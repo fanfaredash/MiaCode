@@ -402,6 +402,14 @@ void TimelineQuickItem::setFollowPreviewEnabled(bool enabled)
 {
     const bool changed = cachedFollowPreviewEnabled_ != enabled;
     if (stateBridge_ != nullptr) {
+        // Bridge::setFollowPreviewEnabled emits renderStateChanged,
+        // which is connected to syncSourceState (DirectConnection,
+        // same thread). syncSourceState observes
+        // cachedFollowPreviewEnabled_ != bridge's new value, performs
+        // the cached-update + emit + appearanceRevision_ bump +
+        // update() call. By the time control returns here, the
+        // visual rebuild is already scheduled and the
+        // followPreviewEnabledChanged() signal has fired.
         stateBridge_->setFollowPreviewEnabled(enabled);
     }
     if (!changed) {
@@ -473,13 +481,29 @@ void TimelineQuickItem::syncSourceState()
     const bool nextFollow = stateBridge_ != nullptr && stateBridge_->followPreviewEnabled();
     const bool nextProgressFollow = stateBridge_ == nullptr || stateBridge_->followProgressEnabled();
     const int nextTimelineTop = static_cast<int>(currentSceneState().timelineTop);
+    // Header-control visuals (zoom% text + follow-check tick + colour)
+    // are emitted in TimelineQuickHeaderLayer's staticRoot rebuild,
+    // which is gated on `appearanceChanged || gridRevision changed`.
+    // Toggling followPreview / zoom triggers a scene-state rebuild
+    // (cachedSceneBuildFollowPreviewEnabled_ check at the rebuildNeeded
+    // gate) but DOESN'T bump appearanceRevision_, so the QSG layer
+    // would keep rendering the previous control state until some
+    // unrelated theme/DPR/grid event happened to bump it. Bump it
+    // explicitly here so the visual reflects the new state on the
+    // next paint pass.
+    bool appearanceBumpNeeded = false;
     if (!qFuzzyCompare(cachedZoomScale_ + 1.0, nextZoom + 1.0)) {
         cachedZoomScale_ = nextZoom;
         emit zoomScaleChanged();
+        appearanceBumpNeeded = true;
     }
     if (cachedFollowPreviewEnabled_ != nextFollow) {
         cachedFollowPreviewEnabled_ = nextFollow;
         emit followPreviewEnabledChanged();
+        appearanceBumpNeeded = true;
+    }
+    if (appearanceBumpNeeded) {
+        ++appearanceRevision_;
     }
     if (cachedFollowProgressEnabled_ != nextProgressFollow) {
         cachedFollowProgressEnabled_ = nextProgressFollow;

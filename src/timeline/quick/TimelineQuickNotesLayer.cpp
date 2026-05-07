@@ -16,6 +16,11 @@ namespace {
 struct TimelineQuickNotesRootNode : public QSGNode {
     quint64 revision = 0;
     quint64 appearanceRevision = 0;
+    // Optimization A — destruct + placement-new pool. Lives on the
+    // persistent root so it survives clearChildren. Each claim()
+    // gives a freshly-constructed QSGGeometry (m_server_data=null);
+    // the only thing reused is the CPU heap allocation under it.
+    TimelineQuickGeometryPool spritePool;
 };
 
 void clearChildren(QSGNode* node)
@@ -220,6 +225,16 @@ QSGNode* TimelineQuickNotesLayer::updateNode(
     if (root->revision == state.notesRevision && root->appearanceRevision == state.appearanceRevision) {
         return root;
     }
+    // Optimization A — record pool-owned geometry pointers from the
+    // previous rebuild before clearChildren deletes the nodes. The
+    // geometries stay attached to the soon-to-be-deleted nodes; that
+    // works because we set OwnsGeometry=false at emit time, so
+    // ~QSGGeometryNode skips `delete d->geometry`. We do NOT call
+    // `setGeometry(nullptr)` — that triggers markDirty(DirtyGeometry)
+    // and crashes the renderer on a NULL geometry pointer (verified
+    // via crash dump: AV in QSGBatchRenderer::Renderer::nodeChanged
+    // dereferencing [NULL+0x18]).
+    reclaimGeometriesFromTree(bodyRoot, &root->spritePool);
     clearChildren(bodyRoot);
 
     // DPR for physical-pixel snap. QQuickWindow returns 0 before exposed,
@@ -241,59 +256,73 @@ QSGNode* TimelineQuickNotesLayer::updateNode(
     }
 
     // Track sprites + hold spans + touch-hold lines + note sprites.
-    // All sprite emits stream through ONE batch builder so adjacent
-    // same-texture quads coalesce across all groups (e.g., a track
-    // segment sprite of type X immediately followed by a hold cap of
-    // type X uses the same texture and merges into one run). The
-    // builder flushes between sprite and non-sprite emits, preserving
-    // z-order semantics with the legacy path.
+    //
+    // Optimization B — track and note sprites use the texture-grouped
+    // builder (one node per UNIQUE texture instead of one per
+    // texture-RUN). Both collections are populated with sprites at
+    // distinct (x, y) positions; reordering them within their group
+    // doesn't affect visual output because they don't share pixels
+    // with siblings of the same group. Hold spans keep the ordered
+    // builder because, within each span, the body must render BEFORE
+    // its caps (the caps overlay the body at the seams).
+    //
+    // Z-order between groups is preserved by flushing the prior
+    // builder before starting the next emit phase. Tree order remains
+    // trackSprites → holdSpans → touchHoldLines → noteSprites.
+    //
+    // Optimization A (geometry pool) is enabled with the
+    // destruct+placement-new strategy. claim() takes a pooled
+    // QSGGeometry, destructs it in place (clearing m_server_data),
+    // re-constructs at the same address. Saves the CPU heap alloc
+    // for the QSGGeometry object; m_data is still freshly malloc'd
+    // each rebuild so no cross-frame buffer reuse risk.
     if (textures != nullptr) {
-        TimelineQuickSpriteBatchBuilder batch(bodyRoot);
-
-        // Track sprites — slide arrows and segments. Most charts have
-        // long runs of the same slide-shape texture, so this batch
-        // typically collapses to a small number of nodes.
-        for (const auto& sprite : state.trackSprites) {
-            const QSize targetSize = textures->noteTargetSize(sprite.spriteType, sprite.scale);
-            if (!targetSize.isValid()) continue;
-            QSGTexture* tex = textures->noteTexture(
-                sprite.spriteType, targetSize, sprite.rotationDegrees, sprite.mirrorX);
-            if (tex == nullptr) continue;
-            const QSizeF logicalSize = rotatedSpriteLogicalSize(targetSize, sprite.rotationDegrees);
-            batch.appendQuad(tex, centeredSpriteRect(sprite.center, logicalSize, dpr));
+        // Phase 1: track sprites — reorderable.
+        {
+            TimelineQuickGroupedSpriteBatchBuilder trackBatch(bodyRoot, &root->spritePool);
+            for (const auto& sprite : state.trackSprites) {
+                const QSize targetSize = textures->noteTargetSize(sprite.spriteType, sprite.scale);
+                if (!targetSize.isValid()) continue;
+                QSGTexture* tex = textures->noteTexture(
+                    sprite.spriteType, targetSize, sprite.rotationDegrees, sprite.mirrorX);
+                if (tex == nullptr) continue;
+                const QSizeF logicalSize = rotatedSpriteLogicalSize(targetSize, sprite.rotationDegrees);
+                trackBatch.appendQuad(tex, centeredSpriteRect(sprite.center, logicalSize, dpr));
+            }
+            trackBatch.flush();
         }
 
-        // Hold spans. Bodies, left caps, right caps are all distinct
-        // textures, so within-hold the batch transitions 3 times. But
-        // ACROSS holds of the same (spriteType, holdScale), each piece
-        // shares its texture, so the cumulative batches stay small —
-        // typically 3 batches total per (spriteType, holdScale) group.
-        for (const auto& holdSpan : state.holdSpans) {
-            appendHoldSpanBatched(bodyRoot, batch, holdSpan, textures, dpr);
+        // Phase 2: hold spans — ORDERED. Bodies, left caps, right caps
+        // are distinct textures within a hold; cap-over-body order
+        // matters at the seams.
+        {
+            TimelineQuickSpriteBatchBuilder holdBatch(bodyRoot, &root->spritePool);
+            for (const auto& holdSpan : state.holdSpans) {
+                appendHoldSpanBatched(bodyRoot, holdBatch, holdSpan, textures, dpr);
+            }
+            holdBatch.flush();
         }
 
-        // Flush before the line emits so touch-hold lines render in
-        // their correct z-position (above holds, below note sprites,
-        // matching the legacy ordering).
-        batch.flush();
-
+        // Phase 3: touch-hold lines (between holds and notes z-wise).
         for (const auto& line : state.touchHoldLines) {
             bodyRoot->appendChildNode(buildTimelineLineNode(line));
         }
 
-        // Note sprites — taps, slide heads, holds (the icon at start
-        // position). Same batching benefit as track sprites.
-        for (const auto& sprite : state.noteSprites) {
-            const QSize targetSize = textures->noteTargetSize(sprite.spriteType, sprite.scale);
-            if (!targetSize.isValid()) continue;
-            QSGTexture* tex = textures->noteTexture(
-                sprite.spriteType, targetSize, sprite.rotationDegrees, sprite.mirrorX);
-            if (tex == nullptr) continue;
-            const QSizeF logicalSize = rotatedSpriteLogicalSize(targetSize, sprite.rotationDegrees);
-            batch.appendQuad(tex, centeredSpriteRect(sprite.center, logicalSize, dpr));
+        // Phase 4: note sprites — reorderable, same rationale as
+        // Phase 1.
+        {
+            TimelineQuickGroupedSpriteBatchBuilder noteBatch(bodyRoot, &root->spritePool);
+            for (const auto& sprite : state.noteSprites) {
+                const QSize targetSize = textures->noteTargetSize(sprite.spriteType, sprite.scale);
+                if (!targetSize.isValid()) continue;
+                QSGTexture* tex = textures->noteTexture(
+                    sprite.spriteType, targetSize, sprite.rotationDegrees, sprite.mirrorX);
+                if (tex == nullptr) continue;
+                const QSizeF logicalSize = rotatedSpriteLogicalSize(targetSize, sprite.rotationDegrees);
+                noteBatch.appendQuad(tex, centeredSpriteRect(sprite.center, logicalSize, dpr));
+            }
+            noteBatch.flush();
         }
-
-        batch.flush();
     } else {
         // No texture cache — still need to emit lines so empty-but-
         // not-failing layouts look right.

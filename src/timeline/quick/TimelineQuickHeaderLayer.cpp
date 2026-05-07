@@ -138,6 +138,90 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
         for (const auto& rect : state.laneOverlayRects) {
             staticRoot->appendChildNode(buildTimelineRectNode(rect));
         }
+        // Header controls (zoom button + follow checkbox). Mirrors the
+        // DComp TimelineHeaderSource rendering at lines 146-220 of
+        // src/sources/timeline/TimelineHeaderSource.cpp. Lives in
+        // staticRoot (no horizontal-scroll transform) because the
+        // controls are screen-space — pinned to viewport corners,
+        // independent of timeline scroll position.
+        //
+        // Without this block the zoom% button and Follow Preview
+        // checkbox are missing from the QSG render path; they exist
+        // as data on TimelineSceneState but only the DComp path was
+        // emitting them as visible pixels.
+        if (state.hasHeaderControls) {
+            // Order matters — same as the DComp source path:
+            //   1. zoomButtonBg + followCheckBg (covers widget areas)
+            //   2. followCheckIndicator (the box itself, on top of bg)
+            //   3. borders (4 hairlines per frame)
+            //   4. tick mark when checked
+            //   5. text labels (via texture cache)
+            staticRoot->appendChildNode(buildTimelineRectNode(state.zoomButtonBg));
+            staticRoot->appendChildNode(buildTimelineRectNode(state.followCheckBg));
+            staticRoot->appendChildNode(buildTimelineRectNode(state.followCheckIndicator));
+            const auto pushFrame = [&staticRoot](
+                const miacode::timeline::TimelineSceneRect& r) {
+                const qreal x0 = r.rect.left();
+                const qreal y0 = r.rect.top();
+                const qreal x1 = r.rect.right();
+                const qreal y1 = r.rect.bottom();
+                const QColor c = r.color;
+                staticRoot->appendChildNode(buildTimelineLineNode(
+                    miacode::timeline::TimelineSceneLine{
+                        QPointF(x0, y0), QPointF(x1, y0), c, 1.0}));
+                staticRoot->appendChildNode(buildTimelineLineNode(
+                    miacode::timeline::TimelineSceneLine{
+                        QPointF(x1, y0), QPointF(x1, y1), c, 1.0}));
+                staticRoot->appendChildNode(buildTimelineLineNode(
+                    miacode::timeline::TimelineSceneLine{
+                        QPointF(x1, y1), QPointF(x0, y1), c, 1.0}));
+                staticRoot->appendChildNode(buildTimelineLineNode(
+                    miacode::timeline::TimelineSceneLine{
+                        QPointF(x0, y1), QPointF(x0, y0), c, 1.0}));
+            };
+            pushFrame(state.zoomButtonBorder);
+            pushFrame(state.followCheckIndicatorBorder);
+            if (state.followCheckChecked) {
+                // Tick mark — two diagonal hairlines inside the box.
+                // Same ratios as the DComp source for visual parity.
+                const QRectF box = state.followCheckIndicator.rect;
+                const qreal x = box.left();
+                const qreal y = box.top();
+                const qreal w = box.width();
+                const qreal h = box.height();
+                const QColor tickColor(255, 255, 255);
+                staticRoot->appendChildNode(buildTimelineLineNode(
+                    miacode::timeline::TimelineSceneLine{
+                        QPointF(x + w * 0.24, y + h * 0.55),
+                        QPointF(x + w * 0.44, y + h * 0.74),
+                        tickColor, 1.8}));
+                staticRoot->appendChildNode(buildTimelineLineNode(
+                    miacode::timeline::TimelineSceneLine{
+                        QPointF(x + w * 0.44, y + h * 0.74),
+                        QPointF(x + w * 0.78, y + h * 0.28),
+                        tickColor, 1.8}));
+            }
+            if (textures != nullptr) {
+                const TimelineQuickTextureHandle zoomHandle =
+                    textures->textTexture(state.zoomButtonLabel);
+                if (zoomHandle.texture != nullptr) {
+                    auto* node = new QSGSimpleTextureNode();
+                    node->setTexture(zoomHandle.texture);
+                    node->setRect(QRectF(state.zoomButtonLabel.topLeft,
+                                          zoomHandle.logicalSize));
+                    staticRoot->appendChildNode(node);
+                }
+                const TimelineQuickTextureHandle followHandle =
+                    textures->textTexture(state.followCheckLabel);
+                if (followHandle.texture != nullptr) {
+                    auto* node = new QSGSimpleTextureNode();
+                    node->setTexture(followHandle.texture);
+                    node->setRect(QRectF(state.followCheckLabel.topLeft,
+                                          followHandle.logicalSize));
+                    staticRoot->appendChildNode(node);
+                }
+            }
+        }
         root->staticRevision = state.gridRevision;
     }
     if (appearanceChanged || root->gridRevision != state.gridRevision) {
