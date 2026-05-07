@@ -24,7 +24,7 @@ set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_VERSION_STRING}")
 
 project(MiaCode VERSION ${MIACODE_VERSION} LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -116,6 +116,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/MuriConfig.h
     src/common/DebugLog.h
     src/common/DebugLog.cpp
+    src/common/OperationLog.h
+    src/common/OperationLog.cpp
     src/common/CrashRecovery.h
     src/common/CrashRecovery.cpp
     src/common/Mmcss.h
@@ -571,6 +573,16 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/audio/QtPreviewSfxRuntime.cpp
         src/common/DebugLog.h
         src/common/DebugLog.cpp
+        src/common/OperationLog.h
+        src/common/OperationLog.cpp
+    )
+
+    add_executable(oplog_self_test
+        src/tools/oplog/OperationLogSpec.cpp
+        src/common/DebugLog.h
+        src/common/DebugLog.cpp
+        src/common/OperationLog.h
+        src/common/OperationLog.cpp
     )
 
     add_executable(simai_parser_spec
@@ -832,6 +844,13 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/core/video
         src/timeline
         src/tools
+    )
+
+    target_link_libraries(oplog_self_test PRIVATE
+        Qt6::Core
+    )
+    target_include_directories(oplog_self_test PRIVATE
+        src
     )
 
     if (WIN32)

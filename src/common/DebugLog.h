@@ -13,6 +13,7 @@ enum class Channel {
     StartupTiming,
     Fatal,
     PreviewProfile,
+    Operation,
 };
 
 struct LogWriterStats {
@@ -48,6 +49,7 @@ QString exportLogPath();
 QString startupTimingLogPath();
 QString fatalLogPath();
 QString previewProfileSummaryPath();
+QString operationLogPath();
 
 QString formatTitleLine(const QString& title);
 

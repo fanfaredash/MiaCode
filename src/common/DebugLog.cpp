@@ -1,6 +1,7 @@
 #include "DebugLog.h"
 
 #include "DebugOptions.h"
+#include "OperationLog.h"
 
 #include <QByteArray>
 #include <QCoreApplication>
@@ -64,6 +65,13 @@ bool channelEnabled(Channel channel)
         return miacode::debug_options::previewProfileOutputEnabled();
     case Channel::Fatal:
         return true;
+    case Channel::Operation:
+        // Operation breadcrumbs only fire on failure paths and are
+        // designed to be silent on the happy path. Always-on so the
+        // chain is captured whenever something went wrong, regardless
+        // of whether --debug is set; the sparse cadence makes this
+        // safe for log volume.
+        return true;
     }
     return false;
 }
@@ -83,6 +91,8 @@ QString channelLabel(Channel channel)
         return QStringLiteral("fatal");
     case Channel::PreviewProfile:
         return QStringLiteral("preview_profile");
+    case Channel::Operation:
+        return QStringLiteral("op");
     }
     return QStringLiteral("unknown");
 }
@@ -102,6 +112,8 @@ QString channelFileName(Channel channel)
         return QStringLiteral("miacode_fatal.log");
     case Channel::PreviewProfile:
         return QStringLiteral("miacode_preview_profile_summary.txt");
+    case Channel::Operation:
+        return QStringLiteral("miacode_operation.log");
     }
     return QStringLiteral("miacode_debug.log");
 }
@@ -121,6 +133,8 @@ QString channelPathOverride(Channel channel)
         return qEnvironmentVariable("MIACODE_FATAL_LOG_PATH").trimmed();
     case Channel::PreviewProfile:
         return qEnvironmentVariable("MIACODE_PREVIEW_PROFILE_PATH").trimmed();
+    case Channel::Operation:
+        return qEnvironmentVariable("MIACODE_OPERATION_LOG_PATH").trimmed();
     }
     return QString();
 }
@@ -279,7 +293,8 @@ void trimDebugLogsInCurrentDirectoryLocked()
              Channel::Audio,
              Channel::Export,
              Channel::StartupTiming,
-             Channel::Fatal}) {
+             Channel::Fatal,
+             Channel::Operation}) {
         (void)trimFileToMaxBytesLocked(logPath(channel), maxBytes);
     }
 }
@@ -696,6 +711,11 @@ QString previewProfileSummaryPath()
     return logPath(Channel::PreviewProfile);
 }
 
+QString operationLogPath()
+{
+    return logPath(Channel::Operation);
+}
+
 QString formatTitleLine(const QString& title)
 {
     return QStringLiteral("[%1] %2").arg(timestampString(), title);
@@ -844,7 +864,14 @@ bool appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 del
 
 bool appendFatalMessage(const QString& scope, const QString& payload)
 {
-    return appendLine(Channel::Fatal, scope, payload, true);
+    // Inline the current thread's operation chain so existing top-level
+    // catch (...) sites pick up logical-call-chain context for free.
+    // See docs/OPERATION_BREADCRUMB_LOGGING_PLAN.md §3.5.
+    const QString chain = miacode::oplog::currentChain();
+    const QString fullPayload = chain.isEmpty()
+        ? payload
+        : QStringLiteral("%1 | chain=%2").arg(payload, chain);
+    return appendLine(Channel::Fatal, scope, fullPayload, true);
 }
 
 LogWriterStats logWriterStatsSnapshot()
