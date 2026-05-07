@@ -422,92 +422,7 @@ bool QuickShellBootstrap::start()
                 QStringLiteral("reason=worker_qsg_owns_chart"));
         }
         if (miacode::debug_options::previewUseDCompEnabled() && !workerOwnsChartRender) {
-            previewDCompSurface_ =
-                std::make_unique<miacode::preview::dcomp::PreviewDCompSurface>(this);
-            previewDCompSurface_->attachToWindow(window);
-            // Phase 3.2: connect the surface to the PreviewRuntime so the
-            // render thread can read playhead state. controller_ exposes
-            // it as a generic QObject* (the QML-property accessor); cast
-            // back to PreviewRuntime for the typed setRuntime call.
-            if (controller_ != nullptr) {
-                if (auto* runtime = qobject_cast<PreviewRuntime*>(
-                        controller_->previewRuntime()); runtime != nullptr) {
-                    previewDCompSurface_->setRuntime(runtime);
-                }
-            }
-            // Phase 4c — wire the PreviewStageMediaHost into the surface
-            // so StageBackgroundSource can pull the current QVideoFrame
-            // (delivered by the host's QMediaPlayer + QVideoSink) on
-            // every snapshot build. The host is created lazily inside
-            // MainWindow on first chart-load, so we connect the signal
-            // AND attach the host immediately if it already exists
-            // (race-free in either direction).
-            if (backend_ != nullptr) {
-                QObject::connect(
-                    backend_.get(),
-                    &MainWindow::previewStageMediaHostInitialized,
-                    this,
-                    [this](PreviewStageMediaHost* host) {
-                        if (previewDCompSurface_ != nullptr) {
-                            previewDCompSurface_->setStageMediaHost(host);
-                        }
-                    });
-                if (auto* existingHost = backend_->previewStageMediaHost();
-                    existingHost != nullptr) {
-                    previewDCompSurface_->setStageMediaHost(existingHost);
-                }
-            }
-            // Issue #3 fix — propagate the user's "Preview Canvas Frame
-            // Rate" option (60 / 120 / Display) to the new pipeline.
-            // MainWindow emits previewCanvasPresentSyncIntervalChanged
-            // whenever the user picks a different option in Render
-            // Settings; we forward to the surface, which forwards to
-            // the renderer's setPresentSyncInterval. The legacy QSG
-            // qtPreviewTimer was already wired separately inside
-            // MainWindow itself; this connection brings the new
-            // pipeline to parity.
-            if (backend_ != nullptr) {
-                QObject::connect(
-                    backend_.get(),
-                    &MainWindow::previewCanvasPresentSyncIntervalChanged,
-                    this,
-                    [this](unsigned int syncInterval) {
-                        if (previewDCompSurface_ != nullptr) {
-                            previewDCompSurface_->setRenderPresentSyncInterval(syncInterval);
-                        }
-                    });
-                // Push the initial value once at attach time. The exact
-                // SyncInterval depends on the display refresh rate, which
-                // MainWindow knows; we replicate just enough of the
-                // logic here to seed the renderer correctly. Defaults
-                // are conservative (1 = display refresh) when we can't
-                // determine the display rate at this point.
-                unsigned int initialSyncInterval = 1U;
-                if (auto* screen = QGuiApplication::primaryScreen();
-                    screen != nullptr && screen->refreshRate() > 1.0) {
-                    const double displayHz = screen->refreshRate();
-                    double targetHz = displayHz;
-                    switch (backend_->currentPreviewCanvasFrameRateMode()) {
-                    case MainWindow::PreviewCanvasFrameRateMode::Fps60:
-                        targetHz = 60.0;
-                        break;
-                    case MainWindow::PreviewCanvasFrameRateMode::Fps120:
-                        targetHz = 120.0;
-                        break;
-                    case MainWindow::PreviewCanvasFrameRateMode::DisplayRefresh:
-                    default:
-                        targetHz = displayHz;
-                        break;
-                    }
-                    const double interval = displayHz / qMax(1.0, targetHz);
-                    initialSyncInterval = static_cast<unsigned int>(
-                        qBound<double>(1.0, qRound(interval), 4.0));
-                }
-                previewDCompSurface_->setRenderPresentSyncInterval(initialSyncInterval);
-            }
-            appendQuickShellRuntimeLog(
-                QStringLiteral("dcomp_surface_attached"),
-                QStringLiteral("phase=3.2 reason=env_flag"));
+            createInProcessPreviewSurface(window, QStringLiteral("env_flag"));
         }
 
 #ifdef Q_OS_WIN
@@ -741,6 +656,31 @@ bool QuickShellBootstrap::start()
                         bindToTrackedItem();
                         pushPopupGeometry();
                     });
+
+                // Runtime fallback — supervisor exhausted its respawn
+                // budget (5 retries within 30 s healthy window). The
+                // worker is gone for this session; bring up the
+                // in-process surface so the editor has SOME chart
+                // preview instead of a black region.
+                QObject::connect(
+                    previewWorkerSupervisor_.get(),
+                    &miacode::preview::ipc::PreviewWorkerSupervisor::workerCrashLoopGivenUp,
+                    this,
+                    [this, window]() {
+                        fallBackToInProcessPreviewSurface(
+                            window,
+                            QStringLiteral("worker_crash_loop_given_up"));
+                    });
+            } else if (workerOwnsChartRender) {
+                // Startup fallback — supervisor failed to spawn
+                // synchronously (executable missing, OS denied process
+                // creation, env-flag misconfiguration). Without the
+                // fallback the editor would have no chart preview at
+                // all because the in-process surface was suppressed at
+                // line 416 above. Recreate it now.
+                fallBackToInProcessPreviewSurface(
+                    window,
+                    QStringLiteral("worker_spawn_failed"));
             }
         }
 #endif
@@ -849,6 +789,132 @@ bool QuickShellBootstrap::start()
         });
     }
     return true;
+}
+
+bool QuickShellBootstrap::createInProcessPreviewSurface(QQuickWindow* window, const QString& reason)
+{
+    if (window == nullptr) {
+        return false;
+    }
+    // Idempotent — caller may invoke from multiple paths (normal
+    // startup, spawn-failure fallback, crash-loop-given-up fallback).
+    // Once attached, further calls are a no-op so we don't create a
+    // second surface or re-wire signals already in place.
+    if (previewDCompSurface_ != nullptr) {
+        appendQuickShellRuntimeLog(
+            QStringLiteral("dcomp_surface_attach_skipped"),
+            QStringLiteral("reason=already_attached requested=%1").arg(reason));
+        return true;
+    }
+    previewDCompSurface_ =
+        std::make_unique<miacode::preview::dcomp::PreviewDCompSurface>(this);
+    previewDCompSurface_->attachToWindow(window);
+    // Phase 3.2: connect the surface to the PreviewRuntime so the
+    // render thread can read playhead state. controller_ exposes
+    // it as a generic QObject* (the QML-property accessor); cast
+    // back to PreviewRuntime for the typed setRuntime call.
+    if (controller_ != nullptr) {
+        if (auto* runtime = qobject_cast<PreviewRuntime*>(
+                controller_->previewRuntime()); runtime != nullptr) {
+            previewDCompSurface_->setRuntime(runtime);
+        }
+    }
+    // Phase 4c — wire the PreviewStageMediaHost into the surface so
+    // StageBackgroundSource can pull the current QVideoFrame
+    // (delivered by the host's QMediaPlayer + QVideoSink) on every
+    // snapshot build. The host is created lazily inside MainWindow on
+    // first chart-load, so we connect the signal AND attach the host
+    // immediately if it already exists (race-free in either direction).
+    if (backend_ != nullptr) {
+        QObject::connect(
+            backend_.get(),
+            &MainWindow::previewStageMediaHostInitialized,
+            this,
+            [this](PreviewStageMediaHost* host) {
+                if (previewDCompSurface_ != nullptr) {
+                    previewDCompSurface_->setStageMediaHost(host);
+                }
+            });
+        if (auto* existingHost = backend_->previewStageMediaHost();
+            existingHost != nullptr) {
+            previewDCompSurface_->setStageMediaHost(existingHost);
+        }
+    }
+    // Issue #3 fix — propagate the user's "Preview Canvas Frame
+    // Rate" option (60 / 120 / Display) to the new pipeline.
+    // MainWindow emits previewCanvasPresentSyncIntervalChanged
+    // whenever the user picks a different option in Render
+    // Settings; we forward to the surface, which forwards to
+    // the renderer's setPresentSyncInterval. The legacy QSG
+    // qtPreviewTimer was already wired separately inside
+    // MainWindow itself; this connection brings the new
+    // pipeline to parity.
+    if (backend_ != nullptr) {
+        QObject::connect(
+            backend_.get(),
+            &MainWindow::previewCanvasPresentSyncIntervalChanged,
+            this,
+            [this](unsigned int syncInterval) {
+                if (previewDCompSurface_ != nullptr) {
+                    previewDCompSurface_->setRenderPresentSyncInterval(syncInterval);
+                }
+            });
+        // Push the initial value once at attach time. The exact
+        // SyncInterval depends on the display refresh rate, which
+        // MainWindow knows; we replicate just enough of the
+        // logic here to seed the renderer correctly. Defaults
+        // are conservative (1 = display refresh) when we can't
+        // determine the display rate at this point.
+        unsigned int initialSyncInterval = 1U;
+        if (auto* screen = QGuiApplication::primaryScreen();
+            screen != nullptr && screen->refreshRate() > 1.0) {
+            const double displayHz = screen->refreshRate();
+            double targetHz = displayHz;
+            switch (backend_->currentPreviewCanvasFrameRateMode()) {
+            case MainWindow::PreviewCanvasFrameRateMode::Fps60:
+                targetHz = 60.0;
+                break;
+            case MainWindow::PreviewCanvasFrameRateMode::Fps120:
+                targetHz = 120.0;
+                break;
+            case MainWindow::PreviewCanvasFrameRateMode::DisplayRefresh:
+            default:
+                targetHz = displayHz;
+                break;
+            }
+            const double interval = displayHz / qMax(1.0, targetHz);
+            initialSyncInterval = static_cast<unsigned int>(
+                qBound<double>(1.0, qRound(interval), 4.0));
+        }
+        previewDCompSurface_->setRenderPresentSyncInterval(initialSyncInterval);
+    }
+    appendQuickShellRuntimeLog(
+        QStringLiteral("dcomp_surface_attached"),
+        QStringLiteral("phase=3.2 reason=%1").arg(reason));
+    return true;
+}
+
+void QuickShellBootstrap::fallBackToInProcessPreviewSurface(QQuickWindow* window, const QString& reason)
+{
+    if (window == nullptr) {
+        return;
+    }
+    // Tear down the supervisor first so it doesn't keep replaying
+    // its respawn loop or hold any stale signal connections after we
+    // commit to in-process rendering. Qt's parent-child auto-disconnect
+    // covers everything we wired to the supervisor (workerAttached,
+    // workerCrashLoopGivenUp, workerDeviceRemoved, etc.), and the
+    // unique_ptr reset destroys the QProcess + ring buffer.
+    if (previewWorkerSupervisor_ != nullptr) {
+        previewWorkerSupervisor_.reset();
+        appendQuickShellRuntimeLog(
+            QStringLiteral("preview_worker_supervisor_torn_down"),
+            QStringLiteral("reason=%1").arg(reason));
+    }
+    // Surface up. Helper is idempotent — if the surface already exists
+    // (e.g. crash-loop-given-up arriving while a previous fallback
+    // already brought one up) the call short-circuits with a log line.
+    createInProcessPreviewSurface(window, reason);
 }
 
 bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)

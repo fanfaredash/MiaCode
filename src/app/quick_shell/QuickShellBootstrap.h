@@ -53,6 +53,20 @@ private:
     void scheduleAcceptedRootWindowDestroyAndQuit(const QString& source);
     void destroyAcceptedRootWindowResourcesAndQuit(const QString& source);
     void logFocusEvent(const QString& action, QObject* watched = nullptr, QEvent* event = nullptr, const QString& detail = QString()) const;
+    // Construct previewDCompSurface_ + wire it to the runtime, the
+    // stage-media-host signal, and the present sync interval. Idempotent
+    // — returns immediately if a surface already exists. `reason` is
+    // logged via `dcomp_surface_attached reason=<reason>` for diagnostics
+    // so it's clear whether the surface came from the normal startup
+    // path or the worker-spawn-failure / crash-loop fallback. Safe to
+    // call after the window has been around for a while; the in-process
+    // surface attaches to whatever HWND the window currently owns.
+    bool createInProcessPreviewSurface(QQuickWindow* window, const QString& reason);
+    // Fallback handler: shuts down the worker supervisor (if still
+    // present) and brings up the in-process surface. Wired to both the
+    // synchronous `spawnedOk == false` case at startup and the
+    // PreviewWorkerSupervisor::workerCrashLoopGivenUp signal at runtime.
+    void fallBackToInProcessPreviewSurface(QQuickWindow* window, const QString& reason);
 
     QIcon appIcon_;
     std::unique_ptr<MainWindow> backend_;
