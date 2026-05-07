@@ -676,6 +676,13 @@ void MainWindow::TimelineSection::onTimelineHeaderNavigateRequested(double secon
 
 void MainWindow::TimelineSection::onTimelineUserInteractionStarted()
 {
+    if (!state_.previewProgressFollowEnabled_) {
+        return;
+    }
+    if (state_.qtPreviewPlaying_) {
+        pauseQtPreviewPlaybackExact();
+        owner_.updatePauseButtonAppearance();
+    }
 }
 
 void MainWindow::TimelineSection::onTimelineDragStarted()
@@ -698,15 +705,40 @@ void MainWindow::TimelineSection::onTimelineDragStarted()
 
 void MainWindow::TimelineSection::onTimelineCenterNavigateRequested(double second)
 {
-    Q_UNUSED(second);
+    if (!state_.previewProgressFollowEnabled_) {
+        Q_UNUSED(second);
+        return;
+    }
+    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    const int elapsedMs = state_.previewScrubRenderElapsed_.isValid()
+        ? static_cast<int>(state_.previewScrubRenderElapsed_.elapsed())
+        : -1;
+    const bool shouldRenderNow = !state_.previewScrubRenderElapsed_.isValid()
+        || elapsedMs >= kPreviewScrubRenderIntervalMs;
+    if (shouldRenderNow) {
+        owner_.ensurePreviewStageMediaRouteInitialized();
+        owner_.ensurePreviewSfxRuntimePrepared();
+        requestPausedPreviewSeek(clampedSecond, false, false, false);
+        state_.previewScrubRenderElapsed_.restart();
+    } else {
+        schedulePreviewSeek(clampedSecond, false);
+    }
 }
 
 void MainWindow::TimelineSection::onTimelineWheelNavigateRequested(double second)
 {
-    Q_UNUSED(second);
+    if (!state_.previewProgressFollowEnabled_) {
+        Q_UNUSED(second);
+        if (ui_.previewSeekDebounceTimer_ != nullptr) {
+            ui_.previewSeekDebounceTimer_->stop();
+        }
+        return;
+    }
+    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
         ui_.previewSeekDebounceTimer_->stop();
     }
+    seekPreviewToSecond(clampedSecond, false);
 }
 
 void MainWindow::TimelineSection::onTimelineDragFinished(double second)
@@ -718,13 +750,24 @@ void MainWindow::TimelineSection::onTimelineDragFinished(double second)
     stopPreviewHeldSeek();
     QToolTip::hideText();
     state_.previewScrubRenderElapsed_.invalidate();
-    Q_UNUSED(second);
+    if (!state_.previewProgressFollowEnabled_) {
+        Q_UNUSED(second);
+        if (state_.previewFullscreenActive_) {
+            owner_.showPreviewFullscreenControls(false);
+        }
+        if (ui_.previewSeekDebounceTimer_ != nullptr) {
+            ui_.previewSeekDebounceTimer_->stop();
+        }
+        return;
+    }
+    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     if (state_.previewFullscreenActive_) {
         owner_.showPreviewFullscreenControls(false);
     }
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
         ui_.previewSeekDebounceTimer_->stop();
     }
+    seekPreviewToSecond(clampedSecond, false);
 }
 
 void MainWindow::TimelineSection::onTimelineFollowPreviewToggled(bool enabled)

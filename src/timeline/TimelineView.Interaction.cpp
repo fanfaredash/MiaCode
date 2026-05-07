@@ -110,7 +110,14 @@ void TimelineView::mousePressEvent(QMouseEvent* event)
     timelineDragStartX_ = qRound(event->position().x());
     timelineDragStartScrollValue_ = horizontalScrollBar()->value();
     viewport()->setCursor(Qt::ClosedHandCursor);
+    if (followProgressEnabled()) {
+        suppressPlayheadIndicatorForInteraction();
+    }
     emit timelineDragStarted();
+    if (followProgressEnabled() && !playheadNearViewportCenter()) {
+        const double centerSecond = viewportCenterSecond();
+        emit centerNavigateRequested(centerSecond);
+    }
     appendTimelineUiPerfLog(
         QStringLiteral("kind=drag_begin scroll=%1 center_second=%2")
             .arg(horizontalScrollBar() != nullptr ? horizontalScrollBar()->value() : 0)
@@ -124,6 +131,9 @@ void TimelineView::mouseMoveEvent(QMouseEvent* event)
     if (event != nullptr && timelineDragActive_) {
         const int deltaX = qRound(event->position().x()) - timelineDragStartX_;
         setHorizontalScrollValue(timelineDragStartScrollValue_ - deltaX);
+        if (followProgressEnabled()) {
+            emit centerNavigateRequested(viewportCenterSecond());
+        }
         event->accept();
         return;
     }
@@ -135,6 +145,9 @@ void TimelineView::mouseReleaseEvent(QMouseEvent* event)
     if (event != nullptr && event->button() == Qt::LeftButton && timelineDragActive_) {
         timelineDragActive_ = false;
         viewport()->unsetCursor();
+        if (followProgressEnabled()) {
+            restorePlayheadIndicatorAfterInteraction(true);
+        }
         appendTimelineUiPerfLog(
             QStringLiteral("kind=drag_end scroll=%1 center_second=%2")
                 .arg(horizontalScrollBar() != nullptr ? horizontalScrollBar()->value() : 0)
@@ -162,6 +175,9 @@ void TimelineView::wheelEvent(QWheelEvent* event)
         emit timelineUserInteractionStarted();
         focusPlayhead(false);
         setHorizontalScrollValue(horizontalScrollBar()->value() - (delta / 2));
+        if (followProgressEnabled()) {
+            emit timelineWheelNavigateRequested(viewportCenterSecond());
+        }
         event->accept();
         return;
     }

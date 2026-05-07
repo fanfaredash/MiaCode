@@ -877,6 +877,11 @@ void TimelineQuickItem::mousePressEvent(QMouseEvent* event)
     }
 
     emit timelineUserInteractionStarted();
+    if (followProgressEnabled() && !playheadNearViewportCenter()) {
+        const double centerSecond = viewportCenterSecondForScroll(
+            stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0);
+        emit centerNavigateRequested(centerSecond);
+    }
     dragActive_ = true;
     dragStartX_ = qRound(event->position().x());
     dragStartScrollValue_ = stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0;
@@ -887,6 +892,9 @@ void TimelineQuickItem::mousePressEvent(QMouseEvent* event)
             .arg(dragStartScrollValue_));
     if (stateBridge_ != nullptr) {
         stateBridge_->focusPlayhead(false);
+        if (followProgressEnabled()) {
+            stateBridge_->suppressPlayheadIndicator();
+        }
     }
     emit timelineDragStarted();
     update();
@@ -902,7 +910,9 @@ void TimelineQuickItem::mouseMoveEvent(QMouseEvent* event)
     const int newScroll = dragStartScrollValue_ - (qRound(event->position().x()) - dragStartX_);
     stateBridge_->setHorizontalScrollValue(newScroll);
     const double centerSecond = viewportCenterSecondForScroll(stateBridge_->horizontalScrollValue());
-    Q_UNUSED(centerSecond);
+    if (followProgressEnabled()) {
+        emit centerNavigateRequested(centerSecond);
+    }
     event->accept();
 }
 
@@ -940,6 +950,9 @@ void TimelineQuickItem::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event != nullptr && event->button() == Qt::LeftButton && dragActive_) {
         dragActive_ = false;
+        if (stateBridge_ != nullptr && followProgressEnabled()) {
+            stateBridge_->restorePlayheadIndicator(true);
+        }
         const double centerSecond = viewportCenterSecondForScroll(stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0);
         appendTimelineQuickInteractionLog(
             QStringLiteral("drag_end"),
@@ -1003,7 +1016,9 @@ void TimelineQuickItem::wheelEvent(QWheelEvent* event)
         QString("scroll_after=%1 center_second=%2")
             .arg(stateBridge_->horizontalScrollValue())
             .arg(centerSecond, 0, 'f', 6));
-    Q_UNUSED(centerSecond);
+    if (followProgressEnabled()) {
+        emit timelineWheelNavigateRequested(centerSecond);
+    }
     event->accept();
 }
 
