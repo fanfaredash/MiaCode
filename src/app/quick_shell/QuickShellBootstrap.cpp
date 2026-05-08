@@ -8,6 +8,7 @@
 #include "UiTheme.h"
 #include "common/DebugOptions.h"
 #include "common/DebugLog.h"
+#include "common/OperationLog.h"
 #include "mainwindow/MainWindow.h"
 #include "render/backend_d3d11/PreviewDCompSurface.h"
 #include "render/backend_d3d11/PreviewPopupHwndTracker.h"
@@ -264,6 +265,7 @@ QuickShellBootstrap::~QuickShellBootstrap()
 
 bool QuickShellBootstrap::start()
 {
+    MC_OP("QuickShellBootstrap::start");
     appendQuickShellRuntimeLog(QStringLiteral("start_enter"));
     backend_ = std::make_unique<MainWindow>(true);
     backend_->setQuickShellBackendActive(true);
@@ -793,7 +795,10 @@ bool QuickShellBootstrap::start()
 
 bool QuickShellBootstrap::createInProcessPreviewSurface(QQuickWindow* window, const QString& reason)
 {
+    MC_OP("QuickShellBootstrap::createInProcessPreviewSurface");
+    _mc_op_.note(QStringLiteral("reason=%1").arg(reason));
     if (window == nullptr) {
+        _mc_op_.fail(QStringLiteral("null window"));
         return false;
     }
     // Idempotent — caller may invoke from multiple paths (normal
@@ -896,7 +901,10 @@ bool QuickShellBootstrap::createInProcessPreviewSurface(QQuickWindow* window, co
 
 void QuickShellBootstrap::fallBackToInProcessPreviewSurface(QQuickWindow* window, const QString& reason)
 {
+    MC_OP("QuickShellBootstrap::fallBackToInProcessPreviewSurface");
+    _mc_op_.note(QStringLiteral("reason=%1").arg(reason));
     if (window == nullptr) {
+        _mc_op_.fail(QStringLiteral("null window"));
         return;
     }
     // Tear down the supervisor first so it doesn't keep replaying
