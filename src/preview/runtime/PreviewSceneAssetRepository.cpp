@@ -1,5 +1,7 @@
 #include "preview/runtime/PreviewSceneAssetRepository.h"
 
+#include "common/OperationLog.h"
+
 #include <QMetaObject>
 #include <QPointer>
 #include <QThreadPool>
@@ -32,6 +34,8 @@ void PreviewSceneAssetRepository::setOutlineVariant(PreviewOutlineVariant varian
 
 void PreviewSceneAssetRepository::setSkinDirectory(const QString& skinDirectory)
 {
+    MC_OP("PreviewSceneAssetRepository::setSkinDirectory");
+    _mc_op_.note(QStringLiteral("skin=%1").arg(skinDirectory));
     skinDirectory_ = skinDirectory;
     const quint64 generation = ++loadGeneration_;
     QPointer<PreviewSceneAssetRepository> guard(this);
@@ -54,10 +58,16 @@ void PreviewSceneAssetRepository::setSkinDirectory(const QString& skinDirectory)
 
 bool PreviewSceneAssetRepository::loadSkinDirectorySync(const QString& skinDirectory)
 {
+    MC_OP("PreviewSceneAssetRepository::loadSkinDirectorySync");
+    _mc_op_.note(QStringLiteral("skin=%1").arg(skinDirectory));
     skinDirectory_ = skinDirectory;
     const quint64 generation = ++loadGeneration_;
     applyLoadResult(PreviewSceneAssetLoader::load(skinDirectory, outlineVariant_, generation));
-    return hasCoreSkinAssetsLoaded();
+    const bool ok = hasCoreSkinAssetsLoaded();
+    if (!ok) {
+        _mc_op_.fail(QStringLiteral("core skin assets missing after load"));
+    }
+    return ok;
 }
 
 bool PreviewSceneAssetRepository::hasCoreSkinAssetsLoaded() const

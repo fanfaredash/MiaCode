@@ -2,6 +2,7 @@
 
 #include "common/AssetPaths.h"
 #include "common/LayoutRingConfig.h"
+#include "common/OperationLog.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewSkinConfig.h"
 
@@ -465,6 +466,10 @@ PreviewSceneAssetLoadResult PreviewSceneAssetLoader::load(
     PreviewOutlineVariant outlineVariant,
     quint64 generation)
 {
+    MC_OP("PreviewSceneAssetLoader::load");
+    _mc_op_.note(QStringLiteral("skin=%1 generation=%2")
+                     .arg(skinDirectory)
+                     .arg(generation));
     PreviewSceneAssetLoadResult result;
     result.generation = generation;
     result.skinDirectory = skinDirectory;
