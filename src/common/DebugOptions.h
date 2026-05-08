@@ -370,29 +370,38 @@ inline bool previewDCompPerPixelAlphaEnabled()
 inline bool previewTimelineUseDCompEnabled()
 {
     // Phase 3c of the v2-refactor — DComp pipeline for the timeline
-    // pane. When on, TimelineQuickItem instantiates a TimelineRenderView
-    // alongside its existing QSG paint node and pushes scene-state
-    // updates to both. The DComp popup overlays the QSG paint via a
-    // top-level HWND.
+    // pane. When on, TimelineQuickItem's updatePaintNode returns null
+    // (skipping the QSG path) and pushes scene-state to a sibling
+    // TimelineRenderView that owns its own top-level popup HWND and
+    // composites the timeline via DirectComposition. When off, the
+    // QSG paint node renders the timeline through Qt Quick's normal
+    // scene graph.
     //
-    // Default OFF as of the worker-preview rollout. Now that the chart
-    // preview is hosted by the out-of-process worker, the editor's
-    // main process renders only the timeline + UI chrome. Pulling
-    // timeline rendering back into the QSG path (no popup HWND, no
-    // second D3D11 device, no per-window swap-chain serialisation
-    // contending with the worker) is the simpler topology — fewer
-    // moving Win32 pieces in the editor process. Set
-    // `MIACODE_TIMELINE_USE_DCOMP=1` to re-enable the DComp timeline
-    // pipeline (e.g. for performance comparison or diagnostics).
+    // **Default ON as of the QML-timeline temporary deprecation
+    // (beta31).** A reproducible editor-process crash was traced to
+    // the QSG/QML path under rapid wheel-scroll (~60 events / 0.26 s)
+    // — see docs/OPERATION_LOG_PATTERNS_SPEC.md §4.5. The HWND
+    // timeline path is more battle-tested under the same workload
+    // because its scene-state pipeline has been the chart-preview
+    // primary since beta25, with the same scroll-bucket invalidation
+    // discipline. While we triage the QSG-path crash, HWND is the
+    // safer default for the editor's timeline pane too.
+    //
+    // Set `MIACODE_TIMELINE_USE_DCOMP=0` to opt back into the QSG/QML
+    // path — useful for performance comparison, for the QSG-path
+    // crash repro, or for environments where the HWND popup topology
+    // doesn't behave correctly (e.g. some screen-recording tools).
     //
     // Auto-disabled on Apple Silicon Windows VMs alongside the chart
     // preview's DComp path, via the previewUseDCompEnabled cascade.
+    // On those VMs the QSG path is the only working option regardless
+    // of this default.
     if (!previewUseDCompEnabled()) {
         return false;
     }
     const std::optional<bool> override = envOptionalFlagValue(
         "MIACODE_TIMELINE_USE_DCOMP");
-    return override.value_or(false);
+    return override.value_or(true);
 }
 
 inline bool previewQsgFullDisableEnabled()
