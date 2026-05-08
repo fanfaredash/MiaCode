@@ -20,6 +20,15 @@ class TimelineView;
 class TimelineQuickStateBridge : public QObject
 {
     Q_OBJECT
+    // QML-bindable mirrors of the follow flags. Used by
+    // BottomTabsQuickHost.qml's tab-strip checkboxes (the controls
+    // that replaced the cramped in-timeline visuals); the legacy QSG
+    // header rendering of the same toggles has been removed so we
+    // no longer have two sources of truth for the on-screen state.
+    Q_PROPERTY(bool followPreviewEnabled READ followPreviewEnabled
+               WRITE setFollowPreviewEnabled NOTIFY followPreviewEnabledChanged)
+    Q_PROPERTY(bool followProgressEnabled READ followProgressEnabled
+               WRITE setFollowProgressEnabled NOTIFY followProgressEnabledChanged)
 
 public:
     explicit TimelineQuickStateBridge(QObject* parent = nullptr);
@@ -76,6 +85,13 @@ signals:
     void renderStateChanged();
     void playheadChanged(double second);
     void zoomScaleChanged(double scale);
+    // Dedicated NOTIFY signals for the Q_PROPERTYs above — keeping
+    // these separate from renderStateChanged means the QML
+    // checkbox bindings only re-evaluate when the toggle they
+    // actually care about flips, not on every per-frame render
+    // state push.
+    void followPreviewEnabledChanged(bool enabled);
+    void followProgressEnabledChanged(bool enabled);
 
 private:
     QSize effectiveViewportSize() const;

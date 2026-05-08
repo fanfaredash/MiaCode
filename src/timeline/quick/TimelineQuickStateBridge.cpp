@@ -762,6 +762,7 @@ void TimelineQuickStateBridge::setFollowPreviewEnabled(bool enabled)
         return;
     }
     followPreviewEnabled_ = enabled;
+    emit followPreviewEnabledChanged(enabled);
     emit renderStateChanged();
 }
 
@@ -776,6 +777,7 @@ void TimelineQuickStateBridge::setFollowProgressEnabled(bool enabled)
         return;
     }
     followProgressEnabled_ = enabled;
+    emit followProgressEnabledChanged(enabled);
     emit renderStateChanged();
 }
 

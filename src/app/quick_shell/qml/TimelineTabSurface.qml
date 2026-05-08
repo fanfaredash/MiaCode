@@ -45,7 +45,12 @@ Item {
         anchors.fill: parent
         stateBridge: controller ? controller.timelineStateBridge : null
         headerLeftLimit: zoomButton.x + zoomButton.width + 2
-        headerRightLimit: followPreviewCheck.x - 2
+        // The follow checkboxes used to live here too and bounded the
+        // header band on the right; they moved to BottomTabsQuickHost
+        // tab strip. Without them, the band can use the full viewport
+        // width minus a small right pad for the scrollbar / scroll
+        // gutter.
+        headerRightLimit: width - 8
 
         onHeaderNavigateRequested: function(second) {
             if (controller)
@@ -188,6 +193,12 @@ Item {
         onClicked: timelineItem.cycleZoomPreset()
     }
 
+    // Cursor Follow / Progress Follow checkboxes moved to
+    // BottomTabsQuickHost.qml's tab strip \u2014 see the long comment in
+    // TimelineSceneStateBuilder.cpp where the matching scene-state
+    // emit was retired. The deletion below removes the QML controls
+    // that were anchored to this surface's right edge.
+    /*
     CheckBox {
         id: followPreviewCheck
 
@@ -310,4 +321,5 @@ Item {
 
         onClicked: timelineItem.followProgressEnabled = checked
     }
+    */
 }

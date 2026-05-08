@@ -1169,7 +1169,20 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 - kTimelineTextVerticalPadding);
         state.zoomButtonLabel = zoomLabel;
 
-        // ---- Follow checks (right) ----
+        // The "Cursor Follow" / "Progress Follow" checkboxes used to
+        // be drawn here in the timeline header band. They moved to
+        // BottomTabsQuickHost.qml's tab strip \u2014 there's enough
+        // horizontal space next to the "\u65f6\u95f4\u8f74 / \u8bed\u6cd5\u68c0\u67e5 /
+        // \u65e0\u7406\u68c0\u67e5" tab labels for both controls without crowding,
+        // and real QML CheckBoxes there avoid the multi-render-mode
+        // footgun we hit when the QSG header layer rendered
+        // followPreview but no path rendered followProgress (only
+        // DComp drew progress in QSG mode). The follow flags still
+        // flow through `request.followPreviewEnabled` /
+        // `request.followProgressEnabled` from the bridge to the
+        // marker culling path; we just don't materialise visuals
+        // for them in the scene state any more.
+#if 0
         const QString followText = request.isChineseUi
             ? QStringLiteral("\u5149\u6807\u8ddf\u968f")
             : QStringLiteral("Cursor Follow");
@@ -1256,6 +1269,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             btnY + (btnHeight - controlMetrics.height()) * 0.5
                 - kTimelineTextVerticalPadding);
         state.progressFollowCheckLabel = progressFollowLabel;
+#endif
     }
 
     return state;

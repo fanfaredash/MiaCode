@@ -17,6 +17,10 @@ Rectangle {
         return paletteMap && paletteMap[key] !== undefined ? paletteMap[key] : fallback
     }
 
+    function isChineseUi() {
+        return paletteMap && paletteMap["isChineseUi"] === true
+    }
+
     function usesNativeBottomTabsSurface() {
         return controller
             && (controller.bottomTabsCurrentTabId === "validation"
@@ -190,6 +194,154 @@ Rectangle {
 
                 Item {
                     Layout.fillWidth: true
+                }
+
+                // Timeline-tab follow toggles. Live in the tab strip
+                // (rather than inside TimelineTabSurface's cramped
+                // header band) so there's room for both checkboxes
+                // and so the visible state is driven by ONE QML
+                // control per toggle — no QSG-layer / DComp dual
+                // rendering path that previously dropped the
+                // progress-follow checkbox in QSG-only mode. Only
+                // surfaced when the timeline tab is the current
+                // tab; the validation / muri tabs leave the right
+                // side empty as before.
+                CheckBox {
+                    id: cursorFollowCheck
+
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.preferredHeight: tabStrip.height - 6
+                    Layout.rightMargin: 4
+                    visible: controller && controller.bottomTabsCurrentTabId === "timeline"
+                    hoverEnabled: true
+                    spacing: 4
+                    text: root.isChineseUi() ? "光标跟随" : "Cursor Follow"
+                    checked: controller && controller.timelineStateBridge
+                        ? controller.timelineStateBridge.followPreviewEnabled
+                        : false
+
+                    indicator: Rectangle {
+                        implicitWidth: 14
+                        implicitHeight: 14
+                        x: 0
+                        y: (cursorFollowCheck.height - height) / 2
+                        radius: 3
+                        color: cursorFollowCheck.checked
+                            ? root.tone("accent", "#60a5fa")
+                            : root.tone("cardBg", "#1f2937")
+                        border.width: 1
+                        border.color: cursorFollowCheck.checked
+                            ? root.tone("accent", "#60a5fa")
+                            : (cursorFollowCheck.hovered
+                                ? root.tone("accent", "#60a5fa")
+                                : root.tone("border", "#475569"))
+
+                        Canvas {
+                            anchors.fill: parent
+                            visible: cursorFollowCheck.checked
+
+                            onPaint: {
+                                const ctx = getContext("2d")
+                                ctx.reset()
+                                ctx.strokeStyle = root.tone("accentText", "#ffffff")
+                                ctx.lineWidth = 1.8
+                                ctx.lineCap = "round"
+                                ctx.lineJoin = "round"
+                                ctx.beginPath()
+                                ctx.moveTo(width * 0.24, height * 0.55)
+                                ctx.lineTo(width * 0.44, height * 0.74)
+                                ctx.lineTo(width * 0.78, height * 0.28)
+                                ctx.stroke()
+                            }
+                        }
+                    }
+
+                    contentItem: Text {
+                        text: cursorFollowCheck.text
+                        color: root.tone("textPrimary", "#203040")
+                        font.pixelSize: 12
+                        font.weight: Font.DemiBold
+                        verticalAlignment: Text.AlignVCenter
+                        leftPadding: cursorFollowCheck.indicator.width + cursorFollowCheck.spacing
+                    }
+
+                    onClicked: {
+                        if (controller && controller.timelineStateBridge) {
+                            controller.timelineStateBridge.followPreviewEnabled = checked
+                        }
+                        if (controller) {
+                            controller.timelineFollowPreviewToggled(checked)
+                        }
+                    }
+                }
+
+                CheckBox {
+                    id: progressFollowCheck
+
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.preferredHeight: tabStrip.height - 6
+                    Layout.rightMargin: 8
+                    visible: controller && controller.bottomTabsCurrentTabId === "timeline"
+                    hoverEnabled: true
+                    spacing: 4
+                    text: root.isChineseUi() ? "进度跟随" : "Progress Follow"
+                    checked: controller && controller.timelineStateBridge
+                        ? controller.timelineStateBridge.followProgressEnabled
+                        : false
+
+                    indicator: Rectangle {
+                        implicitWidth: 14
+                        implicitHeight: 14
+                        x: 0
+                        y: (progressFollowCheck.height - height) / 2
+                        radius: 3
+                        color: progressFollowCheck.checked
+                            ? root.tone("accent", "#60a5fa")
+                            : root.tone("cardBg", "#1f2937")
+                        border.width: 1
+                        border.color: progressFollowCheck.checked
+                            ? root.tone("accent", "#60a5fa")
+                            : (progressFollowCheck.hovered
+                                ? root.tone("accent", "#60a5fa")
+                                : root.tone("border", "#475569"))
+
+                        Canvas {
+                            anchors.fill: parent
+                            visible: progressFollowCheck.checked
+
+                            onPaint: {
+                                const ctx = getContext("2d")
+                                ctx.reset()
+                                ctx.strokeStyle = root.tone("accentText", "#ffffff")
+                                ctx.lineWidth = 1.8
+                                ctx.lineCap = "round"
+                                ctx.lineJoin = "round"
+                                ctx.beginPath()
+                                ctx.moveTo(width * 0.24, height * 0.55)
+                                ctx.lineTo(width * 0.44, height * 0.74)
+                                ctx.lineTo(width * 0.78, height * 0.28)
+                                ctx.stroke()
+                            }
+                        }
+                    }
+
+                    contentItem: Text {
+                        text: progressFollowCheck.text
+                        color: root.tone("textPrimary", "#203040")
+                        font.pixelSize: 12
+                        font.weight: Font.DemiBold
+                        verticalAlignment: Text.AlignVCenter
+                        leftPadding: progressFollowCheck.indicator.width + progressFollowCheck.spacing
+                    }
+
+                    onClicked: {
+                        if (controller && controller.timelineStateBridge) {
+                            controller.timelineStateBridge.followProgressEnabled = checked
+                        }
+                        if (controller) {
+                            controller.timelineFollowProgressToggled(checked)
+                        }
+                    }
                 }
             }
         }
