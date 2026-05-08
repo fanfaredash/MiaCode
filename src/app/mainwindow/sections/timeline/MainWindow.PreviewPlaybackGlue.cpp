@@ -1,6 +1,7 @@
 #include "MainWindow.TimelineSection.h"
 
 #include "common/DebugLog.h"
+#include "common/OperationLog.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -44,6 +45,7 @@ bool MainWindow::TimelineSection::preparePreviewStartState()
 
 void MainWindow::TimelineSection::onStopPreview()
 {
+    MC_OP("MainWindow::TimelineSection::onStopPreview");
     const quint64 opId = ++state_.previewInteractionSequence_;
     const double returnSecond = qBound(0.0, state_.qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
     const bool wasActive = state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_;
@@ -72,6 +74,7 @@ void MainWindow::TimelineSection::onStopPreview()
 
 void MainWindow::TimelineSection::onTogglePreviewPause()
 {
+    MC_OP("MainWindow::TimelineSection::onTogglePreviewPause");
     if (state_.qtPreviewPlaying_) {
         const quint64 opId = ++state_.previewInteractionSequence_;
         appendPreviewInteractionLog(

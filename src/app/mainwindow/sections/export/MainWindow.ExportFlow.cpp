@@ -11,6 +11,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/video_export/BatchVideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
@@ -328,11 +329,14 @@ void MainWindow::ExportSection::applySharedExportTaskSettings(const VideoExportT
 
 void MainWindow::ExportSection::onExportPreviewVideo()
 {
+    MC_OP("MainWindow::ExportSection::onExportPreviewVideo");
     if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
         owner_.statusBar()->showMessage(QStringLiteral("当前未选中难度，无法导出视频。"));
         return;
     }
     if (owner_.previewCanvas_ == nullptr) {
+        _mc_op_.fail(QStringLiteral("previewCanvas_ null"));
         owner_.statusBar()->showMessage(QStringLiteral("预览画布未初始化，无法导出视频。"));
         return;
     }
@@ -573,11 +577,14 @@ void MainWindow::ExportSection::onExportPreviewVideo()
 
 void MainWindow::ExportSection::onBatchExportPreviewVideo()
 {
+    MC_OP("MainWindow::ExportSection::onBatchExportPreviewVideo");
     if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
         owner_.statusBar()->showMessage(uiText("dialog.batch_export.error.no_difficulty", QStringLiteral("No active difficulty is selected.")));
         return;
     }
     if (owner_.previewCanvas_ == nullptr) {
+        _mc_op_.fail(QStringLiteral("previewCanvas_ null"));
         owner_.statusBar()->showMessage(uiText("dialog.batch_export.error.no_preview", QStringLiteral("Preview canvas is not initialized.")));
         return;
     }

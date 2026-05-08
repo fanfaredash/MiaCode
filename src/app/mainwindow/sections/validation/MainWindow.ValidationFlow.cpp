@@ -15,6 +15,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
@@ -1208,16 +1209,19 @@ void MainWindow::ValidationSection::jumpToLocation(int line, int col)
 
 void MainWindow::ValidationSection::onErrorItemActivated(QListWidgetItem* item)
 {
+    MC_OP("MainWindow::ValidationSection::onErrorItemActivated");
     if (item == nullptr) {
         return;
     }
     const int line = item->data(kIssueLineRole).toInt();
     const int col = item->data(kIssueColRole).toInt();
+    _mc_op_.note(QStringLiteral("line=%1 col=%2").arg(line).arg(col));
     jumpToLocation(line, col);
 }
 
 void MainWindow::ValidationSection::onMuriItemActivated(QListWidgetItem* item)
 {
+    MC_OP("MainWindow::ValidationSection::onMuriItemActivated");
     if (item == nullptr || !item->flags().testFlag(Qt::ItemIsEnabled)) {
         return;
     }

@@ -8,6 +8,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/ChartAssetPaths.h"
+#include "common/OperationLog.h"
 #include "common/PreviewSfxAssets.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/latency/LatencyDetectorDialog.h"
@@ -48,6 +49,7 @@ void MainWindow::DialogsSection::updateLatencyDetectorAvailability()
 
 void MainWindow::DialogsSection::onPreviewAudioSettings()
 {
+    MC_OP("MainWindow::DialogsSection::onPreviewAudioSettings");
     openPreviewSettingsDialog(
         true,
         false,
@@ -57,6 +59,7 @@ void MainWindow::DialogsSection::onPreviewAudioSettings()
 
 void MainWindow::DialogsSection::onPreviewVideoSettings()
 {
+    MC_OP("MainWindow::DialogsSection::onPreviewVideoSettings");
     openPreviewSettingsDialog(
         false,
         true,
@@ -66,6 +69,7 @@ void MainWindow::DialogsSection::onPreviewVideoSettings()
 
 void MainWindow::DialogsSection::onAbout()
 {
+    MC_OP("MainWindow::DialogsSection::onAbout");
     QString buildType = "Release";
 #ifndef NDEBUG
     buildType = "Debug";
@@ -158,7 +162,9 @@ void MainWindow::DialogsSection::onAbout()
 
 void MainWindow::DialogsSection::onOpenLatencyDetector()
 {
+    MC_OP("MainWindow::DialogsSection::onOpenLatencyDetector");
     const QString trackPath = resolveLatencyDetectorTrackPath();
+    _mc_op_.note(QStringLiteral("track=%1").arg(trackPath));
     bool wholeBpmOk = false;
     const double wholeBpm = owner_.parsedWholeBpm(&wholeBpmOk);
     const QString meterId = owner_.parsedLatencyMeterId();

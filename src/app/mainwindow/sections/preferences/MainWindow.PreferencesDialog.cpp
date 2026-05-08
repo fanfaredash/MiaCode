@@ -15,6 +15,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
@@ -41,6 +42,7 @@ MainWindow::PreferencesSection::PreferencesSection(
 
 void MainWindow::PreferencesSection::onPreferences()
 {
+    MC_OP("MainWindow::PreferencesSection::onPreferences");
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
     dialog.setWindowTitle(uiText("dialog.preferences.title", "Preferences"));
     dialog.setModal(true);
