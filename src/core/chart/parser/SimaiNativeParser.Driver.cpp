@@ -1088,6 +1088,8 @@ SimaiNativeParseResult SimaiNativeParser::parseForTimeline(
     const QString& text,
     const miacode::simai::SimaiTimingMetadata& timingMetadata)
 {
+    MC_OP("SimaiNativeParser::parseForTimeline");
+    _mc_op_.note(QStringLiteral("text_len=%1").arg(text.size()));
     return parseInternal(text, false, g_invalidStarPreviewEnabled, timingMetadata);
 }
 
@@ -1095,6 +1097,8 @@ SimaiNativeParseResult SimaiNativeParser::validateSyntax(
     const QString& text,
     const miacode::simai::SimaiTimingMetadata& timingMetadata)
 {
+    MC_OP("SimaiNativeParser::validateSyntax");
+    _mc_op_.note(QStringLiteral("text_len=%1").arg(text.size()));
     SimaiNativeParseResult result = parseInternal(text, true, false, timingMetadata);
     return result;
 }
@@ -1115,6 +1119,10 @@ SimaiNativeValidationReport SimaiNativeParser::buildValidationReport(
     const SimaiNativeParseResult* lenientResult,
     const miacode::simai::SimaiTimingMetadata& timingMetadata)
 {
+    MC_OP("SimaiNativeParser::buildValidationReport");
+    _mc_op_.note(QStringLiteral("text_len=%1 locale=%2")
+                     .arg(text.size())
+                     .arg(static_cast<int>(locale)));
     // The lenient pass is now exclusively a chart-preview vehicle (see
     // parseForTimeline) and must not influence diagnostics. Validation severity
     // is whatever the strict parser emits — full stop. The legacy parameter is

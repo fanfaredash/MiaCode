@@ -1,5 +1,7 @@
 #include "ChartBatchTransform.h"
 
+#include "common/OperationLog.h"
+
 #include <QRandomGenerator>
 #include <QStringList>
 #include <QtGlobal>
@@ -1009,6 +1011,8 @@ QString randomRotateForSelection(const QString& input, const std::function<int()
 
 QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount)
 {
+    MC_OP("miacode::chart_transform::transformChartText");
+    _mc_op_.note(QStringLiteral("op=%1 input_len=%2").arg(static_cast<int>(op)).arg(input.size()));
     auto isMirrorOp = [](ChartTransformOp current) {
         return current == ChartTransformOp::MirrorLeftRight || current == ChartTransformOp::MirrorUpDown;
     };
@@ -1396,6 +1400,8 @@ QString transformChartText(const QString& input, ChartTransformOp op, int* chang
 
 QString transformChartSelectionText(const QString& input, ChartTransformOp op, int* changedCount)
 {
+    MC_OP("miacode::chart_transform::transformChartSelectionText");
+    _mc_op_.note(QStringLiteral("op=%1 input_len=%2").arg(static_cast<int>(op)).arg(input.size()));
     int changed = 0;
     const QString output = rewriteSelectionCore(input, [&](const QString& core) {
         return transformChartText(core, op, &changed);

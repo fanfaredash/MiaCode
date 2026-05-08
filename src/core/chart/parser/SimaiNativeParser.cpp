@@ -1,5 +1,7 @@
 #include "SimaiNativeParser.h"
 
+#include "common/OperationLog.h"
+
 #include <QFile>
 #include <QHash>
 #include <QJsonArray>

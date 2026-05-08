@@ -6,6 +6,7 @@
 
 #include <QtGlobal>
 
+#include "common/OperationLog.h"
 #include "core/chart/parser/SimaiNativeParser.h"
 
 namespace miacode::chart_transform {
@@ -1529,6 +1530,8 @@ ChartNormalizationResult normalizeChartText(
     const miacode::simai::SimaiTimingMetadata& timingMetadata,
     const ChartNormalizationOptions& options)
 {
+    MC_OP("miacode::chart_transform::normalizeChartText");
+    _mc_op_.note(QStringLiteral("input_len=%1").arg(input.size()));
     return normalizeChartFragment(
         input,
         timingMetadata,
@@ -1545,9 +1548,13 @@ ChartNormalizationResult normalizeChartSelectionText(
     const miacode::simai::SimaiTimingMetadata& timingMetadata,
     const ChartNormalizationOptions& options)
 {
+    MC_OP("miacode::chart_transform::normalizeChartSelectionText");
+    _mc_op_.note(QStringLiteral("range=%1..%2 input_len=%3")
+                     .arg(selectionStart).arg(selectionEnd).arg(fullText.size()));
     if (selectionStart < 0 || selectionEnd < selectionStart || selectionEnd > fullText.size()) {
         ChartNormalizationResult result;
         result.errorMessage = QStringLiteral("Invalid selection range.");
+        _mc_op_.fail(QStringLiteral("invalid selection range"));
         return result;
     }
 
