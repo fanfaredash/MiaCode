@@ -141,6 +141,11 @@ void flushSnapshotToDisk()
 #else
     Q_UNUSED(idx);
 #endif
+
+    // Phase 4 — also flush the heap-free op-chain shadow so the call
+    // chain at the moment of the crash is recoverable. Heap-safe and
+    // no-op if installShadow() was never called.
+    miacode::oplog::flushShadowToDisk();
 }
 
 #ifdef Q_OS_WIN
@@ -191,6 +196,9 @@ void install()
     if (g_installed.exchange(true, std::memory_order_acq_rel)) {
         return;  // already installed
     }
+    // Phase 4 — pre-resolve the op-chain shadow log path so the SEH
+    // filter (which calls flushShadowToDisk) doesn't need any heap.
+    miacode::oplog::installShadow();
     if (g_snapshot == nullptr) {
         // Heap allocate so the 8 MB doesn't sit in BSS for every process.
         // std::nothrow because we're called early; a bad_alloc here would

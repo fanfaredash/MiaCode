@@ -7,6 +7,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QString>
 #include <QTemporaryDir>
@@ -219,6 +220,105 @@ bool runCurrentChainEmptyOutsideAnyScopeTest()
                    QStringLiteral("currentChain() outside any scope should be empty, got: ") + chain);
 }
 
+// Phase 4 — exercises the heap-free shadow buffer + flush. Pushes a
+// chain via MC_OP, calls flushShadowToDisk() directly (the SEH filter
+// would do the same on a real crash), and asserts the chain is in the
+// resulting file in the exact leaf-first order the SEH path emits.
+bool runShadowFlushTest(const QString& shadowPath)
+{
+    QFile::remove(shadowPath);
+
+    // The shadow path is captured at installShadow() time. Re-installing
+    // is a no-op (idempotent) — for the test we set the env var BEFORE
+    // installShadow() runs so the path is captured correctly.
+    {
+        MC_OP("oplog_test::shadow_outer");
+        {
+            MC_OP("oplog_test::shadow_mid");
+            {
+                MC_OP("oplog_test::shadow_leaf");
+                miacode::oplog::flushShadowToDisk();
+            }
+        }
+    }
+
+    const QString contents = readLog(shadowPath);
+    if (!require(!contents.isEmpty(),
+                 QStringLiteral("shadow log empty after flushShadowToDisk"))) {
+        return false;
+    }
+    if (!checkContains(contents, QStringLiteral("miacode operation breadcrumb shadow"),
+                       QStringLiteral("shadow header"))) {
+        return false;
+    }
+    if (!checkContains(contents, QStringLiteral("[2] oplog_test::shadow_leaf"),
+                       QStringLiteral("shadow leaf at depth index 2"))) {
+        return false;
+    }
+    if (!checkContains(contents, QStringLiteral("[1] oplog_test::shadow_mid"),
+                       QStringLiteral("shadow mid at depth index 1"))) {
+        return false;
+    }
+    if (!checkContains(contents, QStringLiteral("[0] oplog_test::shadow_outer"),
+                       QStringLiteral("shadow outer at depth index 0"))) {
+        return false;
+    }
+    if (!checkContains(contents, QStringLiteral("depth=3"),
+                       QStringLiteral("shadow depth=3"))) {
+        return false;
+    }
+    return true;
+}
+
+// Phase 4 — micro-benchmark to confirm the shadow buffer adds
+// negligible overhead per MC_OP push/pop. Runs N iterations of a
+// nested-scope construct/destruct cycle and reports the per-cycle
+// cost. Used to gate the design — if the cost goes above ~200ns we
+// reconsider.
+bool runShadowBenchmark()
+{
+    constexpr int kIterations = 100000;
+    constexpr int kInnerDepth = 4;
+
+    auto worker = [] {
+        // 4-deep nested MC_OP. Each iteration does 4 push + 4 pop.
+        // Distinct nested blocks because the MC_OP macro declares a
+        // local named _mc_op_ — multiple in the same scope conflict.
+        for (int i = 0; i < kIterations; ++i) {
+            MC_OP("bench::a");
+            { MC_OP("bench::b");
+                { MC_OP("bench::c");
+                    { MC_OP("bench::d");
+                        (void)i;
+                    }
+                }
+            }
+        }
+    };
+
+    QElapsedTimer timer;
+    timer.start();
+    worker();
+    const qint64 elapsedNs = timer.nsecsElapsed();
+    const double cyclesPerOp = static_cast<double>(elapsedNs)
+                               / (static_cast<double>(kIterations) * kInnerDepth * 2.0);
+
+    out() << QStringLiteral("benchmark: %1 iterations × %2-deep × (push+pop) "
+                            "= %3 ns per push-or-pop")
+                    .arg(kIterations)
+                    .arg(kInnerDepth)
+                    .arg(cyclesPerOp, 0, 'f', 1)
+          << Qt::endl;
+
+    // Soft budget — fail loudly if we ever creep above 1µs per op.
+    // Today's measurement should be well under 200 ns.
+    if (cyclesPerOp > 1000.0) {
+        err() << "FAIL: MC_OP overhead exceeded 1 µs per push/pop (regression?)" << Qt::endl;
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 // Realistic mini-scenarios (not assertions) — they exist so a verbose
@@ -421,8 +521,15 @@ int main(int argc, char* argv[])
     }
     const QString opLogPath = QDir(tempDir.path()).filePath(QStringLiteral("op.log"));
     const QString fatalLogPath = QDir(tempDir.path()).filePath(QStringLiteral("fatal.log"));
+    const QString shadowLogPath = QDir(tempDir.path()).filePath(QStringLiteral("shadow.log"));
     qputenv("MIACODE_OPERATION_LOG_PATH", opLogPath.toUtf8());
     qputenv("MIACODE_FATAL_LOG_PATH", fatalLogPath.toUtf8());
+    // Set BEFORE installShadow() so it captures our test path. The
+    // shadow path is resolved once and cached as wchar_t for the SEH
+    // path's heap-free safety; later changes to the env var are not
+    // picked up.
+    qputenv("MIACODE_OPLOG_SHADOW_PATH", shadowLogPath.toUtf8());
+    miacode::oplog::installShadow();
 
     // Force the async writer into synchronous mode for the duration of
     // the test. The default async path leaves bytes in the QFile's
@@ -445,6 +552,14 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!runFatalChainAppendTest(fatalLogPath)) {
+        return 1;
+    }
+    if (!runShadowFlushTest(shadowLogPath)) {
+        return 1;
+    }
+    dumpLogIfVerbose(QStringLiteral("Shadow flush — heap-free dump"),
+                     readLog(shadowLogPath));
+    if (!runShadowBenchmark()) {
         return 1;
     }
 

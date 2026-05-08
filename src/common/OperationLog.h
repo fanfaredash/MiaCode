@@ -74,6 +74,37 @@ private:
 // Empty string if no Scope is active. Cheap (linked-list walk).
 QString currentChain();
 
+// Phase 4 — heap-free shadow chain for hard crashes.
+//
+// The Scope class allocates QString op names and notes via Qt's heap,
+// so its destructor is unsafe to call from a corrupted process (SEH
+// filter, signal handler). The shadow is a separate, static-memory
+// mirror of just the op-name chain that's safe to walk from any of
+// those handlers using only Win32 APIs.
+//
+// Cost: one bounded strncpy + one atomic store per MC_OP push/pop.
+// Memory: ~50 KB of zero-initialised static buffer at process start.
+// Per-thread; up to 32 threads, 16 frames deep, 96-byte names.
+//
+// Lifecycle:
+//   crash_recovery::install()  →  oplog::installShadow()  (path resolve, once)
+//   MC_OP construct/destruct   →  push/pop shadow frame    (always-on, free)
+//   SEH/terminate/signal       →  oplog::flushShadowToDisk() (heap-free write)
+//
+// On non-Windows builds, push/pop still maintain the buffers (so the
+// cost is uniform across platforms in benchmarks) but
+// flushShadowToDisk is a no-op — there's no SEH equivalent to wire
+// it into.
+void installShadow();
+
+// Crash-handler-safe. Walks every active thread's shadow chain and
+// writes a UTF-8 dump to the path captured at install time. Uses
+// only Win32 (CreateFileW / WriteFile / FlushFileBuffers / CloseHandle)
+// and static buffers — no heap, no locks, no Qt.
+//
+// Idempotent. Silent on failure (path unset, file open fails, etc.).
+void flushShadowToDisk();
+
 }  // namespace miacode::oplog
 
 // Convenience macro. The variable name _mc_op_ is conventional so
