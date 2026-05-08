@@ -41,7 +41,7 @@
 
 namespace miacode::preview::ipc {
 
-inline constexpr quint32 kSerialLayoutVersion = 7;
+inline constexpr quint32 kSerialLayoutVersion = 8;
 
 // Hard cap so the slot byte size is bounded at compile time. The ring
 // buffer's slot stride is sizeof(PreviewFrameStateSerial); editor and worker
@@ -171,6 +171,15 @@ struct SerialSpriteEntry
     SerialStringRef typeText;        // raw type string fallback
     SerialStringRef slideDisplayKey; // marker.slideDisplayKey
     SerialStringRef touchPad;        // marker.touchPad
+    // Layout v8 — slide segment chain keys joined with '\n', so the
+    // worker can pick the LAST segment's shape for slide-judge sprite
+    // selection. The editor-side PreviewChartReviewLayerState reads
+    // `marker.slideSegmentKeys.constLast()` to choose between
+    // just_str / just_curv / just_wifi; without this projection the
+    // worker falls back to `slideTrackKey` (which is the FIRST segment
+    // for chain slides), and the worker always rendered just_str for
+    // multi-segment slides whose final segment is curved or wifi.
+    SerialStringRef slideSegmentKeysJoined;
 
     // Touch geometry — `touchPoint` from TimelineNoteMarker. Used by
     // the touch / touch-hold / touch-judge layers.

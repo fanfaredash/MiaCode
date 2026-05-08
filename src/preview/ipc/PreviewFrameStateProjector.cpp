@@ -536,6 +536,16 @@ TimelineNoteMarker inflateSerialSpriteToMarker(const SerialSpriteEntry& entry,
     m.slideTrackKey = readBlobString(snapshot, entry.slideTrackKey);
     m.slideDisplayKey = readBlobString(snapshot, entry.slideDisplayKey);
     m.touchPad = readBlobString(snapshot, entry.touchPad);
+    // Layout v8 — restore slideSegmentKeys from the '\n'-joined blob
+    // string so PreviewChartReviewLayerState can pick the LAST
+    // segment for slide-judge sprite selection. Empty string → empty
+    // list, falling back to slideTrackKey (for v7-and-earlier
+    // snapshots, layoutVersion mismatch is checked separately so we
+    // shouldn't see those at runtime, but split-on-empty is safe).
+    const QString slideSegmentKeysJoined = readBlobString(snapshot, entry.slideSegmentKeysJoined);
+    m.slideSegmentKeys = slideSegmentKeysJoined.isEmpty()
+        ? QStringList()
+        : slideSegmentKeysJoined.split(QChar('\n'), Qt::SkipEmptyParts);
     m.touchPoint = QPointF(entry.touchPointX, entry.touchPointY);
     m.parseOrder = entry.parseOrder;
     m.eachGroupId = entry.eachGroupId;
@@ -728,6 +738,23 @@ int projectActiveSpritesToSerial(const miacode::preview::scene::PreviewFrameStat
         }
         dst.touchPad = appendToStringBlob(out, marker.touchPad);
         if (!marker.touchPad.isEmpty() && dst.touchPad.length == 0) {
+            ++droppedBlobCap;
+        }
+        // Layout v8 — slide segment chain keys, '\n'-joined. Empty for
+        // non-slide markers; for chain slides this carries the per-
+        // segment keys so the worker's
+        // PreviewChartReviewLayerState can reach
+        // slideSegmentKeys.constLast() and pick the right
+        // just_str / just_curv / just_wifi sprite. Pre-v8 snapshots
+        // dropped this field, so the worker always selected just_str
+        // (it fell back to slideTrackKey, which holds the FIRST
+        // segment's key for chain slides).
+        const QString slideSegmentKeysJoined =
+            marker.slideSegmentKeys.isEmpty()
+            ? QString()
+            : marker.slideSegmentKeys.join(QChar('\n'));
+        dst.slideSegmentKeysJoined = appendToStringBlob(out, slideSegmentKeysJoined);
+        if (!slideSegmentKeysJoined.isEmpty() && dst.slideSegmentKeysJoined.length == 0) {
             ++droppedBlobCap;
         }
 
