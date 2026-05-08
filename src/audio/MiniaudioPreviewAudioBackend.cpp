@@ -4,6 +4,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/MiniaudioFileAccess.h"
+#include "common/OperationLog.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewSfxTimeline.h"

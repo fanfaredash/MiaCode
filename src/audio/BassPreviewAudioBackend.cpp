@@ -5,6 +5,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 #include "common/PreviewAudioMixConfig.h"
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewSfxTimeline.h"
@@ -478,19 +479,23 @@ void BassPreviewAudioBackend::setWarmupResolvedPaths(const QString& chartPath, c
 
 bool BassPreviewAudioBackend::ensureBassFxLoaded()
 {
+    MC_OP("BassPreviewAudioBackend::ensureBassFxLoaded");
 #ifdef Q_OS_WIN
     if (bassFxTempoCreate_ != nullptr) {
         return true;
     }
     const QString libraryPath = runtimeFilePath(QStringLiteral("bass_fx.dll"));
+    _mc_op_.note(QStringLiteral("path=%1").arg(libraryPath));
     const HMODULE module = LoadLibraryW(reinterpret_cast<LPCWSTR>(libraryPath.utf16()));
     if (module == nullptr) {
+        _mc_op_.fail(QStringLiteral("LoadLibraryW failed err=%1").arg(::GetLastError()));
         appendAudioDebugLog(QString("bass_fx_load_failed path=%1").arg(libraryPath));
         return false;
     }
     FARPROC proc = GetProcAddress(module, "BASS_FX_TempoCreate");
     if (proc == nullptr) {
         FreeLibrary(module);
+        _mc_op_.fail(QStringLiteral("GetProcAddress BASS_FX_TempoCreate missing"));
         appendAudioDebugLog(QString("bass_fx_symbol_missing path=%1").arg(libraryPath));
         return false;
     }
@@ -498,6 +503,7 @@ bool BassPreviewAudioBackend::ensureBassFxLoaded()
     bassFxTempoCreate_ = reinterpret_cast<void*>(proc);
     return true;
 #else
+    _mc_op_.fail(QStringLiteral("non-Windows platform"));
     return false;
 #endif
 }
@@ -547,7 +553,9 @@ void BassPreviewAudioBackend::unloadOptionalPlugins()
 
 bool BassPreviewAudioBackend::initializeAudioEngine()
 {
+    MC_OP("BassPreviewAudioBackend::initializeAudioEngine");
 #ifndef Q_OS_WIN
+    _mc_op_.fail(QStringLiteral("non-Windows platform"));
     return false;
 #else
     if (engineInitialized_ && masterMixer_ != 0) {
@@ -555,7 +563,9 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
     }
     QElapsedTimer timer;
     timer.start();
+    _mc_op_.note(QStringLiteral("device_sr=%1").arg(deviceSampleRate_));
     if (!ensureBassFxLoaded()) {
+        _mc_op_.fail(QStringLiteral("bass_fx load failed"));
         appendBassDebugLog(
             miacode::preview_audio::bass::BassDebugOperation::InitializeAudioEngine,
             QString("reused=0 elapsed_ms=%1 ok=0 reason=bass_fx").arg(timer.elapsed()),
@@ -565,6 +575,7 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
     if (!registeredBassDeviceRef_) {
         if (gBassDeviceRefCount == 0) {
             if (!BASS_Init(-1, static_cast<int>(deviceSampleRate_), 0, nullptr, nullptr)) {
+                _mc_op_.fail(QStringLiteral("BASS_Init err=%1").arg(static_cast<int>(BASS_ErrorGetCode())));
                 appendAudioDebugLog(QString("bass_init_failed err=%1").arg(static_cast<int>(BASS_ErrorGetCode())));
                 appendBassDebugLog(
                     miacode::preview_audio::bass::BassDebugOperation::InitializeAudioEngine,
@@ -656,6 +667,7 @@ void BassPreviewAudioBackend::resetAssets()
 
 void BassPreviewAudioBackend::initializeAssets()
 {
+    MC_OP("BassPreviewAudioBackend::initializeAssets");
 #ifdef Q_OS_WIN
     QElapsedTimer timer;
     timer.start();
@@ -1045,12 +1057,14 @@ void BassPreviewAudioBackend::startTransportFromCurrentAnchor()
 
 void BassPreviewAudioBackend::reloadAssets(const PreviewAudioSettings& settings)
 {
+    MC_OP("BassPreviewAudioBackend::reloadAssets");
     settings_ = settings;
     settings_.normalize();
     invalidateRetainedPlaybackState(QStringLiteral("reload_assets"));
     trackMissingAfterLoadLogged_ = false;
     refreshPreparedAssets();
     if (!initializeAudioEngine()) {
+        _mc_op_.fail(QStringLiteral("initializeAudioEngine failed"));
         updateRetainedBgmState();
         return;
     }

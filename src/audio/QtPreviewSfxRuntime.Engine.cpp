@@ -1,5 +1,6 @@
 bool QtPreviewSfxRuntime::initializeAudioEngine()
 {
+    MC_OP("QtPreviewSfxRuntime::initializeAudioEngine");
     if (engineState_ != nullptr) {
         return true;
     }
@@ -13,6 +14,7 @@ bool QtPreviewSfxRuntime::initializeAudioEngine()
         delete engineState_;
         engineState_ = nullptr;
         engineInitialized_ = false;
+        _mc_op_.fail(QStringLiteral("ma_engine_init failed"));
         appendAudioDebugLog("initializeAudioEngine failed");
         return false;
     }
@@ -27,6 +29,8 @@ bool QtPreviewSfxRuntime::initializeAudioEngine()
 
 void QtPreviewSfxRuntime::initializeAssets()
 {
+    MC_OP("QtPreviewSfxRuntime::initializeAssets");
+    _mc_op_.note(QStringLiteral("sfx_dir=%1").arg(preparedAssets_.sfxDir));
     if (!engineInitialized_ || engineState_ == nullptr || preparedAssets_.sfxDir.isEmpty()) {
         return;
     }
