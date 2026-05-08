@@ -285,6 +285,53 @@ void runRealisticScenarioDemos(const QString& logPath, const QString& fatalPath)
     };
     importChart();
 
+    // Scenario 4: Phase-2-shape worker IPC exception chain. Mirrors the
+    // actual MC_OP stack a thrown exception would walk in production:
+    //   main → runCliPreviewWorker → PreviewWorkerSession::run
+    //        → onStdinCommandLine → handleAttach → (throw)
+    // The leaf throws bad_alloc (simulating a heap exhaustion during
+    // shared-memory attach). The catch handler at the runCli* boundary
+    // calls appendFatalMessage exactly the way main.cpp does, and the
+    // chain is auto-inlined into both the fatal entry AND each
+    // op-failure entry as the Scope destructors unwind.
+    auto handleAttachThrows = [] {
+        MC_OP("PreviewWorkerSession::handleAttach");
+        _mc_op_.note(QStringLiteral("editor_hwnd=0x12340000 session=demo proto=1"));
+        // Simulate the failure mode: SharedMemory attach fails because
+        // the editor's slot byte size doesn't match what the worker
+        // expects, and the constructor throws.
+        throw std::runtime_error("SharedMemory::attach: slot byte size mismatch (got 65536, expected 524288)");
+    };
+    auto onStdinCommandLineSim = [&] {
+        MC_OP("PreviewWorkerSession::onStdinCommandLine");
+        _mc_op_.note(QStringLiteral("cmd=attach"));
+        handleAttachThrows();
+    };
+    auto previewWorkerRun = [&] {
+        MC_OP("PreviewWorkerSession::run");
+        onStdinCommandLineSim();
+    };
+    auto runCliPreviewWorkerSim = [&] {
+        MC_OP("runCliPreviewWorker");
+        _mc_op_.note(QStringLiteral("staticTestMode=0"));
+        try {
+            previewWorkerRun();
+        } catch (const std::exception& ex) {
+            // Mirrors main.cpp:1352. currentExceptionDetail() runs
+            // INSIDE the catch, so what() is captured here.
+            const QString detail = QString::fromUtf8(ex.what());
+            const QString error = QStringLiteral("Unhandled preview worker exception.");
+            miacode::debug_log::appendFatalMessage(
+                QStringLiteral("preview/worker_exception"),
+                QStringLiteral("%1 details=%2").arg(error, detail));
+        }
+    };
+    auto mainSim = [&] {
+        MC_OP("main");
+        runCliPreviewWorkerSim();
+    };
+    mainSim();
+
     miacode::debug_log::flushAsyncLogWriter(2000);
     dumpLogIfVerbose(QStringLiteral("Realistic scenarios — Channel::Operation"), readLog(logPath));
     dumpLogIfVerbose(QStringLiteral("Realistic scenarios — Channel::Fatal"), readLog(fatalPath));
