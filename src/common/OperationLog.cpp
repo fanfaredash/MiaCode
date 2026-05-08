@@ -364,7 +364,26 @@ void installShadow()
     // Resolve the shadow log path eagerly. We can use Qt freely here
     // (called at startup, heap is intact) — once cached as wchar_t,
     // the SEH path doesn't touch Qt or the C heap.
+    //
+    // Path resolution order (most-specific first):
+    //   1. MIACODE_OPLOG_SHADOW_PATH — explicit per-process override.
+    //   2. MIACODE_LOG_DIR/miacode_op_chain_<pid>.log — co-locates every
+    //      process's shadow next to the parent's other log files. The
+    //      parent supervisor sets MIACODE_LOG_DIR for spawned children
+    //      (worker, export worker), so all shadow files for a session
+    //      land in the same directory and the parent can auto-collate
+    //      crashed children's chains via PID glob.
+    //   3. <%TEMP%>/miacode_op_chain_<pid>.log — last-resort fallback
+    //      when no log dir is configured (e.g. very early startup).
     QString path = qEnvironmentVariable("MIACODE_OPLOG_SHADOW_PATH").trimmed();
+    if (path.isEmpty()) {
+        const QString logDir = qEnvironmentVariable("MIACODE_LOG_DIR").trimmed();
+        if (!logDir.isEmpty()) {
+            const qint64 pid = QCoreApplication::applicationPid();
+            path = QDir(QDir::cleanPath(logDir)).filePath(
+                QStringLiteral("miacode_op_chain_%1.log").arg(pid));
+        }
+    }
     if (path.isEmpty()) {
         const qint64 pid = QCoreApplication::applicationPid();
         path = QDir(QDir::tempPath()).filePath(

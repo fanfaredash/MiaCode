@@ -9,10 +9,12 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QProcess>
 #include <QString>
 #include <QTemporaryDir>
 #include <QTextStream>
 
+#include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
 
@@ -497,11 +499,120 @@ void runRealisticScenarioDemos(const QString& logPath, const QString& fatalPath)
     dumpLogIfVerbose(QStringLiteral("Realistic scenarios — Channel::Fatal"), readLog(fatalPath));
 }
 
+// Cross-process crash demo — parent side. Spawns a child copy of
+// oplog_self_test with --child-crash, waits for the child's
+// CrashExit, then reads the child's shadow log out of MIACODE_LOG_DIR
+// and prints it. Mirrors what PreviewWorkerSupervisor::onProcessFinished
+// does in production.
+int runCrossProcessCrashDemo(const QString& selfExecutablePath)
+{
+    QTemporaryDir parentLogDir;
+    if (!parentLogDir.isValid()) {
+        err() << "could not create temp log dir" << Qt::endl;
+        return 1;
+    }
+    const QString sharedLogDir = parentLogDir.path();
+    out() << QStringLiteral("[parent] log_dir=%1").arg(sharedLogDir) << Qt::endl;
+
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("MIACODE_LOG_DIR"), sharedLogDir);
+    // Clear any inherited override so the child uses MIACODE_LOG_DIR.
+    env.remove(QStringLiteral("MIACODE_OPLOG_SHADOW_PATH"));
+
+    QProcess child;
+    child.setProcessEnvironment(env);
+    child.setProcessChannelMode(QProcess::SeparateChannels);
+    child.start(selfExecutablePath,
+                QStringList{QStringLiteral("--child-crash")});
+    if (!child.waitForStarted(5000)) {
+        err() << "[parent] child failed to start: " << child.errorString() << Qt::endl;
+        return 1;
+    }
+    out() << QStringLiteral("[parent] child started pid=%1, awaiting crash...")
+                 .arg(child.processId())
+          << Qt::endl;
+    const qint64 childPid = static_cast<qint64>(child.processId());
+    child.waitForFinished(10000);
+
+    const auto exitStatus = child.exitStatus();
+    const int exitCode = child.exitCode();
+    out() << QStringLiteral("[parent] child finished status=%1 exit_code=0x%2")
+                 .arg(exitStatus == QProcess::CrashExit ? "CrashExit" : "NormalExit")
+                 .arg(static_cast<unsigned>(exitCode), 0, 16)
+          << Qt::endl;
+    if (exitStatus != QProcess::CrashExit) {
+        err() << "[parent] expected CrashExit, got NormalExit" << Qt::endl;
+        return 1;
+    }
+
+    // Mirrors PreviewWorkerSupervisor::onProcessFinished: read the
+    // dead child's shadow file from the shared log dir and inline it
+    // into the parent's bug report.
+    const QString shadowPath = QDir(sharedLogDir).filePath(
+        QStringLiteral("miacode_op_chain_%1.log").arg(childPid));
+    QFile shadowFile(shadowPath);
+    if (!shadowFile.exists()) {
+        err() << "[parent] shadow log missing at " << shadowPath << Qt::endl;
+        return 1;
+    }
+    if (!shadowFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        err() << "[parent] could not open shadow log: " << shadowFile.errorString() << Qt::endl;
+        return 1;
+    }
+    const QByteArray shadowContents = shadowFile.readAll();
+    shadowFile.close();
+    out() << QStringLiteral("[parent] collated child shadow log (%1 bytes from %2):")
+                 .arg(shadowContents.size())
+                 .arg(shadowPath)
+          << Qt::endl;
+    out() << QString::fromUtf8(shadowContents);
+    if (!shadowContents.endsWith('\n')) {
+        out() << Qt::endl;
+    }
+    return 0;
+}
+
+// Cross-process crash demo — child side. Pushes a known op chain,
+// then triggers a SEGV that runs through the SEH filter so the
+// shadow buffer flush fires. Process exits via CrashExit.
+[[noreturn]] void runChildCrash()
+{
+    // crash_recovery::install() registers the SEH top-level filter
+    // that calls flushShadowToDisk on access violations etc., AND
+    // calls installShadow internally. The shadow path resolves from
+    // MIACODE_LOG_DIR (set by parent).
+    miacode::crash_recovery::install();
+
+    // Build a realistic-looking chain so the parent's collation has
+    // something interesting to show. Note that we deliberately do
+    // NOT pop these scopes — we're about to crash, so the chain
+    // visible to the SEH path / explicit flush below is the chain
+    // at the moment of death.
+    [[maybe_unused]] miacode::oplog::Scope mc_op_main("xprocess_demo::child_main");
+    [[maybe_unused]] miacode::oplog::Scope mc_op_loop("xprocess_demo::worker_loop");
+    [[maybe_unused]] miacode::oplog::Scope mc_op_handle("xprocess_demo::handle_request");
+    [[maybe_unused]] miacode::oplog::Scope mc_op_deser("xprocess_demo::deserialize_payload");
+
+    // Flush the shadow eagerly. In production this happens via the
+    // SEH filter on access violations / segfaults. For a deterministic
+    // demo we drive it directly, then __fastfail — same end-state for
+    // the parent (CrashExit + populated shadow log).
+    miacode::oplog::flushShadowToDisk();
+
+#ifdef _WIN32
+    __fastfail(7);  // STATUS_STACK_BUFFER_OVERRUN — QProcess sees CrashExit
+#else
+    std::abort();
+#endif
+}
+
 int main(int argc, char* argv[])
 {
     QCoreApplication app(argc, argv);
 
     bool simulateFailure = false;
+    bool xprocessDemo = false;
+    bool childCrash = false;
     for (int i = 1; i < argc; ++i) {
         const QString arg = QString::fromLocal8Bit(argv[i]);
         if (arg == QLatin1String("--verbose") || arg == QLatin1String("-v")) {
@@ -511,7 +622,19 @@ int main(int argc, char* argv[])
             // demonstrates the FAIL: line shape. Used only when manually
             // showcasing the test framework — never wired into CI.
             simulateFailure = true;
+        } else if (arg == QLatin1String("--xprocess-demo")) {
+            xprocessDemo = true;
+        } else if (arg == QLatin1String("--child-crash")) {
+            childCrash = true;
         }
+    }
+
+    if (childCrash) {
+        runChildCrash();
+        // unreachable
+    }
+    if (xprocessDemo) {
+        return runCrossProcessCrashDemo(QCoreApplication::applicationFilePath());
     }
 
     QTemporaryDir tempDir;

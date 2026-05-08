@@ -540,6 +540,45 @@ void PreviewWorkerSupervisor::onProcessFinished(int exitCode, QProcess::ExitStat
                             .arg(respawnAttemptsInWindow_));
     attached_ = false;
     popupHwnd_ = 0;
+
+    // Cross-process crash logging: on CrashExit, the dead child may
+    // have written a shadow op-chain log via its SEH filter. Pull it
+    // into the parent's Fatal channel so the editor's bug report is
+    // self-contained — the operator doesn't have to chase down a
+    // separate file per crashed worker.
+    //
+    // Skipped on graceful exit because there's no shadow file written
+    // (clean shutdown doesn't go through the SEH filter), and skipped
+    // when the worker died via __fastfail (which bypasses SEH and
+    // produces no shadow). Either way, the absence-of-file branch
+    // below is silent.
+    if (exitStatus == QProcess::CrashExit && process_ != nullptr) {
+        const qint64 deadPid = static_cast<qint64>(process_->processId());
+        if (deadPid > 0) {
+            const QString logDir = miacode::debug_log::logDirectory();
+            const QString shadowPath = QDir(logDir).filePath(
+                QStringLiteral("miacode_op_chain_%1.log").arg(deadPid));
+            QFile shadowFile(shadowPath);
+            if (shadowFile.exists()
+                && shadowFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                const QByteArray contents = shadowFile.readAll();
+                shadowFile.close();
+                if (!contents.isEmpty()) {
+                    miacode::debug_log::appendFatalMessage(
+                        QStringLiteral("preview/worker_shadow_chain"),
+                        QStringLiteral("worker_pid=%1 path=%2\n%3")
+                            .arg(deadPid)
+                            .arg(shadowPath)
+                            .arg(QString::fromUtf8(contents)));
+                    appendSupervisorLog(QStringLiteral("shadow_collated"),
+                                        QStringLiteral("pid=%1 bytes=%2")
+                                            .arg(deadPid)
+                                            .arg(contents.size()));
+                }
+            }
+        }
+    }
+
     emit workerExited(exitCode, exitStatus);
 
     if (process_ != nullptr) {

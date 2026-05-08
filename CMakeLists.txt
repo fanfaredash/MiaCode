@@ -579,6 +579,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
 
     add_executable(oplog_self_test
         src/tools/oplog/OperationLogSpec.cpp
+        src/common/CrashRecovery.h
+        src/common/CrashRecovery.cpp
         src/common/DebugLog.h
         src/common/DebugLog.cpp
         src/common/OperationLog.h

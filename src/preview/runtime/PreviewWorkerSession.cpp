@@ -1374,6 +1374,15 @@ void PreviewWorkerSession::maybeInjectCrash()
     if (framesPresented_ < static_cast<quint64>(injectCrashAtFrame_)) {
         return;
     }
+    // Two nested MC_OP frames so the SEH path's shadow dump shows a
+    // non-trivial chain — demonstrates that the crash captured
+    // logical context, not just "we died at frame N." In production
+    // the chain naturally has parent frames; here we fabricate them.
+    MC_OP("PreviewWorkerSession::maybeInjectCrash");
+    _mc_op_.note(QStringLiteral("frames_presented=%1 crash_at=%2")
+                     .arg(framesPresented_)
+                     .arg(injectCrashAtFrame_));
+
     // Log + flush the planned crash so the supervisor scraper can correlate
     // the worker's last log line with the QProcess::CrashExit event. After
     // __fastfail the process is gone — no further IO will happen.
@@ -1384,7 +1393,38 @@ void PreviewWorkerSession::maybeInjectCrash()
     miacode::debug_log::flushAsyncLogWriter(200);
     std::fflush(stdout);
     std::fflush(stderr);
+
+    // Crash injection mode — controls whether the SEH filter (and
+    // hence the Phase 4 shadow buffer) gets a chance to run.
+    //
+    //   "fastfail" (default) — __fastfail(7) bypasses SEH entirely.
+    //                          QProcess sees CrashExit; no shadow log.
+    //                          Closest analogue to driver/OS-level
+    //                          forcible termination.
+    //
+    //   "segv" / "av"        — null pointer write triggers an access
+    //                          violation that runs through the SEH
+    //                          filter. flushSnapshotToDisk() fires
+    //                          and writes the shadow chain. QProcess
+    //                          still sees CrashExit. Use this mode to
+    //                          exercise the cross-process crash log
+    //                          collation path.
+    //
+    //   "abort"              — std::abort(): SIGABRT handler runs,
+    //                          shadow chain captured, then re-raised.
+    const QByteArray modeRaw = qgetenv("MIACODE_PREVIEW_WORKER_INJECT_CRASH_MODE");
+    const QByteArray mode = modeRaw.toLower();
 #ifdef _WIN32
+    if (mode == "segv" || mode == "av") {
+        // Volatile null deref — must be volatile so the compiler
+        // doesn't optimise it away as undefined-behaviour-with-no-
+        // observable-effect.
+        volatile int* p = nullptr;
+        *p = 0xDEADBEEF;
+        __fastfail(7);  // unreachable; here for compiler control flow
+    } else if (mode == "abort") {
+        std::abort();
+    }
     // FAST_FAIL_FATAL_APP_EXIT (7) — terminates the process via a
     // STATUS_STACK_BUFFER_OVERRUN exception that bypasses every SEH /
     // catch handler. QProcess sees CrashExit. This is closer to a real
@@ -1392,6 +1432,7 @@ void PreviewWorkerSession::maybeInjectCrash()
     // by structured handlers on some Windows builds.
     __fastfail(7);
 #else
+    Q_UNUSED(mode);
     std::abort();
 #endif
 }
