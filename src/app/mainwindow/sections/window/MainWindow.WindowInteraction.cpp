@@ -6,6 +6,7 @@
 #include "DialogLocalization.h"
 #include "UiText.h"
 #include "common/DebugLog.h"
+#include "common/OperationLog.h"
 #include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
@@ -997,7 +998,9 @@ void MainWindow::WindowSection::hideFindReplaceBar()
 
 void MainWindow::WindowSection::onToggleFindReplace()
 {
+    MC_OP("MainWindow::WindowSection::onToggleFindReplace");
     if (owner_.editorFindBar_ == nullptr) {
+        _mc_op_.fail(QStringLiteral("editorFindBar_ null"));
         return;
     }
     if (owner_.editorFindBar_->isVisible()) {
@@ -1025,22 +1028,27 @@ void MainWindow::WindowSection::onToggleFindReplace()
 
 void MainWindow::WindowSection::onFindNext()
 {
+    MC_OP("MainWindow::WindowSection::onFindNext");
     this->runFindInEditor(false);
 }
 
 void MainWindow::WindowSection::onFindPrevious()
 {
+    MC_OP("MainWindow::WindowSection::onFindPrevious");
     this->runFindInEditor(true);
 }
 
 void MainWindow::WindowSection::onReplaceOne()
 {
+    MC_OP("MainWindow::WindowSection::onReplaceOne");
     QTextEdit* target = this->activeFindTarget();
     if (target == nullptr || owner_.editorFindEdit_ == nullptr || owner_.editorReplaceEdit_ == nullptr) {
+        _mc_op_.fail(QStringLiteral("find/replace UI not initialised"));
         return;
     }
     const QString findText = owner_.editorFindEdit_->text();
     if (findText.isEmpty()) {
+        _mc_op_.fail(QStringLiteral("empty findText"));
         return;
     }
 
@@ -1054,14 +1062,18 @@ void MainWindow::WindowSection::onReplaceOne()
 
 void MainWindow::WindowSection::onReplaceAll()
 {
+    MC_OP("MainWindow::WindowSection::onReplaceAll");
     QTextEdit* target = this->activeFindTarget();
     if (target == nullptr || owner_.editorFindEdit_ == nullptr || owner_.editorReplaceEdit_ == nullptr) {
+        _mc_op_.fail(QStringLiteral("find/replace UI not initialised"));
         return;
     }
     const QString findText = owner_.editorFindEdit_->text();
     if (findText.isEmpty()) {
+        _mc_op_.fail(QStringLiteral("empty findText"));
         return;
     }
+    _mc_op_.note(QStringLiteral("findText_len=%1").arg(findText.size()));
 
     QTextDocument* doc = target->document();
     QTextCursor editCursor(doc);
