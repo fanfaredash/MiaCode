@@ -5,6 +5,7 @@
 #include "PlainCodeEditor.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "common/OperationLog.h"
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
 
@@ -209,7 +210,9 @@ QString MainWindow::DocumentSection::transformChartText(const QString& input, Ch
 
 void MainWindow::DocumentSection::onMirrorLeftRight()
 {
+    MC_OP("MainWindow::DocumentSection::onMirrorLeftRight");
     if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
@@ -223,7 +226,9 @@ void MainWindow::DocumentSection::onMirrorLeftRight()
 
 void MainWindow::DocumentSection::onMirrorUpDown()
 {
+    MC_OP("MainWindow::DocumentSection::onMirrorUpDown");
     if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
@@ -237,7 +242,9 @@ void MainWindow::DocumentSection::onMirrorUpDown()
 
 void MainWindow::DocumentSection::onRotate180()
 {
+    MC_OP("MainWindow::DocumentSection::onRotate180");
     if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
@@ -251,7 +258,9 @@ void MainWindow::DocumentSection::onRotate180()
 
 void MainWindow::DocumentSection::onRotate45CounterClockwise()
 {
+    MC_OP("MainWindow::DocumentSection::onRotate45CounterClockwise");
     if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
@@ -265,7 +274,9 @@ void MainWindow::DocumentSection::onRotate45CounterClockwise()
 
 void MainWindow::DocumentSection::onRotate45Clockwise()
 {
+    MC_OP("MainWindow::DocumentSection::onRotate45Clockwise");
     if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
@@ -279,7 +290,9 @@ void MainWindow::DocumentSection::onRotate45Clockwise()
 
 void MainWindow::DocumentSection::onNormalizeWholeChart()
 {
+    MC_OP("MainWindow::DocumentSection::onNormalizeWholeChart");
     if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
@@ -427,7 +440,9 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
 
 void MainWindow::DocumentSection::onToggleBreakSelection()
 {
+    MC_OP("MainWindow::DocumentSection::onToggleBreakSelection");
     if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
@@ -438,7 +453,9 @@ void MainWindow::DocumentSection::onToggleBreakSelection()
 
 void MainWindow::DocumentSection::onToggleExSelection()
 {
+    MC_OP("MainWindow::DocumentSection::onToggleExSelection");
     if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
@@ -449,7 +466,9 @@ void MainWindow::DocumentSection::onToggleExSelection()
 
 void MainWindow::DocumentSection::onToggleFireworkSelection()
 {
+    MC_OP("MainWindow::DocumentSection::onToggleFireworkSelection");
     if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
@@ -460,7 +479,9 @@ void MainWindow::DocumentSection::onToggleFireworkSelection()
 
 void MainWindow::DocumentSection::onRandomRotateSelection()
 {
+    MC_OP("MainWindow::DocumentSection::onRandomRotateSelection");
     if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
