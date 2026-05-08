@@ -151,14 +151,20 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
         // emitting them as visible pixels.
         if (state.hasHeaderControls) {
             // Order matters — same as the DComp source path:
-            //   1. zoomButtonBg + followCheckBg (covers widget areas)
-            //   2. followCheckIndicator (the box itself, on top of bg)
-            //   3. borders (4 hairlines per frame)
-            //   4. tick mark when checked
-            //   5. text labels (via texture cache)
+            //   1. zoomButtonBg (covers widget area)
+            //   2. zoom button border (4 hairlines)
+            //   3. zoom text label (via texture cache)
+            //
+            // Beta29 — the follow / progress-follow checkboxes that used
+            // to live alongside the zoom button moved to
+            // BottomTabsQuickHost.qml's tab strip (real QML CheckBoxes).
+            // The matching emit block in TimelineSceneStateBuilder is
+            // fenced under #if 0; reading the now-default-constructed
+            // followCheck* / progressFollowCheck* fields here would push
+            // empty rects + invalid colors + 0×0 text textures into the
+            // QSG scene, which has been observed to silently abort the
+            // process under x64 emulation on Apple-Silicon Windows VMs.
             staticRoot->appendChildNode(buildTimelineRectNode(state.zoomButtonBg));
-            staticRoot->appendChildNode(buildTimelineRectNode(state.followCheckBg));
-            staticRoot->appendChildNode(buildTimelineRectNode(state.followCheckIndicator));
             const auto pushFrame = [&staticRoot](
                 const miacode::timeline::TimelineSceneRect& r) {
                 const qreal x0 = r.rect.left();
@@ -180,27 +186,6 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
                         QPointF(x0, y1), QPointF(x0, y0), c, 1.0}));
             };
             pushFrame(state.zoomButtonBorder);
-            pushFrame(state.followCheckIndicatorBorder);
-            if (state.followCheckChecked) {
-                // Tick mark — two diagonal hairlines inside the box.
-                // Same ratios as the DComp source for visual parity.
-                const QRectF box = state.followCheckIndicator.rect;
-                const qreal x = box.left();
-                const qreal y = box.top();
-                const qreal w = box.width();
-                const qreal h = box.height();
-                const QColor tickColor(255, 255, 255);
-                staticRoot->appendChildNode(buildTimelineLineNode(
-                    miacode::timeline::TimelineSceneLine{
-                        QPointF(x + w * 0.24, y + h * 0.55),
-                        QPointF(x + w * 0.44, y + h * 0.74),
-                        tickColor, 1.8}));
-                staticRoot->appendChildNode(buildTimelineLineNode(
-                    miacode::timeline::TimelineSceneLine{
-                        QPointF(x + w * 0.44, y + h * 0.74),
-                        QPointF(x + w * 0.78, y + h * 0.28),
-                        tickColor, 1.8}));
-            }
             if (textures != nullptr) {
                 const TimelineQuickTextureHandle zoomHandle =
                     textures->textTexture(state.zoomButtonLabel);
@@ -209,15 +194,6 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
                     node->setTexture(zoomHandle.texture);
                     node->setRect(QRectF(state.zoomButtonLabel.topLeft,
                                           zoomHandle.logicalSize));
-                    staticRoot->appendChildNode(node);
-                }
-                const TimelineQuickTextureHandle followHandle =
-                    textures->textTexture(state.followCheckLabel);
-                if (followHandle.texture != nullptr) {
-                    auto* node = new QSGSimpleTextureNode();
-                    node->setTexture(followHandle.texture);
-                    node->setRect(QRectF(state.followCheckLabel.topLeft,
-                                          followHandle.logicalSize));
                     staticRoot->appendChildNode(node);
                 }
             }

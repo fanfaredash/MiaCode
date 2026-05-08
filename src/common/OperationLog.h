@@ -105,6 +105,27 @@ void installShadow();
 // Idempotent. Silent on failure (path unset, file open fails, etc.).
 void flushShadowToDisk();
 
+// Phase 6 — startup beacon for "the process exited before any log line
+// was written". Writes a tiny `miacode_startup_beacon_<pid>.txt` next
+// to the eventual op-chain shadow log. Heap-free pure-Win32; safe to
+// call as the very first line of main(), before crash_recovery::install
+// or QApplication construction.
+//
+// Resolves the same path priority as installShadow (env override →
+// MIACODE_LOG_DIR → %TEMP%) but is independent of the SEH machinery —
+// the file is always written when reached. Its absence after a silent
+// startup crash means the process died before main() ran (DLL import
+// failure, static-init crash); its presence proves we made it to line
+// 1 of main(), narrowing the search to subsequent code.
+//
+// Two-line content:
+//   pid=<n> utc=<ISO8601-ish> version=<MIACODE_DISPLAY_VERSION_STRING>
+//   logdir=<resolved path>  (the dir we'd write into; empty if unset)
+//
+// Idempotent — calling more than once is harmless (overwrites with
+// the most recent timestamp).
+void writeStartupBeacon(const char* versionUtf8);
+
 }  // namespace miacode::oplog
 
 // Convenience macro. The variable name _mc_op_ is conventional so

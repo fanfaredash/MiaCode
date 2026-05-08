@@ -151,25 +151,22 @@ void TimelineHeaderSource::contributeToSnapshot(
             };
 
         // Background fills. Order matters:
-        //   1. zoomButtonBg + followCheckBg (covers the widget areas;
-        //      the follow-check backdrop blocks line markers from
-        //      leaking through the text glyph gaps)
-        //   2. followCheckIndicator (the box itself, on top of the
-        //      backdrop, so the colour-coded fill is visible)
-        // The tick + borders are emitted as lines in `overlayLines`
-        // below, drawn in a later batch.
+        //   1. zoomButtonBg (covers the widget area)
+        // Beta29 — the follow / progress-follow checkboxes that used to
+        // be drawn alongside the zoom button moved to
+        // BottomTabsQuickHost.qml's tab strip (real QML CheckBoxes).
+        // The matching emit block in TimelineSceneStateBuilder is fenced
+        // under #if 0; reading the now-default-constructed
+        // followCheck* / progressFollowCheck* fields here would push
+        // empty rects + invalid colors + 0×0 text textures into the
+        // batch, which has been observed to silently abort the process
+        // under x64 emulation on Apple-Silicon Windows VMs.
         QVector<miacode::timeline::TimelineSceneRect> bgRects;
-        bgRects.reserve(5);
+        bgRects.reserve(1);
         bgRects.append(shiftRect(state->zoomButtonBg));
-        bgRects.append(shiftRect(state->followCheckBg));
-        bgRects.append(shiftRect(state->progressFollowCheckBg));
-        bgRects.append(shiftRect(state->followCheckIndicator));
-        bgRects.append(shiftRect(state->progressFollowCheckIndicator));
         sb::pushTimelineRectBatch(snapshot, bgRects);
 
-        // 4-line frame around each control (zoom button + check box).
-        // Tick lines (two angular strokes) added when the checkbox is
-        // checked — drawn AFTER the indicator fill so they overlay it.
+        // 4-line frame around the zoom button.
         QVector<miacode::timeline::TimelineSceneLine> overlayLines;
         const auto pushFrame = [&overlayLines, scrollOffsetX](
             const miacode::timeline::TimelineSceneRect& r) {
@@ -188,54 +185,12 @@ void TimelineHeaderSource::contributeToSnapshot(
                 QPointF(x0, y1), QPointF(x0, y0), c, 1.0});
         };
         pushFrame(state->zoomButtonBorder);
-        pushFrame(state->followCheckIndicatorBorder);
-        pushFrame(state->progressFollowCheckIndicatorBorder);
-
-        if (state->followCheckChecked) {
-            // Tick mark — two short angular strokes inside the
-            // indicator. Computed from the indicator rect so it
-            // tracks position. White / accentText for contrast.
-            const QRectF box = state->followCheckIndicator.rect;
-            const qreal x = box.left() + scrollOffsetX;
-            const qreal y = box.top();
-            const qreal w = box.width();
-            const qreal h = box.height();
-            const QColor tickColor(255, 255, 255);
-            // From (24%, 55%) to (44%, 74%)
-            overlayLines.append(miacode::timeline::TimelineSceneLine{
-                QPointF(x + w * 0.24, y + h * 0.55),
-                QPointF(x + w * 0.44, y + h * 0.74),
-                tickColor, 1.8});
-            // From (44%, 74%) to (78%, 28%)
-            overlayLines.append(miacode::timeline::TimelineSceneLine{
-                QPointF(x + w * 0.44, y + h * 0.74),
-                QPointF(x + w * 0.78, y + h * 0.28),
-                tickColor, 1.8});
-        }
-        if (state->progressFollowCheckChecked) {
-            const QRectF box = state->progressFollowCheckIndicator.rect;
-            const qreal x = box.left() + scrollOffsetX;
-            const qreal y = box.top();
-            const qreal w = box.width();
-            const qreal h = box.height();
-            const QColor tickColor(255, 255, 255);
-            overlayLines.append(miacode::timeline::TimelineSceneLine{
-                QPointF(x + w * 0.24, y + h * 0.55),
-                QPointF(x + w * 0.44, y + h * 0.74),
-                tickColor, 1.8});
-            overlayLines.append(miacode::timeline::TimelineSceneLine{
-                QPointF(x + w * 0.44, y + h * 0.74),
-                QPointF(x + w * 0.78, y + h * 0.28),
-                tickColor, 1.8});
-        }
         sb::pushTimelineLineBatch(snapshot, overlayLines);
 
         // Labels (text) — chart-preview Sprites batch, no scroll
         // translate applied by pipeline, so applyScrollOffsetX=0.
         QVector<miacode::timeline::TimelineSceneTextLabel> controlLabels;
         controlLabels.append(state->zoomButtonLabel);
-        controlLabels.append(state->followCheckLabel);
-        controlLabels.append(state->progressFollowCheckLabel);
         rasteriseLabels(controlLabels, /*applyScrollOffsetX=*/0.0);
     }
 }

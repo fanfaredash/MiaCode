@@ -489,4 +489,81 @@ void flushShadowToDisk()
 #endif
 }
 
+void writeStartupBeacon(const char* versionUtf8)
+{
+#ifdef Q_OS_WIN
+    // Resolve path with the SAME priority as installShadow so the
+    // beacon lands next to the eventual shadow log. Done independently
+    // here because crash_recovery::install (which calls installShadow)
+    // hasn't run yet — that's the whole point of the beacon.
+    QString path = qEnvironmentVariable("MIACODE_OPLOG_SHADOW_PATH").trimmed();
+    QString resolvedDir;
+    if (!path.isEmpty()) {
+        // Caller passed an explicit shadow path; put the beacon in the
+        // same directory with a fixed-prefix name.
+        resolvedDir = QFileInfo(path).absolutePath();
+    }
+    if (resolvedDir.isEmpty()) {
+        const QString logDir = qEnvironmentVariable("MIACODE_LOG_DIR").trimmed();
+        if (!logDir.isEmpty()) {
+            resolvedDir = QDir::cleanPath(logDir);
+        }
+    }
+    if (resolvedDir.isEmpty()) {
+        resolvedDir = QDir::tempPath();
+    }
+    QDir().mkpath(resolvedDir);
+
+    const qint64 pid = static_cast<qint64>(::GetCurrentProcessId());
+    const QString beaconPath = QDir(resolvedDir).filePath(
+        QStringLiteral("miacode_startup_beacon_%1.txt").arg(pid));
+    const std::wstring wpath = beaconPath.toStdWString();
+    if (wpath.empty()) {
+        return;
+    }
+
+    HANDLE handle = ::CreateFileW(
+        wpath.c_str(),
+        GENERIC_WRITE,
+        FILE_SHARE_READ,
+        nullptr,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+        return;
+    }
+
+    writeStr(handle, "pid=");
+    writeUint(handle, static_cast<quint64>(pid));
+    writeStr(handle, " utc=");
+    SYSTEMTIME st;
+    ::GetSystemTime(&st);
+    writeUint(handle, st.wYear);    writeStr(handle, "-");
+    writeUint(handle, st.wMonth);   writeStr(handle, "-");
+    writeUint(handle, st.wDay);     writeStr(handle, "T");
+    writeUint(handle, st.wHour);    writeStr(handle, ":");
+    writeUint(handle, st.wMinute);  writeStr(handle, ":");
+    writeUint(handle, st.wSecond);  writeStr(handle, "Z");
+    if (versionUtf8 != nullptr && versionUtf8[0] != '\0') {
+        writeStr(handle, " version=");
+        DWORD vlen = 0;
+        while (vlen < 64 && versionUtf8[vlen] != '\0') {
+            ++vlen;
+        }
+        writeBytes(handle, versionUtf8, vlen);
+    }
+    writeStr(handle, "\nlogdir=");
+    const QByteArray dirUtf8 = resolvedDir.toUtf8();
+    writeBytes(handle, dirUtf8.constData(),
+               static_cast<DWORD>(dirUtf8.size()));
+    writeStr(handle, "\n");
+
+    ::FlushFileBuffers(handle);
+    ::CloseHandle(handle);
+#else
+    Q_UNUSED(versionUtf8);
+#endif
+}
+
 }  // namespace miacode::oplog

@@ -1376,6 +1376,17 @@ int runCliPreviewWorker(QApplication& app, bool staticTestMode, QString* errorMe
 
 int main(int argc, char* argv[])
 {
+    // Phase 6 — startup beacon. Heap-free, pure-Win32. Lands a tiny
+    // miacode_startup_beacon_<pid>.txt next to the eventual op-chain
+    // shadow log (MIACODE_LOG_DIR or %TEMP%). Its presence proves the
+    // process made it to line 1 of main() — its absence means the
+    // process died in static init / DLL load (outside our reach), which
+    // is a fundamentally different debug path than a crash inside our
+    // code. Written before MC_OP, before crash_recovery::install, and
+    // before QApplication construction so a crash in any of those still
+    // leaves the breadcrumb behind.
+    miacode::oplog::writeStartupBeacon(MIACODE_DISPLAY_VERSION_STRING);
+
     MC_OP("main");
     // Install crash-time autosave handlers BEFORE anything else can fail.
     // This way an early-startup segfault (e.g. graphics driver bug during
