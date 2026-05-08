@@ -2,6 +2,7 @@
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 
 #include <QString>
 
@@ -57,16 +58,24 @@ PreviewDCompCore::~PreviewDCompCore()
 
 bool PreviewDCompCore::initialise(HWND parentHwnd, QSize pixelSize)
 {
+    MC_OP("PreviewDCompCore::initialise");
+    _mc_op_.note(QStringLiteral("hwnd=%1 size=%2x%3")
+                     .arg(reinterpret_cast<quintptr>(parentHwnd), 0, 16)
+                     .arg(pixelSize.width())
+                     .arg(pixelSize.height()));
     if (ready_) {
         // Already initialised — caller should shutdown() first if reinit is
         // needed. Treat as success because the existing setup is usable.
         return true;
     }
     if (parentHwnd == nullptr) {
+        _mc_op_.fail(QStringLiteral("null_parent_hwnd"));
         logDComp("init_failed", QStringLiteral("reason=null_parent_hwnd"));
         return false;
     }
     if (pixelSize.width() <= 0 || pixelSize.height() <= 0) {
+        _mc_op_.fail(QStringLiteral("zero size %1x%2")
+                         .arg(pixelSize.width()).arg(pixelSize.height()));
         // DXGI rejects zero-size swap chains. The QML placeholder may
         // briefly report size (0, 0) before the layout settles — caller
         // can retry once the layout is stable.

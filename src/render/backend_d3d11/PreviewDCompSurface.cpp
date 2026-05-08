@@ -2,6 +2,7 @@
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "core/scene/PreviewFrameState.h"
 #include "core/scene/PreviewSceneGeometry.h"
@@ -980,6 +981,8 @@ void PreviewDCompSurface::onWindowVisibilityChanged()
 
 void PreviewDCompSurface::onRendererDeviceLost()
 {
+    MC_OP("PreviewDCompSurface::onRendererDeviceLost");
+    _mc_op_.note(QStringLiteral("frames_pre=%1").arg(renderer_.framesRendered()));
     // Runs on the GUI thread (queued connection from the render thread).
     // The render thread has already broken out of its loop and is on
     // its way to returning from renderLoop — renderer_.stop() will
@@ -1299,6 +1302,7 @@ void PreviewDCompSurface::applyTrackedItemGeometry()
 
 bool PreviewDCompSurface::initialiseIfReady()
 {
+    MC_OP("PreviewDCompSurface::initialiseIfReady");
     if (initialised_) {
         return true;
     }
