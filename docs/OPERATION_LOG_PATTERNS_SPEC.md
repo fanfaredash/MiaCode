@@ -23,7 +23,28 @@ Pair docs (design / rollout history): `OPERATION_BREADCRUMB_LOGGING_PLAN.md` (En
 
 All files land in `MIACODE_LOG_DIR` if set, else in the session's project log dir, else in `<exe>/logs` under `--debug`, else `<TEMP>`. See [DebugLog.cpp::logDirectory](../src/common/DebugLog.cpp:622).
 
-The parent process passes `MIACODE_LOG_DIR` to spawned children via `QProcessEnvironment` so editor + worker logs co-locate. Each process writes the same channel files (interleaved by timestamp) and a per-PID shadow file for hard-crash recovery.
+The parent process passes `MIACODE_LOG_DIR` to spawned children via `QProcessEnvironment` so editor + worker logs co-locate **in the same directory but in separate files**. Specifically, [`PreviewWorkerSupervisor::startProcess`](../src/preview/ipc/PreviewWorkerSupervisor.cpp:120) injects per-channel overrides:
+
+- `MIACODE_RUNTIME_LOG_PATH=<dir>/miacode_runtime_debug_worker.log`
+- `MIACODE_FATAL_LOG_PATH=<dir>/miacode_fatal_worker.log`
+
+So a typical session log directory contains:
+
+| File | Writer |
+|---|---|
+| `miacode_runtime_debug.log` | editor |
+| `miacode_runtime_debug_worker.log` | worker |
+| `miacode_fatal.log` | editor |
+| `miacode_fatal_worker.log` | worker |
+| `miacode_audio_debug.log` | editor (audio engine is editor-side) |
+| `miacode_video_export.log` | editor + export worker (split is via per-job sub-files inside) |
+| `miacode_worker_trace.log` | worker (always lands at this fixed name) |
+| `miacode_startup_timing.log` | latest process to write — editor + worker share, last write wins |
+| `miacode_op_chain_<pid>.log` | the process that crashed (one file per crashed PID) |
+| `miacode_startup_beacon_<pid>.txt` | one-shot heap-free beacon per process at startup |
+| `preview_worker_latency_<session>.csv` | worker per-session render latency dump |
+
+The reason for the editor/worker split on `runtime` and `fatal`: on Windows the `AsyncLogWriter` holds an exclusive handle on the file it's writing, so a second process's `QFile::open(WriteOnly | Append)` would silently fail. With separate filenames both processes can append independently.
 
 Per-channel path can be overridden by `MIACODE_<CHANNEL>_LOG_PATH` env var (see [DebugLog.cpp:113-126](../src/common/DebugLog.cpp:113)).
 
@@ -142,12 +163,30 @@ Three layers, in this order:
 
 ### 4.4 Symptom: "cross-process bug — editor and worker disagree"
 
-Both processes write to the same files in `MIACODE_LOG_DIR`. Open `miacode_runtime_debug.log` and `miacode_fatal.log` side-by-side; entries are timestamp-ordered and tagged by source:
+Editor and worker write to **separate files in the same directory** (see §2). Open both halves side-by-side and merge by timestamp:
 
-- Editor: `[runtime/preview/worker_supervisor]`, `[runtime/MainWindow/…]`, etc.
-- Worker: `[runtime/preview/worker]`, `[fatal/preview/worker_exception]`, etc.
+| Editor side | Worker side |
+|---|---|
+| `miacode_runtime_debug.log` | `miacode_runtime_debug_worker.log` |
+| `miacode_fatal.log` | `miacode_fatal_worker.log` |
 
-The supervisor's stdin/stdout-routed events ([`PreviewWorkerSupervisor::parseStdoutLine`](../src/preview/ipc/PreviewWorkerSupervisor.cpp:436)) appear in the editor log with the worker's reported state; cross-reference with the worker's own emissions to see whether they were in agreement.
+Tags help disambiguate further:
+
+- Editor: `[runtime/preview/worker_supervisor]`, `[runtime/MainWindow/…]`, `[runtime/quick_shell/…]`, etc.
+- Worker: `[preview/worker]`, `[fatal/preview/worker_exception]`, etc.
+
+The supervisor's stdin/stdout-routed events ([`PreviewWorkerSupervisor::parseStdoutLine`](../src/preview/ipc/PreviewWorkerSupervisor.cpp:436)) appear in the **editor**'s runtime log even though they describe worker state — those are the supervisor's view of what the worker reported. Cross-reference with the worker's own emissions in `miacode_runtime_debug_worker.log` to see whether they agreed.
+
+### 4.5 Symptom: "editor went silent, worker shut down later via stdin_eof"
+
+This is the **editor crashed, worker survived** pattern. Diagnostic procedure:
+
+1. Open `miacode_runtime_debug.log` (editor side) and find the **last** entry. That's the moment the editor process died — note the timestamp.
+2. Open `miacode_runtime_debug_worker.log` and find the `tag=stdin_eof treated as shutdown` entry. Its timestamp will be **N seconds after** the editor's last entry — that's how long it took the OS to drain the editor's pipe handles.
+3. The editor's last log entry shows what it was doing right before death. Look for bursts of repeated actions (rapid wheel-scroll, repeated rebuild events, etc.) that may indicate a load-dependent crash.
+4. Check for `miacode_fatal.log` — if **missing**, the editor never reached any `catch (...) → appendFatalMessage` site. Hard SEH or OS termination.
+5. Check for `miacode_op_chain_<pid>.log` matching what should have been the editor's PID. **If missing, the build predates Phase 4** (heap-free shadow). Recommend the user upgrade and reproduce.
+6. If the shadow file IS present, open it directly — it has the leaf-first chain at crash time.
 
 ### 4.5 Symptom: nothing in any log
 
@@ -221,11 +260,11 @@ If you find a log gap that hit one of these areas, you don't need `MC_OP` at the
 
 `Channel::Fatal` is synchronous and never drops.
 
-### 7.4 Multi-process append-mode race
+### 7.4 Editor/worker file split (was originally a multi-writer race)
 
-When editor and worker write to the same `Channel::Fatal` file, each takes a `QMutexLocker` per-write within its own process and uses `O_APPEND` (`QIODevice::Append`) at the OS level. Cross-process atomicity is "reasonably safe but not guaranteed" — entries may interleave at line boundaries. In practice this is invisible because each line is < 4 KB and POSIX `O_APPEND` (Windows equivalent: `FILE_APPEND_DATA` opens with shared-write semantics) handles small-write atomicity at the kernel level.
+Earlier drafts of this doc assumed editor and worker shared the same `miacode_fatal.log` / `miacode_runtime_debug.log` files (interleaved by timestamp). They don't — see §2. The supervisor splits them via `MIACODE_FATAL_LOG_PATH` / `MIACODE_RUNTIME_LOG_PATH` env overrides. The split exists because Windows `AsyncLogWriter` holds an exclusive handle on its target file; a second writer would silently fail to open.
 
-If you ever see torn lines in `miacode_fatal.log`, that's the smoking gun — file a bug. We have not observed this in practice.
+If you grep across both files and merge by timestamp, you get the interleaved view manually. There's no automated merger today — operator-side `Sort-Object LastWriteTime` or similar.
 
 ### 7.5 Shadow buffer pool exhaustion
 
