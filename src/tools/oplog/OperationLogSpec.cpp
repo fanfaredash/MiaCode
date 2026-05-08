@@ -332,6 +332,66 @@ void runRealisticScenarioDemos(const QString& logPath, const QString& fatalPath)
     };
     mainSim();
 
+    // Scenario 5: Phase-3 audio init chain (area H). Mirrors the
+    // actual MC_OP stack in src/audio/BassPreviewAudioBackend.cpp:
+    //   reloadAssets → initializeAudioEngine → ensureBassFxLoaded
+    // when bass_fx.dll is missing from the runtime install. Each
+    // layer emits its own fail() with the underlying error code so
+    // the Channel::Operation log shows which BASS call rejected the
+    // request and what it was trying to do.
+    auto ensureBassFxLoadedSim = [] {
+        MC_OP("BassPreviewAudioBackend::ensureBassFxLoaded");
+        const QString libraryPath = QStringLiteral("D:/Apps/MiaCode/bass_fx.dll");
+        _mc_op_.note(QStringLiteral("path=%1").arg(libraryPath));
+        _mc_op_.fail(QStringLiteral("LoadLibraryW failed err=126"));
+        return false;
+    };
+    auto initializeAudioEngineSim = [&] {
+        MC_OP("BassPreviewAudioBackend::initializeAudioEngine");
+        _mc_op_.note(QStringLiteral("device_sr=48000"));
+        if (!ensureBassFxLoadedSim()) {
+            _mc_op_.fail(QStringLiteral("bass_fx load failed"));
+            return false;
+        }
+        return true;
+    };
+    auto reloadAssetsSim = [&] {
+        MC_OP("BassPreviewAudioBackend::reloadAssets");
+        if (!initializeAudioEngineSim()) {
+            _mc_op_.fail(QStringLiteral("initializeAudioEngine failed"));
+            return;
+        }
+    };
+    reloadAssetsSim();
+
+    // Scenario 6: Phase-3 render device-lost recovery chain (area J).
+    // A DXGI_ERROR_DEVICE_REMOVED arrives via the renderer's queued
+    // signal; onRendererDeviceLost runs on the GUI thread, tears down
+    // Core, and tries to re-initialise. Re-init throws because the GPU
+    // TDR hasn't completed yet — the catch handler at the GUI-thread
+    // seam logs via appendFatalMessage.
+    auto initialiseIfReadySim = [] {
+        MC_OP("PreviewDCompSurface::initialiseIfReady");
+        throw std::runtime_error("DXGI_ERROR_DEVICE_REMOVED on re-init (HRESULT 0x887A0005)");
+    };
+    auto onRendererDeviceLostSim = [&] {
+        MC_OP("PreviewDCompSurface::onRendererDeviceLost");
+        _mc_op_.note(QStringLiteral("frames_pre=2487"));
+        initialiseIfReadySim();
+    };
+    auto guiThreadDispatchSim = [&] {
+        MC_OP("PreviewDCompSurface::onRendererDeviceLostQueuedDispatch");
+        try {
+            onRendererDeviceLostSim();
+        } catch (const std::exception& ex) {
+            const QString detail = QString::fromUtf8(ex.what());
+            miacode::debug_log::appendFatalMessage(
+                QStringLiteral("preview/dcomp_recovery_failed"),
+                QStringLiteral("Recovery from DEVICE_REMOVED failed: %1").arg(detail));
+        }
+    };
+    guiThreadDispatchSim();
+
     miacode::debug_log::flushAsyncLogWriter(2000);
     dumpLogIfVerbose(QStringLiteral("Realistic scenarios — Channel::Operation"), readLog(logPath));
     dumpLogIfVerbose(QStringLiteral("Realistic scenarios — Channel::Fatal"), readLog(fatalPath));
