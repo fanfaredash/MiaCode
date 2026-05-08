@@ -11,6 +11,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 #include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/video_export/BatchVideoExportDialog.h"
@@ -545,10 +546,15 @@ bool MainWindow::ExportSection::startVideoExportWorkerProcess(
     bool forceDisableOffscreenPbo
 )
 {
+    MC_OP("MainWindow::ExportSection::startVideoExportWorkerProcess");
+    _mc_op_.note(QStringLiteral("output=%1 disable_pbo=%2")
+                     .arg(snapshot.outputPath)
+                     .arg(forceDisableOffscreenPbo ? 1 : 0));
     if (process == nullptr) {
         if (errorMessage != nullptr) {
             *errorMessage = QStringLiteral("export worker process is null");
         }
+        _mc_op_.fail(QStringLiteral("null QProcess"));
         return false;
     }
 
@@ -557,6 +563,7 @@ bool MainWindow::ExportSection::startVideoExportWorkerProcess(
         if (errorMessage != nullptr) {
             *errorMessage = uiText("dialog.video_export.error.executable_missing", "Failed to locate MiaCode executable.");
         }
+        _mc_op_.fail(QStringLiteral("executable not found at %1").arg(executablePath));
         return false;
     }
 
@@ -582,6 +589,7 @@ bool MainWindow::ExportSection::startVideoExportWorkerProcess(
         if (errorMessage != nullptr) {
             *errorMessage = process->errorString();
         }
+        _mc_op_.fail(QStringLiteral("waitForStarted timeout: %1").arg(process->errorString()));
         return false;
     }
 
@@ -593,6 +601,7 @@ bool MainWindow::ExportSection::startVideoExportWorkerProcess(
                 "Failed to send export snapshot to worker."
             );
         }
+        _mc_op_.fail(QStringLiteral("stdin write short: bytes=%1").arg(payload.size()));
         process->kill();
         process->waitForFinished(1000);
         return false;
@@ -609,6 +618,12 @@ bool MainWindow::ExportSection::runVideoExportWorkerSync(
     const std::function<void(int percent, const QString& rawMessage)>& progressCallback
 )
 {
+    MC_OP("MainWindow::ExportSection::runVideoExportWorkerSync");
+    _mc_op_.note(QStringLiteral("output=%1 size=%2x%3 fps=%4")
+                     .arg(snapshot.outputPath)
+                     .arg(snapshot.outputWidth)
+                     .arg(snapshot.outputHeight)
+                     .arg(snapshot.fps));
     if (errorMessage != nullptr) {
         errorMessage->clear();
     }
@@ -826,10 +841,13 @@ void MainWindow::ExportSection::showExportToolbarMenu()
 
 bool MainWindow::ExportSection::launchVideoExportWorker(const VideoExportSnapshot& snapshot, QString* errorMessage)
 {
+    MC_OP("MainWindow::ExportSection::launchVideoExportWorker");
+    _mc_op_.note(QStringLiteral("output=%1").arg(snapshot.outputPath));
     if (owner_.videoExportWorkerProcess_ != nullptr && owner_.videoExportWorkerProcess_->state() != QProcess::NotRunning) {
         if (errorMessage != nullptr) {
             *errorMessage = uiText("dialog.video_export.error.worker_busy", "Another export is already running.");
         }
+        _mc_op_.fail(QStringLiteral("worker already running"));
         return false;
     }
 
@@ -972,7 +990,9 @@ void MainWindow::ExportSection::handleVideoExportWorkerStderr()
 
 void MainWindow::ExportSection::handleVideoExportWorkerEvent(const QJsonObject& eventObject)
 {
+    MC_OP("MainWindow::ExportSection::handleVideoExportWorkerEvent");
     const QString eventType = eventObject.value(QStringLiteral("event")).toString();
+    _mc_op_.note(QStringLiteral("event=%1").arg(eventType));
     const bool suppressProgressUi = owner_.videoExportWorkerCancelRequested_;
     if (eventType == QLatin1String("worker_ready")) {
         if (!suppressProgressUi && owner_.videoExportProgressDialog_ != nullptr) {
@@ -1095,6 +1115,8 @@ void MainWindow::ExportSection::handleVideoExportWorkerEvent(const QJsonObject& 
 
 void MainWindow::ExportSection::handleVideoExportWorkerProcessFinished(int exitCode, int exitStatus)
 {
+    MC_OP("MainWindow::ExportSection::handleVideoExportWorkerProcessFinished");
+    _mc_op_.note(QStringLiteral("exit_code=%1 status=%2").arg(exitCode).arg(exitStatus));
     Q_UNUSED(exitCode);
 
     const auto restorePreviewAspectIfNeeded = [this]() {
@@ -1292,6 +1314,7 @@ void MainWindow::ExportSection::handleVideoExportWorkerProcessFinished(int exitC
 
 void MainWindow::ExportSection::cancelVideoExportWorker()
 {
+    MC_OP("MainWindow::ExportSection::cancelVideoExportWorker");
     owner_.videoExportWorkerCancelRequested_ = true;
     if (owner_.videoExportProgressDialog_ != nullptr) {
         QTimer::singleShot(0, &owner_, [this]() {
