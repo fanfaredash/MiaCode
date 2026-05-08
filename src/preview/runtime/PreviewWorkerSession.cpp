@@ -554,6 +554,18 @@ void PreviewWorkerSession::handleSetVisualTransform(int xPx, int yPx, int displa
     if (ownerTracker_ != nullptr) {
         RECT editorRect{};
         if (::GetWindowRect(reinterpret_cast<HWND>(editorOwnerHwnd_), &editorRect)) {
+            // Detect size changes BEFORE updating the cached values.
+            // setVisualTransform fires every frame (~60 Hz) — most calls
+            // are position-only and must NOT invalidate the prepared
+            // scene cache (would defeat the cache and stutter playback).
+            // But size changes need a fresh layout: the prepared cache
+            // computes per-marker screen positions from the canvas size,
+            // so a stale cache after a resize keeps the scene laid out
+            // for the OLD canvas (the "playfield offset to the right
+            // of the popup" symptom on rapid resize bursts).
+            const bool sizeChanged = !hasLastPopupGeometry_
+                || lastPopupDisplayWPx_ != displayWPx
+                || lastPopupDisplayHPx_ != displayHPx;
             lastEditorOriginXPx_ = editorRect.left;
             lastEditorOriginYPx_ = editorRect.top;
             lastPopupOffsetXPx_ = xPx - editorRect.left;
@@ -561,6 +573,14 @@ void PreviewWorkerSession::handleSetVisualTransform(int xPx, int yPx, int displa
             lastPopupDisplayWPx_ = displayWPx;
             lastPopupDisplayHPx_ = displayHPx;
             hasLastPopupGeometry_ = true;
+            if (sizeChanged) {
+                ++lastWindowRevision_;
+                frameState_.sceneContentRevision = lastWindowRevision_;
+                appendWorkerLog(
+                    QStringLiteral("scene_cache_invalidate_resize"),
+                    QStringLiteral("trigger=set_visual_transform wh=%1x%2 revision=%3")
+                        .arg(displayWPx).arg(displayHPx).arg(lastWindowRevision_));
+            }
             appendWorkerLog(QStringLiteral("set_visual_transform_apply"),
                             QStringLiteral("popup_xy=%1,%2 wh=%3x%4 editor_origin=%5,%6 popup_offset=%7,%8")
                                 .arg(xPx).arg(yPx).arg(displayWPx).arg(displayHPx)
@@ -618,6 +638,17 @@ void PreviewWorkerSession::handleResize(int wPx, int hPx)
         return;
     }
     core_->resize(QSize(wPx, hPx));
+    // The prepared scene cache lays out marker screen positions from
+    // the canvas size at sync() time; without invalidation here the
+    // cache holds the OLD layout and the next render places sprites
+    // for a viewport that's no longer current. Bump unconditionally
+    // since handleResize is only called on real geometry deltas.
+    ++lastWindowRevision_;
+    frameState_.sceneContentRevision = lastWindowRevision_;
+    appendWorkerLog(
+        QStringLiteral("scene_cache_invalidate_resize"),
+        QStringLiteral("trigger=handle_resize wh=%1x%2 revision=%3")
+            .arg(wPx).arg(hPx).arg(lastWindowRevision_));
 #else
     Q_UNUSED(wPx);
     Q_UNUSED(hPx);
