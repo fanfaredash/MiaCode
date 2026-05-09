@@ -50,6 +50,7 @@ private:
     void scheduleRootWindowCloseRelay(const QString& source);
     void processRootWindowCloseRelay();
     void beginAcceptedRootWindowShutdown(const QString& source);
+    void shutdownPreviewWorkerSupervisor(const QString& source);
     void scheduleAcceptedRootWindowDestroyAndQuit(const QString& source);
     void destroyAcceptedRootWindowResourcesAndQuit(const QString& source);
     void logFocusEvent(const QString& action, QObject* watched = nullptr, QEvent* event = nullptr, const QString& detail = QString()) const;

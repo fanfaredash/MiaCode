@@ -914,7 +914,7 @@ void QuickShellBootstrap::fallBackToInProcessPreviewSurface(QQuickWindow* window
     // workerCrashLoopGivenUp, workerDeviceRemoved, etc.), and the
     // unique_ptr reset destroys the QProcess + ring buffer.
     if (previewWorkerSupervisor_ != nullptr) {
-        previewWorkerSupervisor_.reset();
+        shutdownPreviewWorkerSupervisor(QStringLiteral("fallback:%1").arg(reason));
         appendQuickShellRuntimeLog(
             QStringLiteral("preview_worker_supervisor_torn_down"),
             QStringLiteral("reason=%1").arg(reason));
@@ -1310,6 +1310,7 @@ void QuickShellBootstrap::beginAcceptedRootWindowShutdown(const QString& source)
             previewShutdownTimer.elapsed()
         );
     }
+    shutdownPreviewWorkerSupervisor(QStringLiteral("accepted_close:%1").arg(source));
     if (backend_ != nullptr) {
         QElapsedTimer backendCloseTimer;
         backendCloseTimer.start();
@@ -1334,6 +1335,31 @@ void QuickShellBootstrap::beginAcceptedRootWindowShutdown(const QString& source)
         QStringLiteral("source=%1 elapsed_ms=%2").arg(source).arg(totalTimer.elapsed())
     );
     scheduleAcceptedRootWindowDestroyAndQuit(source);
+}
+
+void QuickShellBootstrap::shutdownPreviewWorkerSupervisor(const QString& source)
+{
+    if (previewWorkerSupervisor_ == nullptr) {
+        return;
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/quick_shell"),
+        QStringLiteral("action=shutdown_preview_worker_enter source=%1").arg(source),
+        true
+    );
+    QElapsedTimer timer;
+    timer.start();
+    previewWorkerSupervisor_->shutdown();
+    previewWorkerSupervisor_.reset();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/quick_shell"),
+        QStringLiteral("shutdown_preview_worker"),
+        timer.elapsed(),
+        QStringLiteral("source=%1").arg(source),
+        /*force=*/true
+    );
 }
 
 void QuickShellBootstrap::scheduleAcceptedRootWindowDestroyAndQuit(const QString& source)
@@ -1431,11 +1457,7 @@ void QuickShellBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QStrin
     // and waits ~500 ms for the worker to exit. Same ordering rationale
     // as the in-process surface: tear it down before MainWindow so any
     // in-flight queued signals don't reach a destroyed receiver.
-    if (previewWorkerSupervisor_ != nullptr) {
-        previewWorkerSupervisor_->shutdown();
-    }
-    logResetTiming(QStringLiteral("accepted_close_destroy_preview_worker_supervisor"),
-                   previewWorkerSupervisor_);
+    shutdownPreviewWorkerSupervisor(QStringLiteral("accepted_close_destroy:%1").arg(source));
     logResetTiming(QStringLiteral("accepted_close_destroy_engine"), engine_);
     rootWindow_ = nullptr;
 #ifdef Q_OS_WIN
