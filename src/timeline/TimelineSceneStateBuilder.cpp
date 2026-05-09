@@ -46,7 +46,12 @@ constexpr int kNoteSize = 14;
 constexpr int kTimelineMaxRenderedSubdivisionBeats = 32;
 constexpr double kTimelineDisplayLeadInSeconds = 0.5;
 constexpr double kTimelineHeaderLineAnchorToleranceSeconds = 1e-6;
-constexpr qreal kTimelineBeatLineWidth = 1.2;
+// Bar lines + secondary-strong subdivision lines share this thickness so
+// they read as the same hierarchy tier (color sets them apart).
+constexpr qreal kTimelineBeatLineWidth = 1.5;
+// Regular within-measure timeline lines (quarter notes for x/4, eighth
+// notes for x/8) — thinner than bar lines, thicker is reserved.
+constexpr qreal kTimelineSubdivisionLineWidth = 1.0;
 constexpr qreal kTimelineHoldThicknessRelativeToTap =
     static_cast<qreal>(miacode::preview_skin::kHoldWidthRelativeToTap);
 constexpr qreal kTimelineTextHorizontalPadding = 2.0;
@@ -622,8 +627,56 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             }
         }
     }
-    for (double measureSecond : request.snapshot.measureLineSeconds) {
+
+    // Emit timeline (within-measure) subdivision lines.
+    //   x/4 -> a line at every quarter note (numerator-1 lines per measure)
+    //   x/8 -> a line at every eighth  note (numerator-1 lines per measure)
+    //   4/4 -> beat 3 is "secondary strong": same thickness as bar line
+    //   6/8 -> beat 4 is "secondary strong": same thickness as bar line
+    // Other denominators get no within-measure lines (the spec only
+    // covers /4 and /8).
+    const auto emitSubdivisionsForSpan = [&](double startSecond, double endSecond, int numerator, int denominator) {
+        if (!(endSecond > startSecond + 1e-6)) {
+            return;
+        }
+        if (denominator != 4 && denominator != 8) {
+            return;
+        }
+        const int safeNumerator = qMax(1, numerator);
+        if (safeNumerator < 2) {
+            return;
+        }
+        const double measureDuration = endSecond - startSecond;
+        const int secondaryStrongIndex = (denominator == 4 && safeNumerator == 4)
+            ? 2
+            : (denominator == 8 && safeNumerator == 6 ? 3 : -1);
+        for (int beatIndex = 1; beatIndex < safeNumerator; ++beatIndex) {
+            const double beatSecond = startSecond
+                + measureDuration * static_cast<double>(beatIndex) / static_cast<double>(safeNumerator);
+            const bool isSecondaryStrong = (beatIndex == secondaryStrongIndex);
+            const qreal width = isSecondaryStrong ? kTimelineBeatLineWidth : kTimelineSubdivisionLineWidth;
+            addGridLine(beatSecond, theme.gridSubdivision, width, false);
+        }
+    };
+    for (int measureIndex = 0; measureIndex < request.snapshot.measureLineSeconds.size(); ++measureIndex) {
+        const double measureSecond = request.snapshot.measureLineSeconds.at(measureIndex);
         addGridLine(measureSecond, theme.gridMajor, kTimelineBeatLineWidth, false);
+
+        double nextMeasureSecond = std::numeric_limits<double>::infinity();
+        if (measureIndex + 1 < request.snapshot.measureLineSeconds.size()) {
+            nextMeasureSecond = request.snapshot.measureLineSeconds.at(measureIndex + 1);
+        } else if (request.snapshot.trailingMeasureLineStepSeconds > 1e-6) {
+            nextMeasureSecond = measureSecond + request.snapshot.trailingMeasureLineStepSeconds;
+        } else {
+            continue;
+        }
+        const int numerator = measureIndex < request.snapshot.measureLineMeterNumerators.size()
+            ? request.snapshot.measureLineMeterNumerators.at(measureIndex)
+            : 4;
+        const int denominator = measureIndex < request.snapshot.measureLineMeterDenominators.size()
+            ? request.snapshot.measureLineMeterDenominators.at(measureIndex)
+            : 4;
+        emitSubdivisionsForSpan(measureSecond, nextMeasureSecond, numerator, denominator);
     }
 
     if (request.snapshot.trailingMeasureLineStepSeconds > 1e-6) {
@@ -639,9 +692,16 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             extensionSecond += request.snapshot.trailingMeasureLineStepSeconds
                 * static_cast<double>(qMax<qint64>(1, static_cast<qint64>(qFloor(delta / request.snapshot.trailingMeasureLineStepSeconds)) + 1));
         }
+        const int trailingNumerator = qMax(1, request.snapshot.trailingMeasureLineMeterNumerator);
+        const int trailingDenominator = qMax(1, request.snapshot.trailingMeasureLineMeterDenominator);
         for (; extensionSecond <= state.displayEndSeconds + 1.0 + 1e-6;
              extensionSecond += request.snapshot.trailingMeasureLineStepSeconds) {
             addGridLine(extensionSecond, theme.gridMajor, kTimelineBeatLineWidth, false);
+            emitSubdivisionsForSpan(
+                extensionSecond,
+                extensionSecond + request.snapshot.trailingMeasureLineStepSeconds,
+                trailingNumerator,
+                trailingDenominator);
         }
     }
 

@@ -16,6 +16,7 @@ struct TimelineThemeColors {
     QColor border;
     QColor axis;
     QColor gridMajor;
+    QColor gridSubdivision;
     QColor gridMinor;
     QColor laneEven;
     QColor laneOdd;
@@ -48,12 +49,14 @@ inline TimelineThemeColors timelineThemeColors()
         c.timelineBorder,
         c.timelineAxis,
         // Beta21-fix11 — wired through dedicated palette entries:
-        //   bar lines  -> c.timelineGridMajor
-        //   note lines -> c.timelineGridMinor
-        // Tune those two values directly in UiTheme.cpp without
+        //   bar lines        -> c.timelineGridMajor
+        //   timeline lines   -> c.timelineGridSubdivision (between bar / note)
+        //   note lines       -> c.timelineGridMinor
+        // Tune these palette entries directly in UiTheme.cpp without
         // affecting any other timeline element (axis boundary, lane
         // labels, etc.).
         c.timelineGridMajor,
+        c.timelineGridSubdivision,
         c.timelineGridMinor,
         c.timelineLaneEven,
         c.timelineLaneOdd,

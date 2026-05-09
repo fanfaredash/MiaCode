@@ -78,6 +78,8 @@ struct TimelineRenderLine {
     double startSecond = 0.0;
     double endSecond = 0.0;
     QVector<double> measureLineSecondOffsets;
+    QVector<int> measureLineMeterNumerators;
+    QVector<int> measureLineMeterDenominators;
     QVector<TimelineRenderBeat> beats;
     QVector<TimelineRenderNote> notes;
 };
@@ -85,10 +87,14 @@ struct TimelineRenderLine {
 struct TimelineRenderSnapshot {
     QVector<TimelineRenderLine> lines;
     QVector<double> measureLineSeconds;
+    QVector<int> measureLineMeterNumerators;
+    QVector<int> measureLineMeterDenominators;
     QVector<double> noteVisualEndPrefixMaxWithSlideTracks;
     QVector<double> noteVisualEndPrefixMaxWithoutSlideTracks;
     double trailingMeasureLineStartSecond = 0.0;
     double trailingMeasureLineStepSeconds = 0.0;
+    int trailingMeasureLineMeterNumerator = 4;
+    int trailingMeasureLineMeterDenominator = 4;
     double durationSeconds = 0.0;
     double minimumSecond = -0.5;
     double maximumSecond = 1.0;

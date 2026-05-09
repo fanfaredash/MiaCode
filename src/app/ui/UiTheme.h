@@ -57,6 +57,7 @@ struct Colors {
     QColor timelineBase;
     QColor timelineBorder;
     QColor timelineGridMajor;
+    QColor timelineGridSubdivision;
     QColor timelineGridMinor;
     QColor timelineLaneEven;
     QColor timelineLaneOdd;

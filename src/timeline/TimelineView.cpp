@@ -57,7 +57,10 @@ constexpr int kTimelineHeaderAnchorMarkerTextGapPx = 0;
 constexpr int kNoteSize = 14;
 constexpr int kSlideTrackBasePixelSize =
     static_cast<int>((static_cast<double>(kNoteSize) * miacode::preview_skin::kSlideTrackLongSideRelativeToTap) + 0.5);
-constexpr qreal kTimelineBeatLineWidth = 1.2;
+// Bar lines + secondary-strong subdivisions share this thickness; regular
+// timeline lines are thinner so the bar-line hierarchy reads.
+constexpr qreal kTimelineBeatLineWidth = 1.5;
+constexpr qreal kTimelineSubdivisionLineWidth = 1.0;
 constexpr qreal kTimelineHoldThicknessRelativeToTap =
     static_cast<qreal>(miacode::preview_skin::kHoldWidthRelativeToTap);
 constexpr double kTimelineDisplayLeadInSeconds = 0.5;

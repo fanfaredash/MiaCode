@@ -28,6 +28,8 @@ install_manifest.txt
 *.VC.db
 *.opendb
 
+tmp*/
+
 # Keep only docs spec/checklist files under version control.
 docs/*
 !docs/DEBUG_INDEX.md

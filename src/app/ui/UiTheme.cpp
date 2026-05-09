@@ -67,6 +67,7 @@ const UiTheme::Colors& lightColors()
         QColor("#F7F8FA"),                  // timelineBase
         QColor("#C7D2DF"),                  // timelineBorder
         QColor("#5A86D8"),                  // timelineGridMajor
+        QColor(122, 154, 204, 165),         // timelineGridSubdivision
         QColor(174, 188, 204, 110),         // timelineGridMinor
         QColor(251, 251, 251, 190),         // timelineLaneEven
         QColor(242, 242, 242, 190),         // timelineLaneOdd
@@ -123,6 +124,7 @@ const UiTheme::Colors& darkColors()
         QColor("#202833"),                  // timelineBase
         QColor("#4A5C70"),                  // timelineBorder
         QColor("#7FA5D8"),                  // timelineGridMajor
+        QColor(120, 152, 198, 140),         // timelineGridSubdivision
         QColor(95, 120, 155, 80),           // timelineGridMinor
         QColor(34, 42, 52, 210),            // timelineLaneEven
         QColor(29, 36, 45, 210),            // timelineLaneOdd

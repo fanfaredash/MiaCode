@@ -707,8 +707,15 @@ void TimelineQuickModel::clear()
     nextEachGroupId_ = 0;
     lines_.clear();
     snapshot_.lines.clear();
+    snapshot_.measureLineSeconds.clear();
+    snapshot_.measureLineMeterNumerators.clear();
+    snapshot_.measureLineMeterDenominators.clear();
     snapshot_.noteVisualEndPrefixMaxWithSlideTracks.clear();
     snapshot_.noteVisualEndPrefixMaxWithoutSlideTracks.clear();
+    snapshot_.trailingMeasureLineStartSecond = 0.0;
+    snapshot_.trailingMeasureLineStepSeconds = 0.0;
+    snapshot_.trailingMeasureLineMeterNumerator = 4;
+    snapshot_.trailingMeasureLineMeterDenominator = 4;
     snapshot_.durationSeconds = 0.0;
     snapshot_.minimumSecond = -0.5;
     snapshot_.maximumSecond = 1.0;
@@ -1265,10 +1272,14 @@ void TimelineQuickModel::rebuildSnapshotDuration()
 {
     snapshot_.lines.clear();
     snapshot_.measureLineSeconds.clear();
+    snapshot_.measureLineMeterNumerators.clear();
+    snapshot_.measureLineMeterDenominators.clear();
     snapshot_.noteVisualEndPrefixMaxWithSlideTracks.clear();
     snapshot_.noteVisualEndPrefixMaxWithoutSlideTracks.clear();
     snapshot_.trailingMeasureLineStartSecond = 0.0;
     snapshot_.trailingMeasureLineStepSeconds = 0.0;
+    snapshot_.trailingMeasureLineMeterNumerator = 4;
+    snapshot_.trailingMeasureLineMeterDenominator = 4;
     snapshot_.lines.reserve(lines_.size());
     snapshot_.noteVisualEndPrefixMaxWithSlideTracks.reserve(lines_.size());
     snapshot_.noteVisualEndPrefixMaxWithoutSlideTracks.reserve(lines_.size());
@@ -1333,12 +1344,24 @@ void TimelineQuickModel::rebuildSnapshotDuration()
         }
 
         snapshot_.lines.append(renderLine);
-        for (double secondOffset : renderLine.measureLineSecondOffsets) {
-            const double absoluteSecond = renderLine.startSecond + secondOffset;
+        for (int measureIndex = 0; measureIndex < renderLine.measureLineSecondOffsets.size(); ++measureIndex) {
+            const double absoluteSecond = renderLine.startSecond
+                + renderLine.measureLineSecondOffsets.at(measureIndex);
             if (terminalLineIndex >= 0 && absoluteSecond > terminalSecond + kTimelineEpsilon) {
                 continue;
             }
+            const int sizeBefore = snapshot_.measureLineSeconds.size();
             appendDistinctSecond(&snapshot_.measureLineSeconds, absoluteSecond);
+            if (snapshot_.measureLineSeconds.size() != sizeBefore) {
+                const int numerator = measureIndex < renderLine.measureLineMeterNumerators.size()
+                    ? renderLine.measureLineMeterNumerators.at(measureIndex)
+                    : 4;
+                const int denominator = measureIndex < renderLine.measureLineMeterDenominators.size()
+                    ? renderLine.measureLineMeterDenominators.at(measureIndex)
+                    : 4;
+                snapshot_.measureLineMeterNumerators.append(qMax(1, numerator));
+                snapshot_.measureLineMeterDenominators.append(qMax(1, denominator));
+            }
         }
 
         minSecond = hasData ? qMin(minSecond, renderLine.startSecond) : renderLine.startSecond;
@@ -1365,10 +1388,17 @@ void TimelineQuickModel::rebuildSnapshotDuration()
         if (qIsFinite(measureDuration) && measureDuration > kTimelineEpsilon) {
             snapshot_.trailingMeasureLineStartSecond = trailingLine.endState.currentMeasureStartSecond;
             snapshot_.trailingMeasureLineStepSeconds = measureDuration;
+            snapshot_.trailingMeasureLineMeterNumerator = qMax(1, trailingLine.endState.meterNumerator);
+            snapshot_.trailingMeasureLineMeterDenominator = qMax(1, trailingLine.endState.meterDenominator);
             const double nextMeasureSecond = trailingLine.endState.currentMeasureStartSecond + measureDuration;
             if (qIsFinite(nextMeasureSecond)
                 && nextMeasureSecond > trailingLine.endState.currentMeasureStartSecond + kTimelineEpsilon) {
+                const int sizeBefore = snapshot_.measureLineSeconds.size();
                 appendDistinctSecond(&snapshot_.measureLineSeconds, nextMeasureSecond);
+                if (snapshot_.measureLineSeconds.size() != sizeBefore) {
+                    snapshot_.measureLineMeterNumerators.append(snapshot_.trailingMeasureLineMeterNumerator);
+                    snapshot_.measureLineMeterDenominators.append(snapshot_.trailingMeasureLineMeterDenominator);
+                }
                 if (hasData) {
                     maxSecond = qMax(maxSecond, nextMeasureSecond);
                     minSecond = qMin(minSecond, nextMeasureSecond);
@@ -1846,6 +1876,8 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
     lineState->render.startSecond = startState.second;
     lineState->render.endSecond = startState.second;
     lineState->render.measureLineSecondOffsets.clear();
+    lineState->render.measureLineMeterNumerators.clear();
+    lineState->render.measureLineMeterDenominators.clear();
     lineState->render.beats.clear();
     lineState->render.notes.clear();
     lineState->cursorCache.segmentStarts.clear();
@@ -1883,9 +1915,14 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
         token.clear();
     };
     const auto appendMeasureLine = [&](double absoluteSecond) {
+        const int countBefore = lineState->render.measureLineSecondOffsets.size();
         appendDistinctSecond(
             &lineState->render.measureLineSecondOffsets,
             absoluteSecond - lineState->render.startSecond);
+        if (lineState->render.measureLineSecondOffsets.size() != countBefore) {
+            lineState->render.measureLineMeterNumerators.append(qMax(1, state.meterNumerator));
+            lineState->render.measureLineMeterDenominators.append(qMax(1, state.meterDenominator));
+        }
     };
     const auto advanceMeasureLinesTo = [&](double targetSecond) {
         const double measureDuration = measureDurationSeconds(
