@@ -599,6 +599,37 @@ void PreviewWorkerSession::handleSetVisualTransform(int xPx, int yPx, int displa
 void PreviewWorkerSession::onOwnerLocationChanged(int left, int top, int right, int bottom)
 {
 #ifdef Q_OS_WIN
+    if (popupHwnd_ != nullptr && hasLastPopupGeometry_) {
+        const int xPx = left + lastPopupOffsetXPx_;
+        const int yPx = top + lastPopupOffsetYPx_;
+        if (qsgMode_) {
+            const qreal dpr = (qsgQuickWindow_ != nullptr
+                                && qsgQuickWindow_->effectiveDevicePixelRatio() > 0.0)
+                              ? qsgQuickWindow_->effectiveDevicePixelRatio()
+                              : 1.0;
+            if (qsgQuickWindow_ != nullptr) {
+                qsgQuickWindow_->setPosition(qRound(xPx / dpr), qRound(yPx / dpr));
+            }
+        } else {
+            ::SetWindowPos(reinterpret_cast<HWND>(popupHwnd_),
+                           nullptr,
+                           xPx,
+                           yPx,
+                           lastPopupDisplayWPx_,
+                           lastPopupDisplayHPx_,
+                           SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOREDRAW);
+        }
+
+        lastEditorOriginXPx_ = left;
+        lastEditorOriginYPx_ = top;
+        appendWorkerLog(QStringLiteral("owner_location_follow"),
+                        QStringLiteral("popup_xy=%1,%2 wh=%3x%4 editor_origin=%5,%6 qsg=%7")
+                            .arg(xPx).arg(yPx)
+                            .arg(lastPopupDisplayWPx_).arg(lastPopupDisplayHPx_)
+                            .arg(left).arg(top)
+                            .arg(qsgMode_ ? 1 : 0));
+        return;
+    }
     Q_UNUSED(left);
     Q_UNUSED(top);
     Q_UNUSED(right);
