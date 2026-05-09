@@ -19,6 +19,8 @@ struct PreviewAudioSettings {
     double exRestoreVolume = 0.30;
     double breakVolume = 0.30;
     double breakRestoreVolume = 0.30;
+    double breakSlideVolume = 0.30;
+    double breakSlideRestoreVolume = 0.30;
     double slideVolume = 0.30;
     double slideRestoreVolume = 0.30;
     double touchVolume = 0.30;
@@ -37,6 +39,7 @@ struct PreviewAudioSettings {
     int tapPercent() const;
     int exPercent() const;
     int breakPercent() const;
+    int breakSlidePercent() const;
     int slidePercent() const;
     int touchPercent() const;
     int fireworkPercent() const;
@@ -46,6 +49,7 @@ struct PreviewAudioSettings {
     void setTapPercent(int value);
     void setExPercent(int value);
     void setBreakPercent(int value);
+    void setBreakSlidePercent(int value);
     void setSlidePercent(int value);
     void setTouchPercent(int value);
     void setFireworkPercent(int value);
@@ -56,6 +60,7 @@ struct PreviewAudioSettings {
     bool tapMuted() const;
     bool exMuted() const;
     bool breakMuted() const;
+    bool breakSlideMuted() const;
     bool slideMuted() const;
     bool touchMuted() const;
     bool fireworkMuted() const;
@@ -67,6 +72,7 @@ struct PreviewAudioSettings {
     void toggleTapMuted();
     void toggleExMuted();
     void toggleBreakMuted();
+    void toggleBreakSlideMuted();
     void toggleSlideMuted();
     void toggleTouchMuted();
     void toggleFireworkMuted();
@@ -88,12 +94,15 @@ inline double previewSfxVolumeForKind(const PreviewAudioSettings& settings, cons
     }
     if (lowered == "judge_break"
         || lowered == "break_touch"
-        || lowered == "break"
-        || lowered == "break_slide"
+        || lowered == "break") {
+        return settings.breakVolume * globalVolume;
+    }
+    if (lowered == "break_slide"
         || lowered == "break_slide_start"
         || lowered == "break_slide_finish"
+        || lowered == "break_slide_tail_break"
         || lowered == "judge_break_slide") {
-        return settings.breakVolume * globalVolume;
+        return settings.breakSlideVolume * globalVolume;
     }
     if (lowered == "slide") {
         return settings.slideVolume * globalVolume;

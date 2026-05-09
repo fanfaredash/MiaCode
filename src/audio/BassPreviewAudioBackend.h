@@ -215,6 +215,7 @@ private:
     std::unique_ptr<Sample> breakSample_;
     std::unique_ptr<Sample> breakSlideStartSample_;
     std::unique_ptr<Sample> breakSlideFinishSample_;
+    std::unique_ptr<Sample> breakSlideTailBreakSample_;
     std::unique_ptr<Sample> judgeBreakSlideSample_;
     std::unique_ptr<Sample> exSample_;
     std::unique_ptr<Sample> touchSample_;

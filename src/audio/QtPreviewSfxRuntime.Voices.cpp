@@ -14,7 +14,7 @@ bool QtPreviewSfxRuntime::playKindInternal(const QString& kind, double gain)
         bank = &judgeBreakSfx_;
     } else if (lowered == "slide") {
         bank = &slideSfx_;
-    } else if (lowered == "break") {
+    } else if (lowered == "break" || lowered == "break_slide_tail_break") {
         bank = &breakSfx_;
     } else if (lowered == "break_slide" || lowered == "break_slide_start") {
         bank = &breakSlideStartSfx_;

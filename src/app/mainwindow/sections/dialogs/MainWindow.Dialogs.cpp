@@ -388,6 +388,17 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     QLabel* breakLabel = nullptr;
     QToolButton* breakMuteButton = nullptr;
     addAudioRow(breakAudioLabelText, owner_.previewAudioSettings_.breakPercent(), &breakSlider, &breakLabel, &breakMuteButton);
+    const QString breakSlideAudioLabelText = uiText("dialog.render_settings.audio.break_slide", "Break Slide Volume");
+    QSlider* breakSlideSlider = nullptr;
+    QLabel* breakSlideLabel = nullptr;
+    QToolButton* breakSlideMuteButton = nullptr;
+    addAudioRow(
+        breakSlideAudioLabelText,
+        owner_.previewAudioSettings_.breakSlidePercent(),
+        &breakSlideSlider,
+        &breakSlideLabel,
+        &breakSlideMuteButton
+    );
     const QString slideAudioLabelText = uiText("dialog.render_settings.audio.slide", "Slide Volume");
     QSlider* slideSlider = nullptr;
     QLabel* slideLabel = nullptr;
@@ -1090,6 +1101,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         breakSlider,
         breakLabel,
         breakMuteButton,
+        breakSlideSlider,
+        breakSlideLabel,
+        breakSlideMuteButton,
         slideSlider,
         slideLabel,
         slideMuteButton,
@@ -1108,6 +1122,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         judgeAudioLabelText,
         exAudioLabelText,
         breakAudioLabelText,
+        breakSlideAudioLabelText,
         slideAudioLabelText,
         touchAudioLabelText,
         fireworkAudioLabelText
@@ -1148,6 +1163,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         syncAudioRow(judgeSlider, judgeLabel, owner_.previewAudioSettings_.tapPercent());
         syncAudioRow(exSlider, exLabel, owner_.previewAudioSettings_.exPercent());
         syncAudioRow(breakSlider, breakLabel, owner_.previewAudioSettings_.breakPercent());
+        syncAudioRow(breakSlideSlider, breakSlideLabel, owner_.previewAudioSettings_.breakSlidePercent());
         syncAudioRow(slideSlider, slideLabel, owner_.previewAudioSettings_.slidePercent());
         if (breakSlideTailCheerCheck != nullptr) {
             const QSignalBlocker blocker(breakSlideTailCheerCheck);
@@ -1160,6 +1176,11 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         syncPerChannelMuteButton(judgeMuteButton, owner_.previewAudioSettings_.tapMuted(), judgeAudioLabelText);
         syncPerChannelMuteButton(exMuteButton, owner_.previewAudioSettings_.exMuted(), exAudioLabelText);
         syncPerChannelMuteButton(breakMuteButton, owner_.previewAudioSettings_.breakMuted(), breakAudioLabelText);
+        syncPerChannelMuteButton(
+            breakSlideMuteButton,
+            owner_.previewAudioSettings_.breakSlideMuted(),
+            breakSlideAudioLabelText
+        );
         syncPerChannelMuteButton(slideMuteButton, owner_.previewAudioSettings_.slideMuted(), slideAudioLabelText);
         syncPerChannelMuteButton(touchMuteButton, owner_.previewAudioSettings_.touchMuted(), touchAudioLabelText);
         syncPerChannelMuteButton(fireworkMuteButton, owner_.previewAudioSettings_.fireworkMuted(), fireworkAudioLabelText);
@@ -1210,6 +1231,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             if (!owner_.previewAudioSettings_.breakMuted()) {
                 owner_.previewAudioSettings_.toggleBreakMuted();
             }
+            if (!owner_.previewAudioSettings_.breakSlideMuted()) {
+                owner_.previewAudioSettings_.toggleBreakSlideMuted();
+            }
             if (!owner_.previewAudioSettings_.slideMuted()) {
                 owner_.previewAudioSettings_.toggleSlideMuted();
             }
@@ -1236,6 +1260,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             if (owner_.previewAudioSettings_.breakMuted()) {
                 owner_.previewAudioSettings_.toggleBreakMuted();
             }
+            if (owner_.previewAudioSettings_.breakSlideMuted()) {
+                owner_.previewAudioSettings_.toggleBreakSlideMuted();
+            }
             if (owner_.previewAudioSettings_.slideMuted()) {
                 owner_.previewAudioSettings_.toggleSlideMuted();
             }
@@ -1253,6 +1280,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     connectAudioSlider(judgeSlider, &PreviewAudioSettings::setTapPercent, "judge");
     connectAudioSlider(exSlider, &PreviewAudioSettings::setExPercent, "ex");
     connectAudioSlider(breakSlider, &PreviewAudioSettings::setBreakPercent, "break");
+    connectAudioSlider(breakSlideSlider, &PreviewAudioSettings::setBreakSlidePercent, "break_slide");
     connectAudioSlider(slideSlider, &PreviewAudioSettings::setSlidePercent, "slide");
     connectAudioSlider(touchSlider, &PreviewAudioSettings::setTouchPercent, "touch");
     connectAudioSlider(fireworkSlider, &PreviewAudioSettings::setFireworkPercent, "firework");
@@ -1276,6 +1304,12 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     connectPerChannelMute(judgeMuteButton, &PreviewAudioSettings::toggleTapMuted, &PreviewAudioSettings::tapMuted, "judge");
     connectPerChannelMute(exMuteButton, &PreviewAudioSettings::toggleExMuted, &PreviewAudioSettings::exMuted, "ex");
     connectPerChannelMute(breakMuteButton, &PreviewAudioSettings::toggleBreakMuted, &PreviewAudioSettings::breakMuted, "break");
+    connectPerChannelMute(
+        breakSlideMuteButton,
+        &PreviewAudioSettings::toggleBreakSlideMuted,
+        &PreviewAudioSettings::breakSlideMuted,
+        "break_slide"
+    );
     connectPerChannelMute(slideMuteButton, &PreviewAudioSettings::toggleSlideMuted, &PreviewAudioSettings::slideMuted, "slide");
     connectPerChannelMute(touchMuteButton, &PreviewAudioSettings::toggleTouchMuted, &PreviewAudioSettings::touchMuted, "touch");
     connectPerChannelMute(fireworkMuteButton, &PreviewAudioSettings::toggleFireworkMuted, &PreviewAudioSettings::fireworkMuted, "firework");
@@ -1306,12 +1340,13 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         );
     }
 
-    connect(audioApplyTimer, &QTimer::timeout, &dialog, [this, audioApplyTimer, masterSlider, bgmSlider, answerSlider, judgeSlider, breakSlider, slideSlider, exSlider, touchSlider, fireworkSlider, &pendingAudition, playDialogLocalSfxAudition]() {
+    connect(audioApplyTimer, &QTimer::timeout, &dialog, [this, audioApplyTimer, masterSlider, bgmSlider, answerSlider, judgeSlider, breakSlider, breakSlideSlider, slideSlider, exSlider, touchSlider, fireworkSlider, &pendingAudition, playDialogLocalSfxAudition]() {
         if (masterSlider->isSliderDown()
             || bgmSlider->isSliderDown()
             || answerSlider->isSliderDown()
             || judgeSlider->isSliderDown()
             || breakSlider->isSliderDown()
+            || breakSlideSlider->isSliderDown()
             || slideSlider->isSliderDown()
             || exSlider->isSliderDown()
             || touchSlider->isSliderDown()

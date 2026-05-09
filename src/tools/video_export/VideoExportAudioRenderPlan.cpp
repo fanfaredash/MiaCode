@@ -243,7 +243,9 @@ bool buildVideoExportAudioRenderPlan(
         scheduled.assetKind = previewSfxNormalizedKind(
             playback.kind == QLatin1String("break_slide_finish")
                 ? QStringLiteral("break_slide")
-                : playback.kind);
+                : playback.kind == QLatin1String("break_slide_tail_break")
+                    ? QStringLiteral("break")
+                    : playback.kind);
         scheduled.mixSecond =
             miacode::preview_sfx_timeline::scheduledPlaybackMixSecond(playback, built.timelineOriginSecond);
         scheduled.gain = gain;

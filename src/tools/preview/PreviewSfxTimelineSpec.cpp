@@ -324,6 +324,29 @@ bool verifyBreakSlideTailSfx(QTextStream& err)
         return false;
     }
 
+    const QVector<ScheduledPlayback> scheduledPlaybacks =
+        miacode::preview_sfx_timeline::buildScheduledPlaybacks(events);
+    int scheduledTailBreakCount = 0;
+    for (const ScheduledPlayback& playback : scheduledPlaybacks) {
+        if (playback.kind == QLatin1String("break_slide_tail_break") && qAbs(playback.second - 3.0) <= 1e-6) {
+            ++scheduledTailBreakCount;
+        }
+    }
+    if (!require(
+            scheduledTailBreakCount == 1,
+            QStringLiteral("break slide tail break should route to the Break Slide volume bucket after scheduling"),
+            err)) {
+        return false;
+    }
+
+    const QVector<ScheduledPlayback> mutedTailPlaybacks =
+        miacode::preview_sfx_timeline::buildScheduledPlaybacks(events, true);
+    for (const ScheduledPlayback& playback : mutedTailPlaybacks) {
+        if (playback.kind == QLatin1String("break_slide_tail_break")) {
+            return require(false, QStringLiteral("muting break-slide tail break should remove only the tail break playback"), err);
+        }
+    }
+
     return true;
 }
 

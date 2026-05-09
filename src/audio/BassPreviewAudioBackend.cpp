@@ -652,6 +652,7 @@ void BassPreviewAudioBackend::resetAssets()
     resetSample(breakSample_);
     resetSample(breakSlideStartSample_);
     resetSample(breakSlideFinishSample_);
+    resetSample(breakSlideTailBreakSample_);
     resetSample(judgeBreakSlideSample_);
     resetSample(exSample_);
     resetSample(touchSample_);
@@ -703,6 +704,7 @@ void BassPreviewAudioBackend::initializeAssets()
     loadSample(breakSample_, QStringLiteral("break"), false, true);
     loadSample(breakSlideStartSample_, QStringLiteral("break_slide_start"), false, true);
     loadSample(breakSlideFinishSample_, QStringLiteral("break_slide_finish"), false, true);
+    loadSample(breakSlideTailBreakSample_, QStringLiteral("break_slide_tail_break"), false, true);
     loadSample(judgeBreakSlideSample_, QStringLiteral("judge_break_slide"), false, true);
     loadSample(exSample_, QStringLiteral("ex"), false, true);
     loadSample(touchSample_, QStringLiteral("touch"), false, true);
@@ -740,6 +742,7 @@ void BassPreviewAudioBackend::initializeAssets()
         breakSample_.get(),
         breakSlideStartSample_.get(),
         breakSlideFinishSample_.get(),
+        breakSlideTailBreakSample_.get(),
         judgeBreakSlideSample_.get(),
         exSample_.get(),
         touchSample_.get(),
@@ -780,6 +783,7 @@ void BassPreviewAudioBackend::applySampleLevels()
     apply(breakSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("break")));
     apply(breakSlideStartSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("break_slide_start")));
     apply(breakSlideFinishSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("break_slide_finish")));
+    apply(breakSlideTailBreakSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("break_slide_tail_break")));
     apply(judgeBreakSlideSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("judge_break_slide")));
     apply(exSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("ex")));
     apply(touchSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("touch")));
@@ -953,6 +957,7 @@ void BassPreviewAudioBackend::clearResidualVoicesForPausedReposition()
         breakSample_.get(),
         breakSlideStartSample_.get(),
         breakSlideFinishSample_.get(),
+        breakSlideTailBreakSample_.get(),
         judgeBreakSlideSample_.get(),
         exSample_.get(),
         touchSample_.get(),
@@ -1230,6 +1235,7 @@ void BassPreviewAudioBackend::stopAllSamples()
         breakSample_.get(),
         breakSlideStartSample_.get(),
         breakSlideFinishSample_.get(),
+        breakSlideTailBreakSample_.get(),
         judgeBreakSlideSample_.get(),
         exSample_.get(),
         touchSample_.get(),

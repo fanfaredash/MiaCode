@@ -33,8 +33,11 @@ inline QStringList assetFileNamesForKind(const QString& kind)
     if (lowered == QStringLiteral("break_slide_start")) {
         return {QStringLiteral("slide_break_start.wav"), QStringLiteral("break_slide_start.wav")};
     }
-    if (lowered == QStringLiteral("break_slide")) {
+    if (lowered == QStringLiteral("break_slide") || lowered == QStringLiteral("break_slide_finish")) {
         return {QStringLiteral("slide_break_slide.wav"), QStringLiteral("break_slide.wav")};
+    }
+    if (lowered == QStringLiteral("break_slide_tail_break")) {
+        return {QStringLiteral("break.wav")};
     }
     if (lowered == QStringLiteral("judge_break_slide")) {
         return {QStringLiteral("slide_break_slide.wav"), QStringLiteral("judge_break_slide.wav")};

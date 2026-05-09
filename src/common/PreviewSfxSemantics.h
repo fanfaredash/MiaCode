@@ -18,6 +18,7 @@ inline bool previewSfxShouldAggregateKind(const QString& kind)
         || lowered == "slide"
         || lowered == "break_slide_start"
         || lowered == "break_slide_finish"
+        || lowered == "break_slide_tail_break"
         || lowered == "judge_break_slide"
         || lowered == "ex"
         || lowered == "touch"
@@ -29,7 +30,8 @@ inline bool previewSfxShouldInterruptPreviousKind(const QString& kind)
     const QString lowered = previewSfxNormalizedKind(kind);
     return previewSfxShouldAggregateKind(lowered)
         || lowered == "break_touch"
-        || lowered == "break_slide";
+        || lowered == "break_slide"
+        || lowered == "break_slide_tail_break";
 }
 
 inline double previewSfxPlaybackGainForAggregate(const QString& kind, int count, double maxGain)

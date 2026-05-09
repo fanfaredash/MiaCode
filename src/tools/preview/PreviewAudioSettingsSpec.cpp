@@ -48,6 +48,13 @@ bool verifyAssetRouting(QTextStream& err)
         return false;
     }
     if (!require(
+            miacode::preview_sfx::assetFileNamesForKind(QStringLiteral("break_slide_tail_break"))
+                    == QStringList{QStringLiteral("break.wav")},
+            QStringLiteral("break_slide_tail_break should route to break.wav"),
+            err)) {
+        return false;
+    }
+    if (!require(
             miacode::preview_sfx::assetFileNamesForKind(QStringLiteral("touchhold"))
                     == QStringList{QStringLiteral("touch_Hold_riser.wav"), QStringLiteral("touchHold_riser.wav")},
             QStringLiteral("touchhold should prefer Majdata touch_Hold_riser before legacy touchHold_riser"),
@@ -76,6 +83,7 @@ bool verifyDirectBucketGain(QTextStream& err)
     settings.tapVolume = 0.6;
     settings.exVolume = 0.4;
     settings.breakVolume = 0.3;
+    settings.breakSlideVolume = 0.7;
     settings.slideVolume = 0.2;
     settings.touchVolume = 0.9;
     settings.fireworkVolume = 1.0;
@@ -105,21 +113,24 @@ bool verifyDirectBucketGain(QTextStream& err)
     if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("slide")), 0.10, 1e-9, QStringLiteral("slide should use direct Slide bucket gain"), err)) {
         return false;
     }
-    if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("break_slide_start")), 0.15, 1e-9, QStringLiteral("break_slide_start should share Break bucket"), err)) {
+    if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("break_slide_start")), 0.35, 1e-9, QStringLiteral("break_slide_start should use direct Break Slide bucket gain"), err)) {
         return false;
     }
-    if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("judge_break_slide")), 0.15, 1e-9, QStringLiteral("judge_break_slide should share Break bucket"), err)) {
+    if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("break_slide_tail_break")), 0.35, 1e-9, QStringLiteral("break_slide_tail_break should use direct Break Slide bucket gain"), err)) {
+        return false;
+    }
+    if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("judge_break_slide")), 0.35, 1e-9, QStringLiteral("judge_break_slide should use direct Break Slide bucket gain"), err)) {
         return false;
     }
     settings.breakSlideTailCheerMuted = true;
     if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("break")), 0.15, 1e-9, QStringLiteral("break bucket gain should stay unchanged when break-slide tail break is muted"), err)) {
         return false;
     }
-    if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("judge_break_slide")), 0.15, 1e-9, QStringLiteral("muted break-slide tail cheer should keep judge_break_slide audible"), err)) {
+    if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("judge_break_slide")), 0.35, 1e-9, QStringLiteral("muted break-slide tail break should keep judge_break_slide volume unchanged"), err)) {
         return false;
     }
     settings.breakSlideTailCheerMuted = false;
-    if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("break_slide")), 0.15, 1e-9, QStringLiteral("break_slide should share Break bucket"), err)) {
+    if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("break_slide")), 0.35, 1e-9, QStringLiteral("break_slide should use direct Break Slide bucket gain"), err)) {
         return false;
     }
     if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("break_slide_break")), 0.0, 1e-9, QStringLiteral("break_slide_break should not be a routed SFX kind"), err)) {
@@ -165,6 +176,9 @@ bool verifyLegacyMigration(QTextStream& err)
     if (!requireNear(settings.breakVolume, 0.3, 1e-9, QStringLiteral("legacy break should stay on Break bucket"), err)) {
         return false;
     }
+    if (!requireNear(settings.breakSlideVolume, 0.7, 1e-9, QStringLiteral("legacy break_slide should migrate to Break Slide bucket"), err)) {
+        return false;
+    }
     if (!requireNear(settings.slideVolume, 0.1, 1e-9, QStringLiteral("legacy slide should stay on slide bucket"), err)) {
         return false;
     }
@@ -202,7 +216,10 @@ bool verifyNewSchemaPreference(QTextStream& err)
     if (!requireNear(settings.slideVolume, 0.11, 1e-9, QStringLiteral("new slide key should win over legacy break_slide"), err)) {
         return false;
     }
-    if (!requireNear(settings.breakVolume, 0.13, 1e-9, QStringLiteral("new break key should own break-slide gain"), err)) {
+    if (!requireNear(settings.breakVolume, 0.13, 1e-9, QStringLiteral("new break key should own ordinary Break gain"), err)) {
+        return false;
+    }
+    if (!requireNear(settings.breakSlideVolume, 0.12, 1e-9, QStringLiteral("new break_slide key should own Break Slide gain"), err)) {
         return false;
     }
     if (!require(settings.breakSlideTailCheerMuted, QStringLiteral("new break-slide cheer mute key should persist"), err)) {
@@ -230,7 +247,7 @@ bool verifyJsonShape(QTextStream& err)
     if (!require(object.contains(QStringLiteral("break_slide_tail_cheer_muted")), QStringLiteral("new schema should write break-slide tail break filter option"), err)) {
         return false;
     }
-    if (!require(!object.contains(QStringLiteral("break_slide_volume")), QStringLiteral("new schema should stop writing break_slide_volume"), err)) {
+    if (!require(object.contains(QStringLiteral("break_slide_volume")), QStringLiteral("new schema should write break_slide_volume"), err)) {
         return false;
     }
     if (!require(!object.contains(QStringLiteral("bgm_volume")), QStringLiteral("new schema should stop writing bgm_volume"), err)) {

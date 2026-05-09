@@ -10,6 +10,7 @@ constexpr double kDefaultAnswerVolume = 0.80;
 constexpr double kDefaultTapVolume = 0.30;
 constexpr double kDefaultExVolume = 0.30;
 constexpr double kDefaultBreakVolume = 0.30;
+constexpr double kDefaultBreakSlideVolume = 0.30;
 constexpr double kDefaultSlideVolume = 0.30;
 constexpr double kDefaultTouchVolume = 0.30;
 constexpr double kDefaultFireworkVolume = 0.30;
@@ -114,6 +115,7 @@ void PreviewAudioSettings::normalize()
     normalizeVolumePair(tapVolume, tapRestoreVolume, kDefaultTapVolume);
     normalizeVolumePair(exVolume, exRestoreVolume, kDefaultExVolume);
     normalizeVolumePair(breakVolume, breakRestoreVolume, kDefaultBreakVolume);
+    normalizeVolumePair(breakSlideVolume, breakSlideRestoreVolume, kDefaultBreakSlideVolume);
     normalizeVolumePair(slideVolume, slideRestoreVolume, kDefaultSlideVolume);
     normalizeVolumePair(touchVolume, touchRestoreVolume, kDefaultTouchVolume);
     normalizeVolumePair(fireworkVolume, fireworkRestoreVolume, kDefaultFireworkVolume);
@@ -147,6 +149,11 @@ int PreviewAudioSettings::exPercent() const
 int PreviewAudioSettings::breakPercent() const
 {
     return qRound(clamp(breakVolume) * 100.0);
+}
+
+int PreviewAudioSettings::breakSlidePercent() const
+{
+    return qRound(clamp(breakSlideVolume) * 100.0);
 }
 
 int PreviewAudioSettings::slidePercent() const
@@ -214,6 +221,14 @@ void PreviewAudioSettings::setBreakPercent(int value)
     }
 }
 
+void PreviewAudioSettings::setBreakSlidePercent(int value)
+{
+    setVolumePercent(breakSlideVolume, breakSlideRestoreVolume, value, kDefaultBreakSlideVolume);
+    if (breakSlideVolume > kMuteThreshold) {
+        restoreGlobalIfMuted(*this);
+    }
+}
+
 void PreviewAudioSettings::setSlidePercent(int value)
 {
     setVolumePercent(slideVolume, slideRestoreVolume, value, kDefaultSlideVolume);
@@ -268,6 +283,11 @@ bool PreviewAudioSettings::breakMuted() const
     return isMutedVolume(breakVolume);
 }
 
+bool PreviewAudioSettings::breakSlideMuted() const
+{
+    return isMutedVolume(breakSlideVolume);
+}
+
 bool PreviewAudioSettings::slideMuted() const
 {
     return isMutedVolume(slideVolume);
@@ -289,6 +309,7 @@ bool PreviewAudioSettings::allNonTrackMuted() const
         && tapMuted()
         && exMuted()
         && breakMuted()
+        && breakSlideMuted()
         && slideMuted()
         && touchMuted()
         && fireworkMuted();
@@ -349,6 +370,14 @@ void PreviewAudioSettings::toggleBreakMuted()
     toggleMuted(breakVolume, breakRestoreVolume, kDefaultBreakVolume);
 }
 
+void PreviewAudioSettings::toggleBreakSlideMuted()
+{
+    if (breakSlideMuted()) {
+        restoreGlobalIfMuted(*this);
+    }
+    toggleMuted(breakSlideVolume, breakSlideRestoreVolume, kDefaultBreakSlideVolume);
+}
+
 void PreviewAudioSettings::toggleSlideMuted()
 {
     if (slideMuted()) {
@@ -388,6 +417,9 @@ void PreviewAudioSettings::toggleAllNonTrackMuted()
         if (!breakMuted()) {
             toggleBreakMuted();
         }
+        if (!breakSlideMuted()) {
+            toggleBreakSlideMuted();
+        }
         if (!slideMuted()) {
             toggleSlideMuted();
         }
@@ -404,6 +436,7 @@ void PreviewAudioSettings::toggleAllNonTrackMuted()
     toggleTapMuted();
     toggleExMuted();
     toggleBreakMuted();
+    toggleBreakSlideMuted();
     toggleSlideMuted();
     toggleTouchMuted();
     toggleFireworkMuted();
@@ -426,6 +459,8 @@ QJsonObject PreviewAudioSettings::toJson() const
     object.insert("ex_restore_volume", normalized.exRestoreVolume);
     object.insert("break_volume", normalized.breakVolume);
     object.insert("break_restore_volume", normalized.breakRestoreVolume);
+    object.insert("break_slide_volume", normalized.breakSlideVolume);
+    object.insert("break_slide_restore_volume", normalized.breakSlideRestoreVolume);
     object.insert("slide_volume", normalized.slideVolume);
     object.insert("slide_restore_volume", normalized.slideRestoreVolume);
     object.insert("break_slide_tail_cheer_muted", normalized.breakSlideTailCheerMuted);
@@ -493,20 +528,23 @@ PreviewAudioSettings PreviewAudioSettings::fromJson(const QJsonObject& object)
         "ex_restore_volume",
         settings.exVolume > kMuteThreshold ? settings.exVolume : kDefaultExVolume);
 
-    const bool hasBreakVolume = object.contains(QLatin1String("break_volume"));
     settings.breakVolume = valueOrDefault(
         object,
         "break_volume",
-        valueOrDefault(object, "break_slide_volume", legacySfx));
+        legacySfx);
     settings.breakRestoreVolume = valueOrDefault(
         object,
         "break_restore_volume",
-        hasBreakVolume
-            ? (settings.breakVolume > kMuteThreshold ? settings.breakVolume : kDefaultBreakVolume)
-            : valueOrDefault(
-                object,
-                "break_slide_restore_volume",
-                settings.breakVolume > kMuteThreshold ? settings.breakVolume : kDefaultBreakVolume));
+        settings.breakVolume > kMuteThreshold ? settings.breakVolume : kDefaultBreakVolume);
+
+    settings.breakSlideVolume = valueOrDefault(
+        object,
+        "break_slide_volume",
+        settings.breakVolume);
+    settings.breakSlideRestoreVolume = valueOrDefault(
+        object,
+        "break_slide_restore_volume",
+        settings.breakSlideVolume > kMuteThreshold ? settings.breakSlideVolume : kDefaultBreakSlideVolume);
 
     const double legacySlide = valueOrDefault(object, "slide_volume", legacySfx);
     settings.slideVolume = hasNewBucketSchema

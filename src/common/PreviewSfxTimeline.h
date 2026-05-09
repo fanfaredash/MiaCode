@@ -133,10 +133,13 @@ inline CollapsedEventGroup collapseEventGroup(
         if (muteBreakSlideTailBreak && event.breakSlideTailBreak) {
             continue;
         }
-        if (previewSfxShouldAggregateKind(event.kind)) {
+        const QString aggregateKind = event.breakSlideTailBreak
+            ? QStringLiteral("break_slide_tail_break")
+            : event.kind;
+        if (previewSfxShouldAggregateKind(aggregateKind)) {
             accumulateAggregatedPlayback(
                 &group.aggregatedPlaybacks,
-                event.kind,
+                aggregateKind,
                 event.gain,
                 event.originClampAllowanceSeconds);
             continue;

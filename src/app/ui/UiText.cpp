@@ -473,6 +473,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.audio.answer", "Answer 音量"},
         {"dialog.render_settings.audio.tap", "Tap 音量"},
         {"dialog.render_settings.audio.break", "Break 音量"},
+        {"dialog.render_settings.audio.break_slide", "Break Slide 音量"},
         {"dialog.render_settings.audio.slide", "Slide 音量"},
         {"dialog.render_settings.audio.break_slide_tail_cheer_mute", "关闭breakslide结尾“欢呼”声"},
         {"dialog.render_settings.audio.ex", "EX 音量"},
