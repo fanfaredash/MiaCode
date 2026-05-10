@@ -27,6 +27,38 @@ function Resolve-RepoPath {
     return [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $PathValue))
 }
 
+function Compress-ArchiveWithRetry {
+    param(
+        [string]$SourcePath,
+        [string]$DestinationPath,
+        [int]$MaxAttempts = 5,
+        [int]$InitialDelaySeconds = 2
+    )
+
+    $lastError = $null
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        if (Test-Path -LiteralPath $DestinationPath) {
+            Remove-Item -LiteralPath $DestinationPath -Force -ErrorAction SilentlyContinue
+        }
+
+        try {
+            Compress-Archive -Path $SourcePath -DestinationPath $DestinationPath -CompressionLevel Optimal -ErrorAction Stop
+            return
+        } catch {
+            $lastError = $_.Exception
+            if ($attempt -ge $MaxAttempts) {
+                break
+            }
+
+            $delaySeconds = [Math]::Min(30, $InitialDelaySeconds * $attempt)
+            Write-Warning "Compress-Archive failed (attempt $attempt/$MaxAttempts): $($lastError.Message). Retrying in $delaySeconds seconds..."
+            Start-Sleep -Seconds $delaySeconds
+        }
+    }
+
+    throw "Compress-Archive failed after $MaxAttempts attempts: $($lastError.Message)"
+}
+
 function Read-VersionInfoFromCMake {
     param([string]$CMakeFilePath)
     if (!(Test-Path $CMakeFilePath)) {
@@ -558,7 +590,7 @@ $zipParentDir = Split-Path -Parent $DistDir
 $zipFolderName = Split-Path -Leaf $DistDir
 Push-Location $zipParentDir
 try {
-    Compress-Archive -Path $zipFolderName -DestinationPath $zipPath -CompressionLevel Optimal
+    Compress-ArchiveWithRetry -SourcePath $zipFolderName -DestinationPath $zipPath
 } finally {
     Pop-Location
 }
