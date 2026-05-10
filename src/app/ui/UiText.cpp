@@ -447,6 +447,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.preferences.editor_group", "编辑器"},
         {"dialog.preferences.editor_font_size", "文本框字号"},
         {"dialog.preferences.editor_line_spacing", "行距"},
+        {"dialog.preferences.editor_half_width_input", "强制半角符号输入"},
         {"dialog.preferences.restart_title", "需要重启"},
         {"dialog.preferences.restart_message", "语言设置已保存。请重启 MiaCode 以应用菜单、字体和界面文本。"},
         {"dialog.unsaved_changes.title", "未保存的更改"},

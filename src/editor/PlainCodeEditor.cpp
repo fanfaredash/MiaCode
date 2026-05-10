@@ -44,10 +44,18 @@ QChar normalizedHalfWidthChar(QChar ch)
         return QLatin1Char(',');
     case 0x3002:
         return QLatin1Char('.');
+    case 0x00B7:
+        return QLatin1Char('`');
+    case 0x300A:
+        return QLatin1Char('<');
+    case 0x300B:
+        return QLatin1Char('>');
     case 0x3010:
         return QLatin1Char('[');
     case 0x3011:
         return QLatin1Char(']');
+    case 0xFFE5:
+        return QLatin1Char('$');
     default:
         return ch;
     }
@@ -55,10 +63,28 @@ QChar normalizedHalfWidthChar(QChar ch)
 
 QString normalizedHalfWidthText(QString text)
 {
+    if (text == QStringLiteral("……") || text == QStringLiteral("…")) {
+        return QStringLiteral("^");
+    }
     for (int i = 0; i < text.size(); ++i) {
         text[i] = normalizedHalfWidthChar(text.at(i));
     }
     return text;
+}
+
+QString normalizedHalfWidthKeyText(const QKeyEvent* event, const QString& text)
+{
+    if (event != nullptr
+        && (event->modifiers() & Qt::ShiftModifier)
+        && !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
+        if (event->key() == Qt::Key_6) {
+            return QStringLiteral("^");
+        }
+        if (event->key() == Qt::Key_4) {
+            return QStringLiteral("$");
+        }
+    }
+    return normalizedHalfWidthText(text);
 }
 
 void logSelectionRestoreEditorShortcut(const QString& scope, const QString& payload)
@@ -256,6 +282,7 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
     updateLineNumberAreaWidth(0);
     setLineWrapMode(QTextEdit::NoWrap);
     setAcceptRichText(false);
+    setHalfWidthInputEnabled(halfWidthInputEnabled_);
     if (QTextFrame* frame = document()->rootFrame(); frame != nullptr) {
         QTextFrameFormat format = frame->frameFormat();
         format.setLeftMargin(kEditorDocumentLeftInset);
@@ -463,6 +490,18 @@ void PlainCodeEditor::setBatchTransformActions(const QList<QAction*>& actions)
 void PlainCodeEditor::setMoreBatchTransformActions(const QList<QAction*>& actions)
 {
     moreBatchTransformActions_ = actions;
+}
+
+void PlainCodeEditor::setHalfWidthInputEnabled(bool enabled)
+{
+    halfWidthInputEnabled_ = enabled;
+    Qt::InputMethodHints hints = inputMethodHints();
+    if (enabled) {
+        hints |= Qt::ImhLatinOnly;
+    } else {
+        hints &= ~Qt::ImhLatinOnly;
+    }
+    setInputMethodHints(hints);
 }
 
 bool PlainCodeEditor::event(QEvent* event)
@@ -682,9 +721,7 @@ void PlainCodeEditor::insertFromMimeData(const QMimeData* source)
         return;
     }
 
-    const QString text = halfWidthInputEnabled_
-        ? normalizedHalfWidthText(source->text())
-        : source->text();
+    const QString text = source->text();
     if (text.isEmpty()) {
         QTextEdit::insertFromMimeData(source);
         return;
@@ -757,7 +794,7 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         return;
     }
 
-    const QString normalizedText = normalizedHalfWidthText(inputText);
+    const QString normalizedText = normalizedHalfWidthKeyText(event, inputText);
     if (normalizedText == inputText) {
         QTextEdit::keyPressEvent(event);
         return;

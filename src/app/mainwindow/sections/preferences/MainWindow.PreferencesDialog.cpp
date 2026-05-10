@@ -204,8 +204,10 @@ void MainWindow::PreferencesSection::onPreferences()
     editorLayout->setVerticalSpacing(8);
     const int originalEditorFontSize = state_.editorTextFontPointSize_;
     const double originalEditorLineSpacingFactor = state_.editorLineSpacingFactor_;
+    const bool originalEditorHalfWidthInputEnabled = state_.editorHalfWidthInputEnabled_;
     int selectedEditorFontSize = originalEditorFontSize;
     double selectedEditorLineSpacingFactor = originalEditorLineSpacingFactor;
+    bool selectedEditorHalfWidthInputEnabled = originalEditorHalfWidthInputEnabled;
 
     auto* editorFontSizeLabel = new QLabel(uiText("dialog.preferences.editor_font_size", "Text Font Size"), editorGroup);
     auto* fontSizeRow = new QWidget(editorGroup);
@@ -249,6 +251,17 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(lineSpacingLabel, lineSpacingCombo);
 
+    auto* halfWidthInputCheckbox = new QCheckBox(
+        uiText("dialog.preferences.editor_half_width_input", "Force half-width symbol input"),
+        editorGroup
+    );
+    halfWidthInputCheckbox->setChecked(selectedEditorHalfWidthInputEnabled);
+    connect(halfWidthInputCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
+        selectedEditorHalfWidthInputEnabled = checked;
+        owner_.applyEditorHalfWidthInputEnabled(selectedEditorHalfWidthInputEnabled, false);
+    });
+    editorLayout->addRow(QString(), halfWidthInputCheckbox);
+
     auto* dialogDecreaseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+-")), &dialog);
     dialogDecreaseShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(dialogDecreaseShortcut, &QShortcut::activated, &dialog, [editorFontSizeSpin]() {
@@ -276,6 +289,7 @@ void MainWindow::PreferencesSection::onPreferences()
     if (dialogResult != QDialog::Accepted) {
         owner_.applyEditorLineSpacingFactor(originalEditorLineSpacingFactor, false);
         owner_.applyEditorTextFontSize(originalEditorFontSize, false);
+        owner_.applyEditorHalfWidthInputEnabled(originalEditorHalfWidthInputEnabled, false);
         return;
     }
 
@@ -286,11 +300,14 @@ void MainWindow::PreferencesSection::onPreferences()
         selectedEditorLineSpacingFactor + 1.0,
         originalEditorLineSpacingFactor + 1.0
     );
-    if (!languageChanged && !themeChanged && !editorFontChanged && !editorLineSpacingChanged) {
+    const bool editorHalfWidthInputChanged =
+        selectedEditorHalfWidthInputEnabled != originalEditorHalfWidthInputEnabled;
+    if (!languageChanged && !themeChanged && !editorFontChanged && !editorLineSpacingChanged
+        && !editorHalfWidthInputChanged) {
         return;
     }
 
-    if (editorFontChanged || editorLineSpacingChanged) {
+    if (editorFontChanged || editorLineSpacingChanged || editorHalfWidthInputChanged) {
         owner_.persistEditorTextFontPreference();
         owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
     }

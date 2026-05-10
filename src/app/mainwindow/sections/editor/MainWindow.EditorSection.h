@@ -13,6 +13,7 @@ public:
     void persistEditorTextFontPreference() const;
     void applyEditorTextFontSize(int pointSize, bool persistPreference);
     void applyEditorLineSpacingFactor(double factor, bool persistPreference);
+    void applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference);
     QString resolveProjectRenderStateFilePath() const;
     void loadProjectRenderState();
     void saveProjectRenderState() const;

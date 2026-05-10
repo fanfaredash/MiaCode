@@ -71,7 +71,9 @@ void MainWindow::EditorSection::loadPortableState()
             ui.value("editor_line_spacing_factor").toDouble(state_.editorLineSpacingFactor_)
         );
     }
+    state_.editorHalfWidthInputEnabled_ = ui.value("editor_half_width_input").toBool(true);
     applyEditorTextFontSize(state_.editorTextFontPointSize_, false);
+    applyEditorHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_, false);
 
     const QString dir = app.value("last_open_dir").toString();
     if (!dir.isEmpty() && QDir(dir).exists()) {
@@ -328,6 +330,7 @@ void MainWindow::EditorSection::savePortableState() const
 
     ui.insert("editor_text_font_size", state_.editorTextFontPointSize_);
     ui.insert("editor_line_spacing_factor", state_.editorLineSpacingFactor_);
+    ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     root.insert("ui", ui);
 
     app.insert("last_open_dir", state_.lastOpenDir_);
@@ -409,6 +412,7 @@ void MainWindow::EditorSection::persistEditorTextFontPreference() const
     QJsonObject ui = root.value("ui").toObject();
     ui.insert("editor_text_font_size", state_.editorTextFontPointSize_);
     ui.insert("editor_line_spacing_factor", state_.editorLineSpacingFactor_);
+    ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     root.insert("ui", ui);
     UiText::savePreferencesObject(root);
 }
@@ -460,6 +464,17 @@ void MainWindow::EditorSection::applyEditorLineSpacingFactor(double factor, bool
     }
 }
 
+void MainWindow::EditorSection::applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference)
+{
+    state_.editorHalfWidthInputEnabled_ = enabled;
+    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
+        editor->setHalfWidthInputEnabled(enabled);
+    }
+    if (persistPreference) {
+        persistEditorTextFontPreference();
+    }
+}
+
 void MainWindow::loadPortableState()
 {
     editorSection_->loadPortableState();
@@ -493,4 +508,9 @@ void MainWindow::applyEditorTextFontSize(int pointSize, bool persistPreference)
 void MainWindow::applyEditorLineSpacingFactor(double factor, bool persistPreference)
 {
     editorSection_->applyEditorLineSpacingFactor(factor, persistPreference);
+}
+
+void MainWindow::applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference)
+{
+    editorSection_->applyEditorHalfWidthInputEnabled(enabled, persistPreference);
 }

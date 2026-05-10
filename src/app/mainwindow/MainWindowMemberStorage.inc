@@ -414,6 +414,7 @@
         PreviewTimingSettings previewTimingSettings_;
         int editorTextFontPointSize_ = 0;
         double editorLineSpacingFactor_ = 1.5;
+        bool editorHalfWidthInputEnabled_ = true;
         SimaiDocument document_;
         int previewStatsLayoutRows_ = 0;
         int previewStatsLayoutCols_ = 0;
@@ -737,6 +738,7 @@
     PreviewTimingSettings& previewTimingSettings_ = state_.previewTimingSettings_;
     int& editorTextFontPointSize_ = state_.editorTextFontPointSize_;
     double& editorLineSpacingFactor_ = state_.editorLineSpacingFactor_;
+    bool& editorHalfWidthInputEnabled_ = state_.editorHalfWidthInputEnabled_;
     SimaiDocument& document_ = state_.document_;
     QWidget*& welcomePage_ = ui_.welcomePage_;
     QLabel*& welcomeEmptyHintLabel_ = ui_.welcomeEmptyHintLabel_;

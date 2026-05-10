@@ -29,6 +29,8 @@ public:
     void setPreviewFollowVisualCaret(bool active, int line = 1, int col = 1);
     bool applyPreviewFollowCursor(const QTextCursor& cursor, bool centerView, bool suppressSignals = true);
     QPointF normalizedViewportHitPosition(const QPointF& position) const;
+    void setHalfWidthInputEnabled(bool enabled);
+    bool halfWidthInputEnabled() const { return halfWidthInputEnabled_; }
 
 signals:
     void undoShortcutRequested();
