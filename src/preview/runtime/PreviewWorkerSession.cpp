@@ -98,6 +98,22 @@ void appendWorkerLog(const QString& tag, const QString& payload)
     }
 }
 
+quint64 muriReportSnapshotFingerprint(const miacode::preview::ipc::PreviewFrameStateSerial& snapshot)
+{
+    quint32 usedBytes = snapshot.muriReportBlobUsedBytes;
+    if (usedBytes > static_cast<quint32>(snapshot.muriReportBlob.size())) {
+        usedBytes = static_cast<quint32>(snapshot.muriReportBlob.size());
+    }
+    quint64 fingerprint = 14695981039346656037ull;
+    fingerprint ^= usedBytes;
+    fingerprint *= 1099511628211ull;
+    for (quint32 i = 0; i < usedBytes; ++i) {
+        fingerprint ^= static_cast<unsigned char>(snapshot.muriReportBlob[i]);
+        fingerprint *= 1099511628211ull;
+    }
+    return fingerprint;
+}
+
 }  // namespace
 
 namespace miacode::preview::worker {
@@ -883,9 +899,16 @@ void PreviewWorkerSession::pumpQsgFrame()
                  ^ (static_cast<quint64>(last.typeKind) << 24);
         }
         const bool fingerprintChanged = (fp != lastWindowFingerprint_);
-        if (fingerprintChanged) {
+        const quint64 muriReportFingerprint = muriReportSnapshotFingerprint(lastSnapshot_);
+        const bool muriReportChanged = (muriReportFingerprint != lastMuriReportFingerprint_);
+        if (fingerprintChanged || muriReportChanged) {
             ++lastWindowRevision_;
-            lastWindowFingerprint_ = fp;
+            if (fingerprintChanged) {
+                lastWindowFingerprint_ = fp;
+            }
+            if (muriReportChanged) {
+                lastMuriReportFingerprint_ = muriReportFingerprint;
+            }
             didCacheBump = true;
         }
         frameState_.sceneContentRevision = lastWindowRevision_;
@@ -904,9 +927,13 @@ void PreviewWorkerSession::pumpQsgFrame()
             const qint64 inflateStartNs = pumpTimer.nsecsElapsed();
             miacode::preview::ipc::inflateActiveSpritesToMarkers(
                 lastSnapshot_, &frameState_.noteMarkers);
+            inflateNs = pumpTimer.nsecsElapsed() - inflateStartNs;
+        }
+        if (muriReportChanged) {
+            const qint64 inflateStartNs = pumpTimer.nsecsElapsed();
             miacode::preview::ipc::unpackMuriAnalysisReport(
                 lastSnapshot_, &frameState_);
-            inflateNs = pumpTimer.nsecsElapsed() - inflateStartNs;
+            inflateNs += pumpTimer.nsecsElapsed() - inflateStartNs;
         }
 
         // PSO warm-up: inject a synthetic touch+firework marker once,

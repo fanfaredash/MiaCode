@@ -41,7 +41,7 @@
 
 namespace miacode::preview::ipc {
 
-inline constexpr quint32 kSerialLayoutVersion = 8;
+inline constexpr quint32 kSerialLayoutVersion = 9;
 
 // Hard cap so the slot byte size is bounded at compile time. The ring
 // buffer's slot stride is sizeof(PreviewFrameStateSerial); editor and worker
@@ -190,6 +190,8 @@ struct SerialSpriteEntry
     // layers to break ties between markers at the same `second`.
     qint32 parseOrder = -1;
     qint32 eachGroupId = -1;
+    qint32 sourceLine = 1;
+    qint32 sourceCol = 1;
 
     // Slide geometry — points into `markerGeometryBlob` at a packed
     // `SlideGeometryPayload` (see PreviewSlideGeometryLayout.h). Empty

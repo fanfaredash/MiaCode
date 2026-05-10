@@ -549,6 +549,8 @@ TimelineNoteMarker inflateSerialSpriteToMarker(const SerialSpriteEntry& entry,
     m.touchPoint = QPointF(entry.touchPointX, entry.touchPointY);
     m.parseOrder = entry.parseOrder;
     m.eachGroupId = entry.eachGroupId;
+    m.sourceLine = entry.sourceLine;
+    m.sourceCol = entry.sourceCol;
     m.wifiCriticalProportion = entry.wifiCriticalProportion;
     m.slideNativeTrackLength = entry.slideNativeTrackLength;
     m.slideRuntimeTrackLength = entry.slideRuntimeTrackLength;
@@ -717,6 +719,8 @@ int projectActiveSpritesToSerial(const miacode::preview::scene::PreviewFrameStat
         dst.touchPointY = static_cast<float>(marker.touchPoint.y());
         dst.parseOrder = marker.parseOrder;
         dst.eachGroupId = marker.eachGroupId;
+        dst.sourceLine = marker.sourceLine;
+        dst.sourceCol = marker.sourceCol;
         dst.wifiCriticalProportion = static_cast<float>(marker.wifiCriticalProportion);
         dst.slideNativeTrackLength = static_cast<float>(marker.slideNativeTrackLength);
         dst.slideRuntimeTrackLength = static_cast<float>(marker.slideRuntimeTrackLength);

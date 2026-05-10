@@ -360,6 +360,7 @@ private:
     // staying constant for a paused / static frame stream.
     quint64 lastWindowFingerprint_ = 0;
     quint64 lastWindowRevision_ = 0;
+    quint64 lastMuriReportFingerprint_ = 0;
 
     // Cached per-type marker counts — recomputed only when the visible
     // window fingerprint changes. Feeds the periodic qsg_tick log
