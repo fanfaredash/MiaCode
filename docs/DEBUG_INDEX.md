@@ -194,6 +194,11 @@ Launch the Qt Quick hybrid host explicitly in debug mode:
 
 - `MiaCode.exe --quick-shell-beta --debug`
 
+Launch the worker + HWND timeline route from a release package:
+
+- `Start_MiaCode_Legacy_QML.bat`
+- This sets `MIACODE_PREVIEW_USE_DCOMP=1`, `MIACODE_PREVIEW_OUT_OF_PROCESS=1`, `MIACODE_PREVIEW_WORKER_QSG_RENDER=1`, and `MIACODE_TIMELINE_USE_DCOMP=1`.
+
 Force export logging into a local directory:
 
 - `set MIACODE_LOG_DIR=<folder>`

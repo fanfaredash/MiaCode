@@ -16,11 +16,6 @@ namespace {
 struct TimelineQuickNotesRootNode : public QSGNode {
     quint64 revision = 0;
     quint64 appearanceRevision = 0;
-    // Optimization A — destruct + placement-new pool. Lives on the
-    // persistent root so it survives clearChildren. Each claim()
-    // gives a freshly-constructed QSGGeometry (m_server_data=null);
-    // the only thing reused is the CPU heap allocation under it.
-    TimelineQuickGeometryPool spritePool;
 };
 
 void clearChildren(QSGNode* node)
@@ -225,16 +220,12 @@ QSGNode* TimelineQuickNotesLayer::updateNode(
     if (root->revision == state.notesRevision && root->appearanceRevision == state.appearanceRevision) {
         return root;
     }
-    // Optimization A — record pool-owned geometry pointers from the
-    // previous rebuild before clearChildren deletes the nodes. The
-    // geometries stay attached to the soon-to-be-deleted nodes; that
-    // works because we set OwnsGeometry=false at emit time, so
-    // ~QSGGeometryNode skips `delete d->geometry`. We do NOT call
-    // `setGeometry(nullptr)` — that triggers markDirty(DirtyGeometry)
-    // and crashes the renderer on a NULL geometry pointer (verified
-    // via crash dump: AV in QSGBatchRenderer::Renderer::nodeChanged
-    // dereferencing [NULL+0x18]).
-    reclaimGeometriesFromTree(bodyRoot, &root->spritePool);
+    // Keep sprite batching, but do not recycle QSGGeometry objects.
+    // The pool saved only a small object allocation while crossing an
+    // unsafe Qt Scene Graph lifetime boundary during rapid timeline
+    // scroll/seek rebuilds. Fresh geometry per batch keeps the large
+    // performance win from batching without reusing renderer-tracked
+    // geometry storage.
     clearChildren(bodyRoot);
 
     // DPR for physical-pixel snap. QQuickWindow returns 0 before exposed,
@@ -270,16 +261,12 @@ QSGNode* TimelineQuickNotesLayer::updateNode(
     // builder before starting the next emit phase. Tree order remains
     // trackSprites → holdSpans → touchHoldLines → noteSprites.
     //
-    // Optimization A (geometry pool) is enabled with the
-    // destruct+placement-new strategy. claim() takes a pooled
-    // QSGGeometry, destructs it in place (clearing m_server_data),
-    // re-constructs at the same address. Saves the CPU heap alloc
-    // for the QSGGeometry object; m_data is still freshly malloc'd
-    // each rebuild so no cross-frame buffer reuse risk.
+    // Geometry nodes are fresh per rebuild. Batching still limits node
+    // count to texture groups instead of per-note nodes.
     if (textures != nullptr) {
         // Phase 1: track sprites — reorderable.
         {
-            TimelineQuickGroupedSpriteBatchBuilder trackBatch(bodyRoot, &root->spritePool);
+            TimelineQuickGroupedSpriteBatchBuilder trackBatch(bodyRoot);
             for (const auto& sprite : state.trackSprites) {
                 const QSize targetSize = textures->noteTargetSize(sprite.spriteType, sprite.scale);
                 if (!targetSize.isValid()) continue;
@@ -296,7 +283,7 @@ QSGNode* TimelineQuickNotesLayer::updateNode(
         // are distinct textures within a hold; cap-over-body order
         // matters at the seams.
         {
-            TimelineQuickSpriteBatchBuilder holdBatch(bodyRoot, &root->spritePool);
+            TimelineQuickSpriteBatchBuilder holdBatch(bodyRoot);
             for (const auto& holdSpan : state.holdSpans) {
                 appendHoldSpanBatched(bodyRoot, holdBatch, holdSpan, textures, dpr);
             }
@@ -311,7 +298,7 @@ QSGNode* TimelineQuickNotesLayer::updateNode(
         // Phase 4: note sprites — reorderable, same rationale as
         // Phase 1.
         {
-            TimelineQuickGroupedSpriteBatchBuilder noteBatch(bodyRoot, &root->spritePool);
+            TimelineQuickGroupedSpriteBatchBuilder noteBatch(bodyRoot);
             for (const auto& sprite : state.noteSprites) {
                 const QSize targetSize = textures->noteTargetSize(sprite.spriteType, sprite.scale);
                 if (!targetSize.isValid()) continue;

@@ -142,6 +142,7 @@ Do not rename sound files casually; both preview-time and export-time behavior d
   - the CMake post-build deploy step now also copies the repo-local BASS runtime DLL set (`bass`, `bassmix`, `bass_fx`, `bass_aac`, `bassopus`) into the executable directory
 - Windows release packages now also include:
     - root-level `Start_MiaCode_Debug.bat`
+    - root-level `Start_MiaCode_Legacy_QML.bat`, which now opts into chart worker rendering and the HWND/DComp timeline route for A/B testing against the default embedded QSG-only startup path
     - root-level `Start_MiaCode_QuickShell_Debug.bat`
     - root-level `logs/` helper folder only for explicit debug-launch scripts; normal project-bound runtime logs default to `.miacode/logs/`
     - `docs/DEBUG_INDEX.md`

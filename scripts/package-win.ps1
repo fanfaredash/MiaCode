@@ -300,7 +300,7 @@ if (!(Test-Path $legacyQmlLauncherSrc)) {
 Copy-Item $legacyQmlLauncherSrc (Join-Path $DistDir "Start_MiaCode_Legacy_QML.bat") -Force
 
 New-Item -ItemType Directory -Path (Join-Path $DistDir "logs") -Force | Out-Null
-New-Item -ItemType Directory -Path (Join-Path $DistDir "logs\\legacy-qml") -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $DistDir "logs\\worker-hwnd") -Force | Out-Null
 
 if ($Config -eq "Debug") {
     $deployMode = "--debug"
@@ -450,12 +450,15 @@ $releaseReadme = Join-Path $docsDir "RELEASE_README.txt"
 $releaseLines = @(
     "MiaCode release package"
     ""
-    "Run (default — DComp preview pipeline + QuickShell UI):"
+    "Run (default embedded QSG legacy pipeline + QuickShell UI):"
     "  MiaCode.exe"
     "  Start_MiaCode_Debug.bat            (adds --debug, logs into .\\logs\\)"
     ""
-    "Run with the legacy QSG-only preview pipeline (DComp disabled):"
-    "  Start_MiaCode_Legacy_QML.bat       (sets MIACODE_PREVIEW_USE_DCOMP=0)"
+    "Run with the worker + HWND timeline pipeline:"
+    "  Start_MiaCode_Legacy_QML.bat       (sets MIACODE_PREVIEW_USE_DCOMP=1,"
+    "                                      MIACODE_PREVIEW_OUT_OF_PROCESS=1,"
+    "                                      MIACODE_PREVIEW_WORKER_QSG_RENDER=1,"
+    "                                      MIACODE_TIMELINE_USE_DCOMP=1)"
     ""
     "Debug logs:"
     "  .\\logs\\miacode_runtime_debug.log"
@@ -463,11 +466,11 @@ $releaseLines = @(
     "  .\\logs\\miacode_video_export.log"
     "  .\\logs\\miacode_startup_timing.log"
     "  .\\logs\\miacode_fatal.log"
-    "  .\\logs\\legacy-qml\\miacode_runtime_debug.log"
-    "  .\\logs\\legacy-qml\\miacode_audio_debug.log"
-    "  .\\logs\\legacy-qml\\miacode_video_export.log"
-    "  .\\logs\\legacy-qml\\miacode_startup_timing.log"
-    "  .\\logs\\legacy-qml\\miacode_fatal.log"
+    "  .\\logs\\worker-hwnd\\miacode_runtime_debug.log"
+    "  .\\logs\\worker-hwnd\\miacode_audio_debug.log"
+    "  .\\logs\\worker-hwnd\\miacode_video_export.log"
+    "  .\\logs\\worker-hwnd\\miacode_startup_timing.log"
+    "  .\\logs\\worker-hwnd\\miacode_fatal.log"
     ""
     "Included:"
     "  - MiaCode.exe (main app)"
@@ -503,7 +506,7 @@ $requiredPackagePaths = @(
     "Start_MiaCode_Debug.bat",
     "Start_MiaCode_Legacy_QML.bat",
     "logs",
-    "logs\\legacy-qml",
+    "logs\\worker-hwnd",
     (Get-QtRuntimeDllName -BaseName "Qt6Core" -Config $Config),
     (Get-QtRuntimeDllName -BaseName "Qt6Gui" -Config $Config),
     (Get-QtRuntimeDllName -BaseName "Qt6Widgets" -Config $Config),
