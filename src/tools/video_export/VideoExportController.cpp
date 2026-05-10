@@ -848,6 +848,13 @@ ReadyFramePayload buildReadyFramePayload(
     return readyFrame;
 }
 
+QImage makeTransparentOverlayFrame(const QSize& frameSize)
+{
+    QImage frame(frameSize, QImage::Format_RGBA8888);
+    frame.fill(Qt::transparent);
+    return frame;
+}
+
 ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
     VideoExportQuickRenderBackend* exportBackend,
     bool* useOffscreenGpu,
@@ -3127,6 +3134,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const int frameCount = audioRenderPlan.frameCount;
     const double alignedTotalSeconds = audioRenderPlan.alignedTotalSeconds;
     const double timelineOriginSecond = audioRenderPlan.timelineOriginSecond;
+    const bool partialRangeExport = !task.fullRangeExport;
     const int frameWidth = qMax(1, task.outputWidth);
     const int frameHeight = qMax(1, task.outputHeight);
     const QSize frameSize(frameWidth, frameHeight);
@@ -3161,7 +3169,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
               task.staticTapOnSlideThresholdSeconds);
     appendVideoExportLog(
         QStringLiteral("input_probe"),
-        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 leadIn=%8 timelineOrigin=%9 fullRange=%10 markerFilter=marker.second within simulatedWindow frameWindow=%11..%12 totalSeconds=%13 alignedSeconds=%14 frameCount=%15 size=%16x%17")
+        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 leadIn=%8 timelineOrigin=%9 fullRange=%10 markerFilter=marker.second within simulatedWindow frameWindow=%11..%12 visibleWindow=%13..%14 totalSeconds=%15 alignedSeconds=%16 frameCount=%17 size=%18x%19")
             .arg(mediaPath)
             .arg(hasMedia ? 1 : 0)
             .arg(mediaIsImage ? 1 : 0)
@@ -3173,6 +3181,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(timelineOriginSecond, 0, 'f', 6)
             .arg(task.fullRangeExport ? 1 : 0)
             .arg(timelineOriginSecond, 0, 'f', 6)
+            .arg(audioRenderPlan.segmentEndSecond, 0, 'f', 6)
+            .arg(audioRenderPlan.segmentStartSecond, 0, 'f', 6)
             .arg(audioRenderPlan.segmentEndSecond, 0, 'f', 6)
             .arg(audioRenderPlan.totalSeconds, 0, 'f', 6)
             .arg(alignedTotalSeconds, 0, 'f', 6)
@@ -4267,7 +4277,27 @@ VideoExportResult VideoExportController::exportPreparedTask(
             appendVideoExportLog(QStringLiteral("canceled"), QStringLiteral("stage=frame_loop frame=%1").arg(frameIndex));
             return result;
         }
-        const double exportSecond = timelineOriginSecond + static_cast<double>(frameIndex) / task.fps;
+        const double outputSecond = static_cast<double>(frameIndex) / task.fps;
+        const bool partialPreloadFrame =
+            partialRangeExport && outputSecond + kTimelineEpsilonSeconds < audioRenderPlan.leadInSeconds;
+        const double exportSecond = partialRangeExport
+            ? audioRenderPlan.segmentStartSecond + qMax(0.0, outputSecond - audioRenderPlan.leadInSeconds)
+            : timelineOriginSecond + outputSecond;
+        if (partialPreloadFrame) {
+            ReadyFramePayload readyFrame = buildReadyFramePayload(
+                nullptr,
+                frameIndex,
+                exportSecond,
+                QVector<ObjectTraceItem>(),
+                makeTransparentOverlayFrame(frameSize),
+                0,
+                false
+            );
+            if (!processReadyFrame(readyFrame)) {
+                return result;
+            }
+            continue;
+        }
         QVector<ObjectTraceItem> traceItems;
         if (diagObjectTraceEnabled || diagObjectHashEnabled) {
             traceItems = collectVisibleObjectTrace(
