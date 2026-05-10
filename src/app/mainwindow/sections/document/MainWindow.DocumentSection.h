@@ -70,6 +70,8 @@ public:
     void onToggleExSelection();
     void onToggleFireworkSelection();
     void onRandomRotateSelection();
+    void onRaiseSubdivisionSelection();
+    void onLowerSubdivisionSelection();
     void updateEditorHeader();
     void updateDifficultyScopedActionStates();
     void updateEditorHeaderLayoutMode();

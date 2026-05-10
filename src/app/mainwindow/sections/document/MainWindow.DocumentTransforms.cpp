@@ -490,6 +490,36 @@ void MainWindow::DocumentSection::onRandomRotateSelection()
     });
 }
 
+void MainWindow::DocumentSection::onRaiseSubdivisionSelection()
+{
+    MC_OP("MainWindow::DocumentSection::onRaiseSubdivisionSelection");
+    if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
+        owner_.statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    applySelectionBatchTransform(
+        UiText::isChineseUi() ? QStringLiteral("分音提升一档") : QStringLiteral("Subdivision +1"),
+        [](const QString& text, int* changedCount) {
+            return miacode::chart_transform::raiseSubdivisionForSelection(text, changedCount);
+        });
+}
+
+void MainWindow::DocumentSection::onLowerSubdivisionSelection()
+{
+    MC_OP("MainWindow::DocumentSection::onLowerSubdivisionSelection");
+    if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
+        owner_.statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    applySelectionBatchTransform(
+        UiText::isChineseUi() ? QStringLiteral("分音降低一档") : QStringLiteral("Subdivision -1"),
+        [](const QString& text, int* changedCount) {
+            return miacode::chart_transform::lowerSubdivisionForSelection(text, changedCount);
+        });
+}
+
 QString MainWindow::resolveInitialOpenDirectory() const
 {
     return documentSection_->resolveInitialOpenDirectory();
@@ -553,4 +583,14 @@ void MainWindow::onToggleFireworkSelection()
 void MainWindow::onRandomRotateSelection()
 {
     documentSection_->onRandomRotateSelection();
+}
+
+void MainWindow::onRaiseSubdivisionSelection()
+{
+    documentSection_->onRaiseSubdivisionSelection();
+}
+
+void MainWindow::onLowerSubdivisionSelection()
+{
+    documentSection_->onLowerSubdivisionSelection();
 }

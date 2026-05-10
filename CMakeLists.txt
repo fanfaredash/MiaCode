@@ -610,6 +610,10 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/core/chart/document/SimaiTimingMetadata.cpp
         src/core/chart/parser/SimaiNativeParser.h
         src/core/chart/parser/SimaiNativeParser.cpp
+        src/common/OperationLog.h
+        src/common/OperationLog.cpp
+        src/common/DebugLog.h
+        src/common/DebugLog.cpp
         resources/fonts.qrc
     )
 

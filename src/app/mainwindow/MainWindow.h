@@ -240,6 +240,8 @@ private slots:
     void onToggleExSelection();
     void onToggleFireworkSelection();
     void onRandomRotateSelection();
+    void onRaiseSubdivisionSelection();
+    void onLowerSubdivisionSelection();
     void onStopPreview();
     void onTogglePreviewPause();
     void onToggleJudgeMarkers(bool checked);

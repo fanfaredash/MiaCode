@@ -124,6 +124,12 @@ void MainWindow::DocumentSection::updateDifficultyScopedActionStates()
     if (ui_.transformRandomRotateAction_ != nullptr) {
         ui_.transformRandomRotateAction_->setEnabled(enabled);
     }
+    if (ui_.transformRaiseSubdivisionAction_ != nullptr) {
+        ui_.transformRaiseSubdivisionAction_->setEnabled(enabled);
+    }
+    if (ui_.transformLowerSubdivisionAction_ != nullptr) {
+        ui_.transformLowerSubdivisionAction_->setEnabled(enabled);
+    }
     if (ui_.stopPreviewButton_ != nullptr) {
         ui_.stopPreviewButton_->setEnabled(enabled);
     }

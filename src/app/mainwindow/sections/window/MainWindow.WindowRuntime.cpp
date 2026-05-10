@@ -755,6 +755,8 @@ QList<QAction*> MainWindow::WindowSection::quickShellShortcutActions() const
         owner_.transformToggleExAction_,
         owner_.transformToggleFireworkAction_,
         owner_.transformRandomRotateAction_,
+        owner_.transformRaiseSubdivisionAction_,
+        owner_.transformLowerSubdivisionAction_,
         owner_.stopPreviewAction_,
         owner_.pausePreviewAction_,
         owner_.stopOrPlayPreviewShortcutAction_,
@@ -847,4 +849,3 @@ void MainWindow::WindowSection::playInvalidStarPreviewEasterEggSound(bool enable
     effect->stop();
     effect->play();
 }
-

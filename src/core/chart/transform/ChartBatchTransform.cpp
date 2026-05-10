@@ -2,6 +2,8 @@
 
 #include "common/OperationLog.h"
 
+#include <limits>
+
 #include <QRandomGenerator>
 #include <QStringList>
 #include <QtGlobal>
@@ -551,6 +553,300 @@ QString rewriteSelectionCore(const SelectionEdgeSplit& split, const std::functio
 QString rewriteSelectionCore(const QString& input, const std::function<QString(const QString&)>& rewriteCore)
 {
     return rewriteSelectionCore(splitSelectionEdges(input), rewriteCore);
+}
+
+bool parsePositiveIntegerText(const QString& text, int* value)
+{
+    if (text.isEmpty()) {
+        return false;
+    }
+    int parsed = 0;
+    for (QChar ch : text) {
+        if (!ch.isDigit()) {
+            return false;
+        }
+        const int digit = ch.digitValue();
+        if (parsed > (std::numeric_limits<int>::max() - digit) / 10) {
+            return false;
+        }
+        parsed = parsed * 10 + digit;
+    }
+    if (parsed <= 0) {
+        return false;
+    }
+    if (value != nullptr) {
+        *value = parsed;
+    }
+    return true;
+}
+
+bool isSubdivisionSignature(const QString& text, int* denominator)
+{
+    if (!text.startsWith(QLatin1Char('{')) || !text.endsWith(QLatin1Char('}'))) {
+        return false;
+    }
+    return parsePositiveIntegerText(text.mid(1, text.size() - 2), denominator);
+}
+
+QString raiseSubdivisionCore(const QString& input, int* changedCount)
+{
+    int changed = 0;
+    QString output;
+    output.reserve(input.size() * 2);
+
+    const QStringList lines = input.split('\n', Qt::KeepEmptyParts);
+    for (int lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
+        const QString& line = lines.at(lineIndex);
+        for (int i = 0; i < line.size(); ++i) {
+            const QChar ch = line.at(i);
+            if (ch == QChar('|') && i + 1 < line.size() && line.at(i + 1) == QChar('|')) {
+                output.append(line.mid(i));
+                break;
+            }
+            if (ch == QChar('(')) {
+                const int close = line.indexOf(')', i + 1);
+                if (close < 0) {
+                    output.append(line.mid(i));
+                    break;
+                }
+                output.append(line.mid(i, close - i + 1));
+                i = close;
+                continue;
+            }
+            if (ch == QChar('[')) {
+                const int close = line.indexOf(']', i + 1);
+                if (close < 0) {
+                    output.append(line.mid(i));
+                    break;
+                }
+                output.append(line.mid(i, close - i + 1));
+                i = close;
+                continue;
+            }
+            if (ch == QChar('{')) {
+                const int close = line.indexOf('}', i + 1);
+                if (close < 0) {
+                    output.append(line.mid(i));
+                    break;
+                }
+                int denominator = 0;
+                const QString signature = line.mid(i, close - i + 1);
+                if (isSubdivisionSignature(signature, &denominator)
+                    && denominator <= (std::numeric_limits<int>::max() / 2)) {
+                    output.append(QStringLiteral("{%1}").arg(denominator * 2));
+                    ++changed;
+                } else {
+                    output.append(signature);
+                }
+                i = close;
+                continue;
+            }
+            if (ch == QChar('H') && line.mid(i, 3) == QStringLiteral("HS*")) {
+                const int close = line.indexOf('>', i + 3);
+                if (close < 0) {
+                    output.append(line.mid(i));
+                    break;
+                }
+                output.append(line.mid(i, close - i + 1));
+                i = close;
+                continue;
+            }
+            output.append(ch);
+            if (ch == QChar(',')) {
+                output.append(ch);
+                ++changed;
+            }
+        }
+        if (lineIndex + 1 < lines.size()) {
+            output.append('\n');
+        }
+    }
+
+    if (changedCount != nullptr) {
+        *changedCount = changed;
+    }
+    return output;
+}
+
+bool validateLowerSubdivisionLine(const QString& line)
+{
+    int slot = 0;
+    bool slotHasContent = false;
+    for (int i = 0; i < line.size(); ++i) {
+        const QChar ch = line.at(i);
+        if (ch == QChar('|') && i + 1 < line.size() && line.at(i + 1) == QChar('|')) {
+            break;
+        }
+        if (ch == QChar('(')) {
+            const int close = line.indexOf(')', i + 1);
+            if (close < 0) {
+                if ((slot % 2) != 0) {
+                    return false;
+                }
+                break;
+            }
+            i = close;
+            continue;
+        }
+        if (ch == QChar('[')) {
+            const int close = line.indexOf(']', i + 1);
+            if (close < 0) {
+                if ((slot % 2) != 0) {
+                    return false;
+                }
+                break;
+            }
+            if (!slotHasContent && (slot % 2) != 0) {
+                return false;
+            }
+            slotHasContent = true;
+            i = close;
+            continue;
+        }
+        if (ch == QChar('{')) {
+            const int close = line.indexOf('}', i + 1);
+            if (close < 0) {
+                if ((slot % 2) != 0) {
+                    return false;
+                }
+                break;
+            }
+            int denominator = 0;
+            if (isSubdivisionSignature(line.mid(i, close - i + 1), &denominator)
+                && ((denominator % 2) != 0 || denominator <= 1)) {
+                return false;
+            }
+            i = close;
+            continue;
+        }
+        if (ch == QChar('H') && line.mid(i, 3) == QStringLiteral("HS*")) {
+            const int close = line.indexOf('>', i + 3);
+            if (close < 0) {
+                if ((slot % 2) != 0) {
+                    return false;
+                }
+                break;
+            }
+            if (!slotHasContent && (slot % 2) != 0) {
+                return false;
+            }
+            slotHasContent = true;
+            i = close;
+            continue;
+        }
+        if (ch == QChar(',')) {
+            if (slotHasContent && (slot % 2) != 0) {
+                return false;
+            }
+            ++slot;
+            slotHasContent = false;
+            continue;
+        }
+        if (!ch.isSpace()) {
+            if ((slot % 2) != 0) {
+                return false;
+            }
+            slotHasContent = true;
+        }
+    }
+    return !slotHasContent || ((slot % 2) == 0);
+}
+
+QString lowerSubdivisionLine(const QString& line, int* changed)
+{
+    QString output;
+    output.reserve(line.size());
+    int slot = 0;
+    for (int i = 0; i < line.size(); ++i) {
+        const QChar ch = line.at(i);
+        if (ch == QChar('|') && i + 1 < line.size() && line.at(i + 1) == QChar('|')) {
+            output.append(line.mid(i));
+            break;
+        }
+        if (ch == QChar('(')) {
+            const int close = line.indexOf(')', i + 1);
+            if (close < 0) {
+                output.append(line.mid(i));
+                break;
+            }
+            output.append(line.mid(i, close - i + 1));
+            i = close;
+            continue;
+        }
+        if (ch == QChar('[')) {
+            const int close = line.indexOf(']', i + 1);
+            if (close < 0) {
+                output.append(line.mid(i));
+                break;
+            }
+            output.append(line.mid(i, close - i + 1));
+            i = close;
+            continue;
+        }
+        if (ch == QChar('{')) {
+            const int close = line.indexOf('}', i + 1);
+            if (close < 0) {
+                output.append(line.mid(i));
+                break;
+            }
+            int denominator = 0;
+            const QString signature = line.mid(i, close - i + 1);
+            if (isSubdivisionSignature(signature, &denominator)) {
+                output.append(QStringLiteral("{%1}").arg(denominator / 2));
+                if (changed != nullptr) {
+                    ++(*changed);
+                }
+            } else {
+                output.append(signature);
+            }
+            i = close;
+            continue;
+        }
+        if (ch == QChar('H') && line.mid(i, 3) == QStringLiteral("HS*")) {
+            const int close = line.indexOf('>', i + 3);
+            if (close < 0) {
+                output.append(line.mid(i));
+                break;
+            }
+            output.append(line.mid(i, close - i + 1));
+            i = close;
+            continue;
+        }
+        if (ch == QChar(',')) {
+            ++slot;
+            if ((slot % 2) == 0) {
+                output.append(ch);
+            } else if (changed != nullptr) {
+                ++(*changed);
+            }
+            continue;
+        }
+        output.append(ch);
+    }
+    return output;
+}
+
+QString lowerSubdivisionCore(const QString& input, int* changedCount)
+{
+    const QStringList lines = input.split('\n', Qt::KeepEmptyParts);
+    int changed = 0;
+    QString output;
+    output.reserve(input.size());
+    for (int lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
+        const QString& line = lines.at(lineIndex);
+        if (validateLowerSubdivisionLine(line)) {
+            output.append(lowerSubdivisionLine(line, &changed));
+        } else {
+            output.append(line);
+        }
+        if (lineIndex + 1 < lines.size()) {
+            output.append('\n');
+        }
+    }
+    if (changedCount != nullptr) {
+        *changedCount = changed;
+    }
+    return output;
 }
 
 void scanSelectionTokens(const QString& input, const std::function<void(const QString&)>& visitToken)
@@ -1405,6 +1701,32 @@ QString transformChartSelectionText(const QString& input, ChartTransformOp op, i
     int changed = 0;
     const QString output = rewriteSelectionCore(input, [&](const QString& core) {
         return transformChartText(core, op, &changed);
+    });
+    if (changedCount != nullptr) {
+        *changedCount = changed;
+    }
+    return output;
+}
+
+QString raiseSubdivisionForSelection(const QString& input, int* changedCount)
+{
+    MC_OP("miacode::chart_transform::raiseSubdivisionForSelection");
+    int changed = 0;
+    const QString output = rewriteSelectionCore(input, [&](const QString& core) {
+        return raiseSubdivisionCore(core, &changed);
+    });
+    if (changedCount != nullptr) {
+        *changedCount = changed;
+    }
+    return output;
+}
+
+QString lowerSubdivisionForSelection(const QString& input, int* changedCount)
+{
+    MC_OP("miacode::chart_transform::lowerSubdivisionForSelection");
+    int changed = 0;
+    const QString output = rewriteSelectionCore(input, [&](const QString& core) {
+        return lowerSubdivisionCore(core, &changed);
     });
     if (changedCount != nullptr) {
         *changedCount = changed;

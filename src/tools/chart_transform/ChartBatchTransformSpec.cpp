@@ -1006,6 +1006,76 @@ void runInlineSpecs(QTextStream& err, int* failed)
     }
 
     {
+        int changed = 0;
+        const QString input = QStringLiteral("{8}4^1[4:1],5,6h[4:1],,");
+        const QString output = miacode::chart_transform::raiseSubdivisionForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{16}4^1[4:1],,5,,6h[4:1],,,,"),
+            QStringLiteral("subdivision +1 doubles the rendered grid and expands comma spacing"),
+            failed,
+            err
+        );
+        expectTrue(changed == 5, QStringLiteral("subdivision +1 counts the signature and inserted commas"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{16}1,,2,,3,,");
+        const QString output = miacode::chart_transform::lowerSubdivisionForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{8}1,2,3,"),
+            QStringLiteral("subdivision -1 halves the rendered grid when all occupied slots are even-aligned"),
+            failed,
+            err
+        );
+        expectTrue(changed == 4, QStringLiteral("subdivision -1 counts the signature and removed commas"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{16},,7,6,5,4,1,2,3,4,");
+        const QString output = miacode::chart_transform::lowerSubdivisionForSelection(input, &changed);
+        expectEqual(
+            output,
+            input,
+            QStringLiteral("subdivision -1 leaves text unchanged when odd-grid notes would be lost"),
+            failed,
+            err
+        );
+        expectTrue(changed == 0, QStringLiteral("subdivision -1 reports no changes when reduction is impossible"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{16},,7,6,5,4,1,2,3,4,\n{8}7^2[4:1],,5,,4h[4:1],,");
+        const QString output = miacode::chart_transform::lowerSubdivisionForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{16},,7,6,5,4,1,2,3,4,\n{4}7^2[4:1],5,4h[4:1],"),
+            QStringLiteral("subdivision -1 judges each selected line independently"),
+            failed,
+            err
+        );
+        expectTrue(changed == 4, QStringLiteral("subdivision -1 counts only the reducible line changes"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{16},,7,6,5,4,1,2,3,4,\n{8}7^2[4:1],5,4h[4:1],,");
+        const QString output = miacode::chart_transform::lowerSubdivisionForSelection(input, &changed);
+        expectEqual(
+            output,
+            input,
+            QStringLiteral("subdivision -1 independently keeps multiple irreducible selected lines unchanged"),
+            failed,
+            err
+        );
+        expectTrue(changed == 0, QStringLiteral("subdivision -1 reports no changes when every selected line is irreducible"), failed, err);
+    }
+
+    {
         const miacode::chart_transform::ChartNormalizationResult normalized =
             miacode::chart_transform::normalizeChartText(QStringLiteral("A1fxh[4:1],,,,\nE"));
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts a simple valid chart"), failed, err);

@@ -24,5 +24,7 @@ QString randomRotateForSelection(
     const QString& input,
     const std::function<int()>& nextStep,
     int* changedCount = nullptr);
+QString raiseSubdivisionForSelection(const QString& input, int* changedCount = nullptr);
+QString lowerSubdivisionForSelection(const QString& input, int* changedCount = nullptr);
 
 }  // namespace miacode::chart_transform

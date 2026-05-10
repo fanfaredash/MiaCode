@@ -329,6 +329,20 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.transformRotate45ClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45Clockwise);
     transformMenu->addAction(owner_.transformRotate45ClockwiseAction_);
 
+    owner_.transformRaiseSubdivisionAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("分音提升一档") : QStringLiteral("Subdivision +1"),
+        &owner_);
+    owner_.transformRaiseSubdivisionAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+=")));
+    connect(owner_.transformRaiseSubdivisionAction_, &QAction::triggered, &owner_, &MainWindow::onRaiseSubdivisionSelection);
+    transformMenu->addAction(owner_.transformRaiseSubdivisionAction_);
+
+    owner_.transformLowerSubdivisionAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("分音降低一档") : QStringLiteral("Subdivision -1"),
+        &owner_);
+    owner_.transformLowerSubdivisionAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+-")));
+    connect(owner_.transformLowerSubdivisionAction_, &QAction::triggered, &owner_, &MainWindow::onLowerSubdivisionSelection);
+    transformMenu->addAction(owner_.transformLowerSubdivisionAction_);
+
     auto* moreTransformMenu = transformMenu->addMenu(uiText("action.transform.more", "More..."));
     owner_.transformToggleBreakAction_ = new QAction(uiText("action.transform.toggle_break", "Toggle Break"), &owner_);
     owner_.transformToggleBreakAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_B));
@@ -506,4 +520,3 @@ void MainWindow::setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* t
 {
     frameSection_->setupMenusAndActions(fileMenu, editMenu, transformMenu, previewMenu, helpMenu);
 }
-

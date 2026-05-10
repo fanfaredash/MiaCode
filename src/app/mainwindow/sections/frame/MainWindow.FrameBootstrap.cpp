@@ -201,6 +201,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         transformRotate180Action_,
         transformRotate45CounterClockwiseAction_,
         transformRotate45ClockwiseAction_,
+        transformRaiseSubdivisionAction_,
+        transformLowerSubdivisionAction_,
     });
     editor->setMoreBatchTransformActions({
         transformToggleBreakAction_,
@@ -857,6 +859,16 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 
     if (normalizeWholeChartAction_ != nullptr) {
         toolboxMenu_->addAction(normalizeWholeChartAction_);
+    }
+
+    if (transformRaiseSubdivisionAction_ != nullptr || transformLowerSubdivisionAction_ != nullptr) {
+        toolboxMenu_->addSeparator();
+        if (transformRaiseSubdivisionAction_ != nullptr) {
+            toolboxMenu_->addAction(transformRaiseSubdivisionAction_);
+        }
+        if (transformLowerSubdivisionAction_ != nullptr) {
+            toolboxMenu_->addAction(transformLowerSubdivisionAction_);
+        }
     }
 
     toolboxMenu_->addSeparator();

@@ -495,14 +495,14 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
     };
     fontDecreaseAction_ = new QAction(QStringLiteral("Decrease Editor Font"), this);
-    fontDecreaseAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+-")));
+    fontDecreaseAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+-")));
     fontDecreaseAction_->setShortcutContext(Qt::WindowShortcut);
     addAction(fontDecreaseAction_);
     connect(fontDecreaseAction_, &QAction::triggered, this, [applyEditorFontDelta]() {
         applyEditorFontDelta(-1);
     });
     fontIncreaseAction_ = new QAction(QStringLiteral("Increase Editor Font"), this);
-    fontIncreaseAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+=")));
+    fontIncreaseAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+=")));
     fontIncreaseAction_->setShortcutContext(Qt::WindowShortcut);
     addAction(fontIncreaseAction_);
     connect(fontIncreaseAction_, &QAction::triggered, this, [applyEditorFontDelta]() {
