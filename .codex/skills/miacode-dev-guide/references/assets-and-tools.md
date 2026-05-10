@@ -169,6 +169,9 @@ Current repo-local helper scripts include:
 - `scripts/compare_log_vs_video_trajectory.py`
 - `scripts/export_and_analyze_duplicates.py`
 - `scripts/calc_hold_crop_ratio.py`
+- `tools/intro_remotion/qml/build-exporter.ps1`
+- `tools/intro_remotion/qml/render-qml-video.ps1`
+- `tools/intro_remotion/qml/render-remotion-video.ps1`
 
 These are developer aids, not runtime dependencies. If a debugging workflow starts depending on one of them regularly, keep this list and its purpose notes up to date.
 
