@@ -86,6 +86,41 @@ QFont timelineLaneLabelFont()
     return laneLabelFont;
 }
 
+double normalizedContentScale(double scale)
+{
+    return qBound(0.5, scale, 1.0);
+}
+
+double headerContentScale(double scale)
+{
+    const double contentScale = normalizedContentScale(scale);
+    return 0.5 + (contentScale * 0.5);
+}
+
+int scaledMetric(int value, double contentScale)
+{
+    return qMax(1, qRound(static_cast<qreal>(value) * normalizedContentScale(contentScale)));
+}
+
+qreal scaledMetric(qreal value, double contentScale)
+{
+    return value * static_cast<qreal>(normalizedContentScale(contentScale));
+}
+
+QFont scaledFontForContentScale(const QFont& sourceFont, double contentScale)
+{
+    QFont scaledFont(sourceFont);
+    const qreal scale = static_cast<qreal>(normalizedContentScale(contentScale));
+    if (scaledFont.pointSizeF() > 0.0) {
+        scaledFont.setPointSizeF(qMax(1.0, scaledFont.pointSizeF() * scale));
+    } else if (scaledFont.pointSize() > 0) {
+        scaledFont.setPointSizeF(qMax(1.0, static_cast<qreal>(scaledFont.pointSize()) * scale));
+    } else if (scaledFont.pixelSize() > 0) {
+        scaledFont.setPixelSize(qMax(1, qRound(static_cast<qreal>(scaledFont.pixelSize()) * scale)));
+    }
+    return scaledFont;
+}
+
 QSizeF timelineTextLogicalSize(const QFont& font, const QString& text)
 {
     const QFontMetricsF metrics(font);
@@ -119,42 +154,43 @@ double pixelsPerSecondForZoom(double zoomScale)
     return 120.0 * qMax(0.25, zoomScale);
 }
 
-int rawSecondToX(double second, double displayStartSeconds, double pixelsPerSecond)
+int rawSecondToX(double second, double displayStartSeconds, double pixelsPerSecond, int timelineLeft)
 {
-    return kTimelineLeftMargin + qRound((second - displayStartSeconds) * pixelsPerSecond);
+    return timelineLeft + qRound((second - displayStartSeconds) * pixelsPerSecond);
 }
 
-qreal rawSecondToXExact(double second, double displayStartSeconds, double pixelsPerSecond)
+qreal rawSecondToXExact(double second, double displayStartSeconds, double pixelsPerSecond, int timelineLeft)
 {
-    return static_cast<qreal>(kTimelineLeftMargin) + static_cast<qreal>((second - displayStartSeconds) * pixelsPerSecond);
+    return static_cast<qreal>(timelineLeft) + static_cast<qreal>((second - displayStartSeconds) * pixelsPerSecond);
 }
 
-int rawContentWidth(double displayStartSeconds, double displayEndSeconds, double pixelsPerSecond)
+int rawContentWidth(double displayStartSeconds, double displayEndSeconds, double pixelsPerSecond, int timelineLeft)
 {
     const double timelineSeconds = qMax(0.0, displayEndSeconds - displayStartSeconds);
-    return kTimelineLeftMargin + static_cast<int>(timelineSeconds * pixelsPerSecond) + kTimelineRightPadding;
+    return timelineLeft + static_cast<int>(timelineSeconds * pixelsPerSecond) + kTimelineRightPadding;
 }
 
 int secondToX(const TimelineSceneLayoutMetrics& metrics, double second)
 {
-    return rawSecondToX(second, metrics.displayStartSeconds, metrics.pixelsPerSecond)
+    return rawSecondToX(second, metrics.displayStartSeconds, metrics.pixelsPerSecond, metrics.timelineLeft)
         + metrics.leadingCenteringPadding;
 }
 
 qreal secondToXExact(const TimelineSceneLayoutMetrics& metrics, double second)
 {
-    return rawSecondToXExact(second, metrics.displayStartSeconds, metrics.pixelsPerSecond)
+    return rawSecondToXExact(second, metrics.displayStartSeconds, metrics.pixelsPerSecond, metrics.timelineLeft)
         + static_cast<qreal>(metrics.leadingCenteringPadding);
 }
 
 int secondToX(const TimelineSceneState& state, double second)
 {
-    return rawSecondToX(second, state.displayStartSeconds, state.pixelsPerSecond) + state.leadingCenteringPadding;
+    return rawSecondToX(second, state.displayStartSeconds, state.pixelsPerSecond, state.timelineLeft)
+        + state.leadingCenteringPadding;
 }
 
 qreal secondToXExact(const TimelineSceneState& state, double second)
 {
-    return rawSecondToXExact(second, state.displayStartSeconds, state.pixelsPerSecond)
+    return rawSecondToXExact(second, state.displayStartSeconds, state.pixelsPerSecond, state.timelineLeft)
         + static_cast<qreal>(state.leadingCenteringPadding);
 }
 
@@ -166,7 +202,7 @@ qreal muriMarkerAnchorY(
 {
     const int startLane = qBound(1, note.lane, kPlayableLaneCount);
     const qreal startY = static_cast<qreal>(
-        state.timelineTop + (startLane - 1) * kLaneHeight + kLaneHeight / 2);
+        state.timelineTop + (startLane - 1) * state.laneHeight + state.laneHeight / 2);
     if (note.kind != TimelineRenderNoteKind::Slide && note.kind != TimelineRenderNoteKind::Wifi) {
         return startY;
     }
@@ -184,7 +220,7 @@ qreal muriMarkerAnchorY(
 
     const int endLane = qBound(1, note.endLane, kPlayableLaneCount);
     const qreal endY = static_cast<qreal>(
-        state.timelineTop + (endLane - 1) * kLaneHeight + kLaneHeight / 2);
+        state.timelineTop + (endLane - 1) * state.laneHeight + state.laneHeight / 2);
     if (triggerSecond <= traceSecond) {
         return startY;
     }
@@ -337,14 +373,16 @@ void appendSprite(
 
 TimelineSceneLayoutMetrics buildLayoutMetrics(const TimelineSceneBuildRequest& request)
 {
+    const double contentScale = normalizedContentScale(request.contentScale);
     TimelineSceneLayoutMetrics metrics;
     metrics.viewportSize = request.viewportSize;
-    metrics.timelineLeft = kTimelineLeftMargin;
-    metrics.timelineTop = kHeaderHeight + kTimelineTopMargin;
-    metrics.timelineHeight = kLaneCount * kLaneHeight;
-    metrics.laneHeight = kLaneHeight;
+    metrics.timelineLeft = scaledMetric(kTimelineLeftMargin, contentScale);
+    metrics.timelineTop = scaledMetric(kHeaderHeight + kTimelineTopMargin, headerContentScale(contentScale));
+    metrics.timelineHeight = kLaneCount * scaledMetric(kLaneHeight, contentScale);
+    metrics.laneHeight = scaledMetric(kLaneHeight, contentScale);
     metrics.laneCount = kLaneCount;
     metrics.pixelsPerSecond = pixelsPerSecondForZoom(request.zoomScale);
+    metrics.contentScale = contentScale;
     metrics.maxNavigableSecond = maxNavigableSecond(request);
     metrics.displayStartSeconds =
         qMin(-kTimelineDisplayLeadInSeconds, request.snapshot.minimumSecond - kTimelineDisplayLeadInSeconds);
@@ -352,14 +390,26 @@ TimelineSceneLayoutMetrics buildLayoutMetrics(const TimelineSceneBuildRequest& r
     metrics.leadingCenteringPadding = qMax(
         0,
         (request.viewportSize.width() / 2)
-            - rawSecondToX(0.0, metrics.displayStartSeconds, metrics.pixelsPerSecond));
+            - rawSecondToX(0.0, metrics.displayStartSeconds, metrics.pixelsPerSecond, metrics.timelineLeft));
     metrics.trailingCenteringPadding = qMax(
         0,
-        rawSecondToX(metrics.maxNavigableSecond, metrics.displayStartSeconds, metrics.pixelsPerSecond)
+        rawSecondToX(
+            metrics.maxNavigableSecond,
+            metrics.displayStartSeconds,
+            metrics.pixelsPerSecond,
+            metrics.timelineLeft)
                 + (request.viewportSize.width() / 2)
-            - rawContentWidth(metrics.displayStartSeconds, metrics.displayEndSeconds, metrics.pixelsPerSecond));
+            - rawContentWidth(
+                metrics.displayStartSeconds,
+                metrics.displayEndSeconds,
+                metrics.pixelsPerSecond,
+                metrics.timelineLeft));
     metrics.contentWidth =
-        rawContentWidth(metrics.displayStartSeconds, metrics.displayEndSeconds, metrics.pixelsPerSecond)
+        rawContentWidth(
+            metrics.displayStartSeconds,
+            metrics.displayEndSeconds,
+            metrics.pixelsPerSecond,
+            metrics.timelineLeft)
         + metrics.leadingCenteringPadding + metrics.trailingCenteringPadding;
     return metrics;
 }
@@ -381,6 +431,7 @@ void applyLayoutMetrics(TimelineSceneState* state, const TimelineSceneLayoutMetr
     state->displayStartSeconds = metrics.displayStartSeconds;
     state->displayEndSeconds = metrics.displayEndSeconds;
     state->pixelsPerSecond = metrics.pixelsPerSecond;
+    state->contentScale = metrics.contentScale;
     state->maxNavigableSecond = metrics.maxNavigableSecond;
 }
 
@@ -422,7 +473,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     state.overlayDynamicRevision = request.overlayDynamicRevision;
 
     const TimelineThemeColors theme = timelineThemeColors();
-    const QFont laneLabelFont = timelineLaneLabelFont();
+    const QFont laneLabelFont = scaledFontForContentScale(timelineLaneLabelFont(), state.contentScale);
     state.baseBackgroundRects.append(TimelineSceneRect{
         QRectF(0.0, 0.0, request.viewportSize.width(), request.viewportSize.height()),
         theme.window,
@@ -507,12 +558,12 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         1.0,
     });
 
-    for (int lane = 0; lane < kLaneCount; ++lane) {
-        const qreal y = state.timelineTop + lane * kLaneHeight;
+    for (int lane = 0; lane < state.laneCount; ++lane) {
+        const qreal y = state.timelineTop + lane * state.laneHeight;
         // Match the widget path: waveform is drawn first, then the semi-transparent
         // lane row fills are composited on top to get the final perceived color.
         state.laneOverlayRects.append(TimelineSceneRect{
-            QRectF(state.timelineLeft, y, request.viewportSize.width() - state.timelineLeft, kLaneHeight),
+            QRectF(state.timelineLeft, y, request.viewportSize.width() - state.timelineLeft, state.laneHeight),
             (lane % 2 == 0) ? theme.laneEven : theme.laneOdd,
         });
         TimelineSceneTextLabel label;
@@ -521,12 +572,16 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         label.color = theme.label;
         label.logicalSize = timelineTextLogicalSize(label.font, label.text);
         const QFontMetricsF laneMetrics(label.font);
-        const qreal textLeft = 4.0
+        const qreal textLeft = scaledMetric(4.0, state.contentScale)
             + qMax<qreal>(
                 0.0,
-                static_cast<qreal>(state.timelineLeft - 8) - laneMetrics.horizontalAdvance(label.text));
-        const qreal textTop = y + 1.0
-            + qMax<qreal>(0.0, (static_cast<qreal>(kLaneHeight - 1) - laneMetrics.height()) * 0.5);
+                static_cast<qreal>(state.timelineLeft - scaledMetric(8, state.contentScale))
+                    - laneMetrics.horizontalAdvance(label.text));
+        const qreal textTop = y + scaledMetric(1.0, state.contentScale)
+            + qMax<qreal>(
+                0.0,
+                (static_cast<qreal>(state.laneHeight - scaledMetric(1, state.contentScale))
+                    - laneMetrics.height()) * 0.5);
         label.topLeft = QPointF(
             textLeft - kTimelineTextHorizontalPadding,
             textTop - kTimelineTextVerticalPadding);
@@ -724,7 +779,8 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         }
         for (const HeaderLineLabel& label : collapsed) {
             if (!headerLabels.isEmpty()
-                && label.screenX - headerLabels.constLast().screenX < kTimelineHeaderLineLabelMinSpacingPx) {
+                && label.screenX - headerLabels.constLast().screenX
+                    < scaledMetric(kTimelineHeaderLineLabelMinSpacingPx, headerContentScale(state.contentScale))) {
                 continue;
             }
             headerLabels.append(label);
@@ -732,23 +788,32 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     }
 
     const QFont oneDigitFont =
-        scaledTimelineHeaderFont(request.headerLineNumberFont, kTimelineHeaderSingleDigitFontScale);
+        scaledTimelineHeaderFont(
+            request.headerLineNumberFont,
+            kTimelineHeaderSingleDigitFontScale * static_cast<qreal>(headerContentScale(state.contentScale)));
     const QFontMetricsF oneDigitMetrics(oneDigitFont);
     qreal singleDigitWidth = 0.0;
     for (QChar digit = QLatin1Char('0'); digit <= QLatin1Char('9'); digit = QChar(digit.unicode() + 1)) {
         singleDigitWidth = qMax(singleDigitWidth, static_cast<qreal>(oneDigitMetrics.horizontalAdvance(digit)));
     }
-    const qreal markerTipY = static_cast<qreal>(state.timelineTop) - kTimelineTopMarkerTipOffsetPx;
+    const qreal markerTipY =
+        static_cast<qreal>(state.timelineTop)
+        - scaledMetric(kTimelineTopMarkerTipOffsetPx, headerContentScale(state.contentScale));
     const qreal headerTextBottom = (static_cast<qreal>(state.timelineTop - oneDigitMetrics.height()) * 0.5)
         + oneDigitMetrics.height();
     const qreal markerHeight = qMin(
-        qMax(0.0, markerTipY - headerTextBottom - kTimelineHeaderAnchorMarkerTextGapPx),
-        singleDigitWidth * kTimelineHeaderAnchorMarkerLegacyWidthFactor * kTimelineHeaderAnchorMarkerLegacyHeightFactor);
+        qMax(0.0, markerTipY - headerTextBottom
+            - scaledMetric(
+                static_cast<qreal>(kTimelineHeaderAnchorMarkerTextGapPx),
+                headerContentScale(state.contentScale))),
+        singleDigitWidth * kTimelineHeaderAnchorMarkerLegacyWidthFactor
+            * kTimelineHeaderAnchorMarkerLegacyHeightFactor);
     for (const HeaderLineLabel& label : headerLabels) {
         const QString labelText = QString::number(label.lineNumber);
         const QFont labelFont = scaledTimelineHeaderFont(
             request.headerLineNumberFont,
-            timelineHeaderLabelScale(request.headerLineNumberFont, labelText.size()));
+            timelineHeaderLabelScale(request.headerLineNumberFont, labelText.size())
+                * static_cast<qreal>(headerContentScale(state.contentScale)));
         const QFontMetricsF labelMetrics(labelFont);
         state.headerLabels.append(TimelineSceneTextLabel{
             labelText,
@@ -920,13 +985,16 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 extentRight = qMax(extentRight, markerX);
             }
         }
-        if (extentRight < state.timelineLeft - kNoteSize || extentLeft > state.contentWidth + kNoteSize) {
+        const int noteCullPadding = scaledMetric(kNoteSize, state.contentScale);
+        if (extentRight < state.timelineLeft - noteCullPadding
+            || extentLeft > state.contentWidth + noteCullPadding) {
             return;
         }
 
-        const int rowTop = state.timelineTop + (note.lane - 1) * kLaneHeight;
-        const int rowCenterY = rowTop + (kLaneHeight / 2);
-        const qreal baseIconScale = request.zoomScale <= 0.25 ? 0.5 : 1.0;
+        const int rowTop = state.timelineTop + (note.lane - 1) * state.laneHeight;
+        const int rowCenterY = rowTop + (state.laneHeight / 2);
+        const qreal baseIconScale =
+            request.zoomScale <= 0.25 ? 0.5 : static_cast<qreal>(state.contentScale);
         QString iconType;
         switch (note.kind) {
         case TimelineRenderNoteKind::Tap:
@@ -988,8 +1056,10 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             const auto& noteAssets = sceneNoteAssets();
             const int startLane = qBound(1, note.lane, kPlayableLaneCount);
             const int endLane = qBound(1, note.endLane, kPlayableLaneCount);
-            const int startY = state.timelineTop + (startLane - 1) * kLaneHeight + kLaneHeight / 2;
-            const int endY = state.timelineTop + (endLane - 1) * kLaneHeight + kLaneHeight / 2;
+            const int startY =
+                state.timelineTop + (startLane - 1) * state.laneHeight + state.laneHeight / 2;
+            const int endY =
+                state.timelineTop + (endLane - 1) * state.laneHeight + state.laneHeight / 2;
             const qreal dx = static_cast<qreal>(slideEndX - slideStartX);
             const qreal dy = static_cast<qreal>(endY - startY);
             const qreal length = qSqrt(dx * dx + dy * dy);
@@ -1000,7 +1070,13 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideEach)) {
                 baseTrackType = QStringLiteral("slide_track_each");
             }
-            const qreal trackScale = qBound<qreal>(0.25, request.zoomScale, 1.0);
+            const qreal zoomTrackScale = qBound<qreal>(0.25, request.zoomScale, 1.0);
+            const qreal trackScale = request.zoomScale <= 0.25
+                ? 0.5
+                : qBound<qreal>(
+                    0.5,
+                    zoomTrackScale * static_cast<qreal>(state.contentScale),
+                    1.0);
             const QSize trackTargetSize =
                 miacode::timeline::targetSizeForNoteType(noteAssets, baseTrackType, trackScale);
             if (!trackTargetSize.isValid()) {
@@ -1009,7 +1085,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             const qreal angleDegrees = (!qFuzzyIsNull(dx) || !qFuzzyIsNull(dy))
                 ? qRadiansToDegrees(qAtan2(dy, dx))
                 : 0.0;
-            const qreal minSpacing = trackScale <= 0.25 ? 1.0 : 4.0;
+            const qreal minSpacing = trackScale <= 0.5 ? 1.0 : 4.0;
             const qreal spacing =
                 qMax<qreal>(minSpacing, static_cast<qreal>(trackTargetSize.width()) * 0.72 + 1.0);
             const int steps = qMax(1, static_cast<int>(length / spacing));
@@ -1033,11 +1109,13 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 extentLeft,
                 extentRight,
                 rowTop,
-                kLaneHeight,
+                state.laneHeight,
                 iconType,
                 baseIconScale,
                 theme.holdBody,
-                qMax<qreal>(3.0, kNoteSize * kTimelineHoldThicknessRelativeToTap * request.zoomScale),
+                qMax<qreal>(
+                    3.0,
+                    static_cast<qreal>(kNoteSize) * kTimelineHoldThicknessRelativeToTap * baseIconScale),
             });
         }
         if (isTouchHold) {
@@ -1057,17 +1135,19 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 (note.kind == TimelineRenderNoteKind::TouchHold && endSecond > startSecond) ? endSecond : startSecond;
             const int fireLeft = secondToSceneX(state, triggerSecond);
             const int fireRight = secondToSceneX(state, triggerSecond + kTimelineFireworkDurationSeconds);
-            const qreal rowHeight = qMax<qreal>(1.0, kLaneHeight - 4.0);
+            const qreal rowHeight =
+                qMax<qreal>(1.0, static_cast<qreal>(state.laneHeight) - scaledMetric(4.0, state.contentScale));
             const qreal bandHeight = rowHeight / static_cast<qreal>(theme.fireworkBands.size());
             for (int bandIndex = 0; bandIndex < static_cast<int>(theme.fireworkBands.size()); ++bandIndex) {
-                const qreal bandTop = rowTop + 2.0 + bandHeight * static_cast<qreal>(bandIndex);
+                const qreal bandTop =
+                    rowTop + scaledMetric(2.0, state.contentScale) + bandHeight * static_cast<qreal>(bandIndex);
                 state.fireworkBands.append(TimelineSceneRect{
                     QRectF(
                         fireLeft,
                         bandTop,
                         qMax(1, fireRight - fireLeft),
                         bandIndex + 1 == static_cast<int>(theme.fireworkBands.size())
-                            ? ((rowTop + 2.0 + rowHeight) - bandTop)
+                            ? ((rowTop + scaledMetric(2.0, state.contentScale) + rowHeight) - bandTop)
                             : bandHeight),
                     theme.fireworkBands.at(bandIndex),
                 });
@@ -1098,7 +1178,11 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                     : static_cast<qreal>(rowCenterY);
                 appendGlyph(
                     &state.muriDots,
-                    QRectF(markerX + 4.0, markerY - 8.0, 7.0, 7.0),
+                    QRectF(
+                        markerX + scaledMetric(4.0, state.contentScale),
+                        markerY - scaledMetric(8.0, state.contentScale),
+                        scaledMetric(7.0, state.contentScale),
+                        scaledMetric(7.0, state.contentScale)),
                     TimelineSceneGlyphShape::Circle,
                     theme.muriMarker);
                 if (!state.muriDots.isEmpty()) {
@@ -1134,12 +1218,16 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     const int entryX = secondToSceneX(state, request.playbackEntrySeconds);
     if (entryX > state.timelineLeft) {
         state.hasEntryMarker = true;
-        const qreal tipY = static_cast<qreal>(state.timelineTop) - kTimelineTopMarkerTipOffsetPx;
-        const qreal baseY = qMax<qreal>(0.0, tipY - kTimelinePlaybackEntryMarkerHeightPx);
+        const qreal headerScale = headerContentScale(state.contentScale);
+        const qreal tipY =
+            static_cast<qreal>(state.timelineTop) - scaledMetric(kTimelineTopMarkerTipOffsetPx, headerScale);
+        const qreal markerHeight = scaledMetric(kTimelinePlaybackEntryMarkerHeightPx, headerScale);
+        const qreal markerHalfWidth = scaledMetric(kTimelinePlaybackEntryMarkerHalfWidthPx, headerScale);
+        const qreal baseY = qMax<qreal>(0.0, tipY - markerHeight);
         state.entryMarker = TimelineSceneTriangle{
             QPointF(entryX, tipY),
-            QPointF(entryX - kTimelinePlaybackEntryMarkerHalfWidthPx, baseY),
-            QPointF(entryX + kTimelinePlaybackEntryMarkerHalfWidthPx, baseY),
+            QPointF(entryX - markerHalfWidth, baseY),
+            QPointF(entryX + markerHalfWidth, baseY),
             theme.entryMarker,
         };
     }
@@ -1185,14 +1273,15 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     // match the QML controls.
     if (state.timelineTop > 4 && request.viewportSize.width() > 0) {
         state.hasHeaderControls = true;
+        const qreal headerControlScale = static_cast<qreal>(headerContentScale(state.contentScale));
         // Phase 9d-native polish — use the application's default UI
         // font (matches the menu-bar font, including Chinese fallback
         // chain) at the same pixel size and weight the QML controls use.
         QFont controlFont;
-        controlFont.setPixelSize(12);
+        controlFont.setPixelSize(qMax(1, qRound(12.0 * headerControlScale)));
         controlFont.setWeight(QFont::DemiBold);
         const QFontMetricsF controlMetrics(controlFont);
-        const int btnHeight = 22;
+        const int btnHeight = qMax(1, qRound(22.0 * headerControlScale));
         const int btnY = qMax(0, (state.timelineTop - btnHeight) / 2);
         const QColor cardBg = theme.window.lightnessF() < 0.5
             ? QColor(31, 41, 55) : QColor(243, 244, 246);
@@ -1203,8 +1292,8 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             qRound(request.zoomScale * 100.0));
         const qreal zoomTextW = controlMetrics.horizontalAdvance(zoomText);
         // Padding: 12 left for glyph slot, 8 right
-        const int zoomBtnW = qRound(zoomTextW + 12 + 8);
-        const int zoomBtnX = 4;
+        const int zoomBtnW = qRound(zoomTextW + (12.0 + 8.0) * headerControlScale);
+        const int zoomBtnX = qRound(4.0 * headerControlScale);
         state.zoomButtonBg = TimelineSceneRect{
             QRectF(zoomBtnX, btnY, zoomBtnW, btnHeight),
             cardBg,
@@ -1224,7 +1313,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         zoomLabel.color = theme.label;
         zoomLabel.logicalSize = timelineTextLogicalSize(controlFont, zoomText);
         zoomLabel.topLeft = QPointF(
-            zoomBtnX + 12 - kTimelineTextHorizontalPadding,
+            zoomBtnX + 12.0 * headerControlScale - kTimelineTextHorizontalPadding,
             btnY + (btnHeight - controlMetrics.height()) * 0.5
                 - kTimelineTextVerticalPadding);
         state.zoomButtonLabel = zoomLabel;

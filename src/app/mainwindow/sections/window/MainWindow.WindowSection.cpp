@@ -284,6 +284,16 @@ int MainWindow::shellBottomTabsHeight() const
     return windowSection_->shellBottomTabsHeight();
 }
 
+double MainWindow::shellBottomTabsHeaderScale() const
+{
+    return windowSection_->shellBottomTabsHeaderScale();
+}
+
+void MainWindow::setShellBottomTabsHeight(int height)
+{
+    windowSection_->setShellBottomTabsHeight(height);
+}
+
 QWidget* MainWindow::shellPreviewPanelWidget() const
 {
     return windowSection_->shellPreviewPanelWidget();

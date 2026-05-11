@@ -7,6 +7,7 @@
 #include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "../validation/MainWindow.ValidationSection.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "../export/MainWindow.ExportSection.h"
 #include "common/DebugLog.h"
@@ -25,6 +26,112 @@
 using namespace miacode::mainwindow::shared;
 
 namespace {
+
+constexpr double kBottomTabsContentScaleMin = 0.5;
+constexpr double kBottomTabsContentScaleMax = 1.0;
+
+double clampedBottomTabsContentScale(double scale)
+{
+    return qBound(kBottomTabsContentScaleMin, scale, kBottomTabsContentScaleMax);
+}
+
+double bottomTabsHeaderScaleForContentScale(double scale)
+{
+    const double contentScale = clampedBottomTabsContentScale(scale);
+    return 0.5 + (contentScale * 0.5);
+}
+
+void scaleFont(QFont* font, double scale)
+{
+    if (font == nullptr) {
+        return;
+    }
+    const qreal clampedScale = static_cast<qreal>(clampedBottomTabsContentScale(scale));
+    if (font->pointSizeF() > 0.0) {
+        font->setPointSizeF(qMax(1.0, font->pointSizeF() * clampedScale));
+    } else if (font->pointSize() > 0) {
+        font->setPointSizeF(qMax(1.0, static_cast<qreal>(font->pointSize()) * clampedScale));
+    } else if (font->pixelSize() > 0) {
+        font->setPixelSize(qMax(1, qRound(static_cast<qreal>(font->pixelSize()) * clampedScale)));
+    }
+}
+
+void applyScaledListFont(QListWidget* list, double scale)
+{
+    if (list == nullptr) {
+        return;
+    }
+    QVariant baseFontVariant = list->property("bottomTabsBaseFont");
+    if (!baseFontVariant.isValid()) {
+        baseFontVariant = QVariant::fromValue(list->font());
+        list->setProperty("bottomTabsBaseFont", baseFontVariant);
+    }
+    QFont font = baseFontVariant.value<QFont>();
+    scaleFont(&font, scale);
+    list->setFont(font);
+}
+
+void applyScaledTabBarFont(QTabWidget* tabs, double scale)
+{
+    if (tabs == nullptr || tabs->tabBar() == nullptr) {
+        return;
+    }
+    QTabBar* tabBar = tabs->tabBar();
+    QVariant baseFontVariant = tabBar->property("bottomTabsBaseFont");
+    if (!baseFontVariant.isValid()) {
+        baseFontVariant = QVariant::fromValue(tabBar->font());
+        tabBar->setProperty("bottomTabsBaseFont", baseFontVariant);
+    }
+    QFont font = baseFontVariant.value<QFont>();
+    scaleFont(&font, scale);
+    tabBar->setFont(font);
+    tabBar->updateGeometry();
+}
+
+int scaledBottomTabsTabBarHeight(QTabBar* tabBar, double contentScale)
+{
+    if (tabBar == nullptr) {
+        return 0;
+    }
+    tabBar->ensurePolished();
+    QVariant baseHeightVariant = tabBar->property("bottomTabsBaseHeight");
+    if (!baseHeightVariant.isValid()) {
+        baseHeightVariant = qMax(tabBar->minimumSizeHint().height(), tabBar->sizeHint().height());
+        tabBar->setProperty("bottomTabsBaseHeight", baseHeightVariant);
+    }
+    return qMax(
+        1,
+        qRound(static_cast<qreal>(baseHeightVariant.toInt())
+            * static_cast<qreal>(bottomTabsHeaderScaleForContentScale(contentScale))));
+}
+
+int scaledBottomTabsTimelineContentHeight(double contentScale)
+{
+    const double clampedScale = clampedBottomTabsContentScale(contentScale);
+    const int headerHeight = qMax(
+        1,
+        qRound(static_cast<qreal>(miacode::window_parity::kTimelineHeaderHeight
+                + miacode::window_parity::kTimelineTopMargin)
+            * static_cast<qreal>(bottomTabsHeaderScaleForContentScale(clampedScale))));
+    const int laneHeight = qMax(
+        1,
+        qRound(static_cast<qreal>(miacode::window_parity::kTimelineLaneHeight)
+            * static_cast<qreal>(clampedScale)));
+    return headerHeight + miacode::window_parity::kTimelineLaneCount * laneHeight;
+}
+
+double bottomTabsContentScaleForTimelineContentHeight(int timelineHeight)
+{
+    const double headerBase =
+        miacode::window_parity::kTimelineHeaderHeight + miacode::window_parity::kTimelineTopMargin;
+    const double laneBase =
+        miacode::window_parity::kTimelineLaneHeight * miacode::window_parity::kTimelineLaneCount;
+    const double variableBase = headerBase * 0.5 + laneBase;
+    if (variableBase <= 0.0) {
+        return kBottomTabsContentScaleMax;
+    }
+    return clampedBottomTabsContentScale((static_cast<double>(timelineHeight) - headerBase * 0.5) / variableBase);
+}
 
 bool actionMatchesShortcut(QAction* action, const QKeySequence& sequence)
 {
@@ -398,6 +505,29 @@ void MainWindow::WindowSection::setShellPreviewFullscreen(bool fullscreen)
     }
 }
 
+void MainWindow::WindowSection::setShellBottomTabsHeight(int height)
+{
+    if (owner_.bottomTabs_ == nullptr) {
+        return;
+    }
+    const int fullHeight = computeBottomTabsDeviceHeightForScale(kBottomTabsContentScaleMax);
+    const int minHeight = computeBottomTabsDeviceHeightForScale(kBottomTabsContentScaleMin);
+    if (fullHeight <= 0 || minHeight <= 0) {
+        return;
+    }
+    const int clampedHeight = qBound(qMin(minHeight, fullHeight), height, qMax(minHeight, fullHeight));
+    const int fullTimelineHeight = scaledBottomTabsTimelineContentHeight(kBottomTabsContentScaleMax);
+    const int chromeHeight = qMax(0, fullHeight - fullTimelineHeight);
+    const double nextScale =
+        bottomTabsContentScaleForTimelineContentHeight(qMax(0, clampedHeight - chromeHeight));
+    const double clampedScale = clampedBottomTabsContentScale(nextScale);
+    if (!qFuzzyCompare(owner_.bottomTabsContentScale_ + 1.0, clampedScale + 1.0)) {
+        owner_.bottomTabsContentScale_ = clampedScale;
+        applyBottomTabsContentScale();
+    }
+    updateBottomTabsDeviceHeight();
+}
+
 void MainWindow::WindowSection::setShellBottomTabsCurrentTab(const QString& tabId)
 {
     owner_.setCurrentBottomTabsTabId(tabId);
@@ -656,6 +786,11 @@ int MainWindow::WindowSection::shellBottomTabsHeight() const
     return this->computeBottomTabsDeviceHeight();
 }
 
+double MainWindow::WindowSection::shellBottomTabsHeaderScale() const
+{
+    return bottomTabsHeaderScaleForContentScale(owner_.bottomTabsContentScale_);
+}
+
 QWidget* MainWindow::WindowSection::shellPreviewPanelWidget() const
 {
     return owner_.previewPanel_;
@@ -897,6 +1032,11 @@ void MainWindow::WindowSection::applySystemWindowBackdrop(QWidget* target) const
 
 int MainWindow::WindowSection::computeBottomTabsDeviceHeight() const
 {
+    return computeBottomTabsDeviceHeightForScale(owner_.bottomTabsContentScale_);
+}
+
+int MainWindow::WindowSection::computeBottomTabsDeviceHeightForScale(double contentScale) const
+{
     if (owner_.bottomTabs_ == nullptr) {
         return 0;
     }
@@ -907,17 +1047,31 @@ int MainWindow::WindowSection::computeBottomTabsDeviceHeight() const
         tabBar->ensurePolished();
     }
 
-    int timelineHeight = miacode::window_parity::computeTimelineMinimumContentHeight();
-    if (owner_.timelineView_ != nullptr) {
-        owner_.timelineView_->ensurePolished();
-        timelineHeight =
-            qMax(owner_.timelineView_->minimumHeight(), owner_.timelineView_->minimumSizeHint().height());
-    }
-    const int tabBarHeight = tabBar != nullptr
-        ? qMax(tabBar->minimumSizeHint().height(), tabBar->sizeHint().height())
-        : 0;
+    const int timelineHeight = scaledBottomTabsTimelineContentHeight(contentScale);
+    const int tabBarHeight = scaledBottomTabsTabBarHeight(tabBar, contentScale);
     const int frameWidth = qMax(0, owner_.bottomTabs_->style()->pixelMetric(QStyle::PM_DefaultFrameWidth, nullptr, owner_.bottomTabs_));
     return miacode::window_parity::computeBottomTabsDeviceHeight(timelineHeight, tabBarHeight, frameWidth);
+}
+
+void MainWindow::WindowSection::applyBottomTabsContentScale()
+{
+    const double scale = clampedBottomTabsContentScale(owner_.bottomTabsContentScale_);
+    owner_.bottomTabsContentScale_ = scale;
+    const double headerScale = bottomTabsHeaderScaleForContentScale(scale);
+    if (owner_.timelineQuickStateBridge_ != nullptr) {
+        owner_.timelineQuickStateBridge_->setContentScale(scale);
+    }
+    if (owner_.timelineView_ != nullptr) {
+        owner_.timelineView_->setContentScale(scale);
+    }
+    applyScaledTabBarFont(owner_.bottomTabs_, headerScale);
+    applyScaledTabBarFont(owner_.quickShellBottomTabsProxy_, headerScale);
+    applyScaledListFont(owner_.errorList_, headerScale);
+    applyScaledListFont(owner_.muriList_, headerScale);
+    if (owner_.validationSection_ != nullptr) {
+        owner_.validationSection_->scheduleWrappedListRelayout(owner_.errorList_);
+        owner_.validationSection_->scheduleWrappedListRelayout(owner_.muriList_);
+    }
 }
 
 void MainWindow::WindowSection::updateBottomTabsDeviceHeight()
@@ -926,6 +1080,7 @@ void MainWindow::WindowSection::updateBottomTabsDeviceHeight()
         return;
     }
 
+    applyBottomTabsContentScale();
     const int targetHeight = this->computeBottomTabsDeviceHeight();
     if (targetHeight <= 0) {
         return;

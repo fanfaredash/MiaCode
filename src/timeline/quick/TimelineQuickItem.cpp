@@ -593,7 +593,9 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         || cachedSceneBuildFollowPreviewEnabled_ != stateBridge_->followPreviewEnabled()
         || cachedSceneBuildFollowProgressEnabled_ != stateBridge_->followProgressEnabled()
         || !qFuzzyCompare(cachedSceneBuildZoomScale_ + 1.0,
-                          stateBridge_->zoomScale() + 1.0);
+                          stateBridge_->zoomScale() + 1.0)
+        || !qFuzzyCompare(cachedSceneBuildContentScale_ + 1.0,
+                          stateBridge_->contentScale() + 1.0);
     if (rebuildNeeded && miacode::debug_options::runtimeDebugOutputEnabled()) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
@@ -622,6 +624,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.headerLeftLimit = headerLeftLimit_;
     request.headerRightLimit = headerRightLimit_ > 0 ? headerRightLimit_ : request.viewportSize.width();
     request.zoomScale = stateBridge_->zoomScale();
+    request.contentScale = stateBridge_->contentScale();
     request.playbackEntrySeconds = stateBridge_->playbackEntrySeconds();
     request.playheadSeconds = stateBridge_->playheadSeconds();
     request.cursorSeconds = stateBridge_->cursorSeconds();
@@ -663,6 +666,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         cachedSceneBuildFollowPreviewEnabled_ = stateBridge_->followPreviewEnabled();
         cachedSceneBuildFollowProgressEnabled_ = stateBridge_->followProgressEnabled();
         cachedSceneBuildZoomScale_ = stateBridge_->zoomScale();
+        cachedSceneBuildContentScale_ = stateBridge_->contentScale();
     }
     if (rebuildNeeded && miacode::debug_options::runtimeDebugOutputEnabled()) {
         miacode::debug_log::appendLine(

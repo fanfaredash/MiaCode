@@ -10,7 +10,7 @@ bool TimelineView::waveformOnlyPresentation() const
 
 int TimelineView::headerHeight() const
 {
-    return waveformOnlyPresentation() ? 0 : kHeaderHeight;
+    return waveformOnlyPresentation() ? 0 : scaledTimelineHeaderMetric(kHeaderHeight);
 }
 
 void TimelineView::updateHorizontalRange()
@@ -35,17 +35,18 @@ int TimelineView::rawContentWidth() const
 
 int TimelineView::timelineLeft() const
 {
-    return waveformOnlyPresentation() ? kWaveformOnlyMargin : kTimelineLeftMargin;
+    return waveformOnlyPresentation() ? kWaveformOnlyMargin : scaledTimelineMetric(kTimelineLeftMargin);
 }
 
 int TimelineView::timelineTop() const
 {
-    return headerHeight() + (waveformOnlyPresentation() ? kWaveformOnlyMargin : kTimelineTopMargin);
+    return headerHeight()
+        + (waveformOnlyPresentation() ? kWaveformOnlyMargin : scaledTimelineHeaderMetric(kTimelineTopMargin));
 }
 
 int TimelineView::laneHeight() const
 {
-    return kLaneHeight;
+    return scaledTimelineMetric(kLaneHeight);
 }
 
 int TimelineView::timelineHeight() const
@@ -55,7 +56,33 @@ int TimelineView::timelineHeight() const
 
 int TimelineView::notePixelSize() const
 {
-    return kNoteSize;
+    return scaledTimelineMetric(kNoteSize);
+}
+
+int TimelineView::scaledTimelineMetric(int value) const
+{
+    return qMax(1, qRound(static_cast<qreal>(value) * qBound(0.5, contentScale_, 1.0)));
+}
+
+qreal TimelineView::scaledTimelineMetric(qreal value) const
+{
+    return value * static_cast<qreal>(qBound(0.5, contentScale_, 1.0));
+}
+
+double TimelineView::headerContentScale() const
+{
+    const double contentScale = qBound(0.5, contentScale_, 1.0);
+    return 0.5 + (contentScale * 0.5);
+}
+
+int TimelineView::scaledTimelineHeaderMetric(int value) const
+{
+    return qMax(1, qRound(static_cast<qreal>(value) * static_cast<qreal>(headerContentScale())));
+}
+
+qreal TimelineView::scaledTimelineHeaderMetric(qreal value) const
+{
+    return value * static_cast<qreal>(headerContentScale());
 }
 
 int TimelineView::rawSecondToX(double second) const
@@ -397,13 +424,24 @@ QVector<TimelineView::HeaderLineLabel> TimelineView::visibleHeaderLineLabels(
     labels.reserve(collapsed.size());
     for (const HeaderLineLabel& label : collapsed) {
         const QString labelText = QString::number(label.lineNumber);
-        const int labelHalfWidth = timelineHeaderLabelHalfWidthPx(headerLineNumberFont_, labelText);
+        QFont scaledHeaderFont(headerLineNumberFont_);
+        if (scaledHeaderFont.pointSizeF() > 0.0) {
+            scaledHeaderFont.setPointSizeF(qMax(1.0, scaledHeaderFont.pointSizeF() * headerContentScale()));
+        } else if (scaledHeaderFont.pointSize() > 0) {
+            scaledHeaderFont.setPointSizeF(
+                qMax(1.0, static_cast<qreal>(scaledHeaderFont.pointSize()) * headerContentScale()));
+        } else if (scaledHeaderFont.pixelSize() > 0) {
+            scaledHeaderFont.setPixelSize(
+                qMax(1, qRound(static_cast<qreal>(scaledHeaderFont.pixelSize()) * headerContentScale())));
+        }
+        const int labelHalfWidth = timelineHeaderLabelHalfWidthPx(scaledHeaderFont, labelText);
         if (label.screenX - labelHalfWidth < headerLeftLimit
             || label.screenX + labelHalfWidth > headerRightLimit) {
             continue;
         }
         if (!labels.isEmpty()
-            && label.screenX - labels.constLast().screenX < kTimelineHeaderLineLabelMinSpacingPx) {
+            && label.screenX - labels.constLast().screenX
+                < scaledTimelineHeaderMetric(kTimelineHeaderLineLabelMinSpacingPx)) {
             continue;
         }
         labels.append(label);

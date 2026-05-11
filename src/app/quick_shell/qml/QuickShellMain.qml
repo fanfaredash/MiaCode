@@ -1029,15 +1029,19 @@ ApplicationWindow {
                     }
 
                     BottomTabsQuickHost {
+                        readonly property int resolvedHostHeight: controller.bottomTabsHostHeight > 0
+                            ? controller.bottomTabsHostHeight
+                            : metric("bottomTabsHostHeight", 260)
+
                         Layout.fillWidth: true
                         Layout.preferredHeight: controller.bottomTabsVisible
-                            ? metric("bottomTabsHostHeight", 260)
+                            ? resolvedHostHeight
                             : 0
                         Layout.minimumHeight: controller.bottomTabsVisible
-                            ? metric("bottomTabsHostHeight", 260)
+                            ? resolvedHostHeight
                             : 0
                         Layout.maximumHeight: controller.bottomTabsVisible
-                            ? metric("bottomTabsHostHeight", 260)
+                            ? resolvedHostHeight
                             : 0
                         visible: controller.bottomTabsVisible
                         controller: root.shellController

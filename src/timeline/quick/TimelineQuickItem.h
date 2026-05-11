@@ -145,6 +145,7 @@ private:
     mutable bool cachedSceneBuildFollowPreviewEnabled_ = false;
     mutable bool cachedSceneBuildFollowProgressEnabled_ = true;
     mutable double cachedSceneBuildZoomScale_ = -1.0;  // sentinel: forces first build
+    mutable double cachedSceneBuildContentScale_ = -1.0;
     mutable int cachedSceneBuildHeaderLeftLimit_ = 0;
     mutable int cachedSceneBuildHeaderRightLimit_ = 0;
     mutable quint64 cachedSceneBuildAppearanceRevision_ = 0;

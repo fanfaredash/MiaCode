@@ -359,6 +359,7 @@ void TimelineView::applyStateFromBridge()
     cursorSeconds_ = stateBridge_->cursorSeconds();
     showSlideTracks_ = stateBridge_->showSlideTracks();
     playheadIndicatorSuppressed_ = stateBridge_->playheadIndicatorSuppressed();
+    contentScale_ = stateBridge_->contentScale();
     pixelsPerSecond_ = 120.0 * stateBridge_->zoomScale();
     const int nextZoomIndex = qMax(0, zoomPresets_.indexOf(stateBridge_->zoomScale()));
     if (nextZoomIndex >= 0) {
@@ -755,7 +756,7 @@ int TimelineView::minimumContentHeightForCurrentDevice() const
         return timelineTop() + timelineHeight() + 8;
     }
 
-    const int baseHeaderHeight = kHeaderHeight + kTimelineTopMargin;
+    const int baseHeaderHeight = scaledTimelineHeaderMetric(kHeaderHeight + kTimelineTopMargin);
     int controlBandHeight = 0;
     if (zoomButton_ != nullptr) {
         controlBandHeight = qMax(
@@ -776,10 +777,18 @@ int TimelineView::minimumContentHeightForCurrentDevice() const
         );
     }
     if (!headerLineNumberFont_.family().isEmpty()) {
-        controlBandHeight = qMax(controlBandHeight, QFontMetrics(headerLineNumberFont_).height());
+        QFont scaledHeaderFont(headerLineNumberFont_);
+        if (scaledHeaderFont.pointSizeF() > 0.0) {
+            scaledHeaderFont.setPointSizeF(qMax(1.0, scaledHeaderFont.pointSizeF() * headerContentScale()));
+        } else if (scaledHeaderFont.pointSize() > 0) {
+            scaledHeaderFont.setPointSizeF(qMax(1.0, static_cast<qreal>(scaledHeaderFont.pointSize()) * headerContentScale()));
+        } else if (scaledHeaderFont.pixelSize() > 0) {
+            scaledHeaderFont.setPixelSize(qMax(1, qRound(static_cast<qreal>(scaledHeaderFont.pixelSize()) * headerContentScale())));
+        }
+        controlBandHeight = qMax(controlBandHeight, QFontMetrics(scaledHeaderFont).height());
     }
     const int headerHeight = qMax(baseHeaderHeight, controlBandHeight + 10);
-    return headerHeight + timelineHeight() + miacode::window_parity::kTimelineBottomPadding;
+    return headerHeight + timelineHeight();
 }
 
 void TimelineView::refreshMinimumHeightForCurrentDevice()
@@ -812,6 +821,31 @@ void TimelineView::updateDisplayBounds()
 double TimelineView::zoomScale() const
 {
     return zoomPresets_.value(zoomPresetIndex_, 0.5);
+}
+
+double TimelineView::contentScale() const
+{
+    return contentScale_;
+}
+
+void TimelineView::setContentScale(double scale)
+{
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setContentScale(scale);
+        return;
+    }
+    const double clamped = qBound(0.5, scale, 1.0);
+    if (qFuzzyCompare(contentScale_ + 1.0, clamped + 1.0)) {
+        return;
+    }
+    contentScale_ = clamped;
+    transformedIconCache_.clear();
+    holdPixmapPartsCache_.clear();
+    updateHorizontalRange();
+    layoutHeaderButtons();
+    refreshMinimumHeightForCurrentDevice();
+    viewport()->update();
+    emit renderStateChanged();
 }
 
 int TimelineView::horizontalScrollValue() const

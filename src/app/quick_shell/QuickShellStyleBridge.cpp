@@ -257,6 +257,7 @@ void QuickShellStyleBridge::refreshFromBackend()
         {QStringLiteral("previewControlStatsGap"), miacode::window_parity::kPreviewControlStatsGap},
         {QStringLiteral("bottomTabsHostHeight"), 260},
         {QStringLiteral("bottomTabsTabBarHeight"), 40},
+        {QStringLiteral("bottomTabsResizeHotzoneHeight"), 8},
         {QStringLiteral("fullscreenHintTopMargin"), miacode::window_parity::kPreviewFullscreenHintTopMargin},
         {QStringLiteral("fullscreenOverlaySideMargin"), miacode::window_parity::kPreviewFullscreenOverlaySideMargin},
         {QStringLiteral("fullscreenOverlayBottomMargin"), miacode::window_parity::kPreviewFullscreenOverlayBottomMargin},

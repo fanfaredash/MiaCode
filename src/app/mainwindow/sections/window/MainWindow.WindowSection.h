@@ -20,6 +20,7 @@ public:
     void beginShellPreviewHeldSeek(int direction, int key);
     void stopShellPreviewHeldSeek(int key = 0);
     void setShellPreviewFullscreen(bool fullscreen);
+    void setShellBottomTabsHeight(int height);
     void setShellBottomTabsCurrentTab(const QString& tabId);
     void navigateShellTimelineToSecond(double second);
     void wheelShellTimelineNavigate(double second);
@@ -59,6 +60,7 @@ public:
     QWidget* shellWorkspaceWidget() const;
     QWidget* shellBottomTabsWidget() const;
     int shellBottomTabsHeight() const;
+    double shellBottomTabsHeaderScale() const;
     QWidget* shellPreviewPanelWidget() const;
     double shellNormalizedPreviewCanvasAspectRatio() const;
     void shellRefreshLayoutAfterResize();
@@ -72,6 +74,8 @@ public:
     void setOutlineDockCollapsed(bool collapsed);
     void applySystemWindowBackdrop(QWidget* target = nullptr) const;
     int computeBottomTabsDeviceHeight() const;
+    int computeBottomTabsDeviceHeightForScale(double contentScale) const;
+    void applyBottomTabsContentScale();
     void updateBottomTabsDeviceHeight();
     QString formatWindowStateFlags(Qt::WindowStates states) const;
     void logWindowGeometryDebug(const QString& tag, const QString& detail = QString());

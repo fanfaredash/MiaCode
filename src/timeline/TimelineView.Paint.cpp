@@ -263,7 +263,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
     }
 
     if (!headerLabels.isEmpty()) {
-        const QFontMetricsF baseHeaderMetrics(headerLineNumberFont_);
+        const qreal timelineHeaderScale = static_cast<qreal>(headerContentScale());
         auto scaledHeaderFont = [](const QFont& sourceFont, qreal scale) {
             QFont scaledFont(sourceFont);
             const qreal clampedScale = qMax(0.1, scale);
@@ -276,8 +276,10 @@ void TimelineView::paintEvent(QPaintEvent* event)
             }
             return scaledFont;
         };
-        const QFont oneDigitFont = scaledHeaderFont(headerLineNumberFont_, kTimelineHeaderSingleDigitFontScale);
+        const QFont oneDigitFont =
+            scaledHeaderFont(headerLineNumberFont_, kTimelineHeaderSingleDigitFontScale * timelineHeaderScale);
         const QFontMetricsF oneDigitMetrics(oneDigitFont);
+        const QFontMetricsF baseHeaderMetrics(scaledHeaderFont(headerLineNumberFont_, timelineHeaderScale));
         qreal singleDigitWidth = 0.0;
         for (QChar digit = QLatin1Char('0'); digit <= QLatin1Char('9'); digit = QChar(digit.unicode() + 1)) {
             singleDigitWidth = qMax(singleDigitWidth, static_cast<qreal>(oneDigitMetrics.horizontalAdvance(digit)));
@@ -295,15 +297,17 @@ void TimelineView::paintEvent(QPaintEvent* event)
                 / qMax<qreal>(1.0, static_cast<qreal>(baseHeaderMetrics.horizontalAdvance(widthSample)));
             return scaledHeaderFont(
                 headerLineNumberFont_,
-                qMin(kTimelineHeaderMultiDigitBaseFontScale, widthScale)
+                qMin(kTimelineHeaderMultiDigitBaseFontScale, widthScale) * timelineHeaderScale
             );
         };
-        const qreal markerTipY = static_cast<qreal>(top) - kTimelineTopMarkerTipOffsetPx;
+        const qreal markerTipY =
+            static_cast<qreal>(top) - scaledTimelineHeaderMetric(kTimelineTopMarkerTipOffsetPx);
         const qreal headerTextBottom = (static_cast<qreal>(top - oneDigitMetrics.height()) * 0.5)
             + oneDigitMetrics.height();
         const qreal maxMarkerHeight = qMax(
             0.0,
-            markerTipY - headerTextBottom - kTimelineHeaderAnchorMarkerTextGapPx);
+            markerTipY - headerTextBottom
+                - scaledTimelineHeaderMetric(static_cast<qreal>(kTimelineHeaderAnchorMarkerTextGapPx)));
         const qreal legacyHeightLimitedMarkerHeight =
             singleDigitWidth * kTimelineHeaderAnchorMarkerLegacyWidthFactor
             * kTimelineHeaderAnchorMarkerLegacyHeightFactor;
@@ -547,7 +551,8 @@ void TimelineView::paintEvent(QPaintEvent* event)
                 extentRight = qMax(extentRight, markerX);
             }
         }
-        if (extentRight < left - kNoteSize || extentLeft > viewport()->width() + kNoteSize) {
+        const int noteCullPadding = notePixelSize();
+        if (extentRight < left - noteCullPadding || extentLeft > viewport()->width() + noteCullPadding) {
             return;
         }
 
@@ -630,7 +635,10 @@ void TimelineView::paintEvent(QPaintEvent* event)
             } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideEach)) {
                 baseTrackType = QStringLiteral("slide_track_each");
             }
-            const qreal trackScale = qBound<qreal>(0.25, zoomScale(), 1.0);
+            const qreal zoomTrackScale = qBound<qreal>(0.25, zoomScale(), 1.0);
+            const qreal trackScale = zoomScale() <= 0.25
+                ? 0.5
+                : qBound<qreal>(0.5, zoomTrackScale * static_cast<qreal>(contentScale()), 1.0);
             const qreal angleDegrees = (!qFuzzyIsNull(dx) || !qFuzzyIsNull(dy))
                 ? qRadiansToDegrees(qAtan2(dy, dx))
                 : 0.0;
@@ -662,7 +670,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
             return;
         }
 
-        const qreal baseIconScale = zoomScale() <= 0.25 ? 0.5 : 1.0;
+        const qreal baseIconScale = zoomScale() <= 0.25 ? 0.5 : static_cast<qreal>(contentScale());
         const qreal iconScale = isHold ? holdScaleForBaseIconScale(iconType, baseIconScale) : baseIconScale;
         const QPixmap& icon = transformedIconForType(iconType, iconScale);
 
@@ -764,14 +772,16 @@ void TimelineView::paintEvent(QPaintEvent* event)
         QColor entryColor = c.timelinePlayhead;
         entryColor.setAlpha(220);
         painter.setBrush(entryColor);
-        const qreal entryMarkerTipY = static_cast<qreal>(top) - kTimelineTopMarkerTipOffsetPx;
+        const qreal entryMarkerTipY =
+            static_cast<qreal>(top) - scaledTimelineHeaderMetric(kTimelineTopMarkerTipOffsetPx);
         const qreal entryMarkerBaseY = qMax<qreal>(
             0.0,
-            entryMarkerTipY - kTimelinePlaybackEntryMarkerHeightPx);
+            entryMarkerTipY - scaledTimelineHeaderMetric(kTimelinePlaybackEntryMarkerHeightPx));
+        const qreal entryMarkerHalfWidth = scaledTimelineHeaderMetric(kTimelinePlaybackEntryMarkerHalfWidthPx);
         QPainterPath entryMarker;
         entryMarker.moveTo(entryX, entryMarkerTipY);
-        entryMarker.lineTo(entryX - kTimelinePlaybackEntryMarkerHalfWidthPx, entryMarkerBaseY);
-        entryMarker.lineTo(entryX + kTimelinePlaybackEntryMarkerHalfWidthPx, entryMarkerBaseY);
+        entryMarker.lineTo(entryX - entryMarkerHalfWidth, entryMarkerBaseY);
+        entryMarker.lineTo(entryX + entryMarkerHalfWidth, entryMarkerBaseY);
         entryMarker.closeSubpath();
         painter.drawPath(entryMarker);
         painter.restore();

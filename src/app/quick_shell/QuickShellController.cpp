@@ -177,6 +177,16 @@ QString QuickShellController::bottomTabsCurrentTabId() const
     return bottomTabsCurrentTabId_;
 }
 
+int QuickShellController::bottomTabsHostHeight() const
+{
+    return bottomTabsHostHeight_;
+}
+
+double QuickShellController::bottomTabsHeaderScale() const
+{
+    return bottomTabsHeaderScale_;
+}
+
 bool QuickShellController::bottomTabsVisible() const
 {
     return bottomTabsVisible_;
@@ -418,6 +428,15 @@ void QuickShellController::setBottomTabsCurrentTabId(const QString& tabId)
         return;
     }
     commandSink_->setShellBottomTabsCurrentTab(tabId);
+    refreshFromStateSource();
+}
+
+void QuickShellController::setBottomTabsHostHeight(int height)
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    commandSink_->setShellBottomTabsHeight(height);
     refreshFromStateSource();
 }
 
@@ -717,6 +736,8 @@ void QuickShellController::refreshFromStateSource()
     stateChanged |= assignIfChanged(previewUsesSeparateSurface_, stateSource_->shellPreviewUsesSeparateSurface());
     stateChanged |= assignIfChanged(timelineSurfaceReady_, stateSource_->shellTimelineSurfaceReady());
     stateChanged |= assignIfChanged(bottomTabsCurrentTabId_, stateSource_->shellBottomTabsCurrentTabId());
+    stateChanged |= assignIfChanged(bottomTabsHostHeight_, stateSource_->shellBottomTabsHeight());
+    stateChanged |= assignIfChanged(bottomTabsHeaderScale_, stateSource_->shellBottomTabsHeaderScale());
     stateChanged |= assignIfChanged(bottomTabsVisible_, stateSource_->shellBottomTabsVisible());
     stateChanged |= assignIfChanged(timelineTabVisible_, stateSource_->shellTimelineTabVisible());
     stateChanged |= assignIfChanged(validationTabVisible_, stateSource_->shellValidationTabVisible());

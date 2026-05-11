@@ -36,6 +36,7 @@ public:
     virtual void beginShellPreviewHeldSeek(int direction, int key) = 0;
     virtual void stopShellPreviewHeldSeek(int key = 0) = 0;
     virtual void setShellPreviewFullscreen(bool fullscreen) = 0;
+    virtual void setShellBottomTabsHeight(int height) = 0;
     virtual void setShellBottomTabsCurrentTab(const QString& tabId) = 0;
     virtual void navigateShellTimelineToSecond(double second) = 0;
     virtual void wheelShellTimelineNavigate(double second) = 0;
@@ -72,6 +73,8 @@ public:
     virtual QObject* shellTimelineStateBridgeObject() const = 0;
     virtual bool shellTimelineSurfaceReady() const = 0;
     virtual QString shellBottomTabsCurrentTabId() const = 0;
+    virtual int shellBottomTabsHeight() const = 0;
+    virtual double shellBottomTabsHeaderScale() const = 0;
     virtual bool shellBottomTabsVisible() const = 0;
     virtual bool shellTimelineTabVisible() const = 0;
     virtual bool shellValidationTabVisible() const = 0;

@@ -1104,6 +1104,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     logStartupStage("preview_runtime_ready");
 
     bottomTabs_ = new QTabWidget(central);
+    bottomTabs_->installEventFilter(this);
     if (QTabBar* bottomTabBar = bottomTabs_->tabBar(); bottomTabBar != nullptr) {
         bottomTabBar->installEventFilter(this);
     }

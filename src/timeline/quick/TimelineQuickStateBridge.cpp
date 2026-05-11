@@ -482,6 +482,7 @@ void TimelineQuickStateBridge::refreshLayoutMetrics()
     request.waveformData = waveformData_;
     request.viewportSize = effectiveViewportSize();
     request.zoomScale = zoomScale();
+    request.contentScale = contentScale_;
     request.playbackEntrySeconds = playbackEntrySeconds_;
     request.playheadSeconds = playheadSeconds_;
     request.cursorSeconds = cursorSeconds_;
@@ -530,6 +531,23 @@ void TimelineQuickStateBridge::setHorizontalScrollValue(int value)
 double TimelineQuickStateBridge::zoomScale() const
 {
     return zoomPresets_.value(zoomPresetIndex_, 0.5);
+}
+
+double TimelineQuickStateBridge::contentScale() const
+{
+    return contentScale_;
+}
+
+void TimelineQuickStateBridge::setContentScale(double scale)
+{
+    const double clamped = qBound(0.5, scale, 1.0);
+    if (qFuzzyCompare(contentScale_ + 1.0, clamped + 1.0)) {
+        return;
+    }
+    contentScale_ = clamped;
+    refreshLayoutMetrics();
+    bumpAllRevisions();
+    emit renderStateChanged();
 }
 
 void TimelineQuickStateBridge::setZoomScale(double scale)

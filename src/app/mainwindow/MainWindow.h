@@ -169,6 +169,7 @@ public:
     void beginShellPreviewHeldSeek(int direction, int key) override;
     void stopShellPreviewHeldSeek(int key = 0) override;
     void setShellPreviewFullscreen(bool fullscreen) override;
+    void setShellBottomTabsHeight(int height) override;
     void setShellBottomTabsCurrentTab(const QString& tabId) override;
     void navigateShellTimelineToSecond(double second) override;
     void wheelShellTimelineNavigate(double second) override;
@@ -208,6 +209,7 @@ public:
     QWidget* shellWorkspaceWidget() const override;
     QWidget* shellBottomTabsWidget() const override;
     int shellBottomTabsHeight() const override;
+    double shellBottomTabsHeaderScale() const override;
     QWidget* shellPreviewPanelWidget() const override;
     double shellNormalizedPreviewCanvasAspectRatio() const override;
     void shellRefreshLayoutAfterResize() override;

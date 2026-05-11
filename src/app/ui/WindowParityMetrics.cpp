@@ -204,8 +204,7 @@ PreviewPanelLayout computePreviewPanelLayout(
 int computeTimelineMinimumContentHeight()
 {
     return (kTimelineHeaderHeight + kTimelineTopMargin)
-        + (kTimelineLaneHeight * kTimelineLaneCount)
-        + kTimelineBottomPadding;
+        + (kTimelineLaneHeight * kTimelineLaneCount);
 }
 
 int computeBottomTabsDeviceHeight(int timelineHeight, int tabBarHeight, int frameWidth)

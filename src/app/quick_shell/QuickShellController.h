@@ -36,6 +36,8 @@ class QuickShellController : public QObject
     Q_PROPERTY(QObject* timelineStateBridge READ timelineStateBridge CONSTANT)
     Q_PROPERTY(bool timelineSurfaceReady READ timelineSurfaceReady NOTIFY shellStateChanged)
     Q_PROPERTY(QString bottomTabsCurrentTabId READ bottomTabsCurrentTabId NOTIFY shellStateChanged)
+    Q_PROPERTY(int bottomTabsHostHeight READ bottomTabsHostHeight NOTIFY shellStateChanged)
+    Q_PROPERTY(double bottomTabsHeaderScale READ bottomTabsHeaderScale NOTIFY shellStateChanged)
     Q_PROPERTY(bool bottomTabsVisible READ bottomTabsVisible NOTIFY shellStateChanged)
     Q_PROPERTY(bool timelineTabVisible READ timelineTabVisible NOTIFY shellStateChanged)
     Q_PROPERTY(bool validationTabVisible READ validationTabVisible NOTIFY shellStateChanged)
@@ -79,6 +81,8 @@ public:
     QObject* timelineStateBridge() const;
     bool timelineSurfaceReady() const;
     QString bottomTabsCurrentTabId() const;
+    int bottomTabsHostHeight() const;
+    double bottomTabsHeaderScale() const;
     bool bottomTabsVisible() const;
     bool timelineTabVisible() const;
     bool validationTabVisible() const;
@@ -105,6 +109,7 @@ public:
     Q_INVOKABLE void updatePreviewScrub(double second, bool centerView = true);
     Q_INVOKABLE void endPreviewScrub(double second, bool centerView = true);
     Q_INVOKABLE void setPreviewRate(double rate);
+    Q_INVOKABLE void setBottomTabsHostHeight(int height);
     Q_INVOKABLE void setBottomTabsCurrentTabId(const QString& tabId);
     Q_INVOKABLE void timelineHeaderNavigate(double second);
     Q_INVOKABLE void timelineWheelNavigate(double second);
@@ -157,6 +162,8 @@ private:
     bool previewUsesSeparateSurface_ = false;
     bool timelineSurfaceReady_ = false;
     QString bottomTabsCurrentTabId_;
+    int bottomTabsHostHeight_ = 0;
+    double bottomTabsHeaderScale_ = 1.0;
     bool bottomTabsVisible_ = false;
     bool timelineTabVisible_ = false;
     bool validationTabVisible_ = false;

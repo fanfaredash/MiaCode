@@ -31,6 +31,8 @@ Item {
         return paletteMap && paletteMap[key] !== undefined ? paletteMap[key] : fallback
     }
 
+    readonly property real headerScale: controller ? controller.bottomTabsHeaderScale : 1.0
+
     // Phase 9d reverted — separating the band visually didn't match
     // user expectation (buttons + line markers should occupy the
     // SAME header band, not stack vertically). The proper fix is
@@ -98,13 +100,13 @@ Item {
         id: zoomButton
 
         anchors.left: parent.left
-        anchors.leftMargin: 4
+        anchors.leftMargin: Math.round(4 * root.headerScale)
         y: Math.max(0, (timelineItem.timelineTop - height) / 2)
-        implicitHeight: 22
+        implicitHeight: Math.max(1, Math.round(22 * root.headerScale))
         padding: 1
         leftPadding: 2
-        rightPadding: 8
-        spacing: 6
+        rightPadding: Math.round(8 * root.headerScale)
+        spacing: Math.round(6 * root.headerScale)
         hoverEnabled: true
         text: Math.round(timelineItem.zoomScale * 100) + "%"
         // Phase 9d-native — invisible to the eye (DComp pipeline
@@ -139,8 +141,8 @@ Item {
                 Canvas {
                     id: zoomGlyph
 
-                    width: 18
-                    height: 18
+                    width: Math.max(1, Math.round(18 * root.headerScale))
+                    height: Math.max(1, Math.round(18 * root.headerScale))
 
                     property color strokeColor: zoomButton.down
                         ? root.tone("accentText", "#ffffff")
@@ -183,7 +185,7 @@ Item {
                         ? root.tone("accentText", "#ffffff")
                         : root.tone("textPrimary", "#e5e7eb")
                     font.weight: Font.DemiBold
-                    font.pixelSize: 12
+                    font.pixelSize: Math.max(1, Math.round(12 * root.headerScale))
                     height: zoomGlyph.height
                     verticalAlignment: Text.AlignVCenter
                 }

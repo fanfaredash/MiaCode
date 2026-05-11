@@ -51,6 +51,8 @@ public:
     void setHorizontalScrollValue(int value);
     double zoomScale() const;
     void setZoomScale(double scale);
+    double contentScale() const;
+    void setContentScale(double scale);
     void cycleZoomPreset(double anchorSecond);
     void stepZoomPreset(int deltaSteps, double anchorSecond);
     void setPlaybackEntrySeconds(double second);
@@ -114,6 +116,7 @@ private:
     QVector<double> zoomPresets_;
     int zoomPresetIndex_ = 1;
     int horizontalScrollValue_ = 0;
+    double contentScale_ = 1.0;
     double playbackEntrySeconds_ = 0.0;
     double playheadUpperLimitSeconds_ = -1.0;
     double playheadSeconds_ = 0.0;

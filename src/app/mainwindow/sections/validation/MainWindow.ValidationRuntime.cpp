@@ -874,6 +874,15 @@ void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
 
     clearValidationErrors();
     state_.validationDecorations_.clear();
+    if (entry.issues.isEmpty() && ui_.errorList_ != nullptr) {
+        auto* item = new QListWidgetItem(
+            UiText::isChineseUi()
+                ? QStringLiteral("未检测到语法错误。")
+                : QStringLiteral("No syntax errors detected."),
+            ui_.errorList_
+        );
+        item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+    }
     for (const ValidationCachedIssue& issue : entry.issues) {
         const QString issueTypeKey = issue.issueTypeKey.isEmpty()
             ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
@@ -970,6 +979,15 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
     setValidationTabVisible(true);
     clearValidationErrors();
     state_.validationDecorations_.clear();
+    if (entry.issues.isEmpty() && ui_.errorList_ != nullptr) {
+        auto* item = new QListWidgetItem(
+            UiText::isChineseUi()
+                ? QStringLiteral("未检测到语法错误。")
+                : QStringLiteral("No syntax errors detected."),
+            ui_.errorList_
+        );
+        item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+    }
     for (const ValidationCachedIssue& issue : entry.issues) {
         const QString issueTypeKey = issue.issueTypeKey.isEmpty()
             ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)

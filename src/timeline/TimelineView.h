@@ -73,6 +73,8 @@ public:
     void setMuriAnalysisReport(const MuriAnalysisReport& report);
     const QHash<quint64, QVector<miacode::timeline::TimelineMuriMarkerPlacement>>& muriMarkerPlacementsByLocation() const;
     double zoomScale() const;
+    double contentScale() const;
+    void setContentScale(double scale);
     int horizontalScrollValue() const;
     void setHorizontalScrollValue(int value);
     void stepZoomPresetForQuickSurface(int deltaSteps, double anchorSecond);
@@ -143,6 +145,11 @@ private:
     int laneHeight() const;
     int timelineHeight() const;
     int notePixelSize() const;
+    int scaledTimelineMetric(int value) const;
+    qreal scaledTimelineMetric(qreal value) const;
+    double headerContentScale() const;
+    int scaledTimelineHeaderMetric(int value) const;
+    qreal scaledTimelineHeaderMetric(qreal value) const;
     int rawSecondToX(double second) const;
     int secondToX(double second) const;
     double xToSecond(int x) const;
@@ -221,6 +228,7 @@ private:
     QVector<double> zoomPresets_;
     QVector<double> buttonZoomPresets_;
     int zoomPresetIndex_ = 0;
+    double contentScale_ = 1.0;
     PresentationMode presentationMode_ = PresentationMode::Full;
     FocusTarget focusTarget_ = FocusTarget::Playhead;
     bool timelineDragActive_ = false;

@@ -172,6 +172,10 @@
         double pendingQuickTimelineCursorSecond_ = 0.0;
         bool pendingQuickTimelineCursorCenterView_ = false;
         BottomTabsTabId currentBottomTabsTabId_ = BottomTabsTabId::Timeline;
+        double bottomTabsContentScale_ = 1.0;
+        bool bottomTabsResizeDragActive_ = false;
+        int bottomTabsResizeStartGlobalY_ = 0;
+        int bottomTabsResizeStartHeight_ = 0;
         bool timelineTabVisible_ = true;
         QtPreviewSfxRuntime* previewSfxRuntime_ = nullptr;
         miacode::waveform::WaveformCacheService* waveformCacheService_ = nullptr;
@@ -465,6 +469,10 @@
     double& pendingQuickTimelineCursorSecond_ = state_.pendingQuickTimelineCursorSecond_;
     bool& pendingQuickTimelineCursorCenterView_ = state_.pendingQuickTimelineCursorCenterView_;
     BottomTabsTabId& currentBottomTabsTabId_ = state_.currentBottomTabsTabId_;
+    double& bottomTabsContentScale_ = state_.bottomTabsContentScale_;
+    bool& bottomTabsResizeDragActive_ = state_.bottomTabsResizeDragActive_;
+    int& bottomTabsResizeStartGlobalY_ = state_.bottomTabsResizeStartGlobalY_;
+    int& bottomTabsResizeStartHeight_ = state_.bottomTabsResizeStartHeight_;
     bool& timelineTabVisible_ = state_.timelineTabVisible_;
     QtPreviewSfxRuntime*& previewSfxRuntime_ = state_.previewSfxRuntime_;
     QThreadPool*& previewWarmupPool_ = state_.previewWarmupPool_;

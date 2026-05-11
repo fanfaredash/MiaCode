@@ -24,6 +24,7 @@ struct TimelineSceneLayoutMetrics {
     double displayStartSeconds = 0.0;
     double displayEndSeconds = 0.0;
     double pixelsPerSecond = 0.0;
+    double contentScale = 1.0;
     double maxNavigableSecond = 0.0;
 };
 
@@ -123,6 +124,7 @@ struct TimelineSceneState {
     double visibleStartSecond = 0.0;
     double visibleEndSecond = 0.0;
     double pixelsPerSecond = 0.0;
+    double contentScale = 1.0;
     double maxNavigableSecond = 0.0;
     quint64 appearanceRevision = 0;
     quint64 gridRevision = 0;

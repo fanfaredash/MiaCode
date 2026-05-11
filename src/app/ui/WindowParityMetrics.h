@@ -72,7 +72,6 @@ constexpr int kTimelineHeaderHeight = 28;
 constexpr int kTimelineTopMargin = 6;
 constexpr int kTimelineLaneHeight = 20;
 constexpr int kTimelineLaneCount = 9;
-constexpr int kTimelineBottomPadding = 20;
 
 constexpr int kPreviewFullscreenHintTopMargin = 28;
 constexpr int kPreviewFullscreenOverlaySideMargin = 18;

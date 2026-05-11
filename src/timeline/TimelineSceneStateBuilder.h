@@ -36,6 +36,7 @@ struct TimelineSceneBuildRequest {
     // moves don't reveal empty space.
     int horizontalCullPaddingPx = 0;
     double zoomScale = 0.5;
+    double contentScale = 1.0;
     double playbackEntrySeconds = 0.0;
     double playheadSeconds = 0.0;
     double cursorSeconds = 0.0;

@@ -26,6 +26,7 @@ constexpr int kEditorFindBarMaxWidth = 500;
 constexpr int kEditorFindBarHorizontalMargin = 14;
 constexpr int kEditorFindBarTopMargin = 10;
 constexpr int kEditorFindBarOverlayGap = 8;
+constexpr int kBottomTabsResizeHotzonePx = 8;
 
 bool widgetMatchesOrDescendsFrom(QWidget* widget, QWidget* root)
 {
@@ -37,6 +38,16 @@ bool isUnmodifiedHorizontalArrowKey(const QKeyEvent* event)
     return event != nullptr
         && event->modifiers() == Qt::NoModifier
         && (event->key() == Qt::Key_Left || event->key() == Qt::Key_Right);
+}
+
+bool bottomTabsResizeHotzoneContains(QWidget* bottomTabs, QWidget* watchedWidget, const QPoint& localPos)
+{
+    if (bottomTabs == nullptr || watchedWidget == nullptr) {
+        return false;
+    }
+    const QPoint bottomTabsPos =
+        watchedWidget == bottomTabs ? localPos : watchedWidget->mapTo(bottomTabs, localPos);
+    return bottomTabsPos.y() >= 0 && bottomTabsPos.y() <= kBottomTabsResizeHotzonePx;
 }
 
 void appendPreviewInteractionLog(const QString& action, const QString& payload = QString())
@@ -464,6 +475,50 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         && event->type() == QEvent::Resize) {
         this->updateEditorFindBarGeometry();
         this->applyFindOverlayInset();
+    }
+    if (owner_.bottomTabs_ != nullptr && event != nullptr && watchedWidget != nullptr) {
+        const bool watchedBottomTabsTop =
+            watched == owner_.bottomTabs_
+            || watched == owner_.bottomTabs_->tabBar();
+        if (watchedBottomTabsTop) {
+            if (event->type() == QEvent::MouseButtonPress) {
+                auto* mouseEvent = static_cast<QMouseEvent*>(event);
+                if (mouseEvent->button() == Qt::LeftButton
+                    && bottomTabsResizeHotzoneContains(owner_.bottomTabs_, watchedWidget, mouseEvent->pos())) {
+                    owner_.bottomTabsResizeDragActive_ = true;
+                    owner_.bottomTabsResizeStartGlobalY_ = mouseEvent->globalPosition().toPoint().y();
+                    owner_.bottomTabsResizeStartHeight_ = owner_.bottomTabs_->height();
+                    owner_.bottomTabs_->setCursor(Qt::SizeVerCursor);
+                    event->accept();
+                    return true;
+                }
+            } else if (event->type() == QEvent::MouseMove) {
+                auto* mouseEvent = static_cast<QMouseEvent*>(event);
+                if (owner_.bottomTabsResizeDragActive_) {
+                    const int deltaY =
+                        mouseEvent->globalPosition().toPoint().y() - owner_.bottomTabsResizeStartGlobalY_;
+                    setShellBottomTabsHeight(owner_.bottomTabsResizeStartHeight_ - deltaY);
+                    event->accept();
+                    return true;
+                }
+                if (bottomTabsResizeHotzoneContains(owner_.bottomTabs_, watchedWidget, mouseEvent->pos())) {
+                    owner_.bottomTabs_->setCursor(Qt::SizeVerCursor);
+                } else {
+                    owner_.bottomTabs_->unsetCursor();
+                }
+            } else if (event->type() == QEvent::MouseButtonRelease) {
+                if (owner_.bottomTabsResizeDragActive_) {
+                    owner_.bottomTabsResizeDragActive_ = false;
+                    owner_.bottomTabs_->unsetCursor();
+                    event->accept();
+                    return true;
+                }
+            } else if (event->type() == QEvent::Leave) {
+                if (!owner_.bottomTabsResizeDragActive_) {
+                    owner_.bottomTabs_->unsetCursor();
+                }
+            }
+        }
     }
     if (owner_.bottomTabs_ != nullptr && watched == owner_.bottomTabs_->tabBar() && event->type() == QEvent::Wheel) {
         return true;

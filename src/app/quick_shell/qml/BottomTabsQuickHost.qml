@@ -47,6 +47,8 @@ Rectangle {
     }
 
     readonly property int tabBarHeight: metric("bottomTabsTabBarHeight", 40)
+    readonly property int resizeHotzoneHeight: metric("bottomTabsResizeHotzoneHeight", 8)
+    readonly property real headerScale: controller ? controller.bottomTabsHeaderScale : 1.0
     readonly property var visibleTabs: {
         // Labels come from the controller (which honours UiText::isChineseUi)
         // rather than QML's qsTr — qsTr requires a .ts translation file
@@ -106,8 +108,8 @@ Rectangle {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 8
+                anchors.leftMargin: Math.round(8 * root.headerScale)
+                anchors.rightMargin: Math.round(8 * root.headerScale)
                 spacing: 0
 
                 Repeater {
@@ -122,8 +124,8 @@ Rectangle {
                         readonly property bool isCurrentTab: controller
                             && controller.bottomTabsCurrentTabId === modelData.id
 
-                        Layout.preferredWidth: tabLabel.implicitWidth + 28
-                        Layout.minimumWidth: tabLabel.implicitWidth + 28
+                        Layout.preferredWidth: tabLabel.implicitWidth + Math.round(28 * root.headerScale)
+                        Layout.minimumWidth: tabLabel.implicitWidth + Math.round(28 * root.headerScale)
                         Layout.fillHeight: true
 
                         // Tab body. Top-rounded rectangle: 2px radius at top
@@ -171,7 +173,7 @@ Rectangle {
                             color: tabItem.isCurrentTab
                                 ? tone("textPrimary", "#203040")
                                 : tone("textSecondary", "#5a6878")
-                            font.pixelSize: 13
+                            font.pixelSize: Math.max(1, Math.round(13 * root.headerScale))
                             // Native QTabBar uses regular weight; reserved
                             // semibold for emphasis is not how Qt's native
                             // tab labels look.
@@ -210,19 +212,19 @@ Rectangle {
                     id: cursorFollowCheck
 
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredHeight: tabStrip.height - 6
-                    Layout.rightMargin: 4
+                    Layout.preferredHeight: tabStrip.height - Math.round(6 * root.headerScale)
+                    Layout.rightMargin: Math.round(4 * root.headerScale)
                     visible: controller && controller.bottomTabsCurrentTabId === "timeline"
                     hoverEnabled: true
-                    spacing: 4
+                    spacing: Math.round(4 * root.headerScale)
                     text: root.isChineseUi() ? "光标跟随" : "Cursor Follow"
                     checked: controller && controller.timelineStateBridge
                         ? controller.timelineStateBridge.followPreviewEnabled
                         : false
 
                     indicator: Rectangle {
-                        implicitWidth: 14
-                        implicitHeight: 14
+                        implicitWidth: Math.max(1, Math.round(14 * root.headerScale))
+                        implicitHeight: Math.max(1, Math.round(14 * root.headerScale))
                         x: 0
                         y: (cursorFollowCheck.height - height) / 2
                         radius: 3
@@ -259,7 +261,7 @@ Rectangle {
                     contentItem: Text {
                         text: cursorFollowCheck.text
                         color: root.tone("textPrimary", "#203040")
-                        font.pixelSize: 12
+                        font.pixelSize: Math.max(1, Math.round(12 * root.headerScale))
                         font.weight: Font.DemiBold
                         verticalAlignment: Text.AlignVCenter
                         leftPadding: cursorFollowCheck.indicator.width + cursorFollowCheck.spacing
@@ -279,19 +281,19 @@ Rectangle {
                     id: progressFollowCheck
 
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredHeight: tabStrip.height - 6
-                    Layout.rightMargin: 8
+                    Layout.preferredHeight: tabStrip.height - Math.round(6 * root.headerScale)
+                    Layout.rightMargin: Math.round(8 * root.headerScale)
                     visible: controller && controller.bottomTabsCurrentTabId === "timeline"
                     hoverEnabled: true
-                    spacing: 4
+                    spacing: Math.round(4 * root.headerScale)
                     text: root.isChineseUi() ? "进度跟随" : "Progress Follow"
                     checked: controller && controller.timelineStateBridge
                         ? controller.timelineStateBridge.followProgressEnabled
                         : false
 
                     indicator: Rectangle {
-                        implicitWidth: 14
-                        implicitHeight: 14
+                        implicitWidth: Math.max(1, Math.round(14 * root.headerScale))
+                        implicitHeight: Math.max(1, Math.round(14 * root.headerScale))
                         x: 0
                         y: (progressFollowCheck.height - height) / 2
                         radius: 3
@@ -328,7 +330,7 @@ Rectangle {
                     contentItem: Text {
                         text: progressFollowCheck.text
                         color: root.tone("textPrimary", "#203040")
-                        font.pixelSize: 12
+                        font.pixelSize: Math.max(1, Math.round(12 * root.headerScale))
                         font.weight: Font.DemiBold
                         verticalAlignment: Text.AlignVCenter
                         leftPadding: progressFollowCheck.indicator.width + progressFollowCheck.spacing
@@ -381,6 +383,38 @@ Rectangle {
                         root.syncNativeBottomTabsSurface()
                 }
             }
+        }
+    }
+
+    MouseArea {
+        id: resizeHotzone
+
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: root.resizeHotzoneHeight
+        z: 1000
+        hoverEnabled: true
+        cursorShape: Qt.SizeVerCursor
+        acceptedButtons: Qt.LeftButton
+
+        property real pressGlobalY: 0
+        property int pressHeight: 0
+
+        onPressed: function(mouse) {
+            const point = mapToGlobal(mouse.x, mouse.y)
+            pressGlobalY = point.y
+            pressHeight = root.height
+            mouse.accepted = true
+        }
+
+        onPositionChanged: function(mouse) {
+            if (!pressed || !controller)
+                return
+            const point = mapToGlobal(mouse.x, mouse.y)
+            const deltaY = point.y - pressGlobalY
+            controller.setBottomTabsHostHeight(pressHeight - Math.round(deltaY))
+            mouse.accepted = true
         }
     }
 }

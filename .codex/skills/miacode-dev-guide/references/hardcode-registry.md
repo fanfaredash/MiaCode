@@ -85,13 +85,14 @@ Use this file to track where important constants live, what they mean, and wheth
 - `src/tools/video_export/VideoExportDialog.cpp`
   - Owns: export-dialog UI sizing and preview control constants
   - Rule: local UI constants usually stay local unless reused across dialogs
-- `src/app/mainwindow/MainWindow.cpp`
-  - Owns: embedded/fullscreen preview panel spacing, fullscreen overlay timing/opacity/reveal geometry constants, and the fixed Timeline-side preview UI cadence used by scrubbing/timeline refresh
+- `src/app/mainwindow/MainWindow.cpp` and `src/app/mainwindow/sections/window/*.cpp`
+  - Owns: embedded/fullscreen preview panel spacing, fullscreen overlay timing/opacity/reveal geometry constants, bottom-tab content resize bounds/hot-zone behavior, and the fixed Timeline-side preview UI cadence used by scrubbing/timeline refresh
   - Examples:
     - fullscreen `Esc` hint top inset
     - fullscreen control-bar side/bottom margins, max width, and bottom hot-zone height
     - fullscreen control-bar hide offset, reveal animation duration, and opacity fade duration
     - fullscreen control-bar auto-hide delay
+    - bottom-tab invisible top-edge resize hot zone (`8 px`), content-scale clamp (`50%..100%`), derived header/list-font scale (`75%..100%`), and Timeline host height calculation from scaled header plus scaled lanes
     - fixed `30 Hz` Timeline UI cadence (`33 ms` timer interval / `1/30 s` seek-throttle threshold)
   - Rule: keep local while they only shape the main-window preview UX and do not need preview/export parity
 - `src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp`
