@@ -29,6 +29,8 @@
 #include <QtGui>
 #include <QtWidgets>
 
+#include <functional>
+
 using namespace miacode::mainwindow::shared;
 
 MainWindow::PreferencesSection::PreferencesSection(
@@ -46,7 +48,7 @@ void MainWindow::PreferencesSection::onPreferences()
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
     dialog.setWindowTitle(uiText("dialog.preferences.title", "Preferences"));
     dialog.setModal(true);
-    dialog.setMinimumWidth(400);
+    dialog.setMinimumWidth(620);
     dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
     owner_.windowSection_->applySystemWindowBackdrop(&dialog);
     UiDialogs::prepareDialogWindow(&dialog, &owner_);
@@ -56,7 +58,38 @@ void MainWindow::PreferencesSection::onPreferences()
     rootLayout->setSpacing(10);
     rootLayout->setSizeConstraint(QLayout::SetFixedSize);
 
-    auto* interfaceGroup = new QGroupBox(uiText("dialog.preferences.interface_group", "Interface"), &dialog);
+    auto* contentRow = new QWidget(&dialog);
+    auto* contentLayout = new QHBoxLayout(contentRow);
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+    contentLayout->setSpacing(12);
+    auto* categoryColumn = new QWidget(contentRow);
+    auto* categoryColumnLayout = new QVBoxLayout(categoryColumn);
+    categoryColumnLayout->setContentsMargins(0, 24, 0, 0);
+    categoryColumnLayout->setSpacing(0);
+    auto* categoryList = new QListWidget(categoryColumn);
+    categoryList->setObjectName(QStringLiteral("PreferenceCategoryList"));
+    categoryList->setFixedWidth(88);
+    categoryList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    categoryList->setSelectionMode(QAbstractItemView::SingleSelection);
+    categoryList->addItem(uiText("dialog.preferences.interface_group", "Appearance"));
+    categoryList->addItem(uiText("dialog.preferences.editor_group", "Editor"));
+    categoryList->addItem(uiText("dialog.preferences.performance_group", "Performance"));
+    categoryList->setSpacing(2);
+    for (int index = 0; index < categoryList->count(); ++index) {
+        categoryList->item(index)->setSizeHint(QSize(0, 30));
+    }
+    auto* pageStack = new QStackedWidget(contentRow);
+    pageStack->setObjectName(QStringLiteral("PreferencePageStack"));
+    categoryColumnLayout->addWidget(categoryList, 0, Qt::AlignTop);
+    contentLayout->addWidget(categoryColumn, 0);
+    contentLayout->addWidget(pageStack, 1);
+    rootLayout->addWidget(contentRow);
+
+    auto* appearancePage = new QWidget(pageStack);
+    auto* appearancePageLayout = new QVBoxLayout(appearancePage);
+    appearancePageLayout->setContentsMargins(0, 0, 0, 0);
+    appearancePageLayout->setSpacing(10);
+    auto* interfaceGroup = new QGroupBox(uiText("dialog.preferences.interface_group", "Appearance"), appearancePage);
     auto* interfaceLayout = new QFormLayout(interfaceGroup);
     interfaceLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     interfaceLayout->setHorizontalSpacing(12);
@@ -88,9 +121,6 @@ void MainWindow::PreferencesSection::onPreferences()
             return uiText("dialog.preferences.theme.system", "Follow System");
         }
     };
-    const QIcon selectedMenuOptionIcon = makeMenuSelectionCheckIcon(UiTheme::colors().accent);
-    const QIcon unselectedMenuOptionIcon = makeMenuSelectionCheckIcon(UiTheme::colors().accent, false);
-
     auto* languageLabelWidget = new QLabel(uiText("dialog.preferences.language", "Language"), interfaceGroup);
     auto* languageRow = new QWidget(interfaceGroup);
     auto* languageRowLayout = new QHBoxLayout(languageRow);
@@ -110,20 +140,14 @@ void MainWindow::PreferencesSection::onPreferences()
         UiText::LanguagePreference::English,
         UiText::LanguagePreference::Chinese,
     };
-    const auto refreshLanguageMenuIcons = [&]() {
-        for (QAction* action : languageMenu->actions()) {
-            const auto actionPreference = static_cast<UiText::LanguagePreference>(action->data().toInt());
-            action->setIcon(actionPreference == selectedPreference ? selectedMenuOptionIcon : unselectedMenuOptionIcon);
-        }
-    };
     for (UiText::LanguagePreference preference : languageOptions) {
         QAction* action = languageMenu->addAction(languageLabel(preference));
         action->setData(static_cast<int>(preference));
-        action->setIcon(preference == selectedPreference ? selectedMenuOptionIcon : unselectedMenuOptionIcon);
         connect(action, &QAction::triggered, &dialog, [&, preference, languageButton]() {
             selectedPreference = preference;
-            refreshLanguageMenuIcons();
             languageButton->setText(languageLabel(selectedPreference));
+            UiText::setPreferredLanguage(selectedPreference);
+            owner_.statusBar()->showMessage(uiText("status.preferences_saved", "Preferences saved. Restart to apply."));
         });
     }
     int languageButtonWidth = 0;
@@ -132,12 +156,8 @@ void MainWindow::PreferencesSection::onPreferences()
         languageButtonWidth = qMax(languageButtonWidth, languageMetrics.horizontalAdvance(languageLabel(preference)));
     }
     languageButton->setFixedWidth(languageButtonWidth + 28);
-    connect(languageButton, &QToolButton::clicked, &dialog, [languageButton, languageLabelWidget, languageMenu]() {
-        const int estimatedItemHeight = qMax(32, languageButton->sizeHint().height() + 2);
-        const QPoint labelCenterGlobal = languageLabelWidget->mapToGlobal(QPoint(languageLabelWidget->width(), languageLabelWidget->height() / 2));
-        const QPoint buttonTopLeftGlobal = languageButton->mapToGlobal(QPoint(0, 0));
-        const QPoint popupPos(buttonTopLeftGlobal.x(), labelCenterGlobal.y() - estimatedItemHeight / 2 - 7);
-        languageMenu->popup(popupPos);
+    connect(languageButton, &QToolButton::clicked, &dialog, [languageButton, languageMenu]() {
+        languageMenu->popup(languageButton->mapToGlobal(QPoint(0, languageButton->height())));
     });
     languageRowLayout->addWidget(languageButton, 0);
     languageRowLayout->addStretch(1);
@@ -162,20 +182,16 @@ void MainWindow::PreferencesSection::onPreferences()
         UiText::ThemePreference::Light,
         UiText::ThemePreference::Dark,
     };
-    const auto refreshThemeMenuIcons = [&]() {
-        for (QAction* action : themeMenu->actions()) {
-            const auto actionPreference = static_cast<UiText::ThemePreference>(action->data().toInt());
-            action->setIcon(actionPreference == selectedThemePreference ? selectedMenuOptionIcon : unselectedMenuOptionIcon);
-        }
-    };
     for (UiText::ThemePreference preference : themeOptions) {
         QAction* action = themeMenu->addAction(themeLabel(preference));
         action->setData(static_cast<int>(preference));
-        action->setIcon(preference == selectedThemePreference ? selectedMenuOptionIcon : unselectedMenuOptionIcon);
         connect(action, &QAction::triggered, &dialog, [&, preference, themeButton]() {
             selectedThemePreference = preference;
-            refreshThemeMenuIcons();
             themeButton->setText(themeLabel(selectedThemePreference));
+            UiText::setPreferredTheme(selectedThemePreference);
+            owner_.windowSection_->applyUiTheme();
+            dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
+            owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
         });
     }
     int themeButtonWidth = 0;
@@ -184,30 +200,29 @@ void MainWindow::PreferencesSection::onPreferences()
         themeButtonWidth = qMax(themeButtonWidth, themeMetrics.horizontalAdvance(themeLabel(preference)));
     }
     themeButton->setFixedWidth(themeButtonWidth + 28);
-    connect(themeButton, &QToolButton::clicked, &dialog, [themeButton, themeLabelWidget, themeMenu]() {
-        const int estimatedItemHeight = qMax(32, themeButton->sizeHint().height() + 2);
-        const QPoint labelCenterGlobal = themeLabelWidget->mapToGlobal(QPoint(themeLabelWidget->width(), themeLabelWidget->height() / 2));
-        const QPoint buttonTopLeftGlobal = themeButton->mapToGlobal(QPoint(0, 0));
-        const QPoint popupPos(buttonTopLeftGlobal.x(), labelCenterGlobal.y() - estimatedItemHeight / 2 - 7);
-        themeMenu->popup(popupPos);
+    connect(themeButton, &QToolButton::clicked, &dialog, [themeButton, themeMenu]() {
+        themeMenu->popup(themeButton->mapToGlobal(QPoint(0, themeButton->height())));
     });
     themeRowLayout->addWidget(themeButton, 0);
     themeRowLayout->addStretch(1);
     interfaceLayout->addRow(themeLabelWidget, themeRow);
-    rootLayout->addWidget(interfaceGroup);
+    appearancePageLayout->addWidget(interfaceGroup);
+    appearancePageLayout->addStretch(1);
+    pageStack->addWidget(appearancePage);
 
-    auto* editorGroup = new QGroupBox(uiText("dialog.preferences.editor_group", "Editor"), &dialog);
+    auto* editorPage = new QWidget(pageStack);
+    auto* editorPageLayout = new QVBoxLayout(editorPage);
+    editorPageLayout->setContentsMargins(0, 0, 0, 0);
+    editorPageLayout->setSpacing(10);
+    auto* editorGroup = new QGroupBox(uiText("dialog.preferences.editor_group", "Editor"), editorPage);
     auto* editorLayout = new QFormLayout(editorGroup);
     editorLayout->setContentsMargins(12, 10, 12, 12);
     editorLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     editorLayout->setHorizontalSpacing(12);
     editorLayout->setVerticalSpacing(8);
-    const int originalEditorFontSize = state_.editorTextFontPointSize_;
-    const double originalEditorLineSpacingFactor = state_.editorLineSpacingFactor_;
-    const bool originalEditorHalfWidthInputEnabled = state_.editorHalfWidthInputEnabled_;
-    int selectedEditorFontSize = originalEditorFontSize;
-    double selectedEditorLineSpacingFactor = originalEditorLineSpacingFactor;
-    bool selectedEditorHalfWidthInputEnabled = originalEditorHalfWidthInputEnabled;
+    int selectedEditorFontSize = state_.editorTextFontPointSize_;
+    double selectedEditorLineSpacingFactor = state_.editorLineSpacingFactor_;
+    bool selectedEditorHalfWidthInputEnabled = state_.editorHalfWidthInputEnabled_;
 
     auto* editorFontSizeLabel = new QLabel(uiText("dialog.preferences.editor_font_size", "Text Font Size"), editorGroup);
     auto* fontSizeRow = new QWidget(editorGroup);
@@ -222,7 +237,8 @@ void MainWindow::PreferencesSection::onPreferences()
     shortcutHint->setStyleSheet(QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
     connect(editorFontSizeSpin, qOverload<int>(&QSpinBox::valueChanged), &dialog, [&](int value) {
         selectedEditorFontSize = value;
-        owner_.applyEditorTextFontSize(selectedEditorFontSize, false);
+        owner_.applyEditorTextFontSize(selectedEditorFontSize, true);
+        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
     });
     fontSizeRowLayout->addWidget(editorFontSizeSpin, 0);
     fontSizeRowLayout->addWidget(shortcutHint, 0);
@@ -234,9 +250,9 @@ void MainWindow::PreferencesSection::onPreferences()
     for (double factor : kEditorLineSpacingFactorOptions) {
         lineSpacingCombo->addItem(editorLineSpacingFactorLabel(factor), factor);
     }
-    int lineSpacingIndex = lineSpacingCombo->findData(originalEditorLineSpacingFactor);
+    int lineSpacingIndex = lineSpacingCombo->findData(selectedEditorLineSpacingFactor);
     if (lineSpacingIndex < 0) {
-        lineSpacingIndex = lineSpacingCombo->findData(normalizeEditorLineSpacingFactor(originalEditorLineSpacingFactor));
+        lineSpacingIndex = lineSpacingCombo->findData(normalizeEditorLineSpacingFactor(selectedEditorLineSpacingFactor));
     }
     if (lineSpacingIndex < 0) {
         lineSpacingIndex = 0;
@@ -247,18 +263,21 @@ void MainWindow::PreferencesSection::onPreferences()
             return;
         }
         selectedEditorLineSpacingFactor = lineSpacingCombo->itemData(index).toDouble();
-        owner_.applyEditorLineSpacingFactor(selectedEditorLineSpacingFactor, false);
+        owner_.applyEditorLineSpacingFactor(selectedEditorLineSpacingFactor, true);
+        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
     });
     editorLayout->addRow(lineSpacingLabel, lineSpacingCombo);
 
     auto* halfWidthInputCheckbox = new QCheckBox(
-        uiText("dialog.preferences.editor_half_width_input", "Force half-width symbol input"),
+        uiText("dialog.preferences.editor_half_width_input", "Lock half-width symbol input"),
         editorGroup
     );
+    halfWidthInputCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     halfWidthInputCheckbox->setChecked(selectedEditorHalfWidthInputEnabled);
     connect(halfWidthInputCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
         selectedEditorHalfWidthInputEnabled = checked;
-        owner_.applyEditorHalfWidthInputEnabled(selectedEditorHalfWidthInputEnabled, false);
+        owner_.applyEditorHalfWidthInputEnabled(selectedEditorHalfWidthInputEnabled, true);
+        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
     });
     editorLayout->addRow(QString(), halfWidthInputCheckbox);
 
@@ -277,55 +296,152 @@ void MainWindow::PreferencesSection::onPreferences()
     connect(dialogIncreaseShiftShortcut, &QShortcut::activated, &dialog, [editorFontSizeSpin]() {
         editorFontSizeSpin->setValue(editorFontSizeSpin->value() + 1);
     });
-    rootLayout->addWidget(editorGroup);
+    editorPageLayout->addWidget(editorGroup);
+    editorPageLayout->addStretch(1);
+    pageStack->addWidget(editorPage);
 
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    auto* performancePage = new QWidget(pageStack);
+    auto* performancePageLayout = new QVBoxLayout(performancePage);
+    performancePageLayout->setContentsMargins(0, 0, 0, 0);
+    performancePageLayout->setSpacing(10);
+    auto* performanceGroup = new QGroupBox(uiText("dialog.preferences.performance_group", "Performance"), performancePage);
+    auto* performanceLayout = new QFormLayout(performanceGroup);
+    performanceLayout->setContentsMargins(12, 10, 12, 12);
+    performanceLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    performanceLayout->setHorizontalSpacing(12);
+    performanceLayout->setVerticalSpacing(8);
+
+    struct FrameRateOption {
+        PreviewCanvasFrameRateMode mode;
+        QString label;
+    };
+    const double detectedRefreshRate = owner_.currentPreviewCanvasRefreshRate();
+    const QString displayRefreshLabel = QStringLiteral("%1 (%2 Hz)")
+        .arg(uiText(
+            "dialog.render_settings.preview.canvas_frame_rate.display",
+            "Display Refresh Rate"
+        ))
+        .arg(QString::number(detectedRefreshRate, 'f', detectedRefreshRate >= 100.0 ? 0 : 1));
+    const auto frameRateLabelForMode =
+        [](PreviewCanvasFrameRateMode mode, const QList<FrameRateOption>& options) -> QString {
+            for (const FrameRateOption& option : options) {
+                if (option.mode == mode) {
+                    return option.label;
+                }
+            }
+            for (const FrameRateOption& option : options) {
+                if (option.mode == PreviewCanvasFrameRateMode::DisplayRefresh) {
+                    return option.label;
+                }
+            }
+            return !options.isEmpty() ? options.front().label : QString();
+        };
+    const auto addFrameRateRow =
+        [&](const QString& label,
+            PreviewCanvasFrameRateMode selectedMode,
+            const QList<FrameRateOption>& options,
+            const std::function<void(PreviewCanvasFrameRateMode)>& applyMode) {
+            auto* button = new QToolButton(performanceGroup);
+            button->setObjectName("PreferenceMenuButton");
+            button->setFont(uiAccentFont(10, QFont::DemiBold));
+            button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+            button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+            button->setText(frameRateLabelForMode(selectedMode, options));
+            auto* menu = new QMenu(button);
+            menu->setFont(uiAccentFont(10));
+            styleRoundedMenu(*menu);
+            for (const FrameRateOption& option : options) {
+                QAction* action = menu->addAction(option.label);
+                action->setData(static_cast<int>(option.mode));
+                connect(action, &QAction::triggered, &dialog, [&, option, button, applyMode]() {
+                    button->setText(option.label);
+                    applyMode(option.mode);
+                    owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+                });
+            }
+            connect(button, &QToolButton::clicked, &dialog, [button, menu]() {
+                menu->popup(button->mapToGlobal(QPoint(0, button->height())));
+            });
+            performanceLayout->addRow(label, button);
+        };
+
+    QList<FrameRateOption> canvasFrameRateOptions;
+    canvasFrameRateOptions.append({
+        PreviewCanvasFrameRateMode::Fps60,
+        uiText("dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS"),
+    });
+    if (detectedRefreshRate >= 119.5) {
+        canvasFrameRateOptions.append({
+            PreviewCanvasFrameRateMode::Fps120,
+            uiText("dialog.render_settings.preview.canvas_frame_rate.120", "120 FPS"),
+        });
+    }
+    canvasFrameRateOptions.append({
+        PreviewCanvasFrameRateMode::DisplayRefresh,
+        displayRefreshLabel,
+    });
+
+    QList<FrameRateOption> appFrameRateOptions;
+    if (detectedRefreshRate >= 29.5) {
+        appFrameRateOptions.append({
+            PreviewCanvasFrameRateMode::Fps30,
+            uiText("dialog.render_settings.preview.canvas_frame_rate.30", "30 FPS"),
+        });
+    }
+    if (detectedRefreshRate >= 59.5) {
+        appFrameRateOptions.append({
+            PreviewCanvasFrameRateMode::Fps60,
+            uiText("dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS"),
+        });
+    }
+    if (detectedRefreshRate >= 119.5) {
+        appFrameRateOptions.append({
+            PreviewCanvasFrameRateMode::Fps120,
+            uiText("dialog.render_settings.preview.canvas_frame_rate.120", "120 FPS"),
+        });
+    }
+    appFrameRateOptions.append({
+        PreviewCanvasFrameRateMode::DisplayRefresh,
+        displayRefreshLabel,
+    });
+
+    addFrameRateRow(
+        uiText("dialog.render_settings.preview.canvas_frame_rate", "Preview Refresh Rate"),
+        owner_.currentPreviewCanvasFrameRateMode(),
+        canvasFrameRateOptions,
+        [&](PreviewCanvasFrameRateMode mode) {
+            owner_.setPreviewCanvasFrameRateMode(mode, true);
+        }
+    );
+    addFrameRateRow(
+        uiText("dialog.preferences.performance.pv_frame_rate", "PV Refresh Rate"),
+        owner_.currentPreviewStageMediaFrameRateMode(),
+        appFrameRateOptions,
+        [&](PreviewCanvasFrameRateMode mode) {
+            owner_.setPreviewStageMediaFrameRateMode(mode, true);
+        }
+    );
+    addFrameRateRow(
+        uiText("dialog.preferences.performance.timeline_frame_rate", "Timeline Refresh Rate"),
+        owner_.currentTimelineFrameRateMode(),
+        appFrameRateOptions,
+        [&](PreviewCanvasFrameRateMode mode) {
+            owner_.setTimelineFrameRateMode(mode, true);
+        }
+    );
+    performancePageLayout->addWidget(performanceGroup);
+    performancePageLayout->addStretch(1);
+    pageStack->addWidget(performancePage);
+
+    QObject::connect(categoryList, &QListWidget::currentRowChanged, pageStack, &QStackedWidget::setCurrentIndex);
+    categoryList->setCurrentRow(0);
+
+    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
     UiDialogs::localizeButtonBox(buttonBox);
-    connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     rootLayout->addWidget(buttonBox, 0, Qt::AlignRight);
 
-    const int dialogResult = dialog.exec();
-    if (dialogResult != QDialog::Accepted) {
-        owner_.applyEditorLineSpacingFactor(originalEditorLineSpacingFactor, false);
-        owner_.applyEditorTextFontSize(originalEditorFontSize, false);
-        owner_.applyEditorHalfWidthInputEnabled(originalEditorHalfWidthInputEnabled, false);
-        return;
-    }
-
-    const bool languageChanged = selectedPreference != currentPreference;
-    const bool themeChanged = selectedThemePreference != currentThemePreference;
-    const bool editorFontChanged = selectedEditorFontSize != originalEditorFontSize;
-    const bool editorLineSpacingChanged = !qFuzzyCompare(
-        selectedEditorLineSpacingFactor + 1.0,
-        originalEditorLineSpacingFactor + 1.0
-    );
-    const bool editorHalfWidthInputChanged =
-        selectedEditorHalfWidthInputEnabled != originalEditorHalfWidthInputEnabled;
-    if (!languageChanged && !themeChanged && !editorFontChanged && !editorLineSpacingChanged
-        && !editorHalfWidthInputChanged) {
-        return;
-    }
-
-    if (editorFontChanged || editorLineSpacingChanged || editorHalfWidthInputChanged) {
-        owner_.persistEditorTextFontPreference();
-        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
-    }
-    if (themeChanged) {
-        UiText::setPreferredTheme(selectedThemePreference);
-        owner_.windowSection_->applyUiTheme();
-        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
-    }
-    if (languageChanged) {
-        UiText::setPreferredLanguage(selectedPreference);
-        owner_.statusBar()->showMessage(uiText("status.preferences_saved", "Preferences saved. Restart to apply."));
-        UiDialogs::showMessageBox(
-            QMessageBox::Information,
-            &owner_,
-            uiText("dialog.preferences.restart_title", "Restart Required"),
-            uiText("dialog.preferences.restart_message", "Language preference saved. Restart MiaCode to apply menu, font, and UI text updates.")
-        );
-    }
+    dialog.exec();
 }
 
 void MainWindow::onPreferences()

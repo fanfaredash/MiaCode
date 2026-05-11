@@ -100,6 +100,7 @@ public:
     double videoFrameIntervalMaxMs() const;
     qint64 videoFrameStallCount() const;
     bool videoFrameStalled() const;
+    void setVideoFrameToImageMaxFps(double fps);
     void setObservedPlayheadSecond(double second);
     QString debugMediaTypeName() const;
 
@@ -153,6 +154,7 @@ private:
     // 60Hz chart-preview tick into stutter territory (HUD stutter
     // count climbed to ~20 during ECHO playback before throttling).
     QElapsedTimer videoFrameToImageThrottle_;
+    double videoFrameToImageMaxFps_ = 30.0;
     bool mediaVisible_ = true;
     PreviewBackgroundScaleMode backgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     QMediaPlayer* player_ = nullptr;

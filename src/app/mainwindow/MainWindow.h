@@ -270,6 +270,7 @@ public:
     // mutation surface (the setter setPreviewCanvasFrameRateMode
     // remains internal); only the value type is now visible.
     enum class PreviewCanvasFrameRateMode {
+        Fps30,
         Fps60,
         Fps120,
         DisplayRefresh,
@@ -337,8 +338,14 @@ private:
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
     double normalizedPreviewCanvasAspectRatio(double ratio) const;
     void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    PreviewCanvasFrameRateMode previewFrameRateModeFromStorageValue(
+        const QString& value,
+        PreviewCanvasFrameRateMode fallback) const;
     PreviewCanvasFrameRateMode previewCanvasFrameRateModeFromStorageValue(const QString& value) const;
+    QString previewFrameRateModeStorageValue(PreviewCanvasFrameRateMode mode) const;
     QString previewCanvasFrameRateModeStorageValue() const;
+    QString previewStageMediaFrameRateModeStorageValue() const;
+    QString timelineFrameRateModeStorageValue() const;
 public:
     // Issue #3 fix — public getter for the current preview canvas
     // frame-rate mode. QuickShellBootstrap needs it to seed the DComp
@@ -347,6 +354,8 @@ public:
     // the persisted project / portable state). Read-only — the setter
     // setPreviewCanvasFrameRateMode stays internal.
     PreviewCanvasFrameRateMode currentPreviewCanvasFrameRateMode() const;
+    PreviewCanvasFrameRateMode currentPreviewStageMediaFrameRateMode() const;
+    PreviewCanvasFrameRateMode currentTimelineFrameRateMode() const;
 private:
     PreviewOutlineVariant previewOutlineVariantFromStorageValue(const QString& value) const;
     QString previewOutlineVariantStorageValue() const;
@@ -364,6 +373,8 @@ private:
     QString previewSkinDisplayName(const QString& directoryName) const;
     double currentPreviewCanvasRefreshRate() const;
     void refreshPreviewFrameRateTimers();
+    void setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    void setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     double timelineSecondForCursor(int line, int col) const;
     void jumpToLocation(int line, int col);
     QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr) const;

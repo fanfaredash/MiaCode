@@ -1006,6 +1006,16 @@ bool PreviewStageMediaHost::videoFrameStalled() const
     return videoFrameStalled_;
 }
 
+void PreviewStageMediaHost::setVideoFrameToImageMaxFps(double fps)
+{
+    const double normalized = qBound(1.0, qIsFinite(fps) ? fps : 30.0, 1000.0);
+    if (qAbs(videoFrameToImageMaxFps_ - normalized) <= 0.001) {
+        return;
+    }
+    videoFrameToImageMaxFps_ = normalized;
+    videoFrameToImageThrottle_.invalidate();
+}
+
 void PreviewStageMediaHost::setObservedPlayheadSecond(double second)
 {
     observedPlayheadSecond_ = qMax(0.0, second);
@@ -1555,10 +1565,11 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame, quin
     //      cost. We always capture the FIRST frame after a
     //      visibility transition / chart switch (throttle not yet
     //      armed), so user actions don't get a stale frame.
-    constexpr qint64 kVideoFrameToImageThrottleMs = 33;
+    const qint64 videoFrameToImageThrottleNs =
+        qMax<qint64>(1, qRound64(1000000000.0 / qMax(1.0, videoFrameToImageMaxFps_)));
     const bool throttledOut =
         videoFrameToImageThrottle_.isValid()
-        && videoFrameToImageThrottle_.elapsed() < kVideoFrameToImageThrottleMs;
+        && videoFrameToImageThrottle_.nsecsElapsed() < videoFrameToImageThrottleNs;
     // Phase 4d — when per-pixel alpha is on, QML's VideoOutput renders
     // the video natively (GPU-direct via QRhi), no CPU detour needed.
     // Skip the toImage() conversion entirely — that's the whole point

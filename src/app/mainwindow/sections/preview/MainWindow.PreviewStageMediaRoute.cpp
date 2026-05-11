@@ -339,6 +339,7 @@ void MainWindow::PreviewSection::ensurePreviewStageMediaHostInitialized()
 
     state_.previewStageMediaHost_ = new PreviewStageMediaHost(&owner_);
     state_.previewStageMediaHost_->setBackgroundScaleMode(state_.previewBackgroundScaleMode_);
+    owner_.setPreviewStageMediaFrameRateMode(state_.previewStageMediaFrameRateMode_, false);
     connect(state_.previewStageMediaHost_, &PreviewStageMediaHost::mediaStateChanged, &owner_, [this]() {
         applyPreviewStageMediaRouteVisualSettings();
         refreshQuickShellPreviewCompositeSurfaceState();

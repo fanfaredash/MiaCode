@@ -136,6 +136,8 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.previewSlideEarlierSecondAndTextOnTop_ = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     state_.previewSkinVariant_ = PreviewSkinVariant::Standard;
     state_.previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
+    state_.previewStageMediaFrameRateMode_ = PreviewCanvasFrameRateMode::Fps30;
+    state_.timelineFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
     state_.previewCanvasAspectRatio_ = 1.0;
     state_.previewAutoRestoreSquareAfterExport_ = false;
     state_.previewForceLabeledJudgeLineWhenPaused_ = true;
@@ -285,6 +287,18 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
         state_.previewCanvasFrameRateMode_ =
             owner_.previewCanvasFrameRateModeFromStorageValue(preview.value("canvas_frame_rate_mode").toString());
     }
+    if (preview.value("pv_frame_rate_mode").isString()) {
+        state_.previewStageMediaFrameRateMode_ = owner_.previewFrameRateModeFromStorageValue(
+            preview.value("pv_frame_rate_mode").toString(),
+            PreviewCanvasFrameRateMode::Fps30);
+    }
+    if (preview.value("timeline_frame_rate_mode").isString()) {
+        state_.timelineFrameRateMode_ = owner_.previewFrameRateModeFromStorageValue(
+            preview.value("timeline_frame_rate_mode").toString(),
+            state_.previewCanvasFrameRateMode_);
+    } else {
+        state_.timelineFrameRateMode_ = state_.previewCanvasFrameRateMode_;
+    }
     if (preview.value("force_labeled_judge_line_when_paused").isBool()) {
         state_.previewForceLabeledJudgeLineWhenPaused_ =
             preview.value("force_labeled_judge_line_when_paused")
@@ -401,6 +415,8 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("slide_earlier_second_and_text_on_top", state_.previewSlideEarlierSecondAndTextOnTop_);
     preview.insert("skin_variant", owner_.previewSkinVariantStorageValue());
     preview.insert("canvas_frame_rate_mode", owner_.previewCanvasFrameRateModeStorageValue());
+    preview.insert("pv_frame_rate_mode", owner_.previewStageMediaFrameRateModeStorageValue());
+    preview.insert("timeline_frame_rate_mode", owner_.timelineFrameRateModeStorageValue());
     preview.insert(
         "force_labeled_judge_line_when_paused",
         state_.previewForceLabeledJudgeLineWhenPaused_

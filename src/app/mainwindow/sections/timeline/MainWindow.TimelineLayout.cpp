@@ -436,9 +436,17 @@ double MainWindow::TimelineSection::normalizedPreviewCanvasAspectRatio(double ra
     return qBound(1.0, ratio, 3.0);
 }
 
-MainWindow::PreviewCanvasFrameRateMode MainWindow::previewCanvasFrameRateModeFromStorageValue(const QString& value) const
+MainWindow::PreviewCanvasFrameRateMode MainWindow::previewFrameRateModeFromStorageValue(
+    const QString& value,
+    PreviewCanvasFrameRateMode fallback) const
 {
     const QString normalized = value.trimmed().toLower();
+    if (normalized == QLatin1String("30") || normalized == QLatin1String("30fps")) {
+        return PreviewCanvasFrameRateMode::Fps30;
+    }
+    if (normalized == QLatin1String("60") || normalized == QLatin1String("60fps")) {
+        return PreviewCanvasFrameRateMode::Fps60;
+    }
     if (normalized == QLatin1String("120") || normalized == QLatin1String("120fps")) {
         return PreviewCanvasFrameRateMode::Fps120;
     }
@@ -448,12 +456,19 @@ MainWindow::PreviewCanvasFrameRateMode MainWindow::previewCanvasFrameRateModeFro
         || normalized == QLatin1String("unlimited")) {
         return PreviewCanvasFrameRateMode::DisplayRefresh;
     }
-    return PreviewCanvasFrameRateMode::Fps60;
+    return fallback;
 }
 
-QString MainWindow::TimelineSection::previewCanvasFrameRateModeStorageValue() const
+MainWindow::PreviewCanvasFrameRateMode MainWindow::previewCanvasFrameRateModeFromStorageValue(const QString& value) const
 {
-    switch (state_.previewCanvasFrameRateMode_) {
+    return previewFrameRateModeFromStorageValue(value, PreviewCanvasFrameRateMode::Fps60);
+}
+
+QString MainWindow::TimelineSection::previewFrameRateModeStorageValue(PreviewCanvasFrameRateMode mode) const
+{
+    switch (mode) {
+    case PreviewCanvasFrameRateMode::Fps30:
+        return QStringLiteral("30");
     case PreviewCanvasFrameRateMode::Fps120:
         return QStringLiteral("120");
     case PreviewCanvasFrameRateMode::DisplayRefresh:
@@ -464,9 +479,44 @@ QString MainWindow::TimelineSection::previewCanvasFrameRateModeStorageValue() co
     }
 }
 
+QString MainWindow::TimelineSection::previewCanvasFrameRateModeStorageValue() const
+{
+    return previewFrameRateModeStorageValue(state_.previewCanvasFrameRateMode_);
+}
+
+QString MainWindow::TimelineSection::previewStageMediaFrameRateModeStorageValue() const
+{
+    return previewFrameRateModeStorageValue(state_.previewStageMediaFrameRateMode_);
+}
+
+QString MainWindow::TimelineSection::timelineFrameRateModeStorageValue() const
+{
+    return previewFrameRateModeStorageValue(state_.timelineFrameRateMode_);
+}
+
 MainWindow::PreviewCanvasFrameRateMode MainWindow::currentPreviewCanvasFrameRateMode() const
 {
     return state_.previewCanvasFrameRateMode_;
+}
+
+MainWindow::PreviewCanvasFrameRateMode MainWindow::currentPreviewStageMediaFrameRateMode() const
+{
+    return timelineSection_->currentPreviewStageMediaFrameRateMode();
+}
+
+MainWindow::PreviewCanvasFrameRateMode MainWindow::currentTimelineFrameRateMode() const
+{
+    return timelineSection_->currentTimelineFrameRateMode();
+}
+
+MainWindow::PreviewCanvasFrameRateMode MainWindow::TimelineSection::currentPreviewStageMediaFrameRateMode() const
+{
+    return state_.previewStageMediaFrameRateMode_;
+}
+
+MainWindow::PreviewCanvasFrameRateMode MainWindow::TimelineSection::currentTimelineFrameRateMode() const
+{
+    return state_.timelineFrameRateMode_;
 }
 
 double MainWindow::TimelineSection::currentPreviewCanvasRefreshRate() const
@@ -515,6 +565,9 @@ qint64 MainWindow::TimelineSection::previewCanvasTargetFrameIntervalNs() const
     const double displayHz = currentPreviewCanvasRefreshRate();
     double targetHz;
     switch (state_.previewCanvasFrameRateMode_) {
+    case PreviewCanvasFrameRateMode::Fps30:
+        targetHz = qMin(30.0, displayHz);
+        break;
     case PreviewCanvasFrameRateMode::Fps120:
         targetHz = qMin(120.0, displayHz);
         break;
@@ -529,13 +582,33 @@ qint64 MainWindow::TimelineSection::previewCanvasTargetFrameIntervalNs() const
     return qMax<qint64>(1LL, qRound64(1000000000.0 / qMax(1.0, targetHz)));
 }
 
+double MainWindow::TimelineSection::targetRefreshRateForFrameRateMode(PreviewCanvasFrameRateMode mode) const
+{
+    const double displayHz = currentPreviewCanvasRefreshRate();
+    switch (mode) {
+    case PreviewCanvasFrameRateMode::Fps30:
+        return qMin(30.0, displayHz);
+    case PreviewCanvasFrameRateMode::Fps60:
+        return qMin(60.0, displayHz);
+    case PreviewCanvasFrameRateMode::Fps120:
+        return qMin(120.0, displayHz);
+    case PreviewCanvasFrameRateMode::DisplayRefresh:
+    default:
+        return displayHz;
+    }
+}
+
+qint64 MainWindow::TimelineSection::targetFrameIntervalNsForFrameRateMode(PreviewCanvasFrameRateMode mode) const
+{
+    return qMax<qint64>(1LL, qRound64(1000000000.0 / qMax(1.0, targetRefreshRateForFrameRateMode(mode))));
+}
+
 qint64 MainWindow::TimelineSection::timelineTargetFrameIntervalNs() const
 {
-    const qint64 previewIntervalNs = qMax<qint64>(1LL, previewCanvasTargetFrameIntervalNs());
-    const double previewTargetFps = 1000000000.0 / static_cast<double>(previewIntervalNs);
     const double timelineTargetFps =
-        qMin(previewTargetFps, miacode::mainwindow::shared::kTimelineMaxUiUpdateFps);
-    return qMax<qint64>(1LL, qRound64(1000000000.0 / timelineTargetFps));
+        qMin(targetRefreshRateForFrameRateMode(state_.timelineFrameRateMode_),
+             miacode::mainwindow::shared::kTimelineMaxUiUpdateFps);
+    return qMax<qint64>(1LL, qRound64(1000000000.0 / qMax(1.0, timelineTargetFps)));
 }
 
 void MainWindow::TimelineSection::resetQtPreviewFixedFramePacing()
@@ -737,6 +810,7 @@ void MainWindow::TimelineSection::refreshPreviewFrameRateTimers()
     if (ui_.qtPreviewTimelineTimer_ != nullptr) {
         ui_.qtPreviewTimelineTimer_->setInterval(std::chrono::nanoseconds(qMax<qint64>(1, timelineIntervalNs)));
     }
+    applyPreviewStageMediaFrameRateMode();
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setFramePacingDebugState(
             previewCanvasUsesFrameSwappedPacing(),
@@ -744,6 +818,15 @@ void MainWindow::TimelineSection::refreshPreviewFrameRateTimers()
             currentPreviewCanvasRefreshRate()
         );
     }
+}
+
+void MainWindow::TimelineSection::applyPreviewStageMediaFrameRateMode()
+{
+    if (state_.previewStageMediaHost_ == nullptr) {
+        return;
+    }
+    state_.previewStageMediaHost_->setVideoFrameToImageMaxFps(
+        targetRefreshRateForFrameRateMode(state_.previewStageMediaFrameRateMode_));
 }
 
 void MainWindow::TimelineSection::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
@@ -760,7 +843,9 @@ void MainWindow::TimelineSection::setPreviewCanvasFrameRateMode(PreviewCanvasFra
             return 1U;
         }
         double targetHz = displayHz;  // DisplayRefresh fall-through
-        if (m == PreviewCanvasFrameRateMode::Fps60) {
+        if (m == PreviewCanvasFrameRateMode::Fps30) {
+            targetHz = 30.0;
+        } else if (m == PreviewCanvasFrameRateMode::Fps60) {
             targetHz = 60.0;
         } else if (m == PreviewCanvasFrameRateMode::Fps120) {
             targetHz = 120.0;
@@ -809,6 +894,24 @@ void MainWindow::TimelineSection::setPreviewCanvasFrameRateMode(PreviewCanvasFra
     }
     if (persistState) {
         owner_.saveProjectRenderState();
+        owner_.savePortableState();
+    }
+}
+
+void MainWindow::TimelineSection::setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
+{
+    state_.previewStageMediaFrameRateMode_ = mode;
+    applyPreviewStageMediaFrameRateMode();
+    if (persistState) {
+        owner_.savePortableState();
+    }
+}
+
+void MainWindow::TimelineSection::setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
+{
+    state_.timelineFrameRateMode_ = mode;
+    refreshPreviewFrameRateTimers();
+    if (persistState) {
         owner_.savePortableState();
     }
 }
@@ -1452,6 +1555,21 @@ QString MainWindow::previewCanvasFrameRateModeStorageValue() const
     return timelineSection_->previewCanvasFrameRateModeStorageValue();
 }
 
+QString MainWindow::previewFrameRateModeStorageValue(PreviewCanvasFrameRateMode mode) const
+{
+    return timelineSection_->previewFrameRateModeStorageValue(mode);
+}
+
+QString MainWindow::previewStageMediaFrameRateModeStorageValue() const
+{
+    return timelineSection_->previewStageMediaFrameRateModeStorageValue();
+}
+
+QString MainWindow::timelineFrameRateModeStorageValue() const
+{
+    return timelineSection_->timelineFrameRateModeStorageValue();
+}
+
 double MainWindow::currentPreviewCanvasRefreshRate() const
 {
     return timelineSection_->currentPreviewCanvasRefreshRate();
@@ -1505,6 +1623,16 @@ void MainWindow::refreshPreviewFrameRateTimers()
 void MainWindow::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
 {
     timelineSection_->setPreviewCanvasFrameRateMode(mode, persistState);
+}
+
+void MainWindow::setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
+{
+    timelineSection_->setPreviewStageMediaFrameRateMode(mode, persistState);
+}
+
+void MainWindow::setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
+{
+    timelineSection_->setTimelineFrameRateMode(mode, persistState);
 }
 
 void MainWindow::setPreviewCanvasAspectRatio(double ratio, bool persistState)

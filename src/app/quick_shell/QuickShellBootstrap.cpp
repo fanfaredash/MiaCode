@@ -876,6 +876,9 @@ bool QuickShellBootstrap::createInProcessPreviewSurface(QQuickWindow* window, co
             const double displayHz = screen->refreshRate();
             double targetHz = displayHz;
             switch (backend_->currentPreviewCanvasFrameRateMode()) {
+            case MainWindow::PreviewCanvasFrameRateMode::Fps30:
+                targetHz = 30.0;
+                break;
             case MainWindow::PreviewCanvasFrameRateMode::Fps60:
                 targetHz = 60.0;
                 break;

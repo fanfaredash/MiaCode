@@ -405,6 +405,8 @@
         PreviewSkinVariant previewSkinVariant_ = PreviewSkinVariant::Standard;
         QString previewSkinDirectoryName_ = QStringLiteral("skinSTD");
         PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
+        PreviewCanvasFrameRateMode previewStageMediaFrameRateMode_ = PreviewCanvasFrameRateMode::Fps30;
+        PreviewCanvasFrameRateMode timelineFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
         double previewCanvasAspectRatio_ = 1.0;
         bool previewAutoRestoreSquareAfterExport_ = false;
         bool previewForceLabeledJudgeLineWhenPaused_ = true;

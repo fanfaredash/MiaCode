@@ -86,11 +86,19 @@ public:
     int updatePreviewStatsLayoutMode(int hostWidth = -1);
     int previewStatsMinimumHeightForPanelWidth(int panelWidth) const;
     double normalizedPreviewCanvasAspectRatio(double ratio) const;
+    QString previewFrameRateModeStorageValue(PreviewCanvasFrameRateMode mode) const;
     QString previewCanvasFrameRateModeStorageValue() const;
+    QString previewStageMediaFrameRateModeStorageValue() const;
+    QString timelineFrameRateModeStorageValue() const;
     double currentPreviewCanvasRefreshRate() const;
+    PreviewCanvasFrameRateMode currentPreviewStageMediaFrameRateMode() const;
+    PreviewCanvasFrameRateMode currentTimelineFrameRateMode() const;
     bool previewCanvasUsesFrameSwappedPacing() const;
+    double targetRefreshRateForFrameRateMode(PreviewCanvasFrameRateMode mode) const;
     qint64 previewCanvasTargetFrameIntervalNs() const;
+    qint64 targetFrameIntervalNsForFrameRateMode(PreviewCanvasFrameRateMode mode) const;
     qint64 timelineTargetFrameIntervalNs() const;
+    void applyPreviewStageMediaFrameRateMode();
     void resetQtPreviewFixedFramePacing();
     void scheduleNextQtPreviewTick();
     void requestNextDisplayRefreshPreviewFrame();
@@ -99,6 +107,8 @@ public:
     void requestNextPreviewCanvasFrame();
     void refreshPreviewFrameRateTimers();
     void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    void setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    void setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
     void togglePreviewFullscreen();
     void enterPreviewFullscreen();
