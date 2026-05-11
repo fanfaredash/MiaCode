@@ -60,16 +60,16 @@ bool verifyFullRangePlan(QTextStream& err)
         return false;
     }
 
-    if (!require(qAbs(plan.leadInSeconds - 3.0) <= 1e-6, QStringLiteral("full-range export should keep 3s lead-in"), err)) {
+    if (!require(qAbs(plan.leadInSeconds - 2.0) <= 1e-6, QStringLiteral("full-range export should keep 2s lead-in"), err)) {
         return false;
     }
-    if (!require(qAbs(plan.timelineOriginSecond + 3.0) <= 1e-6, QStringLiteral("full-range export should start at -3s timeline origin"), err)) {
+    if (!require(qAbs(plan.timelineOriginSecond + 2.0) <= 1e-6, QStringLiteral("full-range export should start at -2s timeline origin"), err)) {
         return false;
     }
     if (!require(plan.backgroundTrack.enabled, QStringLiteral("existing track path should enable BGM render plan"), err)) {
         return false;
     }
-    if (!require(qAbs(plan.backgroundTrack.mixStartSecond - 3.0) <= 1e-6, QStringLiteral("negative origin should delay BGM into the mix"), err)) {
+    if (!require(qAbs(plan.backgroundTrack.mixStartSecond - 2.0) <= 1e-6, QStringLiteral("negative origin should delay BGM into the mix"), err)) {
         return false;
     }
     if (!require(qAbs(plan.backgroundTrack.sourceStartSecond) <= 1e-6, QStringLiteral("negative origin should not seek BGM"), err)) {
