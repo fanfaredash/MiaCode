@@ -861,16 +861,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         toolboxMenu_->addAction(normalizeWholeChartAction_);
     }
 
-    if (transformRaiseSubdivisionAction_ != nullptr || transformLowerSubdivisionAction_ != nullptr) {
-        toolboxMenu_->addSeparator();
-        if (transformRaiseSubdivisionAction_ != nullptr) {
-            toolboxMenu_->addAction(transformRaiseSubdivisionAction_);
-        }
-        if (transformLowerSubdivisionAction_ != nullptr) {
-            toolboxMenu_->addAction(transformLowerSubdivisionAction_);
-        }
-    }
-
     toolboxMenu_->addSeparator();
 
     QAction* toolboxOfficialChartMirrorAction = toolboxMenu_->addAction(

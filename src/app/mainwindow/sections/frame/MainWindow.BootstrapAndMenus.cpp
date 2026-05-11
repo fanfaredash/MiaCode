@@ -329,6 +329,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.transformRotate45ClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45Clockwise);
     transformMenu->addAction(owner_.transformRotate45ClockwiseAction_);
 
+    transformMenu->addSeparator();
     owner_.transformRaiseSubdivisionAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("分音提升一档") : QStringLiteral("Subdivision +1"),
         &owner_);
@@ -342,6 +343,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     owner_.transformLowerSubdivisionAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+-")));
     connect(owner_.transformLowerSubdivisionAction_, &QAction::triggered, &owner_, &MainWindow::onLowerSubdivisionSelection);
     transformMenu->addAction(owner_.transformLowerSubdivisionAction_);
+    transformMenu->addSeparator();
 
     auto* moreTransformMenu = transformMenu->addMenu(uiText("action.transform.more", "More..."));
     owner_.transformToggleBreakAction_ = new QAction(uiText("action.transform.toggle_break", "Toggle Break"), &owner_);
