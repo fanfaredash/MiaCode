@@ -116,6 +116,9 @@ inline double previewSfxVolumeForKind(const PreviewAudioSettings& settings, cons
     if (lowered == "firework") {
         return settings.fireworkVolume * globalVolume;
     }
+    if (lowered == "clock") {
+        return settings.answerVolume * globalVolume;
+    }
     return 0.0;
 }
 

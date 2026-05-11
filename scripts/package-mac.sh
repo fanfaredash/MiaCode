@@ -173,6 +173,7 @@ required_sfx_files=(
   "touch_hanabi.wav"
   "touch.wav"
   "touch_Hold_riser.wav"
+  "clock.wav"
 )
   for sfx_file in "${required_sfx_files[@]}"; do
     if [[ ! -f "$required_sfx_dir/$sfx_file" ]]; then

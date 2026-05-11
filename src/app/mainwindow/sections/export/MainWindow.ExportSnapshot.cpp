@@ -7,6 +7,7 @@
 #include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "common/ChartClockCount.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
@@ -823,6 +824,10 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     task.showTimestamp = request.showTimestamp;
     task.showObjectStatsHud = request.showObjectStatsHud;
     task.outputPath = outputPath;
+    task.clockCount = miacode::chart_clock::clockCountFromDocument(owner_.document_);
+    if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId)) {
+        task.clockBpm = miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart);
+    }
 
     const VideoExportResult exportResult = VideoExportController::exportFullPreview(task, nullptr);
     if (!exportResult.success) {

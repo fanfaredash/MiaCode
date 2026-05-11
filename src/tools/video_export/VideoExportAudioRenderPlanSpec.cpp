@@ -4,6 +4,7 @@
 
 #include "VideoExportAudioRenderPlan.h"
 #include "VideoExportController.h"
+#include "common/ChartClockCount.h"
 
 namespace {
 
@@ -214,6 +215,94 @@ bool verifyPositiveOriginTrackSeek(QTextStream& err)
     return true;
 }
 
+bool verifyClockCountScheduling(QTextStream& err)
+{
+    VideoExportTask task;
+    task.noteMarkers = {makeTap(1.0)};
+    task.exportStartSeconds = 0.0;
+    task.contentDurationSeconds = 3.0;
+    task.fullRangeExport = true;
+    task.fps = 60;
+    task.clockCount = 3;
+    task.clockBpm = 120.0;
+
+    VideoExportAudioRenderPlan plan;
+    QString errorMessage;
+    if (!miacode::video_export::buildVideoExportAudioRenderPlan(task, &plan, &errorMessage)) {
+        err << errorMessage << Qt::endl;
+        return false;
+    }
+
+    QVector<double> clockSeconds;
+    for (const auto& playback : plan.scheduledSfxPlaybacks) {
+        if (playback.kind == QLatin1String("clock")) {
+            clockSeconds.append(playback.mixSecond);
+        }
+    }
+    if (!require(clockSeconds.size() == 3, QStringLiteral("full export should schedule requested clock count"), err)) {
+        return false;
+    }
+    if (!require(qAbs(clockSeconds.at(0) - 2.0) <= 1e-6, QStringLiteral("clock should start at chart time zero after lead-in"), err)) {
+        return false;
+    }
+    if (!require(qAbs(clockSeconds.at(1) - 2.5) <= 1e-6, QStringLiteral("clock should repeat at quarter-note interval"), err)) {
+        return false;
+    }
+    if (!require(qAbs(clockSeconds.at(2) - 3.0) <= 1e-6, QStringLiteral("clock should repeat at quarter-note interval"), err)) {
+        return false;
+    }
+    return true;
+}
+
+bool verifyPartialExportSkipsClockCount(QTextStream& err)
+{
+    VideoExportTask task;
+    task.noteMarkers = {makeTap(1.0)};
+    task.exportStartSeconds = 0.0;
+    task.contentDurationSeconds = 3.0;
+    task.fullRangeExport = false;
+    task.fps = 60;
+    task.clockCount = 3;
+    task.clockBpm = 120.0;
+
+    VideoExportAudioRenderPlan plan;
+    QString errorMessage;
+    if (!miacode::video_export::buildVideoExportAudioRenderPlan(task, &plan, &errorMessage)) {
+        err << errorMessage << Qt::endl;
+        return false;
+    }
+
+    const auto it = std::find_if(
+        plan.scheduledSfxPlaybacks.begin(),
+        plan.scheduledSfxPlaybacks.end(),
+        [](const auto& playback) { return playback.kind == QLatin1String("clock"); });
+    return require(it == plan.scheduledSfxPlaybacks.end(), QStringLiteral("partial export should not schedule clocks"), err);
+}
+
+bool verifyClockCountMetadataParsing(QTextStream& err)
+{
+    SimaiDocument document;
+    document.extraFields = {
+        {QStringLiteral("clock_count"), QStringLiteral("4")},
+        {QStringLiteral("wholebpm"), QStringLiteral("150")},
+    };
+    if (!require(miacode::chart_clock::clockCountFromDocument(document) == 4, QStringLiteral("clock_count should parse as non-negative integer"), err)) {
+        return false;
+    }
+    if (!require(qAbs(miacode::chart_clock::clockBpmForChart(document, QStringLiteral("(180)")) - 150.0) <= 1e-6, QStringLiteral("wholebpm should take priority over inline bpm"), err)) {
+        return false;
+    }
+
+    SimaiDocument inlineBpmDocument;
+    inlineBpmDocument.extraFields = {
+        {QStringLiteral("clock_count"), QStringLiteral("2")},
+    };
+    if (!require(qAbs(miacode::chart_clock::clockBpmForChart(inlineBpmDocument, QStringLiteral("{4},,,(180),,")) - 180.0) <= 1e-6, QStringLiteral("first inline bpm should be used when wholebpm is absent"), err)) {
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -235,6 +324,15 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyPositiveOriginTrackSeek(err)) {
+        return 1;
+    }
+    if (!verifyClockCountScheduling(err)) {
+        return 1;
+    }
+    if (!verifyPartialExportSkipsClockCount(err)) {
+        return 1;
+    }
+    if (!verifyClockCountMetadataParsing(err)) {
         return 1;
     }
 

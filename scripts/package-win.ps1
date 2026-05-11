@@ -441,7 +441,8 @@ if (Test-Path $assetsSrc) {
         "tap_perfect.wav",
         "touch_hanabi.wav",
         "touch.wav",
-        "touch_Hold_riser.wav"
+        "touch_Hold_riser.wav",
+        "clock.wav"
     )
     foreach ($sfxFile in $requiredSfxFiles) {
         $sfxPath = Join-Path $requiredSfxDir $sfxFile

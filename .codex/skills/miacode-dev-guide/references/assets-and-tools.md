@@ -124,6 +124,7 @@ Important kinds include:
 - `touch`
 - `touchhold`
 - `firework`
+- `clock`
 
 Do not rename sound files casually; both preview-time and export-time behavior depend on these conventions.
 

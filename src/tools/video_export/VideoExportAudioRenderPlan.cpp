@@ -133,6 +133,48 @@ QVector<miacode::video_export::TouchholdSpanRenderPlan> buildMergedTouchholdSpan
     return merged;
 }
 
+void appendClockCountPlaybacks(
+    const VideoExportTask& task,
+    const PreviewAudioSettings& audioSettings,
+    miacode::video_export::VideoExportAudioRenderPlan* plan
+)
+{
+    if (plan == nullptr
+        || !task.fullRangeExport
+        || task.clockCount <= 0
+        || !qIsFinite(task.clockBpm)
+        || task.clockBpm <= 0.0) {
+        return;
+    }
+
+    const double chartZeroMixSecond = -plan->timelineOriginSecond;
+    const double quarterNoteSeconds = 60.0 / task.clockBpm;
+    if (!qIsFinite(chartZeroMixSecond) || !qIsFinite(quarterNoteSeconds) || quarterNoteSeconds <= 0.0) {
+        return;
+    }
+
+    const double gain = qMax(0.0, previewSfxVolumeForKind(audioSettings, QStringLiteral("clock")));
+    if (gain <= 0.0) {
+        return;
+    }
+
+    plan->scheduledSfxPlaybacks.reserve(plan->scheduledSfxPlaybacks.size() + task.clockCount);
+    for (int index = 0; index < task.clockCount; ++index) {
+        const double mixSecond = chartZeroMixSecond + quarterNoteSeconds * index;
+        if (mixSecond + kTimelineEpsilonSeconds < 0.0
+            || mixSecond > plan->alignedTotalSeconds + kTimelineEpsilonSeconds) {
+            continue;
+        }
+
+        miacode::video_export::ScheduledSfxPlaybackRenderPlan scheduled;
+        scheduled.kind = QStringLiteral("clock");
+        scheduled.assetKind = QStringLiteral("clock");
+        scheduled.mixSecond = mixSecond;
+        scheduled.gain = gain;
+        plan->scheduledSfxPlaybacks.append(scheduled);
+    }
+}
+
 }  // namespace
 
 namespace miacode::video_export {
@@ -254,6 +296,7 @@ bool buildVideoExportAudioRenderPlan(
         }
         built.scheduledSfxPlaybacks.append(scheduled);
     }
+    appendClockCountPlaybacks(task, normalizedAudioSettings, &built);
 
     built.mergedTouchholdSpans = buildMergedTouchholdSpans(
         touchholdSpans,

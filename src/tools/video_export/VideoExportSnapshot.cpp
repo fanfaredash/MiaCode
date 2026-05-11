@@ -2,6 +2,7 @@
 
 #include "SimaiDocument.h"
 #include "SimaiNativeParser.h"
+#include "common/ChartClockCount.h"
 #include "common/ChartAssetPaths.h"
 #include "tools/muri/MuriAnalyzer.h"
 
@@ -407,6 +408,8 @@ bool buildVideoExportTaskFromSnapshot(
     built.showTimestamp = snapshot.showTimestamp;
     built.showObjectStatsHud = snapshot.showObjectStatsHud;
     built.skinLoadWaitMs = qBound(0, snapshot.skinLoadWaitMs, 20000);
+    built.clockCount = miacode::chart_clock::clockCountFromDocument(document);
+    built.clockBpm = miacode::chart_clock::clockBpmForChart(document, difficulty->chart);
     built.muriAnalysisReport = MuriAnalyzer::analyze(
         built.noteMarkers,
         built.muriRenderOptions,

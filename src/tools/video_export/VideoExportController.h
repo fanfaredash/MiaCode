@@ -59,6 +59,8 @@ struct VideoExportTask {
     bool showTimestamp = true;
     bool showObjectStatsHud = false;
     int skinLoadWaitMs = 2000;
+    int clockCount = 0;
+    double clockBpm = 0.0;
 };
 
 struct VideoExportResult {

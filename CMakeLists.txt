@@ -128,6 +128,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/WaveformCache.h
     src/common/WaveformCache.cpp
     src/common/PreviewTimingSettings.h
+    src/common/ChartClockCount.h
     src/common/PreviewSfxTiming.h
     src/common/PreviewSfxTimeline.h
     src/editor/PlainCodeEditor.h
