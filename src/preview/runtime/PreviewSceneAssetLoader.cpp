@@ -464,7 +464,8 @@ void populateJudgeEffectAssets(const QString& skinDirectory, miacode::preview::s
 PreviewSceneAssetLoadResult PreviewSceneAssetLoader::load(
     const QString& skinDirectory,
     PreviewOutlineVariant outlineVariant,
-    quint64 generation)
+    quint64 generation,
+    const QString& outlineImagePath)
 {
     MC_OP("PreviewSceneAssetLoader::load");
     _mc_op_.note(QStringLiteral("skin=%1 generation=%2")
@@ -473,17 +474,19 @@ PreviewSceneAssetLoadResult PreviewSceneAssetLoader::load(
     PreviewSceneAssetLoadResult result;
     result.generation = generation;
     result.skinDirectory = skinDirectory;
-    result.assetState = loadAssetState(outlineVariant);
+    result.assetState = loadAssetState(outlineVariant, outlineImagePath);
     populateSkinAssets(skinDirectory, &result.skinAssets);
     populateJudgeOverlayAssets(skinDirectory, &result.judgeOverlayAssets);
     populateJudgeEffectAssets(skinDirectory, &result.judgeEffectAssets);
     return result;
 }
 
-miacode::preview::scene::PreviewAssetState PreviewSceneAssetLoader::loadAssetState(PreviewOutlineVariant outlineVariant)
+miacode::preview::scene::PreviewAssetState PreviewSceneAssetLoader::loadAssetState(
+    PreviewOutlineVariant outlineVariant,
+    const QString& outlineImagePath)
 {
     miacode::preview::scene::PreviewAssetState assets;
-    const QString outlinePath = miacode::assets::outlinePathForVariant(outlineVariant);
+    const QString outlinePath = miacode::assets::outlinePathForVariantOrCustom(outlineVariant, outlineImagePath);
     assets.outlineImage = outlinePath.isEmpty() ? QImage() : QImage(outlinePath);
     assets.layoutRingDiameterRatio = miacode::layout_ring::kOutlinePlayfieldDiameterRatio;
     return assets;

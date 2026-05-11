@@ -13,6 +13,8 @@
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/latency/LatencyDetectorDialog.h"
 
+#include <QDesktopServices>
+#include <QUrl>
 #include <QtCore>
 #include <QtGui>
 #include <QtWidgets>
@@ -251,12 +253,15 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         const bool useSingleDecimal = qAbs(snapped - roundedOneDecimal) < 0.001;
         return QString::number(snapped, 'f', useSingleDecimal ? 1 : 2);
     };
-    const auto addDialogMenuChoice = [](QMenu* menu, const QString& text, const std::function<void()>& onTriggered) {
+    const auto addDialogMenuChoice = [](QMenu* menu, const QString& text, const std::function<void()>& onTriggered, bool italic = false) {
         auto* action = new QWidgetAction(menu);
         auto* button = new QToolButton(menu);
         button->setAutoRaise(true);
         button->setToolButtonStyle(Qt::ToolButtonTextOnly);
         button->setText(text);
+        QFont buttonFont = button->font();
+        buttonFont.setItalic(italic);
+        button->setFont(buttonFont);
         button->setCursor(Qt::PointingHandCursor);
         const auto& c = UiTheme::colors();
         button->setStyleSheet(
@@ -630,8 +635,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
 
     const QString scaleFillLabel = uiText("dialog.render_settings.video.scale.fill", "Fill (crop if needed)");
     const QString scaleFitLabel = uiText("dialog.render_settings.video.scale.fit", "Fit (keep full image, may letterbox)");
-    const QString standardSkinLabel = uiText("dialog.render_settings.video.skin.standard", "Standard");
-    const QString dxSkinLabel = uiText("dialog.render_settings.video.skin.dx", "DX");
+    const QString importSkinLabel = uiText("dialog.render_settings.video.skin.import", "Import...");
     const QString slideStackOrderDxLabel = uiText(
         "dialog.render_settings.gameplay.slide_stack_order.dx_style",
         "DX Style"
@@ -643,31 +647,40 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     const auto slideStackOrderLabelForValue = [slideStackOrderDxLabel, slideStackOrderFinaleLabel](bool earlierOnTop) {
         return earlierOnTop ? slideStackOrderDxLabel : slideStackOrderFinaleLabel;
     };
+    const QString currentSkinButtonLabel = owner_.previewSkinDisplayName(owner_.previewSkinDirectoryName_);
     auto* skinButton = createDialogMenuButton(
         gameplayGroup,
-        owner_.previewSkinVariant_ == PreviewSkinVariant::Dx ? dxSkinLabel : standardSkinLabel
+        currentSkinButtonLabel
     );
     skinButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto* skinMenu = new QMenu(skinButton);
     styleRoundedMenu(*skinMenu);
-    addDialogMenuChoice(skinMenu, standardSkinLabel, [this, skinButton, standardSkinLabel]() {
-        owner_.previewSkinVariant_ = PreviewSkinVariant::Standard;
-        skinButton->setText(standardSkinLabel);
-        if (owner_.previewCanvas_ != nullptr) {
-            owner_.previewCanvas_->setSkinDirectory(owner_.resolvePreviewSkinDir());
+    for (const QString& skinDirectoryName : owner_.availablePreviewSkinDirectoryNames()) {
+        const QString skinLabel = owner_.previewSkinDisplayName(skinDirectoryName);
+        addDialogMenuChoice(skinMenu, skinLabel, [this, skinButton, skinDirectoryName, skinLabel]() {
+            owner_.previewSkinDirectoryName_ = skinDirectoryName;
+            owner_.previewSkinVariant_ =
+                skinDirectoryName.compare(QStringLiteral("skinDX"), Qt::CaseInsensitive) == 0
+                    ? PreviewSkinVariant::Dx
+                    : PreviewSkinVariant::Standard;
+            skinButton->setText(skinLabel);
+            if (owner_.previewCanvas_ != nullptr) {
+                owner_.previewCanvas_->setSkinDirectory(owner_.resolvePreviewSkinDir());
+            }
+            owner_.saveProjectRenderState();
+            owner_.savePortableState();
+        });
+    }
+    if (!skinMenu->actions().isEmpty()) {
+        skinMenu->addSeparator();
+    }
+    addDialogMenuChoice(skinMenu, importSkinLabel, [this]() {
+        const QString skinRoot = owner_.resolvePreviewSkinRootDir();
+        if (!skinRoot.isEmpty()) {
+            QDir().mkpath(skinRoot);
+            QDesktopServices::openUrl(QUrl::fromLocalFile(skinRoot));
         }
-        owner_.saveProjectRenderState();
-        owner_.savePortableState();
-    });
-    addDialogMenuChoice(skinMenu, dxSkinLabel, [this, skinButton, dxSkinLabel]() {
-        owner_.previewSkinVariant_ = PreviewSkinVariant::Dx;
-        skinButton->setText(dxSkinLabel);
-        if (owner_.previewCanvas_ != nullptr) {
-            owner_.previewCanvas_->setSkinDirectory(owner_.resolvePreviewSkinDir());
-        }
-        owner_.saveProjectRenderState();
-        owner_.savePortableState();
-    });
+    }, true);
     skinButton->setMenu(skinMenu);
     const QString disabledLabel = uiText("dialog.render_settings.option.disabled", "Disabled");
     const QString slideJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.slide", "slide");
@@ -753,6 +766,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         "dialog.render_settings.gameplay.judge_line.area_labeled",
         "Judge Area (Labeled)"
     );
+    const QString judgeLineImportLabel = uiText("dialog.render_settings.gameplay.judge_line.import", "Import...");
     const auto judgeLineLabelForVariant = [
         judgeLinePointLabel,
         judgeLineLineLabel,
@@ -771,7 +785,12 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             return judgeLineLineLabel;
         }
     };
-    auto* judgeLineButton = createDialogMenuButton(gameplayGroup, judgeLineLabelForVariant(owner_.previewOutlineVariant_));
+    const auto judgeLineButtonLabel = [&]() {
+        return owner_.previewCustomOutlineFileName_.isEmpty()
+            ? judgeLineLabelForVariant(owner_.previewOutlineVariant_)
+            : owner_.previewCustomOutlineFileName_;
+    };
+    auto* judgeLineButton = createDialogMenuButton(gameplayGroup, judgeLineButtonLabel());
     judgeLineButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto* judgeLineMenu = new QMenu(judgeLineButton);
     styleRoundedMenu(*judgeLineMenu);
@@ -795,6 +814,24 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             judgeLineButton->setText(judgeLineLabelForVariant(owner_.previewOutlineVariant_));
         }
     );
+    const QStringList customOutlineNames = owner_.availablePreviewCustomOutlineFileNames();
+    if (!customOutlineNames.isEmpty()) {
+        judgeLineMenu->addSeparator();
+    }
+    for (const QString& fileName : customOutlineNames) {
+        addDialogMenuChoice(judgeLineMenu, fileName, [this, judgeLineButton, fileName]() {
+            owner_.applyPreviewCustomOutlineFileName(fileName, true);
+            judgeLineButton->setText(fileName);
+        });
+    }
+    judgeLineMenu->addSeparator();
+    addDialogMenuChoice(judgeLineMenu, judgeLineImportLabel, [this]() {
+        const QString outlineDir = owner_.resolvePreviewCustomOutlineDir();
+        if (!outlineDir.isEmpty()) {
+            QDir().mkpath(outlineDir);
+            QDesktopServices::openUrl(QUrl::fromLocalFile(outlineDir));
+        }
+    }, true);
     judgeLineButton->setMenu(judgeLineMenu);
     auto* forceLabeledJudgeLineWhenPausedCheck = new QCheckBox(
         uiText(

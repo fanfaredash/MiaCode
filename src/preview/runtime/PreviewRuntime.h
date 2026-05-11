@@ -125,6 +125,7 @@ public:
     // has been bound yet.
     QString skinDirectory() const;
     void setOutlineVariant(PreviewOutlineVariant variant);
+    void setOutlineImagePath(const QString& path);
     void setBackgroundBrightness(double brightness);
     void setBackgroundBrightnessOuter(double brightness);
     void setBackgroundBrightnessInner(double brightness);

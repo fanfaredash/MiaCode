@@ -21,10 +21,13 @@ public:
     static PreviewSceneAssetLoadResult load(
         const QString& skinDirectory,
         PreviewOutlineVariant outlineVariant,
-        quint64 generation = 0
+        quint64 generation = 0,
+        const QString& outlineImagePath = QString()
     );
 
-    static scene::PreviewAssetState loadAssetState(PreviewOutlineVariant outlineVariant);
+    static scene::PreviewAssetState loadAssetState(
+        PreviewOutlineVariant outlineVariant,
+        const QString& outlineImagePath = QString());
 };
 
 }  // namespace miacode::preview::runtime

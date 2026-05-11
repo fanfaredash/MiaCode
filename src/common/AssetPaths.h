@@ -61,6 +61,33 @@ inline QString outlineJudgeAreaLabeledPath()
     return assetPath(QStringLiteral("background/outline_area_labeled.png"));
 }
 
+inline QString customOutlineRootPath()
+{
+    return assetPath(QStringLiteral("background/outlines"));
+}
+
+inline bool isSupportedCustomOutlinePath(const QString& path)
+{
+    if (path.isEmpty()) {
+        return false;
+    }
+    const QFileInfo info(path);
+    return info.exists()
+        && info.isFile()
+        && info.suffix().compare(QStringLiteral("png"), Qt::CaseInsensitive) == 0;
+}
+
+inline QString customOutlinePathForFileName(const QString& fileName)
+{
+    const QString trimmed = fileName.trimmed();
+    if (trimmed.isEmpty() || QFileInfo(trimmed).fileName() != trimmed) {
+        return QString();
+    }
+
+    const QString path = QDir(customOutlineRootPath()).filePath(trimmed);
+    return isSupportedCustomOutlinePath(path) ? QDir::cleanPath(path) : QString();
+}
+
 inline QString outlinePathForVariant(PreviewOutlineVariant variant)
 {
     QString preferredPath;
@@ -94,6 +121,16 @@ inline QString outlinePathForVariant(PreviewOutlineVariant variant)
         }
     }
     return QString();
+}
+
+inline QString outlinePathForVariantOrCustom(
+    PreviewOutlineVariant variant,
+    const QString& customOutlinePath)
+{
+    if (isSupportedCustomOutlinePath(customOutlinePath)) {
+        return QDir::cleanPath(customOutlinePath);
+    }
+    return outlinePathForVariant(variant);
 }
 
 }  // namespace miacode::assets

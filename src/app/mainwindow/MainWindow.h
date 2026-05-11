@@ -352,8 +352,14 @@ private:
     PreviewOutlineVariant effectivePreviewOutlineVariant() const;
     void applyEffectivePreviewOutlineVariantToCanvas();
     void applyPreviewOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection, bool persistState);
+    QString resolvePreviewCustomOutlineDir() const;
+    QString resolvePreviewCustomOutlinePath() const;
+    QStringList availablePreviewCustomOutlineFileNames() const;
+    void applyPreviewCustomOutlineFileName(const QString& fileName, bool persistState);
     PreviewSkinVariant previewSkinVariantFromStorageValue(const QString& value) const;
     QString previewSkinVariantStorageValue() const;
+    QStringList availablePreviewSkinDirectoryNames() const;
+    QString previewSkinDisplayName(const QString& directoryName) const;
     double currentPreviewCanvasRefreshRate() const;
     void refreshPreviewFrameRateTimers();
     double timelineSecondForCursor(int line, int col) const;
@@ -362,6 +368,7 @@ private:
     QString editorText() const;
     QString resolveDefaultTrackPath() const;
     QString resolvePreviewSkinDir() const;
+    QString resolvePreviewSkinRootDir() const;
     QString resolveProjectRenderStateFilePath() const;
     QString resolveInitialOpenDirectory() const;
     void resetPortablePreviewSettingsToDefaults();

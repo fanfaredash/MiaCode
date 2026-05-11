@@ -455,6 +455,13 @@ void PreviewRuntime::setOutlineVariant(PreviewOutlineVariant variant)
     }
 }
 
+void PreviewRuntime::setOutlineImagePath(const QString& path)
+{
+    if (assets_ != nullptr) {
+        assets_->setOutlineImagePath(path);
+    }
+}
+
 void PreviewRuntime::setBackgroundBrightness(double brightness)
 {
     frameState_.render.backgroundBrightnessOuter = qBound(0.0, brightness, 1.0);

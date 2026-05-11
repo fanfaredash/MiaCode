@@ -146,14 +146,33 @@ void MainWindow::EditorSection::loadProjectRenderState()
                                 .toBool(state_.previewSlideEarlierSecondAndTextOnTop_);
                     }
                     if (render.value("skin_variant").isString()) {
-                        state_.previewSkinVariant_ = owner_.previewSkinVariantFromStorageValue(
-                            render.value("skin_variant").toString()
-                        );
+                        const QString skinValue = render.value("skin_variant").toString().trimmed();
+                        state_.previewSkinVariant_ = owner_.previewSkinVariantFromStorageValue(skinValue);
+                        state_.previewSkinDirectoryName_ =
+                            state_.previewSkinVariant_ == PreviewSkinVariant::Dx ? QStringLiteral("skinDX") : QStringLiteral("skinSTD");
+                        const QString normalizedSkinValue = skinValue.toLower();
+                        if (!skinValue.isEmpty()
+                            && normalizedSkinValue != QLatin1String("standard")
+                            && normalizedSkinValue != QLatin1String("std")
+                            && normalizedSkinValue != QLatin1String("skin")
+                            && normalizedSkinValue != QLatin1String("skinstd")
+                            && normalizedSkinValue != QLatin1String("dx")
+                            && normalizedSkinValue != QLatin1String("skin_dx")
+                            && normalizedSkinValue != QLatin1String("skindx")) {
+                            state_.previewSkinDirectoryName_ = skinValue;
+                        }
                     }
                     if (render.value("outline_variant").isString()) {
                         const QString outlineVariant = render.value("outline_variant").toString().trimmed();
                         if (!outlineVariant.isEmpty()) {
                             state_.previewOutlineVariant_ = owner_.previewOutlineVariantFromStorageValue(outlineVariant);
+                            state_.previewOutlineVariantUsesAutoSelection_ = false;
+                        }
+                    }
+                    if (render.value("custom_outline_file").isString()) {
+                        state_.previewCustomOutlineFileName_ =
+                            QFileInfo(render.value("custom_outline_file").toString().trimmed()).fileName();
+                        if (!state_.previewCustomOutlineFileName_.isEmpty()) {
                             state_.previewOutlineVariantUsesAutoSelection_ = false;
                         }
                     }
@@ -342,8 +361,14 @@ void MainWindow::EditorSection::saveProjectRenderState() const
     render.insert("skin_variant", owner_.previewSkinVariantStorageValue());
     if (state_.previewOutlineVariantUsesAutoSelection_) {
         render.remove("outline_variant");
+        render.remove("custom_outline_file");
     } else {
         render.insert("outline_variant", owner_.previewOutlineVariantStorageValue());
+        if (state_.previewCustomOutlineFileName_.isEmpty()) {
+            render.remove("custom_outline_file");
+        } else {
+            render.insert("custom_outline_file", state_.previewCustomOutlineFileName_);
+        }
     }
     render.insert("render_mode", renderModeToken(state_.muriRenderOptions_.renderMode));
     render.insert("show_chart_review_slide_judge_overlay", state_.muriRenderOptions_.showChartReviewSlideJudgeOverlay);

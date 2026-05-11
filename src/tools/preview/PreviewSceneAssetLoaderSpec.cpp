@@ -50,8 +50,8 @@ bool saveDummyPng(const QString& destination, const QSize& size, QTextStream& er
 
 bool verifyDxRootLayout(QTextStream& err)
 {
-    const QString dxDir = miacode::assets::assetPath(QStringLiteral("skinDX"));
-    if (!require(!dxDir.isEmpty(), QStringLiteral("skinDX asset directory was not resolved"), err)) {
+    const QString dxDir = miacode::assets::assetPath(QStringLiteral("skin/skinDX"));
+    if (!require(!dxDir.isEmpty(), QStringLiteral("skin/skinDX asset directory was not resolved"), err)) {
         return false;
     }
 
@@ -146,7 +146,7 @@ bool verifyLegacyFallback(QTextStream& err)
     const QDir dir(tempDir.path());
 
     if (!copyFileTo(
-            miacode::assets::assetPath(QStringLiteral("skin/just_str_l_fast_gd.png")),
+            miacode::assets::assetPath(QStringLiteral("skin/skinSTD/just_str_l_fast_gd.png")),
             dir.filePath(QStringLiteral("SlideOKSkins/just_str_l_fast_gd.png")),
             err)) {
         return false;

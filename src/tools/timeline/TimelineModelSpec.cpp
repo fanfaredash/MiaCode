@@ -1655,6 +1655,29 @@ int main(int argc, char** argv)
     }
 
     {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("6<8[160#16:1]/2>4[16:1],\nE"), 0.0);
+        const TimelineRenderSnapshot snapshot = model.snapshot();
+        expect(!snapshot.lines.isEmpty(), QStringLiteral("quick model builds snapshot for hashed-duration slash slide each repro"));
+        if (!snapshot.lines.isEmpty()) {
+            const QVector<TimelineRenderNote>& notes = snapshot.lines.constFirst().notes;
+            int slideCount = 0;
+            int slideEachCount = 0;
+            for (const TimelineRenderNote& note : notes) {
+                if (note.kind != TimelineRenderNoteKind::Slide) {
+                    continue;
+                }
+                ++slideCount;
+                if (timelineRenderFlagSet(note, TimelineRenderFlagSlideEach)) {
+                    ++slideEachCount;
+                }
+            }
+            expect(slideCount == 2, QStringLiteral("quick model emits two slides for hashed-duration slash each repro"));
+            expect(slideEachCount == 2, QStringLiteral("quick model marks slash-paired slides as yellow tracks despite # timing"));
+        }
+    }
+
+    {
         const QString chart = QStringLiteral(
             "(264) {80},,,,,,,,8-4[8:1],,,,,,,,,,,,,,,,,,,,8,,,,,,,,,,,,,,,,,,,,3/5,,,,,,,,,,,,,,,,,,,,8>4[4:1],,,,,1>5[4:1],,,,,2>6[4:1],,\n"
             "{80},,,3<7[4:1],,,,,,,,,,,,,,,,,,,,,,,,,1-5[8:1],,,,,,,,,,,,,,,,,,,,1,,,,,,,,,,,,,,,,,,,,3/7,,,,,,,,,,,,\n"

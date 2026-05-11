@@ -28,7 +28,18 @@ void PreviewSceneAssetRepository::setOutlineVariant(PreviewOutlineVariant varian
         return;
     }
     outlineVariant_ = variant;
-    currentAssets_.assetState = PreviewSceneAssetLoader::loadAssetState(outlineVariant_);
+    currentAssets_.assetState = PreviewSceneAssetLoader::loadAssetState(outlineVariant_, outlineImagePath_);
+    emit assetsChanged();
+}
+
+void PreviewSceneAssetRepository::setOutlineImagePath(const QString& path)
+{
+    const QString normalized = path.trimmed();
+    if (outlineImagePath_ == normalized) {
+        return;
+    }
+    outlineImagePath_ = normalized;
+    currentAssets_.assetState = PreviewSceneAssetLoader::loadAssetState(outlineVariant_, outlineImagePath_);
     emit assetsChanged();
 }
 
@@ -39,8 +50,15 @@ void PreviewSceneAssetRepository::setSkinDirectory(const QString& skinDirectory)
     skinDirectory_ = skinDirectory;
     const quint64 generation = ++loadGeneration_;
     QPointer<PreviewSceneAssetRepository> guard(this);
-    QThreadPool::globalInstance()->start([guard, skinDirectory, outlineVariant = outlineVariant_, generation]() {
-        PreviewSceneAssetLoadResult result = PreviewSceneAssetLoader::load(skinDirectory, outlineVariant, generation);
+    QThreadPool::globalInstance()->start([
+        guard,
+        skinDirectory,
+        outlineVariant = outlineVariant_,
+        outlineImagePath = outlineImagePath_,
+        generation
+    ]() {
+        PreviewSceneAssetLoadResult result =
+            PreviewSceneAssetLoader::load(skinDirectory, outlineVariant, generation, outlineImagePath);
         if (guard.isNull()) {
             return;
         }
@@ -62,7 +80,7 @@ bool PreviewSceneAssetRepository::loadSkinDirectorySync(const QString& skinDirec
     _mc_op_.note(QStringLiteral("skin=%1").arg(skinDirectory));
     skinDirectory_ = skinDirectory;
     const quint64 generation = ++loadGeneration_;
-    applyLoadResult(PreviewSceneAssetLoader::load(skinDirectory, outlineVariant_, generation));
+    applyLoadResult(PreviewSceneAssetLoader::load(skinDirectory, outlineVariant_, generation, outlineImagePath_));
     const bool ok = hasCoreSkinAssetsLoaded();
     if (!ok) {
         _mc_op_.fail(QStringLiteral("core skin assets missing after load"));
@@ -82,7 +100,7 @@ void PreviewSceneAssetRepository::applyLoadResult(PreviewSceneAssetLoadResult&& 
     if (result.generation != loadGeneration_) {
         return;
     }
-    result.assetState = PreviewSceneAssetLoader::loadAssetState(outlineVariant_);
+    result.assetState = PreviewSceneAssetLoader::loadAssetState(outlineVariant_, outlineImagePath_);
     currentAssets_ = std::move(result);
     emit assetsChanged();
 }

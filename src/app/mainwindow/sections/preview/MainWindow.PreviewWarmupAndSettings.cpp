@@ -94,6 +94,27 @@ void warmupFileIntoOsCache(const QString& path, qint64 maxBytes = -1)
     }
 }
 
+QString standardPreviewSkinDirectoryName()
+{
+    return QStringLiteral("skinSTD");
+}
+
+QString dxPreviewSkinDirectoryName()
+{
+    return QStringLiteral("skinDX");
+}
+
+bool hasCorePreviewSkinAssets(const QString& directory)
+{
+    if (directory.isEmpty()) {
+        return false;
+    }
+    const QDir dir(directory);
+    return QFileInfo::exists(dir.filePath(QStringLiteral("tap.png")))
+        && QFileInfo::exists(dir.filePath(QStringLiteral("hold.png")))
+        && QFileInfo::exists(dir.filePath(QStringLiteral("star.png")));
+}
+
 }  // namespace
 
 void MainWindow::PreviewSection::ensurePreviewSfxRuntimePrepared()
@@ -365,6 +386,7 @@ void MainWindow::PreviewSection::applyEffectivePreviewOutlineVariantToCanvas()
 {
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setOutlineVariant(effectivePreviewOutlineVariant());
+        state_.previewCanvas_->setOutlineImagePath(resolvePreviewCustomOutlinePath());
     }
 }
 
@@ -375,6 +397,45 @@ void MainWindow::PreviewSection::applyPreviewOutlineVariant(
 {
     state_.previewOutlineVariant_ = variant;
     state_.previewOutlineVariantUsesAutoSelection_ = useAutoSelection;
+    state_.previewCustomOutlineFileName_.clear();
+    applyEffectivePreviewOutlineVariantToCanvas();
+    if (persistState) {
+        owner_.saveProjectRenderState();
+        owner_.savePortableState();
+    }
+}
+
+QString MainWindow::PreviewSection::resolvePreviewCustomOutlineDir() const
+{
+    return miacode::assets::customOutlineRootPath();
+}
+
+QString MainWindow::PreviewSection::resolvePreviewCustomOutlinePath() const
+{
+    return miacode::assets::customOutlinePathForFileName(state_.previewCustomOutlineFileName_);
+}
+
+QStringList MainWindow::PreviewSection::availablePreviewCustomOutlineFileNames() const
+{
+    const QString root = resolvePreviewCustomOutlineDir();
+    if (root.isEmpty()) {
+        return {};
+    }
+    const QDir dir(root);
+    const QFileInfoList entries = dir.entryInfoList(QStringList{QStringLiteral("*.png")}, QDir::Files, QDir::Name | QDir::IgnoreCase);
+    QStringList names;
+    names.reserve(entries.size());
+    for (const QFileInfo& entry : entries) {
+        names.append(entry.fileName());
+    }
+    return names;
+}
+
+void MainWindow::PreviewSection::applyPreviewCustomOutlineFileName(const QString& fileName, bool persistState)
+{
+    const QString normalized = QFileInfo(fileName.trimmed()).fileName();
+    state_.previewCustomOutlineFileName_ = normalized;
+    state_.previewOutlineVariantUsesAutoSelection_ = false;
     applyEffectivePreviewOutlineVariantToCanvas();
     if (persistState) {
         owner_.saveProjectRenderState();
@@ -394,22 +455,94 @@ MainWindow::PreviewSkinVariant MainWindow::PreviewSection::previewSkinVariantFro
 
 QString MainWindow::PreviewSection::previewSkinVariantStorageValue() const
 {
-    return state_.previewSkinVariant_ == PreviewSkinVariant::Dx
-        ? QStringLiteral("dx")
-        : QStringLiteral("standard");
+    return state_.previewSkinDirectoryName_.trimmed().isEmpty()
+        ? standardPreviewSkinDirectoryName()
+        : state_.previewSkinDirectoryName_.trimmed();
+}
+
+QString MainWindow::PreviewSection::resolvePreviewSkinRootDir() const
+{
+    return miacode::assets::assetPath(QStringLiteral("skin"));
+}
+
+QStringList MainWindow::PreviewSection::availablePreviewSkinDirectoryNames() const
+{
+    const QString root = resolvePreviewSkinRootDir();
+    if (root.isEmpty()) {
+        return {};
+    }
+
+    QStringList names;
+    const QStringList builtInNames{
+        standardPreviewSkinDirectoryName(),
+        dxPreviewSkinDirectoryName(),
+    };
+    const QDir rootDir(root);
+    for (const QString& name : builtInNames) {
+        if (hasCorePreviewSkinAssets(rootDir.filePath(name))) {
+            names.append(name);
+        }
+    }
+
+    const QFileInfoList entries = rootDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase);
+    for (const QFileInfo& entry : entries) {
+        const QString name = entry.fileName();
+        bool isBuiltIn = false;
+        for (const QString& builtInName : builtInNames) {
+            if (name.compare(builtInName, Qt::CaseInsensitive) == 0) {
+                isBuiltIn = true;
+                break;
+            }
+        }
+        if (!isBuiltIn && hasCorePreviewSkinAssets(entry.absoluteFilePath())) {
+            names.append(name);
+        }
+    }
+    return names;
+}
+
+QString MainWindow::PreviewSection::previewSkinDisplayName(const QString& directoryName) const
+{
+    if (directoryName.compare(standardPreviewSkinDirectoryName(), Qt::CaseInsensitive) == 0) {
+        return uiText("dialog.render_settings.video.skin.standard", "Standard");
+    }
+    if (directoryName.compare(dxPreviewSkinDirectoryName(), Qt::CaseInsensitive) == 0) {
+        return uiText("dialog.render_settings.video.skin.dx", "DX");
+    }
+    return directoryName;
 }
 
 QString MainWindow::PreviewSection::resolvePreviewSkinDir() const
 {
-    const QStringList candidateDirs = state_.previewSkinVariant_ == PreviewSkinVariant::Dx
-        ? QStringList{QStringLiteral("skinDX"), QStringLiteral("skin")}
-        : QStringList{QStringLiteral("skin"), QStringLiteral("skinDX")};
-    for (const QString& candidateDirName : candidateDirs) {
-        const QString candidateDir = miacode::assets::assetPath(candidateDirName);
-        if (QFileInfo::exists(QDir(candidateDir).filePath("tap.png"))) {
-            return candidateDir;
+    const QString root = resolvePreviewSkinRootDir();
+    if (root.isEmpty()) {
+        return QString();
+    }
+
+    const QString selected = state_.previewSkinDirectoryName_.trimmed().isEmpty()
+        ? standardPreviewSkinDirectoryName()
+        : state_.previewSkinDirectoryName_.trimmed();
+    const QString selectedDir = QDir(root).filePath(selected);
+    if (hasCorePreviewSkinAssets(selectedDir)) {
+        return QDir::cleanPath(selectedDir);
+    }
+
+    const QStringList fallbackNames{
+        standardPreviewSkinDirectoryName(),
+        dxPreviewSkinDirectoryName(),
+    };
+    for (const QString& name : fallbackNames) {
+        const QString candidate = QDir(root).filePath(name);
+        if (hasCorePreviewSkinAssets(candidate)) {
+            return QDir::cleanPath(candidate);
         }
     }
+
+    const QStringList availableNames = availablePreviewSkinDirectoryNames();
+    if (!availableNames.isEmpty()) {
+        return QDir::cleanPath(QDir(root).filePath(availableNames.first()));
+    }
+
     return QString();
 }
 
@@ -521,6 +654,26 @@ void MainWindow::applyPreviewOutlineVariant(
     previewSection_->applyPreviewOutlineVariant(variant, useAutoSelection, persistState);
 }
 
+QString MainWindow::resolvePreviewCustomOutlineDir() const
+{
+    return previewSection_->resolvePreviewCustomOutlineDir();
+}
+
+QString MainWindow::resolvePreviewCustomOutlinePath() const
+{
+    return previewSection_->resolvePreviewCustomOutlinePath();
+}
+
+QStringList MainWindow::availablePreviewCustomOutlineFileNames() const
+{
+    return previewSection_->availablePreviewCustomOutlineFileNames();
+}
+
+void MainWindow::applyPreviewCustomOutlineFileName(const QString& fileName, bool persistState)
+{
+    previewSection_->applyPreviewCustomOutlineFileName(fileName, persistState);
+}
+
 MainWindow::PreviewSkinVariant MainWindow::previewSkinVariantFromStorageValue(const QString& value) const
 {
     return previewSection_->previewSkinVariantFromStorageValue(value);
@@ -531,9 +684,24 @@ QString MainWindow::previewSkinVariantStorageValue() const
     return previewSection_->previewSkinVariantStorageValue();
 }
 
+QStringList MainWindow::availablePreviewSkinDirectoryNames() const
+{
+    return previewSection_->availablePreviewSkinDirectoryNames();
+}
+
+QString MainWindow::previewSkinDisplayName(const QString& directoryName) const
+{
+    return previewSection_->previewSkinDisplayName(directoryName);
+}
+
 QString MainWindow::resolvePreviewSkinDir() const
 {
     return previewSection_->resolvePreviewSkinDir();
+}
+
+QString MainWindow::resolvePreviewSkinRootDir() const
+{
+    return previewSection_->resolvePreviewSkinRootDir();
 }
 
 void MainWindow::applyPreviewAudioSettingsToRuntime()

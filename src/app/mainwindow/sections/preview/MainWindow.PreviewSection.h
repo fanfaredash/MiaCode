@@ -69,9 +69,16 @@ public:
     PreviewOutlineVariant effectivePreviewOutlineVariant() const;
     void applyEffectivePreviewOutlineVariantToCanvas();
     void applyPreviewOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection, bool persistState);
+    QString resolvePreviewCustomOutlineDir() const;
+    QString resolvePreviewCustomOutlinePath() const;
+    QStringList availablePreviewCustomOutlineFileNames() const;
+    void applyPreviewCustomOutlineFileName(const QString& fileName, bool persistState);
     MainWindow::PreviewSkinVariant previewSkinVariantFromStorageValue(const QString& value) const;
     QString previewSkinVariantStorageValue() const;
+    QStringList availablePreviewSkinDirectoryNames() const;
+    QString previewSkinDisplayName(const QString& directoryName) const;
     QString resolvePreviewSkinDir() const;
+    QString resolvePreviewSkinRootDir() const;
     void applyPreviewAudioSettingsToRuntime();
 
 private:

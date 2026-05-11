@@ -160,6 +160,7 @@ QJsonObject VideoExportSnapshot::toJson() const
     resources.insert(QStringLiteral("track_path"), trackPath);
     resources.insert(QStringLiteral("background_media_path"), backgroundMediaPath);
     resources.insert(QStringLiteral("skin_dir"), skinDirectory);
+    resources.insert(QStringLiteral("outline_image_path"), outlineImagePath);
     root.insert(QStringLiteral("resources"), resources);
 
     QJsonObject render;
@@ -247,6 +248,7 @@ bool VideoExportSnapshot::fromJson(
     parsed.trackPath = jsonString(resources, "track_path");
     parsed.backgroundMediaPath = jsonString(resources, "background_media_path");
     parsed.skinDirectory = jsonString(resources, "skin_dir");
+    parsed.outlineImagePath = jsonString(resources, "outline_image_path");
 
     const QJsonObject render = object.value(QStringLiteral("render")).toObject();
     parsed.backgroundBrightnessOuter =
@@ -388,6 +390,7 @@ bool buildVideoExportTaskFromSnapshot(
     built.layoutSquareScale = snapshot.layoutSquareScale;
     built.smoothBrightness = snapshot.smoothBrightness;
     built.outlineVariant = snapshot.outlineVariant;
+    built.outlineImagePath = snapshot.outlineImagePath;
     built.backgroundScaleMode = snapshot.backgroundScaleMode;
     built.tapFlowSpeed = snapshot.tapFlowSpeed;
     built.touchFlowSpeed = snapshot.touchFlowSpeed;

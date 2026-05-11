@@ -38,6 +38,7 @@ bool VideoExportQuickRenderBackend::bootstrap(
     QString* errorMessage)
 {
     assets_.setOutlineVariant(task.outlineVariant);
+    assets_.setOutlineImagePath(task.outlineImagePath);
     assets_.setStageMediaAvailable(stageMediaAvailable);
     if (!assets_.loadSkinDirectorySync(task.skinDirectory)) {
         if (errorMessage != nullptr) {
@@ -78,6 +79,7 @@ bool VideoExportQuickRenderBackend::bootstrap(
 void VideoExportQuickRenderBackend::copyRenderStateFrom(const VideoExportQuickRenderBackend& source)
 {
     assets_.setOutlineVariant(source.assets_.outlineVariant());
+    assets_.setOutlineImagePath(source.assets_.outlineImagePath());
     assets_.setStageMediaAvailable(source.assets_.stageMediaAvailable());
     frameState_ = source.frameState_;
     lastRenderStats_ = source.lastRenderStats_;

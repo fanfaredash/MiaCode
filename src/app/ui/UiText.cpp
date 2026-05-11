@@ -501,6 +501,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.video.skin", "皮肤"},
         {"dialog.render_settings.video.skin.standard", "标准"},
         {"dialog.render_settings.video.skin.dx", "DX"},
+        {"dialog.render_settings.video.skin.import", "导入..."},
         {"dialog.render_settings.video.scale_mode", "背景 / PV 缩放模式"},
         {"dialog.render_settings.video.canvas_aspect", "预览画布比例"},
         {"dialog.render_settings.gameplay.judge_effect", "判定效果"},
@@ -512,6 +513,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.gameplay.judge_line.line", "线"},
         {"dialog.render_settings.gameplay.judge_line.area", "判定区"},
         {"dialog.render_settings.gameplay.judge_line.area_labeled", "判定区（带编号）"},
+        {"dialog.render_settings.gameplay.judge_line.import", "导入..."},
         {
             "dialog.render_settings.gameplay.force_labeled_judge_line_when_paused",
             "暂停时不显示PV/BG"

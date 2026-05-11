@@ -796,6 +796,12 @@ void finalizeEachGroup(ParseState* state, const QVector<int>& groupIndices)
         }
     }
 
+    if (slideIndices.size() >= 2) {
+        for (int index : slideIndices) {
+            (*noteMarkers)[index].slideEach = true;
+        }
+    }
+
     if (noteEachGroupCount >= 2) {
         for (int index : touchIndices) {
             (*noteMarkers)[index].isEach = true;

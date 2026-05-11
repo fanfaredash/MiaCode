@@ -9,8 +9,10 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
   - Functions: `findAssetRoot`, `assetPath`
 - Main repo asset areas:
   - `assets/skin`
+  - Built-in skins live under `assets/skin/skinSTD` and `assets/skin/skinDX`; user-imported skins are additional valid child folders under `assets/skin`
   - `assets/SFX`
   - `assets/background`
+  - Custom judge-line PNGs live under `assets/background/outlines`; the render settings import action only opens this folder
   - `assets/noteguide`
   - `assets/generated`
   - `assets/fonts`
@@ -53,19 +55,20 @@ If these conventions change, update both code and this file.
 - Skin textures:
   - Consumers: `PreviewRuntime`, `PreviewQuickExportSession`, `VideoExportQuickRenderBackend`
   - Entry: `MainWindow::resolvePreviewSkinDir`, `PreviewRuntime::setSkinDirectory`, `PreviewSceneAssetRepository::setSkinDirectory`, `PreviewSceneAssetLoader::load`
+  - Skin selection enumerates child directories of `assets/skin`; a directory is shown only when core files such as `tap.png`, `hold.png`, and `star.png` exist
   - Quick scene textures are uploaded through `PreviewTextureRepository` per Quick item/window, with cacheable reuse keyed by `QImage::cacheKey()`, per-frame transient cleanup, and debug/profile counters for cache hits, cache creates, sprite count, and sprite-batch count
   - `PreviewAnimatedSpriteHelpers` now only caches CPU overlay composites by source-image keys plus tint parameters; Quick runtime `BreakAnimate` / `HoldShine` effects no longer rebuild per-frame `QImage`s and instead run through `PreviewQuickSpriteNodes.cpp` plus `src/preview/quick_scene/shaders/PreviewSpriteMaterial.{vert,frag}`
   - Quick sprite rendering now expands sprites into layer-local contiguous batch geometry keyed by `(texture, effect)` without reordering; shared base images and `sourceRect` slicing are the intended path for atlas-like reuse this round
   - Native chart-review judge overlays load from:
     - `JudgeTextSkins/judge_text_normal.png`
     - `JudgeTextSkins/judge_text_break.png`
-    - root-level `assets/skin/just_str_l.png`
-    - root-level `assets/skin/just_str_r.png`
-    - root-level `assets/skin/just_curv_l.png`
-    - root-level `assets/skin/just_curv_r.png`
-    - root-level `assets/skin/just_wifi_u.png`
-    - root-level `assets/skin/just_wifi_d.png`
-  - MaimuriDX-style bad-judge slide overlays load only from `assets/skin/SlideOKSkins/*.png`
+    - root-level `<selected skin>/just_str_l.png`
+    - root-level `<selected skin>/just_str_r.png`
+    - root-level `<selected skin>/just_curv_l.png`
+    - root-level `<selected skin>/just_curv_r.png`
+    - root-level `<selected skin>/just_wifi_u.png`
+    - root-level `<selected skin>/just_wifi_d.png`
+  - MaimuriDX-style bad-judge slide overlays load only from `<selected skin>/SlideOKSkins/*.png`
   - Canonical filenames:
     - `just_str_l_fast_gd.png`
     - `just_str_r_fast_gd.png`
@@ -73,7 +76,7 @@ If these conventions change, update both code and this file.
     - `just_curv_r_fast_gd.png`
     - `just_wifi_u_fast_gd.png`
     - `just_wifi_d_fast_gd.png`
-  - Do not add fallback from these overlays to root-level `assets/skin/just_*.png` or any `perfect`-style judge assets
+  - Do not add fallback from these overlays to root-level `<selected skin>/just_*.png` or any `perfect`-style judge assets
 - SFX clips:
   - Consumer: `QtPreviewSfxRuntime`, `VideoExportAudioRenderPlan`, export audio backends
   - Entry: `miacode::preview_sfx::resolveSfxDirectory`
@@ -98,6 +101,7 @@ If these conventions change, update both code and this file.
     - `background/outline_line.png`
     - `background/outline_area.png`
     - `background/outline_area_labeled.png`
+  - Optional custom judge-line PNGs are selected by file name from `background/outlines/*.png`; if the selected file is missing, preview/export fall back to the saved built-in `PreviewOutlineVariant`
   - Source helper art for rebuilding the labeled-area variant currently lives at `background/region_labels_overlay_transparent_v3.png`, and `scripts/build_outline_area_labeled.py` regenerates the final labeled outline by compositing that overlay over `outline_area.png`
   - The active outline assets are currently `1080x1080` canvases with built-in transparent border; preview/export map them across the full playfield square, and the selected variant is a shared render setting rather than an asset-size inference
 - Generated slide data:

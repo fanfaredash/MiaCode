@@ -38,6 +38,7 @@ struct VideoExportTask {
     double layoutSquareScale = miacode::preview_video::kLayoutSquareScaleDefault;
     bool smoothBrightness = miacode::preview_video::kSmoothBrightnessDefault;
     PreviewOutlineVariant outlineVariant = PreviewOutlineVariant::Line;
+    QString outlineImagePath;
     PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
     double tapFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     double touchFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;

@@ -20,16 +20,7 @@
 #include <QTextDocument>
 #include <QTextFrame>
 
-namespace {
-constexpr int kLineNumberLeftPadding = 6;
-constexpr int kLineNumberRightPadding = 10;
-constexpr int kLineNumberMinWidth = 40;
-constexpr qreal kEditorDocumentLeftInset = 14.0;
-constexpr int kCurrentLineHighlightLeftInset = 3;
-constexpr int kCurrentLineHighlightRightInset = 0;
-constexpr int kCurrentLineHighlightDirtyMargin = 2;
-constexpr int kEditorCursorVisibleWidth = 1;
-
+namespace miacode::editor {
 QChar normalizedHalfWidthChar(QChar ch)
 {
     const ushort code = ch.unicode();
@@ -41,7 +32,7 @@ QChar normalizedHalfWidthChar(QChar ch)
     }
     switch (code) {
     case 0x3001:
-        return QLatin1Char(',');
+        return QLatin1Char('/');
     case 0x3002:
         return QLatin1Char('.');
     case 0x00B7:
@@ -86,6 +77,17 @@ QString normalizedHalfWidthKeyText(const QKeyEvent* event, const QString& text)
     }
     return normalizedHalfWidthText(text);
 }
+}
+
+namespace {
+constexpr int kLineNumberLeftPadding = 6;
+constexpr int kLineNumberRightPadding = 10;
+constexpr int kLineNumberMinWidth = 40;
+constexpr qreal kEditorDocumentLeftInset = 14.0;
+constexpr int kCurrentLineHighlightLeftInset = 3;
+constexpr int kCurrentLineHighlightRightInset = 0;
+constexpr int kCurrentLineHighlightDirtyMargin = 2;
+constexpr int kEditorCursorVisibleWidth = 1;
 
 void logSelectionRestoreEditorShortcut(const QString& scope, const QString& payload)
 {
@@ -700,7 +702,7 @@ void PlainCodeEditor::inputMethodEvent(QInputMethodEvent* event)
     }
 
     const QString commitString = event->commitString();
-    const QString normalizedCommitString = normalizedHalfWidthText(commitString);
+    const QString normalizedCommitString = miacode::editor::normalizedHalfWidthText(commitString);
     if (commitString == normalizedCommitString) {
         QTextEdit::inputMethodEvent(event);
         return;
@@ -794,7 +796,7 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         return;
     }
 
-    const QString normalizedText = normalizedHalfWidthKeyText(event, inputText);
+    const QString normalizedText = miacode::editor::normalizedHalfWidthKeyText(event, inputText);
     if (normalizedText == inputText) {
         QTextEdit::keyPressEvent(event);
         return;

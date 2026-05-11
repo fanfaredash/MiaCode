@@ -55,7 +55,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Batch text editing surface:
   - Files: `src/editor/PlainCodeEditor.h`, `src/editor/PlainCodeEditor.cpp`
   - Class: `PlainCodeEditor`
-  - Owns: line numbers, transform actions in context menu, editor display behavior
+  - Owns: line numbers, transform actions in context menu, editor display behavior, half-width chart input normalization
 
 ## 4. Parser, Syntax Validation, And Marker Generation
 

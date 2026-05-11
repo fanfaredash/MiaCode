@@ -43,7 +43,7 @@ namespace miacode::timeline {
 TimelineNoteAssetSet loadTimelineNoteAssets()
 {
     TimelineNoteAssetSet assets;
-    const QString notesDir = miacode::assets::assetPath("skin");
+    const QString notesDir = miacode::assets::assetPath("skin/skinSTD");
     if (!QFileInfo::exists(QDir(notesDir).filePath("tap.png"))) {
         return assets;
     }

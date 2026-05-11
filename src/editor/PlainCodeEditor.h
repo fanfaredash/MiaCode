@@ -13,6 +13,12 @@ class QKeyEvent;
 class QMouseEvent;
 class QMimeData;
 
+namespace miacode::editor {
+QChar normalizedHalfWidthChar(QChar ch);
+QString normalizedHalfWidthText(QString text);
+QString normalizedHalfWidthKeyText(const QKeyEvent* event, const QString& text);
+}
+
 class PlainCodeEditor : public QTextEdit
 {
     Q_OBJECT

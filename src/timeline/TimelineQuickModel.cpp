@@ -2315,20 +2315,35 @@ void TimelineQuickModel::rebuildSlideDerivedFlags()
         }
     }
 
+    QHash<int, QVector<QPair<int, int>>> slideEachGroups;
     QHash<int, QHash<qint64, QVector<QPair<int, int>>>> slideTraceGroups;
     for (int lineIndex = 0; lineIndex < lines_.size(); ++lineIndex) {
         const LineState& lineState = lines_.at(lineIndex);
         for (int noteIndex = 0; noteIndex < lineState.render.notes.size(); ++noteIndex) {
             const TimelineRenderNote& note = lineState.render.notes.at(noteIndex);
             if ((note.kind != TimelineRenderNoteKind::Slide && note.kind != TimelineRenderNoteKind::Wifi)
-                || note.slideTraceSecondOffset < 0.0
                 || note.eachGroupId < 0) {
+                continue;
+            }
+            const QPair<int, int> ref = qMakePair(lineIndex, noteIndex);
+            slideEachGroups[note.eachGroupId].append(ref);
+            if (note.slideTraceSecondOffset < 0.0) {
                 continue;
             }
             const qint64 traceKey = qRound64(
                 timelineRenderAbsoluteSecond(lineState.render, note.slideTraceSecondOffset) * 1000000.0
             );
-            slideTraceGroups[note.eachGroupId][traceKey].append(qMakePair(lineIndex, noteIndex));
+            slideTraceGroups[note.eachGroupId][traceKey].append(ref);
+        }
+    }
+
+    for (auto groupIt = slideEachGroups.begin(); groupIt != slideEachGroups.end(); ++groupIt) {
+        const QVector<QPair<int, int>>& group = groupIt.value();
+        if (group.size() < 2) {
+            continue;
+        }
+        for (const QPair<int, int>& ref : group) {
+            lines_[ref.first].render.notes[ref.second].flags |= static_cast<quint32>(TimelineRenderFlagSlideEach);
         }
     }
 
@@ -2441,6 +2456,9 @@ void TimelineQuickModel::finalizeEachGroup(LineState* lineState, const QVector<i
     setFlagForIndices(touchHoldIndices, TimelineRenderFlagIsEach);
     setFlagForIndices(touchIndices, TimelineRenderFlagIsEach);
     setFlagForIndices(slideIndices, TimelineRenderFlagHeadEach);
+    if (slideIndices.size() >= 2) {
+        setFlagForIndices(slideIndices, TimelineRenderFlagSlideEach);
+    }
 }
 
 int TimelineQuickModel::allocateLineId()

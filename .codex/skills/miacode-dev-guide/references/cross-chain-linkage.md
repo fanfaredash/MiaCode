@@ -117,7 +117,7 @@ Shared concerns:
 - head-star behavior for slide and wifi
 - `hasHeadStar` gates only the pre-head object / head SFX / head judge path; `headlessImmediate` only changes the waiting-star visual ramp
 - `sameHeadSlide` behavior
-- `headEach` vs `slideEach`: `headEach` comes from synchronous note-head grouping, while `slideEach` must stay aligned between `SimaiNativeParser` and `TimelineQuickModel` by grouping only slide/wifi notes that share both the same each-group and the same `slideTraceSecond`
+- `headEach` vs `slideEach`: `headEach` comes from synchronous note-head grouping, while `slideEach` must stay aligned between `SimaiNativeParser` and `TimelineQuickModel`. Multiple slide/wifi notes in the same slash each-group are yellow each tracks even when `#` / `##` timing signatures give them different `slideTraceSecond`; older slides outside that each-group must not inherit yellow solely because a later group reaches the same shoot moment.
 - `trackBreak` vs `headBreak`
 - touchhold span semantics
 - same-second same-kind runtime/export SFX collapse to one playback using the strongest event gain, and every note-SFX kind is now latest-wins across time on both runtime preview and export; do not reintroduce per-kind overlap on only one side
@@ -181,6 +181,8 @@ Asset root:
 
 - `miacode::assets::findAssetRoot`
 - `miacode::assets::assetPath`
+- Skin import opens `assets/skin`; built-in and user skins are sibling child directories and only complete core skins are listed
+- Judge-line import opens `assets/background/outlines`; custom PNG selections must flow through realtime preview and export task/snapshot state together with the built-in `PreviewOutlineVariant` fallback
 
 Preview-time consumers:
 

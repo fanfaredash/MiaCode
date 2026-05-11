@@ -393,11 +393,13 @@
         bool previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
         PreviewOutlineVariant previewOutlineVariant_ = PreviewOutlineVariant::Line;
         bool previewOutlineVariantUsesAutoSelection_ = true;
+        QString previewCustomOutlineFileName_;
         PreviewBackgroundScaleMode previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
         double previewTapFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
         double previewTouchFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
         bool previewSlideEarlierSecondAndTextOnTop_ = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
         PreviewSkinVariant previewSkinVariant_ = PreviewSkinVariant::Standard;
+        QString previewSkinDirectoryName_ = QStringLiteral("skinSTD");
         PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
         double previewCanvasAspectRatio_ = 1.0;
         bool previewAutoRestoreSquareAfterExport_ = false;
@@ -719,11 +721,13 @@
     bool& previewSmoothBrightness_ = state_.previewSmoothBrightness_;
     PreviewOutlineVariant& previewOutlineVariant_ = state_.previewOutlineVariant_;
     bool& previewOutlineVariantUsesAutoSelection_ = state_.previewOutlineVariantUsesAutoSelection_;
+    QString& previewCustomOutlineFileName_ = state_.previewCustomOutlineFileName_;
     PreviewBackgroundScaleMode& previewBackgroundScaleMode_ = state_.previewBackgroundScaleMode_;
     double& previewTapFlowSpeed_ = state_.previewTapFlowSpeed_;
     double& previewTouchFlowSpeed_ = state_.previewTouchFlowSpeed_;
     bool& previewSlideEarlierSecondAndTextOnTop_ = state_.previewSlideEarlierSecondAndTextOnTop_;
     PreviewSkinVariant& previewSkinVariant_ = state_.previewSkinVariant_;
+    QString& previewSkinDirectoryName_ = state_.previewSkinDirectoryName_;
     PreviewCanvasFrameRateMode& previewCanvasFrameRateMode_ = state_.previewCanvasFrameRateMode_;
     double& previewCanvasAspectRatio_ = state_.previewCanvasAspectRatio_;
     bool& previewAutoRestoreSquareAfterExport_ = state_.previewAutoRestoreSquareAfterExport_;

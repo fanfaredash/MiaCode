@@ -205,6 +205,12 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
             state_.previewOutlineVariantUsesAutoSelection_ = false;
         }
     }
+    if (preview.value("custom_outline_file").isString()) {
+        state_.previewCustomOutlineFileName_ = QFileInfo(preview.value("custom_outline_file").toString().trimmed()).fileName();
+        if (!state_.previewCustomOutlineFileName_.isEmpty()) {
+            state_.previewOutlineVariantUsesAutoSelection_ = false;
+        }
+    }
     const double legacyBrightness = qBound(
         0.0,
         preview.value("background_brightness").toDouble(miacode::preview_video::kBackgroundBrightnessDefault),
@@ -259,7 +265,21 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
                 .toBool(state_.previewSlideEarlierSecondAndTextOnTop_);
     }
     if (preview.value("skin_variant").isString()) {
-        state_.previewSkinVariant_ = owner_.previewSkinVariantFromStorageValue(preview.value("skin_variant").toString());
+        const QString skinValue = preview.value("skin_variant").toString().trimmed();
+        state_.previewSkinVariant_ = owner_.previewSkinVariantFromStorageValue(skinValue);
+        state_.previewSkinDirectoryName_ =
+            state_.previewSkinVariant_ == PreviewSkinVariant::Dx ? QStringLiteral("skinDX") : QStringLiteral("skinSTD");
+        const QString normalizedSkinValue = skinValue.toLower();
+        if (!skinValue.isEmpty()
+            && normalizedSkinValue != QLatin1String("standard")
+            && normalizedSkinValue != QLatin1String("std")
+            && normalizedSkinValue != QLatin1String("skin")
+            && normalizedSkinValue != QLatin1String("skinstd")
+            && normalizedSkinValue != QLatin1String("dx")
+            && normalizedSkinValue != QLatin1String("skin_dx")
+            && normalizedSkinValue != QLatin1String("skindx")) {
+            state_.previewSkinDirectoryName_ = skinValue;
+        }
     }
     if (preview.value("canvas_frame_rate_mode").isString()) {
         state_.previewCanvasFrameRateMode_ =
@@ -361,8 +381,14 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("smooth_brightness", state_.previewSmoothBrightness_);
     if (state_.previewOutlineVariantUsesAutoSelection_) {
         preview.remove("outline_variant");
+        preview.remove("custom_outline_file");
     } else {
         preview.insert("outline_variant", owner_.previewOutlineVariantStorageValue());
+        if (state_.previewCustomOutlineFileName_.isEmpty()) {
+            preview.remove("custom_outline_file");
+        } else {
+            preview.insert("custom_outline_file", state_.previewCustomOutlineFileName_);
+        }
     }
     preview.insert(
         "background_scale_mode",

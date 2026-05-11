@@ -396,6 +396,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.layoutSquareScale = requestedTask.layoutSquareScale;
     built.smoothBrightness = requestedTask.smoothBrightness;
     built.outlineVariant = requestedTask.outlineVariant;
+    built.outlineImagePath = owner_.resolvePreviewCustomOutlinePath();
     built.backgroundScaleMode = requestedTask.backgroundScaleMode;
     built.tapFlowSpeed = requestedTask.tapFlowSpeed;
     built.touchFlowSpeed = requestedTask.touchFlowSpeed;
@@ -612,6 +613,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
     built.layoutSquareScale = requestedTask.layoutSquareScale;
     built.smoothBrightness = requestedTask.smoothBrightness;
     built.outlineVariant = requestedTask.outlineVariant;
+    built.outlineImagePath = owner_.resolvePreviewCustomOutlinePath();
     built.backgroundScaleMode = requestedTask.backgroundScaleMode;
     built.tapFlowSpeed = requestedTask.tapFlowSpeed;
     built.touchFlowSpeed = requestedTask.touchFlowSpeed;
@@ -807,6 +809,7 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     task.layoutSquareScale = request.layoutSquareScale;
     task.smoothBrightness = request.smoothBrightness;
     task.outlineVariant = request.outlineVariant;
+    task.outlineImagePath = owner_.resolvePreviewCustomOutlinePath();
     task.backgroundScaleMode = request.backgroundScaleMode;
     task.tapFlowSpeed = request.noteFlowSpeed;
     task.touchFlowSpeed = request.touchFlowSpeed;
@@ -841,4 +844,3 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     }
     return true;
 }
-

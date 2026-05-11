@@ -280,6 +280,28 @@ int main(int argc, char** argv)
 
     {
         const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("6<8[160#16:1]/2>4[16:1],\nE")
+        );
+        expect(parsed.ok, QStringLiteral("hashed-duration slash slide each repro parses"));
+
+        int slideCount = 0;
+        int slideEachCount = 0;
+        for (const TimelineNoteMarker& marker : parsed.noteMarkers) {
+            if (marker.type != QLatin1String("slide")) {
+                continue;
+            }
+            ++slideCount;
+            if (marker.slideEach) {
+                ++slideEachCount;
+            }
+        }
+
+        expect(slideCount == 2, QStringLiteral("hashed-duration slash slide each repro emits two slides"));
+        expect(slideEachCount == 2, QStringLiteral("slash-paired slides with matching shoot moment both keep yellow track state"));
+    }
+
+    {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
             QStringLiteral("1-5[8:1],1,\nE")
         );
         expect(parsed.ok, QStringLiteral("tap-on-slide-head repro parses"));

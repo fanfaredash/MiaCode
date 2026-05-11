@@ -557,6 +557,10 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/core/chart/parser/SimaiNativeParser.cpp
         src/core/chart/document/SimaiTimingMetadata.h
         src/core/chart/document/SimaiTimingMetadata.cpp
+        src/common/OperationLog.h
+        src/common/OperationLog.cpp
+        src/common/DebugLog.h
+        src/common/DebugLog.cpp
         resources/fonts.qrc
     )
 
@@ -595,6 +599,10 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/core/chart/parser/SimaiNativeParser.cpp
         src/core/chart/document/SimaiTimingMetadata.h
         src/core/chart/document/SimaiTimingMetadata.cpp
+        src/common/OperationLog.h
+        src/common/OperationLog.cpp
+        src/common/DebugLog.h
+        src/common/DebugLog.cpp
         resources/fonts.qrc
     )
 
@@ -646,7 +654,25 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/core/chart/document/SimaiTimingMetadata.cpp
         src/timeline/TimelineQuickModel.h
         src/timeline/TimelineQuickModel.cpp
+        src/common/OperationLog.h
+        src/common/OperationLog.cpp
+        src/common/DebugLog.h
+        src/common/DebugLog.cpp
         resources/fonts.qrc
+    )
+
+    add_executable(plain_code_editor_spec
+        src/tools/editor/PlainCodeEditorSpec.cpp
+        src/editor/PlainCodeEditor.h
+        src/editor/PlainCodeEditor.cpp
+        src/app/ui/UiText.h
+        src/app/ui/UiText.cpp
+        src/app/ui/UiTheme.h
+        src/app/ui/UiTheme.cpp
+        src/common/DebugLog.h
+        src/common/DebugLog.cpp
+        src/common/OperationLog.h
+        src/common/OperationLog.cpp
     )
 
     add_executable(preview_asset_loader_spec
@@ -654,6 +680,10 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/preview/runtime/PreviewSceneAssetLoader.h
         src/preview/runtime/PreviewSceneAssetLoader.cpp
         src/core/scene/PreviewFrameState.h
+        src/common/OperationLog.h
+        src/common/OperationLog.cpp
+        src/common/DebugLog.h
+        src/common/DebugLog.cpp
     )
 
     add_executable(preview_firework_lifecycle_spec
@@ -918,6 +948,17 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/core/chart/parser
         src/timeline
         src/tools
+    )
+
+    target_link_libraries(plain_code_editor_spec PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+    )
+    target_include_directories(plain_code_editor_spec PRIVATE
+        src
+        src/app/ui
+        src/common
     )
 
     target_link_libraries(preview_asset_loader_spec PRIVATE
