@@ -508,14 +508,6 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     connect(fontIncreaseAction_, &QAction::triggered, this, [applyEditorFontDelta]() {
         applyEditorFontDelta(1);
     });
-    fontIncreaseShiftAction_ = new QAction(QStringLiteral("Increase Editor Font Shift"), this);
-    fontIncreaseShiftAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl++")));
-    fontIncreaseShiftAction_->setShortcutContext(Qt::WindowShortcut);
-    addAction(fontIncreaseShiftAction_);
-    connect(fontIncreaseShiftAction_, &QAction::triggered, this, [applyEditorFontDelta]() {
-        applyEditorFontDelta(1);
-    });
-
     statusBar()->showMessage("PlainCodeEditor ready.");
 
     loadPortableState();

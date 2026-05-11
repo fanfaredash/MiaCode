@@ -697,6 +697,7 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
         miacode::waveform::makeWaveformPlaceholder(
             knownTrackDurationSeconds > 0.0 ? knownTrackDurationSeconds : 0.0));
     owner_.setCurrentFilePath(normalizedPath, true);
+    owner_.addRecentFilePath(normalizedPath);
 
     // Eagerly create the crash-recovery directory BEFORE the user can
     // edit. Without this, a crash in the first ~1 ms after a keystroke
@@ -1081,6 +1082,7 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
     if (normalizedPath != state_.currentFilePath_) {
         owner_.setCurrentFilePath(normalizedPath);
     }
+    owner_.addRecentFilePath(normalizedPath);
     resetAutosaveState(serialized);
     const QString autosaveDirectoryPath = resolveAutosaveDirectoryPath();
     if (!autosaveDirectoryPath.isEmpty()) {
@@ -1250,6 +1252,91 @@ void MainWindow::onNewFile()
 void MainWindow::onOpenFile()
 {
     documentSection_->onOpenFile();
+}
+
+void MainWindow::onOpenCurrentFolder()
+{
+    const QFileInfo fileInfo(currentFilePath_);
+    const QString folderPath = currentFilePath_.isEmpty()
+        ? QString()
+        : fileInfo.absoluteDir().absolutePath();
+    if (!folderPath.isEmpty()) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
+    }
+}
+
+void MainWindow::addRecentFilePath(const QString& path)
+{
+    const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+    if (normalizedPath.isEmpty()) {
+        return;
+    }
+    recentFilePaths_.removeAll(normalizedPath);
+    recentFilePaths_.prepend(normalizedPath);
+    while (recentFilePaths_.size() > 10) {
+        recentFilePaths_.removeLast();
+    }
+    savePortableState();
+}
+
+void MainWindow::openRecentFilePath(const QString& path)
+{
+    const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+    if (normalizedPath.isEmpty()) {
+        return;
+    }
+    const QFileInfo fileInfo(normalizedPath);
+    if (!fileInfo.exists() || !fileInfo.isFile()) {
+        recentFilePaths_.removeAll(normalizedPath);
+        savePortableState();
+        UiDialogs::showMessageBox(QMessageBox::Warning, this, uiText("action.open_recent", "Open Recent"), "File no longer exists:\n" + normalizedPath);
+        return;
+    }
+    openFileAtPath(normalizedPath, true, true);
+}
+
+void MainWindow::refreshRecentFilesMenu(QMenu* recentFilesMenu)
+{
+    if (recentFilesMenu == nullptr) {
+        return;
+    }
+    recentFilesMenu->clear();
+    QStringList existingPaths;
+    QSet<QString> seenPaths;
+    for (const QString& path : recentFilePaths_) {
+        const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+        if (normalizedPath.isEmpty() || seenPaths.contains(normalizedPath)) {
+            continue;
+        }
+        const QFileInfo fileInfo(normalizedPath);
+        if (!fileInfo.exists() || !fileInfo.isFile()) {
+            continue;
+        }
+        seenPaths.insert(normalizedPath);
+        existingPaths.append(normalizedPath);
+    }
+    if (existingPaths != recentFilePaths_) {
+        recentFilePaths_ = existingPaths;
+        savePortableState();
+    }
+    if (existingPaths.isEmpty()) {
+        QAction* emptyAction = recentFilesMenu->addAction(uiText("action.open_recent.empty", "No Recent Files"));
+        emptyAction->setEnabled(false);
+        return;
+    }
+    for (const QString& path : existingPaths) {
+        const QFileInfo fileInfo(path);
+        const QString folderName = fileInfo.absoluteDir().dirName().trimmed();
+        const QString displayName = folderName.isEmpty()
+            ? QDir::toNativeSeparators(fileInfo.absoluteFilePath())
+            : folderName;
+        QAction* action = recentFilesMenu->addAction(displayName);
+        action->setToolTip(QDir::toNativeSeparators(path));
+        action->setStatusTip(QDir::toNativeSeparators(path));
+        connect(action, &QAction::triggered, this, [this, path]() {
+            openRecentFilePath(path);
+        });
+    }
 }
 
 bool MainWindow::openFileAtPath(const QString& path, bool showStatusMessage, bool showErrors)

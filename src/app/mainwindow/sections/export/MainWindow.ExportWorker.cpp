@@ -1298,14 +1298,29 @@ void MainWindow::ExportSection::handleVideoExportWorkerProcessFinished(int exitC
         }
     } else {
         const QString details = owner_.videoExportWorkerResultDetails_.trimmed();
-        showCenteredLocalizedMessageBox(
+        QMessageBox dialog(
             QMessageBox::Critical,
-            &owner_,
             uiText("dialog.video_export.error.failed_title", "Export Failed"),
             details.isEmpty()
                 ? owner_.videoExportWorkerResultMessage_
-                : QStringLiteral("%1\n\n%2").arg(owner_.videoExportWorkerResultMessage_, details)
+                : QStringLiteral("%1\n\n%2").arg(owner_.videoExportWorkerResultMessage_, details),
+            QMessageBox::NoButton,
+            UiDialogs::effectiveParentWidget(&owner_)
         );
+        dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+        UiDialogs::configureDialogPreviewShortcuts(&dialog);
+        UiDialogs::applyDetachedParentBehavior(&dialog, &owner_);
+        QPushButton* openFolderButton = nullptr;
+        if (!owner_.currentFilePath_.isEmpty()) {
+            openFolderButton = dialog.addButton(uiText("action.open_folder", "Open Folder"), QMessageBox::ActionRole);
+        }
+        QPushButton* okButton = dialog.addButton(uiText("action.ok", "OK"), QMessageBox::AcceptRole);
+        dialog.setDefaultButton(okButton);
+        centerDialogOnAnchor(&dialog, &owner_);
+        dialog.exec();
+        if (openFolderButton != nullptr && dialog.clickedButton() == openFolderButton) {
+            owner_.onOpenCurrentFolder();
+        }
     }
 
     restorePreviewAspectIfNeeded();
@@ -1424,4 +1439,3 @@ void MainWindow::ExportSection::clearVideoExportWorkerState()
         );
     }
 }
-

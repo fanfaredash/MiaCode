@@ -249,7 +249,7 @@ Muri warning/render note:
 
 Owners:
 
-- Persistent state: `MainWindow::loadProjectRenderState`, `saveProjectRenderState`, `MainWindow::loadPortableState`, `MainWindow::savePortableState`, `miacode::video_export::loadDialogPreferences`, `miacode::video_export::saveDialogPreferences`
+- Persistent state: shared preview/render preferences are owned by `MainWindow::loadPortableState` and `MainWindow::savePortableState`; `MainWindow::loadProjectRenderState` / `saveProjectRenderState` are chart-folder metadata only and must not override those preferences on folder switch. Export-only dialog options stay under `miacode::video_export::loadDialogPreferences` / `saveDialogPreferences`.
 - Preview application: `PreviewRuntime` setters, `PreviewSceneAssetRepository`, and `PreviewMediaController`
 - Runtime host application: `PreviewRuntime`, cached-frame refresh, and `PreviewQuickRuntimeSurface`
 - Quick layer application: `PreviewQuickSceneRoot`, `PreviewQuickStageBackgroundLayer`, `PreviewQuickBackdropLayer`, `PreviewQuickHudLayer`

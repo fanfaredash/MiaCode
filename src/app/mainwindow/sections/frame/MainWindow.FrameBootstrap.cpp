@@ -643,7 +643,35 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     auto* chartLayout = new QVBoxLayout(chartPage_);
     chartLayout->setContentsMargins(0, 0, 0, 0);
     chartLayout->setSpacing(0);
-    chartLayout->addWidget(editorWidget_, 1);
+    chartCopySplitter_ = new QSplitter(Qt::Horizontal, chartPage_);
+    chartCopySplitter_->setChildrenCollapsible(false);
+    chartCopySplitter_->setHandleWidth(1);
+    chartCopySplitter_->addWidget(editorWidget_);
+    copyAreaPanel_ = new QWidget(chartCopySplitter_);
+    copyAreaPanel_->setObjectName("CopyAreaPanel");
+    copyAreaPanel_->setAttribute(Qt::WA_StyledBackground, true);
+    copyAreaPanel_->setStyleSheet(UiTheme::editorShellStyleSheet());
+    auto* copyAreaLayout = new QVBoxLayout(copyAreaPanel_);
+    copyAreaLayout->setContentsMargins(0, 0, 0, 0);
+    copyAreaLayout->setSpacing(0);
+    copyAreaEditor_ = new PlainCodeEditor(copyAreaPanel_);
+    copyAreaEditor_->setLineWrapMode(QTextEdit::WidgetWidth);
+    copyAreaEditor_->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    copyAreaEditor_->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("复制区") : QStringLiteral("Copy area"));
+    copyAreaEditor_->setStyleSheet(UiTheme::editorTextEditStyleSheet());
+    if (QScrollBar* vbar = copyAreaEditor_->verticalScrollBar()) {
+        vbar->setStyleSheet(modernScrollBarStyle());
+    }
+    if (QScrollBar* hbar = copyAreaEditor_->horizontalScrollBar()) {
+        hbar->setStyleSheet(modernScrollBarStyle());
+    }
+    syncCopyAreaEditorAppearance();
+    copyAreaLayout->addWidget(copyAreaEditor_, 1);
+    chartCopySplitter_->addWidget(copyAreaPanel_);
+    chartCopySplitter_->setStretchFactor(0, 1);
+    chartCopySplitter_->setStretchFactor(1, 1);
+    copyAreaPanel_->hide();
+    chartLayout->addWidget(chartCopySplitter_, 1);
 
     editorStack_->addWidget(welcomePage_);
     editorStack_->addWidget(metadataPage_);
@@ -860,6 +888,22 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     if (normalizeWholeChartAction_ != nullptr) {
         toolboxMenu_->addAction(normalizeWholeChartAction_);
     }
+
+    toolboxMenu_->addSeparator();
+
+    QMenu* copyAreaMenu = toolboxMenu_->addMenu(
+        UiText::isChineseUi() ? QStringLiteral("复制区") : QStringLiteral("Copy Area")
+    );
+    styleRoundedMenu(*copyAreaMenu);
+    simpleCopyAreaAction_ = copyAreaMenu->addAction(
+        UiText::isChineseUi() ? QStringLiteral("简易复制区") : QStringLiteral("Simple Copy Area")
+    );
+    connect(simpleCopyAreaAction_, &QAction::triggered, this, &MainWindow::showSimpleCopyArea);
+    fullCopyAreaAction_ = copyAreaMenu->addAction(
+        UiText::isChineseUi() ? QStringLiteral("完整复制区") : QStringLiteral("Full Copy Area")
+    );
+    fullCopyAreaAction_->setCheckable(true);
+    connect(fullCopyAreaAction_, &QAction::toggled, this, &MainWindow::setFullCopyAreaVisible);
 
     toolboxMenu_->addSeparator();
 
@@ -1118,7 +1162,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     timelineQuickStateBridge_->setFollowProgressEnabled(previewProgressFollowEnabled_);
     connect(timelineQuickStateBridge_, &TimelineQuickStateBridge::zoomScaleChanged, this, [this](double) {
         savePortableState();
-        saveProjectRenderState();
     });
     if (!timelineWidgetlessQuickRoute_) {
         timelineView_ = new TimelineView(bottomTabs_);
@@ -1152,6 +1195,22 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     }
 
     if (auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_); editor != nullptr) {
+        if (copyAreaEditor_ != nullptr) {
+            auto* mainVScroll = editor->verticalScrollBar();
+            auto* copyVScroll = copyAreaEditor_->verticalScrollBar();
+            if (mainVScroll != nullptr && copyVScroll != nullptr) {
+                connect(mainVScroll, &QScrollBar::valueChanged, this, [copyVScroll](int value) {
+                    if (copyVScroll->value() != value) {
+                        copyVScroll->setValue(qBound(copyVScroll->minimum(), value, copyVScroll->maximum()));
+                    }
+                });
+                connect(copyVScroll, &QScrollBar::valueChanged, this, [mainVScroll](int value) {
+                    if (mainVScroll->value() != value) {
+                        mainVScroll->setValue(qBound(mainVScroll->minimum(), value, mainVScroll->maximum()));
+                    }
+                });
+            }
+        }
         connect(editor->document(), &QTextDocument::contentsChange, this, [this](int position, int charsRemoved, int charsAdded) {
             if (suppressTextDirtyTracking_) {
                 return;
@@ -1168,6 +1227,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
                 }
             });
             ++timelineRevision_;
+            syncCopyAreaLineCount();
             applyTimelineQuickChange(position, charsRemoved, charsAdded);
             requestTimelineSlowRefresh();
             bool syncPreviewFollow = false;

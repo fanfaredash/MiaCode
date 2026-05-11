@@ -12,6 +12,7 @@
 #include <QPoint>
 #include <QRect>
 #include <QSet>
+#include <QStringList>
 #include <QTextEdit>
 #include <QVector>
 
@@ -230,6 +231,7 @@ private slots:
     void onValidateSimai();
     void onNewFile();
     void onOpenFile();
+    void onOpenCurrentFolder();
     bool onSaveFile();
     bool onSaveFileAs();
     void onMirrorLeftRight();
@@ -391,6 +393,13 @@ private:
     void applyEditorTextFontSize(int pointSize, bool persistPreference);
     void applyEditorLineSpacingFactor(double factor, bool persistPreference);
     void applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference);
+    void showSimpleCopyArea();
+    void setFullCopyAreaVisible(bool visible);
+    void syncCopyAreaEditorAppearance();
+    void syncCopyAreaLineCount();
+    void addRecentFilePath(const QString& path);
+    void openRecentFilePath(const QString& path);
+    void refreshRecentFilesMenu(QMenu* recentFilesMenu);
     void persistEditorTextFontPreference() const;
     void loadProjectRenderState();
     void saveProjectRenderState() const;

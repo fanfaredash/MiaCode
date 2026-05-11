@@ -323,7 +323,6 @@ void MainWindow::ExportSection::applySharedExportTaskSettings(const VideoExportT
         owner_.previewCanvas_->setSlideEarlierSecondAndTextOnTop(owner_.previewSlideEarlierSecondAndTextOnTop_);
     }
 
-    owner_.saveProjectRenderState();
     owner_.savePortableState();
 }
 
@@ -432,7 +431,6 @@ void MainWindow::ExportSection::onExportPreviewVideo()
             if (owner_.previewCanvas_ != nullptr) {
                 owner_.previewCanvas_->setShowTimestamp(owner_.previewShowTimestamp_);
             }
-            owner_.saveProjectRenderState();
             owner_.savePortableState();
         },
         [this](bool showObjectStatsHud) {
@@ -441,7 +439,6 @@ void MainWindow::ExportSection::onExportPreviewVideo()
             if (owner_.previewCanvas_ != nullptr) {
                 owner_.previewCanvas_->setShowObjectStatsHud(owner_.previewShowObjectStatsHud_);
             }
-            owner_.saveProjectRenderState();
             owner_.savePortableState();
         },
         [this](double ratio) {
@@ -455,7 +452,6 @@ void MainWindow::ExportSection::onExportPreviewVideo()
                 owner_.previewCanvas_->setBackgroundBrightnessOuter(owner_.previewBackgroundBrightnessOuter_);
                 owner_.previewCanvas_->setBackgroundBrightnessInner(owner_.previewBackgroundBrightnessInner_);
             }
-            owner_.saveProjectRenderState();
             owner_.savePortableState();
         },
         [this](double scale) {
@@ -463,7 +459,6 @@ void MainWindow::ExportSection::onExportPreviewVideo()
             if (owner_.previewCanvas_ != nullptr) {
                 owner_.previewCanvas_->setLayoutSquareScale(owner_.previewLayoutSquareScale_);
             }
-            owner_.saveProjectRenderState();
             owner_.savePortableState();
         },
         [this](bool smooth) {
@@ -471,7 +466,6 @@ void MainWindow::ExportSection::onExportPreviewVideo()
             if (owner_.previewCanvas_ != nullptr) {
                 owner_.previewCanvas_->setSmoothBrightness(owner_.previewSmoothBrightness_);
             }
-            owner_.saveProjectRenderState();
             owner_.savePortableState();
         },
         [this](PreviewBackgroundScaleMode mode) {
@@ -480,7 +474,6 @@ void MainWindow::ExportSection::onExportPreviewVideo()
             if (owner_.previewCanvas_ != nullptr) {
                 owner_.previewCanvas_->setBackgroundScaleMode(owner_.previewBackgroundScaleMode_);
             }
-            owner_.saveProjectRenderState();
             owner_.savePortableState();
         },
         [this](double flowSpeed) {
@@ -488,7 +481,6 @@ void MainWindow::ExportSection::onExportPreviewVideo()
             if (owner_.previewCanvas_ != nullptr) {
                 owner_.previewCanvas_->setTapFlowSpeed(owner_.previewTapFlowSpeed_);
             }
-            owner_.saveProjectRenderState();
             owner_.savePortableState();
         },
         [this](double flowSpeed) {
@@ -496,7 +488,6 @@ void MainWindow::ExportSection::onExportPreviewVideo()
             if (owner_.previewCanvas_ != nullptr) {
                 owner_.previewCanvas_->setTouchFlowSpeed(owner_.previewTouchFlowSpeed_);
             }
-            owner_.saveProjectRenderState();
             owner_.savePortableState();
         },
         UiDialogs::effectiveParentWidget(&owner_)

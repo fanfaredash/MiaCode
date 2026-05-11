@@ -400,7 +400,6 @@ void MainWindow::PreviewSection::applyPreviewOutlineVariant(
     state_.previewCustomOutlineFileName_.clear();
     applyEffectivePreviewOutlineVariantToCanvas();
     if (persistState) {
-        owner_.saveProjectRenderState();
         owner_.savePortableState();
     }
 }
@@ -438,7 +437,6 @@ void MainWindow::PreviewSection::applyPreviewCustomOutlineFileName(const QString
     state_.previewOutlineVariantUsesAutoSelection_ = false;
     applyEffectivePreviewOutlineVariantToCanvas();
     if (persistState) {
-        owner_.saveProjectRenderState();
         owner_.savePortableState();
     }
 }

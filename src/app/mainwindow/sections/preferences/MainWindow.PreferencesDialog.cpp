@@ -233,7 +233,7 @@ void MainWindow::PreferencesSection::onPreferences()
     editorFontSizeSpin->setRange(kEditorTextFontSizeMin, kEditorTextFontSizeMax);
     editorFontSizeSpin->setValue(selectedEditorFontSize);
     editorFontSizeSpin->setSuffix(" pt");
-    auto* shortcutHint = new QLabel(QStringLiteral("Ctrl+-/Ctrl+="), fontSizeRow);
+    auto* shortcutHint = new QLabel(QStringLiteral("Ctrl+Shift+- / Ctrl+Shift++"), fontSizeRow);
     shortcutHint->setStyleSheet(QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
     connect(editorFontSizeSpin, qOverload<int>(&QSpinBox::valueChanged), &dialog, [&](int value) {
         selectedEditorFontSize = value;
@@ -281,19 +281,14 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(QString(), halfWidthInputCheckbox);
 
-    auto* dialogDecreaseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+-")), &dialog);
+    auto* dialogDecreaseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+-")), &dialog);
     dialogDecreaseShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(dialogDecreaseShortcut, &QShortcut::activated, &dialog, [editorFontSizeSpin]() {
         editorFontSizeSpin->setValue(editorFontSizeSpin->value() - 1);
     });
-    auto* dialogIncreaseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+=")), &dialog);
+    auto* dialogIncreaseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+=")), &dialog);
     dialogIncreaseShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(dialogIncreaseShortcut, &QShortcut::activated, &dialog, [editorFontSizeSpin]() {
-        editorFontSizeSpin->setValue(editorFontSizeSpin->value() + 1);
-    });
-    auto* dialogIncreaseShiftShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl++")), &dialog);
-    dialogIncreaseShiftShortcut->setContext(Qt::WidgetWithChildrenShortcut);
-    connect(dialogIncreaseShiftShortcut, &QShortcut::activated, &dialog, [editorFontSizeSpin]() {
         editorFontSizeSpin->setValue(editorFontSizeSpin->value() + 1);
     });
     editorPageLayout->addWidget(editorGroup);
@@ -448,4 +443,3 @@ void MainWindow::onPreferences()
 {
     preferencesSection_->onPreferences();
 }
-

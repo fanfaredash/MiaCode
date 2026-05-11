@@ -541,7 +541,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             selectedFlowSpeed = snapFlowSpeed(typedSpeed);
             flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
             applyFlowSpeed(selectedFlowSpeed);
-            owner_.saveProjectRenderState();
             owner_.savePortableState();
         });
         return flowSpeedEdit;
@@ -667,7 +666,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             if (owner_.previewCanvas_ != nullptr) {
                 owner_.previewCanvas_->setSkinDirectory(owner_.resolvePreviewSkinDir());
             }
-            owner_.saveProjectRenderState();
             owner_.savePortableState();
         });
     }
@@ -680,7 +678,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             QDir().mkpath(skinRoot);
             QDesktopServices::openUrl(QUrl::fromLocalFile(skinRoot));
         }
-    }, true);
+    });
     skinButton->setMenu(skinMenu);
     const QString disabledLabel = uiText("dialog.render_settings.option.disabled", "Disabled");
     const QString slideJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.slide", "slide");
@@ -748,7 +746,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
                 owner_.muriRenderOptions_.*memberPtr = checked;
                 judgeEffectButton->setText(judgeEffectButtonLabel());
                 owner_.applyMuriRenderOptions();
-                owner_.saveProjectRenderState();
                 owner_.savePortableState();
             }
         );
@@ -831,7 +828,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             QDir().mkpath(outlineDir);
             QDesktopServices::openUrl(QUrl::fromLocalFile(outlineDir));
         }
-    }, true);
+    });
     judgeLineButton->setMenu(judgeLineMenu);
     auto* forceLabeledJudgeLineWhenPausedCheck = new QCheckBox(
         uiText(
@@ -862,7 +859,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         if (owner_.previewCanvas_ != nullptr) {
             owner_.previewCanvas_->setSlideEarlierSecondAndTextOnTop(earlierOnTop);
         }
-        owner_.saveProjectRenderState();
         owner_.savePortableState();
     };
     addDialogMenuChoice(slideStackOrderMenu, slideStackOrderDxLabel, [setSlideStackOrder]() {
@@ -887,7 +883,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         if (owner_.previewCanvas_ != nullptr) {
             owner_.previewCanvas_->setBackgroundScaleMode(selectedScaleMode);
         }
-        owner_.saveProjectRenderState();
         owner_.savePortableState();
     });
     addDialogMenuChoice(scaleModeMenu, scaleFitLabel, [&, scaleFitLabel]() {
@@ -898,7 +893,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         if (owner_.previewCanvas_ != nullptr) {
             owner_.previewCanvas_->setBackgroundScaleMode(selectedScaleMode);
         }
-        owner_.saveProjectRenderState();
         owner_.savePortableState();
     });
     scaleModeButton->setMenu(scaleModeMenu);
@@ -1231,7 +1225,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         owner_.previewAudioSettings_.normalize();
         syncAudioControlsFromCurrentSettings();
         owner_.applyPreviewAudioSettingsToRuntime();
-        owner_.saveProjectRenderState();
+        owner_.savePortableState();
         queueAudioApply(audition);
     };
 
@@ -1368,7 +1362,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
                 owner_.previewAudioSettings_.normalize();
                 syncAudioControlsFromCurrentSettings();
                 owner_.applyPreviewAudioSettingsToRuntime();
-                owner_.saveProjectRenderState();
+                owner_.savePortableState();
                 if (audioApplyTimer->isActive()) {
                     audioApplyTimer->stop();
                 }
@@ -1414,7 +1408,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         if (owner_.previewCanvas_ != nullptr) {
             owner_.previewCanvas_->setBackgroundBrightnessOuter(owner_.previewBackgroundBrightnessOuter_);
         }
-        owner_.saveProjectRenderState();
         owner_.savePortableState();
     });
     connect(innerBrightnessSlider, &QSlider::valueChanged, &dialog, [this, innerBrightnessLabel](int value) {
@@ -1423,7 +1416,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         if (owner_.previewCanvas_ != nullptr) {
             owner_.previewCanvas_->setBackgroundBrightnessInner(owner_.previewBackgroundBrightnessInner_);
         }
-        owner_.saveProjectRenderState();
         owner_.savePortableState();
     });
     connect(layoutSquareScaleSlider, &QSlider::valueChanged, &dialog, [this, layoutSquareScaleLabel](int value) {
@@ -1432,7 +1424,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         if (owner_.previewCanvas_ != nullptr) {
             owner_.previewCanvas_->setLayoutSquareScale(owner_.previewLayoutSquareScale_);
         }
-        owner_.saveProjectRenderState();
         owner_.savePortableState();
     });
     connect(smoothBrightnessCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
@@ -1440,7 +1431,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         if (owner_.previewCanvas_ != nullptr) {
             owner_.previewCanvas_->setSmoothBrightness(owner_.previewSmoothBrightness_);
         }
-        owner_.saveProjectRenderState();
         owner_.savePortableState();
     });
     connect(timestampCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
@@ -1448,14 +1438,12 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         if (owner_.previewCanvas_ != nullptr) {
             owner_.previewCanvas_->setShowTimestamp(owner_.previewShowTimestamp_);
         }
-        owner_.saveProjectRenderState();
         owner_.savePortableState();
     });
     connect(forceLabeledJudgeLineWhenPausedCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
         owner_.previewForceLabeledJudgeLineWhenPaused_ = checked;
         owner_.applyEffectivePreviewOutlineVariantToCanvas();
         owner_.applyPreviewStageMediaRouteVisualSettings();
-        owner_.saveProjectRenderState();
         owner_.savePortableState();
     });
 
@@ -1464,7 +1452,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         if (owner_.previewCanvas_ != nullptr) {
             owner_.previewCanvas_->setShowDebugInfo(owner_.previewShowDebugInfo_);
         }
-        owner_.saveProjectRenderState();
         owner_.savePortableState();
     });
     dialog.adjustSize();

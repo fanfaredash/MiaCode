@@ -775,7 +775,6 @@ void MainWindow::TimelineSection::onTimelineFollowPreviewToggled(bool enabled)
     state_.previewFollowEnabled_ = enabled;
     invalidatePreviewFollowBindingCache();
     owner_.savePortableState();
-    owner_.saveProjectRenderState();
     if (!enabled) {
         owner_.clearPreviewFollowDecoration();
         return;
@@ -797,7 +796,6 @@ void MainWindow::TimelineSection::onTimelineFollowProgressToggled(bool enabled)
         ui_.timelineView_->setFollowProgressEnabled(enabled);
     }
     owner_.savePortableState();
-    owner_.saveProjectRenderState();
 }
 
 void MainWindow::TimelineSection::applyLatestTimelinePreviewStateToPausedPreview()

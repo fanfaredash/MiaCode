@@ -69,6 +69,25 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.openAction_, &QAction::triggered, &owner_, &MainWindow::onOpenFile);
     fileMenu->addAction(owner_.openAction_);
 
+    owner_.openCurrentFolderAction_ = new QAction(uiText("action.open_folder", "Open Folder"), &owner_);
+    connect(owner_.openCurrentFolderAction_, &QAction::triggered, &owner_, &MainWindow::onOpenCurrentFolder);
+    fileMenu->addAction(owner_.openCurrentFolderAction_);
+
+    owner_.recentFilesMenu_ = fileMenu->addMenu(uiText("action.open_recent", "Open Recent"));
+    connect(owner_.recentFilesMenu_, &QMenu::aboutToShow, &owner_, [this]() {
+        owner_.refreshRecentFilesMenu(owner_.recentFilesMenu_);
+    });
+    connect(fileMenu, &QMenu::aboutToShow, &owner_, [this]() {
+        if (owner_.openCurrentFolderAction_ != nullptr) {
+            owner_.openCurrentFolderAction_->setEnabled(!owner_.currentFilePath_.isEmpty());
+        }
+        if (owner_.recentFilesMenu_ != nullptr) {
+            owner_.recentFilesMenu_->setEnabled(!owner_.recentFilePaths_.isEmpty());
+        }
+    });
+
+    fileMenu->addSeparator();
+
     owner_.saveAction_ = new QAction(uiText("action.save", "Save"), &owner_);
     owner_.saveAction_->setShortcut(QKeySequence::Save);
     connect(owner_.saveAction_, &QAction::triggered, &owner_, &MainWindow::onSaveFile);
@@ -78,8 +97,6 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     owner_.saveAsAction_->setShortcut(QKeySequence::SaveAs);
     connect(owner_.saveAsAction_, &QAction::triggered, &owner_, &MainWindow::onSaveFileAs);
     fileMenu->addAction(owner_.saveAsAction_);
-
-    fileMenu->addSeparator();
 
     owner_.preferencesAction_ = new QAction(uiText("action.preferences", "Preferences..."), &owner_);
     connect(owner_.preferencesAction_, &QAction::triggered, &owner_, &MainWindow::onPreferences);

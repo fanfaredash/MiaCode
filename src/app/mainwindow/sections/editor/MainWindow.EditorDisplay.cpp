@@ -44,6 +44,7 @@ void MainWindow::EditorSection::loadPortableState()
 {
     state_.lastSessionFilePath_.clear();
     state_.lastOpenDir_.clear();
+    state_.recentFilePaths_.clear();
     state_.lastTrackPath_.clear();
     state_.autoRestoreLastSessionFile_ = true;
     resetPortablePreviewSettingsToDefaults();
@@ -85,6 +86,19 @@ void MainWindow::EditorSection::loadPortableState()
     }
     if (app.value("auto_restore_last_open_file").isBool()) {
         state_.autoRestoreLastSessionFile_ = app.value("auto_restore_last_open_file").toBool(true);
+    }
+    const QJsonArray recentFiles = app.value("recent_files").toArray();
+    QSet<QString> seenRecentFiles;
+    for (const QJsonValue& value : recentFiles) {
+        const QString path = QDir::cleanPath(value.toString().trimmed());
+        if (path.isEmpty() || seenRecentFiles.contains(path)) {
+            continue;
+        }
+        seenRecentFiles.insert(path);
+        state_.recentFilePaths_.append(path);
+        if (state_.recentFilePaths_.size() >= 10) {
+            break;
+        }
     }
     const QString trackPath = app.value("last_track_path").toString();
     if (!trackPath.isEmpty() && QFileInfo::exists(trackPath)) {
@@ -370,6 +384,13 @@ void MainWindow::EditorSection::savePortableState() const
     app.insert("last_open_dir", state_.lastOpenDir_);
     app.insert("last_open_file", state_.lastSessionFilePath_);
     app.insert("auto_restore_last_open_file", state_.autoRestoreLastSessionFile_);
+    QJsonArray recentFiles;
+    for (const QString& path : state_.recentFilePaths_) {
+        if (!path.trimmed().isEmpty()) {
+            recentFiles.append(path);
+        }
+    }
+    app.insert("recent_files", recentFiles);
     app.insert("last_track_path", state_.lastTrackPath_);
     app.insert("show_slide_tracks", state_.showSlideTracks_);
 
@@ -472,6 +493,7 @@ void MainWindow::EditorSection::applyEditorTextFontSize(int pointSize, bool pers
         editor->setBlockSpacingPixels(blockSpacingPixels);
         editor->refreshLineNumberAreaLayout();
     }
+    syncCopyAreaEditorAppearance();
     if (state_.timelineQuickStateBridge_ != nullptr) {
         owner_.windowSection_->updateBottomTabsDeviceHeight();
     }
@@ -497,6 +519,7 @@ void MainWindow::EditorSection::applyEditorLineSpacingFactor(double factor, bool
         editor->setBlockSpacingPixels(blockSpacingPixels);
         editor->refreshLineNumberAreaLayout();
     }
+    syncCopyAreaEditorAppearance();
     if (ui_.metadataExtraEdit_ != nullptr) {
         applyBlockSpacingToTextEdit(ui_.metadataExtraEdit_, blockSpacingPixels);
     }
@@ -512,9 +535,118 @@ void MainWindow::EditorSection::applyEditorHalfWidthInputEnabled(bool enabled, b
     if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
         editor->setHalfWidthInputEnabled(enabled);
     }
+    if (ui_.copyAreaEditor_ != nullptr) {
+        ui_.copyAreaEditor_->setHalfWidthInputEnabled(enabled);
+    }
     if (persistPreference) {
         persistEditorTextFontPreference();
     }
+}
+
+void MainWindow::EditorSection::showSimpleCopyArea()
+{
+    auto* dialog = new QDialog(UiDialogs::effectiveParentWidget(&owner_));
+    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
+    dialog->setWindowTitle(UiText::isChineseUi() ? QStringLiteral("简易复制区") : QStringLiteral("Simple Copy Area"));
+    dialog->setWindowModality(Qt::NonModal);
+    dialog->setWindowFlags(
+        (dialog->windowFlags() | Qt::Window | Qt::WindowMinimizeButtonHint | Qt::WindowCloseButtonHint)
+        & ~Qt::WindowContextHelpButtonHint);
+    UiDialogs::applyDetachedParentBehavior(dialog, UiDialogs::effectiveParentWidget(&owner_));
+    dialog->resize(520, 360);
+    auto* layout = new QVBoxLayout(dialog);
+    layout->setContentsMargins(12, 12, 12, 12);
+    layout->setSpacing(10);
+
+    auto* edit = new PlainCodeEditor(dialog);
+    edit->setFont(editorFont(state_.editorTextFontPointSize_));
+    edit->setBlockSpacingPixels(blockSpacingPixelsForPointSize(
+        state_.editorTextFontPointSize_,
+        state_.editorLineSpacingFactor_));
+    edit->setHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_);
+    edit->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("临时记录要复制的内容") : QStringLiteral("Temporary copy notes"));
+    edit->setStyleSheet(UiTheme::editorTextEditStyleSheet());
+    if (auto* vbar = edit->verticalScrollBar()) {
+        vbar->setStyleSheet(modernScrollBarStyle());
+    }
+    if (auto* hbar = edit->horizontalScrollBar()) {
+        hbar->setStyleSheet(modernScrollBarStyle());
+    }
+    layout->addWidget(edit, 1);
+
+    auto* buttonBox = new QDialogButtonBox(dialog);
+    auto* copyButton = buttonBox->addButton(
+        UiText::isChineseUi() ? QStringLiteral("复制全部") : QStringLiteral("Copy All"),
+        QDialogButtonBox::ActionRole);
+    auto* closeButton = buttonBox->addButton(QDialogButtonBox::Close);
+    connect(copyButton, &QPushButton::clicked, dialog, [edit]() {
+        QGuiApplication::clipboard()->setText(edit->toPlainText());
+    });
+    connect(closeButton, &QPushButton::clicked, dialog, &QDialog::close);
+    UiDialogs::localizeButtonBox(buttonBox);
+    layout->addWidget(buttonBox, 0);
+
+    UiDialogs::centerDialogOnAnchor(dialog, UiDialogs::effectiveParentWidget(&owner_));
+    dialog->show();
+}
+
+void MainWindow::EditorSection::setFullCopyAreaVisible(bool visible)
+{
+    if (ui_.copyAreaPanel_ == nullptr || ui_.fullCopyAreaAction_ == nullptr) {
+        return;
+    }
+    ui_.copyAreaPanel_->setVisible(visible);
+    ui_.fullCopyAreaAction_->setChecked(visible);
+    if (visible) {
+        syncCopyAreaEditorAppearance();
+        syncCopyAreaLineCount();
+        if (ui_.chartCopySplitter_ != nullptr) {
+            ui_.chartCopySplitter_->setSizes({1, 1});
+        }
+        if (ui_.copyAreaEditor_ != nullptr) {
+            ui_.copyAreaEditor_->setFocus();
+        }
+    } else if (ui_.editorWidget_ != nullptr) {
+        ui_.editorWidget_->setFocus();
+    }
+}
+
+void MainWindow::EditorSection::syncCopyAreaEditorAppearance()
+{
+    if (ui_.copyAreaEditor_ == nullptr) {
+        return;
+    }
+    const int blockSpacingPixels = blockSpacingPixelsForPointSize(
+        state_.editorTextFontPointSize_,
+        state_.editorLineSpacingFactor_);
+    QSignalBlocker blocker(ui_.copyAreaEditor_);
+    ui_.copyAreaEditor_->setFont(editorFont(state_.editorTextFontPointSize_));
+    ui_.copyAreaEditor_->setBlockSpacingPixels(blockSpacingPixels);
+    ui_.copyAreaEditor_->setHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_);
+    ui_.copyAreaEditor_->refreshLineNumberAreaLayout();
+}
+
+void MainWindow::EditorSection::syncCopyAreaLineCount()
+{
+    if (ui_.copyAreaEditor_ == nullptr) {
+        return;
+    }
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr || editor->document() == nullptr || ui_.copyAreaEditor_->document() == nullptr) {
+        return;
+    }
+    const int sourceLines = qMax(1, editor->document()->blockCount());
+    const int copyLines = qMax(1, ui_.copyAreaEditor_->document()->blockCount());
+    if (copyLines >= sourceLines) {
+        return;
+    }
+    QTextCursor cursor(ui_.copyAreaEditor_->document());
+    cursor.movePosition(QTextCursor::End);
+    cursor.beginEditBlock();
+    for (int i = copyLines; i < sourceLines; ++i) {
+        cursor.insertBlock();
+    }
+    cursor.endEditBlock();
 }
 
 void MainWindow::loadPortableState()
@@ -555,4 +687,24 @@ void MainWindow::applyEditorLineSpacingFactor(double factor, bool persistPrefere
 void MainWindow::applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference)
 {
     editorSection_->applyEditorHalfWidthInputEnabled(enabled, persistPreference);
+}
+
+void MainWindow::showSimpleCopyArea()
+{
+    editorSection_->showSimpleCopyArea();
+}
+
+void MainWindow::setFullCopyAreaVisible(bool visible)
+{
+    editorSection_->setFullCopyAreaVisible(visible);
+}
+
+void MainWindow::syncCopyAreaEditorAppearance()
+{
+    editorSection_->syncCopyAreaEditorAppearance();
+}
+
+void MainWindow::syncCopyAreaLineCount()
+{
+    editorSection_->syncCopyAreaLineCount();
 }

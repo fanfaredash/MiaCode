@@ -772,7 +772,6 @@ QList<QAction*> MainWindow::WindowSection::quickShellShortcutActions() const
         owner_.aboutAction_,
         owner_.fontDecreaseAction_,
         owner_.fontIncreaseAction_,
-        owner_.fontIncreaseShiftAction_,
     };
 }
 

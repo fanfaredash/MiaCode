@@ -54,7 +54,6 @@ void MainWindow::ValidationSection::onToggleJudgeMarkers(bool checked)
     state_.showJudgeMarkers_ = checked;
     applyMuriRenderOptions();
     owner_.savePortableState();
-    owner_.saveProjectRenderState();
     owner_.statusBar()->showMessage(
         state_.showJudgeMarkers_
             ? uiText("status.judge_marker_enabled", "Judge markers enabled.")
@@ -67,7 +66,6 @@ void MainWindow::ValidationSection::onToggleTouchTrail(bool checked)
     state_.showTouchTrail_ = checked;
     applyMuriRenderOptions();
     owner_.savePortableState();
-    owner_.saveProjectRenderState();
     owner_.statusBar()->showMessage(
         state_.showTouchTrail_
             ? uiText("status.touch_trail_enabled", "Touch trail enabled.")
@@ -138,7 +136,6 @@ void MainWindow::ValidationSection::onEditStaticTapOnSlideThreshold()
 
     state_.staticTapOnSlideThresholdMs_ = newThresholdMs;
     owner_.savePortableState();
-    owner_.saveProjectRenderState();
     if (owner_.hasActiveDifficulty()) {
         if (!owner_.scheduleTimelineAnalysisRefreshFromLatestPreviewState()) {
             owner_.refreshTimelineMetadata();
@@ -192,7 +189,6 @@ void MainWindow::ValidationSection::setMuriRenderMode(RenderMode mode, bool pers
     applyMuriRenderOptions();
     if (persistState) {
         owner_.savePortableState();
-        owner_.saveProjectRenderState();
     }
     if (owner_.hasActiveDifficulty() && !owner_.scheduleTimelineAnalysisRefreshFromLatestPreviewState()) {
         owner_.refreshTimelineMetadata();

@@ -7,6 +7,8 @@
         QAction* validateAction_ = nullptr;
         QAction* newAction_ = nullptr;
         QAction* openAction_ = nullptr;
+        QAction* openCurrentFolderAction_ = nullptr;
+        QMenu* recentFilesMenu_ = nullptr;
         QAction* saveAction_ = nullptr;
         QAction* settingsPlaceholderAction_ = nullptr;
         QAction* preferencesAction_ = nullptr;
@@ -42,10 +44,11 @@
         QAction* previewAudioSettingsAction_ = nullptr;
         QAction* previewVideoSettingsAction_ = nullptr;
         QAction* swapWorkspaceSidesAction_ = nullptr;
+        QAction* simpleCopyAreaAction_ = nullptr;
+        QAction* fullCopyAreaAction_ = nullptr;
         QAction* aboutAction_ = nullptr;
         QAction* fontDecreaseAction_ = nullptr;
         QAction* fontIncreaseAction_ = nullptr;
-        QAction* fontIncreaseShiftAction_ = nullptr;
         QLabel* currentFileLabel_ = nullptr;
         QTimer* autosaveTimer_ = nullptr;
         QTimer* autosaveIdleTimer_ = nullptr;
@@ -64,6 +67,9 @@
         QWidget* metadataCard_ = nullptr;
         QLabel* metadataEmptyHintLabel_ = nullptr;
         QWidget* chartPage_ = nullptr;
+        QSplitter* chartCopySplitter_ = nullptr;
+        QWidget* copyAreaPanel_ = nullptr;
+        PlainCodeEditor* copyAreaEditor_ = nullptr;
         QStackedWidget* editorStack_ = nullptr;
         QDockWidget* outlineDock_ = nullptr;
         QListWidget* outlineList_ = nullptr;
@@ -201,6 +207,7 @@
         QString lastSessionFilePath_;
         QString currentFilePath_;
         QString lastOpenDir_;
+        QStringList recentFilePaths_;
         QString lastTrackPath_;
         QByteArray autosaveReferenceContentSignature_;
         QByteArray autosaveLastLatestContentSignature_;
@@ -488,6 +495,8 @@
     QAction*& validateAction_ = ui_.validateAction_;
     QAction*& newAction_ = ui_.newAction_;
     QAction*& openAction_ = ui_.openAction_;
+    QAction*& openCurrentFolderAction_ = ui_.openCurrentFolderAction_;
+    QMenu*& recentFilesMenu_ = ui_.recentFilesMenu_;
     QAction*& saveAction_ = ui_.saveAction_;
     QAction*& settingsPlaceholderAction_ = ui_.settingsPlaceholderAction_;
     QAction*& preferencesAction_ = ui_.preferencesAction_;
@@ -523,10 +532,11 @@
     QAction*& previewAudioSettingsAction_ = ui_.previewAudioSettingsAction_;
     QAction*& previewVideoSettingsAction_ = ui_.previewVideoSettingsAction_;
     QAction*& swapWorkspaceSidesAction_ = ui_.swapWorkspaceSidesAction_;
+    QAction*& simpleCopyAreaAction_ = ui_.simpleCopyAreaAction_;
+    QAction*& fullCopyAreaAction_ = ui_.fullCopyAreaAction_;
     QAction*& aboutAction_ = ui_.aboutAction_;
     QAction*& fontDecreaseAction_ = ui_.fontDecreaseAction_;
     QAction*& fontIncreaseAction_ = ui_.fontIncreaseAction_;
-    QAction*& fontIncreaseShiftAction_ = ui_.fontIncreaseShiftAction_;
     QLabel*& currentFileLabel_ = ui_.currentFileLabel_;
     QTimer*& autosaveTimer_ = ui_.autosaveTimer_;
     QTimer*& autosaveIdleTimer_ = ui_.autosaveIdleTimer_;
@@ -558,6 +568,7 @@
     QString& lastSessionFilePath_ = state_.lastSessionFilePath_;
     QString& currentFilePath_ = state_.currentFilePath_;
     QString& lastOpenDir_ = state_.lastOpenDir_;
+    QStringList& recentFilePaths_ = state_.recentFilePaths_;
     QString& lastTrackPath_ = state_.lastTrackPath_;
     QByteArray& autosaveReferenceContentSignature_ = state_.autosaveReferenceContentSignature_;
     QByteArray& autosaveLastLatestContentSignature_ = state_.autosaveLastLatestContentSignature_;
@@ -764,6 +775,9 @@
     QWidget*& metadataCard_ = ui_.metadataCard_;
     QLabel*& metadataEmptyHintLabel_ = ui_.metadataEmptyHintLabel_;
     QWidget*& chartPage_ = ui_.chartPage_;
+    QSplitter*& chartCopySplitter_ = ui_.chartCopySplitter_;
+    QWidget*& copyAreaPanel_ = ui_.copyAreaPanel_;
+    PlainCodeEditor*& copyAreaEditor_ = ui_.copyAreaEditor_;
     QStackedWidget*& editorStack_ = ui_.editorStack_;
     QDockWidget*& outlineDock_ = ui_.outlineDock_;
     QListWidget*& outlineList_ = ui_.outlineList_;

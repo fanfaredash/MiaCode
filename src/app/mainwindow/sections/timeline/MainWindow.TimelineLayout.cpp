@@ -893,7 +893,6 @@ void MainWindow::TimelineSection::setPreviewCanvasFrameRateMode(PreviewCanvasFra
         owner_.setPreviewFixedTimerHighResolutionActive(false);
     }
     if (persistState) {
-        owner_.saveProjectRenderState();
         owner_.savePortableState();
     }
 }
@@ -962,7 +961,6 @@ void MainWindow::TimelineSection::setPreviewCanvasAspectRatio(double ratio, bool
     }
     refreshLayoutAfterPageSwitch();
     if (persistState) {
-        owner_.saveProjectRenderState();
         owner_.savePortableState();
     }
 }
@@ -1329,7 +1327,6 @@ void MainWindow::TimelineSection::setWorkspacePanelsSwapped(bool swapped, bool p
     applyWorkspacePanelArrangement();
     if (persistState) {
         owner_.savePortableState();
-        owner_.saveProjectRenderState();
     }
 }
 

@@ -364,6 +364,9 @@ const QHash<QString, QString>& zhMap()
 
         {"action.new", "新建"},
         {"action.open", "打开"},
+        {"action.open_folder", "打开文件夹"},
+        {"action.open_recent", "打开最近的文件"},
+        {"action.open_recent.empty", "没有最近的文件"},
         {"action.save", "保存"},
         {"action.ok", "确定"},
         {"action.discard", "放弃"},

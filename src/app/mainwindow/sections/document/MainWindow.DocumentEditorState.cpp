@@ -585,7 +585,6 @@ bool MainWindow::DocumentSection::undoDeletedDifficultyField()
         updateEditorHeader();
         updateEditorEmptyState();
         updateEditorStatus();
-        owner_.saveProjectRenderState();
         owner_.refreshLayoutAfterPageSwitch();
         QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
     }
