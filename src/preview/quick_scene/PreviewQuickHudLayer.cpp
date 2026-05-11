@@ -337,8 +337,15 @@ void paintPreviewHudOverlay(
 
     const qreal stageAspectRatio = stageRect.height() > 0.0 ? (stageRect.width() / stageRect.height()) : 1.0;
 
+    // The HUD honours `hudPlayheadSecondsOverride` when finite so callers
+    // (e.g. the full-range video export's lead-in clamp) can show a
+    // count-down timestamp while keeping the scene clamped at chart 0.
+    const double hudPlayheadSeconds = qIsFinite(state->hudPlayheadSecondsOverride)
+        ? state->hudPlayheadSecondsOverride
+        : state->playheadSeconds;
+
     if (state->render.showTimestamp) {
-        const QString timeLabel = miacode::preview::scene::formatPreviewHudTimeLabel(state->playheadSeconds);
+        const QString timeLabel = miacode::preview::scene::formatPreviewHudTimeLabel(hudPlayheadSeconds);
         const QFontMetrics timeMetrics(timeFont);
         const bool insetTimestampForAspect =
             aspectRatioNear(stageAspectRatio, 16.0 / 9.0) || aspectRatioNear(stageAspectRatio, 4.0 / 3.0);
@@ -378,7 +385,7 @@ void paintPreviewHudOverlay(
 
     const miacode::preview::scene::PreviewHudStats stats =
         state->progressStatsCache != nullptr
-        ? state->progressStatsCache->hudStatsAt(state->playheadSeconds)
+        ? state->progressStatsCache->hudStatsAt(hudPlayheadSeconds)
         : miacode::preview::scene::PreviewHudStats();
 
     int baseFontPointSize = qMax(1, qRound(static_cast<qreal>(kHudReferenceStatsFontPointSize) * hudScale));

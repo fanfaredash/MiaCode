@@ -51,6 +51,7 @@
 #include <cstring>
 #include <deque>
 #include <functional>
+#include <limits>
 #include <optional>
 
 #ifdef Q_OS_WIN
@@ -848,13 +849,6 @@ ReadyFramePayload buildReadyFramePayload(
     return readyFrame;
 }
 
-QImage makeTransparentOverlayFrame(const QSize& frameSize)
-{
-    QImage frame(frameSize, QImage::Format_RGBA8888);
-    frame.fill(Qt::transparent);
-    return frame;
-}
-
 ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
     VideoExportQuickRenderBackend* exportBackend,
     bool* useOffscreenGpu,
@@ -867,7 +861,8 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
     bool showObjectStatsHud,
     QVector<ObjectTraceItem>&& traceItems,
     ReadyFramePayload* readyFrame,
-    QString* fallbackDetail
+    QString* fallbackDetail,
+    double hudPlayheadSecondsOverride
 )
 {
     if (exportBackend == nullptr
@@ -896,7 +891,8 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
             &completedFrame,
             &completedFrameReady,
             false,
-            &pboStepError
+            &pboStepError,
+            hudPlayheadSecondsOverride
         );
         const qint64 renderNs = frameTimer.nsecsElapsed();
         if (pboStepOk) {
@@ -941,8 +937,18 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
     }
 
     frame = *useOffscreenGpu
-        ? exportBackend->renderOverlayFrameOffscreen(frameSize, exportSecond, showTimestamp, showObjectStatsHud)
-        : exportBackend->renderOverlayFrame(frameSize, exportSecond, showTimestamp, showObjectStatsHud);
+        ? exportBackend->renderOverlayFrameOffscreen(
+              frameSize,
+              exportSecond,
+              showTimestamp,
+              showObjectStatsHud,
+              hudPlayheadSecondsOverride)
+        : exportBackend->renderOverlayFrame(
+              frameSize,
+              exportSecond,
+              showTimestamp,
+              showObjectStatsHud,
+              hudPlayheadSecondsOverride);
     if (frame.isNull()) {
         appendRenderBackendFallbackDetail(
             fallbackDetail,
@@ -3736,9 +3742,19 @@ VideoExportResult VideoExportController::exportPreparedTask(
 
     if (useOffscreenGpu) {
         frameTimer.start();
+        // The warmup primes the Quick scene graph (texture upload, shader
+        // compile, vertex buffer build) using the playhead the first real
+        // frame will see — `qMax(0.0, timelineOriginSecond)` so the warmup
+        // is at chart time 0 for full-range exports and at
+        // `segmentStartSecond` for partial exports. Warming at a negative
+        // chart time produced an empty / no-active-notes scene cache that
+        // was reused for the first 120 lead-in frames, leaving them as a
+        // transparent overlay (= black after FFmpeg's overlay-over-base
+        // composite).
+        const double warmupPlayheadSeconds = qMax(0.0, timelineOriginSecond);
         const QImage warmupFrame = exportCanvas.renderOverlayFrameOffscreen(
             frameSize,
-            timelineOriginSecond,
+            warmupPlayheadSeconds,
             task.showTimestamp,
             task.showObjectStatsHud
         );
@@ -3816,6 +3832,45 @@ VideoExportResult VideoExportController::exportPreparedTask(
         const bool usedOffscreenPath = readyFrame.usedOffscreenPath;
         const int fallbackCount = readyFrame.fallbackCount;
         const bool usedGpuRenderer = readyFrame.usedGpuRenderer;
+
+        // Diagnostic: sample the first few rendered frames' RGBA so we can
+        // tell whether the renderer is emitting opaque pixels (disc/HUD)
+        // or a fully-transparent overlay (which composites to black on
+        // FFmpeg's solid base). Sampled only for frames 0..4 + every
+        // ~30 frames after, to bound log volume.
+        if (!frame.isNull() && (frameIndex < 5 || frameIndex % 30 == 0)) {
+            const QSize sampleSize = frame.size();
+            const int sampleWidth = sampleSize.width();
+            const int sampleHeight = sampleSize.height();
+            if (sampleWidth > 0 && sampleHeight > 0) {
+                qint64 alphaSum = 0;
+                qint64 alphaMax = 0;
+                qint64 sampleCount = 0;
+                const int step = qMax(1, qMin(sampleWidth, sampleHeight) / 32);
+                for (int y = 0; y < sampleHeight; y += step) {
+                    for (int x = 0; x < sampleWidth; x += step) {
+                        const QRgb pixel = frame.pixel(x, y);
+                        const int alpha = qAlpha(pixel);
+                        alphaSum += alpha;
+                        alphaMax = qMax<qint64>(alphaMax, alpha);
+                        ++sampleCount;
+                    }
+                }
+                const double meanAlpha = sampleCount > 0
+                    ? static_cast<double>(alphaSum) / static_cast<double>(sampleCount)
+                    : 0.0;
+                appendVideoExportLog(
+                    QStringLiteral("frame_alpha_sample"),
+                    QStringLiteral("frame=%1 t=%2 size=%3x%4 samples=%5 meanA=%6 maxA=%7")
+                        .arg(frameIndex)
+                        .arg(exportSecond, 0, 'f', 6)
+                        .arg(sampleWidth)
+                        .arg(sampleHeight)
+                        .arg(sampleCount)
+                        .arg(meanAlpha, 0, 'f', 2)
+                        .arg(alphaMax));
+            }
+        }
 
         if (frame.isNull()) {
             ffmpeg.kill();
@@ -4280,26 +4335,24 @@ VideoExportResult VideoExportController::exportPreparedTask(
             return result;
         }
         const double outputSecond = static_cast<double>(frameIndex) / task.fps;
-        const bool partialPreloadFrame =
-            partialRangeExport && outputSecond + kTimelineEpsilonSeconds < audioRenderPlan.leadInSeconds;
+        const bool inLeadInOrPreload =
+            outputSecond + kTimelineEpsilonSeconds < audioRenderPlan.leadInSeconds;
+        // Render the chart playfield + HUD throughout the lead-in / preload
+        // instead of emitting a transparent overlay (which composites to
+        // black on FFmpeg's solid base). The scene plays back the chart
+        // frozen at its segment-start time (chart 0 for full-range,
+        // segmentStart for partial-range exports), while the HUD reads
+        // the unclamped raw chart time so the timestamp counts up through
+        // the lead-in (e.g. -2s → 0s for full-range; segmentStart-1s →
+        // segmentStart for partial).
+        const double rawChartSecond = timelineOriginSecond + outputSecond;
         const double exportSecond = partialRangeExport
             ? audioRenderPlan.segmentStartSecond + qMax(0.0, outputSecond - audioRenderPlan.leadInSeconds)
-            : timelineOriginSecond + outputSecond;
-        if (partialPreloadFrame) {
-            ReadyFramePayload readyFrame = buildReadyFramePayload(
-                nullptr,
-                frameIndex,
-                exportSecond,
-                QVector<ObjectTraceItem>(),
-                makeTransparentOverlayFrame(frameSize),
-                0,
-                false
-            );
-            if (!processReadyFrame(readyFrame)) {
-                return result;
-            }
-            continue;
-        }
+            : qMax(0.0, rawChartSecond);
+        const double hudPlayheadSecondsOverride =
+            inLeadInOrPreload
+                ? rawChartSecond
+                : std::numeric_limits<double>::quiet_NaN();
         QVector<ObjectTraceItem> traceItems;
         if (diagObjectTraceEnabled || diagObjectHashEnabled) {
             traceItems = collectVisibleObjectTrace(
@@ -4343,7 +4396,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
             task.showObjectStatsHud,
             std::move(traceItems),
             &readyFrame,
-            &renderBackendFallbackDetail
+            &renderBackendFallbackDetail,
+            hudPlayheadSecondsOverride
         );
         if (!renderBackendFallbackDetail.isEmpty()) {
             appendVideoExportLog(QStringLiteral("render_backend_fallback"), renderBackendFallbackDetail);

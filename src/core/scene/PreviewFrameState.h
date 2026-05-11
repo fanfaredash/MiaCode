@@ -4,7 +4,9 @@
 #include <QRectF>
 #include <QVector>
 #include <QtGlobal>
+#include <QtMath>
 
+#include <limits>
 #include <memory>
 
 #include "common/PreviewGameplayConfig.h"
@@ -201,6 +203,12 @@ struct PreviewFrameState {
     PreviewJudgeEffectAssets judgeEffect;
     PreviewRenderState render;
     double playheadSeconds = 0.0;
+    // Optional HUD-only override. When finite, the HUD timestamp/stats use
+    // this value instead of `playheadSeconds`; the scene graph and note
+    // layers always read `playheadSeconds`. Used by the full-range video
+    // export so the HUD can count down through the lead-in (negative
+    // seconds) while the scene stays clamped at chart time 0.
+    double hudPlayheadSecondsOverride = std::numeric_limits<double>::quiet_NaN();
     quint64 sceneContentRevision = 0;
     double fpsDisplay = 0.0;
     double tickFpsDisplay = 0.0;

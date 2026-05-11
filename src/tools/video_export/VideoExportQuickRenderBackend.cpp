@@ -238,10 +238,15 @@ bool VideoExportQuickRenderBackend::renderOverlayFrameOffscreenPboStep(
     QImage* completedFrame,
     bool* completedFrameReady,
     bool drainOnly,
-    QString* errorMessage)
+    QString* errorMessage,
+    double hudPlayheadSecondsOverride)
 {
     session_.setFrameSize(outputSize);
-    updateFrameStateForRender(playheadSeconds, showTimestamp, showObjectStatsHud);
+    updateFrameStateForRender(
+        playheadSeconds,
+        showTimestamp,
+        showObjectStatsHud,
+        hudPlayheadSecondsOverride);
     const bool ok = session_.renderFramePboStep(
         completedFrame,
         completedFrameReady,
@@ -256,19 +261,30 @@ QImage VideoExportQuickRenderBackend::renderOverlayFrame(
     const QSize& outputSize,
     double playheadSeconds,
     bool showTimestamp,
-    bool showObjectStatsHud)
+    bool showObjectStatsHud,
+    double hudPlayheadSecondsOverride)
 {
-    return renderOverlayFrameOffscreen(outputSize, playheadSeconds, showTimestamp, showObjectStatsHud);
+    return renderOverlayFrameOffscreen(
+        outputSize,
+        playheadSeconds,
+        showTimestamp,
+        showObjectStatsHud,
+        hudPlayheadSecondsOverride);
 }
 
 QImage VideoExportQuickRenderBackend::renderOverlayFrameOffscreen(
     const QSize& outputSize,
     double playheadSeconds,
     bool showTimestamp,
-    bool showObjectStatsHud)
+    bool showObjectStatsHud,
+    double hudPlayheadSecondsOverride)
 {
     session_.setFrameSize(outputSize);
-    updateFrameStateForRender(playheadSeconds, showTimestamp, showObjectStatsHud);
+    updateFrameStateForRender(
+        playheadSeconds,
+        showTimestamp,
+        showObjectStatsHud,
+        hudPlayheadSecondsOverride);
     const QImage frame = session_.renderFrame();
     lastRenderStats_ = session_.lastRenderStats();
     return frame;
@@ -323,7 +339,8 @@ void VideoExportQuickRenderBackend::syncSessionStateIfInitialized()
 void VideoExportQuickRenderBackend::updateFrameStateForRender(
     double playheadSeconds,
     bool showTimestamp,
-    bool showObjectStatsHud)
+    bool showObjectStatsHud,
+    double hudPlayheadSecondsOverride)
 {
     session_.applyExportFrameTick(
         playheadSeconds,
@@ -331,6 +348,7 @@ void VideoExportQuickRenderBackend::updateFrameStateForRender(
         showObjectStatsHud,
         true,
         0,
-        0.0
+        0.0,
+        hudPlayheadSecondsOverride
     );
 }

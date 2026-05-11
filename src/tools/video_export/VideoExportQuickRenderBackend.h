@@ -3,6 +3,8 @@
 #include <QString>
 #include <QSurfaceFormat>
 
+#include <limits>
+
 #include "PreviewRenderSettings.h"
 #include "VideoExportController.h"
 #include "preview/runtime/PreviewQuickExportSession.h"
@@ -58,15 +60,22 @@ public:
         QImage* completedFrame,
         bool* completedFrameReady,
         bool drainOnly,
-        QString* errorMessage = nullptr
+        QString* errorMessage = nullptr,
+        double hudPlayheadSecondsOverride = std::numeric_limits<double>::quiet_NaN()
     );
 
-    QImage renderOverlayFrame(const QSize& outputSize, double playheadSeconds, bool showTimestamp, bool showObjectStatsHud);
+    QImage renderOverlayFrame(
+        const QSize& outputSize,
+        double playheadSeconds,
+        bool showTimestamp,
+        bool showObjectStatsHud,
+        double hudPlayheadSecondsOverride = std::numeric_limits<double>::quiet_NaN());
     QImage renderOverlayFrameOffscreen(
         const QSize& outputSize,
         double playheadSeconds,
         bool showTimestamp,
-        bool showObjectStatsHud
+        bool showObjectStatsHud,
+        double hudPlayheadSecondsOverride = std::numeric_limits<double>::quiet_NaN()
     );
 
     bool isGpuRendererReadyForDebug() const;
@@ -79,7 +88,11 @@ public:
 private:
     void refreshAssetState();
     void syncSessionStateIfInitialized();
-    void updateFrameStateForRender(double playheadSeconds, bool showTimestamp, bool showObjectStatsHud);
+    void updateFrameStateForRender(
+        double playheadSeconds,
+        bool showTimestamp,
+        bool showObjectStatsHud,
+        double hudPlayheadSecondsOverride = std::numeric_limits<double>::quiet_NaN());
 
     miacode::preview::runtime::PreviewSceneAssetRepository assets_;
     PreviewQuickExportSession session_;

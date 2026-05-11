@@ -3,6 +3,7 @@
 #include "DialogLocalization.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "common/DebugLog.h"
 #include "common/PreviewInteractionConfig.h"
 #include "tools/video_export/VideoExportPreferences.h"
 
@@ -1533,9 +1534,23 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     const double selectedRangeEnd = rangeEndSeconds();
     updated.exportStartSeconds = selectedRangeStart;
     updated.contentDurationSeconds = qMax(0.0, selectedRangeEnd - updated.exportStartSeconds);
+    // Tolerate the spinbox / floating-point slop that prevented genuine
+    // "Export All" selections (range == [0, totalDuration] up to the
+    // dialog's 1 ms display precision) from being classified as
+    // full-range. We treat anything within 0.01 s of the total as full.
+    constexpr double kFullRangeEpsilonSeconds = 0.01;
     updated.fullRangeExport =
-        selectedRangeStart <= 1e-6
-        && selectedRangeEnd + 1e-6 >= totalDurationSeconds_;
+        selectedRangeStart <= kFullRangeEpsilonSeconds
+        && selectedRangeEnd + kFullRangeEpsilonSeconds >= totalDurationSeconds_;
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Export,
+        QStringLiteral("dialog_range_decision"),
+        QStringLiteral("rangeStart=%1 rangeEnd=%2 totalDuration=%3 fullRangeExport=%4 epsilon=%5")
+            .arg(selectedRangeStart, 0, 'f', 9)
+            .arg(selectedRangeEnd, 0, 'f', 9)
+            .arg(totalDurationSeconds_, 0, 'f', 9)
+            .arg(updated.fullRangeExport ? 1 : 0)
+            .arg(kFullRangeEpsilonSeconds, 0, 'f', 6));
 
     const QFileInfo outputInfo(updated.outputPath);
     const QDir outputDir = outputInfo.absoluteDir();

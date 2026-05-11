@@ -79,9 +79,11 @@ void PreviewQuickExportSession::applyExportFrameTick(
     bool showObjectStatsHud,
     bool usedGpuRendererThisFrame,
     int cpuFallbackCount,
-    double fpsDisplay)
+    double fpsDisplay,
+    double hudPlayheadSecondsOverride)
 {
     frameState_.playheadSeconds = playheadSeconds;
+    frameState_.hudPlayheadSecondsOverride = hudPlayheadSecondsOverride;
     frameState_.render.showTimestamp = showTimestamp;
     frameState_.render.showObjectStatsHud = showObjectStatsHud;
     frameState_.usedGpuRendererThisFrame = usedGpuRendererThisFrame;

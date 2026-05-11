@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <limits>
 #include <mutex>
 #include <thread>
 
@@ -45,7 +46,8 @@ public:
         bool showObjectStatsHud,
         bool usedGpuRendererThisFrame,
         int cpuFallbackCount,
-        double fpsDisplay
+        double fpsDisplay,
+        double hudPlayheadSecondsOverride = std::numeric_limits<double>::quiet_NaN()
     );
     const miacode::preview::scene::PreviewFrameState& frameState() const { return frameState_; }
     void setLayerFlags(miacode::preview::scene::PreviewRenderLayerFlags layerFlags);
