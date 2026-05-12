@@ -119,6 +119,7 @@ public:
     Q_INVOKABLE void timelineUserInteractionStarted();
     Q_INVOKABLE void noteTimelineSurfaceReady();
     Q_INVOKABLE void timelineFollowPreviewToggled(bool enabled);
+    Q_INVOKABLE void timelineViewportLockToggled(bool enabled);
     Q_INVOKABLE void timelineFollowProgressToggled(bool enabled);
     Q_INVOKABLE bool stepPreviewBySeconds(double deltaSeconds, bool centerView = true);
     Q_INVOKABLE void beginPreviewHeldSeek(int direction, int key);

@@ -676,12 +676,22 @@ void MainWindow::TimelineSection::onTimelineHeaderNavigateRequested(double secon
 
 void MainWindow::TimelineSection::onTimelineUserInteractionStarted()
 {
-    if (!state_.previewProgressFollowEnabled_) {
+    const bool pauseForViewportLock =
+        state_.previewFollowEnabled_ && state_.previewViewportLockEnabled_;
+    if (!state_.previewProgressFollowEnabled_ && !pauseForViewportLock) {
         return;
     }
     if (state_.qtPreviewPlaying_) {
         pauseQtPreviewPlaybackExact();
         owner_.updatePauseButtonAppearance();
+        if (pauseForViewportLock) {
+            const double second = qMax(0.0, state_.qtPreviewPauseSecond_);
+            QTimer::singleShot(0, &owner_, [this, second]() {
+                if (state_.previewFollowEnabled_ && state_.previewViewportLockEnabled_) {
+                    syncEditorCursorToPreviewSecond(second, true, false);
+                }
+            });
+        }
     }
 }
 
@@ -773,6 +783,9 @@ void MainWindow::TimelineSection::onTimelineDragFinished(double second)
 void MainWindow::TimelineSection::onTimelineFollowPreviewToggled(bool enabled)
 {
     state_.previewFollowEnabled_ = enabled;
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setFollowPreviewEnabled(enabled);
+    }
     invalidatePreviewFollowBindingCache();
     owner_.savePortableState();
     if (!enabled) {
@@ -783,7 +796,26 @@ void MainWindow::TimelineSection::onTimelineFollowPreviewToggled(bool enabled)
         return;
     }
     const double second = qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond());
-    syncEditorCursorToPreviewSecond(second, false, !state_.qtPreviewPlaying_);
+    syncEditorCursorToPreviewSecond(second, state_.qtPreviewPlaying_ && state_.previewViewportLockEnabled_, !state_.qtPreviewPlaying_);
+}
+
+void MainWindow::TimelineSection::onTimelineViewportLockToggled(bool enabled)
+{
+    state_.previewViewportLockEnabled_ = enabled;
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setViewportLockEnabled(enabled);
+    }
+    if (ui_.timelineView_ != nullptr) {
+        ui_.timelineView_->setViewportLockEnabled(enabled);
+    }
+    owner_.savePortableState();
+    if (!enabled || !hasActiveDifficulty()) {
+        return;
+    }
+    if (state_.qtPreviewPlaying_ && state_.previewFollowEnabled_) {
+        const double second = qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond());
+        syncEditorCursorToPreviewSecond(second, true, false);
+    }
 }
 
 void MainWindow::TimelineSection::onTimelineFollowProgressToggled(bool enabled)

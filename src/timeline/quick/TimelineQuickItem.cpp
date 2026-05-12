@@ -423,6 +423,28 @@ void TimelineQuickItem::setFollowPreviewEnabled(bool enabled)
     update();
 }
 
+bool TimelineQuickItem::viewportLockEnabled() const
+{
+    return cachedViewportLockEnabled_;
+}
+
+void TimelineQuickItem::setViewportLockEnabled(bool enabled)
+{
+    const bool changed = cachedViewportLockEnabled_ != enabled;
+    if (stateBridge_ != nullptr) {
+        stateBridge_->setViewportLockEnabled(enabled);
+    }
+    if (!changed) {
+        return;
+    }
+    if (cachedViewportLockEnabled_ != enabled) {
+        cachedViewportLockEnabled_ = enabled;
+        emit viewportLockEnabledChanged();
+    }
+    emit viewportLockToggled(enabled);
+    update();
+}
+
 bool TimelineQuickItem::followProgressEnabled() const
 {
     return cachedFollowProgressEnabled_;
@@ -479,6 +501,7 @@ void TimelineQuickItem::syncSourceState()
 {
     const qreal nextZoom = stateBridge_ != nullptr ? stateBridge_->zoomScale() : 0.5;
     const bool nextFollow = stateBridge_ != nullptr && stateBridge_->followPreviewEnabled();
+    const bool nextViewportLock = stateBridge_ != nullptr && stateBridge_->viewportLockEnabled();
     const bool nextProgressFollow = stateBridge_ == nullptr || stateBridge_->followProgressEnabled();
     const int nextTimelineTop = static_cast<int>(currentSceneState().timelineTop);
     // Header-control visuals (zoom% text + follow-check tick + colour)
@@ -501,6 +524,10 @@ void TimelineQuickItem::syncSourceState()
         cachedFollowPreviewEnabled_ = nextFollow;
         emit followPreviewEnabledChanged();
         appearanceBumpNeeded = true;
+    }
+    if (cachedViewportLockEnabled_ != nextViewportLock) {
+        cachedViewportLockEnabled_ = nextViewportLock;
+        emit viewportLockEnabledChanged();
     }
     if (appearanceBumpNeeded) {
         ++appearanceRevision_;

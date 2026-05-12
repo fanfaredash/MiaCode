@@ -438,6 +438,21 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
     if (event != nullptr && event->type() == QEvent::FocusIn && this->isTextInputWidget(watchedWidget)) {
         owner_.stopPreviewHeldSeek();
     }
+    if (watched == owner_.editorViewport_
+        && event != nullptr
+        && (event->type() == QEvent::Wheel || event->type() == QEvent::MouseButtonPress)
+        && owner_.qtPreviewPlaying_
+        && owner_.previewFollowEnabled_
+        && owner_.previewViewportLockEnabled_) {
+        owner_.pauseQtPreviewPlaybackExact();
+        owner_.updatePauseButtonAppearance();
+        const double second = qMax(0.0, owner_.qtPreviewPauseSecond_);
+        QTimer::singleShot(0, &owner_, [this, second]() {
+            if (owner_.previewFollowEnabled_ && owner_.previewViewportLockEnabled_) {
+                owner_.syncEditorCursorToPreviewSecond(second, true, false);
+            }
+        });
+    }
     if (event != nullptr
         && (event->type() == QEvent::ShortcutOverride
             || event->type() == QEvent::KeyPress
@@ -685,6 +700,18 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         }
     }
     if (owner_.previewSlider_ != nullptr && watched == owner_.previewSlider_) {
+        if ((event->type() == QEvent::Wheel || event->type() == QEvent::MouseButtonPress)
+            && owner_.qtPreviewPlaying_
+            && owner_.previewFollowEnabled_
+            && owner_.previewViewportLockEnabled_) {
+            owner_.pauseQtPreviewPlaybackExact();
+            owner_.updatePauseButtonAppearance();
+            QTimer::singleShot(0, &owner_, [this]() {
+                if (owner_.previewFollowEnabled_ && owner_.previewViewportLockEnabled_) {
+                    owner_.syncEditorCursorToPreviewSecond(qMax(0.0, owner_.qtPreviewPauseSecond_), true, false);
+                }
+            });
+        }
         if (event->type() == QEvent::Wheel) {
             owner_.stopPreviewHeldSeek();
             if (owner_.handlePreviewSeekWheel(static_cast<QWheelEvent*>(event))) {
@@ -836,6 +863,12 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
                     false,
                     0.0,
                     false);
+                if (owner_.previewViewportLockEnabled_) {
+                    auto* editor = qobject_cast<PlainCodeEditor*>(owner_.editorWidget_);
+                    if (editor != nullptr) {
+                        editor->applyPreviewFollowCursor(editor->textCursor(), true, true);
+                    }
+                }
             });
         }
     }
@@ -1262,4 +1295,3 @@ void MainWindow::WindowSection::changeEvent(QEvent* event)
         this->logWindowGeometryDebug("zorder_change");
     }
 }
-

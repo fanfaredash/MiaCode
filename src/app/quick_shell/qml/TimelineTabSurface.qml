@@ -195,7 +195,7 @@ Item {
         onClicked: timelineItem.cycleZoomPreset()
     }
 
-    // Cursor Follow / Progress Follow checkboxes moved to
+    // View Lock / Code Follow / Progress Follow checkboxes moved to
     // BottomTabsQuickHost.qml's tab strip \u2014 see the long comment in
     // TimelineSceneStateBuilder.cpp where the matching scene-state
     // emit was retired. The deletion below removes the QML controls
@@ -209,7 +209,7 @@ Item {
         y: Math.max(0, (timelineItem.timelineTop - height) / 2)
         hoverEnabled: true
         spacing: 4
-        text: root.isChineseUi() ? "\u5149\u6807\u8ddf\u968f" : "Cursor Follow"
+        text: root.isChineseUi() ? "\u4ee3\u7801\u8ddf\u968f" : "Cursor Follow"
         checked: timelineItem.followPreviewEnabled
         // Phase 9d-native — invisible (DComp renders natively in the
         // popup composition plane) but still receives input. DComp

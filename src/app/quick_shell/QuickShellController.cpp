@@ -512,6 +512,15 @@ void QuickShellController::timelineFollowPreviewToggled(bool enabled)
     refreshFromStateSource();
 }
 
+void QuickShellController::timelineViewportLockToggled(bool enabled)
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    commandSink_->shellTimelineViewportLockToggled(enabled);
+    refreshFromStateSource();
+}
+
 void QuickShellController::timelineFollowProgressToggled(bool enabled)
 {
     if (commandSink_ == nullptr) {

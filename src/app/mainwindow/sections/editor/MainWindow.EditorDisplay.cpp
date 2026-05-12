@@ -117,6 +117,7 @@ void MainWindow::EditorSection::loadPortableState()
             );
         }
         state_.timelineQuickStateBridge_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
+        state_.timelineQuickStateBridge_->setViewportLockEnabled(state_.previewViewportLockEnabled_);
         state_.timelineQuickStateBridge_->setFollowProgressEnabled(state_.previewProgressFollowEnabled_);
     }
     owner_.refreshPreviewFrameRateTimers();
@@ -137,6 +138,7 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.showJudgeMarkers_ = false;
     state_.showTouchTrail_ = false;
     state_.previewFollowEnabled_ = false;
+    state_.previewViewportLockEnabled_ = false;
     state_.previewProgressFollowEnabled_ = true;
     state_.muriRenderOptions_ = MuriRenderOptions();
     state_.staticTapOnSlideThresholdMs_ = miacode::muri::kStaticTapOnSlideThresholdDefaultMs;
@@ -345,6 +347,9 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     if (preview.value("follow_preview").isBool()) {
         state_.previewFollowEnabled_ = preview.value("follow_preview").toBool(false);
     }
+    if (preview.value("viewport_lock").isBool()) {
+        state_.previewViewportLockEnabled_ = preview.value("viewport_lock").toBool(false);
+    }
     if (preview.value("follow_progress").isBool()) {
         state_.previewProgressFollowEnabled_ = preview.value("follow_progress").toBool(true);
     }
@@ -451,6 +456,7 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("show_object_stats_export", state_.exportShowObjectStatsHud_);
     preview.insert("show_validation_summary", state_.previewShowValidationSummary_);
     preview.insert("follow_preview", state_.previewFollowEnabled_);
+    preview.insert("viewport_lock", state_.previewViewportLockEnabled_);
     preview.insert("follow_progress", state_.previewProgressFollowEnabled_);
     preview.insert(
         "timeline_zoom_scale",

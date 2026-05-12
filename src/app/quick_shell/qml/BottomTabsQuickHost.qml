@@ -209,6 +209,75 @@ Rectangle {
                 // tab; the validation / muri tabs leave the right
                 // side empty as before.
                 CheckBox {
+                    id: viewportLockCheck
+
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.preferredHeight: tabStrip.height - Math.round(6 * root.headerScale)
+                    Layout.rightMargin: Math.round(4 * root.headerScale)
+                    visible: controller && controller.bottomTabsCurrentTabId === "timeline"
+                    hoverEnabled: true
+                    spacing: Math.round(4 * root.headerScale)
+                    text: root.isChineseUi() ? "光标居中" : "View Lock"
+                    checked: controller && controller.timelineStateBridge
+                        ? controller.timelineStateBridge.viewportLockEnabled
+                        : false
+
+                    indicator: Rectangle {
+                        implicitWidth: Math.max(1, Math.round(14 * root.headerScale))
+                        implicitHeight: Math.max(1, Math.round(14 * root.headerScale))
+                        x: 0
+                        y: (viewportLockCheck.height - height) / 2
+                        radius: 3
+                        color: viewportLockCheck.checked
+                            ? root.tone("accent", "#60a5fa")
+                            : root.tone("cardBg", "#1f2937")
+                        border.width: 1
+                        border.color: viewportLockCheck.checked
+                            ? root.tone("accent", "#60a5fa")
+                            : (viewportLockCheck.hovered
+                                ? root.tone("accent", "#60a5fa")
+                                : root.tone("border", "#475569"))
+
+                        Canvas {
+                            anchors.fill: parent
+                            visible: viewportLockCheck.checked
+
+                            onPaint: {
+                                const ctx = getContext("2d")
+                                ctx.reset()
+                                ctx.strokeStyle = root.tone("accentText", "#ffffff")
+                                ctx.lineWidth = 1.8
+                                ctx.lineCap = "round"
+                                ctx.lineJoin = "round"
+                                ctx.beginPath()
+                                ctx.moveTo(width * 0.24, height * 0.55)
+                                ctx.lineTo(width * 0.44, height * 0.74)
+                                ctx.lineTo(width * 0.78, height * 0.28)
+                                ctx.stroke()
+                            }
+                        }
+                    }
+
+                    contentItem: Text {
+                        text: viewportLockCheck.text
+                        color: root.tone("textPrimary", "#203040")
+                        font.pixelSize: Math.max(1, Math.round(12 * root.headerScale))
+                        font.weight: Font.DemiBold
+                        verticalAlignment: Text.AlignVCenter
+                        leftPadding: viewportLockCheck.indicator.width + viewportLockCheck.spacing
+                    }
+
+                    onClicked: {
+                        if (controller && controller.timelineStateBridge) {
+                            controller.timelineStateBridge.viewportLockEnabled = checked
+                        }
+                        if (controller) {
+                            controller.timelineViewportLockToggled(checked)
+                        }
+                    }
+                }
+
+                CheckBox {
                     id: cursorFollowCheck
 
                     Layout.alignment: Qt.AlignVCenter
@@ -217,7 +286,7 @@ Rectangle {
                     visible: controller && controller.bottomTabsCurrentTabId === "timeline"
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
-                    text: root.isChineseUi() ? "光标跟随" : "Cursor Follow"
+                    text: root.isChineseUi() ? "代码跟随" : "Cursor Follow"
                     checked: controller && controller.timelineStateBridge
                         ? controller.timelineStateBridge.followPreviewEnabled
                         : false

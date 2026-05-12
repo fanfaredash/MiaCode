@@ -243,11 +243,29 @@ TimelineView::TimelineView(QWidget* parent)
     zoomButton_->setAutoRaise(false);
     zoomButton_->setCursor(Qt::PointingHandCursor);
     connect(zoomButton_, &QToolButton::clicked, this, [this]() { cycleZoomPreset(); });
+    viewportLockCheckBox_ = new QCheckBox(this);
+    viewportLockCheckBox_->setCursor(Qt::PointingHandCursor);
+    viewportLockCheckBox_->setText(
+        UiText::isChineseUi()
+            ? QStringLiteral("\u5149\u6807\u5c45\u4e2d")
+            : QStringLiteral("View Lock")
+    );
+    viewportLockCheckBox_->setToolTip(
+        UiText::isChineseUi()
+            ? QStringLiteral("\u5c06\u7f16\u8f91\u5668\u5149\u6807\u5c3d\u91cf\u4fdd\u6301\u5728\u4ee3\u7801\u533a\u4e2d\u592e")
+            : QStringLiteral("Keep the editor cursor near the middle of the code area when possible")
+    );
+    connect(viewportLockCheckBox_, &QCheckBox::toggled, this, [this](bool enabled) {
+        if (stateBridge_ != nullptr && !applyingBridgeState_) {
+            stateBridge_->setViewportLockEnabled(enabled);
+        }
+        emit viewportLockToggled(enabled);
+    });
     followPreviewCheckBox_ = new QCheckBox(this);
     followPreviewCheckBox_->setCursor(Qt::PointingHandCursor);
     followPreviewCheckBox_->setText(
         UiText::isChineseUi()
-            ? QStringLiteral("\u5149\u6807\u8ddf\u968f")
+            ? QStringLiteral("\u4ee3\u7801\u8ddf\u968f")
             : QStringLiteral("Cursor Follow")
     );
     followPreviewCheckBox_->setToolTip(
@@ -370,6 +388,10 @@ void TimelineView::applyStateFromBridge()
         const QSignalBlocker blocker(followPreviewCheckBox_);
         followPreviewCheckBox_->setChecked(stateBridge_->followPreviewEnabled());
     }
+    if (viewportLockCheckBox_ != nullptr) {
+        const QSignalBlocker blocker(viewportLockCheckBox_);
+        viewportLockCheckBox_->setChecked(stateBridge_->viewportLockEnabled());
+    }
     if (followProgressCheckBox_ != nullptr) {
         const QSignalBlocker blocker(followProgressCheckBox_);
         followProgressCheckBox_->setChecked(stateBridge_->followProgressEnabled());
@@ -424,6 +446,15 @@ void TimelineView::refreshTheme()
     }
     if (followPreviewCheckBox_ != nullptr) {
         followPreviewCheckBox_->setStyleSheet(
+            UiTheme::timelineCheckBoxStyleSheet()
+            + QStringLiteral(
+                "QCheckBox { spacing: 4px; }"
+                "QCheckBox::indicator { width: 14px; height: 14px; }"
+            )
+        );
+    }
+    if (viewportLockCheckBox_ != nullptr) {
+        viewportLockCheckBox_->setStyleSheet(
             UiTheme::timelineCheckBoxStyleSheet()
             + QStringLiteral(
                 "QCheckBox { spacing: 4px; }"
@@ -770,6 +801,12 @@ int TimelineView::minimumContentHeightForCurrentDevice() const
             qMax(followPreviewCheckBox_->minimumSizeHint().height(), followPreviewCheckBox_->sizeHint().height())
         );
     }
+    if (viewportLockCheckBox_ != nullptr) {
+        controlBandHeight = qMax(
+            controlBandHeight,
+            qMax(viewportLockCheckBox_->minimumSizeHint().height(), viewportLockCheckBox_->sizeHint().height())
+        );
+    }
     if (followProgressCheckBox_ != nullptr) {
         controlBandHeight = qMax(
             controlBandHeight,
@@ -927,6 +964,25 @@ void TimelineView::setFollowPreviewEnabled(bool enabled)
 bool TimelineView::followPreviewEnabled() const
 {
     return followPreviewCheckBox_ != nullptr && followPreviewCheckBox_->isChecked();
+}
+
+void TimelineView::setViewportLockEnabled(bool enabled)
+{
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setViewportLockEnabled(enabled);
+        return;
+    }
+    if (viewportLockCheckBox_ == nullptr) {
+        return;
+    }
+    const QSignalBlocker blocker(viewportLockCheckBox_);
+    viewportLockCheckBox_->setChecked(enabled);
+    emit renderStateChanged();
+}
+
+bool TimelineView::viewportLockEnabled() const
+{
+    return viewportLockCheckBox_ != nullptr && viewportLockCheckBox_->isChecked();
 }
 
 void TimelineView::setFollowProgressEnabled(bool enabled)

@@ -309,6 +309,9 @@ void TimelineView::layoutHeaderButtons()
         if (zoomButton_ != nullptr) {
             zoomButton_->hide();
         }
+        if (viewportLockCheckBox_ != nullptr) {
+            viewportLockCheckBox_->hide();
+        }
         if (followPreviewCheckBox_ != nullptr) {
             followPreviewCheckBox_->hide();
         }
@@ -360,6 +363,23 @@ void TimelineView::layoutHeaderButtons()
         followPreviewCheckBox_->setFixedHeight(checkBoxHeight);
         const int y = qMax(0, (timelineTop() - followPreviewCheckBox_->height()) / 2);
         followPreviewCheckBox_->move(qMax(leftBaseX, rightX - followPreviewCheckBox_->width()), y);
+        rightX = followPreviewCheckBox_->x() - controlGap;
+    }
+    if (viewportLockCheckBox_ != nullptr) {
+        viewportLockCheckBox_->show();
+        viewportLockCheckBox_->adjustSize();
+        const int checkBoxHeight = qMax(
+            viewportLockCheckBox_->minimumSizeHint().height(),
+            viewportLockCheckBox_->sizeHint().height()
+        );
+        const int checkBoxWidth = qMax(
+            viewportLockCheckBox_->minimumSizeHint().width(),
+            viewportLockCheckBox_->sizeHint().width()
+        );
+        viewportLockCheckBox_->setFixedWidth(checkBoxWidth);
+        viewportLockCheckBox_->setFixedHeight(checkBoxHeight);
+        const int y = qMax(0, (timelineTop() - viewportLockCheckBox_->height()) / 2);
+        viewportLockCheckBox_->move(qMax(leftBaseX, rightX - viewportLockCheckBox_->width()), y);
     }
 }
 

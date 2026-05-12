@@ -38,6 +38,7 @@ public:
     void onTimelineCenterNavigateRequested(double second);
     void onTimelineDragFinished(double second);
     void onTimelineFollowPreviewToggled(bool enabled);
+    void onTimelineViewportLockToggled(bool enabled);
     void onTimelineFollowProgressToggled(bool enabled);
     void applyLatestTimelinePreviewStateToPausedPreview();
     void requestTimelineSlowRefresh();

@@ -134,6 +134,11 @@ void MainWindow::shellTimelineFollowPreviewToggled(bool enabled)
     windowSection_->shellTimelineFollowPreviewToggled(enabled);
 }
 
+void MainWindow::shellTimelineViewportLockToggled(bool enabled)
+{
+    windowSection_->shellTimelineViewportLockToggled(enabled);
+}
+
 void MainWindow::shellTimelineFollowProgressToggled(bool enabled)
 {
     windowSection_->shellTimelineFollowProgressToggled(enabled);

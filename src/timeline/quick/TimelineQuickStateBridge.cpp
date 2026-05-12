@@ -784,6 +784,21 @@ void TimelineQuickStateBridge::setFollowPreviewEnabled(bool enabled)
     emit renderStateChanged();
 }
 
+bool TimelineQuickStateBridge::viewportLockEnabled() const
+{
+    return viewportLockEnabled_;
+}
+
+void TimelineQuickStateBridge::setViewportLockEnabled(bool enabled)
+{
+    if (viewportLockEnabled_ == enabled) {
+        return;
+    }
+    viewportLockEnabled_ = enabled;
+    emit viewportLockEnabledChanged(enabled);
+    emit renderStateChanged();
+}
+
 bool TimelineQuickStateBridge::followProgressEnabled() const
 {
     return followProgressEnabled_;

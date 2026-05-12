@@ -1318,7 +1318,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 - kTimelineTextVerticalPadding);
         state.zoomButtonLabel = zoomLabel;
 
-        // The "Cursor Follow" / "Progress Follow" checkboxes used to
+        // The "Code Follow" / "Progress Follow" checkboxes used to
         // be drawn here in the timeline header band. They moved to
         // BottomTabsQuickHost.qml's tab strip \u2014 there's enough
         // horizontal space next to the "\u65f6\u95f4\u8f74 / \u8bed\u6cd5\u68c0\u67e5 /
@@ -1333,7 +1333,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         // for them in the scene state any more.
 #if 0
         const QString followText = request.isChineseUi
-            ? QStringLiteral("\u5149\u6807\u8ddf\u968f")
+            ? QStringLiteral("\u4ee3\u7801\u8ddf\u968f")
             : QStringLiteral("Cursor Follow");
         const QString progressFollowText = request.isChineseUi
             ? QStringLiteral("\u8fdb\u5ea6\u8ddf\u968f")
