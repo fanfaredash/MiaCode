@@ -19,10 +19,16 @@ struct BgmPeakNormalizationResult {
     bool decoded = false;
 };
 
-// Decodes the file with miniaudio, scans for the peak sample value across
-// channels, and computes a peak-normalization gain factor. Used by both
-// the live-preview Bass backend and the video-export plan builder so the
-// two paths apply identical gain to the same source file.
+// First draft, unverified. Used by the video-export plan builder so
+// exports match the loudness of live preview, which runs an equivalent
+// scan via BASS_ChannelGetLevel inside BassPreviewAudioBackend.
+//
+// Caveats:
+//   - Not cross-checked against the BASS scan on real-world tracks; the
+//     two decoders (miniaudio's dr_mp3 vs BASS's MP3 decoder) may differ
+//     by a fraction of a dB at peaks. Preview and export gains may drift
+//     by that margin until this is validated.
+//   - No caching: every plan build re-decodes the full track.
 BgmPeakNormalizationResult computeBgmPeakNormalization(const QString& filePath);
 
 }  // namespace miacode::audio
