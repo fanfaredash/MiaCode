@@ -194,7 +194,7 @@ struct BassPreviewAudioBackend::Sample {
         if (!valid()) {
             return;
         }
-        const float effective = clampSampleVolume(baseVolume * qMax(0.0, eventGain));
+        const float effective = clampSampleVolume(baseVolume * gain * qMax(0.0, eventGain));
         BASS_ChannelSetAttribute(source, BASS_ATTRIB_VOL, effective);
     }
 
@@ -207,7 +207,6 @@ struct BassPreviewAudioBackend::Sample {
         bool speedChange
     )
     {
-        Q_UNUSED(normalize);
         free();
 
         path = samplePath;
@@ -260,6 +259,43 @@ struct BassPreviewAudioBackend::Sample {
                 return false;
             }
             stream = tempoStream;
+        }
+
+        if (normalize) {
+            const QWORD scanLength = BASS_ChannelGetLength(stream, BASS_POS_BYTE);
+            double peak = 0.0;
+            if (scanLength != static_cast<QWORD>(-1) && scanLength > 0) {
+                QWORD lastPos = 0;
+                for (int iter = 0; iter < 200000; ++iter) {
+                    const QWORD pos = BASS_ChannelGetPosition(stream, BASS_POS_BYTE);
+                    if (pos == static_cast<QWORD>(-1) || pos >= scanLength) {
+                        break;
+                    }
+                    if (iter > 0 && pos == lastPos) {
+                        break;
+                    }
+                    lastPos = pos;
+                    const DWORD level = BASS_ChannelGetLevel(stream);
+                    if (level == static_cast<DWORD>(-1)) {
+                        break;
+                    }
+                    const double leftNorm = static_cast<double>(LOWORD(level)) / 32768.0;
+                    const double rightNorm = static_cast<double>(HIWORD(level)) / 32768.0;
+                    const double maxNorm = qMax(leftNorm, rightNorm);
+                    if (maxNorm > peak) {
+                        peak = maxNorm;
+                    }
+                }
+            }
+            constexpr double kBgmNormalizeMaxBoost = 4.0;
+            constexpr double kBgmNormalizePeakFloor = 1.0e-4;
+            gain = qMin(kBgmNormalizeMaxBoost, 1.0 / qMax(peak, kBgmNormalizePeakFloor));
+            appendAudioDebugLog(
+                QString("bgm_normalize_peak kind=%1 peak=%2 gain=%3 path=%4")
+                    .arg(sampleKind)
+                    .arg(peak, 0, 'f', 6)
+                    .arg(gain, 0, 'f', 4)
+                    .arg(samplePath));
         }
 
         float channelFrequency = static_cast<float>(backend->deviceSampleRate_);
@@ -721,7 +757,7 @@ void BassPreviewAudioBackend::initializeAssets()
                 preparedAssets_.trackPath,
                 QStringLiteral("bgm"),
                 QStringLiteral("bgm"),
-                false,
+                true,
                 true)) {
             backgroundTrackSample_ = backgroundTrackSampleOwner_.get();
             backgroundTrackSample_->setLoop(false);

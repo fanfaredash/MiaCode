@@ -362,7 +362,21 @@ QPointF PlainCodeEditor::normalizedViewportHitPosition(const QPointF& position) 
 
 void PlainCodeEditor::updateCursorVisibility()
 {
-    setCursorWidth(kEditorCursorVisibleWidth);
+    // Cursor width tracks the typing mode:
+    //   - insert: pinned at kEditorCursorVisibleWidth (1 px caret)
+    //   - overwrite: widened to a space-advance block (floored at 6 px
+    //     so micro-fonts still render a visible block)
+    // This function runs both on every cursorPositionChanged (via
+    // syncCursorVisualState) and on the Insert toggle, so the mode's
+    // visual stays consistent across arrow-key moves, click-to-position,
+    // and re-focus.
+    if (overwriteMode()) {
+        const QFontMetrics fm(font());
+        const int spaceAdvance = fm.horizontalAdvance(QLatin1Char(' '));
+        setCursorWidth(qMax(6, spaceAdvance));
+    } else {
+        setCursorWidth(kEditorCursorVisibleWidth);
+    }
 }
 
 void PlainCodeEditor::syncCursorVisualState()
@@ -758,21 +772,12 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         && !event->isAutoRepeat()
         && !(event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier
                                    | Qt::AltModifier | Qt::MetaModifier))) {
-        const bool nextOverwrite = !overwriteMode();
-        setOverwriteMode(nextOverwrite);
-        // Visual cue — the editor's idle cursor width is pinned at 1
-        // px (kEditorCursorVisibleWidth) so even Qt's built-in
-        // overwrite render still looks like a thin caret. Widen the
-        // cursor to a character cell while in overwrite mode so the
-        // user can see the mode at a glance; restore the 1 px line
-        // on the way back to insert mode.
-        if (nextOverwrite) {
-            const QFontMetrics fm(font());
-            const int spaceAdvance = fm.horizontalAdvance(QLatin1Char(' '));
-            setCursorWidth(qMax(6, spaceAdvance));
-        } else {
-            setCursorWidth(kEditorCursorVisibleWidth);
-        }
+        setOverwriteMode(!overwriteMode());
+        // Defer to updateCursorVisibility so the post-toggle width is
+        // computed by the same code path that runs on every
+        // cursorPositionChanged — keeps the mode visual consistent
+        // across arrow-key moves and click-to-position events.
+        updateCursorVisibility();
         event->accept();
         return;
     }
