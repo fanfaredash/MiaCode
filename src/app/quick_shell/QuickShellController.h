@@ -121,6 +121,14 @@ public:
     Q_INVOKABLE void timelineFollowPreviewToggled(bool enabled);
     Q_INVOKABLE void timelineViewportLockToggled(bool enabled);
     Q_INVOKABLE void timelineFollowProgressToggled(bool enabled);
+    // Pops a Qt Widgets QMenu containing the timeline-follow toggles
+    // (View Lock / Cursor Follow / Progress Follow) anchored so its
+    // bottom-right sits just above the gear button's top-right. The
+    // QMenu rides the OS popup path used by every other native menu
+    // in the app, so it draws above WindowContainer-embedded
+    // workspace / preview windows without the focus quirks of QtQuick
+    // Popup.Window.
+    Q_INVOKABLE void openTimelineFollowSettingsMenu(int gearGlobalRight, int gearGlobalTop);
     Q_INVOKABLE bool stepPreviewBySeconds(double deltaSeconds, bool centerView = true);
     Q_INVOKABLE void beginPreviewHeldSeek(int direction, int key);
     Q_INVOKABLE void stopPreviewHeldSeek(int key = 0);

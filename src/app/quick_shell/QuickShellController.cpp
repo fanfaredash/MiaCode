@@ -2,13 +2,18 @@
 
 #include "QuickShellNativeSurfaceHost.h"
 #include "UiText.h"
+#include "UiTheme.h"
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 
+#include <QAction>
 #include <QElapsedTimer>
+#include <QMenu>
+#include <QPoint>
 #include <QTimer>
 #include <QWidget>
 #include <QWindow>
@@ -528,6 +533,56 @@ void QuickShellController::timelineFollowProgressToggled(bool enabled)
     }
     commandSink_->shellTimelineFollowProgressToggled(enabled);
     refreshFromStateSource();
+}
+
+void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, int gearGlobalTop)
+{
+    if (stateSource_ == nullptr) {
+        return;
+    }
+    auto* bridge = qobject_cast<TimelineQuickStateBridge*>(
+        stateSource_->shellTimelineStateBridgeObject());
+    if (bridge == nullptr) {
+        return;
+    }
+
+    // Heap-allocate so popup() can return immediately; WA_DeleteOnClose
+    // tears the menu down once the user clicks an item or dismisses.
+    auto* menu = new QMenu();
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    UiTheme::styleRoundedMenu(*menu);
+
+    const bool chinese = UiText::isChineseUi();
+    const auto addToggle = [&](const QString& label, bool checked, void (QuickShellController::*slot)(bool)) {
+        QAction* action = menu->addAction(label);
+        action->setCheckable(true);
+        action->setChecked(checked);
+        QObject::connect(action, &QAction::toggled, this, [this, slot](bool on) {
+            (this->*slot)(on);
+        });
+    };
+
+    addToggle(
+        chinese ? QStringLiteral("光标居中") : QStringLiteral("View Lock"),
+        bridge->viewportLockEnabled(),
+        &QuickShellController::timelineViewportLockToggled);
+    addToggle(
+        chinese ? QStringLiteral("代码跟随") : QStringLiteral("Cursor Follow"),
+        bridge->followPreviewEnabled(),
+        &QuickShellController::timelineFollowPreviewToggled);
+    addToggle(
+        chinese ? QStringLiteral("进度跟随") : QStringLiteral("Progress Follow"),
+        bridge->followProgressEnabled(),
+        &QuickShellController::timelineFollowProgressToggled);
+
+    // Layout once so sizeHint reflects all three rows + the rounded
+    // stylesheet padding; only after that can we anchor the bottom-
+    // right corner. menu->popup() handles the rest of the show path.
+    menu->adjustSize();
+    const QSize menuSize = menu->sizeHint();
+    const int x = gearGlobalRight - menuSize.width();
+    const int y = gearGlobalTop - menuSize.height() - 4;
+    menu->popup(QPoint(x, y));
 }
 
 bool QuickShellController::stepPreviewBySeconds(double deltaSeconds, bool centerView)
