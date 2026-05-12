@@ -79,8 +79,11 @@ bool verifyFullRangePlan(QTextStream& err)
     return true;
 }
 
-bool verifyPartialExportAnswerClamp(QTextStream& err)
+bool verifyPartialExportMutesPreRangeSfx(QTextStream& err)
 {
+    // A tap whose chart time would clamp into the partial pre-range
+    // used to schedule an "answer" SFX at mixSecond=0. The pre-range
+    // is now music-only, so that SFX must be dropped entirely.
     VideoExportTask task;
     task.noteMarkers = {makeTap(0.0)};
     task.exportStartSeconds = 1.0;
@@ -98,17 +101,124 @@ bool verifyPartialExportAnswerClamp(QTextStream& err)
     if (!require(qAbs(plan.leadInSeconds - 1.0) <= 1e-6, QStringLiteral("partial export should use 1s preload"), err)) {
         return false;
     }
-    if (!require(!plan.scheduledSfxPlaybacks.isEmpty(), QStringLiteral("partial export should keep compensated answer playback"), err)) {
-        return false;
-    }
-    auto it = std::find_if(
+    const auto it = std::find_if(
         plan.scheduledSfxPlaybacks.begin(),
         plan.scheduledSfxPlaybacks.end(),
         [](const auto& playback) { return playback.kind == QLatin1String("answer"); });
-    if (!require(it != plan.scheduledSfxPlaybacks.end(), QStringLiteral("partial export should include answer playback"), err)) {
+    if (!require(
+            it == plan.scheduledSfxPlaybacks.end(),
+            QStringLiteral("partial export pre-range should mute all SFX, including the compensated answer"),
+            err)) {
         return false;
     }
-    if (!require(qAbs(it->mixSecond) <= 1e-6, QStringLiteral("partial export answer should clamp to frame zero"), err)) {
+    for (const auto& playback : plan.scheduledSfxPlaybacks) {
+        if (!require(
+                playback.mixSecond + 1e-6 >= plan.leadInSeconds,
+                QStringLiteral("partial export should not schedule any SFX before the pre-range ends"),
+                err)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool verifyPartialExportClampsTouchholdSpanIntoSegment(QTextStream& err)
+{
+    // A touchhold whose chart-time start sits inside the partial
+    // pre-range should be trimmed so its audio begins at the segment
+    // boundary, not earlier. Tail-end portion past the cutoff stays.
+    VideoExportTask task;
+    task.noteMarkers = {makeTouchHold(0.5, 2.5)};
+    task.exportStartSeconds = 1.0;
+    task.contentDurationSeconds = 2.0;
+    task.fullRangeExport = false;
+    task.fps = 60;
+
+    VideoExportAudioRenderPlan plan;
+    QString errorMessage;
+    if (!miacode::video_export::buildVideoExportAudioRenderPlan(task, &plan, &errorMessage)) {
+        err << errorMessage << Qt::endl;
+        return false;
+    }
+
+    if (!require(plan.mergedTouchholdSpans.size() == 1, QStringLiteral("partial export should keep the spanning touchhold"), err)) {
+        return false;
+    }
+    const auto& span = plan.mergedTouchholdSpans.first();
+    if (!require(
+            qAbs(span.mixSecond - plan.leadInSeconds) <= 1e-6,
+            QStringLiteral("touchhold span that begins inside pre-range should clamp to segment start"),
+            err)) {
+        return false;
+    }
+    // exportStart=1.0 ⇒ timelineOrigin = 0.0 ⇒ span mix range
+    // [0.5, 2.5] pre-clamp. After clamping start to leadIn=1.0 the
+    // surviving portion is mix [1.0, 2.5] ⇒ duration 1.5 s.
+    if (!require(
+            qAbs(span.durationSeconds - 1.5) <= 1e-6,
+            QStringLiteral("clamped touchhold span should keep the portion past the cutoff"),
+            err)) {
+        return false;
+    }
+    return true;
+}
+
+bool verifyPartialExportDropsTouchholdSpanEntirelyInPreRange(QTextStream& err)
+{
+    // A touchhold whose entire chart-time range sits in the partial
+    // pre-range should be dropped completely (it never overlaps the
+    // playable segment).
+    VideoExportTask task;
+    task.noteMarkers = {makeTouchHold(0.1, 0.4)};
+    task.exportStartSeconds = 1.0;
+    task.contentDurationSeconds = 2.0;
+    task.fullRangeExport = false;
+    task.fps = 60;
+
+    VideoExportAudioRenderPlan plan;
+    QString errorMessage;
+    if (!miacode::video_export::buildVideoExportAudioRenderPlan(task, &plan, &errorMessage)) {
+        err << errorMessage << Qt::endl;
+        return false;
+    }
+
+    return require(
+        plan.mergedTouchholdSpans.isEmpty(),
+        QStringLiteral("touchhold span fully inside the partial pre-range should be dropped"),
+        err);
+}
+
+bool verifyPartialExportKeepsBackgroundTrackInPreRange(QTextStream& err)
+{
+    // The background track should still be scheduled even though
+    // SFX are muted in the pre-range — music plays throughout.
+    QTemporaryDir tempDir;
+    QFile trackFile(tempDir.filePath(QStringLiteral("track.mp3")));
+    if (!trackFile.open(QIODevice::WriteOnly)) {
+        err << "failed to create temp track" << Qt::endl;
+        return false;
+    }
+    trackFile.close();
+
+    VideoExportTask task;
+    task.trackPath = trackFile.fileName();
+    task.noteMarkers = {makeTap(0.0)};
+    task.exportStartSeconds = 1.0;
+    task.contentDurationSeconds = 2.0;
+    task.fullRangeExport = false;
+    task.fps = 60;
+
+    VideoExportAudioRenderPlan plan;
+    QString errorMessage;
+    if (!miacode::video_export::buildVideoExportAudioRenderPlan(task, &plan, &errorMessage)) {
+        err << errorMessage << Qt::endl;
+        return false;
+    }
+
+    if (!require(plan.backgroundTrack.enabled, QStringLiteral("partial pre-range should still mix the background track"), err)) {
+        return false;
+    }
+    if (!require(qAbs(plan.backgroundTrack.mixStartSecond) <= 1e-6, QStringLiteral("background track should start at frame zero"), err)) {
         return false;
     }
     return true;
@@ -314,7 +424,16 @@ int main(int argc, char* argv[])
     if (!verifyFullRangePlan(err)) {
         return 1;
     }
-    if (!verifyPartialExportAnswerClamp(err)) {
+    if (!verifyPartialExportMutesPreRangeSfx(err)) {
+        return 1;
+    }
+    if (!verifyPartialExportClampsTouchholdSpanIntoSegment(err)) {
+        return 1;
+    }
+    if (!verifyPartialExportDropsTouchholdSpanEntirelyInPreRange(err)) {
+        return 1;
+    }
+    if (!verifyPartialExportKeepsBackgroundTrackInPreRange(err)) {
         return 1;
     }
     if (!verifyLatestWinsScheduling(err)) {

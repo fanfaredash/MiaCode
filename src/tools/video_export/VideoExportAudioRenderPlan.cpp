@@ -133,6 +133,60 @@ QVector<miacode::video_export::TouchholdSpanRenderPlan> buildMergedTouchholdSpan
     return merged;
 }
 
+void suppressSfxBeforePreRangeEnd(
+    double preRangeEndSecond,
+    miacode::video_export::VideoExportAudioRenderPlan* plan
+)
+{
+    // Partial-range exports always emit a fixed pre-range before the
+    // chart segment proper begins (currently kPartialRangePreloadSeconds
+    // = 1.0 s). The pre-range is intended for the viewer to register
+    // the layout / HUD before the playable region opens; we keep the
+    // background track audible there for context but mute all SFX so
+    // the pre-range doesn't sound like an artificial early hit.
+    //
+    // Point-in-time SFX (tap, judge, answer, break, clock, …) are
+    // dropped entirely when their mix second falls before the cutoff.
+    // Sustained touchhold spans get their start clamped to the cutoff
+    // so a touchhold that begins inside the pre-range still produces
+    // audio for the part that overlaps the playable segment, but is
+    // dropped if it ends before the segment starts.
+    if (plan == nullptr || preRangeEndSecond <= kTimelineEpsilonSeconds) {
+        return;
+    }
+
+    auto& scheduled = plan->scheduledSfxPlaybacks;
+    scheduled.erase(
+        std::remove_if(
+            scheduled.begin(),
+            scheduled.end(),
+            [preRangeEndSecond](const miacode::video_export::ScheduledSfxPlaybackRenderPlan& playback) {
+                return playback.mixSecond + kTimelineEpsilonSeconds < preRangeEndSecond;
+            }
+        ),
+        scheduled.end()
+    );
+
+    auto& spans = plan->mergedTouchholdSpans;
+    spans.erase(
+        std::remove_if(
+            spans.begin(),
+            spans.end(),
+            [preRangeEndSecond](const miacode::video_export::TouchholdSpanRenderPlan& span) {
+                return span.mixSecond + span.durationSeconds + kTimelineEpsilonSeconds <= preRangeEndSecond;
+            }
+        ),
+        spans.end()
+    );
+    for (miacode::video_export::TouchholdSpanRenderPlan& span : spans) {
+        if (span.mixSecond + kTimelineEpsilonSeconds < preRangeEndSecond) {
+            const double endSecond = span.mixSecond + span.durationSeconds;
+            span.mixSecond = preRangeEndSecond;
+            span.durationSeconds = qMax(0.0, endSecond - preRangeEndSecond);
+        }
+    }
+}
+
 void appendClockCountPlaybacks(
     const VideoExportTask& task,
     const PreviewAudioSettings& audioSettings,
@@ -303,6 +357,10 @@ bool buildVideoExportAudioRenderPlan(
         built.timelineOriginSecond,
         built.alignedTotalSeconds,
         qMax(0.0, previewSfxVolumeForKind(normalizedAudioSettings, QStringLiteral("touchhold"))));
+
+    if (!task.fullRangeExport) {
+        suppressSfxBeforePreRangeEnd(built.leadInSeconds, &built);
+    }
 
     *plan = built;
     return true;
