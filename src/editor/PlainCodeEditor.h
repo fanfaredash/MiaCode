@@ -37,10 +37,12 @@ public:
     QPointF normalizedViewportHitPosition(const QPointF& position) const;
     void setHalfWidthInputEnabled(bool enabled);
     bool halfWidthInputEnabled() const { return halfWidthInputEnabled_; }
+    void setEditorOverwriteMode(bool enabled);
 
 signals:
     void undoShortcutRequested();
     void redoShortcutRequested();
+    void editorOverwriteModeChanged(bool enabled);
 
 protected:
     bool event(QEvent* event) override;
@@ -61,6 +63,7 @@ private slots:
 
 private:
     QRect currentLineHighlightRect() const;
+    QRect overwriteCharacterHighlightRect() const;
     QRect previewFollowVisualCaretRect() const;
     void syncCursorVisualState();
     void updateCursorVisibility();

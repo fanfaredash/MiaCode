@@ -223,6 +223,7 @@ void MainWindow::PreferencesSection::onPreferences()
     int selectedEditorFontSize = state_.editorTextFontPointSize_;
     double selectedEditorLineSpacingFactor = state_.editorLineSpacingFactor_;
     bool selectedEditorHalfWidthInputEnabled = state_.editorHalfWidthInputEnabled_;
+    bool selectedEditorOverwriteModeEnabled = state_.editorOverwriteModeEnabled_;
     bool selectedPreserveDifficultySwitchView = state_.preserveDifficultySwitchView_;
 
     auto* editorFontSizeLabel = new QLabel(uiText("dialog.preferences.editor_font_size", "Text Font Size"), editorGroup);
@@ -281,6 +282,28 @@ void MainWindow::PreferencesSection::onPreferences()
         owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
     });
     editorLayout->addRow(QString(), halfWidthInputCheckbox);
+
+    auto* overwriteModeRow = new QWidget(editorGroup);
+    auto* overwriteModeRowLayout = new QHBoxLayout(overwriteModeRow);
+    overwriteModeRowLayout->setContentsMargins(0, 0, 0, 0);
+    overwriteModeRowLayout->setSpacing(8);
+    auto* overwriteModeCheckbox = new QCheckBox(
+        uiText("dialog.preferences.editor_overwrite_mode", "Overwrite mode"),
+        overwriteModeRow
+    );
+    overwriteModeCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    overwriteModeCheckbox->setChecked(selectedEditorOverwriteModeEnabled);
+    auto* overwriteModeShortcutHint = new QLabel(QStringLiteral("Insert"), overwriteModeRow);
+    overwriteModeShortcutHint->setStyleSheet(QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
+    connect(overwriteModeCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
+        selectedEditorOverwriteModeEnabled = checked;
+        owner_.applyEditorOverwriteModeEnabled(selectedEditorOverwriteModeEnabled, true);
+        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+    });
+    overwriteModeRowLayout->addWidget(overwriteModeCheckbox, 0);
+    overwriteModeRowLayout->addWidget(overwriteModeShortcutHint, 0);
+    overwriteModeRowLayout->addStretch(1);
+    editorLayout->addRow(QString(), overwriteModeRow);
 
     auto* preserveDifficultySwitchViewCheckbox = new QCheckBox(
         uiText("dialog.preferences.preserve_difficulty_switch_view", "Preserve editor position and preview progress when switching difficulties"),

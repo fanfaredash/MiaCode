@@ -433,6 +433,7 @@
         int editorTextFontPointSize_ = 0;
         double editorLineSpacingFactor_ = 1.5;
         bool editorHalfWidthInputEnabled_ = true;
+        bool editorOverwriteModeEnabled_ = false;
         bool preserveDifficultySwitchView_ = true;
         bool pendingDifficultySwitchPreviewRestore_ = false;
         quint64 pendingDifficultySwitchPreviewRestoreRevision_ = 0;
@@ -775,6 +776,7 @@
     int& editorTextFontPointSize_ = state_.editorTextFontPointSize_;
     double& editorLineSpacingFactor_ = state_.editorLineSpacingFactor_;
     bool& editorHalfWidthInputEnabled_ = state_.editorHalfWidthInputEnabled_;
+    bool& editorOverwriteModeEnabled_ = state_.editorOverwriteModeEnabled_;
     bool& preserveDifficultySwitchView_ = state_.preserveDifficultySwitchView_;
     SimaiDocument& document_ = state_.document_;
     QWidget*& welcomePage_ = ui_.welcomePage_;

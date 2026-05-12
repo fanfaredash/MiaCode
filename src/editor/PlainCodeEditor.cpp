@@ -333,6 +333,49 @@ QRect PlainCodeEditor::currentLineHighlightRect() const
     return currentLineHighlightRectForCursor(this, textCursor(), blockSpacingPixels_);
 }
 
+QRect PlainCodeEditor::overwriteCharacterHighlightRect() const
+{
+    if (!overwriteMode() || isReadOnly() || !hasFocus() || document() == nullptr || viewport() == nullptr) {
+        return QRect();
+    }
+
+    const QTextCursor cursor = textCursor();
+    if (cursor.hasSelection()) {
+        return QRect();
+    }
+
+    const QTextBlock block = cursor.block();
+    if (!block.isValid()) {
+        return QRect();
+    }
+
+    const int offsetInBlock = cursor.position() - block.position();
+    const QString blockText = block.text();
+    if (offsetInBlock < 0 || offsetInBlock >= blockText.size()) {
+        return QRect();
+    }
+
+    QTextCursor nextCursor = cursor;
+    nextCursor.movePosition(QTextCursor::NextCharacter);
+    QRect leftRect = cursorRect(cursor);
+    QRect rightRect = cursorRect(nextCursor);
+    if (!leftRect.isValid()) {
+        return QRect();
+    }
+
+    const int fallbackWidth = qMax(1, fontMetrics().horizontalAdvance(blockText.mid(offsetInBlock, 1)));
+    int width = rightRect.isValid() && rightRect.top() == leftRect.top()
+        ? rightRect.left() - leftRect.left()
+        : fallbackWidth;
+    if (width <= 0) {
+        width = fallbackWidth;
+    }
+
+    QRect highlightRect(leftRect.left(), leftRect.top(), width, leftRect.height());
+    highlightRect = highlightRect.intersected(viewport()->rect());
+    return highlightRect.isValid() ? highlightRect : QRect();
+}
+
 QRect PlainCodeEditor::previewFollowVisualCaretRect() const
 {
     if (!previewFollowVisualCaretActive_ || document() == nullptr || viewport() == nullptr) {
@@ -504,6 +547,16 @@ void PlainCodeEditor::setHalfWidthInputEnabled(bool enabled)
         hints &= ~Qt::ImhLatinOnly;
     }
     setInputMethodHints(hints);
+}
+
+void PlainCodeEditor::setEditorOverwriteMode(bool enabled)
+{
+    if (overwriteMode() == enabled) {
+        return;
+    }
+    setOverwriteMode(enabled);
+    viewport()->update();
+    emit editorOverwriteModeChanged(enabled);
 }
 
 bool PlainCodeEditor::event(QEvent* event)
@@ -751,6 +804,17 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         return;
     }
 
+    const bool plainInsertKey =
+        event->key() == Qt::Key_Insert
+        && !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier | Qt::ShiftModifier));
+    if (plainInsertKey) {
+        if (!event->isAutoRepeat()) {
+            setEditorOverwriteMode(!overwriteMode());
+        }
+        event->accept();
+        return;
+    }
+
     if (!event->isAutoRepeat()) {
         if (event->matches(QKeySequence::Undo)) {
             logSelectionRestoreEditorShortcut(
@@ -853,6 +917,18 @@ void PlainCodeEditor::paintEvent(QPaintEvent* event)
         painter.setPen(QPen(c.borderSoft, 1));
         painter.setBrush(Qt::NoBrush);
         painter.drawRoundedRect(highlightRect, 4.0, 4.0);
+    }
+
+    const QRect overwriteRect = overwriteCharacterHighlightRect();
+    if (overwriteRect.isValid()) {
+        const UiTheme::Colors& c = UiTheme::colors();
+        QColor fill = c.accent;
+        fill.setAlpha(c.dark ? 92 : 72);
+        QColor border = c.accent;
+        border.setAlpha(c.dark ? 210 : 180);
+        painter.fillRect(overwriteRect, fill);
+        painter.setPen(QPen(border, 1));
+        painter.drawRect(overwriteRect.adjusted(0, 0, -1, -1));
     }
 
     if (!hasFocus() && previewFollowVisualCaretActive_) {
