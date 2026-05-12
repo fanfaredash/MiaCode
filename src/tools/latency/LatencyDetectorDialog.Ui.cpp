@@ -42,10 +42,10 @@ void LatencyDetectorDialog::buildUi()
     offsetEdit_->setAlignment(Qt::AlignCenter);
     offsetEdit_->setFixedWidth(74);
 
-    // SFX volume now lives on the offset row — it took the slot
-    // formerly held by Detect Offset / Restore. Detect Offset moved
-    // up to the BPM row next to Detect BPM; Restore is gone (the new
-    // result popup eliminated the need to undo an auto-write).
+    // SFX label / slider / value live in the controls row at the
+    // bottom — see the controlsRow assembly later in buildUi(). They
+    // sit next to the playback transport so volume is reachable from
+    // the same row as play/stop.
     sfxVolumeSlider_ = new QSlider(Qt::Horizontal, this);
     sfxVolumeSlider_->setRange(0, 100);
     sfxVolumeSlider_->setValue(25);
@@ -72,9 +72,6 @@ void LatencyDetectorDialog::buildUi()
     addAdjustButton(">", 0.001);
     addAdjustButton(">>", 0.010);
     offsetRow->addStretch(1);
-    offsetRow->addWidget(sfxLabel, 0, Qt::AlignVCenter);
-    offsetRow->addWidget(sfxVolumeSlider_, 0, Qt::AlignVCenter);
-    offsetRow->addWidget(sfxVolumeValueLabel_, 0, Qt::AlignVCenter);
     rootLayout->addLayout(offsetRow);
 
     auto* timingRow = new QHBoxLayout();
@@ -102,7 +99,9 @@ void LatencyDetectorDialog::buildUi()
     timingRow->addWidget(snapLabel);
     timingRow->addWidget(offsetSnapCombo_);
     timingRow->addStretch(1);
-    timingRow->addWidget(zoomButton_, 0, Qt::AlignRight | Qt::AlignVCenter);
+    // zoomButton_ moved down into the controls row (bottom-right) so
+    // play/stop, SFX, time, speed, and zoom all share one transport
+    // strip; only meter + snap stay here.
     rootLayout->addLayout(timingRow);
 
     waveformView_ = new TimelineView(this);
@@ -167,10 +166,16 @@ void LatencyDetectorDialog::buildUi()
 
     controlsRow->addWidget(playPauseButton_, 0, Qt::AlignVCenter);
     controlsRow->addWidget(stopButton_, 0, Qt::AlignVCenter);
+    controlsRow->addSpacing(8);
+    controlsRow->addWidget(sfxLabel, 0, Qt::AlignVCenter);
+    controlsRow->addWidget(sfxVolumeSlider_, 0, Qt::AlignVCenter);
+    controlsRow->addWidget(sfxVolumeValueLabel_, 0, Qt::AlignVCenter);
+    controlsRow->addSpacing(8);
     controlsRow->addWidget(playbackTimeLabel_, 0, Qt::AlignVCenter);
     controlsRow->addSpacing(4);
     controlsRow->addWidget(speedButton_, 0, Qt::AlignVCenter);
     controlsRow->addStretch(1);
+    controlsRow->addWidget(zoomButton_, 0, Qt::AlignRight | Qt::AlignVCenter);
     rootLayout->addLayout(controlsRow);
 
     // Deferred-commit Save / Cancel row. All in-session edits stay
