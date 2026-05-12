@@ -758,7 +758,21 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         && !event->isAutoRepeat()
         && !(event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier
                                    | Qt::AltModifier | Qt::MetaModifier))) {
-        setOverwriteMode(!overwriteMode());
+        const bool nextOverwrite = !overwriteMode();
+        setOverwriteMode(nextOverwrite);
+        // Visual cue — the editor's idle cursor width is pinned at 1
+        // px (kEditorCursorVisibleWidth) so even Qt's built-in
+        // overwrite render still looks like a thin caret. Widen the
+        // cursor to a character cell while in overwrite mode so the
+        // user can see the mode at a glance; restore the 1 px line
+        // on the way back to insert mode.
+        if (nextOverwrite) {
+            const QFontMetrics fm(font());
+            const int spaceAdvance = fm.horizontalAdvance(QLatin1Char(' '));
+            setCursorWidth(qMax(6, spaceAdvance));
+        } else {
+            setCursorWidth(kEditorCursorVisibleWidth);
+        }
         event->accept();
         return;
     }
