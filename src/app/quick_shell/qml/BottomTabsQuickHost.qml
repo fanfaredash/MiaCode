@@ -217,7 +217,7 @@ Rectangle {
                     visible: controller && controller.bottomTabsCurrentTabId === "timeline"
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
-                    text: root.isChineseUi() ? "视角锁定" : "View Lock"
+                    text: root.isChineseUi() ? "光标居中" : "View Lock"
                     checked: controller && controller.timelineStateBridge
                         ? controller.timelineStateBridge.viewportLockEnabled
                         : false
@@ -286,7 +286,7 @@ Rectangle {
                     visible: controller && controller.bottomTabsCurrentTabId === "timeline"
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
-                    text: root.isChineseUi() ? "光标跟随" : "Cursor Follow"
+                    text: root.isChineseUi() ? "代码跟随" : "Cursor Follow"
                     checked: controller && controller.timelineStateBridge
                         ? controller.timelineStateBridge.followPreviewEnabled
                         : false

@@ -247,7 +247,7 @@ TimelineView::TimelineView(QWidget* parent)
     viewportLockCheckBox_->setCursor(Qt::PointingHandCursor);
     viewportLockCheckBox_->setText(
         UiText::isChineseUi()
-            ? QStringLiteral("\u89c6\u89d2\u9501\u5b9a")
+            ? QStringLiteral("\u5149\u6807\u5c45\u4e2d")
             : QStringLiteral("View Lock")
     );
     viewportLockCheckBox_->setToolTip(
@@ -265,7 +265,7 @@ TimelineView::TimelineView(QWidget* parent)
     followPreviewCheckBox_->setCursor(Qt::PointingHandCursor);
     followPreviewCheckBox_->setText(
         UiText::isChineseUi()
-            ? QStringLiteral("\u5149\u6807\u8ddf\u968f")
+            ? QStringLiteral("\u4ee3\u7801\u8ddf\u968f")
             : QStringLiteral("Cursor Follow")
     );
     followPreviewCheckBox_->setToolTip(
