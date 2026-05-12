@@ -263,7 +263,7 @@ QuickShellBootstrap::~QuickShellBootstrap()
     );
 }
 
-bool QuickShellBootstrap::start()
+bool QuickShellBootstrap::start(const QString& startupOpenTarget)
 {
     MC_OP("QuickShellBootstrap::start");
     appendQuickShellRuntimeLog(QStringLiteral("start_enter"));
@@ -788,6 +788,14 @@ bool QuickShellBootstrap::start()
             if (surfaceHost_ != nullptr) {
                 surfaceHost_->noteQuickShellUiReady();
             }
+        });
+    }
+    if (!startupOpenTarget.trimmed().isEmpty() && backend_ != nullptr) {
+        QTimer::singleShot(0, backend_.get(), [backend = QPointer<MainWindow>(backend_.get()), startupOpenTarget]() {
+            if (backend.isNull()) {
+                return;
+            }
+            backend->openStartupTarget(startupOpenTarget);
         });
     }
     return true;

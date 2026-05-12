@@ -152,6 +152,7 @@ public:
         QString* errorMessage,
         QString* details = nullptr
     );
+    bool openStartupTarget(const QString& path);
     bool quickShellRootWindowFrameGeometryAvailable() const;
     QRect quickShellRootWindowFrameGeometry() const;
     void setQuickShellBackendActive(bool active);

@@ -34,7 +34,7 @@ public:
     explicit QuickShellBootstrap(const QIcon& appIcon, QObject* parent = nullptr);
     ~QuickShellBootstrap() override;
 
-    bool start();
+    bool start(const QString& startupOpenTarget = QString());
     QuickShellController* controller() const;
     QuickShellStyleBridge* styleBridge() const;
 #ifdef Q_OS_WIN

@@ -115,6 +115,31 @@ bool wantsQuickShellBeta(const QStringList& arguments)
     return arguments.contains(QStringLiteral("--quick-shell-beta"));
 }
 
+QString startupOpenTargetFromArguments(const QStringList& arguments)
+{
+    for (int index = 1; index < arguments.size(); ++index) {
+        const QString argument = arguments.at(index).trimmed();
+        if (argument.isEmpty()) {
+            continue;
+        }
+        if (argument == QStringLiteral("--")) {
+            if (index + 1 < arguments.size()) {
+                return arguments.at(index + 1);
+            }
+            return QString();
+        }
+        if (argument == QStringLiteral("--rhi")) {
+            ++index;
+            continue;
+        }
+        if (argument.startsWith('-')) {
+            continue;
+        }
+        return arguments.at(index);
+    }
+    return QString();
+}
+
 // ===== Graphics backend selector =====
 //
 // User-driven backend selection without driver probing (which would touch GPU vendor DLLs
@@ -1420,6 +1445,10 @@ int main(int argc, char* argv[])
     const bool cliPreviewWorkerCrashRecoveryTestMode =
         wantsCliPreviewWorkerCrashRecoveryTest(rawArgs);
     const bool forceOpenGlGraphicsApi = cliVideoExportRequested || cliVideoExportWorkerRequested;
+    const QString startupOpenTarget =
+        !cliVideoExportRequested && !cliVideoExportWorkerRequested && !cliPreviewWorkerRequested
+            ? startupOpenTargetFromArguments(rawArgs)
+            : QString();
 
     // Preview worker self-redirect for the runtime log channel. The worker
     // is the same MiaCode.exe relaunched with --preview-worker, but it
@@ -1781,7 +1810,7 @@ int main(int argc, char* argv[])
     QElapsedTimer postExecObjectTeardownElapsed;
     {
         QuickShellBootstrap quickShellBootstrap(appIcon);
-        if (!quickShellBootstrap.start()) {
+        if (!quickShellBootstrap.start(startupOpenTarget)) {
             QTextStream(stderr) << "Failed to start Quick Shell Beta.\n";
             return 1;
         }

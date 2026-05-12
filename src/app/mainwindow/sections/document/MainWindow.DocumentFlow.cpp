@@ -1344,6 +1344,52 @@ bool MainWindow::openFileAtPath(const QString& path, bool showStatusMessage, boo
     return documentSection_->openFileAtPath(path, showStatusMessage, showErrors);
 }
 
+bool MainWindow::openStartupTarget(const QString& path)
+{
+    const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+    if (normalizedPath.isEmpty()) {
+        return false;
+    }
+
+    const QFileInfo info(normalizedPath);
+    if (info.isDir()) {
+        const QString maidataPath = QDir(info.absoluteFilePath()).filePath(QStringLiteral("maidata.txt"));
+        if (QFileInfo::exists(maidataPath) && QFileInfo(maidataPath).isFile()) {
+            return openFileAtPath(maidataPath, true, true);
+        }
+
+        setCurrentFilePath(QString(), true);
+        loadDocument(SimaiDocument::createEmpty());
+        UiDialogs::showMessageBox(
+            QMessageBox::Warning,
+            this,
+            uiText("dialog.open_startup_folder.missing_maidata.title", "maidata.txt Not Found"),
+            uiText(
+                "dialog.open_startup_folder.missing_maidata.message",
+                QStringLiteral("No maidata.txt was found in the dropped folder:\n%1")
+                    .arg(QDir::toNativeSeparators(info.absoluteFilePath()))
+            )
+        );
+        return false;
+    }
+
+    if (info.exists() && info.isFile()) {
+        return openFileAtPath(info.absoluteFilePath(), true, true);
+    }
+
+    UiDialogs::showMessageBox(
+        QMessageBox::Warning,
+        this,
+        uiText("dialog.open_startup_target.missing.title", "Open Failed"),
+        uiText(
+            "dialog.open_startup_target.missing.message",
+            QStringLiteral("The dropped file or folder does not exist:\n%1")
+                .arg(QDir::toNativeSeparators(normalizedPath))
+        )
+    );
+    return false;
+}
+
 bool MainWindow::restoreLastSessionFile()
 {
     return documentSection_->restoreLastSessionFile();
