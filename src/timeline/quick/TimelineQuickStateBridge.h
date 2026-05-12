@@ -27,6 +27,8 @@ class TimelineQuickStateBridge : public QObject
     // no longer have two sources of truth for the on-screen state.
     Q_PROPERTY(bool followPreviewEnabled READ followPreviewEnabled
                WRITE setFollowPreviewEnabled NOTIFY followPreviewEnabledChanged)
+    Q_PROPERTY(bool viewportLockEnabled READ viewportLockEnabled
+               WRITE setViewportLockEnabled NOTIFY viewportLockEnabledChanged)
     Q_PROPERTY(bool followProgressEnabled READ followProgressEnabled
                WRITE setFollowProgressEnabled NOTIFY followProgressEnabledChanged)
 
@@ -70,6 +72,8 @@ public:
     void setShowSlideTracks(bool show);
     bool followPreviewEnabled() const;
     void setFollowPreviewEnabled(bool enabled);
+    bool viewportLockEnabled() const;
+    void setViewportLockEnabled(bool enabled);
     bool followProgressEnabled() const;
     void setFollowProgressEnabled(bool enabled);
     bool playheadIndicatorSuppressed() const;
@@ -93,6 +97,7 @@ signals:
     // actually care about flips, not on every per-frame render
     // state push.
     void followPreviewEnabledChanged(bool enabled);
+    void viewportLockEnabledChanged(bool enabled);
     void followProgressEnabledChanged(bool enabled);
 
 private:
@@ -123,6 +128,7 @@ private:
     double cursorSeconds_ = 0.0;
     bool showSlideTracks_ = true;
     bool followPreviewEnabled_ = false;
+    bool viewportLockEnabled_ = false;
     bool followProgressEnabled_ = true;
     bool playheadIndicatorSuppressed_ = false;
     miacode::timeline::TimelineSceneLayoutMetrics layoutMetrics_;

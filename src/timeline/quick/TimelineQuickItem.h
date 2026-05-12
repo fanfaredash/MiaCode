@@ -33,6 +33,7 @@ class TimelineQuickItem : public QQuickItem
     Q_PROPERTY(int headerRightLimit READ headerRightLimit WRITE setHeaderRightLimit NOTIFY headerInsetsChanged)
     Q_PROPERTY(qreal zoomScale READ zoomScale NOTIFY zoomScaleChanged)
     Q_PROPERTY(bool followPreviewEnabled READ followPreviewEnabled WRITE setFollowPreviewEnabled NOTIFY followPreviewEnabledChanged)
+    Q_PROPERTY(bool viewportLockEnabled READ viewportLockEnabled WRITE setViewportLockEnabled NOTIFY viewportLockEnabledChanged)
     Q_PROPERTY(bool followProgressEnabled READ followProgressEnabled WRITE setFollowProgressEnabled NOTIFY followProgressEnabledChanged)
     Q_PROPERTY(int timelineTop READ timelineTop NOTIFY sceneMetricsChanged)
     Q_PROPERTY(bool ready READ isReady NOTIFY readyChanged)
@@ -54,6 +55,8 @@ public:
     qreal zoomScale() const;
     bool followPreviewEnabled() const;
     void setFollowPreviewEnabled(bool enabled);
+    bool viewportLockEnabled() const;
+    void setViewportLockEnabled(bool enabled);
     bool followProgressEnabled() const;
     void setFollowProgressEnabled(bool enabled);
     int timelineTop() const;
@@ -67,6 +70,7 @@ signals:
     void headerInsetsChanged();
     void zoomScaleChanged();
     void followPreviewEnabledChanged();
+    void viewportLockEnabledChanged();
     void followProgressEnabledChanged();
     void sceneMetricsChanged();
     void readyChanged();
@@ -79,6 +83,7 @@ signals:
     void timelineDragFinished(double second);
     void timelineUserInteractionStarted();
     void followPreviewToggled(bool enabled);
+    void viewportLockToggled(bool enabled);
     void followProgressToggled(bool enabled);
     void previewPlayPauseRequested();
 
@@ -112,6 +117,7 @@ private:
     int headerRightLimit_ = 0;
     qreal cachedZoomScale_ = 0.5;
     bool cachedFollowPreviewEnabled_ = false;
+    bool cachedViewportLockEnabled_ = false;
     bool cachedFollowProgressEnabled_ = true;
     int cachedTimelineTop_ = 0;
     bool ready_ = false;

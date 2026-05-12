@@ -573,6 +573,11 @@ void MainWindow::WindowSection::shellTimelineFollowPreviewToggled(bool enabled)
     owner_.timelineSection_->onTimelineFollowPreviewToggled(enabled);
 }
 
+void MainWindow::WindowSection::shellTimelineViewportLockToggled(bool enabled)
+{
+    owner_.timelineSection_->onTimelineViewportLockToggled(enabled);
+}
+
 void MainWindow::WindowSection::shellTimelineFollowProgressToggled(bool enabled)
 {
     owner_.timelineSection_->onTimelineFollowProgressToggled(enabled);

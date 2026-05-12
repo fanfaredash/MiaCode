@@ -83,6 +83,8 @@ public:
     void restorePlayheadIndicatorForQuickSurface(bool immediate = false);
     void setFollowPreviewEnabled(bool enabled);
     bool followPreviewEnabled() const;
+    void setViewportLockEnabled(bool enabled);
+    bool viewportLockEnabled() const;
     void setFollowProgressEnabled(bool enabled);
     bool followProgressEnabled() const;
     void setPresentationMode(PresentationMode mode);
@@ -100,6 +102,7 @@ signals:
     void timelineDragFinished(double second);
     void timelineUserInteractionStarted();
     void followPreviewToggled(bool enabled);
+    void viewportLockToggled(bool enabled);
     void followProgressToggled(bool enabled);
     void previewPlayPauseRequested();
     void renderStateChanged();
@@ -222,6 +225,7 @@ private:
     mutable QHash<QString, HoldPixmapParts> holdPixmapPartsCache_;
     std::shared_ptr<const miacode::waveform::WaveformData> waveformData_;
     QToolButton* zoomButton_ = nullptr;
+    QCheckBox* viewportLockCheckBox_ = nullptr;
     QCheckBox* followPreviewCheckBox_ = nullptr;
     QCheckBox* followProgressCheckBox_ = nullptr;
     QFont headerLineNumberFont_;

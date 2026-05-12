@@ -188,6 +188,9 @@ void TimelineView::paintEvent(QPaintEvent* event)
     if (followPreviewCheckBox_ != nullptr) {
         headerRightLimit = qMin(headerRightLimit, followPreviewCheckBox_->x() - 1);
     }
+    if (viewportLockCheckBox_ != nullptr) {
+        headerRightLimit = qMin(headerRightLimit, viewportLockCheckBox_->x() - 1);
+    }
     if (followProgressCheckBox_ != nullptr) {
         headerRightLimit = qMin(headerRightLimit, followProgressCheckBox_->x() - 1);
     }

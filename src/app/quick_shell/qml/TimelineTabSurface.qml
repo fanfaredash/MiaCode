@@ -195,7 +195,7 @@ Item {
         onClicked: timelineItem.cycleZoomPreset()
     }
 
-    // Cursor Follow / Progress Follow checkboxes moved to
+    // View Lock / Cursor Follow / Progress Follow checkboxes moved to
     // BottomTabsQuickHost.qml's tab strip \u2014 see the long comment in
     // TimelineSceneStateBuilder.cpp where the matching scene-state
     // emit was retired. The deletion below removes the QML controls
