@@ -3996,6 +3996,69 @@ VideoExportResult VideoExportController::exportPreparedTask(
             ? fnv1a64Bytes(packedFrameData, packedFrameSize)
             : 0;
 
+        // Alpha-encoding sanity probe. We are claiming the bytes about to
+        // hit the FFmpeg pipe are straight-alpha RGBA8888 (declared via
+        // `-pix_fmt rgba` and consumed under `overlay=...:alpha=straight`).
+        // Premultiplied data masquerading as straight would manifest as
+        // every partial-alpha pixel having max(R,G,B) <= A. Conversely a
+        // single sampled pixel with max(R,G,B) > A is definitive proof
+        // the data really is straight.
+        //
+        // Sampling is gated to a tiny fixed set of frames (0, 1, 30, 60,
+        // 120) and a handful of fixed positions to keep the log to
+        // <= 5 short lines per export.
+        if (packedFrameData != nullptr
+            && packedFrameSize >= static_cast<qint64>(frameWidth) * frameHeight * 4
+            && frameWidth > 0
+            && frameHeight > 0
+            && (frameIndex == 0 || frameIndex == 1 || frameIndex == 30
+                || frameIndex == 60 || frameIndex == 120)) {
+            static const double kSampleNorm[][2] = {
+                {0.50, 0.50}, {0.50, 0.20}, {0.50, 0.80},
+                {0.20, 0.50}, {0.80, 0.50}, {0.70, 0.30},
+                {0.55, 0.70}, {0.05, 0.05}, {0.95, 0.95},
+            };
+            const int sampleCount = static_cast<int>(sizeof(kSampleNorm) / sizeof(kSampleNorm[0]));
+            QStringList samplePieces;
+            samplePieces.reserve(sampleCount);
+            int partialAlphaCount = 0;
+            int strictlyStraightCount = 0;
+            for (int i = 0; i < sampleCount; ++i) {
+                const int sx = qBound(0, static_cast<int>(kSampleNorm[i][0] * frameWidth), frameWidth - 1);
+                const int sy = qBound(0, static_cast<int>(kSampleNorm[i][1] * frameHeight), frameHeight - 1);
+                const qint64 off = (static_cast<qint64>(sy) * frameWidth + sx) * 4;
+                const uchar r = static_cast<uchar>(packedFrameData[off + 0]);
+                const uchar g = static_cast<uchar>(packedFrameData[off + 1]);
+                const uchar b = static_cast<uchar>(packedFrameData[off + 2]);
+                const uchar a = static_cast<uchar>(packedFrameData[off + 3]);
+                const int rgbMax = qMax(qMax(r, g), b);
+                const bool partialAlpha = (a > 0 && a < 255);
+                const bool strictlyStraight = partialAlpha && (rgbMax > a);
+                if (partialAlpha) ++partialAlphaCount;
+                if (strictlyStraight) ++strictlyStraightCount;
+                samplePieces.append(QStringLiteral("(%1,%2)%3/%4/%5/%6%7")
+                    .arg(sx).arg(sy)
+                    .arg(static_cast<int>(r)).arg(static_cast<int>(g))
+                    .arg(static_cast<int>(b)).arg(static_cast<int>(a))
+                    .arg(strictlyStraight ? QStringLiteral("!") : QString()));
+            }
+            const QString alphaVerdict = strictlyStraightCount > 0
+                ? QStringLiteral("straight_confirmed")
+                : (partialAlphaCount == 0
+                    ? QStringLiteral("no_partial_alpha_sampled")
+                    : QStringLiteral("ambiguous_no_strict_straight_pixel"));
+            appendVideoExportLog(
+                QStringLiteral("alpha_sample"),
+                QStringLiteral("frame=%1 size=%2x%3 verdict=%4 partial=%5 strict_straight=%6 samples=%7")
+                    .arg(frameIndex)
+                    .arg(frameWidth).arg(frameHeight)
+                    .arg(alphaVerdict)
+                    .arg(partialAlphaCount)
+                    .arg(strictlyStraightCount)
+                    .arg(samplePieces.join(QLatin1Char(' ')))
+            );
+        }
+
         if (diagPipeHashEnabled && !traceItems.isEmpty()) {
             ++diagPipeHashObjectFrames;
             if (hasPreviousObjectPackedHash && packedHash == previousObjectPackedHash) {
