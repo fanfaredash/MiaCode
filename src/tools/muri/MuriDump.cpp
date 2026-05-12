@@ -21,6 +21,7 @@
 #include "common/MuriTypes.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriStaticChecker.h"
+#include "tools/muri/MuriPanelEntries.h"
 
 namespace {
 
@@ -1180,6 +1181,21 @@ int main(int argc, char* argv[])
         markerStatesArray.append(jsonFromMarkerState(state));
     }
 
+    const QVector<miacode::muri::MuriPanelEntry> visibleEntries =
+        miacode::muri::buildVisibleMuriPanelEntries(report, staticReferences);
+    QJsonArray visibleEntriesArray;
+    for (const miacode::muri::MuriPanelEntry& entry : visibleEntries) {
+        QJsonObject obj;
+        obj.insert(QStringLiteral("kind"), muriKindKey(entry.kind));
+        obj.insert(QStringLiteral("is_static"), entry.isStatic);
+        obj.insert(QStringLiteral("line"), entry.line);
+        obj.insert(QStringLiteral("col"), entry.col);
+        obj.insert(QStringLiteral("second"), entry.second);
+        obj.insert(QStringLiteral("occurrence_second"), entry.occurrenceSecond);
+        obj.insert(QStringLiteral("detail"), entry.rawDetail);
+        visibleEntriesArray.append(obj);
+    }
+
     QJsonObject root;
     root.insert(QStringLiteral("ok"), nativeResult.ok);
     root.insert(QStringLiteral("source"), sourceDescription);
@@ -1189,6 +1205,7 @@ int main(int argc, char* argv[])
     root.insert(QStringLiteral("summary"), summaryObject);
     root.insert(QStringLiteral("diagnostics"), diagnosticsArray);
     root.insert(QStringLiteral("static_references"), staticReferencesArray);
+    root.insert(QStringLiteral("visible_panel_entries"), visibleEntriesArray);
     root.insert(QStringLiteral("marker_states"), markerStatesArray);
 
     if (parser.isSet(QStringLiteral("with-markers"))) {

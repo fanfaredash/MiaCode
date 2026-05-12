@@ -537,6 +537,11 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/tools/muri/MuriDump.cpp
         src/common/MuriTypes.h
         src/common/MuriTypes.cpp
+        src/common/OperationLog.h
+        src/common/OperationLog.cpp
+        src/common/DebugLog.h
+        src/common/DebugLog.cpp
+        src/common/DebugOptions.h
         src/core/chart/document/SimaiDocument.h
         src/core/chart/document/SimaiDocument.cpp
         src/core/chart/document/SimaiTimingMetadata.h
@@ -545,6 +550,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/core/chart/parser/SimaiNativeParser.cpp
         src/tools/muri/MuriAnalyzer.h
         src/tools/muri/MuriAnalyzer.cpp
+        src/tools/muri/MuriPanelEntries.h
+        src/tools/muri/MuriPanelEntries.cpp
         src/tools/muri/MuriStaticChecker.h
         src/tools/muri/MuriStaticChecker.cpp
         resources/fonts.qrc
