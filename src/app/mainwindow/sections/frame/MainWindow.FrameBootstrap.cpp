@@ -232,6 +232,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             redoAction_->trigger();
         }
     });
+    connect(editor, &PlainCodeEditor::editorOverwriteModeChanged, this, [this](bool enabled) {
+        applyEditorOverwriteModeEnabled(enabled, true);
+    });
     chartBracketHighlighter_ = new BracketScopeHighlighter(editor->document());
     editorWidget_ = editor;
     editorWidget_->setFont(codeFont);
@@ -659,6 +662,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     copyAreaEditor_->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     copyAreaEditor_->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("复制区") : QStringLiteral("Copy area"));
     copyAreaEditor_->setStyleSheet(UiTheme::editorTextEditStyleSheet());
+    connect(copyAreaEditor_, &PlainCodeEditor::editorOverwriteModeChanged, this, [this](bool enabled) {
+        applyEditorOverwriteModeEnabled(enabled, true);
+    });
     if (QScrollBar* vbar = copyAreaEditor_->verticalScrollBar()) {
         vbar->setStyleSheet(modernScrollBarStyle());
     }

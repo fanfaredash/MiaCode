@@ -15,8 +15,6 @@
 namespace miacode::preview_sfx_timeline {
 
 constexpr double kTimelineEpsilonSeconds = 1e-6;
-constexpr double kFireworkTouchTriggerDelaySeconds =
-    miacode::preview_gameplay::kJudgeEffectFireworkTouchTriggerDelaySeconds;
 
 struct Event {
     double second = 0.0;
@@ -335,8 +333,7 @@ inline void buildTimeline(
             addEvent(judgeSecond, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("touch"));
             if (marker.isFirework) {
                 addEvent(
-                    qMax(0.0, miacode::preview_sfx_timing::slideTriggerSecond(marker.second, normalizedTimingSettings, playbackRate))
-                        + kFireworkTouchTriggerDelaySeconds,
+                    qMax(0.0, miacode::preview_sfx_timing::slideTriggerSecond(marker.second, normalizedTimingSettings, playbackRate)),
                     QStringLiteral("firework"));
             }
             continue;

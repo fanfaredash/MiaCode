@@ -520,6 +520,20 @@ void PlainCodeEditor::setHalfWidthInputEnabled(bool enabled)
     setInputMethodHints(hints);
 }
 
+void PlainCodeEditor::setEditorOverwriteMode(bool enabled)
+{
+    if (overwriteMode() == enabled) {
+        return;
+    }
+    setOverwriteMode(enabled);
+    // Refresh the caret width through the shared cursorPositionChanged
+    // code path so the mode visual stays consistent whether the toggle
+    // came from Insert, the Preferences dialog, or anywhere else.
+    updateCursorVisibility();
+    viewport()->update();
+    emit editorOverwriteModeChanged(enabled);
+}
+
 bool PlainCodeEditor::event(QEvent* event)
 {
     if (event != nullptr && event->type() == QEvent::ShortcutOverride) {
@@ -768,16 +782,13 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
     // Plain Insert toggles overwrite mode. Shift+Insert (paste) and
     // Ctrl+Insert (copy) are deliberately left to the base class so
     // those standard X11-era shortcuts keep working.
-    if (event->key() == Qt::Key_Insert
-        && !event->isAutoRepeat()
-        && !(event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier
-                                   | Qt::AltModifier | Qt::MetaModifier))) {
-        setOverwriteMode(!overwriteMode());
-        // Defer to updateCursorVisibility so the post-toggle width is
-        // computed by the same code path that runs on every
-        // cursorPositionChanged — keeps the mode visual consistent
-        // across arrow-key moves and click-to-position events.
-        updateCursorVisibility();
+    const bool plainInsertKey =
+        event->key() == Qt::Key_Insert
+        && !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier | Qt::ShiftModifier));
+    if (plainInsertKey) {
+        if (!event->isAutoRepeat()) {
+            setEditorOverwriteMode(!overwriteMode());
+        }
         event->accept();
         return;
     }

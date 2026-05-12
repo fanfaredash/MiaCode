@@ -27,6 +27,8 @@
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
 
+#include <algorithm>
+
 #include <QtCore>
 #include <QtGui>
 #include <QtWidgets>
@@ -79,6 +81,12 @@ struct PreparedDocumentOpenPayload {
     qint64 parseElapsedMs = 0;
     qint64 trackProbeElapsedMs = 0;
     qint64 totalElapsedMs = 0;
+};
+
+struct BackupRestoreEntry {
+    QString filePath;
+    QDateTime modifiedAt;
+    int priority = 0;
 };
 
 PreparedDocumentOpenPayload prepareDocumentOpenPayload(const QString& path, bool probeTrackDuration)
@@ -206,6 +214,54 @@ QString autosaveTimestampStringUtc(qint64 msecsSinceEpoch)
 QString autosaveTimestampStringUtcNow()
 {
     return autosaveTimestampStringUtc(QDateTime::currentDateTimeUtc().toMSecsSinceEpoch());
+}
+
+QString backupRestoreEntryLabel(const BackupRestoreEntry& entry)
+{
+    if (!entry.modifiedAt.isValid()) {
+        return QFileInfo(entry.filePath).fileName();
+    }
+    return entry.modifiedAt.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+}
+
+QList<BackupRestoreEntry> backupRestoreEntriesForAutosaveDirectory(const QString& autosaveDirectoryPath)
+{
+    QList<BackupRestoreEntry> entries;
+    if (autosaveDirectoryPath.isEmpty()) {
+        return entries;
+    }
+
+    const QString latestPath = autosaveLatestFilePath(autosaveDirectoryPath);
+    const QFileInfo latestInfo(latestPath);
+    if (latestInfo.exists() && latestInfo.isFile()) {
+        entries.append(BackupRestoreEntry{latestInfo.absoluteFilePath(), latestInfo.lastModified(), 1});
+    }
+
+    const QString crashRecoveryPath = QDir(autosaveDirectoryPath).filePath(
+        QFileInfo(autosaveDirectoryPath).fileName() + QStringLiteral(".crash_recovery")
+    );
+    const QFileInfo crashRecoveryInfo(crashRecoveryPath);
+    if (crashRecoveryInfo.exists() && crashRecoveryInfo.isFile()) {
+        entries.append(BackupRestoreEntry{crashRecoveryInfo.absoluteFilePath(), crashRecoveryInfo.lastModified(), 2});
+    }
+
+    QDir historyDir(autosaveHistoryDirectoryPath(autosaveDirectoryPath));
+    const QFileInfoList historyFiles = historyDir.entryInfoList(
+        QStringList{QStringLiteral("*.bak")},
+        QDir::Files | QDir::NoDotAndDotDot,
+        QDir::Name
+    );
+    for (const QFileInfo& historyInfo : historyFiles) {
+        entries.append(BackupRestoreEntry{historyInfo.absoluteFilePath(), historyInfo.lastModified(), 0});
+    }
+
+    std::sort(entries.begin(), entries.end(), [](const BackupRestoreEntry& lhs, const BackupRestoreEntry& rhs) {
+        if (lhs.modifiedAt != rhs.modifiedAt) {
+            return lhs.modifiedAt > rhs.modifiedAt;
+        }
+        return lhs.priority > rhs.priority;
+    });
+    return entries;
 }
 
 bool ensureDirectoryExists(const QString& directoryPath)
@@ -721,15 +777,15 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
             const QString recoveryText = QString::fromUtf8(recoveryUtf8);
             const QString diskText = document.toText();
             if (!recoveryText.isEmpty() && recoveryText != diskText) {
-                const auto choice = QMessageBox::question(
+                const auto choice = UiDialogs::showMessageBox(
+                    QMessageBox::Question,
                     &owner_,
-                    QObject::tr("Recover Unsaved Changes"),
-                    QObject::tr(
-                        "MiaCode appears to have closed unexpectedly while "
-                        "editing this chart.\n\n"
-                        "Recover the unsaved changes from the previous "
-                        "session?\n\n"
-                        "(Choosing No will discard the recovery file.)"),
+                    uiText("dialog.crash_recovery.title", "Recover Unsaved Changes"),
+                    uiText(
+                        "dialog.crash_recovery.message",
+                        "MiaCode appears to have closed unexpectedly while editing this chart.\n\n"
+                        "Recover the unsaved changes from the previous session?\n\n"
+                        "Choosing No will discard the recovery file."),
                     QMessageBox::Yes | QMessageBox::No,
                     QMessageBox::Yes);
                 if (choice == QMessageBox::Yes) {
@@ -748,8 +804,7 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
     owner_.refreshWaveformCache(knownTrackDurationSeconds);
     if (restoredFromCrash) {
         owner_.statusBar()->showMessage(
-            QObject::tr("Recovered unsaved changes from previous session — "
-                        "save to keep them."),
+            uiText("status.crash_recovery.loaded", "Recovered unsaved changes from previous session. Save to keep them."),
             10000);
         // Mark the current text as a fresh edit baseline so the regular
         // autosave timers see it as dirty vs the on-disk content.
@@ -791,6 +846,127 @@ void MainWindow::DocumentSection::cleanupCrashRecoveryForCleanExit()
 QString MainWindow::DocumentSection::resolveAutosaveDirectoryPath() const
 {
     return autosaveEntryDirectoryPathForFile(state_.currentFilePath_);
+}
+
+void MainWindow::DocumentSection::refreshRestoreBackupMenu(QMenu* restoreBackupMenu)
+{
+    if (restoreBackupMenu == nullptr) {
+        return;
+    }
+    restoreBackupMenu->clear();
+
+    const QString autosaveDirectoryPath = resolveAutosaveDirectoryPath();
+    const QList<BackupRestoreEntry> entries = backupRestoreEntriesForAutosaveDirectory(autosaveDirectoryPath);
+    if (entries.isEmpty()) {
+        QAction* emptyAction = restoreBackupMenu->addAction(uiText("action.restore_backup.empty", "No Backups Available"));
+        emptyAction->setEnabled(false);
+        return;
+    }
+
+    QSet<QString> usedLabels;
+    for (const BackupRestoreEntry& entry : entries) {
+        QString label = backupRestoreEntryLabel(entry);
+        if (usedLabels.contains(label)) {
+            label = QStringLiteral("%1  %2").arg(label, QFileInfo(entry.filePath).fileName());
+        }
+        usedLabels.insert(label);
+
+        QAction* action = restoreBackupMenu->addAction(label);
+        action->setToolTip(QDir::toNativeSeparators(entry.filePath));
+        action->setStatusTip(QDir::toNativeSeparators(entry.filePath));
+        connect(action, &QAction::triggered, &owner_, [this, path = entry.filePath]() {
+            restoreBackupFilePath(path);
+        });
+    }
+}
+
+void MainWindow::DocumentSection::restoreBackupFilePath(const QString& path)
+{
+    const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+    const QFileInfo backupInfo(normalizedPath);
+    if (normalizedPath.isEmpty() || !backupInfo.exists() || !backupInfo.isFile()) {
+        UiDialogs::showMessageBox(
+            QMessageBox::Warning,
+            &owner_,
+            uiText("dialog.restore_backup.title", "Restore Backup"),
+            uiText(
+                "dialog.restore_backup.missing",
+                QStringLiteral("Backup file does not exist:\n%1").arg(QDir::toNativeSeparators(normalizedPath)))
+        );
+        return;
+    }
+
+    const auto choice = UiDialogs::showMessageBox(
+        QMessageBox::Question,
+        &owner_,
+        uiText("dialog.restore_backup.title", "Restore Backup"),
+        uiText(
+            "dialog.restore_backup.confirm",
+            QStringLiteral("Restore this backup?\n\n%1\n\nThe current editor content will be replaced, but the original file will not be overwritten.")
+                .arg(QDir::toNativeSeparators(normalizedPath))),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
+    if (choice != QMessageBox::Yes) {
+        return;
+    }
+
+    QString diskReferenceText = state_.document_.toText();
+    if (!state_.currentFilePath_.isEmpty()) {
+        QFile currentFile(state_.currentFilePath_);
+        if (currentFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            const QByteArray currentBytes = currentFile.readAll();
+            if (currentBytes.startsWith("\xEF\xBB\xBF")) {
+                diskReferenceText = QString::fromUtf8(currentBytes.mid(3));
+            } else {
+                QStringDecoder utf8Decoder(QStringConverter::Utf8);
+                diskReferenceText = utf8Decoder.decode(currentBytes);
+                if (utf8Decoder.hasError()) {
+                    QStringDecoder systemDecoder(QStringConverter::System);
+                    diskReferenceText = systemDecoder.decode(currentBytes);
+                }
+            }
+        }
+    }
+
+    QFile file(normalizedPath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        UiDialogs::showMessageBox(
+            QMessageBox::Critical,
+            &owner_,
+            uiText("dialog.restore_backup.title", "Restore Backup"),
+            uiText(
+                "dialog.restore_backup.read_failed",
+                QStringLiteral("Cannot read backup file:\n%1").arg(QDir::toNativeSeparators(normalizedPath)))
+        );
+        return;
+    }
+
+    QString backupText;
+    const QByteArray bytes = file.readAll();
+    if (bytes.startsWith("\xEF\xBB\xBF")) {
+        backupText = QString::fromUtf8(bytes.mid(3));
+    } else {
+        QStringDecoder utf8Decoder(QStringConverter::Utf8);
+        backupText = utf8Decoder.decode(bytes);
+        if (utf8Decoder.hasError()) {
+            QStringDecoder systemDecoder(QStringConverter::System);
+            backupText = systemDecoder.decode(bytes);
+        }
+    }
+
+    loadDocument(SimaiDocument::fromText(backupText));
+    state_.autosaveReferenceContentSignature_ = autosaveContentSignature(diskReferenceText);
+    state_.autosaveLastLatestContentSignature_.clear();
+    state_.autosaveLastHistoryContentSignature_.clear();
+    state_.autosaveLastHistorySnapshotMs_ = kAutosaveUnsetTimestampMs;
+    state_.documentDirty_ = true;
+    state_.currentFieldDirty_ = true;
+    updateDirtyState();
+    owner_.scheduleTimelineRefresh();
+    owner_.statusBar()->showMessage(
+        uiText("status.restore_backup.loaded", "Restored from backup. Save to keep the changes."),
+        10000
+    );
 }
 
 QString MainWindow::DocumentSection::currentDocumentTextForAutosave() const
@@ -1295,6 +1471,11 @@ void MainWindow::openRecentFilePath(const QString& path)
     openFileAtPath(normalizedPath, true, true);
 }
 
+void MainWindow::restoreBackupFilePath(const QString& path)
+{
+    documentSection_->restoreBackupFilePath(path);
+}
+
 void MainWindow::refreshRecentFilesMenu(QMenu* recentFilesMenu)
 {
     if (recentFilesMenu == nullptr) {
@@ -1337,6 +1518,11 @@ void MainWindow::refreshRecentFilesMenu(QMenu* recentFilesMenu)
             openRecentFilePath(path);
         });
     }
+}
+
+void MainWindow::refreshRestoreBackupMenu(QMenu* restoreBackupMenu)
+{
+    documentSection_->refreshRestoreBackupMenu(restoreBackupMenu);
 }
 
 bool MainWindow::openFileAtPath(const QString& path, bool showStatusMessage, bool showErrors)

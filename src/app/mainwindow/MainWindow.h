@@ -234,6 +234,8 @@ private slots:
     void onNewFile();
     void onOpenFile();
     void onOpenCurrentFolder();
+    void refreshRestoreBackupMenu(QMenu* restoreBackupMenu);
+    void restoreBackupFilePath(const QString& path);
     bool onSaveFile();
     bool onSaveFileAs();
     void onMirrorLeftRight();
@@ -395,6 +397,7 @@ private:
     void applyEditorTextFontSize(int pointSize, bool persistPreference);
     void applyEditorLineSpacingFactor(double factor, bool persistPreference);
     void applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference);
+    void applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference);
     void applyPreserveDifficultySwitchView(bool enabled, bool persistPreference);
     void showSimpleCopyArea();
     void setFullCopyAreaVisible(bool visible);
