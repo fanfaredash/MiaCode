@@ -77,51 +77,35 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     toolBar->addWidget(toolbarLeadingSpacer);
     toolBar->addAction(openAction_);
     toolBar->addAction(saveAction_);
+    // Beta20-fix / post-rename — we used to clamp every custom toolbar
+    // button to a 64-px floor with 12-px synthetic side padding. That
+    // floor was wider than the natural width of Qt's own
+    // addAction()-managed buttons next to it (Open / Save), so after
+    // the recent label shortening (Audio Settings → Audio, etc.) the
+    // pair sat in a visibly oversized cell with empty air on each side
+    // of the text. We now let `sizeHint()` produce the natural width
+    // exactly the way `addAction()` would, and only sync Audio/Video
+    // to each other (so the pair stays equal width even when the two
+    // labels happen to differ slightly in glyph advance).
     constexpr int kToolbarActionButtonWidth = 64;
-    // Beta20-fix — reduced from 20 → 12 (6 px on each side) so the
-    // explicit-fixed-width buttons (Audio Settings / Video Settings)
-    // hug their text the same way Qt's native `addAction()`-managed
-    // toolbar buttons (Open / Save / Export) do. The previous 20 px
-    // produced ~10 px of empty space on each side of the label text,
-    // which read as gratuitous extra margin compared to the native
-    // buttons next to them.
-    constexpr int kToolbarActionButtonHorizontalPadding = 12;
-    const auto compactToolbarButtonWidth = [](const QFont& font, QAction* action) -> int {
-        if (action == nullptr) {
-            return kToolbarActionButtonWidth;
-        }
-        const QFontMetrics metrics(font);
-        const int textBoundedWidth =
-            metrics.horizontalAdvance(action->text())
-            + kToolbarActionButtonHorizontalPadding;
-        // Chinese UI — short labels (设置, 导出) are far narrower than
-        // the 64 px floor, so always clamp to the floor in Chinese to
-        // keep the toolbar visually balanced. English UI — let labels
-        // grow naturally beyond the floor when needed.
-        if (UiText::isChineseUi()) {
-            return qMax(kToolbarActionButtonWidth, textBoundedWidth);
-        }
-        return qMax(kToolbarActionButtonWidth, textBoundedWidth);
-    };
-    const auto makeCompactToolbarButton = [toolBar, compactToolbarButtonWidth](QAction* action) -> QToolButton* {
+    const auto makeCompactToolbarButton = [toolBar](QAction* action) -> QToolButton* {
         auto* button = new QToolButton(toolBar);
         button->setDefaultAction(action);
         button->setAutoRaise(true);
         button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-        const int buttonWidth = compactToolbarButtonWidth(button->font(), action);
-        button->setFixedWidth(buttonWidth);
         button->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
+        button->ensurePolished();
         return button;
     };
 
     previewAudioSettingsButton_ = makeCompactToolbarButton(previewAudioSettingsAction_);
     previewVideoSettingsButton_ = makeCompactToolbarButton(previewVideoSettingsAction_);
-    int settingsButtonWidth = kToolbarActionButtonWidth;
+    int settingsButtonWidth = 1;
     if (previewAudioSettingsButton_ != nullptr) {
-        settingsButtonWidth = qMax(settingsButtonWidth, previewAudioSettingsButton_->width());
+        settingsButtonWidth = qMax(settingsButtonWidth, previewAudioSettingsButton_->sizeHint().width());
     }
     if (previewVideoSettingsButton_ != nullptr) {
-        settingsButtonWidth = qMax(settingsButtonWidth, previewVideoSettingsButton_->width());
+        settingsButtonWidth = qMax(settingsButtonWidth, previewVideoSettingsButton_->sizeHint().width());
     }
     if (previewAudioSettingsButton_ != nullptr) {
         previewAudioSettingsButton_->setFixedWidth(settingsButtonWidth);
