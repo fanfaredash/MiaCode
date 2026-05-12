@@ -105,17 +105,22 @@ struct X264TuningPlan {
     // beta25 — defaults retuned for compactness. The previous
     // {preset=fast, crf=21, bf=0} chased fast wallclock encode at the
     // cost of ~25-35% larger files than the x264 stock defaults at the
-    // same visual quality. {preset=fast, crf=23, bf=3, tune=animation}
-    // pushes towards stock behaviour: bf=3 is the x264 default and
-    // ships ~10-15% smaller; crf=23 is one notch below crf=21 and is
-    // visually transparent for chart-preview content; the animation
-    // tune adjusts deblocking + aq-strength to favour the sharp-edge
-    // graphic content that dominates the chart layer. The autotuner
-    // below adds another one-step preset bump (faster→fast, fast→medium)
-    // so the assembly defaults emit roughly stock x264 behaviour.
+    // same visual quality. An interim {crf=23, bf=3} pass leaned toward
+    // stock x264 behaviour for size, but bf=3 reorders chroma references
+    // and produced visible dark "ringing" halos around high-contrast
+    // playfield overlays on yuv420p exports (see izanai_MAS export logs
+    // 2026-05-12). Current defaults {preset=fast, crf=22, bf=0,
+    // tune=animation} pull back from bf=3 to eliminate that artifact
+    // while keeping crf one notch tighter than the bf=3 era so file
+    // size doesn't balloon: dropping bf=3 typically costs ~10% size, and
+    // crf=22 vs crf=23 recovers most of that. The animation tune
+    // adjusts deblocking + aq-strength to favour the sharp-edge graphic
+    // content that dominates the chart layer. The autotuner below adds
+    // another one-step preset bump (faster→fast, fast→medium) so the
+    // assembly defaults emit roughly stock x264 behaviour.
     QString preset = QStringLiteral("fast");
-    int crf = 23;
-    int bframes = 3;
+    int crf = 22;
+    int bframes = 0;
     QString tune;
 
     QStringList toArgs() const
@@ -736,7 +741,12 @@ X264TuningPlan chooseX264TuningPlan(
     plan.tune = QStringLiteral("animation");
 
     if (preset == VideoExportPreset::HighQuality) {
-        plan.crf = qMax(18, plan.crf - 1);
+        // Pull two CRF notches below the Fast default. With Fast at
+        // crf=22 this lands HighQuality at crf=20 — perceptually
+        // transparent on the high-contrast UI overlay and still well
+        // above the qMax(18, …) floor, which keeps the file size from
+        // exploding if some future tweak lowers the Fast default.
+        plan.crf = qMax(18, plan.crf - 2);
         plan.bframes = 0;
     }
 
