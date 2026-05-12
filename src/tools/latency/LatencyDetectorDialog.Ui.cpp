@@ -167,10 +167,6 @@ void LatencyDetectorDialog::buildUi()
     controlsRow->addWidget(playPauseButton_, 0, Qt::AlignVCenter);
     controlsRow->addWidget(stopButton_, 0, Qt::AlignVCenter);
     controlsRow->addSpacing(8);
-    controlsRow->addWidget(sfxLabel, 0, Qt::AlignVCenter);
-    controlsRow->addWidget(sfxVolumeSlider_, 0, Qt::AlignVCenter);
-    controlsRow->addWidget(sfxVolumeValueLabel_, 0, Qt::AlignVCenter);
-    controlsRow->addSpacing(8);
     controlsRow->addWidget(playbackTimeLabel_, 0, Qt::AlignVCenter);
     controlsRow->addSpacing(4);
     controlsRow->addWidget(speedButton_, 0, Qt::AlignVCenter);
@@ -181,7 +177,15 @@ void LatencyDetectorDialog::buildUi()
     // Deferred-commit Save / Cancel row. All in-session edits stay
     // local — commitPendingValues drains BPM, offset, and meter into
     // the parent on Save. Cancel (and X / Esc) reject without ever
-    // touching the chart.
+    // touching the chart. SFX volume rides on the same row at the
+    // far left so it sits at the bottom of the dialog without
+    // crowding the playback transport above.
+    auto* commitRow = new QHBoxLayout();
+    commitRow->setSpacing(8);
+    commitRow->addWidget(sfxLabel, 0, Qt::AlignVCenter);
+    commitRow->addWidget(sfxVolumeSlider_, 0, Qt::AlignVCenter);
+    commitRow->addWidget(sfxVolumeValueLabel_, 0, Qt::AlignVCenter);
+    commitRow->addStretch(1);
     auto* commitButtonBox = new QDialogButtonBox(
         QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
     UiDialogs::localizeButtonBox(commitButtonBox);
@@ -193,7 +197,8 @@ void LatencyDetectorDialog::buildUi()
         accept();
     });
     connect(commitButtonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    rootLayout->addWidget(commitButtonBox, 0, Qt::AlignRight);
+    commitRow->addWidget(commitButtonBox, 0, Qt::AlignRight);
+    rootLayout->addLayout(commitRow);
 
     sfxRuntime_ = new QtPreviewSfxRuntime(this);
     sfxRuntime_->setChartPath(chartPath_);
