@@ -2,6 +2,7 @@
 
 #include "BassPreviewDebugLogRouting.h"
 #include "BassPreviewRetainedState.h"
+#include "BgmPeakNormalize.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
@@ -262,39 +263,14 @@ struct BassPreviewAudioBackend::Sample {
         }
 
         if (normalize) {
-            const QWORD scanLength = BASS_ChannelGetLength(stream, BASS_POS_BYTE);
-            double peak = 0.0;
-            if (scanLength != static_cast<QWORD>(-1) && scanLength > 0) {
-                QWORD lastPos = 0;
-                for (int iter = 0; iter < 200000; ++iter) {
-                    const QWORD pos = BASS_ChannelGetPosition(stream, BASS_POS_BYTE);
-                    if (pos == static_cast<QWORD>(-1) || pos >= scanLength) {
-                        break;
-                    }
-                    if (iter > 0 && pos == lastPos) {
-                        break;
-                    }
-                    lastPos = pos;
-                    const DWORD level = BASS_ChannelGetLevel(stream);
-                    if (level == static_cast<DWORD>(-1)) {
-                        break;
-                    }
-                    const double leftNorm = static_cast<double>(LOWORD(level)) / 32768.0;
-                    const double rightNorm = static_cast<double>(HIWORD(level)) / 32768.0;
-                    const double maxNorm = qMax(leftNorm, rightNorm);
-                    if (maxNorm > peak) {
-                        peak = maxNorm;
-                    }
-                }
-            }
-            constexpr double kBgmNormalizeMaxBoost = 4.0;
-            constexpr double kBgmNormalizePeakFloor = 1.0e-4;
-            gain = qMin(kBgmNormalizeMaxBoost, 1.0 / qMax(peak, kBgmNormalizePeakFloor));
+            const auto normalization = miacode::audio::computeBgmPeakNormalization(samplePath);
+            gain = normalization.gain;
             appendAudioDebugLog(
-                QString("bgm_normalize_peak kind=%1 peak=%2 gain=%3 path=%4")
+                QString("bgm_normalize_peak kind=%1 peak=%2 gain=%3 decoded=%4 path=%5")
                     .arg(sampleKind)
-                    .arg(peak, 0, 'f', 6)
+                    .arg(normalization.peak, 0, 'f', 6)
                     .arg(gain, 0, 'f', 4)
+                    .arg(normalization.decoded ? 1 : 0)
                     .arg(samplePath));
         }
 

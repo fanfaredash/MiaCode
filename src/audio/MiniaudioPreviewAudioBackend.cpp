@@ -18,7 +18,6 @@
 
 #include <SoundTouch.h>
 
-#define MINIAUDIO_IMPLEMENTATION
 #include "../third_party/miniaudio/miniaudio.h"
 
 #define QtPreviewSfxRuntime MiniaudioPreviewAudioBackend
