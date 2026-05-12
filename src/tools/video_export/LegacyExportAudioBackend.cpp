@@ -214,11 +214,35 @@ bool LegacyExportAudioBackend::renderMixedTrackToWav(
 
     if (plan.backgroundTrack.enabled) {
         if (const DecodedClip* clip = loadClip(QStringLiteral("bgm"), plan.backgroundTrack.path)) {
+            // First draft, unverified: cross-platform fallback scan via the
+            // already-decoded PCM. The Bass backend runs the equivalent scan
+            // via BASS_ChannelGetLevel; their peaks may differ by a fraction
+            // of a dB at the LSB level until cross-checked.
+            double peak = 0.0;
+            for (const float sample : clip->samples) {
+                const double absValue = qAbs(static_cast<double>(sample));
+                if (absValue > peak) {
+                    peak = absValue;
+                }
+            }
+            constexpr double kBgmNormalizeMaxBoost = 4.0;
+            constexpr double kBgmNormalizePeakFloor = 1.0e-4;
+            const double normalizationGain =
+                qMin(kBgmNormalizeMaxBoost, 1.0 / qMax(peak, kBgmNormalizePeakFloor));
+            const double effectiveGain = plan.backgroundTrack.gain * normalizationGain;
+            appendExportLog(
+                QStringLiteral("bgm_normalize_peak"),
+                QStringLiteral("peak=%1 norm_gain=%2 plan_gain=%3 effective=%4 path=%5")
+                    .arg(peak, 0, 'f', 6)
+                    .arg(normalizationGain, 0, 'f', 4)
+                    .arg(plan.backgroundTrack.gain, 0, 'f', 4)
+                    .arg(effectiveGain, 0, 'f', 4)
+                    .arg(plan.backgroundTrack.path));
             const qint64 startFrame = qRound64(plan.backgroundTrack.mixStartSecond * kMixSampleRate);
             const qint64 maxFrames = qMax<qint64>(0, qRound64(plan.backgroundTrack.durationSeconds * kMixSampleRate));
             const qint64 clipStartFrame =
                 qMax<qint64>(0, qRound64(plan.backgroundTrack.sourceStartSecond * kMixSampleRate));
-            addClipToMix(*clip, plan.backgroundTrack.gain, startFrame, maxFrames, clipStartFrame, &mix);
+            addClipToMix(*clip, effectiveGain, startFrame, maxFrames, clipStartFrame, &mix);
         }
     }
 

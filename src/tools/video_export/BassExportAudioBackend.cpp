@@ -293,6 +293,48 @@ bool BassExportAudioBackend::renderMixedTrackToWav(
             return true;
         }
 
+        double effectiveGain = gain;
+        if (tag == QStringLiteral("bgm")) {
+            const QWORD scanLength = BASS_ChannelGetLength(stream, BASS_POS_BYTE);
+            double peak = 0.0;
+            if (scanLength != static_cast<QWORD>(-1) && scanLength > 0) {
+                QWORD lastPos = 0;
+                for (int iter = 0; iter < 200000; ++iter) {
+                    const QWORD pos = BASS_ChannelGetPosition(stream, BASS_POS_BYTE);
+                    if (pos == static_cast<QWORD>(-1) || pos >= scanLength) {
+                        break;
+                    }
+                    if (iter > 0 && pos == lastPos) {
+                        break;
+                    }
+                    lastPos = pos;
+                    const DWORD level = BASS_ChannelGetLevel(stream);
+                    if (level == static_cast<DWORD>(-1)) {
+                        break;
+                    }
+                    const double leftNorm = static_cast<double>(LOWORD(level)) / 32768.0;
+                    const double rightNorm = static_cast<double>(HIWORD(level)) / 32768.0;
+                    const double maxNorm = qMax(leftNorm, rightNorm);
+                    if (maxNorm > peak) {
+                        peak = maxNorm;
+                    }
+                }
+            }
+            constexpr double kBgmNormalizeMaxBoost = 4.0;
+            constexpr double kBgmNormalizePeakFloor = 1.0e-4;
+            const double normalizationGain =
+                qMin(kBgmNormalizeMaxBoost, 1.0 / qMax(peak, kBgmNormalizePeakFloor));
+            effectiveGain = gain * normalizationGain;
+            appendExportLog(
+                QStringLiteral("bgm_normalize_peak"),
+                QStringLiteral("peak=%1 norm_gain=%2 plan_gain=%3 effective=%4 path=%5")
+                    .arg(peak, 0, 'f', 6)
+                    .arg(normalizationGain, 0, 'f', 4)
+                    .arg(gain, 0, 'f', 4)
+                    .arg(effectiveGain, 0, 'f', 4)
+                    .arg(path));
+        }
+
         if (sourceStartSecond > 0.0) {
             const QWORD sourcePosition = BASS_ChannelSeconds2Bytes(stream, sourceStartSecond);
             if (!BASS_ChannelSetPosition(stream, sourcePosition, BASS_POS_BYTE)) {
@@ -304,9 +346,11 @@ bool BassExportAudioBackend::renderMixedTrackToWav(
                 }
                 return false;
             }
+        } else if (tag == QStringLiteral("bgm")) {
+            BASS_ChannelSetPosition(stream, 0, BASS_POS_BYTE);
         }
 
-        BASS_ChannelSetAttribute(stream, BASS_ATTRIB_VOL, static_cast<float>(qBound(0.0, gain, 2.0)));
+        BASS_ChannelSetAttribute(stream, BASS_ATTRIB_VOL, static_cast<float>(qBound(0.0, effectiveGain, 2.0)));
         const QWORD mixStartBytes = BASS_ChannelSeconds2Bytes(masterMixer, mixStartSecond);
         const QWORD mixLengthBytes = BASS_ChannelSeconds2Bytes(masterMixer, durationSeconds);
         if (!BASS_Mixer_StreamAddChannelEx(

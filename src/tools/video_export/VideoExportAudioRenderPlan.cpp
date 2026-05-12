@@ -2,12 +2,11 @@
 
 #include "VideoExportController.h"
 
-#include "audio/BgmPeakNormalize.h"
-#include "audio/PreviewAudioSettings.h"
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewSfxSemantics.h"
 #include "common/PreviewSfxTimeline.h"
 #include "common/VideoExportConfig.h"
+#include "audio/PreviewAudioSettings.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -289,9 +288,7 @@ bool buildVideoExportAudioRenderPlan(
         BackgroundTrackRenderPlan backgroundPlan;
         backgroundPlan.enabled = true;
         backgroundPlan.path = normalizedTrackPath;
-        const double trackVolume = qMax(0.0, previewTrackVolume(normalizedAudioSettings));
-        const auto normalization = miacode::audio::computeBgmPeakNormalization(normalizedTrackPath);
-        backgroundPlan.gain = trackVolume * normalization.gain;
+        backgroundPlan.gain = qMax(0.0, previewTrackVolume(normalizedAudioSettings));
         if (built.timelineOriginSecond > kTimelineEpsilonSeconds) {
             backgroundPlan.sourceStartSecond = built.timelineOriginSecond;
             backgroundPlan.mixStartSecond = 0.0;
