@@ -282,13 +282,20 @@ Item {
         id: settingsMenu
 
         parent: settingsGearButton
-        // Open upward so the popup covers the Progress Follow chip in
-        // the bottom-tab strip above (deliberate \u2014 matches the spec
-        // "neatly obscure the retained Progress Follow option").
-        // The popup is rendered on the application overlay layer so
-        // it isn't clipped to the timeline surface bounds.
+        // Spec asked us to open upward so the popup would cover the
+        // Progress Follow chip in the tab strip above. That works in
+        // QML in isolation, but BottomTabsQuickHost lives in a
+        // QQuickWidget whose QQuickWindow is bounded by the widget's
+        // own pixel rect \u2014 the editor is a separate QWidget above it.
+        // An upward popup gets visually clipped at the widget's top
+        // edge (everything past the tab strip area vanishes behind
+        // the editor). Open downward into the timeline content area
+        // instead: plenty of vertical room and fully inside the
+        // QQuickWidget's drawable region. The Progress-Follow-overlay
+        // requirement is parked for a follow-up (would need either a
+        // separate Window/popup HWND or a full-window overlay layer).
         x: settingsGearButton.width - width
-        y: -height - 4
+        y: settingsGearButton.height + 4
         width: Math.max(160, settingsContent.implicitWidth + 16)
         height: settingsContent.implicitHeight + 16
         padding: 8
@@ -311,7 +318,6 @@ Item {
             CheckBox {
                 id: menuViewLockCheck
 
-                width: parent.width
                 hoverEnabled: true
                 spacing: Math.round(6 * root.headerScale)
                 text: root.isChineseUi() ? "\u5149\u6807\u5c45\u4e2d" : "View Lock"
@@ -374,7 +380,6 @@ Item {
             CheckBox {
                 id: menuCursorFollowCheck
 
-                width: parent.width
                 hoverEnabled: true
                 spacing: Math.round(6 * root.headerScale)
                 text: root.isChineseUi() ? "\u4ee3\u7801\u8ddf\u968f" : "Cursor Follow"
@@ -437,7 +442,6 @@ Item {
             CheckBox {
                 id: menuProgressFollowCheck
 
-                width: parent.width
                 hoverEnabled: true
                 spacing: Math.round(6 * root.headerScale)
                 text: root.isChineseUi() ? "\u8fdb\u5ea6\u8ddf\u968f" : "Progress Follow"
