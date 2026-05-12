@@ -12,16 +12,149 @@
 
 #include <QAction>
 #include <QElapsedTimer>
+#include <QEnterEvent>
+#include <QFontMetrics>
 #include <QMenu>
+#include <QMouseEvent>
+#include <QPaintEvent>
+#include <QPainter>
+#include <QPainterPath>
 #include <QPoint>
 #include <QTimer>
 #include <QWidget>
+#include <QWidgetAction>
 #include <QWindow>
+
+#include <functional>
+#include <utility>
 
 namespace {
 
 constexpr int kQuickShellActiveRefreshIntervalMs = 16;
 constexpr int kQuickShellIdleRefreshIntervalMs = 250;
+
+// Custom QMenu item widget for the timeline-follow settings menu.
+// Paints a 14×14 rounded-square indicator + checkmark + label that
+// pixel-matches the QML CheckBox style used elsewhere in the shell.
+// Handles its own click events so QMenu doesn't dismiss when the
+// user toggles a toggle — that's the "menu stays open" behaviour
+// the spec asked for. The widget swallows the mouse release in its
+// own area so QMenu's default close-on-release path never fires.
+class FollowSettingsCheckItem : public QWidget
+{
+public:
+    FollowSettingsCheckItem(const QString& text, bool initialChecked,
+                            std::function<void(bool)> onToggled,
+                            QWidget* parent = nullptr)
+        : QWidget(parent)
+        , text_(text)
+        , checked_(initialChecked)
+        , onToggled_(std::move(onToggled))
+    {
+        setCursor(Qt::PointingHandCursor);
+        setMouseTracking(true);
+        setAttribute(Qt::WA_Hover, true);
+    }
+
+    bool isChecked() const { return checked_; }
+
+    QSize sizeHint() const override
+    {
+        QFont labelFont = font();
+        labelFont.setWeight(QFont::DemiBold);
+        const QFontMetrics fm(labelFont);
+        const int textW = fm.horizontalAdvance(text_);
+        const int width = kPaddingLeft_ + kBoxSize_ + kBoxGap_ + textW + kPaddingRight_;
+        const int height = qMax(kRowHeightMin_, fm.height() + kRowPadV_ * 2);
+        return QSize(width, height);
+    }
+
+protected:
+    void enterEvent(QEnterEvent*) override { hovered_ = true; update(); }
+    void leaveEvent(QEvent*) override { hovered_ = false; update(); }
+
+    void mouseReleaseEvent(QMouseEvent* event) override
+    {
+        if (event->button() != Qt::LeftButton || !rect().contains(event->pos())) {
+            QWidget::mouseReleaseEvent(event);
+            return;
+        }
+        checked_ = !checked_;
+        update();
+        if (onToggled_) {
+            onToggled_(checked_);
+        }
+        // Consume so QMenu's release handler never fires — menu stays
+        // open. The user dismisses via Esc or click-outside.
+        event->accept();
+    }
+
+    void paintEvent(QPaintEvent*) override
+    {
+        const UiTheme::Colors& c = UiTheme::colors();
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing, true);
+
+        if (hovered_) {
+            const QRect bg = rect().adjusted(2, 2, -2, -2);
+            p.setPen(Qt::NoPen);
+            p.setBrush(c.menuHoverBg);
+            p.drawRoundedRect(bg, 4, 4);
+        }
+
+        const QRect box(
+            kPaddingLeft_,
+            (height() - kBoxSize_) / 2,
+            kBoxSize_,
+            kBoxSize_);
+        if (checked_) {
+            p.setPen(QPen(c.accent, 1));
+            p.setBrush(c.accent);
+            p.drawRoundedRect(box, 3, 3);
+            // Checkmark — matches QML Canvas line path (0.24,0.55) →
+            // (0.44,0.74) → (0.78,0.28).
+            p.setPen(QPen(c.accentText, 1.6,
+                          Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            p.setBrush(Qt::NoBrush);
+            QPainterPath path;
+            path.moveTo(box.x() + kBoxSize_ * 0.24,
+                        box.y() + kBoxSize_ * 0.55);
+            path.lineTo(box.x() + kBoxSize_ * 0.44,
+                        box.y() + kBoxSize_ * 0.74);
+            path.lineTo(box.x() + kBoxSize_ * 0.78,
+                        box.y() + kBoxSize_ * 0.28);
+            p.drawPath(path);
+        } else {
+            p.setPen(QPen(hovered_ ? c.accent : c.border, 1));
+            p.setBrush(c.cardBg);
+            p.drawRoundedRect(box, 3, 3);
+        }
+
+        QFont labelFont = font();
+        labelFont.setWeight(QFont::DemiBold);
+        p.setFont(labelFont);
+        p.setPen(c.textPrimary);
+        const QRect textRect = rect().adjusted(
+            kPaddingLeft_ + kBoxSize_ + kBoxGap_,
+            0,
+            -kPaddingRight_,
+            0);
+        p.drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, text_);
+    }
+
+private:
+    static constexpr int kPaddingLeft_ = 10;
+    static constexpr int kPaddingRight_ = 14;
+    static constexpr int kBoxSize_ = 14;
+    static constexpr int kBoxGap_ = 8;
+    static constexpr int kRowHeightMin_ = 26;
+    static constexpr int kRowPadV_ = 5;
+
+    QString text_;
+    bool checked_ = false;
+    bool hovered_ = false;
+    std::function<void(bool)> onToggled_;
+};
 
 template <typename T>
 bool assignIfChanged(T& target, const T& value)
@@ -547,30 +680,38 @@ void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, i
     }
 
     // Heap-allocate so popup() can return immediately; WA_DeleteOnClose
-    // tears the menu down once the user clicks an item or dismisses.
+    // tears the menu down once the user dismisses (Esc / click-outside).
     auto* menu = new QMenu();
     menu->setAttribute(Qt::WA_DeleteOnClose);
     UiTheme::styleRoundedMenu(*menu);
 
     const bool chinese = UiText::isChineseUi();
-    const auto addToggle = [&](const QString& label, bool checked, void (QuickShellController::*slot)(bool)) {
-        QAction* action = menu->addAction(label);
-        action->setCheckable(true);
-        action->setChecked(checked);
-        QObject::connect(action, &QAction::toggled, this, [this, slot](bool on) {
-            (this->*slot)(on);
-        });
+
+    // Each item is a custom QWidget that paints the QML-CheckBox look
+    // (rounded square indicator + accent fill + white checkmark + hover
+    // background) and toggles via its own mouseReleaseEvent. The widget
+    // accepts the event so QMenu's close-on-release path never fires —
+    // that's how the menu stays open across multiple toggles.
+    const auto addToggleWidget = [&](const QString& label, bool initialChecked,
+                                     void (QuickShellController::*slot)(bool)) {
+        auto* item = new FollowSettingsCheckItem(label, initialChecked,
+            [this, slot](bool checked) {
+                (this->*slot)(checked);
+            });
+        auto* widgetAction = new QWidgetAction(menu);
+        widgetAction->setDefaultWidget(item);
+        menu->addAction(widgetAction);
     };
 
-    addToggle(
+    addToggleWidget(
         chinese ? QStringLiteral("光标居中") : QStringLiteral("View Lock"),
         bridge->viewportLockEnabled(),
         &QuickShellController::timelineViewportLockToggled);
-    addToggle(
+    addToggleWidget(
         chinese ? QStringLiteral("代码跟随") : QStringLiteral("Cursor Follow"),
         bridge->followPreviewEnabled(),
         &QuickShellController::timelineFollowPreviewToggled);
-    addToggle(
+    addToggleWidget(
         chinese ? QStringLiteral("进度跟随") : QStringLiteral("Progress Follow"),
         bridge->followProgressEnabled(),
         &QuickShellController::timelineFollowProgressToggled);
