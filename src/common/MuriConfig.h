@@ -34,14 +34,13 @@ constexpr double kPadRadiusB = kLogicalCanvasSize * 75.0 / 1080.0;
 constexpr double kPadRadiusC = kLogicalCanvasSize * 105.0 / 1080.0;
 constexpr double kPadRadiusD = kLogicalCanvasSize * 65.0 / 1080.0;
 constexpr double kPadRadiusE = kLogicalCanvasSize * 60.0 / 1080.0;
-// Ratios match MajdataPlay's NoteHelper.GetTouchAreaDistance (A 4.0, B 2.2, D 4.1, E 3.1).
 constexpr double kPadDistanceA = kLogicalCanvasSize * 410.0 / 1080.0;
 constexpr double kPadDistanceB = kPadDistanceA * 2.2 / 4.0;
 constexpr double kPadDistanceD = kPadDistanceA * 4.1 / 4.0;
 constexpr double kPadDistanceE = kPadDistanceA * 3.1 / 4.0;
 constexpr double kPadAngleBaseDegrees = -67.5;
 constexpr double kPadAngleStepDegrees = 45.0;
-constexpr double kHandRadiusNormal = kLogicalCanvasSize * 60.0 / 1080.0;
+constexpr double kHandRadiusNormal = kLogicalCanvasSize * 30.0 / 1080.0; // Set to half
 constexpr double kHandRadiusWifi = kLogicalCanvasSize * 100.0 / 1080.0;
 constexpr double kHandRadiusMax = kLogicalCanvasSize * 180.0 / 1080.0;
 constexpr double kSlideMergeDistance = kLogicalCanvasSize * 20.0 / 1080.0;
