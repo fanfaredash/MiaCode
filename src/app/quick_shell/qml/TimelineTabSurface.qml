@@ -282,20 +282,19 @@ Item {
         id: settingsMenu
 
         parent: settingsGearButton
-        // Spec asked us to open upward so the popup would cover the
-        // Progress Follow chip in the tab strip above. That works in
-        // QML in isolation, but BottomTabsQuickHost lives in a
-        // QQuickWidget whose QQuickWindow is bounded by the widget's
-        // own pixel rect \u2014 the editor is a separate QWidget above it.
-        // An upward popup gets visually clipped at the widget's top
-        // edge (everything past the tab strip area vanishes behind
-        // the editor). Open downward into the timeline content area
-        // instead: plenty of vertical room and fully inside the
-        // QQuickWidget's drawable region. The Progress-Follow-overlay
-        // requirement is parked for a follow-up (would need either a
-        // separate Window/popup HWND or a full-window overlay layer).
+        // Open upward so the popup overlays the Progress Follow chip
+        // in the tab strip above (per spec). The QQuickWidget that
+        // hosts BottomTabsQuickHost is bounded by its own pixel rect,
+        // so a plain Item-anchored Popup gets visually clipped at the
+        // widget's top edge \u2014 the previous draft showed only the last
+        // item for that reason. popupType: Popup.Window has Qt back
+        // the popup with an OS-level window when needed, which lets
+        // it escape the QQuickWidget bounds. This is not a separate
+        // QML Window element (no Window { } in this file) \u2014 same
+        // pattern QuickShellMain.qml's previewSpeedMenu uses.
+        popupType: Popup.Window
         x: settingsGearButton.width - width
-        y: settingsGearButton.height + 4
+        y: -height - 4
         width: Math.max(160, settingsContent.implicitWidth + 16)
         height: settingsContent.implicitHeight + 16
         padding: 8
