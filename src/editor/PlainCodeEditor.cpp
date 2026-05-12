@@ -751,6 +751,18 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         return;
     }
 
+    // Plain Insert toggles overwrite mode. Shift+Insert (paste) and
+    // Ctrl+Insert (copy) are deliberately left to the base class so
+    // those standard X11-era shortcuts keep working.
+    if (event->key() == Qt::Key_Insert
+        && !event->isAutoRepeat()
+        && !(event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier
+                                   | Qt::AltModifier | Qt::MetaModifier))) {
+        setOverwriteMode(!overwriteMode());
+        event->accept();
+        return;
+    }
+
     if (!event->isAutoRepeat()) {
         if (event->matches(QKeySequence::Undo)) {
             logSelectionRestoreEditorShortcut(
