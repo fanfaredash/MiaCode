@@ -287,12 +287,14 @@ Rectangle {
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredHeight: tabStrip.height - Math.round(6 * root.headerScale)
                     Layout.rightMargin: Math.round(4 * root.headerScale)
-                    // Hidden inline — surfaced only through the timeline
-                    // surface's settings gear menu (see TimelineTabSurface.qml).
-                    visible: false
+                    // Inline surface for the Follow Code toggle. The
+                    // gear menu in TimelineTabSurface.qml exposes the
+                    // remaining View Lock / Follow Progress toggles
+                    // and a mirror of this one.
+                    visible: controller && controller.bottomTabsCurrentTabId === "timeline"
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
-                    text: root.isChineseUi() ? "代码跟随" : "Cursor Follow"
+                    text: root.isChineseUi() ? "代码跟随" : "Follow Code"
                     checked: controller && controller.timelineStateBridge
                         ? controller.timelineStateBridge.followPreviewEnabled
                         : false
@@ -358,7 +360,9 @@ Rectangle {
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredHeight: tabStrip.height - Math.round(6 * root.headerScale)
                     Layout.rightMargin: Math.round(8 * root.headerScale)
-                    visible: controller && controller.bottomTabsCurrentTabId === "timeline"
+                    // Hidden inline — surfaced only through the timeline
+                    // surface's settings gear menu (see TimelineTabSurface.qml).
+                    visible: false
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
                     text: root.isChineseUi() ? "进度跟随" : "Progress Follow"

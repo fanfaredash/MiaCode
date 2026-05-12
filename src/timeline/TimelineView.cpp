@@ -266,7 +266,7 @@ TimelineView::TimelineView(QWidget* parent)
     followPreviewCheckBox_->setText(
         UiText::isChineseUi()
             ? QStringLiteral("\u4ee3\u7801\u8ddf\u968f")
-            : QStringLiteral("Cursor Follow")
+            : QStringLiteral("Follow Code")
     );
     followPreviewCheckBox_->setToolTip(
         UiText::isChineseUi()

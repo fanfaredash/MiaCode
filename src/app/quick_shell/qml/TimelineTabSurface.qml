@@ -198,12 +198,13 @@ Item {
     // Settings gear at the top-right of the timeline header band,
     // mirroring the zoom button on the left. Click triggers the
     // controller's openTimelineFollowSettingsMenu, which spawns a
-    // Qt Widgets QMenu (View Lock / Cursor Follow / Progress
-    // Follow). QMenu rides the OS popup path used by every other
-    // native menu in MiaCode, so it draws above the workspace and
-    // preview WindowContainers without the focus quirks the prior
-    // QtQuick Popup.Window draft had. The QML Popup block that
-    // previously sat here has been deleted.
+    // Qt Widgets QMenu (View Lock / Follow Progress / Follow Code).
+    // The bottom-most menu item is Follow Code so its Y aligns
+    // with the inline Follow Code chip in the tab strip above.
+    // QMenu rides the OS popup path used by every other native menu
+    // in MiaCode, so it draws above the workspace and preview
+    // WindowContainers without the focus quirks the prior QtQuick
+    // Popup.Window draft had.
     ToolButton {
         id: settingsGearButton
 

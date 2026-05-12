@@ -122,7 +122,7 @@ public:
     Q_INVOKABLE void timelineViewportLockToggled(bool enabled);
     Q_INVOKABLE void timelineFollowProgressToggled(bool enabled);
     // Pops a Qt Widgets QMenu containing the timeline-follow toggles
-    // (View Lock / Cursor Follow / Progress Follow) anchored so its
+    // (View Lock / Follow Progress / Follow Code) anchored so its
     // bottom-right sits just above the gear button's top-right. The
     // QMenu rides the OS popup path used by every other native menu
     // in the app, so it draws above WindowContainer-embedded
