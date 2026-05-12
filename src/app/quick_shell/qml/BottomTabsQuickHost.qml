@@ -214,7 +214,11 @@ Rectangle {
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredHeight: tabStrip.height - Math.round(6 * root.headerScale)
                     Layout.rightMargin: Math.round(4 * root.headerScale)
-                    visible: controller && controller.bottomTabsCurrentTabId === "timeline"
+                    // Hidden inline — surfaced only through the timeline
+                    // surface's settings gear menu (see TimelineTabSurface.qml).
+                    // Kept here so the QML state-binding plumbing stays intact;
+                    // setting visible: false also pulls it out of the layout.
+                    visible: false
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
                     text: root.isChineseUi() ? "光标居中" : "View Lock"
@@ -283,7 +287,9 @@ Rectangle {
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredHeight: tabStrip.height - Math.round(6 * root.headerScale)
                     Layout.rightMargin: Math.round(4 * root.headerScale)
-                    visible: controller && controller.bottomTabsCurrentTabId === "timeline"
+                    // Hidden inline — surfaced only through the timeline
+                    // surface's settings gear menu (see TimelineTabSurface.qml).
+                    visible: false
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
                     text: root.isChineseUi() ? "代码跟随" : "Cursor Follow"

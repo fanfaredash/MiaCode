@@ -195,6 +195,310 @@ Item {
         onClicked: timelineItem.cycleZoomPreset()
     }
 
+    // Settings gear at the top-right of the timeline header band,
+    // mirroring the zoom button on the left. Click opens an upward
+    // popup containing the View Lock / Cursor Follow / Progress
+    // Follow toggles, which the BottomTabsQuickHost tab strip now
+    // hides behind a single "Progress Follow" inline checkbox.
+    // Draft revision \u2014 geometry / open-direction up for review.
+    ToolButton {
+        id: settingsGearButton
+
+        anchors.right: parent.right
+        anchors.rightMargin: Math.round(8 * root.headerScale)
+        y: Math.max(0, (timelineItem.timelineTop - height) / 2)
+        implicitWidth: Math.max(1, Math.round(28 * root.headerScale))
+        implicitHeight: Math.max(1, Math.round(22 * root.headerScale))
+        padding: 1
+        hoverEnabled: true
+        checkable: true
+        checked: settingsMenu.opened
+
+        background: Rectangle {
+            radius: 6
+            color: settingsGearButton.down || settingsGearButton.checked
+                ? root.tone("accentPressed", "#2563eb")
+                : (settingsGearButton.hovered
+                    ? root.tone("menuHoverBg", "#334155")
+                    : root.tone("cardBg", "#1f2937"))
+            border.width: 1
+            border.color: (settingsGearButton.hovered && !settingsGearButton.down)
+                || settingsGearButton.checked
+                ? root.tone("accent", "#60a5fa")
+                : root.tone("borderStrong", "#475569")
+        }
+
+        contentItem: Canvas {
+            id: gearGlyph
+
+            property color strokeColor: settingsGearButton.down || settingsGearButton.checked
+                ? root.tone("accentText", "#ffffff")
+                : root.tone("timelineLabel", "#d4dce8")
+
+            onStrokeColorChanged: requestPaint()
+
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                const cx = width / 2
+                const cy = height / 2
+                const minDim = Math.min(width, height)
+                const outerR = minDim * 0.40
+                const innerR = outerR * 0.62
+                const hubR = innerR * 0.55
+                const toothCount = 6
+                ctx.fillStyle = strokeColor
+                ctx.beginPath()
+                for (let i = 0; i < toothCount * 2; ++i) {
+                    const angle = (i * Math.PI / toothCount) - Math.PI / 2
+                    const r = (i % 2 === 0) ? outerR : innerR
+                    const px = cx + Math.cos(angle) * r
+                    const py = cy + Math.sin(angle) * r
+                    if (i === 0)
+                        ctx.moveTo(px, py)
+                    else
+                        ctx.lineTo(px, py)
+                }
+                ctx.closePath()
+                ctx.fill()
+                // Punch the central hub.
+                ctx.globalCompositeOperation = "destination-out"
+                ctx.beginPath()
+                ctx.ellipse(cx - hubR, cy - hubR, hubR * 2, hubR * 2, 0, 0, Math.PI * 2)
+                ctx.fill()
+                ctx.globalCompositeOperation = "source-over"
+            }
+        }
+
+        onClicked: {
+            if (settingsMenu.opened)
+                settingsMenu.close()
+            else
+                settingsMenu.open()
+        }
+    }
+
+    Popup {
+        id: settingsMenu
+
+        parent: settingsGearButton
+        // Open upward so the popup covers the Progress Follow chip in
+        // the bottom-tab strip above (deliberate \u2014 matches the spec
+        // "neatly obscure the retained Progress Follow option").
+        // The popup is rendered on the application overlay layer so
+        // it isn't clipped to the timeline surface bounds.
+        x: settingsGearButton.width - width
+        y: -height - 4
+        width: Math.max(160, settingsContent.implicitWidth + 16)
+        height: settingsContent.implicitHeight + 16
+        padding: 8
+        modal: false
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+
+        background: Rectangle {
+            radius: 8
+            color: root.tone("inputBg", "#1f2937")
+            border.width: 1
+            border.color: root.tone("borderStrong", "#475569")
+        }
+
+        contentItem: Column {
+            id: settingsContent
+
+            spacing: Math.round(6 * root.headerScale)
+
+            CheckBox {
+                id: menuViewLockCheck
+
+                width: parent.width
+                hoverEnabled: true
+                spacing: Math.round(6 * root.headerScale)
+                text: root.isChineseUi() ? "\u5149\u6807\u5c45\u4e2d" : "View Lock"
+                checked: controller && controller.timelineStateBridge
+                    ? controller.timelineStateBridge.viewportLockEnabled
+                    : false
+
+                indicator: Rectangle {
+                    implicitWidth: Math.max(1, Math.round(14 * root.headerScale))
+                    implicitHeight: Math.max(1, Math.round(14 * root.headerScale))
+                    x: 0
+                    y: (menuViewLockCheck.height - height) / 2
+                    radius: 3
+                    color: menuViewLockCheck.checked
+                        ? root.tone("accent", "#60a5fa")
+                        : root.tone("cardBg", "#1f2937")
+                    border.width: 1
+                    border.color: menuViewLockCheck.checked
+                        ? root.tone("accent", "#60a5fa")
+                        : (menuViewLockCheck.hovered
+                            ? root.tone("accent", "#60a5fa")
+                            : root.tone("border", "#475569"))
+
+                    Canvas {
+                        anchors.fill: parent
+                        visible: menuViewLockCheck.checked
+                        onPaint: {
+                            const ctx = getContext("2d")
+                            ctx.reset()
+                            ctx.strokeStyle = root.tone("accentText", "#ffffff")
+                            ctx.lineWidth = 1.8
+                            ctx.lineCap = "round"
+                            ctx.lineJoin = "round"
+                            ctx.beginPath()
+                            ctx.moveTo(width * 0.24, height * 0.55)
+                            ctx.lineTo(width * 0.44, height * 0.74)
+                            ctx.lineTo(width * 0.78, height * 0.28)
+                            ctx.stroke()
+                        }
+                    }
+                }
+
+                contentItem: Text {
+                    text: menuViewLockCheck.text
+                    color: root.tone("textPrimary", "#e5e7eb")
+                    font.pixelSize: Math.max(1, Math.round(12 * root.headerScale))
+                    font.weight: Font.DemiBold
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: menuViewLockCheck.indicator.width + menuViewLockCheck.spacing
+                }
+
+                onClicked: {
+                    if (controller && controller.timelineStateBridge)
+                        controller.timelineStateBridge.viewportLockEnabled = checked
+                    if (controller)
+                        controller.timelineViewportLockToggled(checked)
+                }
+            }
+
+            CheckBox {
+                id: menuCursorFollowCheck
+
+                width: parent.width
+                hoverEnabled: true
+                spacing: Math.round(6 * root.headerScale)
+                text: root.isChineseUi() ? "\u4ee3\u7801\u8ddf\u968f" : "Cursor Follow"
+                checked: controller && controller.timelineStateBridge
+                    ? controller.timelineStateBridge.followPreviewEnabled
+                    : false
+
+                indicator: Rectangle {
+                    implicitWidth: Math.max(1, Math.round(14 * root.headerScale))
+                    implicitHeight: Math.max(1, Math.round(14 * root.headerScale))
+                    x: 0
+                    y: (menuCursorFollowCheck.height - height) / 2
+                    radius: 3
+                    color: menuCursorFollowCheck.checked
+                        ? root.tone("accent", "#60a5fa")
+                        : root.tone("cardBg", "#1f2937")
+                    border.width: 1
+                    border.color: menuCursorFollowCheck.checked
+                        ? root.tone("accent", "#60a5fa")
+                        : (menuCursorFollowCheck.hovered
+                            ? root.tone("accent", "#60a5fa")
+                            : root.tone("border", "#475569"))
+
+                    Canvas {
+                        anchors.fill: parent
+                        visible: menuCursorFollowCheck.checked
+                        onPaint: {
+                            const ctx = getContext("2d")
+                            ctx.reset()
+                            ctx.strokeStyle = root.tone("accentText", "#ffffff")
+                            ctx.lineWidth = 1.8
+                            ctx.lineCap = "round"
+                            ctx.lineJoin = "round"
+                            ctx.beginPath()
+                            ctx.moveTo(width * 0.24, height * 0.55)
+                            ctx.lineTo(width * 0.44, height * 0.74)
+                            ctx.lineTo(width * 0.78, height * 0.28)
+                            ctx.stroke()
+                        }
+                    }
+                }
+
+                contentItem: Text {
+                    text: menuCursorFollowCheck.text
+                    color: root.tone("textPrimary", "#e5e7eb")
+                    font.pixelSize: Math.max(1, Math.round(12 * root.headerScale))
+                    font.weight: Font.DemiBold
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: menuCursorFollowCheck.indicator.width + menuCursorFollowCheck.spacing
+                }
+
+                onClicked: {
+                    if (controller && controller.timelineStateBridge)
+                        controller.timelineStateBridge.followPreviewEnabled = checked
+                    if (controller)
+                        controller.timelineFollowPreviewToggled(checked)
+                }
+            }
+
+            CheckBox {
+                id: menuProgressFollowCheck
+
+                width: parent.width
+                hoverEnabled: true
+                spacing: Math.round(6 * root.headerScale)
+                text: root.isChineseUi() ? "\u8fdb\u5ea6\u8ddf\u968f" : "Progress Follow"
+                checked: controller && controller.timelineStateBridge
+                    ? controller.timelineStateBridge.followProgressEnabled
+                    : false
+
+                indicator: Rectangle {
+                    implicitWidth: Math.max(1, Math.round(14 * root.headerScale))
+                    implicitHeight: Math.max(1, Math.round(14 * root.headerScale))
+                    x: 0
+                    y: (menuProgressFollowCheck.height - height) / 2
+                    radius: 3
+                    color: menuProgressFollowCheck.checked
+                        ? root.tone("accent", "#60a5fa")
+                        : root.tone("cardBg", "#1f2937")
+                    border.width: 1
+                    border.color: menuProgressFollowCheck.checked
+                        ? root.tone("accent", "#60a5fa")
+                        : (menuProgressFollowCheck.hovered
+                            ? root.tone("accent", "#60a5fa")
+                            : root.tone("border", "#475569"))
+
+                    Canvas {
+                        anchors.fill: parent
+                        visible: menuProgressFollowCheck.checked
+                        onPaint: {
+                            const ctx = getContext("2d")
+                            ctx.reset()
+                            ctx.strokeStyle = root.tone("accentText", "#ffffff")
+                            ctx.lineWidth = 1.8
+                            ctx.lineCap = "round"
+                            ctx.lineJoin = "round"
+                            ctx.beginPath()
+                            ctx.moveTo(width * 0.24, height * 0.55)
+                            ctx.lineTo(width * 0.44, height * 0.74)
+                            ctx.lineTo(width * 0.78, height * 0.28)
+                            ctx.stroke()
+                        }
+                    }
+                }
+
+                contentItem: Text {
+                    text: menuProgressFollowCheck.text
+                    color: root.tone("textPrimary", "#e5e7eb")
+                    font.pixelSize: Math.max(1, Math.round(12 * root.headerScale))
+                    font.weight: Font.DemiBold
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: menuProgressFollowCheck.indicator.width + menuProgressFollowCheck.spacing
+                }
+
+                onClicked: {
+                    if (controller && controller.timelineStateBridge)
+                        controller.timelineStateBridge.followProgressEnabled = checked
+                    if (controller)
+                        controller.timelineFollowProgressToggled(checked)
+                }
+            }
+        }
+    }
+
     // View Lock / Code Follow / Progress Follow checkboxes moved to
     // BottomTabsQuickHost.qml's tab strip \u2014 see the long comment in
     // TimelineSceneStateBuilder.cpp where the matching scene-state
