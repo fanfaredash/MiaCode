@@ -775,6 +775,8 @@ void MainWindow::ValidationSection::rebuildMuriDiagnosticsPanel()
         return static_cast<int>(a.kind) < static_cast<int>(b.kind);
     });
 
+    int entryIndex = 0;
+    int addedItemCount = 0;
     for (const MuriPanelEntry& entry : entries) {
         const QString issueTypeKey = muriIssueTypeKey(entry.kind);
         const bool ignoredInHeader = isIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey);
@@ -793,16 +795,41 @@ void MainWindow::ValidationSection::rebuildMuriDiagnosticsPanel()
             item->setData(kIssueTypeKeyRole, issueTypeKey);
             item->setData(kIssueTypeLabelRole, title);
             item->setData(kIssueIgnoredRole, ignoredInHeader);
+            ++addedItemCount;
         }
+        appendMuriPerfLog(
+            QStringLiteral(
+                "phase=panel_entry_added index=%1 kind=%2 line=%3 col=%4 second=%5 "
+                "is_static=%6 ignored_in_header=%7 item_added=%8 list_count=%9 "
+                "plain_text_chars=%10 html_chars=%11"
+            )
+                .arg(entryIndex)
+                .arg(static_cast<int>(entry.kind))
+                .arg(entry.line)
+                .arg(entry.col)
+                .arg(entry.second, 0, 'f', 6)
+                .arg(entry.isStatic ? 1 : 0)
+                .arg(ignoredInHeader ? 1 : 0)
+                .arg(item != nullptr ? 1 : 0)
+                .arg(ui_.muriList_->count())
+                .arg(text.plainText.size())
+                .arg(text.html.size())
+        );
+        ++entryIndex;
     }
     state_.pendingMuriPanelRefresh_ = false;
     scheduleWrappedListRelayout(ui_.muriList_);
     updateEditorValidationSummary();
     appendMuriPerfLog(
-        QStringLiteral("phase=panel_rebuild entries=%1 diagnostics=%2 static_refs=%3 elapsed_ms=%4")
+        QStringLiteral(
+            "phase=panel_rebuild entries=%1 diagnostics=%2 static_refs=%3 "
+            "added_items=%4 list_count=%5 elapsed_ms=%6"
+        )
             .arg(entries.size())
             .arg(alignedMuriReport.diagnostics.size())
             .arg(alignedStaticReferences.size())
+            .arg(addedItemCount)
+            .arg(ui_.muriList_->count())
             .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
     );
 }
