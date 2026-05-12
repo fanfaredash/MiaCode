@@ -564,6 +564,29 @@ void LatencyDetectorDialog::setOffsetSeconds(double seconds)
     updateOffsetEdit(seconds, false);
 }
 
+void LatencyDetectorDialog::commitPendingValues()
+{
+    // Drain the session into the parent in a single batch on Save.
+    // Open the gate temporarily so the existing emit sites fire once;
+    // updateBpmEdit / applyOffsetValue normally skip the emit because
+    // sessionEmitSuppressed_ is true throughout the session.
+    sessionEmitSuppressed_ = false;
+    bool bpmOk = false;
+    const double bpm = parsedBpm(&bpmOk);
+    if (bpmOk && bpm > 0.0) {
+        emit bpmChanged(bpm);
+    }
+    bool offsetOk = false;
+    const double offset = parsedOffset(&offsetOk);
+    if (offsetOk) {
+        emit offsetChanged(offset);
+    }
+    if (meterCombo_ != nullptr) {
+        emit meterIdChanged(meterCombo_->currentData().toString());
+    }
+    sessionEmitSuppressed_ = true;
+}
+
 bool LatencyDetectorDialog::eventFilter(QObject* watched, QEvent* event)
 {
     Q_UNUSED(watched);

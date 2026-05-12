@@ -175,6 +175,23 @@ void LatencyDetectorDialog::buildUi()
     controlsRow->addWidget(sfxVolumeValueLabel_, 0, Qt::AlignVCenter);
     rootLayout->addLayout(controlsRow);
 
+    // Deferred-commit Save / Cancel row. All in-session edits stay
+    // local — commitPendingValues drains BPM, offset, and meter into
+    // the parent on Save. Cancel (and X / Esc) reject without ever
+    // touching the chart.
+    auto* commitButtonBox = new QDialogButtonBox(
+        QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
+    UiDialogs::localizeButtonBox(commitButtonBox);
+    if (auto* saveButton = commitButtonBox->button(QDialogButtonBox::Save)) {
+        saveButton->setDefault(true);
+    }
+    connect(commitButtonBox, &QDialogButtonBox::accepted, this, [this]() {
+        commitPendingValues();
+        accept();
+    });
+    connect(commitButtonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    rootLayout->addWidget(commitButtonBox, 0, Qt::AlignRight);
+
     sfxRuntime_ = new QtPreviewSfxRuntime(this);
     sfxRuntime_->setChartPath(chartPath_);
     sfxRuntime_->setBackgroundTrackOffsetSeconds(0.0);
@@ -237,7 +254,9 @@ void LatencyDetectorDialog::buildUi()
     });
     connect(meterCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
         updateBeatOverlay();
-        if (meterCombo_ != nullptr) {
+        // Edits stay local until the user clicks Save; see
+        // commitPendingValues + sessionEmitSuppressed_.
+        if (!sessionEmitSuppressed_ && meterCombo_ != nullptr) {
             emit meterIdChanged(meterCombo_->currentData().toString());
         }
     });
@@ -584,7 +603,9 @@ void LatencyDetectorDialog::updateBpmEdit(double bpm, bool notify)
         bpmEdit_->setText(QString::number(normalized, 'f', 3));
     }
     updateBeatOverlay();
-    if (notify && normalized > 0.0) {
+    // Edits stay local until the user clicks Save; see
+    // commitPendingValues + sessionEmitSuppressed_.
+    if (notify && normalized > 0.0 && !sessionEmitSuppressed_) {
         emit bpmChanged(normalized);
     }
 }
@@ -605,7 +626,9 @@ bool LatencyDetectorDialog::applyOffsetValue(double seconds, bool notify, bool u
     updateBeatOverlay();
     lastAppliedOffsetSeconds_ = normalized;
     hasLastAppliedOffset_ = true;
-    if (notify && changed) {
+    // Edits stay local until the user clicks Save; see
+    // commitPendingValues + sessionEmitSuppressed_.
+    if (notify && changed && !sessionEmitSuppressed_) {
         emit offsetChanged(normalized);
     }
     return changed;

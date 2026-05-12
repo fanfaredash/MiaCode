@@ -54,6 +54,7 @@ protected:
 
 private:
     void buildUi();
+    void commitPendingValues();
     void loadAudioAnalysis();
     void updatePlaybackUi();
     void updateZoomButtonUi();
@@ -153,4 +154,9 @@ private:
     double pendingPausedSeekSecond_ = 0.0;
     bool pendingPausedSeekCenterView_ = false;
     bool pendingPausedSeekActive_ = false;
+    // Suppress bpmChanged / offsetChanged / meterIdChanged during the
+    // session — values reach the parent only after the user clicks
+    // Save (commitPendingValues), so closing via Cancel / X / Esc
+    // leaves the chart untouched.
+    bool sessionEmitSuppressed_ = true;
 };
