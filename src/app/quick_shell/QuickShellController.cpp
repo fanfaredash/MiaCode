@@ -218,12 +218,12 @@ QString QuickShellController::timelineTabLabel() const
 
 QString QuickShellController::validationTabLabel() const
 {
-    return UiText::isChineseUi() ? QStringLiteral("语法检查") : QStringLiteral("Syntax Check");
+    return UiText::isChineseUi() ? QStringLiteral("语法") : QStringLiteral("Syntax");
 }
 
 QString QuickShellController::muriTabLabel() const
 {
-    return UiText::isChineseUi() ? QStringLiteral("无理检查") : QStringLiteral("Muri Check");
+    return UiText::isChineseUi() ? QStringLiteral("无理") : QStringLiteral("Muri");
 }
 
 QWindow* QuickShellController::topChromeWindow() const

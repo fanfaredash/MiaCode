@@ -308,7 +308,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     editMenu->addSeparator();
 
     owner_.validateAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("语法检查") : QStringLiteral("Syntax Check"),
+        UiText::isChineseUi() ? QStringLiteral("语法") : QStringLiteral("Syntax"),
         &owner_
     );
     owner_.validateAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
@@ -490,11 +490,11 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
 
     previewMenu->addSeparator();
 
-    owner_.previewAudioSettingsAction_ = new QAction(uiText("action.audio_settings", "Audio Settings..."), &owner_);
+    owner_.previewAudioSettingsAction_ = new QAction(uiText("action.audio_settings", "Audio"), &owner_);
     connect(owner_.previewAudioSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewAudioSettings);
     previewMenu->addAction(owner_.previewAudioSettingsAction_);
 
-    owner_.previewVideoSettingsAction_ = new QAction(uiText("action.video_settings", "Video Settings..."), &owner_);
+    owner_.previewVideoSettingsAction_ = new QAction(uiText("action.video_settings", "Video"), &owner_);
     connect(owner_.previewVideoSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewVideoSettings);
     previewMenu->addAction(owner_.previewVideoSettingsAction_);
 

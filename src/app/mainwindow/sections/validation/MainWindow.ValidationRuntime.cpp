@@ -1165,7 +1165,7 @@ bool MainWindow::ValidationSection::runValidateSimai()
         owner_.statusBar()->showMessage(uiText("status.syntax.passed", "Syntax check passed."));
         QMessageBox okDialog(UiDialogs::effectiveParentWidget(&owner_));
         okDialog.setIcon(QMessageBox::Information);
-        okDialog.setWindowTitle(ui_.validateAction_ != nullptr ? ui_.validateAction_->text() : QStringLiteral("Syntax Check"));
+        okDialog.setWindowTitle(ui_.validateAction_ != nullptr ? ui_.validateAction_->text() : QStringLiteral("Syntax"));
         okDialog.setWindowIcon(owner_.windowIcon());
         okDialog.setText(uiText("dialog.syntax_ok.message", "No syntax errors or warnings found."));
         okDialog.setStandardButtons(QMessageBox::Ok);

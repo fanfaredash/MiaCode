@@ -63,9 +63,9 @@ QString MainWindow::bottomTabsFallbackLabel(BottomTabsTabId tabId) const
     case BottomTabsTabId::Timeline:
         return UiText::isChineseUi() ? QStringLiteral("时间轴") : QStringLiteral("Timeline");
     case BottomTabsTabId::Validation:
-        return UiText::isChineseUi() ? QStringLiteral("语法检查") : QStringLiteral("Syntax Check");
+        return UiText::isChineseUi() ? QStringLiteral("语法") : QStringLiteral("Syntax");
     case BottomTabsTabId::Muri:
-        return UiText::isChineseUi() ? QStringLiteral("无理检查") : QStringLiteral("Muri Check");
+        return UiText::isChineseUi() ? QStringLiteral("无理") : QStringLiteral("Muri");
     case BottomTabsTabId::Unknown:
         break;
     }

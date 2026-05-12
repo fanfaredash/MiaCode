@@ -1308,7 +1308,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     });
     bottomTabs_->addTab(
         errorList_,
-        UiText::isChineseUi() ? QStringLiteral("语法检查") : QStringLiteral("Syntax Check")
+        UiText::isChineseUi() ? QStringLiteral("语法") : QStringLiteral("Syntax")
     );
 
     muriList_ = new QListWidget(bottomTabs_);
@@ -1326,7 +1326,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     });
     bottomTabs_->addTab(
         muriList_,
-        UiText::isChineseUi() ? QStringLiteral("无理检查") : QStringLiteral("Muri Check")
+        UiText::isChineseUi() ? QStringLiteral("无理") : QStringLiteral("Muri")
     );
     connect(bottomTabs_, &QTabWidget::currentChanged, this, [this](int) {
         if (!quickShellBottomTabsProxyActive() && !timelineWidgetlessQuickRoute_) {
