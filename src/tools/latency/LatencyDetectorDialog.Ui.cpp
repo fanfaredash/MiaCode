@@ -25,13 +25,9 @@ void LatencyDetectorDialog::buildUi()
     bpmEdit_->setPlaceholderText("180.000");
     bpmEdit_->setFixedWidth(74);
     detectBpmButton_ = new QPushButton(localizedText("检测BPM", "Detect BPM"), this);
-    bpmHelpButton_ = new QPushButton(localizedText(QStringLiteral("\u6D4B\u5F97\u4E0D\u51C6?"), "Inaccurate?"), this);
-    bpmHelpButton_->setMinimumWidth(120);
     bpmRow->addWidget(bpmLabel);
     bpmRow->addWidget(bpmEdit_);
     bpmRow->addWidget(detectBpmButton_);
-    bpmRow->addSpacing(16);
-    bpmRow->addWidget(bpmHelpButton_);
     bpmRow->addStretch(1);
     rootLayout->addLayout(bpmRow);
 
@@ -42,8 +38,6 @@ void LatencyDetectorDialog::buildUi()
     offsetEdit_->setValidator(new QDoubleValidator(-9999.0, 9999.0, 3, offsetEdit_));
     offsetEdit_->setAlignment(Qt::AlignCenter);
     offsetEdit_->setFixedWidth(74);
-    restoreDetectedOffsetButton_ = new QPushButton(localizedText(QStringLiteral("\u8FD8\u539F"), "Restore"), this);
-    restoreDetectedOffsetButton_->setEnabled(false);
     detectOffsetButton_ = new QPushButton(localizedText("检测偏移", "Detect Offset"), this);
 
     const auto addAdjustButton = [this, offsetRow](const QString& text, double delta) {
@@ -64,7 +58,6 @@ void LatencyDetectorDialog::buildUi()
     addAdjustButton(">", 0.001);
     addAdjustButton(">>", 0.010);
     offsetRow->addWidget(detectOffsetButton_);
-    offsetRow->addWidget(restoreDetectedOffsetButton_);
     offsetRow->addStretch(1);
     rootLayout->addLayout(offsetRow);
 
@@ -226,23 +219,15 @@ void LatencyDetectorDialog::buildUi()
             updateBpmEdit(bpm, true);
         }
     });
-    connect(bpmHelpButton_, &QPushButton::clicked, this, &LatencyDetectorDialog::showBpmHelpDialog);
     connect(detectOffsetButton_, &QPushButton::clicked, this, [this]() {
         bool ok = false;
         const double bpm = parsedBpm(&ok);
         if (!ok || bpm <= 0.0) {
             return;
         }
-        detectedOffsetRestoreSeconds_ = hasLastAppliedOffset_ ? lastAppliedOffsetSeconds_ : parsedOffset();
-        hasDetectedOffsetRestore_ = true;
-        if (restoreDetectedOffsetButton_ != nullptr) {
-            restoreDetectedOffsetButton_->setEnabled(true);
-        }
         const double offset = detectOffset(bpm);
-        updateOffsetEdit(offset, true);
-        restartPlaybackAfterOffsetChange();
+        showOffsetDetectionResultDialog(bpm, offset);
     });
-    connect(restoreDetectedOffsetButton_, &QPushButton::clicked, this, &LatencyDetectorDialog::restoreDetectedOffset);
     connect(offsetEdit_, &QLineEdit::textEdited, this, [this]() {
         previewOffsetEdit();
     });
@@ -653,20 +638,6 @@ void LatencyDetectorDialog::applyOffsetEdit()
     }
 }
 
-void LatencyDetectorDialog::restoreDetectedOffset()
-{
-    if (!hasDetectedOffsetRestore_) {
-        return;
-    }
-    if (restoreDetectedOffsetButton_ != nullptr) {
-        restoreDetectedOffsetButton_->setEnabled(false);
-    }
-    hasDetectedOffsetRestore_ = false;
-    if (applyOffsetValue(detectedOffsetRestoreSeconds_, true, true)) {
-        restartPlaybackAfterOffsetChange();
-    }
-}
-
 void LatencyDetectorDialog::applyBpmEdit()
 {
     bool ok = false;
@@ -678,11 +649,11 @@ void LatencyDetectorDialog::applyBpmEdit()
     }
 }
 
-void LatencyDetectorDialog::showBpmHelpDialog()
+void LatencyDetectorDialog::showOffsetDetectionResultDialog(double bpmUsed, double detectedOffsetSeconds)
 {
     QDialog dialog(UiDialogs::effectiveParentWidget(this));
-    dialog.setWindowTitle(localizedText("BPM检测说明", "BPM Detection Notes"));
-    dialog.resize(460, 210);
+    dialog.setWindowTitle(localizedText("检测结果", "Detection Result"));
+    dialog.resize(460, 260);
     UiDialogs::prepareDialogWindow(&dialog, this);
 
     auto* rootLayout = new QVBoxLayout(&dialog);
@@ -692,8 +663,11 @@ void LatencyDetectorDialog::showBpmHelpDialog()
     auto* infoEdit = new QPlainTextEdit(&dialog);
     infoEdit->setReadOnly(true);
     infoEdit->setLineWrapMode(QPlainTextEdit::WidgetWidth);
-    infoEdit->setMinimumHeight(120);
+    infoEdit->setMinimumHeight(160);
 
+    // Top-2 alternative BPM candidates from the last DetectBPM run,
+    // skipping the one currently selected. Useful when the user wants
+    // to revisit BPM before trusting the offset estimate.
     QPair<double, double> alt1{0.0, 0.0};
     QPair<double, double> alt2{0.0, 0.0};
     int altCount = 0;
@@ -712,36 +686,51 @@ void LatencyDetectorDialog::showBpmHelpDialog()
         }
     }
 
-    const QString latest = lastDetectedBpm_ > 0.0
-        ? QString::number(lastDetectedBpm_, 'f', 3)
+    const QString offsetText = qIsFinite(detectedOffsetSeconds)
+        ? QString::number(detectedOffsetSeconds, 'f', 3)
+        : QStringLiteral("--");
+    const QString bpmText = qIsFinite(bpmUsed) && bpmUsed > 0.0
+        ? QString::number(bpmUsed, 'f', 3)
         : QStringLiteral("--");
     const QString altBpm1 = alt1.first > 0.0 ? QString::number(alt1.first, 'f', 3) : QStringLiteral("--");
     const QString altBpm2 = alt2.first > 0.0 ? QString::number(alt2.first, 'f', 3) : QStringLiteral("--");
-    const double altScore1 = alt1.first > 0.0 ? alt1.second : 0.0;
-    const double altScore2 = alt2.first > 0.0 ? alt2.second : 0.0;
 
-    QString text = localizedText(
+    QString body = localizedText(
+        "检测偏移：" + offsetText + " s\n"
+        "使用的 BPM：" + bpmText + "\n"
+        "备选 BPM 1：" + altBpm1 + "\n"
+        "备选 BPM 2：" + altBpm2 + "\n"
+        "\n"
         "在测试前请先设置拍号。\n"
         "如果拍号复杂或未知，请选择自动检测。\n"
         "因乐曲本身存在变速或音频瞬态不明显，可能出现误差。\n"
+        "请试听播放后再决定是否填入偏移框。",
+        "Detected offset: " + offsetText + " s\n"
+        "BPM used: " + bpmText + "\n"
+        "Alternative BPM 1: " + altBpm1 + "\n"
+        "Alternative BPM 2: " + altBpm2 + "\n"
         "\n"
-        "最近一次检测结果：" + latest + " BPM\n"
-        + QString("备选1：%1 BPM\n").arg(altBpm1)
-        + QString("备选2：%1 BPM\n").arg(altBpm2),
-        "Set meter before testing. \n"
+        "Set meter before testing.\n"
         "Choose Auto when meter is complex or unknown.\n"
-        "BPM detection may be inaccurate due to tempo changes or weak transients.\n"
-        "\n"
-        "Latest result: " + latest + " BPM\n"
-        + QString("Alternative 1: %1 BPM\n").arg(altBpm1)
-        + QString("Alternative 2: %1 BPM\n").arg(altBpm2)
+        "Detection may be inaccurate due to tempo changes or weak transients.\n"
+        "Audition the result before pasting the offset value."
     );
-
-    infoEdit->setPlainText(text);
+    infoEdit->setPlainText(body);
     rootLayout->addWidget(infoEdit, 1);
 
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok, &dialog);
+    auto* buttonBox = new QDialogButtonBox(&dialog);
+    QPushButton* copyButton = buttonBox->addButton(
+        localizedText("复制偏移值", "Copy Offset"), QDialogButtonBox::ActionRole);
+    buttonBox->addButton(QDialogButtonBox::Close);
     UiDialogs::localizeButtonBox(buttonBox);
+    connect(copyButton, &QPushButton::clicked, this, [detectedOffsetSeconds]() {
+        // Raw number — pastes directly into the Offset field with no
+        // labelling or unit, so the user can replace the existing text.
+        if (QClipboard* clipboard = QGuiApplication::clipboard()) {
+            clipboard->setText(QString::number(detectedOffsetSeconds, 'f', 3));
+        }
+    });
+    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     rootLayout->addWidget(buttonBox);
     dialog.exec();

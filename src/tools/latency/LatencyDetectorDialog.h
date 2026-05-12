@@ -68,8 +68,7 @@ private:
     void previewOffsetEdit();
     void applyOffsetEdit();
     void applyBpmEdit();
-    void restoreDetectedOffset();
-    void showBpmHelpDialog();
+    void showOffsetDetectionResultDialog(double bpmUsed, double detectedOffsetSeconds);
     void rebuildTimelineSnapshot();
     void beginManualSeekInteraction();
     void applyPlaybackRate(double rate);
@@ -100,10 +99,8 @@ private:
     TimelineView* waveformView_ = nullptr;
     QLineEdit* bpmEdit_ = nullptr;
     QPushButton* detectBpmButton_ = nullptr;
-    QPushButton* bpmHelpButton_ = nullptr;
     QLineEdit* offsetEdit_ = nullptr;
     QPushButton* detectOffsetButton_ = nullptr;
-    QPushButton* restoreDetectedOffsetButton_ = nullptr;
     QToolButton* playPauseButton_ = nullptr;
     QToolButton* stopButton_ = nullptr;
     QSlider* playbackSlider_ = nullptr;
@@ -139,8 +136,6 @@ private:
     double detectedMeterPhaseSecond_ = 0.0;
     bool detectedMeterPhaseValid_ = false;
     QString lastDetectedMeterId_ = "4/4";
-    double detectedOffsetRestoreSeconds_ = 0.0;
-    bool hasDetectedOffsetRestore_ = false;
     double beatSfxVolume_ = 1.0;
     bool playbackSliderDragging_ = false;
     double lastDetectedBpm_ = 0.0;

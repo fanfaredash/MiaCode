@@ -9,10 +9,12 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QClipboard>
 #include <QComboBox>
 #include <QFile>
 #include <QDoubleValidator>
 #include <QEvent>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
