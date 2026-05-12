@@ -87,8 +87,11 @@ void LatencyDetectorDialog::buildUi()
     zoomButton_->setAutoRaise(false);
     zoomButton_->setCursor(Qt::PointingHandCursor);
     zoomButton_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    zoomButton_->setStyleSheet(UiTheme::timelineZoomButtonStyleSheet());
-    zoomButton_->setFixedHeight(24);
+    // Match the speed button (1x) look on the same row — both use the
+    // dialog-menu rounded style with 26 px fixed height so they read
+    // as a paired control instead of two unrelated buttons.
+    zoomButton_->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
+    zoomButton_->setFixedHeight(26);
     const int zoomButtonWidth = qMax(
         88,
         QFontMetrics(zoomButton_->font()).horizontalAdvance(UiTheme::timelineZoomButtonText(2.0)) + 32);
