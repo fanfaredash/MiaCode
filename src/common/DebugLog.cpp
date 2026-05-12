@@ -218,13 +218,15 @@ QString defaultDebugLogDirectory()
 
 qint64 startupTrimMaxBytes()
 {
-    // Phase 3e diag — temporarily bumped from 100 KB to 2 MB so we
-    // can capture the full Phase 3e startup sequence including
-    // TimelineQuickItem construct events. The default 100 KB was
-    // truncating ~30 seconds of session into ~1 second of visible
-    // log when --debug is active. Restore to 100 KB once Phase 3e
-    // converges.
-    return 2 * 1024 * 1024;
+    // Beta35 — bumped from 2 MB to 4 MB so a single project session
+    // can retain a longer trailing window of diagnostic context
+    // before the rolling trim kicks in. The trim runs every
+    // kTrimEveryWritesPerChannel (200) writes per channel; at the
+    // 2 MB cap, busy sessions on muri/render perf channels were
+    // dropping evidence faster than user-reported reproductions
+    // could be triaged. 4 MB doubles the retained window without
+    // affecting the trim cadence or worker-thread I/O cost.
+    return 4 * 1024 * 1024;
 }
 
 bool trimFileToMaxBytesLocked(const QString& path, qint64 maxBytes)
@@ -661,11 +663,33 @@ QString logDirectory()
 
 void setSessionProjectLogDirectory(const QString& directoryPath)
 {
+    const QString normalizedNewDirectory = directoryPath.trimmed().isEmpty()
+        ? QString()
+        : QDir::cleanPath(directoryPath);
+
+    QString previousDirectory;
     {
         QMutexLocker locker(&projectLogDirectoryMutex());
-        sessionProjectLogDirectoryStorage() = directoryPath.trimmed().isEmpty()
-            ? QString()
-            : QDir::cleanPath(directoryPath);
+        previousDirectory = sessionProjectLogDirectoryStorage();
+    }
+
+    // If the project folder actually changed, drain the async log
+    // writer and tear down its cached file handles. The writer keeps
+    // one QFile* per channel open for the lifetime of the worker
+    // thread; on Windows those handles take an exclusive write lock
+    // that blocks the user from zipping / compressing the old
+    // project folder while MiaCode is still running. Stopping the
+    // writer here closes every cached handle synchronously, and the
+    // next enqueue() lazily restarts the worker — which then opens
+    // fresh handles in the new project directory.
+    if (previousDirectory != normalizedNewDirectory) {
+        AsyncLogWriter::instance().flush(2000);
+        AsyncLogWriter::instance().stop();
+    }
+
+    {
+        QMutexLocker locker(&projectLogDirectoryMutex());
+        sessionProjectLogDirectoryStorage() = normalizedNewDirectory;
     }
     if (miacode::debug_options::debugModeEnabled()) {
         trimDebugLogsInCurrentDirectoryLocked();
