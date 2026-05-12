@@ -90,6 +90,7 @@ public:
     void activateInitialField();
     void loadDocument(const SimaiDocument& document);
     void clearTimelineAndPreview();
+    void applyDifficultySwitchEditorScrollRestore(int verticalScrollValue, int horizontalScrollValue);
     void rebuildAutosaveMetadata(const QString& autosaveDirectoryPath) const;
 
 private:

@@ -49,6 +49,7 @@ void MainWindow::EditorSection::loadPortableState()
     state_.autoRestoreLastSessionFile_ = true;
     resetPortablePreviewSettingsToDefaults();
     state_.editorLineSpacingFactor_ = kEditorLineSpacingFactorDefault;
+    state_.preserveDifficultySwitchView_ = true;
     state_.editorTextFontPointSize_ = qBound(
         kEditorTextFontSizeMin,
         state_.editorTextFontPointSize_ > 0 ? state_.editorTextFontPointSize_ : editorFont().pointSize(),
@@ -73,6 +74,7 @@ void MainWindow::EditorSection::loadPortableState()
         );
     }
     state_.editorHalfWidthInputEnabled_ = ui.value("editor_half_width_input").toBool(true);
+    state_.preserveDifficultySwitchView_ = ui.value("preserve_difficulty_switch_view").toBool(true);
     applyEditorTextFontSize(state_.editorTextFontPointSize_, false);
     applyEditorHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_, false);
 
@@ -379,6 +381,7 @@ void MainWindow::EditorSection::savePortableState() const
     ui.insert("editor_text_font_size", state_.editorTextFontPointSize_);
     ui.insert("editor_line_spacing_factor", state_.editorLineSpacingFactor_);
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
+    ui.insert("preserve_difficulty_switch_view", state_.preserveDifficultySwitchView_);
     root.insert("ui", ui);
 
     app.insert("last_open_dir", state_.lastOpenDir_);
@@ -476,6 +479,7 @@ void MainWindow::EditorSection::persistEditorTextFontPreference() const
     ui.insert("editor_text_font_size", state_.editorTextFontPointSize_);
     ui.insert("editor_line_spacing_factor", state_.editorLineSpacingFactor_);
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
+    ui.insert("preserve_difficulty_switch_view", state_.preserveDifficultySwitchView_);
     root.insert("ui", ui);
     UiText::savePreferencesObject(root);
 }
@@ -541,6 +545,20 @@ void MainWindow::EditorSection::applyEditorHalfWidthInputEnabled(bool enabled, b
     if (persistPreference) {
         persistEditorTextFontPreference();
     }
+}
+
+void MainWindow::EditorSection::applyPreserveDifficultySwitchView(bool enabled, bool persistPreference)
+{
+    state_.preserveDifficultySwitchView_ = enabled;
+    if (!persistPreference) {
+        return;
+    }
+
+    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject ui = root.value("ui").toObject();
+    ui.insert("preserve_difficulty_switch_view", state_.preserveDifficultySwitchView_);
+    root.insert("ui", ui);
+    UiText::savePreferencesObject(root);
 }
 
 void MainWindow::EditorSection::showSimpleCopyArea()
@@ -687,6 +705,11 @@ void MainWindow::applyEditorLineSpacingFactor(double factor, bool persistPrefere
 void MainWindow::applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference)
 {
     editorSection_->applyEditorHalfWidthInputEnabled(enabled, persistPreference);
+}
+
+void MainWindow::applyPreserveDifficultySwitchView(bool enabled, bool persistPreference)
+{
+    editorSection_->applyPreserveDifficultySwitchView(enabled, persistPreference);
 }
 
 void MainWindow::showSimpleCopyArea()

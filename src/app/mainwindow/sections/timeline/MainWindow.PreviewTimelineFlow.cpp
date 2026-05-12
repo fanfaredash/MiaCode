@@ -892,6 +892,17 @@ void MainWindow::TimelineSection::dispatchTimelineSlowRefresh()
                 if (!guard->state_.qtPreviewPlaying_) {
                     guard->applyLatestTimelinePreviewStateToPausedPreview();
                 }
+                if (guard->state_.pendingDifficultySwitchPreviewRestore_
+                    && guard->state_.pendingDifficultySwitchPreviewRestoreRevision_ == request.revision
+                    && guard->state_.pendingDifficultySwitchPreviewRestoreDifficultyId_ == request.difficultyId) {
+                    const double restoreSecond = guard->state_.pendingDifficultySwitchPreviewRestoreSecond_;
+                    guard->state_.pendingDifficultySwitchPreviewRestore_ = false;
+                    guard->state_.pendingDifficultySwitchPreviewRestoreRevision_ = 0;
+                    guard->state_.pendingDifficultySwitchPreviewRestoreDifficultyId_ = 0;
+                    guard->state_.pendingDifficultySwitchPreviewRestoreSecond_ = 0.0;
+                    guard->seekPreviewDiscreteToSecond(restoreSecond, false);
+                    guard->deferTimelineCursorBridgeUpdate(restoreSecond, false);
+                }
                 guard->scheduleTimelineAnalysisRefresh(request, parseResult, previewState);
                 if (guard->state_.pendingPreviewPlaybackStart_
                     && !guard->state_.qtPreviewPlaying_

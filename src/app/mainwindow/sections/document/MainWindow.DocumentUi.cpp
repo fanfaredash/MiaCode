@@ -749,6 +749,22 @@ void MainWindow::DocumentSection::populateDifficultyPage(int difficultyId)
     updateEditorStatus();
 }
 
+void MainWindow::DocumentSection::applyDifficultySwitchEditorScrollRestore(
+    int verticalScrollValue,
+    int horizontalScrollValue)
+{
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr) {
+        return;
+    }
+    if (QScrollBar* vertical = editor->verticalScrollBar(); vertical != nullptr) {
+        vertical->setValue(qBound(vertical->minimum(), verticalScrollValue, vertical->maximum()));
+    }
+    if (QScrollBar* horizontal = editor->horizontalScrollBar(); horizontal != nullptr) {
+        horizontal->setValue(qBound(horizontal->minimum(), horizontalScrollValue, horizontal->maximum()));
+    }
+}
+
 void MainWindow::DocumentSection::setChartBottomTabsMode(bool enabled)
 {
     owner_.setBottomTabsTabVisible(MainWindow::BottomTabsTabId::Timeline, enabled);
@@ -837,6 +853,24 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     if (!SimaiDocument::isDifficultyId(difficultyId) || state_.document_.difficulty(difficultyId) == nullptr) {
         return false;
     }
+    const bool restoreSwitchView = state_.preserveDifficultySwitchView_ && owner_.hasActiveDifficulty();
+    const double restorePreviewSecond = restoreSwitchView
+        ? qMax(0.0, state_.qtPreviewPlaying_
+              ? owner_.currentPreviewAuthoritativeAudioClockSecond()
+              : state_.qtPreviewPauseSecond_)
+        : 0.0;
+    int restoreVerticalScrollValue = 0;
+    int restoreHorizontalScrollValue = 0;
+    if (restoreSwitchView) {
+        if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
+            if (QScrollBar* vertical = editor->verticalScrollBar(); vertical != nullptr) {
+                restoreVerticalScrollValue = vertical->value();
+            }
+            if (QScrollBar* horizontal = editor->horizontalScrollBar(); horizontal != nullptr) {
+                restoreHorizontalScrollValue = horizontal->value();
+            }
+        }
+    }
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
@@ -853,10 +887,46 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
         state_.activeOutlineKey_ = "chart";
     }
     populateDifficultyPage(difficultyId);
+    if (restoreSwitchView) {
+        applyDifficultySwitchEditorScrollRestore(restoreVerticalScrollValue, restoreHorizontalScrollValue);
+        QTimer::singleShot(0, &owner_, [this, difficultyId, restoreVerticalScrollValue, restoreHorizontalScrollValue]() {
+            if (state_.activeDifficultyId_ != difficultyId || !owner_.hasActiveDifficulty()) {
+                return;
+            }
+            applyDifficultySwitchEditorScrollRestore(restoreVerticalScrollValue, restoreHorizontalScrollValue);
+        });
+    }
     const double previousPreviewTrackDurationSeconds = state_.previewTrackDurationSeconds_;
     const std::shared_ptr<const miacode::waveform::WaveformData> previousWaveformData =
         state_.timelineQuickStateBridge_ != nullptr ? state_.timelineQuickStateBridge_->waveformData() : nullptr;
     clearTimelineAndPreview();
+    if (restoreSwitchView) {
+        state_.qtPreviewPauseSecond_ = restorePreviewSecond;
+        state_.pendingDifficultySwitchPreviewRestore_ = true;
+        state_.pendingDifficultySwitchPreviewRestoreRevision_ = state_.timelineRevision_ + 1;
+        state_.pendingDifficultySwitchPreviewRestoreDifficultyId_ = difficultyId;
+        state_.pendingDifficultySwitchPreviewRestoreSecond_ = restorePreviewSecond;
+        if (ui_.previewSlider_ != nullptr) {
+            QSignalBlocker blocker(ui_.previewSlider_);
+            ui_.previewSlider_->setMaximum(qMax(ui_.previewSlider_->maximum(), qMax(1, qRound(restorePreviewSecond * 1000.0))));
+        }
+        if (ui_.previewSlider_ != nullptr && !state_.previewScrubDragging_) {
+            const int value = qBound(0, qRound(restorePreviewSecond * 1000.0), ui_.previewSlider_->maximum());
+            QSignalBlocker blocker(ui_.previewSlider_);
+            ui_.previewSlider_->setValue(value);
+        }
+        if (state_.timelineQuickStateBridge_ != nullptr) {
+            state_.timelineQuickStateBridge_->setPlayheadSeconds(restorePreviewSecond, false);
+        }
+        if (state_.previewCanvas_ != nullptr) {
+            state_.previewCanvas_->setPlayheadSeconds(restorePreviewSecond, false);
+        }
+    } else {
+        state_.pendingDifficultySwitchPreviewRestore_ = false;
+        state_.pendingDifficultySwitchPreviewRestoreRevision_ = 0;
+        state_.pendingDifficultySwitchPreviewRestoreDifficultyId_ = 0;
+        state_.pendingDifficultySwitchPreviewRestoreSecond_ = 0.0;
+    }
     if (previousWaveformData) {
         owner_.applyWaveformData(previousWaveformData);
     } else if (previousPreviewTrackDurationSeconds > 0.0) {

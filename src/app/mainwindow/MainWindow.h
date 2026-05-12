@@ -394,6 +394,7 @@ private:
     void applyEditorTextFontSize(int pointSize, bool persistPreference);
     void applyEditorLineSpacingFactor(double factor, bool persistPreference);
     void applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference);
+    void applyPreserveDifficultySwitchView(bool enabled, bool persistPreference);
     void showSimpleCopyArea();
     void setFullCopyAreaVisible(bool visible);
     void syncCopyAreaEditorAppearance();

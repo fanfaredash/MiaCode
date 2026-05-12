@@ -102,6 +102,7 @@ Rectangle {
     readonly property real durationSeconds: controller ? Math.max(controller.previewDurationSeconds, 0.001) : 0.001
     readonly property real positionSeconds: controller ? controller.previewPositionSeconds : 0
     readonly property real displayedSeconds: transportSlider.pressed ? transportSlider.value : positionSeconds
+    readonly property real displayedProgress: Math.max(0, Math.min(1, displayedSeconds / durationSeconds))
     readonly property string timeSummary: formatDisplayTime(displayedSeconds) + " / " + formatDisplayTime(durationSeconds)
     readonly property int controlButtonHeight: metric("previewControlButtonMinHeight", 28)
     property real preciseHintSecond: positionSeconds
@@ -233,7 +234,7 @@ Rectangle {
                     }
 
                     Rectangle {
-                        width: Math.max(6, transportSlider.visualPosition * parent.width)
+                        width: Math.max(6, root.displayedProgress * parent.width)
                         height: parent.height
                         radius: height / 2
                         color: tone("accent", "#2e77d0")
@@ -242,7 +243,7 @@ Rectangle {
 
                 handle: Rectangle {
                     x: transportSlider.leftPadding
-                        + transportSlider.visualPosition * (transportSlider.availableWidth - width)
+                        + root.displayedProgress * (transportSlider.availableWidth - width)
                     y: Math.round((transportSlider.height - height) / 2)
                     width: 18
                     height: 18
