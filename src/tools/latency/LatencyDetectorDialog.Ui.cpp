@@ -25,9 +25,12 @@ void LatencyDetectorDialog::buildUi()
     bpmEdit_->setPlaceholderText("180.000");
     bpmEdit_->setFixedWidth(74);
     detectBpmButton_ = new QPushButton(localizedText("检测BPM", "Detect BPM"), this);
+    detectOffsetButton_ = new QPushButton(localizedText("检测偏移", "Detect Offset"), this);
     bpmRow->addWidget(bpmLabel);
     bpmRow->addWidget(bpmEdit_);
     bpmRow->addWidget(detectBpmButton_);
+    bpmRow->addSpacing(8);
+    bpmRow->addWidget(detectOffsetButton_);
     bpmRow->addStretch(1);
     rootLayout->addLayout(bpmRow);
 
@@ -38,7 +41,18 @@ void LatencyDetectorDialog::buildUi()
     offsetEdit_->setValidator(new QDoubleValidator(-9999.0, 9999.0, 3, offsetEdit_));
     offsetEdit_->setAlignment(Qt::AlignCenter);
     offsetEdit_->setFixedWidth(74);
-    detectOffsetButton_ = new QPushButton(localizedText("检测偏移", "Detect Offset"), this);
+
+    // SFX volume now lives on the offset row — it took the slot
+    // formerly held by Detect Offset / Restore. Detect Offset moved
+    // up to the BPM row next to Detect BPM; Restore is gone (the new
+    // result popup eliminated the need to undo an auto-write).
+    sfxVolumeSlider_ = new QSlider(Qt::Horizontal, this);
+    sfxVolumeSlider_->setRange(0, 100);
+    sfxVolumeSlider_->setValue(25);
+    sfxVolumeSlider_->setFixedWidth(110);
+    sfxVolumeValueLabel_ = new QLabel("25%", this);
+    sfxVolumeValueLabel_->setMinimumWidth(42);
+    auto* sfxLabel = new QLabel(localizedText("效果音", "SFX"), this);
 
     const auto addAdjustButton = [this, offsetRow](const QString& text, double delta) {
         auto* button = new QPushButton(text, this);
@@ -57,8 +71,10 @@ void LatencyDetectorDialog::buildUi()
     offsetRow->addWidget(offsetEdit_);
     addAdjustButton(">", 0.001);
     addAdjustButton(">>", 0.010);
-    offsetRow->addWidget(detectOffsetButton_);
     offsetRow->addStretch(1);
+    offsetRow->addWidget(sfxLabel, 0, Qt::AlignVCenter);
+    offsetRow->addWidget(sfxVolumeSlider_, 0, Qt::AlignVCenter);
+    offsetRow->addWidget(sfxVolumeValueLabel_, 0, Qt::AlignVCenter);
     rootLayout->addLayout(offsetRow);
 
     auto* timingRow = new QHBoxLayout();
@@ -148,24 +164,13 @@ void LatencyDetectorDialog::buildUi()
         });
     }
     speedButton_->setMenu(speedMenu);
-    sfxVolumeSlider_ = new QSlider(Qt::Horizontal, this);
-    sfxVolumeSlider_->setRange(0, 100);
-    sfxVolumeSlider_->setValue(25);
-    sfxVolumeSlider_->setFixedWidth(110);
-    sfxVolumeValueLabel_ = new QLabel("25%", this);
-    sfxVolumeValueLabel_->setMinimumWidth(42);
-    auto* sfxLabel = new QLabel(localizedText("效果音", "SFX"), this);
 
     controlsRow->addWidget(playPauseButton_, 0, Qt::AlignVCenter);
     controlsRow->addWidget(stopButton_, 0, Qt::AlignVCenter);
     controlsRow->addWidget(playbackTimeLabel_, 0, Qt::AlignVCenter);
     controlsRow->addSpacing(4);
     controlsRow->addWidget(speedButton_, 0, Qt::AlignVCenter);
-    controlsRow->addSpacing(48);
     controlsRow->addStretch(1);
-    controlsRow->addWidget(sfxLabel, 0, Qt::AlignVCenter);
-    controlsRow->addWidget(sfxVolumeSlider_, 0, Qt::AlignVCenter);
-    controlsRow->addWidget(sfxVolumeValueLabel_, 0, Qt::AlignVCenter);
     rootLayout->addLayout(controlsRow);
 
     // Deferred-commit Save / Cancel row. All in-session edits stay
