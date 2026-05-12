@@ -77,12 +77,20 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.recentFilesMenu_, &QMenu::aboutToShow, &owner_, [this]() {
         owner_.refreshRecentFilesMenu(owner_.recentFilesMenu_);
     });
+
+    owner_.restoreBackupMenu_ = fileMenu->addMenu(uiText("action.restore_backup", "Restore Backup"));
+    connect(owner_.restoreBackupMenu_, &QMenu::aboutToShow, &owner_, [this]() {
+        owner_.refreshRestoreBackupMenu(owner_.restoreBackupMenu_);
+    });
     connect(fileMenu, &QMenu::aboutToShow, &owner_, [this]() {
         if (owner_.openCurrentFolderAction_ != nullptr) {
             owner_.openCurrentFolderAction_->setEnabled(!owner_.currentFilePath_.isEmpty());
         }
         if (owner_.recentFilesMenu_ != nullptr) {
             owner_.recentFilesMenu_->setEnabled(!owner_.recentFilePaths_.isEmpty());
+        }
+        if (owner_.restoreBackupMenu_ != nullptr) {
+            owner_.restoreBackupMenu_->setEnabled(!owner_.currentFilePath_.isEmpty());
         }
     });
 

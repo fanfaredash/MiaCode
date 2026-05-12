@@ -234,6 +234,8 @@ private slots:
     void onNewFile();
     void onOpenFile();
     void onOpenCurrentFolder();
+    void refreshRestoreBackupMenu(QMenu* restoreBackupMenu);
+    void restoreBackupFilePath(const QString& path);
     bool onSaveFile();
     bool onSaveFileAs();
     void onMirrorLeftRight();

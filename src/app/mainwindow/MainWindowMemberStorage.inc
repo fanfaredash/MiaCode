@@ -9,6 +9,7 @@
         QAction* openAction_ = nullptr;
         QAction* openCurrentFolderAction_ = nullptr;
         QMenu* recentFilesMenu_ = nullptr;
+        QMenu* restoreBackupMenu_ = nullptr;
         QAction* saveAction_ = nullptr;
         QAction* settingsPlaceholderAction_ = nullptr;
         QAction* preferencesAction_ = nullptr;
@@ -504,6 +505,7 @@
     QAction*& openAction_ = ui_.openAction_;
     QAction*& openCurrentFolderAction_ = ui_.openCurrentFolderAction_;
     QMenu*& recentFilesMenu_ = ui_.recentFilesMenu_;
+    QMenu*& restoreBackupMenu_ = ui_.restoreBackupMenu_;
     QAction*& saveAction_ = ui_.saveAction_;
     QAction*& settingsPlaceholderAction_ = ui_.settingsPlaceholderAction_;
     QAction*& preferencesAction_ = ui_.preferencesAction_;

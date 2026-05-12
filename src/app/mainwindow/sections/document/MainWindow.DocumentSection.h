@@ -14,6 +14,8 @@ public:
     void onNewFile();
     void onOpenFile();
     bool openFileAtPath(const QString& path, bool showStatusMessage = true, bool showErrors = true);
+    void refreshRestoreBackupMenu(QMenu* restoreBackupMenu);
+    void restoreBackupFilePath(const QString& path);
     bool restoreLastSessionFile();
     void scheduleStartupRestoreLastSessionFile();
     void cancelPendingStartupRestore();
