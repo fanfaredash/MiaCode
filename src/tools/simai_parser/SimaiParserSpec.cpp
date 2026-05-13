@@ -1,6 +1,8 @@
 #include "SimaiNativeParser.h"
 
 #include <QCoreApplication>
+#include <QFile>
+#include <QHash>
 #include <QTextStream>
 #include <QtMath>
 
@@ -728,6 +730,103 @@ int main(int argc, char** argv)
             }
         }
         expect(sawInvalidHs, QStringLiteral("<HS*-2> emits an HS-related parse error"));
+    }
+
+    {
+        // Real-chart repro: extracted difficulty-5 from 蒼鷺之火 -
+        // 250604/maidata.txt. Verifies HS=1 reset works in the actual
+        // chart that the user reported as buggy.
+        QTextStream debug(stdout);
+        QFile f(QStringLiteral("D:/MaiChartWorkspace/Original/蒼鷺之火 - 250604/maidata.txt"));
+        if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            const QString full = QString::fromUtf8(f.readAll());
+            const int diffStart = full.indexOf(QStringLiteral("&inote_5="));
+            if (diffStart >= 0) {
+                const int chartStart = diffStart + QString(QStringLiteral("&inote_5=")).length();
+                int chartEnd = full.indexOf(QStringLiteral("\nE"), chartStart);
+                if (chartEnd < 0) chartEnd = full.size();
+                const QString chartText = full.mid(chartStart, chartEnd - chartStart + 2);
+                const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(chartText);
+                debug << "[debug] 蒼鷺之火 diff5: ok=" << (parsed.ok ? 1 : 0)
+                      << " notes=" << parsed.noteMarkers.size()
+                      << " errors=" << parsed.errors.size() << "\n";
+                for (const auto& err : parsed.errors) {
+                    debug << "  err L" << err.line << ":C" << err.col << " " << err.message << "\n";
+                }
+                QHash<double, int> hsHist;
+                for (const auto& m : parsed.noteMarkers) hsHist[m.hsMultiplier]++;
+                debug << "  hs histogram:";
+                for (auto it = hsHist.constBegin(); it != hsHist.constEnd(); ++it) {
+                    debug << " " << it.key() << "x" << it.value();
+                }
+                debug << "\n";
+                bool sawHs1AfterReset = false;
+                bool sawHs2 = false;
+                int lastHs1Line = -1;
+                for (const auto& m : parsed.noteMarkers) {
+                    if (nearlyEqual(m.hsMultiplier, 2.0)) sawHs2 = true;
+                    if (sawHs2 && nearlyEqual(m.hsMultiplier, 1.0)) {
+                        sawHs1AfterReset = true;
+                        lastHs1Line = m.sourceLine;
+                        break;
+                    }
+                }
+                expect(sawHs1AfterReset,
+                       QStringLiteral("蒼鷺之火 diff5: HS=1 reset region has a marker with hsMultiplier=1.0"));
+                debug << "  HS=1-after-HS=2 reset note at sourceLine=" << lastHs1Line << "\n";
+            } else {
+                debug << "[debug] 蒼鷺之火 diff5: &inote_5= not found, skipping\n";
+            }
+            f.close();
+        }
+    }
+
+    {
+        // Multi-line repro mirroring the 蒼鷺之火 chart: directive on its
+        // own line, blank line before, beat block on next line. Reported
+        // bug: after `<HS*1>`, notes still rendered at 2x.
+        const QString chart = QStringLiteral(
+            "(174)\n"
+            "{16} 1,,,,,,,,\n"
+            "\n"
+            "<HS*0.5>\n"
+            "{16} 1,,,,,,,,\n"
+            "\n"
+            "<HS*2>\n"
+            "{16} 1,,,,,,,,\n"
+            "\n"
+            "<HS*1>\n"
+            "{16} 1,,,,,,,,\n"
+            "E\n"
+        );
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(chart);
+        QTextStream debug(stdout);
+        debug << "[debug] multi-line repro: ok=" << (parsed.ok ? 1 : 0)
+              << " notes=" << parsed.noteMarkers.size()
+              << " errors=" << parsed.errors.size() << "\n";
+        for (const auto& err : parsed.errors) {
+            debug << "  err L" << err.line << ":C" << err.col << " " << err.message << "\n";
+        }
+        for (int i = 0; i < parsed.noteMarkers.size(); ++i) {
+            const auto& m = parsed.noteMarkers[i];
+            debug << "  note[" << i << "] type=" << m.type
+                  << " sec=" << m.second
+                  << " hs=" << m.hsMultiplier
+                  << " L" << m.sourceLine << "C" << m.sourceCol << "\n";
+        }
+        // The 4 notes should have hsMultipliers: 1.0, 0.5, 2.0, 1.0
+        if (parsed.noteMarkers.size() == 4) {
+            expect(nearlyEqual(parsed.noteMarkers.at(0).hsMultiplier, 1.0),
+                   QStringLiteral("multi-line: note before any HS has hs=1.0"));
+            expect(nearlyEqual(parsed.noteMarkers.at(1).hsMultiplier, 0.5),
+                   QStringLiteral("multi-line: note after <HS*0.5> has hs=0.5"));
+            expect(nearlyEqual(parsed.noteMarkers.at(2).hsMultiplier, 2.0),
+                   QStringLiteral("multi-line: note after <HS*2> has hs=2.0"));
+            expect(nearlyEqual(parsed.noteMarkers.at(3).hsMultiplier, 1.0),
+                   QStringLiteral("multi-line: note after <HS*1> has hs=1.0 (the reported bug)"));
+        } else {
+            expect(false, QStringLiteral("multi-line: expected 4 notes"));
+        }
     }
 
     {

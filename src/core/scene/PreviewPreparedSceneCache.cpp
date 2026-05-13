@@ -1,5 +1,6 @@
 #include "core/scene/PreviewPreparedSceneCache.h"
 
+#include "common/DebugLog.h"
 #include "common/PreviewGameplayConfig.h"
 #include "core/scene/PreviewJudgeOverlayShared.h"
 #include "core/scene/PreviewMarkerDrawOrder.h"
@@ -8,6 +9,7 @@
 
 #include <QHash>
 #include <QSet>
+#include <QTextStream>
 
 #include <algorithm>
 
@@ -167,6 +169,34 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
     touchHoldLayer_.clear();
     chartReviewLayer_.clear();
     maimuriDxJudgeLayer_.clear();
+
+    // HS diagnostic: once per cache rebuild, log a histogram of marker
+    // hsMultiplier values. Routed through the Runtime channel so it
+    // appears in miacode_runtime_debug.log alongside other scene-cache
+    // diagnostics. Cheap (one map insertion per marker, one log line).
+    {
+        QHash<double, int> hsHist;
+        for (const TimelineNoteMarker& marker : state.noteMarkers) {
+            hsHist[marker.hsMultiplier]++;
+        }
+        QString hsSummary;
+        QTextStream out(&hsSummary);
+        out << "tapFlowSpeed=" << state.render.tapFlowSpeed
+            << " touchFlowSpeed=" << state.render.touchFlowSpeed
+            << " hs_histogram:";
+        for (auto it = hsHist.constBegin(); it != hsHist.constEnd(); ++it) {
+            const PreviewTapTiming sample = previewTapTimingForEffectiveFlowSpeed(
+                static_cast<qreal>(state.render.tapFlowSpeed * it.key()));
+            out << " hs=" << it.key()
+                << ",count=" << it.value()
+                << ",fly=" << sample.flyDurationSeconds
+                << ",life=" << sample.lifecycleDurationSeconds;
+        }
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("preview_prepared_scene_hs"),
+            hsSummary);
+    }
 
     // Per-marker timing: hsMultiplier scales the user-set flow speed
     // (Q4 — effective speed is unclamped). The visibility windows below
