@@ -544,6 +544,13 @@ if (WIN32)
     set_target_properties(MiaCodeLauncher PROPERTIES
         OUTPUT_NAME "MiaCodeLauncher"
     )
+    # Shared app icon — the wrapper exe lives at the dist root and is the
+    # user-clickable face of MiaCode in File Explorer, so it must show
+    # the same icon as the real binary inside app/. Reuses the generated
+    # .rc emitted alongside the MiaCode target above.
+    if (EXISTS "${MIACODE_APP_ICON}" AND DEFINED MIACODE_APP_RC)
+        target_sources(MiaCodeLauncher PRIVATE "${MIACODE_APP_RC}")
+    endif()
 endif()
 
 if (MIACODE_BUILD_DEV_TOOLS)
