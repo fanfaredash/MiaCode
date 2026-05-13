@@ -98,6 +98,10 @@ Use this file to track where important constants live, what they mean, and wheth
     - bottom-tab invisible top-edge resize hot zone (`8 px`), content-scale clamp (`50%..100%`), derived header/list-font scale (`75%..100%`), and Timeline host height calculation from scaled header plus scaled lanes
     - fixed `30 Hz` Timeline UI cadence (`33 ms` timer interval / `1/30 s` seek-throttle threshold)
   - Rule: keep local while they only shape the main-window preview UX and do not need preview/export parity
+- `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.cpp`
+  - Owns: toolbox media-prepend ffmpeg defaults and local file conventions
+  - Current tuning note: prepended background-video black frames are encoded as `1920x1080` at `30 FPS`, the original video is letterboxed into that canvas, output uses x264 `CRF 18` / `veryfast`, and the generated background video is video-only. Prepended `track.mp3` silence uses stereo `44100 Hz` anullsrc and libmp3lame `-q:a 2`. Backups are fixed at `track_bak.mp3` for audio and `<video-stem>_bak.mp4` for video. Blank duration defaults detect beat count from `&clock_count=` / `&clockcount=` before falling back to `4`, and BPM from `&wholebpm=` before the first half-width chart BPM token before falling back to `120`.
+  - Rule: keep local while this remains a single toolbox operation; promote if export, preview, or batch tooling starts sharing the same media-mutation policy
 - `src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp`
   - Owns: wrapped Validation/Muri issue-row padding, minimum row height, and ignored-row opacity used by the shared rich-text list delegate
   - Rule: keep local while these values only shape diagnostics-list rendering in the main window and are not reused by other widgets or the Quick frontend

@@ -43,6 +43,7 @@ public:
     void setBpm(double bpm);
     void setMeterId(const QString& meterId);
     void setOffsetSeconds(double seconds);
+    bool detectBpmAndMeter(double* bpm, QString* meterId);
 
 signals:
     void bpmChanged(double bpm);

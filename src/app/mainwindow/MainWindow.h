@@ -260,6 +260,10 @@ private slots:
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
     void onOpenLatencyDetector();
+    void onPrependTrackSilence();
+    void onPrependPvBlack();
+    void onCompressBackgroundVideo();
+    void onConvertTrackTo44100Hz();
     void onPreferences();
     void onAbout();
     void onToggleFindReplace();

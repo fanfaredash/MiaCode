@@ -11,9 +11,20 @@ public:
     void onPreviewVideoSettings();
     void onAbout();
     void onOpenLatencyDetector();
+    void onPrependTrackSilence();
+    void onPrependPvBlack();
+    void onCompressBackgroundVideo();
+    void onConvertTrackTo44100Hz();
 
 private:
+    enum class MediaBlankTarget {
+        Track,
+        Pv,
+    };
+
     QString resolveLatencyDetectorTrackPath() const;
+    QString resolveCurrentChartDirectory() const;
+    void onPrependMediaBlank(MediaBlankTarget target);
     void openPreviewSettingsDialog(bool includeAudioSettings, bool includeVideoSettings, const QString& title);
 
     MainWindow& owner_;

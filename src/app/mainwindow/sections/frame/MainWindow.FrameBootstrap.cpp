@@ -891,6 +891,31 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         toolboxMenu_->addAction(latencyDetectorAction_);
     }
 
+    if (prependTrackSilenceAction_ != nullptr
+        || prependPvBlackAction_ != nullptr
+        || compressBackgroundVideoAction_ != nullptr
+        || convertTrackTo44100HzAction_ != nullptr) {
+        prependMediaBlankMenu_ = toolboxMenu_->addMenu(
+            UiText::isChineseUi() ? QStringLiteral("音频/视频处理") : QStringLiteral("Audio/Video Processing")
+        );
+        styleRoundedMenu(*prependMediaBlankMenu_);
+        if (convertTrackTo44100HzAction_ != nullptr) {
+            prependMediaBlankMenu_->addAction(convertTrackTo44100HzAction_);
+        }
+        if (compressBackgroundVideoAction_ != nullptr) {
+            prependMediaBlankMenu_->addAction(compressBackgroundVideoAction_);
+        }
+        if (convertTrackTo44100HzAction_ != nullptr || compressBackgroundVideoAction_ != nullptr) {
+            prependMediaBlankMenu_->addSeparator();
+        }
+        if (prependTrackSilenceAction_ != nullptr) {
+            prependMediaBlankMenu_->addAction(prependTrackSilenceAction_);
+        }
+        if (prependPvBlackAction_ != nullptr) {
+            prependMediaBlankMenu_->addAction(prependPvBlackAction_);
+        }
+    }
+
     if (normalizeWholeChartAction_ != nullptr) {
         toolboxMenu_->addAction(normalizeWholeChartAction_);
     }

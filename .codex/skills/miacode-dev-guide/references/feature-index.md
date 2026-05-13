@@ -210,7 +210,14 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - File: `src/app/mainwindow/MainWindow.cpp`
   - Key functions: `onMirrorLeftRight`, `onMirrorUpDown`, `onRotate180`, `onRotate45CounterClockwise`, `onRotate45Clockwise`, `onNormalizeWholeChart`, `onToggleBreakSelection`, `onToggleExSelection`, `onToggleFireworkSelection`, `onRandomRotateSelection`
 
-## 12. Build, Packaging, And Dev-Only Helper Binaries
+## 12. Toolbox Media Utilities
+
+- Prepend blank media:
+  - Files: `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.cpp`, `src/app/mainwindow/sections/frame/MainWindow.BootstrapAndMenus.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp`
+  - Key functions: `MainWindow::onPrependTrackSilence`, `MainWindow::onPrependPvBlack`, `MainWindow::onCompressBackgroundVideo`, `MainWindow::onConvertTrackTo44100Hz`, `MainWindow::DialogsSection::onPrependMediaBlank`
+  - Owns: the `Audio/Video Processing` toolbox submenu. It splits `x` beats at BPM `y` into separate actions for prepending silence to sibling `track.mp3` or black video to the resolved chart background video (`&video=` override first, then `bg.mp4` / `pv.mp4` fallback), writing `track_bak.mp3` or `<video-stem>_bak.mp4` backups before replacing the selected original. It also contains one-click media normalization actions: compress the resolved chart background video under 20 MiB and convert `track.mp3` to 44100 Hz. Dialog defaults use `&clock_count=` / `&clockcount=` for beat count (fallback `4`) and `&wholebpm=` before the first half-width chart BPM token such as `(185)` (fallback `120`).
+
+## 13. Build, Packaging, And Dev-Only Helper Binaries
 
 - CMake targets:
   - File: `CMakeLists.txt`

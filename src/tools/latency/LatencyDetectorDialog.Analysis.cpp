@@ -333,6 +333,22 @@ double LatencyDetectorDialog::detectBpm()
     return bestTempo.bpm;
 }
 
+bool LatencyDetectorDialog::detectBpmAndMeter(double* bpm, QString* meterId)
+{
+    setMeterId(QStringLiteral("auto"));
+    const double detectedBpm = detectBpm();
+    if (!(detectedBpm > 0.0)) {
+        return false;
+    }
+    if (bpm != nullptr) {
+        *bpm = detectedBpm;
+    }
+    if (meterId != nullptr) {
+        *meterId = lastDetectedMeterId_;
+    }
+    return true;
+}
+
 double LatencyDetectorDialog::detectOffset(double bpm) const
 {
     if ((onsetEnvelope_.isEmpty() && offsetEnvelope_.isEmpty()) || bpm <= 0.0) {

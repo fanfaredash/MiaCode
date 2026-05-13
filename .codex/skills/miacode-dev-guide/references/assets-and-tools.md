@@ -28,9 +28,12 @@ Current chart-directory conventions:
 
 - chart text file: `maidata.txt`
 - music track: `track.mp3`
+- toolbox media backup: `track_bak.mp3`
 - background media candidates:
   - `bg.mp4`
   - `pv.mp4`
+  - chart `&video=` may point at another existing `.mp4`, such as `mv.mp4`
+  - toolbox media backup: `<video-stem>_bak.mp4`
   - `bg.jpg`
   - `bg.png`
   - `bg.jpeg`
@@ -49,6 +52,8 @@ Current chart-directory conventions:
   - if multiple history writes happen inside the same second, the later write replaces the earlier file of that same name
 
 If these conventions change, update both code and this file.
+
+The toolbox blank-media submenu operates on the current chart directory only. Its audio action prepends silence to `track.mp3` and leaves the original input as `track_bak.mp3`; its video action prepends black frames to the resolved chart background video and leaves the original input as `<video-stem>_bak.mp4`.
 
 ## 3. Asset Consumers
 

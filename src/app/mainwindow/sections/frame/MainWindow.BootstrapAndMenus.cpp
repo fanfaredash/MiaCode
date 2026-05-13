@@ -317,6 +317,27 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     editMenu->addAction(owner_.latencyDetectorAction_);
     editMenu->addSeparator();
 
+    owner_.prependTrackSilenceAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("音频开头静音处理") : QStringLiteral("Prepend Track Silence..."),
+        &owner_
+    );
+    connect(owner_.prependTrackSilenceAction_, &QAction::triggered, &owner_, &MainWindow::onPrependTrackSilence);
+    owner_.prependPvBlackAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("视频开头黑幕处理") : QStringLiteral("Prepend PV Black Screen..."),
+        &owner_
+    );
+    connect(owner_.prependPvBlackAction_, &QAction::triggered, &owner_, &MainWindow::onPrependPvBlack);
+    owner_.compressBackgroundVideoAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("视频压缩") : QStringLiteral("Compress Video..."),
+        &owner_
+    );
+    connect(owner_.compressBackgroundVideoAction_, &QAction::triggered, &owner_, &MainWindow::onCompressBackgroundVideo);
+    owner_.convertTrackTo44100HzAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("音频处理") : QStringLiteral("Audio Processing..."),
+        &owner_
+    );
+    connect(owner_.convertTrackTo44100HzAction_, &QAction::triggered, &owner_, &MainWindow::onConvertTrackTo44100Hz);
+
     owner_.validateAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("语法") : QStringLiteral("Syntax"),
         &owner_
