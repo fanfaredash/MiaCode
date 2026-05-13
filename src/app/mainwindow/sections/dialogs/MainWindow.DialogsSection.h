@@ -24,6 +24,8 @@ private:
 
     QString resolveLatencyDetectorTrackPath() const;
     QString resolveCurrentChartDirectory() const;
+    void releasePreviewMediaForFileOperation();
+    void reloadPreviewMediaAfterFileOperation(bool reloadTrack);
     void onPrependMediaBlank(MediaBlankTarget target);
     void openPreviewSettingsDialog(bool includeAudioSettings, bool includeVideoSettings, const QString& title);
 

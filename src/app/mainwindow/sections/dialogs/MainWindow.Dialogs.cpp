@@ -11,6 +11,7 @@
 #include "common/ChartClockCount.h"
 #include "common/OperationLog.h"
 #include "common/PreviewSfxAssets.h"
+#include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/latency/LatencyDetectorDialog.h"
 
@@ -75,7 +76,9 @@ bool copyFileReplacing(const QString& sourcePath, const QString& destinationPath
     QFile::remove(destinationPath);
     if (!QFile::copy(sourcePath, destinationPath)) {
         if (error != nullptr) {
-            *error = QStringLiteral("Failed to write backup: %1").arg(destinationPath);
+            *error = UiText::isChineseUi()
+                ? QStringLiteral("无法写入文件：%1\n\n文件可能正在被预览、播放器、资源管理器预览窗格或其他程序占用。").arg(destinationPath)
+                : QStringLiteral("Failed to write file: %1\n\nThe file may be open in preview, a media player, File Explorer preview pane, or another program.").arg(destinationPath);
         }
         return false;
     }
@@ -90,7 +93,15 @@ bool restoreFileFromBackup(const QString& backupPath, const QString& destination
         }
         return false;
     }
-    return copyFileReplacing(backupPath, destinationPath, error);
+    if (!copyFileReplacing(backupPath, destinationPath, error)) {
+        if (error != nullptr) {
+            *error = UiText::isChineseUi()
+                ? QStringLiteral("还原备份失败：%1\n\n文件可能正在被预览、播放器、资源管理器预览窗格或其他程序占用。").arg(destinationPath)
+                : QStringLiteral("Failed to restore backup to: %1\n\nThe file may be open in preview, a media player, File Explorer preview pane, or another program.").arg(destinationPath);
+        }
+        return false;
+    }
+    return true;
 }
 
 int mediaBlankClockCountFromFields(const QVector<SimaiRawField>& fields)
@@ -124,7 +135,9 @@ bool replaceFileWithTemp(const QString& tempPath, const QString& destinationPath
     QFile::remove(replacingPath);
     if (!QFile::rename(destinationPath, replacingPath)) {
         if (error != nullptr) {
-            *error = QStringLiteral("Failed to stage original file for replacement: %1").arg(destinationPath);
+            *error = UiText::isChineseUi()
+                ? QStringLiteral("无法替换原文件：%1\n\n文件可能仍被预览、播放器、资源管理器预览窗格或其他程序占用。请停止预览并关闭占用该文件的程序后重试。").arg(destinationPath)
+                : QStringLiteral("Failed to stage original file for replacement: %1\n\nThe file may still be open in preview, a media player, File Explorer preview pane, or another program. Stop preview and close programs using it, then try again.").arg(destinationPath);
         }
         return false;
     }
@@ -243,6 +256,15 @@ bool compressVideoUnder20Mb(
     constexpr int kAudioBitrateKbps = 96;
     constexpr int kMinVideoBitrateKbps = 120;
     const QFileInfo videoInfo(videoPath);
+    const qint64 originalBytes = videoInfo.size();
+    if (originalBytes > 0 && originalBytes <= kTargetBytes) {
+        if (error != nullptr) {
+            *error = UiText::isChineseUi()
+                ? QStringLiteral("当前视频已经小于 20 MiB，无需压缩。")
+                : QStringLiteral("The current video is already under 20 MiB; compression is not needed.");
+        }
+        return false;
+    }
     const QString backupPath = videoInfo.dir().filePath(
         QStringLiteral("%1_bak.%2").arg(videoInfo.completeBaseName(), videoInfo.suffix())
     );
@@ -257,7 +279,10 @@ bool compressVideoUnder20Mb(
         return false;
     }
 
-    const double targetBits = static_cast<double>(kTargetBytes) * 8.0 * 0.965;
+    const qint64 outputTargetBytes = originalBytes > 0
+        ? std::min(kTargetBytes, static_cast<qint64>(std::floor(static_cast<double>(originalBytes) * 0.86)))
+        : kTargetBytes;
+    const double targetBits = static_cast<double>(outputTargetBytes) * 8.0 * 0.965;
     int totalBitrateKbps = static_cast<int>(std::floor(targetBits / durationSeconds / 1000.0));
     int videoBitrateKbps = std::max(kMinVideoBitrateKbps, totalBitrateKbps - kAudioBitrateKbps);
 
@@ -289,10 +314,12 @@ bool compressVideoUnder20Mb(
     }
 
     const qint64 compressedBytes = QFileInfo(tempPath).size();
-    if (compressedBytes <= 0 || compressedBytes > kTargetBytes) {
+    if (compressedBytes <= 0 || compressedBytes > kTargetBytes || (originalBytes > 0 && compressedBytes >= originalBytes)) {
         QFile::remove(tempPath);
         if (error != nullptr) {
-            *error = QStringLiteral("Compressed video is still larger than 20 MiB.");
+            *error = compressedBytes > kTargetBytes
+                ? QStringLiteral("Compressed video is still larger than 20 MiB.")
+                : QStringLiteral("Compressed video was not smaller than the original file.");
         }
         return false;
     }
@@ -349,15 +376,16 @@ bool prependTrackSilence(
         return false;
     }
 
+    const QString silenceDuration = QString::number(silenceSeconds, 'f', 6);
     QStringList args;
     args << QStringLiteral("-hide_banner")
          << QStringLiteral("-y")
          << QStringLiteral("-f") << QStringLiteral("lavfi")
-         << QStringLiteral("-t") << QString::number(silenceSeconds, 'f', 6)
-         << QStringLiteral("-i") << QStringLiteral("anullsrc=channel_layout=stereo:sample_rate=44100")
+         << QStringLiteral("-i") << QStringLiteral("anullsrc=channel_layout=stereo:sample_rate=44100:d=%1").arg(silenceDuration)
          << QStringLiteral("-i") << backupPath
-         << QStringLiteral("-filter_complex") << QStringLiteral("[0:a][1:a]concat=n=2:v=0:a=1[a]")
-         << QStringLiteral("-map") << QStringLiteral("[a]")
+         << QStringLiteral("-filter_complex")
+         << QStringLiteral("[0:a]atrim=duration=%1,asetpts=PTS-STARTPTS[s];[1:a]aresample=44100,aformat=channel_layouts=stereo,asetpts=PTS-STARTPTS[a];[s][a]concat=n=2:v=0:a=1[out]").arg(silenceDuration)
+         << QStringLiteral("-map") << QStringLiteral("[out]")
          << QStringLiteral("-c:a") << QStringLiteral("libmp3lame")
          << QStringLiteral("-q:a") << QStringLiteral("2")
          << tempPath;
@@ -444,6 +472,47 @@ QString MainWindow::DialogsSection::resolveCurrentChartDirectory() const
         return QString();
     }
     return QFileInfo(owner_.currentFilePath_).absoluteDir().absolutePath();
+}
+
+void MainWindow::DialogsSection::releasePreviewMediaForFileOperation()
+{
+    owner_.onStopPreview();
+    owner_.clearPreviewStageMediaRoute();
+    for (int i = 0; i < 8; ++i) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        QThread::msleep(25);
+    }
+}
+
+void MainWindow::DialogsSection::reloadPreviewMediaAfterFileOperation(bool reloadTrack)
+{
+    if (owner_.currentFilePath_.isEmpty()) {
+        return;
+    }
+    if (reloadTrack) {
+        owner_.lastTrackPath_ = miacode::chart_assets::resolveTrackPath(owner_.currentFilePath_);
+        if (state_.waveformCacheService_ != nullptr) {
+            state_.waveformCacheService_->clear();
+        }
+        if (owner_.previewSfxRuntime_ != nullptr) {
+            owner_.previewSfxRuntime_->setChartPath(QString());
+            owner_.previewSfxRuntime_->setChartPath(owner_.currentFilePath_);
+            owner_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(owner_.previewPlaybackRate_);
+            owner_.previewSfxRuntime_->resetRetainedPreviewPlaybackTransaction(qMax(0.0, owner_.qtPreviewPauseSecond_));
+        }
+        owner_.refreshWaveformCache();
+        owner_.updatePreviewSliderRange();
+        owner_.updatePreviewSliderPosition(qMax(0.0, owner_.qtPreviewPauseSecond_));
+    }
+    owner_.syncPreviewStageMediaRouteChartPath(
+        owner_.currentFilePath_,
+        owner_.lastTrackPath_,
+        qMax(0.0, owner_.qtPreviewPauseSecond_),
+        owner_.document_.videoPath
+    );
+    for (int i = 0; i < 4; ++i) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    }
 }
 
 void MainWindow::DialogsSection::updateLatencyDetectorAvailability()
@@ -693,11 +762,14 @@ void MainWindow::DialogsSection::onCompressBackgroundVideo()
         return;
     }
 
+    releasePreviewMediaForFileOperation();
+
     QString error;
     if (!compressVideoUnder20Mb(ffmpegPath, videoPath, UiDialogs::effectiveParentWidget(&owner_), &error)) {
         QMessageBox::critical(UiDialogs::effectiveParentWidget(&owner_), title, error);
         return;
     }
+    reloadPreviewMediaAfterFileOperation(false);
     owner_.statusBar()->showMessage(
         UiText::isChineseUi()
             ? QStringLiteral("已压缩 %1 到 20M 内。").arg(videoInfo.fileName())
@@ -709,7 +781,7 @@ void MainWindow::DialogsSection::onCompressBackgroundVideo()
 void MainWindow::DialogsSection::onConvertTrackTo44100Hz()
 {
     MC_OP("MainWindow::DialogsSection::onConvertTrackTo44100Hz");
-    const QString title = UiText::isChineseUi() ? QStringLiteral("音频处理") : QStringLiteral("Audio Processing");
+    const QString title = UiText::isChineseUi() ? QStringLiteral("采样率转换") : QStringLiteral("Sample Rate");
     const QString chartDirPath = resolveCurrentChartDirectory();
     if (chartDirPath.isEmpty()) {
         QMessageBox::warning(
@@ -756,11 +828,14 @@ void MainWindow::DialogsSection::onConvertTrackTo44100Hz()
         return;
     }
 
+    releasePreviewMediaForFileOperation();
+
     QString error;
     if (!convertTrackTo44100Hz(ffmpegPath, trackPath, UiDialogs::effectiveParentWidget(&owner_), &error)) {
         QMessageBox::critical(UiDialogs::effectiveParentWidget(&owner_), title, error);
         return;
     }
+    reloadPreviewMediaAfterFileOperation(true);
     owner_.statusBar()->showMessage(
         UiText::isChineseUi()
             ? QStringLiteral("已将 track.mp3 处理为 44100Hz。")
@@ -907,7 +982,8 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
     UiDialogs::localizeButtonBox(buttonBox);
     connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    connect(restoreButton, &QPushButton::clicked, &dialog, [backupPath, inputPath, title, this]() {
+    connect(restoreButton, &QPushButton::clicked, &dialog, [backupPath, inputPath, isTrack, title, this]() {
+        releasePreviewMediaForFileOperation();
         QString error;
         if (!restoreFileFromBackup(backupPath, inputPath, &error)) {
             QMessageBox::critical(UiDialogs::effectiveParentWidget(&owner_), title, error);
@@ -918,6 +994,7 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
             title,
             UiText::isChineseUi() ? QStringLiteral("已还原备份。") : QStringLiteral("Backup restored.")
         );
+        reloadPreviewMediaAfterFileOperation(isTrack);
     });
     layout->addWidget(buttonBox, 0, Qt::AlignRight);
     if (dialog.exec() != QDialog::Accepted) {
@@ -936,6 +1013,8 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
         );
         return;
     }
+
+    releasePreviewMediaForFileOperation();
 
     QString error;
     const QWidget* parent = UiDialogs::effectiveParentWidget(&owner_);
@@ -956,6 +1035,7 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
         return;
     }
 
+    reloadPreviewMediaAfterFileOperation(isTrack);
     owner_.statusBar()->showMessage(
         UiText::isChineseUi()
             ? QStringLiteral("已为 %1 开头添加 %2 秒空白。").arg(inputName).arg(silenceSeconds, 0, 'f', 3)

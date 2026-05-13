@@ -333,7 +333,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     );
     connect(owner_.compressBackgroundVideoAction_, &QAction::triggered, &owner_, &MainWindow::onCompressBackgroundVideo);
     owner_.convertTrackTo44100HzAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("音频处理") : QStringLiteral("Audio Processing..."),
+        UiText::isChineseUi() ? QStringLiteral("采样率转换") : QStringLiteral("Sample Rate..."),
         &owner_
     );
     connect(owner_.convertTrackTo44100HzAction_, &QAction::triggered, &owner_, &MainWindow::onConvertTrackTo44100Hz);
