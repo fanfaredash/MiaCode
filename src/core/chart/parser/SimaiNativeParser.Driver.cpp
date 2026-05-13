@@ -48,9 +48,15 @@ const QString& kBeatValueAbove384Prefix()
     return value;
 }
 
-const QString& kUnterminatedHsBlock()
+const QString& kUnterminatedHsBracket()
 {
-    static const QString value = QStringLiteral("Unterminated HS* block");
+    static const QString value = QStringLiteral("Unterminated <HS*> bracket");
+    return value;
+}
+
+const QString& kInvalidHsValue()
+{
+    static const QString value = QStringLiteral("Invalid <HS*N> value");
     return value;
 }
 
@@ -249,7 +255,8 @@ const QHash<QString, QString>& zhExactMap()
         {kInvalidBeatValue(), QStringLiteral("分拍数值无效")},
         {kUnterminatedBpmBlock(), QStringLiteral("BPM 块未闭合")},
         {kUnterminatedBeatBlock(), QStringLiteral("分拍块未闭合")},
-        {kUnterminatedHsBlock(), QStringLiteral("HS* 块未闭合")},
+        {kUnterminatedHsBracket(), QStringLiteral("<HS*> 括号未闭合")},
+        {kInvalidHsValue(), QStringLiteral("<HS*N> 数值无效")},
         {kMissingBeatSeparator(), QStringLiteral("缺少拍间分隔符 ','")},
         {kRepeatedSlashSeparator(), QStringLiteral("不允许使用连续分隔符 '//'")},
         {kRepeatedBacktickSeparator(), QStringLiteral("不允许使用连续分隔符 '``'")},
@@ -711,14 +718,24 @@ SimaiNativeParseResult parseInternal(
                 continue;
             }
 
-                if (ch == QChar('H') && line.mid(i, 3) == QStringLiteral("HS*")) {
+                // <HS*N> hi-speed multiplier directive. Mutates state.hs;
+                // the next appendNote() call will stamp the new value onto
+                // the emitted marker. Q1: the old bracket-less `HS*N>` form
+                // is no longer recognized — charts using it will fall
+                // through to the generic invalid-token path.
+                if (ch == QChar('<') && line.mid(i, 4) == QStringLiteral("<HS*")) {
                     flushToken(lineNumber);
-                    const int close = line.indexOf('>', i + 3);
+                    const int close = line.indexOf('>', i + 4);
                     if (close < 0) {
-                        if (strictMode) {
-                            appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kUnterminatedHsBlock());
-                        }
+                        appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kUnterminatedHsBracket());
                         break;
+                    }
+                    bool hsOk = false;
+                    const double hs = line.mid(i + 4, close - i - 4).trimmed().toDouble(&hsOk);
+                    if (!hsOk || !(hs > 0.0)) {
+                        appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kInvalidHsValue());
+                    } else {
+                        state.hs = hs;
                     }
                     i = close;
                     continue;
@@ -770,6 +787,9 @@ SimaiNativeParseResult parseInternal(
                 && (ch == QChar('E') || ch == QChar('e'))
                 && lineTailIsTerminalMarker(line, i)) {
                 flushToken(lineNumber);
+                // Q2 — reset HS at chart-end so any post-terminal logic
+                // (or future re-emission) starts from a known baseline.
+                state.hs = 1.0;
                 break;
             }
 

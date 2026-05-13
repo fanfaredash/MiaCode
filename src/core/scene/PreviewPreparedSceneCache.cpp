@@ -168,12 +168,22 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
     chartReviewLayer_.clear();
     maimuriDxJudgeLayer_.clear();
 
-    const PreviewTapTiming tapTiming =
-        previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.tapFlowSpeed));
-    const PreviewSlideTrackTiming trackTiming =
-        previewSlideTrackTimingForFlowSpeed(static_cast<qreal>(state.render.tapFlowSpeed));
-    const PreviewTouchTiming touchTiming =
-        previewTouchTimingForFlowSpeed(static_cast<qreal>(state.render.touchFlowSpeed));
+    // Per-marker timing: hsMultiplier scales the user-set flow speed
+    // (Q4 — effective speed is unclamped). The visibility windows below
+    // are precomputed per-marker so a low-HS note appears earlier and a
+    // high-HS note appears later than the default.
+    const auto markerTapTiming = [&state](double hsMultiplier) {
+        return previewTapTimingForEffectiveFlowSpeed(
+            static_cast<qreal>(state.render.tapFlowSpeed * hsMultiplier));
+    };
+    const auto markerTrackTiming = [&state](double hsMultiplier) {
+        return previewSlideTrackTimingForEffectiveFlowSpeed(
+            static_cast<qreal>(state.render.tapFlowSpeed * hsMultiplier));
+    };
+    const auto markerTouchTiming = [&state](double hsMultiplier) {
+        return previewTouchTimingForEffectiveFlowSpeed(
+            static_cast<qreal>(state.render.touchFlowSpeed * hsMultiplier));
+    };
     QHash<QString, int> markerIndexByKey;
     markerIndexByKey.reserve(state.noteMarkers.size() * 2);
     const QHash<QString, SlideHeadRepresentative> slideHeadRepresentatives =
@@ -187,6 +197,9 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
         }
 
         const QString type = marker.type.toLower();
+        const PreviewTapTiming tapTiming = markerTapTiming(marker.hsMultiplier);
+        const PreviewSlideTrackTiming trackTiming = markerTrackTiming(marker.hsMultiplier);
+        const PreviewTouchTiming touchTiming = markerTouchTiming(marker.hsMultiplier);
         int headRepresentativeMarkerIndex = markerIndex;
         if ((type == QLatin1String("slide") || type == QLatin1String("wifi")) && marker.hasHeadStar) {
             const auto it = slideHeadRepresentatives.constFind(slideHeadEventKey(marker));

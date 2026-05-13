@@ -66,6 +66,58 @@ PreviewTouchTiming previewTouchTimingForFlowSpeed(qreal flowSpeed)
     return timing;
 }
 
+PreviewTapTiming previewTapTimingForEffectiveFlowSpeed(qreal effectiveFlowSpeed)
+{
+    const double safeFlowSpeed = qMax(0.0001, static_cast<double>(effectiveFlowSpeed));
+    const double timingScaleFrames =
+        miacode::preview_gameplay::kPreviewTimingBaseFrames
+        + miacode::preview_gameplay::kPreviewTimingFlowFramesNumerator / safeFlowSpeed;
+
+    PreviewTapTiming timing;
+    timing.spawnDurationSeconds = static_cast<qreal>(
+        miacode::preview_gameplay::previewTimingSecondsFromFramesAt120Fps(timingScaleFrames)
+    );
+    timing.flyDurationSeconds = timing.spawnDurationSeconds;
+    timing.lifecycleDurationSeconds = static_cast<qreal>(
+        miacode::preview_gameplay::previewTimingSecondsFromFramesAt120Fps(timingScaleFrames * 2.0)
+    );
+    timing.unitsPerSecond = static_cast<qreal>(
+        (miacode::preview_gameplay::kLogicalDistanceEdge - miacode::preview_gameplay::kLogicalDistanceTap)
+        / qMax(0.0001, static_cast<double>(timing.flyDurationSeconds))
+    );
+    return timing;
+}
+
+PreviewSlideTrackTiming previewSlideTrackTimingForEffectiveFlowSpeed(qreal effectiveFlowSpeed)
+{
+    const double safeFlowSpeed = qMax(0.0001, static_cast<double>(effectiveFlowSpeed));
+    const double timingScaleFrames =
+        miacode::preview_gameplay::kPreviewTimingBaseFrames
+        + miacode::preview_gameplay::kPreviewTimingFlowFramesNumerator / safeFlowSpeed;
+
+    PreviewSlideTrackTiming timing;
+    timing.appearLeadInSeconds = static_cast<qreal>(
+        miacode::preview_gameplay::previewTimingSecondsFromFramesAt120Fps(timingScaleFrames + 2.0)
+    );
+    timing.fullBrightLeadInSeconds = static_cast<qreal>(
+        miacode::preview_gameplay::previewTimingSecondsFromFramesAt120Fps(
+            miacode::preview_gameplay::kSlideTrackFullBrightLeadInFramesAt120Fps
+        )
+    );
+    return timing;
+}
+
+PreviewTouchTiming previewTouchTimingForEffectiveFlowSpeed(qreal effectiveFlowSpeed)
+{
+    const PreviewTapTiming tapTiming = previewTapTimingForEffectiveFlowSpeed(effectiveFlowSpeed);
+
+    PreviewTouchTiming timing;
+    timing.durationSeconds = tapTiming.lifecycleDurationSeconds;
+    timing.showDurationSeconds = timing.durationSeconds / 5.0;
+    timing.closeDurationSeconds = timing.durationSeconds - timing.showDurationSeconds;
+    return timing;
+}
+
 qreal touchPreHitAlpha(qreal deltaSeconds, qreal touchDurationSeconds, qreal touchShowDurationSeconds)
 {
     if (deltaSeconds >= 0.0) {

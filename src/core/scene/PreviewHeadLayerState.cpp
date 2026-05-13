@@ -277,15 +277,23 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
     PreviewHeadLayerState layerState;
     layerState.ownedImages.reserve(markers.size() * 2);
 
-    const PreviewTapTiming tapTiming = previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.tapFlowSpeed));
+    // Per-marker tap timing: each note carries an `hsMultiplier` set at
+    // parse time by <HS*N>; effective flow speed = user setting * HS, with
+    // no upper clamp (Q4 — clamp lives at the user-setting boundary, HS is
+    // allowed to push the effective speed past it). The lambdas below
+    // recompute timing per call. Cheap (one division + multiplies).
+    const auto markerTapTiming = [&state](double hsMultiplier) {
+        return previewTapTimingForEffectiveFlowSpeed(
+            static_cast<qreal>(state.render.tapFlowSpeed * hsMultiplier));
+    };
 
-    const auto tapApproachFor = [tapTiming](qreal deltaSeconds) {
+    const auto tapApproachWith = [](const PreviewTapTiming& timing, qreal deltaSeconds) {
         return sampleTapApproach(
             deltaSeconds,
-            tapTiming.lifecycleDurationSeconds,
-            tapTiming.spawnDurationSeconds,
-            tapTiming.flyDurationSeconds,
-            tapTiming.unitsPerSecond,
+            timing.lifecycleDurationSeconds,
+            timing.spawnDurationSeconds,
+            timing.flyDurationSeconds,
+            timing.unitsPerSecond,
             kLogicalDistanceTap,
             kLogicalDistanceEdge
         );
@@ -358,7 +366,10 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
             if (marker.endSecond < marker.second || deltaEndSeconds > 0.0) {
                 continue;
             }
-            const TapApproachSample headApproach = tapApproachFor(deltaSeconds);
+            // Q5: hold body uses HS frozen at note emission; tail uses the
+            // same timing as the head.
+            const PreviewTapTiming tapTiming = markerTapTiming(marker.hsMultiplier);
+            const TapApproachSample headApproach = tapApproachWith(tapTiming, deltaSeconds);
             if (headApproach.scale <= 0.0) {
                 continue;
             }
@@ -469,7 +480,7 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
             }
 
             const qreal distance = headApproach.distance;
-            const qreal distanceEnd = tapApproachFor(deltaEndSeconds).distance;
+            const qreal distanceEnd = tapApproachWith(tapTiming, deltaEndSeconds).distance;
             const QPointF logicalHead(
                 kLogicalCanvasCenter + unit.x() * distance,
                 kLogicalCanvasCenter + unit.y() * distance
@@ -513,7 +524,8 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
         if (slideLike ? deltaSeconds >= 0.0 : deltaSeconds > 0.0) {
             continue;
         }
-        const TapApproachSample approach = tapApproachFor(deltaSeconds);
+        const PreviewTapTiming tapTiming = markerTapTiming(marker.hsMultiplier);
+        const TapApproachSample approach = tapApproachWith(tapTiming, deltaSeconds);
         if (approach.scale <= 0.0) {
             continue;
         }

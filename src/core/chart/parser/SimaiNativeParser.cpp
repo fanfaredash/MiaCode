@@ -41,6 +41,10 @@ struct ParseState {
     int meterNumerator = kDefaultMeterNumerator;
     int meterDenominator = kDefaultMeterDenominator;
     double currentMeasureStartSecond = 0.0;
+    // Current HS (hi-speed) multiplier set by <HS*N>. Mutated only by that
+    // directive; reset to 1.0 at chart-end (E marker) per Q2. Notes emitted
+    // while this is N have their hsMultiplier frozen at N.
+    double hs = 1.0;
     bool strictMode = false;
     bool allowInvalidStarFallback = false;
     SimaiNativeParseResult result;

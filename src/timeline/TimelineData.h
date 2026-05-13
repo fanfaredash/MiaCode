@@ -73,4 +73,10 @@ struct TimelineNoteMarker {
     bool trackBreak = false;
     bool hasHeadStar = true;
     bool headlessImmediate = false;
+    // HS (hi-speed) multiplier in effect at the moment this note was emitted.
+    // Frozen at emission — subsequent <HS*N> directives only affect notes
+    // emitted after, so hold bodies retain their start-time HS even if a
+    // later directive crosses the body. Effective fall speed = userFlowSpeed
+    // * hsMultiplier. Default 1.0 = current/legacy behavior.
+    double hsMultiplier = 1.0;
 };

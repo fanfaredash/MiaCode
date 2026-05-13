@@ -554,6 +554,7 @@ TimelineNoteMarker inflateSerialSpriteToMarker(const SerialSpriteEntry& entry,
     m.wifiCriticalProportion = entry.wifiCriticalProportion;
     m.slideNativeTrackLength = entry.slideNativeTrackLength;
     m.slideRuntimeTrackLength = entry.slideRuntimeTrackLength;
+    m.hsMultiplier = entry.hsMultiplier;
 
     // Flag bitmap → boolean fields. Mirror image of `packMarkerFlags` in
     // the projector path.
@@ -724,6 +725,7 @@ int projectActiveSpritesToSerial(const miacode::preview::scene::PreviewFrameStat
         dst.wifiCriticalProportion = static_cast<float>(marker.wifiCriticalProportion);
         dst.slideNativeTrackLength = static_cast<float>(marker.slideNativeTrackLength);
         dst.slideRuntimeTrackLength = static_cast<float>(marker.slideRuntimeTrackLength);
+        dst.hsMultiplier = static_cast<float>(marker.hsMultiplier);
         // Slide visibility gates — both default -1.0; without projection
         // every slide is hidden by `availableSecond < 0` in the track layer.
         dst.slideTraceSecond = marker.slideTraceSecond;

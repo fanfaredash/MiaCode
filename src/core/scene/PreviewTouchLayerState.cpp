@@ -18,8 +18,12 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
     PreviewTouchLayerState layerState;
     QHash<quint64, QVector<int>> sensorMarkers;
     sensorMarkers.reserve(16);
-    const PreviewTouchTiming touchTiming =
-        previewTouchTimingForFlowSpeed(static_cast<qreal>(state.render.touchFlowSpeed));
+    // Per-marker touch timing: hsMultiplier scales touchFlowSpeed, no
+    // upper clamp on the effective speed (Q4).
+    const auto markerTouchTiming = [&state](double hsMultiplier) {
+        return previewTouchTimingForEffectiveFlowSpeed(
+            static_cast<qreal>(state.render.touchFlowSpeed * hsMultiplier));
+    };
 
     for (int markerIndex = 0; markerIndex < markers.size(); ++markerIndex) {
         const TimelineNoteMarker& marker = markers.markerAt(markerIndex);
@@ -27,6 +31,7 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
             continue;
         }
         const qreal deltaSeconds = static_cast<qreal>(state.playheadSeconds - marker.second);
+        const PreviewTouchTiming touchTiming = markerTouchTiming(marker.hsMultiplier);
         if (deltaSeconds <= -touchTiming.durationSeconds || deltaSeconds >= 0.0) {
             continue;
         }
@@ -75,6 +80,7 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
             continue;
         }
         const qreal deltaSeconds = static_cast<qreal>(state.playheadSeconds - marker.second);
+        const PreviewTouchTiming touchTiming = markerTouchTiming(marker.hsMultiplier);
         if (deltaSeconds <= -touchTiming.durationSeconds || deltaSeconds >= 0.0) {
             continue;
         }

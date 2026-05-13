@@ -1156,8 +1156,8 @@ NormalizationSeed scanNormalizationSeed(
                 index = close;
                 continue;
             }
-            if (ch == QLatin1Char('H') && line.mid(index, 3) == QStringLiteral("HS*")) {
-                const int close = line.indexOf(QLatin1Char('>'), index + 3);
+            if (ch == QLatin1Char('<') && line.mid(index, 4) == QStringLiteral("<HS*")) {
+                const int close = line.indexOf(QLatin1Char('>'), index + 4);
                 if (close < 0) {
                     break;
                 }
@@ -1416,10 +1416,10 @@ ChartNormalizationResult normalizeChartFragment(
                 continue;
             }
 
-            if (ch == QLatin1Char('H') && line.mid(index, 3) == QStringLiteral("HS*")) {
+            if (ch == QLatin1Char('<') && line.mid(index, 4) == QStringLiteral("<HS*")) {
                 flushToken();
                 finalizeGroup();
-                const int close = line.indexOf(QLatin1Char('>'), index + 3);
+                const int close = line.indexOf(QLatin1Char('>'), index + 4);
                 if (close < 0) {
                     break;
                 }

@@ -100,7 +100,11 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
     }
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-    const PreviewSlideTrackTiming trackTiming = previewSlideTrackTimingForFlowSpeed(state.render.tapFlowSpeed);
+    // Per-marker slide-track timing: hsMultiplier scales tapFlowSpeed.
+    const auto markerTrackTiming = [&state](double hsMultiplier) {
+        return previewSlideTrackTimingForEffectiveFlowSpeed(
+            static_cast<qreal>(state.render.tapFlowSpeed * hsMultiplier));
+    };
     MarkerMuriStateLookup exactStateByKey;
     MarkerMuriStateLookup slideFallbackStateByBaseKey;
     exactStateByKey.reserve(state.muriAnalysisReport.markerStates.size());
@@ -225,6 +229,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
             if (!state.muriRenderOptions.showSlideTracks) {
                 continue;
             }
+            const PreviewSlideTrackTiming trackTiming = markerTrackTiming(marker.hsMultiplier);
             if (marker.availableSecond < 0.0
                 || marker.slideTrackAreaPoints.isEmpty()
                 || state.playheadSeconds < marker.second - trackTiming.appearLeadInSeconds
@@ -498,6 +503,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
         if (!state.muriRenderOptions.showSlideTracks) {
             continue;
         }
+        const PreviewSlideTrackTiming trackTiming = markerTrackTiming(marker.hsMultiplier);
         if (marker.availableSecond < 0.0
             || marker.wifiTrackAreaPoints.isEmpty()
             || state.playheadSeconds < marker.second - trackTiming.appearLeadInSeconds

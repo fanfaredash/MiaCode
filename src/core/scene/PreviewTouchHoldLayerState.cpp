@@ -16,8 +16,11 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
     PreviewTouchHoldLayerState layerState;
     layerState.sprites.reserve(markers.size() * 5);
     layerState.arcs.reserve(markers.size());
-    const PreviewTouchTiming touchTiming =
-        previewTouchTimingForFlowSpeed(static_cast<qreal>(state.render.touchFlowSpeed));
+    // Per-marker touch-hold timing: hsMultiplier scales touchFlowSpeed.
+    const auto markerTouchTiming = [&state](double hsMultiplier) {
+        return previewTouchTimingForEffectiveFlowSpeed(
+            static_cast<qreal>(state.render.touchFlowSpeed * hsMultiplier));
+    };
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
 
@@ -76,6 +79,7 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
 
         const qreal deltaSeconds = static_cast<qreal>(state.playheadSeconds - marker.second);
         const qreal holdDuration = qMax<qreal>(0.001, static_cast<qreal>(marker.endSecond - marker.second));
+        const PreviewTouchTiming touchTiming = markerTouchTiming(marker.hsMultiplier);
         if (deltaSeconds <= -touchTiming.durationSeconds || deltaSeconds >= holdDuration) {
             continue;
         }

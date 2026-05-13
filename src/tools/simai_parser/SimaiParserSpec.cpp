@@ -637,6 +637,123 @@ int main(int argc, char** argv)
         }
     }
 
+    // <HS*N> hi-speed multiplier directive — Q1: only the bracketed
+    // <HS*N> form is recognized; Q2: reset at E (chart end); Q5: hold
+    // body freezes the HS at its emission time; Q7: negative/zero is an
+    // error.
+    {
+        // Baseline: no HS → every note's hsMultiplier defaults to 1.0.
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(QStringLiteral("1,2,3,4,E"));
+        expect(parsed.ok, QStringLiteral("baseline chart with no HS directive parses ok"));
+        bool allDefault = !parsed.noteMarkers.isEmpty();
+        for (const TimelineNoteMarker& marker : parsed.noteMarkers) {
+            if (!nearlyEqual(marker.hsMultiplier, 1.0)) {
+                allDefault = false;
+                break;
+            }
+        }
+        expect(allDefault, QStringLiteral("notes default to hsMultiplier = 1.0 when no <HS*> appears"));
+    }
+
+    {
+        // <HS*2> followed by notes — emitted markers carry the multiplier.
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("1,<HS*2>2,3,E"));
+        expect(parsed.ok, QStringLiteral("<HS*2> directive parses"));
+        expect(parsed.noteMarkers.size() == 3, QStringLiteral("<HS*2> chart still emits all three taps"));
+        if (parsed.noteMarkers.size() == 3) {
+            expect(nearlyEqual(parsed.noteMarkers.at(0).hsMultiplier, 1.0),
+                   QStringLiteral("note before <HS*2> keeps hsMultiplier 1.0"));
+            expect(nearlyEqual(parsed.noteMarkers.at(1).hsMultiplier, 2.0),
+                   QStringLiteral("note after <HS*2> picks up hsMultiplier 2.0"));
+            expect(nearlyEqual(parsed.noteMarkers.at(2).hsMultiplier, 2.0),
+                   QStringLiteral("HS persists until next directive — third note also 2.0"));
+        }
+    }
+
+    {
+        // Fractional + reset: <HS*0.5>, then <HS*1> reverts to default.
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("<HS*0.5>1,2,<HS*1>3,E"));
+        expect(parsed.ok, QStringLiteral("<HS*0.5> followed by <HS*1> parses"));
+        if (parsed.noteMarkers.size() == 3) {
+            expect(nearlyEqual(parsed.noteMarkers.at(0).hsMultiplier, 0.5),
+                   QStringLiteral("first note under <HS*0.5> has hsMultiplier 0.5"));
+            expect(nearlyEqual(parsed.noteMarkers.at(1).hsMultiplier, 0.5),
+                   QStringLiteral("second note under <HS*0.5> still 0.5"));
+            expect(nearlyEqual(parsed.noteMarkers.at(2).hsMultiplier, 1.0),
+                   QStringLiteral("<HS*1> resets effective multiplier to 1.0"));
+        }
+    }
+
+    {
+        // Q5: hold body uses HS at its start; a later directive does not
+        // retroactively reshape it.
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("<HS*1.5>1h[4:1],<HS*3>2,E"));
+        expect(parsed.ok, QStringLiteral("hold under <HS*1.5> followed by <HS*3> parses"));
+        const TimelineNoteMarker* hold = firstMarkerOfType(parsed, QStringLiteral("hold"));
+        expect(hold != nullptr && nearlyEqual(hold->hsMultiplier, 1.5),
+               QStringLiteral("hold body keeps the HS in effect at its start (Q5)"));
+        if (parsed.noteMarkers.size() >= 2) {
+            const TimelineNoteMarker& last = parsed.noteMarkers.constLast();
+            expect(nearlyEqual(last.hsMultiplier, 3.0),
+                   QStringLiteral("subsequent tap picks up the later <HS*3>"));
+        }
+    }
+
+    {
+        // Q7: zero rejected as invalid.
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("<HS*0>1,E"));
+        bool sawInvalidHs = false;
+        for (const SimaiNativeMessage& err : parsed.errors) {
+            if (err.message.contains(QStringLiteral("HS"))) {
+                sawInvalidHs = true;
+                break;
+            }
+        }
+        expect(sawInvalidHs, QStringLiteral("<HS*0> emits an HS-related parse error"));
+    }
+
+    {
+        // Q7: negative rejected.
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("<HS*-2>1,E"));
+        bool sawInvalidHs = false;
+        for (const SimaiNativeMessage& err : parsed.errors) {
+            if (err.message.contains(QStringLiteral("HS"))) {
+                sawInvalidHs = true;
+                break;
+            }
+        }
+        expect(sawInvalidHs, QStringLiteral("<HS*-2> emits an HS-related parse error"));
+    }
+
+    {
+        // Q1: the old bracket-less HS*N> form is no longer recognized as
+        // a directive — it falls through to ordinary token parsing,
+        // which produces errors / unrelated tokens. We don't assert on
+        // any specific error here, only that the new <HS*N> *is* the
+        // canonical form by verifying it works (done above) and the old
+        // form does not silently mutate HS state.
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("HS*2>1,2,E"));
+        // Whatever the parser produces, the first emitted tap (if any)
+        // must not have hsMultiplier 2.0 — that would mean the old form
+        // accidentally still works.
+        bool oldFormStillMutatesHs = false;
+        for (const TimelineNoteMarker& marker : parsed.noteMarkers) {
+            if (marker.type == QLatin1String("tap")
+                && !nearlyEqual(marker.hsMultiplier, 1.0)) {
+                oldFormStillMutatesHs = true;
+                break;
+            }
+        }
+        expect(!oldFormStillMutatesHs,
+               QStringLiteral("old bracket-less HS*N> form no longer mutates HS state (Q1)"));
+    }
+
     if (failed != 0) {
         err << "\nSimai parser spec failed: " << failed << " case(s)\n";
         return 1;

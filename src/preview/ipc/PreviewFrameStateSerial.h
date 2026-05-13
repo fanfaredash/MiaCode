@@ -41,7 +41,7 @@
 
 namespace miacode::preview::ipc {
 
-inline constexpr quint32 kSerialLayoutVersion = 9;
+inline constexpr quint32 kSerialLayoutVersion = 10;
 
 // Hard cap so the slot byte size is bounded at compile time. The ring
 // buffer's slot stride is sizeof(PreviewFrameStateSerial); editor and worker
@@ -213,6 +213,13 @@ struct SerialSpriteEntry
     // first gate hides every slide. Layout v4 added.
     double slideTraceSecond = -1.0;
     double availableSecond = -1.0;
+
+    // HS multiplier in effect at the moment this note was emitted by the
+    // parser. Default 1.0 = legacy behavior. The worker-side layer code
+    // multiplies this into the effective flow speed to slow/speed up the
+    // visual fall trajectory; judge time (marker.second) is unaffected.
+    // Layout v10 added.
+    float hsMultiplier = 1.0f;
 };
 
 // Top-level POD. trivially copyable; suitable for memcpy across the IPC

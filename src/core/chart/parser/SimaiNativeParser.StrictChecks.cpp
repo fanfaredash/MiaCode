@@ -59,8 +59,8 @@ void runStrictFormatChecks(ParseState* state, const QStringList& lines)
                 i = close;
                 continue;
             }
-            if (ch == QChar('H') && line.mid(i, 3) == QStringLiteral("HS*")) {
-                const int close = line.indexOf(QChar('>'), i + 3);
+            if (ch == QChar('<') && line.mid(i, 4) == QStringLiteral("<HS*")) {
+                const int close = line.indexOf(QChar('>'), i + 4);
                 if (close < 0) {
                     break;
                 }
@@ -152,6 +152,7 @@ void appendNote(ParseState* state, const TimelineNoteMarker& marker, QVector<int
     }
     TimelineNoteMarker stored = marker;
     stored.parseOrder = state->result.noteMarkers.size();
+    stored.hsMultiplier = state->hs;
     state->result.noteMarkers.append(stored);
     if (groupIndices != nullptr) {
         groupIndices->append(state->result.noteMarkers.size() - 1);

@@ -641,8 +641,8 @@ QString raiseSubdivisionCore(const QString& input, int* changedCount)
                 i = close;
                 continue;
             }
-            if (ch == QChar('H') && line.mid(i, 3) == QStringLiteral("HS*")) {
-                const int close = line.indexOf('>', i + 3);
+            if (ch == QChar('<') && line.mid(i, 4) == QStringLiteral("<HS*")) {
+                const int close = line.indexOf('>', i + 4);
                 if (close < 0) {
                     output.append(line.mid(i));
                     break;
@@ -719,8 +719,8 @@ bool validateLowerSubdivisionLine(const QString& line)
             i = close;
             continue;
         }
-        if (ch == QChar('H') && line.mid(i, 3) == QStringLiteral("HS*")) {
-            const int close = line.indexOf('>', i + 3);
+        if (ch == QChar('<') && line.mid(i, 4) == QStringLiteral("<HS*")) {
+            const int close = line.indexOf('>', i + 4);
             if (close < 0) {
                 if ((slot % 2) != 0) {
                     return false;
@@ -802,8 +802,8 @@ QString lowerSubdivisionLine(const QString& line, int* changed)
             i = close;
             continue;
         }
-        if (ch == QChar('H') && line.mid(i, 3) == QStringLiteral("HS*")) {
-            const int close = line.indexOf('>', i + 3);
+        if (ch == QChar('<') && line.mid(i, 4) == QStringLiteral("<HS*")) {
+            const int close = line.indexOf('>', i + 4);
             if (close < 0) {
                 output.append(line.mid(i));
                 break;
@@ -890,9 +890,9 @@ void scanSelectionTokens(const QString& input, const std::function<void(const QS
                 i = close;
                 continue;
             }
-            if (ch == QChar('H') && line.mid(i, 3) == QStringLiteral("HS*")) {
+            if (ch == QChar('<') && line.mid(i, 4) == QStringLiteral("<HS*")) {
                 flushToken();
-                const int close = line.indexOf(QChar('>'), i + 3);
+                const int close = line.indexOf(QChar('>'), i + 4);
                 if (close < 0) {
                     break;
                 }
@@ -956,9 +956,9 @@ QString rewriteSelectionTokens(const QString& input, const std::function<QString
                 i = close;
                 continue;
             }
-            if (ch == QChar('H') && line.mid(i, 3) == QStringLiteral("HS*")) {
+            if (ch == QChar('<') && line.mid(i, 4) == QStringLiteral("<HS*")) {
                 flushToken();
-                const int close = line.indexOf(QChar('>'), i + 3);
+                const int close = line.indexOf(QChar('>'), i + 4);
                 if (close < 0) {
                     transformed.append(line.mid(i));
                     break;
@@ -1668,9 +1668,9 @@ QString transformChartText(const QString& input, ChartTransformOp op, int* chang
                 i = close;
                 continue;
             }
-            if (ch == QChar('H') && line.mid(i, 3) == QStringLiteral("HS*")) {
+            if (ch == QChar('<') && line.mid(i, 4) == QStringLiteral("<HS*")) {
                 flushToken();
-                const int close = line.indexOf('>', i + 3);
+                const int close = line.indexOf('>', i + 4);
                 if (close < 0) {
                     transformed.append(line.mid(i));
                     break;

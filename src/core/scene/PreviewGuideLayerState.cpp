@@ -111,15 +111,19 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
         fallbackEachGroupsBySecond[secondKey].append(ActiveEachCandidate{&marker});
     };
 
-    const PreviewTapTiming tapTiming = previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.tapFlowSpeed));
-
-    const auto tapApproachFor = [tapTiming](qreal deltaSeconds) {
+    // Per-marker timing: each note's hsMultiplier scales the effective
+    // flow speed. See PreviewHeadLayerState.cpp for the design rationale.
+    const auto markerTapTiming = [&state](double hsMultiplier) {
+        return previewTapTimingForEffectiveFlowSpeed(
+            static_cast<qreal>(state.render.tapFlowSpeed * hsMultiplier));
+    };
+    const auto tapApproachWith = [](const PreviewTapTiming& timing, qreal deltaSeconds) {
         return sampleTapApproach(
             deltaSeconds,
-            tapTiming.lifecycleDurationSeconds,
-            tapTiming.spawnDurationSeconds,
-            tapTiming.flyDurationSeconds,
-            tapTiming.unitsPerSecond,
+            timing.lifecycleDurationSeconds,
+            timing.spawnDurationSeconds,
+            timing.flyDurationSeconds,
+            timing.unitsPerSecond,
             kLogicalDistanceTap,
             kLogicalDistanceEdge
         );
@@ -133,7 +137,8 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
                 continue;
             }
             const qreal deltaSeconds = static_cast<qreal>(state.playheadSeconds - marker.second);
-            const TapApproachSample approach = tapApproachFor(deltaSeconds);
+            const PreviewTapTiming tapTiming = markerTapTiming(marker.hsMultiplier);
+            const TapApproachSample approach = tapApproachWith(tapTiming, deltaSeconds);
             if (state.playheadSeconds > marker.second || approach.scale <= 0.0) {
                 continue;
             }
@@ -154,7 +159,8 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
                 continue;
             }
             const qreal deltaSeconds = static_cast<qreal>(state.playheadSeconds - marker.second);
-            const TapApproachSample approach = tapApproachFor(deltaSeconds);
+            const PreviewTapTiming tapTiming = markerTapTiming(marker.hsMultiplier);
+            const TapApproachSample approach = tapApproachWith(tapTiming, deltaSeconds);
             if (approach.scale <= 0.0) {
                 continue;
             }
@@ -192,7 +198,7 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
         }
     }
 
-    const auto appendEachGroupGuides = [&sprites, &playfieldRect, &state, &tapApproachFor](const QVector<ActiveEachCandidate>& notes) {
+    const auto appendEachGroupGuides = [&sprites, &playfieldRect, &state, &markerTapTiming, &tapApproachWith](const QVector<ActiveEachCandidate>& notes) {
         if (notes.size() < 2) {
             return;
         }
@@ -225,7 +231,13 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
             return;
         }
 
-        const TapApproachSample approach = tapApproachFor(static_cast<qreal>(state.playheadSeconds - notes[0].marker->second));
+        // Each-group guides share one timing across the group; use the
+        // first member's HS (typical author convention is uniform-HS
+        // within an each-group).
+        const PreviewTapTiming groupTapTiming = markerTapTiming(notes[0].marker->hsMultiplier);
+        const TapApproachSample approach = tapApproachWith(
+            groupTapTiming,
+            static_cast<qreal>(state.playheadSeconds - notes[0].marker->second));
         if (approach.scale <= 0.0) {
             return;
         }

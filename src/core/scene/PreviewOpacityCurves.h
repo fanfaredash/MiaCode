@@ -30,6 +30,17 @@ struct PreviewTouchTiming {
 PreviewTapTiming previewTapTimingForFlowSpeed(qreal flowSpeed);
 PreviewSlideTrackTiming previewSlideTrackTimingForFlowSpeed(qreal flowSpeed);
 PreviewTouchTiming previewTouchTimingForFlowSpeed(qreal flowSpeed);
+
+// HS-aware variants that take the *effective* speed (= userFlowSpeed *
+// hsMultiplier) without re-clamping to the user-setting slider range.
+// Per Q4 the user setting is clamped at the boundary where it enters the
+// system; HS-multiplied effective speed must be allowed to range beyond
+// those bounds. A small positive floor is still applied to avoid
+// divide-by-zero / runaway timings on HS=0 (which the parser already
+// rejects upstream, but defensively floor here too).
+PreviewTapTiming previewTapTimingForEffectiveFlowSpeed(qreal effectiveFlowSpeed);
+PreviewSlideTrackTiming previewSlideTrackTimingForEffectiveFlowSpeed(qreal effectiveFlowSpeed);
+PreviewTouchTiming previewTouchTimingForEffectiveFlowSpeed(qreal effectiveFlowSpeed);
 qreal touchPreHitAlpha(qreal deltaSeconds, qreal touchDurationSeconds, qreal touchShowDurationSeconds);
 qreal touchCloseProgress(qreal deltaSeconds, qreal touchDurationSeconds, qreal touchShowDurationSeconds, qreal touchCloseDurationSeconds);
 qreal touchCloseAmount(qreal progress, qreal range);

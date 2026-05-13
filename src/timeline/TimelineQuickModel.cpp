@@ -1995,9 +1995,9 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
             index = close;
             continue;
         }
-        if (ch == QLatin1Char('H') && lineState->text.mid(index, 3) == QStringLiteral("HS*")) {
+        if (ch == QLatin1Char('<') && lineState->text.mid(index, 4) == QStringLiteral("<HS*")) {
             flushToken();
-            const int close = lineState->text.indexOf(QLatin1Char('>'), index + 3);
+            const int close = lineState->text.indexOf(QLatin1Char('>'), index + 4);
             if (close < 0) {
                 break;
             }

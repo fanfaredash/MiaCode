@@ -241,8 +241,11 @@ QString extractValidationSummaryFocusText(
         if (normalizedRaw == QStringLiteral("Unterminated beat block")) {
             return QStringLiteral("{");
         }
-        if (normalizedRaw == QStringLiteral("Unterminated HS* block")) {
-            return QStringLiteral("HS*");
+        if (normalizedRaw == QStringLiteral("Unterminated <HS*> bracket")) {
+            return QStringLiteral("<HS*");
+        }
+        if (normalizedRaw == QStringLiteral("Invalid <HS*N> value")) {
+            return QStringLiteral("<HS*");
         }
         if (normalizedRaw == QStringLiteral("Invalid BPM value")) {
             return QStringLiteral("BPM");
