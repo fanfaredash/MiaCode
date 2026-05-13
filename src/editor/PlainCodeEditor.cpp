@@ -1,5 +1,6 @@
 #include "PlainCodeEditor.h"
 #include "common/DebugLog.h"
+#include "ShortcutRegistry.h"
 #include "UiText.h"
 #include "UiTheme.h"
 
@@ -659,19 +660,28 @@ void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
     };
 
     auto* cutAction = menu->addAction(translated(QStringLiteral("action.cut"), QStringLiteral("Cut")));
-    cutAction->setShortcut(QKeySequence::Cut);
+    ShortcutRegistry::instance().applyShortcut(
+        cutAction,
+        QStringLiteral("edit.cut"),
+        QKeySequence::Cut);
     cutAction->setShortcutVisibleInContextMenu(true);
     cutAction->setEnabled(textCursor().hasSelection());
     connect(cutAction, &QAction::triggered, this, &QTextEdit::cut);
 
     auto* copyAction = menu->addAction(translated(QStringLiteral("action.copy"), QStringLiteral("Copy")));
-    copyAction->setShortcut(QKeySequence::Copy);
+    ShortcutRegistry::instance().applyShortcut(
+        copyAction,
+        QStringLiteral("edit.copy"),
+        QKeySequence::Copy);
     copyAction->setShortcutVisibleInContextMenu(true);
     copyAction->setEnabled(textCursor().hasSelection());
     connect(copyAction, &QAction::triggered, this, &QTextEdit::copy);
 
     auto* pasteAction = menu->addAction(translated(QStringLiteral("action.paste"), QStringLiteral("Paste")));
-    pasteAction->setShortcut(QKeySequence::Paste);
+    ShortcutRegistry::instance().applyShortcut(
+        pasteAction,
+        QStringLiteral("edit.paste"),
+        QKeySequence::Paste);
     pasteAction->setShortcutVisibleInContextMenu(true);
     pasteAction->setEnabled(canPaste());
     connect(pasteAction, &QAction::triggered, this, &QTextEdit::paste);
@@ -779,13 +789,20 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         return;
     }
 
-    // Plain Insert toggles overwrite mode. Shift+Insert (paste) and
-    // Ctrl+Insert (copy) are deliberately left to the base class so
-    // those standard X11-era shortcuts keep working.
-    const bool plainInsertKey =
-        event->key() == Qt::Key_Insert
-        && !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier | Qt::ShiftModifier));
-    if (plainInsertKey) {
+    // The default plain Insert binding deliberately avoids Shift+Insert
+    // paste and Ctrl+Insert copy. Custom bindings are matched through
+    // the shortcut registry.
+    const QKeySequence overwriteModeSequence =
+        ShortcutRegistry::instance().sequence(
+            QStringLiteral("editor.overwrite_mode"),
+            QKeySequence(Qt::Key_Insert));
+    const QKeySequence pressedSequence(
+        (event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))
+        | event->key());
+    const bool overwriteModeKey =
+        !overwriteModeSequence.isEmpty()
+        && pressedSequence == overwriteModeSequence;
+    if (overwriteModeKey) {
         if (!event->isAutoRepeat()) {
             setEditorOverwriteMode(!overwriteMode());
         }

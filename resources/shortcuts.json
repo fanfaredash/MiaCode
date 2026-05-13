@@ -1,0 +1,149 @@
+{
+  "schema": 1,
+  "notes": [
+    "Action and shortcut entries are read by the app.",
+    "Users may copy this file next to MiaCode.exe as shortcuts.json and override action/shortcut sequences without rebuilding."
+  ],
+  "actions": {
+    "transform.mirror_lr": {
+      "label_zh": "左右镜像",
+      "label_en": "Mirror Left/Right",
+      "default": "Ctrl+J",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "transform.mirror_ud": {
+      "label_zh": "上下镜像",
+      "label_en": "Mirror Up/Down",
+      "default": "Ctrl+K",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "transform.rotate_180": {
+      "label_zh": "旋转 180°",
+      "label_en": "Rotate 180",
+      "default": "Ctrl+L",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "transform.rotate_ccw_45": {
+      "label_zh": "逆时针旋转 45°",
+      "label_en": "Rotate -45",
+      "default": "Ctrl+;",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "transform.rotate_cw_45": {
+      "label_zh": "顺时针旋转 45°",
+      "label_en": "Rotate +45",
+      "default": "Ctrl+'",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "transform.subdivision_up": {
+      "label_zh": "分音提升一档",
+      "label_en": "Subdivision +1",
+      "default": "Ctrl+=",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "transform.subdivision_down": {
+      "label_zh": "分音降低一档",
+      "label_en": "Subdivision -1",
+      "default": "Ctrl+-",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "transform.toggle_break": {
+      "label_zh": "一键全 Break",
+      "label_en": "Toggle Break",
+      "default": "Ctrl+B",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "transform.toggle_ex": {
+      "label_zh": "一键全 Ex",
+      "label_en": "Toggle EX",
+      "default": "Ctrl+N",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "transform.toggle_firework": {
+      "label_zh": "一键全 Firework",
+      "label_en": "Toggle Firework",
+      "default": "Ctrl+M",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "transform.random_rotate": {
+      "label_zh": "一键全随机",
+      "label_en": "Random Rotate",
+      "default": "Ctrl+,",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "preview.stop_or_play": {
+      "label_zh": "停止或播放预览",
+      "label_en": "Stop or Play Preview",
+      "default": "Ctrl+Shift+C",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "preview.play_pause_global": {
+      "label_zh": "播放/暂停预览",
+      "label_en": "Play/Pause Preview",
+      "default": "Ctrl+Shift+X",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "preview.speed_down": {
+      "label_zh": "播放速度降低",
+      "label_en": "Playback Speed -",
+      "default": "Ctrl+O",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "preview.speed_up": {
+      "label_zh": "播放速度提高",
+      "label_en": "Playback Speed +",
+      "default": "Ctrl+P",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "editor.font_decrease": {
+      "label_zh": "编辑器字号减小",
+      "label_en": "Decrease Editor Font",
+      "default": "Ctrl+Shift+-",
+      "context": "window",
+      "owner": "MainWindow.FrameBootstrapFinalize"
+    },
+    "editor.font_increase": {
+      "label_zh": "编辑器字号增大",
+      "label_en": "Increase Editor Font",
+      "default": "Ctrl+Shift+=",
+      "context": "window",
+      "owner": "MainWindow.FrameBootstrapFinalize"
+    },
+    "editor.overwrite_mode": {
+      "label_zh": "覆写模式",
+      "label_en": "Overwrite Mode",
+      "default": "Insert",
+      "context": "editor",
+      "owner": "PlainCodeEditor"
+    }
+  },
+  "contextual": {
+    "preferences.font_decrease": {
+      "label_zh": "首选项：编辑器字号减小",
+      "label_en": "Preferences: Decrease Editor Font",
+      "default": "Ctrl+Shift+-",
+      "owner": "MainWindow.PreferencesDialog"
+    },
+    "preferences.font_increase": {
+      "label_zh": "首选项：编辑器字号增大",
+      "label_en": "Preferences: Increase Editor Font",
+      "default": "Ctrl+Shift+=",
+      "owner": "MainWindow.PreferencesDialog"
+    }
+  }
+}

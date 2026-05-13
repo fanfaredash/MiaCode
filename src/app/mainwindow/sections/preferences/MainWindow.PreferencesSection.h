@@ -7,6 +7,7 @@ public:
     PreferencesSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state);
 
     void onPreferences();
+    void applyConfiguredShortcuts();
 
 private:
     MainWindow& owner_;

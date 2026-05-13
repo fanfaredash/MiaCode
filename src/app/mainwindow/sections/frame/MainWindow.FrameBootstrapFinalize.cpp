@@ -16,6 +16,7 @@
 #include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
+#include "ShortcutRegistry.h"
 #include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -463,10 +464,18 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         connect(editorReplaceAllButton_, &QPushButton::clicked, this, &MainWindow::onReplaceAll);
     }
     if (editorFindBar_ != nullptr) {
-        auto* toggleFindBarShortcut = new QShortcut(QKeySequence::Find, editorFindBar_);
+        auto* toggleFindBarShortcut = new QShortcut(editorFindBar_);
+        ShortcutRegistry::instance().applyShortcut(
+            toggleFindBarShortcut,
+            QStringLiteral("editor.find_bar.toggle"),
+            QKeySequence::Find);
         toggleFindBarShortcut->setContext(Qt::WidgetWithChildrenShortcut);
         connect(toggleFindBarShortcut, &QShortcut::activated, this, &MainWindow::onToggleFindReplace);
-        auto* closeFindBarShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), editorFindBar_);
+        auto* closeFindBarShortcut = new QShortcut(editorFindBar_);
+        ShortcutRegistry::instance().applyShortcut(
+            closeFindBarShortcut,
+            QStringLiteral("editor.find_bar.close"),
+            QKeySequence(Qt::Key_Escape));
         closeFindBarShortcut->setContext(Qt::WidgetWithChildrenShortcut);
         connect(closeFindBarShortcut, &QShortcut::activated, this, [this]() {
             windowSection_->hideFindReplaceBar();
@@ -479,14 +488,20 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
     };
     fontDecreaseAction_ = new QAction(QStringLiteral("Decrease Editor Font"), this);
-    fontDecreaseAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+-")));
+    ShortcutRegistry::instance().applyShortcut(
+        fontDecreaseAction_,
+        QStringLiteral("editor.font_decrease"),
+        QKeySequence(QStringLiteral("Ctrl+Shift+-")));
     fontDecreaseAction_->setShortcutContext(Qt::WindowShortcut);
     addAction(fontDecreaseAction_);
     connect(fontDecreaseAction_, &QAction::triggered, this, [applyEditorFontDelta]() {
         applyEditorFontDelta(-1);
     });
     fontIncreaseAction_ = new QAction(QStringLiteral("Increase Editor Font"), this);
-    fontIncreaseAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+=")));
+    ShortcutRegistry::instance().applyShortcut(
+        fontIncreaseAction_,
+        QStringLiteral("editor.font_increase"),
+        QKeySequence(QStringLiteral("Ctrl+Shift+=")));
     fontIncreaseAction_->setShortcutContext(Qt::WindowShortcut);
     addAction(fontIncreaseAction_);
     connect(fontIncreaseAction_, &QAction::triggered, this, [applyEditorFontDelta]() {

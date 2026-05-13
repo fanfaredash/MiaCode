@@ -7,6 +7,7 @@
 #include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
+#include "ShortcutRegistry.h"
 #include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -31,6 +32,177 @@
 
 #include <functional>
 
+namespace {
+
+QString shortcutSequenceText(const QList<QKeySequence>& sequences)
+{
+    QStringList parts;
+    for (const QKeySequence& sequence : sequences) {
+        if (!sequence.isEmpty()) {
+            parts.append(sequence.toString(QKeySequence::NativeText));
+        }
+    }
+    return parts.join(QStringLiteral(", "));
+}
+
+QString shortcutSequenceText(const QKeySequence& sequence)
+{
+    return sequence.isEmpty()
+        ? QString()
+        : sequence.toString(QKeySequence::NativeText);
+}
+
+class ShortcutCaptureEdit final : public QLineEdit {
+public:
+    explicit ShortcutCaptureEdit(QWidget* parent = nullptr)
+        : QLineEdit(parent)
+    {
+        setAlignment(Qt::AlignCenter);
+        setPlaceholderText(QStringLiteral("Ctrl+Alt+K"));
+    }
+
+    QKeySequence sequence() const { return sequence_; }
+
+protected:
+    void keyPressEvent(QKeyEvent* event) override
+    {
+        if (event == nullptr) {
+            return;
+        }
+        if (event->key() == Qt::Key_unknown) {
+            event->accept();
+            return;
+        }
+        if (event->key() == Qt::Key_Backspace || event->key() == Qt::Key_Delete) {
+            sequence_ = QKeySequence();
+            clear();
+            event->accept();
+            return;
+        }
+        if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+            QLineEdit::keyPressEvent(event);
+            return;
+        }
+
+        const int key = event->key();
+        if (key == Qt::Key_Control || key == Qt::Key_Shift || key == Qt::Key_Alt || key == Qt::Key_Meta) {
+            event->accept();
+            return;
+        }
+
+        const Qt::KeyboardModifiers modifiers =
+            event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
+        sequence_ = QKeySequence(modifiers | key);
+        setText(shortcutSequenceText(sequence_));
+        event->accept();
+    }
+
+private:
+    QKeySequence sequence_;
+};
+
+class ShortcutTableWidget final : public QTableWidget {
+public:
+    explicit ShortcutTableWidget(QWidget* parent = nullptr)
+        : QTableWidget(parent)
+    {
+        setMouseTracking(true);
+    }
+
+protected:
+    void leaveEvent(QEvent* event) override
+    {
+        QTableWidget::leaveEvent(event);
+        setCurrentCell(-1, -1);
+    }
+};
+
+void applyConfiguredShortcut(
+    QAction* action,
+    const QString& id,
+    const QKeySequence& fallback,
+    Qt::ShortcutContext context = Qt::WindowShortcut)
+{
+    ShortcutRegistry::instance().applyShortcut(action, id, fallback);
+    if (action != nullptr) {
+        action->setShortcutContext(context);
+    }
+}
+
+QString shortcutHintFor(const QString& id, const QKeySequence& fallback)
+{
+    return shortcutSequenceText(
+        ShortcutRegistry::instance().sequences(
+            id,
+            fallback.isEmpty() ? QList<QKeySequence>{} : QList<QKeySequence>{fallback}));
+}
+
+QString fontShortcutHintText()
+{
+    const QString decrease = shortcutHintFor(
+        QStringLiteral("preferences.font_decrease"),
+        QKeySequence(QStringLiteral("Ctrl+Shift+-")));
+    const QString increase = shortcutHintFor(
+        QStringLiteral("preferences.font_increase"),
+        QKeySequence(QStringLiteral("Ctrl+Shift+=")));
+    return QStringLiteral("%1 / %2").arg(decrease, increase);
+}
+
+QString overwriteModeShortcutHintText()
+{
+    return shortcutHintFor(
+        QStringLiteral("editor.overwrite_mode"),
+        QKeySequence(Qt::Key_Insert));
+}
+
+QList<QPair<QString, QStringList>> shortcutCategoryGroups()
+{
+    return {
+        {
+            QStringLiteral("谱面变换"),
+            {
+                QStringLiteral("transform.mirror_lr"),
+                QStringLiteral("transform.mirror_ud"),
+                QStringLiteral("transform.rotate_180"),
+                QStringLiteral("transform.rotate_ccw_45"),
+                QStringLiteral("transform.rotate_cw_45"),
+                QStringLiteral("transform.subdivision_up"),
+                QStringLiteral("transform.subdivision_down"),
+                QStringLiteral("transform.toggle_break"),
+                QStringLiteral("transform.toggle_ex"),
+                QStringLiteral("transform.toggle_firework"),
+                QStringLiteral("transform.random_rotate"),
+            },
+        },
+        {
+            QStringLiteral("预览"),
+            {
+                QStringLiteral("preview.stop_or_play"),
+                QStringLiteral("preview.play_pause_global"),
+                QStringLiteral("preview.speed_down"),
+                QStringLiteral("preview.speed_up"),
+            },
+        },
+        {
+            QStringLiteral("编辑器"),
+            {
+                QStringLiteral("editor.font_decrease"),
+                QStringLiteral("editor.font_increase"),
+                QStringLiteral("editor.overwrite_mode"),
+            },
+        },
+        {
+            QStringLiteral("首选项弹窗"),
+            {
+                QStringLiteral("preferences.font_decrease"),
+                QStringLiteral("preferences.font_increase"),
+            },
+        },
+    };
+}
+
+}  // namespace
+
 using namespace miacode::mainwindow::shared;
 
 MainWindow::PreferencesSection::PreferencesSection(
@@ -41,6 +213,82 @@ MainWindow::PreferencesSection::PreferencesSection(
     , ui_(ui)
     , state_(state)
 {}
+
+void MainWindow::PreferencesSection::applyConfiguredShortcuts()
+{
+    applyConfiguredShortcut(
+        owner_.transformMirrorLeftRightAction_,
+        QStringLiteral("transform.mirror_lr"),
+        QKeySequence(Qt::CTRL | Qt::Key_J));
+    applyConfiguredShortcut(
+        owner_.transformMirrorUpDownAction_,
+        QStringLiteral("transform.mirror_ud"),
+        QKeySequence(Qt::CTRL | Qt::Key_K));
+    applyConfiguredShortcut(
+        owner_.transformRotate180Action_,
+        QStringLiteral("transform.rotate_180"),
+        QKeySequence(Qt::CTRL | Qt::Key_L));
+    applyConfiguredShortcut(
+        owner_.transformRotate45CounterClockwiseAction_,
+        QStringLiteral("transform.rotate_ccw_45"),
+        QKeySequence(Qt::CTRL | Qt::Key_Semicolon));
+    applyConfiguredShortcut(
+        owner_.transformRotate45ClockwiseAction_,
+        QStringLiteral("transform.rotate_cw_45"),
+        QKeySequence(Qt::CTRL | Qt::Key_Apostrophe));
+    applyConfiguredShortcut(
+        owner_.transformRaiseSubdivisionAction_,
+        QStringLiteral("transform.subdivision_up"),
+        QKeySequence(QStringLiteral("Ctrl+=")));
+    applyConfiguredShortcut(
+        owner_.transformLowerSubdivisionAction_,
+        QStringLiteral("transform.subdivision_down"),
+        QKeySequence(QStringLiteral("Ctrl+-")));
+    applyConfiguredShortcut(
+        owner_.transformToggleBreakAction_,
+        QStringLiteral("transform.toggle_break"),
+        QKeySequence(Qt::CTRL | Qt::Key_B));
+    applyConfiguredShortcut(
+        owner_.transformToggleExAction_,
+        QStringLiteral("transform.toggle_ex"),
+        QKeySequence(Qt::CTRL | Qt::Key_N));
+    applyConfiguredShortcut(
+        owner_.transformToggleFireworkAction_,
+        QStringLiteral("transform.toggle_firework"),
+        QKeySequence(Qt::CTRL | Qt::Key_M));
+    applyConfiguredShortcut(
+        owner_.transformRandomRotateAction_,
+        QStringLiteral("transform.random_rotate"),
+        QKeySequence(Qt::CTRL | Qt::Key_Comma));
+    applyConfiguredShortcut(
+        owner_.stopOrPlayPreviewShortcutAction_,
+        QStringLiteral("preview.stop_or_play"),
+        QKeySequence(QStringLiteral("Ctrl+Shift+C")),
+        Qt::ApplicationShortcut);
+    applyConfiguredShortcut(
+        owner_.playPausePreviewShortcutAction_,
+        QStringLiteral("preview.play_pause_global"),
+        QKeySequence(QStringLiteral("Ctrl+Shift+X")),
+        Qt::ApplicationShortcut);
+    applyConfiguredShortcut(
+        owner_.previewSlowerAction_,
+        QStringLiteral("preview.speed_down"),
+        QKeySequence(QStringLiteral("Ctrl+O")));
+    applyConfiguredShortcut(
+        owner_.previewFasterAction_,
+        QStringLiteral("preview.speed_up"),
+        QKeySequence(QStringLiteral("Ctrl+P")));
+    applyConfiguredShortcut(
+        owner_.fontDecreaseAction_,
+        QStringLiteral("editor.font_decrease"),
+        QKeySequence(QStringLiteral("Ctrl+Shift+-")),
+        Qt::WindowShortcut);
+    applyConfiguredShortcut(
+        owner_.fontIncreaseAction_,
+        QStringLiteral("editor.font_increase"),
+        QKeySequence(QStringLiteral("Ctrl+Shift+=")),
+        Qt::WindowShortcut);
+}
 
 void MainWindow::PreferencesSection::onPreferences()
 {
@@ -74,6 +322,7 @@ void MainWindow::PreferencesSection::onPreferences()
     categoryList->addItem(uiText("dialog.preferences.interface_group", "Appearance"));
     categoryList->addItem(uiText("dialog.preferences.editor_group", "Editor"));
     categoryList->addItem(uiText("dialog.preferences.performance_group", "Performance"));
+    categoryList->addItem(uiText("dialog.preferences.shortcuts_group", "Shortcuts"));
     categoryList->setSpacing(2);
     for (int index = 0; index < categoryList->count(); ++index) {
         categoryList->item(index)->setSizeHint(QSize(0, 30));
@@ -235,7 +484,7 @@ void MainWindow::PreferencesSection::onPreferences()
     editorFontSizeSpin->setRange(kEditorTextFontSizeMin, kEditorTextFontSizeMax);
     editorFontSizeSpin->setValue(selectedEditorFontSize);
     editorFontSizeSpin->setSuffix(" pt");
-    auto* shortcutHint = new QLabel(QStringLiteral("Ctrl+Shift+- / Ctrl+Shift++"), fontSizeRow);
+    auto* shortcutHint = new QLabel(fontShortcutHintText(), fontSizeRow);
     shortcutHint->setStyleSheet(QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
     connect(editorFontSizeSpin, qOverload<int>(&QSpinBox::valueChanged), &dialog, [&](int value) {
         selectedEditorFontSize = value;
@@ -293,7 +542,7 @@ void MainWindow::PreferencesSection::onPreferences()
     );
     overwriteModeCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     overwriteModeCheckbox->setChecked(selectedEditorOverwriteModeEnabled);
-    auto* overwriteModeShortcutHint = new QLabel(QStringLiteral("Insert"), overwriteModeRow);
+    auto* overwriteModeShortcutHint = new QLabel(overwriteModeShortcutHintText(), overwriteModeRow);
     overwriteModeShortcutHint->setStyleSheet(QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
     connect(overwriteModeCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
         selectedEditorOverwriteModeEnabled = checked;
@@ -318,12 +567,20 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(QString(), preserveDifficultySwitchViewCheckbox);
 
-    auto* dialogDecreaseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+-")), &dialog);
+    auto* dialogDecreaseShortcut = new QShortcut(&dialog);
+    ShortcutRegistry::instance().applyShortcut(
+        dialogDecreaseShortcut,
+        QStringLiteral("preferences.font_decrease"),
+        QKeySequence(QStringLiteral("Ctrl+Shift+-")));
     dialogDecreaseShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(dialogDecreaseShortcut, &QShortcut::activated, &dialog, [editorFontSizeSpin]() {
         editorFontSizeSpin->setValue(editorFontSizeSpin->value() - 1);
     });
-    auto* dialogIncreaseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+=")), &dialog);
+    auto* dialogIncreaseShortcut = new QShortcut(&dialog);
+    ShortcutRegistry::instance().applyShortcut(
+        dialogIncreaseShortcut,
+        QStringLiteral("preferences.font_increase"),
+        QKeySequence(QStringLiteral("Ctrl+Shift+=")));
     dialogIncreaseShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(dialogIncreaseShortcut, &QShortcut::activated, &dialog, [editorFontSizeSpin]() {
         editorFontSizeSpin->setValue(editorFontSizeSpin->value() + 1);
@@ -464,6 +721,221 @@ void MainWindow::PreferencesSection::onPreferences()
     performancePageLayout->addWidget(performanceGroup);
     performancePageLayout->addStretch(1);
     pageStack->addWidget(performancePage);
+
+    auto* shortcutsPage = new QWidget(pageStack);
+    auto* shortcutsPageLayout = new QVBoxLayout(shortcutsPage);
+    shortcutsPageLayout->setContentsMargins(0, 0, 0, 0);
+    shortcutsPageLayout->setSpacing(10);
+    auto* shortcutsGroup = new QGroupBox(uiText("dialog.preferences.shortcuts_group", "Shortcuts"), shortcutsPage);
+    auto* shortcutsLayout = new QVBoxLayout(shortcutsGroup);
+    shortcutsLayout->setContentsMargins(12, 10, 12, 12);
+    shortcutsLayout->setSpacing(8);
+    auto* editShortcutsButton = new QPushButton(uiText("dialog.preferences.shortcuts.edit", "Edit Shortcuts"), shortcutsGroup);
+    auto* resetShortcutsButton = new QPushButton(uiText("dialog.preferences.shortcuts.reset", "Restore Shortcuts"), shortcutsGroup);
+    editShortcutsButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    resetShortcutsButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    shortcutsLayout->addWidget(editShortcutsButton, 0, Qt::AlignLeft);
+    shortcutsLayout->addWidget(resetShortcutsButton, 0, Qt::AlignLeft);
+    shortcutsPageLayout->addWidget(shortcutsGroup);
+    shortcutsPageLayout->addStretch(1);
+    pageStack->addWidget(shortcutsPage);
+
+    const auto openShortcutEditDialog = [&]() {
+        QDialog shortcutsDialog(&dialog);
+        shortcutsDialog.setWindowTitle(uiText("dialog.preferences.shortcuts.title", "Keyboard Shortcuts"));
+        shortcutsDialog.setModal(true);
+        shortcutsDialog.resize(740, 500);
+        shortcutsDialog.setMinimumSize(680, 440);
+        shortcutsDialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
+        owner_.windowSection_->applySystemWindowBackdrop(&shortcutsDialog);
+        UiDialogs::prepareDialogWindow(&shortcutsDialog, &dialog);
+
+        auto* shortcutRootLayout = new QVBoxLayout(&shortcutsDialog);
+        shortcutRootLayout->setContentsMargins(10, 10, 10, 10);
+        shortcutRootLayout->setSpacing(6);
+        auto* table = new ShortcutTableWidget(&shortcutsDialog);
+        table->setColumnCount(2);
+        table->setHorizontalHeaderLabels({
+            uiText("dialog.preferences.shortcuts.command", "Command"),
+            uiText("dialog.preferences.shortcuts.keybinding", "Keybinding"),
+        });
+        table->verticalHeader()->hide();
+        table->setShowGrid(false);
+        table->setAlternatingRowColors(true);
+        table->setSelectionBehavior(QAbstractItemView::SelectItems);
+        table->setSelectionMode(QAbstractItemView::SingleSelection);
+        table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        table->horizontalHeader()->setStretchLastSection(false);
+        table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+        table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
+        table->setColumnWidth(1, 170);
+        table->verticalHeader()->setDefaultSectionSize(32);
+        table->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+        table->setFrameShape(QFrame::NoFrame);
+        table->setStyleSheet(QStringLiteral(
+            "QTableWidget { border: 1px solid rgba(128,128,128,72); border-radius: 6px; }"
+            "QTableWidget::item { padding: 5px 9px; }"
+            "QTableWidget::item:selected { background: rgba(88, 145, 220, 58); }"
+            "QHeaderView::section { padding: 6px 9px; border: 0; border-bottom: 1px solid rgba(128,128,128,72); font-weight: 600; }"
+        ));
+        shortcutRootLayout->addWidget(table, 1);
+
+        std::function<void()> refreshRows;
+        std::function<void(int)> openCaptureForRow;
+        refreshRows = [&]() {
+            const QList<ShortcutRegistry::ShortcutDefinition> definitions =
+                ShortcutRegistry::instance().editableShortcuts();
+            QHash<QString, ShortcutRegistry::ShortcutDefinition> definitionById;
+            for (const auto& definition : definitions) {
+                definitionById.insert(definition.id, definition);
+            }
+            int row = 0;
+            table->setRowCount(0);
+            for (const auto& group : shortcutCategoryGroups()) {
+                table->insertRow(row);
+                table->setSpan(row, 0, 1, 2);
+                auto* categoryItem = new QTableWidgetItem(group.first);
+                categoryItem->setFlags(Qt::ItemIsEnabled);
+                categoryItem->setBackground(QBrush(QColor(91, 122, 153, 38)));
+                categoryItem->setForeground(QBrush(QColor(92, 119, 148)));
+                QFont categoryFont = table->font();
+                categoryFont.setPointSize(categoryFont.pointSize() + 1);
+                categoryFont.setWeight(QFont::DemiBold);
+                categoryItem->setFont(categoryFont);
+                categoryItem->setTextAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+                table->setItem(row, 0, categoryItem);
+                table->setRowHeight(row, 32);
+                ++row;
+
+                for (const QString& id : group.second) {
+                    if (!definitionById.contains(id)) {
+                        continue;
+                    }
+                    table->insertRow(row);
+                    const auto definition = definitionById.value(id);
+                    const QString label = UiText::isChineseUi() && !definition.labelZh.isEmpty()
+                        ? definition.labelZh
+                        : definition.labelEn;
+                    auto* commandItem = new QTableWidgetItem(label);
+                    commandItem->setData(Qt::UserRole, definition.id);
+                    commandItem->setToolTip(definition.id);
+                    table->setItem(row, 0, commandItem);
+                    auto* keybindingItem = new QTableWidgetItem(
+                        shortcutSequenceText(ShortcutRegistry::instance().sequences(definition.id, definition.defaultSequences)));
+                    keybindingItem->setData(Qt::UserRole, definition.id);
+                    keybindingItem->setTextAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+                    keybindingItem->setToolTip(uiText("dialog.preferences.shortcuts.change", "Change Keybinding"));
+                    table->setItem(row, 1, keybindingItem);
+                    table->setRowHeight(row, 32);
+                    ++row;
+                }
+            }
+        };
+
+        openCaptureForRow = [&](int row) {
+            QTableWidgetItem* idItem = table->item(row, 1);
+            if (idItem == nullptr) {
+                return;
+            }
+            const QString id = idItem->data(Qt::UserRole).toString();
+            if (id.isEmpty()) {
+                return;
+            }
+            QDialog captureDialog(&shortcutsDialog);
+            captureDialog.setWindowTitle(uiText("dialog.preferences.shortcuts.capture_title", "Change Keybinding"));
+            captureDialog.setModal(true);
+            captureDialog.resize(600, 270);
+            captureDialog.setMinimumSize(520, 240);
+            captureDialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
+            owner_.windowSection_->applySystemWindowBackdrop(&captureDialog);
+            UiDialogs::prepareDialogWindow(&captureDialog, &shortcutsDialog);
+            auto* captureLayout = new QVBoxLayout(&captureDialog);
+            captureLayout->setContentsMargins(24, 22, 24, 18);
+            captureLayout->setSpacing(12);
+            auto* prompt = new QLabel(uiText("dialog.preferences.shortcuts.capture_prompt", "Press the desired key combination, then press Enter."), &captureDialog);
+            prompt->setAlignment(Qt::AlignCenter);
+            auto* captureEdit = new ShortcutCaptureEdit(&captureDialog);
+            captureEdit->setMinimumHeight(42);
+            captureEdit->setStyleSheet(QStringLiteral("font-size: 15px; padding: 7px 10px;"));
+            auto* previewLabel = new QLabel(&captureDialog);
+            previewLabel->setAlignment(Qt::AlignCenter);
+            previewLabel->setMinimumHeight(26);
+            previewLabel->setStyleSheet(QStringLiteral("font-weight: 600;"));
+            auto* captureButtons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Reset | QDialogButtonBox::Cancel, &captureDialog);
+            UiDialogs::localizeButtonBox(captureButtons);
+            captureLayout->addWidget(prompt);
+            captureLayout->addWidget(captureEdit);
+            captureLayout->addWidget(previewLabel);
+            captureLayout->addStretch(1);
+            captureLayout->addWidget(captureButtons);
+            QObject::connect(captureEdit, &QLineEdit::textChanged, &captureDialog, [captureEdit, previewLabel]() {
+                previewLabel->setText(captureEdit->text());
+            });
+            QObject::connect(captureButtons, &QDialogButtonBox::accepted, &captureDialog, [&]() {
+                if (captureEdit->sequence().isEmpty()) {
+                    return;
+                }
+                if (ShortcutRegistry::instance().setUserShortcut(id, captureEdit->sequence())) {
+                    applyConfiguredShortcuts();
+                    shortcutHint->setText(fontShortcutHintText());
+                    overwriteModeShortcutHint->setText(overwriteModeShortcutHintText());
+                    refreshRows();
+                    owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+                }
+                captureDialog.accept();
+            });
+            QObject::connect(captureButtons, &QDialogButtonBox::rejected, &captureDialog, &QDialog::reject);
+            if (QPushButton* resetButton = captureButtons->button(QDialogButtonBox::Reset); resetButton != nullptr) {
+                QObject::connect(resetButton, &QPushButton::clicked, &captureDialog, [&]() {
+                    if (ShortcutRegistry::instance().resetUserShortcut(id)) {
+                        applyConfiguredShortcuts();
+                        shortcutHint->setText(fontShortcutHintText());
+                        overwriteModeShortcutHint->setText(overwriteModeShortcutHintText());
+                        refreshRows();
+                        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+                    }
+                    captureDialog.accept();
+                });
+            }
+            captureEdit->setFocus(Qt::OtherFocusReason);
+            captureDialog.exec();
+        };
+
+        QObject::connect(table, &QTableWidget::cellClicked, &shortcutsDialog, [&](int row, int column) {
+            if (column == 1) {
+                openCaptureForRow(row);
+            } else if (table->columnSpan(row, 0) > 1) {
+                table->clearSelection();
+            }
+        });
+        refreshRows();
+
+        auto* closeBox = new QDialogButtonBox(QDialogButtonBox::Close, &shortcutsDialog);
+        UiDialogs::localizeButtonBox(closeBox);
+        QObject::connect(closeBox, &QDialogButtonBox::rejected, &shortcutsDialog, &QDialog::reject);
+        shortcutRootLayout->addWidget(closeBox, 0, Qt::AlignRight);
+        shortcutsDialog.exec();
+    };
+
+    connect(editShortcutsButton, &QPushButton::clicked, &dialog, openShortcutEditDialog);
+    connect(resetShortcutsButton, &QPushButton::clicked, &dialog, [&]() {
+        const int choice = QMessageBox::question(
+            &dialog,
+            uiText("dialog.preferences.shortcuts.reset_confirm_title", "Restore Shortcuts"),
+            uiText("dialog.preferences.shortcuts.reset_confirm_message", "Restore all editable shortcuts to their defaults?"),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No
+        );
+        if (choice != QMessageBox::Yes) {
+            return;
+        }
+        if (ShortcutRegistry::instance().resetEditableShortcuts()) {
+            applyConfiguredShortcuts();
+            shortcutHint->setText(fontShortcutHintText());
+            overwriteModeShortcutHint->setText(overwriteModeShortcutHintText());
+            owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+        }
+    });
 
     QObject::connect(categoryList, &QListWidget::currentRowChanged, pageStack, &QStackedWidget::setCurrentIndex);
     categoryList->setCurrentRow(0);

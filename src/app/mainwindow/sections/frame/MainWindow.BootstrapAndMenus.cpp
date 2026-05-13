@@ -16,6 +16,7 @@
 #include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
+#include "ShortcutRegistry.h"
 #include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -353,27 +354,42 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.normalizeWholeChartAction_, &QAction::triggered, &owner_, &MainWindow::onNormalizeWholeChart);
 
     owner_.transformMirrorLeftRightAction_ = new QAction(uiText("action.transform.mirror_lr", "Mirror Left/Right"), &owner_);
-    owner_.transformMirrorLeftRightAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_J));
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.transformMirrorLeftRightAction_,
+        QStringLiteral("transform.mirror_lr"),
+        QKeySequence(Qt::CTRL | Qt::Key_J));
     connect(owner_.transformMirrorLeftRightAction_, &QAction::triggered, &owner_, &MainWindow::onMirrorLeftRight);
     transformMenu->addAction(owner_.transformMirrorLeftRightAction_);
 
     owner_.transformMirrorUpDownAction_ = new QAction(uiText("action.transform.mirror_ud", "Mirror Up/Down"), &owner_);
-    owner_.transformMirrorUpDownAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.transformMirrorUpDownAction_,
+        QStringLiteral("transform.mirror_ud"),
+        QKeySequence(Qt::CTRL | Qt::Key_K));
     connect(owner_.transformMirrorUpDownAction_, &QAction::triggered, &owner_, &MainWindow::onMirrorUpDown);
     transformMenu->addAction(owner_.transformMirrorUpDownAction_);
 
     owner_.transformRotate180Action_ = new QAction(uiText("action.transform.rotate_180", "Rotate 180"), &owner_);
-    owner_.transformRotate180Action_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.transformRotate180Action_,
+        QStringLiteral("transform.rotate_180"),
+        QKeySequence(Qt::CTRL | Qt::Key_L));
     connect(owner_.transformRotate180Action_, &QAction::triggered, &owner_, &MainWindow::onRotate180);
     transformMenu->addAction(owner_.transformRotate180Action_);
 
     owner_.transformRotate45CounterClockwiseAction_ = new QAction(uiText("action.transform.rotate_ccw_45", "Rotate -45"), &owner_);
-    owner_.transformRotate45CounterClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Semicolon));
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.transformRotate45CounterClockwiseAction_,
+        QStringLiteral("transform.rotate_ccw_45"),
+        QKeySequence(Qt::CTRL | Qt::Key_Semicolon));
     connect(owner_.transformRotate45CounterClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45CounterClockwise);
     transformMenu->addAction(owner_.transformRotate45CounterClockwiseAction_);
 
     owner_.transformRotate45ClockwiseAction_ = new QAction(uiText("action.transform.rotate_cw_45", "Rotate +45"), &owner_);
-    owner_.transformRotate45ClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Apostrophe));
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.transformRotate45ClockwiseAction_,
+        QStringLiteral("transform.rotate_cw_45"),
+        QKeySequence(Qt::CTRL | Qt::Key_Apostrophe));
     connect(owner_.transformRotate45ClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45Clockwise);
     transformMenu->addAction(owner_.transformRotate45ClockwiseAction_);
 
@@ -381,36 +397,54 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     owner_.transformRaiseSubdivisionAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("分音提升一档") : QStringLiteral("Subdivision +1"),
         &owner_);
-    owner_.transformRaiseSubdivisionAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+=")));
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.transformRaiseSubdivisionAction_,
+        QStringLiteral("transform.subdivision_up"),
+        QKeySequence(QStringLiteral("Ctrl+=")));
     connect(owner_.transformRaiseSubdivisionAction_, &QAction::triggered, &owner_, &MainWindow::onRaiseSubdivisionSelection);
     transformMenu->addAction(owner_.transformRaiseSubdivisionAction_);
 
     owner_.transformLowerSubdivisionAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("分音降低一档") : QStringLiteral("Subdivision -1"),
         &owner_);
-    owner_.transformLowerSubdivisionAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+-")));
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.transformLowerSubdivisionAction_,
+        QStringLiteral("transform.subdivision_down"),
+        QKeySequence(QStringLiteral("Ctrl+-")));
     connect(owner_.transformLowerSubdivisionAction_, &QAction::triggered, &owner_, &MainWindow::onLowerSubdivisionSelection);
     transformMenu->addAction(owner_.transformLowerSubdivisionAction_);
     transformMenu->addSeparator();
 
     auto* moreTransformMenu = transformMenu->addMenu(uiText("action.transform.more", "More..."));
     owner_.transformToggleBreakAction_ = new QAction(uiText("action.transform.toggle_break", "Toggle Break"), &owner_);
-    owner_.transformToggleBreakAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_B));
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.transformToggleBreakAction_,
+        QStringLiteral("transform.toggle_break"),
+        QKeySequence(Qt::CTRL | Qt::Key_B));
     connect(owner_.transformToggleBreakAction_, &QAction::triggered, &owner_, &MainWindow::onToggleBreakSelection);
     moreTransformMenu->addAction(owner_.transformToggleBreakAction_);
 
     owner_.transformToggleExAction_ = new QAction(uiText("action.transform.toggle_ex", "Toggle EX"), &owner_);
-    owner_.transformToggleExAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_N));
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.transformToggleExAction_,
+        QStringLiteral("transform.toggle_ex"),
+        QKeySequence(Qt::CTRL | Qt::Key_N));
     connect(owner_.transformToggleExAction_, &QAction::triggered, &owner_, &MainWindow::onToggleExSelection);
     moreTransformMenu->addAction(owner_.transformToggleExAction_);
 
     owner_.transformToggleFireworkAction_ = new QAction(uiText("action.transform.toggle_firework", "Toggle Firework"), &owner_);
-    owner_.transformToggleFireworkAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_M));
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.transformToggleFireworkAction_,
+        QStringLiteral("transform.toggle_firework"),
+        QKeySequence(Qt::CTRL | Qt::Key_M));
     connect(owner_.transformToggleFireworkAction_, &QAction::triggered, &owner_, &MainWindow::onToggleFireworkSelection);
     moreTransformMenu->addAction(owner_.transformToggleFireworkAction_);
 
     owner_.transformRandomRotateAction_ = new QAction(uiText("action.transform.random_rotate", "Random Rotate"), &owner_);
-    owner_.transformRandomRotateAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.transformRandomRotateAction_,
+        QStringLiteral("transform.random_rotate"),
+        QKeySequence(Qt::CTRL | Qt::Key_Comma));
     connect(owner_.transformRandomRotateAction_, &QAction::triggered, &owner_, &MainWindow::onRandomRotateSelection);
     moreTransformMenu->addAction(owner_.transformRandomRotateAction_);
 
@@ -426,7 +460,10 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.pausePreviewAction_, &QAction::triggered, &owner_, &MainWindow::onTogglePreviewPause);
     previewMenu->addAction(owner_.pausePreviewAction_);
     owner_.stopOrPlayPreviewShortcutAction_ = new QAction(&owner_);
-    owner_.stopOrPlayPreviewShortcutAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+C")));
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.stopOrPlayPreviewShortcutAction_,
+        QStringLiteral("preview.stop_or_play"),
+        QKeySequence(QStringLiteral("Ctrl+Shift+C")));
     owner_.stopOrPlayPreviewShortcutAction_->setShortcutContext(Qt::ApplicationShortcut);
     owner_.addAction(owner_.stopOrPlayPreviewShortcutAction_);
     connect(owner_.stopOrPlayPreviewShortcutAction_, &QAction::triggered, &owner_, [this]() {
@@ -437,7 +474,10 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         owner_.onTogglePreviewPause();
     });
     owner_.playPausePreviewShortcutAction_ = new QAction(&owner_);
-    owner_.playPausePreviewShortcutAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+X")));
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.playPausePreviewShortcutAction_,
+        QStringLiteral("preview.play_pause_global"),
+        QKeySequence(QStringLiteral("Ctrl+Shift+X")));
     owner_.playPausePreviewShortcutAction_->setShortcutContext(Qt::ApplicationShortcut);
     owner_.addAction(owner_.playPausePreviewShortcutAction_);
     connect(owner_.playPausePreviewShortcutAction_, &QAction::triggered, &owner_, &MainWindow::onTogglePreviewPause);
@@ -447,7 +487,10 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         &owner_
     );
     owner_.previewSlowerAction_ = previewSlowerAction;
-    previewSlowerAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+O")));
+    ShortcutRegistry::instance().applyShortcut(
+        previewSlowerAction,
+        QStringLiteral("preview.speed_down"),
+        QKeySequence(QStringLiteral("Ctrl+O")));
     connect(previewSlowerAction, &QAction::triggered, &owner_, [this]() {
         owner_.applyPreviewPlaybackRate(steppedPreviewPlaybackRate(owner_.previewPlaybackRate_, -1));
     });
@@ -458,7 +501,10 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         &owner_
     );
     owner_.previewFasterAction_ = previewFasterAction;
-    previewFasterAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+P")));
+    ShortcutRegistry::instance().applyShortcut(
+        previewFasterAction,
+        QStringLiteral("preview.speed_up"),
+        QKeySequence(QStringLiteral("Ctrl+P")));
     connect(previewFasterAction, &QAction::triggered, &owner_, [this]() {
         owner_.applyPreviewPlaybackRate(steppedPreviewPlaybackRate(owner_.previewPlaybackRate_, 1));
     });

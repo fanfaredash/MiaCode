@@ -405,6 +405,7 @@ inline void localizeButtonBox(QDialogButtonBox* buttonBox)
         {QDialogButtonBox::No, "action.no", "No"},
         {QDialogButtonBox::Save, "action.save", "Save"},
         {QDialogButtonBox::Discard, "action.discard", "Discard"},
+        {QDialogButtonBox::Reset, "action.reset", "Reset"},
     };
 
     for (const auto& entry : localizedButtons) {
@@ -432,6 +433,7 @@ inline void localizeMessageBox(QMessageBox* dialog)
         {QMessageBox::No, "action.no", "No"},
         {QMessageBox::Save, "action.save", "Save"},
         {QMessageBox::Discard, "action.discard", "Discard"},
+        {QMessageBox::Reset, "action.reset", "Reset"},
     };
 
     for (const auto& entry : localizedButtons) {
