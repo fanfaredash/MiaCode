@@ -136,9 +136,20 @@ function Invoke-MiaCodeConfigure {
     )
 
     Write-Host "Precheck: reconfiguring CMake in $BuildDir ..."
-    & cmake -S $RepoRoot -B $BuildDir | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        throw "cmake configure failed with exit code $LASTEXITCODE"
+    # CMake prints qsb shader-compile diagnostics to stderr even on
+    # success; PS 5.1's `$ErrorActionPreference = Stop` (set at the top
+    # of this script) treats those as terminating errors and aborts the
+    # configure with NativeCommandError. Relax around the call and gate
+    # success on the exit code instead. Mirrors the windeployqt block.
+    $prevErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & cmake -S $RepoRoot -B $BuildDir | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            throw "cmake configure failed with exit code $LASTEXITCODE"
+        }
+    } finally {
+        $ErrorActionPreference = $prevErrorActionPreference
     }
 }
 
