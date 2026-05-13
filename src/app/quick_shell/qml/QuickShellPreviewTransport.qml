@@ -101,12 +101,14 @@ Rectangle {
 
     readonly property real durationSeconds: controller ? Math.max(controller.previewDurationSeconds, 0.001) : 0.001
     readonly property real positionSeconds: controller ? controller.previewPositionSeconds : 0
-    readonly property real displayedSeconds: transportSlider.pressed ? transportSlider.value : positionSeconds
+    readonly property real displayedSeconds: scrubActive ? activeScrubSecond : positionSeconds
     readonly property real displayedProgress: Math.max(0, Math.min(1, displayedSeconds / durationSeconds))
     readonly property string timeSummary: formatDisplayTime(displayedSeconds) + " / " + formatDisplayTime(durationSeconds)
     readonly property int controlButtonHeight: metric("previewControlButtonMinHeight", 28)
     property real preciseHintSecond: positionSeconds
     property bool preciseHintVisible: false
+    property bool scrubActive: false
+    property real activeScrubSecond: positionSeconds
 
     implicitHeight: transportLayout.implicitHeight + 16
     radius: metric("previewControlCardRadius", 10)
@@ -199,26 +201,31 @@ Rectangle {
                 onPressedChanged: {
                     root.focusRequested()
                     if (pressed) {
-                        root.preciseHintSecond = value
+                        root.scrubActive = true
+                        root.activeScrubSecond = value
+                        root.preciseHintSecond = root.activeScrubSecond
                         root.preciseHintVisible = true
                         root.scrubActivityChanged(true)
                         if (controller)
                             controller.beginPreviewScrub()
                         return
                     }
-                    root.preciseHintSecond = value
-                    root.showPreciseHint(value)
+                    const releaseSecond = root.activeScrubSecond
+                    root.preciseHintSecond = releaseSecond
+                    root.showPreciseHint(releaseSecond)
+                    root.scrubActive = false
                     root.scrubActivityChanged(false)
                     if (controller)
-                        controller.endPreviewScrub(value, true)
+                        controller.endPreviewScrub(releaseSecond, true)
                 }
 
                 onMoved: {
                     root.focusRequested()
-                    root.preciseHintSecond = value
+                    root.activeScrubSecond = value
+                    root.preciseHintSecond = root.activeScrubSecond
                     root.preciseHintVisible = true
                     if (controller)
-                        controller.updatePreviewScrub(value, true)
+                        controller.updatePreviewScrub(root.activeScrubSecond, true)
                 }
 
                 background: Item {
