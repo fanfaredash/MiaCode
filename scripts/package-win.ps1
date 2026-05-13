@@ -122,6 +122,11 @@ function Invoke-MiaCodeBuild {
     if ($LASTEXITCODE -ne 0) {
         throw "cmake --build failed with exit code $LASTEXITCODE"
     }
+    Write-Host "Precheck: building MiaCodeLauncher ($Config) ..."
+    & cmake --build $BuildDir --target MiaCodeLauncher --config $Config --parallel $BuildJobs | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "cmake --build MiaCodeLauncher failed with exit code $LASTEXITCODE"
+    }
 }
 
 function Invoke-MiaCodeConfigure {
@@ -317,7 +322,22 @@ if (Test-Path $DistDir) {
 }
 New-Item -ItemType Directory -Path $DistDir | Out-Null
 
-Copy-Item $exePath (Join-Path $DistDir "MiaCode.exe") -Force
+# All runtime DLLs and Qt plugin/QML subtrees live in app/ so the dist
+# root only exposes the user-facing entry points (launcher exe + .bat
+# files + assets/ + logs/).
+$appDir = Join-Path $DistDir "app"
+New-Item -ItemType Directory -Path $appDir | Out-Null
+
+# Real MiaCode.exe goes inside app/; the wrapper at root is named
+# MiaCode.exe and forwards execution to it.
+Copy-Item $exePath (Join-Path $appDir "MiaCode.exe") -Force
+
+$buildOutputDir = Join-Path $BuildDir $Config
+$launcherExe = Join-Path $buildOutputDir "MiaCodeLauncher.exe"
+if (!(Test-Path $launcherExe)) {
+    throw "MiaCodeLauncher.exe not found after build: $launcherExe"
+}
+Copy-Item $launcherExe (Join-Path $DistDir "MiaCode.exe") -Force
 
 $debugLauncherSrc = Join-Path $repoRoot "scripts\\Start_MiaCode_Debug.bat"
 if (!(Test-Path $debugLauncherSrc)) {
@@ -350,12 +370,12 @@ $prevErrorActionPreference = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 try {
     & $deployTool `
-        --dir $DistDir `
+        --dir $appDir `
         $deployMode `
         --compiler-runtime `
         --no-translations `
         --qmldir (Join-Path $repoRoot "src") `
-        (Join-Path $DistDir "MiaCode.exe")
+        (Join-Path $appDir "MiaCode.exe")
     if ($LASTEXITCODE -ne 0) {
         throw "windeployqt failed with exit code $LASTEXITCODE"
     }
@@ -381,18 +401,17 @@ $requiredQtRuntimeDllBaseNames = @(
     "Qt6QuickControls2",
     "Qt6Svg"
 )
-Copy-QtRuntimeDllSet -QtBinDir $qtBinDir -DistDir $DistDir -BaseNames $requiredQtRuntimeDllBaseNames -Config $Config
+Copy-QtRuntimeDllSet -QtBinDir $qtBinDir -DistDir $appDir -BaseNames $requiredQtRuntimeDllBaseNames -Config $Config
 foreach ($deprecatedBaseName in @("Qt6OpenGLWidgets", "Qt6Concurrent")) {
     $deprecatedDll = Get-QtRuntimeDllName -BaseName $deprecatedBaseName -Config $Config
-    Remove-PackagedDllIfPresent -DistDir $DistDir -DllName $deprecatedDll
+    Remove-PackagedDllIfPresent -DistDir $appDir -DllName $deprecatedDll
 }
-Remove-PackagedDllIfPresent -DistDir $DistDir -DllName "opengl32sw.dll"
+Remove-PackagedDllIfPresent -DistDir $appDir -DllName "opengl32sw.dll"
 
-$buildOutputDir = Join-Path $BuildDir $Config
 foreach ($runtimeDll in @("dxcompiler.dll", "dxil.dll")) {
     $srcDll = Join-Path $buildOutputDir $runtimeDll
     if (Test-Path $srcDll) {
-        Copy-Item $srcDll (Join-Path $DistDir $runtimeDll) -Force
+        Copy-Item $srcDll (Join-Path $appDir $runtimeDll) -Force
     }
 }
 
@@ -409,7 +428,7 @@ foreach ($runtimeDll in $requiredBassRuntimeDlls) {
     if (!(Test-Path $srcDll)) {
         throw "Missing required BASS runtime DLL: $srcDll"
     }
-    Copy-Item $srcDll (Join-Path $DistDir $runtimeDll) -Force
+    Copy-Item $srcDll (Join-Path $appDir $runtimeDll) -Force
 }
 
 # (libmpv removed in beta20 — chart-preview video backgrounds use
@@ -421,7 +440,7 @@ if ($IncludeDevTools) {
     foreach ($toolName in @("simai_native_dump.exe")) {
         $toolPath = Join-Path $buildOutputDir $toolName
         if (Test-Path $toolPath) {
-            Copy-Item $toolPath (Join-Path $DistDir $toolName) -Force
+            Copy-Item $toolPath (Join-Path $appDir $toolName) -Force
         }
     }
 }
@@ -459,7 +478,10 @@ if (Test-Path $ffmpegSrc) {
     if ($ffmpegSize -lt 1MB) {
         throw "Invalid ffmpeg binary (too small): $ffmpegSrc ($ffmpegSize bytes)"
     }
-    $ffmpegDstDir = Join-Path $DistDir "ffmpeg"
+    # ffmpeg lives under app/ alongside the real exe so that
+    # resolveFfmpegExecutable() finds it via the appDir/ffmpeg/
+    # candidate (the real exe's applicationDirPath = app/).
+    $ffmpegDstDir = Join-Path $appDir "ffmpeg"
     New-Item -ItemType Directory -Path $ffmpegDstDir -Force | Out-Null
     Copy-Item $ffmpegSrc (Join-Path $ffmpegDstDir "ffmpeg.exe") -Force
 } else {
@@ -467,119 +489,68 @@ if (Test-Path $ffmpegSrc) {
     throw "Missing required ffmpeg binary: $ffmpegSrc"
 }
 
-$docsDir = Join-Path $DistDir "docs"
-New-Item -ItemType Directory -Path $docsDir -Force | Out-Null
-foreach ($docSpec in @(
-    @{ Source = Join-Path $repoRoot "README.md"; Destination = Join-Path $docsDir "README.md" },
-    @{ Source = Join-Path $repoRoot "README_EN.md"; Destination = Join-Path $docsDir "README_EN.md" },
-    @{ Source = Join-Path $repoRoot "docs\\DEBUG_INDEX.md"; Destination = Join-Path $docsDir "DEBUG_INDEX.md" },
-    @{ Source = Join-Path $repoRoot "docs\\PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md"; Destination = Join-Path $docsDir "PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md" }
-)) {
-    if (Test-Path $docSpec.Source) {
-        Copy-Item $docSpec.Source $docSpec.Destination -Force
-    }
-}
-$releaseReadme = Join-Path $docsDir "RELEASE_README.txt"
-$releaseLines = @(
-    "MiaCode release package"
-    ""
-    "Run (default embedded QSG legacy pipeline + QuickShell UI):"
-    "  MiaCode.exe"
-    "  Start_MiaCode_Debug.bat            (adds --debug, logs into .\\logs\\)"
-    ""
-    "Run with the worker + HWND timeline pipeline:"
-    "  Start_MiaCode_Legacy_QML.bat       (sets MIACODE_PREVIEW_USE_DCOMP=1,"
-    "                                      MIACODE_PREVIEW_OUT_OF_PROCESS=1,"
-    "                                      MIACODE_PREVIEW_WORKER_QSG_RENDER=1,"
-    "                                      MIACODE_TIMELINE_USE_DCOMP=1)"
-    ""
-    "Debug logs:"
-    "  .\\logs\\miacode_runtime_debug.log"
-    "  .\\logs\\miacode_audio_debug.log"
-    "  .\\logs\\miacode_video_export.log"
-    "  .\\logs\\miacode_startup_timing.log"
-    "  .\\logs\\miacode_fatal.log"
-    "  .\\logs\\worker-hwnd\\miacode_runtime_debug.log"
-    "  .\\logs\\worker-hwnd\\miacode_audio_debug.log"
-    "  .\\logs\\worker-hwnd\\miacode_video_export.log"
-    "  .\\logs\\worker-hwnd\\miacode_startup_timing.log"
-    "  .\\logs\\worker-hwnd\\miacode_fatal.log"
-    ""
-    "Included:"
-    "  - MiaCode.exe (main app)"
-    "  - Start_MiaCode_Debug.bat"
-    "  - Start_MiaCode_Legacy_QML.bat"
-    "  - Qt runtime DLLs, plugin folders, and QML modules"
-    "  - BASS runtime DLLs (bass, bassmix, bass_fx, bass_aac, bassopus)"
-    "  - dxcompiler.dll, dxil.dll (D3D shader compilation runtime)"
-    "  - ffmpeg/ffmpeg.exe"
-    "  - assets/"
-    "  - docs/"
-    "  - logs/"
-)
-if ($IncludeDevTools) {
-    $releaseLines += @(
-        "  - simai_native_dump.exe"
-    )
-}
-$releaseLines += @(
-    ""
-    "Not included on purpose:"
-    "  - soundtouch_probe.exe"
-)
-if (!$IncludeDevTools) {
-    $releaseLines += @(
-        "  - simai_native_dump.exe"
-    )
-}
-$releaseLines | Set-Content -Path $releaseReadme -Encoding UTF8
-
 $requiredPackagePaths = @(
+    # Root: user-facing entry points + content + log dirs only.
     "MiaCode.exe",
     "Start_MiaCode_Debug.bat",
     "Start_MiaCode_Legacy_QML.bat",
     "logs",
     "logs\\worker-hwnd",
-    (Get-QtRuntimeDllName -BaseName "Qt6Core" -Config $Config),
-    (Get-QtRuntimeDllName -BaseName "Qt6Gui" -Config $Config),
-    (Get-QtRuntimeDllName -BaseName "Qt6Widgets" -Config $Config),
-    (Get-QtRuntimeDllName -BaseName "Qt6Multimedia" -Config $Config),
-    (Get-QtRuntimeDllName -BaseName "Qt6Network" -Config $Config),
-    (Get-QtRuntimeDllName -BaseName "Qt6OpenGL" -Config $Config),
-    (Get-QtRuntimeDllName -BaseName "Qt6Quick" -Config $Config),
-    (Get-QtRuntimeDllName -BaseName "Qt6Qml" -Config $Config),
-    (Get-QtRuntimeDllName -BaseName "Qt6QmlMeta" -Config $Config),
-    (Get-QtRuntimeDllName -BaseName "Qt6QmlModels" -Config $Config),
-    (Get-QtRuntimeDllName -BaseName "Qt6QmlWorkerScript" -Config $Config),
-    (Get-QtRuntimeDllName -BaseName "Qt6QuickControls2" -Config $Config),
-    (Get-QtRuntimeDllName -BaseName "Qt6Svg" -Config $Config),
-    "D3Dcompiler_47.dll",
-    "dxcompiler.dll",
-    "dxil.dll",
-    "bass.dll",
-    "bassmix.dll",
-    "bass_fx.dll",
-    "bass_aac.dll",
-    "bassopus.dll",
-    "platforms\\qwindows.dll",
-    "qml\\QtQuick\\qtquick2plugin.dll",
-    "qml\\QtQuick\\Controls\\qtquickcontrols2plugin.dll",
-    "qml\\QtQuick\\Layouts\\qquicklayoutsplugin.dll",
-    "qml\\QtQml\\Models\\modelsplugin.dll",
-    "qml\\QtQml\\WorkerScript\\workerscriptplugin.dll",
-    "docs\\PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md"
+    "assets\\SFX",
+    # app/: the real exe and its DLL/plugin/QML retinue.
+    "app\\MiaCode.exe",
+    "app\\ffmpeg\\ffmpeg.exe",
+    (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6Core" -Config $Config)),
+    (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6Gui" -Config $Config)),
+    (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6Widgets" -Config $Config)),
+    (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6Multimedia" -Config $Config)),
+    (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6Network" -Config $Config)),
+    (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6OpenGL" -Config $Config)),
+    (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6Quick" -Config $Config)),
+    (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6Qml" -Config $Config)),
+    (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6QmlMeta" -Config $Config)),
+    (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6QmlModels" -Config $Config)),
+    (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6QmlWorkerScript" -Config $Config)),
+    (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6QuickControls2" -Config $Config)),
+    (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6Svg" -Config $Config)),
+    "app\\D3Dcompiler_47.dll",
+    "app\\dxcompiler.dll",
+    "app\\dxil.dll",
+    "app\\bass.dll",
+    "app\\bassmix.dll",
+    "app\\bass_fx.dll",
+    "app\\bass_aac.dll",
+    "app\\bassopus.dll",
+    "app\\platforms\\qwindows.dll",
+    "app\\qml\\QtQuick\\qtquick2plugin.dll",
+    "app\\qml\\QtQuick\\Controls\\qtquickcontrols2plugin.dll",
+    "app\\qml\\QtQuick\\Layouts\\qquicklayoutsplugin.dll",
+    "app\\qml\\QtQml\\Models\\modelsplugin.dll",
+    "app\\qml\\QtQml\\WorkerScript\\workerscriptplugin.dll"
 )
 $unexpectedPackagePaths = @(
+    # docs/ + RELEASE_README.txt intentionally removed.
+    "docs",
+    "RELEASE_README.txt",
     "Start_MiaCode_Debug_CompareDump.bat",
     "Start_MiaCode_Debug_View.bat",
     "Start_MiaCode_Debug_Widget.bat",
     "Start_MiaCode_QuickShell_Debug.bat",
     "logs\\quick-shell-beta",
+    # No DLLs at root anymore — everything moved to app/.
+    (Get-QtRuntimeDllName -BaseName "Qt6Core" -Config $Config),
+    (Get-QtRuntimeDllName -BaseName "Qt6Gui" -Config $Config),
+    (Get-QtRuntimeDllName -BaseName "Qt6Widgets" -Config $Config),
+    "bass.dll",
+    "bassmix.dll",
+    "D3Dcompiler_47.dll",
+    "dxcompiler.dll",
+    "ffmpeg\\ffmpeg.exe",
     "libmpv-2.dll",
     "soundtouch_probe.exe",
-    (Get-QtRuntimeDllName -BaseName "Qt6OpenGLWidgets" -Config $Config),
-    (Get-QtRuntimeDllName -BaseName "Qt6Concurrent" -Config $Config),
-    "opengl32sw.dll"
+    (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6OpenGLWidgets" -Config $Config)),
+    (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6Concurrent" -Config $Config)),
+    "app\\opengl32sw.dll"
 )
 Assert-PackageEntries -DistDir $DistDir -RequiredRelativePaths $requiredPackagePaths -UnexpectedRelativePaths $unexpectedPackagePaths
 

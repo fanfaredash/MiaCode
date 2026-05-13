@@ -532,6 +532,20 @@ if (MSVC)
     target_compile_options(MiaCode PRIVATE /FS)
 endif()
 
+# Tiny launcher exe that lives at the dist-package root and forwards
+# execution to app/MiaCode.exe. Lets the package keep the ~40 Qt/BASS/
+# Qt6Multimedia-ffmpeg/D3D DLLs inside app/ rather than scattering them
+# across the root the user sees in File Explorer. Built only on Windows
+# — other platforms ship MiaCode.exe at the bundle root directly.
+if (WIN32)
+    add_executable(MiaCodeLauncher WIN32
+        src/wrapper/MiaCodeLauncher.cpp
+    )
+    set_target_properties(MiaCodeLauncher PROPERTIES
+        OUTPUT_NAME "MiaCodeLauncher"
+    )
+endif()
+
 if (MIACODE_BUILD_DEV_TOOLS)
     add_executable(miacode_muri_dump
         src/tools/muri/MuriDump.cpp
