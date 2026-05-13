@@ -69,6 +69,8 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.openAction_, &QAction::triggered, &owner_, &MainWindow::onOpenFile);
     fileMenu->addAction(owner_.openAction_);
 
+    fileMenu->addSeparator();
+
     owner_.openCurrentFolderAction_ = new QAction(uiText("action.open_folder", "Open Folder"), &owner_);
     connect(owner_.openCurrentFolderAction_, &QAction::triggered, &owner_, &MainWindow::onOpenCurrentFolder);
     fileMenu->addAction(owner_.openCurrentFolderAction_);
