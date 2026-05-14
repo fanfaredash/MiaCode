@@ -744,7 +744,6 @@ QList<QAction*> MainWindow::WindowSection::quickShellShortcutActions() const
         owner_.findReplaceAction_,
         owner_.undoAction_,
         owner_.redoAction_,
-        owner_.validateAction_,
         owner_.transformMirrorLeftRightAction_,
         owner_.transformMirrorUpDownAction_,
         owner_.transformRotate180Action_,

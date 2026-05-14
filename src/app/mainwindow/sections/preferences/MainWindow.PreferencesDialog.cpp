@@ -440,6 +440,7 @@ void MainWindow::PreferencesSection::onPreferences()
             UiText::setPreferredTheme(selectedThemePreference);
             owner_.windowSection_->applyUiTheme();
             dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
+            owner_.windowSection_->applySystemWindowBackdrop(&dialog);
             owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
         });
     }

@@ -62,8 +62,6 @@ public:
     void onToggleTouchTrail(bool checked);
     void onEditStaticTapOnSlideThreshold();
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
-    bool runValidateSimai();
-    void onValidateSimai();
 
 private:
     bool isMuriDiagnosticsTabActive() const;

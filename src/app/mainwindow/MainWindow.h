@@ -230,7 +230,6 @@ protected:
     void changeEvent(QEvent* event) override;
 
 private slots:
-    void onValidateSimai();
     void onNewFile();
     void onOpenFile();
     void onOpenCurrentFolder();
@@ -416,7 +415,6 @@ private:
     void removeProjectRenderState() const;
     void applyPreviewAudioSettingsToRuntime();
     void setLastOpenDirectory(const QString& pathOrDir);
-    bool runValidateSimai();
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
     bool preparePreviewStartState();
     void refreshEditorExtraSelections();

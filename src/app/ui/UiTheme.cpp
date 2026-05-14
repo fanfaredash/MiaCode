@@ -266,6 +266,12 @@ QString scrollBarStyleSheet()
 void styleRoundedMenu(QMenu& menu)
 {
     const Colors& c = colors();
+    if (!menu.property("miacode.refresh_theme_on_show").toBool()) {
+        menu.setProperty("miacode.refresh_theme_on_show", true);
+        QObject::connect(&menu, &QMenu::aboutToShow, &menu, [&menu]() {
+            UiTheme::styleRoundedMenu(menu);
+        });
+    }
     menu.setPalette(applicationPalette());
     menu.setWindowFlag(Qt::FramelessWindowHint, true);
     menu.setWindowFlag(Qt::NoDropShadowWindowHint, true);

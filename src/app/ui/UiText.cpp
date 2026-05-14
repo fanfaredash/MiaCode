@@ -401,7 +401,6 @@ const QHash<QString, QString>& zhMap()
         {"action.paste", "粘贴"},
         {"action.undo", "撤回"},
         {"action.redo", "重做"},
-        {"action.validate", "校验 Simai"},
         {"action.stop_preview", "停止"},
         {"action.pause_preview", "播放/暂停预览"},
         {"action.preview_speed_down", "播放速度 ↓"},
@@ -670,8 +669,6 @@ const QHash<QString, QString>& zhMap()
         {"status.preferences_updated", "首选项已更新。"},
         {"status.preferences_saved", "首选项已保存，重启后生效。"},
         {"status.syntax.select_difficulty", "请先选择一个难度文本。"},
-        {"status.syntax.passed", "语法检查通过。"},
-        {"dialog.syntax_ok.message", "未发现语法错误/警告。"},
         {"status.syntax.failed_counts", "语法检查未通过：%1 个错误，%2 个警告。"},
     };
     return map;

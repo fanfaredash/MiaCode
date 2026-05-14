@@ -76,9 +76,6 @@ void MainWindow::DocumentSection::updateDifficultyScopedActionStates()
 {
     const bool enabled = owner_.hasActiveDifficulty();
 
-    if (ui_.validateAction_ != nullptr) {
-        ui_.validateAction_->setEnabled(enabled);
-    }
     if (ui_.pausePreviewAction_ != nullptr) {
         ui_.pausePreviewAction_->setEnabled(enabled);
     }

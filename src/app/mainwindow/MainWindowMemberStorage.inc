@@ -4,7 +4,6 @@
         QPlainTextEdit* outputView_ = nullptr;
         QListWidget* errorList_ = nullptr;
         QListWidget* muriList_ = nullptr;
-        QAction* validateAction_ = nullptr;
         QAction* newAction_ = nullptr;
         QAction* openAction_ = nullptr;
         QAction* openCurrentFolderAction_ = nullptr;
@@ -505,7 +504,6 @@
     QPlainTextEdit*& outputView_ = ui_.outputView_;
     QListWidget*& errorList_ = ui_.errorList_;
     QListWidget*& muriList_ = ui_.muriList_;
-    QAction*& validateAction_ = ui_.validateAction_;
     QAction*& newAction_ = ui_.newAction_;
     QAction*& openAction_ = ui_.openAction_;
     QAction*& openCurrentFolderAction_ = ui_.openCurrentFolderAction_;

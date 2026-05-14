@@ -165,13 +165,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         editMenu->removeAction(latencyDetectorAction_);
         toolsMenu->addAction(latencyDetectorAction_);
     }
-    if (validateAction_ != nullptr) {
-        editMenu->removeAction(validateAction_);
+    if (normalizeWholeChartAction_ != nullptr) {
         toolsMenu->addSeparator();
-        toolsMenu->addAction(validateAction_);
-        if (normalizeWholeChartAction_ != nullptr) {
-            toolsMenu->addAction(normalizeWholeChartAction_);
-        }
+        toolsMenu->addAction(normalizeWholeChartAction_);
     }
     if (exportVideoAction_ != nullptr) {
         previewMenu->removeAction(exportVideoAction_);

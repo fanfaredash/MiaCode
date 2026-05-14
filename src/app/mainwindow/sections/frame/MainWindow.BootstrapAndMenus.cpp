@@ -61,12 +61,18 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     };
 
     owner_.newAction_ = new QAction(uiText("action.new", "New"), &owner_);
-    owner_.newAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+N")));
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.newAction_,
+        QStringLiteral("file.new"),
+        QKeySequence(QStringLiteral("Ctrl+Shift+N")));
     connect(owner_.newAction_, &QAction::triggered, &owner_, &MainWindow::onNewFile);
     fileMenu->addAction(owner_.newAction_);
 
     owner_.openAction_ = new QAction(uiText("action.open", "Open..."), &owner_);
-    owner_.openAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+O")));
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.openAction_,
+        QStringLiteral("file.open"),
+        QKeySequence(QStringLiteral("Ctrl+Shift+O")));
     connect(owner_.openAction_, &QAction::triggered, &owner_, &MainWindow::onOpenFile);
     fileMenu->addAction(owner_.openAction_);
 
@@ -100,12 +106,18 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     fileMenu->addSeparator();
 
     owner_.saveAction_ = new QAction(uiText("action.save", "Save"), &owner_);
-    owner_.saveAction_->setShortcut(QKeySequence::Save);
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.saveAction_,
+        QStringLiteral("file.save"),
+        QKeySequence::Save);
     connect(owner_.saveAction_, &QAction::triggered, &owner_, &MainWindow::onSaveFile);
     fileMenu->addAction(owner_.saveAction_);
 
     owner_.saveAsAction_ = new QAction(uiText("action.save_as", "Save As..."), &owner_);
-    owner_.saveAsAction_->setShortcut(QKeySequence::SaveAs);
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.saveAsAction_,
+        QStringLiteral("file.save_as"),
+        QKeySequence::SaveAs);
     connect(owner_.saveAsAction_, &QAction::triggered, &owner_, &MainWindow::onSaveFileAs);
     fileMenu->addAction(owner_.saveAsAction_);
 
@@ -116,7 +128,10 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     fileMenu->addSeparator();
 
     auto* quitAction = new QAction("Quit", &owner_);
-    quitAction->setShortcut(QKeySequence::Quit);
+    ShortcutRegistry::instance().applyShortcut(
+        quitAction,
+        QStringLiteral("file.quit"),
+        QKeySequence::Quit);
     connect(quitAction, &QAction::triggered, qApp, &QApplication::quit);
     fileMenu->addAction(quitAction);
 
@@ -124,7 +139,10 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         UiText::isChineseUi() ? QStringLiteral("查找/替换") : QStringLiteral("Find/Replace"),
         &owner_
     );
-    owner_.findReplaceAction_->setShortcut(QKeySequence::Find);
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.findReplaceAction_,
+        QStringLiteral("edit.find_replace"),
+        QKeySequence::Find);
     connect(owner_.findReplaceAction_, &QAction::triggered, &owner_, &MainWindow::onToggleFindReplace);
     editMenu->addAction(owner_.findReplaceAction_);
 
@@ -147,7 +165,10 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     };
 
     auto* cutAction = new QAction(uiText("action.cut", "Cut"), &owner_);
-    cutAction->setShortcut(QKeySequence::Cut);
+    ShortcutRegistry::instance().applyShortcut(
+        cutAction,
+        QStringLiteral("edit.cut"),
+        QKeySequence::Cut);
     connect(cutAction, &QAction::triggered, &owner_, [invokeOnFocusedTextWidget]() {
         invokeOnFocusedTextWidget(
             [](QTextEdit* textEdit) { textEdit->cut(); },
@@ -157,7 +178,10 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     editMenu->addAction(cutAction);
 
     auto* copyAction = new QAction(uiText("action.copy", "Copy"), &owner_);
-    copyAction->setShortcut(QKeySequence::Copy);
+    ShortcutRegistry::instance().applyShortcut(
+        copyAction,
+        QStringLiteral("edit.copy"),
+        QKeySequence::Copy);
     connect(copyAction, &QAction::triggered, &owner_, [invokeOnFocusedTextWidget]() {
         invokeOnFocusedTextWidget(
             [](QTextEdit* textEdit) { textEdit->copy(); },
@@ -167,7 +191,10 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     editMenu->addAction(copyAction);
 
     auto* pasteAction = new QAction(uiText("action.paste", "Paste"), &owner_);
-    pasteAction->setShortcut(QKeySequence::Paste);
+    ShortcutRegistry::instance().applyShortcut(
+        pasteAction,
+        QStringLiteral("edit.paste"),
+        QKeySequence::Paste);
     connect(pasteAction, &QAction::triggered, &owner_, [invokeOnFocusedTextWidget]() {
         invokeOnFocusedTextWidget(
             [](QTextEdit* textEdit) { textEdit->paste(); },
@@ -179,7 +206,10 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     editMenu->addSeparator();
 
     owner_.undoAction_ = new QAction(uiText("action.undo", "Undo"), &owner_);
-    owner_.undoAction_->setShortcuts(QKeySequence::keyBindings(QKeySequence::Undo));
+    ShortcutRegistry::instance().applyShortcuts(
+        owner_.undoAction_,
+        QStringLiteral("edit.undo"),
+        QKeySequence::keyBindings(QKeySequence::Undo));
     connect(owner_.undoAction_, &QAction::triggered, &owner_, [this]() {
         const auto focusSummary = []() {
             if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
@@ -247,7 +277,10 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     editMenu->addAction(owner_.undoAction_);
 
     owner_.redoAction_ = new QAction(uiText("action.redo", "Redo"), &owner_);
-    owner_.redoAction_->setShortcuts(QKeySequence::keyBindings(QKeySequence::Redo));
+    ShortcutRegistry::instance().applyShortcuts(
+        owner_.redoAction_,
+        QStringLiteral("edit.redo"),
+        QKeySequence::keyBindings(QKeySequence::Redo));
     connect(owner_.redoAction_, &QAction::triggered, &owner_, [this]() {
         const auto focusSummary = []() {
             if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
@@ -338,14 +371,6 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         &owner_
     );
     connect(owner_.convertTrackTo44100HzAction_, &QAction::triggered, &owner_, &MainWindow::onConvertTrackTo44100Hz);
-
-    owner_.validateAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("语法") : QStringLiteral("Syntax"),
-        &owner_
-    );
-    owner_.validateAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
-    connect(owner_.validateAction_, &QAction::triggered, &owner_, &MainWindow::onValidateSimai);
-    editMenu->addAction(owner_.validateAction_);
 
     owner_.normalizeWholeChartAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("谱面整理") : QStringLiteral("Format Chart"),

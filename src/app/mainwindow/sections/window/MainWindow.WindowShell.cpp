@@ -271,6 +271,21 @@ void applySystemBackdropToWidget(QWidget* widget, bool enabled, bool darkTheme)
         const BOOL micaEnabled = enabled ? TRUE : FALSE;
         setDwmWindowAttribute(hwnd, kDwmwaMicaEffect, &micaEnabled, sizeof(micaEnabled));
     }
+    ::SetWindowPos(
+        hwnd,
+        nullptr,
+        0,
+        0,
+        0,
+        0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED
+    );
+    ::RedrawWindow(
+        hwnd,
+        nullptr,
+        nullptr,
+        RDW_INVALIDATE | RDW_UPDATENOW | RDW_FRAME
+    );
 }
 #endif
 
