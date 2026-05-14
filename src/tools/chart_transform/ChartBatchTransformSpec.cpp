@@ -1076,6 +1076,34 @@ void runInlineSpecs(QTextStream& err, int* failed)
     }
 
     {
+        int changed = 0;
+        const QString input = QStringLiteral("{16}1,,\n2/4,,3h[8:1],,5,3,4,2,,6/4,,5,7,,");
+        const QString output = miacode::chart_transform::lowerSubdivisionForSelection(input, &changed);
+        expectEqual(
+            output,
+            input,
+            QStringLiteral("subdivision -1 refuses a wrapped selection when later notes occupy odd slots"),
+            failed,
+            err
+        );
+        expectTrue(changed == 0, QStringLiteral("subdivision -1 reports no changes for irreducible wrapped selection"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{16}1,,\n2/4,,3h[8:1],,5,,7,,");
+        const QString output = miacode::chart_transform::lowerSubdivisionForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{8}1,\n2/4,3h[8:1],5,7,"),
+            QStringLiteral("subdivision -1 carries slot parity across wrapped lines without explicit subdivision reset"),
+            failed,
+            err
+        );
+        expectTrue(changed == 6, QStringLiteral("subdivision -1 counts signature and removed commas across wrapped lines"), failed, err);
+    }
+
+    {
         const miacode::chart_transform::ChartNormalizationResult normalized =
             miacode::chart_transform::normalizeChartText(QStringLiteral("A1fxh[4:1],,,,\nE"));
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts a simple valid chart"), failed, err);

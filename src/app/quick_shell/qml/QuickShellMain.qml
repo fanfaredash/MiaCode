@@ -16,6 +16,7 @@ ApplicationWindow {
     property string previewSpeedToastLastLabel: ""
     property bool previewSpeedToastVisible: false
     property string previewSpeedToastPercentText: "100%"
+    property bool previewSpeedMenuInputShieldActive: false
     property bool initialGeometryApplied: false
     property real previewPaneWidth: previewPaneInitialWidth(
         metric("initialWindowWidth", 1280),
@@ -683,6 +684,13 @@ ApplicationWindow {
     }
 
     Timer {
+        id: previewSpeedMenuInputShieldReleaseTimer
+        interval: 120
+        repeat: false
+        onTriggered: root.previewSpeedMenuInputShieldActive = false
+    }
+
+    Timer {
         id: embeddedInlineSurfaceActivateTimer
         interval: 16
         repeat: false
@@ -740,6 +748,11 @@ ApplicationWindow {
     Menu {
         id: previewSpeedMenu
         popupType: Popup.Window
+        onAboutToShow: {
+            previewSpeedMenuInputShieldReleaseTimer.stop()
+            root.previewSpeedMenuInputShieldActive = true
+        }
+        onClosed: previewSpeedMenuInputShieldReleaseTimer.restart()
         padding: 4
         leftPadding: 4
         rightPadding: 4
@@ -1216,6 +1229,7 @@ ApplicationWindow {
                                         paletteMap: root.paletteMap
                                         metricsMap: root.metricsMap
                                         speedMenu: previewSpeedMenu
+                                        inputBlocked: root.previewSpeedMenuInputShieldActive
                                         fullscreenMode: false
                                         onFocusRequested: embeddedPreviewInteractionRoot.forceActiveFocus()
                                     }
@@ -1471,6 +1485,7 @@ ApplicationWindow {
                 paletteMap: root.paletteMap
                 metricsMap: root.metricsMap
                 speedMenu: previewSpeedMenu
+                inputBlocked: root.previewSpeedMenuInputShieldActive
                 fullscreenMode: true
                 onFocusRequested: {
                     fullscreenPreviewWindow.requestActivate()

@@ -10,6 +10,7 @@ Rectangle {
     property var metricsMap: ({})
     property var speedMenu: null
     property bool fullscreenMode: false
+    property bool inputBlocked: false
 
     signal focusRequested()
     signal scrubActivityChanged(bool active)
@@ -196,6 +197,7 @@ Rectangle {
                 from: 0
                 to: root.durationSeconds
                 live: true
+                enabled: !root.inputBlocked
                 focusPolicy: Qt.NoFocus
 
                 onPressedChanged: {
@@ -310,6 +312,7 @@ Rectangle {
                     ToolButton {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: root.controlButtonHeight
+                        enabled: !root.inputBlocked
                         focusPolicy: Qt.NoFocus
                         padding: 0
                         onPressed: root.focusRequested()
@@ -340,6 +343,7 @@ Rectangle {
                     ToolButton {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: root.controlButtonHeight
+                        enabled: !root.inputBlocked
                         focusPolicy: Qt.NoFocus
                         padding: 0
                         onPressed: root.focusRequested()
@@ -423,6 +427,7 @@ Rectangle {
                     ToolButton {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: root.controlButtonHeight
+                        enabled: !root.inputBlocked
                         focusPolicy: Qt.NoFocus
                         padding: 0
                         onPressed: root.focusRequested()
@@ -453,6 +458,7 @@ Rectangle {
                         Layout.preferredHeight: root.controlButtonHeight
                         Layout.minimumHeight: root.controlButtonHeight
                         Layout.maximumHeight: root.controlButtonHeight
+                        enabled: !root.inputBlocked
                         focusPolicy: Qt.NoFocus
                         padding: 0
                         onPressed: root.focusRequested()
@@ -508,6 +514,7 @@ Rectangle {
                         Layout.preferredHeight: root.controlButtonHeight
                         Layout.minimumHeight: root.controlButtonHeight
                         Layout.maximumHeight: root.controlButtonHeight
+                        enabled: !root.inputBlocked
                         focusPolicy: Qt.NoFocus
                         padding: 0
                         onPressed: root.focusRequested()
@@ -534,6 +541,7 @@ Rectangle {
                     ToolButton {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: root.controlButtonHeight
+                        enabled: !root.inputBlocked
                         focusPolicy: Qt.NoFocus
                         padding: 0
                         onPressed: root.focusRequested()
@@ -566,6 +574,7 @@ Rectangle {
                     ToolButton {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: root.controlButtonHeight
+                        enabled: !root.inputBlocked
                         focusPolicy: Qt.NoFocus
                         padding: 0
                         onPressed: root.focusRequested()
@@ -596,6 +605,7 @@ Rectangle {
                     ToolButton {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: root.controlButtonHeight
+                        enabled: !root.inputBlocked
                         focusPolicy: Qt.NoFocus
                         padding: 0
                         onPressed: root.focusRequested()
