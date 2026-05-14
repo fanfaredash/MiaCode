@@ -69,6 +69,18 @@ protected:
         if (event == nullptr) {
             return;
         }
+        // Esc closes the capture dialog without storing a new binding.
+        // The line edit otherwise consumes every key, so without this
+        // shortcut Esc would simply be captured as the user's chosen
+        // sequence ("Esc") — which is never what the user means by
+        // pressing Esc on a popup.
+        if (event->key() == Qt::Key_Escape && event->modifiers() == Qt::NoModifier) {
+            if (auto* dialog = qobject_cast<QDialog*>(window()); dialog != nullptr) {
+                dialog->reject();
+            }
+            event->accept();
+            return;
+        }
         if (event->key() == Qt::Key_unknown) {
             event->accept();
             return;
@@ -117,6 +129,87 @@ protected:
     }
 };
 
+// Item delegate that gives every row a consistent text inset. Two passes:
+//   1) Paint the panel (selection bg, hover, item bg) at the FULL cell rect
+//      so a row-selected item gets one continuous blue band across both
+//      columns — adjusting `opt.rect` in a single-pass paint would shrink
+//      the selection visual on every cell, leaving a darker stripe at the
+//      column-1 left edge where the inset selection bg stops short.
+//   2) Draw the cell text manually at the inset rect. The inset differs
+//      between category headers and regular content rows so each looks
+//      right in isolation while staying consistent across selection state.
+class ShortcutItemDelegate final : public QStyledItemDelegate {
+public:
+    ShortcutItemDelegate(int contentHorizontalPadding,
+                         int categoryHorizontalPadding,
+                         QObject* parent = nullptr)
+        : QStyledItemDelegate(parent)
+        , contentPadding_(contentHorizontalPadding)
+        , categoryPadding_(categoryHorizontalPadding)
+    {}
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option,
+               const QModelIndex& index) const override
+    {
+        QStyleOptionViewItem opt = option;
+        initStyleOption(&opt, index);
+        QStyle* style = (opt.widget != nullptr) ? opt.widget->style() : QApplication::style();
+
+        // Pass 1: panel at full rect so selection / hover / per-item bg
+        // span the entire cell width on both columns of a selected row.
+        style->drawPrimitive(QStyle::PE_PanelItemViewItem, &opt, painter, opt.widget);
+
+        if (opt.text.isEmpty()) {
+            return;
+        }
+
+        // Pass 2: text at inset rect.
+        const int pad = paddingFor(index);
+        const QRect textRect = opt.rect.adjusted(pad, 0, -pad, 0);
+        if (!textRect.isValid() || textRect.width() <= 0) {
+            return;
+        }
+        painter->save();
+        painter->setClipRect(opt.rect);
+        QColor textColor;
+        if (const QVariant fg = index.data(Qt::ForegroundRole); fg.isValid()) {
+            textColor = qvariant_cast<QBrush>(fg).color();
+        } else if ((opt.state & QStyle::State_Selected) != 0) {
+            textColor = opt.palette.color(opt.palette.currentColorGroup(), QPalette::HighlightedText);
+        } else {
+            textColor = opt.palette.color(opt.palette.currentColorGroup(), QPalette::Text);
+        }
+        painter->setPen(textColor);
+        painter->setFont(opt.font);
+        const QFontMetrics fm(opt.font);
+        const QString elided = fm.elidedText(opt.text, opt.textElideMode, textRect.width());
+        painter->drawText(textRect, opt.displayAlignment, elided);
+        painter->restore();
+    }
+
+    QSize sizeHint(const QStyleOptionViewItem& option,
+                   const QModelIndex& index) const override
+    {
+        QSize size = QStyledItemDelegate::sizeHint(option, index);
+        size.rwidth() += paddingFor(index) * 2;
+        return size;
+    }
+
+private:
+    // Category/header rows are emitted with flags == Qt::ItemIsEnabled (no
+    // Qt::ItemIsSelectable); the smaller categoryPadding_ keeps the section
+    // title close to the cell edge while command rows below sit further in.
+    int paddingFor(const QModelIndex& index) const
+    {
+        return index.flags().testFlag(Qt::ItemIsSelectable)
+            ? contentPadding_
+            : categoryPadding_;
+    }
+
+    int contentPadding_;
+    int categoryPadding_;
+};
+
 void applyConfiguredShortcut(
     QAction* action,
     const QString& id,
@@ -139,11 +232,13 @@ QString shortcutHintFor(const QString& id, const QKeySequence& fallback)
 
 QString fontShortcutHintText()
 {
+    // Reuses the editor.font_* shortcut IDs so the preferences-dialog spin-box
+    // hint stays in lock-step with the user's editor font shortcut bindings.
     const QString decrease = shortcutHintFor(
-        QStringLiteral("preferences.font_decrease"),
+        QStringLiteral("editor.font_decrease"),
         QKeySequence(QStringLiteral("Ctrl+Shift+-")));
     const QString increase = shortcutHintFor(
-        QStringLiteral("preferences.font_increase"),
+        QStringLiteral("editor.font_increase"),
         QKeySequence(QStringLiteral("Ctrl+Shift+=")));
     return QStringLiteral("%1 / %2").arg(decrease, increase);
 }
@@ -189,13 +284,6 @@ QList<QPair<QString, QStringList>> shortcutCategoryGroups()
                 QStringLiteral("editor.font_decrease"),
                 QStringLiteral("editor.font_increase"),
                 QStringLiteral("editor.overwrite_mode"),
-            },
-        },
-        {
-            QStringLiteral("首选项弹窗"),
-            {
-                QStringLiteral("preferences.font_decrease"),
-                QStringLiteral("preferences.font_increase"),
             },
         },
     };
@@ -568,10 +656,13 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(QString(), preserveDifficultySwitchViewCheckbox);
 
+    // The preferences dialog font spin-box reuses the editor.font_* shortcut
+    // IDs so a single binding controls both the editor and the dialog —
+    // there is no longer a separate preferences.font_* registry entry.
     auto* dialogDecreaseShortcut = new QShortcut(&dialog);
     ShortcutRegistry::instance().applyShortcut(
         dialogDecreaseShortcut,
-        QStringLiteral("preferences.font_decrease"),
+        QStringLiteral("editor.font_decrease"),
         QKeySequence(QStringLiteral("Ctrl+Shift+-")));
     dialogDecreaseShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(dialogDecreaseShortcut, &QShortcut::activated, &dialog, [editorFontSizeSpin]() {
@@ -580,7 +671,7 @@ void MainWindow::PreferencesSection::onPreferences()
     auto* dialogIncreaseShortcut = new QShortcut(&dialog);
     ShortcutRegistry::instance().applyShortcut(
         dialogIncreaseShortcut,
-        QStringLiteral("preferences.font_increase"),
+        QStringLiteral("editor.font_increase"),
         QKeySequence(QStringLiteral("Ctrl+Shift+=")));
     dialogIncreaseShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(dialogIncreaseShortcut, &QShortcut::activated, &dialog, [editorFontSizeSpin]() {
@@ -763,7 +854,12 @@ void MainWindow::PreferencesSection::onPreferences()
         table->verticalHeader()->hide();
         table->setShowGrid(false);
         table->setAlternatingRowColors(true);
-        table->setSelectionBehavior(QAbstractItemView::SelectItems);
+        // Highlight the whole row when a shortcut is clicked — the previous
+        // per-cell selection left an uneven look where only the command
+        // cell got the blue tint and the keybinding cell kept its row
+        // background. A click on either column of a content row opens the
+        // capture dialog (see the cellClicked handler below).
+        table->setSelectionBehavior(QAbstractItemView::SelectRows);
         table->setSelectionMode(QAbstractItemView::SingleSelection);
         table->setEditTriggers(QAbstractItemView::NoEditTriggers);
         table->horizontalHeader()->setStretchLastSection(false);
@@ -773,12 +869,19 @@ void MainWindow::PreferencesSection::onPreferences()
         table->verticalHeader()->setDefaultSectionSize(32);
         table->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
         table->setFrameShape(QFrame::NoFrame);
+        // Horizontal padding is applied via ShortcutItemDelegate (installed
+        // below) instead of QSS so it renders identically in selected and
+        // unselected states. The QSS rule for `::item:selected` only sets
+        // the selection background — the inset comes from the delegate.
         table->setStyleSheet(QStringLiteral(
             "QTableWidget { border: 1px solid rgba(128,128,128,72); border-radius: 6px; }"
-            "QTableWidget::item { padding: 5px 9px; }"
             "QTableWidget::item:selected { background: rgba(88, 145, 220, 58); }"
             "QHeaderView::section { padding: 6px 9px; border: 0; border-bottom: 1px solid rgba(128,128,128,72); font-weight: 600; }"
         ));
+        // Content rows get a generous ±28 px inset; category section
+        // headers use the smaller ±14 px so the section title sits closer
+        // to the cell edge than the commands listed beneath it.
+        table->setItemDelegate(new ShortcutItemDelegate(28, 14, table));
         shortcutRootLayout->addWidget(table, 1);
 
         std::function<void()> refreshRows;
@@ -792,13 +895,27 @@ void MainWindow::PreferencesSection::onPreferences()
             }
             int row = 0;
             table->setRowCount(0);
+            // Theme-aware category-row colors. The background is fully
+            // opaque so it overrides QTableWidget's alternating-row brush —
+            // otherwise the first category row (which falls on the base
+            // brush) looks visibly dimmer than the subsequent ones (which
+            // fall on the alternate brush). The foreground uses an accent
+            // tint so the sub-heading stands out from regular rows but is
+            // still recognizable as a category label rather than a command.
+            const auto& themeColors = UiTheme::colors();
+            const QColor categoryBackground = themeColors.dark
+                ? QColor(0x2A, 0x3A, 0x52)
+                : QColor(0xE3, 0xEE, 0xFC);
+            const QColor categoryForeground = themeColors.dark
+                ? QColor(0x9D, 0xC0, 0xF2)
+                : QColor(0x1F, 0x5D, 0xAD);
             for (const auto& group : shortcutCategoryGroups()) {
                 table->insertRow(row);
                 table->setSpan(row, 0, 1, 2);
                 auto* categoryItem = new QTableWidgetItem(group.first);
                 categoryItem->setFlags(Qt::ItemIsEnabled);
-                categoryItem->setBackground(QBrush(QColor(91, 122, 153, 38)));
-                categoryItem->setForeground(QBrush(QColor(92, 119, 148)));
+                categoryItem->setBackground(QBrush(categoryBackground));
+                categoryItem->setForeground(QBrush(categoryForeground));
                 QFont categoryFont = table->font();
                 categoryFont.setPointSize(categoryFont.pointSize() + 1);
                 categoryFont.setWeight(QFont::DemiBold);
@@ -903,11 +1020,16 @@ void MainWindow::PreferencesSection::onPreferences()
         };
 
         QObject::connect(table, &QTableWidget::cellClicked, &shortcutsDialog, [&](int row, int column) {
-            if (column == 1) {
-                openCaptureForRow(row);
-            } else if (table->columnSpan(row, 0) > 1) {
+            // Category header rows span both columns and aren't editable —
+            // clicking them just clears the stray selection. Every other
+            // row opens the capture dialog from either column so users can
+            // hit either the command name or its key binding to rebind.
+            if (table->columnSpan(row, 0) > 1) {
                 table->clearSelection();
+                return;
             }
+            Q_UNUSED(column);
+            openCaptureForRow(row);
         });
         refreshRows();
 

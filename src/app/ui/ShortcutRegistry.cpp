@@ -33,8 +33,6 @@ const QStringList& editableShortcutIds()
         QStringLiteral("editor.font_decrease"),
         QStringLiteral("editor.font_increase"),
         QStringLiteral("editor.overwrite_mode"),
-        QStringLiteral("preferences.font_decrease"),
-        QStringLiteral("preferences.font_increase"),
     };
     return ids;
 }

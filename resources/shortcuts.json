@@ -131,19 +131,5 @@
       "context": "editor",
       "owner": "PlainCodeEditor"
     }
-  },
-  "contextual": {
-    "preferences.font_decrease": {
-      "label_zh": "首选项：编辑器字号减小",
-      "label_en": "Preferences: Decrease Editor Font",
-      "default": "Ctrl+Shift+-",
-      "owner": "MainWindow.PreferencesDialog"
-    },
-    "preferences.font_increase": {
-      "label_zh": "首选项：编辑器字号增大",
-      "label_en": "Preferences: Increase Editor Font",
-      "default": "Ctrl+Shift+=",
-      "owner": "MainWindow.PreferencesDialog"
-    }
   }
 }
