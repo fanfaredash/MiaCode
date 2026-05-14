@@ -27,6 +27,29 @@ using namespace miacode::mainwindow::shared;
 
 namespace {
 
+// Same helper as in MainWindow.WindowRuntime.cpp — duplicated here so the
+// quick-shell close path can cascade-close popups without leaking the helper
+// outside its translation unit. See the longer comment over there for the
+// caveat about Qt::ApplicationModal exec() blocking taskbar-initiated closes
+// from reaching MainWindow's closeEvent in the first place.
+int dismissOpenChildPopupDialogs(QWidget& owner)
+{
+    int closed = 0;
+    const auto topLevels = QApplication::topLevelWidgets();
+    for (QWidget* widget : topLevels) {
+        if (widget == nullptr || widget == &owner) {
+            continue;
+        }
+        if (!widget->isWindow() || !widget->isVisible()) {
+            continue;
+        }
+        if (widget->close()) {
+            ++closed;
+        }
+    }
+    return closed;
+}
+
 constexpr double kBottomTabsContentScaleMin = 0.5;
 constexpr double kBottomTabsContentScaleMax = 1.0;
 
@@ -324,6 +347,18 @@ bool MainWindow::WindowSection::confirmShellClose()
 {
     QElapsedTimer totalTimer;
     totalTimer.start();
+
+    // Cascade-close popup chains (Preferences, Keyboard Shortcuts, etc.)
+    // before the unsaved-changes prompt runs. The save dialog lives inside
+    // maybeSaveBeforeContinue and isn't spawned yet, so it's not affected.
+    const int dismissed = dismissOpenChildPopupDialogs(owner_);
+    if (dismissed > 0) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/window"),
+            QStringLiteral("confirm_shell_close_dismissed_child_dialogs=%1").arg(dismissed)
+        );
+    }
 
     QElapsedTimer maybeSaveTimer;
     maybeSaveTimer.start();

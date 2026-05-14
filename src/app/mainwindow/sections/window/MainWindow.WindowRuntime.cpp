@@ -38,6 +38,40 @@ QString pointerHex(const void* pointer)
     return QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(pointer), 0, 16);
 }
 
+// Cascade-close every visible top-level popup besides the main window.
+// Backed by Qt's QApplication::closeAllWindows() semantics: each popup
+// receives a QCloseEvent and can decline if it has unsaved state.
+//
+// Safe because none of these popups carry an unsaved-confirmation step —
+// the "Save before exiting?" prompt is owned by maybeSaveBeforeContinue()
+// and is spawned AFTER this sweep, so it isn't on screen yet and isn't
+// affected.
+//
+// Note: this helper only runs once MainWindow's own closeEvent has fired.
+// Qt's modal gate (Qt::ApplicationModal + dialog.exec()) drops close
+// events targeted at non-modal windows for the duration of the nested
+// event loop, so a taskbar "Close window" issued while a modal popup is
+// open will not reach here. The fix for that path is to convert those
+// popups from exec() to open()+finished — see comments in the export
+// flow callers.
+int dismissOpenChildPopupDialogs(QWidget& owner)
+{
+    int closed = 0;
+    const auto topLevels = QApplication::topLevelWidgets();
+    for (QWidget* widget : topLevels) {
+        if (widget == nullptr || widget == &owner) {
+            continue;
+        }
+        if (!widget->isWindow() || !widget->isVisible()) {
+            continue;
+        }
+        if (widget->close()) {
+            ++closed;
+        }
+    }
+    return closed;
+}
+
 QString qEventTypeName(QEvent::Type type)
 {
     switch (type) {
@@ -535,6 +569,17 @@ void MainWindow::WindowSection::closeEvent(QCloseEvent* event)
     QElapsedTimer totalTimer;
     totalTimer.start();
     this->logWindowGeometryDebug("close_event_enter");
+    // Dismiss any open child popup dialogs (Preferences, Keyboard
+    // Shortcuts, etc.) before showing the unsaved-changes prompt so the
+    // close cascade reaches every open popup window.
+    const int dismissed = dismissOpenChildPopupDialogs(owner_);
+    if (dismissed > 0) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/window"),
+            QStringLiteral("legacy_close_event_dismissed_child_dialogs=%1").arg(dismissed)
+        );
+    }
     QElapsedTimer maybeSaveTimer;
     maybeSaveTimer.start();
     const bool canClose = owner_.maybeSaveBeforeContinue();
