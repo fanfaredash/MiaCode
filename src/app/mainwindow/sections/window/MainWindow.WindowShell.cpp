@@ -598,6 +598,11 @@ void MainWindow::WindowSection::shellTimelineFollowProgressToggled(bool enabled)
     owner_.timelineSection_->onTimelineFollowProgressToggled(enabled);
 }
 
+void MainWindow::WindowSection::shellTimelineSyncToggled(bool enabled)
+{
+    owner_.timelineSection_->onTimelineSyncToggled(enabled);
+}
+
 bool MainWindow::WindowSection::shellHasShortcut(const QKeySequence& sequence) const
 {
     if (sequence.isEmpty()) {

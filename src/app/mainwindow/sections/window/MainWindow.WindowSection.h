@@ -32,6 +32,7 @@ public:
     void shellTimelineFollowPreviewToggled(bool enabled);
     void shellTimelineViewportLockToggled(bool enabled);
     void shellTimelineFollowProgressToggled(bool enabled);
+    void shellTimelineSyncToggled(bool enabled);
     bool shellHasShortcut(const QKeySequence& sequence) const;
     bool shellTriggerShortcut(const QKeySequence& sequence);
     QString shellWindowTitle() const;

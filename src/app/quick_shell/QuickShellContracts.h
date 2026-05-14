@@ -48,6 +48,7 @@ public:
     virtual void shellTimelineFollowPreviewToggled(bool enabled) = 0;
     virtual void shellTimelineViewportLockToggled(bool enabled) = 0;
     virtual void shellTimelineFollowProgressToggled(bool enabled) = 0;
+    virtual void shellTimelineSyncToggled(bool enabled) = 0;
     virtual bool shellHasShortcut(const QKeySequence& sequence) const = 0;
     virtual bool shellTriggerShortcut(const QKeySequence& sequence) = 0;
 };

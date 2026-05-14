@@ -398,8 +398,9 @@
         bool showJudgeMarkers_ = false;
         bool showTouchTrail_ = false;
         bool previewFollowEnabled_ = false;
-        bool previewViewportLockEnabled_ = false;
+        bool previewViewportLockEnabled_ = true;
         bool previewProgressFollowEnabled_ = true;
+        bool timelineSyncEnabled_ = false;
         MuriAnalysisReport muriAnalysisReport_;
         QVector<MuriStaticReference> muriStaticReferences_;
         MuriRenderOptions muriRenderOptions_;
@@ -750,6 +751,7 @@
     bool& previewFollowEnabled_ = state_.previewFollowEnabled_;
     bool& previewViewportLockEnabled_ = state_.previewViewportLockEnabled_;
     bool& previewProgressFollowEnabled_ = state_.previewProgressFollowEnabled_;
+    bool& timelineSyncEnabled_ = state_.timelineSyncEnabled_;
     MuriAnalysisReport& muriAnalysisReport_ = state_.muriAnalysisReport_;
     QVector<MuriStaticReference>& muriStaticReferences_ = state_.muriStaticReferences_;
     MuriRenderOptions& muriRenderOptions_ = state_.muriRenderOptions_;

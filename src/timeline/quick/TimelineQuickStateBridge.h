@@ -31,6 +31,8 @@ class TimelineQuickStateBridge : public QObject
                WRITE setViewportLockEnabled NOTIFY viewportLockEnabledChanged)
     Q_PROPERTY(bool followProgressEnabled READ followProgressEnabled
                WRITE setFollowProgressEnabled NOTIFY followProgressEnabledChanged)
+    Q_PROPERTY(bool timelineSyncEnabled READ timelineSyncEnabled
+               WRITE setTimelineSyncEnabled NOTIFY timelineSyncEnabledChanged)
 
 public:
     explicit TimelineQuickStateBridge(QObject* parent = nullptr);
@@ -76,6 +78,8 @@ public:
     void setViewportLockEnabled(bool enabled);
     bool followProgressEnabled() const;
     void setFollowProgressEnabled(bool enabled);
+    bool timelineSyncEnabled() const;
+    void setTimelineSyncEnabled(bool enabled);
     bool playheadIndicatorSuppressed() const;
     void suppressPlayheadIndicator();
     void restorePlayheadIndicator(bool immediate = false);
@@ -99,6 +103,7 @@ signals:
     void followPreviewEnabledChanged(bool enabled);
     void viewportLockEnabledChanged(bool enabled);
     void followProgressEnabledChanged(bool enabled);
+    void timelineSyncEnabledChanged(bool enabled);
 
 private:
     QSize effectiveViewportSize() const;
@@ -130,6 +135,7 @@ private:
     bool followPreviewEnabled_ = false;
     bool viewportLockEnabled_ = false;
     bool followProgressEnabled_ = true;
+    bool timelineSyncEnabled_ = false;
     bool playheadIndicatorSuppressed_ = false;
     miacode::timeline::TimelineSceneLayoutMetrics layoutMetrics_;
     bool layoutMetricsValid_ = false;

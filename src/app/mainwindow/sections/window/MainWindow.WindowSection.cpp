@@ -144,6 +144,11 @@ void MainWindow::shellTimelineFollowProgressToggled(bool enabled)
     windowSection_->shellTimelineFollowProgressToggled(enabled);
 }
 
+void MainWindow::shellTimelineSyncToggled(bool enabled)
+{
+    windowSection_->shellTimelineSyncToggled(enabled);
+}
+
 bool MainWindow::shellHasShortcut(const QKeySequence& sequence) const
 {
     return windowSection_->shellHasShortcut(sequence);

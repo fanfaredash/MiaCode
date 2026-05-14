@@ -122,6 +122,7 @@ void MainWindow::EditorSection::loadPortableState()
         state_.timelineQuickStateBridge_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
         state_.timelineQuickStateBridge_->setViewportLockEnabled(state_.previewViewportLockEnabled_);
         state_.timelineQuickStateBridge_->setFollowProgressEnabled(state_.previewProgressFollowEnabled_);
+        state_.timelineQuickStateBridge_->setTimelineSyncEnabled(state_.timelineSyncEnabled_);
     }
     owner_.refreshPreviewFrameRateTimers();
     owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
@@ -141,8 +142,9 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.showJudgeMarkers_ = false;
     state_.showTouchTrail_ = false;
     state_.previewFollowEnabled_ = false;
-    state_.previewViewportLockEnabled_ = false;
+    state_.previewViewportLockEnabled_ = true;
     state_.previewProgressFollowEnabled_ = true;
+    state_.timelineSyncEnabled_ = false;
     state_.muriRenderOptions_ = MuriRenderOptions();
     state_.staticTapOnSlideThresholdMs_ = miacode::muri::kStaticTapOnSlideThresholdDefaultMs;
     state_.previewBackgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
@@ -351,10 +353,11 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
         state_.previewFollowEnabled_ = preview.value("follow_preview").toBool(false);
     }
     if (preview.value("viewport_lock").isBool()) {
-        state_.previewViewportLockEnabled_ = preview.value("viewport_lock").toBool(false);
+        state_.previewViewportLockEnabled_ = preview.value("viewport_lock").toBool(true);
     }
-    if (preview.value("follow_progress").isBool()) {
-        state_.previewProgressFollowEnabled_ = preview.value("follow_progress").toBool(true);
+    state_.previewProgressFollowEnabled_ = true;
+    if (preview.value("timeline_sync").isBool()) {
+        state_.timelineSyncEnabled_ = preview.value("timeline_sync").toBool(false);
     }
     const miacode::chart_transform::ChartNormalizationOptions normalizationOptions =
         miacode::chart_transform::chartNormalizationOptionsFromPreferences(
@@ -462,6 +465,7 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("follow_preview", state_.previewFollowEnabled_);
     preview.insert("viewport_lock", state_.previewViewportLockEnabled_);
     preview.insert("follow_progress", state_.previewProgressFollowEnabled_);
+    preview.insert("timeline_sync", state_.timelineSyncEnabled_);
     preview.insert(
         "timeline_zoom_scale",
         state_.timelineQuickStateBridge_ != nullptr ? state_.timelineQuickStateBridge_->zoomScale() : 0.5

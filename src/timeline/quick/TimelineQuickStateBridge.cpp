@@ -814,6 +814,20 @@ void TimelineQuickStateBridge::setFollowProgressEnabled(bool enabled)
     emit renderStateChanged();
 }
 
+bool TimelineQuickStateBridge::timelineSyncEnabled() const
+{
+    return timelineSyncEnabled_;
+}
+
+void TimelineQuickStateBridge::setTimelineSyncEnabled(bool enabled)
+{
+    if (timelineSyncEnabled_ == enabled) {
+        return;
+    }
+    timelineSyncEnabled_ = enabled;
+    emit timelineSyncEnabledChanged(enabled);
+}
+
 bool TimelineQuickStateBridge::playheadIndicatorSuppressed() const
 {
     return playheadIndicatorSuppressed_;

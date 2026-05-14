@@ -859,7 +859,7 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
                     false,
                     false,
                     syncTimelineCursor,
-                    true,
+                    owner_.timelineSyncEnabled_,
                     false,
                     0.0,
                     false);
@@ -984,7 +984,7 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
                 false,
                 false,
                 syncTimelineCursor,
-                true,
+                owner_.timelineSyncEnabled_,
                 false,
                 0.0,
                 false);

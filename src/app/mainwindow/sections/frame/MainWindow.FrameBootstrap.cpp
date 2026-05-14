@@ -1188,6 +1188,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     timelineQuickStateBridge_->setShowSlideTracks(true);
     timelineQuickStateBridge_->setViewportLockEnabled(previewViewportLockEnabled_);
     timelineQuickStateBridge_->setFollowProgressEnabled(previewProgressFollowEnabled_);
+    timelineQuickStateBridge_->setTimelineSyncEnabled(timelineSyncEnabled_);
     connect(timelineQuickStateBridge_, &TimelineQuickStateBridge::zoomScaleChanged, this, [this](double) {
         savePortableState();
     });
@@ -1274,7 +1275,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
                 true,
                 true,
                 syncTimelineCursor,
-                !qtPreviewPlaying_ && !syncPreviewFollow,
+                !qtPreviewPlaying_ && !syncPreviewFollow && timelineSyncEnabled_,
                 syncPreviewFollow,
                 previewFollowSecond,
                 false
@@ -1287,7 +1288,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             true,
             false,
             syncTimelineCursor,
-            !qtPreviewPlaying_,
+            !qtPreviewPlaying_ && timelineSyncEnabled_,
             false,
             0.0,
             false

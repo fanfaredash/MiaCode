@@ -830,6 +830,15 @@ void MainWindow::TimelineSection::onTimelineFollowProgressToggled(bool enabled)
     owner_.savePortableState();
 }
 
+void MainWindow::TimelineSection::onTimelineSyncToggled(bool enabled)
+{
+    state_.timelineSyncEnabled_ = enabled;
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setTimelineSyncEnabled(enabled);
+    }
+    owner_.savePortableState();
+}
+
 void MainWindow::TimelineSection::applyLatestTimelinePreviewStateToPausedPreview()
 {
     if (state_.qtPreviewPlaying_) {

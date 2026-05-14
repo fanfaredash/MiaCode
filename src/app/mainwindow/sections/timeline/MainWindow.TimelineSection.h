@@ -40,6 +40,7 @@ public:
     void onTimelineFollowPreviewToggled(bool enabled);
     void onTimelineViewportLockToggled(bool enabled);
     void onTimelineFollowProgressToggled(bool enabled);
+    void onTimelineSyncToggled(bool enabled);
     void applyLatestTimelinePreviewStateToPausedPreview();
     void requestTimelineSlowRefresh();
     void dispatchTimelineSlowRefresh();

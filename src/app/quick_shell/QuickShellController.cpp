@@ -668,6 +668,15 @@ void QuickShellController::timelineFollowProgressToggled(bool enabled)
     refreshFromStateSource();
 }
 
+void QuickShellController::timelineSyncToggled(bool enabled)
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    commandSink_->shellTimelineSyncToggled(enabled);
+    refreshFromStateSource();
+}
+
 void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, int gearGlobalTop)
 {
     if (stateSource_ == nullptr) {
@@ -707,13 +716,13 @@ void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, i
         chinese ? QStringLiteral("光标居中") : QStringLiteral("View Lock"),
         bridge->viewportLockEnabled(),
         &QuickShellController::timelineViewportLockToggled);
-    // Follow Progress sits above Follow Code so the bottom-most menu
+    // Timeline Sync sits above Follow Code so the bottom-most menu
     // item matches the inline tab-strip chip (which now shows Follow
     // Code) — visually the two anchors are at the same Y on screen.
     addToggleWidget(
-        chinese ? QStringLiteral("进度跟随") : QStringLiteral("Follow Progress"),
-        bridge->followProgressEnabled(),
-        &QuickShellController::timelineFollowProgressToggled);
+        chinese ? QStringLiteral("时轴同步") : QStringLiteral("Timeline Sync"),
+        bridge->timelineSyncEnabled(),
+        &QuickShellController::timelineSyncToggled);
     addToggleWidget(
         chinese ? QStringLiteral("代码跟随") : QStringLiteral("Follow Code"),
         bridge->followPreviewEnabled(),
