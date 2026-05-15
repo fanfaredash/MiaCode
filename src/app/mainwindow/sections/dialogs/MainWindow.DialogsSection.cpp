@@ -39,3 +39,18 @@ void MainWindow::onConvertTrackTo44100Hz()
 {
     dialogsSection_->onConvertTrackTo44100Hz();
 }
+
+void MainWindow::onReadTitleFromTrack()
+{
+    dialogsSection_->onReadTitleFromTrack();
+}
+
+void MainWindow::onReadArtistFromTrack()
+{
+    dialogsSection_->onReadArtistFromTrack();
+}
+
+void MainWindow::onExtractBackgroundFromTrack()
+{
+    dialogsSection_->onExtractBackgroundFromTrack();
+}

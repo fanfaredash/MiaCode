@@ -588,9 +588,62 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     firstWrapLayout->addWidget(latencyDetectorButton_, 0, Qt::AlignLeft);
     firstWrapLayout->addStretch(1);
 
-    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.title", "title")), titleEdit_);
-    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.artist", "artist")), artistEdit_);
-    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.des", "des")), designerEdit_);
+    // Title and artist each get their own "read from MP3" button on the
+    // far right of the matching row, mirroring the BPM detection button
+    // on the offset row below. Each button only fills its own field so
+    // users who only need one of the two values aren't forced to accept
+    // the other.
+    auto* titleWrap = new QWidget(metadataPage_);
+    auto* titleWrapLayout = new QHBoxLayout(titleWrap);
+    titleWrapLayout->setContentsMargins(0, 0, 0, 0);
+    titleWrapLayout->setSpacing(6);
+    titleWrapLayout->addWidget(titleEdit_, 1);
+    auto* readTitleButton = new QToolButton(metadataPage_);
+    readTitleButton->setText(UiText::isChineseUi()
+        ? QStringLiteral("从 MP3 读取")
+        : QStringLiteral("Read from MP3"));
+    readTitleButton->setToolTip(UiText::isChineseUi()
+        ? QStringLiteral("从 track.mp3 的 ID3 标签里读取标题。")
+        : QStringLiteral("Pull the title from track.mp3's ID3 tag."));
+    connect(readTitleButton, &QToolButton::clicked, this, &MainWindow::onReadTitleFromTrack);
+    titleWrapLayout->addWidget(readTitleButton, 0, Qt::AlignRight);
+
+    auto* artistWrap = new QWidget(metadataPage_);
+    auto* artistWrapLayout = new QHBoxLayout(artistWrap);
+    artistWrapLayout->setContentsMargins(0, 0, 0, 0);
+    artistWrapLayout->setSpacing(6);
+    artistWrapLayout->addWidget(artistEdit_, 1);
+    auto* readArtistButton = new QToolButton(metadataPage_);
+    readArtistButton->setText(UiText::isChineseUi()
+        ? QStringLiteral("从 MP3 读取")
+        : QStringLiteral("Read from MP3"));
+    readArtistButton->setToolTip(UiText::isChineseUi()
+        ? QStringLiteral("从 track.mp3 的 ID3 标签里读取曲师。")
+        : QStringLiteral("Pull the artist from track.mp3's ID3 tag."));
+    connect(readArtistButton, &QToolButton::clicked, this, &MainWindow::onReadArtistFromTrack);
+    artistWrapLayout->addWidget(readArtistButton, 0, Qt::AlignRight);
+
+    // Designer row gets an "extract cover to bg.jpg" button. After writing
+    // bg.jpg the slot re-runs the preview media-route resolution so the
+    // workspace preview shows the new background immediately.
+    auto* designerWrap = new QWidget(metadataPage_);
+    auto* designerWrapLayout = new QHBoxLayout(designerWrap);
+    designerWrapLayout->setContentsMargins(0, 0, 0, 0);
+    designerWrapLayout->setSpacing(6);
+    designerWrapLayout->addWidget(designerEdit_, 1);
+    auto* extractCoverButton = new QToolButton(metadataPage_);
+    extractCoverButton->setText(UiText::isChineseUi()
+        ? QStringLiteral("提取封面 bg.jpg")
+        : QStringLiteral("Extract Cover → bg.jpg"));
+    extractCoverButton->setToolTip(UiText::isChineseUi()
+        ? QStringLiteral("把 track.mp3 内嵌的封面图写到当前谱面目录的 bg.jpg。")
+        : QStringLiteral("Write track.mp3's embedded cover artwork as bg.jpg next to the chart."));
+    connect(extractCoverButton, &QToolButton::clicked, this, &MainWindow::onExtractBackgroundFromTrack);
+    designerWrapLayout->addWidget(extractCoverButton, 0, Qt::AlignRight);
+
+    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.title", "title")), titleWrap);
+    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.artist", "artist")), artistWrap);
+    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.des", "des")), designerWrap);
     metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.first", "first")), firstWrap);
     metadataCardLayout->addLayout(metadataForm);
 

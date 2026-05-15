@@ -15,6 +15,9 @@ public:
     void onPrependPvBlack();
     void onCompressBackgroundVideo();
     void onConvertTrackTo44100Hz();
+    void onReadTitleFromTrack();
+    void onReadArtistFromTrack();
+    void onExtractBackgroundFromTrack();
 
 private:
     enum class MediaBlankTarget {

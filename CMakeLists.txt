@@ -126,6 +126,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/Mmcss.cpp
     src/common/DebugImageCompare.h
     src/common/ChartAssetPaths.h
+    src/common/Id3TagReader.h
+    src/common/Id3TagReader.cpp
     src/common/TimelineThemeConfig.h
     src/common/WaveformCache.h
     src/common/WaveformCache.cpp
