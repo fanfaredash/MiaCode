@@ -5,7 +5,13 @@
 #include "UiTheme.h"
 
 #include <QAction>
+#include <QApplication>
 #include <QContextMenuEvent>
+#include <QDrag>
+#include <QDragEnterEvent>
+#include <QDragLeaveEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QEvent>
 #include <QFocusEvent>
 #include <QInputMethodEvent>
@@ -84,6 +90,7 @@ namespace {
 constexpr int kLineNumberLeftPadding = 6;
 constexpr int kLineNumberRightPadding = 10;
 constexpr int kLineNumberMinWidth = 40;
+constexpr int kLineNumberDropHitSlopRight = 56;
 constexpr qreal kEditorDocumentLeftInset = 14.0;
 constexpr int kCurrentLineHighlightLeftInset = 3;
 constexpr int kCurrentLineHighlightRightInset = 0;
@@ -251,6 +258,7 @@ public:
     explicit LineNumberArea(PlainCodeEditor* editor)
         : QWidget(editor), editor_(editor)
     {
+        setAcceptDrops(true);
     }
 
     QSize sizeHint() const override
@@ -259,6 +267,63 @@ public:
     }
 
 protected:
+    void dragEnterEvent(QDragEnterEvent* event) override
+    {
+        editor_->dragEnterEvent(event);
+    }
+
+    void dragMoveEvent(QDragMoveEvent* event) override
+    {
+        editor_->dragMoveEvent(event);
+    }
+
+    void dragLeaveEvent(QDragLeaveEvent* event) override
+    {
+        editor_->dragLeaveEvent(event);
+    }
+
+    void dropEvent(QDropEvent* event) override
+    {
+        editor_->dropEvent(event);
+    }
+
+    void mouseDoubleClickEvent(QMouseEvent* event) override
+    {
+        const int line = editor_->lineNumberAtAreaPosition(event->pos());
+        if (line > 0) {
+            emit editor_->lineNumberBookmarkActivated(line);
+            event->accept();
+            return;
+        }
+        QWidget::mouseDoubleClickEvent(event);
+    }
+
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        const int line = editor_->lineNumberAtAreaPosition(event->pos());
+        editor_->pressedBookmarkLine_ = editor_->bookmarkedLines_.contains(line) ? line : -1;
+        editor_->lineNumberPressPos_ = event->pos();
+        QWidget::mousePressEvent(event);
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) override
+    {
+        if (event != nullptr
+            && (event->buttons() & Qt::LeftButton)
+            && editor_->pressedBookmarkLine_ > 0
+            && (event->pos() - editor_->lineNumberPressPos_).manhattanLength() >= QApplication::startDragDistance()) {
+            auto* drag = new QDrag(this);
+            auto* mime = new QMimeData;
+            mime->setData(QStringLiteral("application/x-miacode-bookmark-move"), QByteArray::number(editor_->pressedBookmarkLine_));
+            drag->setMimeData(mime);
+            drag->exec(Qt::MoveAction);
+            editor_->pressedBookmarkLine_ = -1;
+            event->accept();
+            return;
+        }
+        QWidget::mouseMoveEvent(event);
+    }
+
     void paintEvent(QPaintEvent* event) override
     {
         editor_->lineNumberAreaPaintEvent(event);
@@ -285,6 +350,7 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
     updateLineNumberAreaWidth(0);
     setLineWrapMode(QTextEdit::NoWrap);
     setAcceptRichText(false);
+    setAcceptDrops(true);
     setHalfWidthInputEnabled(halfWidthInputEnabled_);
     if (QTextFrame* frame = document()->rootFrame(); frame != nullptr) {
         QTextFrameFormat format = frame->frameFormat();
@@ -359,6 +425,66 @@ QRect PlainCodeEditor::previewFollowVisualCaretRect() const
 QPointF PlainCodeEditor::normalizedViewportHitPosition(const QPointF& position) const
 {
     return normalizedViewportHitPositionForBlockSpacing(this, position);
+}
+
+void PlainCodeEditor::setBookmarkedLines(const QSet<int>& lines)
+{
+    bookmarkedLines_ = lines;
+    if (lineNumberArea_ != nullptr) {
+        lineNumberArea_->update();
+    }
+}
+
+int PlainCodeEditor::lineNumberAtGlobalPosition(const QPoint& globalPos) const
+{
+    if (lineNumberArea_ == nullptr) {
+        return -1;
+    }
+    const QPoint areaPos = lineNumberArea_->mapFromGlobal(globalPos);
+    QRect hitRect = lineNumberArea_->rect();
+    hitRect.adjust(0, 0, kLineNumberDropHitSlopRight, 0);
+    if (!hitRect.contains(areaPos)) {
+        return -1;
+    }
+    return lineNumberAtAreaPosition(areaPos);
+}
+
+void PlainCodeEditor::setBookmarkDropPreviewLine(int line)
+{
+    const int normalizedLine = line > 0 ? line : -1;
+    if (hoveredBookmarkDropLine_ == normalizedLine) {
+        return;
+    }
+    hoveredBookmarkDropLine_ = normalizedLine;
+    if (lineNumberArea_ != nullptr) {
+        lineNumberArea_->update();
+    }
+}
+
+int PlainCodeEditor::lineNumberAtAreaPosition(const QPoint& pos) const
+{
+    QTextCursor startCursor = cursorForPosition(QPoint(0, 0));
+    QTextBlock block = startCursor.block();
+    if (!block.isValid() && document() != nullptr) {
+        block = document()->firstBlock();
+    }
+    int blockNumber = block.isValid() ? block.blockNumber() : 0;
+    const int yOffset = qMax(0, topOverlayInsetPixels_);
+    const int targetY = pos.y() - yOffset;
+
+    while (block.isValid()) {
+        QTextCursor blockCursor(block);
+        const QRect blockRect = cursorRect(blockCursor);
+        if (targetY >= blockRect.top() && targetY <= blockRect.bottom()) {
+            return blockNumber + 1;
+        }
+        if (blockRect.top() > targetY) {
+            break;
+        }
+        block = block.next();
+        ++blockNumber;
+    }
+    return -1;
 }
 
 void PlainCodeEditor::updateCursorVisibility()
@@ -925,6 +1051,64 @@ void PlainCodeEditor::paintEvent(QPaintEvent* event)
     }
 }
 
+void PlainCodeEditor::dragEnterEvent(QDragEnterEvent* event)
+{
+    if (event != nullptr && event->mimeData() != nullptr
+        && event->mimeData()->hasFormat(QStringLiteral("application/x-miacode-bookmark-move"))) {
+        event->acceptProposedAction();
+        return;
+    }
+    QTextEdit::dragEnterEvent(event);
+}
+
+void PlainCodeEditor::dragMoveEvent(QDragMoveEvent* event)
+{
+    if (event != nullptr && event->mimeData() != nullptr
+        && event->mimeData()->hasFormat(QStringLiteral("application/x-miacode-bookmark-move"))) {
+        const QPoint areaPos = event->position().toPoint();
+        const int line = lineNumberAtAreaPosition(areaPos);
+        if (hoveredBookmarkDropLine_ != line) {
+            hoveredBookmarkDropLine_ = line;
+            lineNumberArea_->update();
+        }
+        event->acceptProposedAction();
+        return;
+    }
+    QTextEdit::dragMoveEvent(event);
+}
+
+void PlainCodeEditor::dragLeaveEvent(QDragLeaveEvent* event)
+{
+    hoveredBookmarkDropLine_ = -1;
+    lineNumberArea_->update();
+    QTextEdit::dragLeaveEvent(event);
+}
+
+void PlainCodeEditor::dropEvent(QDropEvent* event)
+{
+    if (event != nullptr && event->mimeData() != nullptr) {
+        const int line = lineNumberAtAreaPosition(event->position().toPoint());
+        hoveredBookmarkDropLine_ = -1;
+        lineNumberArea_->update();
+        if (line > 0 && event->mimeData()->hasFormat(QStringLiteral("application/x-miacode-bookmark-move"))) {
+            bool ok = false;
+            const int fromLine = event->mimeData()->data(QStringLiteral("application/x-miacode-bookmark-move")).toInt(&ok);
+            if (ok && fromLine > 0 && fromLine != line) {
+                emit lineNumberBookmarkMoveRequested(fromLine, line);
+            }
+        }
+        event->acceptProposedAction();
+        return;
+    }
+    QTextEdit::dropEvent(event);
+}
+
+void PlainCodeEditor::mouseReleaseEvent(QMouseEvent* event)
+{
+    pressedBookmarkLine_ = -1;
+    QTextEdit::mouseReleaseEvent(event);
+}
+
 void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
 {
     QPainter painter(lineNumberArea_);
@@ -953,6 +1137,24 @@ void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
         if (blockRect.bottom() >= visibleTop) {
             const QString number = QString::number(blockNumber + 1);
             const int drawTop = blockRect.top() + yOffset;
+            const int line = blockNumber + 1;
+            const bool isBookmarkLine = bookmarkedLines_.contains(line);
+            const bool isDropLine = hoveredBookmarkDropLine_ == line;
+            if (isBookmarkLine || isDropLine) {
+                QColor markerColor = c.accent;
+                markerColor.setAlpha(isDropLine ? 80 : 34);
+                const QRect rowRect(0, drawTop, lineNumberArea_->width(), lineHeight);
+                painter.fillRect(rowRect, markerColor);
+                painter.setPen(QPen(c.accent, isDropLine ? 2 : 1));
+                const int underlineY = qMin(rowRect.bottom() - 2, drawTop + lineHeight - 3);
+                painter.drawLine(
+                    kLineNumberLeftPadding,
+                    underlineY,
+                    lineNumberArea_->width() - kLineNumberRightPadding,
+                    underlineY
+                );
+            }
+            painter.setPen(isBookmarkLine || isDropLine ? c.accent : c.textSecondary);
             painter.drawText(
                 kLineNumberLeftPadding,
                 drawTop,

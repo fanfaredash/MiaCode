@@ -23,5 +23,7 @@ PreviewHudStats computePreviewHudStats(const QVector<TimelineNoteMarker>& noteMa
 QString formatPreviewHudTimeLabel(double seconds);
 QFont previewHudTimestampFont(int pointSize, QFont::Weight weight = QFont::Medium);
 QFont previewHudMonoFont(int pointSize, QFont::Weight weight = QFont::Medium);
+QString previewHudFontDisplayName();
+void setPreviewHudCustomFontPath(const QString& fontPath);
 
 }  // namespace miacode::preview::scene

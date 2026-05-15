@@ -1,8 +1,12 @@
 #include "core/scene/PreviewHudState.h"
 
+#include "UiText.h"
+
+#include <QFileInfo>
 #include <QFontDatabase>
 #include <QFontInfo>
 #include <QHash>
+#include <QJsonObject>
 #include <QtMath>
 
 namespace {
@@ -31,6 +35,69 @@ double slideJudgeSecondFor(const TimelineNoteMarker& marker)
 bool eventPlayed(double second, double judgeSecond)
 {
     return judgeSecond <= (second + 1e-6);
+}
+
+QString persistedHudFontPath()
+{
+    const QJsonObject root = UiText::loadPreferencesObject();
+    const QJsonObject app = root.value(QStringLiteral("app")).toObject();
+    const QJsonObject videoExport = app.value(QStringLiteral("video_export")).toObject();
+    const QString path = videoExport.value(QStringLiteral("hud_font_path")).toString();
+    if (path.isEmpty()) {
+        return QString();
+    }
+    const QFileInfo info(path);
+    if (!info.isFile() || info.suffix().compare(QStringLiteral("ttf"), Qt::CaseInsensitive) != 0) {
+        return QString();
+    }
+    return info.absoluteFilePath();
+}
+
+QString& cachedHudFontPath()
+{
+    static QString path;
+    return path;
+}
+
+QString& cachedHudFontFamily()
+{
+    static QString family;
+    return family;
+}
+
+bool& hudFontCacheInitialized()
+{
+    static bool initialized = false;
+    return initialized;
+}
+
+QString customHudFontFamily()
+{
+    QString& cachedPath = cachedHudFontPath();
+    QString& cachedFamily = cachedHudFontFamily();
+    bool& initialized = hudFontCacheInitialized();
+
+    if (!initialized) {
+        cachedPath = persistedHudFontPath();
+        initialized = true;
+    }
+
+    if (cachedPath.isEmpty()) {
+        cachedFamily.clear();
+        return QString();
+    }
+    if (!cachedFamily.isEmpty()) {
+        return cachedFamily;
+    }
+
+    const int fontId = QFontDatabase::addApplicationFont(cachedPath);
+    if (fontId < 0) {
+        cachedPath.clear();
+        return QString();
+    }
+    const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+    cachedFamily = families.isEmpty() ? QString() : families.first();
+    return cachedFamily;
 }
 
 }  // namespace
@@ -195,6 +262,14 @@ QString formatPreviewHudTimeLabel(double seconds)
 
 QFont previewHudTimestampFont(int pointSize, QFont::Weight weight)
 {
+    const QString customFamily = customHudFontFamily();
+    if (!customFamily.isEmpty()) {
+        QFont font(customFamily);
+        font.setPointSize(pointSize);
+        font.setWeight(weight);
+        return font;
+    }
+
     static const QString embeddedJetBrainsMonoFamily = []() -> QString {
         const int fontId = QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/jetbrains_mono.ttf"));
         if (fontId < 0) {
@@ -223,6 +298,14 @@ QFont previewHudTimestampFont(int pointSize, QFont::Weight weight)
 
 QFont previewHudMonoFont(int pointSize, QFont::Weight weight)
 {
+    const QString customFamily = customHudFontFamily();
+    if (!customFamily.isEmpty()) {
+        QFont font(customFamily);
+        font.setPointSize(pointSize);
+        font.setWeight(weight);
+        return font;
+    }
+
     QFont font;
     for (const QString& family : QStringList{QStringLiteral("Cascadia Mono"), QStringLiteral("JetBrains Mono"), QStringLiteral("Cascadia Code"), QStringLiteral("Consolas")}) {
         font.setFamily(family);
@@ -236,6 +319,33 @@ QFont previewHudMonoFont(int pointSize, QFont::Weight weight)
     font.setPointSize(pointSize);
     font.setWeight(weight);
     return font;
+}
+
+QString previewHudFontDisplayName()
+{
+    const QString customFamily = customHudFontFamily();
+    return customFamily.isEmpty() ? QStringLiteral("Default") : customFamily;
+}
+
+void setPreviewHudCustomFontPath(const QString& fontPath)
+{
+    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject app = root.value(QStringLiteral("app")).toObject();
+    QJsonObject videoExport = app.value(QStringLiteral("video_export")).toObject();
+    const QString normalizedPath = fontPath.isEmpty() ? QString() : QFileInfo(fontPath).absoluteFilePath();
+    if (normalizedPath.isEmpty()) {
+        videoExport.remove(QStringLiteral("hud_font_path"));
+    } else {
+        videoExport.insert(QStringLiteral("hud_font_path"), normalizedPath);
+    }
+    app.insert(QStringLiteral("video_export"), videoExport);
+    root.insert(QStringLiteral("app"), app);
+    UiText::savePreferencesObject(root);
+
+    cachedHudFontPath() = normalizedPath;
+    cachedHudFontFamily().clear();
+    hudFontCacheInitialized() = true;
+    customHudFontFamily();
 }
 
 }  // namespace miacode::preview::scene

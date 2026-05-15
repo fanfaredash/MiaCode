@@ -16,7 +16,12 @@ public:
     void applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference);
     void applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference);
     void applyPreserveDifficultySwitchView(bool enabled, bool persistPreference);
-    void showSimpleCopyArea();
+    void showCreateBookmarkDialog();
+    void showBookmarkManager();
+    void openBookmarkAtLine(int line);
+    void addBookmark(int line, const QString& title, const QString& text);
+    void replaceBookmarkLine(int fromLine, int toLine);
+    void refreshEditorBookmarkLines();
     void setFullCopyAreaVisible(bool visible);
     void syncCopyAreaEditorAppearance();
     void syncCopyAreaLineCount();

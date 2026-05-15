@@ -49,7 +49,8 @@
         QAction* previewAudioSettingsAction_ = nullptr;
         QAction* previewVideoSettingsAction_ = nullptr;
         QAction* swapWorkspaceSidesAction_ = nullptr;
-        QAction* simpleCopyAreaAction_ = nullptr;
+        QAction* createBookmarkAction_ = nullptr;
+        QAction* bookmarkManagerAction_ = nullptr;
         QAction* fullCopyAreaAction_ = nullptr;
         QAction* aboutAction_ = nullptr;
         QAction* fontDecreaseAction_ = nullptr;
@@ -222,6 +223,7 @@
         int editorUndoSaveAnchor_ = 0;
         int metadataExtraUndoSaveAnchor_ = 0;
         QVector<SelectionTransformUndoEntry> chartSelectionTransformUndoEntries_;
+        QVector<EditorBookmark> editorBookmarks_;
         int lastObservedEditorUndoSteps_ = 0;
         int lastObservedEditorRedoSteps_ = 0;
         bool editorSelectionUndoRedoRestoreInProgress_ = false;
@@ -550,7 +552,8 @@
     QAction*& previewAudioSettingsAction_ = ui_.previewAudioSettingsAction_;
     QAction*& previewVideoSettingsAction_ = ui_.previewVideoSettingsAction_;
     QAction*& swapWorkspaceSidesAction_ = ui_.swapWorkspaceSidesAction_;
-    QAction*& simpleCopyAreaAction_ = ui_.simpleCopyAreaAction_;
+    QAction*& createBookmarkAction_ = ui_.createBookmarkAction_;
+    QAction*& bookmarkManagerAction_ = ui_.bookmarkManagerAction_;
     QAction*& fullCopyAreaAction_ = ui_.fullCopyAreaAction_;
     QAction*& aboutAction_ = ui_.aboutAction_;
     QAction*& fontDecreaseAction_ = ui_.fontDecreaseAction_;
@@ -596,6 +599,7 @@
     int& editorUndoSaveAnchor_ = state_.editorUndoSaveAnchor_;
     int& metadataExtraUndoSaveAnchor_ = state_.metadataExtraUndoSaveAnchor_;
     QVector<SelectionTransformUndoEntry>& chartSelectionTransformUndoEntries_ = state_.chartSelectionTransformUndoEntries_;
+    QVector<EditorBookmark>& editorBookmarks_ = state_.editorBookmarks_;
     int& lastObservedEditorUndoSteps_ = state_.lastObservedEditorUndoSteps_;
     int& lastObservedEditorRedoSteps_ = state_.lastObservedEditorRedoSteps_;
     bool& editorSelectionUndoRedoRestoreInProgress_ = state_.editorSelectionUndoRedoRestoreInProgress_;

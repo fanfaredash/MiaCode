@@ -403,7 +403,9 @@ private:
     void applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference);
     void applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference);
     void applyPreserveDifficultySwitchView(bool enabled, bool persistPreference);
-    void showSimpleCopyArea();
+    void showCreateBookmarkDialog();
+    void showBookmarkManager();
+    void openBookmarkAtLine(int line);
     void setFullCopyAreaVisible(bool visible);
     void syncCopyAreaEditorAppearance();
     void syncCopyAreaLineCount();
@@ -516,6 +518,12 @@ private:
         int originalPosition = -1;
         int transformedAnchor = -1;
         int transformedPosition = -1;
+    };
+
+    struct EditorBookmark {
+        QString title;
+        QString text;
+        int line = 1;
     };
 
     class EditorSection;

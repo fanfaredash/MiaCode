@@ -72,6 +72,10 @@ private:
     void syncLivePreviewTimestampVisibility();
     void syncLivePreviewObjectStatsVisibility();
     void restoreLivePreviewState();
+    void openHudFontSettingsDialog();
+    QString importHudFontFromUser(QWidget* parent);
+    void resetHudFont();
+    void refreshLivePreviewHudFont();
     void loadPersistedSettings();
     void savePersistedSettings(const VideoExportTask& task) const;
     void persistExportOnlySettings() const;
@@ -161,6 +165,7 @@ private:
     QCheckBox* showTimestampCheck_ = nullptr;
     QCheckBox* showObjectStatsCheck_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
+    QPushButton* hudFontSettingsButton_ = nullptr;
     QToolButton* backgroundScaleModeButton_ = nullptr;
     QMenu* backgroundScaleModeMenu_ = nullptr;
     PreviewBackgroundScaleMode selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;

@@ -231,6 +231,12 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     connect(editor, &PlainCodeEditor::editorOverwriteModeChanged, this, [this](bool enabled) {
         applyEditorOverwriteModeEnabled(enabled, true);
     });
+    connect(editor, &PlainCodeEditor::lineNumberBookmarkActivated, this, &MainWindow::openBookmarkAtLine);
+    connect(editor, &PlainCodeEditor::lineNumberBookmarkMoveRequested, this, [this](int fromLine, int toLine) {
+        if (editorSection_ != nullptr) {
+            editorSection_->replaceBookmarkLine(fromLine, toLine);
+        }
+    });
     chartBracketHighlighter_ = new BracketScopeHighlighter(editor->document());
     editorWidget_ = editor;
     editorWidget_->setFont(codeFont);
@@ -918,14 +924,23 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 
     toolboxMenu_->addSeparator();
 
+    QMenu* bookmarkMenu = toolboxMenu_->addMenu(
+        UiText::isChineseUi() ? QStringLiteral("书签") : QStringLiteral("Bookmarks")
+    );
+    styleRoundedMenu(*bookmarkMenu);
+    createBookmarkAction_ = bookmarkMenu->addAction(
+        UiText::isChineseUi() ? QStringLiteral("创建书签") : QStringLiteral("Create Bookmark")
+    );
+    connect(createBookmarkAction_, &QAction::triggered, this, &MainWindow::showCreateBookmarkDialog);
+    bookmarkManagerAction_ = bookmarkMenu->addAction(
+        UiText::isChineseUi() ? QStringLiteral("书签管理") : QStringLiteral("Bookmark Manager")
+    );
+    connect(bookmarkManagerAction_, &QAction::triggered, this, &MainWindow::showBookmarkManager);
+
     QMenu* copyAreaMenu = toolboxMenu_->addMenu(
         UiText::isChineseUi() ? QStringLiteral("复制区") : QStringLiteral("Copy Area")
     );
     styleRoundedMenu(*copyAreaMenu);
-    simpleCopyAreaAction_ = copyAreaMenu->addAction(
-        UiText::isChineseUi() ? QStringLiteral("简易复制区") : QStringLiteral("Simple Copy Area")
-    );
-    connect(simpleCopyAreaAction_, &QAction::triggered, this, &MainWindow::showSimpleCopyArea);
     fullCopyAreaAction_ = copyAreaMenu->addAction(
         UiText::isChineseUi() ? QStringLiteral("完整复制区") : QStringLiteral("Full Copy Area")
     );
