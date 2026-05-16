@@ -833,6 +833,49 @@ void appendRenderBackendFallbackDetail(QString* detail, const QString& entry)
     *detail += QStringLiteral("; ") + entry;
 }
 
+// Paint a semi-transparent two-bar pause glyph centred over the export
+// frame. Called once per frame for the lead-in / pre-range window so the
+// viewer immediately sees that the playfield is held in a stationary state
+// (chart frozen at segmentStart, no playback yet). The glyph disappears
+// the moment the lead-in ends and the chart starts to advance.
+//
+// The size, colour, and inset are tuned to read against both bright and
+// dark backgrounds without obscuring the chart visuals — alpha 110/255
+// (≈43%) lets the playfield show through while still being unambiguous.
+void drawLeadInPauseOverlay(QImage* frame)
+{
+    if (frame == nullptr || frame->isNull()) {
+        return;
+    }
+    const QSize sz = frame->size();
+    const int shortSide = qMin(sz.width(), sz.height());
+    if (shortSide <= 0) {
+        return;
+    }
+
+    QPainter painter(frame);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+
+    const int barHeight = qMax(8, qRound(shortSide * 0.18));
+    const int barWidth = qMax(3, qRound(barHeight * 0.30));
+    const int gap = qMax(2, qRound(barWidth * 0.60));
+    const int totalWidth = barWidth * 2 + gap;
+    const qreal x0 = (sz.width() - totalWidth) / 2.0;
+    const qreal y0 = (sz.height() - barHeight) / 2.0;
+    const qreal radius = qMax<qreal>(2.0, barWidth * 0.22);
+
+    // Soft drop shadow to keep the glyph readable on bright/light frames.
+    painter.setBrush(QColor(0, 0, 0, 60));
+    painter.drawRoundedRect(QRectF(x0 + 1.5, y0 + 1.5, barWidth, barHeight), radius, radius);
+    painter.drawRoundedRect(QRectF(x0 + barWidth + gap + 1.5, y0 + 1.5, barWidth, barHeight), radius, radius);
+
+    // Main bars: semi-transparent white.
+    painter.setBrush(QColor(255, 255, 255, 110));
+    painter.drawRoundedRect(QRectF(x0, y0, barWidth, barHeight), radius, radius);
+    painter.drawRoundedRect(QRectF(x0 + barWidth + gap, y0, barWidth, barHeight), radius, radius);
+}
+
 ReadyFramePayload buildReadyFramePayload(
     VideoExportQuickRenderBackend* exportBackend,
     int frameIndex,
@@ -3835,7 +3878,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
         const int frameIndex = readyFrame.frameIndex;
         const double exportSecond = readyFrame.exportSecond;
         const QVector<ObjectTraceItem>& traceItems = readyFrame.traceItems;
-        const QImage& frame = readyFrame.frame;
+        // Local mutable copy: we may paint the lead-in pause overlay on top
+        // before the frame is packed for FFmpeg (see further down). All the
+        // diagnostics above the pack step still observe the un-overlaid
+        // frame because the overlay is the very last mutation we perform.
+        QImage frame = readyFrame.frame;
         const qint64 renderNs = readyFrame.renderNs;
         const qint64 offscreenDrawNs = readyFrame.offscreenDrawNs;
         const qint64 offscreenReadbackNs = readyFrame.offscreenReadbackNs;
@@ -3982,6 +4029,19 @@ VideoExportResult VideoExportController::exportPreparedTask(
             }
             previousObjectSignature = objectSignature;
             hasPreviousObjectSignature = true;
+        }
+
+        // Lead-in / pre-range overlay: while the playfield is held
+        // stationary at segmentStart, paint a semi-transparent pause
+        // glyph on top so the viewer can tell at a glance that playback
+        // hasn't started yet. Once outputSecond crosses leadInSeconds
+        // the condition flips false and the overlay vanishes.
+        const double outputSecondForOverlay =
+            static_cast<double>(frameIndex) / static_cast<double>(qMax(1, task.fps));
+        const bool inLeadInOverlay =
+            outputSecondForOverlay + kTimelineEpsilonSeconds < audioRenderPlan.leadInSeconds;
+        if (inLeadInOverlay) {
+            drawLeadInPauseOverlay(&frame);
         }
 
         const char* packedFrameData = nullptr;
