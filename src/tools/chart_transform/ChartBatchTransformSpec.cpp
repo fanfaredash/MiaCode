@@ -891,6 +891,89 @@ void runInlineSpecs(QTextStream& err, int* failed)
         expectTrue(changed == 1, QStringLiteral("rotate +45 counts only the rotated note body after }"), failed, err);
     }
 
+    // Regression: a selection that *starts* with an unmatched closing
+    // brace — typical when the user drags from inside a {N}…} subdivision
+    // and crosses its trailing '}' — must still rotate every note in the
+    // selection. Before the fix, the leading '}' was glued onto the
+    // first note (yielding token "}E4" which failed every recognition
+    // path in transformToken), so E4 silently survived while E5 and E6
+    // rotated. All three should rotate now.
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("}E4,E5,E6");
+        const QString output = miacode::chart_transform::transformChartSelectionText(
+            input,
+            miacode::chart_transform::ChartTransformOp::Rotate180,
+            &changed
+        );
+        expectEqual(
+            output,
+            QStringLiteral("}E8,E1,E2"),
+            QStringLiteral("rotate 180 transforms every touch note in a selection that leads with an unmatched }"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("rotate 180 counts all three touch notes after a leading }"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("}E4,E5,E6,");
+        const QString output = miacode::chart_transform::transformChartSelectionText(
+            input,
+            miacode::chart_transform::ChartTransformOp::Rotate180,
+            &changed
+        );
+        expectEqual(
+            output,
+            QStringLiteral("}E8,E1,E2,"),
+            QStringLiteral("rotate 180 keeps the trailing comma untouched when the selection ends just after the last note"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("rotate 180 counts all three notes regardless of the trailing comma"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("}1,2,3");
+        const QString output = miacode::chart_transform::transformChartSelectionText(
+            input,
+            miacode::chart_transform::ChartTransformOp::Rotate180,
+            &changed
+        );
+        expectEqual(
+            output,
+            QStringLiteral("}5,6,7"),
+            QStringLiteral("rotate 180 transforms plain digit notes in a selection that leads with an unmatched }"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("rotate 180 counts all three plain notes after a leading }"), failed, err);
+    }
+
+    // Direct-call variant: transformChartText with a stray leading `}`
+    // exercises the close-bracket flush trigger added to its tokenizer
+    // (the defense-in-depth half of the fix). Even without the selection
+    // edge-split, the closer must not absorb the following note.
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("}E4,E5,E6");
+        const QString output = miacode::chart_transform::transformChartText(
+            input,
+            miacode::chart_transform::ChartTransformOp::Rotate180,
+            &changed
+        );
+        expectEqual(
+            output,
+            QStringLiteral("}E8,E1,E2"),
+            QStringLiteral("transformChartText flushes stray leading } so the following note still parses"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("transformChartText with a leading } counts all three touches"), failed, err);
+    }
+
     {
         int changed = 0;
         const QString input = QStringLiteral("8:1)1");

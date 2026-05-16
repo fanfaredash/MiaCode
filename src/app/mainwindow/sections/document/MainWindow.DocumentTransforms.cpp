@@ -217,7 +217,7 @@ void MainWindow::DocumentSection::onMirrorLeftRight()
         return;
     }
     if (!applySelectionBatchTransform(uiText("action.transform.mirror_lr", "Mirror Left/Right"), [this](const QString& text, int* changedCount) {
-        return transformChartText(text, ChartTransformOp::MirrorLeftRight, changedCount);
+        return miacode::chart_transform::transformChartSelectionText(text, miacode::chart_transform::ChartTransformOp::MirrorLeftRight, changedCount);
     })) {
         return;
     }
@@ -233,7 +233,7 @@ void MainWindow::DocumentSection::onMirrorUpDown()
         return;
     }
     if (!applySelectionBatchTransform(uiText("action.transform.mirror_ud", "Mirror Up/Down"), [this](const QString& text, int* changedCount) {
-        return transformChartText(text, ChartTransformOp::MirrorUpDown, changedCount);
+        return miacode::chart_transform::transformChartSelectionText(text, miacode::chart_transform::ChartTransformOp::MirrorUpDown, changedCount);
     })) {
         return;
     }
@@ -249,7 +249,7 @@ void MainWindow::DocumentSection::onRotate180()
         return;
     }
     if (!applySelectionBatchTransform(uiText("action.transform.rotate_180", "Rotate 180"), [this](const QString& text, int* changedCount) {
-        return transformChartText(text, ChartTransformOp::Rotate180, changedCount);
+        return miacode::chart_transform::transformChartSelectionText(text, miacode::chart_transform::ChartTransformOp::Rotate180, changedCount);
     })) {
         return;
     }
@@ -265,7 +265,7 @@ void MainWindow::DocumentSection::onRotate45CounterClockwise()
         return;
     }
     if (!applySelectionBatchTransform(uiText("action.transform.rotate_ccw_45", "Rotate -45"), [this](const QString& text, int* changedCount) {
-        return transformChartText(text, ChartTransformOp::Rotate45CounterClockwise, changedCount);
+        return miacode::chart_transform::transformChartSelectionText(text, miacode::chart_transform::ChartTransformOp::Rotate45CounterClockwise, changedCount);
     })) {
         return;
     }
@@ -281,7 +281,7 @@ void MainWindow::DocumentSection::onRotate45Clockwise()
         return;
     }
     if (!applySelectionBatchTransform(uiText("action.transform.rotate_cw_45", "Rotate +45"), [this](const QString& text, int* changedCount) {
-        return transformChartText(text, ChartTransformOp::Rotate45Clockwise, changedCount);
+        return miacode::chart_transform::transformChartSelectionText(text, miacode::chart_transform::ChartTransformOp::Rotate45Clockwise, changedCount);
     })) {
         return;
     }

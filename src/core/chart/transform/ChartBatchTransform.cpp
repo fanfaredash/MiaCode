@@ -1728,6 +1728,19 @@ QString transformChartText(const QString& input, ChartTransformOp op, int* chang
                 transformed.append(ch);
                 continue;
             }
+            // Defense-in-depth for selection-based callers: a closing
+            // bracket without its opener (e.g. selection that begins with
+            // "}") would otherwise be glued onto the next note and make
+            // the whole token unrecognizable. Flushing here keeps the
+            // stray closer in its own (untransformed) token so the
+            // following note still parses cleanly. Well-formed whole-line
+            // input never reaches this branch because the matching
+            // opener handlers below swallow each bracket pair end-to-end.
+            if (ch == QChar(')') || ch == QChar('}') || ch == QChar(']')) {
+                flushToken();
+                transformed.append(ch);
+                continue;
+            }
             if (ch == QChar('(')) {
                 flushToken();
                 const int close = line.indexOf(')', i + 1);
