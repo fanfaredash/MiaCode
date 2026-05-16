@@ -839,9 +839,19 @@ void appendRenderBackendFallbackDetail(QString* detail, const QString& entry)
 // (chart frozen at segmentStart, no playback yet). The glyph disappears
 // the moment the lead-in ends and the chart starts to advance.
 //
-// The size, colour, and inset are tuned to read against both bright and
-// dark backgrounds without obscuring the chart visuals — alpha 110/255
-// (≈43%) lets the playfield show through while still being unambiguous.
+// Layered so the pause read clearly against both dark and bright chart
+// backgrounds:
+//   1) A faint full-frame black wash (alpha 70/255 ≈ 27%) that mutes the
+//      whole playfield so it visibly "feels" paused.
+//   2) A rounded translucent backdrop panel under the bars for contrast
+//      on bright frames.
+//   3) Two opaque white bars with a thin black outline so the bars
+//      stay legible regardless of what shows through.
+//
+// `Format_RGBA8888` (straight alpha) is what the export pipeline feeds
+// FFmpeg — QPainter on this format composes correctly through Qt's
+// internal premultiplied path; the final straight-alpha output is what
+// FFmpeg's `overlay=…:alpha=straight` filter expects.
 void drawLeadInPauseOverlay(QImage* frame)
 {
     if (frame == nullptr || frame->isNull()) {
@@ -857,21 +867,38 @@ void drawLeadInPauseOverlay(QImage* frame)
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setPen(Qt::NoPen);
 
-    const int barHeight = qMax(8, qRound(shortSide * 0.18));
-    const int barWidth = qMax(3, qRound(barHeight * 0.30));
-    const int gap = qMax(2, qRound(barWidth * 0.60));
+    // Layer 1 — full-frame dim. SourceOver onto an opaque chart frame
+    // pulls its perceived brightness down ~27%; onto a transparent base
+    // it leaves a dark wash that FFmpeg's overlay filter then composites
+    // over the chart background. Either way the playfield reads paused.
+    painter.fillRect(frame->rect(), QColor(0, 0, 0, 70));
+
+    // 2/3 of the original sizing — the previous version read as overly
+    // dominant during the lead-in; scaling barHeight here cascades to
+    // every other dimension because they are all derived from it.
+    const int barHeight = qMax(8, qRound(shortSide * 0.22 * 2.0 / 3.0));
+    const int barWidth = qMax(3, qRound(barHeight * 0.32));
+    const int gap = qMax(2, qRound(barWidth * 0.65));
     const int totalWidth = barWidth * 2 + gap;
     const qreal x0 = (sz.width() - totalWidth) / 2.0;
     const qreal y0 = (sz.height() - barHeight) / 2.0;
-    const qreal radius = qMax<qreal>(2.0, barWidth * 0.22);
+    const qreal radius = qMax<qreal>(3.0, barWidth * 0.25);
 
-    // Soft drop shadow to keep the glyph readable on bright/light frames.
-    painter.setBrush(QColor(0, 0, 0, 60));
-    painter.drawRoundedRect(QRectF(x0 + 1.5, y0 + 1.5, barWidth, barHeight), radius, radius);
-    painter.drawRoundedRect(QRectF(x0 + barWidth + gap + 1.5, y0 + 1.5, barWidth, barHeight), radius, radius);
+    // Layer 2 — translucent backdrop panel behind the bars.
+    const qreal panelPadX = barWidth * 0.7;
+    const qreal panelPadY = barHeight * 0.18;
+    const QRectF panelRect(
+        x0 - panelPadX,
+        y0 - panelPadY,
+        totalWidth + panelPadX * 2.0,
+        barHeight + panelPadY * 2.0
+    );
+    painter.setBrush(QColor(0, 0, 0, 110));
+    painter.drawRoundedRect(panelRect, radius * 1.6, radius * 1.6);
 
-    // Main bars: semi-transparent white.
-    painter.setBrush(QColor(255, 255, 255, 110));
+    // Layer 3 — bars themselves: opaque white with a thin dark outline.
+    painter.setPen(QPen(QColor(0, 0, 0, 160), 1.5));
+    painter.setBrush(QColor(255, 255, 255, 230));
     painter.drawRoundedRect(QRectF(x0, y0, barWidth, barHeight), radius, radius);
     painter.drawRoundedRect(QRectF(x0 + barWidth + gap, y0, barWidth, barHeight), radius, radius);
 }
@@ -4042,6 +4069,17 @@ VideoExportResult VideoExportController::exportPreparedTask(
             outputSecondForOverlay + kTimelineEpsilonSeconds < audioRenderPlan.leadInSeconds;
         if (inLeadInOverlay) {
             drawLeadInPauseOverlay(&frame);
+            if (frameIndex < 6 || frameIndex % 30 == 0) {
+                appendVideoExportLog(
+                    QStringLiteral("lead_in_pause_overlay"),
+                    QStringLiteral("frame=%1 output_s=%2 lead_in_s=%3 size=%4x%5")
+                        .arg(frameIndex)
+                        .arg(outputSecondForOverlay, 0, 'f', 4)
+                        .arg(audioRenderPlan.leadInSeconds, 0, 'f', 4)
+                        .arg(frame.width())
+                        .arg(frame.height())
+                );
+            }
         }
 
         const char* packedFrameData = nullptr;
