@@ -1087,19 +1087,30 @@ void PlainCodeEditor::dragLeaveEvent(QDragLeaveEvent* event)
 void PlainCodeEditor::dropEvent(QDropEvent* event)
 {
     if (event != nullptr && event->mimeData() != nullptr) {
-        const int line = lineNumberAtAreaPosition(event->position().toPoint());
+        // Clear any bookmark-drop-row hover indicator regardless of which
+        // drop format we receive — dragMoveEvent may have set it for a
+        // bookmark drag earlier in the gesture.
         hoveredBookmarkDropLine_ = -1;
         lineNumberArea_->update();
-        if (line > 0 && event->mimeData()->hasFormat(QStringLiteral("application/x-miacode-bookmark-move"))) {
-            bool ok = false;
-            const int fromLine = event->mimeData()->data(QStringLiteral("application/x-miacode-bookmark-move")).toInt(&ok);
-            if (ok && fromLine > 0 && fromLine != line) {
-                emit lineNumberBookmarkMoveRequested(fromLine, line);
+        if (event->mimeData()->hasFormat(QStringLiteral("application/x-miacode-bookmark-move"))) {
+            const int line = lineNumberAtAreaPosition(event->position().toPoint());
+            if (line > 0) {
+                bool ok = false;
+                const int fromLine = event->mimeData()->data(
+                    QStringLiteral("application/x-miacode-bookmark-move")).toInt(&ok);
+                if (ok && fromLine > 0 && fromLine != line) {
+                    emit lineNumberBookmarkMoveRequested(fromLine, line);
+                }
             }
+            event->acceptProposedAction();
+            return;
         }
-        event->acceptProposedAction();
-        return;
     }
+    // Non-bookmark drop (e.g. dragging a selected block of text inside
+    // the editor): delegate to QTextEdit so the default text-move drop
+    // logic actually moves the text. Previously every drop was
+    // short-circuited with acceptProposedAction(), which left the
+    // caret at the drop position but never moved any text.
     QTextEdit::dropEvent(event);
 }
 
