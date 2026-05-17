@@ -198,4 +198,13 @@ private:
     qint64 videoFrameStallCount_ = 0;
     bool videoFrameStalled_ = false;
     bool shuttingDown_ = false;
+    // Defensive: when setPlaybackRate is invoked while the underlying
+    // QMediaPlayer is in a transient status (LoadingMedia /
+    // BufferingMedia / StalledMedia / InvalidMedia), the rate is
+    // cached in playbackRate_ but NOT pushed to player_; this flag
+    // tells the mediaStatusChanged handler to re-apply the rate the
+    // next time the player reaches a stable status. Qt 6.8 FFmpeg /
+    // D3D11-NV12 has documented crashes when setPlaybackRate races a
+    // decoder reconfigure during these transitions.
+    bool pendingPlaybackRateApply_ = false;
 };

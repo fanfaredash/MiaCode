@@ -173,7 +173,11 @@ void PreviewStageMediaHost::initializeBackendObjects()
     audioOutput_->setMuted(true);
     audioOutput_->setVolume(0.0f);
     player_->setAudioOutput(audioOutput_);
+    // Fresh player has NoMedia status which is stable, so the rate
+    // is safe to push here. Clear any pending-apply flag carried
+    // from the previous (now destroyed) player instance.
     player_->setPlaybackRate(static_cast<qreal>(playbackRate_));
+    pendingPlaybackRateApply_ = false;
     // One-shot diagnostic so the user-machine vs dev-machine PV-scaling
     // bug can be pinned down without a custom build. The QtMultimedia
     // backend (FFmpeg vs native WMF on Windows) is selected at runtime
@@ -240,6 +244,24 @@ void PreviewStageMediaHost::initializeBackendObjects()
                 .arg(debugMediaTypeName())
                 .arg(recoveringVideoBackend_ ? 1 : 0)
         );
+        // Drain any deferred playback-rate apply now that the media
+        // pipeline has reached a stable state. Symmetric guard with
+        // setPlaybackRate(): only flush on stable statuses.
+        if (pendingPlaybackRateApply_ && player_ != nullptr) {
+            const bool stable = status == QMediaPlayer::NoMedia
+                || status == QMediaPlayer::LoadedMedia
+                || status == QMediaPlayer::BufferedMedia
+                || status == QMediaPlayer::EndOfMedia;
+            if (stable) {
+                pendingPlaybackRateApply_ = false;
+                player_->setPlaybackRate(static_cast<qreal>(playbackRate_));
+                appendPreviewStageMediaLog(
+                    QStringLiteral("playback_rate_deferred_apply"),
+                    QString("rate=%1 status=%2")
+                        .arg(playbackRate_, 0, 'f', 3)
+                        .arg(mediaStatusName(status)));
+            }
+        }
         if (status == QMediaPlayer::EndOfMedia) {
             videoPlaybackActive_ = false;
             videoPlaybackPendingStart_ = false;
@@ -481,9 +503,34 @@ void PreviewStageMediaHost::setPlaybackRate(double rate)
 {
     playbackRate_ = qMax(0.05, rate);
 #ifdef HAVE_QT_MULTIMEDIA
-    if (player_ != nullptr) {
-        player_->setPlaybackRate(static_cast<qreal>(playbackRate_));
+    if (player_ == nullptr) {
+        return;
     }
+    // Qt 6.8 + FFmpeg backend on Windows (D3D11 / NV12 path) has
+    // documented crashes when QMediaPlayer::setPlaybackRate races
+    // decoder reconfigure during the transient media-status window.
+    // When the status is NOT one of the stable ones, cache the rate
+    // (already in playbackRate_) and defer the push until the next
+    // mediaStatusChanged transition into a stable state — the rate
+    // is also re-applied unconditionally on recoverVideoBackend via
+    // initializeBackendObjects, so worst case is one frame of stale
+    // rate while the decoder settles.
+    const QMediaPlayer::MediaStatus status = player_->mediaStatus();
+    const bool stable = status == QMediaPlayer::NoMedia
+        || status == QMediaPlayer::LoadedMedia
+        || status == QMediaPlayer::BufferedMedia
+        || status == QMediaPlayer::EndOfMedia;
+    if (!stable) {
+        pendingPlaybackRateApply_ = true;
+        appendPreviewStageMediaLog(
+            QStringLiteral("playback_rate_deferred"),
+            QString("rate=%1 status=%2 reason=transient_media_status")
+                .arg(playbackRate_, 0, 'f', 3)
+                .arg(mediaStatusName(status)));
+        return;
+    }
+    pendingPlaybackRateApply_ = false;
+    player_->setPlaybackRate(static_cast<qreal>(playbackRate_));
 #endif
 }
 
