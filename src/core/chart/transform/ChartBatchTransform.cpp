@@ -1708,11 +1708,18 @@ QString transformChartText(const QString& input, ChartTransformOp op, int* chang
     for (int lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
         const QString& line = lines.at(lineIndex);
         QString token;
+        // Tracks matched [ inside the current token (e.g. slide duration
+        // brackets in `8-3[8:1]` and chained `8b-3[8:1]*^5[8:1]`). When
+        // we see a `]` and depth > 0, it belongs to this token and gets
+        // appended; only depth == 0 means a stray closer and triggers
+        // the defensive flush below.
+        int tokenBracketDepth = 0;
         const auto flushToken = [&]() {
             if (!token.isEmpty()) {
                 transformed.append(transformToken(token));
                 token.clear();
             }
+            tokenBracketDepth = 0;
         };
 
         for (int i = 0; i < line.size(); ++i) {
@@ -1736,9 +1743,28 @@ QString transformChartText(const QString& input, ChartTransformOp op, int* chang
             // following note still parses cleanly. Well-formed whole-line
             // input never reaches this branch because the matching
             // opener handlers below swallow each bracket pair end-to-end.
-            if (ch == QChar(')') || ch == QChar('}') || ch == QChar(']')) {
+            //
+            // Exception: a `]` matching a `[` previously appended to the
+            // current token (e.g. slide duration `8-3[8:1]`, or chained
+            // slides `8b-3[8:1]*^5[8:1]` where the token spans several
+            // bracketed sub-segments) MUST stay inside the token —
+            // otherwise the second-segment leading operator (`*^5…`)
+            // becomes a stand-alone unrecognizable token. Track depth
+            // and only flush when the `]` is genuinely stray.
+            if (ch == QChar(')') || ch == QChar('}')
+                || (ch == QChar(']') && tokenBracketDepth == 0)) {
                 flushToken();
                 transformed.append(ch);
+                continue;
+            }
+            if (ch == QChar(']') && tokenBracketDepth > 0) {
+                token.append(ch);
+                --tokenBracketDepth;
+                continue;
+            }
+            if (ch == QChar('[')) {
+                token.append(ch);
+                ++tokenBracketDepth;
                 continue;
             }
             if (ch == QChar('(')) {

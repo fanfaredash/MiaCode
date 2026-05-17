@@ -1398,6 +1398,44 @@ void runInlineSpecs(QTextStream& err, int* failed)
             err
         );
     }
+
+    // Regression: chained slides (segments joined with `*`) must rotate
+    // every lane digit in every segment, not just the first one.
+    // Reported on 8b-3[8:1]*^5[8:1] — before the fix only "8b-3" got
+    // rotated and "^5" remained at lane 5.
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("8b-3[8:1]*^5[8:1]");
+        const QString output = miacode::chart_transform::transformChartText(
+            input,
+            miacode::chart_transform::ChartTransformOp::Rotate45Clockwise,
+            &changed
+        );
+        expectEqual(
+            output,
+            QStringLiteral("1b-4[8:1]*^6[8:1]"),
+            QStringLiteral("rotate +45 rotates every segment of a *-chained slide (8b-3[8:1]*^5[8:1])"),
+            failed,
+            err
+        );
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("8b-3[8:1]*>5[8:1]");
+        const QString output = miacode::chart_transform::transformChartText(
+            input,
+            miacode::chart_transform::ChartTransformOp::Rotate45Clockwise,
+            &changed
+        );
+        expectEqual(
+            output,
+            QStringLiteral("1b-4[8:1]*>6[8:1]"),
+            QStringLiteral("rotate +45 rotates every segment of a *-chained slide with > arc (8b-3[8:1]*>5[8:1])"),
+            failed,
+            err
+        );
+    }
 }
 
 }  // namespace
