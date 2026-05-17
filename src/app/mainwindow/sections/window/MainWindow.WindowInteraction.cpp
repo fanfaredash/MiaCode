@@ -863,12 +863,14 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
                     false,
                     0.0,
                     false);
-                if (owner_.previewViewportLockEnabled_) {
-                    auto* editor = qobject_cast<PlainCodeEditor*>(owner_.editorWidget_);
-                    if (editor != nullptr) {
-                        editor->applyPreviewFollowCursor(editor->textCursor(), true, true);
-                    }
-                }
+                // Intentionally no View Lock action here: when playback is
+                // already paused, a left-click's text position is by
+                // definition already visible (you can only click on visible
+                // pixels). The previous applyPreviewFollowCursor(centerView=
+                // true, suppressSignals=true) added in `42a9f06 view locked`
+                // overwrote drag selections and froze the caret blink via
+                // QSignalBlocker. The View Lock path while paused should be
+                // a no-op — Qt's default click handling is correct.
             });
         }
     }

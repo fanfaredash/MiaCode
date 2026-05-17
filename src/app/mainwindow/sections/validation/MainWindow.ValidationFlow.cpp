@@ -805,12 +805,13 @@ void MainWindow::ValidationSection::applyEditorExtraSelectionsForReason(const QS
         state_.previewFollowDecorationCursorLine_,
         state_.previewFollowDecorationCursorCol_);
     const int totalSelections = state_.cachedValidationExtraSelections_.size();
+    const int previewFollowActive = state_.previewFollowDecorationActive_ ? 1 : 0;
     if (signature == state_.lastEditorExtraSelectionsSignature_) {
         appendValidationPerfLog(
             QStringLiteral("edit/extra_selections_perf"),
             QStringLiteral("skipped=1 decorations=%1 preview_follow=%2 elapsed_ms=%3")
                 .arg(state_.validationDecorations_.size())
-                .arg(0)
+                .arg(previewFollowActive)
                 .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
         );
         appendValidationPerfLog(
@@ -819,7 +820,7 @@ void MainWindow::ValidationSection::applyEditorExtraSelectionsForReason(const QS
                 "reason=%1 validation_selections=%2 follow_active=%3 total_selections=%4 elapsed_ms=%5")
                 .arg(reason)
                 .arg(state_.cachedValidationExtraSelections_.size())
-                .arg(0)
+                .arg(previewFollowActive)
                 .arg(totalSelections)
                 .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
         );
@@ -850,7 +851,7 @@ void MainWindow::ValidationSection::applyEditorExtraSelectionsForReason(const QS
         QStringLiteral("edit/extra_selections_perf"),
         QStringLiteral("skipped=0 decorations=%1 preview_follow=%2 selections=%3 elapsed_ms=%4")
             .arg(state_.validationDecorations_.size())
-            .arg(0)
+            .arg(previewFollowActive)
             .arg(state_.currentEditorExtraSelections_.size())
             .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
     );
@@ -860,7 +861,7 @@ void MainWindow::ValidationSection::applyEditorExtraSelectionsForReason(const QS
             "reason=%1 validation_selections=%2 follow_active=%3 total_selections=%4 elapsed_ms=%5")
             .arg(reason)
             .arg(state_.cachedValidationExtraSelections_.size())
-            .arg(0)
+            .arg(previewFollowActive)
             .arg(state_.currentEditorExtraSelections_.size())
             .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
     );
