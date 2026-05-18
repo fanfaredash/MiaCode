@@ -31,6 +31,20 @@ constexpr double kBassPreviewMinRate = 0.25;
 constexpr double kBassPreviewMaxRate = 2.0;
 constexpr double kBassPreviewStatusLogIntervalSeconds = 1.0;
 constexpr DWORD kBassPreviewTempoFlags = 0x10000 | BASS_STREAM_DECODE; // BASS_FX_FREESOURCE | BASS_STREAM_DECODE
+// BASS_FX 2.4.13+. Enabling this flushes the SoundTouch sequencer at
+// pause / resume / seek boundaries so we don't emit half-processed
+// samples on the next read. Without it, multiple pause-resume cycles
+// accumulate boundary clicks that sound like audio "tearing"; with
+// it, BASS_FX schedules a short crossfade across the discontinuity.
+// Older BASS_FX builds ignore unknown attribute IDs and BASS_ChannelSetAttribute
+// returns FALSE — safe to set unconditionally.
+constexpr DWORD kBassPreviewTempoOptionPreventClick = 0x10016;
+// BASS_POS_FLUSH (BASS 2.4.15+). OR'd into BASS_ChannelSetPosition's
+// `mode` argument; on a BASS_FX tempo stream it clears the internal
+// SoundTouch input/output queue, so a seek won't emit residual
+// pre-seek samples. Safe on non-FX streams (BASS ignores unsupported
+// flags).
+constexpr DWORD kBassPosFlush = 0x4000000;
 constexpr DWORD kBassPreviewTempoAttribute = 0x10000; // BASS_ATTRIB_TEMPO
 
 bool runtimeAudioDebugEnabled()
@@ -258,6 +272,15 @@ struct BassPreviewAudioBackend::Sample {
                         .arg(errorCode));
                 return false;
             }
+            // Enable BASS_FX click prevention. Result is logged so we
+            // can tell from a customer dump whether their BASS_FX
+            // shipped supports it.
+            const BOOL preventClickOk = BASS_ChannelSetAttribute(
+                tempoStream, kBassPreviewTempoOptionPreventClick, 1.0f);
+            appendAudioDebugLog(
+                QString("bass_tempo_create kind=%1 prevent_click_attr_supported=%2")
+                    .arg(kind)
+                    .arg(preventClickOk ? 1 : 0));
             stream = tempoStream;
         }
 
@@ -340,7 +363,16 @@ struct BassPreviewAudioBackend::Sample {
         }
         const double clamped = qBound(0.0, qIsFinite(seconds) ? seconds : 0.0, lengthSeconds);
         const QWORD position = BASS_ChannelSeconds2Bytes(source, clamped);
-        BASS_ChannelSetPosition(source, position, BASS_POS_BYTE);
+        // BASS_POS_FLUSH on a BASS_FX tempo stream drops the internal
+        // SoundTouch input/output queue — without it, a seek leaves
+        // ~40 ms of pre-seek samples queued that get emitted before
+        // the new position's samples, producing audible "tearing" /
+        // overlap after pause-resume cycles where the BGM is
+        // re-seeked even by a few milliseconds.
+        const DWORD mode = speedChangeSupported
+            ? (BASS_POS_BYTE | kBassPosFlush)
+            : BASS_POS_BYTE;
+        BASS_ChannelSetPosition(source, position, mode);
     }
 
     double currentSec() const
@@ -366,7 +398,27 @@ struct BassPreviewAudioBackend::Sample {
             return;
         }
         const float tempo = static_cast<float>((qBound(kBassPreviewMinRate, rate, kBassPreviewMaxRate) - 1.0) * 100.0);
+        // Defense in depth: BASS_FX's BASS_ATTRIB_TEMPO is not robust
+        // to modification while the source is being actively pulled by
+        // the mixer (especially for large excursions like 1.0→0.5).
+        // Snapshot the running state, pause to give the audio thread a
+        // clean pre/post boundary, write the attribute, then restore.
+        // BassPreviewAudioBackend::setBackgroundTrackPlaybackRate has
+        // an outer defer that should usually keep us off this path
+        // during playback; this guard catches the residual cases
+        // (e.g. SFX samples reconfigured outside the background-track
+        // flow).
+        const DWORD flags = BASS_Mixer_ChannelFlags(source, 0, 0);
+        const bool wasRunning = flags != static_cast<DWORD>(-1)
+            && (flags & BASS_MIXER_CHAN_PAUSE) == 0
+            && BASS_Mixer_ChannelIsActive(source) == BASS_ACTIVE_PLAYING;
+        if (wasRunning) {
+            BASS_Mixer_ChannelFlags(source, BASS_MIXER_CHAN_PAUSE, BASS_MIXER_CHAN_PAUSE);
+        }
         BASS_ChannelSetAttribute(source, kBassPreviewTempoAttribute, tempo);
+        if (wasRunning) {
+            BASS_Mixer_ChannelFlags(source, 0, BASS_MIXER_CHAN_PAUSE);
+        }
     }
 
     bool isPlaying() const
@@ -891,7 +943,18 @@ void BassPreviewAudioBackend::setBackgroundTrackSampleSpeed(double rate)
 {
 #ifdef Q_OS_WIN
     if (backgroundTrackSample_ != nullptr) {
+        // Log the actual moment of BASS_FX tempo attribute write,
+        // along with whether the source was active at that point —
+        // critical for telling "tempo flip while playing" race apart
+        // from "tempo flip while paused" (safe) in dumps.
+        const double bgmRawBefore = backgroundTrackSample_->currentSec();
         backgroundTrackSample_->setSpeed(rate);
+        appendAudioDebugLog(
+            QString("bass_init op=bgm_tempo_apply rate=%1 master_running=%2 bgm_raw_before=%3 bgm_raw_after=%4")
+                .arg(rate, 0, 'f', 3)
+                .arg(playbackSession_.masterRunning ? 1 : 0)
+                .arg(bgmRawBefore, 0, 'f', 6)
+                .arg(backgroundTrackSample_->currentSec(), 0, 'f', 6));
     }
 #else
     Q_UNUSED(rate);
@@ -954,7 +1017,24 @@ void BassPreviewAudioBackend::suspendPlaybackTransport()
     }
     logTrackFileMissingAfterLoadIfNeeded();
     const double pauseSecond = authoritativeSecond();
+    const double bgmRawAtPause = (backgroundTrackSample_ != nullptr)
+        ? backgroundTrackSample_->currentSec()
+        : -1.0;
+    // Drift snapshot vs. previous pause boundary. A monotonically
+    // growing |bgm_delta_from_auth| or |auth_delta_from_prev_pause|
+    // across cycles is the smoking gun for the "tearing after many
+    // pause-resume" report — it means BGM and master mixer are
+    // walking out of phase across boundaries.
+    const double authDeltaFromPrevPause = (playbackSession_.lastPauseAuthoritativeSecond >= 0.0)
+        ? (pauseSecond - playbackSession_.lastPauseAuthoritativeSecond)
+        : 0.0;
+    const double bgmDeltaFromAuth = (bgmRawAtPause >= 0.0)
+        ? (bgmRawAtPause - playbackSession_.backgroundTrackOffsetSeconds - pauseSecond)
+        : 0.0;
     playbackSession_.lastAuthoritativeSecond = pauseSecond;
+    playbackSession_.lastPauseAuthoritativeSecond = pauseSecond;
+    playbackSession_.lastPauseBgmRawSecond = bgmRawAtPause;
+    ++playbackSession_.pauseCycleCount;
     clearScheduledGroupSync();
     BASS_ChannelPause(masterMixer_);
     playbackSession_.masterRunning = false;
@@ -962,9 +1042,13 @@ void BassPreviewAudioBackend::suspendPlaybackTransport()
     retainedPlaybackMode_ = RetainedPlaybackMode::PausedExact;
     appendBassDebugLog(
         miacode::preview_audio::bass::BassDebugOperation::PauseExact,
-        QString("second=%1 mode=%2")
+        QString("second=%1 mode=%2 cycle=%3 bgm_raw=%4 bgm_delta_from_auth_ms=%5 auth_delta_from_prev_pause_s=%6")
             .arg(pauseSecond, 0, 'f', 6)
-            .arg(retainedPlaybackModeLabel(retainedPlaybackMode_)));
+            .arg(retainedPlaybackModeLabel(retainedPlaybackMode_))
+            .arg(playbackSession_.pauseCycleCount)
+            .arg(bgmRawAtPause, 0, 'f', 6)
+            .arg(bgmDeltaFromAuth * 1000.0, 0, 'f', 3)
+            .arg(authDeltaFromPrevPause, 0, 'f', 6));
 #endif
 }
 
@@ -1098,14 +1182,44 @@ void BassPreviewAudioBackend::startTransportFromCurrentAnchor()
         restoreTouchholdVoices(playbackSession_.lastAuthoritativeSecond);
     }
     armNextGroupSync(playbackSession_.lastAuthoritativeSecond);
+    // Resume-side drift snapshot (paired with the suspend log). The
+    // gap_from_pause_s shows how long the user was paused; if BGM
+    // raw position has moved while we were paused (it shouldn't —
+    // backgroundTrackSample_->play() is supposed to resume from the
+    // exact same byte), the bgm_delta_from_pause column will spike.
+    const double bgmRawAtResume = (backgroundTrackSample_ != nullptr)
+        ? backgroundTrackSample_->currentSec()
+        : -1.0;
+    const double gapFromPauseS = (playbackSession_.lastPauseAuthoritativeSecond >= 0.0)
+        ? (playbackSession_.lastAuthoritativeSecond - playbackSession_.lastPauseAuthoritativeSecond)
+        : 0.0;
+    const double bgmDeltaFromPauseMs = (bgmRawAtResume >= 0.0
+        && playbackSession_.lastPauseBgmRawSecond >= 0.0)
+        ? ((bgmRawAtResume - playbackSession_.lastPauseBgmRawSecond) * 1000.0)
+        : 0.0;
+    playbackSession_.lastResumeAuthoritativeSecond = playbackSession_.lastAuthoritativeSecond;
+    playbackSession_.lastResumeBgmRawSecond = bgmRawAtResume;
 #endif
     preparedPlayback_ = PreparedPlaybackState();
+#ifdef Q_OS_WIN
+    appendBassDebugLog(
+        miacode::preview_audio::bass::BassDebugOperation::ResumeTransport,
+        QString("from=%1 second=%2 bg_pending=%3 cycle=%4 bgm_raw=%5 gap_from_pause_s=%6 bgm_delta_from_pause_ms=%7")
+            .arg(retainedPlaybackModeLabel(retainedMode))
+            .arg(playbackSession_.lastAuthoritativeSecond, 0, 'f', 6)
+            .arg(playbackSession_.backgroundTrackPendingStart ? 1 : 0)
+            .arg(playbackSession_.pauseCycleCount)
+            .arg(bgmRawAtResume, 0, 'f', 6)
+            .arg(gapFromPauseS, 0, 'f', 6)
+            .arg(bgmDeltaFromPauseMs, 0, 'f', 3));
+#else
     appendBassDebugLog(
         miacode::preview_audio::bass::BassDebugOperation::ResumeTransport,
         QString("from=%1 second=%2 bg_pending=%3")
             .arg(retainedPlaybackModeLabel(retainedMode))
             .arg(playbackSession_.lastAuthoritativeSecond, 0, 'f', 6)
             .arg(playbackSession_.backgroundTrackPendingStart ? 1 : 0));
+#endif
     retainedPlaybackMode_ = RetainedPlaybackMode::None;
     noteTransportReady(QStringLiteral("resume_transport"));
 }
@@ -1186,6 +1300,27 @@ void BassPreviewAudioBackend::setBackgroundTrackPlaybackRate(double rate)
                 .arg(normalizedRate, 0, 'f', 3));
     }
     playbackSession_.backgroundTrackPlaybackRate = normalizedRate;
+    // BASS_FX tempo plug-in is not safe to BASS_ChannelSetAttribute
+    // on while the source is being actively pulled by the mixer —
+    // observed crash (logs_19) when changing to 0.5x mid-playback.
+    // When masterRunning, defer the actual tempo modify: the
+    // invalidation above will trigger the runtime to stop and re-
+    // anchor playback, and configureBackgroundTrackForSecond reads
+    // playbackSession_.backgroundTrackPlaybackRate to call
+    // backgroundTrackSample_->setSpeed() once the source is safely
+    // paused. The cached rate above is the source of truth; this
+    // just narrows the window where the modify happens.
+    if (rateChanged && playbackSession_.masterRunning) {
+        appendAudioDebugLog(
+            QString("bass_init op=defer_rate_tempo_modify reason=master_running new_rate=%1")
+                .arg(normalizedRate, 0, 'f', 3));
+        // Bound flush so the breadcrumb hits disk before any
+        // subsequent BASS_FX call inside the runtime's stop chain
+        // has a chance to fault. Symmetric with the flush inside
+        // invalidateRetainedPlaybackState.
+        miacode::debug_log::flushAsyncLogWriter(200);
+        return;
+    }
     setBackgroundTrackSampleSpeed(playbackSession_.backgroundTrackPlaybackRate);
 }
 
@@ -1583,6 +1718,7 @@ void BassPreviewAudioBackend::configureBackgroundTrackForSecond(
         return;
     }
 
+    const double bgmRawBeforeSeek = backgroundTrackSample_->currentSec();
     backgroundTrackSample_->setCurrentSec(rawSecond);
     backgroundTrackSample_->pause();
     playbackSession_.backgroundTrackPendingStart = false;
@@ -1590,11 +1726,19 @@ void BassPreviewAudioBackend::configureBackgroundTrackForSecond(
     playbackSession_.backgroundTrackRunning = false;
     appendBassDebugLog(
         miacode::preview_audio::bass::BassDebugOperation::ConfigureBackgroundTrack,
-        QString("reason=%1 second=%2 raw=%3 elapsed_ms=%4 pending_start=0")
+        // Added bgm_raw_before_seek so we can see when the BGM was
+        // re-seeked unnecessarily (e.g. pause-resume that goes through
+        // the anchored path will land here even though no user seek
+        // occurred). Pairs with the BASS_POS_FLUSH on setCurrentSec —
+        // if FLUSH is supported, the SoundTouch queue is clean even
+        // when this delta is non-zero.
+        QString("reason=%1 second=%2 raw=%3 elapsed_ms=%4 pending_start=0 bgm_raw_before_seek=%5 master_running=%6")
             .arg(reason)
             .arg(second, 0, 'f', 6)
             .arg(rawSecond, 0, 'f', 6)
-            .arg(timer.elapsed()),
+            .arg(timer.elapsed())
+            .arg(bgmRawBeforeSeek, 0, 'f', 6)
+            .arg(playbackSession_.masterRunning ? 1 : 0),
         route == miacode::preview_audio::bass::BassDebugRoute::Init);
 #else
     Q_UNUSED(second);
