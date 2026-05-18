@@ -370,7 +370,8 @@ Copy-Item $legacyQmlLauncherSrc (Join-Path $DistDir "Start_MiaCode_Legacy_QML.ba
 $triageLaunchers = @(
     "Start_MiaCode_SkipDiagD3D11.bat",   # A: skip D3D11 probe only
     "Start_MiaCode_DiagBypass.bat",      # B: skip AsyncLogWriter only
-    "Start_MiaCode_SkipBoth.bat"         # C: skip both
+    "Start_MiaCode_SkipBoth.bat",        # C: skip both
+    "Start_MiaCode_QtPluginDiag.bat"     # D: QT_DEBUG_PLUGINS + stderr redirect
 )
 foreach ($launcher in $triageLaunchers) {
     $src = Join-Path $repoRoot "scripts\\$launcher"
