@@ -444,6 +444,60 @@ foreach ($runtimeDll in @("dxcompiler.dll", "dxil.dll")) {
     }
 }
 
+# Beta49: app-local VC++ runtime to bypass user-system MSVCP140/VCRUNTIME140
+# version mismatch. Confirmed root cause for the Win10-22H2 AMD Renoir
+# silent-crash report — fault at MSVCP140.dll+0x12EB0 in 4 independent code
+# paths, all from the first std::mutex lock of the process. Loader pulls
+# the system32 copy if no app-local copy exists; bundling our build-machine
+# version next to MiaCode.exe makes the loader find app/ first (default
+# DLL search order: directory of the EXE → System32 → ...).
+$vcRuntimeSrc = $null
+# Probe candidate Visual Studio 2022 redist layouts. We can't rely on
+# $env:VCToolsRedistDir because package-win.ps1 is normally invoked from
+# a plain PowerShell session, not VsDevCmd. Walk the well-known install
+# roots and pick the highest-versioned Microsoft.VC14X.CRT folder under
+# x64. Tested against BuildTools, Community, Professional, Enterprise.
+$vsCandidateRoots = @(
+    'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Redist\MSVC',
+    'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Redist\MSVC',
+    'C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Redist\MSVC',
+    'C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Redist\MSVC',
+    'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC'
+)
+foreach ($root in $vsCandidateRoots) {
+    if (!(Test-Path $root)) { continue }
+    $crtDirs = Get-ChildItem -Path (Join-Path $root '*\x64\Microsoft.VC*.CRT') -Directory -ErrorAction SilentlyContinue
+    if ($crtDirs) {
+        # Prefer numeric version dirs (14.x.y) over symlink-style (v143).
+        # Sort by parent's parent name descending so the highest version wins.
+        $vcRuntimeSrc = ($crtDirs | Sort-Object { $_.Parent.Parent.Name } -Descending | Select-Object -First 1).FullName
+        break
+    }
+}
+
+if (![string]::IsNullOrWhiteSpace($vcRuntimeSrc) -and (Test-Path $vcRuntimeSrc)) {
+    Write-Host "Bundling VC++ runtime from: $vcRuntimeSrc"
+    $vcRuntimeDlls = @(
+        'vcruntime140.dll',
+        'vcruntime140_1.dll',
+        'msvcp140.dll',
+        'msvcp140_1.dll',
+        'msvcp140_2.dll',
+        'msvcp140_codecvt_ids.dll',
+        'concrt140.dll'
+    )
+    foreach ($dll in $vcRuntimeDlls) {
+        $src = Join-Path $vcRuntimeSrc $dll
+        if (Test-Path $src) {
+            Copy-Item $src (Join-Path $appDir $dll) -Force
+            Write-Host "  + $dll"
+        }
+    }
+} else {
+    Write-Warning "VC++ runtime redist directory not found; app-local CRT bundling skipped."
+    Write-Warning "Expected: `$env:VCToolsRedistDir/x64/Microsoft.VC143.CRT/"
+}
+
 $bassRuntimeDir = Join-Path $repoRoot "third_party\\bass\\bin\\win64"
 $requiredBassRuntimeDlls = @(
     "bass.dll",

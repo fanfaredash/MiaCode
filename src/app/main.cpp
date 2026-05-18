@@ -51,6 +51,7 @@
 #include <cstdio>
 #include <cstring>
 #pragma comment(lib, "winmm.lib")
+#pragma comment(lib, "version.lib")
 #endif
 
 namespace {
@@ -124,9 +125,37 @@ void probeLoadedModule(const wchar_t* name) noexcept
             ::WideCharToMultiByte(CP_UTF8, 0, path, -1, pathUtf8,
                                   sizeof(pathUtf8), nullptr, nullptr);
         }
-        char buf[768];
+        // Read FileVersion via GetFileVersionInfo so we can prove whether
+        // the user's MSVCP140 / VCRUNTIME140 is the post-VS2019-16.5
+        // build our binary needs. Mismatch here is the leading hypothesis
+        // for "first std::mutex lock crashes with AV inside MSVCP140".
+        char versionUtf8[64] = "?";
+        if (len > 0 && len < MAX_PATH) {
+            DWORD vhandle = 0;
+            DWORD vsize = ::GetFileVersionInfoSizeW(path, &vhandle);
+            if (vsize > 0 && vsize < 65536) {
+                BYTE versionBuf[65536];
+                if (::GetFileVersionInfoW(path, 0, vsize, versionBuf)) {
+                    VS_FIXEDFILEINFO* fixed = nullptr;
+                    UINT fixedLen = 0;
+                    if (::VerQueryValueW(versionBuf, L"\\",
+                                         reinterpret_cast<LPVOID*>(&fixed),
+                                         &fixedLen)
+                        && fixed != nullptr) {
+                        std::snprintf(versionUtf8, sizeof(versionUtf8),
+                            "%u.%u.%u.%u",
+                            HIWORD(fixed->dwFileVersionMS),
+                            LOWORD(fixed->dwFileVersionMS),
+                            HIWORD(fixed->dwFileVersionLS),
+                            LOWORD(fixed->dwFileVersionLS));
+                    }
+                }
+            }
+        }
+        char buf[1024];
         std::snprintf(buf, sizeof(buf),
-            "diag/dll name=%s loaded=1 path=%s", nameUtf8, pathUtf8);
+            "diag/dll name=%s loaded=1 version=%s path=%s",
+            nameUtf8, versionUtf8, pathUtf8);
         appendBeaconLineUtf8(buf);
         return;
     }
