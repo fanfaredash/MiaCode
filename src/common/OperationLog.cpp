@@ -54,6 +54,13 @@ thread_local ShadowThreadSlot* tls_shadowSlot = nullptr;
 // disk without calling any heap-allocating Qt API.
 wchar_t g_shadowPathW[kShadowPathCap] = {};
 std::atomic<bool> g_shadowInstalled{false};
+
+// Path to the startup beacon file. Captured at writeStartupBeacon()
+// time so appendStartupBeaconLine() can reopen it without re-running
+// the Qt path-resolution logic (which would be unsafe from a partially-
+// constructed process). Zero-initialised — appendStartupBeaconLine
+// silently no-ops until writeStartupBeacon populates this.
+wchar_t g_beaconPathW[kShadowPathCap] = {};
 #endif
 
 quint64 currentThreadId() noexcept
@@ -561,8 +568,53 @@ void writeStartupBeacon(const char* versionUtf8)
 
     ::FlushFileBuffers(handle);
     ::CloseHandle(handle);
+
+    // Cache the resolved path so appendStartupBeaconLine() can reopen
+    // the same file later for append-mode writes. Must happen AFTER
+    // the initial CREATE_ALWAYS write above (otherwise an append racing
+    // with the create would lose the header).
+    if (wpath.size() + 1 <= kShadowPathCap) {
+        std::memcpy(g_beaconPathW, wpath.c_str(),
+                    (wpath.size() + 1) * sizeof(wchar_t));
+    }
 #else
     Q_UNUSED(versionUtf8);
+#endif
+}
+
+void appendStartupBeaconLine(const char* lineUtf8) noexcept
+{
+#ifdef Q_OS_WIN
+    if (lineUtf8 == nullptr || g_beaconPathW[0] == L'\0') {
+        return;
+    }
+
+    HANDLE handle = ::CreateFileW(
+        g_beaconPathW,
+        FILE_APPEND_DATA,
+        FILE_SHARE_READ,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+        return;
+    }
+
+    // Bounded length cap. 4 KB is enough for a single diagnostic line;
+    // longer payloads get truncated rather than risk a runaway write
+    // from corrupted memory.
+    DWORD len = 0;
+    while (lineUtf8[len] != '\0' && len < 4096) {
+        ++len;
+    }
+    writeBytes(handle, lineUtf8, len);
+    writeStr(handle, "\n");
+
+    ::FlushFileBuffers(handle);
+    ::CloseHandle(handle);
+#else
+    Q_UNUSED(lineUtf8);
 #endif
 }
 

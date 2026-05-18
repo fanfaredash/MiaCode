@@ -126,6 +126,17 @@ void flushShadowToDisk();
 // the most recent timestamp).
 void writeStartupBeacon(const char* versionUtf8);
 
+// Append an additional line to the beacon file written by
+// writeStartupBeacon. No-op until writeStartupBeacon has been called
+// (the file path is cached at that point). Pure Win32, heap-free,
+// safe to call before / during / after QApplication construction.
+//
+// Used by the experimental beta42 startup-diagnostic patch to record
+// OS / VC-runtime / D3D11 probe results plus startup phase markers,
+// so a silent crash anywhere in startup leaves a per-phase breadcrumb
+// trail in the same beacon file that's already proven to land on disk.
+void appendStartupBeaconLine(const char* lineUtf8) noexcept;
+
 }  // namespace miacode::oplog
 
 // Convenience macro. The variable name _mc_op_ is conventional so

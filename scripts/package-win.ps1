@@ -362,6 +362,23 @@ if (!(Test-Path $legacyQmlLauncherSrc)) {
 }
 Copy-Item $legacyQmlLauncherSrc (Join-Path $DistDir "Start_MiaCode_Legacy_QML.bat") -Force
 
+# Beta45 triage launchers. A pair of env-var-gated .bat files for isolating
+# whether the Win10-22H2 startup regression is caused by the D3D11 hardware
+# probe (which loads vendor UMD DLLs that never unload) or by the
+# AsyncLogWriter singleton's first interaction with std::mutex /
+# CONDITION_VARIABLE primitives.
+$triageLaunchers = @(
+    "Start_MiaCode_SkipDiagD3D11.bat",   # A: skip D3D11 probe only
+    "Start_MiaCode_DiagBypass.bat",      # B: skip AsyncLogWriter only
+    "Start_MiaCode_SkipBoth.bat"         # C: skip both
+)
+foreach ($launcher in $triageLaunchers) {
+    $src = Join-Path $repoRoot "scripts\\$launcher"
+    if (Test-Path $src) {
+        Copy-Item $src (Join-Path $DistDir $launcher) -Force
+    }
+}
+
 New-Item -ItemType Directory -Path (Join-Path $DistDir "logs") -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $DistDir "logs\\worker-hwnd") -Force | Out-Null
 

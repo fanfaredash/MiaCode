@@ -17,6 +17,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdio>
 #include <deque>
 #include <mutex>
 #include <thread>
@@ -776,21 +777,60 @@ void trimDebugSessionLogsForStartup()
 
 bool resetChannel(Channel channel, const QStringList& initialLines, bool force)
 {
+    miacode::oplog::appendStartupBeaconLine("reset/entry");
     if (!shouldWrite(channel, force)) {
+        miacode::oplog::appendStartupBeaconLine("reset/should_not_write");
         return false;
     }
-    // Truncate is destructive — drain and stop the worker so it isn't writing to the file
-    // we're about to wipe (and so its cached handle is closed before we open in Truncate
-    // mode, which is otherwise a Windows sharing-violation hazard).
-    AsyncLogWriter::instance().flush(2000);
-    AsyncLogWriter::instance().stop();
+    // Diagnostic bypass: setting MIACODE_SKIP_ASYNCLOG_FLUSH=1 short-circuits
+    // the flush+stop calls below. On the user's broken Win10 22H2 the first
+    // touch of AsyncLogWriter::instance() (Meyers singleton construction)
+    // appears to fault — if this env var lets the app start, we've localised
+    // the regression to that singleton's construction.
+    const bool skipAsyncLog =
+        qEnvironmentVariableIntValue("MIACODE_SKIP_ASYNCLOG_FLUSH") == 1;
+    if (skipAsyncLog) {
+        miacode::oplog::appendStartupBeaconLine("reset/asynclog_skipped_via_env");
+    } else {
+        miacode::oplog::appendStartupBeaconLine("reset/before_asynclog_instance_call");
+        // Truncate is destructive — drain and stop the worker so it isn't writing to the
+        // file we're about to wipe (and so its cached handle is closed before we open in
+        // Truncate mode, which is otherwise a Windows sharing-violation hazard).
+        AsyncLogWriter& writer = AsyncLogWriter::instance();
+        miacode::oplog::appendStartupBeaconLine("reset/after_asynclog_instance_call");
+        miacode::oplog::appendStartupBeaconLine("reset/before_asynclog_flush");
+        writer.flush(2000);
+        miacode::oplog::appendStartupBeaconLine("reset/after_asynclog_flush");
+        miacode::oplog::appendStartupBeaconLine("reset/before_asynclog_stop");
+        writer.stop();
+        miacode::oplog::appendStartupBeaconLine("reset/after_asynclog_stop");
+    }
+    miacode::oplog::appendStartupBeaconLine("reset/before_log_mutex_lock");
     QMutexLocker locker(&logMutex());
+    miacode::oplog::appendStartupBeaconLine("reset/before_log_path");
     const QString path = logPath(channel);
+    {
+        const QByteArray pathUtf8 = path.toUtf8();
+        char buf[1024];
+        std::snprintf(buf, sizeof(buf), "reset/log_path=%.900s", pathUtf8.constData());
+        miacode::oplog::appendStartupBeaconLine(buf);
+    }
+    miacode::oplog::appendStartupBeaconLine("reset/before_ensure_parent_dir");
     ensureParentDirectory(path);
+    miacode::oplog::appendStartupBeaconLine("reset/before_qfile_ctor");
     QFile file(path);
+    miacode::oplog::appendStartupBeaconLine("reset/before_qfile_open");
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        const QFile::FileError err = file.error();
+        const QByteArray errStr = file.errorString().toUtf8();
+        char buf[768];
+        std::snprintf(buf, sizeof(buf),
+            "reset/qfile_open_failed err=%d msg=%.500s",
+            static_cast<int>(err), errStr.constData());
+        miacode::oplog::appendStartupBeaconLine(buf);
         return false;
     }
+    miacode::oplog::appendStartupBeaconLine("reset/qfile_open_ok");
     QTextStream stream(&file);
     for (const QString& line : initialLines) {
         stream << line;
@@ -798,6 +838,7 @@ bool resetChannel(Channel channel, const QStringList& initialLines, bool force)
             stream << '\n';
         }
     }
+    miacode::oplog::appendStartupBeaconLine("reset/return_ok");
     return true;
 }
 
@@ -807,11 +848,16 @@ bool appendText(Channel channel, const QString& text, bool force)
         return false;
     }
     QByteArray bytes = prepareLogPayload(text);
-    // Fatal messages are typically logged just before a crash — we want them on disk
-    // synchronously so they survive process termination. For everything else, async
-    // queueing keeps the caller's hot path (GUI / render thread) out of file I/O.
-    if (channel == Channel::Fatal) {
-        AsyncLogWriter::instance().flush(1000);
+    // Diagnostic bypass: when MIACODE_SKIP_ASYNCLOG_FLUSH=1 is set, write
+    // synchronously and never touch AsyncLogWriter::instance(). Used to
+    // localise startup crashes that happen in the singleton's first-time
+    // construction on certain Win10 22H2 builds.
+    const bool skipAsyncLog =
+        qEnvironmentVariableIntValue("MIACODE_SKIP_ASYNCLOG_FLUSH") == 1;
+    if (skipAsyncLog || channel == Channel::Fatal) {
+        if (!skipAsyncLog) {
+            AsyncLogWriter::instance().flush(1000);
+        }
         QMutexLocker locker(&logMutex());
         const QString path = logPath(channel);
         ensureParentDirectory(path);
@@ -910,6 +956,12 @@ bool flushAsyncLogWriter(int timeoutMs)
 
 void shutdownAsyncLogWriter()
 {
+    // Diagnostic bypass: never touch the singleton if the user has opted out
+    // for the duration of this run. Reading the env var here covers the case
+    // where the singleton was never constructed during startup.
+    if (qEnvironmentVariableIntValue("MIACODE_SKIP_ASYNCLOG_FLUSH") == 1) {
+        return;
+    }
     AsyncLogWriter::instance().shutdown();
 }
 

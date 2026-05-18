@@ -75,6 +75,9 @@ third_party/**/*.a
 scripts/*
 !scripts/Start_MiaCode_Debug.bat
 !scripts/Start_MiaCode_Legacy_QML.bat
+!scripts/Start_MiaCode_DiagBypass.bat
+!scripts/Start_MiaCode_SkipBoth.bat
+!scripts/Start_MiaCode_SkipDiagD3D11.bat
 !scripts/build-macos.sh
 !scripts/build-win.ps1
 !scripts/compare-export-encode-profiles.ps1

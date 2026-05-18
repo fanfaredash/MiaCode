@@ -266,18 +266,28 @@ QuickShellBootstrap::~QuickShellBootstrap()
 bool QuickShellBootstrap::start(const QString& startupOpenTarget)
 {
     MC_OP("QuickShellBootstrap::start");
+    miacode::oplog::appendStartupBeaconLine("qsb/start_enter");
     appendQuickShellRuntimeLog(QStringLiteral("start_enter"));
+    miacode::oplog::appendStartupBeaconLine("qsb/before_mainwindow_ctor");
     backend_ = std::make_unique<MainWindow>(true);
+    miacode::oplog::appendStartupBeaconLine("qsb/after_mainwindow_ctor");
     backend_->setQuickShellBackendActive(true);
+    miacode::oplog::appendStartupBeaconLine("qsb/after_set_backend_active");
     backend_->hide();
+    miacode::oplog::appendStartupBeaconLine("qsb/after_first_hide");
     backend_->setVisible(false);
+    miacode::oplog::appendStartupBeaconLine("qsb/after_first_setvisible_false");
     appendQuickShellRuntimeLog(QStringLiteral("backend_ready"));
+    miacode::oplog::appendStartupBeaconLine("qsb/backend_ready");
     surfaceHost_ = std::make_unique<QuickShellNativeSurfaceHost>(backend_.get(), backend_.get(), this);
+    miacode::oplog::appendStartupBeaconLine("qsb/after_surface_host_ctor");
     backend_->hide();
     backend_->setVisible(false);
     appendQuickShellRuntimeLog(QStringLiteral("surface_host_ready"));
+    miacode::oplog::appendStartupBeaconLine("qsb/surface_host_ready");
     controller_ = std::make_unique<QuickShellController>(backend_.get(), backend_.get(), surfaceHost_.get(), this);
     appendQuickShellRuntimeLog(QStringLiteral("controller_ready"));
+    miacode::oplog::appendStartupBeaconLine("qsb/controller_ready");
     QObject::connect(
         controller_.get(),
         &QuickShellController::rootCloseAccepted,
@@ -296,7 +306,9 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
             &QuickShellNativeSurfaceHost::refreshSurfaceStyles
         );
     }
+    miacode::oplog::appendStartupBeaconLine("qsb/before_qml_engine_ctor");
     engine_ = std::make_unique<QQmlApplicationEngine>(this);
+    miacode::oplog::appendStartupBeaconLine("qsb/after_qml_engine_ctor");
     appendQuickShellRuntimeLog(QStringLiteral("engine_ready"));
     if (qApp != nullptr) {
         qApp->installEventFilter(this);
@@ -375,7 +387,9 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
     engine_->rootContext()->setContextProperty(QStringLiteral("styleBridge"), styleBridge_.get());
     const QUrl mainUrl(QStringLiteral("qrc:/quick_shell/qml/QuickShellMain.qml"));
     appendQuickShellRuntimeLog(QStringLiteral("load_begin"), mainUrl.toString());
+    miacode::oplog::appendStartupBeaconLine("qsb/before_qml_load");
     engine_->load(mainUrl);
+    miacode::oplog::appendStartupBeaconLine("qsb/after_qml_load");
     appendQuickShellRuntimeLog(
         QStringLiteral("load_end"),
         QString("root_objects=%1").arg(engine_->rootObjects().size())
