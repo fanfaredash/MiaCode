@@ -1033,11 +1033,17 @@ void BassPreviewAudioBackend::suspendPlaybackTransport()
     const double pauseSecond = authoritativeSecond();
     playbackSession_.lastAuthoritativeSecond = pauseSecond;
     clearScheduledGroupSync();
-    // G1 Commit 6: master mixer is no longer paused at session-pause. Sample audibility
-    // is gated by BASS_MIXER_CHAN_PAUSE on each per-sample source (set when each Sample
-    // ::pause / ::stop runs from the broader pause flow). Leaving the master in
-    // ACTIVE_PLAYING avoids the BASS_FX SoundTouch cold-start that produced the audio
-    // tearing reported in PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §4.2.
+    // G1 Commit 6 (corrected post-test): master mixer stays ACTIVE_PLAYING for the
+    // engine's lifetime — what makes the BGM go silent is *this* call, setting
+    // BASS_MIXER_CHAN_PAUSE on the BGM source. Pre-G1, BASS_ChannelPause on the
+    // master silenced every channel implicitly; the original Commit 6 dropped
+    // the master pause but left this site empty, which let BGM keep playing
+    // through the pause UI state. SFX one-shots self-terminate so they don't
+    // need explicit silencing; touchhold is handled by separate
+    // pauseTouchholdVoices() callers in the pause flow.
+    if (backgroundTrackSample_ != nullptr) {
+        backgroundTrackSample_->pause();
+    }
     playbackSession_.masterRunning = false;
     playbackSession_.backgroundTrackRunning = false;
     retainedPlaybackMode_ = RetainedPlaybackMode::PausedExact;
