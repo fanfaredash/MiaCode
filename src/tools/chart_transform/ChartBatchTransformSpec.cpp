@@ -18,6 +18,7 @@
 #include "SimaiDocument.h"
 #include "SimaiNativeParser.h"
 #include "core/chart/transform/ChartNormalization.h"
+#include "core/chart/transform/Non384SnapTable.h"
 
 namespace {
 
@@ -1436,6 +1437,48 @@ void runInlineSpecs(QTextStream& err, int* failed)
             err
         );
     }
+
+    // Non-384 snap table: spot checks for the rule "nearest p/q with q | 384,
+    // q <= 4y" and global verification that no two adjacent x/y, (x+1)/y in
+    // any non-384-divisor y up to 384 collide on the same (p, q).
+    {
+        const miacode::chart_transform::SnapTarget t = miacode::chart_transform::nearestSnapTargetForNon384(1, 5);
+        expectTrue(
+            t.p == 3 && t.q == 16,
+            QStringLiteral("non-384 snap: 1/5 with 4y=20 picks 3/16 (q<=20 best candidate)"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::SnapTarget t = miacode::chart_transform::nearestSnapTargetForNon384(4, 20);
+        expectTrue(
+            t.p == 13 && t.q == 64,
+            QStringLiteral("non-384 snap: 4/20 with 4y=80 picks 13/64 (different from 1/5 even though values match)"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const QVector<miacode::chart_transform::SnapCollision> collisions =
+            miacode::chart_transform::findNon384SnapTableCollisions(
+                miacode::chart_transform::kSnap384Modulus);
+        expectTrue(
+            collisions.isEmpty(),
+            QStringLiteral("non-384 snap: every (x, x+1) pair in every non-384-divisor y in [2, 384] lands on a distinct (p, q)"),
+            failed,
+            err
+        );
+        if (!collisions.isEmpty()) {
+            const auto& first = collisions.constFirst();
+            err << "  first collision: y=" << first.y
+                << " at x=" << first.x << " and x=" << (first.x + 1)
+                << " both -> " << first.shared.p << "/" << first.shared.q
+                << " (total collisions=" << collisions.size() << ")\n";
+        }
+    }
 }
 
 }  // namespace
@@ -1448,6 +1491,31 @@ int main(int argc, char** argv)
 
     int failed = 0;
     const QStringList args = app.arguments();
+    if (args.size() >= 2 && args.at(1) == QLatin1String("--dump-snap-table")) {
+        int maxY = miacode::chart_transform::kSnap384Modulus;
+        if (args.size() >= 3) {
+            bool maxOk = false;
+            const int parsed = args.at(2).toInt(&maxOk);
+            if (maxOk && parsed > 1) {
+                maxY = parsed;
+            }
+        }
+        out << "y\tx\tp\tq\tx/y\tp/q\terr\n";
+        for (int y = 2; y <= maxY; ++y) {
+            if ((miacode::chart_transform::kSnap384Modulus % y) == 0) continue;
+            for (int x = 0; x < y; ++x) {
+                const miacode::chart_transform::SnapTarget t =
+                    miacode::chart_transform::nearestSnapTargetForNon384(x, y);
+                const double xy = static_cast<double>(x) / static_cast<double>(y);
+                const double pq = static_cast<double>(t.p) / static_cast<double>(t.q);
+                out << y << '\t' << x << '\t' << t.p << '\t' << t.q
+                    << '\t' << QString::number(xy, 'f', 6)
+                    << '\t' << QString::number(pq, 'f', 6)
+                    << '\t' << QString::number(qAbs(xy - pq), 'g', 4) << '\n';
+            }
+        }
+        return 0;
+    }
     if (args.size() >= 4 && args.at(1) == QLatin1String("--dump")) {
         miacode::chart_transform::ChartTransformOp op = miacode::chart_transform::ChartTransformOp::MirrorLeftRight;
         if (!parseTransformOpToken(args.at(2), &op)) {

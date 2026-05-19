@@ -366,6 +366,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/core/chart/transform/ChartBatchTransform.cpp
     src/core/chart/transform/ChartNormalization.h
     src/core/chart/transform/ChartNormalization.cpp
+    src/core/chart/transform/Non384SnapTable.h
+    src/core/chart/transform/Non384SnapTable.cpp
     src/core/chart/document/SimaiDocument.h
     src/core/chart/document/SimaiDocument.cpp
     src/core/chart/document/SimaiTimingMetadata.h
@@ -661,6 +663,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/core/chart/transform/ChartBatchTransform.cpp
         src/core/chart/transform/ChartNormalization.h
         src/core/chart/transform/ChartNormalization.cpp
+        src/core/chart/transform/Non384SnapTable.h
+        src/core/chart/transform/Non384SnapTable.cpp
         src/core/chart/document/SimaiDocument.h
         src/core/chart/document/SimaiDocument.cpp
         src/core/chart/document/SimaiTimingMetadata.h
