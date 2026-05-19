@@ -168,11 +168,6 @@ private:
     bool maybeStartPendingBackgroundTrack(double second);
     bool playKindInternal(const QString& kind, double gain = 1.0);
     void triggerGroup(const CollapsedEventGroup& group);
-    // G1 Commit 7: BASS_SYNC_POS-driven scheduling retired. clearScheduledGroupSync /
-    // armNextGroupSync are retained as no-op stubs so existing callers compile
-    // unchanged; onMixerGroupSync / handleMixerGroupSync are removed outright.
-    void clearScheduledGroupSync();
-    void armNextGroupSync(double currentSecond);
     void logPlaybackStatus(double authoritativeSecond, double fallbackSecond);
     void logPreparedEventWindow(double startSecond) const;
     QString groupSignature(const CollapsedEventGroup& group) const;

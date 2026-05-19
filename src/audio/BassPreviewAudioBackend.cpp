@@ -1096,7 +1096,6 @@ void BassPreviewAudioBackend::suspendPlaybackTransport()
     logTrackFileMissingAfterLoadIfNeeded();
     const double pauseSecond = authoritativeSecond();
     playbackSession_.lastAuthoritativeSecond = pauseSecond;
-    clearScheduledGroupSync();
     // G1 Commit 6 (corrected post-test): master mixer stays ACTIVE_PLAYING for the
     // engine's lifetime — what makes the BGM go silent is *this* call, setting
     // BASS_MIXER_CHAN_PAUSE on the BGM source. Pre-G1, BASS_ChannelPause on the
@@ -1125,7 +1124,6 @@ void BassPreviewAudioBackend::anchorTransportToSecond(double targetSecond, const
     timer.start();
     const double anchoredSecond = clampTimelineSecond(targetSecond);
     preparedPlayback_ = PreparedPlaybackState();
-    clearScheduledGroupSync();
     stopAllSamples();
     resetMasterMixerClock(anchoredSecond);
     configureBackgroundTrackForSecond(
@@ -1208,7 +1206,6 @@ void BassPreviewAudioBackend::repositionPausedTransportToSecond(double targetSec
     timer.start();
     const double repositionedSecond = clampTimelineSecond(targetSecond);
     preparedPlayback_ = PreparedPlaybackState();
-    clearScheduledGroupSync();
     clearResidualVoicesForPausedReposition();
     repositionMasterTransportClock(repositionedSecond);
     configureBackgroundTrackForSecond(
@@ -1270,7 +1267,6 @@ void BassPreviewAudioBackend::startTransportFromCurrentAnchor()
     if (retainedMode == RetainedPlaybackMode::PausedAnchored) {
         restoreTouchholdVoices(playbackSession_.lastAuthoritativeSecond);
     }
-    armNextGroupSync(playbackSession_.lastAuthoritativeSecond);
 #endif
     preparedPlayback_ = PreparedPlaybackState();
     appendBassDebugLog(
@@ -1385,6 +1381,15 @@ void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double
             .arg(normalizedRate, 0, 'f', 3)
             .arg(sanitizedChart, 0, 'f', 6)
             .arg(rawSecond, 0, 'f', 6));
+    // G2 followup A2 (§7.2 consistency): bass_sample_play also gets a row
+    // here so the per-session log has a clean "play flag flipped" record
+    // for every flag-flip event (cold play, retained resume, live rate
+    // change). reason=live_rate_resume distinguishes this from the other
+    // two paths.
+    appendAudioDebugLog(
+        QString("bass_sample_play kind=bgm rate_at_play=%1 offset_sec=%2 reason=live_rate_resume")
+            .arg(normalizedRate, 0, 'f', 3)
+            .arg(backgroundTrackSample_->currentSec(), 0, 'f', 6));
 #else
     Q_UNUSED(rate);
     Q_UNUSED(chartSecond);
@@ -1491,7 +1496,6 @@ void BassPreviewAudioBackend::resetMasterMixerClock(double startSecond)
     if (masterMixer_ == 0) {
         return;
     }
-    clearScheduledGroupSync();
     // G1 Commit 6: see comment in repositionMasterTransportClock. Same rationale here:
     // the master keeps running, and authoritativeSecond no longer reads its position.
     playbackSession_.sessionStartSecond = clampTimelineSecond(startSecond);
@@ -1540,7 +1544,6 @@ void BassPreviewAudioBackend::stopAllSamples()
 
 void BassPreviewAudioBackend::stopPlaybackSession()
 {
-    clearScheduledGroupSync();
     stopAllSamples();
     resetMasterMixerClock(playbackSession_.lastAuthoritativeSecond);
     playbackSession_.backgroundTrackRunning = false;
@@ -1549,25 +1552,10 @@ void BassPreviewAudioBackend::stopPlaybackSession()
     retainedPlaybackMode_ = RetainedPlaybackMode::None;
 }
 
-void BassPreviewAudioBackend::clearScheduledGroupSync()
-{
-    // G1 Commit 7: BASS_SYNC_POS-driven SFX scheduling is retired. No syncs are
-    // ever armed (armNextGroupSync is a no-op), so this clear is also a no-op.
-    // Retained only because existing callers still reference it; a future sweep
-    // can remove the call sites and this stub together.
-}
-
-void BassPreviewAudioBackend::armNextGroupSync(double currentSecond)
-{
-    // G1 Commit 7: SFX triggering moved fully to wall-clock-driven drainEvents
-    // in MainWindow::TimelineSection::onQtPreviewTickAtSecond. The previous
-    // BASS_SYNC_POS callback chain (armNextGroupSync → BASS_ChannelSetSync →
-    // onMixerGroupSync → handleMixerGroupSync → triggerGroup → re-arm) is
-    // dead code; arming any new sync now would only produce duplicate
-    // triggers as the BASS-cursor and wall-clock drift past each other.
-    // See PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §3.7, §6.1 step 7.
-    Q_UNUSED(currentSecond);
-}
+// G2 followup A2: armNextGroupSync / clearScheduledGroupSync deleted outright.
+// They were empty no-op stubs left behind by G1 Commit 7's BASS_SYNC_POS
+// removal; with every call site in this file now also gone, the surface area
+// has nothing left to support.
 
 void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, double fallbackSecond)
 {
@@ -1835,7 +1823,6 @@ void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
         drainEvents(preparedPlayback_.startSecond);
     }
     restoreTouchholdVoices(preparedPlayback_.startSecond);
-    armNextGroupSync(preparedPlayback_.startSecond);
     logTrackFileMissingAfterLoadIfNeeded();
     // G1 Commit 8: rename `bass_commit` → `bass_play` per §7.2 of
     // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md, and add the rate field so
@@ -2056,7 +2043,6 @@ double BassPreviewAudioBackend::syncPreviewPlaybackClockTransaction(double fallb
     playbackSession_.lastAuthoritativeSecond = second;
     maybeStartPendingBackgroundTrack(second);
     drainEvents(second);
-    armNextGroupSync(second);
     logPlaybackStatus(second, fallbackSecond);
     return second;
 }
