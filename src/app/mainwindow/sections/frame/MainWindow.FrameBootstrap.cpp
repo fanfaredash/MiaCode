@@ -975,28 +975,25 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         toolboxMenu_->addAction(normalizeWholeChartAction_);
     }
 
-    // Bookmarks and Copy Area are intentionally hidden from the toolbox
-    // for now — the underlying widgets / actions still get constructed
-    // and wired so the rest of the codebase compiles unchanged, but the
-    // submenus aren't surfaced in the toolbox UI. Flip this constant
-    // back to `true` once the features ship.
-    constexpr bool kBookmarksAndCopyAreaIntegratedIntoToolbox = false;
-    if (kBookmarksAndCopyAreaIntegratedIntoToolbox) {
-        toolboxMenu_->addSeparator();
+    toolboxMenu_->addSeparator();
 
-        QMenu* bookmarkMenu = toolboxMenu_->addMenu(
-            UiText::isChineseUi() ? QStringLiteral("书签") : QStringLiteral("Bookmarks")
-        );
-        styleRoundedMenu(*bookmarkMenu);
-        createBookmarkAction_ = bookmarkMenu->addAction(
-            UiText::isChineseUi() ? QStringLiteral("创建书签") : QStringLiteral("Create Bookmark")
-        );
-        connect(createBookmarkAction_, &QAction::triggered, this, &MainWindow::showCreateBookmarkDialog);
-        bookmarkManagerAction_ = bookmarkMenu->addAction(
-            UiText::isChineseUi() ? QStringLiteral("书签管理") : QStringLiteral("Bookmark Manager")
-        );
-        connect(bookmarkManagerAction_, &QAction::triggered, this, &MainWindow::showBookmarkManager);
+    QMenu* bookmarkMenu = toolboxMenu_->addMenu(
+        UiText::isChineseUi() ? QStringLiteral("书签") : QStringLiteral("Bookmarks")
+    );
+    styleRoundedMenu(*bookmarkMenu);
+    createBookmarkAction_ = bookmarkMenu->addAction(
+        UiText::isChineseUi() ? QStringLiteral("创建书签") : QStringLiteral("Create Bookmark")
+    );
+    connect(createBookmarkAction_, &QAction::triggered, this, &MainWindow::showCreateBookmarkDialog);
+    bookmarkManagerAction_ = bookmarkMenu->addAction(
+        UiText::isChineseUi() ? QStringLiteral("书签管理") : QStringLiteral("Bookmark Manager")
+    );
+    connect(bookmarkManagerAction_, &QAction::triggered, this, &MainWindow::showBookmarkManager);
 
+    // Copy Area remains hidden from the toolbox for now — flip this constant
+    // back to `true` once that feature ships.
+    constexpr bool kCopyAreaIntegratedIntoToolbox = false;
+    if (kCopyAreaIntegratedIntoToolbox) {
         QMenu* copyAreaMenu = toolboxMenu_->addMenu(
             UiText::isChineseUi() ? QStringLiteral("复制区") : QStringLiteral("Copy Area")
         );
