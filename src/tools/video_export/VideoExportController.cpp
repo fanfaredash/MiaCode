@@ -4529,9 +4529,19 @@ VideoExportResult VideoExportController::exportPreparedTask(
         const double exportSecond = partialRangeExport
             ? audioRenderPlan.segmentStartSecond + qMax(0.0, outputSecond - audioRenderPlan.leadInSeconds)
             : qMax(0.0, rawChartSecond);
+        // HUD override during the pre-roll window:
+        //   * Full-range exports want the count-down displayed (chart-time
+        //     ramps from -leadIn → 0), so use the unclamped rawChartSecond.
+        //     Out of pre-roll it falls back to whatever exportSecond is.
+        //   * Partial-range exports want the HUD frozen on segmentStart
+        //     (matches the frozen chart playfield + the pause overlay).
+        //     The user expectation is "nothing animates during the freeze";
+        //     a ramping HUD here would contradict that.
         const double hudPlayheadSecondsOverride =
             inLeadInOrPreload
-                ? rawChartSecond
+                ? (partialRangeExport
+                       ? audioRenderPlan.segmentStartSecond
+                       : rawChartSecond)
                 : std::numeric_limits<double>::quiet_NaN();
         QVector<ObjectTraceItem> traceItems;
         if (diagObjectTraceEnabled || diagObjectHashEnabled) {

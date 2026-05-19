@@ -140,10 +140,13 @@ void suppressSfxBeforePreRangeEnd(
 {
     // Partial-range exports always emit a fixed pre-range before the
     // chart segment proper begins (currently kPartialRangePreloadSeconds
-    // = 1.0 s). The pre-range is intended for the viewer to register
-    // the layout / HUD before the playable region opens; we keep the
-    // background track audible there for context but mute all SFX so
-    // the pre-range doesn't sound like an artificial early hit.
+    // = 1.5 s — see VideoExportConfig.h). The pre-range is a frozen
+    // state: chart playfield, HUD timestamp, AND BGM are all held on
+    // the segment-start moment while a translucent pause glyph sits
+    // on top (drawLeadInPauseOverlay in VideoExportController.cpp).
+    // SFX in the pre-range would sound like artificial early hits, so
+    // they're stripped from the audio plan here regardless of where
+    // BGM mix start lands.
     //
     // Point-in-time SFX (tap, judge, answer, break, clock, …) are
     // dropped entirely when their mix second falls before the cutoff.
@@ -289,16 +292,32 @@ bool buildVideoExportAudioRenderPlan(
         backgroundPlan.enabled = true;
         backgroundPlan.path = normalizedTrackPath;
         backgroundPlan.gain = qMax(0.0, previewTrackVolume(normalizedAudioSettings));
-        if (built.timelineOriginSecond > kTimelineEpsilonSeconds) {
-            backgroundPlan.sourceStartSecond = built.timelineOriginSecond;
-            backgroundPlan.mixStartSecond = 0.0;
-            backgroundPlan.durationSeconds = built.alignedTotalSeconds;
+        if (!task.fullRangeExport) {
+            // Partial-range pre-roll is a frozen state: chart, HUD and audio
+            // all sit on the segment-start moment while drawLeadInPauseOverlay
+            // shows the pause glyph. BGM joins the mix once the preload window
+            // expires, sourcing from segmentStart (i.e. exportStartSeconds),
+            // so the viewer hears the music from the exact second the playfield
+            // unfreezes. Pre-G2 (the older "keep BGM audible during pre-range")
+            // behaviour was deliberately removed per user request — the
+            // freeze-then-go reading is cleaner than a silent chart with
+            // running music.
+            backgroundPlan.sourceStartSecond = qMax(0.0, task.exportStartSeconds);
+            backgroundPlan.mixStartSecond = built.leadInSeconds;
+            backgroundPlan.durationSeconds = qMax(0.0, built.alignedTotalSeconds - built.leadInSeconds);
         } else if (built.timelineOriginSecond < -kTimelineEpsilonSeconds) {
+            // Full-range with a negative timeline origin: chart 0 is offset
+            // by the 2 s count-down lead-in. BGM still starts at chart 0
+            // (source second 0) so the music's natural intro lands at the
+            // right beat; we just delay the mix by leadInSeconds.
             backgroundPlan.sourceStartSecond = 0.0;
             backgroundPlan.mixStartSecond = -built.timelineOriginSecond;
             backgroundPlan.durationSeconds = qMax(0.0, built.alignedTotalSeconds + built.timelineOriginSecond);
         } else {
-            backgroundPlan.sourceStartSecond = 0.0;
+            // Full-range with timelineOrigin ≥ 0 (e.g. user chose to skip
+            // the count-in via flags): BGM starts at frame zero, from the
+            // origin's source position.
+            backgroundPlan.sourceStartSecond = qMax(0.0, built.timelineOriginSecond);
             backgroundPlan.mixStartSecond = 0.0;
             backgroundPlan.durationSeconds = built.alignedTotalSeconds;
         }

@@ -98,7 +98,7 @@ bool verifyPartialExportMutesPreRangeSfx(QTextStream& err)
         return false;
     }
 
-    if (!require(qAbs(plan.leadInSeconds - 1.0) <= 1e-6, QStringLiteral("partial export should use 1s preload"), err)) {
+    if (!require(qAbs(plan.leadInSeconds - 1.5) <= 1e-6, QStringLiteral("partial export should use 1.5s preload"), err)) {
         return false;
     }
     const auto it = std::find_if(
@@ -190,8 +190,13 @@ bool verifyPartialExportDropsTouchholdSpanEntirelyInPreRange(QTextStream& err)
 
 bool verifyPartialExportKeepsBackgroundTrackInPreRange(QTextStream& err)
 {
-    // The background track should still be scheduled even though
-    // SFX are muted in the pre-range — music plays throughout.
+    // Per beta51+ partial-range semantics, the pre-roll window is a
+    // frozen state — chart, HUD, AND BGM all hold on the segment-start
+    // moment while the pause glyph overlay plays. BGM is still scheduled
+    // (the plan needs an entry so the ffmpeg mix knows what to do), but
+    // its mixStartSecond is shifted to the end of the preload, and the
+    // source position starts from segmentStart so the music's natural
+    // beat lands the instant the playfield unfreezes.
     QTemporaryDir tempDir;
     QFile trackFile(tempDir.filePath(QStringLiteral("track.mp3")));
     if (!trackFile.open(QIODevice::WriteOnly)) {
@@ -215,10 +220,19 @@ bool verifyPartialExportKeepsBackgroundTrackInPreRange(QTextStream& err)
         return false;
     }
 
-    if (!require(plan.backgroundTrack.enabled, QStringLiteral("partial pre-range should still mix the background track"), err)) {
+    if (!require(plan.backgroundTrack.enabled, QStringLiteral("partial export should still schedule the background track"), err)) {
         return false;
     }
-    if (!require(qAbs(plan.backgroundTrack.mixStartSecond) <= 1e-6, QStringLiteral("background track should start at frame zero"), err)) {
+    if (!require(
+            qAbs(plan.backgroundTrack.mixStartSecond - plan.leadInSeconds) <= 1e-6,
+            QStringLiteral("partial export should delay BGM mix start by the preload (silent pre-roll)"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            qAbs(plan.backgroundTrack.sourceStartSecond - task.exportStartSeconds) <= 1e-6,
+            QStringLiteral("partial export should source BGM from segmentStart so beat 0 lands when freeze ends"),
+            err)) {
         return false;
     }
     return true;
@@ -279,7 +293,13 @@ bool verifyTouchholdSpanMerge(QTextStream& err)
     if (!require(plan.mergedTouchholdSpans.size() == 2, QStringLiteral("touchhold spans should merge overlapping sustains"), err)) {
         return false;
     }
-    if (!require(qAbs(plan.mergedTouchholdSpans.at(0).mixSecond - 2.0) <= 1e-6, QStringLiteral("merged touchhold span should preserve delayed preload start"), err)) {
+    // touchhold chart-time [1.0, 2.0] ⊕ [1.5, 3.0] merges into [1.0, 3.0] chart.
+    // mixSecond = chart - timelineOrigin, timelineOrigin = -leadIn = -1.5
+    // ⇒ mix [2.5, 4.5] ⇒ first span mixSecond=2.5, duration=2.0.
+    if (!require(
+            qAbs(plan.mergedTouchholdSpans.at(0).mixSecond - (1.0 + plan.leadInSeconds)) <= 1e-6,
+            QStringLiteral("merged touchhold span should preserve delayed preload start"),
+            err)) {
         return false;
     }
     if (!require(qAbs(plan.mergedTouchholdSpans.at(0).durationSeconds - 2.0) <= 1e-6, QStringLiteral("merged touchhold span should cover full overlapped duration"), err)) {
@@ -290,6 +310,11 @@ bool verifyTouchholdSpanMerge(QTextStream& err)
 
 bool verifyPositiveOriginTrackSeek(QTextStream& err)
 {
+    // Even when the timeline origin (segmentStart - leadIn) is positive,
+    // partial-range exports keep the freeze-then-go contract: BGM is
+    // silent during the preload window and starts from segmentStart at
+    // mix-second = leadIn. The pre-G2 "preserve continuity by sourcing
+    // from timeline origin" branch is gone — see VideoExportAudioRenderPlan.cpp.
     QTemporaryDir tempDir;
     QFile trackFile(tempDir.filePath(QStringLiteral("track.mp3")));
     if (!trackFile.open(QIODevice::WriteOnly)) {
@@ -313,13 +338,19 @@ bool verifyPositiveOriginTrackSeek(QTextStream& err)
         return false;
     }
 
-    if (!require(plan.backgroundTrack.enabled, QStringLiteral("positive-origin export should still schedule BGM"), err)) {
+    if (!require(plan.backgroundTrack.enabled, QStringLiteral("positive-origin partial export should still schedule BGM"), err)) {
         return false;
     }
-    if (!require(qAbs(plan.backgroundTrack.mixStartSecond) <= 1e-6, QStringLiteral("positive-origin export should mix BGM from frame zero"), err)) {
+    if (!require(
+            qAbs(plan.backgroundTrack.mixStartSecond - plan.leadInSeconds) <= 1e-6,
+            QStringLiteral("positive-origin partial export should delay BGM mix start by the preload"),
+            err)) {
         return false;
     }
-    if (!require(qAbs(plan.backgroundTrack.sourceStartSecond - 3.0) <= 1e-6, QStringLiteral("positive-origin export should seek BGM by timeline origin"), err)) {
+    if (!require(
+            qAbs(plan.backgroundTrack.sourceStartSecond - task.exportStartSeconds) <= 1e-6,
+            QStringLiteral("positive-origin partial export should source BGM from segmentStart, not from timeline origin"),
+            err)) {
         return false;
     }
     return true;
