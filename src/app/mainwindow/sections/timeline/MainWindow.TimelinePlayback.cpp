@@ -1486,14 +1486,17 @@ void MainWindow::TimelineSection::onQtPreviewTick()
     }
     const double elapsedSeconds = static_cast<double>(state_.qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
     const double fallbackSecond = state_.qtPreviewStartSecond_ + (elapsedSeconds * state_.previewPlaybackRate_);
-    // G1 Commit 4: chart-second is now the wall-clock value directly. The runtime sync call is
-    // still made here — it drains the SFX timeline, arms the next BASS_SYNC_POS, and emits the
-    // `bass_status` debug row — but its return value (the BASS-master-mixer cursor) is no longer
-    // authoritative. Commit 5 deletes the call entirely once a thin per-tick `drainSfxBefore`
-    // replacement lands. `hasAudioClock` becomes false so the downstream diag paths stop treating
-    // the chart-second as audio-derived.
+    // G1 Commit 5: the old syncPreviewPlaybackClockTransaction call is gone. Its three
+    // side effects are now driven directly off wall-clock chart-second:
+    //   * SFX drain — handled by drainEvents() inside onQtPreviewTickAtSecond.
+    //   * Pending-BGM-start (BGM with positive offset) — handled by syncBackgroundTrack
+    //     called below; it forwards to maybeStartPendingBackgroundTrack on the backend.
+    //   * BASS_SYNC_POS re-arming — retired (see armNextGroupSync, which is now an
+    //     early-return no-op pending Commit 7's full deletion). With wall-clock-driven
+    //     drainEvents, the BASS SYNC chain can only produce duplicate triggers and
+    //     buys nothing.
     if (state_.previewSfxRuntime_ != nullptr) {
-        state_.previewSfxRuntime_->syncPreviewPlaybackClockTransaction(fallbackSecond);
+        state_.previewSfxRuntime_->syncBackgroundTrack(fallbackSecond);
     }
     const double second = fallbackSecond;
     const bool hasAudioClock = false;

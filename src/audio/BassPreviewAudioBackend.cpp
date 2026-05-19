@@ -1372,6 +1372,21 @@ void BassPreviewAudioBackend::clearScheduledGroupSync()
 void BassPreviewAudioBackend::armNextGroupSync(double currentSecond)
 {
 #ifdef Q_OS_WIN
+    // G1 Commit 5: BASS_SYNC_POS-driven SFX scheduling has been retired.
+    // Wall-clock chart-second now drives drainEvents() directly from the
+    // per-tick path in MainWindow::TimelineSection::onQtPreviewTickAtSecond,
+    // so this function is dead weight that, if left enabled, would produce
+    // duplicate SFX triggers (BASS cursor reaching the group second + the
+    // wall-clock tick draining it). Commit 7 deletes the function and the
+    // surrounding scheduler infrastructure outright; for now an early
+    // return keeps the call sites in commitPreparedPreviewPlayback /
+    // startTransportFromCurrentAnchor / handleMixerGroupSync valid while
+    // ensuring no new syncs are armed.
+    Q_UNUSED(currentSecond);
+    return;
+    // Unreachable — preserved below intentionally; Commit 7 removes it
+    // together with the rest of the scheduledGroupSync_ machinery.
+#ifdef MIACODE_BASS_SYNC_POS_LEGACY
     if (shuttingDown_.load(std::memory_order_acquire)) {
         return;
     }
@@ -1414,9 +1429,10 @@ void BassPreviewAudioBackend::armNextGroupSync(double currentSecond)
         }
         return;
     }
+#endif  // MIACODE_BASS_SYNC_POS_LEGACY
 #else
     Q_UNUSED(currentSecond);
-#endif
+#endif  // Q_OS_WIN
 }
 
 void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, double fallbackSecond)
