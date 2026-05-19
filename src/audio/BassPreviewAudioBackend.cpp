@@ -549,6 +549,7 @@ bool BassPreviewAudioBackend::canBePrimary(QString* reason) const
 
 void BassPreviewAudioBackend::setWarmupResolvedPaths(const QString& chartPath, const QString& trackPath, const QString& sfxDir)
 {
+    MC_OP("BassPreviewAudioBackend::setWarmupResolvedPaths");
     warmupPaths_.chartPath = chartPath.isEmpty() ? QString() : QDir::cleanPath(chartPath);
     warmupPaths_.trackPath = trackPath.isEmpty() ? QString() : QDir::cleanPath(trackPath);
     warmupPaths_.sfxDir = sfxDir.isEmpty() ? QString() : QDir::cleanPath(sfxDir);
@@ -1169,6 +1170,7 @@ bool BassPreviewAudioBackend::audioEngineInitialized() const
 
 void BassPreviewAudioBackend::setChartPath(const QString& chartPath)
 {
+    MC_OP("BassPreviewAudioBackend::setChartPath");
     const QString normalized = chartPath.isEmpty() ? QString() : QDir::cleanPath(chartPath);
     if (preparedAssets_.chartPath == normalized) {
         return;
@@ -1194,6 +1196,7 @@ void BassPreviewAudioBackend::setBackgroundTrackOffsetSeconds(double seconds)
 
 void BassPreviewAudioBackend::setBackgroundTrackPlaybackRate(double rate)
 {
+    MC_OP("BassPreviewAudioBackend::setBackgroundTrackPlaybackRate");
     const double normalizedRate = qBound(kBassPreviewMinRate, qIsFinite(rate) ? rate : 1.0, kBassPreviewMaxRate);
     if (qAbs(playbackSession_.backgroundTrackPlaybackRate - normalizedRate) > kBassPreviewEpsilonSeconds) {
         invalidateRetainedPlaybackState(QStringLiteral("background_track_rate_changed"));
@@ -1204,6 +1207,7 @@ void BassPreviewAudioBackend::setBackgroundTrackPlaybackRate(double rate)
 
 void BassPreviewAudioBackend::applyLevels(const PreviewAudioSettings& settings)
 {
+    MC_OP("BassPreviewAudioBackend::applyLevels");
     settings_ = settings;
     settings_.normalize();
     applySampleLevels();
@@ -1270,11 +1274,13 @@ void BassPreviewAudioBackend::configureTimeline(
     double playbackRate,
     const PreviewTimingSettings& timingSettings)
 {
+    MC_OP("BassPreviewAudioBackend::configureTimeline");
     rebuildPreparedTimeline(noteMarkers, playbackRate, timingSettings);
 }
 
 void BassPreviewAudioBackend::clearTimeline()
 {
+    MC_OP("BassPreviewAudioBackend::clearTimeline");
     clearPreparedTimeline();
     stopAll();
 }
@@ -1644,6 +1650,7 @@ double BassPreviewAudioBackend::preparePreviewPlaybackTransaction(
     bool resumeFromPause,
     double playbackRate)
 {
+    MC_OP("BassPreviewAudioBackend::preparePreviewPlaybackTransaction");
     QElapsedTimer timer;
     timer.start();
     noteInitWindowOpened(QStringLiteral("prepare_preview_playback"));
@@ -1686,6 +1693,7 @@ double BassPreviewAudioBackend::preparePreviewPlaybackTransaction(
 
 void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
 {
+    MC_OP("BassPreviewAudioBackend::commitPreparedPreviewPlayback");
 #ifdef Q_OS_WIN
     if (!preparedPlayback_.pending || masterMixer_ == 0) {
         return;
@@ -1716,6 +1724,7 @@ void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
 
 void BassPreviewAudioBackend::cancelPreparedPreviewPlayback()
 {
+    MC_OP("BassPreviewAudioBackend::cancelPreparedPreviewPlayback");
     if (!preparedPlayback_.pending) {
         return;
     }
@@ -1735,6 +1744,7 @@ void BassPreviewAudioBackend::applyPausedPreviewState(
     double playbackRate,
     const PreviewTimingSettings& timingSettings)
 {
+    MC_OP("BassPreviewAudioBackend::applyPausedPreviewState");
     preparedPlayback_ = PreparedPlaybackState();
     const bool transportInvalidated =
         noteMarkersChanged
@@ -1772,6 +1782,7 @@ void BassPreviewAudioBackend::applyPausedPreviewState(
 
 double BassPreviewAudioBackend::startPreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate)
 {
+    MC_OP("BassPreviewAudioBackend::startPreviewPlaybackTransaction");
     const double preparedSecond = preparePreviewPlaybackTransaction(startSecond, resumeFromPause, playbackRate);
     commitPreparedPreviewPlayback();
     return preparedSecond;
@@ -1784,6 +1795,7 @@ miacode::preview_audio::PausePreviewResult BassPreviewAudioBackend::capturePause
 
 miacode::preview_audio::PausePreviewResult BassPreviewAudioBackend::pausePreviewPlaybackTransaction()
 {
+    MC_OP("BassPreviewAudioBackend::pausePreviewPlaybackTransaction");
     PausePreviewResult result;
     result.usedBackgroundTrack = hasBackgroundTrack();
     result.pauseSecond = authoritativeSecond();
@@ -1798,6 +1810,7 @@ miacode::preview_audio::PausePreviewResult BassPreviewAudioBackend::pausePreview
 
 double BassPreviewAudioBackend::resumeRetainedPreviewPlaybackTransaction()
 {
+    MC_OP("BassPreviewAudioBackend::resumeRetainedPreviewPlaybackTransaction");
     if (retainedPlaybackMode_ != RetainedPlaybackMode::PausedExact
         && retainedPlaybackMode_ != RetainedPlaybackMode::PausedAnchored) {
         return authoritativeSecond();
@@ -1808,6 +1821,7 @@ double BassPreviewAudioBackend::resumeRetainedPreviewPlaybackTransaction()
 
 double BassPreviewAudioBackend::seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying)
 {
+    MC_OP("BassPreviewAudioBackend::seekRetainedPreviewPlaybackTransaction");
     const double clampedSecond = clampTimelineSecond(targetSecond);
     const bool sameSecond = retainedSecondMatches(clampedSecond);
     const auto action = miacode::preview_audio::bass::retainedSeekAction(
@@ -1854,6 +1868,7 @@ double BassPreviewAudioBackend::seekRetainedPreviewPlaybackTransaction(double ta
 
 void BassPreviewAudioBackend::resetRetainedPreviewPlaybackTransaction(double targetSecond)
 {
+    MC_OP("BassPreviewAudioBackend::resetRetainedPreviewPlaybackTransaction");
     const double clampedSecond = clampTimelineSecond(targetSecond);
     const bool sameSecond = retainedSecondMatches(clampedSecond);
     const auto action = miacode::preview_audio::bass::retainedSeekAction(
@@ -1882,6 +1897,7 @@ void BassPreviewAudioBackend::resetRetainedPreviewPlaybackTransaction(double tar
 
 void BassPreviewAudioBackend::clearRetainedPreviewPlaybackTransaction()
 {
+    MC_OP("BassPreviewAudioBackend::clearRetainedPreviewPlaybackTransaction");
     retainedPlaybackMode_ = RetainedPlaybackMode::None;
 }
 
@@ -1917,6 +1933,7 @@ double BassPreviewAudioBackend::syncPreviewPlaybackClockTransaction(double fallb
 
 void BassPreviewAudioBackend::resetCursor(double second, bool includeCurrentSecond)
 {
+    MC_OP("BassPreviewAudioBackend::resetCursor");
     playbackSession_.eventGroupIndex = 0;
     while (playbackSession_.eventGroupIndex < preparedGroups_.size()) {
         const double groupSecond = preparedGroups_[playbackSession_.eventGroupIndex].second;
@@ -1982,6 +1999,7 @@ void BassPreviewAudioBackend::drainEvents(double second)
 
 void BassPreviewAudioBackend::pauseTouchholdVoices()
 {
+    MC_OP("BassPreviewAudioBackend::pauseTouchholdVoices");
 #ifdef Q_OS_WIN
     if (touchholdSample_ != nullptr) {
         touchholdSample_->stop();
@@ -1991,6 +2009,7 @@ void BassPreviewAudioBackend::pauseTouchholdVoices()
 
 void BassPreviewAudioBackend::restoreTouchholdVoices(double second)
 {
+    MC_OP("BassPreviewAudioBackend::restoreTouchholdVoices");
 #ifdef Q_OS_WIN
     pauseTouchholdVoices();
     if (touchholdSample_ == nullptr) {
@@ -2029,6 +2048,7 @@ bool BassPreviewAudioBackend::isBackgroundTrackRunning() const
 
 void BassPreviewAudioBackend::startBackgroundTrack(double second)
 {
+    MC_OP("BassPreviewAudioBackend::startBackgroundTrack");
 #ifdef Q_OS_WIN
     if (masterMixer_ != 0 && !playbackSession_.masterRunning) {
         resetMasterMixerClock(second);
@@ -2056,6 +2076,7 @@ void BassPreviewAudioBackend::startBackgroundTrack(double second)
 
 void BassPreviewAudioBackend::seekBackgroundTrack(double second)
 {
+    MC_OP("BassPreviewAudioBackend::seekBackgroundTrack");
     configureBackgroundTrackForSecond(
         second,
         QStringLiteral("seek_background_track"),
@@ -2068,6 +2089,7 @@ void BassPreviewAudioBackend::seekBackgroundTrack(double second)
 
 void BassPreviewAudioBackend::pauseBackgroundTrack()
 {
+    MC_OP("BassPreviewAudioBackend::pauseBackgroundTrack");
 #ifdef Q_OS_WIN
     if (backgroundTrackSample_ != nullptr) {
         backgroundTrackSample_->pause();
@@ -2099,6 +2121,7 @@ bool BassPreviewAudioBackend::playKindInternal(const QString& kind, double gain)
 
 bool BassPreviewAudioBackend::audition(const QString& kind, double gain)
 {
+    MC_OP("BassPreviewAudioBackend::audition");
 #ifdef Q_OS_WIN
     if (!initializeAudioEngine() || masterMixer_ == 0) {
         return false;
@@ -2119,6 +2142,7 @@ bool BassPreviewAudioBackend::audition(const QString& kind, double gain)
 
 void BassPreviewAudioBackend::stopAll()
 {
+    MC_OP("BassPreviewAudioBackend::stopAll");
     stopPlaybackSession();
     preparedPlayback_ = PreparedPlaybackState();
     retainedPlaybackMode_ = RetainedPlaybackMode::None;
@@ -2126,6 +2150,7 @@ void BassPreviewAudioBackend::stopAll()
 
 void BassPreviewAudioBackend::prepareForShutdown()
 {
+    MC_OP("BassPreviewAudioBackend::prepareForShutdown");
     shuttingDown_.store(true, std::memory_order_release);
     stopAll();
 }
