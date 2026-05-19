@@ -442,6 +442,11 @@
         double editorLineSpacingFactor_ = 1.5;
         bool editorHalfWidthInputEnabled_ = true;
         bool editorOverwriteModeEnabled_ = false;
+        // beta51+ — "禁止中文輸入法輸入" preference. Off by default so existing
+        // users / non-CJK locales aren't surprised by a sudden IME disable on
+        // first launch. When on, each editor widget gets Qt::WA_InputMethodEnabled
+        // toggled off so the OS bypasses the IME composition window entirely.
+        bool editorImeInputDisabled_ = false;
         bool preserveDifficultySwitchView_ = true;
         bool pendingDifficultySwitchPreviewRestore_ = false;
         quint64 pendingDifficultySwitchPreviewRestoreRevision_ = 0;
@@ -793,6 +798,7 @@
     double& editorLineSpacingFactor_ = state_.editorLineSpacingFactor_;
     bool& editorHalfWidthInputEnabled_ = state_.editorHalfWidthInputEnabled_;
     bool& editorOverwriteModeEnabled_ = state_.editorOverwriteModeEnabled_;
+    bool& editorImeInputDisabled_ = state_.editorImeInputDisabled_;
     bool& preserveDifficultySwitchView_ = state_.preserveDifficultySwitchView_;
     SimaiDocument& document_ = state_.document_;
     QWidget*& welcomePage_ = ui_.welcomePage_;

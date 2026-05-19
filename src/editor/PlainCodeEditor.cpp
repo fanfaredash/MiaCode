@@ -647,6 +647,21 @@ void PlainCodeEditor::setHalfWidthInputEnabled(bool enabled)
     setInputMethodHints(hints);
 }
 
+void PlainCodeEditor::setImeInputDisabled(bool disabled)
+{
+    imeInputDisabled_ = disabled;
+    // Qt::WA_InputMethodEnabled defaults to true on text-edit widgets. Setting
+    // it false causes the platform integration to skip the IME composition
+    // window entirely — keystrokes arrive as plain QKeyEvent with their ASCII
+    // / numeric / punctuation `text()` payload, no QInputMethodEvent ever
+    // fires for this widget. That's the behaviour the user wants when the
+    // "禁止中文輸入法輸入" preference is on: editing a maidata.txt never
+    // accidentally swallows commas / brackets / digits into an IME candidate
+    // box. Toggling the attribute on a focused widget is safe — Qt resyncs
+    // the IME state on the next focus event.
+    setAttribute(Qt::WA_InputMethodEnabled, !disabled);
+}
+
 void PlainCodeEditor::setEditorOverwriteMode(bool enabled)
 {
     if (overwriteMode() == enabled) {

@@ -243,13 +243,6 @@ QString fontShortcutHintText()
     return QStringLiteral("%1 / %2").arg(decrease, increase);
 }
 
-QString overwriteModeShortcutHintText()
-{
-    return shortcutHintFor(
-        QStringLiteral("editor.overwrite_mode"),
-        QKeySequence(Qt::Key_Insert));
-}
-
 QList<QPair<QString, QStringList>> shortcutCategoryGroups()
 {
     return {
@@ -561,7 +554,7 @@ void MainWindow::PreferencesSection::onPreferences()
     int selectedEditorFontSize = state_.editorTextFontPointSize_;
     double selectedEditorLineSpacingFactor = state_.editorLineSpacingFactor_;
     bool selectedEditorHalfWidthInputEnabled = state_.editorHalfWidthInputEnabled_;
-    bool selectedEditorOverwriteModeEnabled = state_.editorOverwriteModeEnabled_;
+    bool selectedEditorImeInputDisabled = state_.editorImeInputDisabled_;
     bool selectedPreserveDifficultySwitchView = state_.preserveDifficultySwitchView_;
 
     auto* editorFontSizeLabel = new QLabel(uiText("dialog.preferences.editor_font_size", "Text Font Size"), editorGroup);
@@ -621,27 +614,28 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(QString(), halfWidthInputCheckbox);
 
-    auto* overwriteModeRow = new QWidget(editorGroup);
-    auto* overwriteModeRowLayout = new QHBoxLayout(overwriteModeRow);
-    overwriteModeRowLayout->setContentsMargins(0, 0, 0, 0);
-    overwriteModeRowLayout->setSpacing(8);
-    auto* overwriteModeCheckbox = new QCheckBox(
-        uiText("dialog.preferences.editor_overwrite_mode", "Overwrite mode"),
-        overwriteModeRow
+    // beta51+ — Replaced the former "Overwrite mode" preference with a
+    // "禁止中文輸入法輸入" toggle. Overwrite mode still works as a runtime
+    // editor mode (Insert key remains bound via the editor.overwrite_mode
+    // shortcut and PlainCodeEditor's internal keypress handler), but the
+    // preference checkbox here was redundant — the option is bound at the
+    // session level by the Insert key already. The new option hard-disables
+    // the platform IME on the chart editor so a stray Chinese / Japanese /
+    // Korean IME doesn't swallow commas, brackets, or digits into a
+    // candidate box mid-edit. Off by default; users with CJK keyboard
+    // layouts can flip it on once and forget about it.
+    auto* imeInputDisabledCheckbox = new QCheckBox(
+        uiText("dialog.preferences.editor_ime_input_disabled", "Disable IME input (force ASCII)"),
+        editorGroup
     );
-    overwriteModeCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    overwriteModeCheckbox->setChecked(selectedEditorOverwriteModeEnabled);
-    auto* overwriteModeShortcutHint = new QLabel(overwriteModeShortcutHintText(), overwriteModeRow);
-    overwriteModeShortcutHint->setStyleSheet(QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
-    connect(overwriteModeCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
-        selectedEditorOverwriteModeEnabled = checked;
-        owner_.applyEditorOverwriteModeEnabled(selectedEditorOverwriteModeEnabled, true);
+    imeInputDisabledCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    imeInputDisabledCheckbox->setChecked(selectedEditorImeInputDisabled);
+    connect(imeInputDisabledCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
+        selectedEditorImeInputDisabled = checked;
+        owner_.applyEditorImeInputDisabled(selectedEditorImeInputDisabled, true);
         owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
     });
-    overwriteModeRowLayout->addWidget(overwriteModeCheckbox, 0);
-    overwriteModeRowLayout->addWidget(overwriteModeShortcutHint, 0);
-    overwriteModeRowLayout->addStretch(1);
-    editorLayout->addRow(QString(), overwriteModeRow);
+    editorLayout->addRow(QString(), imeInputDisabledCheckbox);
 
     auto* preserveDifficultySwitchViewCheckbox = new QCheckBox(
         uiText("dialog.preferences.preserve_difficulty_switch_view", "Preserve editor position and preview progress when switching difficulties"),
@@ -996,7 +990,6 @@ void MainWindow::PreferencesSection::onPreferences()
                 if (ShortcutRegistry::instance().setUserShortcut(id, captureEdit->sequence())) {
                     applyConfiguredShortcuts();
                     shortcutHint->setText(fontShortcutHintText());
-                    overwriteModeShortcutHint->setText(overwriteModeShortcutHintText());
                     refreshRows();
                     owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
                 }
@@ -1008,7 +1001,6 @@ void MainWindow::PreferencesSection::onPreferences()
                     if (ShortcutRegistry::instance().resetUserShortcut(id)) {
                         applyConfiguredShortcuts();
                         shortcutHint->setText(fontShortcutHintText());
-                        overwriteModeShortcutHint->setText(overwriteModeShortcutHintText());
                         refreshRows();
                         owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
                     }
@@ -1055,7 +1047,12 @@ void MainWindow::PreferencesSection::onPreferences()
         if (ShortcutRegistry::instance().resetEditableShortcuts()) {
             applyConfiguredShortcuts();
             shortcutHint->setText(fontShortcutHintText());
-            overwriteModeShortcutHint->setText(overwriteModeShortcutHintText());
+            // beta51+ — overwriteModeShortcutHint label was bound to the
+            // former overwrite-mode preference row, which was removed in
+            // favour of the "禁止中文輸入法輸入" toggle. The Insert key
+            // binding still lives in the shortcuts registry under
+            // `editor.overwrite_mode`; reset still affects it, just no
+            // dialog label needs refreshing now.
             owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
         }
     });

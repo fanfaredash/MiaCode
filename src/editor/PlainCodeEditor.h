@@ -42,6 +42,15 @@ public:
     QPointF normalizedViewportHitPosition(const QPointF& position) const;
     void setHalfWidthInputEnabled(bool enabled);
     bool halfWidthInputEnabled() const { return halfWidthInputEnabled_; }
+    // beta51+ — hard-disable the platform IME on this editor when the user
+    // turns on the "禁止中文輸入法輸入" preference. Sets Qt::WA_InputMethodEnabled
+    // = !disabled so the OS routes raw key events directly to the editor
+    // (Chinese / Japanese / Korean / Vietnamese IMEs all get bypassed,
+    // regardless of whether they honour Qt::ImhLatinOnly). halfWidth's
+    // ImhLatinOnly hint is a *suggestion* most CJK IMEs ignore on Windows;
+    // this attribute is the OS-level kill-switch.
+    void setImeInputDisabled(bool disabled);
+    bool imeInputDisabled() const { return imeInputDisabled_; }
     void setEditorOverwriteMode(bool enabled);
 
 signals:
@@ -84,6 +93,7 @@ private:
     int blockSpacingPixels_ = 0;
     int topOverlayInsetPixels_ = 0;
     bool halfWidthInputEnabled_ = true;
+    bool imeInputDisabled_ = false;
     QList<QAction*> batchTransformActions_;
     QList<QAction*> moreBatchTransformActions_;
     QRect lastCurrentLineHighlightRect_;

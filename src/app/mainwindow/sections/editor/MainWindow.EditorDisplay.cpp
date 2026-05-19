@@ -287,10 +287,12 @@ void MainWindow::EditorSection::loadPortableState()
     }
     state_.editorHalfWidthInputEnabled_ = ui.value("editor_half_width_input").toBool(true);
     state_.editorOverwriteModeEnabled_ = ui.value("editor_overwrite_mode").toBool(false);
+    state_.editorImeInputDisabled_ = ui.value("editor_ime_input_disabled").toBool(false);
     state_.preserveDifficultySwitchView_ = ui.value("preserve_difficulty_switch_view").toBool(true);
     applyEditorTextFontSize(state_.editorTextFontPointSize_, false);
     applyEditorHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_, false);
     applyEditorOverwriteModeEnabled(state_.editorOverwriteModeEnabled_, false);
+    applyEditorImeInputDisabled(state_.editorImeInputDisabled_, false);
 
     const QString dir = app.value("last_open_dir").toString();
     if (!dir.isEmpty() && QDir(dir).exists()) {
@@ -604,6 +606,7 @@ void MainWindow::EditorSection::savePortableState() const
     ui.insert("editor_line_spacing_factor", state_.editorLineSpacingFactor_);
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
+    ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);
     ui.insert("preserve_difficulty_switch_view", state_.preserveDifficultySwitchView_);
     root.insert("ui", ui);
 
@@ -705,6 +708,7 @@ void MainWindow::EditorSection::persistEditorTextFontPreference() const
     ui.insert("editor_line_spacing_factor", state_.editorLineSpacingFactor_);
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
+    ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);
     ui.insert("preserve_difficulty_switch_view", state_.preserveDifficultySwitchView_);
     root.insert("ui", ui);
     UiText::savePreferencesObject(root);
@@ -783,6 +787,20 @@ void MainWindow::EditorSection::applyEditorOverwriteModeEnabled(bool enabled, bo
     if (ui_.copyAreaEditor_ != nullptr) {
         QSignalBlocker blocker(ui_.copyAreaEditor_);
         ui_.copyAreaEditor_->setEditorOverwriteMode(enabled);
+    }
+    if (persistPreference) {
+        persistEditorTextFontPreference();
+    }
+}
+
+void MainWindow::EditorSection::applyEditorImeInputDisabled(bool disabled, bool persistPreference)
+{
+    state_.editorImeInputDisabled_ = disabled;
+    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
+        editor->setImeInputDisabled(disabled);
+    }
+    if (ui_.copyAreaEditor_ != nullptr) {
+        ui_.copyAreaEditor_->setImeInputDisabled(disabled);
     }
     if (persistPreference) {
         persistEditorTextFontPreference();
@@ -1023,6 +1041,7 @@ void MainWindow::EditorSection::showCreateBookmarkDialog()
         state_.editorTextFontPointSize_,
         state_.editorLineSpacingFactor_));
     edit->setHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_);
+    edit->setImeInputDisabled(state_.editorImeInputDisabled_);
     edit->setEditorOverwriteMode(state_.editorOverwriteModeEnabled_);
     connect(edit, &PlainCodeEditor::editorOverwriteModeChanged, &owner_, [this](bool enabled) {
         applyEditorOverwriteModeEnabled(enabled, true);
@@ -1203,6 +1222,7 @@ void MainWindow::EditorSection::syncCopyAreaEditorAppearance()
     ui_.copyAreaEditor_->setFont(editorFont(state_.editorTextFontPointSize_));
     ui_.copyAreaEditor_->setBlockSpacingPixels(blockSpacingPixels);
     ui_.copyAreaEditor_->setHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_);
+    ui_.copyAreaEditor_->setImeInputDisabled(state_.editorImeInputDisabled_);
     ui_.copyAreaEditor_->setEditorOverwriteMode(state_.editorOverwriteModeEnabled_);
     ui_.copyAreaEditor_->refreshLineNumberAreaLayout();
 }
@@ -1273,6 +1293,11 @@ void MainWindow::applyEditorHalfWidthInputEnabled(bool enabled, bool persistPref
 void MainWindow::applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference)
 {
     editorSection_->applyEditorOverwriteModeEnabled(enabled, persistPreference);
+}
+
+void MainWindow::applyEditorImeInputDisabled(bool disabled, bool persistPreference)
+{
+    editorSection_->applyEditorImeInputDisabled(disabled, persistPreference);
 }
 
 void MainWindow::applyPreserveDifficultySwitchView(bool enabled, bool persistPreference)
