@@ -390,8 +390,13 @@ struct BassPreviewAudioBackend::Sample {
             return false;
         }
 
+        // BASS_ATTRIB_BUFFER is not settable on a decode-only Mixer stream — BASS
+        // returns BASS_ERROR_NOTAVAIL (code 37). The call has always been a silent
+        // no-op here; G1 Commit 1's blanket noteBassErr surfaced it as 14×N noise
+        // per test session. Swallow the post-error code explicitly so the
+        // diagnostic channel stays focused on real failures.
         BASS_ChannelSetAttribute(resamplerStream, BASS_ATTRIB_BUFFER, 0.0f);
-        noteBassErr("sample_create/set_buffer_attr");
+        (void) BASS_ErrorGetCode();  // discard expected NOTAVAIL on decode stream
         BASS_Mixer_StreamAddChannel(resamplerStream, stream, 0);
         noteBassErr("sample_create/add_source_to_resampler");
         BASS_Mixer_ChannelFlags(stream, BASS_MIXER_CHAN_PAUSE, BASS_MIXER_CHAN_PAUSE);
@@ -1237,6 +1242,16 @@ void BassPreviewAudioBackend::startTransportFromCurrentAnchor()
     // sample (done below via backgroundTrackSample_->play() and similar).
     playbackSession_.masterRunning = true;
     playbackSession_.lastAuthoritativeSecond = authoritativeSecond();
+    // G1 followup: bass_play also fires on the retained-resume path (the
+    // common case for ▶ after ⏸). The cold-start path emits it from
+    // commitPreparedPreviewPlayback; without this line, the row never
+    // appears for any session after the first prepare.
+    appendAudioDebugLog(
+        QString("bass_play txn=%1 start=%2 rate=%3 resume=1 reason=resume_anchor mode=%4")
+            .arg(playbackTransactionId_)
+            .arg(playbackSession_.lastAuthoritativeSecond, 0, 'f', 6)
+            .arg(playbackSession_.backgroundTrackPlaybackRate, 0, 'f', 3)
+            .arg(retainedPlaybackModeLabel(retainedMode)));
     if (backgroundTrackSample_ != nullptr) {
         if (!playbackSession_.backgroundTrackPendingStart) {
             backgroundTrackSample_->play();
@@ -2110,6 +2125,16 @@ void BassPreviewAudioBackend::restoreTouchholdVoices(double second)
 void BassPreviewAudioBackend::syncBackgroundTrack(double timelineSecond)
 {
     maybeStartPendingBackgroundTrack(timelineSecond);
+    // G1 followup: restore the per-second bass_status row. Pre-G1 it was driven
+    // from syncPreviewPlaybackClockTransaction; that path is gone (Commit 5),
+    // and MainWindow now calls syncBackgroundTrack on every tick as the BGM-
+    // pending-start hook. Riding that schedule keeps bass_status emitting at
+    // the same ~16ms cadence the old call had, then rate-limited to once per
+    // second internally by logPlaybackStatus. authoritativeSecond returns the
+    // last-recorded snapshot now, so we pass MainWindow's wall-clock second
+    // directly into both arguments — `auth` will track wall-clock and the
+    // row's drift_ms collapses to ~0 as long as the chart is on rate.
+    logPlaybackStatus(timelineSecond, timelineSecond);
 }
 
 bool BassPreviewAudioBackend::hasBackgroundTrack() const
