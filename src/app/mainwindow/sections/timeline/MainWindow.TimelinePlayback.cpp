@@ -556,6 +556,18 @@ void MainWindow::TimelineSection::seekPreviewToSecond(double second, bool center
     owner_.ensurePreviewSfxRuntimePrepared();
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     if (state_.qtPreviewPlaying_ && state_.previewSfxRuntime_ != nullptr) {
+        // G1 Commit 8 followup: bass_clock_seek per §7.2 — playing-seek branch.
+        // from_chart is the wall-clock chart-second right before the re-anchor,
+        // to_chart is the requested target. Reason "playing_seek" disambiguates
+        // from the discrete / paused / scrub paths.
+        const double fromChartSecond = owner_.currentPreviewAuthoritativeAudioClockSecond();
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Audio,
+            QString(),
+            QString("bass_clock_seek from_chart=%1 to_chart=%2 rate=%3 reason=playing_seek")
+                .arg(fromChartSecond, 0, 'f', 6)
+                .arg(clampedSecond, 0, 'f', 6)
+                .arg(state_.previewPlaybackRate_, 0, 'f', 3));
         const double effectiveSecond =
             state_.previewSfxRuntime_->seekRetainedPreviewPlaybackTransaction(clampedSecond, true);
         state_.qtPreviewStartSecond_ = effectiveSecond;
@@ -576,6 +588,15 @@ void MainWindow::TimelineSection::seekPreviewToSecond(double second, bool center
     if (state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
         cancelPreviewStartupSync();
     }
+    // G1 Commit 8 followup: bass_clock_seek per §7.2 — paused-anchor branch
+    // (also covers the post-cancel startup-pending case).
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Audio,
+        QString(),
+        QString("bass_clock_seek from_chart=%1 to_chart=%2 rate=%3 reason=paused_anchor")
+            .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6)
+            .arg(clampedSecond, 0, 'f', 6)
+            .arg(state_.previewPlaybackRate_, 0, 'f', 3));
     anchorQtPreviewPlaybackToSecond(clampedSecond, centerView);
 }
 
@@ -586,6 +607,20 @@ void MainWindow::TimelineSection::seekPreviewDiscreteToSecond(double second, boo
     owner_.ensurePreviewStageMediaRouteInitialized();
     owner_.ensurePreviewSfxRuntimePrepared();
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    // G1 Commit 8 followup: bass_clock_seek per §7.2 — discrete-seek branch
+    // (arrow keys, jump-to-note). from_chart is the current wall-clock chart
+    // sec; the branch below may then reanchor a playing session into pause
+    // before applying the seek.
+    {
+        const double fromChartSecond = owner_.currentPreviewAuthoritativeAudioClockSecond();
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Audio,
+            QString(),
+            QString("bass_clock_seek from_chart=%1 to_chart=%2 rate=%3 reason=discrete")
+                .arg(fromChartSecond, 0, 'f', 6)
+                .arg(clampedSecond, 0, 'f', 6)
+                .arg(state_.previewPlaybackRate_, 0, 'f', 3));
+    }
     if (state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
         cancelPreviewStartupSync();
     } else if (state_.qtPreviewPlaying_) {
@@ -682,6 +717,22 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
     if (qFuzzyCompare(state_.previewPlaybackRate_ + 1.0, clampedRate + 1.0)) {
         return;
     }
+    // G1 Commit 8 followup: bass_clock_set_rate per §7.2. while_playing=1
+    // distinguishes the case that, in G1, doesn't actually push the new TEMPO
+    // onto the running BGM tempo stream (Sample::setSpeed guard skips the
+    // write) — exactly the scenario where the user sees chart-time and BGM
+    // drift apart. The corresponding sample_set_speed_skipped_playing line
+    // from the backend confirms the deferral. G2 will replace this comment
+    // with an actual pause-modify-resume sequence.
+    const double chartNow = owner_.currentPreviewAuthoritativeAudioClockSecond();
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Audio,
+        QString(),
+        QString("bass_clock_set_rate from=%1 to=%2 while_playing=%3 chart_now=%4")
+            .arg(state_.previewPlaybackRate_, 0, 'f', 3)
+            .arg(clampedRate, 0, 'f', 3)
+            .arg(state_.qtPreviewPlaying_ ? 1 : 0)
+            .arg(chartNow, 0, 'f', 6));
     state_.previewPlaybackRate_ = clampedRate;
     if (ui_.previewSpeedButton_ != nullptr) {
         QString rateText = QString::number(state_.previewPlaybackRate_, 'f', 2);

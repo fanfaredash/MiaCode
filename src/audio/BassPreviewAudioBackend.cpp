@@ -17,6 +17,8 @@
 #include <QFileInfo>
 #include <QtMath>
 
+#include <cstdio>   // G1 Commit 8 followup: std::snprintf for startup-beacon lines
+
 #ifdef Q_OS_WIN
 #include <windows.h>
 
@@ -199,6 +201,21 @@ struct BassPreviewAudioBackend::Sample {
 
     void free()
     {
+        // G1 Commit 8 followup: per-sample destroy beacon per §7.3. Writing to
+        // the startup beacon (not the audio debug channel) because the most
+        // valuable use of this line is post-crash forensics — if the next
+        // process startup reads a stale beacon file we want the *last sample
+        // freed before the crash* visible there with its BASS handle values.
+        if (source != 0 || resampler != 0) {
+            char buf[160];
+            const QByteArray kindUtf8 = kind.toUtf8();
+            std::snprintf(buf, sizeof(buf),
+                "audio/sample/destroy kind=%s source=0x%08x resampler=0x%08x",
+                kindUtf8.constData(),
+                static_cast<unsigned>(source),
+                static_cast<unsigned>(resampler));
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
         if (source != 0) {
             BASS_Mixer_ChannelFlags(source, BASS_MIXER_CHAN_PAUSE, BASS_MIXER_CHAN_PAUSE);
             noteBassErr("sample_free/pause_flag");
@@ -245,6 +262,25 @@ struct BassPreviewAudioBackend::Sample {
         kind = sampleKind;
         speedChangeSupported = speedChange;
 
+        // G1 Commit 8 followup: per-sample create beacon per §7.3. The beacon is
+        // heap-free / pure Win32, so if BASS_StreamCreateFile or BASS_FX_TempoCreate
+        // crashes mid-call (the (a)-scenario fault locus per
+        // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §4.1), this line still lands
+        // and lets the next startup pin which sample was in flight. Filename only,
+        // not full path, to fit the beacon line budget.
+        {
+            char buf[160];
+            const QByteArray kindUtf8 = sampleKind.toUtf8();
+            const QByteArray nameUtf8 = QFileInfo(samplePath).fileName().toUtf8();
+            std::snprintf(buf, sizeof(buf),
+                "audio/sample/create kind=%s file=%s speed_change=%d normalize=%d",
+                kindUtf8.constData(),
+                nameUtf8.constData(),
+                speedChange ? 1 : 0,
+                normalize ? 1 : 0);
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
+
         QFile file(samplePath);
         if (!file.open(QIODevice::ReadOnly)) {
             appendAudioDebugLog(QString("bass_sample_open_failed kind=%1 path=%2").arg(kind, samplePath));
@@ -257,6 +293,10 @@ struct BassPreviewAudioBackend::Sample {
             return false;
         }
 
+        // G1 Commit 8 followup: keep the decode and tempo handles in separate
+        // locals so the create_ok beacon line below can record both even when
+        // `stream` is overwritten by the tempo wrapper. decode_handle stays
+        // valid for as long as the tempo stream owns it via BASS_FX_FREESOURCE.
         DWORD stream = BASS_StreamCreateFile(
             TRUE,
             bytes.constData(),
@@ -271,6 +311,8 @@ struct BassPreviewAudioBackend::Sample {
                     .arg(static_cast<int>(BASS_ErrorGetCode())));
             return false;
         }
+        const DWORD decodeHandle = stream;
+        DWORD tempoHandle = 0;
 
         if (speedChangeSupported) {
             const auto tempoCreate = reinterpret_cast<BassFxTempoCreateProc>(backend->bassFxTempoCreate_);
@@ -290,6 +332,7 @@ struct BassPreviewAudioBackend::Sample {
                 return false;
             }
             stream = tempoStream;
+            tempoHandle = tempoStream;
         }
 
         if (normalize) {
@@ -366,6 +409,22 @@ struct BassPreviewAudioBackend::Sample {
             lengthSeconds = BASS_ChannelBytes2Seconds(source, lengthBytes);
         }
         applyVolume();
+        // G1 Commit 8 followup: per-sample create_ok beacon per §7.3. Records the
+        // three handles ((decode → tempo → resampler) needed to map a VEH fault
+        // address back to the right BASS_FX SoundTouch SEQUENCE_MS / SEEKWINDOW_MS
+        // ring slot when a crash drops into the plug-in.
+        {
+            char buf[200];
+            const QByteArray kindUtf8 = kind.toUtf8();
+            std::snprintf(buf, sizeof(buf),
+                "audio/sample/create_ok kind=%s decode=0x%08x tempo=0x%08x resampler=0x%08x length_sec=%.3f",
+                kindUtf8.constData(),
+                static_cast<unsigned>(decodeHandle),
+                static_cast<unsigned>(tempoHandle),
+                static_cast<unsigned>(resamplerStream),
+                lengthSeconds);
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
         return true;
     }
 
