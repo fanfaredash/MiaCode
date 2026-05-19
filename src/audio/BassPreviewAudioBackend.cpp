@@ -1964,6 +1964,15 @@ double BassPreviewAudioBackend::seekRetainedPreviewPlaybackTransaction(double ta
             .arg(sameSecond ? 1 : 0));
     switch (action) {
     case miacode::preview_audio::bass::RetainedSeekAction::KeepPaused:
+        // beta50 followup — see resetRetainedPreviewPlaybackTransaction's
+        // matching block. lastAuthoritativeSecond is no longer a reliable
+        // BGM-cursor proxy post-G1 Commit 6, so sameSecond=true (which got
+        // us into this branch) doesn't imply the BGM source is actually at
+        // clampedSecond. Re-seek BGM defensively before settling here.
+        configureBackgroundTrackForSecond(
+            clampedSecond,
+            QStringLiteral("retained_seek_keep_paused"),
+            miacode::preview_audio::bass::BassDebugRoute::Transport);
         playbackSession_.lastAuthoritativeSecond = clampedSecond;
         break;
     case miacode::preview_audio::bass::RetainedSeekAction::ResumeExact:
@@ -2009,6 +2018,26 @@ void BassPreviewAudioBackend::resetRetainedPreviewPlaybackTransaction(double tar
             .arg(clampedSecond, 0, 'f', 6)
             .arg(sameSecond ? 1 : 0));
     if (action == miacode::preview_audio::bass::RetainedSeekAction::KeepPaused) {
+        // beta50 followup — Stop-button audio-side fix:
+        //
+        // sameSecond is computed against lastAuthoritativeSecond, but G1
+        // Commit 6 stopped that field from tracking the live BGM cursor —
+        // it now only carries whatever value was last *recorded* (e.g. at
+        // play-start). Concretely: Play 0 → ⏸10 → ▶ resume → ⏸30 → ⏹ Stop
+        // back to 10 lands here with lastAuthoritativeSecond=10 (the
+        // resume's recorded value) and clampedSecond=10, so sameSecond is
+        // true and the pre-fix code returned without touching BGM. The
+        // BGM cursor was actually at ~30 from the play-to-30s session
+        // though, so audio stuck at the pause point even as visual moved
+        // back to R. configureBackgroundTrackForSecond performs the BGM
+        // cursor seek (BASS_ChannelSetPosition on the source) that the
+        // caller is reasonably expecting from a "reset to target second"
+        // method; it's cheap when BGM is already there and load-bearing
+        // when it isn't.
+        configureBackgroundTrackForSecond(
+            clampedSecond,
+            QStringLiteral("retained_reset_keep_paused"),
+            miacode::preview_audio::bass::BassDebugRoute::Transport);
         playbackSession_.lastAuthoritativeSecond = clampedSecond;
         return;
     }
