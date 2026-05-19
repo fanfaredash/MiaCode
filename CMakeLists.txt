@@ -356,6 +356,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/audio/PreviewAudioBackend.h
     src/audio/PreviewAudioSettings.h
     src/audio/PreviewAudioSettings.cpp
+    src/audio/PreviewClock.h
+    src/audio/PreviewClock.cpp
     src/audio/BassPreviewAudioBackend.h
     src/audio/BassPreviewAudioBackend.cpp
     src/audio/MiniaudioPreviewAudioBackend.h
@@ -618,6 +620,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/tools/probe/SoundtouchProbe.cpp
         src/audio/PreviewAudioSettings.h
         src/audio/PreviewAudioSettings.cpp
+        src/audio/PreviewClock.h
+        src/audio/PreviewClock.cpp
         src/audio/BassPreviewAudioBackend.h
         src/audio/BassPreviewAudioBackend.cpp
         src/audio/MiniaudioPreviewAudioBackend.h
