@@ -73,7 +73,18 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
         if (qFuzzyIsNull(marker.touchPoint.x()) && qFuzzyIsNull(marker.touchPoint.y())) {
             continue;
         }
-        if (marker.endSecond <= marker.second) {
+        // beta51+ — only the truly invalid `endSecond < second` case is
+        // dropped here; the zero-duration case (`endSecond == second`,
+        // produced by bare `Ch` / `A1h` syntax accepted by the parser
+        // in db52893) falls through to the line below where the
+        // qMax<qreal>(0.001, …) floor gives the animation a tiny but
+        // non-zero window. Before this change `<=` short-circuited the
+        // floor, so bare touch-hold markers parsed but never reached
+        // any of the sprite layout code — they were invisible on the
+        // playfield. Regular hold notes (`1h`) already use `<` in
+        // PreviewHeadLayerState / PreviewGuideLayerState so this just
+        // brings the touch-hold path into line.
+        if (marker.endSecond < marker.second) {
             continue;
         }
 
