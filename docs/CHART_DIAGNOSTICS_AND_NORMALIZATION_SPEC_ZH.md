@@ -413,24 +413,64 @@ checkbox 选项控制行为，跨会话持久化在编辑器偏好里。
 回归测试 `ChartBatchTransformSpec.cpp:1342-1361` 是 mid-measure 选区 +
 `startAtNewMeasure=true` 注入 `\|\| 4/4` 的实证。
 
-#### `reduceTo384Grid`（默认 true）
+#### 核心 snap 规则（`snapXOverY`）
 
-这个选项控制**对非 384 网格的 moment 如何处理**。`renderMeasureLine`
-（`ChartNormalization.cpp:1061+`）是 dispatcher，按 measure 分流：
+所有 384 网格归一都走 `snapXOverY(x, y)`（`Non384SnapTable.cpp:43+`），
+针对一个分数 `x/y` 返回 `(p, q)`：
+
+| 输入情况 | 返回 |
+|---|---|
+| `y` 是 384 的约数（或 y == 1） | **`(x, y)` 直通**，不改 |
+| `y > 384` | fallback：`(round(384 * x / y), 384)` |
+| `0 < y ≤ 384` 且 `y ∤ 384` | **`q = max{d : d \| 384, d ≤ 4y}`**；**`p = round(q * x / y)`**（向最近整数舍入，half-away-from-zero） |
+
+非 384 约数 y 的 q 是简单一查：
+
+| y | 4y | q（≤ 4y 的最大 384 约数） |
+|---|---|---|
+| 5 | 20 | 16 |
+| 7 | 28 | 24 |
+| 9 | 36 | 32 |
+| 10–11 | 40–44 | 32 |
+| 13–15 | 52–60 | 48 |
+| 17–23 | 68–92 | 64 |
+| 25–31 | 100–124 | 96 |
+| 28 | 112 | 96 |
+| 33–47 | 132–188 | 128 |
+| 49–63 | 196–252 | 192 |
+| ≥ 65 | ≥ 260 | 192（直到 4y ≥ 384）→ 384 |
+
+规则非常简单：**单一 q 决定整个 y 系的网格密度，每个 x 独立 round 到该
+网格**。同 y 的相邻 x 偶尔会 round 到同一个 p（碰撞），但实际谱面里这
+对最终输出影响极小，规则换来的「无状态、可手算、表达干净」更划算。
+
+#### `reduceTo384Grid`（默认 true）— 选项的实际作用
+
+`renderMeasureLine`（`ChartNormalization.cpp:1061+`）是 dispatcher：
 
 | 值 | 行为 |
 |---|---|
-| true | 所有 measure **强制走** `renderMeasureLineApproximate`（`ChartNormalization.cpp:839-917`）。候选 subdivision 集 = 16, 24, 32, 48, 64, 96, 128, 192, 384（即 ≥16 的 384 因数）。逐个 beat-segment 挑能在 `kSnapToleranceWhole ≈ 1/768` 内容纳所有 moment 的**最小** candidate。`{16}` 谱在正常情况下输出仍是 `{16}`，**不会被推到** `{384}`。**非 384 分母的 moment（如 1/7、1/9）会被 round 到 384 grid，丢失精度**（如 `{7}` 输入会被压成 `{384}` 并 snap）。 |
-| false | **每个 measure 独立判定**：扫描该 measure 内所有 `MeasureMoment::positionWhole.denominator`，若**全部都是 384 约数**（即 `384 % denom == 0`）→ 走 approximate（与 reduce=true 相同行为）；若**任一 moment 落在非 384 约数位置**→ 整个 measure 走 `renderMeasureLineExact`（`ChartNormalization.cpp:996-1059`），用 moment 位置分母的 LCM 选 subdivision，能产生 `{7}`、`{9}`、`{15}` 等非-384 因数，**保留 moment 精度**。 |
+| true | 所有 measure 走 `renderMeasureLineApproximate`（`ChartNormalization.cpp:839+`）。每个 beat-segment 把段内每个 moment 都过 `snapXOverY`，segment 的 `{N}` 取所有 moment q 的 **LCM**，再做两步调整（见下）。**非 384 约数 y 的 moment（如 1/28、1/56）也被映射到 q-grid，丢失少量精度（详见上表）**。 |
+| false | **每 measure 独立判定**：扫所有 `MeasureMoment::positionWhole.denominator`，若**全部都是 384 约数** → 走 approximate（与 reduce=true 行为一致）；若**任一非 384 约数** → 整个 measure 走 `renderMeasureLineExact`（`ChartNormalization.cpp:996+`），按 moment 位置分母的 LCM 选 subdivision，能产生 `{7}`、`{9}`、`{15}` 等非-384 因数 subdivision，**保留 moment 精度**。 |
+
+approximate 路径下每个 segment 的 `{N}` 计算：
+
+1. `segmentQ = LCM(每个 moment 的 snap.q)`；段内无 moment 则取 0。
+2. **空段/纯 2 幂 bump**：若 `segmentQ ≤ 16` 且 `16 % segmentQ == 0`（即
+   `segmentQ ∈ {1, 2, 4, 8, 16}`） → bump 到 16。这样空 beat 仍写 `{16}`，
+   不会写出 `{1},`。**`{12}`、`{24}` 等含 3 因子的 subdivision 不会被
+   bump**，保留原细分。
+3. **拍齐 align**：`segmentQ = LCM(segmentQ, meterDenominator)`。这保证
+   `segmentLengthGrid * segmentQ / 384` 是整数（每段整数个 slot）。
+4. 若超出 384 范围 → fallback 到 384。
 
 关键含意：
 
-- 普通谱面（每个 moment 都落在 384 grid 上）在 reduce=true / false 下
-  **输出完全一致** —— 用户不会看到「reduce=false 突然把空白合并成 `{1}`
-  大 chunk」的意外行为。
-- 只有真正含 `{7}` / `{9}` / `{15}` 等异常分音的 measure，才会在
-  reduce=false 下落入 exact 路径（保留精度），而在 reduce=true 下被
-  强制 snap 到 384 grid（精度损失）。
+- 普通谱面（每个 moment 都在 384 grid 上）在 reduce=true / false 下
+  **输出完全一致**。
+- 只有真正含非 384 分音（`{7}`、`{9}`、`{28}` 等）的 measure 才会在
+  reduce=false 下走 exact 路径（保留 LCM 表达），在 reduce=true 下走
+  approximate（每 beat 取 `snapXOverY` 给的 q）。
 - 对话框文案「统一近似至 384 分音」对应 reduce=true；reduce=false 表达
   「保留非 384 分音原位（其余照旧近似）」的语义。
 
@@ -438,11 +478,13 @@ checkbox 选项控制行为，跨会话持久化在编辑器偏好里。
 
 时长由 `normalizePlainDurationSignature`（`ChartNormalization.cpp:330+`）处理。
 **当且仅当以下三个条件同时满足时，时长字符串才会被改写**；否则原 signature
-**逐字保留**，用户的书写选择完全不动：
+**逐字保留**：
 
 1. 时长字符串**不含 `#`**（`parsePlainDurationSignature` 见 `#` 直接 return false）
-2. `reduceTo384Grid=true`（"统一近似至 384 分音" 选项打开）
-3. **原始 `beats` 值不是 384 的约数**（即 `384 % beats != 0`）
+2. `reduceTo384Grid=true`
+3. **原始 `beats` 值不是 384 的约数**
+
+改写直接调用 `snapXOverY(numerator, beats)`，得到 `(p, q)` 后输出 `[q:p]`。
 
 例：
 
@@ -450,28 +492,29 @@ checkbox 选项控制行为，跨会话持久化在编辑器偏好里。
 |---|---|---|---|---|
 | `[8:1]` | 8 | 是 | `[8:1]` 不动 | `[8:1]` 不动 |
 | `[24:6]` | 24 | 是 | `[24:6]` 不动 | `[24:6]` 不动 |
-| `[48:5]` | 48 | 是 | `[48:5]` 不动 | `[48:5]` 不动 |
 | `[1:3]` | 1 | 是 | `[1:3]` 不动 | `[1:3]` 不动 |
-| `[7:1]` | 7 | 否 | 改写到 384 grid | `[7:1]` 不动 |
-| `[500:1]` | 500 | 否 | `[384:1]`（units=1） | `[500:1]` 不动 |
-| `[2000:1]` | 2000 | 否 | units=0 → 进零时长分支 | `[2000:1]` 不动 |
+| `[5:1]` | 5 | 否 | **`[16:3]`**（q=16，p=round(16/5)=3） | `[5:1]` 不动 |
+| `[7:1]` | 7 | 否 | **`[24:3]`**（q=24，p=round(24/7)=3） | `[7:1]` 不动 |
+| `[28:6]` | 28 | 否 | **`[96:21]`**（q=96，p=round(96*6/28)=21） | `[28:6]` 不动 |
+| `[500:1]` | 500 > 384 | n/a | **`[384:1]`**（fallback：q=384，p=round(384/500)=1） | `[500:1]` 不动 |
+| `[2000:1]` | 2000 > 384 | n/a | snap.p=0 → 进零时长分支 | `[2000:1]` 不动 |
 | `[120#24:3]` | (含 `#`) | n/a | `[120#24:3]` 不动 | `[120#24:3]` 不动 |
 
 #### 触发改写时的零时长分支
 
-当三个条件都成立、且改写后 `units = round(numerator/beats * 384) ≤ 0` 时，
-策略由 token 类决定（`renderTokenForGrid` 传不同的
-`DurationNormalizationOptions`）：
+当条件都成立、且 `snap.p == 0`（duration 太短被舍入到 0）时，策略由
+token 类决定（`renderTokenForGrid` 传不同的 `DurationNormalizationOptions`）：
 
 | Token 类 | `allowZeroDuration` | `omitZeroDurationBracket` | 含义 |
 |---|---|---|---|
 | Touch hold | true | false | 输出 `[1:0]`，bracket 保留（touch 的 `[]` 语法有可见性） |
 | Note hold | true | true | **整段 bracket 删除**，token 留 `h` 字符（例：`2h[2000:1]` → `2h`） |
-| Slide duration | false | false | Slide 必须有时长，floor 到 `units=1`，输出 `[384:1]` |
+| Slide duration | false | false | Slide 必须有时长，floor 到 `[q:1]`（typically `[384:1]`） |
 
-回归 `ChartBatchTransformSpec.cpp:1216-1228` 验证 `[2000:1]`（non-384）→
-`2h` 与 `[1:3]`（384 约数）→ 不动；`:1230-1241` 验证 `[500:1]` →
-`[384:1]`；`:1244-1255` 验证 `[192:1]` 已是 384 约数 → 不动。
+回归 `ChartBatchTransformSpec.cpp:1217-1228` 验证 `[2000:1]`（fallback
+归零）→ `2h` 与 `[1:3]`（384 约数）→ 不动；`:1231-1241` 验证 `[500:1]` →
+`[384:1]`；`:1259-1269`/`:1272-1283` 验证 `1h[7:1]` → `1h[24:3]` 与
+`1-5[5:1]` → `1-5[16:3]`。
 
 ### 3.3 触发小节切分的事件
 
