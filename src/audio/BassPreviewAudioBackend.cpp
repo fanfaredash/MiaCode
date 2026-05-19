@@ -1388,81 +1388,22 @@ void BassPreviewAudioBackend::stopPlaybackSession()
 
 void BassPreviewAudioBackend::clearScheduledGroupSync()
 {
-#ifdef Q_OS_WIN
-    QMutexLocker locker(&schedulerMutex_);
-    if (scheduledGroupSync_ != 0 && masterMixer_ != 0) {
-        BASS_ChannelRemoveSync(masterMixer_, scheduledGroupSync_);
-        noteBassErr("clear_group_sync/remove_sync");
-    }
-    scheduledGroupSync_ = 0;
-    scheduledGroupIndex_ = -1;
-#endif
+    // G1 Commit 7: BASS_SYNC_POS-driven SFX scheduling is retired. No syncs are
+    // ever armed (armNextGroupSync is a no-op), so this clear is also a no-op.
+    // Retained only because existing callers still reference it; a future sweep
+    // can remove the call sites and this stub together.
 }
 
 void BassPreviewAudioBackend::armNextGroupSync(double currentSecond)
 {
-#ifdef Q_OS_WIN
-    // G1 Commit 5: BASS_SYNC_POS-driven SFX scheduling has been retired.
-    // Wall-clock chart-second now drives drainEvents() directly from the
-    // per-tick path in MainWindow::TimelineSection::onQtPreviewTickAtSecond,
-    // so this function is dead weight that, if left enabled, would produce
-    // duplicate SFX triggers (BASS cursor reaching the group second + the
-    // wall-clock tick draining it). Commit 7 deletes the function and the
-    // surrounding scheduler infrastructure outright; for now an early
-    // return keeps the call sites in commitPreparedPreviewPlayback /
-    // startTransportFromCurrentAnchor / handleMixerGroupSync valid while
-    // ensuring no new syncs are armed.
+    // G1 Commit 7: SFX triggering moved fully to wall-clock-driven drainEvents
+    // in MainWindow::TimelineSection::onQtPreviewTickAtSecond. The previous
+    // BASS_SYNC_POS callback chain (armNextGroupSync → BASS_ChannelSetSync →
+    // onMixerGroupSync → handleMixerGroupSync → triggerGroup → re-arm) is
+    // dead code; arming any new sync now would only produce duplicate
+    // triggers as the BASS-cursor and wall-clock drift past each other.
+    // See PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §3.7, §6.1 step 7.
     Q_UNUSED(currentSecond);
-    return;
-    // Unreachable — preserved below intentionally; Commit 7 removes it
-    // together with the rest of the scheduledGroupSync_ machinery.
-#ifdef MIACODE_BASS_SYNC_POS_LEGACY
-    if (shuttingDown_.load(std::memory_order_acquire)) {
-        return;
-    }
-    if (masterMixer_ == 0 || !playbackSession_.masterRunning) {
-        return;
-    }
-
-    QMutexLocker locker(&schedulerMutex_);
-    if (shuttingDown_.load(std::memory_order_acquire)) {
-        return;
-    }
-    if (scheduledGroupSync_ != 0) {
-        return;
-    }
-
-    for (int index = playbackSession_.eventGroupIndex; index < preparedGroups_.size(); ++index) {
-        const double groupSecond = preparedGroups_[index].second;
-        if (groupSecond <= currentSecond + kBassPreviewEpsilonSeconds) {
-            continue;
-        }
-        const double relativeSecond = qMax(
-            0.0,
-            (groupSecond - playbackSession_.sessionStartSecond)
-                / qMax(kBassPreviewMinRate, playbackSession_.sessionPlaybackRate));
-        const QWORD position = BASS_ChannelSeconds2Bytes(masterMixer_, relativeSecond);
-        const quint32 syncHandle = BASS_ChannelSetSync(
-            masterMixer_,
-            BASS_SYNC_POS | BASS_SYNC_MIXTIME,
-            position,
-            reinterpret_cast<SYNCPROC*>(BassPreviewAudioBackend::onMixerGroupSync),
-            this);
-        if (syncHandle != 0) {
-            scheduledGroupSync_ = syncHandle;
-            scheduledGroupIndex_ = index;
-            appendAudioDebugLog(
-                QString("bass_schedule_arm txn=%1 idx=%2 second=%3")
-                    .arg(playbackTransactionId_)
-                    .arg(index)
-                    .arg(groupSecond, 0, 'f', 6));
-        }
-        return;
-    }
-#endif  // MIACODE_BASS_SYNC_POS_LEGACY
-#else
-    Q_UNUSED(currentSecond);
-#endif  // Q_OS_WIN
 }
 
 void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, double fallbackSecond)
@@ -1484,7 +1425,9 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
         ? (bgmRawSecond - playbackSession_.backgroundTrackOffsetSeconds)
         : -1.0;
     const double driftMs = (authoritativeSecond - fallbackSecond) * 1000.0;
-    const int nextGroupIndex = scheduledGroupIndex_ >= 0 ? scheduledGroupIndex_ : playbackSession_.eventGroupIndex;
+    // G1 Commit 7: scheduledGroupIndex_ deleted with the BASS_SYNC_POS scheduler.
+    // The next group to trigger is simply the current event-group cursor.
+    const int nextGroupIndex = playbackSession_.eventGroupIndex;
     const double nextGroupSecond =
         (nextGroupIndex >= 0 && nextGroupIndex < preparedGroups_.size()) ? preparedGroups_[nextGroupIndex].second : -1.0;
     appendAudioDebugLog(
@@ -1539,57 +1482,9 @@ void BassPreviewAudioBackend::logPreparedEventWindow(double startSecond) const
     }
 }
 
-#ifdef Q_OS_WIN
-void BassPreviewAudioBackend::onMixerGroupSync(quint32 handle, quint32 channel, quint32 data, void* user)
-{
-    Q_UNUSED(channel);
-    Q_UNUSED(data);
-    BassPreviewAudioBackend* backend = static_cast<BassPreviewAudioBackend*>(user);
-    if (backend != nullptr) {
-        backend->handleMixerGroupSync(handle);
-    }
-}
-
-void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
-{
-    if (shuttingDown_.load(std::memory_order_acquire)) {
-        return;
-    }
-    CollapsedEventGroup group;
-    int groupIndex = -1;
-    bool shouldTrigger = false;
-    {
-        QMutexLocker locker(&schedulerMutex_);
-        if (shuttingDown_.load(std::memory_order_acquire)) {
-            return;
-        }
-        if (handle == 0 || handle != scheduledGroupSync_) {
-            return;
-        }
-        groupIndex = scheduledGroupIndex_;
-        scheduledGroupSync_ = 0;
-        scheduledGroupIndex_ = -1;
-        if (groupIndex >= 0 && groupIndex < preparedGroups_.size()) {
-            group = preparedGroups_[groupIndex];
-            if (playbackSession_.eventGroupIndex <= groupIndex) {
-                playbackSession_.eventGroupIndex = groupIndex + 1;
-            }
-            playbackSession_.lastTriggeredGroupIndex = groupIndex;
-            playbackSession_.lastTriggeredGroupSecond = group.second;
-            playbackSession_.triggeredGroupCount += 1;
-            shouldTrigger = true;
-        }
-    }
-    if (!shouldTrigger) {
-        return;
-    }
-    if (shuttingDown_.load(std::memory_order_acquire)) {
-        return;
-    }
-    triggerGroup(group);
-    armNextGroupSync(group.second);
-}
-#endif
+// G1 Commit 7: onMixerGroupSync / handleMixerGroupSync deleted. The BASS_SYNC_POS
+// callback chain was the BASS-cursor-driven SFX trigger path; it's been fully
+// replaced by wall-clock drainEvents in MainWindow's per-tick handler.
 
 double BassPreviewAudioBackend::authoritativeSecond() const
 {
@@ -2038,17 +1933,9 @@ void BassPreviewAudioBackend::drainEvents(double second)
         if (group.second > second + kBassPreviewEpsilonSeconds) {
             break;
         }
-#ifdef Q_OS_WIN
-        {
-            QMutexLocker locker(&schedulerMutex_);
-            if (scheduledGroupSync_ != 0 && scheduledGroupIndex_ == playbackSession_.eventGroupIndex && masterMixer_ != 0) {
-                BASS_ChannelRemoveSync(masterMixer_, scheduledGroupSync_);
-                noteBassErr("drain_events/remove_sync");
-                scheduledGroupSync_ = 0;
-                scheduledGroupIndex_ = -1;
-            }
-        }
-#endif
+        // G1 Commit 7: pre-G1 each drain had to cancel a matching BASS_SYNC_POS arm
+        // so the same group wasn't triggered twice. No arms exist anymore (the SYNC
+        // scheduler is gone), so the cancellation block has been deleted.
         triggerGroup(group);
         playbackSession_.lastTriggeredGroupIndex = playbackSession_.eventGroupIndex;
         playbackSession_.lastTriggeredGroupSecond = group.second;

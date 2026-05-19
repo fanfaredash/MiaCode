@@ -5,7 +5,6 @@
 
 #include <QObject>
 #include <QHash>
-#include <QMutex>
 
 #include "common/PreviewAudioMixConfig.h"
 #include "BassPreviewDebugLogRouting.h"
@@ -168,15 +167,14 @@ private:
     bool maybeStartPendingBackgroundTrack(double second);
     bool playKindInternal(const QString& kind, double gain = 1.0);
     void triggerGroup(const CollapsedEventGroup& group);
+    // G1 Commit 7: BASS_SYNC_POS-driven scheduling retired. clearScheduledGroupSync /
+    // armNextGroupSync are retained as no-op stubs so existing callers compile
+    // unchanged; onMixerGroupSync / handleMixerGroupSync are removed outright.
     void clearScheduledGroupSync();
     void armNextGroupSync(double currentSecond);
     void logPlaybackStatus(double authoritativeSecond, double fallbackSecond);
     void logPreparedEventWindow(double startSecond) const;
     QString groupSignature(const CollapsedEventGroup& group) const;
-#ifdef Q_OS_WIN
-    static void onMixerGroupSync(quint32 handle, quint32 channel, quint32 data, void* user);
-    void handleMixerGroupSync(quint32 handle);
-#endif
 
     PreviewAudioSettings settings_;
     PreviewTimingSettings timingSettings_;
@@ -202,9 +200,6 @@ private:
     quint64 transportReadyGeneration_ = 0;
     bool trackMissingAfterLoadLogged_ = false;
     std::atomic_bool shuttingDown_ = false;
-    QMutex schedulerMutex_;
-    quint32 scheduledGroupSync_ = 0;
-    int scheduledGroupIndex_ = -1;
     QHash<QString, Sample*> samplesByKind_;
     Sample* backgroundTrackSample_ = nullptr;
     Sample* touchholdSample_ = nullptr;
