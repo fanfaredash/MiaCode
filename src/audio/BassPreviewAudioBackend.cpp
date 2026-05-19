@@ -184,6 +184,13 @@ struct BassPreviewAudioBackend::Sample {
     double lengthSeconds = 0.0;
     bool speedChangeSupported = false;
     float baseVolume = 1.0f;
+    // G1 Commit 8: per-sample pause-cycle counter for the §7.2 `bass_sample_pause`
+    // line. Bumped each time the sample's MIXER_CHAN_PAUSE flag is re-set;
+    // surfacing the cycle count is how multi-cycle audio tearing (the bug from
+    // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §4.2) becomes visible in the
+    // log instead of needing the user to remember how many pause-resume rounds
+    // they did before the artifact showed up.
+    int pauseCycleCount = 0;
 
     bool valid() const
     {
@@ -458,6 +465,19 @@ struct BassPreviewAudioBackend::Sample {
         }
         BASS_Mixer_ChannelFlags(source, BASS_MIXER_CHAN_PAUSE, BASS_MIXER_CHAN_PAUSE);
         noteBassErr("sample_pause/set_pause_flag");
+        // G1 Commit 8: bass_sample_pause diagnostic per §7.2. Only BGM is logged —
+        // SFX pads pause every tick they're not retriggered and would flood the
+        // channel. pause_bgm_raw is the current cursor in source-bytes-seconds,
+        // which lets us spot tempo-stream drift cycle by cycle without needing
+        // to cross-reference the bass_status row that follows.
+        if (kind == QLatin1String("bgm")) {
+            ++pauseCycleCount;
+            appendAudioDebugLog(
+                QString("bass_sample_pause kind=%1 cycle=%2 pause_bgm_raw=%3")
+                    .arg(kind)
+                    .arg(pauseCycleCount)
+                    .arg(currentSec(), 0, 'f', 6));
+        }
     }
 
     void stop()
@@ -1156,6 +1176,11 @@ void BassPreviewAudioBackend::startTransportFromCurrentAnchor()
         if (!playbackSession_.backgroundTrackPendingStart) {
             backgroundTrackSample_->play();
             playbackSession_.backgroundTrackRunning = true;
+            // G1 Commit 8: bass_sample_play per §7.2 — resume-from-anchor path.
+            appendAudioDebugLog(
+                QString("bass_sample_play kind=bgm rate_at_play=%1 offset_sec=%2 reason=resume_anchor")
+                    .arg(playbackSession_.backgroundTrackPlaybackRate, 0, 'f', 3)
+                    .arg(backgroundTrackSample_->currentSec(), 0, 'f', 6));
         } else {
             playbackSession_.backgroundTrackRunning = false;
         }
@@ -1299,6 +1324,15 @@ void BassPreviewAudioBackend::rebuildPreparedTimeline(
             .arg(preparedTimeline_.touchholdSpans.size())
             .arg(playbackRate, 0, 'f', 3),
         true);
+    // G1 Commit 8: §7.2 / §7.4 alias for the rebuild_timeline row, with just the
+    // two fields a human reading the validation log cares about. The verbose
+    // `bass_init op=rebuild_timeline ...` line above keeps its existing format
+    // so log scrapers can still index it; this `bass_timeline_built` row is the
+    // one ECHO step 1 reads.
+    appendAudioDebugLog(
+        QString("bass_timeline_built groups=%1 rate=%2")
+            .arg(preparedGroups_.size())
+            .arg(playbackRate, 0, 'f', 3));
 }
 
 void BassPreviewAudioBackend::configureTimeline(
@@ -1660,6 +1694,13 @@ void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
     if (backgroundTrackSample_ != nullptr && !playbackSession_.backgroundTrackPendingStart) {
         backgroundTrackSample_->play();
         playbackSession_.backgroundTrackRunning = true;
+        // G1 Commit 8: bass_sample_play per §7.2 — confirms the BGM flag flipped
+        // *after* TEMPO was set (Commit 6 invariant) and records where in the
+        // source we resumed reading.
+        appendAudioDebugLog(
+            QString("bass_sample_play kind=bgm rate_at_play=%1 offset_sec=%2 reason=commit")
+                .arg(playbackSession_.backgroundTrackPlaybackRate, 0, 'f', 3)
+                .arg(backgroundTrackSample_->currentSec(), 0, 'f', 6));
     }
     if (!preparedPlayback_.resumeFromPause) {
         drainEvents(preparedPlayback_.startSecond);
@@ -1667,10 +1708,15 @@ void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
     restoreTouchholdVoices(preparedPlayback_.startSecond);
     armNextGroupSync(preparedPlayback_.startSecond);
     logTrackFileMissingAfterLoadIfNeeded();
+    // G1 Commit 8: rename `bass_commit` → `bass_play` per §7.2 of
+    // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md, and add the rate field so
+    // ECHO validation can read out the speed each play session started with
+    // without cross-referencing other lines.
     appendAudioDebugLog(
-        QString("bass_commit txn=%1 start=%2 resume=%3 bg_pending=%4")
+        QString("bass_play txn=%1 start=%2 rate=%3 resume=%4 bg_pending=%5")
             .arg(playbackTransactionId_)
             .arg(preparedPlayback_.startSecond, 0, 'f', 6)
+            .arg(playbackSession_.backgroundTrackPlaybackRate, 0, 'f', 3)
             .arg(preparedPlayback_.resumeFromPause ? 1 : 0)
             .arg(playbackSession_.backgroundTrackPendingStart ? 1 : 0));
 #endif
@@ -1928,6 +1974,14 @@ void BassPreviewAudioBackend::triggerGroup(const CollapsedEventGroup& group)
 
 void BassPreviewAudioBackend::drainEvents(double second)
 {
+    // G1 Commit 8: bass_sfx_drain per §7.2. Emit one line per tick that actually
+    // triggered something, with the chart-second the tick was draining toward,
+    // the count, and the first/last group indices. Quiet ticks (drained=0) stay
+    // out of the log so the channel isn't dominated by no-ops. Track the range
+    // around the loop so we can read it in the log line afterward.
+    const int firstIdxBeforeDrain = playbackSession_.eventGroupIndex;
+    int drainedCount = 0;
+    int lastTriggeredIdx = -1;
     while (playbackSession_.eventGroupIndex < preparedGroups_.size()) {
         const CollapsedEventGroup& group = preparedGroups_[playbackSession_.eventGroupIndex];
         if (group.second > second + kBassPreviewEpsilonSeconds) {
@@ -1940,7 +1994,17 @@ void BassPreviewAudioBackend::drainEvents(double second)
         playbackSession_.lastTriggeredGroupIndex = playbackSession_.eventGroupIndex;
         playbackSession_.lastTriggeredGroupSecond = group.second;
         playbackSession_.triggeredGroupCount += 1;
+        lastTriggeredIdx = playbackSession_.eventGroupIndex;
+        ++drainedCount;
         ++playbackSession_.eventGroupIndex;
+    }
+    if (drainedCount > 0) {
+        appendAudioDebugLog(
+            QString("bass_sfx_drain at_chart=%1 drained=%2 first_idx=%3 last_idx=%4")
+                .arg(second, 0, 'f', 6)
+                .arg(drainedCount)
+                .arg(firstIdxBeforeDrain)
+                .arg(lastTriggeredIdx));
     }
 }
 
