@@ -356,29 +356,14 @@ if (!(Test-Path $debugLauncherSrc)) {
 }
 Copy-Item $debugLauncherSrc (Join-Path $DistDir "Start_MiaCode_Debug.bat") -Force
 
-$legacyQmlLauncherSrc = Join-Path $repoRoot "scripts\\Start_MiaCode_Legacy_QML.bat"
-if (!(Test-Path $legacyQmlLauncherSrc)) {
-    throw "Missing required launcher script: $legacyQmlLauncherSrc"
-}
-Copy-Item $legacyQmlLauncherSrc (Join-Path $DistDir "Start_MiaCode_Legacy_QML.bat") -Force
-
-# Beta45 triage launchers. A pair of env-var-gated .bat files for isolating
-# whether the Win10-22H2 startup regression is caused by the D3D11 hardware
-# probe (which loads vendor UMD DLLs that never unload) or by the
-# AsyncLogWriter singleton's first interaction with std::mutex /
-# CONDITION_VARIABLE primitives.
-$triageLaunchers = @(
-    "Start_MiaCode_SkipDiagD3D11.bat",   # A: skip D3D11 probe only
-    "Start_MiaCode_DiagBypass.bat",      # B: skip AsyncLogWriter only
-    "Start_MiaCode_SkipBoth.bat",        # C: skip both
-    "Start_MiaCode_QtPluginDiag.bat"     # D: QT_DEBUG_PLUGINS + stderr redirect
-)
-foreach ($launcher in $triageLaunchers) {
-    $src = Join-Path $repoRoot "scripts\\$launcher"
-    if (Test-Path $src) {
-        Copy-Item $src (Join-Path $DistDir $launcher) -Force
-    }
-}
+# beta51: Start_MiaCode_Debug.bat is the only launcher shipped now.
+# The legacy QML launcher and the beta45 D3D11/Plugin/AsyncLog triage
+# launchers (Start_MiaCode_Legacy_QML / SkipDiagD3D11 / DiagBypass /
+# SkipBoth / QtPluginDiag) used to land here too. They were diagnostic
+# probes for regressions long since closed; keeping them around mostly
+# confused testers about which .bat to double-click. The source files
+# in scripts/ are kept (cheap, useful for one-off reproducions) but
+# they no longer flow into the distributed zip.
 
 New-Item -ItemType Directory -Path (Join-Path $DistDir "logs") -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $DistDir "logs\\worker-hwnd") -Force | Out-Null
@@ -576,7 +561,6 @@ $requiredPackagePaths = @(
     # Root: user-facing entry points + content + log dirs only.
     "MiaCode.exe",
     "Start_MiaCode_Debug.bat",
-    "Start_MiaCode_Legacy_QML.bat",
     "logs",
     "logs\\worker-hwnd",
     "assets\\SFX",
@@ -619,6 +603,15 @@ $unexpectedPackagePaths = @(
     "Start_MiaCode_Debug_View.bat",
     "Start_MiaCode_Debug_Widget.bat",
     "Start_MiaCode_QuickShell_Debug.bat",
+    # beta51: Start_MiaCode_Debug.bat is the only launcher shipped. The
+    # legacy QML and beta45 triage launchers are no longer copied into
+    # DistDir; assert they don't accidentally come back via a stray
+    # build step or leftover output dir.
+    "Start_MiaCode_Legacy_QML.bat",
+    "Start_MiaCode_SkipDiagD3D11.bat",
+    "Start_MiaCode_DiagBypass.bat",
+    "Start_MiaCode_SkipBoth.bat",
+    "Start_MiaCode_QtPluginDiag.bat",
     "logs\\quick-shell-beta",
     # No DLLs at root anymore — everything moved to app/.
     (Get-QtRuntimeDllName -BaseName "Qt6Core" -Config $Config),
