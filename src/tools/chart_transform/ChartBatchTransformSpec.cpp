@@ -1257,6 +1257,32 @@ void runInlineSpecs(QTextStream& err, int* failed)
 
     {
         const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(QStringLiteral("1h[7:1],,,,\nE"));
+        expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts a non-384-divisor hold duration"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16}1h[8:1],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize whole chart snaps non-384 hold duration through the uniform table (y=7 -> q=8)"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(QStringLiteral("1-5[5:1],,,,\nE"));
+        expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts a non-384-divisor slide duration"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16}1-5[6:1],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize whole chart snaps non-384 slide duration through the uniform table (y=5 -> q=6)"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationResult normalized =
             miacode::chart_transform::normalizeChartText(QStringLiteral(",,(180)|| 3 / 4\n,,,\nE"));
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts BPM plus inline time-signature control syntax"), failed, err);
         expectEqual(
@@ -1438,24 +1464,61 @@ void runInlineSpecs(QTextStream& err, int* failed)
         );
     }
 
-    // Non-384 snap table: spot checks for the rule "nearest p/q with q | 384,
-    // q <= 4y" and global verification that no two adjacent x/y, (x+1)/y in
-    // any non-384-divisor y up to 384 collide on the same (p, q).
+    // Uniform-q snap table: per y, every x in [0, y) maps to a single q.
+    // Spot checks + global collision-freedom + JSON round-trip.
     {
-        const miacode::chart_transform::SnapTarget t = miacode::chart_transform::nearestSnapTargetForNon384(1, 5);
+        miacode::chart_transform::ensureUniformSnapTableReady();
+
+        const miacode::chart_transform::SnapResult r5 =
+            miacode::chart_transform::snapXOverY(1, 5);
         expectTrue(
-            t.p == 3 && t.q == 16,
-            QStringLiteral("non-384 snap: 1/5 with 4y=20 picks 3/16 (q<=20 best candidate)"),
+            r5.ok && r5.q == 6 && r5.p == 1,
+            QStringLiteral("uniform snap: 1/5 -> 1/6 (y=5 picks q=6, the smallest collision-free q in {q|384, q<=20})"),
             failed,
             err
         );
-    }
 
-    {
-        const miacode::chart_transform::SnapTarget t = miacode::chart_transform::nearestSnapTargetForNon384(4, 20);
+        const miacode::chart_transform::SnapResult r20 =
+            miacode::chart_transform::snapXOverY(4, 20);
         expectTrue(
-            t.p == 13 && t.q == 64,
-            QStringLiteral("non-384 snap: 4/20 with 4y=80 picks 13/64 (different from 1/5 even though values match)"),
+            r20.ok && r20.q == 24 && r20.p == 5,
+            QStringLiteral("uniform snap: 4/20 -> 5/24 (y=20 picks q=24, different from 1/5 even though values match)"),
+            failed,
+            err
+        );
+
+        const miacode::chart_transform::SnapResult r7 =
+            miacode::chart_transform::snapXOverY(1, 7);
+        expectTrue(
+            r7.ok && r7.q == 8 && r7.p == 1,
+            QStringLiteral("uniform snap: 1/7 -> 1/8 (y=7 picks q=8)"),
+            failed,
+            err
+        );
+
+        const miacode::chart_transform::SnapResult rDiv =
+            miacode::chart_transform::snapXOverY(3, 16);
+        expectTrue(
+            rDiv.ok && rDiv.q == 16 && rDiv.p == 3,
+            QStringLiteral("uniform snap: y that already divides 384 passes through unchanged"),
+            failed,
+            err
+        );
+
+        const miacode::chart_transform::SnapResult rBig =
+            miacode::chart_transform::snapXOverY(1, 2000);
+        expectTrue(
+            rBig.ok && rBig.q == 384 && rBig.p == 0,
+            QStringLiteral("uniform snap: y > 384 falls back to 384-grid round (1/2000 -> 0/384)"),
+            failed,
+            err
+        );
+
+        const miacode::chart_transform::SnapResult rCarry =
+            miacode::chart_transform::snapXOverY(11, 5);
+        expectTrue(
+            rCarry.ok && rCarry.q == 6 && rCarry.p == 13,
+            QStringLiteral("uniform snap: x >= y carries whole notes (11/5 = 2 + 1/5 -> 2*6 + 1 = 13/6)"),
             failed,
             err
         );
@@ -1463,20 +1526,43 @@ void runInlineSpecs(QTextStream& err, int* failed)
 
     {
         const QVector<miacode::chart_transform::SnapCollision> collisions =
-            miacode::chart_transform::findNon384SnapTableCollisions(
-                miacode::chart_transform::kSnap384Modulus);
+            miacode::chart_transform::findUniformSnapTableCollisions();
         expectTrue(
             collisions.isEmpty(),
-            QStringLiteral("non-384 snap: every (x, x+1) pair in every non-384-divisor y in [2, 384] lands on a distinct (p, q)"),
+            QStringLiteral("uniform snap: every non-384-divisor y in [2, 384] has a collision-free q (by construction); cached table also free of adjacency collisions"),
             failed,
             err
         );
         if (!collisions.isEmpty()) {
             const auto& first = collisions.constFirst();
-            err << "  first collision: y=" << first.y
-                << " at x=" << first.x << " and x=" << (first.x + 1)
-                << " both -> " << first.shared.p << "/" << first.shared.q
-                << " (total collisions=" << collisions.size() << ")\n";
+            err << "  first issue: y=" << first.y
+                << " at x=" << first.x
+                << " (p=" << first.p << ", q=" << first.q << ")"
+                << " (total=" << collisions.size() << ")\n";
+        }
+    }
+
+    {
+        const QString tmpPath = QDir::tempPath()
+            + QStringLiteral("/miacode_non384_snap_test_")
+            + QString::number(QCoreApplication::applicationPid())
+            + QStringLiteral(".json");
+        const bool savedOk = miacode::chart_transform::saveUniformSnapTableCacheToJson(tmpPath);
+        expectTrue(savedOk, QStringLiteral("uniform snap: JSON cache saves to a writable path"), failed, err);
+
+        if (savedOk) {
+            const bool loadedOk = miacode::chart_transform::loadUniformSnapTableCacheFromJson(tmpPath);
+            expectTrue(loadedOk, QStringLiteral("uniform snap: JSON cache round-trips through load"), failed, err);
+
+            const miacode::chart_transform::SnapResult after =
+                miacode::chart_transform::snapXOverY(2, 5);
+            expectTrue(
+                after.ok && after.q == 6 && after.p == 2,
+                QStringLiteral("uniform snap: 2/5 still maps to 2/6 after JSON load round-trip"),
+                failed,
+                err
+            );
+            QFile(tmpPath).remove();
         }
     }
 }
@@ -1500,15 +1586,17 @@ int main(int argc, char** argv)
                 maxY = parsed;
             }
         }
-        out << "y\tx\tp\tq\tx/y\tp/q\terr\n";
+        miacode::chart_transform::ensureUniformSnapTableReady();
+        out << "y\tq\tx\tp\tx/y\tp/q\terr\n";
         for (int y = 2; y <= maxY; ++y) {
             if ((miacode::chart_transform::kSnap384Modulus % y) == 0) continue;
-            for (int x = 0; x < y; ++x) {
-                const miacode::chart_transform::SnapTarget t =
-                    miacode::chart_transform::nearestSnapTargetForNon384(x, y);
+            const miacode::chart_transform::UniformSnapTable& t =
+                miacode::chart_transform::uniformSnapTableForY(y);
+            for (int x = 0; x < t.pByX.size(); ++x) {
+                const int p = t.pByX[x];
                 const double xy = static_cast<double>(x) / static_cast<double>(y);
-                const double pq = static_cast<double>(t.p) / static_cast<double>(t.q);
-                out << y << '\t' << x << '\t' << t.p << '\t' << t.q
+                const double pq = static_cast<double>(p) / static_cast<double>(t.q);
+                out << y << '\t' << t.q << '\t' << x << '\t' << p
                     << '\t' << QString::number(xy, 'f', 6)
                     << '\t' << QString::number(pq, 'f', 6)
                     << '\t' << QString::number(qAbs(xy - pq), 'g', 4) << '\n';

@@ -8,6 +8,7 @@
 
 #include "common/OperationLog.h"
 #include "core/chart/parser/SimaiNativeParser.h"
+#include "core/chart/transform/Non384SnapTable.h"
 
 namespace miacode::chart_transform {
 namespace {
@@ -340,43 +341,42 @@ QString normalizePlainDurationSignature(
         return signature;
     }
 
-    // Rewrite the duration only when (a) the 384-reduce option is on and
-    // (b) the user's beats value is not already a divisor of 384. Outside
-    // that gate the original text is preserved verbatim so authoring intent
-    // (e.g. an existing `[24:6]` vs. its `[4:1]` reduction) survives.
+    // Gate: rewrite only when 384-reduce is on AND the user's beats is not
+    // already a divisor of 384. Outside that gate the original text is
+    // preserved verbatim so authoring intent survives.
     if (!reduceTo384Grid) {
         return signature;
     }
     const int colon = signature.indexOf(QLatin1Char(':'));
     bool beatsOk = false;
+    bool numOk = false;
     const int originalBeats = signature.left(colon).trimmed().toInt(&beatsOk);
-    if (beatsOk && originalBeats > 0
-        && (kMaximumSnapSubdivisionBeats % originalBeats) == 0) {
+    const int originalNumerator = signature.mid(colon + 1).trimmed().toInt(&numOk);
+    if (!beatsOk || !numOk || originalBeats <= 0 || originalNumerator < 0) {
+        return signature;
+    }
+    if ((kSnap384Modulus % originalBeats) == 0) {
         return signature;
     }
 
-    qint64 units = scaleRationalRounded(durationWhole, kMaximumSnapSubdivisionBeats);
-    if (!options.allowZeroDuration && units <= 0) {
-        units = 1;
+    // Apply the uniform per-y snap table. Falls back internally to a
+    // 384-grid round when y > 384 (out of table range).
+    ensureUniformSnapTableReady();
+    const SnapResult snap = snapXOverY(originalNumerator, originalBeats);
+    if (!snap.ok) {
+        return signature;
     }
-    if (options.allowZeroDuration && units <= 0) {
+
+    if (snap.p == 0) {
+        if (!options.allowZeroDuration) {
+            return QStringLiteral("%1:1").arg(snap.q);
+        }
         if (options.omitZeroDurationBracket) {
             return QString();
         }
         return QStringLiteral("1:0");
     }
-    static const QVector<int> kPreferredDurationBeats = preferredSnapSubdivisionBeats();
-    int renderedBeats = kMaximumSnapSubdivisionBeats;
-    for (int candidate : kPreferredDurationBeats) {
-        const qint64 scaledUnits = units * static_cast<qint64>(candidate);
-        if ((scaledUnits % kMaximumSnapSubdivisionBeats) == 0) {
-            renderedBeats = candidate;
-            break;
-        }
-    }
-    const qint64 renderedUnits =
-        (units * static_cast<qint64>(renderedBeats)) / static_cast<qint64>(kMaximumSnapSubdivisionBeats);
-    return QStringLiteral("%1:%2").arg(renderedBeats).arg(renderedUnits);
+    return QStringLiteral("%1:%2").arg(snap.q).arg(snap.p);
 }
 
 QString normalizeSingleBracketSuffix(
