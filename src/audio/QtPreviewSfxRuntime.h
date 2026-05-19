@@ -24,6 +24,7 @@ public:
     void setChartPath(const QString& chartPath);
     void setBackgroundTrackOffsetSeconds(double seconds);
     void setBackgroundTrackPlaybackRate(double rate);
+    void applyPlaybackRateAtChartSecond(double rate, double chartSecond);
     void applyLevels(const PreviewAudioSettings& settings);
     void configureTimeline(
         const QVector<TimelineNoteMarker>& noteMarkers,

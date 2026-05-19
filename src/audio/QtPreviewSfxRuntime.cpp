@@ -92,6 +92,11 @@ void QtPreviewSfxRuntime::setBackgroundTrackPlaybackRate(double rate)
     backend_->setBackgroundTrackPlaybackRate(rate);
 }
 
+void QtPreviewSfxRuntime::applyPlaybackRateAtChartSecond(double rate, double chartSecond)
+{
+    backend_->applyPlaybackRateAtChartSecond(rate, chartSecond);
+}
+
 void QtPreviewSfxRuntime::applyLevels(const PreviewAudioSettings& settings)
 {
     backend_->applyLevels(settings);

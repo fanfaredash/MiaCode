@@ -32,6 +32,7 @@ public:
     void setChartPath(const QString& chartPath) override;
     void setBackgroundTrackOffsetSeconds(double seconds) override;
     void setBackgroundTrackPlaybackRate(double rate) override;
+    void applyPlaybackRateAtChartSecond(double rate, double chartSecond) override;
     void applyLevels(const PreviewAudioSettings& settings) override;
     void configureTimeline(
         const QVector<TimelineNoteMarker>& noteMarkers,

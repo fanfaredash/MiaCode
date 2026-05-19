@@ -1342,6 +1342,55 @@ void BassPreviewAudioBackend::setBackgroundTrackPlaybackRate(double rate)
     setBackgroundTrackSampleSpeed(playbackSession_.backgroundTrackPlaybackRate);
 }
 
+void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double chartSecond)
+{
+    MC_OP("BassPreviewAudioBackend::applyPlaybackRateAtChartSecond");
+#ifdef Q_OS_WIN
+    const double normalizedRate = qBound(kBassPreviewMinRate, qIsFinite(rate) ? rate : 1.0, kBassPreviewMaxRate);
+    const double sanitizedChart = qIsFinite(chartSecond) ? chartSecond : 0.0;
+    if (backgroundTrackSample_ == nullptr) {
+        // No BGM loaded — just record the rate so the next sample creation
+        // picks it up. invalidateRetainedPlaybackState is intentionally NOT
+        // called here; this entry is a live UI tweak, not a structural
+        // change to the prepared transport.
+        playbackSession_.backgroundTrackPlaybackRate = normalizedRate;
+        playbackSession_.sessionPlaybackRate = normalizedRate;
+        return;
+    }
+    // G2 Commit 2: the pause-modify-resume sequence from
+    // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §6.2. Pause first so the
+    // BASS_FX tempo stream stops being pulled by the master mixer, then
+    // the Sample::setSpeed guard introduced in G1 Commit 6 passes its
+    // MIXER_CHAN_PAUSE check and the TEMPO write lands. Re-anchor the
+    // cursor to the wall-clock chart-second to keep audio/visual aligned
+    // across the rate change, then resume. The whole atomic step happens
+    // while the master mixer continues to play silence — the only audible
+    // event is the brief BGM gap (~50-100ms typically) covered by the
+    // pause flag flip.
+    const double oldRate = playbackSession_.backgroundTrackPlaybackRate;
+    backgroundTrackSample_->pause();
+    backgroundTrackSample_->setSpeed(normalizedRate);
+    const double rawSecond = sanitizedChart + playbackSession_.backgroundTrackOffsetSeconds;
+    if (rawSecond >= 0.0) {
+        backgroundTrackSample_->setCurrentSec(rawSecond);
+    }
+    playbackSession_.backgroundTrackPlaybackRate = normalizedRate;
+    playbackSession_.sessionPlaybackRate = normalizedRate;
+    playbackSession_.sessionStartSecond = sanitizedChart;
+    playbackSession_.lastAuthoritativeSecond = sanitizedChart;
+    backgroundTrackSample_->play();
+    appendAudioDebugLog(
+        QString("bass_live_rate_change from=%1 to=%2 chart=%3 raw=%4")
+            .arg(oldRate, 0, 'f', 3)
+            .arg(normalizedRate, 0, 'f', 3)
+            .arg(sanitizedChart, 0, 'f', 6)
+            .arg(rawSecond, 0, 'f', 6));
+#else
+    Q_UNUSED(rate);
+    Q_UNUSED(chartSecond);
+#endif
+}
+
 void BassPreviewAudioBackend::applyLevels(const PreviewAudioSettings& settings)
 {
     MC_OP("BassPreviewAudioBackend::applyLevels");

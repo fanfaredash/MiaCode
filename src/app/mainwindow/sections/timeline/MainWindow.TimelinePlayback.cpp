@@ -717,23 +717,33 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
     if (qFuzzyCompare(state_.previewPlaybackRate_ + 1.0, clampedRate + 1.0)) {
         return;
     }
-    // G1 Commit 8 followup: bass_clock_set_rate per §7.2. while_playing=1
-    // distinguishes the case that, in G1, doesn't actually push the new TEMPO
-    // onto the running BGM tempo stream (Sample::setSpeed guard skips the
-    // write) — exactly the scenario where the user sees chart-time and BGM
-    // drift apart. The corresponding sample_set_speed_skipped_playing line
-    // from the backend confirms the deferral. G2 will replace this comment
-    // with an actual pause-modify-resume sequence.
+    // G2 Commit 2: capture the wall-clock chart-second using the OLD rate,
+    // before any state is overwritten. This is the value we pass to the
+    // backend's atomic pause-modify-resume sequence below (and the value we
+    // re-anchor the wall-clock timer to a few lines down). Per
+    // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §6.2 — sampling chart-second
+    // before the rate flip is the only way to keep audio and visual in step
+    // across the transition.
     const double chartNow = owner_.currentPreviewAuthoritativeAudioClockSecond();
+    const bool wasPlaying = state_.qtPreviewPlaying_;
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Audio,
         QString(),
         QString("bass_clock_set_rate from=%1 to=%2 while_playing=%3 chart_now=%4")
             .arg(state_.previewPlaybackRate_, 0, 'f', 3)
             .arg(clampedRate, 0, 'f', 3)
-            .arg(state_.qtPreviewPlaying_ ? 1 : 0)
+            .arg(wasPlaying ? 1 : 0)
             .arg(chartNow, 0, 'f', 6));
     state_.previewPlaybackRate_ = clampedRate;
+    // G2 Commit 2: re-anchor the wall-clock master to the captured chart-second
+    // so the next tick reads chartNow + 0*newRate = chartNow (no jump), then
+    // advances at the new rate.
+    if (wasPlaying) {
+        state_.qtPreviewStartSecond_ = chartNow;
+        state_.qtPreviewElapsed_.restart();
+        state_.qtPreviewTimelineStartSecond_ = chartNow;
+        state_.qtPreviewTimelineElapsed_.restart();
+    }
     if (ui_.previewSpeedButton_ != nullptr) {
         QString rateText = QString::number(state_.previewPlaybackRate_, 'f', 2);
         while (rateText.endsWith('0')) {
@@ -761,21 +771,41 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
     owner_.showPreviewPlaybackRateToast(state_.previewPlaybackRate_);
     owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
     if (state_.previewSfxRuntime_ != nullptr) {
-        state_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(state_.previewPlaybackRate_);
-        if (!state_.qtPreviewPlaying_
-            && !state_.previewStartupSyncPending_
-            && !state_.previewLateVideoStartPending_
-            && !state_.latestTimelineNoteMarkers_.isEmpty()) {
-            state_.previewSfxRuntime_->applyPausedPreviewState(
-                state_.latestTimelineNoteMarkers_,
-                false,
-                state_.qtPreviewPauseSecond_,
-                state_.previewPlaybackRate_,
-                state_.previewTimingSettings_);
+        if (wasPlaying) {
+            // G2 Commit 2: live rate change while playing. The backend's
+            // applyPlaybackRateAtChartSecond runs the atomic pause-modify-resume
+            // sequence (pause BGM flag → BASS_ATTRIB_TEMPO write → re-anchor BGM
+            // cursor to chartNow → unpause flag), all while the master mixer
+            // keeps running. Pre-G2 this site forced a full
+            // stopQtPreviewPlayback + startQtPreviewPlayback cycle to push the
+            // new TEMPO in — heavyweight and broke audio continuity. The new
+            // call covers the same effect with ~50-100ms BGM gap (per §6.2)
+            // instead of a full session restart.
+            state_.previewSfxRuntime_->applyPlaybackRateAtChartSecond(
+                state_.previewPlaybackRate_, chartNow);
+        } else {
+            state_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(state_.previewPlaybackRate_);
+            if (!state_.previewStartupSyncPending_
+                && !state_.previewLateVideoStartPending_
+                && !state_.latestTimelineNoteMarkers_.isEmpty()) {
+                state_.previewSfxRuntime_->applyPausedPreviewState(
+                    state_.latestTimelineNoteMarkers_,
+                    false,
+                    state_.qtPreviewPauseSecond_,
+                    state_.previewPlaybackRate_,
+                    state_.previewTimingSettings_);
+            }
         }
     }
     owner_.savePortableState();
-    if (state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
+    // G2 Commit 2: the playback-restart cycle below previously ran whenever
+    // qtPreviewPlaying_ was true, because it was the only way to get the new
+    // TEMPO onto the BGM tempo stream. With applyPlaybackRateAtChartSecond
+    // handling that atomically, restart is no longer needed for live rate
+    // change. It still kicks in for the startup-pending / late-video-pending
+    // paths since those represent a partially-prepared session that must
+    // be re-laid-out.
+    if (state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
         stopQtPreviewPlayback(true);
         startQtPreviewPlayback(state_.qtPreviewPauseSecond_, true);
     }
