@@ -1282,6 +1282,36 @@ void runInlineSpecs(QTextStream& err, int* failed)
     }
 
     {
+        // {28} measure: LCM of moment denoms is 28 (non-384-divisor).
+        // Without the snap-table override the measure would fall through
+        // to {384}. The uniform table routes y=28 -> q=128.
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(
+                QStringLiteral("{28}1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8,1,2,3,4,\nE"));
+        expectTrue(normalized.ok, QStringLiteral("normalize accepts a {28} measure"), failed, err);
+        expectTrue(
+            normalized.text.startsWith(QStringLiteral("{128}")),
+            QStringLiteral("normalize routes a {28} measure through the uniform table (y=28 -> q=128) instead of {384}"),
+            failed,
+            err
+        );
+    }
+
+    {
+        // {7} measure: y=7 -> q=32 via snap table.
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(
+                QStringLiteral("{7}1,2,3,4,5,6,7,\nE"));
+        expectTrue(normalized.ok, QStringLiteral("normalize accepts a {7} measure"), failed, err);
+        expectTrue(
+            normalized.text.startsWith(QStringLiteral("{32}")),
+            QStringLiteral("normalize routes a {7} measure through the uniform table (y=7 -> q=32)"),
+            failed,
+            err
+        );
+    }
+
+    {
         const miacode::chart_transform::ChartNormalizationResult normalized =
             miacode::chart_transform::normalizeChartText(QStringLiteral(",,(180)|| 3 / 4\n,,,\nE"));
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts BPM plus inline time-signature control syntax"), failed, err);

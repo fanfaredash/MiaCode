@@ -835,6 +835,31 @@ QString renderMeasureLineApproximate(const RenderMeasure& measure)
 {
     static const QVector<int> kPreferredBeats = preferredSnapSubdivisionBeats();
 
+    // Pre-compute LCM of moment-position denominators. When the LCM is a
+    // non-384-divisor that the uniform snap table can serve, force every
+    // segment in this measure to use the table's chosen q so users see
+    // e.g. {28} -> {128} instead of falling through to {384}.
+    qint64 yMeasureLcm = 1;
+    bool yLcmInRange = true;
+    for (const MeasureMoment& moment : measure.moments) {
+        const qint64 denom = moment.positionWhole.denominator;
+        if (denom <= 1) continue;
+        yMeasureLcm = safeLcm(yMeasureLcm, denom);
+        if (yMeasureLcm <= 0 || yMeasureLcm > kSnap384Modulus) {
+            yLcmInRange = false;
+            break;
+        }
+    }
+    int uniformQ = 0;
+    if (yLcmInRange && yMeasureLcm > 1
+        && (kSnap384Modulus % yMeasureLcm) != 0) {
+        ensureUniformSnapTableReady();
+        const UniformSnapTable& table = uniformSnapTableForY(static_cast<int>(yMeasureLcm));
+        if (table.q > 0) {
+            uniformQ = table.q;
+        }
+    }
+
     const int measureGridLength = qMax(1, qRound(toDouble(measure.lengthWhole) * 384.0));
     const int startPhaseGrid = qMax(0, qRound(toDouble(measure.startPhaseWhole) * 384.0));
     const int endPhaseGrid = startPhaseGrid + measureGridLength;
@@ -873,15 +898,20 @@ QString renderMeasureLineApproximate(const RenderMeasure& measure)
             segmentMomentIndices.append(index);
         }
 
-        int beats = 384;
-        for (int candidate : kPreferredBeats) {
-            const int stepGrid = 384 / candidate;
-            if (stepGrid <= 0 || (segmentLengthGrid % stepGrid) != 0) {
-                continue;
-            }
-            if (snapRangeFitsBeats(segmentMomentPositions, candidate)) {
-                beats = candidate;
-                break;
+        int beats;
+        if (uniformQ > 0) {
+            beats = uniformQ;
+        } else {
+            beats = 384;
+            for (int candidate : kPreferredBeats) {
+                const int stepGrid = 384 / candidate;
+                if (stepGrid <= 0 || (segmentLengthGrid % stepGrid) != 0) {
+                    continue;
+                }
+                if (snapRangeFitsBeats(segmentMomentPositions, candidate)) {
+                    beats = candidate;
+                    break;
+                }
             }
         }
 
