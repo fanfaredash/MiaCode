@@ -649,17 +649,21 @@ void PlainCodeEditor::setHalfWidthInputEnabled(bool enabled)
 
 void PlainCodeEditor::setImeInputDisabled(bool disabled)
 {
+    // [BETA51 IME-DISABLE: DISABLED PENDING FIX]
+    // Setter is kept on the public API but every caller in the project has
+    // been commented out (see MainWindow.EditorDisplay.cpp + the preferences
+    // dialog). Qt::WA_InputMethodEnabled does *not* prevent Windows CJK IMEs
+    // from opening their composition window on this widget — the user
+    // reported the toggle had no effect post-4f9a27e. The eventual fix
+    // probably needs to wire ImmAssociateContext / TSF directly on the
+    // widget's native window handle; that's outside the Qt attribute surface.
+    // Until then this method records the requested state but does not touch
+    // the WA attribute, so external callers (if any new ones appear) don't
+    // think the feature is live.
     imeInputDisabled_ = disabled;
-    // Qt::WA_InputMethodEnabled defaults to true on text-edit widgets. Setting
-    // it false causes the platform integration to skip the IME composition
-    // window entirely — keystrokes arrive as plain QKeyEvent with their ASCII
-    // / numeric / punctuation `text()` payload, no QInputMethodEvent ever
-    // fires for this widget. That's the behaviour the user wants when the
-    // "禁止中文輸入法輸入" preference is on: editing a maidata.txt never
-    // accidentally swallows commas / brackets / digits into an IME candidate
-    // box. Toggling the attribute on a focused widget is safe — Qt resyncs
-    // the IME state on the next focus event.
+#if 0
     setAttribute(Qt::WA_InputMethodEnabled, !disabled);
+#endif
 }
 
 void PlainCodeEditor::setEditorOverwriteMode(bool enabled)

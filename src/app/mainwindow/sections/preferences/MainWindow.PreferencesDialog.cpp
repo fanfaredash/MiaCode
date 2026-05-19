@@ -554,7 +554,6 @@ void MainWindow::PreferencesSection::onPreferences()
     int selectedEditorFontSize = state_.editorTextFontPointSize_;
     double selectedEditorLineSpacingFactor = state_.editorLineSpacingFactor_;
     bool selectedEditorHalfWidthInputEnabled = state_.editorHalfWidthInputEnabled_;
-    bool selectedEditorImeInputDisabled = state_.editorImeInputDisabled_;
     bool selectedPreserveDifficultySwitchView = state_.preserveDifficultySwitchView_;
 
     auto* editorFontSizeLabel = new QLabel(uiText("dialog.preferences.editor_font_size", "Text Font Size"), editorGroup);
@@ -614,28 +613,34 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(QString(), halfWidthInputCheckbox);
 
-    // beta51+ — Replaced the former "Overwrite mode" preference with a
-    // "禁止中文輸入法輸入" toggle. Overwrite mode still works as a runtime
-    // editor mode (Insert key remains bound via the editor.overwrite_mode
-    // shortcut and PlainCodeEditor's internal keypress handler), but the
-    // preference checkbox here was redundant — the option is bound at the
-    // session level by the Insert key already. The new option hard-disables
-    // the platform IME on the chart editor so a stray Chinese / Japanese /
-    // Korean IME doesn't swallow commas, brackets, or digits into a
-    // candidate box mid-edit. Off by default; users with CJK keyboard
-    // layouts can flip it on once and forget about it.
-    auto* imeInputDisabledCheckbox = new QCheckBox(
-        uiText("dialog.preferences.editor_ime_input_disabled", "Disable IME input (force ASCII)"),
-        editorGroup
-    );
-    imeInputDisabledCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    imeInputDisabledCheckbox->setChecked(selectedEditorImeInputDisabled);
-    connect(imeInputDisabledCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
-        selectedEditorImeInputDisabled = checked;
-        owner_.applyEditorImeInputDisabled(selectedEditorImeInputDisabled, true);
-        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
-    });
-    editorLayout->addRow(QString(), imeInputDisabledCheckbox);
+    // [BETA51 IME-DISABLE: DISABLED PENDING FIX]
+    // The "禁止中文輸入法輸入" preference shipped in 4f9a27e (UI), backed by
+    // Qt::WA_InputMethodEnabled = false on PlainCodeEditor. On user testing
+    // it didn't actually block Windows CJK IMEs — the IME composition window
+    // still appeared on Chinese input. Until we find an approach that reliably
+    // blocks all platform IMEs (likely involving the Windows TSF / ImmAssociateContext
+    // path rather than just the Qt attribute) the entire feature is hidden:
+    // this UI block is commented out, the load/save/apply call sites in
+    // MainWindow.EditorDisplay.cpp are also commented out, and the editor-
+    // creation bootstrap no longer calls setImeInputDisabled. The state
+    // member, applyEditorImeInputDisabled method, and
+    // PlainCodeEditor::setImeInputDisabled API all stay in place so the
+    // eventual fix can re-enable everything at once by un-commenting these
+    // sites. The orphan UiText key dialog.preferences.editor_ime_input_disabled
+    // is kept too.
+    //
+    // auto* imeInputDisabledCheckbox = new QCheckBox(
+    //     uiText("dialog.preferences.editor_ime_input_disabled", "Disable IME input (force ASCII)"),
+    //     editorGroup
+    // );
+    // imeInputDisabledCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    // imeInputDisabledCheckbox->setChecked(selectedEditorImeInputDisabled);
+    // connect(imeInputDisabledCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
+    //     selectedEditorImeInputDisabled = checked;
+    //     owner_.applyEditorImeInputDisabled(selectedEditorImeInputDisabled, true);
+    //     owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+    // });
+    // editorLayout->addRow(QString(), imeInputDisabledCheckbox);
 
     auto* preserveDifficultySwitchViewCheckbox = new QCheckBox(
         uiText("dialog.preferences.preserve_difficulty_switch_view", "Preserve editor position and preview progress when switching difficulties"),

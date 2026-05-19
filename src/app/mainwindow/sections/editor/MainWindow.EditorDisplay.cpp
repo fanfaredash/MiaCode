@@ -287,12 +287,16 @@ void MainWindow::EditorSection::loadPortableState()
     }
     state_.editorHalfWidthInputEnabled_ = ui.value("editor_half_width_input").toBool(true);
     state_.editorOverwriteModeEnabled_ = ui.value("editor_overwrite_mode").toBool(false);
-    state_.editorImeInputDisabled_ = ui.value("editor_ime_input_disabled").toBool(false);
+    // [BETA51 IME-DISABLE: DISABLED PENDING FIX] state stays at its default
+    // false; any existing `editor_ime_input_disabled` value in preferences.json
+    // is intentionally ignored until the WA_InputMethodEnabled approach is
+    // replaced with one that actually blocks Windows CJK IMEs.
+    // state_.editorImeInputDisabled_ = ui.value("editor_ime_input_disabled").toBool(false);
     state_.preserveDifficultySwitchView_ = ui.value("preserve_difficulty_switch_view").toBool(true);
     applyEditorTextFontSize(state_.editorTextFontPointSize_, false);
     applyEditorHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_, false);
     applyEditorOverwriteModeEnabled(state_.editorOverwriteModeEnabled_, false);
-    applyEditorImeInputDisabled(state_.editorImeInputDisabled_, false);
+    // applyEditorImeInputDisabled(state_.editorImeInputDisabled_, false);
 
     const QString dir = app.value("last_open_dir").toString();
     if (!dir.isEmpty() && QDir(dir).exists()) {
@@ -606,7 +610,11 @@ void MainWindow::EditorSection::savePortableState() const
     ui.insert("editor_line_spacing_factor", state_.editorLineSpacingFactor_);
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
-    ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);
+    // [BETA51 IME-DISABLE: DISABLED PENDING FIX] don't persist while feature
+    // is off — leaves any pre-existing `editor_ime_input_disabled` key in the
+    // JSON untouched (we just don't write or read it). Re-enable along with
+    // the load/apply sites once the platform IME blocker is replaced.
+    // ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);
     ui.insert("preserve_difficulty_switch_view", state_.preserveDifficultySwitchView_);
     root.insert("ui", ui);
 
@@ -708,7 +716,9 @@ void MainWindow::EditorSection::persistEditorTextFontPreference() const
     ui.insert("editor_line_spacing_factor", state_.editorLineSpacingFactor_);
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
-    ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);
+    // [BETA51 IME-DISABLE: DISABLED PENDING FIX] see saveState() and
+    // loadPortableState() for the rationale.
+    // ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);
     ui.insert("preserve_difficulty_switch_view", state_.preserveDifficultySwitchView_);
     root.insert("ui", ui);
     UiText::savePreferencesObject(root);
@@ -795,6 +805,20 @@ void MainWindow::EditorSection::applyEditorOverwriteModeEnabled(bool enabled, bo
 
 void MainWindow::EditorSection::applyEditorImeInputDisabled(bool disabled, bool persistPreference)
 {
+    // [BETA51 IME-DISABLE: DISABLED PENDING FIX]
+    // The Qt::WA_InputMethodEnabled approach behind this method didn't
+    // actually block Windows CJK IMEs on user testing. Until we replace it
+    // with something that does (likely a Windows TSF / ImmAssociateContext
+    // path), every call site is commented out and this method short-circuits.
+    // Body is preserved below the early return so the eventual fix only has
+    // to delete the early return + uncomment the call sites in
+    // loadPortableState / saveState / persistEditorTextFontPreference / the
+    // bookmark dialog editor init / syncCopyAreaEditorAppearance / the
+    // preferences dialog row in MainWindow.PreferencesDialog.cpp.
+    Q_UNUSED(disabled);
+    Q_UNUSED(persistPreference);
+    return;
+#if 0
     state_.editorImeInputDisabled_ = disabled;
     if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
         editor->setImeInputDisabled(disabled);
@@ -805,6 +829,7 @@ void MainWindow::EditorSection::applyEditorImeInputDisabled(bool disabled, bool 
     if (persistPreference) {
         persistEditorTextFontPreference();
     }
+#endif
 }
 
 void MainWindow::EditorSection::applyPreserveDifficultySwitchView(bool enabled, bool persistPreference)
@@ -1041,7 +1066,9 @@ void MainWindow::EditorSection::showCreateBookmarkDialog()
         state_.editorTextFontPointSize_,
         state_.editorLineSpacingFactor_));
     edit->setHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_);
-    edit->setImeInputDisabled(state_.editorImeInputDisabled_);
+    // [BETA51 IME-DISABLE: DISABLED PENDING FIX] don't propagate the setting
+    // to bookmark-dialog editors either while the feature is off.
+    // edit->setImeInputDisabled(state_.editorImeInputDisabled_);
     edit->setEditorOverwriteMode(state_.editorOverwriteModeEnabled_);
     connect(edit, &PlainCodeEditor::editorOverwriteModeChanged, &owner_, [this](bool enabled) {
         applyEditorOverwriteModeEnabled(enabled, true);
@@ -1222,7 +1249,9 @@ void MainWindow::EditorSection::syncCopyAreaEditorAppearance()
     ui_.copyAreaEditor_->setFont(editorFont(state_.editorTextFontPointSize_));
     ui_.copyAreaEditor_->setBlockSpacingPixels(blockSpacingPixels);
     ui_.copyAreaEditor_->setHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_);
-    ui_.copyAreaEditor_->setImeInputDisabled(state_.editorImeInputDisabled_);
+    // [BETA51 IME-DISABLE: DISABLED PENDING FIX] copy-area editor also stays
+    // on the platform-default IME state while the toggle is gated off.
+    // ui_.copyAreaEditor_->setImeInputDisabled(state_.editorImeInputDisabled_);
     ui_.copyAreaEditor_->setEditorOverwriteMode(state_.editorOverwriteModeEnabled_);
     ui_.copyAreaEditor_->refreshLineNumberAreaLayout();
 }
