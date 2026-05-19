@@ -1261,8 +1261,8 @@ void runInlineSpecs(QTextStream& err, int* failed)
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts a non-384-divisor hold duration"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("{16}1h[32:5],,,, ,,,, ,,,, ,,,,\nE"),
-            QStringLiteral("normalize whole chart snaps non-384 hold duration through the uniform table (y=7 -> q=32)"),
+            QStringLiteral("{16}1h[24:3],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize whole chart snaps non-384 hold duration via snapXOverY (y=7 -> q=24)"),
             failed,
             err
         );
@@ -1274,38 +1274,40 @@ void runInlineSpecs(QTextStream& err, int* failed)
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts a non-384-divisor slide duration"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("{16}1-5[24:5],,,, ,,,, ,,,, ,,,,\nE"),
-            QStringLiteral("normalize whole chart snaps non-384 slide duration through the uniform table (y=5 -> q=24)"),
+            QStringLiteral("{16}1-5[16:3],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize whole chart snaps non-384 slide duration via snapXOverY (y=5 -> q=16)"),
             failed,
             err
         );
     }
 
     {
-        // {28} measure: LCM of moment denoms is 28 (non-384-divisor).
-        // Without the snap-table override the measure would fall through
-        // to {384}. The uniform table routes y=28 -> q=128.
+        // {28} measure: each moment has denom dividing 28. snapXOverY for
+        // each (denom 28, 14, 7, etc.) picks a per-moment q; the segment
+        // subdivision is the LCM of those q's, which is 96 for moments
+        // whose denom is exactly 28.
         const miacode::chart_transform::ChartNormalizationResult normalized =
             miacode::chart_transform::normalizeChartText(
                 QStringLiteral("{28}1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8,1,2,3,4,5,6,7,8,1,2,3,4,\nE"));
         expectTrue(normalized.ok, QStringLiteral("normalize accepts a {28} measure"), failed, err);
         expectTrue(
-            normalized.text.startsWith(QStringLiteral("{128}")),
-            QStringLiteral("normalize routes a {28} measure through the uniform table (y=28 -> q=128) instead of {384}"),
+            normalized.text.startsWith(QStringLiteral("{96}")),
+            QStringLiteral("normalize routes a {28} measure to {96} via per-moment snapXOverY (no longer falls through to {384})"),
             failed,
             err
         );
     }
 
     {
-        // {7} measure: y=7 -> q=32 via snap table.
+        // {7} measure: moments at multiples of 1/7. Per-moment q=24 (max
+        // divisor of 384 <= 28). Segment LCM = 24.
         const miacode::chart_transform::ChartNormalizationResult normalized =
             miacode::chart_transform::normalizeChartText(
                 QStringLiteral("{7}1,2,3,4,5,6,7,\nE"));
         expectTrue(normalized.ok, QStringLiteral("normalize accepts a {7} measure"), failed, err);
         expectTrue(
-            normalized.text.startsWith(QStringLiteral("{32}")),
-            QStringLiteral("normalize routes a {7} measure through the uniform table (y=7 -> q=32)"),
+            normalized.text.startsWith(QStringLiteral("{24}")),
+            QStringLiteral("normalize routes a {7} measure to {24} via per-moment snapXOverY"),
             failed,
             err
         );
@@ -1494,17 +1496,15 @@ void runInlineSpecs(QTextStream& err, int* failed)
         );
     }
 
-    // Uniform-q snap table: per y, every x in [0, y) maps to a single q.
-    // q is picked from divisors of 384 with q <= 6y that keep every x
-    // distinct, minimizing max per-x fractional error; ties prefer smaller q.
+    // Snap rule: q = largest divisor of 384 with q <= 4y; p = round(q*x/y).
+    // Different x for same y share a q; collisions on adjacent x are
+    // accepted (rare and only on dense non-384 charts).
     {
-        miacode::chart_transform::ensureUniformSnapTableReady();
-
         const miacode::chart_transform::SnapResult r5 =
             miacode::chart_transform::snapXOverY(1, 5);
         expectTrue(
-            r5.ok && r5.q == 24 && r5.p == 5,
-            QStringLiteral("uniform snap: 1/5 -> 5/24 (y=5 picks q=24 under q<=30 bound)"),
+            r5.ok && r5.q == 16 && r5.p == 3,
+            QStringLiteral("snap: 1/5 -> 3/16 (y=5: largest divisor of 384 <= 20 is 16; p=round(16/5)=3)"),
             failed,
             err
         );
@@ -1512,8 +1512,8 @@ void runInlineSpecs(QTextStream& err, int* failed)
         const miacode::chart_transform::SnapResult r20 =
             miacode::chart_transform::snapXOverY(4, 20);
         expectTrue(
-            r20.ok && r20.q == 96 && r20.p == 19,
-            QStringLiteral("uniform snap: 4/20 -> 19/96 (y=20 picks q=96 under q<=120; distinct from 1/5)"),
+            r20.ok && r20.q == 64 && r20.p == 13,
+            QStringLiteral("snap: 4/20 -> 13/64 (y=20: largest divisor of 384 <= 80 is 64; distinct from 1/5)"),
             failed,
             err
         );
@@ -1521,20 +1521,17 @@ void runInlineSpecs(QTextStream& err, int* failed)
         const miacode::chart_transform::SnapResult r7 =
             miacode::chart_transform::snapXOverY(1, 7);
         expectTrue(
-            r7.ok && r7.q == 32 && r7.p == 5,
-            QStringLiteral("uniform snap: 1/7 -> 5/32 (y=7 picks q=32 under q<=42)"),
+            r7.ok && r7.q == 24 && r7.p == 3,
+            QStringLiteral("snap: 1/7 -> 3/24 (y=7: largest divisor of 384 <= 28 is 24; p=round(24/7)=3)"),
             failed,
             err
         );
 
-        // Tie-break case: y=9 has q=48 reachable (6y=54 covers it) and the
-        // pairs (12,16), (24,32), (48) keep tying at the smaller q. q=48
-        // achieves the lowest reachable max frac error 1/144.
-        const miacode::chart_transform::SnapResult r9 =
-            miacode::chart_transform::snapXOverY(1, 9);
+        const miacode::chart_transform::SnapResult r28 =
+            miacode::chart_transform::snapXOverY(1, 28);
         expectTrue(
-            r9.ok && r9.q == 48 && r9.p == 5,
-            QStringLiteral("uniform snap: 1/9 -> 5/48 (under q<=54, q=48 is the smallest with min frac err)"),
+            r28.ok && r28.q == 96 && r28.p == 3,
+            QStringLiteral("snap: 1/28 -> 3/96 (y=28: largest divisor of 384 <= 112 is 96)"),
             failed,
             err
         );
@@ -1543,7 +1540,7 @@ void runInlineSpecs(QTextStream& err, int* failed)
             miacode::chart_transform::snapXOverY(3, 16);
         expectTrue(
             rDiv.ok && rDiv.q == 16 && rDiv.p == 3,
-            QStringLiteral("uniform snap: y that already divides 384 passes through unchanged"),
+            QStringLiteral("snap: y that already divides 384 passes through unchanged"),
             failed,
             err
         );
@@ -1552,61 +1549,20 @@ void runInlineSpecs(QTextStream& err, int* failed)
             miacode::chart_transform::snapXOverY(1, 2000);
         expectTrue(
             rBig.ok && rBig.q == 384 && rBig.p == 0,
-            QStringLiteral("uniform snap: y > 384 falls back to 384-grid round (1/2000 -> 0/384)"),
+            QStringLiteral("snap: y > 384 falls back to 384-grid round (1/2000 -> 0/384)"),
             failed,
             err
         );
 
-        const miacode::chart_transform::SnapResult rCarry =
+        // x >= y: no carry split; direct round(q*x/y) handles it.
+        const miacode::chart_transform::SnapResult rBigX =
             miacode::chart_transform::snapXOverY(11, 5);
         expectTrue(
-            rCarry.ok && rCarry.q == 24 && rCarry.p == 53,
-            QStringLiteral("uniform snap: x >= y carries whole notes (11/5 = 2 + 1/5 -> 2*24 + 5 = 53/24)"),
+            rBigX.ok && rBigX.q == 16 && rBigX.p == 35,
+            QStringLiteral("snap: x=11, y=5 -> 35/16 (no special carry; just round(16*11/5))"),
             failed,
             err
         );
-    }
-
-    {
-        const QVector<miacode::chart_transform::SnapCollision> collisions =
-            miacode::chart_transform::findUniformSnapTableCollisions();
-        expectTrue(
-            collisions.isEmpty(),
-            QStringLiteral("uniform snap: every non-384-divisor y in [2, 384] has a collision-free q (by construction); cached table also free of adjacency collisions"),
-            failed,
-            err
-        );
-        if (!collisions.isEmpty()) {
-            const auto& first = collisions.constFirst();
-            err << "  first issue: y=" << first.y
-                << " at x=" << first.x
-                << " (p=" << first.p << ", q=" << first.q << ")"
-                << " (total=" << collisions.size() << ")\n";
-        }
-    }
-
-    {
-        const QString tmpPath = QDir::tempPath()
-            + QStringLiteral("/miacode_non384_snap_test_")
-            + QString::number(QCoreApplication::applicationPid())
-            + QStringLiteral(".json");
-        const bool savedOk = miacode::chart_transform::saveUniformSnapTableCacheToJson(tmpPath);
-        expectTrue(savedOk, QStringLiteral("uniform snap: JSON cache saves to a writable path"), failed, err);
-
-        if (savedOk) {
-            const bool loadedOk = miacode::chart_transform::loadUniformSnapTableCacheFromJson(tmpPath);
-            expectTrue(loadedOk, QStringLiteral("uniform snap: JSON cache round-trips through load"), failed, err);
-
-            const miacode::chart_transform::SnapResult after =
-                miacode::chart_transform::snapXOverY(2, 5);
-            expectTrue(
-                after.ok && after.q == 24 && after.p == 10,
-                QStringLiteral("uniform snap: 2/5 still maps to 10/24 after JSON load round-trip"),
-                failed,
-                err
-            );
-            QFile(tmpPath).remove();
-        }
     }
 }
 
@@ -1620,6 +1576,45 @@ int main(int argc, char** argv)
 
     int failed = 0;
     const QStringList args = app.arguments();
+    if (args.size() >= 3 && args.at(1) == QLatin1String("--normalize-dump")) {
+        const QString path = args.at(2);
+        int difficultyId = 5;
+        if (args.size() >= 4) {
+            bool idOk = false;
+            const int parsed = args.at(3).toInt(&idOk);
+            if (idOk) difficultyId = parsed;
+        }
+        bool reduce = true;
+        if (args.size() >= 5 && args.at(4).compare(QLatin1String("exact"), Qt::CaseInsensitive) == 0) {
+            reduce = false;
+        }
+        QString sourceText;
+        QString errorMessage;
+        if (!readUtf8File(path, &sourceText, &errorMessage)) {
+            err << errorMessage << '\n';
+            return 3;
+        }
+        const SimaiDocument doc = SimaiDocument::fromText(sourceText);
+        const SimaiDifficultyData* difficulty = doc.difficulty(difficultyId);
+        if (difficulty == nullptr) {
+            err << "no difficulty " << difficultyId << " in " << QDir::toNativeSeparators(path) << '\n';
+            return 4;
+        }
+        miacode::chart_transform::ChartNormalizationOptions opts;
+        opts.reduceTo384Grid = reduce;
+        opts.startAtNewMeasure = true;
+        const miacode::chart_transform::ChartNormalizationResult result =
+            miacode::chart_transform::normalizeChartText(
+                difficulty->chart,
+                miacode::simai::buildTimingMetadata(doc),
+                opts);
+        if (!result.ok) {
+            err << "normalize failed: " << result.errorMessage << '\n';
+            return 5;
+        }
+        out << result.text;
+        return 0;
+    }
     if (args.size() >= 2 && args.at(1) == QLatin1String("--dump-snap-table")) {
         int maxY = miacode::chart_transform::kSnap384Modulus;
         if (args.size() >= 3) {
@@ -1629,17 +1624,16 @@ int main(int argc, char** argv)
                 maxY = parsed;
             }
         }
-        miacode::chart_transform::ensureUniformSnapTableReady();
         out << "y\tq\tx\tp\tx/y\tp/q\terr\n";
         for (int y = 2; y <= maxY; ++y) {
             if ((miacode::chart_transform::kSnap384Modulus % y) == 0) continue;
-            const miacode::chart_transform::UniformSnapTable& t =
-                miacode::chart_transform::uniformSnapTableForY(y);
-            for (int x = 0; x < t.pByX.size(); ++x) {
-                const int p = t.pByX[x];
+            for (int x = 0; x < y; ++x) {
+                const miacode::chart_transform::SnapResult snap =
+                    miacode::chart_transform::snapXOverY(x, y);
+                if (!snap.ok) continue;
                 const double xy = static_cast<double>(x) / static_cast<double>(y);
-                const double pq = static_cast<double>(p) / static_cast<double>(t.q);
-                out << y << '\t' << t.q << '\t' << x << '\t' << p
+                const double pq = static_cast<double>(snap.p) / static_cast<double>(snap.q);
+                out << y << '\t' << snap.q << '\t' << x << '\t' << snap.p
                     << '\t' << QString::number(xy, 'f', 6)
                     << '\t' << QString::number(pq, 'f', 6)
                     << '\t' << QString::number(qAbs(xy - pq), 'g', 4) << '\n';

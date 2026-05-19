@@ -359,9 +359,8 @@ QString normalizePlainDurationSignature(
         return signature;
     }
 
-    // Apply the uniform per-y snap table. Falls back internally to a
-    // 384-grid round when y > 384 (out of table range).
-    ensureUniformSnapTableReady();
+    // q = largest divisor of 384 with q <= 4y; p = round(q*x / y).
+    // Internally falls back to a 384-grid round when y > 384.
     const SnapResult snap = snapXOverY(originalNumerator, originalBeats);
     if (!snap.ok) {
         return signature;
@@ -833,33 +832,6 @@ bool snapRangeFitsBeats(const QVector<Rational>& momentPositions, int beats)
 
 QString renderMeasureLineApproximate(const RenderMeasure& measure)
 {
-    static const QVector<int> kPreferredBeats = preferredSnapSubdivisionBeats();
-
-    // Pre-compute LCM of moment-position denominators. When the LCM is a
-    // non-384-divisor that the uniform snap table can serve, force every
-    // segment in this measure to use the table's chosen q so users see
-    // e.g. {28} -> {128} instead of falling through to {384}.
-    qint64 yMeasureLcm = 1;
-    bool yLcmInRange = true;
-    for (const MeasureMoment& moment : measure.moments) {
-        const qint64 denom = moment.positionWhole.denominator;
-        if (denom <= 1) continue;
-        yMeasureLcm = safeLcm(yMeasureLcm, denom);
-        if (yMeasureLcm <= 0 || yMeasureLcm > kSnap384Modulus) {
-            yLcmInRange = false;
-            break;
-        }
-    }
-    int uniformQ = 0;
-    if (yLcmInRange && yMeasureLcm > 1
-        && (kSnap384Modulus % yMeasureLcm) != 0) {
-        ensureUniformSnapTableReady();
-        const UniformSnapTable& table = uniformSnapTableForY(static_cast<int>(yMeasureLcm));
-        if (table.q > 0) {
-            uniformQ = table.q;
-        }
-    }
-
     const int measureGridLength = qMax(1, qRound(toDouble(measure.lengthWhole) * 384.0));
     const int startPhaseGrid = qMax(0, qRound(toDouble(measure.startPhaseWhole) * 384.0));
     const int endPhaseGrid = startPhaseGrid + measureGridLength;
@@ -898,21 +870,46 @@ QString renderMeasureLineApproximate(const RenderMeasure& measure)
             segmentMomentIndices.append(index);
         }
 
+        // Pick segment subdivision as LCM of each moment's snap q (q = largest
+        // divisor of 384 with q <= 4y, applied per-moment using snapXOverY).
+        // Empty segments bump to 16 (default visual grid). After LCM we align
+        // with the meter denominator so beats split evenly into integer slot
+        // counts.
         int beats;
-        if (uniformQ > 0) {
-            beats = uniformQ;
-        } else {
-            beats = 384;
-            for (int candidate : kPreferredBeats) {
-                const int stepGrid = 384 / candidate;
-                if (stepGrid <= 0 || (segmentLengthGrid % stepGrid) != 0) {
-                    continue;
-                }
-                if (snapRangeFitsBeats(segmentMomentPositions, candidate)) {
-                    beats = candidate;
+        {
+            qint64 segmentQ = 0;
+            for (int momentIndex : segmentMomentIndices) {
+                const MeasureMoment& m = measure.moments.at(momentIndex);
+                const SnapResult snap = snapXOverY(
+                    static_cast<int>(m.positionWhole.numerator),
+                    static_cast<int>(m.positionWhole.denominator));
+                if (!snap.ok || snap.q <= 0) continue;
+                segmentQ = (segmentQ == 0) ? snap.q : safeLcm(segmentQ, snap.q);
+                if (segmentQ <= 0 || segmentQ > kSnap384Modulus) {
+                    segmentQ = kSnap384Modulus;
                     break;
                 }
             }
+            if (segmentQ == 0) {
+                segmentQ = 1;
+            }
+            // Bump pure power-of-two subdivisions <= 16 up to 16 so an empty
+            // beat in a 4/4 chart still emits {16}, not {1}.
+            if (segmentQ <= 16 && (16 % segmentQ) == 0) {
+                segmentQ = 16;
+            }
+            // Align with the meter denominator so segmentLengthGrid * segmentQ
+            // is a multiple of 384 (i.e., integer slot count per segment).
+            if (measure.meterDenominator > 0) {
+                const qint64 aligned = safeLcm(segmentQ, measure.meterDenominator);
+                if (aligned > 0 && aligned <= kSnap384Modulus
+                    && (kSnap384Modulus % aligned) == 0) {
+                    segmentQ = aligned;
+                } else {
+                    segmentQ = kSnap384Modulus;
+                }
+            }
+            beats = static_cast<int>(segmentQ);
         }
 
         const int slotCount = qMax(1, qRound(toDouble(Rational(segmentLengthGrid, 384)) * beats));
