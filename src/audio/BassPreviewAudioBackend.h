@@ -118,16 +118,6 @@ private:
         double lastTriggeredGroupSecond = -1.0;
         int lastTriggeredGroupIndex = -1;
         int triggeredGroupCount = 0;
-        // Diagnostics for the "tearing after multiple pause-resume"
-        // user report. pauseCycleCount counts every suspend ↔ resume
-        // round trip on this engine. lastPauseSecond / lastResumeSecond
-        // give us the BGM position observed at each boundary so a log
-        // reader can spot drift across cycles.
-        int pauseCycleCount = 0;
-        double lastPauseAuthoritativeSecond = -1.0;
-        double lastPauseBgmRawSecond = -1.0;
-        double lastResumeAuthoritativeSecond = -1.0;
-        double lastResumeBgmRawSecond = -1.0;
     };
 
     QString resolveTrackPath(const QString& chartPath) const;
