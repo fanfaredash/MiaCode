@@ -547,7 +547,23 @@ if (WIN32)
     )
     set_target_properties(MiaCodeLauncher PROPERTIES
         OUTPUT_NAME "MiaCodeLauncher"
+        # Static-link the MSVC runtime so the launcher itself has zero
+        # MSVCP140/VCRUNTIME140 dependency. Without this, the preflight
+        # probe is useless: the launcher would itself fail to load when
+        # the user is missing the same DLLs we're trying to detect for
+        # them. Pure Win32 from here on — kernel32 + user32 only.
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
     )
+    if (MSVC)
+        # /utf-8: parse source as UTF-8 (default would be the system
+        # codepage — GBK on zh-CN Windows — which mangles the CJK
+        # characters embedded in the bilingual MessageBox strings).
+        # Without this, MessageBoxW shows garbage where Chinese should
+        # be. Only needed on the launcher since the main MiaCode target
+        # routes all user-visible text through Qt's tr() / QStringLiteral
+        # which encodes correctly regardless of compiler defaults.
+        target_compile_options(MiaCodeLauncher PRIVATE /utf-8)
+    endif()
     # Shared app icon — the wrapper exe lives at the dist root and is the
     # user-clickable face of MiaCode in File Explorer, so it must show
     # the same icon as the real binary inside app/. Reuses the generated
