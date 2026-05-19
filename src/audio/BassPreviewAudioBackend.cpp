@@ -1101,12 +1101,21 @@ void BassPreviewAudioBackend::suspendPlaybackTransport()
     // BASS_MIXER_CHAN_PAUSE on the BGM source. Pre-G1, BASS_ChannelPause on the
     // master silenced every channel implicitly; the original Commit 6 dropped
     // the master pause but left this site empty, which let BGM keep playing
-    // through the pause UI state. SFX one-shots self-terminate so they don't
-    // need explicit silencing; touchhold is handled by separate
-    // pauseTouchholdVoices() callers in the pause flow.
+    // through the pause UI state.
+    //
+    // beta50 followup: same blind spot applied to the touchhold voice. If a
+    // touchhold span was active at the moment the user pressed ⏸, its sample
+    // kept looping because the master-pause shortcut was gone and no per-
+    // sample flag was being set on the touchhold source either. The earlier
+    // comment claiming "touchhold is handled by separate pauseTouchholdVoices()
+    // callers in the pause flow" was wrong — pauseTouchholdVoices() was only
+    // invoked from the anchor / reposition / prepare paths, not from
+    // suspendPlaybackTransport itself. Calling it here closes that hole.
+    // SFX one-shots still self-terminate so they don't need explicit silencing.
     if (backgroundTrackSample_ != nullptr) {
         backgroundTrackSample_->pause();
     }
+    pauseTouchholdVoices();
     playbackSession_.masterRunning = false;
     playbackSession_.backgroundTrackRunning = false;
     retainedPlaybackMode_ = RetainedPlaybackMode::PausedExact;
