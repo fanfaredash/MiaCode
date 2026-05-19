@@ -361,65 +361,216 @@ UI 上的呈现：
 
 ## 3. 谱面规范化 —— "调整 / Modify" 菜单
 
-> **审查状态。** 本节是从索引 / 设计意图层面描述该子系统。与 §1（语法
-> 检测）不同，本次修订**没有**在代码层面逐行核对实现；这里描述的重写
-> 规则与选项语义可能与当前 `normalizeChartText()` /
-> `ChartBatchTransformSpec` 的实际行为存在偏差。**仍需对代码做人工
-> 核对**，才能把本节当作权威参考。本子系统的权威参考是
-> `docs/SIMAI_NORMALIZATION_TIME_SIGNATURE_RESEARCH.md`，以及下方入口
-> 表中引用的源文件。
-
 把谱面文本重写为标准形式。**绝不会被隐式触发** —— 始终由用户从菜单触发，
-通过单个 undoable 编辑块完成。两个独立选项可以叠加。
+通过单个 undoable 编辑块完成（`editCursor.beginEditBlock()` /
+`endEditBlock()`，`MainWindow.DocumentTransforms.cpp:393-398`）。两个独立
+checkbox 选项控制行为，跨会话持久化在编辑器偏好里。
 
 ### 入口
 
 | 表面 | 文件 / 符号 |
 |---|---|
-| 公共 API | `normalizeChartText()`、`normalizeChartSelectionText()` —— `src/core/chart/transform/ChartNormalization.h:36,41` |
+| 公共 API（全文） | `normalizeChartText()` —— `src/core/chart/transform/ChartNormalization.h:36` |
+| 公共 API（选区） | `normalizeChartSelectionText()` —— `:41` |
+| 内部主流程 | `normalizeChartFragment()` —— `src/core/chart/transform/ChartNormalization.cpp:1190+` |
 | 选项结构体 | `ChartNormalizationOptions` —— `:10-13` |
-| 结果结构体 | `ChartNormalizationResult`（`ok`, `text`, `errorMessage`, `changedCount`, `measureLineCount`） |
-| 菜单入口 | `MainWindow::DocumentSection::onNormalizeWholeChart()` —— `src/app/mainwindow/sections/document/MainWindow.DocumentTransforms.cpp:311+` |
-| 批量 transform 工具 | `src/tools/chart_transform/ChartBatchTransformSpec.cpp` |
-| 偏好设置 | `chartNormalizeStartAtNewMeasurePreferenceKey`、`chartNormalizeReduceTo384GridPreferenceKey` |
+| 结果结构体 | `ChartNormalizationResult { ok, text, errorMessage, changedCount, measureLineCount }` —— `:15-21` |
+| 菜单入口 | `MainWindow::DocumentSection::onNormalizeWholeChart()` —— `src/app/mainwindow/sections/document/MainWindow.DocumentTransforms.cpp:291` |
+| 内联回归测试 | `runInlineSpecs()` —— `src/tools/chart_transform/ChartBatchTransformSpec.cpp:736+` |
+| 偏好键名 | `kChartNormalizeStartAtNewMeasurePreferenceKey`、`kChartNormalizeReduceTo384GridPreferenceKey` —— `ChartNormalization.h:23-26` |
 
-### 策略选项
+### 3.1 输入与门控
 
-| 选项 | 默认 | 效果 |
+`normalizeChartFragment` 的第一步是
+`SimaiNativeParser::buildValidationReport(input, English, nullptr, timingMetadata)`
+（`ChartNormalization.cpp:1200-1208`）。按 §1.2 的拆解，`buildValidationReport`
+现在是**仅 strict** —— 因此：
+
+- 任何 strict pass 抓到的 **Error** 都会让 normalization 立刻返回
+  `{ ok: false, errorMessage: <第一条 issue 的本地化消息> }`，编辑器保持
+  文档不动。
+- strict pass 抓到的 **Warning**（如 `{7}` 非 384 因数、touch_hold 修饰符
+  位置非典范、`b` 不紧贴 slide `[` 等，详见 §1.1 表）**全部放行**。
+
+> **关于 §0 标签的修正。** §0 表把规范化标为 "lenient"，但代码实际通过
+> `buildValidationReport`（strict）做门控。具体后果：strict-only 的 Error
+> —— `1//5` 重复分隔符、`[HS*xyz` 未闭合 HS 块、缺逗号、misplaced slide
+> head modifier、misplaced tap-star modifier、invalid slide chain
+> —— 也会阻挡 normalization，即便 lenient pass 能跳过坏段继续抽 marker。
+
+### 3.2 两个选项的实际语义
+
+对话框（`MainWindow.DocumentTransforms.cpp:73-87`）显示两个 checkbox，但
+作用层级很不一样。
+
+#### `startAtNewMeasure`（默认 true）
+
+| 调用路径 | 实际影响 |
+|---|---|
+| `normalizeChartText`（全文 / 无选区） | **实质 no-op**。seed 来自 `seedFromTimingMetadata`，`startPhaseWhole` 总是 0；不管选项真假，第一个 measure 都从 phase 0 开始。 |
+| `normalizeChartSelectionText`（有选区） | true：把选区起点视为小节边界，丢弃 `scanNormalizationSeed` 算出的相位偏移；如果原本相位非零，输出**会在最前面注入一行 `\|\| <meter>`**（`ChartNormalization.cpp:1561-1574`）。false：保留原相位，输出延续选区前一刻的 measure。 |
+
+回归测试 `ChartBatchTransformSpec.cpp:1342-1361` 是 mid-measure 选区 +
+`startAtNewMeasure=true` 注入 `\|\| 4/4` 的实证。
+
+#### `reduceTo384Grid`（默认 true）
+
+这个选项控制**对非 384 网格的 moment 如何处理**。`renderMeasureLine`
+（`ChartNormalization.cpp:1061+`）是 dispatcher，按 measure 分流：
+
+| 值 | 行为 |
+|---|---|
+| true | 所有 measure **强制走** `renderMeasureLineApproximate`（`ChartNormalization.cpp:839-917`）。候选 subdivision 集 = 16, 24, 32, 48, 64, 96, 128, 192, 384（即 ≥16 的 384 因数）。逐个 beat-segment 挑能在 `kSnapToleranceWhole ≈ 1/768` 内容纳所有 moment 的**最小** candidate。`{16}` 谱在正常情况下输出仍是 `{16}`，**不会被推到** `{384}`。**非 384 分母的 moment（如 1/7、1/9）会被 round 到 384 grid，丢失精度**（如 `{7}` 输入会被压成 `{384}` 并 snap）。 |
+| false | **每个 measure 独立判定**：扫描该 measure 内所有 `MeasureMoment::positionWhole.denominator`，若**全部都是 384 约数**（即 `384 % denom == 0`）→ 走 approximate（与 reduce=true 相同行为）；若**任一 moment 落在非 384 约数位置**→ 整个 measure 走 `renderMeasureLineExact`（`ChartNormalization.cpp:996-1059`），用 moment 位置分母的 LCM 选 subdivision，能产生 `{7}`、`{9}`、`{15}` 等非-384 因数，**保留 moment 精度**。 |
+
+关键含意：
+
+- 普通谱面（每个 moment 都落在 384 grid 上）在 reduce=true / false 下
+  **输出完全一致** —— 用户不会看到「reduce=false 突然把空白合并成 `{1}`
+  大 chunk」的意外行为。
+- 只有真正含 `{7}` / `{9}` / `{15}` 等异常分音的 measure，才会在
+  reduce=false 下落入 exact 路径（保留精度），而在 reduce=true 下被
+  强制 snap 到 384 grid（精度损失）。
+- 对话框文案「统一近似至 384 分音」对应 reduce=true；reduce=false 表达
+  「保留非 384 分音原位（其余照旧近似）」的语义。
+
+#### Duration 时长字符串（`[beats:numerator]` 或 `[ms#beats:numerator]`）
+
+时长由 `normalizePlainDurationSignature`（`ChartNormalization.cpp:330+`）处理。
+**当且仅当以下三个条件同时满足时，时长字符串才会被改写**；否则原 signature
+**逐字保留**，用户的书写选择完全不动：
+
+1. 时长字符串**不含 `#`**（`parsePlainDurationSignature` 见 `#` 直接 return false）
+2. `reduceTo384Grid=true`（"统一近似至 384 分音" 选项打开）
+3. **原始 `beats` 值不是 384 的约数**（即 `384 % beats != 0`）
+
+例：
+
+| 输入时长 | 原 `beats` | 384 约数？ | reduce=true 输出 | reduce=false 输出 |
+|---|---|---|---|---|
+| `[8:1]` | 8 | 是 | `[8:1]` 不动 | `[8:1]` 不动 |
+| `[24:6]` | 24 | 是 | `[24:6]` 不动 | `[24:6]` 不动 |
+| `[48:5]` | 48 | 是 | `[48:5]` 不动 | `[48:5]` 不动 |
+| `[1:3]` | 1 | 是 | `[1:3]` 不动 | `[1:3]` 不动 |
+| `[7:1]` | 7 | 否 | 改写到 384 grid | `[7:1]` 不动 |
+| `[500:1]` | 500 | 否 | `[384:1]`（units=1） | `[500:1]` 不动 |
+| `[2000:1]` | 2000 | 否 | units=0 → 进零时长分支 | `[2000:1]` 不动 |
+| `[120#24:3]` | (含 `#`) | n/a | `[120#24:3]` 不动 | `[120#24:3]` 不动 |
+
+#### 触发改写时的零时长分支
+
+当三个条件都成立、且改写后 `units = round(numerator/beats * 384) ≤ 0` 时，
+策略由 token 类决定（`renderTokenForGrid` 传不同的
+`DurationNormalizationOptions`）：
+
+| Token 类 | `allowZeroDuration` | `omitZeroDurationBracket` | 含义 |
+|---|---|---|---|
+| Touch hold | true | false | 输出 `[1:0]`，bracket 保留（touch 的 `[]` 语法有可见性） |
+| Note hold | true | true | **整段 bracket 删除**，token 留 `h` 字符（例：`2h[2000:1]` → `2h`） |
+| Slide duration | false | false | Slide 必须有时长，floor 到 `units=1`，输出 `[384:1]` |
+
+回归 `ChartBatchTransformSpec.cpp:1216-1228` 验证 `[2000:1]`（non-384）→
+`2h` 与 `[1:3]`（384 约数）→ 不动；`:1230-1241` 验证 `[500:1]` →
+`[384:1]`；`:1244-1255` 验证 `[192:1]` 已是 384 约数 → 不动。
+
+### 3.3 触发小节切分的事件
+
+主 parse 循环（`ChartNormalization.cpp:1334-1463`）按字符走，下面四种事件
+会切小节，其余字符都只是更新 token 或推进 phase：
+
+| 事件 | 行为 | 实现 |
 |---|---|---|
-| `startAtNewMeasure` | true | 把选区起点视为小节边界；重写之前的部分小节上下文 |
-| `reduceTo384Grid` | true | 把非 384 的细分量化到最近的 384 网格 |
+| `(BPM)` 且数值 ≠ currentBpm | 关闭当前 measure → 开新 measure（同 meter）→ 把 `(BPM)` 作为 leading boundary 放在新 measure 顶端 | `:1387-1392` `restartMeasureAtCurrentPosition` |
+| `(BPM)` 但数值 = currentBpm | **不切**，只挂在当前位置作 inline `StandaloneText` 注解 | `:1393-1396` `appendBoundaryItem` |
+| 合法 `\|\| x/y` 内联 time-signature | 关闭当前 measure → 开新 measure（**新 meter**）→ 把 `\|\| <normalized>` 作为 leading boundary | `:1352-1363`，靠 `parseInlineTimeSignatureComment`（`SimaiTimingMetadata.cpp:70+`） |
+| 其他 `\|\| ...` 注释（非 time-signature） | 关闭当前 measure → 开新 measure（**保留原 meter、保留相位进位**）→ 把注释原文作为 leading boundary | `:1364-1367` `splitMeasureAtCurrentPosition` |
+| `{N}` subdivision 变化 | **不切小节**，只更新 `currentBeats` | `:1403-1417` |
 
-对话框（`MainWindow.DocumentTransforms.cpp:72-86`）显示两个 checkbox：
+`splitMeasureAtCurrentPosition` 与 `restartMeasureAtCurrentPosition` 的关键
+差别：前者把 `currentMeasure.startPhaseWhole + currentPositionWhole` 作为
+新 measure 的 startPhase（让后续 token 继续填满半个小节），后者把新
+measure 的 startPhase 设回 0（小节从头开始）。
 
-- "选区起点视作小节线开始 / Treat selection start as measure boundary"
-- "统一近似至384分音 / Snap approximately to 384 grid"
+### 3.4 输出版面规则
 
-选择项通过编辑器偏好 JSON 跨会话持久化。
+| 规则 | 实现 |
+|---|---|
+| 每个 measure 一行，前缀 `{N}` 由渲染器从 moment 位置反推 | `renderMeasureLine` `:1061-1066` |
+| 同一 moment 内多 token 用 `/` 串（合击） | `buildMomentText` `:729-747` |
+| 同一 moment 内多 group 用 `` ` `` 串（连击） | 同上 |
+| measure line 内 beat 边界用空格分隔 | approximate: `:910-912`；exact: `:1048-1050` |
+| 每 emit 4 个 measure line 追加一个空行 | `:1483-1485` `(emittedMeasureLines % 4) == 0` |
+| 末尾连续空行剪掉 | `:1487-1489` |
+| `(BPM)` 与 `\|\| x/y` 相邻 boundary item 合并为单行 `(180) \|\| 4/4` | `appendBoundaryItems` `:785-826`；回归 `ChartBatchTransformSpec.cpp:1258-1268` |
+| `normalizeChartText`（全文路径）在末尾追加单独的 `E` | `:1490-1492`，由 `appendTerminalMarker=true` 触发 |
+| `normalizeChartSelectionText`（选区路径）**不**追加 `E` | 调用时传 `appendTerminalMarker=false`（`:1568-1574`） |
 
-### 算法特性
+### 3.5 Token 规范化
 
-- **无 parser 的 token 级 transform。** 作用于谱面文本而不是 parse 出的
-  AST，从而保留注释、空白、谱面作者的书写风格仍然附着在正确的 token 上。
-- **每行一小节。** 输出把每个小节重新格式化到独立行，前缀 `{N}` 细分声明。
-- **time-signature 感知。** 读 `SimaiTimingMetadata` 获取整谱 time-signature；
-  尊重 inline `|| x/y` overrides，它们会截断当前小节并重启 grid 基准。
-- **BPM 触发 grid 重启。** 一行 `(BPM)` 在那一点重启细分基准。
-- **Modifier 顺序典范化。** 单个 note 内部的 modifier 重排为典范的
-  `b x h f`，依据
-  `SIMAI_NORMALIZATION_TIME_SIGNATURE_RESEARCH.md` 的决定。
+`canonicalizeToken`（`:628-651`）依次尝试三种解析器；任意一个成功就用对应
+build 函数重组并返回；**三个都失败则原文（仅 trim）输出**。
 
-### 错误 / 中止行为
+| Token 类 | 识别条件 | parse 接受的修饰符 | 重组顺序 | 备注 |
+|---|---|---|---|---|
+| Touch | 首字符 `C`（可带 `1`/`2`）或 `A`/`B`/`D`/`E` + lane 数字 | `b` `x` `h` `f` | prefix → `b` → `x` → `h` → `f` → bracketSuffix | bracket 与 `h` 互为充要：有 `[…]` 必须有 `h`，反之亦然 |
+| Note | 首字符 1-8 lane 数字、不含 slide operator、不是纯数字串 | **仅** `b` `x` `h`；其余字符（包括 `f`、`?`、`!`、`@` 等）落入 `extraModifiers` | lane → `sortedModifierText(extraModifiers)` → `b` → `x` → `h` → bracketSuffix | `extraModifiers` 按 unicode codepoint 升序排列；bracket 与 `h` 互为充要 |
+| Slide head | 首字符 1-8 lane 数字、含 slide operator `-^v<>Vpqszw` | head 区识别 `b` / `x` / `?` / `!` / `@`（直到第一个 shape 字符）；**`h` 在 head 出现 → 整 token reject** | lane → `sortedModifierText(headExtraModifiers)` → `b` → `x` → core 剩余（trackBreak `b` 插回第一个 `[` 之前） | `?` `!` `@` 同样按 unicode 升序：输出固定为 `!` < `?` < `@` |
+| 都不匹配 | —— | —— | —— | `canonicalizeToken` 返回 `trimmed` 原文（silent passthrough） |
 
-如果输入文本无法重新 tokenize（例如一个跨多个小节的未终止括号组），
-`normalizeChartText()` 返回 `{ ok: false, errorMessage: "..." }`，编辑器
-保持文档不动。绝不会提交部分重写。
+涉及典范顺序的两个细节，前一版 §3 没有讲清：
 
-### 已有详细规格
+1. **「b x h f」严格只成立于 touch**。Note token 不识别 `f` —— `f` 会被
+   当作 extra modifier 排到 `b` 之前；slide head 既不识别 `h` 也不识别
+   `f`。
+2. **「`?` `!` `@` 按 ASCII 排」是隐性规则**。研究文档 decision 7 第二行
+   明文规定，代码通过 `sortedModifierText` 实现，但前一版 §3 完全没写。
 
-`docs/SIMAI_NORMALIZATION_TIME_SIGNATURE_RESEARCH.md` 承载完整的设计依据：
-10 条最终决策、9 项架构发现、前置条件、输出规则、空行策略、modifier 顺序
-规范、5 阶段实现拆分。
+### 3.6 `changedCount` / `measureLineCount` 语义
+
+`:1497`：
+
+```cpp
+result.changedCount = result.text == input ? 0 : qMax(1, emittedMeasureLines);
+result.measureLineCount = emittedMeasureLines;
+```
+
+- `changedCount` **不是**改动 token / atom 数，而是「未改动 → 0；改动 →
+  emit 出的 measure 行数（至少 1）」。当 UI 想区分「等价输入 → 提示
+  *Already normalized*」与「实际改动 → 提示 *N measure line(s)*」时（见
+  `MainWindow.DocumentTransforms.cpp:384-389, 432-437`），这个字段是布尔
+  开关 + 大致规模指示，**不应当作精确变更数**。
+- `measureLineCount` 是 emit 的 measure 行数本身（用于 status bar 显示）。
+
+### 3.7 错误 / 中止行为
+
+`buildValidationReport.errorCount > 0` → 直接 return
+`{ ok=false, errorMessage }`，错误文本取自报告中第一条 issue 的本地化消息
+（`summarizeValidationError` `:1068-1075`）。`MainWindow.DocumentTransforms.cpp:369-381`
+把它转成 `QMessageBox::Warning` 弹给用户后保留原文档；**绝不会提交部分
+重写**。
+
+选区路径的额外早退：选区范围越界（`selectionStart < 0`、`selectionEnd <
+selectionStart`、`selectionEnd > fullText.size()`）→
+`{ ok=false, errorMessage="Invalid selection range." }`
+（`:1554-1559`）。
+
+### 3.8 偏好持久化
+
+`chartNormalizationOptionsFromPreferences` /
+`saveChartNormalizationOptionsToPreferences`（`:1501-1526`）把
+`startAtNewMeasure` 与 `reduceTo384Grid` 写入编辑器 preview JSON。
+`onNormalizeWholeChart` 在用户切换 checkbox 时即时回写
+`savePortableState()`（`MainWindow.DocumentTransforms.cpp:341-349`） ——
+即便用户最终取消对话框，对 checkbox 的更改也已被保留。
+
+### 3.9 已有详细规格
+
+`docs/SIMAI_NORMALIZATION_TIME_SIGNATURE_RESEARCH.md` 是设计依据：10 条
+最终决策、9 项架构发现、前置条件、输出规则、空行策略、modifier 顺序
+规范、5 阶段实现拆分。该文档写于实现之前，部分决策已在代码中变形 ——
+例如 decision 9 把 384-grid 描述为唯一基准 + fallback rounding，而当前
+代码通过 `reduceTo384Grid=false` 选项开放了 exact 渲染路径；以本节
+（§3）为准。
 
 ---
 

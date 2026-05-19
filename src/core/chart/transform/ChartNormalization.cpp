@@ -333,31 +333,26 @@ QString normalizePlainDurationSignature(
     bool reduceTo384Grid,
     const DurationNormalizationOptions& options)
 {
+    Q_UNUSED(gridBeats);
+
     Rational durationWhole;
     if (!parsePlainDurationSignature(signature, &durationWhole)) {
         return signature;
     }
 
+    // Rewrite the duration only when (a) the 384-reduce option is on and
+    // (b) the user's beats value is not already a divisor of 384. Outside
+    // that gate the original text is preserved verbatim so authoring intent
+    // (e.g. an existing `[24:6]` vs. its `[4:1]` reduction) survives.
     if (!reduceTo384Grid) {
-        if (durationWhole.isZero()) {
-            if (!options.allowZeroDuration) {
-                return signature;
-            }
-            if (options.omitZeroDurationBracket) {
-                return QString();
-            }
-            return QStringLiteral("1:0");
-        }
-        // Exact-mode formatting keeps the active rendered grid when it can
-        // represent the duration exactly, so users do not see a 16-grid line
-        // collapse its token text back to a shorter unrelated denominator.
-        qint64 renderedUnits = 0;
-        if (gridBeats > 0 && scaleRationalExact(durationWhole, gridBeats, &renderedUnits)) {
-            return QStringLiteral("%1:%2").arg(gridBeats).arg(renderedUnits);
-        }
-        return QStringLiteral("%1:%2")
-            .arg(durationWhole.denominator)
-            .arg(durationWhole.numerator);
+        return signature;
+    }
+    const int colon = signature.indexOf(QLatin1Char(':'));
+    bool beatsOk = false;
+    const int originalBeats = signature.left(colon).trimmed().toInt(&beatsOk);
+    if (beatsOk && originalBeats > 0
+        && (kMaximumSnapSubdivisionBeats % originalBeats) == 0) {
+        return signature;
     }
 
     qint64 units = scaleRationalRounded(durationWhole, kMaximumSnapSubdivisionBeats);
@@ -1060,9 +1055,20 @@ QString renderMeasureLineExact(const RenderMeasure& measure)
 
 QString renderMeasureLine(const RenderMeasure& measure, const ChartNormalizationOptions& options)
 {
-    return options.reduceTo384Grid
-        ? renderMeasureLineApproximate(measure)
-        : renderMeasureLineExact(measure);
+    // reduce=false escapes into the exact (cursor-walking + LCM) renderer
+    // only when the measure actually contains a moment whose position is not
+    // a divisor of 384. Charts that stay on the 384 grid render identically
+    // in both modes — users only see the "preserve precision" effect on
+    // measures that actually need it (e.g. {7}, {9}, {15} subdivisions).
+    if (!options.reduceTo384Grid) {
+        for (const MeasureMoment& moment : measure.moments) {
+            const qint64 denom = moment.positionWhole.denominator;
+            if (denom > 0 && (kMaximumSnapSubdivisionBeats % denom) != 0) {
+                return renderMeasureLineExact(measure);
+            }
+        }
+    }
+    return renderMeasureLineApproximate(measure);
 }
 
 QString summarizeValidationError(const SimaiNativeValidationReport& report)

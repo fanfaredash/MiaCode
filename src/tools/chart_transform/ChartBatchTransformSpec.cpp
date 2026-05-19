@@ -1192,8 +1192,8 @@ void runInlineSpecs(QTextStream& err, int* failed)
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts a simple valid chart"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("{16}A1xhf[16:4],,,, ,,,, ,,,, ,,,,\nE"),
-            QStringLiteral("normalize whole chart emits a single 4/4 measure line with canonical touch modifier order"),
+            QStringLiteral("{16}A1xhf[4:1],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize whole chart leaves a 384-divisor touch-hold duration untouched while still canonicalizing modifier order"),
             failed,
             err
         );
@@ -1203,11 +1203,11 @@ void runInlineSpecs(QTextStream& err, int* failed)
         const miacode::chart_transform::ChartNormalizationResult normalized =
             miacode::chart_transform::normalizeChartText(
                 QStringLiteral("A1fxh[24:6]/1h[8:0]/1-5[24:3]/1-5[120#24:3],,,,\nE"));
-        expectTrue(normalized.ok, QStringLiteral("normalize whole chart reduces hold and slide durations to the 384 grid"), failed, err);
+        expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts mixed 384-divisor and hash durations"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("{16}A1xhf[16:4]/1h/1-5[16:2]/1-5[120#24:3],,,, ,,,, ,,,, ,,,,\nE"),
-            QStringLiteral("normalize whole chart reduces no-hash durations onto the 384 grid without simplifying past 16th-note width"),
+            QStringLiteral("{16}A1xhf[24:6]/1h[8:0]/1-5[24:3]/1-5[120#24:3],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize whole chart leaves durations untouched when the original beats is a divisor of 384 or the signature carries '#'"),
             failed,
             err
         );
@@ -1220,8 +1220,8 @@ void runInlineSpecs(QTextStream& err, int* failed)
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts the reported dense hold fragment"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("{16}2h,7h,3h,6h, 1h,5h,8h,4h, 7h/3h,8h/4h,5h/1h,2h/6h, 3h/7-3[16:48],8h/4h,5h/1h,6h/2h,\nE"),
-            QStringLiteral("normalize whole chart snaps irreducible hold durations onto the 384 grid, keeps the line grid stable, and collapses zero-length holds"),
+            QStringLiteral("{16}2h,7h,3h,6h, 1h,5h,8h,4h, 7h/3h,8h/4h,5h/1h,2h/6h, 3h/7-3[1:3],8h/4h,5h/1h,6h/2h,\nE"),
+            QStringLiteral("normalize whole chart collapses non-384-divisor zero-length note holds but keeps a 384-divisor slide duration verbatim"),
             failed,
             err
         );
@@ -1389,11 +1389,11 @@ void runInlineSpecs(QTextStream& err, int* failed)
                 input,
                 miacode::simai::SimaiTimingMetadata(),
                 miacode::chart_transform::ChartNormalizationOptions{true, false});
-        expectTrue(normalized.ok, QStringLiteral("exact normalize accepts duration text on a carried 16-grid line"), failed, err);
+        expectTrue(normalized.ok, QStringLiteral("reduce=false on a 384-grid-only measure falls back to approximate"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("{16}1-5[16:2],1,,, {2}, {4},\nE"),
-            QStringLiteral("exact normalize keeps no-hash duration text aligned with the rendered local grid before later empty chunks are minimized"),
+            QStringLiteral("{16}1-5[8:1],1,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("reduce=false on a measure whose moments are all on the 384 grid renders identically to reduce=true (no chunk collapse)"),
             failed,
             err
         );
