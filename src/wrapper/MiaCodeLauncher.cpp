@@ -245,74 +245,92 @@ DllCategory classifyDll(const std::wstring& name)
 
 void showMissingDllMessage(const std::wstring& missingDll, DWORD lastError)
 {
-    std::wstring header;
-    std::wstring solution;
+    // Bilingual layout: simplified Chinese block on top, English block on
+    // bottom, separator line in between. Each block is self-contained so
+    // a reader can ignore the other language entirely.
+    std::wstring zh;
+    std::wstring en;
     switch (classifyDll(missingDll)) {
     case DllCategory::VCRuntime:
-        header = L"缺少 Visual C++ 2015-2022 執行時程式庫: " + missingDll + L"\n"
-                 L"Missing Visual C++ 2015-2022 Runtime: " + missingDll;
-        solution = L"解決方案 / Solution:\n"
-                   L"下載並安裝 / Download and install:\n"
-                   L"https://aka.ms/vs/17/release/vc_redist.x64.exe";
+        zh = L"缺少 Visual C++ 2015-2022 运行库: " + missingDll + L"\n\n"
+             L"解决方案:\n"
+             L"下载并安装:\n"
+             L"https://aka.ms/vs/17/release/vc_redist.x64.exe";
+        en = L"Missing Visual C++ 2015-2022 Runtime: " + missingDll + L"\n\n"
+             L"Solution:\n"
+             L"Download and install:\n"
+             L"https://aka.ms/vs/17/release/vc_redist.x64.exe";
         break;
     case DllCategory::QtPlatform:
-        header = L"缺少 Qt 平台外掛: " + missingDll + L"\n"
-                 L"Missing Qt platform plugin: " + missingDll;
-        solution = L"可能原因 / Possible causes:\n"
-                   L"  1. app\\platforms\\ 子目錄缺失\n"
-                   L"     app\\platforms\\ subfolder is missing\n"
-                   L"  2. 防毒軟體誤判刪除\n"
-                   L"     Antivirus false-positive removal\n"
-                   L"  3. 從 OneDrive 等雲端目錄執行,檔案尚未同步\n"
-                   L"     Running from a OneDrive cloud folder with unsynced files\n\n"
-                   L"解決方案 / Solution:\n"
-                   L"重新解壓 MiaCode-*.zip 到本地非雲端目錄\n"
-                   L"Re-extract MiaCode-*.zip to a local non-cloud folder";
+        zh = L"缺少 Qt 平台插件: " + missingDll + L"\n\n"
+             L"可能原因:\n"
+             L"  1. app\\platforms\\ 子目录缺失\n"
+             L"  2. 杀毒软件误判删除\n"
+             L"  3. 从 OneDrive 等云端目录运行,文件尚未同步\n\n"
+             L"解决方案:\n"
+             L"重新解压 MiaCode-*.zip 到本地非云端目录";
+        en = L"Missing Qt platform plugin: " + missingDll + L"\n\n"
+             L"Possible causes:\n"
+             L"  1. app\\platforms\\ subfolder is missing\n"
+             L"  2. Antivirus false-positive removal\n"
+             L"  3. Running from a OneDrive cloud folder with unsynced files\n\n"
+             L"Solution:\n"
+             L"Re-extract MiaCode-*.zip to a local non-cloud folder";
         break;
     case DllCategory::Qt:
-        header = L"缺少 Qt 執行檔: " + missingDll + L"\n"
-                 L"Missing Qt runtime: " + missingDll;
-        solution = L"解決方案 / Solution:\n"
-                   L"  1. 確認 app\\ 子目錄完整解壓\n"
-                   L"     Verify the app\\ subfolder is fully extracted\n"
-                   L"  2. 若 zip 解壓中斷,重新下載並解壓\n"
-                   L"     If extraction was interrupted, re-download and re-extract\n"
-                   L"  3. 防毒軟體可能誤刪檔案,請將 MiaCode 加入排除清單\n"
-                   L"     Antivirus may have removed the file — add MiaCode to exclusions";
+        zh = L"缺少 Qt 运行库: " + missingDll + L"\n\n"
+             L"解决方案:\n"
+             L"  1. 确认 app\\ 子目录已完整解压\n"
+             L"  2. 若 zip 解压中断, 请重新下载并解压\n"
+             L"  3. 杀毒软件可能误删文件, 请将 MiaCode 加入排除列表";
+        en = L"Missing Qt runtime: " + missingDll + L"\n\n"
+             L"Solution:\n"
+             L"  1. Verify the app\\ subfolder is fully extracted\n"
+             L"  2. If extraction was interrupted, re-download and re-extract\n"
+             L"  3. Antivirus may have removed the file — add MiaCode to exclusions";
         break;
     case DllCategory::DirectX:
-        header = L"缺少 DirectX 執行檔: " + missingDll + L"\n"
-                 L"Missing DirectX runtime: " + missingDll;
-        solution = L"解決方案 / Solution:\n"
-                   L"  1. 確認 app\\ 子目錄完整解壓\n"
-                   L"     Verify the app\\ subfolder is fully extracted\n"
-                   L"  2. 安裝 DirectX End-User Runtime\n"
-                   L"     Install DirectX End-User Runtime:\n"
-                   L"     https://www.microsoft.com/download/details.aspx?id=35";
+        zh = L"缺少 DirectX 运行库: " + missingDll + L"\n\n"
+             L"解决方案:\n"
+             L"  1. 确认 app\\ 子目录已完整解压\n"
+             L"  2. 安装 DirectX End-User Runtime:\n"
+             L"     https://www.microsoft.com/download/details.aspx?id=35";
+        en = L"Missing DirectX runtime: " + missingDll + L"\n\n"
+             L"Solution:\n"
+             L"  1. Verify the app\\ subfolder is fully extracted\n"
+             L"  2. Install DirectX End-User Runtime:\n"
+             L"     https://www.microsoft.com/download/details.aspx?id=35";
         break;
     case DllCategory::BASS:
-        header = L"缺少 BASS 音訊執行檔: " + missingDll + L"\n"
-                 L"Missing BASS audio runtime: " + missingDll;
-        solution = L"解決方案 / Solution:\n"
-                   L"重新解壓 MiaCode-*.zip,保留完整 app\\ 子目錄\n"
-                   L"Re-extract MiaCode-*.zip preserving the full app\\ subfolder";
+        zh = L"缺少 BASS 音频运行库: " + missingDll + L"\n\n"
+             L"解决方案:\n"
+             L"重新解压 MiaCode-*.zip, 保留完整的 app\\ 子目录";
+        en = L"Missing BASS audio runtime: " + missingDll + L"\n\n"
+             L"Solution:\n"
+             L"Re-extract MiaCode-*.zip preserving the full app\\ subfolder";
         break;
     case DllCategory::Generic:
     default:
-        header = L"缺少必要 DLL: " + missingDll + L"\n"
-                 L"Missing required DLL: " + missingDll;
-        solution = L"解決方案 / Solution:\n"
-                   L"  1. 重新解壓 MiaCode-*.zip 到本地目錄\n"
-                   L"     Re-extract MiaCode-*.zip to a local folder\n"
-                   L"  2. 確認防毒軟體未誤刪檔案\n"
-                   L"     Confirm antivirus did not remove the file";
+        zh = L"缺少必要 DLL: " + missingDll + L"\n\n"
+             L"解决方案:\n"
+             L"  1. 重新解压 MiaCode-*.zip 到本地目录\n"
+             L"  2. 确认杀毒软件未误删文件";
+        en = L"Missing required DLL: " + missingDll + L"\n\n"
+             L"Solution:\n"
+             L"  1. Re-extract MiaCode-*.zip to a local folder\n"
+             L"  2. Confirm antivirus did not remove the file";
         break;
     }
 
-    wchar_t errBuf[96];
-    ::swprintf_s(errBuf, L"\n\n錯誤碼 / Error: 0x%08lX (%lu)", lastError, lastError);
+    wchar_t errZh[96];
+    ::swprintf_s(errZh, L"\n\n错误代码: 0x%08lX (%lu)", lastError, lastError);
+    wchar_t errEn[96];
+    ::swprintf_s(errEn, L"\n\nError code: 0x%08lX (%lu)", lastError, lastError);
 
-    const std::wstring body = header + L"\n\n" + solution + errBuf;
+    const std::wstring body =
+        zh + errZh +
+        L"\n\n────────────────────────────────────\n\n" +
+        en + errEn;
     ::MessageBoxW(nullptr, body.c_str(), L"MiaCode",
                   MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
 }
@@ -451,9 +469,12 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 
     if (::GetFileAttributesW(realExe.c_str()) == INVALID_FILE_ATTRIBUTES) {
         const std::wstring msg =
-            L"找不到 app\\MiaCode.exe / Real MiaCode.exe not found at:\n" + realExe +
-            L"\n\n解決方案 / Solution:\n"
-            L"重新解壓 MiaCode-*.zip,保留完整 app\\ 子目錄\n"
+            L"找不到 app\\MiaCode.exe\n" + realExe + L"\n\n"
+            L"解决方案:\n"
+            L"重新解压 MiaCode-*.zip, 保留完整的 app\\ 子目录"
+            L"\n\n────────────────────────────────────\n\n"
+            L"Real MiaCode.exe not found at:\n" + realExe + L"\n\n"
+            L"Solution:\n"
             L"Re-extract MiaCode-*.zip preserving the full app\\ subfolder";
         ::MessageBoxW(nullptr, msg.c_str(), L"MiaCode",
                       MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
