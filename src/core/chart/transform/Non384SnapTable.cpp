@@ -40,19 +40,35 @@ inline qint64 roundDivPositive(qint64 num, qint64 den)
     return (num + den / 2) / den;
 }
 
+struct SnapCandidate
+{
+    int q = 0;
+    qint64 maxErrorNum = 0;     // max over x of |x*q - p*y|; per-x fractional
+                                // error is maxErrorNum / (q*y)
+    QVector<int> pByX;
+};
+
 UniformSnapTable computeUniformSnapTable(int y)
 {
     UniformSnapTable result;
     if (y <= 0 || y > kSnap384Modulus) {
         return result;
     }
-    const qint64 fourY = static_cast<qint64>(4) * y;
+    // Enumerate every q | 384 with q <= 8y that maps every x in [0, y) to
+    // a distinct round(q*x/y). Among those, pick the q with the smallest
+    // max fractional error (maxErrorNum / (q*y)). On ties, prefer the
+    // smaller q -- a smaller subdivision is simpler to express and the
+    // achievable error is identical.
+    const qint64 eightY = static_cast<qint64>(8) * y;
+    QVector<SnapCandidate> candidates;
+    candidates.reserve(divisorsOf384Ascending().size());
     for (int q : divisorsOf384Ascending()) {
-        if (static_cast<qint64>(q) > fourY) {
+        if (static_cast<qint64>(q) > eightY) {
             break;
         }
         QSet<int> seen;
         QVector<int> ps(y);
+        qint64 maxErr = 0;
         bool ok = true;
         for (int x = 0; x < y; ++x) {
             const qint64 p = roundDivPositive(static_cast<qint64>(q) * x, static_cast<qint64>(y));
@@ -63,13 +79,33 @@ UniformSnapTable computeUniformSnapTable(int y)
             }
             seen.insert(pi);
             ps[x] = pi;
+            const qint64 errNum = qAbs(static_cast<qint64>(x) * q - p * static_cast<qint64>(y));
+            if (errNum > maxErr) {
+                maxErr = errNum;
+            }
         }
         if (ok) {
-            result.q = q;
-            result.pByX = ps;
-            return result;
+            candidates.append({q, maxErr, ps});
         }
     }
+    if (candidates.isEmpty()) {
+        return result;
+    }
+
+    int bestIdx = 0;
+    for (int i = 1; i < candidates.size(); ++i) {
+        const SnapCandidate& best = candidates[bestIdx];
+        const SnapCandidate& cand = candidates[i];
+        // err_cand < err_best
+        //   <=> cand.maxErrorNum / cand.q < best.maxErrorNum / best.q
+        //   <=> cand.maxErrorNum * best.q < best.maxErrorNum * cand.q
+        // On strict tie keep the earlier (smaller q) candidate.
+        if (cand.maxErrorNum * best.q < best.maxErrorNum * cand.q) {
+            bestIdx = i;
+        }
+    }
+    result.q = candidates[bestIdx].q;
+    result.pByX = candidates[bestIdx].pByX;
     return result;
 }
 

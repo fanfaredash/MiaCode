@@ -1261,8 +1261,8 @@ void runInlineSpecs(QTextStream& err, int* failed)
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts a non-384-divisor hold duration"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("{16}1h[8:1],,,, ,,,, ,,,, ,,,,\nE"),
-            QStringLiteral("normalize whole chart snaps non-384 hold duration through the uniform table (y=7 -> q=8)"),
+            QStringLiteral("{16}1h[48:7],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize whole chart snaps non-384 hold duration through the uniform table (y=7 -> q=48)"),
             failed,
             err
         );
@@ -1274,8 +1274,8 @@ void runInlineSpecs(QTextStream& err, int* failed)
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts a non-384-divisor slide duration"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("{16}1-5[6:1],,,, ,,,, ,,,, ,,,,\nE"),
-            QStringLiteral("normalize whole chart snaps non-384 slide duration through the uniform table (y=5 -> q=6)"),
+            QStringLiteral("{16}1-5[32:6],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize whole chart snaps non-384 slide duration through the uniform table (y=5 -> q=32)"),
             failed,
             err
         );
@@ -1465,15 +1465,16 @@ void runInlineSpecs(QTextStream& err, int* failed)
     }
 
     // Uniform-q snap table: per y, every x in [0, y) maps to a single q.
-    // Spot checks + global collision-freedom + JSON round-trip.
+    // q is picked as the LARGEST divisor of 384 with q <= 8y that keeps
+    // every x distinct -- minimizing per-x error.
     {
         miacode::chart_transform::ensureUniformSnapTableReady();
 
         const miacode::chart_transform::SnapResult r5 =
             miacode::chart_transform::snapXOverY(1, 5);
         expectTrue(
-            r5.ok && r5.q == 6 && r5.p == 1,
-            QStringLiteral("uniform snap: 1/5 -> 1/6 (y=5 picks q=6, the smallest collision-free q in {q|384, q<=20})"),
+            r5.ok && r5.q == 32 && r5.p == 6,
+            QStringLiteral("uniform snap: 1/5 -> 6/32 (y=5 picks q=32, largest collision-free divisor of 384 with q<=40)"),
             failed,
             err
         );
@@ -1481,8 +1482,8 @@ void runInlineSpecs(QTextStream& err, int* failed)
         const miacode::chart_transform::SnapResult r20 =
             miacode::chart_transform::snapXOverY(4, 20);
         expectTrue(
-            r20.ok && r20.q == 24 && r20.p == 5,
-            QStringLiteral("uniform snap: 4/20 -> 5/24 (y=20 picks q=24, different from 1/5 even though values match)"),
+            r20.ok && r20.q == 128 && r20.p == 26,
+            QStringLiteral("uniform snap: 4/20 -> 26/128 (y=20 picks q=128, distinct from 1/5 even though values match)"),
             failed,
             err
         );
@@ -1490,8 +1491,20 @@ void runInlineSpecs(QTextStream& err, int* failed)
         const miacode::chart_transform::SnapResult r7 =
             miacode::chart_transform::snapXOverY(1, 7);
         expectTrue(
-            r7.ok && r7.q == 8 && r7.p == 1,
-            QStringLiteral("uniform snap: 1/7 -> 1/8 (y=7 picks q=8)"),
+            r7.ok && r7.q == 48 && r7.p == 7,
+            QStringLiteral("uniform snap: 1/7 -> 7/48 (y=7 picks q=48, largest collision-free divisor of 384 with q<=56)"),
+            failed,
+            err
+        );
+
+        // Tie-break case: y=9 has q=48 and q=64 tied at frac err 1/144 (both
+        // maxErrorNum=3 and =4 respectively, but 3/(48*9) == 4/(64*9)).
+        // The rule picks the smaller q.
+        const miacode::chart_transform::SnapResult r9 =
+            miacode::chart_transform::snapXOverY(1, 9);
+        expectTrue(
+            r9.ok && r9.q == 48 && r9.p == 5,
+            QStringLiteral("uniform snap: 1/9 -> 5/48 (tie between q=48 and q=64 at min frac err; smaller q wins)"),
             failed,
             err
         );
@@ -1517,8 +1530,8 @@ void runInlineSpecs(QTextStream& err, int* failed)
         const miacode::chart_transform::SnapResult rCarry =
             miacode::chart_transform::snapXOverY(11, 5);
         expectTrue(
-            rCarry.ok && rCarry.q == 6 && rCarry.p == 13,
-            QStringLiteral("uniform snap: x >= y carries whole notes (11/5 = 2 + 1/5 -> 2*6 + 1 = 13/6)"),
+            rCarry.ok && rCarry.q == 32 && rCarry.p == 70,
+            QStringLiteral("uniform snap: x >= y carries whole notes (11/5 = 2 + 1/5 -> 2*32 + 6 = 70/32)"),
             failed,
             err
         );
@@ -1557,8 +1570,8 @@ void runInlineSpecs(QTextStream& err, int* failed)
             const miacode::chart_transform::SnapResult after =
                 miacode::chart_transform::snapXOverY(2, 5);
             expectTrue(
-                after.ok && after.q == 6 && after.p == 2,
-                QStringLiteral("uniform snap: 2/5 still maps to 2/6 after JSON load round-trip"),
+                after.ok && after.q == 32 && after.p == 13,
+                QStringLiteral("uniform snap: 2/5 still maps to 13/32 after JSON load round-trip"),
                 failed,
                 err
             );
