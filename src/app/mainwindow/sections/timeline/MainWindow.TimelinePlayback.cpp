@@ -1289,23 +1289,7 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
         state_.qtPreviewDisplayRefreshConsecutiveWatchdogs_ = 0;
     };
 
-    // beta50 followup — Stop-button regression fix:
-    //
-    // qtPreviewPlaybackReturnSecond_ ("R" in the spec, the entry point Stop
-    // is supposed to return to) used to be overwritten on every play press
-    // — including the resume-from-pause case. That meant after
-    //   Play 0 → pause 10 → ▶ → pause 30 → Stop
-    // R got bumped to 10 by the resume, so Stop sent us to 10 instead of
-    // the original 0. From the user's POV the Stop button "behaved like
-    // pause" because R kept following the last pause point around.
-    //
-    // R should only be updated when the play press is starting a *new*
-    // session, not when it's just continuing one. The fast-resume branch
-    // below (PausedExact / PausedAnchored retained mode) is "continue an
-    // existing session"; the full-prepare path that follows the branch is
-    // "start a new session". So move the R-update into the full-prepare
-    // arm and let fast-resume preserve whatever R was set on the original
-    // play press.
+    state_.qtPreviewPlaybackReturnSecond_ = requestedSecond;
     state_.qtPreviewPlaybackEndSecond_ = qMax(0.0, previewPlaybackEndSeconds());
     owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
     state_.pausedSeekMediaPending_ = false;
@@ -1351,12 +1335,6 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
             return true;
         }
     }
-    // Full-prepare arm — this is a fresh session, so the Stop-return point
-    // updates to where the user just pressed play from. Anything that got
-    // here either had no retained pause state (first-time play, post-Stop
-    // play, after chart reload) or had its retained state invalidated
-    // (Invalidated mode falls through to here too).
-    state_.qtPreviewPlaybackReturnSecond_ = requestedSecond;
     state_.previewStartupSyncPending_ = true;
     state_.previewLateVideoStartPending_ = false;
     state_.previewStartupAudioPrepared_ = false;
