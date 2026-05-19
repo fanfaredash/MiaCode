@@ -54,16 +54,16 @@ UniformSnapTable computeUniformSnapTable(int y)
     if (y <= 0 || y > kSnap384Modulus) {
         return result;
     }
-    // Enumerate every q | 384 with q <= 8y that maps every x in [0, y) to
+    // Enumerate every q | 384 with q <= 6y that maps every x in [0, y) to
     // a distinct round(q*x/y). Among those, pick the q with the smallest
     // max fractional error (maxErrorNum / (q*y)). On ties, prefer the
     // smaller q -- a smaller subdivision is simpler to express and the
     // achievable error is identical.
-    const qint64 eightY = static_cast<qint64>(8) * y;
+    const qint64 sixY = static_cast<qint64>(6) * y;
     QVector<SnapCandidate> candidates;
     candidates.reserve(divisorsOf384Ascending().size());
     for (int q : divisorsOf384Ascending()) {
-        if (static_cast<qint64>(q) > eightY) {
+        if (static_cast<qint64>(q) > sixY) {
             break;
         }
         QSet<int> seen;
