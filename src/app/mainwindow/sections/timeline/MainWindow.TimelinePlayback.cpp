@@ -732,11 +732,13 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
 
 double MainWindow::currentPreviewAuthoritativeAudioClockSecond() const
 {
+    // G1 Commit 4: wall-clock is now the master timeline. BASS handles
+    // audio output, but chart-second comes from qtPreviewElapsed_ —
+    // a monotonic QElapsedTimer that doesn't suffer from buffer
+    // underrun, tempo-stream stalls, or the 0.5x ramp-up race.
+    // See docs/PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §5.1, §6.1.
     if (previewStartupSyncPending_ || previewLateVideoStartPending_) {
         return previewStartupPreparedSecond_;
-    }
-    if (previewSfxRuntime_ != nullptr) {
-        return previewSfxRuntime_->authoritativePlaybackSecond();
     }
     if (qtPreviewPlaying_) {
         const double elapsedSeconds = static_cast<double>(qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
@@ -1484,17 +1486,17 @@ void MainWindow::TimelineSection::onQtPreviewTick()
     }
     const double elapsedSeconds = static_cast<double>(state_.qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
     const double fallbackSecond = state_.qtPreviewStartSecond_ + (elapsedSeconds * state_.previewPlaybackRate_);
-    double second = fallbackSecond;
-    bool hasAudioClock = false;
-    if (state_.previewSfxRuntime_ == nullptr) {
-        second = fallbackSecond;
-    } else {
-        second = state_.previewSfxRuntime_->syncPreviewPlaybackClockTransaction(fallbackSecond);
-        hasAudioClock = true;
+    // G1 Commit 4: chart-second is now the wall-clock value directly. The runtime sync call is
+    // still made here — it drains the SFX timeline, arms the next BASS_SYNC_POS, and emits the
+    // `bass_status` debug row — but its return value (the BASS-master-mixer cursor) is no longer
+    // authoritative. Commit 5 deletes the call entirely once a thin per-tick `drainSfxBefore`
+    // replacement lands. `hasAudioClock` becomes false so the downstream diag paths stop treating
+    // the chart-second as audio-derived.
+    if (state_.previewSfxRuntime_ != nullptr) {
+        state_.previewSfxRuntime_->syncPreviewPlaybackClockTransaction(fallbackSecond);
     }
-    // Pass AUDIO time to onQtPreviewTickAtSecond. Smoothing happens inside, applied only to the
-    // scene playhead (for smooth visible motion) — SFX drain and video stage sync must stay on
-    // audio time so that audio/video/SFX remain aligned with BGM.
+    const double second = fallbackSecond;
+    const bool hasAudioClock = false;
     onQtPreviewTickAtSecond(second, fallbackSecond, hasAudioClock);
 }
 
@@ -1502,33 +1504,21 @@ double MainWindow::TimelineSection::applyVisualClockSmoothing(
     double audioSecond, double fallbackSecond, bool hasAudioClock)
 {
     Q_UNUSED(fallbackSecond);
-    // Tunables — kept local to avoid leaking into public headers. Chosen for a 60fps / 16.67ms
-    // target.
+    Q_UNUSED(hasAudioClock);
+    // G1 Commit 4: smoothing collapsed to pass-through.
     //
-    // Tier 2A retune (2026-04-26):
-    //  - Snap threshold lowered from 350ms → 50ms (~3 vsyncs). With the QRhi video-surface
-    //    path landed, the typical stall is now ~50-100ms (DXGI back-pressure + scheduler
-    //    quantum). At the old 350ms threshold those stalls fell BELOW snap and got absorbed
-    //    over 6-8 frames of slow-motion catch-up — visually that reads as "smeared" motion.
-    //    Snapping at 50ms turns the stall into one frame jump + immediate audio-locked
-    //    motion afterwards, which matches what users perceive as smooth.
-    //  - kVisualClockMaxStepScale kept at 1.5 — ≤50ms drifts are still smoothed normally.
-    //  - kVisualClockCatchupRate kept at 0.30 — applies inside the smoothed band.
-    constexpr double kVisualClockMaxStepScale = 1.50;
-    constexpr double kVisualClockMinStepScale = 0.0;  // never retreat visually
-    constexpr double kVisualClockCatchupRate = 0.30;  // close ~30% of drift per tick
-    constexpr double kVisualClockSnapSeconds = 0.050;  // drift > 50ms → snap, treat as seek
-
-    // Tier 2A predictive playhead. The audio-time sample we receive corresponds to "where audio
-    // was when sampled"; the frame we render off it won't be visible until at least one vsync
-    // later (~16.7ms at 60Hz, on top of the GUI→render→composite→present pipeline). Bias the
-    // returned visual time forward by `lookaheadSeconds` so the rendered scene matches the
-    // audio moment when it's actually visible — eliminates the perceived "audio leads video by
-    // one frame" lag that survives smoothing because smoothing only fights variance, not
-    // pipeline latency. Crucially, `state_.qtPreviewVisualClockSecond_` keeps tracking the
-    // un-biased smoothed audio time, so the smoothing math (drift, catchup, snap) stays
-    // coherent across ticks — the lookahead is purely a per-frame display-time shift applied
-    // to the *return value*. Computed once here so every return path applies the same shift.
+    // The pre-G1 implementation existed to absorb jitter in the BASS-master-mixer cursor
+    // (~50-100ms stalls from DXGI back-pressure, tempo-stream stalls, buffer underrun).
+    // With wall-clock now the master timeline (`qtPreviewElapsed_`), the input here is
+    // monotonic and rate-correct by construction — there is nothing to smooth.
+    //
+    // What's preserved: the lookahead-vsync shift. That compensates for GPU pipeline
+    // latency (GUI → render → composite → present takes 1-2 vsyncs after the tick that
+    // samples chart-second) and is independent of the audio backend, so it survives the
+    // clock flip. State variables are still maintained so debug overlays and the
+    // smoothing-enabled toggle continue to work without dangling references.
+    //
+    // See docs/PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §3.6, §5.3, §6.1 step 4.
     const qint64 targetIntervalNs = qMax<qint64>(1, previewCanvasTargetFrameIntervalNs());
     const double playbackRate = qMax(0.0, state_.previewPlaybackRate_);
     const double targetStepSeconds =
@@ -1536,99 +1526,10 @@ double MainWindow::TimelineSection::applyVisualClockSmoothing(
     const double lookaheadVsyncs = miacode::debug_options::previewVisualLookaheadVsyncs();
     const double lookaheadSeconds = targetStepSeconds * lookaheadVsyncs;
 
-    if (!miacode::debug_options::previewVisualSmoothingEnabled()) {
-        // Feature disabled: pass audio time through unchanged but keep state coherent so that
-        // re-enabling mid-playback doesn't see stale baselines. Lookahead still applies — it's
-        // a display-time shift, independent of smoothing.
-        state_.qtPreviewVisualClockSecond_ = audioSecond;
-        state_.qtPreviewVisualClockLastAudioSecond_ = audioSecond;
-        state_.qtPreviewVisualClockInitialized_ = true;
-        return audioSecond + lookaheadSeconds;
-    }
-
-    // Not initialized (first tick of the session or just after a seek / resume): sync hard.
-    if (!state_.qtPreviewVisualClockInitialized_) {
-        state_.qtPreviewVisualClockSecond_ = audioSecond;
-        state_.qtPreviewVisualClockLastAudioSecond_ = audioSecond;
-        state_.qtPreviewVisualClockInitialized_ = true;
-        return audioSecond + lookaheadSeconds;
-    }
-
-    const double audioDelta = audioSecond - state_.qtPreviewVisualClockLastAudioSecond_;
+    state_.qtPreviewVisualClockSecond_ = audioSecond;
     state_.qtPreviewVisualClockLastAudioSecond_ = audioSecond;
-
-    // Big drift (seek, pause/resume gap, audio backend glitch): snap to audio. Smoothing cannot
-    // help across discontinuities — better to take the one-frame jump than stay 300ms behind for
-    // the next dozen frames.
-    const double driftBeforeSeconds = audioSecond - state_.qtPreviewVisualClockSecond_;
-    if (qAbs(driftBeforeSeconds) > kVisualClockSnapSeconds) {
-        state_.qtPreviewVisualClockSecond_ = audioSecond;
-        // Rate-limit the snap log so a flurry of audio-clock jumps (which can happen on slow
-        // render cycles when wall_ms balloons to 80+ms) doesn't fill the GUI hot path with
-        // file-I/O-blocking writes — each appendLine call costs 0-50ms depending on disk state.
-        if (miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
-            const qint64 nowMs = state_.qtPreviewWatchdogElapsed_.elapsed();
-            const qint64 sampleMs = miacode::debug_options::previewFramePacingDiagnosticSampleMs();
-            if (state_.qtPreviewVisualClockDiagLastLogMs_ < 0
-                || nowMs - state_.qtPreviewVisualClockDiagLastLogMs_ >= sampleMs) {
-                state_.qtPreviewVisualClockDiagLastLogMs_ = nowMs;
-                appendPreviewFramePacingDiagLog(
-                    QStringLiteral("visual_clock_snap"),
-                    QStringLiteral("drift_ms=%1 audio_second=%2 audio_delta_ms=%3 lookahead_ms=%4")
-                        .arg(driftBeforeSeconds * 1000.0, 0, 'f', 3)
-                        .arg(audioSecond, 0, 'f', 6)
-                        .arg(audioDelta * 1000.0, 0, 'f', 3)
-                        .arg(lookaheadSeconds * 1000.0, 0, 'f', 3)
-                );
-            }
-        }
-        return state_.qtPreviewVisualClockSecond_ + lookaheadSeconds;
-    }
-
-    // Reverse motion (audio went backwards): rate change dips or timing-authority swap can
-    // occasionally produce a tiny negative delta. Pass it through rather than fighting it.
-    if (audioDelta < 0.0) {
-        state_.qtPreviewVisualClockSecond_ = audioSecond;
-        return state_.qtPreviewVisualClockSecond_ + lookaheadSeconds;
-    }
-
-    // Advance toward audio at `audioDelta + catchup * driftBeforeSeconds`, capped at max step.
-    // - When render is steady at 60fps, audioDelta ~= target, catchup ~= 0, visual tracks audio.
-    // - When a slow render cycle makes audioDelta ~= 2*target, cap kicks in at 1.25*target; the
-    //   remaining 0.75*target of drift is absorbed over the next 3-4 frames by catchup.
-    const double rawStep = audioDelta + driftBeforeSeconds * kVisualClockCatchupRate;
-    const double maxStep = targetStepSeconds * kVisualClockMaxStepScale;
-    const double minStep = targetStepSeconds * kVisualClockMinStepScale;
-    const double cappedStep = qBound(minStep, rawStep, maxStep);
-    state_.qtPreviewVisualClockSecond_ += cappedStep;
-
-    // Diagnostic log (rate-limited to sampleMs only, no per-frame "big correction" trigger — that
-    // was cascading into a noise loop where every tick logged, the logging contributed to per-tick
-    // cost, and the cost made every frame look like a "big correction" vs target step).
-    if (miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
-        const qint64 nowMs = state_.qtPreviewWatchdogElapsed_.elapsed();
-        const qint64 sampleMs = miacode::debug_options::previewFramePacingDiagnosticSampleMs();
-        if (state_.qtPreviewVisualClockDiagLastLogMs_ < 0
-            || nowMs - state_.qtPreviewVisualClockDiagLastLogMs_ >= sampleMs) {
-            state_.qtPreviewVisualClockDiagLastLogMs_ = nowMs;
-            const double driftAfterSeconds = audioSecond - state_.qtPreviewVisualClockSecond_;
-            appendPreviewFramePacingDiagLog(
-                QStringLiteral("visual_clock_smoothing"),
-                QStringLiteral(
-                    "audio_delta_ms=%1 step_ms=%2 target_step_ms=%3 drift_before_ms=%4 drift_after_ms=%5 lookahead_ms=%6"
-                )
-                    .arg(audioDelta * 1000.0, 0, 'f', 3)
-                    .arg(cappedStep * 1000.0, 0, 'f', 3)
-                    .arg(targetStepSeconds * 1000.0, 0, 'f', 3)
-                    .arg(driftBeforeSeconds * 1000.0, 0, 'f', 3)
-                    .arg(driftAfterSeconds * 1000.0, 0, 'f', 3)
-                    .arg(lookaheadSeconds * 1000.0, 0, 'f', 3)
-            );
-        }
-    }
-
-    Q_UNUSED(hasAudioClock);
-    return state_.qtPreviewVisualClockSecond_ + lookaheadSeconds;
+    state_.qtPreviewVisualClockInitialized_ = true;
+    return audioSecond + lookaheadSeconds;
 }
 
 void MainWindow::TimelineSection::resetVisualClockSmoothing()
