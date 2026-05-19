@@ -450,12 +450,6 @@ BassPreviewAudioBackend::~BassPreviewAudioBackend()
         engineInitialized_ = false;
     }
 #endif
-    // Best-effort sync flush of the async log writer so any final
-    // teardown breadcrumbs (and any pending events queued during the
-    // destructor itself) reach disk before the channel/file handles
-    // are released by shutdownAsyncLogWriter() in main(). Bounded so
-    // a stuck writer can't block process teardown.
-    miacode::debug_log::flushAsyncLogWriter(500);
 }
 
 QString BassPreviewAudioBackend::backendId() const
@@ -909,14 +903,6 @@ void BassPreviewAudioBackend::invalidateRetainedPlaybackState(const QString& rea
             .arg(reason)
             .arg(retainedPlaybackModeLabel(previousMode)),
         true);
-    // Crash-forensics checkpoint: this is the first event of a fresh
-    // init-window cycle and the most likely transition to lose to the
-    // async log writer on crash. A short, bounded sync flush keeps the
-    // "previous=<mode>" breadcrumb on disk before any downstream BASS
-    // call has a chance to take the process down. Timeout is generous
-    // enough for normal queue depth (peak observed ~7 entries) and
-    // bounded so a stuck worker can't stall the audio thread.
-    miacode::debug_log::flushAsyncLogWriter(200);
 }
 
 void BassPreviewAudioBackend::updateRetainedBgmState()
@@ -1160,30 +1146,8 @@ void BassPreviewAudioBackend::setBackgroundTrackOffsetSeconds(double seconds)
 void BassPreviewAudioBackend::setBackgroundTrackPlaybackRate(double rate)
 {
     const double normalizedRate = qBound(kBassPreviewMinRate, qIsFinite(rate) ? rate : 1.0, kBassPreviewMaxRate);
-    const bool rateChanged =
-        qAbs(playbackSession_.backgroundTrackPlaybackRate - normalizedRate) > kBassPreviewEpsilonSeconds;
-    // Defensive guard (matches the MiniAudio path which already keys its
-    // reconfigure on engineInitialized_): suppress the retained-state
-    // invalidation when there is literally nothing to invalidate yet —
-    // BASS engine not initialized AND no timeline events prepared AND
-    // retained mode already None. Without this, persisted-rate restore
-    // at startup opens an init window before bass_engine_ready and the
-    // subsequent retained_reset / anchor_transport / transport_ready
-    // chain executes against a null engine. The new rate is still
-    // stored so the next legitimate rebuild_timeline / initialize path
-    // picks it up.
-    const bool nothingToInvalidate = !engineInitialized_
-        && preparedTimeline_.events.isEmpty()
-        && retainedPlaybackMode_ == RetainedPlaybackMode::None;
-    if (rateChanged && !nothingToInvalidate) {
+    if (qAbs(playbackSession_.backgroundTrackPlaybackRate - normalizedRate) > kBassPreviewEpsilonSeconds) {
         invalidateRetainedPlaybackState(QStringLiteral("background_track_rate_changed"));
-    } else if (rateChanged) {
-        // Still emit a tracer so the deferral is visible in the audio
-        // debug log without touching the state machine.
-        appendAudioDebugLog(
-            QString("bass_init op=defer_rate_invalidation reason=pre_engine_no_timeline previous_rate=%1 new_rate=%2")
-                .arg(playbackSession_.backgroundTrackPlaybackRate, 0, 'f', 3)
-                .arg(normalizedRate, 0, 'f', 3));
     }
     playbackSession_.backgroundTrackPlaybackRate = normalizedRate;
     setBackgroundTrackSampleSpeed(playbackSession_.backgroundTrackPlaybackRate);
