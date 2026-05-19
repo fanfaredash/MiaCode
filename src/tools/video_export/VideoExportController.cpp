@@ -4063,11 +4063,20 @@ VideoExportResult VideoExportController::exportPreparedTask(
         // glyph on top so the viewer can tell at a glance that playback
         // hasn't started yet. Once outputSecond crosses leadInSeconds
         // the condition flips false and the overlay vanishes.
+        //
+        // The overlay only makes sense for partial-range exports — a
+        // full-range export already begins at chart 0, and its 2 s
+        // count-down is part of the deliverable (the user expects the
+        // chart's start moment, including the visual count-in if any,
+        // to be in the rendered video). Drawing the pause glyph on the
+        // full-range lead-in was reported as a regression where the
+        // exported `.mp4` looked like it was stuck on a frozen frame
+        // for the first 2 s. partialRangeExport gates the draw.
         const double outputSecondForOverlay =
             static_cast<double>(frameIndex) / static_cast<double>(qMax(1, task.fps));
         const bool inLeadInOverlay =
             outputSecondForOverlay + kTimelineEpsilonSeconds < audioRenderPlan.leadInSeconds;
-        if (inLeadInOverlay) {
+        if (inLeadInOverlay && partialRangeExport) {
             drawLeadInPauseOverlay(&frame);
             if (frameIndex < 6 || frameIndex % 30 == 0) {
                 appendVideoExportLog(
