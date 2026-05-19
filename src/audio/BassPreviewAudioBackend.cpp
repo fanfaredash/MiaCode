@@ -46,6 +46,25 @@ void appendAudioDebugLog(const QString& message)
     miacode::debug_log::appendLine(miacode::debug_log::Channel::Audio, QString(), message);
 }
 
+// G1 Commit 1: unified BASS error-code reporting. Call immediately after
+// any BASS_* / BASS_Mixer_* / BASS_FX_* invocation. If BASS_ErrorGetCode()
+// is non-zero, emits a single `bass_err ctx=<ctx> code=<n>` line to the
+// audio channel. Reads-and-clears the per-thread error, matching BASS's
+// own contract: only the most recent failure is preserved, so callers must
+// query before the next BASS call or risk losing the code.
+void noteBassErr(const char* ctx)
+{
+#ifdef Q_OS_WIN
+    const int code = static_cast<int>(BASS_ErrorGetCode());
+    if (code == 0) {
+        return;
+    }
+    appendAudioDebugLog(QString("bass_err ctx=%1 code=%2").arg(QLatin1String(ctx)).arg(code));
+#else
+    Q_UNUSED(ctx);
+#endif
+}
+
 QString runtimeFilePath(const QString& fileName)
 {
     return QDir(QCoreApplication::applicationDirPath()).filePath(fileName);
@@ -175,14 +194,18 @@ struct BassPreviewAudioBackend::Sample {
     {
         if (source != 0) {
             BASS_Mixer_ChannelFlags(source, BASS_MIXER_CHAN_PAUSE, BASS_MIXER_CHAN_PAUSE);
+            noteBassErr("sample_free/pause_flag");
         }
         if (resampler != 0) {
             BASS_Mixer_ChannelRemove(resampler);
+            noteBassErr("sample_free/mixer_remove");
             BASS_StreamFree(resampler);
+            noteBassErr("sample_free/stream_free_resampler");
             resampler = 0;
         }
         if (source != 0) {
             BASS_StreamFree(source);
+            noteBassErr("sample_free/stream_free_source");
             source = 0;
         }
         bytes.clear();
@@ -196,6 +219,7 @@ struct BassPreviewAudioBackend::Sample {
         }
         const float effective = clampSampleVolume(baseVolume * gain * qMax(0.0, eventGain));
         BASS_ChannelSetAttribute(source, BASS_ATTRIB_VOL, effective);
+        noteBassErr("sample_apply_volume");
     }
 
     bool create(
@@ -317,10 +341,15 @@ struct BassPreviewAudioBackend::Sample {
         }
 
         BASS_ChannelSetAttribute(resamplerStream, BASS_ATTRIB_BUFFER, 0.0f);
+        noteBassErr("sample_create/set_buffer_attr");
         BASS_Mixer_StreamAddChannel(resamplerStream, stream, 0);
+        noteBassErr("sample_create/add_source_to_resampler");
         BASS_Mixer_ChannelFlags(stream, BASS_MIXER_CHAN_PAUSE, BASS_MIXER_CHAN_PAUSE);
+        noteBassErr("sample_create/initial_pause_flag");
         BASS_Mixer_StreamAddChannel(backend->masterMixer_, resamplerStream, 0);
+        noteBassErr("sample_create/add_resampler_to_master");
         BASS_ChannelSetPosition(stream, 0, BASS_POS_BYTE);
+        noteBassErr("sample_create/initial_seek_zero");
 
         source = stream;
         resampler = resamplerStream;
@@ -341,6 +370,7 @@ struct BassPreviewAudioBackend::Sample {
         const double clamped = qBound(0.0, qIsFinite(seconds) ? seconds : 0.0, lengthSeconds);
         const QWORD position = BASS_ChannelSeconds2Bytes(source, clamped);
         BASS_ChannelSetPosition(source, position, BASS_POS_BYTE);
+        noteBassErr("sample_set_current_sec");
     }
 
     double currentSec() const
@@ -358,6 +388,7 @@ struct BassPreviewAudioBackend::Sample {
             return;
         }
         BASS_ChannelFlags(source, loop ? BASS_SAMPLE_LOOP : 0, BASS_SAMPLE_LOOP);
+        noteBassErr("sample_set_loop");
     }
 
     void setSpeed(double rate)
@@ -367,6 +398,7 @@ struct BassPreviewAudioBackend::Sample {
         }
         const float tempo = static_cast<float>((qBound(kBassPreviewMinRate, rate, kBassPreviewMaxRate) - 1.0) * 100.0);
         BASS_ChannelSetAttribute(source, kBassPreviewTempoAttribute, tempo);
+        noteBassErr("sample_set_speed");
     }
 
     bool isPlaying() const
@@ -387,6 +419,7 @@ struct BassPreviewAudioBackend::Sample {
             return;
         }
         BASS_Mixer_ChannelFlags(source, 0, BASS_MIXER_CHAN_PAUSE);
+        noteBassErr("sample_play/clear_pause_flag");
     }
 
     void playOneShot(double eventGain)
@@ -396,7 +429,9 @@ struct BassPreviewAudioBackend::Sample {
         }
         applyVolume(eventGain);
         BASS_Mixer_ChannelSetPosition(source, 0, BASS_POS_BYTE);
+        noteBassErr("sample_one_shot/seek_zero");
         BASS_Mixer_ChannelFlags(source, 0, BASS_MIXER_CHAN_PAUSE);
+        noteBassErr("sample_one_shot/clear_pause_flag");
     }
 
     void pause()
@@ -405,6 +440,7 @@ struct BassPreviewAudioBackend::Sample {
             return;
         }
         BASS_Mixer_ChannelFlags(source, BASS_MIXER_CHAN_PAUSE, BASS_MIXER_CHAN_PAUSE);
+        noteBassErr("sample_pause/set_pause_flag");
     }
 
     void stop()
@@ -413,7 +449,9 @@ struct BassPreviewAudioBackend::Sample {
             return;
         }
         BASS_Mixer_ChannelFlags(source, BASS_MIXER_CHAN_PAUSE, BASS_MIXER_CHAN_PAUSE);
+        noteBassErr("sample_stop/set_pause_flag");
         BASS_Mixer_ChannelSetPosition(source, 0, BASS_POS_BYTE);
+        noteBassErr("sample_stop/seek_zero");
     }
 };
 
@@ -435,6 +473,7 @@ BassPreviewAudioBackend::~BassPreviewAudioBackend()
     unloadOptionalPlugins();
     if (masterMixer_ != 0) {
         BASS_StreamFree(masterMixer_);
+        noteBassErr("dtor/master_stream_free");
         masterMixer_ = 0;
     }
     unloadBassFx();
@@ -444,7 +483,9 @@ BassPreviewAudioBackend::~BassPreviewAudioBackend()
     }
     if (engineInitialized_ && gBassDeviceRefCount == 0) {
         BASS_Stop();
+        noteBassErr("dtor/bass_stop");
         BASS_Free();
+        noteBassErr("dtor/bass_free");
         engineInitialized_ = false;
     } else if (engineInitialized_) {
         engineInitialized_ = false;
@@ -578,10 +619,12 @@ void BassPreviewAudioBackend::unloadOptionalPlugins()
 #ifdef Q_OS_WIN
     if (pluginAac_ != 0) {
         BASS_PluginFree(pluginAac_);
+        noteBassErr("plugin_free_aac");
         pluginAac_ = 0;
     }
     if (pluginOpus_ != 0) {
         BASS_PluginFree(pluginOpus_);
+        noteBassErr("plugin_free_opus");
         pluginOpus_ = 0;
     }
 #endif
@@ -644,7 +687,9 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
         return false;
     }
     BASS_ChannelSetAttribute(masterMixer_, BASS_ATTRIB_BUFFER, 0.0f);
+    noteBassErr("engine_init/master_buffer_attr");
     BASS_ChannelSetAttribute(masterMixer_, BASS_ATTRIB_MIXER_THREADS, 8.0f);
+    noteBassErr("engine_init/master_mixer_threads_attr");
     engineInitialized_ = true;
     appendAudioDebugLog(QString("bass_engine_ready sample_rate=%1").arg(deviceSampleRate_));
     appendBassDebugLog(
@@ -943,6 +988,7 @@ void BassPreviewAudioBackend::suspendPlaybackTransport()
     playbackSession_.lastAuthoritativeSecond = pauseSecond;
     clearScheduledGroupSync();
     BASS_ChannelPause(masterMixer_);
+    noteBassErr("suspend_transport/master_pause");
     playbackSession_.masterRunning = false;
     playbackSession_.backgroundTrackRunning = false;
     retainedPlaybackMode_ = RetainedPlaybackMode::PausedExact;
@@ -1015,7 +1061,9 @@ void BassPreviewAudioBackend::repositionMasterTransportClock(double targetSecond
         return;
     }
     BASS_ChannelPause(masterMixer_);
+    noteBassErr("reposition_master_clock/pause");
     BASS_ChannelSetPosition(masterMixer_, 0, BASS_POS_BYTE);
+    noteBassErr("reposition_master_clock/seek_zero");
 #else
     Q_UNUSED(targetSecond);
 #endif
@@ -1068,6 +1116,7 @@ void BassPreviewAudioBackend::startTransportFromCurrentAnchor()
     const RetainedPlaybackMode retainedMode = retainedPlaybackMode_;
     logTrackFileMissingAfterLoadIfNeeded();
     BASS_ChannelPlay(masterMixer_, FALSE);
+    noteBassErr("start_transport_from_anchor/master_play");
     playbackSession_.masterRunning = true;
     playbackSession_.lastAuthoritativeSecond = authoritativeSecond();
     if (backgroundTrackSample_ != nullptr) {
@@ -1243,7 +1292,9 @@ void BassPreviewAudioBackend::resetMasterMixerClock(double startSecond)
     }
     clearScheduledGroupSync();
     BASS_ChannelStop(masterMixer_);
+    noteBassErr("reset_master_clock/stop");
     BASS_ChannelSetPosition(masterMixer_, 0, BASS_POS_BYTE);
+    noteBassErr("reset_master_clock/seek_zero");
     playbackSession_.sessionStartSecond = clampTimelineSecond(startSecond);
     playbackSession_.sessionPlaybackRate = qBound(
         kBassPreviewMinRate,
@@ -1305,6 +1356,7 @@ void BassPreviewAudioBackend::clearScheduledGroupSync()
     QMutexLocker locker(&schedulerMutex_);
     if (scheduledGroupSync_ != 0 && masterMixer_ != 0) {
         BASS_ChannelRemoveSync(masterMixer_, scheduledGroupSync_);
+        noteBassErr("clear_group_sync/remove_sync");
     }
     scheduledGroupSync_ = 0;
     scheduledGroupIndex_ = -1;
@@ -1639,6 +1691,7 @@ void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
         return;
     }
     BASS_ChannelPlay(masterMixer_, FALSE);
+    noteBassErr("commit_prepared/master_play");
     playbackSession_.masterRunning = true;
     playbackSession_.lastAuthoritativeSecond = preparedPlayback_.startSecond;
     if (backgroundTrackSample_ != nullptr && !playbackSession_.backgroundTrackPendingStart) {
@@ -1913,6 +1966,7 @@ void BassPreviewAudioBackend::drainEvents(double second)
             QMutexLocker locker(&schedulerMutex_);
             if (scheduledGroupSync_ != 0 && scheduledGroupIndex_ == playbackSession_.eventGroupIndex && masterMixer_ != 0) {
                 BASS_ChannelRemoveSync(masterMixer_, scheduledGroupSync_);
+                noteBassErr("drain_events/remove_sync");
                 scheduledGroupSync_ = 0;
                 scheduledGroupIndex_ = -1;
             }
@@ -1979,6 +2033,7 @@ void BassPreviewAudioBackend::startBackgroundTrack(double second)
     if (masterMixer_ != 0 && !playbackSession_.masterRunning) {
         resetMasterMixerClock(second);
         BASS_ChannelPlay(masterMixer_, FALSE);
+        noteBassErr("start_bgm/master_play");
         playbackSession_.masterRunning = true;
         playbackSession_.lastAuthoritativeSecond = clampTimelineSecond(second);
     }
@@ -2051,6 +2106,7 @@ bool BassPreviewAudioBackend::audition(const QString& kind, double gain)
     if (!playbackSession_.masterRunning) {
         resetMasterMixerClock(0.0);
         BASS_ChannelPlay(masterMixer_, FALSE);
+        noteBassErr("audition/master_play");
         playbackSession_.masterRunning = true;
     }
     return playKindInternal(kind, gain);
