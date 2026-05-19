@@ -165,6 +165,15 @@ private:
     quint64 videoSourceGeneration_ = 0;
     double timelineOffsetSeconds_ = 0.0;
     double playbackRate_ = 1.0;
+    // G2 Commit 1: Qt 6.8 FFmpeg's QMediaPlayer::setPlaybackRate has a race
+    // when the player is in a transient mediaStatus (LoadingMedia /
+    // BufferingMedia / StalledMedia / InvalidMedia) — the rate write either
+    // gets silently dropped or fights with the buffer-fill loop. When
+    // setPlaybackRate is called in those states we cache the requested rate
+    // here and re-apply it from mediaStatusChanged once the player lands in
+    // a stable state. Matches the deferred-apply pattern outlined in
+    // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §6.2.
+    bool pendingPlaybackRateApply_ = false;
     quint64 playbackTransactionId_ = 0;
     qint64 preparedPlaybackTargetMs_ = -1;
     double preparedPlaybackTargetSecond_ = 0.0;

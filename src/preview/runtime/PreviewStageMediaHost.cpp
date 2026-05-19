@@ -240,6 +240,26 @@ void PreviewStageMediaHost::initializeBackendObjects()
                 .arg(debugMediaTypeName())
                 .arg(recoveringVideoBackend_ ? 1 : 0)
         );
+        // G2 Commit 1: flush a deferred setPlaybackRate write the moment the
+        // player lands in a stable state. The original setPlaybackRate call
+        // returned without touching the player and stashed pendingPlaybackRateApply_;
+        // here is where the cached playbackRate_ actually reaches QMediaPlayer.
+        if (pendingPlaybackRateApply_ && player_ != nullptr) {
+            const bool stableNow = status == QMediaPlayer::NoMedia
+                                || status == QMediaPlayer::LoadedMedia
+                                || status == QMediaPlayer::BufferedMedia
+                                || status == QMediaPlayer::EndOfMedia;
+            if (stableNow) {
+                pendingPlaybackRateApply_ = false;
+                player_->setPlaybackRate(static_cast<qreal>(playbackRate_));
+                appendPreviewStageMediaLog(
+                    QStringLiteral("playback_rate_flushed"),
+                    QString("rate=%1 status=%2 kind=%3")
+                        .arg(playbackRate_, 0, 'f', 3)
+                        .arg(mediaStatusName(status))
+                        .arg(debugMediaTypeName()));
+            }
+        }
         if (status == QMediaPlayer::EndOfMedia) {
             videoPlaybackActive_ = false;
             videoPlaybackPendingStart_ = false;
@@ -481,9 +501,35 @@ void PreviewStageMediaHost::setPlaybackRate(double rate)
 {
     playbackRate_ = qMax(0.05, rate);
 #ifdef HAVE_QT_MULTIMEDIA
-    if (player_ != nullptr) {
-        player_->setPlaybackRate(static_cast<qreal>(playbackRate_));
+    if (player_ == nullptr) {
+        return;
     }
+    // G2 Commit 1: defer the player_->setPlaybackRate(...) write when the
+    // QMediaPlayer is in a transient mediaStatus. Qt 6.8's FFmpeg backend
+    // races with the buffer-fill loop in Loading/Buffering/Stalled/Invalid
+    // and either silently drops the rate or fights with internal state,
+    // both of which were the source of the c307537 sub-1.0x rate-restore
+    // crash (PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §1.1 / §6.2).
+    // Cache pending here; mediaStatusChanged flushes it once the player
+    // lands in a stable state. NoMedia + EndOfMedia count as stable since
+    // the write is harmlessly absorbed by the next load / restart anyway.
+    const QMediaPlayer::MediaStatus status = player_->mediaStatus();
+    const bool stable = status == QMediaPlayer::NoMedia
+                     || status == QMediaPlayer::LoadedMedia
+                     || status == QMediaPlayer::BufferedMedia
+                     || status == QMediaPlayer::EndOfMedia;
+    if (!stable) {
+        pendingPlaybackRateApply_ = true;
+        appendPreviewStageMediaLog(
+            QStringLiteral("playback_rate_deferred"),
+            QString("rate=%1 status=%2 kind=%3")
+                .arg(playbackRate_, 0, 'f', 3)
+                .arg(mediaStatusName(status))
+                .arg(debugMediaTypeName()));
+        return;
+    }
+    pendingPlaybackRateApply_ = false;
+    player_->setPlaybackRate(static_cast<qreal>(playbackRate_));
 #endif
 }
 
