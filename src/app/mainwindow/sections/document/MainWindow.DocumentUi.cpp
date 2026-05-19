@@ -996,6 +996,10 @@ void MainWindow::DocumentSection::loadDocument(const SimaiDocument& document)
     state_.activeOutlineKey_ = state_.document_.difficultyIds().isEmpty() ? QStringLiteral("welcome") : QStringLiteral("chart");
     activateInitialField();
     updateMetadataPageMode();
+    // Restore the per-project "all difficulties share the same designer"
+    // preference (or infer it on first open) AFTER metadata-page-mode is
+    // refreshed, so the checkbox UI exists and is in its final layout.
+    refreshUnifiedDesignerStateForLoadedDocument();
     updateDirtyState();
     owner_.updateWindowTitle();
 }

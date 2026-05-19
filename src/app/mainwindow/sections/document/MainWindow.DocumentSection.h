@@ -11,6 +11,15 @@ public:
     bool maybeSaveBeforeContinue();
     bool maybeSaveCurrentFieldChanges();
     bool applyCurrentFieldToDocument();
+    // Pure-UI handler for the "all difficulties share the same designer"
+    // checkbox toggle. See onUnifiedDesignerToggled() implementation in
+    // DocumentFlow.cpp for the OFF→ON popup logic.
+    void onUnifiedDesignerToggled(bool checked);
+    // Apply the saved-or-inferred unified-designer preference to the
+    // checkbox state when a chart is opened. Reads
+    // <chartDir>/.miacode/preferences.json; falls back to
+    // SimaiDocument::inferUnifiedDesignerDefault() when the key is absent.
+    void refreshUnifiedDesignerStateForLoadedDocument();
     void onNewFile();
     void onOpenFile();
     bool openFileAtPath(const QString& path, bool showStatusMessage = true, bool showErrors = true);
@@ -96,6 +105,17 @@ public:
     void rebuildAutosaveMetadata(const QString& autosaveDirectoryPath) const;
 
 private:
+    // Broadcast the chosen designer name into every relevant field
+    // (state_.document_.designer + every per-difficulty designer) and the
+    // matching QLineEdits. Used by onUnifiedDesignerToggled().
+    void applyUnifiedDesignerName(const QString& canonicalName);
+    // Modal picker shown when the user enables the option but no single
+    // canonical name exists yet. Lists every distinct non-empty designer
+    // found in the document plus a "Clear all" option, and writes the
+    // user's selection (or an empty string for "Clear all") to *out.
+    // Returns false if the user cancels — callers should revert the
+    // checkbox to OFF in that case.
+    bool promptCanonicalDesignerName(const QStringList& candidates, QString* out);
     void setChartBottomTabsMode(bool enabled);
     void pruneChartSelectionTransformUndoEntriesFromStep(int undoStepThreshold);
     void updateLastObservedChartEditorUndoRedoSteps();

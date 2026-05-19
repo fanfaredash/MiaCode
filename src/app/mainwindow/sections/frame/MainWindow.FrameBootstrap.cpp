@@ -623,28 +623,49 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     connect(readArtistButton, &QToolButton::clicked, this, &MainWindow::onReadArtistFromTrack);
     artistWrapLayout->addWidget(readArtistButton, 0, Qt::AlignRight);
 
-    // Designer row gets an "extract cover to bg.jpg" button. After writing
-    // bg.jpg the slot re-runs the preview media-route resolution so the
-    // workspace preview shows the new background immediately.
+    // Designer row gets a "[ ] All difficulties share the same designer"
+    // checkbox. When checked, edits to the top-level &des broadcast to
+    // every per-difficulty &des_N, and edits to a per-difficulty designer
+    // broadcast back to &des and the other difficulties. The checkbox
+    // state persists per-project via ProjectPreferences.
     auto* designerWrap = new QWidget(metadataPage_);
     auto* designerWrapLayout = new QHBoxLayout(designerWrap);
     designerWrapLayout->setContentsMargins(0, 0, 0, 0);
     designerWrapLayout->setSpacing(6);
     designerWrapLayout->addWidget(designerEdit_, 1);
+    unifiedDesignerCheckbox_ = new QCheckBox(metadataPage_);
+    unifiedDesignerCheckbox_->setText(UiText::isChineseUi()
+        ? QStringLiteral("所有难度采用相同名义")
+        : QStringLiteral("All difficulties share this designer"));
+    unifiedDesignerCheckbox_->setToolTip(UiText::isChineseUi()
+        ? QStringLiteral("勾选后，&des 与每个难度的 &des_N 会双向同步。")
+        : QStringLiteral("When checked, &des and every &des_N stay in sync."));
+    connect(unifiedDesignerCheckbox_, &QCheckBox::toggled, this, &MainWindow::onUnifiedDesignerToggled);
+    designerWrapLayout->addWidget(unifiedDesignerCheckbox_, 0, Qt::AlignRight);
+
+    // Cover-extraction row sits below `first`. The label is intentionally
+    // short ("封面") so the form column stays compact; the button text
+    // carries the description "从 track.mp3 中提取 bg.jpg".
+    auto* coverWrap = new QWidget(metadataPage_);
+    auto* coverWrapLayout = new QHBoxLayout(coverWrap);
+    coverWrapLayout->setContentsMargins(0, 0, 0, 0);
+    coverWrapLayout->setSpacing(6);
     auto* extractCoverButton = new QToolButton(metadataPage_);
     extractCoverButton->setText(UiText::isChineseUi()
-        ? QStringLiteral("提取封面 bg.jpg")
-        : QStringLiteral("Extract Cover → bg.jpg"));
+        ? QStringLiteral("从 track.mp3 中提取 bg.jpg")
+        : QStringLiteral("Extract bg.jpg from track.mp3"));
     extractCoverButton->setToolTip(UiText::isChineseUi()
         ? QStringLiteral("把 track.mp3 内嵌的封面图写到当前谱面目录的 bg.jpg。")
         : QStringLiteral("Write track.mp3's embedded cover artwork as bg.jpg next to the chart."));
     connect(extractCoverButton, &QToolButton::clicked, this, &MainWindow::onExtractBackgroundFromTrack);
-    designerWrapLayout->addWidget(extractCoverButton, 0, Qt::AlignRight);
+    coverWrapLayout->addWidget(extractCoverButton, 0, Qt::AlignLeft);
+    coverWrapLayout->addStretch(1);
 
     metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.title", "title")), titleWrap);
     metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.artist", "artist")), artistWrap);
     metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.des", "des")), designerWrap);
     metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.first", "first")), firstWrap);
+    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.cover", "cover")), coverWrap);
     metadataCardLayout->addLayout(metadataForm);
 
     auto* extraMetadataLabel = new QLabel(uiText("metadata.other_fields", "Other &xx Fields"), metadataPage_);

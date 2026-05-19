@@ -17,6 +17,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
+#include "common/ProjectPreferences.h"
 #include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
@@ -447,16 +448,23 @@ bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
 {
     bool changed = false;
     bool metadataTimingChanged = false;
+    bool designerBroadcastNeeded = false;
+    QString broadcastDesignerValue;
     if (owner_.hasActiveDifficulty()) {
         SimaiDifficultyData& difficultyData = state_.document_.ensureDifficulty(state_.activeDifficultyId_);
         const QString newLevel = ui_.difficultyLevelEdit_ != nullptr ? ui_.difficultyLevelEdit_->text() : QString();
         const QString newDesigner = ui_.difficultyDesignerEdit_ != nullptr ? ui_.difficultyDesignerEdit_->text() : QString();
         const QString newChart = owner_.editorText();
-        if (difficultyData.level != newLevel || difficultyData.designer != newDesigner || difficultyData.chart != newChart) {
+        const bool designerEdited = (difficultyData.designer != newDesigner);
+        if (difficultyData.level != newLevel || designerEdited || difficultyData.chart != newChart) {
             difficultyData.level = newLevel;
             difficultyData.designer = newDesigner;
             difficultyData.chart = newChart;
             changed = true;
+        }
+        if (state_.unifiedDesignerEnabled_ && designerEdited) {
+            designerBroadcastNeeded = true;
+            broadcastDesignerValue = newDesigner;
         }
     } else {
         const QString newTitle = ui_.titleEdit_ != nullptr ? ui_.titleEdit_->text() : QString();
@@ -467,10 +475,11 @@ bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
             ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(),
             true
         );
+        const bool designerEdited = (state_.document_.designer != newDesigner);
         if (state_.document_.title != newTitle
             || state_.document_.artist != newArtist
             || state_.document_.first != newFirst
-            || state_.document_.designer != newDesigner
+            || designerEdited
             || state_.document_.extraFields != newExtraFields) {
             metadataTimingChanged = (state_.document_.first != newFirst);
             state_.document_.title = newTitle;
@@ -479,6 +488,45 @@ bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
             state_.document_.designer = newDesigner;
             state_.document_.extraFields = newExtraFields;
             changed = true;
+        }
+        if (state_.unifiedDesignerEnabled_ && designerEdited) {
+            designerBroadcastNeeded = true;
+            broadcastDesignerValue = newDesigner;
+        }
+    }
+
+    // Broadcast designer name to every other field when the "unified" option
+    // is enabled. We do this *after* the just-edited field has been applied
+    // so the value being broadcast is always the new one.
+    if (designerBroadcastNeeded) {
+        if (state_.document_.designer != broadcastDesignerValue) {
+            state_.document_.designer = broadcastDesignerValue;
+            changed = true;
+        }
+        const QVector<int> diffIds = state_.document_.difficultyIds();
+        for (int diffId : diffIds) {
+            SimaiDifficultyData* diff = state_.document_.difficulty(diffId);
+            if (diff == nullptr) {
+                continue;
+            }
+            if (diff->designer != broadcastDesignerValue) {
+                diff->designer = broadcastDesignerValue;
+                changed = true;
+            }
+        }
+        // Reflect the freshly-broadcast value into the inactive editor's UI
+        // so users see consistent state when they switch fields. We only
+        // touch the editor that's NOT the active source.
+        if (owner_.hasActiveDifficulty()) {
+            if (ui_.designerEdit_ != nullptr && ui_.designerEdit_->text() != broadcastDesignerValue) {
+                QSignalBlocker block(ui_.designerEdit_);
+                ui_.designerEdit_->setText(broadcastDesignerValue);
+            }
+        } else {
+            if (ui_.difficultyDesignerEdit_ != nullptr && ui_.difficultyDesignerEdit_->text() != broadcastDesignerValue) {
+                QSignalBlocker block(ui_.difficultyDesignerEdit_);
+                ui_.difficultyDesignerEdit_->setText(broadcastDesignerValue);
+            }
         }
     }
 
@@ -493,6 +541,300 @@ bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
     if (metadataTimingChanged) {
         owner_.refreshWaveformCache();
         owner_.refreshTimelineMetadata();
+    }
+    return true;
+}
+
+namespace {
+
+constexpr const char* kUnifiedDesignerPrefKey = "unified_designer_enabled";
+
+// Collect every distinct non-empty designer name across the top &des and
+// each per-difficulty &des_N. Used by the OFF→ON popup flows so the user
+// can pick which name to canonicalize, or so we know whether anything is
+// at risk of being overwritten silently.
+struct DesignerSurvey {
+    QString topDesigner;
+    QVector<QPair<int, QString>> perDifficulty;  // (id, designer)
+    QStringList distinctNonEmpty;                // de-duped, preserves insert order
+};
+
+DesignerSurvey surveyDesigners(const SimaiDocument& doc)
+{
+    DesignerSurvey survey;
+    survey.topDesigner = doc.designer;
+    if (!doc.designer.isEmpty()) {
+        survey.distinctNonEmpty.append(doc.designer);
+    }
+    const QVector<int> diffIds = doc.difficultyIds();
+    survey.perDifficulty.reserve(diffIds.size());
+    for (int id : diffIds) {
+        const SimaiDifficultyData* diff = doc.difficulty(id);
+        if (diff == nullptr) {
+            continue;
+        }
+        survey.perDifficulty.append(qMakePair(id, diff->designer));
+        if (!diff->designer.isEmpty() && !survey.distinctNonEmpty.contains(diff->designer)) {
+            survey.distinctNonEmpty.append(diff->designer);
+        }
+    }
+    return survey;
+}
+
+void writeUnifiedDesignerPreference(const QString& chartPath, bool enabled)
+{
+    if (chartPath.isEmpty()) {
+        return;
+    }
+    QJsonObject prefs = miacode::project_preferences::load(chartPath);
+    prefs[QLatin1String(kUnifiedDesignerPrefKey)] = enabled;
+    miacode::project_preferences::save(chartPath, prefs);
+}
+
+}  // namespace
+
+void MainWindow::DocumentSection::refreshUnifiedDesignerStateForLoadedDocument()
+{
+    bool enabled = false;
+    const QString chartPath = state_.currentFilePath_;
+    bool decisionFromPreference = false;
+    if (!chartPath.isEmpty()) {
+        const QJsonObject prefs = miacode::project_preferences::load(chartPath);
+        const QJsonValue stored = prefs.value(QLatin1String(kUnifiedDesignerPrefKey));
+        if (stored.isBool()) {
+            enabled = stored.toBool();
+            decisionFromPreference = true;
+        }
+    }
+    if (!decisionFromPreference) {
+        enabled = state_.document_.inferUnifiedDesignerDefault();
+    }
+    state_.unifiedDesignerEnabled_ = enabled;
+    if (ui_.unifiedDesignerCheckbox_ != nullptr) {
+        QSignalBlocker block(ui_.unifiedDesignerCheckbox_);
+        ui_.unifiedDesignerCheckbox_->setChecked(enabled);
+    }
+}
+
+void MainWindow::DocumentSection::onUnifiedDesignerToggled(bool checked)
+{
+    MC_OP("MainWindow::DocumentSection::onUnifiedDesignerToggled");
+    // Flush any pending in-progress edit so the document state we inspect
+    // for the popup logic is the same as what the user can see in the UI.
+    applyCurrentFieldToDocument();
+
+    if (!checked) {
+        // ON → OFF: just persist the new preference. No content edits, no
+        // popup. Per-difficulty designers stay exactly as they were.
+        state_.unifiedDesignerEnabled_ = false;
+        writeUnifiedDesignerPreference(state_.currentFilePath_, false);
+        return;
+    }
+
+    // OFF → ON: figure out whether we can flip silently, need to confirm an
+    // overwrite, or need to ask the user to pick a canonical name.
+    const DesignerSurvey survey = surveyDesigners(state_.document_);
+
+    // Case A: zero or one distinct non-empty designer — nothing to disambiguate.
+    //   - No designers at all → silently enable.
+    //   - One designer, also matches top &des → silently enable.
+    //   - One designer only on per-diff side, top &des empty → silently
+    //     adopt the per-diff name as canonical (no destructive overwrite).
+    if (survey.distinctNonEmpty.size() <= 1) {
+        QString canonical = survey.topDesigner;
+        if (canonical.isEmpty() && !survey.distinctNonEmpty.isEmpty()) {
+            canonical = survey.distinctNonEmpty.first();
+        }
+        applyUnifiedDesignerName(canonical);
+        state_.unifiedDesignerEnabled_ = true;
+        writeUnifiedDesignerPreference(state_.currentFilePath_, true);
+        return;
+    }
+
+    // Case B: top &des is non-empty AND some per-difficulty designer differs
+    // → ask the user to confirm overwriting the differing per-diff names.
+    const bool topNonEmpty = !survey.topDesigner.isEmpty();
+    bool someDiffDiffers = false;
+    for (const auto& pair : survey.perDifficulty) {
+        if (!pair.second.isEmpty() && pair.second != survey.topDesigner) {
+            someDiffDiffers = true;
+            break;
+        }
+    }
+    if (topNonEmpty && someDiffDiffers) {
+        QStringList affected;
+        for (const auto& pair : survey.perDifficulty) {
+            if (!pair.second.isEmpty() && pair.second != survey.topDesigner) {
+                affected.append(
+                    QStringLiteral("&des_%1 (%2)").arg(pair.first).arg(pair.second));
+            }
+        }
+        const QString detail = affected.join(QStringLiteral("\n"));
+        const QString promptBody = UiText::isChineseUi()
+            ? QStringLiteral(
+                  "启用「所有难度采用相同名义」后，下列难度的设计师名将被 &des = \"%1\" 覆盖：\n\n%2\n\n"
+                  "是否继续？")
+                  .arg(survey.topDesigner, detail)
+            : QStringLiteral(
+                  "Enabling \"All difficulties share this designer\" will overwrite the "
+                  "designer of the following difficulties with &des = \"%1\":\n\n%2\n\n"
+                  "Continue?")
+                  .arg(survey.topDesigner, detail);
+        const auto choice = UiDialogs::showMessageBox(
+            QMessageBox::Question,
+            &owner_,
+            UiText::isChineseUi()
+                ? QStringLiteral("覆盖各难度设计师名？")
+                : QStringLiteral("Overwrite per-difficulty designers?"),
+            promptBody,
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        if (choice != QMessageBox::Yes) {
+            // User declined → revert checkbox UI to OFF and don't persist.
+            if (ui_.unifiedDesignerCheckbox_ != nullptr) {
+                QSignalBlocker block(ui_.unifiedDesignerCheckbox_);
+                ui_.unifiedDesignerCheckbox_->setChecked(false);
+            }
+            state_.unifiedDesignerEnabled_ = false;
+            return;
+        }
+        applyUnifiedDesignerName(survey.topDesigner);
+        state_.unifiedDesignerEnabled_ = true;
+        writeUnifiedDesignerPreference(state_.currentFilePath_, true);
+        return;
+    }
+
+    // Case C: top &des is empty (or matches everything except some per-diff
+    // designers) AND multiple distinct per-difficulty designers exist →
+    // show a picker so the user can choose which name becomes canonical.
+    QString picked;
+    bool pickerAccepted = promptCanonicalDesignerName(survey.distinctNonEmpty, &picked);
+    if (!pickerAccepted) {
+        if (ui_.unifiedDesignerCheckbox_ != nullptr) {
+            QSignalBlocker block(ui_.unifiedDesignerCheckbox_);
+            ui_.unifiedDesignerCheckbox_->setChecked(false);
+        }
+        state_.unifiedDesignerEnabled_ = false;
+        return;
+    }
+    applyUnifiedDesignerName(picked);
+    state_.unifiedDesignerEnabled_ = true;
+    writeUnifiedDesignerPreference(state_.currentFilePath_, true);
+}
+
+void MainWindow::DocumentSection::applyUnifiedDesignerName(const QString& canonicalName)
+{
+    bool changed = false;
+    if (state_.document_.designer != canonicalName) {
+        state_.document_.designer = canonicalName;
+        changed = true;
+    }
+    const QVector<int> diffIds = state_.document_.difficultyIds();
+    for (int id : diffIds) {
+        SimaiDifficultyData* diff = state_.document_.difficulty(id);
+        if (diff != nullptr && diff->designer != canonicalName) {
+            diff->designer = canonicalName;
+            changed = true;
+        }
+    }
+    if (ui_.designerEdit_ != nullptr && ui_.designerEdit_->text() != canonicalName) {
+        QSignalBlocker block(ui_.designerEdit_);
+        ui_.designerEdit_->setText(canonicalName);
+    }
+    if (ui_.difficultyDesignerEdit_ != nullptr && ui_.difficultyDesignerEdit_->text() != canonicalName) {
+        QSignalBlocker block(ui_.difficultyDesignerEdit_);
+        ui_.difficultyDesignerEdit_->setText(canonicalName);
+    }
+    if (changed) {
+        state_.documentDirty_ = true;
+        anchorCurrentFieldCleanState();
+        state_.currentFieldDirty_ = false;
+        updateDirtyState();
+        owner_.updateWindowTitle();
+        rebuildFieldSidebar();
+    }
+}
+
+bool MainWindow::DocumentSection::promptCanonicalDesignerName(const QStringList& candidates, QString* out)
+{
+    if (out == nullptr) {
+        return false;
+    }
+    QDialog dialog(&owner_);
+    dialog.setWindowTitle(UiText::isChineseUi()
+        ? QStringLiteral("选择统一的设计师名")
+        : QStringLiteral("Pick the canonical designer"));
+    // Size hint generous enough for long Chinese designer names so the
+    // radio labels aren't cut off. The scroll area lets the dialog stay
+    // bounded even when there are many candidates.
+    dialog.resize(520, 420);
+
+    auto* outerLayout = new QVBoxLayout(&dialog);
+    auto* prompt = new QLabel(
+        UiText::isChineseUi()
+            ? QStringLiteral(
+                  "当前谱面在 &des 和各 &des_N 中检测到多个不同的设计师名义。\n"
+                  "请选择一个作为统一名义（将写入到所有难度），或选择「直接清除」让所有字段变为空。")
+            : QStringLiteral(
+                  "This chart has multiple distinct designer names across &des and the "
+                  "per-difficulty &des_N fields. Pick one to use everywhere, or choose "
+                  "\"Clear all\" to make every field empty."),
+        &dialog);
+    prompt->setWordWrap(true);
+    outerLayout->addWidget(prompt);
+
+    auto* scroll = new QScrollArea(&dialog);
+    scroll->setWidgetResizable(true);
+    auto* listHost = new QWidget(scroll);
+    auto* listLayout = new QVBoxLayout(listHost);
+    listLayout->setContentsMargins(8, 8, 8, 8);
+    listLayout->setSpacing(6);
+    auto* group = new QButtonGroup(&dialog);
+    group->setExclusive(true);
+
+    int radioIndex = 0;
+    for (const QString& name : candidates) {
+        auto* radio = new QRadioButton(name, listHost);
+        radio->setToolTip(name);
+        // Word-wrap so 30+ char designer names don't blow the dialog wider.
+        radio->setStyleSheet(QStringLiteral("QRadioButton { padding: 4px; }"));
+        if (radioIndex == 0) {
+            radio->setChecked(true);
+        }
+        group->addButton(radio, radioIndex);
+        listLayout->addWidget(radio);
+        ++radioIndex;
+    }
+    // "Clear all" lives at the end of the list, visually separated. Its
+    // chosen-id is sentinel kClearAllId so callers can tell it apart.
+    constexpr int kClearAllId = -1;
+    auto* clearAllRadio = new QRadioButton(
+        UiText::isChineseUi()
+            ? QStringLiteral("直接清除（所有字段置空）")
+            : QStringLiteral("Clear all (leave every field empty)"),
+        listHost);
+    group->addButton(clearAllRadio, kClearAllId);
+    listLayout->addWidget(clearAllRadio);
+    listLayout->addStretch(1);
+    scroll->setWidget(listHost);
+    outerLayout->addWidget(scroll, 1);
+
+    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    QObject::connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    outerLayout->addWidget(buttonBox);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return false;
+    }
+    const int selectedId = group->checkedId();
+    if (selectedId == kClearAllId) {
+        *out = QString();
+    } else if (selectedId >= 0 && selectedId < candidates.size()) {
+        *out = candidates.at(selectedId);
+    } else {
+        // No selection somehow → treat as cancel.
+        return false;
     }
     return true;
 }
@@ -1418,6 +1760,11 @@ bool MainWindow::maybeSaveCurrentFieldChanges()
 bool MainWindow::applyCurrentFieldToDocument()
 {
     return documentSection_->applyCurrentFieldToDocument();
+}
+
+void MainWindow::onUnifiedDesignerToggled(bool checked)
+{
+    documentSection_->onUnifiedDesignerToggled(checked);
 }
 
 void MainWindow::onNewFile()

@@ -267,6 +267,10 @@ private slots:
     void onReadTitleFromTrack();
     void onReadArtistFromTrack();
     void onExtractBackgroundFromTrack();
+    // "All difficulties share the same designer" checkbox toggle. OFF→ON
+    // can pop up a confirm/picker dialog (see DocumentFlow); ON→OFF is
+    // silent and only changes the stored preference (no content edits).
+    void onUnifiedDesignerToggled(bool checked);
     void onPreferences();
     void onAbout();
     void onToggleFindReplace();

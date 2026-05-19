@@ -84,6 +84,12 @@
         QLineEdit* artistEdit_ = nullptr;
         QLineEdit* firstEdit_ = nullptr;
         QLineEdit* designerEdit_ = nullptr;
+        // "All difficulties share the same designer name" checkbox lives in
+        // the designer row, replacing the (now-relocated) extract-cover
+        // button. The mirrored bool (unifiedDesignerEnabled_) is in
+        // MainWindowState — searched there because applyCurrentFieldToDocument
+        // reads the flag every keystroke and shouldn't reach through ui_.
+        QCheckBox* unifiedDesignerCheckbox_ = nullptr;
         QTextEdit* metadataExtraEdit_ = nullptr;
         QWidget* editorDifficultyControls_ = nullptr;
         QLabel* difficultyLevelLabel_ = nullptr;
@@ -170,6 +176,10 @@
     };
 
     struct MainWindowState {
+        // Mirrors ui_.unifiedDesignerCheckbox_->isChecked() but readable
+        // without a UI-thread round-trip. True ⇒ broadcast designer edits
+        // between top &des and every &des_N inside applyCurrentFieldToDocument.
+        bool unifiedDesignerEnabled_ = false;
         PreviewRuntime* previewCanvas_ = nullptr;
         PreviewStageMediaHost* previewStageMediaHost_ = nullptr;
         QuickShellPreviewCompositeSurface* quickShellPreviewCompositeSurface_ = nullptr;
@@ -818,6 +828,7 @@
     QLineEdit*& artistEdit_ = ui_.artistEdit_;
     QLineEdit*& firstEdit_ = ui_.firstEdit_;
     QLineEdit*& designerEdit_ = ui_.designerEdit_;
+    QCheckBox*& unifiedDesignerCheckbox_ = ui_.unifiedDesignerCheckbox_;
     QTextEdit*& metadataExtraEdit_ = ui_.metadataExtraEdit_;
     QWidget*& editorDifficultyControls_ = ui_.editorDifficultyControls_;
     QLabel*& difficultyLevelLabel_ = ui_.difficultyLevelLabel_;

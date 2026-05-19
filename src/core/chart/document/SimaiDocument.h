@@ -47,6 +47,16 @@ public:
     SimaiDifficultyData& ensureDifficulty(int id);
     void removeDifficulty(int id);
 
+    // Heuristic for "all difficulties share the same designer name" default
+    // when the project has no explicit preference recorded yet.
+    //
+    // Returns false when there is evidence that difficulties are deliberately
+    // authored under distinct designer names (multiple distinct non-empty
+    // per-difficulty designers; or per-difficulty designers exist but the
+    // top-level &des field is empty). Otherwise returns true (no per-diff
+    // designers, or all per-diff designers match the top-level &des).
+    bool inferUnifiedDesignerDefault() const;
+
     QString title;
     QString artist;
     QString first;

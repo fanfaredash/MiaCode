@@ -289,3 +289,43 @@ void SimaiDocument::removeDifficulty(int id)
 {
     difficulties_.remove(id);
 }
+
+bool SimaiDocument::inferUnifiedDesignerDefault() const
+{
+    // Collect distinct non-empty per-difficulty designer names.
+    QVector<QString> perDiff;
+    perDiff.reserve(difficulties_.size());
+    for (auto it = difficulties_.cbegin(); it != difficulties_.cend(); ++it) {
+        const QString& d = it.value().designer;
+        if (d.isEmpty()) {
+            continue;
+        }
+        if (!perDiff.contains(d)) {
+            perDiff.append(d);
+        }
+    }
+
+    // No per-diff designers at all → safely default ON; the user just hasn't
+    // filled them out yet, and the top &des can broadcast freely.
+    if (perDiff.isEmpty()) {
+        return true;
+    }
+
+    // Multiple distinct per-diff designers → clearly authored separately,
+    // default OFF so nothing gets clobbered without explicit consent.
+    if (perDiff.size() > 1) {
+        return false;
+    }
+
+    // Exactly one per-diff designer present. If the top &des is empty or
+    // differs from it, that's still a signal that the project was authored
+    // with per-diff designers in mind → default OFF.
+    const QString sole = perDiff.first();
+    if (designer.isEmpty() || designer != sole) {
+        return false;
+    }
+
+    // Top &des matches the sole per-diff designer (and any empty ones are
+    // unset placeholders) → behaviorally equivalent to "unified", default ON.
+    return true;
+}

@@ -131,6 +131,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/TimelineThemeConfig.h
     src/common/WaveformCache.h
     src/common/WaveformCache.cpp
+    src/common/ProjectPreferences.h
+    src/common/ProjectPreferences.cpp
     src/common/PreviewTimingSettings.h
     src/common/ChartClockCount.h
     src/common/PreviewSfxTiming.h
