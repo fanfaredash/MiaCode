@@ -422,14 +422,12 @@ bool parseTouchSuffix(
         *errorMessage = QString("Touch duration requires 'h': %1").arg(token);
         return false;
     }
-    if (*hasHold && openBracket < 0) {
-        *errorMessage = QString("Invalid touch-hold duration: %1").arg(token);
-        return false;
-    }
-    if (*hasHold && durationSignature->isEmpty()) {
-        *errorMessage = QString("Invalid touch-hold duration: %1").arg(token);
-        return false;
-    }
+    // beta51+ — touch-hold without a duration signature (e.g. `Ch`, `A1h`,
+    // `Ch[]`) is accepted and treated as duration 0. Mirrors the existing
+    // tap-hold path in parseTapOrHoldToken, which already lets `1h` through
+    // as a zero-length hold. The caller (parseTouchToken) is responsible
+    // for skipping parseHoldDurationSignature when durationSignature is
+    // empty so we don't choke on the empty-string case there.
 
     return true;
 }

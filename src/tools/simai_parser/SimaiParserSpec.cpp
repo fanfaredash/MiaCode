@@ -122,6 +122,33 @@ int main(int argc, char** argv)
     }
 
     {
+        // beta51+ — touch-hold without a duration signature is accepted and
+        // treated as duration 0, mirroring the tap-hold behaviour for `1h`.
+        // Covers the no-bracket form (`Ch`, `A1h`) and the empty-bracket
+        // form (`Ch[]`). Tap-form `1h` was already supported pre-G1 but
+        // is included here for symmetry.
+        const SimaiNativeParseResult bareHold = SimaiNativeParser::parseForTimeline(QStringLiteral("Ch/A1h/1h/Ch[],\nE"));
+        expect(bareHold.ok, QStringLiteral("bare touch-hold (no [...] / empty []) accepted as duration 0"));
+        int touchHoldCount = 0;
+        int holdCount = 0;
+        for (const TimelineNoteMarker& marker : bareHold.noteMarkers) {
+            if (marker.type == QLatin1String("touch_hold")) {
+                ++touchHoldCount;
+                expect(
+                    nearlyEqual(marker.endSecond, marker.second),
+                    QStringLiteral("bare touch-hold tail sits on the head timing"));
+            } else if (marker.type == QLatin1String("hold")) {
+                ++holdCount;
+                expect(
+                    nearlyEqual(marker.endSecond, marker.second),
+                    QStringLiteral("bare tap-hold tail sits on the head timing"));
+            }
+        }
+        expect(touchHoldCount == 3, QStringLiteral("Ch, A1h, Ch[] all emit touch_hold markers"));
+        expect(holdCount == 1, QStringLiteral("1h still emits a single tap hold"));
+    }
+
+    {
         const SimaiNativeParseResult zeroSlide = SimaiNativeParser::parseForTimeline(QStringLiteral("1-5[8:0],\nE"));
         const SimaiNativeParseResult zeroHashedSlide = SimaiNativeParser::parseForTimeline(QStringLiteral("1-5[120#0],\nE"));
         expect(!zeroSlide.ok, QStringLiteral("slide rejects zero fraction duration"));

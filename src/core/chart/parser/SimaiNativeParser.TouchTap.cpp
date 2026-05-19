@@ -61,11 +61,18 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
     marker.isFirework = hasFirework;
 
     if (hasHold) {
-        bool durationOk = false;
-        const double durationSecond = parseHoldDurationSignature(durationSignature, state->bpm, &durationOk);
-        if (!durationOk) {
-            appendTokenError(state, lineNumber, column, QString("Invalid touch-hold duration: %1").arg(token));
-            return;
+        double durationSecond = 0.0;
+        // beta51+ — empty signature means "no [...] given" or "[]" — both treated
+        // as duration 0. Matches the tap-hold path's handling of `1h`. Only
+        // attempt the bpm-aware fraction/seconds parse when there's actually
+        // something inside the brackets.
+        if (!durationSignature.isEmpty()) {
+            bool durationOk = false;
+            durationSecond = parseHoldDurationSignature(durationSignature, state->bpm, &durationOk);
+            if (!durationOk) {
+                appendTokenError(state, lineNumber, column, QString("Invalid touch-hold duration: %1").arg(token));
+                return;
+            }
         }
         marker.type = "touch_hold";
         marker.endSecond = marker.second + qMax(0.0, durationSecond);
