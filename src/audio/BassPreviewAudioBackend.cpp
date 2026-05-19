@@ -1964,16 +1964,13 @@ double BassPreviewAudioBackend::seekRetainedPreviewPlaybackTransaction(double ta
             .arg(sameSecond ? 1 : 0));
     switch (action) {
     case miacode::preview_audio::bass::RetainedSeekAction::KeepPaused:
-        // beta50 followup — see resetRetainedPreviewPlaybackTransaction's
-        // matching block. lastAuthoritativeSecond is no longer a reliable
-        // BGM-cursor proxy post-G1 Commit 6, so sameSecond=true (which got
-        // us into this branch) doesn't imply the BGM source is actually at
-        // clampedSecond. Re-seek BGM defensively before settling here.
-        configureBackgroundTrackForSecond(
-            clampedSecond,
-            QStringLiteral("retained_seek_keep_paused"),
-            miacode::preview_audio::bass::BassDebugRoute::Transport);
-        playbackSession_.lastAuthoritativeSecond = clampedSecond;
+        // beta50 followup — same root cause as resetRetainedPreviewPlaybackTransaction's
+        // matching block. Post-G1 lastAuthoritativeSecond doesn't track the
+        // live BGM cursor / SFX event cursor / touchhold, so sameSecond=true
+        // (which got us here) doesn't mean those three are aligned at
+        // clampedSecond. Route through repositionPausedTransportToSecond so
+        // BGM, SFX-event-index, and touchhold all re-anchor in one shot.
+        repositionPausedTransportToSecond(clampedSecond, QStringLiteral("retained_seek_paused"));
         break;
     case miacode::preview_audio::bass::RetainedSeekAction::ResumeExact:
     case miacode::preview_audio::bass::RetainedSeekAction::ResumeAnchored:
@@ -2017,31 +2014,31 @@ void BassPreviewAudioBackend::resetRetainedPreviewPlaybackTransaction(double tar
             .arg(retainedSeekActionLabel(action))
             .arg(clampedSecond, 0, 'f', 6)
             .arg(sameSecond ? 1 : 0));
-    if (action == miacode::preview_audio::bass::RetainedSeekAction::KeepPaused) {
-        // beta50 followup — Stop-button audio-side fix:
+    if (action == miacode::preview_audio::bass::RetainedSeekAction::KeepPaused
+        || action == miacode::preview_audio::bass::RetainedSeekAction::RepositionPaused) {
+        // beta50 followup — Stop-button audio sync fix:
         //
         // sameSecond is computed against lastAuthoritativeSecond, but G1
-        // Commit 6 stopped that field from tracking the live BGM cursor —
-        // it now only carries whatever value was last *recorded* (e.g. at
-        // play-start). Concretely: Play 0 → ⏸10 → ▶ resume → ⏸30 → ⏹ Stop
-        // back to 10 lands here with lastAuthoritativeSecond=10 (the
-        // resume's recorded value) and clampedSecond=10, so sameSecond is
-        // true and the pre-fix code returned without touching BGM. The
-        // BGM cursor was actually at ~30 from the play-to-30s session
-        // though, so audio stuck at the pause point even as visual moved
-        // back to R. configureBackgroundTrackForSecond performs the BGM
-        // cursor seek (BASS_ChannelSetPosition on the source) that the
-        // caller is reasonably expecting from a "reset to target second"
-        // method; it's cheap when BGM is already there and load-bearing
-        // when it isn't.
-        configureBackgroundTrackForSecond(
-            clampedSecond,
-            QStringLiteral("retained_reset_keep_paused"),
-            miacode::preview_audio::bass::BassDebugRoute::Transport);
-        playbackSession_.lastAuthoritativeSecond = clampedSecond;
-        return;
-    }
-    if (action == miacode::preview_audio::bass::RetainedSeekAction::RepositionPaused) {
+        // Commit 6 stopped that field from tracking the live BGM cursor
+        // (and the live SFX event cursor) — it now only carries whatever
+        // value was last *recorded* at the previous transport state
+        // change. So "sameSecond=true" no longer implies "BGM cursor +
+        // SFX event cursor + touchhold are already at clampedSecond".
+        //
+        // Concretely: Play 0 → ⏸10 → ▶ resume → ⏸30 → ⏹ Stop back to 10
+        // landed here with sameSecond=true → KeepPaused → only
+        // lastAuthoritativeSecond got updated, while BGM cursor stayed
+        // near ~30 and the SFX event-group cursor still pointed past
+        // 10's groups. Result: next ▶ played the audio from chart-30
+        // while visuals were on chart-10, and SFX skipped every group
+        // between 10 and 30.
+        //
+        // Fix: collapse KeepPaused into the same repositionPausedTransportToSecond
+        // path RepositionPaused uses. That routine seeks all three cursors
+        // (BGM source via configureBackgroundTrackForSecond, SFX event
+        // index via resetCursor, touchhold via pauseTouchholdVoices) plus
+        // resets session-state housekeeping. Cost is one BASS_ChannelSetPosition
+        // + one event-cursor scan; both are cheap.
         repositionPausedTransportToSecond(clampedSecond, QStringLiteral("retained_reset"));
         return;
     }
