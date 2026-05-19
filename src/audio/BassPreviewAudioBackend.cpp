@@ -396,6 +396,23 @@ struct BassPreviewAudioBackend::Sample {
         if (!valid() || !speedChangeSupported) {
             return;
         }
+        // G1 Commit 6: BASS_ATTRIB_TEMPO must only be written while the sample is paused
+        // (BASS_MIXER_CHAN_PAUSE flag set on the source). Writing it while the tempo stream
+        // is being actively pulled by the master mixer triggers a SoundTouch race that
+        // crashes BASS_FX at 0.5x. Per PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §4.1
+        // scenario (b), this guard is the actual fix for the playback-time rate change
+        // crash; the new G1 invariant ("speed set once" — at create / reload / paused
+        // user rate change) means a caller hitting this skip path is a deferred rate
+        // change waiting for the next pause cycle, not lost behavior.
+        const DWORD flags = BASS_Mixer_ChannelFlags(source, 0, 0);
+        noteBassErr("sample_set_speed/read_flags");
+        if (flags != static_cast<DWORD>(-1) && (flags & BASS_MIXER_CHAN_PAUSE) == 0) {
+            appendAudioDebugLog(
+                QString("sample_set_speed_skipped_playing kind=%1 rate=%2")
+                    .arg(kind)
+                    .arg(rate, 0, 'f', 3));
+            return;
+        }
         const float tempo = static_cast<float>((qBound(kBassPreviewMinRate, rate, kBassPreviewMaxRate) - 1.0) * 100.0);
         BASS_ChannelSetAttribute(source, kBassPreviewTempoAttribute, tempo);
         noteBassErr("sample_set_speed");
@@ -691,6 +708,14 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
     noteBassErr("engine_init/master_buffer_attr");
     BASS_ChannelSetAttribute(masterMixer_, BASS_ATTRIB_MIXER_THREADS, 8.0f);
     noteBassErr("engine_init/master_mixer_threads_attr");
+    // G1 Commit 6: master mixer stays ACTIVE_PLAYING for the lifetime of the engine.
+    // Pre-G1 we cycled it via BASS_ChannelPause / BASS_ChannelPlay / BASS_ChannelStop
+    // at every session-state change; each cold-start churned BASS_FX SoundTouch
+    // buffers and was the root cause of the multi-cycle audio-tearing bug per
+    // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §4.2. Sample audibility is now
+    // gated entirely by the BASS_MIXER_CHAN_PAUSE flag on each per-sample source.
+    BASS_ChannelPlay(masterMixer_, FALSE);
+    noteBassErr("engine_init/master_play_once");
     engineInitialized_ = true;
     appendAudioDebugLog(QString("bass_engine_ready sample_rate=%1").arg(deviceSampleRate_));
     appendBassDebugLog(
@@ -988,8 +1013,11 @@ void BassPreviewAudioBackend::suspendPlaybackTransport()
     const double pauseSecond = authoritativeSecond();
     playbackSession_.lastAuthoritativeSecond = pauseSecond;
     clearScheduledGroupSync();
-    BASS_ChannelPause(masterMixer_);
-    noteBassErr("suspend_transport/master_pause");
+    // G1 Commit 6: master mixer is no longer paused at session-pause. Sample audibility
+    // is gated by BASS_MIXER_CHAN_PAUSE on each per-sample source (set when each Sample
+    // ::pause / ::stop runs from the broader pause flow). Leaving the master in
+    // ACTIVE_PLAYING avoids the BASS_FX SoundTouch cold-start that produced the audio
+    // tearing reported in PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §4.2.
     playbackSession_.masterRunning = false;
     playbackSession_.backgroundTrackRunning = false;
     retainedPlaybackMode_ = RetainedPlaybackMode::PausedExact;
@@ -1061,10 +1089,13 @@ void BassPreviewAudioBackend::repositionMasterTransportClock(double targetSecond
     if (masterMixer_ == 0) {
         return;
     }
-    BASS_ChannelPause(masterMixer_);
-    noteBassErr("reposition_master_clock/pause");
-    BASS_ChannelSetPosition(masterMixer_, 0, BASS_POS_BYTE);
-    noteBassErr("reposition_master_clock/seek_zero");
+    // G1 Commit 6: master mixer position is no longer used to derive chart-second
+    // (authoritativeSecond returns lastAuthoritativeSecond unconditionally). Resetting
+    // the master here pre-G1 was about restoring a 0-based offset for that math, so
+    // dropping the BASS calls is now purely a cleanup of dead I/O — and avoids one
+    // more SoundTouch cold-start in BASS_FX. The session state below still gets
+    // recomputed; that part remains load-bearing for downstream callers reading
+    // sessionStartSecond / sessionPlaybackRate.
 #else
     Q_UNUSED(targetSecond);
 #endif
@@ -1116,8 +1147,9 @@ void BassPreviewAudioBackend::startTransportFromCurrentAnchor()
     }
     const RetainedPlaybackMode retainedMode = retainedPlaybackMode_;
     logTrackFileMissingAfterLoadIfNeeded();
-    BASS_ChannelPlay(masterMixer_, FALSE);
-    noteBassErr("start_transport_from_anchor/master_play");
+    // G1 Commit 6: master mixer was started at engine init and stays running.
+    // Resume is now purely the act of unsetting BASS_MIXER_CHAN_PAUSE on each
+    // sample (done below via backgroundTrackSample_->play() and similar).
     playbackSession_.masterRunning = true;
     playbackSession_.lastAuthoritativeSecond = authoritativeSecond();
     if (backgroundTrackSample_ != nullptr) {
@@ -1297,10 +1329,8 @@ void BassPreviewAudioBackend::resetMasterMixerClock(double startSecond)
         return;
     }
     clearScheduledGroupSync();
-    BASS_ChannelStop(masterMixer_);
-    noteBassErr("reset_master_clock/stop");
-    BASS_ChannelSetPosition(masterMixer_, 0, BASS_POS_BYTE);
-    noteBassErr("reset_master_clock/seek_zero");
+    // G1 Commit 6: see comment in repositionMasterTransportClock. Same rationale here:
+    // the master keeps running, and authoritativeSecond no longer reads its position.
     playbackSession_.sessionStartSecond = clampTimelineSecond(startSecond);
     playbackSession_.sessionPlaybackRate = qBound(
         kBassPreviewMinRate,
@@ -1563,19 +1593,18 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
 
 double BassPreviewAudioBackend::authoritativeSecond() const
 {
-#ifdef Q_OS_WIN
-    if (!engineInitialized_ || masterMixer_ == 0 || !playbackSession_.masterRunning) {
-        return playbackSession_.lastAuthoritativeSecond;
-    }
-    const QWORD position = BASS_ChannelGetPosition(masterMixer_, BASS_POS_BYTE);
-    if (position == static_cast<QWORD>(-1)) {
-        return playbackSession_.lastAuthoritativeSecond;
-    }
-    const double mixerElapsedSecond = BASS_ChannelBytes2Seconds(masterMixer_, position);
-    return playbackSession_.sessionStartSecond + (mixerElapsedSecond * playbackSession_.sessionPlaybackRate);
-#else
+    // G1 Commit 6: BASS_ChannelGetPosition(masterMixer_) is no longer queried.
+    // Wall-clock is the chart-second master (MainWindow's qtPreviewElapsed_), and
+    // the master mixer keeps running indefinitely with a position that bears no
+    // relation to session time. Return the last externally-recorded snapshot
+    // (set at prepare / pause / seek / start transitions). MainWindow has
+    // stopped reading this through currentPreviewAuthoritativeAudioClockSecond
+    // (see Commit 4); the only remaining consumers are internal — seek-action
+    // selection in seekRetainedPreviewPlaybackTransaction and the
+    // PausePreviewResult.pauseSecond round-trip, both of which now compare
+    // against the wall-clock pause-second the caller already supplied at the
+    // last suspendPlaybackTransport.
     return playbackSession_.lastAuthoritativeSecond;
-#endif
 }
 
 void BassPreviewAudioBackend::configureBackgroundTrackForSecond(
@@ -1600,8 +1629,14 @@ void BassPreviewAudioBackend::configureBackgroundTrackForSecond(
     }
 
     backgroundTrackSample_->setLoop(false);
-    backgroundTrackSample_->setSpeed(playbackSession_.backgroundTrackPlaybackRate);
-
+    // G1 Commit 6: setSpeed is no longer called from this per-seek / per-pause helper.
+    // BASS_ATTRIB_TEMPO is written exactly twice in a sample's lifetime: at
+    // initializeAssets() right after creation, and from
+    // setBackgroundTrackPlaybackRate() when the user moves the rate slider — and the
+    // latter is now guarded by Sample::setSpeed so it only takes effect when the
+    // sample is in MIXER_CHAN_PAUSE state. Calling it here on every configure step
+    // was the proximate trigger for the 0.5x rate-change crash (scenario (b) in
+    // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §4.1).
     const double rawSecond = second + playbackSession_.backgroundTrackOffsetSeconds;
     if (rawSecond < 0.0) {
         backgroundTrackSample_->setCurrentSec(0.0);
@@ -1676,6 +1711,15 @@ double BassPreviewAudioBackend::preparePreviewPlaybackTransaction(
     retainedPlaybackMode_ = RetainedPlaybackMode::None;
     setBackgroundTrackPlaybackRate(playbackRate);
     stopPlaybackSession();
+    // G1 Commit 6: re-apply rate now that stopPlaybackSession has put every Sample
+    // back into BASS_MIXER_CHAN_PAUSE state. setBackgroundTrackPlaybackRate above
+    // may have skipped its internal setSpeed if the previous session was still
+    // playing when this prepare came in (the new Sample::setSpeed guard short-
+    // circuits writes to BASS_FX TEMPO whenever the source is being actively
+    // pulled — see PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §4.1 / §6.1).
+    // The rate value is already stored in playbackSession_; this call just
+    // pushes it onto the now-paused tempo stream.
+    setBackgroundTrackSampleSpeed(playbackSession_.backgroundTrackPlaybackRate);
     resetMasterMixerClock(startSecond);
     configureBackgroundTrackForSecond(
         startSecond,
@@ -1714,8 +1758,8 @@ void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
     if (!preparedPlayback_.pending || masterMixer_ == 0) {
         return;
     }
-    BASS_ChannelPlay(masterMixer_, FALSE);
-    noteBassErr("commit_prepared/master_play");
+    // G1 Commit 6: master mixer was started at engine init. The commit step is now
+    // purely about unsetting BASS_MIXER_CHAN_PAUSE on the BGM sample below.
     playbackSession_.masterRunning = true;
     playbackSession_.lastAuthoritativeSecond = preparedPlayback_.startSecond;
     if (backgroundTrackSample_ != nullptr && !playbackSession_.backgroundTrackPendingStart) {
@@ -2068,8 +2112,7 @@ void BassPreviewAudioBackend::startBackgroundTrack(double second)
 #ifdef Q_OS_WIN
     if (masterMixer_ != 0 && !playbackSession_.masterRunning) {
         resetMasterMixerClock(second);
-        BASS_ChannelPlay(masterMixer_, FALSE);
-        noteBassErr("start_bgm/master_play");
+        // G1 Commit 6: master mixer was started at engine init and never stops.
         playbackSession_.masterRunning = true;
         playbackSession_.lastAuthoritativeSecond = clampTimelineSecond(second);
     }
@@ -2144,8 +2187,7 @@ bool BassPreviewAudioBackend::audition(const QString& kind, double gain)
     }
     if (!playbackSession_.masterRunning) {
         resetMasterMixerClock(0.0);
-        BASS_ChannelPlay(masterMixer_, FALSE);
-        noteBassErr("audition/master_play");
+        // G1 Commit 6: master mixer was started at engine init and never stops.
         playbackSession_.masterRunning = true;
     }
     return playKindInternal(kind, gain);

@@ -971,9 +971,16 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
         return;
     }
 
+    // G1 Commit 6: capture the canonical pause-second from the wall-clock master
+    // BEFORE handing pause control to the runtime. With BASS_ChannelGetPosition no
+    // longer consulted in BassPreviewAudioBackend::authoritativeSecond
+    // (PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §5.3 / §6.1 step 6), the runtime's
+    // returned pauseSecond would be stale; the wall-clock value is the truth, so we
+    // overwrite the runtime's PausePreviewResult.pauseSecond with it below.
+    const double wallClockPauseSecond = owner_.currentPreviewAuthoritativeAudioClockSecond();
     const QtPreviewSfxRuntime::PausePreviewResult pauseResult =
         state_.previewSfxRuntime_->pausePreviewPlaybackTransaction();
-    state_.qtPreviewPauseSecond_ = pauseResult.pauseSecond;
+    state_.qtPreviewPauseSecond_ = wallClockPauseSecond;
     cancelPreviewStartupSync();
     owner_.pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
@@ -1043,9 +1050,12 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackForReanchor()
 
     QElapsedTimer timer;
     timer.start();
+    // G1 Commit 6: pause-second from wall-clock master; see pauseQtPreviewPlaybackExact
+    // for rationale.
+    const double wallClockPauseSecond = owner_.currentPreviewAuthoritativeAudioClockSecond();
     const QtPreviewSfxRuntime::PausePreviewResult pauseResult =
         state_.previewSfxRuntime_->pausePreviewPlaybackTransaction();
-    state_.qtPreviewPauseSecond_ = pauseResult.pauseSecond;
+    state_.qtPreviewPauseSecond_ = wallClockPauseSecond;
     cancelPreviewStartupSync();
     owner_.pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
