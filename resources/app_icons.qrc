@@ -1,6 +1,7 @@
 <RCC>
     <qresource prefix="/">
         <file alias="icons/app.png">icons/app.png</file>
+        <file alias="icons/checkmark.svg">icons/checkmark.svg</file>
         <file alias="config/shortcuts.json">shortcuts.json</file>
     </qresource>
 </RCC>

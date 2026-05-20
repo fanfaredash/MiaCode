@@ -676,6 +676,7 @@
     int& projectLastOpenedDifficultyId_ = state_.projectLastOpenedDifficultyId_;
     bool& documentDirty_ = state_.documentDirty_;
     bool& currentFieldDirty_ = state_.currentFieldDirty_;
+    bool& unifiedDesignerEnabled_ = state_.unifiedDesignerEnabled_;
     bool& qtPreviewPlaying_ = state_.qtPreviewPlaying_;
     bool& qtPreviewTimelineDirty_ = state_.qtPreviewTimelineDirty_;
     bool& qtPreviewAwaitingFrameSwap_ = state_.qtPreviewAwaitingFrameSwap_;

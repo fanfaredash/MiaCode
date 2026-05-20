@@ -873,14 +873,16 @@ QString darkAwareCheckBoxStyleSheet()
     // Standalone QCheckBox styling used on the chart-info form where the
     // checkbox isn't part of a themed dialog. Mirrors the radio-indicator
     // approach in designerPickerDialogStyleSheet so the box stays visible
-    // in dark mode without inheriting from a host widget.
+    // in dark mode without inheriting from a host widget. The :checked
+    // state paints a white checkmark via the qrc-bundled SVG so users
+    // get a recognisable glyph rather than a solid accent fill.
     const Colors& c = colors();
     const QColor indicatorBg = c.dark ? c.windowAltBg : QColor("#FFFFFF");
     return QStringLiteral(
         "QCheckBox { color: %1; spacing: 6px; }"
         "QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid %2; border-radius: 3px; background: %3; }"
         "QCheckBox::indicator:hover { border-color: %4; }"
-        "QCheckBox::indicator:checked { background: %4; border-color: %4; image: none; }"
+        "QCheckBox::indicator:checked { background: %4; border-color: %4; image: url(\":/icons/checkmark.svg\"); }"
         "QCheckBox::indicator:checked:hover { background: %5; border-color: %5; }"
     )
         .arg(css(c.textPrimary))

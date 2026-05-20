@@ -903,7 +903,18 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
                         rebuildFieldSidebar();
                         return;
                     }
-                    document_.ensureDifficulty(id);
+                    SimaiDifficultyData& newDiff = document_.ensureDifficulty(id);
+                    // Honour the "all difficulties share the same designer
+                    // name" project preference at creation time: seed the
+                    // fresh difficulty's designer with the top-level &des
+                    // so the user doesn't have to retype it. The runtime
+                    // sync (applyCurrentFieldToDocument) only kicks in on
+                    // edits — without this seed, a freshly-added
+                    // difficulty would persist with an empty designer
+                    // until the user manually broadcasts again.
+                    if (unifiedDesignerEnabled_ && newDiff.designer.isEmpty()) {
+                        newDiff.designer = document_.designer;
+                    }
                     documentDirty_ = true;
                     activeOutlineKey_ = "chart";
                     updateDirtyState();
