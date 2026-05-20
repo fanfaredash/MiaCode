@@ -47,15 +47,25 @@ public:
     SimaiDifficultyData& ensureDifficulty(int id);
     void removeDifficulty(int id);
 
-    // Heuristic for "all difficulties share the same designer name" default
-    // when the project has no explicit preference recorded yet.
-    //
-    // Returns false when there is evidence that difficulties are deliberately
-    // authored under distinct designer names (multiple distinct non-empty
-    // per-difficulty designers; or per-difficulty designers exist but the
-    // top-level &des field is empty). Otherwise returns true (no per-diff
-    // designers, or all per-diff designers match the top-level &des).
+    // Default for the "all difficulties share the same designer name"
+    // project preference when no explicit value is recorded yet.
+    // Currently *always false* — auto-enabling has no entirely-safe
+    // fallback, so we require the user to opt in. The heuristic that
+    // detects "this project is already trivially unified" lives in
+    // isUnifiedDesignerTriviallySafe() below and is preserved for a
+    // future preferences/onboarding flow that might surface a suggestion.
     bool inferUnifiedDesignerDefault() const;
+
+    // Returns true when every &des_N already matches the top-level &des
+    // verbatim (or both are empty). Includes the brand-new-project case
+    // (no difficulties + empty &des) and the already-unified case
+    // (&des = "X" with every existing &des_N = "X"). Any disagreement —
+    // including a blank &des_N when &des has a value, or vice versa —
+    // returns false. Kept as a public utility even though
+    // inferUnifiedDesignerDefault() doesn't consult it, because future
+    // UI affordances (e.g. "this project looks unified, enable it?")
+    // will want to ask this question explicitly.
+    bool isUnifiedDesignerTriviallySafe() const;
 
     QString title;
     QString artist;
