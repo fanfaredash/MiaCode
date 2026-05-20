@@ -670,25 +670,35 @@ void MainWindow::DocumentSection::onUnifiedDesignerToggled(bool checked)
             }
         }
         const QString detail = affected.join(QStringLiteral("\n"));
+        // Top-level line uses the same "&des (name)" shape as the per-diff
+        // entries below so the list reads as a single column.
         const QString promptBody = UiText::isChineseUi()
             ? QStringLiteral(
-                  "启用「所有难度采用相同名义」后，下列难度的设计师名将被 &des = \"%1\" 覆盖：\n\n%2\n\n"
+                  "启用「所有难度采用相同名义」后，下列难度的谱师名将被 &des (%1) 覆盖：\n\n%2\n\n"
                   "是否继续？")
                   .arg(survey.topDesigner, detail)
             : QStringLiteral(
                   "Enabling \"All difficulties share this designer\" will overwrite the "
-                  "designer of the following difficulties with &des = \"%1\":\n\n%2\n\n"
+                  "designer of the following difficulties with &des (%1):\n\n%2\n\n"
                   "Continue?")
                   .arg(survey.topDesigner, detail);
-        const auto choice = UiDialogs::showMessageBox(
+        // Manually construct the QMessageBox so we can apply the
+        // dark-aware system backdrop (UiDialogs::showMessageBox doesn't
+        // expose a hook for that). The dialog still uses the localized
+        // Yes/No labels from UiDialogs::execMessageBox.
+        QMessageBox confirmDialog(
             QMessageBox::Question,
-            &owner_,
             UiText::isChineseUi()
-                ? QStringLiteral("覆盖各难度设计师名？")
+                ? QStringLiteral("覆盖各难度谱师名？")
                 : QStringLiteral("Overwrite per-difficulty designers?"),
             promptBody,
-            QMessageBox::Yes | QMessageBox::No,
-            QMessageBox::No);
+            QMessageBox::NoButton,
+            UiDialogs::effectiveParentWidget(&owner_));
+        confirmDialog.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+        confirmDialog.setDefaultButton(QMessageBox::No);
+        owner_.windowSection_->applySystemWindowBackdrop(&confirmDialog);
+        UiDialogs::prepareDialogWindow(&confirmDialog, &owner_);
+        const auto choice = UiDialogs::execMessageBox(&confirmDialog);
         if (choice != QMessageBox::Yes) {
             // User declined → revert checkbox UI to OFF and don't persist.
             if (ui_.unifiedDesignerCheckbox_ != nullptr) {
@@ -760,20 +770,26 @@ bool MainWindow::DocumentSection::promptCanonicalDesignerName(const QStringList&
     if (out == nullptr) {
         return false;
     }
-    QDialog dialog(&owner_);
+    QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
+    dialog.setModal(true);
     dialog.setWindowTitle(UiText::isChineseUi()
-        ? QStringLiteral("选择统一的设计师名")
+        ? QStringLiteral("选择统一的谱师名")
         : QStringLiteral("Pick the canonical designer"));
+    // Themed background and visible radio indicators (the Windows default
+    // disc is nearly invisible against the dark card background).
+    dialog.setStyleSheet(UiTheme::designerPickerDialogStyleSheet());
     // Size hint generous enough for long Chinese designer names so the
     // radio labels aren't cut off. The scroll area lets the dialog stay
     // bounded even when there are many candidates.
     dialog.resize(520, 420);
 
     auto* outerLayout = new QVBoxLayout(&dialog);
+    outerLayout->setContentsMargins(14, 14, 14, 12);
+    outerLayout->setSpacing(10);
     auto* prompt = new QLabel(
         UiText::isChineseUi()
             ? QStringLiteral(
-                  "当前谱面在 &des 和各 &des_N 中检测到多个不同的设计师名义。\n"
+                  "当前谱面在 &des 和各 &des_N 中检测到多个不同的谱师名义。\n"
                   "请选择一个作为统一名义（将写入到所有难度），或选择「直接清除」让所有字段变为空。")
             : QStringLiteral(
                   "This chart has multiple distinct designer names across &des and the "
@@ -785,19 +801,21 @@ bool MainWindow::DocumentSection::promptCanonicalDesignerName(const QStringList&
 
     auto* scroll = new QScrollArea(&dialog);
     scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
     auto* listHost = new QWidget(scroll);
     auto* listLayout = new QVBoxLayout(listHost);
     listLayout->setContentsMargins(8, 8, 8, 8);
-    listLayout->setSpacing(6);
+    listLayout->setSpacing(2);
     auto* group = new QButtonGroup(&dialog);
     group->setExclusive(true);
 
+    // Every radio button (regular candidate or "Clear all") gets the same
+    // base widget styling from the dialog stylesheet — no per-row override
+    // here, so vertical alignment between rows stays exact.
     int radioIndex = 0;
     for (const QString& name : candidates) {
         auto* radio = new QRadioButton(name, listHost);
         radio->setToolTip(name);
-        // Word-wrap so 30+ char designer names don't blow the dialog wider.
-        radio->setStyleSheet(QStringLiteral("QRadioButton { padding: 4px; }"));
         if (radioIndex == 0) {
             radio->setChecked(true);
         }
@@ -805,13 +823,13 @@ bool MainWindow::DocumentSection::promptCanonicalDesignerName(const QStringList&
         listLayout->addWidget(radio);
         ++radioIndex;
     }
-    // "Clear all" lives at the end of the list, visually separated. Its
-    // chosen-id is sentinel kClearAllId so callers can tell it apart.
+    // "Clear all" lives at the end of the list. Its chosen-id is the
+    // sentinel kClearAllId so callers can tell it apart from real names.
     constexpr int kClearAllId = -1;
     auto* clearAllRadio = new QRadioButton(
         UiText::isChineseUi()
-            ? QStringLiteral("直接清除（所有字段置空）")
-            : QStringLiteral("Clear all (leave every field empty)"),
+            ? QStringLiteral("直接清除")
+            : QStringLiteral("Clear all"),
         listHost);
     group->addButton(clearAllRadio, kClearAllId);
     listLayout->addWidget(clearAllRadio);
@@ -820,9 +838,16 @@ bool MainWindow::DocumentSection::promptCanonicalDesignerName(const QStringList&
     outerLayout->addWidget(scroll, 1);
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    UiDialogs::localizeButtonBox(buttonBox);
     QObject::connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     QObject::connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     outerLayout->addWidget(buttonBox);
+
+    // Apply the dark-mode title bar + center the dialog on the main window
+    // (or whatever the active anchor widget is). Without these the dialog
+    // would inherit a light title bar and spawn at an arbitrary location.
+    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
+    UiDialogs::prepareDialogWindow(&dialog, &owner_);
 
     if (dialog.exec() != QDialog::Accepted) {
         return false;

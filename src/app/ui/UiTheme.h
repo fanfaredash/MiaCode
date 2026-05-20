@@ -108,6 +108,8 @@ QString preferencesDialogStyleSheet();
 QString settingsDialogStyleSheet();
 QString aboutDialogStyleSheet();
 QString exportDialogStyleSheet();
+QString designerPickerDialogStyleSheet();
+QString darkAwareCheckBoxStyleSheet();
 QString readOnlyLineEditStyleSheet();
 QString collapsibleToggleStyleSheet();
 QString activePlaybackButtonStyleSheet();

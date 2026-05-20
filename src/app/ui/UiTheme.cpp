@@ -834,6 +834,62 @@ QString exportDialogStyleSheet()
         .arg(css(c.textPrimary));
 }
 
+QString designerPickerDialogStyleSheet()
+{
+    // Stylesheet for the "pick canonical designer" dialog. The radio button
+    // indicator gets explicit fills so it stays visible in dark mode (the
+    // platform default leaves the unchecked disc nearly invisible against
+    // the dark card background). Padding is set on QRadioButton, not on
+    // individual button widgets — that way every row aligns identically.
+    const Colors& c = colors();
+    const QColor indicatorBg = c.dark ? c.windowAltBg : QColor("#FFFFFF");
+    const QColor indicatorBorder = c.borderStrong;
+    return QStringLiteral(
+        "QDialog { background: %1; }"
+        "QLabel { color: %2; }"
+        "QScrollArea { background: %3; border: 1px solid %4; border-radius: 8px; }"
+        "QScrollArea > QWidget > QWidget { background: %3; }"
+        "QRadioButton { color: %2; spacing: 8px; padding: 4px; }"
+        "QRadioButton::indicator { width: 16px; height: 16px; border: 1px solid %5; border-radius: 8px; background: %6; }"
+        "QRadioButton::indicator:hover { border-color: %7; }"
+        "QRadioButton::indicator:checked { background: %7; border: 4px solid %6; outline: 1px solid %7; }"
+        "QPushButton { min-width: 92px; min-height: 30px; padding: 0 12px; border: 1px solid %4; border-radius: 8px; background: %3; color: %2; }"
+        "QPushButton:hover { background: %8; border-color: %7; }"
+        "QPushButton:default, QPushButton:pressed { background: %7; border-color: %7; color: %9; }"
+    )
+        .arg(css(c.windowBg))
+        .arg(css(c.textPrimary))
+        .arg(css(c.cardBg))
+        .arg(css(c.border))
+        .arg(css(indicatorBorder))
+        .arg(css(indicatorBg))
+        .arg(css(c.accent))
+        .arg(css(c.menuHoverBg))
+        .arg(css(c.accentText));
+}
+
+QString darkAwareCheckBoxStyleSheet()
+{
+    // Standalone QCheckBox styling used on the chart-info form where the
+    // checkbox isn't part of a themed dialog. Mirrors the radio-indicator
+    // approach in designerPickerDialogStyleSheet so the box stays visible
+    // in dark mode without inheriting from a host widget.
+    const Colors& c = colors();
+    const QColor indicatorBg = c.dark ? c.windowAltBg : QColor("#FFFFFF");
+    return QStringLiteral(
+        "QCheckBox { color: %1; spacing: 6px; }"
+        "QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid %2; border-radius: 3px; background: %3; }"
+        "QCheckBox::indicator:hover { border-color: %4; }"
+        "QCheckBox::indicator:checked { background: %4; border-color: %4; image: none; }"
+        "QCheckBox::indicator:checked:hover { background: %5; border-color: %5; }"
+    )
+        .arg(css(c.textPrimary))
+        .arg(css(c.borderStrong))
+        .arg(css(indicatorBg))
+        .arg(css(c.accent))
+        .arg(css(c.accentHover));
+}
+
 QString readOnlyLineEditStyleSheet()
 {
     const Colors& c = colors();

@@ -640,6 +640,10 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     unifiedDesignerCheckbox_->setToolTip(UiText::isChineseUi()
         ? QStringLiteral("勾选后，&des 与每个难度的 &des_N 会双向同步。")
         : QStringLiteral("When checked, &des and every &des_N stay in sync."));
+    // Explicit indicator styling so the checkbox is visible in dark mode —
+    // the platform default leaves the unchecked box nearly invisible against
+    // the metadata page's dark card background.
+    unifiedDesignerCheckbox_->setStyleSheet(UiTheme::darkAwareCheckBoxStyleSheet());
     connect(unifiedDesignerCheckbox_, &QCheckBox::toggled, this, &MainWindow::onUnifiedDesignerToggled);
     designerWrapLayout->addWidget(unifiedDesignerCheckbox_, 0, Qt::AlignRight);
 
