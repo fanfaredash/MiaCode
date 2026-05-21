@@ -1414,8 +1414,8 @@ void runInlineSpecs(QTextStream& err, int* failed)
         expectTrue(normalized.ok, QStringLiteral("selection normalize accepts a mid-measure selection"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("|| 4/4\n{16}2,,,, 3,,,,{4}"),
-            QStringLiteral("selection normalize injects a restart time signature when starting a new measure mid-line, and glues a trailing {N} onto the last line so post-selection content keeps the original subdivision"),
+            QStringLiteral("|| 4/4\n{16}2,,,, 3,,,,\n{4}"),
+            QStringLiteral("selection normalize injects a restart time signature when starting a new measure mid-line, and appends a standalone trailing {N} so post-selection content keeps the original subdivision"),
             failed,
             err
         );

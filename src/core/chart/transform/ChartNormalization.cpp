@@ -1570,12 +1570,7 @@ ChartNormalizationResult normalizeChartFragment(
             }
         }
         if (lastEmittedBeats != targetBeats) {
-            const QString marker = QStringLiteral("{%1}").arg(targetBeats);
-            if (outputLines.isEmpty()) {
-                outputLines.append(marker);
-            } else {
-                outputLines.last().append(marker);
-            }
+            outputLines.append(QStringLiteral("{%1}").arg(targetBeats));
         }
     }
     if (appendTerminalMarker) {
