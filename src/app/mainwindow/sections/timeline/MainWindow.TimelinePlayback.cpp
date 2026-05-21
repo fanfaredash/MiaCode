@@ -14,6 +14,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewRuntime.h"
@@ -31,6 +32,8 @@
 #include <QtCore>
 #include <QtGui>
 #include <QtWidgets>
+
+#include <cstdio>  // G2 Diag: std::snprintf for sync rate-change beacon lines
 
 using namespace miacode::mainwindow::shared;
 
@@ -714,7 +717,24 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
 {
     owner_.ensurePreviewStageMediaRouteInitialized();
     const double clampedRate = qMax(0.25, rate);
+    // G2 Diag: sync beacon at the rate-change UI entry. The user-reported 0.5x
+    // crash leaves NO async DebugLog tail (the AsyncLogWriter queue drops on
+    // fast-fail), so the existing bass_clock_set_rate row a few lines down
+    // never reaches disk. Mirror every leg of the dispatch into the sync
+    // beacon (pure-Win32 fsync per line) so the next crash leaves a usable
+    // trail: ui_enter → qt_media_call → bass_runtime_call → ui_exit.
+    {
+        char buf[200];
+        std::snprintf(buf, sizeof(buf),
+            "ui/rate/enter from=%.3f requested=%.3f clamped=%.3f playing=%d",
+            state_.previewPlaybackRate_,
+            rate,
+            clampedRate,
+            state_.qtPreviewPlaying_ ? 1 : 0);
+        miacode::oplog::appendStartupBeaconLine(buf);
+    }
     if (qFuzzyCompare(state_.previewPlaybackRate_ + 1.0, clampedRate + 1.0)) {
+        miacode::oplog::appendStartupBeaconLine("ui/rate/exit reason=noop_same_rate");
         return;
     }
     // G2 Commit 2: capture the wall-clock chart-second using the OLD rate,
@@ -769,7 +789,9 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
         }
     }
     owner_.showPreviewPlaybackRateToast(state_.previewPlaybackRate_);
+    miacode::oplog::appendStartupBeaconLine("ui/rate/qt_media_about_to_call");
     owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
+    miacode::oplog::appendStartupBeaconLine("ui/rate/qt_media_returned");
     if (state_.previewSfxRuntime_ != nullptr) {
         if (wasPlaying) {
             // G2 Commit 2: live rate change while playing. The backend's
@@ -781,19 +803,25 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
             // new TEMPO in — heavyweight and broke audio continuity. The new
             // call covers the same effect with ~50-100ms BGM gap (per §6.2)
             // instead of a full session restart.
+            miacode::oplog::appendStartupBeaconLine("ui/rate/bass_live_about_to_call");
             state_.previewSfxRuntime_->applyPlaybackRateAtChartSecond(
                 state_.previewPlaybackRate_, chartNow);
+            miacode::oplog::appendStartupBeaconLine("ui/rate/bass_live_returned");
         } else {
+            miacode::oplog::appendStartupBeaconLine("ui/rate/bass_paused_about_to_call");
             state_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(state_.previewPlaybackRate_);
+            miacode::oplog::appendStartupBeaconLine("ui/rate/bass_paused_returned");
             if (!state_.previewStartupSyncPending_
                 && !state_.previewLateVideoStartPending_
                 && !state_.latestTimelineNoteMarkers_.isEmpty()) {
+                miacode::oplog::appendStartupBeaconLine("ui/rate/bass_apply_paused_about_to_call");
                 state_.previewSfxRuntime_->applyPausedPreviewState(
                     state_.latestTimelineNoteMarkers_,
                     false,
                     state_.qtPreviewPauseSecond_,
                     state_.previewPlaybackRate_,
                     state_.previewTimingSettings_);
+                miacode::oplog::appendStartupBeaconLine("ui/rate/bass_apply_paused_returned");
             }
         }
     }
@@ -806,9 +834,12 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
     // paths since those represent a partially-prepared session that must
     // be re-laid-out.
     if (state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
+        miacode::oplog::appendStartupBeaconLine("ui/rate/restart_cycle_about_to_call");
         stopQtPreviewPlayback(true);
         startQtPreviewPlayback(state_.qtPreviewPauseSecond_, true);
+        miacode::oplog::appendStartupBeaconLine("ui/rate/restart_cycle_returned");
     }
+    miacode::oplog::appendStartupBeaconLine("ui/rate/exit reason=ok");
 }
 
 double MainWindow::currentPreviewAuthoritativeAudioClockSecond() const

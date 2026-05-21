@@ -475,9 +475,34 @@ struct BassPreviewAudioBackend::Sample {
         // crash; the new G1 invariant ("speed set once" — at create / reload / paused
         // user rate change) means a caller hitting this skip path is a deferred rate
         // change waiting for the next pause cycle, not lost behavior.
+        //
+        // G2 Diag: 0.5x crash recurrence — async DebugLog drops the last few queued
+        // lines when the process fast-fails, so the existing appendAudioDebugLog rows
+        // never make it to disk. Mirror every step around the tempo write into the
+        // synchronous beacon (heap-free, fsync per line) so the breadcrumb survives.
+        const QByteArray kindUtf8 = kind.toUtf8();
+        {
+            char buf[160];
+            std::snprintf(buf, sizeof(buf),
+                "audio/rate/sample_read_flags kind=%s source=0x%08x rate=%.3f",
+                kindUtf8.constData(),
+                static_cast<unsigned>(source),
+                rate);
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
         const DWORD flags = BASS_Mixer_ChannelFlags(source, 0, 0);
         noteBassErr("sample_set_speed/read_flags");
         if (flags != static_cast<DWORD>(-1) && (flags & BASS_MIXER_CHAN_PAUSE) == 0) {
+            {
+                char buf[200];
+                std::snprintf(buf, sizeof(buf),
+                    "audio/rate/sample_skip_playing kind=%s source=0x%08x rate=%.3f flags=0x%08lx",
+                    kindUtf8.constData(),
+                    static_cast<unsigned>(source),
+                    rate,
+                    static_cast<unsigned long>(flags));
+                miacode::oplog::appendStartupBeaconLine(buf);
+            }
             appendAudioDebugLog(
                 QString("sample_set_speed_skipped_playing kind=%1 rate=%2")
                     .arg(kind)
@@ -485,8 +510,28 @@ struct BassPreviewAudioBackend::Sample {
             return;
         }
         const float tempo = static_cast<float>((qBound(kBassPreviewMinRate, rate, kBassPreviewMaxRate) - 1.0) * 100.0);
+        {
+            char buf[220];
+            std::snprintf(buf, sizeof(buf),
+                "audio/rate/sample_about_to_setattr_tempo kind=%s source=0x%08x rate=%.3f tempo=%.3f flags=0x%08lx",
+                kindUtf8.constData(),
+                static_cast<unsigned>(source),
+                rate,
+                static_cast<double>(tempo),
+                static_cast<unsigned long>(flags));
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
         BASS_ChannelSetAttribute(source, kBassPreviewTempoAttribute, tempo);
         noteBassErr("sample_set_speed");
+        {
+            char buf[160];
+            std::snprintf(buf, sizeof(buf),
+                "audio/rate/sample_setattr_tempo_done kind=%s source=0x%08x rate=%.3f",
+                kindUtf8.constData(),
+                static_cast<unsigned>(source),
+                rate);
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
     }
 
     bool isPlaying() const
@@ -1340,11 +1385,25 @@ void BassPreviewAudioBackend::setBackgroundTrackPlaybackRate(double rate)
 {
     MC_OP("BassPreviewAudioBackend::setBackgroundTrackPlaybackRate");
     const double normalizedRate = qBound(kBassPreviewMinRate, qIsFinite(rate) ? rate : 1.0, kBassPreviewMaxRate);
+    // G2 Diag: paused-rate-change entry — paired with the live-rate-change path
+    // (applyPlaybackRateAtChartSecond). Same justification: sync beacon
+    // survives a fast-fail in setBackgroundTrackSampleSpeed → Sample::setSpeed
+    // even when the async DebugLog queue does not.
+    {
+        char buf[180];
+        std::snprintf(buf, sizeof(buf),
+            "audio/rate/bass_paused_enter from=%.3f to=%.3f has_bgm=%d",
+            playbackSession_.backgroundTrackPlaybackRate,
+            normalizedRate,
+            backgroundTrackSample_ != nullptr ? 1 : 0);
+        miacode::oplog::appendStartupBeaconLine(buf);
+    }
     if (qAbs(playbackSession_.backgroundTrackPlaybackRate - normalizedRate) > kBassPreviewEpsilonSeconds) {
         invalidateRetainedPlaybackState(QStringLiteral("background_track_rate_changed"));
     }
     playbackSession_.backgroundTrackPlaybackRate = normalizedRate;
     setBackgroundTrackSampleSpeed(playbackSession_.backgroundTrackPlaybackRate);
+    miacode::oplog::appendStartupBeaconLine("audio/rate/bass_paused_exit");
 }
 
 void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double chartSecond)
@@ -1353,6 +1412,21 @@ void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double
 #ifdef Q_OS_WIN
     const double normalizedRate = qBound(kBassPreviewMinRate, qIsFinite(rate) ? rate : 1.0, kBassPreviewMaxRate);
     const double sanitizedChart = qIsFinite(chartSecond) ? chartSecond : 0.0;
+    // G2 Diag: every leg of the pause-modify-resume sequence below maps to one
+    // synchronous beacon line. Async DebugLog drops queue tail on fast-fail —
+    // the user reported 0.5x crash where NO bass_live_rate_change row landed —
+    // so the only reliable trail is the sync-fsync beacon. Each line is a
+    // strncpy'd stack buffer to keep heap allocation off the critical path.
+    {
+        char buf[200];
+        std::snprintf(buf, sizeof(buf),
+            "audio/rate/bass_enter from=%.3f to=%.3f chart=%.6f has_bgm=%d",
+            playbackSession_.backgroundTrackPlaybackRate,
+            normalizedRate,
+            sanitizedChart,
+            backgroundTrackSample_ != nullptr ? 1 : 0);
+        miacode::oplog::appendStartupBeaconLine(buf);
+    }
     if (backgroundTrackSample_ == nullptr) {
         // No BGM loaded — just record the rate so the next sample creation
         // picks it up. invalidateRetainedPlaybackState is intentionally NOT
@@ -1360,6 +1434,8 @@ void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double
         // change to the prepared transport.
         playbackSession_.backgroundTrackPlaybackRate = normalizedRate;
         playbackSession_.sessionPlaybackRate = normalizedRate;
+        miacode::oplog::appendStartupBeaconLine(
+            "audio/rate/bass_exit reason=no_bgm");
         return;
     }
     // G2 Commit 2: the pause-modify-resume sequence from
@@ -1373,17 +1449,28 @@ void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double
     // event is the brief BGM gap (~50-100ms typically) covered by the
     // pause flag flip.
     const double oldRate = playbackSession_.backgroundTrackPlaybackRate;
+    miacode::oplog::appendStartupBeaconLine("audio/rate/bass_about_to_pause");
     backgroundTrackSample_->pause();
+    miacode::oplog::appendStartupBeaconLine("audio/rate/bass_about_to_setspeed");
     backgroundTrackSample_->setSpeed(normalizedRate);
     const double rawSecond = sanitizedChart + playbackSession_.backgroundTrackOffsetSeconds;
     if (rawSecond >= 0.0) {
+        {
+            char buf[120];
+            std::snprintf(buf, sizeof(buf),
+                "audio/rate/bass_about_to_seek raw=%.6f",
+                rawSecond);
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
         backgroundTrackSample_->setCurrentSec(rawSecond);
     }
     playbackSession_.backgroundTrackPlaybackRate = normalizedRate;
     playbackSession_.sessionPlaybackRate = normalizedRate;
     playbackSession_.sessionStartSecond = sanitizedChart;
     playbackSession_.lastAuthoritativeSecond = sanitizedChart;
+    miacode::oplog::appendStartupBeaconLine("audio/rate/bass_about_to_resume");
     backgroundTrackSample_->play();
+    miacode::oplog::appendStartupBeaconLine("audio/rate/bass_exit reason=ok");
     appendAudioDebugLog(
         QString("bass_live_rate_change from=%1 to=%2 chart=%3 raw=%4")
             .arg(oldRate, 0, 'f', 3)
