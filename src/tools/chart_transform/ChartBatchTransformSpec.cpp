@@ -1414,8 +1414,8 @@ void runInlineSpecs(QTextStream& err, int* failed)
         expectTrue(normalized.ok, QStringLiteral("selection normalize accepts a mid-measure selection"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("|| 4/4\n{16}2,,,, 3,,,,\n{4}"),
-            QStringLiteral("selection normalize injects a restart time signature when starting a new measure mid-line, and appends a trailing {N} so post-selection content keeps the original subdivision"),
+            QStringLiteral("|| 4/4\n{16}2,,,, 3,,,,{4}"),
+            QStringLiteral("selection normalize injects a restart time signature when starting a new measure mid-line, and glues a trailing {N} onto the last line so post-selection content keeps the original subdivision"),
             failed,
             err
         );
@@ -1435,8 +1435,8 @@ void runInlineSpecs(QTextStream& err, int* failed)
         expectTrue(normalized.ok, QStringLiteral("selection normalize accepts an exact non-384 subdivision selection"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("{9}1,1,,,,,,,,\n{9}"),
-            QStringLiteral("selection normalize carries the active subdivision from the selection prefix and appends a trailing {N} mirroring the original final currentBeats"),
+            QStringLiteral("{9}1,1,,,,,,,,"),
+            QStringLiteral("selection normalize carries the active subdivision from the selection prefix; no trailing {N} when the last emitted {N} already matches the original final currentBeats"),
             failed,
             err
         );

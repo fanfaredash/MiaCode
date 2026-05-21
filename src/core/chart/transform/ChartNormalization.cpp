@@ -1546,13 +1546,37 @@ ChartNormalizationResult normalizeChartFragment(
         outputLines.removeLast();
     }
     if (!appendTerminalMarker) {
-        // Selection mode: trailing {N} so that post-selection content keeps
-        // the same `currentBeats` the original selection ended on. Input
-        // `{N}` markers are consumed (used to compute moment positions) but
-        // never re-emitted by normalize; without this trailing marker,
-        // normalize's own per-segment {N} choice leaks into post-selection
-        // parsing and shifts downstream note timings.
-        outputLines.append(QStringLiteral("{%1}").arg(qMax(1, currentBeats)));
+        // Selection mode: emit a trailing {N} so post-selection content
+        // keeps the same `currentBeats` the original selection ended on.
+        // Input `{N}` markers are consumed (used to compute moment positions)
+        // but never re-emitted as such — the per-segment {N}s normalize
+        // does emit would otherwise leak into post-selection parsing and
+        // shift downstream note timings.
+        // Skip when the last `{N}` already in the output matches; when we
+        // do append, glue to the last line instead of taking a new line.
+        const int targetBeats = qMax(1, currentBeats);
+        int lastEmittedBeats = -1;
+        for (int i = outputLines.size() - 1; i >= 0; --i) {
+            const QString& line = outputLines.at(i);
+            const int closeBrace = line.lastIndexOf(QLatin1Char('}'));
+            if (closeBrace < 0) continue;
+            const int openBrace = line.lastIndexOf(QLatin1Char('{'), closeBrace);
+            if (openBrace < 0) continue;
+            bool ok = false;
+            const int beats = line.mid(openBrace + 1, closeBrace - openBrace - 1).trimmed().toInt(&ok);
+            if (ok && beats > 0) {
+                lastEmittedBeats = beats;
+                break;
+            }
+        }
+        if (lastEmittedBeats != targetBeats) {
+            const QString marker = QStringLiteral("{%1}").arg(targetBeats);
+            if (outputLines.isEmpty()) {
+                outputLines.append(marker);
+            } else {
+                outputLines.last().append(marker);
+            }
+        }
     }
     if (appendTerminalMarker) {
         outputLines.append(QStringLiteral("E"));
