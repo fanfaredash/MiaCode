@@ -1,5 +1,7 @@
 #include "ChartBatchTransform.h"
 
+#include <functional>
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -1564,6 +1566,60 @@ void runInlineSpecs(QTextStream& err, int* failed)
             err
         );
     }
+
+    // Regression: multi-segment slide via `*` must keep each segment's break
+    // 'b' on its own branch. The earlier collapse-to-single-flag rebuild
+    // moved a 'b' from the second branch to the first
+    // (1-5[8:1]*-4b[8:1] -> 1-5b[8:1]*-4[8:1]), changing semantics.
+    {
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(
+                QStringLiteral("1-5[8:1]*-4b[8:1],,,,\nE"),
+                miacode::simai::SimaiTimingMetadata(),
+                miacode::chart_transform::ChartNormalizationOptions{true, false});
+        expectTrue(normalized.ok, QStringLiteral("normalize accepts a multi-segment slide with per-branch break"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16}1-5[8:1]*-4b[8:1],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize keeps the break 'b' on the second branch (was moved to the first branch by the old collapse-to-single-flag rebuild)"),
+            failed,
+            err
+        );
+    }
+
+    {
+        // Inverse case: break on first branch, none on second.
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(
+                QStringLiteral("1-5b[8:1]*-4[8:1],,,,\nE"),
+                miacode::simai::SimaiTimingMetadata(),
+                miacode::chart_transform::ChartNormalizationOptions{true, false});
+        expectTrue(normalized.ok, QStringLiteral("normalize accepts the inverse multi-segment slide"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16}1-5b[8:1]*-4[8:1],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize keeps the break 'b' on the first branch"),
+            failed,
+            err
+        );
+    }
+
+    {
+        // Both branches break.
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(
+                QStringLiteral("1-5b[8:1]*-4b[8:1],,,,\nE"),
+                miacode::simai::SimaiTimingMetadata(),
+                miacode::chart_transform::ChartNormalizationOptions{true, false});
+        expectTrue(normalized.ok, QStringLiteral("normalize accepts both-branches-break multi-segment slide"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16}1-5b[8:1]*-4b[8:1],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize keeps both 'b' flags on their respective branches"),
+            failed,
+            err
+        );
+    }
 }
 
 }  // namespace
@@ -1576,6 +1632,148 @@ int main(int argc, char** argv)
 
     int failed = 0;
     const QStringList args = app.arguments();
+    if (args.size() >= 3 && args.at(1) == QLatin1String("--normalize-parse-compare")) {
+        const QString path = args.at(2);
+        int requestedDiff = -1;
+        if (args.size() >= 4) {
+            bool idOk = false;
+            const int parsed = args.at(3).toInt(&idOk);
+            if (idOk) requestedDiff = parsed;
+        }
+        bool reduce = false;
+        if (args.size() >= 5 && args.at(4).compare(QLatin1String("reduce"), Qt::CaseInsensitive) == 0) {
+            reduce = true;
+        }
+        QString sourceText;
+        QString errorMessage;
+        if (!readUtf8File(path, &sourceText, &errorMessage)) {
+            err << errorMessage << '\n';
+            return 3;
+        }
+        const SimaiDocument doc = SimaiDocument::fromText(sourceText);
+        int diffId = requestedDiff;
+        if (diffId < 0) {
+            for (int id : doc.difficultyIds()) {
+                const SimaiDifficultyData* d = doc.difficulty(id);
+                if (d != nullptr && !d->chart.trimmed().isEmpty() && id > diffId) {
+                    diffId = id;
+                }
+            }
+        }
+        if (diffId < 0) {
+            err << "no usable difficulty in " << QDir::toNativeSeparators(path) << '\n';
+            return 4;
+        }
+        const SimaiDifficultyData* difficulty = doc.difficulty(diffId);
+        if (difficulty == nullptr) {
+            err << "no difficulty " << diffId << '\n';
+            return 4;
+        }
+
+        const auto timingMd = miacode::simai::buildTimingMetadata(doc);
+        const QString origChart = difficulty->chart;
+
+        // Strip source positions (which shift after normalize) so the parse
+        // comparison is purely semantic.
+        std::function<QJsonValue(const QJsonValue&)> strip = [&](const QJsonValue& v) -> QJsonValue {
+            if (v.isObject()) {
+                QJsonObject obj = v.toObject();
+                obj.remove(QStringLiteral("source_line"));
+                obj.remove(QStringLiteral("source_col"));
+                obj.remove(QStringLiteral("source_end_col"));
+                obj.remove(QStringLiteral("parse_order"));
+                for (auto it = obj.begin(); it != obj.end(); ++it) {
+                    *it = strip(*it);
+                }
+                return obj;
+            }
+            if (v.isArray()) {
+                QJsonArray arr = v.toArray();
+                QJsonArray result;
+                for (const auto& item : arr) {
+                    result.append(strip(item));
+                }
+                return result;
+            }
+            return v;
+        };
+
+        out << "=== " << QDir::toNativeSeparators(path) << " diff=" << diffId
+            << " reduce=" << (reduce ? "true" : "false") << " ===\n";
+
+        // Build the semantic comparison view: drop beat_markers (re-emitted
+        // subdivisions naturally shift) and warnings (which can change
+        // count after normalize). Keep ok / errors / note_markers — those
+        // are the user-visible chart semantics.
+        const auto buildSemanticView = [&](const SimaiNativeParseResult& parse) {
+            QJsonObject obj;
+            obj.insert(QStringLiteral("ok"), parse.ok);
+            obj.insert(QStringLiteral("errors"), strip(dumpMessages(parse.errors)));
+            obj.insert(QStringLiteral("note_markers"), strip(dumpNoteMarkers(parse.noteMarkers)));
+            return obj;
+        };
+
+        const auto origParse = SimaiNativeParser::parseForTimeline(origChart, timingMd);
+        const QJsonObject origSemantic = buildSemanticView(origParse);
+
+        miacode::chart_transform::ChartNormalizationOptions opts;
+        opts.reduceTo384Grid = reduce;
+        opts.startAtNewMeasure = true;
+
+        // Test 1: whole-chart normalize.
+        {
+            const auto result = miacode::chart_transform::normalizeChartText(origChart, timingMd, opts);
+            if (!result.ok) {
+                out << "  WHOLE: normalize FAIL: " << result.errorMessage << '\n';
+            } else {
+                const auto newParse = SimaiNativeParser::parseForTimeline(result.text, timingMd);
+                const QJsonObject newSemantic = buildSemanticView(newParse);
+                QString diff;
+                const bool same = compareJsonValues(origSemantic, newSemantic, QStringLiteral("$"), &diff);
+                out << "  WHOLE: " << (same ? "PASS" : QString("DIFFER: ") + diff) << '\n';
+            }
+        }
+
+        // Tests 2, 3: two pseudo-random line ranges (deterministic per chart length).
+        const QStringList chartLines = origChart.split(QLatin1Char('\n'), Qt::KeepEmptyParts);
+        const int totalLines = chartLines.size();
+        if (totalLines >= 4) {
+            // Range A: lines [N/4, N/2). Range B: lines [N/2, 3N/4).
+            // Both are deterministic so the tests are repeatable.
+            const QVector<QPair<int, int>> ranges = {
+                {totalLines / 4, totalLines / 2},
+                {totalLines / 2, qMin(totalLines, 3 * totalLines / 4)},
+            };
+            for (const auto& range : ranges) {
+                int startOffset = 0;
+                for (int i = 0; i < range.first; ++i) {
+                    startOffset += chartLines.at(i).size() + 1;
+                }
+                int endOffset = startOffset;
+                for (int i = range.first; i < range.second; ++i) {
+                    endOffset += chartLines.at(i).size() + 1;
+                }
+                endOffset = qMin(endOffset, origChart.size());
+                if (startOffset >= endOffset) continue;
+
+                const auto result = miacode::chart_transform::normalizeChartSelectionText(
+                    origChart, startOffset, endOffset, timingMd, opts);
+                if (!result.ok) {
+                    out << "  SEG[L" << (range.first + 1) << "-L" << range.second
+                        << "]: normalize FAIL: " << result.errorMessage << '\n';
+                    continue;
+                }
+                const QString spliced = origChart.left(startOffset) + result.text + origChart.mid(endOffset);
+                const auto newParse = SimaiNativeParser::parseForTimeline(spliced, timingMd);
+                const QJsonObject newSemantic = buildSemanticView(newParse);
+                QString diff;
+                const bool same = compareJsonValues(origSemantic, newSemantic, QStringLiteral("$"), &diff);
+                out << "  SEG[L" << (range.first + 1) << "-L" << range.second
+                    << "]: " << (same ? "PASS" : QString("DIFFER: ") + diff) << '\n';
+            }
+        }
+        return 0;
+    }
     if (args.size() >= 3 && args.at(1) == QLatin1String("--normalize-dump")) {
         const QString path = args.at(2);
         int difficultyId = 5;

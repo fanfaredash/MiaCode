@@ -286,12 +286,17 @@ struct NoteTokenParts {
     bool valid = false;
 };
 
+struct SlideSegmentParts {
+    QString text;                // segment text without 'b' chars
+    bool segmentBreak = false;   // there was a 'b' anywhere in this segment
+};
+
 struct SlideTokenParts {
-    QString coreWithoutTrackBreak;
-    QString headExtraModifiers;
-    bool headBreak = false;
-    bool headEx = false;
-    bool trackBreak = false;
+    QChar lane;
+    QString headExtraModifiers;  // ?!@ before the first shape char
+    bool headBreak = false;      // 'b' in head position (between lane and first shape char)
+    bool headEx = false;         // 'x' in head position
+    QVector<SlideSegmentParts> segments;
     bool valid = false;
 };
 
@@ -512,6 +517,8 @@ bool parseSlideTokenParts(const QString& token, SlideTokenParts* parts)
         return false;
     }
 
+    parts->lane = token.at(0);
+
     int prefixLength = 0;
     while ((1 + prefixLength) < token.size()) {
         const QChar ch = token.at(1 + prefixLength);
@@ -542,16 +549,28 @@ bool parseSlideTokenParts(const QString& token, SlideTokenParts* parts)
         return false;
     }
 
-    const QString core = QString(token.at(0)) + remainder;
-    parts->trackBreak = core.mid(1).contains(QLatin1Char('b'), Qt::CaseInsensitive);
-    parts->coreWithoutTrackBreak.reserve(core.size());
-    parts->coreWithoutTrackBreak.append(core.at(0));
-    for (int index = 1; index < core.size(); ++index) {
-        if (core.at(index).toLower() == QLatin1Char('b')) {
-            continue;
+    // Split by `*` so each `*`-branch can keep its own break flag. Collapsing
+    // every `b` in the body into a single flag (the previous behavior) loses
+    // per-branch info — `1-5[8:1]*-4b[8:1]` then rebuilds as
+    // `1-5b[8:1]*-4[8:1]`, moving the break to the wrong branch.
+    const QStringList rawSegments = remainder.split(QLatin1Char('*'));
+    parts->segments.reserve(rawSegments.size());
+    for (const QString& raw : rawSegments) {
+        SlideSegmentParts seg;
+        seg.text.reserve(raw.size());
+        for (QChar ch : raw) {
+            if (ch.toLower() == QLatin1Char('b')) {
+                seg.segmentBreak = true;
+                continue;
+            }
+            seg.text.append(ch);
         }
-        parts->coreWithoutTrackBreak.append(core.at(index));
+        parts->segments.append(seg);
     }
+    if (parts->segments.isEmpty()) {
+        return false;
+    }
+
     parts->valid = true;
     return true;
 }
@@ -597,8 +616,7 @@ QString buildNoteToken(const NoteTokenParts& parts)
 QString buildSlideToken(const SlideTokenParts& parts)
 {
     QString token;
-    token.reserve(parts.coreWithoutTrackBreak.size() + parts.headExtraModifiers.size() + 3);
-    token.append(parts.coreWithoutTrackBreak.at(0));
+    token.append(parts.lane);
     token.append(sortedModifierText(parts.headExtraModifiers));
     if (parts.headBreak) {
         token.append(QLatin1Char('b'));
@@ -606,16 +624,22 @@ QString buildSlideToken(const SlideTokenParts& parts)
     if (parts.headEx) {
         token.append(QLatin1Char('x'));
     }
-    QString remainder = parts.coreWithoutTrackBreak.mid(1);
-    if (parts.trackBreak) {
-        const int firstBracket = remainder.indexOf(QLatin1Char('['));
-        if (firstBracket >= 0) {
-            remainder.insert(firstBracket, QLatin1Char('b'));
-        } else {
-            remainder.append(QLatin1Char('b'));
+    for (int i = 0; i < parts.segments.size(); ++i) {
+        if (i > 0) {
+            token.append(QLatin1Char('*'));
         }
+        const SlideSegmentParts& seg = parts.segments.at(i);
+        QString segText = seg.text;
+        if (seg.segmentBreak) {
+            const int firstBracket = segText.indexOf(QLatin1Char('['));
+            if (firstBracket >= 0) {
+                segText.insert(firstBracket, QLatin1Char('b'));
+            } else {
+                segText.append(QLatin1Char('b'));
+            }
+        }
+        token.append(segText);
     }
-    token.append(remainder);
     return token;
 }
 
@@ -673,15 +697,16 @@ QString renderTokenForGrid(const QString& token, int gridBeats, bool reduceTo384
 
     SlideTokenParts slideParts;
     if (parseSlideTokenParts(trimmed, &slideParts) && slideParts.valid) {
-        const int openBracket = slideParts.coreWithoutTrackBreak.indexOf(QLatin1Char('['));
-        if (openBracket >= 0) {
-            const QString normalizedBracket = normalizeSingleBracketSuffix(
-                slideParts.coreWithoutTrackBreak.mid(openBracket),
-                gridBeats,
-                reduceTo384Grid,
-                DurationNormalizationOptions{false, false});
-            slideParts.coreWithoutTrackBreak =
-                slideParts.coreWithoutTrackBreak.left(openBracket) + normalizedBracket;
+        for (SlideSegmentParts& seg : slideParts.segments) {
+            const int openBracket = seg.text.indexOf(QLatin1Char('['));
+            if (openBracket >= 0) {
+                const QString normalizedBracket = normalizeSingleBracketSuffix(
+                    seg.text.mid(openBracket),
+                    gridBeats,
+                    reduceTo384Grid,
+                    DurationNormalizationOptions{false, false});
+                seg.text = seg.text.left(openBracket) + normalizedBracket;
+            }
         }
         return buildSlideToken(slideParts);
     }
