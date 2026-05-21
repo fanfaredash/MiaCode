@@ -1414,8 +1414,8 @@ void runInlineSpecs(QTextStream& err, int* failed)
         expectTrue(normalized.ok, QStringLiteral("selection normalize accepts a mid-measure selection"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("|| 4/4\n{16}2,,,, 3,,,,"),
-            QStringLiteral("selection normalize injects a restart time signature when starting a new measure mid-line"),
+            QStringLiteral("|| 4/4\n{16}2,,,, 3,,,,\n{4}"),
+            QStringLiteral("selection normalize injects a restart time signature when starting a new measure mid-line, and appends a trailing {N} so post-selection content keeps the original subdivision"),
             failed,
             err
         );
@@ -1435,8 +1435,8 @@ void runInlineSpecs(QTextStream& err, int* failed)
         expectTrue(normalized.ok, QStringLiteral("selection normalize accepts an exact non-384 subdivision selection"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("{9}1,1,,,,,,,,"),
-            QStringLiteral("selection normalize carries the active subdivision from the selection prefix"),
+            QStringLiteral("{9}1,1,,,,,,,,\n{9}"),
+            QStringLiteral("selection normalize carries the active subdivision from the selection prefix and appends a trailing {N} mirroring the original final currentBeats"),
             failed,
             err
         );
@@ -1770,6 +1770,24 @@ int main(int argc, char** argv)
                 const bool same = compareJsonValues(origSemantic, newSemantic, QStringLiteral("$"), &diff);
                 out << "  SEG[L" << (range.first + 1) << "-L" << range.second
                     << "]: " << (same ? "PASS" : QString("DIFFER: ") + diff) << '\n';
+                if (!same) {
+                    out << "    durationSeconds: orig=" << origParse.durationSeconds
+                        << " new=" << newParse.durationSeconds << '\n';
+                    const QJsonArray origNotes = origSemantic.value(QStringLiteral("note_markers")).toArray();
+                    const QJsonArray newNotes = newSemantic.value(QStringLiteral("note_markers")).toArray();
+                    const int limit = qMin(origNotes.size(), newNotes.size());
+                    for (int idx = 0; idx < limit; ++idx) {
+                        QString sub;
+                        if (!compareJsonValues(
+                                origNotes.at(idx),
+                                newNotes.at(idx),
+                                QStringLiteral("$.note_markers[%1]").arg(idx),
+                                &sub)) {
+                            out << "    first diff at idx=" << idx << '\n';
+                            break;
+                        }
+                    }
+                }
             }
         }
         return 0;

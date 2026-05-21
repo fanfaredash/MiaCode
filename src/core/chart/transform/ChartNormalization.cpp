@@ -1545,6 +1545,15 @@ ChartNormalizationResult normalizeChartFragment(
     while (!outputLines.isEmpty() && outputLines.constLast().isEmpty()) {
         outputLines.removeLast();
     }
+    if (!appendTerminalMarker) {
+        // Selection mode: trailing {N} so that post-selection content keeps
+        // the same `currentBeats` the original selection ended on. Input
+        // `{N}` markers are consumed (used to compute moment positions) but
+        // never re-emitted by normalize; without this trailing marker,
+        // normalize's own per-segment {N} choice leaks into post-selection
+        // parsing and shifts downstream note timings.
+        outputLines.append(QStringLiteral("{%1}").arg(qMax(1, currentBeats)));
+    }
     if (appendTerminalMarker) {
         outputLines.append(QStringLiteral("E"));
     }
