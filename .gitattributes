@@ -1,0 +1,21 @@
+* text=auto
+
+# Windows batch files MUST be CRLF — cmd.exe parses LF .bat files
+# character-by-character (treats each line's first byte as a command),
+# producing garbage like "'M' is not an internal or external command"
+# for every line that starts with M (set MIACODE_*=... lines).
+# Discovered in beta55 when scripts/Start_MiaCode_DisablePerPixelAlpha.bat
+# was written by an editor that defaulted to LF; the .bat shipped in
+# the zip and the user's cmd window vomited LF parse errors before
+# even reaching the start "" /wait line. eol=crlf forces git to
+# materialise these files with CRLF in the working tree regardless of
+# the platform's core.autocrlf setting, and to normalise back to LF
+# on commit. (LF is what we already have in storage for the existing
+# Start_MiaCode_Debug.bat etc., so this is a no-op for storage but
+# guarantees checkout-side correctness.)
+*.bat eol=crlf
+*.cmd eol=crlf
+
+# PowerShell scripts also benefit from CRLF on Windows, though
+# powershell.exe is more lenient than cmd.exe.
+*.ps1 eol=crlf
