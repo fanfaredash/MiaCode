@@ -356,7 +356,30 @@ if (!(Test-Path $debugLauncherSrc)) {
 }
 Copy-Item $debugLauncherSrc (Join-Path $DistDir "Start_MiaCode_Debug.bat") -Force
 
-# beta51: Start_MiaCode_Debug.bat is the only launcher shipped now.
+# beta55 diagnostic launchers — paired with the playback-rate crash
+# investigation. Default Start_MiaCode_Debug.bat reproduces the crash;
+# these two .bat files toggle env vars that isolate the root cause:
+#   * Start_MiaCode_DisablePerPixelAlpha.bat → MIACODE_PREVIEW_DCOMP_PER_PIXEL_ALPHA=0
+#     Tests hypothesis #1 (QRhi D3D11 texture invalidation during
+#     Qt setPlaybackRate). If launching with this .bat survives the
+#     rate switch, hypothesis confirmed.
+#   * Start_MiaCode_FFmpegBackend.bat → QT_MEDIA_BACKEND=ffmpeg
+#     Tests whether the Windows Media Foundation backend specifically
+#     is involved; logs_24 already showed FFmpeg also crashes, so this
+#     is mostly a control / fallback option.
+# Both .bat files live in scripts/ (kept in source control) AND in the
+# zip root (alongside Start_MiaCode_Debug.bat) so users can double-click
+# them. When the investigation closes they can be removed from both
+# sides — for now they ship with every package.
+foreach ($diagLauncher in @("Start_MiaCode_DisablePerPixelAlpha.bat", "Start_MiaCode_FFmpegBackend.bat")) {
+    $src = Join-Path $repoRoot "scripts\\$diagLauncher"
+    if (!(Test-Path $src)) {
+        throw "Missing required diagnostic launcher script: $src"
+    }
+    Copy-Item $src (Join-Path $DistDir $diagLauncher) -Force
+}
+
+# beta51: Start_MiaCode_Debug.bat is the only "normal" launcher shipped now.
 # The legacy QML launcher and the beta45 D3D11/Plugin/AsyncLog triage
 # launchers (Start_MiaCode_Legacy_QML / SkipDiagD3D11 / DiagBypass /
 # SkipBoth / QtPluginDiag) used to land here too. They were diagnostic
@@ -561,6 +584,9 @@ $requiredPackagePaths = @(
     # Root: user-facing entry points + content + log dirs only.
     "MiaCode.exe",
     "Start_MiaCode_Debug.bat",
+    # beta55 diagnostic launchers (see comment block at the copy site).
+    "Start_MiaCode_DisablePerPixelAlpha.bat",
+    "Start_MiaCode_FFmpegBackend.bat",
     "logs",
     "logs\\worker-hwnd",
     "assets\\SFX",

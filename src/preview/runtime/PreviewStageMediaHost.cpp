@@ -547,95 +547,55 @@ void PreviewStageMediaHost::setPlaybackRate(double rate)
         // even at 0.5x / 1.5x (logs_24 startup line 134-161).
         return;
     }
-    if (qFuzzyCompare(playbackRate_ + 1.0, oldRate + 1.0)) {
-        miacode::oplog::appendStartupBeaconLine("preview/rate/qt_host_noop_same_rate");
-        return;
-    }
-    // G2 fix: Qt 6.8 QMediaPlayer::setPlaybackRate(rate) with rate != 1.0
-    // applied to a player that already has an active source fast-fails the
-    // process from a worker thread on BOTH WMF (logs_22/23 at 0.5x) and
-    // FFmpeg (logs_24 at 1.5x) backends. The only ordering that's been
-    // proven safe in this Qt revision is "set rate on a player that has
-    // no source yet". Therefore: tear down + recreate the player on every
-    // rate change. recoverVideoBackend() already does exactly this
-    // sequence (delete player → initializeBackendObjects (which applies
-    // playbackRate_ pre-setSource) → bindVideoOutput → setSource →
-    // setPosition → optional play), so we forward to it. Cost is a
-    // ~200-500ms video re-buffer per rate change; benefit is real A/V
-    // sync at the new rate, not the previous "skip Qt setRate" hack that
-    // left the video pinned at 1.0x.
-    //
-    // Special-case rate==1.0: a direct setPlaybackRate(1.0) on a running
-    // player has never been observed to crash, and skipping the reload
-    // keeps the common "return to normal speed" path cheap.
-    if (qFuzzyCompare(playbackRate_ + 1.0, 2.0)) {
-        const QMediaPlayer::MediaStatus status = player_->mediaStatus();
-        const bool stable = status == QMediaPlayer::NoMedia
-                         || status == QMediaPlayer::LoadedMedia
-                         || status == QMediaPlayer::BufferedMedia
-                         || status == QMediaPlayer::EndOfMedia;
-        if (!stable) {
-            pendingPlaybackRateApply_ = true;
-            {
-                char buf[160];
-                std::snprintf(buf, sizeof(buf),
-                    "preview/rate/qt_host_deferred rate=%.3f status=%d",
-                    playbackRate_,
-                    static_cast<int>(status));
-                miacode::oplog::appendStartupBeaconLine(buf);
-            }
-            appendPreviewStageMediaLog(
-                QStringLiteral("playback_rate_deferred"),
-                QString("rate=%1 status=%2 kind=%3")
-                    .arg(playbackRate_, 0, 'f', 3)
-                    .arg(mediaStatusName(status))
-                    .arg(debugMediaTypeName()));
-            return;
-        }
-        pendingPlaybackRateApply_ = false;
+    // beta55 diagnostic build: revert beta54's recoverVideoBackend rebuild
+    // path so the 0.5x / 1.5x crash recurs on demand. This release ships
+    // alongside Start_MiaCode_DisablePerPixelAlpha.bat and
+    // Start_MiaCode_FFmpegBackend.bat — users compare default-launcher
+    // behaviour (crash) against env-toggle behaviour (does it survive?)
+    // to confirm hypothesis #1 (DComp per-pixel-alpha + QRhi D3D11
+    // texture invalidation during Qt's setPlaybackRate-triggered
+    // converter rebuild). beta54's rebuild fix is intentionally absent
+    // here; if hypothesis #1 confirms, the proper fix targets the QML /
+    // DComp surface layer instead. Sync beacon trail is preserved so
+    // late tail-truncation in the async DebugLog doesn't lose the
+    // breadcrumb when the crash recurs.
+    const QMediaPlayer::MediaStatus status = player_->mediaStatus();
+    const bool stable = status == QMediaPlayer::NoMedia
+                     || status == QMediaPlayer::LoadedMedia
+                     || status == QMediaPlayer::BufferedMedia
+                     || status == QMediaPlayer::EndOfMedia;
+    if (!stable) {
+        pendingPlaybackRateApply_ = true;
         {
             char buf[160];
             std::snprintf(buf, sizeof(buf),
-                "preview/rate/qt_host_about_to_setrate rate=%.3f status=%d",
+                "preview/rate/qt_host_deferred rate=%.3f status=%d",
                 playbackRate_,
                 static_cast<int>(status));
             miacode::oplog::appendStartupBeaconLine(buf);
         }
-        player_->setPlaybackRate(1.0);
-        miacode::oplog::appendStartupBeaconLine(
-            "preview/rate/qt_host_setrate_done rate=1.000");
+        appendPreviewStageMediaLog(
+            QStringLiteral("playback_rate_deferred"),
+            QString("rate=%1 status=%2 kind=%3")
+                .arg(playbackRate_, 0, 'f', 3)
+                .arg(mediaStatusName(status))
+                .arg(debugMediaTypeName()));
         return;
     }
-    // rate != 1.0: must rebuild the player. Reset the recovery counter
-    // first — a user-driven rate change is not the consecutive-failure
-    // condition the limit was designed to guard against (cap is 3, and
-    // a user can plausibly tap through 0.5x → 0.75x → 1.5x → 2.0x in a
-    // few seconds).
-    consecutiveVideoBackendRecoveryCount_ = 0;
-    const double targetSecond = videoPlaybackActive_
-        ? observedPlayheadSecond_
-        : currentPlaybackSecond();
-    const bool resumePlay = videoPlaybackActive_
-        && playerPlaybackState(player_) == QMediaPlayer::PlayingState;
     pendingPlaybackRateApply_ = false;
-    {
-        char buf[220];
-        std::snprintf(buf, sizeof(buf),
-            "preview/rate/qt_host_rebuild_begin rate=%.3f target_sec=%.6f resume=%d",
-            playbackRate_,
-            targetSecond,
-            resumePlay ? 1 : 0);
-        miacode::oplog::appendStartupBeaconLine(buf);
-    }
-    const bool ok = recoverVideoBackend(
-        QStringLiteral("playback_rate_change_to_%1").arg(playbackRate_, 0, 'f', 3),
-        targetSecond,
-        resumePlay);
     {
         char buf[160];
         std::snprintf(buf, sizeof(buf),
-            "preview/rate/qt_host_rebuild_end ok=%d rate=%.3f",
-            ok ? 1 : 0,
+            "preview/rate/qt_host_about_to_setrate rate=%.3f status=%d",
+            playbackRate_,
+            static_cast<int>(status));
+        miacode::oplog::appendStartupBeaconLine(buf);
+    }
+    player_->setPlaybackRate(static_cast<qreal>(playbackRate_));
+    {
+        char buf[120];
+        std::snprintf(buf, sizeof(buf),
+            "preview/rate/qt_host_setrate_done rate=%.3f",
             playbackRate_);
         miacode::oplog::appendStartupBeaconLine(buf);
     }
