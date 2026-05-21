@@ -20,6 +20,9 @@ public:
     QString currentValidationIgnoreScopeKey() const;
     bool isIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey) const;
     void setIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey, bool ignored);
+    void loadProjectValidationPreferences();
+    void saveProjectValidationPreferences(const QString& chartFilePath = QString()) const;
+    void applyIgnoreMuriIssuePrompts(bool enabled, bool persistPreference);
     void refreshEditorExtraSelections();
     const MuriAnalysisReport& alignedMuriAnalysisReportForPreview() const;
     void applyAlignedMuriAnalysisReportToViews();

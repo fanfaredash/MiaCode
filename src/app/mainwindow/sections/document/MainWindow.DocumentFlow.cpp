@@ -1625,6 +1625,7 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
     if (normalizedPath != state_.currentFilePath_) {
         owner_.setCurrentFilePath(normalizedPath);
     }
+    owner_.saveProjectValidationPreferences(normalizedPath);
     owner_.addRecentFilePath(normalizedPath);
     resetAutosaveState(serialized);
     const QString autosaveDirectoryPath = resolveAutosaveDirectoryPath();

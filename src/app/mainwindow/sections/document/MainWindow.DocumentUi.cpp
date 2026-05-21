@@ -1000,6 +1000,7 @@ void MainWindow::DocumentSection::loadDocument(const SimaiDocument& document)
     // preference (or infer it on first open) AFTER metadata-page-mode is
     // refreshed, so the checkbox UI exists and is in its final layout.
     refreshUnifiedDesignerStateForLoadedDocument();
+    owner_.loadProjectValidationPreferences();
     updateDirtyState();
     owner_.updateWindowTitle();
 }

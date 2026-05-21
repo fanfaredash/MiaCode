@@ -1028,7 +1028,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 
     // Copy Area remains hidden from the toolbox for now — flip this constant
     // back to `true` once that feature ships.
-    constexpr bool kCopyAreaIntegratedIntoToolbox = false;
+    constexpr bool kCopyAreaIntegratedIntoToolbox = true;
     if (kCopyAreaIntegratedIntoToolbox) {
         QMenu* copyAreaMenu = toolboxMenu_->addMenu(
             UiText::isChineseUi() ? QStringLiteral("复制区") : QStringLiteral("Copy Area")

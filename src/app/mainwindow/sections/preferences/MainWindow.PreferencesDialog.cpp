@@ -554,6 +554,8 @@ void MainWindow::PreferencesSection::onPreferences()
     int selectedEditorFontSize = state_.editorTextFontPointSize_;
     double selectedEditorLineSpacingFactor = state_.editorLineSpacingFactor_;
     bool selectedEditorHalfWidthInputEnabled = state_.editorHalfWidthInputEnabled_;
+    bool selectedEditorOverwriteModeEnabled = state_.editorOverwriteModeEnabled_;
+    bool selectedIgnoreMuriIssuePrompts = state_.ignoreMuriIssuePrompts_;
     bool selectedPreserveDifficultySwitchView = state_.preserveDifficultySwitchView_;
 
     auto* editorFontSizeLabel = new QLabel(uiText("dialog.preferences.editor_font_size", "Text Font Size"), editorGroup);
@@ -612,6 +614,39 @@ void MainWindow::PreferencesSection::onPreferences()
         owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
     });
     editorLayout->addRow(QString(), halfWidthInputCheckbox);
+
+    auto* overwriteModeCheckbox = new QCheckBox(
+        uiText("dialog.preferences.editor_overwrite_mode", "Overwrite mode"),
+        editorGroup
+    );
+    overwriteModeCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    overwriteModeCheckbox->setChecked(selectedEditorOverwriteModeEnabled);
+    connect(overwriteModeCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
+        selectedEditorOverwriteModeEnabled = checked;
+        owner_.applyEditorOverwriteModeEnabled(selectedEditorOverwriteModeEnabled, true);
+        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+    });
+    editorLayout->addRow(QString(), overwriteModeCheckbox);
+
+    auto* ignoreMuriIssuePromptsCheckbox = new QCheckBox(
+        UiText::isChineseUi()
+            ? QStringLiteral("忽略无理报错提示")
+            : QStringLiteral("Ignore muri issue prompts"),
+        editorGroup
+    );
+    ignoreMuriIssuePromptsCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    ignoreMuriIssuePromptsCheckbox->setChecked(selectedIgnoreMuriIssuePrompts);
+    ignoreMuriIssuePromptsCheckbox->setToolTip(
+        UiText::isChineseUi()
+            ? QStringLiteral("开启后不在编辑器标题栏和时间轴小点中提示无理。设置保存到当前谱面文件夹的 .miacode。")
+            : QStringLiteral("Hides muri from the editor header and timeline dots. Saved in the current chart folder's .miacode data.")
+    );
+    connect(ignoreMuriIssuePromptsCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
+        selectedIgnoreMuriIssuePrompts = checked;
+        owner_.applyIgnoreMuriIssuePrompts(selectedIgnoreMuriIssuePrompts, true);
+        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+    });
+    editorLayout->addRow(QString(), ignoreMuriIssuePromptsCheckbox);
 
     // [BETA51 IME-DISABLE: DISABLED PENDING FIX]
     // The "禁止中文輸入法輸入" preference shipped in 4f9a27e (UI), backed by

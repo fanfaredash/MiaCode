@@ -51,7 +51,7 @@ Rectangle {
     readonly property real headerScale: controller ? controller.bottomTabsHeaderScale : 1.0
     readonly property var visibleTabs: {
         // Labels come from the controller (which honours UiText::isChineseUi)
-        // rather than QML's qsTr — qsTr requires a .ts translation file
+        // rather than QML's qsTr - qsTr requires a .ts translation file
         // that the project doesn't ship, so it'd just leak the English
         // literal. The controller mirrors MainWindow::bottomTabsFallbackLabel.
         const tabs = []
@@ -77,7 +77,7 @@ Rectangle {
         anchors.fill: parent
         spacing: 0
 
-        // Issue #2b Option B — restyle to match Qt's native QTabBar look:
+        // Issue #2b Option B - restyle to match Qt's native QTabBar look:
         //  - Rectangular tabs (no pill rounding); subtle 2px top corner rounding.
         //  - Selected tab background MERGES with the content area below by
         //    sharing its colour and skipping the bottom border.
@@ -202,7 +202,7 @@ Rectangle {
                 // (rather than inside TimelineTabSurface's cramped
                 // header band) so there's room for both checkboxes
                 // and so the visible state is driven by ONE QML
-                // control per toggle — no QSG-layer / DComp dual
+                // control per toggle - no QSG-layer / DComp dual
                 // rendering path that previously dropped the
                 // progress-follow checkbox in QSG-only mode. Only
                 // surfaced when the timeline tab is the current
@@ -214,7 +214,7 @@ Rectangle {
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredHeight: tabStrip.height - Math.round(6 * root.headerScale)
                     Layout.rightMargin: Math.round(4 * root.headerScale)
-                    // Hidden inline — surfaced only through the timeline
+                    // Hidden inline - surfaced only through the timeline
                     // surface's settings gear menu (see TimelineTabSurface.qml).
                     // Kept here so the QML state-binding plumbing stays intact;
                     // setting visible: false also pulls it out of the layout.
@@ -360,12 +360,12 @@ Rectangle {
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredHeight: tabStrip.height - Math.round(6 * root.headerScale)
                     Layout.rightMargin: Math.round(8 * root.headerScale)
-                    // Hidden inline — surfaced only through the timeline
+                    // Hidden inline - surfaced only through the timeline
                     // surface's settings gear menu (see TimelineTabSurface.qml).
                     visible: false
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
-                    text: root.isChineseUi() ? "进度跟随" : "Progress Follow"
+                    text: root.isChineseUi() ? "进度跟随" : "Timeline Sync"
                     checked: controller && controller.timelineStateBridge
                         ? controller.timelineStateBridge.followProgressEnabled
                         : false
