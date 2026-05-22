@@ -31,6 +31,7 @@
 #include <QIcon>
 #include <QKeyEvent>
 #include <QLineEdit>
+#include <QPlainTextEdit>
 #include <QQmlError>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -1050,6 +1051,32 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
                 keyEvent != nullptr
                 && keyEvent->modifiers() == Qt::NoModifier
                 && (keyEvent->key() == Qt::Key_Left || keyEvent->key() == Qt::Key_Right);
+            // The sticky `previewSeekArmed_` flag is purely geometric — it
+            // only knows whether the last mouse press was inside the QML
+            // previewPaneFrame's bounds. In QuickShell mode the editor's
+            // native sub-window (QuickShellWorkspaceSurfaceWindow) overlays
+            // part of that bounds, so a click that landed on the editor
+            // (focus goes to PlainCodeEditor, cursor moves) still arms
+            // the flag, and the next arrow keypress meant for cursor
+            // navigation gets swallowed into preview seek. Gate the
+            // hijack on the active focus widget NOT being a text input;
+            // let normal arrow delivery handle text-cursor navigation.
+            const QWidget* focusedWidget = QApplication::focusWidget();
+            const bool focusIsTextInput = focusedWidget != nullptr
+                && (qobject_cast<const QTextEdit*>(focusedWidget) != nullptr
+                    || qobject_cast<const QPlainTextEdit*>(focusedWidget) != nullptr
+                    || qobject_cast<const QLineEdit*>(focusedWidget) != nullptr);
+            if (isArrow && focusIsTextInput) {
+                appendQuickShellArrowDispatchLog(
+                    QStringLiteral("arrow_text_input_passthrough"),
+                    QStringLiteral("key=%1 event_type=%2 watched={%3} focus_widget={%4} armed=1")
+                        .arg(keyEvent->key())
+                        .arg(static_cast<int>(event->type()))
+                        .arg(describeFocusObject(watched))
+                        .arg(describeFocusObject(qobject_cast<QObject*>(QApplication::focusWidget())))
+                );
+                return QObject::eventFilter(watched, event);
+            }
             if (isArrow) {
                 if (event->type() == QEvent::ShortcutOverride) {
                     appendQuickShellArrowDispatchLog(
