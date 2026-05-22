@@ -79,6 +79,23 @@ void appendQuickShellFocusLog(const QString& action, const QString& payload = QS
     );
 }
 
+void appendQuickShellArrowDispatchLog(const QString& action, const QString& payload = QString())
+{
+    // Always-on tracing for the arrow-key dispatch path so we can
+    // diagnose user reports of arrow-keys-hijacked-to-preview-seek
+    // without requiring a debug-mode rerun. The log volume is small
+    // (one line per mouse press and one per arrow press/release).
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("quick_shell/arrow_dispatch"),
+        text
+    );
+}
+
 QString focusPolicyName(Qt::FocusPolicy policy)
 {
     switch (policy) {
@@ -997,7 +1014,30 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
     if (!controller_->previewFullscreen() && event->type() == QEvent::MouseButtonPress) {
         auto* mouseEvent = static_cast<QMouseEvent*>(event);
         const QPoint globalPos = mouseEvent != nullptr ? mouseEvent->globalPosition().toPoint() : QPoint();
+        const bool previouslyArmed = previewSeekArmed_;
         previewSeekArmed_ = previewSeekHotRectContainsGlobalPoint(globalPos);
+        // Always log mouse-press arming decisions so we can see exactly
+        // which click left previewSeekArmed_ stuck on. Includes the
+        // global pos, the live hot rect (if QML root is available), and
+        // the watched widget that received the press.
+        QRectF hotRect;
+        if (engine_ != nullptr && !engine_->rootObjects().isEmpty()) {
+            if (auto* window = qobject_cast<QQuickWindow*>(engine_->rootObjects().constFirst());
+                window != nullptr) {
+                hotRect = window->property("previewSeekHotRect").toRectF();
+            }
+        }
+        appendQuickShellArrowDispatchLog(
+            QStringLiteral("mouse_press_arm"),
+            QStringLiteral("global=%1,%2 hot_rect=%3,%4,%5x%6 prev_armed=%7 new_armed=%8 watched={%9} focus_widget={%10} button=%11")
+                .arg(globalPos.x()).arg(globalPos.y())
+                .arg(hotRect.x()).arg(hotRect.y()).arg(hotRect.width()).arg(hotRect.height())
+                .arg(previouslyArmed ? 1 : 0)
+                .arg(previewSeekArmed_ ? 1 : 0)
+                .arg(describeFocusObject(watched))
+                .arg(describeFocusObject(qobject_cast<QObject*>(QApplication::focusWidget())))
+                .arg(mouseEvent != nullptr ? static_cast<int>(mouseEvent->button()) : -1)
+        );
     }
 
     if (!controller_->previewFullscreen()) {
@@ -1012,11 +1052,28 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
                 && (keyEvent->key() == Qt::Key_Left || keyEvent->key() == Qt::Key_Right);
             if (isArrow) {
                 if (event->type() == QEvent::ShortcutOverride) {
+                    appendQuickShellArrowDispatchLog(
+                        QStringLiteral("arrow_shortcut_override_swallow"),
+                        QStringLiteral("key=%1 watched={%2} focus_widget={%3} armed=1")
+                            .arg(keyEvent->key())
+                            .arg(describeFocusObject(watched))
+                            .arg(describeFocusObject(qobject_cast<QObject*>(QApplication::focusWidget())))
+                    );
                     keyEvent->accept();
                     return true;
                 }
                 const int direction = keyEvent->key() == Qt::Key_Left ? -1 : 1;
                 if (event->type() == QEvent::KeyPress) {
+                    appendQuickShellArrowDispatchLog(
+                        QStringLiteral("arrow_press_hijack"),
+                        QStringLiteral("key=%1 direction=%2 autorepeat=%3 watched={%4} focus_widget={%5} focus_window={%6}")
+                            .arg(keyEvent->key())
+                            .arg(direction)
+                            .arg(keyEvent->isAutoRepeat() ? 1 : 0)
+                            .arg(describeFocusObject(watched))
+                            .arg(describeFocusObject(qobject_cast<QObject*>(QApplication::focusWidget())))
+                            .arg(describeFocusObject(qobject_cast<QObject*>(qApp != nullptr ? qApp->focusWindow() : nullptr)))
+                    );
                     keyEvent->accept();
                     if (keyEvent->isAutoRepeat()) {
                         return true;
@@ -1029,6 +1086,13 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
                     return true;
                 }
                 if (event->type() == QEvent::KeyRelease) {
+                    appendQuickShellArrowDispatchLog(
+                        QStringLiteral("arrow_release"),
+                        QStringLiteral("key=%1 autorepeat=%2 watched={%3}")
+                            .arg(keyEvent->key())
+                            .arg(keyEvent->isAutoRepeat() ? 1 : 0)
+                            .arg(describeFocusObject(watched))
+                    );
                     keyEvent->accept();
                     if (!keyEvent->isAutoRepeat()) {
                         controller_->stopPreviewHeldSeek(keyEvent->key());
