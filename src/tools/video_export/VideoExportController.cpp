@@ -4539,20 +4539,27 @@ VideoExportResult VideoExportController::exportPreparedTask(
             outputSecond + kTimelineEpsilonSeconds < audioRenderPlan.leadInSeconds;
         // Render the chart playfield + HUD throughout the lead-in / preload
         // instead of emitting a transparent overlay (which composites to
-        // black on FFmpeg's solid base). The scene plays back the chart
-        // frozen at its segment-start time (chart 0 for full-range,
-        // segmentStart for partial-range exports), while the HUD reads
-        // the unclamped raw chart time so the timestamp counts up through
-        // the lead-in (e.g. -2s → 0s for full-range; segmentStart-1s →
-        // segmentStart for partial).
+        // black on FFmpeg's solid base).
+        //   * Full-range exports actually play back the negative chart-time
+        //     window (-leadIn → 0) so notes/effects scheduled before chart 0
+        //     (e.g. approach animations for notes near second 0, or markers
+        //     whose `second` is itself negative) render naturally instead of
+        //     popping into existence at a frozen chart-zero frame.
+        //   * Partial-range exports keep the chart frozen at segmentStart
+        //     throughout the freeze window (drawLeadInPauseOverlay also
+        //     paints a pause glyph on top), and the HUD is held on
+        //     segmentStart too — the user expectation is "nothing animates
+        //     during the freeze"; a ramping HUD would contradict that.
         const double rawChartSecond = timelineOriginSecond + outputSecond;
         const double exportSecond = partialRangeExport
             ? audioRenderPlan.segmentStartSecond + qMax(0.0, outputSecond - audioRenderPlan.leadInSeconds)
-            : qMax(0.0, rawChartSecond);
+            : rawChartSecond;
         // HUD override during the pre-roll window:
-        //   * Full-range exports want the count-down displayed (chart-time
-        //     ramps from -leadIn → 0), so use the unclamped rawChartSecond.
-        //     Out of pre-roll it falls back to whatever exportSecond is.
+        //   * Full-range exports show the count-down (chart-time ramps from
+        //     -leadIn → 0). Since exportSecond now carries that negative
+        //     value through to the scene, this override is effectively the
+        //     same as state.playheadSeconds, but we keep it explicit so the
+        //     HUD path is independent of any future scene-time clamping.
         //   * Partial-range exports want the HUD frozen on segmentStart
         //     (matches the frozen chart playfield + the pause overlay).
         //     The user expectation is "nothing animates during the freeze";
