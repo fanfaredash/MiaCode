@@ -401,6 +401,59 @@ void probeD3D11Device() noexcept
 // shadow log may not land. First-chance fires for every exception (even
 // caught C++ exceptions which use SEH internally), so we filter to only
 // the codes that always mean process termination.
+void appendExceptionBeaconLine(const char* tag, EXCEPTION_POINTERS* info) noexcept
+{
+    if (info == nullptr || info->ExceptionRecord == nullptr) {
+        return;
+    }
+    const EXCEPTION_RECORD* record = info->ExceptionRecord;
+    const CONTEXT* context = info->ContextRecord;
+    char modulePath[MAX_PATH] = {};
+    void* moduleBase = nullptr;
+    MEMORY_BASIC_INFORMATION mbi = {};
+    if (::VirtualQuery(record->ExceptionAddress, &mbi, sizeof(mbi)) == sizeof(mbi)) {
+        moduleBase = mbi.AllocationBase;
+        if (moduleBase != nullptr) {
+            ::GetModuleFileNameA(reinterpret_cast<HMODULE>(moduleBase), modulePath, MAX_PATH);
+        }
+    }
+#if defined(_M_X64) || defined(__x86_64__)
+    const unsigned long long ip = context != nullptr ? static_cast<unsigned long long>(context->Rip) : 0ull;
+    const unsigned long long sp = context != nullptr ? static_cast<unsigned long long>(context->Rsp) : 0ull;
+    const unsigned long long bp = context != nullptr ? static_cast<unsigned long long>(context->Rbp) : 0ull;
+#elif defined(_M_IX86) || defined(__i386__)
+    const unsigned long long ip = context != nullptr ? static_cast<unsigned long long>(context->Eip) : 0ull;
+    const unsigned long long sp = context != nullptr ? static_cast<unsigned long long>(context->Esp) : 0ull;
+    const unsigned long long bp = context != nullptr ? static_cast<unsigned long long>(context->Ebp) : 0ull;
+#else
+    const unsigned long long ip = 0ull;
+    const unsigned long long sp = 0ull;
+    const unsigned long long bp = 0ull;
+#endif
+    const ULONG_PTR p0 = record->NumberParameters > 0 ? record->ExceptionInformation[0] : 0;
+    const ULONG_PTR p1 = record->NumberParameters > 1 ? record->ExceptionInformation[1] : 0;
+    const ULONG_PTR p2 = record->NumberParameters > 2 ? record->ExceptionInformation[2] : 0;
+    char buf[1024];
+    std::snprintf(buf, sizeof(buf),
+        "crash/%s code=0x%08lx flags=0x%08lx addr=%p tid=%lu ip=0x%llx sp=0x%llx bp=0x%llx "
+        "params=%lu p0=0x%llx p1=0x%llx p2=0x%llx module_base=%p module=\"%s\"",
+        tag,
+        static_cast<unsigned long>(record->ExceptionCode),
+        static_cast<unsigned long>(record->ExceptionFlags),
+        record->ExceptionAddress,
+        static_cast<unsigned long>(::GetCurrentThreadId()),
+        ip,
+        sp,
+        bp,
+        static_cast<unsigned long>(record->NumberParameters),
+        static_cast<unsigned long long>(p0),
+        static_cast<unsigned long long>(p1),
+        static_cast<unsigned long long>(p2),
+        moduleBase,
+        modulePath);
+    miacode::oplog::appendStartupBeaconLine(buf);
+}
+
 LONG WINAPI vectoredHandler(EXCEPTION_POINTERS* info) noexcept
 {
     if (info == nullptr || info->ExceptionRecord == nullptr) {
@@ -412,21 +465,20 @@ LONG WINAPI vectoredHandler(EXCEPTION_POINTERS* info) noexcept
     // similar runtime-internal codes.
     const bool isFatal =
         code == 0xC0000005   /* ACCESS_VIOLATION */
+        || code == 0xC0000374 /* HEAP_CORRUPTION */
         || code == 0xC0000409 /* STACK_BUFFER_OVERRUN / __fastfail */
         || code == 0xC000041D /* UNHANDLED C++ EXCEPTION (CRT) */
+        || code == 0xC0000420 /* ASSERTION_FAILURE */
+        || code == 0xC0000602 /* FAIL_FAST_EXCEPTION */
         || code == 0xC0000094 /* INTEGER_DIVIDE_BY_ZERO */
         || code == 0x80000003 /* BREAKPOINT (debugger) */
         || code == 0xC00000FD /* STACK_OVERFLOW */
-        || code == 0xC000001D /* ILLEGAL_INSTRUCTION */;
+        || code == 0xC000001D /* ILLEGAL_INSTRUCTION */
+        || code == 0x40000015 /* FATAL_APP_EXIT */;
     if (!isFatal) {
         return EXCEPTION_CONTINUE_SEARCH;
     }
-    char buf[256];
-    std::snprintf(buf, sizeof(buf),
-        "diag/veh first_chance code=0x%08lx addr=%p",
-        static_cast<unsigned long>(code),
-        info->ExceptionRecord->ExceptionAddress);
-    miacode::oplog::appendStartupBeaconLine(buf);
+    appendExceptionBeaconLine("veh_first_chance", info);
     // Also flush the op-chain shadow so we have a chain at the moment of
     // the fault, even if the regular SEH filter never fires.
     miacode::oplog::flushShadowToDisk();
@@ -928,7 +980,7 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     ));
     parser.addOption(QCommandLineOption(
         QStringLiteral("background-scale"),
-        QStringLiteral("Background scale mode: fill or fit."),
+        QStringLiteral("Background scale mode: fill, fit, or square_fit."),
         QStringLiteral("mode"),
         QStringLiteral("fill")
     ));
@@ -1037,9 +1089,17 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
         }
         return 2;
     }
-    if (backgroundScaleToken != QStringLiteral("fill") && backgroundScaleToken != QStringLiteral("fit")) {
+    const bool squareFitScaleToken =
+        backgroundScaleToken == QStringLiteral("square_fit")
+        || backgroundScaleToken == QStringLiteral("square-fit")
+        || backgroundScaleToken == QStringLiteral("square_fill")
+        || backgroundScaleToken == QStringLiteral("square-fill")
+        || backgroundScaleToken == QStringLiteral("square");
+    if (backgroundScaleToken != QStringLiteral("fill")
+        && backgroundScaleToken != QStringLiteral("fit")
+        && !squareFitScaleToken) {
         if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("--background-scale must be either fill or fit");
+            *errorMessage = QStringLiteral("--background-scale must be fill, fit, or square_fit");
         }
         return 2;
     }
@@ -1077,9 +1137,11 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     request.backgroundBrightnessOuter = outerBrightness;
     request.backgroundBrightnessInner = innerBrightness;
     request.layoutSquareScale = layoutSquareScale;
-    request.backgroundScaleMode = backgroundScaleToken == QStringLiteral("fit")
-        ? PreviewBackgroundScaleMode::FitContain
-        : PreviewBackgroundScaleMode::FillCrop;
+    request.backgroundScaleMode = squareFitScaleToken
+        ? PreviewBackgroundScaleMode::SquareFitContain
+        : (backgroundScaleToken == QStringLiteral("fit")
+               ? PreviewBackgroundScaleMode::FitContain
+               : PreviewBackgroundScaleMode::FillCrop);
     request.noteFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
     request.touchFlowSpeed = request.noteFlowSpeed;
     request.skinLoadWaitMs = skinWaitMs;

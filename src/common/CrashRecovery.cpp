@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <csignal>
+#include <cstdio>
 #include <cstring>
 #include <exception>
 #include <new>
@@ -149,8 +150,28 @@ void flushSnapshotToDisk()
 }
 
 #ifdef Q_OS_WIN
+void appendSehBeacon(const char* tag, EXCEPTION_POINTERS* info) noexcept
+{
+    if (info == nullptr || info->ExceptionRecord == nullptr) {
+        miacode::oplog::appendStartupBeaconLine(tag);
+        return;
+    }
+    const EXCEPTION_RECORD* record = info->ExceptionRecord;
+    char buf[256];
+    std::snprintf(buf, sizeof(buf),
+        "crash/%s code=0x%08lx flags=0x%08lx addr=%p tid=%lu params=%lu",
+        tag,
+        static_cast<unsigned long>(record->ExceptionCode),
+        static_cast<unsigned long>(record->ExceptionFlags),
+        record->ExceptionAddress,
+        static_cast<unsigned long>(::GetCurrentThreadId()),
+        static_cast<unsigned long>(record->NumberParameters));
+    miacode::oplog::appendStartupBeaconLine(buf);
+}
+
 LONG WINAPI sehTopLevelFilter(EXCEPTION_POINTERS* info)
 {
+    appendSehBeacon("seh_top_level", info);
     flushSnapshotToDisk();
     // Chain to the previous filter (typically Qt's WinMain default,
     // which can produce a minidump). EXCEPTION_CONTINUE_SEARCH lets
@@ -164,6 +185,7 @@ LONG WINAPI sehTopLevelFilter(EXCEPTION_POINTERS* info)
 
 void terminateHandler()
 {
+    miacode::oplog::appendStartupBeaconLine("crash/terminate_handler");
     flushSnapshotToDisk();
     // Chain to whatever handler was registered before us — typically
     // Qt's default or libc's, both of which produce useful diagnostics
@@ -179,6 +201,9 @@ void terminateHandler()
 
 void signalHandler(int sig)
 {
+    char buf[80];
+    std::snprintf(buf, sizeof(buf), "crash/signal_handler sig=%d", sig);
+    miacode::oplog::appendStartupBeaconLine(buf);
     flushSnapshotToDisk();
     // Restore the default handler then re-raise so the process dies
     // with the original signal disposition. SIG_DFL on Windows for
