@@ -79,6 +79,7 @@ scripts/*
 !scripts/Start_MiaCode_SkipBoth.bat
 !scripts/Start_MiaCode_SkipDiagD3D11.bat
 !scripts/Start_MiaCode_QtPluginDiag.bat
+!scripts/Start_MiaCode_ExportNoPboReadback.bat
 !scripts/build-macos.sh
 !scripts/build-win.ps1
 !scripts/compare-export-encode-profiles.ps1

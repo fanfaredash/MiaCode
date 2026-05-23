@@ -3633,12 +3633,32 @@ VideoExportResult VideoExportController::exportPreparedTask(
             offscreenInitError.isEmpty() ? result.message : offscreenInitError);
         return result;
     }
+    // Diagnostic gate: MIACODE_EXPORT_DISABLE_PBO_READBACK=1 forces the
+    // synchronous non-PBO readback path (renderOverlayFrameOffscreen,
+    // PreviewQuickExportSession.cpp:354-362). The PBO path schedules an
+    // async glReadPixels(FBO→PBO) with no fence before the next frame
+    // clears the FBO; if a driver mistracks that hazard, the captured
+    // bytes are partly from the next frame's clear/draw — manifesting as
+    // horizontal-band tearing on individual rendered frames. The non-PBO
+    // path uses glReadPixels with a CPU pointer, which the driver must
+    // serialize, so it cannot exhibit this race. Costs one full
+    // GPU→CPU stall per frame (~20-30% slower export at 1080p60), but
+    // is the safe ground truth for diagnosing PBO-race symptoms.
+    const bool disablePboReadbackViaEnv =
+        qEnvironmentVariableIntValue("MIACODE_EXPORT_DISABLE_PBO_READBACK") == 1;
     const bool requestOffscreenPboReadback =
-        useOffscreenGpu && exportConfig.renderBackend.requestOffscreenPboReadback;
+        useOffscreenGpu
+        && exportConfig.renderBackend.requestOffscreenPboReadback
+        && !disablePboReadbackViaEnv;
     QString offscreenPboError;
     bool useOffscreenPboReadback = false;
     if (requestOffscreenPboReadback) {
         useOffscreenPboReadback = exportCanvas.supportsOffscreenPboReadback(&offscreenPboError);
+    }
+    if (disablePboReadbackViaEnv) {
+        appendVideoExportLog(
+            QStringLiteral("pbo_readback_disabled_via_env"),
+            QStringLiteral("MIACODE_EXPORT_DISABLE_PBO_READBACK=1"));
     }
     appendVideoExportLog(
         QStringLiteral("render_backend"),

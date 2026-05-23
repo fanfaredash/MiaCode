@@ -371,7 +371,7 @@ Copy-Item $debugLauncherSrc (Join-Path $DistDir "Start_MiaCode_Debug.bat") -Forc
 # zip root (alongside Start_MiaCode_Debug.bat) so users can double-click
 # them. When the investigation closes they can be removed from both
 # sides — for now they ship with every package.
-foreach ($diagLauncher in @("Start_MiaCode_DisablePerPixelAlpha.bat", "Start_MiaCode_FFmpegBackend.bat")) {
+foreach ($diagLauncher in @("Start_MiaCode_DisablePerPixelAlpha.bat", "Start_MiaCode_FFmpegBackend.bat", "Start_MiaCode_ExportNoPboReadback.bat")) {
     $src = Join-Path $repoRoot "scripts\\$diagLauncher"
     if (!(Test-Path $src)) {
         throw "Missing required diagnostic launcher script: $src"
@@ -587,6 +587,9 @@ $requiredPackagePaths = @(
     # beta55 diagnostic launchers (see comment block at the copy site).
     "Start_MiaCode_DisablePerPixelAlpha.bat",
     "Start_MiaCode_FFmpegBackend.bat",
+    # beta57 export PBO-readback race triage launcher
+    # (MIACODE_EXPORT_DISABLE_PBO_READBACK=1).
+    "Start_MiaCode_ExportNoPboReadback.bat",
     "logs",
     "logs\\worker-hwnd",
     "assets\\SFX",

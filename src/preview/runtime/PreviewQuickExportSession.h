@@ -123,6 +123,14 @@ private:
     QByteArray directReadbackBuffer_;
     QImage reusableReadbackFrame_;
     GLuint offscreenReadbackPbos_[2] = {0, 0};
+    // Per-PBO fence placed right after each glReadPixels(FBO→PBO) so
+    // mapPboAndSubmitConvertJob can wait for that DMA to actually
+    // finish before issuing glMapBufferRange. Without this, drivers
+    // that don't strictly serialise FBO→PBO transfers against the
+    // next frame's clear/draw against the same FBO can hand us a
+    // partly-clobbered PBO — manifesting as horizontal-band tearing
+    // on individual exported frames.
+    GLsync offscreenReadbackFences_[2] = {nullptr, nullptr};
     QSize offscreenReadbackPboSize_;
     qsizetype offscreenReadbackPboBytes_ = 0;
     int offscreenReadbackPboWriteIndex_ = 0;

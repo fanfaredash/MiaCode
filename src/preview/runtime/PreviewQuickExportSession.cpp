@@ -631,6 +631,21 @@ bool PreviewQuickExportSession::renderFramePboStep(
     extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
     gl->glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
 
+    // Place a fence so the next mapPboAndSubmitConvertJob targeting
+    // PBO[writeIndex] can wait for this readback's DMA to actually
+    // finish before mapping. See the offscreenReadbackFences_ comment
+    // in the header. glFenceSync returns nullptr on drivers that
+    // don't support GL_ARB_sync (theoretically possible on a GL 3.0/3.1
+    // context that exposes PBO via extension); the wait site checks
+    // for nullptr and falls back to the previous "rely on map's
+    // implicit sync" behaviour, which is what shipped before this fix.
+    if (offscreenReadbackFences_[writeIndex] != nullptr) {
+        extra->glDeleteSync(offscreenReadbackFences_[writeIndex]);
+        offscreenReadbackFences_[writeIndex] = nullptr;
+    }
+    offscreenReadbackFences_[writeIndex] =
+        extra->glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+
     if (offscreenReadbackPendingIndex_ >= 0) {
         if (!mapPboAndSubmitConvertJob(offscreenReadbackPendingIndex_, pixelSize, errorMessage)) {
             context_->doneCurrent();
@@ -891,6 +906,41 @@ bool PreviewQuickExportSession::mapPboAndSubmitConvertJob(
     }
 
     extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, offscreenReadbackPbos_[pboIndex]);
+
+    // Wait for the fence placed when this PBO's glReadPixels was issued
+    // before mapping: glMapBufferRange's implicit "wait for pending
+    // writes" is too loose on several real-world driver/Qt-RHI combos
+    // (Win10 22H2 + Intel iGPU/ANGLE, some AMD paths), and the
+    // resulting partial reads were the cause of the per-frame
+    // horizontal-band tearing that MIACODE_EXPORT_DISABLE_PBO_READBACK
+    // worked around. GL_SYNC_FLUSH_COMMANDS_BIT guarantees a flush on
+    // first probe, so we don't deadlock if the producer-side glFlush
+    // happened to be elided.
+    if (offscreenReadbackFences_[pboIndex] != nullptr) {
+        constexpr GLuint64 kFenceTimeoutNs = 2000000000ULL;  // 2 s
+        const GLenum waitResult = extra->glClientWaitSync(
+            offscreenReadbackFences_[pboIndex],
+            GL_SYNC_FLUSH_COMMANDS_BIT,
+            kFenceTimeoutNs);
+        if (waitResult == GL_TIMEOUT_EXPIRED || waitResult == GL_WAIT_FAILED) {
+            // Don't abort the export — the subsequent map will either
+            // see correct bytes (if the GPU caught up by then), or
+            // expose whatever glMapBufferRange's own implicit sync
+            // gives, which is the pre-fence behaviour. Failing loudly
+            // here would turn a soft timing glitch into a hard export
+            // failure, so we just record it and continue.
+            appendExportSessionLog(
+                QStringLiteral("pbo_fence_wait_failed"),
+                QStringLiteral("pboIndex=%1 result=0x%2 timeoutNs=%3")
+                    .arg(pboIndex)
+                    .arg(QString::number(waitResult, 16))
+                    .arg(kFenceTimeoutNs)
+            );
+        }
+        extra->glDeleteSync(offscreenReadbackFences_[pboIndex]);
+        offscreenReadbackFences_[pboIndex] = nullptr;
+    }
+
     void* mapped = extra->glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, offscreenReadbackPboBytes_, GL_MAP_READ_BIT);
     if (mapped == nullptr) {
         extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -1124,10 +1174,21 @@ void PreviewQuickExportSession::destroyFramebuffer()
 void PreviewQuickExportSession::destroyOffscreenReadbackPbos()
 {
     QOpenGLExtraFunctions* extra = context_ != nullptr ? context_->extraFunctions() : nullptr;
-    if (extra != nullptr
-        && QOpenGLContext::currentContext() == context_
-        && (offscreenReadbackPbos_[0] != 0 || offscreenReadbackPbos_[1] != 0)) {
-        extra->glDeleteBuffers(2, offscreenReadbackPbos_);
+    const bool contextCurrent =
+        extra != nullptr && QOpenGLContext::currentContext() == context_;
+    if (contextCurrent) {
+        // Delete the per-PBO fences first; leaking a GLsync that
+        // outlives its PBO is harmless but the lifetime invariant is
+        // easier to reason about if both go in lockstep.
+        for (GLsync& fence : offscreenReadbackFences_) {
+            if (fence != nullptr) {
+                extra->glDeleteSync(fence);
+                fence = nullptr;
+            }
+        }
+        if (offscreenReadbackPbos_[0] != 0 || offscreenReadbackPbos_[1] != 0) {
+            extra->glDeleteBuffers(2, offscreenReadbackPbos_);
+        }
     }
     clearOffscreenReadbackPboState();
 }
@@ -1136,6 +1197,14 @@ void PreviewQuickExportSession::clearOffscreenReadbackPboState()
 {
     offscreenReadbackPbos_[0] = 0;
     offscreenReadbackPbos_[1] = 0;
+    // The fence pointers are zeroed here without GL deletion; the
+    // caller is responsible for glDeleteSync while the context is
+    // current (see destroyOffscreenReadbackPbos). If we get here via
+    // the deferred-cleanup branch in resetOffscreenPboReadback, the
+    // sync objects are released when their owning GL context is
+    // destroyed.
+    offscreenReadbackFences_[0] = nullptr;
+    offscreenReadbackFences_[1] = nullptr;
     offscreenReadbackPboSize_ = QSize();
     offscreenReadbackPboBytes_ = 0;
     offscreenReadbackPboWriteIndex_ = 0;
