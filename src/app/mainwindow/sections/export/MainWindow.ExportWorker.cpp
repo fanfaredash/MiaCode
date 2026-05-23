@@ -38,6 +38,8 @@ QString videoExportBackgroundScaleModeToken(PreviewBackgroundScaleMode mode)
     switch (mode) {
     case PreviewBackgroundScaleMode::FitContain:
         return QStringLiteral("fit");
+    case PreviewBackgroundScaleMode::SquareFitContain:
+        return QStringLiteral("square_fit");
     case PreviewBackgroundScaleMode::FillCrop:
     default:
         return QStringLiteral("fill");

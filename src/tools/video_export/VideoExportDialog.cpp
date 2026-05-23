@@ -307,6 +307,8 @@ QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
     switch (mode) {
     case PreviewBackgroundScaleMode::FitContain:
         return uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)"));
+    case PreviewBackgroundScaleMode::SquareFitContain:
+        return uiText("dialog.video_export.option.scale.square_fit", QStringLiteral("1:1 Fit (center square)"));
     case PreviewBackgroundScaleMode::FillCrop:
     default:
         return uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)"));
@@ -1111,26 +1113,38 @@ VideoExportDialog::VideoExportDialog(
     optionsLayout->addWidget(touchFlowSpeedRow, 3, 1, 1, 1);
     const QString scaleFillLabel = uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)"));
     const QString scaleFitLabel = uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)"));
+    const QString scaleSquareFitLabel = uiText(
+        "dialog.video_export.option.scale.square_fit",
+        QStringLiteral("1:1 Fit (center square)"));
     selectedBackgroundScaleMode_ = baseTask_.backgroundScaleMode;
     backgroundScaleModeButton_ = createDialogMenuButton(
         optionsContent_,
-        selectedBackgroundScaleMode_ == PreviewBackgroundScaleMode::FitContain ? scaleFitLabel : scaleFillLabel
+        exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_)
     );
     backgroundScaleModeMenu_ = new QMenu(backgroundScaleModeButton_);
     UiTheme::styleRoundedMenu(*backgroundScaleModeMenu_);
-    addDialogMenuChoice(backgroundScaleModeMenu_, scaleFillLabel, [this, scaleFillLabel]() {
+    addDialogMenuChoice(backgroundScaleModeMenu_, scaleFillLabel, [this]() {
         selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
         if (backgroundScaleModeButton_ != nullptr) {
-            backgroundScaleModeButton_->setText(scaleFillLabel);
+            backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
         }
         if (previewScaleModeCallback_) {
             previewScaleModeCallback_(selectedBackgroundScaleMode_);
         }
     });
-    addDialogMenuChoice(backgroundScaleModeMenu_, scaleFitLabel, [this, scaleFitLabel]() {
+    addDialogMenuChoice(backgroundScaleModeMenu_, scaleFitLabel, [this]() {
         selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FitContain;
         if (backgroundScaleModeButton_ != nullptr) {
-            backgroundScaleModeButton_->setText(scaleFitLabel);
+            backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
+        }
+        if (previewScaleModeCallback_) {
+            previewScaleModeCallback_(selectedBackgroundScaleMode_);
+        }
+    });
+    addDialogMenuChoice(backgroundScaleModeMenu_, scaleSquareFitLabel, [this]() {
+        selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::SquareFitContain;
+        if (backgroundScaleModeButton_ != nullptr) {
+            backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
         }
         if (previewScaleModeCallback_) {
             previewScaleModeCallback_(selectedBackgroundScaleMode_);

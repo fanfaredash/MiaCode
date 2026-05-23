@@ -1678,6 +1678,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
 
     const QString scaleFillLabel = uiText("dialog.render_settings.video.scale.fill", "Fill (crop if needed)");
     const QString scaleFitLabel = uiText("dialog.render_settings.video.scale.fit", "Fit (keep full image, may letterbox)");
+    const QString scaleSquareFitLabel = uiText(
+        "dialog.render_settings.video.scale.square_fit",
+        "1:1 Fit (center square)");
     const QString importSkinLabel = uiText("dialog.render_settings.video.skin.import", "Import...");
     const QString slideStackOrderDxLabel = uiText(
         "dialog.render_settings.gameplay.slide_stack_order.dx_style",
@@ -1913,31 +1916,41 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     });
     slideStackOrderButton->setMenu(slideStackOrderMenu);
     PreviewBackgroundScaleMode selectedScaleMode = owner_.previewBackgroundScaleMode_;
+    const auto scaleModeLabelFor = [&](PreviewBackgroundScaleMode mode) {
+        switch (mode) {
+        case PreviewBackgroundScaleMode::FitContain:
+            return scaleFitLabel;
+        case PreviewBackgroundScaleMode::SquareFitContain:
+            return scaleSquareFitLabel;
+        case PreviewBackgroundScaleMode::FillCrop:
+        default:
+            return scaleFillLabel;
+        }
+    };
     auto* scaleModeButton = createDialogMenuButton(
         videoGroup,
-        selectedScaleMode == PreviewBackgroundScaleMode::FitContain ? scaleFitLabel : scaleFillLabel
+        scaleModeLabelFor(selectedScaleMode)
     );
     auto* scaleModeMenu = new QMenu(scaleModeButton);
     styleRoundedMenu(*scaleModeMenu);
-    addDialogMenuChoice(scaleModeMenu, scaleFillLabel, [&, scaleFillLabel]() {
-        selectedScaleMode = PreviewBackgroundScaleMode::FillCrop;
-        scaleModeButton->setText(scaleFillLabel);
+    const auto setScaleMode = [&](PreviewBackgroundScaleMode mode) {
+        selectedScaleMode = mode;
+        scaleModeButton->setText(scaleModeLabelFor(selectedScaleMode));
         owner_.previewBackgroundScaleMode_ = selectedScaleMode;
         owner_.applyPreviewStageMediaRouteVisualSettings();
         if (owner_.previewCanvas_ != nullptr) {
             owner_.previewCanvas_->setBackgroundScaleMode(selectedScaleMode);
         }
         owner_.savePortableState();
+    };
+    addDialogMenuChoice(scaleModeMenu, scaleFillLabel, [&, setScaleMode]() {
+        setScaleMode(PreviewBackgroundScaleMode::FillCrop);
     });
-    addDialogMenuChoice(scaleModeMenu, scaleFitLabel, [&, scaleFitLabel]() {
-        selectedScaleMode = PreviewBackgroundScaleMode::FitContain;
-        scaleModeButton->setText(scaleFitLabel);
-        owner_.previewBackgroundScaleMode_ = selectedScaleMode;
-        owner_.applyPreviewStageMediaRouteVisualSettings();
-        if (owner_.previewCanvas_ != nullptr) {
-            owner_.previewCanvas_->setBackgroundScaleMode(selectedScaleMode);
-        }
-        owner_.savePortableState();
+    addDialogMenuChoice(scaleModeMenu, scaleFitLabel, [&, setScaleMode]() {
+        setScaleMode(PreviewBackgroundScaleMode::FitContain);
+    });
+    addDialogMenuChoice(scaleModeMenu, scaleSquareFitLabel, [&, setScaleMode]() {
+        setScaleMode(PreviewBackgroundScaleMode::SquareFitContain);
     });
     scaleModeButton->setMenu(scaleModeMenu);
 

@@ -160,6 +160,8 @@ QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
     switch (mode) {
     case PreviewBackgroundScaleMode::FitContain:
         return uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)"));
+    case PreviewBackgroundScaleMode::SquareFitContain:
+        return uiText("dialog.video_export.option.scale.square_fit", QStringLiteral("1:1 Fit (center square)"));
     case PreviewBackgroundScaleMode::FillCrop:
     default:
         return uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)"));
@@ -639,6 +641,13 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     });
     addDialogMenuChoice(backgroundScaleModeMenu_, exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode::FitContain), [this]() {
         selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FitContain;
+        if (backgroundScaleModeButton_ != nullptr) {
+            backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
+        }
+        notifySharedSettingsChanged();
+    });
+    addDialogMenuChoice(backgroundScaleModeMenu_, exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode::SquareFitContain), [this]() {
+        selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::SquareFitContain;
         if (backgroundScaleModeButton_ != nullptr) {
             backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
         }

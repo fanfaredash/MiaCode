@@ -7,6 +7,13 @@
 
 #include <cstdio>  // G2 Diag: std::snprintf for sync rate-change beacon lines
 
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 #ifdef HAVE_QT_MULTIMEDIA
 #include <QAudioOutput>
 #include <QMediaPlayer>
@@ -25,11 +32,21 @@ namespace {
 
 constexpr qint64 kPausedSeekAckToleranceMs = 80;
 constexpr int kMediaSeekPrepareTimeoutMs = 800;
-constexpr int kVideoPlaybackWatchdogMs = 1200;
+constexpr int kVideoPlaybackWatchdogMs = 600;
+constexpr int kVideoPlaybackSoftRecoveryMaxConsecutive = 2;
 constexpr int kVideoBackendRecoveryMaxConsecutive = 3;
 constexpr int kVideoFrameIntervalWindowSize = 120;
 constexpr qint64 kVideoFrameStallMinMs = 120;
 constexpr double kVideoFrameStallMultiplier = 3.5;
+
+unsigned long currentBeaconTid() noexcept
+{
+#ifdef Q_OS_WIN
+    return static_cast<unsigned long>(::GetCurrentThreadId());
+#else
+    return 0;
+#endif
+}
 
 double averageOrZero(double total, qint64 count)
 {
@@ -243,6 +260,20 @@ void PreviewStageMediaHost::initializeBackendObjects()
         emit diagnosticsChanged();
     });
     connect(player_, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus status) {
+        if (syncMediaStatusBeaconBudget_ > 0) {
+            --syncMediaStatusBeaconBudget_;
+            char buf[240];
+            std::snprintf(buf, sizeof(buf),
+                "preview/media/status_changed tid=%lu status=%d state=%d rate=%.3f pos=%lld pending_rate=%d kind=%d",
+                currentBeaconTid(),
+                static_cast<int>(status),
+                static_cast<int>(playerPlaybackState(player_)),
+                player_ != nullptr ? static_cast<double>(player_->playbackRate()) : -1.0,
+                player_ != nullptr ? static_cast<long long>(player_->position()) : -1ll,
+                pendingPlaybackRateApply_ ? 1 : 0,
+                static_cast<int>(mediaKind_));
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
         appendPreviewStageMediaLog(
             QStringLiteral("media_status"),
             QString("status=%1 playback_state=%2 position_ms=%3 kind=%4 recovering=%5")
@@ -273,14 +304,22 @@ void PreviewStageMediaHost::initializeBackendObjects()
                 {
                     char buf[180];
                     std::snprintf(buf, sizeof(buf),
-                        "preview/rate/qt_host_flush_about_to_setrate rate=%.3f status=%d",
+                        "preview/rate/qt_host_flush_about_to_setrate tid=%lu rate=%.3f status=%d",
+                        currentBeaconTid(),
                         playbackRate_,
                         static_cast<int>(status));
                     miacode::oplog::appendStartupBeaconLine(buf);
                 }
                 player_->setPlaybackRate(static_cast<qreal>(playbackRate_));
-                miacode::oplog::appendStartupBeaconLine(
-                    "preview/rate/qt_host_flush_setrate_done");
+                {
+                    char buf[180];
+                    std::snprintf(buf, sizeof(buf),
+                        "preview/rate/qt_host_flush_setrate_done tid=%lu rate=%.3f player_rate=%.3f",
+                        currentBeaconTid(),
+                        playbackRate_,
+                        player_ != nullptr ? static_cast<double>(player_->playbackRate()) : -1.0);
+                    miacode::oplog::appendStartupBeaconLine(buf);
+                }
                 appendPreviewStageMediaLog(
                     QStringLiteral("playback_rate_flushed"),
                     QString("rate=%1 status=%2 kind=%3")
@@ -449,6 +488,10 @@ int PreviewStageMediaHost::backgroundScaleMode() const
 
 void PreviewStageMediaHost::setBackgroundScaleModeValue(int mode)
 {
+    if (mode == static_cast<int>(PreviewBackgroundScaleMode::SquareFitContain)) {
+        setBackgroundScaleMode(PreviewBackgroundScaleMode::SquareFitContain);
+        return;
+    }
     setBackgroundScaleMode(
         mode == static_cast<int>(PreviewBackgroundScaleMode::FitContain)
             ? PreviewBackgroundScaleMode::FitContain
@@ -528,16 +571,23 @@ void PreviewStageMediaHost::setChartPath(const QString& chartPath,
 
 void PreviewStageMediaHost::setPlaybackRate(double rate)
 {
+    MC_OP("PreviewStageMediaHost::setPlaybackRate");
     const double oldRate = playbackRate_;
     playbackRate_ = qMax(0.05, rate);
 #ifdef HAVE_QT_MULTIMEDIA
+    if (mediaKind_ == MediaKind::Video && player_ != nullptr) {
+        syncVideoFrameBeaconBudget_ = 24;
+        syncMediaStatusBeaconBudget_ = 16;
+    }
     {
-        char buf[200];
+        char buf[260];
         std::snprintf(buf, sizeof(buf),
-            "preview/rate/qt_host_enter rate=%.3f old=%.3f player_null=%d",
+            "preview/rate/qt_host_enter tid=%lu rate=%.3f old=%.3f player_null=%d kind=%d",
+            currentBeaconTid(),
             playbackRate_,
             oldRate,
-            player_ == nullptr ? 1 : 0);
+            player_ == nullptr ? 1 : 0,
+            static_cast<int>(mediaKind_));
         miacode::oplog::appendStartupBeaconLine(buf);
     }
     if (player_ == nullptr) {
@@ -560,6 +610,8 @@ void PreviewStageMediaHost::setPlaybackRate(double rate)
     // late tail-truncation in the async DebugLog doesn't lose the
     // breadcrumb when the crash recurs.
     const QMediaPlayer::MediaStatus status = player_->mediaStatus();
+    const QMediaPlayer::PlaybackState playbackState = playerPlaybackState(player_);
+    const qreal playerRateBefore = player_->playbackRate();
     const bool stable = status == QMediaPlayer::NoMedia
                      || status == QMediaPlayer::LoadedMedia
                      || status == QMediaPlayer::BufferedMedia
@@ -567,11 +619,15 @@ void PreviewStageMediaHost::setPlaybackRate(double rate)
     if (!stable) {
         pendingPlaybackRateApply_ = true;
         {
-            char buf[160];
+            char buf[240];
             std::snprintf(buf, sizeof(buf),
-                "preview/rate/qt_host_deferred rate=%.3f status=%d",
+                "preview/rate/qt_host_deferred tid=%lu rate=%.3f status=%d state=%d player_rate=%.3f pos=%lld",
+                currentBeaconTid(),
                 playbackRate_,
-                static_cast<int>(status));
+                static_cast<int>(status),
+                static_cast<int>(playbackState),
+                static_cast<double>(playerRateBefore),
+                static_cast<long long>(player_->position()));
             miacode::oplog::appendStartupBeaconLine(buf);
         }
         appendPreviewStageMediaLog(
@@ -584,19 +640,29 @@ void PreviewStageMediaHost::setPlaybackRate(double rate)
     }
     pendingPlaybackRateApply_ = false;
     {
-        char buf[160];
+        char buf[260];
         std::snprintf(buf, sizeof(buf),
-            "preview/rate/qt_host_about_to_setrate rate=%.3f status=%d",
+            "preview/rate/qt_host_about_to_setrate tid=%lu rate=%.3f old=%.3f status=%d state=%d player_rate=%.3f pos=%lld",
+            currentBeaconTid(),
             playbackRate_,
-            static_cast<int>(status));
+            oldRate,
+            static_cast<int>(status),
+            static_cast<int>(playbackState),
+            static_cast<double>(playerRateBefore),
+            static_cast<long long>(player_->position()));
         miacode::oplog::appendStartupBeaconLine(buf);
     }
     player_->setPlaybackRate(static_cast<qreal>(playbackRate_));
     {
-        char buf[120];
+        char buf[220];
         std::snprintf(buf, sizeof(buf),
-            "preview/rate/qt_host_setrate_done rate=%.3f",
-            playbackRate_);
+            "preview/rate/qt_host_setrate_done tid=%lu rate=%.3f player_rate=%.3f status=%d state=%d pos=%lld",
+            currentBeaconTid(),
+            playbackRate_,
+            static_cast<double>(player_->playbackRate()),
+            static_cast<int>(player_->mediaStatus()),
+            static_cast<int>(playerPlaybackState(player_)),
+            static_cast<long long>(player_->position()));
         miacode::oplog::appendStartupBeaconLine(buf);
     }
 #endif
@@ -643,6 +709,7 @@ void PreviewStageMediaHost::preparePlaybackStart(double seconds, quint64 transac
     videoPlaybackActive_ = false;
     videoPlaybackPendingStart_ = false;
     videoPlaybackActiveElapsed_.invalidate();
+    consecutiveVideoPlaybackSoftRecoveryCount_ = 0;
     lastTimelineSecond_ = clampedSecond;
     const qint64 targetMs = qMax<qint64>(0, qRound64((clampedSecond + timelineOffsetSeconds_) * 1000.0));
     preparedPlaybackTargetMs_ = targetMs;
@@ -730,6 +797,7 @@ void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSe
     videoPlaybackPendingStart_ = false;
     videoPlaybackActive_ = true;
     videoPlaybackActiveElapsed_.restart();
+    consecutiveVideoPlaybackSoftRecoveryCount_ = 0;
     if (playerPlaybackState(player_) != QMediaPlayer::PlayingState) {
         QMetaObject::invokeMethod(player_, [this]() {
             if (mediaKind_ == MediaKind::Video && videoPlaybackActive_) {
@@ -819,6 +887,7 @@ void PreviewStageMediaHost::setPlayheadSeconds(double seconds)
 
 void PreviewStageMediaHost::startPlayback(double seconds)
 {
+    MC_OP("PreviewStageMediaHost::startPlayback");
 #ifndef HAVE_QT_MULTIMEDIA
     Q_UNUSED(seconds);
 #else
@@ -840,14 +909,42 @@ void PreviewStageMediaHost::startPlayback(double seconds)
         emit diagnosticsChanged();
         return;
     }
+    syncVideoFrameBeaconBudget_ = qMax(syncVideoFrameBeaconBudget_, 24);
+    syncMediaStatusBeaconBudget_ = qMax(syncMediaStatusBeaconBudget_, 16);
 
     lastTimelineSecond_ = qMax(0.0, seconds);
     const double rawSecond = seconds + timelineOffsetSeconds_;
     const qint64 targetMs = qMax<qint64>(0, qRound64(rawSecond * 1000.0));
     lastSeekMs_ = targetMs;
+    {
+        char buf[260];
+        std::snprintf(buf, sizeof(buf),
+            "preview/play/start_before_set_position tid=%lu txn=%llu target_ms=%lld rate=%.3f status=%d state=%d pos=%lld",
+            currentBeaconTid(),
+            static_cast<unsigned long long>(playbackTransactionId_),
+            static_cast<long long>(targetMs),
+            playbackRate_,
+            static_cast<int>(player_->mediaStatus()),
+            static_cast<int>(playerPlaybackState(player_)),
+            static_cast<long long>(player_->position()));
+        miacode::oplog::appendStartupBeaconLine(buf);
+    }
     player_->setPosition(targetMs);
+    {
+        char buf[220];
+        std::snprintf(buf, sizeof(buf),
+            "preview/play/start_after_set_position tid=%lu txn=%llu pos=%lld status=%d state=%d",
+            currentBeaconTid(),
+            static_cast<unsigned long long>(playbackTransactionId_),
+            static_cast<long long>(player_->position()),
+            static_cast<int>(player_->mediaStatus()),
+            static_cast<int>(playerPlaybackState(player_)));
+        miacode::oplog::appendStartupBeaconLine(buf);
+    }
     if (rawSecond < 0.0) {
+        miacode::oplog::appendStartupBeaconLine("preview/play/start_before_pause_negative_raw");
         player_->pause();
+        miacode::oplog::appendStartupBeaconLine("preview/play/start_after_pause_negative_raw");
         videoPlaybackPendingStart_ = true;
         videoPlaybackActive_ = false;
         videoPlaybackActiveElapsed_.invalidate();
@@ -862,10 +959,33 @@ void PreviewStageMediaHost::startPlayback(double seconds)
         if (videoFrameElapsed_.isValid()) {
             videoFrameElapsed_.restart();
         }
+        {
+            char buf[220];
+            std::snprintf(buf, sizeof(buf),
+                "preview/play/start_before_play tid=%lu txn=%llu rate=%.3f status=%d state=%d",
+                currentBeaconTid(),
+                static_cast<unsigned long long>(playbackTransactionId_),
+                playbackRate_,
+                static_cast<int>(player_->mediaStatus()),
+                static_cast<int>(playerPlaybackState(player_)));
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
         player_->play();
+        {
+            char buf[220];
+            std::snprintf(buf, sizeof(buf),
+                "preview/play/start_after_play tid=%lu txn=%llu status=%d state=%d pos=%lld",
+                currentBeaconTid(),
+                static_cast<unsigned long long>(playbackTransactionId_),
+                static_cast<int>(player_->mediaStatus()),
+                static_cast<int>(playerPlaybackState(player_)),
+                static_cast<long long>(player_->position()));
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
         videoPlaybackActive_ = true;
         videoPlaybackPendingStart_ = false;
         videoPlaybackActiveElapsed_.restart();
+        consecutiveVideoPlaybackSoftRecoveryCount_ = 0;
         if (playerPlaybackState(player_) != QMediaPlayer::PlayingState) {
             QMetaObject::invokeMethod(player_, [this]() {
                 if (mediaKind_ == MediaKind::Video && videoPlaybackActive_) {
@@ -1009,6 +1129,7 @@ void PreviewStageMediaHost::syncPlayback(double seconds)
     videoPlaybackPendingStart_ = false;
     videoPlaybackActive_ = true;
     videoPlaybackActiveElapsed_.restart();
+    consecutiveVideoPlaybackSoftRecoveryCount_ = 0;
     appendPreviewStageMediaLog(
         QStringLiteral("sync_playback_started"),
         QString("txn=%1 second=%2 raw_second=%3 target_ms=%4")
@@ -1253,6 +1374,7 @@ void PreviewStageMediaHost::loadImageMedia(const QString& path)
 
 void PreviewStageMediaHost::loadVideoMedia(const QString& path)
 {
+    MC_OP("PreviewStageMediaHost::loadVideoMedia");
 #ifndef HAVE_QT_MULTIMEDIA
     Q_UNUSED(path);
 #else
@@ -1290,10 +1412,43 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     ++videoPlaybackWatchdogSerial_;
     consecutiveVideoBackendRecoveryCount_ = 0;
     resetVideoFrameDiagnostics();
+    syncMediaStatusBeaconBudget_ = qMax(syncMediaStatusBeaconBudget_, 12);
+    syncVideoFrameBeaconBudget_ = qMax(syncVideoFrameBeaconBudget_, 8);
+    {
+        char buf[260];
+        std::snprintf(buf, sizeof(buf),
+            "preview/load_video/before_bind tid=%lu rate=%.3f status=%d state=%d",
+            currentBeaconTid(),
+            playbackRate_,
+            static_cast<int>(player_->mediaStatus()),
+            static_cast<int>(playerPlaybackState(player_)));
+        miacode::oplog::appendStartupBeaconLine(buf);
+    }
     bindVideoOutput();
+    miacode::oplog::appendStartupBeaconLine("preview/load_video/after_bind");
+    {
+        char buf[260];
+        std::snprintf(buf, sizeof(buf),
+            "preview/load_video/before_set_source tid=%lu rate=%.3f path_len=%d",
+            currentBeaconTid(),
+            playbackRate_,
+            static_cast<int>(path.size()));
+        miacode::oplog::appendStartupBeaconLine(buf);
+    }
     player_->setSource(QUrl::fromLocalFile(path));
+    {
+        char buf[220];
+        std::snprintf(buf, sizeof(buf),
+            "preview/load_video/after_set_source tid=%lu status=%d state=%d",
+            currentBeaconTid(),
+            static_cast<int>(player_->mediaStatus()),
+            static_cast<int>(playerPlaybackState(player_)));
+        miacode::oplog::appendStartupBeaconLine(buf);
+    }
     player_->pause();
+    miacode::oplog::appendStartupBeaconLine("preview/load_video/after_pause");
     player_->setPosition(0);
+    miacode::oplog::appendStartupBeaconLine("preview/load_video/after_set_position_zero");
     updateClockDelta();
     emit imageSourceChanged();
     emit mediaStateChanged();
@@ -1317,12 +1472,16 @@ void PreviewStageMediaHost::bindVideoOutput()
     }
 
     if (videoOutputObject_ == nullptr) {
+        miacode::oplog::appendStartupBeaconLine("preview/bind_video_output/before_clear_output");
         player_->setVideoOutput(static_cast<QObject*>(nullptr));
+        miacode::oplog::appendStartupBeaconLine("preview/bind_video_output/after_clear_output");
         appendPreviewStageMediaLog(QStringLiteral("bind_video_output"), QStringLiteral("attached=0 sink=0"));
         return;
     }
 
+    miacode::oplog::appendStartupBeaconLine("preview/bind_video_output/before_set_output_object");
     player_->setVideoOutput(videoOutputObject_);
+    miacode::oplog::appendStartupBeaconLine("preview/bind_video_output/after_set_output_object");
 
     QObject* sinkObject = nullptr;
     const QVariant sinkVariant = videoOutputObject_->property("videoSink");
@@ -1332,9 +1491,19 @@ void PreviewStageMediaHost::bindVideoOutput()
     videoSink_ = qobject_cast<QVideoSink*>(sinkObject);
     if (videoSink_ != nullptr) {
         const quint64 sourceGeneration = videoSourceGeneration_;
+        miacode::oplog::appendStartupBeaconLine("preview/bind_video_output/before_connect_sink");
         videoSinkFrameConnection_ = QObject::connect(videoSink_, &QVideoSink::videoFrameChanged, this, [this, sourceGeneration](const QVideoFrame& frame) {
+            if (syncVideoFrameBeaconBudget_ > 0) {
+                char buf[180];
+                std::snprintf(buf, sizeof(buf),
+                    "preview/frame/sink_signal tid=%lu source_gen=%llu",
+                    currentBeaconTid(),
+                    static_cast<unsigned long long>(sourceGeneration));
+                miacode::oplog::appendStartupBeaconLine(buf);
+            }
             noteVideoFrameArrived(frame, sourceGeneration);
         });
+        miacode::oplog::appendStartupBeaconLine("preview/bind_video_output/after_connect_sink");
         appendPreviewStageMediaLog(QStringLiteral("bind_video_output"), QStringLiteral("attached=1 sink=1"));
         return;
     }
@@ -1465,6 +1634,7 @@ bool PreviewStageMediaHost::recoverVideoBackend(const QString& reason, double ta
         player_->play();
         videoPlaybackActive_ = true;
         videoPlaybackActiveElapsed_.restart();
+        consecutiveVideoPlaybackSoftRecoveryCount_ = 0;
         scheduleVideoPlaybackWatchdog(QStringLiteral("backend_recover_resume"));
     }
     updateClockDelta();
@@ -1601,10 +1771,23 @@ void PreviewStageMediaHost::scheduleVideoPlaybackWatchdog(const QString& reason)
     const quint64 serial = ++videoPlaybackWatchdogSerial_;
     const qint64 frameCount = videoFrameCountTotal_;
     const double targetSecond = observedPlayheadSecond_;
+    {
+        char buf[260];
+        std::snprintf(buf, sizeof(buf),
+            "preview/watchdog/schedule tid=%lu serial=%llu reason=%s frame_count=%lld age_ms=%lld rate=%.3f",
+            currentBeaconTid(),
+            static_cast<unsigned long long>(serial),
+            reason.toUtf8().constData(),
+            static_cast<long long>(frameCount),
+            static_cast<long long>(currentVideoFrameAgeForDiagnosticsMs()),
+            playbackRate_);
+        miacode::oplog::appendStartupBeaconLine(buf);
+    }
     QTimer::singleShot(kVideoPlaybackWatchdogMs, this, [this, serial, frameCount, targetSecond, reason]() {
         if (serial != videoPlaybackWatchdogSerial_
             || mediaKind_ != MediaKind::Video
             || !videoPlaybackActive_) {
+            miacode::oplog::appendStartupBeaconLine("preview/watchdog/skip_stale_or_inactive");
             return;
         }
         const qint64 ageMs = currentVideoFrameAgeForDiagnosticsMs();
@@ -1612,11 +1795,13 @@ void PreviewStageMediaHost::scheduleVideoPlaybackWatchdog(const QString& reason)
         const bool staleFrame = ageMs >= kVideoPlaybackWatchdogMs;
         const bool notPlaying = playerPlaybackState(player_) != QMediaPlayer::PlayingState;
         if (!noNewFrame && !staleFrame && !notPlaying) {
+            consecutiveVideoPlaybackSoftRecoveryCount_ = 0;
+            miacode::oplog::appendStartupBeaconLine("preview/watchdog/healthy");
             return;
         }
         appendPreviewStageMediaLog(
             QStringLiteral("video_playback_watchdog_timeout"),
-            QString("reason=%1 target_second=%2 observed_second=%3 no_new_frame=%4 stale_frame=%5 not_playing=%6 frame_count=%7 initial_frame_count=%8 age_ms=%9 playback_state=%10")
+            QString("reason=%1 target_second=%2 observed_second=%3 no_new_frame=%4 stale_frame=%5 not_playing=%6 frame_count=%7 initial_frame_count=%8 age_ms=%9 playback_state=%10 soft_recovery_count=%11")
                 .arg(reason)
                 .arg(targetSecond, 0, 'f', 6)
                 .arg(observedPlayheadSecond_, 0, 'f', 6)
@@ -1627,9 +1812,139 @@ void PreviewStageMediaHost::scheduleVideoPlaybackWatchdog(const QString& reason)
                 .arg(frameCount)
                 .arg(ageMs)
                 .arg(playbackStateName(playerPlaybackState(player_)))
+                .arg(consecutiveVideoPlaybackSoftRecoveryCount_)
         );
-        recoverVideoBackend(QStringLiteral("playback_watchdog_%1").arg(reason), observedPlayheadSecond_, true);
+        trySoftRecoverVideoPlayback(
+            QStringLiteral("playback_watchdog_%1").arg(reason),
+            observedPlayheadSecond_,
+            frameCount,
+            ageMs);
     });
+#endif
+}
+
+bool PreviewStageMediaHost::trySoftRecoverVideoPlayback(const QString& reason,
+                                                        double targetSecond,
+                                                        qint64 initialFrameCount,
+                                                        qint64 ageMs)
+{
+#ifndef HAVE_QT_MULTIMEDIA
+    Q_UNUSED(reason);
+    Q_UNUSED(targetSecond);
+    Q_UNUSED(initialFrameCount);
+    Q_UNUSED(ageMs);
+    return false;
+#else
+    if (shuttingDown_
+        || mediaKind_ != MediaKind::Video
+        || player_ == nullptr
+        || !videoPlaybackActive_) {
+        appendPreviewStageMediaLog(
+            QStringLiteral("video_playback_soft_recover_skip"),
+            QString("reason=%1 shutting_down=%2 kind=%3 has_player=%4 active=%5")
+                .arg(reason)
+                .arg(shuttingDown_ ? 1 : 0)
+                .arg(debugMediaTypeName())
+                .arg(player_ != nullptr ? 1 : 0)
+                .arg(videoPlaybackActive_ ? 1 : 0));
+        return false;
+    }
+    if (consecutiveVideoPlaybackSoftRecoveryCount_ >= kVideoPlaybackSoftRecoveryMaxConsecutive) {
+        appendPreviewStageMediaLog(
+            QStringLiteral("video_playback_soft_recover_exhausted"),
+            QString("reason=%1 count=%2 limit=%3 frame_count=%4 initial_frame_count=%5 age_ms=%6 playback_state=%7 position_ms=%8")
+                .arg(reason)
+                .arg(consecutiveVideoPlaybackSoftRecoveryCount_)
+                .arg(kVideoPlaybackSoftRecoveryMaxConsecutive)
+                .arg(videoFrameCountTotal_)
+                .arg(initialFrameCount)
+                .arg(ageMs)
+                .arg(playbackStateName(playerPlaybackState(player_)))
+                .arg(player_->position()));
+        miacode::oplog::appendStartupBeaconLine("preview/watchdog/soft_recover_exhausted");
+        return false;
+    }
+
+    const int step = consecutiveVideoPlaybackSoftRecoveryCount_++;
+    const QString strategy = step == 0
+        ? QStringLiteral("seek_flush")
+        : QStringLiteral("rebind_sink_seek_flush");
+    const double clampedTargetSecond = qMax(0.0, qIsFinite(targetSecond) ? targetSecond : currentPlaybackSecond());
+    const qint64 targetMs = qMax<qint64>(0, qRound64((clampedTargetSecond + timelineOffsetSeconds_) * 1000.0));
+    const qint64 flushMs = targetMs + 1;
+    ++videoPlaybackWatchdogSerial_;
+    syncVideoFrameBeaconBudget_ = qMax(syncVideoFrameBeaconBudget_, 24);
+    syncMediaStatusBeaconBudget_ = qMax(syncMediaStatusBeaconBudget_, 16);
+
+    {
+        char buf[300];
+        std::snprintf(buf, sizeof(buf),
+            "preview/watchdog/soft_recover_begin tid=%lu step=%d strategy=%s target_ms=%lld pos=%lld frame_count=%lld age_ms=%lld rate=%.3f",
+            currentBeaconTid(),
+            step,
+            strategy.toUtf8().constData(),
+            static_cast<long long>(targetMs),
+            static_cast<long long>(player_->position()),
+            static_cast<long long>(videoFrameCountTotal_),
+            static_cast<long long>(ageMs),
+            playbackRate_);
+        miacode::oplog::appendStartupBeaconLine(buf);
+    }
+    appendPreviewStageMediaLog(
+        QStringLiteral("video_playback_soft_recover_begin"),
+        QString("reason=%1 step=%2 strategy=%3 target_second=%4 target_ms=%5 flush_ms=%6 frame_count=%7 initial_frame_count=%8 age_ms=%9 playback_state=%10 position_ms=%11")
+            .arg(reason)
+            .arg(step)
+            .arg(strategy)
+            .arg(clampedTargetSecond, 0, 'f', 6)
+            .arg(targetMs)
+            .arg(flushMs)
+            .arg(videoFrameCountTotal_)
+            .arg(initialFrameCount)
+            .arg(ageMs)
+            .arg(playbackStateName(playerPlaybackState(player_)))
+            .arg(player_->position()));
+
+    if (step == 1) {
+        if (videoSinkFrameConnection_) {
+            QObject::disconnect(videoSinkFrameConnection_);
+            videoSinkFrameConnection_ = QMetaObject::Connection();
+        }
+        videoSink_.clear();
+        player_->setVideoOutput(static_cast<QObject*>(nullptr));
+        bindVideoOutput();
+    }
+
+    player_->pause();
+    player_->setPosition(flushMs);
+    videoPlaybackActive_ = true;
+    videoPlaybackPendingStart_ = false;
+    videoPlaybackActiveElapsed_.restart();
+    if (videoFrameElapsed_.isValid()) {
+        videoFrameElapsed_.restart();
+    }
+
+    QTimer::singleShot(0, this, [this, targetMs, reason, strategy]() {
+        if (shuttingDown_
+            || mediaKind_ != MediaKind::Video
+            || player_ == nullptr
+            || !videoPlaybackActive_) {
+            return;
+        }
+        player_->setPosition(targetMs);
+        player_->play();
+        appendPreviewStageMediaLog(
+            QStringLiteral("video_playback_soft_recover_play"),
+            QString("reason=%1 strategy=%2 target_ms=%3 playback_state=%4 position_ms=%5")
+                .arg(reason)
+                .arg(strategy)
+                .arg(targetMs)
+                .arg(playbackStateName(playerPlaybackState(player_)))
+                .arg(player_->position()));
+        miacode::oplog::appendStartupBeaconLine("preview/watchdog/soft_recover_play");
+        scheduleVideoPlaybackWatchdog(QStringLiteral("soft_recover_%1").arg(strategy));
+    });
+    return true;
 #endif
 }
 
@@ -1644,11 +1959,32 @@ void PreviewStageMediaHost::updateClockDelta()
 
 void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame, quint64 sourceGeneration)
 {
+    MC_OP("PreviewStageMediaHost::noteVideoFrameArrived");
 #ifndef HAVE_QT_MULTIMEDIA
     Q_UNUSED(frame);
     Q_UNUSED(sourceGeneration);
 #else
+    const bool syncFrameBeacon = syncVideoFrameBeaconBudget_ > 0;
+    if (syncFrameBeacon) {
+        char buf[300];
+        std::snprintf(buf, sizeof(buf),
+            "preview/frame/arrived_enter tid=%lu valid=%d source_gen=%llu current_gen=%llu count=%lld start_us=%lld end_us=%lld active=%d rate=%.3f",
+            currentBeaconTid(),
+            frame.isValid() ? 1 : 0,
+            static_cast<unsigned long long>(sourceGeneration),
+            static_cast<unsigned long long>(videoSourceGeneration_),
+            static_cast<long long>(videoFrameCountTotal_),
+            static_cast<long long>(frame.startTime()),
+            static_cast<long long>(frame.endTime()),
+            videoPlaybackActive_ ? 1 : 0,
+            playbackRate_);
+        miacode::oplog::appendStartupBeaconLine(buf);
+    }
     if (mediaKind_ != MediaKind::Video || sourceGeneration != videoSourceGeneration_) {
+        if (syncFrameBeacon) {
+            --syncVideoFrameBeaconBudget_;
+            miacode::oplog::appendStartupBeaconLine("preview/frame/arrived_drop_stale");
+        }
         appendPreviewStageMediaLog(
             QStringLiteral("video_frame_drop"),
             QString("reason=stale_source source_generation=%1 current_generation=%2 kind=%3")
@@ -1659,6 +1995,10 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame, quin
         return;
     }
     if (!frame.isValid()) {
+        if (syncFrameBeacon) {
+            --syncVideoFrameBeaconBudget_;
+            miacode::oplog::appendStartupBeaconLine("preview/frame/arrived_drop_invalid");
+        }
         return;
     }
     // Phase 4c-9 — convert the QVideoFrame to a QImage and stash it
@@ -1692,11 +2032,39 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame, quin
     const bool skipForPerPixelAlpha =
         miacode::debug_options::previewDCompPerPixelAlphaEnabled();
     if (mediaVisible_ && !throttledOut && !skipForPerPixelAlpha) {
+        if (syncFrameBeacon) {
+            char buf[220];
+            std::snprintf(buf, sizeof(buf),
+                "preview/frame/before_to_image tid=%lu count=%lld pixel_format=%d",
+                currentBeaconTid(),
+                static_cast<long long>(videoFrameCountTotal_),
+                static_cast<int>(frame.surfaceFormat().pixelFormat()));
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
         QImage decodedImage = frame.toImage();
+        if (syncFrameBeacon) {
+            char buf[220];
+            std::snprintf(buf, sizeof(buf),
+                "preview/frame/after_to_image tid=%lu null=%d size=%dx%d",
+                currentBeaconTid(),
+                decodedImage.isNull() ? 1 : 0,
+                decodedImage.width(),
+                decodedImage.height());
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
         if (!decodedImage.isNull()) {
             loadedBackgroundImage_ = std::move(decodedImage);
             videoFrameToImageThrottle_.restart();
         }
+    } else if (syncFrameBeacon) {
+        char buf[220];
+        std::snprintf(buf, sizeof(buf),
+            "preview/frame/skip_to_image tid=%lu visible=%d throttled=%d per_pixel_alpha=%d",
+            currentBeaconTid(),
+            mediaVisible_ ? 1 : 0,
+            throttledOut ? 1 : 0,
+            skipForPerPixelAlpha ? 1 : 0);
+        miacode::oplog::appendStartupBeaconLine(buf);
     }
     const bool firstFrameForSource = videoFrameCountTotal_ == 0;
     if (videoFrameElapsed_.isValid()) {
@@ -1713,6 +2081,7 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame, quin
     videoFrameElapsed_.restart();
     ++videoFrameCountTotal_;
     consecutiveVideoBackendRecoveryCount_ = 0;
+    consecutiveVideoPlaybackSoftRecoveryCount_ = 0;
     if (firstFrameForSource) {
         // Frame size + surface format diagnostics are the missing piece for
         // the user-machine PV-scaling bug: mediaTargetRect / VideoOutput
@@ -1844,6 +2213,20 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame, quin
         }
     }
     updateVideoFrameStallState(true);
+    if (syncFrameBeacon) {
+        --syncVideoFrameBeaconBudget_;
+        char buf[280];
+        std::snprintf(buf, sizeof(buf),
+            "preview/frame/arrived_exit tid=%lu count=%lld player_pos=%lld clock_delta=%.6f status=%d state=%d remaining=%d",
+            currentBeaconTid(),
+            static_cast<long long>(videoFrameCountTotal_),
+            player_ != nullptr ? static_cast<long long>(player_->position()) : -1ll,
+            clockDeltaSeconds_,
+            player_ != nullptr ? static_cast<int>(player_->mediaStatus()) : -1,
+            player_ != nullptr ? static_cast<int>(playerPlaybackState(player_)) : -1,
+            syncVideoFrameBeaconBudget_);
+        miacode::oplog::appendStartupBeaconLine(buf);
+    }
     emit diagnosticsChanged();
 #endif
 }
@@ -1861,6 +2244,7 @@ void PreviewStageMediaHost::resetVideoFrameDiagnostics()
     videoFrameCountTotal_ = 0;
     videoFrameStallCount_ = 0;
     videoFrameStalled_ = false;
+    consecutiveVideoPlaybackSoftRecoveryCount_ = 0;
 }
 
 bool PreviewStageMediaHost::updateVideoFrameStallState(bool logTransition)

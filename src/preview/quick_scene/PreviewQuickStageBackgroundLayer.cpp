@@ -360,15 +360,16 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
         }
         profile.mediaTextureMs = static_cast<double>(mediaTextureTimer.nsecsElapsed()) / 1000000.0;
         if (texture != nullptr) {
-            mediaNode->setOwnsTexture(false);
-            mediaNode->setTexture(texture);
-            mediaNode->setRect(
-                miacode::preview::scene::mediaTargetRect(
+            const miacode::preview::scene::PreviewMediaPlacement placement =
+                miacode::preview::scene::mediaPlacement(
                     mediaImage.size(),
                     stageRect,
-                    state.render.backgroundScaleMode == PreviewBackgroundScaleMode::FitContain
-                )
-            );
+                    state.render.backgroundScaleMode
+                );
+            mediaNode->setOwnsTexture(false);
+            mediaNode->setTexture(texture);
+            mediaNode->setRect(placement.targetRect);
+            mediaNode->setSourceRect(texture->convertToNormalizedSourceRect(placement.sourceRect));
             mediaNode->setFiltering(QSGTexture::Linear);
         } else {
             removeMediaNode(root);

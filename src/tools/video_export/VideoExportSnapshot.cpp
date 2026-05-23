@@ -14,9 +14,15 @@ namespace {
 
 QString backgroundScaleModeToken(PreviewBackgroundScaleMode mode)
 {
-    return mode == PreviewBackgroundScaleMode::FitContain
-        ? QStringLiteral("fit")
-        : QStringLiteral("fill");
+    switch (mode) {
+    case PreviewBackgroundScaleMode::FitContain:
+        return QStringLiteral("fit");
+    case PreviewBackgroundScaleMode::SquareFitContain:
+        return QStringLiteral("square_fit");
+    case PreviewBackgroundScaleMode::FillCrop:
+    default:
+        return QStringLiteral("fill");
+    }
 }
 
 QString outlineVariantToken(PreviewOutlineVariant variant)
@@ -79,9 +85,18 @@ VideoExportPreset videoExportPresetFromToken(const QString& token)
 
 PreviewBackgroundScaleMode backgroundScaleModeFromToken(const QString& token)
 {
-    return token.trimmed().compare(QStringLiteral("fit"), Qt::CaseInsensitive) == 0
-        ? PreviewBackgroundScaleMode::FitContain
-        : PreviewBackgroundScaleMode::FillCrop;
+    const QString normalized = token.trimmed().toLower();
+    if (normalized == QLatin1String("fit") || normalized == QLatin1String("contain")) {
+        return PreviewBackgroundScaleMode::FitContain;
+    }
+    if (normalized == QLatin1String("square_fit")
+        || normalized == QLatin1String("square-fit")
+        || normalized == QLatin1String("square_fill")
+        || normalized == QLatin1String("square-fill")
+        || normalized == QLatin1String("square")) {
+        return PreviewBackgroundScaleMode::SquareFitContain;
+    }
+    return PreviewBackgroundScaleMode::FillCrop;
 }
 
 QString renderModeToken(RenderMode mode)

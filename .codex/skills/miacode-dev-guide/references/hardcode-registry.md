@@ -67,6 +67,10 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: shader-side `BreakAnimate` / `HoldShine` brightness and contrast coefficients, custom sprite-material uniform layout, and the layer-local contiguous batch policy keyed by texture only while per-sprite effect selection stays in vertex data
   - Current tuning note: this file is now the owner for runtime sprite effect math and for the “merge only adjacent compatible sprites, never reorder” rule; changes here affect both runtime preview and export preview because both share the Quick scene graph path
   - Rule: keep local while the values are renderer-internal, but document any changes that alter visual parity or layer-order guarantees
+- `src/preview/runtime/PreviewStageMediaHost.cpp`
+  - Owns: QtMultimedia stage-video watchdog and recovery thresholds for realtime background video
+  - Current tuning note: playback watchdog fires after `600 ms` without a fresh frame / with a stale frame / when not playing, then tries at most `2` soft recoveries before giving up for that playback stretch: first a pause + seek-flush + play, then a video-output rebind + seek-flush + play. Full backend rebuild remains reserved for explicit media errors, invalid media, and existing seek/prepare timeout recovery paths.
+  - Rule: keep local while these thresholds only protect runtime video preview; promote if export preview, worker preview, or user-facing recovery preferences need the same policy
 - `src/tools/latency/LatencyDetectorDialog.cpp`
   - Owns: detection windows, hop sizes, BPM scan range, offset penalties, snap thresholds
   - Rule: keep local when the values are intrinsic to the latency tool, but document any user-visible range changes

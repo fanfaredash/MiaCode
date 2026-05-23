@@ -125,6 +125,10 @@ private:
     void schedulePreparedPlaybackTimeout(quint64 transactionId, qint64 targetMs);
     void schedulePausedSeekTimeout(quint64 generation, qint64 targetMs);
     void scheduleVideoPlaybackWatchdog(const QString& reason);
+    bool trySoftRecoverVideoPlayback(const QString& reason,
+                                     double targetSecond,
+                                     qint64 initialFrameCount,
+                                     qint64 ageMs);
     void updateClockDelta();
     void noteVideoFrameArrived(const QVideoFrame& frame, quint64 sourceGeneration);
     void resetVideoFrameDiagnostics();
@@ -165,6 +169,8 @@ private:
     quint64 videoSourceGeneration_ = 0;
     double timelineOffsetSeconds_ = 0.0;
     double playbackRate_ = 1.0;
+    int syncVideoFrameBeaconBudget_ = 0;
+    int syncMediaStatusBeaconBudget_ = 0;
     // G2 Commit 1: Qt 6.8 FFmpeg's QMediaPlayer::setPlaybackRate has a race
     // when the player is in a transient mediaStatus (LoadingMedia /
     // BufferingMedia / StalledMedia / InvalidMedia) — the rate write either
@@ -191,6 +197,7 @@ private:
     quint64 videoPlaybackWatchdogSerial_ = 0;
     bool recoveringVideoBackend_ = false;
     int consecutiveVideoBackendRecoveryCount_ = 0;
+    int consecutiveVideoPlaybackSoftRecoveryCount_ = 0;
     bool videoPlaybackActive_ = false;
     bool videoPlaybackPendingStart_ = false;
     double observedPlayheadSecond_ = 0.0;

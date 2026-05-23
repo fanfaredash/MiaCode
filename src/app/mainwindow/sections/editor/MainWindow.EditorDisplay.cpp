@@ -342,7 +342,7 @@ void MainWindow::EditorSection::loadPortableState()
         state_.timelineQuickStateBridge_->setTimelineSyncEnabled(state_.timelineSyncEnabled_);
     }
     owner_.refreshPreviewFrameRateTimers();
-    owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
+    owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_, "editor_display_apply_settings");
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(state_.previewPlaybackRate_);
     }
@@ -481,6 +481,12 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     const QString scaleMode = preview.value("background_scale_mode").toString().trimmed().toLower();
     if (scaleMode == QLatin1String("fit") || scaleMode == QLatin1String("contain")) {
         state_.previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FitContain;
+    } else if (scaleMode == QLatin1String("square_fit")
+        || scaleMode == QLatin1String("square-fit")
+        || scaleMode == QLatin1String("square_fill")
+        || scaleMode == QLatin1String("square-fill")
+        || scaleMode == QLatin1String("square")) {
+        state_.previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::SquareFitContain;
     } else if (!scaleMode.isEmpty()) {
         state_.previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     }
@@ -666,7 +672,9 @@ void MainWindow::EditorSection::savePortableState() const
         "background_scale_mode",
         state_.previewBackgroundScaleMode_ == PreviewBackgroundScaleMode::FitContain
             ? QStringLiteral("fit")
-            : QStringLiteral("fill")
+            : (state_.previewBackgroundScaleMode_ == PreviewBackgroundScaleMode::SquareFitContain
+                   ? QStringLiteral("square_fit")
+                   : QStringLiteral("fill"))
     );
     preview.insert("tap_flow_speed", state_.previewTapFlowSpeed_);
     preview.insert("touch_flow_speed", state_.previewTouchFlowSpeed_);

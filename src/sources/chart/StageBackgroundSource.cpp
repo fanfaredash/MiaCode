@@ -63,10 +63,9 @@ void StageBackgroundSource::contributeToSnapshot(
         return;
     }
 
-    const bool fitContain =
-        state.render.backgroundScaleMode == PreviewBackgroundScaleMode::FitContain;
-    const QRectF targetRect = scene::mediaTargetRect(
-        bgImage.size(), ctx.stageRect, fitContain);
+    const scene::PreviewMediaPlacement placement = scene::mediaPlacement(
+        bgImage.size(), ctx.stageRect, state.render.backgroundScaleMode);
+    const QRectF targetRect = placement.targetRect;
     if (targetRect.width() <= 0.0 || targetRect.height() <= 0.0) {
         return;
     }
@@ -80,6 +79,7 @@ void StageBackgroundSource::contributeToSnapshot(
     bg.height = targetRect.height();
     bg.rotationDegrees = 0.0;
     bg.opacity = 1.0;
+    bg.sourceRect = placement.sourceRect;
     bg.effect = scene::PreviewAnimatedSpriteEffect::None;
     bg.cacheable = bgCacheable;
     scene::PreviewSpriteDescriptors batch;

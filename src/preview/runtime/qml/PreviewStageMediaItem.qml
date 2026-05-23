@@ -15,34 +15,44 @@ Item {
         visible: root.mediaHost && root.mediaHost.mediaVisible && root.mediaHost.hasResolvedMedia
     }
 
-    Image {
-        id: previewStageImage
-        objectName: "previewStageImage"
-        anchors.fill: parent
-        visible: root.mediaHost
-            && root.mediaHost.mediaVisible
-            && root.mediaHost.hasResolvedMedia
-            && !root.mediaHost.hasVideoMedia
-        fillMode: root.mediaHost && root.mediaHost.backgroundScaleMode === 1
-            ? Image.PreserveAspectFit
-            : Image.PreserveAspectCrop
-        source: root.mediaHost ? root.mediaHost.imageSource : ""
-        asynchronous: true
-        cache: true
-        smooth: true
-        mipmap: true
-    }
+    Item {
+        id: mediaFrame
+        objectName: "previewStageMediaFrame"
+        property bool squareFit: root.mediaHost && root.mediaHost.backgroundScaleMode === 2
+        width: squareFit ? Math.min(root.width, root.height) : root.width
+        height: squareFit ? Math.min(root.width, root.height) : root.height
+        anchors.centerIn: parent
+        clip: squareFit
 
-    VideoOutput {
-        id: previewStageVideoOutput
-        objectName: "previewStageVideoOutput"
-        anchors.fill: parent
-        visible: root.mediaHost
-            && root.mediaHost.mediaVisible
-            && root.mediaHost.hasVideoMedia
-            && root.mediaHost.hasVideoFrame
-        fillMode: root.mediaHost && root.mediaHost.backgroundScaleMode === 1
-            ? VideoOutput.PreserveAspectFit
-            : VideoOutput.PreserveAspectCrop
+        Image {
+            id: previewStageImage
+            objectName: "previewStageImage"
+            anchors.fill: parent
+            visible: root.mediaHost
+                && root.mediaHost.mediaVisible
+                && root.mediaHost.hasResolvedMedia
+                && !root.mediaHost.hasVideoMedia
+            fillMode: root.mediaHost && (root.mediaHost.backgroundScaleMode === 1 || root.mediaHost.backgroundScaleMode === 2)
+                ? Image.PreserveAspectFit
+                : Image.PreserveAspectCrop
+            source: root.mediaHost ? root.mediaHost.imageSource : ""
+            asynchronous: true
+            cache: true
+            smooth: true
+            mipmap: true
+        }
+
+        VideoOutput {
+            id: previewStageVideoOutput
+            objectName: "previewStageVideoOutput"
+            anchors.fill: parent
+            visible: root.mediaHost
+                && root.mediaHost.mediaVisible
+                && root.mediaHost.hasVideoMedia
+                && root.mediaHost.hasVideoFrame
+            fillMode: root.mediaHost && (root.mediaHost.backgroundScaleMode === 1 || root.mediaHost.backgroundScaleMode === 2)
+                ? VideoOutput.PreserveAspectFit
+                : VideoOutput.PreserveAspectCrop
+        }
     }
 }
