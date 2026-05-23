@@ -14,6 +14,7 @@
 #include "common/LayoutRingConfig.h"
 #include "common/PreviewAudioMixConfig.h"
 #include "common/PreviewGameplayConfig.h"
+#include "core/scene/PreviewSceneGeometry.h"
 #include "common/PreviewSfxTimeline.h"
 #include "preview/runtime/PreviewSceneAssetLoader.h"
 #include "tools/muri/MuriAnalyzer.h"
@@ -1841,26 +1842,10 @@ QRectF staticMediaTargetRect(
     const QSize& outputSize,
     PreviewBackgroundScaleMode scaleMode)
 {
-    if (mediaSize.isEmpty() || outputSize.isEmpty()) {
-        return QRectF();
-    }
-
-    QSize fittedSize = mediaSize;
-    fittedSize.scale(
-        outputSize,
-        scaleMode == PreviewBackgroundScaleMode::FitContain
-            ? Qt::KeepAspectRatio
-            : Qt::KeepAspectRatioByExpanding
-    );
-    if (fittedSize.isEmpty()) {
-        return QRectF();
-    }
-
-    return QRectF(
-        (outputSize.width() - fittedSize.width()) * 0.5,
-        (outputSize.height() - fittedSize.height()) * 0.5,
-        fittedSize.width(),
-        fittedSize.height()
+    return miacode::preview::scene::mediaTargetRect(
+        mediaSize,
+        QRectF(0.0, 0.0, outputSize.width(), outputSize.height()),
+        scaleMode
     );
 }
 
@@ -1897,7 +1882,11 @@ bool stageStaticBackgroundImageForExport(
 
     QPainter painter(&stagedImage);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-    painter.drawImage(staticMediaTargetRect(sourceImage.size(), outputSize, scaleMode), sourceImage);
+    painter.drawImage(
+        staticMediaTargetRect(sourceImage.size(), outputSize, scaleMode),
+        sourceImage,
+        miacode::preview::scene::mediaSourceRect(sourceImage.size(), scaleMode)
+    );
     painter.end();
 
     if (!stagedImage.save(stagedPath)) {
@@ -1913,7 +1902,11 @@ bool stageStaticBackgroundImageForExport(
             .arg(sourceImage.height())
             .arg(stagedImage.width())
             .arg(stagedImage.height())
-            .arg(scaleMode == PreviewBackgroundScaleMode::FitContain ? QStringLiteral("fit") : QStringLiteral("fill"))
+            .arg(scaleMode == PreviewBackgroundScaleMode::FitContain
+                    ? QStringLiteral("fit")
+                    : (scaleMode == PreviewBackgroundScaleMode::SquareFitContain
+                           ? QStringLiteral("square_fit")
+                           : QStringLiteral("fill")))
             .arg(stagedPath);
     }
     return true;
@@ -3493,12 +3486,19 @@ VideoExportResult VideoExportController::exportPreparedTask(
     if (hasMedia) {
         QString mediaChain = QStringLiteral("[%1:v]").arg(mediaInputIndex);
         QStringList mediaFilters;
+        const int squareSide = qMax(1, qMin(frameWidth, frameHeight));
+        const int squareOffsetX = (frameWidth - squareSide) / 2;
+        const int squareOffsetY = (frameHeight - squareSide) / 2;
         if (!(mediaIsImage && mediaUsesPreprocessedImage)) {
             if (task.backgroundScaleMode == PreviewBackgroundScaleMode::FitContain) {
                 mediaFilters << QStringLiteral(
                     "scale=%1:%2:force_original_aspect_ratio=decrease,pad=%1:%2:(ow-iw)/2:(oh-ih)/2:color=black")
                                     .arg(frameWidth)
                                     .arg(frameHeight);
+            } else if (task.backgroundScaleMode == PreviewBackgroundScaleMode::SquareFitContain) {
+                mediaFilters << QStringLiteral(
+                    "scale=%1:%1:force_original_aspect_ratio=decrease,pad=%1:%1:(ow-iw)/2:(oh-ih)/2:color=black")
+                                    .arg(squareSide);
             } else {
                 mediaFilters << QStringLiteral(
                     "scale=%1:%2:force_original_aspect_ratio=increase,crop=%1:%2")
@@ -3526,7 +3526,15 @@ VideoExportResult VideoExportController::exportPreparedTask(
         mediaChain += mediaFilters.join(QLatin1Char(','));
         mediaChain += QStringLiteral("[media_src]");
         filterParts << mediaChain;
-        filterParts << QStringLiteral("[base_fill][media_src]overlay=0:0:format=rgb:alpha=straight[base_media]");
+        filterParts << QStringLiteral("[base_fill][media_src]overlay=%1:%2:format=rgb:alpha=straight[base_media]")
+                           .arg((task.backgroundScaleMode == PreviewBackgroundScaleMode::SquareFitContain
+                                    && !(mediaIsImage && mediaUsesPreprocessedImage))
+                                    ? squareOffsetX
+                                    : 0)
+                           .arg((task.backgroundScaleMode == PreviewBackgroundScaleMode::SquareFitContain
+                                    && !(mediaIsImage && mediaUsesPreprocessedImage))
+                                    ? squareOffsetY
+                                    : 0);
     } else {
         filterParts << QStringLiteral("[base_fill]null[base_media]");
     }
