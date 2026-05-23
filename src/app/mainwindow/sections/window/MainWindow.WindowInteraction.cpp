@@ -226,7 +226,7 @@ void MainWindow::WindowSection::recoverPreviewBackendsAfterApplicationResume()
             qMax(0.0, state_.qtPreviewPauseSecond_),
             state_.document_.videoPath  // Phase 4c — &video= override
         );
-        owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
+        owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_, "fullscreen_return");
     }
     owner_.applyPreviewStageMediaRouteVisualSettings();
 }

@@ -48,7 +48,7 @@ public:
         const QString& trackPath
     );
     void resetPreviewStageMediaRouteTimelineOffset();
-    void applyPreviewStageMediaRoutePlaybackRate(double rate);
+    void applyPreviewStageMediaRoutePlaybackRate(double rate, const char* site = nullptr);
     bool previewStageMediaRouteHasVideo() const;
     double previewStageMediaRouteCurrentPlaybackSecond() const;
     void startPreviewStageMediaRoutePlayback(double second);

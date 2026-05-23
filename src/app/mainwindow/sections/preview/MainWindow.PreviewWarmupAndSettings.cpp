@@ -547,7 +547,7 @@ QString MainWindow::PreviewSection::resolvePreviewSkinDir() const
 void MainWindow::PreviewSection::applyPreviewAudioSettingsToRuntime()
 {
     state_.previewAudioSettings_.normalize();
-    applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
+    applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_, "preview_audio_settings");
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->applyLevels(state_.previewAudioSettings_);
     }

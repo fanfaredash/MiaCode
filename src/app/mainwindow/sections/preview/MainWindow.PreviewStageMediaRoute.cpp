@@ -15,6 +15,7 @@
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
+#include "common/OperationLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
@@ -27,6 +28,8 @@
 #include <QtCore>
 #include <QtGui>
 #include <QtWidgets>
+
+#include <cstdio>
 
 using namespace miacode::mainwindow::shared;
 
@@ -165,7 +168,7 @@ void MainWindow::PreviewSection::syncPreviewStageMediaRouteChartPath(
         state_.previewStageMediaHost_->setPlayheadSeconds(clampedPausedSecond);
     }
 
-    applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
+    applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_, "sync_chart_path");
     refreshPreviewStageMediaRouteDebugState(false);
 }
 
@@ -195,7 +198,7 @@ void MainWindow::PreviewSection::applyPreviewMediaWarmupToStageMediaRoute(
         state_.previewStageMediaHost_->setChartPath(chartPath);
     }
 
-    applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
+    applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_, "media_warmup_result");
     refreshPreviewStageMediaRouteDebugState(false);
 }
 
@@ -206,8 +209,17 @@ void MainWindow::PreviewSection::resetPreviewStageMediaRouteTimelineOffset()
     }
 }
 
-void MainWindow::PreviewSection::applyPreviewStageMediaRoutePlaybackRate(double rate)
+void MainWindow::PreviewSection::applyPreviewStageMediaRoutePlaybackRate(double rate, const char* site)
 {
+    char buf[260];
+    std::snprintf(buf, sizeof(buf),
+        "preview/rate/route_apply tid=0x%llx site=%s rate=%.3f host=%d has_video=%d",
+        static_cast<unsigned long long>(reinterpret_cast<quintptr>(QThread::currentThreadId())),
+        site != nullptr ? site : "(unspecified)",
+        rate,
+        state_.previewStageMediaHost_ != nullptr ? 1 : 0,
+        state_.previewStageMediaHost_ != nullptr && state_.previewStageMediaHost_->hasVideoMedia() ? 1 : 0);
+    miacode::oplog::appendStartupBeaconLine(buf);
     if (state_.previewStageMediaHost_ != nullptr) {
         state_.previewStageMediaHost_->setPlaybackRate(rate);
     }
@@ -568,9 +580,9 @@ void MainWindow::resetPreviewStageMediaRouteTimelineOffset()
     previewSection_->resetPreviewStageMediaRouteTimelineOffset();
 }
 
-void MainWindow::applyPreviewStageMediaRoutePlaybackRate(double rate)
+void MainWindow::applyPreviewStageMediaRoutePlaybackRate(double rate, const char* site)
 {
-    previewSection_->applyPreviewStageMediaRoutePlaybackRate(rate);
+    previewSection_->applyPreviewStageMediaRoutePlaybackRate(rate, site);
 }
 
 bool MainWindow::previewStageMediaRouteHasVideo() const

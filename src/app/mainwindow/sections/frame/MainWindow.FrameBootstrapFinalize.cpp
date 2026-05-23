@@ -518,7 +518,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     if (previewUsesStageMediaHostRoute()) {
         ensurePreviewStageMediaRouteInitialized();
     }
-    applyPreviewStageMediaRoutePlaybackRate(previewPlaybackRate_);
+    applyPreviewStageMediaRoutePlaybackRate(previewPlaybackRate_, "frame_bootstrap_finalize");
     applyPreviewStageMediaRouteVisualSettings();
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->setChartPath(currentFilePath_);

@@ -790,7 +790,7 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
     }
     owner_.showPreviewPlaybackRateToast(state_.previewPlaybackRate_);
     miacode::oplog::appendStartupBeaconLine("ui/rate/qt_media_about_to_call");
-    owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
+    owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_, "ui_rate_change");
     miacode::oplog::appendStartupBeaconLine("ui/rate/qt_media_returned");
     if (state_.previewSfxRuntime_ != nullptr) {
         if (wasPlaying) {
@@ -1322,7 +1322,7 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
 
     state_.qtPreviewPlaybackReturnSecond_ = requestedSecond;
     state_.qtPreviewPlaybackEndSecond_ = qMax(0.0, previewPlaybackEndSeconds());
-    owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
+    owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_, "playback_start_prepare");
     state_.pausedSeekMediaPending_ = false;
     state_.pausedSeekMediaSubmittedGeneration_ = 0;
     state_.pausedSeekMediaAckGeneration_ = 0;
