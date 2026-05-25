@@ -26,6 +26,7 @@ void TimelineOverlaySource::contributeToSnapshot(
     //   4. playhead line (vertical at the audio playhead)
     //   5. drag-center line (horizontal crosshair during drag-select)
     //   6. entry marker triangle (indicates "chart starts here")
+    //   7. cursor marker triangle (indicates editor cursor position)
     //
     // The single-element optionals (cursor, playhead, drag-center,
     // entry marker) only push a batch when the corresponding `has*`
@@ -56,6 +57,11 @@ void TimelineOverlaySource::contributeToSnapshot(
     if (state->hasEntryMarker) {
         QVector<miacode::timeline::TimelineSceneTriangle> tmp;
         tmp.append(state->entryMarker);
+        sb::pushTimelineTriangleBatch(snapshot, tmp);
+    }
+    if (state->hasCursorMarker) {
+        QVector<miacode::timeline::TimelineSceneTriangle> tmp;
+        tmp.append(state->cursorMarker);
         sb::pushTimelineTriangleBatch(snapshot, tmp);
     }
 }

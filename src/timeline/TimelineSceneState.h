@@ -157,6 +157,8 @@ struct TimelineSceneState {
     QVector<TimelineSceneGlyph> muriDots;
     bool hasEntryMarker = false;
     TimelineSceneTriangle entryMarker;
+    bool hasCursorMarker = false;
+    TimelineSceneTriangle cursorMarker;
     bool hasCursorLine = false;
     TimelineSceneLine cursorLine;
     bool hasPlayheadLine = false;
