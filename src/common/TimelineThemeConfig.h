@@ -26,6 +26,7 @@ struct TimelineThemeColors {
     QColor playhead;
     QColor cursor;
     QColor entryMarker;
+    QColor cursorMarker;
     QColor muriMarker;
     QColor noteNormal;
     QColor noteEach;
@@ -66,6 +67,7 @@ inline TimelineThemeColors timelineThemeColors()
         c.timelinePlayhead,
         c.timelineCursor,
         c.timelinePlayhead,
+        QColor(239, 68, 68, 230),
         QColor(255, 146, 43, 230),
         c.accent,
         QColor(255, 214, 64),

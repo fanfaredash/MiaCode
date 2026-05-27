@@ -8,6 +8,7 @@
 #include "UiTheme.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
+#include "tools/muri/MuriPanelEntries.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -22,6 +23,38 @@ bool previewConsumesMuriAnalysisReport(const MuriRenderOptions& options)
     return options.renderMode == RenderMode::MaimuriDxStyle
         || options.showJudgeMarkers
         || options.showTouchTrail;
+}
+
+MuriAnalysisReport muriPromptReportForTimelineDots(
+    const MuriAnalysisReport& alignedReport,
+    const QVector<MuriStaticReference>& alignedStaticReferences)
+{
+    MuriAnalysisReport promptReport;
+    const QVector<miacode::muri::MuriPanelEntry> entries =
+        miacode::muri::buildVisibleMuriPanelEntries(alignedReport, alignedStaticReferences);
+    promptReport.diagnostics.reserve(entries.size());
+    for (const miacode::muri::MuriPanelEntry& entry : entries) {
+        MuriDiagnostic diagnostic;
+        diagnostic.kind = entry.kind;
+        diagnostic.alertLevel = entry.alertLevel;
+        diagnostic.second = entry.occurrenceSecond;
+        diagnostic.anchorSecond = entry.second;
+        diagnostic.line = entry.line;
+        diagnostic.col = entry.col;
+        diagnostic.detail = entry.rawDetail;
+        promptReport.diagnostics.append(diagnostic);
+    }
+    promptReport.sourceSignature = alignedReport.sourceSignature;
+    return promptReport;
+}
+
+const QVector<MuriStaticReference>& alignedMuriStaticReferencesForTimeline(
+    const QByteArray& latestSignature,
+    const QByteArray& analysisSignature,
+    const QVector<MuriStaticReference>& references)
+{
+    static const QVector<MuriStaticReference> kEmptyReferences;
+    return latestSignature == analysisSignature ? references : kEmptyReferences;
 }
 
 }  // namespace
@@ -39,8 +72,15 @@ void MainWindow::ValidationSection::applyAlignedMuriAnalysisReportToViews()
 {
     static const MuriAnalysisReport kEmptyReport;
     const MuriAnalysisReport& alignedReport = alignedMuriAnalysisReportForPreview();
+    const QVector<MuriStaticReference>& alignedStaticReferences = alignedMuriStaticReferencesForTimeline(
+        state_.latestTimelineNoteMarkerSignature_,
+        state_.muriAnalysisReportNoteMarkerSignature_,
+        state_.muriStaticReferences_);
+    const MuriAnalysisReport timelinePromptReport = state_.ignoreMuriIssuePrompts_
+        ? MuriAnalysisReport()
+        : muriPromptReportForTimelineDots(alignedReport, alignedStaticReferences);
     if (state_.timelineQuickStateBridge_ != nullptr) {
-        state_.timelineQuickStateBridge_->setMuriAnalysisReport(alignedReport);
+        state_.timelineQuickStateBridge_->setMuriAnalysisReport(timelinePromptReport);
     }
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setMuriAnalysisReport(

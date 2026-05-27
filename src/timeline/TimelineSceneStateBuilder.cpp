@@ -1234,6 +1234,19 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
 
     const int cursorX = secondToSceneX(state, request.cursorSeconds);
     if (cursorX > state.timelineLeft) {
+        state.hasCursorMarker = true;
+        const qreal headerScale = headerContentScale(state.contentScale);
+        const qreal tipY =
+            static_cast<qreal>(state.timelineTop) - scaledMetric(kTimelineTopMarkerTipOffsetPx, headerScale);
+        const qreal markerHeight = scaledMetric(kTimelinePlaybackEntryMarkerHeightPx, headerScale);
+        const qreal markerHalfWidth = scaledMetric(kTimelinePlaybackEntryMarkerHalfWidthPx, headerScale);
+        const qreal baseY = qMax<qreal>(0.0, tipY - markerHeight);
+        state.cursorMarker = TimelineSceneTriangle{
+            QPointF(cursorX, tipY),
+            QPointF(cursorX - markerHalfWidth, baseY),
+            QPointF(cursorX + markerHalfWidth, baseY),
+            theme.cursorMarker,
+        };
         state.hasCursorLine = true;
         state.cursorLine = TimelineSceneLine{
             QPointF(cursorX, state.timelineTop),

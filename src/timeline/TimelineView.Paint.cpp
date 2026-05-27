@@ -792,6 +792,25 @@ void TimelineView::paintEvent(QPaintEvent* event)
 
     const int playheadX = secondToX(playheadSeconds_) - xOffset;
     const int cursorX = secondToX(cursorSeconds_) - xOffset;
+    if (cursorX > left) {
+        painter.save();
+        painter.setClipRect(QRect(left, 0, viewport()->width() - left, top));
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(239, 68, 68, 230));
+        const qreal cursorMarkerTipY =
+            static_cast<qreal>(top) - scaledTimelineHeaderMetric(kTimelineTopMarkerTipOffsetPx);
+        const qreal cursorMarkerBaseY = qMax<qreal>(
+            0.0,
+            cursorMarkerTipY - scaledTimelineHeaderMetric(kTimelinePlaybackEntryMarkerHeightPx));
+        const qreal cursorMarkerHalfWidth = scaledTimelineHeaderMetric(kTimelinePlaybackEntryMarkerHalfWidthPx);
+        QPainterPath cursorMarker;
+        cursorMarker.moveTo(cursorX, cursorMarkerTipY);
+        cursorMarker.lineTo(cursorX - cursorMarkerHalfWidth, cursorMarkerBaseY);
+        cursorMarker.lineTo(cursorX + cursorMarkerHalfWidth, cursorMarkerBaseY);
+        cursorMarker.closeSubpath();
+        painter.drawPath(cursorMarker);
+        painter.restore();
+    }
     if (!playheadIndicatorSuppressed_ && playheadX > left) {
         painter.save();
         painter.setClipRect(timelineRect);

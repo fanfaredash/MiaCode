@@ -921,21 +921,23 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
             }
         }
     }
-    const MuriAnalysisReport& alignedMuriReport = alignedMuriAnalysisReportForUi(
-        state_.latestTimelineNoteMarkerSignature_,
-        state_.muriAnalysisReportNoteMarkerSignature_,
-        state_.muriAnalysisReport_);
-    const QVector<MuriStaticReference>& alignedStaticReferences = alignedMuriStaticReferencesForUi(
-        state_.latestTimelineNoteMarkerSignature_,
-        state_.muriAnalysisReportNoteMarkerSignature_,
-        state_.muriStaticReferences_);
-    const QVector<MuriPanelEntry> muriEntries =
-        miacode::muri::buildVisibleMuriPanelEntries(alignedMuriReport, alignedStaticReferences);
-    for (const MuriPanelEntry& entry : muriEntries) {
-        if (ignoredTypes.contains(muriIssueTypeKey(entry.kind))) {
-            continue;
+    if (!state_.ignoreMuriIssuePrompts_) {
+        const MuriAnalysisReport& alignedMuriReport = alignedMuriAnalysisReportForUi(
+            state_.latestTimelineNoteMarkerSignature_,
+            state_.muriAnalysisReportNoteMarkerSignature_,
+            state_.muriAnalysisReport_);
+        const QVector<MuriStaticReference>& alignedStaticReferences = alignedMuriStaticReferencesForUi(
+            state_.latestTimelineNoteMarkerSignature_,
+            state_.muriAnalysisReportNoteMarkerSignature_,
+            state_.muriStaticReferences_);
+        const QVector<MuriPanelEntry> muriEntries =
+            miacode::muri::buildVisibleMuriPanelEntries(alignedMuriReport, alignedStaticReferences);
+        for (const MuriPanelEntry& entry : muriEntries) {
+            if (ignoredTypes.contains(muriIssueTypeKey(entry.kind))) {
+                continue;
+            }
+            ++muriIssueCount;
         }
-        ++muriIssueCount;
     }
 
     const bool showError = errorCount > 0;

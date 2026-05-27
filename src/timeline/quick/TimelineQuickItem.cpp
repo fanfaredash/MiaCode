@@ -126,6 +126,9 @@ quint64 timelineThemeSignatureHash(const miacode::timeline::TimelineSceneState& 
     if (state.hasEntryMarker) {
         mix(static_cast<quint64>(state.entryMarker.color.rgba()));
     }
+    if (state.hasCursorMarker) {
+        mix(static_cast<quint64>(state.cursorMarker.color.rgba()));
+    }
     return h;
 }
 
@@ -191,6 +194,7 @@ void applyDynamicSceneState(
     }
 
     state->hasCursorLine = false;
+    state->hasCursorMarker = false;
     state->hasPlayheadLine = false;
     state->hasDragCenterLine = false;
 
@@ -198,6 +202,18 @@ void applyDynamicSceneState(
     const int cursorX =
         miacode::timeline::TimelineSceneStateBuilder::secondToSceneX(*state, stateBridge->cursorSeconds());
     if (cursorX > state->timelineLeft) {
+        state->hasCursorMarker = true;
+        const qreal headerScale = 0.5 + (qBound(0.5, state->contentScale, 1.0) * 0.5);
+        const qreal tipY = static_cast<qreal>(state->timelineTop) - (1.0 * headerScale);
+        const qreal markerHeight = 8.0 * headerScale;
+        const qreal markerHalfWidth = 6.0 * headerScale;
+        const qreal baseY = qMax<qreal>(0.0, tipY - markerHeight);
+        state->cursorMarker = miacode::timeline::TimelineSceneTriangle{
+            QPointF(cursorX, tipY),
+            QPointF(cursorX - markerHalfWidth, baseY),
+            QPointF(cursorX + markerHalfWidth, baseY),
+            theme.cursorMarker,
+        };
         state->hasCursorLine = true;
         state->cursorLine = miacode::timeline::TimelineSceneLine{
             QPointF(cursorX, state->timelineTop),

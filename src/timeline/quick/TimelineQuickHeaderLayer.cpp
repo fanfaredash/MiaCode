@@ -16,6 +16,7 @@ struct TimelineQuickHeaderRootNode : public QSGNode {
     quint64 staticRevision = 0;
     quint64 gridRevision = 0;
     quint64 headerRevision = 0;
+    quint64 dynamicRevision = 0;
     quint64 appearanceRevision = 0;
 };
 
@@ -210,13 +211,18 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
         clearChildren(gridContentRoot);
         root->gridRevision = state.gridRevision;
     }
-    if (appearanceChanged || root->headerRevision != state.headerRevision) {
+    if (appearanceChanged
+        || root->headerRevision != state.headerRevision
+        || root->dynamicRevision != state.overlayDynamicRevision) {
         clearChildren(headerContentRoot);
         for (const auto& triangle : state.headerMarkers) {
             headerContentRoot->appendChildNode(buildTimelineTriangleNode(triangle));
         }
         if (state.hasEntryMarker) {
             headerContentRoot->appendChildNode(buildTimelineTriangleNode(state.entryMarker));
+        }
+        if (state.hasCursorMarker) {
+            headerContentRoot->appendChildNode(buildTimelineTriangleNode(state.cursorMarker));
         }
         if (textures != nullptr) {
             for (const auto& label : state.headerLabels) {
@@ -231,6 +237,7 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
             }
         }
         root->headerRevision = state.headerRevision;
+        root->dynamicRevision = state.overlayDynamicRevision;
     }
     root->appearanceRevision = state.appearanceRevision;
     return root;
