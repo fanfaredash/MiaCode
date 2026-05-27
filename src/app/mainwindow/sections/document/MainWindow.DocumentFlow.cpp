@@ -2170,6 +2170,11 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
     return documentSection_->switchToDifficultyField(difficultyId);
 }
 
+bool MainWindow::switchToLatencyField()
+{
+    return documentSection_->switchToLatencyField();
+}
+
 void MainWindow::activateInitialField()
 {
     documentSection_->activateInitialField();

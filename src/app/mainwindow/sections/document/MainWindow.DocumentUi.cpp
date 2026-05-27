@@ -20,6 +20,7 @@
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
+#include "tools/latency/LatencyDetectionPage.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -630,6 +631,19 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     metadataItem->setData(Qt::UserRole, "metadata");
     metadataItem->setToolTip(metadataLabel);
 
+    const QString latencyLabel = UiText::isChineseUi()
+        ? QStringLiteral("BPM & 延迟检测")
+        : QStringLiteral("BPM & Latency");
+    auto* latencyItem = new QListWidgetItem(
+        makeLatencyAccessIcon(UiTheme::colors().iconPrimary),
+        latencyLabel,
+        ui_.outlineList_
+    );
+    latencyItem->setData(Qt::UserRole, "latency");
+    latencyItem->setToolTip(UiText::isChineseUi()
+        ? QStringLiteral("打开 BPM & 延迟检测页：自动检测 BPM/Offset，并通过试听校准。")
+        : QStringLiteral("Open the BPM & Latency page: auto-detect BPM/Offset and audition for calibration."));
+
     QListWidgetItem* selectedItem = nullptr;
     bool hasMissingDifficulty = false;
     const QVector<int> ids = state_.document_.difficultyIds();
@@ -682,6 +696,8 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     );
     if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
         selectedItem = metadataItem;
+    } else if (state_.activeOutlineKey_ == QLatin1String("latency")) {
+        selectedItem = latencyItem;
     }
     if (selectedItem != nullptr) {
         ui_.outlineList_->setCurrentItem(selectedItem);
@@ -782,10 +798,49 @@ void MainWindow::DocumentSection::setChartBottomTabsMode(bool enabled)
     }
 }
 
+bool MainWindow::DocumentSection::switchToLatencyField()
+{
+    if (!maybeSaveCurrentFieldChanges()) {
+        return false;
+    }
+    if (ui_.latencyDetectionPage_ == nullptr || ui_.editorStack_ == nullptr) {
+        return false;
+    }
+    owner_.cacheWorkspaceLayoutSizes();
+    owner_.stopQtPreviewPlayback(true);
+    state_.pendingPreviewPlaybackStart_ = false;
+    state_.pendingPreviewPlaybackResumeFromPause_ = false;
+    state_.pendingPreviewPlaybackRevision_ = 0;
+    state_.pendingPreviewPlaybackDifficultyId_ = 0;
+    state_.pendingPreviewPlaybackSecond_ = 0.0;
+    state_.activeDifficultyId_ = 0;
+    state_.activeOutlineKey_ = "latency";
+    populateMetadataPage();  // keeps document fields in sync for sidebar use
+    ui_.editorStack_->setCurrentWidget(ui_.latencyDetectionPage_);
+    // Bottom timeline + bottom tabs remain visible: the sandbox audition
+    // drives them with the synthesized test chart, so the user can watch
+    // the taps scroll past the judge line in sync with the song.
+    setChartBottomTabsMode(true);
+    owner_.clearValidationDecorations();
+    state_.currentFieldDirty_ = false;
+    updateDirtyState();
+    rebuildFieldSidebar();
+    owner_.updateWindowTitle();
+    updateEditorEmptyState();
+    updateEditorStatus();
+    ui_.latencyDetectionPage_->onPageEntered();
+    owner_.refreshLayoutAfterPageSwitch();
+    QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
+    return true;
+}
+
 bool MainWindow::DocumentSection::switchToMetadataField()
 {
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
+    }
+    if (ui_.latencyDetectionPage_ != nullptr && state_.activeOutlineKey_ == QLatin1String("latency")) {
+        ui_.latencyDetectionPage_->onPageLeft();
     }
     owner_.cacheWorkspaceLayoutSizes();
     owner_.stopQtPreviewPlayback(true);
@@ -818,6 +873,9 @@ bool MainWindow::DocumentSection::switchToWelcomePage()
 {
     if (!maybeSaveBeforeContinue()) {
         return false;
+    }
+    if (ui_.latencyDetectionPage_ != nullptr && state_.activeOutlineKey_ == QLatin1String("latency")) {
+        ui_.latencyDetectionPage_->onPageLeft();
     }
     owner_.cacheWorkspaceLayoutSizes();
     owner_.stopQtPreviewPlayback(true);
@@ -873,6 +931,9 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     }
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
+    }
+    if (ui_.latencyDetectionPage_ != nullptr && state_.activeOutlineKey_ == QLatin1String("latency")) {
+        ui_.latencyDetectionPage_->onPageLeft();
     }
     owner_.cacheWorkspaceLayoutSizes();
     owner_.stopQtPreviewPlayback(true);

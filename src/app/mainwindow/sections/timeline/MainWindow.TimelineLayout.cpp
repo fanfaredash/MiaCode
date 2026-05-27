@@ -25,7 +25,6 @@
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
-#include "tools/latency/LatencyDetectorDialog.h"
 
 #include <QtCore>
 #include <QtGui>

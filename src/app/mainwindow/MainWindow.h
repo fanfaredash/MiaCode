@@ -46,7 +46,10 @@ class QGridLayout;
 class QHBoxLayout;
 class QHideEvent;
 class QLabel;
-class LatencyDetectorDialog;
+namespace miacode::latency {
+class LatencySandboxController;
+class LatencyDetectionPage;
+}
 class QListWidget;
 class QListWidgetItem;
 class QJsonObject;
@@ -98,6 +101,16 @@ class MainWindow : public QMainWindow,
 {
     Q_OBJECT
 
+    // The latency-detection sandbox controller drives the timeline +
+    // SFX runtime directly during BPM/offset audition; granting it
+    // friend access is cleaner than punching a dozen narrow accessors
+    // through MainWindow's API surface for a single feature. The page
+    // widget also needs friend access to call the private
+    // applyLatencyDetectorBpm/Offset writers and to read the document
+    // state for refresh.
+    friend class miacode::latency::LatencySandboxController;
+    friend class miacode::latency::LatencyDetectionPage;
+
 public:
     // Phase 4c — non-owning accessor + signal so the QuickShellBootstrap can
     // wire the host (QMediaPlayer + QVideoSink) into PreviewDCompSurface
@@ -106,6 +119,12 @@ public:
     // the signal lets the bootstrap connect once and react to its
     // appearance without polling.
     PreviewStageMediaHost* previewStageMediaHost() const;
+
+    // Accessor for the latency-detection sandbox controller. The
+    // LatencyDetectionPage UI binds its controls to the controller
+    // (BPM/offset/subdivision/SFX-volume + audition lifecycle).
+    // Always non-null after construction.
+    miacode::latency::LatencySandboxController* latencySandboxController() const;
 
 signals:
     void previewStageMediaHostInitialized(PreviewStageMediaHost* host);
@@ -260,7 +279,6 @@ private slots:
     void onBatchExportPreviewVideo();
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
-    void onOpenLatencyDetector();
     void onPrependTrackSilence();
     void onPrependPvBlack();
     void onCompressBackgroundVideo();

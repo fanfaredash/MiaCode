@@ -19,6 +19,7 @@
 #include "common/DebugOptions.h"
 #include "common/DebugLog.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "tools/latency/LatencySandboxController.h"
 
 #include <QtCore>
 #include <QtGui>

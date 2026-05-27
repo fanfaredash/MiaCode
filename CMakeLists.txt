@@ -141,8 +141,14 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/editor/PlainCodeEditor.cpp
     src/editor/BracketScopeHighlighter.h
     src/editor/BracketScopeHighlighter.cpp
-    src/tools/latency/LatencyDetectorDialog.h
-    src/tools/latency/LatencyDetectorDialog.cpp
+    src/tools/latency/LatencyAnalysis.h
+    src/tools/latency/LatencyAnalysis.cpp
+    src/tools/latency/LatencyTestChartBuilder.h
+    src/tools/latency/LatencyTestChartBuilder.cpp
+    src/tools/latency/LatencySandboxController.h
+    src/tools/latency/LatencySandboxController.cpp
+    src/tools/latency/LatencyDetectionPage.h
+    src/tools/latency/LatencyDetectionPage.cpp
     src/tools/muri/MuriAnalyzer.h
     src/tools/muri/MuriAnalyzer.cpp
     src/tools/muri/MuriPanelEntries.h

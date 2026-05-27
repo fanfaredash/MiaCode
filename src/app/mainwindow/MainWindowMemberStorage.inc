@@ -73,6 +73,7 @@
         QWidget* metadataCard_ = nullptr;
         QLabel* metadataEmptyHintLabel_ = nullptr;
         QWidget* chartPage_ = nullptr;
+        miacode::latency::LatencyDetectionPage* latencyDetectionPage_ = nullptr;
         QSplitter* chartCopySplitter_ = nullptr;
         QWidget* copyAreaPanel_ = nullptr;
         PlainCodeEditor* copyAreaEditor_ = nullptr;
@@ -141,7 +142,6 @@
         QMenu* toolboxMenu_ = nullptr;
         QToolButton* previewAudioSettingsButton_ = nullptr;
         QToolButton* previewVideoSettingsButton_ = nullptr;
-        QToolButton* latencyDetectorButton_ = nullptr;
         QSlider* previewSlider_ = nullptr;
         QToolButton* previewSpeedButton_ = nullptr;
         QToolButton* previewFullscreenButton_ = nullptr;
@@ -170,7 +170,6 @@
         QTimer* previewFullscreenCursorPollTimer_ = nullptr;
         QPropertyAnimation* previewFullscreenControlsAnimation_ = nullptr;
         QPropertyAnimation* previewFullscreenControlsOpacityAnimation_ = nullptr;
-        QPointer<LatencyDetectorDialog> latencyDetectorDialog_;
         BracketScopeHighlighter* chartBracketHighlighter_ = nullptr;
         BracketScopeHighlighter* metadataBracketHighlighter_ = nullptr;
     };
@@ -255,6 +254,10 @@
         quint64 timelineAnalysisRunningRevision_ = 0;
         bool timelineSlowWorkerRunning_ = false;
         bool timelineAnalysisWorkerRunning_ = false;
+        // Set true while LatencySandboxController has hot-swapped the
+        // timeline noteMarkers + audio settings for a sandbox audition.
+        // Gates code paths that otherwise refresh from the real chart.
+        bool latencySandboxAuditionActive_ = false;
         QByteArray lastPreviewNoteMarkerSignature_;
         QByteArray muriAnalysisReportNoteMarkerSignature_;
         bool outlineDockCollapsed_ = false;
@@ -497,6 +500,7 @@
 
     MainWindowUiRefs ui_;
     MainWindowState state_;
+    std::unique_ptr<miacode::latency::LatencySandboxController> latencySandboxController_;
     QWidget*& editorWidget_ = ui_.editorWidget_;
     PreviewRuntime*& previewCanvas_ = state_.previewCanvas_;
     PreviewStageMediaHost*& previewStageMediaHost_ = state_.previewStageMediaHost_;
@@ -888,7 +892,6 @@
     QMenu*& toolboxMenu_ = ui_.toolboxMenu_;
     QToolButton*& previewAudioSettingsButton_ = ui_.previewAudioSettingsButton_;
     QToolButton*& previewVideoSettingsButton_ = ui_.previewVideoSettingsButton_;
-    QToolButton*& latencyDetectorButton_ = ui_.latencyDetectorButton_;
     QSlider*& previewSlider_ = ui_.previewSlider_;
     QToolButton*& previewSpeedButton_ = ui_.previewSpeedButton_;
     QToolButton*& previewFullscreenButton_ = ui_.previewFullscreenButton_;
@@ -926,7 +929,6 @@
     QRect& quickShellRootWindowFrameGeometry_ = state_.quickShellRootWindowFrameGeometry_;
     bool& quickShellPreviewCompositeSurfaceActive_ = state_.quickShellPreviewCompositeSurfaceActive_;
     std::shared_ptr<const miacode::preview::scene::PreviewProgressStatsCache>& previewProgressStatsCache_ = state_.previewProgressStatsCache_;
-    QPointer<LatencyDetectorDialog>& latencyDetectorDialog_ = ui_.latencyDetectorDialog_;
     BracketScopeHighlighter*& chartBracketHighlighter_ = ui_.chartBracketHighlighter_;
     BracketScopeHighlighter*& metadataBracketHighlighter_ = ui_.metadataBracketHighlighter_;
     QHash<int, ValidationCacheEntry>& validationCacheByDifficulty_ = state_.validationCacheByDifficulty_;

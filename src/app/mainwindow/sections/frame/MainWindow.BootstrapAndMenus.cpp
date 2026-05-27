@@ -346,8 +346,12 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
 
     editMenu->addSeparator();
 
-    owner_.latencyDetectorAction_ = new QAction(UiText::isChineseUi() ? QStringLiteral("BPM&&偏移检测") : QStringLiteral("BPM && Offset Detection..."), &owner_);
-    connect(owner_.latencyDetectorAction_, &QAction::triggered, &owner_, &MainWindow::onOpenLatencyDetector);
+    owner_.latencyDetectorAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("BPM && 延迟检测") : QStringLiteral("BPM && Latency"),
+        &owner_);
+    connect(owner_.latencyDetectorAction_, &QAction::triggered, &owner_, [this]() {
+        owner_.switchToLatencyField();
+    });
     editMenu->addAction(owner_.latencyDetectorAction_);
     editMenu->addSeparator();
 

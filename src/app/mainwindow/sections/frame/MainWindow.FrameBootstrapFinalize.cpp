@@ -165,7 +165,6 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     currentFileLabel_ = new QLabel(this);
     statusBar()->addPermanentWidget(currentFileLabel_, 1);
     updateCurrentFileLabel();
-    dialogsSection_->updateLatencyDetectorAvailability();
 
     autosaveTimer_ = new QTimer(this);
     autosaveTimer_->setInterval(kAutosaveIntervalMs);

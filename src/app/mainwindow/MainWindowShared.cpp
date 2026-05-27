@@ -21,6 +21,7 @@
 #include <QLocale>
 #include <QMenu>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPen>
 #include <QPixmap>
 #include <QPolygonF>
@@ -906,6 +907,45 @@ QIcon makeSettingsGearIcon(const QColor& color)
         const QPointF inner(9.0 + qCos(angle) * 5.0, 9.0 + qSin(angle) * 5.0);
         painter.drawLine(inner, outer);
     }
+    painter.end();
+    return QIcon(pixmap);
+}
+
+QIcon makeLatencyAccessIcon(const QColor& color)
+{
+    // Outline-list eighth-note glyph for the BPM & latency entry.
+    // Drawn at 14x14 to match the same icon-size budget as the
+    // metadata badge; same Antialiased / round-cap stroke style as
+    // makeOutlineCloseIcon so it sits visually next to the other
+    // entries without looking out of place.
+    QPixmap pixmap(14, 14);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    // Filled note head — a tilted ellipse so it reads as a music note
+    // rather than a plain dot.
+    painter.save();
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+    painter.translate(4.2, 10.0);
+    painter.rotate(-20.0);
+    painter.drawEllipse(QRectF(-2.6, -1.7, 5.2, 3.4));
+    painter.restore();
+
+    // Stem from the head's upper-right edge straight up.
+    QPen stemPen(color, 1.4);
+    stemPen.setCapStyle(Qt::RoundCap);
+    painter.setPen(stemPen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawLine(QPointF(6.5, 9.6), QPointF(6.5, 2.6));
+
+    // Eighth-note flag — short curve trailing off the top of the stem.
+    QPainterPath flag;
+    flag.moveTo(6.5, 2.6);
+    flag.cubicTo(QPointF(10.2, 3.6), QPointF(10.8, 5.0), QPointF(9.4, 6.8));
+    painter.drawPath(flag);
+
     painter.end();
     return QIcon(pixmap);
 }

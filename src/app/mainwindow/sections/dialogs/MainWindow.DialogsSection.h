@@ -6,11 +6,9 @@ class MainWindow::DialogsSection {
 public:
     DialogsSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state);
 
-    void updateLatencyDetectorAvailability();
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
     void onAbout();
-    void onOpenLatencyDetector();
     void onPrependTrackSilence();
     void onPrependPvBlack();
     void onCompressBackgroundVideo();

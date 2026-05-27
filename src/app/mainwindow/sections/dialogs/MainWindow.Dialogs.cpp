@@ -14,7 +14,7 @@
 #include "common/PreviewSfxAssets.h"
 #include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
-#include "tools/latency/LatencyDetectorDialog.h"
+#include "tools/latency/LatencyAnalysis.h"
 
 #include <QDesktopServices>
 #include <QUrl>
@@ -516,17 +516,6 @@ void MainWindow::DialogsSection::reloadPreviewMediaAfterFileOperation(bool reloa
     }
 }
 
-void MainWindow::DialogsSection::updateLatencyDetectorAvailability()
-{
-    const bool enabled = !resolveLatencyDetectorTrackPath().isEmpty();
-    if (owner_.latencyDetectorAction_ != nullptr) {
-        owner_.latencyDetectorAction_->setEnabled(enabled);
-    }
-    if (owner_.latencyDetectorButton_ != nullptr) {
-        owner_.latencyDetectorButton_->setEnabled(enabled);
-    }
-}
-
 void MainWindow::DialogsSection::onPreviewAudioSettings()
 {
     MC_OP("MainWindow::DialogsSection::onPreviewAudioSettings");
@@ -638,67 +627,6 @@ void MainWindow::DialogsSection::onAbout()
     owner_.aboutIconLabel_.clear();
     owner_.invalidStarPreviewAboutClickCount_ = 0;
     owner_.invalidStarPreviewAboutClickElapsed_.invalidate();
-}
-
-void MainWindow::DialogsSection::onOpenLatencyDetector()
-{
-    MC_OP("MainWindow::DialogsSection::onOpenLatencyDetector");
-    const QString trackPath = resolveLatencyDetectorTrackPath();
-    _mc_op_.note(QStringLiteral("track=%1").arg(trackPath));
-    bool wholeBpmOk = false;
-    const double wholeBpm = owner_.parsedWholeBpm(&wholeBpmOk);
-    const QString meterId = owner_.parsedLatencyMeterId();
-    const double offsetSeconds = owner_.parsedRawFirstSeconds();
-    if (trackPath.isEmpty()) {
-        owner_.statusBar()->showMessage(UiText::isChineseUi()
-            ? QStringLiteral("当前谱面目录缺少 track.mp3，无法打开BPM&偏移检测。")
-            : QStringLiteral("track.mp3 was not found next to the current chart."));
-        updateLatencyDetectorAvailability();
-        return;
-    }
-
-    if (owner_.latencyDetectorDialog_ != nullptr) {
-        if (owner_.latencyDetectorDialog_->trackPath() == trackPath) {
-            owner_.latencyDetectorDialog_->setOffsetSeconds(offsetSeconds);
-            owner_.latencyDetectorDialog_->setBpm(wholeBpmOk ? wholeBpm : 0.0);
-            owner_.latencyDetectorDialog_->setMeterId(meterId);
-            owner_.latencyDetectorDialog_->raise();
-            owner_.latencyDetectorDialog_->activateWindow();
-            return;
-        }
-        owner_.latencyDetectorDialog_->close();
-        owner_.latencyDetectorDialog_.clear();
-    }
-
-    owner_.latencyDetectorDialog_ = new LatencyDetectorDialog(
-        trackPath,
-        owner_.currentFilePath_,
-        owner_.ensureWaveformCacheService(),
-        owner_.previewAudioSettings_,
-        UiDialogs::effectiveParentWidget(&owner_)
-    );
-    owner_.windowSection_->applySystemWindowBackdrop(owner_.latencyDetectorDialog_);
-    UiDialogs::prepareDialogWindow(
-        owner_.latencyDetectorDialog_,
-        &owner_,
-        true,
-        UiDialogs::PreviewShortcutPolicy::LocalPlaybackControls
-    );
-    owner_.latencyDetectorDialog_->setOffsetSeconds(offsetSeconds);
-    owner_.latencyDetectorDialog_->setBpm(wholeBpmOk ? wholeBpm : 0.0);
-    owner_.latencyDetectorDialog_->setMeterId(meterId);
-    connect(owner_.latencyDetectorDialog_, &LatencyDetectorDialog::offsetChanged, &owner_, [this](double seconds) {
-        owner_.applyLatencyDetectorOffset(seconds);
-    });
-    connect(owner_.latencyDetectorDialog_, &LatencyDetectorDialog::bpmChanged, &owner_, [this](double bpm) {
-        owner_.applyLatencyDetectorBpm(bpm);
-    });
-    connect(owner_.latencyDetectorDialog_, &QObject::destroyed, &owner_, [this]() {
-        owner_.latencyDetectorDialog_.clear();
-    });
-    owner_.latencyDetectorDialog_->show();
-    owner_.latencyDetectorDialog_->raise();
-    owner_.latencyDetectorDialog_->activateWindow();
 }
 
 void MainWindow::DialogsSection::onPrependTrackSilence()
@@ -1149,19 +1077,17 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
         return chartBpm > 0.0 ? chartBpm : miacode::chart_clock::kFallbackClockBpm;
     };
     const auto analyzeTrackBpmAndMeter = [this]() -> QPair<double, QString> {
-        LatencyDetectorDialog detector(
-            miacode::chart_assets::resolveTrackPath(owner_.currentFilePath_),
-            owner_.currentFilePath_,
-            owner_.ensureWaveformCacheService(),
-            owner_.previewAudioSettings_,
-            UiDialogs::effectiveParentWidget(&owner_)
-        );
-        double bpm = 0.0;
-        QString meterId;
-        if (!detector.detectBpmAndMeter(&bpm, &meterId)) {
+        const QString trackPath = miacode::chart_assets::resolveTrackPath(owner_.currentFilePath_);
+        const auto decoded = miacode::latency_analysis::decodeMonoTrack(trackPath);
+        if (decoded.samples.isEmpty()) {
             return {0.0, QString()};
         }
-        return {bpm, meterId};
+        const auto envelope = miacode::latency_analysis::buildOnsetEnvelope(decoded.samples, decoded.sampleRate);
+        const auto result = miacode::latency_analysis::detectBpm(envelope);
+        if (!(result.bpm > 0.0)) {
+            return {0.0, QString()};
+        }
+        return {result.bpm, result.meterId};
     };
     beatsSpin->setValue(detectedBeats());
     bpmSpin->setValue(detectedBpm());

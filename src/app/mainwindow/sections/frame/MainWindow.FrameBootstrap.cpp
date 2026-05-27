@@ -31,6 +31,8 @@
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
+#include "tools/latency/LatencyDetectionPage.h"
+#include "tools/latency/LatencySandboxController.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -100,6 +102,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     windowSection_ = std::make_unique<WindowSection>(*this, ui_, state_);
     frameSection_ = std::make_unique<FrameSection>(*this, ui_, state_);
     timelineSection_ = std::make_unique<TimelineSection>(*this, ui_, state_);
+    // unique_ptr owns it; pass no QObject parent to avoid double-delete.
+    latencySandboxController_ = std::make_unique<miacode::latency::LatencySandboxController>(this, nullptr);
     logStartupStage("sections_ready");
 
     previewWarmupPool_ = new QThreadPool(this);
@@ -606,10 +610,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     firstWrapLayout->setContentsMargins(0, 0, 0, 0);
     firstWrapLayout->setSpacing(6);
     firstWrapLayout->addWidget(firstEdit_, 0, Qt::AlignLeft);
-    latencyDetectorButton_ = new QToolButton(metadataPage_);
-    latencyDetectorButton_->setText(UiText::isChineseUi() ? QStringLiteral("BPM&&偏移检测") : QStringLiteral("BPM && Offset Detection"));
-    connect(latencyDetectorButton_, &QToolButton::clicked, this, &MainWindow::onOpenLatencyDetector);
-    firstWrapLayout->addWidget(latencyDetectorButton_, 0, Qt::AlignLeft);
     firstWrapLayout->addStretch(1);
 
     // Title and artist each get their own "read from MP3" button on the
@@ -785,6 +785,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 
     editorStack_->addWidget(welcomePage_);
     editorStack_->addWidget(metadataPage_);
+    ui_.latencyDetectionPage_ = new miacode::latency::LatencyDetectionPage(this);
+    editorStack_->addWidget(ui_.latencyDetectionPage_);
     editorStack_->addWidget(chartPage_);
     centralLayout->addWidget(editorStack_, 1);
     if (editorFindBar_ != nullptr) {
@@ -879,6 +881,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             if (switchToMetadataField() && titleEdit_ != nullptr) {
                 titleEdit_->setFocus();
             }
+            return;
+        }
+        if (kind == "latency") {
+            activeOutlineKey_ = "latency";
+            switchToLatencyField();
             return;
         }
         if (kind == "add") {
@@ -1552,4 +1559,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     logStartupStage("workspace_and_central_widget_ready");
 
     finishFrameBootstrap(toolBar, logStartupStage);
+}
+
+miacode::latency::LatencySandboxController* MainWindow::latencySandboxController() const
+{
+    return latencySandboxController_.get();
 }

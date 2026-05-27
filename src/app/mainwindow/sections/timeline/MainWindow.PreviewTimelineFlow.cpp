@@ -27,7 +27,7 @@
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
-#include "tools/latency/LatencyDetectorDialog.h"
+#include "tools/latency/LatencySandboxController.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -496,9 +496,8 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
         owner_.clearValidationErrors();
         owner_.clearValidationDecorations();
         stopQtPreviewPlayback(false);
-        if (ui_.latencyDetectorDialog_ != nullptr) {
-            ui_.latencyDetectorDialog_->close();
-            ui_.latencyDetectorDialog_.clear();
+        if (owner_.latencySandboxController() != nullptr) {
+            owner_.latencySandboxController()->exitIfActive();
         }
     }
     if ((pathChanged || trackPathChanged) && state_.waveformCacheService_ != nullptr) {
@@ -533,7 +532,6 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
     }
     updateWindowTitle();
     updateCurrentFileLabel();
-    owner_.dialogsSection_->updateLatencyDetectorAvailability();
     if (pathChanged) {
         owner_.loadProjectRenderState();
     }

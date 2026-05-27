@@ -98,6 +98,7 @@ public:
     bool switchToMetadataField();
     bool switchToWelcomePage();
     bool switchToDifficultyField(int difficultyId);
+    bool switchToLatencyField();
     void activateInitialField();
     void loadDocument(const SimaiDocument& document);
     void clearTimelineAndPreview();

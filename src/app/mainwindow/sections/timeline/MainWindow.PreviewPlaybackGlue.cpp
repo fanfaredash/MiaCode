@@ -2,6 +2,7 @@
 
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
+#include "tools/latency/LatencySandboxController.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -46,6 +47,15 @@ bool MainWindow::TimelineSection::preparePreviewStartState()
 void MainWindow::TimelineSection::onStopPreview()
 {
     MC_OP("MainWindow::TimelineSection::onStopPreview");
+    // Latency-page sandbox takes over the stop/space transport when
+    // the user is on its outline entry, so the existing player keys
+    // double as the audition controls (per design — no new shortcut).
+    if (state_.activeOutlineKey_ == QLatin1String("latency")) {
+        if (auto* sandbox = owner_.latencySandboxController(); sandbox != nullptr) {
+            sandbox->stopAudition();
+        }
+        return;
+    }
     const quint64 opId = ++state_.previewInteractionSequence_;
     const double returnSecond = qBound(0.0, state_.qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
     const bool wasActive = state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_;
@@ -75,6 +85,12 @@ void MainWindow::TimelineSection::onStopPreview()
 void MainWindow::TimelineSection::onTogglePreviewPause()
 {
     MC_OP("MainWindow::TimelineSection::onTogglePreviewPause");
+    if (state_.activeOutlineKey_ == QLatin1String("latency")) {
+        if (auto* sandbox = owner_.latencySandboxController(); sandbox != nullptr) {
+            sandbox->toggleAudition();
+        }
+        return;
+    }
     if (state_.qtPreviewPlaying_) {
         const quint64 opId = ++state_.previewInteractionSequence_;
         appendPreviewInteractionLog(

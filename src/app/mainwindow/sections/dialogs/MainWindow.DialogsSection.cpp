@@ -15,11 +15,6 @@ void MainWindow::onAbout()
     dialogsSection_->onAbout();
 }
 
-void MainWindow::onOpenLatencyDetector()
-{
-    dialogsSection_->onOpenLatencyDetector();
-}
-
 void MainWindow::onPrependTrackSilence()
 {
     dialogsSection_->onPrependTrackSilence();
