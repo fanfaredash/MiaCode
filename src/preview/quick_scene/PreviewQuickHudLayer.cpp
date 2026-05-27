@@ -30,6 +30,49 @@ void drawHudText(QPainter& painter, const QPointF& baseline, const QString& text
     painter.restore();
 }
 
+// Greedy pixel-width wrapper used by the chart info HUD. Wraps at ASCII
+// space boundaries when one exists in the trailing half of the line;
+// otherwise breaks per character so CJK chart titles (no spaces) still
+// wrap instead of running off the limit. Returns one or more lines whose
+// rendered width fits inside `maxWidth`; never returns an empty list for
+// a non-empty input (a single oversized glyph is allowed to overflow
+// rather than silently dropped).
+QStringList wrapTextByPixelWidth(const QString& text, qreal maxWidth, const QFontMetrics& fm)
+{
+    QStringList lines;
+    if (text.isEmpty()) {
+        return lines;
+    }
+    if (maxWidth <= 0.0) {
+        lines.append(text);
+        return lines;
+    }
+    QString current;
+    qreal currentWidth = 0.0;
+    for (int i = 0; i < text.size(); ++i) {
+        const QChar ch = text.at(i);
+        const qreal chWidth = static_cast<qreal>(fm.horizontalAdvance(ch));
+        if (!current.isEmpty() && currentWidth + chWidth > maxWidth) {
+            const int spaceIdx = current.lastIndexOf(QLatin1Char(' '));
+            if (spaceIdx > 0 && spaceIdx >= current.size() / 2) {
+                lines.append(current.left(spaceIdx));
+                current = current.mid(spaceIdx + 1);
+                currentWidth = static_cast<qreal>(fm.horizontalAdvance(current));
+            } else {
+                lines.append(current);
+                current.clear();
+                currentWidth = 0.0;
+            }
+        }
+        current.append(ch);
+        currentWidth += chWidth;
+    }
+    if (!current.isEmpty()) {
+        lines.append(current);
+    }
+    return lines;
+}
+
 }  // namespace
 
 // Min interval between HUD repaints. The HUD shows FPS/max-ms/stutter
@@ -193,7 +236,8 @@ void paintPreviewHudOverlay(
             layerFlags, miacode::preview::scene::HudLayer)) {
         return;
     }
-    if (!state->render.showTimestamp && !state->render.showDebugInfo && !state->render.showObjectStatsHud) {
+    if (!state->render.showTimestamp && !state->render.showDebugInfo && !state->render.showObjectStatsHud
+        && !state->render.showChartInfoHud) {
         return;
     }
 
@@ -365,6 +409,84 @@ void paintPreviewHudOverlay(
             timeFont,
             qMax<qreal>(1.0, 2.0 * hudScale)
         );
+    }
+
+    // Optional top-left chart info HUD. Shares the 1:1 / 4:3 skip-rule
+    // with the object stats HUD because both rely on the wide letterbox
+    // margin to sit outside the playfield. Font + left inset match the
+    // bottom-left timestamp HUD (same point size, DemiBold, +hudPadding
+    // from stage's left edge) so the two text overlays read as a pair.
+    // Lines 1-3 (title / artist / difficulty) render as single, un-wrapped
+    // lines so a long song or artist name doesn't collapse into a column;
+    // Qt's painter clips at the stage edge if they overflow. Line 4
+    // (designer) auto-wraps inside the gap between the stage's left edge
+    // and the playfield so it doesn't intrude on the chart sprites.
+    // Total stack is capped at half the stage height — if the wrapped
+    // designer lines would overflow that budget, the final visible row
+    // is replaced with "..." to signal the cut.
+    if (state->render.showChartInfoHud
+        && !aspectRatioNear(stageAspectRatio, 1.0)
+        && !aspectRatioNear(stageAspectRatio, 4.0 / 3.0)) {
+        const QRectF chartInfoPlayfield =
+            miacode::preview::scene::playfieldRectForStage(stageRect, state->render.layoutSquareScale);
+        const qreal chartInfoLeft = stageRect.left() + hudPadding;
+        const qreal chartInfoDesignerRightLimit = chartInfoPlayfield.left() - hudPadding;
+        const qreal chartInfoDesignerMaxWidth = chartInfoDesignerRightLimit - chartInfoLeft;
+        const qreal chartInfoMaxHeight = stageRect.height() / 2.0 - hudPadding;
+        if (chartInfoMaxHeight > 0.0) {
+            // Mirror the timestamp HUD: same point size, DemiBold,
+            // previewHudTimestampFont() font family.
+            const QFontMetrics chartInfoMetrics(timeFont);
+            const qreal lineHeight = static_cast<qreal>(chartInfoMetrics.lineSpacing());
+            const int maxLines = qMax(0, static_cast<int>(chartInfoMaxHeight / qMax<qreal>(1.0, lineHeight)));
+            if (maxLines > 0) {
+                QStringList physicalLines;
+                // Lines 1-3: pushed verbatim, no width clamp, no wrap.
+                if (!state->chartTitle.isEmpty()) {
+                    physicalLines.append(state->chartTitle);
+                }
+                if (!state->chartArtist.isEmpty()) {
+                    physicalLines.append(state->chartArtist);
+                }
+                if (!state->chartDifficultyLabel.isEmpty()) {
+                    physicalLines.append(state->chartDifficultyLabel);
+                }
+                // Line 4: designer wraps to stay inside the letterbox
+                // margin. Skip wrapping if the margin is too narrow to
+                // matter (would just emit one char per line) — let the
+                // painter clip instead, same fallback as lines 1-3.
+                if (!state->chartDesigner.isEmpty()) {
+                    if (chartInfoDesignerMaxWidth >= 40.0) {
+                        physicalLines.append(wrapTextByPixelWidth(
+                            state->chartDesigner, chartInfoDesignerMaxWidth, chartInfoMetrics));
+                    } else {
+                        physicalLines.append(state->chartDesigner);
+                    }
+                }
+                bool truncated = false;
+                if (physicalLines.size() > maxLines) {
+                    truncated = true;
+                    physicalLines = physicalLines.mid(0, maxLines);
+                }
+                if (truncated && !physicalLines.isEmpty()) {
+                    physicalLines[physicalLines.size() - 1] = QStringLiteral("...");
+                }
+                if (!physicalLines.isEmpty()) {
+                    const qreal chartInfoShadow = qMax<qreal>(1.0, 2.0 * hudScale);
+                    qreal chartInfoBaseline = stageRect.top() + hudPadding + chartInfoMetrics.ascent();
+                    for (const QString& line : physicalLines) {
+                        drawHudText(
+                            painter,
+                            QPointF(chartInfoLeft, chartInfoBaseline),
+                            line,
+                            timeFont,
+                            chartInfoShadow
+                        );
+                        chartInfoBaseline += lineHeight;
+                    }
+                }
+            }
+        }
     }
 
     if (!state->render.showObjectStatsHud) {

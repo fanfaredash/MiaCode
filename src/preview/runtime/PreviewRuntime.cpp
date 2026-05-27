@@ -527,7 +527,18 @@ void PreviewRuntime::setSlideEarlierSecondAndTextOnTop(bool enabled)
 
 void PreviewRuntime::setShowDebugInfo(bool show)
 {
-    frameState_.render.showDebugInfo = show;
+    requestedShowDebugInfo_ = show;
+    frameState_.render.showDebugInfo = requestedShowDebugInfo_ && !suppressDebugInfo_;
+    update();
+}
+
+void PreviewRuntime::setSuppressDebugInfo(bool suppress)
+{
+    if (suppressDebugInfo_ == suppress) {
+        return;
+    }
+    suppressDebugInfo_ = suppress;
+    frameState_.render.showDebugInfo = requestedShowDebugInfo_ && !suppressDebugInfo_;
     update();
 }
 
@@ -562,6 +573,38 @@ bool PreviewRuntime::showTimestamp() const
 bool PreviewRuntime::showObjectStatsHud() const
 {
     return frameState_.render.showObjectStatsHud;
+}
+
+void PreviewRuntime::setShowChartInfoHud(bool show)
+{
+    if (frameState_.render.showChartInfoHud == show) {
+        return;
+    }
+    frameState_.render.showChartInfoHud = show;
+    update();
+}
+
+void PreviewRuntime::setChartInfo(const QString& title,
+                                  const QString& artist,
+                                  const QString& difficultyLabel,
+                                  const QString& designer)
+{
+    if (frameState_.chartTitle == title
+        && frameState_.chartArtist == artist
+        && frameState_.chartDifficultyLabel == difficultyLabel
+        && frameState_.chartDesigner == designer) {
+        return;
+    }
+    frameState_.chartTitle = title;
+    frameState_.chartArtist = artist;
+    frameState_.chartDifficultyLabel = difficultyLabel;
+    frameState_.chartDesigner = designer;
+    update();
+}
+
+bool PreviewRuntime::showChartInfoHud() const
+{
+    return frameState_.render.showChartInfoHud;
 }
 
 void PreviewRuntime::reset()

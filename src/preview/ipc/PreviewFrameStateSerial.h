@@ -41,7 +41,7 @@
 
 namespace miacode::preview::ipc {
 
-inline constexpr quint32 kSerialLayoutVersion = 10;
+inline constexpr quint32 kSerialLayoutVersion = 12;
 
 // Hard cap so the slot byte size is bounded at compile time. The ring
 // buffer's slot stride is sizeof(PreviewFrameStateSerial); editor and worker
@@ -144,6 +144,7 @@ inline constexpr quint32 kSlideEarlierSecondAndTextOnTop   = 1u << 1;
 inline constexpr quint32 kShowDebugInfo                    = 1u << 2;
 inline constexpr quint32 kShowTimestamp                    = 1u << 3;
 inline constexpr quint32 kShowObjectStatsHud               = 1u << 4;
+inline constexpr quint32 kShowChartInfoHud                 = 1u << 5;
 }  // namespace RenderFlags
 
 // Reference into the snapshot's `markerGeometryBlob` for variable-length
@@ -326,6 +327,17 @@ struct PreviewFrameStateSerial
     quint32 mediaKind = 0;
     quint32 mediaVisible = 0;
     quint64 mediaSerial = 0;  // bumps on chart-path / mode change
+
+    // Chart metadata for the optional top-left chart info HUD shown during
+    // export preview / export. All four are SerialStringRef into the
+    // shared stringBlob; empty refs mean "no value yet" and the painter
+    // skips the missing line. chartDifficultyLabel is pre-formatted by
+    // the producer as e.g. "MAS 13+". v11 added title/designer;
+    // v12 added artist/difficultyLabel.
+    SerialStringRef chartTitle;
+    SerialStringRef chartArtist;
+    SerialStringRef chartDifficultyLabel;
+    SerialStringRef chartDesigner;
 
     // String blob for variable-length data referenced by SerialStringRef.
     quint32 stringBlobUsedBytes = 0;

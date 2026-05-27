@@ -539,6 +539,10 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
         previewCanvas_->setShowTimestamp(previewShowTimestamp_);
         previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
+        // Chart info HUD only ever activates inside the export-preview
+        // dialog (gated by setSuppressDebugInfo + setChartInfo there); the
+        // editor's main preview keeps it off.
+        previewCanvas_->setShowChartInfoHud(false);
     }
     applyMuriRenderOptions();
     windowSection_->applyUiTheme();

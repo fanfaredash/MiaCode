@@ -440,6 +440,8 @@
         bool previewShowTimestamp_ = true;
         bool previewShowObjectStatsHud_ = false;
         bool exportShowObjectStatsHud_ = false;
+        bool previewShowChartInfoHud_ = false;
+        bool exportShowChartInfoHud_ = false;
         bool previewShowValidationSummary_ = true;
         bool chartNormalizeStartAtNewMeasure_ = true;
         bool chartNormalizeReduceTo384Grid_ = false;
@@ -797,6 +799,8 @@
     bool& previewShowTimestamp_ = state_.previewShowTimestamp_;
     bool& previewShowObjectStatsHud_ = state_.previewShowObjectStatsHud_;
     bool& exportShowObjectStatsHud_ = state_.exportShowObjectStatsHud_;
+    bool& previewShowChartInfoHud_ = state_.previewShowChartInfoHud_;
+    bool& exportShowChartInfoHud_ = state_.exportShowChartInfoHud_;
     bool& previewShowValidationSummary_ = state_.previewShowValidationSummary_;
     bool& chartNormalizeStartAtNewMeasure_ = state_.chartNormalizeStartAtNewMeasure_;
     bool& chartNormalizeReduceTo384Grid_ = state_.chartNormalizeReduceTo384Grid_;

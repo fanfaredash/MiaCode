@@ -13,6 +13,13 @@
 #include <QDoubleValidator>
 #include <QDir>
 #include <QFileDialog>
+
+#ifdef Q_OS_WIN
+#include <QWindow>
+#include <objbase.h>
+#include <shlobj.h>
+#include <shobjidl.h>
+#endif
 #include <QFileInfo>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -321,8 +328,104 @@ void addDialogMenuChoice(
     menu->addAction(action);
 }
 
+#ifdef Q_OS_WIN
+// Windows native multi-folder picker via IFileOpenDialog. The shell
+// supports FOS_PICKFOLDERS + FOS_ALLOWMULTISELECT (Win Vista+), giving
+// the user the same Explorer-style chooser they get elsewhere in the
+// OS with Ctrl/Shift selection. Qt's QFileDialog in native mode can't
+// do this directly (the platform plugin maps Directory mode to
+// SHBrowseForFolder-style picker which is single-select); falling back
+// to the COM API is the supported route.
+QStringList selectMultipleDirectoriesNativeWin(QWidget* parent, const QString& startDirectory)
+{
+    QStringList result;
+    IFileOpenDialog* dialog = nullptr;
+    HRESULT hr = CoCreateInstance(
+        CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog));
+    if (FAILED(hr) || dialog == nullptr) {
+        return result;
+    }
+    DWORD options = 0;
+    if (SUCCEEDED(dialog->GetOptions(&options))) {
+        dialog->SetOptions(
+            options
+            | FOS_PICKFOLDERS
+            | FOS_ALLOWMULTISELECT
+            | FOS_PATHMUSTEXIST
+            | FOS_FORCEFILESYSTEM
+            | FOS_NOCHANGEDIR);
+    }
+    const QString trimmedStart = startDirectory.trimmed();
+    if (!trimmedStart.isEmpty()) {
+        const QString native = QDir::toNativeSeparators(QDir::cleanPath(trimmedStart));
+        IShellItem* startItem = nullptr;
+        if (SUCCEEDED(SHCreateItemFromParsingName(
+                reinterpret_cast<LPCWSTR>(native.utf16()),
+                nullptr,
+                IID_PPV_ARGS(&startItem)))
+            && startItem != nullptr) {
+            dialog->SetFolder(startItem);
+            startItem->Release();
+        }
+    }
+    const QString title = uiText(
+        "dialog.batch_export.select_charts",
+        QStringLiteral("Select Chart Folders"));
+    dialog->SetTitle(reinterpret_cast<LPCWSTR>(title.utf16()));
+
+    HWND parentHwnd = nullptr;
+    if (parent != nullptr) {
+        if (QWidget* topLevel = parent->window(); topLevel != nullptr) {
+            topLevel->createWinId();
+            if (QWindow* handle = topLevel->windowHandle(); handle != nullptr) {
+                parentHwnd = reinterpret_cast<HWND>(handle->winId());
+            }
+        }
+    }
+    hr = dialog->Show(parentHwnd);
+    if (SUCCEEDED(hr)) {
+        IShellItemArray* items = nullptr;
+        if (SUCCEEDED(dialog->GetResults(&items)) && items != nullptr) {
+            DWORD count = 0;
+            if (SUCCEEDED(items->GetCount(&count))) {
+                for (DWORD i = 0; i < count; ++i) {
+                    IShellItem* item = nullptr;
+                    if (SUCCEEDED(items->GetItemAt(i, &item)) && item != nullptr) {
+                        PWSTR path = nullptr;
+                        if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))
+                            && path != nullptr) {
+                            result.append(QString::fromWCharArray(path));
+                            CoTaskMemFree(path);
+                        }
+                        item->Release();
+                    }
+                }
+            }
+            items->Release();
+        }
+    }
+    dialog->Release();
+    return result;
+}
+#endif  // Q_OS_WIN
+
 QStringList selectMultipleDirectories(QWidget* parent, const QString& startDirectory)
 {
+#ifdef Q_OS_WIN
+    // Prefer the OS-native Explorer-style picker when available. Falls
+    // through to the Qt-driven dialog if the shell call fails (e.g.
+    // the COM init somehow isn't apartment-threaded), so the user
+    // never ends up with no picker at all.
+    QStringList nativeResult = selectMultipleDirectoriesNativeWin(parent, startDirectory);
+    if (!nativeResult.isEmpty()) {
+        return nativeResult;
+    }
+    // Note: an empty result here can also mean "user cancelled" — we
+    // can't distinguish that from "shell call failed" without tracking
+    // the HRESULT. Treat empty as cancel and skip the Qt fallback, so
+    // closing the native dialog doesn't pop a second one.
+    return nativeResult;
+#else
     QFileDialog dialog(parent, uiText("dialog.batch_export.select_charts", QStringLiteral("Select Chart Folders")), startDirectory);
     dialog.setFileMode(QFileDialog::Directory);
     dialog.setOption(QFileDialog::ShowDirsOnly, true);
@@ -337,6 +440,7 @@ QStringList selectMultipleDirectories(QWidget* parent, const QString& startDirec
         return {};
     }
     return dialog.selectedFiles();
+#endif
 }
 
 QWidget* createSliderOption(
@@ -585,10 +689,13 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     showTimestampCheck_->setChecked(baseTask_.showTimestamp);
     showObjectStatsCheck_ = new QCheckBox(uiText("dialog.video_export.option.show_object_stats", QStringLiteral("Show object stats")), optionsCard);
     showObjectStatsCheck_->setChecked(baseTask_.showObjectStatsHud);
+    showChartInfoCheck_ = new QCheckBox(uiText("dialog.video_export.option.show_chart_info", QStringLiteral("Show chart info")), optionsCard);
+    showChartInfoCheck_->setChecked(baseTask_.showChartInfoHud);
     smoothBrightnessCheck_ = new QCheckBox(uiText("dialog.video_export.option.smooth_brightness", QStringLiteral("Smooth brightness")), optionsCard);
     smoothBrightnessCheck_->setChecked(baseTask_.smoothBrightness);
     checkboxLayout->addWidget(showTimestampCheck_, 0);
     checkboxLayout->addWidget(showObjectStatsCheck_, 0);
+    checkboxLayout->addWidget(showChartInfoCheck_, 0);
     checkboxLayout->addWidget(smoothBrightnessCheck_, 0);
     checkboxLayout->addStretch(1);
     optionsLayout->addWidget(checkboxRow, optionRow, 0, 1, 4);
@@ -728,6 +835,9 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     connect(showObjectStatsCheck_, &QCheckBox::toggled, this, [this](bool) {
         notifySharedSettingsChanged();
     });
+    connect(showChartInfoCheck_, &QCheckBox::toggled, this, [this](bool) {
+        notifySharedSettingsChanged();
+    });
     connect(smoothBrightnessCheck_, &QCheckBox::toggled, this, [this](bool) {
         notifySharedSettingsChanged();
     });
@@ -819,6 +929,8 @@ void BatchVideoExportDialog::addChartDirectories(const QStringList& directories)
         }
     }
 
+    refreshChartDirectoryNumbering();
+
     if (!firstValidDirectory.isEmpty()) {
         saveLastChartBrowseDirectory(firstValidDirectory);
     }
@@ -867,11 +979,29 @@ void BatchVideoExportDialog::browseOutputDirectory()
 void BatchVideoExportDialog::removeSelectedChartDirectories()
 {
     qDeleteAll(chartDirectoryList_->selectedItems());
+    refreshChartDirectoryNumbering();
 }
 
 void BatchVideoExportDialog::clearChartDirectories()
 {
     chartDirectoryList_->clear();
+}
+
+void BatchVideoExportDialog::refreshChartDirectoryNumbering()
+{
+    if (chartDirectoryList_ == nullptr) {
+        return;
+    }
+    for (int i = 0; i < chartDirectoryList_->count(); ++i) {
+        QListWidgetItem* item = chartDirectoryList_->item(i);
+        if (item == nullptr) {
+            continue;
+        }
+        const QString path = item->data(Qt::UserRole).toString();
+        item->setText(QStringLiteral("[%1] %2")
+                          .arg(i + 1)
+                          .arg(QDir::toNativeSeparators(path)));
+    }
 }
 
 bool BatchVideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessage) const
@@ -901,6 +1031,7 @@ bool BatchVideoExportDialog::applyUiToTask(VideoExportTask* task, QString* error
     task->preset = selectedPreset_;
     task->showTimestamp = showTimestampCheck_ != nullptr && showTimestampCheck_->isChecked();
     task->showObjectStatsHud = showObjectStatsCheck_ != nullptr && showObjectStatsCheck_->isChecked();
+    task->showChartInfoHud = showChartInfoCheck_ != nullptr && showChartInfoCheck_->isChecked();
     task->smoothBrightness = smoothBrightnessCheck_ != nullptr && smoothBrightnessCheck_->isChecked();
     task->backgroundBrightnessOuter = qBound(0.0, brightnessOuterSlider_->value() / 100.0, 1.0);
     task->backgroundBrightnessInner = qBound(0.0, brightnessInnerSlider_->value() / 100.0, 1.0);
@@ -1074,6 +1205,7 @@ VideoExportTask BatchVideoExportDialog::currentSharedSettingsTask() const
     task.preset = selectedPreset_;
     task.showTimestamp = showTimestampCheck_ != nullptr && showTimestampCheck_->isChecked();
     task.showObjectStatsHud = showObjectStatsCheck_ != nullptr && showObjectStatsCheck_->isChecked();
+    task.showChartInfoHud = showChartInfoCheck_ != nullptr && showChartInfoCheck_->isChecked();
     task.smoothBrightness = smoothBrightnessCheck_ != nullptr && smoothBrightnessCheck_->isChecked();
     task.backgroundBrightnessOuter =
         brightnessOuterSlider_ != nullptr ? qBound(0.0, brightnessOuterSlider_->value() / 100.0, 1.0)

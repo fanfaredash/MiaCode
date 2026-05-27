@@ -58,6 +58,16 @@ struct VideoExportTask {
     bool fullRangeExport = true;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;
+    bool showChartInfoHud = false;
+    // Chart metadata for the optional top-left chart info HUD. Populated
+    // from the active SimaiDocument at task-construction time; the worker
+    // re-derives these from the snapshot's chart text + difficulty id
+    // when running out of process (see buildVideoExportTaskFromSnapshot).
+    // chartDifficultyLabel is pre-formatted as e.g. "MAS 13+".
+    QString chartTitle;
+    QString chartArtist;
+    QString chartDifficultyLabel;
+    QString chartDesigner;
     int skinLoadWaitMs = 2000;
     int clockCount = 0;
     double clockBpm = 0.0;

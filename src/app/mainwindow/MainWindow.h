@@ -133,6 +133,7 @@ public:
         double contentDurationSeconds = -1.0;
         bool showTimestamp = true;
         bool showObjectStatsHud = false;
+        bool showChartInfoHud = false;
         bool smoothBrightness = miacode::preview_video::kSmoothBrightnessDefault;
         double backgroundBrightnessOuter = miacode::preview_video::kBackgroundBrightnessDefault;
         double backgroundBrightnessInner = miacode::preview_video::kBackgroundBrightnessInnerDefault;

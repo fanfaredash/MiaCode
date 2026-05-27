@@ -65,6 +65,11 @@ bool VideoExportQuickRenderBackend::bootstrap(
     frameState_.render.showDebugInfo = false;
     frameState_.render.showTimestamp = task.showTimestamp;
     frameState_.render.showObjectStatsHud = task.showObjectStatsHud;
+    frameState_.render.showChartInfoHud = task.showChartInfoHud;
+    frameState_.chartTitle = task.chartTitle;
+    frameState_.chartArtist = task.chartArtist;
+    frameState_.chartDifficultyLabel = task.chartDifficultyLabel;
+    frameState_.chartDesigner = task.chartDesigner;
     refreshAssetState();
 
     session_.setLayerFlags(miacode::preview::scene::kPreviewExportOverlayRenderLayers);

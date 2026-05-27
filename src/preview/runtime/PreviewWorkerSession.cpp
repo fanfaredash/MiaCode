@@ -794,6 +794,27 @@ void PreviewWorkerSession::pumpQsgFrame()
             (renderBits & miacode::preview::ipc::RenderFlags::kShowTimestamp) != 0;
         frameState_.render.showObjectStatsHud =
             (renderBits & miacode::preview::ipc::RenderFlags::kShowObjectStatsHud) != 0;
+        frameState_.render.showChartInfoHud =
+            (renderBits & miacode::preview::ipc::RenderFlags::kShowChartInfoHud) != 0;
+        // Bounds-checked read out of the shared stringBlob — match the
+        // skinDirectory / mediaImagePath pattern below so a malformed
+        // ref (offset+length past blob size) silently degrades to an
+        // empty string instead of reading out of bounds.
+        const auto readBlob = [&](const miacode::preview::ipc::SerialStringRef& ref) -> QString {
+            if (ref.length == 0) {
+                return QString();
+            }
+            if (ref.offset + ref.length > static_cast<quint32>(lastSnapshot_.stringBlob.size())) {
+                return QString();
+            }
+            return QString::fromUtf8(
+                lastSnapshot_.stringBlob.data() + ref.offset,
+                static_cast<int>(ref.length));
+        };
+        frameState_.chartTitle = readBlob(lastSnapshot_.chartTitle);
+        frameState_.chartArtist = readBlob(lastSnapshot_.chartArtist);
+        frameState_.chartDifficultyLabel = readBlob(lastSnapshot_.chartDifficultyLabel);
+        frameState_.chartDesigner = readBlob(lastSnapshot_.chartDesigner);
 
         // Asset state + skin / judge / firework images come from the
         // worker's repository. Refresh only when the repository signals

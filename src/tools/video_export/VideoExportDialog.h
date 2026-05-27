@@ -33,6 +33,7 @@ public:
     using CurrentPreviewSecondCallback = std::function<double()>;
     using PreviewTimestampCallback = std::function<void(bool showTimestamp)>;
     using PreviewObjectStatsCallback = std::function<void(bool showObjectStatsHud)>;
+    using PreviewChartInfoCallback = std::function<void(bool showChartInfoHud)>;
     using PreviewAspectRatioCallback = std::function<void(double ratio)>;
     using PreviewBrightnessCallback = std::function<void(double outer, double inner)>;
     using PreviewLayoutScaleCallback = std::function<void(double scale)>;
@@ -50,6 +51,7 @@ public:
         CurrentPreviewSecondCallback currentPreviewSecondCallback = {},
         PreviewTimestampCallback previewTimestampCallback = {},
         PreviewObjectStatsCallback previewObjectStatsCallback = {},
+        PreviewChartInfoCallback previewChartInfoCallback = {},
         PreviewAspectRatioCallback previewAspectRatioCallback = {},
         PreviewBrightnessCallback previewBrightnessCallback = {},
         PreviewLayoutScaleCallback previewLayoutScaleCallback = {},
@@ -71,6 +73,7 @@ private:
     void refreshDialogGeometry();
     void syncLivePreviewTimestampVisibility();
     void syncLivePreviewObjectStatsVisibility();
+    void syncLivePreviewChartInfoVisibility();
     void restoreLivePreviewState();
     void openHudFontSettingsDialog();
     QString importHudFontFromUser(QWidget* parent);
@@ -123,6 +126,7 @@ private:
     CurrentPreviewSecondCallback currentPreviewSecondCallback_;
     PreviewTimestampCallback previewTimestampCallback_;
     PreviewObjectStatsCallback previewObjectStatsCallback_;
+    PreviewChartInfoCallback previewChartInfoCallback_;
     PreviewAspectRatioCallback previewAspectRatioCallback_;
     PreviewBrightnessCallback previewBrightnessCallback_;
     PreviewLayoutScaleCallback previewLayoutScaleCallback_;
@@ -142,6 +146,7 @@ private:
     bool previewStateRestored_ = false;
     bool initialShowTimestamp_ = true;
     bool initialShowObjectStats_ = false;
+    bool initialShowChartInfo_ = false;
     int previewHeldSeekDirection_ = 0;
     int previewSeekHeldArrowKey_ = 0;
     int previewSeekHeldArrowLastElapsedMs_ = 0;
@@ -164,6 +169,7 @@ private:
     VideoExportPreset selectedPreset_ = VideoExportPreset::Fast;
     QCheckBox* showTimestampCheck_ = nullptr;
     QCheckBox* showObjectStatsCheck_ = nullptr;
+    QCheckBox* showChartInfoCheck_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
     QPushButton* hudFontSettingsButton_ = nullptr;
     QToolButton* backgroundScaleModeButton_ = nullptr;

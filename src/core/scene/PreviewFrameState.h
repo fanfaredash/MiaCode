@@ -189,6 +189,7 @@ struct PreviewRenderState {
     bool showDebugInfo = false;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;
+    bool showChartInfoHud = false;
 };
 
 struct PreviewFrameState {
@@ -202,6 +203,16 @@ struct PreviewFrameState {
     PreviewJudgeOverlayAssets judgeOverlay;
     PreviewJudgeEffectAssets judgeEffect;
     PreviewRenderState render;
+    // Source chart metadata for the optional "show chart info" HUD shown
+    // top-left during export / export-preview. Lines render in order:
+    //   chartTitle / chartArtist / chartDifficultyLabel / chartDesigner
+    // Empty fields are skipped. chartDifficultyLabel is pre-formatted as
+    // e.g. "MAS 13+" by the producer so the painter doesn't need the
+    // raw difficulty id + level lookups.
+    QString chartTitle;
+    QString chartArtist;
+    QString chartDifficultyLabel;
+    QString chartDesigner;
     double playheadSeconds = 0.0;
     // Optional HUD-only override. When finite, the HUD timestamp/stats use
     // this value instead of `playheadSeconds`; the scene graph and note

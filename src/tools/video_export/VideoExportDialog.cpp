@@ -539,6 +539,7 @@ VideoExportDialog::VideoExportDialog(
     CurrentPreviewSecondCallback currentPreviewSecondCallback,
     PreviewTimestampCallback previewTimestampCallback,
     PreviewObjectStatsCallback previewObjectStatsCallback,
+    PreviewChartInfoCallback previewChartInfoCallback,
     PreviewAspectRatioCallback previewAspectRatioCallback,
     PreviewBrightnessCallback previewBrightnessCallback,
     PreviewLayoutScaleCallback previewLayoutScaleCallback,
@@ -557,6 +558,7 @@ VideoExportDialog::VideoExportDialog(
     , currentPreviewSecondCallback_(std::move(currentPreviewSecondCallback))
     , previewTimestampCallback_(std::move(previewTimestampCallback))
     , previewObjectStatsCallback_(std::move(previewObjectStatsCallback))
+    , previewChartInfoCallback_(std::move(previewChartInfoCallback))
     , previewAspectRatioCallback_(std::move(previewAspectRatioCallback))
     , previewBrightnessCallback_(std::move(previewBrightnessCallback))
     , previewLayoutScaleCallback_(std::move(previewLayoutScaleCallback))
@@ -577,6 +579,7 @@ VideoExportDialog::VideoExportDialog(
     }
     initialShowTimestamp_ = baseTask_.showTimestamp;
     initialShowObjectStats_ = baseTask_.showObjectStatsHud;
+    initialShowChartInfo_ = baseTask_.showChartInfoHud;
 
     auto* rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(12, 10, 12, 10);
@@ -929,6 +932,11 @@ VideoExportDialog::VideoExportDialog(
         optionsContent_
     );
     showObjectStatsCheck_->setChecked(baseTask_.showObjectStatsHud);
+    showChartInfoCheck_ = new QCheckBox(
+        uiText("dialog.video_export.option.show_chart_info", QStringLiteral("Show chart info")),
+        optionsContent_
+    );
+    showChartInfoCheck_->setChecked(baseTask_.showChartInfoHud);
     smoothBrightnessCheck_ = new QCheckBox(
         l10n(QStringLiteral("Smooth brightness"), QStringLiteral("骞虫粦浜害")),
         optionsContent_
@@ -1174,6 +1182,7 @@ VideoExportDialog::VideoExportDialog(
     );
     hudFontSettingsButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     objectStatsLayout->addWidget(showObjectStatsCheck_, 0, Qt::AlignLeft | Qt::AlignVCenter);
+    objectStatsLayout->addWidget(showChartInfoCheck_, 0, Qt::AlignLeft | Qt::AlignVCenter);
     objectStatsLayout->addWidget(hudFontSettingsButton_, 0);
     objectStatsLayout->addStretch(1);
     optionsLayout->addWidget(objectStatsRow, 6, 0, 1, 2);
@@ -1246,6 +1255,10 @@ VideoExportDialog::VideoExportDialog(
     connect(showObjectStatsCheck_, &QCheckBox::toggled, this, [this](bool checked) {
         syncLivePreviewObjectStatsVisibility();
         initialShowObjectStats_ = checked;
+    });
+    connect(showChartInfoCheck_, &QCheckBox::toggled, this, [this](bool checked) {
+        syncLivePreviewChartInfoVisibility();
+        initialShowChartInfo_ = checked;
     });
     connect(hudFontSettingsButton_, &QPushButton::clicked, this, &VideoExportDialog::openHudFontSettingsDialog);
     connect(smoothBrightnessCheck_, &QCheckBox::toggled, this, [this](bool checked) {
@@ -1400,6 +1413,14 @@ void VideoExportDialog::syncLivePreviewObjectStatsVisibility()
     previewObjectStatsCallback_(showObjectStatsCheck_->isChecked());
 }
 
+void VideoExportDialog::syncLivePreviewChartInfoVisibility()
+{
+    if (showChartInfoCheck_ == nullptr || !previewChartInfoCallback_) {
+        return;
+    }
+    previewChartInfoCallback_(showChartInfoCheck_->isChecked());
+}
+
 void VideoExportDialog::restoreLivePreviewState()
 {
     if (previewStateRestored_) {
@@ -1411,6 +1432,9 @@ void VideoExportDialog::restoreLivePreviewState()
     }
     if (previewObjectStatsCallback_) {
         previewObjectStatsCallback_(initialShowObjectStats_);
+    }
+    if (previewChartInfoCallback_) {
+        previewChartInfoCallback_(initialShowChartInfo_);
     }
     if (previewAspectRatioCallback_) {
         previewAspectRatioCallback_(1.0);
@@ -1811,6 +1835,7 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     updated.preset = selectedPreset_;
     updated.showTimestamp = showTimestampCheck_ != nullptr ? showTimestampCheck_->isChecked() : true;
     updated.showObjectStatsHud = showObjectStatsCheck_ != nullptr ? showObjectStatsCheck_->isChecked() : false;
+    updated.showChartInfoHud = showChartInfoCheck_ != nullptr ? showChartInfoCheck_->isChecked() : false;
     updated.backgroundBrightnessOuter = brightnessOuterSlider_ != nullptr
         ? qBound(0.0, static_cast<double>(brightnessOuterSlider_->value()) / 100.0, 1.0)
         : updated.backgroundBrightnessOuter;

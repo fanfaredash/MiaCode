@@ -112,6 +112,18 @@ int projectMediaPathsToSerial(const QString& mediaImagePath,
                               quint64 mediaSerial,
                               PreviewFrameStateSerial& out);
 
+// Pack the chart title + designer strings for the optional chart info HUD.
+// Empty strings are encoded as zero-length SerialStringRefs so the worker
+// painter skips the missing line. Shares the snapshot's string blob with
+// projectAssetPathsToSerial / projectMediaPathsToSerial — call this last
+// so the per-frame sprite projection can fail-soft if the blob is
+// already saturated.
+int projectChartInfoToSerial(const QString& chartTitle,
+                             const QString& chartArtist,
+                             const QString& chartDifficultyLabel,
+                             const QString& chartDesigner,
+                             PreviewFrameStateSerial& out);
+
 // Worker-side: reconstruct a `TimelineNoteMarker` from a single
 // `SerialSpriteEntry` plus the snapshot's string blob. The mapping is
 // best-effort — slide segment geometry (`slideSegmentPoints`,

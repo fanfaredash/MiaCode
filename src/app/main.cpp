@@ -957,6 +957,10 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
         QStringLiteral("Show object stats HUD in output video.")
     ));
     parser.addOption(QCommandLineOption(
+        QStringLiteral("show-chart-info"),
+        QStringLiteral("Show top-left chart info HUD (title + designer) in output video.")
+    ));
+    parser.addOption(QCommandLineOption(
         QStringLiteral("smooth-brightness"),
         QStringLiteral("Enable smooth brightness in output video.")
     ));
@@ -1133,6 +1137,7 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     request.contentDurationSeconds = durationSeconds;
     request.showTimestamp = !parser.isSet(QStringLiteral("hide-timestamp"));
     request.showObjectStatsHud = parser.isSet(QStringLiteral("show-object-stats"));
+    request.showChartInfoHud = parser.isSet(QStringLiteral("show-chart-info"));
     request.smoothBrightness = parser.isSet(QStringLiteral("smooth-brightness"));
     request.backgroundBrightnessOuter = outerBrightness;
     request.backgroundBrightnessInner = innerBrightness;

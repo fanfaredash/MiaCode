@@ -44,6 +44,7 @@ struct VideoExportSnapshot {
     QString outputPath;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;
+    bool showChartInfoHud = false;
     int skinLoadWaitMs = 2000;
 
     QJsonObject toJson() const;

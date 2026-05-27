@@ -137,11 +137,18 @@ public:
     void setNoteFlowSpeed(double flowSpeed);
     void setSlideEarlierSecondAndTextOnTop(bool enabled);
     void setShowDebugInfo(bool show);
+    void setSuppressDebugInfo(bool suppress);
     void setShowTimestamp(bool show);
     void setShowObjectStatsHud(bool show);
     void setSuppressObjectStatsHud(bool suppress);
+    void setShowChartInfoHud(bool show);
+    void setChartInfo(const QString& title,
+                      const QString& artist,
+                      const QString& difficultyLabel,
+                      const QString& designer);
     bool showTimestamp() const;
     bool showObjectStatsHud() const;
+    bool showChartInfoHud() const;
 
     void reset();
     void noteTickForProfiling();
@@ -194,6 +201,8 @@ private:
     miacode::preview::scene::PreviewFrameState frameState_;
     bool requestedShowObjectStatsHud_ = false;
     bool suppressObjectStatsHud_ = false;
+    bool requestedShowDebugInfo_ = false;
+    bool suppressDebugInfo_ = false;
     QElapsedTimer presentTimer_;
     qint64 lastPresentedNs_ = -1;
     QVector<double> presentedFrameIntervalsMs_;

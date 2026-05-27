@@ -300,6 +300,8 @@ void MainWindow::ExportSection::applySharedExportTaskSettings(const VideoExportT
     owner_.previewShowTimestamp_ = task.showTimestamp;
     owner_.previewShowObjectStatsHud_ = task.showObjectStatsHud;
     owner_.exportShowObjectStatsHud_ = task.showObjectStatsHud;
+    owner_.previewShowChartInfoHud_ = task.showChartInfoHud;
+    owner_.exportShowChartInfoHud_ = task.showChartInfoHud;
     owner_.previewBackgroundBrightnessOuter_ = qBound(0.0, task.backgroundBrightnessOuter, 1.0);
     owner_.previewBackgroundBrightnessInner_ = qBound(0.0, task.backgroundBrightnessInner, 1.0);
     owner_.previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(task.layoutSquareScale);
@@ -313,6 +315,11 @@ void MainWindow::ExportSection::applySharedExportTaskSettings(const VideoExportT
     if (owner_.previewCanvas_ != nullptr) {
         owner_.previewCanvas_->setShowTimestamp(owner_.previewShowTimestamp_);
         owner_.previewCanvas_->setShowObjectStatsHud(owner_.previewShowObjectStatsHud_);
+        // Chart info HUD is deliberately *not* pushed to the live editor
+        // preview here — the persisted value drives the export dialog's
+        // initial checkbox state and the next export render, but the
+        // editor's normal preview never shows it (debug HUD owns the
+        // top-left corner outside the export dialog window).
         owner_.previewCanvas_->setBackgroundBrightnessOuter(owner_.previewBackgroundBrightnessOuter_);
         owner_.previewCanvas_->setBackgroundBrightnessInner(owner_.previewBackgroundBrightnessInner_);
         owner_.previewCanvas_->setLayoutSquareScale(owner_.previewLayoutSquareScale_);
@@ -389,12 +396,36 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     task.fps = 60;
     task.showTimestamp = owner_.previewShowTimestamp_;
     task.showObjectStatsHud = owner_.exportShowObjectStatsHud_;
+    task.showChartInfoHud = owner_.exportShowChartInfoHud_;
 
     const QFileInfo chartInfo(owner_.currentFilePath_);
     QString chartTitle = owner_.document_.title;
     if (owner_.editorStack_ != nullptr && owner_.editorStack_->currentWidget() == owner_.metadataPage_ && owner_.titleEdit_ != nullptr) {
         chartTitle = owner_.titleEdit_->text();
     }
+    // Per-difficulty designer overrides the document-level &des field when
+    // populated; otherwise we fall back so projects using the shared-designer
+    // convention still surface a name in the HUD.
+    QString chartDesigner = owner_.document_.designer;
+    QString chartDifficultyLabel;
+    if (owner_.hasActiveDifficulty()) {
+        const SimaiDifficultyData* difficulty = owner_.document_.difficulty(owner_.activeDifficultyId_);
+        if (difficulty != nullptr && !difficulty->designer.isEmpty()) {
+            chartDesigner = difficulty->designer;
+        }
+        const QString diffShort = SimaiDocument::difficultyShortName(owner_.activeDifficultyId_);
+        const QString diffLevel = (difficulty != nullptr) ? difficulty->level.trimmed() : QString();
+        if (!diffShort.isEmpty() || !diffLevel.isEmpty()) {
+            chartDifficultyLabel = QStringLiteral("%1 %2")
+                .arg(diffShort, diffLevel)
+                .trimmed();
+        }
+    }
+    const QString chartArtist = owner_.document_.artist;
+    task.chartTitle = chartTitle;
+    task.chartArtist = chartArtist;
+    task.chartDifficultyLabel = chartDifficultyLabel;
+    task.chartDesigner = chartDesigner;
     const QString exportStem = sanitizeExportFileStem(chartTitle, QStringLiteral("out"));
     const QString difficultyName = owner_.hasActiveDifficulty()
         ? SimaiDocument::difficultyShortName(owner_.activeDifficultyId_).replace(':', '_')
@@ -438,6 +469,14 @@ void MainWindow::ExportSection::onExportPreviewVideo()
             owner_.exportShowObjectStatsHud_ = showObjectStatsHud;
             if (owner_.previewCanvas_ != nullptr) {
                 owner_.previewCanvas_->setShowObjectStatsHud(owner_.previewShowObjectStatsHud_);
+            }
+            owner_.savePortableState();
+        },
+        [this](bool showChartInfoHud) {
+            owner_.previewShowChartInfoHud_ = showChartInfoHud;
+            owner_.exportShowChartInfoHud_ = showChartInfoHud;
+            if (owner_.previewCanvas_ != nullptr) {
+                owner_.previewCanvas_->setShowChartInfoHud(owner_.previewShowChartInfoHud_);
             }
             owner_.savePortableState();
         },
@@ -544,7 +583,22 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     dialog.move(targetTopLeft);
     owner_.windowSection_->applySystemWindowBackdrop(&dialog);
     ++owner_.previewPaneRestoreGeneration_;
+    // While the export-preview dialog is up the debug HUD is replaced by
+    // the optional chart info HUD — the debug numbers don't reach the
+    // exported video anyway, and the user wants to see chart metadata
+    // here. Suppress the debug HUD without clearing the persisted
+    // showDebugInfo preference so it returns intact on dialog close.
+    if (owner_.previewCanvas_ != nullptr) {
+        owner_.previewCanvas_->setSuppressDebugInfo(true);
+        owner_.previewCanvas_->setChartInfo(chartTitle, chartArtist, chartDifficultyLabel, chartDesigner);
+        owner_.previewCanvas_->setShowChartInfoHud(owner_.previewShowChartInfoHud_);
+    }
     dialog.exec();
+    if (owner_.previewCanvas_ != nullptr) {
+        owner_.previewCanvas_->setSuppressDebugInfo(false);
+        owner_.previewCanvas_->setShowChartInfoHud(false);
+        owner_.previewCanvas_->setChartInfo(QString(), QString(), QString(), QString());
+    }
     owner_.setPreviewCanvasAspectRatio(1.0, false);
     owner_.restoreSquareAfterVideoExport_ = false;
     if (dialog.exportRequested()) {
@@ -620,6 +674,29 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo()
     task.fps = 60;
     task.showTimestamp = owner_.previewShowTimestamp_;
     task.showObjectStatsHud = owner_.exportShowObjectStatsHud_;
+    task.showChartInfoHud = owner_.exportShowChartInfoHud_;
+    // Batch export carries the *current* chart's metadata only as a hint
+    // for the dialog UI; the per-job chartTitle / chartArtist /
+    // chartDifficultyLabel / chartDesigner used by each render is
+    // re-derived inside buildVideoExportTaskFromSnapshot from the
+    // snapshot's chartTextUtf8 + difficulty id for that job.
+    task.chartTitle = owner_.document_.title;
+    task.chartArtist = owner_.document_.artist;
+    if (owner_.hasActiveDifficulty()) {
+        const SimaiDifficultyData* difficulty = owner_.document_.difficulty(owner_.activeDifficultyId_);
+        task.chartDesigner = (difficulty != nullptr && !difficulty->designer.isEmpty())
+            ? difficulty->designer
+            : owner_.document_.designer;
+        const QString diffShort = SimaiDocument::difficultyShortName(owner_.activeDifficultyId_);
+        const QString diffLevel = (difficulty != nullptr) ? difficulty->level.trimmed() : QString();
+        if (!diffShort.isEmpty() || !diffLevel.isEmpty()) {
+            task.chartDifficultyLabel = QStringLiteral("%1 %2")
+                .arg(diffShort, diffLevel)
+                .trimmed();
+        }
+    } else {
+        task.chartDesigner = owner_.document_.designer;
+    }
 
     const QString difficultyToken = SimaiDocument::difficultyShortName(owner_.activeDifficultyId_);
     BatchVideoExportDialog dialog(

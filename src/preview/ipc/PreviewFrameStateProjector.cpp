@@ -90,6 +90,20 @@ int projectMediaPathsToSerial(const QString& mediaImagePath,
     return static_cast<int>(out.stringBlobUsedBytes - before);
 }
 
+int projectChartInfoToSerial(const QString& chartTitle,
+                             const QString& chartArtist,
+                             const QString& chartDifficultyLabel,
+                             const QString& chartDesigner,
+                             PreviewFrameStateSerial& out)
+{
+    const quint32 before = out.stringBlobUsedBytes;
+    out.chartTitle = appendToStringBlob(out, chartTitle);
+    out.chartArtist = appendToStringBlob(out, chartArtist);
+    out.chartDifficultyLabel = appendToStringBlob(out, chartDifficultyLabel);
+    out.chartDesigner = appendToStringBlob(out, chartDesigner);
+    return static_cast<int>(out.stringBlobUsedBytes - before);
+}
+
 
 namespace {
 
@@ -675,6 +689,7 @@ void projectScalarsToSerial(const miacode::preview::scene::PreviewFrameState& st
     if (render.showDebugInfo)                  renderBits |= RenderFlags::kShowDebugInfo;
     if (render.showTimestamp)                  renderBits |= RenderFlags::kShowTimestamp;
     if (render.showObjectStatsHud)             renderBits |= RenderFlags::kShowObjectStatsHud;
+    if (render.showChartInfoHud)               renderBits |= RenderFlags::kShowChartInfoHud;
     out.renderFlagsBitmap = renderBits;
 }
 

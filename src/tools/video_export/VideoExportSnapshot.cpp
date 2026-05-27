@@ -209,6 +209,7 @@ QJsonObject VideoExportSnapshot::toJson() const
     render.insert(QStringLiteral("static_tap_on_slide_threshold_seconds"), staticTapOnSlideThresholdSeconds);
     render.insert(QStringLiteral("show_timestamp"), showTimestamp);
     render.insert(QStringLiteral("show_object_stats_hud"), showObjectStatsHud);
+    render.insert(QStringLiteral("show_chart_info_hud"), showChartInfoHud);
     render.insert(QStringLiteral("skin_wait_ms"), skinLoadWaitMs);
     root.insert(QStringLiteral("render"), render);
 
@@ -318,6 +319,8 @@ bool VideoExportSnapshot::fromJson(
         render.value(QStringLiteral("show_timestamp")).toBool(parsed.showTimestamp);
     parsed.showObjectStatsHud =
         render.value(QStringLiteral("show_object_stats_hud")).toBool(parsed.showObjectStatsHud);
+    parsed.showChartInfoHud =
+        render.value(QStringLiteral("show_chart_info_hud")).toBool(parsed.showChartInfoHud);
     parsed.skinLoadWaitMs =
         render.value(QStringLiteral("skin_wait_ms")).toInt(parsed.skinLoadWaitMs);
 
@@ -422,6 +425,24 @@ bool buildVideoExportTaskFromSnapshot(
     built.fullRangeExport = snapshot.fullRangeExport;
     built.showTimestamp = snapshot.showTimestamp;
     built.showObjectStatsHud = snapshot.showObjectStatsHud;
+    built.showChartInfoHud = snapshot.showChartInfoHud;
+    // Reconstruct chart metadata from the parsed SimaiDocument so the
+    // out-of-process worker can populate the chart info HUD without
+    // shipping the strings separately. Per-difficulty designer takes
+    // precedence over the document-level &des field; the difficulty
+    // label is composed from the short name + per-difficulty level.
+    built.chartTitle = document.title;
+    built.chartArtist = document.artist;
+    built.chartDesigner = !difficulty->designer.isEmpty()
+        ? difficulty->designer
+        : document.designer;
+    const QString diffShortName = SimaiDocument::difficultyShortName(snapshot.difficultyId);
+    const QString diffLevel = difficulty->level.trimmed();
+    if (!diffShortName.isEmpty() || !diffLevel.isEmpty()) {
+        built.chartDifficultyLabel = QStringLiteral("%1 %2")
+            .arg(diffShortName, diffLevel)
+            .trimmed();
+    }
     built.skinLoadWaitMs = qBound(0, snapshot.skinLoadWaitMs, 20000);
     built.clockCount = miacode::chart_clock::clockCountFromDocument(document);
     built.clockBpm = miacode::chart_clock::clockBpmForChart(document, difficulty->chart);

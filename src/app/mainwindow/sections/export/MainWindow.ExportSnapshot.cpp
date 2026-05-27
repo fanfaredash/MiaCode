@@ -421,6 +421,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     );
     built.showTimestamp = requestedTask.showTimestamp;
     built.showObjectStatsHud = requestedTask.showObjectStatsHud;
+    built.showChartInfoHud = requestedTask.showChartInfoHud;
     built.skinLoadWaitMs = requestedTask.skinLoadWaitMs;
 
     if (built.skinDirectory.trimmed().isEmpty()) {
@@ -635,6 +636,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
     );
     built.showTimestamp = requestedTask.showTimestamp;
     built.showObjectStatsHud = requestedTask.showObjectStatsHud;
+    built.showChartInfoHud = requestedTask.showChartInfoHud;
     built.skinLoadWaitMs = requestedTask.skinLoadWaitMs;
 
     if (built.skinDirectory.trimmed().isEmpty()) {
@@ -823,6 +825,23 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     task.fps = request.fps;
     task.showTimestamp = request.showTimestamp;
     task.showObjectStatsHud = request.showObjectStatsHud;
+    task.showChartInfoHud = request.showChartInfoHud;
+    task.chartTitle = owner_.document_.title;
+    task.chartArtist = owner_.document_.artist;
+    if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId)) {
+        task.chartDesigner = !difficulty->designer.isEmpty()
+            ? difficulty->designer
+            : owner_.document_.designer;
+        const QString diffShort = SimaiDocument::difficultyShortName(difficultyId);
+        const QString diffLevel = difficulty->level.trimmed();
+        if (!diffShort.isEmpty() || !diffLevel.isEmpty()) {
+            task.chartDifficultyLabel = QStringLiteral("%1 %2")
+                .arg(diffShort, diffLevel)
+                .trimmed();
+        }
+    } else {
+        task.chartDesigner = owner_.document_.designer;
+    }
     task.outputPath = outputPath;
     task.clockCount = miacode::chart_clock::clockCountFromDocument(owner_.document_);
     if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId)) {

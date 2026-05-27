@@ -587,6 +587,10 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
                                 mediaImagePath, mediaVideoPath,
                                 mediaKindValue, mediaVisible, mediaSerial,
                                 snapshot);
+                            miacode::preview::ipc::projectChartInfoToSerial(
+                                fs.chartTitle, fs.chartArtist,
+                                fs.chartDifficultyLabel, fs.chartDesigner,
+                                snapshot);
                             previewWorkerSupervisor_->publishSnapshot(snapshot);
                             // Re-push popup geometry every tick so DPI /
                             // zoom changes propagate even when their

@@ -45,6 +45,12 @@ private:
     void browseOutputDirectory();
     void removeSelectedChartDirectories();
     void clearChartDirectories();
+    // Re-stamp each row's display text as "[N] <path>" so the user can
+    // see at a glance how many folders are queued. Storage stays in
+    // Qt::UserRole (the raw normalized path); only the visible label
+    // carries the numbering. Call after any add/remove that changes
+    // the row count.
+    void refreshChartDirectoryNumbering();
     void startExport();
     bool applyUiToTask(VideoExportTask* task, QString* errorMessage) const;
     void loadPersistedSettings();
@@ -80,6 +86,7 @@ private:
     VideoExportPreset selectedPreset_ = VideoExportPreset::Fast;
     QCheckBox* showTimestampCheck_ = nullptr;
     QCheckBox* showObjectStatsCheck_ = nullptr;
+    QCheckBox* showChartInfoCheck_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
     QToolButton* backgroundScaleModeButton_ = nullptr;
     QMenu* backgroundScaleModeMenu_ = nullptr;

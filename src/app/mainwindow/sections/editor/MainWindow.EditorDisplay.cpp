@@ -385,6 +385,8 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.previewShowTimestamp_ = true;
     state_.previewShowObjectStatsHud_ = false;
     state_.exportShowObjectStatsHud_ = false;
+    state_.previewShowChartInfoHud_ = false;
+    state_.exportShowChartInfoHud_ = false;
     state_.previewShowValidationSummary_ = true;
     state_.chartNormalizeStartAtNewMeasure_ = true;
     state_.chartNormalizeReduceTo384Grid_ = false;
@@ -569,6 +571,15 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     const bool unifiedObjectStatsHud = state_.previewShowObjectStatsHud_ || state_.exportShowObjectStatsHud_;
     state_.previewShowObjectStatsHud_ = unifiedObjectStatsHud;
     state_.exportShowObjectStatsHud_ = unifiedObjectStatsHud;
+    if (preview.value("show_chart_info_preview").isBool()) {
+        state_.previewShowChartInfoHud_ = preview.value("show_chart_info_preview").toBool(false);
+    }
+    if (preview.value("show_chart_info_export").isBool()) {
+        state_.exportShowChartInfoHud_ = preview.value("show_chart_info_export").toBool(false);
+    }
+    const bool unifiedChartInfoHud = state_.previewShowChartInfoHud_ || state_.exportShowChartInfoHud_;
+    state_.previewShowChartInfoHud_ = unifiedChartInfoHud;
+    state_.exportShowChartInfoHud_ = unifiedChartInfoHud;
     if (preview.value("show_validation_summary").isBool()) {
         state_.previewShowValidationSummary_ = preview.value("show_validation_summary").toBool(true);
     }
@@ -691,6 +702,8 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("show_timestamp", state_.previewShowTimestamp_);
     preview.insert("show_object_stats_preview", state_.previewShowObjectStatsHud_);
     preview.insert("show_object_stats_export", state_.exportShowObjectStatsHud_);
+    preview.insert("show_chart_info_preview", state_.previewShowChartInfoHud_);
+    preview.insert("show_chart_info_export", state_.exportShowChartInfoHud_);
     preview.insert("show_validation_summary", state_.previewShowValidationSummary_);
     preview.insert("follow_preview", state_.previewFollowEnabled_);
     preview.insert("viewport_lock", state_.previewViewportLockEnabled_);
