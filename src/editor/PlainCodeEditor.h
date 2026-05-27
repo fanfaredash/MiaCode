@@ -52,6 +52,17 @@ public:
     void setImeInputDisabled(bool disabled);
     bool imeInputDisabled() const { return imeInputDisabled_; }
     void setEditorOverwriteMode(bool enabled);
+    // Auto-close brackets — when the user types {, [, or (, the matching
+    // closing bracket is inserted right after and the caret stays
+    // between the pair. Default on; controlled via the editor section
+    // of the Preferences dialog.
+    void setAutoCloseBracketsEnabled(bool enabled);
+    bool autoCloseBracketsEnabled() const { return autoCloseBracketsEnabled_; }
+    // simai hold shortcut — typing 'h' auto-inserts '[]' after it and
+    // parks the caret between the square brackets. Independent toggle
+    // from the generic bracket auto-close above.
+    void setAutoInsertSquareAfterHEnabled(bool enabled);
+    bool autoInsertSquareAfterHEnabled() const { return autoInsertSquareAfterHEnabled_; }
 
 signals:
     void undoShortcutRequested();
@@ -94,6 +105,8 @@ private:
     int topOverlayInsetPixels_ = 0;
     bool halfWidthInputEnabled_ = true;
     bool imeInputDisabled_ = false;
+    bool autoCloseBracketsEnabled_ = true;
+    bool autoInsertSquareAfterHEnabled_ = true;
     QList<QAction*> batchTransformActions_;
     QList<QAction*> moreBatchTransformActions_;
     QRect lastCurrentLineHighlightRect_;

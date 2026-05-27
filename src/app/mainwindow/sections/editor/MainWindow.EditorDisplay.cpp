@@ -261,7 +261,8 @@ void MainWindow::EditorSection::loadPortableState()
     resetPortablePreviewSettingsToDefaults();
     state_.editorLineSpacingFactor_ = kEditorLineSpacingFactorDefault;
     state_.editorOverwriteModeEnabled_ = false;
-    state_.preserveDifficultySwitchView_ = true;
+    state_.editorAutoCloseBracketsEnabled_ = true;
+    state_.editorAutoInsertSquareAfterHEnabled_ = true;
     state_.editorTextFontPointSize_ = qBound(
         kEditorTextFontSizeMin,
         state_.editorTextFontPointSize_ > 0 ? state_.editorTextFontPointSize_ : editorFont().pointSize(),
@@ -287,15 +288,18 @@ void MainWindow::EditorSection::loadPortableState()
     }
     state_.editorHalfWidthInputEnabled_ = ui.value("editor_half_width_input").toBool(true);
     state_.editorOverwriteModeEnabled_ = ui.value("editor_overwrite_mode").toBool(false);
+    state_.editorAutoCloseBracketsEnabled_ = ui.value("editor_auto_close_brackets").toBool(true);
+    state_.editorAutoInsertSquareAfterHEnabled_ = ui.value("editor_auto_insert_square_after_h").toBool(true);
     // [BETA51 IME-DISABLE: DISABLED PENDING FIX] state stays at its default
     // false; any existing `editor_ime_input_disabled` value in preferences.json
     // is intentionally ignored until the WA_InputMethodEnabled approach is
     // replaced with one that actually blocks Windows CJK IMEs.
     // state_.editorImeInputDisabled_ = ui.value("editor_ime_input_disabled").toBool(false);
-    state_.preserveDifficultySwitchView_ = ui.value("preserve_difficulty_switch_view").toBool(true);
     applyEditorTextFontSize(state_.editorTextFontPointSize_, false);
     applyEditorHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_, false);
     applyEditorOverwriteModeEnabled(state_.editorOverwriteModeEnabled_, false);
+    applyEditorAutoCloseBracketsEnabled(state_.editorAutoCloseBracketsEnabled_, false);
+    applyEditorAutoInsertSquareAfterHEnabled(state_.editorAutoInsertSquareAfterHEnabled_, false);
     // applyEditorImeInputDisabled(state_.editorImeInputDisabled_, false);
 
     const QString dir = app.value("last_open_dir").toString();
@@ -627,12 +631,13 @@ void MainWindow::EditorSection::savePortableState() const
     ui.insert("editor_line_spacing_factor", state_.editorLineSpacingFactor_);
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
+    ui.insert("editor_auto_close_brackets", state_.editorAutoCloseBracketsEnabled_);
+    ui.insert("editor_auto_insert_square_after_h", state_.editorAutoInsertSquareAfterHEnabled_);
     // [BETA51 IME-DISABLE: DISABLED PENDING FIX] don't persist while feature
     // is off — leaves any pre-existing `editor_ime_input_disabled` key in the
     // JSON untouched (we just don't write or read it). Re-enable along with
     // the load/apply sites once the platform IME blocker is replaced.
     // ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);
-    ui.insert("preserve_difficulty_switch_view", state_.preserveDifficultySwitchView_);
     root.insert("ui", ui);
 
     app.insert("last_open_dir", state_.lastOpenDir_);
@@ -737,10 +742,11 @@ void MainWindow::EditorSection::persistEditorTextFontPreference() const
     ui.insert("editor_line_spacing_factor", state_.editorLineSpacingFactor_);
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
+    ui.insert("editor_auto_close_brackets", state_.editorAutoCloseBracketsEnabled_);
+    ui.insert("editor_auto_insert_square_after_h", state_.editorAutoInsertSquareAfterHEnabled_);
     // [BETA51 IME-DISABLE: DISABLED PENDING FIX] see saveState() and
     // loadPortableState() for the rationale.
     // ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);
-    ui.insert("preserve_difficulty_switch_view", state_.preserveDifficultySwitchView_);
     root.insert("ui", ui);
     UiText::savePreferencesObject(root);
 }
@@ -824,6 +830,34 @@ void MainWindow::EditorSection::applyEditorOverwriteModeEnabled(bool enabled, bo
     }
 }
 
+void MainWindow::EditorSection::applyEditorAutoCloseBracketsEnabled(bool enabled, bool persistPreference)
+{
+    state_.editorAutoCloseBracketsEnabled_ = enabled;
+    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
+        editor->setAutoCloseBracketsEnabled(enabled);
+    }
+    if (ui_.copyAreaEditor_ != nullptr) {
+        ui_.copyAreaEditor_->setAutoCloseBracketsEnabled(enabled);
+    }
+    if (persistPreference) {
+        persistEditorTextFontPreference();
+    }
+}
+
+void MainWindow::EditorSection::applyEditorAutoInsertSquareAfterHEnabled(bool enabled, bool persistPreference)
+{
+    state_.editorAutoInsertSquareAfterHEnabled_ = enabled;
+    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
+        editor->setAutoInsertSquareAfterHEnabled(enabled);
+    }
+    if (ui_.copyAreaEditor_ != nullptr) {
+        ui_.copyAreaEditor_->setAutoInsertSquareAfterHEnabled(enabled);
+    }
+    if (persistPreference) {
+        persistEditorTextFontPreference();
+    }
+}
+
 void MainWindow::EditorSection::applyEditorImeInputDisabled(bool disabled, bool persistPreference)
 {
     // [BETA51 IME-DISABLE: DISABLED PENDING FIX]
@@ -851,20 +885,6 @@ void MainWindow::EditorSection::applyEditorImeInputDisabled(bool disabled, bool 
         persistEditorTextFontPreference();
     }
 #endif
-}
-
-void MainWindow::EditorSection::applyPreserveDifficultySwitchView(bool enabled, bool persistPreference)
-{
-    state_.preserveDifficultySwitchView_ = enabled;
-    if (!persistPreference) {
-        return;
-    }
-
-    QJsonObject root = UiText::loadPreferencesObject();
-    QJsonObject ui = root.value("ui").toObject();
-    ui.insert("preserve_difficulty_switch_view", state_.preserveDifficultySwitchView_);
-    root.insert("ui", ui);
-    UiText::savePreferencesObject(root);
 }
 
 void MainWindow::EditorSection::refreshEditorBookmarkLines()
@@ -1094,6 +1114,8 @@ void MainWindow::EditorSection::showCreateBookmarkDialog()
     connect(edit, &PlainCodeEditor::editorOverwriteModeChanged, &owner_, [this](bool enabled) {
         applyEditorOverwriteModeEnabled(enabled, true);
     });
+    edit->setAutoCloseBracketsEnabled(state_.editorAutoCloseBracketsEnabled_);
+    edit->setAutoInsertSquareAfterHEnabled(state_.editorAutoInsertSquareAfterHEnabled_);
     edit->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("书签内容") : QStringLiteral("Bookmark notes"));
     edit->setStyleSheet(UiTheme::editorTextEditStyleSheet());
     if (auto* vbar = edit->verticalScrollBar()) {
@@ -1274,6 +1296,8 @@ void MainWindow::EditorSection::syncCopyAreaEditorAppearance()
     // on the platform-default IME state while the toggle is gated off.
     // ui_.copyAreaEditor_->setImeInputDisabled(state_.editorImeInputDisabled_);
     ui_.copyAreaEditor_->setEditorOverwriteMode(state_.editorOverwriteModeEnabled_);
+    ui_.copyAreaEditor_->setAutoCloseBracketsEnabled(state_.editorAutoCloseBracketsEnabled_);
+    ui_.copyAreaEditor_->setAutoInsertSquareAfterHEnabled(state_.editorAutoInsertSquareAfterHEnabled_);
     ui_.copyAreaEditor_->refreshLineNumberAreaLayout();
 }
 
@@ -1345,14 +1369,19 @@ void MainWindow::applyEditorOverwriteModeEnabled(bool enabled, bool persistPrefe
     editorSection_->applyEditorOverwriteModeEnabled(enabled, persistPreference);
 }
 
+void MainWindow::applyEditorAutoCloseBracketsEnabled(bool enabled, bool persistPreference)
+{
+    editorSection_->applyEditorAutoCloseBracketsEnabled(enabled, persistPreference);
+}
+
+void MainWindow::applyEditorAutoInsertSquareAfterHEnabled(bool enabled, bool persistPreference)
+{
+    editorSection_->applyEditorAutoInsertSquareAfterHEnabled(enabled, persistPreference);
+}
+
 void MainWindow::applyEditorImeInputDisabled(bool disabled, bool persistPreference)
 {
     editorSection_->applyEditorImeInputDisabled(disabled, persistPreference);
-}
-
-void MainWindow::applyPreserveDifficultySwitchView(bool enabled, bool persistPreference)
-{
-    editorSection_->applyPreserveDifficultySwitchView(enabled, persistPreference);
 }
 
 void MainWindow::showCreateBookmarkDialog()

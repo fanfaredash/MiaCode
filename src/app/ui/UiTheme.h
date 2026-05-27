@@ -106,6 +106,14 @@ QIcon dialogTransportPauseIcon(const QColor& color);
 QIcon dialogTransportStopIcon(const QColor& color);
 QString preferencesDialogStyleSheet();
 QString settingsDialogStyleSheet();
+// Reusable QTabWidget/QTabBar styling for dialog tab strips. Append
+// to a dialog's own stylesheet so callers don't have to re-derive the
+// same selectors. Used by both the render-settings dialog (视频/游戏)
+// and the preferences dialog (外观/编辑器/性能/快捷键) so the two read
+// as one consistent pattern. Pass the dialog's own backdrop color so
+// unselected tabs read as a piece of the dialog chrome rather than a
+// foreign color band.
+QString dialogTabStripStyleSheet(const QColor& dialogBackground);
 QString aboutDialogStyleSheet();
 QString exportDialogStyleSheet();
 QString designerPickerDialogStyleSheet();

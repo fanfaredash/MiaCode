@@ -410,8 +410,9 @@ private:
     void applyEditorLineSpacingFactor(double factor, bool persistPreference);
     void applyEditorHalfWidthInputEnabled(bool enabled, bool persistPreference);
     void applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference);
+    void applyEditorAutoCloseBracketsEnabled(bool enabled, bool persistPreference);
+    void applyEditorAutoInsertSquareAfterHEnabled(bool enabled, bool persistPreference);
     void applyEditorImeInputDisabled(bool disabled, bool persistPreference);
-    void applyPreserveDifficultySwitchView(bool enabled, bool persistPreference);
     void showCreateBookmarkDialog();
     void showBookmarkManager();
     void openBookmarkAtLine(int line);

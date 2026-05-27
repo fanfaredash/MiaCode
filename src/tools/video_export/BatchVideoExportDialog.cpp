@@ -723,7 +723,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
 
     QWidget* judgeLineOption = createSliderOption(
         optionsCard,
-        uiText("dialog.video_export.option.layout_size", QStringLiteral("Judge Line Size")),
+        uiText("dialog.video_export.option.layout_size", QStringLiteral("Stage Display Scale")),
         qRound(miacode::preview_video::normalizedLayoutSquareScale(baseTask_.layoutSquareScale) * 100.0),
         &layoutSquareScaleSlider_,
         &layoutSquareScaleValueLabel_

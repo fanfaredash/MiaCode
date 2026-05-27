@@ -338,10 +338,22 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     editorValidationErrorLayout->setSpacing(6);
     editorValidationErrorIconLabel_ = new QLabel(editorValidationErrorGroup);
     editorValidationErrorIconLabel_->setFixedSize(14, 14);
+    editorValidationErrorIconLabel_->setCursor(Qt::PointingHandCursor);
+    editorValidationErrorIconLabel_->installEventFilter(this);
+    const QString jumpToValidationToolTip = UiText::isChineseUi()
+        ? QStringLiteral("点击跳转到「语法」选项卡")
+        : QStringLiteral("Click to open the Syntax tab");
+    const QString jumpToMuriToolTip = UiText::isChineseUi()
+        ? QStringLiteral("点击跳转到「无理」选项卡")
+        : QStringLiteral("Click to open the Muri tab");
+    editorValidationErrorIconLabel_->setToolTip(jumpToValidationToolTip);
     editorValidationErrorCountLabel_ = new QLabel(QStringLiteral("0"), editorValidationErrorGroup);
     editorValidationErrorCountLabel_->setFont(uiMonoFont(10, QFont::DemiBold));
     editorValidationErrorCountLabel_->setFixedWidth(summaryCountReserveWidth);
     editorValidationErrorCountLabel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    editorValidationErrorCountLabel_->setCursor(Qt::PointingHandCursor);
+    editorValidationErrorCountLabel_->installEventFilter(this);
+    editorValidationErrorCountLabel_->setToolTip(jumpToValidationToolTip);
     editorValidationErrorLayout->addWidget(editorValidationErrorIconLabel_, 0, Qt::AlignVCenter);
     editorValidationErrorLayout->addWidget(editorValidationErrorCountLabel_, 0, Qt::AlignVCenter);
     editorValidationErrorGroup->setFixedWidth(14 + 6 + summaryCountReserveWidth);
@@ -353,10 +365,16 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     editorValidationWarningLayout->setSpacing(3);
     editorValidationWarningIconLabel_ = new QLabel(editorValidationWarningGroup);
     editorValidationWarningIconLabel_->setFixedSize(14, 14);
+    editorValidationWarningIconLabel_->setCursor(Qt::PointingHandCursor);
+    editorValidationWarningIconLabel_->installEventFilter(this);
+    editorValidationWarningIconLabel_->setToolTip(jumpToValidationToolTip);
     editorValidationWarningCountLabel_ = new QLabel(QStringLiteral("0"), editorValidationWarningGroup);
     editorValidationWarningCountLabel_->setFont(uiMonoFont(10, QFont::DemiBold));
     editorValidationWarningCountLabel_->setFixedWidth(summaryCountReserveWidth);
     editorValidationWarningCountLabel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    editorValidationWarningCountLabel_->setCursor(Qt::PointingHandCursor);
+    editorValidationWarningCountLabel_->installEventFilter(this);
+    editorValidationWarningCountLabel_->setToolTip(jumpToValidationToolTip);
     editorValidationWarningLayout->addWidget(editorValidationWarningIconLabel_, 0, Qt::AlignVCenter);
     editorValidationWarningLayout->addWidget(editorValidationWarningCountLabel_, 0, Qt::AlignVCenter);
     editorValidationWarningGroup->setFixedWidth(14 + 3 + summaryCountReserveWidth);
@@ -368,10 +386,16 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     editorValidationMuriLayout->setSpacing(4);
     editorValidationMuriIconLabel_ = new QLabel(editorValidationMuriGroup);
     editorValidationMuriIconLabel_->setFixedSize(14, 14);
+    editorValidationMuriIconLabel_->setCursor(Qt::PointingHandCursor);
+    editorValidationMuriIconLabel_->installEventFilter(this);
+    editorValidationMuriIconLabel_->setToolTip(jumpToMuriToolTip);
     editorValidationMuriCountLabel_ = new QLabel(QStringLiteral("0"), editorValidationMuriGroup);
     editorValidationMuriCountLabel_->setFont(uiMonoFont(10, QFont::DemiBold));
     editorValidationMuriCountLabel_->setFixedWidth(summaryCountReserveWidth);
     editorValidationMuriCountLabel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    editorValidationMuriCountLabel_->setCursor(Qt::PointingHandCursor);
+    editorValidationMuriCountLabel_->installEventFilter(this);
+    editorValidationMuriCountLabel_->setToolTip(jumpToMuriToolTip);
     editorValidationMuriLayout->addWidget(editorValidationMuriIconLabel_, 0, Qt::AlignVCenter);
     editorValidationMuriLayout->addWidget(editorValidationMuriCountLabel_, 0, Qt::AlignVCenter);
     editorValidationMuriGroup->setFixedWidth(14 + 4 + summaryCountReserveWidth);

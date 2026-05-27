@@ -412,6 +412,37 @@ void MainWindow::WindowSection::restoreFocusedTextEditStateAttempt(
 bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
 {
     auto* watchedWidget = qobject_cast<QWidget*>(watched);
+    // Top header validation/muri summary icons + counts route a left-button
+    // press to the matching bottom panel tab so the user can jump straight
+    // from the "?" / "!" badge into the issue list. The icons are only
+    // visible (and thus event-deliverable) when their count > 0, so we
+    // don't need an extra emptiness gate here.
+    if (event != nullptr
+        && event->type() == QEvent::MouseButtonRelease
+        && watchedWidget != nullptr) {
+        auto* mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent != nullptr
+            && mouseEvent->button() == Qt::LeftButton
+            && watchedWidget->rect().contains(mouseEvent->pos())) {
+            const bool isErrorBadge =
+                watched == owner_.editorValidationErrorIconLabel_
+                || watched == owner_.editorValidationErrorCountLabel_;
+            const bool isWarningBadge =
+                watched == owner_.editorValidationWarningIconLabel_
+                || watched == owner_.editorValidationWarningCountLabel_;
+            const bool isMuriBadge =
+                watched == owner_.editorValidationMuriIconLabel_
+                || watched == owner_.editorValidationMuriCountLabel_;
+            if (isErrorBadge || isWarningBadge) {
+                owner_.setCurrentBottomTabsTabId(MainWindow::BottomTabsTabId::Validation);
+                return true;
+            }
+            if (isMuriBadge) {
+                owner_.setCurrentBottomTabsTabId(MainWindow::BottomTabsTabId::Muri);
+                return true;
+            }
+        }
+    }
     if (owner_.runtimeDebugOutputEnabled_
         && event != nullptr
         && (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut)

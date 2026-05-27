@@ -387,33 +387,31 @@ void MainWindow::PreferencesSection::onPreferences()
     rootLayout->setSpacing(10);
     rootLayout->setSizeConstraint(QLayout::SetFixedSize);
 
-    auto* contentRow = new QWidget(&dialog);
-    auto* contentLayout = new QHBoxLayout(contentRow);
-    contentLayout->setContentsMargins(0, 0, 0, 0);
-    contentLayout->setSpacing(12);
-    auto* categoryColumn = new QWidget(contentRow);
-    auto* categoryColumnLayout = new QVBoxLayout(categoryColumn);
-    categoryColumnLayout->setContentsMargins(0, 24, 0, 0);
-    categoryColumnLayout->setSpacing(0);
-    auto* categoryList = new QListWidget(categoryColumn);
-    categoryList->setObjectName(QStringLiteral("PreferenceCategoryList"));
-    categoryList->setFixedWidth(88);
-    categoryList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    categoryList->setSelectionMode(QAbstractItemView::SingleSelection);
-    categoryList->addItem(uiText("dialog.preferences.interface_group", "Appearance"));
-    categoryList->addItem(uiText("dialog.preferences.editor_group", "Editor"));
-    categoryList->addItem(uiText("dialog.preferences.performance_group", "Performance"));
-    categoryList->addItem(uiText("dialog.preferences.shortcuts_group", "Shortcuts"));
-    categoryList->setSpacing(2);
-    for (int index = 0; index < categoryList->count(); ++index) {
-        categoryList->item(index)->setSizeHint(QSize(0, 30));
-    }
-    auto* pageStack = new QStackedWidget(contentRow);
-    pageStack->setObjectName(QStringLiteral("PreferencePageStack"));
-    categoryColumnLayout->addWidget(categoryList, 0, Qt::AlignTop);
-    contentLayout->addWidget(categoryColumn, 0);
-    contentLayout->addWidget(pageStack, 1);
-    rootLayout->addWidget(contentRow);
+    // Tab strip across the top — matches the render-settings dialog so
+    // the two preference-style surfaces share one visual pattern. The
+    // shared CSS lives in UiTheme::dialogTabStripStyleSheet(), already
+    // appended to the preferences stylesheet. We still call the page
+    // container `pageStack` to keep the downstream addWidget()/setCurrent
+    // call sites intact; addTab() does the same wrapping under the hood.
+    auto* pageStack = new QTabWidget(&dialog);
+    pageStack->setObjectName(QStringLiteral("PreferenceTabs"));
+    rootLayout->addWidget(pageStack);
+
+    // Each preference page wraps its controls in a QGroupBox whose
+    // title duplicates the tab name (e.g. "外观" inside the "外观"
+    // tab). The tab strip already labels the page, so strip the inner
+    // title + frame chrome before the group enters the tab. Same
+    // recipe as the render-settings dialog.
+    const auto flattenPageGroup = [](QGroupBox* group) {
+        if (group == nullptr) {
+            return;
+        }
+        group->setTitle(QString());
+        group->setFlat(true);
+        group->setStyleSheet(QStringLiteral(
+            "QGroupBox { border: none; margin-top: 0; padding-top: 0; }"
+        ));
+    };
 
     auto* appearancePage = new QWidget(pageStack);
     auto* appearancePageLayout = new QVBoxLayout(appearancePage);
@@ -537,9 +535,10 @@ void MainWindow::PreferencesSection::onPreferences()
     themeRowLayout->addWidget(themeButton, 0);
     themeRowLayout->addStretch(1);
     interfaceLayout->addRow(themeLabelWidget, themeRow);
+    flattenPageGroup(interfaceGroup);
     appearancePageLayout->addWidget(interfaceGroup);
     appearancePageLayout->addStretch(1);
-    pageStack->addWidget(appearancePage);
+    pageStack->addTab(appearancePage, uiText("dialog.preferences.interface_group", "Appearance"));
 
     auto* editorPage = new QWidget(pageStack);
     auto* editorPageLayout = new QVBoxLayout(editorPage);
@@ -554,9 +553,9 @@ void MainWindow::PreferencesSection::onPreferences()
     int selectedEditorFontSize = state_.editorTextFontPointSize_;
     double selectedEditorLineSpacingFactor = state_.editorLineSpacingFactor_;
     bool selectedEditorHalfWidthInputEnabled = state_.editorHalfWidthInputEnabled_;
-    bool selectedEditorOverwriteModeEnabled = state_.editorOverwriteModeEnabled_;
+    bool selectedAutoCloseBracketsEnabled = state_.editorAutoCloseBracketsEnabled_;
+    bool selectedAutoInsertSquareAfterHEnabled = state_.editorAutoInsertSquareAfterHEnabled_;
     bool selectedIgnoreMuriIssuePrompts = state_.ignoreMuriIssuePrompts_;
-    bool selectedPreserveDifficultySwitchView = state_.preserveDifficultySwitchView_;
 
     auto* editorFontSizeLabel = new QLabel(uiText("dialog.preferences.editor_font_size", "Text Font Size"), editorGroup);
     auto* fontSizeRow = new QWidget(editorGroup);
@@ -615,18 +614,31 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(QString(), halfWidthInputCheckbox);
 
-    auto* overwriteModeCheckbox = new QCheckBox(
-        uiText("dialog.preferences.editor_overwrite_mode", "Overwrite mode"),
+    auto* autoCloseBracketsCheckbox = new QCheckBox(
+        uiText("dialog.preferences.editor_auto_close_brackets", "Auto-close brackets"),
         editorGroup
     );
-    overwriteModeCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    overwriteModeCheckbox->setChecked(selectedEditorOverwriteModeEnabled);
-    connect(overwriteModeCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
-        selectedEditorOverwriteModeEnabled = checked;
-        owner_.applyEditorOverwriteModeEnabled(selectedEditorOverwriteModeEnabled, true);
+    autoCloseBracketsCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    autoCloseBracketsCheckbox->setChecked(selectedAutoCloseBracketsEnabled);
+    connect(autoCloseBracketsCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
+        selectedAutoCloseBracketsEnabled = checked;
+        owner_.applyEditorAutoCloseBracketsEnabled(selectedAutoCloseBracketsEnabled, true);
         owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
     });
-    editorLayout->addRow(QString(), overwriteModeCheckbox);
+    editorLayout->addRow(QString(), autoCloseBracketsCheckbox);
+
+    auto* autoInsertSquareAfterHCheckbox = new QCheckBox(
+        uiText("dialog.preferences.editor_auto_insert_square_after_h", "Auto-insert [] after typing h"),
+        editorGroup
+    );
+    autoInsertSquareAfterHCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    autoInsertSquareAfterHCheckbox->setChecked(selectedAutoInsertSquareAfterHEnabled);
+    connect(autoInsertSquareAfterHCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
+        selectedAutoInsertSquareAfterHEnabled = checked;
+        owner_.applyEditorAutoInsertSquareAfterHEnabled(selectedAutoInsertSquareAfterHEnabled, true);
+        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+    });
+    editorLayout->addRow(QString(), autoInsertSquareAfterHCheckbox);
 
     auto* ignoreMuriIssuePromptsCheckbox = new QCheckBox(
         UiText::isChineseUi()
@@ -677,19 +689,6 @@ void MainWindow::PreferencesSection::onPreferences()
     // });
     // editorLayout->addRow(QString(), imeInputDisabledCheckbox);
 
-    auto* preserveDifficultySwitchViewCheckbox = new QCheckBox(
-        uiText("dialog.preferences.preserve_difficulty_switch_view", "Preserve editor position and preview progress when switching difficulties"),
-        editorGroup
-    );
-    preserveDifficultySwitchViewCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    preserveDifficultySwitchViewCheckbox->setChecked(selectedPreserveDifficultySwitchView);
-    connect(preserveDifficultySwitchViewCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
-        selectedPreserveDifficultySwitchView = checked;
-        owner_.applyPreserveDifficultySwitchView(selectedPreserveDifficultySwitchView, true);
-        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
-    });
-    editorLayout->addRow(QString(), preserveDifficultySwitchViewCheckbox);
-
     // The preferences dialog font spin-box reuses the editor.font_* shortcut
     // IDs so a single binding controls both the editor and the dialog —
     // there is no longer a separate preferences.font_* registry entry.
@@ -711,9 +710,10 @@ void MainWindow::PreferencesSection::onPreferences()
     connect(dialogIncreaseShortcut, &QShortcut::activated, &dialog, [editorFontSizeSpin]() {
         editorFontSizeSpin->setValue(editorFontSizeSpin->value() + 1);
     });
+    flattenPageGroup(editorGroup);
     editorPageLayout->addWidget(editorGroup);
     editorPageLayout->addStretch(1);
-    pageStack->addWidget(editorPage);
+    pageStack->addTab(editorPage, uiText("dialog.preferences.editor_group", "Editor"));
 
     auto* performancePage = new QWidget(pageStack);
     auto* performancePageLayout = new QVBoxLayout(performancePage);
@@ -844,9 +844,10 @@ void MainWindow::PreferencesSection::onPreferences()
             owner_.setTimelineFrameRateMode(mode, true);
         }
     );
+    flattenPageGroup(performanceGroup);
     performancePageLayout->addWidget(performanceGroup);
     performancePageLayout->addStretch(1);
-    pageStack->addWidget(performancePage);
+    pageStack->addTab(performancePage, uiText("dialog.preferences.performance_group", "Performance"));
 
     auto* shortcutsPage = new QWidget(pageStack);
     auto* shortcutsPageLayout = new QVBoxLayout(shortcutsPage);
@@ -862,9 +863,10 @@ void MainWindow::PreferencesSection::onPreferences()
     resetShortcutsButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     shortcutsLayout->addWidget(editShortcutsButton, 0, Qt::AlignLeft);
     shortcutsLayout->addWidget(resetShortcutsButton, 0, Qt::AlignLeft);
+    flattenPageGroup(shortcutsGroup);
     shortcutsPageLayout->addWidget(shortcutsGroup);
     shortcutsPageLayout->addStretch(1);
-    pageStack->addWidget(shortcutsPage);
+    pageStack->addTab(shortcutsPage, uiText("dialog.preferences.shortcuts_group", "Shortcuts"));
 
     const auto openShortcutEditDialog = [&]() {
         QDialog shortcutsDialog(&dialog);
@@ -1097,8 +1099,7 @@ void MainWindow::PreferencesSection::onPreferences()
         }
     });
 
-    QObject::connect(categoryList, &QListWidget::currentRowChanged, pageStack, &QStackedWidget::setCurrentIndex);
-    categoryList->setCurrentRow(0);
+    pageStack->setCurrentIndex(0);
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
     UiDialogs::localizeButtonBox(buttonBox);

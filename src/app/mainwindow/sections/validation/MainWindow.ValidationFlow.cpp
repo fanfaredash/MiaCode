@@ -953,6 +953,10 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
               "editor.validation_summary.tooltip",
               "%1 error(s), %2 warning(s)"
           ).arg(errorCount).arg(warningCount);
+    const QString jumpHint = UiText::isChineseUi()
+        ? QStringLiteral("点击图标可跳转到对应选项卡")
+        : QStringLiteral("Click an icon to jump to its tab");
+    const QString summaryTooltipWithJump = summaryTooltip + QStringLiteral("\n") + jumpHint;
     const bool showSummary = state_.previewShowValidationSummary_ && (showError || showWarning || showMuri);
     ui_.editorValidationSummaryWidget_->setProperty("hasContent", showSummary);
     ui_.editorValidationSummaryWidget_->setToolTip(summaryTooltip);
@@ -985,7 +989,7 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
         });
     }
 
-    const auto applySlot = [showSummary, &summaryTooltip](QLabel* icon, QLabel* count, const SummaryEntry* entry) {
+    const auto applySlot = [showSummary, &summaryTooltipWithJump](QLabel* icon, QLabel* count, const SummaryEntry* entry) {
         const bool occupied = showSummary && entry != nullptr && entry->count > 0;
         if (icon != nullptr) {
             if (occupied) {
@@ -995,7 +999,7 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
             }
             icon->setProperty("hasContent", occupied);
             icon->setVisible(occupied);
-            icon->setToolTip(summaryTooltip);
+            icon->setToolTip(summaryTooltipWithJump);
         }
         if (count != nullptr) {
             if (occupied) {
@@ -1007,7 +1011,7 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
             }
             count->setProperty("hasContent", occupied);
             count->setVisible(occupied);
-            count->setToolTip(summaryTooltip);
+            count->setToolTip(summaryTooltipWithJump);
         }
     };
     const SummaryEntry* slot0 = visibleEntries.size() > 0 ? &visibleEntries[0] : nullptr;

@@ -1277,7 +1277,13 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
     dialog.setWindowTitle(title);
     dialog.setModal(true);
-    dialog.setMinimumWidth(520);
+    // Was 520 → 600 → 720. 600 still clipped "暂停时不显示PV/BG" to
+    // "暂停时不显示PV/B" because the QFormLayout's label column eats
+    // ~180px before the videoCheckRow grid even sees the field, and
+    // the field's right-half cell needs to fit a 15-char label plus
+    // the checkbox indicator + spacing. 720 leaves comfortable margin
+    // for both checkboxes per row at the dialog's default font.
+    dialog.setMinimumWidth(720);
     dialog.setStyleSheet(UiTheme::settingsDialogStyleSheet());
     owner_.windowSection_->applySystemWindowBackdrop(&dialog);
     UiDialogs::prepareDialogWindow(&dialog, &owner_);
@@ -1755,16 +1761,25 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     auto* judgeEffectMenu = new QMenu(judgeEffectButton);
     styleRoundedMenu(*judgeEffectMenu);
     // QCheckBox-in-QWidgetAction so the menu stays open during multi-selection (regular QActions auto-close).
+    // We hide the native indicator and prefix the label with √/× — visually matches the user's request to
+    // surface state via a tick / cross rather than a checkbox glyph, while preserving QCheckBox's click
+    // semantics (toggled signal, keyboard focus, accessibility role).
+    const auto judgeEffectChoiceText = [](const QString& label, bool enabled) {
+        return QStringLiteral("%1  %2")
+            .arg(enabled ? QStringLiteral("√") : QStringLiteral("×"), label);
+    };
     const auto addJudgeEffectChoice = [
         this,
         &dialog,
         judgeEffectButton,
         judgeEffectButtonLabel,
-        judgeEffectMenu
+        judgeEffectMenu,
+        judgeEffectChoiceText
     ](const QString& label, bool MuriRenderOptions::*memberPtr) {
         auto* action = new QWidgetAction(judgeEffectMenu);
-        auto* checkbox = new QCheckBox(label, judgeEffectMenu);
-        checkbox->setChecked(owner_.muriRenderOptions_.*memberPtr);
+        const bool initialChecked = owner_.muriRenderOptions_.*memberPtr;
+        auto* checkbox = new QCheckBox(judgeEffectChoiceText(label, initialChecked), judgeEffectMenu);
+        checkbox->setChecked(initialChecked);
         checkbox->setCursor(Qt::PointingHandCursor);
         const auto& c = UiTheme::colors();
         checkbox->setStyleSheet(
@@ -1773,6 +1788,13 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
                 " color: %1;"
                 " background: transparent;"
                 " padding: 6px 20px 6px 12px;"
+                " spacing: 0px;"
+                "}"
+                "QCheckBox::indicator {"
+                " width: 0px;"
+                " height: 0px;"
+                " margin: 0px;"
+                " padding: 0px;"
                 "}"
                 "QCheckBox:hover {"
                 " background: %2;"
@@ -1786,11 +1808,13 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             checkbox,
             &QCheckBox::toggled,
             &dialog,
-            [this, judgeEffectButton, judgeEffectButtonLabel, memberPtr](bool checked) {
+            [this, judgeEffectButton, judgeEffectButtonLabel, judgeEffectChoiceText,
+             checkbox, label, memberPtr](bool checked) {
                 if (owner_.muriRenderOptions_.*memberPtr == checked) {
                     return;
                 }
                 owner_.muriRenderOptions_.*memberPtr = checked;
+                checkbox->setText(judgeEffectChoiceText(label, checked));
                 judgeEffectButton->setText(judgeEffectButtonLabel());
                 owner_.applyMuriRenderOptions();
                 owner_.savePortableState();
@@ -1971,7 +1995,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     debugCheck->setChecked(owner_.previewShowDebugInfo_);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Outer Brightness"), outerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Inner Brightness"), innerBrightnessRow);
-    videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Layout Size"), layoutSquareScaleRow);
+    videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Stage Display Scale"), layoutSquareScaleRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"), scaleModeButton);
     videoFormLayout->addRow(
         uiText("dialog.render_settings.preview.canvas_frame_rate", "Preview Refresh Rate"),
@@ -2027,7 +2051,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     addGameplayField(
         2,
         0,
-        uiText("dialog.render_settings.gameplay.judge_effect", "Judge Effect"),
+        uiText("dialog.render_settings.gameplay.judge_effect", "Judge Effect Display"),
         judgeEffectButton
     );
     addGameplayField(
@@ -2044,8 +2068,38 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         rootLayout->addWidget(audioGroup, 0);
     }
     if (includeVideoSettings) {
-        rootLayout->addWidget(videoGroup, 0);
-        rootLayout->addWidget(gameplayGroup, 0);
+        // Surface the 视频 / 游戏 split as tab pages instead of two
+        // stacked QGroupBoxes — matches the Preferences dialog pattern.
+        // The groupboxes keep their layouts + children intact; we only
+        // strip their title bar and frame chrome so they read as plain
+        // tab contents (the tab strip already shows the section name).
+        const auto flattenGroup = [](QGroupBox* group) {
+            if (group == nullptr) {
+                return;
+            }
+            group->setTitle(QString());
+            group->setFlat(true);
+            // Belt + braces: setFlat() leaves a 1px top line on most
+            // styles; clearing the border via stylesheet kills that
+            // residual line so the tab pane border is the only frame
+            // the user sees.
+            group->setStyleSheet(QStringLiteral(
+                "QGroupBox { border: none; margin-top: 0; padding-top: 0; }"
+            ));
+        };
+        flattenGroup(videoGroup);
+        flattenGroup(gameplayGroup);
+        auto* videoSettingsTabs = new QTabWidget(&dialog);
+        videoSettingsTabs->setObjectName(QStringLiteral("RenderSettingsTabs"));
+        // documentMode left at the default so the QTabWidget::pane
+        // stylesheet (rounded bottom corners + no top border) actually
+        // takes effect; documentMode=true would skip drawing the pane
+        // frame and re-expose the global hair line above the tab strip.
+        videoSettingsTabs->addTab(videoGroup,
+            uiText("dialog.render_settings.video_group", "Video"));
+        videoSettingsTabs->addTab(gameplayGroup,
+            uiText("dialog.render_settings.gameplay_group", "Gameplay"));
+        rootLayout->addWidget(videoSettingsTabs, 0);
     }
     auto* buttonBox = new QDialogButtonBox(&dialog);
     QPushButton* saveLocalAudioPresetButton = nullptr;
@@ -2132,7 +2186,13 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         QPainter painter(&pixmap);
         painter.setRenderHint(QPainter::Antialiasing, true);
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor("#101010"));
+        // Theme-aware foreground: iconPrimary is the brand's "appropriate
+        // tint for an icon on the dialog backdrop" — dark on light themes,
+        // light on dark themes — so the speaker reads correctly when the
+        // user has dark mode enabled. Previously hard-coded #101010 which
+        // disappeared into the dark backdrop.
+        const QColor iconColor = UiTheme::colors().iconPrimary;
+        painter.setBrush(iconColor);
         painter.drawPolygon(QPolygonF{
             QPointF(1.5, 5.5),
             QPointF(4.4, 5.5),
@@ -2142,7 +2202,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             QPointF(1.5, 10.5),
         });
 
-        QPen pen(QColor("#101010"));
+        QPen pen(iconColor);
         pen.setWidthF(1.35);
         pen.setCapStyle(Qt::RoundCap);
         pen.setJoinStyle(Qt::RoundJoin);

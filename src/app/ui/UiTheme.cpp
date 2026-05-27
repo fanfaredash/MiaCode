@@ -750,10 +750,6 @@ QString preferencesDialogStyleSheet()
         "QGroupBox { background: %2; border: 1px solid %3; border-radius: 10px; margin-top: 12px; padding-top: 10px; font-weight: 600; }"
         "QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; }"
         "QLabel { color: %4; }"
-        "QListWidget#PreferenceCategoryList { background: %2; border: 1px solid %3; border-radius: 8px; padding: 4px; color: %4; outline: 0; }"
-        "QListWidget#PreferenceCategoryList::item { min-height: 24px; padding: 2px 8px; border-radius: 6px; }"
-        "QListWidget#PreferenceCategoryList::item:hover:!selected { background: %5; }"
-        "QListWidget#PreferenceCategoryList::item:selected { background: %7; color: %8; }"
         "QToolButton#PreferenceMenuButton { min-height: 30px; min-width: 180px; border: 1px solid %3; border-radius: 6px; padding: 4px 10px; background: %2; color: %4; font-weight: 600; text-align: left; }"
         "QToolButton#PreferenceMenuButton:hover { background: %5; border-color: %6; }"
         "QToolButton#PreferenceMenuButton:pressed, QToolButton#PreferenceMenuButton:checked { background: %7; border-color: %6; color: %8; }"
@@ -768,7 +764,40 @@ QString preferencesDialogStyleSheet()
         .arg(css(c.menuHoverBg))
         .arg(css(c.accent))
         .arg(css(c.accentPressed))
-        .arg(css(c.accentText));
+        .arg(css(c.accentText))
+        + dialogTabStripStyleSheet(c.windowBg);
+}
+
+QString dialogTabStripStyleSheet(const QColor& dialogBackground)
+{
+    const Colors& c = colors();
+    // Standard browser-tab pattern: pane keeps a full rounded border;
+    // the pane is lifted 1px so the selected tab's bottom edge sits
+    // exactly on the pane's top edge, and we paint that 1px of the
+    // tab in the pane's background so the joint visually merges (no
+    // double line). Unselected tabs sit slightly below so the pane's
+    // top border still reads as a continuous line across the empty
+    // area to the right of the last tab.
+    //
+    // %1 = unselected tab background (caller's dialog backdrop)
+    // %2 = pane / selected tab background (card color)
+    // %3 = pane + tab border color
+    // %4 = text color
+    return QStringLiteral(
+        "QTabWidget::pane { background: %2; border: 1px solid %3;"
+        " border-radius: 10px; top: -1px; padding: 8px; }"
+        "QTabWidget::tab-bar { left: 6px; }"
+        "QTabBar { background: transparent; border: none; }"
+        "QTabBar::tab { background: %1; color: %4; border: 1px solid %3;"
+        " padding: 5px 12px; margin-right: 2px; min-width: 40px;"
+        " border-top-left-radius: 8px; border-top-right-radius: 8px; }"
+        "QTabBar::tab:selected { background: %2; color: %4; border-bottom-color: %2; }"
+        "QTabBar::tab:!selected { margin-top: 2px; }"
+    )
+        .arg(css(dialogBackground))
+        .arg(css(c.cardBg))
+        .arg(css(c.border))
+        .arg(css(c.textPrimary));
 }
 
 QString settingsDialogStyleSheet()
@@ -784,7 +813,8 @@ QString settingsDialogStyleSheet()
         .arg(css(c.windowAltBg))
         .arg(css(c.cardBg))
         .arg(css(c.border))
-        .arg(css(c.textPrimary));
+        .arg(css(c.textPrimary))
+        + dialogTabStripStyleSheet(c.windowAltBg);
 }
 
 QString aboutDialogStyleSheet()

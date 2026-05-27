@@ -1035,7 +1035,7 @@ VideoExportDialog::VideoExportDialog(
         &layoutSquareScaleSlider_,
         &layoutSquareScaleValueLabel_
     );
-    setSliderOptionTitle(layoutSquareScaleOption, uiText("dialog.video_export.option.layout_size", QStringLiteral("Layout Size")));
+    setSliderOptionTitle(layoutSquareScaleOption, uiText("dialog.video_export.option.layout_size", QStringLiteral("Stage Display Scale")));
     optionsLayout->addWidget(layoutSquareScaleOption, 2, 0, 1, 2);
     const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
     const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;

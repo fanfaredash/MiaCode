@@ -850,7 +850,10 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     if (!SimaiDocument::isDifficultyId(difficultyId) || state_.document_.difficulty(difficultyId) == nullptr) {
         return false;
     }
-    const bool restoreSwitchView = state_.preserveDifficultySwitchView_ && owner_.hasActiveDifficulty();
+    // The user-facing toggle for this was removed in beta59 — behavior is
+    // now always "preserve editor position + preview progress when an
+    // active difficulty was selected before the switch".
+    const bool restoreSwitchView = owner_.hasActiveDifficulty();
     const double restorePreviewSecond = restoreSwitchView
         ? qMax(0.0, state_.qtPreviewPlaying_
               ? owner_.currentPreviewAuthoritativeAudioClockSecond()
