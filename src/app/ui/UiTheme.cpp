@@ -442,6 +442,34 @@ QString metadataPageStyleSheet()
         .arg(css(c.menuHoverBg));
 }
 
+QString latencyDetectionPageStyleSheet()
+{
+    const Colors& c = colors();
+    return QStringLiteral(
+        "QFrame#LatencyCard {"
+        " background: %1;"
+        " border: 1px solid %2;"
+        " border-radius: 6px;"
+        "}"
+        "QLabel[role=\"cardTitle\"] {"
+        " color: %3;"
+        " font-weight: 600;"
+        "}"
+        "QLabel[role=\"cardHint\"] {"
+        " color: %4;"
+        "}"
+        "QLabel[role=\"detectResult\"] {"
+        " color: %5;"
+        "}"
+    )
+        .arg(css(c.cardBg))
+        .arg(css(c.border))
+        .arg(css(c.textPrimary))
+        .arg(css(c.textMuted))
+        .arg(css(c.accent));
+}
+
+
 QString metadataEmptyHintLabelStyleSheet()
 {
     return QStringLiteral("color: %1; background: transparent; padding-left: 6px;").arg(css(colors().textMuted));

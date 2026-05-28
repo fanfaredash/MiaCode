@@ -39,28 +39,6 @@ QString latencySfxVolumeSettingsKey()
 {
     return QStringLiteral("latency/sfxVolumePercent");
 }
-
-QString cardStyleSheet()
-{
-    return QStringLiteral(
-        "QFrame#LatencyCard {"
-        " background: #FFFFFF;"
-        " border: 1px solid #E1E7EF;"
-        " border-radius: 6px;"
-        "}"
-        "QLabel[role=\"cardTitle\"] {"
-        " color: #243447;"
-        " font-weight: 600;"
-        "}"
-        "QLabel[role=\"cardHint\"] {"
-        " color: #6B7689;"
-        "}"
-        "QLabel[role=\"detectResult\"] {"
-        " color: #1E3A66;"
-        "}"
-    );
-}
-
 }  // namespace
 
 LatencyDetectionPage::LatencyDetectionPage(MainWindow* owner, QWidget* parent)
@@ -149,7 +127,7 @@ void LatencyDetectionPage::onPageLeft()
 
 void LatencyDetectionPage::buildUi()
 {
-    setStyleSheet(cardStyleSheet());
+    setStyleSheet(UiTheme::latencyDetectionPageStyleSheet());
 
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);

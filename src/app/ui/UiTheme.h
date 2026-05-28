@@ -88,6 +88,7 @@ QString editorTextEditStyleSheet();
 QString editorShellStyleSheet();
 QString editorFindBarStyleSheet();
 QString metadataPageStyleSheet();
+QString latencyDetectionPageStyleSheet();
 QString metadataEmptyHintLabelStyleSheet();
 QString outlineListStyleSheet();
 QString deleteDifficultyButtonStyleSheet();
