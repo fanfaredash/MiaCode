@@ -28,6 +28,7 @@
 #include "timeline/TimelineRenderData.h"
 #include "timeline/TimelineSceneState.h"
 #include "common/MuriTypes.h"
+#include "common/TimelineThemeConfig.h"
 
 namespace miacode::waveform {
 struct WaveformData;
@@ -75,6 +76,8 @@ public:
     double zoomScale() const;
     double contentScale() const;
     void setContentScale(double scale);
+    double waveformBrightness() const;
+    void setWaveformBrightness(double brightness);
     int horizontalScrollValue() const;
     void setHorizontalScrollValue(int value);
     void stepZoomPresetForQuickSurface(int deltaSteps, double anchorSecond);
@@ -233,6 +236,7 @@ private:
     QVector<double> buttonZoomPresets_;
     int zoomPresetIndex_ = 0;
     double contentScale_ = 1.0;
+    double waveformBrightness_ = miacode::timeline::kTimelineWaveformBrightnessDefault;
     PresentationMode presentationMode_ = PresentationMode::Full;
     FocusTarget focusTarget_ = FocusTarget::Playhead;
     bool timelineDragActive_ = false;

@@ -815,6 +815,8 @@ void PreviewWorkerSession::pumpQsgFrame()
         frameState_.chartArtist = readBlob(lastSnapshot_.chartArtist);
         frameState_.chartDifficultyLabel = readBlob(lastSnapshot_.chartDifficultyLabel);
         frameState_.chartDesigner = readBlob(lastSnapshot_.chartDesigner);
+        frameState_.render.centerDisplayMode =
+            static_cast<miacode::preview_gameplay::CenterDisplayMode>(lastSnapshot_.centerDisplayModeKind);
 
         // Asset state + skin / judge / firework images come from the
         // worker's repository. Refresh only when the repository signals

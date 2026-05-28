@@ -140,6 +140,7 @@ public:
     void setSuppressDebugInfo(bool suppress);
     void setShowTimestamp(bool show);
     void setShowObjectStatsHud(bool show);
+    void setCenterDisplayMode(miacode::preview_gameplay::CenterDisplayMode mode);
     void setSuppressObjectStatsHud(bool suppress);
     void setShowChartInfoHud(bool show);
     void setChartInfo(const QString& title,
@@ -149,6 +150,7 @@ public:
     bool showTimestamp() const;
     bool showObjectStatsHud() const;
     bool showChartInfoHud() const;
+    miacode::preview_gameplay::CenterDisplayMode centerDisplayMode() const;
 
     void reset();
     void noteTickForProfiling();

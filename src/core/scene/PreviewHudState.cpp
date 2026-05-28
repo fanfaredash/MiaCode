@@ -233,6 +233,12 @@ PreviewHudStats computePreviewHudStats(const QVector<TimelineNoteMarker>& noteMa
     result.slidePlayed = stats.slidePlayed;
     result.touchPlayed = stats.touchPlayed;
     result.breakPlayed = stats.breakPlayed;
+    result.combo =
+        stats.tapPlayed + stats.holdPlayed + stats.slidePlayed + stats.touchPlayed + stats.breakPlayed;
+    result.totalNotes =
+        stats.tapTotal + stats.holdTotal + stats.slideTotal + stats.touchTotal + stats.breakTotal;
+    result.dxScore = result.combo * 3;
+    result.dxScoreMax = result.totalNotes * 3;
     result.finaleRate = stats.finaleBaseTotal > 0.0
         ? (stats.finaleCurrent / stats.finaleBaseTotal) * 100.0
         : 0.0;
@@ -242,6 +248,8 @@ PreviewHudStats computePreviewHudStats(const QVector<TimelineNoteMarker>& noteMa
         + (stats.deluxeBreakTotal > 0
             ? (static_cast<double>(stats.deluxeBreakCurrent) / static_cast<double>(stats.deluxeBreakTotal))
             : 0.0);
+    result.deluxeBreakCurrent = stats.deluxeBreakCurrent;
+    result.deluxeBreakTotal = stats.deluxeBreakTotal;
     return result;
 }
 

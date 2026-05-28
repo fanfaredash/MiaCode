@@ -691,6 +691,7 @@ void projectScalarsToSerial(const miacode::preview::scene::PreviewFrameState& st
     if (render.showObjectStatsHud)             renderBits |= RenderFlags::kShowObjectStatsHud;
     if (render.showChartInfoHud)               renderBits |= RenderFlags::kShowChartInfoHud;
     out.renderFlagsBitmap = renderBits;
+    out.centerDisplayModeKind = static_cast<quint32>(render.centerDisplayMode);
 }
 
 int projectActiveSpritesToSerial(const miacode::preview::scene::PreviewFrameState& state,

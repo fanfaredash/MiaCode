@@ -4,20 +4,25 @@
 #include "common/DebugLog.h"
 #include "common/Mmcss.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "preview/quick_scene/PreviewQuickHudLayer.h"
 #include "core/scene/PreviewFrameState.h"
+#include "core/scene/PreviewHudState.h"
+#include "core/scene/PreviewProgressStatsCache.h"
 #include "core/scene/PreviewPreparedSceneCache.h"
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QAtomicInteger>
 #include <QMetaObject>
+#include <QPainter>
 #include <QMutexLocker>
 #include <QQuickWindow>
+#include <QSGSimpleTextureNode>
 #include <QSGNode>
 
 namespace {
 
-constexpr int kPreviewQuickSceneLayerSlotCount = 15;
+constexpr int kPreviewQuickSceneLayerSlotCount = 16;
 
 quint64 nextPreviewQuickSceneRootInstanceId()
 {
@@ -41,6 +46,109 @@ void appendQuickSceneLog(const QString& action, const QString& payload = QString
         QStringLiteral("preview/quick_scene"),
         text
     );
+}
+
+void updateCenterDisplaySlot(
+    QSGNode* slot,
+    const miacode::preview::scene::PreviewFrameState& state,
+    const QSize& renderSize,
+    QQuickWindow* window,
+    miacode::preview_gameplay::CenterDisplayMode& cachedMode,
+    double& cachedDeluxeRate,
+    double& cachedFinaleRate,
+    int& cachedCombo,
+    int& cachedDxScore,
+    int& cachedDxScoreMax,
+    int& cachedBreakCurrent,
+    int& cachedBreakTotal,
+    QSize& cachedRenderSize,
+    qreal& cachedDpr)
+{
+    if (slot == nullptr || window == nullptr) {
+        return;
+    }
+    if (state.render.centerDisplayMode == miacode::preview_gameplay::CenterDisplayMode::Off) {
+        QSGNode* old = slot->firstChild();
+        if (old != nullptr) {
+            delete static_cast<QSGSimpleTextureNode*>(old)->texture();
+            slot->removeChildNode(old);
+            delete old;
+        }
+        cachedMode = miacode::preview_gameplay::CenterDisplayMode::Off;
+        return;
+    }
+    const qreal dpr = window->effectiveDevicePixelRatio();
+    const QSize imageSize(qRound(renderSize.width() * dpr), qRound(renderSize.height() * dpr));
+    const bool isConstantDisplay =
+        state.render.centerDisplayMode == miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus101;
+    const bool isBreakOnlyDisplay =
+        state.render.centerDisplayMode == miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus100;
+    const double playheadSeconds = qIsFinite(state.hudPlayheadSecondsOverride)
+        ? state.hudPlayheadSecondsOverride
+        : state.playheadSeconds;
+    miacode::preview::scene::PreviewHudStats stats;
+    if (!isConstantDisplay && state.progressStatsCache != nullptr) {
+        stats = state.progressStatsCache->hudStatsAt(playheadSeconds);
+    }
+    if (!isConstantDisplay && !isBreakOnlyDisplay) {
+        if (cachedMode == state.render.centerDisplayMode
+            && qFuzzyCompare(cachedDeluxeRate + 1.0, stats.deluxeRate + 1.0)
+            && qFuzzyCompare(cachedFinaleRate + 1.0, stats.finaleRate + 1.0)
+            && cachedCombo == stats.combo
+            && cachedDxScore == stats.dxScore
+            && cachedDxScoreMax == stats.dxScoreMax
+            && cachedRenderSize == renderSize
+            && qFuzzyCompare(cachedDpr + 1.0, dpr + 1.0)) {
+            return;
+        }
+        cachedDeluxeRate = stats.deluxeRate;
+        cachedFinaleRate = stats.finaleRate;
+        cachedCombo = stats.combo;
+        cachedDxScore = stats.dxScore;
+        cachedDxScoreMax = stats.dxScoreMax;
+    }
+    if (isConstantDisplay || isBreakOnlyDisplay) {
+        bool unchanged = cachedMode == state.render.centerDisplayMode
+            && cachedRenderSize == renderSize
+            && qFuzzyCompare(cachedDpr + 1.0, dpr + 1.0);
+        if (isBreakOnlyDisplay && unchanged) {
+            unchanged = cachedBreakCurrent == stats.deluxeBreakCurrent
+                && cachedBreakTotal == stats.deluxeBreakTotal;
+            cachedBreakCurrent = stats.deluxeBreakCurrent;
+            cachedBreakTotal = stats.deluxeBreakTotal;
+        }
+        if (unchanged) {
+            return;
+        }
+    }
+    QImage image(imageSize, QImage::Format_ARGB32_Premultiplied);
+    image.setDevicePixelRatio(dpr);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    miacode::preview::hud::paintCenterDisplay(painter, state, renderSize);
+    painter.end();
+    QSGTexture* texture = window->createTextureFromImage(image);
+    if (texture == nullptr) {
+        return;
+    }
+    QSGSimpleTextureNode* node = dynamic_cast<QSGSimpleTextureNode*>(slot->firstChild());
+    if (node == nullptr) {
+        QSGNode* old = slot->firstChild();
+        if (old != nullptr) {
+            delete static_cast<QSGSimpleTextureNode*>(old)->texture();
+            slot->removeChildNode(old);
+            delete old;
+        }
+        node = new QSGSimpleTextureNode();
+        slot->appendChildNode(node);
+    }
+    node->setTexture(texture);
+    node->setRect(0, 0, renderSize.width(), renderSize.height());
+    cachedMode = state.render.centerDisplayMode;
+    cachedRenderSize = renderSize;
+    cachedDpr = dpr;
 }
 
 QSGNode* ensureLayerSlotRoot(QSGNode* oldNode)
@@ -681,6 +789,21 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         }
         return root;
     }
+    updateCenterDisplaySlot(
+        layerSlotAt(root, slotIndex++),
+        *state,
+        renderSize,
+        window(),
+        cachedCenterDisplayMode_,
+        cachedCenterDisplayDeluxeRate_,
+        cachedCenterDisplayFinaleRate_,
+        cachedCenterDisplayCombo_,
+        cachedCenterDisplayDxScore_,
+        cachedCenterDisplayDxScoreMax_,
+        cachedCenterDisplayBreakCurrent_,
+        cachedCenterDisplayBreakTotal_,
+        cachedCenterDisplayRenderSize_,
+        cachedCenterDisplayDpr_);
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::BackdropLayer),

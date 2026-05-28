@@ -70,6 +70,7 @@ bool VideoExportQuickRenderBackend::bootstrap(
     frameState_.chartArtist = task.chartArtist;
     frameState_.chartDifficultyLabel = task.chartDifficultyLabel;
     frameState_.chartDesigner = task.chartDesigner;
+    frameState_.render.centerDisplayMode = task.centerDisplayMode;
     refreshAssetState();
 
     session_.setLayerFlags(miacode::preview::scene::kPreviewExportOverlayRenderLayers);

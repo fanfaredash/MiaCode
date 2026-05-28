@@ -29,6 +29,11 @@ void paintPreviewHudOverlay(
     miacode::preview::scene::PreviewRenderLayerFlags layerFlags
         = miacode::preview::scene::kPreviewAllRenderLayers);
 
+void paintCenterDisplay(
+    QPainter& painter,
+    const miacode::preview::scene::PreviewFrameState& state,
+    const QSize& canvasSize);
+
 }  // namespace miacode::preview::hud
 
 class PreviewQuickHudLayer : public QQuickPaintedItem

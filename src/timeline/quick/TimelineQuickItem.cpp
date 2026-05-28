@@ -668,6 +668,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.headerRightLimit = headerRightLimit_ > 0 ? headerRightLimit_ : request.viewportSize.width();
     request.zoomScale = stateBridge_->zoomScale();
     request.contentScale = stateBridge_->contentScale();
+    request.waveformBrightness = stateBridge_->waveformBrightness();
     request.playbackEntrySeconds = stateBridge_->playbackEntrySeconds();
     request.playheadSeconds = stateBridge_->playheadSeconds();
     request.cursorSeconds = stateBridge_->cursorSeconds();

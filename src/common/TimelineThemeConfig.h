@@ -3,10 +3,29 @@
 #include <array>
 
 #include <QColor>
+#include <QtGlobal>
 
 #include "app/ui/UiTheme.h"
 
 namespace miacode::timeline {
+
+constexpr double kTimelineWaveformBrightnessMin = 0.2;
+constexpr double kTimelineWaveformBrightnessMax = 2.0;
+constexpr double kTimelineWaveformBrightnessDefault = 1.0;
+
+inline double normalizedTimelineWaveformBrightness(double brightness)
+{
+    return qBound(kTimelineWaveformBrightnessMin, brightness, kTimelineWaveformBrightnessMax);
+}
+
+inline QColor adjustedTimelineWaveformColor(QColor color, double brightness)
+{
+    const double clamped = normalizedTimelineWaveformBrightness(brightness);
+    color.setRed(qBound(0, qRound(static_cast<double>(color.red()) * clamped), 255));
+    color.setGreen(qBound(0, qRound(static_cast<double>(color.green()) * clamped), 255));
+    color.setBlue(qBound(0, qRound(static_cast<double>(color.blue()) * clamped), 255));
+    return color;
+}
 
 struct TimelineThemeColors {
     QColor window;

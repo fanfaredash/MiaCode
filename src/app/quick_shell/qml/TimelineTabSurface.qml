@@ -13,6 +13,8 @@ Item {
     onPaletteMapChanged: {
         if (timelineItem)
             timelineItem.refreshTheme()
+        if (brightnessControl)
+            brightnessControl.syncFromBridge()
     }
     onMetricsMapChanged: {
         if (timelineItem)
@@ -46,7 +48,7 @@ Item {
 
         anchors.fill: parent
         stateBridge: controller ? controller.timelineStateBridge : null
-        headerLeftLimit: zoomButton.x + zoomButton.width + 2
+        headerLeftLimit: brightnessControl.x + brightnessControl.width + 2
         // The follow checkboxes used to live here too and bounded the
         // header band on the right; they moved to BottomTabsQuickHost
         // tab strip. Without them, the band can use the full viewport
@@ -193,6 +195,147 @@ Item {
         }
 
         onClicked: timelineItem.cycleZoomPreset()
+    }
+
+    Item {
+        id: brightnessControl
+
+       anchors.left: zoomButton.right
+       anchors.leftMargin: Math.round(6 * root.headerScale)
+       y: Math.max(0, (timelineItem.timelineTop - height) / 2)
+        width: Math.max(1, Math.round(128 * root.headerScale))
+        height: Math.max(1, Math.round(22 * root.headerScale))
+        visible: timelineItem.stateBridge !== null
+
+        function isInvertedForTheme() {
+            return !(root.paletteMap && root.paletteMap["dark"] === true)
+        }
+
+        function sliderValueFromBrightness(brightness) {
+            const percent = brightness * 100
+            return isInvertedForTheme()
+                ? brightnessSlider.from + brightnessSlider.to - percent
+                : percent
+        }
+
+        function brightnessFromSliderValue(value) {
+            const percent = isInvertedForTheme()
+                ? brightnessSlider.from + brightnessSlider.to - value
+                : value
+            return percent / 100
+        }
+
+        function syncFromBridge() {
+            if (timelineItem.stateBridge && !brightnessSlider.pressed)
+                brightnessSlider.value = sliderValueFromBrightness(timelineItem.stateBridge.waveformBrightness)
+        }
+
+        Connections {
+            target: timelineItem
+
+            function onStateBridgeChanged() {
+                brightnessControl.syncFromBridge()
+            }
+        }
+
+        Connections {
+            target: timelineItem.stateBridge
+            ignoreUnknownSignals: true
+        }
+
+        Canvas {
+            id: brightnessGlyph
+
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.max(1, Math.round(18 * root.headerScale))
+            height: Math.max(1, Math.round(18 * root.headerScale))
+
+            property color strokeColor: root.tone("timelineLabel", "#d4dce8")
+
+            onStrokeColorChanged: requestPaint()
+
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                const cx = width / 2
+                const cy = height / 2
+                const r = Math.max(2, Math.min(width, height) * 0.22)
+                const rayInner = r + 2
+                const rayOuter = Math.min(width, height) * 0.46
+                ctx.strokeStyle = strokeColor
+                ctx.fillStyle = strokeColor
+                ctx.lineWidth = Math.max(1, root.headerScale)
+                ctx.beginPath()
+                ctx.ellipse(cx - r, cy - r, r * 2, r * 2, 0, 0, Math.PI * 2)
+                ctx.fill()
+                for (let i = 0; i < 8; ++i) {
+                    const angle = i * Math.PI / 4
+                    ctx.beginPath()
+                    ctx.moveTo(cx + Math.cos(angle) * rayInner, cy + Math.sin(angle) * rayInner)
+                    ctx.lineTo(cx + Math.cos(angle) * rayOuter, cy + Math.sin(angle) * rayOuter)
+                    ctx.stroke()
+                }
+            }
+        }
+
+        Slider {
+            id: brightnessSlider
+
+            anchors.left: brightnessGlyph.right
+            anchors.leftMargin: Math.round(4 * root.headerScale)
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            height: parent.height
+            from: 20
+            to: 200
+            stepSize: 5
+            live: true
+            value: 100
+
+            onMoved: {
+                if (timelineItem.stateBridge)
+                    timelineItem.stateBridge.waveformBrightness = brightnessControl.brightnessFromSliderValue(value)
+            }
+
+            background: Item {
+                x: brightnessSlider.leftPadding
+                y: Math.round((brightnessSlider.height - height) / 2)
+                width: brightnessSlider.availableWidth
+                height: Math.max(3, Math.round(4 * root.headerScale))
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: height / 2
+                    color: root.tone("border", "#d5e0ec")
+                }
+
+                Rectangle {
+                    width: Math.max(height, brightnessSlider.visualPosition * parent.width)
+                    height: parent.height
+                    radius: height / 2
+                    color: root.tone("accent", "#2e77d0")
+                }
+            }
+
+            handle: Rectangle {
+                x: brightnessSlider.leftPadding
+                    + brightnessSlider.visualPosition * (brightnessSlider.availableWidth - width)
+                y: Math.round((brightnessSlider.height - height) / 2)
+                width: Math.max(8, Math.round(10 * root.headerScale))
+                height: width
+                radius: width / 2
+                color: brightnessSlider.pressed
+                    ? root.tone("accentPressed", "#2668b9")
+                    : root.tone("cardBg", "#ffffff")
+                border.width: 1
+                border.color: brightnessSlider.hovered || brightnessSlider.pressed
+                    ? root.tone("accent", "#2e77d0")
+                    : root.tone("borderStrong", "#b8c7da")
+            }
+
+            Component.onCompleted: brightnessControl.syncFromBridge()
+        }
     }
 
     // Settings gear at the top-right of the timeline header band,

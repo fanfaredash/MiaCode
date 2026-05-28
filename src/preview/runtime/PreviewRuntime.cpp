@@ -555,6 +555,12 @@ void PreviewRuntime::setShowObjectStatsHud(bool show)
     update();
 }
 
+void PreviewRuntime::setCenterDisplayMode(miacode::preview_gameplay::CenterDisplayMode mode)
+{
+    frameState_.render.centerDisplayMode = mode;
+    update();
+}
+
 void PreviewRuntime::setSuppressObjectStatsHud(bool suppress)
 {
     if (suppressObjectStatsHud_ == suppress) {
@@ -605,6 +611,11 @@ void PreviewRuntime::setChartInfo(const QString& title,
 bool PreviewRuntime::showChartInfoHud() const
 {
     return frameState_.render.showChartInfoHud;
+}
+
+miacode::preview_gameplay::CenterDisplayMode PreviewRuntime::centerDisplayMode() const
+{
+    return frameState_.render.centerDisplayMode;
 }
 
 void PreviewRuntime::reset()

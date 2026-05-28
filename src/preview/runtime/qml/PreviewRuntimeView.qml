@@ -10,13 +10,13 @@ Rectangle {
         id: previewQuickSceneRoot
         objectName: "previewQuickSceneRoot"
         anchors.fill: parent
-        z: 0
+        z: 1
     }
 
     PreviewQuickHudLayer {
         id: previewQuickHudLayer
         objectName: "previewQuickHudLayer"
         anchors.fill: parent
-        z: 1
+        z: 2
     }
 }

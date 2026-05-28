@@ -68,6 +68,8 @@ struct VideoExportTask {
     QString chartArtist;
     QString chartDifficultyLabel;
     QString chartDesigner;
+    miacode::preview_gameplay::CenterDisplayMode centerDisplayMode =
+        miacode::preview_gameplay::kDefaultCenterDisplayMode;
     int skinLoadWaitMs = 2000;
     int clockCount = 0;
     double clockBpm = 0.0;

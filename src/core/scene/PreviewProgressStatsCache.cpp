@@ -374,6 +374,10 @@ PreviewHudStats PreviewProgressStatsCache::hudStatsAt(double second) const
     stats.slidePlayed = prefix.slidePlayed;
     stats.touchPlayed = prefix.touchPlayed;
     stats.breakPlayed = prefix.breakPlayed;
+    stats.combo = prefix.tapPlayed + prefix.holdPlayed + prefix.slidePlayed + prefix.touchPlayed + prefix.breakPlayed;
+    stats.totalNotes = totals_.totalCount;
+    stats.dxScore = stats.combo * 3;
+    stats.dxScoreMax = totals_.totalCount * 3;
     stats.finaleRate = finaleBaseTotal_ > 0.0
         ? (prefix.finaleCurrent / finaleBaseTotal_) * 100.0
         : 0.0;
@@ -383,6 +387,8 @@ PreviewHudStats PreviewProgressStatsCache::hudStatsAt(double second) const
         + (deluxeBreakTotal_ > 0
             ? (static_cast<double>(prefix.deluxeBreakCurrent) / static_cast<double>(deluxeBreakTotal_))
             : 0.0);
+    stats.deluxeBreakCurrent = prefix.deluxeBreakCurrent;
+    stats.deluxeBreakTotal = deluxeBreakTotal_;
     return stats;
 }
 

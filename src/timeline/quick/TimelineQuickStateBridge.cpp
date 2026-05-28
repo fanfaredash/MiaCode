@@ -7,6 +7,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "UiText.h"
+#include "common/TimelineThemeConfig.h"
 #include "timeline/TimelineSceneStateBuilder.h"
 #include "timeline/TimelineView.h"
 
@@ -483,6 +484,7 @@ void TimelineQuickStateBridge::refreshLayoutMetrics()
     request.viewportSize = effectiveViewportSize();
     request.zoomScale = zoomScale();
     request.contentScale = contentScale_;
+    request.waveformBrightness = waveformBrightness_;
     request.playbackEntrySeconds = playbackEntrySeconds_;
     request.playheadSeconds = playheadSeconds_;
     request.cursorSeconds = cursorSeconds_;
@@ -547,6 +549,23 @@ void TimelineQuickStateBridge::setContentScale(double scale)
     contentScale_ = clamped;
     refreshLayoutMetrics();
     bumpAllRevisions();
+    emit renderStateChanged();
+}
+
+double TimelineQuickStateBridge::waveformBrightness() const
+{
+    return waveformBrightness_;
+}
+
+void TimelineQuickStateBridge::setWaveformBrightness(double brightness)
+{
+    const double clamped = miacode::timeline::normalizedTimelineWaveformBrightness(brightness);
+    if (qFuzzyCompare(waveformBrightness_ + 1.0, clamped + 1.0)) {
+        return;
+    }
+    waveformBrightness_ = clamped;
+    ++waveformRevision_;
+    emit waveformBrightnessChanged(waveformBrightness_);
     emit renderStateChanged();
 }
 

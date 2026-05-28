@@ -543,6 +543,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         // dialog (gated by setSuppressDebugInfo + setChartInfo there); the
         // editor's main preview keeps it off.
         previewCanvas_->setShowChartInfoHud(false);
+        previewCanvas_->setCenterDisplayMode(previewCenterDisplayMode_);
     }
     applyMuriRenderOptions();
     windowSection_->applyUiTheme();

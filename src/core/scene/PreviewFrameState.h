@@ -190,6 +190,8 @@ struct PreviewRenderState {
     bool showTimestamp = true;
     bool showObjectStatsHud = false;
     bool showChartInfoHud = false;
+    miacode::preview_gameplay::CenterDisplayMode centerDisplayMode =
+        miacode::preview_gameplay::kDefaultCenterDisplayMode;
 };
 
 struct PreviewFrameState {

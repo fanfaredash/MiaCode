@@ -290,6 +290,7 @@ struct PreviewFrameStateSerial
     double layoutSquareScale = 0.0;
     quint32 backgroundScaleModeKind = 0;  // PreviewBackgroundScaleMode enum
     quint32 renderFlagsBitmap = 0;        // see RenderFlags below
+    quint32 centerDisplayModeKind = 0;    // preview_gameplay::CenterDisplayMode enum
 
     // Popup-target screen rectangle in editor pixels (origin + display size).
     // Worker MoveWindows the popup HWND to this rectangle. The editor's

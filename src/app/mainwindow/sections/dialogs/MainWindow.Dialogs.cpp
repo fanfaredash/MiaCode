@@ -12,6 +12,7 @@
 #include "common/Id3TagReader.h"
 #include "common/OperationLog.h"
 #include "common/PreviewSfxAssets.h"
+#include "common/PreviewGameplayConfig.h"
 #include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/latency/LatencyAnalysis.h"
@@ -1985,6 +1986,79 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         1,
         uiText("dialog.render_settings.gameplay.slide_stack_order", "Slide Stack Order"),
         slideStackOrderButton
+    );
+    const auto centerDisplayLabelForMode = [](miacode::preview_gameplay::CenterDisplayMode mode) -> QString {
+        switch (mode) {
+        case miacode::preview_gameplay::CenterDisplayMode::Off:
+            return uiText("dialog.render_settings.gameplay.center_display.off", "Off");
+        case miacode::preview_gameplay::CenterDisplayMode::Combo:
+            return uiText("dialog.render_settings.gameplay.center_display.combo", "Combo");
+        case miacode::preview_gameplay::CenterDisplayMode::AchievementDxPlus:
+            return uiText("dialog.render_settings.gameplay.center_display.achievement_dx_plus", "ACHIEVEMENT DX (+)");
+        case miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus100:
+            return uiText("dialog.render_settings.gameplay.center_display.achievement_dx_minus_100", "ACHIEVEMENT DX (100-)");
+        case miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus101:
+            return uiText("dialog.render_settings.gameplay.center_display.achievement_dx_minus_101", "ACHIEVEMENT DX (101-)");
+        case miacode::preview_gameplay::CenterDisplayMode::DxScorePlus:
+            return uiText("dialog.render_settings.gameplay.center_display.dx_score_plus", "DX SCORE (+)");
+        case miacode::preview_gameplay::CenterDisplayMode::DxScoreMinus:
+            return uiText("dialog.render_settings.gameplay.center_display.dx_score_minus", "DX SCORE (-)");
+        case miacode::preview_gameplay::CenterDisplayMode::AchievementFinalePlus:
+            return uiText("dialog.render_settings.gameplay.center_display.achievement_finale_plus", "ACHIEVEMENT FINALE (+)");
+        }
+        return uiText("dialog.render_settings.gameplay.center_display.off", "Off");
+    };
+    auto* centerDisplayButton = createDialogMenuButton(
+        gameplayGroup,
+        centerDisplayLabelForMode(owner_.previewCenterDisplayMode_)
+    );
+    centerDisplayButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* centerDisplayMenu = new QMenu(centerDisplayButton);
+    styleRoundedMenu(*centerDisplayMenu);
+    const auto setCenterDisplay = [this, centerDisplayButton, centerDisplayLabelForMode](
+        miacode::preview_gameplay::CenterDisplayMode mode
+    ) {
+        if (owner_.previewCenterDisplayMode_ == mode) {
+            centerDisplayButton->setText(centerDisplayLabelForMode(mode));
+            return;
+        }
+        owner_.previewCenterDisplayMode_ = mode;
+        centerDisplayButton->setText(centerDisplayLabelForMode(mode));
+        if (owner_.previewCanvas_ != nullptr) {
+            owner_.previewCanvas_->setCenterDisplayMode(mode);
+        }
+        owner_.savePortableState();
+    };
+    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::Off), [setCenterDisplay]() {
+        setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::Off);
+    });
+    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::Combo), [setCenterDisplay]() {
+        setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::Combo);
+    });
+    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::AchievementDxPlus), [setCenterDisplay]() {
+        setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::AchievementDxPlus);
+    });
+    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus100), [setCenterDisplay]() {
+        setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus100);
+    });
+    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus101), [setCenterDisplay]() {
+        setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus101);
+    });
+    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::DxScorePlus), [setCenterDisplay]() {
+        setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::DxScorePlus);
+    });
+    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::DxScoreMinus), [setCenterDisplay]() {
+        setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::DxScoreMinus);
+    });
+    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::AchievementFinalePlus), [setCenterDisplay]() {
+        setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::AchievementFinalePlus);
+    });
+    centerDisplayButton->setMenu(centerDisplayMenu);
+    addGameplayField(
+        3,
+        0,
+        uiText("dialog.render_settings.gameplay.center_display", "Center Display"),
+        centerDisplayButton
     );
     audioGroup->setVisible(includeAudioSettings);
     videoGroup->setVisible(includeVideoSettings);

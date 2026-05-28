@@ -6,6 +6,7 @@
 #include <QPointer>
 #include <QQueue>
 #include <QQuickItem>
+#include "common/PreviewGameplayConfig.h"
 #include <QSize>
 #include <QString>
 #include <atomic>
@@ -145,4 +146,18 @@ private:
     qint64 renderPhaseRenderStartNs_ = -1;
     qint64 renderPhaseRenderEndNs_ = -1;
     qint64 renderPhaseLastLogMs_ = -1;
+    // Center display cache — avoid per-frame QImage+texture regeneration.
+    miacode::preview_gameplay::CenterDisplayMode cachedCenterDisplayMode_ =
+        miacode::preview_gameplay::CenterDisplayMode::Off;
+    double cachedCenterDisplayPlayheadSeconds_ = -1.0;
+    QSize cachedCenterDisplayRenderSize_;
+    qreal cachedCenterDisplayDpr_ = 1.0;
+    // Stats-derived values that determine whether the center display text changed.
+    double cachedCenterDisplayDeluxeRate_ = -1.0;
+    double cachedCenterDisplayFinaleRate_ = -1.0;
+    int cachedCenterDisplayCombo_ = -1;
+    int cachedCenterDisplayDxScore_ = -1;
+    int cachedCenterDisplayDxScoreMax_ = -1;
+    int cachedCenterDisplayBreakCurrent_ = -1;
+    int cachedCenterDisplayBreakTotal_ = -1;
 };

@@ -3,6 +3,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewSkinConfig.h"
+#include "common/TimelineThemeConfig.h"
 #include "common/WaveformCache.h"
 #include "timeline/TimelineNoteAssets.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
@@ -378,6 +379,7 @@ void TimelineView::applyStateFromBridge()
     showSlideTracks_ = stateBridge_->showSlideTracks();
     playheadIndicatorSuppressed_ = stateBridge_->playheadIndicatorSuppressed();
     contentScale_ = stateBridge_->contentScale();
+    waveformBrightness_ = stateBridge_->waveformBrightness();
     pixelsPerSecond_ = 120.0 * stateBridge_->zoomScale();
     const int nextZoomIndex = qMax(0, zoomPresets_.indexOf(stateBridge_->zoomScale()));
     if (nextZoomIndex >= 0) {
@@ -863,6 +865,26 @@ double TimelineView::zoomScale() const
 double TimelineView::contentScale() const
 {
     return contentScale_;
+}
+
+double TimelineView::waveformBrightness() const
+{
+    return waveformBrightness_;
+}
+
+void TimelineView::setWaveformBrightness(double brightness)
+{
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setWaveformBrightness(brightness);
+        return;
+    }
+    const double clamped = miacode::timeline::normalizedTimelineWaveformBrightness(brightness);
+    if (qFuzzyCompare(waveformBrightness_ + 1.0, clamped + 1.0)) {
+        return;
+    }
+    waveformBrightness_ = clamped;
+    viewport()->update();
+    emit renderStateChanged();
 }
 
 void TimelineView::setContentScale(double scale)
