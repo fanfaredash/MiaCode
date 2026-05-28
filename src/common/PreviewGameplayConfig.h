@@ -1,6 +1,76 @@
 #pragma once
 
+#include <QString>
+
 namespace miacode::preview_gameplay {
+
+enum class CenterDisplayMode {
+    Off = 0,
+    Combo,
+    AchievementDxPlus,
+    AchievementDxMinus100,
+    AchievementDxMinus101,
+    DxScorePlus,
+    DxScoreMinus,
+    AchievementFinalePlus,
+};
+
+inline constexpr CenterDisplayMode kDefaultCenterDisplayMode = CenterDisplayMode::Off;
+
+inline const char* centerDisplayModeToken(CenterDisplayMode mode)
+{
+    switch (mode) {
+    case CenterDisplayMode::Combo:
+        return "combo";
+    case CenterDisplayMode::AchievementDxPlus:
+        return "achievement_dx_plus";
+    case CenterDisplayMode::AchievementDxMinus100:
+        return "achievement_dx_minus_100";
+    case CenterDisplayMode::AchievementDxMinus101:
+        return "achievement_dx_minus_101";
+    case CenterDisplayMode::DxScorePlus:
+        return "dx_score_plus";
+    case CenterDisplayMode::DxScoreMinus:
+        return "dx_score_minus";
+    case CenterDisplayMode::AchievementFinalePlus:
+        return "achievement_finale_plus";
+    case CenterDisplayMode::Off:
+    default:
+        return "off";
+    }
+}
+
+inline CenterDisplayMode centerDisplayModeFromToken(const QString& token)
+{
+    const QString normalized = token.trimmed().toLower();
+    if (normalized == QLatin1String("combo")) {
+        return CenterDisplayMode::Combo;
+    }
+    if (normalized == QLatin1String("achievement_dx_plus")
+        || normalized == QLatin1String("achievement_plus")
+        || normalized == QLatin1String("achievement(+)")) {
+        return CenterDisplayMode::AchievementDxPlus;
+    }
+    if (normalized == QLatin1String("achievement_dx_minus_100")
+        || normalized == QLatin1String("achievement_minus_100")) {
+        return CenterDisplayMode::AchievementDxMinus100;
+    }
+    if (normalized == QLatin1String("achievement_dx_minus_101")
+        || normalized == QLatin1String("achievement_minus_101")) {
+        return CenterDisplayMode::AchievementDxMinus101;
+    }
+    if (normalized == QLatin1String("dx_score_plus")) {
+        return CenterDisplayMode::DxScorePlus;
+    }
+    if (normalized == QLatin1String("dx_score_minus")) {
+        return CenterDisplayMode::DxScoreMinus;
+    }
+    if (normalized == QLatin1String("achievement_finale_plus")
+        || normalized == QLatin1String("achievement(+) finale")) {
+        return CenterDisplayMode::AchievementFinalePlus;
+    }
+    return CenterDisplayMode::Off;
+}
 
 inline constexpr double kLogicalCanvasSize = 540.0;
 inline constexpr double kLogicalDistanceTap = kLogicalCanvasSize * 122.5 / 1080.0;

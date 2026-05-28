@@ -421,6 +421,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     );
     built.showTimestamp = requestedTask.showTimestamp;
     built.showObjectStatsHud = requestedTask.showObjectStatsHud;
+    built.centerDisplayMode = requestedTask.centerDisplayMode;
     built.skinLoadWaitMs = requestedTask.skinLoadWaitMs;
 
     if (built.skinDirectory.trimmed().isEmpty()) {
@@ -630,11 +631,12 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
     built.fullRangeExport = true;
     built.outputPath = resolveVideoExportOutputPath(
         QString(),
-        outputDirectory,
-        defaultOutputName
+       outputDirectory,
+       defaultOutputName
     );
     built.showTimestamp = requestedTask.showTimestamp;
     built.showObjectStatsHud = requestedTask.showObjectStatsHud;
+    built.centerDisplayMode = requestedTask.centerDisplayMode;
     built.skinLoadWaitMs = requestedTask.skinLoadWaitMs;
 
     if (built.skinDirectory.trimmed().isEmpty()) {
@@ -823,6 +825,7 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     task.fps = request.fps;
     task.showTimestamp = request.showTimestamp;
     task.showObjectStatsHud = request.showObjectStatsHud;
+    task.centerDisplayMode = request.centerDisplayMode;
     task.outputPath = outputPath;
     task.clockCount = miacode::chart_clock::clockCountFromDocument(owner_.document_);
     if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId)) {

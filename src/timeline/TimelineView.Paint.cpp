@@ -134,7 +134,9 @@ void TimelineView::paintEvent(QPaintEvent* event)
                     qMax(0.0, visibleEndSecond));
             const qreal centerY = top + h / 2.0;
             const qreal maxAmplitude = (qMax<qreal>(8.0, h / 2.0 - 8.0) * 7.0) / 9.0;
-            const QColor waveformColor = c.timelineWaveStroke;
+            const QColor waveformColor = miacode::timeline::adjustedTimelineWaveformColor(
+                c.timelineWaveStroke,
+                waveformBrightness_);
             painter.save();
             painter.setClipRect(QRect(left, top, viewport()->width() - left, h));
             painter.setPen(Qt::NoPen);
@@ -956,7 +958,10 @@ void TimelineView::paintWaveformOnly(QPainter& painter, const QRect& dirtyRect)
             const qreal centerY = cardRect.center().y();
             const qreal maxAmplitude = cardRect.height() * 0.38;
             painter.setPen(Qt::NoPen);
-            painter.setBrush(c.timelineWaveStroke);
+            const QColor waveformColor = miacode::timeline::adjustedTimelineWaveformColor(
+                c.timelineWaveStroke,
+                waveformBrightness_);
+            painter.setBrush(waveformColor);
             for (int index = visibleColumns.first; index < visibleColumns.second; ++index) {
                 const miacode::waveform::WaveformColumn& column = waveformLevel->columns.at(index);
                 if (qAbs(column.max - column.min) <= 1e-5f) {
@@ -975,7 +980,7 @@ void TimelineView::paintWaveformOnly(QPainter& painter, const QRect& dirtyRect)
                 const int barBottom = qCeil(qMax(topY, bottomY));
                 painter.fillRect(
                     QRect(x0, barTop, qMax(1, x1 - x0), qMax(1, barBottom - barTop)),
-                    c.timelineWaveStroke);
+                    waveformColor);
             }
         }
     }

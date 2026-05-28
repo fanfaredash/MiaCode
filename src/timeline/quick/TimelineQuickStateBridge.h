@@ -10,6 +10,7 @@
 
 #include <memory>
 
+#include "common/TimelineThemeConfig.h"
 #include "common/MuriTypes.h"
 #include "common/WaveformCache.h"
 #include "timeline/TimelineRenderData.h"
@@ -33,6 +34,8 @@ class TimelineQuickStateBridge : public QObject
                WRITE setFollowProgressEnabled NOTIFY followProgressEnabledChanged)
     Q_PROPERTY(bool timelineSyncEnabled READ timelineSyncEnabled
                WRITE setTimelineSyncEnabled NOTIFY timelineSyncEnabledChanged)
+    Q_PROPERTY(double waveformBrightness READ waveformBrightness
+               WRITE setWaveformBrightness NOTIFY waveformBrightnessChanged)
 
 public:
     explicit TimelineQuickStateBridge(QObject* parent = nullptr);
@@ -57,6 +60,8 @@ public:
     void setZoomScale(double scale);
     double contentScale() const;
     void setContentScale(double scale);
+    double waveformBrightness() const;
+    void setWaveformBrightness(double brightness);
     void cycleZoomPreset(double anchorSecond);
     void stepZoomPreset(int deltaSteps, double anchorSecond);
     void setPlaybackEntrySeconds(double second);
@@ -104,6 +109,7 @@ signals:
     void viewportLockEnabledChanged(bool enabled);
     void followProgressEnabledChanged(bool enabled);
     void timelineSyncEnabledChanged(bool enabled);
+    void waveformBrightnessChanged(double brightness);
 
 private:
     QSize effectiveViewportSize() const;
@@ -127,6 +133,7 @@ private:
     int zoomPresetIndex_ = 1;
     int horizontalScrollValue_ = 0;
     double contentScale_ = 1.0;
+    double waveformBrightness_ = miacode::timeline::kTimelineWaveformBrightnessDefault;
     double playbackEntrySeconds_ = 0.0;
     double playheadUpperLimitSeconds_ = -1.0;
     double playheadSeconds_ = 0.0;

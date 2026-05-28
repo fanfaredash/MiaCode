@@ -9,6 +9,7 @@
 
 #include <QFontMetrics>
 #include <QPainter>
+#include <QPainterPath>
 #include <QQuickWindow>
 #include <QTimer>
 
@@ -28,6 +29,83 @@ void drawHudText(QPainter& painter, const QPointF& baseline, const QString& text
     painter.setPen(QColor(QStringLiteral("#FFFFFF")));
     painter.drawText(baseline, text);
     painter.restore();
+}
+
+void drawOutlinedHudText(
+    QPainter& painter,
+    const QPointF& baseline,
+    const QString& text,
+    const QFont& font,
+    qreal outlineWidth,
+    const QColor& fillColor)
+{
+    QPainterPath path;
+    path.addText(baseline, font, text);
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.translate(outlineWidth * 0.45, outlineWidth * 0.55);
+    painter.setPen(QPen(QColor(0, 0, 0, 145), outlineWidth * 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPath(path);
+    painter.translate(-outlineWidth * 0.45, -outlineWidth * 0.55);
+    painter.setPen(QPen(QColor(235, 239, 244, 245), outlineWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawPath(path);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(fillColor);
+    painter.drawPath(path);
+    painter.restore();
+}
+
+QString formatCenterAchievement(double value)
+{
+    return QStringLiteral("%1%").arg(QString::number(value, 'f', 4));
+}
+
+QString centerDisplayTitle(miacode::preview_gameplay::CenterDisplayMode mode)
+{
+    switch (mode) {
+    case miacode::preview_gameplay::CenterDisplayMode::Combo:
+        return QStringLiteral("COMBO");
+    case miacode::preview_gameplay::CenterDisplayMode::AchievementFinalePlus:
+        return QStringLiteral("ACHIEVEMENT FiNALE");
+    case miacode::preview_gameplay::CenterDisplayMode::AchievementDxPlus:
+    case miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus100:
+    case miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus101:
+        return QStringLiteral("ACHIEVEMENT");
+    case miacode::preview_gameplay::CenterDisplayMode::DxScorePlus:
+    case miacode::preview_gameplay::CenterDisplayMode::DxScoreMinus:
+        return QStringLiteral("DX SCORE");
+    case miacode::preview_gameplay::CenterDisplayMode::Off:
+    default:
+        return QString();
+    }
+}
+
+QString centerDisplayValue(
+    miacode::preview_gameplay::CenterDisplayMode mode,
+    const miacode::preview::scene::PreviewHudStats& stats)
+{
+    switch (mode) {
+    case miacode::preview_gameplay::CenterDisplayMode::Combo:
+        return QString::number(stats.combo);
+    case miacode::preview_gameplay::CenterDisplayMode::AchievementDxPlus:
+        return formatCenterAchievement(stats.deluxeRate);
+    case miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus100:
+        if (stats.deluxeBreakTotal > 0)
+            return formatCenterAchievement(100.0 + static_cast<double>(stats.deluxeBreakCurrent) / stats.deluxeBreakTotal);
+        return formatCenterAchievement(100.0);
+    case miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus101:
+        return formatCenterAchievement(101.0);
+    case miacode::preview_gameplay::CenterDisplayMode::DxScorePlus:
+        return QString::number(stats.dxScore);
+    case miacode::preview_gameplay::CenterDisplayMode::DxScoreMinus:
+        return QString::number(stats.dxScoreMax);
+    case miacode::preview_gameplay::CenterDisplayMode::AchievementFinalePlus:
+        return formatCenterAchievement(stats.finaleRate);
+    case miacode::preview_gameplay::CenterDisplayMode::Off:
+    default:
+        return QString();
+    }
 }
 
 }  // namespace
@@ -193,7 +271,9 @@ void paintPreviewHudOverlay(
             layerFlags, miacode::preview::scene::HudLayer)) {
         return;
     }
-    if (!state->render.showTimestamp && !state->render.showDebugInfo && !state->render.showObjectStatsHud) {
+    if (!state->render.showTimestamp
+        && !state->render.showDebugInfo
+        && !state->render.showObjectStatsHud) {
         return;
     }
 
@@ -367,6 +447,11 @@ void paintPreviewHudOverlay(
         );
     }
 
+    const miacode::preview::scene::PreviewHudStats stats =
+        state->progressStatsCache != nullptr
+        ? state->progressStatsCache->hudStatsAt(hudPlayheadSeconds)
+        : miacode::preview::scene::PreviewHudStats();
+
     if (!state->render.showObjectStatsHud) {
         return;
     }
@@ -382,12 +467,6 @@ void paintPreviewHudOverlay(
     if (availableStatsWidth < 40.0) {
         return;
     }
-
-    const miacode::preview::scene::PreviewHudStats stats =
-        state->progressStatsCache != nullptr
-        ? state->progressStatsCache->hudStatsAt(hudPlayheadSeconds)
-        : miacode::preview::scene::PreviewHudStats();
-
     int baseFontPointSize = qMax(1, qRound(static_cast<qreal>(kHudReferenceStatsFontPointSize) * hudScale));
     QFont titleFont;
     QFont rateFont;
@@ -488,6 +567,54 @@ void paintPreviewHudOverlay(
         drawHudText(painter, QPointF(blockLeft, baseline), statLines.at(i), statFont, shadowOffset);
         baseline += statMetrics.height();
     }
+}
+
+void paintCenterDisplay(
+    QPainter& painter,
+    const miacode::preview::scene::PreviewFrameState& state,
+    const QSize& canvasSize)
+{
+    if (state.render.centerDisplayMode == miacode::preview_gameplay::CenterDisplayMode::Off) {
+        return;
+    }
+    const QRectF stageRect = miacode::preview::scene::stageRectForSize(canvasSize);
+    constexpr qreal kHudReferenceShortSide = 1024.0;
+    const qreal shortSide = qMin(stageRect.width(), stageRect.height());
+    const qreal hudScale = qMax<qreal>(0.1, shortSide / kHudReferenceShortSide);
+    const double hudPlayheadSeconds = qIsFinite(state.hudPlayheadSecondsOverride)
+        ? state.hudPlayheadSecondsOverride
+        : state.playheadSeconds;
+    const miacode::preview::scene::PreviewHudStats stats =
+        state.progressStatsCache != nullptr
+        ? state.progressStatsCache->hudStatsAt(hudPlayheadSeconds)
+        : miacode::preview::scene::PreviewHudStats();
+    const QString title = centerDisplayTitle(state.render.centerDisplayMode);
+    const QString value = centerDisplayValue(state.render.centerDisplayMode, stats);
+    if (title.isEmpty() || value.isEmpty()) {
+        return;
+    }
+    const int titlePointSize = qMax(1, qRound(34.0 * hudScale));
+    const int valuePointSize = qMax(1, qRound(58.0 * hudScale));
+    QFont titleFont = miacode::preview::scene::previewHudTimestampFont(titlePointSize, QFont::Black);
+    QFont valueFont = miacode::preview::scene::previewHudTimestampFont(valuePointSize, QFont::Black);
+    titleFont.setLetterSpacing(QFont::PercentageSpacing, 98.0);
+    const QFontMetricsF titleMetrics(titleFont);
+    const QFontMetricsF valueMetrics(valueFont);
+    const qreal gap = qMax<qreal>(2.0, 4.0 * hudScale);
+    const qreal totalHeight = titleMetrics.height() + gap + valueMetrics.height();
+    const qreal titleBaselineY =
+        stageRect.center().y() - (totalHeight / 2.0) + titleMetrics.ascent();
+    const qreal valueBaselineY =
+        titleBaselineY + titleMetrics.descent() + gap + valueMetrics.ascent();
+    const QPointF titleBaseline(
+        stageRect.center().x() - (titleMetrics.horizontalAdvance(title) / 2.0),
+        titleBaselineY);
+    const QPointF valueBaseline(
+        stageRect.center().x() - (valueMetrics.horizontalAdvance(value) / 2.0),
+        valueBaselineY);
+    const QColor fillColor(198, 70, 111);
+    drawOutlinedHudText(painter, titleBaseline, title, titleFont, qMax<qreal>(2.0, 4.0 * hudScale), fillColor);
+    drawOutlinedHudText(painter, valueBaseline, value, valueFont, qMax<qreal>(3.0, 5.5 * hudScale), fillColor);
 }
 
 }  // namespace miacode::preview::hud

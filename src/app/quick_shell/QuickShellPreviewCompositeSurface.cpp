@@ -1,6 +1,7 @@
 #include "QuickShellPreviewCompositeSurface.h"
 
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
+#include "preview/quick_scene/PreviewQuickCenterDisplayLayer.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
@@ -20,6 +21,7 @@ void ensureQuickShellPreviewTypesRegistered()
     }
     qmlRegisterType<PreviewQuickSceneRoot>("MiaCode.Preview", 1, 0, "PreviewQuickSceneRoot");
     qmlRegisterType<PreviewQuickHudLayer>("MiaCode.Preview", 1, 0, "PreviewQuickHudLayer");
+    qmlRegisterType<PreviewQuickCenterDisplayLayer>("MiaCode.Preview", 1, 0, "PreviewQuickCenterDisplayLayer");
     registered = true;
 }
 

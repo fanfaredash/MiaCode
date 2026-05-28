@@ -194,6 +194,10 @@ QJsonObject VideoExportSnapshot::toJson() const
     render.insert(QStringLiteral("static_tap_on_slide_threshold_seconds"), staticTapOnSlideThresholdSeconds);
     render.insert(QStringLiteral("show_timestamp"), showTimestamp);
     render.insert(QStringLiteral("show_object_stats_hud"), showObjectStatsHud);
+    render.insert(
+        QStringLiteral("center_display_mode"),
+        QString::fromLatin1(miacode::preview_gameplay::centerDisplayModeToken(centerDisplayMode))
+    );
     render.insert(QStringLiteral("skin_wait_ms"), skinLoadWaitMs);
     root.insert(QStringLiteral("render"), render);
 
@@ -303,6 +307,9 @@ bool VideoExportSnapshot::fromJson(
         render.value(QStringLiteral("show_timestamp")).toBool(parsed.showTimestamp);
     parsed.showObjectStatsHud =
         render.value(QStringLiteral("show_object_stats_hud")).toBool(parsed.showObjectStatsHud);
+    parsed.centerDisplayMode = miacode::preview_gameplay::centerDisplayModeFromToken(
+        render.value(QStringLiteral("center_display_mode")).toString(
+            QString::fromLatin1(miacode::preview_gameplay::centerDisplayModeToken(parsed.centerDisplayMode))));
     parsed.skinLoadWaitMs =
         render.value(QStringLiteral("skin_wait_ms")).toInt(parsed.skinLoadWaitMs);
 
@@ -407,6 +414,7 @@ bool buildVideoExportTaskFromSnapshot(
     built.fullRangeExport = snapshot.fullRangeExport;
     built.showTimestamp = snapshot.showTimestamp;
     built.showObjectStatsHud = snapshot.showObjectStatsHud;
+    built.centerDisplayMode = snapshot.centerDisplayMode;
     built.skinLoadWaitMs = qBound(0, snapshot.skinLoadWaitMs, 20000);
     built.clockCount = miacode::chart_clock::clockCountFromDocument(document);
     built.clockBpm = miacode::chart_clock::clockBpmForChart(document, difficulty->chart);

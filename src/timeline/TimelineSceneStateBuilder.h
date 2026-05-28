@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "common/TimelineThemeConfig.h"
 #include "common/WaveformCache.h"
 #include "timeline/TimelineRenderData.h"
 #include "timeline/TimelineSceneState.h"
@@ -37,6 +38,7 @@ struct TimelineSceneBuildRequest {
     int horizontalCullPaddingPx = 0;
     double zoomScale = 0.5;
     double contentScale = 1.0;
+    double waveformBrightness = kTimelineWaveformBrightnessDefault;
     double playbackEntrySeconds = 0.0;
     double playheadSeconds = 0.0;
     double cursorSeconds = 0.0;

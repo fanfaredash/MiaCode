@@ -15,6 +15,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/TimelineThemeConfig.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
@@ -336,6 +337,12 @@ void MainWindow::EditorSection::loadPortableState()
                 preview.value("timeline_zoom_scale").toDouble(state_.timelineQuickStateBridge_->zoomScale())
             );
         }
+        if (preview.value("timeline_waveform_brightness").isDouble()) {
+            state_.timelineQuickStateBridge_->setWaveformBrightness(
+                preview.value("timeline_waveform_brightness").toDouble(
+                    miacode::timeline::kTimelineWaveformBrightnessDefault)
+            );
+        }
         state_.timelineQuickStateBridge_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
         state_.timelineQuickStateBridge_->setViewportLockEnabled(state_.previewViewportLockEnabled_);
         state_.timelineQuickStateBridge_->setFollowProgressEnabled(state_.previewProgressFollowEnabled_);
@@ -560,6 +567,9 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     if (preview.value("show_object_stats_export").isBool()) {
         state_.exportShowObjectStatsHud_ = preview.value("show_object_stats_export").toBool(false);
     }
+    state_.previewCenterDisplayMode_ = miacode::preview_gameplay::centerDisplayModeFromToken(
+        preview.value(QStringLiteral("center_display_mode")).toString(
+            QString::fromLatin1(miacode::preview_gameplay::centerDisplayModeToken(state_.previewCenterDisplayMode_))));
     const bool unifiedObjectStatsHud = state_.previewShowObjectStatsHud_ || state_.exportShowObjectStatsHud_;
     state_.previewShowObjectStatsHud_ = unifiedObjectStatsHud;
     state_.exportShowObjectStatsHud_ = unifiedObjectStatsHud;
@@ -683,6 +693,10 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("show_timestamp", state_.previewShowTimestamp_);
     preview.insert("show_object_stats_preview", state_.previewShowObjectStatsHud_);
     preview.insert("show_object_stats_export", state_.exportShowObjectStatsHud_);
+    preview.insert(
+        "center_display_mode",
+        QString::fromLatin1(miacode::preview_gameplay::centerDisplayModeToken(state_.previewCenterDisplayMode_))
+    );
     preview.insert("show_validation_summary", state_.previewShowValidationSummary_);
     preview.insert("follow_preview", state_.previewFollowEnabled_);
     preview.insert("viewport_lock", state_.previewViewportLockEnabled_);
@@ -691,6 +705,12 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert(
         "timeline_zoom_scale",
         state_.timelineQuickStateBridge_ != nullptr ? state_.timelineQuickStateBridge_->zoomScale() : 0.5
+    );
+    preview.insert(
+        "timeline_waveform_brightness",
+        state_.timelineQuickStateBridge_ != nullptr
+            ? state_.timelineQuickStateBridge_->waveformBrightness()
+            : miacode::timeline::kTimelineWaveformBrightnessDefault
     );
     miacode::chart_transform::saveChartNormalizationOptionsToPreferences(
         &preview,

@@ -44,6 +44,8 @@ struct VideoExportSnapshot {
     QString outputPath;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;
+    miacode::preview_gameplay::CenterDisplayMode centerDisplayMode =
+        miacode::preview_gameplay::kDefaultCenterDisplayMode;
     int skinLoadWaitMs = 2000;
 
     QJsonObject toJson() const;

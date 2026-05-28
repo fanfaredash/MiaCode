@@ -440,6 +440,8 @@
         bool previewShowTimestamp_ = true;
         bool previewShowObjectStatsHud_ = false;
         bool exportShowObjectStatsHud_ = false;
+        miacode::preview_gameplay::CenterDisplayMode previewCenterDisplayMode_ =
+            miacode::preview_gameplay::kDefaultCenterDisplayMode;
         bool previewShowValidationSummary_ = true;
         bool ignoreMuriIssuePrompts_ = false;
         bool chartNormalizeStartAtNewMeasure_ = true;
@@ -798,6 +800,7 @@
     bool& previewShowTimestamp_ = state_.previewShowTimestamp_;
     bool& previewShowObjectStatsHud_ = state_.previewShowObjectStatsHud_;
     bool& exportShowObjectStatsHud_ = state_.exportShowObjectStatsHud_;
+    miacode::preview_gameplay::CenterDisplayMode& previewCenterDisplayMode_ = state_.previewCenterDisplayMode_;
     bool& previewShowValidationSummary_ = state_.previewShowValidationSummary_;
     bool& ignoreMuriIssuePrompts_ = state_.ignoreMuriIssuePrompts_;
     bool& chartNormalizeStartAtNewMeasure_ = state_.chartNormalizeStartAtNewMeasure_;

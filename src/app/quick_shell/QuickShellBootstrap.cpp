@@ -19,6 +19,7 @@
 // wiring lambda; the lambda passes it straight to setStageMediaHost.
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
+#include "preview/quick_scene/PreviewQuickCenterDisplayLayer.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "timeline/quick/TimelineQuickItem.h"
@@ -203,6 +204,7 @@ void ensurePreviewQuickTypesRegisteredForQuickShell()
     }
     qmlRegisterType<PreviewQuickSceneRoot>("MiaCode.Preview", 1, 0, "PreviewQuickSceneRoot");
     qmlRegisterType<PreviewQuickHudLayer>("MiaCode.Preview", 1, 0, "PreviewQuickHudLayer");
+    qmlRegisterType<PreviewQuickCenterDisplayLayer>("MiaCode.Preview", 1, 0, "PreviewQuickCenterDisplayLayer");
     qmlRegisterType<TimelineQuickItem>("MiaCode.Timeline", 1, 0, "TimelineQuickItem");
     registered = true;
 }

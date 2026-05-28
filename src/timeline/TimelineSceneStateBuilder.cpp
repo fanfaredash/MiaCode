@@ -636,7 +636,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
                 state.waveformBars.append(TimelineSceneRect{
                     QRectF(x0, qMin(topY, bottomY), qMax(1, x1 - x0), qMax<qreal>(1.0, qAbs(bottomY - topY))),
-                    theme.waveform,
+                    adjustedTimelineWaveformColor(theme.waveform, request.waveformBrightness),
                 });
             }
         }

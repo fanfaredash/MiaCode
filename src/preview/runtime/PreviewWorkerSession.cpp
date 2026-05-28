@@ -794,6 +794,8 @@ void PreviewWorkerSession::pumpQsgFrame()
             (renderBits & miacode::preview::ipc::RenderFlags::kShowTimestamp) != 0;
         frameState_.render.showObjectStatsHud =
             (renderBits & miacode::preview::ipc::RenderFlags::kShowObjectStatsHud) != 0;
+        frameState_.render.centerDisplayMode =
+            static_cast<miacode::preview_gameplay::CenterDisplayMode>(lastSnapshot_.centerDisplayModeKind);
 
         // Asset state + skin / judge / firework images come from the
         // worker's repository. Refresh only when the repository signals

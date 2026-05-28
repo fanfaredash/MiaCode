@@ -313,6 +313,7 @@ void MainWindow::ExportSection::applySharedExportTaskSettings(const VideoExportT
     if (owner_.previewCanvas_ != nullptr) {
         owner_.previewCanvas_->setShowTimestamp(owner_.previewShowTimestamp_);
         owner_.previewCanvas_->setShowObjectStatsHud(owner_.previewShowObjectStatsHud_);
+        owner_.previewCanvas_->setCenterDisplayMode(owner_.previewCenterDisplayMode_);
         owner_.previewCanvas_->setBackgroundBrightnessOuter(owner_.previewBackgroundBrightnessOuter_);
         owner_.previewCanvas_->setBackgroundBrightnessInner(owner_.previewBackgroundBrightnessInner_);
         owner_.previewCanvas_->setLayoutSquareScale(owner_.previewLayoutSquareScale_);
@@ -387,8 +388,9 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     task.outputWidth = 1024;
     task.outputHeight = 1024;
     task.fps = 60;
-    task.showTimestamp = owner_.previewShowTimestamp_;
+        task.showTimestamp = owner_.previewShowTimestamp_;
     task.showObjectStatsHud = owner_.exportShowObjectStatsHud_;
+    task.centerDisplayMode = owner_.previewCenterDisplayMode_;
 
     const QFileInfo chartInfo(owner_.currentFilePath_);
     QString chartTitle = owner_.document_.title;
@@ -438,6 +440,7 @@ void MainWindow::ExportSection::onExportPreviewVideo()
             owner_.exportShowObjectStatsHud_ = showObjectStatsHud;
             if (owner_.previewCanvas_ != nullptr) {
                 owner_.previewCanvas_->setShowObjectStatsHud(owner_.previewShowObjectStatsHud_);
+                owner_.previewCanvas_->setCenterDisplayMode(owner_.previewCenterDisplayMode_);
             }
             owner_.savePortableState();
         },
@@ -620,6 +623,7 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo()
     task.fps = 60;
     task.showTimestamp = owner_.previewShowTimestamp_;
     task.showObjectStatsHud = owner_.exportShowObjectStatsHud_;
+    task.centerDisplayMode = owner_.previewCenterDisplayMode_;
 
     const QString difficultyToken = SimaiDocument::difficultyShortName(owner_.activeDifficultyId_);
     BatchVideoExportDialog dialog(
@@ -871,4 +875,3 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo()
             + QStringLiteral("\n\n") + details
     );
 }
-

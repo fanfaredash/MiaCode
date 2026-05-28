@@ -65,6 +65,7 @@ bool VideoExportQuickRenderBackend::bootstrap(
     frameState_.render.showDebugInfo = false;
     frameState_.render.showTimestamp = task.showTimestamp;
     frameState_.render.showObjectStatsHud = task.showObjectStatsHud;
+    frameState_.render.centerDisplayMode = task.centerDisplayMode;
     refreshAssetState();
 
     session_.setLayerFlags(miacode::preview::scene::kPreviewExportOverlayRenderLayers);

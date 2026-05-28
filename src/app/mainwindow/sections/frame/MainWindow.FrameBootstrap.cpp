@@ -1301,6 +1301,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     connect(timelineQuickStateBridge_, &TimelineQuickStateBridge::zoomScaleChanged, this, [this](double) {
         savePortableState();
     });
+    connect(timelineQuickStateBridge_, &TimelineQuickStateBridge::waveformBrightnessChanged, this, [this](double) {
+        savePortableState();
+    });
     if (!timelineWidgetlessQuickRoute_) {
         timelineView_ = new TimelineView(bottomTabs_);
         timelineQuickStateBridge_->attachReferenceView(timelineView_);

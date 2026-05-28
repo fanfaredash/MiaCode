@@ -540,6 +540,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
         previewCanvas_->setShowTimestamp(previewShowTimestamp_);
         previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
+        previewCanvas_->setCenterDisplayMode(previewCenterDisplayMode_);
     }
     applyMuriRenderOptions();
     windowSection_->applyUiTheme();

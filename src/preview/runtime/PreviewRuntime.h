@@ -139,9 +139,11 @@ public:
     void setShowDebugInfo(bool show);
     void setShowTimestamp(bool show);
     void setShowObjectStatsHud(bool show);
+    void setCenterDisplayMode(miacode::preview_gameplay::CenterDisplayMode mode);
     void setSuppressObjectStatsHud(bool suppress);
     bool showTimestamp() const;
     bool showObjectStatsHud() const;
+    miacode::preview_gameplay::CenterDisplayMode centerDisplayMode() const;
 
     void reset();
     void noteTickForProfiling();
