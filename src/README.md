@@ -1,5 +1,12 @@
 # `src` Directory Layout (v2-refactor target)
 
+> **Note (2026-05-29):** the render-direction framing in this file is **superseded**. The
+> in-process **QSG path (`preview/quick_scene` + `core/scene`) is the committed main target**.
+> The DComp / `sources` / `compositor` path is kept **off by default** and is being decoupled;
+> the out-of-process preview worker is being **removed**. See
+> `.claude/skills/miacode-dev-guide/` for the authoritative architecture guide. The folder
+> layout below is still accurate.
+
 This repository is organised by module responsibility, modelled after
 the OBS source/compositor split. Except for entry files, keep sources
 in their second-level folders.
@@ -70,7 +77,6 @@ src/
       PreviewDCompTextureCache.*
       PreviewDCompFrameStateSnapshot.h
       PreviewDCompSurface.*  # Becomes RenderView in Phase 3
-      PreviewDCompPhase0Smoke.cpp
 
   timeline/                  # Editor timeline strip — option-A scope
                              # expansion: Phase 2/3 will add timeline

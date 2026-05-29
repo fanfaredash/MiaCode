@@ -1,0 +1,110 @@
+# Build & Tools
+
+Build configurations, targets, the dev-tools/spec convention, scripts, packaging, assets, and
+helper binaries. Build file: root `CMakeLists.txt` (one file, ~1200 lines). Presets:
+`CMakePresets.json` (configure `vs2022-qt6` → `build/`; build presets `release`, `debug`).
+
+## 1. Build configuration policy
+
+- **Release is the only configuration that matters for routine work.** Build / test / verify in
+  Release (`--config Release`). Do not create or maintain a separate Debug build just to get
+  diagnostics — debug behavior is a **runtime `--debug` flag** (see `debug-and-logging.md`).
+- Debug-specific CMake handling that exists today is standard MSVC/windeployqt boilerplate
+  (`CMAKE_MSVC_DEBUG_INFORMATION_FORMAT` at `CMakeLists.txt:36`; launcher runtime lib at `:565`;
+  windeployqt `$<CONFIG:Debug>` at `:1179`/`:1190`). Leave it unless it gets in the way; it is
+  not a second supported product config.
+- Generator is multi-config (Visual Studio 17 2022), so CTest needs `-C Release`.
+
+## 2. Targets
+
+Default build (no options) produces only: **`MiaCode`** (the app), **`soundtouch`** (static lib
+linked into MiaCode), and on Windows **`MiaCodeLauncher`** (the dist-root launcher exe that
+forwards to `app/MiaCode.exe`).
+
+Everything else is gated behind `option(MIACODE_BUILD_DEV_TOOLS … OFF)` (`CMakeLists.txt:48`,
+block at `:586`). These are dev/diagnostic/spec binaries, off by default:
+
+- Dumps/probes: `miacode_muri_dump`, `simai_native_dump`, `soundtouch_probe`
+- Specs (standalone `main()` style): `oplog_self_test`, `simai_parser_spec`,
+  `chart_batch_transform_spec`, `muri_spec`, `timeline_model_spec`, `plain_code_editor_spec`,
+  `preview_asset_loader_spec`, `preview_firework_lifecycle_spec`, `preview_head_layer_spec`,
+  `preview_realtime_object_hot_path_spec`, `preview_quick_sprite_batch_spec`,
+  `preview_sfx_timeline_spec`, `preview_audio_settings_spec`, `bass_preview_retained_state_spec`,
+  `bass_preview_debug_log_routing_spec`, `quickshell_preview_surface_policy_spec`,
+  `video_export_runtime_policy_spec`, `video_export_audio_render_plan_spec`,
+  `debug_flag_index_spec` (drift guard — every `MIACODE_*` flag read in `src/` must appear in
+  `docs/DEBUG_INDEX.md`, and every flag the doc names must still be read in code or be in the
+  spec's retired allowlist; repo root injected via a `MIACODE_SOURCE_ROOT` compile define)
+
+## 3. Spec / dev-tool convention (audit 2026-05-29 — being standardized)
+
+Findings the convention is fixing:
+
+- The `*_spec` targets are now registered with CTest (`enable_testing()` + `add_test()` per
+  spec), so `ctest -C Release` runs the suite. Before this they were standalone mains nobody ran.
+- Specs are declared via the helper **`miacode_add_dev_tool(NAME TEST SOURCES … LIBS … INCLUDES …)`**
+  (CMakeLists.txt ~636) instead of a copy-pasted `add_executable` + `target_link_libraries` +
+  `target_include_directories` triple. The `TEST` keyword registers the `add_test()` + the Qt-bin
+  `ENVIRONMENT_MODIFICATION` PATH fix. Shared source groups (`_miacode_chart_core`,
+  `_miacode_log_core`, …) are set once and reused.
+
+Rules going forward:
+
+- A new spec = one `miacode_add_dev_tool(NAME TEST ...)` call inside the `MIACODE_BUILD_DEV_TOOLS`
+  block. It is auto-registered with CTest. Do not hand-write the three-call boilerplate. (Need a
+  compile define, e.g. a source-root path? Append a `target_compile_definitions(NAME PRIVATE …)`
+  after the call — see `debug_flag_index_spec`.)
+- Reuse the shared source-group variables; only list sources unique to that spec.
+- Build the suite with `cmake --build build --config Release` after configuring with
+  `-DMIACODE_BUILD_DEV_TOOLS=ON`, then `ctest --test-dir build -C Release`.
+
+## 4. Build & packaging scripts (`scripts/`, whitelisted in `.gitignore`)
+
+- Windows build/package: `build-win.ps1`, `package-win.ps1` (defaults to `build/`, prechecks
+  version freshness against `CMakeLists.txt` + generated `AppVersion.h`, auto-rebuilds MiaCode,
+  runs windeployqt with `--qmldir src`, keeps the Qt Quick DLL set, copies repo-local BASS DLLs).
+- macOS build/package: `build-macos.sh`, `package-mac.sh`.
+- ffmpeg provisioning: `ensure-windows-ffmpeg.ps1`, `ensure-macos-ffmpeg.sh`.
+- Debug launchers (release package + repo): `Start_MiaCode_Debug.bat`,
+  `Start_MiaCode_Legacy_QML.bat`, `Start_MiaCode_QuickShell_Debug.bat`, plus diagnostic A/B
+  launchers (`Start_MiaCode_DiagBypass.bat`, `Start_MiaCode_SkipBoth.bat`,
+  `Start_MiaCode_SkipDiagD3D11.bat`, `Start_MiaCode_QtPluginDiag.bat`,
+  `Start_MiaCode_ExportNoPboReadback.bat`). These set `MIACODE_*` env combos; keep them in sync
+  with `debug-and-logging.md`.
+
+## 5. Helper binaries (behind `MIACODE_BUILD_DEV_TOOLS`)
+
+- `miacode_muri_dump`, `simai_native_dump`, `soundtouch_probe` — CLI diagnostics.
+- `package-win.ps1` currently packages only `simai_native_dump.exe` as a Windows dev tool.
+- BASS runtime DLLs are copied post-build for `MiaCode` (and `soundtouch_probe`) from
+  `third_party/bass/bin/win64/`.
+
+## 6. Assets & runtime file conventions
+
+- Asset root resolution: `src/common/AssetPaths.h` (`findAssetRoot`, `assetPath`).
+- Asset areas: `assets/skin` (`skinSTD`/`skinDX` + user skins), `assets/SFX`,
+  `assets/background` (+ `outlines/` custom judge-line PNGs), `assets/noteguide`,
+  `assets/generated` (`slide_data.json`), `assets/fonts`.
+- Qt resources: `resources/{app_icons,fonts,preview_runtime_qml,quick_shell_qml}.qrc`.
+- Chart-directory conventions: `maidata.txt`, `track.mp3` (`track_bak.mp3`), background
+  `bg.mp4`/`pv.mp4`/`bg.{jpg,png,jpeg}` (or `&video=` target; `<stem>_bak.mp4`), project sidecar
+  `.miacode/` (`miacode_settings.json`, `waveform/`, `.autosave/<chart>/`, `logs/`).
+- SFX kind→filename map: `src/common/PreviewSfxAssets.h` (kinds: answer, judge, judge_break,
+  slide, break, ex, touch, touchhold, firework, clock). Do not rename casually — preview AND
+  export depend on it.
+- ffmpeg: pinned-binary notes in `third_party/ffmpeg/README.md`; never commit the binary
+  (`.gitignore` blocks it). Export resolves ffmpeg from app-local/repo-local fallback.
+
+## 7. Do not commit build artifacts
+
+`.gitignore` blocks `build/`, `.qt/`, `dist/`, `CMakeFiles/`, `*.obj`, `*.log`, `*.pdb`,
+`tmp*/`, third-party binaries, and whitelists only specific `docs/` and `scripts/` files. Audit
+added `experimental/` and `logs/` to the ignore set. Never `git add` a compiled binary, log, or
+local experiment output. `experimental/` holds untracked local experiments (e.g. aubio) with no
+source — not part of the build.
+
+## Update this file when
+
+- A target is added/removed/re-gated, or the spec/CTest convention changes.
+- A build or packaging script is added, renamed, or changes responsibility.
+- An asset directory, filename convention, or required packaged binary changes.

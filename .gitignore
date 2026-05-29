@@ -29,6 +29,8 @@ install_manifest.txt
 *.opendb
 
 tmp*/
+logs/
+experimental/
 
 # Keep only docs spec/checklist files under version control.
 docs/*
@@ -38,6 +40,7 @@ docs/*
 !docs/VIDEO_EXPORT_SUBPROCESS_ISOLATION.md
 !docs/QT_QUICK_FULL_FRONTEND_MIGRATION_PLAN.md
 !docs/PLAYBACK_START_LATENCY_PLAN.md
+!docs/REFACTOR_HANDOFF.md
 !docs/*SPEC.md
 !docs/*CHECKLIST.md
 # Allow bilingual ZH variants of SPEC/CHECKLIST docs without listing each by name.
@@ -90,4 +93,6 @@ scripts/*
 !scripts/package-win.ps1
 !scripts/README.md
 !scripts/README_EN.md
-.claude/
+# Ignore local Claude config, but version-control the repo-guide skill.
+.claude/*
+!.claude/skills/

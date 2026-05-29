@@ -2,6 +2,8 @@
 
 This document is the current user-facing index for MiaCode debug mode, log files, and preview/export diagnostics after the Qt Quick migration.
 
+> Reconciled against the code on 2026-05-29: 79 live `MIACODE_*` environment flags across ~27 files. When you add/remove a flag, update this index (and `.claude/skills/miacode-dev-guide/references/debug-and-logging.md`).
+
 ## Debug Entry Points
 
 - Preferred CLI switch: `--debug`
@@ -46,6 +48,12 @@ Path overrides:
 - `MIACODE_STARTUP_LOG_PATH`
 - `MIACODE_FATAL_LOG_PATH`
 - `MIACODE_PREVIEW_PROFILE_PATH`
+- `MIACODE_OPERATION_LOG_PATH` (operation-breadcrumb log)
+- `MIACODE_OPLOG_SHADOW_PATH` (operation-log shadow copy)
+
+Other logging knobs:
+
+- `MIACODE_SKIP_ASYNCLOG_FLUSH` — skip the async-log flush on shutdown (diagnostics only).
 
 ## Category Gates
 
@@ -56,7 +64,6 @@ These only matter while debug mode is active for the detailed channels. The alwa
 - `MIACODE_DISABLE_EXPORT_DEBUG_OUTPUT`
 - `MIACODE_DISABLE_PREVIEW_PROFILE_OUTPUT`
 - `MIACODE_DISABLE_STARTUP_TIMING`
-- `MIACODE_DISABLE_GL_DEBUG_MESSAGES`
 
 Fatal logging is intentionally not gated by debug mode.
 
@@ -111,11 +118,15 @@ Encoder selection/tuning:
 - `MIACODE_EXPORT_X264_CRF`
 - `MIACODE_EXPORT_X264_BFRAMES`
 
+FFmpeg binary + extra readback toggle:
+
+- `MIACODE_FFMPEG` / `MIACODE_FFMPEG_PATH` — override the ffmpeg executable path used by export (and the dialog's ffmpeg probe).
+- `MIACODE_EXPORT_DISABLE_PBO_READBACK=1` — extra PBO-readback opt-out, narrower than `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO`.
+
 ## Preview-Side Notes
 
 Still active:
 
-- `MIACODE_PREVIEW_SESSION_SCRIPT`
 - `MIACODE_PREVIEW_SFX_DIR`
 - `MIACODE_TRACK_PATH`
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG`
@@ -142,11 +153,13 @@ Retired from the main app:
 - The old native-dialog WinEvent hook and related `window/native*` investigation traces are no longer built into `MiaCode.exe`.
 - If Windows dialog investigation needs to return, it must live in a separate dev-only tool and must not ship in the release `dist/` package.
 
-Retired with the old preview renderer and not recommended anymore:
+Retired with the old preview renderer and not recommended anymore (no longer read by any code):
 
 - `MIACODE_ENABLE_PYGAME_PREVIEW`
 - `MIACODE_PREVIEW_DIAG_COMPARE_VIDEO_FALLBACK_EVERY`
 - `MIACODE_PREVIEW_DIAG_COMPARE_PRESENT_EVERY`
+- `MIACODE_PREVIEW_SESSION_SCRIPT` (was a preview session-script hook; gone)
+- `MIACODE_DISABLE_GL_DEBUG_MESSAGES` (GL debug-message gate; gone)
 
 Preview diagnostics now split these timing sources instead of reporting a single ambiguous FPS number:
 
@@ -179,6 +192,40 @@ Preview diagnostics now split these timing sources instead of reporting a single
   - `timeline/bridge` records quick timeline hot-path state pushes such as `action=set_horizontal_scroll_value` only when `MIACODE_TIMELINE_HOTPATH_DIAG=1`
   - `timeline/quick_scene` records full `scene_state_rebuild_*` boundaries in debug mode; scroll-only `action=content_transform_update` paints require `MIACODE_TIMELINE_HOTPATH_DIAG=1`
   - `timeline/cursor_map` profiles `timelineSecondForCursor()` so editor cursor-to-second mapping can be separated from redraw cost
+
+## Render Path Toggles (diagnostics / A·B only)
+
+The in-process Qt Quick (QSG) path is the default and the only one needed for normal use; both realtime preview and export run through it. The toggles below select alternate render topologies for diagnostics and are **off by default**.
+
+DirectComposition / D3D11 preview (`src/common/DebugOptions.h`; default OFF, being decoupled from the QSG path):
+
+- `MIACODE_PREVIEW_USE_DCOMP` — opt into the DComp-backed chart preview popup.
+- `MIACODE_TIMELINE_USE_DCOMP` — DComp pipeline for the timeline pane.
+- `MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND` — host DComp in an owned top-level HWND (override; default on when DComp is on).
+- `MIACODE_PREVIEW_DCOMP_PER_PIXEL_ALPHA` — per-pixel-alpha NRB popup (override; default on when DComp is on).
+- `MIACODE_PREVIEW_DCOMP_EXCLUSIVE` — let DComp be the sole chart renderer (auto-on with per-pixel alpha).
+- `MIACODE_PREVIEW_DCOMP_QUIESCE_QSG` — skip QSG repaint subscriptions while DComp is active.
+- `MIACODE_PREVIEW_QSG_FULL_DISABLE` — force QSG to the software/basic path (GPU-contention isolation test).
+- `MIACODE_PREVIEW_FORCE_BASIC_RENDER_LOOP` — force `QSG_RENDER_LOOP=basic` at startup.
+- `MIACODE_POPUP_TRACKER` — log owned-popup HWND topology.
+- `MIACODE_SKIP_DIAG_D3D11` — skip the startup D3D11 diagnostic probe.
+
+Out-of-process preview worker (**deprecated — slated for removal**; in-process QSG is the keeper):
+
+- `MIACODE_PREVIEW_OUT_OF_PROCESS` — spawn the child preview-worker process.
+- `MIACODE_PREVIEW_WORKER_QSG_RENDER` — worker uses the QSG render path (default on).
+- `MIACODE_PREVIEW_WORKER_REAL_PUBLISHER` — publish live runtime state vs. a synthetic frame stream (default on).
+- `MIACODE_PREVIEW_WORKER_DISABLE_CRASH_LIMIT` — disable the supervisor's respawn crash limit.
+- `MIACODE_PREVIEW_WORKER_DISABLE_MURI_REPORT` — suppress the worker's Muri-report projection.
+- `MIACODE_PREVIEW_WORKER_INJECT_CRASH` / `MIACODE_PREVIEW_WORKER_INJECT_CRASH_MODE` — fault injection for supervisor testing.
+- `MIACODE_PREVIEW_CRASH_TEST_CYCLES` — scripted crash/respawn cycle count.
+
+## Misc / Platform
+
+- `MIACODE_LANG` — force UI language (overrides system locale; `app/ui/UiText.cpp`).
+- `MIACODE_DISABLE_MMCSS` — opt out of MMCSS pro-audio thread scheduling (Windows; `common/Mmcss.cpp`).
+- `MIACODE_DISPLAY_VERSION_STRING` — override the displayed version string.
+- `MIACODE_SKIP_PREFLIGHT` — skip the launcher preflight checks (`wrapper/MiaCodeLauncher.cpp`).
 
 ## Useful Workflows
 
