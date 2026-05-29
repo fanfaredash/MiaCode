@@ -455,8 +455,10 @@ void paintPreviewHudOverlay(
     const qreal stageAspectRatio = stageRect.height() > 0.0 ? (stageRect.width() / stageRect.height()) : 1.0;
 
     // The HUD honours `hudPlayheadSecondsOverride` when finite so callers
-    // (e.g. the full-range video export's lead-in clamp) can show a
-    // count-down timestamp while keeping the scene clamped at chart 0.
+    // can show a timestamp decoupled from the scene time. The full-range
+    // video export sets it during the lead-in; the scene itself now plays
+    // the real lead-in chart time (it is no longer clamped at chart 0), so
+    // this currently matches the scene playhead.
     const double hudPlayheadSeconds = qIsFinite(state->hudPlayheadSecondsOverride)
         ? state->hudPlayheadSecondsOverride
         : state->playheadSeconds;

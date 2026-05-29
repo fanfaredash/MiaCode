@@ -218,9 +218,12 @@ struct PreviewFrameState {
     double playheadSeconds = 0.0;
     // Optional HUD-only override. When finite, the HUD timestamp/stats use
     // this value instead of `playheadSeconds`; the scene graph and note
-    // layers always read `playheadSeconds`. Used by the full-range video
-    // export so the HUD can count down through the lead-in (negative
-    // seconds) while the scene stays clamped at chart time 0.
+    // layers always read `playheadSeconds`. It exists to let the HUD
+    // timestamp be decoupled from scene time. The video export sets it
+    // during the lead-in, but the scene now plays the real lead-in chart
+    // time (negative for full-range, frozen at segmentStart for
+    // partial-range), so this currently matches `playheadSeconds` and is
+    // kept only to stay independent of any future scene-time clamping.
     double hudPlayheadSecondsOverride = std::numeric_limits<double>::quiet_NaN();
     quint64 sceneContentRevision = 0;
     double fpsDisplay = 0.0;

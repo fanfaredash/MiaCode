@@ -3851,14 +3851,15 @@ VideoExportResult VideoExportController::exportPreparedTask(
     if (useOffscreenGpu) {
         frameTimer.start();
         // The warmup primes the Quick scene graph (texture upload, shader
-        // compile, vertex buffer build) using the playhead the first real
-        // frame will see — `qMax(0.0, timelineOriginSecond)` so the warmup
-        // is at chart time 0 for full-range exports and at
-        // `segmentStartSecond` for partial exports. Warming at a negative
-        // chart time produced an empty / no-active-notes scene cache that
-        // was reused for the first 120 lead-in frames, leaving them as a
-        // transparent overlay (= black after FFmpeg's overlay-over-base
-        // composite).
+        // compile, vertex buffer build) at `qMax(0.0, timelineOriginSecond)`
+        // — chart time 0 for full-range exports, `segmentStartSecond` for
+        // partial exports. This is deliberately a chart time that has active
+        // notes so the warmup compiles the sprite/effect shaders; it is no
+        // longer "the playhead the first real frame will see" (full-range
+        // now renders the negative lead-in window, whose opening frames can
+        // be empty and would prime nothing — leaving the first real frames
+        // to pay the compile cost and risk coming back as a transparent,
+        // black-compositing overlay).
         const double warmupPlayheadSeconds = qMax(0.0, timelineOriginSecond);
         const QImage warmupFrame = exportCanvas.renderOverlayFrameOffscreen(
             frameSize,
