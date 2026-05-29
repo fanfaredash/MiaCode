@@ -172,4 +172,19 @@ void BracketScopeHighlighter::highlightBlock(const QString& text)
     auto* data = new BlockData();
     data->stackAtEnd = stack;
     setCurrentBlockUserData(data);
+
+    // Mirror the carry-over stack into the integer block state. QSyntaxHighlighter
+    // only re-highlights the following block when a block's userState() changes
+    // between runs (the internal forceHighlightOfNextBlock signal) — the BlockData
+    // above is invisible to that machinery. Without this, opening or closing a
+    // bracket on one line never re-colors the lines its scope spans: they stay
+    // stale until each is independently edited (the "next line stays highlighted
+    // until you type on it" bug). Fold both depth and the kind sequence into the
+    // signature so any change to the end-of-line scope is observed. Empty stack
+    // maps to 0; we never emit -1, which Qt reserves for "no state".
+    unsigned signature = 0;
+    for (const StackEntry& entry : stack) {
+        signature = signature * 31u + static_cast<unsigned>(entry.kind) + 1u;
+    }
+    setCurrentBlockState(static_cast<int>(signature & 0x7fffffffu));
 }

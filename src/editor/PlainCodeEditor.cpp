@@ -887,6 +887,78 @@ void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
     delete menu;
 }
 
+// Auto-close brackets — when the user types {, [, or (, insert the matching
+// closing glyph immediately after and park the caret in between. Shared by the
+// keyPressEvent path and the IME commit path (inputMethodEvent) so a bracket
+// delivered either as a raw key or as an IME commit string — including a
+// full-width 「（」/「【」/「｛」 normalized to half-width before we get here —
+// gets paired the same way. The bracket-scope highlighter sees the new closing
+// char through the document-changed signal and re-colors the block on the next
+// paint, so the matched-pair color (and its cross-line scope) stays consistent.
+bool PlainCodeEditor::tryAutoCloseBracket(const QString& text)
+{
+    if (!autoCloseBracketsEnabled_ || text.size() != 1) {
+        return false;
+    }
+    QChar opening;
+    QChar closing;
+    switch (text.at(0).toLatin1()) {
+    case '{': opening = QLatin1Char('{'); closing = QLatin1Char('}'); break;
+    case '[': opening = QLatin1Char('['); closing = QLatin1Char(']'); break;
+    case '(': opening = QLatin1Char('('); closing = QLatin1Char(')'); break;
+    default: return false;
+    }
+    if (isReadOnly() || overwriteMode()) {
+        return false;
+    }
+    QTextCursor cursor = textCursor();
+    cursor.beginEditBlock();
+    if (cursor.hasSelection()) {
+        // Wrap the selection: {<sel>}. The caret ends up at the closing
+        // bracket which mirrors the standard editor "surround with pair".
+        const QString selected = cursor.selectedText();
+        cursor.insertText(QString(opening) + selected + QString(closing));
+        cursor.endEditBlock();
+    } else {
+        cursor.insertText(QString(opening) + QString(closing));
+        cursor.movePosition(QTextCursor::PreviousCharacter);
+        cursor.endEditBlock();
+        setTextCursor(cursor);
+    }
+    return true;
+}
+
+// simai "hold" shortcut: typing a lowercase `h` expands to `h[]` with the caret
+// parked between the brackets (simai hold notation is `<lane>h[<beats>:<ticks>]`).
+// We require the text to be EXACTLY a single lowercase `h` so Shift+H, Ctrl+H,
+// full-width 「ｈ」 etc. fall through to a normal insert. This is wired to the
+// keyPressEvent path ONLY — deliberately not to the IME commit path, because CJK
+// IMEs routinely commit stray latin letters mid-composition and expanding those
+// to `h[]` (or stacking onto an auto-closed bracket) would be disruptive.
+bool PlainCodeEditor::tryAutoExpandH(const QString& text)
+{
+    if (!autoInsertSquareAfterHEnabled_ || text != QLatin1String("h")) {
+        return false;
+    }
+    if (isReadOnly() || overwriteMode()) {
+        return false;
+    }
+    QTextCursor cursor = textCursor();
+    cursor.beginEditBlock();
+    if (cursor.hasSelection()) {
+        // Wrap the selection: h[<sel>]. Mirrors auto-close's surround-with-pair.
+        const QString selected = cursor.selectedText();
+        cursor.insertText(QStringLiteral("h[") + selected + QStringLiteral("]"));
+        cursor.endEditBlock();
+    } else {
+        cursor.insertText(QStringLiteral("h[]"));
+        cursor.movePosition(QTextCursor::PreviousCharacter);
+        cursor.endEditBlock();
+        setTextCursor(cursor);
+    }
+    return true;
+}
+
 void PlainCodeEditor::inputMethodEvent(QInputMethodEvent* event)
 {
     if (event == nullptr || !halfWidthInputEnabled_) {
@@ -896,6 +968,21 @@ void PlainCodeEditor::inputMethodEvent(QInputMethodEvent* event)
 
     const QString commitString = event->commitString();
     const QString normalizedCommitString = miacode::editor::normalizedHalfWidthText(commitString);
+
+    // Route a finalized single-bracket commit through the same auto-close
+    // pairing as keyPressEvent. Without this, a bracket delivered via the IME
+    // commit string — e.g. a full-width 「【」 normalized to a half-width "["
+    // just above — is inserted unclosed, leaving a dangling scope that the
+    // bracket-scope highlighter then carries onto the following line. Guard to a
+    // finalized composition (empty preedit) with no replacement span so the
+    // helper's caret math stays valid.
+    if (event->preeditString().isEmpty()
+        && event->replacementLength() == 0
+        && tryAutoCloseBracket(normalizedCommitString)) {
+        event->accept();
+        return;
+    }
+
     if (commitString == normalizedCommitString) {
         QTextEdit::inputMethodEvent(event);
         return;
@@ -1000,79 +1087,10 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         return;
     }
 
-    // Auto-close brackets — when the user types {, [, or (, insert the
-    // matching closing glyph immediately after and park the caret in
-    // between. The bracket-scope highlighter sees the new closing char
-    // through the document changed signal and re-colors the block on
-    // the next paint, so the matched-pair color stays consistent. The
-    // helper sits AFTER the half-width normalization step (defined
-    // further down) so full-width 「（」/「【」/「｛」 also trigger the pair.
-    const auto tryAutoCloseBracket = [this](const QString& text) -> bool {
-        if (!autoCloseBracketsEnabled_ || text.size() != 1) {
-            return false;
-        }
-        QChar opening;
-        QChar closing;
-        switch (text.at(0).toLatin1()) {
-        case '{': opening = QLatin1Char('{'); closing = QLatin1Char('}'); break;
-        case '[': opening = QLatin1Char('['); closing = QLatin1Char(']'); break;
-        case '(': opening = QLatin1Char('('); closing = QLatin1Char(')'); break;
-        default: return false;
-        }
-        if (isReadOnly() || overwriteMode()) {
-            return false;
-        }
-        QTextCursor cursor = textCursor();
-        cursor.beginEditBlock();
-        if (cursor.hasSelection()) {
-            // Wrap the selection: {<sel>}. The caret ends up at the
-            // closing bracket which mirrors the standard editor
-            // "surround with pair" behavior.
-            const QString selected = cursor.selectedText();
-            cursor.insertText(QString(opening) + selected + QString(closing));
-            cursor.endEditBlock();
-        } else {
-            cursor.insertText(QString(opening) + QString(closing));
-            cursor.movePosition(QTextCursor::PreviousCharacter);
-            cursor.endEditBlock();
-            setTextCursor(cursor);
-        }
-        return true;
-    };
-
-    // simai "hold" shortcut: typing a lowercase `h` expands to `h[]`
-    // with the caret parked between the brackets. The simai hold
-    // notation is `<lane>h[<beats>:<ticks>]` so users typing a hold
-    // marker want to enter the duration spec immediately after `h`.
-    // We require the typed text to be EXACTLY a single lowercase `h`
-    // so Shift+H (capital `H`), Ctrl+H, full-width 「ｈ」 etc. all
-    // fall through to the normal insert path — only the bare key
-    // sequence the user spelled out in the preference triggers the
-    // expansion.
-    const auto tryAutoExpandH = [this](const QString& text) -> bool {
-        if (!autoInsertSquareAfterHEnabled_ || text != QLatin1String("h")) {
-            return false;
-        }
-        if (isReadOnly() || overwriteMode()) {
-            return false;
-        }
-        QTextCursor cursor = textCursor();
-        cursor.beginEditBlock();
-        if (cursor.hasSelection()) {
-            // Wrap the selection: h[<sel>]. Mirrors auto-close's
-            // surround-with-pair behavior.
-            const QString selected = cursor.selectedText();
-            cursor.insertText(QStringLiteral("h[") + selected + QStringLiteral("]"));
-            cursor.endEditBlock();
-        } else {
-            cursor.insertText(QStringLiteral("h[]"));
-            cursor.movePosition(QTextCursor::PreviousCharacter);
-            cursor.endEditBlock();
-            setTextCursor(cursor);
-        }
-        return true;
-    };
-
+    // Bracket auto-pairing is handled by tryAutoCloseBracket() / tryAutoExpandH()
+    // (members, so the IME commit path in inputMethodEvent can reuse them). The
+    // call sites below pass the half-width-normalized text so a full-width
+    // 「（」/「【」/「｛」 pairs the same way a raw "(" / "[" / "{" does.
     if (!halfWidthInputEnabled_
         || (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
         if (tryAutoCloseBracket(event->text()) || tryAutoExpandH(event->text())) {

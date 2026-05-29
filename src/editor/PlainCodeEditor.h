@@ -100,6 +100,12 @@ private:
     void syncCursorVisualState();
     void updateCursorVisibility();
     void updateCurrentLineHighlightRegion(const QRect& previousRect, const QRect& currentRect);
+    // Bracket auto-pairing helpers. Each returns true when it consumed the input
+    // and performed the insertion. tryAutoCloseBracket is shared by both the
+    // keyPressEvent and the IME commit (inputMethodEvent) paths; tryAutoExpandH
+    // is keyPress-only (see its definition for why).
+    bool tryAutoCloseBracket(const QString& text);
+    bool tryAutoExpandH(const QString& text);
 
     int blockSpacingPixels_ = 0;
     int topOverlayInsetPixels_ = 0;
