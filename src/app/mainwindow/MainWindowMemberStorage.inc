@@ -64,6 +64,7 @@
         QTimer* previewSeekDebounceTimer_ = nullptr;
         QTimer* timelineAnalysisIdleTimer_ = nullptr;
         QTimer* exportVideoHoverMenuTimer_ = nullptr;
+        QTimer* bottomTabsContentScalePersistTimer_ = nullptr;
         QObject* editorViewport_ = nullptr;
         QProgressDialog* videoExportProgressDialog_ = nullptr;
         QPointer<QLabel> aboutIconLabel_;
@@ -592,6 +593,7 @@
     QTimer*& previewSeekDebounceTimer_ = ui_.previewSeekDebounceTimer_;
     QTimer*& timelineAnalysisIdleTimer_ = ui_.timelineAnalysisIdleTimer_;
     QTimer*& exportVideoHoverMenuTimer_ = ui_.exportVideoHoverMenuTimer_;
+    QTimer*& bottomTabsContentScalePersistTimer_ = ui_.bottomTabsContentScalePersistTimer_;
     QObject*& editorViewport_ = ui_.editorViewport_;
     QProcess*& videoExportWorkerProcess_ = state_.videoExportWorkerProcess_;
     QProgressDialog*& videoExportProgressDialog_ = ui_.videoExportProgressDialog_;

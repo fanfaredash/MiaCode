@@ -579,6 +579,12 @@ void MainWindow::WindowSection::setShellBottomTabsHeight(int height)
     if (!qFuzzyCompare(owner_.bottomTabsContentScale_ + 1.0, clampedScale + 1.0)) {
         owner_.bottomTabsContentScale_ = clampedScale;
         applyBottomTabsContentScale();
+        // Persist the new divider height as an app-level preference. Stored as a
+        // content-scale ratio (not pixels) so it stays valid across DPI/layout
+        // changes; the write is debounced so a drag doesn't thrash the disk.
+        if (owner_.bottomTabsContentScalePersistTimer_ != nullptr) {
+            owner_.bottomTabsContentScalePersistTimer_->start();
+        }
     }
     updateBottomTabsDeviceHeight();
 }

@@ -291,6 +291,13 @@ void MainWindow::EditorSection::loadPortableState()
     state_.editorOverwriteModeEnabled_ = ui.value("editor_overwrite_mode").toBool(false);
     state_.editorAutoCloseBracketsEnabled_ = ui.value("editor_auto_close_brackets").toBool(true);
     state_.editorAutoInsertSquareAfterHEnabled_ = ui.value("editor_auto_insert_square_after_h").toBool(true);
+    if (ui.value("bottom_tabs_content_scale").isDouble()) {
+        // Stored as a content-scale ratio (not pixels). The raw value is clamped
+        // to its valid [min,max] range by applyBottomTabsContentScale() when the
+        // height is re-applied below.
+        state_.bottomTabsContentScale_ =
+            ui.value("bottom_tabs_content_scale").toDouble(state_.bottomTabsContentScale_);
+    }
     // [BETA51 IME-DISABLE: DISABLED PENDING FIX] state stays at its default
     // false; any existing `editor_ime_input_disabled` value in preferences.json
     // is intentionally ignored until the WA_InputMethodEnabled approach is
@@ -351,6 +358,12 @@ void MainWindow::EditorSection::loadPortableState()
         state_.timelineQuickStateBridge_->setViewportLockEnabled(state_.previewViewportLockEnabled_);
         state_.timelineQuickStateBridge_->setFollowProgressEnabled(state_.previewProgressFollowEnabled_);
         state_.timelineQuickStateBridge_->setTimelineSyncEnabled(state_.timelineSyncEnabled_);
+    }
+    // Re-apply the restored bottom-tabs divider height. The constructor already
+    // ran updateBottomTabsDeviceHeight() once with the default scale before this
+    // load; push the persisted scale into the layout now (it also clamps it).
+    if (owner_.windowSection_ != nullptr) {
+        owner_.windowSection_->updateBottomTabsDeviceHeight();
     }
     owner_.refreshPreviewFrameRateTimers();
     owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_, "editor_display_apply_settings");
@@ -643,6 +656,9 @@ void MainWindow::EditorSection::savePortableState() const
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
     ui.insert("editor_auto_close_brackets", state_.editorAutoCloseBracketsEnabled_);
     ui.insert("editor_auto_insert_square_after_h", state_.editorAutoInsertSquareAfterHEnabled_);
+    // Bottom-tabs (timeline/validation/muri) divider height, persisted as a
+    // content-scale ratio rather than pixels (see loadPortableState()).
+    ui.insert("bottom_tabs_content_scale", state_.bottomTabsContentScale_);
     // [BETA51 IME-DISABLE: DISABLED PENDING FIX] don't persist while feature
     // is off — leaves any pre-existing `editor_ime_input_disabled` key in the
     // JSON untouched (we just don't write or read it). Re-enable along with

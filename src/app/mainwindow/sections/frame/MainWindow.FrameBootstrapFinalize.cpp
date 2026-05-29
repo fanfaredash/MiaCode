@@ -288,6 +288,17 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     connect(previewSeekDebounceTimer_, &QTimer::timeout, this, [this]() {
         maybeSubmitLatestPausedMediaSeek();
     });
+    // Debounce persisting the bottom-tabs (timeline/validation/muri) divider
+    // height. The drag funnels through setShellBottomTabsHeight() which updates
+    // bottomTabsContentScale_ on every move tick; coalesce the synchronous
+    // savePortableState() write so a drag doesn't hammer preferences.json. A
+    // pending write is still covered by the close-time savePortableState().
+    bottomTabsContentScalePersistTimer_ = new QTimer(this);
+    bottomTabsContentScalePersistTimer_->setSingleShot(true);
+    bottomTabsContentScalePersistTimer_->setInterval(500);
+    connect(bottomTabsContentScalePersistTimer_, &QTimer::timeout, this, [this]() {
+        savePortableState();
+    });
     previewHeldSeekTimer_ = new QTimer(this);
     previewHeldSeekTimer_->setTimerType(Qt::PreciseTimer);
     previewHeldSeekTimer_->setInterval(miacode::preview_interaction::kSeekHoldTickIntervalMs);
