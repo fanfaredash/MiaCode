@@ -43,10 +43,13 @@ QString pointerHex(const void* pointer)
 // Backed by Qt's QApplication::closeAllWindows() semantics: each popup
 // receives a QCloseEvent and can decline if it has unsaved state.
 //
-// Safe because none of these popups carry an unsaved-confirmation step —
-// the "Save before exiting?" prompt is owned by maybeSaveBeforeContinue()
-// and is spawned AFTER this sweep, so it isn't on screen yet and isn't
-// affected.
+// MUST be called only AFTER the close is confirmed (i.e. after
+// maybeSaveBeforeContinue() returns true). The sweep is indiscriminate —
+// it also closes the quick-shell's native bridge/compositing surfaces,
+// which host the editor/timeline/preview as top-level QWidgets — so
+// running it on a cancellable path and then declining the close strands
+// the window with its content windows gone. Gating it behind the confirmed
+// branch keeps a cancelled close fully side-effect free.
 //
 // Note: this helper only runs once MainWindow's own closeEvent has fired.
 // Qt's modal gate (Qt::ApplicationModal + dialog.exec()) drops close
@@ -570,17 +573,6 @@ void MainWindow::WindowSection::closeEvent(QCloseEvent* event)
     QElapsedTimer totalTimer;
     totalTimer.start();
     this->logWindowGeometryDebug("close_event_enter");
-    // Dismiss any open child popup dialogs (Preferences, Keyboard
-    // Shortcuts, etc.) before showing the unsaved-changes prompt so the
-    // close cascade reaches every open popup window.
-    const int dismissed = dismissOpenChildPopupDialogs(owner_);
-    if (dismissed > 0) {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("close_timing/window"),
-            QStringLiteral("legacy_close_event_dismissed_child_dialogs=%1").arg(dismissed)
-        );
-    }
     QElapsedTimer maybeSaveTimer;
     maybeSaveTimer.start();
     const bool canClose = owner_.maybeSaveBeforeContinue();
@@ -592,6 +584,17 @@ void MainWindow::WindowSection::closeEvent(QCloseEvent* event)
         QStringLiteral("result=%1").arg(canClose ? QStringLiteral("continue") : QStringLiteral("cancel"))
     );
     if (canClose) {
+        // Close is confirmed. Dismiss any open child popup dialogs
+        // (Preferences, Keyboard Shortcuts, etc.) only now — a cancelled
+        // close (the else branch) must not tear down sibling windows.
+        const int dismissed = dismissOpenChildPopupDialogs(owner_);
+        if (dismissed > 0) {
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("close_timing/window"),
+                QStringLiteral("legacy_close_event_dismissed_child_dialogs=%1").arg(dismissed)
+            );
+        }
         QElapsedTimer autosaveTimer;
         autosaveTimer.start();
         owner_.runAutosaveCheck(false);

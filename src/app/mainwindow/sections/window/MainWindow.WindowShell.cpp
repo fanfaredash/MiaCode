@@ -348,18 +348,6 @@ bool MainWindow::WindowSection::confirmShellClose()
     QElapsedTimer totalTimer;
     totalTimer.start();
 
-    // Cascade-close popup chains (Preferences, Keyboard Shortcuts, etc.)
-    // before the unsaved-changes prompt runs. The save dialog lives inside
-    // maybeSaveBeforeContinue and isn't spawned yet, so it's not affected.
-    const int dismissed = dismissOpenChildPopupDialogs(owner_);
-    if (dismissed > 0) {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("close_timing/window"),
-            QStringLiteral("confirm_shell_close_dismissed_child_dialogs=%1").arg(dismissed)
-        );
-    }
-
     QElapsedTimer maybeSaveTimer;
     maybeSaveTimer.start();
     const bool canClose = owner_.maybeSaveBeforeContinue();
@@ -379,6 +367,23 @@ bool MainWindow::WindowSection::confirmShellClose()
             QStringLiteral("result=cancelled_before_close")
         );
         return false;
+    }
+
+    // Close is confirmed. Only NOW cascade-close popup chains (Preferences,
+    // Keyboard Shortcuts, etc.). Running this after the unsaved-changes
+    // prompt is accepted means a cancelled close leaves every sibling
+    // window untouched — including the quick-shell's native bridge/
+    // compositing surfaces (createBridgeSurface() hosts the editor, timeline
+    // and preview as top-level QWidgets) — so the window keeps full
+    // functionality. Doing the sweep before the prompt closed those surfaces
+    // and a Cancel could not bring them back.
+    const int dismissed = dismissOpenChildPopupDialogs(owner_);
+    if (dismissed > 0) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/window"),
+            QStringLiteral("confirm_shell_close_dismissed_child_dialogs=%1").arg(dismissed)
+        );
     }
 
     QElapsedTimer savePortableTimer;
