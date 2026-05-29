@@ -196,11 +196,39 @@ private:
     void handlePresentedFrame();
     void refreshAssetStateFromRepository();
     void updatePresentedFrameStats();
+    // Firework PSO/texture warm-up (in-process QML preview path). See the
+    // member-variable block below for the full rationale.
+    void armFireworkPsoWarmupIfReady();
+    void appendFireworkWarmupMarker();
+    void removeFireworkWarmupMarkers();
 
     miacode::preview::runtime::PreviewSceneAssetRepository* assets_ = nullptr;
     QPointer<QQuickWindow> visibleHostWindow_;
     QSize frameSize_;
     miacode::preview::scene::PreviewFrameState frameState_;
+    // --- Firework PSO/texture warm-up (in-process QML path) ----------------
+    // Qt RHI compiles the custom PreviewQuickJudgeFireworkMaterial pipeline
+    // and uploads the firework colour-ball texture lazily on the FIRST
+    // firework draw. In a fresh session that first draw lands mid-playback
+    // when a real firework note fires, stalling the QSG render thread for
+    // ~50-300 ms. The out-of-process worker already warms this in
+    // PreviewWorkerSession::pumpQsgFrame() by injecting a one-shot synthetic
+    // off-screen firework right after assets load; the default in-process
+    // preview (this class) had no equivalent, so the stall still hit. We
+    // mirror that warm-up here: once the skin assets (incl. the firework
+    // colour ball) are loaded, append a synthetic off-screen firework marker
+    // so the layer issues exactly one real textured draw at chart load —
+    // compiling the PSO + uploading the texture at a benign moment.
+    //
+    // `armed_` flips true when assets are ready; while armed-but-not-done the
+    // synthetic is re-appended on every setNoteMarkers so a coalesced marker
+    // refresh can never drop it before it renders. `done_` flips once the
+    // synthetic has actually been presented, at which point it is removed.
+    // Re-armed on visible-window change (a new QQuickWindow == a fresh QRhi
+    // pipeline cache, so the previously-warmed PSO/texture are gone).
+    bool fireworkWarmupArmed_ = false;
+    bool fireworkWarmupDone_ = false;
+    qint64 fireworkWarmupArmPresentCount_ = -1;
     bool requestedShowObjectStatsHud_ = false;
     bool suppressObjectStatsHud_ = false;
     bool requestedShowDebugInfo_ = false;

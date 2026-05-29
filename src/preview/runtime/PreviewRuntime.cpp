@@ -11,8 +11,11 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QPointF>
 #include <QQuickWindow>
 #include <QTextStream>
+
+#include <algorithm>
 
 namespace {
 
@@ -160,6 +163,10 @@ PreviewRuntime::PreviewRuntime(QObject* parent)
     updateRequestIntervalsMs_.fill(0.0);
     connect(assets_, &miacode::preview::runtime::PreviewSceneAssetRepository::assetsChanged, this, [this]() {
         refreshAssetStateFromRepository();
+        // Assets (incl. the firework colour ball) just became available —
+        // arm the one-shot firework PSO/texture warm-up. No-op if already
+        // armed/done or if the assets still aren't ready.
+        armFireworkPsoWarmupIfReady();
         update();
     });
 }
@@ -193,6 +200,17 @@ void PreviewRuntime::setVisibleHostWindow(QQuickWindow* window)
         return;
     }
     visibleHostWindow_ = window;
+    // A new QQuickWindow brings a fresh QRhi + pipeline cache, so any
+    // firework PSO/texture warmed for the previous window is gone. Re-arm
+    // the warm-up for this window; arming is deferred internally until the
+    // skin assets are ready (it's a no-op when they aren't).
+    if (window != nullptr) {
+        fireworkWarmupArmed_ = false;
+        fireworkWarmupDone_ = false;
+        fireworkWarmupArmPresentCount_ = -1;
+        armFireworkPsoWarmupIfReady();
+        update();
+    }
 }
 
 void PreviewRuntime::clearVisibleHostWindow(QQuickWindow* window)
@@ -407,6 +425,13 @@ void PreviewRuntime::setRetainedVideoFallbackFrame(const QImage& frame)
 void PreviewRuntime::setNoteMarkers(const QVector<TimelineNoteMarker>& notes)
 {
     frameState_.noteMarkers = notes;
+    // Keep the firework warm-up marker alive across marker refreshes until
+    // it has actually been presented — otherwise a marker push that lands
+    // between arming and the warm-up render would drop it (and updates
+    // coalesce, so the synthetic could never reach the GPU).
+    if (fireworkWarmupArmed_ && !fireworkWarmupDone_) {
+        appendFireworkWarmupMarker();
+    }
     frameState_.sceneContentRevision += 1;
     update();
 }
@@ -1469,6 +1494,20 @@ void PreviewRuntime::handlePresentedFrame()
     frameState_.presentedFrameCount = presentedFrameCountTotal_;
     updatePresentedFrameStats();
     pendingPresentedStatsRefresh_ = false;
+    // Firework warm-up completion. Requiring >= 2 presents past the arm
+    // point clears any frame that was already in flight before the synthetic
+    // was injected, so by now a frame containing the synthetic firework has
+    // definitely been presented — the PSO is compiled and the colour-ball
+    // texture uploaded. Drop the synthetic so it stops costing an off-screen
+    // draw every frame.
+    if (fireworkWarmupArmed_ && !fireworkWarmupDone_
+        && fireworkWarmupArmPresentCount_ >= 0
+        && (presentedFrameCountTotal_ - fireworkWarmupArmPresentCount_) >= 2) {
+        fireworkWarmupDone_ = true;
+        removeFireworkWarmupMarkers();
+        frameState_.sceneContentRevision += 1;
+        update();
+    }
     emit framePresented();
 }
 
@@ -1481,6 +1520,73 @@ void PreviewRuntime::refreshAssetStateFromRepository()
     frameState_.skin = assets_->skinAssets();
     frameState_.judgeOverlay = assets_->judgeOverlayAssets();
     frameState_.judgeEffect = assets_->judgeEffectAssets();
+}
+
+void PreviewRuntime::armFireworkPsoWarmupIfReady()
+{
+    if (fireworkWarmupDone_ || fireworkWarmupArmed_) {
+        return;
+    }
+    // Need the core skin AND the firework colour-ball image present, so the
+    // layer takes the textured colour-ball branch — that's what forces Qt
+    // RHI to compile the firework material pipeline *and* upload the texture.
+    // (populateJudgeEffectAssets always supplies a procedural fallback ball,
+    // so this is non-null whenever core assets have loaded; the guard is
+    // belt-and-suspenders against an empty/uninitialised asset state.)
+    if (assets_ == nullptr || !assets_->hasCoreSkinAssetsLoaded()
+        || frameState_.judgeEffect.fireworkColorBallImage.isNull()) {
+        return;  // retried on the next assetsChanged / visible-window bind
+    }
+    fireworkWarmupArmed_ = true;
+    fireworkWarmupArmPresentCount_ = presentedFrameCountTotal_;
+    removeFireworkWarmupMarkers();  // guarantee exactly one synthetic
+    appendFireworkWarmupMarker();
+    frameState_.sceneContentRevision += 1;
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/runtime"),
+        QStringLiteral("action=firework_pso_warmup_arm playhead=%1 present_count=%2")
+            .arg(frameState_.playheadSeconds, 0, 'f', 3)
+            .arg(presentedFrameCountTotal_));
+    // The caller flushes via update().
+}
+
+void PreviewRuntime::appendFireworkWarmupMarker()
+{
+    // Synthetic off-screen firework. type=="touch" + isFirework so the
+    // firework layer-state builder accepts it; touchPoint far off-canvas
+    // (non-zero, which the builder requires) so the GPU clips every triangle
+    // — the PSO still compiles and the colour-ball texture still uploads, but
+    // no pixels are visible. `second` places the trigger ~0.15 s into the
+    // ~1.33 s curve (recomputed against the live playhead on every
+    // re-append) so the textured colour-ball branch is active, exercising
+    // both the material pipeline and the texture sampler.
+    TimelineNoteMarker synth;
+    synth.type = QStringLiteral("touch");
+    synth.isFirework = true;
+    synth.second = frameState_.playheadSeconds
+        - miacode::preview_gameplay::kJudgeEffectFireworkTouchTriggerDelaySeconds
+        - 0.15;
+    synth.endSecond = -1.0;
+    synth.touchPoint = QPointF(-1.0e6, -1.0e6);  // off-screen, non-zero
+    synth.lane = 1;
+    frameState_.noteMarkers.append(synth);
+}
+
+void PreviewRuntime::removeFireworkWarmupMarkers()
+{
+    QVector<TimelineNoteMarker>& markers = frameState_.noteMarkers;
+    markers.erase(
+        std::remove_if(
+            markers.begin(),
+            markers.end(),
+            [](const TimelineNoteMarker& marker) {
+                return marker.isFirework
+                    && marker.type == QLatin1String("touch")
+                    && qFuzzyCompare(marker.touchPoint.x(), -1.0e6)
+                    && qFuzzyCompare(marker.touchPoint.y(), -1.0e6);
+            }),
+        markers.end());
 }
 
 void PreviewRuntime::updatePresentedFrameStats()
