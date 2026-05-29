@@ -433,10 +433,25 @@ double parseHoldDurationSignature(const QString& signature, double bpm, bool* ok
     auto* okOut = ok != nullptr ? ok : &localOk;
     *okOut = false;
 
-    const auto parseBeatFraction = [](const QString& text, double useBpm, bool* localOk) -> double {
+    if (signature.isEmpty()) {
+        return 0.0;
+    }
+
+    // Mirror the authoritative SimaiNativeParser hold-duration grammar so the Timeline
+    // shows the same hold length the renderer uses:
+    //   [beats:num]       beat fraction at the current BPM
+    //   [#seconds]        absolute seconds
+    //   [tempo#beats:num] beat fraction at a temporary BPM
+    //   [tempo#seconds]   absolute seconds (fallback when the tail is not a fraction)
+    const QStringList hashParts = signature.split(QLatin1Char('#'), Qt::KeepEmptyParts);
+    if (hashParts.size() > 2) {
+        return 0.0;
+    }
+
+    const auto parseBeatFraction = [](const QString& text, double useBpm, bool* fractionOk) -> double {
+        *fractionOk = false;
         const int colon = text.indexOf(QLatin1Char(':'));
-        if (colon <= 0 || colon >= text.size() - 1) {
-            *localOk = false;
+        if (colon < 0) {
             return 0.0;
         }
         bool beatsOk = false;
@@ -444,28 +459,50 @@ double parseHoldDurationSignature(const QString& signature, double bpm, bool* ok
         const int beats = text.left(colon).toInt(&beatsOk);
         const int num = text.mid(colon + 1).toInt(&numOk);
         if (!beatsOk || !numOk || beats <= 0 || useBpm <= 0.0) {
-            *localOk = false;
             return 0.0;
         }
-        *localOk = true;
+        *fractionOk = true;
         return 240.0 * static_cast<double>(num) / (useBpm * static_cast<double>(beats));
     };
 
-    if (signature.isEmpty()) {
-        return 0.0;
-    }
-    if (signature.contains(QLatin1Char('#'))) {
-        const QStringList hashParts = signature.split(QLatin1Char('#'), Qt::KeepEmptyParts);
-        if (hashParts.size() == 2) {
-            bool bpmOk = false;
-            const double tempBpm = hashParts.at(0).toDouble(&bpmOk);
-            if (!bpmOk || tempBpm <= 0.0) {
+    if (hashParts.size() == 2) {
+        if (hashParts.at(0).isEmpty()) {
+            bool secondsOk = false;
+            const double seconds = hashParts.at(1).toDouble(&secondsOk);
+            if (!secondsOk) {
                 return 0.0;
             }
-            return parseBeatFraction(hashParts.at(1), tempBpm, okOut);
+            *okOut = true;
+            return qMax(0.0, seconds);
         }
+
+        bool tempBpmOk = false;
+        const double tempBpm = hashParts.at(0).toDouble(&tempBpmOk);
+        if (!tempBpmOk) {
+            return 0.0;
+        }
+        bool fractionOk = false;
+        const double beatsDuration = parseBeatFraction(hashParts.at(1), tempBpm, &fractionOk);
+        if (fractionOk) {
+            *okOut = true;
+            return beatsDuration;
+        }
+        bool secondsOk = false;
+        const double seconds = hashParts.at(1).toDouble(&secondsOk);
+        if (!secondsOk) {
+            return 0.0;
+        }
+        *okOut = true;
+        return qMax(0.0, seconds);
     }
-    return parseBeatFraction(signature, bpm, okOut);
+
+    bool fractionOk = false;
+    const double beatsDuration = parseBeatFraction(signature, bpm, &fractionOk);
+    if (fractionOk) {
+        *okOut = true;
+        return beatsDuration;
+    }
+    return 0.0;
 }
 
 bool parseSlideWaitAndDuration(const QString& signature, double bpm, double* waitSecond, double* durationSecond)
@@ -2067,7 +2104,12 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
     rebuildFollowSelectionRanges(lineState);
 
     lineState->endState = state;
-    lineState->render.endSecond = qMax(lineMaxSecond, state.second);
+    // Preserve the hold/slide/touch-hold tail extent accumulated by appendNote()
+    // instead of clobbering it with the bar cursor. Otherwise the snapshot duration
+    // and horizontal scroll range drop long note tails that the slow parser path
+    // (TimelineSlowRefresh::computeDurationSeconds) and the visible-range cull
+    // (noteVisualEndPrefixMax) both retain, leaving the three out of sync.
+    lineState->render.endSecond = qMax(lineState->render.endSecond, qMax(lineMaxSecond, state.second));
     return true;
 }
 

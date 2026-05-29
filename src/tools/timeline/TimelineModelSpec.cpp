@@ -1693,6 +1693,91 @@ int main(int argc, char** argv)
                QStringLiteral("quick model matches parser-visible timeline semantics for the Prophesy One UTG slide repro"));
     }
 
+    {
+        // Regression (gap fix): absolute-seconds and tempo#seconds hold/touch-hold
+        // durations must render on the Timeline exactly like the authoritative
+        // SimaiNativeParser. These forms were previously dropped by the quick model.
+        struct DurationCase { QString name; QString chart; double expectedHoldSeconds; };
+        const QVector<DurationCase> cases = {
+            { QStringLiteral("1h[4:3]"),     QStringLiteral("1h[4:3],\nE"),     1.5 },
+            { QStringLiteral("1h[#1.5]"),    QStringLiteral("1h[#1.5],\nE"),    1.5 },
+            { QStringLiteral("1h[120#1.5]"), QStringLiteral("1h[120#1.5],\nE"), 1.5 },
+            { QStringLiteral("1h[120#4:3]"), QStringLiteral("1h[120#4:3],\nE"), 1.5 },
+            { QStringLiteral("Ch[#1.0]"),    QStringLiteral("Ch[#1.0],\nE"),    1.0 },
+        };
+        for (const DurationCase& dc : cases) {
+            QString diff;
+            const bool matches = snapshotMatchesParser(dc.chart, &diff);
+            if (!matches) {
+                err << diff << '\n';
+            }
+            expect(matches,
+                   QStringLiteral("quick model matches parser hold duration for %1").arg(dc.name));
+
+            TimelineQuickModel model;
+            model.rebuildFromText(dc.chart, 0.0);
+            double holdSeconds = -1.0;
+            for (const TimelineRenderLine& line : model.snapshot().lines) {
+                for (const TimelineRenderNote& note : line.notes) {
+                    if (note.kind == TimelineRenderNoteKind::Hold
+                        || note.kind == TimelineRenderNoteKind::TouchHold) {
+                        holdSeconds = note.endSecondOffset - note.secondOffset;
+                    }
+                }
+            }
+            expect(nearlyEqual(holdSeconds, dc.expectedHoldSeconds),
+                   QStringLiteral("quick model resolves %1 to %2s").arg(dc.name).arg(dc.expectedHoldSeconds));
+        }
+    }
+
+    {
+        // Note geometry must survive incremental edits identically to a full rebuild.
+        // (a) single stray-digit insert inside a hold bracket.
+        expect(incrementalMatchesRebuild(
+                   QStringLiteral("5h[4:3],\nE"),
+                   QStringLiteral("5h[4:3],\nE").indexOf(QStringLiteral("[4:3]")) + 3,
+                   0,
+                   QStringLiteral("2"),
+                   0.0),
+               QStringLiteral("incremental insert inside hold duration bracket matches rebuild"));
+
+        // (b) full keystroke sequence on a SINGLE model: type '2' -> delete '2' ->
+        // delete ']' (transiently invalid) -> retype ']'. Each step must match a
+        // fresh rebuild, and the hold must revert to its original length.
+        struct EditStep { int pos; int charsRemoved; QString inserted; QString note; };
+        const QString original = QStringLiteral("5h[4:3],\nE");
+        const int threeIndex = original.indexOf(QStringLiteral("[4:3]")) + 3;
+        const QVector<EditStep> steps = {
+            { threeIndex, 0, QStringLiteral("2"), QStringLiteral("insert stray 2 -> [4:23]") },
+            { threeIndex, 1, QString(),           QStringLiteral("delete stray 2 -> [4:3]") },
+            { threeIndex + 1, 1, QString(),       QStringLiteral("delete ] -> invalid") },
+            { threeIndex + 1, 0, QStringLiteral("]"), QStringLiteral("retype ] -> [4:3]") },
+        };
+        QTextDocument document(original);
+        TimelineQuickModel incremental;
+        incremental.rebuildFromDocument(&document, 0.0);
+        for (const EditStep& step : steps) {
+            applyDocumentChange(&document, step.pos, step.charsRemoved, step.inserted);
+            incremental.applyContentsChange(
+                &document, step.pos, step.charsRemoved, step.inserted.size(), 0.0);
+            TimelineQuickModel rebuilt;
+            rebuilt.rebuildFromDocument(&document, 0.0);
+            expect(sameSnapshot(incremental.snapshot(), rebuilt.snapshot()),
+                   QStringLiteral("incremental hold edit matches rebuild after: %1").arg(step.note));
+        }
+
+        double finalHoldSeconds = -1.0;
+        for (const TimelineRenderLine& line : incremental.snapshot().lines) {
+            for (const TimelineRenderNote& note : line.notes) {
+                if (note.kind == TimelineRenderNoteKind::Hold) {
+                    finalHoldSeconds = note.endSecondOffset - note.secondOffset;
+                }
+            }
+        }
+        expect(nearlyEqual(finalHoldSeconds, 1.5),
+               QStringLiteral("hold duration reverts to [4:3] length after stray-digit insert+delete"));
+    }
+
     if (failed > 0) {
         err << "\nTimeline model spec failed: " << failed << " case(s)\n";
         return 1;
