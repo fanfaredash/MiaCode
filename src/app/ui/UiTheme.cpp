@@ -421,7 +421,13 @@ QString editorFindBarStyleSheet()
 QString metadataPageStyleSheet()
 {
     const Colors& c = colors();
-    return QStringLiteral(
+    // The page canvas *outside* the metadata card uses the darker window
+    // background so the card reads as a distinct surface — matching the
+    // BPM & Latency page. The broad `QWidget` rule keeps inner widgets on the
+    // card background; the higher-specificity `#MetadataPage` id rule only
+    // repaints the page itself.
+    return QStringLiteral("QWidget#MetadataPage { background: %1; }").arg(css(c.windowBg))
+        + QStringLiteral(
         "QWidget { background: %1; color: %2; }"
         "QFrame#MetadataCard { background: %1; border: 1px solid %3; border-radius: 8px; }"
         "QLabel#SectionTitle { color: %2; font-weight: 700; padding-left: 4px; }"

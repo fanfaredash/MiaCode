@@ -117,7 +117,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 - `LatencyDetectionPage.*`, `LatencyAnalysis.*`, `LatencySandboxController.*`,
   `LatencyTestChartBuilder.*` (detection moved to an in-sidebar page + sandbox audition).
-- Entry: `MainWindow.cpp` (`onOpenLatencyDetector` / latency page activation).
+- Entry: `MainWindow.cpp` (`onOpenLatencyDetector` / latency page activation);
+  `switchToLatencyField` in `sections/document/MainWindow.DocumentUi.cpp`.
+- **Audition reuses the main preview transport** — it is NOT a separate player. The page
+  installs the synthesized test chart as the preview source and plays it through the real
+  `startQtPreviewPlayback`/`onQtPreviewTick`. `LatencySandboxController` is a thin
+  install/teardown + UI-poll layer; the page button → `toggleAudition()` →
+  `MainWindow::onTogglePreviewPause()`. See `cross-chain-linkage.md` §12.
 
 ## 10. Muri analysis — `src/tools/muri/`
 

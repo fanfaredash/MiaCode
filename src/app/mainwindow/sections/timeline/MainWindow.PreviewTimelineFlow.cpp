@@ -364,6 +364,13 @@ bool MainWindow::TimelineSection::hasActiveDifficulty() const
     return state_.activeDifficultyId_ > 0 && state_.document_.difficulty(state_.activeDifficultyId_) != nullptr;
 }
 
+bool MainWindow::TimelineSection::hasPreviewableChart() const
+{
+    // latencySandboxAuditionActive_ is set while the latency page has its
+    // synthesized test chart installed as the preview source.
+    return hasActiveDifficulty() || state_.latencySandboxAuditionActive_;
+}
+
 int MainWindow::TimelineSection::activeDifficultyId() const
 {
     return state_.activeDifficultyId_;

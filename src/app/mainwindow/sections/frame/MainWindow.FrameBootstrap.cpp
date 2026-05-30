@@ -549,9 +549,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     welcomeLayout->addStretch(1);
 
     metadataPage_ = new QWidget(editorStack_);
+    metadataPage_->setObjectName("MetadataPage");
     metadataPage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     metadataPage_->setStyleSheet(
         "QWidget { background: #FFFFFF; color: #2A3440; }"
+        "QWidget#MetadataPage { background: #F8FAFD; }"
         "QFrame#MetadataCard { background: #FFFFFF; border: 1px solid #DEE4EC; border-radius: 8px; }"
         "QLabel#SectionTitle { color: #1F2D3D; font-weight: 700; padding-left: 4px; }"
         "QLabel#MetadataFieldLabel { color: #2A3440; background: transparent; padding-left: 8px; }"

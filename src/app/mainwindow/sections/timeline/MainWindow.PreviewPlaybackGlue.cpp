@@ -27,6 +27,15 @@ void appendPreviewInteractionLog(const QString& action, const QString& payload =
 
 bool MainWindow::TimelineSection::preparePreviewStartState()
 {
+    // Latency sandbox: LatencySandboxController populates the test-chart preview
+    // state synchronously, so skip the editor-dirty / difficulty checks and the
+    // slow-refresh round trip — just report whether that state is ready. This
+    // lets the audition reuse the exact same playback transport as a difficulty.
+    if (state_.latencySandboxAuditionActive_) {
+        return state_.latestTimelinePreviewSnapshotReady_
+            && state_.latestTimelinePreviewRevision_ == state_.timelineRevision_;
+    }
+
     const bool chartFieldVisible = ui_.editorStack_ != nullptr && ui_.editorStack_->currentWidget() == ui_.chartPage_;
     if (state_.currentFieldDirty_ && !chartFieldVisible && !owner_.applyCurrentFieldToDocument()) {
         return false;
@@ -47,15 +56,8 @@ bool MainWindow::TimelineSection::preparePreviewStartState()
 void MainWindow::TimelineSection::onStopPreview()
 {
     MC_OP("MainWindow::TimelineSection::onStopPreview");
-    // Latency-page sandbox takes over the stop/space transport when
-    // the user is on its outline entry, so the existing player keys
-    // double as the audition controls (per design — no new shortcut).
-    if (state_.activeOutlineKey_ == QLatin1String("latency")) {
-        if (auto* sandbox = owner_.latencySandboxController(); sandbox != nullptr) {
-            sandbox->stopAudition();
-        }
-        return;
-    }
+    // The latency page now reuses this exact transport (its synthesized test
+    // chart is the preview source), so no special-casing is needed here.
     const quint64 opId = ++state_.previewInteractionSequence_;
     const double returnSecond = qBound(0.0, state_.qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
     const bool wasActive = state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_;
@@ -85,12 +87,6 @@ void MainWindow::TimelineSection::onStopPreview()
 void MainWindow::TimelineSection::onTogglePreviewPause()
 {
     MC_OP("MainWindow::TimelineSection::onTogglePreviewPause");
-    if (state_.activeOutlineKey_ == QLatin1String("latency")) {
-        if (auto* sandbox = owner_.latencySandboxController(); sandbox != nullptr) {
-            sandbox->toggleAudition();
-        }
-        return;
-    }
     if (state_.qtPreviewPlaying_) {
         const quint64 opId = ++state_.previewInteractionSequence_;
         appendPreviewInteractionLog(
@@ -111,7 +107,7 @@ void MainWindow::TimelineSection::onTogglePreviewPause()
         return;
     }
 
-    if (!hasActiveDifficulty()) {
+    if (!hasPreviewableChart()) {
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }

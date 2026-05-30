@@ -158,6 +158,38 @@ affects both live diagnostics and exported overlays.
 - Muri list anchoring/dedupe → `MuriPanelEntries.cpp`, `MainWindow.ValidationFlow.cpp`,
   `src/tools/muri/MuriSpec.cpp`.
 
+## 12. Latency-page audition reuses the main preview transport
+
+The BPM & latency page plays its synthesized test chart through the SAME transport as a
+difficulty's chart page — only the chart source differs (a non-editable, non-displayed test
+chart). Do **not** reintroduce a parallel sandbox player (an earlier wall-clock/`drainEvents`
+replica was the wrong approach: it bypassed the real per-frame path and drifted).
+
+- `LatencySandboxController::installSandboxScene` / `setupSandboxPreviewState` publish the test
+  chart as the preview source exactly like a slow-refresh does for a difficulty: set
+  `latestTimelineNoteMarkers_` (+ signature), `latestTimelinePreviewRevision_ = timelineRevision_`,
+  `latestTimelinePreviewSnapshotReady_ = true`, `PreviewRuntime::setNoteMarkers`, the bottom
+  timeline via `TimelineQuickModel::rebuildFromText` + `setTimelineData`, the slider range, and the
+  SFX timeline via `QtPreviewSfxRuntime::configureTimeline`.
+- `latencySandboxAuditionActive_` (true while the test chart is installed) gates
+  `TimelineSection::hasPreviewableChart()` = `hasActiveDifficulty() || latencySandboxAuditionActive_`.
+  Playback-**start** gates use `hasPreviewableChart()` instead of `hasActiveDifficulty()`:
+  `preparePreviewStartState` (early sandbox branch) and `onTogglePreviewPause` (play branch). Every
+  relaxation is guarded by that flag, so normal-difficulty playback is byte-identical.
+- Play/Pause/Stop run the real transport — `onTogglePreviewPause` / `pauseQtPreviewPlaybackExact` /
+  `startQtPreviewPlayback` → `onQtPreviewTick` — which drives preview render, bottom timeline,
+  slider, SFX, and song audio. The page button calls
+  `LatencySandboxController::toggleAudition()` → `MainWindow::onTogglePreviewPause()`.
+- The controller's `QTimer` is a ~30Hz UI poll ONLY: it mirrors `qtPreviewPlaying_` +
+  `qtPreviewPauseSecond_` onto the page's own widgets (audition button + position label) via
+  `auditionStateChanged` / `playheadAdvanced`. It does NOT drive playback.
+- Leaving the page (`setOnPage(false)`) stops the transport and restores the previous chart's
+  preview state + audio settings.
+- Review together on change: `src/tools/latency/LatencySandboxController.*`,
+  `sections/timeline/MainWindow.PreviewPlaybackGlue.cpp`,
+  `sections/timeline/MainWindow.PreviewTimelineFlow.cpp` (`hasPreviewableChart`),
+  `sections/document/MainWindow.DocumentUi.cpp` (`switchToLatencyField`).
+
 ## Update this file when
 
 - A behavior starts/stops being mirrored across two paths; a new serialized export field is added;

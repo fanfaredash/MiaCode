@@ -7,21 +7,18 @@
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "timeline/TimelineQuickModel.h"
 #include "timeline/TimelineSlowRefresh.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 
-#include <QFileInfo>
 #include <QTimer>
 #include <QtMath>
-
-#include <algorithm>
-#include <limits>
 
 namespace miacode::latency {
 
 namespace {
 
-constexpr int kTickIntervalMs = 33;  // ~30Hz playhead updates
+constexpr int kPollIntervalMs = 33;  // ~30Hz UI poll for the page's own widgets
 constexpr double kFallbackAudioDurationSeconds = 180.0;
 
 }  // namespace
@@ -31,14 +28,15 @@ LatencySandboxController::LatencySandboxController(MainWindow* owner, QObject* p
     , owner_(owner)
     , tickTimer_(new QTimer(this))
 {
-    tickTimer_->setInterval(kTickIntervalMs);
-    tickTimer_->setTimerType(Qt::PreciseTimer);
+    tickTimer_->setInterval(kPollIntervalMs);
     connect(tickTimer_, &QTimer::timeout, this, &LatencySandboxController::onTick);
 }
 
 LatencySandboxController::~LatencySandboxController()
 {
-    exitIfActive();
+    if (onPage_) {
+        setOnPage(false);
+    }
 }
 
 void LatencySandboxController::setOnPage(bool onPage)
@@ -47,17 +45,19 @@ void LatencySandboxController::setOnPage(bool onPage)
         return;
     }
     onPage_ = onPage;
-    if (!onPage_) {
-        exitIfActive();
+    if (onPage_) {
+        installSandboxScene();
+    } else {
+        teardownSandboxScene();
     }
 }
 
 double LatencySandboxController::playheadSeconds() const
 {
-    if (!auditionRunning_ || owner_.isNull() || owner_->state_.previewSfxRuntime_ == nullptr) {
+    if (owner_.isNull()) {
         return 0.0;
     }
-    return qMax(0.0, owner_->state_.previewSfxRuntime_->authoritativePlaybackSecond());
+    return qMax(0.0, owner_->state_.qtPreviewPauseSecond_);
 }
 
 void LatencySandboxController::setBpm(double bpm)
@@ -70,7 +70,7 @@ void LatencySandboxController::setBpm(double bpm)
     }
     bpm_ = bpm;
     emit parametersChanged();
-    regenerateAndPushIfRunning();
+    regenerateAndPushIfActive();
 }
 
 void LatencySandboxController::setOffsetSeconds(double seconds)
@@ -83,7 +83,7 @@ void LatencySandboxController::setOffsetSeconds(double seconds)
     }
     offsetSeconds_ = seconds;
     emit parametersChanged();
-    regenerateAndPushIfRunning();
+    regenerateAndPushIfActive();
 }
 
 void LatencySandboxController::setSubdivision(int subdivision)
@@ -96,7 +96,7 @@ void LatencySandboxController::setSubdivision(int subdivision)
     }
     subdivision_ = subdivision;
     emit parametersChanged();
-    regenerateAndPushIfRunning();
+    regenerateAndPushIfActive();
 }
 
 void LatencySandboxController::setSfxVolumePercent(int percent)
@@ -107,25 +107,22 @@ void LatencySandboxController::setSfxVolumePercent(int percent)
     }
     sfxVolumePercent_ = percent;
     emit parametersChanged();
-    if (auditionRunning_) {
+    if (onPage_) {
         applyOverrideAudioSettings();
     }
 }
 
-bool LatencySandboxController::startAudition()
+void LatencySandboxController::installSandboxScene()
 {
-    if (auditionRunning_) {
-        return true;
+    if (owner_.isNull()) {
+        return;
     }
-    if (owner_.isNull() || owner_->state_.previewSfxRuntime_ == nullptr) {
-        return false;
-    }
-    if (!(bpm_ > 0.0)) {
-        return false;
-    }
+    // Make sure the SFX engine + assets are loaded (the page may be opened
+    // before any difficulty was previewed). Mirrors startQtPreviewPlayback().
+    owner_->ensurePreviewSfxRuntimePrepared();
 
-    // Cache the pre-sandbox audio + timeline state so we can roll back
-    // cleanly when audition stops.
+    // Cache the pre-sandbox audio + timeline state so we can roll back cleanly
+    // when the user leaves the page.
     cachedAudioSettings_ = owner_->state_.previewAudioSettings_;
     hasCachedAudioSettings_ = true;
     cachedNoteMarkers_ = owner_->state_.latestTimelineNoteMarkers_;
@@ -137,122 +134,154 @@ bool LatencySandboxController::startAudition()
     }
     hasCachedTimeline_ = true;
 
+    // Drop any retained pause transaction a previously-paused difficulty left
+    // behind, so the first audition Play starts cleanly from 0 instead of
+    // resuming that difficulty's transaction.
+    if (owner_->state_.previewSfxRuntime_ != nullptr) {
+        owner_->state_.previewSfxRuntime_->stopAll();
+        owner_->state_.previewSfxRuntime_->clearRetainedPreviewPlaybackTransaction();
+    }
+
+    auditionRunning_ = false;
+    lastPolledSecond_ = -1.0;
+    // Tell the playback gates the test chart is a previewable chart, so the
+    // real transport (startQtPreviewPlayback / onTogglePreviewPause) plays it.
     owner_->state_.latencySandboxAuditionActive_ = true;
-    auditionRunning_ = true;
-    lastSentPlayheadSeconds_ = -1.0;
+    owner_->state_.qtPreviewPauseSecond_ = 0.0;
 
+    // Install the test chart as the preview source + apply the per-page SFX mix.
     applyOverrideAudioSettings();
-    pushSyntheticTimeline();
+    setupSandboxPreviewState();
+    applyPlayheadToScene(0.0);
 
-    // Start the playback transaction. The background track + SFX engine
-    // were already wired up when the user opened the chart, so a plain
-    // transaction start is enough — we don't need the full stage-media /
-    // video plumbing that startQtPreviewPlayback() runs.
-    QtPreviewSfxRuntime* runtime = owner_->state_.previewSfxRuntime_;
-    runtime->startPreviewPlaybackTransaction(0.0, false, 1.0);
-    tickTimer_->start();
-
-    emit auditionStateChanged(true);
-    return true;
+    if (tickTimer_ != nullptr) {
+        tickTimer_->start();
+    }
+    emit auditionStateChanged(false);
+    emit playheadAdvanced(0.0);
 }
 
-void LatencySandboxController::stopAudition()
+void LatencySandboxController::teardownSandboxScene()
 {
-    if (!auditionRunning_) {
-        return;
+    if (tickTimer_ != nullptr) {
+        tickTimer_->stop();
+    }
+    if (!owner_.isNull()) {
+        owner_->stopQtPreviewPlayback(true);  // stop the real transport if it's running
+        owner_->state_.latencySandboxAuditionActive_ = false;
+        // Don't let a later difficulty reuse the sandbox's "ready" snapshot.
+        owner_->state_.latestTimelinePreviewSnapshotReady_ = false;
     }
     auditionRunning_ = false;
-    tickTimer_->stop();
-
-    if (!owner_.isNull() && owner_->state_.previewSfxRuntime_ != nullptr) {
-        owner_->state_.previewSfxRuntime_->stopAll();
-    }
+    lastPolledSecond_ = -1.0;
 
     restoreOriginalTimeline();
     restoreOriginalAudioSettings();
 
-    if (!owner_.isNull()) {
-        owner_->state_.latencySandboxAuditionActive_ = false;
-    }
-    lastSentPlayheadSeconds_ = -1.0;
     emit auditionStateChanged(false);
     emit playheadAdvanced(0.0);
 }
 
 void LatencySandboxController::toggleAudition()
 {
-    if (auditionRunning_) {
-        stopAudition();
-    } else {
-        startAudition();
+    // Reuse the real Play/Pause transport so the audition is identical to a
+    // difficulty page (preview render, bottom timeline, slider, SFX, song).
+    if (!owner_.isNull()) {
+        owner_->onTogglePreviewPause();
     }
 }
 
 void LatencySandboxController::exitIfActive()
 {
-    if (auditionRunning_) {
-        stopAudition();
+    // Only stop in-progress audition playback; never touch normal-difficulty
+    // playback (onPage_ is true only while the latency page is selected).
+    if (onPage_ && !owner_.isNull()) {
+        owner_->stopQtPreviewPlayback(true);
     }
 }
 
 void LatencySandboxController::onTick()
 {
-    if (!auditionRunning_ || owner_.isNull() || owner_->state_.previewSfxRuntime_ == nullptr) {
+    // Lightweight poll: mirror the real transport's state onto the page's own
+    // widgets (audition button + position label). The preview/timeline/slider
+    // are driven by the real transport itself.
+    if (owner_.isNull()) {
         return;
     }
-    const double second = qMax(0.0, owner_->state_.previewSfxRuntime_->authoritativePlaybackSecond());
-    if (qAbs(second - lastSentPlayheadSeconds_) < 1e-4) {
+    const bool playing = owner_->state_.qtPreviewPlaying_;
+    const double second = qMax(0.0, owner_->state_.qtPreviewPauseSecond_);
+    if (playing != auditionRunning_) {
+        auditionRunning_ = playing;
+        emit auditionStateChanged(playing);
+    }
+    if (lastPolledSecond_ < 0.0 || qAbs(second - lastPolledSecond_) > 1e-3) {
+        lastPolledSecond_ = second;
+        emit playheadAdvanced(second);
+    }
+}
+
+void LatencySandboxController::regenerateAndPushIfActive()
+{
+    if (!onPage_ || owner_.isNull()) {
         return;
     }
-    lastSentPlayheadSeconds_ = second;
+    if (owner_->state_.qtPreviewPlaying_) {
+        // Don't hot-swap the chart mid-playback (matches difficulty
+        // edit-while-play deferral); new params take effect on the next play.
+        return;
+    }
+    setupSandboxPreviewState();
+    applyPlayheadToScene(qMax(0.0, owner_->state_.qtPreviewPauseSecond_));
+}
+
+void LatencySandboxController::applyPlayheadToScene(double seconds)
+{
+    if (owner_.isNull()) {
+        return;
+    }
+    const double clamped = qMax(0.0, seconds);
+    owner_->state_.qtPreviewPauseSecond_ = clamped;
     if (owner_->state_.timelineQuickStateBridge_ != nullptr) {
-        owner_->state_.timelineQuickStateBridge_->setPlayheadSeconds(second, false);
+        owner_->state_.timelineQuickStateBridge_->setPlayheadSeconds(clamped, false);
     }
     if (owner_->state_.previewCanvas_ != nullptr) {
-        owner_->state_.previewCanvas_->setPlayheadSeconds(second, false);
+        owner_->state_.previewCanvas_->setPlayheadSeconds(clamped, true);
     }
-    emit playheadAdvanced(second);
+    owner_->updatePreviewSliderPosition(clamped);
 }
 
-void LatencySandboxController::regenerateAndPushIfRunning()
-{
-    if (!auditionRunning_) {
-        return;
-    }
-    pushSyntheticTimeline();
-    if (owner_.isNull() || owner_->state_.previewSfxRuntime_ == nullptr) {
-        return;
-    }
-    // Re-arm SFX timeline so future taps line up with the new chart.
-    owner_->state_.previewSfxRuntime_->configureTimeline(
-        owner_->state_.latestTimelineNoteMarkers_,
-        owner_->state_.previewPlaybackRate_ > 0.0 ? owner_->state_.previewPlaybackRate_ : 1.0,
-        owner_->state_.previewTimingSettings_);
-}
-
-void LatencySandboxController::pushSyntheticTimeline()
+void LatencySandboxController::setupSandboxPreviewState()
 {
     if (owner_.isNull()) {
         return;
     }
     const double duration = resolveAudioDurationSeconds();
     const QString chartText = buildTestChartText(bpm_, subdivision_, duration);
-    SimaiNativeParseResult parseResult = SimaiNativeParser::parseForTimeline(chartText);
+    const SimaiNativeParseResult parseResult = SimaiNativeParser::parseForTimeline(chartText);
     const TimelinePreviewRefreshState previewState =
         buildTimelinePreviewRefreshState(parseResult, offsetSeconds_);
 
+    // Preview note markers + "snapshot ready" flags — the same state a
+    // slow-refresh publishes for a real difficulty, so preparePreviewStartState
+    // accepts it and the real transport can play the test chart.
     owner_->state_.latestTimelineNoteMarkers_ = previewState.shiftedNoteMarkers;
     owner_->state_.latestTimelineNoteMarkerSignature_ = previewState.noteMarkerSignature;
-
+    owner_->state_.latestTimelinePreviewRevision_ = owner_->state_.timelineRevision_;
+    owner_->state_.latestTimelinePreviewSnapshotReady_ = true;
     if (owner_->state_.previewCanvas_ != nullptr) {
         owner_->state_.previewCanvas_->setNoteMarkers(previewState.shiftedNoteMarkers);
     }
 
-    TimelineRenderSnapshot snapshot = buildSyntheticSnapshot(duration);
+    // Bottom timeline — reuse the real timeline model so the test chart's notes
+    // (and beat/measure grid) render exactly like a difficulty's timeline.
+    owner_->state_.timelineQuickModel_.rebuildFromText(chartText, offsetSeconds_);
     if (owner_->state_.timelineQuickStateBridge_ != nullptr) {
-        owner_->state_.timelineQuickStateBridge_->setTimelineData(snapshot);
+        owner_->state_.timelineQuickStateBridge_->setTimelineData(
+            owner_->state_.timelineQuickModel_.snapshot());
     }
+    owner_->updatePreviewSliderRange();
 
+    // SFX timeline for the test taps.
     if (owner_->state_.previewSfxRuntime_ != nullptr) {
         owner_->state_.previewSfxRuntime_->configureTimeline(
             previewState.shiftedNoteMarkers,
@@ -274,6 +303,7 @@ void LatencySandboxController::restoreOriginalTimeline()
     if (owner_->state_.timelineQuickStateBridge_ != nullptr) {
         owner_->state_.timelineQuickStateBridge_->setTimelineData(cachedSnapshot_);
     }
+    owner_->updatePreviewSliderRange();
     if (owner_->state_.previewSfxRuntime_ != nullptr) {
         owner_->state_.previewSfxRuntime_->configureTimeline(
             cachedNoteMarkers_,
@@ -312,12 +342,11 @@ PreviewAudioSettings LatencySandboxController::buildOverrideAudioSettings(
     const PreviewAudioSettings& base, int sfxPercent) const
 {
     PreviewAudioSettings override = base;
-    // Keep the song audio at the user's normal effective volume by
-    // collapsing the chained (global * track) multiplier into a single
-    // trackVolume term and pinning globalVolume to 1.0. SFX kinds then
-    // get the sandbox slider's value directly (independent of the
-    // user's normal mix), so the test taps are easy to hear regardless
-    // of how quietly the user runs the song.
+    // Keep the song audio at the user's normal effective volume by collapsing
+    // the chained (global * track) multiplier into a single trackVolume term
+    // and pinning globalVolume to 1.0. SFX kinds then get the sandbox slider's
+    // value directly (independent of the user's normal mix), so the test taps
+    // are easy to hear regardless of how quietly the user runs the song.
     const double cachedEffectiveTrackVolume = previewTrackVolume(base);
     override.globalVolume = 1.0;
     override.globalRestoreVolume = 1.0;
@@ -343,64 +372,6 @@ PreviewAudioSettings LatencySandboxController::buildOverrideAudioSettings(
     override.answerRestoreVolume = sfxLevel;
     override.normalize();
     return override;
-}
-
-TimelineRenderSnapshot LatencySandboxController::buildSyntheticSnapshot(double durationSeconds) const
-{
-    TimelineRenderSnapshot snapshot;
-    snapshot.durationSeconds = qMax(0.0, durationSeconds);
-    snapshot.minimumSecond = 0.0;
-    snapshot.maximumSecond = snapshot.durationSeconds;
-
-    TimelineRenderLine line;
-    line.lineId = 1;
-    line.lineNumber = 1;
-    line.startPosition = 0;
-    line.startSecond = 0.0;
-    line.endSecond = snapshot.durationSeconds;
-
-    if (bpm_ > 0.0) {
-        const double beatPeriod = 60.0 / bpm_;
-        const int safeBarPulseCount = 4;
-        if (beatPeriod > 0.0) {
-            const double renderMinSecond = -0.5;
-            qint64 beatIndex = static_cast<qint64>(qFloor((renderMinSecond - offsetSeconds_) / beatPeriod));
-            while (offsetSeconds_ + static_cast<double>(beatIndex) * beatPeriod < renderMinSecond - 1e-6) {
-                ++beatIndex;
-            }
-            int sourceCol = 1;
-            for (;; ++beatIndex) {
-                const double beatSecond = offsetSeconds_ + static_cast<double>(beatIndex) * beatPeriod;
-                if (beatSecond > snapshot.durationSeconds + 1e-6) {
-                    break;
-                }
-                const bool isBarLine = beatIndex >= 0
-                    ? ((beatIndex % safeBarPulseCount) == 0)
-                    : (((-beatIndex) % safeBarPulseCount) == 0);
-                if (isBarLine) {
-                    if (snapshot.measureLineSeconds.isEmpty()
-                        || qAbs(snapshot.measureLineSeconds.constLast() - beatSecond) > 1e-6) {
-                        snapshot.measureLineSeconds.append(beatSecond);
-                    }
-                } else {
-                    TimelineRenderBeat beat;
-                    beat.secondOffset = beatSecond;
-                    beat.sourceCol = sourceCol;
-                    beat.subdivisionBeats = safeBarPulseCount;
-                    beat.subdivisionIndex = safeBarPulseCount > 0
-                        ? static_cast<int>((beatIndex % safeBarPulseCount + safeBarPulseCount) % safeBarPulseCount)
-                        : 0;
-                    line.beats.append(beat);
-                }
-                ++sourceCol;
-            }
-        }
-    }
-
-    snapshot.lines.append(line);
-    snapshot.noteVisualEndPrefixMaxWithSlideTracks.append(-std::numeric_limits<double>::infinity());
-    snapshot.noteVisualEndPrefixMaxWithoutSlideTracks.append(-std::numeric_limits<double>::infinity());
-    return snapshot;
 }
 
 double LatencySandboxController::resolveAudioDurationSeconds() const

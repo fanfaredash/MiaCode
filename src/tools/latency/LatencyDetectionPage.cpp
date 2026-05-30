@@ -23,6 +23,7 @@
 #include <QSlider>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 
 #include <QtMath>
 
@@ -39,6 +40,28 @@ QString latencySfxVolumeSettingsKey()
 {
     return QStringLiteral("latency/sfxVolumePercent");
 }
+
+// The BPM/offset spin boxes and the SFX slider live in a scroll area, so a
+// mouse wheel over them used to nudge the value (easy to do by accident while
+// scrolling the page). Ignoring the wheel event lets it bubble up to the
+// scroll area instead, so the controls only change via click/keyboard.
+class NoWheelDoubleSpinBox final : public QDoubleSpinBox
+{
+public:
+    using QDoubleSpinBox::QDoubleSpinBox;
+
+protected:
+    void wheelEvent(QWheelEvent* event) override { event->ignore(); }
+};
+
+class NoWheelSlider final : public QSlider
+{
+public:
+    using QSlider::QSlider;
+
+protected:
+    void wheelEvent(QWheelEvent* event) override { event->ignore(); }
+};
 }  // namespace
 
 LatencyDetectionPage::LatencyDetectionPage(MainWindow* owner, QWidget* parent)
@@ -111,10 +134,12 @@ void LatencyDetectionPage::refreshFromDocument()
 
 void LatencyDetectionPage::onPageEntered()
 {
+    // Sync BPM/Offset into the sandbox first so the test chart it installs on
+    // entry is built from the document's values rather than stale defaults.
+    refreshFromDocument();
     if (!sandbox_.isNull()) {
         sandbox_->setOnPage(true);
     }
-    refreshFromDocument();
 }
 
 void LatencyDetectionPage::onPageLeft()
@@ -167,7 +192,7 @@ void LatencyDetectionPage::buildUi()
     auto* bpmLayout = bpmPair.second;
     auto* bpmRow = new QHBoxLayout();
     bpmRow->setSpacing(10);
-    bpmEdit_ = new QDoubleSpinBox(bpmCard);
+    bpmEdit_ = new NoWheelDoubleSpinBox(bpmCard);
     bpmEdit_->setRange(1.0, 999.0);
     bpmEdit_->setDecimals(kDecimalsBpm);
     bpmEdit_->setSingleStep(0.5);
@@ -207,7 +232,7 @@ void LatencyDetectionPage::buildUi()
     auto* offsetLayout = offsetPair.second;
     auto* offsetRow = new QHBoxLayout();
     offsetRow->setSpacing(10);
-    offsetEdit_ = new QDoubleSpinBox(offsetCard);
+    offsetEdit_ = new NoWheelDoubleSpinBox(offsetCard);
     offsetEdit_->setRange(-999.0, 999.0);
     offsetEdit_->setDecimals(kDecimalsOffset);
     offsetEdit_->setSingleStep(0.010);
@@ -288,7 +313,7 @@ void LatencyDetectionPage::buildUi()
     volumeLabel->setProperty("role", "cardHint");
     volumeLabel->setFont(hintFont);
     volumeRow->addWidget(volumeLabel);
-    sfxVolumeSlider_ = new QSlider(Qt::Horizontal, auditionCard);
+    sfxVolumeSlider_ = new NoWheelSlider(Qt::Horizontal, auditionCard);
     sfxVolumeSlider_->setRange(0, 100);
     sfxVolumeSlider_->setValue(kDefaultSfxVolumePercent);
     sfxVolumeSlider_->setMinimumWidth(180);
@@ -498,9 +523,9 @@ void LatencyDetectionPage::onDetectOffsetClicked()
 void LatencyDetectionPage::onAuditionStateChanged(bool running)
 {
     updateAuditionUi(running);
-    if (!running) {
-        updatePositionLabel(0.0);
-    }
+    // Don't reset the position label here: pause keeps the playhead in place.
+    // The controller emits playheadAdvanced() with the correct value (the
+    // freeze point on pause, 0 on stop), which drives updatePositionLabel().
 }
 
 void LatencyDetectionPage::onPlayheadAdvanced(double seconds)
@@ -511,8 +536,10 @@ void LatencyDetectionPage::onPlayheadAdvanced(double seconds)
 void LatencyDetectionPage::updateAuditionUi(bool running)
 {
     if (auditionButton_ != nullptr) {
+        // Behaves like the main Play/Pause button: shows Pause while running,
+        // reverts to the play label when paused or stopped.
         auditionButton_->setText(running
-            ? localizedText(QStringLiteral("■ 停止试听"), QStringLiteral("■ Stop Audition"))
+            ? localizedText(QStringLiteral("⏸ 暂停"), QStringLiteral("⏸ Pause"))
             : localizedText(QStringLiteral("▶ 开始试听"), QStringLiteral("▶ Start Audition")));
     }
 }

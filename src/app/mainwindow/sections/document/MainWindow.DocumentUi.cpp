@@ -38,7 +38,12 @@ void MainWindow::DocumentSection::updateEditorHeader()
         return;
     }
     if (!owner_.hasActiveDifficulty()) {
-        if (state_.document_.difficultyIds().isEmpty() && state_.activeOutlineKey_ == QLatin1String("welcome")) {
+        if (state_.activeOutlineKey_ == QLatin1String("latency")) {
+            ui_.editorContextLabel_->setText(UiText::isChineseUi()
+                ? QStringLiteral("BPM & 延迟检测")
+                : QStringLiteral("BPM & Latency"));
+            ui_.editorContextLabel_->setFont(uiAccentFont(12, QFont::DemiBold));
+        } else if (state_.document_.difficultyIds().isEmpty() && state_.activeOutlineKey_ == QLatin1String("welcome")) {
             ui_.editorContextLabel_->setText(uiText("editor.welcome", "Welcome to MiaCode!"));
             ui_.editorContextLabel_->setFont(uiAccentFont(15, QFont::DemiBold));
         } else {

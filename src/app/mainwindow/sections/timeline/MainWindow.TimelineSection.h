@@ -11,6 +11,10 @@ public:
     void refreshWaveformCache();
     void refreshWaveformCache(double knownDurationSeconds);
     bool hasActiveDifficulty() const;
+    // True when there is a chart the preview transport can play: either a real
+    // active difficulty, or the latency page's synthesized test chart. Playback
+    // gates use this so the latency audition reuses the exact same transport.
+    bool hasPreviewableChart() const;
     int activeDifficultyId() const;
     QString activeChartText() const;
     miacode::simai::SimaiTimingMetadata currentTimingMetadata() const;
