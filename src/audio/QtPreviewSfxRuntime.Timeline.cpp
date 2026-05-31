@@ -285,12 +285,12 @@ void QtPreviewSfxRuntime::drainEvents(double second)
                 settings_.breakSlideTailCheerMuted);
 
         for (const Event& event : group.orderedEvents) {
-            if (event.kind == "touchhold_start") {
-                startTouchholdSpan(event.spanIndex, 0.0);
-                continue;
-            }
-            if (event.kind == "touchhold_stop") {
-                stopTouchholdSpan(event.spanIndex);
+            if (event.kind == "touchhold_start" || event.kind == "touchhold_stop") {
+                // Latest-wins ownership of the single shared touch-hold voice; see
+                // reconcileTouchholdVoice. Order-independent, so a seamless join or
+                // overlap lets the newer span take over instead of the older one
+                // clobbering it.
+                reconcileTouchholdVoice(event.second);
                 continue;
             }
             playKindInternal(event.kind, event.gain);
@@ -303,51 +303,45 @@ void QtPreviewSfxRuntime::drainEvents(double second)
     }
 }
 
+void QtPreviewSfxRuntime::reconcileTouchholdVoice(double second)
+{
+    if (touchholdVoice_ == nullptr || !touchholdVoice_->initialized) {
+        return;
+    }
+    const int owner = miacode::preview_sfx_timeline::touchholdOwnerSpanIndexAt(
+        preparedTimeline_.touchholdSpans, second);
+    if (owner == touchholdOwnerSpanIndex_) {
+        return;  // voice already belongs to the right span — leave it playing
+    }
+    touchholdOwnerSpanIndex_ = owner;
+    if (owner < 0) {
+        ma_sound_stop(&touchholdVoice_->sound);
+        return;
+    }
+    const TouchholdSpan& span = preparedTimeline_.touchholdSpans[owner];
+    const ma_uint64 offsetFrames =
+        static_cast<ma_uint64>(qMax(0.0, second - span.startSecond) * deviceSampleRate_);
+    if (touchholdSoundLengthFrames_ > 0 && offsetFrames >= touchholdSoundLengthFrames_) {
+        ma_sound_stop(&touchholdVoice_->sound);
+        return;
+    }
+    ma_sound_stop(&touchholdVoice_->sound);
+    ma_sound_seek_to_pcm_frame(&touchholdVoice_->sound, offsetFrames);
+    ma_sound_start(&touchholdVoice_->sound);
+}
+
 void QtPreviewSfxRuntime::pauseTouchholdVoices()
 {
     if (touchholdVoice_ != nullptr && touchholdVoice_->initialized) {
         ma_sound_stop(&touchholdVoice_->sound);
     }
-    activeTouchholdSpanIndices_.clear();
+    touchholdOwnerSpanIndex_ = -1;
 }
 
 void QtPreviewSfxRuntime::restoreTouchholdVoices(double second)
 {
     pauseTouchholdVoices();
-    if (touchholdVoice_ == nullptr || !touchholdVoice_->initialized) {
-        return;
-    }
-
-    int startSpanIndex = -1;
-    double startOffsetSeconds = 0.0;
-    for (int spanIndex = 0; spanIndex < preparedTimeline_.touchholdSpans.size(); ++spanIndex) {
-        const TouchholdSpan& span = preparedTimeline_.touchholdSpans[spanIndex];
-        if (second + kQtPreviewSfxEpsilonSeconds < span.startSecond) {
-            continue;
-        }
-        if (second >= span.endSecond - kQtPreviewSfxEpsilonSeconds) {
-            continue;
-        }
-        activeTouchholdSpanIndices_.append(spanIndex);
-        if (startSpanIndex < 0 || span.startSecond < preparedTimeline_.touchholdSpans[startSpanIndex].startSecond) {
-            startSpanIndex = spanIndex;
-            startOffsetSeconds = second - span.startSecond;
-        }
-    }
-
-    if (startSpanIndex < 0) {
-        activeTouchholdSpanIndices_.clear();
-        return;
-    }
-
-    const ma_uint64 offsetFrames = static_cast<ma_uint64>(qMax(0.0, startOffsetSeconds) * deviceSampleRate_);
-    if (touchholdSoundLengthFrames_ > 0 && offsetFrames >= touchholdSoundLengthFrames_) {
-        return;
-    }
-
-    ma_sound_stop(&touchholdVoice_->sound);
-    ma_sound_seek_to_pcm_frame(&touchholdVoice_->sound, offsetFrames);
-    ma_sound_start(&touchholdVoice_->sound);
+    reconcileTouchholdVoice(second);
 }
 
 bool QtPreviewSfxRuntime::hasBackgroundTrack() const

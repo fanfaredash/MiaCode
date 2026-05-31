@@ -219,6 +219,31 @@ inline double scheduledPlaybackMixSecond(const ScheduledPlayback& playback, doub
     return qMax(0.0, playback.second - timelineOriginSecond);
 }
 
+// Owner of the single shared touch-hold voice at `second`, using latest-wins
+// semantics: among all spans whose [startSecond, endSecond) window contains
+// `second`, the one that began most recently (greatest startSecond) wins.
+// Returns -1 when no span is active. This is what lets a newer touch-hold take
+// over the voice from an older one (seamless join, overlap, or nesting) instead
+// of the older note clobbering the newer one — see runtime reconcile callers in
+// BassPreviewAudioBackend / MiniaudioPreviewAudioBackend.
+inline int touchholdOwnerSpanIndexAt(const QVector<TouchholdSpan>& spans, double second)
+{
+    int owner = -1;
+    for (int i = 0; i < spans.size(); ++i) {
+        const TouchholdSpan& span = spans[i];
+        if (second + kTimelineEpsilonSeconds < span.startSecond) {
+            continue;  // not started yet
+        }
+        if (second + kTimelineEpsilonSeconds >= span.endSecond) {
+            continue;  // already finished (also excludes the prior span at a seamless join)
+        }
+        if (owner < 0 || span.startSecond >= spans[owner].startSecond) {
+            owner = i;
+        }
+    }
+    return owner;
+}
+
 inline void buildTimeline(
     const QVector<TimelineNoteMarker>& noteMarkers,
     double playbackRate,

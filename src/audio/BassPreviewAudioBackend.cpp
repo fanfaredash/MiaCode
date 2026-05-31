@@ -2188,17 +2188,14 @@ void BassPreviewAudioBackend::resetCursor(double second, bool includeCurrentSeco
 void BassPreviewAudioBackend::triggerGroup(const CollapsedEventGroup& group)
 {
     for (const Event& event : group.orderedEvents) {
-        if (event.kind == QLatin1String("touchhold_start")) {
-            if (touchholdSample_ != nullptr) {
-                touchholdSample_->setCurrentSec(0.0);
-                touchholdSample_->play();
-            }
-            continue;
-        }
-        if (event.kind == QLatin1String("touchhold_stop")) {
-            if (touchholdSample_ != nullptr) {
-                touchholdSample_->stop();
-            }
+        if (event.kind == QLatin1String("touchhold_start")
+            || event.kind == QLatin1String("touchhold_stop")) {
+            // Latest-wins ownership: rather than naively start/stop the single
+            // shared touch-hold sample per event (which let a prior span's stop
+            // clobber the next span's start at a seamless join, and let an older
+            // span's stop kill a newer overlapping one), re-derive who should own
+            // the voice at this instant and reconcile. Order-independent.
+            reconcileTouchholdVoice(event.second);
             continue;
         }
         playKindInternal(event.kind, event.gain);
@@ -2245,6 +2242,30 @@ void BassPreviewAudioBackend::drainEvents(double second)
     }
 }
 
+void BassPreviewAudioBackend::reconcileTouchholdVoice(double second)
+{
+#ifdef Q_OS_WIN
+    if (touchholdSample_ == nullptr) {
+        return;
+    }
+    const int owner = miacode::preview_sfx_timeline::touchholdOwnerSpanIndexAt(
+        preparedTimeline_.touchholdSpans, second);
+    if (owner == touchholdOwnerSpanIndex_) {
+        return;  // voice already belongs to the right span — leave it playing
+    }
+    touchholdOwnerSpanIndex_ = owner;
+    if (owner < 0) {
+        touchholdSample_->stop();
+        return;
+    }
+    const TouchholdSpan& span = preparedTimeline_.touchholdSpans[owner];
+    touchholdSample_->setCurrentSec(qMax(0.0, second - span.startSecond));
+    touchholdSample_->play();
+#else
+    Q_UNUSED(second);
+#endif
+}
+
 void BassPreviewAudioBackend::pauseTouchholdVoices()
 {
     MC_OP("BassPreviewAudioBackend::pauseTouchholdVoices");
@@ -2253,6 +2274,7 @@ void BassPreviewAudioBackend::pauseTouchholdVoices()
         touchholdSample_->stop();
     }
 #endif
+    touchholdOwnerSpanIndex_ = -1;
 }
 
 void BassPreviewAudioBackend::restoreTouchholdVoices(double second)
@@ -2260,20 +2282,7 @@ void BassPreviewAudioBackend::restoreTouchholdVoices(double second)
     MC_OP("BassPreviewAudioBackend::restoreTouchholdVoices");
 #ifdef Q_OS_WIN
     pauseTouchholdVoices();
-    if (touchholdSample_ == nullptr) {
-        return;
-    }
-    for (const TouchholdSpan& span : preparedTimeline_.touchholdSpans) {
-        if (second + kBassPreviewEpsilonSeconds < span.startSecond) {
-            continue;
-        }
-        if (second >= span.endSecond - kBassPreviewEpsilonSeconds) {
-            continue;
-        }
-        touchholdSample_->setCurrentSec(second - span.startSecond);
-        touchholdSample_->play();
-        return;
-    }
+    reconcileTouchholdVoice(second);
 #else
     Q_UNUSED(second);
 #endif

@@ -54,59 +54,6 @@ bool QtPreviewSfxRuntime::playKindInternal(const QString& kind, double gain)
     return true;
 }
 
-void QtPreviewSfxRuntime::startTouchholdSpan(int spanIndex, double offsetSeconds)
-{
-    if (previewSfxVolumeForKind(settings_, QStringLiteral("touchhold")) <= 0.0) {
-        return;
-    }
-    if (spanIndex < 0 || spanIndex >= preparedTimeline_.touchholdSpans.size()) {
-        return;
-    }
-    if (touchholdVoice_ == nullptr || !touchholdVoice_->initialized) {
-        return;
-    }
-
-    const TouchholdSpan& span = preparedTimeline_.touchholdSpans[spanIndex];
-    if (span.endSecond <= span.startSecond) {
-        return;
-    }
-
-    const ma_uint64 offsetFrames = static_cast<ma_uint64>(qMax(0.0, offsetSeconds) * deviceSampleRate_);
-    if (touchholdSoundLengthFrames_ > 0 && offsetFrames >= touchholdSoundLengthFrames_) {
-        return;
-    }
-
-    if (activeTouchholdSpanIndices_.contains(spanIndex)) {
-        return;
-    }
-
-    const bool shouldStartPlayback = activeTouchholdSpanIndices_.isEmpty();
-    activeTouchholdSpanIndices_.append(spanIndex);
-    if (!shouldStartPlayback) {
-        return;
-    }
-
-    ma_sound_stop(&touchholdVoice_->sound);
-    ma_sound_seek_to_pcm_frame(&touchholdVoice_->sound, offsetFrames);
-    ma_sound_start(&touchholdVoice_->sound);
-}
-
-void QtPreviewSfxRuntime::stopTouchholdSpan(int spanIndex)
-{
-    if (spanIndex < 0) {
-        return;
-    }
-    if (!activeTouchholdSpanIndices_.removeOne(spanIndex)) {
-        return;
-    }
-    if (!activeTouchholdSpanIndices_.isEmpty()) {
-        return;
-    }
-    if (touchholdVoice_ != nullptr && touchholdVoice_->initialized) {
-        ma_sound_stop(&touchholdVoice_->sound);
-    }
-}
-
 bool QtPreviewSfxRuntime::playTouchholdAudition()
 {
     if (previewSfxVolumeForKind(settings_, QStringLiteral("touchhold")) <= 0.0 || touchholdVoice_ == nullptr
@@ -114,7 +61,7 @@ bool QtPreviewSfxRuntime::playTouchholdAudition()
         return touchholdVoice_ != nullptr && touchholdVoice_->initialized;
     }
 
-    activeTouchholdSpanIndices_.clear();
+    touchholdOwnerSpanIndex_ = -1;
     ma_sound_stop(&touchholdVoice_->sound);
     ma_sound_seek_to_pcm_frame(&touchholdVoice_->sound, 0);
     ma_sound_start(&touchholdVoice_->sound);

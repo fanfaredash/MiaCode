@@ -146,8 +146,7 @@ private:
     void clearBackgroundTrackClockAnchor();
     void applyVolumes();
     bool playKindInternal(const QString& kind, double gain = 1.0);
-    void startTouchholdSpan(int spanIndex, double offsetSeconds);
-    void stopTouchholdSpan(int spanIndex);
+    void reconcileTouchholdVoice(double second);
     bool playTouchholdAudition();
 
     PreviewAudioSettings settings_;
@@ -166,7 +165,7 @@ private:
     double lastStretchedClockDriftDeltaMs_ = 0.0;
     bool engineInitialized_ = false;
     Voice* touchholdVoice_ = nullptr;
-    QVector<int> activeTouchholdSpanIndices_;
+    int touchholdOwnerSpanIndex_ = -1;
     Voice* backgroundTrackVoice_ = nullptr;
     bool backgroundTrackConfigured_ = false;
     StretchedBackgroundState* stretchedBackgroundState_ = nullptr;

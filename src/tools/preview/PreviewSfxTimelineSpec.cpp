@@ -613,6 +613,67 @@ bool verifyDisplayOffsetDoesNotRetargetSlideFamily(QTextStream& err)
     return true;
 }
 
+bool verifyTouchholdVoiceLatestWinsOwnership(QTextStream& err)
+{
+    using miacode::preview_sfx_timeline::touchholdOwnerSpanIndexAt;
+
+    const auto span = [](double start, double end) {
+        TouchholdSpan s;
+        s.startSecond = start;
+        s.endSecond = end;
+        return s;
+    };
+
+    // Seamless join: span 0 = [1,3], span 1 = [3,5]. At the boundary the later
+    // span must own the voice so the second touch-hold sounds instead of the
+    // first's stop clobbering it.
+    {
+        QVector<TouchholdSpan> spans{span(1.0, 3.0), span(3.0, 5.0)};
+        if (!require(touchholdOwnerSpanIndexAt(spans, 2.0) == 0, QStringLiteral("seamless: first span owns before the join"), err)) {
+            return false;
+        }
+        if (!require(touchholdOwnerSpanIndexAt(spans, 3.0) == 1, QStringLiteral("seamless: second span owns at the join instant"), err)) {
+            return false;
+        }
+        if (!require(touchholdOwnerSpanIndexAt(spans, 4.0) == 1, QStringLiteral("seamless: second span owns after the join"), err)) {
+            return false;
+        }
+        if (!require(touchholdOwnerSpanIndexAt(spans, 5.0) == -1, QStringLiteral("seamless: no owner once the second span ends"), err)) {
+            return false;
+        }
+    }
+
+    // True overlap: span 0 = [1,4], span 1 = [2,5]. While both are active the
+    // most-recently-started span (1) wins — the newer note takes over, the
+    // older note's stop must not kill it.
+    {
+        QVector<TouchholdSpan> spans{span(1.0, 4.0), span(2.0, 5.0)};
+        if (!require(touchholdOwnerSpanIndexAt(spans, 1.5) == 0, QStringLiteral("overlap: only the first span is active early"), err)) {
+            return false;
+        }
+        if (!require(touchholdOwnerSpanIndexAt(spans, 3.0) == 1, QStringLiteral("overlap: later span takes over while both active"), err)) {
+            return false;
+        }
+        if (!require(touchholdOwnerSpanIndexAt(spans, 4.5) == 1, QStringLiteral("overlap: first span's end does not steal ownership from the survivor"), err)) {
+            return false;
+        }
+    }
+
+    // Nesting: span 0 = [1,10] fully contains span 1 = [3,5]. The inner span
+    // owns while active; ownership returns to the outer span once the inner ends.
+    {
+        QVector<TouchholdSpan> spans{span(1.0, 10.0), span(3.0, 5.0)};
+        if (!require(touchholdOwnerSpanIndexAt(spans, 4.0) == 1, QStringLiteral("nesting: inner span owns while active"), err)) {
+            return false;
+        }
+        if (!require(touchholdOwnerSpanIndexAt(spans, 6.0) == 0, QStringLiteral("nesting: outer span resumes ownership after the inner ends"), err)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -649,6 +710,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyDisplayOffsetDoesNotRetargetSlideFamily(err)) {
+        return 1;
+    }
+    if (!verifyTouchholdVoiceLatestWinsOwnership(err)) {
         return 1;
     }
 

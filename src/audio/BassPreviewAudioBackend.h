@@ -167,6 +167,7 @@ private:
         miacode::preview_audio::bass::BassDebugRoute route);
     bool maybeStartPendingBackgroundTrack(double second);
     bool playKindInternal(const QString& kind, double gain = 1.0);
+    void reconcileTouchholdVoice(double second);
     void triggerGroup(const CollapsedEventGroup& group);
     void logPlaybackStatus(double authoritativeSecond, double fallbackSecond);
     void logPreparedEventWindow(double startSecond) const;
@@ -199,6 +200,7 @@ private:
     QHash<QString, Sample*> samplesByKind_;
     Sample* backgroundTrackSample_ = nullptr;
     Sample* touchholdSample_ = nullptr;
+    int touchholdOwnerSpanIndex_ = -1;
     std::unique_ptr<Sample> answerSample_;
     std::unique_ptr<Sample> judgeSample_;
     std::unique_ptr<Sample> judgeBreakSample_;

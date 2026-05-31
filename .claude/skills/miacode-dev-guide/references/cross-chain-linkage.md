@@ -83,6 +83,14 @@ Shared concerns (collapse/latest-wins/offset rules live in `src/common/PreviewSf
   answer + tap/hold/touch-family judge only.
 - hold tails emit answer+judge (EX/break/break-EX tails answer-only); touch-hold tails answer-only;
   break-slide tail = flagged `break` + `judge_break_slide` routed through `break_slide_tail_break`.
+- touch-hold sustain is a SINGLE shared voice (BASS `touchholdSample_` / miniaudio `touchholdVoice_`)
+  driven by `touchhold_start`/`touchhold_stop` events. Ownership is **latest-wins**: the pure helper
+  `preview_sfx_timeline::touchholdOwnerSpanIndexAt(spans, second)` returns the active span with the
+  greatest `startSecond`, and both backends `reconcileTouchholdVoice(second)` to it on every
+  start/stop event (and on pause/restore/seek). This is order-independent, so a seamless join (prev
+  `endSecond` == next `startSecond`), overlap, or nesting lets the newer touch-hold take over the
+  voice instead of the older span's stop clobbering it. Don't go back to per-event naive start/stop
+  or a first-wins active-set. Export is unaffected (it renders each `TouchholdSpan` independently).
 - `&clock_count=` is export-only count-in (`src/common/ChartClockCount.h`); full-range lead-in `2.0s`,
   partial preload `1.0s` (`src/common/VideoExportConfig.h`).
 

@@ -98,7 +98,7 @@ void QtPreviewSfxRuntime::resetBanks()
         delete touchholdVoice_;
         touchholdVoice_ = nullptr;
     }
-    activeTouchholdSpanIndices_.clear();
+    touchholdOwnerSpanIndex_ = -1;
     touchholdSoundLengthFrames_ = 0;
 
     if (engineState_ != nullptr) {
