@@ -270,6 +270,18 @@ void LatencyDetectionPage::buildUi()
     connect(offsetEdit_, qOverload<double>(&QDoubleSpinBox::valueChanged),
             this, &LatencyDetectionPage::onOffsetEditValueChanged);
     offsetRow->addWidget(offsetEdit_);
+    auto* mediaToolsButton = new QPushButton(
+        localizedText(QStringLiteral("音频/视频处理"), QStringLiteral("Audio/Video Processing")), offsetCard);
+    mediaToolsButton->setCursor(Qt::PointingHandCursor);
+    mediaToolsButton->setToolTip(localizedText(
+        QStringLiteral("打开音频/视频处理工具：采样率转换 / 视频压缩 / 开头静音 / 开头黑幕。"),
+        QStringLiteral("Open audio/video tools: sample-rate convert / compress video / prepend silence / prepend black.")));
+    connect(mediaToolsButton, &QPushButton::clicked, this, [this]() {
+        if (!owner_.isNull()) {
+            owner_->onMediaProcessingTools();
+        }
+    });
+    offsetRow->addWidget(mediaToolsButton);
     detectOffsetButton_ = new QPushButton(
         localizedText(QStringLiteral("自动检测 Offset"), QStringLiteral("Auto-detect Offset")), offsetCard);
     detectOffsetButton_->setCursor(Qt::PointingHandCursor);
