@@ -354,12 +354,15 @@ bool PreviewQuickJudgeFireworkMaterialShader::updateGraphicsPipelineState(
         return false;
     }
 
+    // Premultiplied source-over (matches MajdataPlay's SrcAlpha OneMinusSrcAlpha). The frag
+    // outputs premultiplied color, so the src factor stays One and dst is OneMinusSrcAlpha;
+    // this replaces the old additive blend that made the firework read too bright.
     ps->blendEnable = true;
     ps->srcColor = GraphicsPipelineState::One;
-    ps->dstColor = GraphicsPipelineState::One;
+    ps->dstColor = GraphicsPipelineState::OneMinusSrcAlpha;
     ps->separateBlendFactors = true;
     ps->srcAlpha = GraphicsPipelineState::One;
-    ps->dstAlpha = GraphicsPipelineState::One;
+    ps->dstAlpha = GraphicsPipelineState::OneMinusSrcAlpha;
     ps->opColor = GraphicsPipelineState::BlendOp::Add;
     ps->opAlpha = GraphicsPipelineState::BlendOp::Add;
     return true;

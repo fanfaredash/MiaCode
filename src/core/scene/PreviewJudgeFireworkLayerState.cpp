@@ -20,7 +20,11 @@ constexpr qreal kJudgeEffectFireworkDurationSeconds =
     static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectFireworkDurationSeconds);
 constexpr qreal kJudgeEffectFireworkBaseWidthUnits = 10.8;
 constexpr qreal kJudgeEffectFireworkColorBallBaseWidthUnits = 5.12;
-constexpr qreal kJudgeEffectFireworkBrightnessGain = 1.20;
+// fire.anim Firework material._Alpha: hold 0.589 until 0.5 s, then a flat-tangent Hermite
+// (== smoothstep) down to 0 at the clip end. Replaces the steeper PreviewCanvas falloff; the
+// old +20% brightness gain is dropped so every alpha tracks the reference 1:1.
+constexpr qreal kJudgeEffectFireworkStripeAlphaPeak = 0.589;
+constexpr qreal kJudgeEffectFireworkStripeAlphaHoldSeconds = 0.5;
 constexpr int kJudgeEffectFireworkStepRotationSegmentCount = 3;
 constexpr qreal kJudgeEffectFireworkStepRotationDegrees = 24.0;
 constexpr qreal kFireworkInnerLB = 0.018;
@@ -51,27 +55,11 @@ const std::array<ScalarCurveKey, 3> kJudgeEffectFireworkRotationKeys = {{
     {1.3333334, -78.85715},
 }};
 
-const std::array<ScalarCurveKey, 12> kJudgeEffectFireworkAlphaKeys = {{
-    {0.0, 0.589},
-    {0.5, 0.589},
-    {0.5833333, 0.47709},
-    {0.6666667, 0.37696},
-    {0.75, 0.28861},
-    {0.8333333, 0.21205},
-    {0.9166667, 0.14725},
-    {1.0, 0.09476},
-    {1.0833334, 0.05516},
-    {1.1666666, 0.02899},
-    {1.25, 0.00879},
-    {1.3333334, 0.0},
-}};
-
-// Align to the true v0.3.7-dev5 PreviewCanvas curves. A later quick-preview
-// restore commit replaced these with zero-start ramps, which made the center
-// ball read too small before the spokes arrived.
+// fire.anim ColorBall (small) scale: 0.2 -> 0.5 by 0.16667 s, then hold. (Overrides the
+// earlier PreviewCanvas 0.1 s ramp in favor of MajdataPlay fire.anim.)
 const std::array<ScalarCurveKey, 3> kJudgeEffectFireworkColorBallScaleKeys = {{
     {0.0, 0.2},
-    {0.1, 0.5},
+    {0.16666667, 0.5},
     {1.3333334, 0.5},
 }};
 
@@ -81,15 +69,19 @@ const std::array<ScalarCurveKey, 3> kJudgeEffectFireworkColorBallBigScaleKeys = 
     {1.3333334, 1.15},
 }};
 
-const std::array<ScalarCurveKey, 4> kJudgeEffectFireworkColorBallAlphaKeys = {{
-    {0.0, 1.0},
+// fire.anim ColorBall (small) m_Color.a: holds 0.9 until 0.1 s, then 0.1@0.2 -> 0@0.3.
+const std::array<ScalarCurveKey, 5> kJudgeEffectFireworkColorBallAlphaKeys = {{
+    {0.0, 0.9},
+    {0.1, 0.9},
     {0.2, 0.1},
     {0.3, 0.0},
     {1.3333334, 0.0},
 }};
 
-const std::array<ScalarCurveKey, 4> kJudgeEffectFireworkColorBallBigAlphaKeys = {{
-    {0.0, 1.0},
+// fire.anim ColorBallBig m_Color.a: holds 0.5 until 0.0667 s, then 0.1@0.16667 -> 0@0.8833.
+const std::array<ScalarCurveKey, 5> kJudgeEffectFireworkColorBallBigAlphaKeys = {{
+    {0.0, 0.5},
+    {0.06666667, 0.5},
     {0.16666667, 0.1},
     {0.8833333, 0.0},
     {1.3333334, 0.0},
@@ -191,23 +183,25 @@ PreviewJudgeFireworkLayerState buildPreviewJudgeFireworkLayerState(
     const qreal clipTime = qBound<qreal>(0.0, elapsedSeconds, kJudgeEffectFireworkDurationSeconds);
     const qreal life01 = qBound<qreal>(0.0, clipTime / kJudgeEffectFireworkDurationSeconds, 1.0);
     const qreal fireworkScale = qMax<qreal>(0.0, sampleScalarCurve(kJudgeEffectFireworkScaleKeys, clipTime));
-    const qreal fireworkAlpha = qBound<qreal>(
-        0.0,
-        sampleScalarCurve(kJudgeEffectFireworkAlphaKeys, clipTime) * kJudgeEffectFireworkBrightnessGain,
-        1.0
-    );
+    // fire.anim material._Alpha: 0.589 held to the hold point, then smoothstep to 0 (no gain).
+    qreal fireworkAlpha = kJudgeEffectFireworkStripeAlphaPeak;
+    if (clipTime > kJudgeEffectFireworkStripeAlphaHoldSeconds) {
+        const qreal fadeSpan = kJudgeEffectFireworkDurationSeconds - kJudgeEffectFireworkStripeAlphaHoldSeconds;
+        const qreal fadeU = (clipTime - kJudgeEffectFireworkStripeAlphaHoldSeconds) / fadeSpan;
+        fireworkAlpha = kJudgeEffectFireworkStripeAlphaPeak * (1.0 - smoothStep01(fadeU));
+    }
     const qreal fireworkRotationDegrees = sampleScalarCurve(kJudgeEffectFireworkRotationKeys, clipTime);
     const qreal colorBallScale = qMax<qreal>(0.0, sampleScalarCurve(kJudgeEffectFireworkColorBallScaleKeys, clipTime));
     const qreal colorBallBigScale =
         qMax<qreal>(0.0, sampleScalarCurve(kJudgeEffectFireworkColorBallBigScaleKeys, clipTime));
     const qreal colorBallAlpha = qBound<qreal>(
         0.0,
-        sampleScalarCurve(kJudgeEffectFireworkColorBallAlphaKeys, clipTime) * kJudgeEffectFireworkBrightnessGain,
+        sampleScalarCurve(kJudgeEffectFireworkColorBallAlphaKeys, clipTime),
         1.0
     );
     const qreal colorBallBigAlpha = qBound<qreal>(
         0.0,
-        sampleScalarCurve(kJudgeEffectFireworkColorBallBigAlphaKeys, clipTime) * kJudgeEffectFireworkBrightnessGain,
+        sampleScalarCurve(kJudgeEffectFireworkColorBallBigAlphaKeys, clipTime),
         1.0
     );
     const int stepRotationIndex = qBound(
