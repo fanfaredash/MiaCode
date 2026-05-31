@@ -22,8 +22,11 @@ constexpr double kTouchCanvasCenter = 270.0;
 constexpr double kLaneAngleBaseDegrees = -67.5;
 constexpr double kLaneAngleStepDegrees = 45.0;
 constexpr double kOuterLaneRadius = 430.0;
-// Ratios match MajdataPlay's NoteHelper.GetTouchAreaDistance (A 4.0, B 2.2, D 4.1, E 3.1).
-constexpr double kTouchDistanceA = 540.0 * 410.0 / 1080.0;
+// Match MajdataPlay's NoteHelper.GetTouchAreaDistance (world units A 4.0, B 2.2, D 4.1,
+// E 3.1) at the canvas's 50x world->logical scale (cf. tap ring 4.8->240, 1.225->61.25 in
+// PreviewGameplayConfig). A = 4.0 * 50 = 200 == 540 * 400 / 1080; B/D/E follow by ratio.
+// (Was 410 -> 205, i.e. ~2.5% too far from center; corrected to 400 to match the reference.)
+constexpr double kTouchDistanceA = 540.0 * 400.0 / 1080.0;
 constexpr double kTouchDistanceB = kTouchDistanceA * 2.2 / 4.0;
 constexpr double kTouchDistanceD = kTouchDistanceA * 4.1 / 4.0;
 constexpr double kTouchDistanceE = kTouchDistanceA * 3.1 / 4.0;

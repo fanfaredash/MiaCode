@@ -27,8 +27,10 @@ constexpr qreal kJudgeEffectTouchOuterCardinalAxisScaleX = 1.18;
 constexpr qreal kJudgeEffectTouchOuterCardinalAxisScaleY = 0.85;
 constexpr qreal kJudgeEffectTouchDurationSeconds =
     static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectTouchDurationSeconds);
-constexpr qreal kJudgeEffectTouchDestroySeconds = 0.25;
-constexpr qreal kJudgeEffectTouchCircleFadeEndSeconds = 0.31666666;
+// Unity touchPerfect.anim StopTime (m_SampleRate 60): the circle and every star part fade
+// their m_Color.a 1->0 over [0, this] and the clip ends here. (Was a 0.25 s hard destroy
+// that popped the still-opaque sparkles off-screen; they now fade out like the reference.)
+constexpr qreal kJudgeEffectTouchFadeEndSeconds = 0.31666666;
 constexpr qreal kJudgeEffectTouchUnitRelativeToTouch = 3.125;
 constexpr qreal kJudgeEffectTouchInnerScaleBase = 0.1725238;
 constexpr qreal kJudgeEffectTouchOuterScaleBase = 0.3146144;
@@ -60,19 +62,21 @@ struct ScalarCurveKey {
     qreal value = 0.0;
 };
 
-const std::array<ScalarCurveKey, 2> kJudgeEffectTouchCircleScaleKeys = {{
+const std::array<ScalarCurveKey, 3> kJudgeEffectTouchCircleScaleKeys = {{
     {0.0, 0.1},
-    {0.3, 0.35},
+    {0.16666667, 0.3},
+    {0.31666666, 0.35},
 }};
 
 const std::array<ScalarCurveKey, 2> kJudgeEffectTouchInnerParentScaleKeys = {{
     {0.0, 1.0},
-    {0.25, 1.5},
+    {0.31666666, 1.5},
 }};
 
+// touchPerfect.anim OuterStar1 scale grows 0 -> 1.2 over the clip (was inverted 2.0 -> 0.2).
 const std::array<ScalarCurveKey, 2> kJudgeEffectTouchOuterParentScaleKeys = {{
-    {0.0, 2.0},
-    {0.25, 0.2},
+    {0.0, 0.0},
+    {0.31666666, 1.2},
 }};
 
 template <std::size_t N>
@@ -295,15 +299,17 @@ PreviewTouchJudgeLayerState buildPreviewTouchJudgeLayerState(
             continue;
         }
         const qreal clipTime = judgeEffectTouchClipTime(elapsedSeconds);
-        if (clipTime > kJudgeEffectTouchDestroySeconds) {
+        if (clipTime > kJudgeEffectTouchFadeEndSeconds) {
             continue;
         }
 
         const qreal circleScale = sampleScalarCurve(kJudgeEffectTouchCircleScaleKeys, clipTime);
         const qreal innerParentScale = sampleScalarCurve(kJudgeEffectTouchInnerParentScaleKeys, clipTime);
         const qreal outerParentScale = sampleScalarCurve(kJudgeEffectTouchOuterParentScaleKeys, clipTime);
-        const qreal circleFade = qBound<qreal>(0.0, 1.0 - clipTime / kJudgeEffectTouchCircleFadeEndSeconds, 1.0);
-        const qreal circleAlpha = circleFade;
+        // Reference: TouchCircle and every star part share the same m_Color.a fade (1 -> 0
+        // over the clip), so one value drives the circle and all sparkles.
+        const qreal clipFade = qBound<qreal>(0.0, 1.0 - clipTime / kJudgeEffectTouchFadeEndSeconds, 1.0);
+        const qreal circleAlpha = clipFade;
         const QPointF center = mapLogicalPointToRect(marker.touchPoint, playfieldRect);
 
         appendSprite(
@@ -322,7 +328,7 @@ PreviewTouchJudgeLayerState buildPreviewTouchJudgeLayerState(
                 center + offset * (prefabUnitPixels * innerParentScale),
                 innerPieceWidthPixels,
                 0.0,
-                1.0
+                clipFade
             );
         }
 
@@ -334,7 +340,7 @@ PreviewTouchJudgeLayerState buildPreviewTouchJudgeLayerState(
                 center + offset * (prefabUnitPixels * outerParentScale),
                 outerPieceWidthPixels,
                 kJudgeEffectTouchTextureOuterDiagonalAngleDegrees,
-                1.0
+                clipFade
             );
         }
         for (const QPointF& offset : kJudgeEffectTouchOuterCardinalOffsets) {
@@ -343,7 +349,7 @@ PreviewTouchJudgeLayerState buildPreviewTouchJudgeLayerState(
                 center + offset * (prefabUnitPixels * outerParentScale),
                 outerPieceWidthPixels,
                 0.0,
-                1.0
+                clipFade
             );
         }
     }
