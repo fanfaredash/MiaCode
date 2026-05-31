@@ -463,6 +463,7 @@
         bool editorOverwriteModeEnabled_ = false;
         bool editorAutoCloseBracketsEnabled_ = true;
         bool editorAutoInsertSquareAfterHEnabled_ = true;
+        bool editorBracketCompletionEnabled_ = true;
         // beta51+ — "禁止中文輸入法輸入" preference. Off by default so existing
         // users / non-CJK locales aren't surprised by a sudden IME disable on
         // first launch. When on, each editor widget gets Qt::WA_InputMethodEnabled
@@ -827,11 +828,13 @@
     bool& editorOverwriteModeEnabled_ = state_.editorOverwriteModeEnabled_;
     bool& editorAutoCloseBracketsEnabled_ = state_.editorAutoCloseBracketsEnabled_;
     bool& editorAutoInsertSquareAfterHEnabled_ = state_.editorAutoInsertSquareAfterHEnabled_;
+    bool& editorBracketCompletionEnabled_ = state_.editorBracketCompletionEnabled_;
     bool& editorImeInputDisabled_ = state_.editorImeInputDisabled_;
     SimaiDocument& document_ = state_.document_;
     QWidget*& welcomePage_ = ui_.welcomePage_;
     QLabel*& welcomeEmptyHintLabel_ = ui_.welcomeEmptyHintLabel_;
     QWidget*& metadataPage_ = ui_.metadataPage_;
+    miacode::latency::LatencyDetectionPage*& latencyDetectionPage_ = ui_.latencyDetectionPage_;
     QWidget*& metadataCard_ = ui_.metadataCard_;
     QLabel*& metadataEmptyHintLabel_ = ui_.metadataEmptyHintLabel_;
     QWidget*& chartPage_ = ui_.chartPage_;

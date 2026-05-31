@@ -8,6 +8,7 @@
 
 class MainWindow;
 class QDoubleSpinBox;
+class QEvent;
 class QLabel;
 class QPushButton;
 class QRadioButton;
@@ -35,12 +36,23 @@ public:
     explicit LatencyDetectionPage(MainWindow* owner, QWidget* parent = nullptr);
     ~LatencyDetectionPage() override;
 
+    // (Re)apply the theme-aware stylesheet. Called on construction and again
+    // whenever the app theme changes (light/dark), so the cards/labels don't
+    // stay frozen at the startup theme.
+    void applyThemeStyles();
+
     // Sync controls from the document; safe to call repeatedly.
     void refreshFromDocument();
 
     // Lifecycle hooks called from MainWindow's outline-switch flow.
     void onPageEntered();
     void onPageLeft();
+
+protected:
+    // App-level filter: routes Ctrl+S on this page to save (see the .cpp for why
+    // a filter instead of a QShortcut). NOTE: a page-local Ctrl+Z/Y undo history
+    // was attempted here and reverted — see the .cpp.
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private slots:
     void onBpmEditValueChanged(double value);
@@ -88,7 +100,6 @@ private:
     QLabel* positionLabel_ = nullptr;
     QSlider* sfxVolumeSlider_ = nullptr;
     QLabel* sfxVolumeValueLabel_ = nullptr;
-    QLabel* sandboxHintLabel_ = nullptr;
 
     QTimer* bpmDebounceTimer_ = nullptr;
     QTimer* offsetDebounceTimer_ = nullptr;

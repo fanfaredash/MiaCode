@@ -18,6 +18,9 @@
 #include <QPushButton>
 #include <QRadioButton>
 #include <QScrollArea>
+#include <QEvent>
+#include <QKeyEvent>
+#include <QKeySequence>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSlider>
@@ -32,7 +35,7 @@ namespace miacode::latency {
 namespace {
 
 constexpr int kEditDebounceMs = 300;
-constexpr int kDefaultSfxVolumePercent = 80;
+constexpr int kDefaultSfxVolumePercent = 50;
 constexpr int kDecimalsBpm = 3;
 constexpr int kDecimalsOffset = 3;
 
@@ -83,7 +86,26 @@ LatencyDetectionPage::LatencyDetectionPage(MainWindow* owner, QWidget* parent)
     offsetDebounceTimer_->setInterval(kEditDebounceMs);
     connect(offsetDebounceTimer_, &QTimer::timeout, this, &LatencyDetectionPage::commitOffsetEdit);
 
+    // NOTE (FAILED ATTEMPT, reverted): we tried firing a one-shot "tap" SFX
+    // while dragging the SFX-volume slider so the user could hear the level.
+    // It could not be made to stay silent during playback — the tap still
+    // sounded while the chart was playing despite guarding on qtPreviewPlaying_.
+    // Primary suspicion: somewhere an extra play/audition event is being
+    // scheduled (the guard is bypassed or a stale timer fires), so the feature
+    // was removed. onSfxVolumeChanged now only adjusts the volume.
+
     buildUi();
+
+    // Ctrl+S on this page is handled by an application-level event filter (see
+    // eventFilter), NOT by a page QShortcut. A page QShortcut on the same key as
+    // the global Save QAction is "ambiguous" and Qt then fires neither.
+    //
+    // NOTE (FAILED ATTEMPT, reverted): page-level Ctrl+Z / Ctrl+Y for the
+    // BPM/offset history was also attempted here but never worked reliably and
+    // has been removed — see the comment on eventFilter(). The page no longer
+    // intercepts undo/redo; those keys fall through to the global handler.
+    setFocusPolicy(Qt::StrongFocus);
+    qApp->installEventFilter(this);
 
     if (!sandbox_.isNull()) {
         connect(sandbox_, &LatencySandboxController::auditionStateChanged,
@@ -107,6 +129,11 @@ LatencyDetectionPage::LatencyDetectionPage(MainWindow* owner, QWidget* parent)
 }
 
 LatencyDetectionPage::~LatencyDetectionPage() = default;
+
+void LatencyDetectionPage::applyThemeStyles()
+{
+    setStyleSheet(UiTheme::latencyDetectionPageStyleSheet());
+}
 
 void LatencyDetectionPage::refreshFromDocument()
 {
@@ -140,6 +167,9 @@ void LatencyDetectionPage::onPageEntered()
     if (!sandbox_.isNull()) {
         sandbox_->setOnPage(true);
     }
+    // Take focus so the page-local Save/Undo/Redo shortcuts are live
+    // immediately (otherwise the sidebar list keeps focus on entry).
+    setFocus(Qt::OtherFocusReason);
 }
 
 void LatencyDetectionPage::onPageLeft()
@@ -152,7 +182,7 @@ void LatencyDetectionPage::onPageLeft()
 
 void LatencyDetectionPage::buildUi()
 {
-    setStyleSheet(UiTheme::latencyDetectionPageStyleSheet());
+    applyThemeStyles();
 
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
@@ -198,7 +228,10 @@ void LatencyDetectionPage::buildUi()
     bpmEdit_->setSingleStep(0.5);
     bpmEdit_->setValue(120.0);
     bpmEdit_->setMinimumWidth(160);
-    bpmEdit_->setKeyboardTracking(true);
+    // keyboardTracking off: valueChanged fires only on a settled value (Enter /
+    // focus-out / step button), so a half-typed value (e.g. "8" while typing
+    // "0.893") is never applied to the document or preview.
+    bpmEdit_->setKeyboardTracking(false);
     bpmEdit_->setAccelerated(true);
     bpmEdit_->setSuffix(QStringLiteral(""));
     connect(bpmEdit_, qOverload<double>(&QDoubleSpinBox::valueChanged),
@@ -214,15 +247,6 @@ void LatencyDetectionPage::buildUi()
     bpmDetectResultLabel_->setFont(hintFont);
     bpmRow->addWidget(bpmDetectResultLabel_, 1);
     bpmLayout->addLayout(bpmRow);
-    auto* bpmHint = new QLabel(
-        localizedText(
-            QStringLiteral("以拍/分钟为单位，精度 3 位小数。编辑后自动写入谱面。"),
-            QStringLiteral("Beats per minute, 3-decimal precision. Edits auto-save to the chart.")),
-        bpmCard);
-    bpmHint->setProperty("role", "cardHint");
-    bpmHint->setFont(hintFont);
-    bpmHint->setWordWrap(true);
-    bpmLayout->addWidget(bpmHint);
     contentLayout->addWidget(bpmCard);
 
     // -------- Offset card --------
@@ -238,7 +262,9 @@ void LatencyDetectionPage::buildUi()
     offsetEdit_->setSingleStep(0.010);
     offsetEdit_->setValue(0.0);
     offsetEdit_->setMinimumWidth(160);
-    offsetEdit_->setKeyboardTracking(true);
+    // keyboardTracking off: see the BPM field above — avoids applying an
+    // intermediate value such as "893" while the user is typing "0.893".
+    offsetEdit_->setKeyboardTracking(false);
     offsetEdit_->setAccelerated(true);
     offsetEdit_->setSuffix(localizedText(QStringLiteral(" 秒"), QStringLiteral(" s")));
     connect(offsetEdit_, qOverload<double>(&QDoubleSpinBox::valueChanged),
@@ -249,20 +275,14 @@ void LatencyDetectionPage::buildUi()
     detectOffsetButton_->setCursor(Qt::PointingHandCursor);
     connect(detectOffsetButton_, &QPushButton::clicked, this, &LatencyDetectionPage::onDetectOffsetClicked);
     offsetRow->addWidget(detectOffsetButton_);
+    // Temporarily hide the auto-detect Offset entry point (keep the code/wiring
+    // intact so it can be re-enabled later by removing this one line).
+    detectOffsetButton_->setVisible(false);
     offsetDetectResultLabel_ = new QLabel(QString(), offsetCard);
     offsetDetectResultLabel_->setProperty("role", "detectResult");
     offsetDetectResultLabel_->setFont(hintFont);
     offsetRow->addWidget(offsetDetectResultLabel_, 1);
     offsetLayout->addLayout(offsetRow);
-    auto* offsetHint = new QLabel(
-        localizedText(
-            QStringLiteral("第一个下拍相对音频起点的偏移（秒）。编辑后自动写入谱面。"),
-            QStringLiteral("Time of the first downbeat relative to the audio start (seconds). Auto-saves.")),
-        offsetCard);
-    offsetHint->setProperty("role", "cardHint");
-    offsetHint->setFont(hintFont);
-    offsetHint->setWordWrap(true);
-    offsetLayout->addWidget(offsetHint);
     contentLayout->addWidget(offsetCard);
 
     // -------- Audition (sandbox) card --------
@@ -335,33 +355,18 @@ void LatencyDetectionPage::buildUi()
     volumeRow->addWidget(volumeResetButton);
     auditionLayout->addLayout(volumeRow);
 
-    auto* sfxHint = new QLabel(
-        localizedText(
-            QStringLiteral("该音量仅作用于本页面试听，不影响其它播放设置。"),
-            QStringLiteral("This volume applies only to the audition on this page; other audio settings are untouched.")),
-        auditionCard);
-    sfxHint->setProperty("role", "cardHint");
-    sfxHint->setFont(hintFont);
-    sfxHint->setWordWrap(true);
-    auditionLayout->addWidget(sfxHint);
-
-    sandboxHintLabel_ = new QLabel(
-        localizedText(
-            QStringLiteral("ⓘ 试听期间播放的是临时测试谱面，不会修改你的谱面内容。"),
-            QStringLiteral("ⓘ The audition plays a temporary test chart — your real chart is never modified.")),
-        auditionCard);
-    sandboxHintLabel_->setProperty("role", "cardHint");
-    sandboxHintLabel_->setFont(hintFont);
-    sandboxHintLabel_->setWordWrap(true);
-    auditionLayout->addWidget(sandboxHintLabel_);
-
     contentLayout->addWidget(auditionCard);
     contentLayout->addStretch(1);
 }
 
 void LatencyDetectionPage::onBpmEditValueChanged(double value)
 {
-    Q_UNUSED(value);
+    // Immediate live preview. keyboardTracking is off, so this only fires on a
+    // settled value; the document write + undo entry are coalesced by the
+    // debounce timer (and so are rapid step-button clicks).
+    if (value > 0.0 && !sandbox_.isNull()) {
+        sandbox_->setBpm(value);
+    }
     if (bpmDebounceTimer_ != nullptr) {
         bpmDebounceTimer_->start();
     }
@@ -369,7 +374,9 @@ void LatencyDetectionPage::onBpmEditValueChanged(double value)
 
 void LatencyDetectionPage::onOffsetEditValueChanged(double value)
 {
-    Q_UNUSED(value);
+    if (!sandbox_.isNull()) {
+        sandbox_->setOffsetSeconds(value);
+    }
     if (offsetDebounceTimer_ != nullptr) {
         offsetDebounceTimer_->start();
     }
@@ -406,6 +413,40 @@ void LatencyDetectionPage::commitOffsetEdit()
     }
 }
 
+bool LatencyDetectionPage::eventFilter(QObject* watched, QEvent* event)
+{
+    // Application-level filter (installed on qApp) that routes Ctrl+S on this
+    // page to our own save. We intercept here, before Qt's shortcut machinery,
+    // so we don't collide with the global Save QAction (which would otherwise be
+    // "ambiguous" → fire nothing). Scoped to: this page visible AND the key went
+    // to a widget inside it (never hijacks other pages, dialogs, or the sidebar).
+    //
+    // NOTE (FAILED ATTEMPT, reverted): this filter also handled Ctrl+Z / Ctrl+Y
+    // to drive a page-local BPM/offset undo history. That never worked reliably
+    // (the keys did not consistently reach the page-local handler), so the
+    // undo/redo branches and the param-history were removed. Ctrl+Z/Y now fall
+    // through to the global Undo/Redo handler as on any other page.
+    const QEvent::Type type = event->type();
+    if (type == QEvent::ShortcutOverride || type == QEvent::KeyPress) {
+        if (isVisible()) {
+            auto* target = qobject_cast<QWidget*>(watched);
+            if (target != nullptr && (target == this || isAncestorOf(target))) {
+                auto* keyEvent = static_cast<QKeyEvent*>(event);
+                if (keyEvent->matches(QKeySequence::Save)) {
+                    // Accept the ShortcutOverride so the global Save QAction does
+                    // not also fire; act on the KeyPress.
+                    if (type == QEvent::KeyPress && !owner_.isNull()) {
+                        owner_->onSaveFile();
+                    }
+                    event->accept();
+                    return true;
+                }
+            }
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
 void LatencyDetectionPage::onSubdivisionToggled()
 {
     if (sandbox_.isNull()) {
@@ -423,6 +464,9 @@ void LatencyDetectionPage::onSfxVolumeChanged(int value)
     if (!sandbox_.isNull()) {
         sandbox_->setSfxVolumePercent(value);
     }
+    // NOTE: no audition "tap" is played here on purpose — see the FAILED ATTEMPT
+    // note in the constructor. The tap could not be kept silent during playback
+    // (suspected stray play/audition event), so the slider only sets the volume.
     QSettings().setValue(latencySfxVolumeSettingsKey(), value);
 }
 

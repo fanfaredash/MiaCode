@@ -14,6 +14,7 @@
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
+#include "tools/latency/LatencyDetectionPage.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -916,6 +917,11 @@ void MainWindow::WindowSection::applyUiTheme()
     }
     if (owner_.metadataPage_ != nullptr) {
         owner_.metadataPage_->setStyleSheet(UiTheme::metadataPageStyleSheet());
+    }
+    if (owner_.latencyDetectionPage_ != nullptr) {
+        // Theme-aware card/label colors are frozen at construction otherwise —
+        // re-apply so the BPM & latency page follows light/dark switches too.
+        owner_.latencyDetectionPage_->applyThemeStyles();
     }
     if (owner_.metadataEmptyHintLabel_ != nullptr) {
         owner_.metadataEmptyHintLabel_->setStyleSheet(UiTheme::metadataEmptyHintLabelStyleSheet());
