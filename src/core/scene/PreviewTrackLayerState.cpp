@@ -149,6 +149,21 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
         layerState.sprites.append(sprite);
     };
 
+    // MajdataPlay's slide bar only switches to the break (flash) material once its fade-in
+    // completes at FadeInCompletedTiming (== Timing - fullBright); while fading in it uses the
+    // plain material. Mirror that: gate BreakAnimate on the full-bright point so the track does
+    // not shimmer during fade-in. (The moving star keeps its own break flash in another layer.)
+    const auto breakFlashEffect = [&](const TimelineNoteMarker& m) -> PreviewAnimatedSpriteEffect {
+        if (!m.trackBreak) {
+            return PreviewAnimatedSpriteEffect::None;
+        }
+        const qreal brightStartSecond =
+            static_cast<qreal>(m.second) - markerTrackTiming(m.hsMultiplier).fullBrightLeadInSeconds;
+        return state.playheadSeconds >= brightStartSecond
+            ? PreviewAnimatedSpriteEffect::BreakAnimate
+            : PreviewAnimatedSpriteEffect::None;
+    };
+
     const auto appendSlideArea = [&](const TimelineNoteMarker& marker,
                                      int segmentIndex,
                                      int areaIndex,
@@ -204,9 +219,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
             return;
         }
 
-        const PreviewAnimatedSpriteEffect effect = marker.trackBreak
-            ? PreviewAnimatedSpriteEffect::BreakAnimate
-            : PreviewAnimatedSpriteEffect::None;
+        const PreviewAnimatedSpriteEffect effect = breakFlashEffect(marker);
         for (int pointIndex = clampedCut; pointIndex < points.size(); ++pointIndex) {
             const int imageIndex = imageIndices.value(pointIndex, pointIndex);
             const QImage* baseImage = selectWifiTrackImage(state.skin, marker, imageIndex, 0);
@@ -241,9 +254,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
             if (baseImage == nullptr || baseImage->isNull()) {
                 continue;
             }
-            const PreviewAnimatedSpriteEffect effect = marker.trackBreak
-                ? PreviewAnimatedSpriteEffect::BreakAnimate
-                : PreviewAnimatedSpriteEffect::None;
+            const PreviewAnimatedSpriteEffect effect = breakFlashEffect(marker);
             const QImage* renderImage = baseImage;
             const bool cacheable = true;
 
