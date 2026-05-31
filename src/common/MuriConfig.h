@@ -43,6 +43,17 @@ constexpr double kPadAngleStepDegrees = 45.0;
 constexpr double kHandRadiusNormal = kLogicalCanvasSize * 30.0 / 1080.0; // Set to half
 constexpr double kHandRadiusWifi = kLogicalCanvasSize * 100.0 / 1080.0;
 constexpr double kHandRadiusMax = kLogicalCanvasSize * 180.0 / 1080.0;
+
+// Switch for how an each-group of simultaneous touches feeds the runtime hand model.
+//   1 = collapse the group into a single hand footprint sized by the smallest
+//       enclosing circle of the touch points; an oversized circle is treated as a
+//       two-hand press (legacy behavior).
+//   0 = judge each touch only by its own pad region (no enclosing circle), so a
+//       spread-out touch ring (e.g. B1/E1/.../B8/E8) no longer manufactures a
+//       canvas-spanning footprint that early-judges overlapping slides or inflates
+//       the multi-touch hand count.
+// Kept at 0 and intentionally not exposed in the UI for now.
+constexpr int kSimultaneousTouchEnclosingCircleEnabled = 0;
 constexpr double kSlideMergeDistance = kLogicalCanvasSize * 20.0 / 1080.0;
 constexpr double kSlideMergeTangentDelta = 0.05235389661574631;
 

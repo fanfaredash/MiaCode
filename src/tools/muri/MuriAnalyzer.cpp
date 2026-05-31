@@ -707,6 +707,35 @@ QVector<RuntimeHandAction> buildRuntimeHandActions(
             continue;
         }
 
+        if (kSimultaneousTouchEnclosingCircleEnabled == 0) {
+            // Per-touch model: each touch contributes its own pad-sized footprint
+            // instead of one enclosing circle. A spread-out touch ring no longer
+            // covers (and early-judges) overlapping slides, and no synthetic
+            // two-hand press is fabricated from an oversized circle.
+            for (int childNoteIndex : group.childNoteIndices) {
+                if (childNoteIndex < 0 || childNoteIndex >= notes.size()) {
+                    continue;
+                }
+                const JudgeableSimpleNote& note = notes.at(childNoteIndex);
+                if (note.marker == nullptr) {
+                    continue;
+                }
+                appendPressHandAction(
+                    &actions,
+                    note.markerKey,
+                    note.type,
+                    note.parseOrder >= 0 ? note.parseOrder : note.order,
+                    note.line,
+                    note.col,
+                    note.momentSecond,
+                    note.pressEndSecond,
+                    simpleNoteActionCenter(note),
+                    kHandRadiusNormal,
+                    false);
+            }
+            continue;
+        }
+
         QVector<QPointF> touchPoints;
         touchPoints.reserve(group.childNoteIndices.size());
         for (int childNoteIndex : group.childNoteIndices) {

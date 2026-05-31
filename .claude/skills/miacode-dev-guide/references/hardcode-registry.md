@@ -24,7 +24,12 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   Global `0.30`, Track `1.0`, Answer `0.80`, others `0.30`.
 - `VideoExportConfig.h` — export lead-in (full-range `2.0s`) / partial preload (`1.0s`).
 - `MuriConfig.h` — static tap-on-slide threshold min/max/default + Muri timing cutoffs
-  (slide-head no-tap warning `50 ms`, late-warning `150 ms`, runtime available window default `24 h`).
+  (slide-head no-tap warning `50 ms`, late-warning `150 ms`, runtime available window default `24 h`)
+  + hand-footprint radii (`kHandRadiusNormal/Wifi/Max`) + the simultaneous-touch model switch
+  `kSimultaneousTouchEnclosingCircleEnabled` (default `0`, not UI-exposed): `0` = each touch in an
+  each-group keeps its own pad-sized footprint; `1` = collapse the group into one smallest-enclosing
+  circle (oversized → two-hand press). Read in `MuriAnalyzer.cpp` `buildRuntimeHandActions`, so it
+  feeds BOTH the slide/wifi judge and the multi-touch diagnostics.
 - `TimelineThemeConfig.h` — timeline-scene theme colors shared by Quick (and DComp) paths
   (e.g. editor-cursor header marker `QColor(239,68,68,230)`).
 - `VideoExportRuntimePolicy.h` (`src/tools/video_export/`) — export PBO env precedence + worker
