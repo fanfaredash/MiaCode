@@ -1,4 +1,6 @@
 #include "PlainCodeEditor.h"
+#include "BracketCompletionPopup.h"
+#include "SimaiCompletionCatalog.h"
 #include "common/DebugLog.h"
 #include "ShortcutRegistry.h"
 #include "UiText.h"
@@ -346,7 +348,15 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
         Q_UNUSED(value);
         updateLineNumberArea();
     });
-    connect(this, &QTextEdit::cursorPositionChanged, this, [this]() { syncCursorVisualState(); });
+    connect(this, &QTextEdit::cursorPositionChanged, this, [this]() {
+        syncCursorVisualState();
+        // While the bracket-completion popup is open, a caret move means the
+        // user typed/deleted a filter char (or clicked away) — re-filter or
+        // dismiss. Programmatic edits (open/accept) raise suppressCompletionFilter_.
+        if (!suppressCompletionFilter_ && bracketCompletionActive()) {
+            updateBracketCompletionFilter();
+        }
+    });
     updateLineNumberAreaWidth(0);
     setLineWrapMode(QTextEdit::NoWrap);
     setAcceptRichText(false);
@@ -690,6 +700,19 @@ void PlainCodeEditor::setAutoInsertSquareAfterHEnabled(bool enabled)
     autoInsertSquareAfterHEnabled_ = enabled;
 }
 
+void PlainCodeEditor::setBracketCompletionEnabled(bool enabled)
+{
+    bracketCompletionEnabled_ = enabled;
+    if (!enabled) {
+        closeBracketCompletion();
+    }
+}
+
+void PlainCodeEditor::setWholeBpmCandidate(const QString& bpm)
+{
+    wholeBpmCandidate_ = bpm.trimmed();
+}
+
 bool PlainCodeEditor::event(QEvent* event)
 {
     if (event != nullptr && event->type() == QEvent::ShortcutOverride) {
@@ -763,6 +786,9 @@ void PlainCodeEditor::focusInEvent(QFocusEvent* event)
 
 void PlainCodeEditor::focusOutEvent(QFocusEvent* event)
 {
+    // The popup never takes focus, so losing focus means the user clicked or
+    // tabbed away — dismiss any open suggestion list.
+    closeBracketCompletion();
     const QRect previousRect = previewFollowVisualCaretRect();
     QTextEdit::focusOutEvent(event);
     const QRect currentRect = previewFollowVisualCaretRect();
@@ -959,6 +985,309 @@ bool PlainCodeEditor::tryAutoExpandH(const QString& text)
     return true;
 }
 
+// Bracket input that also offers a completion popup. Wraps tryAutoCloseBracket
+// so the suggestion list opens on the same normalized key/IME bracket. Returns
+// true when the bracket was consumed (paired and/or popup opened).
+bool PlainCodeEditor::tryBracketInput(const QString& text)
+{
+    if (text.size() != 1) {
+        return false;
+    }
+    const QChar opening = text.at(0);
+    if (!miacode::editor::isBracketOpening(opening)) {
+        return false;
+    }
+    const bool hadSelection = textCursor().hasSelection();
+    if (tryAutoCloseBracket(text)) {
+        // The auto-close path inserts "[]" (caret parked between) for the no-
+        // selection case, or wraps the selection. Only the empty-pair case is a
+        // completion slot — wrapping already filled the brackets.
+        if (!hadSelection) {
+            maybeOpenBracketCompletion(opening, /*closingPresent=*/true);
+        }
+        return true;
+    }
+    // Auto-close is off (or declined). Offer completion anyway by inserting just
+    // the opening glyph, so the feature is independent of the auto-close pref.
+    return tryBracketCompletionWithoutAutoClose(text);
+}
+
+bool PlainCodeEditor::tryBracketCompletionWithoutAutoClose(const QString& text)
+{
+    if (!bracketCompletionEnabled_ || autoCloseBracketsEnabled_ || text.size() != 1) {
+        return false;
+    }
+    const QChar opening = text.at(0);
+    if (!miacode::editor::isBracketOpening(opening) || isReadOnly() || overwriteMode()) {
+        return false;
+    }
+    if (textCursor().hasSelection()) {
+        return false;
+    }
+    // No closing glyph will exist to the right, so only commit to handling the
+    // bracket when there is actually something to suggest; otherwise fall
+    // through to a plain insert.
+    const QStringList candidates =
+        miacode::editor::candidatesForOpening(opening, wholeBpmCandidate_, toPlainText());
+    if (candidates.isEmpty()) {
+        return false;
+    }
+    QTextCursor cursor = textCursor();
+    cursor.insertText(QString(opening));
+    setTextCursor(cursor);
+    maybeOpenBracketCompletion(opening, /*closingPresent=*/false);
+    return true;
+}
+
+bool PlainCodeEditor::tryHoldExpand(const QString& text)
+{
+    const bool hadSelection = textCursor().hasSelection();
+    if (!tryAutoExpandH(text)) {
+        return false;
+    }
+    // tryAutoExpandH inserted "h[]" with the caret parked between the brackets
+    // (the no-selection case) — that is exactly a '[' completion slot, so offer
+    // the same duration suggestions. A wrapped selection already filled the
+    // brackets, so there is nothing to suggest there.
+    if (!hadSelection) {
+        maybeOpenBracketCompletion(QLatin1Char('['), /*closingPresent=*/true);
+    }
+    return true;
+}
+
+// Backspace inside an empty matching pair (`(|)`, `[|]`, `{|}`) deletes BOTH
+// glyphs as a single undo step — the inverse of auto-close's pair insertion, so
+// it's gated by the same preference. Ctrl/Alt/Meta+Backspace (word delete) and
+// any selection fall through to the default handling.
+bool PlainCodeEditor::tryDeleteBracketPair(QKeyEvent* event)
+{
+    if (!autoCloseBracketsEnabled_ || event->key() != Qt::Key_Backspace) {
+        return false;
+    }
+    if (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)) {
+        return false;
+    }
+    if (isReadOnly() || overwriteMode()) {
+        return false;
+    }
+    QTextCursor cursor = textCursor();
+    if (cursor.hasSelection()) {
+        return false;
+    }
+    const int position = cursor.position();
+
+    QTextCursor leftProbe(document());
+    leftProbe.setPosition(position);
+    if (!leftProbe.movePosition(QTextCursor::PreviousCharacter, QTextCursor::KeepAnchor)) {
+        return false;
+    }
+    const QString leftText = leftProbe.selectedText();
+    if (leftText.size() != 1 || !miacode::editor::isBracketOpening(leftText.at(0))) {
+        return false;
+    }
+    const QChar closing = miacode::editor::closingBracketFor(leftText.at(0));
+
+    QTextCursor rightProbe(document());
+    rightProbe.setPosition(position);
+    if (!rightProbe.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor)
+        || rightProbe.selectedText() != QString(closing)) {
+        return false;
+    }
+
+    // An open completion popup is anchored to this slot — dismiss it first.
+    if (bracketCompletionActive()) {
+        closeBracketCompletion();
+    }
+    suppressCompletionFilter_ = true;
+    cursor.beginEditBlock();
+    cursor.setPosition(position - 1);
+    cursor.setPosition(position + 1, QTextCursor::KeepAnchor);
+    cursor.removeSelectedText();
+    cursor.endEditBlock();
+    setTextCursor(cursor);
+    suppressCompletionFilter_ = false;
+    event->accept();
+    return true;
+}
+
+void PlainCodeEditor::ensureCompletionPopup()
+{
+    if (completionPopup_ != nullptr) {
+        return;
+    }
+    completionPopup_ = new BracketCompletionPopup(this);
+    const auto& colors = UiTheme::colors();
+    completionPopup_->setStyleSheet(QStringLiteral(
+        "QListWidget {"
+        "  background-color: %1;"
+        "  color: %2;"
+        "  border: 1px solid %3;"
+        "  outline: 0;"
+        "  padding: 2px;"
+        "}"
+        "QListWidget::item {"
+        "  padding: 3px 10px;"
+        "  border-radius: 3px;"
+        "}"
+        "QListWidget::item:selected {"
+        "  background-color: %4;"
+        "  color: %5;"
+        "}")
+        .arg(colors.panelBg.name(QColor::HexRgb))
+        .arg(colors.textPrimary.name(QColor::HexRgb))
+        .arg(colors.border.name(QColor::HexRgb))
+        .arg(colors.accent.name(QColor::HexRgb))
+        .arg(colors.accentText.name(QColor::HexRgb)));
+    // A mouse click commits the highlighted row.
+    connect(completionPopup_, &BracketCompletionPopup::candidateActivated, this,
+            [this](const QString&) { acceptCompletionCandidate(); });
+}
+
+// Opens the suggestion popup for the bracket the caret now sits inside. closing-
+// Present says whether a matching closing glyph was auto-inserted to the right.
+void PlainCodeEditor::maybeOpenBracketCompletion(QChar opening, bool closingPresent)
+{
+    if (!bracketCompletionEnabled_ || isReadOnly() || overwriteMode()) {
+        return;
+    }
+    const QStringList candidates =
+        miacode::editor::candidatesForOpening(opening, wholeBpmCandidate_, toPlainText());
+    if (candidates.isEmpty()) {
+        // e.g. '(' before any BPM is known — nothing useful to show.
+        return;
+    }
+    completionOpening_ = opening;
+    completionClosingPresent_ = closingPresent;
+    completionStartPos_ = textCursor().position();
+    ensureCompletionPopup();
+    const QRect caret = cursorRect();
+    const QPoint anchor = viewport()->mapToGlobal(caret.bottomLeft() + QPoint(0, 2));
+    completionPopup_->showCandidates(candidates, anchor);
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("bracket_completion/open"),
+        QStringLiteral("glyph=%1 candidates=%2 closing=%3")
+            .arg(opening)
+            .arg(candidates.size())
+            .arg(closingPresent ? 1 : 0));
+}
+
+bool PlainCodeEditor::bracketCompletionActive() const
+{
+    return completionPopup_ != nullptr && completionPopup_->isVisible()
+        && !completionOpening_.isNull();
+}
+
+// Intercepts the navigation / accept / dismiss keys while the popup is open.
+// Printable characters and Backspace deliberately return false so they reach the
+// normal insert path and the cursorPositionChanged slot re-filters the list.
+bool PlainCodeEditor::handleCompletionPopupKey(QKeyEvent* event)
+{
+    switch (event->key()) {
+    case Qt::Key_Escape:
+        closeBracketCompletion();
+        event->accept();
+        return true;
+    case Qt::Key_Up:
+        completionPopup_->moveSelection(-1);
+        event->accept();
+        return true;
+    case Qt::Key_Down:
+        completionPopup_->moveSelection(1);
+        event->accept();
+        return true;
+    case Qt::Key_Tab:
+        acceptCompletionCandidate();
+        event->accept();
+        return true;
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+        // Plain Enter commits the highlighted candidate (and swallows the line
+        // break). Ctrl/Alt/Meta + Enter fall through to the editor's own
+        // line-break handling.
+        if (!(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
+            acceptCompletionCandidate();
+            event->accept();
+            return true;
+        }
+        return false;
+    default:
+        return false;
+    }
+}
+
+void PlainCodeEditor::acceptCompletionCandidate()
+{
+    if (!bracketCompletionActive()) {
+        return;
+    }
+    const QString candidate = completionPopup_->currentCandidate();
+    if (candidate.isEmpty()) {
+        closeBracketCompletion();
+        return;
+    }
+    const QChar closing = miacode::editor::closingBracketFor(completionOpening_);
+
+    suppressCompletionFilter_ = true;
+    QTextCursor cursor = textCursor();
+    int selectionEnd = cursor.position();
+    // The candidate carries its own closing glyph, so swallow the auto-inserted
+    // one immediately to the right (if present) instead of duplicating it.
+    if (completionClosingPresent_ && !closing.isNull()) {
+        QTextCursor probe(document());
+        probe.setPosition(selectionEnd);
+        probe.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+        if (probe.selectedText() == QString(closing)) {
+            selectionEnd += 1;
+        }
+    }
+    cursor.beginEditBlock();
+    cursor.setPosition(completionStartPos_);
+    cursor.setPosition(selectionEnd, QTextCursor::KeepAnchor);
+    cursor.insertText(candidate);
+    cursor.endEditBlock();
+    setTextCursor(cursor);
+    suppressCompletionFilter_ = false;
+    closeBracketCompletion();
+}
+
+void PlainCodeEditor::updateBracketCompletionFilter()
+{
+    const int position = textCursor().position();
+    if (position < completionStartPos_) {
+        closeBracketCompletion();
+        return;
+    }
+    QTextCursor span(document());
+    span.setPosition(completionStartPos_);
+    span.setPosition(position, QTextCursor::KeepAnchor);
+    const QString typed = span.selectedText();
+    // A newline or the closing glyph means the caret left the completion slot.
+    const QChar closing = miacode::editor::closingBracketFor(completionOpening_);
+    if (typed.contains(QChar::ParagraphSeparator) || typed.contains(QChar::LineSeparator)
+        || (!closing.isNull() && typed.contains(closing))) {
+        closeBracketCompletion();
+        return;
+    }
+    if (!completionPopup_->applyFilter(typed)) {
+        closeBracketCompletion();
+        return;
+    }
+    const QRect caret = cursorRect();
+    const QPoint anchor = viewport()->mapToGlobal(caret.bottomLeft() + QPoint(0, 2));
+    completionPopup_->moveToAnchor(anchor);
+}
+
+void PlainCodeEditor::closeBracketCompletion()
+{
+    if (completionPopup_ != nullptr) {
+        completionPopup_->hide();
+    }
+    completionOpening_ = QChar();
+    completionClosingPresent_ = false;
+    completionStartPos_ = -1;
+}
+
 void PlainCodeEditor::inputMethodEvent(QInputMethodEvent* event)
 {
     if (event == nullptr || !halfWidthInputEnabled_) {
@@ -978,9 +1307,17 @@ void PlainCodeEditor::inputMethodEvent(QInputMethodEvent* event)
     // helper's caret math stays valid.
     if (event->preeditString().isEmpty()
         && event->replacementLength() == 0
-        && tryAutoCloseBracket(normalizedCommitString)) {
-        event->accept();
-        return;
+        && normalizedCommitString.size() == 1
+        && miacode::editor::isBracketOpening(normalizedCommitString.at(0))) {
+        const QChar opening = normalizedCommitString.at(0);
+        const bool hadSelection = textCursor().hasSelection();
+        if (tryAutoCloseBracket(normalizedCommitString)) {
+            if (!hadSelection) {
+                maybeOpenBracketCompletion(opening, /*closingPresent=*/true);
+            }
+            event->accept();
+            return;
+        }
     }
 
     if (commitString == normalizedCommitString) {
@@ -1028,6 +1365,20 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
 {
     if (event == nullptr) {
         QTextEdit::keyPressEvent(event);
+        return;
+    }
+
+    // While the completion popup is open it owns the navigation / accept /
+    // dismiss keys (↑ ↓ Tab Enter Esc). Printable characters and Backspace
+    // fall through to normal editing; the cursorPositionChanged slot then
+    // re-filters (or dismisses) the list. This must run before the line-break
+    // handling below so a popup-Enter commits instead of inserting a newline.
+    if (bracketCompletionActive() && handleCompletionPopupKey(event)) {
+        return;
+    }
+
+    // Backspace between an empty matching pair removes both glyphs at once.
+    if (tryDeleteBracketPair(event)) {
         return;
     }
 
@@ -1093,7 +1444,7 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
     // 「（」/「【」/「｛」 pairs the same way a raw "(" / "[" / "{" does.
     if (!halfWidthInputEnabled_
         || (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
-        if (tryAutoCloseBracket(event->text()) || tryAutoExpandH(event->text())) {
+        if (tryBracketInput(event->text()) || tryHoldExpand(event->text())) {
             event->accept();
             return;
         }
@@ -1108,7 +1459,7 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
     }
 
     const QString normalizedText = miacode::editor::normalizedHalfWidthKeyText(event, inputText);
-    if (tryAutoCloseBracket(normalizedText) || tryAutoExpandH(normalizedText)) {
+    if (tryBracketInput(normalizedText) || tryHoldExpand(normalizedText)) {
         event->accept();
         return;
     }

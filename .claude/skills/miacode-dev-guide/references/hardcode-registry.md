@@ -37,6 +37,10 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
 
 ## 2. Implementation-local hotspots (keep local unless promotion rule triggers)
 
+- `src/editor/SimaiCompletionCatalog.cpp` — bracket-completion suggestion lists. Fixed,
+  product-decided order (do NOT sort): `[` durations `{8:1] 4:1] 16:3] 384:1]}`, `{`
+  subdivisions `{16} 24} 32}}`. `(` BPM list is dynamic (scanned `(<n>)` markers +
+  `&wholebpm`), not a constant. Keep local; the `SimaiCompletionCatalogSpec` pins these.
 - `src/core/scene/*.cpp` — large volume of render tuning (lane angle base/step, sprite scaling,
   touch/touchhold close curves, judge-effect timing/geometry, firework tuning, descriptor sizing).
   Note: `PreviewJudgeFireworkLayerState.cpp` pins firework hole ratios + color-ball curves to legacy

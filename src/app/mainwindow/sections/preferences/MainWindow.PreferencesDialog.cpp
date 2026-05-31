@@ -555,6 +555,7 @@ void MainWindow::PreferencesSection::onPreferences()
     bool selectedEditorHalfWidthInputEnabled = state_.editorHalfWidthInputEnabled_;
     bool selectedAutoCloseBracketsEnabled = state_.editorAutoCloseBracketsEnabled_;
     bool selectedAutoInsertSquareAfterHEnabled = state_.editorAutoInsertSquareAfterHEnabled_;
+    bool selectedBracketCompletionEnabled = state_.editorBracketCompletionEnabled_;
     bool selectedIgnoreMuriIssuePrompts = state_.ignoreMuriIssuePrompts_;
 
     auto* editorFontSizeLabel = new QLabel(uiText("dialog.preferences.editor_font_size", "Text Font Size"), editorGroup);
@@ -639,6 +640,19 @@ void MainWindow::PreferencesSection::onPreferences()
         owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
     });
     editorLayout->addRow(QString(), autoInsertSquareAfterHCheckbox);
+
+    auto* bracketCompletionCheckbox = new QCheckBox(
+        uiText("dialog.preferences.editor_bracket_completion", "Bracket completion suggestions (dropdown on ( [ {)"),
+        editorGroup
+    );
+    bracketCompletionCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    bracketCompletionCheckbox->setChecked(selectedBracketCompletionEnabled);
+    connect(bracketCompletionCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
+        selectedBracketCompletionEnabled = checked;
+        owner_.applyEditorBracketCompletionEnabled(selectedBracketCompletionEnabled, true);
+        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+    });
+    editorLayout->addRow(QString(), bracketCompletionCheckbox);
 
     auto* ignoreMuriIssuePromptsCheckbox = new QCheckBox(
         UiText::isChineseUi()

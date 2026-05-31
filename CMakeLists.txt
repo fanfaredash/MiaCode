@@ -144,6 +144,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/PreviewSfxTimeline.h
     src/editor/PlainCodeEditor.h
     src/editor/PlainCodeEditor.cpp
+    src/editor/BracketCompletionPopup.h
+    src/editor/BracketCompletionPopup.cpp
+    src/editor/SimaiCompletionCatalog.h
+    src/editor/SimaiCompletionCatalog.cpp
     src/editor/BracketScopeHighlighter.h
     src/editor/BracketScopeHighlighter.cpp
     src/tools/latency/LatencyAnalysis.h
@@ -829,6 +833,10 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/editor/PlainCodeEditorSpec.cpp
             src/editor/PlainCodeEditor.h
             src/editor/PlainCodeEditor.cpp
+            src/editor/BracketCompletionPopup.h
+            src/editor/BracketCompletionPopup.cpp
+            src/editor/SimaiCompletionCatalog.h
+            src/editor/SimaiCompletionCatalog.cpp
             src/app/ui/UiText.h
             src/app/ui/UiText.cpp
             src/app/ui/UiTheme.h
@@ -838,6 +846,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
             ${_miacode_log_core}
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
         INCLUDES src src/app/ui src/common
+    )
+
+    miacode_add_dev_tool(simai_completion_catalog_spec TEST
+        SOURCES
+            src/tools/editor/SimaiCompletionCatalogSpec.cpp
+            src/editor/SimaiCompletionCatalog.h
+            src/editor/SimaiCompletionCatalog.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/editor
     )
 
     miacode_add_dev_tool(preview_asset_loader_spec TEST

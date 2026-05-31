@@ -38,7 +38,21 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `loadDocument`, `rebuildFieldSidebar`, `populateMetadataPage`, `populateDifficultyPage`).
 - Editor header/page-mode UI: `sections/document/MainWindow.DocumentUi.cpp`.
 - Chart text editor: `src/editor/PlainCodeEditor.{h,cpp}` (line numbers, transform context menu,
-  half-width normalization, `normalizedViewportHitPosition`).
+  half-width normalization, `normalizedViewportHitPosition`, bracket auto-close
+  `tryAutoCloseBracket`, empty-pair backspace `tryDeleteBracketPair` (deletes both glyphs of
+  `[|]` in one undo step, gated by the auto-close pref), hold `h[]` expand `tryAutoExpandH`).
+- Bracket-completion dropdown ("tab 补全"): typing `( [ {` (and `h`, which expands to `h[]`
+  then offers the `[` durations) pops a simai-aware suggestion list under the caret. Candidate
+  data + scans: `src/editor/SimaiCompletionCatalog.{h,cpp}` (pure, spec at
+  `src/tools/editor/SimaiCompletionCatalogSpec.cpp`); the non-focusing popup widget:
+  `src/editor/BracketCompletionPopup.{h,cpp}`; editor glue (`tryBracketInput`, `tryHoldExpand`,
+  `maybeOpenBracketCompletion`, `handleCompletionPopupKey`, `acceptCompletionCandidate`,
+  filter via `cursorPositionChanged`) in `PlainCodeEditor.cpp`. `(` BPM list needs the
+  `&wholebpm` value pushed via `setWholeBpmCandidate` from
+  `DocumentSection::setEditorText`. Preference `editor_bracket_completion` (default on) wired
+  the same way as auto-close (`applyEditorBracketCompletionEnabled`, checkbox in
+  `MainWindow.PreferencesDialog.cpp`). Keys: ↑↓ navigate, Tab/Enter accept (Enter swallows the
+  newline), Esc/keep-typing dismiss.
 
 ## 4. Parser, validation, markers
 
@@ -113,10 +127,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - MainWindow ownership: `MainWindow.cpp` / `sections/export/*` (`onExportPreviewVideo`,
   `buildVideoExportSnapshot`, `launchVideoExportWorker`, `handleVideoExportWorkerEvent`).
 
-## 9. BPM & offset detection — `src/tools/latency/`
+## 9. Latency settings (BPM & offset) — `src/tools/latency/`
 
 - `LatencyDetectionPage.*`, `LatencyAnalysis.*`, `LatencySandboxController.*`,
-  `LatencyTestChartBuilder.*` (detection moved to an in-sidebar page + sandbox audition).
+  `LatencyTestChartBuilder.*` (an in-sidebar page + sandbox audition).
+- UI title is **"延迟设置" / "Latency Settings"** (header + sidebar item + tooltip in
+  `sections/document/MainWindow.DocumentUi.cpp`, gated on `activeOutlineKey_=="latency"`).
 - Entry: `MainWindow.cpp` (`onOpenLatencyDetector` / latency page activation);
   `switchToLatencyField` in `sections/document/MainWindow.DocumentUi.cpp`.
 - **Audition reuses the main preview transport** — it is NOT a separate player. The page
@@ -124,6 +140,32 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `startQtPreviewPlayback`/`onQtPreviewTick`. `LatencySandboxController` is a thin
   install/teardown + UI-poll layer; the page button → `toggleAudition()` →
   `MainWindow::onTogglePreviewPause()`. See `cross-chain-linkage.md` §12.
+- **Live param edits (incl. mid-playback):** `setBpm/setOffsetSeconds/setSubdivision` funnel into
+  `regenerateAndPushIfActive()` → `setupSandboxPreviewState()`. The song audio is the fixed master
+  clock and is never re-seeked here; only the test-chart notes + SFX timeline are rebuilt. Because
+  `QtPreviewSfxRuntime::configureTimeline()` resets the SFX event cursor to 0, while playing we
+  follow it with `resetCursor(currentPreviewAuthoritativeAudioClockSecond(), false)` so taps before
+  "now" aren't re-fired (the music keeps playing untouched).
+- **Ctrl+S (works):** the app has no global undo stack (undo = text editor only). Ctrl+S on this page
+  is routed via an **app-level `eventFilter`** (installed on `qApp`) → `MainWindow::onSaveFile()`, NOT a
+  page `QShortcut` — a page QShortcut on the same key as the global Save `QAction` is *ambiguous* (Qt
+  fires neither). Scoped to `isVisible() && (target==this || isAncestorOf(target))`; `onPageEntered()`
+  takes focus so it catches the key on entry. Spin boxes use `keyboardTracking(false)` so a half-typed
+  value is never applied.
+- **Page-local Ctrl+Z/Y undo — ATTEMPTED & REVERTED (failed).** A dedicated BPM/offset history plus an
+  eventFilter Undo/Redo branch was tried; the keys never reached the page-local handler reliably.
+  Removed — Ctrl+Z/Y fall through to the global Undo/Redo handler. Failure noted in code at the
+  `LatencyDetectionPage` ctor + `eventFilter()`. Don't re-add without a different mechanism.
+- **SFX-volume audition tap — ATTEMPTED & REVERTED (failed).** Dragging the SFX slider used to fire a
+  one-shot tap (`LatencySandboxController::playSfxAuditionSample()` → `QtPreviewSfxRuntime::audition`);
+  it could not be kept silent during playback (kept sounding despite guarding on `qtPreviewPlaying_`,
+  primary suspicion: a stray play/audition event scheduled elsewhere). Removed — the slider now only
+  sets the volume. Failure noted in code at `onSfxVolumeChanged` + the deleted-method comment in
+  `LatencySandboxController.cpp`. Default SFX volume = `kDefaultSfxVolumePercent` (**50**; stored
+  per-user under `latency/sfxVolumePercent`).
+- The three gray hint labels under BPM / Offset / SFX-volume were removed from `buildUi`.
+- The "auto-detect Offset" button is currently hidden (`detectOffsetButton_->setVisible(false)` in
+  `LatencyDetectionPage::buildUi`) — code/wiring kept; auto-detect BPM is unaffected.
 
 ## 10. Muri analysis — `src/tools/muri/`
 
@@ -157,7 +199,16 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 - `sections/dialogs/MainWindow.Dialogs.cpp` + `MainWindow.DialogsSection.cpp` — prepend
   silence/black, compress bg video, convert track to 44100 Hz (`onPrependTrackSilence`,
-  `onPrependPvBlack`, `onCompressBackgroundVideo`, `onConvertTrackTo44100Hz`).
+  `onPrependPvBlack`, `onCompressBackgroundVideo`, `onConvertTrackTo44100Hz`). These four open
+  from a single popup, `onMediaProcessingTools()` (one button + one-line description each),
+  reached via the toolbox's "音频/视频处理 / Audio/Video Processing" entry — not a hover submenu.
+  The shared `runFfmpegBlocking(... totalDurationSeconds, error)` helper drives a determinate
+  progress bar by parsing ffmpeg `-progress pipe:1` `out_time_us=` against the expected output
+  duration (falls back to an indeterminate bar when duration is unknown).
+- Toolbox menu itself is built in `sections/frame/MainWindow.FrameBootstrap.cpp` (`toolboxMenu_`).
+  BPM & Latency was dropped from the toolbox (still in the top Tools menu via
+  `latencyDetectorAction_`); Copy Area is gated off by the local `kCopyAreaIntegratedIntoToolbox`
+  constant (feature kept: `copyAreaPanel_`/`fullCopyAreaAction_`/`setFullCopyAreaVisible`).
 
 ## Update this file when
 

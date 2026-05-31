@@ -384,6 +384,18 @@ void MainWindow::DocumentSection::setEditorText(const QString& text)
     const int blockSpacingPixels = blockSpacingPixelsForPointSize(state_.editorTextFontPointSize_, state_.editorLineSpacingFactor_);
     editor->setPlainText(text);
     editor->setBlockSpacingPixels(blockSpacingPixels);
+    // The chart body never carries the &wholebpm metadata line, so feed it to the
+    // editor here for the '(' BPM completion list. extraFields is the canonical
+    // store; it's refreshed on load / difficulty switch, both of which route
+    // through setEditorText().
+    QString wholeBpm;
+    for (const SimaiRawField& field : std::as_const(state_.document_.extraFields)) {
+        if (field.key.compare(QStringLiteral("wholebpm"), Qt::CaseInsensitive) == 0) {
+            wholeBpm = field.value.trimmed();
+            break;
+        }
+    }
+    editor->setWholeBpmCandidate(wholeBpm);
     editor->document()->clearUndoRedoStacks();
     editor->document()->setModified(false);
     state_.editorUndoSaveAnchor_ = editor->document()->availableUndoSteps();

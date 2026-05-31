@@ -17,6 +17,7 @@ public:
     void applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference);
     void applyEditorAutoCloseBracketsEnabled(bool enabled, bool persistPreference);
     void applyEditorAutoInsertSquareAfterHEnabled(bool enabled, bool persistPreference);
+    void applyEditorBracketCompletionEnabled(bool enabled, bool persistPreference);
     void applyEditorImeInputDisabled(bool disabled, bool persistPreference);
     void showCreateBookmarkDialog();
     void showBookmarkManager();

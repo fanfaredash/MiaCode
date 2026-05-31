@@ -264,6 +264,7 @@ void MainWindow::EditorSection::loadPortableState()
     state_.editorOverwriteModeEnabled_ = false;
     state_.editorAutoCloseBracketsEnabled_ = true;
     state_.editorAutoInsertSquareAfterHEnabled_ = true;
+    state_.editorBracketCompletionEnabled_ = true;
     state_.editorTextFontPointSize_ = qBound(
         kEditorTextFontSizeMin,
         state_.editorTextFontPointSize_ > 0 ? state_.editorTextFontPointSize_ : editorFont().pointSize(),
@@ -291,6 +292,7 @@ void MainWindow::EditorSection::loadPortableState()
     state_.editorOverwriteModeEnabled_ = ui.value("editor_overwrite_mode").toBool(false);
     state_.editorAutoCloseBracketsEnabled_ = ui.value("editor_auto_close_brackets").toBool(true);
     state_.editorAutoInsertSquareAfterHEnabled_ = ui.value("editor_auto_insert_square_after_h").toBool(true);
+    state_.editorBracketCompletionEnabled_ = ui.value("editor_bracket_completion").toBool(true);
     if (ui.value("bottom_tabs_content_scale").isDouble()) {
         // Stored as a content-scale ratio (not pixels). The raw value is clamped
         // to its valid [min,max] range by applyBottomTabsContentScale() when the
@@ -308,6 +310,7 @@ void MainWindow::EditorSection::loadPortableState()
     applyEditorOverwriteModeEnabled(state_.editorOverwriteModeEnabled_, false);
     applyEditorAutoCloseBracketsEnabled(state_.editorAutoCloseBracketsEnabled_, false);
     applyEditorAutoInsertSquareAfterHEnabled(state_.editorAutoInsertSquareAfterHEnabled_, false);
+    applyEditorBracketCompletionEnabled(state_.editorBracketCompletionEnabled_, false);
     // applyEditorImeInputDisabled(state_.editorImeInputDisabled_, false);
 
     const QString dir = app.value("last_open_dir").toString();
@@ -656,6 +659,7 @@ void MainWindow::EditorSection::savePortableState() const
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
     ui.insert("editor_auto_close_brackets", state_.editorAutoCloseBracketsEnabled_);
     ui.insert("editor_auto_insert_square_after_h", state_.editorAutoInsertSquareAfterHEnabled_);
+    ui.insert("editor_bracket_completion", state_.editorBracketCompletionEnabled_);
     // Bottom-tabs (timeline/validation/muri) divider height, persisted as a
     // content-scale ratio rather than pixels (see loadPortableState()).
     ui.insert("bottom_tabs_content_scale", state_.bottomTabsContentScale_);
@@ -780,6 +784,7 @@ void MainWindow::EditorSection::persistEditorTextFontPreference() const
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
     ui.insert("editor_auto_close_brackets", state_.editorAutoCloseBracketsEnabled_);
     ui.insert("editor_auto_insert_square_after_h", state_.editorAutoInsertSquareAfterHEnabled_);
+    ui.insert("editor_bracket_completion", state_.editorBracketCompletionEnabled_);
     // [BETA51 IME-DISABLE: DISABLED PENDING FIX] see saveState() and
     // loadPortableState() for the rationale.
     // ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);
@@ -888,6 +893,20 @@ void MainWindow::EditorSection::applyEditorAutoInsertSquareAfterHEnabled(bool en
     }
     if (ui_.copyAreaEditor_ != nullptr) {
         ui_.copyAreaEditor_->setAutoInsertSquareAfterHEnabled(enabled);
+    }
+    if (persistPreference) {
+        persistEditorTextFontPreference();
+    }
+}
+
+void MainWindow::EditorSection::applyEditorBracketCompletionEnabled(bool enabled, bool persistPreference)
+{
+    state_.editorBracketCompletionEnabled_ = enabled;
+    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
+        editor->setBracketCompletionEnabled(enabled);
+    }
+    if (ui_.copyAreaEditor_ != nullptr) {
+        ui_.copyAreaEditor_->setBracketCompletionEnabled(enabled);
     }
     if (persistPreference) {
         persistEditorTextFontPreference();
@@ -1152,6 +1171,7 @@ void MainWindow::EditorSection::showCreateBookmarkDialog()
     });
     edit->setAutoCloseBracketsEnabled(state_.editorAutoCloseBracketsEnabled_);
     edit->setAutoInsertSquareAfterHEnabled(state_.editorAutoInsertSquareAfterHEnabled_);
+    edit->setBracketCompletionEnabled(state_.editorBracketCompletionEnabled_);
     edit->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("书签内容") : QStringLiteral("Bookmark notes"));
     edit->setStyleSheet(UiTheme::editorTextEditStyleSheet());
     if (auto* vbar = edit->verticalScrollBar()) {
@@ -1334,6 +1354,7 @@ void MainWindow::EditorSection::syncCopyAreaEditorAppearance()
     ui_.copyAreaEditor_->setEditorOverwriteMode(state_.editorOverwriteModeEnabled_);
     ui_.copyAreaEditor_->setAutoCloseBracketsEnabled(state_.editorAutoCloseBracketsEnabled_);
     ui_.copyAreaEditor_->setAutoInsertSquareAfterHEnabled(state_.editorAutoInsertSquareAfterHEnabled_);
+    ui_.copyAreaEditor_->setBracketCompletionEnabled(state_.editorBracketCompletionEnabled_);
     ui_.copyAreaEditor_->refreshLineNumberAreaLayout();
 }
 
@@ -1413,6 +1434,11 @@ void MainWindow::applyEditorAutoCloseBracketsEnabled(bool enabled, bool persistP
 void MainWindow::applyEditorAutoInsertSquareAfterHEnabled(bool enabled, bool persistPreference)
 {
     editorSection_->applyEditorAutoInsertSquareAfterHEnabled(enabled, persistPreference);
+}
+
+void MainWindow::applyEditorBracketCompletionEnabled(bool enabled, bool persistPreference)
+{
+    editorSection_->applyEditorBracketCompletionEnabled(enabled, persistPreference);
 }
 
 void MainWindow::applyEditorImeInputDisabled(bool disabled, bool persistPreference)

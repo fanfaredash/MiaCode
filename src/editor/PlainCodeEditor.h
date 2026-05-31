@@ -5,6 +5,7 @@
 #include <QPointF>
 #include <QTextEdit>
 
+class BracketCompletionPopup;
 class LineNumberArea;
 class QAction;
 class QContextMenuEvent;
@@ -63,6 +64,17 @@ public:
     // from the generic bracket auto-close above.
     void setAutoInsertSquareAfterHEnabled(bool enabled);
     bool autoInsertSquareAfterHEnabled() const { return autoInsertSquareAfterHEnabled_; }
+    // Bracket-completion dropdown — when the user opens a ( [ { the editor pops
+    // a small list of simai-aware suggestions (durations / subdivisions / BPMs)
+    // anchored under the caret. Non-blocking: ignoring it and typing keeps the
+    // raw input. Toggled from the editor section of the Preferences dialog;
+    // independent of auto-close (works whether or not the pair is auto-inserted).
+    void setBracketCompletionEnabled(bool enabled);
+    bool bracketCompletionEnabled() const { return bracketCompletionEnabled_; }
+    // Feeds the '(' suggestion list. The chart body editor never holds the
+    // &wholebpm metadata line, so the owning window pushes it in on load /
+    // difficulty switch (see MainWindow::DocumentSection::setEditorText).
+    void setWholeBpmCandidate(const QString& bpm);
 
 signals:
     void undoShortcutRequested();
@@ -106,6 +118,23 @@ private:
     // is keyPress-only (see its definition for why).
     bool tryAutoCloseBracket(const QString& text);
     bool tryAutoExpandH(const QString& text);
+    // Bracket-completion helpers. tryBracketInput() wraps the auto-close path so
+    // the suggestion popup opens on the same (normalized) key/IME bracket input.
+    bool tryBracketInput(const QString& text);
+    // Wraps tryAutoExpandH so the `h[]` expansion opens the same '[' duration
+    // suggestions, with the caret already parked inside the brackets.
+    bool tryHoldExpand(const QString& text);
+    // Backspace between an empty matching pair (e.g. `[|]`) removes both glyphs
+    // in one undo step. Mirrors auto-close — gated by the same preference.
+    bool tryDeleteBracketPair(QKeyEvent* event);
+    bool tryBracketCompletionWithoutAutoClose(const QString& text);
+    void ensureCompletionPopup();
+    void maybeOpenBracketCompletion(QChar opening, bool closingPresent);
+    bool bracketCompletionActive() const;
+    bool handleCompletionPopupKey(QKeyEvent* event);
+    void acceptCompletionCandidate();
+    void updateBracketCompletionFilter();
+    void closeBracketCompletion();
 
     int blockSpacingPixels_ = 0;
     int topOverlayInsetPixels_ = 0;
@@ -113,6 +142,20 @@ private:
     bool imeInputDisabled_ = false;
     bool autoCloseBracketsEnabled_ = true;
     bool autoInsertSquareAfterHEnabled_ = true;
+    bool bracketCompletionEnabled_ = true;
+    // Live state for the bracket-completion popup. completionOpening_ is null
+    // when no popup is active; completionStartPos_ marks the document position
+    // right after the opening bracket (where the user's filter text begins);
+    // completionClosingPresent_ records whether auto-close inserted a closing
+    // glyph to the right (so accepting a candidate consumes it instead of
+    // duplicating it); suppressCompletionFilter_ guards programmatic edits from
+    // the cursorPositionChanged re-filter slot.
+    QString wholeBpmCandidate_;
+    BracketCompletionPopup* completionPopup_ = nullptr;
+    QChar completionOpening_;
+    bool completionClosingPresent_ = false;
+    int completionStartPos_ = -1;
+    bool suppressCompletionFilter_ = false;
     QList<QAction*> batchTransformActions_;
     QList<QAction*> moreBatchTransformActions_;
     QRect lastCurrentLineHighlightRect_;
