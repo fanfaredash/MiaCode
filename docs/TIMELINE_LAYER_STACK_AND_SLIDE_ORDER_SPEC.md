@@ -77,17 +77,42 @@ Two structural rules to remember:
   *also* painting over the bar lines because it lived inside `NotesSource`
   at z=3, above the grid lines that were then at z=2.
 
-## 3. Timeline z-stack — QSG layer pipeline (fallback)
+## 3. Timeline z-stack — QSG layer pipeline (active path)
 
-`TimelineQuickItem::updatePaintNode` iterates a fixed slot list. Slot
-ordering matches the DComp z-stack:
+> **Waveform-on-top update.** The waveform now stacks **above** the grid
+> lines (slot 3, was slot 1) and is rendered as a **translucent filled
+> silhouette** — the alpha baked into `timelineWaveStroke` lets the bar/note
+> lines show through the waveform, so "waveform on top" no longer hides the
+> grid. (An earlier pure top/bottom contour-**stroke** variant was tried and
+> reverted: at real column density it broke into disconnected speckles and
+> read as invisible — a translucent fill keeps the waveform a coherent,
+> clearly visible silhouette while still revealing the grid.) The widget path
+> (`TimelineView.Paint.cpp`) mirrors the same order + translucent fill. The
+> **DComp source pipeline in §2 was intentionally left at its old order**
+> (waveform z=1, below grid lines) — it is default-off and being decoupled
+> per the render-architecture decision, so it was not reordered; it still
+> picks up the translucent colour since it reads the same
+> `state.waveformBars`. This is the one place the QSG and DComp stacks now
+> diverge on purpose.
+
+> **Brightness linkage.** The waveform colour is always run through
+> `adjustedTimelineWaveformColor(timelineWaveStroke, brightness)`. Because the
+> waveform is a translucent fill on top of the grid, this scales the colour's
+> **alpha (opacity)**, NOT its RGB: `1.0x` reproduces the palette base alpha,
+> below fades toward the backdrop, above approaches opaque. Keeping RGB fixed
+> means the slider never shifts the hue — the earlier RGB-multiply drifted teal
+> to pale cyan at the high end and inverted on light themes (raising it reduced
+> contrast). The control now cleanly trades waveform prominence against how
+> much grid shows through.
+
+`TimelineQuickItem::updatePaintNode` iterates a fixed slot list:
 
 | Slot | Layer | Header |
 |---|---|---|
 | 0 | `gridLayer` (basebackgrounds) | `TimelineQuickGridLayer.h` |
-| 1 | `waveformLayer` | `TimelineQuickWaveformLayer.h` |
-| 2 | `headerLayer` (lane overlays + measure-marker triangles + labels — **no grid lines**) | `TimelineQuickHeaderLayer.h` |
-| 3 | `gridLinesLayer` (bar lines + note lines, dedicated slot) | `TimelineQuickGridLinesLayer.h` |
+| 1 | `headerLayer` (lane overlays + measure-marker triangles + labels — **no grid lines**) | `TimelineQuickHeaderLayer.h` |
+| 2 | `gridLinesLayer` (bar lines + note lines, dedicated slot) | `TimelineQuickGridLinesLayer.h` |
+| 3 | `waveformLayer` (**stroked envelope, on top of grid lines**) | `TimelineQuickWaveformLayer.h` |
 | 4 | `notesLayer` | `TimelineQuickNotesLayer.h` |
 | 5 | `overlayLayer` | `TimelineQuickOverlayLayer.h` |
 

@@ -32,7 +32,7 @@ namespace {
 
 constexpr double kTimelineKeyHoldAccelerationPerSecond = 1.0;
 constexpr int kTimelineKeyHoldTickIntervalMs = 16;
-constexpr int kTimelineLayerSlotCount = 6;  // Beta21-fix7: grid + wave + header + gridLines + notes + overlay
+constexpr int kTimelineLayerSlotCount = 6;  // grid + header + gridLines + wave(translucent,on-top) + notes + overlay
 
 double timelineHeldKeyPlaybackRate(double heldSeconds, double maxPlaybackRate)
 {
@@ -855,18 +855,19 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         return gridLayer_->updateNode(oldChild, state, window(), textures_.get());
     });
     updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
-        return waveformLayer_->updateNode(oldChild, state);
-    });
-    updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
         return headerLayer_->updateNode(oldChild, state, window(), textures_.get());
     });
-    // Beta21-fix7 — grid lines now live in their own slot AFTER both
-    // waveformLayer and headerLayer, BEFORE notesLayer. This guarantees
-    // bar/note lines render on top of waveform regardless of any QSG
-    // opaque-batch reorder, while staying below note sprites per the
-    // user's "below notes" instruction.
     updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
         return gridLinesLayer_->updateNode(oldChild, state, window());
+    });
+    // Waveform-on-top — the waveform now stacks ABOVE the grid lines (and
+    // lane overlays) instead of below them. It is a TRANSLUCENT filled
+    // silhouette (alpha baked into timelineWaveStroke), so the bar/note lines
+    // show through the waveform and the audio shape reads on top of the grid
+    // without hiding it. Still BELOW note sprites + the overlay (playhead/
+    // cursor) which follow.
+    updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
+        return waveformLayer_->updateNode(oldChild, state);
     });
     updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
         return notesLayer_->updateNode(oldChild, state, window(), textures_.get());

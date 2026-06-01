@@ -73,8 +73,12 @@ const UiTheme::Colors& lightColors()
         QColor(242, 242, 242, 190),         // timelineLaneOdd
         QColor("#4D5C6D"),                  // timelineLabel
         QColor("#9AA7B6"),                  // timelineAxis
-        QColor(210, 224, 214, 108),         // timelineWaveFill
-        QColor("#9CB3A6"),                  // timelineWaveStroke
+        // Waveform renders as a translucent filled silhouette ABOVE the grid.
+        // Deep teal-green; the blue grid lines show through its alpha. Distinct
+        // from the warm playhead/cursor markers. Alpha 135 is the base for the
+        // 1.0x brightness setting — the brightness slider scales this alpha
+        // (opacity), keeping the hue fixed (see adjustedTimelineWaveformColor).
+        QColor(44, 156, 130, 135),          // timelineWaveStroke
         QColor("#FFC90E"),                  // timelinePlayhead
         QColor("#B85C4D"),                  // timelineCursor
         QColor("#F28C28"),                  // timelineLimit
@@ -130,8 +134,13 @@ const UiTheme::Colors& darkColors()
         QColor(29, 36, 45, 210),            // timelineLaneOdd
         QColor("#C8D5E5"),                  // timelineLabel
         QColor("#8091A5"),                  // timelineAxis
-        QColor(118, 179, 140, 158),         // timelineWaveFill
-        QColor("#5E8B6E"),                  // timelineWaveStroke
+        // Waveform renders as a translucent filled silhouette ABOVE the grid.
+        // Aquamarine-mint family (matches the light theme's waveform tint); the
+        // blue grid lines show through its alpha. Distinct from the warm
+        // playhead/cursor markers. Alpha 160 is the base for the 1.0x
+        // brightness setting — the brightness slider scales this alpha
+        // (opacity), keeping the hue fixed (see adjustedTimelineWaveformColor).
+        QColor(95, 214, 180, 160),          // timelineWaveStroke
         QColor("#FFC90E"),                  // timelinePlayhead
         QColor("#C96B5B"),                  // timelineCursor
         QColor("#FF9B4A"),                  // timelineLimit

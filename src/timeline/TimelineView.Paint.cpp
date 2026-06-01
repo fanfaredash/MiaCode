@@ -120,53 +120,11 @@ void TimelineView::paintEvent(QPaintEvent* event)
     laneLabelFont.setPointSize(10);
     laneLabelFont.setWeight(QFont::DemiBold);
 
-    if (waveformData_ && waveformData_->durationSeconds > 0.0) {
-        const miacode::waveform::WaveformLevel* waveformLevel =
-            miacode::waveform::selectWaveformLevelForVisibleRange(
-                *waveformData_,
-                qMax(0.001, visibleEndSecond - visibleStartSecond),
-                qMax(1, timelineRect.width()));
-        if (waveformLevel != nullptr && !waveformLevel->columns.isEmpty()) {
-            const QPair<int, int> visibleColumns =
-                miacode::waveform::visibleWaveformColumnRange(
-                    *waveformLevel,
-                    qMax(0.0, visibleStartSecond),
-                    qMax(0.0, visibleEndSecond));
-            const qreal centerY = top + h / 2.0;
-            const qreal maxAmplitude = (qMax<qreal>(8.0, h / 2.0 - 8.0) * 7.0) / 9.0;
-            const QColor waveformColor = miacode::timeline::adjustedTimelineWaveformColor(
-                c.timelineWaveStroke,
-                waveformBrightness_);
-            painter.save();
-            painter.setClipRect(QRect(left, top, viewport()->width() - left, h));
-            painter.setPen(Qt::NoPen);
-            painter.setBrush(waveformColor);
-            for (int index = visibleColumns.first; index < visibleColumns.second; ++index) {
-                const miacode::waveform::WaveformColumn& column = waveformLevel->columns.at(index);
-                if (qAbs(column.max - column.min) <= 1e-5f) {
-                    continue;
-                }
-                const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
-                const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
-                int x0 = secondToX(columnStartSecond) - xOffset;
-                int x1 = secondToX(columnEndSecond) - xOffset;
-                if (x1 <= x0) {
-                    x1 = x0 + 1;
-                }
-                if (x1 < left || x0 > viewport()->width()) {
-                    continue;
-                }
-
-                const qreal topY = centerY - (qBound(-1.0f, column.max, 1.0f) * maxAmplitude);
-                const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
-                const int barTop = qFloor(qMin(topY, bottomY));
-                const int barBottom = qCeil(qMax(topY, bottomY));
-                const QRect barRect(x0, barTop, qMax(1, x1 - x0), qMax(1, barBottom - barTop));
-                painter.fillRect(barRect, waveformColor);
-            }
-            painter.restore();
-        }
-    }
+    // NOTE: the waveform is intentionally NOT drawn here anymore. It now
+    // renders as a stroked contour AFTER the grid lines (further below), so
+    // the audio shape sits on top of the grid while its transparent interior
+    // keeps the bar/note lines visible. See the waveform block past the
+    // measure-line loop.
 
     painter.setFont(laneLabelFont);
     for (int lane = 0; lane < kLaneCount; ++lane) {
@@ -264,6 +222,70 @@ void TimelineView::paintEvent(QPaintEvent* event)
             }
             painter.setPen(majorBeatPen);
             painter.drawLine(x, top, x, top + h);
+        }
+    }
+
+    // Waveform — drawn AFTER the grid lines (so it reads on top of the grid)
+    // as a single ANTI-ALIASED filled silhouette: the top envelope left->right
+    // then the bottom envelope right->left, closed into one polygon. This
+    // avoids the per-column hard-edged "sawtooth" aliasing of discrete
+    // fillRect bars and gives a smooth, clean waveform while preserving the
+    // real min/max detail. Translucent (alpha in c.timelineWaveStroke) so the
+    // grid shows through; stays below note sprites. Brightness scales the
+    // fill's alpha via adjustedTimelineWaveformColor (hue fixed).
+    if (waveformData_ && waveformData_->durationSeconds > 0.0) {
+        const miacode::waveform::WaveformLevel* waveformLevel =
+            miacode::waveform::selectWaveformLevelForVisibleRange(
+                *waveformData_,
+                qMax(0.001, visibleEndSecond - visibleStartSecond),
+                qMax(1, timelineRect.width()));
+        if (waveformLevel != nullptr && !waveformLevel->columns.isEmpty()) {
+            const QPair<int, int> visibleColumns =
+                miacode::waveform::visibleWaveformColumnRange(
+                    *waveformLevel,
+                    qMax(0.0, visibleStartSecond),
+                    qMax(0.0, visibleEndSecond));
+            const qreal centerY = top + h / 2.0;
+            const qreal maxAmplitude = (qMax<qreal>(8.0, h / 2.0 - 8.0) * 7.0) / 9.0;
+            const QColor waveformColor = miacode::timeline::adjustedTimelineWaveformColor(
+                c.timelineWaveStroke,
+                waveformBrightness_);
+            QPainterPath wavePath;
+            QVector<QPointF> bottomEnvelope;
+            bottomEnvelope.reserve(visibleColumns.second - visibleColumns.first);
+            bool wavePathStarted = false;
+            for (int index = visibleColumns.first; index < visibleColumns.second; ++index) {
+                const miacode::waveform::WaveformColumn& column = waveformLevel->columns.at(index);
+                const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
+                const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
+                const qreal xMid =
+                    (secondToX(columnStartSecond) + secondToX(columnEndSecond)) * 0.5 - xOffset;
+                if (xMid < left - 2.0 || xMid > viewport()->width() + 2.0) {
+                    continue;
+                }
+                const qreal topY = centerY - (qBound(-1.0f, column.max, 1.0f) * maxAmplitude);
+                const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
+                if (!wavePathStarted) {
+                    wavePath.moveTo(xMid, topY);
+                    wavePathStarted = true;
+                } else {
+                    wavePath.lineTo(xMid, topY);
+                }
+                bottomEnvelope.append(QPointF(xMid, bottomY));
+            }
+            if (wavePathStarted) {
+                for (int i = bottomEnvelope.size() - 1; i >= 0; --i) {
+                    wavePath.lineTo(bottomEnvelope.at(i));
+                }
+                wavePath.closeSubpath();
+                painter.save();
+                painter.setClipRect(QRect(left, top, viewport()->width() - left, h));
+                painter.setRenderHint(QPainter::Antialiasing, true);
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(waveformColor);
+                painter.drawPath(wavePath);
+                painter.restore();
+            }
         }
     }
 
@@ -957,30 +979,43 @@ void TimelineView::paintWaveformOnly(QPainter& painter, const QRect& dirtyRect)
                     qMax(0.0, visibleEndSecond));
             const qreal centerY = cardRect.center().y();
             const qreal maxAmplitude = cardRect.height() * 0.38;
-            painter.setPen(Qt::NoPen);
             const QColor waveformColor = miacode::timeline::adjustedTimelineWaveformColor(
                 c.timelineWaveStroke,
                 waveformBrightness_);
-            painter.setBrush(waveformColor);
+            // Single anti-aliased filled silhouette (top envelope L->R, bottom
+            // R->L) — matches the main timeline; smooth instead of the old
+            // per-column hard-edged bars.
+            QPainterPath wavePath;
+            QVector<QPointF> bottomEnvelope;
+            bottomEnvelope.reserve(visibleColumns.second - visibleColumns.first);
+            bool wavePathStarted = false;
             for (int index = visibleColumns.first; index < visibleColumns.second; ++index) {
                 const miacode::waveform::WaveformColumn& column = waveformLevel->columns.at(index);
-                if (qAbs(column.max - column.min) <= 1e-5f) {
-                    continue;
-                }
                 const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
                 const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
-                int x0 = secondToX(columnStartSecond) - xOffset;
-                int x1 = secondToX(columnEndSecond) - xOffset;
-                if (x1 <= x0) {
-                    x1 = x0 + 1;
-                }
+                const qreal xMid =
+                    (secondToX(columnStartSecond) + secondToX(columnEndSecond)) * 0.5 - xOffset;
                 const qreal topY = centerY - (qBound(-1.0f, column.max, 1.0f) * maxAmplitude);
                 const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
-                const int barTop = qFloor(qMin(topY, bottomY));
-                const int barBottom = qCeil(qMax(topY, bottomY));
-                painter.fillRect(
-                    QRect(x0, barTop, qMax(1, x1 - x0), qMax(1, barBottom - barTop)),
-                    waveformColor);
+                if (!wavePathStarted) {
+                    wavePath.moveTo(xMid, topY);
+                    wavePathStarted = true;
+                } else {
+                    wavePath.lineTo(xMid, topY);
+                }
+                bottomEnvelope.append(QPointF(xMid, bottomY));
+            }
+            if (wavePathStarted) {
+                for (int i = bottomEnvelope.size() - 1; i >= 0; --i) {
+                    wavePath.lineTo(bottomEnvelope.at(i));
+                }
+                wavePath.closeSubpath();
+                painter.save();
+                painter.setRenderHint(QPainter::Antialiasing, true);
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(waveformColor);
+                painter.drawPath(wavePath);
+                painter.restore();
             }
         }
     }

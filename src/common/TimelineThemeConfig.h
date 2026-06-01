@@ -11,19 +11,43 @@ namespace miacode::timeline {
 
 constexpr double kTimelineWaveformBrightnessMin = 0.2;
 constexpr double kTimelineWaveformBrightnessMax = 2.0;
-constexpr double kTimelineWaveformBrightnessDefault = 1.0;
+// Default waveform brightness (== translucent-fill opacity multiplier). 0.5
+// gives a subtle silhouette that reads clearly in both themes without
+// dominating the grid — adopted as the shipped default. The slider still
+// spans kTimelineWaveformBrightnessMin..Max so users can dial it up/down.
+constexpr double kTimelineWaveformBrightnessDefault = 0.5;
 
 inline double normalizedTimelineWaveformBrightness(double brightness)
 {
     return qBound(kTimelineWaveformBrightnessMin, brightness, kTimelineWaveformBrightnessMax);
 }
 
+// The waveform is a translucent fill stacked ON TOP of the grid lines, so the
+// "brightness" slider is best expressed as opacity/prominence: scale ALPHA and
+// keep RGB (hue + saturation) fixed. Rationale — the old per-channel RGB
+// multiply had three problems: (1) at the high end the channels clamp to 255 at
+// different points, so the teal drifted to pale cyan (a hue shift, not
+// "brighter"); (2) on a light theme, lifting RGB moved the colour toward white,
+// i.e. LESS contrast as you raised "brightness" (inverted); (3) once a channel
+// clamped, more slider did nothing. Driving alpha instead is monotonic and
+// intuitive in BOTH themes (higher = more prominent / more grid covered), never
+// shifts hue, and uses the whole slider range. The curve is anchored so 1.0x
+// reproduces the palette's base alpha exactly; below 1.0x it fades toward the
+// backdrop, above 1.0x it approaches fully opaque (no dead zone at the top).
 inline QColor adjustedTimelineWaveformColor(QColor color, double brightness)
 {
     const double clamped = normalizedTimelineWaveformBrightness(brightness);
-    color.setRed(qBound(0, qRound(static_cast<double>(color.red()) * clamped), 255));
-    color.setGreen(qBound(0, qRound(static_cast<double>(color.green()) * clamped), 255));
-    color.setBlue(qBound(0, qRound(static_cast<double>(color.blue()) * clamped), 255));
+    const double baseAlpha = static_cast<double>(color.alpha());
+    double alpha = baseAlpha;
+    if (clamped < 1.0) {
+        // 0.2x .. 1.0x : fade toward the backdrop (down to 20% of base alpha).
+        alpha = baseAlpha * clamped;
+    } else if (clamped > 1.0) {
+        // 1.0x .. 2.0x : approach fully opaque without a dead zone at the top.
+        const double t = (clamped - 1.0) / (kTimelineWaveformBrightnessMax - 1.0);
+        alpha = baseAlpha + (255.0 - baseAlpha) * t;
+    }
+    color.setAlpha(qBound(0, qRound(alpha), 255));
     return color;
 }
 

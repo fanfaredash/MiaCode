@@ -634,6 +634,12 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 }
                 const qreal topY = centerY - (qBound(-1.0f, column.max, 1.0f) * maxAmplitude);
                 const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
+                // Translucent filled silhouette stacked ABOVE the grid lines:
+                // the alpha baked into theme.waveform (timelineWaveStroke)
+                // lets the bar/note lines show through the waveform. Colour
+                // flows through adjustedTimelineWaveformColor so brightness
+                // stays linked — the multiply touches RGB only, so the alpha
+                // (grid see-through amount) is preserved across the slider.
                 state.waveformBars.append(TimelineSceneRect{
                     QRectF(x0, qMin(topY, bottomY), qMax(1, x1 - x0), qMax<qreal>(1.0, qAbs(bottomY - topY))),
                     adjustedTimelineWaveformColor(theme.waveform, request.waveformBrightness),

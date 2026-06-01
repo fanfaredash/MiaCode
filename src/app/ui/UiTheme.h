@@ -63,7 +63,6 @@ struct Colors {
     QColor timelineLaneOdd;
     QColor timelineLabel;
     QColor timelineAxis;
-    QColor timelineWaveFill;
     QColor timelineWaveStroke;
     QColor timelinePlayhead;
     QColor timelineCursor;
