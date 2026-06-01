@@ -87,9 +87,6 @@ private:
     void applyPlayheadToScene(double seconds);
     void setupSandboxPreviewState();  // build test chart → preview/timeline/SFX
     void restoreOriginalTimeline();
-    void applyOverrideAudioSettings();
-    void restoreOriginalAudioSettings();
-    PreviewAudioSettings buildOverrideAudioSettings(const PreviewAudioSettings& base, int sfxPercent) const;
     double resolveAudioDurationSeconds() const;
 
     QPointer<MainWindow> owner_;
@@ -109,8 +106,6 @@ private:
     QVector<TimelineNoteMarker> cachedNoteMarkers_;
     QByteArray cachedNoteMarkerSignature_;
     TimelineRenderSnapshot cachedSnapshot_;
-    bool hasCachedAudioSettings_ = false;
-    PreviewAudioSettings cachedAudioSettings_;
 };
 
 }  // namespace miacode::latency

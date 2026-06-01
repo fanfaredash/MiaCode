@@ -21,6 +21,7 @@
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
+#include "tools/latency/LatencySandboxController.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -548,9 +549,28 @@ void MainWindow::PreviewSection::applyPreviewAudioSettingsToRuntime()
 {
     state_.previewAudioSettings_.normalize();
     applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_, "preview_audio_settings");
-    if (state_.previewSfxRuntime_ != nullptr) {
-        state_.previewSfxRuntime_->applyLevels(state_.previewAudioSettings_);
+    if (state_.previewSfxRuntime_ == nullptr) {
+        return;
     }
+    // Single level-dispatch entry. The runtime's SFX/track levels are a PURE
+    // FUNCTION of the current audio mode, recomputed and pushed here on every
+    // dispatch point (chart load, play start, latency page enter/leave, latency
+    // slider, audio-settings dialog) — never a snapshot that has to be restored on
+    // the way out. While the latency page owns the shared runtime (isOnPage()),
+    // the mode is LatencyAudition: the test taps use the page's independent SFX
+    // slider and the song keeps its normal effective volume; otherwise the user's
+    // real mix is applied verbatim. Because the levels are re-derived from
+    // (mode, previewAudioSettings_, latencySfx), a missed page-exit can never
+    // linger an audition override into the normal preview — the next dispatch
+    // self-corrects from the settled mode. (This replaces the old snapshot/restore
+    // + latencySandboxAuditionActive_ gate, which leaked when an exit path skipped
+    // the controller's restore.)
+    auto* sandbox = owner_.latencySandboxController();
+    const bool latencyAudition = sandbox != nullptr && sandbox->isOnPage();
+    const PreviewAudioSettings levels = latencyAudition
+        ? makePreviewLatencyAuditionLevels(state_.previewAudioSettings_, sandbox->sfxVolumePercent())
+        : state_.previewAudioSettings_;
+    state_.previewSfxRuntime_->applyLevels(levels);
 }
 
 void MainWindow::ensurePreviewSfxRuntimePrepared()

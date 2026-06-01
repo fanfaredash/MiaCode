@@ -10,6 +10,11 @@ void MainWindow::onPreviewVideoSettings()
     dialogsSection_->onPreviewVideoSettings();
 }
 
+void MainWindow::onMediaProcessingTools()
+{
+    dialogsSection_->onMediaProcessingTools();
+}
+
 void MainWindow::onAbout()
 {
     dialogsSection_->onAbout();

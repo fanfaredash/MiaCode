@@ -8,6 +8,7 @@ public:
 
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
+    void onMediaProcessingTools();
     void onAbout();
     void onPrependTrackSilence();
     void onPrependPvBlack();
@@ -28,6 +29,12 @@ private:
     void releasePreviewMediaForFileOperation();
     void reloadPreviewMediaAfterFileOperation(bool reloadTrack);
     void onPrependMediaBlank(MediaBlankTarget target);
+    // Shows an export-style "done" dialog naming the produced file, with an
+    // "Open Folder" button that reveals its containing directory.
+    void showMediaOperationCompleteDialog(
+        const QString& title,
+        const QString& summary,
+        const QString& producedFilePath);
     void openPreviewSettingsDialog(bool includeAudioSettings, bool includeVideoSettings, const QString& title);
 
     MainWindow& owner_;

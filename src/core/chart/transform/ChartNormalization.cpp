@@ -783,6 +783,25 @@ bool lineTailIsTerminalMarker(const QString& line, int startIndex)
     return isTerminalMarkerText(tail);
 }
 
+// In selection mode the fragment renderer appends a trailing {N} so the text
+// AFTER the selection keeps the beats value the selection ended on. That marker
+// is redundant — and shows up as noise like "{32} {4}" — when the very next
+// beats-relevant token after the selection is already its own {N}: i.e. a '{'
+// is reached before the first ',' that would consume the inherited beats. In
+// that case the following {N} overrides ours immediately, so we suppress it.
+bool followingTextRedefinesBeatsBeforeUse(const QString& remainder)
+{
+    for (const QChar ch : remainder) {
+        if (ch == QLatin1Char('{')) {
+            return true;
+        }
+        if (ch == QLatin1Char(',')) {
+            return false;
+        }
+    }
+    return false;
+}
+
 Rational measureLengthWhole(int meterNumerator, int meterDenominator)
 {
     return Rational(qMax(1, meterNumerator), qMax(1, meterDenominator));
@@ -1251,7 +1270,8 @@ ChartNormalizationResult normalizeChartFragment(
     const NormalizationSeed& seed,
     const ChartNormalizationOptions& options,
     bool appendTerminalMarker,
-    bool injectLeadingTimeSignature)
+    bool injectLeadingTimeSignature,
+    bool appendTrailingBeatsMarker = true)
 {
     ChartNormalizationResult result;
 
@@ -1545,7 +1565,7 @@ ChartNormalizationResult normalizeChartFragment(
     while (!outputLines.isEmpty() && outputLines.constLast().isEmpty()) {
         outputLines.removeLast();
     }
-    if (!appendTerminalMarker) {
+    if (!appendTerminalMarker && appendTrailingBeatsMarker) {
         // Selection mode: emit a trailing {N} so post-selection content
         // keeps the same `currentBeats` the original selection ended on.
         // Input `{N}` markers are consumed (used to compute moment positions)
@@ -1554,6 +1574,9 @@ ChartNormalizationResult normalizeChartFragment(
         // shift downstream note timings.
         // Skip when the last `{N}` already in the output matches; when we
         // do append, glue to the last line instead of taking a new line.
+        // (The caller also suppresses this entirely when the text right after
+        // the selection already opens with its own {N} — see
+        // followingTextRedefinesBeatsBeforeUse.)
         const int targetBeats = qMax(1, currentBeats);
         int lastEmittedBeats = -1;
         for (int i = outputLines.size() - 1; i >= 0; --i) {
@@ -1651,13 +1674,20 @@ ChartNormalizationResult normalizeChartSelectionText(
         seed.startPhaseWhole = Rational();
     }
 
+    // Suppress the trailing {N} carry-over marker when the text right after the
+    // selection already redefines the subdivision before using it — otherwise
+    // we emit redundant "{32} {4}" noise.
+    const bool appendTrailingBeatsMarker =
+        !followingTextRedefinesBeatsBeforeUse(fullText.mid(selectionEnd));
+
     return normalizeChartFragment(
         fullText.mid(selectionStart, selectionEnd - selectionStart),
         timingMetadata,
         seed,
         options,
         false,
-        shouldInjectLeadingTimeSignature);
+        shouldInjectLeadingTimeSignature,
+        appendTrailingBeatsMarker);
 }
 
 }  // namespace miacode::chart_transform

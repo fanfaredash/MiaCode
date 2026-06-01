@@ -53,6 +53,23 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   the same way as auto-close (`applyEditorBracketCompletionEnabled`, checkbox in
   `MainWindow.PreferencesDialog.cpp`). Keys: ↑↓ navigate, Tab/Enter accept (Enter swallows the
   newline), Esc/keep-typing dismiss.
+- **Unified designer** (metadata-page checkbox "所有难度采用相同名义" / "All difficulties share
+  this designer"): when ON, top `&des` and every per-difficulty `&des_N` are kept identical.
+  Checkbox build: `MainWindow.FrameBootstrap.cpp` (`unifiedDesignerCheckbox_`). Toggle decision:
+  `MainWindow.DocumentFlow.cpp` `onUnifiedDesignerToggled` — Case A silently unifies when ≤1
+  distinct non-empty name; otherwise a single `promptCanonicalDesignerName` picker lets the user
+  choose the canonical name or "clear all" (the old separate "confirm overwrite with &des"
+  message box was merged into the picker). Per-project pref key `unified_designer_enabled`;
+  `SimaiDocument::inferUnifiedDesignerDefault()` is **always false** (never auto-enable).
+  **Sync invariant — every designer-touching path must preserve it** (treat as a sync set):
+  edit-time broadcast `applyCurrentFieldToDocument`; apply `applyUnifiedDesignerName`; load
+  reconcile `refreshUnifiedDesignerStateForLoadedDocument` (re-aligns on open when there's an
+  unambiguous canonical); new-difficulty seed (`MainWindow.FrameBootstrap.cpp`); undo-delete
+  restore re-seed (`MainWindow.DocumentEditorState.cpp`); autosave snapshot mirror
+  (`currentDocumentTextForAutosave`). The free-form "Other &xx Fields" editor must parse via
+  `SimaiDocument::parseUnmanagedFields` (not `parseRawFields`) so a manually typed managed key
+  (`des`/`des_N`/`lv_N`/`inote_N`/title/artist/first/video) can't bypass the model and emit a
+  duplicate/divergent line.
 
 ## 4. Parser, validation, markers
 
@@ -163,6 +180,28 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   sets the volume. Failure noted in code at `onSfxVolumeChanged` + the deleted-method comment in
   `LatencySandboxController.cpp`. Default SFX volume = `kDefaultSfxVolumePercent` (**50**; stored
   per-user under `latency/sfxVolumePercent`).
+  - **Root cause of that "stray play event" — IDENTIFIED & FIXED (2026-06-01).** The mid-playback noise
+    when dragging *any* SFX/volume slider was NOT the deliberate audition: it was
+    `BassPreviewAudioBackend::applyLevels()` calling `resetCursor(authoritativeSecond(), false)` after its
+    group rebuild. During active playback `authoritativeSecond()` is FROZEN at the last start/seek snapshot
+    (MainWindow's wall-clock is the live SFX master and is never written back to `lastAuthoritativeSecond`),
+    so re-seeking to it rewound the event cursor to the playback start and the next `drainEvents(wallClock)`
+    replayed every tap from there in one burst. This hit BOTH the latency page and the audio-settings
+    dialog — both funnel through `applyPreviewAudioSettingsToRuntime` → `applyLevels`. Fix: anchor the
+    post-rebuild `resetCursor` to the last-fired group's chart-second instead
+    of `authoritativeSecond()`, preserving the fired/unfired boundary whether playing or paused. The miniaudio
+    backend's `applyLevels` (volumes only, no cursor touch) was already correct. A re-attempt of the
+    slider-drag audition is now viable if gated to non-playing state.
+- **SFX-level isolation (audition vs normal preview) — REDESIGNED (2026-06-01).** Two modes share ONE
+  `previewSfxRuntime_`; runtime levels are now a PURE FUNCTION of the current mode, re-dispatched through
+  the single entry `MainWindow::applyPreviewAudioSettingsToRuntime()`. On the latency page
+  (`LatencySandboxController::isOnPage()`) it pushes `makePreviewLatencyAuditionLevels(mix, sfxPercent)`;
+  otherwise the user's real mix. No snapshot/restore, no `latencySandboxAuditionActive_` *audio* gate
+  (that flag now only gates *playback* — `hasPreviewableChart`). **Old leak root cause:** the sidebar
+  handler overwrote `activeOutlineKey_` with the destination BEFORE calling `switchToXField`, so the
+  `== "latency"` teardown guard was always false and `onPageLeft()` never ran → the audition override
+  stayed live on the shared runtime. Fixed by ungating `onPageLeft()` (idempotent) from
+  `activeOutlineKey_`. Full contract in `cross-chain-linkage.md` ("SFX-level isolation").
 - The three gray hint labels under BPM / Offset / SFX-volume were removed from `buildUi`.
 - The "auto-detect Offset" button is currently hidden (`detectOffsetButton_->setVisible(false)` in
   `LatencyDetectionPage::buildUi`) — code/wiring kept; auto-detect BPM is unaffected.

@@ -107,10 +107,20 @@ void LatencySandboxController::setSfxVolumePercent(int percent)
     }
     sfxVolumePercent_ = percent;
     emit parametersChanged();
-    if (onPage_) {
-        applyOverrideAudioSettings();
+    if (onPage_ && !owner_.isNull()) {
+        // Re-dispatch the audition mix with the new slider value (mode is
+        // LatencyAudition while on the page). The slider value never touches the
+        // user's normal mix — it is a separate input to the pure level function.
+        owner_->applyPreviewAudioSettingsToRuntime();
     }
 }
+
+// NOTE (FAILED ATTEMPT, reverted): playSfxAuditionSample() used to fire a single
+// "tap" SFX while the SFX-volume slider was dragged, so the user could hear the
+// level. It could not be kept silent during playback - the tap still sounded
+// while the chart was playing despite guarding on qtPreviewPlaying_. Primary
+// suspicion: a stray play/audition event is scheduled elsewhere. The method (and
+// its page-side caller) were removed; the slider now only sets the volume.
 
 void LatencySandboxController::installSandboxScene()
 {
@@ -121,10 +131,11 @@ void LatencySandboxController::installSandboxScene()
     // before any difficulty was previewed). Mirrors startQtPreviewPlayback().
     owner_->ensurePreviewSfxRuntimePrepared();
 
-    // Cache the pre-sandbox audio + timeline state so we can roll back cleanly
-    // when the user leaves the page.
-    cachedAudioSettings_ = owner_->state_.previewAudioSettings_;
-    hasCachedAudioSettings_ = true;
+    // Cache the pre-sandbox timeline state so we can roll back cleanly when the
+    // user leaves the page. Audio levels are NOT snapshotted: they are re-derived
+    // from the current mode by MainWindow::applyPreviewAudioSettingsToRuntime, so
+    // entering the page dispatches the audition mix and leaving it re-dispatches
+    // the user's normal mix (see the dispatch calls in install/teardown below).
     cachedNoteMarkers_ = owner_->state_.latestTimelineNoteMarkers_;
     cachedNoteMarkerSignature_ = owner_->state_.latestTimelineNoteMarkerSignature_;
     if (owner_->state_.timelineQuickStateBridge_ != nullptr) {
@@ -149,8 +160,10 @@ void LatencySandboxController::installSandboxScene()
     owner_->state_.latencySandboxAuditionActive_ = true;
     owner_->state_.qtPreviewPauseSecond_ = 0.0;
 
-    // Install the test chart as the preview source + apply the per-page SFX mix.
-    applyOverrideAudioSettings();
+    // Install the test chart as the preview source + dispatch the per-page
+    // audition mix. onPage_ is already true (setOnPage flips it before calling
+    // this), so the single mode-aware dispatch resolves to LatencyAudition levels.
+    owner_->applyPreviewAudioSettingsToRuntime();
     setupSandboxPreviewState();
     applyPlayheadToScene(0.0);
 
@@ -176,7 +189,12 @@ void LatencySandboxController::teardownSandboxScene()
     lastPolledSecond_ = -1.0;
 
     restoreOriginalTimeline();
-    restoreOriginalAudioSettings();
+    if (!owner_.isNull()) {
+        // onPage_ is already false here (setOnPage flips it before calling
+        // teardown), so this dispatch resolves to the user's normal mix — no
+        // snapshot needed. This is the deterministic restore on every page exit.
+        owner_->applyPreviewAudioSettingsToRuntime();
+    }
 
     emit auditionStateChanged(false);
     emit playheadAdvanced(0.0);
@@ -225,13 +243,16 @@ void LatencySandboxController::regenerateAndPushIfActive()
     if (!onPage_ || owner_.isNull()) {
         return;
     }
-    if (owner_->state_.qtPreviewPlaying_) {
-        // Don't hot-swap the chart mid-playback (matches difficulty
-        // edit-while-play deferral); new params take effect on the next play.
-        return;
-    }
+    // Hot-apply BPM / offset / subdivision changes even mid-playback: the song
+    // audio is the fixed master clock and is never re-seeked here — we only
+    // rebuild the test-chart notes + SFX timeline and re-anchor them to the
+    // current play position (see setupSandboxPreviewState), so the music keeps
+    // playing while only the SFX and the on-screen notes move to the new params.
     setupSandboxPreviewState();
-    applyPlayheadToScene(qMax(0.0, owner_->state_.qtPreviewPauseSecond_));
+    const double second = owner_->state_.qtPreviewPlaying_
+        ? owner_->currentPreviewAuthoritativeAudioClockSecond()
+        : qMax(0.0, owner_->state_.qtPreviewPauseSecond_);
+    applyPlayheadToScene(second);
 }
 
 void LatencySandboxController::applyPlayheadToScene(double seconds)
@@ -287,6 +308,17 @@ void LatencySandboxController::setupSandboxPreviewState()
             previewState.shiftedNoteMarkers,
             owner_->state_.previewPlaybackRate_ > 0.0 ? owner_->state_.previewPlaybackRate_ : 1.0,
             owner_->state_.previewTimingSettings_);
+        // configureTimeline() rebuilds the event list and resets the SFX cursor
+        // to the start. When we rebuild mid-playback (a hot offset/BPM/细分
+        // change), re-anchor the cursor to the live audio second so the next
+        // drainEvents() does not re-fire every tap scheduled before "now".
+        // Only the SFX event cursor is touched — the background music is never
+        // seeked, so it keeps playing. drainEvents() runs on this same (UI)
+        // thread via the preview tick, so the reposition is atomic w.r.t. it.
+        if (owner_->state_.qtPreviewPlaying_) {
+            owner_->state_.previewSfxRuntime_->resetCursor(
+                owner_->currentPreviewAuthoritativeAudioClockSecond(), false);
+        }
     }
 }
 
@@ -314,64 +346,6 @@ void LatencySandboxController::restoreOriginalTimeline()
     cachedNoteMarkerSignature_.clear();
     cachedSnapshot_ = TimelineRenderSnapshot();
     hasCachedTimeline_ = false;
-}
-
-void LatencySandboxController::applyOverrideAudioSettings()
-{
-    if (owner_.isNull() || owner_->state_.previewSfxRuntime_ == nullptr) {
-        return;
-    }
-    const PreviewAudioSettings base = hasCachedAudioSettings_
-        ? cachedAudioSettings_
-        : owner_->state_.previewAudioSettings_;
-    const PreviewAudioSettings override = buildOverrideAudioSettings(base, sfxVolumePercent_);
-    owner_->state_.previewSfxRuntime_->applyLevels(override);
-}
-
-void LatencySandboxController::restoreOriginalAudioSettings()
-{
-    if (owner_.isNull() || owner_->state_.previewSfxRuntime_ == nullptr || !hasCachedAudioSettings_) {
-        hasCachedAudioSettings_ = false;
-        return;
-    }
-    owner_->state_.previewSfxRuntime_->applyLevels(cachedAudioSettings_);
-    hasCachedAudioSettings_ = false;
-}
-
-PreviewAudioSettings LatencySandboxController::buildOverrideAudioSettings(
-    const PreviewAudioSettings& base, int sfxPercent) const
-{
-    PreviewAudioSettings override = base;
-    // Keep the song audio at the user's normal effective volume by collapsing
-    // the chained (global * track) multiplier into a single trackVolume term
-    // and pinning globalVolume to 1.0. SFX kinds then get the sandbox slider's
-    // value directly (independent of the user's normal mix), so the test taps
-    // are easy to hear regardless of how quietly the user runs the song.
-    const double cachedEffectiveTrackVolume = previewTrackVolume(base);
-    override.globalVolume = 1.0;
-    override.globalRestoreVolume = 1.0;
-    override.trackVolume = PreviewAudioSettings::clamp(cachedEffectiveTrackVolume);
-    override.trackRestoreVolume = override.trackVolume;
-
-    const double sfxLevel = qBound(0.0, static_cast<double>(sfxPercent) / 100.0, 1.0);
-    override.tapVolume = sfxLevel;
-    override.tapRestoreVolume = sfxLevel;
-    override.exVolume = sfxLevel;
-    override.exRestoreVolume = sfxLevel;
-    override.breakVolume = sfxLevel;
-    override.breakRestoreVolume = sfxLevel;
-    override.breakSlideVolume = sfxLevel;
-    override.breakSlideRestoreVolume = sfxLevel;
-    override.slideVolume = sfxLevel;
-    override.slideRestoreVolume = sfxLevel;
-    override.touchVolume = sfxLevel;
-    override.touchRestoreVolume = sfxLevel;
-    override.fireworkVolume = sfxLevel;
-    override.fireworkRestoreVolume = sfxLevel;
-    override.answerVolume = sfxLevel;
-    override.answerRestoreVolume = sfxLevel;
-    override.normalize();
-    return override;
 }
 
 double LatencySandboxController::resolveAudioDurationSeconds() const

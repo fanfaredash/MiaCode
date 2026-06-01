@@ -1277,6 +1277,13 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
 
     owner_.ensurePreviewStageMediaRouteInitialized();
     owner_.ensurePreviewSfxRuntimePrepared();
+    // Re-assert the correct preview levels on EVERY play (fresh or resume).
+    // applyPreviewAudioSettingsToRuntime() re-derives them from the current mode:
+    // a normal difficulty gets the user's real mix, while the latency page's
+    // audition keeps its independent SFX slider — so neither can bleed into the
+    // other. resetCursor does not touch the retained transaction, so this is safe
+    // on resume.
+    owner_.applyPreviewAudioSettingsToRuntime();
     cancelPreviewStartupSync();
     applyLatestTimelinePreviewStateToPausedPreview();
     const double requestedSecond = qBound(0.0, second, previewDurationSeconds());

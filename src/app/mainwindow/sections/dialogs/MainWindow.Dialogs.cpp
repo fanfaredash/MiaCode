@@ -154,40 +154,104 @@ bool replaceFileWithTemp(const QString& tempPath, const QString& destinationPath
     return true;
 }
 
+// Runs ffmpeg modally with a progress dialog. When `totalDurationSeconds` is
+// positive the bar tracks real percent-done — matching the video-export
+// progress UX — by reading ffmpeg's machine-readable `-progress pipe:1`
+// stream: each block carries an `out_time_us=` line (the output timestamp
+// reached so far) which, divided by the expected total duration, gives the
+// percentage. When the duration is unknown (<= 0) it falls back to an
+// indeterminate busy bar.
 bool runFfmpegBlocking(
     const QString& ffmpegPath,
     const QStringList& args,
     QWidget* parent,
     const QString& label,
+    double totalDurationSeconds,
     QString* error)
 {
-    QProgressDialog progress(label, QString(), 0, 0, parent);
+    const bool determinate = totalDurationSeconds > 0.0;
+    QProgressDialog progress(label, QString(), 0, determinate ? 100 : 0, parent);
     progress.setWindowModality(Qt::ApplicationModal);
     progress.setCancelButton(nullptr);
     progress.setMinimumDuration(0);
+    progress.setAutoClose(false);
+    progress.setAutoReset(false);
+    if (determinate) {
+        progress.setValue(0);
+    }
     progress.show();
     QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
 
+    QStringList progressArgs;
+    progressArgs << QStringLiteral("-progress") << QStringLiteral("pipe:1")
+                 << QStringLiteral("-nostats")
+                 << args;
+
     QProcess process;
-    process.setProcessChannelMode(QProcess::MergedChannels);
-    process.start(ffmpegPath, args, QIODevice::ReadOnly);
+    // Keep the channels separate: `-progress` writes to stdout while ffmpeg's
+    // human-readable diagnostics (which we surface on failure) go to stderr.
+    process.setProcessChannelMode(QProcess::SeparateChannels);
+    process.start(ffmpegPath, progressArgs, QIODevice::ReadOnly);
     if (!process.waitForStarted(5000)) {
         if (error != nullptr) {
             *error = process.errorString();
         }
         return false;
     }
-    while (!process.waitForFinished(100)) {
+
+    QString progressBuffer;
+    QString stderrTail;
+    const auto pump = [&]() {
+        if (determinate) {
+            const QByteArray out = process.readAllStandardOutput();
+            if (!out.isEmpty()) {
+                progressBuffer += QString::fromLatin1(out);
+                const int lastNewline = progressBuffer.lastIndexOf(QLatin1Char('\n'));
+                if (lastNewline >= 0) {
+                    const QString complete = progressBuffer.left(lastNewline);
+                    progressBuffer = progressBuffer.mid(lastNewline + 1);
+                    static const QRegularExpression outTimePattern(QStringLiteral(R"(out_time_us=(\d+))"));
+                    qint64 lastMicros = -1;
+                    QRegularExpressionMatchIterator it = outTimePattern.globalMatch(complete);
+                    while (it.hasNext()) {
+                        lastMicros = it.next().captured(1).toLongLong();
+                    }
+                    if (lastMicros >= 0) {
+                        const double seconds = static_cast<double>(lastMicros) / 1000000.0;
+                        // Cap at 99% until the process actually exits so the
+                        // bar doesn't read "done" while ffmpeg is still muxing.
+                        progress.setValue(qBound(0, qRound(seconds / totalDurationSeconds * 100.0), 99));
+                    }
+                }
+            }
+        }
+        const QByteArray err = process.readAllStandardError();
+        if (!err.isEmpty()) {
+            stderrTail += QString::fromLocal8Bit(err);
+            if (stderrTail.size() > 8000) {
+                stderrTail = stderrTail.right(8000);
+            }
+        }
+    };
+
+    while (process.state() != QProcess::NotRunning) {
+        process.waitForReadyRead(100);
+        pump();
         QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    }
+    process.waitForFinished(200);
+    pump();  // drain anything emitted between the last read and exit
+    if (determinate) {
+        progress.setValue(100);
     }
     progress.close();
 
-    const QString output = QString::fromLocal8Bit(process.readAll()).trimmed();
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
         if (error != nullptr) {
-            *error = output.isEmpty()
+            const QString trimmed = stderrTail.trimmed();
+            *error = trimmed.isEmpty()
                 ? QStringLiteral("ffmpeg exited with code %1.").arg(process.exitCode())
-                : output.left(2000);
+                : trimmed.right(2000);
         }
         return false;
     }
@@ -310,6 +374,7 @@ bool compressVideoUnder20Mb(
             args,
             parent,
             UiText::isChineseUi() ? QStringLiteral("正在压缩视频...") : QStringLiteral("Compressing video..."),
+            durationSeconds,
             error)) {
         QFile::remove(tempPath);
         return false;
@@ -342,6 +407,11 @@ bool convertTrackTo44100Hz(
         return false;
     }
 
+    // Best-effort duration probe so the progress bar can read real percent;
+    // a failed probe just degrades to the indeterminate busy bar.
+    double trackDurationSeconds = 0.0;
+    probeMediaDurationSeconds(ffmpegPath, backupPath, &trackDurationSeconds, nullptr);
+
     QStringList args;
     args << QStringLiteral("-hide_banner")
          << QStringLiteral("-y")
@@ -356,6 +426,7 @@ bool convertTrackTo44100Hz(
             args,
             parent,
             UiText::isChineseUi() ? QStringLiteral("正在处理音频...") : QStringLiteral("Processing audio..."),
+            trackDurationSeconds,
             error)) {
         QFile::remove(tempPath);
         return false;
@@ -378,6 +449,13 @@ bool prependTrackSilence(
         return false;
     }
 
+    // Output runs for the original track plus the prepended silence; probe
+    // the source so the progress bar can track real percent (best-effort).
+    double inputDurationSeconds = 0.0;
+    probeMediaDurationSeconds(ffmpegPath, backupPath, &inputDurationSeconds, nullptr);
+    const double totalDurationSeconds =
+        inputDurationSeconds > 0.0 ? inputDurationSeconds + silenceSeconds : 0.0;
+
     const QString silenceDuration = QString::number(silenceSeconds, 'f', 6);
     QStringList args;
     args << QStringLiteral("-hide_banner")
@@ -396,6 +474,7 @@ bool prependTrackSilence(
             args,
             parent,
             UiText::isChineseUi() ? QStringLiteral("正在处理 track.mp3...") : QStringLiteral("Processing track.mp3..."),
+            totalDurationSeconds,
             error)) {
         QFile::remove(tempPath);
         return false;
@@ -420,6 +499,13 @@ bool prependPvBlack(
         return false;
     }
 
+    // Output runs for the original video plus the prepended black screen;
+    // probe the source so the progress bar can track real percent (best-effort).
+    double inputDurationSeconds = 0.0;
+    probeMediaDurationSeconds(ffmpegPath, backupPath, &inputDurationSeconds, nullptr);
+    const double totalDurationSeconds =
+        inputDurationSeconds > 0.0 ? inputDurationSeconds + silenceSeconds : 0.0;
+
     QStringList args;
     args << QStringLiteral("-hide_banner")
          << QStringLiteral("-y")
@@ -442,6 +528,7 @@ bool prependPvBlack(
             args,
             parent,
             UiText::isChineseUi() ? QStringLiteral("正在处理 pv.mp4...") : QStringLiteral("Processing pv.mp4..."),
+            totalDurationSeconds,
             error)) {
         QFile::remove(tempPath);
         return false;
@@ -706,6 +793,13 @@ void MainWindow::DialogsSection::onCompressBackgroundVideo()
             : QStringLiteral("Compressed %1 under 20 MiB.").arg(videoInfo.fileName()),
         6000
     );
+    showMediaOperationCompleteDialog(
+        title,
+        UiText::isChineseUi()
+            ? QStringLiteral("已压缩 %1 到 20M 内（原文件已备份为 %2）。").arg(videoInfo.fileName(), backupName)
+            : QStringLiteral("Compressed %1 under 20 MiB (original backed up as %2).").arg(videoInfo.fileName(), backupName),
+        videoPath
+    );
 }
 
 void MainWindow::DialogsSection::onConvertTrackTo44100Hz()
@@ -772,6 +866,147 @@ void MainWindow::DialogsSection::onConvertTrackTo44100Hz()
             : QStringLiteral("Converted track.mp3 to 44100 Hz."),
         6000
     );
+    showMediaOperationCompleteDialog(
+        title,
+        UiText::isChineseUi()
+            ? QStringLiteral("已将 track.mp3 处理为 44100Hz（原文件已备份为 track_bak.mp3）。")
+            : QStringLiteral("Converted track.mp3 to 44100 Hz (original backed up as track_bak.mp3)."),
+        trackPath
+    );
+}
+
+void MainWindow::DialogsSection::onMediaProcessingTools()
+{
+    MC_OP("MainWindow::DialogsSection::onMediaProcessingTools");
+    const bool zh = UiText::isChineseUi();
+
+    QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
+    dialog.setWindowTitle(zh ? QStringLiteral("音频/视频处理") : QStringLiteral("Audio/Video Processing"));
+    dialog.setModal(true);
+    dialog.setMinimumWidth(480);
+    dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
+    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
+    UiDialogs::prepareDialogWindow(&dialog, &owner_);
+
+    auto* rootLayout = new QVBoxLayout(&dialog);
+    rootLayout->setContentsMargins(14, 14, 14, 12);
+    rootLayout->setSpacing(10);
+
+    struct MediaToolEntry {
+        QString label;
+        QString description;
+        void (MainWindow::DialogsSection::*handler)();
+    };
+    const QVector<MediaToolEntry> entries = {
+        { zh ? QStringLiteral("采样率转换") : QStringLiteral("Sample Rate"),
+          zh ? QStringLiteral("将 track.mp3 转换为 44100Hz，并自动备份原文件。")
+             : QStringLiteral("Convert track.mp3 to 44100 Hz (the original is backed up)."),
+          &MainWindow::DialogsSection::onConvertTrackTo44100Hz },
+        { zh ? QStringLiteral("视频压缩") : QStringLiteral("Compress Video"),
+          zh ? QStringLiteral("将背景视频压缩到 20M 以内，并自动备份原文件。")
+             : QStringLiteral("Compress the background video under 20 MiB (the original is backed up)."),
+          &MainWindow::DialogsSection::onCompressBackgroundVideo },
+        { zh ? QStringLiteral("音频开头静音处理") : QStringLiteral("Prepend Track Silence"),
+          zh ? QStringLiteral("在 track.mp3 开头插入一段静音，并自动备份原文件。")
+             : QStringLiteral("Insert silence at the start of track.mp3 (the original is backed up)."),
+          &MainWindow::DialogsSection::onPrependTrackSilence },
+        { zh ? QStringLiteral("视频开头黑幕处理") : QStringLiteral("Prepend PV Black Screen"),
+          zh ? QStringLiteral("在背景视频开头插入一段黑幕，并自动备份原文件。")
+             : QStringLiteral("Insert a black screen at the start of the background video (the original is backed up)."),
+          &MainWindow::DialogsSection::onPrependPvBlack },
+    };
+
+    QVector<QPushButton*> toolButtons;
+    QVector<QLabel*> descLabels;
+    toolButtons.reserve(entries.size());
+    descLabels.reserve(entries.size());
+    for (const MediaToolEntry& entry : entries) {
+        auto* card = new QFrame(&dialog);
+        card->setObjectName("AboutCard");
+        auto* cardLayout = new QHBoxLayout(card);
+        cardLayout->setContentsMargins(16, 12, 16, 12);
+        cardLayout->setSpacing(12);
+
+        auto* button = new QPushButton(entry.label, card);
+        button->setCursor(Qt::PointingHandCursor);
+        toolButtons.append(button);
+        // Each button runs its existing handler, which shows its own
+        // confirm prompt and a determinate progress bar. The dialog stays
+        // open (modal) so several tools can be run in one sitting.
+        connect(button, &QPushButton::clicked, &dialog, [this, handler = entry.handler]() {
+            (this->*handler)();
+        });
+        cardLayout->addWidget(button, 0, Qt::AlignTop);
+
+        auto* desc = new QLabel(entry.description, card);
+        desc->setObjectName("AboutValue");
+        desc->setWordWrap(true);
+        descLabels.append(desc);
+        cardLayout->addWidget(desc, 1);
+
+        rootLayout->addWidget(card);
+    }
+
+    // Give every button the same width, wide enough for the longest label so
+    // the multi-character Chinese labels (e.g. "音频开头静音处理") don't clip.
+    int uniformButtonWidth = 0;
+    for (QPushButton* button : toolButtons) {
+        const int advance = button->fontMetrics().horizontalAdvance(button->text());
+        uniformButtonWidth = qMax(uniformButtonWidth, qMax(advance, button->sizeHint().width()));
+    }
+    uniformButtonWidth += 40;  // padding beyond the raw text advance
+    for (QPushButton* button : toolButtons) {
+        button->setFixedWidth(uniformButtonWidth);
+    }
+
+    // Widen the dialog so the longest description fits on a single line next to
+    // its button (button + spacing + full description text + all the margins).
+    int widestDescription = 0;
+    for (QLabel* desc : descLabels) {
+        widestDescription = qMax(widestDescription, desc->fontMetrics().horizontalAdvance(desc->text()));
+    }
+    const int requiredWidth = 14 + 14            // rootLayout left/right margins
+        + 16 + 16                                // card left/right margins
+        + uniformButtonWidth + 12                // button + card spacing
+        + widestDescription + 16;                // description + slack
+    dialog.setMinimumWidth(qMax(480, requiredWidth));
+
+    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    UiDialogs::localizeButtonBox(buttonBox);
+    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    rootLayout->addWidget(buttonBox, 0, Qt::AlignRight);
+
+    dialog.exec();
+}
+
+void MainWindow::DialogsSection::showMediaOperationCompleteDialog(
+    const QString& title,
+    const QString& summary,
+    const QString& producedFilePath)
+{
+    const QFileInfo info(producedFilePath);
+    const QString nativePath = QDir::toNativeSeparators(producedFilePath);
+    QMessageBox dialog(
+        QMessageBox::Information,
+        title,
+        QStringLiteral("%1\n\n%2").arg(summary, nativePath),
+        QMessageBox::NoButton,
+        UiDialogs::effectiveParentWidget(&owner_)
+    );
+    dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+    QPushButton* openButton = dialog.addButton(
+        UiText::isChineseUi() ? QStringLiteral("打开文件夹") : QStringLiteral("Open Folder"),
+        QMessageBox::AcceptRole
+    );
+    dialog.addButton(uiText("action.close", "Close"), QMessageBox::RejectRole);
+    dialog.setDefaultButton(openButton);
+    dialog.exec();
+    if (dialog.clickedButton() == openButton) {
+        const QString dir = info.absoluteDir().absolutePath();
+        if (!dir.isEmpty()) {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+        }
+    }
 }
 
 namespace {
@@ -1118,11 +1353,55 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
     connect(detectBpmButton, &QPushButton::clicked, &dialog, applyDetectedBpm);
     form->addRow(UiText::isChineseUi() ? QStringLiteral("拍数") : QStringLiteral("Beats"), beatsRow);
     form->addRow(QStringLiteral("BPM"), bpmRow);
-    layout->addLayout(form);
 
-    auto* hint = new QLabel(QStringLiteral("%1 -> %2").arg(inputName, backupName), &dialog);
-    hint->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    layout->addWidget(hint);
+    // Live, plain-language description of what the entered beats/BPM produce —
+    // updates as either spinner changes so the user sees the resulting blank
+    // length before committing. Placed ABOVE the inputs.
+    auto* summaryLabel = new QLabel(&dialog);
+    summaryLabel->setWordWrap(true);
+    const auto formatNumber = [](double value) {
+        QString text = QString::number(value, 'f', 3);
+        if (text.contains(QLatin1Char('.'))) {
+            while (text.endsWith(QLatin1Char('0'))) {
+                text.chop(1);
+            }
+            if (text.endsWith(QLatin1Char('.'))) {
+                text.chop(1);
+            }
+        }
+        return text;
+    };
+    const auto updateSummary = [summaryLabel, beatsSpin, bpmSpin, isTrack, inputName, formatNumber]() {
+        const double bpm = bpmSpin->value();
+        const double beats = beatsSpin->value();
+        const double seconds = bpm > 0.0 ? beats * 60.0 / bpm : 0.0;
+        summaryLabel->setText(UiText::isChineseUi()
+            ? QStringLiteral("将在 %1 开头增加一段%2，时长为 BPM %3 下的 %4 个 4 分音（约 %5 秒）。")
+                  .arg(isTrack ? QStringLiteral("track.mp3") : QStringLiteral("背景视频"))
+                  .arg(isTrack ? QStringLiteral("空白") : QStringLiteral("黑幕"))
+                  .arg(formatNumber(bpm), formatNumber(beats), formatNumber(seconds))
+            : QStringLiteral("Prepends %1 to %2: %3 quarter-notes at %4 BPM (~%5 s).")
+                  .arg(isTrack ? QStringLiteral("silence") : QStringLiteral("a black screen"))
+                  .arg(inputName)
+                  .arg(formatNumber(beats), formatNumber(bpm), formatNumber(seconds)));
+    };
+    connect(beatsSpin, qOverload<double>(&QDoubleSpinBox::valueChanged), &dialog, [updateSummary](double) { updateSummary(); });
+    connect(bpmSpin, qOverload<double>(&QDoubleSpinBox::valueChanged), &dialog, [updateSummary](double) { updateSummary(); });
+    updateSummary();
+    layout->addWidget(summaryLabel);
+
+    // Divider between the descriptive text block and the input fields. Colour
+    // comes from the theme palette so it adapts to light/dark mode.
+    auto* separator = new QFrame(&dialog);
+    separator->setFrameShape(QFrame::HLine);
+    separator->setFrameShadow(QFrame::Plain);
+    separator->setFixedHeight(1);
+    separator->setStyleSheet(
+        QStringLiteral("background-color: %1; border: none;")
+            .arg(UiTheme::colors().borderSoft.name(QColor::HexRgb)));
+    layout->addWidget(separator);
+
+    layout->addLayout(form);
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     auto* restoreButton = buttonBox->addButton(
@@ -1191,6 +1470,20 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
             ? QStringLiteral("已为 %1 开头添加 %2 秒空白。").arg(inputName).arg(silenceSeconds, 0, 'f', 3)
             : QStringLiteral("Prepended %1 seconds of blank media to %2.").arg(silenceSeconds, 0, 'f', 3).arg(inputName),
         6000
+    );
+    showMediaOperationCompleteDialog(
+        title,
+        UiText::isChineseUi()
+            ? QStringLiteral("已为 %1 开头添加 %2 秒%3（原文件已备份为 %4）。")
+                  .arg(inputName)
+                  .arg(silenceSeconds, 0, 'f', 3)
+                  .arg(isTrack ? QStringLiteral("空白") : QStringLiteral("黑幕"))
+                  .arg(backupName)
+            : QStringLiteral("Prepended %1 s of %2 to %3 (original backed up as %4).")
+                  .arg(silenceSeconds, 0, 'f', 3)
+                  .arg(isTrack ? QStringLiteral("silence") : QStringLiteral("black screen"))
+                  .arg(inputName, backupName),
+        inputPath
     );
 }
 
@@ -1944,10 +2237,16 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     const auto addGameplayField = [gameplayGroup, gameplayLayout](int row, int column, const QString& labelText, QWidget* control) {
         auto* field = new QWidget(gameplayGroup);
         auto* fieldLayout = new QVBoxLayout(field);
-        fieldLayout->setContentsMargins(0, 0, 0, 0);
+        // 1px bottom margin so the rounded control underneath isn't flush
+        // against the field's edge — otherwise its bottom border is clipped
+        // (visible as the "missing bottom edge" on every box).
+        fieldLayout->setContentsMargins(0, 0, 0, 1);
         fieldLayout->setSpacing(6);
         auto* label = new QLabel(labelText, field);
         fieldLayout->addWidget(label, 0);
+        // The QSS border-radius controls report a sizeHint a hair short of what
+        // the bottom border needs; pad the height by 2px so it renders fully.
+        control->setMinimumHeight(qMax(control->minimumHeight(), control->sizeHint().height() + 2));
         fieldLayout->addWidget(control, 0);
         gameplayLayout->addWidget(field, row, column);
     };
@@ -2144,6 +2443,13 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         &dialogAuditionSfxDir
     ](const QString& audition) {
         if (audition.isEmpty()) {
+            return false;
+        }
+        // Don't audition over a running preview: the user already hears the
+        // real SFX from live playback, so a second (dialog-local) runtime
+        // playing the same sample just doubles/garbles it. Audition is only
+        // meaningful when the preview is idle.
+        if (state_.qtPreviewPlaying_) {
             return false;
         }
         QString resolvedKind = previewSfxNormalizedKind(audition);

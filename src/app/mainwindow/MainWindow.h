@@ -281,6 +281,7 @@ private slots:
     void onBatchExportPreviewVideo();
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
+    void onMediaProcessingTools();
     void onPrependTrackSilence();
     void onPrependPvBlack();
     void onCompressBackgroundVideo();

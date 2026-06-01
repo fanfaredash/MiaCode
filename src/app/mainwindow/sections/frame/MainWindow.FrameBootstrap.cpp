@@ -1011,33 +1011,22 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         QDesktopServices::openUrl(QUrl(url));
     };
 
-    if (latencyDetectorAction_ != nullptr) {
-        toolboxMenu_->addAction(latencyDetectorAction_);
-    }
+    // BPM & Latency was removed from the toolbox per the toolbox revamp; the
+    // latencyDetectorAction_ stays alive in the top Tools menu (wired in
+    // FrameBootstrap::setup) so the feature itself is still reachable.
 
     if (prependTrackSilenceAction_ != nullptr
         || prependPvBlackAction_ != nullptr
         || compressBackgroundVideoAction_ != nullptr
         || convertTrackTo44100HzAction_ != nullptr) {
-        prependMediaBlankMenu_ = toolboxMenu_->addMenu(
+        // The four audio/video tools now open in a popup dialog (one button
+        // + a one-line description each) instead of a hover submenu — see
+        // DialogsSection::onMediaProcessingTools(), which calls the same
+        // handlers the old submenu actions were wired to.
+        QAction* mediaProcessingAction = toolboxMenu_->addAction(
             UiText::isChineseUi() ? QStringLiteral("音频/视频处理") : QStringLiteral("Audio/Video Processing")
         );
-        styleRoundedMenu(*prependMediaBlankMenu_);
-        if (convertTrackTo44100HzAction_ != nullptr) {
-            prependMediaBlankMenu_->addAction(convertTrackTo44100HzAction_);
-        }
-        if (compressBackgroundVideoAction_ != nullptr) {
-            prependMediaBlankMenu_->addAction(compressBackgroundVideoAction_);
-        }
-        if (convertTrackTo44100HzAction_ != nullptr || compressBackgroundVideoAction_ != nullptr) {
-            prependMediaBlankMenu_->addSeparator();
-        }
-        if (prependTrackSilenceAction_ != nullptr) {
-            prependMediaBlankMenu_->addAction(prependTrackSilenceAction_);
-        }
-        if (prependPvBlackAction_ != nullptr) {
-            prependMediaBlankMenu_->addAction(prependPvBlackAction_);
-        }
+        connect(mediaProcessingAction, &QAction::triggered, this, &MainWindow::onMediaProcessingTools);
     }
 
     if (normalizeWholeChartAction_ != nullptr) {
@@ -1059,9 +1048,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     );
     connect(bookmarkManagerAction_, &QAction::triggered, this, &MainWindow::showBookmarkManager);
 
-    // Copy Area remains hidden from the toolbox for now — flip this constant
-    // back to `true` once that feature ships.
-    constexpr bool kCopyAreaIntegratedIntoToolbox = true;
+    // Copy Area is intentionally hidden from the toolbox per the toolbox
+    // revamp. The feature itself is kept intact — copyAreaPanel_/copyAreaEditor_,
+    // fullCopyAreaAction_, and setFullCopyAreaVisible() all still exist — so
+    // flipping this constant back to `true` resurfaces it unchanged.
+    constexpr bool kCopyAreaIntegratedIntoToolbox = false;
     if (kCopyAreaIntegratedIntoToolbox) {
         QMenu* copyAreaMenu = toolboxMenu_->addMenu(
             UiText::isChineseUi() ? QStringLiteral("复制区") : QStringLiteral("Copy Area")

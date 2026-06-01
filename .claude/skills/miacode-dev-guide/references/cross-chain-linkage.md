@@ -191,12 +191,36 @@ replica was the wrong approach: it bypassed the real per-frame path and drifted)
 - The controller's `QTimer` is a ~30Hz UI poll ONLY: it mirrors `qtPreviewPlaying_` +
   `qtPreviewPauseSecond_` onto the page's own widgets (audition button + position label) via
   `auditionStateChanged` / `playheadAdvanced`. It does NOT drive playback.
-- Leaving the page (`setOnPage(false)`) stops the transport and restores the previous chart's
-  preview state + audio settings.
-- Review together on change: `src/tools/latency/LatencySandboxController.*`,
+- Leaving the page (`setOnPage(false)`) stops the transport and restores the previous chart's preview
+  state, then re-dispatches audio levels (see below). `setOnPage` flips `onPage_` BEFORE running
+  install/teardown, so the level dispatch reads the correct mode at both edges.
+- **SFX-level isolation — two modes share ONE `previewSfxRuntime_`, and the runtime levels are a PURE
+  FUNCTION of the current mode, NOT a snapshot that is restored on exit.** Single dispatch entry:
+  `MainWindow::applyPreviewAudioSettingsToRuntime()`, which branches on
+  `LatencySandboxController::isOnPage()`:
+  - on the latency page → `makePreviewLatencyAuditionLevels(previewAudioSettings_, sfxVolumePercent())`
+    (every SFX kind = the page's independent slider; song keeps its normal effective volume);
+  - otherwise → the user's real `previewAudioSettings_` verbatim.
+  The latency `sfxVolumePercent` is a SEPARATE input (persisted under `latency/sfxVolumePercent`); it
+  never flows into `previewAudioSettings_` or persistence. Dispatch fires at every deterministic point —
+  chart load (`setCurrentFilePath`), play start (`startQtPreviewPlayback`), latency page enter/leave
+  (`installSandboxScene`/`teardownSandboxScene`), latency slider (`setSfxVolumePercent`), and
+  audio-settings dialog apply (`commitAudioSettingsChange`). Because levels are re-derived from the
+  settled mode every time, a missed page-exit cannot linger an override into the normal preview — the
+  next dispatch self-corrects. `latencySandboxAuditionActive_` no longer gates audio; it only gates
+  *playback* (`hasPreviewableChart`).
+- **Leave teardown must NOT be gated on `activeOutlineKey_`.** The sidebar click handler
+  (`MainWindow.FrameBootstrap.cpp`) overwrites `activeOutlineKey_` with the destination BEFORE calling
+  `switchToXField`, so a `== "latency"` guard there is always false. The three
+  `switchTo{Difficulty,Metadata,Welcome}Field` functions therefore call `onPageLeft()` UNCONDITIONALLY
+  (it is idempotent — `setOnPage(false)` no-ops when not on the page). The old `== "latency"` guard
+  silently skipped teardown on every sidebar exit — the historical SFX-volume leak (fixed 2026-06-01).
+- Review together on change: `src/audio/PreviewAudioSettings.*` (`makePreviewLatencyAuditionLevels`),
+  `sections/preview/MainWindow.PreviewWarmupAndSettings.cpp` (`applyPreviewAudioSettingsToRuntime`),
+  `src/tools/latency/LatencySandboxController.*`,
   `sections/timeline/MainWindow.PreviewPlaybackGlue.cpp`,
   `sections/timeline/MainWindow.PreviewTimelineFlow.cpp` (`hasPreviewableChart`),
-  `sections/document/MainWindow.DocumentUi.cpp` (`switchToLatencyField`).
+  `sections/document/MainWindow.DocumentUi.cpp` (`switchToLatencyField` + the `onPageLeft` calls).
 
 ## Update this file when
 

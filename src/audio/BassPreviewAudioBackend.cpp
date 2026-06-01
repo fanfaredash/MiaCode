@@ -1498,9 +1498,25 @@ void BassPreviewAudioBackend::applyLevels(const PreviewAudioSettings& settings)
     settings_ = settings;
     settings_.normalize();
     applySampleLevels();
-    const double currentSecond = authoritativeSecond();
+    // rebuildPreparedGroups() re-collapses the event groups (breakSlideTailCheer
+    // muting changes grouping), which can shift indices, so the cursor must be
+    // re-anchored afterward. Anchor to the chart-second of the last group we
+    // ALREADY fired — NOT authoritativeSecond(). During active playback that
+    // clock is frozen at the last start/seek snapshot (MainWindow's wall-clock
+    // is the live master and is never written back here); re-seeking to it would
+    // rewind the cursor to the playback start, so the next drainEvents() would
+    // replay every tap from there in a single burst. That burst — heard when a
+    // volume slider is dragged mid-playback (both the audio-settings dialog and
+    // the latency page funnel through applyLevels) — is the long-suspected
+    // "stray play/audition event". Anchoring to the last-fired group preserves
+    // the fired/unfired boundary regardless of whether we're playing or paused.
+    const double anchorSecond =
+        (playbackSession_.eventGroupIndex > 0
+         && playbackSession_.eventGroupIndex - 1 < preparedGroups_.size())
+            ? preparedGroups_[playbackSession_.eventGroupIndex - 1].second
+            : -1.0;
     rebuildPreparedGroups();
-    resetCursor(currentSecond, false);
+    resetCursor(anchorSecond, false);
 }
 
 void BassPreviewAudioBackend::clearPreparedTimeline()

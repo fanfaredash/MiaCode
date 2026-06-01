@@ -591,3 +591,38 @@ PreviewAudioSettings PreviewAudioSettings::fromJson(const QJsonObject& object)
     settings.normalize();
     return settings;
 }
+
+PreviewAudioSettings makePreviewLatencyAuditionLevels(const PreviewAudioSettings& mix, int sfxPercent)
+{
+    PreviewAudioSettings levels = mix;
+    // Keep the song audio at the user's normal effective volume by collapsing the
+    // chained (global * track) multiplier into a single trackVolume term and
+    // pinning globalVolume to 1.0. SFX kinds then get the sandbox slider's value
+    // directly (independent of the user's normal mix), so the test taps are easy
+    // to hear regardless of how quietly the user runs the song.
+    const double effectiveTrackVolume = previewTrackVolume(mix);
+    levels.globalVolume = 1.0;
+    levels.globalRestoreVolume = 1.0;
+    levels.trackVolume = PreviewAudioSettings::clamp(effectiveTrackVolume);
+    levels.trackRestoreVolume = levels.trackVolume;
+
+    const double sfxLevel = qBound(0.0, static_cast<double>(sfxPercent) / 100.0, 1.0);
+    levels.tapVolume = sfxLevel;
+    levels.tapRestoreVolume = sfxLevel;
+    levels.exVolume = sfxLevel;
+    levels.exRestoreVolume = sfxLevel;
+    levels.breakVolume = sfxLevel;
+    levels.breakRestoreVolume = sfxLevel;
+    levels.breakSlideVolume = sfxLevel;
+    levels.breakSlideRestoreVolume = sfxLevel;
+    levels.slideVolume = sfxLevel;
+    levels.slideRestoreVolume = sfxLevel;
+    levels.touchVolume = sfxLevel;
+    levels.touchRestoreVolume = sfxLevel;
+    levels.fireworkVolume = sfxLevel;
+    levels.fireworkRestoreVolume = sfxLevel;
+    levels.answerVolume = sfxLevel;
+    levels.answerRestoreVolume = sfxLevel;
+    levels.normalize();
+    return levels;
+}

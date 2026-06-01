@@ -40,8 +40,8 @@ void MainWindow::DocumentSection::updateEditorHeader()
     if (!owner_.hasActiveDifficulty()) {
         if (state_.activeOutlineKey_ == QLatin1String("latency")) {
             ui_.editorContextLabel_->setText(UiText::isChineseUi()
-                ? QStringLiteral("BPM & 延迟检测")
-                : QStringLiteral("BPM & Latency"));
+                ? QStringLiteral("延迟设置")
+                : QStringLiteral("Latency Settings"));
             ui_.editorContextLabel_->setFont(uiAccentFont(12, QFont::DemiBold));
         } else if (state_.document_.difficultyIds().isEmpty() && state_.activeOutlineKey_ == QLatin1String("welcome")) {
             ui_.editorContextLabel_->setText(uiText("editor.welcome", "Welcome to MiaCode!"));
@@ -637,8 +637,8 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     metadataItem->setToolTip(metadataLabel);
 
     const QString latencyLabel = UiText::isChineseUi()
-        ? QStringLiteral("BPM & 延迟检测")
-        : QStringLiteral("BPM & Latency");
+        ? QStringLiteral("延迟设置")
+        : QStringLiteral("Latency Settings");
     auto* latencyItem = new QListWidgetItem(
         makeLatencyAccessIcon(UiTheme::colors().iconPrimary),
         latencyLabel,
@@ -646,8 +646,8 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     );
     latencyItem->setData(Qt::UserRole, "latency");
     latencyItem->setToolTip(UiText::isChineseUi()
-        ? QStringLiteral("打开 BPM & 延迟检测页：自动检测 BPM/Offset，并通过试听校准。")
-        : QStringLiteral("Open the BPM & Latency page: auto-detect BPM/Offset and audition for calibration."));
+        ? QStringLiteral("打开延迟设置页：调整 BPM/Offset，并通过试听校准。")
+        : QStringLiteral("Open the Latency Settings page: adjust BPM/Offset and audition for calibration."));
 
     QListWidgetItem* selectedItem = nullptr;
     bool hasMissingDifficulty = false;
@@ -844,7 +844,13 @@ bool MainWindow::DocumentSection::switchToMetadataField()
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
-    if (ui_.latencyDetectionPage_ != nullptr && state_.activeOutlineKey_ == QLatin1String("latency")) {
+    // Navigating away always tears down the latency audition. onPageLeft() is
+    // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
+    // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites
+    // that key with the destination BEFORE calling this switch, so the old guard
+    // was always false and teardown (audio-level restore + flag clear) was silently
+    // skipped — the root cause of the SFX-volume leak into the normal preview.
+    if (ui_.latencyDetectionPage_ != nullptr) {
         ui_.latencyDetectionPage_->onPageLeft();
     }
     owner_.cacheWorkspaceLayoutSizes();
@@ -879,7 +885,13 @@ bool MainWindow::DocumentSection::switchToWelcomePage()
     if (!maybeSaveBeforeContinue()) {
         return false;
     }
-    if (ui_.latencyDetectionPage_ != nullptr && state_.activeOutlineKey_ == QLatin1String("latency")) {
+    // Navigating away always tears down the latency audition. onPageLeft() is
+    // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
+    // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites
+    // that key with the destination BEFORE calling this switch, so the old guard
+    // was always false and teardown (audio-level restore + flag clear) was silently
+    // skipped — the root cause of the SFX-volume leak into the normal preview.
+    if (ui_.latencyDetectionPage_ != nullptr) {
         ui_.latencyDetectionPage_->onPageLeft();
     }
     owner_.cacheWorkspaceLayoutSizes();
@@ -937,7 +949,13 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
-    if (ui_.latencyDetectionPage_ != nullptr && state_.activeOutlineKey_ == QLatin1String("latency")) {
+    // Navigating away always tears down the latency audition. onPageLeft() is
+    // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
+    // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites
+    // that key with the destination BEFORE calling this switch, so the old guard
+    // was always false and teardown (audio-level restore + flag clear) was silently
+    // skipped — the root cause of the SFX-volume leak into the normal preview.
+    if (ui_.latencyDetectionPage_ != nullptr) {
         ui_.latencyDetectionPage_->onPageLeft();
     }
     owner_.cacheWorkspaceLayoutSizes();
@@ -1010,6 +1028,11 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
         ui_.editorStack_->setCurrentWidget(ui_.chartPage_);
     }
     setChartBottomTabsMode(true);
+    // Entering a difficulty re-asserts the correct preview levels. With the latency
+    // audition torn down above (onPageLeft), the mode is Normal, so the single
+    // mode-aware dispatch entry pushes the user's real mix (see
+    // applyPreviewAudioSettingsToRuntime) — not a special-cased override.
+    owner_.applyPreviewAudioSettingsToRuntime();
     state_.currentFieldDirty_ = false;
     updateDirtyState();
     rebuildFieldSidebar();

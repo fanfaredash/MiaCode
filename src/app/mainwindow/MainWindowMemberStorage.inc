@@ -36,7 +36,6 @@
         QAction* previewFasterAction_ = nullptr;
         QAction* exportVideoAction_ = nullptr;
         QAction* latencyDetectorAction_ = nullptr;
-        QMenu* prependMediaBlankMenu_ = nullptr;
         QAction* prependTrackSilenceAction_ = nullptr;
         QAction* prependPvBlackAction_ = nullptr;
         QAction* compressBackgroundVideoAction_ = nullptr;
@@ -566,7 +565,6 @@
     QAction*& previewFasterAction_ = ui_.previewFasterAction_;
     QAction*& exportVideoAction_ = ui_.exportVideoAction_;
     QAction*& latencyDetectorAction_ = ui_.latencyDetectorAction_;
-    QMenu*& prependMediaBlankMenu_ = ui_.prependMediaBlankMenu_;
     QAction*& prependTrackSilenceAction_ = ui_.prependTrackSilenceAction_;
     QAction*& prependPvBlackAction_ = ui_.prependPvBlackAction_;
     QAction*& compressBackgroundVideoAction_ = ui_.compressBackgroundVideoAction_;
