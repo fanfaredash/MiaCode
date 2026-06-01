@@ -113,6 +113,15 @@ If one side changes, inspect the other in the same patch.
 - Export consumes the shared resolver via `VideoExportController`; Windows export audio = single
   mixed WAV via `BassExportAudioBackend`, non-Windows = `LegacyExportAudioBackend` fallback.
 - Filenames: `bg.mp4`, `pv.mp4`, `bg.{jpg,png,jpeg}`. Keep preview + export aligned.
+- Pause-hide option `previewForceLabeledJudgeLineWhenPaused_` (UI label key
+  `dialog.render_settings.gameplay.force_labeled_judge_line_when_paused`, zh "暂停时显示判定区"):
+  when ON + preview paused, the on-screen preview switches outline to `JudgeAreaLabeled` AND hides
+  PV/BG. Two consumers — `PreviewSection::effectivePreviewOutlineVariant()` (outline) and
+  `applyPreviewStageMediaRouteVisualSettings()` (`mediaVisible`); treat as a pair. The transient
+  `exportPreviewActive_` flag (set around `ExportSection::onExportPreviewVideo`'s `dialog.exec()`)
+  forces both off so the export-preview dialog shows PV/BG exactly as the exported video will. The
+  exported video itself is unaffected — it already uses `previewOutlineVariant_`, not the paused
+  override.
 
 ## 6. Track-path resolution lives in multiple places
 

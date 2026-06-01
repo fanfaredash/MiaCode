@@ -439,6 +439,11 @@
         double previewCanvasAspectRatio_ = 1.0;
         bool previewAutoRestoreSquareAfterExport_ = false;
         bool previewForceLabeledJudgeLineWhenPaused_ = true;
+        // Transient (not persisted): true only while the export-preview dialog
+        // drives the on-screen preview. When set, the pause-hide option
+        // ("暂停时显示判定区") is ignored so PV/BG renders exactly as it will in the
+        // exported video. Normal preview leaves this false → option behaves as usual.
+        bool exportPreviewActive_ = false;
         bool previewShowDebugInfo_ = false;
         bool previewShowTimestamp_ = true;
         bool previewShowObjectStatsHud_ = false;
@@ -804,6 +809,7 @@
     double& previewCanvasAspectRatio_ = state_.previewCanvasAspectRatio_;
     bool& previewAutoRestoreSquareAfterExport_ = state_.previewAutoRestoreSquareAfterExport_;
     bool& previewForceLabeledJudgeLineWhenPaused_ = state_.previewForceLabeledJudgeLineWhenPaused_;
+    bool& exportPreviewActive_ = state_.exportPreviewActive_;
     bool& previewShowDebugInfo_ = state_.previewShowDebugInfo_;
     bool& previewShowTimestamp_ = state_.previewShowTimestamp_;
     bool& previewShowObjectStatsHud_ = state_.previewShowObjectStatsHud_;

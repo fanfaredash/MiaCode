@@ -377,7 +377,12 @@ PreviewOutlineVariant MainWindow::PreviewSection::autoPreviewOutlineVariantForCh
 
 PreviewOutlineVariant MainWindow::PreviewSection::effectivePreviewOutlineVariant() const
 {
-    if (state_.previewForceLabeledJudgeLineWhenPaused_ && !state_.qtPreviewPlaying_) {
+    // The export-preview dialog ignores the pause-hide option so the on-screen
+    // preview matches the exported video (the user's chosen outline variant, PV/BG
+    // visible) instead of the paused judge-area view.
+    if (state_.previewForceLabeledJudgeLineWhenPaused_
+        && !state_.qtPreviewPlaying_
+        && !state_.exportPreviewActive_) {
         return PreviewOutlineVariant::JudgeAreaLabeled;
     }
     return state_.previewOutlineVariant_;

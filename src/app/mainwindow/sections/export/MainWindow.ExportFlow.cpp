@@ -586,6 +586,12 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     dialog.move(targetTopLeft);
     owner_.windowSection_->applySystemWindowBackdrop(&dialog);
     ++owner_.previewPaneRestoreGeneration_;
+    // The export-preview dialog drives the (paused) on-screen preview. Force PV/BG
+    // visible + the export's chosen outline variant for the dialog's lifetime so the
+    // user sees the real exported look, ignoring the "暂停时显示判定区" pause-hide option.
+    owner_.exportPreviewActive_ = true;
+    owner_.applyEffectivePreviewOutlineVariantToCanvas();
+    owner_.applyPreviewStageMediaRouteVisualSettings();
     // While the export-preview dialog is up the debug HUD is replaced by
     // the optional chart info HUD — the debug numbers don't reach the
     // exported video anyway, and the user wants to see chart metadata
@@ -602,6 +608,10 @@ void MainWindow::ExportSection::onExportPreviewVideo()
         owner_.previewCanvas_->setShowChartInfoHud(false);
         owner_.previewCanvas_->setChartInfo(QString(), QString(), QString(), QString());
     }
+    // Restore normal paused-preview behaviour — the pause-hide option applies again.
+    owner_.exportPreviewActive_ = false;
+    owner_.applyEffectivePreviewOutlineVariantToCanvas();
+    owner_.applyPreviewStageMediaRouteVisualSettings();
     owner_.setPreviewCanvasAspectRatio(1.0, false);
     owner_.restoreSquareAfterVideoExport_ = false;
     if (dialog.exportRequested()) {

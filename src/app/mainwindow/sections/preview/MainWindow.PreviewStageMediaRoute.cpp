@@ -44,7 +44,11 @@ MainWindow::PreviewSection::PreviewSection(
 
 void MainWindow::PreviewSection::applyPreviewStageMediaRouteVisualSettings()
 {
-    const bool mediaVisible = !state_.previewForceLabeledJudgeLineWhenPaused_ || state_.qtPreviewPlaying_;
+    // While the export-preview dialog is up, PV/BG stays visible regardless of the
+    // pause-hide option so the user previews exactly what the exported video shows.
+    const bool mediaVisible = !state_.previewForceLabeledJudgeLineWhenPaused_
+        || state_.qtPreviewPlaying_
+        || state_.exportPreviewActive_;
     if (state_.previewStageMediaHost_ != nullptr) {
         state_.previewStageMediaHost_->setBackgroundScaleMode(state_.previewBackgroundScaleMode_);
         state_.previewStageMediaHost_->setMediaVisible(mediaVisible);
