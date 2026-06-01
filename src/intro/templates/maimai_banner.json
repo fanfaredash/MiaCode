@@ -1,0 +1,109 @@
+{
+  "canvas": {
+    "width": 1080,
+    "height": 1080,
+    "fps": 60,
+    "durationFrames": 1
+  },
+  "card": {
+    "_comment": "MusicBase 420x636 native from prefab. heightRatio 0.78 + topMargin 0.16 gives enough room above for the MBase_Tab (which extends ~104 native px above card top, i.e. ~138 output px at this scale).",
+    "nativeWidth": 420,
+    "nativeHeight": 636,
+    "heightRatio": 0.78,
+    "topMargin": 0.16
+  },
+  "assetsRoot": "qrc:/intro/assets/trackstart",
+  "lvAtlasRoot": "qrc:/intro/assets/lv_atlas",
+  "fontsRoot": "qrc:/intro/assets/fonts",
+  "transparentBackground": true,
+  "lvAtlas": {
+    "_comment": "Per-difficulty digit/symbol atlases. Each atlas is 192x240, 4x4 grid of 48x60 cells. Cell index 0-9 = digit, 10='+', 11='-', 12=',', 13='·', 14='LV' label.",
+    "BASIC":    "UI_NUM_MLevel_01.png",
+    "ADVANCED": "UI_NUM_MLevel_02.png",
+    "EXPERT":   "UI_NUM_MLevel_03.png",
+    "MASTER":   "UI_NUM_MLevel_04.png",
+    "ReMASTER": "UI_NUM_MLevel_05.png",
+    "cellW": 48,
+    "cellH": 60,
+    "gridCols": 4
+  },
+  "fonts": {
+    "_comment": "Free public substitutes for SEGA proprietary fonts, both from the M PLUS family (paired by design). NewRodin EB (display) -> M PLUS 1p Black; MaruGothic DB (body) -> M PLUS Rounded 1c Bold. Qt's font fallback handles non-JP CJK via the system font (e.g. Yu Gothic UI / Microsoft YaHei).",
+    "display": "MPLUS1p-Black.ttf",
+    "body": "MPLUSRounded1c-Bold.ttf"
+  },
+  "assets": {
+    "frame": {
+      "BASIC":    "UI_TST_MBase_BSC.png",
+      "ADVANCED": "UI_TST_MBase_ADV.png",
+      "EXPERT":   "UI_TST_MBase_EXP.png",
+      "MASTER":   "UI_TST_MBase_MST.png",
+      "ReMASTER": "UI_TST_MBase_MST_Re.png"
+    },
+    "tab": {
+      "BASIC":    "UI_TST_MBase_BSC_Tab.png",
+      "ADVANCED": "UI_TST_MBase_ADV_Tab.png",
+      "EXPERT":   "UI_TST_MBase_EXP_Tab.png",
+      "MASTER":   "UI_TST_MBase_MST_Tab.png",
+      "ReMASTER": "UI_TST_MBase_MST_Re_Tab.png"
+    },
+    "lvPill": {
+      "BASIC":    "UI_TST_MBase_LV_BSC.png",
+      "ADVANCED": "UI_TST_MBase_LV_ADV.png",
+      "EXPERT":   "UI_TST_MBase_LV_EXP.png",
+      "MASTER":   "UI_TST_MBase_LV_MST.png",
+      "ReMASTER": "UI_TST_MBase_LV_MST_Re.png"
+    },
+    "plateDeluxe":   "UI_TST_Infoicon_DeluxeMode.png",
+    "plateStandard": "UI_TST_Infoicon_StandardMode.png"
+  },
+  "layout": {
+    "_comment": "Coords in card-native (420x636). From prefab MusicBase + descendants, with parent-pivot offsets folded in. y is +Y down (top-left origin); Unity values converted via (210+ux, 318-uy).",
+    "mbaseTab":      { "x": 0,   "y": -36,  "w": 420, "h": 96 },
+    "plateDeluxe":   { "x": 13,  "y": -31,  "w": 200, "h": 64 },
+    "plateStandard": { "x": 207, "y": -31,  "w": 200, "h": 64 },
+    "jacketSlot":    { "x": 50,  "y": 43,   "w": 320, "h": 320 },
+    "lvPill":        { "x": 223, "y": 307,  "w": 180, "h": 112 },
+    "lvLabel":       { "x": 272, "y": 354,  "w": 48,  "h": 60 },
+    "lvNumber":      { "x": 315, "y": 358,  "w": 70,  "h": 55 },
+    "lvPlus":        { "x": 380, "y": 343,  "w": 28,  "h": 36 },
+    "titleArea":     { "x": 17,  "y": 432,  "w": 386, "h": 33 },
+    "artistArea":    { "x": 17,  "y": 480,  "w": 386, "h": 20 },
+    "uiAchievement": { "x": 26,  "y": 518,  "w": 161, "h": 30 },
+    "uiRank":        { "x": 185, "y": 518,  "w": 85,  "h": 30 },
+    "imgApFcMedal":  { "x": 262, "y": 511,  "w": 80,  "h": 80 },
+    "imgSyncMedal":  { "x": 329, "y": 511,  "w": 80,  "h": 80 },
+    "designerLabel": { "x": 28,  "y": 572,  "w": 121, "h": 25 },
+    "designerName":  { "x": 25,  "y": 599,  "w": 243, "h": 16 },
+    "bpmText":       { "x": 302, "y": 599,  "w": 100, "h": 17 }
+  },
+  "colors": {
+    "titleOnDark":      "#FFFFFF",
+    "artistOnDark":     "#E8E4F5",
+    "designerOnWhite":  "#1A1A1A",
+    "bpmOnWhite":       "#0E2A60",
+    "labelOnWhite":     "#0E2A60",
+    "lvNumber":         "#FFFFFF",
+    "lvNumberShadow":   "#3A1060",
+    "placeholderFill":  "#DDD9D2",
+    "placeholderEdge":  "#DDD9D2"
+  },
+  "background": {
+    "useJacketAsBackdrop": true,
+    "dimColor": "#0A0414",
+    "dimOpacity": 0.55,
+    "blurAmount": 0.9
+  },
+  "font": {
+    "family": "Yu Gothic UI"
+  },
+  "track": {
+    "title": "(title)",
+    "artist": "(artist)",
+    "designer": "(designer)",
+    "level": "?",
+    "difficulty": "MASTER",
+    "bpm": "0",
+    "mode": "DX"
+  }
+}

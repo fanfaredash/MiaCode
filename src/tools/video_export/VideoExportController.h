@@ -59,6 +59,10 @@ struct VideoExportTask {
     bool showTimestamp = true;
     bool showObjectStatsHud = false;
     bool showChartInfoHud = false;
+    // Prepend the maimai track-start intro (full-range exports only). The
+    // banner payload itself is resolved from the chart into the snapshot's
+    // IntroBannerSpec; this flag only gates whether it plays.
+    bool addIntro = false;
     // Chart metadata for the optional top-left chart info HUD. Populated
     // from the active SimaiDocument at task-construction time; the worker
     // re-derives these from the snapshot's chart text + difficulty id

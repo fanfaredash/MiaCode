@@ -230,6 +230,18 @@ QJsonObject VideoExportSnapshot::toJson() const
     exportObject.insert(QStringLiteral("full_range_export"), fullRangeExport);
     exportObject.insert(QStringLiteral("output_path"), outputPath);
     root.insert(QStringLiteral("export"), exportObject);
+
+    QJsonObject introObject;
+    introObject.insert(QStringLiteral("enabled"), intro.enabled);
+    introObject.insert(QStringLiteral("title"), intro.title);
+    introObject.insert(QStringLiteral("artist"), intro.artist);
+    introObject.insert(QStringLiteral("designer"), intro.designer);
+    introObject.insert(QStringLiteral("level"), intro.level);
+    introObject.insert(QStringLiteral("difficulty"), intro.difficulty);
+    introObject.insert(QStringLiteral("bpm"), intro.bpm);
+    introObject.insert(QStringLiteral("mode"), intro.mode);
+    introObject.insert(QStringLiteral("jacket_path"), intro.jacketPath);
+    root.insert(QStringLiteral("intro"), introObject);
     return root;
 }
 
@@ -345,6 +357,17 @@ bool VideoExportSnapshot::fromJson(
     parsed.preset = videoExportPresetFromToken(exportObject.value(QStringLiteral("preset")).toString());
     parsed.fullRangeExport = exportObject.value(QStringLiteral("full_range_export")).toBool(parsed.fullRangeExport);
     parsed.outputPath = exportObject.value(QStringLiteral("output_path")).toString();
+
+    const QJsonObject introObject = object.value(QStringLiteral("intro")).toObject();
+    parsed.intro.enabled = introObject.value(QStringLiteral("enabled")).toBool(parsed.intro.enabled);
+    parsed.intro.title = introObject.value(QStringLiteral("title")).toString();
+    parsed.intro.artist = introObject.value(QStringLiteral("artist")).toString();
+    parsed.intro.designer = introObject.value(QStringLiteral("designer")).toString();
+    parsed.intro.level = introObject.value(QStringLiteral("level")).toString();
+    parsed.intro.difficulty = introObject.value(QStringLiteral("difficulty")).toString(parsed.intro.difficulty);
+    parsed.intro.bpm = introObject.value(QStringLiteral("bpm")).toString();
+    parsed.intro.mode = introObject.value(QStringLiteral("mode")).toString(parsed.intro.mode);
+    parsed.intro.jacketPath = introObject.value(QStringLiteral("jacket_path")).toString();
 
     if (parsed.chartTextUtf8.isEmpty()) {
         if (errorMessage != nullptr) {

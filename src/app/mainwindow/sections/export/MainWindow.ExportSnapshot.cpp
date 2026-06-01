@@ -15,6 +15,7 @@
 #include "tools/video_export/BatchVideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
 #include "tools/video_export/VideoExportDialog.h"
+#include "tools/video_export/VideoExportSnapshot.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -23,6 +24,72 @@
 using namespace miacode::mainwindow::shared;
 
 namespace {
+
+// Map a SimaiDocument difficulty id (1=Easy .. 6=Re:Master, 7=Utage) to the
+// trackstart banner atlas key. The prefab card family only ships the five
+// standard colours, so Easy/Utage fall back to the closest available card.
+QString introDifficultyAtlasKey(int difficultyId)
+{
+    switch (difficultyId) {
+    case 2: return QStringLiteral("BASIC");
+    case 3: return QStringLiteral("ADVANCED");
+    case 4: return QStringLiteral("EXPERT");
+    case 5: return QStringLiteral("MASTER");
+    case 6: return QStringLiteral("ReMASTER");
+    case 1: return QStringLiteral("BASIC");   // Easy: no dedicated card art
+    case 7: return QStringLiteral("MASTER");  // Utage: stand-in
+    default: return QStringLiteral("MASTER");
+    }
+}
+
+// Format a BPM for the banner: integer where exact ("193"), else trimmed
+// decimals ("174.5"). Empty when the value is non-positive.
+QString introBpmString(double bpm)
+{
+    if (!(bpm > 0.0)) {
+        return QString();
+    }
+    QString text = QString::number(bpm, 'f', 2);
+    if (text.contains(QLatin1Char('.'))) {
+        while (text.endsWith(QLatin1Char('0'))) {
+            text.chop(1);
+        }
+        if (text.endsWith(QLatin1Char('.'))) {
+            text.chop(1);
+        }
+    }
+    return text;
+}
+
+// Resolve the pre-roll intro banner payload from a chart. BPM uses the shared
+// clockBpmForChart fallback (&wholebpm -> first (BPM) -> 120), matching the
+// prepend-silence tool. The jacket is the still background image only (never
+// the bg video); empty means the QML uses the miacode logo fallback.
+IntroBannerSpec buildIntroBannerSpec(
+    const SimaiDocument& document,
+    int difficultyId,
+    const QString& chartPath,
+    bool addIntro,
+    bool fullRangeExport)
+{
+    IntroBannerSpec intro;
+    intro.enabled = addIntro && fullRangeExport;
+    intro.title = document.title;
+    intro.artist = document.artist;
+    intro.difficulty = introDifficultyAtlasKey(difficultyId);
+    intro.mode = QStringLiteral("DX");
+    const SimaiDifficultyData* difficulty = document.difficulty(difficultyId);
+    intro.level = (difficulty != nullptr) ? difficulty->level : QString();
+    const QString perDifficultyDesigner = (difficulty != nullptr) ? difficulty->designer : QString();
+    intro.designer = perDifficultyDesigner.trimmed().isEmpty() ? document.designer : perDifficultyDesigner;
+    const QString chartBody = (difficulty != nullptr) ? difficulty->chart : QString();
+    intro.bpm = introBpmString(miacode::chart_clock::clockBpmForChart(document, chartBody));
+    intro.jacketPath = chartPath.isEmpty()
+        ? QString()
+        : miacode::chart_assets::resolveBackgroundMediaPath(chartPath, /*includeVideoCandidates=*/false);
+    return intro;
+}
+
 double parsedDocumentFirstSeconds(const QString& rawValue, bool* ok = nullptr)
 {
     const QString trimmed = rawValue.trimmed();
@@ -424,6 +491,12 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.showChartInfoHud = requestedTask.showChartInfoHud;
     built.centerDisplayMode = requestedTask.centerDisplayMode;
     built.skinLoadWaitMs = requestedTask.skinLoadWaitMs;
+    built.intro = buildIntroBannerSpec(
+        owner_.document_,
+        owner_.activeDifficultyId_,
+        owner_.currentFilePath_,
+        requestedTask.addIntro,
+        built.fullRangeExport);
 
     if (built.skinDirectory.trimmed().isEmpty()) {
         if (errorMessage != nullptr) {
@@ -640,6 +713,12 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
     built.showChartInfoHud = requestedTask.showChartInfoHud;
     built.centerDisplayMode = requestedTask.centerDisplayMode;
     built.skinLoadWaitMs = requestedTask.skinLoadWaitMs;
+    built.intro = buildIntroBannerSpec(
+        document,
+        difficultyId,
+        chartPath,
+        requestedTask.addIntro,
+        built.fullRangeExport);  // batch is always full-range
 
     if (built.skinDirectory.trimmed().isEmpty()) {
         if (errorMessage != nullptr) {

@@ -1,0 +1,41 @@
+<RCC>
+    <qresource prefix="/intro">
+        <file alias="qml/IntroOverlay.qml">../src/intro/qml/IntroOverlay.qml</file>
+        <file alias="qml/MaimaiTransition.qml">../src/intro/qml/MaimaiTransition.qml</file>
+        <file alias="qml/MaimaiBannerCard.qml">../src/intro/qml/MaimaiBannerCard.qml</file>
+        <file alias="templates/maimai_banner.json">../src/intro/templates/maimai_banner.json</file>
+        <file alias="assets/transition/base_BR.png">../src/intro/assets/transition/base_BR.png</file>
+        <file alias="assets/transition/base_TL.png">../src/intro/assets/transition/base_TL.png</file>
+        <file alias="assets/transition/chip.png">../src/intro/assets/transition/chip.png</file>
+        <file alias="assets/transition/hold.png">../src/intro/assets/transition/hold.png</file>
+        <file alias="assets/transition/purple_BR.png">../src/intro/assets/transition/purple_BR.png</file>
+        <file alias="assets/transition/purple_TL.png">../src/intro/assets/transition/purple_TL.png</file>
+        <file alias="assets/transition/slide.png">../src/intro/assets/transition/slide.png</file>
+        <file alias="assets/transition/white_BR.png">../src/intro/assets/transition/white_BR.png</file>
+        <file alias="assets/transition/white_TL.png">../src/intro/assets/transition/white_TL.png</file>
+        <file alias="assets/fonts/MPLUS1p-Black.ttf">../src/intro/assets/fonts/MPLUS1p-Black.ttf</file>
+        <file alias="assets/fonts/MPLUSRounded1c-Bold.ttf">../src/intro/assets/fonts/MPLUSRounded1c-Bold.ttf</file>
+        <file alias="assets/lv_atlas/UI_NUM_MLevel_01.png">../src/intro/assets/lv_atlas/UI_NUM_MLevel_01.png</file>
+        <file alias="assets/lv_atlas/UI_NUM_MLevel_02.png">../src/intro/assets/lv_atlas/UI_NUM_MLevel_02.png</file>
+        <file alias="assets/lv_atlas/UI_NUM_MLevel_03.png">../src/intro/assets/lv_atlas/UI_NUM_MLevel_03.png</file>
+        <file alias="assets/lv_atlas/UI_NUM_MLevel_04.png">../src/intro/assets/lv_atlas/UI_NUM_MLevel_04.png</file>
+        <file alias="assets/lv_atlas/UI_NUM_MLevel_05.png">../src/intro/assets/lv_atlas/UI_NUM_MLevel_05.png</file>
+        <file alias="assets/trackstart/UI_TST_Infoicon_DeluxeMode.png">../src/intro/assets/trackstart/UI_TST_Infoicon_DeluxeMode.png</file>
+        <file alias="assets/trackstart/UI_TST_Infoicon_StandardMode.png">../src/intro/assets/trackstart/UI_TST_Infoicon_StandardMode.png</file>
+        <file alias="assets/trackstart/UI_TST_MBase_ADV.png">../src/intro/assets/trackstart/UI_TST_MBase_ADV.png</file>
+        <file alias="assets/trackstart/UI_TST_MBase_ADV_Tab.png">../src/intro/assets/trackstart/UI_TST_MBase_ADV_Tab.png</file>
+        <file alias="assets/trackstart/UI_TST_MBase_BSC.png">../src/intro/assets/trackstart/UI_TST_MBase_BSC.png</file>
+        <file alias="assets/trackstart/UI_TST_MBase_BSC_Tab.png">../src/intro/assets/trackstart/UI_TST_MBase_BSC_Tab.png</file>
+        <file alias="assets/trackstart/UI_TST_MBase_EXP.png">../src/intro/assets/trackstart/UI_TST_MBase_EXP.png</file>
+        <file alias="assets/trackstart/UI_TST_MBase_EXP_Tab.png">../src/intro/assets/trackstart/UI_TST_MBase_EXP_Tab.png</file>
+        <file alias="assets/trackstart/UI_TST_MBase_LV_ADV.png">../src/intro/assets/trackstart/UI_TST_MBase_LV_ADV.png</file>
+        <file alias="assets/trackstart/UI_TST_MBase_LV_BSC.png">../src/intro/assets/trackstart/UI_TST_MBase_LV_BSC.png</file>
+        <file alias="assets/trackstart/UI_TST_MBase_LV_EXP.png">../src/intro/assets/trackstart/UI_TST_MBase_LV_EXP.png</file>
+        <file alias="assets/trackstart/UI_TST_MBase_LV_MST.png">../src/intro/assets/trackstart/UI_TST_MBase_LV_MST.png</file>
+        <file alias="assets/trackstart/UI_TST_MBase_LV_MST_Re.png">../src/intro/assets/trackstart/UI_TST_MBase_LV_MST_Re.png</file>
+        <file alias="assets/trackstart/UI_TST_MBase_MST.png">../src/intro/assets/trackstart/UI_TST_MBase_MST.png</file>
+        <file alias="assets/trackstart/UI_TST_MBase_MST_Re.png">../src/intro/assets/trackstart/UI_TST_MBase_MST_Re.png</file>
+        <file alias="assets/trackstart/UI_TST_MBase_MST_Re_Tab.png">../src/intro/assets/trackstart/UI_TST_MBase_MST_Re_Tab.png</file>
+        <file alias="assets/trackstart/UI_TST_MBase_MST_Tab.png">../src/intro/assets/trackstart/UI_TST_MBase_MST_Tab.png</file>
+    </qresource>
+</RCC>
