@@ -1497,13 +1497,12 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
     dialog.setWindowTitle(title);
     dialog.setModal(true);
-    // Was 520 → 600 → 720. 600 still clipped "暂停时不显示PV/BG" to
-    // "暂停时不显示PV/B" because the QFormLayout's label column eats
-    // ~180px before the videoCheckRow grid even sees the field, and
-    // the field's right-half cell needs to fit a 15-char label plus
-    // the checkbox indicator + spacing. 720 leaves comfortable margin
-    // for both checkboxes per row at the dialog's default font.
-    dialog.setMinimumWidth(720);
+    // Was 520 → 600 → 720 → 880. The QFormLayout's label column eats ~180px before
+    // the videoCheckRow grid even sees the field, and each right-half checkbox cell
+    // must fit an 8-char CJK label ("显示左下角时间戳" / "暂停时显示判定区") plus the
+    // checkbox indicator + spacing. 720 still clipped the trailing glyph at some
+    // fonts/DPI scales; 880 leaves comfortable margin for both checkboxes per row.
+    dialog.setMinimumWidth(880);
     dialog.setStyleSheet(UiTheme::settingsDialogStyleSheet());
     owner_.windowSection_->applySystemWindowBackdrop(&dialog);
     UiDialogs::prepareDialogWindow(&dialog, &owner_);
