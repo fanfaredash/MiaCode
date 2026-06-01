@@ -465,7 +465,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.preferences.editor_line_spacing", "行距"},
         {"dialog.preferences.editor_half_width_input", "锁定半角符号输入"},
         {"dialog.preferences.editor_auto_close_brackets", "自动补全括号"},
-        {"dialog.preferences.editor_auto_insert_square_after_h", "输入 h 后自动补全 []"},
+        {"dialog.preferences.editor_auto_insert_square_after_h", "自动补全 hold 时值"},
         {"dialog.preferences.editor_bracket_completion", "括号补全建议"},
         {"dialog.preferences.editor_ime_input_disabled", "禁止中文输入法输入"},
         {"dialog.preferences.performance_group", "性能"},

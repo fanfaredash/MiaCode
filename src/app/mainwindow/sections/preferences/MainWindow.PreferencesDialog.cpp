@@ -629,7 +629,7 @@ void MainWindow::PreferencesSection::onPreferences()
     editorLayout->addRow(QString(), autoCloseBracketsCheckbox);
 
     auto* autoInsertSquareAfterHCheckbox = new QCheckBox(
-        uiText("dialog.preferences.editor_auto_insert_square_after_h", "Auto-insert [] after typing h"),
+        uiText("dialog.preferences.editor_auto_insert_square_after_h", "Auto-complete hold duration"),
         editorGroup
     );
     autoInsertSquareAfterHCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
