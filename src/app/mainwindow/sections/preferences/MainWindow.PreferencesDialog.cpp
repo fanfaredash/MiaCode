@@ -642,7 +642,7 @@ void MainWindow::PreferencesSection::onPreferences()
     editorLayout->addRow(QString(), autoInsertSquareAfterHCheckbox);
 
     auto* bracketCompletionCheckbox = new QCheckBox(
-        uiText("dialog.preferences.editor_bracket_completion", "Bracket completion suggestions (dropdown on ( [ {)"),
+        uiText("dialog.preferences.editor_bracket_completion", "Bracket completion suggestions"),
         editorGroup
     );
     bracketCompletionCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
