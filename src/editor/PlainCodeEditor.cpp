@@ -970,6 +970,18 @@ bool PlainCodeEditor::tryAutoExpandH(const QString& text)
         return false;
     }
     QTextCursor cursor = textCursor();
+    if (!cursor.hasSelection()) {
+        // Don't expand when the caret already sits right before a '[': typing 'h'
+        // there means the user wants to hold-fill the existing bracket, not spawn
+        // a second empty one (which would read as the contradictory `h[|][...]`).
+        // Fall through to a plain 'h' insert so they can type into the bracket.
+        QTextCursor rightProbe(document());
+        rightProbe.setPosition(cursor.position());
+        if (rightProbe.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor)
+            && rightProbe.selectedText() == QLatin1String("[")) {
+            return false;
+        }
+    }
     cursor.beginEditBlock();
     if (cursor.hasSelection()) {
         // Wrap the selection: h[<sel>]. Mirrors auto-close's surround-with-pair.
