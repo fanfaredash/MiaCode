@@ -550,7 +550,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.gameplay.judge_line.import", "导入..."},
         {
             "dialog.render_settings.gameplay.force_labeled_judge_line_when_paused",
-            "暂停时不显示PV/BG"
+            "暂停时显示判定区"
         },
         {"dialog.render_settings.gameplay.slide_stack_order", "slide层叠顺序"},
         {"dialog.render_settings.gameplay.slide_stack_order.dx_style", "DX风格"},
