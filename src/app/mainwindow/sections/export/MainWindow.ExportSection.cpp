@@ -16,6 +16,11 @@ void MainWindow::onBatchExportPreviewVideo()
     exportSection_->onBatchExportPreviewVideo();
 }
 
+void MainWindow::onPackAsZip()
+{
+    exportSection_->onPackAsZip();
+}
+
 bool MainWindow::exportPreviewVideoFromCli(const CliVideoExportRequest& request, QString* resolvedOutputPath, QString* errorMessage, QString* details)
 {
     return exportSection_->exportPreviewVideoFromCli(request, resolvedOutputPath, errorMessage, details);

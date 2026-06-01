@@ -121,6 +121,13 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.saveAsAction_, &QAction::triggered, &owner_, &MainWindow::onSaveFileAs);
     fileMenu->addAction(owner_.saveAsAction_);
 
+    owner_.packAsZipAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("导出为ZIP") : QStringLiteral("Export as ZIP..."),
+        &owner_
+    );
+    connect(owner_.packAsZipAction_, &QAction::triggered, &owner_, &MainWindow::onPackAsZip);
+    fileMenu->addAction(owner_.packAsZipAction_);
+
     owner_.preferencesAction_ = new QAction(uiText("action.preferences", "Preferences..."), &owner_);
     connect(owner_.preferencesAction_, &QAction::triggered, &owner_, &MainWindow::onPreferences);
     fileMenu->addAction(owner_.preferencesAction_);

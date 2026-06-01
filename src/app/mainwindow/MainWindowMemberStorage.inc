@@ -13,6 +13,7 @@
         QAction* settingsPlaceholderAction_ = nullptr;
         QAction* preferencesAction_ = nullptr;
         QAction* saveAsAction_ = nullptr;
+        QAction* packAsZipAction_ = nullptr;
         QAction* transformMirrorLeftRightAction_ = nullptr;
         QAction* transformMirrorUpDownAction_ = nullptr;
         QAction* transformRotate180Action_ = nullptr;
@@ -547,6 +548,7 @@
     QAction*& settingsPlaceholderAction_ = ui_.settingsPlaceholderAction_;
     QAction*& preferencesAction_ = ui_.preferencesAction_;
     QAction*& saveAsAction_ = ui_.saveAsAction_;
+    QAction*& packAsZipAction_ = ui_.packAsZipAction_;
     QAction*& transformMirrorLeftRightAction_ = ui_.transformMirrorLeftRightAction_;
     QAction*& transformMirrorUpDownAction_ = ui_.transformMirrorUpDownAction_;
     QAction*& transformRotate180Action_ = ui_.transformRotate180Action_;

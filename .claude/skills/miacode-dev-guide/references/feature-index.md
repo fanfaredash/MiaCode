@@ -144,6 +144,21 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - MainWindow ownership: `MainWindow.cpp` / `sections/export/*` (`onExportPreviewVideo`,
   `buildVideoExportSnapshot`, `launchVideoExportWorker`, `handleVideoExportWorkerEvent`).
 
+## 8b. Export as ZIP — `src/tools/zip_export/`
+
+- Packs the current chart into a `.zip` (`maidata.txt` from `SimaiDocument::toText()` +
+  canonical siblings `track.mp3` / `bg.{jpg,png,jpeg}` / sibling PV `pv.mp4`/`bg.mp4`).
+- Core (backend-neutral, no Qt-widget dep, unit-testable): `ChartZipPackager.{h,cpp}`
+  (`packChartToZip`, `sanitizedZipStem`). Spec: `ChartZipPackagerSpec.cpp` → CTest
+  `chart_zip_packager_spec`. Compression via vendored **miniz** (`third_party/miniz/`).
+- Asset resolution reuses `miacode::chart_assets` (`src/common/ChartAssetPaths.h`). Rules:
+  one background image, one PV; `*_bak` backups excluded; an out-of-folder `&video=` target
+  is skipped (no sibling fallback); only an empty chart body is fatal.
+- Entry slot: `MainWindow::ExportSection::onPackAsZip()` in
+  `sections/export/MainWindow.PackZip.cpp` (progress + result popup mirror batch export).
+  UI: File menu under "Save As" + toolbox "Bookmarks" submenu, both via the single
+  `packAsZipAction_` (created in `setupMenusAndActions`, reused in the toolbox build).
+
 ## 9. Latency settings (BPM & offset) — `src/tools/latency/`
 
 - `LatencyDetectionPage.*`, `LatencyAnalysis.*`, `LatencySandboxController.*`,

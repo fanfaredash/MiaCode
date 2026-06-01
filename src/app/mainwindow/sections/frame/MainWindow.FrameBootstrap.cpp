@@ -1048,6 +1048,14 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     );
     connect(bookmarkManagerAction_, &QAction::triggered, this, &MainWindow::showBookmarkManager);
 
+    // "Export as ZIP" lives directly under the Bookmarks submenu here, and
+    // also under File > Save As. The same QAction is reused in both places
+    // (created in setupMenusAndActions) so the wiring and enabled-state stay
+    // in one spot.
+    if (packAsZipAction_ != nullptr) {
+        toolboxMenu_->addAction(packAsZipAction_);
+    }
+
     // Copy Area is intentionally hidden from the toolbox per the toolbox
     // revamp. The feature itself is kept intact — copyAreaPanel_/copyAreaEditor_,
     // fullCopyAreaAction_, and setFullCopyAreaVisible() all still exist — so

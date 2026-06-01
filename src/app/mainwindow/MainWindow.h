@@ -279,6 +279,7 @@ private slots:
     void onEditStaticTapOnSlideThreshold();
     void onExportPreviewVideo();
     void onBatchExportPreviewVideo();
+    void onPackAsZip();
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
     void onMediaProcessingTools();

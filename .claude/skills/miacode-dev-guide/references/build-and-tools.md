@@ -18,8 +18,13 @@ helper binaries. Build file: root `CMakeLists.txt` (one file, ~1200 lines). Pres
 ## 2. Targets
 
 Default build (no options) produces only: **`MiaCode`** (the app), **`soundtouch`** (static lib
-linked into MiaCode), and on Windows **`MiaCodeLauncher`** (the dist-root launcher exe that
-forwards to `app/MiaCode.exe`).
+linked into MiaCode), **`miniz`** (static lib, vendored `third_party/miniz/` single-file ZIP
+writer for "Export as ZIP" — no new DLL), and on Windows **`MiaCodeLauncher`** (the dist-root
+launcher exe that forwards to `app/MiaCode.exe`).
+
+> Note: the project enables **`LANGUAGES C CXX`** (not just CXX) so the vendored `miniz.c`
+> compiles. With CXX-only, CMake silently demotes `.c` sources to `<None>` and the link fails
+> with unresolved `mz_zip_*` symbols. The `miniz` target has AUTOMOC/UIC/RCC turned off (plain C).
 
 Everything else is gated behind `option(MIACODE_BUILD_DEV_TOOLS … OFF)` (`CMakeLists.txt:48`,
 block at `:586`). These are dev/diagnostic/spec binaries, off by default:
@@ -32,6 +37,7 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   `preview_sfx_timeline_spec`, `preview_audio_settings_spec`, `bass_preview_retained_state_spec`,
   `bass_preview_debug_log_routing_spec`, `quickshell_preview_surface_policy_spec`,
   `video_export_runtime_policy_spec`, `video_export_audio_render_plan_spec`,
+  `chart_zip_packager_spec` (verifies the Export-as-ZIP packager against real zip read-back),
   `debug_flag_index_spec` (drift guard — every `MIACODE_*` flag read in `src/` must appear in
   `docs/DEBUG_INDEX.md`, and every flag the doc names must still be read in code or be in the
   spec's retired allowlist; repo root injected via a `MIACODE_SOURCE_ROOT` compile define)

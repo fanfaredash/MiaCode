@@ -9,6 +9,7 @@ public:
     void applySharedExportTaskSettings(const VideoExportTask& task);
     void onExportPreviewVideo();
     void onBatchExportPreviewVideo();
+    void onPackAsZip();
     bool buildVideoExportSnapshot(
         const VideoExportTask& requestedTask,
         VideoExportSnapshot* snapshot,

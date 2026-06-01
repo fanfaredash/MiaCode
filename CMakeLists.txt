@@ -22,7 +22,7 @@ endif()
 # to the same string now.
 set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_VERSION_STRING}")
 
-project(MiaCode VERSION ${MIACODE_VERSION} LANGUAGES CXX)
+project(MiaCode VERSION ${MIACODE_VERSION} LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -90,6 +90,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/export/MainWindow.ExportSnapshot.cpp
     src/app/mainwindow/sections/export/MainWindow.ExportSection.cpp
     src/app/mainwindow/sections/export/MainWindow.ExportWorker.cpp
+    src/app/mainwindow/sections/export/MainWindow.PackZip.cpp
     src/app/mainwindow/sections/frame/MainWindow.BootstrapAndMenus.cpp
     src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp
     src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp
@@ -196,6 +197,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/RawVideoPipeTransport.cpp
     src/tools/video_export/VideoExportSnapshot.h
     src/tools/video_export/VideoExportSnapshot.cpp
+    src/tools/zip_export/ChartZipPackager.h
+    src/tools/zip_export/ChartZipPackager.cpp
     src/preview/ipc/PreviewFrameStateProjector.h
     src/preview/ipc/PreviewFrameStateProjector.cpp
     src/preview/ipc/PreviewFrameStateSerial.h
@@ -502,6 +505,22 @@ target_include_directories(soundtouch PUBLIC
 )
 target_compile_definitions(soundtouch PUBLIC SOUNDTOUCH_FLOAT_SAMPLES=1)
 
+# Vendored single-file ZIP writer (third_party/miniz), used by the
+# "Export as ZIP" feature. Public stable API, no new runtime DLL — the
+# amalgamated miniz.c links straight into the static lib.
+add_library(miniz STATIC
+    third_party/miniz/miniz.c
+)
+target_include_directories(miniz PUBLIC
+    third_party/miniz
+)
+# Plain C, no Qt — keep the global AUTOMOC/UIC/RCC off this target.
+set_target_properties(miniz PROPERTIES
+    AUTOMOC OFF
+    AUTOUIC OFF
+    AUTORCC OFF
+)
+
 target_link_libraries(MiaCode PRIVATE
     Qt6::Core
     Qt6::Gui
@@ -510,6 +529,7 @@ target_link_libraries(MiaCode PRIVATE
     Qt6::QuickControls2
     Qt6::Widgets
     soundtouch
+    miniz
 )
 target_include_directories(MiaCode PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/generated
@@ -1036,6 +1056,16 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/timeline/TimelineData.h
         LIBS Qt6::Core Qt6::Gui
         INCLUDES src src/common src/audio src/core/video src/timeline src/tools src/tools/video_export
+    )
+
+    miacode_add_dev_tool(chart_zip_packager_spec TEST
+        SOURCES
+            src/tools/zip_export/ChartZipPackagerSpec.cpp
+            src/tools/zip_export/ChartZipPackager.h
+            src/tools/zip_export/ChartZipPackager.cpp
+            src/common/ChartAssetPaths.h
+        LIBS Qt6::Core Qt6::Gui miniz
+        INCLUDES src src/common src/tools
     )
 
     # Drift guard: every MIACODE_* env flag read in src/ must be documented in
