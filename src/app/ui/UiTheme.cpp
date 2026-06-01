@@ -903,8 +903,11 @@ QString designerPickerDialogStyleSheet()
     // Stylesheet for the "pick canonical designer" dialog. The radio button
     // indicator gets explicit fills so it stays visible in dark mode (the
     // platform default leaves the unchecked disc nearly invisible against
-    // the dark card background). Padding is set on QRadioButton, not on
-    // individual button widgets — that way every row aligns identically.
+    // the dark card background). The checked state paints the white checkmark
+    // SVG (like the metadata checkbox) rather than a solid dot, and keeps the
+    // border at 1px in every state so selecting a row never resizes the
+    // indicator box and shifts the label sideways. Padding is set on
+    // QRadioButton, not on individual button widgets — every row aligns.
     const Colors& c = colors();
     const QColor indicatorBg = c.dark ? c.windowAltBg : QColor("#FFFFFF");
     const QColor indicatorBorder = c.borderStrong;
@@ -916,7 +919,7 @@ QString designerPickerDialogStyleSheet()
         "QRadioButton { color: %2; spacing: 8px; padding: 4px; }"
         "QRadioButton::indicator { width: 16px; height: 16px; border: 1px solid %5; border-radius: 8px; background: %6; }"
         "QRadioButton::indicator:hover { border-color: %7; }"
-        "QRadioButton::indicator:checked { background: %7; border: 4px solid %6; outline: 1px solid %7; }"
+        "QRadioButton::indicator:checked { background: %7; border: 1px solid %7; image: url(\":/icons/checkmark.svg\"); }"
         "QPushButton { min-width: 92px; min-height: 30px; padding: 0 12px; border: 1px solid %4; border-radius: 8px; background: %3; color: %2; }"
         "QPushButton:hover { background: %8; border-color: %7; }"
         "QPushButton:default, QPushButton:pressed { background: %7; border-color: %7; color: %9; }"

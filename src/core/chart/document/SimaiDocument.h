@@ -33,6 +33,12 @@ public:
     static SimaiDocument fromText(const QString& text);
 
     static QVector<SimaiRawField> parseRawFields(const QString& text, bool prefixDummyIfNeeded = false);
+    // Like parseRawFields, but drops keys that already have dedicated model
+    // storage and editor UI (title/artist/first/des/video and the
+    // per-difficulty lv_/des_/inote_). Used by the free-form "Other &xx
+    // Fields" editor so a user can't smuggle e.g. a second &des_5 line that
+    // would bypass the model — and, under unified-designer mode, its sync.
+    static QVector<SimaiRawField> parseUnmanagedFields(const QString& text, bool prefixDummyIfNeeded = false);
     static QString serializeRawFields(const QVector<SimaiRawField>& fields);
 
     static bool isDifficultyId(int id);

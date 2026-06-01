@@ -471,7 +471,7 @@ bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
         const QString newArtist = ui_.artistEdit_ != nullptr ? ui_.artistEdit_->text() : QString();
         const QString newFirst = ui_.firstEdit_ != nullptr ? ui_.firstEdit_->text() : QString();
         const QString newDesigner = ui_.designerEdit_ != nullptr ? ui_.designerEdit_->text() : QString();
-        const QVector<SimaiRawField> newExtraFields = SimaiDocument::parseRawFields(
+        const QVector<SimaiRawField> newExtraFields = SimaiDocument::parseUnmanagedFields(
             ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(),
             true
         );
@@ -614,6 +614,33 @@ void MainWindow::DocumentSection::refreshUnifiedDesignerStateForLoadedDocument()
         QSignalBlocker block(ui_.unifiedDesignerCheckbox_);
         ui_.unifiedDesignerCheckbox_->setChecked(enabled);
     }
+
+    // The checkbox claims "all difficulties share one designer", but the file
+    // we just loaded may disagree (it could have been hand-edited, merged, or
+    // touched by another tool since unified mode was last on). Without this,
+    // the box would read as "synced" while &des and the &des_N silently
+    // diverge until the next manual designer edit broadcasts. Reconcile now so
+    // the on-screen promise holds the moment the document opens.
+    if (!enabled) {
+        return;
+    }
+    const DesignerSurvey survey = surveyDesigners(state_.document_);
+    // Only auto-reconcile when there's an unambiguous canonical name:
+    //   - 0/1 distinct non-empty name → fill blanks, no data loss; or
+    //   - &des is non-empty → it is the declared source of truth.
+    // When &des is empty AND the per-difficulty names genuinely conflict
+    // there is no winner to pick without asking, and silently guessing on
+    // load would destroy data with no undo — so leave it for the user.
+    if (survey.distinctNonEmpty.size() >= 2 && survey.topDesigner.isEmpty()) {
+        return;
+    }
+    QString canonical = survey.topDesigner;
+    if (canonical.isEmpty() && !survey.distinctNonEmpty.isEmpty()) {
+        canonical = survey.distinctNonEmpty.first();
+    }
+    // applyUnifiedDesignerName is a no-op (no dirty, no UI churn) when the
+    // document is already consistent, which is the common case.
+    applyUnifiedDesignerName(canonical);
 }
 
 void MainWindow::DocumentSection::onUnifiedDesignerToggled(bool checked)
@@ -631,8 +658,8 @@ void MainWindow::DocumentSection::onUnifiedDesignerToggled(bool checked)
         return;
     }
 
-    // OFF → ON: figure out whether we can flip silently, need to confirm an
-    // overwrite, or need to ask the user to pick a canonical name.
+    // OFF → ON: either flip silently (Case A) or ask the user to pick a
+    // canonical name when several distinct names disagree (Case B).
     const DesignerSurvey survey = surveyDesigners(state_.document_);
 
     // Case A: zero or one distinct non-empty designer — nothing to disambiguate.
@@ -651,75 +678,16 @@ void MainWindow::DocumentSection::onUnifiedDesignerToggled(bool checked)
         return;
     }
 
-    // Case B: top &des is non-empty AND some per-difficulty designer differs
-    // → ask the user to confirm overwriting the differing per-diff names.
-    const bool topNonEmpty = !survey.topDesigner.isEmpty();
-    bool someDiffDiffers = false;
-    for (const auto& pair : survey.perDifficulty) {
-        if (!pair.second.isEmpty() && pair.second != survey.topDesigner) {
-            someDiffDiffers = true;
-            break;
-        }
-    }
-    if (topNonEmpty && someDiffDiffers) {
-        QStringList affected;
-        for (const auto& pair : survey.perDifficulty) {
-            if (!pair.second.isEmpty() && pair.second != survey.topDesigner) {
-                affected.append(
-                    QStringLiteral("&des_%1 (%2)").arg(pair.first).arg(pair.second));
-            }
-        }
-        const QString detail = affected.join(QStringLiteral("\n"));
-        // Top-level line uses the same "&des (name)" shape as the per-diff
-        // entries below so the list reads as a single column.
-        const QString promptBody = UiText::isChineseUi()
-            ? QStringLiteral(
-                  "启用「所有难度采用相同名义」后，下列难度的谱师名将被 &des (%1) 覆盖：\n\n%2\n\n"
-                  "是否继续？")
-                  .arg(survey.topDesigner, detail)
-            : QStringLiteral(
-                  "Enabling \"All difficulties share this designer\" will overwrite the "
-                  "designer of the following difficulties with &des (%1):\n\n%2\n\n"
-                  "Continue?")
-                  .arg(survey.topDesigner, detail);
-        // Manually construct the QMessageBox so we can apply the
-        // dark-aware system backdrop (UiDialogs::showMessageBox doesn't
-        // expose a hook for that). The dialog still uses the localized
-        // Yes/No labels from UiDialogs::execMessageBox.
-        QMessageBox confirmDialog(
-            QMessageBox::Question,
-            UiText::isChineseUi()
-                ? QStringLiteral("覆盖各难度谱师名？")
-                : QStringLiteral("Overwrite per-difficulty designers?"),
-            promptBody,
-            QMessageBox::NoButton,
-            UiDialogs::effectiveParentWidget(&owner_));
-        confirmDialog.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-        confirmDialog.setDefaultButton(QMessageBox::No);
-        owner_.windowSection_->applySystemWindowBackdrop(&confirmDialog);
-        UiDialogs::prepareDialogWindow(&confirmDialog, &owner_);
-        const auto choice = UiDialogs::execMessageBox(&confirmDialog);
-        if (choice != QMessageBox::Yes) {
-            // User declined → revert checkbox UI to OFF and don't persist.
-            if (ui_.unifiedDesignerCheckbox_ != nullptr) {
-                QSignalBlocker block(ui_.unifiedDesignerCheckbox_);
-                ui_.unifiedDesignerCheckbox_->setChecked(false);
-            }
-            state_.unifiedDesignerEnabled_ = false;
-            return;
-        }
-        applyUnifiedDesignerName(survey.topDesigner);
-        state_.unifiedDesignerEnabled_ = true;
-        writeUnifiedDesignerPreference(state_.currentFilePath_, true);
-        return;
-    }
-
-    // Case C: top &des is empty (or matches everything except some per-diff
-    // designers) AND multiple distinct per-difficulty designers exist →
-    // show a picker so the user can choose which name becomes canonical.
+    // Case B (formerly B + C, merged): two or more distinct non-empty
+    // designer names exist across &des and the per-difficulty &des_N. There
+    // is no single obvious winner, so always let the user pick which name
+    // becomes the shared one (or "clear all"). This subsumes the old
+    // "confirm overwrite with &des" flow — when &des is non-empty it simply
+    // appears first in the candidate list — since both that flow and the
+    // picker are, in the end, "choose one name to write to every difficulty".
     QString picked;
-    bool pickerAccepted = promptCanonicalDesignerName(survey.distinctNonEmpty, &picked);
-    if (!pickerAccepted) {
+    if (!promptCanonicalDesignerName(survey.distinctNonEmpty, &picked)) {
+        // User cancelled → revert checkbox UI to OFF and don't persist.
         if (ui_.unifiedDesignerCheckbox_ != nullptr) {
             QSignalBlocker block(ui_.unifiedDesignerCheckbox_);
             ui_.unifiedDesignerCheckbox_->setChecked(false);
@@ -789,12 +757,10 @@ bool MainWindow::DocumentSection::promptCanonicalDesignerName(const QStringList&
     auto* prompt = new QLabel(
         UiText::isChineseUi()
             ? QStringLiteral(
-                  "当前谱面在 &des 和各 &des_N 中检测到多个不同的谱师名义。\n"
-                  "请选择一个作为统一名义（将写入到所有难度），或选择「直接清除」让所有字段变为空。")
+                  "检测到多个不同的谱师名义，请选择一个作为统一名义（写入所有难度），或选择「直接清除」让所有字段置空。")
             : QStringLiteral(
-                  "This chart has multiple distinct designer names across &des and the "
-                  "per-difficulty &des_N fields. Pick one to use everywhere, or choose "
-                  "\"Clear all\" to make every field empty."),
+                  "Multiple distinct designer names were detected. Pick one to use everywhere, "
+                  "or choose \"Clear all\" to empty every field."),
         &dialog);
     prompt->setWordWrap(true);
     outerLayout->addWidget(prompt);
@@ -823,9 +789,12 @@ bool MainWindow::DocumentSection::promptCanonicalDesignerName(const QStringList&
         listLayout->addWidget(radio);
         ++radioIndex;
     }
-    // "Clear all" lives at the end of the list. Its chosen-id is the
-    // sentinel kClearAllId so callers can tell it apart from real names.
-    constexpr int kClearAllId = -1;
+    // "Clear all" lives at the end of the list. Its chosen-id is a sentinel
+    // past the last candidate index so callers can tell it apart from real
+    // names. It must NOT be -1: QButtonGroup::addButton(button, -1) means
+    // "auto-assign an id" (and -1 is also what checkedId() returns for "no
+    // selection"), so -1 would never round-trip back as the clear-all choice.
+    const int kClearAllId = candidates.size();
     auto* clearAllRadio = new QRadioButton(
         UiText::isChineseUi()
             ? QStringLiteral("直接清除")
@@ -1349,10 +1318,35 @@ QString MainWindow::DocumentSection::currentDocumentTextForAutosave() const
         snapshot.artist = ui_.artistEdit_ != nullptr ? ui_.artistEdit_->text() : QString();
         snapshot.first = ui_.firstEdit_ != nullptr ? ui_.firstEdit_->text() : QString();
         snapshot.designer = ui_.designerEdit_ != nullptr ? ui_.designerEdit_->text() : QString();
-        snapshot.extraFields = SimaiDocument::parseRawFields(
+        snapshot.extraFields = SimaiDocument::parseUnmanagedFields(
             ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(),
             true
         );
+    }
+
+    // Under unified mode the active field may hold an uncommitted designer
+    // edit that hasn't broadcast yet (broadcast only happens on field commit
+    // in applyCurrentFieldToDocument). Mirror the active field's designer
+    // across the snapshot so the autosaved backup is never internally
+    // out-of-sync with what the user is typing.
+    const bool capturedDesignerFromUi = owner_.hasActiveDifficulty()
+        || state_.activeOutlineKey_ == QLatin1String("metadata");
+    if (state_.unifiedDesignerEnabled_ && capturedDesignerFromUi) {
+        QString canonical = snapshot.designer;
+        if (owner_.hasActiveDifficulty()) {
+            const SimaiDifficultyData* active = snapshot.difficulty(state_.activeDifficultyId_);
+            if (active != nullptr) {
+                canonical = active->designer;
+            }
+        }
+        snapshot.designer = canonical;
+        const QVector<int> diffIds = snapshot.difficultyIds();
+        for (int diffId : diffIds) {
+            SimaiDifficultyData* diff = snapshot.difficulty(diffId);
+            if (diff != nullptr) {
+                diff->designer = canonical;
+            }
+        }
     }
     return snapshot.toText();
 }

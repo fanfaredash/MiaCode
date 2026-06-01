@@ -581,6 +581,15 @@ bool MainWindow::DocumentSection::undoDeletedDifficultyField()
     SimaiDifficultyData& restoredDifficulty = state_.document_.ensureDifficulty(deletedState.difficultyId);
     restoredDifficulty = deletedState.difficultyData;
     restoredDifficulty.id = deletedState.difficultyId;
+    // Keep the "all difficulties share one designer" invariant intact: the
+    // captured snapshot holds whatever name was current at delete time, which
+    // may now be stale if the shared name changed before the undo. Re-seed
+    // from the canonical &des so the restored difficulty doesn't reintroduce a
+    // divergent designer. Mirrors the seed applied when a difficulty is freshly
+    // added (see MainWindow.FrameBootstrap.cpp).
+    if (state_.unifiedDesignerEnabled_) {
+        restoredDifficulty.designer = state_.document_.designer;
+    }
     state_.validationCacheByDifficulty_.remove(deletedState.difficultyId);
     state_.documentDirty_ = true;
     state_.currentFieldDirty_ = false;

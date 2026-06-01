@@ -41,6 +41,26 @@ QString serializeField(const QString& key, const QString& value)
     return QString("&%1=%2").arg(key, value);
 }
 
+// True for keys that fromText() routes into dedicated document slots
+// (and that have their own editor widgets). Such keys must never live in
+// the free-form extraFields list, or they would serialize as a duplicate
+// line alongside the model-owned one.
+bool isReservedMetadataKey(const QString& key)
+{
+    if (key == QLatin1String("title") || key == QLatin1String("artist")
+        || key == QLatin1String("first") || key == QLatin1String("des")
+        || key == QLatin1String("video")) {
+        return true;
+    }
+    QString prefix;
+    int id = 0;
+    if (parseDifficultySuffix(key, &prefix, &id)) {
+        return prefix == QLatin1String("lv") || prefix == QLatin1String("des")
+            || prefix == QLatin1String("inote");
+    }
+    return false;
+}
+
 }  // namespace
 
 SimaiDocument SimaiDocument::createEmpty()
@@ -151,6 +171,20 @@ QVector<SimaiRawField> SimaiDocument::parseRawFields(const QString& text, bool p
     }
 
     return fields;
+}
+
+QVector<SimaiRawField> SimaiDocument::parseUnmanagedFields(const QString& text, bool prefixDummyIfNeeded)
+{
+    const QVector<SimaiRawField> all = parseRawFields(text, prefixDummyIfNeeded);
+    QVector<SimaiRawField> unmanaged;
+    unmanaged.reserve(all.size());
+    for (const SimaiRawField& field : all) {
+        if (isReservedMetadataKey(field.key)) {
+            continue;
+        }
+        unmanaged.append(field);
+    }
+    return unmanaged;
 }
 
 QString SimaiDocument::serializeRawFields(const QVector<SimaiRawField>& fields)
