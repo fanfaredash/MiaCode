@@ -1502,6 +1502,16 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     // must fit an 8-char CJK label ("显示左下角时间戳" / "暂停时显示判定区") plus the
     // checkbox indicator + spacing. 720 still clipped the trailing glyph at some
     // fonts/DPI scales; 880 leaves comfortable margin for both checkboxes per row.
+    // The video-settings variant carries the wider gameplay/video controls and
+    // two CJK checkbox columns ("显示左下角时间戳" / "暂停时显示判定区") that clip
+    // at narrower widths, so it gets extra width; the audio-only variant keeps
+    // the 880 baseline.
+    // NOTE: rootLayout uses QLayout::SetFixedSize (below), which locks the dialog
+    // to its content sizeHint and IGNORES this dialog-level minimum width — that
+    // is exactly why bumping this value had no visible effect. The video width is
+    // now driven by the tab widget's minimumWidth instead (SetFixedSize honors a
+    // *child* widget's minimum via QWidgetItem). This call stays only as a soft
+    // floor for the audio-only variant.
     dialog.setMinimumWidth(880);
     dialog.setStyleSheet(UiTheme::settingsDialogStyleSheet());
     owner_.windowSection_->applySystemWindowBackdrop(&dialog);
@@ -1622,15 +1632,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         &masterMuteButton,
         100
     );
-    auto* audioSeparator = new QFrame(audioGroup);
-    audioSeparator->setFrameShape(QFrame::HLine);
-    audioSeparator->setFrameShadow(QFrame::Plain);
-    audioSeparator->setLineWidth(1);
-    audioSeparator->setStyleSheet(
-        QStringLiteral("color: %1; background: %1;")
-            .arg(UiTheme::colors().textInverse.name(QColor::HexRgb)));
-    audioFormLayout->addRow(QString(), audioSeparator);
-
     const QString bgmAudioLabelText = uiText("dialog.render_settings.audio.track", "Track Volume");
     QSlider* bgmSlider = nullptr;
     QLabel* bgmLabel = nullptr;
@@ -2389,6 +2390,15 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         flattenGroup(gameplayGroup);
         auto* videoSettingsTabs = new QTabWidget(&dialog);
         videoSettingsTabs->setObjectName(QStringLiteral("RenderSettingsTabs"));
+        // Drive the dialog width from HERE, not from dialog.setMinimumWidth():
+        // the rootLayout's SetFixedSize constraint sizes the dialog to its
+        // content sizeHint and ignores the dialog's own minimum width, but it
+        // DOES honor a child widget's minimum width (QWidgetItem expands the
+        // hint up to the child minimum). Setting the tab's minimum width
+        // reliably widens the dialog so the two CJK checkbox columns
+        // ("显示左下角时间戳" / "暂停时显示判定区") stop clipping. The video form
+        // uses ExpandingFieldsGrow, so the extra width flows into those cells.
+        videoSettingsTabs->setMinimumWidth(420);
         // documentMode left at the default so the QTabWidget::pane
         // stylesheet (rounded bottom corners + no top border) actually
         // takes effect; documentMode=true would skip drawing the pane
