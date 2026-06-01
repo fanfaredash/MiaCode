@@ -1417,25 +1417,34 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         return;
     }
 
-    if (!event->isAutoRepeat()) {
-        if (event->matches(QKeySequence::Undo)) {
-            logSelectionRestoreEditorShortcut(
-                QStringLiteral("editor_shortcut_press"),
-                QStringLiteral("match=undo key=%1 modifiers=%2").arg(event->key()).arg(static_cast<int>(event->modifiers()))
-            );
-            emit undoShortcutRequested();
-            event->accept();
-            return;
-        }
-        if (event->matches(QKeySequence::Redo)) {
-            logSelectionRestoreEditorShortcut(
-                QStringLiteral("editor_shortcut_press"),
-                QStringLiteral("match=redo key=%1 modifiers=%2").arg(event->key()).arg(static_cast<int>(event->modifiers()))
-            );
-            emit redoShortcutRequested();
-            event->accept();
-            return;
-        }
+    // Undo/Redo are handled on auto-repeat too, so holding Ctrl+Z / Ctrl+Y keeps
+    // stepping through the history like every other text editor. (Earlier this was
+    // gated behind !isAutoRepeat(), which is correct for the one-shot overwrite-mode
+    // toggle above but wrongly suppressed repeated undo/redo.) The emit routes through
+    // MainWindow's selection-restore-aware undo/redo actions.
+    if (event->matches(QKeySequence::Undo)) {
+        logSelectionRestoreEditorShortcut(
+            QStringLiteral("editor_shortcut_press"),
+            QStringLiteral("match=undo key=%1 modifiers=%2 repeat=%3")
+                .arg(event->key())
+                .arg(static_cast<int>(event->modifiers()))
+                .arg(event->isAutoRepeat() ? 1 : 0)
+        );
+        emit undoShortcutRequested();
+        event->accept();
+        return;
+    }
+    if (event->matches(QKeySequence::Redo)) {
+        logSelectionRestoreEditorShortcut(
+            QStringLiteral("editor_shortcut_press"),
+            QStringLiteral("match=redo key=%1 modifiers=%2 repeat=%3")
+                .arg(event->key())
+                .arg(static_cast<int>(event->modifiers()))
+                .arg(event->isAutoRepeat() ? 1 : 0)
+        );
+        emit redoShortcutRequested();
+        event->accept();
+        return;
     }
 
     const bool plainEnterKey =
