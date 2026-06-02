@@ -118,11 +118,8 @@ public:
     void setMuriAnalysisReport(const MuriAnalysisReport& report);
     void setMuriRenderOptions(const MuriRenderOptions& options);
     void setSkinDirectory(const QString& skinDir);
-    // Read-only accessor exposed for the out-of-process preview worker
-    // path — the supervisor projects this into PreviewFrameStateSerial
-    // so the worker can load its own skin asset copies from disk via
-    // PreviewSceneAssetLoader. Returns the empty string when no skin
-    // has been bound yet.
+    // Read-only accessor for the bound skin directory. Returns the empty
+    // string when no skin has been bound yet.
     QString skinDirectory() const;
     void setOutlineVariant(PreviewOutlineVariant variant);
     void setOutlineImagePath(const QString& path);
@@ -211,14 +208,11 @@ private:
     // and uploads the firework colour-ball texture lazily on the FIRST
     // firework draw. In a fresh session that first draw lands mid-playback
     // when a real firework note fires, stalling the QSG render thread for
-    // ~50-300 ms. The out-of-process worker already warms this in
-    // PreviewWorkerSession::pumpQsgFrame() by injecting a one-shot synthetic
-    // off-screen firework right after assets load; the default in-process
-    // preview (this class) had no equivalent, so the stall still hit. We
-    // mirror that warm-up here: once the skin assets (incl. the firework
-    // colour ball) are loaded, append a synthetic off-screen firework marker
-    // so the layer issues exactly one real textured draw at chart load —
-    // compiling the PSO + uploading the texture at a benign moment.
+    // ~50-300 ms. We warm this up here: once the skin assets (incl. the
+    // firework colour ball) are loaded, append a synthetic off-screen
+    // firework marker so the layer issues exactly one real textured draw
+    // at chart load — compiling the PSO + uploading the texture at a
+    // benign moment.
     //
     // `armed_` flips true when assets are ready; while armed-but-not-done the
     // synthetic is re-appended on every setNoteMarkers so a coalesced marker

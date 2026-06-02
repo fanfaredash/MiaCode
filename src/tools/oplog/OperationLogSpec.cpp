@@ -352,13 +352,13 @@ void runRealisticScenarioDemos(const QString& logPath, const QString& fatalPath)
 
     // Scenario 2: IPC handler that bails on an unknown command.
     auto handleAttach = [](const QString& cmd) {
-        MC_OP("PreviewWorkerSession::handleAttach");
+        MC_OP("DemoSession::handleAttach");
         _mc_op_.note(QStringLiteral("hwnd=0x0"));
         Q_UNUSED(cmd);
         _mc_op_.fail(QStringLiteral("editor HWND invalid"));
     };
     auto processInbound = [&](const QString& cmd) {
-        MC_OP("PreviewWorkerSession::processInbound");
+        MC_OP("DemoSession::processInbound");
         _mc_op_.note(QStringLiteral("cmd=%1").arg(cmd));
         if (cmd == QLatin1String("attach")) {
             handleAttach(cmd);
@@ -387,50 +387,50 @@ void runRealisticScenarioDemos(const QString& logPath, const QString& fatalPath)
     };
     importChart();
 
-    // Scenario 4: Phase-2-shape worker IPC exception chain. Mirrors the
-    // actual MC_OP stack a thrown exception would walk in production:
-    //   main → runCliPreviewWorker → PreviewWorkerSession::run
+    // Scenario 4: deep nested IPC-style exception chain. Mirrors the
+    // shape of a thrown exception walking a multi-level MC_OP stack:
+    //   main → runDemoEndpoint → DemoSession::run
     //        → onStdinCommandLine → handleAttach → (throw)
-    // The leaf throws bad_alloc (simulating a heap exhaustion during
-    // shared-memory attach). The catch handler at the runCli* boundary
-    // calls appendFatalMessage exactly the way main.cpp does, and the
-    // chain is auto-inlined into both the fatal entry AND each
+    // The leaf throws (simulating a heap exhaustion during shared-memory
+    // attach). The catch handler at the outer boundary calls
+    // appendFatalMessage exactly the way a real catch-handler does, and
+    // the chain is auto-inlined into both the fatal entry AND each
     // op-failure entry as the Scope destructors unwind.
     auto handleAttachThrows = [] {
-        MC_OP("PreviewWorkerSession::handleAttach");
+        MC_OP("DemoSession::handleAttach");
         _mc_op_.note(QStringLiteral("editor_hwnd=0x12340000 session=demo proto=1"));
         // Simulate the failure mode: SharedMemory attach fails because
-        // the editor's slot byte size doesn't match what the worker
-        // expects, and the constructor throws.
+        // the slot byte size doesn't match what the endpoint expects,
+        // and the constructor throws.
         throw std::runtime_error("SharedMemory::attach: slot byte size mismatch (got 65536, expected 524288)");
     };
     auto onStdinCommandLineSim = [&] {
-        MC_OP("PreviewWorkerSession::onStdinCommandLine");
+        MC_OP("DemoSession::onStdinCommandLine");
         _mc_op_.note(QStringLiteral("cmd=attach"));
         handleAttachThrows();
     };
-    auto previewWorkerRun = [&] {
-        MC_OP("PreviewWorkerSession::run");
+    auto demoSessionRun = [&] {
+        MC_OP("DemoSession::run");
         onStdinCommandLineSim();
     };
-    auto runCliPreviewWorkerSim = [&] {
-        MC_OP("runCliPreviewWorker");
+    auto runDemoEndpointSim = [&] {
+        MC_OP("runDemoEndpoint");
         _mc_op_.note(QStringLiteral("staticTestMode=0"));
         try {
-            previewWorkerRun();
+            demoSessionRun();
         } catch (const std::exception& ex) {
-            // Mirrors main.cpp:1352. currentExceptionDetail() runs
-            // INSIDE the catch, so what() is captured here.
+            // currentExceptionDetail() would run INSIDE the catch in
+            // production, so what() is captured here.
             const QString detail = QString::fromUtf8(ex.what());
-            const QString error = QStringLiteral("Unhandled preview worker exception.");
+            const QString error = QStringLiteral("Unhandled demo endpoint exception.");
             miacode::debug_log::appendFatalMessage(
-                QStringLiteral("preview/worker_exception"),
+                QStringLiteral("demo/endpoint_exception"),
                 QStringLiteral("%1 details=%2").arg(error, detail));
         }
     };
     auto mainSim = [&] {
         MC_OP("main");
-        runCliPreviewWorkerSim();
+        runDemoEndpointSim();
     };
     mainSim();
 
@@ -502,8 +502,8 @@ void runRealisticScenarioDemos(const QString& logPath, const QString& fatalPath)
 // Cross-process crash demo — parent side. Spawns a child copy of
 // oplog_self_test with --child-crash, waits for the child's
 // CrashExit, then reads the child's shadow log out of MIACODE_LOG_DIR
-// and prints it. Mirrors what PreviewWorkerSupervisor::onProcessFinished
-// does in production.
+// and prints it. Mirrors what a process supervisor that collates a
+// crashed child's shadow log does in production.
 int runCrossProcessCrashDemo(const QString& selfExecutablePath)
 {
     QTemporaryDir parentLogDir;
@@ -545,9 +545,9 @@ int runCrossProcessCrashDemo(const QString& selfExecutablePath)
         return 1;
     }
 
-    // Mirrors PreviewWorkerSupervisor::onProcessFinished: read the
-    // dead child's shadow file from the shared log dir and inline it
-    // into the parent's bug report.
+    // Mirrors a process supervisor's crash handler: read the dead
+    // child's shadow file from the shared log dir and inline it into
+    // the parent's bug report.
     const QString shadowPath = QDir(sharedLogDir).filePath(
         QStringLiteral("miacode_op_chain_%1.log").arg(childPid));
     QFile shadowFile(shadowPath);

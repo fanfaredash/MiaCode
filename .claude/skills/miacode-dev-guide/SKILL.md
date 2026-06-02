@@ -1,6 +1,6 @@
 ---
 name: miacode-dev-guide
-description: Repository guide for MiaCode (a Qt6/C++/QML maimai chart editor + video exporter). Use when working anywhere in this repo to locate a feature's owning files/classes/functions; understand the module layout (core/app/preview/render/audio/timeline/tools) and dependency rules; follow cross-module sync pairs (parser ↔ timeline ↔ preview ↔ export ↔ Muri); find debug flags and the --debug logging system; follow build/target/CTest/packaging conventions; or check the committed render-architecture decision (in-process QSG is the main path, DComp is off-by-default and being decoupled, the out-of-process worker is being removed). Also update this skill in the same change whenever repo structure, cross-module contracts, debug flags, or build conventions change.
+description: Repository guide for MiaCode (a Qt6/C++/QML maimai chart editor + video exporter). Use when working anywhere in this repo to locate a feature's owning files/classes/functions; understand the module layout (core/app/preview/render/audio/timeline/tools) and dependency rules; follow cross-module sync pairs (parser ↔ timeline ↔ preview ↔ export ↔ Muri); find debug flags and the --debug logging system; follow build/target/CTest/packaging conventions; or check the committed render-architecture decision (in-process QSG is the main path, DComp is off-by-default and being decoupled, the out-of-process worker has been removed). Also update this skill in the same change whenever repo structure, cross-module contracts, debug flags, or build conventions change.
 ---
 
 # MiaCode Dev Guide
@@ -41,8 +41,6 @@ same change.
 - Tools: `src/tools/{latency,muri,video_export,chart_transform,...}`
 - Shared config headers + logging + oplog: `src/common/`
 - **DComp/D3D11 stack — DEFAULT OFF, being decoupled:** `src/render/` + `src/sources/`
-- **Out-of-process preview worker — DEPRECATED, slated for deletion:** `src/preview/ipc/` +
-  `PreviewWorkerSession` (`src/preview/runtime/`)
 
 > Note: `src/simai/`, `src/preview/scene/`, `src/preview/audio/`, `src/preview/video/` are
 > OLD paths from before the "first-unification" reorg. They no longer exist. If a doc or
@@ -59,9 +57,9 @@ This is a committed product decision; treat it as a contract.
    Target end state: no class relationship or CMake coupling that pulls DComp into the QSG
    build/runtime. `previewUseDCompEnabled()` defaults `false` (`src/common/DebugOptions.h`);
    `--quick-shell-beta` auto-enables it for A/B diagnostics only.
-3. **Out-of-process worker (`src/preview/ipc/*`, `PreviewWorkerSession`/`Supervisor`, the
-   `MIACODE_PREVIEW_OUT_OF_PROCESS` / `MIACODE_PREVIEW_WORKER_*` flags) — DELETE.** Do not add
-   features to it. This is the "v2" direction being abandoned.
+3. **Out-of-process worker — DELETED (2026-06-02).** `src/preview/ipc/*`, `PreviewWorkerSession`
+   (`src/preview/runtime/`), and the `MIACODE_PREVIEW_OUT_OF_PROCESS` / `MIACODE_PREVIEW_WORKER_*`
+   flags are gone. Do not reintroduce this "v2" direction; in-process QSG is the keeper.
 4. **`src/README.md` is superseded on this point.** It frames `sources/`+`compositor`+`render`
    as the v2 future and `preview/` (QSG) as legacy-to-be-deleted. That is no longer the plan —
    QSG is the keeper. The exact retirement boundary between `sources/` (compositor abstraction)

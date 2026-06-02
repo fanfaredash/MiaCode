@@ -143,11 +143,6 @@ bool verifyDefaultsAndClamps(QTextStream& err)
     ok &= require(!dbg::previewVisualSmoothingEnabled(), "visual smoothing respects '0'", err);
     unsetEnv("MIACODE_PREVIEW_VISUAL_SMOOTHING");
 
-    unsetEnv("MIACODE_PREVIEW_WORKER_QSG_RENDER");
-    ok &= require(dbg::previewWorkerQsgRenderEnabled(), "worker QSG render defaults on", err);
-    unsetEnv("MIACODE_PREVIEW_WORKER_REAL_PUBLISHER");
-    ok &= require(dbg::previewWorkerRealPublisherEnabled(), "worker real publisher defaults on", err);
-
     // Frame-pacing sample ms: default 1000, positive-guarded.
     unsetEnv("MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS");
     ok &= require(dbg::previewFramePacingDiagnosticSampleMs() == 1000, "sample ms default 1000", err);

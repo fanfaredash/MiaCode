@@ -356,22 +356,14 @@ if (!(Test-Path $debugLauncherSrc)) {
 }
 Copy-Item $debugLauncherSrc (Join-Path $DistDir "Start_MiaCode_Debug.bat") -Force
 
-# beta55 diagnostic launchers — paired with the playback-rate crash
-# investigation. Default Start_MiaCode_Debug.bat reproduces the crash;
-# these two .bat files toggle env vars that isolate the root cause:
+# Diagnostic launchers shipped alongside Start_MiaCode_Debug.bat so testers can
+# double-click them; each toggles env vars for a specific diagnostic:
 #   * Start_MiaCode_DisablePerPixelAlpha.bat → MIACODE_PREVIEW_DCOMP_PER_PIXEL_ALPHA=0
-#     Tests hypothesis #1 (QRhi D3D11 texture invalidation during
-#     Qt setPlaybackRate). If launching with this .bat survives the
-#     rate switch, hypothesis confirmed.
-#   * Start_MiaCode_FFmpegBackend.bat → QT_MEDIA_BACKEND=ffmpeg
-#     Tests whether the Windows Media Foundation backend specifically
-#     is involved; logs_24 already showed FFmpeg also crashes, so this
-#     is mostly a control / fallback option.
-# Both .bat files live in scripts/ (kept in source control) AND in the
-# zip root (alongside Start_MiaCode_Debug.bat) so users can double-click
-# them. When the investigation closes they can be removed from both
-# sides — for now they ship with every package.
-foreach ($diagLauncher in @("Start_MiaCode_DisablePerPixelAlpha.bat", "Start_MiaCode_FFmpegBackend.bat", "Start_MiaCode_ExportNoPboReadback.bat")) {
+#     (DComp per-pixel-alpha A/B; only relevant when DComp is enabled).
+#   * Start_MiaCode_ExportNoPboReadback.bat → MIACODE_EXPORT_DISABLE_PBO_READBACK=1.
+# (Start_MiaCode_FFmpegBackend.bat was removed — the Windows preview now decodes
+# via QtAVPlayer/FFmpeg, so QT_MEDIA_BACKEND no longer affects it.)
+foreach ($diagLauncher in @("Start_MiaCode_DisablePerPixelAlpha.bat", "Start_MiaCode_ExportNoPboReadback.bat")) {
     $src = Join-Path $repoRoot "scripts\\$diagLauncher"
     if (!(Test-Path $src)) {
         throw "Missing required diagnostic launcher script: $src"
@@ -522,10 +514,36 @@ foreach ($runtimeDll in $requiredBassRuntimeDlls) {
     Copy-Item $srcDll (Join-Path $appDir $runtimeDll) -Force
 }
 
-# (libmpv removed in beta20 — chart-preview video backgrounds use
-# Qt6Multimedia's QMediaPlayer + QVideoSink stack via PreviewStageMediaHost,
-# not the planned MpvVideoSource that never landed. libmpv-2.dll was 113 MB
-# of dead weight just to log a startup probe version line.)
+# FFmpeg shared runtime for the QtAVPlayer preview decode backend.
+# PreviewStageMediaHost decodes PV/BG via QtAVPlayer (FFmpeg n7.1 LGPL); these
+# av*.dll must sit next to MiaCode.exe. avfilter-10 is NET-NEW vs the previous
+# package (Qt never shipped it; avdevice is dropped — capture-device only); the
+# other five overlap with what windeployqt stages for Qt
+# Multimedia's ffmpeg plugin, so we copy our own build AFTER windeployqt
+# (-Force overwrite) to keep the runtime matched to the import libs MiaCode
+# linked against. See docs/VIDEO_DECODE_BACKEND_QTAVPLAYER_MIGRATION_ZH.md.
+$ffmpegDevBin = Join-Path $repoRoot "third_party\\ffmpeg\\windows\\dev\\bin"
+$requiredFfmpegRuntimeDlls = @(
+    "avcodec-61.dll",
+    "avformat-61.dll",
+    "avutil-59.dll",
+    "swresample-5.dll",
+    "swscale-8.dll",
+    "avfilter-10.dll"
+)
+foreach ($runtimeDll in $requiredFfmpegRuntimeDlls) {
+    $srcDll = Join-Path $ffmpegDevBin $runtimeDll
+    if (!(Test-Path $srcDll)) {
+        Write-Host "Run .\scripts\ensure-windows-ffmpeg-dev.ps1 to provision the FFmpeg dev SDK (headers + import libs + runtime DLLs)."
+        throw "Missing required FFmpeg runtime DLL: $srcDll"
+    }
+    Copy-Item $srcDll (Join-Path $appDir $runtimeDll) -Force
+}
+
+# (libmpv removed in beta20 — chart-preview video backgrounds decode via
+# QtAVPlayer (FFmpeg) on Windows through PreviewStageMediaHost, not the planned
+# MpvVideoSource that never landed. libmpv-2.dll was 113 MB of dead weight just
+# to log a startup probe version line.)
 
 if ($IncludeDevTools) {
     foreach ($toolName in @("simai_native_dump.exe")) {
@@ -584,9 +602,8 @@ $requiredPackagePaths = @(
     # Root: user-facing entry points + content + log dirs only.
     "MiaCode.exe",
     "Start_MiaCode_Debug.bat",
-    # beta55 diagnostic launchers (see comment block at the copy site).
+    # diagnostic launchers (see comment block at the copy site).
     "Start_MiaCode_DisablePerPixelAlpha.bat",
-    "Start_MiaCode_FFmpegBackend.bat",
     # beta57 export PBO-readback race triage launcher
     # (MIACODE_EXPORT_DISABLE_PBO_READBACK=1).
     "Start_MiaCode_ExportNoPboReadback.bat",
@@ -617,6 +634,14 @@ $requiredPackagePaths = @(
     "app\\bass_fx.dll",
     "app\\bass_aac.dll",
     "app\\bassopus.dll",
+    # FFmpeg shared runtime for the QtAVPlayer preview decode backend.
+    # avfilter-10 is net-new vs the previous package (avdevice intentionally dropped).
+    "app\\avcodec-61.dll",
+    "app\\avformat-61.dll",
+    "app\\avutil-59.dll",
+    "app\\swresample-5.dll",
+    "app\\swscale-8.dll",
+    "app\\avfilter-10.dll",
     "app\\platforms\\qwindows.dll",
     "app\\qml\\QtQuick\\qtquick2plugin.dll",
     "app\\qml\\QtQuick\\Controls\\qtquickcontrols2plugin.dll",

@@ -9,7 +9,7 @@ set(MIACODE_VERSION_PATCH "0")
 # split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
 # they always drifted apart in practice (e.g. beta20 zip shipping with
 # beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "beta59")
+set(MIACODE_VERSION_PRERELEASE "beta61")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
@@ -59,6 +59,14 @@ configure_file(
 )
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets OpenGL Multimedia Quick Qml QuickControls2 ShaderTools)
+
+# MultimediaQuickPrivate exposes the private QtMultimedia headers
+# (qhwvideobuffer_p.h / qvideotexturehelper_p.h) that QtAVPlayer's
+# QAVVideoFrame -> QVideoFrame bridge needs. Optional: only the Windows
+# QtAVPlayer preview backend uses it (see the QtAVPlayer block below).
+if (WIN32)
+    find_package(Qt6 6.8 REQUIRED COMPONENTS MultimediaQuickPrivate)
+endif()
 
 add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
@@ -199,15 +207,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/VideoExportSnapshot.cpp
     src/tools/zip_export/ChartZipPackager.h
     src/tools/zip_export/ChartZipPackager.cpp
-    src/preview/ipc/PreviewFrameStateProjector.h
-    src/preview/ipc/PreviewFrameStateProjector.cpp
-    src/preview/ipc/PreviewFrameStateSerial.h
-    src/preview/ipc/PreviewSnapshotRingBuffer.h
-    src/preview/ipc/PreviewSnapshotRingBuffer.cpp
-    src/preview/ipc/PreviewWorkerProtocol.h
-    src/preview/ipc/PreviewWorkerProtocol.cpp
-    src/preview/ipc/PreviewWorkerSupervisor.h
-    src/preview/ipc/PreviewWorkerSupervisor.cpp
     src/preview/runtime/PreviewQuickExportSession.h
     src/preview/runtime/PreviewQuickExportSession.cpp
     src/preview/runtime/PreviewSceneAssetLoader.h
@@ -218,8 +217,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/runtime/PreviewStageMediaHost.cpp
     src/preview/runtime/PreviewRuntime.h
     src/preview/runtime/PreviewRuntime.cpp
-    src/preview/runtime/PreviewWorkerSession.h
-    src/preview/runtime/PreviewWorkerSession.cpp
     src/core/scene/PreviewFrameState.h
     src/core/scene/PreviewHudState.h
     src/core/scene/PreviewHudState.cpp
@@ -450,6 +447,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     resources/fonts.qrc
     resources/preview_runtime_qml.qrc
     resources/quick_shell_qml.qrc
+    resources/intro.qrc
 )
 
 qt_add_shaders(MiaCode "preview_sprite_shaders"
@@ -588,6 +586,85 @@ endif()
 
 target_link_libraries(MiaCode PRIVATE Qt6::Multimedia)
 target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
+
+# ---------------------------------------------------------------------------
+# QtAVPlayer (FFmpeg) — preview background-video decode backend.
+#
+# Replaces QMediaPlayer for PV/BG decoding inside PreviewStageMediaHost; see
+# docs/VIDEO_DECODE_BACKEND_QTAVPLAYER_MIGRATION_ZH.md. QtAVPlayer is the
+# MIT-licensed source vendored under third_party/QtAVPlayer, compiled straight
+# into MiaCode. It links the external FFmpeg shared libraries (n7.1 LGPL) whose
+# dev SDK (headers + import libs + runtime DLLs) is provisioned under
+# third_party/ffmpeg/windows/dev by scripts/ensure-windows-ffmpeg-dev.ps1.
+#
+# Windows-only for now (D3D11VA hwdevice + provisioned FFmpeg dev SDK). Other
+# platforms keep the QMediaPlayer path — MIACODE_USE_QTAVPLAYER stays undefined
+# there, and PreviewStageMediaHost compiles its legacy backend.
+# ---------------------------------------------------------------------------
+if (WIN32)
+    set(MIACODE_FFMPEG_DEV_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/windows/dev"
+        CACHE PATH "FFmpeg shared dev SDK root (include/ + lib/ + bin/) for the QtAVPlayer preview backend")
+    if (NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/include" OR NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/lib")
+        message(FATAL_ERROR
+            "FFmpeg dev SDK not found at '${MIACODE_FFMPEG_DEV_DIR}'. "
+            "Run scripts/ensure-windows-ffmpeg-dev.ps1, or pass "
+            "-DMIACODE_FFMPEG_DEV_DIR=<root containing include/ lib/ bin/>.")
+    endif()
+
+    # find_library() in QtAVPlayer.cmake resolves the FFmpeg import libs from
+    # <prefix>/lib; prepending the dev root makes our SDK win over any system one.
+    list(PREPEND CMAKE_PREFIX_PATH "${MIACODE_FFMPEG_DEV_DIR}")
+
+    set(QTAVPLAYER_SRC "${CMAKE_CURRENT_SOURCE_DIR}/third_party/QtAVPlayer/src")
+    set(QT_AVPLAYER_DIR "${QTAVPLAYER_SRC}/QtAVPlayer")
+    set(QT_AVPLAYER_MULTIMEDIA ON CACHE BOOL "" FORCE)
+    # Drop avdevice (capture-device I/O only, unused for file playback) to trim
+    # ~7 MB + one DLL: QtAVPlayer.cmake skips finding/linking it and qavdemuxer
+    # compiles out its lone avdevice_register_all() call.
+    set(QT_AVPLAYER_NO_AVDEVICE ON)
+    # Sets QtAVPlayer_SOURCES / QtAVPlayer_LIBS (absolute import-lib paths via
+    # find_library) and globally defines QT_BUILD_QTAVPLAYER_LIB.
+    include("${QT_AVPLAYER_DIR}/QtAVPlayer.cmake")
+
+    target_sources(MiaCode PRIVATE ${QtAVPlayer_SOURCES})
+    target_include_directories(MiaCode PRIVATE
+        "${QTAVPLAYER_SRC}"                  # makes <QtAVPlayer/...> resolve
+        "${MIACODE_FFMPEG_DEV_DIR}/include"  # makes <libavcodec/...> resolve
+    )
+    # QT_AVPLAYER_MULTIMEDIA : build the QAVVideoFrame -> QVideoFrame bridge.
+    # QT_BUILD_QTAVPLAYER_LIB: export QtAVPlayer symbols (sources live in the exe).
+    # MIACODE_USE_QTAVPLAYER  : switch PreviewStageMediaHost onto the new backend.
+    # Re-asserted per-target because QtAVPlayer.cmake's add_compile_definitions
+    # is directory-scoped and MiaCode is created earlier in this file.
+    target_compile_definitions(MiaCode PRIVATE
+        QT_AVPLAYER_MULTIMEDIA
+        QT_BUILD_QTAVPLAYER_LIB
+        QT_AVPLAYER_NO_AVDEVICE
+        MIACODE_USE_QTAVPLAYER=1
+    )
+    target_link_libraries(MiaCode PRIVATE
+        Qt6::MultimediaQuickPrivate
+        ${QtAVPlayer_LIBS}
+    )
+
+    # Runtime: the preview backend dlopen's these next to MiaCode.exe.
+    # avfilter-10 is NET-NEW vs the existing package (QtAVPlayer links it); the
+    # other five match the majors Qt already ships. avdevice is intentionally
+    # NOT shipped (dropped above). windeployqt in package-win.ps1 stages the
+    # packaged set — this POST_BUILD keeps the local build/ tree runnable
+    # without a full package step.
+    add_custom_command(TARGET MiaCode POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/avcodec-61.dll"
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/avformat-61.dll"
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/avutil-59.dll"
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/swresample-5.dll"
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/swscale-8.dll"
+            "${MIACODE_FFMPEG_DEV_DIR}/bin/avfilter-10.dll"
+            $<TARGET_FILE_DIR:MiaCode>
+        VERBATIM
+    )
+endif()
 
 if (MSVC)
     target_compile_options(MiaCode PRIVATE /FS)

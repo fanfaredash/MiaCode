@@ -73,7 +73,7 @@ The Windows release package also ships:
 - `Start_MiaCode_Debug.bat`
   - sets debug mode, creates a local `logs/` directory, and launches `MiaCode.exe --debug`
 - `Start_MiaCode_Legacy_QML.bat`
-  - creates `logs/worker-hwnd/` and launches the worker + HWND timeline route by setting `MIACODE_PREVIEW_USE_DCOMP=1`, `MIACODE_PREVIEW_OUT_OF_PROCESS=1`, `MIACODE_PREVIEW_WORKER_QSG_RENDER=1`, and `MIACODE_TIMELINE_USE_DCOMP=1`
+  - creates `logs/worker-hwnd/` and launches the DComp preview + DComp timeline route by setting `MIACODE_PREVIEW_USE_DCOMP=1` and `MIACODE_TIMELINE_USE_DCOMP=1` (the out-of-process preview worker was removed, so the old `MIACODE_PREVIEW_OUT_OF_PROCESS` / `MIACODE_PREVIEW_WORKER_QSG_RENDER` toggles are gone)
 - `Start_MiaCode_QuickShell_Debug.bat`
   - sets debug mode, creates a dedicated `logs/quick-shell-beta/` directory, and launches `MiaCode.exe --quick-shell-beta --debug`
 

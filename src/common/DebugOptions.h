@@ -24,9 +24,9 @@ namespace miacode::debug_options {
 // 1709+); cached in a function-local static so subsequent calls are a
 // single atomic load.
 //
-// Used by previewUseDCompEnabled() / previewOutOfProcessEnabled() to
-// fall back to the legacy QSG-only render path (the beta19-equivalent
-// pre-DComp pipeline) where neither path creates a popup HWND.
+// Used by previewUseDCompEnabled() to fall back to the legacy QSG-only
+// render path (the beta19-equivalent pre-DComp pipeline) where the path
+// creates no popup HWND.
 inline bool runningOnArm64WindowsEmulation()
 {
 #ifdef Q_OS_WIN
@@ -182,6 +182,18 @@ inline bool previewFixedTimerHighResolutionEnabled()
     return envFlagEnabled("MIACODE_PREVIEW_FIXED_TIMER_HIGH_RES");
 }
 
+inline bool previewForceSoftwareVideoDecodeEnabled()
+{
+    // Force QtAVPlayer to decode preview video in software (setInputVideoCodec("software"))
+    // from the first frame instead of D3D11VA hardware decode. Diagnostic + workaround for the
+    // green-padding artifact on videos whose dimensions are not 16-aligned: the zero-copy
+    // D3D11VA NV12 texture is allocated at the macroblock-aligned coded size (e.g. 300 -> 304),
+    // and the uninitialized padding (U=V=0) samples as pure green when VideoOutput isn't cropped
+    // to the display rectangle. Software frames are CPU buffers cropped to the display size, so
+    // no padding is shown. Set MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO=1 to enable.
+    return envFlagEnabled("MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO");
+}
+
 inline bool previewVisualSmoothingEnabled()
 {
     // Visual-time smoothing (doc section 6.3): bound per-frame visual delta so render-time
@@ -214,65 +226,6 @@ inline bool previewUseDCompEnabled()
         return false;
     }
     return false;
-}
-
-inline bool previewOutOfProcessEnabled()
-{
-    // Out-of-process preview worker (see
-    // docs/PREVIEW_DEVICE_LOSS_MITIGATION_AND_PROCESS_ISOLATION_PLAN.md
-    // section 7.5). The supervisor spawns a child MiaCode.exe
-    // --preview-worker process that owns the chart popup HWND + render
-    // path, so DXGI_ERROR_DEVICE_REMOVED on the chart popup is
-    // contained by a respawning supervisor rather than cascading into
-    // the editor.
-    //
-    // Default OFF as of beta34. Combined with the QSG render flag, this
-    // still makes the worker the chart preview's authoritative renderer
-    // when explicitly enabled for diagnostics / A-B comparison.
-    //
-    // Auto-disabled on Apple Silicon Windows VMs — the worker also
-    // creates an owned-popup HWND, which has the same crash risk under
-    // ARM64 → x86 emulation as the in-process DComp popup.
-    const auto override = envOptionalFlagValue("MIACODE_PREVIEW_OUT_OF_PROCESS");
-    if (override.has_value()) {
-        return *override;
-    }
-    if (runningOnArm64WindowsEmulation()) {
-        return false;
-    }
-    return false;
-}
-
-inline bool previewWorkerQsgRenderEnabled()
-{
-    // When set, the out-of-process preview worker swaps its DComp /
-    // PreviewDCompSpritePipeline render path for a QSG path: a
-    // QQuickWindow hosting a PreviewQuickSceneRoot that reuses the
-    // editor's existing layer code (head, track, slide motion, judge
-    // effect, judge firework, touch, touch-hold, ...). Pixel-perfect
-    // chart fidelity by reusing the editor's QSG layer code.
-    //
-    // Default ON. Pairs with previewOutOfProcessEnabled to make the
-    // worker the chart preview's authoritative renderer with full
-    // chart fidelity. Set `MIACODE_PREVIEW_WORKER_QSG_RENDER=0` to
-    // fall back to the worker's legacy circles-MVP DComp render path.
-    return envOptionalFlagValue("MIACODE_PREVIEW_WORKER_QSG_RENDER").value_or(true);
-}
-
-inline bool previewWorkerRealPublisherEnabled()
-{
-    // When the out-of-process worker is enabled, this flag controls
-    // whether the supervisor publishes the editor's live PreviewRuntime
-    // state (real publisher) or a 60 Hz synthetic frame stream (Phase
-    // 1 latency-harness mode).
-    //
-    // Default ON. Real publisher is the production path; the synthetic
-    // mode is only useful for IPC-latency benchmarking. Set
-    // `MIACODE_PREVIEW_WORKER_REAL_PUBLISHER=0` to switch the supervisor
-    // back into the synthetic timer (the worker will then render its
-    // legacy circles-MVP demo against fake playhead data, useful for
-    // measuring ring-buffer round-trip latency on a given hardware).
-    return envOptionalFlagValue("MIACODE_PREVIEW_WORKER_REAL_PUBLISHER").value_or(true);
 }
 
 inline bool previewDCompPerPixelAlphaEnabled();  // forward decl for use below

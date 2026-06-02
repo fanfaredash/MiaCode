@@ -8,23 +8,20 @@ set "MIACODE_LOG_DIR=%APP_DIR%\logs\worker-hwnd"
 
 if not exist "%MIACODE_LOG_DIR%" mkdir "%MIACODE_LOG_DIR%"
 
-REM Beta34+ default preview rendering is the embedded QSG-only legacy
-REM pipeline. This launcher opts back into the newer out-of-process
-REM preview worker plus HWND/DComp timeline topology for A/B testing.
+REM Default preview rendering is the in-process QSG path. This launcher opts
+REM into the DComp preview + DComp timeline topology for A/B testing. (The
+REM out-of-process preview worker was removed; only the DComp toggles remain
+REM meaningful here.)
 REM
 REM Pass --debug as %1 (or any other CLI flags) to enable verbose log
 REM output into .\logs\worker-hwnd\.
 set "MIACODE_PREVIEW_USE_DCOMP=1"
-set "MIACODE_PREVIEW_OUT_OF_PROCESS=1"
-set "MIACODE_PREVIEW_WORKER_QSG_RENDER=1"
 set "MIACODE_TIMELINE_USE_DCOMP=1"
 
-echo MiaCode worker + HWND timeline pipeline
+echo MiaCode DComp preview + DComp timeline pipeline
 echo   App : %APP_DIR%\MiaCode.exe
 echo   Logs: %MIACODE_LOG_DIR%
 echo   Env : MIACODE_PREVIEW_USE_DCOMP=1
-echo         MIACODE_PREVIEW_OUT_OF_PROCESS=1
-echo         MIACODE_PREVIEW_WORKER_QSG_RENDER=1
 echo         MIACODE_TIMELINE_USE_DCOMP=1
 echo.
 

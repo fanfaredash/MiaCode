@@ -51,7 +51,10 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   coefficients, sprite-material uniform layout, "merge adjacent compatible sprites, never reorder"
   batch rule (affects runtime AND export — shared QSG path).
 - `src/preview/runtime/PreviewStageMediaHost.cpp` — stage-video watchdog/recovery (fires after
-  `600 ms`, ≤2 soft recoveries).
+  `600 ms`, ≤2 soft recoveries). **QMediaPlayer path only** (non-Windows / `!MIACODE_USE_QTAVPLAYER`);
+  the Windows QtAVPlayer backend doesn't need it (no silent-fallback / converter-rebuild failure
+  modes) and compiles these as no-op stubs. Paused-seek ack tolerance `kPausedSeekAckToleranceMs`
+  (`80 ms`) is shared by both backends.
 - `src/tools/latency/` — detection windows, hop sizes, BPM scan range, offset penalties, snap
   thresholds.
 - `src/core/chart/transform/ChartNormalization.cpp` — whole-chart format snap constants

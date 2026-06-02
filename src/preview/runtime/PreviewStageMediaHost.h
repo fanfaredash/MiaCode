@@ -11,10 +11,19 @@
 #include <QUrl>
 #include <QString>
 
+class QVideoSink;
+#ifdef MIACODE_USE_QTAVPLAYER
+// Preview decode backend on Windows: FFmpeg via QtAVPlayer (vendored under
+// third_party/QtAVPlayer). See docs/VIDEO_DECODE_BACKEND_QTAVPLAYER_MIGRATION_ZH.md.
+// QVideoFrame is included (not just forward-declared) because lastVideoFrame_
+// is held by value for frame-replay when a VideoOutput attaches late.
+#include <QVideoFrame>
+class QAVPlayer;
+#else
 class QAudioOutput;
 class QMediaPlayer;
 class QVideoFrame;
-class QVideoSink;
+#endif
 
 class PreviewStageMediaHost : public QObject
 {
@@ -34,7 +43,7 @@ public:
     enum class MediaKind {
         None,
         Image,
-        Video,    // QMediaPlayer-backed (the only video path post-Phase 4d)
+        Video,    // FFmpeg/QtAVPlayer-backed on Windows; QMediaPlayer elsewhere
     };
     Q_ENUM(MediaKind)
 
@@ -131,6 +140,21 @@ private:
                                      qint64 ageMs);
     void updateClockDelta();
     void noteVideoFrameArrived(const QVideoFrame& frame, quint64 sourceGeneration);
+#ifdef MIACODE_USE_QTAVPLAYER
+    // QtAVPlayer frame path: a decoded QAVVideoFrame (already converted to a
+    // QVideoFrame and tagged with its presentation pts in seconds) is pushed
+    // to the QML sink here, mirrored into the toImage() DComp fallback, and
+    // used to settle the paused-seek / prepared-start handshakes by pts.
+    void handleDecodedVideoFrame(const QVideoFrame& frame, double ptsSeconds, double durationSeconds, quint64 sourceGeneration);
+    // Settle the paused-seek / prepared-start acks once the decoded media time
+    // [start,end] (frame pts..pts+dur, or the seeked() position as a point)
+    // reaches the pending seek target. Mirrors the QMediaPlayer path's
+    // frame-covers-target / position-ack logic, keyed on pts instead of µs.
+    void settlePendingSeekAcks(double mediaSecondStart, double mediaSecondEnd);
+    // One-shot fallback: if hardware (D3D11VA) decode reports InvalidMedia,
+    // re-open the source forcing FFmpeg software decode before giving up.
+    void maybeRetryWithSoftwareDecode();
+#endif
     void resetVideoFrameDiagnostics();
     bool updateVideoFrameStallState(bool logTransition);
     qint64 currentVideoFrameAgeForDiagnosticsMs() const;
@@ -161,11 +185,30 @@ private:
     double videoFrameToImageMaxFps_ = 30.0;
     bool mediaVisible_ = true;
     PreviewBackgroundScaleMode backgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
+#ifdef MIACODE_USE_QTAVPLAYER
+    // FFmpeg decode backend. setSpeed() runs inside QtAVPlayer's own decode
+    // loop (no Qt converter rebuild) so rate changes never race the QSG/DComp
+    // texture sampler — the class of crash the QMediaPlayer scaffolding below
+    // existed to paper over. No QAudioOutput: the video's own audio track is
+    // intentionally never played (song audio is BASS-owned).
+    QAVPlayer* player_ = nullptr;
+    QMetaObject::Connection videoFrameConnection_;
+    QMetaObject::Connection seekedConnection_;
+    bool videoBackendLoaded_ = false;
+    bool softwareDecodeFallbackTried_ = false;
+    double lastFramePtsSeconds_ = -1.0;
+    // Latest decoded frame, replayed into the QML sink when a VideoOutput
+    // attaches after decoding has already produced frames (e.g. paused bg) —
+    // the push model has no continuous source to re-pull from like
+    // QMediaPlayer::setVideoOutput did.
+    QVideoFrame lastVideoFrame_;
+#else
     QMediaPlayer* player_ = nullptr;
     QAudioOutput* audioOutput_ = nullptr;
+    QMetaObject::Connection videoSinkFrameConnection_;
+#endif
     QPointer<QObject> videoOutputObject_;
     QPointer<QVideoSink> videoSink_;
-    QMetaObject::Connection videoSinkFrameConnection_;
     quint64 videoSourceGeneration_ = 0;
     double timelineOffsetSeconds_ = 0.0;
     double playbackRate_ = 1.0;

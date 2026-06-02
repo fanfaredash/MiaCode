@@ -72,6 +72,7 @@ Fatal logging is intentionally not gated by debug mode.
 - Realtime preview and export both use Qt Quick scene graph.
 - The desktop app currently forces Qt Quick to the OpenGL backend.
 - Export PBO diagnostics now describe the headless Quick export session, not a removed legacy renderer.
+- Background **PV/BG video decoding** in realtime preview (and therefore the export preview dialog) uses **QtAVPlayer (FFmpeg)** on Windows instead of Qt Multimedia's `QMediaPlayer`. This is selected at **build time** by the `MIACODE_USE_QTAVPLAYER` compile macro — a CMake build-time macro, **not** an environment flag, so it cannot be toggled at runtime (CMake defines it on Windows when the FFmpeg dev SDK is present; other platforms keep the `QMediaPlayer` path). The FFmpeg dev SDK path is a separate CMake cache variable, provisioned by `scripts/ensure-windows-ffmpeg-dev.ps1`. The export *encoder output* is unaffected (still the standalone `ffmpeg.exe` filtergraph). On `InvalidMedia` the preview backend retries once forcing FFmpeg software decode (`preview/stage_media action=video_software_fallback`). See `docs/VIDEO_DECODE_BACKEND_QTAVPLAYER_MIGRATION_ZH.md`.
 
 Relevant export backend toggles:
 
@@ -132,6 +133,7 @@ Still active:
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG`
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS`
 - `MIACODE_PREVIEW_FIXED_TIMER_HIGH_RES`
+- `MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO` (`1` forces QtAVPlayer to decode preview video in software instead of D3D11VA — diagnostic + workaround for the green NV12-padding artifact on videos whose dimensions aren't 16-aligned, e.g. 300×300; hardware textures are allocated at the macroblock-aligned coded size and the uninitialized padding samples as pure green)
 - `MIACODE_PREVIEW_VISUAL_SMOOTHING` (default on; `0` to disable scene-playhead smoothing)
 - `MIACODE_PREVIEW_VISUAL_LOOKAHEAD_VSYNCS` (default `1.0`; biases visual playhead forward by N display intervals to compensate for render→present pipeline latency, `0` disables, range `[0, 4]`)
 - `MIACODE_PREVIEW_QSG_RENDER_TIMING` (`1` to capture Qt scene-graph timings into the runtime log under `preview/qsg_timing` — diagnoses stutter that lives outside the offscreen renderer)
@@ -210,16 +212,6 @@ DirectComposition / D3D11 preview (`src/common/DebugOptions.h`; default OFF, bei
 - `MIACODE_POPUP_TRACKER` — log owned-popup HWND topology.
 - `MIACODE_SKIP_DIAG_D3D11` — skip the startup D3D11 diagnostic probe.
 
-Out-of-process preview worker (**deprecated — slated for removal**; in-process QSG is the keeper):
-
-- `MIACODE_PREVIEW_OUT_OF_PROCESS` — spawn the child preview-worker process.
-- `MIACODE_PREVIEW_WORKER_QSG_RENDER` — worker uses the QSG render path (default on).
-- `MIACODE_PREVIEW_WORKER_REAL_PUBLISHER` — publish live runtime state vs. a synthetic frame stream (default on).
-- `MIACODE_PREVIEW_WORKER_DISABLE_CRASH_LIMIT` — disable the supervisor's respawn crash limit.
-- `MIACODE_PREVIEW_WORKER_DISABLE_MURI_REPORT` — suppress the worker's Muri-report projection.
-- `MIACODE_PREVIEW_WORKER_INJECT_CRASH` / `MIACODE_PREVIEW_WORKER_INJECT_CRASH_MODE` — fault injection for supervisor testing.
-- `MIACODE_PREVIEW_CRASH_TEST_CYCLES` — scripted crash/respawn cycle count.
-
 ## Misc / Platform
 
 - `MIACODE_LANG` — force UI language (overrides system locale; `app/ui/UiText.cpp`).
@@ -240,11 +232,6 @@ Launch the legacy Qt native widget shell in debug mode:
 Launch the Qt Quick hybrid host explicitly in debug mode:
 
 - `MiaCode.exe --quick-shell-beta --debug`
-
-Launch the worker + HWND timeline route from a release package:
-
-- `Start_MiaCode_Legacy_QML.bat`
-- This sets `MIACODE_PREVIEW_USE_DCOMP=1`, `MIACODE_PREVIEW_OUT_OF_PROCESS=1`, `MIACODE_PREVIEW_WORKER_QSG_RENDER=1`, and `MIACODE_TIMELINE_USE_DCOMP=1`.
 
 Force export logging into a local directory:
 

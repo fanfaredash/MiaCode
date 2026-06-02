@@ -18,7 +18,7 @@ canonical doc is `docs/DEBUG_INDEX.md`; this file is the code-owner-oriented sum
 
 **Rule:** new logging = a `debug_log` channel line gated by `--debug`. Do not add raw
 `qDebug`/`qInfo`/`std::cout`/`printf`/`OutputDebugString`. The only existing raw sites are in the
-deprecated worker and the off-by-default DComp path — do not copy that pattern into mainline.
+off-by-default DComp path — do not copy that pattern into mainline.
 
 ### Gating
 - Runtime/Audio/StartupTiming/PreviewProfile detail is gated by process debug mode (`--debug`).
@@ -37,10 +37,11 @@ deprecated worker and the off-by-default DComp path — do not copy that pattern
 
 ## 2. The env-flag situation (audit 2026-05-29)
 
-The *writer* is unified and healthy. The *control surface* is fragmented: **79 distinct
-`MIACODE_*` env vars** (reconciled 2026-05-29) read as string literals across the code, with no
-single in-code registry. Fullest catalog: `docs/DEBUG_INDEX.md` (reconciled to match the code —
-all 79 by category); this file is the agent-facing quick index. Guidance:
+The *writer* is unified and healthy. The *control surface* is fragmented: **72 distinct
+`MIACODE_*` env vars** (reconciled 2026-06-02, after the out-of-process preview worker was
+deleted) read as string literals across the code, with no single in-code registry. Fullest
+catalog: `docs/DEBUG_INDEX.md` (reconciled to match the code — all by category); this file is
+the agent-facing quick index. Guidance:
 
 - **Prefer not to add a new flag.** If you must, add it to `DebugOptions.h` with a default and a
   one-line purpose, and list it in `docs/DEBUG_INDEX.md` in the same change — otherwise the
@@ -49,7 +50,7 @@ all 79 by category); this file is the agent-facing quick index. Guidance:
 - **Intended direction (still pending):** a single table-driven registry in `DebugOptions.h`
   ({name, default, category, purpose}) that can *generate* `docs/DEBUG_INDEX.md` (today it is
   hand-written + `debug_flag_index_spec`-guarded), plus a clean split between user-facing `--debug`
-  and developer-only diagnostic flags. Reduce the count as DComp/worker retire.
+  and developer-only diagnostic flags. Reduce the count further as DComp retires.
 - **Already-dead flags** (removed from code; do not reintroduce): `MIACODE_PREVIEW_DIAG_COMPARE_VIDEO_FALLBACK_EVERY`,
   `MIACODE_PREVIEW_DIAG_COMPARE_PRESENT_EVERY`, `MIACODE_PREVIEW_DONT_CREATE_NATIVE_WIDGET_SIBLINGS`,
   `MIACODE_PREVIEW_SESSION_SCRIPT`, `MIACODE_DISABLE_GL_DEBUG_MESSAGES`.
@@ -69,17 +70,22 @@ all 79 by category); this file is the agent-facing quick index. Guidance:
 `MIACODE_PREVIEW_DISABLE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS`,
 `MIACODE_PREVIEW_SFX_DIR`, `MIACODE_TRACK_PATH`, `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_{FRAMES,DIR,MAX_SAMPLES}`.
 
+**Preview video decode backend (Windows):** `MIACODE_USE_QTAVPLAYER` is a **build-time compile
+macro** (CMake-defined on Windows, NOT an environment flag — it can't be toggled at runtime). It
+switches `PreviewStageMediaHost` onto the FFmpeg/QtAVPlayer backend; other platforms keep the
+`QMediaPlayer` path. It still appears in `docs/DEBUG_INDEX.md` because the `debug_flag_index_spec`
+drift guard greps every `MIACODE_*` literal in `src/`. The FFmpeg dev SDK path is a CMake cache
+variable (not in `src/`, so keep its literal out of `DEBUG_INDEX.md` or the guard flags it stale).
+On hardware-decode `InvalidMedia` the host retries once forcing software decode — log line
+`Channel::Audio` scope `preview/stage_media`, `action=video_software_fallback`. The QtAVPlayer path
+drops the QMediaPlayer-only `recoverVideoBackend` / playback watchdog / soft-recovery / deferred-rate
+scaffolding (no silent WMF fallback, no converter-rebuild crash to recover from).
+
 **DComp/D3D11 (DEFAULT OFF — being decoupled):** `MIACODE_PREVIEW_USE_DCOMP` (default off,
 `DebugOptions.h:194`), `MIACODE_TIMELINE_USE_DCOMP`, `MIACODE_PREVIEW_DCOMP_EXCLUSIVE`,
 `MIACODE_PREVIEW_DCOMP_PER_PIXEL_ALPHA`, `MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND`,
 `MIACODE_PREVIEW_DCOMP_QUIESCE_QSG`, `MIACODE_PREVIEW_QSG_FULL_DISABLE`, `MIACODE_POPUP_TRACKER`,
 `MIACODE_SKIP_DIAG_D3D11`.
-
-**Out-of-process worker (DEPRECATED — delete with the worker):**
-`MIACODE_PREVIEW_OUT_OF_PROCESS`, `MIACODE_PREVIEW_WORKER_QSG_RENDER`,
-`MIACODE_PREVIEW_WORKER_REAL_PUBLISHER`, `MIACODE_PREVIEW_WORKER_DISABLE_CRASH_LIMIT`,
-`MIACODE_PREVIEW_WORKER_DISABLE_MURI_REPORT`, `MIACODE_PREVIEW_WORKER_INJECT_CRASH`(`_MODE`),
-`MIACODE_PREVIEW_CRASH_TEST_CYCLES`.
 
 **Export diagnostics/tuning** (owner: `src/tools/video_export/VideoExportController.cpp` +
 `VideoExportRuntimePolicy.h`): `MIACODE_EXPORT_DIAG_*` (REPEAT, CROP_BOTTOM, MAX_LINES,
@@ -103,5 +109,5 @@ scroll-only paints) require `MIACODE_TIMELINE_HOTPATH_DIAG=1` even in debug mode
 ## Update this file when
 
 - A debug flag or log channel is added, removed, or re-gated (and update `DebugOptions.h`).
-- A flag moves between the active / DComp-off / worker-deprecated categories.
+- A flag moves between the active / DComp-off categories.
 - The logging mechanism or default log directory changes.

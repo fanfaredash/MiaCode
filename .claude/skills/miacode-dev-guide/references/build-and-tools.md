@@ -70,7 +70,12 @@ Rules going forward:
   version freshness against `CMakeLists.txt` + generated `AppVersion.h`, auto-rebuilds MiaCode,
   runs windeployqt with `--qmldir src`, keeps the Qt Quick DLL set, copies repo-local BASS DLLs).
 - macOS build/package: `build-macos.sh`, `package-mac.sh`.
-- ffmpeg provisioning: `ensure-windows-ffmpeg.ps1`, `ensure-macos-ffmpeg.sh`.
+- ffmpeg provisioning: `ensure-windows-ffmpeg.ps1`, `ensure-macos-ffmpeg.sh` (the standalone
+  `ffmpeg.exe` used by **export**).
+- ffmpeg **dev SDK** provisioning (Windows): `ensure-windows-ffmpeg-dev.ps1` downloads the BtbN
+  n7.1 LGPL *shared* build (headers + import libs + runtime DLLs) into
+  `third_party/ffmpeg/windows/dev/` for the **QtAVPlayer preview decode backend**. Gitignored,
+  never committed. CMake finds it via the `MIACODE_FFMPEG_DEV_DIR` cache var.
 - Debug launchers (release package + repo): `Start_MiaCode_Debug.bat`,
   `Start_MiaCode_Legacy_QML.bat`, `Start_MiaCode_QuickShell_Debug.bat`, plus diagnostic A/B
   launchers (`Start_MiaCode_DiagBypass.bat`, `Start_MiaCode_SkipBoth.bat`,
@@ -100,6 +105,21 @@ Rules going forward:
   export depend on it.
 - ffmpeg: pinned-binary notes in `third_party/ffmpeg/README.md`; never commit the binary
   (`.gitignore` blocks it). Export resolves ffmpeg from app-local/repo-local fallback.
+- **QtAVPlayer preview backend (Windows):** vendored MIT source in `third_party/QtAVPlayer/`
+  (compiled straight into `MiaCode` with `QT_AVPLAYER_MULTIMEDIA` + `QT_BUILD_QTAVPLAYER_LIB`);
+  needs the `Qt6::MultimediaQuickPrivate` component and the FFmpeg dev SDK (see §4). The CMake
+  block lives just after `target_link_libraries(MiaCode … Qt6::Multimedia)` and is `if (WIN32)`
+  gated. `avdevice` is dropped (CMake `QT_AVPLAYER_NO_AVDEVICE` + a vendored-source patch in
+  `qavdemuxer.cpp`/`QtAVPlayer.cmake`) since it's capture-device-only — saves ~7 MB + one DLL.
+  **Packaging:** `package-win.ps1` stages 6 `av*.dll` into `app/` next to `MiaCode.exe`
+  (`avcodec-61`/`avformat-61`/`avutil-59`/`swresample-5`/`swscale-8` overlap windeployqt's set;
+  `avfilter-10` is net-new) and asserts them in `$requiredPackagePaths`. avcodec (≈63 MB) +
+  avfilter (≈24 MB) ship as un-trimmed full-LGPL builds by default; the **`scripts/ffmpeg-trim/`**
+  toolchain builds a decode-only LGPL n7.1 replacement (~70 MB → ~15–20 MB) from a reviewed
+  allowlist (`trim-allowlist.psd1`) + `survey-chart-codecs.ps1` calibration, installs into
+  `third_party/ffmpeg/windows/dev/` (backs up to `dev.full.bak`). Decode-only ⇒ stays LGPL (no
+  `--enable-gpl`/x264 — that would make MiaCode GPL; export encoding stays in the separate
+  `ffmpeg.exe`). Needs MSYS2 + VS BuildTools (both present on the dev box).
 
 ## 7. Do not commit build artifacts
 

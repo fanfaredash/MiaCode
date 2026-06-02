@@ -26,8 +26,7 @@ src/
   preview/
     quick_scene/  ACTIVE QSG chart layer renderers (PreviewQuick*Layer, *SceneRoot)
     runtime/      PreviewRuntime, PreviewQuickExportSession, PreviewStageMediaHost,
-                  PreviewSceneAsset*, PreviewWorkerSession (worker — deprecated)
-    ipc/          Out-of-process worker IPC (DEPRECATED — slated for deletion)
+                  PreviewSceneAsset*
   render/         DComp/D3D11 rendering (DEFAULT OFF — being decoupled)
     PreviewDCompRenderer.*
     backend_d3d11/  PreviewDCompCore/Surface/SpritePipeline/TextureCache, TimelineRenderView
@@ -70,8 +69,9 @@ See `SKILL.md` for the canonical statement. Summary:
   `preview/quick_scene/*`. Realtime preview + export share it.
 - **KEEP but OFF + decouple:** DComp/D3D11 (`render/*` + `sources/*`). `previewUseDCompEnabled()`
   defaults `false` (`src/common/DebugOptions.h:194`). End state: zero coupling to the QSG build.
-- **DELETE:** out-of-process worker (`preview/ipc/*`, `PreviewWorkerSession`/`Supervisor`,
-  `MIACODE_PREVIEW_OUT_OF_PROCESS`, `MIACODE_PREVIEW_WORKER_*`).
+- **DELETED (2026-06-02):** the out-of-process worker (`preview/ipc/*`,
+  `PreviewWorkerSession`/`Supervisor`, `MIACODE_PREVIEW_OUT_OF_PROCESS`, `MIACODE_PREVIEW_WORKER_*`)
+  is gone. Do not reintroduce.
 - `src/README.md` predates this and frames DComp/sources as the future — superseded.
 
 Why two scene stacks exist (so you don't "fix" the wrong one): the QSG path uses

@@ -56,6 +56,14 @@ third_party/ffmpeg/**/ffmpeg.exe
 third_party/ffmpeg/**/ffprobe
 third_party/ffmpeg/**/ffprobe.exe
 
+# FFmpeg dev SDK (headers + import libs + runtime DLLs) for the QtAVPlayer
+# preview decode backend. Provisioned by scripts/ensure-windows-ffmpeg-dev.ps1,
+# never committed — the .dll are caught by the third_party/**/*.dll rule below,
+# this also keeps the headers + .lib import libraries out of version control.
+third_party/ffmpeg/windows/dev/
+third_party/ffmpeg/macos/dev/
+third_party/ffmpeg/linux/dev/
+
 # libmpv vendoring — keep headers + import lib + .def under VC, ignore
 # the downloaded archive and any regenerated .exp file.
 third_party/mpv/**/*.7z
@@ -83,11 +91,18 @@ scripts/*
 !scripts/Start_MiaCode_SkipDiagD3D11.bat
 !scripts/Start_MiaCode_QtPluginDiag.bat
 !scripts/Start_MiaCode_ExportNoPboReadback.bat
+!scripts/Start_MiaCode_SoftwareVideoDecode.bat
 !scripts/build-macos.sh
 !scripts/build-win.ps1
 !scripts/compare-export-encode-profiles.ps1
 !scripts/ensure-macos-ffmpeg.sh
 !scripts/ensure-windows-ffmpeg.ps1
+!scripts/ensure-windows-ffmpeg-dev.ps1
+# FFmpeg decode-only trim toolchain (build scripts + allowlist config + docs).
+!scripts/ffmpeg-trim
+!scripts/ffmpeg-trim/**
+# ...but never the per-run report the survey .bat generates next to itself.
+scripts/ffmpeg-trim/ffmpeg-codec-survey.txt
 !scripts/export_and_analyze_duplicates.py
 !scripts/package-mac.sh
 !scripts/package-win.ps1

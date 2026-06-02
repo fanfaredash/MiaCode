@@ -11,8 +11,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - CLI export: `wantsCliVideoExport`, `runCliVideoExport`.
 - **Export** worker (this is the export subprocess — keep): `wantsCliVideoExportWorker`,
   `runCliVideoExportWorker`.
-- The **preview** out-of-process worker wiring (`--preview-worker`, `MIACODE_PREVIEW_OUT_OF_PROCESS`)
-  is **deprecated/slated for deletion** — do not extend.
+- The **preview** out-of-process worker (`--preview-worker`, `MIACODE_PREVIEW_OUT_OF_PROCESS`,
+  `src/preview/ipc/*`, `PreviewWorkerSession`/`Supervisor`) was **deleted (2026-06-02)** — in-process
+  QSG is the keeper; do not reintroduce.
 
 ## 2. Main window & orchestration
 
@@ -108,6 +109,15 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   stage-background setters (`setStageMediaAvailable`, `setStageMediaPresentationMode`,
   `setExternalStageMedia*`). Verify exact widget-shell vs quickshell routing in
   `sections/preview/MainWindow.PreviewStageMediaRoute.cpp`.
+  - **Video decode backend:** on **Windows** the host decodes PV/BG via **QtAVPlayer (FFmpeg)**,
+    not `QMediaPlayer` — guarded by the `MIACODE_USE_QTAVPLAYER` build macro (CMake-defined on
+    Windows; other platforms keep the `QMediaPlayer` path under `#elif defined(HAVE_QT_MULTIMEDIA)`).
+    QtAVPlayer source is vendored in `third_party/QtAVPlayer/`; it links the FFmpeg dev SDK under
+    `third_party/ffmpeg/windows/dev/`. Decoded frames are *pushed* into the QML `VideoOutput`'s
+    `QVideoSink` (`handleDecodedVideoFrame`) rather than observed; `setSpeed` (not `setPlaybackRate`)
+    + `seek` drive playback, and the paused-seek / prepared-start acks settle on frame `pts`.
+    The public method/signal contract is unchanged, so `MainWindow.*` callers don't change.
+    See `docs/VIDEO_DECODE_BACKEND_QTAVPLAYER_MIGRATION_ZH.md`.
 - Backend-neutral scene state (NO GPU deps): `src/core/scene/` — `PreviewFrameState.h`,
   `PreviewLayerOrder.h`, `PreviewOpacityCurves.*`, `PreviewSceneGeometry.*`, `PreviewHudState.*`,
   `PreviewProgressStatsCache.*`, `PreviewPreparedSceneCache.*`, `PreviewMarkerDrawOrder.*`,

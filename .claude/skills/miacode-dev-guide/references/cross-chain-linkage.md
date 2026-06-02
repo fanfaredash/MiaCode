@@ -105,6 +105,13 @@ If one side changes, inspect the other in the same patch.
 
 - Shared resolver: `miacode::chart_assets::resolveBackgroundMediaPath`.
 - Route coordinator: `sections/preview/MainWindow.PreviewStageMediaRoute.cpp`.
+- **Decode backend (preview side):** Windows decodes PV/BG via **QtAVPlayer (FFmpeg)** inside
+  `PreviewStageMediaHost` (build macro `MIACODE_USE_QTAVPLAYER`); other platforms keep `QMediaPlayer`.
+  The export *encoder output* is **unaffected** — it still decodes the background with the standalone
+  `ffmpeg.exe` filtergraph in `VideoExportController` (so a file that previews can also export, and
+  vice-versa: both sides are now FFmpeg). The export *preview dialog* (WYSIWYG) rides the realtime
+  preview path, so it inherits the QtAVPlayer backend. Speed changes use `QAVPlayer::setSpeed` (no Qt
+  converter rebuild → the old `setPlaybackRate` rate-change crash class is gone).
 - Shared preview-time clock getter: `MainWindow::currentPreviewAuthoritativeAudioClockSecond`
   (UI follow, export-dialog current second, weak-video late-start must read this — do not branch on
   `PreviewStageMediaHost::currentPlaybackSecond()`, which is video-local observability only).
