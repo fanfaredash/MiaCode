@@ -127,6 +127,11 @@ private:
     // Backspace between an empty matching pair (e.g. `[|]`) removes both glyphs
     // in one undo step. Mirrors auto-close — gated by the same preference.
     bool tryDeleteBracketPair(QKeyEvent* event);
+    // Typing a closing bracket when the very same glyph already sits to the right
+    // of the caret steps over it instead of inserting a duplicate. The natural
+    // counterpart to auto-close (you type the `]` you "see") — gated by the same
+    // preference. Shared by the keyPressEvent and IME commit paths.
+    bool tryOverwriteClosingBracket(const QString& text);
     bool tryBracketCompletionWithoutAutoClose(const QString& text);
     void ensureCompletionPopup();
     void maybeOpenBracketCompletion(QChar opening, bool closingPresent);

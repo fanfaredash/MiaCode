@@ -20,6 +20,9 @@ namespace miacode::editor {
 // True for the three opening glyphs we offer completion for.
 bool isBracketOpening(QChar ch);
 
+// True for the three closing glyphs (']' '}' ')').
+bool isBracketClosing(QChar ch);
+
 // The matching closing glyph (']' '}' ')'), or a null QChar for anything else.
 QChar closingBracketFor(QChar opening);
 

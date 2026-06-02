@@ -50,6 +50,11 @@ int main(int argc, char** argv)
            QStringLiteral("isBracketOpening true for ( [ {"), out, &failed);
     expect(!isBracketOpening(QLatin1Char('h')) && !isBracketOpening(QLatin1Char(']')),
            QStringLiteral("isBracketOpening false for non-openers"), out, &failed);
+    expect(isBracketClosing(QLatin1Char(']')) && isBracketClosing(QLatin1Char(')'))
+               && isBracketClosing(QLatin1Char('}')),
+           QStringLiteral("isBracketClosing true for ) ] }"), out, &failed);
+    expect(!isBracketClosing(QLatin1Char('h')) && !isBracketClosing(QLatin1Char('[')),
+           QStringLiteral("isBracketClosing false for non-closers"), out, &failed);
     expect(closingBracketFor(QLatin1Char('[')) == QLatin1Char(']')
                && closingBracketFor(QLatin1Char('(')) == QLatin1Char(')')
                && closingBracketFor(QLatin1Char('{')) == QLatin1Char('}'),

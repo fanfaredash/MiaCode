@@ -9,6 +9,11 @@ bool isBracketOpening(QChar ch)
     return ch == QLatin1Char('(') || ch == QLatin1Char('[') || ch == QLatin1Char('{');
 }
 
+bool isBracketClosing(QChar ch)
+{
+    return ch == QLatin1Char(')') || ch == QLatin1Char(']') || ch == QLatin1Char('}');
+}
+
 QChar closingBracketFor(QChar opening)
 {
     switch (opening.unicode()) {

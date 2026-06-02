@@ -1122,6 +1122,44 @@ bool PlainCodeEditor::tryDeleteBracketPair(QKeyEvent* event)
     return true;
 }
 
+// Type-over: when the user types a closing bracket and the identical glyph is
+// already sitting immediately to the right of the caret, just hop past it rather
+// than inserting a second one. This is the natural complement to auto-close — the
+// pair you opened parks the caret at `[|]`, and typing the `]` you see walks the
+// caret out instead of leaving `[]|]`. Gated by the same preference as auto-close.
+// A selection, overwrite mode, or read-only falls through to a normal insert.
+bool PlainCodeEditor::tryOverwriteClosingBracket(const QString& text)
+{
+    if (!autoCloseBracketsEnabled_ || text.size() != 1) {
+        return false;
+    }
+    const QChar closing = text.at(0);
+    if (!miacode::editor::isBracketClosing(closing)) {
+        return false;
+    }
+    if (isReadOnly() || overwriteMode()) {
+        return false;
+    }
+    QTextCursor cursor = textCursor();
+    if (cursor.hasSelection()) {
+        return false;
+    }
+    QTextCursor rightProbe(document());
+    rightProbe.setPosition(cursor.position());
+    if (!rightProbe.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor)
+        || rightProbe.selectedText() != QString(closing)) {
+        return false;
+    }
+    // Stepping over a glyph the popup might be filtering against would leave a
+    // stale list anchored to the old slot — dismiss it first.
+    if (bracketCompletionActive()) {
+        closeBracketCompletion();
+    }
+    cursor.movePosition(QTextCursor::NextCharacter);
+    setTextCursor(cursor);
+    return true;
+}
+
 void PlainCodeEditor::ensureCompletionPopup()
 {
     if (completionPopup_ != nullptr) {
@@ -1332,6 +1370,18 @@ void PlainCodeEditor::inputMethodEvent(QInputMethodEvent* event)
         }
     }
 
+    // A finalized closing-bracket commit (e.g. a full-width 「）」 normalized to a
+    // half-width ")") gets the same type-over treatment as the keyPress path.
+    if (event->preeditString().isEmpty()
+        && event->replacementLength() == 0
+        && normalizedCommitString.size() == 1
+        && miacode::editor::isBracketClosing(normalizedCommitString.at(0))) {
+        if (tryOverwriteClosingBracket(normalizedCommitString)) {
+            event->accept();
+            return;
+        }
+    }
+
     if (commitString == normalizedCommitString) {
         QTextEdit::inputMethodEvent(event);
         return;
@@ -1465,7 +1515,8 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
     // 「（」/「【」/「｛」 pairs the same way a raw "(" / "[" / "{" does.
     if (!halfWidthInputEnabled_
         || (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
-        if (tryBracketInput(event->text()) || tryHoldExpand(event->text())) {
+        if (tryOverwriteClosingBracket(event->text())
+            || tryBracketInput(event->text()) || tryHoldExpand(event->text())) {
             event->accept();
             return;
         }
@@ -1480,7 +1531,8 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
     }
 
     const QString normalizedText = miacode::editor::normalizedHalfWidthKeyText(event, inputText);
-    if (tryBracketInput(normalizedText) || tryHoldExpand(normalizedText)) {
+    if (tryOverwriteClosingBracket(normalizedText)
+        || tryBracketInput(normalizedText) || tryHoldExpand(normalizedText)) {
         event->accept();
         return;
     }

@@ -40,8 +40,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Editor header/page-mode UI: `sections/document/MainWindow.DocumentUi.cpp`.
 - Chart text editor: `src/editor/PlainCodeEditor.{h,cpp}` (line numbers, transform context menu,
   half-width normalization, `normalizedViewportHitPosition`, bracket auto-close
-  `tryAutoCloseBracket`, empty-pair backspace `tryDeleteBracketPair` (deletes both glyphs of
-  `[|]` in one undo step, gated by the auto-close pref), hold `h[]` expand `tryAutoExpandH`).
+  `tryAutoCloseBracket`, closing-bracket type-over `tryOverwriteClosingBracket` (typing `)]}` when
+  the same glyph already sits to the caret's right steps over it instead of inserting a duplicate),
+  empty-pair backspace `tryDeleteBracketPair` (deletes both glyphs of
+  `[|]` in one undo step). All three gated by the auto-close pref; hold `h[]` expand `tryAutoExpandH`).
 - Bracket-completion dropdown ("tab 补全"): typing `( [ {` (and `h`, which expands to `h[]`
   then offers the `[` durations) pops a simai-aware suggestion list under the caret. Candidate
   data + scans: `src/editor/SimaiCompletionCatalog.{h,cpp}` (pure, spec at
