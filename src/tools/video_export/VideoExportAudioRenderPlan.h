@@ -38,6 +38,13 @@ struct VideoExportAudioRenderPlan {
     double segmentStartSecond = 0.0;
     double segmentEndSecond = 0.0;
     double leadInSeconds = 0.0;
+    // Extra silent pre-roll prepended in FRONT of the lead-in for the maimai
+    // track-start intro (full-range exports with intro enabled). The chart
+    // timeline origin, total duration and frame count all absorb it, so the
+    // existing linear frame->chart-second mapping still joins at -leadIn; the
+    // first `introFrameCount` frames are the intro window (driven separately).
+    double introLeadSeconds = 0.0;
+    int introFrameCount = 0;
     double timelineOriginSecond = 0.0;
     double totalSeconds = 0.0;
     double alignedTotalSeconds = 0.0;

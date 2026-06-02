@@ -101,6 +101,9 @@ private:
     void handlePreviewStopOrPlayShortcut();
     void onRangePreviewTick();
     void syncRangeUi();
+    // "Add intro" applies to full-range exports only; grey it when a partial
+    // range is selected.
+    void refreshAddIntroEnabledState();
     void seekPreview(double second);
     void playPreview(double second);
     void pausePreview();
@@ -170,6 +173,7 @@ private:
     QCheckBox* showTimestampCheck_ = nullptr;
     QCheckBox* showObjectStatsCheck_ = nullptr;
     QCheckBox* showChartInfoCheck_ = nullptr;
+    QCheckBox* addIntroCheck_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
     QPushButton* hudFontSettingsButton_ = nullptr;
     QToolButton* backgroundScaleModeButton_ = nullptr;

@@ -691,11 +691,19 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     showObjectStatsCheck_->setChecked(baseTask_.showObjectStatsHud);
     showChartInfoCheck_ = new QCheckBox(uiText("dialog.video_export.option.show_chart_info", QStringLiteral("Show chart info")), optionsCard);
     showChartInfoCheck_->setChecked(baseTask_.showChartInfoHud);
+    addIntroCheck_ = new QCheckBox(
+        UiText::isChineseUi() ? QStringLiteral("添加片头") : QStringLiteral("Add intro"),
+        optionsCard);
+    addIntroCheck_->setChecked(baseTask_.intro.enabled);
+    addIntroCheck_->setToolTip(UiText::isChineseUi()
+        ? QStringLiteral("在每个视频开头加入 maimai 风格片头（批量导出整谱）。")
+        : QStringLiteral("Prepend the maimai track-start intro to each export."));
     smoothBrightnessCheck_ = new QCheckBox(uiText("dialog.video_export.option.smooth_brightness", QStringLiteral("Smooth brightness")), optionsCard);
     smoothBrightnessCheck_->setChecked(baseTask_.smoothBrightness);
     checkboxLayout->addWidget(showTimestampCheck_, 0);
     checkboxLayout->addWidget(showObjectStatsCheck_, 0);
     checkboxLayout->addWidget(showChartInfoCheck_, 0);
+    checkboxLayout->addWidget(addIntroCheck_, 0);
     checkboxLayout->addWidget(smoothBrightnessCheck_, 0);
     checkboxLayout->addStretch(1);
     optionsLayout->addWidget(checkboxRow, optionRow, 0, 1, 4);
@@ -836,6 +844,9 @@ BatchVideoExportDialog::BatchVideoExportDialog(
         notifySharedSettingsChanged();
     });
     connect(showChartInfoCheck_, &QCheckBox::toggled, this, [this](bool) {
+        notifySharedSettingsChanged();
+    });
+    connect(addIntroCheck_, &QCheckBox::toggled, this, [this](bool) {
         notifySharedSettingsChanged();
     });
     connect(smoothBrightnessCheck_, &QCheckBox::toggled, this, [this](bool) {
@@ -1032,6 +1043,7 @@ bool BatchVideoExportDialog::applyUiToTask(VideoExportTask* task, QString* error
     task->showTimestamp = showTimestampCheck_ != nullptr && showTimestampCheck_->isChecked();
     task->showObjectStatsHud = showObjectStatsCheck_ != nullptr && showObjectStatsCheck_->isChecked();
     task->showChartInfoHud = showChartInfoCheck_ != nullptr && showChartInfoCheck_->isChecked();
+    task->intro.enabled = addIntroCheck_ != nullptr && addIntroCheck_->isChecked();
     task->smoothBrightness = smoothBrightnessCheck_ != nullptr && smoothBrightnessCheck_->isChecked();
     task->backgroundBrightnessOuter = qBound(0.0, brightnessOuterSlider_->value() / 100.0, 1.0);
     task->backgroundBrightnessInner = qBound(0.0, brightnessInnerSlider_->value() / 100.0, 1.0);
@@ -1206,6 +1218,7 @@ VideoExportTask BatchVideoExportDialog::currentSharedSettingsTask() const
     task.showTimestamp = showTimestampCheck_ != nullptr && showTimestampCheck_->isChecked();
     task.showObjectStatsHud = showObjectStatsCheck_ != nullptr && showObjectStatsCheck_->isChecked();
     task.showChartInfoHud = showChartInfoCheck_ != nullptr && showChartInfoCheck_->isChecked();
+    task.intro.enabled = addIntroCheck_ != nullptr && addIntroCheck_->isChecked();
     task.smoothBrightness = smoothBrightnessCheck_ != nullptr && smoothBrightnessCheck_->isChecked();
     task.backgroundBrightnessOuter =
         brightnessOuterSlider_ != nullptr ? qBound(0.0, brightnessOuterSlider_->value() / 100.0, 1.0)

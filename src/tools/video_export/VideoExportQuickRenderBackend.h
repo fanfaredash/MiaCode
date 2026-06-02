@@ -52,6 +52,12 @@ public:
     void shutdownOffscreenRenderer();
     bool supportsOffscreenPboReadback(QString* errorMessage = nullptr) const;
     void resetOffscreenPboReadback();
+
+    // Pre-roll intro overlay (full-range exports). setupIntro mounts the QML
+    // scene + pushes the banner data once; setIntroFrame is called per output
+    // frame to advance/hide it. Both no-op if the offscreen renderer isn't up.
+    bool setupIntro(const IntroBannerSpec& intro, QString* errorMessage = nullptr);
+    void setIntroFrame(int authoringFrame, bool active);
     bool renderOverlayFrameOffscreenPboStep(
         const QSize& outputSize,
         double playheadSeconds,

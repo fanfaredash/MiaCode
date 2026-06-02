@@ -495,7 +495,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
         owner_.document_,
         owner_.activeDifficultyId_,
         owner_.currentFilePath_,
-        requestedTask.addIntro,
+        requestedTask.intro.enabled,
         built.fullRangeExport);
 
     if (built.skinDirectory.trimmed().isEmpty()) {
@@ -717,7 +717,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
         document,
         difficultyId,
         chartPath,
-        requestedTask.addIntro,
+        requestedTask.intro.enabled,
         built.fullRangeExport);  // batch is always full-range
 
     if (built.skinDirectory.trimmed().isEmpty()) {

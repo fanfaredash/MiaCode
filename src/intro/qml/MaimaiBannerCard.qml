@@ -30,6 +30,11 @@ Item {
     // Fallback art when no 曲绘 is available (see effectiveJacket).
     property url logoImage: "qrc:/icons/app.png"
     property var trackOverrides: ({})
+    // When the host supplies a parsed template object (the integrated export
+    // injects it from C++ so it doesn't depend on an async XMLHttpRequest that
+    // never fires under the headless QQuickRenderControl loop), use it verbatim
+    // and skip the templateSource XHR entirely.
+    property var externalTemplate: null
     property var template: defaultTemplate()
 
     // When true, the outer blurred-jacket backdrop + dim + black base are skipped,
@@ -223,8 +228,23 @@ Item {
         return arr
     }
 
-    Component.onCompleted: loadTemplate()
-    onTemplateSourceChanged: loadTemplate()
+    Component.onCompleted: {
+        if (externalTemplate) {
+            template = externalTemplate
+        } else {
+            loadTemplate()
+        }
+    }
+    onExternalTemplateChanged: {
+        if (externalTemplate) {
+            template = externalTemplate
+        }
+    }
+    onTemplateSourceChanged: {
+        if (!externalTemplate) {
+            loadTemplate()
+        }
+    }
 
     QtObject {
         id: geom

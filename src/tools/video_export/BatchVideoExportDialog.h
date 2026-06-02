@@ -87,6 +87,7 @@ private:
     QCheckBox* showTimestampCheck_ = nullptr;
     QCheckBox* showObjectStatsCheck_ = nullptr;
     QCheckBox* showChartInfoCheck_ = nullptr;
+    QCheckBox* addIntroCheck_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
     QToolButton* backgroundScaleModeButton_ = nullptr;
     QMenu* backgroundScaleModeMenu_ = nullptr;

@@ -5,6 +5,7 @@
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewSfxSemantics.h"
 #include "common/PreviewSfxTimeline.h"
+#include "common/IntroConfig.h"
 #include "common/VideoExportConfig.h"
 #include "audio/PreviewAudioSettings.h"
 
@@ -261,8 +262,21 @@ bool buildVideoExportAudioRenderPlan(
     built.leadInSeconds = task.fullRangeExport
         ? miacode::video_export::kLeadInSeconds
         : miacode::video_export::kPartialRangePreloadSeconds;
-    built.timelineOriginSecond = built.segmentStartSecond - built.leadInSeconds;
-    built.totalSeconds = built.leadInSeconds + segmentDurationSeconds;
+    // Pre-roll maimai track-start intro: extra silent padding in FRONT of the
+    // lead-in (full-range exports only). The chart timeline origin, total
+    // duration and frame count all absorb it, so the existing linear
+    // frame->chart-second mapping still reaches -leadIn at frame introFrameCount
+    // and chart 0 at the same wall-time as the rendered intro hand-off. The
+    // window is pure silence today (the opening SFX is added later).
+    built.introLeadSeconds = (task.fullRangeExport && task.intro.enabled)
+        ? miacode::intro::kDurationSeconds
+        : 0.0;
+    built.introFrameCount = built.introLeadSeconds > 0.0
+        ? qMax(0, qRound(built.introLeadSeconds * qMax(1, task.fps)))
+        : 0;
+    built.timelineOriginSecond =
+        built.segmentStartSecond - built.leadInSeconds - built.introLeadSeconds;
+    built.totalSeconds = built.introLeadSeconds + built.leadInSeconds + segmentDurationSeconds;
     built.frameCount = qMax(1, qRound(built.totalSeconds * qMax(1, task.fps)));
     built.alignedTotalSeconds = static_cast<double>(built.frameCount) / qMax(1, task.fps);
     built.sfxDirectory = resolveSfxDirectory();

@@ -20,6 +20,24 @@ enum class VideoExportPreset {
     HighQuality,
 };
 
+// Pre-roll "track-start" intro banner spec. Populated from the chart in
+// buildVideoExportSnapshot; consumed by the export session when `enabled`.
+// `enabled` is gated on a full-range export (partial/clip exports never get it).
+struct IntroBannerSpec {
+    bool enabled = false;
+    QString title;
+    QString artist;
+    QString designer;
+    QString level;
+    // Atlas/sprite key: one of BASIC / ADVANCED / EXPERT / MASTER / ReMASTER.
+    QString difficulty = QStringLiteral("MASTER");
+    QString bpm;
+    QString mode = QStringLiteral("DX");
+    // Resolved background STILL image (never the bg video); empty -> the QML
+    // falls back to the miacode logo.
+    QString jacketPath;
+};
+
 struct VideoExportTask {
     QString outputPath;
     QString chartPath;
@@ -59,10 +77,11 @@ struct VideoExportTask {
     bool showTimestamp = true;
     bool showObjectStatsHud = false;
     bool showChartInfoHud = false;
-    // Prepend the maimai track-start intro (full-range exports only). The
-    // banner payload itself is resolved from the chart into the snapshot's
-    // IntroBannerSpec; this flag only gates whether it plays.
-    bool addIntro = false;
+    // Pre-roll maimai track-start intro (full-range exports only). intro.enabled
+    // is the dialog checkbox before the snapshot is built; the rest of the
+    // banner payload is filled by buildVideoExportSnapshot from the chart and
+    // round-trips back onto the task via buildVideoExportTaskFromSnapshot.
+    IntroBannerSpec intro;
     // Chart metadata for the optional top-left chart info HUD. Populated
     // from the active SimaiDocument at task-construction time; the worker
     // re-derives these from the snapshot's chart text + difficulty id

@@ -473,6 +473,7 @@ bool buildVideoExportTaskFromSnapshot(
             .arg(diffShortName, diffLevel)
             .trimmed();
     }
+    built.intro = snapshot.intro;
     built.centerDisplayMode = snapshot.centerDisplayMode;
     built.skinLoadWaitMs = qBound(0, snapshot.skinLoadWaitMs, 20000);
     built.clockCount = miacode::chart_clock::clockCountFromDocument(document);

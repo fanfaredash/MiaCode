@@ -8,6 +8,7 @@
 #include "VideoExportRuntimePolicy.h"
 #include "common/AssetPaths.h"
 #include "common/ChartAssetPaths.h"
+#include "common/IntroConfig.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
 #include "common/DebugOptions.h"
@@ -3391,6 +3392,22 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(rawVideoPipePlan.connectTimeoutMs)
     );
 
+    // Opening SFX: when the intro front-pad is present, extract the bundled
+    // WAV from qrc to the temp dir so ffmpeg can read it (ffmpeg can't open
+    // qrc). It is mixed at output t=0 (== intro start) over the silent pad.
+    const bool introAudioEnabled = audioRenderPlan.introLeadSeconds > 0.0;
+    QString introSfxTempPath;
+    if (introAudioEnabled) {
+        introSfxTempPath = QDir(tempDir.path()).filePath(QStringLiteral("intro_sfx.wav"));
+        if (QFile::exists(introSfxTempPath)) {
+            QFile::remove(introSfxTempPath);
+        }
+        if (!QFile::copy(QString::fromLatin1(miacode::intro::kOpeningSfxResource), introSfxTempPath)) {
+            appendVideoExportLog(QStringLiteral("intro_sfx_extract_failed"), introSfxTempPath);
+            introSfxTempPath.clear();  // fall back to a silent front-pad
+        }
+    }
+
     QStringList args;
     args << QStringLiteral("-y")
          << QStringLiteral("-hide_banner")
@@ -3472,6 +3489,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
     }
     audioInputIndex = currentInputIndex++;
     args << QStringLiteral("-i") << mixedAudioWavPath;
+    int introAudioInputIndex = -1;
+    if (!introSfxTempPath.isEmpty()) {
+        introAudioInputIndex = currentInputIndex++;
+        args << QStringLiteral("-i") << introSfxTempPath;
+    }
 
     const QString totalSecondsText = QString::number(alignedTotalSeconds, 'f', 6);
     const QString timelineOriginText = QString::number(timelineOriginSecond, 'f', 6);
@@ -3550,10 +3572,24 @@ VideoExportResult VideoExportController::exportPreparedTask(
 
     // Quick export frames are already read back in top-left raster order.
     filterParts << QStringLiteral("[0:v]format=rgba[overlay_src]");
-    filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3,aformat=channel_layouts=stereo[aout]")
-                       .arg(audioInputIndex)
-                       .arg(totalSecondsText)
-                       .arg(kMixSampleRate);
+    if (introAudioInputIndex >= 0) {
+        // Mix the opening SFX over the front-pad. normalize=0 keeps the chart
+        // mix at full level (the two don't overlap in time anyway); duration
+        // follows the main chart audio. The SFX plays from output t=0.
+        filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3,aformat=channel_layouts=stereo[mainaud]")
+                           .arg(audioInputIndex)
+                           .arg(totalSecondsText)
+                           .arg(kMixSampleRate);
+        filterParts << QStringLiteral("[%1:a]aresample=%2,aformat=channel_layouts=stereo[introaud]")
+                           .arg(introAudioInputIndex)
+                           .arg(kMixSampleRate);
+        filterParts << QStringLiteral("[mainaud][introaud]amix=inputs=2:normalize=0:duration=first[aout]");
+    } else {
+        filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3,aformat=channel_layouts=stereo[aout]")
+                           .arg(audioInputIndex)
+                           .arg(totalSecondsText)
+                           .arg(kMixSampleRate);
+    }
 
     const SystemMemoryInfo memoryInfo = querySystemMemoryInfo();
     appendVideoExportLog(QStringLiteral("memory_snapshot"), memoryInfoToLog(memoryInfo));
@@ -3640,6 +3676,32 @@ VideoExportResult VideoExportController::exportPreparedTask(
             QStringLiteral("fail_export_backend_init"),
             offscreenInitError.isEmpty() ? result.message : offscreenInitError);
         return result;
+    }
+
+    // Pre-roll maimai track-start intro (full-range exports only). The audio
+    // plan already front-padded the timeline by introLeadSeconds, so frames
+    // [0, introFrameCount) are the intro window. Mount the overlay scene + push
+    // the banner data once here; the per-frame `frame` advance happens in the
+    // loop. A QML load failure degrades gracefully — the padded frames just
+    // render the chart at negative time without the overlay.
+    bool introEnabled = task.intro.enabled
+        && task.fullRangeExport
+        && audioRenderPlan.introFrameCount > 0;
+    if (introEnabled) {
+        QString introError;
+        if (!exportCanvas.setupIntro(task.intro, &introError)) {
+            introEnabled = false;
+            appendVideoExportLog(
+                QStringLiteral("intro_setup_failed"),
+                introError.isEmpty() ? QStringLiteral("unknown") : introError);
+        } else {
+            appendVideoExportLog(
+                QStringLiteral("intro_setup"),
+                QStringLiteral("frames=%1 leadSeconds=%2 difficulty=%3")
+                    .arg(audioRenderPlan.introFrameCount)
+                    .arg(audioRenderPlan.introLeadSeconds, 0, 'f', 3)
+                    .arg(task.intro.difficulty));
+        }
     }
     // Diagnostic gate: MIACODE_EXPORT_DISABLE_PBO_READBACK=1 forces the
     // synchronous non-PBO readback path (renderOverlayFrameOffscreen,
@@ -4579,6 +4641,19 @@ VideoExportResult VideoExportController::exportPreparedTask(
                        ? audioRenderPlan.segmentStartSecond
                        : rawChartSecond)
                 : std::numeric_limits<double>::quiet_NaN();
+        // Pre-roll intro: advance the overlay `frame` and suppress the HUD while
+        // it plays. The overlay sits above the HUD, so during cycle 2 (its
+        // transparent centre) the count-down timestamp would otherwise show
+        // through; hiding it keeps the intro clean.
+        const bool inIntroWindow =
+            introEnabled && frameIndex < audioRenderPlan.introFrameCount;
+        if (introEnabled) {
+            exportCanvas.setIntroFrame(
+                miacode::intro::authoringFrameForOutputFrame(frameIndex, task.fps),
+                inIntroWindow);
+        }
+        const bool showTimestampThisFrame = task.showTimestamp && !inIntroWindow;
+        const bool showObjectStatsThisFrame = task.showObjectStatsHud && !inIntroWindow;
         QVector<ObjectTraceItem> traceItems;
         if (diagObjectTraceEnabled || diagObjectHashEnabled) {
             traceItems = collectVisibleObjectTrace(
@@ -4618,8 +4693,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
             frameSize,
             frameIndex,
             exportSecond,
-            task.showTimestamp,
-            task.showObjectStatsHud,
+            showTimestampThisFrame,
+            showObjectStatsThisFrame,
             std::move(traceItems),
             &readyFrame,
             &renderBackendFallbackDetail,

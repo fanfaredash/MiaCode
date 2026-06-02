@@ -1,8 +1,15 @@
 #include "tools/video_export/VideoExportQuickRenderBackend.h"
 
+#include "common/IntroConfig.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "core/scene/PreviewProgressStatsCache.h"
+
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QUrl>
+#include <QVariantMap>
 
 #include <memory>
 
@@ -234,6 +241,55 @@ bool VideoExportQuickRenderBackend::supportsOffscreenPboReadback(QString* errorM
 void VideoExportQuickRenderBackend::resetOffscreenPboReadback()
 {
     session_.resetOffscreenPboReadback();
+}
+
+bool VideoExportQuickRenderBackend::setupIntro(const IntroBannerSpec& intro, QString* errorMessage)
+{
+    if (!session_.setupIntroOverlay(
+            QUrl(QString::fromLatin1(miacode::intro::kOverlayQmlUrl)),
+            errorMessage)) {
+        return false;
+    }
+    QVariantMap track;
+    track.insert(QStringLiteral("title"), intro.title);
+    track.insert(QStringLiteral("artist"), intro.artist);
+    track.insert(QStringLiteral("designer"), intro.designer);
+    track.insert(QStringLiteral("level"), intro.level);
+    track.insert(QStringLiteral("difficulty"), intro.difficulty);
+    track.insert(QStringLiteral("bpm"), intro.bpm);
+    track.insert(QStringLiteral("mode"), intro.mode);
+    const QUrl jacketUrl = intro.jacketPath.isEmpty()
+        ? QUrl()
+        : QUrl::fromLocalFile(intro.jacketPath);
+
+    // Load + parse the banner template here (C++), not via the QML's async
+    // XMLHttpRequest: the headless export render loop never pumps the event
+    // loop, so the XHR callback would never fire and the card would render on
+    // its empty defaultTemplate(). The qrc alias prefix "/intro" maps the
+    // bundled template to ":/intro/templates/maimai_banner.json".
+    QVariantMap templateMap;
+    QFile templateFile(QStringLiteral(":/intro/templates/maimai_banner.json"));
+    if (templateFile.open(QIODevice::ReadOnly)) {
+        const QJsonDocument doc = QJsonDocument::fromJson(templateFile.readAll());
+        if (doc.isObject()) {
+            templateMap = doc.object().toVariantMap();
+        }
+    }
+    if (templateMap.isEmpty() && errorMessage != nullptr) {
+        *errorMessage = QStringLiteral("intro banner template could not be loaded from qrc");
+    }
+
+    session_.setIntroBannerData(
+        track,
+        templateMap,
+        jacketUrl,
+        QUrl(QString::fromLatin1(miacode::intro::kLogoFallbackUrl)));
+    return true;
+}
+
+void VideoExportQuickRenderBackend::setIntroFrame(int authoringFrame, bool active)
+{
+    session_.setIntroFrame(authoringFrame, active);
 }
 
 bool VideoExportQuickRenderBackend::renderOverlayFrameOffscreenPboStep(

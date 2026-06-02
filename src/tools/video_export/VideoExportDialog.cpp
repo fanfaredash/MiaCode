@@ -937,6 +937,14 @@ VideoExportDialog::VideoExportDialog(
         optionsContent_
     );
     showChartInfoCheck_->setChecked(baseTask_.showChartInfoHud);
+    addIntroCheck_ = new QCheckBox(
+        l10n(QStringLiteral("Add intro"), QStringLiteral("添加片头")),
+        optionsContent_
+    );
+    addIntroCheck_->setChecked(baseTask_.intro.enabled);
+    addIntroCheck_->setToolTip(l10n(
+        QStringLiteral("Prepend the maimai track-start intro (full exports only)."),
+        QStringLiteral("在视频开头加入 maimai 风格片头（仅完整导出包含）。")));
     smoothBrightnessCheck_ = new QCheckBox(
         l10n(QStringLiteral("Smooth brightness"), QStringLiteral("骞虫粦浜害")),
         optionsContent_
@@ -1186,6 +1194,8 @@ VideoExportDialog::VideoExportDialog(
     objectStatsLayout->addWidget(hudFontSettingsButton_, 0);
     objectStatsLayout->addStretch(1);
     optionsLayout->addWidget(objectStatsRow, 6, 0, 1, 2);
+    optionsLayout->addWidget(addIntroCheck_, 7, 0, 1, 2, Qt::AlignLeft | Qt::AlignTop);
+    refreshAddIntroEnabledState();
     rootLayout->addWidget(
         buildCollapsibleSection(
             l10n(QStringLiteral("Options"), QStringLiteral("閫夐」")),
@@ -1890,6 +1900,11 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     updated.fullRangeExport =
         selectedRangeStart <= kFullRangeEpsilonSeconds
         && selectedRangeEnd + kFullRangeEpsilonSeconds >= totalDurationSeconds_;
+    // The maimai intro is a full-export-only pre-roll; partial/clip exports
+    // never get it regardless of the checkbox.
+    updated.intro.enabled =
+        (addIntroCheck_ != nullptr && addIntroCheck_->isChecked())
+        && updated.fullRangeExport;
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Export,
         QStringLiteral("dialog_range_decision"),
@@ -1965,6 +1980,19 @@ void VideoExportDialog::onRangeSpinChanged()
         syncingRangeUi_ = false;
     }
     syncRangeUi();
+    refreshAddIntroEnabledState();
+}
+
+void VideoExportDialog::refreshAddIntroEnabledState()
+{
+    if (addIntroCheck_ == nullptr) {
+        return;
+    }
+    constexpr double kFullRangeEpsilonSeconds = 0.01;
+    const bool fullRange =
+        rangeStartSeconds() <= kFullRangeEpsilonSeconds
+        && rangeEndSeconds() + kFullRangeEpsilonSeconds >= totalDurationSeconds_;
+    addIntroCheck_->setEnabled(fullRange);
 }
 
 void VideoExportDialog::onPreviewSliderChanged(int sliderValue)

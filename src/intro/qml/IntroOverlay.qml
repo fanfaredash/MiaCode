@@ -40,6 +40,9 @@ Item {
     // difficulty/bpm/mode), forwarded to the embedded MaimaiBannerCard.
     property var bannerTrack: ({})
     property url bannerTemplate: "qrc:/intro/templates/maimai_banner.json"
+    // Parsed banner template, injected from C++ (avoids the async XHR that never
+    // completes under the headless export render loop).
+    property var bannerTemplateData: null
 
     // Dim tint over the blurred backdrop so the crisp card reads.
     property color backdropColor: "#0A0414"
@@ -143,6 +146,7 @@ Item {
         frame: root.frame
         fps: root.fps
         templateSource: root.bannerTemplate
+        externalTemplate: root.bannerTemplateData
         jacketImage: root.backgroundImage
         logoImage: root.logoImage
         trackOverrides: root.bannerTrack

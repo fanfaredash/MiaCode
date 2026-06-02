@@ -10,6 +10,8 @@
 #include <QOpenGLExtraFunctions>
 #include <QOpenGLFramebufferObject>
 #include <QOpenGLFunctions>
+#include <QQmlComponent>
+#include <QQmlEngine>
 #include <QQuickGraphicsDevice>
 #include <QQuickItem>
 #include <QQuickRenderControl>
@@ -266,6 +268,7 @@ void PreviewQuickExportSession::invalidate()
             );
         }
         clearOffscreenReadbackPboState();
+        destroyIntroOverlay();
         framebuffer_ = nullptr;
         quickWindow_ = nullptr;
         rootItem_ = nullptr;
@@ -284,6 +287,7 @@ void PreviewQuickExportSession::invalidate()
         return;
     }
 
+    destroyIntroOverlay();
     delete quickWindow_;
     quickWindow_ = nullptr;
     rootItem_ = nullptr;
@@ -1237,6 +1241,118 @@ void PreviewQuickExportSession::applyFrameSize()
     hudLayer_->setPosition(QPointF(0.0, 0.0));
     hudLayer_->setSize(QSizeF(frameSize_));
     hudLayer_->update();
+
+    applyIntroGeometry();
+}
+
+void PreviewQuickExportSession::applyIntroGeometry()
+{
+    if (introItem_ == nullptr) {
+        return;
+    }
+    // IntroOverlay authors at a native 16:9 1920x1080. Scale it to the output
+    // height around its centre and centre it horizontally; anything past the
+    // frame edges is clipped by the framebuffer viewport, which gives the
+    // requested "centre crop of the 16:9 intro" for 4:3 / 1:1 outputs.
+    constexpr double kNativeW = 1920.0;
+    constexpr double kNativeH = 1080.0;
+    const double frameW = qMax(1, frameSize_.width());
+    const double frameH = qMax(1, frameSize_.height());
+    introItem_->setWidth(kNativeW);
+    introItem_->setHeight(kNativeH);
+    introItem_->setTransformOrigin(QQuickItem::Center);
+    introItem_->setScale(frameH / kNativeH);
+    introItem_->setX(frameW / 2.0 - kNativeW / 2.0);
+    introItem_->setY(frameH / 2.0 - kNativeH / 2.0);
+}
+
+void PreviewQuickExportSession::destroyIntroOverlay()
+{
+    // introItem_ lives in the quickWindow_ scene tree and is deleted together
+    // with the window during invalidate(); here we only drop our references.
+    introItem_ = nullptr;
+    introActive_ = false;
+}
+
+bool PreviewQuickExportSession::setupIntroOverlay(const QUrl& qmlUrl, QString* errorMessage)
+{
+    if (rootItem_ == nullptr || quickWindow_ == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("export session not initialized before intro setup");
+        }
+        return false;
+    }
+    if (introItem_ != nullptr) {
+        return true;
+    }
+    if (qmlEngine_ == nullptr) {
+        qmlEngine_ = new QQmlEngine(this);
+    }
+
+    QQmlComponent component(qmlEngine_, qmlUrl);
+    if (component.isError()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("intro QML load failed: %1").arg(component.errorString().trimmed());
+        }
+        return false;
+    }
+    QObject* object = component.create();
+    if (object == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("intro QML create returned null: %1").arg(component.errorString().trimmed());
+        }
+        return false;
+    }
+    introItem_ = qobject_cast<QQuickItem*>(object);
+    if (introItem_ == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("intro QML root is not a QQuickItem");
+        }
+        delete object;
+        return false;
+    }
+    // Parent into the scene tree (also gives it window-tree ownership) and sit
+    // above the chart scene (z=0) and HUD (z=1). Hidden until activated.
+    introItem_->setParentItem(rootItem_);
+    introItem_->setParent(rootItem_);
+    introItem_->setZ(2.0);
+    introItem_->setVisible(false);
+    applyIntroGeometry();
+    return true;
+}
+
+void PreviewQuickExportSession::setIntroBannerData(
+    const QVariantMap& bannerTrack,
+    const QVariantMap& bannerTemplate,
+    const QUrl& backgroundImage,
+    const QUrl& logoImage)
+{
+    if (introItem_ == nullptr) {
+        return;
+    }
+    // Inject the parsed template object directly (the QML's XMLHttpRequest
+    // loader never completes under the headless render loop, so relying on it
+    // would leave the card on its empty defaultTemplate()).
+    if (!bannerTemplate.isEmpty()) {
+        introItem_->setProperty("bannerTemplateData", bannerTemplate);
+    }
+    if (!logoImage.isEmpty()) {
+        introItem_->setProperty("logoImage", logoImage);
+    }
+    introItem_->setProperty("backgroundImage", backgroundImage);
+    introItem_->setProperty("bannerTrack", bannerTrack);
+}
+
+void PreviewQuickExportSession::setIntroFrame(int authoringFrame, bool active)
+{
+    introActive_ = active;
+    if (introItem_ == nullptr) {
+        return;
+    }
+    if (active) {
+        introItem_->setProperty("frame", authoringFrame);
+    }
+    introItem_->setVisible(active);
 }
 
 void PreviewQuickExportSession::applyFrameState()

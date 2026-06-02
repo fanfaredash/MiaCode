@@ -6,6 +6,8 @@
 #include <QSize>
 #include <QString>
 #include <QSurfaceFormat>
+#include <QUrl>
+#include <QVariantMap>
 #include <QtGui/qopengl.h>
 
 #include <atomic>
@@ -20,6 +22,7 @@
 class QOffscreenSurface;
 class QOpenGLContext;
 class QOpenGLFramebufferObject;
+class QQmlEngine;
 class QQuickItem;
 class QQuickRenderControl;
 class QQuickWindow;
@@ -55,6 +58,20 @@ public:
 
     void setFrameSize(const QSize& size);
     QSize frameSize() const { return frameSize_; }
+
+    // Intro overlay (pre-roll maimai track-start). Loads a QML scene from the
+    // given qrc/file URL and mounts it above the chart + HUD. Banner data is
+    // generic (no tools/video_export dependency); the caller maps its own spec
+    // into the QVariantMap track + URLs. The overlay is hidden unless the most
+    // recent setIntroFrame() set it active, so normal frames are unaffected.
+    bool setupIntroOverlay(const QUrl& qmlUrl, QString* errorMessage = nullptr);
+    void setIntroBannerData(
+        const QVariantMap& bannerTrack,
+        const QVariantMap& bannerTemplate,
+        const QUrl& backgroundImage,
+        const QUrl& logoImage);
+    void setIntroFrame(int authoringFrame, bool active);
+    bool introOverlayReady() const { return introItem_ != nullptr; }
 
     bool initialize(
         const QSurfaceFormat& requestedFormat = QSurfaceFormat(),
@@ -100,6 +117,8 @@ private:
     void clearOffscreenReadbackPboState();
     void clearOffscreenPboCapabilityCache();
     void applyFrameSize();
+    void applyIntroGeometry();
+    void destroyIntroOverlay();
     void applyFrameState();
     void bindFrameStateIfNeeded();
     void applyLayerFlagsIfNeeded();
@@ -117,6 +136,9 @@ private:
     QQuickItem* rootItem_ = nullptr;
     PreviewQuickSceneRoot* sceneRoot_ = nullptr;
     PreviewQuickHudLayer* hudLayer_ = nullptr;
+    QQmlEngine* qmlEngine_ = nullptr;
+    QQuickItem* introItem_ = nullptr;
+    bool introActive_ = false;
     QOffscreenSurface* offscreenSurface_ = nullptr;
     QOpenGLContext* context_ = nullptr;
     QOpenGLFramebufferObject* framebuffer_ = nullptr;

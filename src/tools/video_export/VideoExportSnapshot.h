@@ -7,23 +7,8 @@
 #include "common/MuriRenderOptions.h"
 #include "VideoExportController.h"
 
-// Pre-roll "track-start" intro banner spec. Populated in buildVideoExportSnapshot
-// from the chart; consumed by the export session (P3) only when `enabled`.
-// `enabled` is gated on a full-range export — partial/clip exports never get it.
-struct IntroBannerSpec {
-    bool enabled = false;
-    QString title;
-    QString artist;
-    QString designer;
-    QString level;
-    // Atlas/sprite key: one of BASIC / ADVANCED / EXPERT / MASTER / ReMASTER.
-    QString difficulty = QStringLiteral("MASTER");
-    QString bpm;
-    QString mode = QStringLiteral("DX");
-    // Resolved background STILL image (never the bg video); empty -> the QML
-    // falls back to the miacode logo.
-    QString jacketPath;
-};
+// IntroBannerSpec is defined in VideoExportController.h (so VideoExportTask can
+// carry it too); VideoExportSnapshot just serializes one.
 
 struct VideoExportSnapshot {
     QString schema = QStringLiteral("miacode_export_snapshot_v1");
