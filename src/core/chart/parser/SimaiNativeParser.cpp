@@ -1072,7 +1072,6 @@ bool touchHitsSlide(const TimelineNoteMarker& touch, const TimelineNoteMarker& s
 
 bool parseStandardSlideChain(
     const QString& slideCore,
-    bool strictMode,
     double bpm,
     QStringList* shapes,
     double* waitSecond,
@@ -1217,9 +1216,11 @@ bool parseStandardSlideChain(
             return false;
         }
         if (parsedShapes.size() > 1) {
-            if (strictMode) {
-                return false;
-            }
+            // Per-segment ("分段") timing on a multi-shape chain. Fold the
+            // per-segment durations into one total and redistribute it by
+            // shape length, so the chain resolves to the equivalent
+            // total-duration slide. Strict mode flags this as a syntax error
+            // at the call site but still wants the note to parse.
             double totalDuration = 0.0;
             for (const auto& item : waitAndDurations) {
                 totalDuration += qMax(0.0, item.second);

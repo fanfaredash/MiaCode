@@ -185,12 +185,25 @@ int main(int argc, char** argv)
 
     {
         const SimaiNativeParseResult strictFestival = SimaiNativeParser::validateSyntax(QStringLiteral("1-5[8:1]-1[8:2],\nE"));
-        expect(!strictFestival.ok, QStringLiteral("validate rejects per-segment duration for festival slide"));
+        // Per-segment ("分段") timing is still flagged as a syntax error in
+        // strict mode, but the note is no longer dropped — it folds into the
+        // equivalent total-duration slide so the chart still parses.
+        expect(!strictFestival.ok, QStringLiteral("validate flags per-segment duration for festival slide"));
 
         const SimaiNativeParseResult lenientFestival = SimaiNativeParser::parseForTimeline(QStringLiteral("1-5[8:1]-1[8:2],\nE"));
         const SimaiNativeParseResult totalDuration = SimaiNativeParser::parseForTimeline(QStringLiteral("1-5-1[8:3],\nE"));
         expect(lenientFestival.ok, QStringLiteral("timeline parse accepts per-segment duration for festival slide"));
         expect(totalDuration.ok, QStringLiteral("timeline parse accepts total duration festival slide"));
+
+        const TimelineNoteMarker* strictMarker = firstSlideLikeMarker(strictFestival);
+        const TimelineNoteMarker* totalMarker = firstSlideLikeMarker(totalDuration);
+        expect(strictMarker != nullptr, QStringLiteral("strict per-segment festival slide still emits a marker"));
+        if (strictMarker != nullptr && totalMarker != nullptr) {
+            expect(nearlyEqual(strictMarker->slideTraceSecond, totalMarker->slideTraceSecond),
+                QStringLiteral("strict per-segment festival wait matches the equivalent total slide"));
+            expect(nearlyEqual(strictMarker->endSecond, totalMarker->endSecond),
+                QStringLiteral("strict per-segment festival end matches the equivalent total slide"));
+        }
 
         const TimelineNoteMarker* a = firstSlideLikeMarker(lenientFestival);
         const TimelineNoteMarker* b = firstSlideLikeMarker(totalDuration);

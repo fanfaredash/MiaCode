@@ -127,12 +127,15 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     marker.isEx = false;
 
     if (state->strictMode && marker.type == "slide" && sanitizedCore.count(QChar('[')) > 1) {
+        // Per-segment ("分段") slide timing — non-canonical; festival (fes)
+        // charts sometimes write it by mistake. Flag the syntax error but do
+        // NOT bail: the chain parser below folds the per-segment durations into
+        // the equivalent total-duration slide so the note still parses.
         appendTokenError(state, lineNumber, column, QString("Invalid slide duration placement: %1").arg(token));
-        return;
     }
 
     if (marker.type == "slide"
-        && parseStandardSlideChain(sanitizedCore, state->strictMode, state->bpm, &chainShapes, &waitSecond, &chainDurations)) {
+        && parseStandardSlideChain(sanitizedCore, state->bpm, &chainShapes, &waitSecond, &chainDurations)) {
         for (QString& shapeKey : chainShapes) {
             shapeKey = canonicalSlideKey(shapeKey);
         }
