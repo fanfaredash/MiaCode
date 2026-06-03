@@ -3,6 +3,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/FileContentStamp.h"
 #include "common/OperationLog.h"
 
 #include <cstdio>  // G2 Diag: std::snprintf for sync rate-change beacon lines
@@ -32,6 +33,7 @@
 #include <QVideoSink>
 #endif
 
+#include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
@@ -506,8 +508,11 @@ void PreviewStageMediaHost::initializeBackendObjects()
 
 void PreviewStageMediaHost::setWarmupResolvedMediaPath(const QString& chartPath, const QString& mediaPath)
 {
-    warmupChartPath_ = normalizedLocalPath(chartPath);
-    warmupMediaPath_ = normalizedLocalPath(mediaPath);
+    // No-op: the resolved-media cache was removed (see resolveMediaPath). Media
+    // resolution is now always live; the warmup worker still byte-prefetches the
+    // file into the OS cache. Kept as a no-op to preserve the call interface.
+    Q_UNUSED(chartPath);
+    Q_UNUSED(mediaPath);
 }
 
 void PreviewStageMediaHost::attachVideoOutputObject(QObject* videoOutputObject)
@@ -630,35 +635,37 @@ void PreviewStageMediaHost::setChartPath(const QString& chartPath,
                                          const QString& chartVideoOverridePath)
 {
     const QString normalizedChartPath = normalizedLocalPath(chartPath);
-    // Phase 4c — keys cache on (chart-path, video-override) jointly.
-    // The user might re-select the same chart after editing &video=,
-    // so chart-path equality alone isn't sufficient to skip the
-    // refresh.
+    // Resolve the media up-front so the skip decision can be content-aware.
+    // Keying on (chart-path, video-override) jointly is necessary but NOT
+    // sufficient: the user may keep the same chart + same `&video=` yet rewrite
+    // the bg/pv bytes in place (the in-app video tools do exactly that, and
+    // users swap same-named files), so a same-named clip with new content must
+    // still force a re-decode. Phase 4c — explicit `&video=` beats the sibling
+    // heuristic; fall back to the legacy resolver for image-only backgrounds.
+    QString resolvedPath;
+    if (!normalizedChartPath.isEmpty()) {
+        resolvedPath = miacode::chart_assets::resolveChartVideoPath(
+            normalizedChartPath, chartVideoOverridePath);
+        if (resolvedPath.isEmpty()) {
+            resolvedPath = resolveMediaPath(normalizedChartPath);
+        }
+    }
+    const QString mediaStamp = miacode::fs::fileContentStamp(resolvedPath);
     if (normalizedChartPath == chartPath_
-        && chartVideoOverridePath == chartVideoOverridePath_) {
+        && chartVideoOverridePath == chartVideoOverridePath_
+        && mediaStamp == mediaStamp_) {
         return;
     }
 
     chartPath_ = normalizedChartPath;
     chartVideoOverridePath_ = chartVideoOverridePath;
+    mediaStamp_ = mediaStamp;
     clearMedia();
     if (chartPath_.isEmpty()) {
         appendPreviewStageMediaLog(QStringLiteral("set_chart_path"), QStringLiteral("chart=(empty) kind=none"));
         return;
     }
 
-    // Phase 4c — unified resolution: explicit `&video=` override
-    // beats the sibling-filename heuristic. Falls back to the legacy
-    // `resolveMediaPath` path when no override is given AND no
-    // sibling video exists, so still-image charts keep working.
-    QString resolvedPath = miacode::chart_assets::resolveChartVideoPath(
-        chartPath_, chartVideoOverridePath_);
-    if (resolvedPath.isEmpty()) {
-        // No video override AND no sibling video → fall through to
-        // the legacy media-resolver, which also picks up image-only
-        // backgrounds (bg.jpg / bg.png).
-        resolvedPath = resolveMediaPath(chartPath_);
-    }
     if (resolvedPath.isEmpty()) {
         appendPreviewStageMediaLog(
             QStringLiteral("set_chart_path"),
@@ -1767,10 +1774,10 @@ void PreviewStageMediaHost::clearMedia()
 
 QString PreviewStageMediaHost::resolveMediaPath(const QString& chartPath) const
 {
-    const QString normalizedChartPath = normalizedLocalPath(chartPath);
-    if (normalizedChartPath == warmupChartPath_) {
-        return warmupMediaPath_;
-    }
+    // Resolved-media warmup cache removed (2026-06-03). It keyed on the chart-path
+    // string only and never re-validated, so a same-named bg/pv with new content
+    // was shadowed by the stale cached path. Always resolve live; same-content
+    // re-decode is avoided by the content-stamp check in setChartPath().
     return miacode::chart_assets::resolveBackgroundMediaPath(chartPath);
 }
 

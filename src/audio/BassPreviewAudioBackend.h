@@ -79,16 +79,14 @@ public:
 private:
     struct Sample;
 
-    struct WarmupPathState {
-        QString chartPath;
-        QString trackPath;
-        QString sfxDir;
-    };
-
     struct PreparedAssetState {
         QString chartPath;
         QString trackPath;
         QString sfxDir;
+        // Content stamp (size:mtime) of the resolved track, so setChartPath can
+        // detect a same-path/new-content track and force a reload instead of
+        // skipping on path equality alone.
+        QString trackStamp;
     };
 
     struct TimelineProgramState {
@@ -175,7 +173,6 @@ private:
 
     PreviewAudioSettings settings_;
     PreviewTimingSettings timingSettings_;
-    WarmupPathState warmupPaths_;
     PreparedAssetState preparedAssets_;
     TimelineProgramState preparedTimeline_;
     QVector<CollapsedEventGroup> preparedGroups_;

@@ -5,6 +5,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/FileContentStamp.h"
 #include "common/OperationLog.h"
 #include "common/PreviewAudioMixConfig.h"
 #include "common/PreviewSfxAssets.h"
@@ -13,6 +14,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
 #include <QtMath>
@@ -646,18 +648,17 @@ QString BassPreviewAudioBackend::backendId() const
 
 QString BassPreviewAudioBackend::resolveTrackPath(const QString& chartPath) const
 {
-    const QString normalizedChartPath = chartPath.isEmpty() ? QString() : QDir::cleanPath(chartPath);
-    if (!warmupPaths_.chartPath.isEmpty() && normalizedChartPath == warmupPaths_.chartPath) {
-        return warmupPaths_.trackPath;
-    }
+    // Resolved-path warmup cache removed (2026-06-03). It keyed on the chart-path
+    // string only and never re-validated the track file, so a same-named track
+    // with new content — or a track that appeared/changed after warmup — was
+    // shadowed by a stale (or empty) cached path, silently dropping the BGM.
+    // The live resolver is cheap and exists-checked; the warmup worker still
+    // byte-prefetches the file into the OS cache, which was warmup's real value.
     return miacode::chart_assets::resolveTrackPath(chartPath);
 }
 
 QString BassPreviewAudioBackend::resolveSfxDir() const
 {
-    if (!warmupPaths_.sfxDir.isEmpty()) {
-        return warmupPaths_.sfxDir;
-    }
     return miacode::preview_sfx::resolveSfxDirectory();
 }
 
@@ -696,9 +697,13 @@ bool BassPreviewAudioBackend::canBePrimary(QString* reason) const
 void BassPreviewAudioBackend::setWarmupResolvedPaths(const QString& chartPath, const QString& trackPath, const QString& sfxDir)
 {
     MC_OP("BassPreviewAudioBackend::setWarmupResolvedPaths");
-    warmupPaths_.chartPath = chartPath.isEmpty() ? QString() : QDir::cleanPath(chartPath);
-    warmupPaths_.trackPath = trackPath.isEmpty() ? QString() : QDir::cleanPath(trackPath);
-    warmupPaths_.sfxDir = sfxDir.isEmpty() ? QString() : QDir::cleanPath(sfxDir);
+    // No-op: the resolved-path cache was removed (see resolveTrackPath). Path
+    // resolution is now always live so a same-named track with new content is
+    // picked up. Kept as a no-op to preserve the backend interface; the warmup
+    // worker still byte-prefetches the files into the OS cache.
+    Q_UNUSED(chartPath);
+    Q_UNUSED(trackPath);
+    Q_UNUSED(sfxDir);
 }
 
 bool BassPreviewAudioBackend::ensureBassFxLoaded()
@@ -1359,12 +1364,20 @@ void BassPreviewAudioBackend::setChartPath(const QString& chartPath)
 {
     MC_OP("BassPreviewAudioBackend::setChartPath");
     const QString normalized = chartPath.isEmpty() ? QString() : QDir::cleanPath(chartPath);
-    if (preparedAssets_.chartPath == normalized) {
+    // Content-aware skip: the same chart path can point at a track whose bytes
+    // were rewritten in place (the in-app audio tools rewrite track.mp3 at the
+    // same path, and users swap same-named files in Explorer). A path-only
+    // equality check would wrongly skip the reload and keep playing the old
+    // audio, recoverable only by switching files. Stamp the resolved track by
+    // (size, mtime) and skip ONLY when both the path and the stamp are unchanged.
+    const QString trackStamp = miacode::fs::fileContentStamp(resolveTrackPath(normalized));
+    if (preparedAssets_.chartPath == normalized && preparedAssets_.trackStamp == trackStamp) {
         return;
     }
     invalidateRetainedPlaybackState(QStringLiteral("chart_path_changed"));
     trackMissingAfterLoadLogged_ = false;
     preparedAssets_.chartPath = normalized;
+    preparedAssets_.trackStamp = trackStamp;
     refreshPreparedAssets();
     if (engineInitialized_) {
         initializeAssets();

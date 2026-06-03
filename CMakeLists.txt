@@ -1098,6 +1098,19 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/common src/preview src/audio
     )
 
+    # Simulation spec for the preview audio/stage-media cache mechanism: the
+    # content-stamp skip decision (size:mtime, NOT path-only) and the live,
+    # uncached track/bg resolvers. Drives the real production functions against
+    # real temp files, simulating an in-place track.mp3/bg.png rewrite.
+    miacode_add_dev_tool(preview_media_cache_stamp_spec TEST
+        SOURCES
+            src/tools/preview/PreviewMediaCacheStampSpec.cpp
+            src/common/FileContentStamp.h
+            src/common/ChartAssetPaths.h
+        LIBS Qt6::Core
+        INCLUDES src src/common
+    )
+
     miacode_add_dev_tool(quickshell_preview_surface_policy_spec TEST
         SOURCES
             src/tools/preview/QuickShellPreviewSurfacePolicySpec.cpp

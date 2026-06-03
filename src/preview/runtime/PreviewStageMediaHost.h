@@ -163,11 +163,12 @@ private:
     MediaKind mediaKind_ = MediaKind::None;
     QString chartPath_;
     QString mediaPath_;
-    // Phase 4c — last-set raw `&video=` value. Cached so a no-op
-    // setChartPath(same chart, same override) is a fast skip.
+    // Phase 4c — last-set raw `&video=` value. Part of the setChartPath skip key.
     QString chartVideoOverridePath_;
-    QString warmupChartPath_;
-    QString warmupMediaPath_;
+    // Content stamp (size:mtime) of the resolved media, so setChartPath skips a
+    // re-decode only when the path, the override AND the file content are all
+    // unchanged — a same-named clip with new bytes still forces a reload.
+    QString mediaStamp_;
     QUrl imageSource_;
     // Phase 4c-8 — cached QImage of the loaded image-mode background.
     // Populated in loadImageMedia(); cleared in clearMedia/loadVideoMedia/
