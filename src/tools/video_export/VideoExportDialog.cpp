@@ -39,6 +39,7 @@
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSplitter>
+#include <QTabWidget>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -586,17 +587,36 @@ VideoExportDialog::VideoExportDialog(
     rootLayout->setSpacing(8);
     rootLayout->setSizeConstraint(QLayout::SetDefaultConstraint);
 
-    auto* primaryPanel = new QFrame(this);
-    primaryPanel->setObjectName(QStringLiteral("VideoExportPrimaryPanel"));
-    auto* primaryPanelLayout = new QVBoxLayout(primaryPanel);
-    primaryPanelLayout->setContentsMargins(10, 10, 10, 10);
-    primaryPanelLayout->setSpacing(8);
-    rootLayout->addWidget(primaryPanel, 0);
+    // Tabbed settings. The persistent time bar (scrubber + transport) is
+    // built later and lives OUTSIDE this tab widget so it stays reachable
+    // on every page — you can scrub and watch the live preview while tuning
+    // any setting. Three pages:
+    //   Output  — export-only encoding params + the export range.
+    //   Visuals — everything that changes the rendered picture (live).
+    //   HUD     — overlay toggles + HUD font (live).
+    settingsTabs_ = new QTabWidget(this);
+    settingsTabs_->setObjectName(QStringLiteral("VideoExportTabs"));
+    rootLayout->addWidget(settingsTabs_, 0);
+
+    auto* outputPage = new QWidget(settingsTabs_);
+    auto* outputPageLayout = new QVBoxLayout(outputPage);
+    outputPageLayout->setContentsMargins(4, 6, 4, 6);
+    outputPageLayout->setSpacing(10);
+
+    auto* visualsPage = new QWidget(settingsTabs_);
+    auto* visualsPageLayout = new QVBoxLayout(visualsPage);
+    visualsPageLayout->setContentsMargins(4, 6, 4, 6);
+    visualsPageLayout->setSpacing(8);
+
+    auto* hudPage = new QWidget(settingsTabs_);
+    auto* hudPageLayout = new QVBoxLayout(hudPage);
+    hudPageLayout->setContentsMargins(4, 6, 4, 6);
+    hudPageLayout->setSpacing(8);
 
     // Output section — same label-above-control style as the dropdown
     // grid below. Top line is the "Output" label, bottom line carries
     // the path field (stretches) and the Browse button (fixed width).
-    auto* outputRow = new QWidget(primaryPanel);
+    auto* outputRow = new QWidget(outputPage);
     auto* outputColumn = new QVBoxLayout(outputRow);
     outputColumn->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     outputColumn->setSpacing(6);
@@ -618,7 +638,7 @@ VideoExportDialog::VideoExportDialog(
     outputControlLayout->addWidget(outputPathEdit_, 1);
     outputControlLayout->addWidget(browseButton, 0);
     outputColumn->addWidget(outputControlRow, 0);
-    primaryPanelLayout->addWidget(outputRow, 0);
+    outputPageLayout->addWidget(outputRow, 0);
     // Beta20-fix — 2x2 grid layout for the 4 dropdown options.
     //
     // Mirrors the "Gameplay" group in the Video Settings dialog: each
@@ -637,7 +657,7 @@ VideoExportDialog::VideoExportDialog(
     //   │ Audio quality          │ Export Settings        │
     //   │ [192 kbps          ▼] │ [Fast              ▼] │
     //   └────────────────────────┴────────────────────────┘
-    auto* optionsGrid = new QWidget(primaryPanel);
+    auto* optionsGrid = new QWidget(outputPage);
     auto* optionsGridLayout = new QGridLayout(optionsGrid);
     optionsGridLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     optionsGridLayout->setHorizontalSpacing(16);
@@ -794,12 +814,21 @@ VideoExportDialog::VideoExportDialog(
         presetButton_
     );
 
-    primaryPanelLayout->addWidget(optionsGrid, 0);
+    outputPageLayout->addWidget(optionsGrid, 0);
 
-    rangeContent_ = new QWidget(this);
+    rangeContent_ = new QWidget(outputPage);
     auto* rangeLayout = new QVBoxLayout(rangeContent_);
     rangeLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     rangeLayout->setSpacing(6);
+
+    auto* rangeTitleLabel = new QLabel(
+        uiText("dialog.video_export.section.range", QStringLiteral("Export Range")),
+        rangeContent_
+    );
+    QFont rangeTitleFont = rangeTitleLabel->font();
+    rangeTitleFont.setWeight(QFont::DemiBold);
+    rangeTitleLabel->setFont(rangeTitleFont);
+    rangeLayout->addWidget(rangeTitleLabel, 0);
 
     startSecondSpin_ = new TimestampSpinBox(rangeContent_);
     startSecondSpin_->setRange(0.0, totalDurationSeconds_);
@@ -865,21 +894,35 @@ VideoExportDialog::VideoExportDialog(
         + kSetButtonLeftGap
         + startCurrentTimeEdit_->minimumWidth();
 
+    // addIntroCheck_ is built further down (in the former "Options" block);
+    // it is inserted just above the range on this page once it exists.
+    outputPageLayout->addWidget(rangeContent_, 0);
+    outputPageLayout->addStretch(1);
+
+    // Persistent time bar — lives OUTSIDE the tab widget so the scrubber and
+    // transport stay reachable on every settings page. Added to rootLayout
+    // after the tabs, below.
+    auto* previewStrip = new QFrame(this);
+    previewStrip->setObjectName(QStringLiteral("VideoExportPrimaryPanel"));
+    auto* previewStripLayout = new QVBoxLayout(previewStrip);
+    previewStripLayout->setContentsMargins(10, 8, 10, 8);
+    previewStripLayout->setSpacing(2);
+
     previewCursorSecond_ = qBound(0.0, currentPreviewSecond(), totalDurationSeconds_);
     previewSlider_ = new QSlider(Qt::Horizontal, this);
     previewSlider_->setRange(0, secondToSliderValue(totalDurationSeconds_));
     previewSlider_->setValue(secondToSliderValue(previewCursorSecond_));
     previewSlider_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     previewSlider_->setStyleSheet(UiTheme::formSliderStyleSheet());
-    auto* previewControlsRow = new QWidget(primaryPanel);
+    auto* previewControlsRow = new QWidget(previewStrip);
     auto* previewControlsLayout = new QHBoxLayout(previewControlsRow);
     previewControlsLayout->setContentsMargins(kSectionContentLeftInset, 2, kSectionContentLeftInset, 0);
     previewControlsLayout->setSpacing(kPreviewControlSpacing);
 
-    previewTimeLabel_ = new QLabel(primaryPanel);
+    previewTimeLabel_ = new QLabel(previewStrip);
     previewTimeLabel_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     previewTimeLabel_->setFixedWidth(rangeControlWidth);
-    auto* previewTimeRow = new QWidget(primaryPanel);
+    auto* previewTimeRow = new QWidget(previewStrip);
     auto* previewTimeLayout = new QHBoxLayout(previewTimeRow);
     const int previewControlsWidth =
         (kPreviewControlButtonWidth * 2)
@@ -911,10 +954,14 @@ VideoExportDialog::VideoExportDialog(
     previewControlsLayout->addWidget(previewRangeButton_, 0);
     previewControlsLayout->addSpacing(kPreviewControlsToSliderGap);
     previewControlsLayout->addWidget(previewSlider_, 1);
-    primaryPanelLayout->addWidget(previewControlsRow, 0);
-    primaryPanelLayout->addWidget(previewTimeRow, 0);
+    previewStripLayout->addWidget(previewControlsRow, 0);
+    previewStripLayout->addWidget(previewTimeRow, 0);
+    rootLayout->addWidget(previewStrip, 0);
 
-    optionsContent_ = new QWidget(this);
+    // optionsContent_ now holds only the Visuals-page controls; it is added
+    // to the Visuals tab below. HUD-page checkboxes are reparented onto the
+    // HUD tab, and "Add intro" onto the Output tab, further down.
+    optionsContent_ = new QWidget(visualsPage);
     auto* optionsLayout = new QGridLayout(optionsContent_);
     optionsLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     optionsLayout->setHorizontalSpacing(10);
@@ -1178,9 +1225,13 @@ VideoExportDialog::VideoExportDialog(
     backgroundScaleModeLayout->addWidget(backgroundScaleModeLabel, 0);
     backgroundScaleModeLayout->addWidget(backgroundScaleModeButton_, 1);
     optionsLayout->addWidget(backgroundScaleModeRow, 4, 0, 1, 2);
-    optionsLayout->addWidget(smoothBrightnessCheck_, 5, 0, 1, 1, Qt::AlignLeft | Qt::AlignTop);
-    optionsLayout->addWidget(showTimestampCheck_, 5, 1, 1, 1, Qt::AlignLeft | Qt::AlignTop);
-    auto* objectStatsRow = new QWidget(optionsContent_);
+    optionsLayout->addWidget(smoothBrightnessCheck_, 5, 0, 1, 2, Qt::AlignLeft | Qt::AlignTop);
+    visualsPageLayout->addWidget(optionsContent_, 0);
+    visualsPageLayout->addStretch(1);
+
+    // HUD page — overlay toggles + the HUD font picker.
+    hudPageLayout->addWidget(showTimestampCheck_, 0, Qt::AlignLeft | Qt::AlignTop);
+    auto* objectStatsRow = new QWidget(hudPage);
     auto* objectStatsLayout = new QHBoxLayout(objectStatsRow);
     objectStatsLayout->setContentsMargins(0, 0, 0, 0);
     objectStatsLayout->setSpacing(8);
@@ -1193,32 +1244,32 @@ VideoExportDialog::VideoExportDialog(
     objectStatsLayout->addWidget(showChartInfoCheck_, 0, Qt::AlignLeft | Qt::AlignVCenter);
     objectStatsLayout->addWidget(hudFontSettingsButton_, 0);
     objectStatsLayout->addStretch(1);
-    optionsLayout->addWidget(objectStatsRow, 6, 0, 1, 2);
-    optionsLayout->addWidget(addIntroCheck_, 7, 0, 1, 2, Qt::AlignLeft | Qt::AlignTop);
-    refreshAddIntroEnabledState();
-    rootLayout->addWidget(
-        buildCollapsibleSection(
-            l10n(QStringLiteral("Options"), QStringLiteral("閫夐」")),
-            optionsContent_,
-            false,
-            &optionsToggle_
-        )
-    );
-    rootLayout->addWidget(
-        buildCollapsibleSection(
-            l10n(QStringLiteral("Export Range"), QStringLiteral("瀵煎嚭鍖洪棿")),
-            rangeContent_,
-            false,
-            &rangeToggle_
-        )
-    );
+    hudPageLayout->addWidget(objectStatsRow, 0);
+    hudPageLayout->addStretch(1);
 
-    if (optionsToggle_ != nullptr) {
-        optionsToggle_->setText(uiText("dialog.video_export.section.options", QStringLiteral("Options")));
-    }
-    if (rangeToggle_ != nullptr) {
-        rangeToggle_->setText(uiText("dialog.video_export.section.range", QStringLiteral("Export Range")));
-    }
+    // "Add intro" applies to full-range exports only and is tied to the
+    // range, so it lives on the Output page, inserted just above the range.
+    const int rangeWidgetIndex = outputPageLayout->indexOf(rangeContent_);
+    outputPageLayout->insertWidget(
+        rangeWidgetIndex >= 0 ? rangeWidgetIndex : outputPageLayout->count(),
+        addIntroCheck_,
+        0,
+        Qt::AlignLeft | Qt::AlignTop
+    );
+    refreshAddIntroEnabledState();
+
+    settingsTabs_->addTab(
+        outputPage,
+        uiText("dialog.video_export.section.output", l10n(QStringLiteral("Output"), QStringLiteral("输出")))
+    );
+    settingsTabs_->addTab(
+        visualsPage,
+        uiText("dialog.video_export.section.visuals", l10n(QStringLiteral("Visuals"), QStringLiteral("画面")))
+    );
+    settingsTabs_->addTab(
+        hudPage,
+        uiText("dialog.video_export.section.hud", l10n(QStringLiteral("HUD"), QStringLiteral("HUD")))
+    );
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
     exportButton_ = buttonBox->addButton(uiText("dialog.video_export.button.export", QStringLiteral("Export")), QDialogButtonBox::AcceptRole);
@@ -1324,73 +1375,14 @@ VideoExportDialog::VideoExportDialog(
         if (outputPathEdit_ != nullptr) {
             outputPathEdit_->clearFocus();
         }
-        if (rangeToggle_ != nullptr) {
-            rangeToggle_->setFocus(Qt::OtherFocusReason);
+        if (settingsTabs_ != nullptr) {
+            settingsTabs_->setFocus(Qt::OtherFocusReason);
         }
         refreshDialogGeometry();
         if (QWidget* owner = parentWidget(); owner != nullptr) {
             move(desiredDialogTopLeft(owner, size()));
         }
     });
-}
-
-QWidget* VideoExportDialog::buildCollapsibleSection(
-    const QString& title,
-    QWidget* content,
-    bool expanded,
-    QToolButton** toggleOut
-)
-{
-    auto* container = new QWidget(this);
-    auto* layout = new QVBoxLayout(container);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(4);
-
-    auto* toggle = new QToolButton(container);
-    toggle->setText(title);
-    toggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    toggle->setCheckable(true);
-    toggle->setChecked(expanded);
-    toggle->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    toggle->setStyleSheet(UiTheme::collapsibleToggleStyleSheet());
-
-    auto* panel = new QFrame(container);
-    panel->setObjectName(QStringLiteral("VideoExportSectionPanel"));
-    auto* panelLayout = new QVBoxLayout(panel);
-    panelLayout->setContentsMargins(10, 10, 10, 10);
-    panelLayout->setSpacing(0);
-    panelLayout->addWidget(content, 0);
-
-    layout->addWidget(toggle, 0);
-    layout->addWidget(panel, 0);
-    updateSectionToggle(toggle, content, expanded);
-    panel->setVisible(expanded);
-
-    connect(toggle, &QToolButton::toggled, this, [this, toggle, content, panel](bool checked) {
-        updateSectionToggle(toggle, content, checked);
-        if (panel != nullptr) {
-            panel->setVisible(checked);
-        }
-        refreshDialogGeometry();
-        QTimer::singleShot(0, this, [this]() { refreshDialogGeometry(); });
-    });
-    if (toggleOut != nullptr) {
-        *toggleOut = toggle;
-    }
-    return container;
-}
-
-void VideoExportDialog::updateSectionToggle(QToolButton* toggle, QWidget* content, bool expanded)
-{
-    if (toggle != nullptr) {
-        toggle->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
-    }
-    if (content != nullptr) {
-        content->setSizePolicy(QSizePolicy::Preferred, expanded ? QSizePolicy::Preferred : QSizePolicy::Ignored);
-        content->setMinimumHeight(0);
-        content->setMaximumHeight(expanded ? QWIDGETSIZE_MAX : 0);
-        content->setVisible(expanded);
-    }
 }
 
 void VideoExportDialog::refreshDialogGeometry()

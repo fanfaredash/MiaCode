@@ -904,7 +904,8 @@ QString exportDialogStyleSheet()
         .arg(css(c.windowAltBg))
         .arg(css(c.cardBg))
         .arg(css(c.border))
-        .arg(css(c.textPrimary));
+        .arg(css(c.textPrimary))
+        + dialogTabStripStyleSheet(c.windowAltBg);
 }
 
 QString designerPickerDialogStyleSheet()

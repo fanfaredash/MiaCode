@@ -16,6 +16,7 @@ class QLineEdit;
 class QMenu;
 class QPushButton;
 class QSlider;
+class QTabWidget;
 class QTimer;
 class QToolButton;
 class QWheelEvent;
@@ -114,8 +115,6 @@ private:
     double rangeStartSeconds() const;
     double rangeEndSeconds() const;
     QString formatSecond(double second) const;
-    QWidget* buildCollapsibleSection(const QString& title, QWidget* content, bool expanded, QToolButton** toggleOut);
-    void updateSectionToggle(QToolButton* toggle, QWidget* content, bool expanded);
 
     void closeEvent(QCloseEvent* event) override;
     void done(int result) override;
@@ -196,8 +195,7 @@ private:
     QLabel* previewTimeLabel_ = nullptr;
     QWidget* optionsContent_ = nullptr;
     QWidget* rangeContent_ = nullptr;
-    QToolButton* optionsToggle_ = nullptr;
-    QToolButton* rangeToggle_ = nullptr;
+    QTabWidget* settingsTabs_ = nullptr;
     QToolButton* previewRangeButton_ = nullptr;
     QToolButton* stopPreviewButton_ = nullptr;
     QPushButton* exportButton_ = nullptr;
