@@ -134,6 +134,23 @@ bool tryConsumeLeadingFollowControlToken(const QString& text, int limit, int* cu
     return false;
 }
 
+// Skips a leading `||` comment (runs to end of line) so a comment sitting before the first
+// note of a span — e.g. a lead-in label above `{16} 1,2,` — is not highlighted. Advances the
+// cursor to the comment's terminating newline (left for the whitespace pass to consume) or to
+// the span limit when the comment reaches it. Rebuild-time only; no per-tick cost.
+bool tryConsumeLeadingFollowComment(const QString& text, int limit, int* cursor)
+{
+    if (cursor == nullptr || *cursor < 0 || *cursor + 1 >= limit || limit > text.size()) {
+        return false;
+    }
+    if (text.at(*cursor) != QLatin1Char('|') || text.at(*cursor + 1) != QLatin1Char('|')) {
+        return false;
+    }
+    const int newline = text.indexOf(QLatin1Char('\n'), *cursor + 2);
+    *cursor = (newline >= 0 && newline < limit) ? newline : limit;
+    return true;
+}
+
 bool tryConsumeTrailingFollowControlToken(const QString& text, int start, int* endExclusive)
 {
     if (endExclusive == nullptr || start < 0 || *endExclusive <= start || *endExclusive > text.size()) {
@@ -168,27 +185,21 @@ bool tryConsumeTrailingFollowControlToken(const QString& text, int start, int* e
     return false;
 }
 
-int findTrailingInlineTimeSignatureCommentStart(const QString& text, int start, int endExclusive)
+// Returns the position of the first '||' on the last line of the [start, endExclusive)
+// region, or -1 if none. In simai '||' starts a comment that runs to end of line, so this
+// covers every comment kind (plain notes, inline time-signature hints, section labels, …).
+// Used only at rebuild time to keep comments out of the preview-follow selection; the
+// per-tick path is a pure lookup, so this adds no playback cost.
+int findTrailingCommentStart(const QString& text, int start, int endExclusive)
 {
     if (start < 0 || endExclusive > text.size() || start >= endExclusive) {
         return -1;
     }
 
     const int lineStart = qMax(start, text.lastIndexOf(QLatin1Char('\n'), endExclusive - 1) + 1);
-    const QString tailLine = text.mid(lineStart, endExclusive - lineStart);
-    for (int index = 0; index + 1 < tailLine.size(); ++index) {
-        if (tailLine.at(index) != QLatin1Char('|') || tailLine.at(index + 1) != QLatin1Char('|')) {
-            continue;
-        }
-        int numerator = 0;
-        int denominator = 0;
-        if (miacode::simai::parseInlineTimeSignatureComment(
-                tailLine,
-                index,
-                &numerator,
-                &denominator,
-                nullptr)) {
-            return lineStart + index;
+    for (int index = lineStart; index + 1 < endExclusive; ++index) {
+        if (text.at(index) == QLatin1Char('|') && text.at(index + 1) == QLatin1Char('|')) {
+            return index;
         }
     }
 
@@ -225,7 +236,7 @@ void trimFollowSelectionSegment(const QString& text, int anchorCol, int* startCo
             trimmedTrailing = true;
         }
 
-        const int commentStart = findTrailingInlineTimeSignatureCommentStart(text, segmentStart, segmentEnd);
+        const int commentStart = findTrailingCommentStart(text, segmentStart, segmentEnd);
         if (commentStart >= 0) {
             segmentEnd = commentStart;
             trimmedTrailing = true;
@@ -1823,6 +1834,9 @@ void TimelineQuickModel::rebuildFollowSelectionSpans()
             if (tryConsumeLeadingFollowControlToken(flatSpan.text, trimmedEndIndex, &trimmedStartIndex)) {
                 trimmedLeading = true;
             }
+            if (tryConsumeLeadingFollowComment(flatSpan.text, trimmedEndIndex, &trimmedStartIndex)) {
+                trimmedLeading = true;
+            }
         }
 
         bool trimmedTrailing = true;
@@ -1833,7 +1847,7 @@ void TimelineQuickModel::rebuildFollowSelectionSpans()
                 trimmedTrailing = true;
             }
 
-            const int commentStart = findTrailingInlineTimeSignatureCommentStart(
+            const int commentStart = findTrailingCommentStart(
                 flatSpan.text,
                 trimmedStartIndex,
                 trimmedEndIndex);

@@ -1030,6 +1030,95 @@ int main(int argc, char** argv)
     }
 
     {
+        // Preview-follow highlight must drop general `||` comments, not only inline
+        // time-signature hints. Trimming runs at rebuild time, so the per-tick lookup stays
+        // comment-free with no added playback cost.
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("(120){4}1,2-4[4:1] ||note comment\nE"), 0.0);
+        int startCol = 0;
+        int endCol = 0;
+        const bool resolved = model.resolvePreviewFollowSelectionRange(1, 11, &startCol, &endCol);
+        expect(resolved && startCol == 11 && endCol == 18,
+               QStringLiteral("follow selection trims a trailing || comment after the active slide body (startCol=%1 endCol=%2)")
+                   .arg(startCol)
+                   .arg(endCol));
+    }
+
+    {
+        // Span path (the one that actually drives the editor decoration): a trailing comment
+        // after a beat, before the next beat, must be excluded from the highlighted span while
+        // the active note body (here a slide `2-5[4:1]`, cols 3..10) is kept intact.
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("1,2-5[4:1], ||measure tag\n3,\nE"), 0.0);
+        TimelineQuickModel::PreviewFollowBinding binding;
+        const bool resolved = model.resolvePreviewFollowBinding(0.6, &binding);
+        expect(resolved
+                   && binding.span.hasVisibleBody
+                   && binding.span.startLine == 1
+                   && binding.span.startCol == 3
+                   && binding.span.endLine == 1
+                   && binding.span.endCol == 10,
+               QStringLiteral("follow span keeps the slide body but stops before a trailing || comment: %1")
+                   .arg(describeFollowBinding(binding)));
+    }
+
+    {
+        // A standalone comment line between two beats must not leak into the span either.
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("1,\n|| section\n2,\nE"), 0.0);
+        TimelineQuickModel::PreviewFollowBinding binding;
+        const bool resolved = model.resolvePreviewFollowBinding(0.1, &binding);
+        expect(resolved
+                   && binding.span.hasVisibleBody
+                   && binding.span.startLine == 1
+                   && binding.span.startCol == 1
+                   && binding.span.endLine == 1
+                   && binding.span.endCol == 1,
+               QStringLiteral("follow span excludes a standalone || comment line between beats: %1")
+                   .arg(describeFollowBinding(binding)));
+    }
+
+    {
+        // Leading comment (and blank line) before the first beat must be trimmed too: the
+        // first anchor shares second 0.0 with the empty/comment lines, so the span starts at
+        // the document top — the leading trim has to skip blank lines, `||` comments and
+        // control tokens to reach the note `1` on line 3.
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("\n|| lead-in\n{16} 1,2,\nE"), 0.0);
+        TimelineQuickModel::PreviewFollowBinding binding;
+        const bool resolved = model.resolvePreviewFollowBinding(0.05, &binding);
+        expect(resolved
+                   && binding.span.hasVisibleBody
+                   && binding.span.startLine == 3
+                   && binding.span.startCol == 6
+                   && binding.span.endLine == 3
+                   && binding.span.endCol == 6,
+               QStringLiteral("follow span skips a leading || comment and blank line before the first beat: %1")
+                   .arg(describeFollowBinding(binding)));
+    }
+
+    {
+        // Mid-chart leading comment: a comment between a comma-heavy line and the next note
+        // (which shares the trailing comma's second) must not leak into that note's span.
+        const QString chartText = QStringLiteral(
+            "{16}8s4[8:4],,,, ,,,, 5-1b[8:1],,,, ,,,,\n\n|| end here\n\n{32}4x,3x,2x");
+        TimelineQuickModel model;
+        model.rebuildFromText(chartText, 0.0);
+        const double fourthSecond = model.timelineSecondForCursor(5, 5);
+        TimelineQuickModel::PreviewFollowBinding binding;
+        const bool resolved = model.resolvePreviewFollowBinding(fourthSecond, &binding);
+        expect(resolved
+                   && binding.span.hasVisibleBody
+                   && binding.span.startLine == 5
+                   && binding.span.startCol == 5
+                   && binding.span.endLine == 5
+                   && binding.span.endCol == 6,
+               QStringLiteral("follow span skips a mid-chart leading comment between comma runs (4x second=%1): %2")
+                   .arg(fourthSecond)
+                   .arg(describeFollowBinding(binding)));
+    }
+
+    {
         TimelineQuickModel incremental;
         TimelineQuickModel rebuilt;
         const QString original = QStringLiteral("1/2,\n1,,\nE");
