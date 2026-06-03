@@ -80,11 +80,20 @@ Rectangle {
         return fullscreenMode ? "#40FFFFFF" : tone("border", "#d5e0ec")
     }
 
+    // Single source of truth for the on-screen handle centre (slider-local x).
+    // Handle, fill, tooltip and the seek target all derive from displayedProgress
+    // so the visible thumb can never disagree with where the seek actually lands.
+    function handleCenterX() {
+        return transportSlider.leftPadding
+            + root.displayedProgress * (transportSlider.availableWidth - root.handleDiameter)
+            + root.handleDiameter / 2
+    }
+
     function tooltipGlobalX() {
         if (!preciseHintWindow.visible)
             return 0
         const handlePoint = transportSlider.mapToGlobal(
-            transportSlider.leftPadding + transportSlider.visualPosition * transportSlider.availableWidth,
+            root.handleCenterX(),
             0
         )
         return Math.round(handlePoint.x - preciseHintWindow.width / 2)
@@ -94,7 +103,7 @@ Rectangle {
         if (!preciseHintWindow.visible)
             return 0
         const handlePoint = transportSlider.mapToGlobal(
-            transportSlider.leftPadding + transportSlider.visualPosition * transportSlider.availableWidth,
+            root.handleCenterX(),
             0
         )
         return Math.round(handlePoint.y - preciseHintWindow.height - 14)
@@ -106,6 +115,13 @@ Rectangle {
     readonly property real displayedProgress: Math.max(0, Math.min(1, displayedSeconds / durationSeconds))
     readonly property string timeSummary: formatDisplayTime(displayedSeconds) + " / " + formatDisplayTime(durationSeconds)
     readonly property int controlButtonHeight: metric("previewControlButtonMinHeight", 28)
+    // Visual handle diameter (kept in sync with the `handle:` Rectangle below).
+    readonly property int handleDiameter: 18
+    // Interactive (clickable/draggable) height of the scrubber. Deliberately
+    // smaller than the row so a click clearly below the track line — but still
+    // inside the row rectangle — no longer triggers a seek. Tunable; keep < the
+    // handle diameter when you want the hit band to hug the track line.
+    readonly property int scrubInteractiveHeight: fullscreenMode ? 18 : 14
     property real preciseHintSecond: positionSeconds
     property bool preciseHintVisible: false
     property bool scrubActive: false
@@ -193,7 +209,14 @@ Rectangle {
             Slider {
                 id: transportSlider
 
-                anchors.fill: parent
+                // Hit area hugs the track line instead of filling the whole row,
+                // so clicks below the line (but inside the row) no longer seek.
+                // The handle still renders at full size and may visually overflow
+                // this band — only interaction is constrained.
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                height: root.scrubInteractiveHeight
                 from: 0
                 to: root.durationSeconds
                 live: true
@@ -277,9 +300,7 @@ Rectangle {
                     0,
                     Math.min(
                         parent.width - width,
-                        transportSlider.leftPadding
-                            + transportSlider.visualPosition * transportSlider.availableWidth
-                            - width / 2
+                        root.handleCenterX() - width / 2
                     )
                 )
 

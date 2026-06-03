@@ -319,6 +319,11 @@ namespace {
 
 constexpr auto kQuickShellTransportSeekProperty = "miacode.quick_shell_transport_seek";
 
+// H (observability): if the requested scrub second and the position the preview
+// actually settled on diverge by more than this, emit a `preview_scrub_misalign`
+// line so a "thumb vs. real position" report can be classified from logs.
+constexpr double kQuickShellScrubMisalignWarnSeconds = 0.05;
+
 void appendQuickShellBackendLog(const QString& action, const QString& payload = QString())
 {
     QString text = QStringLiteral("action=%1").arg(action);
@@ -470,6 +475,18 @@ void MainWindow::WindowSection::updateShellPreviewScrub(double second, bool cent
     } else {
         owner_.schedulePreviewSeek(clampedSecond, centerView);
     }
+    const double appliedSecond = owner_.pausedSeekAppliedVisualSecond_;
+    const double misalignDelta = clampedSecond - appliedSecond;
+    if (qAbs(misalignDelta) > kQuickShellScrubMisalignWarnSeconds) {
+        appendQuickShellBackendLog(
+            QStringLiteral("preview_scrub_misalign"),
+            QString("phase=update handle=%1 requested=%2 applied=%3 delta=%4")
+                .arg(second, 0, 'f', 6)
+                .arg(clampedSecond, 0, 'f', 6)
+                .arg(appliedSecond, 0, 'f', 6)
+                .arg(misalignDelta, 0, 'f', 6)
+        );
+    }
 }
 
 void MainWindow::WindowSection::endShellPreviewScrub(double second, bool centerView)
@@ -490,6 +507,18 @@ void MainWindow::WindowSection::endShellPreviewScrub(double second, bool centerV
         owner_.previewSeekDebounceTimer_->stop();
     }
     owner_.seekPreviewToSecond(clampedSecond, centerView);
+    const double appliedSecond = owner_.qtPreviewPauseSecond_;
+    const double misalignDelta = clampedSecond - appliedSecond;
+    if (qAbs(misalignDelta) > kQuickShellScrubMisalignWarnSeconds) {
+        appendQuickShellBackendLog(
+            QStringLiteral("preview_scrub_misalign"),
+            QString("phase=end handle=%1 requested=%2 applied=%3 delta=%4")
+                .arg(second, 0, 'f', 6)
+                .arg(clampedSecond, 0, 'f', 6)
+                .arg(appliedSecond, 0, 'f', 6)
+                .arg(misalignDelta, 0, 'f', 6)
+        );
+    }
 }
 
 void MainWindow::WindowSection::setShellPreviewRate(double rate)
