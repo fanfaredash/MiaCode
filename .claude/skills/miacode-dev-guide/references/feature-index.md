@@ -43,19 +43,25 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `tryAutoCloseBracket`, closing-bracket type-over `tryOverwriteClosingBracket` (typing `)]}` when
   the same glyph already sits to the caret's right steps over it instead of inserting a duplicate),
   empty-pair backspace `tryDeleteBracketPair` (deletes both glyphs of
-  `[|]` in one undo step). All three gated by the auto-close pref; hold `h[]` expand `tryAutoExpandH`).
-- Bracket-completion dropdown ("tab 补全"): typing `( [ {` (and `h`, which expands to `h[]`
-  then offers the `[` durations) pops a simai-aware suggestion list under the caret. Candidate
-  data + scans: `src/editor/SimaiCompletionCatalog.{h,cpp}` (pure, spec at
+  `[|]` in one undo step). All gated by the single auto-completion pref; hold shortcut
+  `tryHoldExpand` (typing `h` inserts a bare `h` and pops the `[8:1]`-style suggestions — it
+  inserts NO bracket itself, so a following `[` yields `h[]`, never the old `h[[]]`).
+- Bracket-completion dropdown ("tab 补全"): typing `( [ {` pops a simai-aware suggestion list under
+  the caret; typing `h` pops the full-bracket hold durations (`[8:1]` …). Candidate
+  data + scans: `src/editor/SimaiCompletionCatalog.{h,cpp}` (pure — `candidatesForOpening` for the
+  brackets, `holdDurationCandidates` for `h`; spec at
   `src/tools/editor/SimaiCompletionCatalogSpec.cpp`); the non-focusing popup widget:
   `src/editor/BracketCompletionPopup.{h,cpp}`; editor glue (`tryBracketInput`, `tryHoldExpand`,
-  `maybeOpenBracketCompletion`, `handleCompletionPopupKey`, `acceptCompletionCandidate`,
-  filter via `cursorPositionChanged`) in `PlainCodeEditor.cpp`. `(` BPM list needs the
-  `&wholebpm` value pushed via `setWholeBpmCandidate` from
-  `DocumentSection::setEditorText`. Preference `editor_bracket_completion` (default on) wired
-  the same way as auto-close (`applyEditorBracketCompletionEnabled`, checkbox in
-  `MainWindow.PreferencesDialog.cpp`). Keys: ↑↓ navigate, Tab/Enter accept (Enter swallows the
-  newline), Esc/keep-typing dismiss.
+  shared opener `openCompletionPopup` behind `maybeOpenBracketCompletion` / `maybeOpenHoldCompletion`,
+  `handleCompletionPopupKey`, `acceptCompletionCandidate`, filter via `cursorPositionChanged`) in
+  `PlainCodeEditor.cpp`. `(` BPM list needs the `&wholebpm` value pushed via `setWholeBpmCandidate`
+  from `DocumentSection::setEditorText`. **One unified preference** `editor_auto_completion`
+  (default on) drives auto-close, the suggestion popup, AND the `h` hold suggestions together —
+  formerly three separate toggles (`editor_auto_close_brackets` / `editor_auto_insert_square_after_h`
+  / `editor_bracket_completion`), now migrated in `EditorSection::loadPortableState` by falling back
+  to the legacy auto-close key. Single setter `PlainCodeEditor::setAutoCompletionEnabled`, apply
+  `applyEditorAutoCompletionEnabled`, one checkbox ("自动补全") in `MainWindow.PreferencesDialog.cpp`.
+  Keys: ↑↓ navigate, Tab/Enter accept (Enter swallows the newline), Esc/keep-typing dismiss.
 - **Unified designer** (metadata-page checkbox "所有难度采用相同名义" / "All difficulties share
   this designer"): when ON, top `&des` and every per-difficulty `&des_N` are kept identical.
   Checkbox build: `MainWindow.FrameBootstrap.cpp` (`unifiedDesignerCheckbox_`). Toggle decision:

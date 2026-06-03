@@ -35,6 +35,18 @@ QStringList squareDurationCandidates()
     };
 }
 
+QStringList holdDurationCandidates()
+{
+    // Derived from squareDurationCandidates() so the two stay in lock-step —
+    // typing 'h' offers the same durations, just with the leading '[' included
+    // (nothing was typed before them, unlike the '[' completion slot).
+    QStringList out;
+    for (const QString& token : squareDurationCandidates()) {
+        out.append(QLatin1Char('[') + token);
+    }
+    return out;
+}
+
 QStringList braceDivisionCandidates()
 {
     // Order fixed per product decision — do not sort.

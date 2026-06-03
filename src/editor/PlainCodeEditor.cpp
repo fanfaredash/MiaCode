@@ -690,19 +690,9 @@ void PlainCodeEditor::setEditorOverwriteMode(bool enabled)
     emit editorOverwriteModeChanged(enabled);
 }
 
-void PlainCodeEditor::setAutoCloseBracketsEnabled(bool enabled)
+void PlainCodeEditor::setAutoCompletionEnabled(bool enabled)
 {
-    autoCloseBracketsEnabled_ = enabled;
-}
-
-void PlainCodeEditor::setAutoInsertSquareAfterHEnabled(bool enabled)
-{
-    autoInsertSquareAfterHEnabled_ = enabled;
-}
-
-void PlainCodeEditor::setBracketCompletionEnabled(bool enabled)
-{
-    bracketCompletionEnabled_ = enabled;
+    autoCompletionEnabled_ = enabled;
     if (!enabled) {
         closeBracketCompletion();
     }
@@ -923,7 +913,7 @@ void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
 // paint, so the matched-pair color (and its cross-line scope) stays consistent.
 bool PlainCodeEditor::tryAutoCloseBracket(const QString& text)
 {
-    if (!autoCloseBracketsEnabled_ || text.size() != 1) {
+    if (!autoCompletionEnabled_ || text.size() != 1) {
         return false;
     }
     QChar opening;
@@ -954,52 +944,9 @@ bool PlainCodeEditor::tryAutoCloseBracket(const QString& text)
     return true;
 }
 
-// simai "hold" shortcut: typing a lowercase `h` expands to `h[]` with the caret
-// parked between the brackets (simai hold notation is `<lane>h[<beats>:<ticks>]`).
-// We require the text to be EXACTLY a single lowercase `h` so Shift+H, Ctrl+H,
-// full-width 「ｈ」 etc. fall through to a normal insert. This is wired to the
-// keyPressEvent path ONLY — deliberately not to the IME commit path, because CJK
-// IMEs routinely commit stray latin letters mid-composition and expanding those
-// to `h[]` (or stacking onto an auto-closed bracket) would be disruptive.
-bool PlainCodeEditor::tryAutoExpandH(const QString& text)
-{
-    if (!autoInsertSquareAfterHEnabled_ || text != QLatin1String("h")) {
-        return false;
-    }
-    if (isReadOnly() || overwriteMode()) {
-        return false;
-    }
-    QTextCursor cursor = textCursor();
-    if (!cursor.hasSelection()) {
-        // Don't expand when the caret already sits right before a '[': typing 'h'
-        // there means the user wants to hold-fill the existing bracket, not spawn
-        // a second empty one (which would read as the contradictory `h[|][...]`).
-        // Fall through to a plain 'h' insert so they can type into the bracket.
-        QTextCursor rightProbe(document());
-        rightProbe.setPosition(cursor.position());
-        if (rightProbe.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor)
-            && rightProbe.selectedText() == QLatin1String("[")) {
-            return false;
-        }
-    }
-    cursor.beginEditBlock();
-    if (cursor.hasSelection()) {
-        // Wrap the selection: h[<sel>]. Mirrors auto-close's surround-with-pair.
-        const QString selected = cursor.selectedText();
-        cursor.insertText(QStringLiteral("h[") + selected + QStringLiteral("]"));
-        cursor.endEditBlock();
-    } else {
-        cursor.insertText(QStringLiteral("h[]"));
-        cursor.movePosition(QTextCursor::PreviousCharacter);
-        cursor.endEditBlock();
-        setTextCursor(cursor);
-    }
-    return true;
-}
-
 // Bracket input that also offers a completion popup. Wraps tryAutoCloseBracket
 // so the suggestion list opens on the same normalized key/IME bracket. Returns
-// true when the bracket was consumed (paired and/or popup opened).
+// true when the bracket was consumed (paired and popup opened).
 bool PlainCodeEditor::tryBracketInput(const QString& text)
 {
     if (text.size() != 1) {
@@ -1019,51 +966,56 @@ bool PlainCodeEditor::tryBracketInput(const QString& text)
         }
         return true;
     }
-    // Auto-close is off (or declined). Offer completion anyway by inserting just
-    // the opening glyph, so the feature is independent of the auto-close pref.
-    return tryBracketCompletionWithoutAutoClose(text);
+    // Auto-close declined (preference off, read-only, overwrite): leave the
+    // bracket to the normal insert path. Completion follows the same single
+    // preference as auto-close, so there is no completion-without-close case.
+    return false;
 }
 
-bool PlainCodeEditor::tryBracketCompletionWithoutAutoClose(const QString& text)
+// simai "hold" shortcut: typing a lowercase `h` inserts a bare `h` and offers
+// the full-bracket hold-duration tokens ("[8:1]" …) as a completion popup —
+// simai hold notation is `<lane>h[<beats>:<ticks>]`. Crucially it inserts NO
+// bracket of its own, so a following `[` produces the normal `h[]` rather than
+// the old contradictory `h[[]]`; the suggestion supplies the whole `[...]`.
+// We require EXACTLY a single lowercase `h` so Shift+H, Ctrl+H, full-width 「ｈ」
+// etc. fall through to a normal insert. Wired to the keyPressEvent path ONLY —
+// CJK IMEs routinely commit stray latin letters mid-composition and triggering
+// this on those would be disruptive.
+bool PlainCodeEditor::tryHoldExpand(const QString& text)
 {
-    if (!bracketCompletionEnabled_ || autoCloseBracketsEnabled_ || text.size() != 1) {
+    if (!autoCompletionEnabled_ || text != QLatin1String("h")) {
         return false;
     }
-    const QChar opening = text.at(0);
-    if (!miacode::editor::isBracketOpening(opening) || isReadOnly() || overwriteMode()) {
+    if (isReadOnly() || overwriteMode()) {
         return false;
     }
-    if (textCursor().hasSelection()) {
-        return false;
-    }
-    // No closing glyph will exist to the right, so only commit to handling the
-    // bracket when there is actually something to suggest; otherwise fall
-    // through to a plain insert.
-    const QStringList candidates =
-        miacode::editor::candidatesForOpening(opening, wholeBpmCandidate_, toPlainText());
-    if (candidates.isEmpty()) {
+    // A completion popup is already filtering — let the `h` be a normal filter
+    // character instead of spawning a second, nested suggestion slot.
+    if (bracketCompletionActive()) {
         return false;
     }
     QTextCursor cursor = textCursor();
-    cursor.insertText(QString(opening));
+    if (cursor.hasSelection()) {
+        // Wrap the selection: h[<sel>]. Mirrors auto-close's surround-with-pair.
+        const QString selected = cursor.selectedText();
+        cursor.beginEditBlock();
+        cursor.insertText(QStringLiteral("h[") + selected + QStringLiteral("]"));
+        cursor.endEditBlock();
+        setTextCursor(cursor);
+        return true;
+    }
+    cursor.insertText(QStringLiteral("h"));
     setTextCursor(cursor);
-    maybeOpenBracketCompletion(opening, /*closingPresent=*/false);
-    return true;
-}
-
-bool PlainCodeEditor::tryHoldExpand(const QString& text)
-{
-    const bool hadSelection = textCursor().hasSelection();
-    if (!tryAutoExpandH(text)) {
-        return false;
+    // Don't suggest when the caret already sits right before a '[': the user is
+    // hold-filling the existing bracket, so the full-bracket tokens would only
+    // duplicate it. The bare 'h' was still the right insert (yields `h[`).
+    QTextCursor rightProbe(document());
+    rightProbe.setPosition(cursor.position());
+    if (rightProbe.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor)
+        && rightProbe.selectedText() == QLatin1String("[")) {
+        return true;
     }
-    // tryAutoExpandH inserted "h[]" with the caret parked between the brackets
-    // (the no-selection case) — that is exactly a '[' completion slot, so offer
-    // the same duration suggestions. A wrapped selection already filled the
-    // brackets, so there is nothing to suggest there.
-    if (!hadSelection) {
-        maybeOpenBracketCompletion(QLatin1Char('['), /*closingPresent=*/true);
-    }
+    maybeOpenHoldCompletion();
     return true;
 }
 
@@ -1073,7 +1025,7 @@ bool PlainCodeEditor::tryHoldExpand(const QString& text)
 // any selection fall through to the default handling.
 bool PlainCodeEditor::tryDeleteBracketPair(QKeyEvent* event)
 {
-    if (!autoCloseBracketsEnabled_ || event->key() != Qt::Key_Backspace) {
+    if (!autoCompletionEnabled_ || event->key() != Qt::Key_Backspace) {
         return false;
     }
     if (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)) {
@@ -1130,7 +1082,7 @@ bool PlainCodeEditor::tryDeleteBracketPair(QKeyEvent* event)
 // A selection, overwrite mode, or read-only falls through to a normal insert.
 bool PlainCodeEditor::tryOverwriteClosingBracket(const QString& text)
 {
-    if (!autoCloseBracketsEnabled_ || text.size() != 1) {
+    if (!autoCompletionEnabled_ || text.size() != 1) {
         return false;
     }
     const QChar closing = text.at(0);
@@ -1193,17 +1145,13 @@ void PlainCodeEditor::ensureCompletionPopup()
             [this](const QString&) { acceptCompletionCandidate(); });
 }
 
-// Opens the suggestion popup for the bracket the caret now sits inside. closing-
-// Present says whether a matching closing glyph was auto-inserted to the right.
-void PlainCodeEditor::maybeOpenBracketCompletion(QChar opening, bool closingPresent)
+// Shared core: anchor the popup under the caret and record the slot state.
+// `opening` governs the filter's "left the slot" check (via its matching close);
+// `closingPresent` says whether an auto-inserted close sits to the right so the
+// accept path can swallow it. No-op when there is nothing to suggest.
+void PlainCodeEditor::openCompletionPopup(const QStringList& candidates, QChar opening, bool closingPresent)
 {
-    if (!bracketCompletionEnabled_ || isReadOnly() || overwriteMode()) {
-        return;
-    }
-    const QStringList candidates =
-        miacode::editor::candidatesForOpening(opening, wholeBpmCandidate_, toPlainText());
     if (candidates.isEmpty()) {
-        // e.g. '(' before any BPM is known — nothing useful to show.
         return;
     }
     completionOpening_ = opening;
@@ -1220,6 +1168,35 @@ void PlainCodeEditor::maybeOpenBracketCompletion(QChar opening, bool closingPres
             .arg(opening)
             .arg(candidates.size())
             .arg(closingPresent ? 1 : 0));
+}
+
+// Opens the suggestion popup for the bracket the caret now sits inside. closing-
+// Present says whether a matching closing glyph was auto-inserted to the right.
+void PlainCodeEditor::maybeOpenBracketCompletion(QChar opening, bool closingPresent)
+{
+    if (!autoCompletionEnabled_ || isReadOnly() || overwriteMode()) {
+        return;
+    }
+    // e.g. '(' before any BPM is known yields an empty list — nothing to show.
+    openCompletionPopup(
+        miacode::editor::candidatesForOpening(opening, wholeBpmCandidate_, toPlainText()),
+        opening,
+        closingPresent);
+}
+
+// Opens the 'h' hold-duration suggestions ("[8:1]" …) anchored right after the
+// just-typed 'h'. No bracket was inserted (closingPresent=false); completion-
+// Opening is '[' so the filter's "left the slot" check keys off ']', matching
+// the '[' duration popup.
+void PlainCodeEditor::maybeOpenHoldCompletion()
+{
+    if (!autoCompletionEnabled_ || isReadOnly() || overwriteMode()) {
+        return;
+    }
+    openCompletionPopup(
+        miacode::editor::holdDurationCandidates(),
+        QLatin1Char('['),
+        /*closingPresent=*/false);
 }
 
 bool PlainCodeEditor::bracketCompletionActive() const
@@ -1509,10 +1486,11 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         return;
     }
 
-    // Bracket auto-pairing is handled by tryAutoCloseBracket() / tryAutoExpandH()
-    // (members, so the IME commit path in inputMethodEvent can reuse them). The
-    // call sites below pass the half-width-normalized text so a full-width
-    // 「（」/「【」/「｛」 pairs the same way a raw "(" / "[" / "{" does.
+    // Bracket auto-pairing is handled by tryAutoCloseBracket() / tryBracketInput()
+    // (members, so the IME commit path in inputMethodEvent can reuse them); the
+    // 'h' hold shortcut by tryHoldExpand(). The call sites below pass the half-
+    // width-normalized text so a full-width 「（」/「【」/「｛」 pairs the same way a
+    // raw "(" / "[" / "{" does.
     if (!halfWidthInputEnabled_
         || (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
         if (tryOverwriteClosingBracket(event->text())

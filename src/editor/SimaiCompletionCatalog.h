@@ -27,7 +27,14 @@ bool isBracketClosing(QChar ch);
 QChar closingBracketFor(QChar opening);
 
 // Static duration suggestions for '['. Order is intentional (most common first).
+// These assume the '[' was already typed (and a ']' auto-inserted), so each
+// token carries only its trailing ']': "8:1]" etc.
 QStringList squareDurationCandidates();
+
+// Hold-duration suggestions for the 'h' shortcut. Same durations as
+// squareDurationCandidates(), but in full-bracket form ("[8:1]") since typing
+// 'h' inserts no bracket — the suggestion supplies the whole "[...]" token.
+QStringList holdDurationCandidates();
 
 // Static subdivision suggestions for '{'. Order is intentional.
 QStringList braceDivisionCandidates();

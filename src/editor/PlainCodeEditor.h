@@ -53,24 +53,18 @@ public:
     void setImeInputDisabled(bool disabled);
     bool imeInputDisabled() const { return imeInputDisabled_; }
     void setEditorOverwriteMode(bool enabled);
-    // Auto-close brackets — when the user types {, [, or (, the matching
-    // closing bracket is inserted right after and the caret stays
-    // between the pair. Default on; controlled via the editor section
-    // of the Preferences dialog.
-    void setAutoCloseBracketsEnabled(bool enabled);
-    bool autoCloseBracketsEnabled() const { return autoCloseBracketsEnabled_; }
-    // simai hold shortcut — typing 'h' auto-inserts '[]' after it and
-    // parks the caret between the square brackets. Independent toggle
-    // from the generic bracket auto-close above.
-    void setAutoInsertSquareAfterHEnabled(bool enabled);
-    bool autoInsertSquareAfterHEnabled() const { return autoInsertSquareAfterHEnabled_; }
-    // Bracket-completion dropdown — when the user opens a ( [ { the editor pops
-    // a small list of simai-aware suggestions (durations / subdivisions / BPMs)
-    // anchored under the caret. Non-blocking: ignoring it and typing keeps the
-    // raw input. Toggled from the editor section of the Preferences dialog;
-    // independent of auto-close (works whether or not the pair is auto-inserted).
-    void setBracketCompletionEnabled(bool enabled);
-    bool bracketCompletionEnabled() const { return bracketCompletionEnabled_; }
+    // Auto-completion — a single preference that bundles every smart-typing
+    // affordance in the chart editor (controlled via the editor section of the
+    // Preferences dialog; default on). When enabled:
+    //   * typing { [ ( auto-inserts the matching close and parks the caret
+    //     between the pair (with type-over and empty-pair backspace to match);
+    //   * opening a bracket pops a simai-aware suggestion list (durations /
+    //     subdivisions / BPMs) anchored under the caret, non-blocking;
+    //   * typing the simai hold letter 'h' offers the full "[8:1]"-style
+    //     hold-duration tokens as suggestions (it inserts no bracket itself).
+    // Previously these were three separate toggles; they are unified here.
+    void setAutoCompletionEnabled(bool enabled);
+    bool autoCompletionEnabled() const { return autoCompletionEnabled_; }
     // Feeds the '(' suggestion list. The chart body editor never holds the
     // &wholebpm metadata line, so the owning window pushes it in on load /
     // difficulty switch (see MainWindow::DocumentSection::setEditorText).
@@ -114,15 +108,16 @@ private:
     void updateCurrentLineHighlightRegion(const QRect& previousRect, const QRect& currentRect);
     // Bracket auto-pairing helpers. Each returns true when it consumed the input
     // and performed the insertion. tryAutoCloseBracket is shared by both the
-    // keyPressEvent and the IME commit (inputMethodEvent) paths; tryAutoExpandH
-    // is keyPress-only (see its definition for why).
+    // keyPressEvent and the IME commit (inputMethodEvent) paths.
     bool tryAutoCloseBracket(const QString& text);
-    bool tryAutoExpandH(const QString& text);
     // Bracket-completion helpers. tryBracketInput() wraps the auto-close path so
     // the suggestion popup opens on the same (normalized) key/IME bracket input.
     bool tryBracketInput(const QString& text);
-    // Wraps tryAutoExpandH so the `h[]` expansion opens the same '[' duration
-    // suggestions, with the caret already parked inside the brackets.
+    // simai hold shortcut — typing 'h' inserts a bare 'h' and offers the
+    // full-bracket hold-duration tokens ("[8:1]" …) as a completion popup. It
+    // inserts no bracket itself, so a following '[' yields the normal "h[]"
+    // (not the old "h[[]]"). keyPress-only: CJK IMEs commit stray latin letters
+    // mid-composition, so the IME path must not trigger this.
     bool tryHoldExpand(const QString& text);
     // Backspace between an empty matching pair (e.g. `[|]`) removes both glyphs
     // in one undo step. Mirrors auto-close — gated by the same preference.
@@ -132,9 +127,16 @@ private:
     // counterpart to auto-close (you type the `]` you "see") — gated by the same
     // preference. Shared by the keyPressEvent and IME commit paths.
     bool tryOverwriteClosingBracket(const QString& text);
-    bool tryBracketCompletionWithoutAutoClose(const QString& text);
     void ensureCompletionPopup();
+    // Shared popup-opening core: anchors the suggestion list under the caret and
+    // records the slot state. opening is the glyph whose matching close governs
+    // the filter's "left the slot" check; closingPresent says whether an
+    // auto-inserted close sits to the right (so accept swallows it).
+    void openCompletionPopup(const QStringList& candidates, QChar opening, bool closingPresent);
     void maybeOpenBracketCompletion(QChar opening, bool closingPresent);
+    // Opens the 'h' hold-duration suggestions ("[8:1]" …) anchored after the
+    // just-typed 'h'. No bracket is inserted, so closingPresent is false.
+    void maybeOpenHoldCompletion();
     bool bracketCompletionActive() const;
     bool handleCompletionPopupKey(QKeyEvent* event);
     void acceptCompletionCandidate();
@@ -145,9 +147,7 @@ private:
     int topOverlayInsetPixels_ = 0;
     bool halfWidthInputEnabled_ = true;
     bool imeInputDisabled_ = false;
-    bool autoCloseBracketsEnabled_ = true;
-    bool autoInsertSquareAfterHEnabled_ = true;
-    bool bracketCompletionEnabled_ = true;
+    bool autoCompletionEnabled_ = true;
     // Live state for the bracket-completion popup. completionOpening_ is null
     // when no popup is active; completionStartPos_ marks the document position
     // right after the opening bracket (where the user's filter text begins);

@@ -553,9 +553,7 @@ void MainWindow::PreferencesSection::onPreferences()
     int selectedEditorFontSize = state_.editorTextFontPointSize_;
     double selectedEditorLineSpacingFactor = state_.editorLineSpacingFactor_;
     bool selectedEditorHalfWidthInputEnabled = state_.editorHalfWidthInputEnabled_;
-    bool selectedAutoCloseBracketsEnabled = state_.editorAutoCloseBracketsEnabled_;
-    bool selectedAutoInsertSquareAfterHEnabled = state_.editorAutoInsertSquareAfterHEnabled_;
-    bool selectedBracketCompletionEnabled = state_.editorBracketCompletionEnabled_;
+    bool selectedAutoCompletionEnabled = state_.editorAutoCompletionEnabled_;
     bool selectedIgnoreMuriIssuePrompts = state_.ignoreMuriIssuePrompts_;
 
     auto* editorFontSizeLabel = new QLabel(uiText("dialog.preferences.editor_font_size", "Text Font Size"), editorGroup);
@@ -615,44 +613,27 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(QString(), halfWidthInputCheckbox);
 
-    auto* autoCloseBracketsCheckbox = new QCheckBox(
-        uiText("dialog.preferences.editor_auto_close_brackets", "Auto-close brackets"),
+    // One unified toggle replacing the former three (auto-close brackets / hold
+    // duration / bracket suggestions). It drives bracket auto-close + type-over +
+    // empty-pair backspace, the bracket suggestion popup, and the 'h' hold-
+    // duration suggestions together.
+    auto* autoCompletionCheckbox = new QCheckBox(
+        uiText("dialog.preferences.editor_auto_completion", "Auto-complete brackets"),
         editorGroup
     );
-    autoCloseBracketsCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    autoCloseBracketsCheckbox->setChecked(selectedAutoCloseBracketsEnabled);
-    connect(autoCloseBracketsCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
-        selectedAutoCloseBracketsEnabled = checked;
-        owner_.applyEditorAutoCloseBracketsEnabled(selectedAutoCloseBracketsEnabled, true);
-        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
-    });
-    editorLayout->addRow(QString(), autoCloseBracketsCheckbox);
-
-    auto* autoInsertSquareAfterHCheckbox = new QCheckBox(
-        uiText("dialog.preferences.editor_auto_insert_square_after_h", "Auto-complete hold duration"),
-        editorGroup
+    autoCompletionCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    autoCompletionCheckbox->setChecked(selectedAutoCompletionEnabled);
+    autoCompletionCheckbox->setToolTip(
+        UiText::isChineseUi()
+            ? QStringLiteral("自动补全括号、给出括号/时值建议，并在输入 h 时提示 [8:1] 等 hold 时值。")
+            : QStringLiteral("Auto-closes brackets, suggests durations/BPMs inside them, and offers [8:1]-style hold tokens after typing 'h'.")
     );
-    autoInsertSquareAfterHCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    autoInsertSquareAfterHCheckbox->setChecked(selectedAutoInsertSquareAfterHEnabled);
-    connect(autoInsertSquareAfterHCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
-        selectedAutoInsertSquareAfterHEnabled = checked;
-        owner_.applyEditorAutoInsertSquareAfterHEnabled(selectedAutoInsertSquareAfterHEnabled, true);
+    connect(autoCompletionCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
+        selectedAutoCompletionEnabled = checked;
+        owner_.applyEditorAutoCompletionEnabled(selectedAutoCompletionEnabled, true);
         owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
     });
-    editorLayout->addRow(QString(), autoInsertSquareAfterHCheckbox);
-
-    auto* bracketCompletionCheckbox = new QCheckBox(
-        uiText("dialog.preferences.editor_bracket_completion", "Bracket completion suggestions"),
-        editorGroup
-    );
-    bracketCompletionCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    bracketCompletionCheckbox->setChecked(selectedBracketCompletionEnabled);
-    connect(bracketCompletionCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
-        selectedBracketCompletionEnabled = checked;
-        owner_.applyEditorBracketCompletionEnabled(selectedBracketCompletionEnabled, true);
-        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
-    });
-    editorLayout->addRow(QString(), bracketCompletionCheckbox);
+    editorLayout->addRow(QString(), autoCompletionCheckbox);
 
     auto* ignoreMuriIssuePromptsCheckbox = new QCheckBox(
         UiText::isChineseUi()

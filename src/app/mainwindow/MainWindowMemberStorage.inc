@@ -466,9 +466,10 @@
         double editorLineSpacingFactor_ = 1.5;
         bool editorHalfWidthInputEnabled_ = true;
         bool editorOverwriteModeEnabled_ = false;
-        bool editorAutoCloseBracketsEnabled_ = true;
-        bool editorAutoInsertSquareAfterHEnabled_ = true;
-        bool editorBracketCompletionEnabled_ = true;
+        // Unified "auto-completion" preference: bracket auto-close + type-over +
+        // empty-pair backspace, the bracket suggestion popup, and the 'h' hold-
+        // duration suggestions. Was three separate toggles before they merged.
+        bool editorAutoCompletionEnabled_ = true;
         // beta51+ — "禁止中文輸入法輸入" preference. Off by default so existing
         // users / non-CJK locales aren't surprised by a sudden IME disable on
         // first launch. When on, each editor widget gets Qt::WA_InputMethodEnabled
@@ -832,9 +833,7 @@
     double& editorLineSpacingFactor_ = state_.editorLineSpacingFactor_;
     bool& editorHalfWidthInputEnabled_ = state_.editorHalfWidthInputEnabled_;
     bool& editorOverwriteModeEnabled_ = state_.editorOverwriteModeEnabled_;
-    bool& editorAutoCloseBracketsEnabled_ = state_.editorAutoCloseBracketsEnabled_;
-    bool& editorAutoInsertSquareAfterHEnabled_ = state_.editorAutoInsertSquareAfterHEnabled_;
-    bool& editorBracketCompletionEnabled_ = state_.editorBracketCompletionEnabled_;
+    bool& editorAutoCompletionEnabled_ = state_.editorAutoCompletionEnabled_;
     bool& editorImeInputDisabled_ = state_.editorImeInputDisabled_;
     SimaiDocument& document_ = state_.document_;
     QWidget*& welcomePage_ = ui_.welcomePage_;

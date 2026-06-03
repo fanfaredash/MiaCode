@@ -262,9 +262,7 @@ void MainWindow::EditorSection::loadPortableState()
     resetPortablePreviewSettingsToDefaults();
     state_.editorLineSpacingFactor_ = kEditorLineSpacingFactorDefault;
     state_.editorOverwriteModeEnabled_ = false;
-    state_.editorAutoCloseBracketsEnabled_ = true;
-    state_.editorAutoInsertSquareAfterHEnabled_ = true;
-    state_.editorBracketCompletionEnabled_ = true;
+    state_.editorAutoCompletionEnabled_ = true;
     state_.editorTextFontPointSize_ = qBound(
         kEditorTextFontSizeMin,
         state_.editorTextFontPointSize_ > 0 ? state_.editorTextFontPointSize_ : editorFont().pointSize(),
@@ -290,9 +288,11 @@ void MainWindow::EditorSection::loadPortableState()
     }
     state_.editorHalfWidthInputEnabled_ = ui.value("editor_half_width_input").toBool(true);
     state_.editorOverwriteModeEnabled_ = ui.value("editor_overwrite_mode").toBool(false);
-    state_.editorAutoCloseBracketsEnabled_ = ui.value("editor_auto_close_brackets").toBool(true);
-    state_.editorAutoInsertSquareAfterHEnabled_ = ui.value("editor_auto_insert_square_after_h").toBool(true);
-    state_.editorBracketCompletionEnabled_ = ui.value("editor_bracket_completion").toBool(true);
+    // Unified preference. Migrate from the three legacy keys: a saved
+    // "editor_auto_completion" wins; otherwise fall back to the old auto-close
+    // key (the primary of the three) so existing users keep their setting.
+    state_.editorAutoCompletionEnabled_ = ui.value("editor_auto_completion").toBool(
+        ui.value("editor_auto_close_brackets").toBool(true));
     if (ui.value("bottom_tabs_content_scale").isDouble()) {
         // Stored as a content-scale ratio (not pixels). The raw value is clamped
         // to its valid [min,max] range by applyBottomTabsContentScale() when the
@@ -308,9 +308,7 @@ void MainWindow::EditorSection::loadPortableState()
     applyEditorTextFontSize(state_.editorTextFontPointSize_, false);
     applyEditorHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_, false);
     applyEditorOverwriteModeEnabled(state_.editorOverwriteModeEnabled_, false);
-    applyEditorAutoCloseBracketsEnabled(state_.editorAutoCloseBracketsEnabled_, false);
-    applyEditorAutoInsertSquareAfterHEnabled(state_.editorAutoInsertSquareAfterHEnabled_, false);
-    applyEditorBracketCompletionEnabled(state_.editorBracketCompletionEnabled_, false);
+    applyEditorAutoCompletionEnabled(state_.editorAutoCompletionEnabled_, false);
     // applyEditorImeInputDisabled(state_.editorImeInputDisabled_, false);
 
     const QString dir = app.value("last_open_dir").toString();
@@ -337,10 +335,11 @@ void MainWindow::EditorSection::loadPortableState()
             break;
         }
     }
-    const QString trackPath = app.value("last_track_path").toString();
-    if (!trackPath.isEmpty() && QFileInfo::exists(trackPath)) {
-        state_.lastTrackPath_ = QDir::cleanPath(trackPath);
-    }
+    // `last_track_path` persistence removed (2026-06-03): it is a value derived
+    // from the opened chart's directory and was reloaded at startup before the
+    // document was restored, which let a stale cross-session track path leak into
+    // preview audio. The track path is now always resolved fresh from the loaded
+    // chart (see TimelineSection::setCurrentFilePath), so nothing is read here.
     if (app.value("show_slide_tracks").isBool()) {
         state_.showSlideTracks_ = app.value("show_slide_tracks").toBool(state_.showSlideTracks_);
     }
@@ -657,9 +656,7 @@ void MainWindow::EditorSection::savePortableState() const
     ui.insert("editor_line_spacing_factor", state_.editorLineSpacingFactor_);
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
-    ui.insert("editor_auto_close_brackets", state_.editorAutoCloseBracketsEnabled_);
-    ui.insert("editor_auto_insert_square_after_h", state_.editorAutoInsertSquareAfterHEnabled_);
-    ui.insert("editor_bracket_completion", state_.editorBracketCompletionEnabled_);
+    ui.insert("editor_auto_completion", state_.editorAutoCompletionEnabled_);
     // Bottom-tabs (timeline/validation/muri) divider height, persisted as a
     // content-scale ratio rather than pixels (see loadPortableState()).
     ui.insert("bottom_tabs_content_scale", state_.bottomTabsContentScale_);
@@ -680,7 +677,7 @@ void MainWindow::EditorSection::savePortableState() const
         }
     }
     app.insert("recent_files", recentFiles);
-    app.insert("last_track_path", state_.lastTrackPath_);
+    // `last_track_path` no longer persisted (derived value; see loadPortableState).
     app.insert("show_slide_tracks", state_.showSlideTracks_);
 
     preview.insert("preview_playback_rate", state_.previewPlaybackRate_);
@@ -782,9 +779,7 @@ void MainWindow::EditorSection::persistEditorTextFontPreference() const
     ui.insert("editor_line_spacing_factor", state_.editorLineSpacingFactor_);
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
-    ui.insert("editor_auto_close_brackets", state_.editorAutoCloseBracketsEnabled_);
-    ui.insert("editor_auto_insert_square_after_h", state_.editorAutoInsertSquareAfterHEnabled_);
-    ui.insert("editor_bracket_completion", state_.editorBracketCompletionEnabled_);
+    ui.insert("editor_auto_completion", state_.editorAutoCompletionEnabled_);
     // [BETA51 IME-DISABLE: DISABLED PENDING FIX] see saveState() and
     // loadPortableState() for the rationale.
     // ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);
@@ -871,42 +866,14 @@ void MainWindow::EditorSection::applyEditorOverwriteModeEnabled(bool enabled, bo
     }
 }
 
-void MainWindow::EditorSection::applyEditorAutoCloseBracketsEnabled(bool enabled, bool persistPreference)
+void MainWindow::EditorSection::applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference)
 {
-    state_.editorAutoCloseBracketsEnabled_ = enabled;
+    state_.editorAutoCompletionEnabled_ = enabled;
     if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
-        editor->setAutoCloseBracketsEnabled(enabled);
+        editor->setAutoCompletionEnabled(enabled);
     }
     if (ui_.copyAreaEditor_ != nullptr) {
-        ui_.copyAreaEditor_->setAutoCloseBracketsEnabled(enabled);
-    }
-    if (persistPreference) {
-        persistEditorTextFontPreference();
-    }
-}
-
-void MainWindow::EditorSection::applyEditorAutoInsertSquareAfterHEnabled(bool enabled, bool persistPreference)
-{
-    state_.editorAutoInsertSquareAfterHEnabled_ = enabled;
-    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
-        editor->setAutoInsertSquareAfterHEnabled(enabled);
-    }
-    if (ui_.copyAreaEditor_ != nullptr) {
-        ui_.copyAreaEditor_->setAutoInsertSquareAfterHEnabled(enabled);
-    }
-    if (persistPreference) {
-        persistEditorTextFontPreference();
-    }
-}
-
-void MainWindow::EditorSection::applyEditorBracketCompletionEnabled(bool enabled, bool persistPreference)
-{
-    state_.editorBracketCompletionEnabled_ = enabled;
-    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
-        editor->setBracketCompletionEnabled(enabled);
-    }
-    if (ui_.copyAreaEditor_ != nullptr) {
-        ui_.copyAreaEditor_->setBracketCompletionEnabled(enabled);
+        ui_.copyAreaEditor_->setAutoCompletionEnabled(enabled);
     }
     if (persistPreference) {
         persistEditorTextFontPreference();
@@ -1169,9 +1136,7 @@ void MainWindow::EditorSection::showCreateBookmarkDialog()
     connect(edit, &PlainCodeEditor::editorOverwriteModeChanged, &owner_, [this](bool enabled) {
         applyEditorOverwriteModeEnabled(enabled, true);
     });
-    edit->setAutoCloseBracketsEnabled(state_.editorAutoCloseBracketsEnabled_);
-    edit->setAutoInsertSquareAfterHEnabled(state_.editorAutoInsertSquareAfterHEnabled_);
-    edit->setBracketCompletionEnabled(state_.editorBracketCompletionEnabled_);
+    edit->setAutoCompletionEnabled(state_.editorAutoCompletionEnabled_);
     edit->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("书签内容") : QStringLiteral("Bookmark notes"));
     edit->setStyleSheet(UiTheme::editorTextEditStyleSheet());
     if (auto* vbar = edit->verticalScrollBar()) {
@@ -1352,9 +1317,7 @@ void MainWindow::EditorSection::syncCopyAreaEditorAppearance()
     // on the platform-default IME state while the toggle is gated off.
     // ui_.copyAreaEditor_->setImeInputDisabled(state_.editorImeInputDisabled_);
     ui_.copyAreaEditor_->setEditorOverwriteMode(state_.editorOverwriteModeEnabled_);
-    ui_.copyAreaEditor_->setAutoCloseBracketsEnabled(state_.editorAutoCloseBracketsEnabled_);
-    ui_.copyAreaEditor_->setAutoInsertSquareAfterHEnabled(state_.editorAutoInsertSquareAfterHEnabled_);
-    ui_.copyAreaEditor_->setBracketCompletionEnabled(state_.editorBracketCompletionEnabled_);
+    ui_.copyAreaEditor_->setAutoCompletionEnabled(state_.editorAutoCompletionEnabled_);
     ui_.copyAreaEditor_->refreshLineNumberAreaLayout();
 }
 
@@ -1426,19 +1389,9 @@ void MainWindow::applyEditorOverwriteModeEnabled(bool enabled, bool persistPrefe
     editorSection_->applyEditorOverwriteModeEnabled(enabled, persistPreference);
 }
 
-void MainWindow::applyEditorAutoCloseBracketsEnabled(bool enabled, bool persistPreference)
+void MainWindow::applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference)
 {
-    editorSection_->applyEditorAutoCloseBracketsEnabled(enabled, persistPreference);
-}
-
-void MainWindow::applyEditorAutoInsertSquareAfterHEnabled(bool enabled, bool persistPreference)
-{
-    editorSection_->applyEditorAutoInsertSquareAfterHEnabled(enabled, persistPreference);
-}
-
-void MainWindow::applyEditorBracketCompletionEnabled(bool enabled, bool persistPreference)
-{
-    editorSection_->applyEditorBracketCompletionEnabled(enabled, persistPreference);
+    editorSection_->applyEditorAutoCompletionEnabled(enabled, persistPreference);
 }
 
 void MainWindow::applyEditorImeInputDisabled(bool disabled, bool persistPreference)

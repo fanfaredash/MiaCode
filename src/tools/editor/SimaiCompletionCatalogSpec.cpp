@@ -43,6 +43,14 @@ int main(int argc, char** argv)
                             QStringLiteral("32}")}),
         QStringLiteral("'{' subdivision candidates are 16 24 32 in order"),
         out, &failed);
+    // Hold candidates mirror the '[' durations in full-bracket form (leading '['
+    // included), and stay in lock-step with squareDurationCandidates().
+    expect(
+        holdDurationCandidates()
+            == QStringList({QStringLiteral("[8:1]"), QStringLiteral("[4:1]"),
+                            QStringLiteral("[16:3]"), QStringLiteral("[384:1]")}),
+        QStringLiteral("'h' hold candidates are [8:1] [4:1] [16:3] [384:1] in order"),
+        out, &failed);
 
     // Opening / closing helpers.
     expect(isBracketOpening(QLatin1Char('[')) && isBracketOpening(QLatin1Char('('))
