@@ -206,6 +206,12 @@ const QString& kRepeatedBacktickSeparator()
     return value;
 }
 
+const QString& kSeparatorMissingOperand()
+{
+    static const QString value = QStringLiteral("Separator '/' or '`' is missing an adjacent note");
+    return value;
+}
+
 const QString& kUnmatchedClosingBracketPrefix()
 {
     static const QString value = QStringLiteral("Unmatched closing bracket '");
@@ -260,6 +266,7 @@ const QHash<QString, QString>& zhExactMap()
         {kMissingBeatSeparator(), QStringLiteral("缺少拍间分隔符 ','")},
         {kRepeatedSlashSeparator(), QStringLiteral("不允许使用连续分隔符 '//'")},
         {kRepeatedBacktickSeparator(), QStringLiteral("不允许使用连续分隔符 '``'")},
+        {kSeparatorMissingOperand(), QStringLiteral("分隔符 '/' 或 '`' 缺少相邻音符")},
         {kChartEmpty(), QStringLiteral("谱面为空。")},
     };
     return map;
@@ -595,6 +602,12 @@ SimaiNativeParseResult parseInternal(
     QString token;
     int tokenColumn = 1;
     QVector<int> currentGroup;
+    // Strict-mode tracking for the each-group separators '/' and '`': a divider
+    // must have a note on each side. eachOperandPending is true once a note has
+    // been read on the separator's left; pendingSeparatorCol holds the column of
+    // a '/' or '`' still awaiting a note on its right (-1 = none pending).
+    bool eachOperandPending = false;
+    int pendingSeparatorCol = -1;
     bool initializedMeasureLines = false;
 
     const auto flushToken = [&](int lineNumber) {
@@ -622,6 +635,10 @@ SimaiNativeParseResult parseInternal(
             line.chop(1);
         }
         const int lineNumber = lineIndex + 1;
+        // Each-groups never span a line break, so a separator's operands are
+        // scoped to the current line.
+        eachOperandPending = false;
+        pendingSeparatorCol = -1;
         if (isTerminalMarkerText(line)) {
             continue;
         }
@@ -745,10 +762,23 @@ SimaiNativeParseResult parseInternal(
                 if (strictMode && i + 1 < line.size() && line.at(i + 1) == QChar('/')) {
                     flushToken(lineNumber);
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kRepeatedSlashSeparator(), i + 2);
+                    eachOperandPending = false;
+                    pendingSeparatorCol = -1;
                     ++i;
                     continue;
                 }
+                if (strictMode && !eachOperandPending) {
+                    // e.g. ",/7" or a leading '/': nothing to the left.
+                    flushToken(lineNumber);
+                    appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kSeparatorMissingOperand());
+                    pendingSeparatorCol = -1;
+                    continue;
+                }
                 flushToken(lineNumber);
+                if (strictMode) {
+                    pendingSeparatorCol = i + 1;
+                    eachOperandPending = false;
+                }
                 continue;
             }
 
@@ -758,16 +788,37 @@ SimaiNativeParseResult parseInternal(
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kRepeatedBacktickSeparator(), i + 2);
                     finalizeEachGroup(&state, currentGroup);
                     currentGroup.clear();
+                    eachOperandPending = false;
+                    pendingSeparatorCol = -1;
                     ++i;
+                    continue;
+                }
+                if (strictMode && !eachOperandPending) {
+                    // e.g. ",`7" or a leading '`': nothing to the left.
+                    flushToken(lineNumber);
+                    appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kSeparatorMissingOperand());
+                    finalizeEachGroup(&state, currentGroup);
+                    currentGroup.clear();
+                    pendingSeparatorCol = -1;
                     continue;
                 }
                 flushToken(lineNumber);
                 finalizeEachGroup(&state, currentGroup);
                 currentGroup.clear();
+                if (strictMode) {
+                    pendingSeparatorCol = i + 1;
+                    eachOperandPending = false;
+                }
                 continue;
             }
 
             if (ch == QChar(',')) {
+                if (strictMode && pendingSeparatorCol >= 0) {
+                    // e.g. "7/," — the divider has no note on its right.
+                    appendTokenError(&state, lineNumber, pendingSeparatorCol, ValidationMessage::kSeparatorMissingOperand());
+                }
+                eachOperandPending = false;
+                pendingSeparatorCol = -1;
                 flushToken(lineNumber);
                 finalizeEachGroup(&state, currentGroup);
                 currentGroup.clear();
@@ -797,7 +848,18 @@ SimaiNativeParseResult parseInternal(
                 tokenColumn = i + 1;
             }
             token.append(ch);
+            // A note character supplies the operand a preceding '/' or '`' was
+            // waiting for, and becomes the left operand for any following one.
+            eachOperandPending = true;
+            pendingSeparatorCol = -1;
         }
+
+        if (strictMode && pendingSeparatorCol >= 0) {
+            // A '/' or '`' at end of line with no following note.
+            appendTokenError(&state, lineNumber, pendingSeparatorCol, ValidationMessage::kSeparatorMissingOperand());
+        }
+        pendingSeparatorCol = -1;
+        eachOperandPending = false;
 
         flushToken(lineNumber);
         finalizeEachGroup(&state, currentGroup);

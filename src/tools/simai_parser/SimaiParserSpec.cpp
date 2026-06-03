@@ -486,6 +486,50 @@ int main(int argc, char** argv)
     }
 
     {
+        // A '/' or '`' each-separator must have a note on each side. A dangling
+        // divider (",7/," / ",/7,") is a strict-mode syntax error but stays a
+        // lenient (timeline) no-op for editing tolerance.
+        const SimaiNativeParseResult lenientTrailingSlash = SimaiNativeParser::parseForTimeline(QStringLiteral("1,7/,\nE"));
+        const SimaiNativeParseResult strictTrailingSlash = SimaiNativeParser::validateSyntax(QStringLiteral("1,7/,\nE"));
+        const SimaiNativeParseResult lenientLeadingSlash = SimaiNativeParser::parseForTimeline(QStringLiteral("1,/7,\nE"));
+        const SimaiNativeParseResult strictLeadingSlash = SimaiNativeParser::validateSyntax(QStringLiteral("1,/7,\nE"));
+        const SimaiNativeParseResult strictEndOfLineSlash = SimaiNativeParser::validateSyntax(QStringLiteral("1,7/\nE"));
+        const SimaiNativeParseResult strictTrailingBacktick = SimaiNativeParser::validateSyntax(QStringLiteral("1,7`,\nE"));
+        const SimaiNativeParseResult strictLeadingBacktick = SimaiNativeParser::validateSyntax(QStringLiteral("1,`7,\nE"));
+
+        expect(lenientTrailingSlash.ok, QStringLiteral("lenient parse tolerates trailing slash separator"));
+        expect(!strictTrailingSlash.ok, QStringLiteral("validate rejects slash separator missing its right operand"));
+        expect(lenientLeadingSlash.ok, QStringLiteral("lenient parse tolerates leading slash separator"));
+        expect(!strictLeadingSlash.ok, QStringLiteral("validate rejects slash separator missing its left operand"));
+        expect(!strictEndOfLineSlash.ok, QStringLiteral("validate rejects slash separator at end of line"));
+        expect(!strictTrailingBacktick.ok, QStringLiteral("validate rejects backtick separator missing its right operand"));
+        expect(!strictLeadingBacktick.ok, QStringLiteral("validate rejects backtick separator missing its left operand"));
+
+        // Well-formed each-groups stay valid.
+        const SimaiNativeParseResult strictSlashEach = SimaiNativeParser::validateSyntax(QStringLiteral("1/2,\nE"));
+        const SimaiNativeParseResult strictBacktickEach = SimaiNativeParser::validateSyntax(QStringLiteral("1`2,\nE"));
+        const SimaiNativeParseResult strictTripleEach = SimaiNativeParser::validateSyntax(QStringLiteral("1/2/3,\nE"));
+        const SimaiNativeParseResult strictSlideEach = SimaiNativeParser::validateSyntax(QStringLiteral("1-5[8:1]/2-6[8:1],\nE"));
+        expect(strictSlashEach.ok, QStringLiteral("validate accepts a well-formed slash each-group"));
+        expect(strictBacktickEach.ok, QStringLiteral("validate accepts a well-formed backtick each-group"));
+        expect(strictTripleEach.ok, QStringLiteral("validate accepts a chained slash each-group"));
+        expect(strictSlideEach.ok, QStringLiteral("validate accepts slash-paired slides"));
+
+        const SimaiNativeValidationReport trailingSlashReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("1,7/,\nE"),
+            SimaiNativeValidationLocale::English
+        );
+        const SimaiNativeValidationReport leadingSlashReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("1,/7,\nE"),
+            SimaiNativeValidationLocale::English
+        );
+        expect(!trailingSlashReport.ok, QStringLiteral("validation report treats trailing slash separator as error"));
+        expect(trailingSlashReport.errorCount == 1, QStringLiteral("trailing slash separator counts as one validation error"));
+        expect(!leadingSlashReport.ok, QStringLiteral("validation report treats leading slash separator as error"));
+        expect(leadingSlashReport.errorCount == 1, QStringLiteral("leading slash separator counts as one validation error"));
+    }
+
+    {
         const SimaiNativeParseResult lenientInlineLowerTerminal = SimaiNativeParser::parseForTimeline(QStringLiteral("1,e"));
         const SimaiNativeParseResult strictInlineLowerTerminal = SimaiNativeParser::validateSyntax(QStringLiteral("1,e"));
         const SimaiNativeParseResult strictInlineUpperTerminal = SimaiNativeParser::validateSyntax(QStringLiteral("{1},E"));
