@@ -64,13 +64,22 @@ Item {
     readonly property int cycle1Start: 0
     readonly property int cycle1End:   65                          // retract done
     readonly property int cycle2Start: 168
-    readonly property int cycle2End:   cycle2Start + cycleDuration // 291 == DurationFrames
-    readonly property int durationFrames: cycle2End
+    readonly property int cycle2End:   cycle2Start + cycleDuration // 291, wipe fully retracted
 
     // ---------- Reveal timing (tune these) ----------
     readonly property int cardStartAbs:     48  // dissolve begins as cover clears
     readonly property int cardRevealFrames: 36  // ~0.6s ease-out dissolve
     readonly property int hideAbs:          cycle2Start + 58 // cut behind cycle-2 cover (226)
+    // The cycle-2 wipe retracts (revealStart) to uncover the chart PLAYFIELD on a
+    // black background. The black hold + the chart-background fade-from-black are
+    // applied DOWNSTREAM to the ffmpeg background base (so the playfield outline +
+    // HUD stay unaffected) — NOT here. This overlay only covers, then reveals.
+    // durationFrames still spans the hold + fade so the intro front-pad covers them
+    // (KEEP IN SYNC with IntroConfig.h kDurationFrames / kBgFade*).
+    readonly property int revealStart:      cycle2Start + 95          // ~263, wipe retract onset
+    readonly property int bgHoldFrames:     12                        // ~0.2s black hold (ffmpeg)
+    readonly property int bgRevealFrames:   18                        // ~0.3s bg fade (ffmpeg)
+    readonly property int durationFrames:   cycle2End + bgHoldFrames + bgRevealFrames // 321
 
     function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
     function easeOutCubic(t)  { t = clamp(t, 0, 1); return 1 - Math.pow(1 - t, 3) }
@@ -85,11 +94,12 @@ Item {
         return 0.0
     }
 
-    // The opaque black base stays up through cycle 1 + reveal + hold (so the
-    // intro fully covers whatever is behind it), then cuts at hideAbs so the
-    // chart rendered underneath shows through cycle 2's retracting wipe.
+    // The opaque black base fills gaps behind the wipe + card while the screen is
+    // covered, then drops at the cycle-2 retract so the wipe uncovers the chart
+    // playfield (outline + notes + HUD). The background itself is blacked/faded
+    // downstream in the ffmpeg base, so the playfield/HUD here are unaffected.
     function baseOpacity() {
-        return frame < hideAbs ? 1.0 : 0.0
+        return frame < revealStart ? 1.0 : 0.0
     }
 
     function currentCycleStart() {

@@ -612,7 +612,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     topForm->addWidget(audioBitrateButton_, row, 1, 1, 2);
     ++row;
 
-    auto* presetLabel = new QLabel(uiText("dialog.video_export.preset", QStringLiteral("Export Settings")), this);
+    auto* presetLabel = new QLabel(uiText("dialog.video_export.preset", QStringLiteral("Export Quality")), this);
     presetLabel->setFixedWidth(kFormLabelWidth);
     presetButton_ = createDialogMenuButton(this, exportDialogPresetLabel(selectedPreset_));
     presetMenu_ = new QMenu(presetButton_);

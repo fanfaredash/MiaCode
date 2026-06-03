@@ -810,7 +810,7 @@ VideoExportDialog::VideoExportDialog(
     addOptionField(
         1,
         1,
-        uiText("dialog.video_export.preset", QStringLiteral("Export Settings")),
+        uiText("dialog.video_export.preset", QStringLiteral("Export Quality")),
         presetButton_
     );
 

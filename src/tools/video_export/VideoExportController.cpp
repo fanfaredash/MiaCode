@@ -3565,9 +3565,22 @@ VideoExportResult VideoExportController::exportPreparedTask(
         filterParts << QStringLiteral("[%1:v]fps=%2,format=rgba[dim_mask]")
                            .arg(dimMaskInputIndex)
                            .arg(task.fps);
-        filterParts << QStringLiteral("[base_media][dim_mask]overlay=0:0:format=rgb:alpha=straight[base]");
+        filterParts << QStringLiteral("[base_media][dim_mask]overlay=0:0:format=rgb:alpha=straight[base_src]");
     } else {
-        filterParts << QStringLiteral("[base_media]null[base]");
+        filterParts << QStringLiteral("[base_media]null[base_src]");
+    }
+
+    // Intro background fade-from-black: black the BACKGROUND base until the maimai
+    // wipe has retracted + a short hold, then fade it in. This only touches [base]
+    // (the bg); the playfield outline + HUD are composited later as [overlay_src],
+    // so they read normally over the black/fading background. fade=t=in holds
+    // black before start_time, so the bg is black throughout the covered intro.
+    if (introAudioEnabled) {
+        filterParts << QStringLiteral("[base_src]fade=t=in:st=%1:d=%2:color=black[base]")
+                           .arg(QString::number(miacode::intro::kBgFadeStartSeconds, 'f', 6))
+                           .arg(QString::number(miacode::intro::kBgFadeDurationSeconds, 'f', 6));
+    } else {
+        filterParts << QStringLiteral("[base_src]null[base]");
     }
 
     // Quick export frames are already read back in top-left raster order.
@@ -3594,12 +3607,16 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const SystemMemoryInfo memoryInfo = querySystemMemoryInfo();
     appendVideoExportLog(QStringLiteral("memory_snapshot"), memoryInfoToLog(memoryInfo));
     QString encoderProbeLog;
+    // ffmpeg/encoder parameters are pinned to the HighQuality preset for both
+    // export-quality modes. task.preset now selects only the readback path
+    // (PBO vs synchronous), never the encode bitrate/x264 tuning — so Fast
+    // trades readback speed without ever lowering output encode quality.
     const VideoEncoderConfig encoderConfig = chooseVideoEncoder(
         ffmpegPath,
         frameWidth,
         frameHeight,
         task.fps,
-        task.preset,
+        VideoExportPreset::HighQuality,
         memoryInfo,
         exportConfig,
         &encoderProbeLog
@@ -3703,23 +3720,30 @@ VideoExportResult VideoExportController::exportPreparedTask(
                     .arg(task.intro.difficulty));
         }
     }
-    // Diagnostic gate: MIACODE_EXPORT_DISABLE_PBO_READBACK=1 forces the
-    // synchronous non-PBO readback path (renderOverlayFrameOffscreen,
-    // PreviewQuickExportSession.cpp:354-362). The PBO path schedules an
-    // async glReadPixels(FBO→PBO) with no fence before the next frame
-    // clears the FBO; if a driver mistracks that hazard, the captured
-    // bytes are partly from the next frame's clear/draw — manifesting as
-    // horizontal-band tearing on individual rendered frames. The non-PBO
-    // path uses glReadPixels with a CPU pointer, which the driver must
-    // serialize, so it cannot exhibit this race. Costs one full
-    // GPU→CPU stall per frame (~20-30% slower export at 1080p60), but
-    // is the safe ground truth for diagnosing PBO-race symptoms.
+    // The "导出质量 / Export Quality" toggle (task.preset) selects the
+    // readback path:
+    //   HighQuality (default) -> synchronous non-PBO readback
+    //       (renderOverlayFrameOffscreen): glReadPixels through a CPU pointer
+    //       the driver must serialize, so it cannot tear. ~20-30% slower at
+    //       1080p60.
+    //   Fast -> pipelined async glReadPixels(FBO->PBO): faster, but on some
+    //       GL drivers prone to per-frame horizontal-band tearing that the
+    //       in-engine fence could not fully prevent (observed on a GL 4.6
+    //       context whose fence wait never failed). Speed-over-fidelity.
+    // The ffmpeg/encoder parameters are HighQuality in BOTH modes (the toggle
+    // only changes the readback path), so Fast never lowers encode quality.
+    //
+    // MIACODE_EXPORT_DISABLE_PBO_READBACK=1 is a hard diagnostic override that
+    // forces the synchronous path regardless of the quality choice.
+    const bool highQualityForcesSyncReadback =
+        task.preset == VideoExportPreset::HighQuality;
     const bool disablePboReadbackViaEnv =
         qEnvironmentVariableIntValue("MIACODE_EXPORT_DISABLE_PBO_READBACK") == 1;
     const bool requestOffscreenPboReadback =
         useOffscreenGpu
         && exportConfig.renderBackend.requestOffscreenPboReadback
-        && !disablePboReadbackViaEnv;
+        && !disablePboReadbackViaEnv
+        && !highQualityForcesSyncReadback;
     QString offscreenPboError;
     bool useOffscreenPboReadback = false;
     if (requestOffscreenPboReadback) {
@@ -3729,6 +3753,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
         appendVideoExportLog(
             QStringLiteral("pbo_readback_disabled_via_env"),
             QStringLiteral("MIACODE_EXPORT_DISABLE_PBO_READBACK=1"));
+    }
+    if (highQualityForcesSyncReadback) {
+        appendVideoExportLog(
+            QStringLiteral("pbo_readback_disabled_by_quality"),
+            QStringLiteral("exportQuality=high_quality readback=synchronous"));
     }
     appendVideoExportLog(
         QStringLiteral("render_backend"),
@@ -4645,15 +4674,20 @@ VideoExportResult VideoExportController::exportPreparedTask(
         // it plays. The overlay sits above the HUD, so during cycle 2 (its
         // transparent centre) the count-down timestamp would otherwise show
         // through; hiding it keeps the intro clean.
+        const int introAuthoringFrame =
+            miacode::intro::authoringFrameForOutputFrame(frameIndex, task.fps);
         const bool inIntroWindow =
             introEnabled && frameIndex < audioRenderPlan.introFrameCount;
+        // HUD / timestamp hide only while the maimai wipe still covers the chart;
+        // once it retracts (kHudRevealFrame) they show over the black/fading
+        // background, unaffected by the bg fade.
+        const bool inIntroCover =
+            introEnabled && introAuthoringFrame < miacode::intro::kHudRevealFrame;
         if (introEnabled) {
-            exportCanvas.setIntroFrame(
-                miacode::intro::authoringFrameForOutputFrame(frameIndex, task.fps),
-                inIntroWindow);
+            exportCanvas.setIntroFrame(introAuthoringFrame, inIntroWindow);
         }
-        const bool showTimestampThisFrame = task.showTimestamp && !inIntroWindow;
-        const bool showObjectStatsThisFrame = task.showObjectStatsHud && !inIntroWindow;
+        const bool showTimestampThisFrame = task.showTimestamp && !inIntroCover;
+        const bool showObjectStatsThisFrame = task.showObjectStatsHud && !inIntroCover;
         QVector<ObjectTraceItem> traceItems;
         if (diagObjectTraceEnabled || diagObjectHashEnabled) {
             traceItems = collectVisibleObjectTrace(

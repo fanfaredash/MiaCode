@@ -83,7 +83,7 @@ private:
     int selectedAudioBitrateKbps_ = 192;
     QToolButton* presetButton_ = nullptr;
     QMenu* presetMenu_ = nullptr;
-    VideoExportPreset selectedPreset_ = VideoExportPreset::Fast;
+    VideoExportPreset selectedPreset_ = VideoExportPreset::HighQuality;
     QCheckBox* showTimestampCheck_ = nullptr;
     QCheckBox* showObjectStatsCheck_ = nullptr;
     QCheckBox* showChartInfoCheck_ = nullptr;

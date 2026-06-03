@@ -3,13 +3,30 @@
 namespace miacode::intro {
 
 // IntroOverlay.qml authors its whole timeline in 60-fps frames; its
-// durationFrames == cycle2Start(168) + cycleDuration(123) == 291.
-// KEEP IN SYNC with src/intro/qml/IntroOverlay.qml — if the QML timeline
-// length changes, update kDurationFrames here too.
+// durationFrames == cycle2End(291) + bgHoldFrames(12) + bgRevealFrames(18) == 321
+// (the cycle-2 wipe ends at 291, then a black hold + a fade-from-black on the
+// chart background). KEEP IN SYNC with src/intro/qml/IntroOverlay.qml — if the
+// QML timeline length changes, update kDurationFrames here too.
 inline constexpr int kAuthoringFps = 60;
-inline constexpr int kDurationFrames = 291;
+inline constexpr int kDurationFrames = 321;
 inline constexpr double kDurationSeconds =
-    static_cast<double>(kDurationFrames) / static_cast<double>(kAuthoringFps);  // ~4.85 s
+    static_cast<double>(kDurationFrames) / static_cast<double>(kAuthoringFps);  // ~5.35 s
+
+// Chart-background fade-from-black. Applied to the ffmpeg BACKGROUND base (so the
+// playfield outline + HUD, which live in the QSG overlay, are unaffected) — NOT
+// in the QML overlay. The bg is black until the maimai wipe has retracted + a
+// short hold, then fades in. Authoring frame N maps to OUTPUT second N/kAuthoringFps.
+inline constexpr int kBgFadeStartFrame = 303;     // cycle2End(291) + black hold(12)
+inline constexpr int kBgFadeDurationFrames = 18;  // ~0.30 s fade
+inline constexpr double kBgFadeStartSeconds =
+    static_cast<double>(kBgFadeStartFrame) / static_cast<double>(kAuthoringFps);     // ~5.05 s
+inline constexpr double kBgFadeDurationSeconds =
+    static_cast<double>(kBgFadeDurationFrames) / static_cast<double>(kAuthoringFps); // ~0.30 s
+
+// The maimai overlay covers the chart until its cycle-2 wipe fully retracts; the
+// HUD / timestamp are suppressed until this authoring frame, then shown over the
+// black/fading background (so they read as "unaffected" by the bg fade).
+inline constexpr int kHudRevealFrame = 291;       // == cycle2End
 
 // qrc locations (bundled via resources/intro.qrc + resources/app_icons.qrc).
 inline constexpr char kOverlayQmlUrl[] = "qrc:/intro/qml/IntroOverlay.qml";

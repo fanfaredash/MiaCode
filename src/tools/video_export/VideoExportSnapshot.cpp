@@ -80,7 +80,12 @@ VideoExportPreset videoExportPresetFromToken(const QString& token)
     if (token.compare(QStringLiteral("high_compression"), Qt::CaseInsensitive) == 0) {
         return VideoExportPreset::HighQuality;
     }
-    return VideoExportPreset::Fast;
+    if (token.compare(QStringLiteral("fast"), Qt::CaseInsensitive) == 0) {
+        return VideoExportPreset::Fast;
+    }
+    // Unknown/missing token -> the safe default (synchronous readback, no
+    // tearing), matching the dialog's default export-quality choice.
+    return VideoExportPreset::HighQuality;
 }
 
 PreviewBackgroundScaleMode backgroundScaleModeFromToken(const QString& token)
