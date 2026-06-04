@@ -246,14 +246,6 @@ QString l10n(const QString& en, const QString& zh)
     return UiText::isChineseUi() ? zh : en;
 }
 
-QString flowSpeedValueLabel(double flowSpeed)
-{
-    const double snapped = qRound(flowSpeed * 4.0) / 4.0;
-    const double roundedOneDecimal = qRound(snapped * 10.0) / 10.0;
-    const bool useSingleDecimal = qAbs(snapped - roundedOneDecimal) < 0.001;
-    return QString::number(snapped, 'f', useSingleDecimal ? 1 : 2);
-}
-
 QString exportDialogResolutionLabel(const QSize& size)
 {
     for (const ResolutionPreset& preset : kResolutionPresets) {
@@ -366,6 +358,14 @@ QToolButton* createDialogMenuButton(QWidget* parent, const QString& text, int mi
     if (minimumWidth > 0) {
         button->setMinimumWidth(minimumWidth);
     }
+    // The rounded bottom border gets clipped because QStyleSheetStyle
+    // under-reports the height by a px or two and the layout hands the button
+    // exactly that. A min-height floor is ignored here (vertical policy is
+    // Fixed, which pins height to sizeHint), so force the height explicitly:
+    // ensurePolished() first so sizeHint() reflects the styled metrics, then
+    // setFixedHeight() a few px taller so the full border renders.
+    button->ensurePolished();
+    button->setFixedHeight(qMax(button->sizeHint().height(), 30) + 4);
     return button;
 }
 
@@ -606,8 +606,18 @@ VideoExportDialog::VideoExportDialog(
 
     auto* visualsPage = new QWidget(settingsTabs_);
     auto* visualsPageLayout = new QVBoxLayout(visualsPage);
+    visualsPageLayout_ = visualsPageLayout;
     visualsPageLayout->setContentsMargins(4, 6, 4, 6);
     visualsPageLayout->setSpacing(8);
+
+    // Gameplay page — owner-wired controls (skin / judge line / judge effect /
+    // slide stack order / center display) are injected post-construction via
+    // injectOwnerWiredSettings(); the dialog's own Tap/Touch flow-speed rows
+    // are placed here too (they belong to the gameplay group).
+    gameplayPage_ = new QWidget(settingsTabs_);
+    gameplayPageLayout_ = new QVBoxLayout(gameplayPage_);
+    gameplayPageLayout_->setContentsMargins(4, 6, 4, 6);
+    gameplayPageLayout_->setSpacing(8);
 
     auto* rangePage = new QWidget(settingsTabs_);
     auto* rangePageLayout = new QVBoxLayout(rangePage);
@@ -899,6 +909,18 @@ VideoExportDialog::VideoExportDialog(
         + kSetButtonLeftGap
         + startCurrentTimeEdit_->minimumWidth();
 
+    // Top-aligned flow: a "layout under construction" notice, then the range
+    // controls, then a trailing stretch. (Earlier the controls were pushed to
+    // the window bottom by a stretch, which overflowed the pane on shorter
+    // dialogs — clipping the End row.)
+    auto* rangeConstructionLabel = new QLabel(rangePage);
+    rangeConstructionLabel->setTextFormat(Qt::RichText);
+    rangeConstructionLabel->setText(
+        QStringLiteral("<b>%1</b>").arg(l10n(QStringLiteral("Layout under construction"), QStringLiteral("布局施工中")))
+    );
+    rangeConstructionLabel->setAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+    rangePageLayout->addWidget(rangeConstructionLabel, 0, Qt::AlignHCenter);
+    rangePageLayout->addSpacing(8);
     rangePageLayout->addWidget(rangeContent_, 0);
     rangePageLayout->addStretch(1);
     outputPageLayout->addStretch(1);
@@ -970,7 +992,7 @@ VideoExportDialog::VideoExportDialog(
     auto* optionsLayout = new QGridLayout(optionsContent_);
     optionsLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     optionsLayout->setHorizontalSpacing(10);
-    optionsLayout->setVerticalSpacing(6);
+    optionsLayout->setVerticalSpacing(8);
     optionsLayout->setColumnStretch(0, 1);
     optionsLayout->setColumnStretch(1, 1);
     showTimestampCheck_ = new QCheckBox(
@@ -1016,7 +1038,7 @@ VideoExportDialog::VideoExportDialog(
         auto* container = new QWidget(parent);
         auto* containerLayout = new QVBoxLayout(container);
         containerLayout->setContentsMargins(0, 0, 0, 0);
-        containerLayout->setSpacing(2);
+        containerLayout->setSpacing(3);
         auto* header = new QWidget(container);
         auto* headerLayout = new QHBoxLayout(header);
         headerLayout->setContentsMargins(0, 0, 0, 0);
@@ -1034,6 +1056,9 @@ VideoExportDialog::VideoExportDialog(
         slider->setTickInterval(step);
         slider->setValue(valuePercent);
         slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
+        // Fit the styled handle (groove 6px + -4px margins = 14px) without
+        // clipping, kept compact so the page stays short.
+        slider->setFixedHeight(20);
         containerLayout->addWidget(header, 0);
         containerLayout->addWidget(slider, 0);
         *sliderOut = slider;
@@ -1111,74 +1136,12 @@ VideoExportDialog::VideoExportDialog(
     selectedTouchFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(baseTask_.touchFlowSpeed);
     selectedTapFlowSpeed_ = snapFlowSpeed(selectedTapFlowSpeed_);
     selectedTouchFlowSpeed_ = snapFlowSpeed(selectedTouchFlowSpeed_);
-    const auto createFlowSpeedRow = [
-        this,
-        flowSpeedMin,
-        flowSpeedMax,
-        snapFlowSpeed
-    ](
-        const QString& labelText,
-        QLineEdit** editOut,
-        double* selectedFlowSpeed,
-        const std::function<void(double)>& callback
-    ) {
-        auto* flowSpeedEdit = new QLineEdit(this->optionsContent_);
-        flowSpeedEdit->setAlignment(Qt::AlignCenter);
-        flowSpeedEdit->setText(flowSpeedValueLabel(*selectedFlowSpeed));
-        flowSpeedEdit->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
-        auto* flowSpeedValidator = new QDoubleValidator(flowSpeedMin, flowSpeedMax, 2, flowSpeedEdit);
-        flowSpeedValidator->setNotation(QDoubleValidator::StandardNotation);
-        flowSpeedEdit->setValidator(flowSpeedValidator);
-        QObject::connect(flowSpeedEdit, &QLineEdit::editingFinished, this, [flowSpeedEdit, selectedFlowSpeed, callback, snapFlowSpeed]() {
-            if (flowSpeedEdit == nullptr || selectedFlowSpeed == nullptr) {
-                return;
-            }
-            bool ok = false;
-            const double typedSpeed = flowSpeedEdit->text().trimmed().toDouble(&ok);
-            if (!ok) {
-                flowSpeedEdit->setText(flowSpeedValueLabel(*selectedFlowSpeed));
-                return;
-            }
-            *selectedFlowSpeed = snapFlowSpeed(typedSpeed);
-            flowSpeedEdit->setText(flowSpeedValueLabel(*selectedFlowSpeed));
-            if (callback) {
-                callback(*selectedFlowSpeed);
-            }
-        });
-        if (editOut != nullptr) {
-            *editOut = flowSpeedEdit;
-        }
-        auto* flowSpeedRow = new QWidget(this->optionsContent_);
-        auto* flowSpeedLayout = new QHBoxLayout(flowSpeedRow);
-        flowSpeedLayout->setContentsMargins(0, 0, 0, 0);
-        flowSpeedLayout->setSpacing(6);
-        auto* flowSpeedLabel = new QLabel(labelText, flowSpeedRow);
-        flowSpeedLayout->addWidget(flowSpeedLabel, 0);
-        flowSpeedLayout->addWidget(flowSpeedEdit, 1);
-        return flowSpeedRow;
-    };
-    QWidget* tapFlowSpeedRow = createFlowSpeedRow(
-        uiText("dialog.video_export.option.tap_flow_speed", QStringLiteral("Tap Flow Speed")),
-        &tapFlowSpeedEdit_,
-        &selectedTapFlowSpeed_,
-        [this](double flowSpeed) {
-            if (previewTapFlowSpeedCallback_) {
-                previewTapFlowSpeedCallback_(flowSpeed);
-            }
-        }
-    );
-    QWidget* touchFlowSpeedRow = createFlowSpeedRow(
-        uiText("dialog.video_export.option.touch_flow_speed", QStringLiteral("Touch Flow Speed")),
-        &touchFlowSpeedEdit_,
-        &selectedTouchFlowSpeed_,
-        [this](double flowSpeed) {
-            if (previewTouchFlowSpeedCallback_) {
-                previewTouchFlowSpeedCallback_(flowSpeed);
-            }
-        }
-    );
-    optionsLayout->addWidget(tapFlowSpeedRow, 3, 0, 1, 1);
-    optionsLayout->addWidget(touchFlowSpeedRow, 3, 1, 1, 1);
+    // Tap/Touch flow speed are no longer shown in the export dialog (they are
+    // tuned in the standalone 视频设置 dialog). selectedTap/TouchFlowSpeed_ stay
+    // initialised from baseTask_ above so applyUiToTask still bakes the current
+    // value; the Gameplay tab below carries only the injected owner-wired
+    // controls (skin / judge line / judge effect / slide stack / center).
+    gameplayPageLayout_->addStretch(1);
     const QString scaleFillLabel = uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)"));
     const QString scaleFitLabel = uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)"));
     const QString scaleSquareFitLabel = uiText(
@@ -1229,28 +1192,45 @@ VideoExportDialog::VideoExportDialog(
     );
     backgroundScaleModeLayout->addWidget(backgroundScaleModeLabel, 0);
     backgroundScaleModeLayout->addWidget(backgroundScaleModeButton_, 1);
-    optionsLayout->addWidget(backgroundScaleModeRow, 4, 0, 1, 2);
-    optionsLayout->addWidget(smoothBrightnessCheck_, 5, 0, 1, 2, Qt::AlignLeft | Qt::AlignTop);
+    optionsLayout->addWidget(backgroundScaleModeRow, 3, 0, 1, 2);
     visualsPageLayout->addWidget(optionsContent_, 0);
 
-    // Former HUD page — overlay toggles + the HUD font picker — now merged
-    // onto the Visuals tab, below the picture controls.
-    visualsPageLayout->addWidget(showTimestampCheck_, 0, Qt::AlignLeft | Qt::AlignTop);
-    auto* objectStatsRow = new QWidget(visualsPage);
-    auto* objectStatsLayout = new QHBoxLayout(objectStatsRow);
-    objectStatsLayout->setContentsMargins(0, 0, 0, 0);
-    objectStatsLayout->setSpacing(8);
+    // Former HUD page — overlay toggles — merged onto the Video tab below the
+    // picture controls, in an aligned 2-column grid so the checkboxes line up
+    // (the HUD font picker lives on its own "Font" tab):
+    //   平滑亮度       | 显示左下角时间戳
+    //   显示物量统计    | Show chart info
+    auto* hudToggles = new QWidget(visualsPage);
+    auto* hudTogglesLayout = new QGridLayout(hudToggles);
+    hudTogglesLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
+    hudTogglesLayout->setHorizontalSpacing(16);
+    hudTogglesLayout->setVerticalSpacing(6);
+    hudTogglesLayout->setColumnStretch(0, 1);
+    hudTogglesLayout->setColumnStretch(1, 1);
+    hudTogglesLayout->addWidget(smoothBrightnessCheck_, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
+    hudTogglesLayout->addWidget(showTimestampCheck_, 0, 1, Qt::AlignLeft | Qt::AlignVCenter);
+    hudTogglesLayout->addWidget(showObjectStatsCheck_, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
+    hudTogglesLayout->addWidget(showChartInfoCheck_, 1, 1, Qt::AlignLeft | Qt::AlignVCenter);
+    visualsPageLayout->addWidget(hudToggles, 0);
+    visualsPageLayout->addStretch(1);
+
+    // Font tab — the HUD font picker on its own page.
+    auto* fontPage = new QWidget(settingsTabs_);
+    auto* fontPageLayout = new QVBoxLayout(fontPage);
+    fontPageLayout->setContentsMargins(kSectionContentLeftInset, 6, kSectionContentLeftInset, 6);
+    fontPageLayout->setSpacing(8);
+    auto* fontPageLabel = new QLabel(
+        uiText("dialog.video_export.option.hud_font", l10n(QStringLiteral("HUD font"), QStringLiteral("HUD 字体"))),
+        fontPage
+    );
     hudFontSettingsButton_ = new QPushButton(
         uiText("dialog.video_export.option.hud_font_settings", QStringLiteral("Font Settings")),
-        objectStatsRow
+        fontPage
     );
     hudFontSettingsButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    objectStatsLayout->addWidget(showObjectStatsCheck_, 0, Qt::AlignLeft | Qt::AlignVCenter);
-    objectStatsLayout->addWidget(showChartInfoCheck_, 0, Qt::AlignLeft | Qt::AlignVCenter);
-    objectStatsLayout->addWidget(hudFontSettingsButton_, 0);
-    objectStatsLayout->addStretch(1);
-    visualsPageLayout->addWidget(objectStatsRow, 0);
-    visualsPageLayout->addStretch(1);
+    fontPageLayout->addWidget(fontPageLabel, 0, Qt::AlignLeft);
+    fontPageLayout->addWidget(hudFontSettingsButton_, 0, Qt::AlignLeft);
+    fontPageLayout->addStretch(1);
 
     // "Add intro" is hidden per request: built so persisted state / export
     // wiring keep working, but never shown and never added to a visible layout.
@@ -1263,7 +1243,15 @@ VideoExportDialog::VideoExportDialog(
     );
     settingsTabs_->addTab(
         visualsPage,
-        uiText("dialog.video_export.section.visuals", l10n(QStringLiteral("Visuals"), QStringLiteral("画面")))
+        uiText("dialog.render_settings.video_group", l10n(QStringLiteral("Video"), QStringLiteral("视频")))
+    );
+    settingsTabs_->addTab(
+        gameplayPage_,
+        uiText("dialog.render_settings.gameplay_group", l10n(QStringLiteral("Gameplay"), QStringLiteral("游戏")))
+    );
+    settingsTabs_->addTab(
+        fontPage,
+        uiText("dialog.video_export.section.font", l10n(QStringLiteral("Font"), QStringLiteral("字体")))
     );
     settingsTabs_->addTab(
         rangePage,
@@ -1384,8 +1372,59 @@ VideoExportDialog::VideoExportDialog(
     });
 }
 
+void VideoExportDialog::injectOwnerWiredSettings(QWidget* videoExtras, QWidget* gameplayWidget)
+{
+    // The injected widgets are built by MainWindow (they need owner-side data
+    // + wiring the decoupled dialog can't reach). Drop them in just before each
+    // page's trailing stretch so they hug the existing controls.
+    if (videoExtras != nullptr && visualsPageLayout_ != nullptr) {
+        const int insertIndex = qMax(0, visualsPageLayout_->count() - 1);
+        visualsPageLayout_->insertWidget(insertIndex, videoExtras, 0, Qt::AlignTop);
+    }
+    if (gameplayWidget != nullptr && gameplayPageLayout_ != nullptr) {
+        const int insertIndex = qMax(0, gameplayPageLayout_->count() - 1);
+        gameplayPageLayout_->insertWidget(insertIndex, gameplayWidget, 0, Qt::AlignTop);
+    }
+    refreshDialogGeometry();
+}
+
 void VideoExportDialog::refreshDialogGeometry()
 {
+    // Clear any prior height lock first: a stale setMaximumHeight() from an
+    // earlier call would cap adjustSize() and prevent the dialog from growing
+    // to fit content added later (e.g. the injected Gameplay tab).
+    setMinimumHeight(0);
+    setMaximumHeight(QWIDGETSIZE_MAX);
+
+    // A QTabWidget sizes its pane to the CURRENT page, not the tallest one.
+    // The dialog opens on the Output tab (shorter than Video/Gameplay), so the
+    // pane was sized for Output and the taller tabs' rows collided/overlapped
+    // when selected. Level every page to the tallest page's height (each page
+    // ends with a stretch, so shorter ones just gain trailing slack) — then the
+    // pane fits all tabs and nothing overlaps. Reset to 0 first so the measured
+    // hint reflects real content (not a stale floor from a previous call).
+    if (settingsTabs_ != nullptr) {
+        int maxPageHeight = 0;
+        for (int i = 0; i < settingsTabs_->count(); ++i) {
+            QWidget* page = settingsTabs_->widget(i);
+            if (page == nullptr) {
+                continue;
+            }
+            page->setMinimumHeight(0);
+            if (QLayout* pageLayout = page->layout()) {
+                pageLayout->invalidate();
+                pageLayout->activate();
+            }
+            maxPageHeight = qMax(maxPageHeight, page->sizeHint().height());
+        }
+        for (int i = 0; i < settingsTabs_->count(); ++i) {
+            if (QWidget* page = settingsTabs_->widget(i)) {
+                page->setMinimumHeight(maxPageHeight);
+            }
+        }
+        settingsTabs_->updateGeometry();
+    }
+
     if (QLayout* l = layout()) {
         l->invalidate();
         l->activate();

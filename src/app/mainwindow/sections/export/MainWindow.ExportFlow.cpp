@@ -1,5 +1,6 @@
 #include "MainWindow.ExportSection.h"
 #include "../../MainWindowShared.h"
+#include "../dialogs/MainWindow.DialogsSection.h"
 #include "../window/MainWindow.WindowSection.h"
 
 #include "DialogLocalization.h"
@@ -534,6 +535,16 @@ void MainWindow::ExportSection::onExportPreviewVideo()
         },
         UiDialogs::effectiveParentWidget(&owner_)
     );
+    // Inject the owner-wired Gameplay controls (skin / judge line / judge
+    // effect / slide stack order / center display), built by the DialogsSection
+    // so they can reach MainWindow-side data the decoupled dialog can't. They
+    // mutate owner_ live; their values are re-sourced into the task after the
+    // dialog closes (below).
+    QWidget* injectedGameplay = nullptr;
+    if (owner_.dialogsSection_ != nullptr) {
+        owner_.dialogsSection_->buildExportInjectedSettings(&dialog, &injectedGameplay);
+        dialog.injectOwnerWiredSettings(nullptr, injectedGameplay);
+    }
     UiDialogs::prepareDialogWindow(
         &dialog,
         &owner_,
@@ -542,33 +553,17 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     );
 
     dialog.adjustSize();
-    QRect anchorRect = owner_.geometry();
-    bool hasAnchor = false;
-    auto mergeGlobalRect = [&anchorRect, &hasAnchor](const QWidget* widget) {
-        if (widget == nullptr || !widget->isVisible()) {
-            return;
+    // Center the export dialog on the program window EXCLUDING the preview
+    // area, so the live preview stays visible beside it. The preview panel sits
+    // on the right, so the non-preview region is the main window rect trimmed
+    // to the left of the preview panel.
+    QRect anchorRect(owner_.mapToGlobal(QPoint(0, 0)), owner_.size());
+    if (owner_.previewPanel_ != nullptr && owner_.previewPanel_->isVisible()) {
+        const int previewLeftGlobalX = owner_.previewPanel_->mapToGlobal(QPoint(0, 0)).x();
+        const int nonPreviewWidth = previewLeftGlobalX - anchorRect.left();
+        if (nonPreviewWidth > dialog.width() / 2) {
+            anchorRect.setWidth(nonPreviewWidth);
         }
-        const QRect local = widget->rect();
-        const QRect global(widget->mapToGlobal(local.topLeft()), local.size());
-        if (!hasAnchor) {
-            anchorRect = global;
-            hasAnchor = true;
-            return;
-        }
-        anchorRect = anchorRect.united(global);
-    };
-    mergeGlobalRect(owner_.outlineList_);
-    mergeGlobalRect(owner_.previewLeftColumn_);
-    if (!hasAnchor && owner_.workspaceSplitter_ != nullptr && owner_.previewPanel_ != nullptr && owner_.previewPanel_->isVisible()) {
-        const QRect splitterRect = owner_.workspaceSplitter_->rect();
-        const QRect previewRect = owner_.previewPanel_->geometry();
-        const int leftWidth = qMax(1, previewRect.left());
-        const QRect localLeftArea(0, 0, leftWidth, splitterRect.height());
-        anchorRect = QRect(owner_.workspaceSplitter_->mapToGlobal(localLeftArea.topLeft()), localLeftArea.size());
-    }
-    if (hasAnchor) {
-        const int preferredWidth = qRound(anchorRect.width() * 0.5);
-        dialog.resize(qMax(dialog.minimumWidth(), preferredWidth), dialog.height());
     }
     QPoint targetTopLeft(
         anchorRect.center().x() - dialog.width() / 2,
@@ -615,7 +610,14 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     owner_.setPreviewCanvasAspectRatio(1.0, false);
     owner_.restoreSquareAfterVideoExport_ = false;
     if (dialog.exportRequested()) {
-        const VideoExportTask requestedTask = dialog.requestedExportTask();
+        VideoExportTask requestedTask = dialog.requestedExportTask();
+        // The injected Gameplay/Video-extra controls drive owner_ live rather
+        // than baking into the dialog's task, so re-source those fields from
+        // owner_ here — the dialog's task snapshot predates the user's edits.
+        requestedTask.outlineVariant = owner_.previewOutlineVariant_;
+        requestedTask.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
+        requestedTask.centerDisplayMode = owner_.previewCenterDisplayMode_;
+        requestedTask.muriRenderOptions = owner_.muriRenderOptions_;
         this->applySharedExportTaskSettings(requestedTask);
         VideoExportSnapshot snapshot;
         QString launchError;

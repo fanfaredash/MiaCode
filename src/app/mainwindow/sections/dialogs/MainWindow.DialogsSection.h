@@ -37,6 +37,15 @@ private:
         const QString& producedFilePath);
     void openPreviewSettingsDialog(bool includeAudioSettings, bool includeVideoSettings, const QString& title);
 
+public:
+    // Builds the owner_-wired Gameplay controls (skin / judge line / judge
+    // effect / slide stack order / center display) for injection into the
+    // export dialog's Gameplay tab. Mutates owner_ + previewCanvas_ live and
+    // persists via savePortableState(), exactly like the settings dialog — the
+    // two dialogs stay independently wired.
+    void buildExportInjectedSettings(QWidget* parent, QWidget** gameplayOut);
+
+private:
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;
     MainWindow::MainWindowState& state_;

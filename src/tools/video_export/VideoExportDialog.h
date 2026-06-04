@@ -18,6 +18,7 @@ class QPushButton;
 class QSlider;
 class QTabWidget;
 class QTimer;
+class QVBoxLayout;
 class QToolButton;
 class QWheelEvent;
 class QWidget;
@@ -66,6 +67,12 @@ public:
     bool exportRequested() const { return exportRequested_; }
     VideoExportTask requestedExportTask() const { return requestedExportTask_; }
     bool previewAspectChangedByDialog() const { return previewAspectChangedByDialog_; }
+
+    // Injects MainWindow-built, owner-wired settings widgets: videoExtras is
+    // appended to the bottom of the Video tab; gameplayWidget to the Gameplay
+    // tab (below the dialog's own flow-speed rows). Call once after
+    // construction, before exec().
+    void injectOwnerWiredSettings(QWidget* videoExtras, QWidget* gameplayWidget);
 
 private:
     void browseOutputPath();
@@ -195,6 +202,9 @@ private:
     QLabel* previewTimeLabel_ = nullptr;
     QWidget* optionsContent_ = nullptr;
     QWidget* rangeContent_ = nullptr;
+    QWidget* gameplayPage_ = nullptr;
+    QVBoxLayout* visualsPageLayout_ = nullptr;
+    QVBoxLayout* gameplayPageLayout_ = nullptr;
     QTabWidget* settingsTabs_ = nullptr;
     QToolButton* previewRangeButton_ = nullptr;
     QToolButton* stopPreviewButton_ = nullptr;

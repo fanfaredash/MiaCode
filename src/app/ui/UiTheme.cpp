@@ -897,7 +897,7 @@ QString exportDialogStyleSheet()
     return QStringLiteral(
         "QDialog { background: %1; }"
         "QFrame#VideoExportPrimaryPanel, QFrame#VideoExportSectionPanel { background: %2; border: 1px solid %3; border-radius: 12px; }"
-        "QLineEdit, QDoubleSpinBox { background: %2; color: %4; border: 1px solid %3; border-radius: 8px; padding: 2px 8px; min-height: 24px; }"
+        "QLineEdit, QDoubleSpinBox { background: %2; color: %4; border: 1px solid %3; border-radius: 8px; padding: 4px 8px; min-height: 24px; }"
         "QLabel { color: %4; }"
         "QCheckBox { color: %4; spacing: 6px; }"
     )
@@ -905,7 +905,13 @@ QString exportDialogStyleSheet()
         .arg(css(c.cardBg))
         .arg(css(c.border))
         .arg(css(c.textPrimary))
-        + dialogTabStripStyleSheet(c.windowAltBg);
+        + dialogTabStripStyleSheet(c.windowAltBg)
+        // Export-dialog-only: widen the tab pane's inset (shared default is
+        // 8px) so the dense Visuals page leaves a clear margin to the rounded
+        // pane border — sliders/percent labels were sitting flush against the
+        // top and right edges, getting visually clipped by the 10px corner
+        // radius. ID selector keeps this scoped to this dialog's tabs.
+        + QStringLiteral("QTabWidget#VideoExportTabs::pane { padding: 14px; }");
 }
 
 QString designerPickerDialogStyleSheet()
