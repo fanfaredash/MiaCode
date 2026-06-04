@@ -26,9 +26,98 @@
 #include <algorithm>
 #include <cmath>
 
+#include "common/DebugLog.h"
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <RestartManager.h>
+#pragma comment(lib, "Rstrtmgr.lib")
+#endif
+
 using namespace miacode::mainwindow::shared;
 
 namespace {
+
+// --- "pv占用" diagnostics -------------------------------------------------
+// Name the process(es) currently holding `path` open, via the Windows Restart
+// Manager. Tells us whether the lock is MiaCode itself (internal handle leak)
+// or an external program. See project_pv_file_lock_release.
+#ifdef Q_OS_WIN
+QString describeFileLockHolders(const QString& path)
+{
+    DWORD session = 0;
+    WCHAR sessionKey[CCH_RM_SESSION_KEY + 1] = {0};
+    if (RmStartSession(&session, 0, sessionKey) != ERROR_SUCCESS) {
+        return QStringLiteral("(RmStartSession failed)");
+    }
+    QString result;
+    const std::wstring native = QDir::toNativeSeparators(path).toStdWString();
+    LPCWSTR resources[1] = { native.c_str() };
+    if (RmRegisterResources(session, 1, resources, 0, nullptr, 0, nullptr) == ERROR_SUCCESS) {
+        UINT needed = 0;
+        UINT count = 16;
+        RM_PROCESS_INFO infos[16];
+        DWORD reasons = 0;
+        const DWORD rc = RmGetList(session, &needed, &count, infos, &reasons);
+        if (rc == ERROR_SUCCESS || rc == ERROR_MORE_DATA) {
+            const DWORD self = GetCurrentProcessId();
+            const UINT shown = count < 16 ? count : 16;
+            QStringList holders;
+            for (UINT i = 0; i < shown; ++i) {
+                const DWORD pid = infos[i].Process.dwProcessId;
+                QString name = QString::fromWCharArray(infos[i].strAppName);
+                if (name.isEmpty()) {
+                    name = QStringLiteral("?");
+                }
+                holders << QStringLiteral("%1(PID=%2%3)")
+                               .arg(name)
+                               .arg(pid)
+                               .arg(pid == self ? QStringLiteral(",本进程") : QString());
+            }
+            if (needed > shown) {
+                holders << QStringLiteral("…(+%1)").arg(needed - shown);
+            }
+            result = holders.isEmpty() ? QStringLiteral("(无持有进程)") : holders.join(QStringLiteral("; "));
+        } else {
+            result = QStringLiteral("(RmGetList rc=%1)").arg(static_cast<uint>(rc));
+        }
+    } else {
+        result = QStringLiteral("(RmRegisterResources failed)");
+    }
+    RmEndSession(session);
+    return result;
+}
+// Try to open with NO sharing. Succeeds only if nothing holds the file; on
+// failure the Win32 error distinguishes a sharing lock (32) from access-denied
+// (5), not-found (2), etc. — so we can tell "locked" from "fails for another
+// reason" even when the Restart Manager reports no holder.
+QString probeWin32Access(const QString& path)
+{
+    const std::wstring native = QDir::toNativeSeparators(path).toStdWString();
+    HANDLE h = CreateFileW(native.c_str(), GENERIC_READ | GENERIC_WRITE, 0,
+                           nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h != INVALID_HANDLE_VALUE) {
+        CloseHandle(h);
+        return QStringLiteral("excl_open=ok");
+    }
+    return QStringLiteral("excl_open=err%1").arg(static_cast<uint>(GetLastError()));
+}
+#else
+QString describeFileLockHolders(const QString&) { return QString(); }
+QString probeWin32Access(const QString&) { return QString(); }
+#endif
+
+void logFileLockDiag(const QString& where, const QString& path)
+{
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Fatal,
+        QStringLiteral("diag/file_lock"),
+        QStringLiteral("where=%1 path=%2 %3 holders=%4")
+            .arg(where, path, probeWin32Access(path), describeFileLockHolders(path)));
+}
 
 bool mediaToolFileIsExecutable(const QString& path)
 {
@@ -73,18 +162,66 @@ QString resolveMediaToolFfmpegExecutable()
     return QString();
 }
 
+// Windows can briefly refuse a rename/remove while the file is still held by a
+// just-released decoder handle, an antivirus on-write scan, or Explorer's
+// preview/thumbnail handler. Retry with a short backoff (~2s max) so these
+// transient locks don't fail the whole operation. processEvents keeps the modal
+// progress UI responsive between attempts. See project_pv_file_lock_release.
+constexpr int kFileLockRetryAttempts = 40;
+constexpr int kFileLockRetryDelayMs = 50;
+
+void pumpFileLockRetryDelay()
+{
+    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    QThread::msleep(kFileLockRetryDelayMs);
+}
+
+bool removeWithRetry(const QString& path)
+{
+    if (!QFileInfo::exists(path)) {
+        return true;
+    }
+    for (int attempt = 0; attempt < kFileLockRetryAttempts; ++attempt) {
+        if (QFile::remove(path)) {
+            return true;
+        }
+        pumpFileLockRetryDelay();
+    }
+    return false;
+}
+
+bool renameWithRetry(const QString& from, const QString& to)
+{
+    for (int attempt = 0; attempt < kFileLockRetryAttempts; ++attempt) {
+        if (QFile::rename(from, to)) {
+            return true;
+        }
+        pumpFileLockRetryDelay();
+    }
+    return false;
+}
+
 bool copyFileReplacing(const QString& sourcePath, const QString& destinationPath, QString* error)
 {
-    QFile::remove(destinationPath);
-    if (!QFile::copy(sourcePath, destinationPath)) {
-        if (error != nullptr) {
-            *error = UiText::isChineseUi()
-                ? QStringLiteral("无法写入文件：%1\n\n文件可能正在被预览、播放器、资源管理器预览窗格或其他程序占用。").arg(destinationPath)
-                : QStringLiteral("Failed to write file: %1\n\nThe file may be open in preview, a media player, File Explorer preview pane, or another program.").arg(destinationPath);
+    // Diagnostic bracket #1: who holds the source right after the preview
+    // release (and before any ffmpeg work). For pv ops sourcePath is pv.mp4.
+    logFileLockDiag(QStringLiteral("copy_entry_src"), sourcePath);
+    removeWithRetry(destinationPath);
+    for (int attempt = 0; attempt < kFileLockRetryAttempts; ++attempt) {
+        if (QFile::copy(sourcePath, destinationPath)) {
+            return true;
         }
-        return false;
+        // A failed copy can leave a partial/zero-byte destination; clear it
+        // before the next attempt so QFile::copy doesn't bail on "already exists".
+        QFile::remove(destinationPath);
+        pumpFileLockRetryDelay();
     }
-    return true;
+    if (error != nullptr) {
+        *error = UiText::isChineseUi()
+            ? QStringLiteral("无法写入文件：%1\n\n文件可能正在被预览、播放器、资源管理器预览窗格或其他程序占用。").arg(destinationPath)
+            : QStringLiteral("Failed to write file: %1\n\nThe file may be open in preview, a media player, File Explorer preview pane, or another program.").arg(destinationPath);
+    }
+    return false;
 }
 
 bool restoreFileFromBackup(const QString& backupPath, const QString& destinationPath, QString* error)
@@ -134,23 +271,32 @@ int mediaBlankBeatsFromMeterId(const QString& meterId)
 bool replaceFileWithTemp(const QString& tempPath, const QString& destinationPath, QString* error)
 {
     const QString replacingPath = destinationPath + QStringLiteral(".replacing");
-    QFile::remove(replacingPath);
-    if (!QFile::rename(destinationPath, replacingPath)) {
+    removeWithRetry(replacingPath);
+    // Diagnostic bracket #2: who holds the file right before we rename it
+    // (after ffmpeg finished). Compare with bracket #1 to tell "never released"
+    // from "re-acquired during the encode".
+    logFileLockDiag(QStringLiteral("before_rename"), destinationPath);
+    if (!renameWithRetry(destinationPath, replacingPath)) {
+        const QString diag = QStringLiteral("%1 | %2")
+                                 .arg(probeWin32Access(destinationPath),
+                                      describeFileLockHolders(destinationPath));
+        logFileLockDiag(QStringLiteral("rename_failed"), destinationPath);
         if (error != nullptr) {
-            *error = UiText::isChineseUi()
+            *error = (UiText::isChineseUi()
                 ? QStringLiteral("无法替换原文件：%1\n\n文件可能仍被预览、播放器、资源管理器预览窗格或其他程序占用。请停止预览并关闭占用该文件的程序后重试。").arg(destinationPath)
-                : QStringLiteral("Failed to stage original file for replacement: %1\n\nThe file may still be open in preview, a media player, File Explorer preview pane, or another program. Stop preview and close programs using it, then try again.").arg(destinationPath);
+                : QStringLiteral("Failed to stage original file for replacement: %1\n\nThe file may still be open in preview, a media player, File Explorer preview pane, or another program. Stop preview and close programs using it, then try again.").arg(destinationPath))
+                + QStringLiteral("\n\n[占用诊断] %1").arg(diag);
         }
         return false;
     }
-    if (!QFile::rename(tempPath, destinationPath)) {
-        QFile::rename(replacingPath, destinationPath);
+    if (!renameWithRetry(tempPath, destinationPath)) {
+        renameWithRetry(replacingPath, destinationPath);
         if (error != nullptr) {
             *error = QStringLiteral("Failed to replace file: %1").arg(destinationPath);
         }
         return false;
     }
-    QFile::remove(replacingPath);
+    removeWithRetry(replacingPath);
     return true;
 }
 
@@ -566,6 +712,15 @@ QString MainWindow::DialogsSection::resolveCurrentChartDirectory() const
 void MainWindow::DialogsSection::releasePreviewMediaForFileOperation()
 {
     owner_.onStopPreview();
+    // clearPreviewStageMediaRoute() -> setChartPath("") -> clearMedia(), which
+    // now pushes an empty frame to the QML sink so the retained QVideoFrame ->
+    // QAVStream -> QAVFormatContext reference is dropped and the pv.mp4 avio
+    // handle is actually closed (the real "pv占用" fix lives in clearMedia()).
+    // We deliberately do NOT destroy the host here: deleting it detaches the
+    // QML VideoOutput's sink and it does not reliably re-attach to the
+    // re-created host, which left the post-op preview blank ("压缩后视频不加载").
+    // Keeping the host alive means the post-op reload re-decodes onto the same
+    // still-attached sink. See project_pv_file_lock_release.
     owner_.clearPreviewStageMediaRoute();
     for (int i = 0; i < 8; ++i) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
@@ -784,6 +939,7 @@ void MainWindow::DialogsSection::onCompressBackgroundVideo()
     QString error;
     if (!compressVideoUnder20Mb(ffmpegPath, videoPath, UiDialogs::effectiveParentWidget(&owner_), &error)) {
         QMessageBox::critical(UiDialogs::effectiveParentWidget(&owner_), title, error);
+        reloadPreviewMediaAfterFileOperation(false);
         return;
     }
     reloadPreviewMediaAfterFileOperation(false);
@@ -857,6 +1013,7 @@ void MainWindow::DialogsSection::onConvertTrackTo44100Hz()
     QString error;
     if (!convertTrackTo44100Hz(ffmpegPath, trackPath, UiDialogs::effectiveParentWidget(&owner_), &error)) {
         QMessageBox::critical(UiDialogs::effectiveParentWidget(&owner_), title, error);
+        reloadPreviewMediaAfterFileOperation(true);
         return;
     }
     reloadPreviewMediaAfterFileOperation(true);
@@ -1416,6 +1573,7 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
         QString error;
         if (!restoreFileFromBackup(backupPath, inputPath, &error)) {
             QMessageBox::critical(UiDialogs::effectiveParentWidget(&owner_), title, error);
+            reloadPreviewMediaAfterFileOperation(isTrack);
             return;
         }
         QMessageBox::information(
@@ -1453,6 +1611,7 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
             UiText::isChineseUi() ? QStringLiteral("track.mp3 处理失败") : QStringLiteral("track.mp3 Failed"),
             error
         );
+        reloadPreviewMediaAfterFileOperation(isTrack);
         return;
     }
     if (!isTrack && !prependPvBlack(ffmpegPath, videoPath, silenceSeconds, const_cast<QWidget*>(parent), &error)) {
@@ -1461,6 +1620,7 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
             UiText::isChineseUi() ? QStringLiteral("视频处理失败") : QStringLiteral("Video Failed"),
             error
         );
+        reloadPreviewMediaAfterFileOperation(isTrack);
         return;
     }
 

@@ -1719,6 +1719,19 @@ void PreviewStageMediaHost::clearMedia()
     lastVideoFrame_ = QVideoFrame();
     lastFramePtsSeconds_ = -1.0;
     videoBackendLoaded_ = false;
+    // Push an empty frame so the QML VideoOutput's sink RELEASES the last
+    // decoded frame. A retained QtAVPlayer QVideoFrame transitively holds a
+    // QAVStream -> QSharedPointer<QAVFormatContext>, which keeps the FFmpeg
+    // avio handle on the video file OPEN even after the QAVPlayer is destroyed
+    // (the QML VideoOutput outlives this host). That leaked read handle is the
+    // real cause of "pv占用" / "无法替换原文件": read still works but rename is
+    // refused. Dropping the sink frame lets the format-context refcount reach
+    // zero so ~QAVFormatContext -> avformat_close_input runs. Must happen
+    // BEFORE videoSink_.clear() (which only nulls our QPointer, not the sink's
+    // frame). See project_pv_file_lock_release.
+    if (videoSink_ != nullptr) {
+        videoSink_->setVideoFrame(QVideoFrame());
+    }
     videoSink_.clear();
     if (player_ != nullptr) {
         player_->stop();
