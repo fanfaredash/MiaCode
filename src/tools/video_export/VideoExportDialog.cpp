@@ -591,9 +591,10 @@ VideoExportDialog::VideoExportDialog(
     // built later and lives OUTSIDE this tab widget so it stays reachable
     // on every page — you can scrub and watch the live preview while tuning
     // any setting. Three pages:
-    //   Output  — export-only encoding params + the export range.
-    //   Visuals — everything that changes the rendered picture (live).
-    //   HUD     — overlay toggles + HUD font (live).
+    //   Output       — export-only encoding params.
+    //   Visuals      — everything that changes the rendered picture (live),
+    //                  including the former HUD overlay toggles + HUD font.
+    //   Export Range — the export in/out range.
     settingsTabs_ = new QTabWidget(this);
     settingsTabs_->setObjectName(QStringLiteral("VideoExportTabs"));
     rootLayout->addWidget(settingsTabs_, 0);
@@ -608,10 +609,10 @@ VideoExportDialog::VideoExportDialog(
     visualsPageLayout->setContentsMargins(4, 6, 4, 6);
     visualsPageLayout->setSpacing(8);
 
-    auto* hudPage = new QWidget(settingsTabs_);
-    auto* hudPageLayout = new QVBoxLayout(hudPage);
-    hudPageLayout->setContentsMargins(4, 6, 4, 6);
-    hudPageLayout->setSpacing(8);
+    auto* rangePage = new QWidget(settingsTabs_);
+    auto* rangePageLayout = new QVBoxLayout(rangePage);
+    rangePageLayout->setContentsMargins(4, 6, 4, 6);
+    rangePageLayout->setSpacing(8);
 
     // Output section — same label-above-control style as the dropdown
     // grid below. Top line is the "Output" label, bottom line carries
@@ -816,7 +817,7 @@ VideoExportDialog::VideoExportDialog(
 
     outputPageLayout->addWidget(optionsGrid, 0);
 
-    rangeContent_ = new QWidget(outputPage);
+    rangeContent_ = new QWidget(rangePage);
     auto* rangeLayout = new QVBoxLayout(rangeContent_);
     rangeLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     rangeLayout->setSpacing(6);
@@ -828,6 +829,10 @@ VideoExportDialog::VideoExportDialog(
     QFont rangeTitleFont = rangeTitleLabel->font();
     rangeTitleFont.setWeight(QFont::DemiBold);
     rangeTitleLabel->setFont(rangeTitleFont);
+    // The range now occupies its own tab whose label already names it, so the
+    // in-panel title would just duplicate the tab caption — keep it built (for
+    // any external references) but hidden.
+    rangeTitleLabel->hide();
     rangeLayout->addWidget(rangeTitleLabel, 0);
 
     startSecondSpin_ = new TimestampSpinBox(rangeContent_);
@@ -894,9 +899,8 @@ VideoExportDialog::VideoExportDialog(
         + kSetButtonLeftGap
         + startCurrentTimeEdit_->minimumWidth();
 
-    // addIntroCheck_ is built further down (in the former "Options" block);
-    // it is inserted just above the range on this page once it exists.
-    outputPageLayout->addWidget(rangeContent_, 0);
+    rangePageLayout->addWidget(rangeContent_, 0);
+    rangePageLayout->addStretch(1);
     outputPageLayout->addStretch(1);
 
     // Persistent time bar — lives OUTSIDE the tab widget so the scrubber and
@@ -958,9 +962,10 @@ VideoExportDialog::VideoExportDialog(
     previewStripLayout->addWidget(previewTimeRow, 0);
     rootLayout->addWidget(previewStrip, 0);
 
-    // optionsContent_ now holds only the Visuals-page controls; it is added
-    // to the Visuals tab below. HUD-page checkboxes are reparented onto the
-    // HUD tab, and "Add intro" onto the Output tab, further down.
+    // optionsContent_ holds the Visuals-page controls; it is added to the
+    // Visuals tab below. The former HUD overlay toggles + HUD font picker are
+    // appended onto the same Visuals tab further down. "Add intro" is built but
+    // kept hidden.
     optionsContent_ = new QWidget(visualsPage);
     auto* optionsLayout = new QGridLayout(optionsContent_);
     optionsLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
@@ -1227,11 +1232,11 @@ VideoExportDialog::VideoExportDialog(
     optionsLayout->addWidget(backgroundScaleModeRow, 4, 0, 1, 2);
     optionsLayout->addWidget(smoothBrightnessCheck_, 5, 0, 1, 2, Qt::AlignLeft | Qt::AlignTop);
     visualsPageLayout->addWidget(optionsContent_, 0);
-    visualsPageLayout->addStretch(1);
 
-    // HUD page — overlay toggles + the HUD font picker.
-    hudPageLayout->addWidget(showTimestampCheck_, 0, Qt::AlignLeft | Qt::AlignTop);
-    auto* objectStatsRow = new QWidget(hudPage);
+    // Former HUD page — overlay toggles + the HUD font picker — now merged
+    // onto the Visuals tab, below the picture controls.
+    visualsPageLayout->addWidget(showTimestampCheck_, 0, Qt::AlignLeft | Qt::AlignTop);
+    auto* objectStatsRow = new QWidget(visualsPage);
     auto* objectStatsLayout = new QHBoxLayout(objectStatsRow);
     objectStatsLayout->setContentsMargins(0, 0, 0, 0);
     objectStatsLayout->setSpacing(8);
@@ -1244,18 +1249,12 @@ VideoExportDialog::VideoExportDialog(
     objectStatsLayout->addWidget(showChartInfoCheck_, 0, Qt::AlignLeft | Qt::AlignVCenter);
     objectStatsLayout->addWidget(hudFontSettingsButton_, 0);
     objectStatsLayout->addStretch(1);
-    hudPageLayout->addWidget(objectStatsRow, 0);
-    hudPageLayout->addStretch(1);
+    visualsPageLayout->addWidget(objectStatsRow, 0);
+    visualsPageLayout->addStretch(1);
 
-    // "Add intro" applies to full-range exports only and is tied to the
-    // range, so it lives on the Output page, inserted just above the range.
-    const int rangeWidgetIndex = outputPageLayout->indexOf(rangeContent_);
-    outputPageLayout->insertWidget(
-        rangeWidgetIndex >= 0 ? rangeWidgetIndex : outputPageLayout->count(),
-        addIntroCheck_,
-        0,
-        Qt::AlignLeft | Qt::AlignTop
-    );
+    // "Add intro" is hidden per request: built so persisted state / export
+    // wiring keep working, but never shown and never added to a visible layout.
+    addIntroCheck_->hide();
     refreshAddIntroEnabledState();
 
     settingsTabs_->addTab(
@@ -1267,8 +1266,8 @@ VideoExportDialog::VideoExportDialog(
         uiText("dialog.video_export.section.visuals", l10n(QStringLiteral("Visuals"), QStringLiteral("画面")))
     );
     settingsTabs_->addTab(
-        hudPage,
-        uiText("dialog.video_export.section.hud", l10n(QStringLiteral("HUD"), QStringLiteral("HUD")))
+        rangePage,
+        uiText("dialog.video_export.section.range", l10n(QStringLiteral("Export Range"), QStringLiteral("导出区间")))
     );
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
