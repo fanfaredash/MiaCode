@@ -158,20 +158,26 @@ void LatencySandboxController::installSandboxScene()
     // Tell the playback gates the test chart is a previewable chart, so the
     // real transport (startQtPreviewPlayback / onTogglePreviewPause) plays it.
     owner_->state_.latencySandboxAuditionActive_ = true;
-    owner_->state_.qtPreviewPauseSecond_ = 0.0;
+    // Preserve the playhead carried over from the previous page (set by
+    // switchToLatencyField) instead of snapping to 0, clamped to the test
+    // chart's duration. Mirrors difficulty-switch behaviour.
+    const double sandboxDuration = resolveAudioDurationSeconds();
+    const double restoreSecond = sandboxDuration > 0.0
+        ? qBound(0.0, owner_->state_.qtPreviewPauseSecond_, sandboxDuration)
+        : qMax(0.0, owner_->state_.qtPreviewPauseSecond_);
 
     // Install the test chart as the preview source + dispatch the per-page
     // audition mix. onPage_ is already true (setOnPage flips it before calling
     // this), so the single mode-aware dispatch resolves to LatencyAudition levels.
     owner_->applyPreviewAudioSettingsToRuntime();
     setupSandboxPreviewState();
-    applyPlayheadToScene(0.0);
+    applyPlayheadToScene(restoreSecond);
 
     if (tickTimer_ != nullptr) {
         tickTimer_->start();
     }
     emit auditionStateChanged(false);
-    emit playheadAdvanced(0.0);
+    emit playheadAdvanced(restoreSecond);
 }
 
 void LatencySandboxController::teardownSandboxScene()

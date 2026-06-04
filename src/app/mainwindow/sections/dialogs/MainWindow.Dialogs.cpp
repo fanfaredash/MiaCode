@@ -313,12 +313,18 @@ bool runFfmpegBlocking(
     QWidget* parent,
     const QString& label,
     double totalDurationSeconds,
-    QString* error)
+    QString* error,
+    bool* cancelled = nullptr)
 {
+    if (cancelled != nullptr) {
+        *cancelled = false;
+    }
     const bool determinate = totalDurationSeconds > 0.0;
     QProgressDialog progress(label, QString(), 0, determinate ? 100 : 0, parent);
     progress.setWindowModality(Qt::ApplicationModal);
-    progress.setCancelButton(nullptr);
+    // Real Cancel button (mirrors the export flow). Clicking it asks for
+    // confirmation before actually aborting the ffmpeg process (see below).
+    progress.setCancelButtonText(UiText::isChineseUi() ? QStringLiteral("取消") : QStringLiteral("Cancel"));
     progress.setMinimumDuration(0);
     progress.setAutoClose(false);
     progress.setAutoReset(false);
@@ -344,6 +350,14 @@ bool runFfmpegBlocking(
         }
         return false;
     }
+
+    // Cancel = abort immediately (no confirmation prompt). Clicking the
+    // dialog's Cancel button just flags the loop below, which kills the ffmpeg
+    // process; the caller then surfaces a "canceled" popup.
+    bool cancelConfirmed = false;
+    QObject::connect(&progress, &QProgressDialog::canceled, &progress, [&]() {
+        cancelConfirmed = true;
+    });
 
     QString progressBuffer;
     QString stderrTail;
@@ -383,7 +397,21 @@ bool runFfmpegBlocking(
     while (process.state() != QProcess::NotRunning) {
         process.waitForReadyRead(100);
         pump();
-        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        // AllEvents (not ExcludeUserInputEvents) so the Cancel button receives
+        // clicks; the dialog is application-modal, so the main window stays inert.
+        QCoreApplication::processEvents(QEventLoop::AllEvents);
+        if (cancelConfirmed) {
+            process.kill();
+            process.waitForFinished(2000);
+            progress.close();
+            if (cancelled != nullptr) {
+                *cancelled = true;
+            }
+            if (error != nullptr) {
+                *error = UiText::isChineseUi() ? QStringLiteral("已取消。") : QStringLiteral("Canceled.");
+            }
+            return false;
+        }
     }
     process.waitForFinished(200);
     pump();  // drain anything emitted between the last read and exit
@@ -462,7 +490,8 @@ bool compressVideoUnder20Mb(
     const QString& ffmpegPath,
     const QString& videoPath,
     QWidget* parent,
-    QString* error)
+    QString* error,
+    bool* cancelled = nullptr)
 {
     constexpr qint64 kTargetBytes = 20LL * 1024LL * 1024LL;
     constexpr int kAudioBitrateKbps = 96;
@@ -521,7 +550,8 @@ bool compressVideoUnder20Mb(
             parent,
             UiText::isChineseUi() ? QStringLiteral("正在压缩视频...") : QStringLiteral("Compressing video..."),
             durationSeconds,
-            error)) {
+            error,
+            cancelled)) {
         QFile::remove(tempPath);
         return false;
     }
@@ -543,7 +573,8 @@ bool convertTrackTo44100Hz(
     const QString& ffmpegPath,
     const QString& trackPath,
     QWidget* parent,
-    QString* error)
+    QString* error,
+    bool* cancelled = nullptr)
 {
     const QFileInfo trackInfo(trackPath);
     const QString backupPath = trackInfo.dir().filePath(QStringLiteral("track_bak.mp3"));
@@ -573,7 +604,8 @@ bool convertTrackTo44100Hz(
             parent,
             UiText::isChineseUi() ? QStringLiteral("正在处理音频...") : QStringLiteral("Processing audio..."),
             trackDurationSeconds,
-            error)) {
+            error,
+            cancelled)) {
         QFile::remove(tempPath);
         return false;
     }
@@ -585,7 +617,8 @@ bool prependTrackSilence(
     const QString& trackPath,
     double silenceSeconds,
     QWidget* parent,
-    QString* error)
+    QString* error,
+    bool* cancelled = nullptr)
 {
     const QFileInfo trackInfo(trackPath);
     const QString backupPath = trackInfo.dir().filePath(QStringLiteral("track_bak.mp3"));
@@ -621,7 +654,8 @@ bool prependTrackSilence(
             parent,
             UiText::isChineseUi() ? QStringLiteral("正在处理 track.mp3...") : QStringLiteral("Processing track.mp3..."),
             totalDurationSeconds,
-            error)) {
+            error,
+            cancelled)) {
         QFile::remove(tempPath);
         return false;
     }
@@ -633,7 +667,8 @@ bool prependPvBlack(
     const QString& pvPath,
     double silenceSeconds,
     QWidget* parent,
-    QString* error)
+    QString* error,
+    bool* cancelled = nullptr)
 {
     const QFileInfo pvInfo(pvPath);
     const QString backupPath = pvInfo.dir().filePath(
@@ -675,7 +710,8 @@ bool prependPvBlack(
             parent,
             UiText::isChineseUi() ? QStringLiteral("正在处理 pv.mp4...") : QStringLiteral("Processing pv.mp4..."),
             totalDurationSeconds,
-            error)) {
+            error,
+            cancelled)) {
         QFile::remove(tempPath);
         return false;
     }
@@ -911,6 +947,21 @@ void MainWindow::DialogsSection::onCompressBackgroundVideo()
     }
 
     const QFileInfo videoInfo(videoPath);
+    // Size gate up-front: if the video is already under 20 MiB there is nothing
+    // to compress, so say so immediately instead of making the user confirm
+    // first and only then discovering there's no work to do.
+    constexpr qint64 kCompressTargetBytes = 20LL * 1024LL * 1024LL;
+    const qint64 videoSizeBytes = videoInfo.size();
+    if (videoSizeBytes > 0 && videoSizeBytes <= kCompressTargetBytes) {
+        QMessageBox::information(
+            UiDialogs::effectiveParentWidget(&owner_),
+            title,
+            UiText::isChineseUi()
+                ? QStringLiteral("当前视频已经小于 20 MiB（%1），无需压缩。").arg(QLocale().formattedDataSize(videoSizeBytes))
+                : QStringLiteral("The current video is already under 20 MiB (%1); compression is not needed.").arg(QLocale().formattedDataSize(videoSizeBytes))
+        );
+        return;
+    }
     const QString backupName = QStringLiteral("%1_bak.%2").arg(videoInfo.completeBaseName(), videoInfo.suffix());
     if (QMessageBox::question(
             UiDialogs::effectiveParentWidget(&owner_),
@@ -937,8 +988,15 @@ void MainWindow::DialogsSection::onCompressBackgroundVideo()
     releasePreviewMediaForFileOperation();
 
     QString error;
-    if (!compressVideoUnder20Mb(ffmpegPath, videoPath, UiDialogs::effectiveParentWidget(&owner_), &error)) {
-        QMessageBox::critical(UiDialogs::effectiveParentWidget(&owner_), title, error);
+    bool cancelled = false;
+    if (!compressVideoUnder20Mb(ffmpegPath, videoPath, UiDialogs::effectiveParentWidget(&owner_), &error, &cancelled)) {
+        if (cancelled) {
+            QMessageBox::information(
+                UiDialogs::effectiveParentWidget(&owner_), title,
+                UiText::isChineseUi() ? QStringLiteral("已取消视频压缩。") : QStringLiteral("Video compression canceled."));
+        } else {
+            QMessageBox::critical(UiDialogs::effectiveParentWidget(&owner_), title, error);
+        }
         reloadPreviewMediaAfterFileOperation(false);
         return;
     }
@@ -1011,8 +1069,15 @@ void MainWindow::DialogsSection::onConvertTrackTo44100Hz()
     releasePreviewMediaForFileOperation();
 
     QString error;
-    if (!convertTrackTo44100Hz(ffmpegPath, trackPath, UiDialogs::effectiveParentWidget(&owner_), &error)) {
-        QMessageBox::critical(UiDialogs::effectiveParentWidget(&owner_), title, error);
+    bool cancelled = false;
+    if (!convertTrackTo44100Hz(ffmpegPath, trackPath, UiDialogs::effectiveParentWidget(&owner_), &error, &cancelled)) {
+        if (cancelled) {
+            QMessageBox::information(
+                UiDialogs::effectiveParentWidget(&owner_), title,
+                UiText::isChineseUi() ? QStringLiteral("已取消采样率转换。") : QStringLiteral("Sample-rate conversion canceled."));
+        } else {
+            QMessageBox::critical(UiDialogs::effectiveParentWidget(&owner_), title, error);
+        }
         reloadPreviewMediaAfterFileOperation(true);
         return;
     }
@@ -1604,22 +1669,35 @@ void MainWindow::DialogsSection::onPrependMediaBlank(MediaBlankTarget target)
     releasePreviewMediaForFileOperation();
 
     QString error;
+    bool cancelled = false;
     const QWidget* parent = UiDialogs::effectiveParentWidget(&owner_);
-    if (isTrack && !prependTrackSilence(ffmpegPath, trackPath, silenceSeconds, const_cast<QWidget*>(parent), &error)) {
-        QMessageBox::critical(
-            UiDialogs::effectiveParentWidget(&owner_),
-            UiText::isChineseUi() ? QStringLiteral("track.mp3 处理失败") : QStringLiteral("track.mp3 Failed"),
-            error
-        );
+    if (isTrack && !prependTrackSilence(ffmpegPath, trackPath, silenceSeconds, const_cast<QWidget*>(parent), &error, &cancelled)) {
+        if (cancelled) {
+            QMessageBox::information(
+                UiDialogs::effectiveParentWidget(&owner_), title,
+                UiText::isChineseUi() ? QStringLiteral("已取消 track.mp3 处理。") : QStringLiteral("track.mp3 processing canceled."));
+        } else {
+            QMessageBox::critical(
+                UiDialogs::effectiveParentWidget(&owner_),
+                UiText::isChineseUi() ? QStringLiteral("track.mp3 处理失败") : QStringLiteral("track.mp3 Failed"),
+                error
+            );
+        }
         reloadPreviewMediaAfterFileOperation(isTrack);
         return;
     }
-    if (!isTrack && !prependPvBlack(ffmpegPath, videoPath, silenceSeconds, const_cast<QWidget*>(parent), &error)) {
-        QMessageBox::critical(
-            UiDialogs::effectiveParentWidget(&owner_),
-            UiText::isChineseUi() ? QStringLiteral("视频处理失败") : QStringLiteral("Video Failed"),
-            error
-        );
+    if (!isTrack && !prependPvBlack(ffmpegPath, videoPath, silenceSeconds, const_cast<QWidget*>(parent), &error, &cancelled)) {
+        if (cancelled) {
+            QMessageBox::information(
+                UiDialogs::effectiveParentWidget(&owner_), title,
+                UiText::isChineseUi() ? QStringLiteral("已取消视频处理。") : QStringLiteral("Video processing canceled."));
+        } else {
+            QMessageBox::critical(
+                UiDialogs::effectiveParentWidget(&owner_),
+                UiText::isChineseUi() ? QStringLiteral("视频处理失败") : QStringLiteral("Video Failed"),
+                error
+            );
+        }
         reloadPreviewMediaAfterFileOperation(isTrack);
         return;
     }

@@ -812,12 +812,20 @@ bool MainWindow::DocumentSection::switchToLatencyField()
         return false;
     }
     owner_.cacheWorkspaceLayoutSizes();
+    // Preserve the current preview position across the switch, just like
+    // switchToDifficultyField does, so entering the latency page keeps the
+    // playhead instead of snapping to 0. installSandboxScene() consumes
+    // qtPreviewPauseSecond_ (clamped to the test chart duration).
+    const double restorePreviewSecond = qMax(0.0, state_.qtPreviewPlaying_
+        ? owner_.currentPreviewAuthoritativeAudioClockSecond()
+        : state_.qtPreviewPauseSecond_);
     owner_.stopQtPreviewPlayback(true);
     state_.pendingPreviewPlaybackStart_ = false;
     state_.pendingPreviewPlaybackResumeFromPause_ = false;
     state_.pendingPreviewPlaybackRevision_ = 0;
     state_.pendingPreviewPlaybackDifficultyId_ = 0;
     state_.pendingPreviewPlaybackSecond_ = 0.0;
+    state_.qtPreviewPauseSecond_ = restorePreviewSecond;
     state_.activeDifficultyId_ = 0;
     state_.activeOutlineKey_ = "latency";
     populateMetadataPage();  // keeps document fields in sync for sidebar use
@@ -928,7 +936,12 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     // The user-facing toggle for this was removed in beta59 — behavior is
     // now always "preserve editor position + preview progress when an
     // active difficulty was selected before the switch".
-    const bool restoreSwitchView = owner_.hasActiveDifficulty();
+    // Also preserve when coming FROM the latency page: it sets activeDifficultyId_=0
+    // (so hasActiveDifficulty() is false) but maintains a valid playhead in
+    // qtPreviewPauseSecond_, which we want to carry over to the difficulty.
+    // (latencySandboxAuditionActive_ is still true here — onPageLeft() below
+    // tears it down only afterwards.)
+    const bool restoreSwitchView = owner_.hasActiveDifficulty() || state_.latencySandboxAuditionActive_;
     const double restorePreviewSecond = restoreSwitchView
         ? qMax(0.0, state_.qtPreviewPlaying_
               ? owner_.currentPreviewAuthoritativeAudioClockSecond()
