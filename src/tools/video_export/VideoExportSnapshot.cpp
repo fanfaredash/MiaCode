@@ -468,7 +468,7 @@ bool buildVideoExportTaskFromSnapshot(
     // label is composed from the short name + per-difficulty level.
     built.chartTitle = document.title;
     built.chartArtist = document.artist;
-    built.chartDesigner = !difficulty->designer.isEmpty()
+    built.chartDesigner = !difficulty->designer.trimmed().isEmpty()
         ? difficulty->designer
         : document.designer;
     const QString diffShortName = SimaiDocument::difficultyShortName(snapshot.difficultyId);

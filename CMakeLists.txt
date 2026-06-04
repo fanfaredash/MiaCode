@@ -877,6 +877,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/chart/document src/core/chart/parser src/core/chart/transform src/timeline
     )
 
+    miacode_add_dev_tool(simai_document_spec TEST
+        SOURCES
+            src/tools/chart_document/SimaiDocumentSpec.cpp
+            src/core/chart/document/SimaiDocument.h
+            src/core/chart/document/SimaiDocument.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/core/chart/document
+    )
+
     miacode_add_dev_tool(muri_spec TEST
         SOURCES
             src/tools/muri/MuriSpec.cpp

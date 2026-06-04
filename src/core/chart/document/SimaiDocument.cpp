@@ -1,5 +1,7 @@
 #include "SimaiDocument.h"
 
+#include <algorithm>
+
 #include <QRegularExpression>
 #include <QStringList>
 
@@ -130,6 +132,24 @@ SimaiDocument SimaiDocument::fromText(const QString& text)
         }
 
         doc.extraFields.append(field);
+    }
+
+    // A `&des_N` with no accompanying `&lv_N` / `&inote_N` is a chart-less
+    // designer name, not a difficulty. Move those out of the difficulty map so
+    // they never surface as a phantom empty difficulty (sidebar entry / empty
+    // lv+inote on save). A genuinely all-empty difficulty (no name either) is
+    // left in place so a freshly-added blank difficulty still round-trips.
+    const QVector<int> parsedIds = doc.difficultyIds();
+    for (int id : parsedIds) {
+        const SimaiDifficultyData* difficultyData = doc.difficulty(id);
+        if (difficultyData == nullptr) {
+            continue;
+        }
+        if (difficultyData->level.isEmpty() && difficultyData->chart.isEmpty()
+            && !difficultyData->designer.isEmpty()) {
+            doc.standaloneDesigners_[id] = difficultyData->designer;
+            doc.difficulties_.remove(id);
+        }
     }
 
     return doc;
@@ -273,12 +293,30 @@ QString SimaiDocument::toText() const
         blocks.append(serializeField(field.key, field.value));
     }
 
+    // Emit real difficulties (full lv/des/inote triple) and chart-less
+    // standalone designers (a bare `&des_N`) interleaved in ascending id order
+    // so the output stays diff-friendly regardless of which slots are charted.
+    QVector<int> allIds;
+    allIds.reserve(difficulties_.size() + standaloneDesigners_.size());
     for (auto it = difficulties_.cbegin(); it != difficulties_.cend(); ++it) {
-        const SimaiDifficultyData& difficultyData = it.value();
-        const QString suffix = QString::number(difficultyData.id);
-        blocks.append(serializeField("lv_" + suffix, difficultyData.level));
-        blocks.append(serializeField("des_" + suffix, difficultyData.designer));
-        blocks.append(serializeField("inote_" + suffix, difficultyData.chart));
+        allIds.append(it.key());
+    }
+    for (auto it = standaloneDesigners_.cbegin(); it != standaloneDesigners_.cend(); ++it) {
+        allIds.append(it.key());
+    }
+    std::sort(allIds.begin(), allIds.end());
+    allIds.erase(std::unique(allIds.begin(), allIds.end()), allIds.end());
+    for (int id : allIds) {
+        const QString suffix = QString::number(id);
+        auto difficultyIt = difficulties_.constFind(id);
+        if (difficultyIt != difficulties_.cend()) {
+            const SimaiDifficultyData& difficultyData = difficultyIt.value();
+            blocks.append(serializeField("lv_" + suffix, difficultyData.level));
+            blocks.append(serializeField("des_" + suffix, difficultyData.designer));
+            blocks.append(serializeField("inote_" + suffix, difficultyData.chart));
+            continue;
+        }
+        blocks.append(serializeField("des_" + suffix, standaloneDesigners_.value(id)));
     }
 
     return blocks.join('\n');
@@ -324,6 +362,63 @@ void SimaiDocument::removeDifficulty(int id)
     difficulties_.remove(id);
 }
 
+QString SimaiDocument::designerForSlot(int id) const
+{
+    if (const SimaiDifficultyData* difficultyData = difficulty(id); difficultyData != nullptr) {
+        return difficultyData->designer;
+    }
+    return standaloneDesigners_.value(id);
+}
+
+void SimaiDocument::setDesignerForSlot(int id, const QString& name)
+{
+    if (!isDifficultyId(id)) {
+        return;
+    }
+    if (SimaiDifficultyData* difficultyData = difficulty(id); difficultyData != nullptr) {
+        // A charted difficulty owns its own designer; never create a
+        // standalone entry that would duplicate the `&des_N` line.
+        difficultyData->designer = name;
+        return;
+    }
+    if (name.isEmpty()) {
+        standaloneDesigners_.remove(id);
+        return;
+    }
+    standaloneDesigners_[id] = name;
+}
+
+QVector<int> SimaiDocument::standaloneDesignerIds() const
+{
+    QVector<int> ids;
+    ids.reserve(standaloneDesigners_.size());
+    for (auto it = standaloneDesigners_.cbegin(); it != standaloneDesigners_.cend(); ++it) {
+        ids.append(it.key());
+    }
+    std::sort(ids.begin(), ids.end());
+    return ids;
+}
+
+QVector<QPair<int, QString>> SimaiDocument::perDifficultyDesigners() const
+{
+    QVector<int> ids;
+    ids.reserve(difficulties_.size() + standaloneDesigners_.size());
+    for (auto it = difficulties_.cbegin(); it != difficulties_.cend(); ++it) {
+        ids.append(it.key());
+    }
+    for (auto it = standaloneDesigners_.cbegin(); it != standaloneDesigners_.cend(); ++it) {
+        ids.append(it.key());
+    }
+    std::sort(ids.begin(), ids.end());
+    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+    QVector<QPair<int, QString>> result;
+    result.reserve(ids.size());
+    for (int id : ids) {
+        result.append(qMakePair(id, designerForSlot(id)));
+    }
+    return result;
+}
+
 bool SimaiDocument::inferUnifiedDesignerDefault() const
 {
     // Policy: never auto-enable. Even when isUnifiedDesignerTriviallySafe()
@@ -357,6 +452,12 @@ bool SimaiDocument::isUnifiedDesignerTriviallySafe() const
     // looks unified, enable the option?".
     for (auto it = difficulties_.cbegin(); it != difficulties_.cend(); ++it) {
         if (it.value().designer != designer) {
+            return false;
+        }
+    }
+    // Chart-less `&des_N` names must agree too, or the project isn't unified.
+    for (auto it = standaloneDesigners_.cbegin(); it != standaloneDesigners_.cend(); ++it) {
+        if (it.value() != designer) {
             return false;
         }
     }

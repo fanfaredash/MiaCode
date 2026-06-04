@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMap>
+#include <QPair>
 #include <QString>
 #include <QVector>
 
@@ -53,6 +54,25 @@ public:
     SimaiDifficultyData& ensureDifficulty(int id);
     void removeDifficulty(int id);
 
+    // Per-difficulty designer (`&des_N`) access that works for *all* slots
+    // 1..7, including those with no chart yet. A slot's name is stored on its
+    // SimaiDifficultyData when the difficulty actually exists; otherwise it is
+    // a "standalone" designer — a `&des_N` recorded without creating a phantom
+    // empty difficulty (no `&lv_N` / `&inote_N`, never listed in
+    // difficultyIds()). This backs the "manage per-difficulty designers"
+    // dialog, which can set a name for a slot the user hasn't charted.
+    QString designerForSlot(int id) const;
+    // Sets `&des_N` for the slot. When difficulty `id` exists, writes its
+    // .designer. Otherwise a non-empty name is stored as a standalone designer
+    // (no difficulty is created); an empty name clears any standalone entry.
+    void setDesignerForSlot(int id, const QString& name);
+    // Sorted ids that currently hold a standalone (chart-less) `&des_N`.
+    QVector<int> standaloneDesignerIds() const;
+    // (id, designer) for every slot that has a designer — real difficulties
+    // and standalone entries alike — sorted by id. Used by the unified-designer
+    // survey / broadcast so chart-less names participate too.
+    QVector<QPair<int, QString>> perDifficultyDesigners() const;
+
     // Default for the "all difficulties share the same designer name"
     // project preference when no explicit value is recorded yet.
     // Currently *always false* — auto-enabling has no entirely-safe
@@ -88,4 +108,10 @@ public:
 
 private:
     QMap<int, SimaiDifficultyData> difficulties_;
+    // `&des_N` names for slots that have no chart. Kept disjoint from
+    // difficulties_ (a slot is in one map or the other, never both) so a
+    // chart-less designer name round-trips without materializing an empty
+    // difficulty. fromText() moves designer-only difficulties here; toText()
+    // emits a bare `&des_N=` line for each.
+    QMap<int, QString> standaloneDesigners_;
 };

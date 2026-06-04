@@ -308,19 +308,24 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     difficultyLevelEdit_->setFixedWidth(48);
     difficultyLevelEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     difficultyLevelEdit_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    auto* difficultyDesignerLabel = new QLabel(uiText("editor.des", "Des"), editorDifficultyControls_);
-    difficultyDesignerLabel_ = difficultyDesignerLabel;
-    difficultyDesignerLabel->setFont(uiAccentFont(10));
-    auto* difficultyDesignerLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
-    difficultyDesignerLineEdit->setLeftPlaceholderText("&des_n=");
-    difficultyDesignerEdit_ = difficultyDesignerLineEdit;
-    difficultyDesignerEdit_->setFixedWidth(96);
-    difficultyDesignerEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    difficultyDesignerEdit_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    // Chart-wide timing offset (`&first`). It shares a single source of truth
+    // (document_.first) with the latency page; it used to sit on the metadata
+    // page but lives here now so charters can tune it against the live
+    // timeline/preview. `&des_N` no longer has a header field — per-difficulty
+    // designer names are managed from the metadata page's dialog instead.
+    auto* difficultyFirstLabel = new QLabel(uiText("metadata.field.first", "Offset"), editorDifficultyControls_);
+    difficultyFirstLabel_ = difficultyFirstLabel;
+    difficultyFirstLabel->setFont(uiAccentFont(10));
+    auto* difficultyFirstLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
+    difficultyFirstLineEdit->setLeftPlaceholderText("&first=");
+    firstEdit_ = difficultyFirstLineEdit;
+    firstEdit_->setFixedWidth(64);
+    firstEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    firstEdit_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     editorDifficultyLayout->addWidget(difficultyLevelLabel);
     editorDifficultyLayout->addWidget(difficultyLevelEdit_);
-    editorDifficultyLayout->addWidget(difficultyDesignerLabel);
-    editorDifficultyLayout->addWidget(difficultyDesignerEdit_);
+    editorDifficultyLayout->addWidget(difficultyFirstLabel);
+    editorDifficultyLayout->addWidget(firstEdit_);
     editorDifficultyControls_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     editorDifficultyControls_->hide();
     editorHeaderLayout->addWidget(editorDifficultyControls_, 0);
@@ -591,13 +596,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     metadataForm->setVerticalSpacing(10);
     titleEdit_ = new QLineEdit(metadataPage_);
     artistEdit_ = new QLineEdit(metadataPage_);
-    firstEdit_ = new QLineEdit(metadataPage_);
     auto* designerLineEdit = new LeftPlaceholderLineEdit(metadataPage_);
     designerLineEdit->setLeftPlaceholderText("&des=");
     designerEdit_ = designerLineEdit;
     titleEdit_->setPlaceholderText("&title=");
     artistEdit_->setPlaceholderText("&artist=");
-    firstEdit_->setPlaceholderText("&first=");
     designerEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     const auto makeMetadataFieldLabel = [this](const QString& text) {
         auto* label = new QLabel(text, metadataPage_);
@@ -606,17 +609,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         label->setMinimumWidth(46);
         return label;
     };
-    firstEdit_->setFixedWidth(98);
-    auto* firstWrap = new QWidget(metadataPage_);
-    auto* firstWrapLayout = new QHBoxLayout(firstWrap);
-    firstWrapLayout->setContentsMargins(0, 0, 0, 0);
-    firstWrapLayout->setSpacing(6);
-    firstWrapLayout->addWidget(firstEdit_, 0, Qt::AlignLeft);
-    firstWrapLayout->addStretch(1);
-
     // Title and artist each get their own "read from MP3" button on the
-    // far right of the matching row, mirroring the BPM detection button
-    // on the offset row below. Each button only fills its own field so
+    // far right of the matching row. Each button only fills its own field so
     // users who only need one of the two values aren't forced to accept
     // the other.
     auto* titleWrap = new QWidget(metadataPage_);
@@ -649,41 +643,38 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     connect(readArtistButton, &QToolButton::clicked, this, &MainWindow::onReadArtistFromTrack);
     artistWrapLayout->addWidget(readArtistButton, 0, Qt::AlignRight);
 
-    // Designer row gets a "[ ] All difficulties share the same designer"
-    // checkbox. When checked, edits to the top-level &des broadcast to
-    // every per-difficulty &des_N, and edits to a per-difficulty designer
-    // broadcast back to &des and the other difficulties. The checkbox
-    // state persists per-project via ProjectPreferences.
+    // The top `&des` is the chart-wide / fallback designer. Per-difficulty
+    // names (`&des_1..7`) and the "all difficulties share one designer" toggle
+    // are managed from a dialog opened by the button on the right of this row —
+    // the difficulty header no longer carries a designer field, so nothing
+    // here has to stay in sync with another page.
     auto* designerWrap = new QWidget(metadataPage_);
     auto* designerWrapLayout = new QHBoxLayout(designerWrap);
     designerWrapLayout->setContentsMargins(0, 0, 0, 0);
     designerWrapLayout->setSpacing(6);
     designerWrapLayout->addWidget(designerEdit_, 1);
-    unifiedDesignerCheckbox_ = new QCheckBox(metadataPage_);
-    unifiedDesignerCheckbox_->setText(UiText::isChineseUi()
-        ? QStringLiteral("所有难度采用相同名义")
-        : QStringLiteral("All difficulties share this designer"));
-    unifiedDesignerCheckbox_->setToolTip(UiText::isChineseUi()
-        ? QStringLiteral("勾选后，&des 与每个难度的 &des_N 会双向同步。")
-        : QStringLiteral("When checked, &des and every &des_N stay in sync."));
-    // Explicit indicator styling so the checkbox is visible in dark mode —
-    // the platform default leaves the unchecked box nearly invisible against
-    // the metadata page's dark card background.
-    unifiedDesignerCheckbox_->setStyleSheet(UiTheme::darkAwareCheckBoxStyleSheet());
-    connect(unifiedDesignerCheckbox_, &QCheckBox::toggled, this, &MainWindow::onUnifiedDesignerToggled);
-    designerWrapLayout->addWidget(unifiedDesignerCheckbox_, 0, Qt::AlignRight);
+    auto* manageDesignersButton = new QToolButton(metadataPage_);
+    manageDesignersButton->setText(UiText::isChineseUi()
+        ? QStringLiteral("管理多个难度名义")
+        : QStringLiteral("Manage per-difficulty designers"));
+    manageDesignersButton->setToolTip(UiText::isChineseUi()
+        ? QStringLiteral("为每个难度（&des_1 … &des_7）分别填写谱师名义，并可勾选「所有难度采用相同名义」。")
+        : QStringLiteral("Set each difficulty's designer (&des_1 … &des_7); includes the "
+                         "\"all difficulties share one designer\" toggle."));
+    connect(manageDesignersButton, &QToolButton::clicked, this, &MainWindow::onManagePerDifficultyDesigners);
+    designerWrapLayout->addWidget(manageDesignersButton, 0, Qt::AlignRight);
 
-    // Cover-extraction row sits below `first`. The label is intentionally
-    // short ("封面") so the form column stays compact; the button text
-    // carries the description "从 track.mp3 中提取 bg.jpg".
+    // Cover-extraction row. The label is intentionally short ("曲绘") so the
+    // form column stays compact; the button text carries the action and the
+    // tooltip spells out the bg.jpg destination.
     auto* coverWrap = new QWidget(metadataPage_);
     auto* coverWrapLayout = new QHBoxLayout(coverWrap);
     coverWrapLayout->setContentsMargins(0, 0, 0, 0);
     coverWrapLayout->setSpacing(6);
     auto* extractCoverButton = new QToolButton(metadataPage_);
     extractCoverButton->setText(UiText::isChineseUi()
-        ? QStringLiteral("从 track.mp3 中提取 bg.jpg")
-        : QStringLiteral("Extract bg.jpg from track.mp3"));
+        ? QStringLiteral("从 track.mp3 中提取")
+        : QStringLiteral("Extract from track.mp3"));
     extractCoverButton->setToolTip(UiText::isChineseUi()
         ? QStringLiteral("把 track.mp3 内嵌的封面图写到当前谱面目录的 bg.jpg。")
         : QStringLiteral("Write track.mp3's embedded cover artwork as bg.jpg next to the chart."));
@@ -694,7 +685,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.title", "title")), titleWrap);
     metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.artist", "artist")), artistWrap);
     metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.des", "des")), designerWrap);
-    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.first", "first")), firstWrap);
     metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.cover", "cover")), coverWrap);
     metadataCardLayout->addLayout(metadataForm);
 
@@ -1443,7 +1433,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         updateWindowTitle();
     });
     connect(artistEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
-    connect(firstEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
     connect(designerEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
     if (metadataExtraEdit_ != nullptr) {
         connect(metadataExtraEdit_->document(), &QTextDocument::contentsChange, this, [this](int, int charsRemoved, int charsAdded) {
@@ -1461,7 +1450,16 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         });
     }
     connect(difficultyLevelEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
-    connect(difficultyDesignerEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
+    connect(firstEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
+    // Offset only repositions notes relative to the audio, so a live reflow on
+    // commit (Enter / focus-out) is enough — no need to thrash the timeline on
+    // every keystroke. parsedFirstSeconds() already reads the live field text,
+    // so refreshTimelineMetadata() reflows using the just-typed value.
+    connect(firstEdit_, &QLineEdit::editingFinished, this, [this]() {
+        if (hasActiveDifficulty()) {
+            refreshTimelineMetadata();
+        }
+    });
 
     outputView_ = nullptr;
 

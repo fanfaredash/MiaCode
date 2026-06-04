@@ -62,23 +62,48 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   to the legacy auto-close key. Single setter `PlainCodeEditor::setAutoCompletionEnabled`, apply
   `applyEditorAutoCompletionEnabled`, one checkbox ("自动补全") in `MainWindow.PreferencesDialog.cpp`.
   Keys: ↑↓ navigate, Tab/Enter accept (Enter swallows the newline), Esc/keep-typing dismiss.
-- **Unified designer** (metadata-page checkbox "所有难度采用相同名义" / "All difficulties share
-  this designer"): when ON, top `&des` and every per-difficulty `&des_N` are kept identical.
-  Checkbox build: `MainWindow.FrameBootstrap.cpp` (`unifiedDesignerCheckbox_`). Toggle decision:
-  `MainWindow.DocumentFlow.cpp` `onUnifiedDesignerToggled` — Case A silently unifies when ≤1
-  distinct non-empty name; otherwise a single `promptCanonicalDesignerName` picker lets the user
-  choose the canonical name or "clear all" (the old separate "confirm overwrite with &des"
-  message box was merged into the picker). Per-project pref key `unified_designer_enabled`;
+- **Offset (`&first`) field location:** the chart-wide timing offset is edited from the
+  **difficulty-page header** (`firstEdit_`, label `difficultyFirstLabel_`, built in
+  `MainWindow.FrameBootstrap.cpp` next to `&lv_N`), NOT the metadata page (the metadata `first`
+  row was removed). One source of truth = `document_.first`, shared with the latency page. While a
+  difficulty is active, `TimelineSection::parsedRawFirstSeconds` reads the live field text (so an
+  uncommitted edit reflows the timeline; `editingFinished` triggers `refreshTimelineMetadata`);
+  it commits to `document_.first` in `applyCurrentFieldToDocument`'s difficulty branch (sets
+  `metadataTimingChanged`). The difficulty header no longer has a per-difficulty designer field.
+- **Per-difficulty designers + unified designer:** managed from a modal dialog, NOT a persistent
+  checkbox. The metadata designer row has a "管理多个难度名义" button →
+  `MainWindow::onManagePerDifficultyDesigners` → `DocumentSection::openPerDifficultyDesignerDialog`
+  (`MainWindow.DocumentFlow.cpp`): seven rows for `&des_1..7` plus the "所有难度采用相同名义"
+  toggle, committed on OK. When the toggle is turned ON, ≤1 distinct non-empty name unifies
+  silently; otherwise `promptCanonicalDesignerName` lets the user pick the canonical name or
+  "clear all". Per-project pref key `unified_designer_enabled`;
   `SimaiDocument::inferUnifiedDesignerDefault()` is **always false** (never auto-enable).
-  **Sync invariant — every designer-touching path must preserve it** (treat as a sync set):
-  edit-time broadcast `applyCurrentFieldToDocument`; apply `applyUnifiedDesignerName`; load
-  reconcile `refreshUnifiedDesignerStateForLoadedDocument` (re-aligns on open when there's an
-  unambiguous canonical); new-difficulty seed (`MainWindow.FrameBootstrap.cpp`); undo-delete
-  restore re-seed (`MainWindow.DocumentEditorState.cpp`); autosave snapshot mirror
-  (`currentDocumentTextForAutosave`). The free-form "Other &xx Fields" editor must parse via
+  - **Chart-less `&des_N` (standalone designers):** a slot 1..7 can hold a designer name without a
+    chart. `SimaiDocument` keeps these in `standaloneDesigners_` (disjoint from `difficulties_`),
+    API `designerForSlot` / `setDesignerForSlot` / `standaloneDesignerIds` / `perDifficultyDesigners`.
+    `fromText` post-pass moves a designer-only difficulty (empty level+chart, non-empty designer)
+    into the standalone map; `toText` emits a bare `&des_N=` for it (no phantom `&lv_N`/`&inote_N`,
+    no sidebar entry). The dialog writes chart-less names via `setDesignerForSlot`.
+  **Unified sync invariant — every designer-touching path must preserve it** (sync set): edit-time
+  broadcast `applyCurrentFieldToDocument` (metadata top-`&des` branch only now — the difficulty
+  header has no designer field); apply `applyUnifiedDesignerName`; load reconcile
+  `refreshUnifiedDesignerStateForLoadedDocument`; new-difficulty seed
+  (`MainWindow.FrameBootstrap.cpp`); undo-delete restore re-seed
+  (`MainWindow.DocumentEditorState.cpp`); autosave snapshot mirror (`currentDocumentTextForAutosave`).
+  All broadcast/apply sites iterate `perDifficultyDesigners()` + `setDesignerForSlot` so standalone
+  `&des_N` participate too. There is **no longer cross-page UI designer sync** (no per-difficulty
+  designer line edit to mirror). The free-form "Other &xx Fields" editor must parse via
   `SimaiDocument::parseUnmanagedFields` (not `parseRawFields`) so a manually typed managed key
   (`des`/`des_N`/`lv_N`/`inote_N`/title/artist/first/video) can't bypass the model and emit a
   duplicate/divergent line.
+  **Export-side fallback contract (sync set):** the exported "谱师名义" (intro banner designer +
+  chart-info-HUD `chartDesigner`) uses per-difficulty `&des_N`, falling back to top `&des` when
+  the per-difficulty name is **blank including whitespace** — gate on `designer.trimmed().isEmpty()`,
+  never bare `.isEmpty()` (a `&des_N= ` value parses non-empty and must still fall back). All five
+  sites must stay aligned: intro `MainWindow.ExportSnapshot.cpp` (`intro.designer`), single-export
+  task `MainWindow.ExportSnapshot.cpp` + `MainWindow.ExportFlow.cpp` (live-preview `setChartInfo`
+  path) + batch `MainWindow.ExportFlow.cpp`, and the snapshot rebuild in `VideoExportSnapshot.cpp`
+  (`buildVideoExportTaskFromSnapshot`).
 
 ## 4. Parser, validation, markers
 

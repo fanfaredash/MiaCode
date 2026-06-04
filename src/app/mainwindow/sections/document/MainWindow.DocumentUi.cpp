@@ -177,57 +177,19 @@ void MainWindow::DocumentSection::updateEditorHeaderLayoutMode()
         return;
     }
 
-    const int headerWidth = ui_.editorHeaderWidget_->contentsRect().width();
-    const bool summaryHasContent =
-        ui_.editorValidationSummaryWidget_ != nullptr
-        && ui_.editorValidationSummaryWidget_->property("hasContent").toBool();
-    const auto summaryGroupFullWidth = [](QLabel* icon, QLabel* count, int spacing) {
-        const bool hasContent = (icon != nullptr && icon->property("hasContent").toBool())
-            || (count != nullptr && count->property("hasContent").toBool());
-        if (!hasContent) {
-            return 0;
-        }
-        int width = 0;
-        if (icon != nullptr) {
-            width += qMax(icon->sizeHint().width(), icon->minimumWidth());
-        }
-        if (count != nullptr) {
-            if (width > 0) {
-                width += spacing;
-            }
-            width += qMax(count->sizeHint().width(), count->minimumWidth());
-        }
-        return width;
-    };
-    int summaryFullWidth = 0;
-    int summaryVisibleGroups = 0;
-    for (const int groupWidth : {
-             summaryGroupFullWidth(ui_.editorValidationMuriIconLabel_, ui_.editorValidationMuriCountLabel_, 4),
-             summaryGroupFullWidth(ui_.editorValidationWarningIconLabel_, ui_.editorValidationWarningCountLabel_, 3),
-             summaryGroupFullWidth(ui_.editorValidationErrorIconLabel_, ui_.editorValidationErrorCountLabel_, 6)}) {
-        if (groupWidth <= 0) {
-            continue;
-        }
-        if (summaryVisibleGroups > 0) {
-            summaryFullWidth += 8;
-        }
-        summaryFullWidth += groupWidth;
-        ++summaryVisibleGroups;
-    }
-
     if (ui_.difficultyLevelLabel_ != nullptr) {
         ui_.difficultyLevelLabel_->setVisible(true);
     }
-    if (ui_.difficultyDesignerLabel_ != nullptr) {
-        ui_.difficultyDesignerLabel_->setVisible(true);
+    if (ui_.difficultyFirstLabel_ != nullptr) {
+        ui_.difficultyFirstLabel_->setVisible(true);
     }
     if (ui_.difficultyLevelEdit_ != nullptr) {
         ui_.difficultyLevelEdit_->setFixedWidth(48);
         ui_.difficultyLevelEdit_->setVisible(true);
     }
-    if (ui_.difficultyDesignerEdit_ != nullptr) {
-        ui_.difficultyDesignerEdit_->setFixedWidth(96);
-        ui_.difficultyDesignerEdit_->setVisible(true);
+    if (ui_.firstEdit_ != nullptr) {
+        ui_.firstEdit_->setFixedWidth(64);
+        ui_.firstEdit_->setVisible(true);
     }
     if (ui_.editorDifficultyControls_ != nullptr) {
         ui_.editorDifficultyControls_->setVisible(true);
@@ -277,122 +239,6 @@ void MainWindow::DocumentSection::updateEditorHeaderLayoutMode()
     if (QLayout* headerLayout = ui_.editorHeaderWidget_->layout(); headerLayout != nullptr) {
         headerLayout->activate();
     }
-    syncEditorHeaderMinimumWidth();
-    return;
-
-    struct HeaderLayoutCandidate {
-        bool showLevelControls = true;
-        bool showDesignerControls = true;
-        bool showSummary = false;
-        bool showSummaryCounts = false;
-        bool showCursor = false;
-        bool compactCursor = false;
-    };
-
-    const auto applyCandidate = [this, summaryHasContent](const HeaderLayoutCandidate& candidate) {
-        constexpr int kLevelWidth = 48;
-        constexpr int kDesignerWidth = 96;
-
-        if (ui_.difficultyLevelLabel_ != nullptr) {
-            ui_.difficultyLevelLabel_->setVisible(candidate.showLevelControls);
-        }
-        if (ui_.difficultyDesignerLabel_ != nullptr) {
-            ui_.difficultyDesignerLabel_->setVisible(candidate.showDesignerControls);
-        }
-        if (ui_.difficultyLevelEdit_ != nullptr) {
-            ui_.difficultyLevelEdit_->setFixedWidth(kLevelWidth);
-            ui_.difficultyLevelEdit_->setVisible(candidate.showLevelControls);
-        }
-        if (ui_.difficultyDesignerEdit_ != nullptr) {
-            ui_.difficultyDesignerEdit_->setFixedWidth(kDesignerWidth);
-            ui_.difficultyDesignerEdit_->setVisible(candidate.showDesignerControls);
-        }
-        if (ui_.editorDifficultyControls_ != nullptr) {
-            ui_.editorDifficultyControls_->setVisible(candidate.showLevelControls || candidate.showDesignerControls);
-        }
-
-        if (ui_.editorValidationSummaryWidget_ != nullptr) {
-            const bool showSummary = summaryHasContent && candidate.showSummary;
-            ui_.editorValidationSummaryWidget_->setVisible(showSummary);
-            const auto applySummaryVisibility = [showSummary, candidate](QLabel* icon, QLabel* count) {
-                const bool hasContent = (icon != nullptr && icon->property("hasContent").toBool())
-                    || (count != nullptr && count->property("hasContent").toBool());
-                if (icon != nullptr) {
-                    icon->setVisible(showSummary && hasContent);
-                }
-                if (count != nullptr) {
-                    count->setVisible(showSummary && candidate.showSummaryCounts && hasContent);
-                }
-            };
-            applySummaryVisibility(ui_.editorValidationErrorIconLabel_, ui_.editorValidationErrorCountLabel_);
-            applySummaryVisibility(ui_.editorValidationWarningIconLabel_, ui_.editorValidationWarningCountLabel_);
-            applySummaryVisibility(ui_.editorValidationMuriIconLabel_, ui_.editorValidationMuriCountLabel_);
-            ui_.editorValidationSummaryWidget_->adjustSize();
-        }
-    };
-
-    const QVector<HeaderLayoutCandidate> candidates = summaryHasContent
-        ? QVector<HeaderLayoutCandidate>{
-              HeaderLayoutCandidate{true, true, true, true, true, false},
-              HeaderLayoutCandidate{true, true, true, false, true, false},
-              HeaderLayoutCandidate{true, true, false, false, true, false},
-              HeaderLayoutCandidate{true, true, false, false, true, true},
-              HeaderLayoutCandidate{true, true, false, false, false, false},
-              HeaderLayoutCandidate{true, false, false, false, false, false},
-              HeaderLayoutCandidate{false, false, false, false, false, false},
-          }
-        : QVector<HeaderLayoutCandidate>{
-              HeaderLayoutCandidate{true, true, false, false, true, false},
-              HeaderLayoutCandidate{true, true, false, false, true, true},
-              HeaderLayoutCandidate{true, true, false, false, false, false},
-              HeaderLayoutCandidate{true, false, false, false, false, false},
-              HeaderLayoutCandidate{false, false, false, false, false, false},
-          };
-
-    for (int index = 0; index < candidates.size(); ++index) {
-        const HeaderLayoutCandidate& candidate = candidates.at(index);
-        applyCandidate(candidate);
-
-        if (candidate.showCursor) {
-            const auto [line, col] = currentCursorLineCol();
-            if (candidate.compactCursor) {
-                ui_.editorCursorLabel_->setText(QStringLiteral("%1:%2").arg(line).arg(col));
-            } else if (UiText::isChineseUi()) {
-                ui_.editorCursorLabel_->setText(QStringLiteral("%1琛?%2鍒?").arg(line).arg(col));
-            } else {
-                ui_.editorCursorLabel_->setText(QStringLiteral("Ln %1, Col %2").arg(line).arg(col));
-            }
-            ui_.editorCursorLabel_->setFixedWidth(
-                QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(ui_.editorCursorLabel_->text()) + 10);
-        }
-        ui_.editorCursorLabel_->setVisible(candidate.showCursor);
-
-        if (QLayout* headerLayout = ui_.editorHeaderWidget_->layout(); headerLayout != nullptr) {
-            headerLayout->activate();
-        }
-        const int requiredWidth = ui_.editorHeaderWidget_->minimumSizeHint().width();
-        if (headerWidth >= requiredWidth || index == candidates.size() - 1) {
-            break;
-        }
-    }
-
-    const bool showCursor = ui_.editorCursorLabel_->isVisible();
-    const bool compactCursor = showCursor
-        && ui_.editorCursorLabel_->text().contains(QLatin1Char(':'))
-        && !ui_.editorCursorLabel_->text().contains(QLatin1Char(','));
-    if (showCursor) {
-        const auto [line, col] = currentCursorLineCol();
-        if (compactCursor) {
-            ui_.editorCursorLabel_->setText(QStringLiteral("%1:%2").arg(line).arg(col));
-        } else if (UiText::isChineseUi()) {
-            ui_.editorCursorLabel_->setText(QStringLiteral("%1行 %2列").arg(line).arg(col));
-        } else {
-            ui_.editorCursorLabel_->setText(QStringLiteral("Ln %1, Col %2").arg(line).arg(col));
-        }
-        ui_.editorCursorLabel_->setFixedWidth(
-            QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(ui_.editorCursorLabel_->text()) + 10);
-    }
-    ui_.editorCursorLabel_->setVisible(showCursor);
     syncEditorHeaderMinimumWidth();
 }
 
@@ -504,8 +350,9 @@ bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId)
     const QString difficultyName = SimaiDocument::difficultyName(difficultyId);
     const QString currentLevel =
         deletingActiveDifficulty && ui_.difficultyLevelEdit_ != nullptr ? ui_.difficultyLevelEdit_->text() : difficultyData->level;
-    const QString currentDesigner =
-        deletingActiveDifficulty && ui_.difficultyDesignerEdit_ != nullptr ? ui_.difficultyDesignerEdit_->text() : difficultyData->designer;
+    // The difficulty header no longer edits the designer, so the saved model
+    // value is authoritative for undo capture.
+    const QString currentDesigner = difficultyData->designer;
     const QString currentChart = deletingActiveDifficulty ? owner_.editorText() : difficultyData->chart;
     const bool emptyDifficulty = currentLevel.trimmed().isEmpty()
         && currentDesigner.trimmed().isEmpty()
@@ -719,21 +566,20 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
 
 void MainWindow::DocumentSection::populateMetadataPage()
 {
-    if (ui_.titleEdit_ == nullptr || ui_.artistEdit_ == nullptr || ui_.firstEdit_ == nullptr || ui_.designerEdit_ == nullptr) {
+    if (ui_.titleEdit_ == nullptr || ui_.artistEdit_ == nullptr || ui_.designerEdit_ == nullptr) {
         return;
     }
     QSignalBlocker blockerTitle(ui_.titleEdit_);
     QSignalBlocker blockerArtist(ui_.artistEdit_);
-    QSignalBlocker blockerFirst(ui_.firstEdit_);
     QSignalBlocker blockerDesigner(ui_.designerEdit_);
     ui_.titleEdit_->setText(state_.document_.title);
     ui_.artistEdit_->setText(state_.document_.artist);
-    ui_.firstEdit_->setText(state_.document_.first);
     ui_.designerEdit_->setText(state_.document_.designer);
     ui_.titleEdit_->setModified(false);
     ui_.artistEdit_->setModified(false);
-    ui_.firstEdit_->setModified(false);
     ui_.designerEdit_->setModified(false);
+    // The chart-wide offset (`&first`) now lives on the difficulty-page header,
+    // not here — it is loaded in populateDifficultyPage().
     setMetadataExtraText(SimaiDocument::serializeRawFields(state_.document_.extraFields));
     updateMetadataPageMode();
     updateEditorHeader();
@@ -753,13 +599,12 @@ void MainWindow::DocumentSection::populateDifficultyPage(int difficultyId)
         ui_.difficultyLevelEdit_->setText(difficultyData->level);
         ui_.difficultyLevelEdit_->setModified(false);
     }
-    if (ui_.difficultyDesignerEdit_ != nullptr) {
-        QSignalBlocker blocker(ui_.difficultyDesignerEdit_);
-        if (auto* placeholderEdit = dynamic_cast<LeftPlaceholderLineEdit*>(ui_.difficultyDesignerEdit_)) {
-            placeholderEdit->setLeftPlaceholderText(QString("&des_%1=").arg(difficultyId));
-        }
-        ui_.difficultyDesignerEdit_->setText(difficultyData->designer);
-        ui_.difficultyDesignerEdit_->setModified(false);
+    // The header's offset field edits the chart-wide `&first` (shared with the
+    // latency page), so it loads from the document, not the difficulty.
+    if (ui_.firstEdit_ != nullptr) {
+        QSignalBlocker blocker(ui_.firstEdit_);
+        ui_.firstEdit_->setText(state_.document_.first);
+        ui_.firstEdit_->setModified(false);
     }
     setEditorText(difficultyData->chart);
     updateEditorHeader();

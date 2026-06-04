@@ -11,12 +11,13 @@ public:
     bool maybeSaveBeforeContinue();
     bool maybeSaveCurrentFieldChanges();
     bool applyCurrentFieldToDocument();
-    // Pure-UI handler for the "all difficulties share the same designer"
-    // checkbox toggle. See onUnifiedDesignerToggled() implementation in
-    // DocumentFlow.cpp for the OFF→ON popup logic.
-    void onUnifiedDesignerToggled(bool checked);
+    // Opens the modal "manage per-difficulty designers" dialog: seven rows for
+    // &des_1..7 plus the "all difficulties share one designer" toggle. Commits
+    // on OK (chart-less names become standalone &des_N — no phantom
+    // difficulty). See implementation in DocumentFlow.cpp.
+    void openPerDifficultyDesignerDialog();
     // Apply the saved-or-inferred unified-designer preference to the
-    // checkbox state when a chart is opened. Reads
+    // runtime flag when a chart is opened. Reads
     // <chartDir>/.miacode/preferences.json; falls back to
     // SimaiDocument::inferUnifiedDesignerDefault() when the key is absent.
     void refreshUnifiedDesignerStateForLoadedDocument();
@@ -106,9 +107,9 @@ public:
     void rebuildAutosaveMetadata(const QString& autosaveDirectoryPath) const;
 
 private:
-    // Broadcast the chosen designer name into every relevant field
-    // (state_.document_.designer + every per-difficulty designer) and the
-    // matching QLineEdits. Used by onUnifiedDesignerToggled().
+    // Broadcast the chosen designer name into the top &des, every
+    // per-difficulty designer (charted and standalone), and the metadata-page
+    // designer line edit. Used by the load-time reconcile.
     void applyUnifiedDesignerName(const QString& canonicalName);
     // Modal picker shown when the user enables the option but no single
     // canonical name exists yet. Lists every distinct non-empty designer

@@ -910,7 +910,7 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     task.chartTitle = owner_.document_.title;
     task.chartArtist = owner_.document_.artist;
     if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId)) {
-        task.chartDesigner = !difficulty->designer.isEmpty()
+        task.chartDesigner = !difficulty->designer.trimmed().isEmpty()
             ? difficulty->designer
             : owner_.document_.designer;
         const QString diffShort = SimaiDocument::difficultyShortName(difficultyId);

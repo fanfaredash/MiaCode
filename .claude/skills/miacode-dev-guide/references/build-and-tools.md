@@ -31,6 +31,7 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
 
 - Dumps/probes: `miacode_muri_dump`, `simai_native_dump`, `soundtouch_probe`
 - Specs (standalone `main()` style): `oplog_self_test`, `simai_parser_spec`,
+  `simai_document_spec` (SimaiDocument designer model — standalone chart-less `&des_N` round-trip),
   `chart_batch_transform_spec`, `muri_spec`, `timeline_model_spec`, `plain_code_editor_spec`,
   `preview_asset_loader_spec`, `preview_firework_lifecycle_spec`, `preview_head_layer_spec`,
   `preview_realtime_object_hot_path_spec`, `preview_quick_sprite_batch_spec`,

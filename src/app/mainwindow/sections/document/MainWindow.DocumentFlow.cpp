@@ -452,24 +452,25 @@ bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
     QString broadcastDesignerValue;
     if (owner_.hasActiveDifficulty()) {
         SimaiDifficultyData& difficultyData = state_.document_.ensureDifficulty(state_.activeDifficultyId_);
-        const QString newLevel = ui_.difficultyLevelEdit_ != nullptr ? ui_.difficultyLevelEdit_->text() : QString();
-        const QString newDesigner = ui_.difficultyDesignerEdit_ != nullptr ? ui_.difficultyDesignerEdit_->text() : QString();
+        const QString newLevel = ui_.difficultyLevelEdit_ != nullptr ? ui_.difficultyLevelEdit_->text() : difficultyData.level;
         const QString newChart = owner_.editorText();
-        const bool designerEdited = (difficultyData.designer != newDesigner);
-        if (difficultyData.level != newLevel || designerEdited || difficultyData.chart != newChart) {
+        // The difficulty header no longer edits the per-difficulty designer
+        // (that moved to the metadata-page dialog), so difficultyData.designer
+        // is left untouched here. The header DOES edit the chart-wide offset.
+        if (difficultyData.level != newLevel || difficultyData.chart != newChart) {
             difficultyData.level = newLevel;
-            difficultyData.designer = newDesigner;
             difficultyData.chart = newChart;
             changed = true;
         }
-        if (state_.unifiedDesignerEnabled_ && designerEdited) {
-            designerBroadcastNeeded = true;
-            broadcastDesignerValue = newDesigner;
+        const QString newFirst = ui_.firstEdit_ != nullptr ? ui_.firstEdit_->text() : state_.document_.first;
+        if (state_.document_.first != newFirst) {
+            state_.document_.first = newFirst;
+            metadataTimingChanged = true;
+            changed = true;
         }
     } else {
         const QString newTitle = ui_.titleEdit_ != nullptr ? ui_.titleEdit_->text() : QString();
         const QString newArtist = ui_.artistEdit_ != nullptr ? ui_.artistEdit_->text() : QString();
-        const QString newFirst = ui_.firstEdit_ != nullptr ? ui_.firstEdit_->text() : QString();
         const QString newDesigner = ui_.designerEdit_ != nullptr ? ui_.designerEdit_->text() : QString();
         const QVector<SimaiRawField> newExtraFields = SimaiDocument::parseUnmanagedFields(
             ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(),
@@ -478,13 +479,10 @@ bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
         const bool designerEdited = (state_.document_.designer != newDesigner);
         if (state_.document_.title != newTitle
             || state_.document_.artist != newArtist
-            || state_.document_.first != newFirst
             || designerEdited
             || state_.document_.extraFields != newExtraFields) {
-            metadataTimingChanged = (state_.document_.first != newFirst);
             state_.document_.title = newTitle;
             state_.document_.artist = newArtist;
-            state_.document_.first = newFirst;
             state_.document_.designer = newDesigner;
             state_.document_.extraFields = newExtraFields;
             changed = true;
@@ -495,37 +493,25 @@ bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
         }
     }
 
-    // Broadcast designer name to every other field when the "unified" option
+    // Broadcast designer name to every other slot when the "unified" option
     // is enabled. We do this *after* the just-edited field has been applied
-    // so the value being broadcast is always the new one.
+    // so the value being broadcast is always the new one. Only the top &des
+    // (designerEdit_) is edited live; the per-difficulty names live in the
+    // model (and the designer dialog), so there is no inactive line edit to
+    // mirror back into here.
     if (designerBroadcastNeeded) {
         if (state_.document_.designer != broadcastDesignerValue) {
             state_.document_.designer = broadcastDesignerValue;
             changed = true;
         }
-        const QVector<int> diffIds = state_.document_.difficultyIds();
-        for (int diffId : diffIds) {
-            SimaiDifficultyData* diff = state_.document_.difficulty(diffId);
-            if (diff == nullptr) {
-                continue;
-            }
-            if (diff->designer != broadcastDesignerValue) {
-                diff->designer = broadcastDesignerValue;
+        // Charted difficulties AND chart-less standalone &des_N both follow the
+        // unified name. setDesignerForSlot("") clears a standalone entry, which
+        // is the correct "clear all" behaviour when broadcasting an empty name.
+        const QVector<QPair<int, QString>> designerSlots = state_.document_.perDifficultyDesigners();
+        for (const QPair<int, QString>& slot : designerSlots) {
+            if (slot.second != broadcastDesignerValue) {
+                state_.document_.setDesignerForSlot(slot.first, broadcastDesignerValue);
                 changed = true;
-            }
-        }
-        // Reflect the freshly-broadcast value into the inactive editor's UI
-        // so users see consistent state when they switch fields. We only
-        // touch the editor that's NOT the active source.
-        if (owner_.hasActiveDifficulty()) {
-            if (ui_.designerEdit_ != nullptr && ui_.designerEdit_->text() != broadcastDesignerValue) {
-                QSignalBlocker block(ui_.designerEdit_);
-                ui_.designerEdit_->setText(broadcastDesignerValue);
-            }
-        } else {
-            if (ui_.difficultyDesignerEdit_ != nullptr && ui_.difficultyDesignerEdit_->text() != broadcastDesignerValue) {
-                QSignalBlocker block(ui_.difficultyDesignerEdit_);
-                ui_.difficultyDesignerEdit_->setText(broadcastDesignerValue);
             }
         }
     }
@@ -566,16 +552,12 @@ DesignerSurvey surveyDesigners(const SimaiDocument& doc)
     if (!doc.designer.isEmpty()) {
         survey.distinctNonEmpty.append(doc.designer);
     }
-    const QVector<int> diffIds = doc.difficultyIds();
-    survey.perDifficulty.reserve(diffIds.size());
-    for (int id : diffIds) {
-        const SimaiDifficultyData* diff = doc.difficulty(id);
-        if (diff == nullptr) {
-            continue;
-        }
-        survey.perDifficulty.append(qMakePair(id, diff->designer));
-        if (!diff->designer.isEmpty() && !survey.distinctNonEmpty.contains(diff->designer)) {
-            survey.distinctNonEmpty.append(diff->designer);
+    // Includes chart-less standalone &des_N so the unify picker can offer (and
+    // overwrite) names that belong to slots without a chart.
+    survey.perDifficulty = doc.perDifficultyDesigners();
+    for (const QPair<int, QString>& slot : survey.perDifficulty) {
+        if (!slot.second.isEmpty() && !survey.distinctNonEmpty.contains(slot.second)) {
+            survey.distinctNonEmpty.append(slot.second);
         }
     }
     return survey;
@@ -610,12 +592,8 @@ void MainWindow::DocumentSection::refreshUnifiedDesignerStateForLoadedDocument()
         enabled = state_.document_.inferUnifiedDesignerDefault();
     }
     state_.unifiedDesignerEnabled_ = enabled;
-    if (ui_.unifiedDesignerCheckbox_ != nullptr) {
-        QSignalBlocker block(ui_.unifiedDesignerCheckbox_);
-        ui_.unifiedDesignerCheckbox_->setChecked(enabled);
-    }
 
-    // The checkbox claims "all difficulties share one designer", but the file
+    // The preference claims "all difficulties share one designer", but the file
     // we just loaded may disagree (it could have been hand-edited, merged, or
     // touched by another tool since unified mode was last on). Without this,
     // the box would read as "synced" while &des and the &des_N silently
@@ -643,61 +621,214 @@ void MainWindow::DocumentSection::refreshUnifiedDesignerStateForLoadedDocument()
     applyUnifiedDesignerName(canonical);
 }
 
-void MainWindow::DocumentSection::onUnifiedDesignerToggled(bool checked)
+void MainWindow::DocumentSection::openPerDifficultyDesignerDialog()
 {
-    MC_OP("MainWindow::DocumentSection::onUnifiedDesignerToggled");
-    // Flush any pending in-progress edit so the document state we inspect
-    // for the popup logic is the same as what the user can see in the UI.
+    MC_OP("MainWindow::DocumentSection::openPerDifficultyDesignerDialog");
+    // Flush the top &des (and any other active metadata edit) so the dialog
+    // opens on the state the user can see and the unify survey is accurate.
     applyCurrentFieldToDocument();
 
-    if (!checked) {
-        // ON → OFF: just persist the new preference. No content edits, no
-        // popup. Per-difficulty designers stay exactly as they were.
-        state_.unifiedDesignerEnabled_ = false;
-        writeUnifiedDesignerPreference(state_.currentFilePath_, false);
-        return;
+    QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
+    dialog.setModal(true);
+    dialog.setWindowTitle(UiText::isChineseUi()
+        ? QStringLiteral("谱师名义管理")
+        : QStringLiteral("Designer management"));
+    // Reuse the picker dialog's themed chrome (QLabel/QPushButton), then layer on:
+    //  - a dark outer dialog (windowAltBg) so the content reads as a card on a
+    //    dark page — matching the audio-settings dialog;
+    //  - a QGroupBox "card" (cardBg) whose title sits top-left like "音频";
+    //  - themed QLineEdit inputs (inputBg/textPrimary/borderSoft), same as the
+    //    metadata page, so the inside colors are unchanged from before.
+    const UiTheme::Colors& tc = UiTheme::colors();
+    const auto hex = [](const QColor& col) { return col.name(QColor::HexRgb); };
+    dialog.setStyleSheet(UiTheme::designerPickerDialogStyleSheet()
+        + QStringLiteral(
+              "QDialog { background: %1; }"
+              "QGroupBox { background: %2; border: 1px solid %3; border-radius: 10px;"
+              " margin-top: 12px; padding-top: 10px; }"
+              "QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; color: %4; }")
+              .arg(hex(tc.windowAltBg), hex(tc.cardBg), hex(tc.border), hex(tc.textPrimary))
+        + QStringLiteral(
+              "QLineEdit { background: %1; color: %2; border: 1px solid %3; border-radius: 6px;"
+              " padding: 5px 8px; selection-background-color: %4; selection-color: %5; }"
+              "QLineEdit:focus { border-color: %6; }"
+              "QLineEdit:disabled { background: %7; color: %8; }")
+              .arg(hex(tc.inputBg), hex(tc.textPrimary), hex(tc.borderSoft),
+                   hex(tc.selection), hex(tc.selectionText), hex(tc.accent),
+                   hex(tc.inputDisabledBg), hex(tc.textMuted)));
+    dialog.resize(460, 440);
+
+    auto* outerLayout = new QVBoxLayout(&dialog);
+    outerLayout->setContentsMargins(14, 14, 14, 12);
+    outerLayout->setSpacing(10);
+
+    // The rows + checkbox live inside a titled card (like the "音频" group in
+    // the audio-settings dialog); the OK/Cancel buttons stay outside it.
+    auto* designerGroup = new QGroupBox(
+        UiText::isChineseUi() ? QStringLiteral("谱师") : QStringLiteral("Designers"),
+        &dialog);
+    auto* groupLayout = new QVBoxLayout(designerGroup);
+    groupLayout->setContentsMargins(12, 6, 12, 12);
+    groupLayout->setSpacing(10);
+
+    // Working copy of the seven names + the unified flag (index 1..7). Nothing
+    // touches the document until OK, so Cancel is a clean no-op.
+    QVector<QString> slotNames(8);
+    for (int id = 1; id <= 7; ++id) {
+        slotNames[id] = state_.document_.designerForSlot(id);
     }
+    QString topDesigner = state_.document_.designer;
+    bool localUnified = state_.unifiedDesignerEnabled_;
 
-    // OFF → ON: either flip silently (Case A) or ask the user to pick a
-    // canonical name when several distinct names disagree (Case B).
-    const DesignerSurvey survey = surveyDesigners(state_.document_);
+    auto* unifiedBox = new QCheckBox(
+        UiText::isChineseUi() ? QStringLiteral("所有难度采用相同名义")
+                              : QStringLiteral("All difficulties share this designer"),
+        &dialog);
+    unifiedBox->setToolTip(UiText::isChineseUi()
+        ? QStringLiteral("勾选后，&des 与每个难度的 &des_N 会保持一致。")
+        : QStringLiteral("When checked, &des and every &des_N stay identical."));
+    unifiedBox->setStyleSheet(UiTheme::darkAwareCheckBoxStyleSheet());
+    {
+        QSignalBlocker block(unifiedBox);
+        unifiedBox->setChecked(localUnified);
+    }
+    // Added to the layout after the per-difficulty rows (below) so it sits at
+    // the bottom, just above the OK/Cancel buttons.
 
-    // Case A: zero or one distinct non-empty designer — nothing to disambiguate.
-    //   - No designers at all → silently enable.
-    //   - One designer, also matches top &des → silently enable.
-    //   - One designer only on per-diff side, top &des empty → silently
-    //     adopt the per-diff name as canonical (no destructive overwrite).
-    if (survey.distinctNonEmpty.size() <= 1) {
-        QString canonical = survey.topDesigner;
-        if (canonical.isEmpty() && !survey.distinctNonEmpty.isEmpty()) {
-            canonical = survey.distinctNonEmpty.first();
+    auto* form = new QFormLayout();
+    form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    form->setHorizontalSpacing(8);
+    form->setVerticalSpacing(8);
+    QVector<QLineEdit*> rowEdits(8, nullptr);
+    for (int id = 1; id <= 7; ++id) {
+        auto* edit = new QLineEdit(&dialog);
+        edit->setPlaceholderText(QStringLiteral("&des_%1=").arg(id));
+        edit->setText(slotNames[id]);
+        rowEdits[id] = edit;
+        connect(edit, &QLineEdit::textChanged, &dialog, [&slotNames, id](const QString& text) {
+            slotNames[id] = text;
+        });
+        auto* label = new QLabel(SimaiDocument::difficultyName(id), &dialog);
+        // A small marker shows which slots already have a chart, so a name on a
+        // chart-less slot is an obvious "designer-only" entry.
+        if (state_.document_.difficulty(id) == nullptr) {
+            label->setToolTip(UiText::isChineseUi()
+                ? QStringLiteral("该难度暂无谱面，仅记录 &des_%1。").arg(id)
+                : QStringLiteral("No chart yet — records &des_%1 only.").arg(id));
         }
-        applyUnifiedDesignerName(canonical);
-        state_.unifiedDesignerEnabled_ = true;
-        writeUnifiedDesignerPreference(state_.currentFilePath_, true);
+        form->addRow(label, edit);
+    }
+    groupLayout->addLayout(form);
+    groupLayout->addWidget(unifiedBox);
+    outerLayout->addWidget(designerGroup);
+
+    const auto refreshRowEnabled = [&]() {
+        for (int id = 1; id <= 7; ++id) {
+            rowEdits[id]->setEnabled(!localUnified);
+        }
+    };
+    const auto syncRowsFromNames = [&]() {
+        for (int id = 1; id <= 7; ++id) {
+            QSignalBlocker block(rowEdits[id]);
+            rowEdits[id]->setText(slotNames[id]);
+        }
+    };
+    refreshRowEnabled();
+
+    connect(unifiedBox, &QCheckBox::toggled, &dialog, [&](bool checked) {
+        if (!checked) {
+            localUnified = false;
+            refreshRowEnabled();
+            return;
+        }
+        // Turning ON: collect distinct non-empty names across top &des + the
+        // seven slots. <=1 unifies silently; otherwise the user picks the
+        // canonical name (or "clear all"). Mirrors the old checkbox flow.
+        QStringList distinct;
+        const auto consider = [&distinct](const QString& name) {
+            if (!name.isEmpty() && !distinct.contains(name)) {
+                distinct.append(name);
+            }
+        };
+        consider(topDesigner);
+        for (int id = 1; id <= 7; ++id) {
+            consider(slotNames[id]);
+        }
+        QString canonical;
+        if (distinct.size() <= 1) {
+            canonical = distinct.isEmpty() ? QString() : distinct.first();
+        } else {
+            QString picked;
+            if (!promptCanonicalDesignerName(distinct, &picked)) {
+                QSignalBlocker block(unifiedBox);
+                unifiedBox->setChecked(false);
+                localUnified = false;
+                refreshRowEnabled();
+                return;
+            }
+            canonical = picked;
+        }
+        localUnified = true;
+        topDesigner = canonical;
+        // Every charted difficulty (and any slot the user already named) takes
+        // the canonical name; chart-less unnamed slots stay empty so unifying
+        // never materializes a `&des_N` for a slot nobody touched.
+        for (int id = 1; id <= 7; ++id) {
+            const bool slotGetsName =
+                state_.document_.difficulty(id) != nullptr || !slotNames[id].isEmpty();
+            slotNames[id] = slotGetsName ? canonical : QString();
+        }
+        syncRowsFromNames();
+        refreshRowEnabled();
+    });
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    UiDialogs::localizeButtonBox(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    outerLayout->addWidget(buttons);
+
+    // Themed (dark/light) title bar + center on the main window, matching every
+    // other app dialog and the canonical-name picker below.
+    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
+    UiDialogs::prepareDialogWindow(&dialog, &owner_);
+
+    if (dialog.exec() != QDialog::Accepted) {
         return;
     }
 
-    // Case B (formerly B + C, merged): two or more distinct non-empty
-    // designer names exist across &des and the per-difficulty &des_N. There
-    // is no single obvious winner, so always let the user pick which name
-    // becomes the shared one (or "clear all"). This subsumes the old
-    // "confirm overwrite with &des" flow — when &des is non-empty it simply
-    // appears first in the candidate list — since both that flow and the
-    // picker are, in the end, "choose one name to write to every difficulty".
-    QString picked;
-    if (!promptCanonicalDesignerName(survey.distinctNonEmpty, &picked)) {
-        // User cancelled → revert checkbox UI to OFF and don't persist.
-        if (ui_.unifiedDesignerCheckbox_ != nullptr) {
-            QSignalBlocker block(ui_.unifiedDesignerCheckbox_);
-            ui_.unifiedDesignerCheckbox_->setChecked(false);
+    // Commit the working copy. setDesignerForSlot writes a chart-less name as a
+    // standalone &des_N (no phantom difficulty) and clears the entry on "".
+    bool changed = false;
+    for (int id = 1; id <= 7; ++id) {
+        if (state_.document_.designerForSlot(id) != slotNames[id]) {
+            state_.document_.setDesignerForSlot(id, slotNames[id]);
+            changed = true;
         }
-        state_.unifiedDesignerEnabled_ = false;
-        return;
     }
-    applyUnifiedDesignerName(picked);
-    state_.unifiedDesignerEnabled_ = true;
-    writeUnifiedDesignerPreference(state_.currentFilePath_, true);
+    // Under unified mode the top &des is the shared name too.
+    if (localUnified && state_.document_.designer != topDesigner) {
+        state_.document_.designer = topDesigner;
+        if (ui_.designerEdit_ != nullptr && ui_.designerEdit_->text() != topDesigner) {
+            QSignalBlocker block(ui_.designerEdit_);
+            ui_.designerEdit_->setText(topDesigner);
+        }
+        changed = true;
+    }
+    if (state_.unifiedDesignerEnabled_ != localUnified) {
+        state_.unifiedDesignerEnabled_ = localUnified;
+        changed = true;
+    }
+    writeUnifiedDesignerPreference(state_.currentFilePath_, localUnified);
+
+    if (changed) {
+        state_.documentDirty_ = true;
+        anchorCurrentFieldCleanState();
+        state_.currentFieldDirty_ = false;
+        updateDirtyState();
+        owner_.updateWindowTitle();
+        rebuildFieldSidebar();
+    }
 }
 
 void MainWindow::DocumentSection::applyUnifiedDesignerName(const QString& canonicalName)
@@ -707,21 +838,18 @@ void MainWindow::DocumentSection::applyUnifiedDesignerName(const QString& canoni
         state_.document_.designer = canonicalName;
         changed = true;
     }
-    const QVector<int> diffIds = state_.document_.difficultyIds();
-    for (int id : diffIds) {
-        SimaiDifficultyData* diff = state_.document_.difficulty(id);
-        if (diff != nullptr && diff->designer != canonicalName) {
-            diff->designer = canonicalName;
+    // Charted difficulties AND chart-less standalone &des_N alike. An empty
+    // canonical clears standalone entries (setDesignerForSlot("")).
+    const QVector<QPair<int, QString>> designerSlots = state_.document_.perDifficultyDesigners();
+    for (const QPair<int, QString>& slot : designerSlots) {
+        if (slot.second != canonicalName) {
+            state_.document_.setDesignerForSlot(slot.first, canonicalName);
             changed = true;
         }
     }
     if (ui_.designerEdit_ != nullptr && ui_.designerEdit_->text() != canonicalName) {
         QSignalBlocker block(ui_.designerEdit_);
         ui_.designerEdit_->setText(canonicalName);
-    }
-    if (ui_.difficultyDesignerEdit_ != nullptr && ui_.difficultyDesignerEdit_->text() != canonicalName) {
-        QSignalBlocker block(ui_.difficultyDesignerEdit_);
-        ui_.difficultyDesignerEdit_->setText(canonicalName);
     }
     if (changed) {
         state_.documentDirty_ = true;
@@ -1310,13 +1438,15 @@ QString MainWindow::DocumentSection::currentDocumentTextForAutosave() const
     SimaiDocument snapshot = state_.document_;
     if (owner_.hasActiveDifficulty()) {
         SimaiDifficultyData& difficultyData = snapshot.ensureDifficulty(state_.activeDifficultyId_);
-        difficultyData.level = ui_.difficultyLevelEdit_ != nullptr ? ui_.difficultyLevelEdit_->text() : QString();
-        difficultyData.designer = ui_.difficultyDesignerEdit_ != nullptr ? ui_.difficultyDesignerEdit_->text() : QString();
+        difficultyData.level = ui_.difficultyLevelEdit_ != nullptr ? ui_.difficultyLevelEdit_->text() : difficultyData.level;
         difficultyData.chart = owner_.editorText();
+        // The difficulty header edits the chart-wide offset, not the per-diff
+        // designer — capture the live offset; leave designers as the model has
+        // them.
+        snapshot.first = ui_.firstEdit_ != nullptr ? ui_.firstEdit_->text() : snapshot.first;
     } else if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
         snapshot.title = ui_.titleEdit_ != nullptr ? ui_.titleEdit_->text() : QString();
         snapshot.artist = ui_.artistEdit_ != nullptr ? ui_.artistEdit_->text() : QString();
-        snapshot.first = ui_.firstEdit_ != nullptr ? ui_.firstEdit_->text() : QString();
         snapshot.designer = ui_.designerEdit_ != nullptr ? ui_.designerEdit_->text() : QString();
         snapshot.extraFields = SimaiDocument::parseUnmanagedFields(
             ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(),
@@ -1324,27 +1454,19 @@ QString MainWindow::DocumentSection::currentDocumentTextForAutosave() const
         );
     }
 
-    // Under unified mode the active field may hold an uncommitted designer
-    // edit that hasn't broadcast yet (broadcast only happens on field commit
-    // in applyCurrentFieldToDocument). Mirror the active field's designer
-    // across the snapshot so the autosaved backup is never internally
-    // out-of-sync with what the user is typing.
+    // Under unified mode the metadata page may hold an uncommitted top &des
+    // edit that hasn't broadcast yet (broadcast only happens on field commit in
+    // applyCurrentFieldToDocument). Mirror it across every per-difficulty name —
+    // charted and standalone alike — so the autosaved backup is never
+    // internally out-of-sync with what the user is typing.
     const bool capturedDesignerFromUi = owner_.hasActiveDifficulty()
         || state_.activeOutlineKey_ == QLatin1String("metadata");
     if (state_.unifiedDesignerEnabled_ && capturedDesignerFromUi) {
-        QString canonical = snapshot.designer;
-        if (owner_.hasActiveDifficulty()) {
-            const SimaiDifficultyData* active = snapshot.difficulty(state_.activeDifficultyId_);
-            if (active != nullptr) {
-                canonical = active->designer;
-            }
-        }
-        snapshot.designer = canonical;
-        const QVector<int> diffIds = snapshot.difficultyIds();
-        for (int diffId : diffIds) {
-            SimaiDifficultyData* diff = snapshot.difficulty(diffId);
-            if (diff != nullptr) {
-                diff->designer = canonical;
+        const QString canonical = snapshot.designer;
+        const QVector<QPair<int, QString>> designerSlots = snapshot.perDifficultyDesigners();
+        for (const QPair<int, QString>& slot : designerSlots) {
+            if (slot.second != canonical) {
+                snapshot.setDesignerForSlot(slot.first, canonical);
             }
         }
     }
@@ -1782,9 +1904,9 @@ bool MainWindow::applyCurrentFieldToDocument()
     return documentSection_->applyCurrentFieldToDocument();
 }
 
-void MainWindow::onUnifiedDesignerToggled(bool checked)
+void MainWindow::onManagePerDifficultyDesigners()
 {
-    documentSection_->onUnifiedDesignerToggled(checked);
+    documentSection_->openPerDifficultyDesignerDialog();
 }
 
 void MainWindow::onNewFile()

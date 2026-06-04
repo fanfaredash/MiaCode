@@ -462,27 +462,27 @@ bool MainWindow::DocumentSection::currentFieldHasUndoChanges() const
     if (owner_.hasActiveDifficulty()) {
         const SimaiDifficultyData* difficultyData = state_.document_.difficulty(state_.activeDifficultyId_);
         const QString savedLevel = difficultyData != nullptr ? difficultyData->level : QString();
-        const QString savedDesigner = difficultyData != nullptr ? difficultyData->designer : QString();
         const bool levelDirty = ui_.difficultyLevelEdit_ != nullptr && ui_.difficultyLevelEdit_->text() != savedLevel;
-        const bool designerDirty = ui_.difficultyDesignerEdit_ != nullptr && ui_.difficultyDesignerEdit_->text() != savedDesigner;
+        // The header's offset field edits the chart-wide &first, not a
+        // per-difficulty value.
+        const bool offsetDirty = ui_.firstEdit_ != nullptr && ui_.firstEdit_->text() != state_.document_.first;
         bool chartDirty = false;
         if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
             editor != nullptr && editor->document() != nullptr) {
             chartDirty = editor->document()->availableUndoSteps() != state_.editorUndoSaveAnchor_;
         }
-        return levelDirty || designerDirty || chartDirty;
+        return levelDirty || offsetDirty || chartDirty;
     }
 
     if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
         const bool titleDirty = ui_.titleEdit_ != nullptr && ui_.titleEdit_->text() != state_.document_.title;
         const bool artistDirty = ui_.artistEdit_ != nullptr && ui_.artistEdit_->text() != state_.document_.artist;
-        const bool firstDirty = ui_.firstEdit_ != nullptr && ui_.firstEdit_->text() != state_.document_.first;
         const bool designerDirty = ui_.designerEdit_ != nullptr && ui_.designerEdit_->text() != state_.document_.designer;
         bool extraDirty = false;
         if (ui_.metadataExtraEdit_ != nullptr && ui_.metadataExtraEdit_->document() != nullptr) {
             extraDirty = ui_.metadataExtraEdit_->document()->availableUndoSteps() != state_.metadataExtraUndoSaveAnchor_;
         }
-        return titleDirty || artistDirty || firstDirty || designerDirty || extraDirty;
+        return titleDirty || artistDirty || designerDirty || extraDirty;
     }
 
     return false;
@@ -494,8 +494,8 @@ void MainWindow::DocumentSection::anchorCurrentFieldCleanState()
         if (ui_.difficultyLevelEdit_ != nullptr) {
             ui_.difficultyLevelEdit_->setModified(false);
         }
-        if (ui_.difficultyDesignerEdit_ != nullptr) {
-            ui_.difficultyDesignerEdit_->setModified(false);
+        if (ui_.firstEdit_ != nullptr) {
+            ui_.firstEdit_->setModified(false);
         }
         if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
             editor != nullptr && editor->document() != nullptr) {
@@ -511,9 +511,6 @@ void MainWindow::DocumentSection::anchorCurrentFieldCleanState()
         }
         if (ui_.artistEdit_ != nullptr) {
             ui_.artistEdit_->setModified(false);
-        }
-        if (ui_.firstEdit_ != nullptr) {
-            ui_.firstEdit_->setModified(false);
         }
         if (ui_.designerEdit_ != nullptr) {
             ui_.designerEdit_->setModified(false);

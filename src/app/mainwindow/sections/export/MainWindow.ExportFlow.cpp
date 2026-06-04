@@ -412,7 +412,7 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     QString chartDifficultyLabel;
     if (owner_.hasActiveDifficulty()) {
         const SimaiDifficultyData* difficulty = owner_.document_.difficulty(owner_.activeDifficultyId_);
-        if (difficulty != nullptr && !difficulty->designer.isEmpty()) {
+        if (difficulty != nullptr && !difficulty->designer.trimmed().isEmpty()) {
             chartDesigner = difficulty->designer;
         }
         const QString diffShort = SimaiDocument::difficultyShortName(owner_.activeDifficultyId_);
@@ -697,7 +697,7 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo()
     task.chartArtist = owner_.document_.artist;
     if (owner_.hasActiveDifficulty()) {
         const SimaiDifficultyData* difficulty = owner_.document_.difficulty(owner_.activeDifficultyId_);
-        task.chartDesigner = (difficulty != nullptr && !difficulty->designer.isEmpty())
+        task.chartDesigner = (difficulty != nullptr && !difficulty->designer.trimmed().isEmpty())
             ? difficulty->designer
             : owner_.document_.designer;
         const QString diffShort = SimaiDocument::difficultyShortName(owner_.activeDifficultyId_);

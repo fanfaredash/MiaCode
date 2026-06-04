@@ -442,6 +442,7 @@ const QHash<QString, QString>& zhMap()
         {"metadata.field.artist", "曲师"},
         {"metadata.field.first", "偏移"},
         {"metadata.field.des", "谱师"},
+        {"metadata.field.cover", "曲绘"},
         {"metadata.empty_hint", "← 点击添加谱面难度"},
 
         {"sidebar.metadata", "谱面信息设置"},

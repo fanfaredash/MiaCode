@@ -399,7 +399,10 @@ miacode::simai::SimaiTimingMetadata MainWindow::TimelineSection::currentTimingMe
 double MainWindow::TimelineSection::parsedRawFirstSeconds(bool* ok) const
 {
     QString rawValue = state_.document_.first;
-    if (ui_.editorStack_ != nullptr && ui_.editorStack_->currentWidget() == ui_.metadataPage_ && ui_.firstEdit_ != nullptr) {
+    // The offset field now lives in the difficulty-page header. Read its live
+    // text whenever a difficulty is active so an uncommitted edit reflows the
+    // timeline/preview immediately (it commits to document_.first on field save).
+    if (hasActiveDifficulty() && ui_.firstEdit_ != nullptr) {
         rawValue = ui_.firstEdit_->text();
     }
     const QString trimmedRawValue = rawValue.trimmed();

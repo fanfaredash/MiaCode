@@ -84,20 +84,19 @@
         QToolButton* outlineCollapseButton_ = nullptr;
         QLineEdit* titleEdit_ = nullptr;
         QLineEdit* artistEdit_ = nullptr;
+        // Chart-wide timing offset (`&first`). Lives in the difficulty-page
+        // header (next to Lv), not the metadata page — see FrameBootstrap.
+        // Per-difficulty designer state (`&des_N` + the "share one designer"
+        // toggle) is managed by a dialog, not a persistent checkbox, so there
+        // is no unifiedDesignerCheckbox_ widget; the runtime flag lives in
+        // MainWindowState::unifiedDesignerEnabled_.
         QLineEdit* firstEdit_ = nullptr;
         QLineEdit* designerEdit_ = nullptr;
-        // "All difficulties share the same designer name" checkbox lives in
-        // the designer row, replacing the (now-relocated) extract-cover
-        // button. The mirrored bool (unifiedDesignerEnabled_) is in
-        // MainWindowState — searched there because applyCurrentFieldToDocument
-        // reads the flag every keystroke and shouldn't reach through ui_.
-        QCheckBox* unifiedDesignerCheckbox_ = nullptr;
         QTextEdit* metadataExtraEdit_ = nullptr;
         QWidget* editorDifficultyControls_ = nullptr;
         QLabel* difficultyLevelLabel_ = nullptr;
         QLineEdit* difficultyLevelEdit_ = nullptr;
-        QLabel* difficultyDesignerLabel_ = nullptr;
-        QLineEdit* difficultyDesignerEdit_ = nullptr;
+        QLabel* difficultyFirstLabel_ = nullptr;
         QWidget* editorHeaderWidget_ = nullptr;
         QWidget* editorFindGeometryHost_ = nullptr;
         QWidget* editorBatchTransformControls_ = nullptr;
@@ -176,9 +175,10 @@
     };
 
     struct MainWindowState {
-        // Mirrors ui_.unifiedDesignerCheckbox_->isChecked() but readable
-        // without a UI-thread round-trip. True ⇒ broadcast designer edits
-        // between top &des and every &des_N inside applyCurrentFieldToDocument.
+        // "All difficulties share one designer" preference (set via the
+        // per-difficulty designer dialog, persisted per project). True ⇒
+        // broadcast designer edits between top &des and every &des_N inside
+        // applyCurrentFieldToDocument.
         bool unifiedDesignerEnabled_ = false;
         PreviewRuntime* previewCanvas_ = nullptr;
         PreviewStageMediaHost* previewStageMediaHost_ = nullptr;
@@ -854,13 +854,11 @@
     QLineEdit*& artistEdit_ = ui_.artistEdit_;
     QLineEdit*& firstEdit_ = ui_.firstEdit_;
     QLineEdit*& designerEdit_ = ui_.designerEdit_;
-    QCheckBox*& unifiedDesignerCheckbox_ = ui_.unifiedDesignerCheckbox_;
     QTextEdit*& metadataExtraEdit_ = ui_.metadataExtraEdit_;
     QWidget*& editorDifficultyControls_ = ui_.editorDifficultyControls_;
     QLabel*& difficultyLevelLabel_ = ui_.difficultyLevelLabel_;
     QLineEdit*& difficultyLevelEdit_ = ui_.difficultyLevelEdit_;
-    QLabel*& difficultyDesignerLabel_ = ui_.difficultyDesignerLabel_;
-    QLineEdit*& difficultyDesignerEdit_ = ui_.difficultyDesignerEdit_;
+    QLabel*& difficultyFirstLabel_ = ui_.difficultyFirstLabel_;
     QWidget*& editorHeaderWidget_ = ui_.editorHeaderWidget_;
     QWidget*& editorFindGeometryHost_ = ui_.editorFindGeometryHost_;
     QWidget*& editorBatchTransformControls_ = ui_.editorBatchTransformControls_;
