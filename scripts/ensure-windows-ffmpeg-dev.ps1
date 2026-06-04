@@ -25,6 +25,17 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+try {
+    [Net.ServicePointManager]::SecurityProtocol =
+        [Net.ServicePointManager]::SecurityProtocol -bor
+        [Net.SecurityProtocolType]::Tls12 -bor
+        [Net.SecurityProtocolType]::Tls13
+} catch {
+    [Net.ServicePointManager]::SecurityProtocol =
+        [Net.ServicePointManager]::SecurityProtocol -bor
+        [Net.SecurityProtocolType]::Tls12
+}
+
 if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
     $RepoRoot = Split-Path -Parent $PSScriptRoot
 }
@@ -77,7 +88,32 @@ try {
     New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
 
     Write-Host "Downloading FFmpeg dev SDK from $ffmpegUrl"
-    Invoke-WebRequest -Uri $ffmpegUrl -OutFile $archivePath -MaximumRetryCount 5 -RetryIntervalSec 2
+    $downloadError = $null
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        try {
+            Invoke-WebRequest -Uri $ffmpegUrl -OutFile $archivePath
+            $downloadError = $null
+            break
+        } catch {
+            $downloadError = $_.Exception
+            if ($attempt -ge 5) {
+                break
+            }
+            Start-Sleep -Seconds 2
+        }
+    }
+    if ($null -ne $downloadError) {
+        $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+        if ($null -eq $curl) {
+            throw "Failed to download FFmpeg dev SDK after 5 attempts: $($downloadError.Message)"
+        }
+
+        Write-Warning "Invoke-WebRequest failed: $($downloadError.Message). Retrying with curl.exe..."
+        & $curl.Source -L --fail --retry 5 --retry-delay 2 -o $archivePath $ffmpegUrl
+        if ($LASTEXITCODE -ne 0) {
+            throw "curl.exe failed to download FFmpeg dev SDK with exit code $LASTEXITCODE."
+        }
+    }
 
     Expand-Archive -LiteralPath $archivePath -DestinationPath $extractDir -Force
 
