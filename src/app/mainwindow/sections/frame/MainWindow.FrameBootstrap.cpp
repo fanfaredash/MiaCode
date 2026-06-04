@@ -1471,6 +1471,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     errorList_->setWordWrap(true);
     errorList_->setTextElideMode(Qt::ElideNone);
     errorList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    if (QScrollBar* vbar = errorList_->verticalScrollBar()) {
+        vbar->setStyleSheet(modernScrollBarStyle());
+    }
     errorList_->setContextMenuPolicy(Qt::CustomContextMenu);
     errorList_->viewport()->installEventFilter(this);
     connect(errorList_, &QListWidget::itemActivated, this, &MainWindow::onErrorItemActivated);
@@ -1489,6 +1492,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     muriList_->setWordWrap(true);
     muriList_->setTextElideMode(Qt::ElideNone);
     muriList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    if (QScrollBar* vbar = muriList_->verticalScrollBar()) {
+        vbar->setStyleSheet(modernScrollBarStyle());
+    }
     muriList_->setContextMenuPolicy(Qt::CustomContextMenu);
     muriList_->viewport()->installEventFilter(this);
     connect(muriList_, &QListWidget::itemActivated, this, &MainWindow::onMuriItemActivated);

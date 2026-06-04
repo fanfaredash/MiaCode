@@ -66,8 +66,16 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
 - `src/tools/video_export/RawVideoPipeTransport.cpp` — pipe queue depth / buffer sizing
   (`maxBufferedFrames` derived from frame size, ×2; `requestedBufferBytes` `2 * max(frameBytes,1MiB)`).
 - `src/app/mainwindow/MainWindow.cpp` + `sections/window/*.cpp` — preview panel spacing, fullscreen
-  overlay timing/opacity/reveal geometry, bottom-tab resize bounds (hot zone `8 px`, scale
-  `50%..100%`), fixed `30 Hz` timeline UI cadence.
+  overlay timing/opacity/reveal geometry, bottom-tab resize bounds (hot zone `8 px`, content scale
+  `kBottomTabsContentScaleMin/Max = 0.5..4.0` in `MainWindow.WindowShell.cpp`), fixed `30 Hz`
+  timeline UI cadence. The `4.0` max is a SAFETY bound only — the real ceiling above 100% is
+  `kBottomTabsMaxWindowHeightFraction = 2/3` of the whole window height. **Two-tier scale above
+  100%:** only the note GRID height grows (raw scale); the header ("顶部变换"), note 素材/markers and
+  lane-label fonts CAP at 100%. The 语法/无理 issue-list fonts are a fixed 90% of base, uniform /
+  height-independent (`kBottomTabsIssueListFontScale = 0.9`). The `4.0` max is a
+  SYNC-PAIR mirrored as `kMaxContentScale` in `TimelineSceneStateBuilder.cpp` and the literal `4.0`
+  in `TimelineView.cpp`/`TimelineView.Core.cpp`/`TimelineQuickStateBridge.cpp` `setContentScale`
+  clamps — change all together. See `cross-chain-linkage.md`.
 - `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.cpp` — toolbox media-prepend ffmpeg
   defaults (`1920x1080@30`, x264 `CRF 18 veryfast`; silence stereo `44100 Hz` libmp3lame `-q:a 2`).
 - `src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp` — issue-row padding /

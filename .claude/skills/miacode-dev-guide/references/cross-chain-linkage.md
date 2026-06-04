@@ -47,6 +47,11 @@ Implications:
 
 - `SimaiDocument` stores raw `first`; `MainWindow::parsedFirstSeconds` is the getter; preview/export
   use the finite parsed raw `&first` directly (no inverted "effectiveFirst").
+- **Edited from the difficulty-page header** (`firstEdit_`), not the metadata page. While a
+  difficulty is active `parsedRawFirstSeconds` reads the live field text (uncommitted edits reflow
+  the timeline; `editingFinished` → `refreshTimelineMetadata`); the commit to `document_.first`
+  happens in `applyCurrentFieldToDocument`'s difficulty branch. The latency page still writes
+  `document_.first` via `applyLatencyDetectorOffset` — same single source of truth.
 - `TimelineQuickModel` receives `first` on every rebuild; `buildTimelineSlowRefreshResult` shifts
   markers by `first`; `MainWindow::applyLatencyDetectorOffset` writes raw `first` back.
 - Review together on change: `sections/timeline/MainWindow.PreviewTimelineFlow.cpp`,
@@ -237,6 +242,37 @@ replica was the wrong approach: it bypassed the real per-frame path and drifted)
   `sections/timeline/MainWindow.PreviewPlaybackGlue.cpp`,
   `sections/timeline/MainWindow.PreviewTimelineFlow.cpp` (`hasPreviewableChart`),
   `sections/document/MainWindow.DocumentUi.cpp` (`switchToLatencyField` + the `onPageLeft` calls).
+
+## 13. Bottom-tab content scale → timeline two-tier scale
+
+The bottom-tab (时间轴/语法/无理 panel) divider height maps to `bottomTabsContentScale_`
+(persisted as `bottom_tabs_content_scale`). It can now exceed 100% — clamped to
+`[0.5, 4.0]` (`kBottomTabsContentScaleMax`, a safety bound; the practical ceiling above 100%
+is `kBottomTabsMaxWindowHeightFraction = 2/3` of the window height, enforced in
+`setShellBottomTabsHeight`). Propagation:
+
+1. `MainWindow.WindowShell.cpp`: `setShellBottomTabsHeight` (drag) / restore →
+   `applyBottomTabsContentScale` → `timelineQuickStateBridge_->setContentScale` +
+   `timelineView_->setContentScale`. Device height via `scaledBottomTabsTimelineContentHeight` /
+   `bottomTabsContentScaleForTimelineContentHeight` (piecewise inverse — header caps at 100%,
+   lanes grow). `bottomTabsHeaderScaleForContentScale` = `0.5 + min(scale,1)*0.5` (caps at 1.0).
+2. QSG scene: `TimelineSceneStateBuilder::buildLayoutMetrics` — **two-tier split**:
+   `gridContentScale` (raw, up to 4.0) drives ONLY `laneHeight`/`timelineHeight`;
+   `normalizedContentScale` (capped at 1.0) is stored as `state.contentScale` and drives note
+   素材/markers, lane-label fonts, header (`headerContentScale`), margins. Notes position off
+   `laneHeight` (grows), size off `contentScale` (capped) → taller grid, 100% markers.
+3. Legacy `TimelineView` parity: `TimelineView.Core.cpp` `laneHeight()` uses the raw scale;
+   `scaledTimelineMetric` / `headerContentScale` stay capped.
+4. 语法/无理 list fonts are a fixed 90% of base (`kBottomTabsIssueListFontScale`), uniform /
+   height-independent (NOT `headerScale`-driven); their scrollbars use
+   `UiTheme::scrollBarStyleSheet()` like the editor. `QuickShellController::bottomTabsHeaderScale`
+   (QML tab strip) still inherits the capped header scale.
+
+**SYNC-PAIR:** the `4.0` max is duplicated as `kBottomTabsContentScaleMax`
+(`MainWindow.WindowShell.cpp`), `kMaxContentScale` (`TimelineSceneStateBuilder.cpp`), and a literal
+`4.0` in the `setContentScale` clamps of `TimelineView.cpp` / `TimelineView.Core.cpp` /
+`TimelineQuickStateBridge.cpp` — change all together (also `hardcode-registry.md`). This scale is
+**UI-only** (in-app timeline panel); it has no video-export consumer.
 
 ## Update this file when
 

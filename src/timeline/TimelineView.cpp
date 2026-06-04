@@ -893,7 +893,8 @@ void TimelineView::setContentScale(double scale)
         stateBridge_->setContentScale(scale);
         return;
     }
-    const double clamped = qBound(0.5, scale, 1.0);
+    // Upper bound mirrors kBottomTabsContentScaleMax (MainWindow.WindowShell.cpp).
+    const double clamped = qBound(0.5, scale, 4.0);
     if (qFuzzyCompare(contentScale_ + 1.0, clamped + 1.0)) {
         return;
     }

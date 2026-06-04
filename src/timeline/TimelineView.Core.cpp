@@ -46,7 +46,10 @@ int TimelineView::timelineTop() const
 
 int TimelineView::laneHeight() const
 {
-    return scaledTimelineMetric(kLaneHeight);
+    // Lane/grid height uses the raw (uncapped) scale so the grid can grow past 100%; note
+    // size (notePixelSize) and the header keep using the capped scaledTimelineMetric. Upper
+    // bound mirrors kBottomTabsContentScaleMax (MainWindow.WindowShell.cpp).
+    return qMax(1, qRound(static_cast<qreal>(kLaneHeight) * qBound(0.5, contentScale_, 4.0)));
 }
 
 int TimelineView::timelineHeight() const

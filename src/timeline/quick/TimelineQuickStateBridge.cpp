@@ -542,7 +542,9 @@ double TimelineQuickStateBridge::contentScale() const
 
 void TimelineQuickStateBridge::setContentScale(double scale)
 {
-    const double clamped = qBound(0.5, scale, 1.0);
+    // Upper bound mirrors kBottomTabsContentScaleMax (MainWindow.WindowShell.cpp); above
+    // 100% only the note grid grows, the header/素材 cap in the scene builder.
+    const double clamped = qBound(0.5, scale, 4.0);
     if (qFuzzyCompare(contentScale_ + 1.0, clamped + 1.0)) {
         return;
     }

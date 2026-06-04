@@ -86,9 +86,21 @@ QFont timelineLaneLabelFont()
     return laneLabelFont;
 }
 
+// "Material" scale — caps at 100%. Drives note 素材/markers, lane-label fonts and the
+// header region, so none of them grow when the bottom tab is dragged past 100%.
 double normalizedContentScale(double scale)
 {
     return qBound(0.5, scale, 1.0);
+}
+
+// Raw, uncapped scale used ONLY for the note grid (lane height / timeline height), so the
+// grid keeps growing past 100% while everything above stays capped. kMaxContentScale is a
+// safety bound mirroring kBottomTabsContentScaleMax (MainWindow.WindowShell.cpp).
+constexpr double kMaxContentScale = 4.0;
+
+double gridContentScale(double scale)
+{
+    return qBound(0.5, scale, kMaxContentScale);
 }
 
 double headerContentScale(double scale)
@@ -374,12 +386,16 @@ void appendSprite(
 TimelineSceneLayoutMetrics buildLayoutMetrics(const TimelineSceneBuildRequest& request)
 {
     const double contentScale = normalizedContentScale(request.contentScale);
+    // Lane/grid height uses the raw (uncapped) scale so the grid can grow past 100%; the
+    // header and all note 素材/markers keep using the capped contentScale above.
+    const double gridScale = gridContentScale(request.contentScale);
+    const int laneHeight = qMax(1, qRound(static_cast<qreal>(kLaneHeight) * static_cast<qreal>(gridScale)));
     TimelineSceneLayoutMetrics metrics;
     metrics.viewportSize = request.viewportSize;
     metrics.timelineLeft = scaledMetric(kTimelineLeftMargin, contentScale);
     metrics.timelineTop = scaledMetric(kHeaderHeight + kTimelineTopMargin, headerContentScale(contentScale));
-    metrics.timelineHeight = kLaneCount * scaledMetric(kLaneHeight, contentScale);
-    metrics.laneHeight = scaledMetric(kLaneHeight, contentScale);
+    metrics.timelineHeight = kLaneCount * laneHeight;
+    metrics.laneHeight = laneHeight;
     metrics.laneCount = kLaneCount;
     metrics.pixelsPerSecond = pixelsPerSecondForZoom(request.zoomScale);
     metrics.contentScale = contentScale;

@@ -52,16 +52,31 @@ int dismissOpenChildPopupDialogs(QWidget& owner)
 }
 
 constexpr double kBottomTabsContentScaleMin = 0.5;
-constexpr double kBottomTabsContentScaleMax = 1.0;
+// The bottom tab can be dragged PAST 100% now. kBottomTabsContentScaleMax is only a large
+// safety bound for the math — the practical ceiling is the available window space (clamped
+// in setShellBottomTabsHeight so the preview panel keeps a minimum). Above 100% only the
+// note GRID height keeps growing; the header ("顶部变换") and the note 素材/markers cap at 100%.
+// SYNC PAIR: mirrored by kMaxContentScale in TimelineSceneStateBuilder.cpp and the
+// setContentScale clamps in TimelineView.cpp / TimelineQuickStateBridge.cpp.
+constexpr double kBottomTabsContentScaleMax = 4.0;
+// The bottom tab may grow past 100%, but not without bound — cap it at this fraction of the
+// whole window height so the preview area above always keeps roughly a third of the window.
+constexpr double kBottomTabsMaxWindowHeightFraction = 2.0 / 3.0;
+// 语法 / 无理 issue lists render at a fixed 90% of their base font — uniform, independent of
+// the bottom-tab height (no longer scaled by headerScale).
+constexpr double kBottomTabsIssueListFontScale = 0.9;
 
 double clampedBottomTabsContentScale(double scale)
 {
     return qBound(kBottomTabsContentScaleMin, scale, kBottomTabsContentScaleMax);
 }
 
+// The header / "顶部变换" region and the validation/无理 list fonts follow this scale. It
+// tracks contentScale up to 100% (0.75 -> 1.0) and then CAPS at 1.0, so above 100% the
+// header and list fonts stop growing while only the note grid keeps expanding.
 double bottomTabsHeaderScaleForContentScale(double scale)
 {
-    const double contentScale = clampedBottomTabsContentScale(scale);
+    const double contentScale = qMin(1.0, clampedBottomTabsContentScale(scale));
     return 0.5 + (contentScale * 0.5);
 }
 
@@ -151,10 +166,19 @@ double bottomTabsContentScaleForTimelineContentHeight(int timelineHeight)
     const double laneBase =
         miacode::window_parity::kTimelineLaneHeight * miacode::window_parity::kTimelineLaneCount;
     const double variableBase = headerBase * 0.5 + laneBase;
-    if (variableBase <= 0.0) {
+    if (variableBase <= 0.0 || laneBase <= 0.0) {
         return kBottomTabsContentScaleMax;
     }
-    return clampedBottomTabsContentScale((static_cast<double>(timelineHeight) - headerBase * 0.5) / variableBase);
+    // Inverse of scaledBottomTabsTimelineContentHeight, which is piecewise because the
+    // header term caps at 100%:
+    //   scale <= 1: total = headerBase*0.5 + (headerBase*0.5 + laneBase) * scale
+    //   scale  > 1: total = headerBase     + laneBase * scale            (header capped)
+    // Both branches yield headerBase + laneBase at scale == 1, so the curve is continuous.
+    const double linearScale = (static_cast<double>(timelineHeight) - headerBase * 0.5) / variableBase;
+    if (linearScale <= 1.0) {
+        return clampedBottomTabsContentScale(linearScale);
+    }
+    return clampedBottomTabsContentScale((static_cast<double>(timelineHeight) - headerBase) / laneBase);
 }
 
 bool actionMatchesShortcut(QAction* action, const QKeySequence& sequence)
@@ -600,7 +624,20 @@ void MainWindow::WindowSection::setShellBottomTabsHeight(int height)
     if (fullHeight <= 0 || minHeight <= 0) {
         return;
     }
-    const int clampedHeight = qBound(qMin(minHeight, fullHeight), height, qMax(minHeight, fullHeight));
+    // Bound the bottom-tab height past 100% to a fraction of the whole window height so the
+    // preview area above always keeps roughly a third of the window. The scale-derived
+    // fullHeight is only an upper safety bound.
+    int effectiveMaxHeight = fullHeight;
+    const int windowHeight = owner_.height();
+    if (windowHeight > 0) {
+        const int windowLimit =
+            static_cast<int>(static_cast<double>(windowHeight) * kBottomTabsMaxWindowHeightFraction);
+        if (windowLimit > minHeight) {
+            effectiveMaxHeight = qMin(effectiveMaxHeight, windowLimit);
+        }
+    }
+    const int clampedHeight =
+        qBound(qMin(minHeight, effectiveMaxHeight), height, qMax(minHeight, effectiveMaxHeight));
     const int fullTimelineHeight = scaledBottomTabsTimelineContentHeight(kBottomTabsContentScaleMax);
     const int chromeHeight = qMax(0, fullHeight - fullTimelineHeight);
     const double nextScale =
@@ -963,6 +1000,19 @@ void MainWindow::WindowSection::applyUiTheme()
             hbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
         }
     }
+    // 语法 / 无理 issue lists share the code-editor's rounded scrollbar style (instead of
+    // the default native bar). Re-applied here so it follows light/dark theme switches.
+    for (QListWidget* issueList : {owner_.errorList_, owner_.muriList_}) {
+        if (issueList == nullptr) {
+            continue;
+        }
+        if (QScrollBar* vbar = issueList->verticalScrollBar()) {
+            vbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
+        }
+        if (QScrollBar* hbar = issueList->horizontalScrollBar()) {
+            hbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
+        }
+    }
     if (owner_.outlineList_ != nullptr) {
         owner_.outlineList_->setStyleSheet(UiTheme::outlineListStyleSheet());
     }
@@ -1172,8 +1222,9 @@ void MainWindow::WindowSection::applyBottomTabsContentScale()
     }
     applyScaledTabBarFont(owner_.bottomTabs_, headerScale);
     applyScaledTabBarFont(owner_.quickShellBottomTabsProxy_, headerScale);
-    applyScaledListFont(owner_.errorList_, headerScale);
-    applyScaledListFont(owner_.muriList_, headerScale);
+    // 语法 / 无理 lists use a fixed 90% font, uniform regardless of the bottom-tab height.
+    applyScaledListFont(owner_.errorList_, kBottomTabsIssueListFontScale);
+    applyScaledListFont(owner_.muriList_, kBottomTabsIssueListFontScale);
     if (owner_.validationSection_ != nullptr) {
         owner_.validationSection_->scheduleWrappedListRelayout(owner_.errorList_);
         owner_.validationSection_->scheduleWrappedListRelayout(owner_.muriList_);
