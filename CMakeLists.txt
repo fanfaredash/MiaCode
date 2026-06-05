@@ -460,6 +460,11 @@ qt_add_shaders(MiaCode "preview_sprite_shaders"
         src/preview/quick_scene/shaders/PreviewFireworkMaterial.vert
         src/preview/quick_scene/shaders/PreviewFireworkMaterial.frag
 )
+qt_add_shaders(MiaCode "intro_shaders"
+    PREFIX "/"
+    FILES
+        src/intro/shaders/bg_texture.frag
+)
 set_target_properties(MiaCode PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "MiaCode"
 )

@@ -74,7 +74,7 @@
     "imgApFcMedal":  { "x": 262, "y": 511,  "w": 80,  "h": 80 },
     "imgSyncMedal":  { "x": 329, "y": 511,  "w": 80,  "h": 80 },
     "designerLabel": { "x": 28,  "y": 572,  "w": 121, "h": 25 },
-    "designerName":  { "x": 25,  "y": 599,  "w": 243, "h": 16 },
+    "designerName":  { "x": 28,  "y": 599,  "w": 243, "h": 16 },
     "bpmText":       { "x": 302, "y": 599,  "w": 100, "h": 17 }
   },
   "colors": {

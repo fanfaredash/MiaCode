@@ -24,6 +24,10 @@ Item {
     // Exporter contract — same property names as the prototype.
     property int frame: 0
     property real fps: 30
+    // Authoring frame at which the staggered per-part card reveal begins; -1 shows
+    // the card fully (no fade-in). The maimai track-start card does NOT fade as one
+    // unit — frame/jacket/level/text appear with different delays (see partOpacity).
+    property int revealStartFrame: -1
     property url templateSource: Qt.resolvedUrl("../templates/maimai_banner.json")
     property url backgroundImage: ""
     property url jacketImage: ""
@@ -102,7 +106,7 @@ Item {
                 imgApFcMedal:  { x: 262, y: 511,  w: 80,  h: 80 },
                 imgSyncMedal:  { x: 329, y: 511,  w: 80,  h: 80 },
                 designerLabel: { x: 28,  y: 572,  w: 121, h: 25 },
-                designerName:  { x: 25,  y: 599,  w: 243, h: 16 },
+                designerName:  { x: 28,  y: 599,  w: 243, h: 16 },
                 bpmText:       { x: 302, y: 599,  w: 100, h: 17 }
             },
             colors: {
@@ -146,6 +150,60 @@ Item {
             .replace(/[\r\n]+/g, " ")
             .replace(/\s+/g, " ")
             .trim()
+    }
+
+    // ----- Staggered per-part reveal -----
+    // Replicates the maimai track-start card fade-in: structural parts (frame, then
+    // jacket) appear first, then the LV, then the text/info rows — each its own
+    // delayed ease-out ramp rather than the whole card fading as one unit. Delays /
+    // durations are in AUTHORING frames (the `frame` property), relative to
+    // `revealStartFrame`. Returns 1.0 when no reveal is set (revealStartFrame < 0).
+    function _clamp01(v) { return Math.max(0, Math.min(1, v)) }
+    // smoothstep (ease-in-out) — gentle start AND end, no abrupt onset.
+    function _smooth(t) { t = _clamp01(t); return t * t * (3 - 2 * t) }
+    function partOpacity(delayF, durF) {
+        if (revealStartFrame < 0) return 1.0
+        return _smooth((frame - revealStartFrame - delayF) / durF)
+    }
+
+    // Per-part reveal stages: [delayFrames, durationFrames] relative to
+    // revealStartFrame (authoring fps). Tuned to the maimai reference: a smooth,
+    // HEAVILY-OVERLAPPING materialize (long durations, small delay spread) so there
+    // are no choppy pops — structure (frame) leads only slightly, with the title
+    // essentially alongside it. Tune here in one place.
+    readonly property var revealStage: ({
+        "frame":  [0, 11],
+        "jacket": [0, 12],
+        "title":  [1, 11],
+        "tab":    [0, 11],
+        "level":  [4, 11],
+        "artist": [4, 11],
+        "bars":   [6, 12],
+        "info":   [7, 12]
+    })
+    function stageOpacity(name) {
+        var s = revealStage[name]
+        return s ? partOpacity(s[0], s[1]) : 1.0
+    }
+
+    // ----- Card pop (scale up then settle) -----
+    // The whole card overshoots slightly larger as it materialises, then settles to
+    // 1.0 (calibrated to the maimai reference's subtle ~3-4% bump). Centred on the
+    // card so it grows/shrinks in place. Tune amplitude/timing here.
+    property real cardPopStart: 0.95   // scale at reveal start
+    property real cardPopPeak:  1.05   // overshoot peak (>1)
+    property int  cardPopGrowFrames:   8
+    property int  cardPopSettleFrames: 9
+    function cardPopScale() {
+        if (revealStartFrame < 0) return 1.0
+        var f = frame - revealStartFrame
+        if (f <= 0) return cardPopStart
+        if (f < cardPopGrowFrames)
+            return cardPopStart + (cardPopPeak - cardPopStart) * _smooth(f / cardPopGrowFrames)
+        var g = f - cardPopGrowFrames
+        if (g < cardPopSettleFrames)
+            return cardPopPeak + (1.0 - cardPopPeak) * _smooth(g / cardPopSettleFrames)
+        return 1.0
     }
 
     function assetUrl(filename) {
@@ -298,12 +356,22 @@ Item {
         width: root.template.card.nativeWidth
         height: root.template.card.nativeHeight
         clip: false
-        transform: Scale {
-            origin.x: 0
-            origin.y: 0
-            xScale: geom.cardScale
-            yScale: geom.cardScale
-        }
+        transform: [
+            // Pop overshoot, centred on the card (native centre) so it scales in place.
+            Scale {
+                origin.x: root.template.card.nativeWidth / 2
+                origin.y: root.template.card.nativeHeight / 2
+                xScale: root.cardPopScale()
+                yScale: root.cardPopScale()
+            },
+            // Layout fit: native 420×636 -> heightRatio of the canvas.
+            Scale {
+                origin.x: 0
+                origin.y: 0
+                xScale: geom.cardScale
+                yScale: geom.cardScale
+            }
+        ]
 
         // Z-order matches the Unity prefab: MusicBase's own Image (the frame)
         // renders FIRST, then its children render on top, in declaration order.
@@ -313,6 +381,7 @@ Item {
         // 1) Card frame — drawn first (back), as MusicBase's Image component.
         Image {
             anchors.fill: parent
+            opacity: root.stageOpacity("frame")
             source: root.assetUrl(root.template.assets.frame[root.trackValue("difficulty")])
             smooth: true
             mipmap: true
@@ -324,6 +393,7 @@ Item {
             property var b: root.template.layout.jacketSlot
             x: b.x; y: b.y; width: b.w; height: b.h
             clip: true
+            opacity: root.stageOpacity("jacket")
 
             Image {
                 anchors.fill: parent
@@ -345,6 +415,7 @@ Item {
         Image {
             property var b: root.template.layout.mbaseTab
             x: b.x; y: b.y; width: b.w; height: b.h
+            opacity: root.stageOpacity("tab")
             source: root.assetUrl(root.template.assets.tab[root.trackValue("difficulty")])
             smooth: true
             mipmap: true
@@ -355,6 +426,7 @@ Item {
         Image {
             property var b: root.template.layout.plateDeluxe
             x: b.x; y: b.y; width: b.w; height: b.h
+            opacity: root.stageOpacity("tab")
             source: root.assetUrl(root.template.assets.plateDeluxe)
             visible: root.trackValue("mode") !== "Standard"
             smooth: true
@@ -363,6 +435,7 @@ Item {
         Image {
             property var b: root.template.layout.plateStandard
             x: b.x; y: b.y; width: b.w; height: b.h
+            opacity: root.stageOpacity("tab")
             source: root.assetUrl(root.template.assets.plateStandard)
             visible: root.trackValue("mode") === "Standard"
             smooth: true
@@ -373,6 +446,7 @@ Item {
         Image {
             property var b: root.template.layout.lvPill
             x: b.x; y: b.y; width: b.w; height: b.h
+            opacity: root.stageOpacity("level")
             source: root.assetUrl(root.template.assets.lvPill[root.trackValue("difficulty")])
             smooth: true
             mipmap: true
@@ -391,6 +465,7 @@ Item {
             id: lvDisplay
             property var b: root.template.layout.lvPill
             x: b.x; y: b.y; width: b.w; height: b.h
+            opacity: root.stageOpacity("level")
 
             // LV group — proportional glyph widths + tight spacing,
             // CENTERED horizontally in the visible pill.
@@ -454,6 +529,7 @@ Item {
         Text {
             property var b: root.template.layout.titleArea
             x: b.x; y: b.y; width: b.w; height: b.h
+            opacity: root.stageOpacity("title")
             text: root.oneLine(root.trackValue("title"))
             color: root.template.colors.titleOnDark
             font.family: displayFont.name
@@ -471,6 +547,7 @@ Item {
         Text {
             property var b: root.template.layout.artistArea
             x: b.x; y: b.y; width: b.w; height: b.h
+            opacity: root.stageOpacity("artist")
             text: root.oneLine(root.trackValue("artist"))
             color: root.template.colors.artistOnDark
             font.family: bodyFont.name
@@ -492,6 +569,7 @@ Item {
             property var b: root.template.layout.uiAchievement
             x: b.x; y: b.y; width: b.w; height: b.h
             radius: 4
+            opacity: root.stageOpacity("bars")
             color: root.template.colors.placeholderFill
             antialiasing: true
         }
@@ -499,6 +577,7 @@ Item {
             property var b: root.template.layout.uiRank
             x: b.x; y: b.y; width: b.w; height: b.h
             radius: 4
+            opacity: root.stageOpacity("bars")
             color: root.template.colors.placeholderFill
             antialiasing: true
         }
@@ -512,6 +591,7 @@ Item {
             width: innerSize
             height: innerSize
             radius: width / 2
+            opacity: root.stageOpacity("info")
             color: root.template.colors.placeholderFill
             antialiasing: true
         }
@@ -523,6 +603,7 @@ Item {
             width: innerSize
             height: innerSize
             radius: width / 2
+            opacity: root.stageOpacity("info")
             color: root.template.colors.placeholderFill
             antialiasing: true
         }
@@ -531,6 +612,7 @@ Item {
         Text {
             property var b: root.template.layout.designerLabel
             x: b.x; y: b.y; width: b.w; height: b.h
+            opacity: root.stageOpacity("info")
             text: "NOTES DESIGNER"
             color: root.template.colors.labelOnWhite
             font.family: displayFont.name
@@ -544,6 +626,7 @@ Item {
         Text {
             property var b: root.template.layout.designerName
             x: b.x; y: b.y; width: b.w; height: b.h
+            opacity: root.stageOpacity("info")
             text: {
                 var d = root.oneLine(root.trackValue("designer"))
                 return d.length > 0 ? d : "—"
@@ -566,6 +649,7 @@ Item {
         Text {
             property var b: root.template.layout.bpmText
             x: b.x; y: b.y; width: b.w; height: b.h
+            opacity: root.stageOpacity("info")
             text: "BPM " + root.oneLine(root.trackValue("bpm"))
             color: root.template.colors.bpmOnWhite
             font.family: bodyFont.name

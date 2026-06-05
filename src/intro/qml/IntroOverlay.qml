@@ -62,6 +62,11 @@ Item {
     // backdrop to the plate makes any residual leak invisible regardless).
     property color transitionBaseColor: "#CEA5FC"
 
+    // Animated micro-motion texture on the blurred backdrop (backdrop layer ONLY,
+    // below the card). 0 = grain, 1 = warp, 2 = caustic. bgTexAmp scales strength.
+    property int  bgTexMode: 2
+    property real bgTexAmp:  1.5
+
     implicitWidth: 1920
     implicitHeight: 1080
     width: implicitWidth
@@ -87,8 +92,15 @@ Item {
     readonly property int cycle2End:        cycle2Start + cycle2SpanFrames // 349, wipe fully retracted (5.817s)
 
     // ---------- Reveal timing ----------
-    readonly property int cardStartAbs:     15  // dissolve begins (0.25s)
-    readonly property int cardRevealFrames: 12  // ease-out dissolve, 100% at 0.45s
+    // cardStartAbs / cardRevealFrames drive the blurred 曲绘 BACKDROP + dim only
+    // (they ease in under the wipe and are revealed as it retracts).
+    readonly property int cardStartAbs:     15  // backdrop ease-in begins (0.25s)
+    readonly property int cardRevealFrames: 12  // backdrop ease-in dur
+    // The CARD itself builds via a STAGGERED per-part fade-in (frame -> jacket ->
+    // level -> text, see MaimaiBannerCard.partOpacity). It begins AFTER the cycle-1
+    // wipe has nearly retracted so the assembly happens in FULL VIEW (like the maimai
+    // reference), not hidden under the cover. ~34..50.
+    readonly property int cardRevealStart:  34
     // At cycle 2 the card is INSTANT-CUT (no dissolve): frame 195 flips the whole
     // screen to the solid transition bg (backdropColor), the wipe plays on it, and
     // at the merge (full cover) the solid bg + black base drop to reveal the chart.
@@ -159,7 +171,10 @@ Item {
         visible: opacity > 0
     }
 
-    // 1) Blurred 曲绘 background filling the whole 16:9 frame.
+    // 1) Blurred 曲绘 background filling the whole 16:9 frame, with a subtle ANIMATED
+    //    micro-motion texture (grain/warp/caustic). The texture is applied ONLY to
+    //    this backdrop layer (rendered below the card), so the difficulty card is
+    //    never affected. Pipeline: jacket -> blur (to texture) -> shader -> draw.
     Image {
         id: bgFill
         anchors.fill: parent
@@ -171,13 +186,31 @@ Item {
         mipmap: true
     }
     MultiEffect {
+        id: blurredBg
         anchors.fill: parent
         source: bgFill
         blurEnabled: true
         blur: 1.0
         blurMax: 64
+        // Captured by blurredTex below (hideSource); not drawn directly.
+    }
+    ShaderEffectSource {
+        id: blurredTex
+        anchors.fill: parent
+        sourceItem: blurredBg
+        live: true
+        hideSource: true
+        visible: false
+    }
+    ShaderEffect {
+        anchors.fill: parent
+        property variant source: blurredTex
+        property real time: root.frame / Math.max(1, root.fps)
+        property real amp: root.bgTexAmp
+        property int mode: root.bgTexMode
         opacity: root.cardOpacity()
         visible: opacity > 0 && bgFill.status === Image.Ready
+        fragmentShader: "qrc:/src/intro/shaders/bg_texture.frag.qsb"
     }
     Rectangle {
         anchors.fill: parent
@@ -201,7 +234,13 @@ Item {
         jacketImage: root.backgroundImage
         logoImage: root.logoImage
         trackOverrides: root.bannerTrack
-        opacity: root.cardOpacity()
+        // The card reveals via a STAGGERED per-part fade-in (frame -> jacket ->
+        // level -> text), driven internally from cardRevealStart (AFTER the wipe
+        // clears, so it's in view) — the master opacity here only gates presence +
+        // the cycle-2 hard-cut, NOT the fade-in (else the two would multiply). The
+        // blurred backdrop/dim use cardOpacity() (earlier, under the wipe).
+        revealStartFrame: root.cardRevealStart
+        opacity: (root.frame >= root.cardRevealStart && root.frame < root.hideAbs) ? 1.0 : 0.0
         visible: opacity > 0
     }
 
