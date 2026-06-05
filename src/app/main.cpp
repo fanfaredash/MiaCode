@@ -926,6 +926,13 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
         QStringLiteral("Prepend the maimai track-start intro (full-range exports only).")
     ));
     parser.addOption(QCommandLineOption(
+        QStringLiteral("preview-seconds"),
+        QStringLiteral("Dev: render only the first N seconds of output (e.g. to preview "
+                       "the intro without rendering the whole chart). 0 = full."),
+        QStringLiteral("seconds"),
+        QStringLiteral("0")
+    ));
+    parser.addOption(QCommandLineOption(
         QStringLiteral("smooth-brightness"),
         QStringLiteral("Enable smooth brightness in output video.")
     ));
@@ -1104,6 +1111,11 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     request.showObjectStatsHud = parser.isSet(QStringLiteral("show-object-stats"));
     request.showChartInfoHud = parser.isSet(QStringLiteral("show-chart-info"));
     request.addIntro = parser.isSet(QStringLiteral("intro"));
+    {
+        bool previewOk = false;
+        const double previewSeconds = parser.value(QStringLiteral("preview-seconds")).toDouble(&previewOk);
+        request.previewMaxOutputSeconds = (previewOk && previewSeconds > 0.0) ? previewSeconds : 0.0;
+    }
     request.smoothBrightness = parser.isSet(QStringLiteral("smooth-brightness"));
     request.backgroundBrightnessOuter = outerBrightness;
     request.backgroundBrightnessInner = innerBrightness;

@@ -154,6 +154,7 @@ public:
         bool showObjectStatsHud = false;
         bool showChartInfoHud = false;
         bool addIntro = false;
+        double previewMaxOutputSeconds = 0.0;  // 0 = full; >0 caps output (intro preview)
         miacode::preview_gameplay::CenterDisplayMode centerDisplayMode =
             miacode::preview_gameplay::kDefaultCenterDisplayMode;
         bool smoothBrightness = miacode::preview_video::kSmoothBrightnessDefault;

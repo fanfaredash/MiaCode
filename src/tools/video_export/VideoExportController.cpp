@@ -3211,7 +3211,14 @@ VideoExportResult VideoExportController::exportPreparedTask(
         return result;
     }
 
-    const int frameCount = audioRenderPlan.frameCount;
+    const int fullFrameCount = audioRenderPlan.frameCount;
+    // Dev preview cap: render only the leading frames (intro preview) when
+    // task.previewMaxOutputSeconds > 0, leaving the audio/intro plan untouched so
+    // timing matches a real export. -shortest (added below) trims the mux.
+    const bool previewCapped = task.previewMaxOutputSeconds > 0.0;
+    const int frameCount = previewCapped
+        ? qBound(1, qRound(task.previewMaxOutputSeconds * qMax(1, task.fps)), fullFrameCount)
+        : fullFrameCount;
     const double alignedTotalSeconds = audioRenderPlan.alignedTotalSeconds;
     const double timelineOriginSecond = audioRenderPlan.timelineOriginSecond;
     const bool partialRangeExport = !task.fullRangeExport;
@@ -3813,6 +3820,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
          // collapses, so 96k is our floor.
          << QStringLiteral("%1k")
                 .arg(qBound(96, task.audioBitrateKbps, 320));
+    if (previewCapped) {
+        // -frames:v already stops the video at the capped count; -shortest trims the
+        // (still full-length) audio so the preview output ends with the video.
+        args << QStringLiteral("-shortest");
+    }
     if (encoderConfig.explicitBframes >= 0) {
         args << QStringLiteral("-bf") << QString::number(encoderConfig.explicitBframes);
     }

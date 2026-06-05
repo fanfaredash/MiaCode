@@ -952,6 +952,7 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     }
     task.centerDisplayMode = request.centerDisplayMode;
     task.outputPath = outputPath;
+    task.previewMaxOutputSeconds = request.previewMaxOutputSeconds;
     task.intro = buildIntroBannerSpec(
         owner_.document_,
         difficultyId,

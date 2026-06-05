@@ -66,6 +66,12 @@ struct VideoExportTask {
     int outputWidth = 1024;
     int outputHeight = 1024;
     int fps = 60;
+    // Dev/iteration: cap the rendered output to the first N seconds (0 = full).
+    // Only the leading frames are rendered and the mux is trimmed (-shortest), so
+    // the intro can be previewed without rendering the whole chart. The intro/audio
+    // plan is unchanged (still full-range), so timing is identical to a real export.
+    // Wired from CLI --preview-seconds.
+    double previewMaxOutputSeconds = 0.0;
     // AAC audio bitrate in kbps. Allowed values are surfaced in the
     // export dialog dropdown (128/160/192/256/320). The default of 192
     // is one step above the previous hard-coded 160k baseline — slight
