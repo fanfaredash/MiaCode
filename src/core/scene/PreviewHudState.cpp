@@ -47,7 +47,8 @@ QString persistedHudFontPath()
         return QString();
     }
     const QFileInfo info(path);
-    if (!info.isFile() || info.suffix().compare(QStringLiteral("ttf"), Qt::CaseInsensitive) != 0) {
+    const QString suffix = info.suffix().toLower();
+    if (!info.isFile() || (suffix != QStringLiteral("ttf") && suffix != QStringLiteral("otf"))) {
         return QString();
     }
     return info.absoluteFilePath();
@@ -233,6 +234,11 @@ PreviewHudStats computePreviewHudStats(const QVector<TimelineNoteMarker>& noteMa
     result.slidePlayed = stats.slidePlayed;
     result.touchPlayed = stats.touchPlayed;
     result.breakPlayed = stats.breakPlayed;
+    result.tapTotal = stats.tapTotal;
+    result.holdTotal = stats.holdTotal;
+    result.slideTotal = stats.slideTotal;
+    result.touchTotal = stats.touchTotal;
+    result.breakTotal = stats.breakTotal;
     result.combo =
         stats.tapPlayed + stats.holdPlayed + stats.slidePlayed + stats.touchPlayed + stats.breakPlayed;
     result.totalNotes =

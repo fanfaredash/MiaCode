@@ -1656,6 +1656,10 @@ int main(int argc, char* argv[])
     app.setWindowIcon(appIcon);
     app.setStyle(QStyleFactory::create("Fusion"));
     UiTheme::applyApplicationTheme(app);
+    // Keep the tooltip fade effect, but disable the slide/scroll animation (on
+    // Windows these mirror the OS tooltip fade/animate effects).
+    QApplication::setEffectEnabled(Qt::UI_FadeTooltip, true);
+    QApplication::setEffectEnabled(Qt::UI_AnimateTooltip, false);
     logStartupStage("app_style_ready");
 
     if (UiText::isChineseUi()) {

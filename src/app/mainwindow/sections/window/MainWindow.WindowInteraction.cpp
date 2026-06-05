@@ -496,6 +496,46 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         }
     }
 
+    // Per-widget opt-in tooltips: any widget can re-enable its own tooltip past
+    // the global suppression by setting the dynamic property "miacodeAllowTooltip"
+    // (e.g. the export dialog's "添加片头 (?)" help badge). Such a badge is usually
+    // a lone allowed widget surrounded by suppressed ones, and relying on Qt's
+    // default ToolTip delivery is unreliable there (an adjacent suppressed widget's
+    // hideText()+return-true poisons Qt's tooltip session). So we drive the opt-in
+    // tooltip ourselves:
+    //   - show it eagerly on hover-enter and on click, not only after the long
+    //     standard hover delay;
+    //   - wrap the body in a fixed-width rich-text cell so long help text wraps
+    //     instead of stretching into one very wide strip.
+    const bool isOptInTooltipWidget =
+        watchedWidget != nullptr
+        && watchedWidget->property("miacodeAllowTooltip").toBool();
+    if (isOptInTooltipWidget
+        && event != nullptr
+        && (event->type() == QEvent::Enter
+            || event->type() == QEvent::MouseButtonPress
+            || event->type() == QEvent::ToolTip)) {
+        const QString body = watchedWidget->toolTip();
+        if (!body.isEmpty()) {
+            constexpr int kOptInTooltipWidthPx = 300;
+            // A <td width=...> cell is the reliable way to bound tooltip width in
+            // Qt's rich-text engine; word-wrap then happens inside that width.
+            const QString wrapped =
+                QStringLiteral("<table><tr><td width=\"%1\">%2</td></tr></table>")
+                    .arg(kOptInTooltipWidthPx)
+                    .arg(body.toHtmlEscaped());
+            const QPoint globalPos = event->type() == QEvent::ToolTip
+                ? static_cast<QHelpEvent*>(event)->globalPos()
+                : QCursor::pos();
+            QToolTip::showText(globalPos, wrapped, watchedWidget);
+        }
+        // Consume only the standard ToolTip event (we fully own its display); let
+        // Enter/clicks fall through to any other normal handling.
+        if (event->type() == QEvent::ToolTip) {
+            return true;
+        }
+    }
+
     if (event != nullptr && event->type() == QEvent::ToolTip) {
         const bool allowPreviewTooltip =
             widgetMatchesOrDescendsFrom(watchedWidget, owner_.previewPanel_)

@@ -15,6 +15,11 @@ struct PreviewHudStats {
     int slidePlayed = 0;
     int touchPlayed = 0;
     int breakPlayed = 0;
+    int tapTotal = 0;
+    int holdTotal = 0;
+    int slideTotal = 0;
+    int touchTotal = 0;
+    int breakTotal = 0;
     int combo = 0;
     int totalNotes = 0;
     int dxScore = 0;

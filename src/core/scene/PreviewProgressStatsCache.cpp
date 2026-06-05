@@ -363,6 +363,14 @@ PreviewObjectStatsSnapshot PreviewProgressStatsCache::snapshotAt(double second) 
 PreviewHudStats PreviewProgressStatsCache::hudStatsAt(double second) const
 {
     PreviewHudStats stats;
+    stats.tapTotal = totals_.tapTotal;
+    stats.holdTotal = totals_.holdTotal;
+    stats.slideTotal = totals_.slideTotal;
+    stats.touchTotal = totals_.touchTotal;
+    stats.breakTotal = totals_.breakTotal;
+    stats.totalNotes = totals_.totalCount;
+    stats.dxScoreMax = totals_.totalCount * 3;
+    stats.deluxeBreakTotal = deluxeBreakTotal_;
     const qsizetype index = lastPrefixIndexAt(hudEventPrefixes_, second);
     if (index < 0) {
         return stats;
@@ -374,6 +382,11 @@ PreviewHudStats PreviewProgressStatsCache::hudStatsAt(double second) const
     stats.slidePlayed = prefix.slidePlayed;
     stats.touchPlayed = prefix.touchPlayed;
     stats.breakPlayed = prefix.breakPlayed;
+    stats.tapTotal = totals_.tapTotal;
+    stats.holdTotal = totals_.holdTotal;
+    stats.slideTotal = totals_.slideTotal;
+    stats.touchTotal = totals_.touchTotal;
+    stats.breakTotal = totals_.breakTotal;
     stats.combo = prefix.tapPlayed + prefix.holdPlayed + prefix.slidePlayed + prefix.touchPlayed + prefix.breakPlayed;
     stats.totalNotes = totals_.totalCount;
     stats.dxScore = stats.combo * 3;

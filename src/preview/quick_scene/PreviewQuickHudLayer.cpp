@@ -13,6 +13,8 @@
 #include <QQuickWindow>
 #include <QTimer>
 
+#include <cmath>
+
 namespace {
 
 bool aspectRatioNear(qreal actual, qreal expected)
@@ -79,12 +81,14 @@ void drawOutlinedHudText(
     path.addText(baseline, font, text);
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, true);
+    // Soft drop shadow, approximating MajdataPlay's TMP underlay (black, offset, softened).
     painter.translate(outlineWidth * 0.45, outlineWidth * 0.55);
-    painter.setPen(QPen(QColor(0, 0, 0, 145), outlineWidth * 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setPen(QPen(QColor(0, 0, 0, 110), outlineWidth * 1.3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.setBrush(Qt::NoBrush);
     painter.drawPath(path);
     painter.translate(-outlineWidth * 0.45, -outlineWidth * 0.55);
-    painter.setPen(QPen(QColor(235, 239, 244, 245), outlineWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    // Thin neutral-grey rim (matches TMP _OutlineColor rgb(185,185,185)), not a bright white halo.
+    painter.setPen(QPen(QColor(185, 185, 185, 235), outlineWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.drawPath(path);
     painter.setPen(Qt::NoPen);
     painter.setBrush(fillColor);
@@ -94,7 +98,9 @@ void drawOutlinedHudText(
 
 QString formatCenterAchievement(double value)
 {
-    return QStringLiteral("%1%").arg(QString::number(value, 'f', 4));
+    // Match MajdataPlay: truncate (floor) to 4 decimals, never round up.
+    const double truncated = std::floor(value * 10000.0) / 10000.0;
+    return QStringLiteral("%1%").arg(QString::number(truncated, 'f', 4));
 }
 
 QString centerDisplayTitle(miacode::preview_gameplay::CenterDisplayMode mode)
@@ -123,7 +129,8 @@ QString centerDisplayValue(
 {
     switch (mode) {
     case miacode::preview_gameplay::CenterDisplayMode::Combo:
-        return QString::number(stats.combo);
+        // MajdataPlay hides the whole displayer while combo is 0.
+        return stats.combo == 0 ? QString() : QString::number(stats.combo);
     case miacode::preview_gameplay::CenterDisplayMode::AchievementDxPlus:
         return formatCenterAchievement(stats.deluxeRate);
     case miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus100:
@@ -141,6 +148,67 @@ QString centerDisplayValue(
     case miacode::preview_gameplay::CenterDisplayMode::Off:
     default:
         return QString();
+    }
+}
+
+// MajdataPlay's ObjectCounter color palette (achievement tiers via UpdateAchievementColor).
+QColor achievementTierColor(double rate)
+{
+    if (rate >= 100.0) {
+        return QColor(200, 159, 109);  // gold
+    }
+    if (rate >= 97.0) {
+        return QColor(159, 159, 159);  // silver
+    }
+    if (rate >= 80.0) {
+        return QColor(127, 48, 32);  // bronze
+    }
+    return QColor(63, 127, 176);  // dud / blue
+}
+
+QColor centerDisplayValueColor(
+    miacode::preview_gameplay::CenterDisplayMode mode,
+    const miacode::preview::scene::PreviewHudStats& stats)
+{
+    using Mode = miacode::preview_gameplay::CenterDisplayMode;
+    switch (mode) {
+    case Mode::Combo:
+        return QColor(186, 62, 118);
+    case Mode::AchievementDxPlus:
+        return achievementTierColor(stats.deluxeRate);
+    case Mode::AchievementDxMinus100:
+        return achievementTierColor(stats.deluxeBreakTotal > 0
+            ? 100.0 + static_cast<double>(stats.deluxeBreakCurrent) / stats.deluxeBreakTotal
+            : 100.0);
+    case Mode::AchievementDxMinus101:
+        return achievementTierColor(101.0);
+    case Mode::DxScorePlus:
+    case Mode::DxScoreMinus:
+        return QColor(63, 176, 63);
+    case Mode::AchievementFinalePlus:
+        return achievementTierColor(stats.finaleRate);
+    case Mode::Off:
+    default:
+        return QColor(186, 62, 118);
+    }
+}
+
+QColor centerDisplayHeaderColor(miacode::preview_gameplay::CenterDisplayMode mode)
+{
+    using Mode = miacode::preview_gameplay::CenterDisplayMode;
+    switch (mode) {
+    case Mode::DxScorePlus:
+    case Mode::DxScoreMinus:
+        return QColor(63, 176, 63);
+    case Mode::AchievementDxPlus:
+    case Mode::AchievementDxMinus100:
+    case Mode::AchievementDxMinus101:
+    case Mode::AchievementFinalePlus:
+        return QColor(200, 159, 109);
+    case Mode::Combo:
+    case Mode::Off:
+    default:
+        return QColor(186, 62, 118);
     }
 }
 
@@ -613,11 +681,12 @@ void paintPreviewHudOverlay(
             .arg(QString::number(stats.deluxeRate, 'f', 4).rightJustified(8, QChar('0')));
         statLines = QStringList{
             finaleLine,
-            QStringLiteral("TAP: %1").arg(stats.tapPlayed),
-            QStringLiteral("HLD: %1").arg(stats.holdPlayed),
-            QStringLiteral("SLD: %1").arg(stats.slidePlayed),
-            QStringLiteral("TOH: %1").arg(stats.touchPlayed),
-            QStringLiteral("BRK: %1").arg(stats.breakPlayed),
+            QStringLiteral("TAP: %1/%2").arg(stats.tapPlayed).arg(stats.tapTotal),
+            QStringLiteral("HLD: %1/%2").arg(stats.holdPlayed).arg(stats.holdTotal),
+            QStringLiteral("SLD: %1/%2").arg(stats.slidePlayed).arg(stats.slideTotal),
+            QStringLiteral("TOH: %1/%2").arg(stats.touchPlayed).arg(stats.touchTotal),
+            QStringLiteral("BRK: %1/%2").arg(stats.breakPlayed).arg(stats.breakTotal),
+            QStringLiteral("ALL: %1/%2").arg(stats.combo).arg(stats.totalNotes),
         };
 
         int maxStatWidth = 0;
@@ -695,9 +764,12 @@ void paintCenterDisplay(
         return;
     }
     const QRectF stageRect = miacode::preview::scene::stageRectForSize(canvasSize);
-    constexpr qreal kHudReferenceShortSide = 1024.0;
-    const qreal shortSide = qMin(stageRect.width(), stageRect.height());
-    const qreal hudScale = qMax<qreal>(0.1, shortSide / kHudReferenceShortSide);
+    // Size/position the center display in the playfield's 1080 logical space, the same
+    // design space MajdataPlay's CenterInfoDisplayer lives in, so it tracks the notes ring
+    // (and the "Stage Display Scale" / layoutSquareScale) instead of the stage HUD reference.
+    const QRectF playRect =
+        miacode::preview::scene::playfieldRectForStage(stageRect, state.render.layoutSquareScale);
+    const qreal playShort = qMax<qreal>(1.0, qMin(playRect.width(), playRect.height()));
     const double hudPlayheadSeconds = qIsFinite(state.hudPlayheadSecondsOverride)
         ? state.hudPlayheadSecondsOverride
         : state.playheadSeconds;
@@ -710,28 +782,39 @@ void paintCenterDisplay(
     if (title.isEmpty() || value.isEmpty()) {
         return;
     }
-    const int titlePointSize = qMax(1, qRound(34.0 * hudScale));
-    const int valuePointSize = qMax(1, qRound(58.0 * hudScale));
-    QFont titleFont = miacode::preview::scene::previewHudTimestampFont(titlePointSize, QFont::Black);
-    QFont valueFont = miacode::preview::scene::previewHudTimestampFont(valuePointSize, QFont::Black);
-    titleFont.setLetterSpacing(QFont::PercentageSpacing, 98.0);
+    // MajdataPlay reference (1080 design space): value TMP fontSize 65, header 44,
+    // header centered below the value (which is centered on the playfield centre).
+    // MajdataPlay puts the header 137.3px below; we pull it up to 2/3 that gap (~91.5px).
+    const int valuePixelSize = qMax(1, qRound(65.0 / 1080.0 * playShort));
+    const int titlePixelSize = qMax(1, qRound(44.0 / 1080.0 * playShort));
+    const qreal headerCenterOffsetY = (137.3 * 2.0 / 3.0) / 1080.0 * playShort;
+
+    QFont titleFont = miacode::preview::scene::previewHudTimestampFont(titlePixelSize, QFont::Black);
+    titleFont.setPixelSize(titlePixelSize);
+    QFont valueFont = miacode::preview::scene::previewHudTimestampFont(valuePixelSize, QFont::Black);
+    valueFont.setPixelSize(valuePixelSize);
     const QFontMetricsF titleMetrics(titleFont);
     const QFontMetricsF valueMetrics(valueFont);
-    const qreal gap = qMax<qreal>(2.0, 4.0 * hudScale);
-    const qreal totalHeight = titleMetrics.height() + gap + valueMetrics.height();
-    const qreal titleBaselineY =
-        stageRect.center().y() - (totalHeight / 2.0) + titleMetrics.ascent();
-    const qreal valueBaselineY =
-        titleBaselineY + titleMetrics.descent() + gap + valueMetrics.ascent();
-    const QPointF titleBaseline(
-        stageRect.center().x() - (titleMetrics.horizontalAdvance(title) / 2.0),
-        titleBaselineY);
+
+    const QPointF center = playRect.center();
+    // Value glyph visually centered on the playfield centre.
+    const qreal valueBaselineY = center.y() + (valueMetrics.ascent() - valueMetrics.descent()) / 2.0;
     const QPointF valueBaseline(
-        stageRect.center().x() - (valueMetrics.horizontalAdvance(value) / 2.0),
+        center.x() - valueMetrics.horizontalAdvance(value) / 2.0,
         valueBaselineY);
-    const QColor fillColor(198, 70, 111);
-    drawOutlinedHudText(painter, titleBaseline, title, titleFont, qMax<qreal>(2.0, 4.0 * hudScale), fillColor);
-    drawOutlinedHudText(painter, valueBaseline, value, valueFont, qMax<qreal>(3.0, 5.5 * hudScale), fillColor);
+    // Header label centered horizontally, sitting below the value.
+    const qreal headerCenterY = center.y() + headerCenterOffsetY;
+    const qreal titleBaselineY = headerCenterY + (titleMetrics.ascent() - titleMetrics.descent()) / 2.0;
+    const QPointF titleBaseline(
+        center.x() - titleMetrics.horizontalAdvance(title) / 2.0,
+        titleBaselineY);
+
+    const QColor valueColor = centerDisplayValueColor(state.render.centerDisplayMode, stats);
+    const QColor titleColor = centerDisplayHeaderColor(state.render.centerDisplayMode);
+    drawOutlinedHudText(painter, titleBaseline, title, titleFont,
+        qMax<qreal>(1.5, titlePixelSize * 0.05), titleColor);
+    drawOutlinedHudText(painter, valueBaseline, value, valueFont,
+        qMax<qreal>(2.0, valuePixelSize * 0.05), valueColor);
 }
 
 }  // namespace miacode::preview::hud
