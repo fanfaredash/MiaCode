@@ -153,6 +153,7 @@ public:
         bool showTimestamp = true;
         bool showObjectStatsHud = false;
         bool showChartInfoHud = false;
+        bool addIntro = false;
         miacode::preview_gameplay::CenterDisplayMode centerDisplayMode =
             miacode::preview_gameplay::kDefaultCenterDisplayMode;
         bool smoothBrightness = miacode::preview_video::kSmoothBrightnessDefault;

@@ -814,6 +814,20 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     }
 
     owner_.refreshTimelineMetadata();
+    // The timeline marker parse runs on a worker thread and delivers its result
+    // through a queued (event-loop) call; difficulty switching also defers work via
+    // QTimer::singleShot(0). The CLI has no running event loop, so pump events until
+    // the markers populate (bounded) — otherwise the check below always sees empty.
+    {
+        QElapsedTimer markerWaitTimer;
+        markerWaitTimer.start();
+        constexpr int kMarkerWaitTimeoutMs = 15000;
+        while (owner_.latestTimelineNoteMarkers_.isEmpty()
+               && markerWaitTimer.elapsed() < kMarkerWaitTimeoutMs) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            QThread::msleep(5);
+        }
+    }
     if (owner_.latestTimelineNoteMarkers_.isEmpty()) {
         return fail(QStringLiteral("no parsed note markers for requested difficulty"));
     }
@@ -925,6 +939,12 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     }
     task.centerDisplayMode = request.centerDisplayMode;
     task.outputPath = outputPath;
+    task.intro = buildIntroBannerSpec(
+        owner_.document_,
+        difficultyId,
+        chartPath,
+        request.addIntro,
+        fullRangeExport);
     task.clockCount = miacode::chart_clock::clockCountFromDocument(owner_.document_);
     if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId)) {
         task.clockBpm = miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart);

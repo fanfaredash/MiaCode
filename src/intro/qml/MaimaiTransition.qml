@@ -32,6 +32,11 @@ Item {
     // Skip this many enter-phase frames at the start of the current cycle.
     property int enterTrimFrames: 0
 
+    // Real frames the current cycle should occupy. The inner animation is authored
+    // across `cycleDuration` (123) frames; setting a different span time-scales the
+    // whole cycle (e.g. 154 to stretch a cycle to the 2.567s 转场.mp4). <=0 -> 1:1.
+    property int cycleSpanFrames: 123
+
     // ---------- Native geometry (extracted PNGs are 1920x1080) ----------
     readonly property real layerW: 1920
     readonly property real layerH: 1080
@@ -76,7 +81,10 @@ Item {
 
     function localFrame() {
         if (cycleStartFrame < 0) return -1
-        return frame - cycleStartFrame + enterTrimFrames
+        // Time-scale the inner 0..cycleDuration animation across cycleSpanFrames
+        // real frames, then offset by enterTrimFrames (in inner-frame units).
+        var span = cycleSpanFrames > 0 ? cycleSpanFrames : cycleDuration
+        return (frame - cycleStartFrame) * (cycleDuration / span) + enterTrimFrames
     }
 
     // ---------- Base plate translate (TL: −baseOffX,−baseOffY; BR: mirror) ----------
@@ -203,13 +211,18 @@ Item {
     }
 
     function chipOutState(t) {
-        // Keyframes: [pct, scale, opacity] — no rotation during exit.
+        // Exit = scale up while fading out, with the OPACITY reaching 0 BEFORE the
+        // base-plate retract opens the centre to the black playfield (~t 0.32 here,
+        // = the retract onset). The 滴拉熊 centre is transparent, so once the centre
+        // uncovers black, ANY drawn chip (op>0) reads as a black-filled bear through
+        // that hole. Fading to 0 first means the bear has popped + dissolved over the
+        // lavender pattern and is GONE before the reveal — no black bear.
+        // Keyframes: [pct, scale, opacity].
         var k = [
             [0.00, 1.00, 1.00],
-            [0.30, 0.82, 1.00],
-            [0.50, 2.20, 0.65],
-            [0.70, 3.40, 0.30],
-            [0.85, 4.20, 0.05],
+            [0.12, 1.35, 0.55],
+            [0.22, 1.70, 0.22],
+            [0.32, 2.05, 0.00],
             [1.00, 4.60, 0.00]
         ]
         for (var i = 1; i < k.length; i++) {

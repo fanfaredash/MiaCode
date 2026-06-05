@@ -2,31 +2,34 @@
 
 namespace miacode::intro {
 
-// IntroOverlay.qml authors its whole timeline in 60-fps frames; its
-// durationFrames == cycle2End(291) + bgHoldFrames(12) + bgRevealFrames(18) == 321
-// (the cycle-2 wipe ends at 291, then a black hold + a fade-from-black on the
-// chart background). KEEP IN SYNC with src/intro/qml/IntroOverlay.qml — if the
-// QML timeline length changes, update kDurationFrames here too.
+// IntroOverlay.qml authors its whole timeline in 60-fps frames. The overlay
+// window == durationFrames == cycle2End == 349 (the cycle-2 wipe starts at 195
+// = 3.25 s and spans 154 frames = 2.567 s, retracting fully at 349 = 5.817 s,
+// which is also where the chart hands off / audio starts). The chart-background
+// fade-from-black (5.6 s → 6.6 s) is a downstream ffmpeg filter that deliberately
+// extends PAST this hand-off. KEEP IN SYNC with src/intro/qml/IntroOverlay.qml —
+// if the QML timeline length changes, update kDurationFrames here too.
 inline constexpr int kAuthoringFps = 60;
-inline constexpr int kDurationFrames = 321;
+inline constexpr int kDurationFrames = 349;
 inline constexpr double kDurationSeconds =
-    static_cast<double>(kDurationFrames) / static_cast<double>(kAuthoringFps);  // ~5.35 s
+    static_cast<double>(kDurationFrames) / static_cast<double>(kAuthoringFps);  // ~5.82 s
 
-// Chart-background fade-from-black. Applied to the ffmpeg BACKGROUND base (so the
-// playfield outline + HUD, which live in the QSG overlay, are unaffected) — NOT
-// in the QML overlay. The bg is black until the maimai wipe has retracted + a
-// short hold, then fades in. Authoring frame N maps to OUTPUT second N/kAuthoringFps.
-inline constexpr int kBgFadeStartFrame = 303;     // cycle2End(291) + black hold(12)
-inline constexpr int kBgFadeDurationFrames = 18;  // ~0.30 s fade
-inline constexpr double kBgFadeStartSeconds =
-    static_cast<double>(kBgFadeStartFrame) / static_cast<double>(kAuthoringFps);     // ~5.05 s
+// Chart-background ("曲绘") fade-from-black. Applied to the ffmpeg BACKGROUND base
+// (so the playfield outline + HUD, which live in the QSG overlay, are unaffected)
+// — NOT in the QML overlay. The bg is held black through the covered intro and the
+// early part of the full-range lead-in preview, then fades from pure black to full
+// brightness, COMPLETING exactly at chart 0 (so the 曲绘 is full when the song +
+// clock_count start). Only the DURATION is fixed here; the start is computed in the
+// controller as (chart-0 output second − duration), i.e. anchored to the lead-in,
+// not a fixed frame. See the VideoExportController bg-fade filter.
+inline constexpr int kBgFadeDurationFrames = 60;  // 1.00 s fade, ending AT chart 0
 inline constexpr double kBgFadeDurationSeconds =
-    static_cast<double>(kBgFadeDurationFrames) / static_cast<double>(kAuthoringFps); // ~0.30 s
+    static_cast<double>(kBgFadeDurationFrames) / static_cast<double>(kAuthoringFps); // ~1.00 s
 
 // The maimai overlay covers the chart until its cycle-2 wipe fully retracts; the
 // HUD / timestamp are suppressed until this authoring frame, then shown over the
 // black/fading background (so they read as "unaffected" by the bg fade).
-inline constexpr int kHudRevealFrame = 291;       // == cycle2End
+inline constexpr int kHudRevealFrame = 349;       // == cycle2End (wipe fully retracted)
 
 // qrc locations (bundled via resources/intro.qrc + resources/app_icons.qrc).
 inline constexpr char kOverlayQmlUrl[] = "qrc:/intro/qml/IntroOverlay.qml";

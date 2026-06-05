@@ -3570,14 +3570,21 @@ VideoExportResult VideoExportController::exportPreparedTask(
         filterParts << QStringLiteral("[base_media]null[base_src]");
     }
 
-    // Intro background fade-from-black: black the BACKGROUND base until the maimai
-    // wipe has retracted + a short hold, then fade it in. This only touches [base]
-    // (the bg); the playfield outline + HUD are composited later as [overlay_src],
-    // so they read normally over the black/fading background. fade=t=in holds
-    // black before start_time, so the bg is black throughout the covered intro.
+    // Intro background fade-from-black: black the BACKGROUND base, then fade the
+    // "曲绘" in so it reaches full brightness EXACTLY at chart 0 (the song +
+    // clock_count start). chart 0 in output time is -timelineOriginSecond; the fade
+    // runs for kBgFadeDurationSeconds and ENDS there, so it plays out across the tail
+    // of the full-range lead-in preview (which runs on black before it). This only
+    // touches [base] (the bg); the playfield outline + HUD are composited later as
+    // [overlay_src], so they read normally over the black/fading background.
+    // fade=t=in holds black before start_time, so the bg is black throughout the
+    // covered intro and the early lead-in.
     if (introAudioEnabled) {
+        const double chartZeroOutputSecond = -timelineOriginSecond;
+        const double bgFadeStartSecond =
+            qMax(0.0, chartZeroOutputSecond - miacode::intro::kBgFadeDurationSeconds);
         filterParts << QStringLiteral("[base_src]fade=t=in:st=%1:d=%2:color=black[base]")
-                           .arg(QString::number(miacode::intro::kBgFadeStartSeconds, 'f', 6))
+                           .arg(QString::number(bgFadeStartSecond, 'f', 6))
                            .arg(QString::number(miacode::intro::kBgFadeDurationSeconds, 'f', 6));
     } else {
         filterParts << QStringLiteral("[base_src]null[base]");

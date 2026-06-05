@@ -259,6 +259,11 @@ bool buildVideoExportAudioRenderPlan(
     built.segmentStartSecond = qMax(0.0, task.exportStartSeconds);
     const double segmentDurationSeconds = qMax(0.0, task.contentDurationSeconds);
     built.segmentEndSecond = built.segmentStartSecond + segmentDurationSeconds;
+    // Full-range exports front-pad a 2 s count-down lead-in before chart 0 (the
+    // playfield previews chart-time -leadIn → 0 with the HUD ramping -2s → 0s). The
+    // maimai intro is an ADDITIONAL front-pad ON TOP of that lead-in: the wipe
+    // retract hands off to the live lead-in preview, which then runs out to chart 0
+    // (music + clock_count). So the intro does NOT replace the lead-in.
     built.leadInSeconds = task.fullRangeExport
         ? miacode::video_export::kLeadInSeconds
         : miacode::video_export::kPartialRangePreloadSeconds;
