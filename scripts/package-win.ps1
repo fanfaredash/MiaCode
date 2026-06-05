@@ -356,20 +356,15 @@ if (!(Test-Path $debugLauncherSrc)) {
 }
 Copy-Item $debugLauncherSrc (Join-Path $DistDir "Start_MiaCode_Debug.bat") -Force
 
-# Diagnostic launchers shipped alongside Start_MiaCode_Debug.bat so testers can
-# double-click them; each toggles env vars for a specific diagnostic:
-#   * Start_MiaCode_DisablePerPixelAlpha.bat → MIACODE_PREVIEW_DCOMP_PER_PIXEL_ALPHA=0
-#     (DComp per-pixel-alpha A/B; only relevant when DComp is enabled).
-#   * Start_MiaCode_ExportNoPboReadback.bat → MIACODE_EXPORT_DISABLE_PBO_READBACK=1.
-# (Start_MiaCode_FFmpegBackend.bat was removed — the Windows preview now decodes
-# via QtAVPlayer/FFmpeg, so QT_MEDIA_BACKEND no longer affects it.)
-foreach ($diagLauncher in @("Start_MiaCode_DisablePerPixelAlpha.bat", "Start_MiaCode_ExportNoPboReadback.bat")) {
-    $src = Join-Path $repoRoot "scripts\\$diagLauncher"
-    if (!(Test-Path $src)) {
-        throw "Missing required diagnostic launcher script: $src"
-    }
-    Copy-Item $src (Join-Path $DistDir $diagLauncher) -Force
-}
+# Diagnostic launchers were dropped in 0.5.0-beta: Start_MiaCode_Debug.bat is now
+# the only launcher shipped. Start_MiaCode_DisablePerPixelAlpha.bat (DComp
+# per-pixel-alpha A/B) and Start_MiaCode_ExportNoPboReadback.bat
+# (MIACODE_EXPORT_DISABLE_PBO_READBACK=1) probed regressions long since closed and
+# only confused testers about which .bat to double-click. The source files remain
+# under scripts/ for ad-hoc use; they're just no longer copied into DistDir (and
+# are asserted absent via $unexpectedPackagePaths below).
+# (Start_MiaCode_FFmpegBackend.bat was removed earlier — the Windows preview now
+# decodes via QtAVPlayer/FFmpeg, so QT_MEDIA_BACKEND no longer affects it.)
 
 # beta51: Start_MiaCode_Debug.bat is the only "normal" launcher shipped now.
 # The legacy QML launcher and the beta45 D3D11/Plugin/AsyncLog triage
@@ -602,11 +597,6 @@ $requiredPackagePaths = @(
     # Root: user-facing entry points + content + log dirs only.
     "MiaCode.exe",
     "Start_MiaCode_Debug.bat",
-    # diagnostic launchers (see comment block at the copy site).
-    "Start_MiaCode_DisablePerPixelAlpha.bat",
-    # beta57 export PBO-readback race triage launcher
-    # (MIACODE_EXPORT_DISABLE_PBO_READBACK=1).
-    "Start_MiaCode_ExportNoPboReadback.bat",
     "logs",
     "logs\\worker-hwnd",
     "assets\\SFX",
@@ -666,6 +656,10 @@ $unexpectedPackagePaths = @(
     "Start_MiaCode_DiagBypass.bat",
     "Start_MiaCode_SkipBoth.bat",
     "Start_MiaCode_QtPluginDiag.bat",
+    # 0.5.0-beta: the two remaining diagnostic launchers were dropped from the
+    # package (sources kept under scripts/). Assert they don't sneak back in.
+    "Start_MiaCode_DisablePerPixelAlpha.bat",
+    "Start_MiaCode_ExportNoPboReadback.bat",
     "logs\\quick-shell-beta",
     # No DLLs at root anymore — everything moved to app/.
     (Get-QtRuntimeDllName -BaseName "Qt6Core" -Config $Config),
