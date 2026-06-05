@@ -39,6 +39,7 @@
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QTabWidget>
 #include <QTimer>
 #include <QToolButton>
@@ -170,7 +171,7 @@ QVector<HudFontChoice> hudFontChoices()
 
     QDir dir(hudFontLibraryDirPath());
     const QFileInfoList files = dir.entryInfoList(
-        QStringList{QStringLiteral("*.ttf")},
+        QStringList{QStringLiteral("*.ttf"), QStringLiteral("*.otf")},
         QDir::Files | QDir::Readable,
         QDir::Name | QDir::IgnoreCase
     );
@@ -1390,21 +1391,18 @@ void VideoExportDialog::injectOwnerWiredSettings(QWidget* videoExtras, QWidget* 
 
 void VideoExportDialog::refreshDialogGeometry()
 {
-    // Clear any prior height lock first: a stale setMaximumHeight() from an
-    // earlier call would cap adjustSize() and prevent the dialog from growing
-    // to fit content added later (e.g. the injected Gameplay tab).
+    // Clear any prior height lock first so the content is measured freely.
     setMinimumHeight(0);
     setMaximumHeight(QWIDGETSIZE_MAX);
 
-    // A QTabWidget sizes its pane to the CURRENT page, not the tallest one.
-    // The dialog opens on the Output tab (shorter than Video/Gameplay), so the
-    // pane was sized for Output and the taller tabs' rows collided/overlapped
-    // when selected. Level every page to the tallest page's height (each page
-    // ends with a stretch, so shorter ones just gain trailing slack) — then the
-    // pane fits all tabs and nothing overlaps. Reset to 0 first so the measured
-    // hint reflects real content (not a stale floor from a previous call).
+    // Size the tab content area to the TALLEST tab, not the current one, so no
+    // tab's bottom rows get clipped. Measure each page's natural content height
+    // (reset its floor + activate its layout first), take the max, then floor
+    // every page to it (each page ends with a stretch, so shorter tabs just gain
+    // trailing slack — nothing overlaps).
+    int maxPageHeight = 0;
     if (settingsTabs_ != nullptr) {
-        int maxPageHeight = 0;
+        settingsTabs_->setMinimumHeight(0);
         for (int i = 0; i < settingsTabs_->count(); ++i) {
             QWidget* page = settingsTabs_->widget(i);
             if (page == nullptr) {
@@ -1430,8 +1428,33 @@ void VideoExportDialog::refreshDialogGeometry()
         l->activate();
     }
     adjustSize();
+    // Flush any deferred LayoutRequest on the tab widget so its internal stacked
+    // pane geometry is current before we read it for the chrome calculation
+    // below (otherwise the first call would measure a stale/zero pane height).
+    QCoreApplication::sendPostedEvents(settingsTabs_, QEvent::LayoutRequest);
     const int targetWidth = qMax(minimumWidth(), width());
-    const int targetHeight = sizeHint().height();
+    int targetHeight = sizeHint().height();
+
+    // sizeHint() under-reports here: QStyleSheetStyle does NOT fold the styled
+    // QTabWidget::pane padding (the 14px export override = 28px vertical) into
+    // the tab widget's sizeHint, so a sizeHint-locked dialog leaves the tallest
+    // tab clipped by that padding. Once the dialog is realized, the LIVE
+    // geometry of the internal stacked pane tells us the true chrome, so size
+    // from that instead: make the pane exactly tall enough for the tallest page.
+    //   targetHeight = maxPage + tabChrome + nonTabHeight
+    // where tabChrome = settingsTabs - stack, nonTabHeight = dialog - settingsTabs.
+    // Both terms are invariant under our own resize, so this is idempotent (a
+    // second pass computes the same height rather than collapsing back).
+    if (settingsTabs_ != nullptr && maxPageHeight > 0) {
+        if (QStackedWidget* stack = settingsTabs_->findChild<QStackedWidget*>()) {
+            if (stack->height() > 0 && settingsTabs_->height() > 0) {
+                const int tabChrome = qMax(0, settingsTabs_->height() - stack->height());
+                const int nonTabHeight = qMax(0, height() - settingsTabs_->height());
+                targetHeight = qMax(targetHeight, maxPageHeight + tabChrome + nonTabHeight);
+            }
+        }
+    }
+
     setMinimumHeight(targetHeight);
     setMaximumHeight(targetHeight);
     resize(targetWidth, targetHeight);
@@ -1612,17 +1635,18 @@ QString VideoExportDialog::importHudFontFromUser(QWidget* parent)
         parent != nullptr ? parent : this,
         uiText("dialog.video_export.option.import_hud_font", QStringLiteral("Import Font")),
         QString(),
-        QStringLiteral("TrueType Font (*.ttf)")
+        QStringLiteral("Font Files (*.ttf *.otf)")
     );
     if (selected.isEmpty()) {
         return QString();
     }
     const QFileInfo info(selected);
-    if (!info.isFile() || info.suffix().compare(QStringLiteral("ttf"), Qt::CaseInsensitive) != 0) {
+    const QString suffix = info.suffix().toLower();
+    if (!info.isFile() || (suffix != QStringLiteral("ttf") && suffix != QStringLiteral("otf"))) {
         QMessageBox::warning(
             parent != nullptr ? parent : this,
             uiText("dialog.video_export.option.import_hud_font", QStringLiteral("Import Font")),
-            uiText("dialog.video_export.error.invalid_hud_font", QStringLiteral("Please select a .ttf font file."))
+            uiText("dialog.video_export.error.invalid_hud_font", QStringLiteral("Please select a .ttf or .otf font file."))
         );
         return QString();
     }
@@ -1633,7 +1657,7 @@ QString VideoExportDialog::importHudFontFromUser(QWidget* parent)
         QMessageBox::warning(
             parent != nullptr ? parent : this,
             uiText("dialog.video_export.option.import_hud_font", QStringLiteral("Import Font")),
-            uiText("dialog.video_export.error.invalid_hud_font", QStringLiteral("Please select a .ttf font file."))
+            uiText("dialog.video_export.error.invalid_hud_font", QStringLiteral("Please select a .ttf or .otf font file."))
         );
         return QString();
     }
