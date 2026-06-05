@@ -53,6 +53,11 @@ public:
     );
 
 private:
+    // Banner-card payload (title/artist/designer/level/difficulty/bpm/mode/jacket)
+    // for the currently active difficulty — seeds VideoExportTask::intro so the
+    // export dialog's "Export Cover" can render the card without a full snapshot.
+    IntroBannerSpec buildActiveDifficultyIntroBannerSpec() const;
+
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;
     MainWindow::MainWindowState& state_;

@@ -202,6 +202,29 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   UI: File menu under "Save As" + toolbox "Bookmarks" submenu, both via the single
   `packAsZipAction_` (created in `setupMenusAndActions`, reused in the toolbox build).
 
+## 8c. Cover (difficulty-card) export — `src/tools/cover_export/`
+
+- Renders the maimai difficulty banner card (`src/intro/qml/MaimaiBannerCard.qml`,
+  the same card the intro pre-roll composites) to a single still image — the
+  program-internal port of `tools/intro_remotion/qml/render-banner-from-maidata.ps1`
+  + its `qml/exporter/main.cpp`.
+- Renderer (offscreen `QQuickView` + `grabWindow()`, no chart scene): `IntroCoverExporter.{h,cpp}`
+  (`miacode::cover_export::exportIntroCover`). Loads `qrc:/intro/qml/MaimaiBannerCard.qml`,
+  injects the parsed `:/intro/templates/maimai_banner.json` via `externalTemplate` +
+  the `IntroBannerSpec` fields via `trackOverrides`, renders frame 0 fully assembled
+  (`revealStartFrame` stays −1). Transparent → PNG (alpha); opaque → JPG over the card's
+  own blurred-jacket backdrop. Writes `card.jpg`/`card.png`, adding `(1)`,`(2)`… on collision.
+- Sub-dialog (size + transparent-bg toggle): `ExportCoverDialog.{h,cpp}`; size presets
+  mirror the video-export resolutions, seeded from the current video size, tracked
+  independently.
+- Entry slot: a "导出封面 / Export Cover" button on the **Font** tab of `VideoExportDialog`
+  (`VideoExportDialog::openExportCoverDialog`). It reuses `baseTask_.intro`
+  (`IntroBannerSpec`), which `MainWindow::ExportSection::onExportPreviewVideo` now seeds via
+  `buildActiveDifficultyIntroBannerSpec()` (wraps the `buildIntroBannerSpec` helper in
+  `MainWindow.ExportSnapshot.cpp`). Output dir = the configured video output's directory,
+  falling back to the chart dir. **Note:** the QML is reused as-is — no `intro.qrc` rebundle
+  needed (cf. the AUTORCC-stale caveat that only bites when *editing* `src/intro/qml/*.qml`).
+
 ## 9. Latency settings (BPM & offset) — `src/tools/latency/`
 
 - `LatencyDetectionPage.*`, `LatencyAnalysis.*`, `LatencySandboxController.*`,

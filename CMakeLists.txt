@@ -207,6 +207,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/VideoExportSnapshot.cpp
     src/tools/zip_export/ChartZipPackager.h
     src/tools/zip_export/ChartZipPackager.cpp
+    src/tools/cover_export/IntroCoverExporter.h
+    src/tools/cover_export/IntroCoverExporter.cpp
+    src/tools/cover_export/ExportCoverDialog.h
+    src/tools/cover_export/ExportCoverDialog.cpp
     src/preview/runtime/PreviewQuickExportSession.h
     src/preview/runtime/PreviewQuickExportSession.cpp
     src/preview/runtime/PreviewSceneAssetLoader.h

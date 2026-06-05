@@ -437,6 +437,9 @@ void MainWindow::ExportSection::onExportPreviewVideo()
         .arg(exportStem)
         .arg(difficultyName);
     task.outputPath = outputName;
+    // Seed the banner-card payload so the dialog's "Export Cover" can render the
+    // difficulty card without building a full export snapshot.
+    task.intro = buildActiveDifficultyIntroBannerSpec();
 
     const auto currentPreviewSecond = [this]() -> double {
         return qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond());

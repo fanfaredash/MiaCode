@@ -400,6 +400,19 @@ QString localizeExportWorkerMessageForUiLanguage(const QString& rawMessage)
 
 }  // namespace
 
+IntroBannerSpec MainWindow::ExportSection::buildActiveDifficultyIntroBannerSpec() const
+{
+    // addIntro/fullRange are forced true so every banner field (title/artist/
+    // designer/level/difficulty/bpm/jacket) is populated regardless of whether
+    // the intro pre-roll itself is enabled — the cover export reuses the payload.
+    return buildIntroBannerSpec(
+        owner_.document_,
+        owner_.activeDifficultyId_,
+        owner_.currentFilePath_,
+        /*addIntro=*/true,
+        /*fullRangeExport=*/true);
+}
+
 bool MainWindow::ExportSection::buildVideoExportSnapshot(
     const VideoExportTask& requestedTask,
     VideoExportSnapshot* snapshot,

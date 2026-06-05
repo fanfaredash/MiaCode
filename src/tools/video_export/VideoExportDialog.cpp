@@ -6,6 +6,8 @@
 #include "common/DebugLog.h"
 #include "common/PreviewInteractionConfig.h"
 #include "core/scene/PreviewHudState.h"
+#include "tools/cover_export/ExportCoverDialog.h"
+#include "tools/cover_export/IntroCoverExporter.h"
 #include "tools/video_export/VideoExportPreferences.h"
 
 #include <QAbstractItemView>
@@ -1212,6 +1214,36 @@ VideoExportDialog::VideoExportDialog(
     hudTogglesLayout->addWidget(showTimestampCheck_, 0, 1, Qt::AlignLeft | Qt::AlignVCenter);
     hudTogglesLayout->addWidget(showObjectStatsCheck_, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
     hudTogglesLayout->addWidget(showChartInfoCheck_, 1, 1, Qt::AlignLeft | Qt::AlignVCenter);
+
+    // "Add intro" toggle — an app-level preference (persisted via the dialog
+    // preferences). Lives at the bottom of the Video tab, aligned with the
+    // other overlay checkboxes above, with a "?" help badge that describes the
+    // current dev-status limitations on hover.
+    auto* introRow = new QWidget(hudToggles);
+    auto* introRowLayout = new QHBoxLayout(introRow);
+    introRowLayout->setContentsMargins(0, 0, 0, 0);
+    introRowLayout->setSpacing(6);
+    introRowLayout->addWidget(addIntroCheck_, 0, Qt::AlignVCenter);   // reparents to introRow
+    auto* introHelp = new QLabel(QStringLiteral("?"), introRow);
+    introHelp->setFixedSize(16, 16);
+    introHelp->setAlignment(Qt::AlignCenter);
+    introHelp->setCursor(Qt::WhatsThisCursor);
+    // Opt past the app-wide tooltip suppression (MainWindow installs a global
+    // event filter that hides tooltips outside the preview area).
+    introHelp->setProperty("miacodeAllowTooltip", true);
+    introHelp->setStyleSheet(QStringLiteral(
+        "QLabel { color: #FFFFFF; background: #6B6F7A; border-radius: 8px; font-weight: bold; font-size: 11px; }"));
+    introHelp->setToolTip(l10n(
+        QStringLiteral("Export intro is in development. Difficulties BAS-REM only; levels 1-99+ only "
+                       "(letters / Chinese not supported); very long titles or charter names render "
+                       "poorly; live preview is not yet supported."),
+        QStringLiteral("导出片头功能开发中，目前难度仅支持BAS~REM；等级仅支持1~99+，字母、汉字均不支持；"
+                       "过长的曲名、谱师效果会很差；暂时不支持在线预览效果。")));
+    introRowLayout->addWidget(introHelp, 0, Qt::AlignVCenter);
+    introRowLayout->addStretch(1);
+    hudTogglesLayout->addWidget(introRow, 2, 0, 1, 2, Qt::AlignLeft | Qt::AlignVCenter);
+    connect(addIntroCheck_, &QCheckBox::toggled, this, [this]() { persistExportOnlySettings(); });
+
     visualsPageLayout->addWidget(hudToggles, 0);
     visualsPageLayout->addStretch(1);
 
@@ -1231,11 +1263,24 @@ VideoExportDialog::VideoExportDialog(
     hudFontSettingsButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     fontPageLayout->addWidget(fontPageLabel, 0, Qt::AlignLeft);
     fontPageLayout->addWidget(hudFontSettingsButton_, 0, Qt::AlignLeft);
-    fontPageLayout->addStretch(1);
 
-    // "Add intro" is hidden per request: built so persisted state / export
-    // wiring keep working, but never shown and never added to a visible layout.
-    addIntroCheck_->hide();
+    // Cover export — renders the difficulty banner card to a still image. Parked
+    // on the Font tab for now (it shares no state with the HUD font picker).
+    auto* coverLabel = new QLabel(
+        l10n(QStringLiteral("Cover"), QStringLiteral("封面")),
+        fontPage
+    );
+    exportCoverButton_ = new QPushButton(
+        l10n(QStringLiteral("Export Cover"), QStringLiteral("导出封面")),
+        fontPage
+    );
+    exportCoverButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    fontPageLayout->addSpacing(8);
+    fontPageLayout->addWidget(coverLabel, 0, Qt::AlignLeft);
+    fontPageLayout->addWidget(exportCoverButton_, 0, Qt::AlignLeft);
+    fontPageLayout->addStretch(1);
+    connect(exportCoverButton_, &QPushButton::clicked, this, &VideoExportDialog::openExportCoverDialog);
+
     refreshAddIntroEnabledState();
 
     settingsTabs_->addTab(
@@ -1629,6 +1674,49 @@ void VideoExportDialog::openHudFontSettingsDialog()
     dialog.exec();
 }
 
+void VideoExportDialog::openExportCoverDialog()
+{
+    ExportCoverDialog dialog(selectedResolution(), this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    // The cover is written next to the configured video output (falling back to
+    // the chart directory), the same base the export resolves relative paths to.
+    const QString baseDirectory = exportBaseDirectory(baseTask_);
+    const QString resolvedOutput = resolveOutputPathForExport(
+        outputPathEdit_ != nullptr ? outputPathEdit_->text() : QString(),
+        baseDirectory
+    );
+    const QString outputDirectory = resolvedOutput.isEmpty()
+        ? baseDirectory
+        : QFileInfo(resolvedOutput).absolutePath();
+
+    const miacode::cover_export::CoverExportResult result =
+        miacode::cover_export::exportIntroCover(
+            baseTask_.intro,
+            dialog.selectedSize(),
+            dialog.transparentBackground(),
+            outputDirectory
+        );
+
+    if (result.success) {
+        QMessageBox::information(
+            this,
+            l10n(QStringLiteral("Export Cover"), QStringLiteral("导出封面")),
+            l10n(QStringLiteral("Cover exported:\n%1"), QStringLiteral("封面已导出：\n%1"))
+                .arg(QDir::toNativeSeparators(result.outputPath))
+        );
+    } else {
+        QMessageBox::warning(
+            this,
+            l10n(QStringLiteral("Export Cover"), QStringLiteral("导出封面")),
+            l10n(QStringLiteral("Cover export failed:\n%1"), QStringLiteral("封面导出失败：\n%1"))
+                .arg(result.errorMessage)
+        );
+    }
+}
+
 QString VideoExportDialog::importHudFontFromUser(QWidget* parent)
 {
     const QString selected = QFileDialog::getOpenFileName(
@@ -1725,6 +1813,13 @@ void VideoExportDialog::loadPersistedSettings()
     if (presetButton_ != nullptr) {
         presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
     }
+
+    // App-level "add intro" preference (persists across sessions).
+    if (addIntroCheck_ != nullptr) {
+        const QSignalBlocker blocker(addIntroCheck_);
+        addIntroCheck_->setChecked(
+            settings.value(QStringLiteral("add_intro")).toBool(addIntroCheck_->isChecked()));
+    }
 }
 
 void VideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
@@ -1735,6 +1830,8 @@ void VideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
     settings.insert(QStringLiteral("fps"), task.fps);
     settings.insert(QStringLiteral("audio_bitrate_kbps"), task.audioBitrateKbps);
     settings.insert(QStringLiteral("preset"), videoExportPresetToken(task.preset));
+    settings.insert(QStringLiteral("add_intro"),
+                    addIntroCheck_ != nullptr && addIntroCheck_->isChecked());
     miacode::video_export::saveDialogPreferences(settings);
 }
 
@@ -1746,6 +1843,8 @@ void VideoExportDialog::persistExportOnlySettings() const
     settings.insert(QStringLiteral("fps"), selectedFps_);
     settings.insert(QStringLiteral("audio_bitrate_kbps"), selectedAudioBitrateKbps_);
     settings.insert(QStringLiteral("preset"), videoExportPresetToken(selectedPreset_));
+    settings.insert(QStringLiteral("add_intro"),
+                    addIntroCheck_ != nullptr && addIntroCheck_->isChecked());
     miacode::video_export::saveDialogPreferences(settings);
 }
 
