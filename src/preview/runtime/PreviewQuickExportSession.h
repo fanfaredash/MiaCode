@@ -96,6 +96,10 @@ public:
 private:
     bool ensureFramebuffer(QString* errorMessage);
     bool ensureDirectReadbackBuffer(const QSize& imageSize, QString* errorMessage);
+    // Advance the synchronous readback staging ring and return the next slot.
+    QImage* nextReadbackRingSlot();
+    // Release every staging-ring buffer (called on teardown/reset).
+    void resetReadbackRing();
     bool convertBottomUpPremultipliedReadbackToStraightRgba(
         const uchar* sourceBytes,
         qsizetype sourceBytesPerRow,
@@ -143,7 +147,21 @@ private:
     QOpenGLContext* context_ = nullptr;
     QOpenGLFramebufferObject* framebuffer_ = nullptr;
     QByteArray directReadbackBuffer_;
-    QImage reusableReadbackFrame_;
+    // Synchronous (non-PBO) readback staging ring. The converted straight-RGBA
+    // frame is handed to the FFmpeg pipe via zero-copy (the pump keeps it alive
+    // through `packet.frameOwner`), so the buffer a frame was written into stays
+    // referenced while it is in flight. A single reused QImage would therefore
+    // be shared (refcount >= 2) on the next frame, forcing a copy-on-write
+    // detach inside scanLine() — an unchecked ~14 MiB reallocation that crashes
+    // on OOM and churns the heap every frame. Rotating through a small ring lets
+    // the slot we cycle back to already be drained (refcount 1, isDetached) so it
+    // is reused in place with no allocation; only if the pipe consumer fell
+    // behind (slot still in flight) does the convert step reallocate that slot —
+    // gracefully, via its checked allocation path. See
+    // convertBottomUpPremultipliedReadbackToStraightRgba().
+    static constexpr int kReadbackRingSize = 8;
+    QImage readbackRing_[kReadbackRingSize];
+    int readbackRingIndex_ = 0;
     GLuint offscreenReadbackPbos_[2] = {0, 0};
     // Per-PBO fence placed right after each glReadPixels(FBO→PBO) so
     // mapPboAndSubmitConvertJob can wait for that DMA to actually

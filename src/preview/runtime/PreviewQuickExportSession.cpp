@@ -113,7 +113,7 @@ void PreviewQuickExportSession::setFrameSize(const QSize& size)
     applyFrameSize();
     destroyFramebuffer();
     directReadbackBuffer_.clear();
-    reusableReadbackFrame_ = QImage();
+    resetReadbackRing();
 }
 
 bool PreviewQuickExportSession::initialize(
@@ -131,7 +131,7 @@ bool PreviewQuickExportSession::initialize(
     clearOffscreenReadbackPboState();
     clearOffscreenPboCapabilityCache();
     directReadbackBuffer_.clear();
-    reusableReadbackFrame_ = QImage();
+    resetReadbackRing();
     frameStateBound_ = false;
     layerFlagsApplied_ = false;
     appliedLayerFlags_ = miacode::preview::scene::kPreviewAllRenderLayers;
@@ -278,7 +278,7 @@ void PreviewQuickExportSession::invalidate()
         context_ = nullptr;
         offscreenSurface_ = nullptr;
         directReadbackBuffer_.clear();
-        reusableReadbackFrame_ = QImage();
+        resetReadbackRing();
         clearOffscreenPboCapabilityCache();
         frameStateBound_ = false;
         layerFlagsApplied_ = false;
@@ -306,7 +306,7 @@ void PreviewQuickExportSession::invalidate()
     clearOffscreenReadbackPboState();
     clearOffscreenPboCapabilityCache();
     directReadbackBuffer_.clear();
-    reusableReadbackFrame_ = QImage();
+    resetReadbackRing();
     frameStateBound_ = false;
     layerFlagsApplied_ = false;
     appliedLayerFlags_ = miacode::preview::scene::kPreviewAllRenderLayers;
@@ -365,18 +365,19 @@ QImage PreviewQuickExportSession::renderFrame(QString* errorMessage)
         directReadbackBuffer_.data()
     );
     gl->glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+    QImage* readbackSlot = nextReadbackRingSlot();
     if (!convertBottomUpPremultipliedReadbackToStraightRgba(
             reinterpret_cast<const uchar*>(directReadbackBuffer_.constData()),
             static_cast<qsizetype>(pixelSize.width()) * 4,
             pixelSize,
-            &reusableReadbackFrame_,
+            readbackSlot,
             errorMessage)) {
         context_->doneCurrent();
         return QImage();
     }
     lastRenderStats_.readbackNs = readbackTimer.nsecsElapsed();
     context_->doneCurrent();
-    return reusableReadbackFrame_;
+    return *readbackSlot;
 }
 
 bool PreviewQuickExportSession::supportsOffscreenPboReadback(QString* errorMessage) const
@@ -730,6 +731,21 @@ bool PreviewQuickExportSession::ensureDirectReadbackBuffer(const QSize& imageSiz
     return true;
 }
 
+QImage* PreviewQuickExportSession::nextReadbackRingSlot()
+{
+    QImage* slot = &readbackRing_[readbackRingIndex_];
+    readbackRingIndex_ = (readbackRingIndex_ + 1) % kReadbackRingSize;
+    return slot;
+}
+
+void PreviewQuickExportSession::resetReadbackRing()
+{
+    for (QImage& slot : readbackRing_) {
+        slot = QImage();
+    }
+    readbackRingIndex_ = 0;
+}
+
 bool PreviewQuickExportSession::convertBottomUpPremultipliedReadbackToStraightRgba(
     const uchar* sourceBytes,
     qsizetype sourceBytesPerRow,
@@ -758,9 +774,20 @@ bool PreviewQuickExportSession::convertBottomUpPremultipliedReadbackToStraightRg
         }
         return false;
     }
+    // Force a fresh, exclusively-owned buffer when the reused frame is still
+    // shared (e.g. the previous frame is in flight inside the FFmpeg pipe pump,
+    // which holds it via `packet.frameOwner`). Writing into a shared QImage
+    // would trigger an implicit copy-on-write detach *inside* scanLine() below,
+    // and that detach allocation has no error path: if it fails under memory
+    // pressure (long 2560x1440@120fps exports keep up to ~36 frames, each
+    // ~14 MiB, in flight) the QImage silently becomes null and scanLine()
+    // returns nullptr, so the per-pixel `dst[...] = ...` store faults on a
+    // near-null address. Allocating explicitly here routes any OOM through the
+    // checked isNull() path instead of crashing the export worker.
     if (frame->isNull()
         || frame->size() != safeSize
-        || frame->format() != QImage::Format_RGBA8888) {
+        || frame->format() != QImage::Format_RGBA8888
+        || !frame->isDetached()) {
         *frame = QImage(safeSize, QImage::Format_RGBA8888);
     }
     if (frame->isNull()) {
@@ -775,6 +802,16 @@ bool PreviewQuickExportSession::convertBottomUpPremultipliedReadbackToStraightRg
         const uchar* sourceRowBytes =
             sourceBytes + static_cast<qsizetype>(sourceRow) * sourceBytesPerRow;
         uchar* outputRow = frame->scanLine(row);
+        if (outputRow == nullptr) {
+            // Defensive: scanLine() can only return null here if the buffer
+            // lost its allocation (e.g. an OOM detach slipped through). Fail
+            // the frame cleanly instead of dereferencing a null row pointer.
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral(
+                    "Quick export readback scanLine returned null (out of memory?)");
+            }
+            return false;
+        }
         for (int x = 0; x < safeSize.width(); ++x) {
             const uchar* src = sourceRowBytes + x * 4;
             uchar* dst = outputRow + x * 4;
@@ -1089,11 +1126,12 @@ bool PreviewQuickExportSession::mapOffscreenReadbackPbo(
     }
 
     const uchar* sourceBytes = static_cast<const uchar*>(mapped);
+    QImage* readbackSlot = nextReadbackRingSlot();
     const bool normalized = convertBottomUpPremultipliedReadbackToStraightRgba(
         sourceBytes,
         bytesPerRow,
         safeSize,
-        &reusableReadbackFrame_,
+        readbackSlot,
         errorMessage
     );
     const bool unmapOk = extra->glUnmapBuffer(GL_PIXEL_PACK_BUFFER) == GL_TRUE;
@@ -1107,7 +1145,7 @@ bool PreviewQuickExportSession::mapOffscreenReadbackPbo(
         }
         return false;
     }
-    *frame = reusableReadbackFrame_;
+    *frame = *readbackSlot;
     return true;
 }
 
