@@ -17,6 +17,7 @@
 
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Window
 
 Item {
     id: root
@@ -46,6 +47,11 @@ Item {
     // composite the card over IntroOverlay's own blurred 曲绘 backdrop. Read from
     // the template (the vendored maimai_banner.json sets transparentBackground).
     property bool transparentBackground: (root.template && root.template.transparentBackground === true)
+
+    // Device-pixel ratio of the surface we render onto (2.0 on a HiDPI grab,
+    // 1.0 on a plain export). The jacket-frame snap below folds this in so the
+    // four edges land on whole DEVICE pixels, not just whole logical pixels.
+    readonly property real renderDpr: Math.max(1, Screen.devicePixelRatio)
 
     // Resolved jacket: the chart 曲绘 if present, else the miacode logo.
     readonly property url effectiveJacket:
@@ -388,11 +394,38 @@ Item {
             mipmap: true
         }
 
+        // Shared, device-pixel-snapped jacket rectangle. BOTH the clipped 曲绘
+        // (block 2) and the thin black frame (block 4b) read THIS one rect, so
+        // the frame's inset border always lands exactly on the jacket's clip
+        // edge — there is no per-edge mismatch. Previously the frame snapped its
+        // own rect while the jacket clipped at its raw sub-pixel edge; on the
+        // bottom/right the snap could fall just INSIDE the jacket, leaving a ~1
+        // device-px sliver of 曲绘 peeking past the frame. The card is scaled by a
+        // non-integer factor (geom.cardScale), so each edge is snapped in
+        // ABSOLUTE device space (folding in the fractional geom.cardX/Y AND the
+        // device-pixel ratio) and mapped back to card-native coords. (During the
+        // intro pop the snap is briefly broken — fine for that ~0.3 s transient;
+        // the still cover export has pop = identity.)
+        QtObject {
+            id: jacketBox
+            readonly property var jb: root.template.layout.jacketSlot
+            readonly property real s: geom.cardScale
+            readonly property real dpr: root.renderDpr
+            // native coord -> nearest device-pixel-aligned native coord (X / Y).
+            function snapX(n) { return (Math.round((geom.cardX + n * s) * dpr) / dpr - geom.cardX) / s }
+            function snapY(n) { return (Math.round((geom.cardY + n * s) * dpr) / dpr - geom.cardY) / s }
+            readonly property real nx:  snapX(jb.x)
+            readonly property real ny:  snapY(jb.y)
+            readonly property real nx2: snapX(jb.x + jb.w)
+            readonly property real ny2: snapY(jb.y + jb.h)
+            readonly property real bw: nx2 - nx
+            readonly property real bh: ny2 - ny
+        }
+
         // 2) Jacket inside the slot (on top of frame's black slot placeholder).
         Item {
             id: jacketSlot
-            property var b: root.template.layout.jacketSlot
-            x: b.x; y: b.y; width: b.w; height: b.h
+            x: jacketBox.nx; y: jacketBox.ny; width: jacketBox.bw; height: jacketBox.bh
             clip: true
             opacity: root.stageOpacity("jacket")
 
@@ -446,27 +479,18 @@ Item {
         // 4b) Thin black frame around the 曲绘/jacket. Declared AFTER the tab +
         // plates but BEFORE the LV pill, so its top edge isn't occluded by the
         // tab shoulder, while the pill still draws on top of the overlapped
-        // bottom-right corner. The card is scaled by a non-integer factor
-        // (geom.cardScale), so a plain stroke would land on fractional device
-        // pixels with uneven per-edge anti-aliasing. Fix: SNAP every edge to a
-        // whole device pixel in ABSOLUTE space (folding in the fractional
-        // geom.cardX/Y) and make the stroke 2/scale native = ~2 device px on all
-        // four sides. (During the intro pop the snap is briefly broken — fine for
-        // that ~0.3 s transient; the still cover export has pop = identity.)
+        // bottom-right corner. Reads the SAME device-snapped rect as the jacket
+        // slot (jacketBox), so the inset stroke hugs the jacket's clip edge on
+        // all four sides with no peeking sliver. Stroke is 2/scale native = ~2
+        // device px, drawn without AA so it stays crisp under geom.cardScale.
         Item {
-            property var jb: root.template.layout.jacketSlot
-            readonly property real s: geom.cardScale
-            readonly property real nx:  (Math.round(geom.cardX + jb.x * s) - geom.cardX) / s
-            readonly property real ny:  (Math.round(geom.cardY + jb.y * s) - geom.cardY) / s
-            readonly property real nx2: (Math.round(geom.cardX + (jb.x + jb.w) * s) - geom.cardX) / s
-            readonly property real ny2: (Math.round(geom.cardY + (jb.y + jb.h) * s) - geom.cardY) / s
-            x: nx; y: ny; width: nx2 - nx; height: ny2 - ny
+            x: jacketBox.nx; y: jacketBox.ny; width: jacketBox.bw; height: jacketBox.bh
             opacity: root.stageOpacity("jacket")
             Rectangle {
                 anchors.fill: parent
                 color: "transparent"
                 border.color: "#000000"
-                border.width: 2 / parent.s
+                border.width: 2 / jacketBox.s
                 antialiasing: false
             }
         }
