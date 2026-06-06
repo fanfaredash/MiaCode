@@ -52,21 +52,22 @@ Item {
         (jacketImage.toString().length > 0) ? jacketImage
                                             : (logoImage.toString().length > 0 ? logoImage : "")
 
-    // FontLoaders for the public-domain substitutes of the prefab's SEGA
-    // proprietary fonts. Noto Sans JP Black ≈ SEGA-NewRodinN v2 EB (display);
-    // M PLUS Rounded 1c Bold ≈ SEGA_MaruGothic-DB (body).
+    // FontLoaders for the free OFL substitute of the prefab's SEGA proprietary
+    // fonts. Resource Han Rounded CN (思源圆体, rounded Source Han) natively covers
+    // simplified Chinese (no system fallback) and approximates SEGA's rounded look.
+    // Title (display) uses Heavy for prominence; body uses Bold.
     FontLoader {
         id: displayFont
         source: Qt.resolvedUrl(
             (root.template.fontsRoot || "qrc:/intro/assets/fonts") + "/" +
-            (root.template.fonts ? root.template.fonts.display : "MPLUS1p-Black.ttf")
+            (root.template.fonts ? root.template.fonts.display : "ResourceHanRoundedCN-Heavy.ttf")
         )
     }
     FontLoader {
         id: bodyFont
         source: Qt.resolvedUrl(
             (root.template.fontsRoot || "qrc:/intro/assets/fonts") + "/" +
-            (root.template.fonts ? root.template.fonts.body : "MPLUSRounded1c-Bold.ttf")
+            (root.template.fonts ? root.template.fonts.body : "ResourceHanRoundedCN-Bold.ttf")
         )
     }
 
@@ -440,6 +441,34 @@ Item {
             visible: root.trackValue("mode") === "Standard"
             smooth: true
             mipmap: true
+        }
+
+        // 4b) Thin black frame around the 曲绘/jacket. Declared AFTER the tab +
+        // plates but BEFORE the LV pill, so its top edge isn't occluded by the
+        // tab shoulder, while the pill still draws on top of the overlapped
+        // bottom-right corner. The card is scaled by a non-integer factor
+        // (geom.cardScale), so a plain stroke would land on fractional device
+        // pixels with uneven per-edge anti-aliasing. Fix: SNAP every edge to a
+        // whole device pixel in ABSOLUTE space (folding in the fractional
+        // geom.cardX/Y) and make the stroke 2/scale native = ~2 device px on all
+        // four sides. (During the intro pop the snap is briefly broken — fine for
+        // that ~0.3 s transient; the still cover export has pop = identity.)
+        Item {
+            property var jb: root.template.layout.jacketSlot
+            readonly property real s: geom.cardScale
+            readonly property real nx:  (Math.round(geom.cardX + jb.x * s) - geom.cardX) / s
+            readonly property real ny:  (Math.round(geom.cardY + jb.y * s) - geom.cardY) / s
+            readonly property real nx2: (Math.round(geom.cardX + (jb.x + jb.w) * s) - geom.cardX) / s
+            readonly property real ny2: (Math.round(geom.cardY + (jb.y + jb.h) * s) - geom.cardY) / s
+            x: nx; y: ny; width: nx2 - nx; height: ny2 - ny
+            opacity: root.stageOpacity("jacket")
+            Rectangle {
+                anchors.fill: parent
+                color: "transparent"
+                border.color: "#000000"
+                border.width: 2 / parent.s
+                antialiasing: false
+            }
         }
 
         // 5) LV pill — sits between jacket and difficulty bar, right-aligned.

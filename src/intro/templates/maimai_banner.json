@@ -28,9 +28,9 @@
     "gridCols": 4
   },
   "fonts": {
-    "_comment": "Free public substitutes for SEGA proprietary fonts, both from the M PLUS family (paired by design). NewRodin EB (display) -> M PLUS 1p Black; MaruGothic DB (body) -> M PLUS Rounded 1c Bold. Qt's font fallback handles non-JP CJK via the system font (e.g. Yu Gothic UI / Microsoft YaHei).",
-    "display": "MPLUS1p-Black.ttf",
-    "body": "MPLUSRounded1c-Bold.ttf"
+    "_comment": "Resource Han Rounded CN (思源圆体, rounded Source Han, OFL) — covers full simplified Chinese natively (no system fallback) and approximates SEGA's MaruGothic rounded look. Title uses Heavy for prominence; body uses Bold. Replaced the prior M PLUS 1p Black / M PLUS Rounded 1c Bold pair.",
+    "display": "ResourceHanRoundedCN-Heavy.ttf",
+    "body": "ResourceHanRoundedCN-Bold.ttf"
   },
   "assets": {
     "frame": {
@@ -59,10 +59,11 @@
   },
   "layout": {
     "_comment": "Coords in card-native (420x636). From prefab MusicBase + descendants, with parent-pivot offsets folded in. y is +Y down (top-left origin); Unity values converted via (210+ux, 318-uy).",
-    "mbaseTab":      { "x": 0,   "y": -36,  "w": 420, "h": 96 },
-    "plateDeluxe":   { "x": 13,  "y": -31,  "w": 200, "h": 64 },
-    "plateStandard": { "x": 207, "y": -31,  "w": 200, "h": 64 },
-    "jacketSlot":    { "x": 50,  "y": 43,   "w": 320, "h": 320 },
+    "_layoutComment": "Square jacket restored: window is 320x320 at (51,42). Tab+plates raised 18px (y-36->-54, y-31->-49) so the shoulder sits on the card's top border instead of overlapping the jacket — keeps the visible 曲绘 a clean 1:1. Card canvas (420x636) + heightRatio/topMargin unchanged, so the card BOTTOM edge stays fixed.",
+    "mbaseTab":      { "x": 0,   "y": -54,  "w": 420, "h": 96 },
+    "plateDeluxe":   { "x": 13,  "y": -49,  "w": 200, "h": 64 },
+    "plateStandard": { "x": 207, "y": -49,  "w": 200, "h": 64 },
+    "jacketSlot":    { "x": 51,  "y": 42,   "w": 320, "h": 320 },
     "lvPill":        { "x": 223, "y": 307,  "w": 180, "h": 112 },
     "lvLabel":       { "x": 272, "y": 354,  "w": 48,  "h": 60 },
     "lvNumber":      { "x": 315, "y": 358,  "w": 70,  "h": 55 },

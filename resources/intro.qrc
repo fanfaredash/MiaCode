@@ -14,8 +14,8 @@
         <file alias="assets/transition/slide.png">../src/intro/assets/transition/slide.png</file>
         <file alias="assets/transition/white_BR.png">../src/intro/assets/transition/white_BR.png</file>
         <file alias="assets/transition/white_TL.png">../src/intro/assets/transition/white_TL.png</file>
-        <file alias="assets/fonts/MPLUS1p-Black.ttf">../src/intro/assets/fonts/MPLUS1p-Black.ttf</file>
-        <file alias="assets/fonts/MPLUSRounded1c-Bold.ttf">../src/intro/assets/fonts/MPLUSRounded1c-Bold.ttf</file>
+        <file alias="assets/fonts/ResourceHanRoundedCN-Bold.ttf">../src/intro/assets/fonts/ResourceHanRoundedCN-Bold.ttf</file>
+        <file alias="assets/fonts/ResourceHanRoundedCN-Heavy.ttf">../src/intro/assets/fonts/ResourceHanRoundedCN-Heavy.ttf</file>
         <file alias="assets/lv_atlas/UI_NUM_MLevel_01.png">../src/intro/assets/lv_atlas/UI_NUM_MLevel_01.png</file>
         <file alias="assets/lv_atlas/UI_NUM_MLevel_02.png">../src/intro/assets/lv_atlas/UI_NUM_MLevel_02.png</file>
         <file alias="assets/lv_atlas/UI_NUM_MLevel_03.png">../src/intro/assets/lv_atlas/UI_NUM_MLevel_03.png</file>
