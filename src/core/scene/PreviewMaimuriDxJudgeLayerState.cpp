@@ -28,7 +28,8 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
     const PreviewFrameState& state,
     const PreviewActiveMarkerView& markers,
     const QVector<MuriJudgeSpriteEvent>& activeEvents,
-    const QRectF& playfieldRect
+    const QRectF& playfieldRect,
+    SlideJudgeRenderGroup group
 )
 {
     PreviewSpriteDescriptors sprites;
@@ -56,6 +57,12 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
 
     sprites.reserve(activeEvents.size());
     for (const MuriJudgeSpriteEvent& event : activeEvents) {
+        const bool isJudgeText = event.kind == MuriJudgeSpriteKind::Simple;
+        if ((group == SlideJudgeRenderGroup::JudgeTextOnly && !isJudgeText)
+            || (group == SlideJudgeRenderGroup::SlideShapeOnly && isJudgeText)) {
+            continue;
+        }
+
         if (state.playheadSeconds + 1e-6 < event.spawnSecond) {
             continue;
         }
@@ -68,6 +75,7 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
         PreviewJudgeOverlayPlacement placement;
         const QImage* image = nullptr;
         qreal alpha = 0.0;
+        qreal simpleScale = 1.0;
 
         switch (event.kind) {
         case MuriJudgeSpriteKind::Simple: {
@@ -97,6 +105,21 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
                 kMaimuriDxJudgeFadeOutStartSeconds,
                 kMaimuriDxSimpleJudgeFadeOutEndSeconds
             );
+            simpleScale = maimuriDxSimpleJudgeScale(
+                elapsedSeconds,
+                kMaimuriDxSimpleJudgeScalePopStartScale,
+                kMaimuriDxSimpleJudgeScalePopEndScale,
+                kMaimuriDxSimpleJudgeScalePopEndSeconds
+            );
+            if (event.simpleEffect == MuriSimpleJudgeEffect::Perfect
+                && simpleBreakByKey.value(event.markerKey, false)) {
+                alpha *= maimuriDxSimpleJudgeBreakFlash(
+                    elapsedSeconds,
+                    kMaimuriDxSimpleJudgeBreakFlashPeriodSeconds,
+                    kMaimuriDxSimpleJudgeBreakFlashEndSeconds,
+                    kMaimuriDxSimpleJudgeBreakFlashFloor
+                );
+            }
             break;
         }
         case MuriJudgeSpriteKind::SlideStraight: {
@@ -164,7 +187,7 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
         }
 
         const PreviewSpriteDescriptor sprite =
-            buildJudgeOverlaySpriteDescriptor(image, QRectF(), placement, alpha, playfieldRect);
+            buildJudgeOverlaySpriteDescriptor(image, QRectF(), placement, alpha, playfieldRect, simpleScale);
         if (sprite.image != nullptr) {
             sprites.append(sprite);
         }

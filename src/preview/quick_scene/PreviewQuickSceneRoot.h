@@ -114,6 +114,11 @@ private:
     PreviewQuickTouchHoldLayer touchHoldLayer_;
     PreviewQuickChartReviewLayer chartReviewLayer_;
     PreviewQuickMaimuriDxJudgeLayer maimuriDxJudgeLayer_;
+    // Slide-shape ("just" ring) sub-slots: same builders/cursors as above but
+    // filtered to SlideShapeOnly and composited on a lower slot, so slide-OK
+    // sprites sit below notes/judge-text as in MajdataPlay.
+    PreviewQuickChartReviewLayer chartReviewShapeLayer_;
+    PreviewQuickMaimuriDxJudgeLayer maimuriDxJudgeShapeLayer_;
     miacode::preview::scene::PreviewPreparedSceneCache preparedCache_;
     miacode::preview::scene::PreviewLayerWindowCursor guideCursor_;
     miacode::preview::scene::PreviewLayerWindowCursor headCursor_;

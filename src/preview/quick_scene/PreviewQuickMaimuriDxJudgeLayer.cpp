@@ -13,7 +13,8 @@ QSGNode* PreviewQuickMaimuriDxJudgeLayer::updateNode(
     const miacode::preview::scene::PreviewLayerWindowCursor* cursor,
     const QSize& renderSize,
     QQuickWindow* window,
-    PreviewTextureRepository* textures
+    PreviewTextureRepository* textures,
+    miacode::preview::scene::SlideJudgeRenderGroup group
 ) const
 {
     QVector<MuriJudgeSpriteEvent> activeEvents = state.muriAnalysisReport.judgeSpriteEvents;
@@ -31,7 +32,8 @@ QSGNode* PreviewQuickMaimuriDxJudgeLayer::updateNode(
             miacode::preview::scene::playfieldRectForStage(
                 miacode::preview::scene::stageRectForSize(renderSize),
                 state.render.layoutSquareScale
-            )
+            ),
+            group
         ),
         window,
         textures,

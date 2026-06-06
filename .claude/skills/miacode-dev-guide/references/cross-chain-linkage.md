@@ -37,6 +37,14 @@ Implications:
   windows; layer order is owned by `PreviewQuickSceneRoot` + `PreviewLayerOrder.h`. Adding/changing
   a visible layer → review `src/core/scene/PreviewLayerOrder.h`, `src/preview/quick_scene/*`, and
   `src/tools/video_export/VideoExportQuickRenderBackend.*` together.
+- Slide-judge ("just" rings) vs per-note judge TEXT are split across slots to match MajdataPlay z-order:
+  the `ChartReviewLayer`/`MaimuriDxJudgeLayer` builders take a `SlideJudgeRenderGroup` filter
+  (`PreviewJudgeOverlayShared.h`). `PreviewQuickSceneRoot` composites each enum layer as TWO slots — a
+  `SlideShapeOnly` slot between `slide_motion` and `judge_effect` (below notes/touch/tap-judge), and a
+  `JudgeTextOnly` slot on top. So each judge enum bit drives 2 slots; keep
+  `kPreviewQuickSceneLayerSlotCount` equal to the number of `layerSlotAt(root, slotIndex++)` calls when
+  adding/removing slots. The off-by-default DComp path (`src/sources/chart/ChartReviewSource.*`,
+  `MaimuriDxJudgeSource.*`, sorted by `zOrder()`) still draws both groups in one pass — a known divergence.
 - Firework visuals use the custom `PreviewQuickJudgeFireworkLayer` material; state in
   `src/core/scene/PreviewJudgeFireworkLayerState.*`, shader in
   `src/preview/quick_scene/shaders/PreviewFireworkMaterial.*`.

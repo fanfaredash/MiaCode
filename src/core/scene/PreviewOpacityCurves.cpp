@@ -3,6 +3,8 @@
 
 #include <QtMath>
 
+#include <cmath>
+
 namespace {
 
 qreal touchPreHitElapsedSeconds(qreal deltaSeconds, qreal touchDurationSeconds)
@@ -222,6 +224,31 @@ qreal maimuriDxSimpleJudgeAlpha(qreal elapsedSeconds, qreal lifetimeSeconds, qre
             / qMax<qreal>(miacode::preview::scene::kRenderDurationEpsilon, fadeOutEndSeconds - fadeOutStartSeconds),
         1.0
     );
+}
+
+qreal maimuriDxSimpleJudgeScale(qreal elapsedSeconds, qreal startScale, qreal endScale, qreal popEndSeconds)
+{
+    if (elapsedSeconds <= 0.0) {
+        return startScale;
+    }
+    if (popEndSeconds <= 0.0 || elapsedSeconds >= popEndSeconds) {
+        return endScale;
+    }
+    const qreal t = elapsedSeconds / popEndSeconds;
+    return startScale + (endScale - startScale) * t;
+}
+
+qreal maimuriDxSimpleJudgeBreakFlash(qreal elapsedSeconds, qreal periodSeconds, qreal endSeconds, qreal floorValue)
+{
+    if (elapsedSeconds < 0.0 || elapsedSeconds >= endSeconds || periodSeconds <= 0.0) {
+        return 1.0;
+    }
+    // Triangle 0->1->0 each period, starting at 0 (off) and peaking at period/2 — matches the
+    // MajdataPlay JudgeCPBreak alpha keyframes (off at frame 0, on at the half-period).
+    const qreal phase = std::fmod(elapsedSeconds, periodSeconds) / periodSeconds;
+    const qreal triangle = phase < 0.5 ? (phase * 2.0) : (2.0 - phase * 2.0);
+    const qreal clampedFloor = qBound<qreal>(0.0, floorValue, 1.0);
+    return clampedFloor + (1.0 - clampedFloor) * triangle;
 }
 
 qreal maimuriDxSlideJudgeAlpha(qreal elapsedSeconds, qreal lifetimeSeconds, qreal fadeInEndSeconds, qreal fadeOutStartSeconds, qreal fadeOutEndSeconds)

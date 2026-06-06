@@ -20,6 +20,8 @@ public:
         const miacode::preview::scene::PreviewLayerWindowCursor* cursor,
         const QSize& renderSize,
         QQuickWindow* window,
-        PreviewTextureRepository* textures
+        PreviewTextureRepository* textures,
+        miacode::preview::scene::SlideJudgeRenderGroup group =
+            miacode::preview::scene::SlideJudgeRenderGroup::All
     ) const;
 };

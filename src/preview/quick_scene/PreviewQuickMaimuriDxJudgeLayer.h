@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/scene/PreviewFrameState.h"
+#include "core/scene/PreviewJudgeOverlayShared.h"
 
 class QQuickWindow;
 class QSGNode;
@@ -20,6 +21,8 @@ public:
         const miacode::preview::scene::PreviewLayerWindowCursor* cursor,
         const QSize& renderSize,
         QQuickWindow* window,
-        PreviewTextureRepository* textures
+        PreviewTextureRepository* textures,
+        miacode::preview::scene::SlideJudgeRenderGroup group =
+            miacode::preview::scene::SlideJudgeRenderGroup::All
     ) const;
 };

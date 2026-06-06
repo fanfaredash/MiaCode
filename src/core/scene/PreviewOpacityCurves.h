@@ -54,6 +54,11 @@ qreal touchLogicalOffsetForDelta(
 );
 qreal muriFlashOpacity(double flashSecond, double playheadSeconds);
 qreal maimuriDxSimpleJudgeAlpha(qreal elapsedSeconds, qreal lifetimeSeconds, qreal fadeInEndSeconds, qreal fadeOutStartSeconds, qreal fadeOutEndSeconds);
+// Judge-text scale-pop entrance: linear startScale -> endScale over popEndSeconds, then holds endScale.
+qreal maimuriDxSimpleJudgeScale(qreal elapsedSeconds, qreal startScale, qreal endScale, qreal popEndSeconds);
+// Break judge-text flash: 0<->1 triangle wave (period periodSeconds) mapped to [floorValue, 1.0],
+// active over [0, endSeconds); returns 1.0 outside that window.
+qreal maimuriDxSimpleJudgeBreakFlash(qreal elapsedSeconds, qreal periodSeconds, qreal endSeconds, qreal floorValue);
 qreal maimuriDxSlideJudgeAlpha(qreal elapsedSeconds, qreal lifetimeSeconds, qreal fadeInEndSeconds, qreal fadeOutStartSeconds, qreal fadeOutEndSeconds);
 TapApproachSample sampleTapApproach(
     qreal deltaSeconds,

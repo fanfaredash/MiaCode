@@ -22,7 +22,7 @@
 
 namespace {
 
-constexpr int kPreviewQuickSceneLayerSlotCount = 16;
+constexpr int kPreviewQuickSceneLayerSlotCount = 18;
 
 quint64 nextPreviewQuickSceneRootInstanceId()
 {
@@ -904,6 +904,42 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         preparedCache_.slideLikeLayer().entries.size(),
         slideMotionCursor_.activePreparedIndices.size()
     );
+    // Slide-OK "just" rings (just_curv/just_str/just_wifi shape sprites) render
+    // here — above the slide track but below notes/touch/tap-judge and below the
+    // per-note judge TEXT (which stays on the top chart_review/maimuri_dx_judge
+    // slots). Matches MajdataPlay, where Slide-OK sprites sit under the notes.
+    updateLayerSlotProfiled(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::ChartReviewLayer),
+        "slide_shape_native",
+        &layerProfileStats_,
+        [&](QSGNode* oldChild) {
+            return chartReviewShapeLayer_.updateNode(
+                oldChild,
+                *state,
+                &preparedCache_,
+                &chartReviewCursor_,
+                renderSize,
+                window(),
+                &textures_,
+                miacode::preview::scene::SlideJudgeRenderGroup::SlideShapeOnly);
+        });
+    updateLayerSlotProfiled(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::MaimuriDxJudgeLayer),
+        "slide_shape_dx",
+        &layerProfileStats_,
+        [&](QSGNode* oldChild) {
+            return maimuriDxJudgeShapeLayer_.updateNode(
+                oldChild,
+                *state,
+                &preparedCache_,
+                &maimuriDxJudgeCursor_,
+                renderSize,
+                window(),
+                &textures_,
+                miacode::preview::scene::SlideJudgeRenderGroup::SlideShapeOnly);
+        });
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::JudgeLayer),
@@ -1009,7 +1045,8 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 &chartReviewCursor_,
                 renderSize,
                 window(),
-                &textures_);
+                &textures_,
+                miacode::preview::scene::SlideJudgeRenderGroup::JudgeTextOnly);
         });
     applyWindowCounts(
         "chart_review",
@@ -1029,7 +1066,8 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 &maimuriDxJudgeCursor_,
                 renderSize,
                 window(),
-                &textures_);
+                &textures_,
+                miacode::preview::scene::SlideJudgeRenderGroup::JudgeTextOnly);
         });
     applyWindowCounts(
         "maimuri_dx_judge",

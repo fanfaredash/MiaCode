@@ -214,13 +214,15 @@ PreviewSpriteDescriptor buildJudgeOverlaySpriteDescriptor(
     const QRectF& sourceRect,
     const PreviewJudgeOverlayPlacement& placement,
     qreal opacity,
-    const QRectF& playfieldRect
+    const QRectF& playfieldRect,
+    qreal scale
 )
 {
     PreviewSpriteDescriptor sprite;
     if (image == nullptr || image->isNull() || placement.logicalWidth <= 0.0 || opacity <= kRenderDurationEpsilon) {
         return sprite;
     }
+    const qreal effectiveScale = scale > 0.0 ? scale : 1.0;
 
     const qreal sourceWidth = sourceRect.isValid() && !sourceRect.isEmpty()
         ? sourceRect.width()
@@ -232,7 +234,7 @@ PreviewSpriteDescriptor buildJudgeOverlaySpriteDescriptor(
         return sprite;
     }
 
-    const qreal targetWidth = qMax<qreal>(1.0, qRound(mapLogicalLengthToRect(placement.logicalWidth, playfieldRect)));
+    const qreal targetWidth = qMax<qreal>(1.0, qRound(mapLogicalLengthToRect(placement.logicalWidth, playfieldRect) * effectiveScale));
     const qreal targetHeight = qMax<qreal>(1.0, qRound(targetWidth * (sourceHeight / sourceWidth)));
     sprite.image = image;
     sprite.center = mapLogicalPointToRect(placement.logicalCenter, playfieldRect);

@@ -162,7 +162,8 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
 PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
     const PreviewFrameState& state,
     const QRectF& playfieldRect,
-    const PreviewChartReviewPreparedEvents* preparedEvents
+    const PreviewChartReviewPreparedEvents* preparedEvents,
+    SlideJudgeRenderGroup group
 )
 {
     PreviewSpriteDescriptors sprites;
@@ -184,6 +185,14 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
 
     sprites.reserve(events.size());
     for (const PreviewChartReviewPreparedEvent& event : events) {
+        const bool isJudgeText =
+            event.kind == PreviewChartReviewPreparedKind::SimpleNormal
+            || event.kind == PreviewChartReviewPreparedKind::SimpleBreak;
+        if ((group == SlideJudgeRenderGroup::JudgeTextOnly && !isJudgeText)
+            || (group == SlideJudgeRenderGroup::SlideShapeOnly && isJudgeText)) {
+            continue;
+        }
+
         const qreal elapsedSeconds = static_cast<qreal>(state.playheadSeconds - event.second);
         if (elapsedSeconds < 0.0 || elapsedSeconds > kMaimuriDxJudgeMaxLifetimeSeconds) {
             continue;
@@ -192,6 +201,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
         const QImage* image = nullptr;
         QRectF sourceRect;
         qreal alpha = 0.0;
+        qreal simpleScale = 1.0;
 
         switch (event.kind) {
         case PreviewChartReviewPreparedKind::SimpleNormal:
@@ -218,6 +228,20 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
                 kMaimuriDxJudgeFadeOutStartSeconds,
                 kMaimuriDxSimpleJudgeFadeOutEndSeconds
             );
+            simpleScale = maimuriDxSimpleJudgeScale(
+                elapsedSeconds,
+                kMaimuriDxSimpleJudgeScalePopStartScale,
+                kMaimuriDxSimpleJudgeScalePopEndScale,
+                kMaimuriDxSimpleJudgeScalePopEndSeconds
+            );
+            if (isBreak) {
+                alpha *= maimuriDxSimpleJudgeBreakFlash(
+                    elapsedSeconds,
+                    kMaimuriDxSimpleJudgeBreakFlashPeriodSeconds,
+                    kMaimuriDxSimpleJudgeBreakFlashEndSeconds,
+                    kMaimuriDxSimpleJudgeBreakFlashFloor
+                );
+            }
             break;
         }
         case PreviewChartReviewPreparedKind::StraightLeft:
@@ -283,7 +307,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
         }
 
         const PreviewSpriteDescriptor sprite =
-            buildJudgeOverlaySpriteDescriptor(image, sourceRect, event.placement, alpha, playfieldRect);
+            buildJudgeOverlaySpriteDescriptor(image, sourceRect, event.placement, alpha, playfieldRect, simpleScale);
         if (sprite.image != nullptr) {
             sprites.append(sprite);
         }

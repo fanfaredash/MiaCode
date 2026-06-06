@@ -13,7 +13,8 @@ QSGNode* PreviewQuickChartReviewLayer::updateNode(
     const miacode::preview::scene::PreviewLayerWindowCursor* cursor,
     const QSize& renderSize,
     QQuickWindow* window,
-    PreviewTextureRepository* textures
+    PreviewTextureRepository* textures,
+    miacode::preview::scene::SlideJudgeRenderGroup group
 ) const
 {
     miacode::preview::scene::PreviewChartReviewPreparedEvents activeEvents;
@@ -29,7 +30,8 @@ QSGNode* PreviewQuickChartReviewLayer::updateNode(
                 miacode::preview::scene::stageRectForSize(renderSize),
                 state.render.layoutSquareScale
             ),
-            &activeEvents
+            &activeEvents,
+            group
         ),
         window,
         textures,

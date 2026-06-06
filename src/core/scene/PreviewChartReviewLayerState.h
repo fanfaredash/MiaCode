@@ -35,7 +35,8 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
 PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
     const PreviewFrameState& state,
     const QRectF& playfieldRect,
-    const PreviewChartReviewPreparedEvents* preparedEvents = nullptr
+    const PreviewChartReviewPreparedEvents* preparedEvents = nullptr,
+    SlideJudgeRenderGroup group = SlideJudgeRenderGroup::All
 );
 
 }  // namespace miacode::preview::scene
