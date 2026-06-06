@@ -3586,11 +3586,22 @@ VideoExportResult VideoExportController::exportPreparedTask(
     // [overlay_src], so they read normally over the black/fading background.
     // fade=t=in holds black before start_time, so the bg is black throughout the
     // covered intro and the early lead-in.
+    //
+    // CRITICAL: `fade` fades ALL planes of the RGBA base, INCLUDING alpha — so
+    // before start_time the base is transparent-black (a=0), not opaque-black. The
+    // final `[base][overlay_src]overlay=...:alpha=straight` step then composites the
+    // playfield over a transparent base, which blows every PARTIAL-alpha overlay
+    // pixel out to full opacity (a 12%-opacity antialiased / judge-area pixel renders
+    // as solid white over the black opening). The trailing `,format=rgb24` re-flattens
+    // the base to fully opaque after the fade — the RGB fade-from-black is preserved,
+    // only the (now-bogus) alpha plane is dropped — restoring correct straight-alpha
+    // compositing. Most visible with the heavy "判定区" outline (~30% partial-alpha
+    // pixels) over the still-black opening, before the bg has faded in.
     if (introAudioEnabled) {
         const double chartZeroOutputSecond = -timelineOriginSecond;
         const double bgFadeStartSecond =
             qMax(0.0, chartZeroOutputSecond - miacode::intro::kBgFadeDurationSeconds);
-        filterParts << QStringLiteral("[base_src]fade=t=in:st=%1:d=%2:color=black[base]")
+        filterParts << QStringLiteral("[base_src]fade=t=in:st=%1:d=%2:color=black,format=rgb24[base]")
                            .arg(QString::number(bgFadeStartSecond, 'f', 6))
                            .arg(QString::number(miacode::intro::kBgFadeDurationSeconds, 'f', 6));
     } else {
@@ -4382,11 +4393,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
         // pixel-identical to the deep-copy path, so the regression is
         // genuinely confined to frame 0. Working hypotheses (none
         // confirmed): (a) Qt's first-frame texture-atlas upload races
-        // with the readback buffer reuse, (b) the warmup-allocated
-        // `reusableReadbackFrame_` buffer doesn't trigger COW detach the
-        // same way on the very first PBO-pipeline convert, (c) heap
-        // memory aliasing between the outline QImage and the readback
-        // QImage on the first frame only.
+        // with the readback buffer reuse, (b) the first staging-ring slot
+        // (PreviewQuickExportSession readbackRing_) doesn't trigger COW
+        // detach the same way on the very first PBO-pipeline convert,
+        // (c) heap memory aliasing between the outline QImage and the
+        // readback QImage on the first frame only.
         //
         // Workaround: deep-copy frame 0, zero-copy frames 1+. The cost
         // is one ~width*height*4-byte memcpy on a single frame per
