@@ -2,6 +2,7 @@ build/
 build-mingw*/
 Build-Mingw*/
 dist/
+font_candidates/
 .qt/
 .vs/
 .idea/

@@ -576,6 +576,16 @@ if (Test-Path $assetsSrc) {
     Copy-Item $assetsSrc (Join-Path $DistDir "assets") -Recurse -Force
 }
 
+# Third-party font license (SIL OFL 1.1) for the bundled Resource Han Rounded
+# fonts (思源圆体), which are embedded in MiaCode.exe via the intro qrc. OFL
+# requires the license text to ship alongside the (redistributed) font.
+$licensesSrc = Join-Path $repoRoot "licenses"
+if (Test-Path $licensesSrc) {
+    Copy-Item $licensesSrc (Join-Path $DistDir "licenses") -Recurse -Force
+} else {
+    throw "Missing licenses dir: $licensesSrc"
+}
+
 $ffmpegSrc = Join-Path $repoRoot "third_party\\ffmpeg\\windows\\ffmpeg.exe"
 if (Test-Path $ffmpegSrc) {
     $ffmpegSize = (Get-Item $ffmpegSrc).Length
@@ -600,6 +610,7 @@ $requiredPackagePaths = @(
     "logs",
     "logs\\worker-hwnd",
     "assets\\SFX",
+    "licenses\\Resource-Han-Rounded-OFL.txt",
     # app/: the real exe and its DLL/plugin/QML retinue.
     "app\\MiaCode.exe",
     "app\\ffmpeg\\ffmpeg.exe",
