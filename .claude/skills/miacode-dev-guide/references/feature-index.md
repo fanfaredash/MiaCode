@@ -208,12 +208,62 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   the same card the intro pre-roll composites) to a single still image — the
   program-internal port of `tools/intro_remotion/qml/render-banner-from-maidata.ps1`
   + its `qml/exporter/main.cpp`.
-- Renderer (offscreen `QQuickView` + `grabWindow()`, no chart scene): `IntroCoverExporter.{h,cpp}`
+- Renderer (offscreen, no chart scene): `IntroCoverExporter.{h,cpp}`
   (`miacode::cover_export::exportIntroCover`). Loads `qrc:/intro/qml/MaimaiBannerCard.qml`,
   injects the parsed `:/intro/templates/maimai_banner.json` via `externalTemplate` +
   the `IntroBannerSpec` fields via `trackOverrides`, renders frame 0 fully assembled
   (`revealStartFrame` stays −1). Transparent → PNG (alpha); opaque → JPG over the card's
   own blurred-jacket backdrop. Writes `card.jpg`/`card.png`, adding `(1)`,`(2)`… on collision.
+  - **⚠ Render mechanism (two hard constraints — both cost a crash/bug to learn):**
+    `OffscreenCardRenderer` loads the card with a **bare `QQmlEngine` + `QQmlComponent`** and
+    parents the item into a **plain `QQuickWindow`** (shown at opacity 0, off-chrome), then
+    captures with the public `grabWindow()`. Do NOT "simplify" this:
+    1. **No `QQuickView`.** A `QQuickView` re-registers the QtQuick / QtQuick.Window modules in
+       the **packaged (windeployqt) layout** → `Cannot install element '…' into protected
+       module 'QtQuick'`. A bare `QQmlEngine`+`QQmlComponent` does not (it's how the intro
+       export loads the same QML; same QtQuick/QtQuick.Effects imports).
+    2. **No forced OpenGL / no manual QRhi.** This runs **in-process** in the GUI app, whose
+       scene graph already runs on the platform RHI (Direct3D11 on Windows). Forcing an
+       OpenGL graphics device (`QQuickGraphicsDevice::fromOpenGLContext` + FBO readback — fine
+       in the *export worker* process, which forces OpenGL globally) **hard-crashes** here.
+       Manual `QRhi` readback was also rejected: this Qt install ships `qrhi.h` but **no
+       `Qt6GuiPrivate` CMake package**, so `Qt6::GuiPrivate` can't be linked. `grabWindow()`
+       on a shown plain `QQuickWindow` uses the process RHI with public API only.
+- **Card fonts** (shared by the intro pre-roll AND the cover export — same `MaimaiBannerCard.qml`):
+  title (`displayFont`) uses **`ResourceHanRoundedCN-Heavy.ttf`** and body (`bodyFont`) uses
+  **`ResourceHanRoundedCN-Bold.ttf`** (思源圆体 / Resource Han Rounded, OFL) — Heavy gives the
+  title prominence over the Bold body. It natively covers simplified Chinese (no system
+  fallback) and approximates SEGA MaruGothic. Replaced the old M PLUS 1p Black / M PLUS
+  Rounded 1c Bold pair (deleted). Wired in `src/intro/assets/fonts/` + `resources/intro.qrc`
+  + `src/intro/templates/maimai_banner.json` (`fonts.display`/`fonts.body`) + the `FontLoader`
+  fallbacks in `MaimaiBannerCard.qml`.
+  - **The two bundled TTFs are SUBSET** (via `pyftsubset`) to 中(通用规范8105)/日(JIS X0208 kanji
+    +假名)/英(Latin)/俄(Cyrillic)+希腊/标点/全角/常见符号 — **NO Korean** (RHR-CN ships no Hangul
+    anyway). Heavy 13.05→5.03 MB, Bold 13.33→5.12 MB (~10 MB total vs ~26 MB full). The subset
+    recipe + source `.7z`/full TTFs live in `font_candidates/_subset/do_subset.py` (uses
+    `china/standard/tongyong_guifan.txt` from ButTaiwan/cjktables). Re-subset from the full
+    fonts if coverage needs to change. Family names stay distinct (`Resource Han Rounded CN`
+    vs `…CN Heavy`) so the title/body weight split survives subsetting.
+  - OFL compliance: `licenses/Resource-Han-Rounded-OFL.txt` is shipped in the package
+    (`package-win.ps1` copies repo `licenses/` → `<dist>/licenses/`, validated in
+    `$requiredPackagePaths`).
+  - **Jacket is a true 1:1 square (320×320 native window at (51,42)).** The `UI_TST_MBase_*`
+    frame PNGs had earlier been top-cropped (commits dab3f11 + 4f9f71d, "crop … so it aligns
+    under the Tab") which squashed the square window to 319×304 — that broke 1:1. The pre-crop
+    (square-window) frames were recovered from git and restored (originals also stashed in
+    `font_candidates/original_frames/`). Instead of cropping, the Tab+plates are raised 18 native
+    px (`mbaseTab.y -36→-54`, plates `-31→-49`) so the shoulder sits on the card's top border,
+    not over the jacket. Canvas (420×636) + `heightRatio`/`topMargin` are unchanged, so the card
+    BOTTOM edge stays fixed. `jacketSlot` = `{51,42,320,320}`.
+  - The jacket has a crisp 2-device-px black frame (`MaimaiBannerCard.qml`, declared AFTER
+    tab+plates, BEFORE the LV pill so the top edge isn't occluded and the pill stays on top).
+    It snaps each edge to a whole device pixel in ABSOLUTE space (folding in fractional
+    `geom.cardX/Y`) and uses `border.width: 2/geom.cardScale` so all four sides are equal — a
+    plain native-space stroke renders uneven under the non-integer card scale.
+  - **Mirror QML/template edits to the prototype copies under `tools/intro_remotion/qml/`** for
+    the standalone exporter preview. ⚠ Editing only `src/intro/qml/*.qml` (or qrc-listed assets)
+    may NOT rebundle (AUTORCC misses the qrc→content dep): delete `build/**/qrc_intro.cpp*` (or
+    touch `resources/intro.qrc`) to force RCC.
 - Sub-dialog (size + transparent-bg toggle): `ExportCoverDialog.{h,cpp}`; size presets
   mirror the video-export resolutions, seeded from the current video size, tracked
   independently.
