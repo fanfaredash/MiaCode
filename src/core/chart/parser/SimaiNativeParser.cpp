@@ -97,6 +97,11 @@ struct SlideHeadModifierState {
 
 bool g_invalidStarPreviewEnabled = false;
 
+bool containsUppercaseTapBreakOrExModifier(const QString& modifiers)
+{
+    return modifiers.contains(QChar('B')) || modifiers.contains(QChar('X'));
+}
+
 bool parseTapModifierSequence(
     const QString& prefixModifiers,
     const QString& suffixModifiers,
@@ -106,6 +111,11 @@ bool parseTapModifierSequence(
         return false;
     }
     *state = TapModifierState();
+
+    if (containsUppercaseTapBreakOrExModifier(prefixModifiers)
+        || containsUppercaseTapBreakOrExModifier(suffixModifiers)) {
+        return false;
+    }
 
     const auto parsePart = [state](const QString& part) -> bool {
         for (int i = 0; i < part.size();) {
@@ -172,6 +182,9 @@ bool parseSlideHeadModifierPrefix(const QString& token, int* modifierCount, Slid
 
     while ((1 + *modifierCount) < token.size()) {
         const QChar ch = token.at(1 + *modifierCount);
+        if (ch == QChar('B') || ch == QChar('X')) {
+            return false;
+        }
         const QChar lower = ch.toLower();
         if (lower == QChar('b')) {
             if (state->headBreak) {
@@ -397,8 +410,6 @@ bool parseTouchSuffix(
                 *hasFirework = true;
             } else if (ch == QChar('b')) {
                 *hasBreak = true;
-            } else if (ch == QChar('x')) {
-                // Currently accepted for compatibility; touch ex is not bound yet.
             } else if (!ch.isSpace()) {
                 *errorMessage = QString("Invalid touch modifier: %1").arg(token);
                 return false;

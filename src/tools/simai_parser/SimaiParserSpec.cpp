@@ -95,8 +95,8 @@ int main(int argc, char** argv)
     }
 
     {
-        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(QStringLiteral("A1xhf[4:1],\nE"));
-        expect(parsed.ok, QStringLiteral("touch supports mixed modifier order x/h/f"));
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(QStringLiteral("A1hf[4:1],\nE"));
+        expect(parsed.ok, QStringLiteral("touch supports mixed modifier order h/f"));
         expect(!parsed.noteMarkers.isEmpty(), QStringLiteral("touch mixed modifier creates marker"));
         if (!parsed.noteMarkers.isEmpty()) {
             const TimelineNoteMarker& marker = parsed.noteMarkers.constFirst();
@@ -156,8 +156,8 @@ int main(int argc, char** argv)
     }
 
     {
-        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(QStringLiteral("C1bx,\nE"));
-        expect(parsed.ok, QStringLiteral("lenient parse accepts C1 with b/x modifiers"));
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(QStringLiteral("C1b,\nE"));
+        expect(parsed.ok, QStringLiteral("lenient parse accepts C1 with b modifier"));
         expect(!parsed.noteMarkers.isEmpty(), QStringLiteral("C1 lenient parse emits marker"));
         if (!parsed.noteMarkers.isEmpty()) {
             const TimelineNoteMarker& marker = parsed.noteMarkers.constFirst();
@@ -169,6 +169,34 @@ int main(int argc, char** argv)
     {
         const SimaiNativeParseResult strictC1 = SimaiNativeParser::validateSyntax(QStringLiteral("C1,\nE"));
         expect(!strictC1.ok, QStringLiteral("validate rejects C1/C2 form"));
+    }
+
+    {
+        const SimaiNativeParseResult touchB1x = SimaiNativeParser::validateSyntax(QStringLiteral("B1x,\nE"));
+        const SimaiNativeParseResult touchCx = SimaiNativeParser::validateSyntax(QStringLiteral("Cx,\nE"));
+        const SimaiNativeParseResult touchC2x = SimaiNativeParser::validateSyntax(QStringLiteral("C2x,\nE"));
+        const SimaiNativeParseResult lenientTouchB1x = SimaiNativeParser::parseForTimeline(QStringLiteral("B1x,\nE"));
+
+        expect(!touchB1x.ok, QStringLiteral("validate rejects x after B1 touch"));
+        expect(!touchCx.ok, QStringLiteral("validate rejects x after C touch"));
+        expect(!touchC2x.ok, QStringLiteral("validate rejects x after C2 touch alias"));
+        expect(!lenientTouchB1x.ok, QStringLiteral("timeline parse rejects x after touch"));
+    }
+
+    {
+        const SimaiNativeParseResult uppercaseEx = SimaiNativeParser::validateSyntax(QStringLiteral("2X,\nE"));
+        const SimaiNativeParseResult uppercaseBreak = SimaiNativeParser::validateSyntax(QStringLiteral("2B,\nE"));
+        const SimaiNativeParseResult uppercaseSlideHeadEx = SimaiNativeParser::validateSyntax(QStringLiteral("2X-6[8:1],\nE"));
+        const SimaiNativeParseResult uppercaseSlideHeadBreak = SimaiNativeParser::validateSyntax(QStringLiteral("2B-6[8:1],\nE"));
+        const SimaiNativeParseResult touchB2 = SimaiNativeParser::validateSyntax(QStringLiteral("B2,\nE"));
+        const SimaiNativeParseResult touchB4 = SimaiNativeParser::validateSyntax(QStringLiteral("B4,\nE"));
+
+        expect(!uppercaseEx.ok, QStringLiteral("validate rejects uppercase X after a tap lane"));
+        expect(!uppercaseBreak.ok, QStringLiteral("validate rejects uppercase B after a tap lane"));
+        expect(!uppercaseSlideHeadEx.ok, QStringLiteral("validate rejects uppercase X after a slide head lane"));
+        expect(!uppercaseSlideHeadBreak.ok, QStringLiteral("validate rejects uppercase B after a slide head lane"));
+        expect(touchB2.ok, QStringLiteral("validate keeps B2 as a valid touch note"));
+        expect(touchB4.ok, QStringLiteral("validate keeps B4 as a valid touch note"));
     }
 
     {
