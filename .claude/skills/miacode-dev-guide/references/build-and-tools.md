@@ -29,7 +29,10 @@ launcher exe that forwards to `app/MiaCode.exe`).
 Everything else is gated behind `option(MIACODE_BUILD_DEV_TOOLS … OFF)` (`CMakeLists.txt:48`,
 block at `:586`). These are dev/diagnostic/spec binaries, off by default:
 
-- Dumps/probes: `miacode_muri_dump`, `simai_native_dump`, `soundtouch_probe`
+- Dumps/probes: `miacode_muri_dump`, `simai_native_dump`, `soundtouch_probe`,
+  `latency_offset_batch` (batch offset-detection evaluator: walks a chart corpus, scores
+  `detectOffset` vs each chart's `&first` folded mod one 8th-note; `DetectionTuning` weights
+  exposed as CLI flags. Manual diagnostic — needs a corpus, so NOT a CTest case.)
 - Specs (standalone `main()` style): `oplog_self_test`, `simai_parser_spec`,
   `simai_document_spec` (SimaiDocument designer model — standalone chart-less `&des_N` round-trip),
   `chart_batch_transform_spec`, `muri_spec`, `timeline_model_spec`, `plain_code_editor_spec`,
@@ -86,7 +89,7 @@ Rules going forward:
 
 ## 5. Helper binaries (behind `MIACODE_BUILD_DEV_TOOLS`)
 
-- `miacode_muri_dump`, `simai_native_dump`, `soundtouch_probe` — CLI diagnostics.
+- `miacode_muri_dump`, `simai_native_dump`, `soundtouch_probe`, `latency_offset_batch` — CLI diagnostics.
 - `package-win.ps1` currently packages only `simai_native_dump.exe` as a Windows dev tool.
 - BASS runtime DLLs are copied post-build for `MiaCode` (and `soundtouch_probe`) from
   `third_party/bass/bin/win64/`.

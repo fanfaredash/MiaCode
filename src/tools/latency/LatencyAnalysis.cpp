@@ -18,8 +18,6 @@ constexpr int kOffsetWindowSize = 512;
 constexpr int kOffsetHopSize = 128;
 constexpr double kMinDetectBpm = 50.0;
 constexpr double kMaxDetectBpm = 300.0;
-constexpr double kOffsetPhasePenalty = 0.06;
-constexpr double kOffsetSnapThreshold = 0.90;
 
 struct MeterPattern {
     const char* id = "";
@@ -283,7 +281,7 @@ DecodedAudio decodeMonoTrack(const QString& trackPath, int sampleRate)
     return decoded;
 }
 
-Envelope buildOnsetEnvelope(const QVector<float>& samples, int sampleRate)
+Envelope buildOnsetEnvelope(const QVector<float>& samples, int sampleRate, const DetectionTuning& tuning)
 {
     Envelope envelope;
     if (samples.isEmpty() || sampleRate <= 0) {
@@ -291,6 +289,7 @@ Envelope buildOnsetEnvelope(const QVector<float>& samples, int sampleRate)
     }
     envelope.stepSeconds = static_cast<double>(kAnalysisHopSize) / static_cast<double>(sampleRate);
 
+    const double decay = tuning.onsetBaselineDecay;
     double smoothedEnergy = 0.0;
     double maxValue = 0.0;
     for (int start = 0; start < samples.size(); start += kAnalysisHopSize) {
@@ -308,11 +307,11 @@ Envelope buildOnsetEnvelope(const QVector<float>& samples, int sampleRate)
         const double frameCount = static_cast<double>(end - start);
         const double rms = std::sqrt(squareSum / frameCount);
         const double meanAbs = absSum / frameCount;
-        const double energy = 0.60 * rms + 0.40 * meanAbs;
+        const double energy = tuning.onsetRmsWeight * rms + tuning.onsetMeanAbsWeight * meanAbs;
         const double onset = qMax(0.0, energy - smoothedEnergy);
         envelope.values.append(static_cast<float>(onset));
         maxValue = qMax(maxValue, onset);
-        smoothedEnergy = 0.88 * smoothedEnergy + 0.12 * energy;
+        smoothedEnergy = decay * smoothedEnergy + (1.0 - decay) * energy;
     }
 
     if (maxValue <= 1e-6) {
@@ -610,10 +609,48 @@ BpmDetectionResult detectBpm(const Envelope& onsetEnvelope, const QString& meter
 double detectOffset(
     const Envelope& onsetEnvelope,
     const Envelope& transientEnvelope,
-    const OffsetDetectionInputs& inputs)
+    const OffsetDetectionInputs& inputs,
+    const DetectionTuning& tuning)
 {
     const QVector<float>& onset = onsetEnvelope.values;
-    const QVector<float>& offsetEnv = transientEnvelope.values;
+
+    // Phase 1 — rising-edge onset emphasis. Blend the transient envelope with
+    // its smoothed positive slope so phase scoring locks onto the attack's
+    // rising edge (which leads the amplitude peak on soft onsets) instead of
+    // the peak itself. edgeWeight == 0 leaves the envelope untouched.
+    QVector<float> blendedOffsetEnv;
+    if (tuning.offsetEdgeWeight > 0.0 && transientEnvelope.values.size() >= 3) {
+        const QVector<float>& src = transientEnvelope.values;
+        const int n = src.size();
+        auto smoothed = [&](int i) -> float {
+            const int a = qMax(0, i - 1);
+            const int b = qMin(n - 1, i + 1);
+            return (src.at(a) + src.at(i) + src.at(b)) / 3.0f;
+        };
+        const double w = tuning.offsetEdgeWeight;
+        blendedOffsetEnv.resize(n);
+        float maxBlend = 0.0f;
+        float prevSmoothed = smoothed(0);
+        for (int i = 0; i < n; ++i) {
+            const float cur = smoothed(i);
+            const float slope = i > 0 ? qMax(0.0f, cur - prevSmoothed) : 0.0f;
+            prevSmoothed = cur;
+            const float blended = static_cast<float>((1.0 - w) * src.at(i) + w * slope);
+            blendedOffsetEnv[i] = blended;
+            maxBlend = qMax(maxBlend, blended);
+        }
+        if (maxBlend > 1e-6f) {
+            for (float& v : blendedOffsetEnv) {
+                v /= maxBlend;
+            }
+        } else {
+            blendedOffsetEnv.clear();  // degenerate — fall back to the raw envelope
+        }
+    }
+    const QVector<float>& offsetEnv = blendedOffsetEnv.isEmpty()
+        ? transientEnvelope.values
+        : blendedOffsetEnv;
+
     const double onsetStepSeconds = onsetEnvelope.stepSeconds;
     const double offsetStepSeconds = transientEnvelope.stepSeconds;
     const double bpm = inputs.bpm;
@@ -708,10 +745,10 @@ double detectOffset(
         int sampleCount = 0;
         for (double second = phaseSecond; second < trackDurationSeconds; second += beatPeriod) {
             if (!offsetEnv.isEmpty() && offsetStepSeconds > 0.0) {
-                score += 0.75 * sampleEnvelopeLinear(offsetEnv, second / offsetStepSeconds);
+                score += tuning.offsetTransientWeight * sampleEnvelopeLinear(offsetEnv, second / offsetStepSeconds);
             }
             if (!onset.isEmpty() && onsetStepSeconds > 0.0) {
-                score += 0.25 * sampleEnvelopeLinear(onset, second / onsetStepSeconds);
+                score += tuning.offsetOnsetWeight * sampleEnvelopeLinear(onset, second / onsetStepSeconds);
             }
             ++sampleCount;
         }
@@ -719,9 +756,9 @@ double detectOffset(
             return -1.0;
         }
         score /= static_cast<double>(sampleCount);
-        score -= qAbs(normalizedPhase) * kOffsetPhasePenalty;
+        score -= qAbs(normalizedPhase) * tuning.offsetPhasePenalty;
         if (hasMeterPhaseHint && snapModeId == QLatin1String("bar")) {
-            score -= phaseDistance(phaseSecond, meterBeatPhase, beatPeriod) * 0.14;
+            score -= phaseDistance(phaseSecond, meterBeatPhase, beatPeriod) * tuning.offsetMeterPenalty;
         }
         return score;
     };
@@ -779,7 +816,7 @@ double detectOffset(
     for (double candidate : snapCandidates) {
         const double candidatePhase = normalizePhase(candidate);
         const double candidateScore = scorePhase(candidatePhase);
-        if (candidateScore < bestScore * kOffsetSnapThreshold) {
+        if (candidateScore < bestScore * tuning.offsetSnapThreshold) {
             continue;
         }
 

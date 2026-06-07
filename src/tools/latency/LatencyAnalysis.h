@@ -33,6 +33,50 @@ struct BpmDetectionResult {
     QVector<QPair<double, double>> candidates;
 };
 
+// Tunable weights for the envelope builders and the offset scorer. Every
+// field defaults to the value the algorithm shipped with, so passing a
+// default-constructed DetectionTuning reproduces the production behavior
+// exactly — the GUI callers rely on this. The batch-test dev tool
+// (`latency_offset_batch`) exposes these as CLI flags so the onset/transient
+// mix and the phase penalties can be swept without recompiling.
+struct DetectionTuning {
+    // --- Onset (energy-flux) envelope, buildOnsetEnvelope() ---
+    // Per-frame energy = rmsWeight*RMS + meanAbsWeight*meanAbs.
+    double onsetRmsWeight = 0.60;
+    double onsetMeanAbsWeight = 0.40;
+    // IIR baseline used to half-wave-rectify the flux:
+    //   baseline = decay*baseline + (1-decay)*energy.
+    double onsetBaselineDecay = 0.88;
+
+    // --- Offset scoring, detectOffset() ---
+    // Per-beat phase score = transientWeight*transientEnv + onsetWeight*onsetEnv.
+    double offsetTransientWeight = 0.75;
+    double offsetOnsetWeight = 0.25;
+    // Score -= phasePenalty * |phase|  (biases toward small offsets). Raised
+    // from 0.06 to 0.14 after Phase-0 corpus tuning (docs/OFFSET_DETECTION_
+    // BASELINE_v1_ZH.md): the only safe single-knob win — pulls the +24ms
+    // soft-onset cluster (which sits on first≈0 charts) back toward zero.
+    double offsetPhasePenalty = 0.14;
+    // Score -= meterPenalty * dist-to-meter-phase  (bar snap mode only).
+    double offsetMeterPenalty = 0.14;
+    // Phase 1 — rising-edge onset emphasis. Blends the transient envelope with
+    // its (smoothed) positive slope before phase scoring, so the detector locks
+    // onto the attack's rising edge rather than its later amplitude peak. This
+    // is the signal-adaptive fix for the ~+24ms soft-onset group delay: for
+    // sharp onsets the slope peaks at the same place (no shift, protects the
+    // already-accurate charts); for soft onsets it leads the peak. 0 reproduces
+    // the original envelope exactly. Default 0.5 from Phase-1 corpus tuning:
+    // near-optimal on BOTH the tuning set (<local-chart-root> 64.9%) and the held-out set
+    // (<local-test-set> 60.0%); the tuning-set peak at 0.6 was dropped as it regressed
+    // on the holdout (overfit). Pure slope (1.0) is noisy and collapses.
+    double offsetEdgeWeight = 0.5;
+    // A snap candidate is only accepted when its score is at least
+    // snapThreshold * bestScore. Set > 1.0 to disable snapping entirely
+    // (keeps the raw fine-search phase) — useful for measuring unbiased
+    // detection accuracy.
+    double offsetSnapThreshold = 0.90;
+};
+
 struct OffsetDetectionInputs {
     double bpm = 0.0;
     double offsetAnchorSeconds = 0.0;
@@ -55,7 +99,12 @@ struct OffsetDetectionInputs {
 DecodedAudio decodeMonoTrack(const QString& trackPath, int sampleRate = kAnalysisSampleRate);
 
 // Energy-flux envelope used as the primary signal for BPM detection.
-Envelope buildOnsetEnvelope(const QVector<float>& samples, int sampleRate);
+// `tuning` controls the energy mix + baseline decay; defaults reproduce the
+// production envelope.
+Envelope buildOnsetEnvelope(
+    const QVector<float>& samples,
+    int sampleRate,
+    const DetectionTuning& tuning = DetectionTuning());
 
 // Abs-diff transient envelope used to refine offset detection.
 Envelope buildTransientEnvelope(const QVector<float>& samples, int sampleRate);
@@ -72,6 +121,7 @@ BpmDetectionResult detectBpm(
 double detectOffset(
     const Envelope& onsetEnvelope,
     const Envelope& transientEnvelope,
-    const OffsetDetectionInputs& inputs);
+    const OffsetDetectionInputs& inputs,
+    const DetectionTuning& tuning = DetectionTuning());
 
 }  // namespace miacode::latency_analysis

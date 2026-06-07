@@ -279,6 +279,27 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 - `LatencyDetectionPage.*`, `LatencyAnalysis.*`, `LatencySandboxController.*`,
   `LatencyTestChartBuilder.*` (an in-sidebar page + sandbox audition).
+- **Detection algorithm** lives in `LatencyAnalysis.*` (pure, GUI-free): `decodeMonoTrack` →
+  `buildOnsetEnvelope` (energy-flux, for BPM) + `buildTransientEnvelope` (abs-diff, for offset)
+  → `detectBpm` (autocorrelation + meter-template comb) + `detectOffset` (per-beat phase scan,
+  result folded to bar/quarter/eighth). All the envelope-mix / phase-penalty weights are a
+  defaulted **`DetectionTuning`** struct threaded through `buildOnsetEnvelope`/`detectOffset`
+  (default-constructed = production behavior; GUI callers pass nothing). Phase-1 field
+  `offsetEdgeWeight` (default 0.5) blends the transient envelope with its positive slope so
+  scoring locks onto the attack rising edge, not the late amplitude peak (kills the soft-onset
+  +24ms bias). Corpus-tuned defaults (`offsetPhasePenalty` 0.14, `offsetEdgeWeight` 0.5) lifted
+  the batch pass rate 52.8%→63.0% @10ms — see `docs/OFFSET_DETECTION_BASELINE_v1_ZH.md`.
+- **Offline batch evaluator:** `LatencyBatchTest.cpp` → dev tool **`latency_offset_batch`**
+  (built behind `MIACODE_BUILD_DEV_TOOLS`, NOT a CTest case; own miniaudio-impl TU
+  `LatencyBatchAudioImpl.cpp`, decode-only). Walks a root for `maidata.txt`+`track.*` projects,
+  parses declared BPM (`&wholebpm`→`&bpm`→inline `(NNN)`) + `&first`, runs `detectOffset`, and
+  scores the error **folded modulo one 8th-note** (an integer number of 8th-notes = 0 error).
+  Every `DetectionTuning` field is a CLI flag (`--transient-weight`, `--phase-penalty`,
+  `--snap-threshold`, …); `--bpm-source chart|detect`, `--snap-mode`, `--tolerance-ms`, `--csv`.
+  **Sweep mode:** repeatable `--sweep name:start:stop:step` runs a Cartesian param grid,
+  decoding each project ONCE and reusing its envelopes across all combos (onset envelope rebuilt
+  per combo only when an `onset-*` dim is swept), then prints a combo table ranked by pass%. Used
+  for Phase-0 coordinate-descent tuning against the `&first` ground-truth corpus.
 - UI title is **"延迟设置" / "Latency Settings"** (header + sidebar item + tooltip in
   `sections/document/MainWindow.DocumentUi.cpp`, gated on `activeOutlineKey_=="latency"`).
 - Entry: `MainWindow.cpp` (`onOpenLatencyDetector` / latency page activation);

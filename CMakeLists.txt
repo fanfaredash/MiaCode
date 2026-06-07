@@ -847,6 +847,20 @@ if (MIACODE_BUILD_DEV_TOOLS)
         )
     endif()
 
+    # Batch offset-detection evaluator. Walks a chart corpus and scores the
+    # offset detector against each chart's &first (error folded mod one
+    # 8th-note). Manual diagnostic — needs a real corpus, so NOT a CTest case.
+    # Links only LatencyAnalysis + its own miniaudio impl TU (decode-only).
+    miacode_add_dev_tool(latency_offset_batch
+        SOURCES
+            src/tools/latency/LatencyBatchTest.cpp
+            src/tools/latency/LatencyBatchAudioImpl.cpp
+            src/tools/latency/LatencyAnalysis.h
+            src/tools/latency/LatencyAnalysis.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/tools/latency
+    )
+
     # ---- Spec executables (registered with CTest) ----
     miacode_add_dev_tool(oplog_self_test TEST
         SOURCES
