@@ -75,20 +75,27 @@ void drawOutlinedHudText(
     const QString& text,
     const QFont& font,
     qreal outlineWidth,
+    const QPointF& shadowOffset,
     const QColor& fillColor)
 {
     QPainterPath path;
     path.addText(baseline, font, text);
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, true);
-    // Soft drop shadow, approximating MajdataPlay's TMP underlay (black, offset, softened).
-    painter.translate(outlineWidth * 0.45, outlineWidth * 0.55);
-    painter.setPen(QPen(QColor(0, 0, 0, 110), outlineWidth * 1.3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    // Soft, slightly-dilated black drop shadow — approximates MajdataPlay's
+    // CenterInfoDisplayer TMP underlay (Jua-Regular SDF material: _UnderlayColor
+    // black, offset (0.59, -0.86) => down-right, _UnderlaySoftness 1, _UnderlayDilate 1).
+    // Filled+stroked offset glyph copy mimics the dilated, softened underlay better
+    // than an outline-only stroke.
+    QPainterPath shadowPath;
+    shadowPath.addText(baseline + shadowOffset, font, text);
+    const QColor shadowColor(0, 0, 0, 160);
+    painter.setPen(QPen(shadowColor, outlineWidth * 1.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(shadowColor);
+    painter.drawPath(shadowPath);
+    // Neutral-grey rim — matches TMP _OutlineColor rgb(185,185,185) at full opacity (a=1).
+    painter.setPen(QPen(QColor(185, 185, 185, 255), outlineWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.setBrush(Qt::NoBrush);
-    painter.drawPath(path);
-    painter.translate(-outlineWidth * 0.45, -outlineWidth * 0.55);
-    // Thin neutral-grey rim (matches TMP _OutlineColor rgb(185,185,185)), not a bright white halo.
-    painter.setPen(QPen(QColor(185, 185, 185, 235), outlineWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.drawPath(path);
     painter.setPen(Qt::NoPen);
     painter.setBrush(fillColor);
@@ -811,10 +818,16 @@ void paintCenterDisplay(
 
     const QColor valueColor = centerDisplayValueColor(state.render.centerDisplayMode, stats);
     const QColor titleColor = centerDisplayHeaderColor(state.render.centerDisplayMode);
+    // Drop-shadow offset matches the CenterInfoDisplayer TMP underlay direction
+    // (_UnderlayOffsetX 0.59, _UnderlayOffsetY -0.86; +x right, -y up in TMP =>
+    // down-right on screen). Scaled per glyph size since the underlay lives in the
+    // font's local space (so the larger value glyph casts a proportionally larger shadow).
+    const QPointF titleShadow(titlePixelSize * 0.035, titlePixelSize * 0.051);
+    const QPointF valueShadow(valuePixelSize * 0.035, valuePixelSize * 0.051);
     drawOutlinedHudText(painter, titleBaseline, title, titleFont,
-        qMax<qreal>(1.5, titlePixelSize * 0.05), titleColor);
+        qMax<qreal>(1.5, titlePixelSize * 0.05), titleShadow, titleColor);
     drawOutlinedHudText(painter, valueBaseline, value, valueFont,
-        qMax<qreal>(2.0, valuePixelSize * 0.05), valueColor);
+        qMax<qreal>(2.0, valuePixelSize * 0.05), valueShadow, valueColor);
 }
 
 }  // namespace miacode::preview::hud
