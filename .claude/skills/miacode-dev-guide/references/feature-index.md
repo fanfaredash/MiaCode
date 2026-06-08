@@ -260,7 +260,23 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     It snaps each edge to a whole device pixel in ABSOLUTE space (folding in fractional
     `geom.cardX/Y`) and uses `border.width: 2/geom.cardScale` so all four sides are equal — a
     plain native-space stroke renders uneven under the non-integer card scale.
-  - **Mirror QML/template edits to the prototype copies under `tools/intro_remotion/qml/`** for
+  - **All 7 difficulty cards exist** (ids 1–7 = Easy/Basic/Advanced/Expert/Master/Re:Master/Utage).
+    The prefab only shipped the 5 standard colours (Basic→Re:Master = ids 2–6); **Easy (blue
+    `#69A6FF`) and Utage (orange `#E29A46`) are fan-made hue-recolours** matching MiaCode's own
+    `difficultyColor()` palette (`MainWindowShared.cpp`). Generator + recipe:
+    `tools/lvcard_gen/recolor_difficulty_cards.py` (masked-hue remap of EXP/ADV frame+tab+pill +
+    atlas `_03`/`_02`, re-letters the baked name). The baked difficulty NAME is not a plain
+    font+shadow — pixel cross-sections of MASTER/EXPERT show a **4-layer build**: near-white fill
+    → inner bright stroke → thin DARK outline ring at a small stand-off → soft drop shadow, set in
+    SEGA **FOT-NewRodin Pro UB** (~0.87 horizontal condense, cap 28, centred x≈140 baseline y≈403).
+    NewRodin is commercial → NOT bundled; the generator reads it from `build/fonts_ref/` (env
+    `NEWRODIN_UB`) and only the rasterised PNG ships. Output sprites: `UI_TST_MBase_{EASY,UTAGE}.png`
+    (+`_Tab`, `_LV_`) in `src/intro/assets/trackstart/` and `UI_NUM_MLevel_{EASY,UTAGE}.png` in
+    `src/intro/assets/lv_atlas/` (atlas also copied to `tools/intro_remotion/public/assets/intro/lv_atlas/`).
+    Wired by `EASY`/`UTAGE` keys in **both** `maimai_banner.json` (frame/tab/lvPill/lvAtlas),
+    `resources/intro.qrc`, and `introDifficultyAtlasKey()` in `MainWindow.ExportSnapshot.cpp`
+    (case 1→`EASY`, 7→`UTAGE`; previously fell back to BASIC/MASTER stand-ins).
+- **Mirror QML/template edits to the prototype copies under `tools/intro_remotion/qml/`** for
     the standalone exporter preview. ⚠ Editing only `src/intro/qml/*.qml` (or qrc-listed assets)
     may NOT rebundle (AUTORCC misses the qrc→content dep): delete `build/**/qrc_intro.cpp*` (or
     touch `resources/intro.qrc`) to force RCC.

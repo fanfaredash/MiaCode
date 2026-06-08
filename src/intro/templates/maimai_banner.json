@@ -17,12 +17,14 @@
   "fontsRoot": "qrc:/intro/assets/fonts",
   "transparentBackground": true,
   "lvAtlas": {
-    "_comment": "Per-difficulty digit/symbol atlases. Each atlas is 192x240, 4x4 grid of 48x60 cells. Cell index 0-9 = digit, 10='+', 11='-', 12=',', 13='·', 14='LV' label.",
+    "_comment": "Per-difficulty digit/symbol atlases. Each atlas is 192x240, 4x4 grid of 48x60 cells. Cell index 0-9 = digit, 10='+', 11='-', 12=',', 13='·', 14='LV' label. EASY/UTAGE (ids 1/7) are fan-made hue-recolours (Easy blue #69A6FF, Utage orange #E29A46) — see tools/lvcard_gen/recolor_difficulty_cards.py.",
+    "EASY":     "UI_NUM_MLevel_EASY.png",
     "BASIC":    "UI_NUM_MLevel_01.png",
     "ADVANCED": "UI_NUM_MLevel_02.png",
     "EXPERT":   "UI_NUM_MLevel_03.png",
     "MASTER":   "UI_NUM_MLevel_04.png",
     "ReMASTER": "UI_NUM_MLevel_05.png",
+    "UTAGE":    "UI_NUM_MLevel_UTAGE.png",
     "cellW": 48,
     "cellH": 60,
     "gridCols": 4
@@ -34,25 +36,31 @@
   },
   "assets": {
     "frame": {
+      "EASY":     "UI_TST_MBase_EASY.png",
       "BASIC":    "UI_TST_MBase_BSC.png",
       "ADVANCED": "UI_TST_MBase_ADV.png",
       "EXPERT":   "UI_TST_MBase_EXP.png",
       "MASTER":   "UI_TST_MBase_MST.png",
-      "ReMASTER": "UI_TST_MBase_MST_Re.png"
+      "ReMASTER": "UI_TST_MBase_MST_Re.png",
+      "UTAGE":    "UI_TST_MBase_UTAGE.png"
     },
     "tab": {
+      "EASY":     "UI_TST_MBase_EASY_Tab.png",
       "BASIC":    "UI_TST_MBase_BSC_Tab.png",
       "ADVANCED": "UI_TST_MBase_ADV_Tab.png",
       "EXPERT":   "UI_TST_MBase_EXP_Tab.png",
       "MASTER":   "UI_TST_MBase_MST_Tab.png",
-      "ReMASTER": "UI_TST_MBase_MST_Re_Tab.png"
+      "ReMASTER": "UI_TST_MBase_MST_Re_Tab.png",
+      "UTAGE":    "UI_TST_MBase_UTAGE_Tab.png"
     },
     "lvPill": {
+      "EASY":     "UI_TST_MBase_LV_EASY.png",
       "BASIC":    "UI_TST_MBase_LV_BSC.png",
       "ADVANCED": "UI_TST_MBase_LV_ADV.png",
       "EXPERT":   "UI_TST_MBase_LV_EXP.png",
       "MASTER":   "UI_TST_MBase_LV_MST.png",
-      "ReMASTER": "UI_TST_MBase_LV_MST_Re.png"
+      "ReMASTER": "UI_TST_MBase_LV_MST_Re.png",
+      "UTAGE":    "UI_TST_MBase_LV_UTAGE.png"
     },
     "plateDeluxe":   "UI_TST_Infoicon_DeluxeMode.png",
     "plateStandard": "UI_TST_Infoicon_StandardMode.png"
