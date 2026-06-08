@@ -1692,12 +1692,18 @@ void VideoExportDialog::openExportCoverDialog()
         ? baseDirectory
         : QFileInfo(resolvedOutput).absolutePath();
 
+    IntroBannerSpec coverBanner = baseTask_.intro;
+    if (dialog.levelTextRender()) {
+        coverBanner.lvRenderMode = QStringLiteral("text");
+    }
+
     const miacode::cover_export::CoverExportResult result =
         miacode::cover_export::exportIntroCover(
-            baseTask_.intro,
+            coverBanner,
             dialog.selectedSize(),
             dialog.transparentBackground(),
-            outputDirectory
+            outputDirectory,
+            dialog.textOverflowMode()
         );
 
     if (result.success) {

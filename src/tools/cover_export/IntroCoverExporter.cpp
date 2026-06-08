@@ -63,6 +63,7 @@ QVariantMap bannerTrackOverrides(const IntroBannerSpec& banner)
     track.insert(QStringLiteral("difficulty"), banner.difficulty);
     track.insert(QStringLiteral("bpm"), banner.bpm);
     track.insert(QStringLiteral("mode"), banner.mode);
+    track.insert(QStringLiteral("lvRenderMode"), banner.lvRenderMode);
     return track;
 }
 
@@ -191,7 +192,8 @@ CoverExportResult exportIntroCover(
     const IntroBannerSpec& banner,
     const QSize& size,
     bool transparentBackground,
-    const QString& outputDirectory)
+    const QString& outputDirectory,
+    const QString& textOverflowMode)
 {
     CoverExportResult result;
 
@@ -214,12 +216,16 @@ CoverExportResult exportIntroCover(
         ? QUrl()
         : QUrl::fromLocalFile(banner.jacketPath);
 
+    QVariantMap track = bannerTrackOverrides(banner);
+    track.insert(QStringLiteral("stillTextMode"),
+        textOverflowMode.trimmed().isEmpty() ? QStringLiteral("shrink") : textOverflowMode.trimmed());
+
     QImage image;
     {
         OffscreenCardRenderer renderer;
         image = renderer.render(
             templateMap,
-            bannerTrackOverrides(banner),
+            track,
             jacketUrl,
             transparentBackground,
             QSize(width, height),

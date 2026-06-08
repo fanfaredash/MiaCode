@@ -229,6 +229,23 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
        Manual `QRhi` readback was also rejected: this Qt install ships `qrhi.h` but **no
        `Qt6GuiPrivate` CMake package**, so `Qt6::GuiPrivate` can't be linked. `grabWindow()`
        on a shown plain `QQuickWindow` uses the process RHI with public API only.
+- **Over-long text + arbitrary LV (2026-06-08, `MaimaiBannerCard.qml`):**
+  - **Marquee:** title/artist/designer/BPM are now `MarqueeText` (inline component) instead of
+    raw `HorizontalFit`+`ElideRight`. Split on the `revealStartFrame` gate: animated intro
+    (`>=0`) renders FIXED-size and MARQUEE-scrolls over-long text left (`root.marqueeOffset`,
+    frame-driven — NOT a QML animation, which won't tick headless); the still cover export (`<0`)
+    `HorizontalFit`-shrinks then left-aligns + clips (a still can't scroll). No more ellipsis.
+    Tuned via template `marquee:{startHoldFrames,maxSpeedPxPerFrame}`.
+  - **LV render mode:** template/track `lvRenderMode` = `"atlas"` (default, pre-baked digit
+    sprites, `[0-9]`/`+` only) or `"text"` (raw level STRING, no "Lv" prefix, bundled Heavy font
+    via `Text.Outline`+`MultiEffect` shadow, `Text.Fit` inside `layout.lvTextArea`, per-difficulty
+    `lvRendered` palette). In `atlas` mode `effectiveLvMode()` AUTO-FALLS-BACK to text when the
+    level carries an unsupported glyph (never silently drops chars). **No new font** (reuses the
+    bundled RHR Heavy). **Sync set for `IntroBannerSpec::lvRenderMode`:** struct
+    (`VideoExportController.h`) → `bannerTrackOverrides` (cover, `IntroCoverExporter.cpp`) +
+    intro track map (`VideoExportQuickRenderBackend.cpp`) → snapshot `lv_render_mode`
+    (`VideoExportSnapshot.cpp` to/fromJson) → UI toggle "等级文本渲染" on `ExportCoverDialog`
+    (applied as a local-copy override in `VideoExportDialog::openExportCoverDialog`).
 - **Card fonts** (shared by the intro pre-roll AND the cover export — same `MaimaiBannerCard.qml`):
   title (`displayFont`) uses **`ResourceHanRoundedCN-Heavy.ttf`** and body (`bodyFont`) uses
   **`ResourceHanRoundedCN-Bold.ttf`** (思源圆体 / Resource Han Rounded, OFL) — Heavy gives the

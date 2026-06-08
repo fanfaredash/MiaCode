@@ -33,6 +33,11 @@ struct IntroBannerSpec {
     QString difficulty = QStringLiteral("MASTER");
     QString bpm;
     QString mode = QStringLiteral("DX");
+    // LV render mode forwarded to MaimaiBannerCard.qml: "atlas" (pre-baked digit
+    // sprites, [0-9]/'+' only) or "text" (raw level string in the bundled Heavy
+    // font, arbitrary characters). In "atlas" mode the card auto-falls-back to
+    // text when the level string carries an unsupported glyph.
+    QString lvRenderMode = QStringLiteral("atlas");
     // Resolved background STILL image (never the bg video); empty -> the QML
     // falls back to the miacode logo.
     QString jacketPath;

@@ -2,6 +2,7 @@
 
 #include <QDialog>
 #include <QSize>
+#include <QString>
 
 class QCheckBox;
 class QComboBox;
@@ -21,12 +22,23 @@ public:
 
     QSize selectedSize() const { return selectedSize_; }
     bool transparentBackground() const { return transparentBackground_; }
+    // When true the LV is drawn with the bundled font (raw level string, arbitrary
+    // characters) instead of the pre-baked digit atlas. See IntroBannerSpec::lvRenderMode.
+    bool levelTextRender() const { return levelTextRender_; }
+
+    // Over-long title/artist/designer/BPM handling: "shrink" (shrink font to fit
+    // the whole string) or "ellipsis" (keep font size, clip the tail with "…").
+    QString textOverflowMode() const { return textOverflowMode_; }
 
 private:
     void accept() override;
 
     QComboBox* sizeCombo_ = nullptr;
     QCheckBox* transparentCheck_ = nullptr;
+    QCheckBox* levelTextRenderCheck_ = nullptr;
+    QComboBox* textOverflowCombo_ = nullptr;
     QSize selectedSize_;
     bool transparentBackground_ = false;
+    bool levelTextRender_ = false;
+    QString textOverflowMode_ = QStringLiteral("shrink");
 };

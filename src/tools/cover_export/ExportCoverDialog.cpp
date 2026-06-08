@@ -90,6 +90,35 @@ ExportCoverDialog::ExportCoverDialog(const QSize& initialSize, QWidget* parent)
     transparentCheck_->setChecked(false);
     rootLayout->addWidget(transparentCheck_, 0);
 
+    // LV text-render toggle. Off = pre-baked digit atlas ([0-9]/'+' only, with
+    // auto-fallback to text for unsupported glyphs). On = always render the raw
+    // level string with the bundled font (supports arbitrary / longer strings).
+    levelTextRenderCheck_ = new QCheckBox(
+        l10n(QStringLiteral("Render level as text"), QStringLiteral("等级文本渲染")),
+        this
+    );
+    levelTextRenderCheck_->setChecked(false);
+    rootLayout->addWidget(levelTextRenderCheck_, 0);
+
+    // Over-long text handling for title / artist / designer / BPM.
+    auto* overflowRow = new QWidget(this);
+    auto* overflowLayout = new QHBoxLayout(overflowRow);
+    overflowLayout->setContentsMargins(0, 0, 0, 0);
+    overflowLayout->setSpacing(10);
+    auto* overflowLabel = new QLabel(
+        l10n(QStringLiteral("Long text"), QStringLiteral("文字超长")), overflowRow);
+    textOverflowCombo_ = new QComboBox(overflowRow);
+    textOverflowCombo_->addItem(
+        l10n(QStringLiteral("Shrink to fit"), QStringLiteral("缩小字体以放入全部")),
+        QStringLiteral("shrink"));
+    textOverflowCombo_->addItem(
+        l10n(QStringLiteral("Keep size, ellipsis (…)"), QStringLiteral("保持字号，省略号(…)截断")),
+        QStringLiteral("ellipsis"));
+    textOverflowCombo_->setCurrentIndex(0);
+    overflowLayout->addWidget(overflowLabel, 0);
+    overflowLayout->addWidget(textOverflowCombo_, 1);
+    rootLayout->addWidget(overflowRow, 0);
+
     auto* hint = new QLabel(
         l10n(
             QStringLiteral("Exports the difficulty card to card.jpg (card.png when transparent)."),
@@ -125,5 +154,12 @@ void ExportCoverDialog::accept()
         }
     }
     transparentBackground_ = transparentCheck_ != nullptr && transparentCheck_->isChecked();
+    levelTextRender_ = levelTextRenderCheck_ != nullptr && levelTextRenderCheck_->isChecked();
+    if (textOverflowCombo_ != nullptr) {
+        const QVariant data = textOverflowCombo_->currentData();
+        if (data.isValid()) {
+            textOverflowMode_ = data.toString();
+        }
+    }
     QDialog::accept();
 }

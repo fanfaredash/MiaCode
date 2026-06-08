@@ -26,10 +26,14 @@ struct CoverExportResult {
 //     blurred-jacket backdrop, saved as JPEG.
 //   • The file is written to `outputDirectory` as card.jpg / card.png, adding
 //     "(1)", "(2)" … on collision.
+//   • `textOverflowMode` controls over-long title/artist/designer/BPM in the
+//     still: "shrink" (default) shrinks the font to fit the whole string;
+//     "ellipsis" keeps the base font size and clips the tail with "…".
 CoverExportResult exportIntroCover(
     const IntroBannerSpec& banner,
     const QSize& size,
     bool transparentBackground,
-    const QString& outputDirectory);
+    const QString& outputDirectory,
+    const QString& textOverflowMode = QStringLiteral("shrink"));
 
 }  // namespace miacode::cover_export

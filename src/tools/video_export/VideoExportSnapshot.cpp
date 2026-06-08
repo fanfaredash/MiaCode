@@ -245,6 +245,7 @@ QJsonObject VideoExportSnapshot::toJson() const
     introObject.insert(QStringLiteral("difficulty"), intro.difficulty);
     introObject.insert(QStringLiteral("bpm"), intro.bpm);
     introObject.insert(QStringLiteral("mode"), intro.mode);
+    introObject.insert(QStringLiteral("lv_render_mode"), intro.lvRenderMode);
     introObject.insert(QStringLiteral("jacket_path"), intro.jacketPath);
     root.insert(QStringLiteral("intro"), introObject);
     return root;
@@ -372,6 +373,7 @@ bool VideoExportSnapshot::fromJson(
     parsed.intro.difficulty = introObject.value(QStringLiteral("difficulty")).toString(parsed.intro.difficulty);
     parsed.intro.bpm = introObject.value(QStringLiteral("bpm")).toString();
     parsed.intro.mode = introObject.value(QStringLiteral("mode")).toString(parsed.intro.mode);
+    parsed.intro.lvRenderMode = introObject.value(QStringLiteral("lv_render_mode")).toString(parsed.intro.lvRenderMode);
     parsed.intro.jacketPath = introObject.value(QStringLiteral("jacket_path")).toString();
 
     if (parsed.chartTextUtf8.isEmpty()) {

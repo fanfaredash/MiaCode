@@ -16,6 +16,30 @@
   "lvAtlasRoot": "qrc:/intro/assets/lv_atlas",
   "fontsRoot": "qrc:/intro/assets/fonts",
   "transparentBackground": true,
+  "lvRenderMode": "atlas",
+  "stillTextMode": "shrink",
+  "_stillTextModeComment": "Still cover export only: how over-long title/artist/designer/BPM are handled. 'shrink' = shrink the font to fit the whole string; 'ellipsis' = keep the base font size and clip the tail with '…'. The animated intro ignores this (it always marquee-scrolls). Set per-export from the cover dialog.",
+  "_lvRenderModeComment": "How the LV value is drawn. 'atlas' = the pre-baked digit sprite sheet (only [0-9] and '+'); 'text' = render the raw level STRING with the bundled Heavy font (no 'Lv' prefix, supports arbitrary characters). In 'atlas' mode the card AUTO-FALLS-BACK to text rendering whenever the level string contains a character the atlas can't render, so input is never silently dropped.",
+  "marquee": {
+    "_comment": "Over-long title/artist/designer/BPM CONTINUOUSLY LOOP (scroll left, wrap with a gap) in the animated intro (revealStartFrame>=0). The still cover export shrinks-then-left-aligns instead (a still can't scroll). Frame-driven (NOT QML animation, which never ticks under the headless export loop). Values in card-native px / authoring frames (60fps). scrollPxPerFrame is intentionally slow.",
+    "startHoldFrames": 18,
+    "scrollPxPerFrame": 1.0,
+    "loopGapPx": 48
+  },
+  "lvRendered": {
+    "_comment": "Per-difficulty palette for the 'text' LV render mode, echoing the baked numerals: near-white fill + a difficulty-coloured outline + a soft dark drop shadow. Stroke matches MiaCode's difficultyColor() palette (MainWindowShared.cpp); shadow is a darkened shade of it.",
+    "fill": "#FFFFFF",
+    "stroke": {
+      "EASY": "#69A6FF", "BASIC": "#78C85A", "ADVANCED": "#DCC548",
+      "EXPERT": "#E35C50", "MASTER": "#7A4FD1", "ReMASTER": "#D548B6",
+      "UTAGE": "#E29A46"
+    },
+    "shadow": {
+      "EASY": "#16345E", "BASIC": "#1E3D16", "ADVANCED": "#4A3D0A",
+      "EXPERT": "#4A1410", "MASTER": "#2A1556", "ReMASTER": "#4A1040",
+      "UTAGE": "#3F1A00"
+    }
+  },
   "lvAtlas": {
     "_comment": "Per-difficulty digit/symbol atlases. Each atlas is 192x240, 4x4 grid of 48x60 cells. Cell index 0-9 = digit, 10='+', 11='-', 12=',', 13='·', 14='LV' label. EASY/UTAGE (ids 1/7) are fan-made hue-recolours (Easy blue #69A6FF, Utage orange #E29A46) — see tools/lvcard_gen/recolor_difficulty_cards.py.",
     "EASY":     "UI_NUM_MLevel_EASY.png",
@@ -76,6 +100,7 @@
     "lvLabel":       { "x": 272, "y": 354,  "w": 48,  "h": 60 },
     "lvNumber":      { "x": 315, "y": 358,  "w": 70,  "h": 55 },
     "lvPlus":        { "x": 380, "y": 343,  "w": 28,  "h": 36 },
+    "lvTextArea":    { "x": 274, "y": 358,  "w": 124, "h": 58 },
     "titleArea":     { "x": 17,  "y": 432,  "w": 386, "h": 33 },
     "artistArea":    { "x": 17,  "y": 480,  "w": 386, "h": 20 },
     "uiAchievement": { "x": 26,  "y": 518,  "w": 161, "h": 30 },

@@ -258,6 +258,7 @@ bool VideoExportQuickRenderBackend::setupIntro(const IntroBannerSpec& intro, QSt
     track.insert(QStringLiteral("difficulty"), intro.difficulty);
     track.insert(QStringLiteral("bpm"), intro.bpm);
     track.insert(QStringLiteral("mode"), intro.mode);
+    track.insert(QStringLiteral("lvRenderMode"), intro.lvRenderMode);
     const QUrl jacketUrl = intro.jacketPath.isEmpty()
         ? QUrl()
         : QUrl::fromLocalFile(intro.jacketPath);

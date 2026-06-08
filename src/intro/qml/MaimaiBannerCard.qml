@@ -93,6 +93,22 @@ Item {
             assetsRoot: "qrc:/intro/assets/trackstart",
             lvAtlasRoot: "qrc:/intro/assets/lv_atlas",
             fontsRoot: "qrc:/intro/assets/fonts",
+            lvRenderMode: "atlas",
+            stillTextMode: "shrink",
+            marquee: { startHoldFrames: 18, scrollPxPerFrame: 1.0, loopGapPx: 48 },
+            lvRendered: {
+                fill: "#FFFFFF",
+                stroke: {
+                    "EASY": "#69A6FF", "BASIC": "#78C85A", "ADVANCED": "#DCC548",
+                    "EXPERT": "#E35C50", "MASTER": "#7A4FD1", "ReMASTER": "#D548B6",
+                    "UTAGE": "#E29A46"
+                },
+                shadow: {
+                    "EASY": "#16345E", "BASIC": "#1E3D16", "ADVANCED": "#4A3D0A",
+                    "EXPERT": "#4A1410", "MASTER": "#2A1556", "ReMASTER": "#4A1040",
+                    "UTAGE": "#3F1A00"
+                }
+            },
             assets: {
                 frame: {}, tab: {}, lvPill: {},
                 plateDeluxe: "", plateStandard: ""
@@ -106,6 +122,7 @@ Item {
                 lvLabel:       { x: 272, y: 354,  w: 48,  h: 60 },
                 lvNumber:      { x: 315, y: 358,  w: 70,  h: 55 },
                 lvPlus:        { x: 380, y: 343,  w: 28,  h: 36 },
+                lvTextArea:    { x: 274, y: 358,  w: 124, h: 58 },
                 titleArea:     { x: 17,  y: 432,  w: 386, h: 33 },
                 artistArea:    { x: 17,  y: 480,  w: 386, h: 20 },
                 uiAchievement: { x: 26,  y: 518,  w: 161, h: 30 },
@@ -191,6 +208,33 @@ Item {
     function stageOpacity(name) {
         var s = revealStage[name]
         return s ? partOpacity(s[0], s[1]) : 1.0
+    }
+
+    // ----- Over-long text marquee (animated intro ONLY) -----
+    // Continuous LOOP: returns the current left-shift in [0, period) where
+    // `period` = contentWidth + gap. The caller draws TWO copies of the text
+    // (the 2nd at +period) so the wrap is seamless — the text scrolls left at a
+    // constant (slow) speed forever, with a `gap` of blank between repetitions,
+    // never stopping. A short start hold keeps the beginning readable before the
+    // loop begins. Timed relative to the field's reveal completion so it doesn't
+    // fight the staggered fade-in. Frame-driven (no QML animation — headless
+    // export won't tick one). Returns 0 when not revealing (still cover).
+    function marqueeLoopOffset(stageName, period) {
+        if (revealStartFrame < 0 || period <= 0)
+            return 0
+        var s = revealStage[stageName] || [0, 0]
+        var m = template.marquee || {}
+        var startHold = (m.startHoldFrames !== undefined) ? m.startHoldFrames : 18
+        var speed = (m.scrollPxPerFrame !== undefined) ? m.scrollPxPerFrame : 1.0
+        var begin = revealStartFrame + s[0] + s[1] + startHold
+        var local = frame - begin
+        if (local <= 0)
+            return 0
+        return (local * speed) % period
+    }
+    function marqueeGap() {
+        var m = template.marquee || {}
+        return (m.loopGapPx !== undefined) ? m.loopGapPx : 48
     }
 
     // ----- Card pop (scale up then settle) -----
@@ -293,6 +337,54 @@ Item {
         return arr
     }
 
+    // ----- LV render-mode selection -----
+    // "atlas" = pre-baked digit sprites ([0-9] and '+' only). "text" = render the
+    // raw level STRING (no "Lv" prefix) with the bundled Heavy font, supporting
+    // arbitrary characters. In "atlas" mode we AUTO-FALL-BACK to "text" whenever
+    // the string carries a glyph the atlas can't render, so input is never
+    // silently dropped (e.g. "14★" must not show as "14").
+    function lvStringHasUnsupported(lvStr) {
+        var s = oneLine(lvStr)
+        for (var i = 0; i < s.length; i++) {
+            var c = s[i]
+            if (!((c >= "0" && c <= "9") || c === "+"))
+                return true
+        }
+        return false
+    }
+    function effectiveLvMode() {
+        var mode = trackValue("lvRenderMode")
+        if (mode === undefined || mode === null || mode === "")
+            mode = template.lvRenderMode || "atlas"
+        if (mode === "text")
+            return "text"
+        return lvStringHasUnsupported(trackValue("level")) ? "text" : "atlas"
+    }
+    // Still-cover overflow handling for title/artist/designer/BPM (the animated
+    // intro always marquees and ignores this). "shrink" = HorizontalFit-shrink the
+    // font so the whole string fits; "ellipsis" = keep the base font size and clip
+    // the overflowing tail with "…". Default "shrink".
+    function effectiveStillTextMode() {
+        var m = trackValue("stillTextMode")
+        if (m === undefined || m === null || m === "")
+            m = template.stillTextMode || "shrink"
+        return (m === "ellipsis") ? "ellipsis" : "shrink"
+    }
+    function lvRenderedFill() {
+        var r = template.lvRendered || {}
+        return r.fill || "#FFFFFF"
+    }
+    function lvRenderedStroke() {
+        var r = template.lvRendered || {}
+        var s = r.stroke || {}
+        return s[trackValue("difficulty")] || template.colors.lvNumberShadow || "#3A1060"
+    }
+    function lvRenderedShadow() {
+        var r = template.lvRendered || {}
+        var s = r.shadow || {}
+        return s[trackValue("difficulty")] || "#000000"
+    }
+
     Component.onCompleted: {
         if (externalTemplate) {
             template = externalTemplate
@@ -318,6 +410,82 @@ Item {
         readonly property real cardW: root.template.card.nativeWidth * cardScale
         readonly property real cardX: (root.width - cardW) / 2
         readonly property real cardY: root.template.card.topMargin * root.height
+    }
+
+    // ----- Auto-fit / marquee single-line text field -----
+    // Replaces the old per-field "HorizontalFit + ElideRight". Behaviour splits
+    // on the same `revealStartFrame` gate that distinguishes the two consumers:
+    //   • Animated intro (revealStartFrame >= 0): text renders at a FIXED size so
+    //     its true width is measurable; if it overflows the box it MARQUEE-scrolls
+    //     left (root.marqueeOffset), clipped to the box. No ellipsis.
+    //   • Still cover export (revealStartFrame < 0): a still can't scroll, so the
+    //     text HorizontalFit-shrinks toward minPixel; if it still overflows it
+    //     left-aligns and the box clip shows the beginning (no ellipsis).
+    // When the text fits, it uses the field's natural alignment (baseAlign).
+    component MarqueeText: Item {
+        id: mq
+        property string stageName: ""
+        property string textValue: ""
+        property color textColor: "white"
+        property string fontFamily: ""
+        property real basePixel: 20
+        property real minPixel: 10
+        property int baseAlign: Text.AlignHCenter
+        // True width at the FIXED render size (intro) — drives looping.
+        readonly property real fixedContentWidth: mqMeasure.contentWidth
+        readonly property bool looping: root.revealStartFrame >= 0 && (fixedContentWidth - mq.width) > 0.5
+        readonly property real period: fixedContentWidth + root.marqueeGap()
+        readonly property real loopX: looping ? root.marqueeLoopOffset(mq.stageName, period) : 0
+        // Still cover (revealStartFrame<0) only: "ellipsis" keeps the base font and
+        // truncates the tail with "…"; otherwise "shrink" shrinks the font to fit.
+        readonly property bool stillEllipsis: root.revealStartFrame < 0 && root.effectiveStillTextMode() === "ellipsis"
+        clip: true
+
+        // Hidden probe: always FIXED size so contentWidth is the true text width.
+        Text {
+            id: mqMeasure
+            visible: false
+            text: mq.textValue
+            font.family: mq.fontFamily
+            font.pixelSize: mq.basePixel
+            wrapMode: Text.NoWrap
+            maximumLineCount: 1
+        }
+
+        // Primary copy (also the still-cover renderer when not looping).
+        Text {
+            id: mqText
+            height: parent.height
+            verticalAlignment: Text.AlignVCenter
+            text: mq.textValue
+            color: mq.textColor
+            font.family: mq.fontFamily
+            font.pixelSize: mq.basePixel
+            // Shrink mode goes much lower than the intro min so the whole string fits.
+            minimumPixelSize: mq.stillEllipsis ? mq.basePixel : Math.max(6, Math.round(mq.basePixel * 0.25))
+            wrapMode: Text.NoWrap
+            maximumLineCount: 1
+            fontSizeMode: (root.revealStartFrame >= 0 || mq.stillEllipsis) ? Text.FixedSize : Text.HorizontalFit
+            elide: mq.stillEllipsis ? Text.ElideRight : Text.ElideNone
+            width: mq.looping ? mq.fixedContentWidth : mq.width
+            horizontalAlignment: mq.looping ? Text.AlignLeft : mq.baseAlign
+            x: mq.looping ? -mq.loopX : 0
+        }
+        // Trailing copy for the seamless wrap (only while looping).
+        Text {
+            visible: mq.looping
+            height: parent.height
+            verticalAlignment: Text.AlignVCenter
+            text: mq.textValue
+            color: mq.textColor
+            font.family: mq.fontFamily
+            font.pixelSize: mq.basePixel
+            wrapMode: Text.NoWrap
+            maximumLineCount: 1
+            horizontalAlignment: Text.AlignLeft
+            width: mq.fixedContentWidth
+            x: -mq.loopX + mq.period
+        }
     }
 
     // ----- Backdrop: blurred jacket + dim -----
@@ -519,6 +687,7 @@ Item {
             property var b: root.template.layout.lvPill
             x: b.x; y: b.y; width: b.w; height: b.h
             opacity: root.stageOpacity("level")
+            visible: root.effectiveLvMode() === "atlas"
 
             // LV group — proportional glyph widths + tight spacing,
             // CENTERED horizontally in the visible pill.
@@ -576,42 +745,85 @@ Item {
             }
         }
 
-        // 5) Title — prefab uses SEGA-NewRodinN v2 EB (display) → M PLUS 1p Black.
-        //    HorizontalFit shrinks an over-long title toward minimumPixelSize,
-        //    then ElideRight clips; NoWrap + single line + oneLine() guard it.
-        Text {
+        // 4-text) Rendered LV — the no-new-font alternative to the baked digit
+        //    atlas. Shown when effectiveLvMode()=="text" (user opt-in OR the
+        //    auto-fallback when the level string carries a glyph the atlas can't
+        //    render). Renders the RAW level string (no "Lv" prefix) in the Heavy
+        //    display font, styled to echo the baked numerals: near-white fill +
+        //    difficulty-coloured outline + soft dark drop shadow. Text.Fit shrinks
+        //    it to stay inside lvTextArea (never exceeds the card range).
+        Item {
+            id: lvTextDisplay
+            property var b: (root.template.layout && root.template.layout.lvTextArea)
+                            ? root.template.layout.lvTextArea
+                            : { x: 274, y: 358, w: 124, h: 58 }
+            x: b.x; y: b.y; width: b.w; height: b.h
+            opacity: root.stageOpacity("level")
+            visible: root.effectiveLvMode() === "text"
+            // NO clip: the outline + soft shadow must bleed past the glyph edges.
+            // Text.Fit already keeps the glyphs inside the box; padding leaves room
+            // inside the layer texture so the shadow/outline isn't sheared off at a
+            // hard vertical/horizontal edge.
+
+            Text {
+                id: lvText
+                anchors.fill: parent
+                leftPadding: 6
+                rightPadding: 6
+                topPadding: 3
+                bottomPadding: 0
+                text: root.oneLine(root.trackValue("level"))
+                color: root.lvRenderedFill()
+                style: Text.Outline
+                styleColor: root.lvRenderedStroke()
+                font.family: displayFont.name
+                font.pixelSize: Math.round(parent.height * 0.92)
+                minimumPixelSize: Math.round(parent.height * 0.30)
+                fontSizeMode: Text.Fit
+                wrapMode: Text.NoWrap
+                maximumLineCount: 1
+                horizontalAlignment: Text.AlignHCenter
+                // Bottom-align so the glyph baseline sits where the baked atlas
+                // digits' bottom does (lvTextArea bottom ≈ native 414 = atlas cell bottom).
+                verticalAlignment: Text.AlignBottom
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    shadowEnabled: true
+                    shadowColor: root.lvRenderedShadow()
+                    shadowBlur: 0.5
+                    shadowVerticalOffset: 1
+                    shadowHorizontalOffset: 0
+                }
+            }
+        }
+
+        // 5) Title — prefab uses SEGA-NewRodinN v2 EB (display) → Heavy.
+        //    Over-long titles marquee (intro) / shrink-then-clip (still): see MarqueeText.
+        MarqueeText {
             property var b: root.template.layout.titleArea
             x: b.x; y: b.y; width: b.w; height: b.h
             opacity: root.stageOpacity("title")
-            text: root.oneLine(root.trackValue("title"))
-            color: root.template.colors.titleOnDark
-            font.family: displayFont.name
-            font.pixelSize: Math.round(b.h * 0.82)
-            minimumPixelSize: Math.round(b.h * 0.42)
-            fontSizeMode: Text.HorizontalFit
-            wrapMode: Text.NoWrap
-            maximumLineCount: 1
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
+            stageName: "title"
+            textValue: root.oneLine(root.trackValue("title"))
+            textColor: root.template.colors.titleOnDark
+            fontFamily: displayFont.name
+            basePixel: Math.round(b.h * 0.82)
+            minPixel: Math.round(b.h * 0.42)
+            baseAlign: Text.AlignHCenter
         }
 
-        // 6) Artist — prefab uses SEGA_MaruGothic-DB (body) → M PLUS Rounded 1c Bold.
-        Text {
+        // 6) Artist — prefab uses SEGA_MaruGothic-DB (body) → Bold.
+        MarqueeText {
             property var b: root.template.layout.artistArea
             x: b.x; y: b.y; width: b.w; height: b.h
             opacity: root.stageOpacity("artist")
-            text: root.oneLine(root.trackValue("artist"))
-            color: root.template.colors.artistOnDark
-            font.family: bodyFont.name
-            font.pixelSize: Math.round(b.h * 0.82)
-            minimumPixelSize: Math.round(b.h * 0.42)
-            fontSizeMode: Text.HorizontalFit
-            wrapMode: Text.NoWrap
-            maximumLineCount: 1
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
+            stageName: "artist"
+            textValue: root.oneLine(root.trackValue("artist"))
+            textColor: root.template.colors.artistOnDark
+            fontFamily: bodyFont.name
+            basePixel: Math.round(b.h * 0.82)
+            minPixel: Math.round(b.h * 0.42)
+            baseAlign: Text.AlignHCenter
         }
 
         // 6a-d) Achievement-row placeholders — shown when chart hasn't been
@@ -676,44 +888,36 @@ Item {
         }
 
         // 8) Designer name — prefab TMP_NoteName uses MaruGothic DB → body font.
-        Text {
+        MarqueeText {
             property var b: root.template.layout.designerName
             x: b.x; y: b.y; width: b.w; height: b.h
             opacity: root.stageOpacity("info")
-            text: {
+            stageName: "info"
+            textValue: {
                 var d = root.oneLine(root.trackValue("designer"))
                 return d.length > 0 ? d : "—"
             }
-            color: root.template.colors.designerOnWhite
-            font.family: bodyFont.name
-            font.pixelSize: Math.round(b.h * 0.96)
-            minimumPixelSize: Math.round(b.h * 0.5)
-            fontSizeMode: Text.HorizontalFit
-            wrapMode: Text.NoWrap
-            maximumLineCount: 1
-            horizontalAlignment: Text.AlignLeft
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
+            textColor: root.template.colors.designerOnWhite
+            fontFamily: bodyFont.name
+            basePixel: Math.round(b.h * 0.96)
+            minPixel: Math.round(b.h * 0.5)
+            baseAlign: Text.AlignLeft
         }
 
         // 9) BPM — prefab TMP_BPM uses MaruGothic DB → body font.
         //     m_text in the actual prefab is "BPM:999"; we render with a space
         //     instead of a colon to match the reference image.
-        Text {
+        MarqueeText {
             property var b: root.template.layout.bpmText
             x: b.x; y: b.y; width: b.w; height: b.h
             opacity: root.stageOpacity("info")
-            text: "BPM " + root.oneLine(root.trackValue("bpm"))
-            color: root.template.colors.bpmOnWhite
-            font.family: bodyFont.name
-            font.pixelSize: Math.round(b.h * 0.92)
-            minimumPixelSize: Math.round(b.h * 0.5)
-            fontSizeMode: Text.HorizontalFit
-            wrapMode: Text.NoWrap
-            maximumLineCount: 1
-            horizontalAlignment: Text.AlignLeft
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
+            stageName: "info"
+            textValue: "BPM " + root.oneLine(root.trackValue("bpm"))
+            textColor: root.template.colors.bpmOnWhite
+            fontFamily: bodyFont.name
+            basePixel: Math.round(b.h * 0.92)
+            minPixel: Math.round(b.h * 0.5)
+            baseAlign: Text.AlignLeft
         }
     }
 }
