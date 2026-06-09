@@ -100,11 +100,50 @@ TimelineNoteAssetSet loadTimelineNoteAssets()
         return canvas;
     };
 
-    const auto buildTouchCompositeIcon = [&buildCenteredCompositeIcon](const QPixmap& borderBase, const QPixmap& pointBase) {
-        if (borderBase.isNull() || pointBase.isNull()) {
+    // 4-triangle touch icon — mirrors the in-game touch object's corner layout
+    // (PreviewTouchLayerState::buildPreviewTouchLayerState): four copies of the corner
+    // sprite (touch.png / its each/break variants) placed up/right/down/left and rotated
+    // 180/-90/0/90, each offset from the centre by kTouchClosedOffset(12)/kTouchAssetScale(0.5)
+    // = 24 native px — i.e. the "closed"/at-hit pose the four pieces snap into.
+    const auto buildTouchCornerCompositeIcon = [](const QPixmap& corner) -> QPixmap {
+        if (corner.isNull()) {
             return QPixmap();
         }
-        return buildCenteredCompositeIcon({&borderBase, &pointBase});
+        constexpr qreal kCornerOffset = 24.0;  // kTouchClosedOffset / kTouchAssetScale
+        // Nudge the four pieces outward a touch so the closed pose leaves a small
+        // centre gap instead of the corners meeting flush.
+        constexpr qreal kCornerGap = 6.0;
+        constexpr qreal kEffectiveOffset = kCornerOffset + kCornerGap;
+        const struct {
+            qreal dx;
+            qreal dy;
+            int angle;
+        } layout[] = {
+            {0.0, -kEffectiveOffset, 180},  // up
+            {kEffectiveOffset, 0.0, -90},   // right
+            {0.0, kEffectiveOffset, 0},     // down
+            {-kEffectiveOffset, 0.0, 90},   // left
+        };
+        // Square canvas tightly bounding the rotated, offset corners (symmetric by layout).
+        const qreal halfExtent =
+            qMax(corner.width() / 2.0, kEffectiveOffset + corner.height() / 2.0);
+        const int side = qMax(1, qRound(2.0 * halfExtent));
+
+        QPixmap canvas(side, side);
+        canvas.fill(Qt::transparent);
+        QPainter painter(&canvas);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        const QPointF center(side / 2.0, side / 2.0);
+        for (const auto& piece : layout) {
+            painter.save();
+            painter.translate(center.x() + piece.dx, center.y() + piece.dy);
+            painter.rotate(piece.angle);
+            painter.drawPixmap(QPointF(-corner.width() / 2.0, -corner.height() / 2.0), corner);
+            painter.restore();
+        }
+        painter.end();
+        return canvas;
     };
 
     const auto buildTouchHoldCompositeIcon =
@@ -181,18 +220,17 @@ TimelineNoteAssetSet loadTimelineNoteAssets()
         {"star_ex_double.png", "star_ex.png"},
         kNoteSize + 3);
 
-    const QPixmap touchBorder = loadRawIcon({"touch_border_2.png", "touch.png", "touch_each.png", "each.png", "tap.png"});
-    const QPixmap touchPoint = loadRawIcon({"touch_point.png", "touch_point_each.png", "tap.png"});
-    const QPixmap touchBreakBorder =
-        loadRawIcon({"touch_break_border_2.png", "touch_break.png", "touch_border_2.png", "touch.png", "touch_each.png", "each.png", "tap.png"});
-    const QPixmap touchBreakPoint = loadRawIcon({"touch_break_point.png", "touch_point.png", "touch_point_each.png", "tap.png"});
-    const QPixmap touchEachBorder =
-        loadRawIcon({"touch_border_2_each.png", "touch_border_2.png", "touch_each.png", "touch.png", "each.png", "tap.png"});
-    const QPixmap touchEachPoint = loadRawIcon({"touch_point_each.png", "touch_point.png", "tap.png"});
+    // The touch icons are built by tiling the corner sprite (touch.png + each/break
+    // variants) into the four-triangle in-game touch shape — see buildTouchCornerCompositeIcon.
+    const QPixmap touchCorner = loadRawIcon({"touch.png", "touch_each.png", "each.png", "tap.png"});
+    const QPixmap touchBreakCorner =
+        loadRawIcon({"touch_break.png", "touch.png", "touch_each.png", "each.png", "tap.png"});
+    const QPixmap touchEachCorner =
+        loadRawIcon({"touch_each.png", "touch.png", "each.png", "tap.png"});
 
-    const QPixmap touchComposite = buildTouchCompositeIcon(touchBorder, touchPoint);
-    const QPixmap touchBreakComposite = buildTouchCompositeIcon(touchBreakBorder, touchBreakPoint);
-    const QPixmap touchEachComposite = buildTouchCompositeIcon(touchEachBorder, touchEachPoint);
+    const QPixmap touchComposite = buildTouchCornerCompositeIcon(touchCorner);
+    const QPixmap touchBreakComposite = buildTouchCornerCompositeIcon(touchBreakCorner);
+    const QPixmap touchEachComposite = buildTouchCornerCompositeIcon(touchEachCorner);
     if (!touchComposite.isNull()) {
         putIcon("touch", touchComposite, kNoteSize + 3);
     } else {
