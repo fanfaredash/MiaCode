@@ -1138,6 +1138,20 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
         state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
     }
     updatePreviewSliderPosition(state_.qtPreviewPauseSecond_);
+    // beta4 leak gauge (LOW-FREQUENCY — once per user pause, never per frame): sample
+    // process resource counters so a monotonic climb across edit→play→pause cycles localises
+    // the reported "改多了就掉帧" leak. Gated on runtime debug output so it only costs the
+    // findChildren() walk in --debug / diagnostic builds. See
+    // docs/PREVIEW_FRAMEDROP_DIAGNOSIS_AND_FIX_SPEC_ZH.md.
+    if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("preview/resource_gauge"),
+            QStringLiteral("reason=pause_exact txn=%1 qobject_descendants=%2 %3")
+                .arg(playbackTxn)
+                .arg(static_cast<qint64>(owner_.findChildren<QObject*>().size()))
+                .arg(miacode::debug_log::processResourceGaugePayload()));
+    }
     scheduleDeferredPreviewUiTail(
         true,
         true,

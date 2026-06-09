@@ -522,9 +522,12 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     loadPortableState();
     applyWorkspacePanelArrangement();
     logStartupStage("portable_state_loaded");
-    if (runtimeDebugOutputEnabled_) {
-        previewShowDebugInfo_ = true;
-    }
+    // beta4: the preview debug HUD ("显示预览调试信息") is NO LONGER force-enabled in
+    // --debug / diagnostic builds. It used to default ON whenever runtime debug output was
+    // enabled, so every diagnostic run paid the per-frame debug-overlay paint + stats cost
+    // (which also skewed the frame-drop investigation). The HUD is now driven solely by the
+    // user's render-settings toggle (previewShowDebugInfo_, default false), independent of
+    // debug logging. See docs/PREVIEW_FRAMEDROP_DIAGNOSIS_AND_FIX_SPEC_ZH.md.
     if (previewUsesStageMediaHostRoute()) {
         ensurePreviewStageMediaRouteInitialized();
     }

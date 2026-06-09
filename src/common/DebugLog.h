@@ -70,4 +70,12 @@ bool initializeStartupTimingLogSession();
 bool appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 deltaMs);
 bool appendFatalMessage(const QString& scope, const QString& payload);
 
+// Sample process-wide OS resource counters into a "key=val …" payload fragment for a
+// LOW-FREQUENCY leak gauge (call e.g. once per playback pause — never per frame). On Windows
+// reports GDI + USER handle counts and working-set / private commit (MB); other platforms
+// report zeros. Append app-level counts (e.g. qobject_descendants) alongside it and log via
+// appendLine(Channel::Runtime, "preview/resource_gauge", …) so a monotonic climb across
+// edit→play→pause cycles localises the leak (handles vs GPU/memory vs QObject churn).
+QString processResourceGaugePayload();
+
 }  // namespace miacode::debug_log

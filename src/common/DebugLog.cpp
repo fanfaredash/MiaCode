@@ -24,6 +24,10 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#include <psapi.h>
+#if defined(_MSC_VER)
+#pragma comment(lib, "psapi.lib")
+#endif
 #elif defined(Q_OS_MAC)
 #include <mach-o/dyld.h>
 #elif defined(Q_OS_UNIX)
@@ -942,6 +946,32 @@ bool appendFatalMessage(const QString& scope, const QString& payload)
         ? payload
         : QStringLiteral("%1 | chain=%2").arg(payload, chain);
     return appendLine(Channel::Fatal, scope, fullPayload, true);
+}
+
+QString processResourceGaugePayload()
+{
+#ifdef Q_OS_WIN
+    const HANDLE process = GetCurrentProcess();
+    const DWORD gdiObjects = GetGuiResources(process, GR_GDIOBJECTS);
+    const DWORD userObjects = GetGuiResources(process, GR_USEROBJECTS);
+    quint64 workingSetMb = 0;
+    quint64 privateMb = 0;
+    PROCESS_MEMORY_COUNTERS_EX pmc;
+    ZeroMemory(&pmc, sizeof(pmc));
+    pmc.cb = sizeof(pmc);
+    if (GetProcessMemoryInfo(
+            process, reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc), sizeof(pmc))) {
+        workingSetMb = static_cast<quint64>(pmc.WorkingSetSize) / (1024ull * 1024ull);
+        privateMb = static_cast<quint64>(pmc.PrivateUsage) / (1024ull * 1024ull);
+    }
+    return QStringLiteral("gdi_objects=%1 user_objects=%2 working_set_mb=%3 private_mb=%4")
+        .arg(static_cast<quint64>(gdiObjects))
+        .arg(static_cast<quint64>(userObjects))
+        .arg(workingSetMb)
+        .arg(privateMb);
+#else
+    return QStringLiteral("gdi_objects=0 user_objects=0 working_set_mb=0 private_mb=0");
+#endif
 }
 
 LogWriterStats logWriterStatsSnapshot()
