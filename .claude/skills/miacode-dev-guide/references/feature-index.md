@@ -208,15 +208,53 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   the same card the intro pre-roll composites) to a single still image — the
   program-internal port of `tools/intro_remotion/qml/render-banner-from-maidata.ps1`
   + its `qml/exporter/main.cpp`.
-- Renderer (offscreen, no chart scene): `IntroCoverExporter.{h,cpp}`
-  (`miacode::cover_export::exportIntroCover`). Loads `qrc:/intro/qml/MaimaiBannerCard.qml`,
-  injects the parsed `:/intro/templates/maimai_banner.json` via `externalTemplate` +
-  the `IntroBannerSpec` fields via `trackOverrides`, renders frame 0 fully assembled
-  (`revealStartFrame` stays −1). Transparent → PNG (alpha); opaque → JPG over the card's
-  own blurred-jacket backdrop. Writes `card.jpg`/`card.png`, adding `(1)`,`(2)`… on collision.
+- **Live WYSIWYG composer (2026-06-09)** — replaced the deleted `IntroCoverExporter` /
+  `CoverCardRenderer` / `exportIntroCover` / `renderIntroCoverImage` / `CoverRenderOptions`. The
+  cover is no longer a "card-fills-the-canvas" still; it is a composed scene (full-bleed
+  background + the difficulty card as a free, draggable/scalable LAYER) edited and exported
+  through ONE Qt Quick scene, so the live preview is pixel-identical to the export bar resolution.
+  - **`CoverLayoutModel.{h,cpp}`** — layout source of truth. Each `CoverLayer` (QObject) stores
+    NORMALISED geometry (`nx`/`ny` = layer centre 0..1, `sizeFraction` = content height / canvas
+    height, `z`, `visible`, `locked`), so one model drives both the small preview and the full-res
+    export with no rescaling. Exposed to QML as `layers` (`QList<QObject*>` Repeater model;
+    per-property NOTIFY for two-way drag/scale binding). z-order helpers (`bringToFront` /
+    `sendToBack` / `raiseLayer` / `lowerLayer`), `resetLayout()`, and `toJson`/`fromJson` (future
+    per-chart persistence / presets, handoff Phase 3). v1 seeds one `kind=="card"` layer.
+  - **`CoverComposer.qml`** (`src/intro/qml/`, **listed in `resources/intro.qrc`** → the
+    AUTORCC-stale caveat below now bites when you edit it). The scene: a background fill layer
+    (曲绘 / custom image / transparent, blurred-or-crisp + dim) + a `Repeater` over
+    `coverLayout.layers`. The card layer hosts `MaimaiBannerCard` in **transparent mode** inside a
+    wrapper sized so the card CONTENT (tab shoulder → card bottom) exactly fills it (clones the
+    template, solves `card.heightRatio`/`topMargin` for "content fills the box", sizes the wrapper
+    to `cardAspect`), so dragging/snapping the wrapper == the visible card. Move-drag (centre/edge
+    **snap guides** + `clampCentre` keeping ≥25% on the clipped canvas), a corner **scale** handle,
+    the selection border and guide lines are ALL gated behind **`editable`** (false in the export
+    → no chrome baked in). The card drop-shadow is a `MultiEffect` `layer` on the card wrapper and
+    works in EVERY background mode incl. Transparent (soft shadow on the alpha PNG). **Blur radii
+    are resolution-invariant** (backdrop `blurMax` scaled by `canvas.height/1080`; shadow `blurMax`
+    + offset by the card's px-per-native scale) so preview == export at any size. Initial selection
+    fires from `onCoverLayoutChanged` (the host assigns `coverLayout` AFTER `Component.onCompleted`).
+    Because the card runs transparent, its OWN `backgroundImage`/`backdropBlurEnabled`/internal
+    `cardShadowEnabled` knobs are unused by the cover path (the composer draws bg + shadow itself).
+  - **`CoverComposerView.{h,cpp}`** — host + export. The live view owns a bare `QQuickWindow`
+    running `CoverComposer.qml`, embedded into the dialog via **`QWidget::createWindowContainer`**
+    (which reparents + owns the window); drag/scale mutate the shared `CoverLayoutModel` with zero
+    readback. `renderCoverComposite(model, inputs, fullSize, err)` does an OFFSCREEN full-resolution
+    `grabWindow()` of the SAME scene + model (transient bare window, opacity 0, off-screen;
+    transparent→ARGB32 PNG, else RGB32 JPG; guards an empty/`card`-less template); `exportCoverComposite(...)`
+    renders + saves `card.png`/`card.jpg` (`(1)`,`(2)`… on collision). All presentation rides on
+    **`CoverComposerInputs`** `{templateMap, trackOverrides, jacketPath, backgroundPath,
+    backgroundMode (Jacket/Custom/Transparent), blurBackground, cardShadow}`.
+  - **Dialog (`ExportCoverDialog.{h,cpp}`)** — `buildInputs()` maps the controls (size /
+    background source 曲绘·custom+browse·transparent / blur / card shadow / level-text-render /
+    long-text overflow) to `CoverComposerInputs`; hosts the embedded live composer + a "重置布局 /
+    Reset layout" button; caches the parsed template once in the ctor (`cachedTemplate_`, not
+    re-read per keystroke). Card-shadow stays enabled in Transparent mode; blur is gated to
+    non-transparent (it needs a backdrop). On accept the caller drives `exportCover(outputDir)`.
   - **⚠ Render mechanism (two hard constraints — both cost a crash/bug to learn):**
-    `OffscreenCardRenderer` loads the card with a **bare `QQmlEngine` + `QQmlComponent`** and
-    parents the item into a **plain `QQuickWindow`** (shown at opacity 0, off-chrome), then
+    `CoverComposerView` (live) and `renderCoverComposite` (export) load the scene with a **bare
+    `QQmlEngine` + `QQmlComponent`** parented into a **plain `QQuickWindow`** (the live one embedded
+    via `createWindowContainer`; the export one shown at opacity 0, off-chrome), then
     captures with the public `grabWindow()`. Do NOT "simplify" this:
     1. **No `QQuickView`.** A `QQuickView` re-registers the QtQuick / QtQuick.Window modules in
        the **packaged (windeployqt) layout** → `Cannot install element '…' into protected
@@ -242,10 +280,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     `lvRendered` palette). In `atlas` mode `effectiveLvMode()` AUTO-FALLS-BACK to text when the
     level carries an unsupported glyph (never silently drops chars). **No new font** (reuses the
     bundled RHR Heavy). **Sync set for `IntroBannerSpec::lvRenderMode`:** struct
-    (`VideoExportController.h`) → `bannerTrackOverrides` (cover, `IntroCoverExporter.cpp`) +
-    intro track map (`VideoExportQuickRenderBackend.cpp`) → snapshot `lv_render_mode`
-    (`VideoExportSnapshot.cpp` to/fromJson) → UI toggle "等级文本渲染" on `ExportCoverDialog`
-    (applied as a local-copy override in `VideoExportDialog::openExportCoverDialog`).
+    (`VideoExportController.h`) → cover `buildInputs` → `CoverComposerInputs.trackOverrides`
+    (`ExportCoverDialog.cpp`) + intro track map (`VideoExportQuickRenderBackend.cpp`) → snapshot
+    `lv_render_mode` (`VideoExportSnapshot.cpp` to/fromJson) → UI toggle "等级文本渲染" on
+    `ExportCoverDialog` (folded into `buildInputs`'s `trackOverrides`).
 - **Card fonts** (shared by the intro pre-roll AND the cover export — same `MaimaiBannerCard.qml`):
   title (`displayFont`) uses **`ResourceHanRoundedCN-Heavy.ttf`** and body (`bodyFont`) uses
   **`ResourceHanRoundedCN-Bold.ttf`** (思源圆体 / Resource Han Rounded, OFL) — Heavy gives the
@@ -297,16 +335,17 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     the standalone exporter preview. ⚠ Editing only `src/intro/qml/*.qml` (or qrc-listed assets)
     may NOT rebundle (AUTORCC misses the qrc→content dep): delete `build/**/qrc_intro.cpp*` (or
     touch `resources/intro.qrc`) to force RCC.
-- Sub-dialog (size + transparent-bg toggle): `ExportCoverDialog.{h,cpp}`; size presets
-  mirror the video-export resolutions, seeded from the current video size, tracked
+- Sub-dialog controls + embedded live composer: `ExportCoverDialog.{h,cpp}` (detailed above);
+  size presets mirror the video-export resolutions, seeded from the current video size, tracked
   independently.
 - Entry slot: a "导出封面 / Export Cover" button on the **Font** tab of `VideoExportDialog`
   (`VideoExportDialog::openExportCoverDialog`). It reuses `baseTask_.intro`
   (`IntroBannerSpec`), which `MainWindow::ExportSection::onExportPreviewVideo` now seeds via
   `buildActiveDifficultyIntroBannerSpec()` (wraps the `buildIntroBannerSpec` helper in
   `MainWindow.ExportSnapshot.cpp`). Output dir = the configured video output's directory,
-  falling back to the chart dir. **Note:** the QML is reused as-is — no `intro.qrc` rebundle
-  needed (cf. the AUTORCC-stale caveat that only bites when *editing* `src/intro/qml/*.qml`).
+  falling back to the chart dir. **⚠ Note:** `CoverComposer.qml` is a NEW file in `intro.qrc`, so
+  editing it (or `MaimaiBannerCard.qml`) DOES need the AUTORCC repack — delete `build/**/qrc_intro.cpp*`
+  / touch `resources/intro.qrc` to force RCC (cf. the over-long-text mirror note above).
 
 ## 9. Latency settings (BPM & offset) — `src/tools/latency/`
 

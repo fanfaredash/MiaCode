@@ -3,6 +3,7 @@
         <file alias="qml/IntroOverlay.qml">../src/intro/qml/IntroOverlay.qml</file>
         <file alias="qml/MaimaiTransition.qml">../src/intro/qml/MaimaiTransition.qml</file>
         <file alias="qml/MaimaiBannerCard.qml">../src/intro/qml/MaimaiBannerCard.qml</file>
+        <file alias="qml/CoverComposer.qml">../src/intro/qml/CoverComposer.qml</file>
         <file alias="templates/maimai_banner.json">../src/intro/templates/maimai_banner.json</file>
         <file alias="audio/track_start.wav">../src/intro/audio/track_start.wav</file>
         <file alias="assets/transition/base_BR.png">../src/intro/assets/transition/base_BR.png</file>

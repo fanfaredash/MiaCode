@@ -7,7 +7,6 @@
 #include "common/PreviewInteractionConfig.h"
 #include "core/scene/PreviewHudState.h"
 #include "tools/cover_export/ExportCoverDialog.h"
-#include "tools/cover_export/IntroCoverExporter.h"
 #include "tools/video_export/VideoExportPreferences.h"
 
 #include <QAbstractItemView>
@@ -1676,7 +1675,7 @@ void VideoExportDialog::openHudFontSettingsDialog()
 
 void VideoExportDialog::openExportCoverDialog()
 {
-    ExportCoverDialog dialog(selectedResolution(), this);
+    ExportCoverDialog dialog(baseTask_.intro, selectedResolution(), this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
@@ -1692,19 +1691,7 @@ void VideoExportDialog::openExportCoverDialog()
         ? baseDirectory
         : QFileInfo(resolvedOutput).absolutePath();
 
-    IntroBannerSpec coverBanner = baseTask_.intro;
-    if (dialog.levelTextRender()) {
-        coverBanner.lvRenderMode = QStringLiteral("text");
-    }
-
-    const miacode::cover_export::CoverExportResult result =
-        miacode::cover_export::exportIntroCover(
-            coverBanner,
-            dialog.selectedSize(),
-            dialog.transparentBackground(),
-            outputDirectory,
-            dialog.textOverflowMode()
-        );
+    const miacode::cover_export::CoverExportResult result = dialog.exportCover(outputDirectory);
 
     if (result.success) {
         QMessageBox::information(

@@ -48,6 +48,15 @@ Item {
     // the template (the vendored maimai_banner.json sets transparentBackground).
     property bool transparentBackground: (root.template && root.template.transparentBackground === true)
 
+    // Cover-export extras (the animated intro leaves these at their defaults):
+    //   • backgroundImage — a CUSTOM backdrop image; when set it replaces the
+    //     chart 曲绘 as the blurred/plain backdrop (the jacket SLOT still shows the
+    //     chart 曲绘). Empty -> backdrop falls back to the 曲绘.
+    //   • backdropBlurEnabled — blur the backdrop (true) or show it crisp (false).
+    //   • cardShadowEnabled — soft drop shadow behind the whole card.
+    property bool backdropBlurEnabled: true
+    property bool cardShadowEnabled: false
+
     // Device-pixel ratio of the surface we render onto (2.0 on a HiDPI grab,
     // 1.0 on a plain export). The jacket-frame snap below folds this in so the
     // four edges land on whole DEVICE pixels, not just whole logical pixels.
@@ -57,6 +66,10 @@ Item {
     readonly property url effectiveJacket:
         (jacketImage.toString().length > 0) ? jacketImage
                                             : (logoImage.toString().length > 0 ? logoImage : "")
+
+    // Resolved backdrop: the custom background image if supplied, else the 曲绘.
+    readonly property url effectiveBackdrop:
+        (backgroundImage.toString().length > 0) ? backgroundImage : effectiveJacket
 
     // FontLoaders for the free OFL substitute of the prefab's SEGA proprietary
     // fonts. Resource Han Rounded CN (思源圆体, rounded Source Han) natively covers
@@ -95,6 +108,7 @@ Item {
             fontsRoot: "qrc:/intro/assets/fonts",
             lvRenderMode: "atlas",
             stillTextMode: "shrink",
+            cardShadow: { color: "#99000000", blur: 0.6, offsetY: 14 },
             marquee: { startHoldFrames: 18, scrollPxPerFrame: 1.0, loopGapPx: 48 },
             lvRendered: {
                 fill: "#FFFFFF",
@@ -384,6 +398,19 @@ Item {
         var s = r.shadow || {}
         return s[trackValue("difficulty")] || "#000000"
     }
+    // Card drop-shadow params (cover export). Color carries its own alpha.
+    function cardShadowColor() {
+        var s = template.cardShadow || {}
+        return s.color || "#99000000"
+    }
+    function cardShadowBlurValue() {
+        var s = template.cardShadow || {}
+        return (s.blur !== undefined) ? s.blur : 0.6
+    }
+    function cardShadowOffsetYValue() {
+        var s = template.cardShadow || {}
+        return (s.offsetY !== undefined) ? s.offsetY : 14
+    }
 
     Component.onCompleted: {
         if (externalTemplate) {
@@ -488,20 +515,25 @@ Item {
         }
     }
 
-    // ----- Backdrop: blurred jacket + dim -----
+    // ----- Backdrop: (blurred OR crisp) 曲绘/custom image + dim -----
     Rectangle {
         anchors.fill: parent
         color: "#000000"
         visible: !root.transparentBackground
     }
 
+    // Backdrop source image. Shown CRISP directly when blur is off; when blur is
+    // on it stays hidden and feeds the MultiEffect below as the blur source.
     Image {
         id: backdropSource
         anchors.fill: parent
-        source: root.effectiveJacket
+        source: root.effectiveBackdrop
         fillMode: Image.PreserveAspectCrop
-        visible: false
+        visible: !root.transparentBackground && !root.backdropBlurEnabled
+                 && root.effectiveBackdrop.toString().length > 0
         asynchronous: false
+        smooth: true
+        mipmap: true
     }
 
     MultiEffect {
@@ -510,7 +542,8 @@ Item {
         blurEnabled: true
         blur: root.template.background.blurAmount
         blurMax: 96
-        visible: source !== null && root.effectiveJacket.toString().length > 0 && !root.transparentBackground
+        visible: root.backdropBlurEnabled && !root.transparentBackground
+                 && root.effectiveBackdrop.toString().length > 0
     }
 
     Rectangle {
@@ -547,6 +580,22 @@ Item {
                 yScale: geom.cardScale
             }
         ]
+
+        // Optional soft drop shadow behind the WHOLE card (cover export only). The
+        // layer captures the card incl. the tab that sits above y=0 (expanded
+        // sourceRect) so the shadow follows the real card silhouette, not a clipped
+        // box. autoPaddingEnabled lets the blur bleed past the layer bounds.
+        layer.enabled: root.cardShadowEnabled && !root.transparentBackground
+        layer.sourceRect: Qt.rect(0, -64, width, height + 64)
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: root.cardShadowColor()
+            blurMax: 64
+            shadowBlur: root.cardShadowBlurValue()
+            shadowVerticalOffset: root.cardShadowOffsetYValue()
+            shadowHorizontalOffset: 0
+            autoPaddingEnabled: true
+        }
 
         // Z-order matches the Unity prefab: MusicBase's own Image (the frame)
         // renders FIRST, then its children render on top, in declaration order.

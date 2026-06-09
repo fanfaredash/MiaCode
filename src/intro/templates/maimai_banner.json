@@ -20,6 +20,12 @@
   "stillTextMode": "shrink",
   "_stillTextModeComment": "Still cover export only: how over-long title/artist/designer/BPM are handled. 'shrink' = shrink the font to fit the whole string; 'ellipsis' = keep the base font size and clip the tail with '…'. The animated intro ignores this (it always marquee-scrolls). Set per-export from the cover dialog.",
   "_lvRenderModeComment": "How the LV value is drawn. 'atlas' = the pre-baked digit sprite sheet (only [0-9] and '+'); 'text' = render the raw level STRING with the bundled Heavy font (no 'Lv' prefix, supports arbitrary characters). In 'atlas' mode the card AUTO-FALLS-BACK to text rendering whenever the level string contains a character the atlas can't render, so input is never silently dropped.",
+  "cardShadow": {
+    "_comment": "Cover-export-only soft drop shadow behind the whole card (cardShadowEnabled). color carries alpha; blur is the MultiEffect 0..1 amount (blurMax 64); offsetY in card-native px.",
+    "color": "#99000000",
+    "blur": 0.6,
+    "offsetY": 14
+  },
   "marquee": {
     "_comment": "Over-long title/artist/designer/BPM CONTINUOUSLY LOOP (scroll left, wrap with a gap) in the animated intro (revealStartFrame>=0). The still cover export shrinks-then-left-aligns instead (a still can't scroll). Frame-driven (NOT QML animation, which never ticks under the headless export loop). Values in card-native px / authoring frames (60fps). scrollPxPerFrame is intentionally slow.",
     "startHoldFrames": 18,
