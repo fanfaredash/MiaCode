@@ -102,12 +102,12 @@ bool hasTimelineNavigateModifier(Qt::KeyboardModifiers modifiers)
 
 QVector<double> makeTimelineZoomPresets()
 {
-    return {0.25, 0.5, 0.75, 1.0, 1.5, 2.0};
+    return {0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0};
 }
 
 QVector<double> makeTimelineButtonZoomPresets()
 {
-    return {0.25, 0.5, 0.75, 1.0, 1.5, 2.0};
+    return {0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0};
 }
 
 bool usesTriggerSecondPlacement(const MuriDiagnostic& diagnostic)
