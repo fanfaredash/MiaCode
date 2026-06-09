@@ -13,6 +13,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QJsonObject;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -57,6 +58,13 @@ private:
     miacode::cover_export::CoverComposerInputs buildInputs() const;
     QSize currentSize() const;
 
+    // B2 — layout save / import. The whole composition (size + background + card +
+    // chart-frame settings + layer geometry) round-trips through one JSON file.
+    void saveLayout();
+    void importLayout();
+    QJsonObject exportCompositionJson() const;
+    void applyCompositionJson(const QJsonObject& root);
+
     // Chart-frame picker.
     void onChartFrameToggled(bool on);
     bool renderChartFrameNow();            // grab a still at the current playhead + push to the model; true if a still was produced
@@ -91,6 +99,8 @@ private:
     QCheckBox* levelTextRenderCheck_ = nullptr;
     QComboBox* textOverflowCombo_ = nullptr;
     QPushButton* resetLayoutButton_ = nullptr;
+    QPushButton* saveLayoutButton_ = nullptr;
+    QPushButton* importLayoutButton_ = nullptr;
 
     // Chart-frame layer + its in-process renderer.
     std::unique_ptr<miacode::cover_export::SceneFrameRenderer> sceneFrameRenderer_;
@@ -100,6 +110,9 @@ private:
     QSlider* frameSlider_ = nullptr;       // value = milliseconds into the chart
     QLabel* frameTimeLabel_ = nullptr;
     QPushButton* playButton_ = nullptr;
+    // B1 — chart-frame inner-ring background (reuses the cover background image).
+    QCheckBox* chartFrameBgCheck_ = nullptr;
+    QSlider* chartFrameBgBrightnessSlider_ = nullptr;   // 0..100 → brightness 0..1
     bool rendering_ = false;               // re-entrancy guard (renderAt pumps the event loop)
 
     // Visual-only playback clock (no audio): a wall-clock timer advancing the

@@ -34,6 +34,12 @@ Item {
     property int backgroundMode: 0          // 0=jacket, 1=custom, 2=transparent
     property bool blurEnabled: true
     property bool cardShadowEnabled: false
+    // B1 — chart-frame inner-ring background. When enabled, the chart-frame disk
+    // shows the cover background (曲绘/custom) crisp, circular-masked to the playfield
+    // ring, dimmed by chartFrameBgBrightness; the outer ring stays transparent.
+    property bool chartFrameBgEnabled: false
+    property real chartFrameBgBrightness: 0.8   // 0..1; MultiEffect.brightness = this − 1
+    property real chartFrameDiskDiameter: 0.0   // ring diameter / square side (0 = no disk)
     property bool editable: true            // false in the export render (no chrome/handlers)
     // A2 — the CoverComposerView (live path only) sets this so the chart-frame
     // layer can host a LIVE PreviewQuickSceneRoot instead of the static grab Image:
@@ -252,6 +258,55 @@ Item {
                                           * (layerItem.height / canvas.cardContentNativeH(canvas.coverTemplate))
                     shadowHorizontalOffset: 0
                     autoPaddingEnabled: true
+                }
+                // B1 — chart-frame inner-ring background, BEHIND the overlay. The
+                // crisp cover background, circular-masked to the playfield disk and
+                // dimmed (MultiEffect.brightness); only the BG is masked, so the
+                // overlay (notes/ring/effects) still extends across the square as in
+                // A2. Hidden for the card layer / transparent bg. The source Image is
+                // a native texture provider while hidden; the circular mask is
+                // captured via ShaderEffectSource (the repo's proven hideSource
+                // pattern, cf. IntroOverlay.qml). Declared first → paints behind.
+                Image {
+                    id: chartBgDiskImage
+                    anchors.fill: parent
+                    visible: false
+                    source: layerItem.isChartFrame ? canvas.backdropSourceUrl : ""
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: false
+                    smooth: true
+                    mipmap: true
+                }
+                Item {
+                    id: chartBgDiskMaskContent
+                    anchors.fill: parent
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: canvas.chartFrameDiskDiameter * parent.width
+                        height: width
+                        radius: width / 2
+                        antialiasing: true
+                        color: "#FFFFFF"
+                    }
+                }
+                ShaderEffectSource {
+                    id: chartBgDiskMaskTex
+                    anchors.fill: parent
+                    sourceItem: chartBgDiskMaskContent
+                    hideSource: true
+                    live: layerItem.isChartFrame
+                    visible: false
+                }
+                MultiEffect {
+                    anchors.fill: parent
+                    visible: layerItem.isChartFrame && canvas.chartFrameBgEnabled
+                             && canvas.chartFrameDiskDiameter > 0
+                             && canvas.backdropSourceUrl.toString().length > 0
+                    source: chartBgDiskImage
+                    maskEnabled: true
+                    maskSource: chartBgDiskMaskTex
+                    maskThresholdMin: 0.5
+                    brightness: canvas.chartFrameBgBrightness - 1.0
                 }
                 Loader {
                     anchors.fill: parent

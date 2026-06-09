@@ -240,8 +240,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     height, `z`, `visible`, `locked`), so one model drives both the small preview and the full-res
     export with no rescaling. Exposed to QML as `layers` (`QList<QObject*>` Repeater model;
     per-property NOTIFY for two-way drag/scale binding). z-order helpers (`bringToFront` /
-    `sendToBack` / `raiseLayer` / `lowerLayer`), `resetLayout()`, and `toJson`/`fromJson` (future
-    per-chart persistence / presets, handoff Phase 3). Seeds **two** layers: `kind=="card"`
+    `sendToBack` / `raiseLayer` / `lowerLayer`), `resetLayout()`, and `toJson`/`fromJson` (the layer
+    block of the dialog's B2 layout save/import; per-chart auto-persistence still pending). Seeds
+    **two** layers: `kind=="card"`
     (centred, `z=1`, visible) and `kind=="chartFrame"` (centred-behind, `z=0`, **hidden** until
     `setChartFrameEnabled(true)` — drives its `visible`). A `chartFrame` layer also carries a
     rendered square playfield still: C++ pushes it via `setLayerImage(key, QImage)` (stores
@@ -331,6 +332,31 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     and warns (non-fatal) if an enabled frame still has no still rather than silently shipping a cover
     missing it. Card-shadow stays enabled in Transparent mode; blur is
     gated to non-transparent. On accept the caller drives `exportCover(outputDir)`.
+  - **Chart-frame inner-ring background (B1, 2026-06-09):** when "谱面帧内圈背景 / Chart-frame inner
+    background" is ticked (and the cover background isn't Transparent), the chart-frame playfield disk
+    shows the SAME cover background image (`backdropSourceUrl` = 曲绘/custom), crisp, dimmed by a
+    "谱面帧背景亮度" slider; the OUTER ring stays transparent (the overlay's notes/ring/effects still
+    extend across the square). Implemented **purely in `CoverComposer.qml`** (no scene-root / media /
+    layer-flag change): a hidden source `Image` (`PreserveAspectCrop`) + a `MultiEffect`
+    (`maskEnabled` + `brightness = sliderBrightness − 1`) masked by a centred white-circle captured via
+    `ShaderEffectSource` (`hideSource`, the repo's proven pattern). The circle diameter = the playfield
+    ring: `SceneFrameRenderer::playfieldDiskDiameterFraction()` = `layoutSquareScale ·
+    effectiveLayoutRingDiameterRatio` (the exact ring math from `PreviewVideoGeometryConfig.h`), passed
+    through `CoverComposerInputs.chartFrameDiskDiameter`. Renders identically in the live preview and
+    the export (same QML, both engines). The controls gate on chart-frame-enabled + non-transparent bg.
+  - **Layout save / import (B2, 2026-06-09):** "保存布局… / 导入布局…" buttons round-trip the WHOLE
+    composition through one `*.json` file — assembled at the DIALOG level (`exportCompositionJson` /
+    `applyCompositionJson`), wrapping `CoverLayoutModel::toJson`/`fromJson` (layer geometry + visibility
+    + `frameSeconds`) plus size / background mode+path+blur / card shadow+level-text+long-text /
+    chart-frame inner-bg+brightness. Import sets every control signal-blocked, then re-grabs the chart
+    still at the restored `frameSeconds` by driving `onChartFrameToggled` (the still itself isn't
+    persisted). Import validates the root `kind == "miacode-cover-composition"` tag (rejects unrelated
+    JSON rather than silently resetting). **Absolute-path strategy with fallback:** a `Custom`
+    background whose `customPath` no longer exists (`QFileInfo::exists`) falls back to `Jacket`; a chart
+    frame the importing session can't render (no notes / skin) is skipped — both surfaced in one
+    non-blocking notice. (This explicit
+    file import/export is separate from the still-pending per-chart/global portable-settings auto-memory
+    — handoff §5.4 #4.)
   - **⚠ Render mechanism (two hard constraints — both cost a crash/bug to learn):**
     `CoverComposerView` (live) and `renderCoverComposite` (export) load the scene with a **bare
     `QQmlEngine` + `QQmlComponent`** parented into a **plain `QQuickWindow`** (the live one embedded

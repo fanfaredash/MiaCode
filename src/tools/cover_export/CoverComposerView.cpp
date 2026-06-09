@@ -146,6 +146,9 @@ void applyComposerInputs(QQuickItem* root,
     root->setProperty("backgroundMode", static_cast<int>(inputs.backgroundMode));
     root->setProperty("blurEnabled", inputs.blurBackground);
     root->setProperty("cardShadowEnabled", inputs.cardShadow);
+    root->setProperty("chartFrameBgEnabled", inputs.chartFrameBackground);
+    root->setProperty("chartFrameBgBrightness", inputs.chartFrameBgBrightness);
+    root->setProperty("chartFrameDiskDiameter", inputs.chartFrameDiskDiameter);
     root->setProperty("editable", editable);
 }
 

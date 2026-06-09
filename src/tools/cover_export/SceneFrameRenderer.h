@@ -77,6 +77,18 @@ public:
     void setPlayheadSeconds(double seconds) { frameState_.playheadSeconds = seconds; }
     double playheadSeconds() const { return frameState_.playheadSeconds; }
 
+    // Playfield outline-ring DIAMETER as a fraction of the square render side, for
+    // the B1 chart-frame inner-ring background mask (a centred circle of this
+    // diameter in the square frame == the playfield disk). Derived exactly the way
+    // the scene draws the ring: ringRadius = (side·layoutSquareScale·0.5)·ringRatio
+    // ⇒ diameter/side = layoutSquareScale · effectiveLayoutRingDiameterRatio. Valid
+    // only after bootstrap (else assets.layoutRingDiameterRatio is 0).
+    double playfieldDiskDiameterFraction() const
+    {
+        return miacode::preview_video::normalizedLayoutSquareScale(frameState_.render.layoutSquareScale)
+             * miacode::preview_video::effectiveLayoutRingDiameterRatio(frameState_.assets.layoutRingDiameterRatio);
+    }
+
 private:
     bool ensureWindow(QString* errorMessage);
 

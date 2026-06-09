@@ -45,6 +45,14 @@ struct CoverComposerInputs {
     CoverBackgroundMode backgroundMode = CoverBackgroundMode::Jacket;
     bool blurBackground = true;
     bool cardShadow = false;
+    // B1 — chart-frame inner-ring background. When enabled (and the background is
+    // not Transparent), the chart-frame playfield disk shows the SAME background
+    // image (曲绘 / custom), crisp, circular-masked to the ring, dimmed by
+    // brightness; the outer ring stays transparent. diskDiameter is the ring
+    // diameter / square side (from SceneFrameRenderer::playfieldDiskDiameterFraction).
+    bool chartFrameBackground = false;
+    double chartFrameBgBrightness = 0.8;   // 0..1 (1 = full bright; maps to MultiEffect.brightness − 1)
+    double chartFrameDiskDiameter = 0.0;   // 0 = unknown → no disk drawn
 };
 
 // Live, embeddable WYSIWYG composer. Owns a bare QQuickWindow hosting

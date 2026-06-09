@@ -175,7 +175,18 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
     resetLayoutButton_ = new QPushButton(
         l10n(QStringLiteral("Reset layout"), QStringLiteral("重置布局")), this);
     resetLayoutButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    previewColumn->addWidget(resetLayoutButton_, 0, Qt::AlignHCenter);
+    saveLayoutButton_ = new QPushButton(
+        l10n(QStringLiteral("Save layout…"), QStringLiteral("保存布局…")), this);
+    saveLayoutButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    importLayoutButton_ = new QPushButton(
+        l10n(QStringLiteral("Import layout…"), QStringLiteral("导入布局…")), this);
+    importLayoutButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    auto* layoutButtonsRow = new QHBoxLayout();
+    layoutButtonsRow->setSpacing(8);
+    layoutButtonsRow->addWidget(resetLayoutButton_);
+    layoutButtonsRow->addWidget(saveLayoutButton_);
+    layoutButtonsRow->addWidget(importLayoutButton_);
+    previewColumn->addLayout(layoutButtonsRow);
 
     previewColumn->addStretch(1);
     rootLayout->addLayout(previewColumn, 0);
@@ -298,6 +309,24 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
     playClock_->setInterval(kPlayTickMs);
     connect(playClock_, &QTimer::timeout, this, &ExportCoverDialog::onPlayTick);
 
+    // Chart-frame inner-ring background (B1): the playfield disk shows the cover
+    // background (曲绘/custom) crisp + dimmed; the outer ring stays transparent.
+    // Only meaningful when the chart frame is enabled and the background isn't
+    // Transparent — gated in syncControlEnabled().
+    chartFrameBgCheck_ = new QCheckBox(
+        l10n(QStringLiteral("Chart-frame inner background"), QStringLiteral("谱面帧内圈背景")), this);
+    chartFrameBgCheck_->setChecked(true);
+    chartFrameBgCheck_->setEnabled(false);
+    form->addRow(QString(), chartFrameBgCheck_);
+
+    chartFrameBgBrightnessSlider_ = new QSlider(Qt::Horizontal, this);
+    chartFrameBgBrightnessSlider_->setMinimum(0);
+    chartFrameBgBrightnessSlider_->setMaximum(100);
+    chartFrameBgBrightnessSlider_->setValue(80);
+    chartFrameBgBrightnessSlider_->setEnabled(false);
+    form->addRow(l10n(QStringLiteral("Frame bg brightness"), QStringLiteral("谱面帧背景亮度")),
+                 chartFrameBgBrightnessSlider_);
+
     controlsColumn->addLayout(form);
     controlsColumn->addStretch(1);
 
@@ -339,6 +368,12 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
             if (chartFrameCheck_ != nullptr) chartFrameCheck_->setChecked(false);
         });
     }
+    if (saveLayoutButton_ != nullptr) {
+        connect(saveLayoutButton_, &QPushButton::clicked, this, &ExportCoverDialog::saveLayout);
+    }
+    if (importLayoutButton_ != nullptr) {
+        connect(importLayoutButton_, &QPushButton::clicked, this, &ExportCoverDialog::importLayout);
+    }
 
     connect(chartFrameCheck_, &QCheckBox::toggled, this, &ExportCoverDialog::onChartFrameToggled);
     connect(playButton_, &QPushButton::clicked, this, &ExportCoverDialog::togglePlayback);
@@ -361,6 +396,12 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
             stopPlayback();
         }
     });
+    // B1 inner-ring background controls.
+    connect(chartFrameBgCheck_, &QCheckBox::toggled, this, [this] {
+        syncControlEnabled();
+        pushInputs();
+    });
+    connect(chartFrameBgBrightnessSlider_, &QSlider::valueChanged, this, [this] { pushInputs(); });
 
     syncControlEnabled();
     resizePreviewToAspect();
@@ -392,6 +433,7 @@ void ExportCoverDialog::onChartFrameToggled(bool on)
         if (playButton_ != nullptr) {
             playButton_->setEnabled(false);
         }
+        syncControlEnabled();   // disable the inner-bg controls
         return;
     }
     // Enabling shows the LIVE edit scene (the QML Loader activates + binds), so no
@@ -415,6 +457,7 @@ void ExportCoverDialog::onChartFrameToggled(bool on)
         if (playButton_ != nullptr) {
             playButton_->setEnabled(false);
         }
+        syncControlEnabled();   // re-disable the inner-bg controls after revert
         QMessageBox::warning(
             this,
             l10n(QStringLiteral("Chart frame"), QStringLiteral("谱面帧")),
@@ -425,6 +468,7 @@ void ExportCoverDialog::onChartFrameToggled(bool on)
     if (playButton_ != nullptr) {
         playButton_->setEnabled(true);
     }
+    syncControlEnabled();   // enable the inner-bg controls (if bg isn't transparent)
 }
 
 int ExportCoverDialog::chartFrameRenderPx() const
@@ -604,6 +648,17 @@ miacode::cover_export::CoverComposerInputs ExportCoverDialog::buildInputs() cons
 
     in.blurBackground = blurCheck_ != nullptr && blurCheck_->isChecked();
     in.cardShadow = cardShadowCheck_ != nullptr && cardShadowCheck_->isChecked();
+
+    // B1 — chart-frame inner-ring background (reuses the cover background image via
+    // the QML's backdropSourceUrl). The disk diameter is the playfield ring as a
+    // fraction of the square frame; 0 when the renderer isn't bootstrapped.
+    in.chartFrameBackground = chartFrameBgCheck_ != nullptr && chartFrameBgCheck_->isChecked();
+    in.chartFrameBgBrightness = chartFrameBgBrightnessSlider_ != nullptr
+        ? chartFrameBgBrightnessSlider_->value() / 100.0
+        : 0.8;
+    in.chartFrameDiskDiameter = (chartFrameAvailable_ && sceneFrameRenderer_ != nullptr)
+        ? sceneFrameRenderer_->playfieldDiskDiameterFraction()
+        : 0.0;
     return in;
 }
 
@@ -676,6 +731,18 @@ void ExportCoverDialog::syncControlEnabled()
     // alpha PNG), so it stays enabled regardless of the background source.
     if (blurCheck_ != nullptr) blurCheck_->setEnabled(!isTransparent);
     if (cardShadowCheck_ != nullptr) cardShadowCheck_->setEnabled(true);
+
+    // B1 inner-ring background: only when the chart frame is enabled AND the cover
+    // background isn't Transparent (no image to show in the disk). The brightness
+    // slider additionally needs the inner-bg checkbox on.
+    const bool chartFrameOn =
+        chartFrameCheck_ != nullptr && chartFrameCheck_->isChecked() && chartFrameAvailable_;
+    const bool innerBgEnable = chartFrameOn && !isTransparent;
+    if (chartFrameBgCheck_ != nullptr) chartFrameBgCheck_->setEnabled(innerBgEnable);
+    if (chartFrameBgBrightnessSlider_ != nullptr) {
+        chartFrameBgBrightnessSlider_->setEnabled(
+            innerBgEnable && chartFrameBgCheck_ != nullptr && chartFrameBgCheck_->isChecked());
+    }
 }
 
 void ExportCoverDialog::browseBackground()
@@ -698,5 +765,260 @@ void ExportCoverDialog::browseBackground()
     }
     if (backgroundPathEdit_ != nullptr) {
         backgroundPathEdit_->setText(file);
+    }
+}
+
+// ===================== B2 — layout save / import =====================
+
+QJsonObject ExportCoverDialog::exportCompositionJson() const
+{
+    QJsonObject root;
+    root.insert(QStringLiteral("kind"), QStringLiteral("miacode-cover-composition"));
+    root.insert(QStringLiteral("version"), 1);
+
+    QJsonObject size;
+    size.insert(QStringLiteral("w"), currentSize().width());
+    size.insert(QStringLiteral("h"), currentSize().height());
+    root.insert(QStringLiteral("size"), size);
+
+    QJsonObject bg;
+    bg.insert(QStringLiteral("mode"),
+              backgroundCombo_ != nullptr ? backgroundCombo_->currentData().toString()
+                                          : QStringLiteral("jacket"));
+    // Absolute path (chosen strategy): on a different machine a missing file
+    // triggers the jacket fallback in applyCompositionJson().
+    bg.insert(QStringLiteral("customPath"),
+              backgroundPathEdit_ != nullptr ? backgroundPathEdit_->text().trimmed() : QString());
+    bg.insert(QStringLiteral("blur"), blurCheck_ != nullptr && blurCheck_->isChecked());
+    root.insert(QStringLiteral("background"), bg);
+
+    QJsonObject card;
+    card.insert(QStringLiteral("shadow"), cardShadowCheck_ != nullptr && cardShadowCheck_->isChecked());
+    card.insert(QStringLiteral("levelTextRender"),
+                levelTextRenderCheck_ != nullptr && levelTextRenderCheck_->isChecked());
+    card.insert(QStringLiteral("longText"),
+                textOverflowCombo_ != nullptr ? textOverflowCombo_->currentData().toString()
+                                              : QStringLiteral("shrink"));
+    root.insert(QStringLiteral("card"), card);
+
+    QJsonObject cf;
+    cf.insert(QStringLiteral("innerBackground"),
+              chartFrameBgCheck_ != nullptr && chartFrameBgCheck_->isChecked());
+    cf.insert(QStringLiteral("innerBrightness"),
+              chartFrameBgBrightnessSlider_ != nullptr ? chartFrameBgBrightnessSlider_->value() / 100.0
+                                                       : 0.8);
+    root.insert(QStringLiteral("chartFrame"), cf);
+
+    // Layer geometry + visibility (chart-frame enabled == its layer visible) +
+    // frameSeconds, via CoverLayoutModel (the layers are its responsibility).
+    if (model_ != nullptr) {
+        root.insert(QStringLiteral("layout"), model_->toJson());
+    }
+    return root;
+}
+
+void ExportCoverDialog::saveLayout()
+{
+    stopPlayback();
+    QString path = QFileDialog::getSaveFileName(
+        this,
+        l10n(QStringLiteral("Save cover layout"), QStringLiteral("保存封面布局")),
+        QStringLiteral("cover-layout.json"),
+        l10n(QStringLiteral("Layout (*.json)"), QStringLiteral("布局 (*.json)")));
+    if (path.isEmpty()) {
+        return;
+    }
+    if (!path.endsWith(QStringLiteral(".json"), Qt::CaseInsensitive)) {
+        path += QStringLiteral(".json");
+    }
+    const QJsonDocument doc(exportCompositionJson());
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        || file.write(doc.toJson(QJsonDocument::Indented)) < 0) {
+        QMessageBox::warning(
+            this,
+            l10n(QStringLiteral("Save layout"), QStringLiteral("保存布局")),
+            l10n(QStringLiteral("Could not write the layout file."),
+                 QStringLiteral("无法写入布局文件。")));
+    }
+}
+
+void ExportCoverDialog::importLayout()
+{
+    const QString path = QFileDialog::getOpenFileName(
+        this,
+        l10n(QStringLiteral("Import cover layout"), QStringLiteral("导入封面布局")),
+        QString(),
+        l10n(QStringLiteral("Layout (*.json)"), QStringLiteral("布局 (*.json)")));
+    if (path.isEmpty()) {
+        return;
+    }
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        QMessageBox::warning(
+            this,
+            l10n(QStringLiteral("Import layout"), QStringLiteral("导入布局")),
+            l10n(QStringLiteral("Could not read the layout file."),
+                 QStringLiteral("无法读取布局文件。")));
+        return;
+    }
+    QJsonParseError parseError{};
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (!doc.isObject()) {
+        QMessageBox::warning(
+            this,
+            l10n(QStringLiteral("Import layout"), QStringLiteral("导入布局")),
+            l10n(QStringLiteral("The layout file is not valid JSON."),
+                 QStringLiteral("布局文件不是有效的 JSON。")));
+        return;
+    }
+    const QJsonObject root = doc.object();
+    // Identity guard: an unrelated but structurally-valid JSON would otherwise be
+    // accepted and silently reset the composition toward defaults. Require our tag.
+    if (root.value(QStringLiteral("kind")).toString() != QStringLiteral("miacode-cover-composition")) {
+        QMessageBox::warning(
+            this,
+            l10n(QStringLiteral("Import layout"), QStringLiteral("导入布局")),
+            l10n(QStringLiteral("This file is not a MiaCode cover layout."),
+                 QStringLiteral("该文件不是 MiaCode 封面布局文件。")));
+        return;
+    }
+    applyCompositionJson(root);
+}
+
+void ExportCoverDialog::applyCompositionJson(const QJsonObject& root)
+{
+    stopPlayback();
+
+    // --- Size: match a preset or add a custom entry. ---
+    const QJsonObject size = root.value(QStringLiteral("size")).toObject();
+    const int w = size.value(QStringLiteral("w")).toInt(currentSize().width());
+    const int h = size.value(QStringLiteral("h")).toInt(currentSize().height());
+    if (sizeCombo_ != nullptr && w > 0 && h > 0) {
+        const QSize wanted(w, h);
+        int idx = -1;
+        for (int i = 0; i < sizeCombo_->count(); ++i) {
+            if (sizeCombo_->itemData(i).toSize() == wanted) { idx = i; break; }
+        }
+        if (idx < 0) {
+            sizeCombo_->addItem(QStringLiteral("%1x%2").arg(w).arg(h), wanted);
+            idx = sizeCombo_->count() - 1;
+        }
+        const QSignalBlocker block(sizeCombo_);
+        sizeCombo_->setCurrentIndex(idx);
+    }
+
+    // --- Background, with the absolute-path → jacket fallback. ---
+    const QJsonObject bg = root.value(QStringLiteral("background")).toObject();
+    QString bgMode = bg.value(QStringLiteral("mode")).toString(QStringLiteral("jacket"));
+    const QString customPath = bg.value(QStringLiteral("customPath")).toString();
+    bool fellBack = false;
+    if (bgMode == QStringLiteral("custom")
+        && (customPath.trimmed().isEmpty() || !QFileInfo::exists(customPath))) {
+        bgMode = QStringLiteral("jacket");
+        fellBack = true;
+    }
+    if (backgroundPathEdit_ != nullptr) {
+        const QSignalBlocker block(backgroundPathEdit_);
+        backgroundPathEdit_->setText(customPath);
+    }
+    if (backgroundCombo_ != nullptr) {
+        const int modeIdx = backgroundCombo_->findData(bgMode);
+        if (modeIdx >= 0) {
+            const QSignalBlocker block(backgroundCombo_);
+            backgroundCombo_->setCurrentIndex(modeIdx);
+        }
+    }
+    if (blurCheck_ != nullptr) {
+        const QSignalBlocker block(blurCheck_);
+        blurCheck_->setChecked(bg.value(QStringLiteral("blur")).toBool(blurCheck_->isChecked()));
+    }
+
+    // --- Card ---
+    const QJsonObject card = root.value(QStringLiteral("card")).toObject();
+    if (cardShadowCheck_ != nullptr) {
+        const QSignalBlocker block(cardShadowCheck_);
+        cardShadowCheck_->setChecked(card.value(QStringLiteral("shadow")).toBool(cardShadowCheck_->isChecked()));
+    }
+    if (levelTextRenderCheck_ != nullptr) {
+        const QSignalBlocker block(levelTextRenderCheck_);
+        levelTextRenderCheck_->setChecked(
+            card.value(QStringLiteral("levelTextRender")).toBool(levelTextRenderCheck_->isChecked()));
+    }
+    if (textOverflowCombo_ != nullptr) {
+        const int ltIdx = textOverflowCombo_->findData(card.value(QStringLiteral("longText")).toString());
+        if (ltIdx >= 0) {
+            const QSignalBlocker block(textOverflowCombo_);
+            textOverflowCombo_->setCurrentIndex(ltIdx);
+        }
+    }
+
+    // --- Chart-frame inner-background settings (B1) ---
+    const QJsonObject cf = root.value(QStringLiteral("chartFrame")).toObject();
+    if (chartFrameBgCheck_ != nullptr) {
+        const QSignalBlocker block(chartFrameBgCheck_);
+        chartFrameBgCheck_->setChecked(cf.value(QStringLiteral("innerBackground")).toBool(true));
+    }
+    if (chartFrameBgBrightnessSlider_ != nullptr) {
+        const QSignalBlocker block(chartFrameBgBrightnessSlider_);
+        chartFrameBgBrightnessSlider_->setValue(
+            qBound(0, qRound(cf.value(QStringLiteral("innerBrightness")).toDouble(0.8) * 100.0), 100));
+    }
+
+    // --- Layer geometry (restores positions/scale + the chart-frame visible + frameSeconds). ---
+    if (model_ != nullptr) {
+        model_->fromJson(root.value(QStringLiteral("layout")).toObject());
+    }
+
+    // --- Reconcile the chart frame. The still image isn't persisted (only the
+    // frame time), so re-grab at the restored frameSeconds. Set the playhead first,
+    // then drive enabling through onChartFrameToggled (one path for model + slider +
+    // grab/revert), forcing the checkbox to the wanted state without a spurious
+    // signal. ---
+    double frameSec = 0.0;
+    bool wantChartFrame = false;
+    bool chartFrameDropped = false;   // saved layout wanted it, but it can't render here
+    if (model_ != nullptr) {
+        if (const miacode::cover_export::CoverLayer* cfl = model_->layer(QStringLiteral("chartFrame"))) {
+            frameSec = qBound(0.0, cfl->frameSeconds(), contentDurationSeconds_);
+            const bool savedWanted = cfl->visible();
+            wantChartFrame = savedWanted && chartFrameAvailable_;
+            chartFrameDropped = savedWanted && !chartFrameAvailable_;
+        }
+    }
+    if (frameSlider_ != nullptr) {
+        const QSignalBlocker block(frameSlider_);
+        frameSlider_->setValue(qRound(frameSec * 1000.0));
+    }
+    applyFrameSeconds(frameSec);
+    if (chartFrameCheck_ != nullptr) {
+        const QSignalBlocker block(chartFrameCheck_);
+        chartFrameCheck_->setChecked(wantChartFrame);
+    }
+    onChartFrameToggled(wantChartFrame);   // sets model + slider + grab/revert + play button
+
+    syncControlEnabled();
+    resizePreviewToAspect();
+    pushInputs();
+
+    // Surface BOTH import fallbacks in a single notice (so they don't stack dialogs).
+    QString notice;
+    if (fellBack) {
+        notice += l10n(
+            QStringLiteral("The custom background image was not found; using the chart jacket instead."),
+            QStringLiteral("自定义背景图片未找到，已回退为曲绘背景。"));
+    }
+    if (chartFrameDropped) {
+        if (!notice.isEmpty()) {
+            notice += QLatin1Char('\n');
+        }
+        notice += l10n(
+            QStringLiteral("The imported layout included a chart frame, but this difficulty has no "
+                           "renderable notes; the chart frame was skipped."),
+            QStringLiteral("导入的布局包含谱面帧，但当前难度无可渲染音符，已跳过谱面帧。"));
+    }
+    if (!notice.isEmpty()) {
+        QMessageBox::information(
+            this, l10n(QStringLiteral("Import layout"), QStringLiteral("导入布局")), notice);
     }
 }
