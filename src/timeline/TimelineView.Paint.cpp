@@ -112,6 +112,13 @@ void TimelineView::paintEvent(QPaintEvent* event)
     laneDividerColor.setAlpha(qMin(laneDividerColor.alpha(), 96));
     const QPen laneDividerPen(laneDividerColor, 1.0);
     const QPen minorBeatPen(c.timelineGridMinor, 1.0);
+    // Tiered grid-line heights feature (see TimelineThemeConfig.h). The widget
+    // timeline draws only the bar (小节) and per-comma (逗号) tiers — there are
+    // no separate quarter-note (四分音符) subdivision lines in this path — so
+    // here only the comma tier is shortened; bar lines stay full height.
+    const int commaLineHeight = qRound(static_cast<qreal>(h)
+        * miacode::timeline::timelineGridLineHeightFraction(
+            miacode::timeline::kTimelineGridHeightFractionComma));
     painter.setPen(borderPen);
     painter.drawLine(0, top - 1, viewport()->width(), top - 1);
 
@@ -173,7 +180,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
                 continue;
             }
             painter.setPen(minorBeatPen);
-            painter.drawLine(x, top, x, top + h);
+            painter.drawLine(x, top, x, top + commaLineHeight);
         }
     }
 

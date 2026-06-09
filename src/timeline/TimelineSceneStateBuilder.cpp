@@ -678,15 +678,17 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         gridCullMinX = scrollX + state.timelineLeft - padding - 2.0;
         gridCullMaxX = scrollX + state.viewportSize.width() + padding + 2.0;
     }
-    const auto addGridLine = [&](double absoluteSecond, const QColor& color, qreal width, bool exactPosition) {
+    const auto addGridLine = [&](double absoluteSecond, const QColor& color, qreal width, bool exactPosition,
+                                 qreal heightFraction) {
         const qreal x = (exactPosition ? secondToXExact(state, absoluteSecond)
                                        : static_cast<qreal>(secondToSceneX(state, absoluteSecond)));
         if (x < gridCullMinX || x > gridCullMaxX) {
             return;
         }
+        const qreal lineHeight = state.timelineHeight * heightFraction;
         state.gridLines.append(TimelineSceneLine{
             QPointF(x, state.timelineTop),
-            QPointF(x, state.timelineTop + state.timelineHeight),
+            QPointF(x, state.timelineTop + lineHeight),
             color,
             width,
         });
@@ -700,7 +702,8 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         const TimelineRenderLine& line = request.snapshot.lines.at(lineIndex);
         for (const TimelineRenderBeat& marker : line.beats) {
             if (shouldPaintTimelineBeatMarker(marker)) {
-                addGridLine(timelineRenderAbsoluteSecond(line, marker.secondOffset), theme.gridMinor, 1.0, true);
+                addGridLine(timelineRenderAbsoluteSecond(line, marker.secondOffset), theme.gridMinor, 1.0, true,
+                            timelineGridLineHeightFraction(kTimelineGridHeightFractionComma));
             }
         }
     }
@@ -708,10 +711,10 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     // Emit timeline (within-measure) subdivision lines.
     //   x/4 -> a line at every quarter note (numerator-1 lines per measure)
     //   x/8 -> a line at every eighth  note (numerator-1 lines per measure)
-    //   4/4 -> beat 3 is "secondary strong": same thickness as bar line
-    //   6/8 -> beat 4 is "secondary strong": same thickness as bar line
-    // Other denominators get no within-measure lines (the spec only
-    // covers /4 and /8).
+    // Every within-measure line is a uniform subdivision line. (4/4 beat 3 and
+    // 6/8 beat 4 used to be thickened to bar-line width as "secondary strong";
+    // that mechanism was removed by request.) Other denominators get no
+    // within-measure lines (the spec only covers /4 and /8).
     const auto emitSubdivisionsForSpan = [&](double startSecond, double endSecond, int numerator, int denominator) {
         if (!(endSecond > startSecond + 1e-6)) {
             return;
@@ -724,20 +727,17 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             return;
         }
         const double measureDuration = endSecond - startSecond;
-        const int secondaryStrongIndex = (denominator == 4 && safeNumerator == 4)
-            ? 2
-            : (denominator == 8 && safeNumerator == 6 ? 3 : -1);
         for (int beatIndex = 1; beatIndex < safeNumerator; ++beatIndex) {
             const double beatSecond = startSecond
                 + measureDuration * static_cast<double>(beatIndex) / static_cast<double>(safeNumerator);
-            const bool isSecondaryStrong = (beatIndex == secondaryStrongIndex);
-            const qreal width = isSecondaryStrong ? kTimelineBeatLineWidth : kTimelineSubdivisionLineWidth;
-            addGridLine(beatSecond, theme.gridSubdivision, width, false);
+            addGridLine(beatSecond, theme.gridSubdivision, kTimelineSubdivisionLineWidth, false,
+                        timelineGridLineHeightFraction(kTimelineGridHeightFractionSubdivision));
         }
     };
     for (int measureIndex = 0; measureIndex < request.snapshot.measureLineSeconds.size(); ++measureIndex) {
         const double measureSecond = request.snapshot.measureLineSeconds.at(measureIndex);
-        addGridLine(measureSecond, theme.gridMajor, kTimelineBeatLineWidth, false);
+        addGridLine(measureSecond, theme.gridMajor, kTimelineBeatLineWidth, false,
+                    timelineGridLineHeightFraction(kTimelineGridHeightFractionMeasure));
 
         double nextMeasureSecond = std::numeric_limits<double>::infinity();
         if (measureIndex + 1 < request.snapshot.measureLineSeconds.size()) {
@@ -773,7 +773,8 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         const int trailingDenominator = qMax(1, request.snapshot.trailingMeasureLineMeterDenominator);
         for (; extensionSecond <= state.displayEndSeconds + 1.0 + 1e-6;
              extensionSecond += request.snapshot.trailingMeasureLineStepSeconds) {
-            addGridLine(extensionSecond, theme.gridMajor, kTimelineBeatLineWidth, false);
+            addGridLine(extensionSecond, theme.gridMajor, kTimelineBeatLineWidth, false,
+                        timelineGridLineHeightFraction(kTimelineGridHeightFractionMeasure));
             emitSubdivisionsForSpan(
                 extensionSecond,
                 extensionSecond + request.snapshot.trailingMeasureLineStepSeconds,

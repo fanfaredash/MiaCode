@@ -22,6 +22,29 @@ inline double normalizedTimelineWaveformBrightness(double brightness)
     return qBound(kTimelineWaveformBrightnessMin, brightness, kTimelineWaveformBrightnessMax);
 }
 
+// Tiered grid-line heights feature. The timeline draws three tiers of vertical
+// grid lines; this toggle controls whether they get distinct vertical extents
+// so the hierarchy reads by HEIGHT as well as colour/width:
+//   小节线   (bar / measure line)        -> kTimelineGridHeightFractionMeasure
+//   四分音符线 (quarter/eighth subdivision) -> kTimelineGridHeightFractionSubdivision
+//   逗号线   (per-comma note tick)        -> kTimelineGridHeightFractionComma
+// Lines are anchored at the top of the timeline content area and extend down
+// by `fraction * timelineHeight`, so a shorter line hangs from the ruler like
+// a tick mark. When the feature is OFF (0) every tier spans the full height
+// (the original behaviour). Flip kTimelineTieredGridLineHeightsEnabled to 0 to
+// restore the legacy look.
+constexpr int kTimelineTieredGridLineHeightsEnabled = 1;
+constexpr qreal kTimelineGridHeightFractionMeasure = 9.0 / 9.0;
+constexpr qreal kTimelineGridHeightFractionSubdivision = 8.0 / 9.0;
+constexpr qreal kTimelineGridHeightFractionComma = 7.0 / 9.0;
+
+// Resolve a tier's height fraction honouring the feature toggle: returns the
+// tiered fraction when enabled, otherwise 1.0 (full height / legacy).
+inline qreal timelineGridLineHeightFraction(qreal tieredFraction)
+{
+    return kTimelineTieredGridLineHeightsEnabled != 0 ? tieredFraction : 1.0;
+}
+
 // The waveform is a translucent fill stacked ON TOP of the grid lines, so the
 // "brightness" slider is best expressed as opacity/prominence: scale ALPHA and
 // keep RGB (hue + saturation) fixed. Rationale — the old per-channel RGB

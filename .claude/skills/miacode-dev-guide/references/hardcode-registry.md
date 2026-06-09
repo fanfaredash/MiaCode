@@ -31,7 +31,13 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   circle (oversized → two-hand press). Read in `MuriAnalyzer.cpp` `buildRuntimeHandActions`, so it
   feeds BOTH the slide/wifi judge and the multi-touch diagnostics.
 - `TimelineThemeConfig.h` — timeline-scene theme colors shared by Quick (and DComp) paths
-  (e.g. editor-cursor header marker `QColor(239,68,68,230)`).
+  (e.g. editor-cursor header marker `QColor(239,68,68,230)`); also the **tiered grid-line-height
+  feature**: toggle `kTimelineTieredGridLineHeightsEnabled` (default `1`; `0` = legacy full-height)
+  + per-tier fractions `kTimelineGridHeightFraction{Measure 9/9, Subdivision 8/9, Comma 7/9}` +
+  resolver `timelineGridLineHeightFraction()`. Lines anchor at the top of the content area and
+  extend down by `fraction * timelineHeight`. Consumed by `TimelineSceneStateBuilder.cpp`
+  `addGridLine` (QSG + DComp via pre-baked `state.gridLines`) AND `TimelineView.Paint.cpp` (widget
+  path — bar + comma tiers only; that path has no separate quarter-note subdivision lines).
 - `VideoExportRuntimePolicy.h` (`src/tools/video_export/`) — export PBO env precedence + worker
   crash-retry policy (`kVideoExportWorkerMaxCrashRetries = 1`).
 
