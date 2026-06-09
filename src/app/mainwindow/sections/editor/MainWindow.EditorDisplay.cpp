@@ -494,9 +494,9 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     }
     if (preview.value("background_brightness_inner").isDouble()) {
         state_.previewBackgroundBrightnessInner_ =
-            qBound(0.0, preview.value("background_brightness_inner").toDouble(state_.previewBackgroundBrightnessOuter_), 1.0);
+            qBound(0.0, preview.value("background_brightness_inner").toDouble(miacode::preview_video::kBackgroundBrightnessInnerDefault), 1.0);
     } else {
-        state_.previewBackgroundBrightnessInner_ = state_.previewBackgroundBrightnessOuter_;
+        state_.previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessInnerDefault;
     }
     if (preview.value("layout_square_scale").isDouble()) {
         state_.previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(
