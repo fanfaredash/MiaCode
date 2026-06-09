@@ -112,3 +112,11 @@ scripts/ffmpeg-trim/ffmpeg-codec-survey.txt
 # Ignore local Claude config, but version-control the repo-guide skill.
 .claude/*
 !.claude/skills/
+
+# Python bytecode caches (e.g. tools/lvcard_gen).
+__pycache__/
+*.pyc
+
+# Throwaway slide-arrow-count analysis script + its generated CSV (repo root).
+/slide_arrow_count.py
+/slide_arrow_count.csv
