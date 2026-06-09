@@ -20,6 +20,7 @@
 
 import QtQuick
 import QtQuick.Effects
+import MiaCode.Preview
 
 Item {
     id: canvas
@@ -34,6 +35,11 @@ Item {
     property bool blurEnabled: true
     property bool cardShadowEnabled: false
     property bool editable: true            // false in the export render (no chrome/handlers)
+    // A2 — the CoverComposerView (live path only) sets this so the chart-frame
+    // layer can host a LIVE PreviewQuickSceneRoot instead of the static grab Image:
+    // scrubbing/playback then only moves the shared playhead (zero readback). Stays
+    // null in the export render, where the static grab Image is used instead.
+    property var chartSceneBinder: null
 
     // ---- Editor state ----
     property int selectedIndex: -1
@@ -252,13 +258,36 @@ Item {
                     active: layerItem.isCard && canvas.coverTemplate && canvas.coverTemplate.card
                     sourceComponent: cardComponent
                 }
-                // Chart-frame still: a square playfield grab served by the
-                // "coverchart" C++ image provider, keyed by the layer key. The
-                // imageRevision suffix busts QML's URL cache on each re-grab; an
+                // Chart-frame layer. In edit mode (A2) it hosts a LIVE
+                // PreviewQuickSceneRoot fed the shared frame state, so scrubbing /
+                // playback only moves the playhead with zero readback. The export
+                // render (editable=false → chartSceneBinder stays null) instead
+                // shows the static grab Image below.
+                Loader {
+                    id: liveChartLoader
+                    anchors.fill: parent
+                    active: layerItem.isChartFrame && canvas.editable
+                            && canvas.chartSceneBinder !== null
+                            && layerItem.ld && layerItem.ld.visible
+                    sourceComponent: liveChartComponent
+                    onItemChanged: {
+                        if (!canvas.chartSceneBinder)
+                            return
+                        if (item)
+                            canvas.chartSceneBinder.bindLiveChartScene(item)
+                        else
+                            canvas.chartSceneBinder.unbindLiveChartScene()
+                    }
+                }
+                // Static grab still: a square playfield grab served by the
+                // "coverchart" C++ image provider, keyed by the layer key. Used by
+                // the export render and as a fallback when no live scene is bound.
+                // The imageRevision suffix busts QML's URL cache on each re-grab; an
                 // imageRevision < 0 means "not rendered yet" → blank source.
                 Image {
                     anchors.fill: parent
-                    visible: layerItem.isChartFrame
+                    visible: layerItem.isChartFrame && !liveChartLoader.active
+                             && layerItem.ld && layerItem.ld.imageRevision >= 0
                     source: (layerItem.isChartFrame && layerItem.ld && layerItem.ld.imageRevision >= 0)
                             ? ("image://coverchart/" + layerItem.ld.key + "?r=" + layerItem.ld.imageRevision)
                             : ""
@@ -319,6 +348,25 @@ Item {
             jacketImage: canvas.jacketImage
             revealStartFrame: -1
             frame: 0
+        }
+    }
+
+    // Live chart-frame scene (edit mode, A2). A bare PreviewQuickSceneRoot whose
+    // layer flags / shared frame state are wired in C++ by
+    // CoverComposerView::bindLiveChartScene (overlay layers only over transparent).
+    // dcompFallbackActive is pre-set here so the very first frame renders via the
+    // QSG path even before C++ binds. anchors.fill tracks the layer's drag/scale.
+    Component {
+        id: liveChartComponent
+        PreviewQuickSceneRoot {
+            anchors.fill: parent
+            dcompFallbackActive: true
+            // The export grab clips overlay geometry to its square framebuffer
+            // (SceneFrameRenderer renders into a side×side window). Clip the live
+            // scene to the same square box so out-of-bounds effects (fireworks /
+            // slide trails / muri actions) can't bleed over the background/card in
+            // the preview — keeps preview == export at the frame edges.
+            clip: true
         }
     }
 

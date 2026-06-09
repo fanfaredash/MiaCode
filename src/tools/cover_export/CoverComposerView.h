@@ -2,6 +2,7 @@
 
 #include <QImage>
 #include <QObject>
+#include <QPointer>
 #include <QSize>
 #include <QString>
 #include <QVariantMap>
@@ -10,6 +11,11 @@ class QQmlEngine;
 class QQuickItem;
 class QQuickWindow;
 class QWidget;
+class PreviewQuickSceneRoot;
+
+namespace miacode::preview::scene {
+struct PreviewFrameState;
+}
 
 namespace miacode::cover_export {
 
@@ -71,6 +77,29 @@ public:
     // Push presentation inputs to the live scene.
     void setInputs(const CoverComposerInputs& inputs);
 
+    // ---- A2: live chart-frame edit scene -------------------------------------
+    // Hand the live edit scene the shared, already-bootstrapped frame state
+    // (owned by the dialog's SceneFrameRenderer). The in-QML PreviewQuickSceneRoot
+    // reads it directly, so scrubbing/playback only moves the playhead — no grab.
+    // Must be called BEFORE the user can enable the chart-frame layer.
+    void setChartFrameState(const miacode::preview::scene::PreviewFrameState* frameState);
+
+    // Repaint the live edit scene at the current playhead (call after moving the
+    // shared playhead via SceneFrameRenderer::setPlayheadSeconds). No-op until the
+    // live scene is bound. Zero readback — just schedules a QSG frame.
+    void refreshLiveChartScene();
+
+    // Drop the live scene's reference to the shared frame state. The dialog calls
+    // this in its destructor body, BEFORE the SceneFrameRenderer (which owns the
+    // frame state) is torn down, so the live QQuickItem can never read freed state.
+    void detachLiveChartScene();
+
+    // Called from QML (CoverComposer.qml's chart-frame Loader) when the live
+    // PreviewQuickSceneRoot is created / destroyed. bind configures it (layer
+    // flags, DComp fallback, shared frame state); unbind clears our pointer.
+    Q_INVOKABLE void bindLiveChartScene(QObject* sceneRoot);
+    Q_INVOKABLE void unbindLiveChartScene();
+
     bool isValid() const { return root_ != nullptr; }
     QString lastError() const { return lastError_; }
 
@@ -86,6 +115,12 @@ private:
     QWidget* container_ = nullptr;
     CoverComposerInputs inputs_;
     QString lastError_;
+
+    // A2 live edit scene. chartFrameState_ is borrowed (owned by the dialog's
+    // SceneFrameRenderer); liveChartScene_ is owned by QML (the Loader), tracked
+    // with QPointer so a teardown clears it safely.
+    const miacode::preview::scene::PreviewFrameState* chartFrameState_ = nullptr;
+    QPointer<PreviewQuickSceneRoot> liveChartScene_;
 };
 
 // Off-screen full-resolution render of the SAME composer scene + model, for

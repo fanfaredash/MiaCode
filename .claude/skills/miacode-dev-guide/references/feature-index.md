@@ -293,20 +293,43 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     backgroundMode (Jacket/Custom/Transparent), blurBackground, cardShadow}`. Both the live and the
     export engine register the **`CoverChartImageProvider`** (id `coverchart`, backed by the shared
     `CoverLayoutModel` via `QPointer`) BEFORE loading the QML, so the `chartFrame` `Image` resolves.
+    - **Live chart-frame edit scene (A2, 2026-06-09):** in EDIT mode the `chartFrame` delegate hosts
+      a LIVE `PreviewQuickSceneRoot` (`import MiaCode.Preview`) instead of the static grab `Image`, so
+      scrubbing/playback only move the playhead with ZERO readback (the old per-scrub
+      `grabWindow()` is gone; the offscreen grab is now export-only). `CoverComposerView`
+      `qmlRegisterType`s that one type process-globally + idempotently BEFORE either engine loads the
+      QML — the widget shell never runs the quick-shell bootstrap that normally registers it, and the
+      `import` must resolve in both the live engine AND the export engine (even though the export path
+      never instantiates the type). C++ `bindLiveChartScene` (called from the QML `Loader.onItemChanged`
+      via the `chartSceneBinder` root property, set on the LIVE path only) configures the scene exactly
+      like `SceneFrameRenderer`: `kPreviewExportOverlayRenderLayers` + `setDCompFallbackActive(true)` +
+      the SHARED `PreviewFrameState` borrowed from the dialog's `SceneFrameRenderer`
+      (`frameState()`/`setPlayheadSeconds()`), plus `clip:true` on the scene root for square-box parity
+      with the export framebuffer. The export render (`editable=false` → `chartSceneBinder` null → the
+      Loader stays inactive) keeps the static grab `Image`. The dialog severs the live scene's borrowed
+      `PreviewFrameState` pointer (`detachLiveChartScene`) in its DESTRUCTOR BODY, before the
+      `SceneFrameRenderer` member that owns it is freed — otherwise the QQuickItem (destroyed later in
+      `~QObject`) could read freed state.
   - **Dialog (`ExportCoverDialog.{h,cpp}`)** — ctor now takes the full **`VideoExportTask`** (not
     just `IntroBannerSpec`): `task.intro` drives the card, and `task.noteMarkers`/`skinDirectory`/
     render-settings/`contentDurationSeconds` bootstrap the `SceneFrameRenderer`. `buildInputs()` maps
     the controls (size / background source 曲绘·custom+browse·transparent / blur / card shadow /
     level-text-render / long-text overflow) to `CoverComposerInputs`; hosts the embedded live
     composer + a "重置布局 / Reset layout" button; caches the parsed template once in the ctor.
-    **Chart-frame picker:** an "添加谱面帧 / Add chart frame" checkbox (disabled when the difficulty
-    has no notes) + a frame-time slider (`0..contentDurationSeconds` ms) + mm:ss.cs readout. Enabling
-    does an immediate grab (reverts + warns on first-grab failure so the layer can't ship blank);
-    scrubs / size / scale changes re-grab via a debounce (`renderChartFrameNow` is re-entrancy- and
-    `chartFrameEnabled()`-guarded). The blocking grabs run under a `Qt::WaitCursor`. `exportCover`
-    re-grabs at the exact export resolution (`chartFrameRenderPx` = `sizeFraction × outputHeight`)
-    before compositing, and warns (non-fatal) if an enabled frame still has no still rather than
-    silently shipping a cover missing it. Card-shadow stays enabled in Transparent mode; blur is
+    **Chart-frame picker (A2 live scene):** an "添加谱面帧 / Add chart frame" checkbox (disabled when
+    the difficulty has no notes) + a ▶/⏸ play button + a frame-time slider (`0..contentDurationSeconds`
+    ms) + mm:ss.cs readout. Enabling does ONE verify+seed grab under `Qt::WaitCursor` (reverts + warns
+    on first-grab failure so the layer can't ship blank) and shows the LIVE edit scene. **Scrubbing /
+    playback no longer re-grab** — `applyFrameSeconds` moves the shared playhead and repaints the in-QML
+    `PreviewQuickSceneRoot` (zero readback). Play is **visual-only (no audio)**: a wall-clock `QTimer`
+    (`QElapsedTimer`, ~60 fps) advances the playhead at real speed; the slider follows during play
+    (its `setValue` is `QSignalBlocker`-guarded so the clock never self-pauses) and ANY user scrub
+    (handle drag / groove-click / keyboard — all `valueChanged`) pauses. `renderChartFrameNow` (still
+    re-entrancy- and `chartFrameEnabled()`-guarded) now grabs at the CURRENT shared playhead, so the
+    exported still is WYSIWYG with the live scene. `exportCover` stops playback, then re-grabs at the
+    exact export resolution (`chartFrameRenderPx` = `sizeFraction × outputHeight`) before compositing,
+    and warns (non-fatal) if an enabled frame still has no still rather than silently shipping a cover
+    missing it. Card-shadow stays enabled in Transparent mode; blur is
     gated to non-transparent. On accept the caller drives `exportCover(outputDir)`.
   - **⚠ Render mechanism (two hard constraints — both cost a crash/bug to learn):**
     `CoverComposerView` (live) and `renderCoverComposite` (export) load the scene with a **bare

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDialog>
+#include <QElapsedTimer>
 #include <QSize>
 #include <QString>
 #include <QVariantMap>
@@ -58,9 +59,17 @@ private:
 
     // Chart-frame picker.
     void onChartFrameToggled(bool on);
-    bool renderChartFrameNow();            // grab at the current slider time + push to the model; true if a still was produced
-    void scheduleChartFrameRender();       // debounced renderChartFrameNow
+    bool renderChartFrameNow();            // grab a still at the current playhead + push to the model; true if a still was produced
     int chartFrameRenderPx() const;        // square render size = layer-export px
+
+    // A2 — live edit scene + visual play/pause. Scrubbing/playing only moves the
+    // shared playhead and repaints the in-QML live scene (zero readback); the
+    // offscreen grab is reserved for the export still.
+    void applyFrameSeconds(double seconds);   // set playhead + repaint live scene + readout
+    void togglePlayback();
+    void startPlayback();
+    void stopPlayback();
+    void onPlayTick();
 
     IntroBannerSpec banner_;
 
@@ -90,6 +99,14 @@ private:
     QCheckBox* chartFrameCheck_ = nullptr;
     QSlider* frameSlider_ = nullptr;       // value = milliseconds into the chart
     QLabel* frameTimeLabel_ = nullptr;
-    QTimer* frameDebounce_ = nullptr;
+    QPushButton* playButton_ = nullptr;
     bool rendering_ = false;               // re-entrancy guard (renderAt pumps the event loop)
+
+    // Visual-only playback clock (no audio): a wall-clock timer advancing the
+    // shared playhead while the live scene repaints. playWall_ measures elapsed
+    // wall time so playback runs at real speed regardless of tick jitter.
+    QTimer* playClock_ = nullptr;
+    QElapsedTimer playWall_;
+    double playStartSeconds_ = 0.0;        // playhead (s) when the current play run started
+    bool playing_ = false;
 };

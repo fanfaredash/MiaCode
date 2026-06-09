@@ -2,6 +2,9 @@
 
 #include "tools/cover_export/CoverLayoutModel.h"
 
+#include "core/scene/PreviewLayerOrder.h"
+#include "preview/quick_scene/PreviewQuickSceneRoot.h"
+
 #include <QColor>
 #include <QCoreApplication>
 #include <QDir>
@@ -20,12 +23,30 @@
 #include <QUrl>
 #include <QWidget>
 #include <Qt>
+#include <QtQml>
 
 namespace miacode::cover_export {
 namespace {
 
 constexpr char kComposerQmlUrl[] = "qrc:/intro/qml/CoverComposer.qml";
 constexpr char kCoverChartImageProviderId[] = "coverchart";
+
+// CoverComposer.qml `import MiaCode.Preview` to host the live chart-frame edit
+// scene (A2). That module is normally registered only by the quick-shell
+// bootstrap, which the widget-shell cover dialog never runs — so register the one
+// type the composer needs here. qmlRegisterType is process-global and idempotent;
+// calling it once before EITHER engine (live preview + offscreen export) loads
+// the QML is enough for the import to resolve in both. (Registering OUR type into
+// MiaCode.Preview does NOT re-register the protected QtQuick modules, so it is
+// safe in the packaged layout where a QQuickView would crash — see the header.)
+void ensureComposerQmlTypesRegistered()
+{
+    static const bool registered = [] {
+        qmlRegisterType<PreviewQuickSceneRoot>("MiaCode.Preview", 1, 0, "PreviewQuickSceneRoot");
+        return true;
+    }();
+    Q_UNUSED(registered);
+}
 
 QUrl localFileUrlOrEmpty(const QString& path)
 {
@@ -170,6 +191,8 @@ bool CoverComposerView::ensureLoaded()
         return true;
     }
 
+    ensureComposerQmlTypesRegistered();
+
     window_ = new QQuickWindow();
     // Neutral editor backdrop — shows through in Transparent mode (the QML's own
     // black fill is hidden there), and is fully covered by the QML in the opaque
@@ -237,6 +260,58 @@ void CoverComposerView::setInputs(const CoverComposerInputs& inputs)
 void CoverComposerView::applyInputs()
 {
     applyComposerInputs(root_, model_, inputs_, /*editable=*/true);
+    // Live path only — the export render (renderCoverComposite) never sets this,
+    // so its editable=false Loader stays inactive and the static grab Image shows.
+    if (root_ != nullptr) {
+        root_->setProperty("chartSceneBinder", QVariant::fromValue<QObject*>(this));
+    }
+}
+
+void CoverComposerView::setChartFrameState(const miacode::preview::scene::PreviewFrameState* frameState)
+{
+    chartFrameState_ = frameState;
+    if (liveChartScene_) {
+        liveChartScene_->setFrameState(chartFrameState_);
+    }
+}
+
+void CoverComposerView::refreshLiveChartScene()
+{
+    if (liveChartScene_) {
+        // updatePaintNode reads frameState_->playheadSeconds fresh each frame, so a
+        // plain update() repaints at the moved playhead with zero readback.
+        liveChartScene_->update();
+    }
+}
+
+void CoverComposerView::detachLiveChartScene()
+{
+    chartFrameState_ = nullptr;
+    if (liveChartScene_) {
+        liveChartScene_->setFrameState(nullptr);
+    }
+}
+
+void CoverComposerView::bindLiveChartScene(QObject* sceneRoot)
+{
+    auto* root = qobject_cast<PreviewQuickSceneRoot*>(sceneRoot);
+    if (root == nullptr) {
+        return;
+    }
+    liveChartScene_ = root;
+    // Same configuration the offscreen SceneFrameRenderer uses, so the live edit
+    // scene is pixel-equivalent to the exported grab: overlay layers only (no song
+    // background) over transparent, and force the QSG path even when DComp is on
+    // globally (--quick-shell-beta) — otherwise updatePaintNode short-circuits to
+    // nullptr and the layer renders blank.
+    root->setDCompFallbackActive(true);
+    root->setLayerFlags(miacode::preview::scene::kPreviewExportOverlayRenderLayers);
+    root->setFrameState(chartFrameState_);
+}
+
+void CoverComposerView::unbindLiveChartScene()
+{
+    liveChartScene_.clear();
 }
 
 void CoverComposerView::syncRootSize()
@@ -268,6 +343,8 @@ QImage renderCoverComposite(CoverLayoutModel* model,
         }
         return QImage();
     }
+
+    ensureComposerQmlTypesRegistered();
 
     // Bare QQuickWindow parked off-screen at opacity 0 (the only legal in-process
     // capture). No QQuickView, no forced OpenGL — in-process D3D11.

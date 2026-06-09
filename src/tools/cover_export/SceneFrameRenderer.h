@@ -64,6 +64,19 @@ public:
     // *errorMessage on failure.
     QImage renderAt(double seconds, int sidePx, QString* errorMessage = nullptr);
 
+    // The bootstrapped base frame state. The cover composer's LIVE edit scene (an
+    // in-QML PreviewQuickSceneRoot — A2) reads THIS SAME pointer so scrubbing /
+    // playback only moves the playhead with zero readback (the offscreen grab in
+    // renderAt() is reserved for the export path). Stays valid for this renderer's
+    // lifetime — keep the renderer alive while any live scene references it, and
+    // detach the live scene's pointer before destroying the renderer.
+    const miacode::preview::scene::PreviewFrameState* frameState() const { return &frameState_; }
+
+    // Move the shared playhead WITHOUT grabbing, for the live edit scene. The
+    // export path still calls renderAt() to grab a still at the chosen time.
+    void setPlayheadSeconds(double seconds) { frameState_.playheadSeconds = seconds; }
+    double playheadSeconds() const { return frameState_.playheadSeconds; }
+
 private:
     bool ensureWindow(QString* errorMessage);
 
