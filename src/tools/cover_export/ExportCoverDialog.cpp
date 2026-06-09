@@ -1,9 +1,11 @@
 #include "tools/cover_export/ExportCoverDialog.h"
 
 #include "tools/cover_export/CoverLayoutModel.h"
+#include "tools/cover_export/SceneFrameRenderer.h"
 #include "UiText.h"
 #include "UiTheme.h"
 
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -17,7 +19,11 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
+#include <QSignalBlocker>
+#include <QSlider>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QVariantMap>
 
@@ -48,9 +54,34 @@ constexpr CoverResolutionPreset kCoverResolutionPresets[] = {
 // to the chosen output aspect so the layout matches the export exactly.
 constexpr int kPreviewBox = 400;
 
+// Debounce for chart-frame re-grabs while dragging the slider / scale handle.
+constexpr int kChartFrameDebounceMs = 70;
+
+// Chart-frame square render-size clamp (px); the natural size is the layer's
+// export pixel height, but keep it sane for tiny / huge canvases.
+constexpr int kChartFrameMinPx = 384;
+constexpr int kChartFrameMaxPx = 2048;
+
 QString l10n(const QString& en, const QString& zh)
 {
     return UiText::isChineseUi() ? zh : en;
+}
+
+// mm:ss.cs (centiseconds) for the frame-time readout.
+QString formatFrameTime(double seconds)
+{
+    if (seconds < 0.0) {
+        seconds = 0.0;
+    }
+    const int totalCs = qRound(seconds * 100.0);
+    const int cs = totalCs % 100;
+    const int totalSec = totalCs / 100;
+    const int s = totalSec % 60;
+    const int m = totalSec / 60;
+    return QStringLiteral("%1:%2.%3")
+        .arg(m)
+        .arg(s, 2, 10, QLatin1Char('0'))
+        .arg(cs, 2, 10, QLatin1Char('0'));
 }
 
 QVariantMap loadBannerTemplate()
@@ -68,9 +99,9 @@ QVariantMap loadBannerTemplate()
 
 }  // namespace
 
-ExportCoverDialog::ExportCoverDialog(const IntroBannerSpec& banner, const QSize& initialSize, QWidget* parent)
+ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& initialSize, QWidget* parent)
     : QDialog(parent)
-    , banner_(banner)
+    , banner_(task.intro)
 {
     setWindowTitle(l10n(QStringLiteral("Export Cover"), QStringLiteral("导出封面")));
     setModal(true);
@@ -81,6 +112,15 @@ ExportCoverDialog::ExportCoverDialog(const IntroBannerSpec& banner, const QSize&
     model_ = new miacode::cover_export::CoverLayoutModel(this);
     composerView_ = new miacode::cover_export::CoverComposerView(model_, this);
     cachedTemplate_ = loadBannerTemplate();
+
+    // Bootstrap the in-process chart-frame renderer once from the export task.
+    // Unavailable (→ the toggle stays disabled) when the difficulty has no notes
+    // or the skin can't load.
+    contentDurationSeconds_ = qMax(0.0, task.contentDurationSeconds);
+    sceneFrameRenderer_ = std::make_unique<miacode::cover_export::SceneFrameRenderer>();
+    if (!task.noteMarkers.isEmpty()) {
+        chartFrameAvailable_ = sceneFrameRenderer_->bootstrap(task);
+    }
 
     auto* rootLayout = new QHBoxLayout(this);
     rootLayout->setContentsMargins(16, 14, 16, 14);
@@ -203,6 +243,40 @@ ExportCoverDialog::ExportCoverDialog(const IntroBannerSpec& banner, const QSize&
         QStringLiteral("ellipsis"));
     form->addRow(l10n(QStringLiteral("Long text"), QStringLiteral("文字超长")), textOverflowCombo_);
 
+    // Chart frame (a square playfield grab at a picked time, added as a layer).
+    chartFrameCheck_ = new QCheckBox(
+        l10n(QStringLiteral("Add chart frame"), QStringLiteral("添加谱面帧")), this);
+    chartFrameCheck_->setChecked(false);
+    chartFrameCheck_->setEnabled(chartFrameAvailable_);
+    if (!chartFrameAvailable_) {
+        chartFrameCheck_->setToolTip(
+            l10n(QStringLiteral("This difficulty has no chart notes to render."),
+                 QStringLiteral("当前难度没有可渲染的谱面音符。")));
+    }
+    form->addRow(QString(), chartFrameCheck_);
+
+    // Frame-time picker (slider over the chart content + a mm:ss.cs readout).
+    auto* frameRow = new QWidget(this);
+    auto* frameLayout = new QHBoxLayout(frameRow);
+    frameLayout->setContentsMargins(0, 0, 0, 0);
+    frameLayout->setSpacing(8);
+    frameSlider_ = new QSlider(Qt::Horizontal, frameRow);
+    frameSlider_->setMinimum(0);
+    frameSlider_->setMaximum(qMax(1, qRound(contentDurationSeconds_ * 1000.0)));
+    frameSlider_->setValue(0);
+    frameSlider_->setEnabled(false);
+    frameTimeLabel_ = new QLabel(formatFrameTime(0.0), frameRow);
+    frameTimeLabel_->setMinimumWidth(56);
+    frameTimeLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    frameLayout->addWidget(frameSlider_, 1);
+    frameLayout->addWidget(frameTimeLabel_, 0);
+    form->addRow(l10n(QStringLiteral("Frame time"), QStringLiteral("谱面时间")), frameRow);
+
+    frameDebounce_ = new QTimer(this);
+    frameDebounce_->setSingleShot(true);
+    frameDebounce_->setInterval(kChartFrameDebounceMs);
+    connect(frameDebounce_, &QTimer::timeout, this, &ExportCoverDialog::renderChartFrameNow);
+
     controlsColumn->addLayout(form);
     controlsColumn->addStretch(1);
 
@@ -224,6 +298,10 @@ ExportCoverDialog::ExportCoverDialog(const IntroBannerSpec& banner, const QSize&
     connect(sizeCombo_, &QComboBox::currentIndexChanged, this, [this] {
         resizePreviewToAspect();
         pushInputs();
+        // The chart-frame render resolution tracks the output height.
+        if (chartFrameCheck_ != nullptr && chartFrameCheck_->isChecked()) {
+            scheduleChartFrameRender();
+        }
     });
     connect(backgroundCombo_, &QComboBox::currentIndexChanged, this, [this] {
         syncControlEnabled();
@@ -238,6 +316,28 @@ ExportCoverDialog::ExportCoverDialog(const IntroBannerSpec& banner, const QSize&
     if (resetLayoutButton_ != nullptr) {
         connect(resetLayoutButton_, &QPushButton::clicked, this, [this] {
             if (model_ != nullptr) model_->resetLayout();
+            // resetLayout hides the chart frame; keep the toggle in sync.
+            if (chartFrameCheck_ != nullptr) chartFrameCheck_->setChecked(false);
+        });
+    }
+
+    connect(chartFrameCheck_, &QCheckBox::toggled, this, &ExportCoverDialog::onChartFrameToggled);
+    connect(frameSlider_, &QSlider::valueChanged, this, [this](int valueMs) {
+        if (frameTimeLabel_ != nullptr) {
+            frameTimeLabel_->setText(formatFrameTime(valueMs / 1000.0));
+        }
+        if (chartFrameCheck_ != nullptr && chartFrameCheck_->isChecked()) {
+            scheduleChartFrameRender();
+        }
+    });
+    // Re-grab at the new resolution when the output size changes, and re-grab at a
+    // crisper resolution when the chart-frame layer is scaled up.
+    if (miacode::cover_export::CoverLayer* chartFrameLayer =
+            model_ != nullptr ? model_->layer(QStringLiteral("chartFrame")) : nullptr) {
+        connect(chartFrameLayer, &miacode::cover_export::CoverLayer::sizeFractionChanged, this, [this] {
+            if (chartFrameCheck_ != nullptr && chartFrameCheck_->isChecked()) {
+                scheduleChartFrameRender();
+            }
         });
     }
 
@@ -247,6 +347,90 @@ ExportCoverDialog::ExportCoverDialog(const IntroBannerSpec& banner, const QSize&
 }
 
 ExportCoverDialog::~ExportCoverDialog() = default;
+
+void ExportCoverDialog::onChartFrameToggled(bool on)
+{
+    if (model_ != nullptr) {
+        model_->setChartFrameEnabled(on);
+    }
+    if (frameSlider_ != nullptr) {
+        frameSlider_->setEnabled(on && chartFrameAvailable_);
+    }
+    if (!on) {
+        return;
+    }
+    // Immediate first grab; later scrubs are debounced. The first grab cold-settles
+    // the offscreen scene (~0.3 s), so flag the GUI as busy. If it fails (e.g. the
+    // offscreen RHI couldn't render), don't leave the layer enabled-but-blank — it
+    // would silently drop from the export — so revert the toggle and tell the user.
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    const bool produced = renderChartFrameNow();
+    QApplication::restoreOverrideCursor();
+    if (!produced) {
+        const QSignalBlocker block(chartFrameCheck_);   // avoid recursive toggled()
+        chartFrameCheck_->setChecked(false);
+        if (model_ != nullptr) {
+            model_->setChartFrameEnabled(false);
+        }
+        if (frameSlider_ != nullptr) {
+            frameSlider_->setEnabled(false);
+        }
+        QMessageBox::warning(
+            this,
+            l10n(QStringLiteral("Chart frame"), QStringLiteral("谱面帧")),
+            l10n(QStringLiteral("Could not render the chart frame."),
+                 QStringLiteral("无法渲染谱面帧。")));
+    }
+}
+
+void ExportCoverDialog::scheduleChartFrameRender()
+{
+    if (frameDebounce_ != nullptr) {
+        frameDebounce_->start();
+    }
+}
+
+int ExportCoverDialog::chartFrameRenderPx() const
+{
+    qreal sizeFraction = 0.82;
+    if (model_ != nullptr) {
+        if (miacode::cover_export::CoverLayer* layer = model_->layer(QStringLiteral("chartFrame"))) {
+            sizeFraction = layer->sizeFraction();
+        }
+    }
+    const int outputHeight = qMax(1, currentSize().height());
+    return qBound(kChartFrameMinPx, qRound(sizeFraction * outputHeight), kChartFrameMaxPx);
+}
+
+bool ExportCoverDialog::renderChartFrameNow()
+{
+    // renderAt() pumps the event loop (settle), which can re-deliver the debounce
+    // mid-grab. Guard against re-entrancy; re-arm so the latest request still runs
+    // once the in-flight grab finishes.
+    if (rendering_) {
+        scheduleChartFrameRender();
+        return false;
+    }
+    if (!chartFrameAvailable_ || sceneFrameRenderer_ == nullptr || model_ == nullptr
+        || !model_->chartFrameEnabled()) {
+        return false;   // nothing to do (e.g. a debounce that survived a reset/disable)
+    }
+    rendering_ = true;
+    const double seconds = frameSlider_ != nullptr ? frameSlider_->value() / 1000.0 : 0.0;
+    QString error;
+    const QImage frame = sceneFrameRenderer_->renderAt(seconds, chartFrameRenderPx(), &error);
+    bool produced = false;
+    if (!frame.isNull()) {
+        if (miacode::cover_export::CoverLayer* layer = model_->layer(QStringLiteral("chartFrame"))) {
+            layer->setFrameSeconds(seconds);
+        }
+        model_->setLayerImage(QStringLiteral("chartFrame"), frame);
+        produced = true;
+    }
+    // else: leave the previous still (if any) in place rather than blanking the layer.
+    rendering_ = false;
+    return produced;
+}
 
 QSize ExportCoverDialog::currentSize() const
 {
@@ -322,6 +506,27 @@ void ExportCoverDialog::resizePreviewToAspect()
 
 miacode::cover_export::CoverExportResult ExportCoverDialog::exportCover(const QString& outputDirectory)
 {
+    // Re-grab the chart frame at the exact export resolution (chartFrameRenderPx
+    // tracks currentSize().height(), which the composite scales the layer to), so
+    // the still is crisp in the export and any pending debounced grab is flushed.
+    if (model_ != nullptr && model_->chartFrameEnabled() && chartFrameAvailable_) {
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        renderChartFrameNow();
+        QApplication::restoreOverrideCursor();
+        // Defensive: the toggle-revert keeps an enabled frame from ever sitting
+        // image-less, but the export is the irreversible output — if somehow it
+        // still has no still, tell the user rather than silently ship a cover
+        // missing the frame they enabled.
+        const miacode::cover_export::CoverLayer* chartFrameLayer =
+            model_->layer(QStringLiteral("chartFrame"));
+        if (chartFrameLayer != nullptr && chartFrameLayer->imageRevision() < 0) {
+            QMessageBox::warning(
+                this,
+                l10n(QStringLiteral("Chart frame"), QStringLiteral("谱面帧")),
+                l10n(QStringLiteral("The chart frame could not be rendered; the cover will not include it."),
+                     QStringLiteral("谱面帧无法渲染，封面将不包含它。")));
+        }
+    }
     return miacode::cover_export::exportCoverComposite(
         model_, buildInputs(), currentSize(), outputDirectory);
 }

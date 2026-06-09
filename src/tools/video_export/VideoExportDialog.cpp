@@ -1675,7 +1675,7 @@ void VideoExportDialog::openHudFontSettingsDialog()
 
 void VideoExportDialog::openExportCoverDialog()
 {
-    ExportCoverDialog dialog(baseTask_.intro, selectedResolution(), this);
+    ExportCoverDialog dialog(baseTask_, selectedResolution(), this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }

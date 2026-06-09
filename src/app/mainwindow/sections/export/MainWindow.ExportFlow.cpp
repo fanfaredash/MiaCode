@@ -375,6 +375,9 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     VideoExportTask task;
     task.chartPath = owner_.currentFilePath_;
     task.trackPath = owner_.resolveDefaultTrackPath();
+    // Seed the skin dir so the dialog's "Export Cover" chart-frame renderer can
+    // load the note sprites without building a full export snapshot.
+    task.skinDirectory = owner_.resolvePreviewSkinDir();
     task.noteMarkers = owner_.latestTimelineNoteMarkers_;
     task.muriAnalysisReport = owner_.muriAnalysisReport_;
     task.muriRenderOptions = owner_.muriRenderOptions_;
@@ -386,6 +389,9 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     task.layoutSquareScale = owner_.previewLayoutSquareScale_;
     task.smoothBrightness = owner_.previewSmoothBrightness_;
     task.outlineVariant = owner_.previewOutlineVariant_;
+    // Pair the variant with its custom-outline path (same resolver the real export
+    // snapshot uses) so the cover's chart-frame ring matches the video export.
+    task.outlineImagePath = owner_.resolvePreviewCustomOutlinePath();
     task.backgroundScaleMode = owner_.previewBackgroundScaleMode_;
     task.tapFlowSpeed = owner_.previewTapFlowSpeed_;
     task.touchFlowSpeed = owner_.previewTouchFlowSpeed_;

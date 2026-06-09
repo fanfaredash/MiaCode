@@ -303,10 +303,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     has no notes) + a frame-time slider (`0..contentDurationSeconds` ms) + mm:ss.cs readout. Enabling
     does an immediate grab (reverts + warns on first-grab failure so the layer can't ship blank);
     scrubs / size / scale changes re-grab via a debounce (`renderChartFrameNow` is re-entrancy- and
-    `chartFrameEnabled()`-guarded). `exportCover` re-grabs at the exact export resolution
-    (`chartFrameRenderPx` = `sizeFraction × outputHeight`) before compositing. Card-shadow stays
-    enabled in Transparent mode; blur is gated to non-transparent. On accept the caller drives
-    `exportCover(outputDir)`.
+    `chartFrameEnabled()`-guarded). The blocking grabs run under a `Qt::WaitCursor`. `exportCover`
+    re-grabs at the exact export resolution (`chartFrameRenderPx` = `sizeFraction × outputHeight`)
+    before compositing, and warns (non-fatal) if an enabled frame still has no still rather than
+    silently shipping a cover missing it. Card-shadow stays enabled in Transparent mode; blur is
+    gated to non-transparent. On accept the caller drives `exportCover(outputDir)`.
   - **⚠ Render mechanism (two hard constraints — both cost a crash/bug to learn):**
     `CoverComposerView` (live) and `renderCoverComposite` (export) load the scene with a **bare
     `QQmlEngine` + `QQmlComponent`** parented into a **plain `QQuickWindow`** (the live one embedded

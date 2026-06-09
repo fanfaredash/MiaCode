@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QImage>
 #include <QJsonObject>
 #include <QList>
 #include <QObject>
@@ -18,6 +19,13 @@ namespace miacode::cover_export {
 //   • z             — paint order (higher = on top). Drives QQuickItem.z, not
 //                     list position, so reordering never rebuilds delegates.
 //
+// A `kind=="chartFrame"` layer additionally carries a rendered chart still
+// (`frameImage`, set from C++ via CoverLayoutModel::setLayerImage). QML can't
+// bind a QImage directly, so the image is served through the "coverchart" image
+// provider keyed by `key`, and `imageRevision` (bumped on every set) is folded
+// into the source URL to bust the cache. `frameSeconds` records which chart time
+// the still was grabbed at (for persistence / the frame-picker slider).
+//
 // QML reads/writes these via the Repeater's `modelData`; each property carries a
 // NOTIFY so two-way bindings in the delegate stay live while dragging/scaling.
 class CoverLayer : public QObject
@@ -32,6 +40,8 @@ class CoverLayer : public QObject
     Q_PROPERTY(int z READ z WRITE setZ NOTIFY zChanged)
     Q_PROPERTY(bool visible READ visible WRITE setVisible NOTIFY visibleChanged)
     Q_PROPERTY(bool locked READ locked WRITE setLocked NOTIFY lockedChanged)
+    // -1 = no still rendered yet (QML shows nothing); >= 0 bumps on each new grab.
+    Q_PROPERTY(int imageRevision READ imageRevision NOTIFY imageRevisionChanged)
 
 public:
     explicit CoverLayer(QObject* parent = nullptr) : QObject(parent) {}
@@ -45,6 +55,10 @@ public:
     int z() const { return z_; }
     bool visible() const { return visible_; }
     bool locked() const { return locked_; }
+    int imageRevision() const { return imageRevision_; }
+    QImage frameImage() const { return frameImage_; }
+    double frameSeconds() const { return frameSeconds_; }
+    void setFrameSeconds(double v) { frameSeconds_ = v; }
 
     void setNx(qreal v);
     void setNy(qreal v);
@@ -60,6 +74,7 @@ signals:
     void zChanged();
     void visibleChanged();
     void lockedChanged();
+    void imageRevisionChanged();
 
 private:
     friend class CoverLayoutModel;
@@ -72,11 +87,15 @@ private:
     int z_ = 0;
     bool visible_ = true;
     bool locked_ = false;
+    QImage frameImage_;
+    int imageRevision_ = -1;
+    double frameSeconds_ = 0.0;
 };
 
-// Ordered set of composition layers, exposed to QML. The list is fixed in v1
-// (just the difficulty card); the design carries z-order + extra kinds so the
-// chart-frame / badge layers slot in later without touching this contract.
+// Ordered set of composition layers, exposed to QML. Seeds the difficulty card
+// (always visible) plus the chart-frame layer (hidden until enabled); the design
+// carries z-order + extra kinds so badge layers slot in later without touching
+// this contract.
 class CoverLayoutModel : public QObject
 {
     Q_OBJECT
@@ -87,14 +106,23 @@ class CoverLayoutModel : public QObject
 public:
     explicit CoverLayoutModel(QObject* parent = nullptr);
 
-    // Seed the default composition (currently: the difficulty card centred).
-    // Idempotent — only creates layers that don't already exist.
+    // Seed the default composition (the difficulty card centred + a hidden
+    // chart-frame layer behind it). Idempotent — only creates missing layers.
     void ensureDefaultLayers();
 
     QList<QObject*> layersAsObjects() const;
     const QList<CoverLayer*>& layers() const { return layers_; }
     CoverLayer* layer(const QString& key) const;
     int indexOfKey(const QString& key) const;
+
+    // Chart-frame layer toggle (drives its `visible`). When off, the layer stays
+    // in the model but the QML delegate (and the export grab) skip it.
+    Q_INVOKABLE bool chartFrameEnabled() const;
+    Q_INVOKABLE void setChartFrameEnabled(bool enabled);
+
+    // Store a freshly-rendered chart still on `key`'s layer and bump its
+    // imageRevision so the QML Image reloads it from the "coverchart" provider.
+    void setLayerImage(const QString& key, const QImage& image);
 
     // Paint-order helpers (z based, list order untouched). Bounds-checked.
     Q_INVOKABLE void bringToFront(int index);

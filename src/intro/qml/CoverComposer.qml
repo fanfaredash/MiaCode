@@ -2,10 +2,12 @@
 //
 // One QSG scene that is BOTH the editor preview and the export source: it draws
 // a full-bleed background layer (chart 曲绘 / custom image / transparent, blurred
-// or crisp + dim) and a set of free-floating, draggable LAYERS on top. v1 ships
-// one draggable layer — the difficulty card (MaimaiBannerCard in transparent
-// mode) — but the Repeater + CoverLayoutModel design carries z-order and extra
-// `kind`s so the chart-frame / badge layers slot in later.
+// or crisp + dim) and a set of free-floating, draggable LAYERS on top. Two layer
+// kinds ship: the difficulty card (MaimaiBannerCard in transparent mode) and an
+// optional chart-frame still (a square playfield grab served by the "coverchart"
+// image provider, rendered in-process by SceneFrameRenderer). The Repeater +
+// CoverLayoutModel design carries z-order and extra `kind`s so badge layers slot
+// in later.
 //
 // Geometry is NORMALISED (CoverLayer.nx/ny centre, sizeFraction = content
 // height / canvas height) so the small embedded preview and the full-resolution
@@ -213,6 +215,7 @@ Item {
             required property int index
             readonly property var ld: modelData       // CoverLayer
             readonly property bool isCard: ld && ld.kind === "card"
+            readonly property bool isChartFrame: ld && ld.kind === "chartFrame"
 
             width: canvas.layerContentW(ld)
             height: canvas.layerContentH(ld)
@@ -248,6 +251,22 @@ Item {
                     anchors.fill: parent
                     active: layerItem.isCard && canvas.coverTemplate && canvas.coverTemplate.card
                     sourceComponent: cardComponent
+                }
+                // Chart-frame still: a square playfield grab served by the
+                // "coverchart" C++ image provider, keyed by the layer key. The
+                // imageRevision suffix busts QML's URL cache on each re-grab; an
+                // imageRevision < 0 means "not rendered yet" → blank source.
+                Image {
+                    anchors.fill: parent
+                    visible: layerItem.isChartFrame
+                    source: (layerItem.isChartFrame && layerItem.ld && layerItem.ld.imageRevision >= 0)
+                            ? ("image://coverchart/" + layerItem.ld.key + "?r=" + layerItem.ld.imageRevision)
+                            : ""
+                    fillMode: Image.PreserveAspectFit
+                    asynchronous: false
+                    cache: false
+                    smooth: true
+                    mipmap: true
                 }
             }
 

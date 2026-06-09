@@ -212,6 +212,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/cover_export/CoverLayoutModel.cpp
     src/tools/cover_export/CoverComposerView.h
     src/tools/cover_export/CoverComposerView.cpp
+    src/tools/cover_export/SceneFrameRenderer.h
+    src/tools/cover_export/SceneFrameRenderer.cpp
     src/tools/cover_export/ExportCoverDialog.h
     src/tools/cover_export/ExportCoverDialog.cpp
     src/preview/runtime/PreviewQuickExportSession.h

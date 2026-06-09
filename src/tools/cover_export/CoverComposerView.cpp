@@ -8,10 +8,12 @@
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QImage>
+#include <QPointer>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQmlError>
+#include <QQuickImageProvider>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QThread>
@@ -23,11 +25,67 @@ namespace miacode::cover_export {
 namespace {
 
 constexpr char kComposerQmlUrl[] = "qrc:/intro/qml/CoverComposer.qml";
+constexpr char kCoverChartImageProviderId[] = "coverchart";
 
 QUrl localFileUrlOrEmpty(const QString& path)
 {
     const QString trimmed = path.trimmed();
     return trimmed.isEmpty() ? QUrl() : QUrl::fromLocalFile(trimmed);
+}
+
+// Serves a layer's rendered chart still to QML's `Image { source:
+// "image://coverchart/<layerKey>?r=<rev>" }`. The "?r=<rev>" query is ignored
+// here — it only exists to bust QML's URL-keyed image cache when the still is
+// re-grabbed (CoverLayoutModel::setLayerImage bumps imageRevision). The image
+// lives on the shared CoverLayoutModel, so the same provider class backs both the
+// live preview engine and the offscreen export engine.
+class CoverChartImageProvider : public QQuickImageProvider
+{
+public:
+    explicit CoverChartImageProvider(CoverLayoutModel* model)
+        : QQuickImageProvider(QQuickImageProvider::Image)
+        , model_(model)
+    {
+    }
+
+    QImage requestImage(const QString& id, QSize* size, const QSize& requestedSize) override
+    {
+        Q_UNUSED(requestedSize);
+        QString key = id;
+        const int queryPos = key.indexOf(QLatin1Char('?'));
+        if (queryPos >= 0) {
+            key.truncate(queryPos);
+        }
+        QImage image;
+        if (model_ != nullptr) {
+            if (CoverLayer* layer = model_->layer(key)) {
+                image = layer->frameImage();
+            }
+        }
+        if (image.isNull()) {
+            image = QImage(1, 1, QImage::Format_ARGB32);
+            image.fill(Qt::transparent);
+        }
+        if (size != nullptr) {
+            *size = image.size();
+        }
+        return image;
+    }
+
+private:
+    QPointer<CoverLayoutModel> model_;
+};
+
+// Register the cover-chart image provider on `engine` (idempotent per engine —
+// addImageProvider replaces any existing provider of the same id and takes
+// ownership of the new one).
+void registerCoverChartImageProvider(QQmlEngine* engine, CoverLayoutModel* model)
+{
+    if (engine == nullptr) {
+        return;
+    }
+    engine->addImageProvider(QString::fromLatin1(kCoverChartImageProviderId),
+                             new CoverChartImageProvider(model));
 }
 
 // Pump the event loop so async resources (card fonts, the trackstart frame/tab/
@@ -122,6 +180,7 @@ bool CoverComposerView::ensureLoaded()
     // Engine parented to the window so it outlives the scene items but is torn
     // down together with the window (whoever owns it).
     engine_ = new QQmlEngine(window_);
+    registerCoverChartImageProvider(engine_, model_);
     QQmlComponent component(engine_, QUrl(QString::fromLatin1(kComposerQmlUrl)));
     if (component.isError()) {
         lastError_ = QStringLiteral("failed to load CoverComposer.qml: %1")
@@ -220,6 +279,7 @@ QImage renderCoverComposite(CoverLayoutModel* model,
     window->setPosition(-32000, -32000);
 
     auto* engine = new QQmlEngine(window);
+    registerCoverChartImageProvider(engine, model);
     QQmlComponent component(engine, QUrl(QString::fromLatin1(kComposerQmlUrl)));
     if (component.isError()) {
         if (errorMessage != nullptr) {
