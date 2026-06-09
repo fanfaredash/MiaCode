@@ -164,6 +164,12 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     auto* toolBar = addToolBar("Main");
     toolBar->setMovable(false);
     toolBar->setFloatable(false);
+    // NB: do NOT shrink toolBar->iconSize() to font-match the gear — the gear is
+    // the toolbar's only icon, so its icon-button drives the toolbar row height,
+    // and a smaller iconSize visibly shortens the whole toolbar. The gear is
+    // font-matched purely inside makeSettingsGearIcon, which renders the Material
+    // artwork into an inset of the icon box so the glyph reads at ~menu-text size
+    // while the icon box — and thus the toolbar height — stays at the default.
     setupMenusAndActions(fileMenu, editMenu, transformMenu, previewMenu, helpMenu);
     if (latencyDetectorAction_ != nullptr) {
         editMenu->removeAction(latencyDetectorAction_);

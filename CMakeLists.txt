@@ -58,7 +58,7 @@ configure_file(
     @ONLY
 )
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets OpenGL Multimedia Quick Qml QuickControls2 ShaderTools)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets OpenGL Multimedia Quick Qml QuickControls2 ShaderTools Svg)
 
 # MultimediaQuickPrivate exposes the private QtMultimedia headers
 # (qhwvideobuffer_p.h / qvideotexturehelper_p.h) that QtAVPlayer's
@@ -103,6 +103,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp
     src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp
     src/app/mainwindow/sections/preferences/MainWindow.PreferencesDialog.cpp
+    src/app/mainwindow/sections/preferences/MainWindow.WelcomeDialog.cpp
     src/app/mainwindow/sections/preview/MainWindow.PreviewStageMediaRoute.cpp
     src/app/mainwindow/sections/preview/MainWindow.PreviewWarmupAndSettings.cpp
     src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp
@@ -597,6 +598,9 @@ endif()
 
 target_link_libraries(MiaCode PRIVATE Qt6::Multimedia)
 target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
+# Qt SVG — renders the Google Material "settings" gear toolbar icon
+# (makeSettingsGearIcon, MainWindowShared.cpp) via QSvgRenderer.
+target_link_libraries(MiaCode PRIVATE Qt6::Svg)
 
 # ---------------------------------------------------------------------------
 # QtAVPlayer (FFmpeg) — preview background-video decode backend.

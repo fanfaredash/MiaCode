@@ -539,6 +539,18 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
             if (surfaceHost_ != nullptr) {
                 surfaceHost_->noteQuickShellUiReady();
             }
+            // First-run welcome / initial-config dialog. Deferred one more
+            // tick so the first frame is presented (and the workspace/theme
+            // are settled) before the modal appears over it.
+            if (showWelcomeDialogOnStartup_ && backend_ != nullptr) {
+                showWelcomeDialogOnStartup_ = false;
+                QPointer<MainWindow> welcomeBackendGuard(backend_.get());
+                QTimer::singleShot(0, backend_.get(), [welcomeBackendGuard]() {
+                    if (!welcomeBackendGuard.isNull()) {
+                        welcomeBackendGuard->showWelcomeDialog();
+                    }
+                });
+            }
         });
     }
     if (!startupOpenTarget.trimmed().isEmpty() && backend_ != nullptr) {

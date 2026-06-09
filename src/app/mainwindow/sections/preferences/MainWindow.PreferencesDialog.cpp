@@ -535,6 +535,54 @@ void MainWindow::PreferencesSection::onPreferences()
     themeRowLayout->addWidget(themeButton, 0);
     themeRowLayout->addStretch(1);
     interfaceLayout->addRow(themeLabelWidget, themeRow);
+
+    // Chart-preview position (the same workspace left/right swap exposed by
+    // the Preview menu's "左右面板互换"). false = preview on the right
+    // (default), true = preview on the left.
+    const auto previewSideLabel = [](bool previewOnLeft) -> QString {
+        return previewOnLeft
+            ? uiText("dialog.preferences.preview_side.left", "Left")
+            : uiText("dialog.preferences.preview_side.right", "Right");
+    };
+    auto* previewSideLabelWidget =
+        new QLabel(uiText("dialog.preferences.preview_side", "Chart Preview Position"), interfaceGroup);
+    auto* previewSideRow = new QWidget(interfaceGroup);
+    auto* previewSideRowLayout = new QHBoxLayout(previewSideRow);
+    previewSideRowLayout->setContentsMargins(0, 0, 0, 0);
+    previewSideRowLayout->setSpacing(12);
+    auto* previewSideButton = new QToolButton(previewSideRow);
+    previewSideButton->setObjectName("PreferenceMenuButton");
+    previewSideButton->setFont(uiAccentFont(10, QFont::DemiBold));
+    previewSideButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    previewSideButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    previewSideButton->setText(previewSideLabel(owner_.workspacePanelsSwapped_));
+    auto* previewSideMenu = new QMenu(previewSideButton);
+    previewSideMenu->setFont(uiAccentFont(10));
+    styleRoundedMenu(*previewSideMenu);
+    const QList<bool> previewSideOptions{false, true};
+    for (bool previewOnLeft : previewSideOptions) {
+        QAction* action = previewSideMenu->addAction(previewSideLabel(previewOnLeft));
+        action->setData(previewOnLeft);
+        connect(action, &QAction::triggered, &dialog, [&, previewOnLeft, previewSideButton]() {
+            previewSideButton->setText(previewSideLabel(previewOnLeft));
+            owner_.setWorkspacePanelsSwapped(previewOnLeft, true);
+            owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+        });
+    }
+    int previewSideButtonWidth = 0;
+    const QFontMetrics previewSideMetrics(previewSideButton->font());
+    for (bool previewOnLeft : previewSideOptions) {
+        previewSideButtonWidth =
+            qMax(previewSideButtonWidth, previewSideMetrics.horizontalAdvance(previewSideLabel(previewOnLeft)));
+    }
+    previewSideButton->setFixedWidth(previewSideButtonWidth + 28);
+    connect(previewSideButton, &QToolButton::clicked, &dialog, [previewSideButton, previewSideMenu]() {
+        previewSideMenu->popup(previewSideButton->mapToGlobal(QPoint(0, previewSideButton->height())));
+    });
+    previewSideRowLayout->addWidget(previewSideButton, 0);
+    previewSideRowLayout->addStretch(1);
+    interfaceLayout->addRow(previewSideLabelWidget, previewSideRow);
+
     flattenPageGroup(interfaceGroup);
     appearancePageLayout->addWidget(interfaceGroup);
     appearancePageLayout->addStretch(1);

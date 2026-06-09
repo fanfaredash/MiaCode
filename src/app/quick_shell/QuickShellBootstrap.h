@@ -31,6 +31,10 @@ public:
     ~QuickShellBootstrap() override;
 
     bool start(const QString& startupOpenTarget = QString());
+    // When set before start(), the first-run welcome / initial-config
+    // dialog is shown once the QuickShell UI is ready (see start()'s
+    // post-show hook). Driven by main()'s first-run detection / --welcome.
+    void setShowWelcomeDialogOnStartup(bool show) { showWelcomeDialogOnStartup_ = show; }
     QuickShellController* controller() const;
     QuickShellStyleBridge* styleBridge() const;
 #ifdef Q_OS_WIN
@@ -76,4 +80,5 @@ private:
     bool acceptedRootWindowShutdownStarted_ = false;
     bool acceptedRootWindowDestroyScheduled_ = false;
     bool acceptedRootWindowDestroyStarted_ = false;
+    bool showWelcomeDialogOnStartup_ = false;
 };

@@ -177,6 +177,9 @@ public:
         QString* details = nullptr
     );
     bool openStartupTarget(const QString& path);
+    // Shows the first-run welcome / initial-config dialog (preview side +
+    // theme). Called from QuickShellBootstrap after the UI is ready.
+    void showWelcomeDialog();
     bool quickShellRootWindowFrameGeometryAvailable() const;
     QRect quickShellRootWindowFrameGeometry() const;
     void setQuickShellBackendActive(bool active);

@@ -8,6 +8,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - GUI entry: `main`, `setWindowsAppUserModelId`, `wantsQuickShellBeta`,
   `startupOpenTargetFromArguments` (Qt startup, theme/font, window launch, startup-timing log,
   `--quick-shell-beta` routing, file/folder drag-open).
+- First-run welcome / initial-config dialog: `wantsWelcomeDialog` (`--welcome` flag) + first-run
+  probe `QFile::exists(UiText::preferencesFilePath())` captured right after `app.setApplicationName`
+  (must be BEFORE the first `UiTheme::applyApplicationTheme` / `UiText::isChineseUi` read — that read
+  auto-creates `preferences.json`). Result is passed to
+  `QuickShellBootstrap::setShowWelcomeDialogOnStartup`, which fires `MainWindow::showWelcomeDialog()`
+  from its post-show hook. Dialog body: `sections/preferences/MainWindow.WelcomeDialog.cpp` (see §2).
 - CLI export: `wantsCliVideoExport`, `runCliVideoExport`.
 - **Export** worker (this is the export subprocess — keep): `wantsCliVideoExportWorker`,
   `runCliVideoExportWorker`.
@@ -27,6 +33,22 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - QuickShell beta: `src/app/quick_shell/` (`QuickShellBootstrap`, `QuickShellController`,
   `QuickShellNativeSurfaceHost`, `QuickShellPreviewCompositeSurface`, `QuickShellStyleBridge`,
   `qml/QuickShellMain.qml`).
+- Appearance prefs + first-run onboarding: theme pref persisted via
+  `UiText::preferredTheme`/`setPreferredTheme` (`preferences.json` `ui.theme`); live re-theme via
+  `MainWindow::WindowSection::applyUiTheme` (triggers `ApplicationPaletteChange` → `QuickShellStyleBridge`
+  → QML chrome). Preview-pane side = `workspacePanelsSwapped_` (`preview.swap_side_panels`), live via
+  `MainWindow::setWorkspacePanelsSwapped` (QML reads `controller.workspacePanelsSwapped`, default =
+  preview on right; swapped → preview on left). Both the theme row and a "谱面预览位置" (preview
+  side) row live on the Preferences dialog's 外观 page
+  (`MainWindow::PreferencesSection::onPreferences`, `MainWindow.PreferencesDialog.cpp`) AND in the
+  first-run welcome dialog (`PreferencesSection::showWelcomeDialog`, `MainWindow.WelcomeDialog.cpp`)
+  — both drive the same setters; the welcome dialog adds a self-contained `WelcomeLayoutPreview`
+  schematic. zh strings under `dialog.welcome.*` / `dialog.preferences.preview_side*` in `UiText.cpp`.
+  Toolbar settings/Preferences icon = `makeSettingsGearIcon` (`MainWindowShared.cpp`): the Google
+  Material "settings" gear rendered via `QSvgRenderer` (**Qt6::Svg**). The gear is font-matched by
+  rendering the artwork into an *inset* of the icon box (so the glyph reads ~menu-text size) — do
+  NOT shrink `toolBar->setIconSize(...)` to size it: the gear is the toolbar's only icon, so its
+  icon box drives the toolbar row height and a smaller iconSize visibly shortens the toolbar.
 
 ## 3. Document model & file flow
 
@@ -219,7 +241,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     export with no rescaling. Exposed to QML as `layers` (`QList<QObject*>` Repeater model;
     per-property NOTIFY for two-way drag/scale binding). z-order helpers (`bringToFront` /
     `sendToBack` / `raiseLayer` / `lowerLayer`), `resetLayout()`, and `toJson`/`fromJson` (future
-    per-chart persistence / presets, handoff Phase 3). v1 seeds one `kind=="card"` layer.
+    per-chart persistence / presets, handoff Phase 3). Seeds **two** layers: `kind=="card"`
+    (centred, `z=1`, visible) and `kind=="chartFrame"` (centred-behind, `z=0`, **hidden** until
+    `setChartFrameEnabled(true)` — drives its `visible`). A `chartFrame` layer also carries a
+    rendered square playfield still: C++ pushes it via `setLayerImage(key, QImage)` (stores
+    `frameImage_` + bumps `imageRevision`); QML reads it through the **"coverchart" image provider**.
+    `frameSeconds` records the grabbed chart time (persisted in `toJson`). `z=0` keeps the frame
+    above the background dim (which paints before the Repeater) but below the card (`z=1`).
   - **`CoverComposer.qml`** (`src/intro/qml/`, **listed in `resources/intro.qrc`** → the
     AUTORCC-stale caveat below now bites when you edit it). The scene: a background fill layer
     (曲绘 / custom image / transparent, blurred-or-crisp + dim) + a `Repeater` over
@@ -236,6 +264,24 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     fires from `onCoverLayoutChanged` (the host assigns `coverLayout` AFTER `Component.onCompleted`).
     Because the card runs transparent, its OWN `backgroundImage`/`backdropBlurEnabled`/internal
     `cardShadowEnabled` knobs are unused by the cover path (the composer draws bg + shadow itself).
+    The `chartFrame` delegate is an `Image` whose source is `image://coverchart/<key>?r=<rev>`
+    (`cache:false`, `PreserveAspectFit`); the `?r=` query is the `imageRevision` cache-bust, and a
+    revision `< 0` (no still yet) yields a blank source.
+  - **`SceneFrameRenderer.{h,cpp}` (chart-frame layer, Phase 2, 2026-06-09)** — renders a single
+    chart frame at an arbitrary time T **in-process** for the `chartFrame` layer. Same capture rule
+    as `CoverComposerView` (bare `QQuickWindow` + `grabWindow()` on the process RHI = D3D11; **no
+    `QQuickView`, no forced OpenGL** — it is NOT the export worker), but it hosts a
+    **`PreviewQuickSceneRoot`** (the same C++ chart scene the live preview + video export use; no
+    QML/engine needed) with `setDCompFallbackActive(true)` + `kPreviewExportOverlayRenderLayers`
+    (everything except the song-background media) captured over **transparent**, so the playfield
+    (outline ring + notes + judge) composites as a layer over the cover's own background.
+    `bootstrap(task)` maps the `VideoExportTask` → base `PreviewFrameState` ONCE (mirrors
+    `VideoExportQuickRenderBackend::bootstrap`: note markers + progress cache + muri + skin/judge
+    assets + render settings, incl. `outlineVariant`/`outlineImagePath`); each `renderAt(T, px)`
+    only moves `playheadSeconds` and re-grabs the WARM scene (no re-parse — the same "only the
+    playhead changes per frame" insight the export uses). The seeded `VideoExportTask` therefore
+    must carry `skinDirectory` + `outlineImagePath` (added in `MainWindow.ExportFlow.cpp`, since the
+    cover dialog gets `baseTask_` directly with NO snapshot rebuild).
   - **`CoverComposerView.{h,cpp}`** — host + export. The live view owns a bare `QQuickWindow`
     running `CoverComposer.qml`, embedded into the dialog via **`QWidget::createWindowContainer`**
     (which reparents + owns the window); drag/scale mutate the shared `CoverLayoutModel` with zero
@@ -244,13 +290,23 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     transparent→ARGB32 PNG, else RGB32 JPG; guards an empty/`card`-less template); `exportCoverComposite(...)`
     renders + saves `card.png`/`card.jpg` (`(1)`,`(2)`… on collision). All presentation rides on
     **`CoverComposerInputs`** `{templateMap, trackOverrides, jacketPath, backgroundPath,
-    backgroundMode (Jacket/Custom/Transparent), blurBackground, cardShadow}`.
-  - **Dialog (`ExportCoverDialog.{h,cpp}`)** — `buildInputs()` maps the controls (size /
-    background source 曲绘·custom+browse·transparent / blur / card shadow / level-text-render /
-    long-text overflow) to `CoverComposerInputs`; hosts the embedded live composer + a "重置布局 /
-    Reset layout" button; caches the parsed template once in the ctor (`cachedTemplate_`, not
-    re-read per keystroke). Card-shadow stays enabled in Transparent mode; blur is gated to
-    non-transparent (it needs a backdrop). On accept the caller drives `exportCover(outputDir)`.
+    backgroundMode (Jacket/Custom/Transparent), blurBackground, cardShadow}`. Both the live and the
+    export engine register the **`CoverChartImageProvider`** (id `coverchart`, backed by the shared
+    `CoverLayoutModel` via `QPointer`) BEFORE loading the QML, so the `chartFrame` `Image` resolves.
+  - **Dialog (`ExportCoverDialog.{h,cpp}`)** — ctor now takes the full **`VideoExportTask`** (not
+    just `IntroBannerSpec`): `task.intro` drives the card, and `task.noteMarkers`/`skinDirectory`/
+    render-settings/`contentDurationSeconds` bootstrap the `SceneFrameRenderer`. `buildInputs()` maps
+    the controls (size / background source 曲绘·custom+browse·transparent / blur / card shadow /
+    level-text-render / long-text overflow) to `CoverComposerInputs`; hosts the embedded live
+    composer + a "重置布局 / Reset layout" button; caches the parsed template once in the ctor.
+    **Chart-frame picker:** an "添加谱面帧 / Add chart frame" checkbox (disabled when the difficulty
+    has no notes) + a frame-time slider (`0..contentDurationSeconds` ms) + mm:ss.cs readout. Enabling
+    does an immediate grab (reverts + warns on first-grab failure so the layer can't ship blank);
+    scrubs / size / scale changes re-grab via a debounce (`renderChartFrameNow` is re-entrancy- and
+    `chartFrameEnabled()`-guarded). `exportCover` re-grabs at the exact export resolution
+    (`chartFrameRenderPx` = `sizeFraction × outputHeight`) before compositing. Card-shadow stays
+    enabled in Transparent mode; blur is gated to non-transparent. On accept the caller drives
+    `exportCover(outputDir)`.
   - **⚠ Render mechanism (two hard constraints — both cost a crash/bug to learn):**
     `CoverComposerView` (live) and `renderCoverComposite` (export) load the scene with a **bare
     `QQmlEngine` + `QQmlComponent`** parented into a **plain `QQuickWindow`** (the live one embedded
@@ -339,10 +395,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   size presets mirror the video-export resolutions, seeded from the current video size, tracked
   independently.
 - Entry slot: a "导出封面 / Export Cover" button on the **Font** tab of `VideoExportDialog`
-  (`VideoExportDialog::openExportCoverDialog`). It reuses `baseTask_.intro`
-  (`IntroBannerSpec`), which `MainWindow::ExportSection::onExportPreviewVideo` now seeds via
-  `buildActiveDifficultyIntroBannerSpec()` (wraps the `buildIntroBannerSpec` helper in
-  `MainWindow.ExportSnapshot.cpp`). Output dir = the configured video output's directory,
+  (`VideoExportDialog::openExportCoverDialog`). It passes the whole `baseTask_` (`VideoExportTask`)
+  to `ExportCoverDialog`: `baseTask_.intro` (`IntroBannerSpec`) drives the card —
+  `MainWindow::ExportSection::onExportPreviewVideo` seeds it via
+  `buildActiveDifficultyIntroBannerSpec()` (wraps `buildIntroBannerSpec` in
+  `MainWindow.ExportSnapshot.cpp`) — and `baseTask_.noteMarkers`/`skinDirectory`/`outlineImagePath`/
+  render-settings/`contentDurationSeconds` feed the chart-frame `SceneFrameRenderer`. Output dir =
+  the configured video output's directory,
   falling back to the chart dir. **⚠ Note:** `CoverComposer.qml` is a NEW file in `intro.qrc`, so
   editing it (or `MaimaiBannerCard.qml`) DOES need the AUTORCC repack — delete `build/**/qrc_intro.cpp*`
   / touch `resources/intro.qrc` to force RCC (cf. the over-long-text mirror note above).

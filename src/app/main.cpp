@@ -534,6 +534,13 @@ bool wantsQuickShellBeta(const QStringList& arguments)
     return arguments.contains(QStringLiteral("--quick-shell-beta"));
 }
 
+// Force-show the first-run welcome / initial-config dialog even when
+// preferences already exist. Handy for debugging the onboarding flow.
+bool wantsWelcomeDialog(const QStringList& arguments)
+{
+    return arguments.contains(QStringLiteral("--welcome"));
+}
+
 QString startupOpenTargetFromArguments(const QStringList& arguments)
 {
     for (int index = 1; index < arguments.size(); ++index) {
@@ -1652,6 +1659,16 @@ int main(int argc, char* argv[])
 #endif
     app.setApplicationName("MiaCode");
     app.setApplicationVersion(MIACODE_DISPLAY_VERSION_STRING);
+    // First-run detection. The preferences file is auto-created the first
+    // time a UiText/UiTheme preference is read (the UiTheme::applyApplicationTheme
+    // call just below is the first such read), so we must probe its existence
+    // *here* — after the application name is set (AppConfigLocation depends on
+    // it) but before anything reads a preference. "No preferences on this
+    // machine" == show the welcome / initial-config dialog. The --welcome flag
+    // force-shows it for debugging even when preferences already exist.
+    const bool miacodePreferencesExistedAtStartup = QFile::exists(UiText::preferencesFilePath());
+    const bool shouldShowWelcomeDialog =
+        !miacodePreferencesExistedAtStartup || wantsWelcomeDialog(rawArgs);
     const QIcon appIcon(QStringLiteral(":/icons/app.png"));
     app.setWindowIcon(appIcon);
     app.setStyle(QStyleFactory::create("Fusion"));
@@ -1777,6 +1794,7 @@ int main(int argc, char* argv[])
         miacode::oplog::appendStartupBeaconLine("phase=before_quick_shell_bootstrap_start");
 #endif
         QuickShellBootstrap quickShellBootstrap(appIcon);
+        quickShellBootstrap.setShowWelcomeDialogOnStartup(shouldShowWelcomeDialog);
         if (!quickShellBootstrap.start(startupOpenTarget)) {
 #ifdef Q_OS_WIN
             miacode::oplog::appendStartupBeaconLine("phase=quick_shell_bootstrap_failed");

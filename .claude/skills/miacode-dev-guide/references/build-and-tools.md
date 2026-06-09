@@ -124,6 +124,12 @@ Rules going forward:
   `third_party/ffmpeg/windows/dev/` (backs up to `dev.full.bak`). Decode-only ⇒ stays LGPL (no
   `--enable-gpl`/x264 — that would make MiaCode GPL; export encoding stays in the separate
   `ffmpeg.exe`). Needs MSYS2 + VS BuildTools (both present on the dev box).
+- **Qt6::Svg (toolbar gear icon):** in `find_package(Qt6 … COMPONENTS … Svg)` +
+  `target_link_libraries(MiaCode PRIVATE Qt6::Svg)`, so `makeSettingsGearIcon`
+  (`MainWindowShared.cpp`) renders the Google Material "settings" gear via `QSvgRenderer`.
+  windeployqt stages `Qt6Svg.dll` automatically (it's a direct link dependency — no extra
+  packaging step). So far this is the only `QSvgRenderer` use; keep it that way unless a new
+  feature genuinely needs SVG.
 
 ## 7. Do not commit build artifacts
 
