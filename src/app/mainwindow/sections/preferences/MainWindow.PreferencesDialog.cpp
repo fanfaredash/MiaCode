@@ -377,7 +377,6 @@ void MainWindow::PreferencesSection::onPreferences()
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
     dialog.setWindowTitle(uiText("dialog.preferences.title", "Preferences"));
     dialog.setModal(true);
-    dialog.setMinimumWidth(620);
     dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
     owner_.windowSection_->applySystemWindowBackdrop(&dialog);
     UiDialogs::prepareDialogWindow(&dialog, &owner_);
@@ -542,7 +541,7 @@ void MainWindow::PreferencesSection::onPreferences()
             : uiText("dialog.preferences.preview_side.right", "Right");
     };
     auto* previewSideLabelWidget =
-        new QLabel(uiText("dialog.preferences.preview_side", "Chart Preview Position"), interfaceGroup);
+        new QLabel(uiText("dialog.preferences.preview_side", "Preview Position"), interfaceGroup);
     auto* previewSideRow = new QWidget(interfaceGroup);
     auto* previewSideRowLayout = new QHBoxLayout(previewSideRow);
     previewSideRowLayout->setContentsMargins(0, 0, 0, 0);
@@ -604,42 +603,35 @@ void MainWindow::PreferencesSection::onPreferences()
     };
     auto* headerTopDisplayLabelWidget =
         new QLabel(uiText("dialog.preferences.editor_top_display", "Header Field"), editorGroup);
-    auto* headerTopDisplayRow = new QWidget(editorGroup);
-    auto* headerTopDisplayRowLayout = new QHBoxLayout(headerTopDisplayRow);
-    headerTopDisplayRowLayout->setContentsMargins(0, 0, 0, 0);
-    headerTopDisplayRowLayout->setSpacing(12);
-    auto* headerTopDisplayButton = new QToolButton(headerTopDisplayRow);
-    headerTopDisplayButton->setObjectName("PreferenceMenuButton");
-    headerTopDisplayButton->setFont(uiAccentFont(10, QFont::DemiBold));
-    headerTopDisplayButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    headerTopDisplayButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    headerTopDisplayButton->setText(headerTopDisplayLabel(state_.editorHeaderTopDisplay_));
-    headerTopDisplayButton->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("谱面编辑页顶部 Lv 旁边显示的字段：延迟（&first 偏移）或当前难度的谱师（&des_N）。")
-            : QStringLiteral("The field next to Lv in the chart header: the &first offset or this difficulty's &des_N designer.")
-    );
-    auto* headerTopDisplayMenu = new QMenu(headerTopDisplayButton);
-    headerTopDisplayMenu->setFont(uiAccentFont(10));
-    styleRoundedMenu(*headerTopDisplayMenu);
+    // Plain combo box, same idiom as the 行距 row below — the two-option
+    // pick doesn't warrant the styled PreferenceMenuButton treatment.
+    auto* headerTopDisplayCombo = new QComboBox(editorGroup);
     const QList<EditorHeaderTopDisplay> headerTopDisplayOptions{
         EditorHeaderTopDisplay::Offset,
         EditorHeaderTopDisplay::Designer,
     };
     for (EditorHeaderTopDisplay mode : headerTopDisplayOptions) {
-        QAction* action = headerTopDisplayMenu->addAction(headerTopDisplayLabel(mode));
-        connect(action, &QAction::triggered, &dialog, [&, mode, headerTopDisplayButton]() {
-            headerTopDisplayButton->setText(headerTopDisplayLabel(mode));
-            owner_.applyEditorHeaderTopDisplay(mode, true);
-            owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
-        });
+        headerTopDisplayCombo->addItem(headerTopDisplayLabel(mode), static_cast<int>(mode));
     }
-    connect(headerTopDisplayButton, &QToolButton::clicked, &dialog, [headerTopDisplayButton, headerTopDisplayMenu]() {
-        headerTopDisplayMenu->popup(headerTopDisplayButton->mapToGlobal(QPoint(0, headerTopDisplayButton->height())));
+    const int headerTopDisplayIndex =
+        headerTopDisplayCombo->findData(static_cast<int>(state_.editorHeaderTopDisplay_));
+    headerTopDisplayCombo->setCurrentIndex(qMax(0, headerTopDisplayIndex));
+    headerTopDisplayCombo->setToolTip(
+        UiText::isChineseUi()
+            ? QStringLiteral("谱面编辑页顶部 Lv 旁边显示的字段：延迟（&first 偏移）或当前难度的谱师（&des_N）。")
+            : QStringLiteral("The field next to Lv in the chart header: the &first offset or this difficulty's &des_N designer.")
+    );
+    connect(headerTopDisplayCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
+            [&, headerTopDisplayCombo](int index) {
+        if (index < 0) {
+            return;
+        }
+        const auto mode =
+            static_cast<EditorHeaderTopDisplay>(headerTopDisplayCombo->itemData(index).toInt());
+        owner_.applyEditorHeaderTopDisplay(mode, true);
+        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
     });
-    headerTopDisplayRowLayout->addWidget(headerTopDisplayButton, 0);
-    headerTopDisplayRowLayout->addStretch(1);
-    editorLayout->addRow(headerTopDisplayLabelWidget, headerTopDisplayRow);
+    editorLayout->addRow(headerTopDisplayLabelWidget, headerTopDisplayCombo);
 
     auto* editorFontSizeLabel = new QLabel(uiText("dialog.preferences.editor_font_size", "Text Font Size"), editorGroup);
     auto* fontSizeRow = new QWidget(editorGroup);
@@ -1194,6 +1186,41 @@ void MainWindow::PreferencesSection::onPreferences()
     });
 
     pageStack->setCurrentIndex(0);
+
+    // Width floor: widest page + the tab widget's TRUE horizontal chrome,
+    // measured from live geometry. Two facts force this shape (see the
+    // qt-ui-layout-pitfalls skill, W2/W3):
+    //   - the root layout's SetFixedSize constraint ignores dialog-level
+    //     setMinimumWidth but honors a child's minimum, so the floor lives
+    //     on the tab widget (same as the render-settings dialog, df0829d);
+    //   - the QSS pane padding (8px per side) is absent from
+    //     QTabWidget::sizeHint, so without compensation every page comes up
+    //     ~16px short and Fixed-width fields (menu buttons, the font
+    //     shortcut hint) clip at the right pane edge.
+    // Measuring instead of hardcoding keeps the dialog as narrow as the
+    // content allows while never re-clipping when rows change.
+    int maxPageWidth = 0;
+    for (int i = 0; i < pageStack->count(); ++i) {
+        QWidget* page = pageStack->widget(i);
+        if (page == nullptr) {
+            continue;
+        }
+        if (page->layout() != nullptr) {
+            page->layout()->activate();
+        }
+        maxPageWidth = qMax(maxPageWidth, page->sizeHint().width());
+    }
+    dialog.adjustSize();
+    QCoreApplication::sendPostedEvents(pageStack, QEvent::LayoutRequest);
+    auto* pageStackInner = pageStack->findChild<QStackedWidget*>();
+    // Fallback chrome if the inner stack is not measurable: 2*8px QSS pane
+    // padding + 2*1px pane border (must track the QSS in
+    // UiTheme::dialogTabStripStyleSheet()).
+    int tabChrome = 18;
+    if (pageStackInner != nullptr && pageStack->width() > pageStackInner->width()) {
+        tabChrome = pageStack->width() - pageStackInner->width();
+    }
+    pageStack->setMinimumWidth(maxPageWidth + tabChrome);
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
     UiDialogs::localizeButtonBox(buttonBox);

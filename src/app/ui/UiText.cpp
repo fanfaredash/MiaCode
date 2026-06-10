@@ -459,7 +459,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.preferences.theme.system", "跟随系统"},
         {"dialog.preferences.theme.light", "浅色"},
         {"dialog.preferences.theme.dark", "深色"},
-        {"dialog.preferences.preview_side", "谱面预览位置"},
+        {"dialog.preferences.preview_side", "预览位置"},
         {"dialog.preferences.preview_side.right", "右"},
         {"dialog.preferences.preview_side.left", "左"},
 
