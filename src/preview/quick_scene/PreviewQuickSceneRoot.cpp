@@ -70,7 +70,7 @@ void updateCenterDisplaySlot(
     if (state.render.centerDisplayMode == miacode::preview_gameplay::CenterDisplayMode::Off) {
         QSGNode* old = slot->firstChild();
         if (old != nullptr) {
-            delete static_cast<QSGSimpleTextureNode*>(old)->texture();
+            // Node owns its texture (beta8 leak fix below) — plain delete frees both.
             slot->removeChildNode(old);
             delete old;
         }
@@ -137,11 +137,20 @@ void updateCenterDisplaySlot(
     if (node == nullptr) {
         QSGNode* old = slot->firstChild();
         if (old != nullptr) {
-            delete static_cast<QSGSimpleTextureNode*>(old)->texture();
             slot->removeChildNode(old);
             delete old;
         }
         node = new QSGSimpleTextureNode();
+        // beta8 leak fix — the node MUST own its texture. Every stats change (once per judged
+        // note group) replaces the texture via setTexture(), and without OwnsTexture Qt never
+        // deletes the previous one: each replacement leaked a full-viewport QSGTexture (GPU
+        // copy + the QImage CPU copy retained inside QSGPlainTexture, ~4.6 MB at 512x512 @
+        // dpr 1.5). That was the 30-44 MB/s play-time leak behind the 掉帧→闪退 reports
+        // (logs_34/35). With OwnsTexture, setTexture() deletes the replaced texture and the
+        // node destructor deletes the last one — which is why the mode-off / type-mismatch
+        // paths above do a plain `delete old` with NO manual texture()-delete (that would
+        // now double-free). See docs/PREVIEW_FRAMEDROP_DIAGNOSIS_AND_FIX_SPEC_ZH.md §8.
+        node->setOwnsTexture(true);
         slot->appendChildNode(node);
     }
     node->setTexture(texture);

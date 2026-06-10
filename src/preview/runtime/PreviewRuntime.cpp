@@ -446,6 +446,18 @@ void PreviewRuntime::setProgressStatsCache(
 
 void PreviewRuntime::setMuriAnalysisReport(const MuriAnalysisReport& report)
 {
+    // beta5 leak fix: skip the scene-revision bump + repaint when the report's CONTENT is
+    // unchanged. Every preview play re-pushes the (usually identical) Muri report; the
+    // unconditional sceneContentRevision bump here forced a full PreviewPreparedSceneCache +
+    // QSG rebuild per play, churning RHI geometry/material resources that the threaded render
+    // loop frees only lazily — the ~4MB/play growth that paged the process to multi-GB on
+    // shared-memory (integrated) GPUs. `revision` is a monotonic content id stamped on every
+    // fresh analysis (and on reset), so an unchanged re-apply is a true no-op. This is also a
+    // correctness win: it removes a redundant full rebuild on every play even after edits.
+    // See docs/PREVIEW_FRAMEDROP_DIAGNOSIS_AND_FIX_SPEC_ZH.md.
+    if (report.revision == frameState_.muriAnalysisReport.revision) {
+        return;
+    }
     frameState_.muriAnalysisReport = report;
     frameState_.sceneContentRevision += 1;
     update();
@@ -707,11 +719,29 @@ void PreviewRuntime::noteTickForProfiling()
     }
 }
 
+QString PreviewRuntime::resourceGaugePayload() const
+{
+    return QStringLiteral(
+               "scene_revision=%1 cached_tex=%2 cached_tex_kb=%3 transient_tex=%4 "
+               "cached_tex_creates=%5 transient_tex_creates=%6 sprite_max=%7 present_total=%8")
+        .arg(static_cast<qulonglong>(frameState_.sceneContentRevision))
+        .arg(latestCachedTextureCount_)
+        .arg(latestCachedTextureBytes_ / 1024)
+        .arg(latestTransientTextureCount_)
+        .arg(cachedTextureCreateTotal_)
+        .arg(transientTextureCreateTotal_)
+        .arg(spriteCountMax_)
+        .arg(presentedFrameCountTotal_);
+}
+
 void PreviewRuntime::notePresentedTextureStats(const PreviewTextureStats& stats)
 {
     if (!miacode::debug_options::previewProfileOutputEnabled()) {
         return;
     }
+    latestCachedTextureCount_ = stats.cachedTextureCount;
+    latestCachedTextureBytes_ = stats.cachedTextureBytes;
+    latestTransientTextureCount_ = stats.transientTextureCount;
     profilingSummaryDirty_ = true;
     profiledTextureFrameCount_ += 1;
     cachedTextureHitTotal_ += stats.cachedHitCount;

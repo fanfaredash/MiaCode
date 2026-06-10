@@ -2,6 +2,7 @@
 
 #include <QQuickWindow>
 #include <QSGTexture>
+#include <QStringList>
 
 #include "timeline/quick/TimelineQuickLayerUtils.h"
 
@@ -58,8 +59,47 @@ QSGTexture* TimelineQuickTextureCache::textureForKey(const QString& key, const Q
         return it.value();
     }
     QSGTexture* texture = window_->createTextureFromImage(image);
+    ++textureCreateCount_;
     textures_.insert(key, texture);
     return texture;
+}
+
+void TimelineQuickTextureCache::debugCacheStats(
+    int* textureCount,
+    int* pixmapCount,
+    int* holdPartsCount,
+    int* rotatedNoteKeyCount,
+    quint64* createTotal) const
+{
+    if (textureCount != nullptr) {
+        *textureCount = textures_.size();
+    }
+    if (pixmapCount != nullptr) {
+        *pixmapCount = transformedPixmaps_.size();
+    }
+    if (holdPartsCount != nullptr) {
+        *holdPartsCount = holdPixmapParts_.size();
+    }
+    if (createTotal != nullptr) {
+        *createTotal = textureCreateCount_;
+    }
+    if (rotatedNoteKeyCount != nullptr) {
+        // Note keys are "note|type|w|h|rotTenths|mirror|dpr=N" (see noteTextureKey +
+        // transformedPixmapCacheKey). Field index 4 is the rotation tenths; non-"0" means a
+        // slide-track arrow angle. Counting these isolates the slide-edit-driven key axis.
+        int rotated = 0;
+        for (auto it = textures_.cbegin(); it != textures_.cend(); ++it) {
+            const QString& key = it.key();
+            if (!key.startsWith(QStringLiteral("note|"))) {
+                continue;
+            }
+            const QStringList parts = key.split(QLatin1Char('|'));
+            if (parts.size() >= 6 && parts.at(4) != QStringLiteral("0")) {
+                ++rotated;
+            }
+        }
+        *rotatedNoteKeyCount = rotated;
+    }
 }
 
 QSGTexture* TimelineQuickTextureCache::textureForPixmapKey(const QString& key, const QPixmap& pixmap)

@@ -1017,6 +1017,13 @@ void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiv
     state_.qtPreviewElapsed_.restart();
     state_.qtPreviewTimelineElapsed_.restart();
     state_.qtPreviewPlaying_ = true;
+    // beta7 leak gauge — anchor private bytes at play start so the pause handler can report the
+    // playback-window delta (d_play), the largest previously-unbracketed slice of the cycle.
+    if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+        miacode::debug_log::leak_gauge::notePlayStartPrivateBytes(
+            miacode::debug_log::processPrivateBytes());
+        miacode::debug_log::leak_gauge::markPlayStartTimelinePresents();
+    }
     state_.qtPreviewAwaitingFrameSwap_ = false;
     state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
     state_.qtPreviewAwaitingFrameSwapSinceNs_ = -1;
@@ -1144,13 +1151,31 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
     // findChildren() walk in --debug / diagnostic builds. See
     // docs/PREVIEW_FRAMEDROP_DIAGNOSIS_AND_FIX_SPEC_ZH.md.
     if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+        // beta7 leak gauge — d_play_kb = private-bytes grown over the playback window (the big
+        // previously-unmeasured slice); inflight/inflight_peak = outstanding worker→GUI queued
+        // lambdas (≈0 here exonerates async backlog). Then arm the render thread to emit one
+        // timeline/leak_gauge line (nodes/tex/d_render) on its next present, correlated by txn.
+        const qint64 pausePrivBytes = miacode::debug_log::processPrivateBytes();
+        const qint64 playStartPrivBytes = miacode::debug_log::leak_gauge::playStartPrivateBytes();
+        const qint64 dPlayKb = (pausePrivBytes >= 0 && playStartPrivBytes >= 0)
+            ? (pausePrivBytes - playStartPrivBytes) / 1024
+            : 0;
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("preview/resource_gauge"),
-            QStringLiteral("reason=pause_exact txn=%1 qobject_descendants=%2 %3")
+            QStringLiteral("reason=pause_exact txn=%1 qobject_descendants=%2 d_play_kb=%3 "
+                           "inflight=%4 inflight_peak=%5 presents_in_play=%6 %7 %8")
                 .arg(playbackTxn)
                 .arg(static_cast<qint64>(owner_.findChildren<QObject*>().size()))
-                .arg(miacode::debug_log::processResourceGaugePayload()));
+                .arg(dPlayKb)
+                .arg(miacode::debug_log::leak_gauge::inflightDepth())
+                .arg(miacode::debug_log::leak_gauge::inflightPeak())
+                .arg(miacode::debug_log::leak_gauge::timelinePresentsSincePlayStart())
+                .arg(miacode::debug_log::processResourceGaugePayload())
+                .arg(state_.previewCanvas_ != nullptr
+                         ? state_.previewCanvas_->resourceGaugePayload()
+                         : QStringLiteral("scene_revision=-")));
+        miacode::debug_log::leak_gauge::armRenderSample(pausePrivBytes, playbackTxn);
     }
     scheduleDeferredPreviewUiTail(
         true,

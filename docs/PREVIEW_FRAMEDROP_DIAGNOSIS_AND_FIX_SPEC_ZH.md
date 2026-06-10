@@ -1,7 +1,8 @@
 # 预览掉帧（"改多了就掉帧，必须重启"）诊断与修复方案
 
-> 状态：beta4 = **诊断版**。本文档同时是 beta4 已应用诊断改动的**补丁说明**，以及
-> 真正泄漏修复的**方案（未应用，待取证确认后再做）**。
+> 状态：**已结案（beta8 = 修复版）**。根因 = 预览中央显示 HUD 每判定一个音符组泄漏一张
+> 整视口 QSGTexture（§8，logs_34/35 实锤，beta8 已修复）。§1–§7 保留为取证过程记录；
+> 注意 §1 对 center HUD 的"已排除"与 §7.5 第 2 步的 prepared-cache 分支判断**已被 §8 推翻**。
 
 ## 0. 摘要
 
@@ -33,6 +34,7 @@
   `applyQtPreviewPosition` 播放中刻意跳过重活）。
 - 各效果层 firework / judge scale-pop·break-flash / center HUD（每帧删除多余子节点；firework
   `ensureJudgeFireworkRoot` 是专用槽，create/destroy 平衡，非泄漏）。
+  **【center HUD 的排除已被 §8 推翻】**——当年只核了子节点删除平衡，漏看了纹理所有权。
 - 生产侧 `frameStateChanged` 连接（`setRuntime` 同对象早返回 + 先断开再连接）。
 
 ## 2. 已确认的唯一「按编辑次数单调增长、只重启清空」累积点
@@ -122,3 +124,102 @@
 beta4 关掉了默认强开的预览 HUD。请额外对比：**同样的 20~30 次循环下，掉帧是否明显减轻**。
 - 若明显减轻 → 掉帧很大一部分来自 HUD 每帧开销（已由 3.1 解决），剩余再看 gauge。
 - 若几乎无变化 → HUD 不是主因，全力看 §5 的 gauge 爬升项。
+
+## 7. beta5 —— 确认根因 + 落地修复（gauge 实锤后）
+
+### 7.1 gauge 取证结论（logs_30 / logs_31）
+- **是内存泄漏**：`private_mb` 随暂停次数单调爬升（logs_30 ~76MB/周期 → 5.5GB；logs_31 用"狂点 play/pause" 1900 次 → 8GB），`qobject_descendants` 平、`gdi/user` 仅轻微涨。
+- **是播放/渲染路径，不是编辑**：logs_31 是**纯 play↔pause toggle、零编辑**，仍 ~4MB/toggle（8000÷1900）。
+- **两路独立深挖**：app 层无累积容器（渲染线程按指针读 `frameState_`、无快照/队列；各 push 都 replace；prepared cache clear-before-rebuild；texture repo 有上限；transport 0 connect/0 map）。泄漏在 **Qt RHI/场景图资源层**（几何/材质/staging 缓冲），渲染线程**惰性释放**，在核显（显存=系统内存）+ 快速 toggle/换页拖慢渲染线程时释放跟不上 → `private_mb` 累积、不重启不回收。
+
+### 7.2 根因（git 实锤）
+commit `d8ce8d7`（0.5.0 的 "prepared note windows" QSG 重写）给
+[`PreviewRuntime::setMuriAnalysisReport`](../src/preview/runtime/PreviewRuntime.cpp) 加了**无条件 `sceneContentRevision += 1`**。
+每次 play 都经 `applyLatestTimelinePreviewStateToPausedPreview → applyAlignedMuriAnalysisReportToViews`
+无条件重推（常常一模一样的）Muri 报告 → 撞 revision → `PreviewPreparedSceneCache::sync` 返回 true →
+**11 层全部 reset cursor、整棵 QSG 几何子树推倒重建**（日志里每次 play 都有 `preview_prepared_scene_hs count=925`）。
+编辑也漏，是因为编辑真的改内容、同样撞 revision、同样全量重建。
+
+### 7.3 Part A —— 已落地修复（beta5）
+给 Muri 报告加**单调内容 revision**，让"未变则跳过 revision++/重建"：
+- [`MuriTypes.h`](../src/common/MuriTypes.h)：`MuriAnalysisReport` 加 `quint64 revision`。
+- [`MainWindowMemberStorage.inc`](../src/app/mainwindow/MainWindowMemberStorage.inc)：加 `muriAnalysisReportRevisionCounter_`。
+- [`PreviewTimelineFlow.cpp:1109`](../src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp) / [`DocumentUi.cpp:976`](../src/app/mainwindow/sections/document/MainWindow.DocumentUi.cpp)：每次**存入新报告（分析产出 / reset）**时 `++counter` 并戳进 `report.revision`。
+- [`PreviewRuntime::setMuriAnalysisReport`](../src/preview/runtime/PreviewRuntime.cpp)：`if (report.revision == frameState_.muriAnalysisReport.revision) return;`。
+- **为何正确**：revision 在**每次新分析**都 ++（无论是 marker 还是 render options/threshold 变化导致），所以同一份报告重推 = 同 revision = 真 no-op；任何真实变化 = 新 revision = 必推。比 `sourceSignature`（只含 markers，漏 render options）健壮。**前提**：`muriAnalysisReport_` 只被整体替换、不被原地 mutate（已核对，仅 2 处赋值）。
+
+### 7.4 Part B Step 1 —— 详细 gauge（beta5）
+`preview/resource_gauge` 暂停时新增分项：
+- **进程（Win32）**：`kernel_handles`、`peak_working_set_mb`、`commit_mb`、`paged_pool_kb`、`nonpaged_pool_kb`、**`page_faults`**（换页实锤）。
+- **预览渲染（[`PreviewRuntime::resourceGaugePayload`](../src/preview/runtime/PreviewRuntime.cpp)）**：`scene_revision`（重建计数——**验证 Part A：play 不应再让它涨**）、`cached_tex` / `cached_tex_kb`（当前 RHI 纹理占用）、`transient_tex`、`cached_tex_creates` / `transient_tex_creates`（累计 churn）、`sprite_max`、`present_total`。
+
+### 7.5 beta5 验证
+1. `Start_MiaCode_Debug.bat` 跑 logs_31 同样的"狂点 play/pause"：
+   - **`scene_revision` 不再随 `txn` 涨**（Part A 生效，play 不再触发重建）。
+   - **`private_mb` / `commit_mb` / `page_faults` 不再单调爬升**（泄漏止住）。
+2. 再跑"编辑→播放→暂停"：看 `scene_revision` 只在**真编辑**时涨；`private_mb` 是否仍残留爬升。
+   - 若仍爬 → Part B Step 2：看 `cached_tex_kb` 是否同步涨（纹理）；若纹理平而 `private` 涨 → 确认是 Qt RHI 几何/材质惰性释放，转向"让 prepared-cache sync 增量化、不每次全量重建"（§4.2 源头方向）。
+   - **【已被 §8 推翻】**：beta7 取证证明残余泄漏既不是 RHI 惰性释放也不是 prepared-cache，
+     而是中央显示 HUD 的纹理所有权缺失。本分支判断到此作废。
+
+## 8. 结案（beta8）—— 根因实锤 + 修复
+
+### 8.1 beta7 取证结论（logs_34 / logs_35，2026-06-10）
+
+beta7 量规（`d_play_kb` / `presents_in_play` / `gpu_kb` / `geom_create` / `leak_gauge`）+
+音频日志 `bass_sfx_drain` 交叉回归，得到唯一自洽解释：
+
+- **泄漏与"判定事件数"严格成正比，每个 `bass_sfx_drain`（音符判定组）泄漏 ≈ 4.6 MB**：
+  两场会话全部 65 个测量播放窗口 KB/事件 = 4690±30（s34）/ 4278~4609（s35），
+  无论渲染率 140Hz 还是塌到 16-38Hz（KB/present 会膨胀 8 倍，KB/事件不变）。
+- **无音符段落泄漏归零**：s34 txn170-172（共 33 秒、4748 presents、每帧 ~85 次几何重建照跑、
+  144Hz GUI 定时器照跑）drain 数 1/0/15 → 泄漏 4.5/-0.1/55.7 MB。
+  ⇒ 同时否决"每 present 泄漏"（header churn 假说）与"每 GUI tick 泄漏"假说。
+- **算术闭环**：预览画布 `render_size=512x512`、`dpr=1.50` ⇒ `QImage` 768×768 ARGB32 = 2304 KB；
+  每张泄漏纹理钉住 GPU 一份 + `QSGPlainTexture` 内部 QImage CPU 一份 = **4608 KB ≈ 实测 4690**（98%）。
+- **卡顿/闪退因果链**：30-44 MB/播放秒（随谱面密度 6.7~10 drains/s 浮动）→ private commit
+  16 / 32.5 GB → OS 裁剪工作集（21.4→8.5→13 GB 锯齿）→ ~1.2 万缺页/秒 → present 率阶梯塌陷 = 掉帧；
+  s34 终局 32.5 GB 提交下 ntdll 堆 AV（`0xc0000005` tid=4104 读 `0xFFFFFFFFFFFFFFFF`）= 闪退。
+- 同步排除（对抗验证确认）：音频/BASS、撤销栈（s35 零编辑全速复现）、TimelineQuickTextureCache
+  （按谱面饱和）、日志/句柄/QObject、Qt RHI 延迟释放积压（28 分钟空闲提交不降、与塌帧期速率恒定矛盾）。
+
+### 8.2 根因
+
+[`PreviewQuickSceneRoot.cpp` `updateCenterDisplaySlot`](../src/preview/quick_scene/PreviewQuickSceneRoot.cpp)：
+中央显示（连击/达成率/DX分，`CenterDisplayMode`，默认 Off、用户开启后持久化）每次数值变化
+（= 每个判定组）画一张**整视口** `renderSize×dpr` 的 QImage → `createTextureFromImage` →
+`node->setTexture(texture)`，但 `QSGSimpleTextureNode` **从未 `setOwnsTexture(true)`** ——
+Qt 语义：不拥有则 `setTexture` 替换时**不释放旧纹理**。手动 `delete ...->texture()` 只存在于
+"模式关闭/节点类型不符"两条冷路径，最热的"数值更新"路径每次替换都泄漏一张。
+§1 当年把 center HUD 列为已排除，只核了"子节点删除平衡"，漏看了纹理所有权——以此为戒：
+**QSGSimpleTextureNode + 临时 createTextureFromImage 必须显式声明所有权**。
+（注：视频导出 `VideoExportQuickRenderBackend` 复用同一 SceneRoot，开中央显示导出同样泄漏，本修复一并覆盖。）
+
+### 8.3 beta8 修复（已落地）
+
+- `node->setOwnsTexture(true)`（节点创建处）：`setTexture()` 替换时自动 delete 旧纹理，
+  节点析构时释放最后一张。
+- 两条冷路径的手动 `delete static_cast<QSGSimpleTextureNode*>(old)->texture()` 移除，
+  改为纯 `removeChildNode + delete old`（节点已拥有纹理，再手动删会**双重释放**；
+  顺带消除 old 非 QSGSimpleTextureNode 时 static_cast 的潜在 UB）。
+- CMakeLists 版本 beta7→beta8。**本版未做**"只画文字包围盒"的尺寸优化（见 §8.5）。
+
+### 8.4 beta8 验证步骤
+
+1. `--debug` 启动，**开启中央显示**（达成率/DX分任一非 Off 模式），播放密集段 ≥60 秒后暂停。
+2. 过滤 `preview/resource_gauge`：**`d_play_kb` 应 < ~10MB/次播放**（beta7 同段为 10 万~26 万 KB）；
+   长试谱 `private_mb`/`commit_mb`/`page_faults` 不再单调爬升，`gpu_kb` 不再每播放上百 MB 增长。
+3. 对照组：关闭中央显示重复一次，两组 `d_play_kb` 应同样平（beta7 中关闭=平、开启=爆，是
+   用户侧最快的根因 A/B 复核）。
+4. 视觉回归：中央显示数字正常刷新、暂停/拖动/切模式/关闭模式无残影无崩溃。
+
+### 8.5 后续卫生项（结案后另行排期，非本泄漏）
+
+- 中央显示只画文字包围盒（现在每次数值变化画+上传 768×768 整视口，~25 倍浪费——修掉泄漏后
+  只剩性能问题）；重建判据由裸 double 比较改为"显示字符串变化"。
+- §4.1 撤销栈封顶（真实存在的无上限累积，量级 MB 级）。
+- header 层每 present 全量重建（~87 节点+标签纹理，纯 churn 浪费）：静/动子树拆分、
+  标签纹理 raster 移到缓存命中之后、加 atlas 标志。
+- `timelineThemeSignatureHash` 对可见标签数敏感 → 偶发全缓存 evict/recreate 突发（+886 次纹理重建）。
+- `kTimelineMaxUiUpdateFps=3600` 实际放飞 ~144Hz GUI tick 链（churn 馈源，考虑按消费帧门控
+  `bumpOverlayDynamicRevision`）。

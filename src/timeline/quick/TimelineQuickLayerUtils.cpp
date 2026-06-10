@@ -14,6 +14,18 @@
 #include <cstring>
 #include <new>
 
+#include <atomic>
+
+namespace {
+// beta7 leak gauge — see timelineQuickGeometryCreateTotal().
+std::atomic<quint64> g_timelineGeometryCreateTotal{0};
+}  // namespace
+
+quint64 timelineQuickGeometryCreateTotal()
+{
+    return g_timelineGeometryCreateTotal.load(std::memory_order_relaxed);
+}
+
 QImage makeTimelineGlyphImage(const miacode::timeline::TimelineSceneGlyph& glyph)
 {
     const QSize size(qMax(1, qCeil(glyph.rect.width())), qMax(1, qCeil(glyph.rect.height())));
@@ -116,6 +128,7 @@ QSGNode* buildTimelineRectNode(const miacode::timeline::TimelineSceneRect& rect)
 QSGNode* buildTimelineTriangleNode(const miacode::timeline::TimelineSceneTriangle& triangle)
 {
     auto* geometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 3);
+    g_timelineGeometryCreateTotal.fetch_add(1, std::memory_order_relaxed);
     geometry->setDrawingMode(QSGGeometry::DrawTriangles);
     QSGGeometry::Point2D* vertices = geometry->vertexDataAsPoint2D();
     vertices[0].set(static_cast<float>(triangle.a.x()), static_cast<float>(triangle.a.y()));
@@ -211,6 +224,7 @@ void TimelineQuickFlatColorBatchBuilder::flush()
     auto* geometry = new QSGGeometry(
         QSGGeometry::defaultAttributes_Point2D(),
         pendingVertices_.size());
+    g_timelineGeometryCreateTotal.fetch_add(1, std::memory_order_relaxed);
     geometry->setDrawingMode(QSGGeometry::DrawTriangles);
     QSGGeometry::Point2D* dst = geometry->vertexDataAsPoint2D();
     std::memcpy(dst,
@@ -459,6 +473,7 @@ void TimelineQuickSpriteBatchBuilder::flush()
         geometry = new QSGGeometry(
             QSGGeometry::defaultAttributes_TexturedPoint2D(),
             pendingVertices_.size());
+        g_timelineGeometryCreateTotal.fetch_add(1, std::memory_order_relaxed);
         geometry->setDrawingMode(QSGGeometry::DrawTriangles);
         ownsGeometry = true;
     }
@@ -581,6 +596,7 @@ void TimelineQuickGroupedSpriteBatchBuilder::flush()
             geometry = new QSGGeometry(
                 QSGGeometry::defaultAttributes_TexturedPoint2D(),
                 verts.size());
+            g_timelineGeometryCreateTotal.fetch_add(1, std::memory_order_relaxed);
             geometry->setDrawingMode(QSGGeometry::DrawTriangles);
             ownsGeometry = true;
         }

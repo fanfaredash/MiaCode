@@ -184,6 +184,11 @@ public:
 
     void setFrameSize(const QSize& size);
     const miacode::preview::scene::PreviewFrameState& frameState() const { return frameState_; }
+    // Detailed render-side resource snapshot for the leak gauge ("key=val …"): scene content
+    // revision (rebuild count), current cached/transient texture count + GPU bytes, cumulative
+    // texture creates (churn), peak sprite count, presented-frame total. GUI-thread members,
+    // refreshed from the render thread via notePresentedTextureStats.
+    QString resourceGaugePayload() const;
 
 signals:
     void frameStateChanged();
@@ -259,6 +264,10 @@ private:
     qint64 cachedTextureCreateTotal_ = 0;
     qint64 transientTextureHitTotal_ = 0;
     qint64 transientTextureCreateTotal_ = 0;
+    // Latest CURRENT cache occupancy (leak gauge), refreshed each presented frame.
+    qint64 latestCachedTextureCount_ = 0;
+    qint64 latestCachedTextureBytes_ = 0;
+    qint64 latestTransientTextureCount_ = 0;
     qint64 spriteCountTotal_ = 0;
     qint64 spriteBatchCountTotal_ = 0;
     qint64 spriteCountMax_ = 0;

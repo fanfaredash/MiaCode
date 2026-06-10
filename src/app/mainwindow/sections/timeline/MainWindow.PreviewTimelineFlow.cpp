@@ -14,6 +14,7 @@
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
+#include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewInteractionConfig.h"
@@ -515,6 +516,11 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
     }
     state_.currentFilePath_ = normalizedPath;
     state_.lastSessionFilePath_ = state_.currentFilePath_;
+    // Abnormal-exit detection: record which chart this GUI session has
+    // open (empty path clears the marker). Cleanly removed again in the
+    // two close paths; a marker still present at next startup widens the
+    // chart-open recovery prompt to the debounced autosave snapshot.
+    miacode::crash_recovery::updateSessionMarker(state_.currentFilePath_);
     const QString projectDataDirectoryPath = resolveProjectDataDirectoryPath(state_.currentFilePath_);
     miacode::debug_log::setSessionProjectLogDirectory(
         projectDataDirectoryPath.isEmpty()
@@ -617,6 +623,7 @@ void MainWindow::TimelineSection::applyTimelineQuickChange(int position, int cha
         return;
     }
 
+    miacode::debug_log::MemoryStageScope memScope("preview/mem_stage", "timeline_quick_change");
     QElapsedTimer timer;
     timer.start();
 
@@ -853,6 +860,7 @@ void MainWindow::TimelineSection::applyLatestTimelinePreviewStateToPausedPreview
         return;
     }
 
+    miacode::debug_log::MemoryStageScope memScope("preview/mem_stage", "preview_state_push");
     const bool noteMarkersChanged = state_.latestTimelineNoteMarkerSignature_ != state_.lastPreviewNoteMarkerSignature_;
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->applyPausedPreviewState(
@@ -906,17 +914,27 @@ void MainWindow::TimelineSection::dispatchTimelineSlowRefresh()
         ? state_.timelineSlowRefreshPool_
         : QThreadPool::globalInstance();
     pool->start([guard, request]() {
-        const SimaiNativeParseResult parseResult = SimaiNativeParser::parseForTimeline(
-            request.chartText,
-            request.timingMetadata);
-        const TimelinePreviewRefreshState previewState =
-            buildTimelinePreviewRefreshState(parseResult, request.firstSeconds);
+        miacode::debug_log::MemoryStageScope memScope("preview/mem_stage", "slow_refresh_build");
+        SimaiNativeParseResult parseResult;
+        TimelinePreviewRefreshState previewState;
+        {
+            // beta7 probe 2.1 — tight core bracket excludes the invokeMethod result COPY below,
+            // so (slow_refresh_build − slow_refresh_core) isolates the in-flight handoff cost.
+            miacode::debug_log::MemoryStageScope memScopeCore(
+                "preview/mem_stage", "slow_refresh_core");
+            parseResult = SimaiNativeParser::parseForTimeline(
+                request.chartText,
+                request.timingMetadata);
+            previewState = buildTimelinePreviewRefreshState(parseResult, request.firstSeconds);
+        }
         if (guard.isNull()) {
             return;
         }
+        miacode::debug_log::leak_gauge::noteInflightDispatch();
         QMetaObject::invokeMethod(
             guard.data(),
             [guard, request, parseResult, previewState]() mutable {
+                miacode::debug_log::leak_gauge::noteInflightApplied();
                 if (guard.isNull()) {
                     return;
                 }
@@ -1056,17 +1074,26 @@ void MainWindow::TimelineSection::dispatchTimelineAnalysisRefresh()
         ? state_.timelineAnalysisPool_
         : QThreadPool::globalInstance();
     pool->start([guard, request]() {
-        TimelineAnalysisRefreshResult result = buildTimelineAnalysisRefreshResult(request);
+        miacode::debug_log::MemoryStageScope memScope("preview/mem_stage", "analysis_build");
+        TimelineAnalysisRefreshResult result;
+        {
+            // beta7 probe 2.1 — tight core bracket around the parse + Muri-analyze build only.
+            miacode::debug_log::MemoryStageScope memScopeCore("preview/mem_stage", "analysis_core");
+            result = buildTimelineAnalysisRefreshResult(request);
+        }
         if (guard.isNull()) {
             return;
         }
+        miacode::debug_log::leak_gauge::noteInflightDispatch();
         QMetaObject::invokeMethod(
             guard.data(),
             [guard, result = std::move(result)]() mutable {
+                miacode::debug_log::leak_gauge::noteInflightApplied();
                 if (guard.isNull()) {
                     return;
                 }
 
+                miacode::debug_log::MemoryStageScope memScope("preview/mem_stage", "analysis_apply");
                 QElapsedTimer applyTimer;
                 applyTimer.start();
 
@@ -1107,6 +1134,7 @@ void MainWindow::TimelineSection::dispatchTimelineAnalysisRefresh()
                 guard->state_.validationCacheByDifficulty_[result.difficultyId] = std::move(entry);
                 guard->state_.pendingDeferredValidationUiRefresh_ = true;
                 guard->state_.muriAnalysisReport_ = std::move(result.analysisReport);
+                guard->state_.muriAnalysisReport_.revision = ++guard->state_.muriAnalysisReportRevisionCounter_;
                 guard->state_.muriAnalysisReportNoteMarkerSignature_ = result.noteMarkerSignature;
                 guard->state_.muriStaticReferences_ = std::move(result.staticReferences);
                 guard->state_.pendingDeferredMuriUiRefresh_ = true;

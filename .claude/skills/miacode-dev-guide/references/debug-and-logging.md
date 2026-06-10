@@ -98,6 +98,11 @@ FILTER_THREADS,X264_PRESET,X264_CRF,X264_BFRAMES}`.
 **Misc/runtime:** `MIACODE_FFMPEG`(`_PATH`), `MIACODE_LANG`, `MIACODE_DISPLAY_VERSION_STRING`,
 `MIACODE_DISABLE_MMCSS`, `MIACODE_SKIP_PREFLIGHT`.
 
+**Build-time (CMake, not env):** `MIACODE_USE_QTAVPLAYER` (see above), `MIACODE_BUILD_DEV_TOOLS`
+(configure option gating dev-tool spec executables + CTest registration; appears in
+`docs/DEBUG_INDEX.md` only because the `debug_flag_index_spec` guard greps every `MIACODE_*`
+literal in `src/`, including comments).
+
 ## 4. Runtime trace tags (Runtime channel `scope` values)
 
 Stable tags include: `window/focus`, `app_shutdown`, `close_timing/*`, `preview/quick_runtime`,
@@ -105,6 +110,15 @@ Stable tags include: `window/focus`, `app_shutdown`, `close_timing/*`, `preview/
 `timeline/bridge`, `timeline/quick_scene`, `timeline/cursor_map`, and `edit/*_perf` editor
 performance tags. High-frequency tags (`timeline/bridge` scroll pushes, `timeline/quick_scene`
 scroll-only paints) require `MIACODE_TIMELINE_HOTPATH_DIAG=1` even in debug mode.
+
+Leak/resource gauges (beta4→beta7, both **once per user pause**, never per-frame, `--debug`-gated):
+`preview/resource_gauge` (GUI thread, `pauseQtPreviewPlaybackExact` — process handles/commit/
+page_faults + `d_play_kb` private-bytes-grown-during-play + `presents_in_play` + preview
+`scene_revision`/`cached_tex*`/`present_total`) and `timeline/leak_gauge` (render thread, end of
+`TimelineQuickItem::updatePaintNode`, armed by the pause — `d_render_kb`, QSG `nodes`/`gbytes_kb`,
+`gpu_kb` via `QueryVideoMemoryInfo`, `geom_create`, texture-cache stats, per-layer breakdown).
+These pinned the 0.5.0 preview leak (spec §8); keep them wired for regression checks —
+healthy `d_play_kb` is < ~10 MB per play, beta7's leak showed 30-44 MB/s of play time.
 
 ## Update this file when
 

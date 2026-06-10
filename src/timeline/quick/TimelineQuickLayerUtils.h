@@ -27,6 +27,11 @@ QSGNode* buildTimelineLineNode(const miacode::timeline::TimelineSceneLine& line)
 QSGNode* buildTimelineRectNode(const miacode::timeline::TimelineSceneRect& rect);
 QSGNode* buildTimelineTriangleNode(const miacode::timeline::TimelineSceneTriangle& triangle);
 
+// beta7 leak gauge — cumulative count of QSGGeometry objects allocated by ALL timeline render
+// layers (the per-rebuild churn that backs Qt's RHI deferred buffer release). Monotonic; read
+// once per pause. A per-cycle delta that tracks the GPU-memory climb convicts geometry churn.
+quint64 timelineQuickGeometryCreateTotal();
+
 // ---------------------------------------------------------------------
 // Flat-color rect/line batch builder. Streams axis-aligned rectangles
 // (and orthogonal lines, which are just thin rectangles). Each

@@ -8,7 +8,10 @@
 #include <QLocale>
 #include <QMouseEvent>
 #include <QQuickWindow>
+#include <QSGGeometry>
+#include <QSGGeometryNode>
 #include <QSGNode>
+#include <QSGRendererInterface>
 #include <QToolTip>
 #include <QMetaObject>
 #include <QtMath>
@@ -21,6 +24,7 @@
 #include "timeline/quick/TimelineQuickGridLayer.h"
 #include "timeline/quick/TimelineQuickGridLinesLayer.h"
 #include "timeline/quick/TimelineQuickHeaderLayer.h"
+#include "timeline/quick/TimelineQuickLayerUtils.h"
 #include "timeline/quick/TimelineQuickNotesLayer.h"
 #include "timeline/quick/TimelineQuickOverlayLayer.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
@@ -28,11 +32,108 @@
 #include "timeline/quick/TimelineQuickWaveformLayer.h"
 #include "render/backend_d3d11/TimelineRenderView.h"
 
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <d3d11.h>
+#include <dxgi1_4.h>
+#endif
+
 namespace {
 
 constexpr double kTimelineKeyHoldAccelerationPerSecond = 1.0;
 constexpr int kTimelineKeyHoldTickIntervalMs = 16;
 constexpr int kTimelineLayerSlotCount = 6;  // grid + header + gridLines + wave(translucent,on-top) + notes + overlay
+
+// beta7 leak gauge (probes 1.2 + ②③) — live QSG node count AND geometry vertex/index bytes
+// under a timeline scene subtree. Walks firstChild()/nextSibling() once per pause (only when the
+// render gauge is armed), never per frame. Flat counts while GPU/private memory climbs localises
+// the leak BELOW our nodes (Qt-internal RHI deferred release); climbing counts convict orphaned
+// render-thread nodes / growing geometry buffers. Called per-slot to break the total down by layer.
+struct SceneGraphStats {
+    int nodes = 0;
+    qint64 geomBytes = 0;
+};
+
+void accumulateSceneGraphStats(const QSGNode* node, SceneGraphStats* out)
+{
+    if (node == nullptr || out == nullptr) {
+        return;
+    }
+    out->nodes += 1;
+    if (node->type() == QSGNode::GeometryNodeType) {
+        const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
+        if (const QSGGeometry* geometry = geometryNode->geometry()) {
+            out->geomBytes += static_cast<qint64>(geometry->vertexCount()) * geometry->sizeOfVertex();
+            out->geomBytes += static_cast<qint64>(geometry->indexCount()) * geometry->sizeOfIndex();
+        }
+    }
+    for (const QSGNode* child = node->firstChild(); child != nullptr; child = child->nextSibling()) {
+        accumulateSceneGraphStats(child, out);
+    }
+}
+
+// beta7 leak gauge (probe ① — the decisive CPU-vs-GPU discriminator). private_mb on an integrated
+// GPU conflates CPU heap + GPU/D3D11 resources (shared system RAM). DXGI's per-process
+// QueryVideoMemoryInfo isolates the GPU portion: if gpu_kb climbs monotonically while our
+// node/geometry/texture counts stay flat, the leak is Qt-internal RHI deferred release. Reads the
+// RHI's ID3D11Device via QSGRendererInterface on the render thread (where it is valid). KB, or -1.
+qint64 timelineGpuProcessMemoryKb(QQuickWindow* window)
+{
+#ifdef Q_OS_WIN
+    if (window == nullptr) {
+        return -1;
+    }
+    QSGRendererInterface* rendererInterface = window->rendererInterface();
+    if (rendererInterface == nullptr
+        || rendererInterface->graphicsApi() != QSGRendererInterface::Direct3D11) {
+        return -1;
+    }
+    void* devicePtr =
+        rendererInterface->getResource(window, QSGRendererInterface::DeviceResource);
+    if (devicePtr == nullptr) {
+        return -1;
+    }
+    auto* device = reinterpret_cast<ID3D11Device*>(devicePtr);
+    IDXGIDevice* dxgiDevice = nullptr;
+    if (FAILED(device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&dxgiDevice)))
+        || dxgiDevice == nullptr) {
+        return -1;
+    }
+    qint64 usageKb = -1;
+    IDXGIAdapter* adapter = nullptr;
+    if (SUCCEEDED(dxgiDevice->GetAdapter(&adapter)) && adapter != nullptr) {
+        IDXGIAdapter3* adapter3 = nullptr;
+        if (SUCCEEDED(adapter->QueryInterface(
+                __uuidof(IDXGIAdapter3), reinterpret_cast<void**>(&adapter3)))
+            && adapter3 != nullptr) {
+            quint64 totalBytes = 0;
+            DXGI_QUERY_VIDEO_MEMORY_INFO info;
+            ZeroMemory(&info, sizeof(info));
+            if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info))) {
+                totalBytes += info.CurrentUsage;
+            }
+            ZeroMemory(&info, sizeof(info));
+            if (SUCCEEDED(
+                    adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &info))) {
+                totalBytes += info.CurrentUsage;
+            }
+            usageKb = static_cast<qint64>(totalBytes / 1024ull);
+            adapter3->Release();
+        }
+        adapter->Release();
+    }
+    dxgiDevice->Release();
+    return usageKb;
+#else
+    Q_UNUSED(window);
+    return -1;
+#endif
+}
 
 double timelineHeldKeyPlaybackRate(double heldSeconds, double maxPlaybackRate)
 {
@@ -879,6 +980,9 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
 
     const qint64 elapsedNs = paintNodeTimer.nsecsElapsed();
     ++updatePaintNodeCount_;
+    // beta7 leak gauge (probe ④) — count every timeline present so the pause gauge can report how
+    // many actually ran during the playback window (a stall = starved RHI deferred-release queue).
+    miacode::debug_log::leak_gauge::noteTimelinePresent();
     updatePaintNodeSumNs_ += elapsedNs;
     if (elapsedNs > updatePaintNodeMaxNs_) updatePaintNodeMaxNs_ = elapsedNs;
     const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
@@ -905,6 +1009,69 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         updatePaintNodeSumNs_ = 0;
         updatePaintNodeMaxNs_ = 0;
         updatePaintNodeLastLogMs_ = nowMs;
+    }
+
+    // beta7 leak gauge (probes 1.1 d_render / 1.2 nodes / 3.1 tex). Fires at most ONCE per pause
+    // cycle — only when the GUI pause handler armed a render sample (itself gated on
+    // runtimeDebugOutputEnabled). Never per-frame. Splits the per-cycle private-bytes growth into
+    // the render-present window (d_render) and reports our live render-thread node + texture-cache
+    // counts so a --debug reader can tell whether the 178 MB/cycle climb is OUR accumulation
+    // (nodes/tex climb) or Qt-internal RHI deferred release (nodes/tex flat, private_mb climbs).
+    {
+        qint64 pausePrivBytes = -1;
+        quint64 gaugeTxn = 0;
+        if (miacode::debug_log::leak_gauge::takeRenderSample(&pausePrivBytes, &gaugeTxn)) {
+            const qint64 presentPrivBytes = miacode::debug_log::processPrivateBytes();
+            const qint64 gpuKb = timelineGpuProcessMemoryKb(window());
+            SceneGraphStats total;
+            accumulateSceneGraphStats(root, &total);
+            // Per-layer breakdown (slot order matches updatePaintNode: grid, header, gridLines,
+            // waveform, notes, overlay) — localises a climb to a specific layer.
+            int layerNodes[kTimelineLayerSlotCount] = {0};
+            qint64 layerGeomKb[kTimelineLayerSlotCount] = {0};
+            for (int i = 0; i < kTimelineLayerSlotCount; ++i) {
+                SceneGraphStats layerStats;
+                accumulateSceneGraphStats(layerSlotAt(root, i), &layerStats);
+                layerNodes[i] = layerStats.nodes;
+                layerGeomKb[i] = layerStats.geomBytes / 1024;
+            }
+            int texCount = 0;
+            int texPixCount = 0;
+            int texHoldCount = 0;
+            int texRotCount = 0;
+            quint64 texCreateTotal = 0;
+            if (textures_) {
+                textures_->debugCacheStats(
+                    &texCount, &texPixCount, &texHoldCount, &texRotCount, &texCreateTotal);
+            }
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("timeline/leak_gauge"),
+                QStringLiteral(
+                    "txn=%1 priv_present_mb=%2 d_render_kb=%3 gpu_kb=%4 nodes=%5 gbytes_kb=%6 "
+                    "geom_create=%7 tex=%8 tex_pix=%9 tex_hold=%10 tex_rot=%11 tex_create=%12 "
+                    "layer_nodes=%13 layer_gkb=%14")
+                    .arg(gaugeTxn)
+                    .arg(presentPrivBytes >= 0 ? presentPrivBytes / (1024 * 1024) : -1)
+                    .arg((presentPrivBytes >= 0 && pausePrivBytes >= 0)
+                             ? (presentPrivBytes - pausePrivBytes) / 1024
+                             : 0)
+                    .arg(gpuKb)
+                    .arg(total.nodes)
+                    .arg(total.geomBytes / 1024)
+                    .arg(timelineQuickGeometryCreateTotal())
+                    .arg(texCount)
+                    .arg(texPixCount)
+                    .arg(texHoldCount)
+                    .arg(texRotCount)
+                    .arg(texCreateTotal)
+                    .arg(QStringLiteral("%1,%2,%3,%4,%5,%6")
+                             .arg(layerNodes[0]).arg(layerNodes[1]).arg(layerNodes[2])
+                             .arg(layerNodes[3]).arg(layerNodes[4]).arg(layerNodes[5]))
+                    .arg(QStringLiteral("%1,%2,%3,%4,%5,%6")
+                             .arg(layerGeomKb[0]).arg(layerGeomKb[1]).arg(layerGeomKb[2])
+                             .arg(layerGeomKb[3]).arg(layerGeomKb[4]).arg(layerGeomKb[5])));
+        }
     }
     return root;
 }

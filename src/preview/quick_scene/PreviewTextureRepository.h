@@ -51,6 +51,11 @@ struct PreviewTextureStats {
     qint64 transientCreateCount = 0;
     qint64 spriteCount = 0;
     qint64 spriteBatchCount = 0;
+    // Current (not cumulative) cache occupancy, filled by stats() — for the leak gauge.
+    qint64 cachedTextureCount = 0;
+    qint64 cachedTextureBytes = 0;
+    qint64 transientTextureCount = 0;
+    qint64 retainedTextureCount = 0;
     QVector<PreviewTextureLayerStats> layerStats;
     PreviewStageBackgroundFrameProfile stageBackground;
 };

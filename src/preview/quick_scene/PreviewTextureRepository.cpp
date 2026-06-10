@@ -221,7 +221,14 @@ void PreviewTextureRepository::setStageBackgroundFrameProfile(const PreviewStage
 
 PreviewTextureStats PreviewTextureRepository::stats() const
 {
-    return stats_;
+    PreviewTextureStats result = stats_;
+    // Current cache occupancy (leak gauge): how many textures / how many GPU bytes the
+    // repository is holding RIGHT NOW (hard-capped at 96 entries / 96 MB).
+    result.cachedTextureCount = cachedTextures_.size();
+    result.cachedTextureBytes = cachedTextureBytes_;
+    result.transientTextureCount = transientTextures_.size();
+    result.retainedTextureCount = retainedTextures_.size();
+    return result;
 }
 
 void PreviewTextureRepository::clearCachedTextures()

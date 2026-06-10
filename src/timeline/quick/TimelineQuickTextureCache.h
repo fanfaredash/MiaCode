@@ -58,6 +58,17 @@ public:
     qreal holdScaleForBaseIconScale(const QString& spriteType, qreal baseIconScale) const;
     TimelineQuickHoldTextureParts holdTextureParts(const QString& spriteType, qreal scale);
 
+    // beta7 leak gauge (probe 3.1) — cheap read of the three uncapped caches plus the count of
+    // rotation-bearing note keys (slide-track arrows) and the cumulative texture-create total.
+    // A flat tex/tex_create across edit→play→pause cycles confirms this cache saturates and is
+    // NOT the leak; a monotonic climb reopens it. Called at most once per pause (render thread).
+    void debugCacheStats(
+        int* textureCount,
+        int* pixmapCount,
+        int* holdPartsCount,
+        int* rotatedNoteKeyCount,
+        quint64* createTotal) const;
+
 private:
     struct HoldPixmapPartsCacheEntry {
         miacode::timeline::TimelineHoldPixmapParts parts;
@@ -85,4 +96,7 @@ private:
     QHash<QString, QSGTexture*> textures_;
     QHash<QString, QPixmap> transformedPixmaps_;
     QHash<QString, HoldPixmapPartsCacheEntry> holdPixmapParts_;
+    // beta7 leak gauge — cumulative count of QSGTextures actually created (createTextureFromImage).
+    // Monotonic by design; a flat slope once a chart saturates is the healthy signature.
+    quint64 textureCreateCount_ = 0;
 };

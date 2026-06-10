@@ -155,6 +155,12 @@ struct MuriAnalysisReport {
     QVector<MuriPadWindow> padWindows;
     QVector<MuriActionTrail> actionTrails;
     QString sourceSignature;
+    // Monotonic identity of this report's CONTENT, stamped every time a fresh analysis
+    // result is stored (MainWindow state muriAnalysisReportRevisionCounter_). Lets consumers
+    // cheaply skip a redundant re-apply: PreviewRuntime::setMuriAnalysisReport compares this to
+    // avoid a per-play sceneContentRevision bump + full QSG rebuild when the report is
+    // unchanged (the ~4MB/play RHI-churn leak). 0 = empty / never-analysed.
+    quint64 revision = 0;
 
     bool isEmpty() const
     {
