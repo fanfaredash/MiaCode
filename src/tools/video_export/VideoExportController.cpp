@@ -4221,7 +4221,9 @@ VideoExportResult VideoExportController::exportPreparedTask(
         // to be in the rendered video). Drawing the pause glyph on the
         // full-range lead-in was reported as a regression where the
         // exported `.mp4` looked like it was stuck on a frozen frame
-        // for the first 2 s. partialRangeExport gates the draw.
+        // for the first 2 s. partialRangeExport gates the draw. (Ranges
+        // that start at chart 0 are classified full-range upstream even
+        // when they end early, so they never reach this overlay either.)
         const double outputSecondForOverlay =
             static_cast<double>(frameIndex) / static_cast<double>(qMax(1, task.fps));
         const bool inLeadInOverlay =

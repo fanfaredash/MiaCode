@@ -894,9 +894,10 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     const double contentDurationSeconds = request.contentDurationSeconds > 0.0
         ? request.contentDurationSeconds
         : maxDuration;
-    const bool fullRangeExport =
-        exportStartSeconds <= 1e-6
-        && exportStartSeconds + contentDurationSeconds + 1e-6 >= cappedExportEndSecond;
+    // Mirrors the VideoExportDialog classification: any range starting at
+    // chart 0 is treated as full-range (count-down lead-in, no frozen
+    // preload / pause glyph), even when it ends before the chart does.
+    const bool fullRangeExport = exportStartSeconds <= 1e-6;
     if (contentDurationSeconds <= 0.0) {
         return fail(
             QStringLiteral("content duration is not positive"),

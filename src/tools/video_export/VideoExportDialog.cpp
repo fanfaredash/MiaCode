@@ -2038,16 +2038,18 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     const double selectedRangeEnd = rangeEndSeconds();
     updated.exportStartSeconds = selectedRangeStart;
     updated.contentDurationSeconds = qMax(0.0, selectedRangeEnd - updated.exportStartSeconds);
-    // Tolerate the spinbox / floating-point slop that prevented genuine
-    // "Export All" selections (range == [0, totalDuration] up to the
-    // dialog's 1 ms display precision) from being classified as
-    // full-range. We treat anything within 0.01 s of the total as full.
+    // A range that STARTS at chart 0 behaves exactly like a full export
+    // regardless of where it ends: the deliverable begins with the chart's
+    // real opening (2 s count-down lead-in, BGM from source 0, clock count),
+    // so the partial-range frozen preload + pause glyph would be wrong
+    // there. Only a non-zero start needs the freeze-then-go pre-roll.
+    // The epsilon tolerates spinbox / floating-point slop (the dialog
+    // displays at 1 ms precision).
     constexpr double kFullRangeEpsilonSeconds = 0.01;
-    updated.fullRangeExport =
-        selectedRangeStart <= kFullRangeEpsilonSeconds
-        && selectedRangeEnd + kFullRangeEpsilonSeconds >= totalDurationSeconds_;
-    // The maimai intro is a full-export-only pre-roll; partial/clip exports
-    // never get it regardless of the checkbox.
+    updated.fullRangeExport = selectedRangeStart <= kFullRangeEpsilonSeconds;
+    // The maimai intro is a full-range-only pre-roll; clips starting
+    // mid-chart never get it regardless of the checkbox. (A clip starting
+    // at chart 0 counts as full-range, so it may carry the intro.)
     updated.intro.enabled =
         (addIntroCheck_ != nullptr && addIntroCheck_->isChecked())
         && updated.fullRangeExport;

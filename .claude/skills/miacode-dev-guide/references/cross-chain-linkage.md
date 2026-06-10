@@ -105,7 +105,11 @@ Shared concerns (collapse/latest-wins/offset rules live in `src/common/PreviewSf
   voice instead of the older span's stop clobbering it. Don't go back to per-event naive start/stop
   or a first-wins active-set. Export is unaffected (it renders each `TouchholdSpan` independently).
 - `&clock_count=` is export-only count-in (`src/common/ChartClockCount.h`); full-range lead-in `2.0s`,
-  partial preload `1.0s` (`src/common/VideoExportConfig.h`).
+  partial preload `1.0s` (`src/common/VideoExportConfig.h`). Full-vs-partial classification: any range
+  STARTING at chart 0 counts as full-range even if it ends early (count-down lead-in, no frozen
+  preload / pause glyph); only start > 0 is partial. Decided in TWO places that must stay in sync:
+  `VideoExportDialog.cpp` (`updated.fullRangeExport`) and `MainWindow.ExportSnapshot.cpp`
+  (`fullRangeExport`).
 
 If one side changes, inspect the other in the same patch.
 
