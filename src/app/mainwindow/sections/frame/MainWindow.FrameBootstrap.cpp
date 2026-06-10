@@ -317,8 +317,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // Chart-wide timing offset (`&first`). It shares a single source of truth
     // (document_.first) with the latency page; it used to sit on the metadata
     // page but lives here now so charters can tune it against the live
-    // timeline/preview. `&des_N` no longer has a header field — per-difficulty
-    // designer names are managed from the metadata page's dialog instead.
+    // timeline/preview.
     auto* difficultyFirstLabel = new QLabel(uiText("metadata.field.first", "Offset"), editorDifficultyControls_);
     difficultyFirstLabel_ = difficultyFirstLabel;
     difficultyFirstLabel->setFont(uiAccentFont(10));
@@ -328,10 +327,29 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     firstEdit_->setFixedWidth(64);
     firstEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     firstEdit_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    // Per-difficulty designer (`&des_N`) pair — the alternative header field.
+    // Exactly one of the offset/designer pairs is visible at a time, driven by
+    // the 顶部显示 preference (updateEditorHeaderLayoutMode); designer names can
+    // always also be managed from the metadata page's designer dialog.
+    auto* difficultyDesignerLabel = new QLabel(uiText("editor.des", "Des"), editorDifficultyControls_);
+    difficultyDesignerLabel_ = difficultyDesignerLabel;
+    difficultyDesignerLabel->setFont(uiAccentFont(10));
+    auto* difficultyDesignerLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
+    difficultyDesignerLineEdit->setLeftPlaceholderText("&des_n=");
+    difficultyDesignerEdit_ = difficultyDesignerLineEdit;
+    difficultyDesignerEdit_->setFixedWidth(96);
+    difficultyDesignerEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    difficultyDesignerEdit_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    // Default preference is the offset pair; keep the designer pair hidden
+    // until updateEditorHeaderLayoutMode applies the loaded preference.
+    difficultyDesignerLabel_->hide();
+    difficultyDesignerEdit_->hide();
     editorDifficultyLayout->addWidget(difficultyLevelLabel);
     editorDifficultyLayout->addWidget(difficultyLevelEdit_);
     editorDifficultyLayout->addWidget(difficultyFirstLabel);
     editorDifficultyLayout->addWidget(firstEdit_);
+    editorDifficultyLayout->addWidget(difficultyDesignerLabel);
+    editorDifficultyLayout->addWidget(difficultyDesignerEdit_);
     editorDifficultyControls_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     editorDifficultyControls_->hide();
     editorHeaderLayout->addWidget(editorDifficultyControls_, 0);
@@ -1457,6 +1475,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     }
     connect(difficultyLevelEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
     connect(firstEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
+    connect(difficultyDesignerEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
     // Offset only repositions notes relative to the audio, so a live reflow on
     // commit (Enter / focus-out) is enough — no need to thrash the timeline on
     // every keystroke. parsedFirstSeconds() already reads the live field text,

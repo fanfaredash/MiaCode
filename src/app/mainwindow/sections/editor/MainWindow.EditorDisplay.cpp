@@ -1,5 +1,6 @@
 ﻿#include "MainWindow.EditorSection.h"
 #include "../../MainWindowShared.h"
+#include "../document/MainWindow.DocumentSection.h"
 #include "../window/MainWindow.WindowSection.h"
 
 #include "BracketScopeHighlighter.h"
@@ -269,6 +270,8 @@ void MainWindow::EditorSection::loadPortableState()
         kEditorTextFontSizeMax
     );
 
+    state_.editorHeaderTopDisplay_ = EditorHeaderTopDisplay::Offset;
+
     const QJsonObject root = UiText::loadPreferencesObject();
     const QJsonObject ui = root.value("ui").toObject();
     const QJsonObject app = root.value("app").toObject();
@@ -293,6 +296,12 @@ void MainWindow::EditorSection::loadPortableState()
     // key (the primary of the three) so existing users keep their setting.
     state_.editorAutoCompletionEnabled_ = ui.value("editor_auto_completion").toBool(
         ui.value("editor_auto_close_brackets").toBool(true));
+    // 顶部显示 — which field pair the difficulty header shows ("offset" default,
+    // "designer" for the per-difficulty &des_N edit).
+    state_.editorHeaderTopDisplay_ =
+        ui.value("editor_header_top_display").toString() == QLatin1String("designer")
+            ? EditorHeaderTopDisplay::Designer
+            : EditorHeaderTopDisplay::Offset;
     if (ui.value("bottom_tabs_content_scale").isDouble()) {
         // Stored as a content-scale ratio (not pixels). The raw value is clamped
         // to its valid [min,max] range by applyBottomTabsContentScale() when the
@@ -309,6 +318,7 @@ void MainWindow::EditorSection::loadPortableState()
     applyEditorHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_, false);
     applyEditorOverwriteModeEnabled(state_.editorOverwriteModeEnabled_, false);
     applyEditorAutoCompletionEnabled(state_.editorAutoCompletionEnabled_, false);
+    applyEditorHeaderTopDisplay(state_.editorHeaderTopDisplay_, false);
     // applyEditorImeInputDisabled(state_.editorImeInputDisabled_, false);
 
     const QString dir = app.value("last_open_dir").toString();
@@ -657,6 +667,12 @@ void MainWindow::EditorSection::savePortableState() const
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
     ui.insert("editor_auto_completion", state_.editorAutoCompletionEnabled_);
+    ui.insert(
+        "editor_header_top_display",
+        state_.editorHeaderTopDisplay_ == EditorHeaderTopDisplay::Designer
+            ? QStringLiteral("designer")
+            : QStringLiteral("offset")
+    );
     // Bottom-tabs (timeline/validation/muri) divider height, persisted as a
     // content-scale ratio rather than pixels (see loadPortableState()).
     ui.insert("bottom_tabs_content_scale", state_.bottomTabsContentScale_);
@@ -780,6 +796,12 @@ void MainWindow::EditorSection::persistEditorTextFontPreference() const
     ui.insert("editor_half_width_input", state_.editorHalfWidthInputEnabled_);
     ui.insert("editor_overwrite_mode", state_.editorOverwriteModeEnabled_);
     ui.insert("editor_auto_completion", state_.editorAutoCompletionEnabled_);
+    ui.insert(
+        "editor_header_top_display",
+        state_.editorHeaderTopDisplay_ == EditorHeaderTopDisplay::Designer
+            ? QStringLiteral("designer")
+            : QStringLiteral("offset")
+    );
     // [BETA51 IME-DISABLE: DISABLED PENDING FIX] see saveState() and
     // loadPortableState() for the rationale.
     // ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);
@@ -874,6 +896,21 @@ void MainWindow::EditorSection::applyEditorAutoCompletionEnabled(bool enabled, b
     }
     if (ui_.copyAreaEditor_ != nullptr) {
         ui_.copyAreaEditor_->setAutoCompletionEnabled(enabled);
+    }
+    if (persistPreference) {
+        persistEditorTextFontPreference();
+    }
+}
+
+void MainWindow::EditorSection::applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference)
+{
+    state_.editorHeaderTopDisplay_ = mode;
+    if (owner_.documentSection_ != nullptr) {
+        // Refresh the header designer edit from the model before unhiding it
+        // (covers a mode flip that races a pending designer rewrite), then let
+        // the layout-mode pass apply the offset/designer pair visibility.
+        owner_.documentSection_->syncHeaderDesignerEditFromModel();
+        owner_.documentSection_->updateEditorHeaderLayoutMode();
     }
     if (persistPreference) {
         persistEditorTextFontPreference();
@@ -1397,6 +1434,11 @@ void MainWindow::applyEditorAutoCompletionEnabled(bool enabled, bool persistPref
 void MainWindow::applyEditorImeInputDisabled(bool disabled, bool persistPreference)
 {
     editorSection_->applyEditorImeInputDisabled(disabled, persistPreference);
+}
+
+void MainWindow::applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference)
+{
+    editorSection_->applyEditorHeaderTopDisplay(mode, persistPreference);
 }
 
 void MainWindow::showCreateBookmarkDialog()

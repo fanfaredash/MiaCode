@@ -380,12 +380,34 @@ PreviewOutlineVariant MainWindow::PreviewSection::effectivePreviewOutlineVariant
     // The export-preview dialog ignores the pause-hide option so the on-screen
     // preview matches the exported video (the user's chosen outline variant, PV/BG
     // visible) instead of the paused judge-area view.
-    if (state_.previewForceLabeledJudgeLineWhenPaused_
+    // Holding Alt while paused (pauseDisplayAltHoldActive_) inverts the option
+    // so the user can peek at the other view without opening 视频设置.
+    const bool forceJudgeAreaWhenPaused =
+        state_.previewForceLabeledJudgeLineWhenPaused_ != state_.pauseDisplayAltHoldActive_;
+    if (forceJudgeAreaWhenPaused
         && !state_.qtPreviewPlaying_
         && !state_.exportPreviewActive_) {
         return PreviewOutlineVariant::JudgeAreaLabeled;
     }
     return state_.previewOutlineVariant_;
+}
+
+void MainWindow::PreviewSection::setPauseDisplayAltHoldActive(bool active)
+{
+    // Transient Alt-hold inversion of the "暂停时显示判定区" option (see
+    // WindowSection::eventFilter). Engaging is pointless while the preview is
+    // playing or while the export-preview dialog pins PV visible — both paths
+    // ignore the pause-hide option entirely — so only the release/clear is
+    // accepted unconditionally.
+    if (active == state_.pauseDisplayAltHoldActive_) {
+        return;
+    }
+    if (active && (state_.qtPreviewPlaying_ || state_.exportPreviewActive_)) {
+        return;
+    }
+    state_.pauseDisplayAltHoldActive_ = active;
+    applyEffectivePreviewOutlineVariantToCanvas();
+    applyPreviewStageMediaRouteVisualSettings();
 }
 
 void MainWindow::PreviewSection::applyEffectivePreviewOutlineVariantToCanvas()
@@ -667,6 +689,11 @@ PreviewOutlineVariant MainWindow::effectivePreviewOutlineVariant() const
 void MainWindow::applyEffectivePreviewOutlineVariantToCanvas()
 {
     previewSection_->applyEffectivePreviewOutlineVariantToCanvas();
+}
+
+void MainWindow::setPauseDisplayAltHoldActive(bool active)
+{
+    previewSection_->setPauseDisplayAltHoldActive(active);
 }
 
 void MainWindow::applyPreviewOutlineVariant(

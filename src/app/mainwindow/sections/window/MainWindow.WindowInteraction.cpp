@@ -484,6 +484,29 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
             }
         });
     }
+    // Alt-hold pause display toggle: while the preview is paused, holding Alt
+    // temporarily inverts the "暂停时显示判定区" option (judge area ⇄ PV/BG);
+    // releasing Alt restores it. Losing app focus (e.g. Alt+Tab) eats the
+    // release event, so ApplicationDeactivate also restores. This block only
+    // OBSERVES — it never consumes the event — so Alt+F4, menu mnemonics and
+    // every other Alt combination keep working; an Alt-prefixed combo merely
+    // flips the paused view for as long as Alt is physically down.
+    if (event != nullptr
+        && (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease)
+        && static_cast<QKeyEvent*>(event)->key() == Qt::Key_Alt) {
+        auto* altKeyEvent = static_cast<QKeyEvent*>(event);
+        if (event->type() == QEvent::KeyPress
+            && !altKeyEvent->isAutoRepeat()
+            && altKeyEvent->modifiers() == Qt::AltModifier
+            && QApplication::activeModalWidget() == nullptr
+            && QApplication::activePopupWidget() == nullptr) {
+            owner_.setPauseDisplayAltHoldActive(true);
+        } else if (event->type() == QEvent::KeyRelease) {
+            owner_.setPauseDisplayAltHoldActive(false);
+        }
+    } else if (event != nullptr && event->type() == QEvent::ApplicationDeactivate) {
+        owner_.setPauseDisplayAltHoldActive(false);
+    }
     if (event != nullptr
         && (event->type() == QEvent::ShortcutOverride
             || event->type() == QEvent::KeyPress

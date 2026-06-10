@@ -466,12 +466,17 @@ bool MainWindow::DocumentSection::currentFieldHasUndoChanges() const
         // The header's offset field edits the chart-wide &first, not a
         // per-difficulty value.
         const bool offsetDirty = ui_.firstEdit_ != nullptr && ui_.firstEdit_->text() != state_.document_.first;
+        // Header designer edit (顶部显示=谱师 mode). While hidden it mirrors the
+        // model, so this stays false outside that mode.
+        const QString savedDesigner = difficultyData != nullptr ? difficultyData->designer : QString();
+        const bool designerDirty =
+            ui_.difficultyDesignerEdit_ != nullptr && ui_.difficultyDesignerEdit_->text() != savedDesigner;
         bool chartDirty = false;
         if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
             editor != nullptr && editor->document() != nullptr) {
             chartDirty = editor->document()->availableUndoSteps() != state_.editorUndoSaveAnchor_;
         }
-        return levelDirty || offsetDirty || chartDirty;
+        return levelDirty || offsetDirty || designerDirty || chartDirty;
     }
 
     if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
@@ -496,6 +501,9 @@ void MainWindow::DocumentSection::anchorCurrentFieldCleanState()
         }
         if (ui_.firstEdit_ != nullptr) {
             ui_.firstEdit_->setModified(false);
+        }
+        if (ui_.difficultyDesignerEdit_ != nullptr) {
+            ui_.difficultyDesignerEdit_->setModified(false);
         }
         if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
             editor != nullptr && editor->document() != nullptr) {

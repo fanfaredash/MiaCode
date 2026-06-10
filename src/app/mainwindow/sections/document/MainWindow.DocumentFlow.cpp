@@ -274,6 +274,23 @@ bool ensureDirectoryExists(const QString& directoryPath)
     return dir.exists() || QDir().mkpath(directoryPath);
 }
 
+// Decode chart/backup text bytes: UTF-8 BOM → UTF-8 → system-encoding
+// fallback. Shared by the backup-restore menu and the crash/autosave
+// recovery prompt so every restore path interprets bytes identically.
+QString decodeChartBackupText(const QByteArray& bytes)
+{
+    if (bytes.startsWith("\xEF\xBB\xBF")) {
+        return QString::fromUtf8(bytes.mid(3));
+    }
+    QStringDecoder utf8Decoder(QStringConverter::Utf8);
+    QString text = utf8Decoder.decode(bytes);
+    if (utf8Decoder.hasError()) {
+        QStringDecoder systemDecoder(QStringConverter::System);
+        text = systemDecoder.decode(bytes);
+    }
+    return text;
+}
+
 }  // namespace
 
 bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
@@ -454,13 +471,24 @@ bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
         SimaiDifficultyData& difficultyData = state_.document_.ensureDifficulty(state_.activeDifficultyId_);
         const QString newLevel = ui_.difficultyLevelEdit_ != nullptr ? ui_.difficultyLevelEdit_->text() : difficultyData.level;
         const QString newChart = owner_.editorText();
-        // The difficulty header no longer edits the per-difficulty designer
-        // (that moved to the metadata-page dialog), so difficultyData.designer
-        // is left untouched here. The header DOES edit the chart-wide offset.
         if (difficultyData.level != newLevel || difficultyData.chart != newChart) {
             difficultyData.level = newLevel;
             difficultyData.chart = newChart;
             changed = true;
+        }
+        // Header designer edit (visible in 顶部显示=谱师 mode; while hidden it
+        // mirrors the model, so this block is a no-op). Editing it under
+        // unified mode broadcasts the new name, same as editing the top &des.
+        const QString newDesigner = ui_.difficultyDesignerEdit_ != nullptr
+            ? ui_.difficultyDesignerEdit_->text()
+            : difficultyData.designer;
+        if (difficultyData.designer != newDesigner) {
+            difficultyData.designer = newDesigner;
+            changed = true;
+            if (state_.unifiedDesignerEnabled_) {
+                designerBroadcastNeeded = true;
+                broadcastDesignerValue = newDesigner;
+            }
         }
         const QString newFirst = ui_.firstEdit_ != nullptr ? ui_.firstEdit_->text() : state_.document_.first;
         if (state_.document_.first != newFirst) {
@@ -495,10 +523,10 @@ bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
 
     // Broadcast designer name to every other slot when the "unified" option
     // is enabled. We do this *after* the just-edited field has been applied
-    // so the value being broadcast is always the new one. Only the top &des
-    // (designerEdit_) is edited live; the per-difficulty names live in the
-    // model (and the designer dialog), so there is no inactive line edit to
-    // mirror back into here.
+    // so the value being broadcast is always the new one. The edit can
+    // originate from the top &des (metadata page) or from the header's
+    // per-difficulty field (顶部显示=谱师 mode) — mirror whichever line edit
+    // was NOT the source so both read the canonical name afterwards.
     if (designerBroadcastNeeded) {
         if (state_.document_.designer != broadcastDesignerValue) {
             state_.document_.designer = broadcastDesignerValue;
@@ -514,6 +542,11 @@ bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
                 changed = true;
             }
         }
+        if (ui_.designerEdit_ != nullptr && ui_.designerEdit_->text() != broadcastDesignerValue) {
+            QSignalBlocker block(ui_.designerEdit_);
+            ui_.designerEdit_->setText(broadcastDesignerValue);
+        }
+        syncHeaderDesignerEditFromModel();
     }
 
     anchorCurrentFieldCleanState();
@@ -820,6 +853,9 @@ void MainWindow::DocumentSection::openPerDifficultyDesignerDialog()
         changed = true;
     }
     writeUnifiedDesignerPreference(state_.currentFilePath_, localUnified);
+    // The dialog rewrites &des_N behind the header's back; refresh the header
+    // designer edit so a later field commit can't restore pre-dialog names.
+    syncHeaderDesignerEditFromModel();
 
     if (changed) {
         state_.documentDirty_ = true;
@@ -851,6 +887,7 @@ void MainWindow::DocumentSection::applyUnifiedDesignerName(const QString& canoni
         QSignalBlocker block(ui_.designerEdit_);
         ui_.designerEdit_->setText(canonicalName);
     }
+    syncHeaderDesignerEditFromModel();
     if (changed) {
         state_.documentDirty_ = true;
         anchorCurrentFieldCleanState();
@@ -1226,40 +1263,101 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
     // re-entrant and cheap on warm runs (one stat()).
     miacode::crash_recovery::prepareForChart(normalizedPath);
 
-    // Crash-recovery prompt — if a recovery file exists for this chart
-    // and its content differs from what's on disk, offer the user the
-    // chance to restore the unsaved changes from before the crash.
-    // Only fires on the path where the user actually opens a chart;
-    // restoreLastSessionFile and other internal callers also funnel
-    // through here so they get the prompt too.
+    // Crash/autosave recovery prompt — offer the user the unsaved
+    // changes from a session that ended abnormally. Only fires on the
+    // path where the user actually opens a chart; restoreLastSessionFile
+    // and other internal callers also funnel through here, so at startup
+    // (last session auto-restored) the prompt appears proactively.
     SimaiDocument documentToLoad = document;
     bool restoredFromCrash = false;
     {
+        const QString diskText = document.toText();
+
+        // Candidate 1 — crash-handler snapshot (<chart>.crash_recovery),
+        // written at crash time by the SEH/terminate/signal handlers.
+        QString candidateText;
+        QDateTime candidateTimestamp;
+        QString candidateSource;
         const QByteArray recoveryUtf8 =
             miacode::crash_recovery::readRecoveryFile(normalizedPath);
         if (!recoveryUtf8.isEmpty()) {
             const QString recoveryText = QString::fromUtf8(recoveryUtf8);
-            const QString diskText = document.toText();
             if (!recoveryText.isEmpty() && recoveryText != diskText) {
-                const auto choice = UiDialogs::showMessageBox(
-                    QMessageBox::Question,
-                    &owner_,
-                    uiText("dialog.crash_recovery.title", "Recover Unsaved Changes"),
-                    uiText(
-                        "dialog.crash_recovery.message",
-                        "MiaCode appears to have closed unexpectedly while editing this chart.\n\n"
-                        "Recover the unsaved changes from the previous session?\n\n"
-                        "Choosing No will discard the recovery file."),
-                    QMessageBox::Yes | QMessageBox::No,
-                    QMessageBox::Yes);
-                if (choice == QMessageBox::Yes) {
-                    documentToLoad = SimaiDocument::fromText(recoveryText);
-                    restoredFromCrash = true;
+                candidateText = recoveryText;
+                candidateTimestamp =
+                    QFileInfo(miacode::crash_recovery::crashRecoveryFilePath(normalizedPath))
+                        .lastModified();
+                candidateSource = QStringLiteral("crash_recovery");
+            }
+        }
+
+        // Candidate 2 — the debounced autosave (<name>.bak). Considered
+        // only when the previous session ended abnormally on THIS chart
+        // (session marker): covers task-manager kills / power loss that
+        // bypass the crash handlers entirely. The mtime guard rejects
+        // autosaves older than the chart file — those predate the user's
+        // last explicit save and would restore stale text.
+        if (miacode::crash_recovery::consumeAbandonedSessionChartMatch(normalizedPath)) {
+            const QString latestFilePath =
+                autosaveLatestFilePath(autosaveEntryDirectoryPathForFile(normalizedPath));
+            const QFileInfo latestInfo(latestFilePath);
+            const QDateTime chartModifiedAt = QFileInfo(normalizedPath).lastModified();
+            if (latestInfo.exists() && latestInfo.isFile()
+                && latestInfo.lastModified() > chartModifiedAt
+                && (!candidateTimestamp.isValid()
+                    || latestInfo.lastModified() > candidateTimestamp)) {
+                QFile latestFile(latestFilePath);
+                if (latestFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                    const QString latestText = decodeChartBackupText(latestFile.readAll());
+                    if (!latestText.isEmpty() && latestText != diskText) {
+                        candidateText = latestText;
+                        candidateTimestamp = latestInfo.lastModified();
+                        candidateSource = QStringLiteral("autosave_latest");
+                    }
                 }
             }
-            // Always delete the recovery file once it's been considered
-            // — keeping it around would prompt repeatedly even after
-            // the user declined or has resaved.
+        }
+
+        if (!candidateText.isEmpty()) {
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("crash_recovery"),
+                QStringLiteral("action=recovery_prompt source=%1 snapshot=%2 chart=%3")
+                    .arg(candidateSource,
+                         candidateTimestamp.toString(Qt::ISODate),
+                         normalizedPath));
+            const QString timestampLabel = candidateTimestamp.isValid()
+                ? candidateTimestamp.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"))
+                : QStringLiteral("-");
+            const auto choice = UiDialogs::showMessageBox(
+                QMessageBox::Question,
+                &owner_,
+                uiText("dialog.crash_recovery.title", "Recover Unsaved Changes"),
+                uiText(
+                    "dialog.crash_recovery.message",
+                    "MiaCode appears to have closed unexpectedly while editing this chart.\n\n"
+                    "An autosaved copy with unsaved changes was found (saved at %1).\n"
+                    "Recover these changes?\n\n"
+                    "Choosing No keeps the file's current content.")
+                    .arg(timestampLabel),
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::Yes);
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("crash_recovery"),
+                QStringLiteral("action=recovery_prompt_choice choice=%1")
+                    .arg(choice == QMessageBox::Yes ? QStringLiteral("recover")
+                                                    : QStringLiteral("keep_disk")));
+            if (choice == QMessageBox::Yes) {
+                documentToLoad = SimaiDocument::fromText(candidateText);
+                restoredFromCrash = true;
+            }
+        }
+        // Always delete the crash-recovery file once it's been considered
+        // — keeping it around would prompt repeatedly even after the user
+        // declined or has resaved. The autosave .bak is NOT deleted: it is
+        // part of the normal backup chain (Restore Backup menu).
+        if (!recoveryUtf8.isEmpty()) {
             miacode::crash_recovery::deleteRecoveryFile(normalizedPath);
         }
     }
@@ -1355,7 +1453,8 @@ void MainWindow::DocumentSection::restoreBackupFilePath(const QString& path)
             uiText("dialog.restore_backup.title", "Restore Backup"),
             uiText(
                 "dialog.restore_backup.missing",
-                QStringLiteral("Backup file does not exist:\n%1").arg(QDir::toNativeSeparators(normalizedPath)))
+                "Backup file does not exist:\n%1")
+                .arg(QDir::toNativeSeparators(normalizedPath))
         );
         return;
     }
@@ -1366,8 +1465,8 @@ void MainWindow::DocumentSection::restoreBackupFilePath(const QString& path)
         uiText("dialog.restore_backup.title", "Restore Backup"),
         uiText(
             "dialog.restore_backup.confirm",
-            QStringLiteral("Restore this backup?\n\n%1\n\nThe current editor content will be replaced, but the original file will not be overwritten.")
-                .arg(QDir::toNativeSeparators(normalizedPath))),
+            "Restore this backup?\n\n%1\n\nThe current editor content will be replaced, but the original file will not be overwritten.")
+            .arg(QDir::toNativeSeparators(normalizedPath)),
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No);
     if (choice != QMessageBox::Yes) {
@@ -1378,17 +1477,7 @@ void MainWindow::DocumentSection::restoreBackupFilePath(const QString& path)
     if (!state_.currentFilePath_.isEmpty()) {
         QFile currentFile(state_.currentFilePath_);
         if (currentFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            const QByteArray currentBytes = currentFile.readAll();
-            if (currentBytes.startsWith("\xEF\xBB\xBF")) {
-                diskReferenceText = QString::fromUtf8(currentBytes.mid(3));
-            } else {
-                QStringDecoder utf8Decoder(QStringConverter::Utf8);
-                diskReferenceText = utf8Decoder.decode(currentBytes);
-                if (utf8Decoder.hasError()) {
-                    QStringDecoder systemDecoder(QStringConverter::System);
-                    diskReferenceText = systemDecoder.decode(currentBytes);
-                }
-            }
+            diskReferenceText = decodeChartBackupText(currentFile.readAll());
         }
     }
 
@@ -1400,23 +1489,13 @@ void MainWindow::DocumentSection::restoreBackupFilePath(const QString& path)
             uiText("dialog.restore_backup.title", "Restore Backup"),
             uiText(
                 "dialog.restore_backup.read_failed",
-                QStringLiteral("Cannot read backup file:\n%1").arg(QDir::toNativeSeparators(normalizedPath)))
+                "Cannot read backup file:\n%1")
+                .arg(QDir::toNativeSeparators(normalizedPath))
         );
         return;
     }
 
-    QString backupText;
-    const QByteArray bytes = file.readAll();
-    if (bytes.startsWith("\xEF\xBB\xBF")) {
-        backupText = QString::fromUtf8(bytes.mid(3));
-    } else {
-        QStringDecoder utf8Decoder(QStringConverter::Utf8);
-        backupText = utf8Decoder.decode(bytes);
-        if (utf8Decoder.hasError()) {
-            QStringDecoder systemDecoder(QStringConverter::System);
-            backupText = systemDecoder.decode(bytes);
-        }
-    }
+    const QString backupText = decodeChartBackupText(file.readAll());
 
     loadDocument(SimaiDocument::fromText(backupText));
     state_.autosaveReferenceContentSignature_ = autosaveContentSignature(diskReferenceText);
@@ -1436,14 +1515,22 @@ void MainWindow::DocumentSection::restoreBackupFilePath(const QString& path)
 QString MainWindow::DocumentSection::currentDocumentTextForAutosave() const
 {
     SimaiDocument snapshot = state_.document_;
+    // Tracks where a live (possibly uncommitted) designer edit was captured
+    // from, so the unified-mode mirror below broadcasts what the user is
+    // actually typing rather than a stale committed value.
+    QString liveCanonicalDesigner = snapshot.designer;
     if (owner_.hasActiveDifficulty()) {
         SimaiDifficultyData& difficultyData = snapshot.ensureDifficulty(state_.activeDifficultyId_);
         difficultyData.level = ui_.difficultyLevelEdit_ != nullptr ? ui_.difficultyLevelEdit_->text() : difficultyData.level;
         difficultyData.chart = owner_.editorText();
-        // The difficulty header edits the chart-wide offset, not the per-diff
-        // designer — capture the live offset; leave designers as the model has
-        // them.
+        // The header edits the chart-wide offset, plus — in 顶部显示=谱师 mode —
+        // this difficulty's designer (while hidden the edit mirrors the model,
+        // so capturing it unconditionally is safe).
         snapshot.first = ui_.firstEdit_ != nullptr ? ui_.firstEdit_->text() : snapshot.first;
+        if (ui_.difficultyDesignerEdit_ != nullptr) {
+            difficultyData.designer = ui_.difficultyDesignerEdit_->text();
+            liveCanonicalDesigner = difficultyData.designer;
+        }
     } else if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
         snapshot.title = ui_.titleEdit_ != nullptr ? ui_.titleEdit_->text() : QString();
         snapshot.artist = ui_.artistEdit_ != nullptr ? ui_.artistEdit_->text() : QString();
@@ -1452,17 +1539,20 @@ QString MainWindow::DocumentSection::currentDocumentTextForAutosave() const
             ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(),
             true
         );
+        liveCanonicalDesigner = snapshot.designer;
     }
 
-    // Under unified mode the metadata page may hold an uncommitted top &des
-    // edit that hasn't broadcast yet (broadcast only happens on field commit in
-    // applyCurrentFieldToDocument). Mirror it across every per-difficulty name —
-    // charted and standalone alike — so the autosaved backup is never
-    // internally out-of-sync with what the user is typing.
+    // Under unified mode the metadata page (top &des) or the difficulty header
+    // (&des_N) may hold an uncommitted designer edit that hasn't broadcast yet
+    // (broadcast only happens on field commit in applyCurrentFieldToDocument).
+    // Mirror it across &des and every per-difficulty name — charted and
+    // standalone alike — so the autosaved backup is never internally
+    // out-of-sync with what the user is typing.
     const bool capturedDesignerFromUi = owner_.hasActiveDifficulty()
         || state_.activeOutlineKey_ == QLatin1String("metadata");
     if (state_.unifiedDesignerEnabled_ && capturedDesignerFromUi) {
-        const QString canonical = snapshot.designer;
+        const QString canonical = liveCanonicalDesigner;
+        snapshot.designer = canonical;
         const QVector<QPair<int, QString>> designerSlots = snapshot.perDifficultyDesigners();
         for (const QPair<int, QString>& slot : designerSlots) {
             if (slot.second != canonical) {

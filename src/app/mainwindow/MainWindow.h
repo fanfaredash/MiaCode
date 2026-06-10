@@ -346,6 +346,13 @@ private:
         Muri,
         Unknown,
     };
+    // What the difficulty-page header edits next to "Lv": the chart-wide
+    // offset (`&first`, the default) or the active difficulty's designer
+    // (`&des_N`, the pre-8026b7e header field). Preferences → 编辑器 → 顶部显示.
+    enum class EditorHeaderTopDisplay {
+        Offset,
+        Designer,
+    };
     struct TimelineCursorNote;
     struct PreparedStartupRestoreDocument {
         quint64 generation = 0;
@@ -439,6 +446,10 @@ private:
     void applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference);
     void applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference);
     void applyEditorImeInputDisabled(bool disabled, bool persistPreference);
+    void applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference);
+    // Transient Alt-hold override: while the preview is paused, holding Alt
+    // flips the "暂停时显示判定区" pause display (judge area ⇄ PV/BG) until released.
+    void setPauseDisplayAltHoldActive(bool active);
     void showCreateBookmarkDialog();
     void showBookmarkManager();
     void openBookmarkAtLine(int line);

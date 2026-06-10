@@ -17,6 +17,7 @@ public:
     void applyEditorOverwriteModeEnabled(bool enabled, bool persistPreference);
     void applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference);
     void applyEditorImeInputDisabled(bool disabled, bool persistPreference);
+    void applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference);
     void showCreateBookmarkDialog();
     void showBookmarkManager();
     void openBookmarkAtLine(int line);

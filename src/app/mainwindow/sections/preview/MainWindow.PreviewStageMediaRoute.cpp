@@ -46,7 +46,11 @@ void MainWindow::PreviewSection::applyPreviewStageMediaRouteVisualSettings()
 {
     // While the export-preview dialog is up, PV/BG stays visible regardless of the
     // pause-hide option so the user previews exactly what the exported video shows.
-    const bool mediaVisible = !state_.previewForceLabeledJudgeLineWhenPaused_
+    // Holding Alt while paused inverts the pause-hide option (same effective
+    // flag as effectivePreviewOutlineVariant) so judge area ⇄ PV/BG flip together.
+    const bool forceJudgeAreaWhenPaused =
+        state_.previewForceLabeledJudgeLineWhenPaused_ != state_.pauseDisplayAltHoldActive_;
+    const bool mediaVisible = !forceJudgeAreaWhenPaused
         || state_.qtPreviewPlaying_
         || state_.exportPreviewActive_;
     if (state_.previewStageMediaHost_ != nullptr) {

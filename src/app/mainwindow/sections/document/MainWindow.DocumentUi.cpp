@@ -180,16 +180,27 @@ void MainWindow::DocumentSection::updateEditorHeaderLayoutMode()
     if (ui_.difficultyLevelLabel_ != nullptr) {
         ui_.difficultyLevelLabel_->setVisible(true);
     }
-    if (ui_.difficultyFirstLabel_ != nullptr) {
-        ui_.difficultyFirstLabel_->setVisible(true);
-    }
     if (ui_.difficultyLevelEdit_ != nullptr) {
         ui_.difficultyLevelEdit_->setFixedWidth(48);
         ui_.difficultyLevelEdit_->setVisible(true);
     }
+    // The 顶部显示 preference decides which field pair sits next to Lv: the
+    // chart-wide offset (default) or the active difficulty's designer.
+    const bool headerShowsDesigner =
+        state_.editorHeaderTopDisplay_ == MainWindow::EditorHeaderTopDisplay::Designer;
+    if (ui_.difficultyFirstLabel_ != nullptr) {
+        ui_.difficultyFirstLabel_->setVisible(!headerShowsDesigner);
+    }
     if (ui_.firstEdit_ != nullptr) {
         ui_.firstEdit_->setFixedWidth(64);
-        ui_.firstEdit_->setVisible(true);
+        ui_.firstEdit_->setVisible(!headerShowsDesigner);
+    }
+    if (ui_.difficultyDesignerLabel_ != nullptr) {
+        ui_.difficultyDesignerLabel_->setVisible(headerShowsDesigner);
+    }
+    if (ui_.difficultyDesignerEdit_ != nullptr) {
+        ui_.difficultyDesignerEdit_->setFixedWidth(96);
+        ui_.difficultyDesignerEdit_->setVisible(headerShowsDesigner);
     }
     if (ui_.editorDifficultyControls_ != nullptr) {
         ui_.editorDifficultyControls_->setVisible(true);
@@ -350,9 +361,14 @@ bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId)
     const QString difficultyName = SimaiDocument::difficultyName(difficultyId);
     const QString currentLevel =
         deletingActiveDifficulty && ui_.difficultyLevelEdit_ != nullptr ? ui_.difficultyLevelEdit_->text() : difficultyData->level;
-    // The difficulty header no longer edits the designer, so the saved model
-    // value is authoritative for undo capture.
-    const QString currentDesigner = difficultyData->designer;
+    // The header designer edit (顶部显示=谱师 mode) mirrors the model whenever it
+    // isn't being typed in, so reading the live edit for the active difficulty
+    // captures any uncommitted designer text for undo; other difficulties (and
+    // a missing widget) fall back to the saved model value.
+    const QString currentDesigner =
+        deletingActiveDifficulty && ui_.difficultyDesignerEdit_ != nullptr
+            ? ui_.difficultyDesignerEdit_->text()
+            : difficultyData->designer;
     const QString currentChart = deletingActiveDifficulty ? owner_.editorText() : difficultyData->chart;
     const bool emptyDifficulty = currentLevel.trimmed().isEmpty()
         && currentDesigner.trimmed().isEmpty()
@@ -606,10 +622,43 @@ void MainWindow::DocumentSection::populateDifficultyPage(int difficultyId)
         ui_.firstEdit_->setText(state_.document_.first);
         ui_.firstEdit_->setModified(false);
     }
+    // The header's designer field (visible in 顶部显示=谱师 mode) edits this
+    // difficulty's `&des_N`. Kept in sync even while hidden so a later commit
+    // can read it unconditionally without picking up a stale difficulty's name.
+    if (ui_.difficultyDesignerEdit_ != nullptr) {
+        QSignalBlocker blocker(ui_.difficultyDesignerEdit_);
+        if (auto* placeholderEdit = dynamic_cast<LeftPlaceholderLineEdit*>(ui_.difficultyDesignerEdit_)) {
+            placeholderEdit->setLeftPlaceholderText(QString("&des_%1=").arg(difficultyId));
+        }
+        ui_.difficultyDesignerEdit_->setText(difficultyData->designer);
+        ui_.difficultyDesignerEdit_->setModified(false);
+    }
     setEditorText(difficultyData->chart);
     updateEditorHeader();
     updateEditorEmptyState();
     updateEditorStatus();
+}
+
+void MainWindow::DocumentSection::syncHeaderDesignerEditFromModel()
+{
+    // Re-reads the active difficulty's designer into the header edit. Called
+    // after anything that rewrites designers behind the header's back (the
+    // designer-management dialog, the load-time unified reconcile, a 顶部显示
+    // preference flip) so a later applyCurrentFieldToDocument never commits a
+    // stale header value over the model.
+    if (ui_.difficultyDesignerEdit_ == nullptr || !owner_.hasActiveDifficulty()) {
+        return;
+    }
+    const SimaiDifficultyData* difficultyData = state_.document_.difficulty(state_.activeDifficultyId_);
+    if (difficultyData == nullptr) {
+        return;
+    }
+    QSignalBlocker blocker(ui_.difficultyDesignerEdit_);
+    if (auto* placeholderEdit = dynamic_cast<LeftPlaceholderLineEdit*>(ui_.difficultyDesignerEdit_)) {
+        placeholderEdit->setLeftPlaceholderText(QString("&des_%1=").arg(state_.activeDifficultyId_));
+    }
+    ui_.difficultyDesignerEdit_->setText(difficultyData->designer);
+    ui_.difficultyDesignerEdit_->setModified(false);
 }
 
 void MainWindow::DocumentSection::applyDifficultySwitchEditorScrollRestore(
@@ -974,6 +1023,7 @@ void MainWindow::DocumentSection::clearTimelineAndPreview()
     state_.lastTimelineParseTimingMetadata_ = miacode::simai::SimaiTimingMetadata();
     state_.lastTimelineParseResult_ = SimaiNativeParseResult();
     state_.muriAnalysisReport_ = MuriAnalysisReport();
+    state_.muriAnalysisReport_.revision = ++state_.muriAnalysisReportRevisionCounter_;
     state_.muriAnalysisReportNoteMarkerSignature_.clear();
     state_.pendingDeferredValidationUiRefresh_ = false;
     state_.pendingDeferredMuriUiRefresh_ = false;

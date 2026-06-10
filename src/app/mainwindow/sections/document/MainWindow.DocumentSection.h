@@ -96,6 +96,7 @@ public:
     void rebuildFieldSidebar();
     void populateMetadataPage();
     void populateDifficultyPage(int difficultyId);
+    void syncHeaderDesignerEditFromModel();
     bool switchToMetadataField();
     bool switchToWelcomePage();
     bool switchToDifficultyField(int difficultyId);

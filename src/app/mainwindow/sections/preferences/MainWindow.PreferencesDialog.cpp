@@ -419,6 +419,11 @@ void MainWindow::PreferencesSection::onPreferences()
     appearancePageLayout->setSpacing(10);
     auto* interfaceGroup = new QGroupBox(uiText("dialog.preferences.interface_group", "Appearance"), appearancePage);
     auto* interfaceLayout = new QFormLayout(interfaceGroup);
+    // Explicit margins like the editor/performance pages. The flattened
+    // group box (border: none via flattenPageGroup) zeroes the default
+    // QSS layout margins, so without this the field column runs flush to
+    // the pane edge and the menu buttons' right border gets clipped.
+    interfaceLayout->setContentsMargins(12, 10, 12, 12);
     interfaceLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     interfaceLayout->setHorizontalSpacing(12);
     interfaceLayout->setVerticalSpacing(8);
@@ -478,12 +483,10 @@ void MainWindow::PreferencesSection::onPreferences()
             owner_.statusBar()->showMessage(uiText("status.preferences_saved", "Preferences saved. Restart to apply."));
         });
     }
-    int languageButtonWidth = 0;
-    const QFontMetrics languageMetrics(languageButton->font());
-    for (UiText::LanguagePreference preference : languageOptions) {
-        languageButtonWidth = qMax(languageButtonWidth, languageMetrics.horizontalAdvance(languageLabel(preference)));
-    }
-    languageButton->setFixedWidth(languageButtonWidth + 28);
+    // No manual setFixedWidth here: the QSS PreferenceMenuButton rule
+    // (min-width + padding + border) already defines the styled size, and
+    // pinning a metrics-derived width below it is what clipped the button's
+    // right border. The performance tab's buttons size the same way.
     connect(languageButton, &QToolButton::clicked, &dialog, [languageButton, languageMenu]() {
         languageMenu->popup(languageButton->mapToGlobal(QPoint(0, languageButton->height())));
     });
@@ -523,12 +526,6 @@ void MainWindow::PreferencesSection::onPreferences()
             owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
         });
     }
-    int themeButtonWidth = 0;
-    const QFontMetrics themeMetrics(themeButton->font());
-    for (UiText::ThemePreference preference : themeOptions) {
-        themeButtonWidth = qMax(themeButtonWidth, themeMetrics.horizontalAdvance(themeLabel(preference)));
-    }
-    themeButton->setFixedWidth(themeButtonWidth + 28);
     connect(themeButton, &QToolButton::clicked, &dialog, [themeButton, themeMenu]() {
         themeMenu->popup(themeButton->mapToGlobal(QPoint(0, themeButton->height())));
     });
@@ -569,13 +566,6 @@ void MainWindow::PreferencesSection::onPreferences()
             owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
         });
     }
-    int previewSideButtonWidth = 0;
-    const QFontMetrics previewSideMetrics(previewSideButton->font());
-    for (bool previewOnLeft : previewSideOptions) {
-        previewSideButtonWidth =
-            qMax(previewSideButtonWidth, previewSideMetrics.horizontalAdvance(previewSideLabel(previewOnLeft)));
-    }
-    previewSideButton->setFixedWidth(previewSideButtonWidth + 28);
     connect(previewSideButton, &QToolButton::clicked, &dialog, [previewSideButton, previewSideMenu]() {
         previewSideMenu->popup(previewSideButton->mapToGlobal(QPoint(0, previewSideButton->height())));
     });
@@ -603,6 +593,53 @@ void MainWindow::PreferencesSection::onPreferences()
     bool selectedEditorHalfWidthInputEnabled = state_.editorHalfWidthInputEnabled_;
     bool selectedAutoCompletionEnabled = state_.editorAutoCompletionEnabled_;
     bool selectedIgnoreMuriIssuePrompts = state_.ignoreMuriIssuePrompts_;
+
+    // 顶部显示 — what the difficulty-page header edits next to Lv: the
+    // chart-wide offset (延迟, default) or the per-difficulty designer (谱师).
+    // First row of the page per the preference's prominence.
+    const auto headerTopDisplayLabel = [](EditorHeaderTopDisplay mode) -> QString {
+        return mode == EditorHeaderTopDisplay::Designer
+            ? uiText("dialog.preferences.editor_top_display.designer", "Designer")
+            : uiText("dialog.preferences.editor_top_display.latency", "Latency");
+    };
+    auto* headerTopDisplayLabelWidget =
+        new QLabel(uiText("dialog.preferences.editor_top_display", "Header Field"), editorGroup);
+    auto* headerTopDisplayRow = new QWidget(editorGroup);
+    auto* headerTopDisplayRowLayout = new QHBoxLayout(headerTopDisplayRow);
+    headerTopDisplayRowLayout->setContentsMargins(0, 0, 0, 0);
+    headerTopDisplayRowLayout->setSpacing(12);
+    auto* headerTopDisplayButton = new QToolButton(headerTopDisplayRow);
+    headerTopDisplayButton->setObjectName("PreferenceMenuButton");
+    headerTopDisplayButton->setFont(uiAccentFont(10, QFont::DemiBold));
+    headerTopDisplayButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    headerTopDisplayButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    headerTopDisplayButton->setText(headerTopDisplayLabel(state_.editorHeaderTopDisplay_));
+    headerTopDisplayButton->setToolTip(
+        UiText::isChineseUi()
+            ? QStringLiteral("谱面编辑页顶部 Lv 旁边显示的字段：延迟（&first 偏移）或当前难度的谱师（&des_N）。")
+            : QStringLiteral("The field next to Lv in the chart header: the &first offset or this difficulty's &des_N designer.")
+    );
+    auto* headerTopDisplayMenu = new QMenu(headerTopDisplayButton);
+    headerTopDisplayMenu->setFont(uiAccentFont(10));
+    styleRoundedMenu(*headerTopDisplayMenu);
+    const QList<EditorHeaderTopDisplay> headerTopDisplayOptions{
+        EditorHeaderTopDisplay::Offset,
+        EditorHeaderTopDisplay::Designer,
+    };
+    for (EditorHeaderTopDisplay mode : headerTopDisplayOptions) {
+        QAction* action = headerTopDisplayMenu->addAction(headerTopDisplayLabel(mode));
+        connect(action, &QAction::triggered, &dialog, [&, mode, headerTopDisplayButton]() {
+            headerTopDisplayButton->setText(headerTopDisplayLabel(mode));
+            owner_.applyEditorHeaderTopDisplay(mode, true);
+            owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+        });
+    }
+    connect(headerTopDisplayButton, &QToolButton::clicked, &dialog, [headerTopDisplayButton, headerTopDisplayMenu]() {
+        headerTopDisplayMenu->popup(headerTopDisplayButton->mapToGlobal(QPoint(0, headerTopDisplayButton->height())));
+    });
+    headerTopDisplayRowLayout->addWidget(headerTopDisplayButton, 0);
+    headerTopDisplayRowLayout->addStretch(1);
+    editorLayout->addRow(headerTopDisplayLabelWidget, headerTopDisplayRow);
 
     auto* editorFontSizeLabel = new QLabel(uiText("dialog.preferences.editor_font_size", "Text Font Size"), editorGroup);
     auto* fontSizeRow = new QWidget(editorGroup);
@@ -906,6 +943,20 @@ void MainWindow::PreferencesSection::onPreferences()
     resetShortcutsButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     shortcutsLayout->addWidget(editShortcutsButton, 0, Qt::AlignLeft);
     shortcutsLayout->addWidget(resetShortcutsButton, 0, Qt::AlignLeft);
+    // Fixed (non-rebindable) hold-modifier behavior. It lives outside the
+    // editable shortcut table because the capture dialog can't record a bare
+    // modifier, so a table row would suggest a rebind that can't happen.
+    auto* altPauseHintLabel = new QLabel(
+        uiText(
+            "dialog.preferences.shortcuts.alt_pause_hint",
+            "Hold Alt while the preview is paused to flip between judge area and PV."
+        ),
+        shortcutsGroup
+    );
+    altPauseHintLabel->setWordWrap(true);
+    altPauseHintLabel->setStyleSheet(
+        QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
+    shortcutsLayout->addWidget(altPauseHintLabel, 0, Qt::AlignLeft);
     flattenPageGroup(shortcutsGroup);
     shortcutsPageLayout->addWidget(shortcutsGroup);
     shortcutsPageLayout->addStretch(1);

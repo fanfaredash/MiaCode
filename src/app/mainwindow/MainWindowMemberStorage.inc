@@ -97,6 +97,12 @@
         QLabel* difficultyLevelLabel_ = nullptr;
         QLineEdit* difficultyLevelEdit_ = nullptr;
         QLabel* difficultyFirstLabel_ = nullptr;
+        // Per-difficulty designer (`&des_N`) header pair. Shown instead of the
+        // offset pair when the 顶部显示 preference is set to 谱师
+        // (MainWindowState::editorHeaderTopDisplay_); hidden in the default
+        // offset mode. Distinct from the metadata page's designerEdit_ (&des).
+        QLabel* difficultyDesignerLabel_ = nullptr;
+        QLineEdit* difficultyDesignerEdit_ = nullptr;
         QWidget* editorHeaderWidget_ = nullptr;
         QWidget* editorFindGeometryHost_ = nullptr;
         QWidget* editorBatchTransformControls_ = nullptr;
@@ -418,6 +424,10 @@
         bool previewProgressFollowEnabled_ = true;
         bool timelineSyncEnabled_ = false;
         MuriAnalysisReport muriAnalysisReport_;
+        // Monotonic counter; ++ on every store into muriAnalysisReport_ (fresh analysis or
+        // reset), stamped into muriAnalysisReport_.revision so PreviewRuntime can skip a
+        // redundant per-play re-apply (the ~4MB/play forced-rebuild leak). See beta5 fix.
+        quint64 muriAnalysisReportRevisionCounter_ = 0;
         QVector<MuriStaticReference> muriStaticReferences_;
         MuriRenderOptions muriRenderOptions_;
         int staticTapOnSlideThresholdMs_ = 200;
@@ -445,6 +455,12 @@
         // ("暂停时显示判定区") is ignored so PV/BG renders exactly as it will in the
         // exported video. Normal preview leaves this false → option behaves as usual.
         bool exportPreviewActive_ = false;
+        // Transient (not persisted): true while Alt is held with the preview
+        // paused. Inverts the effective "暂停时显示判定区" option so the paused view
+        // flips judge area ⇄ PV/BG until Alt is released (or the app
+        // deactivates, e.g. Alt+Tab). Set from WindowSection::eventFilter via
+        // MainWindow::setPauseDisplayAltHoldActive.
+        bool pauseDisplayAltHoldActive_ = false;
         bool previewShowDebugInfo_ = false;
         bool previewShowTimestamp_ = true;
         bool previewShowObjectStatsHud_ = false;
@@ -470,6 +486,10 @@
         // empty-pair backspace, the bracket suggestion popup, and the 'h' hold-
         // duration suggestions. Was three separate toggles before they merged.
         bool editorAutoCompletionEnabled_ = true;
+        // 顶部显示 preference: which field pair the difficulty header shows next
+        // to Lv — the chart-wide offset (default) or the per-difficulty
+        // designer. Persisted as ui.editor_header_top_display.
+        EditorHeaderTopDisplay editorHeaderTopDisplay_ = EditorHeaderTopDisplay::Offset;
         // beta51+ — "禁止中文輸入法輸入" preference. Off by default so existing
         // users / non-CJK locales aren't surprised by a sudden IME disable on
         // first launch. When on, each editor widget gets Qt::WA_InputMethodEnabled
@@ -859,6 +879,8 @@
     QLabel*& difficultyLevelLabel_ = ui_.difficultyLevelLabel_;
     QLineEdit*& difficultyLevelEdit_ = ui_.difficultyLevelEdit_;
     QLabel*& difficultyFirstLabel_ = ui_.difficultyFirstLabel_;
+    QLabel*& difficultyDesignerLabel_ = ui_.difficultyDesignerLabel_;
+    QLineEdit*& difficultyDesignerEdit_ = ui_.difficultyDesignerEdit_;
     QWidget*& editorHeaderWidget_ = ui_.editorHeaderWidget_;
     QWidget*& editorFindGeometryHost_ = ui_.editorFindGeometryHost_;
     QWidget*& editorBatchTransformControls_ = ui_.editorBatchTransformControls_;
