@@ -16,6 +16,7 @@
 #include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/latency/LatencyAnalysis.h"
+#include "tools/video_export/HudFontSettings.h"
 
 #include <QDesktopServices>
 #include <QUrl>
@@ -2962,6 +2963,32 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             uiText("dialog.render_settings.video_group", "Video"));
         videoSettingsTabs->addTab(gameplayGroup,
             uiText("dialog.render_settings.gameplay_group", "Gameplay"));
+        // Font tab — the same HUD-font page the video-export dialog hosts (shared
+        // dialog in tools/video_export/HudFontSettings.cpp). Top-aligned content
+        // with a trailing stretch; the smallest page, so it adds no pane height.
+        {
+            auto* fontGroup = new QGroupBox(&dialog);
+            auto* fontLayout = new QVBoxLayout(fontGroup);
+            fontLayout->setContentsMargins(12, 10, 12, 10);
+            fontLayout->setSpacing(8);
+            auto* hudFontLabel = new QLabel(
+                uiText("dialog.video_export.option.hud_font", "HUD font"), fontGroup);
+            auto* hudFontSettingsButton = new QPushButton(
+                uiText("dialog.video_export.option.hud_font_settings", "Font Settings"), fontGroup);
+            hudFontSettingsButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+            fontLayout->addWidget(hudFontLabel, 0, Qt::AlignLeft);
+            fontLayout->addWidget(hudFontSettingsButton, 0, Qt::AlignLeft);
+            fontLayout->addStretch(1);
+            connect(hudFontSettingsButton, &QPushButton::clicked, &dialog, [&dialog]() {
+                // No live-refresh callback: the editor preview HUD re-reads the
+                // global font on its next repaint (scrub/play), which is enough
+                // outside the export dialog's frozen-frame preview.
+                miacode::video_export::openHudFontSettingsDialog(&dialog);
+            });
+            flattenGroup(fontGroup);
+            videoSettingsTabs->addTab(fontGroup,
+                uiText("dialog.video_export.section.font", "Font"));
+        }
         rootLayout->addWidget(videoSettingsTabs, 0);
     }
     auto* buttonBox = new QDialogButtonBox(&dialog);

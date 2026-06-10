@@ -14,9 +14,11 @@
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "tools/cover_export/ExportCoverDialog.h"
 #include "tools/video_export/BatchVideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
 #include "tools/video_export/VideoExportDialog.h"
+#include "tools/video_export/VideoExportPreferences.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -335,23 +337,12 @@ void MainWindow::ExportSection::applySharedExportTaskSettings(const VideoExportT
     owner_.savePortableState();
 }
 
-void MainWindow::ExportSection::onExportPreviewVideo()
+// Build the seed VideoExportTask shared by the export dialog AND the toolbar's
+// direct cover export: parsed note markers + muri + render settings + skin /
+// outline assets + chart metadata + the banner-card payload. Callers must have
+// validated hasActiveDifficulty() / previewCanvas_ and paused playback first.
+VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask()
 {
-    MC_OP("MainWindow::ExportSection::onExportPreviewVideo");
-    if (!owner_.hasActiveDifficulty()) {
-        _mc_op_.fail(QStringLiteral("no active difficulty"));
-        owner_.statusBar()->showMessage(QStringLiteral("当前未选中难度，无法导出视频。"));
-        return;
-    }
-    if (owner_.previewCanvas_ == nullptr) {
-        _mc_op_.fail(QStringLiteral("previewCanvas_ null"));
-        owner_.statusBar()->showMessage(QStringLiteral("预览画布未初始化，无法导出视频。"));
-        return;
-    }
-    if (owner_.qtPreviewPlaying_) {
-        owner_.onTogglePreviewPause();
-    }
-
     owner_.refreshTimelineMetadata();
 
     const auto previewMarkerEndSecond = [](const TimelineNoteMarker& marker) {
@@ -446,6 +437,27 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     // Seed the banner-card payload so the dialog's "Export Cover" can render the
     // difficulty card without building a full export snapshot.
     task.intro = buildActiveDifficultyIntroBannerSpec();
+    return task;
+}
+
+void MainWindow::ExportSection::onExportPreviewVideo()
+{
+    MC_OP("MainWindow::ExportSection::onExportPreviewVideo");
+    if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
+        owner_.statusBar()->showMessage(QStringLiteral("当前未选中难度，无法导出视频。"));
+        return;
+    }
+    if (owner_.previewCanvas_ == nullptr) {
+        _mc_op_.fail(QStringLiteral("previewCanvas_ null"));
+        owner_.statusBar()->showMessage(QStringLiteral("预览画布未初始化，无法导出视频。"));
+        return;
+    }
+    if (owner_.qtPreviewPlaying_) {
+        owner_.onTogglePreviewPause();
+    }
+
+    VideoExportTask task = buildVideoExportSeedTask();
 
     const auto currentPreviewSecond = [this]() -> double {
         return qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond());
@@ -603,7 +615,10 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     // showDebugInfo preference so it returns intact on dialog close.
     if (owner_.previewCanvas_ != nullptr) {
         owner_.previewCanvas_->setSuppressDebugInfo(true);
-        owner_.previewCanvas_->setChartInfo(chartTitle, chartArtist, chartDifficultyLabel, chartDesigner);
+        // The seed task already carries the resolved chart metadata (built in
+        // buildVideoExportSeedTask).
+        owner_.previewCanvas_->setChartInfo(
+            task.chartTitle, task.chartArtist, task.chartDifficultyLabel, task.chartDesigner);
         owner_.previewCanvas_->setShowChartInfoHud(owner_.previewShowChartInfoHud_);
     }
     dialog.exec();
@@ -641,6 +656,67 @@ void MainWindow::ExportSection::onExportPreviewVideo()
                     : launchError
             );
         }
+    }
+}
+
+void MainWindow::ExportSection::onExportCover()
+{
+    MC_OP("MainWindow::ExportSection::onExportCover");
+    if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
+        owner_.statusBar()->showMessage(QStringLiteral("当前未选中难度，无法导出封面。"));
+        return;
+    }
+    if (owner_.previewCanvas_ == nullptr) {
+        _mc_op_.fail(QStringLiteral("previewCanvas_ null"));
+        owner_.statusBar()->showMessage(QStringLiteral("预览画布未初始化，无法导出封面。"));
+        return;
+    }
+    if (owner_.qtPreviewPlaying_) {
+        owner_.onTogglePreviewPause();
+    }
+
+    const VideoExportTask task = buildVideoExportSeedTask();
+
+    // Seed size: the video-export dialog's persisted resolution (the cover
+    // dialog's own app preferences override it when present).
+    const QJsonObject videoPrefs = miacode::video_export::loadDialogPreferences();
+    QSize seedSize(videoPrefs.value(QStringLiteral("resolution_width")).toInt(1024),
+                   videoPrefs.value(QStringLiteral("resolution_height")).toInt(1024));
+    if (seedSize.width() <= 0 || seedSize.height() <= 0) {
+        seedSize = QSize(1024, 1024);
+    }
+
+    ExportCoverDialog dialog(task, seedSize, UiDialogs::effectiveParentWidget(&owner_));
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    // The cover lands next to the chart (the same base the video export resolves
+    // relative output paths against).
+    const QFileInfo chartInfo(task.chartPath);
+    const QString outputDirectory = !chartInfo.absoluteDir().path().isEmpty()
+        ? chartInfo.absoluteDir().absolutePath()
+        : QDir::currentPath();
+
+    const miacode::cover_export::CoverExportResult result = dialog.exportCover(outputDirectory);
+    const QString title = uiText("action.export_cover", QStringLiteral("Export Cover"));
+    if (result.success) {
+        UiDialogs::showMessageBox(
+            QMessageBox::Information,
+            &owner_,
+            title,
+            (UiText::isChineseUi() ? QStringLiteral("封面已导出：\n%1") : QStringLiteral("Cover exported:\n%1"))
+                .arg(QDir::toNativeSeparators(result.outputPath))
+        );
+    } else {
+        UiDialogs::showMessageBox(
+            QMessageBox::Warning,
+            &owner_,
+            title,
+            (UiText::isChineseUi() ? QStringLiteral("封面导出失败：\n%1") : QStringLiteral("Cover export failed:\n%1"))
+                .arg(result.errorMessage)
+        );
     }
 }
 

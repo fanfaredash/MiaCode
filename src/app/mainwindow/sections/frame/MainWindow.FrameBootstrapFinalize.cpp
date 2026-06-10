@@ -122,7 +122,11 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     );
     settingsPlaceholderAction_->setToolTip(uiText("action.preferences", "Preferences..."));
     connect(settingsPlaceholderAction_, &QAction::triggered, this, &MainWindow::onPreferences);
-    exportVideoButton_ = makeCompactToolbarButton(exportVideoAction_);
+    // The toolbar Export button only OPENS the dropdown (it is not bound to
+    // exportVideoAction_, so a click no longer jumps straight into the export
+    // dialog) — the menu holds 导出 / 导出封面 / 批量导出. Hovering still opens
+    // the same menu via the timer below.
+    exportVideoButton_ = makeCompactToolbarButton(nullptr);
     if (exportVideoButton_ != nullptr) {
         const auto syncExportToolbarButton = [this]() {
             if (exportVideoButton_ == nullptr) {
@@ -143,10 +147,19 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         if (exportVideoAction_ != nullptr) {
             exportVideoMenu_->addAction(exportVideoAction_);
         }
+        QAction* toolbarExportCoverAction = exportVideoMenu_->addAction(
+            uiText("action.export_cover", "Export Cover")
+        );
+        connect(toolbarExportCoverAction, &QAction::triggered, this, [this]() {
+            exportSection_->onExportCover();
+        });
         QAction* toolbarBatchExportAction = exportVideoMenu_->addAction(
             uiText("action.batch_export", "Batch Export")
         );
         connect(toolbarBatchExportAction, &QAction::triggered, this, &MainWindow::onBatchExportPreviewVideo);
+        connect(exportVideoButton_, &QToolButton::clicked, this, [this]() {
+            exportSection_->showExportToolbarMenu();
+        });
         exportVideoButton_->installEventFilter(this);
         exportVideoButton_->setMouseTracking(true);
         if (exportVideoAction_ != nullptr) {

@@ -8,6 +8,9 @@ public:
 
     void applySharedExportTaskSettings(const VideoExportTask& task);
     void onExportPreviewVideo();
+    // Toolbar Export dropdown → 导出封面: opens the cover composer directly
+    // (no video-export dialog in between).
+    void onExportCover();
     void onBatchExportPreviewVideo();
     void onPackAsZip();
     bool buildVideoExportSnapshot(
@@ -55,8 +58,12 @@ public:
 private:
     // Banner-card payload (title/artist/designer/level/difficulty/bpm/mode/jacket)
     // for the currently active difficulty — seeds VideoExportTask::intro so the
-    // export dialog's "Export Cover" can render the card without a full snapshot.
+    // cover composer can render the card without a full snapshot.
     IntroBannerSpec buildActiveDifficultyIntroBannerSpec() const;
+    // Seed task shared by the export dialog and the direct cover export (markers
+    // + muri + render settings + skin/outline + chart metadata + intro payload).
+    // Callers validate hasActiveDifficulty()/previewCanvas_ and pause playback.
+    VideoExportTask buildVideoExportSeedTask();
 
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;

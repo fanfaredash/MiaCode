@@ -84,9 +84,6 @@ private:
     void syncLivePreviewChartInfoVisibility();
     void restoreLivePreviewState();
     void openHudFontSettingsDialog();
-    void openExportCoverDialog();
-    QString importHudFontFromUser(QWidget* parent);
-    void resetHudFont();
     void refreshLivePreviewHudFont();
     void loadPersistedSettings();
     void savePersistedSettings(const VideoExportTask& task) const;
@@ -183,7 +180,6 @@ private:
     QCheckBox* addIntroCheck_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
     QPushButton* hudFontSettingsButton_ = nullptr;
-    QPushButton* exportCoverButton_ = nullptr;
     QToolButton* backgroundScaleModeButton_ = nullptr;
     QMenu* backgroundScaleModeMenu_ = nullptr;
     PreviewBackgroundScaleMode selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;

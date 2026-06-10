@@ -196,6 +196,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/muri/MuriStaticChecker.cpp
     src/tools/video_export/VideoExportDialog.h
     src/tools/video_export/VideoExportDialog.cpp
+    src/tools/video_export/HudFontSettings.h
+    src/tools/video_export/HudFontSettings.cpp
     src/tools/video_export/BatchVideoExportDialog.h
     src/tools/video_export/BatchVideoExportDialog.cpp
     src/tools/video_export/VideoExportController.h

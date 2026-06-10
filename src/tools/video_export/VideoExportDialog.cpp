@@ -6,7 +6,7 @@
 #include "common/DebugLog.h"
 #include "common/PreviewInteractionConfig.h"
 #include "core/scene/PreviewHudState.h"
-#include "tools/cover_export/ExportCoverDialog.h"
+#include "tools/video_export/HudFontSettings.h"
 #include "tools/video_export/VideoExportPreferences.h"
 
 #include <QAbstractItemView>
@@ -77,12 +77,6 @@ struct ResolutionPreset {
     double aspectRatio = 1.0;
 };
 
-struct HudFontChoice {
-    QString label;
-    QString path;
-    QString family;
-};
-
 constexpr ResolutionPreset kResolutionPresets[] = {
     {720, 720, "720x720 (1:1)", 1.0},
     {1024, 1024, "1024x1024 (1:1)", 1.0},
@@ -113,105 +107,9 @@ int normaliseAudioBitrateKbps(int requested)
     return closest;
 }
 
-QString hudFontLibraryDirPath()
-{
-    const QFileInfo preferencesInfo(UiText::preferencesFilePath());
-    return preferencesInfo.absoluteDir().filePath(QStringLiteral("fonts"));
-}
-
-QString currentHudFontPath()
-{
-    const QJsonObject root = UiText::loadPreferencesObject();
-    const QJsonObject app = root.value(QStringLiteral("app")).toObject();
-    const QJsonObject videoExport = app.value(QStringLiteral("video_export")).toObject();
-    const QString path = videoExport.value(QStringLiteral("hud_font_path")).toString();
-    if (path.isEmpty()) {
-        return QString();
-    }
-    const QFileInfo info(path);
-    return info.isFile() ? info.absoluteFilePath() : QString();
-}
-
-QString uniqueHudFontLibraryPath(const QFileInfo& sourceInfo)
-{
-    QDir dir(hudFontLibraryDirPath());
-    dir.mkpath(QStringLiteral("."));
-    const QString baseName = sourceInfo.completeBaseName().isEmpty()
-        ? QStringLiteral("font")
-        : sourceInfo.completeBaseName();
-    const QString suffix = sourceInfo.suffix().isEmpty() ? QStringLiteral("ttf") : sourceInfo.suffix();
-    QString candidate = dir.filePath(baseName + QLatin1Char('.') + suffix);
-    int copyIndex = 2;
-    while (QFileInfo::exists(candidate)) {
-        candidate = dir.filePath(QStringLiteral("%1_%2.%3").arg(baseName).arg(copyIndex).arg(suffix));
-        ++copyIndex;
-    }
-    return QFileInfo(candidate).absoluteFilePath();
-}
-
-QString fontFamilyForFile(const QString& path)
-{
-    const int fontId = QFontDatabase::addApplicationFont(path);
-    if (fontId < 0) {
-        return QString();
-    }
-    const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
-    return families.isEmpty() ? QString() : families.first();
-}
-
-QVector<HudFontChoice> hudFontChoices()
-{
-    QVector<HudFontChoice> choices;
-    choices.push_back({
-        UiText::text(QStringLiteral("dialog.video_export.option.hud_font_default")).isEmpty()
-            ? QStringLiteral("Default font")
-            : UiText::text(QStringLiteral("dialog.video_export.option.hud_font_default")),
-        QString(),
-        QString()
-    });
-
-    QDir dir(hudFontLibraryDirPath());
-    const QFileInfoList files = dir.entryInfoList(
-        QStringList{QStringLiteral("*.ttf"), QStringLiteral("*.otf")},
-        QDir::Files | QDir::Readable,
-        QDir::Name | QDir::IgnoreCase
-    );
-    for (const QFileInfo& file : files) {
-        const QString path = file.absoluteFilePath();
-        const QString family = fontFamilyForFile(path);
-        if (family.isEmpty()) {
-            continue;
-        }
-        choices.push_back({
-            QStringLiteral("%1 (%2)").arg(family, file.fileName()),
-            path,
-            family
-        });
-    }
-    return choices;
-}
-
-void populateHudFontCombo(QComboBox* combo, const QString& selectedPath)
-{
-    if (combo == nullptr) {
-        return;
-    }
-    const QSignalBlocker blocker(combo);
-    combo->clear();
-    const QVector<HudFontChoice> choices = hudFontChoices();
-    int selectedIndex = 0;
-    const QString normalizedSelected = selectedPath.isEmpty()
-        ? QString()
-        : QFileInfo(selectedPath).absoluteFilePath();
-    for (int i = 0; i < choices.size(); ++i) {
-        combo->addItem(choices[i].label, choices[i].path);
-        if (!normalizedSelected.isEmpty()
-            && QFileInfo(choices[i].path).absoluteFilePath() == normalizedSelected) {
-            selectedIndex = i;
-        }
-    }
-    combo->setCurrentIndex(selectedIndex);
-}
+// (The HUD-font library helpers + the font-settings dialog moved to
+// tools/video_export/HudFontSettings.cpp on 2026-06-10, shared with the main
+// window's 视频设置 dialog.)
 
 enum class VideoExportShortcutAction {
     None,
@@ -1246,8 +1144,8 @@ VideoExportDialog::VideoExportDialog(
     visualsPageLayout->addWidget(hudToggles, 0);
     visualsPageLayout->addStretch(1);
 
-    // "Cover" tab (renamed from "Font") — the cover export entry + the HUD font
-    // picker share this page.
+    // Font tab — the HUD font picker on its own page. (The cover export moved to
+    // the toolbar Export dropdown, 2026-06-10.)
     auto* fontPage = new QWidget(settingsTabs_);
     auto* fontPageLayout = new QVBoxLayout(fontPage);
     fontPageLayout->setContentsMargins(kSectionContentLeftInset, 6, kSectionContentLeftInset, 6);
@@ -1264,22 +1162,7 @@ VideoExportDialog::VideoExportDialog(
     fontPageLayout->addWidget(fontPageLabel, 0, Qt::AlignLeft);
     fontPageLayout->addWidget(hudFontSettingsButton_, 0, Qt::AlignLeft);
 
-    // Cover export — renders the composed cover to a still image. The tab is
-    // named after it; the HUD font picker above shares the page but no state.
-    auto* coverLabel = new QLabel(
-        l10n(QStringLiteral("Cover"), QStringLiteral("封面")),
-        fontPage
-    );
-    exportCoverButton_ = new QPushButton(
-        l10n(QStringLiteral("Export Cover"), QStringLiteral("导出封面")),
-        fontPage
-    );
-    exportCoverButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    fontPageLayout->addSpacing(8);
-    fontPageLayout->addWidget(coverLabel, 0, Qt::AlignLeft);
-    fontPageLayout->addWidget(exportCoverButton_, 0, Qt::AlignLeft);
     fontPageLayout->addStretch(1);
-    connect(exportCoverButton_, &QPushButton::clicked, this, &VideoExportDialog::openExportCoverDialog);
 
     refreshAddIntroEnabledState();
 
@@ -1297,9 +1180,7 @@ VideoExportDialog::VideoExportDialog(
     );
     settingsTabs_->addTab(
         fontPage,
-        // Label says "Cover" (the tab's headline feature); the page still hosts
-        // the HUD font picker too — same page, text-only rename.
-        uiText("dialog.video_export.section.font", l10n(QStringLiteral("Cover"), QStringLiteral("封面")))
+        uiText("dialog.video_export.section.font", l10n(QStringLiteral("Font"), QStringLiteral("字体")))
     );
     settingsTabs_->addTab(
         rangePage,
@@ -1553,216 +1434,12 @@ void VideoExportDialog::restoreLivePreviewState()
 
 void VideoExportDialog::openHudFontSettingsDialog()
 {
-    QDialog dialog(this);
-    const QString title = uiText("dialog.video_export.option.hud_font_settings", QStringLiteral("Font Settings"));
-    dialog.setWindowTitle(title);
-    dialog.setModal(true);
-    dialog.setWindowFlags((dialog.windowFlags() | Qt::FramelessWindowHint) & ~Qt::WindowContextHelpButtonHint);
-    dialog.setStyleSheet(UiTheme::exportDialogStyleSheet());
-
-    auto* layout = new QVBoxLayout(&dialog);
-    layout->setContentsMargins(12, 12, 12, 12);
-    layout->setSpacing(0);
-
-    auto* panel = new QFrame(&dialog);
-    panel->setObjectName(QStringLiteral("VideoExportPrimaryPanel"));
-    auto* panelLayout = new QVBoxLayout(panel);
-    panelLayout->setContentsMargins(14, 12, 14, 14);
-    panelLayout->setSpacing(10);
-
-    auto* headerRow = new QWidget(panel);
-    auto* headerLayout = new QHBoxLayout(headerRow);
-    headerLayout->setContentsMargins(0, 0, 0, 0);
-    headerLayout->setSpacing(8);
-    auto* titleLabel = new QLabel(title, headerRow);
-    QFont titleFont = titleLabel->font();
-    titleFont.setWeight(QFont::DemiBold);
-    titleLabel->setFont(titleFont);
-    auto* headerCloseButton = new QToolButton(headerRow);
-    headerCloseButton->setText(QStringLiteral("×"));
-    headerCloseButton->setFixedSize(28, 28);
-    headerCloseButton->setAutoRaise(false);
-    headerCloseButton->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet());
-    headerCloseButton->setToolTip(uiText("dialog.video_export.button.close", QStringLiteral("Close")));
-    headerLayout->addWidget(titleLabel, 1);
-    headerLayout->addWidget(headerCloseButton, 0);
-
-    auto* currentLabel = new QLabel(panel);
-    currentLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    auto* fontCombo = new QComboBox(panel);
-    fontCombo->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
-    fontCombo->setMinimumWidth(320);
-    auto* sampleLabel = new QLabel(panel);
-    sampleLabel->setMinimumWidth(320);
-    sampleLabel->setAlignment(Qt::AlignCenter);
-    sampleLabel->setText(QStringLiteral("12:34:567  TAP  HOLD  SLIDE  101.0000%"));
-    sampleLabel->setStyleSheet(QStringLiteral(
-        "QLabel { min-height: 48px; padding: 8px 10px; border: 1px solid rgba(128,128,128,80);"
-        " border-radius: 8px; background: rgba(128,128,128,20); color: palette(text); }"
-    ));
-
-    populateHudFontCombo(fontCombo, currentHudFontPath());
-
-    const auto refreshDialogFont = [&](const QString& selectedPath = currentHudFontPath()) {
-        populateHudFontCombo(fontCombo, selectedPath);
-        const QString family = miacode::preview::scene::previewHudFontDisplayName();
-        const QString displayName = family == QLatin1String("Default")
-            ? uiText("dialog.video_export.option.hud_font_default", QStringLiteral("Default font"))
-            : family;
-        currentLabel->setText(
-            uiText("dialog.video_export.option.hud_font_current", QStringLiteral("Current font: %1")).arg(displayName)
-        );
-        sampleLabel->setFont(miacode::preview::scene::previewHudTimestampFont(13, QFont::DemiBold));
-    };
-    refreshDialogFont();
-
-    auto* buttonRow = new QWidget(panel);
-    auto* buttonLayout = new QHBoxLayout(buttonRow);
-    buttonLayout->setContentsMargins(0, 0, 0, 0);
-    buttonLayout->setSpacing(8);
-    auto* importButton = new QPushButton(
-        uiText("dialog.video_export.option.import_hud_font", QStringLiteral("Import Font")),
-        buttonRow
-    );
-    auto* resetButton = new QPushButton(
-        uiText("dialog.video_export.option.reset_hud_font", QStringLiteral("Reset")),
-        buttonRow
-    );
-    auto* closeButton = new QPushButton(
-        uiText("dialog.video_export.button.close", QStringLiteral("Close")),
-        buttonRow
-    );
-    importButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    resetButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    closeButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    buttonLayout->addWidget(importButton, 0);
-    buttonLayout->addWidget(resetButton, 0);
-    buttonLayout->addStretch(1);
-    buttonLayout->addWidget(closeButton, 0);
-
-    panelLayout->addWidget(headerRow, 0);
-    panelLayout->addWidget(currentLabel, 0);
-    panelLayout->addWidget(fontCombo, 0);
-    panelLayout->addWidget(sampleLabel, 0);
-    panelLayout->addWidget(buttonRow, 0);
-    layout->addWidget(panel, 0);
-
-    connect(fontCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
-        const QString selectedPath = fontCombo->itemData(index).toString();
-        miacode::preview::scene::setPreviewHudCustomFontPath(selectedPath);
+    // Shared dialog (tools/video_export/HudFontSettings.cpp). The callback
+    // re-renders this dialog's paused preview frame so the new HUD font shows
+    // immediately.
+    miacode::video_export::openHudFontSettingsDialog(this, [this]() {
         refreshLivePreviewHudFont();
-        const QString family = miacode::preview::scene::previewHudFontDisplayName();
-        const QString displayName = family == QLatin1String("Default")
-            ? uiText("dialog.video_export.option.hud_font_default", QStringLiteral("Default font"))
-            : family;
-        currentLabel->setText(
-            uiText("dialog.video_export.option.hud_font_current", QStringLiteral("Current font: %1")).arg(displayName)
-        );
-        sampleLabel->setFont(miacode::preview::scene::previewHudTimestampFont(13, QFont::DemiBold));
     });
-    connect(importButton, &QPushButton::clicked, &dialog, [&]() {
-        const QString importedPath = importHudFontFromUser(&dialog);
-        if (!importedPath.isEmpty()) {
-            refreshDialogFont(importedPath);
-        }
-    });
-    connect(resetButton, &QPushButton::clicked, &dialog, [&]() {
-        resetHudFont();
-        refreshDialogFont(QString());
-    });
-    connect(closeButton, &QPushButton::clicked, &dialog, &QDialog::accept);
-    connect(headerCloseButton, &QToolButton::clicked, &dialog, &QDialog::accept);
-
-    dialog.exec();
-}
-
-void VideoExportDialog::openExportCoverDialog()
-{
-    ExportCoverDialog dialog(baseTask_, selectedResolution(), this);
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-
-    // The cover is written next to the configured video output (falling back to
-    // the chart directory), the same base the export resolves relative paths to.
-    const QString baseDirectory = exportBaseDirectory(baseTask_);
-    const QString resolvedOutput = resolveOutputPathForExport(
-        outputPathEdit_ != nullptr ? outputPathEdit_->text() : QString(),
-        baseDirectory
-    );
-    const QString outputDirectory = resolvedOutput.isEmpty()
-        ? baseDirectory
-        : QFileInfo(resolvedOutput).absolutePath();
-
-    const miacode::cover_export::CoverExportResult result = dialog.exportCover(outputDirectory);
-
-    if (result.success) {
-        QMessageBox::information(
-            this,
-            l10n(QStringLiteral("Export Cover"), QStringLiteral("导出封面")),
-            l10n(QStringLiteral("Cover exported:\n%1"), QStringLiteral("封面已导出：\n%1"))
-                .arg(QDir::toNativeSeparators(result.outputPath))
-        );
-    } else {
-        QMessageBox::warning(
-            this,
-            l10n(QStringLiteral("Export Cover"), QStringLiteral("导出封面")),
-            l10n(QStringLiteral("Cover export failed:\n%1"), QStringLiteral("封面导出失败：\n%1"))
-                .arg(result.errorMessage)
-        );
-    }
-}
-
-QString VideoExportDialog::importHudFontFromUser(QWidget* parent)
-{
-    const QString selected = QFileDialog::getOpenFileName(
-        parent != nullptr ? parent : this,
-        uiText("dialog.video_export.option.import_hud_font", QStringLiteral("Import Font")),
-        QString(),
-        QStringLiteral("Font Files (*.ttf *.otf)")
-    );
-    if (selected.isEmpty()) {
-        return QString();
-    }
-    const QFileInfo info(selected);
-    const QString suffix = info.suffix().toLower();
-    if (!info.isFile() || (suffix != QStringLiteral("ttf") && suffix != QStringLiteral("otf"))) {
-        QMessageBox::warning(
-            parent != nullptr ? parent : this,
-            uiText("dialog.video_export.option.import_hud_font", QStringLiteral("Import Font")),
-            uiText("dialog.video_export.error.invalid_hud_font", QStringLiteral("Please select a .ttf or .otf font file."))
-        );
-        return QString();
-    }
-
-    const int fontId = QFontDatabase::addApplicationFont(info.absoluteFilePath());
-    const QStringList families = fontId >= 0 ? QFontDatabase::applicationFontFamilies(fontId) : QStringList();
-    if (families.isEmpty()) {
-        QMessageBox::warning(
-            parent != nullptr ? parent : this,
-            uiText("dialog.video_export.option.import_hud_font", QStringLiteral("Import Font")),
-            uiText("dialog.video_export.error.invalid_hud_font", QStringLiteral("Please select a .ttf or .otf font file."))
-        );
-        return QString();
-    }
-    const QString targetPath = uniqueHudFontLibraryPath(info);
-    if (!QFile::copy(info.absoluteFilePath(), targetPath)) {
-        QMessageBox::warning(
-            parent != nullptr ? parent : this,
-            uiText("dialog.video_export.option.import_hud_font", QStringLiteral("Import Font")),
-            uiText("dialog.video_export.error.copy_hud_font_failed", QStringLiteral("Failed to copy the font into the font library."))
-        );
-        return QString();
-    }
-    miacode::preview::scene::setPreviewHudCustomFontPath(targetPath);
-    refreshLivePreviewHudFont();
-    return targetPath;
-}
-
-void VideoExportDialog::resetHudFont()
-{
-    miacode::preview::scene::setPreviewHudCustomFontPath(QString());
-    refreshLivePreviewHudFont();
 }
 
 void VideoExportDialog::refreshLivePreviewHudFont()

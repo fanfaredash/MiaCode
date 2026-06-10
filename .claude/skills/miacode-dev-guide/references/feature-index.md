@@ -518,17 +518,27 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     may NOT rebundle (AUTORCC misses the qrc→content dep): delete `build/**/qrc_intro.cpp*` (or
     touch `resources/intro.qrc`) to force RCC.
 - Sub-dialog controls + embedded live composer: `ExportCoverDialog.{h,cpp}` (detailed above);
-  size presets mirror the video-export resolutions, seeded from the current video size, tracked
-  independently.
-- Entry slot: a "导出封面 / Export Cover" button on the **Font** tab of `VideoExportDialog`
-  (`VideoExportDialog::openExportCoverDialog`). It passes the whole `baseTask_` (`VideoExportTask`)
-  to `ExportCoverDialog`: `baseTask_.intro` (`IntroBannerSpec`) drives the card —
-  `MainWindow::ExportSection::onExportPreviewVideo` seeds it via
-  `buildActiveDifficultyIntroBannerSpec()` (wraps `buildIntroBannerSpec` in
-  `MainWindow.ExportSnapshot.cpp`) — and `baseTask_.noteMarkers`/`skinDirectory`/`outlineImagePath`/
-  render-settings/`contentDurationSeconds` feed the chart-frame `SceneFrameRenderer`. Output dir =
-  the configured video output's directory,
-  falling back to the chart dir. **⚠ Note:** `CoverComposer.qml` is a NEW file in `intro.qrc`, so
+  size presets mirror the video-export resolutions, seeded from the persisted video size, tracked
+  independently. **All dialog settings persist to app preferences (2026-06-10):** the whole
+  composition JSON (`exportCompositionJson`) saves under `app.cover_export` (the portable
+  preferences object, same store as `miacode::video_export::loadDialogPreferences`) when the user
+  exports, and silently restores on the next dialog open (`applyCompositionJson(saved,
+  interactive=false)` — fallback notice boxes suppressed).
+- Entry slot (2026-06-10): the toolbar **Export dropdown's "导出封面 / Export Cover"** item →
+  `MainWindow::ExportSection::onExportCover()` (`MainWindow.ExportFlow.cpp`) — the toolbar Export
+  button now only OPENS the dropdown (导出 / 导出封面 / 批量导出; click no longer jumps straight
+  into the export dialog). The seed `VideoExportTask` comes from
+  `ExportSection::buildVideoExportSeedTask()` (extracted from `onExportPreviewVideo`, shared by
+  both): `task.intro` (`IntroBannerSpec`, via `buildActiveDifficultyIntroBannerSpec()` wrapping
+  `buildIntroBannerSpec` in `MainWindow.ExportSnapshot.cpp`) drives the card, and
+  `task.noteMarkers`/`skinDirectory`/`outlineImagePath`/render-settings/`contentDurationSeconds`
+  feed the chart-frame `SceneFrameRenderer`. Output dir = the chart directory. (The former
+  `VideoExportDialog::openExportCoverDialog` + its Font-tab button are REMOVED; the export
+  dialog's Font tab is back to HUD-font-only. The HUD-font settings dialog itself moved to
+  `tools/video_export/HudFontSettings.{h,cpp}` —
+  `miacode::video_export::openHudFontSettingsDialog(parent, onFontChanged)` — shared by the
+  export dialog's Font tab and a new **"字体" tab in the 视频设置 dialog**
+  (`MainWindow.Dialogs.cpp::onPreviewVideoSettings`).) **⚠ Note:** `CoverComposer.qml` is a NEW file in `intro.qrc`, so
   editing it (or `MaimaiBannerCard.qml`) DOES need the AUTORCC repack — delete `build/**/qrc_intro.cpp*`
   / touch `resources/intro.qrc` to force RCC (cf. the over-long-text mirror note above).
 
