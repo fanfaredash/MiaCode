@@ -156,6 +156,30 @@ int main(int argc, char** argv)
     }
 
     {
+        // Same-lane v slides (XvX = out to center, back to the same lane) are
+        // a supported extension shape spliced into slide_data.json. The
+        // opposite-lane form Xv(X+4) stays unsupported on purpose — it is
+        // geometrically identical to the straight slide X-(X+4).
+        const SimaiNativeParseResult sameLaneV = SimaiNativeParser::parseForTimeline(QStringLiteral("1v1[8:1],\nE"));
+        expect(sameLaneV.ok, QStringLiteral("timeline parse accepts same-lane v slide 1v1"));
+        const TimelineNoteMarker* marker = firstSlideLikeMarker(sameLaneV);
+        expect(marker != nullptr, QStringLiteral("same-lane v slide emits a slide marker"));
+        if (marker != nullptr) {
+            expect(marker->slideTrackKey == QStringLiteral("1v1"), QStringLiteral("same-lane v slide resolves shape key 1v1"));
+            expect(marker->endLane == 1, QStringLiteral("same-lane v slide ends on its start lane"));
+            expect(
+                !marker->slideSegmentPoints.isEmpty() && !marker->slideSegmentPoints.constFirst().isEmpty(),
+                QStringLiteral("same-lane v slide carries sampled path geometry"));
+        }
+        const SimaiNativeParseResult strictSameLaneV = SimaiNativeParser::validateSyntax(QStringLiteral("1v1[8:1],\nE"));
+        expect(strictSameLaneV.ok, QStringLiteral("strict validation accepts same-lane v slide 1v1"));
+        const SimaiNativeParseResult chainSameLaneV = SimaiNativeParser::validateSyntax(QStringLiteral("5v5v2[8:1],\nE"));
+        expect(chainSameLaneV.ok, QStringLiteral("same-lane v slide chains with further segments"));
+        const SimaiNativeParseResult oppositeV = SimaiNativeParser::parseForTimeline(QStringLiteral("1v5[8:1],\nE"));
+        expect(!oppositeV.ok, QStringLiteral("opposite-lane v slide 1v5 stays rejected (equals 1-5)"));
+    }
+
+    {
         const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(QStringLiteral("C1b,\nE"));
         expect(parsed.ok, QStringLiteral("lenient parse accepts C1 with b modifier"));
         expect(!parsed.noteMarkers.isEmpty(), QStringLiteral("C1 lenient parse emits marker"));

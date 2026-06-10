@@ -100,6 +100,18 @@ Rules going forward:
 - Asset areas: `assets/skin` (`skinSTD`/`skinDX` + user skins), `assets/SFX`,
   `assets/background` (+ `outlines/` custom judge-line PNGs), `assets/noteguide`,
   `assets/generated` (`slide_data.json`), `assets/fonts`.
+- `slide_data.json` is the single source of slide-shape support (parser "unknown shape"
+  errors, preview geometry, and Muri judge data all key into it; embedded via
+  `resources/fonts.qrc` as `:/data/slide_data.json` — touch the qrc after editing the
+  json, AUTORCC misses the dep). Same-lane v slides (`1v1`..`8v8`, out to center and
+  back) are an editor extension spliced from the MajdataPlay-dump donor entries by
+  `scripts/gen_same_lane_v_slides.py` (idempotent); opposite-lane `Xv(X+4)` stays
+  unsupported on purpose — it is identical to the straight slide `X-(X+4)`. Return-leg
+  track arrows mirror the inbound arrows IN PLACE (same positions, flipped rotation)
+  instead of continuing the equidistant generation — staggered opposite arrows on the
+  shared segment read as a broken track. Data conventions the script relies on: arrow
+  arrays are stored in reverse travel order (a C area lists its outbound arrows first),
+  rotation is uniform per straight leg.
 - Qt resources: `resources/{app_icons,fonts,preview_runtime_qml,quick_shell_qml}.qrc`.
 - Chart-directory conventions: `maidata.txt`, `track.mp3` (`track_bak.mp3`), background
   `bg.mp4`/`pv.mp4`/`bg.{jpg,png,jpeg}` (or `&video=` target; `<stem>_bak.mp4`), project sidecar
