@@ -114,6 +114,8 @@ below is exactly the severity displayed in the UI.
 | 15 | Misplaced slide-head modifier (`?` / `!` / `@`) | Error | `Driver.cpp` `detectMisplacedSlideHeadModifierMessage` / `kMisplacedSlideHeadModifierPrefix` | These characters are slide-only head modifiers. Strict requires every `?`/`!`/`@` to sit at index `[1, firstShapeIdx)` of a token that contains a slide-shape character (`-^v<>VpqszwW`). Order with `b`/`x` is unrestricted. Examples: `1!`, `1h@`, `1-5![8:1]`, `1-?5[8:1]` all reject; `1!-5[8:1]`, `1x?-5[8:1]`, `1@bx-5[8:1]` all pass. |
 | 16 | Misplaced tap-star modifier (`$` / `$$`) | Error | `Driver.cpp` `detectMisplacedTapStarModifierMessage` / `kMisplacedTapStarModifierPrefix` | `$` is a tap-only modifier (sets `tapUsesStarMaterial`; `$$` adds `tapStarDouble`). Strict rejects `$` in any token that is not a pure tap — i.e., any token that is non-digit-led, contains a slide-shape char, contains `[…]`, or contains `h` (case-insensitive). Combination with `b` / `x` in either order is fine: `1$`, `1$$`, `1b$`, `1$x`, `1$bx`, `1bx$$` all pass; `A1$`, `1-5$[8:1]`, `1h$`, `1$h[1:1]` all reject. |
 | 17 | Invalid slide chain syntax | Error | `SimaiNativeParser.cpp` `isValidSlideChainStrict` / `kInvalidSlideChainPrefix` invoked from `Slide.cpp::parseSlideToken` | Walks the slide core (after `*` split + head reconstruction + `b` strip) and verifies every character is consumed by a valid construct. **Lane digits.** Head digit must be 1-8; every shape's destination digit(s) must be 1-8. **Shape format.** `V` requires exactly two trailing 1-8 digits; `p` / `q` require either one digit (single loop) or another `p`/`q` followed by one digit (double loop `pp` / `qq`); each of `-^v<>szw` requires exactly one trailing 1-8 digit. **No orphan chars.** Any non-shape, non-bracket character that is not consumed by a shape's trailing-digit slot is rejected — this is what catches the silent-skip behavior of the lenient chain parser, which would otherwise drop the stray `5` in `1v35-7[8:1]` and parse it as `[1v3, 3-7]`. **At least one shape.** A bracket-only token (e.g. `1[8:1]`) is rejected, though that token is routed to the hold path upstream and never reaches this check anyway. **Chain linking is implicit** — each shape's source is the previous shape's destination, so the chain auto-links if the digit-counts are right. **Geometric validity** of (start, V, via, end) is _not_ checked here — that is enforced by the existing slide-data lookup at `Slide.cpp:147`, which already errors on unknown shape keys in both modes (e.g. `1V32` rejects today). |
+| 18 | Missing `,` between note and directive | Warning | `Driver.cpp` `warnDirectiveAfterNote` / `kMissingCommaBeforeDirectivePrefix` | A `{N}` / `(BPM)` / `<HS*N>` directive that directly follows a note with no `,` in between — usually a forgotten beat separator. Tracking survives whitespace AND line breaks (the canonical repro is `{16} 1,1,1,1,1` ↵ `{16},,,` — line 1 ends on a bare note). One warning per forgotten `,`: a directive run like `1{16}(120)` flags only the first directive. Reset by `,` only. |
+| 19 | `*` slide branch carrying a head digit | Error | `Slide.cpp::parseSlideToken` `*`-split loop / `kInvalidSlideStarBranchPrefix` | A same-head `*` branch must be a headless slide body: `5q2[4:1]*p8[4:1]` is canonical; `5q2[4:1]*5p8[4:1]` and `5q2[4:1]*4p8[4:1]` reject. The digit after `*` is NOT a new head — lenient parsing substitutes the shared head lane for it (`*4p8[4:1]` silently becomes `5p8[4:1]`), which is why strict must flag it. Flagged once per token; lenient substitution still runs so the chart previews. |
 
 The `runStrictFormatChecks(state, lines)` pass at `Driver.cpp:652` runs
 **after** the main parse loop. It strips control blocks `( … )`, `{ … }`,
@@ -138,19 +140,32 @@ strict-only checks #11–#13.
 
 The parser **does not enforce a canonical order on `b / x / h / f`**.
 `parseTapModifierSequence` (`SimaiNativeParser.cpp:90+`) iterates the
-modifier characters and only rejects **duplicates**. So all of
-`1bx`, `1xb`, `1xh`, `1hx`, `1bhxf`, `1fxhb` parse identically.
+modifier characters and only rejects **duplicates** and **uppercase
+`B` / `X`** (modifiers are lowercase-only). So all of
+`1bx`, `1xb`, `1xh`, `1hx`, `1bhxf`, `1fxhb` parse identically, while
+`2B` / `2X` reject.
 
 The Chinese display string "Hold 修饰符顺序无效" historically reads as
 "modifier order invalid," but the underlying English message
-`Invalid hold modifier sequence: <token>` actually fires for two
-distinct conditions, **both of which are mode-independent (lenient AND
+`Invalid hold modifier sequence: <token>` actually fires for these
+distinct conditions, **all of which are mode-independent (lenient AND
 strict)**:
 
 | Condition | Source | Example |
 |---|---|---|
 | Duplicate modifier in prefix or suffix | `parseTapModifierSequence` returns `false` → `TouchTap.cpp:126` | `1bb`, `1xx`, `1hh` |
+| Uppercase `B` / `X` modifier | `containsUppercaseTapBreakOrExModifier` → `parseTapModifierSequence` returns `false` | `2B`, `2X` |
 | `h` modifier appears in the suffix after `]` | `TouchTap.cpp:119-122` | `1[4:1]h`, `1x[4:1]h` |
+
+Two related mode-independent tightenings live outside
+`parseTapModifierSequence`:
+
+- **Touch notes reject `x`.** `parseTouchSuffix` no longer accepts `x`
+  on touch / touch-hold tokens (touch EX is not a thing); `B1x`, `Cx`,
+  `A1fxh[4:1]` all error with `kInvalidTouchModifierPrefix`.
+- **Slide heads reject uppercase `B` / `X`.**
+  `parseSlideHeadModifierPrefix` returns `false` on them, so `2X-6[8:1]`
+  / `2B-6[8:1]` fall through to the generic invalid-note path.
 
 The strict-only Warning `kNonCanonicalHoldModifierPlacementPrefix`
 (checks #6 / #7) is a **separate condition** about modifier *placement*
@@ -232,6 +247,9 @@ participates. The strict severity is the UI severity.
 | `1//5` (repeated `/`) | **Error** | `kRepeatedSlashSeparator` |
 | `` 1``5 `` (repeated `` ` ``) | **Error** | `kRepeatedBacktickSeparator` |
 | `1bb` (duplicate `b` modifier) | **Error** | `parseTapModifierSequence` returns `false` (mode-independent) |
+| `2B` / `2X` (uppercase modifier on a tap) | **Error** | `containsUppercaseTapBreakOrExModifier` → `parseTapModifierSequence` returns `false` (mode-independent) |
+| `2B-6[8:1]` / `2X-6[8:1]` (uppercase modifier on a slide head) | **Error** | `parseSlideHeadModifierPrefix` returns `false` → generic invalid-note path (mode-independent). `B2` / `B4` stay valid touch notes. |
+| `B1x` / `Cx` / `C2x` (`x` on a touch) | **Error** | `parseTouchSuffix` rejects `x` → `kInvalidTouchModifierPrefix` (mode-independent) |
 | `1[4:1]h` (`h` after duration block) | **Error** | `TouchTap.cpp:119-122` (mode-independent) |
 | `1h[4:1]x` (tap/hold non-canonical modifier placement) | **Warning** | `kNonCanonicalHoldModifierPlacementPrefix` (`TouchTap.cpp:169-178`) |
 | `Ah[4:1]b` (touch_hold non-canonical modifier placement) | **Warning** | `kNonCanonicalHoldModifierPlacementPrefix` (`TouchTap.cpp:71-80`) |

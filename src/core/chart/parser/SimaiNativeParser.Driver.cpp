@@ -194,6 +194,18 @@ const QString& kMissingBeatSeparator()
     return value;
 }
 
+const QString& kMissingCommaBeforeDirectivePrefix()
+{
+    static const QString value = QStringLiteral("Missing ',' between note and directive: ");
+    return value;
+}
+
+const QString& kInvalidSlideStarBranchPrefix()
+{
+    static const QString value = QStringLiteral("Invalid '*' slide branch (must omit the slide head): ");
+    return value;
+}
+
 const QString& kRepeatedSlashSeparator()
 {
     static const QString value = QStringLiteral("Repeated separator '//' is not allowed");
@@ -289,6 +301,8 @@ const QHash<QString, QString>& zhPrefixMap()
         {kMisplacedSlideHeadModifierPrefix(), QStringLiteral("Slide head 修饰符（?、!、@）只能出现在 slide head 与 shape 之间：")},
         {kMisplacedTapStarModifierPrefix(), QStringLiteral("Tap-star 修饰符（$）只能出现在 tap 中：")},
         {kInvalidSlideChainPrefix(), QStringLiteral("Slide 段链语法无效：")},
+        {kMissingCommaBeforeDirectivePrefix(), QStringLiteral("音符与指令（{} () <HS*>）之间缺少分隔符 ','：")},
+        {kInvalidSlideStarBranchPrefix(), QStringLiteral("'*' 同头 Slide 分支语法无效（* 后必须省略 slide 头部，如 5q2[4:1]*p8[4:1]）：")},
         {kFullwidthDigitPrefix(), QStringLiteral("检测到全角数字，请改用半角数字：")},
         {kFullwidthTouchRegionPrefix(), QStringLiteral("检测到全角触摸区域字母，请改用半角区域字母：")},
         {kFullwidthModifierPrefix(), QStringLiteral("检测到全角修饰符，请改用半角修饰符：")},
@@ -325,6 +339,8 @@ const QVector<QString>& zhPrefixOrder()
         kMisplacedSlideHeadModifierPrefix(),
         kMisplacedTapStarModifierPrefix(),
         kInvalidSlideChainPrefix(),
+        kMissingCommaBeforeDirectivePrefix(),
+        kInvalidSlideStarBranchPrefix(),
         kFullwidthDigitPrefix(),
         kFullwidthTouchRegionPrefix(),
         kFullwidthModifierPrefix(),
@@ -609,6 +625,12 @@ SimaiNativeParseResult parseInternal(
     bool eachOperandPending = false;
     int pendingSeparatorCol = -1;
     bool initializedMeasureLines = false;
+    // Strict-mode tracking for directives ({beats}, (bpm), <HS*N>) that directly
+    // follow a note with no ',' in between — usually a forgotten beat separator
+    // (e.g. "{16} 1,1,1,1,1\n{16},,,"). True once a note character has been read
+    // since the last ','; deliberately survives whitespace and line breaks
+    // because neither is a beat separator.
+    bool noteSinceComma = false;
 
     const auto flushToken = [&](int lineNumber) {
         if (token.isEmpty()) {
@@ -616,6 +638,22 @@ SimaiNativeParseResult parseInternal(
         }
         parseToken(&state, token, lineNumber, tokenColumn, &currentGroup);
         token.clear();
+    };
+    const auto warnDirectiveAfterNote = [&](int lineNumber, const QString& line, int openIndex, int closeIndex) {
+        if (!strictMode || !noteSinceComma) {
+            return;
+        }
+        appendTokenWarning(
+            &state,
+            lineNumber,
+            openIndex + 1,
+            ValidationMessage::kMissingCommaBeforeDirectivePrefix()
+                + line.mid(openIndex, closeIndex - openIndex + 1),
+            closeIndex + 1
+        );
+        // One warning per forgotten ',' — a directive run like "1{16}(120)"
+        // is a single missing separator, not two.
+        noteSinceComma = false;
     };
     const auto advanceMeasureLinesTo = [&](double targetSecond) {
         const double measureDuration = measureDurationSeconds(
@@ -679,6 +717,7 @@ SimaiNativeParseResult parseInternal(
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kUnterminatedBpmBlock());
                     break;
                 }
+                warnDirectiveAfterNote(lineNumber, line, i, close);
                 bool bpmOk = false;
                 const double bpm = line.mid(i + 1, close - i - 1).trimmed().toDouble(&bpmOk);
                 if (!bpmOk || bpm <= 0.0) {
@@ -701,6 +740,7 @@ SimaiNativeParseResult parseInternal(
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kUnterminatedBeatBlock());
                     break;
                 }
+                warnDirectiveAfterNote(lineNumber, line, i, close);
                 bool beatsOk = false;
                 const int beats = line.mid(i + 1, close - i - 1).trimmed().toInt(&beatsOk);
                 if (!beatsOk || beats <= 0) {
@@ -747,6 +787,7 @@ SimaiNativeParseResult parseInternal(
                         appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kUnterminatedHsBracket());
                         break;
                     }
+                    warnDirectiveAfterNote(lineNumber, line, i, close);
                     bool hsOk = false;
                     const double hs = line.mid(i + 4, close - i - 4).trimmed().toDouble(&hsOk);
                     if (!hsOk || !(hs > 0.0)) {
@@ -819,6 +860,7 @@ SimaiNativeParseResult parseInternal(
                 }
                 eachOperandPending = false;
                 pendingSeparatorCol = -1;
+                noteSinceComma = false;
                 flushToken(lineNumber);
                 finalizeEachGroup(&state, currentGroup);
                 currentGroup.clear();
@@ -852,6 +894,7 @@ SimaiNativeParseResult parseInternal(
             // waiting for, and becomes the left operand for any following one.
             eachOperandPending = true;
             pendingSeparatorCol = -1;
+            noteSinceComma = true;
         }
 
         if (strictMode && pendingSeparatorCol >= 0) {

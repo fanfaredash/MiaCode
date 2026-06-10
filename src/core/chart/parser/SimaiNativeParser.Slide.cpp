@@ -39,13 +39,29 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
         const QString prefix = token.left(1) + modifierState.rawModifiers;
         const QChar startLane = token.at(0);
         const QStringList branches = noteCore.split(QChar('*'), Qt::KeepEmptyParts);
-        for (const QString& branchRaw : branches) {
-            QString branch = branchRaw;
+        bool flaggedHeadedBranch = false;
+        for (int branchIndex = 0; branchIndex < branches.size(); ++branchIndex) {
+            QString branch = branches.at(branchIndex);
             if (branch.isEmpty()) {
                 continue;
             }
             if (!isDigitLane(branch.at(0))) {
                 branch.prepend(startLane);
+            } else if (branchIndex > 0 && state->strictMode && !flaggedHeadedBranch) {
+                // A '*' branch must be a headless slide body (`5q2[4:1]*p8[4:1]`).
+                // Repeating a lane digit after '*' is a syntax error — the digit
+                // is NOT a new head; lenient parsing below substitutes the shared
+                // head lane for it, so `5q2[4:1]*4p8[4:1]` silently becomes
+                // 5p8[4:1]. Flag once and keep that lenient substitution so the
+                // chart still previews.
+                appendTokenError(
+                    state,
+                    lineNumber,
+                    column,
+                    QString("Invalid '*' slide branch (must omit the slide head): %1").arg(token),
+                    column + token.size() - 1
+                );
+                flaggedHeadedBranch = true;
             }
             const QString branchToken = prefix + branch.mid(1);
             parseSlideToken(state, branchToken, lineNumber, column, groupIndices);

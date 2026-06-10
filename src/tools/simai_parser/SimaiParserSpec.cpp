@@ -167,8 +167,15 @@ int main(int argc, char** argv)
     }
 
     {
+        // Strict accepts C1/C2 as aliases for C (same normalization as the
+        // lenient pass) and flags the non-canonical form as warning-only.
         const SimaiNativeParseResult strictC1 = SimaiNativeParser::validateSyntax(QStringLiteral("C1,\nE"));
-        expect(!strictC1.ok, QStringLiteral("validate rejects C1/C2 form"));
+        expect(strictC1.ok, QStringLiteral("validate accepts C1/C2 form as a non-canonical alias for C"));
+        expect(strictC1.errors.isEmpty(), QStringLiteral("C1/C2 form emits no strict error"));
+        expect(
+            !strictC1.warnings.isEmpty()
+                && strictC1.warnings.constFirst().message.startsWith(QStringLiteral("Non-canonical center touch token")),
+            QStringLiteral("validate flags C1/C2 form with a non-canonical touch warning"));
     }
 
     {
@@ -206,8 +213,18 @@ int main(int argc, char** argv)
         const SimaiNativeParseResult lenientTailB = SimaiNativeParser::parseForTimeline(QStringLiteral("1-5[8:1]b,\nE"));
 
         expect(strictOk.ok, QStringLiteral("validate accepts break slide b before duration block"));
-        expect(!strictTailB.ok, QStringLiteral("validate rejects break slide b after duration block"));
-        expect(!strictMidB.ok, QStringLiteral("validate rejects break slide b inside shape chain"));
+        expect(strictOk.warnings.isEmpty(), QStringLiteral("canonical break slide b position stays warning-free"));
+        // Non-canonical b placement is warning-only; the slide still parses
+        // (with trackBreak set) instead of being dropped from the markers.
+        expect(strictTailB.ok && strictTailB.errors.isEmpty(),
+            QStringLiteral("validate keeps break slide b after duration block warning-only"));
+        expect(
+            !strictTailB.warnings.isEmpty()
+                && strictTailB.warnings.constFirst().message.startsWith(QStringLiteral("Invalid break slide modifier position")),
+            QStringLiteral("break slide b after duration block emits position warning"));
+        expect(!strictTailB.noteMarkers.isEmpty(), QStringLiteral("non-canonical break slide b still emits slide marker"));
+        expect(strictMidB.ok && !strictMidB.warnings.isEmpty(),
+            QStringLiteral("validate keeps break slide b inside shape chain warning-only"));
         expect(lenientTailB.ok, QStringLiteral("timeline parse keeps lenient break slide b position"));
     }
 
@@ -257,8 +274,14 @@ int main(int argc, char** argv)
         const SimaiNativeParseResult strictBeatInvalid = SimaiNativeParser::validateSyntax(QStringLiteral("{10}1,\nE"));
         const SimaiNativeParseResult strictBeatValid = SimaiNativeParser::validateSyntax(QStringLiteral("{12}1,\nE"));
         expect(lenientBeat.ok, QStringLiteral("lenient parse accepts non-divisor beat value"));
-        expect(!strictBeatInvalid.ok, QStringLiteral("validate rejects beat value that is not a positive divisor of 384"));
-        expect(strictBeatValid.ok, QStringLiteral("validate accepts beat value that divides 384"));
+        expect(strictBeatInvalid.ok && strictBeatInvalid.errors.isEmpty(),
+            QStringLiteral("validate keeps beat value that is not a positive divisor of 384 warning-only"));
+        expect(
+            !strictBeatInvalid.warnings.isEmpty()
+                && strictBeatInvalid.warnings.constFirst().message.contains(QStringLiteral("positive divisor of 384")),
+            QStringLiteral("non-divisor beat value emits 384-divisor warning"));
+        expect(strictBeatValid.ok && strictBeatValid.warnings.isEmpty(),
+            QStringLiteral("validate accepts beat value that divides 384"));
     }
 
     {
@@ -571,6 +594,114 @@ int main(int argc, char** argv)
     }
 
     {
+        // A directive ({beats}, (bpm), <HS*N>) directly following a note with no
+        // ',' in between is a strict-mode warning — usually a forgotten beat
+        // separator. The reference repro spans a line break: line 1 ends on a
+        // bare note, line 2 opens with the next {beats} block.
+        const QString missingCommaPrefix = QStringLiteral("Missing ',' between note and directive: ");
+        const SimaiNativeParseResult strictBeatDirective = SimaiNativeParser::validateSyntax(
+            QStringLiteral("{16}1,1,1,1,1\n{16},,,\nE"));
+        expect(strictBeatDirective.ok && strictBeatDirective.errors.isEmpty(),
+            QStringLiteral("note directly before {beats} directive stays warning-only"));
+        expect(
+            strictBeatDirective.warnings.size() == 1
+                && strictBeatDirective.warnings.constFirst().message == missingCommaPrefix + QStringLiteral("{16}"),
+            QStringLiteral("note directly before {beats} directive emits one missing-comma warning"));
+        if (strictBeatDirective.warnings.size() == 1) {
+            expect(
+                strictBeatDirective.warnings.constFirst().line == 2
+                    && strictBeatDirective.warnings.constFirst().col == 1,
+                QStringLiteral("missing-comma warning points at the directive position"));
+        }
+
+        const SimaiNativeParseResult strictBeatDirectiveOk = SimaiNativeParser::validateSyntax(
+            QStringLiteral("{16}1,1,1,1,1,\n{16},,,\nE"));
+        expect(strictBeatDirectiveOk.ok && strictBeatDirectiveOk.warnings.isEmpty(),
+            QStringLiteral("trailing ',' before the next {beats} directive stays warning-free"));
+
+        const SimaiNativeParseResult strictBpmDirective = SimaiNativeParser::validateSyntax(
+            QStringLiteral("1(120)2,\nE"));
+        expect(
+            strictBpmDirective.warnings.size() == 1
+                && strictBpmDirective.warnings.constFirst().message == missingCommaPrefix + QStringLiteral("(120)"),
+            QStringLiteral("note directly before (bpm) directive emits missing-comma warning"));
+
+        const SimaiNativeParseResult strictHsDirective = SimaiNativeParser::validateSyntax(
+            QStringLiteral("1<HS*2>2,\nE"));
+        expect(
+            strictHsDirective.warnings.size() == 1
+                && strictHsDirective.warnings.constFirst().message == missingCommaPrefix + QStringLiteral("<HS*2>"),
+            QStringLiteral("note directly before <HS*N> directive emits missing-comma warning"));
+
+        // A directive run after one note is a single forgotten ',', not two.
+        const SimaiNativeParseResult strictDirectiveRun = SimaiNativeParser::validateSyntax(
+            QStringLiteral("1{16}(120)2,\nE"));
+        expect(strictDirectiveRun.warnings.size() == 1,
+            QStringLiteral("directive run after a note emits one missing-comma warning"));
+
+        // Lenient (timeline) parsing stays quiet.
+        const SimaiNativeParseResult lenientBeatDirective = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("{16}1,1,1,1,1\n{16},,,\nE"));
+        expect(lenientBeatDirective.ok && lenientBeatDirective.warnings.isEmpty(),
+            QStringLiteral("lenient parse stays quiet for note directly before directive"));
+
+        const SimaiNativeValidationReport zhDirectiveReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("{16}1,1,1,1,1\n{16},,,\nE"),
+            SimaiNativeValidationLocale::Chinese
+        );
+        expect(
+            !zhDirectiveReport.issues.isEmpty()
+                && zhDirectiveReport.issues.constFirst().displayMessage.contains(QStringLiteral("缺少分隔符")),
+            QStringLiteral("zh report localizes missing-comma-before-directive warning"));
+    }
+
+    {
+        // A '*' same-head slide branch must omit the slide head: `5q2[4:1]*p8[4:1]`
+        // is canonical, `5q2[4:1]*5p8[4:1]` is a strict syntax error (the digit
+        // after '*' is not a new head — lenient parsing substitutes the shared
+        // head lane, so `*4p8[4:1]` silently becomes 5p8[4:1]).
+        const QString starBranchPrefix = QStringLiteral("Invalid '*' slide branch (must omit the slide head): ");
+        const SimaiNativeParseResult strictHeadless = SimaiNativeParser::validateSyntax(
+            QStringLiteral("5q2[4:1]*p8[4:1],\nE"));
+        expect(strictHeadless.ok && strictHeadless.errors.isEmpty(),
+            QStringLiteral("validate accepts headless '*' slide branch"));
+
+        const SimaiNativeParseResult strictSameHead = SimaiNativeParser::validateSyntax(
+            QStringLiteral("5q2[4:1]*5p8[4:1],\nE"));
+        expect(!strictSameHead.ok, QStringLiteral("validate rejects '*' branch repeating the same head digit"));
+        expect(
+            strictSameHead.errors.size() == 1
+                && strictSameHead.errors.constFirst().message.startsWith(starBranchPrefix),
+            QStringLiteral("'*' branch with repeated head emits one star-branch error"));
+
+        const SimaiNativeParseResult strictOtherHead = SimaiNativeParser::validateSyntax(
+            QStringLiteral("5q2[4:1]*4p8[4:1],\nE"));
+        expect(!strictOtherHead.ok, QStringLiteral("validate rejects '*' branch with a different head digit"));
+
+        // Lenient keeps the historical substitution so the chart still previews.
+        const SimaiNativeParseResult lenientSameHead = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("5q2[4:1]*5p8[4:1],\nE"));
+        expect(lenientSameHead.ok, QStringLiteral("lenient parse keeps accepting headed '*' branch"));
+        int starSlideCount = 0;
+        for (const TimelineNoteMarker& marker : lenientSameHead.noteMarkers) {
+            if (marker.type == QLatin1String("slide")) {
+                ++starSlideCount;
+                expect(marker.lane == 5, QStringLiteral("lenient headed '*' branch keeps the shared head lane"));
+            }
+        }
+        expect(starSlideCount == 2, QStringLiteral("lenient headed '*' branch still emits both slides"));
+
+        const SimaiNativeValidationReport zhStarReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("5q2[4:1]*5p8[4:1],\nE"),
+            SimaiNativeValidationLocale::Chinese
+        );
+        expect(
+            !zhStarReport.issues.isEmpty()
+                && zhStarReport.issues.constFirst().displayMessage.contains(QStringLiteral("省略 slide 头部")),
+            QStringLiteral("zh report localizes '*' slide branch error"));
+    }
+
+    {
         const SimaiNativeParseResult lenientInlineLowerTerminal = SimaiNativeParser::parseForTimeline(QStringLiteral("1,e"));
         const SimaiNativeParseResult strictInlineLowerTerminal = SimaiNativeParser::validateSyntax(QStringLiteral("1,e"));
         const SimaiNativeParseResult strictInlineUpperTerminal = SimaiNativeParser::validateSyntax(QStringLiteral("{1},E"));
@@ -656,18 +787,36 @@ int main(int argc, char** argv)
     }
 
     {
-        const SimaiNativeValidationReport zhReport = SimaiNativeParser::buildValidationReport(
-            QStringLiteral("1\nE"),
+        const SimaiNativeValidationReport zhWarningReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("{10}1,\nE"),
             SimaiNativeValidationLocale::Chinese
         );
-        expect(zhReport.ok, QStringLiteral("zh validation report stays ok on warning-only strict issue"));
-        if (!zhReport.issues.isEmpty()) {
+        expect(zhWarningReport.ok, QStringLiteral("zh validation report stays ok on warning-only strict issue"));
+        if (!zhWarningReport.issues.isEmpty()) {
             expect(
-                zhReport.issues.constFirst().displayMessage.startsWith(QStringLiteral("[警告]")),
+                zhWarningReport.issues.constFirst().displayMessage.startsWith(QStringLiteral("[警告]")),
                 QStringLiteral("zh report uses chinese warning prefix for strict-only issue")
             );
             expect(
-                zhReport.issues.constFirst().displayMessage.contains(QStringLiteral("缺少拍间分隔符")),
+                zhWarningReport.issues.constFirst().displayMessage.contains(QStringLiteral("分拍数值可能导致转谱错误")),
+                QStringLiteral("zh report localizes strict warning detail")
+            );
+        }
+
+        // Missing beat separator stays a hard error — validation severity is
+        // whatever the strict parser emits; there is no lenient downgrade.
+        const SimaiNativeValidationReport zhErrorReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("1\nE"),
+            SimaiNativeValidationLocale::Chinese
+        );
+        expect(!zhErrorReport.ok, QStringLiteral("zh validation report fails on missing beat separator"));
+        if (!zhErrorReport.issues.isEmpty()) {
+            expect(
+                zhErrorReport.issues.constFirst().displayMessage.startsWith(QStringLiteral("[错误]")),
+                QStringLiteral("zh report uses chinese error prefix for strict error")
+            );
+            expect(
+                zhErrorReport.issues.constFirst().displayMessage.contains(QStringLiteral("缺少拍间分隔符")),
                 QStringLiteral("zh report localizes strict message detail")
             );
         }

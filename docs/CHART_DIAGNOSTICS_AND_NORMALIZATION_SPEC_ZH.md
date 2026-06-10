@@ -106,6 +106,8 @@ time-signature 摆放风格。这些都是 strict-only。Lenient pass 在
 | 15 | Slide head 修饰符位置错误（`?` / `!` / `@`） | Error | `Driver.cpp` `detectMisplacedSlideHeadModifierMessage` / `kMisplacedSlideHeadModifierPrefix` | 这三个字符是仅 slide 才有的 head 修饰符。strict 要求每个 `?`/`!`/`@` 必须落在 token 中的 `[1, firstShapeIdx)` 范围内（`firstShapeIdx` 是 token 中第一个 slide shape 字符的下标，shape 字符集为 `-^v<>VpqszwW`）。它们与 `b`/`x` 的相对顺序没有限制。例如 `1!`、`1h@`、`1-5![8:1]`、`1-?5[8:1]` 都会被拒绝；`1!-5[8:1]`、`1x?-5[8:1]`、`1@bx-5[8:1]` 都通过。 |
 | 16 | Tap-star 修饰符位置错误（`$` / `$$`） | Error | `Driver.cpp` `detectMisplacedTapStarModifierMessage` / `kMisplacedTapStarModifierPrefix` | `$` 是仅 tap 才有的修饰符（设置 `tapUsesStarMaterial`，`$$` 额外置 `tapStarDouble`）。strict 拒绝 `$` 出现在任何非纯 tap 的 token 中 —— 即非数字开头、含 slide shape 字符、含 `[…]`、或含 `h`（不区分大小写）的任意 token。与 `b`/`x` 的任意顺序组合都允许：`1$`、`1$$`、`1b$`、`1$x`、`1$bx`、`1bx$$` 都通过；`A1$`、`1-5$[8:1]`、`1h$`、`1$h[1:1]` 都拒绝。 |
 | 17 | Slide 段链语法无效 | Error | `SimaiNativeParser.cpp` `isValidSlideChainStrict` / `kInvalidSlideChainPrefix`，由 `Slide.cpp::parseSlideToken` 调用 | 在 `*` 拆分 + head 还原 + 剥掉 `b` 之后，逐字符走过 slide core，确保每个字符都被一个合法构造消费。**Lane 数字。** head 必须是 1-8；每个 shape 的尾随数字也必须是 1-8。**Shape 格式。** `V` 必须紧跟两个 1-8 数字；`p` / `q` 后可跟一个数字（单环），或再跟一个相同字符再跟一个数字（双环 `pp` / `qq`）；`-^v<>szw` 中每个字符后必须恰好跟一个 1-8 数字。**无 orphan 字符。** 任何不是 shape / 不是 `[`、且未被任何 shape 的尾随数字槽消费的字符，都会被拒绝 —— 这正是用来抓 lenient chain parser 的 silent-skip：例如 `1v35-7[8:1]` 中的 `5` 会被 lenient 默默丢掉，parse 成 `[1v3, 3-7]`。**至少一个 shape。** 整段只有 bracket 的 token（如 `1[8:1]`）会被拒绝（不过这种 token 在上游 dispatch 时就走 hold 分支了，不会进到本检查）。**Chain 自动连接** —— 每个 shape 的 source 就是上一段的 destination，只要数字位数正确，chain 自然连得起来。**几何合法性**（start, V, via, end 是否真是合法的 V 组合）_不_ 在这里检查 —— 那是 `Slide.cpp:147` 已有的 slide-data 查表负责的，两种模式下都会对未知 shape key 报错（如 `1V32` 今天就已经会被拒绝）。 |
+| 18 | 音符与指令之间缺少 `,` | Warning | `Driver.cpp` `warnDirectiveAfterNote` / `kMissingCommaBeforeDirectivePrefix` | `{N}` / `(BPM)` / `<HS*N>` 指令紧跟在音符之后、中间没有 `,` —— 通常是漏写了拍间分隔符。追踪状态跨越空白与换行（典型 repro：`{16} 1,1,1,1,1` ↵ `{16},,,` —— 第一行以裸音符结尾）。每个漏掉的 `,` 只报一次：`1{16}(120)` 这样的指令连串只在第一个指令处报警。只有 `,` 会复位该状态。 |
+| 19 | `*` slide 分支携带 head 数字 | Error | `Slide.cpp::parseSlideToken` 的 `*` 拆分循环 / `kInvalidSlideStarBranchPrefix` | 同头 `*` 分支必须写成去掉头部的 slide：`5q2[4:1]*p8[4:1]` 是典范写法；`5q2[4:1]*5p8[4:1]` 与 `5q2[4:1]*4p8[4:1]` 都拒绝。`*` 后面的数字**不是**新的 head —— lenient 解析会把它替换为共享的 head lane（`*4p8[4:1]` 会被默默解析成 `5p8[4:1]`），所以 strict 必须把它标成错误。每个 token 只报一次；lenient 的替换行为保持不变，谱面仍可预览。 |
 
 `runStrictFormatChecks(state, lines)` 在 `Driver.cpp:652` 即主 parse loop
 之**后**才跑。它会先剥掉控制块 `( … )`、`{ … }`、`<HS* … >`、以及整行
@@ -128,17 +130,28 @@ time-signature 摆放风格。这些都是 strict-only。Lenient pass 在
 
 Parser **不强制 `b / x / h / f` 的典范字母顺序**。
 `parseTapModifierSequence`（`SimaiNativeParser.cpp:90+`）按字符迭代，
-**仅在出现重复时拒绝**。也就是说 `1bx`、`1xb`、`1xh`、`1hx`、`1bhxf`、
-`1fxhb` parse 出来都一样。
+**仅在出现重复或大写 `B` / `X` 时拒绝**（修饰符只接受小写）。也就是说
+`1bx`、`1xb`、`1xh`、`1hx`、`1bhxf`、`1fxhb` parse 出来都一样，而
+`2B` / `2X` 会被拒绝。
 
 中文显示串「Hold 修饰符顺序无效」历史上读起来像「顺序错」，但底层
-英文 `Invalid hold modifier sequence: <token>` 实际上对应两种条件，
-**两种都与模式无关（lenient 和 strict 都报）**：
+英文 `Invalid hold modifier sequence: <token>` 实际上对应以下几种条件，
+**全部与模式无关（lenient 和 strict 都报）**：
 
 | 条件 | 来源 | 例子 |
 |---|---|---|
 | 前缀或后缀里出现重复修饰符 | `parseTapModifierSequence` 返回 `false` → `TouchTap.cpp:126` | `1bb`、`1xx`、`1hh` |
+| 大写 `B` / `X` 修饰符 | `containsUppercaseTapBreakOrExModifier` → `parseTapModifierSequence` 返回 `false` | `2B`、`2X` |
 | `]` 之后的后缀里出现 `h` 修饰符 | `TouchTap.cpp:119-122` | `1[4:1]h`、`1x[4:1]h` |
+
+另有两处与模式无关的收紧不在 `parseTapModifierSequence` 内：
+
+- **Touch 音符拒绝 `x`。** `parseTouchSuffix` 不再接受 touch /
+  touch-hold token 上的 `x`（touch EX 并不存在）；`B1x`、`Cx`、
+  `A1fxh[4:1]` 都以 `kInvalidTouchModifierPrefix` 报错。
+- **Slide head 拒绝大写 `B` / `X`。** `parseSlideHeadModifierPrefix`
+  对它们返回 `false`，`2X-6[8:1]` / `2B-6[8:1]` 落入通用 invalid-note
+  路径。`B2` / `B4` 仍是合法 touch 音符。
 
 仅 strict 的 Warning `kNonCanonicalHoldModifierPlacementPrefix`（即上表
 #6 / #7）是**另一回事**：它谈的是修饰符相对 `[duration]` 块的*位置*，
@@ -209,6 +222,9 @@ Lenient 的存在意义现在只剩一件事：抽取一组可用的 timeline ma
 | `1//5`（重复 `/`） | **Error** | `kRepeatedSlashSeparator` |
 | `` 1``5 ``（重复 `` ` ``） | **Error** | `kRepeatedBacktickSeparator` |
 | `1bb`（重复 `b` 修饰符） | **Error** | `parseTapModifierSequence` 返回 `false`（与模式无关） |
+| `2B` / `2X`（tap 上的大写修饰符） | **Error** | `containsUppercaseTapBreakOrExModifier` → `parseTapModifierSequence` 返回 `false`（与模式无关） |
+| `2B-6[8:1]` / `2X-6[8:1]`（slide head 上的大写修饰符） | **Error** | `parseSlideHeadModifierPrefix` 返回 `false` → 通用 invalid-note 路径（与模式无关）。`B2` / `B4` 仍是合法 touch 音符。 |
+| `B1x` / `Cx` / `C2x`（touch 上的 `x`） | **Error** | `parseTouchSuffix` 拒绝 `x` → `kInvalidTouchModifierPrefix`（与模式无关） |
 | `1[4:1]h`（`h` 在 `]` 之后） | **Error** | `TouchTap.cpp:119-122`（与模式无关） |
 | `1h[4:1]x`（tap/hold 修饰符位置非典范） | **Warning** | `kNonCanonicalHoldModifierPlacementPrefix`（`TouchTap.cpp:169-178`） |
 | `Ah[4:1]b`（touch_hold 修饰符位置非典范） | **Warning** | `kNonCanonicalHoldModifierPlacementPrefix`（`TouchTap.cpp:71-80`） |
@@ -555,7 +571,7 @@ build 函数重组并返回；**三个都失败则原文（仅 trim）输出**�
 
 | Token 类 | 识别条件 | parse 接受的修饰符 | 重组顺序 | 备注 |
 |---|---|---|---|---|
-| Touch | 首字符 `C`（可带 `1`/`2`）或 `A`/`B`/`D`/`E` + lane 数字 | `b` `x` `h` `f` | prefix → `b` → `x` → `h` → `f` → bracketSuffix | bracket 与 `h` 互为充要：有 `[…]` 必须有 `h`，反之亦然 |
+| Touch | 首字符 `C`（可带 `1`/`2`）或 `A`/`B`/`D`/`E` + lane 数字 | `b` `x` `h` `f` | prefix → `b` → `x` → `h` → `f` → bracketSuffix | bracket 与 `h` 互为充要：有 `[…]` 必须有 `h`，反之亦然。注意：tokenizer 虽接受 `x`，但 parser 已拒绝 touch 上的 `x`，含 `x` 的 touch 会先被 `normalizeChartText` 的校验关卡整体拒绝（`ChartBatchTransformSpec.cpp` 有回归），canonicalize 实际到不了 |
 | Note | 首字符 1-8 lane 数字、不含 slide operator、不是纯数字串 | **仅** `b` `x` `h`；其余字符（包括 `f`、`?`、`!`、`@` 等）落入 `extraModifiers` | lane → `sortedModifierText(extraModifiers)` → `b` → `x` → `h` → bracketSuffix | `extraModifiers` 按 unicode codepoint 升序排列；bracket 与 `h` 互为充要 |
 | Slide head | 首字符 1-8 lane 数字、含 slide operator `-^v<>Vpqszw` | head 区识别 `b` / `x` / `?` / `!` / `@`（直到第一个 shape 字符）；**`h` 在 head 出现 → 整 token reject** | lane → `sortedModifierText(headExtraModifiers)` → `b` → `x` → core 剩余（trackBreak `b` 插回第一个 `[` 之前） | `?` `!` `@` 同样按 unicode 升序：输出固定为 `!` < `?` < `@` |
 | 都不匹配 | —— | —— | —— | `canonicalizeToken` 返回 `trimmed` 原文（silent passthrough） |
