@@ -25,7 +25,7 @@ public:
     void onOpenFile();
     bool openFileAtPath(const QString& path, bool showStatusMessage = true, bool showErrors = true);
     void refreshRestoreBackupMenu(QMenu* restoreBackupMenu);
-    void restoreBackupFilePath(const QString& path);
+    void restoreBackupFilePath(const QString& path, bool mentionAbnormalExit = false);
     bool restoreLastSessionFile();
     void scheduleStartupRestoreLastSessionFile();
     void cancelPendingStartupRestore();
@@ -108,6 +108,8 @@ public:
     void rebuildAutosaveMetadata(const QString& autosaveDirectoryPath) const;
 
 private:
+    void schedulePendingAbnormalExitBackupRestore();
+    void runPendingAbnormalExitBackupRestore();
     // Broadcast the chosen designer name into the top &des, every
     // per-difficulty designer (charted and standalone), and the metadata-page
     // designer line edit. Used by the load-time reconcile.

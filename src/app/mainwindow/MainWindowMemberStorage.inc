@@ -236,6 +236,9 @@
         QByteArray autosaveLastHistoryContentSignature_;
         qint64 autosaveLastHistorySnapshotMs_ = -1;
         qint64 autosaveDirtySinceMs_ = -1;
+        QString pendingAbnormalExitBackupRestorePath_;
+        QString pendingAbnormalExitBackupRestoreChartPath_;
+        bool pendingAbnormalExitBackupRestoreScheduled_ = false;
         int editorUndoSaveAnchor_ = 0;
         int metadataExtraUndoSaveAnchor_ = 0;
         QVector<SelectionTransformUndoEntry> chartSelectionTransformUndoEntries_;
@@ -650,6 +653,9 @@
     QByteArray& autosaveLastHistoryContentSignature_ = state_.autosaveLastHistoryContentSignature_;
     qint64& autosaveLastHistorySnapshotMs_ = state_.autosaveLastHistorySnapshotMs_;
     qint64& autosaveDirtySinceMs_ = state_.autosaveDirtySinceMs_;
+    QString& pendingAbnormalExitBackupRestorePath_ = state_.pendingAbnormalExitBackupRestorePath_;
+    QString& pendingAbnormalExitBackupRestoreChartPath_ = state_.pendingAbnormalExitBackupRestoreChartPath_;
+    bool& pendingAbnormalExitBackupRestoreScheduled_ = state_.pendingAbnormalExitBackupRestoreScheduled_;
     int& editorUndoSaveAnchor_ = state_.editorUndoSaveAnchor_;
     int& metadataExtraUndoSaveAnchor_ = state_.metadataExtraUndoSaveAnchor_;
     QVector<SelectionTransformUndoEntry>& chartSelectionTransformUndoEntries_ = state_.chartSelectionTransformUndoEntries_;

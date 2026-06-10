@@ -23,10 +23,11 @@
 //      no locks, safe to call from a corrupted process. The recovery
 //      file is `<chart>.crash_recovery` next to the existing `.bak`.
 //
-// Recovery flow on chart open: the surface checks for a recovery file,
-// compares its content to the on-disk chart, and if it differs offers
-// the user a one-click restore. Always cleared on clean save / clean
-// app close so it never lingers across normal sessions.
+// Recovery flow on chart open: if a recovery file exists, the document
+// surface records the newest File -> Restore Backup entry, lets the
+// normal window/document load finish, then invokes the same restore path
+// the menu uses. The original chart file is not overwritten; the restored
+// text becomes dirty editor content until the user saves.
 //
 // **Session marker (abnormal-exit detection).** The crash handlers above
 // only cover terminations that actually run them. A task-manager kill,

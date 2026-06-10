@@ -265,6 +265,13 @@ QList<BackupRestoreEntry> backupRestoreEntriesForAutosaveDirectory(const QString
     return entries;
 }
 
+QString latestBackupRestoreFilePathForChart(const QString& chartFilePath)
+{
+    const QList<BackupRestoreEntry> entries =
+        backupRestoreEntriesForAutosaveDirectory(autosaveEntryDirectoryPathForFile(chartFilePath));
+    return entries.isEmpty() ? QString() : entries.constFirst().filePath;
+}
+
 bool ensureDirectoryExists(const QString& directoryPath)
 {
     if (directoryPath.isEmpty()) {
@@ -1263,115 +1270,35 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
     // re-entrant and cheap on warm runs (one stat()).
     miacode::crash_recovery::prepareForChart(normalizedPath);
 
-    // Crash/autosave recovery prompt — offer the user the unsaved
-    // changes from a session that ended abnormally. Only fires on the
-    // path where the user actually opens a chart; restoreLastSessionFile
-    // and other internal callers also funnel through here, so at startup
-    // (last session auto-restored) the prompt appears proactively.
-    SimaiDocument documentToLoad = document;
-    bool restoredFromCrash = false;
-    {
-        const QString diskText = document.toText();
-
-        // Candidate 1 — crash-handler snapshot (<chart>.crash_recovery),
-        // written at crash time by the SEH/terminate/signal handlers.
-        QString candidateText;
-        QDateTime candidateTimestamp;
-        QString candidateSource;
-        const QByteArray recoveryUtf8 =
-            miacode::crash_recovery::readRecoveryFile(normalizedPath);
-        if (!recoveryUtf8.isEmpty()) {
-            const QString recoveryText = QString::fromUtf8(recoveryUtf8);
-            if (!recoveryText.isEmpty() && recoveryText != diskText) {
-                candidateText = recoveryText;
-                candidateTimestamp =
-                    QFileInfo(miacode::crash_recovery::crashRecoveryFilePath(normalizedPath))
-                        .lastModified();
-                candidateSource = QStringLiteral("crash_recovery");
-            }
-        }
-
-        // Candidate 2 — the debounced autosave (<name>.bak). Considered
-        // only when the previous session ended abnormally on THIS chart
-        // (session marker): covers task-manager kills / power loss that
-        // bypass the crash handlers entirely. The mtime guard rejects
-        // autosaves older than the chart file — those predate the user's
-        // last explicit save and would restore stale text.
-        if (miacode::crash_recovery::consumeAbandonedSessionChartMatch(normalizedPath)) {
-            const QString latestFilePath =
-                autosaveLatestFilePath(autosaveEntryDirectoryPathForFile(normalizedPath));
-            const QFileInfo latestInfo(latestFilePath);
-            const QDateTime chartModifiedAt = QFileInfo(normalizedPath).lastModified();
-            if (latestInfo.exists() && latestInfo.isFile()
-                && latestInfo.lastModified() > chartModifiedAt
-                && (!candidateTimestamp.isValid()
-                    || latestInfo.lastModified() > candidateTimestamp)) {
-                QFile latestFile(latestFilePath);
-                if (latestFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                    const QString latestText = decodeChartBackupText(latestFile.readAll());
-                    if (!latestText.isEmpty() && latestText != diskText) {
-                        candidateText = latestText;
-                        candidateTimestamp = latestInfo.lastModified();
-                        candidateSource = QStringLiteral("autosave_latest");
-                    }
-                }
-            }
-        }
-
-        if (!candidateText.isEmpty()) {
+    // Abnormal-exit recovery intentionally reuses File -> Restore Backup.
+    // Opening the chart must finish first so the restore prompt appears over
+    // the fully loaded window and the old on-disk content remains the restore
+    // baseline, exactly like a manual menu action.
+    const bool previousSessionAbandoned =
+        miacode::crash_recovery::consumeAbandonedSessionChartMatch(normalizedPath);
+    const QString crashRecoveryPath = miacode::crash_recovery::crashRecoveryFilePath(normalizedPath);
+    const bool crashRecoveryFileExists =
+        !crashRecoveryPath.isEmpty() && QFileInfo(crashRecoveryPath).exists();
+    if (previousSessionAbandoned || crashRecoveryFileExists) {
+        state_.pendingAbnormalExitBackupRestorePath_ =
+            latestBackupRestoreFilePathForChart(normalizedPath);
+        state_.pendingAbnormalExitBackupRestoreChartPath_ =
+            state_.pendingAbnormalExitBackupRestorePath_.isEmpty() ? QString() : normalizedPath;
+        if (!state_.pendingAbnormalExitBackupRestorePath_.isEmpty()) {
             miacode::debug_log::appendLine(
                 miacode::debug_log::Channel::Runtime,
                 QStringLiteral("crash_recovery"),
-                QStringLiteral("action=recovery_prompt source=%1 snapshot=%2 chart=%3")
-                    .arg(candidateSource,
-                         candidateTimestamp.toString(Qt::ISODate),
-                         normalizedPath));
-            const QString timestampLabel = candidateTimestamp.isValid()
-                ? candidateTimestamp.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"))
-                : QStringLiteral("-");
-            const auto choice = UiDialogs::showMessageBox(
-                QMessageBox::Question,
-                &owner_,
-                uiText("dialog.crash_recovery.title", "Recover Unsaved Changes"),
-                uiText(
-                    "dialog.crash_recovery.message",
-                    "MiaCode appears to have closed unexpectedly while editing this chart.\n\n"
-                    "An autosaved copy with unsaved changes was found (saved at %1).\n"
-                    "Recover these changes?\n\n"
-                    "Choosing No keeps the file's current content.")
-                    .arg(timestampLabel),
-                QMessageBox::Yes | QMessageBox::No,
-                QMessageBox::Yes);
-            miacode::debug_log::appendLine(
-                miacode::debug_log::Channel::Runtime,
-                QStringLiteral("crash_recovery"),
-                QStringLiteral("action=recovery_prompt_choice choice=%1")
-                    .arg(choice == QMessageBox::Yes ? QStringLiteral("recover")
-                                                    : QStringLiteral("keep_disk")));
-            if (choice == QMessageBox::Yes) {
-                documentToLoad = SimaiDocument::fromText(candidateText);
-                restoredFromCrash = true;
-            }
-        }
-        // Always delete the crash-recovery file once it's been considered
-        // — keeping it around would prompt repeatedly even after the user
-        // declined or has resaved. The autosave .bak is NOT deleted: it is
-        // part of the normal backup chain (Restore Backup menu).
-        if (!recoveryUtf8.isEmpty()) {
-            miacode::crash_recovery::deleteRecoveryFile(normalizedPath);
+                QStringLiteral("action=defer_restore_backup path=%1 chart=%2")
+                    .arg(state_.pendingAbnormalExitBackupRestorePath_, normalizedPath));
         }
     }
 
-    loadDocument(documentToLoad);
+    loadDocument(document);
     owner_.refreshWaveformCache(knownTrackDurationSeconds);
-    if (restoredFromCrash) {
-        owner_.statusBar()->showMessage(
-            uiText("status.crash_recovery.loaded", "Recovered unsaved changes from previous session. Save to keep them."),
-            10000);
-        // Mark the current text as a fresh edit baseline so the regular
-        // autosave timers see it as dirty vs the on-disk content.
-        markCurrentFieldDirty();
-    } else if (showStatusMessage) {
+    if (!state_.pendingAbnormalExitBackupRestorePath_.isEmpty()) {
+        schedulePendingAbnormalExitBackupRestore();
+    }
+    if (showStatusMessage) {
         owner_.statusBar()->showMessage(
             QString("Opened: %1 (%2)")
                 .arg(QFileInfo(normalizedPath).fileName())
@@ -1400,7 +1327,16 @@ void MainWindow::DocumentSection::resetAutosaveState(const QString& referenceTex
 void MainWindow::DocumentSection::cleanupCrashRecoveryForCleanExit()
 {
     if (!state_.currentFilePath_.isEmpty()) {
-        miacode::crash_recovery::deleteRecoveryFile(state_.currentFilePath_);
+        const QString recoveryPath =
+            miacode::crash_recovery::crashRecoveryFilePath(state_.currentFilePath_);
+        const bool preservePendingRestore =
+            !state_.pendingAbnormalExitBackupRestorePath_.isEmpty()
+            && !recoveryPath.isEmpty()
+            && QDir::cleanPath(state_.pendingAbnormalExitBackupRestorePath_)
+                == QDir::cleanPath(recoveryPath);
+        if (!preservePendingRestore) {
+            miacode::crash_recovery::deleteRecoveryFile(state_.currentFilePath_);
+        }
     }
     miacode::crash_recovery::clearSnapshot();
 }
@@ -1442,7 +1378,7 @@ void MainWindow::DocumentSection::refreshRestoreBackupMenu(QMenu* restoreBackupM
     }
 }
 
-void MainWindow::DocumentSection::restoreBackupFilePath(const QString& path)
+void MainWindow::DocumentSection::restoreBackupFilePath(const QString& path, bool mentionAbnormalExit)
 {
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     const QFileInfo backupInfo(normalizedPath);
@@ -1459,14 +1395,24 @@ void MainWindow::DocumentSection::restoreBackupFilePath(const QString& path)
         return;
     }
 
+    const QString backupTimestampLabel = backupInfo.lastModified().isValid()
+        ? backupInfo.lastModified().toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"))
+        : QFileInfo(normalizedPath).fileName();
+    const QString restoreConfirmText = mentionAbnormalExit
+        ? uiText(
+              "dialog.restore_backup.abnormal_exit_confirm",
+              "MiaCode did not exit normally last time.\n\n"
+              "Restore the backup from %1?")
+              .arg(backupTimestampLabel)
+        : uiText(
+              "dialog.restore_backup.confirm",
+              "Restore the backup from %1?")
+              .arg(backupTimestampLabel);
     const auto choice = UiDialogs::showMessageBox(
         QMessageBox::Question,
         &owner_,
         uiText("dialog.restore_backup.title", "Restore Backup"),
-        uiText(
-            "dialog.restore_backup.confirm",
-            "Restore this backup?\n\n%1\n\nThe current editor content will be replaced, but the original file will not be overwritten.")
-            .arg(QDir::toNativeSeparators(normalizedPath)),
+        restoreConfirmText,
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No);
     if (choice != QMessageBox::Yes) {
@@ -1510,6 +1456,41 @@ void MainWindow::DocumentSection::restoreBackupFilePath(const QString& path)
         uiText("status.restore_backup.loaded", "Restored from backup. Save to keep the changes."),
         10000
     );
+}
+
+void MainWindow::DocumentSection::schedulePendingAbnormalExitBackupRestore()
+{
+    if (state_.pendingAbnormalExitBackupRestorePath_.isEmpty()
+        || state_.pendingAbnormalExitBackupRestoreScheduled_) {
+        return;
+    }
+    state_.pendingAbnormalExitBackupRestoreScheduled_ = true;
+    QTimer::singleShot(0, &owner_, [this]() {
+        QTimer::singleShot(0, &owner_, [this]() {
+            runPendingAbnormalExitBackupRestore();
+        });
+    });
+}
+
+void MainWindow::DocumentSection::runPendingAbnormalExitBackupRestore()
+{
+    state_.pendingAbnormalExitBackupRestoreScheduled_ = false;
+    const QString path = state_.pendingAbnormalExitBackupRestorePath_;
+    const QString chartPath = state_.pendingAbnormalExitBackupRestoreChartPath_;
+    state_.pendingAbnormalExitBackupRestorePath_.clear();
+    state_.pendingAbnormalExitBackupRestoreChartPath_.clear();
+    if (path.isEmpty()
+        || chartPath.isEmpty()
+        || state_.currentFilePath_.isEmpty()
+        || QDir::cleanPath(chartPath) != QDir::cleanPath(state_.currentFilePath_)) {
+        return;
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("crash_recovery"),
+        QStringLiteral("action=run_deferred_restore_backup path=%1 chart=%2")
+            .arg(path, state_.currentFilePath_));
+    restoreBackupFilePath(path, true);
 }
 
 QString MainWindow::DocumentSection::currentDocumentTextForAutosave() const

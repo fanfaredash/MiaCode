@@ -76,12 +76,16 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `<AppConfigLocation>/session.marker` written via `TimelineSection::setCurrentFilePath`,
   cleared on both clean-close paths — legacy `WindowRuntime closeEvent` and quick-shell
   `WindowShell confirmShellClose` — GUI-only via `setSessionMarkerEnabled(true)` in `main.cpp`,
-  so CLI export/worker runs never touch it). The chart-open prompt lives in
-  `applyOpenedDocumentState` (`MainWindow.DocumentFlow.cpp`): offers the crash file, and —
-  when `consumeAbandonedSessionChartMatch` says the previous session died abnormally on this
-  chart (kill / power loss, no handler ran) — also the debounced autosave `<name>.bak`
-  (only if its mtime is newer than the chart file). Fires proactively at startup because
-  `restoreLastSessionFile` funnels through the same path.
+  so CLI export/worker runs never touch it). Chart open still calls
+  `prepareForChart`, then `applyOpenedDocumentState` only detects an abandoned marker or
+  existing crash-recovery file and records `pendingAbnormalExitBackupRestorePath_` as the same
+  newest entry shown by File → Restore Backup (`backupRestoreEntriesForAutosaveDirectory`:
+  crash file, latest `.bak`, history). After the chart/window finishes loading, a queued
+  `runPendingAbnormalExitBackupRestore` calls `restoreBackupFilePath(path, true)`, so automatic
+  crash recovery has the **same behavior** as the menu action (restore replaces editor text,
+  original file is untouched, autosave reference remains the old file) with only one extra
+  prompt line saying MiaCode did not exit normally last time. `cleanupCrashRecoveryForCleanExit`
+  preserves the pending crash file until that deferred restore has had a chance to read it.
 - Editor header/page-mode UI: `sections/document/MainWindow.DocumentUi.cpp`.
 - Chart text editor: `src/editor/PlainCodeEditor.{h,cpp}` (line numbers, transform context menu,
   half-width normalization, `normalizedViewportHitPosition`, bracket auto-close
@@ -366,14 +370,22 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     level-text-render / long-text overflow) to `CoverComposerInputs`; hosts the embedded live
     composer + a "重置布局 / Reset layout" button; caches the parsed template once in the ctor.
     **Chart-frame picker (A2 live scene):** an "添加谱面帧 / Add chart frame" checkbox (disabled when
-    the difficulty has no notes) + a ▶/⏸ play button + a frame-time slider (`0..contentDurationSeconds`
-    ms) + mm:ss.cs readout. Enabling does ONE verify+seed grab under `Qt::WaitCursor` (reverts + warns
+    the difficulty has no notes) + a ▶/❚❚ play button + a frame-time slider (`0..contentDurationSeconds`
+    ms) + mm:ss.cs readout. The transport button is a 30×30 square (the theme sheet's `min-width: 92px`
+    beats `setFixedWidth`, so the size is forced via an appended QSS override) and the pause glyph is
+    two `U+275A` heavy bars — `U+23F8 ⏸` renders as a COLOR emoji on Windows. Enabling does ONE
+    verify+seed grab under `Qt::WaitCursor` (reverts + warns
     on first-grab failure so the layer can't ship blank) and shows the LIVE edit scene. **Scrubbing /
     playback no longer re-grab** — `applyFrameSeconds` moves the shared playhead and repaints the in-QML
     `PreviewQuickSceneRoot` (zero readback). Play is **visual-only (no audio)**: a wall-clock `QTimer`
     (`QElapsedTimer`, ~60 fps) advances the playhead at real speed; the slider follows during play
     (its `setValue` is `QSignalBlocker`-guarded so the clock never self-pauses) and ANY user scrub
-    (handle drag / groove-click / keyboard — all `valueChanged`) pauses. `renderChartFrameNow` (still
+    (handle drag / groove-click / keyboard — all `valueChanged`) pauses. **Held ←/→ on the slider
+    (2026-06-10)** reuses the preview transport's accelerate-and-cap design via
+    `common/PreviewInteractionConfig.h` (an event filter swallows the slider's default 1 ms arrow
+    step + OS auto-repeat; press steps ±1/120 s immediately, then a 16 ms `Qt::PreciseTimer` advances
+    by real elapsed time × `min(1 + heldSeconds, 3.0)`, mirroring
+    `MainWindow::TimelineSection::applyPreviewHeldSeekTick`). `renderChartFrameNow` (still
     re-entrancy- and `chartFrameEnabled()`-guarded) now grabs at the CURRENT shared playhead, so the
     exported still is WYSIWYG with the live scene. `exportCover` stops playback, then re-grabs at the
     exact export resolution (`chartFrameRenderPx` = `sizeFraction × outputHeight`) before compositing,
