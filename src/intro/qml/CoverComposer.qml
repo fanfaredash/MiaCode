@@ -228,6 +228,11 @@ Item {
             readonly property var ld: modelData       // CoverLayer
             readonly property bool isCard: ld && ld.kind === "card"
             readonly property bool isChartFrame: ld && ld.kind === "chartFrame"
+            // B1 disk background: shared gate for its image + dim overlay.
+            readonly property bool showsDiskBg:
+                isChartFrame && canvas.chartFrameBgEnabled
+                && canvas.chartFrameDiskDiameter > 0
+                && canvas.backdropSourceUrl.toString().length > 0
 
             width: canvas.layerContentW(ld)
             height: canvas.layerContentH(ld)
@@ -299,14 +304,25 @@ Item {
                 }
                 MultiEffect {
                     anchors.fill: parent
-                    visible: layerItem.isChartFrame && canvas.chartFrameBgEnabled
-                             && canvas.chartFrameDiskDiameter > 0
-                             && canvas.backdropSourceUrl.toString().length > 0
+                    visible: layerItem.showsDiskBg
                     source: chartBgDiskImage
                     maskEnabled: true
                     maskSource: chartBgDiskMaskTex
                     maskThresholdMin: 0.5
-                    brightness: canvas.chartFrameBgBrightness - 1.0
+                }
+                // Brightness = the SAME multiplicative dim the realtime preview's
+                // 内圈亮度 uses (stage-background draws black at alpha 1−brightness
+                // → media × brightness). MultiEffect.brightness is ADDITIVE
+                // (crushes dark pixels straight to black) so it is NOT used here.
+                Rectangle {
+                    visible: layerItem.showsDiskBg
+                    anchors.centerIn: parent
+                    width: canvas.chartFrameDiskDiameter * parent.width
+                    height: width
+                    radius: width / 2
+                    antialiasing: true
+                    color: "#000000"
+                    opacity: Math.max(0, Math.min(1, 1.0 - canvas.chartFrameBgBrightness))
                 }
                 Loader {
                     anchors.fill: parent
@@ -368,19 +384,29 @@ Item {
                 enabled: canvas.editable && layerItem.ld && !layerItem.ld.locked
                 property real startNx: 0.5
                 property real startNy: 0.5
+                // Cursor position (scene px) AT ACTIVATION — the drag reference.
+                property real grabSceneX: 0
+                property real grabSceneY: 0
                 onActiveChanged: {
                     if (active) {
                         canvas.selectedIndex = layerItem.index
                         startNx = layerItem.ld.nx
                         startNy = layerItem.ld.ny
+                        // Reference the delta from the centroid AT ACTIVATION, not the
+                        // press: a DragHandler only activates AFTER the cursor passes
+                        // the drag threshold (plus any fast pre-activation motion), so a
+                        // press-referenced delta would jump the layer by that whole
+                        // distance the instant the drag begins.
+                        grabSceneX = centroid.scenePosition.x
+                        grabSceneY = centroid.scenePosition.y
                     } else {
                         canvas.clearGuides()
                     }
                 }
                 onCentroidChanged: {
                     if (!active || !layerItem.ld) return
-                    var dx = centroid.scenePosition.x - centroid.scenePressPosition.x
-                    var dy = centroid.scenePosition.y - centroid.scenePressPosition.y
+                    var dx = centroid.scenePosition.x - grabSceneX
+                    var dy = centroid.scenePosition.y - grabSceneY
                     var cx = startNx * canvas.width + dx
                     var cy = startNy * canvas.height + dy
                     var snapped = canvas.applySnap(cx, cy, layerItem.width, layerItem.height)
@@ -431,7 +457,9 @@ Item {
     Rectangle {
         id: selectionBorder
         readonly property var l: canvas.selectedLayer
-        visible: canvas.editable && l !== null
+        // l.visible: a layer un-ticked from the dialog (card / chart frame) must
+        // not keep showing its selection chrome.
+        visible: canvas.editable && l !== null && l.visible
         x: l ? (l.nx * canvas.width - canvas.layerContentW(l) / 2) : 0
         y: l ? (l.ny * canvas.height - canvas.layerContentH(l) / 2) : 0
         width: l ? canvas.layerContentW(l) : 0
@@ -445,7 +473,7 @@ Item {
     Rectangle {
         id: scaleHandle
         readonly property var l: canvas.selectedLayer
-        visible: canvas.editable && l !== null && !l.locked
+        visible: canvas.editable && l !== null && l.visible && !l.locked
         width: 18
         height: 18
         radius: 4
@@ -458,12 +486,26 @@ Item {
         DragHandler {
             target: null
             enabled: scaleHandle.visible
-            onActiveChanged: if (!active) canvas.clearGuides()
+            // Start state captured AT ACTIVATION so the scale is a delta from the
+            // grab, not an absolute |cursor − centre|. This avoids the activation
+            // jump (drag threshold + wherever on the 18px handle you grabbed) and
+            // the old Math.abs flip (growing again when dragged past the centre).
+            property real grabSceneY: 0
+            property real startHeightPx: 0
+            onActiveChanged: {
+                if (active && scaleHandle.l) {
+                    grabSceneY = centroid.scenePosition.y
+                    startHeightPx = scaleHandle.l.sizeFraction * canvas.height
+                } else {
+                    canvas.clearGuides()
+                }
+            }
             onCentroidChanged: {
                 if (!active || !scaleHandle.l) return
-                var cy = scaleHandle.l.ny * canvas.height
-                var halfH = Math.abs(centroid.scenePosition.y - cy)
-                var newH = Math.max(canvas.height * 0.05, 2 * halfH)
+                // The layer scales about its centre, so the bottom handle tracks the
+                // cursor 1:1 while the height changes by 2× the cursor's vertical delta.
+                var dy = centroid.scenePosition.y - grabSceneY
+                var newH = Math.max(canvas.height * 0.05, startHeightPx + 2 * dy)
                 scaleHandle.l.sizeFraction = newH / canvas.height
             }
         }

@@ -1246,7 +1246,8 @@ VideoExportDialog::VideoExportDialog(
     visualsPageLayout->addWidget(hudToggles, 0);
     visualsPageLayout->addStretch(1);
 
-    // Font tab — the HUD font picker on its own page.
+    // "Cover" tab (renamed from "Font") — the cover export entry + the HUD font
+    // picker share this page.
     auto* fontPage = new QWidget(settingsTabs_);
     auto* fontPageLayout = new QVBoxLayout(fontPage);
     fontPageLayout->setContentsMargins(kSectionContentLeftInset, 6, kSectionContentLeftInset, 6);
@@ -1263,8 +1264,8 @@ VideoExportDialog::VideoExportDialog(
     fontPageLayout->addWidget(fontPageLabel, 0, Qt::AlignLeft);
     fontPageLayout->addWidget(hudFontSettingsButton_, 0, Qt::AlignLeft);
 
-    // Cover export — renders the difficulty banner card to a still image. Parked
-    // on the Font tab for now (it shares no state with the HUD font picker).
+    // Cover export — renders the composed cover to a still image. The tab is
+    // named after it; the HUD font picker above shares the page but no state.
     auto* coverLabel = new QLabel(
         l10n(QStringLiteral("Cover"), QStringLiteral("封面")),
         fontPage
@@ -1296,7 +1297,9 @@ VideoExportDialog::VideoExportDialog(
     );
     settingsTabs_->addTab(
         fontPage,
-        uiText("dialog.video_export.section.font", l10n(QStringLiteral("Font"), QStringLiteral("字体")))
+        // Label says "Cover" (the tab's headline feature); the page still hosts
+        // the HUD font picker too — same page, text-only rename.
+        uiText("dialog.video_export.section.font", l10n(QStringLiteral("Cover"), QStringLiteral("封面")))
     );
     settingsTabs_->addTab(
         rangePage,

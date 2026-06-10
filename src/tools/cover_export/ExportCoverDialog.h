@@ -95,6 +95,9 @@ private:
     QLineEdit* backgroundPathEdit_ = nullptr;
     QPushButton* backgroundBrowse_ = nullptr;
     QCheckBox* blurCheck_ = nullptr;
+    // Difficulty-card section: the card is opt-in like the chart frame (its
+    // checkbox drives the card layer's `visible` on the shared model).
+    QCheckBox* cardCheck_ = nullptr;
     QCheckBox* cardShadowCheck_ = nullptr;
     QCheckBox* levelTextRenderCheck_ = nullptr;
     QComboBox* textOverflowCombo_ = nullptr;

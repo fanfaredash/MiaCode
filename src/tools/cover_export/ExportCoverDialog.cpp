@@ -2,6 +2,7 @@
 
 #include "tools/cover_export/CoverLayoutModel.h"
 #include "tools/cover_export/SceneFrameRenderer.h"
+#include "UiNativeWindowTheme.h"
 #include "UiText.h"
 #include "UiTheme.h"
 
@@ -14,6 +15,7 @@
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -111,7 +113,18 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
 {
     setWindowTitle(l10n(QStringLiteral("Export Cover"), QStringLiteral("导出封面")));
     setModal(true);
-    setStyleSheet(UiTheme::exportDialogStyleSheet());
+    // Theme the native title bar — this dialog is opened from the tools
+    // layer, so no MainWindow-side applySystemWindowBackdrop call covers it.
+    UiNativeWindowTheme::applyToWidget(this);
+    // exportDialogStyleSheet has no QGroupBox rule — append one for the three
+    // option sections (same look as the preferences dialog's groups).
+    setStyleSheet(UiTheme::exportDialogStyleSheet()
+        + QStringLiteral(
+              "QGroupBox { border: 1px solid %1; border-radius: 8px; margin-top: 12px;"
+              " padding-top: 8px; color: %2; font-weight: 600; }"
+              "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }")
+              .arg(UiTheme::colors().borderSoft.name(QColor::HexRgb),
+                   UiTheme::colors().textPrimary.name(QColor::HexRgb)));
 
     const QSize seededSize = initialSize.isValid() ? initialSize : QSize(1080, 1080);
 
@@ -168,9 +181,13 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
              QStringLiteral("拖动卡片摆放，拖角缩放；松手会吸附到中线/边缘。")),
         this);
     previewHint->setWordWrap(true);
+    previewHint->setAlignment(Qt::AlignHCenter);
     previewHint->setStyleSheet(QStringLiteral("color: %1;")
         .arg(UiTheme::colors().textSecondary.name(QColor::HexRgb)));
-    previewColumn->addWidget(previewHint, 0, Qt::AlignHCenter);
+    // No alignment flag: an aligned word-wrapped label only gets its (narrow)
+    // sizeHint width, so heightForWidth under-allocates and the text is clipped.
+    // Give it the full column width and centre the text internally instead.
+    previewColumn->addWidget(previewHint);
 
     resetLayoutButton_ = new QPushButton(
         l10n(QStringLiteral("Reset layout"), QStringLiteral("重置布局")), this);
@@ -191,10 +208,15 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
     previewColumn->addStretch(1);
     rootLayout->addLayout(previewColumn, 0);
 
-    // ---- Right: controls ----
+    // ---- Right: controls, in three sections — canvas (size / background), the
+    // difficulty card, and the chart frame. The card and the frame are each
+    // opt-in layers behind their leading "add" checkbox. ----
     auto* controlsColumn = new QVBoxLayout();
     controlsColumn->setSpacing(10);
-    auto* form = new QFormLayout();
+
+    auto* canvasGroup = new QGroupBox(
+        l10n(QStringLiteral("Size / Background"), QStringLiteral("尺寸 / 背景")), this);
+    auto* form = new QFormLayout(canvasGroup);
     form->setSpacing(10);
     form->setLabelAlignment(Qt::AlignLeft);
     form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
@@ -246,16 +268,31 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
     blurCheck_->setChecked(true);
     form->addRow(QString(), blurCheck_);
 
+    controlsColumn->addWidget(canvasGroup);
+
+    // ---- Difficulty-card section (an opt-in layer, like the chart frame) ----
+    auto* cardGroup = new QGroupBox(
+        l10n(QStringLiteral("Difficulty card"), QStringLiteral("难度卡")), this);
+    auto* cardForm = new QFormLayout(cardGroup);
+    cardForm->setSpacing(10);
+    cardForm->setLabelAlignment(Qt::AlignLeft);
+    cardForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+
+    cardCheck_ = new QCheckBox(
+        l10n(QStringLiteral("Add difficulty card"), QStringLiteral("添加难度卡")), this);
+    cardCheck_->setChecked(true);
+    cardForm->addRow(QString(), cardCheck_);
+
     // Card drop shadow.
     cardShadowCheck_ = new QCheckBox(l10n(QStringLiteral("Card drop shadow"), QStringLiteral("难度卡阴影")), this);
     cardShadowCheck_->setChecked(false);
-    form->addRow(QString(), cardShadowCheck_);
+    cardForm->addRow(QString(), cardShadowCheck_);
 
     // Level text render.
     levelTextRenderCheck_ = new QCheckBox(
         l10n(QStringLiteral("Render level as text"), QStringLiteral("等级文本渲染")), this);
     levelTextRenderCheck_->setChecked(false);
-    form->addRow(QString(), levelTextRenderCheck_);
+    cardForm->addRow(QString(), levelTextRenderCheck_);
 
     // Long-text overflow.
     textOverflowCombo_ = new QComboBox(this);
@@ -264,7 +301,17 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
     textOverflowCombo_->addItem(
         l10n(QStringLiteral("Keep size, ellipsis (…)"), QStringLiteral("保持字号，省略号(…)截断")),
         QStringLiteral("ellipsis"));
-    form->addRow(l10n(QStringLiteral("Long text"), QStringLiteral("文字超长")), textOverflowCombo_);
+    cardForm->addRow(l10n(QStringLiteral("Long text"), QStringLiteral("文字超长")), textOverflowCombo_);
+
+    controlsColumn->addWidget(cardGroup);
+
+    // ---- Chart-frame section (an opt-in layer) ----
+    auto* frameGroup = new QGroupBox(
+        l10n(QStringLiteral("Chart frame"), QStringLiteral("谱面帧")), this);
+    auto* frameForm = new QFormLayout(frameGroup);
+    frameForm->setSpacing(10);
+    frameForm->setLabelAlignment(Qt::AlignLeft);
+    frameForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
     // Chart frame (a square playfield grab at a picked time, added as a layer).
     chartFrameCheck_ = new QCheckBox(
@@ -276,7 +323,7 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
             l10n(QStringLiteral("This difficulty has no chart notes to render."),
                  QStringLiteral("当前难度没有可渲染的谱面音符。")));
     }
-    form->addRow(QString(), chartFrameCheck_);
+    frameForm->addRow(QString(), chartFrameCheck_);
 
     // Frame-time picker: a play/pause button + slider over the chart content + a
     // mm:ss.cs readout. Scrubbing the slider or playing drives the live edit scene
@@ -303,7 +350,7 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
     frameLayout->addWidget(playButton_, 0);
     frameLayout->addWidget(frameSlider_, 1);
     frameLayout->addWidget(frameTimeLabel_, 0);
-    form->addRow(l10n(QStringLiteral("Frame time"), QStringLiteral("谱面时间")), frameRow);
+    frameForm->addRow(l10n(QStringLiteral("Frame time"), QStringLiteral("谱面时间")), frameRow);
 
     playClock_ = new QTimer(this);
     playClock_->setInterval(kPlayTickMs);
@@ -317,17 +364,21 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
         l10n(QStringLiteral("Chart-frame inner background"), QStringLiteral("谱面帧内圈背景")), this);
     chartFrameBgCheck_->setChecked(true);
     chartFrameBgCheck_->setEnabled(false);
-    form->addRow(QString(), chartFrameBgCheck_);
+    frameForm->addRow(QString(), chartFrameBgCheck_);
 
     chartFrameBgBrightnessSlider_ = new QSlider(Qt::Horizontal, this);
     chartFrameBgBrightnessSlider_->setMinimum(0);
     chartFrameBgBrightnessSlider_->setMaximum(100);
-    chartFrameBgBrightnessSlider_->setValue(80);
+    // Seed from the user's preview "background inner brightness" so the same value
+    // yields the same look as the realtime preview's 内圈亮度 (the QML dim is the
+    // same black-overlay model the stage-background layer uses).
+    chartFrameBgBrightnessSlider_->setValue(
+        qBound(0, qRound(qBound(0.0, task.backgroundBrightnessInner, 1.0) * 100.0), 100));
     chartFrameBgBrightnessSlider_->setEnabled(false);
-    form->addRow(l10n(QStringLiteral("Frame bg brightness"), QStringLiteral("谱面帧背景亮度")),
-                 chartFrameBgBrightnessSlider_);
+    frameForm->addRow(l10n(QStringLiteral("Frame bg brightness"), QStringLiteral("谱面帧背景亮度")),
+                      chartFrameBgBrightnessSlider_);
 
-    controlsColumn->addLayout(form);
+    controlsColumn->addWidget(frameGroup);
     controlsColumn->addStretch(1);
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
@@ -358,13 +409,25 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
     connect(backgroundPathEdit_, &QLineEdit::textChanged, this, [this] { pushInputs(); });
     connect(backgroundBrowse_, &QPushButton::clicked, this, &ExportCoverDialog::browseBackground);
     connect(blurCheck_, &QCheckBox::toggled, this, [this] { pushInputs(); });
+    // Card add-toggle drives the card layer's `visible` on the shared model — the
+    // QML delegate and the export composite both follow it (NOTIFY binding).
+    connect(cardCheck_, &QCheckBox::toggled, this, [this](bool on) {
+        if (model_ != nullptr) {
+            if (miacode::cover_export::CoverLayer* cardLayer = model_->layer(QStringLiteral("card"))) {
+                cardLayer->setVisible(on);
+            }
+        }
+        syncControlEnabled();
+    });
     connect(cardShadowCheck_, &QCheckBox::toggled, this, [this] { pushInputs(); });
     connect(levelTextRenderCheck_, &QCheckBox::toggled, this, [this] { pushInputs(); });
     connect(textOverflowCombo_, &QComboBox::currentIndexChanged, this, [this] { pushInputs(); });
     if (resetLayoutButton_ != nullptr) {
         connect(resetLayoutButton_, &QPushButton::clicked, this, [this] {
             if (model_ != nullptr) model_->resetLayout();
-            // resetLayout hides the chart frame; keep the toggle in sync.
+            // resetLayout shows the card and hides the chart frame; keep both
+            // "add" toggles in sync (their handlers are idempotent on the model).
+            if (cardCheck_ != nullptr) cardCheck_->setChecked(true);
             if (chartFrameCheck_ != nullptr) chartFrameCheck_->setChecked(false);
         });
     }
@@ -726,11 +789,15 @@ void ExportCoverDialog::syncControlEnabled()
     const bool isTransparent = (bg == QStringLiteral("transparent"));
     if (backgroundPathEdit_ != nullptr) backgroundPathEdit_->setEnabled(isCustom);
     if (backgroundBrowse_ != nullptr) backgroundBrowse_->setEnabled(isCustom);
-    // Blur only applies when there is a backdrop behind the card. The card drop
-    // shadow works in EVERY mode (in Transparent it casts a soft shadow onto the
-    // alpha PNG), so it stays enabled regardless of the background source.
+    // Blur only applies when there is a backdrop behind the card.
     if (blurCheck_ != nullptr) blurCheck_->setEnabled(!isTransparent);
-    if (cardShadowCheck_ != nullptr) cardShadowCheck_->setEnabled(true);
+
+    // Card sub-options only matter while the card layer is added. (The drop
+    // shadow itself works in EVERY background mode, incl. Transparent.)
+    const bool cardOn = cardCheck_ == nullptr || cardCheck_->isChecked();
+    if (cardShadowCheck_ != nullptr) cardShadowCheck_->setEnabled(cardOn);
+    if (levelTextRenderCheck_ != nullptr) levelTextRenderCheck_->setEnabled(cardOn);
+    if (textOverflowCombo_ != nullptr) textOverflowCombo_->setEnabled(cardOn);
 
     // B1 inner-ring background: only when the chart frame is enabled AND the cover
     // background isn't Transparent (no image to show in the disk). The brightness
@@ -965,9 +1032,18 @@ void ExportCoverDialog::applyCompositionJson(const QJsonObject& root)
             qBound(0, qRound(cf.value(QStringLiteral("innerBrightness")).toDouble(0.8) * 100.0), 100));
     }
 
-    // --- Layer geometry (restores positions/scale + the chart-frame visible + frameSeconds). ---
+    // --- Layer geometry (restores positions/scale + per-layer visible + frameSeconds). ---
     if (model_ != nullptr) {
         model_->fromJson(root.value(QStringLiteral("layout")).toObject());
+    }
+
+    // The card add-toggle mirrors the restored card layer's visibility (the model
+    // already holds the value — just sync the checkbox without re-firing it).
+    if (cardCheck_ != nullptr && model_ != nullptr) {
+        if (const miacode::cover_export::CoverLayer* cardLayer = model_->layer(QStringLiteral("card"))) {
+            const QSignalBlocker block(cardCheck_);
+            cardCheck_->setChecked(cardLayer->visible());
+        }
     }
 
     // --- Reconcile the chart frame. The still image isn't persisted (only the
