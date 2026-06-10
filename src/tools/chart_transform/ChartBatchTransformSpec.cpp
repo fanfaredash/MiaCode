@@ -1191,11 +1191,11 @@ void runInlineSpecs(QTextStream& err, int* failed)
 
     {
         const miacode::chart_transform::ChartNormalizationResult normalized =
-            miacode::chart_transform::normalizeChartText(QStringLiteral("A1fxh[4:1],,,,\nE"));
+            miacode::chart_transform::normalizeChartText(QStringLiteral("A1fh[4:1],,,,\nE"));
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts a simple valid chart"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("{16}A1xhf[4:1],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("{16}A1hf[4:1],,,, ,,,, ,,,, ,,,,\nE"),
             QStringLiteral("normalize whole chart leaves a 384-divisor touch-hold duration untouched while still canonicalizing modifier order"),
             failed,
             err
@@ -1203,13 +1203,21 @@ void runInlineSpecs(QTextStream& err, int* failed)
     }
 
     {
+        // Touch notes no longer accept the `x` modifier, so normalization
+        // refuses the chart instead of canonicalizing it.
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(QStringLiteral("A1fxh[4:1],,,,\nE"));
+        expectTrue(!normalized.ok, QStringLiteral("normalize whole chart rejects a touch-hold with the x modifier"), failed, err);
+    }
+
+    {
         const miacode::chart_transform::ChartNormalizationResult normalized =
             miacode::chart_transform::normalizeChartText(
-                QStringLiteral("A1fxh[24:6]/1h[8:0]/1-5[24:3]/1-5[120#24:3],,,,\nE"));
+                QStringLiteral("A1fh[24:6]/1h[8:0]/1-5[24:3]/1-5[120#24:3],,,,\nE"));
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts mixed 384-divisor and hash durations"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("{16}A1xhf[24:6]/1h[8:0]/1-5[24:3]/1-5[120#24:3],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("{16}A1hf[24:6]/1h[8:0]/1-5[24:3]/1-5[120#24:3],,,, ,,,, ,,,, ,,,,\nE"),
             QStringLiteral("normalize whole chart leaves durations untouched when the original beats is a divisor of 384 or the signature carries '#'"),
             failed,
             err

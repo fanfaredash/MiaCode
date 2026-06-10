@@ -127,33 +127,36 @@ bool verifyLegacyAlignedSample(
     return true;
 }
 
+// Geometry (stripe scale, hole radii) still tracks v0.3.7-dev5; the alpha columns and the
+// small-ball scale ramp track MajdataPlay fire.anim (stripe alpha holds 0.589 until 0.5 s then
+// smoothsteps to 0; small ball 0.9-start alpha and 0.16667 s scale ramp; big ball 0.5 peak).
 bool verifyLegacyDev5Alignment(QTextStream& err)
 {
-    if (!verifyLegacyAlignedSample(0.0, 0.0, 0.7068, 0.2, 1.0, 1.0, 1.0, 12.906, 14.906, false, true, true, true, err)) {
+    if (!verifyLegacyAlignedSample(0.0, 0.0, 0.589, 0.2, 0.9, 1.0, 0.5, 12.906, 14.906, false, true, true, true, err)) {
         return false;
     }
-    if (!verifyLegacyAlignedSample(0.05, 0.0, 0.7068, 0.35, 0.93, 1.025, 0.876, 13.8359881, 15.8359881, false, true, true, true, err)) {
+    if (!verifyLegacyAlignedSample(0.05, 0.0, 0.589, 0.29, 0.9, 1.025, 0.5, 13.8359881, 15.8359881, false, true, true, true, err)) {
         return false;
     }
-    if (!verifyLegacyAlignedSample(0.1, 0.0, 0.7068, 0.5, 0.66, 1.05, 0.552, 16.5305691, 18.5305691, false, true, true, true, err)) {
+    if (!verifyLegacyAlignedSample(0.1, 0.0, 0.589, 0.38, 0.9, 1.05, 0.3666667, 16.5305691, 18.5305691, false, true, true, true, err)) {
         return false;
     }
-    if (!verifyLegacyAlignedSample(0.13333334, 0.6, 0.7068, 0.5, 0.48, 1.0666667, 0.336, 19.2366320, 21.2564784, true, true, true, true, err)) {
+    if (!verifyLegacyAlignedSample(0.13333334, 0.6, 0.589, 0.44, 0.6333333, 1.0666667, 0.2333333, 19.2366320, 21.2564784, true, true, true, true, err)) {
         return false;
     }
-    if (!verifyLegacyAlignedSample(0.2, 1.0333333, 0.7068, 0.5, 0.12, 1.1, 0.114419, 26.6412092, 29.4385362, true, true, true, true, err)) {
+    if (!verifyLegacyAlignedSample(0.2, 1.0333333, 0.589, 0.5, 0.1, 1.1, 0.0953488, 26.6412092, 29.4385362, true, true, true, true, err)) {
         return false;
     }
-    if (!verifyLegacyAlignedSample(0.5, 2.1590909, 0.7068, 0.5, 0.0, 1.15, 0.0641860, 84.4435487, 93.3101213, true, false, true, true, err)) {
+    if (!verifyLegacyAlignedSample(0.5, 2.1590909, 0.589, 0.5, 0.0, 1.15, 0.0534884, 84.4435487, 93.3101213, true, false, true, true, err)) {
         return false;
     }
-    if (!verifyLegacyAlignedSample(0.8, 3.1818182, 0.2912092, 0.5, 0.0, 1.15, 0.0139535, 159.4149022, 176.1534670, true, false, true, true, err)) {
+    if (!verifyLegacyAlignedSample(0.8, 3.1818182, 0.4149576, 0.5, 0.0, 1.15, 0.0116279, 159.4149022, 176.1534670, true, false, true, true, err)) {
         return false;
     }
-    if (!verifyLegacyAlignedSample(1.0, 3.8636364, 0.1137120, 0.5, 0.0, 1.15, 0.0, 203.6728030, 225.0584473, true, false, false, true, err)) {
+    if (!verifyLegacyAlignedSample(1.0, 3.8636364, 0.2073280, 0.5, 0.0, 1.15, 0.0, 203.6728030, 225.0584473, true, false, false, true, err)) {
         return false;
     }
-    if (!verifyLegacyAlignedSample(1.2, 4.5454545, 0.0250920, 0.5, 0.0, 1.15, 0.0, 232.6693625, 257.0996456, true, false, false, true, err)) {
+    if (!verifyLegacyAlignedSample(1.2, 4.5454545, 0.0404101, 0.5, 0.0, 1.15, 0.0, 232.6693625, 257.0996456, true, false, false, true, err)) {
         return false;
     }
 

@@ -191,6 +191,15 @@ affects both live diagnostics and exported overlays.
 
 - `SimaiNativeParser` → `MainWindow.ValidationFlow.cpp`, `PreviewTimelineFlow.cpp`,
   `TimelineQuickModel.cpp`, `ChartNormalization.cpp`, `VideoExportSnapshot.cpp`, `MuriAnalyzer.cpp`.
+- Parser validation severities / modifier acceptance rules are a THREE-WAY sync set: the parser
+  emit points, the spec tests (`src/tools/simai_parser/SimaiParserSpec.cpp` AND
+  `src/tools/chart_transform/ChartBatchTransformSpec.cpp` — normalization gates on
+  `buildValidationReport`, so tightening the parser breaks transform fixtures too), and the
+  diagnostics docs (`docs/CHART_DIAGNOSTICS_AND_NORMALIZATION_SPEC.md` + `_ZH.md`). Severity
+  contract since the 2026-05-03 decoupling: UI severity = strict-pass emit, NO lenient downgrade.
+  The 2026-05/06 drift (C1/C2 + break-slide-b + {N}∤384 flipped to Warning; touch `x` and
+  uppercase `B`/`X` rejected) shipped without updating the specs and sat as 10 CTest failures
+  for a month — update all three sides in the same patch.
 - preview SFX mapping → `VideoExportAudioRenderPlan.cpp`, `VideoExportAudioBackend` impls.
 - preview timing constants → `src/common/PreviewGameplayConfig.h`,
   `src/core/scene/PreviewOpacityCurves.cpp`, `VideoExportController.cpp`.

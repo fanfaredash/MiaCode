@@ -49,6 +49,18 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   rendering the artwork into an *inset* of the icon box (so the glyph reads ~menu-text size) — do
   NOT shrink `toolBar->setIconSize(...)` to size it: the gear is the toolbar's only icon, so its
   icon box drives the toolbar row height and a smaller iconSize visibly shortens the toolbar.
+- Native title-bar theming (Windows DWM): single owner `UiNativeWindowTheme`
+  (`src/app/ui/UiNativeWindowTheme.{h,cpp}`) — dark-mode flag + caption/text/border colors +
+  system backdrop per top-level window. Applied three ways, all idempotent: (1) an app-wide
+  auto-apply event filter installed in `main.cpp` (GUI path only) themes every eligible QWidget
+  top-level on Show/ActivationChange/palette change — popups/tooltips/frameless are excluded by
+  `isEligibleWidget`; (2) `UiDialogs::prepareDialogWindow` applies it when preparing a dialog;
+  (3) `MainWindow::WindowSection::applySystemWindowBackdrop` forwards to it (legacy call sites)
+  and its no-target form sweeps ALL visible top-levels on theme switch. QML root windows are
+  themed by `QuickShellBootstrap` via `UiNativeWindowTheme::applyToWindow` (no frame-refresh
+  tail, unlike the widget path). Do NOT re-add per-file DWM copies — tools-layer dialogs
+  (e.g. `ExportCoverDialog`) include `UiNativeWindowTheme.h` directly when they need an
+  explicit call.
 
 ## 3. Document model & file flow
 
@@ -59,6 +71,17 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Open/save/new/switch + autosave: `sections/document/MainWindow.DocumentFlow.cpp`
   (`onNewFile`, `onOpenFile`, `openStartupTarget`, `onSaveFile`, `runAutosaveCheck`,
   `loadDocument`, `rebuildFieldSidebar`, `populateMetadataPage`, `populateDifficultyPage`).
+- Crash recovery + abnormal-exit autosave prompt: `src/common/CrashRecovery.{h,cpp}`
+  (crash-handler snapshot → `<chart>.crash_recovery`; **session marker**
+  `<AppConfigLocation>/session.marker` written via `TimelineSection::setCurrentFilePath`,
+  cleared on both clean-close paths — legacy `WindowRuntime closeEvent` and quick-shell
+  `WindowShell confirmShellClose` — GUI-only via `setSessionMarkerEnabled(true)` in `main.cpp`,
+  so CLI export/worker runs never touch it). The chart-open prompt lives in
+  `applyOpenedDocumentState` (`MainWindow.DocumentFlow.cpp`): offers the crash file, and —
+  when `consumeAbandonedSessionChartMatch` says the previous session died abnormally on this
+  chart (kill / power loss, no handler ran) — also the debounced autosave `<name>.bak`
+  (only if its mtime is newer than the chart file). Fires proactively at startup because
+  `restoreLastSessionFile` funnels through the same path.
 - Editor header/page-mode UI: `sections/document/MainWindow.DocumentUi.cpp`.
 - Chart text editor: `src/editor/PlainCodeEditor.{h,cpp}` (line numbers, transform context menu,
   half-width normalization, `normalizedViewportHitPosition`, bracket auto-close
@@ -91,7 +114,19 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   difficulty is active, `TimelineSection::parsedRawFirstSeconds` reads the live field text (so an
   uncommitted edit reflows the timeline; `editingFinished` triggers `refreshTimelineMetadata`);
   it commits to `document_.first` in `applyCurrentFieldToDocument`'s difficulty branch (sets
-  `metadataTimingChanged`). The difficulty header no longer has a per-difficulty designer field.
+  `metadataTimingChanged`).
+- **Header 顶部显示 preference (offset vs designer):** the header field pair next to Lv is
+  switchable — `MainWindow::EditorHeaderTopDisplay` (`Offset` default / `Designer`), state
+  `editorHeaderTopDisplay_`, persisted as `ui.editor_header_top_display` (`"offset"`/`"designer"`),
+  preference row at the top of Preferences → 编辑器. In Designer mode the header shows
+  `difficultyDesignerLabel_` + `difficultyDesignerEdit_` (`&des_N` of the active difficulty,
+  re-added in `MainWindow.FrameBootstrap.cpp`); visibility is applied by
+  `updateEditorHeaderLayoutMode`, apply chain `MainWindow::applyEditorHeaderTopDisplay` →
+  `EditorSection::applyEditorHeaderTopDisplay`. The hidden pair's edit is still populated
+  (`populateDifficultyPage`) and recaptured on commit/autosave, so reads are unconditional; any
+  code that rewrites designers behind the header's back must call
+  `DocumentSection::syncHeaderDesignerEditFromModel` (designer dialog commit, unified reconcile,
+  unified broadcast, preference flip all do).
 - **Per-difficulty designers + unified designer:** managed from a modal dialog, NOT a persistent
   checkbox. The metadata designer row has a "管理多个难度名义" button →
   `MainWindow::onManagePerDifficultyDesigners` → `DocumentSection::openPerDifficultyDesignerDialog`
@@ -107,14 +142,18 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     into the standalone map; `toText` emits a bare `&des_N=` for it (no phantom `&lv_N`/`&inote_N`,
     no sidebar entry). The dialog writes chart-less names via `setDesignerForSlot`.
   **Unified sync invariant — every designer-touching path must preserve it** (sync set): edit-time
-  broadcast `applyCurrentFieldToDocument` (metadata top-`&des` branch only now — the difficulty
-  header has no designer field); apply `applyUnifiedDesignerName`; load reconcile
+  broadcast `applyCurrentFieldToDocument` (both the metadata top-`&des` branch AND the difficulty
+  branch's header `difficultyDesignerEdit_` — see the 顶部显示 preference above); apply
+  `applyUnifiedDesignerName`; load reconcile
   `refreshUnifiedDesignerStateForLoadedDocument`; new-difficulty seed
   (`MainWindow.FrameBootstrap.cpp`); undo-delete restore re-seed
-  (`MainWindow.DocumentEditorState.cpp`); autosave snapshot mirror (`currentDocumentTextForAutosave`).
+  (`MainWindow.DocumentEditorState.cpp`); autosave snapshot mirror (`currentDocumentTextForAutosave`,
+  which captures the live header designer text and treats it as canonical under unified mode).
   All broadcast/apply sites iterate `perDifficultyDesigners()` + `setDesignerForSlot` so standalone
-  `&des_N` participate too. There is **no longer cross-page UI designer sync** (no per-difficulty
-  designer line edit to mirror). The free-form "Other &xx Fields" editor must parse via
+  `&des_N` participate too. Cross-page UI sync = mirror `designerEdit_` (metadata) and call
+  `syncHeaderDesignerEditFromModel` (header) after model-side rewrites — the broadcast block,
+  dialog commit, and `applyUnifiedDesignerName` all do both. The free-form "Other &xx Fields"
+  editor must parse via
   `SimaiDocument::parseUnmanagedFields` (not `parseRawFields`) so a manually typed managed key
   (`des`/`des_N`/`lv_N`/`inote_N`/title/artist/first/video) can't bypass the model and emit a
   duplicate/divergent line.
@@ -180,6 +219,15 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Active QSG layers: `src/preview/quick_scene/` — `PreviewQuickSceneRoot.*`, `PreviewQuick*Layer.*`,
   `PreviewQuick{Sprite,Circle,Arc,Sector}Nodes.*`, `PreviewTextureRepository.*`,
   `shaders/PreviewSpriteMaterial.*` / `PreviewFireworkMaterial.*` / `PreviewStageDimMaterial.*`.
+  - Center-display HUD (combo/达成率/DX分, `CenterDisplayMode`, default Off): `updateCenterDisplaySlot`
+    in `PreviewQuickSceneRoot.cpp` re-rasterizes a full-`renderSize` QImage → ad-hoc
+    `createTextureFromImage` per judged-note stats change. **Texture-ownership contract (beta8 leak
+    fix, 2026-06-10):** that slot's `QSGSimpleTextureNode` MUST keep `setOwnsTexture(true)`, and its
+    teardown paths do a plain `delete node` with NO manual `texture()` delete. Without OwnsTexture,
+    `setTexture()` replacement leaked one ~4.6 MB full-viewport texture per judged note — the 0.5.0
+    "掉帧→必须重启/闪退" root cause (`docs/PREVIEW_FRAMEDROP_DIAGNOSIS_AND_FIX_SPEC_ZH.md` §8). Any
+    new ad-hoc `createTextureFromImage` + texture-node site must declare ownership explicitly
+    (repository-cached textures stay `setOwnsTexture(false)` — the repository deletes them).
 - DComp path (**OFF by default**): `src/sources/*Source` → `src/render/compositor` →
   `src/render/backend_d3d11/PreviewDComp*` + `TimelineRenderView`.
 
@@ -330,16 +378,26 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     exported still is WYSIWYG with the live scene. `exportCover` stops playback, then re-grabs at the
     exact export resolution (`chartFrameRenderPx` = `sizeFraction × outputHeight`) before compositing,
     and warns (non-fatal) if an enabled frame still has no still rather than silently shipping a cover
-    missing it. Card-shadow stays enabled in Transparent mode; blur is
-    gated to non-transparent. On accept the caller drives `exportCover(outputDir)`.
+    missing it. Blur is gated to non-transparent. On accept the caller drives `exportCover(outputDir)`.
+    **Controls layout (2026-06-10):** three `QGroupBox` sections — "尺寸 / 背景" (size, background
+    source+path, blur), "难度卡" (an **"添加难度卡 / Add difficulty card" opt-in checkbox** + shadow /
+    level-text / long-text, sub-options gated on it), "谱面帧" (the add checkbox + frame-time row +
+    inner-bg + brightness). The card toggle drives the card layer's `visible` on the shared model
+    (NOTIFY → live scene + export both follow); reset re-ticks it, B2 import syncs it from the restored
+    layer, and the QML selection chrome skips hidden layers (`l.visible` gate). The card drop shadow
+    itself still works in EVERY background mode incl. Transparent.
   - **Chart-frame inner-ring background (B1, 2026-06-09):** when "谱面帧内圈背景 / Chart-frame inner
     background" is ticked (and the cover background isn't Transparent), the chart-frame playfield disk
     shows the SAME cover background image (`backdropSourceUrl` = 曲绘/custom), crisp, dimmed by a
     "谱面帧背景亮度" slider; the OUTER ring stays transparent (the overlay's notes/ring/effects still
     extend across the square). Implemented **purely in `CoverComposer.qml`** (no scene-root / media /
-    layer-flag change): a hidden source `Image` (`PreserveAspectCrop`) + a `MultiEffect`
-    (`maskEnabled` + `brightness = sliderBrightness − 1`) masked by a centred white-circle captured via
-    `ShaderEffectSource` (`hideSource`, the repo's proven pattern). The circle diameter = the playfield
+    layer-flag change): a hidden source `Image` (`PreserveAspectCrop`) + a `MultiEffect` (`maskEnabled`)
+    masked by a centred white-circle captured via `ShaderEffectSource` (`hideSource`, the repo's proven
+    pattern), **dimmed by a black circle overlay at `opacity = 1 − brightness`** — the SAME
+    multiplicative model the realtime preview's 内圈亮度 uses (stage-background dim) — NOT
+    `MultiEffect.brightness`, which is additive and crushes dark pixels (fixed 2026-06-10). The slider
+    seeds from the user's `task.backgroundBrightnessInner`, so the same value looks the same as the
+    preview. The circle diameter = the playfield
     ring: `SceneFrameRenderer::playfieldDiskDiameterFraction()` = `layoutSquareScale ·
     effectiveLayoutRingDiameterRatio` (the exact ring math from `PreviewVideoGeometryConfig.h`), passed
     through `CoverComposerInputs.chartFrameDiskDiameter`. Renders identically in the live preview and
