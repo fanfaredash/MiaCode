@@ -110,6 +110,13 @@
       "context": "application",
       "owner": "MainWindow.BootstrapAndMenus"
     },
+    "preview.pause_display_hold": {
+      "label_zh": "暂停时切换 判定区 / PV（按住）",
+      "label_en": "Flip Judge Area / PV While Paused (Hold)",
+      "default": "Alt",
+      "context": "application",
+      "owner": "MainWindow.WindowInteraction"
+    },
     "editor.font_decrease": {
       "label_zh": "编辑器字号减小",
       "label_en": "Decrease Editor Font",

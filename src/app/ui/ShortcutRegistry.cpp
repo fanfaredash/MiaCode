@@ -30,6 +30,7 @@ const QStringList& editableShortcutIds()
         QStringLiteral("preview.play_pause_global"),
         QStringLiteral("preview.speed_down"),
         QStringLiteral("preview.speed_up"),
+        QStringLiteral("preview.pause_display_hold"),
         QStringLiteral("editor.font_decrease"),
         QStringLiteral("editor.font_increase"),
         QStringLiteral("editor.overwrite_mode"),

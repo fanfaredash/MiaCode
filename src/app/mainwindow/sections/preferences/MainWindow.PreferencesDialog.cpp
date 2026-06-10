@@ -54,11 +54,12 @@ QString shortcutSequenceText(const QKeySequence& sequence)
 
 class ShortcutCaptureEdit final : public QLineEdit {
 public:
-    explicit ShortcutCaptureEdit(QWidget* parent = nullptr)
+    explicit ShortcutCaptureEdit(QWidget* parent = nullptr, bool allowBareModifier = false)
         : QLineEdit(parent)
+        , allowBareModifier_(allowBareModifier)
     {
         setAlignment(Qt::AlignCenter);
-        setPlaceholderText(QStringLiteral("Ctrl+Alt+K"));
+        setPlaceholderText(allowBareModifier_ ? QStringLiteral("Alt") : QStringLiteral("Ctrl+Alt+K"));
     }
 
     QKeySequence sequence() const { return sequence_; }
@@ -98,6 +99,16 @@ protected:
 
         const int key = event->key();
         if (key == Qt::Key_Control || key == Qt::Key_Shift || key == Qt::Key_Alt || key == Qt::Key_Meta) {
+            // Hold-type shortcuts (e.g. preview.pause_display_hold) may bind a
+            // bare modifier. Record it tentatively; if the user continues into
+            // a full combo (Ctrl → Ctrl+X) the combo branch below overwrites
+            // it, so combo capture is unaffected. QKeySequence(Qt::Key_Alt)
+            // round-trips through toString()/fromString as "Alt" (verified on
+            // Qt 6.8; bare Control serializes as "Control").
+            if (allowBareModifier_ && !event->isAutoRepeat()) {
+                sequence_ = QKeySequence(key);
+                setText(shortcutSequenceText(sequence_));
+            }
             event->accept();
             return;
         }
@@ -111,6 +122,7 @@ protected:
 
 private:
     QKeySequence sequence_;
+    bool allowBareModifier_ = false;
 };
 
 class ShortcutTableWidget final : public QTableWidget {
@@ -269,6 +281,7 @@ QList<QPair<QString, QStringList>> shortcutCategoryGroups()
                 QStringLiteral("preview.play_pause_global"),
                 QStringLiteral("preview.speed_down"),
                 QStringLiteral("preview.speed_up"),
+                QStringLiteral("preview.pause_display_hold"),
             },
         },
         {
@@ -935,20 +948,9 @@ void MainWindow::PreferencesSection::onPreferences()
     resetShortcutsButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     shortcutsLayout->addWidget(editShortcutsButton, 0, Qt::AlignLeft);
     shortcutsLayout->addWidget(resetShortcutsButton, 0, Qt::AlignLeft);
-    // Fixed (non-rebindable) hold-modifier behavior. It lives outside the
-    // editable shortcut table because the capture dialog can't record a bare
-    // modifier, so a table row would suggest a rebind that can't happen.
-    auto* altPauseHintLabel = new QLabel(
-        uiText(
-            "dialog.preferences.shortcuts.alt_pause_hint",
-            "Hold Alt while the preview is paused to flip between judge area and PV."
-        ),
-        shortcutsGroup
-    );
-    altPauseHintLabel->setWordWrap(true);
-    altPauseHintLabel->setStyleSheet(
-        QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
-    shortcutsLayout->addWidget(altPauseHintLabel, 0, Qt::AlignLeft);
+    // The Alt-hold pause-display behavior used to be a fixed hint label here;
+    // it is now the editable preview.pause_display_hold entry in the table
+    // (the capture edit accepts bare modifiers for hold-type shortcuts).
     flattenPageGroup(shortcutsGroup);
     shortcutsPageLayout->addWidget(shortcutsGroup);
     shortcutsPageLayout->addStretch(1);
@@ -1092,9 +1094,20 @@ void MainWindow::PreferencesSection::onPreferences()
             auto* captureLayout = new QVBoxLayout(&captureDialog);
             captureLayout->setContentsMargins(24, 22, 24, 18);
             captureLayout->setSpacing(12);
-            auto* prompt = new QLabel(uiText("dialog.preferences.shortcuts.capture_prompt", "Press the desired key combination, then press Enter."), &captureDialog);
+            // Hold-type shortcuts may bind a bare modifier (Alt alone), which
+            // the regular combo capture deliberately swallows.
+            const bool allowBareModifier = (id == QStringLiteral("preview.pause_display_hold"));
+            auto* prompt = new QLabel(
+                allowBareModifier
+                    ? uiText(
+                          "dialog.preferences.shortcuts.capture_prompt_hold",
+                          "Press the key to hold (a bare modifier like Alt works), then press Enter.")
+                    : uiText(
+                          "dialog.preferences.shortcuts.capture_prompt",
+                          "Press the desired key combination, then press Enter."),
+                &captureDialog);
             prompt->setAlignment(Qt::AlignCenter);
-            auto* captureEdit = new ShortcutCaptureEdit(&captureDialog);
+            auto* captureEdit = new ShortcutCaptureEdit(&captureDialog, allowBareModifier);
             captureEdit->setMinimumHeight(42);
             captureEdit->setStyleSheet(QStringLiteral("font-size: 15px; padding: 7px 10px;"));
             auto* previewLabel = new QLabel(&captureDialog);

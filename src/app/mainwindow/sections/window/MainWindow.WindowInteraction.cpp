@@ -4,6 +4,7 @@
 #include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "DialogLocalization.h"
+#include "ShortcutRegistry.h"
 #include "UiText.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
@@ -48,6 +49,39 @@ bool bottomTabsResizeHotzoneContains(QWidget* bottomTabs, QWidget* watchedWidget
     const QPoint bottomTabsPos =
         watchedWidget == bottomTabs ? localPos : watchedWidget->mapTo(bottomTabs, localPos);
     return bottomTabsPos.y() >= 0 && bottomTabsPos.y() <= kBottomTabsResizeHotzonePx;
+}
+
+// The pause-display hold key (default Alt, id preview.pause_display_hold,
+// rebindable via 首选项 → 快捷键) flips 判定区 ⇄ PV while the preview is
+// paused, for as long as the key is physically held. Hold semantics need raw
+// press/release pairs — possibly of a bare modifier — so it cannot ride the
+// QAction/QShortcut path; the event filter below matches against this combo.
+struct PauseDisplayHoldKey {
+    int key = Qt::Key_Alt;
+    Qt::KeyboardModifiers pressModifiers = Qt::AltModifier;
+};
+
+PauseDisplayHoldKey pauseDisplayHoldKey()
+{
+    PauseDisplayHoldKey hold;
+    const QKeySequence sequence = ShortcutRegistry::instance().sequence(
+        QStringLiteral("preview.pause_display_hold"), QKeySequence(Qt::Key_Alt));
+    if (sequence.isEmpty()) {
+        return hold;
+    }
+    const QKeyCombination combination = sequence[0];
+    hold.key = combination.key();
+    switch (hold.key) {
+    // A bare modifier press reports its own flag in modifiers(); requiring
+    // exactly that flag keeps prefixed combos (e.g. Alt+F4) from arming the
+    // hold — same gate the original Alt-only implementation used.
+    case Qt::Key_Alt: hold.pressModifiers = Qt::AltModifier; break;
+    case Qt::Key_Control: hold.pressModifiers = Qt::ControlModifier; break;
+    case Qt::Key_Shift: hold.pressModifiers = Qt::ShiftModifier; break;
+    case Qt::Key_Meta: hold.pressModifiers = Qt::MetaModifier; break;
+    default: hold.pressModifiers = combination.keyboardModifiers(); break;
+    }
+    return hold;
 }
 
 void appendPreviewInteractionLog(const QString& action, const QString& payload = QString())
@@ -484,25 +518,30 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
             }
         });
     }
-    // Alt-hold pause display toggle: while the preview is paused, holding Alt
-    // temporarily inverts the "暂停时显示判定区" option (judge area ⇄ PV/BG);
-    // releasing Alt restores it. Losing app focus (e.g. Alt+Tab) eats the
+    // Hold-key pause display toggle (default Alt, rebindable — see
+    // pauseDisplayHoldKey() above): while the preview is paused, holding the
+    // key temporarily inverts the "暂停时显示判定区" option (judge area ⇄
+    // PV/BG); releasing it restores. Losing app focus (e.g. Alt+Tab) eats the
     // release event, so ApplicationDeactivate also restores. This block only
     // OBSERVES — it never consumes the event — so Alt+F4, menu mnemonics and
-    // every other Alt combination keep working; an Alt-prefixed combo merely
-    // flips the paused view for as long as Alt is physically down.
+    // every other combination keep working; a prefixed combo merely flips the
+    // paused view for as long as the key is physically down. Auto-repeat
+    // releases are ignored so a held non-modifier key doesn't flicker the
+    // state on synthesized repeat pairs.
     if (event != nullptr
-        && (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease)
-        && static_cast<QKeyEvent*>(event)->key() == Qt::Key_Alt) {
-        auto* altKeyEvent = static_cast<QKeyEvent*>(event);
-        if (event->type() == QEvent::KeyPress
-            && !altKeyEvent->isAutoRepeat()
-            && altKeyEvent->modifiers() == Qt::AltModifier
-            && QApplication::activeModalWidget() == nullptr
-            && QApplication::activePopupWidget() == nullptr) {
-            owner_.setPauseDisplayAltHoldActive(true);
-        } else if (event->type() == QEvent::KeyRelease) {
-            owner_.setPauseDisplayAltHoldActive(false);
+        && (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease)) {
+        auto* holdKeyEvent = static_cast<QKeyEvent*>(event);
+        const PauseDisplayHoldKey hold = pauseDisplayHoldKey();
+        if (holdKeyEvent->key() == hold.key) {
+            if (event->type() == QEvent::KeyPress
+                && !holdKeyEvent->isAutoRepeat()
+                && holdKeyEvent->modifiers() == hold.pressModifiers
+                && QApplication::activeModalWidget() == nullptr
+                && QApplication::activePopupWidget() == nullptr) {
+                owner_.setPauseDisplayAltHoldActive(true);
+            } else if (event->type() == QEvent::KeyRelease && !holdKeyEvent->isAutoRepeat()) {
+                owner_.setPauseDisplayAltHoldActive(false);
+            }
         }
     } else if (event != nullptr && event->type() == QEvent::ApplicationDeactivate) {
         owner_.setPauseDisplayAltHoldActive(false);
