@@ -21,6 +21,9 @@ same change.
 - Debug switches, the `--debug` logging system, log channels, env-var index → `references/debug-and-logging.md`
 - Build configs, targets, the `MIACODE_BUILD_DEV_TOOLS` spec convention + CTest, scripts,
   assets, packaging, helper binaries → `references/build-and-tools.md`
+- UI layout bugs — 边界被吞 / clipped borders, tab 页被裁剪, dark-mode 失效, 1px 缝隙/接缝,
+  层叠关系错误 / stacking, hit-area mismatch → use the **`qt-ui-layout-pitfalls`** skill
+  (symptom routing table + proven recipes) BEFORE editing any dialog/QML layout code.
 
 ## Repo at a glance (current paths — verified 2026-05-29)
 
