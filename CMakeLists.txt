@@ -9,7 +9,7 @@ set(MIACODE_VERSION_PATCH "0")
 # split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
 # they always drifted apart in practice (e.g. beta20 zip shipping with
 # beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "beta4")
+set(MIACODE_VERSION_PRERELEASE "beta8")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
@@ -125,6 +125,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/ui/ShortcutRegistry.cpp
     src/app/ui/UiTheme.h
     src/app/ui/UiTheme.cpp
+    src/app/ui/UiNativeWindowTheme.h
+    src/app/ui/UiNativeWindowTheme.cpp
     src/app/ui/WindowParityMetrics.h
     src/app/ui/WindowParityMetrics.cpp
     src/common/MuriTypes.h

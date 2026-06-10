@@ -6,6 +6,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QSaveFile>
+#include <QStandardPaths>
 
 #include <atomic>
 #include <csignal>
@@ -420,6 +422,135 @@ QByteArray readRecoveryFile(const QString& chartFilePath)
         return QByteArray();
     }
     return file.readAll();
+}
+
+namespace {
+
+std::atomic<bool> g_sessionMarkerEnabled{false};
+
+QString sessionMarkerFilePath()
+{
+    const QString configRoot =
+        QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    if (configRoot.isEmpty()) {
+        return QString();
+    }
+    return QDir(configRoot).filePath(QStringLiteral("session.marker"));
+}
+
+// Capture-once of the marker the PREVIOUS session left behind. Runs on
+// the first marker operation of this process (before any write can
+// overwrite the file) and deletes the file so a marker is never
+// "abandoned" twice. Returns the chart path recorded in it, or empty.
+const QString& abandonedSessionChartPath()
+{
+    static const QString captured = []() -> QString {
+        const QString markerPath = sessionMarkerFilePath();
+        if (markerPath.isEmpty()) {
+            return QString();
+        }
+        QFile file(markerPath);
+        if (!file.exists()) {
+            return QString();
+        }
+        QString chartPath;
+        if (file.open(QIODevice::ReadOnly)) {
+            chartPath = QString::fromUtf8(file.readAll()).trimmed();
+            file.close();
+        }
+        file.remove();
+        logCrashRecovery("abandoned_session_marker_found",
+                         QStringLiteral("chart=%1").arg(chartPath));
+        return chartPath;
+    }();
+    return captured;
+}
+
+}  // namespace
+
+void setSessionMarkerEnabled(bool enabled)
+{
+    g_sessionMarkerEnabled.store(enabled, std::memory_order_release);
+}
+
+void updateSessionMarker(const QString& chartFilePath)
+{
+    if (!g_sessionMarkerEnabled.load(std::memory_order_acquire)) {
+        return;
+    }
+    // Force the previous session's marker to be captured before this
+    // session's first write replaces the file — otherwise a normal
+    // startup would read its OWN marker back as "abandoned".
+    abandonedSessionChartPath();
+    if (chartFilePath.isEmpty()) {
+        clearSessionMarker();
+        return;
+    }
+    const QString markerPath = sessionMarkerFilePath();
+    if (markerPath.isEmpty()) {
+        return;
+    }
+    QDir().mkpath(QFileInfo(markerPath).absolutePath());
+    QSaveFile file(markerPath);
+    if (!file.open(QIODevice::WriteOnly)) {
+        logCrashRecovery("session_marker_write_failed",
+                         QStringLiteral("path=%1 err=%2")
+                             .arg(markerPath)
+                             .arg(file.errorString()));
+        return;
+    }
+    const QByteArray payload = chartFilePath.toUtf8();
+    if (file.write(payload) != payload.size() || !file.commit()) {
+        logCrashRecovery("session_marker_write_failed",
+                         QStringLiteral("path=%1 err=%2")
+                             .arg(markerPath)
+                             .arg(file.errorString()));
+    }
+}
+
+void clearSessionMarker()
+{
+    if (!g_sessionMarkerEnabled.load(std::memory_order_acquire)) {
+        return;
+    }
+    abandonedSessionChartPath();
+    const QString markerPath = sessionMarkerFilePath();
+    if (markerPath.isEmpty()) {
+        return;
+    }
+    QFile file(markerPath);
+    if (file.exists() && !file.remove()) {
+        logCrashRecovery("session_marker_delete_failed",
+                         QStringLiteral("path=%1 err=%2")
+                             .arg(markerPath)
+                             .arg(file.errorString()));
+    }
+}
+
+bool consumeAbandonedSessionChartMatch(const QString& chartFilePath)
+{
+    if (!g_sessionMarkerEnabled.load(std::memory_order_acquire)
+        || chartFilePath.isEmpty()) {
+        return false;
+    }
+    const QString& abandoned = abandonedSessionChartPath();
+    if (abandoned.isEmpty()) {
+        return false;
+    }
+    // GUI-thread only — no synchronization needed on the consumed flag.
+    static bool consumed = false;
+    if (consumed) {
+        return false;
+    }
+    const bool match =
+        QDir::cleanPath(abandoned).compare(QDir::cleanPath(chartFilePath),
+                                           Qt::CaseInsensitive) == 0;
+    if (match) {
+        consumed = true;
+        logCrashRecovery("abandoned_session_marker_consumed",
+                         QStringLiteral("chart=%1").arg(chartFilePath));
+    }
+    return match;
 }
 
 bool deleteRecoveryFile(const QString& chartFilePath)

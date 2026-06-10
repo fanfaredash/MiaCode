@@ -28,13 +28,31 @@
 // the user a one-click restore. Always cleared on clean save / clean
 // app close so it never lingers across normal sessions.
 //
+// **Session marker (abnormal-exit detection).** The crash handlers above
+// only cover terminations that actually run them. A task-manager kill,
+// power loss, or a fail-fast abort (__fastfail, heap-corruption
+// termination) writes no recovery file — but the regular 2-second
+// debounced autosave (`.miacode/.autosave/<file>/<file>.bak`) usually
+// holds the unsaved edits. To know whether the previous session ended
+// abnormally, a tiny marker file (the current chart path) is written to
+// the app config dir while a chart is open and deleted on clean close.
+// Marker present at next startup ⇒ the previous session died without a
+// clean shutdown ⇒ the chart-open recovery prompt may also offer the
+// autosave-latest snapshot, not just the crash-handler file. The marker
+// is GUI-session-only: CLI export / export-worker processes share this
+// binary and must never touch it (setSessionMarkerEnabled stays false
+// there).
+//
 // Lifecycle:
-//   main()                 → install()         (once)
+//   main() [GUI only]      → install() + setSessionMarkerEnabled(true)
 //   chart open/close       → updateSnapshot()  (initial state)
+//                          → updateSessionMarker(path)  (via setCurrentFilePath)
 //   markCurrentFieldDirty  → updateSnapshot()  (per edit)
 //   explicit save / chart close → clearSnapshot() + deleteRecoveryFile()
+//   clean app close        → clearSessionMarker()
 //   crash                  → handler → flushSnapshotToDisk()  (writes file)
-//   next chart open of same path → readRecoveryFile() → prompt → load
+//   next chart open of same path → readRecoveryFile() + (if marker matched)
+//                                  autosave-latest → prompt → load
 
 #include <QByteArray>
 #include <QString>
@@ -97,5 +115,32 @@ QByteArray readRecoveryFile(const QString& chartFilePath);
 // recovery, after a successful explicit save, and on clean app close.
 // Returns true if the file was deleted (or didn't exist).
 bool deleteRecoveryFile(const QString& chartFilePath);
+
+// ---- Session marker (abnormal-exit detection) ----------------------
+
+// Enable the session-marker mechanism for this process. Default OFF so
+// CLI video export and export-worker runs (which construct MainWindow
+// and open charts in this same binary) never create or destroy the GUI
+// session's marker. Call once from main(), only on the GUI path.
+void setSessionMarkerEnabled(bool enabled);
+
+// Record that a chart is currently open in this GUI session. Writes the
+// chart path to `<AppConfigLocation>/session.marker`. An empty path
+// clears the marker (no chart open → nothing to recover). The first
+// marker operation of the process captures the previous session's
+// abandoned marker (see consumeAbandonedSessionChartMatch) before
+// overwriting it. No-op while the mechanism is disabled.
+void updateSessionMarker(const QString& chartFilePath);
+
+// Delete the marker. Called on clean app close, after autosave/crash
+// cleanup. No-op while the mechanism is disabled.
+void clearSessionMarker();
+
+// True exactly once per process: when chartFilePath matches the chart
+// recorded by the marker the previous session left behind (i.e. that
+// session ended without a clean close while this chart was open).
+// Callers use this to widen the chart-open recovery prompt to the
+// debounced autosave snapshot. Always false while disabled.
+bool consumeAbandonedSessionChartMatch(const QString& chartFilePath);
 
 }  // namespace miacode::crash_recovery

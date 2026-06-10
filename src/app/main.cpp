@@ -4,6 +4,7 @@
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "UiNativeWindowTheme.h"
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
@@ -1710,6 +1711,17 @@ int main(int argc, char* argv[])
         }
         return exitCode;
     }
+
+    // GUI session from here on. Arm the abnormal-exit session marker —
+    // CLI export / worker runs above must never touch it (they open
+    // charts through the same MainWindow code paths).
+    miacode::crash_recovery::setSessionMarkerEnabled(true);
+
+    // Auto-theme native title bars of every QWidget top-level (dialogs,
+    // message boxes) as they show, including tools-layer dialogs that can't
+    // reach MainWindow::WindowSection. QML root windows are themed by
+    // QuickShellBootstrap. GUI-only: CLI runs above never show windows.
+    UiNativeWindowTheme::installAutoApplyFilter();
 
     // Phase 3a of the v2-refactor — `--quick-shell-beta` becomes the
     // canonical opt-in for the new DComp pipeline. Setting the env vars

@@ -16,6 +16,7 @@
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "common/AssetPaths.h"
 #include "common/PreviewSfxAssets.h"
+#include "common/CrashRecovery.h"
 #include "common/DebugOptions.h"
 #include "common/DebugLog.h"
 #include "preview/runtime/PreviewRuntime.h"
@@ -607,8 +608,11 @@ void MainWindow::WindowSection::closeEvent(QCloseEvent* event)
         );
         // Clean exit: drop the crash-recovery snapshot + delete any
         // recovery file so we don't prompt the user on next open about
-        // a "crash" that was actually a clean shutdown.
+        // a "crash" that was actually a clean shutdown. The session
+        // marker goes with them — its whole job is to survive ONLY
+        // abnormal exits.
         owner_.documentSection_->cleanupCrashRecoveryForCleanExit();
+        miacode::crash_recovery::clearSessionMarker();
 
         QElapsedTimer savePortableTimer;
         savePortableTimer.start();

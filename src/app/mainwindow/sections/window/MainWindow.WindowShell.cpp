@@ -7,9 +7,12 @@
 #include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "UiNativeWindowTheme.h"
 #include "../validation/MainWindow.ValidationSection.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
+#include "../document/MainWindow.DocumentSection.h"
 #include "../export/MainWindow.ExportSection.h"
+#include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
@@ -248,94 +251,8 @@ void refreshMenuBarTheme(QMenuBar* menuBar, QSet<QMenu*>* visited)
     }
 }
 
-#ifdef Q_OS_WIN
-constexpr DWORD kDwmwaUseImmersiveDarkMode = 20;
-constexpr DWORD kDwmwaBorderColor = 34;
-constexpr DWORD kDwmwaCaptionColor = 35;
-constexpr DWORD kDwmwaTextColor = 36;
-constexpr DWORD kDwmwaSystemBackdropType = 38;
-constexpr DWORD kDwmwaMicaEffect = 1029;
-constexpr int kDwmsbtNone = 1;
-constexpr int kDwmsbtMainWindow = 2;
-constexpr COLORREF kDwmColorDefault = 0xFFFFFFFF;
-
-bool setDwmWindowAttribute(HWND hwnd, DWORD attribute, const void* value, DWORD size)
-{
-    if (hwnd == nullptr || value == nullptr || size == 0) {
-        return false;
-    }
-    static HMODULE dwmapiModule = ::LoadLibraryW(L"dwmapi.dll");
-    if (dwmapiModule == nullptr) {
-        return false;
-    }
-    using DwmSetWindowAttributeFn = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
-    static auto setWindowAttribute = reinterpret_cast<DwmSetWindowAttributeFn>(
-        ::GetProcAddress(dwmapiModule, "DwmSetWindowAttribute")
-    );
-    if (setWindowAttribute == nullptr) {
-        return false;
-    }
-    return SUCCEEDED(setWindowAttribute(hwnd, attribute, value, size));
-}
-
-COLORREF colorRefForDwm(const QColor& color)
-{
-    return RGB(color.red(), color.green(), color.blue());
-}
-
-void applySystemBackdropToWidget(QWidget* widget, bool enabled, bool darkTheme)
-{
-    if (widget == nullptr) {
-        return;
-    }
-    widget->winId();
-    QWidget* topLevel = widget->window();
-    const WId nativeId = topLevel != nullptr ? topLevel->winId() : widget->winId();
-    const HWND hwnd = reinterpret_cast<HWND>(nativeId);
-    if (hwnd == nullptr) {
-        return;
-    }
-
-    const BOOL darkMode = darkTheme ? TRUE : FALSE;
-    setDwmWindowAttribute(hwnd, kDwmwaUseImmersiveDarkMode, &darkMode, sizeof(darkMode));
-
-    if (UiText::preferredTheme() == UiText::ThemePreference::System) {
-        setDwmWindowAttribute(hwnd, kDwmwaBorderColor, &kDwmColorDefault, sizeof(kDwmColorDefault));
-        setDwmWindowAttribute(hwnd, kDwmwaCaptionColor, &kDwmColorDefault, sizeof(kDwmColorDefault));
-        setDwmWindowAttribute(hwnd, kDwmwaTextColor, &kDwmColorDefault, sizeof(kDwmColorDefault));
-    } else {
-        const UiTheme::Colors& themeColors = UiTheme::colors();
-        const bool active = topLevel != nullptr ? topLevel->isActiveWindow() : widget->isActiveWindow();
-        const COLORREF borderColor = colorRefForDwm(active ? themeColors.borderStrong : themeColors.borderSoft);
-        const COLORREF captionColor = colorRefForDwm(active ? themeColors.toolbarBg : themeColors.windowAltBg);
-        const COLORREF textColor = colorRefForDwm(active ? themeColors.textPrimary : themeColors.textSecondary);
-        setDwmWindowAttribute(hwnd, kDwmwaBorderColor, &borderColor, sizeof(borderColor));
-        setDwmWindowAttribute(hwnd, kDwmwaCaptionColor, &captionColor, sizeof(captionColor));
-        setDwmWindowAttribute(hwnd, kDwmwaTextColor, &textColor, sizeof(textColor));
-    }
-
-    const int backdropType = enabled ? kDwmsbtMainWindow : kDwmsbtNone;
-    if (!setDwmWindowAttribute(hwnd, kDwmwaSystemBackdropType, &backdropType, sizeof(backdropType))) {
-        const BOOL micaEnabled = enabled ? TRUE : FALSE;
-        setDwmWindowAttribute(hwnd, kDwmwaMicaEffect, &micaEnabled, sizeof(micaEnabled));
-    }
-    ::SetWindowPos(
-        hwnd,
-        nullptr,
-        0,
-        0,
-        0,
-        0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED
-    );
-    ::RedrawWindow(
-        hwnd,
-        nullptr,
-        nullptr,
-        RDW_INVALIDATE | RDW_UPDATENOW | RDW_FRAME
-    );
-}
-#endif
+// Native title-bar / backdrop theming now lives in UiNativeWindowTheme
+// (src/app/ui/) so tools-layer dialogs can reach it too.
 
 }  // namespace
 
@@ -415,6 +332,13 @@ bool MainWindow::WindowSection::confirmShellClose()
             QStringLiteral("confirm_shell_close_dismissed_child_dialogs=%1").arg(dismissed)
         );
     }
+
+    // Clean exit (quick-shell route): mirror the legacy closeEvent —
+    // drop the crash-recovery snapshot, delete any recovery file, and
+    // remove the session marker so the next launch doesn't treat this
+    // clean shutdown as an abnormal exit.
+    owner_.documentSection_->cleanupCrashRecoveryForCleanExit();
+    miacode::crash_recovery::clearSessionMarker();
 
     QElapsedTimer savePortableTimer;
     savePortableTimer.start();
@@ -1166,21 +1090,14 @@ void MainWindow::WindowSection::applySystemWindowBackdrop(QWidget* target) const
 {
 #ifdef Q_OS_WIN
     if (target != nullptr) {
-        applySystemBackdropToWidget(target, true, UiTheme::isDarkTheme());
+        UiNativeWindowTheme::applyToWidget(target);
         return;
     }
-    applySystemBackdropToWidget(const_cast<MainWindow*>(&owner_), true, UiTheme::isDarkTheme());
-    const auto topLevels = QApplication::topLevelWidgets();
-    for (QWidget* topLevel : topLevels) {
-        if (topLevel == nullptr
-            || topLevel == &owner_
-            || topLevel->parentWidget() != &owner_
-            || !topLevel->isVisible()
-            || topLevel->windowState().testFlag(Qt::WindowMinimized)) {
-            continue;
-        }
-        applySystemBackdropToWidget(topLevel, true, UiTheme::isDarkTheme());
-    }
+    // Theme the main window even while it is still hidden (early boot), then
+    // sweep every visible top-level so theme switches restyle open dialogs
+    // regardless of their parent chain.
+    UiNativeWindowTheme::applyToWidget(const_cast<MainWindow*>(&owner_));
+    UiNativeWindowTheme::applyToAllTopLevelWidgets();
 #else
     Q_UNUSED(target);
 #endif

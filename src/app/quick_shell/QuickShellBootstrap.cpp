@@ -6,6 +6,7 @@
 #include "DialogLocalization.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "UiNativeWindowTheme.h"
 #include "common/DebugOptions.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
@@ -140,73 +141,9 @@ private:
     QuickShellBootstrap* bootstrap_ = nullptr;
 };
 
-constexpr DWORD kDwmwaUseImmersiveDarkMode = 20;
-constexpr DWORD kDwmwaBorderColor = 34;
-constexpr DWORD kDwmwaCaptionColor = 35;
-constexpr DWORD kDwmwaTextColor = 36;
-constexpr DWORD kDwmwaSystemBackdropType = 38;
-constexpr DWORD kDwmwaMicaEffect = 1029;
-constexpr int kDwmsbtNone = 1;
-constexpr int kDwmsbtMainWindow = 2;
-constexpr COLORREF kDwmColorDefault = 0xFFFFFFFF;
-
-bool setDwmWindowAttribute(HWND hwnd, DWORD attribute, const void* value, DWORD size)
-{
-    if (hwnd == nullptr || value == nullptr || size == 0) {
-        return false;
-    }
-    static HMODULE dwmapiModule = ::LoadLibraryW(L"dwmapi.dll");
-    if (dwmapiModule == nullptr) {
-        return false;
-    }
-    using DwmSetWindowAttributeFn = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
-    static auto setWindowAttribute = reinterpret_cast<DwmSetWindowAttributeFn>(
-        ::GetProcAddress(dwmapiModule, "DwmSetWindowAttribute")
-    );
-    if (setWindowAttribute == nullptr) {
-        return false;
-    }
-    return SUCCEEDED(setWindowAttribute(hwnd, attribute, value, size));
-}
-
-COLORREF colorRefForDwm(const QColor& color)
-{
-    return RGB(color.red(), color.green(), color.blue());
-}
-
 void applySystemBackdropToQuickWindow(QQuickWindow* window)
 {
-    if (window == nullptr) {
-        return;
-    }
-    const HWND hwnd = reinterpret_cast<HWND>(window->winId());
-    if (hwnd == nullptr) {
-        return;
-    }
-
-    const BOOL darkMode = UiTheme::isDarkTheme() ? TRUE : FALSE;
-    setDwmWindowAttribute(hwnd, kDwmwaUseImmersiveDarkMode, &darkMode, sizeof(darkMode));
-
-    if (UiText::preferredTheme() == UiText::ThemePreference::System) {
-        setDwmWindowAttribute(hwnd, kDwmwaBorderColor, &kDwmColorDefault, sizeof(kDwmColorDefault));
-        setDwmWindowAttribute(hwnd, kDwmwaCaptionColor, &kDwmColorDefault, sizeof(kDwmColorDefault));
-        setDwmWindowAttribute(hwnd, kDwmwaTextColor, &kDwmColorDefault, sizeof(kDwmColorDefault));
-    } else {
-        const UiTheme::Colors& themeColors = UiTheme::colors();
-        const bool active = window->isActive();
-        const COLORREF borderColor = colorRefForDwm(active ? themeColors.borderStrong : themeColors.borderSoft);
-        const COLORREF captionColor = colorRefForDwm(active ? themeColors.toolbarBg : themeColors.windowAltBg);
-        const COLORREF textColor = colorRefForDwm(active ? themeColors.textPrimary : themeColors.textSecondary);
-        setDwmWindowAttribute(hwnd, kDwmwaBorderColor, &borderColor, sizeof(borderColor));
-        setDwmWindowAttribute(hwnd, kDwmwaCaptionColor, &captionColor, sizeof(captionColor));
-        setDwmWindowAttribute(hwnd, kDwmwaTextColor, &textColor, sizeof(textColor));
-    }
-
-    const int backdropType = kDwmsbtMainWindow;
-    if (!setDwmWindowAttribute(hwnd, kDwmwaSystemBackdropType, &backdropType, sizeof(backdropType))) {
-        const BOOL micaEnabled = TRUE;
-        setDwmWindowAttribute(hwnd, kDwmwaMicaEffect, &micaEnabled, sizeof(micaEnabled));
-    }
+    UiNativeWindowTheme::applyToWindow(window);
 }
 #endif
 
