@@ -249,6 +249,11 @@ QWidget* CoverComposerView::createContainer(QWidget* parent)
     return container_;
 }
 
+QObject* CoverComposerView::previewWindowObject() const
+{
+    return window_;
+}
+
 void CoverComposerView::setInputs(const CoverComposerInputs& inputs)
 {
     inputs_ = inputs;

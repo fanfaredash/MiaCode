@@ -82,6 +82,12 @@ public:
     // normalized layout matches the export exactly.
     QWidget* createContainer(QWidget* parent);
 
+    // The embedded live QQuickWindow as a QObject, so the host dialog can
+    // install an event filter on it. Needed for Esc-to-close: once the user
+    // clicks the preview, focus sits in this NATIVE child window and key events
+    // never reach the QDialog's default Esc-reject. Null until createContainer.
+    QObject* previewWindowObject() const;
+
     // Push presentation inputs to the live scene.
     void setInputs(const CoverComposerInputs& inputs);
 

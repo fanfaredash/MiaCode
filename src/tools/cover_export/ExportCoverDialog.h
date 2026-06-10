@@ -2,6 +2,7 @@
 
 #include <QDialog>
 #include <QElapsedTimer>
+#include <QIcon>
 #include <QSize>
 #include <QString>
 #include <QVariantMap>
@@ -50,6 +51,10 @@ public:
     // outputDirectory (PNG when transparent, JPG otherwise).
     miacode::cover_export::CoverExportResult exportCover(const QString& outputDirectory);
 
+protected:
+    // Intercepts ←/→ on the frame slider for the held-seek (below).
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
 private:
     void pushInputs();
     void browseBackground();
@@ -60,10 +65,13 @@ private:
 
     // B2 — layout save / import. The whole composition (size + background + card +
     // chart-frame settings + layer geometry) round-trips through one JSON file.
+    // The same JSON also persists to app preferences (app.cover_export): saved on
+    // export, restored on dialog open. `interactive=false` (the silent preference
+    // restore) suppresses the fallback notice boxes an explicit import shows.
     void saveLayout();
     void importLayout();
     QJsonObject exportCompositionJson() const;
-    void applyCompositionJson(const QJsonObject& root);
+    void applyCompositionJson(const QJsonObject& root, bool interactive = true);
 
     // Chart-frame picker.
     void onChartFrameToggled(bool on);
@@ -78,6 +86,16 @@ private:
     void startPlayback();
     void stopPlayback();
     void onPlayTick();
+
+    // Held ←/→ seek on the frame slider — REUSES the preview transport's
+    // acceleration/cap design (miacode::preview_interaction): an immediate
+    // ±1/120 s step on press, then a 16 ms precise timer advancing by real
+    // elapsed wall time × min(1 + heldSeconds, 3.0)× rate. Mirrors
+    // MainWindow::TimelineSection::beginPreviewHeldSeek / applyPreviewHeldSeekTick.
+    void beginFrameHeldSeek(int direction, int key);
+    void stopFrameHeldSeek(int key = 0);
+    void onFrameHeldSeekTick();
+    void stepFrameBySeconds(double deltaSeconds);   // move playhead + slider, clamped
 
     IntroBannerSpec banner_;
 
@@ -113,6 +131,10 @@ private:
     QSlider* frameSlider_ = nullptr;       // value = milliseconds into the chart
     QLabel* frameTimeLabel_ = nullptr;
     QPushButton* playButton_ = nullptr;
+    // Painted transport icons (slim bars / triangle in the theme text colour) —
+    // font glyphs were rejected: ⏸ = color emoji, ❚❚ = too heavy/wide.
+    QIcon playIcon_;
+    QIcon pauseIcon_;
     // B1 — chart-frame inner-ring background (reuses the cover background image).
     QCheckBox* chartFrameBgCheck_ = nullptr;
     QSlider* chartFrameBgBrightnessSlider_ = nullptr;   // 0..100 → brightness 0..1
@@ -125,4 +147,11 @@ private:
     QElapsedTimer playWall_;
     double playStartSeconds_ = 0.0;        // playhead (s) when the current play run started
     bool playing_ = false;
+
+    // Held ←/→ seek state (see beginFrameHeldSeek).
+    QTimer* frameSeekHoldTimer_ = nullptr;
+    QElapsedTimer frameSeekHoldElapsed_;
+    int frameSeekHoldDirection_ = 0;
+    int frameSeekHoldKey_ = 0;
+    int frameSeekHoldLastElapsedMs_ = 0;
 };

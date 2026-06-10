@@ -2,6 +2,7 @@
 
 #include "tools/cover_export/CoverLayoutModel.h"
 #include "tools/cover_export/SceneFrameRenderer.h"
+#include "common/PreviewInteractionConfig.h"
 #include "UiNativeWindowTheme.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -10,6 +11,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QEvent>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -19,9 +21,14 @@
 #include <QHBoxLayout>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QKeyEvent>
+#include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSlider>
@@ -61,9 +68,47 @@ constexpr int kPreviewBox = 400;
 // so playback stays at real speed even if a tick is late.
 constexpr int kPlayTickMs = 16;
 
-// ▶ / ⏸ glyphs for the play/pause button (visual-only playback, no audio).
-const QChar kPlayGlyph(0x25B6);
-const QChar kPauseGlyph(0x23F8);
+// Painted play / pause icons for the transport button (visual-only playback,
+// no audio). Font glyphs proved uncontrollable: U+23F8 ⏸ renders as a COLOR
+// emoji on Windows and the U+275A ❚❚ fallback was too heavy/wide — painting
+// gives exact bar thickness / gap and the theme text colour. (Same pattern as
+// the toolbar's makeSettingsGearIcon.)
+QIcon makeTransportIcon(bool pause, const QColor& color)
+{
+    constexpr int kSize = 16;     // logical icon size
+    constexpr qreal kDpr = 2.0;   // crisp on high-DPI
+    QPixmap pixmap(qRound(kSize * kDpr), qRound(kSize * kDpr));
+    pixmap.setDevicePixelRatio(kDpr);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+    if (pause) {
+        // Two slim bars with a tight gap (the whole point vs the glyph version).
+        const qreal barWidth = 2.5;
+        const qreal gap = 3.0;
+        const qreal barHeight = 10.0;
+        const qreal top = (kSize - barHeight) / 2.0;
+        painter.drawRoundedRect(
+            QRectF(kSize / 2.0 - gap / 2.0 - barWidth, top, barWidth, barHeight), 1.0, 1.0);
+        painter.drawRoundedRect(
+            QRectF(kSize / 2.0 + gap / 2.0, top, barWidth, barHeight), 1.0, 1.0);
+    } else {
+        // Right-pointing triangle with similar visual mass.
+        const qreal height = 10.0;
+        const qreal width = 9.0;
+        const qreal left = (kSize - width) / 2.0 + 0.5;
+        const qreal top = (kSize - height) / 2.0;
+        QPainterPath triangle;
+        triangle.moveTo(left, top);
+        triangle.lineTo(left, top + height);
+        triangle.lineTo(left + width, top + height / 2.0);
+        triangle.closeSubpath();
+        painter.fillPath(triangle, color);
+    }
+    return QIcon(pixmap);
+}
 
 // Chart-frame square render-size clamp (px); the natural size is the layer's
 // export pixel height, but keep it sane for tiny / huge canvases.
@@ -103,6 +148,26 @@ QVariantMap loadBannerTemplate()
         }
     }
     return templateMap;
+}
+
+// App-level persistence (the portable preferences JSON, under app.cover_export —
+// same store/convention as miacode::video_export::loadDialogPreferences). The
+// whole composition round-trips through the SAME JSON the explicit "保存布局/
+// 导入布局" feature uses, so one schema serves both.
+QJsonObject loadCoverDialogPreferences()
+{
+    const QJsonObject root = UiText::loadPreferencesObject();
+    const QJsonObject app = root.value(QStringLiteral("app")).toObject();
+    return app.value(QStringLiteral("cover_export")).toObject();
+}
+
+void saveCoverDialogPreferences(const QJsonObject& preferences)
+{
+    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject app = root.value(QStringLiteral("app")).toObject();
+    app.insert(QStringLiteral("cover_export"), preferences);
+    root.insert(QStringLiteral("app"), app);
+    UiText::savePreferencesObject(root);
 }
 
 }  // namespace
@@ -166,6 +231,12 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
     if (container != nullptr) {
         previewContainer_ = container;
         previewFrameLayout->addWidget(previewContainer_);
+        // Esc must close the dialog even while focus sits inside the embedded
+        // NATIVE Quick window (after clicking the preview, keys go there and
+        // never reach QDialog's default Esc-reject) — filter it ourselves.
+        if (QObject* quickWindow = composerView_->previewWindowObject()) {
+            quickWindow->installEventFilter(this);
+        }
     } else {
         auto* failed = new QLabel(
             l10n(QStringLiteral("Failed to start the composer:\n%1"),
@@ -333,12 +404,23 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
     auto* frameLayout = new QHBoxLayout(frameRow);
     frameLayout->setContentsMargins(0, 0, 0, 0);
     frameLayout->setSpacing(8);
-    playButton_ = new QPushButton(QString(kPlayGlyph), frameRow);
+    playIcon_ = makeTransportIcon(/*pause=*/false, UiTheme::colors().textPrimary);
+    pauseIcon_ = makeTransportIcon(/*pause=*/true, UiTheme::colors().textPrimary);
+    playButton_ = new QPushButton(frameRow);
+    playButton_->setIcon(playIcon_);
+    playButton_->setIconSize(QSize(16, 16));
     playButton_->setEnabled(false);
-    playButton_->setFixedWidth(34);
     playButton_->setToolTip(l10n(QStringLiteral("Play / pause (visual only)"),
                                  QStringLiteral("播放 / 暂停（仅画面）")));
-    playButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    // Square transport button. Two QSS traps: the theme sheet's `min-width: 92px`
+    // beats setFixedWidth, and its `min-height: 30px` is a CONTENT-box bound — with
+    // the 1px borders the style wants 32px, so a 30px fixed height clipped the
+    // bottom edge. Override BOTH bounds to a 26px content box (+2px borders = the
+    // 28px fixed size) so nothing is clipped.
+    playButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet()
+        + QStringLiteral("QPushButton { min-width: 26px; max-width: 26px;"
+                         " min-height: 26px; max-height: 26px; padding: 0; border-radius: 6px; }"));
+    playButton_->setFixedSize(28, 28);
     frameSlider_ = new QSlider(Qt::Horizontal, frameRow);
     frameSlider_->setMinimum(0);
     frameSlider_->setMaximum(qMax(1, qRound(contentDurationSeconds_ * 1000.0)));
@@ -355,6 +437,15 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
     playClock_ = new QTimer(this);
     playClock_->setInterval(kPlayTickMs);
     connect(playClock_, &QTimer::timeout, this, &ExportCoverDialog::onPlayTick);
+
+    // Held ←/→ seek: same tick cadence + acceleration/cap as the preview
+    // transport (miacode::preview_interaction). The event filter intercepts the
+    // slider's arrow keys (its default keyboard step is 1 ms — uselessly slow).
+    frameSeekHoldTimer_ = new QTimer(this);
+    frameSeekHoldTimer_->setTimerType(Qt::PreciseTimer);
+    frameSeekHoldTimer_->setInterval(miacode::preview_interaction::kSeekHoldTickIntervalMs);
+    connect(frameSeekHoldTimer_, &QTimer::timeout, this, &ExportCoverDialog::onFrameHeldSeekTick);
+    frameSlider_->installEventFilter(this);
 
     // Chart-frame inner-ring background (B1): the playfield disk shows the cover
     // background (曲绘/custom) crisp + dimmed; the outer ring stays transparent.
@@ -375,7 +466,7 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
     chartFrameBgBrightnessSlider_->setValue(
         qBound(0, qRound(qBound(0.0, task.backgroundBrightnessInner, 1.0) * 100.0), 100));
     chartFrameBgBrightnessSlider_->setEnabled(false);
-    frameForm->addRow(l10n(QStringLiteral("Frame bg brightness"), QStringLiteral("谱面帧背景亮度")),
+    frameForm->addRow(l10n(QStringLiteral("Background brightness"), QStringLiteral("背景亮度")),
                       chartFrameBgBrightnessSlider_);
 
     controlsColumn->addWidget(frameGroup);
@@ -469,6 +560,14 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
     syncControlEnabled();
     resizePreviewToAspect();
     pushInputs();
+
+    // App-level preference restore: reopen with the last exported composition
+    // (saved in exportCover). Silent — fallback notices are suppressed; the
+    // explicit 导入布局 path stays interactive.
+    const QJsonObject savedPreferences = loadCoverDialogPreferences();
+    if (!savedPreferences.isEmpty()) {
+        applyCompositionJson(savedPreferences, /*interactive=*/false);
+    }
 }
 
 ExportCoverDialog::~ExportCoverDialog()
@@ -630,7 +729,7 @@ void ExportCoverDialog::startPlayback()
         playClock_->start();
     }
     if (playButton_ != nullptr) {
-        playButton_->setText(QString(kPauseGlyph));
+        playButton_->setIcon(pauseIcon_);
     }
 }
 
@@ -641,7 +740,7 @@ void ExportCoverDialog::stopPlayback()
     }
     playing_ = false;
     if (playButton_ != nullptr) {
-        playButton_->setText(QString(kPlayGlyph));
+        playButton_->setIcon(playIcon_);
     }
 }
 
@@ -665,6 +764,123 @@ void ExportCoverDialog::onPlayTick()
     if (ended) {
         stopPlayback();
     }
+}
+
+bool ExportCoverDialog::eventFilter(QObject* watched, QEvent* event)
+{
+    // Esc from inside the embedded Quick window → close, mirroring QDialog's
+    // default Esc-reject that the native child window otherwise swallows.
+    if (event->type() == QEvent::KeyPress
+        && composerView_ != nullptr && watched == composerView_->previewWindowObject()) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent->key() == Qt::Key_Escape && keyEvent->modifiers() == Qt::NoModifier
+            && !keyEvent->isAutoRepeat()) {
+            reject();
+            return true;
+        }
+    }
+    if (watched == frameSlider_) {
+        if (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            int direction = 0;
+            if (keyEvent->key() == Qt::Key_Left) {
+                direction = -1;
+            } else if (keyEvent->key() == Qt::Key_Right) {
+                direction = 1;
+            }
+            if (direction != 0) {
+                if (event->type() == QEvent::KeyPress) {
+                    if (keyEvent->modifiers() != Qt::NoModifier) {
+                        return QDialog::eventFilter(watched, event);
+                    }
+                    // OS auto-repeat presses are swallowed — the precise hold
+                    // timer drives the motion (same as the preview transport).
+                    if (keyEvent->isAutoRepeat()) {
+                        return true;
+                    }
+                    if (playing_) {
+                        stopPlayback();   // arrow scrub pauses, like any other scrub
+                    }
+                    beginFrameHeldSeek(direction, keyEvent->key());
+                    // A quick tap still moves one fine step immediately.
+                    stepFrameBySeconds(
+                        static_cast<double>(direction)
+                        * miacode::preview_interaction::kSeekSingleStepSeconds);
+                    return true;
+                }
+                if (!keyEvent->isAutoRepeat() && frameSeekHoldKey_ == keyEvent->key()) {
+                    stopFrameHeldSeek(keyEvent->key());
+                    return true;
+                }
+            }
+        } else if (event->type() == QEvent::FocusOut) {
+            // Defensive: never leave the hold timer running once the slider
+            // can no longer see the key release.
+            stopFrameHeldSeek();
+        }
+    }
+    return QDialog::eventFilter(watched, event);
+}
+
+void ExportCoverDialog::beginFrameHeldSeek(int direction, int key)
+{
+    if (direction == 0) {
+        return;
+    }
+    frameSeekHoldDirection_ = direction > 0 ? 1 : -1;
+    frameSeekHoldKey_ = key;
+    frameSeekHoldLastElapsedMs_ = 0;
+    frameSeekHoldElapsed_.restart();
+    if (frameSeekHoldTimer_ != nullptr && !frameSeekHoldTimer_->isActive()) {
+        frameSeekHoldTimer_->start();
+    }
+}
+
+void ExportCoverDialog::stopFrameHeldSeek(int key)
+{
+    if (key != 0 && frameSeekHoldKey_ != key) {
+        return;
+    }
+    frameSeekHoldDirection_ = 0;
+    frameSeekHoldKey_ = 0;
+    frameSeekHoldLastElapsedMs_ = 0;
+    frameSeekHoldElapsed_.invalidate();
+    if (frameSeekHoldTimer_ != nullptr) {
+        frameSeekHoldTimer_->stop();
+    }
+}
+
+void ExportCoverDialog::onFrameHeldSeekTick()
+{
+    if (frameSeekHoldDirection_ == 0 || frameSeekHoldKey_ == 0
+        || !frameSeekHoldElapsed_.isValid()) {
+        return;
+    }
+    // Step by REAL elapsed wall time at the accelerated rate, exactly like
+    // MainWindow::TimelineSection::applyPreviewHeldSeekTick — late ticks don't
+    // slow the seek down, and the rate ramps 1× → 3× over the first 2 s.
+    const int elapsedMs = static_cast<int>(frameSeekHoldElapsed_.elapsed());
+    const int deltaMs = frameSeekHoldLastElapsedMs_ > 0
+        ? (elapsedMs - frameSeekHoldLastElapsedMs_)
+        : miacode::preview_interaction::kSeekHoldTickIntervalMs;
+    frameSeekHoldLastElapsedMs_ = elapsedMs;
+    const double heldSeconds = static_cast<double>(elapsedMs) / 1000.0;
+    stepFrameBySeconds(
+        static_cast<double>(frameSeekHoldDirection_)
+        * miacode::preview_interaction::heldSeekStepSecondsForDeltaMs(deltaMs, heldSeconds));
+}
+
+void ExportCoverDialog::stepFrameBySeconds(double deltaSeconds)
+{
+    const double current = sceneFrameRenderer_ != nullptr
+        ? sceneFrameRenderer_->playheadSeconds()
+        : (frameSlider_ != nullptr ? frameSlider_->value() / 1000.0 : 0.0);
+    const double next = qBound(0.0, current + deltaSeconds, contentDurationSeconds_);
+    if (frameSlider_ != nullptr) {
+        const QSignalBlocker block(frameSlider_);   // avoid the valueChanged scrub path
+        frameSlider_->setValue(qRound(next * 1000.0));
+    }
+    applyFrameSeconds(next);
 }
 
 QSize ExportCoverDialog::currentSize() const
@@ -756,6 +972,9 @@ miacode::cover_export::CoverExportResult ExportCoverDialog::exportCover(const QS
     // tick mid-grab would move the shared playhead out from under it. Stopping also
     // pins the exported still to exactly the frame the user is looking at.
     stopPlayback();
+    // The user committed this composition — remember ALL its settings app-wide
+    // (restored on the next dialog open).
+    saveCoverDialogPreferences(exportCompositionJson());
     // Re-grab the chart frame at the exact export resolution (chartFrameRenderPx
     // tracks currentSize().height(), which the composite scales the layer to), so
     // the still is crisp in the export.
@@ -890,13 +1109,14 @@ void ExportCoverDialog::saveLayout()
     QString path = QFileDialog::getSaveFileName(
         this,
         l10n(QStringLiteral("Save cover layout"), QStringLiteral("保存封面布局")),
-        QStringLiteral("cover-layout.json"),
-        l10n(QStringLiteral("Layout (*.json)"), QStringLiteral("布局 (*.json)")));
+        QStringLiteral("cover-layout.miacover"),
+        l10n(QStringLiteral("Cover layout (*.miacover)"), QStringLiteral("封面布局 (*.miacover)")));
     if (path.isEmpty()) {
         return;
     }
-    if (!path.endsWith(QStringLiteral(".json"), Qt::CaseInsensitive)) {
-        path += QStringLiteral(".json");
+    // Dedicated extension; the payload stays the same composition JSON.
+    if (!path.endsWith(QStringLiteral(".miacover"), Qt::CaseInsensitive)) {
+        path += QStringLiteral(".miacover");
     }
     const QJsonDocument doc(exportCompositionJson());
     QFile file(path);
@@ -912,11 +1132,14 @@ void ExportCoverDialog::saveLayout()
 
 void ExportCoverDialog::importLayout()
 {
+    // Legacy .json stays importable (early layouts saved with that suffix);
+    // the identity check inside is what actually validates the file.
     const QString path = QFileDialog::getOpenFileName(
         this,
         l10n(QStringLiteral("Import cover layout"), QStringLiteral("导入封面布局")),
         QString(),
-        l10n(QStringLiteral("Layout (*.json)"), QStringLiteral("布局 (*.json)")));
+        l10n(QStringLiteral("Cover layout (*.miacover);;Legacy JSON (*.json)"),
+             QStringLiteral("封面布局 (*.miacover);;旧版 JSON (*.json)")));
     if (path.isEmpty()) {
         return;
     }
@@ -953,7 +1176,7 @@ void ExportCoverDialog::importLayout()
     applyCompositionJson(root);
 }
 
-void ExportCoverDialog::applyCompositionJson(const QJsonObject& root)
+void ExportCoverDialog::applyCompositionJson(const QJsonObject& root, bool interactive)
 {
     stopPlayback();
 
@@ -1077,7 +1300,12 @@ void ExportCoverDialog::applyCompositionJson(const QJsonObject& root)
     resizePreviewToAspect();
     pushInputs();
 
-    // Surface BOTH import fallbacks in a single notice (so they don't stack dialogs).
+    // Surface BOTH import fallbacks in a single notice (so they don't stack
+    // dialogs). Suppressed for the silent app-preference restore on dialog open —
+    // a stale custom-background path there should not greet the user with a popup.
+    if (!interactive) {
+        return;
+    }
     QString notice;
     if (fellBack) {
         notice += l10n(

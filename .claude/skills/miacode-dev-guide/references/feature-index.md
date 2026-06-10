@@ -370,11 +370,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     level-text-render / long-text overflow) to `CoverComposerInputs`; hosts the embedded live
     composer + a "重置布局 / Reset layout" button; caches the parsed template once in the ctor.
     **Chart-frame picker (A2 live scene):** an "添加谱面帧 / Add chart frame" checkbox (disabled when
-    the difficulty has no notes) + a ▶/❚❚ play button + a frame-time slider (`0..contentDurationSeconds`
-    ms) + mm:ss.cs readout. The transport button is a 30×30 square (the theme sheet's `min-width: 92px`
-    beats `setFixedWidth`, so the size is forced via an appended QSS override) and the pause glyph is
-    two `U+275A` heavy bars — `U+23F8 ⏸` renders as a COLOR emoji on Windows. Enabling does ONE
-    verify+seed grab under `Qt::WaitCursor` (reverts + warns
+    the difficulty has no notes) + a play/pause button + a frame-time slider (`0..contentDurationSeconds`
+    ms) + mm:ss.cs readout. The transport button is a 28×28 square (the theme sheet's QSS `min-width:
+    92px` beats `setFixedWidth` and its `min-height: 30px` is a CONTENT-box bound that clipped the
+    bottom border — both overridden to a 26px content box via appended QSS + `setFixedSize(28,28)`).
+    Its icons are **QPainter-painted** (`makeTransportIcon`: slim 2.5px pause bars / triangle, theme
+    `textPrimary`) — font glyphs were rejected twice: `U+23F8 ⏸` = color emoji on Windows, `U+275A ❚❚`
+    = too heavy/wide. Enabling does ONE verify+seed grab under `Qt::WaitCursor` (reverts + warns
     on first-grab failure so the layer can't ship blank) and shows the LIVE edit scene. **Scrubbing /
     playback no longer re-grab** — `applyFrameSeconds` moves the shared playhead and repaints the in-QML
     `PreviewQuickSceneRoot` (zero readback). Play is **visual-only (no audio)**: a wall-clock `QTimer`
@@ -397,11 +399,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     inner-bg + brightness). The card toggle drives the card layer's `visible` on the shared model
     (NOTIFY → live scene + export both follow); reset re-ticks it, B2 import syncs it from the restored
     layer, and the QML selection chrome skips hidden layers (`l.visible` gate). The card drop shadow
-    itself still works in EVERY background mode incl. Transparent.
+    itself still works in EVERY background mode incl. Transparent. Esc closes the dialog even with
+    focus inside the embedded NATIVE Quick window (which swallows keys before QDialog's default
+    Esc-reject): the dialog filters the window via `CoverComposerView::previewWindowObject()`.
   - **Chart-frame inner-ring background (B1, 2026-06-09):** when "谱面帧内圈背景 / Chart-frame inner
     background" is ticked (and the cover background isn't Transparent), the chart-frame playfield disk
     shows the SAME cover background image (`backdropSourceUrl` = 曲绘/custom), crisp, dimmed by a
-    "谱面帧背景亮度" slider; the OUTER ring stays transparent (the overlay's notes/ring/effects still
+    "背景亮度" slider (in the 谱面帧 group); the OUTER ring stays transparent (the overlay's notes/ring/effects still
     extend across the square). Implemented **purely in `CoverComposer.qml`** (no scene-root / media /
     layer-flag change): a hidden source `Image` (`PreserveAspectCrop`) + a `MultiEffect` (`maskEnabled`)
     masked by a centred white-circle captured via `ShaderEffectSource` (`hideSource`, the repo's proven
@@ -415,7 +419,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     through `CoverComposerInputs.chartFrameDiskDiameter`. Renders identically in the live preview and
     the export (same QML, both engines). The controls gate on chart-frame-enabled + non-transparent bg.
   - **Layout save / import (B2, 2026-06-09):** "保存布局… / 导入布局…" buttons round-trip the WHOLE
-    composition through one `*.json` file — assembled at the DIALOG level (`exportCompositionJson` /
+    composition through one `*.miacover` file (a dedicated suffix since 2026-06-10; the payload is
+    plain composition JSON, and import still accepts legacy `*.json`) — assembled at the DIALOG level
+    (`exportCompositionJson` /
     `applyCompositionJson`), wrapping `CoverLayoutModel::toJson`/`fromJson` (layer geometry + visibility
     + `frameSeconds`) plus size / background mode+path+blur / card shadow+level-text+long-text /
     chart-frame inner-bg+brightness. Import sets every control signal-blocked, then re-grabs the chart
