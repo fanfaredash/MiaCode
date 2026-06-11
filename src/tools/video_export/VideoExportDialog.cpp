@@ -7,6 +7,7 @@
 #include "common/PreviewInteractionConfig.h"
 #include "core/scene/PreviewHudState.h"
 #include "tools/video_export/HudFontSettings.h"
+#include "tools/video_export/VideoExportAudioRenderPlan.h"
 #include "tools/video_export/VideoExportPreferences.h"
 
 #include <QAbstractItemView>
@@ -195,6 +196,20 @@ QString exportDialogPresetLabel(VideoExportPreset preset)
     }
 }
 
+QString formatDialogSecond(double second, bool allowNegative)
+{
+    const bool negative = allowNegative && second < 0.0;
+    const qint64 totalMs = qRound64(qAbs(second) * 1000.0);
+    const qint64 minutes = totalMs / 60000;
+    const qint64 sec = (totalMs / 1000) % 60;
+    const qint64 ms = totalMs % 1000;
+    return QStringLiteral("%1%2:%3:%4")
+        .arg(negative ? QStringLiteral("-") : QString())
+        .arg(minutes, 2, 10, QChar('0'))
+        .arg(sec, 2, 10, QChar('0'))
+        .arg(ms, 3, 10, QChar('0'));
+}
+
 QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
 {
     switch (mode) {
@@ -210,7 +225,7 @@ QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
 
 int secondToSliderValue(double second)
 {
-    return qMax(0, qRound(second * kPreviewSliderScale));
+    return qRound(second * kPreviewSliderScale);
 }
 
 QString exportBaseDirectory(const VideoExportTask& task)
@@ -349,7 +364,7 @@ QPoint desiredDialogTopLeft(QWidget* owner, const QSize& dialogSize)
 
 double sliderValueToSecond(int sliderValue)
 {
-    return qMax(0.0, static_cast<double>(sliderValue) / kPreviewSliderScale);
+    return static_cast<double>(sliderValue) / kPreviewSliderScale;
 }
 
 QIcon makePreviewPlayIcon(const QColor& color)
@@ -448,6 +463,11 @@ VideoExportDialog::VideoExportDialog(
     PreviewScaleModeCallback previewScaleModeCallback,
     PreviewTapFlowSpeedCallback previewTapFlowSpeedCallback,
     PreviewTouchFlowSpeedCallback previewTouchFlowSpeedCallback,
+    StartExportEffectPreviewCallback startExportEffectPreviewCallback,
+    SeekExportEffectPreviewCallback seekExportEffectPreviewCallback,
+    StopExportEffectPreviewCallback stopExportEffectPreviewCallback,
+    IsExportEffectPreviewPlayingCallback isExportEffectPreviewPlayingCallback,
+    CurrentExportEffectPreviewSecondCallback currentExportEffectPreviewSecondCallback,
     QWidget* parent
 )
     : QDialog(parent)
@@ -467,6 +487,11 @@ VideoExportDialog::VideoExportDialog(
     , previewScaleModeCallback_(std::move(previewScaleModeCallback))
     , previewTapFlowSpeedCallback_(std::move(previewTapFlowSpeedCallback))
     , previewTouchFlowSpeedCallback_(std::move(previewTouchFlowSpeedCallback))
+    , startExportEffectPreviewCallback_(std::move(startExportEffectPreviewCallback))
+    , seekExportEffectPreviewCallback_(std::move(seekExportEffectPreviewCallback))
+    , stopExportEffectPreviewCallback_(std::move(stopExportEffectPreviewCallback))
+    , isExportEffectPreviewPlayingCallback_(std::move(isExportEffectPreviewPlayingCallback))
+    , currentExportEffectPreviewSecondCallback_(std::move(currentExportEffectPreviewSecondCallback))
     , totalDurationSeconds_(qMax(0.0, baseTask.contentDurationSeconds))
 {
     setWindowTitle(uiText("dialog.video_export.title", QStringLiteral("Export Video")));
@@ -800,6 +825,22 @@ VideoExportDialog::VideoExportDialog(
     mergedRangeLayout->addWidget(endSecondSpin_, 1, 1, Qt::AlignLeft);
     mergedRangeLayout->addWidget(setEndButton, 1, 2, Qt::AlignLeft);
     rangeLayout->addWidget(mergedRangeRows, 0);
+    auto* exportEffectPreviewRow = new QWidget(rangeContent_);
+    auto* exportEffectPreviewLayout = new QHBoxLayout(exportEffectPreviewRow);
+    exportEffectPreviewLayout->setContentsMargins(0, 2, 0, 0);
+    exportEffectPreviewLayout->setSpacing(kFormRowSpacing);
+    exportEffectPreviewLayout->addStretch(1);
+    exportEffectPreviewButton_ = new QPushButton(
+        uiText("dialog.video_export.preview.export_effect", QStringLiteral("导出效果预览")),
+        exportEffectPreviewRow
+    );
+    exportEffectPreviewButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    exportEffectPreviewButton_->setMinimumHeight(kPreviewControlButtonHeight);
+    exportEffectPreviewButton_->setToolTip(l10n(
+        QStringLiteral("Preview the selected range with the same timing model used by the exported video."),
+        QStringLiteral("按真实导出时间模型预览当前导出区间。")));
+    exportEffectPreviewLayout->addWidget(exportEffectPreviewButton_, 0);
+    rangeLayout->addWidget(exportEffectPreviewRow, 0);
     const int rangeControlWidth =
         kRangeLabelWidth
         + kSetButtonLeftGap
@@ -1133,9 +1174,9 @@ VideoExportDialog::VideoExportDialog(
     introHelp->setToolTip(l10n(
         QStringLiteral("Export intro is in development. Difficulties BAS-REM only; levels 1-99+ only "
                        "(letters / Chinese not supported); very long titles or charter names render "
-                       "poorly; live preview is not yet supported."),
+                       "poorly."),
         QStringLiteral("导出片头功能开发中，目前难度仅支持BAS~REM；等级仅支持1~99+，字母、汉字均不支持；"
-                       "过长的曲名、谱师效果会很差；暂时不支持在线预览效果。")));
+                       "过长的曲名、谱师效果会很差。")));
     introRowLayout->addWidget(introHelp, 0, Qt::AlignVCenter);
     introRowLayout->addStretch(1);
     hudTogglesLayout->addWidget(introRow, 2, 0, 1, 2, Qt::AlignLeft | Qt::AlignVCenter);
@@ -1224,6 +1265,7 @@ VideoExportDialog::VideoExportDialog(
     connect(setStartButton, &QPushButton::clicked, this, &VideoExportDialog::setRangeStartFromPreview);
     connect(setEndButton, &QPushButton::clicked, this, &VideoExportDialog::setRangeEndFromPreview);
     connect(previewRangeButton_, &QToolButton::clicked, this, &VideoExportDialog::toggleRangePreview);
+    connect(exportEffectPreviewButton_, &QPushButton::clicked, this, &VideoExportDialog::toggleExportEffectPreview);
     connect(stopPreviewButton_, &QToolButton::clicked, this, &VideoExportDialog::stopRangePreviewToStart);
     connect(showTimestampCheck_, &QCheckBox::toggled, this, [this](bool checked) {
         syncLivePreviewTimestampVisibility();
@@ -1648,7 +1690,7 @@ void VideoExportDialog::browseOutputPath()
     outputPathEdit_->setText(displayOutputPathForDialog(selected, baseDirectory));
 }
 
-bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessage) const
+bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessage, bool requireOutputPath) const
 {
     if (task == nullptr) {
         return false;
@@ -1656,13 +1698,15 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     VideoExportTask updated = baseTask_;
     const QString baseDirectory = exportBaseDirectory(updated);
     const QString outputPath = outputPathEdit_ != nullptr ? outputPathEdit_->text().trimmed() : QString();
-    if (outputPath.isEmpty()) {
+    if (requireOutputPath && outputPath.isEmpty()) {
         if (errorMessage != nullptr) {
             *errorMessage = l10n(QStringLiteral("Please choose an output path."), QStringLiteral("请先选择输出路径。"));
         }
         return false;
     }
-    updated.outputPath = resolveOutputPathForExport(outputPath, baseDirectory);
+    if (!outputPath.isEmpty()) {
+        updated.outputPath = resolveOutputPathForExport(outputPath, baseDirectory);
+    }
     const QSize selectedSize = selectedResolution();
     updated.outputWidth = selectedSize.width() > 0 ? selectedSize.width() : updated.outputWidth;
     updated.outputHeight = selectedSize.height() > 0 ? selectedSize.height() : updated.outputHeight;
@@ -1743,13 +1787,15 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
             .arg(updated.fullRangeExport ? 1 : 0)
             .arg(kFullRangeEpsilonSeconds, 0, 'f', 6));
 
-    const QFileInfo outputInfo(updated.outputPath);
-    const QDir outputDir = outputInfo.absoluteDir();
-    if (!outputDir.exists()) {
-        if (errorMessage != nullptr) {
-            *errorMessage = l10n(QStringLiteral("Output directory does not exist."), QStringLiteral("输出目录不存在。"));
+    if (requireOutputPath) {
+        const QFileInfo outputInfo(updated.outputPath);
+        const QDir outputDir = outputInfo.absoluteDir();
+        if (!outputDir.exists()) {
+            if (errorMessage != nullptr) {
+                *errorMessage = l10n(QStringLiteral("Output directory does not exist."), QStringLiteral("输出目录不存在。"));
+            }
+            return false;
         }
-        return false;
     }
     if (updated.outputWidth <= 0 || updated.outputHeight <= 0) {
         if (errorMessage != nullptr) {
@@ -1809,6 +1855,7 @@ void VideoExportDialog::onRangeSpinChanged()
     }
     syncRangeUi();
     refreshAddIntroEnabledState();
+    exportEffectPreviewPlanValid_ = false;
 }
 
 void VideoExportDialog::refreshAddIntroEnabledState()
@@ -1818,14 +1865,28 @@ void VideoExportDialog::refreshAddIntroEnabledState()
     }
     constexpr double kFullRangeEpsilonSeconds = 0.01;
     const bool fullRange =
-        rangeStartSeconds() <= kFullRangeEpsilonSeconds
-        && rangeEndSeconds() + kFullRangeEpsilonSeconds >= totalDurationSeconds_;
+        rangeStartSeconds() <= kFullRangeEpsilonSeconds;
     addIntroCheck_->setEnabled(fullRange);
 }
 
 void VideoExportDialog::onPreviewSliderChanged(int sliderValue)
 {
     if (syncingRangeUi_) {
+        return;
+    }
+    if (exportEffectPreviewPlaying_) {
+        if (!exportEffectPreviewPlanValid_) {
+            QString ignored;
+            buildExportEffectPreviewPlan(&ignored);
+        }
+        const double sliderSecond = sliderValueToSecond(sliderValue);
+        exportEffectPreviewCursorSecond_ = qBound(
+            0.0,
+            exportEffectPreviewOutputSecondFromSliderSecond(sliderSecond),
+            qMax(0.0, exportEffectPreviewTotalSeconds_)
+        );
+        seekExportEffectPreview(exportEffectPreviewCursorSecond_);
+        syncRangeUi();
         return;
     }
     previewCursorSecond_ = qBound(0.0, sliderValueToSecond(sliderValue), totalDurationSeconds_);
@@ -1862,6 +1923,9 @@ void VideoExportDialog::toggleRangePreview()
         stopRangePreview(false);
         return;
     }
+    if (exportEffectPreviewPlaying_) {
+        stopExportEffectPreview(false);
+    }
     playPreview(previewCursorSecond_);
     rangePreviewPlaying_ = true;
     updatePreviewPlayPauseUi();
@@ -1871,6 +1935,39 @@ void VideoExportDialog::toggleRangePreview()
     if (previewTimer_ != nullptr && !previewTimer_->isActive()) {
         previewTimer_->start();
     }
+}
+
+void VideoExportDialog::toggleExportEffectPreview()
+{
+    if (exportEffectPreviewPlaying_) {
+        stopExportEffectPreview(false);
+        return;
+    }
+    if (rangePreviewPlaying_ || isPreviewPlaying()) {
+        stopRangePreview(false);
+    }
+    QString errorMessage;
+    if (!buildExportEffectPreviewPlan(&errorMessage)
+        || !playExportEffectPreview(0.0, &errorMessage)) {
+        UiDialogs::showMessageBox(
+            QMessageBox::Warning,
+            this,
+            uiText("dialog.video_export.title", QStringLiteral("Export Video")),
+            errorMessage.isEmpty()
+                ? l10n(QStringLiteral("Unable to start export effect preview."),
+                       QStringLiteral("无法启动导出效果预览。"))
+                : errorMessage
+        );
+        return;
+    }
+    exportEffectPreviewCursorSecond_ = 0.0;
+    exportEffectPreviewLastUiSecond_ = -1.0;
+    exportEffectPreviewPlaying_ = true;
+    updatePreviewPlayPauseUi();
+    if (previewTimer_ != nullptr && !previewTimer_->isActive()) {
+        previewTimer_->start();
+    }
+    syncRangeUi();
 }
 
 void VideoExportDialog::stopRangePreview(bool seekToCurrent)
@@ -1892,8 +1989,38 @@ void VideoExportDialog::stopRangePreview(bool seekToCurrent)
     }
 }
 
+void VideoExportDialog::stopExportEffectPreview(bool seekToCurrent)
+{
+    if (previewTimer_ != nullptr) {
+        previewTimer_->stop();
+    }
+    if (exportEffectPreviewPlaying_ || isExportEffectPreviewPlaying()) {
+        pauseExportEffectPreview();
+        exportEffectPreviewCursorSecond_ = qBound(
+            0.0,
+            currentExportEffectPreviewSecond(),
+            qMax(0.0, exportEffectPreviewTotalSeconds_)
+        );
+    }
+    exportEffectPreviewPlaying_ = false;
+    exportEffectPreviewLastUiSecond_ = -1.0;
+    if (previewSlider_ != nullptr) {
+        const QSignalBlocker blocker(*previewSlider_);
+        previewSlider_->setRange(0, secondToSliderValue(totalDurationSeconds_));
+    }
+    updatePreviewPlayPauseUi();
+    if (seekToCurrent) {
+        seekPreview(previewCursorSecond_);
+    }
+    syncRangeUi();
+}
+
 void VideoExportDialog::handlePreviewPlayPauseShortcut()
 {
+    if (exportEffectPreviewPlaying_ || isExportEffectPreviewPlaying()) {
+        stopExportEffectPreview(false);
+        return;
+    }
     if (rangePreviewPlaying_ || isPreviewPlaying()) {
         stopRangePreview(false);
         return;
@@ -1903,6 +2030,10 @@ void VideoExportDialog::handlePreviewPlayPauseShortcut()
 
 void VideoExportDialog::handlePreviewStopOrPlayShortcut()
 {
+    if (exportEffectPreviewPlaying_ || isExportEffectPreviewPlaying()) {
+        stopExportEffectPreview(false);
+        return;
+    }
     if (rangePreviewPlaying_ || isPreviewPlaying()) {
         stopRangePreviewToStart();
         return;
@@ -1912,6 +2043,9 @@ void VideoExportDialog::handlePreviewStopOrPlayShortcut()
 
 void VideoExportDialog::stopRangePreviewToStart()
 {
+    if (exportEffectPreviewPlaying_ || isExportEffectPreviewPlaying()) {
+        stopExportEffectPreview(false);
+    }
     stopRangePreview(false);
     previewCursorSecond_ = 0.0;
     seekPreview(previewCursorSecond_);
@@ -1933,10 +2067,39 @@ void VideoExportDialog::updatePreviewPlayPauseUi()
         previewRangeButton_->setToolTip(uiText("dialog.video_export.preview.play", QStringLiteral("Play")));
         previewRangeButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet());
     }
+    if (exportEffectPreviewButton_ != nullptr) {
+        exportEffectPreviewButton_->setText(exportEffectPreviewPlaying_
+            ? l10n(QStringLiteral("Stop Export Preview"), QStringLiteral("停止导出效果预览"))
+            : uiText("dialog.video_export.preview.export_effect", QStringLiteral("导出效果预览")));
+        exportEffectPreviewButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(exportEffectPreviewPlaying_));
+    }
 }
 
 void VideoExportDialog::onRangePreviewTick()
 {
+    if (exportEffectPreviewPlaying_) {
+        if (!isExportEffectPreviewPlaying()) {
+            stopExportEffectPreview(false);
+            return;
+        }
+        const double nextSecond = qBound(
+            0.0,
+            currentExportEffectPreviewSecond(),
+            qMax(0.0, exportEffectPreviewTotalSeconds_)
+        );
+        if (qAbs(nextSecond - exportEffectPreviewLastUiSecond_) < 0.016) {
+            return;
+        }
+        exportEffectPreviewCursorSecond_ = nextSecond;
+        exportEffectPreviewLastUiSecond_ = nextSecond;
+        if (exportEffectPreviewTotalSeconds_ > 0.0
+            && exportEffectPreviewCursorSecond_ >= exportEffectPreviewTotalSeconds_) {
+            exportEffectPreviewCursorSecond_ = exportEffectPreviewTotalSeconds_;
+            stopExportEffectPreview(false);
+        }
+        syncRangeUi();
+        return;
+    }
     if (!rangePreviewPlaying_) {
         return;
     }
@@ -1977,16 +2140,65 @@ void VideoExportDialog::syncRangeUi()
     }
     if (previewSlider_ != nullptr) {
         const QSignalBlocker blocker(*previewSlider_);
-        previewSlider_->setValue(secondToSliderValue(previewCursorSecond_));
+        if (exportEffectPreviewPlaying_) {
+            const double sliderMinimumSecond = exportEffectPreviewFullRange_
+                ? exportEffectPreviewTimelineOriginSecond_
+                : 0.0;
+            const double sliderMaximumSecond = exportEffectPreviewFullRange_
+                ? exportEffectPreviewTimelineOriginSecond_ + exportEffectPreviewTotalSeconds_
+                : qMax(0.0, exportEffectPreviewTotalSeconds_);
+            const int sliderMinimumValue = secondToSliderValue(sliderMinimumSecond);
+            const int sliderMaximumValue = secondToSliderValue(qMax(sliderMinimumSecond, sliderMaximumSecond));
+            const int sliderValue = secondToSliderValue(exportEffectPreviewSliderSecond());
+            if (previewSlider_->minimum() != sliderMinimumValue || previewSlider_->maximum() != sliderMaximumValue) {
+                previewSlider_->setRange(sliderMinimumValue, sliderMaximumValue);
+            }
+            if (previewSlider_->value() != sliderValue) {
+                previewSlider_->setValue(sliderValue);
+            }
+        } else {
+            const int sliderMaximumValue = secondToSliderValue(totalDurationSeconds_);
+            const int sliderValue = secondToSliderValue(previewCursorSecond_);
+            if (previewSlider_->minimum() != 0 || previewSlider_->maximum() != sliderMaximumValue) {
+                previewSlider_->setRange(0, sliderMaximumValue);
+            }
+            if (previewSlider_->value() != sliderValue) {
+                previewSlider_->setValue(sliderValue);
+            }
+        }
     }
     if (previewTimeLabel_ != nullptr) {
-        previewTimeLabel_->setText(QStringLiteral("%1 / %2").arg(formatSecond(previewCursorSecond_), formatSecond(totalDurationSeconds_)));
+        QString nextText;
+        if (exportEffectPreviewPlaying_) {
+            const double endDisplaySecond = exportEffectPreviewFullRange_
+                ? exportEffectPreviewTimelineOriginSecond_ + exportEffectPreviewTotalSeconds_
+                : exportEffectPreviewTotalSeconds_;
+            nextText = QStringLiteral("%1 / %2").arg(
+                formatDialogSecond(exportEffectPreviewDisplaySecond(exportEffectPreviewCursorSecond_), true),
+                formatDialogSecond(endDisplaySecond, exportEffectPreviewFullRange_));
+        } else {
+            nextText = QStringLiteral("%1 / %2").arg(formatSecond(previewCursorSecond_), formatSecond(totalDurationSeconds_));
+        }
+        if (previewTimeLabel_->text() != nextText) {
+            previewTimeLabel_->setText(nextText);
+        }
     }
     if (startCurrentTimeEdit_ != nullptr) {
-        startCurrentTimeEdit_->setText(formatSecond(previewCursorSecond_));
+        const QString nextText = exportEffectPreviewPlaying_
+            ? formatDialogSecond(exportEffectPreviewDisplaySecond(exportEffectPreviewCursorSecond_), true)
+            : formatSecond(previewCursorSecond_);
+        if (startCurrentTimeEdit_->text() != nextText) {
+            startCurrentTimeEdit_->setText(nextText);
+        }
     }
     if (stopPreviewButton_ != nullptr) {
-        stopPreviewButton_->setEnabled(rangePreviewPlaying_ || previewCursorSecond_ > 0.0005);
+        const bool nextEnabled =
+            rangePreviewPlaying_
+            || exportEffectPreviewPlaying_
+            || previewCursorSecond_ > 0.0005;
+        if (stopPreviewButton_->isEnabled() != nextEnabled) {
+            stopPreviewButton_->setEnabled(nextEnabled);
+        }
     }
 
     syncingRangeUi_ = false;
@@ -2003,6 +2215,108 @@ void VideoExportDialog::seekPreview(double second)
     if (seekPreviewCallback_) {
         seekPreviewCallback_(clamped);
     }
+}
+
+bool VideoExportDialog::buildExportEffectPreviewPlan(QString* errorMessage)
+{
+    VideoExportTask task;
+    if (!applyUiToTask(&task, errorMessage, false)) {
+        return false;
+    }
+    miacode::video_export::VideoExportAudioRenderPlan plan;
+    if (!miacode::video_export::buildVideoExportAudioRenderPlan(task, &plan, errorMessage)) {
+        return false;
+    }
+    exportEffectPreviewPlanValid_ = true;
+    exportEffectPreviewFullRange_ = task.fullRangeExport;
+    exportEffectPreviewTotalSeconds_ = qMax(0.0, plan.totalSeconds);
+    exportEffectPreviewLeadInSeconds_ = qMax(0.0, plan.leadInSeconds);
+    exportEffectPreviewTimelineOriginSecond_ = plan.timelineOriginSecond;
+    exportEffectPreviewSegmentStartSecond_ = plan.segmentStartSecond;
+    return true;
+}
+
+double VideoExportDialog::exportEffectPreviewDisplaySecond(double outputSecond) const
+{
+    const double clampedOutput = qBound(0.0, outputSecond, qMax(0.0, exportEffectPreviewTotalSeconds_));
+    if (!exportEffectPreviewFullRange_ && clampedOutput < exportEffectPreviewLeadInSeconds_) {
+        return exportEffectPreviewSegmentStartSecond_;
+    }
+    if (!exportEffectPreviewFullRange_) {
+        return exportEffectPreviewSegmentStartSecond_ + qMax(0.0, clampedOutput - exportEffectPreviewLeadInSeconds_);
+    }
+    return exportEffectPreviewTimelineOriginSecond_ + clampedOutput;
+}
+
+double VideoExportDialog::exportEffectPreviewSliderSecond() const
+{
+    if (exportEffectPreviewFullRange_) {
+        return exportEffectPreviewDisplaySecond(exportEffectPreviewCursorSecond_);
+    }
+    return exportEffectPreviewCursorSecond_;
+}
+
+double VideoExportDialog::exportEffectPreviewOutputSecondFromSliderSecond(double sliderSecond) const
+{
+    if (exportEffectPreviewFullRange_) {
+        return sliderSecond - exportEffectPreviewTimelineOriginSecond_;
+    }
+    return sliderSecond;
+}
+
+void VideoExportDialog::seekExportEffectPreview(double outputSecond)
+{
+    const double clamped = qBound(0.0, outputSecond, qMax(0.0, exportEffectPreviewTotalSeconds_));
+    exportEffectPreviewCursorSecond_ = clamped;
+    if (seekExportEffectPreviewCallback_) {
+        seekExportEffectPreviewCallback_(clamped);
+    }
+}
+
+bool VideoExportDialog::playExportEffectPreview(double outputSecond, QString* errorMessage)
+{
+    VideoExportTask task;
+    if (!applyUiToTask(&task, errorMessage, false)) {
+        return false;
+    }
+    if (!buildExportEffectPreviewPlan(errorMessage)) {
+        return false;
+    }
+    exportEffectPreviewCursorSecond_ = qBound(0.0, outputSecond, qMax(0.0, exportEffectPreviewTotalSeconds_));
+    if (startExportEffectPreviewCallback_) {
+        return startExportEffectPreviewCallback_(task, exportEffectPreviewCursorSecond_, errorMessage);
+    }
+    if (errorMessage != nullptr) {
+        *errorMessage = l10n(
+            QStringLiteral("Export effect preview is not available in this window."),
+            QStringLiteral("当前窗口不支持导出效果预览。"));
+    }
+    return false;
+}
+
+void VideoExportDialog::pauseExportEffectPreview()
+{
+    if (stopExportEffectPreviewCallback_) {
+        stopExportEffectPreviewCallback_();
+    } else {
+        pausePreview();
+    }
+}
+
+bool VideoExportDialog::isExportEffectPreviewPlaying() const
+{
+    if (isExportEffectPreviewPlayingCallback_) {
+        return isExportEffectPreviewPlayingCallback_();
+    }
+    return false;
+}
+
+double VideoExportDialog::currentExportEffectPreviewSecond() const
+{
+    if (currentExportEffectPreviewSecondCallback_) {
+        return currentExportEffectPreviewSecondCallback_();
+    }
+    return exportEffectPreviewCursorSecond_;
 }
 
 void VideoExportDialog::playPreview(double second)
@@ -2050,18 +2364,12 @@ double VideoExportDialog::rangeEndSeconds() const
 
 QString VideoExportDialog::formatSecond(double second) const
 {
-    const qint64 totalMs = qMax<qint64>(0, qRound64(second * 1000.0));
-    const qint64 minutes = totalMs / 60000;
-    const qint64 sec = (totalMs / 1000) % 60;
-    const qint64 ms = totalMs % 1000;
-    return QStringLiteral("%1:%2:%3")
-        .arg(minutes, 2, 10, QChar('0'))
-        .arg(sec, 2, 10, QChar('0'))
-        .arg(ms, 3, 10, QChar('0'));
+    return formatDialogSecond(qMax(0.0, second), false);
 }
 
 void VideoExportDialog::startExport()
 {
+    stopExportEffectPreview(false);
     stopRangePreview(false);
 
     VideoExportTask task;
@@ -2083,6 +2391,7 @@ void VideoExportDialog::startExport()
 
 void VideoExportDialog::closeEvent(QCloseEvent* event)
 {
+    stopExportEffectPreview(false);
     stopRangePreview(false);
     restoreLivePreviewState();
     QDialog::closeEvent(event);
@@ -2090,6 +2399,7 @@ void VideoExportDialog::closeEvent(QCloseEvent* event)
 
 void VideoExportDialog::done(int result)
 {
+    stopExportEffectPreview(false);
     stopRangePreview(false);
     restoreLivePreviewState();
     QDialog::done(result);

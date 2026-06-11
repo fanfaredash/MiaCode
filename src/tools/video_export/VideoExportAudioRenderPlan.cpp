@@ -399,6 +399,15 @@ bool buildVideoExportAudioRenderPlan(
     if (!task.fullRangeExport) {
         suppressSfxBeforePreRangeEnd(built.leadInSeconds, &built);
     }
+    std::stable_sort(
+        built.scheduledSfxPlaybacks.begin(),
+        built.scheduledSfxPlaybacks.end(),
+        [](const ScheduledSfxPlaybackRenderPlan& left, const ScheduledSfxPlaybackRenderPlan& right) {
+            if (!qFuzzyCompare(left.mixSecond + 1.0, right.mixSecond + 1.0)) {
+                return left.mixSecond < right.mixSecond;
+            }
+            return left.kind < right.kind;
+        });
 
     *plan = built;
     return true;

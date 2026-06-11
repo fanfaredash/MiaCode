@@ -189,6 +189,13 @@
     void pauseQtPreviewPlaybackExact();
     void stopQtPreviewPlayback(bool keepPosition = true);
     void applyQtPreviewPosition(double second, bool centerView);
+    bool startExportEffectPreviewPlayback(const VideoExportTask& task, double outputSecond, QString* errorMessage);
+    void seekExportEffectPreviewPlayback(double outputSecond);
+    void stopExportEffectPreviewPlayback();
+    bool isExportEffectPreviewPlaybackActive() const;
+    double currentExportEffectPreviewOutputSecond() const;
+    double exportEffectPreviewOutputSecondFromDisplaySecond(double displaySecond) const;
+    void applyExportEffectPreviewPosition(double outputSecond);
     void syncPausedPreviewMediaTimestamps(double second);
     void flushQtPreviewTimelinePosition();
     void onQtPreviewTick();
@@ -220,6 +227,8 @@
     void applyPreviewHeldSeekTick();
     void updatePreviewSliderRange();
     void updatePreviewSliderPosition(double second);
+    double previewSliderSecondForValue(int sliderValue) const;
+    double previewSliderOutputSecondForValue(int sliderValue) const;
     QString formatPreviewTimestamp(double second) const;
     void showPreviewSliderTimeHint(int sliderValue);
     void refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers);

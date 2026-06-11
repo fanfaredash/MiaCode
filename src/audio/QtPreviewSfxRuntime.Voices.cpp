@@ -28,6 +28,10 @@ bool QtPreviewSfxRuntime::playKindInternal(const QString& kind, double gain)
         bank = &touchSfx_;
     } else if (lowered == "firework") {
         bank = &fireworkSfx_;
+    } else if (lowered == "clock") {
+        bank = &clockSfx_;
+    } else if (lowered == "intro_start") {
+        bank = &introStartSfx_;
     } else if (lowered == "touchhold") {
         return playTouchholdAudition();
     }
@@ -35,7 +39,9 @@ bool QtPreviewSfxRuntime::playKindInternal(const QString& kind, double gain)
     if (bank == nullptr || !bank->configured || bank->voices.isEmpty()) {
         return false;
     }
-    const double volume = previewSfxVolumeForKind(settings_, lowered);
+    const double volume = lowered == "intro_start"
+        ? PreviewAudioSettings::clampGlobal(settings_.globalVolume)
+        : previewSfxVolumeForKind(settings_, lowered);
     if (volume <= 0.0) {
         return true;
     }

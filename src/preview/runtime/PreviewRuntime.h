@@ -4,7 +4,9 @@
 #include <QElapsedTimer>
 #include <QPointer>
 #include <QSize>
+#include <QUrl>
 #include <QVector>
+#include <QVariantMap>
 
 #include <memory>
 
@@ -64,6 +66,12 @@ struct PreviewRuntimeStageBackgroundAggregate {
 class PreviewRuntime : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(bool introOverlayActive READ introOverlayActive NOTIFY introOverlayStateChanged)
+    Q_PROPERTY(int introOverlayFrame READ introOverlayFrame NOTIFY introOverlayStateChanged)
+    Q_PROPERTY(QVariantMap introBannerTrack READ introBannerTrack NOTIFY introOverlayDataChanged)
+    Q_PROPERTY(QVariantMap introBannerTemplate READ introBannerTemplate NOTIFY introOverlayDataChanged)
+    Q_PROPERTY(QUrl introBackgroundImage READ introBackgroundImage NOTIFY introOverlayDataChanged)
+    Q_PROPERTY(QUrl introLogoImage READ introLogoImage NOTIFY introOverlayDataChanged)
 
 public:
     explicit PreviewRuntime(QObject* parent = nullptr);
@@ -103,6 +111,21 @@ public:
         double targetFps,
         double displayRefreshRate);
     void setPlayheadSeconds(double seconds, bool requestUpdate = true);
+    void setHudPlayheadSecondsOverride(double seconds, bool requestUpdate = true);
+    void clearHudPlayheadSecondsOverride(bool requestUpdate = true);
+    void setIntroOverlayData(
+        const QVariantMap& bannerTrack,
+        const QVariantMap& bannerTemplate,
+        const QUrl& backgroundImage,
+        const QUrl& logoImage);
+    void setIntroOverlayFrame(int authoringFrame, bool active, bool requestUpdate = true);
+    void clearIntroOverlay(bool requestUpdate = true);
+    bool introOverlayActive() const { return introOverlayActive_; }
+    int introOverlayFrame() const { return introOverlayFrame_; }
+    QVariantMap introBannerTrack() const { return introBannerTrack_; }
+    QVariantMap introBannerTemplate() const { return introBannerTemplate_; }
+    QUrl introBackgroundImage() const { return introBackgroundImage_; }
+    QUrl introLogoImage() const { return introLogoImage_; }
     void setMediaFrame(const QImage& frame);
     void setVideoFrame(const QVideoFrame& frame);
     void setResolvedStageVideoFrame(
@@ -193,6 +216,8 @@ public:
 signals:
     void frameStateChanged();
     void framePresented();
+    void introOverlayDataChanged();
+    void introOverlayStateChanged();
 
 private:
     void handlePresentedFrame();
@@ -208,6 +233,12 @@ private:
     QPointer<QQuickWindow> visibleHostWindow_;
     QSize frameSize_;
     miacode::preview::scene::PreviewFrameState frameState_;
+    bool introOverlayActive_ = false;
+    int introOverlayFrame_ = 0;
+    QVariantMap introBannerTrack_;
+    QVariantMap introBannerTemplate_;
+    QUrl introBackgroundImage_;
+    QUrl introLogoImage_;
     // --- Firework PSO/texture warm-up (in-process QML path) ----------------
     // Qt RHI compiles the custom PreviewQuickJudgeFireworkMaterial pipeline
     // and uploads the firework colour-ball texture lazily on the FIRST

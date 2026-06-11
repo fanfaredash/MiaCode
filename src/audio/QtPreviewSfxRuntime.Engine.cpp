@@ -35,8 +35,7 @@ void QtPreviewSfxRuntime::initializeAssets()
         return;
     }
 
-    const auto configureBank = [this](SfxBank& bank, const QString& kind, int voiceCount) {
-        const QString path = miacode::preview_sfx::assetFilePathForKind(preparedAssets_.sfxDir, kind);
+    const auto configureBankFromPath = [this](SfxBank& bank, const QString& kind, const QString& path, int voiceCount) {
         if (!QFileInfo::exists(path)) {
             return;
         }
@@ -59,6 +58,13 @@ void QtPreviewSfxRuntime::initializeAssets()
         }
         bank.configured = !bank.voices.isEmpty();
     };
+    const auto configureBank = [&configureBankFromPath, this](SfxBank& bank, const QString& kind, int voiceCount) {
+        configureBankFromPath(
+            bank,
+            kind,
+            miacode::preview_sfx::assetFilePathForKind(preparedAssets_.sfxDir, kind),
+            voiceCount);
+    };
 
     configureBank(answerSfx_, "answer", 1);
     configureBank(judgeSfx_, "judge", 1);
@@ -72,6 +78,8 @@ void QtPreviewSfxRuntime::initializeAssets()
     configureBank(touchSfx_, "touch", 1);
     // All note SFX kinds are now latest-wins to mirror MajdataPlay's runtime behavior.
     configureBank(fireworkSfx_, "firework", 1);
+    configureBank(clockSfx_, "clock", 1);
+    configureBankFromPath(introStartSfx_, "intro_start", introStartSfxLocalPath(), 1);
 
     const QString touchholdPath = miacode::preview_sfx::assetFilePathForKind(preparedAssets_.sfxDir, "touchhold");
     if (QFileInfo::exists(touchholdPath)) {
@@ -147,6 +155,8 @@ void QtPreviewSfxRuntime::applyVolumes()
     applyVolume(exSfx_, previewSfxVolumeForKind(settings_, "ex"));
     applyVolume(touchSfx_, previewSfxVolumeForKind(settings_, "touch"));
     applyVolume(fireworkSfx_, previewSfxVolumeForKind(settings_, "firework"));
+    applyVolume(clockSfx_, previewSfxVolumeForKind(settings_, "clock"));
+    applyVolume(introStartSfx_, PreviewAudioSettings::clampGlobal(settings_.globalVolume));
     if (backgroundTrackVoice_ != nullptr && backgroundTrackVoice_->initialized) {
         ma_sound_set_volume(&backgroundTrackVoice_->sound, static_cast<float>(previewTrackVolume(settings_)));
     }
@@ -295,4 +305,3 @@ bool QtPreviewSfxRuntime::stretchedBackgroundClockReady() const
     QMutexLocker locker(&stretchedBackgroundState_->mutex);
     return stretchedBackgroundState_->authoritativeClockReady;
 }
-

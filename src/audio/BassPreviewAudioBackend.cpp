@@ -8,6 +8,7 @@
 #include "common/FileContentStamp.h"
 #include "common/OperationLog.h"
 #include "common/PreviewAudioMixConfig.h"
+#include "common/IntroConfig.h"
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewSfxTimeline.h"
 
@@ -899,6 +900,8 @@ void BassPreviewAudioBackend::resetAssets()
     resetSample(touchSample_);
     resetSample(touchholdSampleOwner_);
     resetSample(fireworkSample_);
+    resetSample(clockSample_);
+    resetSample(introStartSample_);
     resetSample(backgroundTrackSampleOwner_);
     appendBassDebugLog(
         miacode::preview_audio::bass::BassDebugOperation::ResetAssets,
@@ -951,6 +954,22 @@ void BassPreviewAudioBackend::initializeAssets()
     loadSample(touchSample_, QStringLiteral("touch"), false, true);
     loadSample(touchholdSampleOwner_, QStringLiteral("touchhold"), false, false);
     loadSample(fireworkSample_, QStringLiteral("firework"), false, true);
+    loadSample(clockSample_, QStringLiteral("clock"), false, true);
+    const QString introStartPath = QString::fromLatin1(miacode::intro::kOpeningSfxResource);
+    if (QFileInfo::exists(introStartPath)) {
+        introStartSample_ = std::make_unique<Sample>();
+        if (introStartSample_->create(
+                this,
+                introStartPath,
+                QStringLiteral("intro_start"),
+                QStringLiteral("intro_start"),
+                false,
+                false)) {
+            samplesByKind_.insert(QStringLiteral("intro_start"), introStartSample_.get());
+        } else {
+            introStartSample_.reset();
+        }
+    }
 
     samplesByKind_.insert(QStringLiteral("break_touch"), judgeBreakSample_.get());
     samplesByKind_.insert(QStringLiteral("break_slide"), breakSlideStartSample_.get());
@@ -988,7 +1007,9 @@ void BassPreviewAudioBackend::initializeAssets()
         exSample_.get(),
         touchSample_.get(),
         touchholdSampleOwner_.get(),
-        fireworkSample_.get()
+        fireworkSample_.get(),
+        clockSample_.get(),
+        introStartSample_.get()
     };
     for (const Sample* sample : countedSamples) {
         if (sample != nullptr) {
@@ -1030,6 +1051,8 @@ void BassPreviewAudioBackend::applySampleLevels()
     apply(touchSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("touch")));
     apply(touchholdSample_, previewSfxVolumeForKind(settings_, QStringLiteral("touchhold")));
     apply(fireworkSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("firework")));
+    apply(clockSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("clock")));
+    apply(introStartSample_.get(), PreviewAudioSettings::clampGlobal(settings_.globalVolume));
     apply(backgroundTrackSample_, previewTrackVolume(settings_));
 #endif
 }

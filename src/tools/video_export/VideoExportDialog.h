@@ -43,6 +43,12 @@ public:
     using PreviewScaleModeCallback = std::function<void(PreviewBackgroundScaleMode mode)>;
     using PreviewTapFlowSpeedCallback = std::function<void(double flowSpeed)>;
     using PreviewTouchFlowSpeedCallback = std::function<void(double flowSpeed)>;
+    using StartExportEffectPreviewCallback =
+        std::function<bool(const VideoExportTask& task, double outputSecond, QString* errorMessage)>;
+    using SeekExportEffectPreviewCallback = std::function<void(double outputSecond)>;
+    using StopExportEffectPreviewCallback = std::function<void()>;
+    using IsExportEffectPreviewPlayingCallback = std::function<bool()>;
+    using CurrentExportEffectPreviewSecondCallback = std::function<double()>;
 
     VideoExportDialog(
         const VideoExportTask& baseTask,
@@ -61,6 +67,11 @@ public:
         PreviewScaleModeCallback previewScaleModeCallback = {},
         PreviewTapFlowSpeedCallback previewTapFlowSpeedCallback = {},
         PreviewTouchFlowSpeedCallback previewTouchFlowSpeedCallback = {},
+        StartExportEffectPreviewCallback startExportEffectPreviewCallback = {},
+        SeekExportEffectPreviewCallback seekExportEffectPreviewCallback = {},
+        StopExportEffectPreviewCallback stopExportEffectPreviewCallback = {},
+        IsExportEffectPreviewPlayingCallback isExportEffectPreviewPlayingCallback = {},
+        CurrentExportEffectPreviewSecondCallback currentExportEffectPreviewSecondCallback = {},
         QWidget* parent = nullptr
     );
     bool exportSucceeded() const { return exportSucceeded_; }
@@ -77,7 +88,7 @@ public:
 private:
     void browseOutputPath();
     void startExport();
-    bool applyUiToTask(VideoExportTask* task, QString* errorMessage) const;
+    bool applyUiToTask(VideoExportTask* task, QString* errorMessage, bool requireOutputPath = true) const;
     void refreshDialogGeometry();
     void syncLivePreviewTimestampVisibility();
     void syncLivePreviewObjectStatsVisibility();
@@ -100,7 +111,9 @@ private:
     void setRangeStartFromPreview();
     void setRangeEndFromPreview();
     void toggleRangePreview();
+    void toggleExportEffectPreview();
     void stopRangePreview(bool seekToCurrent);
+    void stopExportEffectPreview(bool seekToCurrent);
     void stopRangePreviewToStart();
     void updatePreviewPlayPauseUi();
     void handlePreviewPlayPauseShortcut();
@@ -113,6 +126,15 @@ private:
     void seekPreview(double second);
     void playPreview(double second);
     void pausePreview();
+    bool buildExportEffectPreviewPlan(QString* errorMessage);
+    double exportEffectPreviewDisplaySecond(double outputSecond) const;
+    double exportEffectPreviewSliderSecond() const;
+    double exportEffectPreviewOutputSecondFromSliderSecond(double sliderSecond) const;
+    void seekExportEffectPreview(double outputSecond);
+    bool playExportEffectPreview(double outputSecond, QString* errorMessage);
+    void pauseExportEffectPreview();
+    bool isExportEffectPreviewPlaying() const;
+    double currentExportEffectPreviewSecond() const;
     bool isPreviewPlaying() const;
     double currentPreviewSecond() const;
     QSize selectedResolution() const;
@@ -141,6 +163,11 @@ private:
     PreviewScaleModeCallback previewScaleModeCallback_;
     PreviewTapFlowSpeedCallback previewTapFlowSpeedCallback_;
     PreviewTouchFlowSpeedCallback previewTouchFlowSpeedCallback_;
+    StartExportEffectPreviewCallback startExportEffectPreviewCallback_;
+    SeekExportEffectPreviewCallback seekExportEffectPreviewCallback_;
+    StopExportEffectPreviewCallback stopExportEffectPreviewCallback_;
+    IsExportEffectPreviewPlayingCallback isExportEffectPreviewPlayingCallback_;
+    CurrentExportEffectPreviewSecondCallback currentExportEffectPreviewSecondCallback_;
 
     double totalDurationSeconds_ = 0.0;
     double previewCursorSecond_ = 0.0;
@@ -149,6 +176,15 @@ private:
     bool exportRequested_ = false;
     bool syncingRangeUi_ = false;
     bool rangePreviewPlaying_ = false;
+    bool exportEffectPreviewPlaying_ = false;
+    bool exportEffectPreviewPlanValid_ = false;
+    bool exportEffectPreviewFullRange_ = false;
+    double exportEffectPreviewCursorSecond_ = 0.0;
+    double exportEffectPreviewLastUiSecond_ = -1.0;
+    double exportEffectPreviewTotalSeconds_ = 0.0;
+    double exportEffectPreviewLeadInSeconds_ = 0.0;
+    double exportEffectPreviewTimelineOriginSecond_ = 0.0;
+    double exportEffectPreviewSegmentStartSecond_ = 0.0;
     bool previewAspectChangedByDialog_ = false;
     bool previewStateRestored_ = false;
     bool initialShowTimestamp_ = true;
@@ -206,6 +242,7 @@ private:
     QTabWidget* settingsTabs_ = nullptr;
     QToolButton* previewRangeButton_ = nullptr;
     QToolButton* stopPreviewButton_ = nullptr;
+    QPushButton* exportEffectPreviewButton_ = nullptr;
     QPushButton* exportButton_ = nullptr;
     QTimer* previewTimer_ = nullptr;
     QTimer* previewHeldSeekTimer_ = nullptr;

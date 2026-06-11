@@ -211,5 +211,7 @@ private:
     std::unique_ptr<Sample> touchSample_;
     std::unique_ptr<Sample> touchholdSampleOwner_;
     std::unique_ptr<Sample> fireworkSample_;
+    std::unique_ptr<Sample> clockSample_;
+    std::unique_ptr<Sample> introStartSample_;
     std::unique_ptr<Sample> backgroundTrackSampleOwner_;
 };

@@ -89,6 +89,8 @@ public:
     double previewPlaybackEndSeconds() const;
     void updatePreviewSliderRange();
     void updatePreviewSliderPosition(double second);
+    double previewSliderSecondForValue(int sliderValue) const;
+    double previewSliderOutputSecondForValue(int sliderValue) const;
     void refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers);
     void clearPreviewObjectStats();
     int updatePreviewStatsLayoutMode(int hostWidth = -1);
@@ -167,6 +169,14 @@ public:
     void finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage);
     void stopQtPreviewPlayback(bool keepPosition = true);
     void applyQtPreviewPosition(double second, bool centerView);
+    bool startExportEffectPreviewPlayback(const VideoExportTask& task, double outputSecond, QString* errorMessage);
+    void seekExportEffectPreviewPlayback(double outputSecond);
+    void stopExportEffectPreviewPlayback();
+    bool isExportEffectPreviewPlaybackActive() const;
+    double currentExportEffectPreviewOutputSecond() const;
+    double exportEffectPreviewOutputSecondFromDisplaySecond(double displaySecond) const;
+    void applyExportEffectPreviewPosition(double outputSecond);
+    void playExportEffectPreviewIntroSound();
     void syncPausedPreviewMediaTimestamps(double second);
     void flushQtPreviewTimelinePosition();
     void onQtPreviewTickAtSecond(double second, double fallbackSecond, bool hasAudioClock);

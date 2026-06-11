@@ -458,6 +458,20 @@
         // ("暂停时显示判定区") is ignored so PV/BG renders exactly as it will in the
         // exported video. Normal preview leaves this false → option behaves as usual.
         bool exportPreviewActive_ = false;
+        bool exportEffectPreviewPlaybackActive_ = false;
+        bool exportEffectPreviewPlaybackFullRange_ = false;
+        bool exportEffectPreviewIntroEnabled_ = false;
+        bool exportEffectPreviewBgmStarted_ = false;
+        bool exportEffectPreviewIntroSoundPlayed_ = false;
+        bool exportEffectPreviewMediaPlaybackStarted_ = false;
+        bool exportEffectPreviewMediaFrozen_ = false;
+        int exportEffectPreviewNextSfxIndex_ = 0;
+        int exportEffectPreviewFps_ = 60;
+        double exportEffectPreviewPlaybackTotalSeconds_ = 0.0;
+        double exportEffectPreviewPlaybackLeadInSeconds_ = 0.0;
+        double exportEffectPreviewPlaybackTimelineOriginSecond_ = 0.0;
+        double exportEffectPreviewPlaybackSegmentStartSecond_ = 0.0;
+        miacode::video_export::VideoExportAudioRenderPlan exportEffectPreviewAudioPlan_;
         // Transient (not persisted): true while Alt is held with the preview
         // paused. Inverts the effective "暂停时显示判定区" option so the paused view
         // flips judge area ⇄ PV/BG until Alt is released (or the app

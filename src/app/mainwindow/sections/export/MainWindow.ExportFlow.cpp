@@ -10,6 +10,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/ChartAssetPaths.h"
+#include "common/ChartClockCount.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
@@ -437,6 +438,10 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask()
     // Seed the banner-card payload so the dialog's "Export Cover" can render the
     // difficulty card without building a full export snapshot.
     task.intro = buildActiveDifficultyIntroBannerSpec();
+    task.clockCount = miacode::chart_clock::clockCountFromDocument(owner_.document_);
+    if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(owner_.activeDifficultyId_)) {
+        task.clockBpm = miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart);
+    }
     return task;
 }
 
@@ -554,6 +559,32 @@ void MainWindow::ExportSection::onExportPreviewVideo()
             }
             owner_.savePortableState();
         },
+        [this](const VideoExportTask& previewTask, double outputSecond, QString* errorMessage) -> bool {
+            VideoExportTask resolvedTask = previewTask;
+            resolvedTask.outlineVariant = owner_.previewOutlineVariant_;
+            resolvedTask.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
+            resolvedTask.centerDisplayMode = owner_.previewCenterDisplayMode_;
+            resolvedTask.muriRenderOptions = owner_.muriRenderOptions_;
+            resolvedTask.clockCount = miacode::chart_clock::clockCountFromDocument(owner_.document_);
+            if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(owner_.activeDifficultyId_)) {
+                resolvedTask.clockBpm = miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart);
+            }
+            this->applySharedExportTaskSettings(resolvedTask);
+            return owner_.startExportEffectPreviewPlayback(resolvedTask, outputSecond, errorMessage);
+        },
+        [this](double outputSecond) {
+            owner_.seekExportEffectPreviewPlayback(outputSecond);
+        },
+        [this]() {
+            owner_.stopExportEffectPreviewPlayback();
+            owner_.updatePauseButtonAppearance();
+        },
+        [this]() -> bool {
+            return owner_.isExportEffectPreviewPlaybackActive();
+        },
+        [this]() -> double {
+            return owner_.currentExportEffectPreviewOutputSecond();
+        },
         UiDialogs::effectiveParentWidget(&owner_)
     );
     // Inject the owner-wired Gameplay controls (skin / judge line / judge
@@ -622,6 +653,7 @@ void MainWindow::ExportSection::onExportPreviewVideo()
         owner_.previewCanvas_->setShowChartInfoHud(owner_.previewShowChartInfoHud_);
     }
     dialog.exec();
+    owner_.stopExportEffectPreviewPlayback();
     if (owner_.previewCanvas_ != nullptr) {
         owner_.previewCanvas_->setSuppressDebugInfo(false);
         owner_.previewCanvas_->setShowChartInfoHud(false);

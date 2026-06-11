@@ -3,6 +3,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/IntroConfig.h"
 #include "common/MiniaudioFileAccess.h"
 #include "common/OperationLog.h"
 #include "common/PreviewGameplayConfig.h"
@@ -11,6 +12,8 @@
 
 #include <algorithm>
 #include <cstring>
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QMutex>
 #include <QMutexLocker>
@@ -42,6 +45,25 @@ void appendAudioDebugLog(const QString& message)
         return;
     }
     miacode::debug_log::appendLine(miacode::debug_log::Channel::Audio, QString(), message);
+}
+
+QString introStartSfxLocalPath()
+{
+    const QString dirPath = QDir::temp().filePath(QStringLiteral("MiaCodePreviewAudio"));
+    QDir dir(dirPath);
+    if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
+        return QString();
+    }
+
+    const QString path = dir.filePath(QStringLiteral("intro_start.wav"));
+    if (QFileInfo::exists(path)) {
+        return path;
+    }
+    if (!QFile::copy(QString::fromLatin1(miacode::intro::kOpeningSfxResource), path)) {
+        appendAudioDebugLog(QString("intro_start_extract_failed path=%1").arg(path));
+        return QString();
+    }
+    return path;
 }
 }
 

@@ -29,6 +29,7 @@
 #include "TimelineView.h"
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
+#include "tools/video_export/VideoExportAudioRenderPlan.h"
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"

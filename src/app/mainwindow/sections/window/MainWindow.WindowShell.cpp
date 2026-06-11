@@ -395,13 +395,32 @@ void MainWindow::WindowSection::beginShellPreviewScrub()
     if (owner_.previewFullscreenActive_) {
         owner_.showPreviewFullscreenControls(false);
     }
-    if (owner_.qtPreviewPlaying_) {
+    if (owner_.qtPreviewPlaying_ && !owner_.isExportEffectPreviewPlaybackActive()) {
         owner_.pauseQtPreviewPlaybackExact();
     }
 }
 
 void MainWindow::WindowSection::updateShellPreviewScrub(double second, bool centerView)
 {
+    if (owner_.isExportEffectPreviewPlaybackActive()) {
+        const double clampedOutput = owner_.exportEffectPreviewOutputSecondFromDisplaySecond(second);
+        QToolTip::hideText();
+        appendQuickShellBackendLog(
+            QStringLiteral("export_effect_scrub_update"),
+            QString("display_second=%1 output_second=%2 center=%3")
+                .arg(second, 0, 'f', 6)
+                .arg(clampedOutput, 0, 'f', 6)
+                .arg(centerView ? 1 : 0)
+        );
+        const bool shouldRenderNow =
+            !owner_.previewScrubRenderElapsed_.isValid()
+            || owner_.previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;
+        if (shouldRenderNow) {
+            owner_.seekExportEffectPreviewPlayback(clampedOutput);
+            owner_.previewScrubRenderElapsed_.restart();
+        }
+        return;
+    }
     const double clampedSecond = qBound(0.0, second, owner_.previewDurationSeconds());
     QToolTip::hideText();
     appendQuickShellBackendLog(
@@ -439,6 +458,25 @@ void MainWindow::WindowSection::updateShellPreviewScrub(double second, bool cent
 
 void MainWindow::WindowSection::endShellPreviewScrub(double second, bool centerView)
 {
+    if (owner_.isExportEffectPreviewPlaybackActive()) {
+        const double clampedOutput = owner_.exportEffectPreviewOutputSecondFromDisplaySecond(second);
+        QToolTip::hideText();
+        appendQuickShellBackendLog(
+            QStringLiteral("export_effect_scrub_end"),
+            QString("display_second=%1 output_second=%2 center=%3")
+                .arg(second, 0, 'f', 6)
+                .arg(clampedOutput, 0, 'f', 6)
+                .arg(centerView ? 1 : 0)
+        );
+        owner_.stopPreviewHeldSeek();
+        owner_.previewScrubDragging_ = false;
+        owner_.previewScrubRenderElapsed_.invalidate();
+        if (owner_.previewSeekDebounceTimer_ != nullptr) {
+            owner_.previewSeekDebounceTimer_->stop();
+        }
+        owner_.seekExportEffectPreviewPlayback(clampedOutput);
+        return;
+    }
     const double clampedSecond = qBound(0.0, second, owner_.previewDurationSeconds());
     QToolTip::hideText();
     appendQuickShellBackendLog(

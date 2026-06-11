@@ -14,6 +14,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/IntroConfig.h"
 #include "common/OperationLog.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewInteractionConfig.h"
@@ -1087,6 +1088,10 @@ void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiv
 
 void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
 {
+    if (state_.exportEffectPreviewPlaybackActive_) {
+        stopExportEffectPreviewPlayback();
+        return;
+    }
     const bool wasPlaying = state_.qtPreviewPlaying_;
     const quint64 playbackTxn = state_.activePreviewPlaybackTransactionId_;
     if (!wasPlaying || state_.previewSfxRuntime_ == nullptr) {
@@ -1494,6 +1499,10 @@ void MainWindow::TimelineSection::finishQtPreviewPlaybackAndReturnToEntry(const 
 
 void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
 {
+    if (state_.exportEffectPreviewPlaybackActive_) {
+        stopExportEffectPreviewPlayback();
+        return;
+    }
     const bool wasPlaying = state_.qtPreviewPlaying_;
     const bool hadStartupSync = state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_;
     const quint64 playbackTxn = state_.activePreviewPlaybackTransactionId_;
@@ -1611,6 +1620,345 @@ void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool cen
     }
 }
 
+namespace {
+
+double exportEffectSceneSecond(
+    bool fullRange,
+    double outputSecond,
+    double leadInSeconds,
+    double timelineOriginSecond,
+    double segmentStartSecond)
+{
+    if (fullRange) {
+        return timelineOriginSecond + outputSecond;
+    }
+    if (outputSecond < leadInSeconds) {
+        return segmentStartSecond;
+    }
+    return segmentStartSecond + qMax(0.0, outputSecond - leadInSeconds);
+}
+
+QVariantMap introBannerTrackMap(const IntroBannerSpec& intro)
+{
+    QVariantMap track;
+    track.insert(QStringLiteral("title"), intro.title);
+    track.insert(QStringLiteral("artist"), intro.artist);
+    track.insert(QStringLiteral("designer"), intro.designer);
+    track.insert(QStringLiteral("level"), intro.level);
+    track.insert(QStringLiteral("difficulty"), intro.difficulty);
+    track.insert(QStringLiteral("bpm"), intro.bpm);
+    track.insert(QStringLiteral("mode"), intro.mode);
+    track.insert(QStringLiteral("lvRenderMode"), intro.lvRenderMode);
+    return track;
+}
+
+QVariantMap introBannerTemplateMap()
+{
+    QVariantMap templateMap;
+    QFile templateFile(QStringLiteral(":/intro/templates/maimai_banner.json"));
+    if (templateFile.open(QIODevice::ReadOnly)) {
+        const QJsonDocument doc = QJsonDocument::fromJson(templateFile.readAll());
+        if (doc.isObject()) {
+            templateMap = doc.object().toVariantMap();
+        }
+    }
+    return templateMap;
+}
+
+bool exportEffectBgmShouldBeAudible(
+    const miacode::video_export::VideoExportAudioRenderPlan& plan,
+    double outputSecond)
+{
+    return plan.backgroundTrack.enabled
+        && outputSecond + kTimelineZeroSecondTolerance >= plan.backgroundTrack.mixStartSecond;
+}
+
+bool exportEffectMediaShouldPlay(bool fullRange, double outputSecond, double sceneSecond, double leadInSeconds)
+{
+    return fullRange
+        ? sceneSecond >= -kTimelineZeroSecondTolerance
+        : outputSecond + kTimelineZeroSecondTolerance >= leadInSeconds;
+}
+
+QString exportEffectSfxAssetKind(const miacode::video_export::ScheduledSfxPlaybackRenderPlan& playback)
+{
+    const QString assetKind = previewSfxNormalizedKind(playback.assetKind);
+    if (!assetKind.isEmpty()) {
+        return assetKind;
+    }
+    return previewSfxNormalizedKind(playback.kind);
+}
+
+}  // namespace
+
+bool MainWindow::TimelineSection::startExportEffectPreviewPlayback(
+    const VideoExportTask& task,
+    double outputSecond,
+    QString* errorMessage)
+{
+    if (!owner_.preparePreviewStartState()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("Preview is not ready.");
+        }
+        return false;
+    }
+
+    miacode::video_export::VideoExportAudioRenderPlan plan;
+    if (!miacode::video_export::buildVideoExportAudioRenderPlan(task, &plan, errorMessage)) {
+        return false;
+    }
+
+    if (state_.qtPreviewPlaying_) {
+        stopQtPreviewPlayback(true);
+    }
+    owner_.ensurePreviewStageMediaRouteInitialized();
+    owner_.ensurePreviewSfxRuntimePrepared();
+    owner_.applyPreviewAudioSettingsToRuntime();
+    cancelPreviewStartupSync();
+    applyLatestTimelinePreviewStateToPausedPreview();
+
+    state_.exportEffectPreviewAudioPlan_ = plan;
+    state_.exportEffectPreviewPlaybackActive_ = true;
+    state_.exportEffectPreviewPlaybackFullRange_ = task.fullRangeExport;
+    state_.exportEffectPreviewIntroEnabled_ = task.fullRangeExport && task.intro.enabled && plan.introLeadSeconds > 0.0;
+    state_.exportEffectPreviewPlaybackTotalSeconds_ = qMax(0.0, plan.totalSeconds);
+    state_.exportEffectPreviewPlaybackLeadInSeconds_ = qMax(0.0, plan.leadInSeconds);
+    state_.exportEffectPreviewPlaybackTimelineOriginSecond_ = plan.timelineOriginSecond;
+    state_.exportEffectPreviewPlaybackSegmentStartSecond_ = plan.segmentStartSecond;
+    state_.exportEffectPreviewBgmStarted_ = false;
+    state_.exportEffectPreviewIntroSoundPlayed_ = false;
+    state_.exportEffectPreviewMediaPlaybackStarted_ = false;
+    state_.exportEffectPreviewMediaFrozen_ = false;
+    state_.exportEffectPreviewNextSfxIndex_ = 0;
+    state_.exportEffectPreviewFps_ = qMax(1, task.fps);
+    updatePreviewSliderRange();
+
+    const double clampedOutput = qBound(0.0, outputSecond, state_.exportEffectPreviewPlaybackTotalSeconds_);
+    state_.qtPreviewStartSecond_ = clampedOutput;
+    state_.qtPreviewPauseSecond_ = clampedOutput;
+    state_.qtPreviewPlaybackReturnSecond_ = clampedOutput;
+    state_.qtPreviewPlaybackEndSecond_ = state_.exportEffectPreviewPlaybackTotalSeconds_;
+    state_.qtPreviewLastTimelineSecond_ = -1.0;
+    state_.qtPreviewPlaying_ = true;
+    state_.qtPreviewElapsed_.restart();
+    state_.qtPreviewTimelineElapsed_.restart();
+    state_.activePreviewPlaybackTransactionId_ = ++state_.previewPlaybackTransactionCounter_;
+    state_.exportEffectPreviewIntroSoundPlayed_ = clampedOutput > kTimelineZeroSecondTolerance;
+
+    const double sceneSecond = exportEffectSceneSecond(
+        state_.exportEffectPreviewPlaybackFullRange_,
+        clampedOutput,
+        state_.exportEffectPreviewPlaybackLeadInSeconds_,
+        state_.exportEffectPreviewPlaybackTimelineOriginSecond_,
+        state_.exportEffectPreviewPlaybackSegmentStartSecond_);
+    if (state_.previewSfxRuntime_ != nullptr) {
+        state_.previewSfxRuntime_->setPlaybackTransactionId(state_.activePreviewPlaybackTransactionId_);
+        state_.previewSfxRuntime_->resetCursor(sceneSecond, true);
+        if (exportEffectBgmShouldBeAudible(state_.exportEffectPreviewAudioPlan_, clampedOutput)) {
+            state_.previewSfxRuntime_->startBackgroundTrack(sceneSecond);
+            state_.exportEffectPreviewBgmStarted_ = true;
+        } else {
+            state_.previewSfxRuntime_->pauseBackgroundTrack();
+        }
+    }
+    if (owner_.previewStageMediaRouteHasVideo()) {
+        if (exportEffectMediaShouldPlay(
+                state_.exportEffectPreviewPlaybackFullRange_,
+                clampedOutput,
+                sceneSecond,
+                state_.exportEffectPreviewPlaybackLeadInSeconds_)) {
+            owner_.startPreviewStageMediaRoutePlayback(sceneSecond);
+            state_.exportEffectPreviewMediaPlaybackStarted_ = true;
+        } else {
+            owner_.seekPreviewStageMediaRouteWhilePaused(qMax(0.0, sceneSecond));
+            state_.exportEffectPreviewMediaFrozen_ = true;
+        }
+    }
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->setActivePlaybackProfilingEnabled(true);
+        if (state_.exportEffectPreviewIntroEnabled_) {
+            const QUrl jacketUrl = task.intro.jacketPath.isEmpty()
+                ? QUrl()
+                : QUrl::fromLocalFile(task.intro.jacketPath);
+            state_.previewCanvas_->setIntroOverlayData(
+                introBannerTrackMap(task.intro),
+                introBannerTemplateMap(),
+                jacketUrl,
+                QUrl(QString::fromLatin1(miacode::intro::kLogoFallbackUrl)));
+        } else {
+            state_.previewCanvas_->clearIntroOverlay(false);
+        }
+    }
+    if (state_.exportEffectPreviewIntroEnabled_ && clampedOutput <= kTimelineZeroSecondTolerance) {
+        playExportEffectPreviewIntroSound();
+    }
+    applyExportEffectPreviewPosition(clampedOutput);
+    resetVisualClockSmoothing();
+    owner_.setPreviewFixedTimerHighResolutionActive(!previewCanvasUsesFrameSwappedPacing());
+    if (state_.previewCanvas_ != nullptr && previewCanvasUsesFrameSwappedPacing()) {
+        requestNextDisplayRefreshPreviewFrame();
+    } else {
+        requestNextFixedIntervalPreviewFrame();
+    }
+    if (ui_.qtPreviewTimelineTimer_ != nullptr && !ui_.qtPreviewTimelineTimer_->isActive()) {
+        ui_.qtPreviewTimelineTimer_->start();
+    }
+    if (ui_.previewStatsUiTimer_ != nullptr && !ui_.previewStatsUiTimer_->isActive()) {
+        ui_.previewStatsUiTimer_->start();
+    }
+    return true;
+}
+
+void MainWindow::TimelineSection::seekExportEffectPreviewPlayback(double outputSecond)
+{
+    if (!state_.exportEffectPreviewPlaybackActive_) {
+        return;
+    }
+    const double clampedOutput = qBound(0.0, outputSecond, state_.exportEffectPreviewPlaybackTotalSeconds_);
+    state_.qtPreviewStartSecond_ = clampedOutput;
+    state_.qtPreviewPauseSecond_ = clampedOutput;
+    state_.qtPreviewElapsed_.restart();
+    state_.exportEffectPreviewNextSfxIndex_ = 0;
+    state_.exportEffectPreviewIntroSoundPlayed_ = clampedOutput > kTimelineZeroSecondTolerance;
+    state_.exportEffectPreviewMediaPlaybackStarted_ = false;
+    state_.exportEffectPreviewMediaFrozen_ = false;
+    while (state_.exportEffectPreviewNextSfxIndex_ < state_.exportEffectPreviewAudioPlan_.scheduledSfxPlaybacks.size()
+           && state_.exportEffectPreviewAudioPlan_.scheduledSfxPlaybacks.at(state_.exportEffectPreviewNextSfxIndex_).mixSecond
+              < clampedOutput) {
+        ++state_.exportEffectPreviewNextSfxIndex_;
+    }
+    const double sceneSecond = exportEffectSceneSecond(
+        state_.exportEffectPreviewPlaybackFullRange_,
+        clampedOutput,
+        state_.exportEffectPreviewPlaybackLeadInSeconds_,
+        state_.exportEffectPreviewPlaybackTimelineOriginSecond_,
+        state_.exportEffectPreviewPlaybackSegmentStartSecond_);
+    if (state_.previewSfxRuntime_ != nullptr) {
+        state_.previewSfxRuntime_->resetCursor(sceneSecond, true);
+        if (exportEffectBgmShouldBeAudible(state_.exportEffectPreviewAudioPlan_, clampedOutput)) {
+            state_.previewSfxRuntime_->startBackgroundTrack(sceneSecond);
+            state_.exportEffectPreviewBgmStarted_ = true;
+        } else {
+            state_.previewSfxRuntime_->pauseBackgroundTrack();
+            state_.exportEffectPreviewBgmStarted_ = false;
+        }
+    }
+    if (state_.exportEffectPreviewIntroEnabled_
+        && !state_.exportEffectPreviewIntroSoundPlayed_
+        && clampedOutput <= kTimelineZeroSecondTolerance) {
+        playExportEffectPreviewIntroSound();
+    }
+    if (owner_.previewStageMediaRouteHasVideo()) {
+        if (exportEffectMediaShouldPlay(
+                state_.exportEffectPreviewPlaybackFullRange_,
+                clampedOutput,
+                sceneSecond,
+                state_.exportEffectPreviewPlaybackLeadInSeconds_)) {
+            owner_.startPreviewStageMediaRoutePlayback(sceneSecond);
+            state_.exportEffectPreviewMediaPlaybackStarted_ = true;
+        } else {
+            owner_.seekPreviewStageMediaRouteWhilePaused(qMax(0.0, sceneSecond));
+            state_.exportEffectPreviewMediaFrozen_ = true;
+        }
+    }
+    applyExportEffectPreviewPosition(clampedOutput);
+}
+
+void MainWindow::TimelineSection::stopExportEffectPreviewPlayback()
+{
+    if (!state_.exportEffectPreviewPlaybackActive_) {
+        return;
+    }
+    state_.exportEffectPreviewPlaybackActive_ = false;
+    state_.exportEffectPreviewBgmStarted_ = false;
+    state_.exportEffectPreviewIntroEnabled_ = false;
+    state_.exportEffectPreviewIntroSoundPlayed_ = false;
+    state_.exportEffectPreviewMediaPlaybackStarted_ = false;
+    state_.exportEffectPreviewMediaFrozen_ = false;
+    state_.exportEffectPreviewNextSfxIndex_ = 0;
+    owner_.pausePreviewStageMediaRoutePlayback();
+    stopQtPreviewTimers();
+    if (state_.previewSfxRuntime_ != nullptr) {
+        state_.previewSfxRuntime_->pausePreviewPlaybackTransaction();
+        state_.previewSfxRuntime_->resetRetainedPreviewPlaybackTransaction(state_.qtPreviewPauseSecond_);
+    }
+    state_.qtPreviewPlaying_ = false;
+    state_.qtPreviewPauseSecond_ = qBound(0.0, state_.qtPreviewPauseSecond_, previewDurationSeconds());
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->clearHudPlayheadSecondsOverride(true);
+        state_.previewCanvas_->clearIntroOverlay(false);
+        state_.previewCanvas_->setActivePlaybackProfilingEnabled(false);
+    }
+    updatePreviewSliderRange();
+    updatePreviewSliderPosition(state_.qtPreviewPauseSecond_);
+    owner_.updatePauseButtonAppearance();
+}
+
+void MainWindow::TimelineSection::playExportEffectPreviewIntroSound()
+{
+    if (!state_.exportEffectPreviewIntroEnabled_ || state_.exportEffectPreviewIntroSoundPlayed_) {
+        return;
+    }
+    const bool played = state_.previewSfxRuntime_ != nullptr
+        && state_.previewSfxRuntime_->audition(QStringLiteral("intro_start"), 1.0);
+    if (!played) {
+        appendPreviewPlaybackLog(QStringLiteral("export_effect_intro_sfx_play_failed"));
+    }
+    state_.exportEffectPreviewIntroSoundPlayed_ = true;
+}
+
+bool MainWindow::TimelineSection::isExportEffectPreviewPlaybackActive() const
+{
+    return state_.exportEffectPreviewPlaybackActive_ && state_.qtPreviewPlaying_;
+}
+
+double MainWindow::TimelineSection::currentExportEffectPreviewOutputSecond() const
+{
+    if (!state_.exportEffectPreviewPlaybackActive_) {
+        return 0.0;
+    }
+    return qBound(0.0, state_.qtPreviewPauseSecond_, state_.exportEffectPreviewPlaybackTotalSeconds_);
+}
+
+double MainWindow::TimelineSection::exportEffectPreviewOutputSecondFromDisplaySecond(double displaySecond) const
+{
+    if (!state_.exportEffectPreviewPlaybackActive_) {
+        return qBound(0.0, displaySecond, previewDurationSeconds());
+    }
+    const double outputSecond = state_.exportEffectPreviewPlaybackFullRange_
+        ? displaySecond - state_.exportEffectPreviewPlaybackTimelineOriginSecond_
+        : displaySecond;
+    return qBound(0.0, outputSecond, state_.exportEffectPreviewPlaybackTotalSeconds_);
+}
+
+void MainWindow::TimelineSection::applyExportEffectPreviewPosition(double outputSecond)
+{
+    const double clampedOutput = qBound(0.0, outputSecond, state_.exportEffectPreviewPlaybackTotalSeconds_);
+    const double sceneSecond = exportEffectSceneSecond(
+        state_.exportEffectPreviewPlaybackFullRange_,
+        clampedOutput,
+        state_.exportEffectPreviewPlaybackLeadInSeconds_,
+        state_.exportEffectPreviewPlaybackTimelineOriginSecond_,
+        state_.exportEffectPreviewPlaybackSegmentStartSecond_);
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->setPlayheadSeconds(sceneSecond, false);
+        state_.previewCanvas_->setHudPlayheadSecondsOverride(sceneSecond, false);
+        if (state_.exportEffectPreviewIntroEnabled_
+            && clampedOutput < state_.exportEffectPreviewAudioPlan_.introLeadSeconds) {
+            const int outputFrame = qMax(0, qFloor(clampedOutput * state_.exportEffectPreviewFps_));
+            const int authoringFrame = miacode::intro::authoringFrameForOutputFrame(
+                outputFrame,
+                state_.exportEffectPreviewFps_);
+            state_.previewCanvas_->setIntroOverlayFrame(authoringFrame, true, false);
+        } else if (state_.previewCanvas_->introOverlayActive()) {
+            state_.previewCanvas_->clearIntroOverlay(false);
+        }
+        state_.previewCanvas_->update();
+    }
+    updatePreviewSliderPosition(clampedOutput);
+    owner_.setPreviewStageMediaRouteObservedPlayheadSecond(sceneSecond);
+}
+
 void MainWindow::TimelineSection::syncPausedPreviewMediaTimestamps(double second)
 {
     owner_.seekPreviewStageMediaRouteWhilePaused(second);
@@ -1668,7 +2016,9 @@ void MainWindow::TimelineSection::onQtPreviewTick()
     //     drainEvents, the BASS SYNC chain can only produce duplicate triggers and
     //     buys nothing.
     if (state_.previewSfxRuntime_ != nullptr) {
-        state_.previewSfxRuntime_->syncBackgroundTrack(fallbackSecond);
+        if (!state_.exportEffectPreviewPlaybackActive_) {
+            state_.previewSfxRuntime_->syncBackgroundTrack(fallbackSecond);
+        }
     }
     const double second = fallbackSecond;
     const bool hasAudioClock = false;
@@ -1719,6 +2069,102 @@ void MainWindow::TimelineSection::resetVisualClockSmoothing()
 void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second, double fallbackSecond, bool hasAudioClock)
 {
     if (!state_.qtPreviewPlaying_) {
+        return;
+    }
+    if (state_.exportEffectPreviewPlaybackActive_) {
+        Q_UNUSED(fallbackSecond);
+        Q_UNUSED(hasAudioClock);
+        const double outputSecond = qBound(0.0, second, state_.exportEffectPreviewPlaybackTotalSeconds_);
+        if (state_.exportEffectPreviewPlaybackTotalSeconds_ > 0.0
+            && outputSecond + kTimelineZeroSecondTolerance >= state_.exportEffectPreviewPlaybackTotalSeconds_) {
+            state_.qtPreviewPauseSecond_ = state_.exportEffectPreviewPlaybackTotalSeconds_;
+            applyExportEffectPreviewPosition(state_.qtPreviewPauseSecond_);
+            stopExportEffectPreviewPlayback();
+            return;
+        }
+        const double sceneSecond = exportEffectSceneSecond(
+            state_.exportEffectPreviewPlaybackFullRange_,
+            outputSecond,
+            state_.exportEffectPreviewPlaybackLeadInSeconds_,
+            state_.exportEffectPreviewPlaybackTimelineOriginSecond_,
+            state_.exportEffectPreviewPlaybackSegmentStartSecond_);
+        if (owner_.previewStageMediaRouteHasVideo()) {
+            const bool mediaShouldPlay = exportEffectMediaShouldPlay(
+                state_.exportEffectPreviewPlaybackFullRange_,
+                outputSecond,
+                sceneSecond,
+                state_.exportEffectPreviewPlaybackLeadInSeconds_);
+            if (mediaShouldPlay) {
+                if (!state_.exportEffectPreviewMediaPlaybackStarted_) {
+                    owner_.startPreviewStageMediaRoutePlayback(sceneSecond);
+                    state_.exportEffectPreviewMediaPlaybackStarted_ = true;
+                } else {
+                    owner_.syncPreviewStageMediaRoutePlayback(sceneSecond);
+                }
+                state_.exportEffectPreviewMediaFrozen_ = false;
+            } else if (!state_.exportEffectPreviewMediaFrozen_) {
+                owner_.seekPreviewStageMediaRouteWhilePaused(qMax(0.0, sceneSecond));
+                state_.exportEffectPreviewMediaFrozen_ = true;
+                state_.exportEffectPreviewMediaPlaybackStarted_ = false;
+            }
+        }
+        applyExportEffectPreviewPosition(outputSecond);
+        if (state_.exportEffectPreviewIntroEnabled_
+            && !state_.exportEffectPreviewIntroSoundPlayed_
+            && outputSecond < state_.exportEffectPreviewAudioPlan_.introLeadSeconds) {
+            playExportEffectPreviewIntroSound();
+        }
+        if (state_.previewSfxRuntime_ != nullptr) {
+            if (!exportEffectBgmShouldBeAudible(state_.exportEffectPreviewAudioPlan_, outputSecond)) {
+                if (state_.exportEffectPreviewBgmStarted_) {
+                    state_.previewSfxRuntime_->pauseBackgroundTrack();
+                    state_.exportEffectPreviewBgmStarted_ = false;
+                }
+            } else if (!state_.exportEffectPreviewBgmStarted_) {
+                state_.previewSfxRuntime_->startBackgroundTrack(sceneSecond);
+                state_.exportEffectPreviewBgmStarted_ = true;
+            } else {
+                state_.previewSfxRuntime_->syncBackgroundTrack(sceneSecond);
+            }
+            while (state_.exportEffectPreviewNextSfxIndex_ < state_.exportEffectPreviewAudioPlan_.scheduledSfxPlaybacks.size()) {
+                const auto& playback =
+                    state_.exportEffectPreviewAudioPlan_.scheduledSfxPlaybacks.at(state_.exportEffectPreviewNextSfxIndex_);
+                if (playback.mixSecond > outputSecond + kTimelineZeroSecondTolerance) {
+                    break;
+                }
+                const QString assetKind = exportEffectSfxAssetKind(playback);
+                if (!assetKind.isEmpty() && playback.gain > 0.0) {
+                    const double runtimeBaseVolume =
+                        previewSfxVolumeForKind(state_.previewAudioSettings_, assetKind);
+                    if (runtimeBaseVolume <= 0.0) {
+                        ++state_.exportEffectPreviewNextSfxIndex_;
+                        continue;
+                    }
+                    const double auditionGain = qMax(0.0, playback.gain / runtimeBaseVolume);
+                    const bool played = state_.previewSfxRuntime_->audition(assetKind, auditionGain);
+                    if (!played) {
+                        appendPreviewPlaybackLog(
+                            QStringLiteral("export_effect_sfx_play_failed"),
+                            QStringLiteral("kind=%1 asset=%2 mix=%3 plan_gain=%4 audition_gain=%5")
+                                .arg(playback.kind)
+                                .arg(assetKind)
+                                .arg(playback.mixSecond, 0, 'f', 6)
+                                .arg(playback.gain, 0, 'f', 6)
+                                .arg(auditionGain, 0, 'f', 6));
+                    }
+                }
+                ++state_.exportEffectPreviewNextSfxIndex_;
+            }
+        }
+        if (state_.previewCanvas_ != nullptr) {
+            state_.previewCanvas_->noteTickForProfiling();
+        }
+        state_.qtPreviewPauseSecond_ = outputSecond;
+        if (previewCanvasUsesFrameSwappedPacing()) {
+            requestNextDisplayRefreshPreviewFrame();
+        } else {
+            requestNextFixedIntervalPreviewFrame();
+        }
         return;
     }
     const bool diagEnabled = miacode::debug_options::previewFramePacingDiagnosticsEnabled();
@@ -2077,6 +2523,44 @@ void MainWindow::stopQtPreviewPlayback(bool keepPosition)
 void MainWindow::applyQtPreviewPosition(double second, bool centerView)
 {
     timelineSection_->applyQtPreviewPosition(second, centerView);
+}
+
+bool MainWindow::startExportEffectPreviewPlayback(
+    const VideoExportTask& task,
+    double outputSecond,
+    QString* errorMessage)
+{
+    return timelineSection_->startExportEffectPreviewPlayback(task, outputSecond, errorMessage);
+}
+
+void MainWindow::seekExportEffectPreviewPlayback(double outputSecond)
+{
+    timelineSection_->seekExportEffectPreviewPlayback(outputSecond);
+}
+
+void MainWindow::stopExportEffectPreviewPlayback()
+{
+    timelineSection_->stopExportEffectPreviewPlayback();
+}
+
+bool MainWindow::isExportEffectPreviewPlaybackActive() const
+{
+    return timelineSection_->isExportEffectPreviewPlaybackActive();
+}
+
+double MainWindow::currentExportEffectPreviewOutputSecond() const
+{
+    return timelineSection_->currentExportEffectPreviewOutputSecond();
+}
+
+double MainWindow::exportEffectPreviewOutputSecondFromDisplaySecond(double displaySecond) const
+{
+    return timelineSection_->exportEffectPreviewOutputSecondFromDisplaySecond(displaySecond);
+}
+
+void MainWindow::applyExportEffectPreviewPosition(double outputSecond)
+{
+    timelineSection_->applyExportEffectPreviewPosition(outputSecond);
 }
 
 void MainWindow::syncPausedPreviewMediaTimestamps(double second)

@@ -880,7 +880,12 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
                     owner_.previewSlider_->setFocus(Qt::MouseFocusReason);
                     owner_.previewSlider_->setValue(value);
                     owner_.showPreviewSliderTimeHint(value);
-                    owner_.seekPreviewDiscreteToSecond(static_cast<double>(value) / 1000.0, true);
+                    const double outputSecond = owner_.previewSliderOutputSecondForValue(value);
+                    if (owner_.isExportEffectPreviewPlaybackActive()) {
+                        owner_.seekExportEffectPreviewPlayback(outputSecond);
+                    } else {
+                        owner_.seekPreviewDiscreteToSecond(outputSecond, true);
+                    }
                     return true;
                 }
             }

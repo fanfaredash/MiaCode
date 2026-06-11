@@ -230,9 +230,23 @@ void MainWindow::TimelineSection::updatePreviewSliderRange()
     if (ui_.previewSlider_ == nullptr) {
         return;
     }
-    const int maximum = qMax(1, qRound(previewDurationSeconds() * 1000.0));
+    int minimum = 0;
+    int maximum = qMax(1, qRound(previewDurationSeconds() * 1000.0));
+    if (state_.exportEffectPreviewPlaybackActive_) {
+        if (state_.exportEffectPreviewPlaybackFullRange_) {
+            minimum = qRound(state_.exportEffectPreviewPlaybackTimelineOriginSecond_ * 1000.0);
+            maximum = qRound(
+                (state_.exportEffectPreviewPlaybackTimelineOriginSecond_
+                 + state_.exportEffectPreviewPlaybackTotalSeconds_) * 1000.0);
+        } else {
+            maximum = qMax(1, qRound(state_.exportEffectPreviewPlaybackTotalSeconds_ * 1000.0));
+        }
+        if (maximum < minimum) {
+            maximum = minimum;
+        }
+    }
     QSignalBlocker blocker(ui_.previewSlider_);
-    ui_.previewSlider_->setMaximum(maximum);
+    ui_.previewSlider_->setRange(minimum, maximum);
 }
 
 void MainWindow::TimelineSection::updatePreviewSliderPosition(double second)
@@ -240,9 +254,32 @@ void MainWindow::TimelineSection::updatePreviewSliderPosition(double second)
     if (ui_.previewSlider_ == nullptr || state_.previewScrubDragging_) {
         return;
     }
-    const int value = qBound(0, qRound(second * 1000.0), ui_.previewSlider_->maximum());
+    double sliderSecond = second;
+    if (state_.exportEffectPreviewPlaybackActive_) {
+        sliderSecond = state_.exportEffectPreviewPlaybackFullRange_
+            ? state_.exportEffectPreviewPlaybackTimelineOriginSecond_ + second
+            : second;
+    }
+    const int value = qBound(
+        ui_.previewSlider_->minimum(),
+        qRound(sliderSecond * 1000.0),
+        ui_.previewSlider_->maximum());
     QSignalBlocker blocker(ui_.previewSlider_);
     ui_.previewSlider_->setValue(value);
+}
+
+double MainWindow::TimelineSection::previewSliderSecondForValue(int sliderValue) const
+{
+    return static_cast<double>(sliderValue) / 1000.0;
+}
+
+double MainWindow::TimelineSection::previewSliderOutputSecondForValue(int sliderValue) const
+{
+    const double sliderSecond = previewSliderSecondForValue(sliderValue);
+    if (state_.exportEffectPreviewPlaybackActive_ && state_.exportEffectPreviewPlaybackFullRange_) {
+        return sliderSecond - state_.exportEffectPreviewPlaybackTimelineOriginSecond_;
+    }
+    return sliderSecond;
 }
 
 void MainWindow::TimelineSection::refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers)
@@ -1466,11 +1503,13 @@ void MainWindow::TimelineSection::updatePreviewObjectStats(double second)
 
 QString MainWindow::TimelineSection::formatPreviewTimestamp(double second) const
 {
-    const int totalCentiseconds = qMax(0, qRound(second * 100.0));
+    const bool negative = second < 0.0;
+    const int totalCentiseconds = qRound(qAbs(second) * 100.0);
     const int minutes = totalCentiseconds / 6000;
     const int secondsPart = (totalCentiseconds / 100) % 60;
     const int centiseconds = totalCentiseconds % 100;
-    return QString("%1:%2.%3")
+    return QString("%1%2:%3.%4")
+        .arg(negative ? QStringLiteral("-") : QString())
         .arg(minutes, 2, 10, QChar('0'))
         .arg(secondsPart, 2, 10, QChar('0'))
         .arg(centiseconds, 2, 10, QChar('0'));
@@ -1481,7 +1520,7 @@ void MainWindow::TimelineSection::showPreviewSliderTimeHint(int sliderValue)
     if (ui_.previewSlider_ == nullptr) {
         return;
     }
-    const double second = static_cast<double>(sliderValue) / 1000.0;
+    const double second = previewSliderSecondForValue(sliderValue);
     QStyleOptionSlider option;
     option.initFrom(ui_.previewSlider_);
     option.subControls = QStyle::SC_SliderHandle;
@@ -1519,6 +1558,16 @@ void MainWindow::updatePreviewSliderRange()
 void MainWindow::updatePreviewSliderPosition(double second)
 {
     timelineSection_->updatePreviewSliderPosition(second);
+}
+
+double MainWindow::previewSliderSecondForValue(int sliderValue) const
+{
+    return timelineSection_->previewSliderSecondForValue(sliderValue);
+}
+
+double MainWindow::previewSliderOutputSecondForValue(int sliderValue) const
+{
+    return timelineSection_->previewSliderOutputSecondForValue(sliderValue);
 }
 
 void MainWindow::refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers)

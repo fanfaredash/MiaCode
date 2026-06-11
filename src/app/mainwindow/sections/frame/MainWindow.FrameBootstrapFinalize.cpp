@@ -384,7 +384,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
             if (previewFullscreenActive_) {
                 showPreviewFullscreenControls(false);
             }
-            if (qtPreviewPlaying_) {
+            if (qtPreviewPlaying_ && !isExportEffectPreviewPlaybackActive()) {
                 pauseQtPreviewPlaybackExact();
             }
             previewScrubDragging_ = true;
@@ -401,7 +401,16 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
                 showPreviewFullscreenControls(false);
             }
             showPreviewSliderTimeHint(value);
-            const double second = static_cast<double>(value) / 1000.0;
+            const double second = previewSliderOutputSecondForValue(value);
+            if (isExportEffectPreviewPlaybackActive()) {
+                const bool shouldRenderNow = !previewScrubRenderElapsed_.isValid()
+                    || previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;
+                if (shouldRenderNow) {
+                    seekExportEffectPreviewPlayback(second);
+                    previewScrubRenderElapsed_.restart();
+                }
+                return;
+            }
             const bool shouldRenderNow = !previewScrubRenderElapsed_.isValid()
                 || previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;
             if (shouldRenderNow) {
@@ -425,7 +434,12 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
             if (previewSeekDebounceTimer_ != nullptr) {
                 previewSeekDebounceTimer_->stop();
             }
-            seekPreviewToSecond(static_cast<double>(previewSlider_->value()) / 1000.0, true);
+            const double second = previewSliderOutputSecondForValue(previewSlider_->value());
+            if (isExportEffectPreviewPlaybackActive()) {
+                seekExportEffectPreviewPlayback(second);
+            } else {
+                seekPreviewToSecond(second, true);
+            }
         });
     }
     if (previewControlCard_ != nullptr) {

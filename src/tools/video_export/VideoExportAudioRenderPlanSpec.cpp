@@ -5,6 +5,7 @@
 #include "VideoExportAudioRenderPlan.h"
 #include "VideoExportController.h"
 #include "common/ChartClockCount.h"
+#include "common/IntroConfig.h"
 
 namespace {
 
@@ -74,6 +75,80 @@ bool verifyFullRangePlan(QTextStream& err)
         return false;
     }
     if (!require(qAbs(plan.backgroundTrack.sourceStartSecond) <= 1e-6, QStringLiteral("negative origin should not seek BGM"), err)) {
+        return false;
+    }
+    return true;
+}
+
+bool verifyFullRangeIntroPlan(QTextStream& err)
+{
+    QTemporaryDir tempDir;
+    QFile trackFile(tempDir.filePath(QStringLiteral("track.mp3")));
+    if (!trackFile.open(QIODevice::WriteOnly)) {
+        err << "failed to create temp track" << Qt::endl;
+        return false;
+    }
+    trackFile.close();
+
+    VideoExportTask task;
+    task.trackPath = trackFile.fileName();
+    task.noteMarkers = {makeTap(1.0)};
+    task.exportStartSeconds = 0.0;
+    task.contentDurationSeconds = 4.0;
+    task.fullRangeExport = true;
+    task.intro.enabled = true;
+    task.fps = 60;
+    task.clockCount = 2;
+    task.clockBpm = 120.0;
+
+    VideoExportAudioRenderPlan plan;
+    QString errorMessage;
+    if (!miacode::video_export::buildVideoExportAudioRenderPlan(task, &plan, &errorMessage)) {
+        err << errorMessage << Qt::endl;
+        return false;
+    }
+
+    const double expectedIntroLead = miacode::intro::kDurationSeconds;
+    if (!require(qAbs(plan.introLeadSeconds - expectedIntroLead) <= 1e-6, QStringLiteral("intro lead should match intro duration"), err)) {
+        return false;
+    }
+    if (!require(qAbs(plan.leadInSeconds - 2.0) <= 1e-6, QStringLiteral("full-range intro export should keep 2s lead-in"), err)) {
+        return false;
+    }
+    if (!require(
+            qAbs(plan.timelineOriginSecond + expectedIntroLead + plan.leadInSeconds) <= 1e-6,
+            QStringLiteral("intro export timeline origin should include intro lead and lead-in"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            qAbs(plan.backgroundTrack.mixStartSecond - (expectedIntroLead + plan.leadInSeconds)) <= 1e-6,
+            QStringLiteral("intro export BGM should enter at chart zero after intro lead and lead-in"),
+            err)) {
+        return false;
+    }
+    QVector<double> clockSeconds;
+    for (const auto& playback : plan.scheduledSfxPlaybacks) {
+        if (playback.kind == QLatin1String("clock")) {
+            clockSeconds.append(playback.mixSecond);
+        }
+    }
+    if (!require(clockSeconds.size() == 2, QStringLiteral("intro full export should keep clock count"), err)) {
+        return false;
+    }
+    for (int index = 1; index < plan.scheduledSfxPlaybacks.size(); ++index) {
+        if (!require(
+                plan.scheduledSfxPlaybacks.at(index - 1).mixSecond
+                    <= plan.scheduledSfxPlaybacks.at(index).mixSecond + 1e-6,
+                QStringLiteral("scheduled SFX playbacks should be sorted by mix second"),
+                err)) {
+            return false;
+        }
+    }
+    if (!require(
+            qAbs(clockSeconds.first() - (expectedIntroLead + plan.leadInSeconds)) <= 1e-6,
+            QStringLiteral("intro clock should start exactly at chart zero"),
+            err)) {
         return false;
     }
     return true;
@@ -453,6 +528,9 @@ int main(int argc, char* argv[])
 
     QTextStream err(stderr);
     if (!verifyFullRangePlan(err)) {
+        return 1;
+    }
+    if (!verifyFullRangeIntroPlan(err)) {
         return 1;
     }
     if (!verifyPartialExportMutesPreRangeSfx(err)) {
