@@ -63,7 +63,6 @@
         QTimer* previewStatsUiTimer_ = nullptr;
         QTimer* previewSeekDebounceTimer_ = nullptr;
         QTimer* timelineAnalysisIdleTimer_ = nullptr;
-        QTimer* exportVideoHoverMenuTimer_ = nullptr;
         QTimer* bottomTabsContentScalePersistTimer_ = nullptr;
         QObject* editorViewport_ = nullptr;
         QProgressDialog* videoExportProgressDialog_ = nullptr;
@@ -75,6 +74,14 @@
         QLabel* metadataEmptyHintLabel_ = nullptr;
         QWidget* chartPage_ = nullptr;
         miacode::latency::LatencyDetectionPage* latencyDetectionPage_ = nullptr;
+        miacode::export_page::ExportLauncherPage* exportPage_ = nullptr;
+        // E-C embedded video-export panel: a VideoExportDialog in embedded
+        // panel mode, hosted inside the Export hub page's video sub-page.
+        // Created/destroyed by ExportSection::create/destroyEmbeddedVideoExportPanel.
+        QPointer<VideoExportDialog> embeddedVideoExportPanel_;
+        // BPM/offset summary on the metadata page's "延迟与偏移校准" entry
+        // card (L-A migration); refreshed by populateMetadataPage.
+        QLabel* latencyEntrySummaryLabel_ = nullptr;
         QSplitter* chartCopySplitter_ = nullptr;
         QWidget* copyAreaPanel_ = nullptr;
         PlainCodeEditor* copyAreaEditor_ = nullptr;
@@ -144,7 +151,6 @@
         QToolButton* pausePreviewButton_ = nullptr;
         QToolButton* syntaxCheckButton_ = nullptr;
         QToolButton* exportVideoButton_ = nullptr;
-        QMenu* exportVideoMenu_ = nullptr;
         QMenu* toolboxMenu_ = nullptr;
         QToolButton* previewAudioSettingsButton_ = nullptr;
         QToolButton* previewVideoSettingsButton_ = nullptr;
@@ -304,6 +310,19 @@
         bool videoExportWorkerSuccess_ = false;
         bool videoExportWorkerCompletionReceived_ = false;
         bool videoExportWorkerCancelRequested_ = false;
+        // E-C inline export progress (A3 as amended 2026-06-11): an export
+        // launched from the embedded panel skips the QProgressDialog and
+        // rides the preview-area PLAYBACK transport instead — the slider
+        // advances through CHART TIME (exportStart + percent × duration)
+        // like a playback, range untouched; stage/ETA text goes to the
+        // status bar only. useInlineProgress_ marks the launch mode
+        // (survives the safe-mode retry; cleared by
+        // clearVideoExportWorkerState); second < 0 = no inline progress
+        // showing.
+        bool videoExportUseInlineProgress_ = false;
+        double videoExportInlineProgressSecond_ = -1.0;
+        // Difficulty the embedded video panel was seeded with (0 = none).
+        int embeddedVideoExportDifficultyId_ = 0;
         bool restoreSquareAfterVideoExport_ = false;
         quint64 previewPaneRestoreGeneration_ = 0;
         int videoExportWorkerLastProgressPercent_ = 0;
@@ -622,7 +641,6 @@
     QTimer*& previewStatsUiTimer_ = ui_.previewStatsUiTimer_;
     QTimer*& previewSeekDebounceTimer_ = ui_.previewSeekDebounceTimer_;
     QTimer*& timelineAnalysisIdleTimer_ = ui_.timelineAnalysisIdleTimer_;
-    QTimer*& exportVideoHoverMenuTimer_ = ui_.exportVideoHoverMenuTimer_;
     QTimer*& bottomTabsContentScalePersistTimer_ = ui_.bottomTabsContentScalePersistTimer_;
     QObject*& editorViewport_ = ui_.editorViewport_;
     QProcess*& videoExportWorkerProcess_ = state_.videoExportWorkerProcess_;
@@ -714,6 +732,9 @@
     bool& videoExportWorkerSuccess_ = state_.videoExportWorkerSuccess_;
     bool& videoExportWorkerCompletionReceived_ = state_.videoExportWorkerCompletionReceived_;
     bool& videoExportWorkerCancelRequested_ = state_.videoExportWorkerCancelRequested_;
+    bool& videoExportUseInlineProgress_ = state_.videoExportUseInlineProgress_;
+    double& videoExportInlineProgressSecond_ = state_.videoExportInlineProgressSecond_;
+    int& embeddedVideoExportDifficultyId_ = state_.embeddedVideoExportDifficultyId_;
     bool& restoreSquareAfterVideoExport_ = state_.restoreSquareAfterVideoExport_;
     quint64& previewPaneRestoreGeneration_ = state_.previewPaneRestoreGeneration_;
     int& videoExportWorkerLastProgressPercent_ = state_.videoExportWorkerLastProgressPercent_;
@@ -866,6 +887,9 @@
     QLabel*& welcomeEmptyHintLabel_ = ui_.welcomeEmptyHintLabel_;
     QWidget*& metadataPage_ = ui_.metadataPage_;
     miacode::latency::LatencyDetectionPage*& latencyDetectionPage_ = ui_.latencyDetectionPage_;
+    miacode::export_page::ExportLauncherPage*& exportPage_ = ui_.exportPage_;
+    QPointer<VideoExportDialog>& embeddedVideoExportPanel_ = ui_.embeddedVideoExportPanel_;
+    QLabel*& latencyEntrySummaryLabel_ = ui_.latencyEntrySummaryLabel_;
     QWidget*& metadataCard_ = ui_.metadataCard_;
     QLabel*& metadataEmptyHintLabel_ = ui_.metadataEmptyHintLabel_;
     QWidget*& chartPage_ = ui_.chartPage_;
@@ -927,7 +951,6 @@
     QToolButton*& pausePreviewButton_ = ui_.pausePreviewButton_;
     QToolButton*& syntaxCheckButton_ = ui_.syntaxCheckButton_;
     QToolButton*& exportVideoButton_ = ui_.exportVideoButton_;
-    QMenu*& exportVideoMenu_ = ui_.exportVideoMenu_;
     QMenu*& toolboxMenu_ = ui_.toolboxMenu_;
     QToolButton*& previewAudioSettingsButton_ = ui_.previewAudioSettingsButton_;
     QToolButton*& previewVideoSettingsButton_ = ui_.previewVideoSettingsButton_;

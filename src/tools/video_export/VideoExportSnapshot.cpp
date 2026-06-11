@@ -247,6 +247,10 @@ QJsonObject VideoExportSnapshot::toJson() const
     introObject.insert(QStringLiteral("mode"), intro.mode);
     introObject.insert(QStringLiteral("lv_render_mode"), intro.lvRenderMode);
     introObject.insert(QStringLiteral("jacket_path"), intro.jacketPath);
+    introObject.insert(QStringLiteral("background_mode"), intro.backgroundMode);
+    introObject.insert(QStringLiteral("background_custom_path"), intro.customBackgroundPath);
+    introObject.insert(QStringLiteral("background_blur"), intro.blurBackground);
+    introObject.insert(QStringLiteral("card_shadow"), intro.cardShadow);
     root.insert(QStringLiteral("intro"), introObject);
     return root;
 }
@@ -375,6 +379,14 @@ bool VideoExportSnapshot::fromJson(
     parsed.intro.mode = introObject.value(QStringLiteral("mode")).toString(parsed.intro.mode);
     parsed.intro.lvRenderMode = introObject.value(QStringLiteral("lv_render_mode")).toString(parsed.intro.lvRenderMode);
     parsed.intro.jacketPath = introObject.value(QStringLiteral("jacket_path")).toString();
+    parsed.intro.backgroundMode =
+        introObject.value(QStringLiteral("background_mode")).toString(parsed.intro.backgroundMode);
+    parsed.intro.customBackgroundPath =
+        introObject.value(QStringLiteral("background_custom_path")).toString();
+    parsed.intro.blurBackground =
+        introObject.value(QStringLiteral("background_blur")).toBool(parsed.intro.blurBackground);
+    parsed.intro.cardShadow =
+        introObject.value(QStringLiteral("card_shadow")).toBool(parsed.intro.cardShadow);
 
     if (parsed.chartTextUtf8.isEmpty()) {
         if (errorMessage != nullptr) {

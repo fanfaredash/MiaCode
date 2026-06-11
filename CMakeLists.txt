@@ -170,6 +170,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/latency/LatencySandboxController.cpp
     src/tools/latency/LatencyDetectionPage.h
     src/tools/latency/LatencyDetectionPage.cpp
+    src/tools/export_page/ExportLauncherPage.h
+    src/tools/export_page/ExportLauncherPage.cpp
     src/tools/muri/MuriAnalyzer.h
     src/tools/muri/MuriAnalyzer.cpp
     src/tools/muri/MuriAnalyzerGeometry.h
@@ -206,6 +208,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/VideoExportRuntimePolicy.cpp
     src/tools/video_export/VideoExportQuickRenderBackend.h
     src/tools/video_export/VideoExportQuickRenderBackend.cpp
+    src/tools/video_export/IntroPreviewWidget.h
+    src/tools/video_export/IntroPreviewWidget.cpp
     src/tools/video_export/RawVideoPipeTransport.h
     src/tools/video_export/RawVideoPipeTransport.cpp
     src/tools/video_export/VideoExportSnapshot.h

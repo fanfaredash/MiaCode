@@ -116,6 +116,9 @@ private:
     // Difficulty-card section: the card is opt-in like the chart frame (its
     // checkbox drives the card layer's `visible` on the shared model).
     QCheckBox* cardCheck_ = nullptr;
+    // DX / SD chart type: drives which mode plate the card shows (でらっくす /
+    // スタンダード) and, for SD, mirrors the tab shoulder to the right.
+    QComboBox* cardModeCombo_ = nullptr;
     QCheckBox* cardShadowCheck_ = nullptr;
     QCheckBox* levelTextRenderCheck_ = nullptr;
     QComboBox* textOverflowCombo_ = nullptr;

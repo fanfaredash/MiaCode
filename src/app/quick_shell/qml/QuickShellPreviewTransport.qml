@@ -111,7 +111,16 @@ Rectangle {
 
     readonly property real durationSeconds: controller ? Math.max(controller.previewDurationSeconds, 0.001) : 0.001
     readonly property real positionSeconds: controller ? controller.previewPositionSeconds : 0
-    readonly property real displayedSeconds: scrubActive ? activeScrubSecond : positionSeconds
+    // Inline export progress (export launched from the Export page's embedded
+    // video panel): the transport rides its normal playback display with the
+    // CHART TIME the worker has rendered so far — same time format, same
+    // fill math. Scrubbing stays ENABLED: a live drag wins while it lasts,
+    // and the export position re-asserts itself between interactions.
+    readonly property real exportProgressSeconds: controller ? controller.videoExportProgressSeconds : -1
+    readonly property bool exportProgressActive: exportProgressSeconds >= 0
+    readonly property real displayedSeconds: scrubActive
+        ? activeScrubSecond
+        : (exportProgressActive ? exportProgressSeconds : positionSeconds)
     readonly property real displayedProgress: Math.max(0, Math.min(1, displayedSeconds / durationSeconds))
     readonly property string timeSummary: formatDisplayTime(displayedSeconds) + " / " + formatDisplayTime(durationSeconds)
     readonly property int controlButtonHeight: metric("previewControlButtonMinHeight", 28)

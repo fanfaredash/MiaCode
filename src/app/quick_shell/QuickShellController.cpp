@@ -245,6 +245,11 @@ double QuickShellController::previewPositionSeconds() const
     return previewPositionSeconds_;
 }
 
+double QuickShellController::videoExportProgressSeconds() const
+{
+    return videoExportProgressSeconds_;
+}
+
 double QuickShellController::previewDurationSeconds() const
 {
     return previewDurationSeconds_;
@@ -947,6 +952,7 @@ void QuickShellController::refreshFromStateSource()
     stateChanged |= assignIfChanged(previewPlaying_, stateSource_->shellPreviewPlaying());
     stateChanged |= assignIfChanged(previewPositionSeconds_, stateSource_->shellPreviewPositionSeconds());
     stateChanged |= assignIfChanged(previewDurationSeconds_, stateSource_->shellPreviewDurationSeconds());
+    stateChanged |= assignIfChanged(videoExportProgressSeconds_, stateSource_->shellVideoExportProgressSeconds());
     stateChanged |= assignIfChanged(previewStatsTexts_, stateSource_->shellPreviewStatsTexts());
     stateChanged |= assignIfChanged(previewCanvasAspectRatio_, stateSource_->shellPreviewCanvasAspectRatio());
     stateChanged |= assignIfChanged(previewPaneRestoreGeneration_, stateSource_->shellPreviewPaneRestoreGeneration());
@@ -991,7 +997,9 @@ void QuickShellController::updateRefreshTimerInterval()
     if (refreshTimer_ == nullptr) {
         return;
     }
-    const int nextIntervalMs = previewPlaying_
+    // Inline export progress counts as "active": poll fast enough that the
+    // transport's progress display tracks the worker smoothly.
+    const int nextIntervalMs = (previewPlaying_ || videoExportProgressSeconds_ >= 0.0)
         ? kQuickShellActiveRefreshIntervalMs
         : kQuickShellIdleRefreshIntervalMs;
     if (refreshTimer_->interval() != nextIntervalMs) {

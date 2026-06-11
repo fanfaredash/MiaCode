@@ -88,6 +88,11 @@ QString editorShellStyleSheet();
 QString editorFindBarStyleSheet();
 QString metadataPageStyleSheet();
 QString latencyDetectionPageStyleSheet();
+QString exportLauncherPageStyleSheet();
+// Embedded video-export panel only (export page): flat underline tab bar +
+// transparent per-tab scroll viewports. The modal dialog keeps its default
+// boxed tabs.
+QString embeddedExportTabStyleSheet();
 QString metadataEmptyHintLabelStyleSheet();
 QString outlineListStyleSheet();
 QString deleteDifficultyButtonStyleSheet();

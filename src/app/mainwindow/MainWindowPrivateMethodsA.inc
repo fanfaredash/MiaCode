@@ -119,6 +119,7 @@
     bool switchToWelcomePage();
     bool switchToDifficultyField(int difficultyId);
     bool switchToLatencyField();
+    bool switchToExportField();
     void activateInitialField();
     void loadDocument(const SimaiDocument& document);
     void clearTimelineAndPreview();

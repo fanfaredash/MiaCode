@@ -188,6 +188,29 @@ void LatencyDetectionPage::buildUi()
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(0);
 
+    // Return bar (L-A migration): this page lost its sidebar item and is now
+    // reached from the metadata page's "延迟与偏移校准" entry card (or the
+    // Tools menu), so it carries its own way back. switchToMetadataField()
+    // runs the full leave semantics (onPageLeft teardown, bottom-tab OFF).
+    auto* backBar = new QWidget(this);
+    auto* backBarLayout = new QHBoxLayout(backBar);
+    backBarLayout->setContentsMargins(22, 12, 28, 0);
+    backBarLayout->setSpacing(0);
+    auto* backButton = new QPushButton(
+        localizedText(QStringLiteral("← 返回谱面信息"), QStringLiteral("← Back to Chart Info")), backBar);
+    backButton->setObjectName(QStringLiteral("LatencyBackButton"));
+    backButton->setCursor(Qt::PointingHandCursor);
+    backButton->setFlat(true);
+    backButton->setFocusPolicy(Qt::NoFocus);
+    connect(backButton, &QPushButton::clicked, this, [this]() {
+        if (!owner_.isNull()) {
+            owner_->switchToMetadataField();
+        }
+    });
+    backBarLayout->addWidget(backButton, 0, Qt::AlignLeft);
+    backBarLayout->addStretch(1);
+    outer->addWidget(backBar, 0);
+
     auto* scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);

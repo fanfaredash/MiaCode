@@ -668,6 +668,10 @@ Item {
             x: b.x; y: b.y; width: b.w; height: b.h
             opacity: root.stageOpacity("tab")
             source: root.assetUrl(root.template.assets.tab[root.trackValue("difficulty")])
+            // The prefab tab only ships a LEFT tall shoulder (the でらっくす seat).
+            // For Standard (SD) charts mirror it so the shoulder moves to the
+            // right and seats the スタンダード plate symmetrically.
+            mirror: root.trackValue("mode") === "Standard"
             smooth: true
             mipmap: true
         }

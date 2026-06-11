@@ -23,6 +23,11 @@ class QuickShellController : public QObject
     Q_PROPERTY(double previewCanvasAspectRatio READ previewCanvasAspectRatio NOTIFY shellStateChanged)
     Q_PROPERTY(qulonglong previewPaneRestoreGeneration READ previewPaneRestoreGeneration NOTIFY shellStateChanged)
     Q_PROPERTY(double previewSeekSingleStepSeconds READ previewSeekSingleStepSeconds CONSTANT)
+    // Inline export progress (export launched from the Export page's embedded
+    // video panel): the chart time rendered so far, < 0 = inactive. The
+    // transport rides its normal playback slider/time display with this
+    // value, seeking disabled.
+    Q_PROPERTY(double videoExportProgressSeconds READ videoExportProgressSeconds NOTIFY shellStateChanged)
     Q_PROPERTY(bool previewFullscreen READ previewFullscreen WRITE setPreviewFullscreen NOTIFY previewFullscreenChanged)
     Q_PROPERTY(QObject* previewRuntime READ previewRuntime CONSTANT)
     Q_PROPERTY(QObject* previewStageMediaHost READ previewStageMediaHost CONSTANT)
@@ -72,6 +77,7 @@ public:
     double previewCanvasAspectRatio() const;
     qulonglong previewPaneRestoreGeneration() const;
     double previewSeekSingleStepSeconds() const;
+    double videoExportProgressSeconds() const;
     bool previewFullscreen() const;
     QObject* previewRuntime() const;
     QObject* previewStageMediaHost() const;
@@ -165,6 +171,7 @@ private:
     bool previewPlaying_ = false;
     double previewPositionSeconds_ = 0.0;
     double previewDurationSeconds_ = 0.0;
+    double videoExportProgressSeconds_ = -1.0;
     QStringList previewStatsTexts_;
     double previewCanvasAspectRatio_ = 1.0;
     quint64 previewPaneRestoreGeneration_ = 0;

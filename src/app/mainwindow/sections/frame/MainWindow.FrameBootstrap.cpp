@@ -31,6 +31,7 @@
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
+#include "tools/export_page/ExportLauncherPage.h"
 #include "tools/latency/LatencyDetectionPage.h"
 #include "tools/latency/LatencySandboxController.h"
 #include "tools/muri/MuriAnalyzer.h"
@@ -761,6 +762,39 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     metadataLayout->addWidget(metadataEmptyHintLabel_, 0, Qt::AlignLeft | Qt::AlignTop);
     metadataLayout->addWidget(metadataCard, 1);
 
+    // "延迟与偏移校准" entry card (L-A migration): the latency page lost its
+    // sidebar item and is now reached from here. The card carries a live
+    // BPM/offset summary (refreshed by populateMetadataPage) and a button
+    // that runs the full switchToLatencyField entry semantics (bottom-tab ON,
+    // playhead preserved).
+    auto* latencyEntryCard = new QFrame(metadataPage_);
+    latencyEntryCard->setObjectName("MetadataCard");
+    auto* latencyEntryLayout = new QVBoxLayout(latencyEntryCard);
+    latencyEntryLayout->setContentsMargins(14, 12, 14, 14);
+    latencyEntryLayout->setSpacing(8);
+    auto* latencyEntryTitle = new QLabel(
+        uiText("metadata.latency_card.title", "Latency && Offset Calibration"), metadataPage_);
+    latencyEntryTitle->setObjectName("SectionTitle");
+    latencyEntryTitle->setFont(uiAccentFont(12));
+    latencyEntryLayout->addWidget(latencyEntryTitle);
+    auto* latencyEntryRow = new QHBoxLayout();
+    latencyEntryRow->setSpacing(6);
+    latencyEntrySummaryLabel_ = new QLabel(metadataPage_);
+    latencyEntrySummaryLabel_->setObjectName("MetadataFieldLabel");
+    latencyEntrySummaryLabel_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    latencyEntryRow->addWidget(latencyEntrySummaryLabel_, 1);
+    auto* openLatencyPageButton = new QToolButton(metadataPage_);
+    openLatencyPageButton->setText(uiText("metadata.latency_card.open", "Open Latency Settings →"));
+    openLatencyPageButton->setToolTip(UiText::isChineseUi()
+        ? QStringLiteral("打开延迟设置页：调整 BPM/Offset，并通过试听校准。")
+        : QStringLiteral("Open the Latency Settings page: adjust BPM/Offset and audition for calibration."));
+    connect(openLatencyPageButton, &QToolButton::clicked, this, [this]() {
+        switchToLatencyField();
+    });
+    latencyEntryRow->addWidget(openLatencyPageButton, 0, Qt::AlignRight);
+    latencyEntryLayout->addLayout(latencyEntryRow);
+    metadataLayout->addWidget(latencyEntryCard, 0);
+
     chartPage_ = new QWidget(editorStack_);
     chartPage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     auto* chartLayout = new QVBoxLayout(chartPage_);
@@ -803,6 +837,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     editorStack_->addWidget(metadataPage_);
     ui_.latencyDetectionPage_ = new miacode::latency::LatencyDetectionPage(this);
     editorStack_->addWidget(ui_.latencyDetectionPage_);
+    ui_.exportPage_ = new miacode::export_page::ExportLauncherPage(this);
+    editorStack_->addWidget(ui_.exportPage_);
     editorStack_->addWidget(chartPage_);
     centralLayout->addWidget(editorStack_, 1);
     if (editorFindBar_ != nullptr) {
@@ -899,9 +935,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             }
             return;
         }
-        if (kind == "latency") {
-            activeOutlineKey_ = "latency";
-            switchToLatencyField();
+        if (kind == "export") {
+            activeOutlineKey_ = "export";
+            switchToExportField();
             return;
         }
         if (kind == "add") {

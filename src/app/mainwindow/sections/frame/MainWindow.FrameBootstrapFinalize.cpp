@@ -122,57 +122,28 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     );
     settingsPlaceholderAction_->setToolTip(uiText("action.preferences", "Preferences..."));
     connect(settingsPlaceholderAction_, &QAction::triggered, this, &MainWindow::onPreferences);
-    // The toolbar Export button only OPENS the dropdown (it is not bound to
-    // exportVideoAction_, so a click no longer jumps straight into the export
-    // dialog) — the menu holds 导出 / 导出封面 / 批量导出. Hovering still opens
-    // the same menu via the timer below.
+    // The toolbar Export button jumps straight to the Export hub page (the
+    // sidebar "export" item equivalent) — the old dropdown menu + 250ms
+    // hover-open timer are gone; the page itself hosts the four entries.
+    // Deliberately NOT bound to exportVideoAction_ (difficulty-scoped): the
+    // page is reachable without an active difficulty and greys its own cards.
     exportVideoButton_ = makeCompactToolbarButton(nullptr);
     if (exportVideoButton_ != nullptr) {
-        const auto syncExportToolbarButton = [this]() {
-            if (exportVideoButton_ == nullptr) {
-                return;
-            }
-            exportVideoButton_->setText(uiText("toolbar.export", "Export"));
-            exportVideoButton_->setToolTip(exportVideoAction_ != nullptr ? exportVideoAction_->text() : QString());
-        };
-        syncExportToolbarButton();
+        exportVideoButton_->setText(uiText("toolbar.export", "Export"));
+        exportVideoButton_->setToolTip(UiText::isChineseUi()
+            ? QStringLiteral("打开导出页：导出视频 / 导出封面 / 批量导出 / 打包ZIP")
+            : QStringLiteral("Open the Export page: video / cover / batch / ZIP"));
         int openButtonWidth = kToolbarActionButtonWidth;
         if (QWidget* openWidget = toolBar->widgetForAction(openAction_); openWidget != nullptr) {
             openButtonWidth = qMax(1, openWidget->sizeHint().width());
         }
         exportVideoButton_->setFixedWidth(openButtonWidth);
         toolBar->insertWidget(settingsPlaceholderAction_, exportVideoButton_);
-        exportVideoMenu_ = new QMenu(exportVideoButton_);
-        styleRoundedMenu(*exportVideoMenu_);
-        if (exportVideoAction_ != nullptr) {
-            exportVideoMenu_->addAction(exportVideoAction_);
-        }
-        QAction* toolbarExportCoverAction = exportVideoMenu_->addAction(
-            uiText("action.export_cover", "Export Cover")
-        );
-        connect(toolbarExportCoverAction, &QAction::triggered, this, [this]() {
-            exportSection_->onExportCover();
-        });
-        QAction* toolbarBatchExportAction = exportVideoMenu_->addAction(
-            uiText("action.batch_export", "Batch Export")
-        );
-        connect(toolbarBatchExportAction, &QAction::triggered, this, &MainWindow::onBatchExportPreviewVideo);
         connect(exportVideoButton_, &QToolButton::clicked, this, [this]() {
-            exportSection_->showExportToolbarMenu();
+            switchToExportField();
         });
-        exportVideoButton_->installEventFilter(this);
-        exportVideoButton_->setMouseTracking(true);
-        if (exportVideoAction_ != nullptr) {
-            connect(exportVideoAction_, &QAction::changed, this, syncExportToolbarButton);
-        }
     }
 
-    exportVideoHoverMenuTimer_ = new QTimer(this);
-    exportVideoHoverMenuTimer_->setSingleShot(true);
-    exportVideoHoverMenuTimer_->setInterval(250);
-    connect(exportVideoHoverMenuTimer_, &QTimer::timeout, this, [this]() {
-        exportSection_->showExportToolbarMenu();
-    });
     statusBar()->setSizeGripEnabled(false);
     statusBar()->addPermanentWidget(new QLabel("Current File:", this));
     currentFileLabel_ = new QLabel(this);

@@ -934,40 +934,36 @@ QIcon makeSettingsGearIcon(const QColor& color)
     return QIcon(pixmap);
 }
 
-QIcon makeLatencyAccessIcon(const QColor& color)
+QIcon makeExportAccessIcon(const QColor& color)
 {
-    // Outline-list eighth-note glyph for the BPM & latency entry.
-    // Drawn at 14x14 to match the same icon-size budget as the
+    // Outline-list export glyph (downward arrow into a tray) for the Export
+    // hub entry. Drawn at 14x14 to match the same icon-size budget as the
     // metadata badge; same Antialiased / round-cap stroke style as
-    // makeOutlineCloseIcon so it sits visually next to the other
-    // entries without looking out of place.
+    // makeOutlineCloseIcon so it sits visually next to the other entries
+    // without looking out of place.
     QPixmap pixmap(14, 14);
     pixmap.fill(Qt::transparent);
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    // Filled note head — a tilted ellipse so it reads as a music note
-    // rather than a plain dot.
-    painter.save();
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(color);
-    painter.translate(4.2, 10.0);
-    painter.rotate(-20.0);
-    painter.drawEllipse(QRectF(-2.6, -1.7, 5.2, 3.4));
-    painter.restore();
-
-    // Stem from the head's upper-right edge straight up.
-    QPen stemPen(color, 1.4);
-    stemPen.setCapStyle(Qt::RoundCap);
-    painter.setPen(stemPen);
+    QPen pen(color, 1.4);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(pen);
     painter.setBrush(Qt::NoBrush);
-    painter.drawLine(QPointF(6.5, 9.6), QPointF(6.5, 2.6));
 
-    // Eighth-note flag — short curve trailing off the top of the stem.
-    QPainterPath flag;
-    flag.moveTo(6.5, 2.6);
-    flag.cubicTo(QPointF(10.2, 3.6), QPointF(10.8, 5.0), QPointF(9.4, 6.8));
-    painter.drawPath(flag);
+    // Arrow shaft + head pointing down into the tray.
+    painter.drawLine(QPointF(7.0, 2.2), QPointF(7.0, 8.4));
+    painter.drawLine(QPointF(4.7, 6.2), QPointF(7.0, 8.6));
+    painter.drawLine(QPointF(9.3, 6.2), QPointF(7.0, 8.6));
+
+    // Tray — open-topped box catching the arrow.
+    QPainterPath tray;
+    tray.moveTo(2.8, 8.6);
+    tray.lineTo(2.8, 11.4);
+    tray.lineTo(11.2, 11.4);
+    tray.lineTo(11.2, 8.6);
+    painter.drawPath(tray);
 
     painter.end();
     return QIcon(pixmap);

@@ -550,7 +550,12 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         uiText("action.export_chart", "Export Chart"),
         &owner_
     );
-    connect(owner_.exportVideoAction_, &QAction::triggered, &owner_, &MainWindow::onExportPreviewVideo);
+    // Jumps to the Export hub page (same as the toolbar Export button) — the
+    // modal-dialog direct entry was removed 2026-06-12 (spec decision D6
+    // overturned); the page hosts the full embedded export panel.
+    connect(owner_.exportVideoAction_, &QAction::triggered, &owner_, [this]() {
+        owner_.switchToExportField();
+    });
     previewMenu->addAction(owner_.exportVideoAction_);
 
     previewMenu->addSeparator();

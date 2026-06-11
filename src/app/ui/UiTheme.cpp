@@ -476,11 +476,108 @@ QString latencyDetectionPageStyleSheet()
         "QLabel[role=\"detectResult\"] {"
         " color: %5;"
         "}"
+        "QPushButton#LatencyBackButton {"
+        " color: %4;"
+        " background: transparent;"
+        " border: none;"
+        " padding: 4px 6px;"
+        " text-align: left;"
+        "}"
+        "QPushButton#LatencyBackButton:hover {"
+        " color: %5;"
+        "}"
     )
         .arg(css(c.cardBg))
         .arg(css(c.border))
         .arg(css(c.textPrimary))
         .arg(css(c.textMuted))
+        .arg(css(c.accent));
+}
+
+QString exportLauncherPageStyleSheet()
+{
+    // 2026-06-12 redesign: flat header — difficulty badges stay pill chips,
+    // the sub-nav is underline-indicator text (no card frames, no hint text).
+    const Colors& c = colors();
+    const QColor badgeCheckedBg = c.dark ? QColor("#263344") : QColor("#EDF4FF");
+    return QStringLiteral(
+        "QLabel[role=\"disabledReason\"] {"
+        " color: %4;"
+        "}"
+        "QToolButton[role=\"difficultyBadge\"] {"
+        " color: %2;"
+        " background: transparent;"
+        " border: 1px solid %1;"
+        " border-radius: 12px;"
+        " padding: 3px 11px;"
+        "}"
+        "QToolButton[role=\"difficultyBadge\"]:hover {"
+        " background: %5;"
+        "}"
+        "QToolButton[role=\"difficultyBadge\"]:checked {"
+        " background: %6;"
+        " border-color: %4;"
+        "}"
+        "QToolButton[role=\"subNavTab\"] {"
+        " color: %3;"
+        " background: transparent;"
+        " border: none;"
+        " border-bottom: 2px solid transparent;"
+        " padding: 2px 2px 7px 2px;"
+        "}"
+        "QToolButton[role=\"subNavTab\"]:hover {"
+        " color: %2;"
+        "}"
+        "QToolButton[role=\"subNavTab\"]:checked {"
+        " color: %2;"
+        " border-bottom: 2px solid %4;"
+        "}"
+        "QWidget#ExportHeaderRule {"
+        " background: %1;"
+        "}"
+    )
+        .arg(css(c.border))
+        .arg(css(c.textPrimary))
+        .arg(css(c.textMuted))
+        .arg(css(c.accent))
+        .arg(css(c.menuHoverBg))
+        .arg(css(badgeCheckedBg));
+}
+
+QString embeddedExportTabStyleSheet()
+{
+    const Colors& c = colors();
+    return QStringLiteral(
+        "QTabWidget#VideoExportTabs::pane {"
+        " border: none;"
+        " background: transparent;"
+        "}"
+        "QTabWidget#VideoExportTabs QTabBar {"
+        " background: transparent;"
+        "}"
+        "QTabWidget#VideoExportTabs QTabBar::tab {"
+        " background: transparent;"
+        " border: none;"
+        " border-bottom: 2px solid transparent;"
+        " padding: 4px 2px 7px 2px;"
+        " margin-right: 14px;"
+        " color: %1;"
+        " font-weight: 600;"
+        "}"
+        "QTabWidget#VideoExportTabs QTabBar::tab:hover:!selected {"
+        " color: %2;"
+        "}"
+        "QTabWidget#VideoExportTabs QTabBar::tab:selected {"
+        " color: %2;"
+        " border-bottom: 2px solid %3;"
+        "}"
+        "QScrollArea#EmbeddedExportTabScroll {"
+        " background: transparent;"
+        " border: none;"
+        "}"
+    )
+        .arg(css(c.textMuted))
+        .arg(css(c.textPrimary))
         .arg(css(c.accent));
 }
 

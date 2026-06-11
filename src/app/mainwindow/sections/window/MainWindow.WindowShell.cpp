@@ -17,6 +17,7 @@
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
+#include "tools/export_page/ExportLauncherPage.h"
 #include "tools/latency/LatencyDetectionPage.h"
 
 #include <QtCore>
@@ -913,6 +914,9 @@ void MainWindow::WindowSection::applyUiTheme()
         // re-apply so the BPM & latency page follows light/dark switches too.
         owner_.latencyDetectionPage_->applyThemeStyles();
     }
+    if (owner_.exportPage_ != nullptr) {
+        owner_.exportPage_->applyThemeStyles();
+    }
     if (owner_.metadataEmptyHintLabel_ != nullptr) {
         owner_.metadataEmptyHintLabel_->setStyleSheet(UiTheme::metadataEmptyHintLabelStyleSheet());
     }
@@ -987,7 +991,6 @@ void MainWindow::WindowSection::applyUiTheme()
     }
     QSet<QMenu*> refreshedMenus;
     refreshMenuBarTheme(owner_.menuBar(), &refreshedMenus);
-    refreshMenuThemeRecursive(owner_.exportVideoMenu_, &refreshedMenus);
     refreshMenuThemeRecursive(owner_.toolboxMenu_, &refreshedMenus);
     const QList<QMenu*> menus = owner_.findChildren<QMenu*>();
     for (QMenu* menu : menus) {

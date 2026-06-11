@@ -434,6 +434,7 @@ const QHash<QString, QString>& zhMap()
         {"editor.metadata", "谱面信息设置"},
         {"editor.welcome", "欢迎使用MiaCode！"},
         {"editor.des", "谱师"},
+        {"editor.export", "导出"},
 
         {"metadata.information", "基础信息"},
         {"metadata.other_fields", "其他 &xx 字段"},
@@ -443,9 +444,12 @@ const QHash<QString, QString>& zhMap()
         {"metadata.field.des", "谱师"},
         {"metadata.field.cover", "曲绘"},
         {"metadata.empty_hint", "← 点击添加谱面难度"},
+        {"metadata.latency_card.title", "延迟与偏移校准"},
+        {"metadata.latency_card.open", "打开延迟设置 →"},
 
         {"sidebar.metadata", "谱面信息设置"},
         {"sidebar.add_difficulty", "添加难度"},
+        {"sidebar.export", "导出"},
 
         {"tab.timeline", "时间轴"},
         {"tab.validation_errors", "校验错误"},

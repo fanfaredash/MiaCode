@@ -1,7 +1,10 @@
 #pragma once
 
 #include <functional>
+#include <QFileInfo>
 #include <QString>
+#include <QUrl>
+#include <QVariantMap>
 #include <QVector>
 
 #include "PreviewRenderSettings.h"
@@ -41,7 +44,69 @@ struct IntroBannerSpec {
     // Resolved background STILL image (never the bg video); empty -> the QML
     // falls back to the miacode logo.
     QString jacketPath;
+    // ---- Intro backdrop + card styling (the export dialog's "片头" tab) ----
+    // backgroundMode: "jacket" (the chart 曲绘 backdrop) or "custom"
+    // (customBackgroundPath replaces the backdrop image; the card's jacket slot
+    // still shows the 曲绘). A missing/empty custom path falls back to jacket.
+    QString backgroundMode = QStringLiteral("jacket");
+    QString customBackgroundPath;
+    bool blurBackground = true;
+    // Soft drop shadow behind the difficulty card. (The card itself is NOT
+    // optional — an intro always carries it.)
+    bool cardShadow = false;
 };
+
+// Spec -> IntroOverlay.qml contract, shared by the export overlay mount
+// (VideoExportQuickRenderBackend::setupIntro) and the export dialog's live
+// intro preview so the two can never diverge.
+inline QVariantMap introBannerTrackMap(const IntroBannerSpec& intro)
+{
+    QVariantMap track;
+    track.insert(QStringLiteral("title"), intro.title);
+    track.insert(QStringLiteral("artist"), intro.artist);
+    track.insert(QStringLiteral("designer"), intro.designer);
+    track.insert(QStringLiteral("level"), intro.level);
+    track.insert(QStringLiteral("difficulty"), intro.difficulty);
+    track.insert(QStringLiteral("bpm"), intro.bpm);
+    track.insert(QStringLiteral("mode"), intro.mode);
+    track.insert(QStringLiteral("lvRenderMode"), intro.lvRenderMode);
+    return track;
+}
+
+// Carry the dialog-controlled "片头" styling (everything EXCEPT the
+// chart-derived payload and `enabled`) onto a freshly rebuilt spec. The export
+// snapshot rebuilds the payload from the live document right before launch
+// (buildVideoExportSnapshot), which would otherwise silently reset the
+// dialog's choices to defaults.
+inline void copyIntroStyling(const IntroBannerSpec& from, IntroBannerSpec* to)
+{
+    if (to == nullptr) {
+        return;
+    }
+    to->mode = from.mode;
+    to->lvRenderMode = from.lvRenderMode;
+    to->backgroundMode = from.backgroundMode;
+    to->customBackgroundPath = from.customBackgroundPath;
+    to->blurBackground = from.blurBackground;
+    to->cardShadow = from.cardShadow;
+}
+
+// IntroOverlay root properties beyond the track: custom backdrop URL (empty ->
+// the 曲绘 backdrop), blur toggle, card drop shadow.
+inline QVariantMap introBannerStyleMap(const IntroBannerSpec& intro)
+{
+    QUrl backdrop;
+    if (intro.backgroundMode == QStringLiteral("custom")
+        && !intro.customBackgroundPath.trimmed().isEmpty()
+        && QFileInfo::exists(intro.customBackgroundPath)) {
+        backdrop = QUrl::fromLocalFile(intro.customBackgroundPath);
+    }
+    QVariantMap style;
+    style.insert(QStringLiteral("backdropImage"), backdrop);
+    style.insert(QStringLiteral("backdropBlurEnabled"), intro.blurBackground);
+    style.insert(QStringLiteral("cardShadowEnabled"), intro.cardShadow);
+    return style;
+}
 
 struct VideoExportTask {
     QString outputPath;

@@ -58,6 +58,7 @@ pixels, and several Qt defaults lie** (`sizeHint()` under QSS, `SetFixedSize`,
 | 平台蓝色填充闪现 (platform blue-fill flashes) | Viewport default paint path fires on style/palette events | Z3 |
 | 取消关闭但弹窗已没了 (cancel close, popups already gone) | Side-effect sweep ran BEFORE the cancellable prompt | Z4 |
 | 方向键被预览劫持 (arrows hijacked from text input) | Geometric "armed" gate without focus-widget check | Z5 |
+| 整个编辑列错位且跨页持续 (whole workspace column offset, persists across pages) | `QQuickWidget` under a quick-shell rehosted surface → top-level HWND recreated → foreign-window embed broken | Z6 |
 
 Full recipes with code idioms and the commit history behind each: `references/recipes.md`.
 The W-patterns are also condensed in user memory `reference-widget-dialog-clipping`.
@@ -102,11 +103,18 @@ The W-patterns are also condensed in user memory `reference-widget-dialog-clippi
   confirm returns true; `event->ignore()` must leave the world untouched.
 - **Z5**: keyboard gates need a focus-widget check (`QTextEdit`/`QPlainTextEdit`/`QLineEdit`
   → pass through), not just geometric armed state.
+- **Z6**: NO `QQuickWidget`/`QOpenGLWidget` anywhere under a quick-shell rehosted surface
+  (texture child → top-level HWND recreate → the `fromWinId` embed dies). Live QML preview
+  in widgets = native `QQuickView` + `createWindowContainer` + key-forwarding event filter
+  (cf. `IntroPreviewWidget`).
 
 ## Known rejected approaches — do not retry
 
-- QScrollArea-per-tab + screen-height cap for the export dialog (user wants the dialog
-  sized to the tallest tab).
+- QScrollArea-per-tab + screen-height cap for the **modal** export dialog (user wants the
+  dialog sized to the tallest tab). Scope note 2026-06-12: the EMBEDDED export-page panel is
+  the opposite by product decision — fixed frame (pinned header / tab bar / Start-Export
+  footer), tabs at natural height, per-tab vertical-only QScrollArea as a short-window
+  fallback, horizontal scrolling forbidden everywhere on the page.
 - Two-column slider grids in the export dialog (right column clips; use full-width rows).
 - `QFrame::HLine` styled dividers (content rect collapses, paints nothing).
 - Unicode emoji-presentation glyphs (⏸ U+23F8) on buttons — Windows renders color emoji,

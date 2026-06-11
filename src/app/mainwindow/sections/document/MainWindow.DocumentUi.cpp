@@ -20,6 +20,7 @@
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
+#include "tools/export_page/ExportLauncherPage.h"
 #include "tools/latency/LatencyDetectionPage.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
@@ -42,6 +43,9 @@ void MainWindow::DocumentSection::updateEditorHeader()
             ui_.editorContextLabel_->setText(UiText::isChineseUi()
                 ? QStringLiteral("延迟设置")
                 : QStringLiteral("Latency Settings"));
+            ui_.editorContextLabel_->setFont(uiAccentFont(12, QFont::DemiBold));
+        } else if (state_.activeOutlineKey_ == QLatin1String("export")) {
+            ui_.editorContextLabel_->setText(uiText("editor.export", "Export"));
             ui_.editorContextLabel_->setFont(uiAccentFont(12, QFont::DemiBold));
         } else if (state_.document_.difficultyIds().isEmpty() && state_.activeOutlineKey_ == QLatin1String("welcome")) {
             ui_.editorContextLabel_->setText(uiText("editor.welcome", "Welcome to MiaCode!"));
@@ -91,9 +95,9 @@ void MainWindow::DocumentSection::updateDifficultyScopedActionStates()
     if (ui_.playPausePreviewShortcutAction_ != nullptr) {
         ui_.playPausePreviewShortcutAction_->setEnabled(enabled);
     }
-    if (ui_.exportVideoAction_ != nullptr) {
-        ui_.exportVideoAction_->setEnabled(enabled);
-    }
+    // exportVideoAction_ is deliberately NOT difficulty-scoped: since
+    // 2026-06-12 it jumps to the Export hub page (reachable with no active
+    // difficulty; the page greys its own panes).
     if (ui_.stopPreviewAction_ != nullptr) {
         ui_.stopPreviewAction_->setEnabled(enabled);
     }
@@ -142,9 +146,10 @@ void MainWindow::DocumentSection::updateDifficultyScopedActionStates()
     if (ui_.syntaxCheckButton_ != nullptr) {
         ui_.syntaxCheckButton_->setEnabled(enabled);
     }
-    if (ui_.exportVideoButton_ != nullptr) {
-        ui_.exportVideoButton_->setEnabled(enabled);
-    }
+    // The toolbar Export button is deliberately NOT difficulty-scoped: it
+    // jumps to the Export hub page, which is reachable with no active
+    // difficulty (the page greys its own panes). Same for the Tools-menu
+    // 「导出谱面」action since 2026-06-12.
     if (ui_.transformMirrorLeftRightButton_ != nullptr) {
         ui_.transformMirrorLeftRightButton_->setEnabled(enabled);
     }
@@ -499,18 +504,9 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     metadataItem->setData(Qt::UserRole, "metadata");
     metadataItem->setToolTip(metadataLabel);
 
-    const QString latencyLabel = UiText::isChineseUi()
-        ? QStringLiteral("延迟设置")
-        : QStringLiteral("Latency Settings");
-    auto* latencyItem = new QListWidgetItem(
-        makeLatencyAccessIcon(UiTheme::colors().iconPrimary),
-        latencyLabel,
-        ui_.outlineList_
-    );
-    latencyItem->setData(Qt::UserRole, "latency");
-    latencyItem->setToolTip(UiText::isChineseUi()
-        ? QStringLiteral("打开延迟设置页：调整 BPM/Offset，并通过试听校准。")
-        : QStringLiteral("Open the Latency Settings page: adjust BPM/Offset and audition for calibration."));
+    // The latency-settings sidebar item is gone (L-A migration): the page is
+    // now reached from the metadata page's "延迟与偏移校准" entry card (and
+    // the Tools menu's BPM && 延迟检测 direct action).
 
     QListWidgetItem* selectedItem = nullptr;
     bool hasMissingDifficulty = false;
@@ -545,6 +541,18 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
         addItem->setData(Qt::UserRole, "add");
         addItem->setToolTip(addDifficultyLabel);
     }
+    const QString exportLabel = uiText("sidebar.export", "Export");
+    auto* exportItem = new QListWidgetItem(
+        makeExportAccessIcon(UiTheme::colors().iconPrimary),
+        exportLabel,
+        ui_.outlineList_
+    );
+    exportItem->setData(Qt::UserRole, "export");
+    exportItem->setToolTip(
+        UiText::isChineseUi()
+            ? QStringLiteral("打开导出页：导出视频 / 导出封面 / 批量导出 / 打包ZIP")
+            : QStringLiteral("Open the Export page: video / cover / batch / ZIP")
+    );
     auto* toolboxItem = new QListWidgetItem(
         makeToolboxAccessIcon(UiTheme::colors().iconPrimary, QColor(QStringLiteral("#E6B84A"))),
         UiText::isChineseUi() ? QStringLiteral("工具箱") : QStringLiteral("Toolbox"),
@@ -553,19 +561,17 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     toolboxItem->setData(Qt::UserRole, "toolbox");
     toolboxItem->setToolTip(
         UiText::isChineseUi()
-            ? QStringLiteral("打开工具箱：无理检测 / 视频导出 / BPM检测与偏移")
-            : QStringLiteral("Open toolbox: Muri Check / Video Export / BPM & Offset")
-    );
-    toolboxItem->setText(UiText::isChineseUi() ? QStringLiteral("工具箱") : QStringLiteral("Toolbox"));
-    toolboxItem->setToolTip(
-        UiText::isChineseUi()
             ? QStringLiteral("打开工具箱：无理检测 / 谱面整理 / 官谱镜像站")
             : QStringLiteral("Open toolbox: Muri Check / Format Chart / Official Chart Mirror")
     );
     if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
         selectedItem = metadataItem;
     } else if (state_.activeOutlineKey_ == QLatin1String("latency")) {
-        selectedItem = latencyItem;
+        // The latency page is informationally a sub-page of the metadata page
+        // now — keep the metadata item highlighted while it is showing.
+        selectedItem = metadataItem;
+    } else if (state_.activeOutlineKey_ == QLatin1String("export")) {
+        selectedItem = exportItem;
     }
     if (selectedItem != nullptr) {
         ui_.outlineList_->setCurrentItem(selectedItem);
@@ -577,6 +583,12 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
             ui_.outlineList_->selectionModel()->clearCurrentIndex();
             ui_.outlineList_->selectionModel()->clearSelection();
         }
+    }
+    // The export page derives its difficulty badges + card availability from
+    // the same document state this sidebar reflects — refresh it on the same
+    // triggers (document load, difficulty add/delete, page switches). Cheap.
+    if (ui_.exportPage_ != nullptr) {
+        ui_.exportPage_->refreshFromDocument();
     }
 }
 
@@ -597,6 +609,28 @@ void MainWindow::DocumentSection::populateMetadataPage()
     // The chart-wide offset (`&first`) now lives on the difficulty-page header,
     // not here — it is loaded in populateDifficultyPage().
     setMetadataExtraText(SimaiDocument::serializeRawFields(state_.document_.extraFields));
+    // The "延迟与偏移校准" entry card's BPM/offset summary tracks the same
+    // sources the latency page itself shows: parsedWholeBpm (the document's
+    // &wholebpm resolution) and document_.first.
+    if (ui_.latencyEntrySummaryLabel_ != nullptr) {
+        bool bpmOk = false;
+        const double bpm = owner_.parsedWholeBpm(&bpmOk);
+        QString bpmText = QStringLiteral("—");
+        if (bpmOk && bpm > 0.0) {
+            bpmText = QString::number(bpm, 'f', 3);
+            while (bpmText.endsWith(QLatin1Char('0'))) {
+                bpmText.chop(1);
+            }
+            if (bpmText.endsWith(QLatin1Char('.'))) {
+                bpmText.chop(1);
+            }
+        }
+        const QString offsetRaw = state_.document_.first.trimmed();
+        const QString offsetText = offsetRaw.isEmpty() ? QStringLiteral("0") : offsetRaw;
+        ui_.latencyEntrySummaryLabel_->setText(UiText::isChineseUi()
+            ? QStringLiteral("BPM %1　·　偏移 %2 s").arg(bpmText, offsetText)
+            : QStringLiteral("BPM %1  ·  Offset %2 s").arg(bpmText, offsetText));
+    }
     updateMetadataPageMode();
     updateEditorHeader();
 }
@@ -705,6 +739,12 @@ bool MainWindow::DocumentSection::switchToLatencyField()
     if (ui_.latencyDetectionPage_ == nullptr || ui_.editorStack_ == nullptr) {
         return false;
     }
+    // Leaving the export page (possibly) — tear down its embedded video
+    // panel unconditionally (idempotent), same pattern as the latency
+    // onPageLeft calls in the other switch functions.
+    if (ui_.exportPage_ != nullptr) {
+        ui_.exportPage_->onPageLeft();
+    }
     owner_.cacheWorkspaceLayoutSizes();
     // Preserve the current preview position across the switch, just like
     // switchToDifficultyField does, so entering the latency page keeps the
@@ -741,6 +781,56 @@ bool MainWindow::DocumentSection::switchToLatencyField()
     return true;
 }
 
+bool MainWindow::DocumentSection::switchToExportField()
+{
+    if (!maybeSaveCurrentFieldChanges()) {
+        return false;
+    }
+    if (ui_.exportPage_ == nullptr || ui_.editorStack_ == nullptr) {
+        return false;
+    }
+    // Captured BEFORE the reset below: seeds the page's difficulty badge
+    // default (decision D4 — "the difficulty that was active on entry").
+    const int previousActiveDifficultyId = state_.activeDifficultyId_;
+    // Navigating away always tears down the latency audition. onPageLeft() is
+    // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
+    // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites
+    // that key with the destination BEFORE calling this switch, so the old guard
+    // was always false and teardown (audio-level restore + flag clear) was silently
+    // skipped — the root cause of the SFX-volume leak into the normal preview.
+    if (ui_.latencyDetectionPage_ != nullptr) {
+        ui_.latencyDetectionPage_->onPageLeft();
+    }
+    // Same contract for the export page: every leave path tears down its
+    // embedded video panel (idempotent; a running export keeps rendering).
+    if (ui_.exportPage_ != nullptr) {
+        ui_.exportPage_->onPageLeft();
+    }
+    owner_.cacheWorkspaceLayoutSizes();
+    owner_.stopQtPreviewPlayback(true);
+    state_.pendingPreviewPlaybackStart_ = false;
+    state_.pendingPreviewPlaybackResumeFromPause_ = false;
+    state_.pendingPreviewPlaybackRevision_ = 0;
+    state_.pendingPreviewPlaybackDifficultyId_ = 0;
+    state_.pendingPreviewPlaybackSecond_ = 0.0;
+    state_.activeDifficultyId_ = 0;
+    state_.activeOutlineKey_ = "export";
+    populateMetadataPage();  // keeps document fields in sync for sidebar use
+    ui_.editorStack_->setCurrentWidget(ui_.exportPage_);
+    setChartBottomTabsMode(false);
+    owner_.clearValidationDecorations();
+    state_.currentFieldDirty_ = false;
+    updateDirtyState();
+    rebuildFieldSidebar();
+    owner_.updateWindowTitle();
+    updateEditorEmptyState();
+    updateEditorStatus();
+    ui_.exportPage_->onPageEntered(previousActiveDifficultyId);
+    owner_.refreshLayoutAfterPageSwitch();
+    QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
+    return true;
+}
+
 bool MainWindow::DocumentSection::switchToMetadataField()
 {
     if (!maybeSaveCurrentFieldChanges()) {
@@ -754,6 +844,11 @@ bool MainWindow::DocumentSection::switchToMetadataField()
     // skipped — the root cause of the SFX-volume leak into the normal preview.
     if (ui_.latencyDetectionPage_ != nullptr) {
         ui_.latencyDetectionPage_->onPageLeft();
+    }
+    // Same contract for the export page: every leave path tears down its
+    // embedded video panel (idempotent; a running export keeps rendering).
+    if (ui_.exportPage_ != nullptr) {
+        ui_.exportPage_->onPageLeft();
     }
     owner_.cacheWorkspaceLayoutSizes();
     owner_.stopQtPreviewPlayback(true);
@@ -795,6 +890,11 @@ bool MainWindow::DocumentSection::switchToWelcomePage()
     // skipped — the root cause of the SFX-volume leak into the normal preview.
     if (ui_.latencyDetectionPage_ != nullptr) {
         ui_.latencyDetectionPage_->onPageLeft();
+    }
+    // Same contract for the export page: every leave path tears down its
+    // embedded video panel (idempotent; a running export keeps rendering).
+    if (ui_.exportPage_ != nullptr) {
+        ui_.exportPage_->onPageLeft();
     }
     owner_.cacheWorkspaceLayoutSizes();
     owner_.stopQtPreviewPlayback(true);
@@ -864,6 +964,11 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     // skipped — the root cause of the SFX-volume leak into the normal preview.
     if (ui_.latencyDetectionPage_ != nullptr) {
         ui_.latencyDetectionPage_->onPageLeft();
+    }
+    // Same contract for the export page: every leave path tears down its
+    // embedded video panel (idempotent; a running export keeps rendering).
+    if (ui_.exportPage_ != nullptr) {
+        ui_.exportPage_->onPageLeft();
     }
     owner_.cacheWorkspaceLayoutSizes();
     owner_.stopQtPreviewPlayback(true);

@@ -401,23 +401,47 @@ QString localizeExportWorkerMessageForUiLanguage(const QString& rawMessage)
 
 }  // namespace
 
-IntroBannerSpec MainWindow::ExportSection::buildActiveDifficultyIntroBannerSpec() const
+IntroBannerSpec MainWindow::ExportSection::buildIntroBannerSpecForDifficulty(int difficultyId) const
 {
     // addIntro/fullRange are forced true so every banner field (title/artist/
     // designer/level/difficulty/bpm/jacket) is populated regardless of whether
     // the intro pre-roll itself is enabled — the cover export reuses the payload.
     return buildIntroBannerSpec(
         owner_.document_,
-        owner_.activeDifficultyId_,
+        difficultyId,
         owner_.currentFilePath_,
         /*addIntro=*/true,
         /*fullRangeExport=*/true);
 }
 
+QVector<TimelineNoteMarker> MainWindow::ExportSection::buildParsedMarkersForDifficulty(int difficultyId) const
+{
+    // Parse + &first-shift markers for an arbitrary difficulty of the LIVE
+    // document — the export-page launch path for a non-active difficulty.
+    // Mirrors the worker-side rebuild (buildVideoExportTaskFromSnapshot) so
+    // the seed/dialog sees the same markers the worker will re-derive.
+    const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId);
+    if (difficulty == nullptr || difficulty->chart.trimmed().isEmpty()) {
+        return {};
+    }
+    const miacode::simai::SimaiTimingMetadata timingMetadata =
+        miacode::simai::buildTimingMetadata(owner_.document_);
+    const SimaiNativeParseResult parsedTimeline = SimaiNativeParser::parseForTimeline(
+        difficulty->chart,
+        timingMetadata);
+    if (parsedTimeline.noteMarkers.isEmpty()) {
+        return {};
+    }
+    bool firstOk = false;
+    const double firstSeconds = parsedDocumentFirstSeconds(owner_.document_.first, &firstOk);
+    return shiftedNoteMarkers(parsedTimeline.noteMarkers, firstOk ? firstSeconds : 0.0);
+}
+
 bool MainWindow::ExportSection::buildVideoExportSnapshot(
     const VideoExportTask& requestedTask,
     VideoExportSnapshot* snapshot,
-    QString* errorMessage
+    QString* errorMessage,
+    int difficultyId
 )
 {
     if (snapshot == nullptr) {
@@ -426,7 +450,9 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
         }
         return false;
     }
-    if (!owner_.hasActiveDifficulty()) {
+    const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : owner_.activeDifficultyId_;
+    if (!SimaiDocument::isDifficultyId(resolvedDifficultyId)
+        || owner_.document_.difficulty(resolvedDifficultyId) == nullptr) {
         if (errorMessage != nullptr) {
             *errorMessage = uiText("dialog.video_export.error.no_difficulty", "No active difficulty is selected.");
         }
@@ -440,7 +466,15 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     }
 
     owner_.refreshTimelineMetadata();
-    if (owner_.latestTimelineNoteMarkers_.isEmpty()) {
+    // Marker sanity gate: the live timeline only covers the ACTIVE difficulty,
+    // so an explicit non-active target (export-page launch) validates by
+    // parsing that difficulty directly — the worker re-parses the same text.
+    const bool usesActiveTimeline =
+        owner_.hasActiveDifficulty() && resolvedDifficultyId == owner_.activeDifficultyId_;
+    const bool hasMarkers = usesActiveTimeline
+        ? !owner_.latestTimelineNoteMarkers_.isEmpty()
+        : !buildParsedMarkersForDifficulty(resolvedDifficultyId).isEmpty();
+    if (!hasMarkers) {
         if (errorMessage != nullptr) {
             *errorMessage = uiText("dialog.video_export.error.no_markers", "No parsed note markers are available for export.");
         }
@@ -451,8 +485,8 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.jobId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     built.createdAtUtc = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
     built.chartTextUtf8 = owner_.document_.toText();
-    built.difficultyId = owner_.activeDifficultyId_;
-    built.difficultyName = SimaiDocument::difficultyShortName(owner_.activeDifficultyId_);
+    built.difficultyId = resolvedDifficultyId;
+    built.difficultyName = SimaiDocument::difficultyShortName(resolvedDifficultyId);
     built.originalChartPath = owner_.currentFilePath_;
     built.projectDir = owner_.currentFilePath_.isEmpty()
         ? QString()
@@ -493,7 +527,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.preset = requestedTask.preset;
     built.fullRangeExport = requestedTask.fullRangeExport;
     const QString exportStem = sanitizeExportFileStem(owner_.document_.title, QStringLiteral("out"));
-    const QString difficultyName = SimaiDocument::difficultyShortName(owner_.activeDifficultyId_).replace(':', '_');
+    const QString difficultyName = SimaiDocument::difficultyShortName(resolvedDifficultyId).replace(':', '_');
     const QString defaultOutputName = QStringLiteral("%1_%2.mp4").arg(exportStem, difficultyName);
     built.outputPath = resolveVideoExportOutputPath(
         requestedTask.outputPath,
@@ -507,10 +541,14 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.skinLoadWaitMs = requestedTask.skinLoadWaitMs;
     built.intro = buildIntroBannerSpec(
         owner_.document_,
-        owner_.activeDifficultyId_,
+        resolvedDifficultyId,
         owner_.currentFilePath_,
         requestedTask.intro.enabled,
         built.fullRangeExport);
+    // The payload above is rebuilt from the live document; the "片头" tab
+    // styling (DX/SD, backdrop, blur, shadow, lv text) only exists on the
+    // dialog task — carry it over or the export silently reverts to defaults.
+    copyIntroStyling(requestedTask.intro, &built.intro);
 
     if (built.skinDirectory.trimmed().isEmpty()) {
         if (errorMessage != nullptr) {

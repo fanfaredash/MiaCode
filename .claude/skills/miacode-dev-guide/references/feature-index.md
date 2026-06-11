@@ -30,6 +30,20 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `sections/{frame,document,timeline,validation,editor,preferences,preview,export,window,dialogs}/`.
 - Frame/menus/toolbar/layout: `sections/frame/MainWindow.BootstrapAndMenus.cpp`,
   `MainWindow.FrameBootstrap.cpp`, `MainWindow.FrameBootstrapFinalize.cpp`.
+- **Sidebar (outline list) + central page stack (2026-06-11, export-page migration phase 1):**
+  `outlineList_` is rebuilt by `DocumentSection::rebuildFieldSidebar()` (`MainWindow.DocumentUi.cpp`).
+  Item keys (`Qt::UserRole`), in order: `metadata` → `metadataPage_`, `difficulty_chart`
+  (+UserRole+1=id) → chart editor, `add` (inline menu), **`export`** → `exportPage_` (the Export
+  hub page, §8), `toolbox` (popup menu, no page switch). There is NO `latency` sidebar item
+  anymore — the latency page is reached from the metadata page's "延迟与偏移校准" entry card
+  (§9); while it shows, the sidebar keeps **metadata** highlighted
+  (`activeOutlineKey_=="latency"` selects the metadata item). `editorStack_` pages:
+  `welcomePage_` / `metadataPage_` / `latencyDetectionPage_` / `exportPage_` / `chartPage_`.
+  Page-switch functions (`switchToMetadataField` / `switchToWelcomePage` /
+  `switchToDifficultyField` / `switchToLatencyField` / `switchToExportField`, all in
+  `MainWindow.DocumentUi.cpp`) share one skeleton — **every leave path calls
+  `latencyDetectionPage_->onPageLeft()` unconditionally** (SFX-leak regression guard, §9).
+  Bottom-tab mode table: editor ON / latency ON / metadata OFF / welcome OFF / **export OFF**.
 - QuickShell beta: `src/app/quick_shell/` (`QuickShellBootstrap`, `QuickShellController`,
   `QuickShellNativeSurfaceHost`, `QuickShellPreviewCompositeSurface`, `QuickShellStyleBridge`,
   `qml/QuickShellMain.qml`).
@@ -260,6 +274,84 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `buildVideoExportTaskFromSnapshot`).
 - MainWindow ownership: `MainWindow.cpp` / `sections/export/*` (`onExportPreviewVideo`,
   `buildVideoExportSnapshot`, `launchVideoExportWorker`, `handleVideoExportWorkerEvent`).
+- **Export hub page (E-C hybrid since 2026-06-11 — phases 1+2 of the export-page migration,
+  spec `docs/EXPORT_PAGE_AND_LATENCY_ENTRY_MIGRATION_SPEC_ZH.md`):**
+  `src/tools/export_page/ExportLauncherPage.{h,cpp}` (`miacode::export_page::ExportLauncherPage`,
+  a `MainWindow`-friend widget like the latency page) — an `editorStack_` page reached via the
+  sidebar `export` item, the toolbar Export button (now a direct jump; the old dropdown menu +
+  250ms hover-open timer + `showExportToolbarMenu()` are DELETED), the Tools-menu
+  `exportVideoAction_` (since 2026-06-12 — see below), and `MainWindow::switchToExportField()`.
+  **Fixed-frame layout (2026-06-12 redesign):** the page itself NEVER scrolls and horizontal
+  scrolling is forbidden everywhere — a pinned header (difficulty badge pill row + an UNDERLINE
+  HORIZONTAL sub-nav, `role="subNavTab"` QToolButtons styled by
+  `UiTheme::exportLauncherPageStyleSheet`; card frames + all hint/description text deleted) +
+  `#ExportHeaderRule` hairline + the sub-page stack filling the rest. (A left nav COLUMN was
+  tried and reverted: the quick-shell workspace surface can be ~700 logical px total and the
+  embedded 6-tab panel needs the full content width; the panel's 560px dialog minimum is also
+  dropped in embedded mode.) Four entries: **视频导出 (IN-PAGE — see "Embedded video panel"
+  below)** / 封面导出 (dialog launcher pane) / 批量导出 (dialog launcher pane) / 打包ZIP
+  (in-page action pane) — the three non-video panes are action-button-only ("↗" marks dialog
+  launchers; greyed with a reason label when unavailable).
+  **Embedded video panel (E-C):** NOT a separate panel class — `VideoExportDialog` itself gained
+  an embedded mode (`setEmbeddedPanelMode(true)`: **`setWindowFlags(Qt::Widget)` — MANDATORY:
+  QLayout only strips the Qt::Dialog window flag when it has to reparent, so a panel constructed
+  with the host as parent would otherwise pop up as a top-level window while a phantom layout
+  slot wrecks the page (the 2026-06-11 弹窗+错位 bug)** / no modality / no self-sizing
+  height+width locks / done() & Esc-reject no-op / Cancel hidden; `startExport()` emits
+  `exportConfirmed()` and the panel STAYS OPEN; the export button doubles as 取消导出 while
+  running via `setEmbeddedExportRunning`). **Embedded fixed-frame internals (2026-06-12):** the
+  in-panel transport strip (`previewStrip_`) is HIDDEN — the preview-area transport on the right
+  is the only seek surface; `previewTimer_` runs for the panel's whole life and
+  `onRangePreviewTick`'s embedded branch mirrors the main preview's authoritative clock into the
+  range tab's current-time readout + the 设为起点/终点 seed (those also re-read the clock at
+  click time); each tab page is re-hosted in a vertical-only `QScrollArea`
+  (`#EmbeddedExportTabScroll`, horizontal policy AlwaysOff — content must compress) with the tab
+  area stretched to fill and the Start-Export button box pinned at the bottom under an
+  `#EmbeddedExportFooterRule` hairline; the 片头 tab's live `IntroPreviewWidget` is DELETED in
+  embedded mode (tallest content, sacrificed so every tab fits without scrolling at default
+  window sizes); tabs restyled by `UiTheme::embeddedExportTabStyleSheet` (flat underline).
+  **D6 OVERTURNED 2026-06-12:** no UI entrance opens the modal form anymore — the Tools-menu
+  「导出谱面」 action now jumps to this page (`MainWindow::onExportPreviewVideo` wrapper deleted;
+  `ExportSection::onExportPreviewVideo` kept in code as the unreachable modal twin). Prefs
+  persistence + the `refreshAddIntroEnabledState`/`applyUiToTask` bake-gate lockstep stay
+  single-sourced in the one class. Lifecycle:
+  `ExportSection::createEmbeddedVideoExportPanel(difficultyId,parent)`
+  (shared ctor wiring via `buildConfiguredVideoExportDialog`; brackets the
+  `begin/endExportPreviewSession` pair — exportPreviewActive_ + debug-HUD suppression — that the
+  modal path also uses) on entering the video sub-page;
+  `destroyEmbeddedVideoExportPanel()` (= dialog-close semantics) on leaving it. The page's
+  `onPageLeft()` is called UNCONDITIONALLY from every page-leave switch function (same idempotent
+  pattern as the latency teardown). Badge switch while the video sub-page shows re-seeds the panel.
+  **Inline export progress (A3 as amended 2026-06-11 — reuse the PLAYBACK bar, not a percent
+  bar):** a panel-launched export creates NO `QProgressDialog` (every dialog-update site in
+  `MainWindow.ExportWorker.cpp` is null-guarded); instead `videoExportUseInlineProgress_` rides
+  the preview transport AS A PLAYBACK: the slider advances through CHART TIME
+  (`exportStart + percent × contentDuration`, from `videoExportWorkerSnapshot_`), range/time
+  format untouched, seeking disabled (`TimelineSection::updatePreviewSliderPosition` is gated on
+  `videoExportInlineProgressSecond_ >= 0`); stage/ETA text goes to the status bar only. Quick
+  shell reads the chart time via `shellVideoExportProgressSeconds()` (QuickShellStateSource) →
+  `QuickShellController.videoExportProgressSeconds` → `QuickShellPreviewTransport.qml`
+  (displayedSeconds override, seeking disabled, fast poll while active). Helpers
+  `begin/update/endInlineExportProgress` (`MainWindow.ExportWorker.cpp`) are driven from the
+  same worker-event sites as the dialog updates and survive the safe-mode retry —
+  `beginInlineExportProgress` MUST run after `videoExportWorkerSnapshot_` is stored (it reads
+  the export start second); menu-launched exports keep the popup.
+  **Difficulty context (decision D4):** the page keeps `activeDifficultyId_ == 0`, so NOTHING on
+  it may use `hasActiveDifficulty()`; the badge default = difficulty active before entering →
+  kept page selection → `projectLastOpenedDifficultyId_` → first existing. Cards grey with a
+  reason when no difficulty has a chart body (ZIP: empty document).
+  **Explicit-difficulty plumbing:** `onExportPreviewVideo` / `onExportCover` /
+  `onBatchExportPreviewVideo` / `buildVideoExportSeedTask` / `buildVideoExportSnapshot` all take
+  `int difficultyId = 0` (0 = active difficulty, the menu-action behavior). For a non-active
+  target, the seed/snapshot parse that difficulty's chart directly via
+  `ExportSection::buildParsedMarkersForDifficulty()` (`MainWindow.ExportSnapshot.cpp` — parse +
+  &first-shift, mirroring the worker rebuild) + an inline `MuriAnalyzer::analyze`, because the
+  live timeline markers belong to the active difficulty only. Batch export treats the explicit id
+  as a default-token hint only. The intro payload comes from
+  `buildIntroBannerSpecForDifficulty(id)` (renamed from `buildActiveDifficultyIntroBannerSpec`).
+  Neither the toolbar button nor `exportVideoAction_` (Tools menu) is difficulty-scoped anymore
+  (`updateDifficultyScopedActionStates` touches neither): both jump to the page, which greys its
+  own panes.
 
 ## 8b. Export as ZIP — `src/tools/zip_export/`
 
@@ -274,7 +366,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Entry slot: `MainWindow::ExportSection::onPackAsZip()` in
   `sections/export/MainWindow.PackZip.cpp` (progress + result popup mirror batch export).
   UI: File menu under "Save As" + toolbox "Bookmarks" submenu, both via the single
-  `packAsZipAction_` (created in `setupMenusAndActions`, reused in the toolbox build).
+  `packAsZipAction_` (created in `setupMenusAndActions`, reused in the toolbox build), **plus
+  the Export hub page's 打包ZIP card (§8) — same slot, in-page entry (2026-06-11)**.
 
 ## 8c. Cover (difficulty-card) export — `src/tools/cover_export/`
 
@@ -394,9 +487,15 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     and warns (non-fatal) if an enabled frame still has no still rather than silently shipping a cover
     missing it. Blur is gated to non-transparent. On accept the caller drives `exportCover(outputDir)`.
     **Controls layout (2026-06-10):** three `QGroupBox` sections — "尺寸 / 背景" (size, background
-    source+path, blur), "难度卡" (an **"添加难度卡 / Add difficulty card" opt-in checkbox** + shadow /
-    level-text / long-text, sub-options gated on it), "谱面帧" (the add checkbox + frame-time row +
-    inner-bg + brightness). The card toggle drives the card layer's `visible` on the shared model
+    source+path, blur), "难度卡" (an **"添加难度卡 / Add difficulty card" opt-in checkbox** + DX/SD
+    chart type / shadow / level-text / long-text, sub-options gated on it), "谱面帧" (the add
+    checkbox + frame-time row + inner-bg + brightness). **DX/SD chart type (2026-06-11):**
+    `cardModeCombo_` ("谱面类型", data `"DX"`/`"Standard"`) feeds `trackOverrides["mode"]`; on
+    `"Standard"` `MaimaiBannerCard.qml` shows the スタンダード plate top-right AND `mirror`s the
+    MBase tab so its tall shoulder seats the plate (the prefab only ships a left-shoulder tab).
+    Persisted in the composition JSON `card.mode` (B2 save/import + silent preference restore).
+    The VIDEO intro path is still hardcoded `intro.mode = "DX"` in `MainWindow.ExportSnapshot.cpp`
+    (`buildIntroBannerSpec`) — only the cover dialog exposes SD; banner_.mode just seeds the combo. The card toggle drives the card layer's `visible` on the shared model
     (NOTIFY → live scene + export both follow); reset re-ticks it, B2 import syncs it from the restored
     layer, and the QML selection chrome skips hidden layers (`l.visible` gate). The card drop shadow
     itself still works in EVERY background mode incl. Transparent. Esc closes the dialog even with
@@ -524,12 +623,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   preferences object, same store as `miacode::video_export::loadDialogPreferences`) when the user
   exports, and silently restores on the next dialog open (`applyCompositionJson(saved,
   interactive=false)` — fallback notice boxes suppressed).
-- Entry slot (2026-06-10): the toolbar **Export dropdown's "导出封面 / Export Cover"** item →
-  `MainWindow::ExportSection::onExportCover()` (`MainWindow.ExportFlow.cpp`) — the toolbar Export
-  button now only OPENS the dropdown (导出 / 导出封面 / 批量导出; click no longer jumps straight
-  into the export dialog). The seed `VideoExportTask` comes from
-  `ExportSection::buildVideoExportSeedTask()` (extracted from `onExportPreviewVideo`, shared by
-  both): `task.intro` (`IntroBannerSpec`, via `buildActiveDifficultyIntroBannerSpec()` wrapping
+- Entry slot (2026-06-11): the **Export hub page's 导出封面 card** (§8) →
+  `MainWindow::ExportSection::onExportCover(difficultyId)` (`MainWindow.ExportFlow.cpp`) — the
+  toolbar Export dropdown is GONE; the toolbar Export button now jumps straight to the Export
+  page. The seed `VideoExportTask` comes from
+  `ExportSection::buildVideoExportSeedTask(difficultyId)` (shared with `onExportPreviewVideo`):
+  `task.intro` (`IntroBannerSpec`, via `buildIntroBannerSpecForDifficulty()` wrapping
   `buildIntroBannerSpec` in `MainWindow.ExportSnapshot.cpp`) drives the card, and
   `task.noteMarkers`/`skinDirectory`/`outlineImagePath`/render-settings/`contentDurationSeconds`
   feed the chart-frame `SceneFrameRenderer`. Output dir = the chart directory. (The former
@@ -541,6 +640,50 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   (`MainWindow.Dialogs.cpp::onPreviewVideoSettings`).) **⚠ Note:** `CoverComposer.qml` is a NEW file in `intro.qrc`, so
   editing it (or `MaimaiBannerCard.qml`) DOES need the AUTORCC repack — delete `build/**/qrc_intro.cpp*`
   / touch `resources/intro.qrc` to force RCC (cf. the over-long-text mirror note above).
+- **Export dialog "片头" tab (2026-06-11):** the 添加片头 checkbox moved from the 视频 tab to a
+  dedicated **片头 tab** (between 游戏 and 字体) carrying the cover-dialog-style controls —
+  添加片头 as the bold master switch (the old "?" dev-status badge + tooltip were REMOVED per
+  user), 背景 group (背景源 曲绘/自定义图片 + path/browse + 背景虚化) and 难度卡 group
+  (谱面类型 DX|SD / 难度卡阴影 / 等级文本渲染 with a `miacodeAllowTooltip` tooltip "atlas only
+  covers 0-9/+") — plus a **read-only live preview** (`IntroPreviewWidget`,
+  `src/tools/video_export/IntroPreviewWidget.{h,cpp}`: a native `QQuickView` in a
+  `createWindowContainer` hosting the REAL `IntroOverlay.qml` pinned at card-hold frame 120,
+  no-focus + key-forwarding event filter). **⚠ Hosting rule (2026-06-12):** it was a
+  `QQuickWidget` first — that breaks the quick shell: the first texture child inside the
+  rehosted `QuickShellWorkspaceSurface` (the embedded Export-page panel) forces a top-level
+  HWND destroy+recreate, the shell's `fromWinId` WindowContainer keeps the dead handle, and
+  the whole workspace pops out as a floating frameless window (整列错位, persisted across
+  pages). NO `QQuickWidget`/`QOpenGLWidget` under any rehosted surface — see
+  qt-ui-layout-pitfalls recipe **Z6**. **Preview geometry (2026-06-11 fix):** the widget is a FIXED
+  320×220 box (the dialog must NOT resize when the resolution preset changes); inside it a
+  letterboxed `clip:true` QQuickItem stands in for the export framebuffer and the overlay root
+  keeps its NATIVE 1920×1080 layout with `applyIntroGeometry`'s exact transform (scale to frame
+  height around centre + centre-crop) — do NOT re-layout the overlay at the output aspect: the
+  export centre-crops a 16:9 render (`PreviewQuickExportSession::applyIntroGeometry`), so a
+  re-layout diverges on 1:1/4:3 backdrop framing. **Gate (2026-06-11 fix):**
+  `refreshAddIntroEnabledState` greys 添加片头 only when the range START is non-zero, mirroring
+  `applyUiToTask`'s bake gate (a [0, partial] clip counts as full-range and carries the intro)
+  — the two gates must stay in lockstep. **⚠ Wiring rule:** `buildVideoExportSnapshot`
+  (`MainWindow.ExportSnapshot.cpp`) REBUILDS `built.intro` from the live document and must call
+  `copyIntroStyling(requestedTask.intro, &built.intro)` (`VideoExportController.h`) — without
+  it every dialog styling choice silently resets to defaults at export launch (the original
+  "settings don't affect the export" bug). Deliberately ABSENT: 文字超长 (the animated
+  intro always marquee-scrolls; shrink/ellipsis are still-cover-only), 透明 background (video
+  has no alpha), and 添加难度卡 (an intro ALWAYS carries the card — no `cardEnabled` knob
+  anywhere). **Contract:** `IntroBannerSpec` gained `backgroundMode`("jacket"|"custom") /
+  `customBackgroundPath` / `blurBackground` / `cardShadow`; spec→QML mapping is the shared
+  `introBannerTrackMap`/`introBannerStyleMap` (`VideoExportController.h`), used by BOTH
+  `VideoExportQuickRenderBackend::setupIntro` (→`PreviewQuickExportSession::
+  setIntroBannerData(..., style)` → `IntroOverlay` root properties `backdropImage`/
+  `backdropBlurEnabled`/`cardShadowEnabled`) and the dialog preview (`applySpec`) — preview ==
+  export by construction. Snapshot keys `background_mode`/`background_custom_path`/
+  `background_blur`/`card_shadow` (`VideoExportSnapshot.cpp`); dialog prefs keys
+  `intro_background_*`/`intro_card_type`/`intro_card_shadow`/`intro_level_text_render`
+  (`appendIntroPersistedSettings`). `applyUiToTask` injects `currentIntroSpec()`. The intro card
+  shadow is drawn by `IntroOverlay` (layer MultiEffect) — `MaimaiBannerCard.cardShadowEnabled`
+  is a no-op in transparent mode. The custom backdrop replaces only the blurred backdrop; the
+  card's jacket slot still shows the 曲绘. Batch export (`BatchVideoExportDialog`) and the CLI
+  keep spec defaults (jacket/blur/DX).
 
 ## 9. Latency settings (BPM & offset) — `src/tools/latency/`
 
@@ -567,10 +710,18 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   decoding each project ONCE and reusing its envelopes across all combos (onset envelope rebuilt
   per combo only when an `onset-*` dim is swept), then prints a combo table ranked by pass%. Used
   for Phase-0 coordinate-descent tuning against the `&first` ground-truth corpus.
-- UI title is **"延迟设置" / "Latency Settings"** (header + sidebar item + tooltip in
+- UI title is **"延迟设置" / "Latency Settings"** (page header in
   `sections/document/MainWindow.DocumentUi.cpp`, gated on `activeOutlineKey_=="latency"`).
-- Entry: `MainWindow.cpp` (`onOpenLatencyDetector` / latency page activation);
-  `switchToLatencyField` in `sections/document/MainWindow.DocumentUi.cpp`.
+- **Entries (2026-06-11, L-A migration — the sidebar item is GONE):** (1) the metadata page's
+  "延迟与偏移校准" entry card (built in `MainWindow.FrameBootstrap.cpp` after the metadata card;
+  BPM/offset summary label `latencyEntrySummaryLabel_` refreshed by `populateMetadataPage` from
+  `parsedWholeBpm` + `document_.first`) → `switchToLatencyField()`; (2) the Tools menu's
+  "BPM && 延迟检测" `latencyDetectorAction_` (kept as the keyboard-reachable direct path).
+  The page carries a "← 返回谱面信息" bar at the top of `LatencyDetectionPage::buildUi()`
+  (`QPushButton#LatencyBackButton`, styled in `UiTheme::latencyDetectionPageStyleSheet`) →
+  `switchToMetadataField()`. While the page shows, the sidebar highlights **metadata**.
+  Page body + lifecycle contracts (onPageEntered/onPageLeft, SFX isolation, Ctrl+S filter)
+  are UNCHANGED by the migration — only the way in/out moved.
 - **Audition reuses the main preview transport** — it is NOT a separate player. The page
   installs the synthesized test chart as the preview source and plays it through the real
   `startQtPreviewPlayback`/`onQtPreviewTick`. `LatencySandboxController` is a thin

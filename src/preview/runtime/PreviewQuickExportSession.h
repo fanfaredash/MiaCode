@@ -65,11 +65,15 @@ public:
     // into the QVariantMap track + URLs. The overlay is hidden unless the most
     // recent setIntroFrame() set it active, so normal frames are unaffected.
     bool setupIntroOverlay(const QUrl& qmlUrl, QString* errorMessage = nullptr);
+    // `style` carries optional IntroOverlay root properties (backdropImage url,
+    // backdropBlurEnabled, cardShadowEnabled); keys are applied verbatim via
+    // setProperty, so the contract stays QML-side.
     void setIntroBannerData(
         const QVariantMap& bannerTrack,
         const QVariantMap& bannerTemplate,
         const QUrl& backgroundImage,
-        const QUrl& logoImage);
+        const QUrl& logoImage,
+        const QVariantMap& style = QVariantMap());
     void setIntroFrame(int authoringFrame, bool active);
     bool introOverlayReady() const { return introItem_ != nullptr; }
 

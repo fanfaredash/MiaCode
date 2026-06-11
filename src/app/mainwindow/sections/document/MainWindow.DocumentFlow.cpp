@@ -2362,6 +2362,11 @@ bool MainWindow::switchToLatencyField()
     return documentSection_->switchToLatencyField();
 }
 
+bool MainWindow::switchToExportField()
+{
+    return documentSection_->switchToExportField();
+}
+
 void MainWindow::activateInitialField()
 {
     documentSection_->activateInitialField();

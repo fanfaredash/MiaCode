@@ -354,6 +354,18 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
     cardCheck_->setChecked(true);
     cardForm->addRow(QString(), cardCheck_);
 
+    // DX / SD chart type. "Standard" is the QML-side mode value (the card shows
+    // the スタンダード plate top-right and mirrors the tab shoulder); anything
+    // else shows the でらっくす plate top-left.
+    cardModeCombo_ = new QComboBox(this);
+    cardModeCombo_->addItem(QStringLiteral("DX"), QStringLiteral("DX"));
+    cardModeCombo_->addItem(QStringLiteral("SD"), QStringLiteral("Standard"));
+    {
+        const int modeIdx = cardModeCombo_->findData(banner_.mode);
+        if (modeIdx >= 0) cardModeCombo_->setCurrentIndex(modeIdx);
+    }
+    cardForm->addRow(l10n(QStringLiteral("Chart type"), QStringLiteral("谱面类型")), cardModeCombo_);
+
     // Card drop shadow.
     cardShadowCheck_ = new QCheckBox(l10n(QStringLiteral("Card drop shadow"), QStringLiteral("难度卡阴影")), this);
     cardShadowCheck_->setChecked(false);
@@ -510,6 +522,7 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
         }
         syncControlEnabled();
     });
+    connect(cardModeCombo_, &QComboBox::currentIndexChanged, this, [this] { pushInputs(); });
     connect(cardShadowCheck_, &QCheckBox::toggled, this, [this] { pushInputs(); });
     connect(levelTextRenderCheck_, &QCheckBox::toggled, this, [this] { pushInputs(); });
     connect(textOverflowCombo_, &QComboBox::currentIndexChanged, this, [this] { pushInputs(); });
@@ -902,7 +915,9 @@ miacode::cover_export::CoverComposerInputs ExportCoverDialog::buildInputs() cons
     track.insert(QStringLiteral("level"), banner_.level);
     track.insert(QStringLiteral("difficulty"), banner_.difficulty);
     track.insert(QStringLiteral("bpm"), banner_.bpm);
-    track.insert(QStringLiteral("mode"), banner_.mode);
+    track.insert(QStringLiteral("mode"),
+                 cardModeCombo_ != nullptr ? cardModeCombo_->currentData().toString()
+                                           : banner_.mode);
     track.insert(QStringLiteral("lvRenderMode"),
                  (levelTextRenderCheck_ != nullptr && levelTextRenderCheck_->isChecked())
                      ? QStringLiteral("text")
@@ -1014,6 +1029,7 @@ void ExportCoverDialog::syncControlEnabled()
     // Card sub-options only matter while the card layer is added. (The drop
     // shadow itself works in EVERY background mode, incl. Transparent.)
     const bool cardOn = cardCheck_ == nullptr || cardCheck_->isChecked();
+    if (cardModeCombo_ != nullptr) cardModeCombo_->setEnabled(cardOn);
     if (cardShadowCheck_ != nullptr) cardShadowCheck_->setEnabled(cardOn);
     if (levelTextRenderCheck_ != nullptr) levelTextRenderCheck_->setEnabled(cardOn);
     if (textOverflowCombo_ != nullptr) textOverflowCombo_->setEnabled(cardOn);
@@ -1079,6 +1095,9 @@ QJsonObject ExportCoverDialog::exportCompositionJson() const
     root.insert(QStringLiteral("background"), bg);
 
     QJsonObject card;
+    card.insert(QStringLiteral("mode"),
+                cardModeCombo_ != nullptr ? cardModeCombo_->currentData().toString()
+                                          : QStringLiteral("DX"));
     card.insert(QStringLiteral("shadow"), cardShadowCheck_ != nullptr && cardShadowCheck_->isChecked());
     card.insert(QStringLiteral("levelTextRender"),
                 levelTextRenderCheck_ != nullptr && levelTextRenderCheck_->isChecked());
@@ -1226,6 +1245,13 @@ void ExportCoverDialog::applyCompositionJson(const QJsonObject& root, bool inter
 
     // --- Card ---
     const QJsonObject card = root.value(QStringLiteral("card")).toObject();
+    if (cardModeCombo_ != nullptr) {
+        const int modeIdx = cardModeCombo_->findData(card.value(QStringLiteral("mode")).toString());
+        if (modeIdx >= 0) {
+            const QSignalBlocker block(cardModeCombo_);
+            cardModeCombo_->setCurrentIndex(modeIdx);
+        }
+    }
     if (cardShadowCheck_ != nullptr) {
         const QSignalBlocker block(cardShadowCheck_);
         cardShadowCheck_->setChecked(card.value(QStringLiteral("shadow")).toBool(cardShadowCheck_->isChecked()));

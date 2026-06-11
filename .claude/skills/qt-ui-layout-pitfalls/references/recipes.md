@@ -244,6 +244,34 @@ Preview seek armed by "last click inside preview bounds" stole arrows from the e
 `QApplication::focusWidget()` being a text input → pass through; log the passthrough for
 verification. Commit: cf53bc3.
 
+### Z6. QQuickWidget inside a quick-shell rehosted surface de-embeds the whole workspace
+
+**Symptom**: entering one page (导出页) shifts the ENTIRE editor column (header + every
+page, 谱面信息设置 included) to a wrong offset, and it stays broken on every page until
+restart. Looks like a layout bug; is a window-embedding bug.
+
+**Mechanism**: the quick shell embeds each bridge surface (`QuickShellWorkspaceSurface`
+etc.) into the QML scene by wrapping its HWND with `QWindow::fromWinId` inside a
+`WindowContainer` (`QuickShellNativeSurfaceHost::createForeignWindowForSurface`). The
+first time a *texture-based child* (`QQuickWidget`, `QOpenGLWidget`) appears anywhere in
+that surface's widget tree, Qt destroys + recreates the surface's top-level platform
+window to switch the backingstore to RHI-composited flushing. The foreign wrapper keeps
+pointing at the dead HWND, so the recreated surface pops out as a free-floating frameless
+top-level window overlapping the shell — every page rendered in it from then on is
+"错位". (2026-06-12 导出页迁移: the embedded `VideoExportDialog` panel's
+`IntroPreviewWidget` was a `QQuickWidget`.)
+
+**Recipe**: never put a `QQuickWidget`/`QOpenGLWidget` under a rehosted surface
+(workspace / sidebar / top-chrome / bottom-tabs / status). For a live QML preview inside
+widgets, host a native `QQuickView` via `QWidget::createWindowContainer` (a native child
+window has no backingstore interaction — cf. `IntroPreviewWidget`, and
+`ExportCoverDialog`'s `previewWindowObject`), and forward the view's key events back to
+the host window with an event filter so a click on the preview can't swallow Esc/arrows.
+
+**Diagnosis tool**: dump `mapToGlobal(0,0)` vs `geometry()` for the surface widget plus
+`QGuiApplication::topLevelWindows()` before/after the repro step — a surface whose
+`global == geom` and a new visible `QWidgetWindow <surface>Window` entry = de-embedded.
+
 ---
 
 ## Sync-pair constants to keep aligned (UI-layout-relevant)

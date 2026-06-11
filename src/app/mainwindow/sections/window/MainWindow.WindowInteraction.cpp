@@ -671,19 +671,6 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
     if (owner_.bottomTabs_ != nullptr && watched == owner_.bottomTabs_->tabBar() && event->type() == QEvent::Wheel) {
         return true;
     }
-    if (owner_.exportVideoButton_ != nullptr && watched == owner_.exportVideoButton_) {
-        if (event->type() == QEvent::Enter || event->type() == QEvent::HoverEnter || event->type() == QEvent::MouseMove) {
-            if (owner_.exportVideoHoverMenuTimer_ != nullptr && !QApplication::mouseButtons().testAnyFlag(Qt::AllButtons)) {
-                owner_.exportVideoHoverMenuTimer_->start();
-            }
-        } else if (event->type() == QEvent::Leave
-                   || event->type() == QEvent::MouseButtonPress
-                   || event->type() == QEvent::Hide) {
-            if (owner_.exportVideoHoverMenuTimer_ != nullptr) {
-                owner_.exportVideoHoverMenuTimer_->stop();
-            }
-        }
-    }
     if (owner_.aboutIconLabel_ != nullptr && watched == owner_.aboutIconLabel_) {
         if (event->type() == QEvent::MouseButtonRelease) {
             auto* mouseEvent = static_cast<QMouseEvent*>(event);

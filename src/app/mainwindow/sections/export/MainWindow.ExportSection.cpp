@@ -6,11 +6,6 @@ MainWindow::ExportSection::ExportSection(MainWindow& owner, MainWindow::MainWind
     , state_(state)
 {}
 
-void MainWindow::onExportPreviewVideo()
-{
-    exportSection_->onExportPreviewVideo();
-}
-
 void MainWindow::onBatchExportPreviewVideo()
 {
     exportSection_->onBatchExportPreviewVideo();

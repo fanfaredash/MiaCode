@@ -68,6 +68,13 @@ public:
     virtual double shellPreviewCanvasAspectRatio() const = 0;
     virtual quint64 shellPreviewPaneRestoreGeneration() const = 0;
     virtual bool shellPreviewFullscreen() const = 0;
+    // Inline export progress (an export launched from the Export page's
+    // embedded video panel, A3 as amended 2026-06-11): the CHART TIME the
+    // worker has rendered up to (exportStart + percent × duration), < 0 when
+    // no inline export progress is showing. The QML transport rides its
+    // normal playback slider/time display with this value (seeking disabled
+    // while active); stage/ETA text goes to the shared status bar instead.
+    virtual double shellVideoExportProgressSeconds() const { return -1.0; }
     virtual QObject* shellPreviewRuntimeObject() const = 0;
     virtual QObject* shellPreviewStageMediaHostObject() const = 0;
     virtual bool shellPreviewUsesSeparateSurface() const = 0;

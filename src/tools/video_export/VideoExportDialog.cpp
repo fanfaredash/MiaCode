@@ -7,6 +7,7 @@
 #include "common/PreviewInteractionConfig.h"
 #include "core/scene/PreviewHudState.h"
 #include "tools/video_export/HudFontSettings.h"
+#include "tools/video_export/IntroPreviewWidget.h"
 #include "tools/video_export/VideoExportPreferences.h"
 
 #include <QAbstractItemView>
@@ -26,7 +27,9 @@
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QFrame>
+#include <QFormLayout>
 #include <QGridLayout>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QJsonObject>
 #include <QKeyEvent>
@@ -37,6 +40,8 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSplitter>
@@ -809,18 +814,9 @@ VideoExportDialog::VideoExportDialog(
         + kSetButtonLeftGap
         + startCurrentTimeEdit_->minimumWidth();
 
-    // Top-aligned flow: a "layout under construction" notice, then the range
-    // controls, then a trailing stretch. (Earlier the controls were pushed to
-    // the window bottom by a stretch, which overflowed the pane on shorter
-    // dialogs — clipping the End row.)
-    auto* rangeConstructionLabel = new QLabel(rangePage);
-    rangeConstructionLabel->setTextFormat(Qt::RichText);
-    rangeConstructionLabel->setText(
-        QStringLiteral("<b>%1</b>").arg(l10n(QStringLiteral("Layout under construction"), QStringLiteral("布局施工中")))
-    );
-    rangeConstructionLabel->setAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
-    rangePageLayout->addWidget(rangeConstructionLabel, 0, Qt::AlignHCenter);
-    rangePageLayout->addSpacing(8);
+    // Top-aligned flow: the range controls, then a trailing stretch. (Earlier
+    // the controls were pushed to the window bottom by a stretch, which
+    // overflowed the pane on shorter dialogs — clipping the End row.)
     rangePageLayout->addWidget(rangeContent_, 0);
     rangePageLayout->addStretch(1);
     outputPageLayout->addStretch(1);
@@ -828,7 +824,8 @@ VideoExportDialog::VideoExportDialog(
     // Persistent time bar — lives OUTSIDE the tab widget so the scrubber and
     // transport stay reachable on every settings page. Added to rootLayout
     // after the tabs, below.
-    auto* previewStrip = new QFrame(this);
+    previewStrip_ = new QFrame(this);
+    QFrame* previewStrip = previewStrip_;
     previewStrip->setObjectName(QStringLiteral("VideoExportPrimaryPanel"));
     auto* previewStripLayout = new QVBoxLayout(previewStrip);
     previewStripLayout->setContentsMargins(10, 8, 10, 8);
@@ -916,9 +913,6 @@ VideoExportDialog::VideoExportDialog(
         optionsContent_
     );
     addIntroCheck_->setChecked(baseTask_.intro.enabled);
-    addIntroCheck_->setToolTip(l10n(
-        QStringLiteral("Prepend the maimai track-start intro (full exports only)."),
-        QStringLiteral("在视频开头加入 maimai 风格片头（仅完整导出包含）。")));
     smoothBrightnessCheck_ = new QCheckBox(
         l10n(QStringLiteral("Smooth brightness"), QStringLiteral("骞虫粦浜害")),
         optionsContent_
@@ -1112,35 +1106,7 @@ VideoExportDialog::VideoExportDialog(
     hudTogglesLayout->addWidget(showObjectStatsCheck_, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
     hudTogglesLayout->addWidget(showChartInfoCheck_, 1, 1, Qt::AlignLeft | Qt::AlignVCenter);
 
-    // "Add intro" toggle — an app-level preference (persisted via the dialog
-    // preferences). Lives at the bottom of the Video tab, aligned with the
-    // other overlay checkboxes above, with a "?" help badge that describes the
-    // current dev-status limitations on hover.
-    auto* introRow = new QWidget(hudToggles);
-    auto* introRowLayout = new QHBoxLayout(introRow);
-    introRowLayout->setContentsMargins(0, 0, 0, 0);
-    introRowLayout->setSpacing(6);
-    introRowLayout->addWidget(addIntroCheck_, 0, Qt::AlignVCenter);   // reparents to introRow
-    auto* introHelp = new QLabel(QStringLiteral("?"), introRow);
-    introHelp->setFixedSize(16, 16);
-    introHelp->setAlignment(Qt::AlignCenter);
-    introHelp->setCursor(Qt::WhatsThisCursor);
-    // Opt past the app-wide tooltip suppression (MainWindow installs a global
-    // event filter that hides tooltips outside the preview area).
-    introHelp->setProperty("miacodeAllowTooltip", true);
-    introHelp->setStyleSheet(QStringLiteral(
-        "QLabel { color: #FFFFFF; background: #6B6F7A; border-radius: 8px; font-weight: bold; font-size: 11px; }"));
-    introHelp->setToolTip(l10n(
-        QStringLiteral("Export intro is in development. Difficulties BAS-REM only; levels 1-99+ only "
-                       "(letters / Chinese not supported); very long titles or charter names render "
-                       "poorly; live preview is not yet supported."),
-        QStringLiteral("导出片头功能开发中，目前难度仅支持BAS~REM；等级仅支持1~99+，字母、汉字均不支持；"
-                       "过长的曲名、谱师效果会很差；暂时不支持在线预览效果。")));
-    introRowLayout->addWidget(introHelp, 0, Qt::AlignVCenter);
-    introRowLayout->addStretch(1);
-    hudTogglesLayout->addWidget(introRow, 2, 0, 1, 2, Qt::AlignLeft | Qt::AlignVCenter);
-    connect(addIntroCheck_, &QCheckBox::toggled, this, [this]() { persistExportOnlySettings(); });
-
+    // ("添加片头" moved to its own "片头" tab, built below.)
     visualsPageLayout->addWidget(hudToggles, 0);
     visualsPageLayout->addStretch(1);
 
@@ -1164,6 +1130,133 @@ VideoExportDialog::VideoExportDialog(
 
     fontPageLayout->addStretch(1);
 
+    // ---- Intro tab ("片头") — pre-roll settings + read-only live preview ----
+    // Mirrors the cover dialog's 背景/难度卡 controls, minus size (follows the
+    // export resolution) and minus 文字超长 (the ANIMATED intro always marquee-
+    // scrolls long text; shrink/ellipsis are still-cover-only modes).
+    auto* introPage = new QWidget(settingsTabs_);
+    auto* introPageLayout = new QHBoxLayout(introPage);
+    introPageLayout->setContentsMargins(kSectionContentLeftInset, 6, kSectionContentLeftInset, 6);
+    introPageLayout->setSpacing(14);
+
+    // Left: the live IntroOverlay preview, pinned at the card-hold frame and
+    // sized to the export aspect ratio. Display-only (no drag / no layout IO).
+    auto* introPreviewColumn = new QWidget(introPage);
+    auto* introPreviewLayout = new QVBoxLayout(introPreviewColumn);
+    introPreviewLayout->setContentsMargins(0, 0, 0, 0);
+    introPreviewLayout->setSpacing(4);
+    introPreview_ = new IntroPreviewWidget(introPreviewColumn);
+    introPreviewLayout->addWidget(introPreview_, 0, Qt::AlignTop | Qt::AlignHCenter);
+    introPreviewLayout->addStretch(1);
+    introPageLayout->addWidget(introPreviewColumn, 0, Qt::AlignTop);
+
+    // Right: controls column.
+    auto* introControls = new QWidget(introPage);
+    auto* introControlsLayout = new QVBoxLayout(introControls);
+    introControlsLayout->setContentsMargins(0, 0, 0, 0);
+    introControlsLayout->setSpacing(6);
+
+    // "添加片头" — THE master switch of this tab; bold + one size up so it
+    // reads as such (moved from the Video tab).
+    {
+        QFont introCheckFont = addIntroCheck_->font();
+        introCheckFont.setBold(true);
+        introCheckFont.setPointSizeF(introCheckFont.pointSizeF() + 1.0);
+        addIntroCheck_->setFont(introCheckFont);
+    }
+    introControlsLayout->addWidget(addIntroCheck_, 0, Qt::AlignLeft);   // reparents to introControls
+
+    // 背景 group — backdrop source + blur (size follows the export resolution).
+    auto* introBgGroup = new QGroupBox(
+        l10n(QStringLiteral("Background"), QStringLiteral("背景")), introControls);
+    auto* introBgForm = new QFormLayout(introBgGroup);
+    introBgForm->setSpacing(8);
+    introBgForm->setLabelAlignment(Qt::AlignLeft);
+    introBgForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    introBackgroundCombo_ = new QComboBox(introBgGroup);
+    introBackgroundCombo_->addItem(
+        l10n(QStringLiteral("Chart jacket (曲绘)"), QStringLiteral("曲绘")), QStringLiteral("jacket"));
+    introBackgroundCombo_->addItem(
+        l10n(QStringLiteral("Custom image"), QStringLiteral("自定义图片")), QStringLiteral("custom"));
+    introBgForm->addRow(l10n(QStringLiteral("Background"), QStringLiteral("背景")), introBackgroundCombo_);
+    auto* introBgPathRow = new QWidget(introBgGroup);
+    auto* introBgPathLayout = new QHBoxLayout(introBgPathRow);
+    introBgPathLayout->setContentsMargins(0, 0, 0, 0);
+    introBgPathLayout->setSpacing(8);
+    introBackgroundPathEdit_ = new QLineEdit(introBgPathRow);
+    introBackgroundPathEdit_->setPlaceholderText(
+        l10n(QStringLiteral("Custom background image path"), QStringLiteral("自定义背景图片路径")));
+    introBackgroundBrowse_ = new QPushButton(
+        l10n(QStringLiteral("Browse…"), QStringLiteral("浏览…")), introBgPathRow);
+    introBackgroundBrowse_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    introBgPathLayout->addWidget(introBackgroundPathEdit_, 1);
+    introBgPathLayout->addWidget(introBackgroundBrowse_, 0);
+    introBgForm->addRow(QString(), introBgPathRow);
+    introBlurCheck_ = new QCheckBox(
+        l10n(QStringLiteral("Blur background"), QStringLiteral("背景虚化")), introBgGroup);
+    introBlurCheck_->setChecked(baseTask_.intro.blurBackground);
+    introBgForm->addRow(QString(), introBlurCheck_);
+    introControlsLayout->addWidget(introBgGroup, 0);
+
+    // 难度卡 group — DX/SD type + shadow + level-text render. (No card toggle:
+    // an intro always carries the difficulty card.)
+    auto* introCardGroup = new QGroupBox(
+        l10n(QStringLiteral("Difficulty card"), QStringLiteral("难度卡")), introControls);
+    auto* introCardForm = new QFormLayout(introCardGroup);
+    introCardForm->setSpacing(8);
+    introCardForm->setLabelAlignment(Qt::AlignLeft);
+    introCardForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    // DX / SD chart type. "Standard" is the QML-side mode value: the card shows
+    // the スタンダード plate top-right and mirrors the tab shoulder under it.
+    introCardModeCombo_ = new QComboBox(introCardGroup);
+    introCardModeCombo_->addItem(QStringLiteral("DX"), QStringLiteral("DX"));
+    introCardModeCombo_->addItem(QStringLiteral("SD"), QStringLiteral("Standard"));
+    {
+        const int modeIdx = introCardModeCombo_->findData(baseTask_.intro.mode);
+        if (modeIdx >= 0) {
+            introCardModeCombo_->setCurrentIndex(modeIdx);
+        }
+    }
+    introCardForm->addRow(
+        l10n(QStringLiteral("Chart type"), QStringLiteral("谱面类型")), introCardModeCombo_);
+    introCardShadowCheck_ = new QCheckBox(
+        l10n(QStringLiteral("Card drop shadow"), QStringLiteral("难度卡阴影")), introCardGroup);
+    introCardShadowCheck_->setChecked(baseTask_.intro.cardShadow);
+    introCardForm->addRow(QString(), introCardShadowCheck_);
+    introLevelTextCheck_ = new QCheckBox(
+        l10n(QStringLiteral("Render level as text"), QStringLiteral("等级文本渲染")), introCardGroup);
+    introLevelTextCheck_->setChecked(baseTask_.intro.lvRenderMode == QStringLiteral("text"));
+    // Opt past the app-wide tooltip suppression (MainWindow installs a global
+    // event filter that hides tooltips outside the preview area).
+    introLevelTextCheck_->setProperty("miacodeAllowTooltip", true);
+    introLevelTextCheck_->setToolTip(l10n(
+        QStringLiteral("The baked LV sprites only cover digits 0-9 and \"+\". Tick this to render "
+                       "the level as text when it needs any other character."),
+        QStringLiteral("原生材质仅支持等级为数字0~9与“+”；如果等级需要其他字符，请勾选这个选项。")));
+    introCardForm->addRow(QString(), introLevelTextCheck_);
+    introControlsLayout->addWidget(introCardGroup, 0);
+    introControlsLayout->addStretch(1);
+    introPageLayout->addWidget(introControls, 1);
+
+    // Wiring: every control re-gates sub-controls, refreshes the read-only
+    // preview, and persists (app-level preferences, like add_intro).
+    const auto introUiChanged = [this]() {
+        syncIntroControlsEnabled();
+        refreshIntroPreview();
+        persistExportOnlySettings();
+    };
+    connect(addIntroCheck_, &QCheckBox::toggled, this, introUiChanged);
+    connect(introBackgroundCombo_, &QComboBox::currentIndexChanged, this, introUiChanged);
+    connect(introBlurCheck_, &QCheckBox::toggled, this, introUiChanged);
+    connect(introCardModeCombo_, &QComboBox::currentIndexChanged, this, introUiChanged);
+    connect(introCardShadowCheck_, &QCheckBox::toggled, this, introUiChanged);
+    connect(introLevelTextCheck_, &QCheckBox::toggled, this, introUiChanged);
+    // The path edit refreshes the live preview per keystroke but only hits the
+    // preference file when editing finishes.
+    connect(introBackgroundPathEdit_, &QLineEdit::textChanged, this, [this]() { refreshIntroPreview(); });
+    connect(introBackgroundPathEdit_, &QLineEdit::editingFinished, this, [this]() { persistExportOnlySettings(); });
+    connect(introBackgroundBrowse_, &QPushButton::clicked, this, [this]() { browseIntroBackground(); });
+
     refreshAddIntroEnabledState();
 
     settingsTabs_->addTab(
@@ -1179,6 +1272,10 @@ VideoExportDialog::VideoExportDialog(
         uiText("dialog.render_settings.gameplay_group", l10n(QStringLiteral("Gameplay"), QStringLiteral("游戏")))
     );
     settingsTabs_->addTab(
+        introPage,
+        uiText("dialog.video_export.section.intro", l10n(QStringLiteral("Intro"), QStringLiteral("片头")))
+    );
+    settingsTabs_->addTab(
         fontPage,
         uiText("dialog.video_export.section.font", l10n(QStringLiteral("Font"), QStringLiteral("字体")))
     );
@@ -1187,16 +1284,18 @@ VideoExportDialog::VideoExportDialog(
         uiText("dialog.video_export.section.range", l10n(QStringLiteral("Export Range"), QStringLiteral("导出区间")))
     );
 
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
+    buttonBox_ = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
+    QDialogButtonBox* buttonBox = buttonBox_;
     exportButton_ = buttonBox->addButton(uiText("dialog.video_export.button.export", QStringLiteral("Export")), QDialogButtonBox::AcceptRole);
     exportButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(true));
     exportButton_->setMinimumWidth(kDialogActionButtonMinWidth);
-    if (QPushButton* cancelButton = buttonBox->button(QDialogButtonBox::Cancel)) {
-        cancelButton->setText(uiText("dialog.video_export.button.cancel", QStringLiteral("Cancel")));
-        cancelButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-        cancelButton->setMinimumWidth(kDialogActionButtonMinWidth);
+    cancelButton_ = buttonBox->button(QDialogButtonBox::Cancel);
+    if (cancelButton_ != nullptr) {
+        cancelButton_->setText(uiText("dialog.video_export.button.cancel", QStringLiteral("Cancel")));
+        cancelButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+        cancelButton_->setMinimumWidth(kDialogActionButtonMinWidth);
     }
-    connect(exportButton_, &QPushButton::clicked, this, &VideoExportDialog::startExport);
+    connect(exportButton_, &QPushButton::clicked, this, &VideoExportDialog::onExportButtonClicked);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
     rootLayout->addWidget(buttonBox);
 
@@ -1284,7 +1383,7 @@ VideoExportDialog::VideoExportDialog(
     syncRangeUi();
     updatePreviewPlayPauseUi();
     refreshDialogGeometry();
-    if (QWidget* owner = parentWidget(); owner != nullptr) {
+    if (QWidget* owner = parentWidget(); owner != nullptr && !embeddedPanelMode_) {
         move(desiredDialogTopLeft(owner, size()));
     }
     QTimer::singleShot(0, this, [this]() {
@@ -1295,10 +1394,146 @@ VideoExportDialog::VideoExportDialog(
             settingsTabs_->setFocus(Qt::OtherFocusReason);
         }
         refreshDialogGeometry();
-        if (QWidget* owner = parentWidget(); owner != nullptr) {
+        if (QWidget* owner = parentWidget(); owner != nullptr && !embeddedPanelMode_) {
             move(desiredDialogTopLeft(owner, size()));
         }
     });
+}
+
+void VideoExportDialog::setEmbeddedPanelMode(bool embedded)
+{
+    if (embeddedPanelMode_ == embedded) {
+        return;
+    }
+    embeddedPanelMode_ = embedded;
+    if (!embedded) {
+        return;
+    }
+    setModal(false);
+    // CRITICAL: QDialog carries Qt::Dialog (a Qt::Window flag) from its ctor,
+    // and QLayout::addWidget only strips window flags when it has to
+    // REPARENT — when the panel was constructed with the host as parent
+    // already, the flag survives and the "embedded" panel pops up as a
+    // top-level window while its layout slot stays behind as a phantom
+    // (the 2026-06-11 导出页错位+弹窗 bug). Clear it explicitly.
+    setWindowFlags(Qt::Widget);
+    // The ctor's refreshDialogGeometry() already locked the dialog height —
+    // clear the locks so the host layout owns sizing from here on. The
+    // 560px dialog minimum width is also dropped: the quick-shell workspace
+    // surface can be ~700 logical px total, so the embedded panel must be
+    // allowed to compress to its real layout minimum instead of forcing a
+    // horizontal scrollbar onto the page.
+    setMinimumHeight(0);
+    setMaximumHeight(QWIDGETSIZE_MAX);
+    setMinimumWidth(0);
+    // Vertical Expanding: the host page hands the panel ALL remaining height
+    // (fixed header above, nothing below) and the tab area absorbs it.
+    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    if (cancelButton_ != nullptr) {
+        cancelButton_->hide();
+    }
+    if (exportButton_ != nullptr) {
+        exportButton_->setText(uiText(
+            "dialog.video_export.button.start_export",
+            l10n(QStringLiteral("Start Export"), QStringLiteral("开始导出"))));
+    }
+
+    // ---- Fixed-frame page layout (2026-06-12 redesign) ----
+    // The page never scrolls as a whole: the tab bar and the Start-Export
+    // footer stay put; only a tab's own content scrolls (vertically) when the
+    // viewport is genuinely too short. Horizontal scrolling is forbidden —
+    // content must compress into the available width.
+
+    // The in-panel transport strip is gone: the preview-area transport on the
+    // right is the single seek/play surface; the range tab mirrors its clock.
+    if (previewStrip_ != nullptr) {
+        previewStrip_->hide();
+    }
+
+    // The 片头 live preview is sacrificed in the embedded page (product
+    // decision 2026-06-12): it was the tallest tab content by far, and the
+    // page must fit the viewport without scrolling at default window sizes.
+    if (introPreview_ != nullptr) {
+        QWidget* previewColumn = introPreview_->parentWidget();
+        introPreview_ = nullptr;
+        delete previewColumn;
+    }
+
+    // Re-host every tab page inside a vertical-only scroll viewport. The
+    // ctor's modal-path refreshDialogGeometry() floored each page to the
+    // tallest page — undo that first; pages now keep natural height and the
+    // scroll area is only a too-short-window fallback.
+    if (settingsTabs_ != nullptr) {
+        const int currentIndex = settingsTabs_->currentIndex();
+        QStringList tabLabels;
+        QList<QWidget*> tabPages;
+        while (settingsTabs_->count() > 0) {
+            tabLabels.append(settingsTabs_->tabText(0));
+            tabPages.append(settingsTabs_->widget(0));
+            settingsTabs_->removeTab(0);
+        }
+        for (int i = 0; i < tabPages.size(); ++i) {
+            QWidget* page = tabPages.at(i);
+            page->setMinimumHeight(0);
+            page->setAutoFillBackground(false);
+            auto* pageScroll = new QScrollArea(settingsTabs_);
+            pageScroll->setObjectName(QStringLiteral("EmbeddedExportTabScroll"));
+            pageScroll->setWidgetResizable(true);
+            pageScroll->setFrameShape(QFrame::NoFrame);
+            pageScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+            pageScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+            pageScroll->viewport()->setAutoFillBackground(false);
+            pageScroll->setWidget(page);
+            settingsTabs_->addTab(pageScroll, tabLabels.at(i));
+        }
+        settingsTabs_->setCurrentIndex(qMax(0, currentIndex));
+        settingsTabs_->setStyleSheet(UiTheme::embeddedExportTabStyleSheet());
+    }
+
+    if (auto* root = qobject_cast<QVBoxLayout*>(layout()); root != nullptr) {
+        if (settingsTabs_ != nullptr) {
+            root->setStretchFactor(settingsTabs_, 1);
+        }
+        // Hairline above the pinned footer. Plain styled QWidget — QFrame::HLine
+        // is a known-rejected divider (its content rect collapses under QSS).
+        if (buttonBox_ != nullptr) {
+            auto* footerRule = new QWidget(this);
+            footerRule->setObjectName(QStringLiteral("EmbeddedExportFooterRule"));
+            footerRule->setAttribute(Qt::WA_StyledBackground, true);
+            footerRule->setFixedHeight(1);
+            footerRule->setStyleSheet(QStringLiteral("background: %1;")
+                .arg(UiTheme::colors().border.name(QColor::HexRgb)));
+            root->insertWidget(root->indexOf(buttonBox_), footerRule);
+        }
+    }
+
+    // With no in-panel transport the tick timer doubles as the clock mirror
+    // for the range tab's current-time readout — keep it running for the
+    // panel's whole life (see onRangePreviewTick's embedded branch).
+    if (previewTimer_ != nullptr) {
+        previewTimer_->start();
+    }
+
+    refreshDialogGeometry();
+}
+
+void VideoExportDialog::setEmbeddedExportRunning(bool running)
+{
+    embeddedExportRunning_ = running;
+    if (!embeddedPanelMode_ || exportButton_ == nullptr) {
+        return;
+    }
+    exportButton_->setText(running
+        ? uiText("dialog.video_export.button.cancel_export",
+                 l10n(QStringLiteral("Cancel Export"), QStringLiteral("取消导出")))
+        : uiText("dialog.video_export.button.start_export",
+                 l10n(QStringLiteral("Start Export"), QStringLiteral("开始导出"))));
+}
+
+void VideoExportDialog::finalizeEmbeddedSession()
+{
+    stopRangePreview(false);
+    restoreLivePreviewState();
 }
 
 void VideoExportDialog::injectOwnerWiredSettings(QWidget* videoExtras, QWidget* gameplayWidget)
@@ -1319,6 +1554,15 @@ void VideoExportDialog::injectOwnerWiredSettings(QWidget* videoExtras, QWidget* 
 
 void VideoExportDialog::refreshDialogGeometry()
 {
+    // Embedded panel mode: the host page owns the outer geometry — the tab
+    // area stretches to fill it and each page lives in its own vertical-only
+    // scroll viewport (see setEmbeddedPanelMode). No equal-height flooring,
+    // no window-only height lock / resize below.
+    if (embeddedPanelMode_) {
+        updateGeometry();
+        return;
+    }
+
     // Clear any prior height lock first so the content is measured freely.
     setMinimumHeight(0);
     setMaximumHeight(QWIDGETSIZE_MAX);
@@ -1493,6 +1737,50 @@ void VideoExportDialog::loadPersistedSettings()
         addIntroCheck_->setChecked(
             settings.value(QStringLiteral("add_intro")).toBool(addIntroCheck_->isChecked()));
     }
+
+    // "片头" tab styling (app-level preferences, like add_intro).
+    if (introBackgroundCombo_ != nullptr) {
+        const QSignalBlocker blocker(introBackgroundCombo_);
+        const int idx = introBackgroundCombo_->findData(
+            settings.value(QStringLiteral("intro_background_mode"))
+                .toString(introBackgroundCombo_->currentData().toString()));
+        if (idx >= 0) {
+            introBackgroundCombo_->setCurrentIndex(idx);
+        }
+    }
+    if (introBackgroundPathEdit_ != nullptr) {
+        const QSignalBlocker blocker(introBackgroundPathEdit_);
+        introBackgroundPathEdit_->setText(
+            settings.value(QStringLiteral("intro_background_custom_path"))
+                .toString(introBackgroundPathEdit_->text()));
+    }
+    if (introBlurCheck_ != nullptr) {
+        const QSignalBlocker blocker(introBlurCheck_);
+        introBlurCheck_->setChecked(
+            settings.value(QStringLiteral("intro_background_blur")).toBool(introBlurCheck_->isChecked()));
+    }
+    if (introCardModeCombo_ != nullptr) {
+        const QSignalBlocker blocker(introCardModeCombo_);
+        const int idx = introCardModeCombo_->findData(
+            settings.value(QStringLiteral("intro_card_type"))
+                .toString(introCardModeCombo_->currentData().toString()));
+        if (idx >= 0) {
+            introCardModeCombo_->setCurrentIndex(idx);
+        }
+    }
+    if (introCardShadowCheck_ != nullptr) {
+        const QSignalBlocker blocker(introCardShadowCheck_);
+        introCardShadowCheck_->setChecked(
+            settings.value(QStringLiteral("intro_card_shadow")).toBool(introCardShadowCheck_->isChecked()));
+    }
+    if (introLevelTextCheck_ != nullptr) {
+        const QSignalBlocker blocker(introLevelTextCheck_);
+        introLevelTextCheck_->setChecked(
+            settings.value(QStringLiteral("intro_level_text_render")).toBool(introLevelTextCheck_->isChecked()));
+    }
+    resizeIntroPreviewToAspect();
+    syncIntroControlsEnabled();
+    refreshIntroPreview();
 }
 
 void VideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
@@ -1503,8 +1791,7 @@ void VideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
     settings.insert(QStringLiteral("fps"), task.fps);
     settings.insert(QStringLiteral("audio_bitrate_kbps"), task.audioBitrateKbps);
     settings.insert(QStringLiteral("preset"), videoExportPresetToken(task.preset));
-    settings.insert(QStringLiteral("add_intro"),
-                    addIntroCheck_ != nullptr && addIntroCheck_->isChecked());
+    appendIntroPersistedSettings(&settings);
     miacode::video_export::saveDialogPreferences(settings);
 }
 
@@ -1516,9 +1803,38 @@ void VideoExportDialog::persistExportOnlySettings() const
     settings.insert(QStringLiteral("fps"), selectedFps_);
     settings.insert(QStringLiteral("audio_bitrate_kbps"), selectedAudioBitrateKbps_);
     settings.insert(QStringLiteral("preset"), videoExportPresetToken(selectedPreset_));
-    settings.insert(QStringLiteral("add_intro"),
-                    addIntroCheck_ != nullptr && addIntroCheck_->isChecked());
+    appendIntroPersistedSettings(&settings);
     miacode::video_export::saveDialogPreferences(settings);
+}
+
+void VideoExportDialog::appendIntroPersistedSettings(QJsonObject* settings) const
+{
+    if (settings == nullptr) {
+        return;
+    }
+    settings->insert(QStringLiteral("add_intro"),
+                     addIntroCheck_ != nullptr && addIntroCheck_->isChecked());
+    if (introBackgroundCombo_ != nullptr) {
+        settings->insert(QStringLiteral("intro_background_mode"),
+                         introBackgroundCombo_->currentData().toString());
+    }
+    if (introBackgroundPathEdit_ != nullptr) {
+        settings->insert(QStringLiteral("intro_background_custom_path"),
+                         introBackgroundPathEdit_->text().trimmed());
+    }
+    if (introBlurCheck_ != nullptr) {
+        settings->insert(QStringLiteral("intro_background_blur"), introBlurCheck_->isChecked());
+    }
+    if (introCardModeCombo_ != nullptr) {
+        settings->insert(QStringLiteral("intro_card_type"),
+                         introCardModeCombo_->currentData().toString());
+    }
+    if (introCardShadowCheck_ != nullptr) {
+        settings->insert(QStringLiteral("intro_card_shadow"), introCardShadowCheck_->isChecked());
+    }
+    if (introLevelTextCheck_ != nullptr) {
+        settings->insert(QStringLiteral("intro_level_text_render"), introLevelTextCheck_->isChecked());
+    }
 }
 
 bool VideoExportDialog::stepPreviewSliderBySeconds(double deltaSeconds)
@@ -1628,6 +1944,8 @@ void VideoExportDialog::applySelectedAspectRatioToPreview(bool markChanged)
     if (previewAspectRatioCallback_) {
         previewAspectRatioCallback_(aspectRatio);
     }
+    // The intro tab's read-only preview tracks the export aspect too.
+    resizeIntroPreviewToAspect();
 }
 
 void VideoExportDialog::browseOutputPath()
@@ -1730,6 +2048,10 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     // The maimai intro is a full-range-only pre-roll; clips starting
     // mid-chart never get it regardless of the checkbox. (A clip starting
     // at chart 0 counts as full-range, so it may carry the intro.)
+    // "片头" tab styling (background + difficulty card) — shared with the
+    // read-only preview via currentIntroSpec, so preview == export. `enabled`
+    // is recomputed below from the checkbox + range.
+    updated.intro = currentIntroSpec();
     updated.intro.enabled =
         (addIntroCheck_ != nullptr && addIntroCheck_->isChecked())
         && updated.fullRangeExport;
@@ -1816,11 +2138,97 @@ void VideoExportDialog::refreshAddIntroEnabledState()
     if (addIntroCheck_ == nullptr) {
         return;
     }
+    // MUST mirror applyUiToTask's bake gate: any range STARTING at chart 0
+    // counts as full-range and may carry the intro (see the comment there).
+    // The old extra "end reaches the chart tail" condition froze a checked-
+    // but-disabled box for [0, partial] clips whose state was STILL baked
+    // into the export — misleading and uncontrollable.
     constexpr double kFullRangeEpsilonSeconds = 0.01;
-    const bool fullRange =
-        rangeStartSeconds() <= kFullRangeEpsilonSeconds
-        && rangeEndSeconds() + kFullRangeEpsilonSeconds >= totalDurationSeconds_;
-    addIntroCheck_->setEnabled(fullRange);
+    addIntroCheck_->setEnabled(rangeStartSeconds() <= kFullRangeEpsilonSeconds);
+    syncIntroControlsEnabled();
+}
+
+void VideoExportDialog::syncIntroControlsEnabled()
+{
+    // Everything on the "片头" tab follows 添加片头 (which itself is greyed on a
+    // partial range); the path row additionally follows the 背景 combo.
+    const bool introOn = addIntroCheck_ != nullptr
+        && addIntroCheck_->isEnabled() && addIntroCheck_->isChecked();
+    const bool customBg = introBackgroundCombo_ != nullptr
+        && introBackgroundCombo_->currentData().toString() == QStringLiteral("custom");
+    if (introBackgroundCombo_ != nullptr) introBackgroundCombo_->setEnabled(introOn);
+    if (introBackgroundPathEdit_ != nullptr) introBackgroundPathEdit_->setEnabled(introOn && customBg);
+    if (introBackgroundBrowse_ != nullptr) introBackgroundBrowse_->setEnabled(introOn && customBg);
+    if (introBlurCheck_ != nullptr) introBlurCheck_->setEnabled(introOn);
+    if (introCardModeCombo_ != nullptr) introCardModeCombo_->setEnabled(introOn);
+    if (introCardShadowCheck_ != nullptr) introCardShadowCheck_->setEnabled(introOn);
+    if (introLevelTextCheck_ != nullptr) introLevelTextCheck_->setEnabled(introOn);
+}
+
+void VideoExportDialog::browseIntroBackground()
+{
+    const QString file = QFileDialog::getOpenFileName(
+        this,
+        l10n(QStringLiteral("Choose background image"), QStringLiteral("选择背景图片")),
+        QString(),
+        l10n(QStringLiteral("Images (*.png *.jpg *.jpeg *.bmp *.webp)"),
+             QStringLiteral("图片 (*.png *.jpg *.jpeg *.bmp *.webp)")));
+    if (file.isEmpty()) {
+        return;
+    }
+    if (introBackgroundCombo_ != nullptr) {
+        const int customIndex = introBackgroundCombo_->findData(QStringLiteral("custom"));
+        if (customIndex >= 0) {
+            introBackgroundCombo_->setCurrentIndex(customIndex);   // fires introUiChanged
+        }
+    }
+    if (introBackgroundPathEdit_ != nullptr) {
+        introBackgroundPathEdit_->setText(file);
+    }
+    persistExportOnlySettings();
+}
+
+IntroBannerSpec VideoExportDialog::currentIntroSpec() const
+{
+    IntroBannerSpec spec = baseTask_.intro;   // chart payload: title/level/曲绘…
+    if (introCardModeCombo_ != nullptr) {
+        spec.mode = introCardModeCombo_->currentData().toString();
+    }
+    if (introLevelTextCheck_ != nullptr) {
+        spec.lvRenderMode = introLevelTextCheck_->isChecked()
+            ? QStringLiteral("text")
+            : QStringLiteral("atlas");
+    }
+    if (introBackgroundCombo_ != nullptr) {
+        spec.backgroundMode = introBackgroundCombo_->currentData().toString();
+    }
+    if (introBackgroundPathEdit_ != nullptr) {
+        spec.customBackgroundPath = introBackgroundPathEdit_->text().trimmed();
+    }
+    if (introBlurCheck_ != nullptr) {
+        spec.blurBackground = introBlurCheck_->isChecked();
+    }
+    if (introCardShadowCheck_ != nullptr) {
+        spec.cardShadow = introCardShadowCheck_->isChecked();
+    }
+    return spec;
+}
+
+void VideoExportDialog::refreshIntroPreview()
+{
+    if (introPreview_ != nullptr) {
+        introPreview_->applySpec(currentIntroSpec());
+    }
+}
+
+void VideoExportDialog::resizeIntroPreviewToAspect()
+{
+    // The preview widget is a FIXED box (the dialog never resizes when the
+    // resolution changes); only the letterboxed frame inside it follows the
+    // output aspect. Reuses the same ratio source as the main live preview.
+    if (introPreview_ != nullptr) {
+        introPreview_->setOutputAspectRatio(selectedResolutionAspectRatio());
+    }
 }
 
 void VideoExportDialog::onPreviewSliderChanged(int sliderValue)
@@ -1845,6 +2253,11 @@ void VideoExportDialog::setRangeStartFromPreview()
     if (startSecondSpin_ == nullptr) {
         return;
     }
+    // Embedded panel: read the main preview's clock at click time — the
+    // preview-area transport is the only seek surface.
+    if (embeddedPanelMode_) {
+        previewCursorSecond_ = qBound(0.0, currentPreviewSecond(), totalDurationSeconds_);
+    }
     startSecondSpin_->setValue(previewCursorSecond_);
 }
 
@@ -1852,6 +2265,9 @@ void VideoExportDialog::setRangeEndFromPreview()
 {
     if (endSecondSpin_ == nullptr) {
         return;
+    }
+    if (embeddedPanelMode_) {
+        previewCursorSecond_ = qBound(0.0, currentPreviewSecond(), totalDurationSeconds_);
     }
     endSecondSpin_->setValue(previewCursorSecond_);
 }
@@ -1875,7 +2291,9 @@ void VideoExportDialog::toggleRangePreview()
 
 void VideoExportDialog::stopRangePreview(bool seekToCurrent)
 {
-    if (previewTimer_ != nullptr) {
+    // Embedded mode keeps the timer alive — it is the range tab's clock
+    // mirror, not a play-state ticker.
+    if (previewTimer_ != nullptr && !embeddedPanelMode_) {
         previewTimer_->stop();
     }
     if (rangePreviewPlaying_ || isPreviewPlaying()) {
@@ -1937,6 +2355,18 @@ void VideoExportDialog::updatePreviewPlayPauseUi()
 
 void VideoExportDialog::onRangePreviewTick()
 {
+    // Embedded panel: there is no in-panel transport — the timer runs for the
+    // panel's whole life and simply mirrors the main preview's authoritative
+    // clock into the range tab's current-time readout (and the cursor that
+    // seeds 设为起点/终点). Play/stop/seek all live on the preview-area
+    // transport to the right.
+    if (embeddedPanelMode_) {
+        previewCursorSecond_ = qBound(0.0, currentPreviewSecond(), totalDurationSeconds_);
+        if (startCurrentTimeEdit_ != nullptr) {
+            startCurrentTimeEdit_->setText(formatSecond(previewCursorSecond_));
+        }
+        return;
+    }
     if (!rangePreviewPlaying_) {
         return;
     }
@@ -2060,6 +2490,17 @@ QString VideoExportDialog::formatSecond(double second) const
         .arg(ms, 3, 10, QChar('0'));
 }
 
+void VideoExportDialog::onExportButtonClicked()
+{
+    // Embedded panel: while a worker run launched from here is active, the
+    // export button doubles as the cancel affordance.
+    if (embeddedPanelMode_ && embeddedExportRunning_) {
+        emit exportCancelRequested();
+        return;
+    }
+    startExport();
+}
+
 void VideoExportDialog::startExport()
 {
     stopRangePreview(false);
@@ -2078,6 +2519,12 @@ void VideoExportDialog::startExport()
     savePersistedSettings(task);
     requestedExportTask_ = task;
     exportRequested_ = true;
+    if (embeddedPanelMode_) {
+        // The panel stays open while the host launches the worker (progress
+        // shows on the preview-area transport, A3 as amended 2026-06-11).
+        emit exportConfirmed();
+        return;
+    }
     accept();
 }
 
@@ -2090,6 +2537,13 @@ void VideoExportDialog::closeEvent(QCloseEvent* event)
 
 void VideoExportDialog::done(int result)
 {
+    // Embedded panel: there is no window to close — Esc (QDialog's default
+    // reject) and programmatic done() must NOT hide the panel or restore the
+    // live-preview state mid-session. Teardown happens explicitly via
+    // finalizeEmbeddedSession() when the host leaves the video sub-page.
+    if (embeddedPanelMode_) {
+        return;
+    }
     stopRangePreview(false);
     restoreLivePreviewState();
     QDialog::done(result);

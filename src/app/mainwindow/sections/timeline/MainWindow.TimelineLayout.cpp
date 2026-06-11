@@ -240,6 +240,10 @@ void MainWindow::TimelineSection::updatePreviewSliderPosition(double second)
     if (ui_.previewSlider_ == nullptr || state_.previewScrubDragging_) {
         return;
     }
+    // NOTE: while an inline (panel-launched) export rides this slider as its
+    // playback-style progress display, user seeks still update it normally —
+    // the export's periodic progress events simply re-assert the export
+    // position between interactions (拖动在导出期间保持可用).
     const int value = qBound(0, qRound(second * 1000.0), ui_.previewSlider_->maximum());
     QSignalBlocker blocker(ui_.previewSlider_);
     ui_.previewSlider_->setValue(value);

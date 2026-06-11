@@ -1363,7 +1363,8 @@ void PreviewQuickExportSession::setIntroBannerData(
     const QVariantMap& bannerTrack,
     const QVariantMap& bannerTemplate,
     const QUrl& backgroundImage,
-    const QUrl& logoImage)
+    const QUrl& logoImage,
+    const QVariantMap& style)
 {
     if (introItem_ == nullptr) {
         return;
@@ -1379,6 +1380,9 @@ void PreviewQuickExportSession::setIntroBannerData(
     }
     introItem_->setProperty("backgroundImage", backgroundImage);
     introItem_->setProperty("bannerTrack", bannerTrack);
+    for (auto it = style.constBegin(); it != style.constEnd(); ++it) {
+        introItem_->setProperty(it.key().toUtf8().constData(), it.value());
+    }
 }
 
 void PreviewQuickExportSession::setIntroFrame(int authoringFrame, bool active)

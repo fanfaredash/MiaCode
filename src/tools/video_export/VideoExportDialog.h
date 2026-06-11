@@ -10,7 +10,11 @@
 
 class QCheckBox;
 class QCloseEvent;
+class QComboBox;
+class QDialogButtonBox;
 class QDoubleSpinBox;
+class QFrame;
+class QJsonObject;
 class QLabel;
 class QLineEdit;
 class QMenu;
@@ -22,6 +26,8 @@ class QVBoxLayout;
 class QToolButton;
 class QWheelEvent;
 class QWidget;
+
+class IntroPreviewWidget;
 
 class VideoExportDialog : public QDialog
 {
@@ -74,8 +80,37 @@ public:
     // construction, before exec().
     void injectOwnerWiredSettings(QWidget* videoExtras, QWidget* gameplayWidget);
 
+    // ---- Embedded panel mode (E-C, export-page phase 2) ----
+    // The same dialog doubles as the Export hub page's in-page video panel:
+    // call setEmbeddedPanelMode(true) immediately after construction (before
+    // the widget is shown / added to a layout). It disables every
+    // window-only behavior — modality, self-sizing height locks +
+    // centering, Esc-reject (done() becomes a no-op), the Cancel button —
+    // and reroutes the Export button: startExport() emits exportConfirmed()
+    // instead of accept(), so the host launches the worker while the panel
+    // stays open. The Tools-menu modal path is unchanged (flag off).
+    void setEmbeddedPanelMode(bool embedded);
+    bool embeddedPanelMode() const { return embeddedPanelMode_; }
+    // While an embedded-launched export runs, the Export button doubles as
+    // the cancel affordance (导出 → 取消导出); clicking it then emits
+    // exportCancelRequested() instead of starting another export.
+    void setEmbeddedExportRunning(bool running);
+    // Host-side teardown for the embedded panel (the moral equivalent of the
+    // modal path's done()): stops the range preview and restores the live
+    // preview HUD/aspect state. Idempotent.
+    void finalizeEmbeddedSession();
+
+signals:
+    // Embedded mode only: the user confirmed the export (settings already
+    // validated + persisted; requestedExportTask() carries the task).
+    void exportConfirmed();
+    // Embedded mode only: the user clicked the (cancel-mode) export button
+    // while a worker run was active.
+    void exportCancelRequested();
+
 private:
     void browseOutputPath();
+    void onExportButtonClicked();
     void startExport();
     bool applyUiToTask(VideoExportTask* task, QString* errorMessage) const;
     void refreshDialogGeometry();
@@ -88,6 +123,8 @@ private:
     void loadPersistedSettings();
     void savePersistedSettings(const VideoExportTask& task) const;
     void persistExportOnlySettings() const;
+    // Shared by both save paths: add_intro + the "片头" tab styling keys.
+    void appendIntroPersistedSettings(QJsonObject* settings) const;
     void applySelectedAspectRatioToPreview(bool markChanged);
     bool stepPreviewSliderBySeconds(double deltaSeconds);
     bool handlePreviewSliderWheel(QWheelEvent* event);
@@ -107,9 +144,22 @@ private:
     void handlePreviewStopOrPlayShortcut();
     void onRangePreviewTick();
     void syncRangeUi();
-    // "Add intro" applies to full-range exports only; grey it when a partial
-    // range is selected.
+    // "Add intro" applies to exports that START at chart 0 (the bake gate in
+    // applyUiToTask treats those as full-range); grey it when the range
+    // starts mid-chart.
     void refreshAddIntroEnabledState();
+    // ---- "片头" tab ----
+    // Sub-control gating: background path row follows the combo, card
+    // sub-options follow the card toggle, everything follows 添加片头.
+    void syncIntroControlsEnabled();
+    void browseIntroBackground();
+    // Current intro spec = baseTask_.intro (chart payload) + the tab's styling
+    // controls. Used by BOTH the read-only preview and applyUiToTask, so
+    // preview == export.
+    IntroBannerSpec currentIntroSpec() const;
+    void refreshIntroPreview();
+    // Pin the read-only preview to the selected output aspect ratio.
+    void resizeIntroPreviewToAspect();
     void seekPreview(double second);
     void playPreview(double second);
     void pausePreview();
@@ -145,6 +195,8 @@ private:
     double totalDurationSeconds_ = 0.0;
     double previewCursorSecond_ = 0.0;
     double initialResolutionAspectRatio_ = 1.0;
+    bool embeddedPanelMode_ = false;
+    bool embeddedExportRunning_ = false;
     bool exportSucceeded_ = false;
     bool exportRequested_ = false;
     bool syncingRangeUi_ = false;
@@ -178,6 +230,15 @@ private:
     QCheckBox* showObjectStatsCheck_ = nullptr;
     QCheckBox* showChartInfoCheck_ = nullptr;
     QCheckBox* addIntroCheck_ = nullptr;
+    // ---- "片头" tab controls ----
+    QComboBox* introBackgroundCombo_ = nullptr;
+    QLineEdit* introBackgroundPathEdit_ = nullptr;
+    QPushButton* introBackgroundBrowse_ = nullptr;
+    QCheckBox* introBlurCheck_ = nullptr;
+    QComboBox* introCardModeCombo_ = nullptr;
+    QCheckBox* introCardShadowCheck_ = nullptr;
+    QCheckBox* introLevelTextCheck_ = nullptr;
+    IntroPreviewWidget* introPreview_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
     QPushButton* hudFontSettingsButton_ = nullptr;
     QToolButton* backgroundScaleModeButton_ = nullptr;
@@ -204,9 +265,12 @@ private:
     QVBoxLayout* visualsPageLayout_ = nullptr;
     QVBoxLayout* gameplayPageLayout_ = nullptr;
     QTabWidget* settingsTabs_ = nullptr;
+    QFrame* previewStrip_ = nullptr;
+    QDialogButtonBox* buttonBox_ = nullptr;
     QToolButton* previewRangeButton_ = nullptr;
     QToolButton* stopPreviewButton_ = nullptr;
     QPushButton* exportButton_ = nullptr;
+    QPushButton* cancelButton_ = nullptr;
     QTimer* previewTimer_ = nullptr;
     QTimer* previewHeldSeekTimer_ = nullptr;
 };

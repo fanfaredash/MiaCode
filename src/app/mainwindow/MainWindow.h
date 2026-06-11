@@ -50,6 +50,9 @@ namespace miacode::latency {
 class LatencySandboxController;
 class LatencyDetectionPage;
 }
+namespace miacode::export_page {
+class ExportLauncherPage;
+}
 class QListWidget;
 class QListWidgetItem;
 class QJsonObject;
@@ -84,6 +87,7 @@ class QtPreviewSfxRuntime;
 class TimelineView;
 class TimelineQuickStateBridge;
 class QuickShellPreviewCompositeSurface;
+class VideoExportDialog;
 
 namespace miacode::waveform {
 class WaveformCacheService;
@@ -110,6 +114,11 @@ class MainWindow : public QMainWindow,
     // state for refresh.
     friend class miacode::latency::LatencySandboxController;
     friend class miacode::latency::LatencyDetectionPage;
+    // The Export hub page launches the existing ExportSection entry slots
+    // with an explicitly selected difficulty and reads document/difficulty
+    // state for its badge row — same narrow-feature rationale as the
+    // latency page above.
+    friend class miacode::export_page::ExportLauncherPage;
 
 public:
     // Phase 4c — non-owning accessor + signal so the QuickShellBootstrap can
@@ -223,6 +232,7 @@ public:
     double shellPreviewCanvasAspectRatio() const override;
     quint64 shellPreviewPaneRestoreGeneration() const override;
     bool shellPreviewFullscreen() const override;
+    double shellVideoExportProgressSeconds() const override;
     QObject* shellPreviewRuntimeObject() const override;
     QObject* shellPreviewStageMediaHostObject() const override;
     bool shellPreviewUsesSeparateSurface() const override;
@@ -282,7 +292,6 @@ private slots:
     void onToggleJudgeMarkers(bool checked);
     void onToggleTouchTrail(bool checked);
     void onEditStaticTapOnSlideThreshold();
-    void onExportPreviewVideo();
     void onBatchExportPreviewVideo();
     void onPackAsZip();
     void onPreviewAudioSettings();

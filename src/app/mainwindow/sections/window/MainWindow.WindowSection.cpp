@@ -189,6 +189,11 @@ double MainWindow::shellPreviewDurationSeconds() const
     return windowSection_->shellPreviewDurationSeconds();
 }
 
+double MainWindow::shellVideoExportProgressSeconds() const
+{
+    return videoExportInlineProgressSecond_;
+}
+
 QStringList MainWindow::shellPreviewStatsTexts() const
 {
     return windowSection_->shellPreviewStatsTexts();

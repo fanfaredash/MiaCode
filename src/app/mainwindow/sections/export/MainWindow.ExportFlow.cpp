@@ -15,6 +15,7 @@
 #include "common/OperationLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/cover_export/ExportCoverDialog.h"
+#include "tools/muri/MuriAnalyzer.h"
 #include "tools/video_export/BatchVideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
 #include "tools/video_export/VideoExportDialog.h"
@@ -337,13 +338,34 @@ void MainWindow::ExportSection::applySharedExportTaskSettings(const VideoExportT
     owner_.savePortableState();
 }
 
-// Build the seed VideoExportTask shared by the export dialog AND the toolbar's
-// direct cover export: parsed note markers + muri + render settings + skin /
-// outline assets + chart metadata + the banner-card payload. Callers must have
-// validated hasActiveDifficulty() / previewCanvas_ and paused playback first.
-VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask()
+// Build the seed VideoExportTask shared by the export dialog AND the direct
+// cover export: parsed note markers + muri + render settings + skin /
+// outline assets + chart metadata + the banner-card payload. Callers must
+// have validated the target difficulty / previewCanvas_ and paused playback
+// first. difficultyId 0 = active difficulty (the pre-export-page behavior).
+VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask(int difficultyId)
 {
+    const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : owner_.activeDifficultyId_;
+    // The live timeline markers / muri report belong to the ACTIVE difficulty.
+    // An export-page launch targeting another difficulty parses that chart
+    // directly instead (the same parse the worker re-runs from the snapshot).
+    const bool usesActiveTimeline =
+        owner_.hasActiveDifficulty() && resolvedDifficultyId == owner_.activeDifficultyId_;
+
     owner_.refreshTimelineMetadata();
+
+    QVector<TimelineNoteMarker> seedMarkers;
+    MuriAnalysisReport seedMuriReport;
+    if (usesActiveTimeline) {
+        seedMarkers = owner_.latestTimelineNoteMarkers_;
+        seedMuriReport = owner_.muriAnalysisReport_;
+    } else {
+        seedMarkers = buildParsedMarkersForDifficulty(resolvedDifficultyId);
+        seedMuriReport = MuriAnalyzer::analyze(
+            seedMarkers,
+            owner_.muriRenderOptions_,
+            static_cast<double>(owner_.staticTapOnSlideThresholdMs_) / 1000.0);
+    }
 
     const auto previewMarkerEndSecond = [](const TimelineNoteMarker& marker) {
         double markerEnd = qMax(marker.second, marker.endSecond);
@@ -355,7 +377,7 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask()
         return qMax(0.0, markerEnd);
     };
     double lastMarkerEndSecond = 0.0;
-    for (const TimelineNoteMarker& marker : owner_.latestTimelineNoteMarkers_) {
+    for (const TimelineNoteMarker& marker : seedMarkers) {
         lastMarkerEndSecond = qMax(lastMarkerEndSecond, previewMarkerEndSecond(marker));
     }
     const double cappedExportEndSecond = qMax(
@@ -369,8 +391,8 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask()
     // Seed the skin dir so the dialog's "Export Cover" chart-frame renderer can
     // load the note sprites without building a full export snapshot.
     task.skinDirectory = owner_.resolvePreviewSkinDir();
-    task.noteMarkers = owner_.latestTimelineNoteMarkers_;
-    task.muriAnalysisReport = owner_.muriAnalysisReport_;
+    task.noteMarkers = seedMarkers;
+    task.muriAnalysisReport = seedMuriReport;
     task.muriRenderOptions = owner_.muriRenderOptions_;
     task.staticTapOnSlideThresholdSeconds = static_cast<double>(owner_.staticTapOnSlideThresholdMs_) / 1000.0;
     task.audioSettings = owner_.previewAudioSettings_;
@@ -405,16 +427,18 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask()
     }
     // Per-difficulty designer overrides the document-level &des field when
     // populated; otherwise we fall back so projects using the shared-designer
-    // convention still surface a name in the HUD.
+    // convention still surface a name in the HUD. The trimmed() gate is the
+    // export-side fallback contract (feature-index §3) — keep all five sites
+    // aligned.
     QString chartDesigner = owner_.document_.designer;
     QString chartDifficultyLabel;
-    if (owner_.hasActiveDifficulty()) {
-        const SimaiDifficultyData* difficulty = owner_.document_.difficulty(owner_.activeDifficultyId_);
-        if (difficulty != nullptr && !difficulty->designer.trimmed().isEmpty()) {
-            chartDesigner = difficulty->designer;
+    const SimaiDifficultyData* resolvedDifficulty = owner_.document_.difficulty(resolvedDifficultyId);
+    if (resolvedDifficulty != nullptr) {
+        if (!resolvedDifficulty->designer.trimmed().isEmpty()) {
+            chartDesigner = resolvedDifficulty->designer;
         }
-        const QString diffShort = SimaiDocument::difficultyShortName(owner_.activeDifficultyId_);
-        const QString diffLevel = (difficulty != nullptr) ? difficulty->level.trimmed() : QString();
+        const QString diffShort = SimaiDocument::difficultyShortName(resolvedDifficultyId);
+        const QString diffLevel = resolvedDifficulty->level.trimmed();
         if (!diffShort.isEmpty() || !diffLevel.isEmpty()) {
             chartDifficultyLabel = QStringLiteral("%1 %2")
                 .arg(diffShort, diffLevel)
@@ -427,8 +451,8 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask()
     task.chartDifficultyLabel = chartDifficultyLabel;
     task.chartDesigner = chartDesigner;
     const QString exportStem = sanitizeExportFileStem(chartTitle, QStringLiteral("out"));
-    const QString difficultyName = owner_.hasActiveDifficulty()
-        ? SimaiDocument::difficultyShortName(owner_.activeDifficultyId_).replace(':', '_')
+    const QString difficultyName = resolvedDifficulty != nullptr
+        ? SimaiDocument::difficultyShortName(resolvedDifficultyId).replace(':', '_')
         : QStringLiteral("chart");
     const QString outputName = QString("%1_%2.mp4")
         .arg(exportStem)
@@ -436,15 +460,21 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask()
     task.outputPath = outputName;
     // Seed the banner-card payload so the dialog's "Export Cover" can render the
     // difficulty card without building a full export snapshot.
-    task.intro = buildActiveDifficultyIntroBannerSpec();
+    task.intro = buildIntroBannerSpecForDifficulty(resolvedDifficultyId);
     return task;
 }
 
-void MainWindow::ExportSection::onExportPreviewVideo()
+// MODAL twin of the embedded export panel. Since 2026-06-12 no UI entrance
+// reaches it (the Tools-menu 「导出谱面」 jumps to the Export page; spec
+// decision D6 overturned) — kept because it exercises the same
+// VideoExportDialog in window form and may be rewired later.
+void MainWindow::ExportSection::onExportPreviewVideo(int difficultyId)
 {
     MC_OP("MainWindow::ExportSection::onExportPreviewVideo");
-    if (!owner_.hasActiveDifficulty()) {
-        _mc_op_.fail(QStringLiteral("no active difficulty"));
+    const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : owner_.activeDifficultyId_;
+    if (!SimaiDocument::isDifficultyId(resolvedDifficultyId)
+        || owner_.document_.difficulty(resolvedDifficultyId) == nullptr) {
+        _mc_op_.fail(QStringLiteral("no target difficulty"));
         owner_.statusBar()->showMessage(QStringLiteral("当前未选中难度，无法导出视频。"));
         return;
     }
@@ -457,12 +487,88 @@ void MainWindow::ExportSection::onExportPreviewVideo()
         owner_.onTogglePreviewPause();
     }
 
-    VideoExportTask task = buildVideoExportSeedTask();
+    VideoExportTask task = buildVideoExportSeedTask(resolvedDifficultyId);
 
+    VideoExportDialog* dialog =
+        buildConfiguredVideoExportDialog(task, UiDialogs::effectiveParentWidget(&owner_));
+    UiDialogs::prepareDialogWindow(
+        dialog,
+        &owner_,
+        true,
+        UiDialogs::PreviewShortcutPolicy::LocalPlaybackControls
+    );
+
+    dialog->adjustSize();
+    // Center the export dialog on the program window EXCLUDING the preview
+    // area, so the live preview stays visible beside it. The preview panel sits
+    // on the right, so the non-preview region is the main window rect trimmed
+    // to the left of the preview panel.
+    QRect anchorRect(owner_.mapToGlobal(QPoint(0, 0)), owner_.size());
+    if (owner_.previewPanel_ != nullptr && owner_.previewPanel_->isVisible()) {
+        const int previewLeftGlobalX = owner_.previewPanel_->mapToGlobal(QPoint(0, 0)).x();
+        const int nonPreviewWidth = previewLeftGlobalX - anchorRect.left();
+        if (nonPreviewWidth > dialog->width() / 2) {
+            anchorRect.setWidth(nonPreviewWidth);
+        }
+    }
+    QPoint targetTopLeft(
+        anchorRect.center().x() - dialog->width() / 2,
+        anchorRect.center().y() - dialog->height() / 2
+    );
+    QScreen* targetScreen = QGuiApplication::screenAt(anchorRect.center());
+    if (targetScreen == nullptr && owner_.windowHandle() != nullptr) {
+        targetScreen = owner_.windowHandle()->screen();
+    }
+    if (targetScreen != nullptr) {
+        const QRect avail = targetScreen->availableGeometry();
+        targetTopLeft.setX(qBound(avail.left(), targetTopLeft.x(), avail.right() - dialog->width() + 1));
+        targetTopLeft.setY(qBound(avail.top(), targetTopLeft.y(), avail.bottom() - dialog->height() + 1));
+    }
+    dialog->move(targetTopLeft);
+    owner_.windowSection_->applySystemWindowBackdrop(dialog);
+    beginExportPreviewSession(task);
+    dialog->exec();
+    endExportPreviewSession();
+    const bool exportWasRequested = dialog->exportRequested();
+    VideoExportTask requestedTask = dialog->requestedExportTask();
+    delete dialog;
+    dialog = nullptr;
+    if (exportWasRequested) {
+        // The injected Gameplay/Video-extra controls drive owner_ live rather
+        // than baking into the dialog's task, so re-source those fields from
+        // owner_ here — the dialog's task snapshot predates the user's edits.
+        requestedTask.outlineVariant = owner_.previewOutlineVariant_;
+        requestedTask.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
+        requestedTask.centerDisplayMode = owner_.previewCenterDisplayMode_;
+        requestedTask.muriRenderOptions = owner_.muriRenderOptions_;
+        this->applySharedExportTaskSettings(requestedTask);
+        VideoExportSnapshot snapshot;
+        QString launchError;
+        // Menu-launched exports keep the QProgressDialog (the inline
+        // preview-transport progress belongs to the embedded panel path).
+        owner_.videoExportUseInlineProgress_ = false;
+        if (!this->buildVideoExportSnapshot(requestedTask, &snapshot, &launchError, resolvedDifficultyId)
+            || !this->launchVideoExportWorker(snapshot, &launchError)) {
+            UiDialogs::showMessageBox(
+                QMessageBox::Critical,
+                &owner_,
+                uiText("dialog.video_export.title", "Export Video"),
+                launchError.isEmpty()
+                    ? uiText("dialog.video_export.error.launch_failed", "Failed to start background export.")
+                    : launchError
+            );
+        }
+    }
+}
+
+VideoExportDialog* MainWindow::ExportSection::buildConfiguredVideoExportDialog(
+    const VideoExportTask& task,
+    QWidget* parent)
+{
     const auto currentPreviewSecond = [this]() -> double {
         return qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond());
     };
-    VideoExportDialog dialog(
+    auto* dialog = new VideoExportDialog(
         task,
         [this](double second) {
             owner_.seekPreviewToSecond(second, false);
@@ -554,65 +660,35 @@ void MainWindow::ExportSection::onExportPreviewVideo()
             }
             owner_.savePortableState();
         },
-        UiDialogs::effectiveParentWidget(&owner_)
+        parent
     );
     // Inject the owner-wired Gameplay controls (skin / judge line / judge
     // effect / slide stack order / center display), built by the DialogsSection
     // so they can reach MainWindow-side data the decoupled dialog can't. They
-    // mutate owner_ live; their values are re-sourced into the task after the
-    // dialog closes (below).
+    // mutate owner_ live; their values are re-sourced into the task when the
+    // export is confirmed.
     QWidget* injectedGameplay = nullptr;
     if (owner_.dialogsSection_ != nullptr) {
-        owner_.dialogsSection_->buildExportInjectedSettings(&dialog, &injectedGameplay);
-        dialog.injectOwnerWiredSettings(nullptr, injectedGameplay);
+        owner_.dialogsSection_->buildExportInjectedSettings(dialog, &injectedGameplay);
+        dialog->injectOwnerWiredSettings(nullptr, injectedGameplay);
     }
-    UiDialogs::prepareDialogWindow(
-        &dialog,
-        &owner_,
-        true,
-        UiDialogs::PreviewShortcutPolicy::LocalPlaybackControls
-    );
+    return dialog;
+}
 
-    dialog.adjustSize();
-    // Center the export dialog on the program window EXCLUDING the preview
-    // area, so the live preview stays visible beside it. The preview panel sits
-    // on the right, so the non-preview region is the main window rect trimmed
-    // to the left of the preview panel.
-    QRect anchorRect(owner_.mapToGlobal(QPoint(0, 0)), owner_.size());
-    if (owner_.previewPanel_ != nullptr && owner_.previewPanel_->isVisible()) {
-        const int previewLeftGlobalX = owner_.previewPanel_->mapToGlobal(QPoint(0, 0)).x();
-        const int nonPreviewWidth = previewLeftGlobalX - anchorRect.left();
-        if (nonPreviewWidth > dialog.width() / 2) {
-            anchorRect.setWidth(nonPreviewWidth);
-        }
-    }
-    QPoint targetTopLeft(
-        anchorRect.center().x() - dialog.width() / 2,
-        anchorRect.center().y() - dialog.height() / 2
-    );
-    QScreen* targetScreen = QGuiApplication::screenAt(anchorRect.center());
-    if (targetScreen == nullptr && owner_.windowHandle() != nullptr) {
-        targetScreen = owner_.windowHandle()->screen();
-    }
-    if (targetScreen != nullptr) {
-        const QRect avail = targetScreen->availableGeometry();
-        targetTopLeft.setX(qBound(avail.left(), targetTopLeft.x(), avail.right() - dialog.width() + 1));
-        targetTopLeft.setY(qBound(avail.top(), targetTopLeft.y(), avail.bottom() - dialog.height() + 1));
-    }
-    dialog.move(targetTopLeft);
-    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
+void MainWindow::ExportSection::beginExportPreviewSession(const VideoExportTask& task)
+{
     ++owner_.previewPaneRestoreGeneration_;
-    // The export-preview dialog drives the (paused) on-screen preview. Force PV/BG
-    // visible + the export's chosen outline variant for the dialog's lifetime so the
+    // The export dialog/panel drives the (paused) on-screen preview. Force PV/BG
+    // visible + the export's chosen outline variant for its lifetime so the
     // user sees the real exported look, ignoring the "暂停时显示判定区" pause-hide option.
     owner_.exportPreviewActive_ = true;
     owner_.applyEffectivePreviewOutlineVariantToCanvas();
     owner_.applyPreviewStageMediaRouteVisualSettings();
-    // While the export-preview dialog is up the debug HUD is replaced by
+    // While the export dialog/panel is up the debug HUD is replaced by
     // the optional chart info HUD — the debug numbers don't reach the
     // exported video anyway, and the user wants to see chart metadata
     // here. Suppress the debug HUD without clearing the persisted
-    // showDebugInfo preference so it returns intact on dialog close.
+    // showDebugInfo preference so it returns intact afterwards.
     if (owner_.previewCanvas_ != nullptr) {
         owner_.previewCanvas_->setSuppressDebugInfo(true);
         // The seed task already carries the resolved chart metadata (built in
@@ -621,7 +697,10 @@ void MainWindow::ExportSection::onExportPreviewVideo()
             task.chartTitle, task.chartArtist, task.chartDifficultyLabel, task.chartDesigner);
         owner_.previewCanvas_->setShowChartInfoHud(owner_.previewShowChartInfoHud_);
     }
-    dialog.exec();
+}
+
+void MainWindow::ExportSection::endExportPreviewSession()
+{
     if (owner_.previewCanvas_ != nullptr) {
         owner_.previewCanvas_->setSuppressDebugInfo(false);
         owner_.previewCanvas_->setShowChartInfoHud(false);
@@ -633,37 +712,101 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     owner_.applyPreviewStageMediaRouteVisualSettings();
     owner_.setPreviewCanvasAspectRatio(1.0, false);
     owner_.restoreSquareAfterVideoExport_ = false;
-    if (dialog.exportRequested()) {
-        VideoExportTask requestedTask = dialog.requestedExportTask();
-        // The injected Gameplay/Video-extra controls drive owner_ live rather
-        // than baking into the dialog's task, so re-source those fields from
-        // owner_ here — the dialog's task snapshot predates the user's edits.
-        requestedTask.outlineVariant = owner_.previewOutlineVariant_;
-        requestedTask.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
-        requestedTask.centerDisplayMode = owner_.previewCenterDisplayMode_;
-        requestedTask.muriRenderOptions = owner_.muriRenderOptions_;
-        this->applySharedExportTaskSettings(requestedTask);
-        VideoExportSnapshot snapshot;
-        QString launchError;
-        if (!this->buildVideoExportSnapshot(requestedTask, &snapshot, &launchError)
-            || !this->launchVideoExportWorker(snapshot, &launchError)) {
-            UiDialogs::showMessageBox(
-                QMessageBox::Critical,
-                &owner_,
-                uiText("dialog.video_export.title", "Export Video"),
-                launchError.isEmpty()
-                    ? uiText("dialog.video_export.error.launch_failed", "Failed to start background export.")
-                    : launchError
-            );
-        }
-    }
 }
 
-void MainWindow::ExportSection::onExportCover()
+QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficultyId, QWidget* parent)
+{
+    destroyEmbeddedVideoExportPanel();
+    const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : owner_.activeDifficultyId_;
+    if (!SimaiDocument::isDifficultyId(resolvedDifficultyId)
+        || owner_.document_.difficulty(resolvedDifficultyId) == nullptr
+        || owner_.previewCanvas_ == nullptr) {
+        return nullptr;
+    }
+    if (owner_.qtPreviewPlaying_) {
+        owner_.onTogglePreviewPause();
+    }
+
+    VideoExportTask task = buildVideoExportSeedTask(resolvedDifficultyId);
+    VideoExportDialog* panel = buildConfiguredVideoExportDialog(task, parent);
+    panel->setEmbeddedPanelMode(true);
+    owner_.embeddedVideoExportPanel_ = panel;
+    owner_.embeddedVideoExportDifficultyId_ = resolvedDifficultyId;
+    connect(panel, &VideoExportDialog::exportConfirmed, &owner_, [this]() {
+        this->handleEmbeddedExportConfirmed();
+    });
+    connect(panel, &VideoExportDialog::exportCancelRequested, &owner_, [this]() {
+        this->cancelVideoExportWorker();
+    });
+    beginExportPreviewSession(task);
+    // Re-entering the video sub-page while an inline-launched export is still
+    // rendering: re-arm the cancel affordance on the fresh panel.
+    if (owner_.videoExportUseInlineProgress_
+        && owner_.videoExportWorkerProcess_ != nullptr
+        && owner_.videoExportWorkerProcess_->state() != QProcess::NotRunning) {
+        panel->setEmbeddedExportRunning(true);
+    }
+    return panel;
+}
+
+void MainWindow::ExportSection::destroyEmbeddedVideoExportPanel()
+{
+    if (owner_.embeddedVideoExportPanel_.isNull()) {
+        return;
+    }
+    VideoExportDialog* panel = owner_.embeddedVideoExportPanel_;
+    owner_.embeddedVideoExportPanel_.clear();
+    owner_.embeddedVideoExportDifficultyId_ = 0;
+    panel->finalizeEmbeddedSession();
+    panel->hide();
+    // deleteLater: this may run from inside the panel's own signal handlers.
+    panel->deleteLater();
+    endExportPreviewSession();
+}
+
+void MainWindow::ExportSection::handleEmbeddedExportConfirmed()
+{
+    VideoExportDialog* panel = owner_.embeddedVideoExportPanel_;
+    if (panel == nullptr) {
+        return;
+    }
+    VideoExportTask requestedTask = panel->requestedExportTask();
+    // Same re-source as the modal path: the injected Gameplay/Video-extra
+    // controls drive owner_ live rather than baking into the panel's task.
+    requestedTask.outlineVariant = owner_.previewOutlineVariant_;
+    requestedTask.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
+    requestedTask.centerDisplayMode = owner_.previewCenterDisplayMode_;
+    requestedTask.muriRenderOptions = owner_.muriRenderOptions_;
+    this->applySharedExportTaskSettings(requestedTask);
+    VideoExportSnapshot snapshot;
+    QString launchError;
+    // Panel-launched exports show progress on the preview-area transport
+    // (A3 as amended 2026-06-11) — no QProgressDialog.
+    owner_.videoExportUseInlineProgress_ = true;
+    if (!this->buildVideoExportSnapshot(
+            requestedTask, &snapshot, &launchError, owner_.embeddedVideoExportDifficultyId_)
+        || !this->launchVideoExportWorker(snapshot, &launchError)) {
+        owner_.videoExportUseInlineProgress_ = false;
+        UiDialogs::showMessageBox(
+            QMessageBox::Critical,
+            &owner_,
+            uiText("dialog.video_export.title", "Export Video"),
+            launchError.isEmpty()
+                ? uiText("dialog.video_export.error.launch_failed", "Failed to start background export.")
+                : launchError
+        );
+        return;
+    }
+    panel->setEmbeddedExportRunning(true);
+}
+
+void MainWindow::ExportSection::onExportCover(int difficultyId)
 {
     MC_OP("MainWindow::ExportSection::onExportCover");
-    if (!owner_.hasActiveDifficulty()) {
-        _mc_op_.fail(QStringLiteral("no active difficulty"));
+    const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : owner_.activeDifficultyId_;
+    if (!SimaiDocument::isDifficultyId(resolvedDifficultyId)
+        || owner_.document_.difficulty(resolvedDifficultyId) == nullptr) {
+        _mc_op_.fail(QStringLiteral("no target difficulty"));
         owner_.statusBar()->showMessage(QStringLiteral("当前未选中难度，无法导出封面。"));
         return;
     }
@@ -676,7 +819,7 @@ void MainWindow::ExportSection::onExportCover()
         owner_.onTogglePreviewPause();
     }
 
-    const VideoExportTask task = buildVideoExportSeedTask();
+    const VideoExportTask task = buildVideoExportSeedTask(resolvedDifficultyId);
 
     // Seed size: the video-export dialog's persisted resolution (the cover
     // dialog's own app preferences override it when present).
@@ -720,11 +863,13 @@ void MainWindow::ExportSection::onExportCover()
     }
 }
 
-void MainWindow::ExportSection::onBatchExportPreviewVideo()
+void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
 {
     MC_OP("MainWindow::ExportSection::onBatchExportPreviewVideo");
-    if (!owner_.hasActiveDifficulty()) {
-        _mc_op_.fail(QStringLiteral("no active difficulty"));
+    const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : owner_.activeDifficultyId_;
+    if (!SimaiDocument::isDifficultyId(resolvedDifficultyId)
+        || owner_.document_.difficulty(resolvedDifficultyId) == nullptr) {
+        _mc_op_.fail(QStringLiteral("no target difficulty"));
         owner_.statusBar()->showMessage(uiText("dialog.batch_export.error.no_difficulty", QStringLiteral("No active difficulty is selected.")));
         return;
     }
@@ -782,13 +927,13 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo()
     // snapshot's chartTextUtf8 + difficulty id for that job.
     task.chartTitle = owner_.document_.title;
     task.chartArtist = owner_.document_.artist;
-    if (owner_.hasActiveDifficulty()) {
-        const SimaiDifficultyData* difficulty = owner_.document_.difficulty(owner_.activeDifficultyId_);
-        task.chartDesigner = (difficulty != nullptr && !difficulty->designer.trimmed().isEmpty())
+    if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(resolvedDifficultyId);
+        difficulty != nullptr) {
+        task.chartDesigner = !difficulty->designer.trimmed().isEmpty()
             ? difficulty->designer
             : owner_.document_.designer;
-        const QString diffShort = SimaiDocument::difficultyShortName(owner_.activeDifficultyId_);
-        const QString diffLevel = (difficulty != nullptr) ? difficulty->level.trimmed() : QString();
+        const QString diffShort = SimaiDocument::difficultyShortName(resolvedDifficultyId);
+        const QString diffLevel = difficulty->level.trimmed();
         if (!diffShort.isEmpty() || !diffLevel.isEmpty()) {
             task.chartDifficultyLabel = QStringLiteral("%1 %2")
                 .arg(diffShort, diffLevel)
@@ -799,7 +944,7 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo()
     }
     task.centerDisplayMode = owner_.previewCenterDisplayMode_;
 
-    const QString difficultyToken = SimaiDocument::difficultyShortName(owner_.activeDifficultyId_);
+    const QString difficultyToken = SimaiDocument::difficultyShortName(resolvedDifficultyId);
     BatchVideoExportDialog dialog(
         task,
         difficultyToken,

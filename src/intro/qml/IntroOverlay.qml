@@ -44,6 +44,16 @@ Item {
     property url backgroundImage: ""
     property url logoImage: "qrc:/icons/app.png"
 
+    // ---- "片头" tab styling (IntroBannerSpec extras, set via setProperty) ----
+    // Custom BACKDROP image: replaces the blurred 曲绘 backdrop only — the
+    // card's jacket slot still shows the 曲绘. Empty -> 曲绘 backdrop.
+    property url backdropImage: ""
+    // false -> the backdrop image renders crisp (no MultiEffect blur pass).
+    property bool backdropBlurEnabled: true
+    // Soft drop shadow behind the whole card (the transparent-mode card can't
+    // draw its own — MaimaiBannerCard.cardShadowEnabled is a no-op there).
+    property bool cardShadowEnabled: false
+
     // Banner payload pulled from the chart (title/artist/designer/level/
     // difficulty/bpm/mode), forwarded to the embedded MaimaiBannerCard.
     property var bannerTrack: ({})
@@ -75,6 +85,9 @@ Item {
     readonly property url effectiveJacket:
         (backgroundImage.toString().length > 0) ? backgroundImage
                                                  : (logoImage.toString().length > 0 ? logoImage : "")
+    // Backdrop source: the custom image when set, else the 曲绘/logo fallback.
+    readonly property url effectiveBackdrop:
+        (backdropImage.toString().length > 0) ? backdropImage : effectiveJacket
 
     // ---------- Cycle layout ----------
     // The wipe authors its inner animation across `cycleDuration` (123) frames;
@@ -178,7 +191,7 @@ Item {
     Image {
         id: bgFill
         anchors.fill: parent
-        source: root.effectiveJacket
+        source: root.effectiveBackdrop
         fillMode: Image.PreserveAspectCrop
         visible: false
         asynchronous: false
@@ -189,8 +202,8 @@ Item {
         id: blurredBg
         anchors.fill: parent
         source: bgFill
-        blurEnabled: true
-        blur: 1.0
+        blurEnabled: root.backdropBlurEnabled
+        blur: root.backdropBlurEnabled ? 1.0 : 0.0
         blurMax: 64
         // Captured by blurredTex below (hideSource); not drawn directly.
     }
@@ -222,6 +235,22 @@ Item {
     // 2) Live banner card, centered at a square the height of the frame,
     //    floating on the backdrop. Renders transparent (template flag), so the
     //    blurred backdrop shows around it.
+    // Drop-shadow parameters echo MaimaiBannerCard.cardShadow* (template
+    // `cardShadow` block with the same defaults), since the transparent-mode
+    // card can't draw its own shadow.
+    function cardShadowColor() {
+        var s = (bannerTemplateData && bannerTemplateData.cardShadow) || {}
+        return s.color !== undefined ? s.color : "#99000000"
+    }
+    function cardShadowBlurValue() {
+        var s = (bannerTemplateData && bannerTemplateData.cardShadow) || {}
+        return s.blur !== undefined ? s.blur : 0.6
+    }
+    function cardShadowOffsetYValue() {
+        var s = (bannerTemplateData && bannerTemplateData.cardShadow) || {}
+        return s.offsetY !== undefined ? s.offsetY : 14
+    }
+
     MaimaiBannerCard {
         id: cardImg
         anchors.centerIn: parent
@@ -242,6 +271,13 @@ Item {
         revealStartFrame: root.cardRevealStart
         opacity: (root.frame >= root.cardRevealStart && root.frame < root.hideAbs) ? 1.0 : 0.0
         visible: opacity > 0
+        layer.enabled: root.cardShadowEnabled
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: root.cardShadowColor()
+            shadowBlur: root.cardShadowBlurValue()
+            shadowVerticalOffset: root.cardShadowOffsetYValue()
+        }
     }
 
     MaimaiTransition {
