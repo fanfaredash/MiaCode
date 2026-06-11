@@ -21,9 +21,11 @@ public:
     double parsedRawFirstSeconds(bool* ok = nullptr) const;
     double parsedFirstSeconds(bool* ok = nullptr) const;
     double parsedWholeBpm(bool* ok = nullptr) const;
+    int parsedClockCount() const;
     QString parsedLatencyMeterId() const;
     void applyLatencyDetectorOffset(double seconds);
     void applyLatencyDetectorBpm(double bpm);
+    void applyLatencyDetectorClockCount(int clockCount);
     void setCurrentFilePath(const QString& path, bool suppressImmediateRefresh = false);
     void updateWindowTitle();
     void updateCurrentFileLabel();

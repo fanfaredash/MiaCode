@@ -195,6 +195,11 @@ double MainWindow::parsedWholeBpm(bool* ok) const
     return timelineSection_->parsedWholeBpm(ok);
 }
 
+int MainWindow::parsedClockCount() const
+{
+    return timelineSection_->parsedClockCount();
+}
+
 QString MainWindow::parsedLatencyMeterId() const
 {
     return timelineSection_->parsedLatencyMeterId();

@@ -72,6 +72,7 @@ SimaiDocument SimaiDocument::createEmpty()
     doc.artist = QString();
     doc.first = QString();
     doc.designer = QString();
+    ensureDefaultClockCount(&doc.extraFields);
     return doc;
 }
 
@@ -133,6 +134,7 @@ SimaiDocument SimaiDocument::fromText(const QString& text)
 
         doc.extraFields.append(field);
     }
+    ensureDefaultClockCount(&doc.extraFields);
 
     // A `&des_N` with no accompanying `&lv_N` / `&inote_N` is a chart-less
     // designer name, not a difficulty. Move those out of the difficulty map so
@@ -220,6 +222,20 @@ QString SimaiDocument::serializeRawFields(const QVector<SimaiRawField>& fields)
     return blocks.join('\n');
 }
 
+bool SimaiDocument::ensureDefaultClockCount(QVector<SimaiRawField>* fields)
+{
+    if (fields == nullptr) {
+        return false;
+    }
+    for (const SimaiRawField& field : *fields) {
+        if (field.key.compare(QStringLiteral("clock_count"), Qt::CaseInsensitive) == 0) {
+            return false;
+        }
+    }
+    fields->append(SimaiRawField{QStringLiteral("clock_count"), QStringLiteral("4")});
+    return true;
+}
+
 bool SimaiDocument::isDifficultyId(int id)
 {
     return id >= 1 && id <= 7;
@@ -286,7 +302,9 @@ QString SimaiDocument::toText() const
         blocks.append(serializeField("video", videoPath));
     }
 
-    for (const SimaiRawField& field : extraFields) {
+    QVector<SimaiRawField> serializedExtraFields = extraFields;
+    ensureDefaultClockCount(&serializedExtraFields);
+    for (const SimaiRawField& field : serializedExtraFields) {
         if (field.key.isEmpty()) {
             continue;
         }

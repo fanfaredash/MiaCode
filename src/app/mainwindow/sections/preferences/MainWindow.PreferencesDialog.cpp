@@ -1200,18 +1200,8 @@ void MainWindow::PreferencesSection::onPreferences()
 
     pageStack->setCurrentIndex(0);
 
-    // Width floor: widest page + the tab widget's TRUE horizontal chrome,
-    // measured from live geometry. Two facts force this shape (see the
-    // qt-ui-layout-pitfalls skill, W2/W3):
-    //   - the root layout's SetFixedSize constraint ignores dialog-level
-    //     setMinimumWidth but honors a child's minimum, so the floor lives
-    //     on the tab widget (same as the render-settings dialog, df0829d);
-    //   - the QSS pane padding (8px per side) is absent from
-    //     QTabWidget::sizeHint, so without compensation every page comes up
-    //     ~16px short and Fixed-width fields (menu buttons, the font
-    //     shortcut hint) clip at the right pane edge.
-    // Measuring instead of hardcoding keeps the dialog as narrow as the
-    // content allows while never re-clipping when rows change.
+    // Keep the dialog compact by targeting roughly 75% of the widest page
+    // hint. The tab bar remains the hard floor so the page labels stay usable.
     int maxPageWidth = 0;
     for (int i = 0; i < pageStack->count(); ++i) {
         QWidget* page = pageStack->widget(i);
@@ -1233,7 +1223,12 @@ void MainWindow::PreferencesSection::onPreferences()
     if (pageStackInner != nullptr && pageStack->width() > pageStackInner->width()) {
         tabChrome = pageStack->width() - pageStackInner->width();
     }
-    pageStack->setMinimumWidth(maxPageWidth + tabChrome);
+    int desiredWidth = qRound((maxPageWidth + tabChrome) * 0.75);
+    if (QTabBar* tabBar = pageStack->tabBar(); tabBar != nullptr) {
+        tabBar->ensurePolished();
+        desiredWidth = qMax(desiredWidth, tabBar->sizeHint().width());
+    }
+    pageStack->setFixedWidth(desiredWidth);
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
     UiDialogs::localizeButtonBox(buttonBox);

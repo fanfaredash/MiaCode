@@ -14,6 +14,7 @@
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
+#include "common/ChartClockCount.h"
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
@@ -248,6 +249,36 @@ void appendTimelinePerfLog(const QString& tag, const QString& payload)
     );
 }
 
+QVector<SimaiRawField> metadataExtraFieldsFromUi(
+    const QTextEdit* metadataExtraEdit,
+    const QVector<SimaiRawField>& fallbackFields
+)
+{
+    if (metadataExtraEdit != nullptr) {
+        return SimaiDocument::parseRawFields(metadataExtraEdit->toPlainText(), true);
+    }
+    return fallbackFields;
+}
+
+bool upsertMetadataField(QVector<SimaiRawField>* fields, const QString& key, const QString& value)
+{
+    if (fields == nullptr) {
+        return false;
+    }
+    for (SimaiRawField& field : *fields) {
+        if (field.key.compare(key, Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+        if (field.value == value) {
+            return false;
+        }
+        field.value = value;
+        return true;
+    }
+    fields->append(SimaiRawField{key, value});
+    return true;
+}
+
 }  // namespace
 
 void MainWindow::TimelineSection::invalidatePreviewFollowBindingCache()
@@ -443,6 +474,13 @@ double MainWindow::TimelineSection::parsedWholeBpm(bool* ok) const
     return 0.0;
 }
 
+int MainWindow::TimelineSection::parsedClockCount() const
+{
+    const QVector<SimaiRawField> fields = metadataExtraFieldsFromUi(ui_.metadataExtraEdit_, state_.document_.extraFields);
+    const int value = miacode::chart_clock::clockCountFromFields(fields);
+    return value > 0 ? value : 4;
+}
+
 QString MainWindow::TimelineSection::parsedLatencyMeterId() const
 {
     return miacode::simai::latencyMeterIdForTimingMetadata(currentTimingMetadata());
@@ -468,27 +506,25 @@ void MainWindow::TimelineSection::applyLatencyDetectorBpm(double bpm)
     if (!qIsFinite(bpm) || bpm <= 0.0) {
         return;
     }
-    QVector<SimaiRawField> fields = SimaiDocument::parseRawFields(
-        ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(),
-        true
-    );
+    QVector<SimaiRawField> fields = metadataExtraFieldsFromUi(ui_.metadataExtraEdit_, state_.document_.extraFields);
     const QString serializedBpm = QString::number(bpm, 'f', 3);
-    bool foundWholeBpm = false;
-    for (SimaiRawField& field : fields) {
-        if (field.key.compare(QStringLiteral("wholebpm"), Qt::CaseInsensitive) != 0) {
-            continue;
-        }
-        field.value = serializedBpm;
-        foundWholeBpm = true;
-        break;
-    }
-    if (!foundWholeBpm) {
-        fields.append(SimaiRawField{QStringLiteral("wholebpm"), serializedBpm});
-    }
+    upsertMetadataField(&fields, QStringLiteral("wholebpm"), serializedBpm);
     state_.document_.extraFields = fields;
     owner_.setMetadataExtraText(SimaiDocument::serializeRawFields(fields));
     state_.documentDirty_ = true;
     owner_.updateDirtyState();
+}
+
+void MainWindow::TimelineSection::applyLatencyDetectorClockCount(int clockCount)
+{
+    const int normalized = qMax(1, clockCount);
+    QVector<SimaiRawField> fields = metadataExtraFieldsFromUi(ui_.metadataExtraEdit_, state_.document_.extraFields);
+    upsertMetadataField(&fields, QStringLiteral("clock_count"), QString::number(normalized));
+    state_.document_.extraFields = fields;
+    owner_.setMetadataExtraText(SimaiDocument::serializeRawFields(fields));
+    state_.documentDirty_ = true;
+    owner_.updateDirtyState();
+    refreshTimelineMetadata();
 }
 
 void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool suppressImmediateRefresh)
@@ -1856,6 +1892,11 @@ void MainWindow::applyLatencyDetectorOffset(double seconds)
 void MainWindow::applyLatencyDetectorBpm(double bpm)
 {
     timelineSection_->applyLatencyDetectorBpm(bpm);
+}
+
+void MainWindow::applyLatencyDetectorClockCount(int clockCount)
+{
+    timelineSection_->applyLatencyDetectorClockCount(clockCount);
 }
 
 void MainWindow::setCurrentFilePath(const QString& path, bool suppressImmediateRefresh)

@@ -178,6 +178,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Main window entry:
   - File: `src/app/mainwindow/MainWindow.cpp`
   - Key function: `onOpenLatencyDetector`
+- Metadata writeback:
+  - Files: `src/tools/latency/LatencyDetectionPage.cpp`, `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`, `src/core/chart/document/SimaiDocument.cpp`
+  - Owns: latency-page BPM / offset / `clock_count` controls, BPM auto-detection meter-to-`clock_count` writeback, and default `&clock_count=4` materialization in metadata extra fields
 
 ## 10. Muri Analysis And Static Diagnostics
 

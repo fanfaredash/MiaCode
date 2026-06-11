@@ -24,6 +24,7 @@
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSlider>
+#include <QSpinBox>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
@@ -65,6 +66,26 @@ public:
 protected:
     void wheelEvent(QWheelEvent* event) override { event->ignore(); }
 };
+
+class NoWheelSpinBox final : public QSpinBox
+{
+public:
+    using QSpinBox::QSpinBox;
+
+protected:
+    void wheelEvent(QWheelEvent* event) override { event->ignore(); }
+};
+
+int clockCountFromMeterId(const QString& meterId)
+{
+    const int slash = meterId.indexOf(QLatin1Char('/'));
+    if (slash <= 0) {
+        return 0;
+    }
+    bool ok = false;
+    const int numerator = meterId.left(slash).trimmed().toInt(&ok);
+    return (ok && numerator > 0) ? numerator : 0;
+}
 }  // namespace
 
 LatencyDetectionPage::LatencyDetectionPage(MainWindow* owner, QWidget* parent)
@@ -85,6 +106,11 @@ LatencyDetectionPage::LatencyDetectionPage(MainWindow* owner, QWidget* parent)
     offsetDebounceTimer_->setSingleShot(true);
     offsetDebounceTimer_->setInterval(kEditDebounceMs);
     connect(offsetDebounceTimer_, &QTimer::timeout, this, &LatencyDetectionPage::commitOffsetEdit);
+
+    clockCountDebounceTimer_ = new QTimer(this);
+    clockCountDebounceTimer_->setSingleShot(true);
+    clockCountDebounceTimer_->setInterval(kEditDebounceMs);
+    connect(clockCountDebounceTimer_, &QTimer::timeout, this, &LatencyDetectionPage::commitClockCountEdit);
 
     // NOTE (FAILED ATTEMPT, reverted): we tried firing a one-shot "tap" SFX
     // while dragging the SFX-volume slider so the user could hear the level.
@@ -142,6 +168,7 @@ void LatencyDetectionPage::refreshFromDocument()
     }
     const double bpm = documentWholeBpm();
     const double offset = documentOffsetSeconds();
+    const int clockCount = documentClockCount();
     if (bpmEdit_ != nullptr) {
         QSignalBlocker blocker(bpmEdit_);
         bpmEdit_->setValue(bpm > 0.0 ? bpm : 120.0);
@@ -149,6 +176,10 @@ void LatencyDetectionPage::refreshFromDocument()
     if (offsetEdit_ != nullptr) {
         QSignalBlocker blocker(offsetEdit_);
         offsetEdit_->setValue(offset);
+    }
+    if (clockCountEdit_ != nullptr) {
+        QSignalBlocker blocker(clockCountEdit_);
+        clockCountEdit_->setValue(clockCount > 0 ? clockCount : 4);
     }
     if (!sandbox_.isNull()) {
         if (bpm > 0.0) {
@@ -297,6 +328,37 @@ void LatencyDetectionPage::buildUi()
     offsetLayout->addLayout(offsetRow);
     contentLayout->addWidget(offsetCard);
 
+    // -------- Clock count card --------
+    auto clockPair = makeCard(QStringLiteral("clock_count"));
+    auto* clockCard = clockPair.first;
+    auto* clockLayout = clockPair.second;
+    auto* clockRow = new QHBoxLayout();
+    clockRow->setSpacing(10);
+    clockCountEdit_ = new NoWheelSpinBox(clockCard);
+    clockCountEdit_->setRange(1, 64);
+    clockCountEdit_->setSingleStep(1);
+    clockCountEdit_->setValue(4);
+    clockCountEdit_->setMinimumWidth(160);
+    clockCountEdit_->setKeyboardTracking(false);
+    clockCountEdit_->setAccelerated(true);
+    connect(clockCountEdit_, qOverload<int>(&QSpinBox::valueChanged), this, [this](int) {
+        if (clockCountDebounceTimer_ != nullptr) {
+            clockCountDebounceTimer_->start();
+        }
+    });
+    clockRow->addWidget(clockCountEdit_);
+    detectClockCountButton_ = new QPushButton(
+        localizedText(QStringLiteral("自动检测拍号"), QStringLiteral("Auto-detect Time Signature")), clockCard);
+    detectClockCountButton_->setCursor(Qt::PointingHandCursor);
+    connect(detectClockCountButton_, &QPushButton::clicked, this, &LatencyDetectionPage::onDetectClockCountClicked);
+    clockRow->addWidget(detectClockCountButton_);
+    clockCountDetectResultLabel_ = new QLabel(QString(), clockCard);
+    clockCountDetectResultLabel_->setProperty("role", "detectResult");
+    clockCountDetectResultLabel_->setFont(hintFont);
+    clockRow->addWidget(clockCountDetectResultLabel_, 1);
+    clockLayout->addLayout(clockRow);
+    contentLayout->addWidget(clockCard);
+
     // -------- Audition (sandbox) card --------
     auto auditionPair = makeCard(
         localizedText(QStringLiteral("节奏校准试听"), QStringLiteral("Rhythm Calibration Audition")));
@@ -425,6 +487,20 @@ void LatencyDetectionPage::commitOffsetEdit()
     }
 }
 
+void LatencyDetectionPage::commitClockCountEdit()
+{
+    if (owner_.isNull() || clockCountEdit_ == nullptr) {
+        return;
+    }
+    const int value = clockCountEdit_->value();
+    if (value <= 0) {
+        return;
+    }
+    suppressDocumentRefresh_ = true;
+    owner_->applyLatencyDetectorClockCount(value);
+    suppressDocumentRefresh_ = false;
+}
+
 bool LatencyDetectionPage::eventFilter(QObject* watched, QEvent* event)
 {
     // Application-level filter (installed on qApp) that routes Ctrl+S on this
@@ -517,15 +593,63 @@ void LatencyDetectionPage::onDetectBpmClicked()
     lastDetectedMeterId_ = result.meterId;
     lastDetectedMeterPhase_ = result.meterPhaseSeconds;
     hasLastDetectedMeterPhase_ = result.meterPhaseValid;
+    const int detectedClockCount = clockCountFromMeterId(result.meterId);
+    if (detectedClockCount > 0 && clockCountEdit_ != nullptr) {
+        QSignalBlocker blocker(clockCountEdit_);
+        clockCountEdit_->setValue(detectedClockCount);
+    }
     if (bpmEdit_ != nullptr) {
         QSignalBlocker blocker(bpmEdit_);
         bpmEdit_->setValue(result.bpm);
     }
     commitBpmEdit();
+    if (detectedClockCount > 0) {
+        commitClockCountEdit();
+    }
     if (bpmDetectResultLabel_ != nullptr) {
         bpmDetectResultLabel_->setText(localizedText(
             QStringLiteral("检测结果: %1"),
             QStringLiteral("Detected: %1")).arg(result.bpm, 0, 'f', kDecimalsBpm));
+    }
+}
+
+void LatencyDetectionPage::onDetectClockCountClicked()
+{
+    if (owner_.isNull()) {
+        return;
+    }
+    const QString trackPath = currentTrackPath();
+    if (trackPath.isEmpty()) {
+        if (clockCountDetectResultLabel_ != nullptr) {
+            clockCountDetectResultLabel_->setText(localizedText(
+                QStringLiteral("缺少歌曲音频"), QStringLiteral("Track audio missing")));
+        }
+        return;
+    }
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    ensureAudioEnvelopeReady();
+    const auto result = latency_analysis::detectBpm(cachedOnsetEnvelope_);
+    QApplication::restoreOverrideCursor();
+    const int detectedClockCount = clockCountFromMeterId(result.meterId);
+    if (!(result.bpm > 0.0) || detectedClockCount <= 0) {
+        if (clockCountDetectResultLabel_ != nullptr) {
+            clockCountDetectResultLabel_->setText(localizedText(
+                QStringLiteral("未检测到拍号"), QStringLiteral("Time signature not detected")));
+        }
+        return;
+    }
+    lastDetectedMeterId_ = result.meterId;
+    lastDetectedMeterPhase_ = result.meterPhaseSeconds;
+    hasLastDetectedMeterPhase_ = result.meterPhaseValid;
+    if (clockCountEdit_ != nullptr) {
+        QSignalBlocker blocker(clockCountEdit_);
+        clockCountEdit_->setValue(detectedClockCount);
+    }
+    commitClockCountEdit();
+    if (clockCountDetectResultLabel_ != nullptr) {
+        clockCountDetectResultLabel_->setText(localizedText(
+            QStringLiteral("检测结果: %1 (%2)"),
+            QStringLiteral("Detected: %1 (%2)")).arg(detectedClockCount).arg(result.meterId));
     }
 }
 
@@ -632,6 +756,14 @@ void LatencyDetectionPage::updateAutoDetectAvailability()
                 QStringLiteral("需要先加载歌曲音频"),
                 QStringLiteral("Requires a loaded track audio file")));
     }
+    if (detectClockCountButton_ != nullptr) {
+        detectClockCountButton_->setEnabled(hasAudio);
+        detectClockCountButton_->setToolTip(hasAudio
+            ? QString()
+            : localizedText(
+                QStringLiteral("需要先加载歌曲音频"),
+                QStringLiteral("Requires a loaded track audio file")));
+    }
 }
 
 void LatencyDetectionPage::ensureAudioEnvelopeReady()
@@ -708,6 +840,14 @@ double LatencyDetectionPage::documentWholeBpm() const
     bool ok = false;
     const double value = owner_->parsedWholeBpm(&ok);
     return ok ? value : 0.0;
+}
+
+int LatencyDetectionPage::documentClockCount() const
+{
+    if (owner_.isNull()) {
+        return 4;
+    }
+    return owner_->parsedClockCount();
 }
 
 }  // namespace miacode::latency

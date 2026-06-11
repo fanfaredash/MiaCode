@@ -41,6 +41,7 @@ public:
     // would bypass the model — and, under unified-designer mode, its sync.
     static QVector<SimaiRawField> parseUnmanagedFields(const QString& text, bool prefixDummyIfNeeded = false);
     static QString serializeRawFields(const QVector<SimaiRawField>& fields);
+    static bool ensureDefaultClockCount(QVector<SimaiRawField>* fields);
 
     static bool isDifficultyId(int id);
     static QString difficultyName(int id);

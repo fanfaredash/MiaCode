@@ -507,10 +507,11 @@ bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
         const QString newTitle = ui_.titleEdit_ != nullptr ? ui_.titleEdit_->text() : QString();
         const QString newArtist = ui_.artistEdit_ != nullptr ? ui_.artistEdit_->text() : QString();
         const QString newDesigner = ui_.designerEdit_ != nullptr ? ui_.designerEdit_->text() : QString();
-        const QVector<SimaiRawField> newExtraFields = SimaiDocument::parseUnmanagedFields(
+        QVector<SimaiRawField> newExtraFields = SimaiDocument::parseUnmanagedFields(
             ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(),
             true
         );
+        SimaiDocument::ensureDefaultClockCount(&newExtraFields);
         const bool designerEdited = (state_.document_.designer != newDesigner);
         if (state_.document_.title != newTitle
             || state_.document_.artist != newArtist
@@ -1520,6 +1521,7 @@ QString MainWindow::DocumentSection::currentDocumentTextForAutosave() const
             ui_.metadataExtraEdit_ != nullptr ? ui_.metadataExtraEdit_->toPlainText() : QString(),
             true
         );
+        SimaiDocument::ensureDefaultClockCount(&snapshot.extraFields);
         liveCanonicalDesigner = snapshot.designer;
     }
 
