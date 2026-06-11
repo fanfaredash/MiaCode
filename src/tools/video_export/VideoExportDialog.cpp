@@ -1259,7 +1259,11 @@ VideoExportDialog::VideoExportDialog(
     connect(previewSlider_, &QSlider::sliderReleased, this, [this]() {
         stopPreviewHeldSeek();
         previewScrubRenderElapsed_.invalidate();
-        seekPreview(previewCursorSecond_);
+        if (exportEffectPreviewPlaying_) {
+            seekExportEffectPreview(exportEffectPreviewCursorSecond_);
+        } else {
+            seekPreview(previewCursorSecond_);
+        }
         syncRangeUi();
     });
     connect(setStartButton, &QPushButton::clicked, this, &VideoExportDialog::setRangeStartFromPreview);
@@ -1885,6 +1889,7 @@ void VideoExportDialog::onPreviewSliderChanged(int sliderValue)
             exportEffectPreviewOutputSecondFromSliderSecond(sliderSecond),
             qMax(0.0, exportEffectPreviewTotalSeconds_)
         );
+        exportEffectPreviewLastUiSecond_ = exportEffectPreviewCursorSecond_;
         seekExportEffectPreview(exportEffectPreviewCursorSecond_);
         syncRangeUi();
         return;
@@ -2082,6 +2087,9 @@ void VideoExportDialog::onRangePreviewTick()
             stopExportEffectPreview(false);
             return;
         }
+        if (previewSlider_ != nullptr && previewSlider_->isSliderDown()) {
+            return;
+        }
         const double nextSecond = qBound(
             0.0,
             currentExportEffectPreviewSecond(),
@@ -2153,7 +2161,7 @@ void VideoExportDialog::syncRangeUi()
             if (previewSlider_->minimum() != sliderMinimumValue || previewSlider_->maximum() != sliderMaximumValue) {
                 previewSlider_->setRange(sliderMinimumValue, sliderMaximumValue);
             }
-            if (previewSlider_->value() != sliderValue) {
+            if (!previewSlider_->isSliderDown() && previewSlider_->value() != sliderValue) {
                 previewSlider_->setValue(sliderValue);
             }
         } else {
