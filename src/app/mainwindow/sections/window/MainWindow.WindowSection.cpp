@@ -191,7 +191,10 @@ double MainWindow::shellPreviewDurationSeconds() const
 
 double MainWindow::shellVideoExportProgressSeconds() const
 {
-    return videoExportInlineProgressSecond_;
+    // Export progress no longer rides the preview transport (2026-06-13): it is
+    // status-bar only, so the quick-shell preview slider stays the user's during
+    // an export. Returning -1 disables the QuickShellPreviewTransport override.
+    return -1.0;
 }
 
 QStringList MainWindow::shellPreviewStatsTexts() const

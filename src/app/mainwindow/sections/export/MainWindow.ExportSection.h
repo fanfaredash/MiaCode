@@ -103,6 +103,13 @@ private:
     // HUD on begin; full restore + aspect reset on end.
     void beginExportPreviewSession(const VideoExportTask& task);
     void endExportPreviewSession();
+    // Export-page preview audition: install the badge-selected difficulty as a
+    // real, playable preview source (markers + bottom-timeline + slider + SFX),
+    // so the normal transport plays/seeks it even though activeDifficultyId_==0.
+    // Mirrors the latency page's installSandboxScene. Teardown clears the flag
+    // and invalidates the snapshot so the next difficulty switch rebuilds.
+    void installExportPreviewAuditionScene(int difficultyId);
+    void teardownExportPreviewAuditionScene();
     void handleEmbeddedExportConfirmed();
     // ---- Inline export progress on the preview transport (A3 amended) ----
     void beginInlineExportProgress();

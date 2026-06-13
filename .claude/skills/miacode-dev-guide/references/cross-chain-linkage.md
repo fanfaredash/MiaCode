@@ -264,6 +264,24 @@ replica was the wrong approach: it bypassed the real per-frame path and drifted)
   `sections/timeline/MainWindow.PreviewTimelineFlow.cpp` (`hasPreviewableChart`),
   `sections/document/MainWindow.DocumentUi.cpp` (`switchToLatencyField` + the `onPageLeft` calls).
 
+### 12a. Export-page preview reuses the same transport (2026-06-13)
+
+The export hub's video sub-page applies the SAME pattern as the latency page: the badge-selected
+difficulty is installed as a playable preview source so the NORMAL transport plays/seeks it even
+though `activeDifficultyId_ == 0` (D4). `ExportSection::installExportPreviewAuditionScene`
+(`MainWindow.ExportSnapshot.cpp`) mirrors `installSandboxScene` (publish markers + snapshot-ready,
+bottom-timeline rebuild, slider range, SFX `configureTimeline`), and
+`state_.exportPreviewAuditionActive_` is OR'd into `hasPreviewableChart()` alongside
+`latencySandboxAuditionActive_`. Install is in `createEmbeddedVideoExportPanel` (re-runs on badge
+switch — the panel is recreated); teardown is in `endExportPreviewSession`
+(`teardownExportPreviewAuditionScene` — stop + clear flag + invalidate snapshot; no cache/restore,
+the destination field reinstalls its own preview). Unlike latency, audio levels are NOT
+mode-switched (export uses the user's normal mix). Export progress is status-bar-only and never
+touches the transport — preview and a running export are independent. Review together:
+`MainWindow.ExportSnapshot.cpp`, `MainWindow.ExportFlow.cpp` (lifecycle),
+`PreviewTimelineFlow.cpp` (`hasPreviewableChart`), `MainWindow.ExportWorker.cpp` +
+`WindowSection.cpp` (progress decoupling). Supersedes the reverted "导出效果预览".
+
 ## 13. Bottom-tab content scale → timeline two-tier scale
 
 The bottom-tab (时间轴/语法/无理 panel) divider height maps to `bottomTabsContentScale_`

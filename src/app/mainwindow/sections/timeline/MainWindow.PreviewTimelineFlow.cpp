@@ -369,7 +369,12 @@ bool MainWindow::TimelineSection::hasPreviewableChart() const
 {
     // latencySandboxAuditionActive_ is set while the latency page has its
     // synthesized test chart installed as the preview source.
-    return hasActiveDifficulty() || state_.latencySandboxAuditionActive_;
+    // exportPreviewAuditionActive_ is set while the export page has the
+    // badge-selected difficulty installed as a playable preview source — so the
+    // normal transport plays it even though activeDifficultyId_ == 0 (D4).
+    return hasActiveDifficulty()
+        || state_.latencySandboxAuditionActive_
+        || state_.exportPreviewAuditionActive_;
 }
 
 int MainWindow::TimelineSection::activeDifficultyId() const

@@ -4,7 +4,10 @@
 #include "DialogLocalization.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
+#include "TimelineQuickModel.h"
+#include "TimelineSlowRefresh.h"
 #include "TimelineView.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/ChartClockCount.h"
@@ -435,6 +438,84 @@ QVector<TimelineNoteMarker> MainWindow::ExportSection::buildParsedMarkersForDiff
     bool firstOk = false;
     const double firstSeconds = parsedDocumentFirstSeconds(owner_.document_.first, &firstOk);
     return shiftedNoteMarkers(parsedTimeline.noteMarkers, firstOk ? firstSeconds : 0.0);
+}
+
+void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficultyId)
+{
+    // Mirrors LatencySandboxController::installSandboxScene/setupSandboxPreviewState,
+    // but the "test chart" is a real difficulty's chart. Installs it as the
+    // preview source so the normal transport (play/pause/seek) drives it on the
+    // export page even though activeDifficultyId_ == 0 (decision D4). The export
+    // WYSIWYG forcing (beginExportPreviewSession) is applied separately and stays.
+    const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId);
+    if (owner_.previewCanvas_ == nullptr || difficulty == nullptr
+        || difficulty->chart.trimmed().isEmpty()) {
+        return;
+    }
+
+    owner_.ensurePreviewSfxRuntimePrepared();
+    // Drop any retained pause transaction the previously-installed difficulty
+    // left behind so the first Play starts clean from 0.
+    if (owner_.previewSfxRuntime_ != nullptr) {
+        owner_.previewSfxRuntime_->stopAll();
+        owner_.previewSfxRuntime_->clearRetainedPreviewPlaybackTransaction();
+    }
+    owner_.exportPreviewAuditionActive_ = true;
+
+    const miacode::simai::SimaiTimingMetadata timingMetadata =
+        miacode::simai::buildTimingMetadata(owner_.document_);
+    const SimaiNativeParseResult parseResult =
+        SimaiNativeParser::parseForTimeline(difficulty->chart, timingMetadata);
+    bool firstOk = false;
+    const double firstSeconds = parsedDocumentFirstSeconds(owner_.document_.first, &firstOk);
+    const double effectiveFirst = firstOk ? firstSeconds : 0.0;
+    const TimelinePreviewRefreshState previewState =
+        buildTimelinePreviewRefreshState(parseResult, effectiveFirst);
+
+    // Preview note markers + "snapshot ready" — the same state a slow-refresh
+    // publishes for a real difficulty, so preparePreviewStartState accepts it.
+    owner_.latestTimelineNoteMarkers_ = previewState.shiftedNoteMarkers;
+    owner_.latestTimelineNoteMarkerSignature_ = previewState.noteMarkerSignature;
+    owner_.latestTimelinePreviewRevision_ = owner_.timelineRevision_;
+    owner_.latestTimelinePreviewSnapshotReady_ = true;
+    owner_.previewCanvas_->setNoteMarkers(previewState.shiftedNoteMarkers);
+
+    // Bottom-timeline model feeds previewDurationSeconds() (slider range) even
+    // though the strip itself is hidden on the export page (bottom-tab OFF).
+    owner_.timelineQuickModel_.rebuildFromText(difficulty->chart, effectiveFirst, timingMetadata);
+    if (owner_.timelineQuickStateBridge_ != nullptr) {
+        owner_.timelineQuickStateBridge_->setTimelineData(owner_.timelineQuickModel_.snapshot());
+    }
+
+    // Reset the playhead to the start for the freshly-installed difficulty.
+    owner_.qtPreviewPauseSecond_ = 0.0;
+    if (owner_.timelineQuickStateBridge_ != nullptr) {
+        owner_.timelineQuickStateBridge_->setPlayheadSeconds(0.0, false);
+    }
+    owner_.previewCanvas_->setPlayheadSeconds(0.0, true);
+    owner_.updatePreviewSliderRange();
+    owner_.updatePreviewSliderPosition(0.0);
+
+    // SFX timeline for this difficulty's notes.
+    if (owner_.previewSfxRuntime_ != nullptr) {
+        owner_.previewSfxRuntime_->configureTimeline(
+            previewState.shiftedNoteMarkers,
+            owner_.previewPlaybackRate_ > 0.0 ? owner_.previewPlaybackRate_ : 1.0,
+            owner_.previewTimingSettings_);
+    }
+}
+
+void MainWindow::ExportSection::teardownExportPreviewAuditionScene()
+{
+    if (!owner_.exportPreviewAuditionActive_) {
+        return;
+    }
+    owner_.stopQtPreviewPlayback(true);  // stop the real transport if it's running
+    owner_.exportPreviewAuditionActive_ = false;
+    // Invalidate the snapshot so the next difficulty switch rebuilds its own
+    // preview from scratch (we deliberately don't cache/restore — leaving the
+    // page reinstalls the destination field's preview anyway).
+    owner_.latestTimelinePreviewSnapshotReady_ = false;
 }
 
 bool MainWindow::ExportSection::buildVideoExportSnapshot(

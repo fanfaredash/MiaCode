@@ -701,6 +701,9 @@ void MainWindow::ExportSection::beginExportPreviewSession(const VideoExportTask&
 
 void MainWindow::ExportSection::endExportPreviewSession()
 {
+    // Stop + tear down the playable preview audition (no-op for the modal path,
+    // which never installs it). Must run before the canvas/aspect restore below.
+    teardownExportPreviewAuditionScene();
     if (owner_.previewCanvas_ != nullptr) {
         owner_.previewCanvas_->setSuppressDebugInfo(false);
         owner_.previewCanvas_->setShowChartInfoHud(false);
@@ -739,6 +742,11 @@ QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficult
         this->cancelVideoExportWorker();
     });
     beginExportPreviewSession(task);
+    // Install the badge-selected difficulty as a playable preview audition so
+    // the right-side transport plays/seeks it like the editor (所见即所导). This
+    // also covers badge switches — syncEmbeddedVideoPanel recreates the panel,
+    // which re-installs the newly-selected difficulty.
+    installExportPreviewAuditionScene(resolvedDifficultyId);
     // Re-entering the video sub-page while an inline-launched export is still
     // rendering: re-arm the cancel affordance on the fresh panel.
     if (owner_.videoExportUseInlineProgress_

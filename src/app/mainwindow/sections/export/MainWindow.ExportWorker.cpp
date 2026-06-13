@@ -1474,16 +1474,12 @@ void MainWindow::ExportSection::clearVideoExportWorkerState()
 
 void MainWindow::ExportSection::beginInlineExportProgress()
 {
-    const double startSecond = qMax(0.0, owner_.videoExportWorkerSnapshot_.exportStartSeconds);
-    owner_.videoExportInlineProgressSecond_ = startSecond;
-    // The slider deliberately STAYS enabled — the user can keep scrubbing the
-    // preview while the export renders. Progress updates simply re-assert the
-    // export position between interactions (and yield while a drag is live).
-    if (ui_.previewSlider_ != nullptr && !owner_.previewScrubDragging_) {
-        const QSignalBlocker blocker(ui_.previewSlider_);
-        ui_.previewSlider_->setValue(
-            qBound(0, qRound(startSecond * 1000.0), ui_.previewSlider_->maximum()));
-    }
+    // Progress is reported in the STATUS BAR only (2026-06-13): the preview
+    // transport stays entirely the user's — playback and a running export are
+    // NOT mutually exclusive. videoExportInlineProgressSecond_ >= 0 just marks
+    // that an inline (panel-launched) export is in flight (cleared on end).
+    owner_.videoExportInlineProgressSecond_ =
+        qMax(0.0, owner_.videoExportWorkerSnapshot_.exportStartSeconds);
     owner_.statusBar()->showMessage(
         uiText("dialog.video_export.progress.preparing", "Preparing export..."));
 }
@@ -1493,19 +1489,17 @@ void MainWindow::ExportSection::updateInlineExportProgress(int percent, const QS
     if (owner_.videoExportInlineProgressSecond_ < 0.0) {
         return;  // inline progress not active (popup-dialog launch)
     }
+    // Status-bar only: never drive the preview slider (it belongs to the user
+    // now). Fold the percent into the stage/ETA label.
+    QString message = label;
     if (percent >= 0) {
-        const VideoExportSnapshot& snapshot = owner_.videoExportWorkerSnapshot_;
-        const double second = qMax(0.0, snapshot.exportStartSeconds)
-            + (qBound(0, percent, 100) / 100.0) * qMax(0.0, snapshot.contentDurationSeconds);
-        owner_.videoExportInlineProgressSecond_ = second;
-        if (ui_.previewSlider_ != nullptr && !owner_.previewScrubDragging_) {
-            const QSignalBlocker blocker(ui_.previewSlider_);
-            ui_.previewSlider_->setValue(
-                qBound(0, qRound(second * 1000.0), ui_.previewSlider_->maximum()));
-        }
+        const QString percentText = QStringLiteral("%1%").arg(qBound(0, percent, 100));
+        message = message.isEmpty()
+            ? percentText
+            : QStringLiteral("%1 · %2").arg(percentText, message);
     }
-    if (!label.isEmpty()) {
-        owner_.statusBar()->showMessage(label);
+    if (!message.isEmpty()) {
+        owner_.statusBar()->showMessage(message);
     }
 }
 

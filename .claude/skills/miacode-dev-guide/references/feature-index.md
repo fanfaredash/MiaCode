@@ -322,20 +322,37 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `destroyEmbeddedVideoExportPanel()` (= dialog-close semantics) on leaving it. The page's
   `onPageLeft()` is called UNCONDITIONALLY from every page-leave switch function (same idempotent
   pattern as the latency teardown). Badge switch while the video sub-page shows re-seeds the panel.
-  **Inline export progress (A3 as amended 2026-06-11 — reuse the PLAYBACK bar, not a percent
-  bar):** a panel-launched export creates NO `QProgressDialog` (every dialog-update site in
-  `MainWindow.ExportWorker.cpp` is null-guarded); instead `videoExportUseInlineProgress_` rides
-  the preview transport AS A PLAYBACK: the slider advances through CHART TIME
-  (`exportStart + percent × contentDuration`, from `videoExportWorkerSnapshot_`), range/time
-  format untouched, seeking disabled (`TimelineSection::updatePreviewSliderPosition` is gated on
-  `videoExportInlineProgressSecond_ >= 0`); stage/ETA text goes to the status bar only. Quick
-  shell reads the chart time via `shellVideoExportProgressSeconds()` (QuickShellStateSource) →
-  `QuickShellController.videoExportProgressSeconds` → `QuickShellPreviewTransport.qml`
-  (displayedSeconds override, seeking disabled, fast poll while active). Helpers
-  `begin/update/endInlineExportProgress` (`MainWindow.ExportWorker.cpp`) are driven from the
-  same worker-event sites as the dialog updates and survive the safe-mode retry —
-  `beginInlineExportProgress` MUST run after `videoExportWorkerSnapshot_` is stored (it reads
-  the export start second); menu-launched exports keep the popup.
+  **Inline export progress (STATUS-BAR ONLY — 2026-06-13 redesign; supersedes the A3 "ride the
+  PLAYBACK bar" amendment):** a panel-launched export creates NO `QProgressDialog` (every
+  dialog-update site in `MainWindow.ExportWorker.cpp` is null-guarded). Progress (percent · stage ·
+  ETA) shows in the STATUS BAR ONLY — the preview transport is NEVER touched by the export, so
+  playback and a running export are NOT mutually exclusive (the worker is out-of-process). Helpers
+  `begin/update/endInlineExportProgress` (`MainWindow.ExportWorker.cpp`) only write the status bar;
+  `videoExportInlineProgressSecond_ >= 0` is now just the "inline export running" sentinel (no
+  slider drive); `shellVideoExportProgressSeconds()` returns -1 so `QuickShellPreviewTransport.qml`
+  does NOT override the quick-shell preview slider. `videoExportUseInlineProgress_` still marks the
+  no-popup launch mode and survives the safe-mode retry; `beginInlineExportProgress` MUST still run
+  after `videoExportWorkerSnapshot_` is stored; menu-launched exports keep the popup. (⚠ Earlier
+  the slider rode CHART-TIME export progress with seeking disabled — reverted; do not reintroduce
+  slider coupling.)
+  **Playable export-page preview (所见即所导 — 2026-06-13):** the embedded video panel installs the
+  BADGE-SELECTED difficulty as a real, PLAYABLE preview source so the NORMAL transport (play /
+  pause / seek) drives the right-side preview even though `activeDifficultyId_ == 0` (D4 kept).
+  `ExportSection::installExportPreviewAuditionScene(difficultyId)` (`MainWindow.ExportSnapshot.cpp`)
+  mirrors `LatencySandboxController::installSandboxScene`: parse the difficulty's chart →
+  `buildTimelinePreviewRefreshState` → publish `latestTimelineNoteMarkers_` / signature / revision /
+  `latestTimelinePreviewSnapshotReady_` + `previewCanvas_->setNoteMarkers` + `timelineQuickModel_`
+  rebuild (feeds `previewDurationSeconds()` / slider though the strip is hidden) + SFX
+  `configureTimeline`, and set `state_.exportPreviewAuditionActive_` — which `hasPreviewableChart()`
+  ORs in (alongside `latencySandboxAuditionActive_`). Installed in `createEmbeddedVideoExportPanel`
+  (so a badge switch, which recreates the panel, re-installs the new difficulty); torn down in
+  `endExportPreviewSession` via `teardownExportPreviewAuditionScene` (stops playback, clears the
+  flag, invalidates the snapshot so the next field rebuilds — NO cache/restore, because leaving the
+  page reinstalls the destination's preview). The export WYSIWYG forcing
+  (`beginExportPreviewSession`: PV/BG on, debug-HUD off, export outline) stays. ⚠ This REPLACES a
+  reverted "导出效果预览" experiment (upstream `21bd164`+`1465036` was cherry-picked then `git reset`
+  away per product decision 2026-06-13; the adapted integration is parked on branch
+  `backup/effect-preview-adapted-b0b41ff`). There is now NO intro-overlay preview on the export page.
   **Difficulty context (decision D4):** the page keeps `activeDifficultyId_ == 0`, so NOTHING on
   it may use `hasActiveDifficulty()`; the badge default = difficulty active before entering →
   kept page selection → `projectLastOpenedDifficultyId_` → first existing. Cards grey with a

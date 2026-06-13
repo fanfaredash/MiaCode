@@ -323,6 +323,12 @@
         double videoExportInlineProgressSecond_ = -1.0;
         // Difficulty the embedded video panel was seeded with (0 = none).
         int embeddedVideoExportDifficultyId_ = 0;
+        // Export-page preview audition (2026-06-13): while the embedded video
+        // panel is up, the badge-selected difficulty is installed as a real,
+        // playable preview source (like the latency page) so the normal
+        // transport plays/seeks it even though activeDifficultyId_ == 0 (D4).
+        // Cleared on teardown, which forces the next difficulty to rebuild.
+        bool exportPreviewAuditionActive_ = false;
         bool restoreSquareAfterVideoExport_ = false;
         quint64 previewPaneRestoreGeneration_ = 0;
         int videoExportWorkerLastProgressPercent_ = 0;
@@ -735,6 +741,7 @@
     bool& videoExportUseInlineProgress_ = state_.videoExportUseInlineProgress_;
     double& videoExportInlineProgressSecond_ = state_.videoExportInlineProgressSecond_;
     int& embeddedVideoExportDifficultyId_ = state_.embeddedVideoExportDifficultyId_;
+    bool& exportPreviewAuditionActive_ = state_.exportPreviewAuditionActive_;
     bool& restoreSquareAfterVideoExport_ = state_.restoreSquareAfterVideoExport_;
     quint64& previewPaneRestoreGeneration_ = state_.previewPaneRestoreGeneration_;
     int& videoExportWorkerLastProgressPercent_ = state_.videoExportWorkerLastProgressPercent_;
