@@ -2188,6 +2188,16 @@ void VideoExportDialog::browseIntroBackground()
     persistExportOnlySettings();
 }
 
+bool VideoExportDialog::isAddIntroActiveForPreview() const
+{
+    // Mirrors the bake gate: 添加片头 only applies to full-range exports, so the
+    // checkbox is greyed (disabled) on a partial range — don't preview the intro
+    // in that case even if the box is still visually checked.
+    return addIntroCheck_ != nullptr
+        && addIntroCheck_->isEnabled()
+        && addIntroCheck_->isChecked();
+}
+
 IntroBannerSpec VideoExportDialog::currentIntroSpec() const
 {
     IntroBannerSpec spec = baseTask_.intro;   // chart payload: title/level/曲绘…

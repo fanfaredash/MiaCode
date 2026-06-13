@@ -3,6 +3,7 @@
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
 #include "tools/latency/LatencySandboxController.h"
+#include "tools/video_export/VideoExportController.h"  // IntroBannerSpec (export-page intro lead-in)
 
 #include <QtCore>
 #include <QtGui>
@@ -27,11 +28,13 @@ void appendPreviewInteractionLog(const QString& action, const QString& payload =
 
 bool MainWindow::TimelineSection::preparePreviewStartState()
 {
-    // Latency sandbox: LatencySandboxController populates the test-chart preview
-    // state synchronously, so skip the editor-dirty / difficulty checks and the
-    // slow-refresh round trip — just report whether that state is ready. This
-    // lets the audition reuse the exact same playback transport as a difficulty.
-    if (state_.latencySandboxAuditionActive_) {
+    // Latency sandbox + export-page audition: the controller/section populated
+    // the preview state synchronously (installSandboxScene /
+    // installExportPreviewAuditionScene), so skip the editor-dirty / difficulty
+    // checks and the slow-refresh round trip — just report whether that state is
+    // ready. This lets the audition reuse the exact same playback transport as a
+    // difficulty even though activeDifficultyId_ == 0 on the export page (D4).
+    if (state_.latencySandboxAuditionActive_ || state_.exportPreviewAuditionActive_) {
         return state_.latestTimelinePreviewSnapshotReady_
             && state_.latestTimelinePreviewRevision_ == state_.timelineRevision_;
     }
@@ -56,6 +59,11 @@ bool MainWindow::TimelineSection::preparePreviewStartState()
 void MainWindow::TimelineSection::onStopPreview()
 {
     MC_OP("MainWindow::TimelineSection::onStopPreview");
+    // Stop the export-page intro animation if it's mid-play (it clears the
+    // overlay and leaves the chart paused at 0).
+    if (state_.exportIntroLeadInActive_) {
+        cancelExportIntroLeadIn();
+    }
     // The latency page now reuses this exact transport (its synthesized test
     // chart is the preview source), so no special-casing is needed here.
     const quint64 opId = ++state_.previewInteractionSequence_;
@@ -87,6 +95,11 @@ void MainWindow::TimelineSection::onStopPreview()
 void MainWindow::TimelineSection::onTogglePreviewPause()
 {
     MC_OP("MainWindow::TimelineSection::onTogglePreviewPause");
+    if (state_.exportIntroLeadInActive_) {
+        // Toggling during the intro animation cancels it (stays paused at 0).
+        cancelExportIntroLeadIn();
+        return;
+    }
     if (state_.qtPreviewPlaying_) {
         const quint64 opId = ++state_.previewInteractionSequence_;
         appendPreviewInteractionLog(
@@ -110,6 +123,16 @@ void MainWindow::TimelineSection::onTogglePreviewPause()
     if (!hasPreviewableChart()) {
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
+    }
+    // Export-page intro lead-in: when 添加片头 is on and we play from the start,
+    // play the animated intro first, then hand off to the chart audition. Playing
+    // from mid-chart (or with 添加片头 off) skips straight to the chart.
+    if (state_.exportPreviewAuditionActive_ && state_.qtPreviewPauseSecond_ <= 0.05) {
+        IntroBannerSpec introSpec;
+        if (owner_.currentExportIntroLeadInSpec(&introSpec)) {
+            startExportIntroLeadIn(introSpec);
+            return;
+        }
     }
     const quint64 opId = ++state_.previewInteractionSequence_;
     state_.previewPendingPlayInteractionId_ = opId;
@@ -152,4 +175,9 @@ void MainWindow::onStopPreview()
 void MainWindow::onTogglePreviewPause()
 {
     timelineSection_->onTogglePreviewPause();
+}
+
+void MainWindow::cancelExportIntroLeadIn()
+{
+    timelineSection_->cancelExportIntroLeadIn();
 }

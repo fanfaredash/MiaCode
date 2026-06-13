@@ -73,6 +73,11 @@ public:
     bool exportRequested() const { return exportRequested_; }
     VideoExportTask requestedExportTask() const { return requestedExportTask_; }
     bool previewAspectChangedByDialog() const { return previewAspectChangedByDialog_; }
+    // Export-page intro lead-in preview: the embedded audition reads these so it
+    // can play the animated intro before the chart when 添加片头 is on (the
+    // checkbox is greyed on a partial range, so isEnabled() matters).
+    bool isAddIntroActiveForPreview() const;
+    IntroBannerSpec previewIntroSpec() const { return currentIntroSpec(); }
 
     // Injects MainWindow-built, owner-wired settings widgets: videoExtras is
     // appended to the bottom of the Video tab; gameplayWidget to the Gameplay

@@ -343,8 +343,15 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `buildTimelinePreviewRefreshState` → publish `latestTimelineNoteMarkers_` / signature / revision /
   `latestTimelinePreviewSnapshotReady_` + `previewCanvas_->setNoteMarkers` + `timelineQuickModel_`
   rebuild (feeds `previewDurationSeconds()` / slider though the strip is hidden) + SFX
-  `configureTimeline`, and set `state_.exportPreviewAuditionActive_` — which `hasPreviewableChart()`
-  ORs in (alongside `latencySandboxAuditionActive_`). Installed in `createEmbeddedVideoExportPanel`
+  `configureTimeline`, and set `state_.exportPreviewAuditionActive_`. **THREE difficulty gates must
+  all OR-in the audition flag** (the latency page only needed the first two because it drives its
+  OWN audition button, not the main transport): (1) `hasPreviewableChart()`
+  (`PreviewTimelineFlow.cpp`); (2) the latency/audition early-path in `preparePreviewStartState()`
+  (`PreviewPlaybackGlue.cpp`) — else `startQtPreviewPlayback` silently returns false; (3) the
+  `playbackEnabled` branch in `DocumentSection::updateDifficultyScopedActionStates()`
+  (`MainWindow.DocumentUi.cpp`) — else the play/pause/stop button + shortcuts are GREYED on the page
+  (refreshed by `installExportPreviewAuditionScene` / `teardownExportPreviewAuditionScene` calling
+  it). Installed in `createEmbeddedVideoExportPanel`
   (so a badge switch, which recreates the panel, re-installs the new difficulty); torn down in
   `endExportPreviewSession` via `teardownExportPreviewAuditionScene` (stops playback, clears the
   flag, invalidates the snapshot so the next field rebuilds — NO cache/restore, because leaving the

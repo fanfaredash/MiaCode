@@ -158,6 +158,13 @@ public:
     bool preparePreviewStartState();
     void onStopPreview();
     void onTogglePreviewPause();
+    // Export-page intro lead-in: plays the animated intro (overlay + opening
+    // sfx) before the chart when 添加片头 is on and the audition plays from 0.
+    // Self-contained QTimer-driven phase; hands off to startQtPreviewPlayback(0)
+    // on completion. cancel clears the overlay and stays paused at 0.
+    void startExportIntroLeadIn(const IntroBannerSpec& spec);
+    void tickExportIntroLeadIn();
+    void cancelExportIntroLeadIn();
     bool startQtPreviewPlayback(double second, bool resumeFromPause = false);
     void pauseQtPreviewPlaybackExact();
     void handlePreviewStartupCanvasPresented();

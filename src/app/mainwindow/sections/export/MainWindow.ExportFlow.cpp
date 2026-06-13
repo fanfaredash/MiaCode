@@ -808,6 +808,20 @@ void MainWindow::ExportSection::handleEmbeddedExportConfirmed()
     panel->setEmbeddedExportRunning(true);
 }
 
+bool MainWindow::currentExportIntroLeadInSpec(IntroBannerSpec* outSpec) const
+{
+    // The embedded video panel owns the live 片头 settings; the audition reads
+    // them at play time so the intro preview always reflects current settings.
+    if (embeddedVideoExportPanel_.isNull()
+        || !embeddedVideoExportPanel_->isAddIntroActiveForPreview()) {
+        return false;
+    }
+    if (outSpec != nullptr) {
+        *outSpec = embeddedVideoExportPanel_->previewIntroSpec();
+    }
+    return true;
+}
+
 void MainWindow::ExportSection::onExportCover(int difficultyId)
 {
     MC_OP("MainWindow::ExportSection::onExportCover");

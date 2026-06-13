@@ -110,6 +110,12 @@
     void updateEditorValidationSummary();
     void updateEditorEmptyState();
     void updateDifficultyScopedActionStates();
+    // Export-page intro lead-in: returns true (and fills *outSpec) when the
+    // embedded video panel has 添加片头 active, so the audition can play the
+    // animated intro before the chart. cancelExportIntroLeadIn() forwards to the
+    // timeline driver (used by teardown).
+    bool currentExportIntroLeadInSpec(IntroBannerSpec* outSpec) const;
+    void cancelExportIntroLeadIn();
     void updateMetadataPageMode();
     bool deleteDifficultyField(int difficultyId);
     void updateDifficultyDeleteButton(bool visible);

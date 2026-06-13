@@ -329,6 +329,12 @@
         // transport plays/seeks it even though activeDifficultyId_ == 0 (D4).
         // Cleared on teardown, which forces the next difficulty to rebuild.
         bool exportPreviewAuditionActive_ = false;
+        // Export-page intro lead-in: while it runs, the animated 片头 plays in the
+        // preview before the chart (添加片头 on, playing from 0). Self-contained
+        // QTimer-driven phase; the chart audition starts when it finishes.
+        bool exportIntroLeadInActive_ = false;
+        QElapsedTimer exportIntroLeadInElapsed_;
+        QTimer* exportIntroLeadInTimer_ = nullptr;
         bool restoreSquareAfterVideoExport_ = false;
         quint64 previewPaneRestoreGeneration_ = 0;
         int videoExportWorkerLastProgressPercent_ = 0;

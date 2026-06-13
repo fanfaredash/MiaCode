@@ -68,6 +68,7 @@ class BracketScopeHighlighter;
 class PlainCodeEditor;
 class PreviewRuntime;
 class PreviewStageMediaHost;
+struct IntroBannerSpec;
 class QPlainTextEdit;
 class QProcess;
 class QProgressDialog;

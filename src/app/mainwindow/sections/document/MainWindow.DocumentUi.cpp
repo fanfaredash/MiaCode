@@ -85,21 +85,27 @@ void MainWindow::DocumentSection::updateEditorHeader()
 void MainWindow::DocumentSection::updateDifficultyScopedActionStates()
 {
     const bool enabled = owner_.hasActiveDifficulty();
+    // Playback controls (play/pause/stop + their shortcuts) additionally light
+    // up for the export-page preview audition, which plays the badge-selected
+    // difficulty even though activeDifficultyId_ == 0 (D4), so hasActiveDifficulty
+    // is false. (The latency page uses its own audition button, not these.) The
+    // edit/transform actions below stay strictly difficulty-scoped.
+    const bool playbackEnabled = enabled || state_.exportPreviewAuditionActive_;
 
     if (ui_.pausePreviewAction_ != nullptr) {
-        ui_.pausePreviewAction_->setEnabled(enabled);
+        ui_.pausePreviewAction_->setEnabled(playbackEnabled);
     }
     if (ui_.stopOrPlayPreviewShortcutAction_ != nullptr) {
-        ui_.stopOrPlayPreviewShortcutAction_->setEnabled(enabled);
+        ui_.stopOrPlayPreviewShortcutAction_->setEnabled(playbackEnabled);
     }
     if (ui_.playPausePreviewShortcutAction_ != nullptr) {
-        ui_.playPausePreviewShortcutAction_->setEnabled(enabled);
+        ui_.playPausePreviewShortcutAction_->setEnabled(playbackEnabled);
     }
     // exportVideoAction_ is deliberately NOT difficulty-scoped: since
     // 2026-06-12 it jumps to the Export hub page (reachable with no active
     // difficulty; the page greys its own panes).
     if (ui_.stopPreviewAction_ != nullptr) {
-        ui_.stopPreviewAction_->setEnabled(enabled);
+        ui_.stopPreviewAction_->setEnabled(playbackEnabled);
     }
     if (ui_.transformMirrorLeftRightAction_ != nullptr) {
         ui_.transformMirrorLeftRightAction_->setEnabled(enabled);
@@ -138,10 +144,10 @@ void MainWindow::DocumentSection::updateDifficultyScopedActionStates()
         ui_.transformLowerSubdivisionAction_->setEnabled(enabled);
     }
     if (ui_.stopPreviewButton_ != nullptr) {
-        ui_.stopPreviewButton_->setEnabled(enabled);
+        ui_.stopPreviewButton_->setEnabled(playbackEnabled);
     }
     if (ui_.pausePreviewButton_ != nullptr) {
-        ui_.pausePreviewButton_->setEnabled(enabled);
+        ui_.pausePreviewButton_->setEnabled(playbackEnabled);
     }
     if (ui_.syntaxCheckButton_ != nullptr) {
         ui_.syntaxCheckButton_->setEnabled(enabled);

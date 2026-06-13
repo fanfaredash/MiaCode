@@ -19,6 +19,8 @@
 #include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
+#include "common/IntroConfig.h"
+#include "tools/video_export/VideoExportController.h"
 #include "core/scene/PreviewOpacityCurves.h"
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "core/chart/transform/ChartBatchTransform.h"
@@ -29,6 +31,7 @@
 #include "tools/muri/MuriStaticChecker.h"
 
 #include <QtCore>
+#include <QSoundEffect>
 #include <QtGui>
 #include <QtWidgets>
 
@@ -1299,6 +1302,116 @@ void MainWindow::TimelineSection::anchorQtPreviewPlaybackToSecond(double second,
         clampedSecond,
         true,
         state_.previewFollowEnabled_);
+}
+
+namespace {
+// Spec -> IntroOverlay.qml banner template (the JSON layout the export overlay
+// mount also reads). Kept file-local; introBannerTrackMap is the shared inline
+// in VideoExportController.h.
+QVariantMap introLeadInBannerTemplateMap()
+{
+    QVariantMap templateMap;
+    QFile templateFile(QString::fromLatin1(miacode::intro::kBannerTemplateUrl).mid(3));  // "qrc:" -> ":"
+    if (templateFile.open(QIODevice::ReadOnly)) {
+        const QJsonDocument doc = QJsonDocument::fromJson(templateFile.readAll());
+        if (doc.isObject()) {
+            templateMap = doc.object().toVariantMap();
+        }
+    }
+    return templateMap;
+}
+}  // namespace
+
+void MainWindow::TimelineSection::startExportIntroLeadIn(const IntroBannerSpec& spec)
+{
+    if (state_.previewCanvas_ == nullptr) {
+        return;
+    }
+    if (state_.qtPreviewPlaying_) {
+        stopQtPreviewPlayback(true);
+    }
+    // Freeze the chart preview at 0 behind the overlay.
+    state_.qtPreviewPauseSecond_ = 0.0;
+    seekPreviewDiscreteToSecond(0.0, true);
+
+    // Background follows the 片头 tab's 背景 选择 (曲绘 vs 自定义图片).
+    const QString backgroundPath =
+        (spec.backgroundMode == QStringLiteral("custom") && !spec.customBackgroundPath.isEmpty())
+            ? spec.customBackgroundPath
+            : spec.jacketPath;
+    const QUrl backgroundUrl = backgroundPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(backgroundPath);
+    state_.previewCanvas_->setIntroOverlayData(
+        introBannerTrackMap(spec),
+        introLeadInBannerTemplateMap(),
+        backgroundUrl,
+        QUrl(QString::fromLatin1(miacode::intro::kLogoFallbackUrl)));
+    state_.previewCanvas_->setIntroOverlayFrame(0, true);
+
+    // One-shot opening sfx (self-deleting; matches the export's track_start.wav).
+    auto* introSound = new QSoundEffect(&owner_);
+    introSound->setSource(QUrl(QStringLiteral("qrc:/intro/audio/track_start.wav")));
+    connect(introSound, &QSoundEffect::playingChanged, introSound, [introSound]() {
+        if (!introSound->isPlaying()) {
+            introSound->deleteLater();
+        }
+    });
+    introSound->play();
+
+    if (state_.exportIntroLeadInTimer_ == nullptr) {
+        state_.exportIntroLeadInTimer_ = new QTimer(&owner_);
+        state_.exportIntroLeadInTimer_->setInterval(16);  // ~60 fps overlay frame stepping
+        connect(state_.exportIntroLeadInTimer_, &QTimer::timeout, &owner_, [this]() {
+            tickExportIntroLeadIn();
+        });
+    }
+    state_.exportIntroLeadInActive_ = true;
+    state_.exportIntroLeadInElapsed_.restart();
+    state_.exportIntroLeadInTimer_->start();
+    owner_.updatePauseButtonAppearance();
+}
+
+void MainWindow::TimelineSection::tickExportIntroLeadIn()
+{
+    if (!state_.exportIntroLeadInActive_) {
+        return;
+    }
+    const double elapsedSeconds = static_cast<double>(state_.exportIntroLeadInElapsed_.elapsed()) / 1000.0;
+    if (elapsedSeconds >= miacode::intro::kDurationSeconds) {
+        // Intro finished -> hand off to the normal chart audition from 0.
+        state_.exportIntroLeadInActive_ = false;
+        if (state_.exportIntroLeadInTimer_ != nullptr) {
+            state_.exportIntroLeadInTimer_->stop();
+        }
+        if (state_.previewCanvas_ != nullptr) {
+            state_.previewCanvas_->clearIntroOverlay(true);
+        }
+        startQtPreviewPlayback(0.0, true);
+        return;
+    }
+    const int authoringFrame = qBound(
+        0,
+        qRound(elapsedSeconds * static_cast<double>(miacode::intro::kAuthoringFps)),
+        miacode::intro::kDurationFrames);
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->setIntroOverlayFrame(authoringFrame, true);
+    }
+}
+
+void MainWindow::TimelineSection::cancelExportIntroLeadIn()
+{
+    if (!state_.exportIntroLeadInActive_) {
+        return;
+    }
+    state_.exportIntroLeadInActive_ = false;
+    if (state_.exportIntroLeadInTimer_ != nullptr) {
+        state_.exportIntroLeadInTimer_->stop();
+    }
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->clearIntroOverlay(true);
+    }
+    // The one-shot opening sfx self-deletes when it finishes; cancelling the
+    // visual mid-animation lets the short tail play out.
+    owner_.updatePauseButtonAppearance();
 }
 
 bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool resumeFromPause)

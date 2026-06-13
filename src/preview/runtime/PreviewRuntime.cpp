@@ -16,6 +16,7 @@
 #include <QTextStream>
 
 #include <algorithm>
+#include <limits>
 
 namespace {
 
@@ -368,6 +369,62 @@ void PreviewRuntime::setPlayheadSeconds(double seconds, bool requestUpdate)
     }
 }
 
+void PreviewRuntime::setHudPlayheadSecondsOverride(double seconds, bool requestUpdate)
+{
+    frameState_.hudPlayheadSecondsOverride = seconds;
+    if (requestUpdate) {
+        update();
+    }
+}
+
+void PreviewRuntime::clearHudPlayheadSecondsOverride(bool requestUpdate)
+{
+    frameState_.hudPlayheadSecondsOverride = std::numeric_limits<double>::quiet_NaN();
+    if (requestUpdate) {
+        update();
+    }
+}
+
+void PreviewRuntime::setIntroOverlayData(
+    const QVariantMap& bannerTrack,
+    const QVariantMap& bannerTemplate,
+    const QUrl& backgroundImage,
+    const QUrl& logoImage)
+{
+    introBannerTrack_ = bannerTrack;
+    introBannerTemplate_ = bannerTemplate;
+    introBackgroundImage_ = backgroundImage;
+    introLogoImage_ = logoImage;
+    emit introOverlayDataChanged();
+}
+
+void PreviewRuntime::setIntroOverlayFrame(int authoringFrame, bool active, bool requestUpdate)
+{
+    const int nextFrame = qMax(0, authoringFrame);
+    const bool changed = introOverlayFrame_ != nextFrame || introOverlayActive_ != active;
+    introOverlayFrame_ = nextFrame;
+    introOverlayActive_ = active;
+    if (changed) {
+        emit introOverlayStateChanged();
+    }
+    if (requestUpdate) {
+        update();
+    }
+}
+
+void PreviewRuntime::clearIntroOverlay(bool requestUpdate)
+{
+    const bool changed = introOverlayActive_ || introOverlayFrame_ != 0;
+    introOverlayActive_ = false;
+    introOverlayFrame_ = 0;
+    if (changed) {
+        emit introOverlayStateChanged();
+    }
+    if (requestUpdate) {
+        update();
+    }
+}
+
 void PreviewRuntime::setMediaFrame(const QImage& frame)
 {
     frameState_.media.mediaFrame = frame;
@@ -662,7 +719,9 @@ void PreviewRuntime::reset()
     frameState_.progressStatsCache.reset();
     frameState_.muriAnalysisReport = MuriAnalysisReport();
     frameState_.playheadSeconds = 0.0;
+    frameState_.hudPlayheadSecondsOverride = std::numeric_limits<double>::quiet_NaN();
     frameState_.sceneContentRevision = 0;
+    clearIntroOverlay(false);
     frameState_.media = miacode::preview::scene::PreviewMediaFrameState();
     frameState_.media.presentationMode = presentationMode;
     frameState_.fpsDisplay = 0.0;

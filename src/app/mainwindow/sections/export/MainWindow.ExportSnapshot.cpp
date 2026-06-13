@@ -503,6 +503,10 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
             owner_.previewPlaybackRate_ > 0.0 ? owner_.previewPlaybackRate_ : 1.0,
             owner_.previewTimingSettings_);
     }
+
+    // Re-enable the preview play/pause/stop controls: they are difficulty-scoped
+    // (hasActiveDifficulty) by default, and the page now has a previewable chart.
+    owner_.updateDifficultyScopedActionStates();
 }
 
 void MainWindow::ExportSection::teardownExportPreviewAuditionScene()
@@ -510,12 +514,15 @@ void MainWindow::ExportSection::teardownExportPreviewAuditionScene()
     if (!owner_.exportPreviewAuditionActive_) {
         return;
     }
+    owner_.cancelExportIntroLeadIn();    // stop any in-flight 片头 animation
     owner_.stopQtPreviewPlayback(true);  // stop the real transport if it's running
     owner_.exportPreviewAuditionActive_ = false;
     // Invalidate the snapshot so the next difficulty switch rebuilds its own
     // preview from scratch (we deliberately don't cache/restore — leaving the
     // page reinstalls the destination field's preview anyway).
     owner_.latestTimelinePreviewSnapshotReady_ = false;
+    // Return the playback controls to their difficulty-scoped state.
+    owner_.updateDifficultyScopedActionStates();
 }
 
 bool MainWindow::ExportSection::buildVideoExportSnapshot(
