@@ -359,7 +359,33 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   (`beginExportPreviewSession`: PV/BG on, debug-HUD off, export outline) stays. ⚠ This REPLACES a
   reverted "导出效果预览" experiment (upstream `21bd164`+`1465036` was cherry-picked then `git reset`
   away per product decision 2026-06-13; the adapted integration is parked on branch
-  `backup/effect-preview-adapted-b0b41ff`). There is now NO intro-overlay preview on the export page.
+  `backup/effect-preview-adapted-b0b41ff`). Intro preview is now the negative-time 片头 region below.
+  **片头 (intro) preview at NEGATIVE time (2026-06-13, commit `62f88e2`):** when 添加片头 is on
+  (full-range), the preview timeline extends left to `[-introDuration, 0)` (introDuration =
+  `miacode::intro::kDurationSeconds` ≈ 5.82s) — the 片头 IS that negative segment. Scrub/click left of
+  0 shows a STATIC intro frame; play advances through it (overlay frame stepped + a `track_start.wav`
+  one-shot `QSoundEffect`) and crosses 0 into the chart audition; pause freezes the frame. Driver =
+  `TimelineSection` `enter/exit/render/startExportIntroAdvance` + `tickExportIntroLeadIn` +
+  `handleExportIntroSliderSeek` (routes a slider seek < 0 into the region) in
+  `MainWindow.TimelinePlayback.cpp`; overlay rendering is the re-added `PreviewRuntime`
+  `setIntroOverlayData/setIntroOverlayFrame/clearIntroOverlay` + a z=3 `introOverlayLayer` in BOTH
+  `PreviewRuntimeView.qml` and `QuickShellPreviewSurface.qml`.
+  ⚠⚠ **The on-screen preview transport (default shell too) is the QML
+  `QuickShellPreviewTransport.qml`** — its slider was hardcoded `from: 0` (the real clamp) — NOT the
+  QWidget `ui_.previewSlider_`, which is null on the export page (so `updatePreviewSliderRange`
+  early-returns there; that QSlider negative-min path is kept only as a fallback). The negative `from`
+  is plumbed `TimelineSection::exportIntroLowerBoundSeconds()` →
+  `QuickShellContracts::shellPreviewLowerBoundSeconds()` →
+  `QuickShellController.previewLowerBoundSeconds` → the QML slider's `from`;
+  `WindowSection::shellPreviewPositionSeconds()` returns the negative `exportIntroPlayheadSeconds_`
+  during the region so the QML thumb follows; the QML progress-fill + `formatDisplayTime` handle
+  negative time. **Touch `resources/quick_shell_qml.qrc` after editing that QML** (AUTORCC misses the
+  dep). The dialog emits `introPreviewSettingsChanged` on 添加片头 / 片头 changes →
+  `refreshExportIntroState` (resize the range, enter/leave the region). ⚠ **添加片头 detection
+  (`VideoExportDialog::isAddIntroActiveForPreview`) reads the checkbox + `rangeStartSeconds()`
+  DIRECTLY, NOT `addIntroCheck_->isEnabled()`** — the embedded tab-rehost flips a widget's effective
+  enabled state false while it stays checked, which silently collapsed the region/slider (cost ~3
+  wrong-layer fix rounds). Modal keeps its own static `IntroPreviewWidget` (C3, unreachable).
   **Difficulty context (decision D4):** the page keeps `activeDifficultyId_ == 0`, so NOTHING on
   it may use `hasActiveDifficulty()`; the badge default = difficulty active before entering →
   kept page selection → `projectLastOpenedDifficultyId_` → first existing. Cards grey with a

@@ -282,6 +282,15 @@ touches the transport — preview and a running export are independent. Review t
 `PreviewTimelineFlow.cpp` (`hasPreviewableChart`), `MainWindow.ExportWorker.cpp` +
 `WindowSection.cpp` (progress decoupling). Supersedes the reverted "导出效果预览".
 
+- **The visible transport is QML, not the QWidget `ui_.previewSlider_`** (which is null on the
+  export page). Any preview-transport state that QML needs (range, position, lower bound, export
+  progress…) flows owner → `QuickShellContracts` (`shellPreview*` virtuals) →
+  `QuickShellController` (`assignIfChanged` in its state poll → `Q_PROPERTY`) →
+  `QuickShellPreviewTransport.qml`. Example: the negative-time 片头 lower bound is
+  `exportIntroLowerBoundSeconds()` → `shellPreviewLowerBoundSeconds()` →
+  `previewLowerBoundSeconds` → the slider's `from`. Add a transport field? Touch all four layers,
+  and **touch `resources/quick_shell_qml.qrc`** so AUTORCC re-bundles the QML.
+
 ## 13. Bottom-tab content scale → timeline two-tier scale
 
 The bottom-tab (时间轴/语法/无理 panel) divider height maps to `bottomTabsContentScale_`
