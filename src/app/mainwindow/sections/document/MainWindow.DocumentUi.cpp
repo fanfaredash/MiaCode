@@ -143,6 +143,12 @@ void MainWindow::DocumentSection::updateDifficultyScopedActionStates()
     if (ui_.transformLowerSubdivisionAction_ != nullptr) {
         ui_.transformLowerSubdivisionAction_->setEnabled(enabled);
     }
+    if (ui_.transformRaiseSubdivisionHalfStepAction_ != nullptr) {
+        ui_.transformRaiseSubdivisionHalfStepAction_->setEnabled(enabled);
+    }
+    if (ui_.transformLowerSubdivisionHalfStepAction_ != nullptr) {
+        ui_.transformLowerSubdivisionHalfStepAction_->setEnabled(enabled);
+    }
     if (ui_.stopPreviewButton_ != nullptr) {
         ui_.stopPreviewButton_->setEnabled(playbackEnabled);
     }

@@ -22,10 +22,13 @@ const QStringList& editableShortcutIds()
         QStringLiteral("transform.rotate_cw_45"),
         QStringLiteral("transform.subdivision_up"),
         QStringLiteral("transform.subdivision_down"),
+        QStringLiteral("transform.subdivision_half_up"),
+        QStringLiteral("transform.subdivision_half_down"),
         QStringLiteral("transform.toggle_break"),
         QStringLiteral("transform.toggle_ex"),
         QStringLiteral("transform.toggle_firework"),
         QStringLiteral("transform.random_rotate"),
+        QStringLiteral("transform.clear_complete_elements"),
         QStringLiteral("preview.stop_or_play"),
         QStringLiteral("preview.play_pause_global"),
         QStringLiteral("preview.speed_down"),
@@ -90,6 +93,31 @@ QJsonValue sequenceJsonValue(const QList<QKeySequence>& sequences)
         }
     }
     return array;
+}
+
+QList<QKeySequence> runtimeSequencesForAction(const QList<QKeySequence>& sequences)
+{
+    QList<QKeySequence> expanded;
+    const auto appendUnique = [&expanded](const QKeySequence& sequence) {
+        if (!sequence.isEmpty() && !expanded.contains(sequence)) {
+            expanded.append(sequence);
+        }
+    };
+    for (const QKeySequence& sequence : sequences) {
+        appendUnique(sequence);
+        const QString portable = sequence.toString(QKeySequence::PortableText);
+        if (portable == QStringLiteral("Ctrl+Shift+=")) {
+            appendUnique(QKeySequence(QStringLiteral("Ctrl++")));
+        } else if (portable == QStringLiteral("Ctrl++")) {
+            appendUnique(QKeySequence(QStringLiteral("Ctrl+Shift+=")));
+        } else if (portable == QStringLiteral("Ctrl+Shift+-")) {
+            appendUnique(QKeySequence(QStringLiteral("Ctrl+_")));
+            appendUnique(QKeySequence(QStringLiteral("Ctrl+Shift+_")));
+        } else if (portable == QStringLiteral("Ctrl+_") || portable == QStringLiteral("Ctrl+Shift+_")) {
+            appendUnique(QKeySequence(QStringLiteral("Ctrl+Shift+-")));
+        }
+    }
+    return expanded;
 }
 
 }  // namespace
@@ -159,7 +187,8 @@ void ShortcutRegistry::applyShortcut(QAction* action, const QString& id, const Q
     if (action == nullptr) {
         return;
     }
-    action->setShortcut(sequence(id, fallback));
+    const QKeySequence matched = sequence(id, fallback);
+    action->setShortcuts(runtimeSequencesForAction(matched.isEmpty() ? QList<QKeySequence>{} : QList<QKeySequence>{matched}));
 }
 
 void ShortcutRegistry::applyShortcuts(
@@ -170,7 +199,7 @@ void ShortcutRegistry::applyShortcuts(
     if (action == nullptr) {
         return;
     }
-    action->setShortcuts(sequences(id, fallback));
+    action->setShortcuts(runtimeSequencesForAction(sequences(id, fallback)));
 }
 
 void ShortcutRegistry::applyShortcut(QShortcut* shortcut, const QString& id, const QKeySequence& fallback) const
@@ -186,7 +215,13 @@ bool ShortcutRegistry::setUserShortcut(const QString& id, const QKeySequence& se
     if (!editableShortcutIds().contains(id) || sequence.isEmpty()) {
         return false;
     }
-    userOverrides_.insert(id, {sequence});
+    const QKeySequence normalized =
+        sequence.toString(QKeySequence::PortableText) == QStringLiteral("Ctrl+Shift++")
+            ? QKeySequence(QStringLiteral("Ctrl+Shift+="))
+        : sequence.toString(QKeySequence::PortableText) == QStringLiteral("Ctrl+Shift+_")
+            ? QKeySequence(QStringLiteral("Ctrl+Shift+-"))
+            : sequence;
+    userOverrides_.insert(id, {normalized});
     if (!saveUserOverrides()) {
         return false;
     }

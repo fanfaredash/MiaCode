@@ -47,9 +47,57 @@ QString shortcutSequenceText(const QList<QKeySequence>& sequences)
 
 QString shortcutSequenceText(const QKeySequence& sequence)
 {
+    if (sequence.toString(QKeySequence::PortableText) == QStringLiteral("Ctrl+Shift++")) {
+        return QStringLiteral("Ctrl+Shift+=");
+    }
+    if (sequence.toString(QKeySequence::PortableText) == QStringLiteral("Ctrl+Shift+_")) {
+        return QStringLiteral("Ctrl+Shift+-");
+    }
     return sequence.isEmpty()
         ? QString()
         : sequence.toString(QKeySequence::NativeText);
+}
+
+QString shortcutSequenceKey(const QKeySequence& sequence)
+{
+    if (sequence.toString(QKeySequence::PortableText) == QStringLiteral("Ctrl+Shift++")) {
+        return QStringLiteral("Ctrl+Shift+=");
+    }
+    if (sequence.toString(QKeySequence::PortableText) == QStringLiteral("Ctrl+Shift+_")) {
+        return QStringLiteral("Ctrl+Shift+-");
+    }
+    return sequence.toString(QKeySequence::PortableText);
+}
+
+QString shortcutDefinitionLabel(const ShortcutRegistry::ShortcutDefinition& definition)
+{
+    return UiText::isChineseUi() && !definition.labelZh.isEmpty()
+        ? definition.labelZh
+        : definition.labelEn;
+}
+
+QString conflictingShortcutLabel(
+    const QList<ShortcutRegistry::ShortcutDefinition>& definitions,
+    const QString& currentId,
+    const QKeySequence& sequence)
+{
+    if (sequence.isEmpty()) {
+        return QString();
+    }
+    for (const auto& definition : definitions) {
+        if (definition.id == currentId) {
+            continue;
+        }
+        const QList<QKeySequence> sequences =
+            ShortcutRegistry::instance().sequences(definition.id, definition.defaultSequences);
+        for (const QKeySequence& existing : sequences) {
+            if (!existing.isEmpty() && existing == sequence) {
+                const QString label = shortcutDefinitionLabel(definition);
+                return label.isEmpty() ? definition.id : label;
+            }
+        }
+    }
+    return QString();
 }
 
 class ShortcutCaptureEdit final : public QLineEdit {
@@ -65,6 +113,18 @@ public:
     QKeySequence sequence() const { return sequence_; }
 
 protected:
+    bool event(QEvent* event) override
+    {
+        if (event != nullptr && event->type() == QEvent::ShortcutOverride) {
+            // Capture mode owns the keyboard. Accepting ShortcutOverride keeps
+            // application QAction shortcuts from firing while the user is
+            // merely trying to type a new binding.
+            event->accept();
+            return true;
+        }
+        return QLineEdit::event(event);
+    }
+
     void keyPressEvent(QKeyEvent* event) override
     {
         if (event == nullptr) {
@@ -99,14 +159,34 @@ protected:
 
         const int key = event->key();
         if (key == Qt::Key_Control || key == Qt::Key_Shift || key == Qt::Key_Alt || key == Qt::Key_Meta) {
-            // Hold-type shortcuts (e.g. preview.pause_display_hold) may bind a
-            // bare modifier. Record it tentatively; if the user continues into
-            // a full combo (Ctrl → Ctrl+X) the combo branch below overwrites
-            // it, so combo capture is unaffected. QKeySequence(Qt::Key_Alt)
-            // round-trips through toString()/fromString as "Alt" (verified on
-            // Qt 6.8; bare Control serializes as "Control").
-            if (allowBareModifier_ && !event->isAutoRepeat()) {
-                sequence_ = QKeySequence(key);
+            // Record modifier-only input too, so Ctrl / Shift / Ctrl+Shift is
+            // visible while composing a combo. If the user continues into
+            // Ctrl+X, the non-modifier branch below overwrites this tentative
+            // value. Only the hold shortcut is meant to store a single bare
+            // modifier, but showing these keys during capture is still useful
+            // feedback for every editable shortcut.
+            if (!event->isAutoRepeat()) {
+                Qt::KeyboardModifiers modifiers =
+                    event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
+                switch (key) {
+                case Qt::Key_Control:
+                    modifiers |= Qt::ControlModifier;
+                    break;
+                case Qt::Key_Shift:
+                    modifiers |= Qt::ShiftModifier;
+                    break;
+                case Qt::Key_Alt:
+                    modifiers |= Qt::AltModifier;
+                    break;
+                case Qt::Key_Meta:
+                    modifiers |= Qt::MetaModifier;
+                    break;
+                default:
+                    break;
+                }
+                sequence_ = allowBareModifier_ || modifiers != Qt::NoModifier
+                    ? QKeySequence(static_cast<int>(modifiers))
+                    : QKeySequence();
                 setText(shortcutSequenceText(sequence_));
             }
             event->accept();
@@ -115,7 +195,15 @@ protected:
 
         const Qt::KeyboardModifiers modifiers =
             event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
-        sequence_ = QKeySequence(modifiers | key);
+        if ((modifiers & (Qt::ControlModifier | Qt::ShiftModifier)) == (Qt::ControlModifier | Qt::ShiftModifier)
+            && (key == Qt::Key_Equal || key == Qt::Key_Plus)) {
+            sequence_ = QKeySequence(QStringLiteral("Ctrl+Shift+="));
+        } else if ((modifiers & (Qt::ControlModifier | Qt::ShiftModifier)) == (Qt::ControlModifier | Qt::ShiftModifier)
+            && (key == Qt::Key_Minus || key == Qt::Key_Underscore)) {
+            sequence_ = QKeySequence(QStringLiteral("Ctrl+Shift+-"));
+        } else {
+            sequence_ = QKeySequence(modifiers | key);
+        }
         setText(shortcutSequenceText(sequence_));
         event->accept();
     }
@@ -123,6 +211,53 @@ protected:
 private:
     QKeySequence sequence_;
     bool allowBareModifier_ = false;
+};
+
+class ShortcutCaptureEventBlocker final : public QObject {
+public:
+    ShortcutCaptureEventBlocker(QDialog* dialog, ShortcutCaptureEdit* edit)
+        : QObject(dialog)
+        , dialog_(dialog)
+        , edit_(edit)
+    {}
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        Q_UNUSED(watched);
+        if (event == nullptr || dialog_ == nullptr || edit_ == nullptr || !dialog_->isVisible()) {
+            return false;
+        }
+        if (event->type() == QEvent::ShortcutOverride) {
+            event->accept();
+            return true;
+        }
+        if (event->type() == QEvent::KeyPress) {
+            if (QApplication::focusWidget() == edit_) {
+                return false;
+            }
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            QKeyEvent forwarded(
+                keyEvent->type(),
+                keyEvent->key(),
+                keyEvent->modifiers(),
+                keyEvent->text(),
+                keyEvent->isAutoRepeat(),
+                keyEvent->count());
+            QApplication::sendEvent(edit_, &forwarded);
+            event->accept();
+            return true;
+        }
+        if (event->type() == QEvent::KeyRelease) {
+            event->accept();
+            return true;
+        }
+        return false;
+    }
+
+private:
+    QPointer<QDialog> dialog_;
+    QPointer<ShortcutCaptureEdit> edit_;
 };
 
 class ShortcutTableWidget final : public QTableWidget {
@@ -234,6 +369,18 @@ void applyConfiguredShortcut(
     }
 }
 
+void applyConfiguredShortcutList(
+    QAction* action,
+    const QString& id,
+    const QList<QKeySequence>& fallback,
+    Qt::ShortcutContext context = Qt::WindowShortcut)
+{
+    ShortcutRegistry::instance().applyShortcuts(action, id, fallback);
+    if (action != nullptr) {
+        action->setShortcutContext(context);
+    }
+}
+
 QString shortcutHintFor(const QString& id, const QKeySequence& fallback)
 {
     return shortcutSequenceText(
@@ -248,10 +395,10 @@ QString fontShortcutHintText()
     // hint stays in lock-step with the user's editor font shortcut bindings.
     const QString decrease = shortcutHintFor(
         QStringLiteral("editor.font_decrease"),
-        QKeySequence(QStringLiteral("Ctrl+Shift+-")));
+        QKeySequence(QStringLiteral("Ctrl+Alt+-")));
     const QString increase = shortcutHintFor(
         QStringLiteral("editor.font_increase"),
-        QKeySequence(QStringLiteral("Ctrl+Shift+=")));
+        QKeySequence(QStringLiteral("Ctrl+Alt+=")));
     return QStringLiteral("%1 / %2").arg(decrease, increase);
 }
 
@@ -266,8 +413,11 @@ QList<QPair<QString, QStringList>> shortcutCategoryGroups()
                 QStringLiteral("transform.rotate_180"),
                 QStringLiteral("transform.rotate_ccw_45"),
                 QStringLiteral("transform.rotate_cw_45"),
+                QStringLiteral("transform.clear_complete_elements"),
                 QStringLiteral("transform.subdivision_up"),
                 QStringLiteral("transform.subdivision_down"),
+                QStringLiteral("transform.subdivision_half_up"),
+                QStringLiteral("transform.subdivision_half_down"),
                 QStringLiteral("transform.toggle_break"),
                 QStringLiteral("transform.toggle_ex"),
                 QStringLiteral("transform.toggle_firework"),
@@ -331,6 +481,10 @@ void MainWindow::PreferencesSection::applyConfiguredShortcuts()
         QStringLiteral("transform.rotate_cw_45"),
         QKeySequence(Qt::CTRL | Qt::Key_Apostrophe));
     applyConfiguredShortcut(
+        owner_.transformClearCompleteElementsAction_,
+        QStringLiteral("transform.clear_complete_elements"),
+        QKeySequence(Qt::CTRL | Qt::Key_Q));
+    applyConfiguredShortcut(
         owner_.transformRaiseSubdivisionAction_,
         QStringLiteral("transform.subdivision_up"),
         QKeySequence(QStringLiteral("Ctrl+=")));
@@ -338,6 +492,14 @@ void MainWindow::PreferencesSection::applyConfiguredShortcuts()
         owner_.transformLowerSubdivisionAction_,
         QStringLiteral("transform.subdivision_down"),
         QKeySequence(QStringLiteral("Ctrl+-")));
+    applyConfiguredShortcutList(
+        owner_.transformRaiseSubdivisionHalfStepAction_,
+        QStringLiteral("transform.subdivision_half_up"),
+        {QKeySequence(QStringLiteral("Ctrl+Shift+=")), QKeySequence(QStringLiteral("Ctrl++"))});
+    applyConfiguredShortcutList(
+        owner_.transformLowerSubdivisionHalfStepAction_,
+        QStringLiteral("transform.subdivision_half_down"),
+        {QKeySequence(QStringLiteral("Ctrl+Shift+-")), QKeySequence(QStringLiteral("Ctrl+_"))});
     applyConfiguredShortcut(
         owner_.transformToggleBreakAction_,
         QStringLiteral("transform.toggle_break"),
@@ -375,12 +537,12 @@ void MainWindow::PreferencesSection::applyConfiguredShortcuts()
     applyConfiguredShortcut(
         owner_.fontDecreaseAction_,
         QStringLiteral("editor.font_decrease"),
-        QKeySequence(QStringLiteral("Ctrl+Shift+-")),
+        QKeySequence(QStringLiteral("Ctrl+Alt+-")),
         Qt::WindowShortcut);
     applyConfiguredShortcut(
         owner_.fontIncreaseAction_,
         QStringLiteral("editor.font_increase"),
-        QKeySequence(QStringLiteral("Ctrl+Shift+=")),
+        QKeySequence(QStringLiteral("Ctrl+Alt+=")),
         Qt::WindowShortcut);
 }
 
@@ -781,7 +943,7 @@ void MainWindow::PreferencesSection::onPreferences()
     ShortcutRegistry::instance().applyShortcut(
         dialogDecreaseShortcut,
         QStringLiteral("editor.font_decrease"),
-        QKeySequence(QStringLiteral("Ctrl+Shift+-")));
+        QKeySequence(QStringLiteral("Ctrl+Alt+-")));
     dialogDecreaseShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(dialogDecreaseShortcut, &QShortcut::activated, &dialog, [editorFontSizeSpin]() {
         editorFontSizeSpin->setValue(editorFontSizeSpin->value() - 1);
@@ -790,7 +952,7 @@ void MainWindow::PreferencesSection::onPreferences()
     ShortcutRegistry::instance().applyShortcut(
         dialogIncreaseShortcut,
         QStringLiteral("editor.font_increase"),
-        QKeySequence(QStringLiteral("Ctrl+Shift+=")));
+        QKeySequence(QStringLiteral("Ctrl+Alt+=")));
     dialogIncreaseShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(dialogIncreaseShortcut, &QShortcut::activated, &dialog, [editorFontSizeSpin]() {
         editorFontSizeSpin->setValue(editorFontSizeSpin->value() + 1);
@@ -1010,12 +1172,24 @@ void MainWindow::PreferencesSection::onPreferences()
 
         std::function<void()> refreshRows;
         std::function<void(int)> openCaptureForRow;
+        const auto editableDefinitions = []() {
+            return ShortcutRegistry::instance().editableShortcuts();
+        };
         refreshRows = [&]() {
-            const QList<ShortcutRegistry::ShortcutDefinition> definitions =
-                ShortcutRegistry::instance().editableShortcuts();
+            const QList<ShortcutRegistry::ShortcutDefinition> definitions = editableDefinitions();
             QHash<QString, ShortcutRegistry::ShortcutDefinition> definitionById;
             for (const auto& definition : definitions) {
                 definitionById.insert(definition.id, definition);
+            }
+            QHash<QString, int> shortcutUseCounts;
+            for (const auto& definition : definitions) {
+                const QList<QKeySequence> sequences =
+                    ShortcutRegistry::instance().sequences(definition.id, definition.defaultSequences);
+                for (const QKeySequence& sequence : sequences) {
+                    if (!sequence.isEmpty()) {
+                        ++shortcutUseCounts[shortcutSequenceKey(sequence)];
+                    }
+                }
             }
             int row = 0;
             table->setRowCount(0);
@@ -1055,18 +1229,27 @@ void MainWindow::PreferencesSection::onPreferences()
                     }
                     table->insertRow(row);
                     const auto definition = definitionById.value(id);
-                    const QString label = UiText::isChineseUi() && !definition.labelZh.isEmpty()
-                        ? definition.labelZh
-                        : definition.labelEn;
+                    const QString label = shortcutDefinitionLabel(definition);
                     auto* commandItem = new QTableWidgetItem(label);
                     commandItem->setData(Qt::UserRole, definition.id);
                     commandItem->setToolTip(definition.id);
                     table->setItem(row, 0, commandItem);
-                    auto* keybindingItem = new QTableWidgetItem(
-                        shortcutSequenceText(ShortcutRegistry::instance().sequences(definition.id, definition.defaultSequences)));
+                    const QList<QKeySequence> sequences =
+                        ShortcutRegistry::instance().sequences(definition.id, definition.defaultSequences);
+                    auto* keybindingItem = new QTableWidgetItem(shortcutSequenceText(sequences));
                     keybindingItem->setData(Qt::UserRole, definition.id);
                     keybindingItem->setTextAlignment(Qt::AlignVCenter | Qt::AlignLeft);
                     keybindingItem->setToolTip(uiText("dialog.preferences.shortcuts.change", "Change Keybinding"));
+                    bool duplicate = false;
+                    for (const QKeySequence& sequence : sequences) {
+                        if (!sequence.isEmpty() && shortcutUseCounts.value(shortcutSequenceKey(sequence)) > 1) {
+                            duplicate = true;
+                            break;
+                        }
+                    }
+                    if (duplicate) {
+                        keybindingItem->setForeground(QBrush(QColor(0xD9, 0x32, 0x32)));
+                    }
                     table->setItem(row, 1, keybindingItem);
                     table->setRowHeight(row, 32);
                     ++row;
@@ -1110,20 +1293,43 @@ void MainWindow::PreferencesSection::onPreferences()
             auto* captureEdit = new ShortcutCaptureEdit(&captureDialog, allowBareModifier);
             captureEdit->setMinimumHeight(42);
             captureEdit->setStyleSheet(QStringLiteral("font-size: 15px; padding: 7px 10px;"));
+            auto* captureBlocker = new ShortcutCaptureEventBlocker(&captureDialog, captureEdit);
+            qApp->installEventFilter(captureBlocker);
+            QObject::connect(&captureDialog, &QDialog::finished, &captureDialog, [captureBlocker]() {
+                qApp->removeEventFilter(captureBlocker);
+            });
             auto* previewLabel = new QLabel(&captureDialog);
             previewLabel->setAlignment(Qt::AlignCenter);
             previewLabel->setMinimumHeight(26);
             previewLabel->setStyleSheet(QStringLiteral("font-weight: 600;"));
+            auto* conflictLabel = new QLabel(&captureDialog);
+            conflictLabel->setAlignment(Qt::AlignCenter);
+            conflictLabel->setMinimumHeight(24);
+            conflictLabel->setWordWrap(true);
+            conflictLabel->setStyleSheet(QStringLiteral("color: #D93232; font-weight: 600;"));
             auto* captureButtons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Reset | QDialogButtonBox::Cancel, &captureDialog);
             UiDialogs::localizeButtonBox(captureButtons);
             captureLayout->addWidget(prompt);
             captureLayout->addWidget(captureEdit);
             captureLayout->addWidget(previewLabel);
+            captureLayout->addWidget(conflictLabel);
             captureLayout->addStretch(1);
             captureLayout->addWidget(captureButtons);
-            QObject::connect(captureEdit, &QLineEdit::textChanged, &captureDialog, [captureEdit, previewLabel]() {
+            const auto updateConflictState = [captureEdit, previewLabel, conflictLabel, editableDefinitions, id]() {
                 previewLabel->setText(captureEdit->text());
-            });
+                const QString conflict = conflictingShortcutLabel(editableDefinitions(), id, captureEdit->sequence());
+                if (conflict.isEmpty()) {
+                    previewLabel->setStyleSheet(QStringLiteral("font-weight: 600;"));
+                    conflictLabel->clear();
+                    return;
+                }
+                previewLabel->setStyleSheet(QStringLiteral("font-weight: 600; color: #D93232;"));
+                conflictLabel->setText(
+                    UiText::isChineseUi()
+                        ? QStringLiteral("与「%1」重复").arg(conflict)
+                        : QStringLiteral("Conflicts with \"%1\"").arg(conflict));
+            };
+            QObject::connect(captureEdit, &QLineEdit::textChanged, &captureDialog, updateConflictState);
             QObject::connect(captureButtons, &QDialogButtonBox::accepted, &captureDialog, [&]() {
                 if (captureEdit->sequence().isEmpty()) {
                     return;

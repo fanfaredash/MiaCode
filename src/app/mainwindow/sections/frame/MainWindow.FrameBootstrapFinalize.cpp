@@ -494,7 +494,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     ShortcutRegistry::instance().applyShortcut(
         fontDecreaseAction_,
         QStringLiteral("editor.font_decrease"),
-        QKeySequence(QStringLiteral("Ctrl+Shift+-")));
+        QKeySequence(QStringLiteral("Ctrl+Alt+-")));
     fontDecreaseAction_->setShortcutContext(Qt::WindowShortcut);
     addAction(fontDecreaseAction_);
     connect(fontDecreaseAction_, &QAction::triggered, this, [applyEditorFontDelta]() {
@@ -504,7 +504,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     ShortcutRegistry::instance().applyShortcut(
         fontIncreaseAction_,
         QStringLiteral("editor.font_increase"),
-        QKeySequence(QStringLiteral("Ctrl+Shift+=")));
+        QKeySequence(QStringLiteral("Ctrl+Alt+=")));
     fontIncreaseAction_->setShortcutContext(Qt::WindowShortcut);
     addAction(fontIncreaseAction_);
     connect(fontIncreaseAction_, &QAction::triggered, this, [applyEditorFontDelta]() {

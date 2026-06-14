@@ -208,8 +208,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         transformRotate180Action_,
         transformRotate45CounterClockwiseAction_,
         transformRotate45ClockwiseAction_,
+        transformClearCompleteElementsAction_,
         transformRaiseSubdivisionAction_,
         transformLowerSubdivisionAction_,
+        transformRaiseSubdivisionHalfStepAction_,
+        transformLowerSubdivisionHalfStepAction_,
     });
     editor->setMoreBatchTransformActions({
         transformToggleBreakAction_,
@@ -237,6 +240,21 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         );
         if (redoAction_ != nullptr) {
             redoAction_->trigger();
+        }
+    });
+    connect(editor, &PlainCodeEditor::clearCompleteElementsShortcutRequested, this, [this]() {
+        if (transformClearCompleteElementsAction_ != nullptr) {
+            transformClearCompleteElementsAction_->trigger();
+        }
+    });
+    connect(editor, &PlainCodeEditor::raiseSubdivisionHalfStepShortcutRequested, this, [this]() {
+        if (transformRaiseSubdivisionHalfStepAction_ != nullptr) {
+            transformRaiseSubdivisionHalfStepAction_->trigger();
+        }
+    });
+    connect(editor, &PlainCodeEditor::lowerSubdivisionHalfStepShortcutRequested, this, [this]() {
+        if (transformLowerSubdivisionHalfStepAction_ != nullptr) {
+            transformLowerSubdivisionHalfStepAction_->trigger();
         }
     });
     connect(editor, &PlainCodeEditor::editorOverwriteModeChanged, this, [this](bool enabled) {

@@ -86,6 +86,209 @@ QString normalizedHalfWidthKeyText(const QKeyEvent* event, const QString& text)
     }
     return normalizedHalfWidthText(text);
 }
+
+QString clearCompleteElementsInSelection(
+    const QString& text,
+    int selectionStart,
+    int selectionEnd,
+    int* changedCount)
+{
+    if (changedCount != nullptr) {
+        *changedCount = 0;
+    }
+    if (text.isEmpty()) {
+        return text;
+    }
+
+    const int boundedStart = qBound(0, selectionStart, text.size());
+    const int boundedEnd = qBound(boundedStart, selectionEnd, text.size());
+    if (boundedStart >= boundedEnd) {
+        return text;
+    }
+
+    QString output;
+    output.reserve(text.size());
+    output.append(text.left(boundedStart));
+
+    int segmentStart = boundedStart;
+    const auto commentStartInLine = [&text](int start, int endExclusive) {
+        const int index = text.indexOf(QStringLiteral("||"), start);
+        return (index >= 0 && index < endExclusive) ? index : -1;
+    };
+    const int newlineBeforeSelection =
+        boundedStart > 0 ? text.lastIndexOf(QLatin1Char('\n'), boundedStart - 1) : -1;
+    int lineStart = newlineBeforeSelection + 1;
+    int nextLineStart = text.indexOf(QLatin1Char('\n'), lineStart);
+    if (nextLineStart < 0) {
+        nextLineStart = text.size();
+    } else {
+        ++nextLineStart;
+    }
+    int commentStart = commentStartInLine(lineStart, nextLineStart);
+    int squareDepth = 0;
+    int braceDepth = 0;
+    int parenDepth = 0;
+    int changed = 0;
+
+    const auto isTopLevel = [&]() {
+        return squareDepth == 0 && braceDepth == 0 && parenDepth == 0;
+    };
+    const auto leadingPrefixEnd = [&](int start, int end) {
+        int pos = start;
+        while (pos < end) {
+            const QChar opening = text.at(pos);
+            QChar closing;
+            if (opening == QLatin1Char('{')) {
+                closing = QLatin1Char('}');
+            } else if (opening == QLatin1Char('(')) {
+                closing = QLatin1Char(')');
+            } else {
+                break;
+            }
+            const int closeIndex = text.indexOf(closing, pos + 1);
+            if (closeIndex < 0 || closeIndex >= end) {
+                break;
+            }
+            pos = closeIndex + 1;
+        }
+        return pos;
+    };
+    const auto isBoundaryBefore = [&](int pos) {
+        if (pos <= 0) {
+            return true;
+        }
+        const QChar previous = text.at(pos - 1);
+        return previous == QLatin1Char(',')
+            || previous == QLatin1Char('\n')
+            || previous == QChar::ParagraphSeparator
+            || previous == QChar::LineSeparator;
+    };
+    const auto partialLeadingPrefixEnd = [&](int start, int end) {
+        const int openBrace = text.lastIndexOf(QLatin1Char('{'), start);
+        const int openParen = text.lastIndexOf(QLatin1Char('('), start);
+        const int openIndex = qMax(openBrace, openParen);
+        if (openIndex < 0 || openIndex >= start || !isBoundaryBefore(openIndex)) {
+            return start;
+        }
+        const QChar closing = text.at(openIndex) == QLatin1Char('{')
+            ? QLatin1Char('}')
+            : QLatin1Char(')');
+        const int closeIndex = text.indexOf(closing, openIndex + 1);
+        if (closeIndex < start || closeIndex >= end) {
+            return start;
+        }
+        return closeIndex + 1;
+    };
+    const auto appendRawThrough = [&](int endExclusive) {
+        output.append(text.mid(segmentStart, endExclusive - segmentStart));
+        segmentStart = endExclusive;
+    };
+    const auto isElementBoundary = [&](int pos) {
+        if (pos <= 0) {
+            return true;
+        }
+        const QChar previous = text.at(pos - 1);
+        if (previous == QLatin1Char(',')
+            || previous == QLatin1Char('\n')
+            || previous == QChar::ParagraphSeparator
+            || previous == QChar::LineSeparator) {
+            return true;
+        }
+        if (previous != QLatin1Char('}') && previous != QLatin1Char(')')) {
+            return false;
+        }
+        const QChar opening = previous == QLatin1Char('}')
+            ? QLatin1Char('{')
+            : QLatin1Char('(');
+        const int openIndex = text.lastIndexOf(opening, pos - 2);
+        if (openIndex < 0) {
+            return false;
+        }
+        if (openIndex == 0) {
+            return true;
+        }
+        const QChar beforePrefix = text.at(openIndex - 1);
+        return beforePrefix == QLatin1Char(',')
+            || beforePrefix == QLatin1Char('\n')
+            || beforePrefix == QChar::ParagraphSeparator
+            || beforePrefix == QChar::LineSeparator;
+    };
+    const auto appendClearedSegment = [&](int commaIndex) {
+        const int fullPrefixEnd = leadingPrefixEnd(segmentStart, commaIndex);
+        const int partialPrefixEnd = partialLeadingPrefixEnd(segmentStart, commaIndex);
+        const int prefixEnd = qMax(fullPrefixEnd, partialPrefixEnd);
+        const bool canClear = commaIndex > prefixEnd
+            && (isElementBoundary(segmentStart) || partialPrefixEnd > segmentStart);
+        output.append(text.mid(segmentStart, prefixEnd - segmentStart));
+        if (canClear) {
+            ++changed;
+            output.append(QLatin1Char(','));
+        } else {
+            output.append(text.mid(prefixEnd, commaIndex - prefixEnd + 1));
+        }
+        segmentStart = commaIndex + 1;
+    };
+
+    for (int i = boundedStart; i < boundedEnd; ++i) {
+        while (i >= nextLineStart) {
+            lineStart = nextLineStart;
+            nextLineStart = text.indexOf(QLatin1Char('\n'), lineStart);
+            if (nextLineStart < 0) {
+                nextLineStart = text.size();
+            } else {
+                ++nextLineStart;
+            }
+            commentStart = commentStartInLine(lineStart, nextLineStart);
+            squareDepth = 0;
+            braceDepth = 0;
+            parenDepth = 0;
+        }
+        if (commentStart >= lineStart && i >= commentStart) {
+            // TODO: Ctrl+Q intentionally skips comment text for now. If comment
+            // editing later needs this shortcut, add a separate comment-aware
+            // grammar instead of reusing chart-token clearing.
+            appendRawThrough(qMin(nextLineStart, boundedEnd));
+            i = segmentStart - 1;
+            continue;
+        }
+        const QChar ch = text.at(i);
+        switch (ch.unicode()) {
+        case '[':
+            ++squareDepth;
+            break;
+        case ']':
+            squareDepth = qMax(0, squareDepth - 1);
+            break;
+        case '{':
+            ++braceDepth;
+            break;
+        case '}':
+            braceDepth = qMax(0, braceDepth - 1);
+            break;
+        case '(':
+            ++parenDepth;
+            break;
+        case ')':
+            parenDepth = qMax(0, parenDepth - 1);
+            break;
+        case ',':
+            if (isTopLevel()) {
+                appendClearedSegment(i);
+            }
+            break;
+        default:
+            break;
+        }
+    }
+
+    output.append(text.mid(segmentStart, boundedEnd - segmentStart));
+    output.append(text.mid(boundedEnd));
+
+    if (changedCount != nullptr) {
+        *changedCount = changed;
+    }
+    return output;
+}
 }
 
 namespace {
@@ -107,6 +310,42 @@ void logSelectionRestoreEditorShortcut(const QString& scope, const QString& payl
         payload,
         true
     );
+}
+
+QKeySequence keySequenceForEvent(const QKeyEvent* event)
+{
+    if (event == nullptr) {
+        return QKeySequence();
+    }
+    return QKeySequence(
+        (event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))
+        | event->key());
+}
+
+bool matchesShortcutId(const QKeyEvent* event, const QString& id, const QList<QKeySequence>& fallback)
+{
+    if (event == nullptr) {
+        return false;
+    }
+    const QKeySequence pressed = keySequenceForEvent(event);
+    const QList<QKeySequence> sequences = ShortcutRegistry::instance().sequences(id, fallback);
+    for (const QKeySequence& sequence : sequences) {
+        if (!sequence.isEmpty() && pressed == sequence) {
+            return true;
+        }
+        const QString portable = sequence.toString(QKeySequence::PortableText);
+        if (portable == QStringLiteral("Ctrl+Shift+=")
+            && (pressed == QKeySequence(QStringLiteral("Ctrl++"))
+                || pressed == QKeySequence(QStringLiteral("Ctrl+Shift++")))) {
+            return true;
+        }
+        if (portable == QStringLiteral("Ctrl+Shift+-")
+            && (pressed == QKeySequence(QStringLiteral("Ctrl+_"))
+                || pressed == QKeySequence(QStringLiteral("Ctrl+Shift+_")))) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void insertLineBreakAtCursor(QTextEdit* editor)
@@ -707,8 +946,25 @@ bool PlainCodeEditor::event(QEvent* event)
 {
     if (event != nullptr && event->type() == QEvent::ShortcutOverride) {
         auto* keyEvent = static_cast<QKeyEvent*>(event);
-        if (keyEvent != nullptr
-            && (keyEvent->matches(QKeySequence::Undo) || keyEvent->matches(QKeySequence::Redo))) {
+        if (keyEvent == nullptr) {
+            return QTextEdit::event(event);
+        }
+        if (matchesShortcutId(
+                keyEvent,
+                QStringLiteral("transform.clear_complete_elements"),
+                {QKeySequence(Qt::CTRL | Qt::Key_Q)})
+            || matchesShortcutId(
+                keyEvent,
+                QStringLiteral("transform.subdivision_half_up"),
+                {QKeySequence(QStringLiteral("Ctrl+Shift+=")), QKeySequence(QStringLiteral("Ctrl++"))})
+            || matchesShortcutId(
+                keyEvent,
+                QStringLiteral("transform.subdivision_half_down"),
+                {QKeySequence(QStringLiteral("Ctrl+Shift+-"))})) {
+            event->accept();
+            return true;
+        }
+        if (keyEvent->matches(QKeySequence::Undo) || keyEvent->matches(QKeySequence::Redo)) {
             logSelectionRestoreEditorShortcut(
                 QStringLiteral("editor_shortcut_override"),
                 QStringLiteral("match=%1 key=%2 modifiers=%3 focus=%4")
@@ -1430,9 +1686,31 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         ShortcutRegistry::instance().sequence(
             QStringLiteral("editor.overwrite_mode"),
             QKeySequence(Qt::Key_Insert));
-    const QKeySequence pressedSequence(
-        (event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))
-        | event->key());
+    const QKeySequence pressedSequence = keySequenceForEvent(event);
+    if (matchesShortcutId(
+            event,
+            QStringLiteral("transform.clear_complete_elements"),
+            {QKeySequence(Qt::CTRL | Qt::Key_Q)})) {
+        emit clearCompleteElementsShortcutRequested();
+        event->accept();
+        return;
+    }
+    if (matchesShortcutId(
+            event,
+            QStringLiteral("transform.subdivision_half_up"),
+            {QKeySequence(QStringLiteral("Ctrl+Shift+=")), QKeySequence(QStringLiteral("Ctrl++"))})) {
+        emit raiseSubdivisionHalfStepShortcutRequested();
+        event->accept();
+        return;
+    }
+    if (matchesShortcutId(
+            event,
+            QStringLiteral("transform.subdivision_half_down"),
+            {QKeySequence(QStringLiteral("Ctrl+Shift+-")), QKeySequence(QStringLiteral("Ctrl+_"))})) {
+        emit lowerSubdivisionHalfStepShortcutRequested();
+        event->accept();
+        return;
+    }
     const bool overwriteModeKey =
         !overwriteModeSequence.isEmpty()
         && pressedSequence == overwriteModeSequence;

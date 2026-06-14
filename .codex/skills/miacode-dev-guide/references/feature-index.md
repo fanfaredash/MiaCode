@@ -198,17 +198,17 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 ## 11. Batch Transforms And Authoring Helpers
 
 - Chart transforms:
-  - Files: `src/simai/transform/ChartBatchTransform.h`, `src/simai/transform/ChartBatchTransform.cpp`
+  - Files: `src/core/chart/transform/ChartBatchTransform.h`, `src/core/chart/transform/ChartBatchTransform.cpp`
   - Namespace: `miacode::chart_transform`
   - Key functions: `transformChartText`, `toggleBreakForSelection`, `toggleExForSelection`, `toggleFireworkForSelection`, `randomRotateForSelection`
 - Whole-chart normalization:
-  - Files: `src/simai/transform/ChartNormalization.h`, `src/simai/transform/ChartNormalization.cpp`
+  - Files: `src/core/chart/transform/ChartNormalization.h`, `src/core/chart/transform/ChartNormalization.cpp`
   - Namespace: `miacode::chart_transform`
   - Key function: `normalizeChartText`
   - Owns: current-difficulty full-chart normalization, one-measure-per-line rebuild, canonical modifier order, metadata-aware measure splitting, ordinary `||` comment preservation via standalone-line splits, per-beat subdivision minimization, and syntax-error blocking
 - Main window action entry points:
   - File: `src/app/mainwindow/MainWindow.cpp`
-  - Key functions: `onMirrorLeftRight`, `onMirrorUpDown`, `onRotate180`, `onRotate45CounterClockwise`, `onRotate45Clockwise`, `onNormalizeWholeChart`, `onToggleBreakSelection`, `onToggleExSelection`, `onToggleFireworkSelection`, `onRandomRotateSelection`
+  - Key functions: `onMirrorLeftRight`, `onMirrorUpDown`, `onRotate180`, `onRotate45CounterClockwise`, `onRotate45Clockwise`, `onNormalizeWholeChart`, `onToggleBreakSelection`, `onToggleExSelection`, `onToggleFireworkSelection`, `onRandomRotateSelection`, `onClearCompleteElementsSelection`, `onRaiseSubdivisionHalfStepSelection`, `onLowerSubdivisionHalfStepSelection`
 
 ## 12. Toolbox Media Utilities
 

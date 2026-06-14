@@ -1190,6 +1190,104 @@ void runInlineSpecs(QTextStream& err, int* failed)
     }
 
     {
+        int changed = 0;
+        const QString input = QStringLiteral("{16}1,,1,,");
+        const QString output = miacode::chart_transform::raiseSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{24}1,,,1,,,"),
+            QStringLiteral("subdivision +1/2 raises 16 to 24 and expands two comma slots to three"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("subdivision +1/2 counts the signature and inserted commas"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{32}1,,2,,3,,");
+        const QString output = miacode::chart_transform::raiseSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{48}1,,,2,,,3,,,"),
+            QStringLiteral("subdivision +1/2 raises 32 to 48"),
+            failed,
+            err
+        );
+        expectTrue(changed == 4, QStringLiteral("subdivision +1/2 counts one signature and three inserted commas"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{16}1h[16:5],,2-4[32:1],,");
+        const QString output = miacode::chart_transform::raiseSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{24}1h[16:5],,,2-4[32:1],,,"),
+            QStringLiteral("subdivision +1/2 leaves bracketed timing values unchanged"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("subdivision +1/2 still counts signature and inserted commas around bracket syntax"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{16}1,,2,,|| {16}3,,4,,");
+        const QString output = miacode::chart_transform::raiseSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{24}1,,,2,,,|| {16}3,,4,,"),
+            QStringLiteral("subdivision +1/2 skips ordinary comments"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("subdivision +1/2 counts only pre-comment changes"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{16}1,2,");
+        const QString output = miacode::chart_transform::raiseSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            input,
+            QStringLiteral("subdivision +1/2 leaves odd-slot notes unchanged"),
+            failed,
+            err
+        );
+        expectTrue(changed == 0, QStringLiteral("subdivision +1/2 reports no changes when conversion is not lossless"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{24}1,,,1,,,");
+        const QString output = miacode::chart_transform::lowerSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{16}1,,1,,"),
+            QStringLiteral("subdivision -1/2 lowers 24 to 16 and compresses three comma slots to two"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("subdivision -1/2 counts the signature and removed commas"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{24}1,,2,,");
+        const QString output = miacode::chart_transform::lowerSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            input,
+            QStringLiteral("subdivision -1/2 leaves non-third-aligned notes unchanged"),
+            failed,
+            err
+        );
+        expectTrue(changed == 0, QStringLiteral("subdivision -1/2 reports no changes when reduction is not lossless"), failed, err);
+    }
+
+    {
         const miacode::chart_transform::ChartNormalizationResult normalized =
             miacode::chart_transform::normalizeChartText(QStringLiteral("A1fh[4:1],,,,\nE"));
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts a simple valid chart"), failed, err);

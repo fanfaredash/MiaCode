@@ -24,8 +24,11 @@
         QAction* transformToggleExAction_ = nullptr;
         QAction* transformToggleFireworkAction_ = nullptr;
         QAction* transformRandomRotateAction_ = nullptr;
+        QAction* transformClearCompleteElementsAction_ = nullptr;
         QAction* transformRaiseSubdivisionAction_ = nullptr;
         QAction* transformLowerSubdivisionAction_ = nullptr;
+        QAction* transformRaiseSubdivisionHalfStepAction_ = nullptr;
+        QAction* transformLowerSubdivisionHalfStepAction_ = nullptr;
         QAction* findReplaceAction_ = nullptr;
         QAction* undoAction_ = nullptr;
         QAction* redoAction_ = nullptr;
@@ -624,8 +627,11 @@
     QAction*& transformToggleExAction_ = ui_.transformToggleExAction_;
     QAction*& transformToggleFireworkAction_ = ui_.transformToggleFireworkAction_;
     QAction*& transformRandomRotateAction_ = ui_.transformRandomRotateAction_;
+    QAction*& transformClearCompleteElementsAction_ = ui_.transformClearCompleteElementsAction_;
     QAction*& transformRaiseSubdivisionAction_ = ui_.transformRaiseSubdivisionAction_;
     QAction*& transformLowerSubdivisionAction_ = ui_.transformLowerSubdivisionAction_;
+    QAction*& transformRaiseSubdivisionHalfStepAction_ = ui_.transformRaiseSubdivisionHalfStepAction_;
+    QAction*& transformLowerSubdivisionHalfStepAction_ = ui_.transformLowerSubdivisionHalfStepAction_;
     QAction*& findReplaceAction_ = ui_.findReplaceAction_;
     QAction*& undoAction_ = ui_.undoAction_;
     QAction*& redoAction_ = ui_.redoAction_;

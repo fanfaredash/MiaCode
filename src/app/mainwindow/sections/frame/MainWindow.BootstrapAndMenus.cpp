@@ -138,7 +138,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     ShortcutRegistry::instance().applyShortcut(
         quitAction,
         QStringLiteral("file.quit"),
-        QKeySequence::Quit);
+        QKeySequence(QStringLiteral("Ctrl+Esc")));
     connect(quitAction, &QAction::triggered, qApp, &QApplication::quit);
     fileMenu->addAction(quitAction);
 
@@ -429,6 +429,14 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.transformRotate45ClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45Clockwise);
     transformMenu->addAction(owner_.transformRotate45ClockwiseAction_);
 
+    owner_.transformClearCompleteElementsAction_ = new QAction(QStringLiteral("一键清空要素"), &owner_);
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.transformClearCompleteElementsAction_,
+        QStringLiteral("transform.clear_complete_elements"),
+        QKeySequence(Qt::CTRL | Qt::Key_Q));
+    connect(owner_.transformClearCompleteElementsAction_, &QAction::triggered, &owner_, &MainWindow::onClearCompleteElementsSelection);
+    transformMenu->addAction(owner_.transformClearCompleteElementsAction_);
+
     transformMenu->addSeparator();
     owner_.transformRaiseSubdivisionAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("分音提升一档") : QStringLiteral("Subdivision +1"),
@@ -449,6 +457,26 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         QKeySequence(QStringLiteral("Ctrl+-")));
     connect(owner_.transformLowerSubdivisionAction_, &QAction::triggered, &owner_, &MainWindow::onLowerSubdivisionSelection);
     transformMenu->addAction(owner_.transformLowerSubdivisionAction_);
+
+    owner_.transformRaiseSubdivisionHalfStepAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("分音提升半档") : QStringLiteral("Subdivision +1/2"),
+        &owner_);
+    ShortcutRegistry::instance().applyShortcuts(
+        owner_.transformRaiseSubdivisionHalfStepAction_,
+        QStringLiteral("transform.subdivision_half_up"),
+        {QKeySequence(QStringLiteral("Ctrl+Shift+=")), QKeySequence(QStringLiteral("Ctrl++"))});
+    connect(owner_.transformRaiseSubdivisionHalfStepAction_, &QAction::triggered, &owner_, &MainWindow::onRaiseSubdivisionHalfStepSelection);
+    transformMenu->addAction(owner_.transformRaiseSubdivisionHalfStepAction_);
+
+    owner_.transformLowerSubdivisionHalfStepAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("分音降低半档") : QStringLiteral("Subdivision -1/2"),
+        &owner_);
+    ShortcutRegistry::instance().applyShortcuts(
+        owner_.transformLowerSubdivisionHalfStepAction_,
+        QStringLiteral("transform.subdivision_half_down"),
+        {QKeySequence(QStringLiteral("Ctrl+Shift+-")), QKeySequence(QStringLiteral("Ctrl+_"))});
+    connect(owner_.transformLowerSubdivisionHalfStepAction_, &QAction::triggered, &owner_, &MainWindow::onLowerSubdivisionHalfStepSelection);
+    transformMenu->addAction(owner_.transformLowerSubdivisionHalfStepAction_);
     transformMenu->addSeparator();
 
     auto* moreTransformMenu = transformMenu->addMenu(uiText("action.transform.more", "More..."));
