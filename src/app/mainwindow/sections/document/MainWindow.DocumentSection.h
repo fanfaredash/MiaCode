@@ -82,8 +82,11 @@ public:
     void onToggleExSelection();
     void onToggleFireworkSelection();
     void onRandomRotateSelection();
+    void onClearCompleteElementsSelection();
     void onRaiseSubdivisionSelection();
     void onLowerSubdivisionSelection();
+    void onRaiseSubdivisionHalfStepSelection();
+    void onLowerSubdivisionHalfStepSelection();
     void updateEditorHeader();
     void updateDifficultyScopedActionStates();
     void updateEditorHeaderLayoutMode();

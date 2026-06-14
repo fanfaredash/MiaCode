@@ -489,6 +489,92 @@ void MainWindow::DocumentSection::onRandomRotateSelection()
     });
 }
 
+void MainWindow::DocumentSection::onClearCompleteElementsSelection()
+{
+    MC_OP("MainWindow::DocumentSection::onClearCompleteElementsSelection");
+    if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
+        owner_.statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr) {
+        owner_.statusBar()->showMessage(QStringLiteral("一键清空要素: editor unavailable."));
+        return;
+    }
+
+    int startPos = -1;
+    int endPos = -1;
+    if (!currentSelectionRange(&startPos, &endPos)) {
+        owner_.statusBar()->showMessage(QStringLiteral("一键清空要素: no selection."));
+        return;
+    }
+
+    const QTextCursor oldCursor = editor->textCursor();
+    const int oldVScroll = editor->verticalScrollBar() != nullptr ? editor->verticalScrollBar()->value() : 0;
+    const int oldHScroll = editor->horizontalScrollBar() != nullptr ? editor->horizontalScrollBar()->value() : 0;
+    const QString original = owner_.editorText();
+    const int begin = qMin(startPos, endPos);
+    const int finish = qMax(startPos, endPos);
+    if (begin < 0 || finish <= begin || finish > original.size()) {
+        owner_.statusBar()->showMessage(QStringLiteral("一键清空要素: invalid selection range."));
+        return;
+    }
+
+    int changed = 0;
+    const QString transformedFull =
+        miacode::editor::clearCompleteElementsInSelection(original, begin, finish, &changed);
+    if (transformedFull == original) {
+        owner_.statusBar()->showMessage(QStringLiteral("一键清空要素: no note index changed."));
+        return;
+    }
+
+    const int unchangedSuffixLength = original.size() - finish;
+    const int transformedSelectionEnd = transformedFull.size() - unchangedSuffixLength;
+    const QString transformedSelection =
+        transformedFull.mid(begin, transformedSelectionEnd - begin);
+
+    const bool forwardSelection = oldCursor.hasSelection()
+        ? (oldCursor.position() >= oldCursor.anchor())
+        : true;
+    const int originalAnchor = forwardSelection ? begin : finish;
+    const int originalPosition = forwardSelection ? finish : begin;
+
+    QTextCursor editCursor = oldCursor;
+    editCursor.beginEditBlock();
+    editCursor.setPosition(begin);
+    editCursor.setPosition(finish, QTextCursor::KeepAnchor);
+    editCursor.insertText(transformedSelection);
+    editCursor.endEditBlock();
+
+    QTextCursor restoredCursor(editor->document());
+    const int maxPos = editor->document()->characterCount() - 1;
+    const int transformedEnd = begin + transformedSelection.size();
+    const int restoredAnchor = qBound(0, forwardSelection ? begin : transformedEnd, maxPos);
+    const int restoredPosition = qBound(0, forwardSelection ? transformedEnd : begin, maxPos);
+    restoredCursor.setPosition(restoredAnchor);
+    restoredCursor.setPosition(restoredPosition, QTextCursor::KeepAnchor);
+    editor->setTextCursor(restoredCursor);
+    recordChartSelectionTransformUndoEntry(originalAnchor, originalPosition, restoredCursor);
+    if (editor->verticalScrollBar() != nullptr) {
+        editor->verticalScrollBar()->setValue(qBound(
+            editor->verticalScrollBar()->minimum(),
+            oldVScroll,
+            editor->verticalScrollBar()->maximum()));
+    }
+    if (editor->horizontalScrollBar() != nullptr) {
+        editor->horizontalScrollBar()->setValue(qBound(
+            editor->horizontalScrollBar()->minimum(),
+            oldHScroll,
+            editor->horizontalScrollBar()->maximum()));
+    }
+
+    markCurrentFieldDirty();
+    state_.lastPreviewNoteMarkerSignature_.clear();
+    owner_.refreshTimelineMetadata();
+    owner_.statusBar()->showMessage(QStringLiteral("一键清空要素 applied on selection: %1 replacement(s).").arg(changed));
+}
+
 void MainWindow::DocumentSection::onRaiseSubdivisionSelection()
 {
     MC_OP("MainWindow::DocumentSection::onRaiseSubdivisionSelection");
@@ -516,6 +602,36 @@ void MainWindow::DocumentSection::onLowerSubdivisionSelection()
         UiText::isChineseUi() ? QStringLiteral("分音降低一档") : QStringLiteral("Subdivision -1"),
         [](const QString& text, int* changedCount) {
             return miacode::chart_transform::lowerSubdivisionForSelection(text, changedCount);
+        });
+}
+
+void MainWindow::DocumentSection::onRaiseSubdivisionHalfStepSelection()
+{
+    MC_OP("MainWindow::DocumentSection::onRaiseSubdivisionHalfStepSelection");
+    if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
+        owner_.statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    applySelectionBatchTransform(
+        UiText::isChineseUi() ? QStringLiteral("分音提升半档") : QStringLiteral("Subdivision +1/2"),
+        [](const QString& text, int* changedCount) {
+            return miacode::chart_transform::raiseSubdivisionHalfStepForSelection(text, changedCount);
+        });
+}
+
+void MainWindow::DocumentSection::onLowerSubdivisionHalfStepSelection()
+{
+    MC_OP("MainWindow::DocumentSection::onLowerSubdivisionHalfStepSelection");
+    if (!owner_.hasActiveDifficulty()) {
+        _mc_op_.fail(QStringLiteral("no active difficulty"));
+        owner_.statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    applySelectionBatchTransform(
+        UiText::isChineseUi() ? QStringLiteral("分音降低半档") : QStringLiteral("Subdivision -1/2"),
+        [](const QString& text, int* changedCount) {
+            return miacode::chart_transform::lowerSubdivisionHalfStepForSelection(text, changedCount);
         });
 }
 
@@ -584,6 +700,11 @@ void MainWindow::onRandomRotateSelection()
     documentSection_->onRandomRotateSelection();
 }
 
+void MainWindow::onClearCompleteElementsSelection()
+{
+    documentSection_->onClearCompleteElementsSelection();
+}
+
 void MainWindow::onRaiseSubdivisionSelection()
 {
     documentSection_->onRaiseSubdivisionSelection();
@@ -592,4 +713,14 @@ void MainWindow::onRaiseSubdivisionSelection()
 void MainWindow::onLowerSubdivisionSelection()
 {
     documentSection_->onLowerSubdivisionSelection();
+}
+
+void MainWindow::onRaiseSubdivisionHalfStepSelection()
+{
+    documentSection_->onRaiseSubdivisionHalfStepSelection();
+}
+
+void MainWindow::onLowerSubdivisionHalfStepSelection()
+{
+    documentSection_->onLowerSubdivisionHalfStepSelection();
 }

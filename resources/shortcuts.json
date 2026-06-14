@@ -5,6 +5,13 @@
     "Users may copy this file next to MiaCode.exe as shortcuts.json and override action/shortcut sequences without rebuilding."
   ],
   "actions": {
+    "file.quit": {
+      "label_zh": "退出",
+      "label_en": "Quit",
+      "default": "Ctrl+Esc",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
     "transform.mirror_lr": {
       "label_zh": "左右镜像",
       "label_en": "Mirror Left/Right",
@@ -54,6 +61,20 @@
       "context": "application",
       "owner": "MainWindow.BootstrapAndMenus"
     },
+    "transform.subdivision_half_up": {
+      "label_zh": "分音提升半档",
+      "label_en": "Subdivision +1/2",
+      "default": ["Ctrl+Shift+=", "Ctrl++"],
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "transform.subdivision_half_down": {
+      "label_zh": "分音降低半档",
+      "label_en": "Subdivision -1/2",
+      "default": "Ctrl+Shift+-",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
     "transform.toggle_break": {
       "label_zh": "一键全 Break",
       "label_en": "Toggle Break",
@@ -79,6 +100,13 @@
       "label_zh": "一键全随机",
       "label_en": "Random Rotate",
       "default": "Ctrl+,",
+      "context": "application",
+      "owner": "MainWindow.BootstrapAndMenus"
+    },
+    "transform.clear_complete_elements": {
+      "label_zh": "一键清空要素",
+      "label_en": "一键清空要素",
+      "default": "Ctrl+Q",
       "context": "application",
       "owner": "MainWindow.BootstrapAndMenus"
     },
@@ -120,14 +148,14 @@
     "editor.font_decrease": {
       "label_zh": "编辑器字号减小",
       "label_en": "Decrease Editor Font",
-      "default": "Ctrl+Shift+-",
+      "default": "Ctrl+Alt+-",
       "context": "window",
       "owner": "MainWindow.FrameBootstrapFinalize"
     },
     "editor.font_increase": {
       "label_zh": "编辑器字号增大",
       "label_en": "Increase Editor Font",
-      "default": "Ctrl+Shift+=",
+      "default": "Ctrl+Alt+=",
       "context": "window",
       "owner": "MainWindow.FrameBootstrapFinalize"
     },

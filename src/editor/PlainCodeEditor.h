@@ -19,6 +19,11 @@ namespace miacode::editor {
 QChar normalizedHalfWidthChar(QChar ch);
 QString normalizedHalfWidthText(QString text);
 QString normalizedHalfWidthKeyText(const QKeyEvent* event, const QString& text);
+QString clearCompleteElementsInSelection(
+    const QString& text,
+    int selectionStart,
+    int selectionEnd,
+    int* changedCount = nullptr);
 }
 
 class PlainCodeEditor : public QTextEdit
@@ -73,6 +78,9 @@ public:
 signals:
     void undoShortcutRequested();
     void redoShortcutRequested();
+    void clearCompleteElementsShortcutRequested();
+    void raiseSubdivisionHalfStepShortcutRequested();
+    void lowerSubdivisionHalfStepShortcutRequested();
     void editorOverwriteModeChanged(bool enabled);
     void lineNumberBookmarkMoveRequested(int fromLine, int toLine);
     void lineNumberBookmarkActivated(int line);
