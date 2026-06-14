@@ -466,52 +466,64 @@ Item {
         // Still cover (revealStartFrame<0) only: "ellipsis" keeps the base font and
         // truncates the tail with "…"; otherwise "shrink" shrinks the font to fit.
         readonly property bool stillEllipsis: root.revealStartFrame < 0 && root.effectiveStillTextMode() === "ellipsis"
-        clip: true
+        readonly property real verticalOverscan: Math.max(2, Math.ceil(mq.basePixel * 0.30))
+        clip: false
 
-        // Hidden probe: always FIXED size so contentWidth is the true text width.
-        Text {
-            id: mqMeasure
-            visible: false
-            text: mq.textValue
-            font.family: mq.fontFamily
-            font.pixelSize: mq.basePixel
-            wrapMode: Text.NoWrap
-            maximumLineCount: 1
-        }
+        Item {
+            id: mqClip
+            x: 0
+            y: -mq.verticalOverscan
+            width: mq.width
+            height: mq.height + mq.verticalOverscan * 2
+            clip: true
 
-        // Primary copy (also the still-cover renderer when not looping).
-        Text {
-            id: mqText
-            height: parent.height
-            verticalAlignment: Text.AlignVCenter
-            text: mq.textValue
-            color: mq.textColor
-            font.family: mq.fontFamily
-            font.pixelSize: mq.basePixel
-            // Shrink mode goes much lower than the intro min so the whole string fits.
-            minimumPixelSize: mq.stillEllipsis ? mq.basePixel : Math.max(6, Math.round(mq.basePixel * 0.25))
-            wrapMode: Text.NoWrap
-            maximumLineCount: 1
-            fontSizeMode: (root.revealStartFrame >= 0 || mq.stillEllipsis) ? Text.FixedSize : Text.HorizontalFit
-            elide: mq.stillEllipsis ? Text.ElideRight : Text.ElideNone
-            width: mq.looping ? mq.fixedContentWidth : mq.width
-            horizontalAlignment: mq.looping ? Text.AlignLeft : mq.baseAlign
-            x: mq.looping ? -mq.loopX : 0
-        }
-        // Trailing copy for the seamless wrap (only while looping).
-        Text {
-            visible: mq.looping
-            height: parent.height
-            verticalAlignment: Text.AlignVCenter
-            text: mq.textValue
-            color: mq.textColor
-            font.family: mq.fontFamily
-            font.pixelSize: mq.basePixel
-            wrapMode: Text.NoWrap
-            maximumLineCount: 1
-            horizontalAlignment: Text.AlignLeft
-            width: mq.fixedContentWidth
-            x: -mq.loopX + mq.period
+            // Hidden probe: always FIXED size so contentWidth is the true text width.
+            Text {
+                id: mqMeasure
+                visible: false
+                text: mq.textValue
+                font.family: mq.fontFamily
+                font.pixelSize: mq.basePixel
+                wrapMode: Text.NoWrap
+                maximumLineCount: 1
+            }
+
+            // Primary copy (also the still-cover renderer when not looping).
+            Text {
+                id: mqText
+                y: mq.verticalOverscan
+                height: mq.height
+                verticalAlignment: Text.AlignVCenter
+                text: mq.textValue
+                color: mq.textColor
+                font.family: mq.fontFamily
+                font.pixelSize: mq.basePixel
+                // Shrink mode goes much lower than the intro min so the whole string fits.
+                minimumPixelSize: mq.stillEllipsis ? mq.basePixel : Math.max(6, Math.round(mq.basePixel * 0.25))
+                wrapMode: Text.NoWrap
+                maximumLineCount: 1
+                fontSizeMode: (root.revealStartFrame >= 0 || mq.stillEllipsis) ? Text.FixedSize : Text.HorizontalFit
+                elide: mq.stillEllipsis ? Text.ElideRight : Text.ElideNone
+                width: mq.looping ? mq.fixedContentWidth : mq.width
+                horizontalAlignment: mq.looping ? Text.AlignLeft : mq.baseAlign
+                x: mq.looping ? -mq.loopX : 0
+            }
+            // Trailing copy for the seamless wrap (only while looping).
+            Text {
+                visible: mq.looping
+                y: mq.verticalOverscan
+                height: mq.height
+                verticalAlignment: Text.AlignVCenter
+                text: mq.textValue
+                color: mq.textColor
+                font.family: mq.fontFamily
+                font.pixelSize: mq.basePixel
+                wrapMode: Text.NoWrap
+                maximumLineCount: 1
+                horizontalAlignment: Text.AlignLeft
+                width: mq.fixedContentWidth
+                x: -mq.loopX + mq.period
+            }
         }
     }
 
