@@ -254,6 +254,10 @@ double QuickShellController::previewDurationSeconds() const
 {
     return previewDurationSeconds_;
 }
+double QuickShellController::previewLowerBoundSeconds() const
+{
+    return previewLowerBoundSeconds_;
+}
 
 QStringList QuickShellController::previewStatsTexts() const
 {
@@ -952,6 +956,7 @@ void QuickShellController::refreshFromStateSource()
     stateChanged |= assignIfChanged(previewPlaying_, stateSource_->shellPreviewPlaying());
     stateChanged |= assignIfChanged(previewPositionSeconds_, stateSource_->shellPreviewPositionSeconds());
     stateChanged |= assignIfChanged(previewDurationSeconds_, stateSource_->shellPreviewDurationSeconds());
+    stateChanged |= assignIfChanged(previewLowerBoundSeconds_, stateSource_->shellPreviewLowerBoundSeconds());
     stateChanged |= assignIfChanged(videoExportProgressSeconds_, stateSource_->shellVideoExportProgressSeconds());
     stateChanged |= assignIfChanged(previewStatsTexts_, stateSource_->shellPreviewStatsTexts());
     stateChanged |= assignIfChanged(previewCanvasAspectRatio_, stateSource_->shellPreviewCanvasAspectRatio());

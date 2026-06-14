@@ -189,6 +189,12 @@ double MainWindow::shellPreviewDurationSeconds() const
     return windowSection_->shellPreviewDurationSeconds();
 }
 
+double MainWindow::shellPreviewLowerBoundSeconds() const
+{
+    // Negative-time intro region: the QML transport's slider `from` binds here.
+    return exportIntroLowerBoundSeconds();
+}
+
 double MainWindow::shellVideoExportProgressSeconds() const
 {
     // Export progress no longer rides the preview transport (2026-06-13): it is

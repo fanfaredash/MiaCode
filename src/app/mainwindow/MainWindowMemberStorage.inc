@@ -335,6 +335,16 @@
         bool exportIntroLeadInActive_ = false;
         QElapsedTimer exportIntroLeadInElapsed_;
         QTimer* exportIntroLeadInTimer_ = nullptr;
+        // Negative-time intro region: the intro occupies [-duration, 0) on the
+        // preview timeline. Scrub/pause shows a static intro frame at that
+        // position; play advances through it and crosses 0 into the chart.
+        // The intro duration is the constant miacode::intro::kDurationSeconds and
+        // "添加片头 on" is read live via exportIntroEnabled() (no cached flag — a
+        // cache desynced and collapsed the slider). Playhead is the current
+        // position in [-duration, 0]; AdvanceFrom is where a play started.
+        double exportIntroPlayheadSeconds_ = 0.0;
+        double exportIntroAdvanceFromSeconds_ = 0.0;
+        bool exportIntroRegionActive_ = false;
         bool restoreSquareAfterVideoExport_ = false;
         quint64 previewPaneRestoreGeneration_ = 0;
         int videoExportWorkerLastProgressPercent_ = 0;
@@ -748,6 +758,8 @@
     double& videoExportInlineProgressSecond_ = state_.videoExportInlineProgressSecond_;
     int& embeddedVideoExportDifficultyId_ = state_.embeddedVideoExportDifficultyId_;
     bool& exportPreviewAuditionActive_ = state_.exportPreviewAuditionActive_;
+    bool& exportIntroRegionActive_ = state_.exportIntroRegionActive_;
+    double& exportIntroPlayheadSeconds_ = state_.exportIntroPlayheadSeconds_;
     bool& restoreSquareAfterVideoExport_ = state_.restoreSquareAfterVideoExport_;
     quint64& previewPaneRestoreGeneration_ = state_.previewPaneRestoreGeneration_;
     int& videoExportWorkerLastProgressPercent_ = state_.videoExportWorkerLastProgressPercent_;

@@ -373,6 +373,11 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
             }
             showPreviewSliderTimeHint(value);
             const double second = static_cast<double>(value) / 1000.0;
+            // Negative-time intro region: a drag into [-duration, 0) renders a
+            // static intro frame instead of a chart seek.
+            if (handleExportIntroSliderSeek(second)) {
+                return;
+            }
             const bool shouldRenderNow = !previewScrubRenderElapsed_.isValid()
                 || previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;
             if (shouldRenderNow) {
@@ -396,7 +401,11 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
             if (previewSeekDebounceTimer_ != nullptr) {
                 previewSeekDebounceTimer_->stop();
             }
-            seekPreviewToSecond(static_cast<double>(previewSlider_->value()) / 1000.0, true);
+            const double releasedSecond = static_cast<double>(previewSlider_->value()) / 1000.0;
+            if (handleExportIntroSliderSeek(releasedSecond)) {
+                return;
+            }
+            seekPreviewToSecond(releasedSecond, true);
         });
     }
     if (previewControlCard_ != nullptr) {

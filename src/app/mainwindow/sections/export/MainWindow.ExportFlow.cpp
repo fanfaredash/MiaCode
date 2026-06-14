@@ -741,6 +741,9 @@ QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficult
     connect(panel, &VideoExportDialog::exportCancelRequested, &owner_, [this]() {
         this->cancelVideoExportWorker();
     });
+    connect(panel, &VideoExportDialog::introPreviewSettingsChanged, &owner_, [this]() {
+        owner_.refreshExportIntroState();
+    });
     beginExportPreviewSession(task);
     // Install the badge-selected difficulty as a playable preview audition so
     // the right-side transport plays/seeks it like the editor (所见即所导). This

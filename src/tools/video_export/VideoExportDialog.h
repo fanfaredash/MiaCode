@@ -112,6 +112,9 @@ signals:
     // Embedded mode only: the user clicked the (cancel-mode) export button
     // while a worker run was active.
     void exportCancelRequested();
+    // Embedded mode only: 添加片头 toggled or a 片头 setting changed — the host
+    // refreshes the negative-time intro region (slider range + overlay).
+    void introPreviewSettingsChanged();
 
 private:
     void browseOutputPath();

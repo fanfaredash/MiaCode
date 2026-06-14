@@ -229,6 +229,7 @@ public:
     bool shellPreviewPlaying() const override;
     double shellPreviewPositionSeconds() const override;
     double shellPreviewDurationSeconds() const override;
+    double shellPreviewLowerBoundSeconds() const override;
     QStringList shellPreviewStatsTexts() const override;
     double shellPreviewCanvasAspectRatio() const override;
     quint64 shellPreviewPaneRestoreGeneration() const override;

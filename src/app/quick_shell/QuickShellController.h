@@ -28,6 +28,9 @@ class QuickShellController : public QObject
     // transport rides its normal playback slider/time display with this
     // value, seeking disabled.
     Q_PROPERTY(double videoExportProgressSeconds READ videoExportProgressSeconds NOTIFY shellStateChanged)
+    // Negative-time intro region lower bound (<= 0). The transport slider's
+    // `from` binds to this so the 片头 can be scrubbed/played left of chart 0.
+    Q_PROPERTY(double previewLowerBoundSeconds READ previewLowerBoundSeconds NOTIFY shellStateChanged)
     Q_PROPERTY(bool previewFullscreen READ previewFullscreen WRITE setPreviewFullscreen NOTIFY previewFullscreenChanged)
     Q_PROPERTY(QObject* previewRuntime READ previewRuntime CONSTANT)
     Q_PROPERTY(QObject* previewStageMediaHost READ previewStageMediaHost CONSTANT)
@@ -73,6 +76,7 @@ public:
     bool previewPlaying() const;
     double previewPositionSeconds() const;
     double previewDurationSeconds() const;
+    double previewLowerBoundSeconds() const;
     QStringList previewStatsTexts() const;
     double previewCanvasAspectRatio() const;
     qulonglong previewPaneRestoreGeneration() const;
@@ -171,6 +175,7 @@ private:
     bool previewPlaying_ = false;
     double previewPositionSeconds_ = 0.0;
     double previewDurationSeconds_ = 0.0;
+    double previewLowerBoundSeconds_ = 0.0;
     double videoExportProgressSeconds_ = -1.0;
     QStringList previewStatsTexts_;
     double previewCanvasAspectRatio_ = 1.0;

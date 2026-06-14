@@ -403,6 +403,11 @@ void MainWindow::WindowSection::beginShellPreviewScrub()
 
 void MainWindow::WindowSection::updateShellPreviewScrub(double second, bool centerView)
 {
+    // Negative-time intro region: a seek into [-duration, 0) renders a static
+    // intro frame instead of a chart seek (export page, 添加片头 on).
+    if (owner_.handleExportIntroSliderSeek(second)) {
+        return;
+    }
     const double clampedSecond = qBound(0.0, second, owner_.previewDurationSeconds());
     QToolTip::hideText();
     appendQuickShellBackendLog(
@@ -440,6 +445,9 @@ void MainWindow::WindowSection::updateShellPreviewScrub(double second, bool cent
 
 void MainWindow::WindowSection::endShellPreviewScrub(double second, bool centerView)
 {
+    if (owner_.handleExportIntroSliderSeek(second)) {
+        return;
+    }
     const double clampedSecond = qBound(0.0, second, owner_.previewDurationSeconds());
     QToolTip::hideText();
     appendQuickShellBackendLog(
@@ -701,6 +709,11 @@ bool MainWindow::WindowSection::shellPreviewPlaying() const
 
 double MainWindow::WindowSection::shellPreviewPositionSeconds() const
 {
+    // While the export-page intro region is shown, the transport playhead sits
+    // in negative time (the intro) — report that so the QML thumb follows it.
+    if (owner_.exportIntroRegionActive_) {
+        return owner_.exportIntroPlayheadSeconds_;
+    }
     return qMax(0.0, owner_.qtPreviewPauseSecond_);
 }
 

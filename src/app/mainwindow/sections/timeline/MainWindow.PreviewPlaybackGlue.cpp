@@ -96,8 +96,13 @@ void MainWindow::TimelineSection::onTogglePreviewPause()
 {
     MC_OP("MainWindow::TimelineSection::onTogglePreviewPause");
     if (state_.exportIntroLeadInActive_) {
-        // Toggling during the intro animation cancels it (stays paused at 0).
-        cancelExportIntroLeadIn();
+        // The intro is advancing -> pause it, keeping the static frame on screen.
+        pauseExportIntroAdvance();
+        return;
+    }
+    if (state_.exportIntroRegionActive_) {
+        // Paused/scrubbed inside the intro region -> play (advance from here).
+        startExportIntroAdvance(state_.exportIntroPlayheadSeconds_);
         return;
     }
     if (state_.qtPreviewPlaying_) {
@@ -123,16 +128,6 @@ void MainWindow::TimelineSection::onTogglePreviewPause()
     if (!hasPreviewableChart()) {
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
-    }
-    // Export-page intro lead-in: when 添加片头 is on and we play from the start,
-    // play the animated intro first, then hand off to the chart audition. Playing
-    // from mid-chart (or with 添加片头 off) skips straight to the chart.
-    if (state_.exportPreviewAuditionActive_ && state_.qtPreviewPauseSecond_ <= 0.05) {
-        IntroBannerSpec introSpec;
-        if (owner_.currentExportIntroLeadInSpec(&introSpec)) {
-            startExportIntroLeadIn(introSpec);
-            return;
-        }
     }
     const quint64 opId = ++state_.previewInteractionSequence_;
     state_.previewPendingPlayInteractionId_ = opId;
@@ -180,4 +175,19 @@ void MainWindow::onTogglePreviewPause()
 void MainWindow::cancelExportIntroLeadIn()
 {
     timelineSection_->cancelExportIntroLeadIn();
+}
+
+bool MainWindow::handleExportIntroSliderSeek(double second)
+{
+    return timelineSection_->handleExportIntroSliderSeek(second);
+}
+
+double MainWindow::exportIntroLowerBoundSeconds() const
+{
+    return timelineSection_->exportIntroLowerBoundSeconds();
+}
+
+void MainWindow::refreshExportIntroState()
+{
+    timelineSection_->refreshExportIntroState();
 }

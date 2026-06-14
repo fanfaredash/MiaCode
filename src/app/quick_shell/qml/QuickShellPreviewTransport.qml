@@ -28,10 +28,12 @@ Rectangle {
     }
 
     function formatDisplayTime(secondsValue) {
-        const safeSeconds = Math.max(0, Math.floor(secondsValue + 0.0001))
+        // Negative time = the export-page 片头 (intro) region, shown as -MM:SS.
+        const negative = secondsValue < -0.0001
+        const safeSeconds = Math.floor(Math.abs(secondsValue) + 0.0001)
         const minutes = Math.floor(safeSeconds / 60)
         const seconds = safeSeconds % 60
-        return String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0")
+        return (negative ? "-" : "") + String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0")
     }
 
     function openSpeedMenu() {
@@ -111,6 +113,9 @@ Rectangle {
 
     readonly property real durationSeconds: controller ? Math.max(controller.previewDurationSeconds, 0.001) : 0.001
     readonly property real positionSeconds: controller ? controller.previewPositionSeconds : 0
+    // Export-page negative-time intro region: the slider extends left to this
+    // (<= 0) so the 片头 can be scrubbed/played left of chart 0.
+    readonly property real lowerBoundSeconds: controller ? Math.min(0, controller.previewLowerBoundSeconds) : 0
     // Inline export progress (export launched from the Export page's embedded
     // video panel): the transport rides its normal playback display with the
     // CHART TIME the worker has rendered so far — same time format, same
@@ -121,7 +126,10 @@ Rectangle {
     readonly property real displayedSeconds: scrubActive
         ? activeScrubSecond
         : (exportProgressActive ? exportProgressSeconds : positionSeconds)
-    readonly property real displayedProgress: Math.max(0, Math.min(1, displayedSeconds / durationSeconds))
+    readonly property real displayedProgress: {
+        const span = durationSeconds - lowerBoundSeconds
+        return span > 0 ? Math.max(0, Math.min(1, (displayedSeconds - lowerBoundSeconds) / span)) : 0
+    }
     readonly property string timeSummary: formatDisplayTime(displayedSeconds) + " / " + formatDisplayTime(durationSeconds)
     readonly property int controlButtonHeight: metric("previewControlButtonMinHeight", 28)
     // Visual handle diameter (kept in sync with the `handle:` Rectangle below).
@@ -226,7 +234,7 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 height: root.scrubInteractiveHeight
-                from: 0
+                from: root.lowerBoundSeconds
                 to: root.durationSeconds
                 live: true
                 enabled: !root.inputBlocked

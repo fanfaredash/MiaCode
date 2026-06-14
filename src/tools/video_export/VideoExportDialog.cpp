@@ -1244,6 +1244,9 @@ VideoExportDialog::VideoExportDialog(
         syncIntroControlsEnabled();
         refreshIntroPreview();
         persistExportOnlySettings();
+        // Embedded mode: the host refreshes the negative-time intro region (its
+        // slider range + the overlay) to match 添加片头 / the 片头 settings.
+        emit introPreviewSettingsChanged();
     };
     connect(addIntroCheck_, &QCheckBox::toggled, this, introUiChanged);
     connect(introBackgroundCombo_, &QComboBox::currentIndexChanged, this, introUiChanged);
@@ -2190,12 +2193,15 @@ void VideoExportDialog::browseIntroBackground()
 
 bool VideoExportDialog::isAddIntroActiveForPreview() const
 {
-    // Mirrors the bake gate: 添加片头 only applies to full-range exports, so the
-    // checkbox is greyed (disabled) on a partial range — don't preview the intro
-    // in that case even if the box is still visually checked.
-    return addIntroCheck_ != nullptr
-        && addIntroCheck_->isEnabled()
-        && addIntroCheck_->isChecked();
+    const bool checked = addIntroCheck_ != nullptr && addIntroCheck_->isChecked();
+    // Full-range gate — mirror refreshAddIntroEnabledState's RANGE logic directly
+    // rather than addIntroCheck_->isEnabled(). isEnabled() reads the widget's
+    // *effective* enabled state, which the embedded tab-rehost can flip to false
+    // even while 添加片头 stays checked; that was collapsing the intro region /
+    // negative slider while the overlay lingered.
+    constexpr double kFullRangeEpsilonSeconds = 0.01;
+    const bool fullRange = rangeStartSeconds() <= kFullRangeEpsilonSeconds;
+    return checked && fullRange;
 }
 
 IntroBannerSpec VideoExportDialog::currentIntroSpec() const

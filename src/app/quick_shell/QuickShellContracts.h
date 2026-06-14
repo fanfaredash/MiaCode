@@ -75,6 +75,10 @@ public:
     // normal playback slider/time display with this value (seeking disabled
     // while active); stage/ETA text goes to the shared status bar instead.
     virtual double shellVideoExportProgressSeconds() const { return -1.0; }
+    // Export-page negative-time intro region: the preview timeline's lower bound
+    // (<= 0; -introDuration while 添加片头 is on, else 0). The transport slider's
+    // `from` uses this so the intro can be scrubbed/played left of chart 0.
+    virtual double shellPreviewLowerBoundSeconds() const { return 0.0; }
     virtual QObject* shellPreviewRuntimeObject() const = 0;
     virtual QObject* shellPreviewStageMediaHostObject() const = 0;
     virtual bool shellPreviewUsesSeparateSurface() const = 0;

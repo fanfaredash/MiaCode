@@ -116,6 +116,13 @@
     // timeline driver (used by teardown).
     bool currentExportIntroLeadInSpec(IntroBannerSpec* outSpec) const;
     void cancelExportIntroLeadIn();
+    // Negative-time intro region forwarders: handleExportIntroSliderSeek routes a
+    // slider seek into the intro (returns true if handled); lowerBound is the
+    // slider minimum (negative when 添加片头 on); refreshExportIntroState reacts to
+    // the 添加片头 toggle.
+    bool handleExportIntroSliderSeek(double second);
+    double exportIntroLowerBoundSeconds() const;
+    void refreshExportIntroState();
     void updateMetadataPageMode();
     bool deleteDifficultyField(int difficultyId);
     void updateDifficultyDeleteButton(bool visible);

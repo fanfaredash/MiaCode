@@ -158,13 +158,24 @@ public:
     bool preparePreviewStartState();
     void onStopPreview();
     void onTogglePreviewPause();
-    // Export-page intro lead-in: plays the animated intro (overlay + opening
-    // sfx) before the chart when 添加片头 is on and the audition plays from 0.
-    // Self-contained QTimer-driven phase; hands off to startQtPreviewPlayback(0)
-    // on completion. cancel clears the overlay and stays paused at 0.
-    void startExportIntroLeadIn(const IntroBannerSpec& spec);
+    // Export-page negative-time intro region: the 片头 occupies [-duration, 0)
+    // on the preview timeline (添加片头 on). Scrub/pause shows a static intro
+    // frame; play advances through it (overlay + opening sfx) and crosses 0 into
+    // the chart audition. handleExportIntroSliderSeek routes a slider seek into
+    // the region (negative) vs the chart (>=0); refreshExportIntroState reacts to
+    // the 添加片头 toggle / install (resizes the slider, enters/leaves the region).
+    bool exportIntroEnabled() const;
+    double exportIntroLowerBoundSeconds() const;
+    void setupExportIntroOverlayData();
+    void renderExportIntroFrame(double positionSeconds);
+    void enterExportIntroRegion(double positionSeconds);
+    void exitExportIntroRegion();
+    void pauseExportIntroAdvance();
+    void startExportIntroAdvance(double fromPositionSeconds);
     void tickExportIntroLeadIn();
     void cancelExportIntroLeadIn();
+    bool handleExportIntroSliderSeek(double second);
+    void refreshExportIntroState();
     bool startQtPreviewPlayback(double second, bool resumeFromPause = false);
     void pauseQtPreviewPlaybackExact();
     void handlePreviewStartupCanvasPresented();

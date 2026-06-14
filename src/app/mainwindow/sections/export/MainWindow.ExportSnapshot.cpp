@@ -507,6 +507,9 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
     // Re-enable the preview play/pause/stop controls: they are difficulty-scoped
     // (hasActiveDifficulty) by default, and the page now has a previewable chart.
     owner_.updateDifficultyScopedActionStates();
+    // Set up the negative-time intro region (slider range + default playhead at
+    // the intro head) when 添加片头 is on for this difficulty.
+    owner_.refreshExportIntroState();
 }
 
 void MainWindow::ExportSection::teardownExportPreviewAuditionScene()

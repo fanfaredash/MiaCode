@@ -867,7 +867,12 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
                     owner_.previewSlider_->setFocus(Qt::MouseFocusReason);
                     owner_.previewSlider_->setValue(value);
                     owner_.showPreviewSliderTimeHint(value);
-                    owner_.seekPreviewDiscreteToSecond(static_cast<double>(value) / 1000.0, true);
+                    const double clickSecond = static_cast<double>(value) / 1000.0;
+                    // Negative-time intro region: a click in [-duration, 0) shows
+                    // a static intro frame instead of a chart seek.
+                    if (!owner_.handleExportIntroSliderSeek(clickSecond)) {
+                        owner_.seekPreviewDiscreteToSecond(clickSecond, true);
+                    }
                     return true;
                 }
             }

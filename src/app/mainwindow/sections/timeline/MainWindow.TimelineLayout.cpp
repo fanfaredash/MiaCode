@@ -231,7 +231,11 @@ void MainWindow::TimelineSection::updatePreviewSliderRange()
         return;
     }
     const int maximum = qMax(1, qRound(previewDurationSeconds() * 1000.0));
+    // Negative-time intro region (export page, 添加片头 on): the slider extends
+    // left to -introDuration so the intro can be scrubbed/played; otherwise 0.
+    const int minimum = qMin(0, qRound(exportIntroLowerBoundSeconds() * 1000.0));
     QSignalBlocker blocker(ui_.previewSlider_);
+    ui_.previewSlider_->setMinimum(minimum);
     ui_.previewSlider_->setMaximum(maximum);
 }
 
@@ -240,11 +244,10 @@ void MainWindow::TimelineSection::updatePreviewSliderPosition(double second)
     if (ui_.previewSlider_ == nullptr || state_.previewScrubDragging_) {
         return;
     }
-    // NOTE: while an inline (panel-launched) export rides this slider as its
-    // playback-style progress display, user seeks still update it normally —
-    // the export's periodic progress events simply re-assert the export
-    // position between interactions (拖动在导出期间保持可用).
-    const int value = qBound(0, qRound(second * 1000.0), ui_.previewSlider_->maximum());
+    // The slider minimum is negative while the intro region is shown, so clamp to
+    // the slider's own minimum (not 0) to let the playhead sit in the intro.
+    const int value = qBound(
+        ui_.previewSlider_->minimum(), qRound(second * 1000.0), ui_.previewSlider_->maximum());
     QSignalBlocker blocker(ui_.previewSlider_);
     ui_.previewSlider_->setValue(value);
 }
