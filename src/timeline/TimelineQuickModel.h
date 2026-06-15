@@ -84,6 +84,11 @@ private:
         int meterNumerator = 4;
         int meterDenominator = 4;
         double currentMeasureStartSecond = 0.0;
+        // Whether the chart-start measure line has been emitted yet. Mirrors the
+        // strict parser's `initializedMeasureLines`: the very first NON-terminal
+        // line seeds it, so a leading terminal `E` line no longer suppresses the
+        // chart-start grid.
+        bool initialMeasureLineEmitted = false;
     };
 
     struct AbsoluteCursorAnchor {

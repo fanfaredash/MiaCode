@@ -723,10 +723,11 @@ SimaiNativeParseResult parseInternal(
                 if (!bpmOk || bpm <= 0.0) {
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kInvalidBpmValue());
                 } else {
-                    if (qAbs(state.bpm - bpm) > kTimelineEpsilon) {
-                        state.currentMeasureStartSecond = state.second;
-                        appendDistinctSecond(&state.result.measureLineSeconds, state.currentMeasureStartSecond);
-                    }
+                    // Any (bpm) directive restarts the measure phase, even when the
+                    // value is unchanged (变BPM 一律重启小节相位). Kept in lockstep
+                    // with TimelineQuickModel + ChartNormalization.
+                    state.currentMeasureStartSecond = state.second;
+                    appendDistinctSecond(&state.result.measureLineSeconds, state.currentMeasureStartSecond);
                     state.bpm = bpm;
                 }
                 i = close;

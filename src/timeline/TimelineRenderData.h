@@ -80,6 +80,11 @@ struct TimelineRenderLine {
     QVector<double> measureLineSecondOffsets;
     QVector<int> measureLineMeterNumerators;
     QVector<int> measureLineMeterDenominators;
+    // Real within-measure beat step (seconds) for each measure line, i.e.
+    // noteStepSeconds(bpm, denominator). Used to draw subdivision lines on the
+    // true beat grid clipped to a 变拍/变BPM boundary, so a truncated measure
+    // never spaces its beat lines as if it were a full measure.
+    QVector<double> measureLineBeatStepSeconds;
     QVector<TimelineRenderBeat> beats;
     QVector<TimelineRenderNote> notes;
 };
@@ -89,6 +94,9 @@ struct TimelineRenderSnapshot {
     QVector<double> measureLineSeconds;
     QVector<int> measureLineMeterNumerators;
     QVector<int> measureLineMeterDenominators;
+    // Parallel to measureLineSeconds: real within-measure beat step (seconds)
+    // governing the span AFTER each measure line (see TimelineRenderLine).
+    QVector<double> measureLineBeatStepSeconds;
     QVector<double> noteVisualEndPrefixMaxWithSlideTracks;
     QVector<double> noteVisualEndPrefixMaxWithoutSlideTracks;
     double trailingMeasureLineStartSecond = 0.0;

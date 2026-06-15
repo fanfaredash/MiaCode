@@ -610,6 +610,7 @@ bool sameNote(const TimelineRenderNote& left, const TimelineRenderNote& right)
 }
 
 bool sameDoubleVector(const QVector<double>& left, const QVector<double>& right);
+bool sameIntVector(const QVector<int>& left, const QVector<int>& right);
 
 bool sameLine(const TimelineRenderLine& left, const TimelineRenderLine& right)
 {
@@ -618,6 +619,9 @@ bool sameLine(const TimelineRenderLine& left, const TimelineRenderLine& right)
         || !nearlyEqual(left.startSecond, right.startSecond)
         || !nearlyEqual(left.endSecond, right.endSecond)
         || !sameDoubleVector(left.measureLineSecondOffsets, right.measureLineSecondOffsets)
+        || !sameIntVector(left.measureLineMeterNumerators, right.measureLineMeterNumerators)
+        || !sameIntVector(left.measureLineMeterDenominators, right.measureLineMeterDenominators)
+        || !sameDoubleVector(left.measureLineBeatStepSeconds, right.measureLineBeatStepSeconds)
         || left.beats.size() != right.beats.size()
         || left.notes.size() != right.notes.size()) {
         return false;
@@ -654,6 +658,11 @@ bool sameDoubleVector(const QVector<double>& left, const QVector<double>& right)
     return true;
 }
 
+bool sameIntVector(const QVector<int>& left, const QVector<int>& right)
+{
+    return left == right;
+}
+
 bool sameSnapshot(const TimelineRenderSnapshot& left, const TimelineRenderSnapshot& right)
 {
     if (!nearlyEqual(left.durationSeconds, right.durationSeconds)
@@ -661,8 +670,13 @@ bool sameSnapshot(const TimelineRenderSnapshot& left, const TimelineRenderSnapsh
         || !nearlyEqual(left.maximumSecond, right.maximumSecond)
         || !nearlyEqual(left.trailingMeasureLineStartSecond, right.trailingMeasureLineStartSecond)
         || !nearlyEqual(left.trailingMeasureLineStepSeconds, right.trailingMeasureLineStepSeconds)
+        || left.trailingMeasureLineMeterNumerator != right.trailingMeasureLineMeterNumerator
+        || left.trailingMeasureLineMeterDenominator != right.trailingMeasureLineMeterDenominator
         || left.lines.size() != right.lines.size()
         || !sameDoubleVector(left.measureLineSeconds, right.measureLineSeconds)
+        || !sameIntVector(left.measureLineMeterNumerators, right.measureLineMeterNumerators)
+        || !sameIntVector(left.measureLineMeterDenominators, right.measureLineMeterDenominators)
+        || !sameDoubleVector(left.measureLineBeatStepSeconds, right.measureLineBeatStepSeconds)
         || !sameDoubleVector(left.noteVisualEndPrefixMaxWithSlideTracks, right.noteVisualEndPrefixMaxWithSlideTracks)
         || !sameDoubleVector(left.noteVisualEndPrefixMaxWithoutSlideTracks, right.noteVisualEndPrefixMaxWithoutSlideTracks)) {
         return false;
@@ -1548,6 +1562,83 @@ int main(int argc, char** argv)
         QString diff;
         expect(snapshotMatchesParser(chartText, &diff),
                QStringLiteral("parser and quick model agree on BPM-reset measure-line semantics: %1").arg(diff));
+    }
+
+    {
+        // User-supplied 变拍 fixture: a (126) BPM line, a whole-note {1} pickup
+        // measure, then a boundary-aligned || 3/4 followed by two {16} 3/4
+        // measures. The || 3/4 restart lands EXACTLY on the auto-advanced 4/4
+        // measure line, so it must hand the span after it to the NEW 3/4 meter
+        // (problem B), and every measure must record the real beat step so the
+        // drawing keeps subdivision lines on the true grid (problem A).
+        const QString chartText = QStringLiteral(
+            "(126)\n"
+            "{1},|| 3/4\n"
+            "{16}2h[16:3],,,4h[16:3],,,5h[8:1],,6,,47,,\n"
+            "{16}7h[16:3],,,5h[16:3],,,4h[8:1],,3,,52,,");
+        TimelineQuickModel model;
+        model.rebuildFromText(chartText, 0.0);
+        const TimelineRenderSnapshot snapshot = model.snapshot();
+        const double step126q = 10.0 / 21.0;  // noteStepSeconds(126, 4)
+        expect(snapshot.measureLineSeconds.size() == 5,
+               QStringLiteral("变拍fixture: 4 real measure lines plus one trailing extrapolation"));
+        if (snapshot.measureLineSeconds.size() == 5) {
+            expect(nearlyEqual(snapshot.measureLineSeconds.at(0), 0.0)
+                       && nearlyEqual(snapshot.measureLineSeconds.at(1), 40.0 / 21.0)
+                       && nearlyEqual(snapshot.measureLineSeconds.at(2), 70.0 / 21.0)
+                       && nearlyEqual(snapshot.measureLineSeconds.at(3), 100.0 / 21.0)
+                       && nearlyEqual(snapshot.measureLineSeconds.at(4), 130.0 / 21.0),
+                   QStringLiteral("变拍fixture: measure lines follow the 4/4 then 3/4 cadence at 126 BPM"));
+        }
+        const QVector<int> expectNumerators{4, 3, 3, 3, 3};
+        const QVector<int> expectDenominators{4, 4, 4, 4, 4};
+        expect(snapshot.measureLineMeterNumerators == expectNumerators
+                   && snapshot.measureLineMeterDenominators == expectDenominators,
+               QStringLiteral("变拍fixture: the boundary-coincident || 3/4 hands its span to the new meter (B fix)"));
+        bool stepsOk = snapshot.measureLineBeatStepSeconds.size() == 5;
+        for (const double beatStep : snapshot.measureLineBeatStepSeconds) {
+            stepsOk = stepsOk && nearlyEqual(beatStep, step126q);
+        }
+        expect(stepsOk,
+               QStringLiteral("变拍fixture: every measure records the real beat step for true-grid subdivisions (A data)"));
+
+        QString diff;
+        expect(snapshotMatchesParser(chartText, &diff),
+               QStringLiteral("变拍fixture: parser and quick model agree on measure-line cadence: %1").arg(diff));
+    }
+
+    {
+        // Mid-measure 变拍 truncates the running 4/4 measure (problem A): the
+        // truncated span keeps the OLD 4/4 meter and the real 0.5s beat step (NOT
+        // span/numerator = 0.25), so the drawing clips subdivisions to the 变拍.
+        const QString chartText = QStringLiteral(",,|| 3/4\n,,,\nE");
+        TimelineQuickModel model;
+        model.rebuildFromText(chartText, 0.0);
+        const TimelineRenderSnapshot snapshot = model.snapshot();
+        expect(snapshot.measureLineSeconds.size() >= 2
+                   && nearlyEqual(snapshot.measureLineSeconds.at(0), 0.0)
+                   && nearlyEqual(snapshot.measureLineSeconds.at(1), 1.0),
+               QStringLiteral("mid-measure变拍: a truncated measure line lands at the 变拍 instant (1.0s)"));
+        expect(snapshot.measureLineMeterNumerators.size() >= 2
+                   && snapshot.measureLineMeterNumerators.at(0) == 4
+                   && snapshot.measureLineMeterNumerators.at(1) == 3,
+               QStringLiteral("mid-measure变拍: truncated span stays 4/4, the next span is 3/4"));
+        expect(snapshot.measureLineBeatStepSeconds.size() >= 2
+                   && nearlyEqual(snapshot.measureLineBeatStepSeconds.at(0), 0.5),
+               QStringLiteral("mid-measure变拍: truncated 4/4 keeps the real 0.5s step, not span/numerator"));
+    }
+
+    {
+        // Incremental edit on a terminal-E 变拍 chart: changing an upstream BPM
+        // must also shift the terminal line's stored cutoff (problem E), or a real
+        // measure line gets filtered out and the incremental snapshot diverges
+        // from a full rebuild (now compared incl. the per-measure meter arrays).
+        const QString original =
+            QStringLiteral("(120)1,2,3,4,\n|| 6/8\n1,2,3,\n(180)4,5,6,\nE");
+        const int position = original.indexOf(QStringLiteral("120"));
+        expect(position >= 0, QStringLiteral("terminal-E变拍: fixture has an editable BPM token"));
+        expect(incrementalMatchesRebuild(original, position, 3, QStringLiteral("90"), 0.0),
+               QStringLiteral("terminal-E变拍: incremental BPM edit matches full rebuild (terminalSecond shift)"));
     }
 
     {

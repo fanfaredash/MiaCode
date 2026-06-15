@@ -758,6 +758,7 @@ void TimelineQuickModel::clear()
     snapshot_.measureLineSeconds.clear();
     snapshot_.measureLineMeterNumerators.clear();
     snapshot_.measureLineMeterDenominators.clear();
+    snapshot_.measureLineBeatStepSeconds.clear();
     snapshot_.noteVisualEndPrefixMaxWithSlideTracks.clear();
     snapshot_.noteVisualEndPrefixMaxWithoutSlideTracks.clear();
     snapshot_.trailingMeasureLineStartSecond = 0.0;
@@ -1310,6 +1311,12 @@ void TimelineQuickModel::shiftLineTiming(LineState* lineState, double deltaSecon
     lineState->endState.currentMeasureStartSecond += deltaSeconds;
     lineState->render.startSecond += deltaSeconds;
     lineState->render.endSecond += deltaSeconds;
+    // A terminal `E` line carries its own absolute terminalSecond used as the
+    // measure-line cutoff in rebuildSnapshotDuration; the pure-shift fast path
+    // must keep it in sync or a real measure line gets filtered out.
+    if (lineState->isTerminalE && lineState->terminalSecond >= 0.0) {
+        lineState->terminalSecond += deltaSeconds;
+    }
     if (lineState->hasNotes) {
         lineState->firstNoteSecond += deltaSeconds;
         lineState->lastNoteSecond += deltaSeconds;
@@ -1322,6 +1329,7 @@ void TimelineQuickModel::rebuildSnapshotDuration()
     snapshot_.measureLineSeconds.clear();
     snapshot_.measureLineMeterNumerators.clear();
     snapshot_.measureLineMeterDenominators.clear();
+    snapshot_.measureLineBeatStepSeconds.clear();
     snapshot_.noteVisualEndPrefixMaxWithSlideTracks.clear();
     snapshot_.noteVisualEndPrefixMaxWithoutSlideTracks.clear();
     snapshot_.trailingMeasureLineStartSecond = 0.0;
@@ -1398,18 +1406,28 @@ void TimelineQuickModel::rebuildSnapshotDuration()
             if (terminalLineIndex >= 0 && absoluteSecond > terminalSecond + kTimelineEpsilon) {
                 continue;
             }
-            const int sizeBefore = snapshot_.measureLineSeconds.size();
-            appendDistinctSecond(&snapshot_.measureLineSeconds, absoluteSecond);
-            if (snapshot_.measureLineSeconds.size() != sizeBefore) {
-                const int numerator = measureIndex < renderLine.measureLineMeterNumerators.size()
-                    ? renderLine.measureLineMeterNumerators.at(measureIndex)
-                    : 4;
-                const int denominator = measureIndex < renderLine.measureLineMeterDenominators.size()
-                    ? renderLine.measureLineMeterDenominators.at(measureIndex)
-                    : 4;
-                snapshot_.measureLineMeterNumerators.append(qMax(1, numerator));
-                snapshot_.measureLineMeterDenominators.append(qMax(1, denominator));
+            const int numerator = measureIndex < renderLine.measureLineMeterNumerators.size()
+                ? qMax(1, renderLine.measureLineMeterNumerators.at(measureIndex))
+                : 4;
+            const int denominator = measureIndex < renderLine.measureLineMeterDenominators.size()
+                ? qMax(1, renderLine.measureLineMeterDenominators.at(measureIndex))
+                : 4;
+            const double beatStep = measureIndex < renderLine.measureLineBeatStepSeconds.size()
+                ? renderLine.measureLineBeatStepSeconds.at(measureIndex)
+                : 0.0;
+            if (!snapshot_.measureLineSeconds.isEmpty()
+                && qAbs(snapshot_.measureLineSeconds.constLast() - absoluteSecond) <= kTimelineEpsilon) {
+                // Boundary-coincident restart spanning a line break: the LATER
+                // entry's meter governs the span after the shared line.
+                snapshot_.measureLineMeterNumerators.last() = numerator;
+                snapshot_.measureLineMeterDenominators.last() = denominator;
+                snapshot_.measureLineBeatStepSeconds.last() = beatStep;
+                continue;
             }
+            snapshot_.measureLineSeconds.append(absoluteSecond);
+            snapshot_.measureLineMeterNumerators.append(numerator);
+            snapshot_.measureLineMeterDenominators.append(denominator);
+            snapshot_.measureLineBeatStepSeconds.append(beatStep);
         }
 
         minSecond = hasData ? qMin(minSecond, renderLine.startSecond) : renderLine.startSecond;
@@ -1441,11 +1459,15 @@ void TimelineQuickModel::rebuildSnapshotDuration()
             const double nextMeasureSecond = trailingLine.endState.currentMeasureStartSecond + measureDuration;
             if (qIsFinite(nextMeasureSecond)
                 && nextMeasureSecond > trailingLine.endState.currentMeasureStartSecond + kTimelineEpsilon) {
+                const double trailingBeatStep = noteStepSeconds(
+                    trailingLine.endState.bpm,
+                    trailingLine.endState.meterDenominator);
                 const int sizeBefore = snapshot_.measureLineSeconds.size();
                 appendDistinctSecond(&snapshot_.measureLineSeconds, nextMeasureSecond);
                 if (snapshot_.measureLineSeconds.size() != sizeBefore) {
                     snapshot_.measureLineMeterNumerators.append(snapshot_.trailingMeasureLineMeterNumerator);
                     snapshot_.measureLineMeterDenominators.append(snapshot_.trailingMeasureLineMeterDenominator);
+                    snapshot_.measureLineBeatStepSeconds.append(trailingBeatStep);
                 }
                 if (hasData) {
                     maxSecond = qMax(maxSecond, nextMeasureSecond);
@@ -1929,6 +1951,7 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
     lineState->render.measureLineSecondOffsets.clear();
     lineState->render.measureLineMeterNumerators.clear();
     lineState->render.measureLineMeterDenominators.clear();
+    lineState->render.measureLineBeatStepSeconds.clear();
     lineState->render.beats.clear();
     lineState->render.notes.clear();
     lineState->cursorCache.segmentStarts.clear();
@@ -1966,14 +1989,24 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
         token.clear();
     };
     const auto appendMeasureLine = [&](double absoluteSecond) {
-        const int countBefore = lineState->render.measureLineSecondOffsets.size();
-        appendDistinctSecond(
-            &lineState->render.measureLineSecondOffsets,
-            absoluteSecond - lineState->render.startSecond);
-        if (lineState->render.measureLineSecondOffsets.size() != countBefore) {
-            lineState->render.measureLineMeterNumerators.append(qMax(1, state.meterNumerator));
-            lineState->render.measureLineMeterDenominators.append(qMax(1, state.meterDenominator));
+        const double offset = absoluteSecond - lineState->render.startSecond;
+        const int meterNumerator = qMax(1, state.meterNumerator);
+        const int meterDenominator = qMax(1, state.meterDenominator);
+        const double beatStep = noteStepSeconds(state.bpm, state.meterDenominator);
+        QVector<double>& offsets = lineState->render.measureLineSecondOffsets;
+        if (!offsets.isEmpty() && qAbs(offsets.constLast() - offset) <= kTimelineEpsilon) {
+            // A meter/BPM restart (|| x/y or (bpm)) landing exactly on the
+            // previous measure line: keep the single line, but let the NEW meter
+            // govern the span AFTER it, so old and new subdivisions never mix.
+            lineState->render.measureLineMeterNumerators.last() = meterNumerator;
+            lineState->render.measureLineMeterDenominators.last() = meterDenominator;
+            lineState->render.measureLineBeatStepSeconds.last() = beatStep;
+            return;
         }
+        offsets.append(offset);
+        lineState->render.measureLineMeterNumerators.append(meterNumerator);
+        lineState->render.measureLineMeterDenominators.append(meterDenominator);
+        lineState->render.measureLineBeatStepSeconds.append(beatStep);
     };
     const auto advanceMeasureLinesTo = [&](double targetSecond) {
         const double measureDuration = measureDurationSeconds(
@@ -1986,8 +2019,13 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
         }
     };
 
-    if (lineState->lineNumber == 1) {
+    if (!state.initialMeasureLineEmitted) {
+        // Seed the chart-start measure line on the FIRST non-terminal line
+        // (terminal `E` lines return early above without setting the flag), so a
+        // leading `E` no longer drops the chart-start grid. Mirrors the strict
+        // parser's `initializedMeasureLines`.
         appendMeasureLine(state.currentMeasureStartSecond);
+        state.initialMeasureLineEmitted = true;
     }
 
     for (int index = 0; index < lineState->text.size(); ++index) {
@@ -2022,11 +2060,13 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
             bool bpmOk = false;
             const double bpm = lineState->text.mid(index + 1, close - index - 1).trimmed().toDouble(&bpmOk);
             if (bpmOk && bpm > 0.0) {
-                if (qAbs(state.bpm - bpm) > kTimelineEpsilon) {
-                    state.currentMeasureStartSecond = state.second;
-                    appendMeasureLine(state.currentMeasureStartSecond);
-                }
+                // Any (bpm) directive restarts the measure phase, even when the
+                // value is unchanged (变BPM 一律重启小节相位). Update the bpm BEFORE
+                // emitting the measure line so its beat step reflects the NEW tempo
+                // (the line governs the span after it).
                 state.bpm = bpm;
+                state.currentMeasureStartSecond = state.second;
+                appendMeasureLine(state.currentMeasureStartSecond);
             }
             index = close;
             continue;
@@ -2530,5 +2570,6 @@ bool TimelineQuickModel::parseStatesEqual(const ParseState& a, const ParseState&
         && a.subdivisionIndex == b.subdivisionIndex
         && a.meterNumerator == b.meterNumerator
         && a.meterDenominator == b.meterDenominator
-        && qAbs(a.currentMeasureStartSecond - b.currentMeasureStartSecond) <= kTimelineEpsilon;
+        && qAbs(a.currentMeasureStartSecond - b.currentMeasureStartSecond) <= kTimelineEpsilon
+        && a.initialMeasureLineEmitted == b.initialMeasureLineEmitted;
 }

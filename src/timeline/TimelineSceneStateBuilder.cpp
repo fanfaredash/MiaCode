@@ -715,7 +715,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     // 6/8 beat 4 used to be thickened to bar-line width as "secondary strong";
     // that mechanism was removed by request.) Other denominators get no
     // within-measure lines (the spec only covers /4 and /8).
-    const auto emitSubdivisionsForSpan = [&](double startSecond, double endSecond, int numerator, int denominator) {
+    const auto emitSubdivisionsForSpan = [&](double startSecond, double endSecond, int numerator, int denominator, double beatStepSeconds) {
         if (!(endSecond > startSecond + 1e-6)) {
             return;
         }
@@ -726,10 +726,22 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         if (safeNumerator < 2) {
             return;
         }
-        const double measureDuration = endSecond - startSecond;
-        for (int beatIndex = 1; beatIndex < safeNumerator; ++beatIndex) {
-            const double beatSecond = startSecond
-                + measureDuration * static_cast<double>(beatIndex) / static_cast<double>(safeNumerator);
+        // Lay subdivision lines on the REAL beat grid (one per beat at the
+        // measure's BPM) and clip strictly inside the span. A measure that a
+        // 变拍/变BPM truncated draws only the beats that fall before the boundary,
+        // so old- and new-meter lines never mix (per spec). Fall back to dividing
+        // the span equally only when no real step is available (legacy snapshots).
+        const double step = beatStepSeconds > 1e-6
+            ? beatStepSeconds
+            : (endSecond - startSecond) / static_cast<double>(safeNumerator);
+        if (!(step > 1e-6)) {
+            return;
+        }
+        for (int beatIndex = 1;; ++beatIndex) {
+            const double beatSecond = startSecond + step * static_cast<double>(beatIndex);
+            if (!(beatSecond < endSecond - 1e-6)) {
+                break;
+            }
             addGridLine(beatSecond, theme.gridSubdivision, kTimelineSubdivisionLineWidth, false,
                         timelineGridLineHeightFraction(kTimelineGridHeightFractionSubdivision));
         }
@@ -753,7 +765,10 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         const int denominator = measureIndex < request.snapshot.measureLineMeterDenominators.size()
             ? request.snapshot.measureLineMeterDenominators.at(measureIndex)
             : 4;
-        emitSubdivisionsForSpan(measureSecond, nextMeasureSecond, numerator, denominator);
+        const double beatStep = measureIndex < request.snapshot.measureLineBeatStepSeconds.size()
+            ? request.snapshot.measureLineBeatStepSeconds.at(measureIndex)
+            : 0.0;
+        emitSubdivisionsForSpan(measureSecond, nextMeasureSecond, numerator, denominator, beatStep);
     }
 
     if (request.snapshot.trailingMeasureLineStepSeconds > 1e-6) {
@@ -779,7 +794,8 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 extensionSecond,
                 extensionSecond + request.snapshot.trailingMeasureLineStepSeconds,
                 trailingNumerator,
-                trailingDenominator);
+                trailingDenominator,
+                request.snapshot.trailingMeasureLineStepSeconds / static_cast<double>(trailingNumerator));
         }
     }
 
