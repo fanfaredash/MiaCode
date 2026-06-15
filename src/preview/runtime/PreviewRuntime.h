@@ -72,6 +72,10 @@ class PreviewRuntime : public QObject
     Q_PROPERTY(QVariantMap introBannerTemplate READ introBannerTemplate NOTIFY introOverlayDataChanged)
     Q_PROPERTY(QUrl introBackgroundImage READ introBackgroundImage NOTIFY introOverlayDataChanged)
     Q_PROPERTY(QUrl introLogoImage READ introLogoImage NOTIFY introOverlayDataChanged)
+    // "片头" tab styling (introBannerStyleMap: backdropImage / backdropBlurEnabled /
+    // cardShadowEnabled) — applied onto IntroOverlay.qml key-by-key in QML, mirroring
+    // the export session's setProperty loop so preview and export can't diverge.
+    Q_PROPERTY(QVariantMap introBannerStyle READ introBannerStyle NOTIFY introOverlayDataChanged)
 
 public:
     explicit PreviewRuntime(QObject* parent = nullptr);
@@ -117,7 +121,8 @@ public:
         const QVariantMap& bannerTrack,
         const QVariantMap& bannerTemplate,
         const QUrl& backgroundImage,
-        const QUrl& logoImage);
+        const QUrl& logoImage,
+        const QVariantMap& bannerStyle = {});
     void setIntroOverlayFrame(int authoringFrame, bool active, bool requestUpdate = true);
     void clearIntroOverlay(bool requestUpdate = true);
     bool introOverlayActive() const { return introOverlayActive_; }
@@ -126,6 +131,7 @@ public:
     QVariantMap introBannerTemplate() const { return introBannerTemplate_; }
     QUrl introBackgroundImage() const { return introBackgroundImage_; }
     QUrl introLogoImage() const { return introLogoImage_; }
+    QVariantMap introBannerStyle() const { return introBannerStyle_; }
     void setMediaFrame(const QImage& frame);
     void setVideoFrame(const QVideoFrame& frame);
     void setResolvedStageVideoFrame(
@@ -239,6 +245,7 @@ private:
     QVariantMap introBannerTemplate_;
     QUrl introBackgroundImage_;
     QUrl introLogoImage_;
+    QVariantMap introBannerStyle_;
     // --- Firework PSO/texture warm-up (in-process QML path) ----------------
     // Qt RHI compiles the custom PreviewQuickJudgeFireworkMaterial pipeline
     // and uploads the firework colour-ball texture lazily on the FIRST

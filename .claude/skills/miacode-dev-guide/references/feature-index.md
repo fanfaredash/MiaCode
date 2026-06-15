@@ -370,6 +370,16 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `MainWindow.TimelinePlayback.cpp`; overlay rendering is the re-added `PreviewRuntime`
   `setIntroOverlayData/setIntroOverlayFrame/clearIntroOverlay` + a z=3 `introOverlayLayer` in BOTH
   `PreviewRuntimeView.qml` and `QuickShellPreviewSurface.qml`.
+  ⚠ **片头 styling (背景虚化 / 自定义背景 / 卡片阴影) is plumbed via a 5th `bannerStyle` arg
+  on `setIntroOverlayData` carrying `introBannerStyleMap(spec)` (the SAME map the export mount
+  applies in `PreviewQuickExportSession::setIntroBannerData`) → `PreviewRuntime.introBannerStyle`
+  (QVariantMap prop) → each QML `syncIntroOverlayData()` loops the map onto IntroOverlay key-by-key
+  (`backdropImage`/`backdropBlurEnabled`/`cardShadowEnabled`), mirroring the export's `setProperty`
+  loop so preview ≡ export. `backgroundImage` is ALWAYS the 曲绘 jacket (card slot + backdrop
+  fallback); the custom backdrop rides `backdropImage` in the style map — do NOT pass the custom
+  path as `backgroundImage` (the pre-2026-06-16 bug: blur toggle did nothing in preview + custom
+  bg wrongly replaced the card jacket). Both QML edited → touch their qrc (`preview_runtime_qml.qrc`
+  + `quick_shell_qml.qrc`).
   ⚠⚠ **The on-screen preview transport (default shell too) is the QML
   `QuickShellPreviewTransport.qml`** — its slider was hardcoded `from: 0` (the real clamp) — NOT the
   QWidget `ui_.previewSlider_`, which is null on the export page (so `updatePreviewSliderRange`

@@ -1346,17 +1346,20 @@ void MainWindow::TimelineSection::setupExportIntroOverlayData()
     if (!owner_.currentExportIntroLeadInSpec(&spec)) {
         return;
     }
-    // Background follows the 片头 tab's 背景 选择 (曲绘 vs 自定义图片).
-    const QString backgroundPath =
-        (spec.backgroundMode == QStringLiteral("custom") && !spec.customBackgroundPath.isEmpty())
-            ? spec.customBackgroundPath
-            : spec.jacketPath;
-    const QUrl backgroundUrl = backgroundPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(backgroundPath);
+    // backgroundImage is ALWAYS the 曲绘 jacket (it feeds the card's jacket slot
+    // AND the backdrop fallback) — mirror the export mount, which passes jacketUrl
+    // here and routes the 片头 tab's 背景虚化/自定义背景/卡片阴影 through the style
+    // map (introBannerStyleMap → backdropImage/backdropBlurEnabled/cardShadowEnabled).
+    // Passing the custom backdrop as backgroundImage (the old behavior) wrongly
+    // replaced the card jacket and ignored the blur toggle.
+    const QUrl jacketUrl =
+        spec.jacketPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(spec.jacketPath);
     state_.previewCanvas_->setIntroOverlayData(
         introBannerTrackMap(spec),
         introLeadInBannerTemplateMap(),
-        backgroundUrl,
-        QUrl(QString::fromLatin1(miacode::intro::kLogoFallbackUrl)));
+        jacketUrl,
+        QUrl(QString::fromLatin1(miacode::intro::kLogoFallbackUrl)),
+        introBannerStyleMap(spec));
 }
 
 void MainWindow::TimelineSection::renderExportIntroFrame(double positionSeconds)

@@ -389,12 +389,14 @@ void PreviewRuntime::setIntroOverlayData(
     const QVariantMap& bannerTrack,
     const QVariantMap& bannerTemplate,
     const QUrl& backgroundImage,
-    const QUrl& logoImage)
+    const QUrl& logoImage,
+    const QVariantMap& bannerStyle)
 {
     introBannerTrack_ = bannerTrack;
     introBannerTemplate_ = bannerTemplate;
     introBackgroundImage_ = backgroundImage;
     introLogoImage_ = logoImage;
+    introBannerStyle_ = bannerStyle;
     emit introOverlayDataChanged();
 }
 

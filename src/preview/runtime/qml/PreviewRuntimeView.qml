@@ -40,6 +40,14 @@ Rectangle {
             introOverlayLoader.item.bannerTemplateData = root.runtime.introBannerTemplate
             introOverlayLoader.item.backgroundImage = root.runtime.introBackgroundImage
             introOverlayLoader.item.logoImage = root.runtime.introLogoImage
+            // "片头" tab styling (backdropImage / backdropBlurEnabled /
+            // cardShadowEnabled), applied key-by-key like the export mount so the
+            // 背景虚化/自定义背景/卡片阴影 toggles take effect live in the preview.
+            var style = root.runtime.introBannerStyle
+            if (style) {
+                for (var k in style)
+                    introOverlayLoader.item[k] = style[k]
+            }
         }
 
         function syncIntroOverlayFrame() {
