@@ -204,11 +204,6 @@ struct NormalizationSeed {
     double currentBpm = 120.0;
 };
 
-bool nearlyEqual(double a, double b, double epsilon = kNormalizationEpsilon)
-{
-    return qAbs(a - b) <= epsilon;
-}
-
 bool isDigitLane(QChar ch)
 {
     return ch >= QLatin1Char('1') && ch <= QLatin1Char('8');
@@ -1216,6 +1211,10 @@ NormalizationSeed scanNormalizationSeed(
                 const double parsedBpm = line.mid(index + 1, close - index - 1).trimmed().toDouble(&bpmOk);
                 if (bpmOk) {
                     seed.currentBpm = parsedBpm;
+                    // A (bpm) directive restarts the measure phase, matching the
+                    // parser + fragment renderer, so selection-mode seeds the right
+                    // start phase (变BPM 一律重启小节相位).
+                    currentPhase = Rational();
                 }
                 index = close;
                 continue;
@@ -1463,15 +1462,13 @@ ChartNormalizationResult normalizeChartFragment(
                 bool bpmOk = false;
                 const double parsedBpm = bpmText.toDouble(&bpmOk);
                 if (bpmOk) {
-                    if (!nearlyEqual(parsedBpm, currentBpm)) {
-                        restartMeasureAtCurrentPosition(
-                            BoundaryItem{BoundaryItemKind::Bpm, QStringLiteral("(%1)").arg(bpmText)},
-                            currentMeasure.meterNumerator,
-                            currentMeasure.meterDenominator);
-                    } else {
-                        appendBoundaryItem(
-                            BoundaryItem{BoundaryItemKind::StandaloneText, QStringLiteral("(%1)").arg(bpmText)});
-                    }
+                    // Any (bpm) directive restarts the measure, even when the value
+                    // is unchanged (变BPM 一律重启小节相位). Kept in lockstep with the
+                    // parser + TimelineQuickModel.
+                    restartMeasureAtCurrentPosition(
+                        BoundaryItem{BoundaryItemKind::Bpm, QStringLiteral("(%1)").arg(bpmText)},
+                        currentMeasure.meterNumerator,
+                        currentMeasure.meterDenominator);
                     currentBpm = parsedBpm;
                 }
                 index = close;
@@ -1551,14 +1548,31 @@ ChartNormalizationResult normalizeChartFragment(
 
     QStringList outputLines;
     int emittedMeasureLines = 0;
+    int sectionMeasureIndex = 0;
     for (const RenderMeasure& measure : renderedMeasures) {
+        // 变拍/变BPM 另起一段：段相位（4 小节一组的计数）在该边界归零，让分块的
+        // 空行从新拍子/新速度重新计起，而不是沿用全局计数。边界处的 (bpm)/|| x/y
+        // 指令行本身就是视觉分隔，所以这里只重置计数、不额外插空行。leadingItems 的
+        // TimeSignature/Bpm 项正是真实重启点（同拍号/同BPM 以 StandaloneText 出现，
+        // 不会误触发）。
+        const bool startsNewSection = std::any_of(
+            measure.leadingItems.cbegin(),
+            measure.leadingItems.cend(),
+            [](const BoundaryItem& item) {
+                return item.kind == BoundaryItemKind::TimeSignature
+                    || item.kind == BoundaryItemKind::Bpm;
+            });
+        if (startsNewSection) {
+            sectionMeasureIndex = 0;
+        }
         appendBoundaryItems(&outputLines, measure.leadingItems);
         if (!measure.lengthWhole.isZero() || !measure.moments.isEmpty()) {
             outputLines.append(renderMeasureLine(measure, options));
             ++emittedMeasureLines;
+            ++sectionMeasureIndex;
         }
         appendBoundaryItems(&outputLines, measure.trailingItems);
-        if (emittedMeasureLines > 0 && (emittedMeasureLines % 4) == 0) {
+        if (sectionMeasureIndex > 0 && (sectionMeasureIndex % 4) == 0) {
             outputLines.append(QString());
         }
     }

@@ -1435,6 +1435,29 @@ void runInlineSpecs(QTextStream& err, int* failed)
     }
 
     {
+        // User-supplied 变拍 fixture through 谱面整理: a boundary-aligned || 3/4
+        // after a (126) whole-note {1} pickup, then two {16} 3/4 measures.
+        // Normalization must preserve the inline time-signature change and be
+        // idempotent across the 变拍 boundary (the 变拍/变BPM 段相位 reset must not
+        // drift the output on a second pass).
+        const QString chartText = QStringLiteral(
+            "(126)\n"
+            "{1},|| 3/4\n"
+            "{16}2h[16:3],,,4h[16:3],,,5h[8:1],,6,,47,,\n"
+            "{16}7h[16:3],,,5h[16:3],,,4h[8:1],,3,,52,,");
+        const miacode::chart_transform::ChartNormalizationResult first =
+            miacode::chart_transform::normalizeChartText(chartText);
+        expectTrue(first.ok, QStringLiteral("变拍fixture: 谱面整理 accepts the (126)/{1}/|| 3/4 chart"), failed, err);
+        expectTrue(first.text.contains(QStringLiteral("|| 3/4")),
+                   QStringLiteral("变拍fixture: 谱面整理 preserves the inline || 3/4 change"), failed, err);
+        const miacode::chart_transform::ChartNormalizationResult second =
+            miacode::chart_transform::normalizeChartText(first.text);
+        expectTrue(second.ok, QStringLiteral("变拍fixture: re-normalizing the 变拍 output stays valid"), failed, err);
+        expectEqual(second.text, first.text,
+                    QStringLiteral("变拍fixture: 谱面整理 is idempotent across the 变拍 boundary"), failed, err);
+    }
+
+    {
         const miacode::chart_transform::ChartNormalizationResult normalized =
             miacode::chart_transform::normalizeChartText(QStringLiteral("1,2, || hello\n3,4,\nE"));
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart keeps ordinary mid-measure comments"), failed, err);
