@@ -78,13 +78,19 @@ SimaiDocument SimaiDocument::createEmpty()
 
 SimaiDocument SimaiDocument::fromText(const QString& text)
 {
-    SimaiDocument doc = createEmpty();
+    // NOTE: start from a plain document, NOT createEmpty(): createEmpty() seeds a
+    // default &clock_count=4, and if the parsed text also carries its own
+    // &clock_count= the two would stack into a duplicate (and grow on every
+    // load/save round-trip). The single ensureDefaultClockCount() below
+    // materializes the default exactly once, after the file's own fields land.
+    SimaiDocument doc;
     const QVector<SimaiRawField> fields = parseRawFields(text);
     if (fields.isEmpty()) {
         if (!text.trimmed().isEmpty()) {
             SimaiDifficultyData& master = doc.ensureDifficulty(5);
             master.chart = text;
         }
+        ensureDefaultClockCount(&doc.extraFields);
         return doc;
     }
 
@@ -227,13 +233,27 @@ bool SimaiDocument::ensureDefaultClockCount(QVector<SimaiRawField>* fields)
     if (fields == nullptr) {
         return false;
     }
-    for (const SimaiRawField& field : *fields) {
-        if (field.key.compare(QStringLiteral("clock_count"), Qt::CaseInsensitive) == 0) {
-            return false;
+    // Keep the first clock_count and drop any strays. This both materializes the
+    // default (when none is present) and self-heals documents that already
+    // accumulated duplicate &clock_count= lines from earlier round-trips.
+    bool found = false;
+    bool mutated = false;
+    for (int i = 0; i < fields->size();) {
+        if (fields->at(i).key.compare(QStringLiteral("clock_count"), Qt::CaseInsensitive) == 0) {
+            if (found) {
+                fields->removeAt(i);
+                mutated = true;
+                continue;
+            }
+            found = true;
         }
+        ++i;
     }
-    fields->append(SimaiRawField{QStringLiteral("clock_count"), QStringLiteral("4")});
-    return true;
+    if (!found) {
+        fields->append(SimaiRawField{QStringLiteral("clock_count"), QStringLiteral("4")});
+        mutated = true;
+    }
+    return mutated;
 }
 
 bool SimaiDocument::isDifficultyId(int id)

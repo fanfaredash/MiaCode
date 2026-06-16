@@ -128,6 +128,42 @@ void runSpecs(QTextStream& out, int* failed)
         expectTrue(doc.difficulty(7) != nullptr, "blank difficulty 7 stays a difficulty", failed, out);
         expectTrue(doc.standaloneDesignerIds().isEmpty(), "blank difficulty is not a standalone", failed, out);
     }
+
+    // --- &clock_count default is materialized exactly once and never stacks. ---
+    {
+        // Regression: fromText() used to start from createEmpty() (which seeds a
+        // default &clock_count=4); a file that also carried its own &clock_count=
+        // then accumulated duplicates that grew on every load/save round-trip.
+        auto clockLines = [](const QString& text) {
+            int n = 0;
+            for (const QString& line : text.split('\n')) {
+                if (line.startsWith(QStringLiteral("&clock_count="))) {
+                    ++n;
+                }
+            }
+            return n;
+        };
+
+        const SimaiDocument withClock = SimaiDocument::fromText(
+            "&title=T\n&first=0\n&clock_count=6\n&lv_5=12\n&inote_5=(120){1}1,\n");
+        expectTrue(clockLines(withClock.toText()) == 1, "existing &clock_count is not duplicated on load", failed, out);
+        expectTrue(withClock.toText().contains(QStringLiteral("&clock_count=6")),
+                   "the file's own &clock_count value is preserved (not reset to the default)", failed, out);
+
+        const SimaiDocument round = SimaiDocument::fromText(
+            SimaiDocument::fromText(withClock.toText()).toText());
+        expectTrue(clockLines(round.toText()) == 1, "&clock_count stays single across load/save round-trips", failed, out);
+
+        const SimaiDocument noClock = SimaiDocument::fromText(
+            "&title=X\n&first=0\n&lv_5=1\n&inote_5=(120){1}1,\n");
+        expectTrue(clockLines(noClock.toText()) == 1, "missing &clock_count is defaulted exactly once", failed, out);
+
+        QVector<SimaiRawField> dupFields;
+        dupFields.append(SimaiRawField{QStringLiteral("clock_count"), QStringLiteral("6")});
+        dupFields.append(SimaiRawField{QStringLiteral("clock_count"), QStringLiteral("6")});
+        SimaiDocument::ensureDefaultClockCount(&dupFields);
+        expectTrue(dupFields.size() == 1, "ensureDefaultClockCount collapses duplicate &clock_count entries", failed, out);
+    }
 }
 
 }  // namespace
