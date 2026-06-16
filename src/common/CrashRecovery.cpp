@@ -3,13 +3,16 @@
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 
 #include <atomic>
+#include <cerrno>
 #include <csignal>
 #include <cstdio>
 #include <cstring>
@@ -428,40 +431,176 @@ namespace {
 
 std::atomic<bool> g_sessionMarkerEnabled{false};
 
-QString sessionMarkerFilePath()
+// Directory holding per-instance session markers. Each concurrently
+// running GUI process owns exactly one file in here, named by its PID, so
+// two instances never share or clobber each other's marker. The old design
+// used a single `session.marker`, which made a second instance read the
+// first (still-running) instance's marker and wrongly report it as an
+// abnormal exit — and then delete it, corrupting the first instance's state.
+QString sessionMarkerDir()
 {
     const QString configRoot =
         QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
     if (configRoot.isEmpty()) {
         return QString();
     }
-    return QDir(configRoot).filePath(QStringLiteral("session.marker"));
+    return QDir(configRoot).filePath(QStringLiteral("sessions"));
 }
 
-// Capture-once of the marker the PREVIOUS session left behind. Runs on
-// the first marker operation of this process (before any write can
-// overwrite the file) and deletes the file so a marker is never
-// "abandoned" twice. Returns the chart path recorded in it, or empty.
-const QString& abandonedSessionChartPath()
+// This process's own marker file: <sessionsDir>/session-<pid>.marker.
+QString ownSessionMarkerFilePath()
 {
-    static const QString captured = []() -> QString {
-        const QString markerPath = sessionMarkerFilePath();
-        if (markerPath.isEmpty()) {
-            return QString();
+    const QString dir = sessionMarkerDir();
+    if (dir.isEmpty()) {
+        return QString();
+    }
+    return QDir(dir).filePath(
+        QStringLiteral("session-%1.marker")
+            .arg(QCoreApplication::applicationPid()));
+}
+
+#ifdef Q_OS_WIN
+// Creation time of THIS process. Recorded in the marker so liveness checks
+// can reject PID reuse (a recycled PID now owned by an unrelated process).
+// 0 if it can't be queried.
+quint64 ownProcessCreationTime()
+{
+    FILETIME creation, exitT, kernel, user;
+    if (::GetProcessTimes(::GetCurrentProcess(), &creation, &exitT, &kernel, &user)) {
+        return (static_cast<quint64>(creation.dwHighDateTime) << 32)
+             | static_cast<quint64>(creation.dwLowDateTime);
+    }
+    return 0;
+}
+
+// True iff a process with `pid` is currently running AND (when a non-zero
+// creation time was recorded) its creation time matches `storedCreation`.
+// The creation-time match defends against PID reuse across reboots: a dead
+// instance's PID may have been recycled by an unrelated live process, which
+// must NOT count as "the marker's owner is still alive".
+bool processIsLive(qint64 pid, quint64 storedCreation)
+{
+    if (pid <= 0) {
+        return false;
+    }
+    HANDLE handle = ::OpenProcess(
+        SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+        FALSE,
+        static_cast<DWORD>(pid));
+    if (handle == nullptr) {
+        // No such process (or unopenable) — for a same-user GUI marker this
+        // means the owner is gone.
+        return false;
+    }
+    bool live = false;
+    // WAIT_TIMEOUT => the process object is non-signaled => still running.
+    if (::WaitForSingleObject(handle, 0) == WAIT_TIMEOUT) {
+        if (storedCreation == 0) {
+            live = true;  // nothing to compare against; assume live.
+        } else {
+            FILETIME creation, exitT, kernel, user;
+            if (::GetProcessTimes(handle, &creation, &exitT, &kernel, &user)) {
+                const quint64 ct =
+                    (static_cast<quint64>(creation.dwHighDateTime) << 32)
+                  | static_cast<quint64>(creation.dwLowDateTime);
+                live = (ct == storedCreation);
+            } else {
+                live = true;
+            }
         }
-        QFile file(markerPath);
-        if (!file.exists()) {
-            return QString();
+    }
+    ::CloseHandle(handle);
+    return live;
+}
+#else
+quint64 ownProcessCreationTime()
+{
+    return 0;
+}
+
+bool processIsLive(qint64 pid, quint64 /*storedCreation*/)
+{
+    if (pid <= 0) {
+        return false;
+    }
+    // Best-effort on POSIX: signal 0 probes existence without delivering a
+    // signal. EPERM means the process exists but is owned by someone else
+    // (treat as alive). PID-reuse is not defended here (creation time is
+    // Windows-only), which is acceptable: this binary's marker bug is
+    // Windows-specific and the worst POSIX outcome is one missed recovery.
+    if (::kill(static_cast<pid_t>(pid), 0) == 0) {
+        return true;
+    }
+    return errno == EPERM;
+}
+#endif
+
+// Serialize this process's marker (pid + creation time + chart path).
+QByteArray sessionMarkerPayload(const QString& chartFilePath)
+{
+    QString text;
+    text += QStringLiteral("pid=%1\n").arg(QCoreApplication::applicationPid());
+    text += QStringLiteral("created=%1\n").arg(ownProcessCreationTime());
+    text += QStringLiteral("chart=%1\n").arg(chartFilePath);
+    return text.toUtf8();
+}
+
+// Capture-once snapshot of the chart paths recorded by markers whose owning
+// process was already DEAD when this process started — i.e. instances that
+// terminated without a clean close. Markers belonging to still-running peers
+// (or to this process) are left untouched. Dead markers are deleted as they
+// are captured so they're never claimed twice. The static is initialized
+// thread-safely; mutation afterwards (consume) is GUI-thread only.
+QSet<QString>& abandonedSessionCharts()
+{
+    static QSet<QString> captured = []() -> QSet<QString> {
+        QSet<QString> result;
+        const QString dirPath = sessionMarkerDir();
+        if (dirPath.isEmpty()) {
+            return result;
         }
-        QString chartPath;
-        if (file.open(QIODevice::ReadOnly)) {
-            chartPath = QString::fromUtf8(file.readAll()).trimmed();
+        QDir dir(dirPath);
+        const QFileInfoList entries = dir.entryInfoList(
+            QStringList() << QStringLiteral("session-*.marker"),
+            QDir::Files);
+        for (const QFileInfo& entry : entries) {
+            QFile file(entry.absoluteFilePath());
+            if (!file.open(QIODevice::ReadOnly)) {
+                continue;
+            }
+            const QString content = QString::fromUtf8(file.readAll());
             file.close();
+
+            qint64 pid = 0;
+            quint64 created = 0;
+            QString chart;
+            const QStringList lines = content.split(QLatin1Char('\n'));
+            for (const QString& rawLine : lines) {
+                const QString line = rawLine.trimmed();
+                if (line.startsWith(QStringLiteral("pid="))) {
+                    pid = line.mid(4).toLongLong();
+                } else if (line.startsWith(QStringLiteral("created="))) {
+                    created = line.mid(8).toULongLong();
+                } else if (line.startsWith(QStringLiteral("chart="))) {
+                    chart = line.mid(6);
+                }
+            }
+
+            if (processIsLive(pid, created)) {
+                // A concurrent, still-running instance — not abandoned.
+                continue;
+            }
+            // Owner is gone: this marker is a genuine abnormal-exit remnant.
+            if (!chart.isEmpty()) {
+                result.insert(QDir::cleanPath(chart));
+            }
+            file.remove();
+            logCrashRecovery("abandoned_session_marker_found",
+                             QStringLiteral("chart=%1 pid=%2")
+                                 .arg(chart)
+                                 .arg(pid));
         }
-        file.remove();
-        logCrashRecovery("abandoned_session_marker_found",
-                         QStringLiteral("chart=%1").arg(chartPath));
-        return chartPath;
+        return result;
     }();
     return captured;
 }
@@ -478,15 +617,15 @@ void updateSessionMarker(const QString& chartFilePath)
     if (!g_sessionMarkerEnabled.load(std::memory_order_acquire)) {
         return;
     }
-    // Force the previous session's marker to be captured before this
-    // session's first write replaces the file — otherwise a normal
-    // startup would read its OWN marker back as "abandoned".
-    abandonedSessionChartPath();
+    // Snapshot any abandoned (dead-owner) markers before we create or mutate
+    // this process's own marker, so a stale same-PID remnant from a crashed
+    // previous run is recovered rather than silently overwritten.
+    abandonedSessionCharts();
     if (chartFilePath.isEmpty()) {
         clearSessionMarker();
         return;
     }
-    const QString markerPath = sessionMarkerFilePath();
+    const QString markerPath = ownSessionMarkerFilePath();
     if (markerPath.isEmpty()) {
         return;
     }
@@ -499,7 +638,7 @@ void updateSessionMarker(const QString& chartFilePath)
                              .arg(file.errorString()));
         return;
     }
-    const QByteArray payload = chartFilePath.toUtf8();
+    const QByteArray payload = sessionMarkerPayload(chartFilePath);
     if (file.write(payload) != payload.size() || !file.commit()) {
         logCrashRecovery("session_marker_write_failed",
                          QStringLiteral("path=%1 err=%2")
@@ -513,8 +652,9 @@ void clearSessionMarker()
     if (!g_sessionMarkerEnabled.load(std::memory_order_acquire)) {
         return;
     }
-    abandonedSessionChartPath();
-    const QString markerPath = sessionMarkerFilePath();
+    // Capture abandoned markers before mutating the sessions dir.
+    abandonedSessionCharts();
+    const QString markerPath = ownSessionMarkerFilePath();
     if (markerPath.isEmpty()) {
         return;
     }
@@ -533,24 +673,23 @@ bool consumeAbandonedSessionChartMatch(const QString& chartFilePath)
         || chartFilePath.isEmpty()) {
         return false;
     }
-    const QString& abandoned = abandonedSessionChartPath();
+    // GUI-thread only — no synchronization needed on the captured set.
+    QSet<QString>& abandoned = abandonedSessionCharts();
     if (abandoned.isEmpty()) {
         return false;
     }
-    // GUI-thread only — no synchronization needed on the consumed flag.
-    static bool consumed = false;
-    if (consumed) {
-        return false;
+    const QString cleaned = QDir::cleanPath(chartFilePath);
+    for (auto it = abandoned.begin(); it != abandoned.end(); ++it) {
+        if (it->compare(cleaned, Qt::CaseInsensitive) == 0) {
+            // Consume so each abandoned chart is offered recovery exactly
+            // once, even if multiple dead instances are detected at startup.
+            abandoned.erase(it);
+            logCrashRecovery("abandoned_session_marker_consumed",
+                             QStringLiteral("chart=%1").arg(chartFilePath));
+            return true;
+        }
     }
-    const bool match =
-        QDir::cleanPath(abandoned).compare(QDir::cleanPath(chartFilePath),
-                                           Qt::CaseInsensitive) == 0;
-    if (match) {
-        consumed = true;
-        logCrashRecovery("abandoned_session_marker_consumed",
-                         QStringLiteral("chart=%1").arg(chartFilePath));
-    }
-    return match;
+    return false;
 }
 
 bool deleteRecoveryFile(const QString& chartFilePath)

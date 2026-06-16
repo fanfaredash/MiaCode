@@ -34,14 +34,27 @@
 // power loss, or a fail-fast abort (__fastfail, heap-corruption
 // termination) writes no recovery file — but the regular 2-second
 // debounced autosave (`.miacode/.autosave/<file>/<file>.bak`) usually
-// holds the unsaved edits. To know whether the previous session ended
-// abnormally, a tiny marker file (the current chart path) is written to
-// the app config dir while a chart is open and deleted on clean close.
-// Marker present at next startup ⇒ the previous session died without a
-// clean shutdown ⇒ the chart-open recovery prompt may also offer the
-// autosave-latest snapshot, not just the crash-handler file. The marker
-// is GUI-session-only: CLI export / export-worker processes share this
-// binary and must never touch it (setSessionMarkerEnabled stays false
+// holds the unsaved edits. To know whether a previous session ended
+// abnormally, each GUI process writes a small **per-instance** marker
+// while a chart is open and deletes it on clean close:
+//
+//     <AppConfigLocation>/sessions/session-<pid>.marker
+//
+// The marker records `pid`, the process `created` time (Windows, for
+// PID-reuse defense), and the current `chart` path. Markers are
+// per-instance — keyed by PID — so multiple MiaCode windows can run at
+// once without a second instance mistaking the first's live marker for an
+// abnormal exit (the old single `session.marker` design did exactly that,
+// and even deleted the running instance's marker). At startup a process
+// scans `sessions/` ONCE and treats a marker as abandoned only if its
+// owning process is no longer alive (OpenProcess + WaitForSingleObject,
+// with a creation-time match to reject recycled PIDs). Live peers' markers
+// are left untouched; each process only ever writes/deletes its own.
+// An abandoned marker for chart X ⇒ a prior session died without a clean
+// shutdown while X was open ⇒ the chart-open recovery prompt for X may also
+// offer the autosave-latest snapshot, not just the crash-handler file. The
+// marker is GUI-session-only: CLI export / export-worker processes share
+// this binary and must never touch it (setSessionMarkerEnabled stays false
 // there).
 //
 // Lifecycle:
@@ -125,23 +138,26 @@ bool deleteRecoveryFile(const QString& chartFilePath);
 // session's marker. Call once from main(), only on the GUI path.
 void setSessionMarkerEnabled(bool enabled);
 
-// Record that a chart is currently open in this GUI session. Writes the
-// chart path to `<AppConfigLocation>/session.marker`. An empty path
-// clears the marker (no chart open → nothing to recover). The first
-// marker operation of the process captures the previous session's
-// abandoned marker (see consumeAbandonedSessionChartMatch) before
-// overwriting it. No-op while the mechanism is disabled.
+// Record that a chart is currently open in this GUI session. Writes this
+// process's own per-instance marker (`sessions/session-<pid>.marker`) with
+// the chart path. An empty path clears this process's marker (no chart open
+// → nothing to recover). The first marker operation of the process captures
+// the abandoned markers other (dead) sessions left behind (see
+// consumeAbandonedSessionChartMatch) before writing. Concurrent live
+// instances are never touched. No-op while the mechanism is disabled.
 void updateSessionMarker(const QString& chartFilePath);
 
-// Delete the marker. Called on clean app close, after autosave/crash
-// cleanup. No-op while the mechanism is disabled.
+// Delete THIS process's own marker. Called on clean app close, after
+// autosave/crash cleanup. Never touches other instances' markers. No-op
+// while the mechanism is disabled.
 void clearSessionMarker();
 
-// True exactly once per process: when chartFilePath matches the chart
-// recorded by the marker the previous session left behind (i.e. that
-// session ended without a clean close while this chart was open).
-// Callers use this to widen the chart-open recovery prompt to the
-// debounced autosave snapshot. Always false while disabled.
+// True once per abandoned chart: when chartFilePath matches a chart recorded
+// by a marker that a NON-LIVE previous session left behind (that session
+// ended without a clean close while this chart was open). Markers belonging
+// to still-running instances are excluded. Callers use this to widen the
+// chart-open recovery prompt to the debounced autosave snapshot. Always
+// false while disabled.
 bool consumeAbandonedSessionChartMatch(const QString& chartFilePath);
 
 }  // namespace miacode::crash_recovery

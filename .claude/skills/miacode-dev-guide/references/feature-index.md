@@ -86,11 +86,16 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   (`onNewFile`, `onOpenFile`, `openStartupTarget`, `onSaveFile`, `runAutosaveCheck`,
   `loadDocument`, `rebuildFieldSidebar`, `populateMetadataPage`, `populateDifficultyPage`).
 - Crash recovery + abnormal-exit autosave prompt: `src/common/CrashRecovery.{h,cpp}`
-  (crash-handler snapshot → `<chart>.crash_recovery`; **session marker**
-  `<AppConfigLocation>/session.marker` written via `TimelineSection::setCurrentFilePath`,
-  cleared on both clean-close paths — legacy `WindowRuntime closeEvent` and quick-shell
-  `WindowShell confirmShellClose` — GUI-only via `setSessionMarkerEnabled(true)` in `main.cpp`,
-  so CLI export/worker runs never touch it). Chart open still calls
+  (crash-handler snapshot → `<chart>.crash_recovery`; **per-instance session marker**
+  `<AppConfigLocation>/sessions/session-<pid>.marker` — records `pid` + process `created`
+  time + `chart` path — written via `TimelineSection::setCurrentFilePath`, cleared on both
+  clean-close paths — legacy `WindowRuntime closeEvent` and quick-shell `WindowShell
+  confirmShellClose` — GUI-only via `setSessionMarkerEnabled(true)` in `main.cpp`, so CLI
+  export/worker runs never touch it. **Multi-instance safe:** markers are PID-keyed and a
+  marker counts as abandoned only when its owning process is no longer alive — `processIsLive`
+  via `OpenProcess`+`WaitForSingleObject`, with a creation-time match to reject recycled PIDs;
+  a second concurrent window no longer mistakes the first's live marker for a crash, and each
+  process only writes/deletes its own file). Chart open still calls
   `prepareForChart`, then `applyOpenedDocumentState` only detects an abandoned marker or
   existing crash-recovery file and records `pendingAbnormalExitBackupRestorePath_` as the same
   newest entry shown by File → Restore Backup (`backupRestoreEntriesForAutosaveDirectory`:
