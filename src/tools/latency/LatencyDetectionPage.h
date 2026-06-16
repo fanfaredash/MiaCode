@@ -14,6 +14,7 @@ class QPushButton;
 class QRadioButton;
 class QSlider;
 class QTimer;
+class QSpinBox;
 
 namespace miacode::latency {
 
@@ -62,6 +63,7 @@ private slots:
     void onAuditionButtonClicked();
     void onDetectBpmClicked();
     void onDetectOffsetClicked();
+    void onDetectClockCountClicked();
     void onAuditionStateChanged(bool running);
     void onPlayheadAdvanced(double seconds);
 
@@ -69,6 +71,7 @@ private:
     void buildUi();
     void commitBpmEdit();
     void commitOffsetEdit();
+    void commitClockCountEdit();
     void updateAuditionUi(bool running);
     void updatePositionLabel(double seconds);
     void updateAutoDetectAvailability();
@@ -79,6 +82,7 @@ private:
     QString currentTrackPath() const;
     double documentOffsetSeconds() const;
     double documentWholeBpm() const;
+    int documentClockCount() const;
 
     QPointer<MainWindow> owner_;
     QPointer<LatencySandboxController> sandbox_;
@@ -93,6 +97,11 @@ private:
     QPushButton* detectOffsetButton_ = nullptr;
     QLabel* offsetDetectResultLabel_ = nullptr;
 
+    // Clock count card
+    QSpinBox* clockCountEdit_ = nullptr;
+    QPushButton* detectClockCountButton_ = nullptr;
+    QLabel* clockCountDetectResultLabel_ = nullptr;
+
     // Audition card
     QRadioButton* subdivision4Radio_ = nullptr;
     QRadioButton* subdivision8Radio_ = nullptr;
@@ -103,6 +112,7 @@ private:
 
     QTimer* bpmDebounceTimer_ = nullptr;
     QTimer* offsetDebounceTimer_ = nullptr;
+    QTimer* clockCountDebounceTimer_ = nullptr;
 
     // Cached audio envelopes for auto-detection (re-decoded only when
     // the track path changes).

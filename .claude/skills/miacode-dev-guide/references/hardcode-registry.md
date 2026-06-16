@@ -15,7 +15,7 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   `0.95`), dimming geometry, smooth brightness.
 - `LayoutRingConfig.h` — fixed outline-to-playfield diameter ratio (preview ↔ export dim mask).
 - `PreviewSfxAssets.h` — SFX kind→filename mapping + SFX dir resolution.
-- `ChartClockCount.h` — export-only `&clock_count=` parsing + BPM fallback order.
+- `ChartClockCount.h` — shared `&clock_count=` parsing + BPM fallback order; a missing value is materialized as `4` by `SimaiDocument::ensureDefaultClockCount`; consumed by chart metadata, the latency settings UI, and export count-in.
 - `PreviewTimingSettings.h` — persisted preview timing offset layers (`audioOffset`,
   `displayOffset`, `judgeOffset`, `answerOffset`).
 - `PreviewAudioMixConfig.h` — shared offline mix format (`48 kHz`, stereo).

@@ -104,7 +104,7 @@ Shared concerns (collapse/latest-wins/offset rules live in `src/common/PreviewSf
   `endSecond` == next `startSecond`), overlap, or nesting lets the newer touch-hold take over the
   voice instead of the older span's stop clobbering it. Don't go back to per-event naive start/stop
   or a first-wins active-set. Export is unaffected (it renders each `TouchholdSpan` independently).
-- `&clock_count=` is export-only count-in (`src/common/ChartClockCount.h`); full-range lead-in `2.0s`,
+- `&clock_count=` is a defaulted (`4`) count-in metadata field (`src/common/ChartClockCount.h`), editable from the latency settings page + metadata "Other &xx Fields" and materialized by `SimaiDocument::ensureDefaultClockCount`; its export count-in uses full-range lead-in `2.0s`,
   partial preload `1.0s` (`src/common/VideoExportConfig.h`). Full-vs-partial classification: any range
   STARTING at chart 0 counts as full-range even if it ends early (count-down lead-in, no frozen
   preload / pause glyph); only start > 0 is partial. Decided in TWO places that must stay in sync:

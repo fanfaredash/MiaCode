@@ -767,10 +767,17 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   card's jacket slot still shows the 曲绘. Batch export (`BatchVideoExportDialog`) and the CLI
   keep spec defaults (jacket/blur/DX).
 
-## 9. Latency settings (BPM & offset) — `src/tools/latency/`
+## 9. Latency settings (BPM / offset / clock_count) — `src/tools/latency/`
 
 - `LatencyDetectionPage.*`, `LatencyAnalysis.*`, `LatencySandboxController.*`,
   `LatencyTestChartBuilder.*` (an in-sidebar page + sandbox audition).
+- **UI** is one "Chart Parameters" (谱面参数) card holding three symmetric grid rows
+  (label / spin / auto-detect / result) for BPM, Offset, and `clock_count`, plus the
+  audition card; the audio/video media-tools launcher sits in the page back-bar (not on
+  the Offset row) so the rows stay uniform. `clock_count` (spin 1–64, default 4) writes
+  through `MainWindow::applyLatencyDetectorClockCount` → `parsedClockCount` →
+  `extraFields`; `自动检测 BPM` also fills it from the detected meter numerator. The
+  `自动检测 Offset` entry point is visible again here (its wiring was always intact).
 - **Detection algorithm** lives in `LatencyAnalysis.*` (pure, GUI-free): `decodeMonoTrack` →
   `buildOnsetEnvelope` (energy-flux, for BPM) + `buildTransientEnvelope` (abs-diff, for offset)
   → `detectBpm` (autocorrelation + meter-template comb) + `detectOffset` (per-beat phase scan,

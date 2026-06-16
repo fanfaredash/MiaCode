@@ -24,8 +24,9 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: SFX kind-to-filename mapping and SFX directory resolution
   - Scope: sound asset conventions
 - `src/common/ChartClockCount.h`
-  - Owns: export-only `&clock_count=` parsing plus its BPM fallback order (`&wholebpm=`, first inline `(BPM)`, then `120 BPM`)
-  - Scope: chart metadata to full-range export count-in scheduling
+  - Owns: shared `&clock_count=` parsing plus its BPM fallback order (`&wholebpm=`, first inline `(BPM)`, then `120 BPM`)
+  - Current default: missing `&clock_count=` is materialized as `4` by `SimaiDocument::ensureDefaultClockCount(...)`; latency BPM auto-detection maps detected meter ids such as `3/4`, `4/4`, or `6/8` to the numerator when updating the field
+  - Scope: chart metadata, latency settings UI, and full-range export count-in scheduling
 - `src/common/PreviewTimingSettings.h`
   - Owns: persisted preview timing offset layers (`audioOffset`, `displayOffset`, `judgeOffset`, `answerOffset`) plus the internal frame-vs-second conversion helper for future callers
   - Scope: realtime preview, persistence, and export snapshot/task timing parity
