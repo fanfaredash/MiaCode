@@ -1005,24 +1005,33 @@ QIcon makeToolboxAccessIcon(const QColor& toolboxColor, const QColor& gearColor)
 
 QIcon makeMediaToolsIcon(const QColor& color)
 {
-    // "Tune" glyph (three horizontal slider rails with handles) — reads as
-    // audio/video processing / adjustment, and stays distinct from the toolbox
-    // and settings-gear icons used elsewhere.
+    // Magic-wand + sparkle ("process / apply effects"): a clean single-concept
+    // glyph, distinct from the toolbox and settings-gear icons used elsewhere.
     QPixmap pixmap(20, 20);
     pixmap.fill(Qt::transparent);
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    QPen pen(color, 1.7);
-    pen.setCapStyle(Qt::RoundCap);
-    pen.setJoinStyle(Qt::RoundJoin);
-    painter.setPen(pen);
-    painter.drawLine(QPointF(3.2, 6.0), QPointF(16.8, 6.0));
-    painter.drawLine(QPointF(3.2, 10.0), QPointF(16.8, 10.0));
-    painter.drawLine(QPointF(3.2, 14.0), QPointF(16.8, 14.0));
+
+    QPen shaft(color, 2.0);
+    shaft.setCapStyle(Qt::RoundCap);
+    shaft.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(shaft);
+    painter.drawLine(QPointF(4.8, 15.6), QPointF(12.4, 8.0));
+
+    // Four-point sparkle at the wand tip.
+    const QPointF center(14.2, 5.8);
+    const double outerRadius = 3.7;
+    const double innerRadius = 1.15;
+    QPolygonF sparkle;
+    for (int index = 0; index < 8; ++index) {
+        const double angle = (index * 45.0 - 90.0) * 0.017453292519943295;
+        const double radius = (index % 2 == 0) ? outerRadius : innerRadius;
+        sparkle << center + QPointF(qCos(angle) * radius, qSin(angle) * radius);
+    }
+    painter.setPen(Qt::NoPen);
     painter.setBrush(color);
-    painter.drawEllipse(QPointF(12.5, 6.0), 2.3, 2.3);
-    painter.drawEllipse(QPointF(7.0, 10.0), 2.3, 2.3);
-    painter.drawEllipse(QPointF(13.5, 14.0), 2.3, 2.3);
+    painter.drawPolygon(sparkle);
+
     painter.end();
     return QIcon(pixmap);
 }

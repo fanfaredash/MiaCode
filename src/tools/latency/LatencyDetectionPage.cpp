@@ -78,16 +78,6 @@ protected:
     void wheelEvent(QWheelEvent* event) override { event->ignore(); }
 };
 
-int clockCountFromMeterId(const QString& meterId)
-{
-    const int slash = meterId.indexOf(QLatin1Char('/'));
-    if (slash <= 0) {
-        return 0;
-    }
-    bool ok = false;
-    const int numerator = meterId.left(slash).trimmed().toInt(&ok);
-    return (ok && numerator > 0) ? numerator : 0;
-}
 }  // namespace
 
 LatencyDetectionPage::LatencyDetectionPage(MainWindow* owner, QWidget* parent)
@@ -337,7 +327,7 @@ void LatencyDetectionPage::buildUi()
             this, &LatencyDetectionPage::onBpmEditValueChanged);
     paramGrid->addWidget(bpmEdit_, 0, 1, Qt::AlignVCenter);
     detectBpmButton_ = new QPushButton(
-        localizedText(QStringLiteral("自动检测 BPM"), QStringLiteral("Auto-detect BPM")), paramCard);
+        localizedText(QStringLiteral("自动检测"), QStringLiteral("Auto-detect")), paramCard);
     detectBpmButton_->setCursor(Qt::PointingHandCursor);
     connect(detectBpmButton_, &QPushButton::clicked, this, &LatencyDetectionPage::onDetectBpmClicked);
     paramGrid->addWidget(detectBpmButton_, 0, 2, Qt::AlignVCenter);
@@ -346,10 +336,10 @@ void LatencyDetectionPage::buildUi()
     bpmDetectResultLabel_->setFont(resultFont);
     paramGrid->addWidget(bpmDetectResultLabel_, 0, 3, Qt::AlignLeft | Qt::AlignVCenter);
 
-    // Row 1: Start Offset (First). The auto-detect Offset entry point is shown
-    // here again (it had been hidden); its wiring was always intact.
+    // Row 1: Offset (&first). The auto-detect Offset entry point is shown here
+    // again (it had been hidden); its wiring was always intact.
     paramGrid->addWidget(
-        makeRowLabel(localizedText(QStringLiteral("起始偏移 Offset"), QStringLiteral("Start Offset"))),
+        makeRowLabel(localizedText(QStringLiteral("偏移"), QStringLiteral("Offset"))),
         1, 0, Qt::AlignLeft | Qt::AlignVCenter);
     offsetEdit_ = new NoWheelDoubleSpinBox(paramCard);
     offsetEdit_->setRange(-999.0, 999.0);
@@ -366,7 +356,7 @@ void LatencyDetectionPage::buildUi()
             this, &LatencyDetectionPage::onOffsetEditValueChanged);
     paramGrid->addWidget(offsetEdit_, 1, 1, Qt::AlignVCenter);
     detectOffsetButton_ = new QPushButton(
-        localizedText(QStringLiteral("自动检测 Offset"), QStringLiteral("Auto-detect Offset")), paramCard);
+        localizedText(QStringLiteral("自动检测"), QStringLiteral("Auto-detect")), paramCard);
     detectOffsetButton_->setCursor(Qt::PointingHandCursor);
     connect(detectOffsetButton_, &QPushButton::clicked, this, &LatencyDetectionPage::onDetectOffsetClicked);
     paramGrid->addWidget(detectOffsetButton_, 1, 2, Qt::AlignVCenter);
@@ -375,9 +365,9 @@ void LatencyDetectionPage::buildUi()
     offsetDetectResultLabel_->setFont(resultFont);
     paramGrid->addWidget(offsetDetectResultLabel_, 1, 3, Qt::AlignLeft | Qt::AlignVCenter);
 
-    // Row 2: clock_count (export count-in beats; also auto-filled by BPM detect)
+    // Row 2: clock_count (export count-in beats; a plain manual field)
     paramGrid->addWidget(
-        makeRowLabel(localizedText(QStringLiteral("拍号 clock_count"), QStringLiteral("Clock count"))),
+        makeRowLabel(QStringLiteral("clock_count")),
         2, 0, Qt::AlignLeft | Qt::AlignVCenter);
     clockCountEdit_ = new NoWheelSpinBox(paramCard);
     clockCountEdit_->setRange(1, 64);
@@ -392,15 +382,8 @@ void LatencyDetectionPage::buildUi()
         }
     });
     paramGrid->addWidget(clockCountEdit_, 2, 1, Qt::AlignVCenter);
-    // No dedicated meter-detect button: clock_count is filled together with
-    // 自动检测 BPM (from the detected meter numerator), so a muted hint stands in
-    // for the removed control across the detect + result columns.
-    auto* clockCountHintLabel = new QLabel(
-        localizedText(QStringLiteral("随「自动检测 BPM」一并填充"),
-                      QStringLiteral("Filled together with Auto-detect BPM")), paramCard);
-    clockCountHintLabel->setProperty("role", "cardHint");
-    clockCountHintLabel->setFont(resultFont);
-    paramGrid->addWidget(clockCountHintLabel, 2, 2, 1, 2, Qt::AlignLeft | Qt::AlignVCenter);
+    // clock_count is a plain manual field: no auto-detect button, no hint, and
+    // BPM detection no longer writes it.
 
     paramLayout->addLayout(paramGrid);
     contentLayout->addWidget(paramCard);
@@ -414,7 +397,7 @@ void LatencyDetectionPage::buildUi()
     auto* subdivRow = new QHBoxLayout();
     subdivRow->setSpacing(16);
     auto* subdivLabel = new QLabel(
-        localizedText(QStringLiteral("细分:"), QStringLiteral("Subdivision:")), auditionCard);
+        localizedText(QStringLiteral("分音:"), QStringLiteral("Subdivision:")), auditionCard);
     subdivLabel->setProperty("role", "cardHint");
     subdivLabel->setFont(hintFont);
     subdivRow->addWidget(subdivLabel);
@@ -456,7 +439,7 @@ void LatencyDetectionPage::buildUi()
     sfxVolumeSlider_ = new NoWheelSlider(Qt::Horizontal, auditionCard);
     sfxVolumeSlider_->setRange(0, 100);
     sfxVolumeSlider_->setValue(kDefaultSfxVolumePercent);
-    sfxVolumeSlider_->setMinimumWidth(180);
+    sfxVolumeSlider_->setMinimumWidth(120);
     connect(sfxVolumeSlider_, &QSlider::valueChanged, this, &LatencyDetectionPage::onSfxVolumeChanged);
     volumeRow->addWidget(sfxVolumeSlider_, 1);
     sfxVolumeValueLabel_ = new QLabel(QStringLiteral("%1%").arg(kDefaultSfxVolumePercent), auditionCard);
@@ -646,19 +629,11 @@ void LatencyDetectionPage::onDetectBpmClicked()
     lastDetectedMeterId_ = result.meterId;
     lastDetectedMeterPhase_ = result.meterPhaseSeconds;
     hasLastDetectedMeterPhase_ = result.meterPhaseValid;
-    const int detectedClockCount = clockCountFromMeterId(result.meterId);
-    if (detectedClockCount > 0 && clockCountEdit_ != nullptr) {
-        QSignalBlocker blocker(clockCountEdit_);
-        clockCountEdit_->setValue(detectedClockCount);
-    }
     if (bpmEdit_ != nullptr) {
         QSignalBlocker blocker(bpmEdit_);
         bpmEdit_->setValue(result.bpm);
     }
     commitBpmEdit();
-    if (detectedClockCount > 0) {
-        commitClockCountEdit();
-    }
     if (bpmDetectResultLabel_ != nullptr) {
         bpmDetectResultLabel_->setText(localizedText(
             QStringLiteral("检测结果: %1"),
