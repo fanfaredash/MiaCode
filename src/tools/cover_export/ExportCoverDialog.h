@@ -107,6 +107,9 @@ private:
     miacode::cover_export::CoverLayoutModel* model_ = nullptr;
     miacode::cover_export::CoverComposerView* composerView_ = nullptr;
     QWidget* previewContainer_ = nullptr;
+    // Height of the three stacked control groups (+ inter-group gaps); the preview
+    // frame is sized to this so its bottom aligns with the 谱面帧 group bottom.
+    int controlsStackHeight_ = 0;
 
     QComboBox* sizeCombo_ = nullptr;
     QComboBox* backgroundCombo_ = nullptr;

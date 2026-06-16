@@ -60,8 +60,9 @@ constexpr CoverResolutionPreset kCoverResolutionPresets[] = {
 };
 
 // Longest side of the live-preview pane in logical px; the preview letterboxes
-// to the chosen output aspect so the layout matches the export exactly.
-constexpr int kPreviewBox = 400;
+// to the chosen output aspect so the layout matches the export exactly. Sized
+// generously so the card/frame are comfortable to drag-place and resize.
+constexpr int kPreviewBox = 560;
 
 // Visual-only playback tick (~60 fps). The live scene repaints from the shared
 // playhead each tick; real elapsed wall time (not the tick count) sets the time,
@@ -246,19 +247,6 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
         previewFrameLayout->addWidget(failed);
     }
     previewColumn->addWidget(previewFrame, 0, Qt::AlignTop);
-
-    auto* previewHint = new QLabel(
-        l10n(QStringLiteral("Drag the card to place it; drag the corner to resize. Lines snap to centre/edges."),
-             QStringLiteral("拖动卡片摆放，拖角缩放；松手会吸附到中线/边缘。")),
-        this);
-    previewHint->setWordWrap(true);
-    previewHint->setAlignment(Qt::AlignHCenter);
-    previewHint->setStyleSheet(QStringLiteral("color: %1;")
-        .arg(UiTheme::colors().textSecondary.name(QColor::HexRgb)));
-    // No alignment flag: an aligned word-wrapped label only gets its (narrow)
-    // sizeHint width, so heightForWidth under-allocates and the text is clipped.
-    // Give it the full column width and centre the text internally instead.
-    previewColumn->addWidget(previewHint);
 
     resetLayoutButton_ = new QPushButton(
         l10n(QStringLiteral("Reset layout"), QStringLiteral("重置布局")), this);
@@ -483,6 +471,14 @@ ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& i
 
     controlsColumn->addWidget(frameGroup);
     controlsColumn->addStretch(1);
+
+    // Height of the three stacked control groups + the two inter-group gaps. The
+    // preview frame is sized to this (minus its 1px margins) so its BOTTOM lines up
+    // with the bottom of the 谱面帧 group — both columns start at the same top.
+    controlsStackHeight_ = canvasGroup->sizeHint().height()
+        + cardGroup->sizeHint().height()
+        + frameGroup->sizeHint().height()
+        + 2 * controlsColumn->spacing();
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
     auto* exportButton = buttonBox->addButton(
@@ -969,16 +965,34 @@ void ExportCoverDialog::resizePreviewToAspect()
         return;
     }
     const QSize sz = currentSize();
-    int pw = kPreviewBox;
-    int ph = kPreviewBox;
-    if (sz.width() >= sz.height()) {
-        pw = kPreviewBox;
-        ph = qMax(1, qRound(static_cast<double>(pw) * sz.height() / sz.width()));
-    } else {
-        ph = kPreviewBox;
-        pw = qMax(1, qRound(static_cast<double>(ph) * sz.width() / sz.height()));
-    }
+    // Anchor the preview HEIGHT so the preview-frame bottom lines up with the bottom
+    // of the 谱面帧 group on the right (controlsStackHeight_ minus the frame's 1px
+    // top+bottom margins), then let the WIDTH follow the chosen aspect ratio. Picking
+    // a wider ratio (4:3 / 16:9) thus WIDENS the window rather than changing the
+    // editing-area height. kPreviewBox is the fallback if the stack isn't measured.
+    const int ph = controlsStackHeight_ > 2 ? controlsStackHeight_ - 2 : kPreviewBox;
+    const int pw = qMax(1, qRound(static_cast<double>(ph) * sz.width() / sz.height()));
     previewContainer_->setFixedSize(pw, ph);
+
+    // Once shown, a wider/narrower aspect ratio changes the dialog width; keep the
+    // window on its previous CENTER so widening to 4:3 / 16:9 stays centered instead
+    // of expanding to the right. The embedded native preview window relayouts the
+    // dialog ASYNCHRONOUSLY, so measuring/moving now would use the stale (pre-grow)
+    // size and leave it expanded rightward. Capture the current center and re-apply
+    // it on the next event-loop turn, after the new size has settled. (Skipped
+    // before first show — geometry isn't meaningful yet; the platform centres it.)
+    if (isVisible()) {
+        const QPoint targetCenter = frameGeometry().center();
+        QTimer::singleShot(0, this, [this, targetCenter] {
+            if (QLayout* dialogLayout = layout()) {
+                dialogLayout->activate();
+            }
+            adjustSize();
+            QRect frame = frameGeometry();
+            frame.moveCenter(targetCenter);
+            move(frame.topLeft());
+        });
+    }
 }
 
 miacode::cover_export::CoverExportResult ExportCoverDialog::exportCover(const QString& outputDirectory)
