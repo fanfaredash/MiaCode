@@ -37,6 +37,7 @@ class QAction;
 class QByteArray;
 class QCloseEvent;
 class QChronoTimer;
+class QDialog;
 class QDockWidget;
 class QEvent;
 class PreviewStageMediaHost;
@@ -302,6 +303,7 @@ private slots:
     void onEditStaticTapOnSlideThreshold();
     void onBatchExportPreviewVideo();
     void onPackAsZip();
+    void onNetBatchDownload();
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
     void onMediaProcessingTools();

@@ -78,7 +78,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
 
     fileMenu->addSeparator();
 
-    owner_.openCurrentFolderAction_ = new QAction(uiText("action.open_folder", "Open Folder"), &owner_);
+    owner_.openCurrentFolderAction_ = new QAction(uiText("action.open_current_folder", "Open Current Folder"), &owner_);
     connect(owner_.openCurrentFolderAction_, &QAction::triggered, &owner_, &MainWindow::onOpenCurrentFolder);
     fileMenu->addAction(owner_.openCurrentFolderAction_);
 
@@ -382,6 +382,12 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         &owner_
     );
     connect(owner_.convertTrackTo44100HzAction_, &QAction::triggered, &owner_, &MainWindow::onConvertTrackTo44100Hz);
+
+    owner_.netBatchDownloadAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("Net 批量下载...") : QStringLiteral("Net Batch Download..."),
+        &owner_
+    );
+    connect(owner_.netBatchDownloadAction_, &QAction::triggered, &owner_, &MainWindow::onNetBatchDownload);
 
     owner_.normalizeWholeChartAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("谱面整理") : QStringLiteral("Format Chart"),

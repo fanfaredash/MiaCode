@@ -58,7 +58,7 @@ configure_file(
     @ONLY
 )
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets OpenGL Multimedia Quick Qml QuickControls2 ShaderTools Svg)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network OpenGL Multimedia Quick Qml QuickControls2 ShaderTools Svg)
 
 # MultimediaQuickPrivate exposes the private QtMultimedia headers
 # (qhwvideobuffer_p.h / qvideotexturehelper_p.h) that QtAVPlayer's
@@ -222,6 +222,12 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/VideoExportSnapshot.cpp
     src/tools/zip_export/ChartZipPackager.h
     src/tools/zip_export/ChartZipPackager.cpp
+    src/tools/net/NetClient.h
+    src/tools/net/NetClient.cpp
+    src/tools/net/NetBatchDownloadWorker.h
+    src/tools/net/NetBatchDownloadWorker.cpp
+    src/tools/net/NetBatchDownloadDialog.h
+    src/tools/net/NetBatchDownloadDialog.cpp
     src/tools/cover_export/CoverLayoutModel.h
     src/tools/cover_export/CoverLayoutModel.cpp
     src/tools/cover_export/CoverComposerView.h
@@ -554,6 +560,7 @@ target_link_libraries(MiaCode PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Widgets
+    Qt6::Network
     soundtouch
     miniz
 )
@@ -577,6 +584,7 @@ target_include_directories(MiaCode PRIVATE
     src/timeline
     src/tools/latency
     src/tools/video_export
+    src/tools/net
 )
 
 target_sources(MiaCode PRIVATE
@@ -1209,6 +1217,18 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/zip_export/ChartZipPackager.cpp
             src/common/ChartAssetPaths.h
         LIBS Qt6::Core Qt6::Gui miniz
+        INCLUDES src src/common src/tools
+    )
+
+    miacode_add_dev_tool(net_client_spec TEST
+        SOURCES
+            src/tools/net/NetClientSpec.cpp
+            src/tools/net/NetClient.h
+            src/tools/net/NetClient.cpp
+            src/tools/zip_export/ChartZipPackager.h
+            src/tools/zip_export/ChartZipPackager.cpp
+            src/common/ChartAssetPaths.h
+        LIBS Qt6::Core Qt6::Network miniz
         INCLUDES src src/common src/tools
     )
 

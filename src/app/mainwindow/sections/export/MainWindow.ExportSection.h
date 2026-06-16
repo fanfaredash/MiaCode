@@ -20,6 +20,7 @@ public:
     // seeds the dialog's default difficulty token.
     void onBatchExportPreviewVideo(int difficultyId = 0);
     void onPackAsZip();
+    void onNetBatchDownload();
     // ---- E-C embedded video panel (hosted by the Export hub page) ----
     // Builds a VideoExportDialog in embedded panel mode seeded with the given
     // difficulty, begins the export-preview session (exportPreviewActive_,

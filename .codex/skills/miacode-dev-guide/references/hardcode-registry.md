@@ -37,7 +37,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: shared runtime/export SFX timing formulas, including the current offset layering (`audioOffset` as whole-SFX chart shift, positive `displayOffset` advancing only answer/judge families, family-specific `judge` / `answer` offsets) plus the chart-domain `1/60 s` pre-trigger shared by answer and judge-family SFX
   - Scope: realtime preview and export SFX timing parity
 - `src/preview/audio/PreviewAudioSettings.h`
-  - Owns: shared preview/export SFX aggregation policy plus the Majdata-View-style bucket-to-kind gain mapping
+  - Owns: shared preview/export SFX aggregation policy plus the Net-View-style bucket-to-kind gain mapping
   - Current defaults: Global `0.30`, Track `1.0`, Answer `0.80`, Tap `0.30`, EX `0.30`, Break `0.30`, Slide `0.30`, Touch `0.30`, Firework `0.30`
   - Scope: realtime preview and export audio balance
 - `src/common/VideoExportConfig.h`
@@ -110,6 +110,10 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: toolbox media-prepend ffmpeg defaults and local file conventions
   - Current tuning note: prepended background-video black frames are encoded as `1920x1080` at `30 FPS`, the original video is letterboxed into that canvas, output uses x264 `CRF 18` / `veryfast`, and the generated background video is video-only. Prepended `track.mp3` silence uses stereo `44100 Hz` anullsrc and libmp3lame `-q:a 2`. Backups are fixed at `track_bak.mp3` for audio and `<video-stem>_bak.mp4` for video. Blank duration defaults detect beat count from `&clock_count=` / `&clockcount=` before falling back to `4`, and BPM from `&wholebpm=` before the first half-width chart BPM token before falling back to `120`.
   - Rule: keep local while this remains a single toolbox operation; promote if export, preview, or batch tooling starts sharing the same media-mutation policy
+- `src/tools/net/NetClient.cpp`, `src/tools/net/NetBatchDownloadWorker.cpp`, and `src/tools/net/NetBatchDownloadDialog.cpp`
+  - Owns: Net public-resource download defaults and local chart-folder conventions
+  - Current tuning note: network requests use a local `60 s` timeout. User-ID queries prefer one `uploader:<ID>` list request and only try limited case-variant fallback queries if fuzzy matching is enabled and the exact uploader request returns no rows; tag-only queries may use additional case/plain-text variants when fuzzy matching is enabled. Resource downloads run on a background worker thread, retry up to `3` attempts with an `800 ms` retry wait, chart-to-chart queue pacing is `250 ms`, and successful folder downloads use the fixed file set `track.mp3`, `bg.jpg`, and `maidata.txt`. Optional zip packaging writes those same three entries. Diagnostics report per-resource `KiB/s` / `MiB/s`, per-chart slowest resource, and queue-average speed.
+  - Rule: keep local while this remains a single Net toolbox operation; promote if other importers/downloaders start sharing the same remote-resource policy
 - `src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp`
   - Owns: wrapped Validation/Muri issue-row padding, minimum row height, and ignored-row opacity used by the shared rich-text list delegate
   - Rule: keep local while these values only shape diagnostics-list rendering in the main window and are not reused by other widgets or the Quick frontend

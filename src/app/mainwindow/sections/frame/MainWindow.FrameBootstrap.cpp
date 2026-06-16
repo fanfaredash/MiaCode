@@ -1133,6 +1133,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     if (packAsZipAction_ != nullptr) {
         toolboxMenu_->addAction(packAsZipAction_);
     }
+    if (netBatchDownloadAction_ != nullptr) {
+        toolboxMenu_->addAction(netBatchDownloadAction_);
+    }
 
     // Copy Area is intentionally hidden from the toolbox per the toolbox
     // revamp. The feature itself is kept intact — copyAreaPanel_/copyAreaEditor_,

@@ -295,4 +295,3 @@ bool QtPreviewSfxRuntime::stretchedBackgroundClockReady() const
     QMutexLocker locker(&stretchedBackgroundState_->mutex);
     return stretchedBackgroundState_->authoritativeClockReady;
 }
-
