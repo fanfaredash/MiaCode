@@ -2044,6 +2044,24 @@ miacode::preview_audio::PausePreviewResult BassPreviewAudioBackend::pausePreview
     PausePreviewResult result;
     result.usedBackgroundTrack = hasBackgroundTrack();
     result.pauseSecond = authoritativeSecond();
+    // G1 fix (A/V desync on resume): authoritativeSecond() is the last externally
+    // recorded snapshot, which on the export-page audition pause path can be stale
+    // — reset toward the session start (0) — while the BGM sample kept advancing to
+    // the true playhead. That desynced resume (transport from 0, BGM from its real
+    // position). When a BGM is the live clock, take ITS position (the ground truth
+    // of where the audio actually is) as the pause second so transport and BGM
+    // resume in lockstep. No-op in the editor preview, where the BGM already tracks
+    // the playhead, so authoritativeSecond() and the BGM position agree.
+    if (playbackSession_.masterRunning
+        && result.usedBackgroundTrack
+        && backgroundTrackSample_ != nullptr
+        && !playbackSession_.backgroundTrackPendingStart) {
+        const double bgmChartSecond =
+            backgroundTrackSample_->currentSec() - playbackSession_.backgroundTrackOffsetSeconds;
+        if (qIsFinite(bgmChartSecond) && bgmChartSecond >= 0.0) {
+            result.pauseSecond = bgmChartSecond;
+        }
+    }
     playbackSession_.lastAuthoritativeSecond = result.pauseSecond;
     if (playbackSession_.masterRunning) {
         suspendPlaybackTransport();
