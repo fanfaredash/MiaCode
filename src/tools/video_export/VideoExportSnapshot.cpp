@@ -215,6 +215,7 @@ QJsonObject VideoExportSnapshot::toJson() const
     render.insert(QStringLiteral("show_timestamp"), showTimestamp);
     render.insert(QStringLiteral("show_object_stats_hud"), showObjectStatsHud);
     render.insert(QStringLiteral("show_chart_info_hud"), showChartInfoHud);
+    render.insert(QStringLiteral("clock_count"), clockCount);
     render.insert(
         QStringLiteral("center_display_mode"),
         QString::fromLatin1(miacode::preview_gameplay::centerDisplayModeToken(centerDisplayMode))
@@ -347,6 +348,8 @@ bool VideoExportSnapshot::fromJson(
         render.value(QStringLiteral("show_object_stats_hud")).toBool(parsed.showObjectStatsHud);
     parsed.showChartInfoHud =
         render.value(QStringLiteral("show_chart_info_hud")).toBool(parsed.showChartInfoHud);
+    parsed.clockCount =
+        render.value(QStringLiteral("clock_count")).toInt(parsed.clockCount);
     parsed.centerDisplayMode = miacode::preview_gameplay::centerDisplayModeFromToken(
         render.value(QStringLiteral("center_display_mode")).toString(
             QString::fromLatin1(miacode::preview_gameplay::centerDisplayModeToken(parsed.centerDisplayMode))));
@@ -495,7 +498,12 @@ bool buildVideoExportTaskFromSnapshot(
     built.intro = snapshot.intro;
     built.centerDisplayMode = snapshot.centerDisplayMode;
     built.skinLoadWaitMs = qBound(0, snapshot.skinLoadWaitMs, 20000);
-    built.clockCount = miacode::chart_clock::clockCountFromDocument(document);
+    // Honor an explicit clock_count baked into the snapshot (the video dialog's
+    // "Enable clock_count" gate — 0 disables the count-in); otherwise derive it
+    // from the chart (legacy / CLI / batch, where the snapshot carries -1).
+    built.clockCount = snapshot.clockCount >= 0
+        ? snapshot.clockCount
+        : miacode::chart_clock::clockCountFromDocument(document);
     built.clockBpm = miacode::chart_clock::clockBpmForChart(document, difficulty->chart);
     built.muriAnalysisReport = MuriAnalyzer::analyze(
         built.noteMarkers,

@@ -637,6 +637,9 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.showChartInfoHud = requestedTask.showChartInfoHud;
     built.centerDisplayMode = requestedTask.centerDisplayMode;
     built.skinLoadWaitMs = requestedTask.skinLoadWaitMs;
+    // Bake the dialog's clock_count gate into the snapshot so the worker honors it
+    // instead of re-deriving from the chart (snapshots elsewhere keep -1 = derive).
+    built.clockCount = requestedTask.clockCount;
     built.intro = buildIntroBannerSpec(
         owner_.document_,
         resolvedDifficultyId,

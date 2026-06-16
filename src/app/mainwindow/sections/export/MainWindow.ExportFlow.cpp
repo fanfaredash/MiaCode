@@ -10,6 +10,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/ChartAssetPaths.h"
+#include "common/ChartClockCount.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
@@ -461,6 +462,9 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask(int difficul
     // Seed the banner-card payload so the dialog's "Export Cover" can render the
     // difficulty card without building a full export snapshot.
     task.intro = buildIntroBannerSpecForDifficulty(resolvedDifficultyId);
+    // Seed clock_count so the dialog's "Enable clock_count (N)" checkbox shows the
+    // chart's value; the checkbox then gates whether it reaches the export.
+    task.clockCount = miacode::chart_clock::clockCountFromDocument(owner_.document_);
     return task;
 }
 
