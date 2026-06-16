@@ -123,6 +123,11 @@
     bool handleExportIntroSliderSeek(double second);
     double exportIntroLowerBoundSeconds() const;
     void refreshExportIntroState();
+    // clock_count count-in for the export-page audition: seed/clear forwarders the
+    // audition-scene install/teardown call (the count-in plays on the chart audition
+    // after the intro hands off, mirroring the exported clock track).
+    void setExportAuditionClockSchedule(int clockCount, double clockBpm);
+    void clearExportAuditionClockSchedule();
     void updateMetadataPageMode();
     bool deleteDifficultyField(int difficultyId);
     void updateDifficultyDeleteButton(bool visible);

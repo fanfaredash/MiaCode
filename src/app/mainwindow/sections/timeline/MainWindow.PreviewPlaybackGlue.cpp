@@ -191,3 +191,13 @@ void MainWindow::refreshExportIntroState()
 {
     timelineSection_->refreshExportIntroState();
 }
+
+void MainWindow::setExportAuditionClockSchedule(int clockCount, double clockBpm)
+{
+    timelineSection_->setExportAuditionClockSchedule(clockCount, clockBpm);
+}
+
+void MainWindow::clearExportAuditionClockSchedule()
+{
+    timelineSection_->clearExportAuditionClockSchedule();
+}

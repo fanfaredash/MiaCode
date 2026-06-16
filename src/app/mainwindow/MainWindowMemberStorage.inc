@@ -348,6 +348,19 @@
         double exportIntroPlayheadSeconds_ = 0.0;
         double exportIntroAdvanceFromSeconds_ = 0.0;
         bool exportIntroRegionActive_ = false;
+        // Persistent, preloaded one-shot for the 片头 "track-start" opening jingle.
+        // Created/sourced once (a fresh QSoundEffect played in the same breath it is
+        // sourced silently drops the first play — the async load isn't ready yet), so
+        // startExportIntroAdvance only stop()+play()s it.
+        QSoundEffect* exportIntroStartSound_ = nullptr;
+        // clock_count count-in for the export-page audition: clock.wav ticks at
+        // chart-time [0, count*beat) (beat = 60/clockBpm), mirroring the export's
+        // appendClockCountPlaybacks. Fired one-shot from the playback tick (NOT the
+        // SFX timeline — the resume hand-off at chart 0 would skip the downbeat).
+        // Scoped to exportPreviewAuditionActive_; NextIndex is the next unfired tick.
+        int exportAuditionClockCount_ = 0;
+        double exportAuditionClockBeatSeconds_ = 0.0;
+        int exportAuditionClockNextIndex_ = 0;
         bool restoreSquareAfterVideoExport_ = false;
         quint64 previewPaneRestoreGeneration_ = 0;
         int videoExportWorkerLastProgressPercent_ = 0;

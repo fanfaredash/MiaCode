@@ -176,6 +176,16 @@ public:
     void cancelExportIntroLeadIn();
     bool handleExportIntroSliderSeek(double second);
     void refreshExportIntroState();
+    // 片头 opening jingle (track_start.wav): lazily create + preload the persistent
+    // one-shot so it is ready before the user presses play.
+    void ensureExportIntroStartSound();
+    // clock_count count-in for the export-page audition (see MemberStorage). Setup
+    // is seeded when the audition scene installs; the cursor resets to skip elapsed
+    // ticks at each playback start; due ticks fire one-shot from the playback tick.
+    void setExportAuditionClockSchedule(int clockCount, double clockBpm);
+    void clearExportAuditionClockSchedule();
+    void resetExportAuditionClockCursor(double startSecond);
+    void maybeFireExportAuditionClockTicks(double second);
     bool startQtPreviewPlayback(double second, bool resumeFromPause = false);
     void pauseQtPreviewPlaybackExact();
     void handlePreviewStartupCanvasPresented();

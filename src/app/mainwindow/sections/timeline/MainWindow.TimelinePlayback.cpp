@@ -1015,6 +1015,10 @@ void MainWindow::TimelineSection::stopQtPreviewTimers()
 void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiveStartSecond)
 {
     state_.pausedPreviewMediaSeekPending_ = false;
+    // Position the clock count-in cursor for this playback start (skips ticks before
+    // the start second without replaying them; the downbeat at 0 fires on the first
+    // tick after the 片头 hand-off).
+    resetExportAuditionClockCursor(effectiveStartSecond);
     state_.qtPreviewStartSecond_ = effectiveStartSecond;
     state_.qtPreviewPauseSecond_ = effectiveStartSecond;
     state_.qtPreviewElapsed_.restart();
@@ -1346,6 +1350,7 @@ void MainWindow::TimelineSection::setupExportIntroOverlayData()
     if (!owner_.currentExportIntroLeadInSpec(&spec)) {
         return;
     }
+    ensureExportIntroStartSound();  // preload so the first play isn't dropped
     // backgroundImage is ALWAYS the 曲绘 jacket (it feeds the card's jacket slot
     // AND the backdrop fallback) — mirror the export mount, which passes jacketUrl
     // here and routes the 片头 tab's 背景虚化/自定义背景/卡片阴影 through the style
@@ -1437,16 +1442,17 @@ void MainWindow::TimelineSection::startExportIntroAdvance(double fromPositionSec
     enterExportIntroRegion(fromPositionSeconds);
     state_.exportIntroAdvanceFromSeconds_ = state_.exportIntroPlayheadSeconds_;
 
-    // Opening sfx (self-deleting) — only when advancing from at/near the head.
+    // Opening jingle — only when advancing from at/near the intro head. Uses the
+    // persistent, preloaded effect: a fresh QSoundEffect played in the same breath
+    // it is sourced silently drops the first play (its async load isn't ready yet),
+    // which is why the startup sound was inaudible before.
     if (state_.exportIntroPlayheadSeconds_ <= -miacode::intro::kDurationSeconds + 0.1) {
-        auto* introSound = new QSoundEffect(&owner_);
-        introSound->setSource(QUrl(QStringLiteral("qrc:/intro/audio/track_start.wav")));
-        connect(introSound, &QSoundEffect::playingChanged, introSound, [introSound]() {
-            if (!introSound->isPlaying()) {
-                introSound->deleteLater();
-            }
-        });
-        introSound->play();
+        ensureExportIntroStartSound();
+        if (state_.exportIntroStartSound_ != nullptr
+            && !state_.exportIntroStartSound_->source().isEmpty()) {
+            state_.exportIntroStartSound_->stop();
+            state_.exportIntroStartSound_->play();
+        }
     }
 
     if (state_.exportIntroLeadInTimer_ == nullptr) {
@@ -1522,6 +1528,87 @@ void MainWindow::TimelineSection::refreshExportIntroState()
     } else if (!state_.qtPreviewPlaying_ && qAbs(state_.qtPreviewPauseSecond_) <= 0.05) {
         // Default the playhead to the intro head so the user sees it first.
         enterExportIntroRegion(-miacode::intro::kDurationSeconds);
+    }
+}
+
+void MainWindow::TimelineSection::ensureExportIntroStartSound()
+{
+    if (state_.exportIntroStartSound_ != nullptr) {
+        return;
+    }
+    auto* sound = new QSoundEffect(&owner_);
+    // QSoundEffect is unreliable with qrc: sources on some Windows/Qt builds (the
+    // proven-working invalidStar easter-egg sounds use on-disk files). Extract the
+    // bundled jingle to a temp file once and point the effect at that; fall back to
+    // the qrc URL only if the copy fails.
+    const QString tempDir = QDir(QDir::tempPath()).filePath(QStringLiteral("MiaCode"));
+    QDir().mkpath(tempDir);
+    const QString target = QDir(tempDir).filePath(QStringLiteral("intro_track_start.wav"));
+    const bool haveLocal =
+        QFile::exists(target)
+        || QFile::copy(QStringLiteral(":/intro/audio/track_start.wav"), target);
+    sound->setSource(haveLocal
+        ? QUrl::fromLocalFile(target)
+        : QUrl(QStringLiteral("qrc:/intro/audio/track_start.wav")));
+    state_.exportIntroStartSound_ = sound;
+}
+
+void MainWindow::TimelineSection::setExportAuditionClockSchedule(int clockCount, double clockBpm)
+{
+    // clock_count count-in for the export audition. clock ticks live at chart-time
+    // [0, count*beat) (beat = 60/clockBpm), mirroring the export's
+    // appendClockCountPlaybacks — they sound on the chart audition AFTER the 片头
+    // hands off at chart 0.
+    const bool valid = clockCount > 0 && qIsFinite(clockBpm) && clockBpm > 0.0;
+    state_.exportAuditionClockCount_ = valid ? clockCount : 0;
+    state_.exportAuditionClockBeatSeconds_ = valid ? (60.0 / clockBpm) : 0.0;
+    state_.exportAuditionClockNextIndex_ = 0;
+}
+
+void MainWindow::TimelineSection::clearExportAuditionClockSchedule()
+{
+    state_.exportAuditionClockCount_ = 0;
+    state_.exportAuditionClockBeatSeconds_ = 0.0;
+    state_.exportAuditionClockNextIndex_ = 0;
+}
+
+void MainWindow::TimelineSection::resetExportAuditionClockCursor(double startSecond)
+{
+    // Skip ticks that already elapsed before startSecond WITHOUT firing them, so
+    // resuming mid-chart or seeking past the count-in doesn't replay it.
+    int index = 0;
+    if (state_.exportAuditionClockBeatSeconds_ > 0.0) {
+        while (index < state_.exportAuditionClockCount_
+               && index * state_.exportAuditionClockBeatSeconds_
+                      + kTimelineZeroSecondTolerance < startSecond) {
+            ++index;
+        }
+    }
+    state_.exportAuditionClockNextIndex_ = index;
+}
+
+void MainWindow::TimelineSection::maybeFireExportAuditionClockTicks(double second)
+{
+    if (!state_.exportPreviewAuditionActive_
+        || state_.exportAuditionClockCount_ <= 0
+        || state_.exportAuditionClockBeatSeconds_ <= 0.0
+        || state_.previewSfxRuntime_ == nullptr) {
+        return;
+    }
+    while (state_.exportAuditionClockNextIndex_ < state_.exportAuditionClockCount_) {
+        const double tickSecond =
+            state_.exportAuditionClockNextIndex_ * state_.exportAuditionClockBeatSeconds_;
+        if (tickSecond > second + kTimelineZeroSecondTolerance) {
+            break;  // not yet due
+        }
+        // Don't machine-gun a backlog: skip (without playing) any tick we blew past
+        // by more than one beat (a forward seek during playback). The downbeat at 0
+        // and on-time ticks (≤ one frame late) still fire — gain 1.0 so the loaded
+        // clock sample's own clock-volume level applies.
+        if (second - tickSecond <= state_.exportAuditionClockBeatSeconds_) {
+            state_.previewSfxRuntime_->audition(QStringLiteral("clock"), 1.0);
+        }
+        ++state_.exportAuditionClockNextIndex_;
     }
 }
 
@@ -2047,6 +2134,7 @@ void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second, double 
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->drainEvents(second);
     }
+    maybeFireExportAuditionClockTicks(second);
     if (diagEnabled) {
         drainEventsElapsedNs = tickProfileTimer.nsecsElapsed() - beforeDrainNs;
     }

@@ -503,6 +503,12 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
             owner_.previewPlaybackRate_ > 0.0 ? owner_.previewPlaybackRate_ : 1.0,
             owner_.previewTimingSettings_);
     }
+    // clock_count count-in: the audition plays it on the chart (after the 片头 hands
+    // off at 0), so 所见即所导 includes the count-in. Same source as the export
+    // snapshot (clockCountFromDocument + clockBpmForChart).
+    owner_.setExportAuditionClockSchedule(
+        miacode::chart_clock::clockCountFromDocument(owner_.document_),
+        miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart));
 
     // Re-enable the preview play/pause/stop controls: they are difficulty-scoped
     // (hasActiveDifficulty) by default, and the page now has a previewable chart.
@@ -519,6 +525,7 @@ void MainWindow::ExportSection::teardownExportPreviewAuditionScene()
     }
     owner_.cancelExportIntroLeadIn();    // stop any in-flight 片头 animation
     owner_.stopQtPreviewPlayback(true);  // stop the real transport if it's running
+    owner_.clearExportAuditionClockSchedule();  // drop the count-in for this scene
     owner_.exportPreviewAuditionActive_ = false;
     // Invalidate the snapshot so the next difficulty switch rebuilds its own
     // preview from scratch (we deliberately don't cache/restore — leaving the
