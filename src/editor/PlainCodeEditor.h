@@ -57,6 +57,7 @@ public:
     // this attribute is the OS-level kill-switch.
     void setImeInputDisabled(bool disabled);
     bool imeInputDisabled() const { return imeInputDisabled_; }
+    QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
     void setEditorOverwriteMode(bool enabled);
     // Auto-completion — a single preference that bundles every smart-typing
     // affordance in the chart editor (controlled via the editor section of the

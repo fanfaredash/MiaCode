@@ -8,6 +8,8 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QGuiApplication>
+#include <QInputMethod>
 #include <QContextMenuEvent>
 #include <QDrag>
 #include <QDragEnterEvent>
@@ -898,21 +900,31 @@ void PlainCodeEditor::setHalfWidthInputEnabled(bool enabled)
 
 void PlainCodeEditor::setImeInputDisabled(bool disabled)
 {
-    // [BETA51 IME-DISABLE: DISABLED PENDING FIX]
-    // Setter is kept on the public API but every caller in the project has
-    // been commented out (see MainWindow.EditorDisplay.cpp + the preferences
-    // dialog). Qt::WA_InputMethodEnabled does *not* prevent Windows CJK IMEs
-    // from opening their composition window on this widget — the user
-    // reported the toggle had no effect post-4f9a27e. The eventual fix
-    // probably needs to wire ImmAssociateContext / TSF directly on the
-    // widget's native window handle; that's outside the Qt attribute surface.
-    // Until then this method records the requested state but does not touch
-    // the WA attribute, so external callers (if any new ones appear) don't
-    // think the feature is live.
+    // The prior beta51 approach only called setAttribute(WA_InputMethodEnabled,
+    // false), which had no effect on Windows CJK IMEs. Root cause: QTextEdit
+    // reimplements inputMethodQuery() and delegates Qt::ImEnabled to its
+    // internal QWidgetTextControl (which reports enabled based on editability),
+    // bypassing the WA attribute entirely. The platform queries inputMethodQuery
+    // — not the attribute — so the attribute change was a no-op.
+    //
+    // The fix is to also override inputMethodQuery(Qt::ImEnabled) below.
+    // When it returns false, QWindowsInputContext::update() calls
+    // ImmAssociateContext(hwnd, NULL) (IMM32) or the TSF equivalent,
+    // suppressing the candidate window. The attribute is still set as an
+    // additional signal for other Qt machinery.
     imeInputDisabled_ = disabled;
-#if 0
     setAttribute(Qt::WA_InputMethodEnabled, !disabled);
-#endif
+    if (hasFocus()) {
+        QGuiApplication::inputMethod()->update(Qt::ImEnabled);
+    }
+}
+
+QVariant PlainCodeEditor::inputMethodQuery(Qt::InputMethodQuery query) const
+{
+    if (imeInputDisabled_ && query == Qt::ImEnabled) {
+        return false;
+    }
+    return QTextEdit::inputMethodQuery(query);
 }
 
 void PlainCodeEditor::setEditorOverwriteMode(bool enabled)
@@ -1025,6 +1037,15 @@ void PlainCodeEditor::focusInEvent(QFocusEvent* event)
 {
     const QRect previousRect = previewFollowVisualCaretRect();
     QTextEdit::focusInEvent(event);
+    // Re-apply IME disable after the base-class focus handler, which may
+    // re-assert WA_InputMethodEnabled based on editability. Our
+    // inputMethodQuery(Qt::ImEnabled) override already returns false, but
+    // we also need to notify the platform so ImmAssociateContext fires now
+    // rather than waiting for the next IME probe.
+    if (imeInputDisabled_) {
+        setAttribute(Qt::WA_InputMethodEnabled, false);
+        QGuiApplication::inputMethod()->update(Qt::ImEnabled);
+    }
     if (viewport() != nullptr && previousRect.isValid()) {
         viewport()->update(previousRect.adjusted(-1, -1, 1, 1).intersected(viewport()->rect()));
     }

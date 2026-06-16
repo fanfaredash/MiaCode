@@ -767,6 +767,7 @@ void MainWindow::PreferencesSection::onPreferences()
     bool selectedEditorHalfWidthInputEnabled = state_.editorHalfWidthInputEnabled_;
     bool selectedAutoCompletionEnabled = state_.editorAutoCompletionEnabled_;
     bool selectedIgnoreMuriIssuePrompts = state_.ignoreMuriIssuePrompts_;
+    bool selectedEditorImeInputDisabled = state_.editorImeInputDisabled_;
 
     // 顶部显示 — what the difficulty-page header edits next to Lv: the
     // chart-wide offset (延迟, default) or the per-difficulty designer (谱师).
@@ -852,18 +853,42 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(lineSpacingLabel, lineSpacingCombo);
 
-    auto* halfWidthInputCheckbox = new QCheckBox(
-        uiText("dialog.preferences.editor_half_width_input", "Lock half-width symbol input"),
+    // 中文输入 combo — merges the former "Lock half-width symbol input" checkbox
+    // and "Disable IME input" checkbox into three graduated levels:
+    //   0 关闭          halfWidth=OFF  imeDisabled=OFF  (plain IME, no filtering)
+    //   1 仅过滤全角字符 halfWidth=ON   imeDisabled=OFF  (default: normalize commits)
+    //   2 开启          halfWidth=ON   imeDisabled=ON   (block IME candidate window)
+    auto* chineseInputLabel = new QLabel(
+        UiText::isChineseUi() ? QStringLiteral("中文输入") : QStringLiteral("Chinese input"),
         editorGroup
     );
-    halfWidthInputCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    halfWidthInputCheckbox->setChecked(selectedEditorHalfWidthInputEnabled);
-    connect(halfWidthInputCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
-        selectedEditorHalfWidthInputEnabled = checked;
-        owner_.applyEditorHalfWidthInputEnabled(selectedEditorHalfWidthInputEnabled, true);
-        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+    const int initialChineseInputMode =
+        state_.editorImeInputDisabled_ ? 2 :
+        state_.editorHalfWidthInputEnabled_ ? 1 : 0;
+    int selectedChineseInputMode = initialChineseInputMode;
+    auto* chineseInputCombo = new QComboBox(editorGroup);
+    if (UiText::isChineseUi()) {
+        chineseInputCombo->addItem(QStringLiteral("开启"));
+        chineseInputCombo->addItem(QStringLiteral("仅过滤全角字符"));
+        chineseInputCombo->addItem(QStringLiteral("禁止中文输入法"));
+    } else {
+        chineseInputCombo->addItem(QStringLiteral("On"));
+        chineseInputCombo->addItem(QStringLiteral("Filter full-width chars"));
+        chineseInputCombo->addItem(QStringLiteral("Disable IME"));
+    }
+    chineseInputCombo->setCurrentIndex(selectedChineseInputMode);
+    connect(chineseInputCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedChineseInputMode = index;
+        selectedEditorHalfWidthInputEnabled = (index >= 1);
+        selectedEditorImeInputDisabled = (index >= 2);
+        owner_.applyEditorHalfWidthInputEnabled(selectedEditorHalfWidthInputEnabled, false);
+        owner_.applyEditorImeInputDisabled(selectedEditorImeInputDisabled, true);
+        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
     });
-    editorLayout->addRow(QString(), halfWidthInputCheckbox);
+    editorLayout->addRow(chineseInputLabel, chineseInputCombo);
 
     // One unified toggle replacing the former three (auto-close brackets / hold
     // duration / bracket suggestions). It drives bracket auto-close + type-over +
@@ -907,34 +932,6 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(QString(), ignoreMuriIssuePromptsCheckbox);
 
-    // [BETA51 IME-DISABLE: DISABLED PENDING FIX]
-    // The "禁止中文輸入法輸入" preference shipped in 4f9a27e (UI), backed by
-    // Qt::WA_InputMethodEnabled = false on PlainCodeEditor. On user testing
-    // it didn't actually block Windows CJK IMEs — the IME composition window
-    // still appeared on Chinese input. Until we find an approach that reliably
-    // blocks all platform IMEs (likely involving the Windows TSF / ImmAssociateContext
-    // path rather than just the Qt attribute) the entire feature is hidden:
-    // this UI block is commented out, the load/save/apply call sites in
-    // MainWindow.EditorDisplay.cpp are also commented out, and the editor-
-    // creation bootstrap no longer calls setImeInputDisabled. The state
-    // member, applyEditorImeInputDisabled method, and
-    // PlainCodeEditor::setImeInputDisabled API all stay in place so the
-    // eventual fix can re-enable everything at once by un-commenting these
-    // sites. The orphan UiText key dialog.preferences.editor_ime_input_disabled
-    // is kept too.
-    //
-    // auto* imeInputDisabledCheckbox = new QCheckBox(
-    //     uiText("dialog.preferences.editor_ime_input_disabled", "Disable IME input (force ASCII)"),
-    //     editorGroup
-    // );
-    // imeInputDisabledCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    // imeInputDisabledCheckbox->setChecked(selectedEditorImeInputDisabled);
-    // connect(imeInputDisabledCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
-    //     selectedEditorImeInputDisabled = checked;
-    //     owner_.applyEditorImeInputDisabled(selectedEditorImeInputDisabled, true);
-    //     owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
-    // });
-    // editorLayout->addRow(QString(), imeInputDisabledCheckbox);
 
     // The preferences dialog font spin-box reuses the editor.font_* shortcut
     // IDs so a single binding controls both the editor and the dialog —
