@@ -31,7 +31,6 @@
 #include "tools/muri/MuriStaticChecker.h"
 
 #include <QtCore>
-#include <QSoundEffect>
 #include <QtGui>
 #include <QtWidgets>
 
@@ -1369,7 +1368,6 @@ void MainWindow::TimelineSection::setupExportIntroOverlayData()
     if (!owner_.currentExportIntroLeadInSpec(&spec)) {
         return;
     }
-    ensureExportIntroStartSound();  // preload so the first play isn't dropped
     // backgroundImage is ALWAYS the 曲绘 jacket (it feeds the card's jacket slot
     // AND the backdrop fallback) — mirror the export mount, which passes jacketUrl
     // here and routes the 片头 tab's 背景虚化/自定义背景/卡片阴影 through the style
@@ -1464,16 +1462,15 @@ void MainWindow::TimelineSection::startExportIntroAdvance(double fromPositionSec
     enterExportIntroRegion(fromPositionSeconds);
     state_.exportIntroAdvanceFromSeconds_ = state_.exportIntroPlayheadSeconds_;
 
-    // Opening jingle — only when advancing from at/near the intro head. Uses the
-    // persistent, preloaded effect: a fresh QSoundEffect played in the same breath
-    // it is sourced silently drops the first play (its async load isn't ready yet),
-    // which is why the startup sound was inaudible before.
+    // Opening jingle — only when advancing from at/near the intro head. Played
+    // through the SAME BASS audition path as the note SFX / clock count-in: the
+    // QSoundEffect path was inaudible on this Windows/Qt build (GUI 2026-06-16),
+    // while audition() is proven (clock_count works). The SFX runtime is already
+    // prepared by installExportPreviewAuditionScene; ensure it anyway (idempotent).
     if (state_.exportIntroPlayheadSeconds_ <= -miacode::intro::kDurationSeconds + 0.1) {
-        ensureExportIntroStartSound();
-        if (state_.exportIntroStartSound_ != nullptr
-            && !state_.exportIntroStartSound_->source().isEmpty()) {
-            state_.exportIntroStartSound_->stop();
-            state_.exportIntroStartSound_->play();
+        owner_.ensurePreviewSfxRuntimePrepared();
+        if (state_.previewSfxRuntime_ != nullptr) {
+            state_.previewSfxRuntime_->audition(QStringLiteral("track_start"), 1.0);
         }
     }
 
@@ -1551,28 +1548,6 @@ void MainWindow::TimelineSection::refreshExportIntroState()
         // Default the playhead to the intro head so the user sees it first.
         enterExportIntroRegion(-miacode::intro::kDurationSeconds);
     }
-}
-
-void MainWindow::TimelineSection::ensureExportIntroStartSound()
-{
-    if (state_.exportIntroStartSound_ != nullptr) {
-        return;
-    }
-    auto* sound = new QSoundEffect(&owner_);
-    // QSoundEffect is unreliable with qrc: sources on some Windows/Qt builds (the
-    // proven-working invalidStar easter-egg sounds use on-disk files). Extract the
-    // bundled jingle to a temp file once and point the effect at that; fall back to
-    // the qrc URL only if the copy fails.
-    const QString tempDir = QDir(QDir::tempPath()).filePath(QStringLiteral("MiaCode"));
-    QDir().mkpath(tempDir);
-    const QString target = QDir(tempDir).filePath(QStringLiteral("intro_track_start.wav"));
-    const bool haveLocal =
-        QFile::exists(target)
-        || QFile::copy(QStringLiteral(":/intro/audio/track_start.wav"), target);
-    sound->setSource(haveLocal
-        ? QUrl::fromLocalFile(target)
-        : QUrl(QStringLiteral("qrc:/intro/audio/track_start.wav")));
-    state_.exportIntroStartSound_ = sound;
 }
 
 void MainWindow::TimelineSection::setExportAuditionClockSchedule(int clockCount, double clockBpm)

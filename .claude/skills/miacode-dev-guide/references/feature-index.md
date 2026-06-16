@@ -44,6 +44,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `MainWindow.DocumentUi.cpp`) share one skeleton — **every leave path calls
   `latencyDetectionPage_->onPageLeft()` unconditionally** (SFX-leak regression guard, §9).
   Bottom-tab mode table: editor ON / latency ON / metadata OFF / welcome OFF / **export OFF**.
+  `switchToExportField` is the one exception to the shared skeleton: the export page is slow to
+  build (embedded video panel), so it shows `outlineBusySpinner_` (`miacode::ui::BusySpinner`,
+  `src/app/ui/BusySpinner.{h,cpp}`) floated over the `export` sidebar row and defers the heavy
+  body (`performSwitchToExportField`) by one event-loop tick via `QTimer::singleShot(0, …)`. The
+  spinner is a mouse-transparent viewport overlay positioned with the same `visualItemRect`
+  pattern as `deleteDifficultyButton_`; spinner `isActive()` guards re-entrancy. Stopped in the
+  same deferred lambda once the build returns.
 - QuickShell beta: `src/app/quick_shell/` (`QuickShellBootstrap`, `QuickShellController`,
   `QuickShellNativeSurfaceHost`, `QuickShellPreviewCompositeSurface`, `QuickShellStyleBridge`,
   `qml/QuickShellMain.qml`).
@@ -391,7 +398,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   (full-range), the preview timeline extends left to `[-introDuration, 0)` (introDuration =
   `miacode::intro::kDurationSeconds` ≈ 5.82s) — the 片头 IS that negative segment. Scrub/click left of
   0 shows a STATIC intro frame; play advances through it (overlay frame stepped + a `track_start.wav`
-  one-shot `QSoundEffect`) and crosses 0 into the chart audition; pause freezes the frame. Driver =
+  one-shot via the BASS `audition("track_start")` path — see 片头 audio below) and crosses 0 into the
+  chart audition; pause freezes the frame. Driver =
   `TimelineSection` `enter/exit/render/startExportIntroAdvance` + `tickExportIntroLeadIn` +
   `handleExportIntroSliderSeek` (routes a slider seek < 0 into the region) in
   `MainWindow.TimelinePlayback.cpp`; overlay rendering is the re-added `PreviewRuntime`
@@ -407,16 +415,15 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   path as `backgroundImage` (the pre-2026-06-16 bug: blur toggle did nothing in preview + custom
   bg wrongly replaced the card jacket). Both QML edited → touch their qrc (`preview_runtime_qml.qrc`
   + `quick_shell_qml.qrc`).
-  ⚠ **片头 audio (2026-06-16):** (a) the **opening jingle** (`track_start.wav`) is a PERSISTENT,
-  preloaded `QSoundEffect` (`exportIntroStartSound_` + `ensureExportIntroStartSound()`), extracted
-  qrc→temp file (qrc: source is flaky for `QSoundEffect` on Windows — the working invalidStar
-  sounds use on-disk files) and `stop()+play()`d from `startExportIntroAdvance` (head-gated). A
-  fresh-create+source+play-in-one-breath dropped the first play (the old "no startup sound").
-  🔴 **STILL UNRESOLVED (GUI 2026-06-16): track_start is INAUDIBLE even after the preload + temp-file
-  extraction** — so the QSoundEffect async-load race was NOT the (only) cause. Next suspects: the
-  jingle plays but `clearIntroOverlay`/region teardown or the playback start stops/steals the device;
-  the temp copy not actually landing; or QSoundEffect being globally dead on this build (try a
-  `BassPreviewAudioBackend::audition`-style path / a loaded SFX kind instead of QSoundEffect). (b)
+  ⚠ **片头 audio (2026-06-16):** BOTH sounds go through the **BASS audition path** (`audition(kind)` →
+  loaded SFX sample), NOT `QSoundEffect` — the `QSoundEffect` path (even preloaded + qrc→temp file)
+  was INAUDIBLE on this Windows/Qt build (GUI-confirmed dead), while `audition()` is proven. (a) the
+  **opening jingle** (`track_start.wav`) is loaded as a pseudo-SFX kind `"track_start"`
+  (`assetFileNamesForKind`+`previewSfxVolumeForKind`→answer bucket in
+  `common/PreviewSfxAssets.h`/`audio/PreviewAudioSettings.h`; `BassPreviewAudioBackend.trackStartSample_`).
+  **`track_start.wav` MUST ship in `assets/SFX/`** (the BASS backend loads from the resolved SFX dir,
+  not qrc — the file is duplicated from `src/intro/audio/`). `startExportIntroAdvance` (head-gated)
+  calls `ensurePreviewSfxRuntimePrepared()` + `audition("track_start")`. (b)
   **clock_count count-in** plays on the chart audition AFTER the 片头 hands off at 0 (✅ GUI-confirmed
   audible 2026-06-16): a per-tick
   scheduler (`setExportAuditionClockSchedule`/`resetExportAuditionClockCursor`/

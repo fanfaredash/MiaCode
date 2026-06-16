@@ -119,6 +119,11 @@ inline double previewSfxVolumeForKind(const PreviewAudioSettings& settings, cons
     if (lowered == "clock") {
         return settings.answerVolume * globalVolume;
     }
+    if (lowered == "track_start") {
+        // 片头 opening jingle (preview-only affordance). Shares the answer bucket
+        // like clock so it tracks a real, audible level the user can tune.
+        return settings.answerVolume * globalVolume;
+    }
     return 0.0;
 }
 

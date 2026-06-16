@@ -212,5 +212,6 @@ private:
     std::unique_ptr<Sample> touchholdSampleOwner_;
     std::unique_ptr<Sample> fireworkSample_;
     std::unique_ptr<Sample> clockSample_;  // clock_count count-in (audition only)
+    std::unique_ptr<Sample> trackStartSample_;  // 片头 opening jingle (audition only)
     std::unique_ptr<Sample> backgroundTrackSampleOwner_;
 };

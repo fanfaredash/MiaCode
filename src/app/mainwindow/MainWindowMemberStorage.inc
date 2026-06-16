@@ -142,6 +142,9 @@
         QTabWidget* bottomTabs_ = nullptr;
         QTabWidget* quickShellBottomTabsProxy_ = nullptr;
         QToolButton* deleteDifficultyButton_ = nullptr;
+        // Indeterminate spinner floated over the "Export" sidebar row while the
+        // (synchronous, ~hundreds-of-ms) export-page build runs.
+        miacode::ui::BusySpinner* outlineBusySpinner_ = nullptr;
         QSplitter* workspaceSplitter_ = nullptr;
         QWidget* previewPanel_ = nullptr;
         QWidget* previewLeftColumn_ = nullptr;
@@ -348,11 +351,6 @@
         double exportIntroPlayheadSeconds_ = 0.0;
         double exportIntroAdvanceFromSeconds_ = 0.0;
         bool exportIntroRegionActive_ = false;
-        // Persistent, preloaded one-shot for the 片头 "track-start" opening jingle.
-        // Created/sourced once (a fresh QSoundEffect played in the same breath it is
-        // sourced silently drops the first play — the async load isn't ready yet), so
-        // startExportIntroAdvance only stop()+play()s it.
-        QSoundEffect* exportIntroStartSound_ = nullptr;
         // clock_count count-in for the export-page audition: clock.wav ticks at
         // chart-time [0, count*beat) (beat = 60/clockBpm), mirroring the export's
         // appendClockCountPlaybacks. Fired one-shot from the playback tick (NOT the
@@ -983,6 +981,7 @@
     QLabel*& editorEmptyStateLabel_ = ui_.editorEmptyStateLabel_;
     QTabWidget*& bottomTabs_ = ui_.bottomTabs_;
     QToolButton*& deleteDifficultyButton_ = ui_.deleteDifficultyButton_;
+    miacode::ui::BusySpinner*& outlineBusySpinner_ = ui_.outlineBusySpinner_;
     QSplitter*& workspaceSplitter_ = ui_.workspaceSplitter_;
     QWidget*& previewPanel_ = ui_.previewPanel_;
     QWidget*& previewLeftColumn_ = ui_.previewLeftColumn_;

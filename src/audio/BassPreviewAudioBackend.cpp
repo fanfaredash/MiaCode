@@ -900,6 +900,7 @@ void BassPreviewAudioBackend::resetAssets()
     resetSample(touchholdSampleOwner_);
     resetSample(fireworkSample_);
     resetSample(clockSample_);
+    resetSample(trackStartSample_);
     resetSample(backgroundTrackSampleOwner_);
     appendBassDebugLog(
         miacode::preview_audio::bass::BassDebugOperation::ResetAssets,
@@ -953,6 +954,7 @@ void BassPreviewAudioBackend::initializeAssets()
     loadSample(touchholdSampleOwner_, QStringLiteral("touchhold"), false, false);
     loadSample(fireworkSample_, QStringLiteral("firework"), false, true);
     loadSample(clockSample_, QStringLiteral("clock"), false, true);
+    loadSample(trackStartSample_, QStringLiteral("track_start"), false, true);
 
     samplesByKind_.insert(QStringLiteral("break_touch"), judgeBreakSample_.get());
     samplesByKind_.insert(QStringLiteral("break_slide"), breakSlideStartSample_.get());
@@ -1033,6 +1035,7 @@ void BassPreviewAudioBackend::applySampleLevels()
     apply(touchholdSample_, previewSfxVolumeForKind(settings_, QStringLiteral("touchhold")));
     apply(fireworkSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("firework")));
     apply(clockSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("clock")));
+    apply(trackStartSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("track_start")));
     apply(backgroundTrackSample_, previewTrackVolume(settings_));
 #endif
 }

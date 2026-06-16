@@ -57,6 +57,9 @@ inline QStringList assetFileNamesForKind(const QString& kind)
     if (lowered == QStringLiteral("clock")) {
         return {QStringLiteral("clock.wav")};
     }
+    if (lowered == QStringLiteral("track_start")) {
+        return {QStringLiteral("track_start.wav")};
+    }
     return {};
 }
 
