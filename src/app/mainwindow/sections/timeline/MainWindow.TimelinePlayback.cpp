@@ -565,6 +565,14 @@ void MainWindow::TimelineSection::seekPreviewToSecond(double second, bool center
     owner_.ensurePreviewStageMediaRouteInitialized();
     owner_.ensurePreviewSfxRuntimePrepared();
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    // The negative-time 片头 region is preview-only and lives left of chart 0;
+    // ANY funnel seek targets a real chart position (clamped >= 0), so it must
+    // leave the region. Otherwise exportIntroRegionActive_ lingers and
+    // shellPreviewPositionSeconds() keeps reporting the frozen negative intro
+    // playhead (stuck thumb) while the play toggle takes the dead region branch.
+    if (state_.exportIntroRegionActive_) {
+        exitExportIntroRegion();
+    }
     if (state_.qtPreviewPlaying_ && state_.previewSfxRuntime_ != nullptr) {
         // G1 Commit 8 followup: bass_clock_seek per §7.2 — playing-seek branch.
         // from_chart is the wall-clock chart-second right before the re-anchor,
@@ -617,6 +625,12 @@ void MainWindow::TimelineSection::seekPreviewDiscreteToSecond(double second, boo
     owner_.ensurePreviewStageMediaRouteInitialized();
     owner_.ensurePreviewSfxRuntimePrepared();
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    // Leave the negative-time 片头 region on any discrete seek to a chart
+    // position (see seekPreviewToSecond) — keeps the region flag from going
+    // stale when an arrow/jump/stop lands the playhead back at chart >= 0.
+    if (state_.exportIntroRegionActive_) {
+        exitExportIntroRegion();
+    }
     // G1 Commit 8 followup: bass_clock_seek per §7.2 — discrete-seek branch
     // (arrow keys, jump-to-note). from_chart is the current wall-clock chart
     // sec; the branch below may then reanchor a playing session into pause
@@ -1409,6 +1423,9 @@ void MainWindow::TimelineSection::exitExportIntroRegion()
     const bool wasActive = state_.exportIntroRegionActive_ || state_.exportIntroLeadInActive_;
     state_.exportIntroLeadInActive_ = false;
     state_.exportIntroRegionActive_ = false;
+    // Drop the negative playhead so a later stray read can't resurrect a frozen
+    // intro position (the region flags above are authoritative; this is hygiene).
+    state_.exportIntroPlayheadSeconds_ = 0.0;
     if (state_.exportIntroLeadInTimer_ != nullptr) {
         state_.exportIntroLeadInTimer_->stop();
     }

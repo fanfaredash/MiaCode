@@ -161,6 +161,8 @@ private:
     void handlePreviewStopOrPlayShortcut();
     void onRangePreviewTick();
     void syncRangeUi();
+    // Updates the small "当前导出区间：[start, end]" caption from the current range.
+    void refreshRangeSummaryLabel();
     // The export-range track (a custom QWidget): for handle drags, live-seek
     // the preview through the SAME single seek entry the right-side transport
     // uses — never a second transport.
@@ -221,6 +223,10 @@ private:
     bool exportSucceeded_ = false;
     bool exportRequested_ = false;
     bool syncingRangeUi_ = false;
+    // Last emitted isAddIntroActiveForPreview() — refreshAddIntroEnabledState only
+    // notifies the host (introPreviewSettingsChanged) when the range-driven intro
+    // gate actually flips, so a stranded negative-time intro region gets torn down.
+    bool introActiveForPreviewLast_ = false;
     bool rangePreviewPlaying_ = false;
     bool previewAspectChangedByDialog_ = false;
     bool previewStateRestored_ = false;
@@ -286,6 +292,8 @@ private:
     // Stored as QWidget* (the concrete ExportRangeTrack is a file-local type in
     // the .cpp); cast where its API is needed.
     QWidget* rangeTrack_ = nullptr;
+    // Small muted "当前导出区间：[start, end]" caption under the End row.
+    QLabel* rangeSummaryLabel_ = nullptr;
     QSlider* previewSlider_ = nullptr;
     QLabel* previewTimeLabel_ = nullptr;
     QWidget* optionsContent_ = nullptr;

@@ -439,8 +439,24 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `WindowSection::shellPreviewPositionSeconds()` returns the negative `exportIntroPlayheadSeconds_`
   during the region so the QML thumb follows; the QML progress-fill + `formatDisplayTime` handle
   negative time. **Touch `resources/quick_shell_qml.qrc` after editing that QML** (AUTORCC misses the
-  dep). The dialog emits `introPreviewSettingsChanged` on 添加片头 / 片头 changes →
-  `refreshExportIntroState` (resize the range, enter/leave the region). ⚠ **添加片头 detection
+  dep). The dialog emits `introPreviewSettingsChanged` on 添加片头 / 片头 changes **AND on an
+  export-RANGE gate flip** (`refreshAddIntroEnabledState`, when `isAddIntroActiveForPreview()`
+  toggles — guarded by `introActiveForPreviewLast_` so a range drag doesn't re-emit per tick) →
+  `refreshExportIntroState` (resize the range, enter/leave the region). ⚠⚠ **Stale-region
+  invariant (2026-06-16 fix):** `exportIntroRegionActive_`/`exportIntroLeadInActive_` must never
+  outlive `exportIntroEnabled()`. The bug: moving the range start off 0 flips the gate false
+  without clearing the region → `shellPreviewPositionSeconds()` keeps returning the frozen
+  negative `exportIntroPlayheadSeconds_` (thumb stuck far-left, scrubs overridden) + the play
+  toggle hits the dead region branch where `startExportIntroAdvance` early-returns (no-op). The
+  range-change path (`onRangeSpinChanged`→`refreshAddIntroEnabledState`) previously did NOT reach
+  `refreshExportIntroState`. Three guards now keep the invariant: (1) the range-flip emit above
+  tears the region down; (2) the seek funnel (`seekPreviewToSecond` + `seekPreviewDiscreteToSecond`)
+  calls `exitExportIntroRegion()` on ANY chart seek (clamped ≥0), covering step/arrow/held/stop;
+  (3) `onTogglePreviewPause` re-checks `exportIntroEnabled()` live on both intro branches and
+  self-heals (exit + fall through) when stale. `exitExportIntroRegion` also resets
+  `exportIntroPlayheadSeconds_=0`. Decision: KEEP the negative-time intro preview (the lower bound
+  stays `-introDuration` when enabled) — only the staleness is fixed; "can't drag into 片头" was
+  about RANGE selection, which already clamps `[0,total]`. ⚠ **添加片头 detection
   (`VideoExportDialog::isAddIntroActiveForPreview`) reads the checkbox + `rangeStartSeconds()`
   DIRECTLY, NOT `addIntroCheck_->isEnabled()`** — the embedded tab-rehost flips a widget's effective
   enabled state false while it stays checked, which silently collapsed the region/slider (cost ~3

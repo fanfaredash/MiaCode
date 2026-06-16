@@ -1079,6 +1079,20 @@ VideoExportDialog::VideoExportDialog(
     endRowLayout->addWidget(setEndButton, 0);
     rangeLayout->addWidget(endRow, 0);
 
+    // Caption under the rows: a live "当前导出区间：[start, end]" summary in the
+    // same MM:SS:mmm format as the spin boxes, small + muted. Kept in sync by
+    // syncRangeUi() and re-themed in applyThemeStyles().
+    rangeSummaryLabel_ = new QLabel(rangeContent_);
+    {
+        QFont summaryFont = rangeSummaryLabel_->font();
+        summaryFont.setPointSizeF(qMax(7.0, summaryFont.pointSizeF() - 1.0));
+        rangeSummaryLabel_->setFont(summaryFont);
+    }
+    rangeSummaryLabel_->setStyleSheet(
+        QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
+    rangeLayout->addWidget(rangeSummaryLabel_, 0);
+    refreshRangeSummaryLabel();
+
     // Width budget for the modal transport's time label below (the embedded
     // panel hides that strip); no longer derived from fixed control widths.
     const int rangeControlWidth =
@@ -1872,6 +1886,10 @@ void VideoExportDialog::applyThemeStyles()
     if (rangeTrack_ != nullptr) {
         rangeTrack_->update();
     }
+    if (rangeSummaryLabel_ != nullptr) {
+        rangeSummaryLabel_->setStyleSheet(
+            QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
+    }
 
     // Sliders: the scrubber uses the form style; the visuals sliders the dialog
     // style.
@@ -2522,6 +2540,19 @@ void VideoExportDialog::refreshAddIntroEnabledState()
     constexpr double kFullRangeEpsilonSeconds = 0.01;
     addIntroCheck_->setEnabled(rangeStartSeconds() <= kFullRangeEpsilonSeconds);
     syncIntroControlsEnabled();
+    // The host's negative-time intro audition is gated on isAddIntroActiveForPreview()
+    // (== 添加片头 checked AND a full-range export). The 片头-tab controls already
+    // notify the host via introUiChanged; the export RANGE is the OTHER input to
+    // that gate, so when moving start on/off 0 flips it we must notify too —
+    // otherwise the host never calls refreshExportIntroState() to tear the intro
+    // region down, and the preview playhead gets stranded in negative time (stuck
+    // thumb + dead play toggle). Emit only on an actual flip so a range drag does
+    // not re-render the intro overlay on every spin tick.
+    const bool introActiveForPreview = isAddIntroActiveForPreview();
+    if (introActiveForPreview != introActiveForPreviewLast_) {
+        introActiveForPreviewLast_ = introActiveForPreview;
+        emit introPreviewSettingsChanged();
+    }
 }
 
 void VideoExportDialog::syncIntroControlsEnabled()
@@ -2831,11 +2862,25 @@ void VideoExportDialog::syncRangeUi()
         track->setPlayheadSeconds(previewCursorSecond_);
         track->setIntroBannerShown(isAddIntroActiveForPreview());
     }
+    refreshRangeSummaryLabel();
     if (stopPreviewButton_ != nullptr) {
         stopPreviewButton_->setEnabled(rangePreviewPlaying_ || previewCursorSecond_ > 0.0005);
     }
 
     syncingRangeUi_ = false;
+}
+
+void VideoExportDialog::refreshRangeSummaryLabel()
+{
+    if (rangeSummaryLabel_ == nullptr) {
+        return;
+    }
+    const double start = qBound(0.0, rangeStartSeconds(), totalDurationSeconds_);
+    const double end = qBound(start, rangeEndSeconds(), totalDurationSeconds_);
+    rangeSummaryLabel_->setText(
+        l10n(QStringLiteral("Current export range: [%1, %2]"),
+             QStringLiteral("当前导出区间：[%1, %2]"))
+            .arg(formatSecond(start), formatSecond(end)));
 }
 
 void VideoExportDialog::seekPreview(double second)

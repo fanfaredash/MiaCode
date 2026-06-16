@@ -96,14 +96,24 @@ void MainWindow::TimelineSection::onTogglePreviewPause()
 {
     MC_OP("MainWindow::TimelineSection::onTogglePreviewPause");
     if (state_.exportIntroLeadInActive_) {
-        // The intro is advancing -> pause it, keeping the static frame on screen.
-        pauseExportIntroAdvance();
-        return;
+        if (exportIntroEnabled()) {
+            // The intro is advancing -> pause it, keeping the static frame on screen.
+            pauseExportIntroAdvance();
+            return;
+        }
+        // Stale flag (添加片头 turned off / range left full-range while the intro
+        // was advancing): heal by tearing the region down, then fall through to
+        // normal chart play so the toggle is never a silent no-op.
+        exitExportIntroRegion();
     }
     if (state_.exportIntroRegionActive_) {
-        // Paused/scrubbed inside the intro region -> play (advance from here).
-        startExportIntroAdvance(state_.exportIntroPlayheadSeconds_);
-        return;
+        if (exportIntroEnabled()) {
+            // Paused/scrubbed inside the intro region -> play (advance from here).
+            startExportIntroAdvance(state_.exportIntroPlayheadSeconds_);
+            return;
+        }
+        // Stale region (intro no longer enabled): heal and fall through to play.
+        exitExportIntroRegion();
     }
     if (state_.qtPreviewPlaying_) {
         const quint64 opId = ++state_.previewInteractionSequence_;
