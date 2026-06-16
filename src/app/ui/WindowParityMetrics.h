@@ -12,6 +12,16 @@ constexpr int kInitialWindowFloorHeight = 640;
 constexpr int kOutlineCollapsedWidth = 20;
 constexpr int kOutlineExpandedMinWidth = 120;
 constexpr int kOutlineExpandedDefaultWidth = 190;
+
+// Central content-column (editorStack) minimum width, and the export page's
+// design-width budget. SPEC (2026-06-15): derived from the smallest allowed
+// window — kInitialWindowFloorWidth(960) - kOutlineExpandedDefaultWidth(190)
+// - previewSplitterHandle(6) - kEmbeddedPreviewPanelMinWidth(320) = 444, taken
+// as 440 with a small margin. At the floor window size the three panes
+// (sidebar + content + preview) coexist with the preview at its own minimum.
+// Export-page controls (difficulty badge row, sub-nav, embedded video panel)
+// MUST lay out within this width — never assume more; wrap/collapse instead.
+constexpr int kWorkspaceContentMinWidth = 440;
 constexpr int kOutlineListPadding = 6;
 constexpr int kOutlineRowHorizontalPadding = 12;
 constexpr int kOutlineRowVerticalPadding = 4;

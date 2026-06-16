@@ -1420,6 +1420,18 @@ void VideoExportDialog::setEmbeddedPanelMode(bool embedded)
     // top-level window while its layout slot stays behind as a phantom
     // (the 2026-06-11 导出页错位+弹窗 bug). Clear it explicitly.
     setWindowFlags(Qt::Widget);
+    // Surface unification: the ctor applied exportDialogStyleSheet(), whose
+    // `QDialog { background: windowAltBg }` rule keeps matching this widget by
+    // class even after it is reparented into the page — so the whole video
+    // sub-page painted a windowAltBg rectangle against the page's windowBg (the
+    // "整块面板偏色" color seam). Re-paint THIS instance with the page background
+    // via a higher-specificity ID selector so the embedded panel reads as one
+    // continuous surface with the export page header (the modal dialog, which
+    // keeps its own objectName-less stylesheet, is unaffected).
+    setObjectName(QStringLiteral("EmbeddedVideoExportPanel"));
+    setStyleSheet(styleSheet()
+        + QStringLiteral("QDialog#EmbeddedVideoExportPanel { background: %1; }")
+              .arg(UiTheme::colors().windowBg.name(QColor::HexRgb)));
     // The ctor's refreshDialogGeometry() already locked the dialog height —
     // clear the locks so the host layout owns sizing from here on. The
     // 560px dialog minimum width is also dropped: the quick-shell workspace

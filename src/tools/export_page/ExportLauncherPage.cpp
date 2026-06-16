@@ -3,6 +3,7 @@
 #include "mainwindow/MainWindow.h"
 #include "mainwindow/MainWindowShared.h"
 #include "mainwindow/sections/export/MainWindow.ExportSection.h"
+#include "FlowLayout.h"
 #include "UiText.h"
 #include "UiTheme.h"
 
@@ -56,11 +57,17 @@ void ExportLauncherPage::buildUi()
     outer->setSpacing(8);
 
     // -------- Difficulty badge row (decision D4; hint text removed) --------
+    // Wrapping flow layout: with up to 7 difficulties the pills fold to a second
+    // row instead of clipping off the right edge (the page forbids horizontal
+    // scrolling, and the content column is bounded by the kWorkspaceContentMinWidth
+    // design budget). hSpacing/vSpacing = 8 to match the former row spacing.
     badgeRowHost_ = new QWidget(this);
-    badgeRowLayout_ = new QHBoxLayout(badgeRowHost_);
-    badgeRowLayout_->setContentsMargins(0, 0, 0, 0);
-    badgeRowLayout_->setSpacing(8);
-    badgeRowLayout_->addStretch(1);
+    badgeRowLayout_ = new miacode::ui::FlowLayout(badgeRowHost_, 0, 8, 8);
+    // Let the outer QVBoxLayout grant the host its wrapped (height-for-width)
+    // height so a second row pushes the sub-nav down instead of being clipped.
+    QSizePolicy badgeHostPolicy = badgeRowHost_->sizePolicy();
+    badgeHostPolicy.setHeightForWidth(true);
+    badgeRowHost_->setSizePolicy(badgeHostPolicy);
     outer->addWidget(badgeRowHost_);
 
     // -------- Underline sub-nav row --------
@@ -266,7 +273,6 @@ void ExportLauncherPage::rebuildDifficultyBadges()
         return;
     }
     const QVector<int> ids = owner_->state_.document_.difficultyIds();
-    int insertIndex = 0;
     for (int id : ids) {
         auto* badge = new QToolButton(badgeRowHost_);
         badge->setProperty("role", "difficultyBadge");
@@ -282,7 +288,7 @@ void ExportLauncherPage::rebuildDifficultyBadges()
         connect(badge, &QToolButton::clicked, this, [this, id]() {
             setSelectedDifficulty(id);
         });
-        badgeRowLayout_->insertWidget(insertIndex++, badge);
+        badgeRowLayout_->addWidget(badge);
         badgeButtons_.append(badge);
     }
 }

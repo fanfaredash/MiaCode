@@ -13,6 +13,10 @@ class QStackedWidget;
 class QToolButton;
 class QVBoxLayout;
 
+namespace miacode::ui {
+class FlowLayout;
+}
+
 namespace miacode::export_page {
 
 // Central-area "Export" hub page wired into MainWindow::editorStack_ — the
@@ -110,7 +114,7 @@ private:
     QPointer<MainWindow> owner_;
 
     QWidget* badgeRowHost_ = nullptr;
-    QHBoxLayout* badgeRowLayout_ = nullptr;
+    miacode::ui::FlowLayout* badgeRowLayout_ = nullptr;
     QList<QToolButton*> badgeButtons_;
     int selectedDifficultyId_ = 0;
     bool pageSessionActive_ = false;

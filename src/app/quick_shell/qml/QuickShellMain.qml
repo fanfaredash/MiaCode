@@ -204,7 +204,8 @@ ApplicationWindow {
     }
 
     function contentPaneMinWidth() {
-        return metric("workspaceContentMinWidth", 320)
+        // Spec floor = export-page design-width budget (see kWorkspaceContentMinWidth).
+        return metric("workspaceContentMinWidth", 440)
     }
 
     function workspacePaneMinWidth() {
@@ -1030,6 +1031,12 @@ ApplicationWindow {
                 ColumnLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    // Hard floor for the central editor/export column. Belt-and-
+                    // suspenders with previewPaneMaxWidth (which already reserves
+                    // workspacePaneMinWidth): a wider export aspect ratio
+                    // letterboxes the preview instead of squeezing this column
+                    // below its design-width budget. (spec: kWorkspaceContentMinWidth)
+                    Layout.minimumWidth: contentPaneMinWidth()
                     spacing: 0
 
                     WindowContainer {

@@ -19,6 +19,7 @@
 #include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "WindowParityMetrics.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -1619,7 +1620,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     logStartupStage("timeline_and_tabs_ready");
 
     previewLeftColumn_ = new QWidget(this);
-    previewLeftColumn_->setMinimumWidth(320);
+    // Content-column floor = export-page design-width budget (spec). Mirrors the
+    // QuickShell content WindowContainer's Layout.minimumWidth.
+    previewLeftColumn_->setMinimumWidth(miacode::window_parity::kWorkspaceContentMinWidth);
     previewLeftColumn_->setProperty("baseMinimumWidth", previewLeftColumn_->minimumWidth());
     previewLeftColumn_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     auto* leftColumnLayout = new QVBoxLayout(previewLeftColumn_);

@@ -939,7 +939,9 @@ void MainWindow::TimelineSection::setPreviewCanvasAspectRatio(double ratio, bool
         const bool restoringToSquare = qAbs(normalized - 1.0) <= 1e-6 && previousRatio > 1.0 + 1e-6;
         const int availableWidth = qMax(0, ui_.workspaceSplitter_->contentsRect().width());
         const int availableHeight = qMax(0, ui_.workspaceSplitter_->contentsRect().height());
-        const int leftMinWidth = qMax(320, ui_.previewLeftColumn_->minimumWidth());
+        const int leftMinWidth = qMax(
+            miacode::window_parity::kWorkspaceContentMinWidth,
+            ui_.previewLeftColumn_->minimumWidth());
         const int controlHeight =
             ui_.previewControlCard_ != nullptr
                 ? qMax(ui_.previewControlCard_->minimumSizeHint().height(), ui_.previewControlCard_->sizeHint().height())
@@ -957,7 +959,10 @@ void MainWindow::TimelineSection::setPreviewCanvasAspectRatio(double ratio, bool
         const int clampedRightWidth = qBound(
             kEmbeddedPreviewPanelMinWidth,
             targetRightWidth,
-            qMax(kEmbeddedPreviewPanelMinWidth, availableWidth)
+            // Reserve the left column's minimum: a wider aspect ratio must
+            // letterbox the preview, never squeeze the content column below
+            // its design-width budget (spec: kWorkspaceContentMinWidth).
+            qMax(kEmbeddedPreviewPanelMinWidth, availableWidth - leftMinWidth)
         );
         ui_.previewPanel_->setMinimumWidth(clampedRightWidth);
         if (availableWidth > 0) {

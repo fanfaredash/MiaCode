@@ -200,7 +200,7 @@ void QuickShellStyleBridge::refreshFromBackend()
     int initialWindowY = 120;
     int previewPanelMinWidth = miacode::window_parity::kEmbeddedPreviewPanelMinWidth;
     int workspaceSidebarWidth = miacode::window_parity::kOutlineExpandedDefaultWidth;
-    int workspaceContentMinWidth = 320;
+    int workspaceContentMinWidth = miacode::window_parity::kWorkspaceContentMinWidth;
     int workspaceCompositeMinWidth = workspaceSidebarWidth + workspaceContentMinWidth;
     if (QScreen* screen = QApplication::primaryScreen(); screen != nullptr) {
         const QRect workArea = screen->availableGeometry();
