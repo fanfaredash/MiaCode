@@ -90,6 +90,7 @@ QIcon makeDifficultyBadgeIcon(int difficultyId);
 QIcon makeOutlineCloseIcon(const QColor& color);
 QIcon makeSettingsGearIcon(const QColor& color);
 QIcon makeToolboxAccessIcon(const QColor& toolboxColor, const QColor& gearColor);
+QIcon makeMediaToolsIcon(const QColor& color);
 QIcon makeExportAccessIcon(const QColor& color);
 QIcon makeTransformMirrorLeftRightIcon(const QColor& color);
 QIcon makeTransformMirrorUpDownIcon(const QColor& color);

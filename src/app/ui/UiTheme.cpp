@@ -486,6 +486,17 @@ QString latencyDetectionPageStyleSheet()
         "QPushButton#LatencyBackButton:hover {"
         " color: %5;"
         "}"
+        "QPushButton#LatencyMediaToolsButton {"
+        " color: %3;"
+        " background: %1;"
+        " border: 1px solid %2;"
+        " border-radius: 13px;"
+        " padding: 5px 14px 5px 11px;"
+        "}"
+        "QPushButton#LatencyMediaToolsButton:hover {"
+        " border-color: %5;"
+        " color: %5;"
+        "}"
     )
         .arg(css(c.cardBg))
         .arg(css(c.border))

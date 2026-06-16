@@ -24,6 +24,7 @@
 #include <QKeySequence>
 #include <QSettings>
 #include <QSignalBlocker>
+#include <QSize>
 #include <QSlider>
 #include <QSpinBox>
 #include <QTimer>
@@ -247,6 +248,10 @@ void LatencyDetectionPage::buildUi()
     // result.
     auto* mediaToolsButton = new QPushButton(
         localizedText(QStringLiteral("音频/视频处理"), QStringLiteral("Audio/Video Processing")), backBar);
+    mediaToolsButton->setObjectName(QStringLiteral("LatencyMediaToolsButton"));
+    mediaToolsButton->setIcon(
+        miacode::mainwindow::shared::makeMediaToolsIcon(UiTheme::colors().accent));
+    mediaToolsButton->setIconSize(QSize(16, 16));
     mediaToolsButton->setCursor(Qt::PointingHandCursor);
     mediaToolsButton->setToolTip(localizedText(
         QStringLiteral("打开音频/视频处理工具：采样率转换 / 视频压缩 / 开头静音 / 开头黑幕。"),
@@ -310,6 +315,11 @@ void LatencyDetectionPage::buildUi()
         return label;
     };
 
+    // Detection-result labels are secondary; render them a touch smaller so the
+    // "检测结果: …" text fits the narrowed result column without clipping.
+    QFont resultFont = hintFont;
+    resultFont.setPointSize(qMax(8, hintFont.pointSize() - 2));
+
     // Row 0: BPM
     paramGrid->addWidget(makeRowLabel(QStringLiteral("BPM")), 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
     bpmEdit_ = new NoWheelDoubleSpinBox(paramCard);
@@ -317,7 +327,7 @@ void LatencyDetectionPage::buildUi()
     bpmEdit_->setDecimals(kDecimalsBpm);
     bpmEdit_->setSingleStep(0.5);
     bpmEdit_->setValue(120.0);
-    bpmEdit_->setMinimumWidth(150);
+    bpmEdit_->setMinimumWidth(110);
     // keyboardTracking off: valueChanged fires only on a settled value (Enter /
     // focus-out / step button), so a half-typed value (e.g. "8" while typing
     // "0.893") is never applied to the document or preview.
@@ -333,7 +343,7 @@ void LatencyDetectionPage::buildUi()
     paramGrid->addWidget(detectBpmButton_, 0, 2, Qt::AlignVCenter);
     bpmDetectResultLabel_ = new QLabel(QString(), paramCard);
     bpmDetectResultLabel_->setProperty("role", "detectResult");
-    bpmDetectResultLabel_->setFont(hintFont);
+    bpmDetectResultLabel_->setFont(resultFont);
     paramGrid->addWidget(bpmDetectResultLabel_, 0, 3, Qt::AlignLeft | Qt::AlignVCenter);
 
     // Row 1: Start Offset (First). The auto-detect Offset entry point is shown
@@ -346,7 +356,7 @@ void LatencyDetectionPage::buildUi()
     offsetEdit_->setDecimals(kDecimalsOffset);
     offsetEdit_->setSingleStep(0.010);
     offsetEdit_->setValue(0.0);
-    offsetEdit_->setMinimumWidth(150);
+    offsetEdit_->setMinimumWidth(110);
     // keyboardTracking off: see the BPM field above — avoids applying an
     // intermediate value such as "893" while the user is typing "0.893".
     offsetEdit_->setKeyboardTracking(false);
@@ -362,7 +372,7 @@ void LatencyDetectionPage::buildUi()
     paramGrid->addWidget(detectOffsetButton_, 1, 2, Qt::AlignVCenter);
     offsetDetectResultLabel_ = new QLabel(QString(), paramCard);
     offsetDetectResultLabel_->setProperty("role", "detectResult");
-    offsetDetectResultLabel_->setFont(hintFont);
+    offsetDetectResultLabel_->setFont(resultFont);
     paramGrid->addWidget(offsetDetectResultLabel_, 1, 3, Qt::AlignLeft | Qt::AlignVCenter);
 
     // Row 2: clock_count (export count-in beats; also auto-filled by BPM detect)
@@ -373,7 +383,7 @@ void LatencyDetectionPage::buildUi()
     clockCountEdit_->setRange(1, 64);
     clockCountEdit_->setSingleStep(1);
     clockCountEdit_->setValue(4);
-    clockCountEdit_->setMinimumWidth(150);
+    clockCountEdit_->setMinimumWidth(110);
     clockCountEdit_->setKeyboardTracking(false);
     clockCountEdit_->setAccelerated(true);
     connect(clockCountEdit_, qOverload<int>(&QSpinBox::valueChanged), this, [this](int) {
@@ -382,15 +392,15 @@ void LatencyDetectionPage::buildUi()
         }
     });
     paramGrid->addWidget(clockCountEdit_, 2, 1, Qt::AlignVCenter);
-    detectClockCountButton_ = new QPushButton(
-        localizedText(QStringLiteral("自动检测拍号"), QStringLiteral("Auto-detect Time Signature")), paramCard);
-    detectClockCountButton_->setCursor(Qt::PointingHandCursor);
-    connect(detectClockCountButton_, &QPushButton::clicked, this, &LatencyDetectionPage::onDetectClockCountClicked);
-    paramGrid->addWidget(detectClockCountButton_, 2, 2, Qt::AlignVCenter);
-    clockCountDetectResultLabel_ = new QLabel(QString(), paramCard);
-    clockCountDetectResultLabel_->setProperty("role", "detectResult");
-    clockCountDetectResultLabel_->setFont(hintFont);
-    paramGrid->addWidget(clockCountDetectResultLabel_, 2, 3, Qt::AlignLeft | Qt::AlignVCenter);
+    // No dedicated meter-detect button: clock_count is filled together with
+    // 自动检测 BPM (from the detected meter numerator), so a muted hint stands in
+    // for the removed control across the detect + result columns.
+    auto* clockCountHintLabel = new QLabel(
+        localizedText(QStringLiteral("随「自动检测 BPM」一并填充"),
+                      QStringLiteral("Filled together with Auto-detect BPM")), paramCard);
+    clockCountHintLabel->setProperty("role", "cardHint");
+    clockCountHintLabel->setFont(resultFont);
+    paramGrid->addWidget(clockCountHintLabel, 2, 2, 1, 2, Qt::AlignLeft | Qt::AlignVCenter);
 
     paramLayout->addLayout(paramGrid);
     contentLayout->addWidget(paramCard);
@@ -454,16 +464,23 @@ void LatencyDetectionPage::buildUi()
     sfxVolumeValueLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     sfxVolumeValueLabel_->setFont(hintFont);
     volumeRow->addWidget(sfxVolumeValueLabel_);
+    auditionLayout->addLayout(volumeRow);
+
+    // Reset sits on its own row, right-aligned, so it never collides with the
+    // slider / percent readout on a narrow page.
+    auto* volumeResetRow = new QHBoxLayout();
+    volumeResetRow->setSpacing(10);
+    volumeResetRow->addStretch(1);
     auto* volumeResetButton = new QPushButton(
-        localizedText(QStringLiteral("重置"), QStringLiteral("Reset")), auditionCard);
+        localizedText(QStringLiteral("重置音量"), QStringLiteral("Reset volume")), auditionCard);
     volumeResetButton->setCursor(Qt::PointingHandCursor);
     connect(volumeResetButton, &QPushButton::clicked, this, [this]() {
         if (sfxVolumeSlider_ != nullptr) {
             sfxVolumeSlider_->setValue(kDefaultSfxVolumePercent);
         }
     });
-    volumeRow->addWidget(volumeResetButton);
-    auditionLayout->addLayout(volumeRow);
+    volumeResetRow->addWidget(volumeResetButton);
+    auditionLayout->addLayout(volumeResetRow);
 
     contentLayout->addWidget(auditionCard);
     contentLayout->addStretch(1);
@@ -649,46 +666,6 @@ void LatencyDetectionPage::onDetectBpmClicked()
     }
 }
 
-void LatencyDetectionPage::onDetectClockCountClicked()
-{
-    if (owner_.isNull()) {
-        return;
-    }
-    const QString trackPath = currentTrackPath();
-    if (trackPath.isEmpty()) {
-        if (clockCountDetectResultLabel_ != nullptr) {
-            clockCountDetectResultLabel_->setText(localizedText(
-                QStringLiteral("缺少歌曲音频"), QStringLiteral("Track audio missing")));
-        }
-        return;
-    }
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    ensureAudioEnvelopeReady();
-    const auto result = latency_analysis::detectBpm(cachedOnsetEnvelope_);
-    QApplication::restoreOverrideCursor();
-    const int detectedClockCount = clockCountFromMeterId(result.meterId);
-    if (!(result.bpm > 0.0) || detectedClockCount <= 0) {
-        if (clockCountDetectResultLabel_ != nullptr) {
-            clockCountDetectResultLabel_->setText(localizedText(
-                QStringLiteral("未检测到拍号"), QStringLiteral("Time signature not detected")));
-        }
-        return;
-    }
-    lastDetectedMeterId_ = result.meterId;
-    lastDetectedMeterPhase_ = result.meterPhaseSeconds;
-    hasLastDetectedMeterPhase_ = result.meterPhaseValid;
-    if (clockCountEdit_ != nullptr) {
-        QSignalBlocker blocker(clockCountEdit_);
-        clockCountEdit_->setValue(detectedClockCount);
-    }
-    commitClockCountEdit();
-    if (clockCountDetectResultLabel_ != nullptr) {
-        clockCountDetectResultLabel_->setText(localizedText(
-            QStringLiteral("检测结果: %1 (%2)"),
-            QStringLiteral("Detected: %1 (%2)")).arg(detectedClockCount).arg(result.meterId));
-    }
-}
-
 void LatencyDetectionPage::onDetectOffsetClicked()
 {
     if (owner_.isNull()) {
@@ -787,14 +764,6 @@ void LatencyDetectionPage::updateAutoDetectAvailability()
     if (detectOffsetButton_ != nullptr) {
         detectOffsetButton_->setEnabled(hasAudio);
         detectOffsetButton_->setToolTip(hasAudio
-            ? QString()
-            : localizedText(
-                QStringLiteral("需要先加载歌曲音频"),
-                QStringLiteral("Requires a loaded track audio file")));
-    }
-    if (detectClockCountButton_ != nullptr) {
-        detectClockCountButton_->setEnabled(hasAudio);
-        detectClockCountButton_->setToolTip(hasAudio
             ? QString()
             : localizedText(
                 QStringLiteral("需要先加载歌曲音频"),

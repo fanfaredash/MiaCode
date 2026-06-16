@@ -1003,6 +1003,30 @@ QIcon makeToolboxAccessIcon(const QColor& toolboxColor, const QColor& gearColor)
     return QIcon(pixmap);
 }
 
+QIcon makeMediaToolsIcon(const QColor& color)
+{
+    // "Tune" glyph (three horizontal slider rails with handles) — reads as
+    // audio/video processing / adjustment, and stays distinct from the toolbox
+    // and settings-gear icons used elsewhere.
+    QPixmap pixmap(20, 20);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QPen pen(color, 1.7);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(pen);
+    painter.drawLine(QPointF(3.2, 6.0), QPointF(16.8, 6.0));
+    painter.drawLine(QPointF(3.2, 10.0), QPointF(16.8, 10.0));
+    painter.drawLine(QPointF(3.2, 14.0), QPointF(16.8, 14.0));
+    painter.setBrush(color);
+    painter.drawEllipse(QPointF(12.5, 6.0), 2.3, 2.3);
+    painter.drawEllipse(QPointF(7.0, 10.0), 2.3, 2.3);
+    painter.drawEllipse(QPointF(13.5, 14.0), 2.3, 2.3);
+    painter.end();
+    return QIcon(pixmap);
+}
+
 QIcon makeTransformMirrorLeftRightIcon(const QColor& color)
 {
     QPixmap pixmap(20, 20);

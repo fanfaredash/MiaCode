@@ -63,7 +63,6 @@ private slots:
     void onAuditionButtonClicked();
     void onDetectBpmClicked();
     void onDetectOffsetClicked();
-    void onDetectClockCountClicked();
     void onAuditionStateChanged(bool running);
     void onPlayheadAdvanced(double seconds);
 
@@ -97,10 +96,8 @@ private:
     QPushButton* detectOffsetButton_ = nullptr;
     QLabel* offsetDetectResultLabel_ = nullptr;
 
-    // Clock count card
+    // Clock count (spin box only; auto-filled together with BPM detection)
     QSpinBox* clockCountEdit_ = nullptr;
-    QPushButton* detectClockCountButton_ = nullptr;
-    QLabel* clockCountDetectResultLabel_ = nullptr;
 
     // Audition card
     QRadioButton* subdivision4Radio_ = nullptr;
