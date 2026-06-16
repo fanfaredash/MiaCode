@@ -13,6 +13,7 @@
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
+#include "common/ContentDurationConfig.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewInteractionConfig.h"
@@ -194,19 +195,24 @@ void MainWindow::setPreviewFixedTimerHighResolutionActive(bool active)
 
 double MainWindow::TimelineSection::previewDurationSeconds() const
 {
-    double duration = 0.0;
+    // Unified content-duration policy = max(chartEnd + tail, music) — see
+    // common/ContentDurationConfig.h. The chart end is the timeline bridge's
+    // durationSeconds (last note/beat/measure); the runtime cursors below are
+    // maxed in WITHOUT the tail so the range merely covers an active playhead.
+    double chartEndSeconds = 0.0;
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        chartEndSeconds = qMax(chartEndSeconds, state_.timelineQuickStateBridge_->durationSeconds());
+    }
+    double duration = miacode::content_duration::totalContentDurationSeconds(
+        chartEndSeconds, state_.previewTrackDurationSeconds_);
     if (state_.qtPreviewPlaying_ && state_.qtPreviewPlaybackEndSecond_ > 0.0) {
         duration = qMax(duration, state_.qtPreviewPlaybackEndSecond_);
     }
     if (state_.timelineQuickStateBridge_ != nullptr) {
-        duration = qMax(duration, state_.timelineQuickStateBridge_->durationSeconds());
         duration = qMax(duration, state_.timelineQuickStateBridge_->playheadSeconds());
         duration = qMax(duration, state_.timelineQuickStateBridge_->playbackEntrySeconds());
     }
     duration = qMax(duration, qMax(0.0, state_.qtPreviewPauseSecond_));
-    if (state_.previewTrackDurationSeconds_ > 0.0) {
-        duration = qMax(duration, state_.previewTrackDurationSeconds_ + 3.0);
-    }
     return qMax(0.0, duration);
 }
 
@@ -215,14 +221,14 @@ double MainWindow::TimelineSection::previewPlaybackEndSeconds() const
     if (state_.qtPreviewPlaying_ && state_.qtPreviewPlaybackEndSecond_ > 0.0) {
         return qMax(0.0, state_.qtPreviewPlaybackEndSecond_);
     }
-    double duration = 0.0;
+    // Same unified content-duration policy as previewDurationSeconds(), so
+    // playback auto-stops exactly where the slider/total duration ends.
+    double chartEndSeconds = 0.0;
     if (state_.timelineQuickStateBridge_ != nullptr) {
-        duration = qMax(duration, state_.timelineQuickStateBridge_->durationSeconds());
+        chartEndSeconds = qMax(chartEndSeconds, state_.timelineQuickStateBridge_->durationSeconds());
     }
-    if (state_.previewTrackDurationSeconds_ > 0.0) {
-        duration = qMax(duration, state_.previewTrackDurationSeconds_);
-    }
-    return qMax(0.0, duration);
+    return miacode::content_duration::totalContentDurationSeconds(
+        chartEndSeconds, state_.previewTrackDurationSeconds_);
 }
 
 void MainWindow::TimelineSection::updatePreviewSliderRange()

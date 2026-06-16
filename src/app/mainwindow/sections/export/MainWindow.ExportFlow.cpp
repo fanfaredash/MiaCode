@@ -11,6 +11,7 @@
 #include "UiTheme.h"
 #include "common/ChartAssetPaths.h"
 #include "common/ChartClockCount.h"
+#include "common/ContentDurationConfig.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
@@ -381,10 +382,9 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask(int difficul
     for (const TimelineNoteMarker& marker : seedMarkers) {
         lastMarkerEndSecond = qMax(lastMarkerEndSecond, previewMarkerEndSecond(marker));
     }
-    const double cappedExportEndSecond = qMax(
-        0.0,
-        qMin(owner_.previewDurationSeconds(), lastMarkerEndSecond + 3.0)
-    );
+    // Unified content-duration policy = max(chartEnd + tail, music).
+    const double unifiedExportEndSecond = miacode::content_duration::totalContentDurationSeconds(
+        lastMarkerEndSecond, owner_.previewTrackDurationSeconds_);
 
     VideoExportTask task;
     task.chartPath = owner_.currentFilePath_;
@@ -411,7 +411,7 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask(int difficul
     task.touchFlowSpeed = owner_.previewTouchFlowSpeed_;
     task.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
     task.exportStartSeconds = 0.0;
-    task.contentDurationSeconds = cappedExportEndSecond;
+    task.contentDurationSeconds = unifiedExportEndSecond;
     task.fullRangeExport = true;
     task.outputWidth = 1024;
     task.outputHeight = 1024;

@@ -12,6 +12,7 @@
 #include "UiTheme.h"
 #include "common/ChartClockCount.h"
 #include "common/ChartAssetPaths.h"
+#include "common/ContentDurationConfig.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "preview/runtime/PreviewRuntime.h"
@@ -795,10 +796,9 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
         lastMarkerEndSecond = qMax(lastMarkerEndSecond, markerEndSecond(marker));
     }
     const double trackDurationSeconds = probeAudioDurationSeconds(trackPath);
-    double contentDurationSeconds = qMax(0.0, lastMarkerEndSecond + 3.0);
-    if (trackDurationSeconds > 0.0) {
-        contentDurationSeconds = qMax(0.0, qMin(trackDurationSeconds, contentDurationSeconds));
-    }
+    // Unified content-duration policy = max(chartEnd + tail, music).
+    const double contentDurationSeconds = miacode::content_duration::totalContentDurationSeconds(
+        lastMarkerEndSecond, trackDurationSeconds);
     if (contentDurationSeconds <= 0.0) {
         if (errorMessage != nullptr) {
             *errorMessage = uiText(
@@ -1029,11 +1029,10 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     for (const TimelineNoteMarker& marker : owner_.latestTimelineNoteMarkers_) {
         lastMarkerEndSecond = qMax(lastMarkerEndSecond, previewMarkerEndSecond(marker));
     }
-    const double cappedExportEndSecond = qMax(
-        0.0,
-        qMin(owner_.previewDurationSeconds(), lastMarkerEndSecond + 3.0)
-    );
-    const double maxDuration = qMax(0.0, cappedExportEndSecond - exportStartSeconds);
+    // Unified content-duration policy = max(chartEnd + tail, music).
+    const double unifiedExportEndSecond = miacode::content_duration::totalContentDurationSeconds(
+        lastMarkerEndSecond, owner_.previewTrackDurationSeconds_);
+    const double maxDuration = qMax(0.0, unifiedExportEndSecond - exportStartSeconds);
     const double contentDurationSeconds = request.contentDurationSeconds > 0.0
         ? request.contentDurationSeconds
         : maxDuration;
@@ -1046,7 +1045,7 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
             QStringLiteral("content duration is not positive"),
             QStringLiteral("start=%1 total=%2")
                 .arg(exportStartSeconds, 0, 'f', 3)
-                .arg(cappedExportEndSecond, 0, 'f', 3)
+                .arg(unifiedExportEndSecond, 0, 'f', 3)
         );
     }
 
