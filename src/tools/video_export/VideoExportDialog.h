@@ -237,6 +237,7 @@ private:
     QCheckBox* showTimestampCheck_ = nullptr;
     QCheckBox* showObjectStatsCheck_ = nullptr;
     QCheckBox* showChartInfoCheck_ = nullptr;
+    QCheckBox* clockCountCheck_ = nullptr;
     QCheckBox* addIntroCheck_ = nullptr;
     // ---- "片头" tab controls ----
     QComboBox* introBackgroundCombo_ = nullptr;

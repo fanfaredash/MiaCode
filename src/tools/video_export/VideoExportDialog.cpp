@@ -908,6 +908,15 @@ VideoExportDialog::VideoExportDialog(
         optionsContent_
     );
     showChartInfoCheck_->setChecked(baseTask_.showChartInfoHud);
+    clockCountCheck_ = new QCheckBox(
+        l10n(QStringLiteral("Enable clock_count (%1)"), QStringLiteral("启用 clock_count (%1)"))
+            .arg(baseTask_.clockCount),
+        optionsContent_
+    );
+    // Opt-in count-in: OFF by default. When checked, applyUiToTask bakes the
+    // chart's clock_count beats (the value shown in the label, carried in
+    // baseTask_) into the export; unchecked exports with no clock.wav ticks.
+    clockCountCheck_->setChecked(false);
     addIntroCheck_ = new QCheckBox(
         l10n(QStringLiteral("Add intro"), QStringLiteral("添加片头")),
         optionsContent_
@@ -1105,6 +1114,7 @@ VideoExportDialog::VideoExportDialog(
     hudTogglesLayout->addWidget(showTimestampCheck_, 0, 1, Qt::AlignLeft | Qt::AlignVCenter);
     hudTogglesLayout->addWidget(showObjectStatsCheck_, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
     hudTogglesLayout->addWidget(showChartInfoCheck_, 1, 1, Qt::AlignLeft | Qt::AlignVCenter);
+    hudTogglesLayout->addWidget(clockCountCheck_, 2, 0, 1, 2, Qt::AlignLeft | Qt::AlignVCenter);
 
     // ("添加片头" moved to its own "片头" tab, built below.)
     visualsPageLayout->addWidget(hudToggles, 0);
@@ -2005,6 +2015,11 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     updated.showTimestamp = showTimestampCheck_ != nullptr ? showTimestampCheck_->isChecked() : true;
     updated.showObjectStatsHud = showObjectStatsCheck_ != nullptr ? showObjectStatsCheck_->isChecked() : false;
     updated.showChartInfoHud = showChartInfoCheck_ != nullptr ? showChartInfoCheck_->isChecked() : false;
+    // clock_count count-in is opt-in: off → 0 (no ticks), on → the document's
+    // clock_count value carried in baseTask_.
+    updated.clockCount = (clockCountCheck_ != nullptr && clockCountCheck_->isChecked())
+        ? baseTask_.clockCount
+        : 0;
     updated.backgroundBrightnessOuter = brightnessOuterSlider_ != nullptr
         ? qBound(0.0, static_cast<double>(brightnessOuterSlider_->value()) / 100.0, 1.0)
         : updated.backgroundBrightnessOuter;
