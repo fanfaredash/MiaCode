@@ -105,6 +105,15 @@ public:
     // preview HUD/aspect state. Idempotent.
     void finalizeEmbeddedSession();
 
+    // Re-apply every theme-baked stylesheet + icon on a light/dark switch.
+    // buildUi() bakes these once at construction and Qt does NOT regenerate a
+    // widget's literal stylesheet string on a palette change, so the embedded
+    // export panel (a persistent page surface) would otherwise stay frozen at
+    // the startup theme until it is destroyed + rebuilt. MainWindow's
+    // applyUiTheme() forwards to the live embedded panel here; the modal path is
+    // rebuilt per open so it never needs it, but calling it there is harmless.
+    void applyThemeStyles();
+
 signals:
     // Embedded mode only: the user confirmed the export (settings already
     // validated + persisted; requestedExportTask() carries the task).
@@ -152,6 +161,10 @@ private:
     void handlePreviewStopOrPlayShortcut();
     void onRangePreviewTick();
     void syncRangeUi();
+    // The export-range track (a custom QWidget): for handle drags, live-seek
+    // the preview through the SAME single seek entry the right-side transport
+    // uses — never a second transport.
+    void scrubPreviewFromTrack(double second, bool live);
     // "Add intro" applies to exports that START at chart 0 (the bake gate in
     // applyUiToTask treats those as full-range); grey it when the range
     // starts mid-chart.
@@ -265,7 +278,14 @@ private:
     QLabel* layoutSquareScaleValueLabel_ = nullptr;
     QDoubleSpinBox* startSecondSpin_ = nullptr;
     QDoubleSpinBox* endSecondSpin_ = nullptr;
-    QLineEdit* startCurrentTimeEdit_ = nullptr;
+    // Held so applyThemeStyles() can re-apply their baked button stylesheets on
+    // a theme switch (they are otherwise local widgets unreachable by pointer).
+    QPushButton* outputBrowseButton_ = nullptr;
+    QPushButton* setStartButton_ = nullptr;
+    QPushButton* setEndButton_ = nullptr;
+    // Stored as QWidget* (the concrete ExportRangeTrack is a file-local type in
+    // the .cpp); cast where its API is needed.
+    QWidget* rangeTrack_ = nullptr;
     QSlider* previewSlider_ = nullptr;
     QLabel* previewTimeLabel_ = nullptr;
     QWidget* optionsContent_ = nullptr;

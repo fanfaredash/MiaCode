@@ -1,6 +1,7 @@
 ﻿#include "VideoExportDialog.h"
 
 #include "DialogLocalization.h"
+#include "EditableValueLabel.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/DebugLog.h"
@@ -38,6 +39,10 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QPaintEvent>
+#include <QPainterPath>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QScrollArea>
@@ -383,7 +388,11 @@ public:
         setButtonSymbols(QAbstractSpinBox::NoButtons);
         setAlignment(Qt::AlignCenter);
         setKeyboardTracking(false);
-        setFixedWidth(92);
+        // Fluid width: the redesigned range editor lays the spin boxes out in
+        // full-width rows, so they grow/shrink with the content column instead
+        // of pinning a fixed 92px (which overflowed the 440px budget).
+        setMinimumWidth(96);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         setMinimumHeight(28);
     }
 
@@ -432,6 +441,238 @@ protected:
         }
         return QValidator::Invalid;
     }
+};
+
+// Export-range selector: a full-duration lane with a highlighted [start, end]
+// segment, two draggable handles, and a READ-ONLY gold playhead mirroring the
+// preview clock. Pointer-only (the spin boxes below are the keyboard path); all
+// linkage flows through std::function callbacks so the class stays moc-free and
+// file-local (same pattern as TimestampSpinBox). The track is never a transport:
+// body clicks are inert — only the two handles act, and a handle drag live-seeks
+// the preview through the dialog's single seek callback. Per the layout skill
+// (Z2) one canonical xForSecond()/secondForX() feeds BOTH paint and hit test.
+class ExportRangeTrack : public QWidget
+{
+public:
+    explicit ExportRangeTrack(QWidget* parent = nullptr)
+        : QWidget(parent)
+    {
+        setMinimumWidth(180);
+        setMinimumHeight(52);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        setMouseTracking(true);
+        setFocusPolicy(Qt::NoFocus);
+    }
+
+    void setTotalSeconds(double total) { total_ = qMax(0.0, total); clampValues(); update(); }
+    void setRange(double start, double end) { start_ = start; end_ = end; clampValues(); update(); }
+    void setPlayheadSeconds(double second)
+    {
+        const double clamped = qBound(0.0, second, total_);
+        if (qFuzzyCompare(clamped + 1.0, playhead_ + 1.0)) {
+            return;
+        }
+        playhead_ = clamped;
+        update();
+    }
+    void setIntroBannerText(const QString& text) { introBannerText_ = text; update(); }
+    void setIntroBannerShown(bool shown)
+    {
+        if (introBannerShown_ == shown) {
+            return;
+        }
+        introBannerShown_ = shown;
+        update();
+    }
+
+    std::function<void()> onPressed;
+    std::function<void(double)> onStartDragged;
+    std::function<void(double)> onEndDragged;
+    std::function<void(double)> onReleased;
+
+protected:
+    QSize sizeHint() const override { return QSize(320, 52); }
+
+    void paintEvent(QPaintEvent*) override
+    {
+        const auto& c = UiTheme::colors();
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing, true);
+
+        const QRectF lane = laneRect();
+        const double cy = lane.center().y();
+        const double xs = xForSecond(start_);
+        const double xe = xForSecond(end_);
+        const double xp = xForSecond(playhead_);
+
+        // 1) base lane
+        p.setPen(QPen(c.border, 1.0));
+        p.setBrush(c.inputBg);
+        p.drawRoundedRect(lane, 3.0, 3.0);
+
+        // 2) selected [start, end] segment
+        QColor segFill = c.accent;
+        segFill.setAlpha(70);
+        p.setPen(Qt::NoPen);
+        p.setBrush(segFill);
+        p.drawRect(QRectF(xs, lane.top(), qMax(1.0, xe - xs), lane.height()));
+        p.setPen(QPen(c.accent, 1.4));
+        p.drawLine(QPointF(xs, lane.top()), QPointF(xs, lane.bottom()));
+        p.drawLine(QPointF(xe, lane.top()), QPointF(xe, lane.bottom()));
+
+        // 3) read-only playhead (gold) — mirrors the preview, never seeks
+        p.setPen(QPen(c.timelinePlayhead, 2.0));
+        p.drawLine(QPointF(xp, cy - 12.0), QPointF(xp, cy + 12.0));
+        QPainterPath tri;
+        tri.moveTo(xp - 4.0, cy - 17.0);
+        tri.lineTo(xp + 4.0, cy - 17.0);
+        tri.lineTo(xp, cy - 12.0);
+        tri.closeSubpath();
+        p.fillPath(tri, c.timelinePlayhead);
+
+        // 4) handles
+        auto paintHandle = [&](double x) {
+            p.setPen(QPen(c.accentText, 1.0));
+            p.setBrush(c.accent);
+            p.drawRoundedRect(QRectF(x - 5.0, cy - 9.0, 10.0, 18.0), 3.0, 3.0);
+        };
+        paintHandle(xs);
+        paintHandle(xe);
+
+        // 5) axis labels + optional 含片头 tag
+        QFont small = font();
+        small.setPointSizeF(qMax(7.0, small.pointSizeF() - 1.0));
+        p.setFont(small);
+        p.setPen(c.textMuted);
+        const double labelY = height() - 15.0;
+        p.drawText(QRectF(sideInset_, labelY, width() * 0.5, 14.0),
+                   Qt::AlignLeft | Qt::AlignVCenter, axisLabel(0.0));
+        p.drawText(QRectF(width() * 0.5, labelY, width() * 0.5 - sideInset_, 14.0),
+                   Qt::AlignRight | Qt::AlignVCenter, axisLabel(total_));
+        if (introBannerShown_ && !introBannerText_.isEmpty()) {
+            p.setPen(c.accent);
+            p.drawText(QRectF(xs + 6.0, lane.top() - 16.0, 120.0, 14.0),
+                       Qt::AlignLeft | Qt::AlignVCenter, introBannerText_);
+        }
+    }
+
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        if (event->button() != Qt::LeftButton || total_ <= 0.0) {
+            QWidget::mousePressEvent(event);
+            return;
+        }
+        const int hit = hitTestHandle(event->position().toPoint());
+        if (hit < 0) {
+            return;  // body clicks are inert — the right transport owns seeking
+        }
+        dragging_ = hit;
+        setCursor(Qt::SizeHorCursor);
+        if (onPressed) {
+            onPressed();
+        }
+        emitDrag(secondForX(event->position().x()));
+    }
+    void mouseMoveEvent(QMouseEvent* event) override
+    {
+        if (dragging_ < 0) {
+            setCursor(hitTestHandle(event->position().toPoint()) >= 0 ? Qt::SizeHorCursor
+                                                                      : Qt::ArrowCursor);
+            return;
+        }
+        emitDrag(secondForX(event->position().x()));
+    }
+    void mouseReleaseEvent(QMouseEvent* event) override
+    {
+        if (dragging_ < 0) {
+            QWidget::mouseReleaseEvent(event);
+            return;
+        }
+        const int which = dragging_;
+        dragging_ = -1;
+        const double s = secondForX(event->position().x());
+        const double clamped = (which == 0) ? qBound(0.0, s, end_) : qBound(start_, s, total_);
+        setCursor(hitTestHandle(event->position().toPoint()) >= 0 ? Qt::SizeHorCursor
+                                                                  : Qt::ArrowCursor);
+        if (onReleased) {
+            onReleased(clamped);
+        }
+    }
+
+private:
+    static QString axisLabel(double seconds)
+    {
+        const qint64 t = qMax<qint64>(0, qRound64(seconds));
+        return QStringLiteral("%1:%2").arg(t / 60).arg(t % 60, 2, 10, QChar('0'));
+    }
+    QRectF laneRect() const
+    {
+        const double cy = (height() - 16.0) * 0.5;
+        return QRectF(sideInset_, cy - 3.0, qMax(1.0, width() - 2.0 * sideInset_), 6.0);
+    }
+    double xForSecond(double s) const
+    {
+        const QRectF lane = laneRect();
+        if (total_ <= 0.0) {
+            return lane.left();
+        }
+        return lane.left() + (qBound(0.0, s, total_) / total_) * lane.width();
+    }
+    double secondForX(double x) const
+    {
+        const QRectF lane = laneRect();
+        if (lane.width() <= 0.0 || total_ <= 0.0) {
+            return 0.0;
+        }
+        return qBound(0.0, (x - lane.left()) / lane.width(), 1.0) * total_;
+    }
+    int hitTestHandle(const QPoint& pos) const
+    {
+        if (total_ <= 0.0) {
+            return -1;
+        }
+        const double cy = laneRect().center().y();
+        if (pos.y() < cy - 14.0 || pos.y() > cy + 14.0) {
+            return -1;
+        }
+        const double ds = qAbs(pos.x() - xForSecond(start_));
+        const double de = qAbs(pos.x() - xForSecond(end_));
+        constexpr double grab = 9.0;
+        if (ds <= grab || de <= grab) {
+            return de < ds ? 1 : 0;
+        }
+        return -1;
+    }
+    void emitDrag(double second)
+    {
+        if (dragging_ == 0) {
+            start_ = qBound(0.0, second, end_);
+            if (onStartDragged) {
+                onStartDragged(start_);
+            }
+        } else if (dragging_ == 1) {
+            end_ = qBound(start_, second, total_);
+            if (onEndDragged) {
+                onEndDragged(end_);
+            }
+        }
+        update();
+    }
+    void clampValues()
+    {
+        start_ = qBound(0.0, start_, total_);
+        end_ = qBound(start_, end_, total_);
+        playhead_ = qBound(0.0, playhead_, total_);
+    }
+
+    double total_ = 0.0;
+    double start_ = 0.0;
+    double end_ = 0.0;
+    double playhead_ = 0.0;
+    bool introBannerShown_ = false;
+    QString introBannerText_;
+    int dragging_ = -1;   // -1 none, 0 start handle, 1 end handle
+    static constexpr double sideInset_ = 8.0;
 };
 
 }  // namespace
@@ -546,6 +787,7 @@ VideoExportDialog::VideoExportDialog(
     outputPathEdit_ = new QLineEdit(outputControlRow);
     outputPathEdit_->setText(displayOutputPathForDialog(baseTask_.outputPath, exportBaseDirectory(baseTask_)));
     auto* browseButton = new QPushButton(l10n(QStringLiteral("Browse..."), QStringLiteral("娴忚...")), outputRow);
+    outputBrowseButton_ = browseButton;
     browseButton->setText(uiText("dialog.video_export.browse", QStringLiteral("Browse...")));
     browseButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     const int rightAlignedButtonWidth = qMax(browseButton->sizeHint().width(), kDialogActionButtonMinWidth);
@@ -764,55 +1006,83 @@ VideoExportDialog::VideoExportDialog(
     startSecondSpin_->setValue(defaultStart);
     endSecondSpin_->setValue(defaultEnd);
 
-    auto* mergedRangeRows = new QWidget(rangeContent_);
-    auto* mergedRangeLayout = new QGridLayout(mergedRangeRows);
-    mergedRangeLayout->setContentsMargins(0, 0, 0, 0);
-    mergedRangeLayout->setHorizontalSpacing(kSetButtonLeftGap);
-    mergedRangeLayout->setVerticalSpacing(rangeLayout->spacing());
-    mergedRangeLayout->setColumnStretch(3, 1);
+    // Visual range selector -- replaces the old fixed-width spin/Set/tall-readout
+    // grid that overflowed the 440px content column. A full-duration track shows
+    // the highlighted [start, end] segment with two draggable handles plus a
+    // read-only gold playhead mirroring the preview clock; the Start/End spin
+    // boxes (kept as the data model + keyboard path) sit below in full-width
+    // rows. Dragging a handle live-seeks the preview through the SAME single
+    // seek entry the right-side transport uses -- the two stay in sync and the
+    // track is never itself a transport (body clicks are inert).
+    auto* track = new ExportRangeTrack(rangeContent_);
+    rangeTrack_ = track;
+    track->setTotalSeconds(totalDurationSeconds_);
+    track->setRange(defaultStart, defaultEnd);
+    track->setPlayheadSeconds(previewCursorSecond_);
+    track->setIntroBannerText(uiText("dialog.video_export.range.intro_tag", QStringLiteral("intro")));
+    track->onPressed = [this]() {
+        // Trimming should reveal frames, not fight playback -- pause on grab.
+        if (isPreviewPlaying()) {
+            stopRangePreview(false);
+        }
+        previewScrubRenderElapsed_.invalidate();
+    };
+    track->onStartDragged = [this](double second) {
+        startSecondSpin_->setValue(second);   // -> onRangeSpinChanged -> syncRangeUi
+        scrubPreviewFromTrack(second, true);
+    };
+    track->onEndDragged = [this](double second) {
+        endSecondSpin_->setValue(second);
+        scrubPreviewFromTrack(second, true);
+    };
+    track->onReleased = [this](double second) {
+        scrubPreviewFromTrack(second, false);
+    };
+    rangeLayout->addWidget(track, 0);
 
-    auto* startLabel = new QLabel(l10n(QStringLiteral("Start"), QStringLiteral("璧峰")), mergedRangeRows);
+    // Start / End rows: full-width (the layout playbook bans two-column grids in
+    // this dialog -- the right column clips). Label + fluid spin + "set current"
+    // (captures the live preview position via setRange*FromPreview()).
+    auto* startRow = new QWidget(rangeContent_);
+    auto* startRowLayout = new QHBoxLayout(startRow);
+    startRowLayout->setContentsMargins(0, 0, 0, 0);
+    startRowLayout->setSpacing(kSetButtonLeftGap);
+    auto* startLabel = new QLabel(uiText("dialog.video_export.range.start", QStringLiteral("Start")), startRow);
     startLabel->setFixedWidth(kRangeLabelWidth);
-    startLabel->setText(uiText("dialog.video_export.range.start", QStringLiteral("Start")));
     startLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    auto* setStartButton = new QPushButton(l10n(QStringLiteral("Set Start"), QStringLiteral("璁惧畾璧峰")), mergedRangeRows);
-    setStartButton->setFixedWidth(kRangeSetButtonWidth);
-    setStartButton->setText(uiText("dialog.video_export.range.set_left", QStringLiteral("<- Set")));
+    auto* setStartButton = new QPushButton(
+        uiText("dialog.video_export.range.set_current", QStringLiteral("Set to current value")), startRow);
+    setStartButton_ = setStartButton;
+    setStartButton->setToolTip(
+        uiText("dialog.video_export.range.set_current.tip", QStringLiteral("Set to the current preview position")));
     setStartButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    startCurrentTimeEdit_ = new QLineEdit(mergedRangeRows);
-    startCurrentTimeEdit_->setReadOnly(true);
-    startCurrentTimeEdit_->setFocusPolicy(Qt::NoFocus);
-    startCurrentTimeEdit_->setMinimumWidth(108);
-    startCurrentTimeEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    startCurrentTimeEdit_->setMinimumHeight(startSecondSpin_->sizeHint().height() * 2 + mergedRangeLayout->verticalSpacing() + 2);
-    startCurrentTimeEdit_->setAlignment(Qt::AlignCenter);
-    startCurrentTimeEdit_->setStyleSheet(UiTheme::readOnlyLineEditStyleSheet());
+    startRowLayout->addWidget(startLabel, 0);
+    startRowLayout->addWidget(startSecondSpin_, 1);
+    startRowLayout->addWidget(setStartButton, 0);
+    rangeLayout->addWidget(startRow, 0);
 
-    auto* endLabel = new QLabel(l10n(QStringLiteral("End"), QStringLiteral("缁撴潫")), mergedRangeRows);
+    auto* endRow = new QWidget(rangeContent_);
+    auto* endRowLayout = new QHBoxLayout(endRow);
+    endRowLayout->setContentsMargins(0, 0, 0, 0);
+    endRowLayout->setSpacing(kSetButtonLeftGap);
+    auto* endLabel = new QLabel(uiText("dialog.video_export.range.end", QStringLiteral("End")), endRow);
     endLabel->setFixedWidth(kRangeLabelWidth);
-    endLabel->setText(uiText("dialog.video_export.range.end", QStringLiteral("End")));
     endLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    auto* setEndButton = new QPushButton(l10n(QStringLiteral("Set End"), QStringLiteral("璁惧畾缁撴潫")), mergedRangeRows);
-    setEndButton->setFixedWidth(kRangeSetButtonWidth);
-    setEndButton->setText(uiText("dialog.video_export.range.set_left", QStringLiteral("<- Set")));
+    auto* setEndButton = new QPushButton(
+        uiText("dialog.video_export.range.set_current", QStringLiteral("Set to current value")), endRow);
+    setEndButton_ = setEndButton;
+    setEndButton->setToolTip(
+        uiText("dialog.video_export.range.set_current.tip", QStringLiteral("Set to the current preview position")));
     setEndButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    endRowLayout->addWidget(endLabel, 0);
+    endRowLayout->addWidget(endSecondSpin_, 1);
+    endRowLayout->addWidget(setEndButton, 0);
+    rangeLayout->addWidget(endRow, 0);
 
-    mergedRangeLayout->addWidget(startLabel, 0, 0);
-    mergedRangeLayout->addWidget(startSecondSpin_, 0, 1, Qt::AlignLeft);
-    mergedRangeLayout->addWidget(setStartButton, 0, 2, Qt::AlignLeft);
-    mergedRangeLayout->addWidget(startCurrentTimeEdit_, 0, 3, 2, 1, Qt::AlignLeft | Qt::AlignVCenter);
-    mergedRangeLayout->addWidget(endLabel, 1, 0);
-    mergedRangeLayout->addWidget(endSecondSpin_, 1, 1, Qt::AlignLeft);
-    mergedRangeLayout->addWidget(setEndButton, 1, 2, Qt::AlignLeft);
-    rangeLayout->addWidget(mergedRangeRows, 0);
+    // Width budget for the modal transport's time label below (the embedded
+    // panel hides that strip); no longer derived from fixed control widths.
     const int rangeControlWidth =
-        kRangeLabelWidth
-        + kSetButtonLeftGap
-        + startSecondSpin_->width()
-        + kSetButtonLeftGap
-        + setStartButton->width()
-        + kSetButtonLeftGap
-        + startCurrentTimeEdit_->minimumWidth();
+        kRangeLabelWidth + kSetButtonLeftGap + 110 + kSetButtonLeftGap + kRangeSetButtonWidth;
 
     // Top-aligned flow: the range controls, then a trailing stretch. (Earlier
     // the controls were pushed to the window bottom by a stretch, which
@@ -947,7 +1217,7 @@ VideoExportDialog::VideoExportDialog(
         headerLayout->setContentsMargins(0, 0, 0, 0);
         headerLayout->setSpacing(6);
         auto* titleLabel = new QLabel(title, header);
-        auto* valueLabel = new QLabel(QStringLiteral("%1%").arg(valuePercent), header);
+        auto* valueLabel = new miacode::ui::EditableValueLabel(QStringLiteral("%1%").arg(valuePercent), header);
         valueLabel->setMinimumWidth(40);
         valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         headerLayout->addWidget(titleLabel, 1);
@@ -962,6 +1232,7 @@ VideoExportDialog::VideoExportDialog(
         // Fit the styled handle (groove 6px + -4px margins = 14px) without
         // clipping, kept compact so the page stays short.
         slider->setFixedHeight(20);
+        valueLabel->bindSlider(slider);
         containerLayout->addWidget(header, 0);
         containerLayout->addWidget(slider, 0);
         *sliderOut = slider;
@@ -1559,6 +1830,81 @@ void VideoExportDialog::finalizeEmbeddedSession()
 {
     stopRangePreview(false);
     restoreLivePreviewState();
+}
+
+void VideoExportDialog::applyThemeStyles()
+{
+    // Mirror every baked stylesheet/icon site in buildUi(). The dialog's own
+    // sheet re-themes most children by QSS type-selector cascade; the rest set
+    // their own literal stylesheet (or an accent-/icon-tinted QIcon) and must be
+    // re-applied by hand.
+    // In embedded mode setEmbeddedPanelMode() appended a higher-specificity
+    // `QDialog#EmbeddedVideoExportPanel { background: windowBg }` override so the
+    // panel reads as one continuous surface with the export-page header. A bare
+    // setStyleSheet(exportDialogStyleSheet()) would DROP that override and leave
+    // the panel painting the baked startup-theme color — re-append it here.
+    QString sheet = UiTheme::exportDialogStyleSheet();
+    if (embeddedPanelMode_) {
+        sheet += QStringLiteral("QDialog#EmbeddedVideoExportPanel { background: %1; }")
+                     .arg(UiTheme::colors().windowBg.name(QColor::HexRgb));
+    }
+    setStyleSheet(sheet);
+
+    // Dropdown menu buttons (createDialogMenuButton).
+    for (QToolButton* button : {resolutionButton_, fpsButton_, audioBitrateButton_,
+                                presetButton_, backgroundScaleModeButton_}) {
+        if (button != nullptr) {
+            button->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
+        }
+    }
+
+    // Plain push buttons.
+    for (QPushButton* button : {outputBrowseButton_, setStartButton_, setEndButton_,
+                                hudFontSettingsButton_, introBackgroundBrowse_, cancelButton_}) {
+        if (button != nullptr) {
+            button->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+        }
+    }
+    if (exportButton_ != nullptr) {
+        exportButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(true));
+    }
+
+    if (rangeTrack_ != nullptr) {
+        rangeTrack_->update();
+    }
+
+    // Sliders: the scrubber uses the form style; the visuals sliders the dialog
+    // style.
+    if (previewSlider_ != nullptr) {
+        previewSlider_->setStyleSheet(UiTheme::formSliderStyleSheet());
+    }
+    for (QSlider* slider : {brightnessOuterSlider_, brightnessInnerSlider_, layoutSquareScaleSlider_}) {
+        if (slider != nullptr) {
+            slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
+        }
+    }
+
+    // Transport controls: stylesheet + accent/icon-tinted QIcon.
+    if (stopPreviewButton_ != nullptr) {
+        stopPreviewButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet());
+        stopPreviewButton_->setIcon(makePreviewStopIcon(UiTheme::colors().iconPrimary));
+    }
+    // Re-renders previewRangeButton_'s play/pause icon + stylesheet for the
+    // current state and theme.
+    updatePreviewPlayPauseUi();
+
+    // Embedded panel chrome: flat-underline tab strip + the footer hairline,
+    // both of which bake colors at construction.
+    if (embeddedPanelMode_) {
+        if (settingsTabs_ != nullptr) {
+            settingsTabs_->setStyleSheet(UiTheme::embeddedExportTabStyleSheet());
+        }
+        if (auto* footerRule = findChild<QWidget*>(QStringLiteral("EmbeddedExportFooterRule"));
+            footerRule != nullptr) {
+            footerRule->setStyleSheet(
+                QStringLiteral("background: %1;").arg(UiTheme::colors().border.name(QColor::HexRgb)));
+        }
+    }
 }
 
 void VideoExportDialog::injectOwnerWiredSettings(QWidget* videoExtras, QWidget* gameplayWidget)
@@ -2315,6 +2661,30 @@ void VideoExportDialog::setRangeEndFromPreview()
     endSecondSpin_->setValue(previewCursorSecond_);
 }
 
+void VideoExportDialog::scrubPreviewFromTrack(double second, bool live)
+{
+    // C2 linkage: a handle drag live-seeks the preview through seekPreviewCallback_
+    // (== MainWindow::seekPreviewToSecond, the single seek entry the right-side
+    // transport also uses), so the on-screen time bar stays in sync. The gold
+    // marker (previewCursorSecond_) always tracks; the decode seek is throttled.
+    const double clamped = qBound(0.0, second, totalDurationSeconds_);
+    previewCursorSecond_ = clamped;
+    if (rangeTrack_ != nullptr) {
+        static_cast<ExportRangeTrack*>(rangeTrack_)->setPlayheadSeconds(clamped);
+    }
+    bool doSeek = !live;
+    if (live) {
+        if (!previewScrubRenderElapsed_.isValid()
+            || previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs) {
+            doSeek = true;
+            previewScrubRenderElapsed_.restart();
+        }
+    }
+    if (doSeek && seekPreviewCallback_) {
+        seekPreviewCallback_(clamped);
+    }
+}
+
 void VideoExportDialog::toggleRangePreview()
 {
     if (rangePreviewPlaying_) {
@@ -2405,8 +2775,8 @@ void VideoExportDialog::onRangePreviewTick()
     // transport to the right.
     if (embeddedPanelMode_) {
         previewCursorSecond_ = qBound(0.0, currentPreviewSecond(), totalDurationSeconds_);
-        if (startCurrentTimeEdit_ != nullptr) {
-            startCurrentTimeEdit_->setText(formatSecond(previewCursorSecond_));
+        if (rangeTrack_ != nullptr) {
+            static_cast<ExportRangeTrack*>(rangeTrack_)->setPlayheadSeconds(previewCursorSecond_);
         }
         return;
     }
@@ -2455,8 +2825,11 @@ void VideoExportDialog::syncRangeUi()
     if (previewTimeLabel_ != nullptr) {
         previewTimeLabel_->setText(QStringLiteral("%1 / %2").arg(formatSecond(previewCursorSecond_), formatSecond(totalDurationSeconds_)));
     }
-    if (startCurrentTimeEdit_ != nullptr) {
-        startCurrentTimeEdit_->setText(formatSecond(previewCursorSecond_));
+    if (rangeTrack_ != nullptr) {
+        auto* track = static_cast<ExportRangeTrack*>(rangeTrack_);
+        track->setRange(clampedStart, clampedEnd);
+        track->setPlayheadSeconds(previewCursorSecond_);
+        track->setIntroBannerShown(isAddIntroActiveForPreview());
     }
     if (stopPreviewButton_ != nullptr) {
         stopPreviewButton_->setEnabled(rangePreviewPlaying_ || previewCursorSecond_ > 0.0005);
