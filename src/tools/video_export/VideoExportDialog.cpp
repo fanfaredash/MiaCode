@@ -1,5 +1,6 @@
 ﻿#include "VideoExportDialog.h"
 
+#include "BusySpinner.h"
 #include "DialogLocalization.h"
 #include "EditableValueLabel.h"
 #include "UiText.h"
@@ -797,6 +798,7 @@ VideoExportDialog::VideoExportDialog(
     outputControlLayout->addWidget(browseButton, 0);
     outputColumn->addWidget(outputControlRow, 0);
     outputPageLayout->addWidget(outputRow, 0);
+    miacode::ui::busyTick();  // keep the export-switch spinner turning during the build
     // Beta20-fix — 2x2 grid layout for the 4 dropdown options.
     //
     // Mirrors the "Gameplay" group in the Video Settings dialog: each
@@ -1164,6 +1166,7 @@ VideoExportDialog::VideoExportDialog(
     previewStripLayout->addWidget(previewControlsRow, 0);
     previewStripLayout->addWidget(previewTimeRow, 0);
     rootLayout->addWidget(previewStrip, 0);
+    miacode::ui::busyTick();
 
     // optionsContent_ holds the Visuals-page controls; it is added to the
     // Visuals tab below. The former HUD overlay toggles + HUD font picker are
@@ -1410,6 +1413,7 @@ VideoExportDialog::VideoExportDialog(
     // ("添加片头" moved to its own "片头" tab, built below.)
     visualsPageLayout->addWidget(hudToggles, 0);
     visualsPageLayout->addStretch(1);
+    miacode::ui::busyTick();
 
     // Font tab — the HUD font picker on its own page. (The cover export moved to
     // the toolbar Export dropdown, 2026-06-10.)
@@ -1430,6 +1434,7 @@ VideoExportDialog::VideoExportDialog(
     fontPageLayout->addWidget(hudFontSettingsButton_, 0, Qt::AlignLeft);
 
     fontPageLayout->addStretch(1);
+    miacode::ui::busyTick();
 
     // ---- Intro tab ("片头") — pre-roll settings + read-only live preview ----
     // Mirrors the cover dialog's 背景/难度卡 controls, minus size (follows the
@@ -1683,10 +1688,12 @@ VideoExportDialog::VideoExportDialog(
     previewSlider_->installEventFilter(this);
 
     loadPersistedSettings();
+    miacode::ui::busyTick();
     initialResolutionAspectRatio_ = selectedResolutionAspectRatio();
     syncRangeUi();
     updatePreviewPlayPauseUi();
     refreshDialogGeometry();
+    miacode::ui::busyTick();
     if (QWidget* owner = parentWidget(); owner != nullptr && !embeddedPanelMode_) {
         move(desiredDialogTopLeft(owner, size()));
     }
