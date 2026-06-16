@@ -819,16 +819,29 @@ double LatencyDetectionPage::documentWholeBpm() const
     if (owner_.isNull()) {
         return 0.0;
     }
-    // Resolve the BPM default the same way export count-in does
-    // (miacode::chart_clock::clockBpmForChart): prefer &wholebpm, then fall back
-    // to the first inline (BPM) in the active chart. If neither is present this
-    // returns 0 and refreshFromDocument() applies the final 120 fallback.
+    // Resolve the BPM default the way export count-in does
+    // (miacode::chart_clock::clockBpmForChart): prefer &wholebpm, else the first
+    // inline (BPM) of a chart. The latency page has no "active difficulty", so
+    // activeChartText() is empty here — and BPM is song-wide anyway, so scan the
+    // document's difficulties for the first non-empty chart. 0 here means
+    // refreshFromDocument() applies the final 120 fallback.
     bool ok = false;
     const double whole = owner_->parsedWholeBpm(&ok);
     if (ok && whole > 0.0) {
         return whole;
     }
-    return miacode::chart_clock::firstBpmFromChart(owner_->activeChartText());
+    const SimaiDocument& document = owner_->state_.document_;
+    for (const int id : document.difficultyIds()) {
+        const SimaiDifficultyData* difficultyData = document.difficulty(id);
+        if (difficultyData == nullptr || difficultyData->chart.isEmpty()) {
+            continue;
+        }
+        const double firstBpm = miacode::chart_clock::firstBpmFromChart(difficultyData->chart);
+        if (firstBpm > 0.0) {
+            return firstBpm;
+        }
+    }
+    return 0.0;
 }
 
 int LatencyDetectionPage::documentClockCount() const
