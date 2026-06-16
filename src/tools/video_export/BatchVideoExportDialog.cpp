@@ -3,6 +3,7 @@
 #include "common/ChartAssetPaths.h"
 #include "SimaiNativeParser.h"
 #include "SimaiDocument.h"
+#include "EditableValueLabel.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "tools/video_export/VideoExportPreferences.h"
@@ -464,9 +465,10 @@ QWidget* createSliderOption(
     slider->setTickInterval(1);
     slider->setValue(valuePercent);
     slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
-    auto* valueLabel = new QLabel(QStringLiteral("%1%").arg(valuePercent), container);
+    auto* valueLabel = new miacode::ui::EditableValueLabel(QStringLiteral("%1%").arg(valuePercent), container);
     valueLabel->setMinimumWidth(kSliderValueLabelWidth);
     valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    valueLabel->bindSlider(slider);
 
     layout->addWidget(titleLabel, 0);
     layout->addWidget(slider, 1);

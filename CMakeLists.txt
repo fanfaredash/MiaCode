@@ -131,6 +131,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/ui/WindowParityMetrics.cpp
     src/app/ui/FlowLayout.h
     src/app/ui/FlowLayout.cpp
+    src/app/ui/EditableValueLabel.h
+    src/app/ui/EditableValueLabel.cpp
     src/common/MuriTypes.h
     src/common/MuriTypes.cpp
     src/common/MuriRenderOptions.h
