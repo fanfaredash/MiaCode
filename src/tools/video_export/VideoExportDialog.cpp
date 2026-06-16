@@ -2877,10 +2877,12 @@ void VideoExportDialog::refreshRangeSummaryLabel()
     }
     const double start = qBound(0.0, rangeStartSeconds(), totalDurationSeconds_);
     const double end = qBound(start, rangeEndSeconds(), totalDurationSeconds_);
+    const double durationSeconds = qMax(0.0, end - start);
     rangeSummaryLabel_->setText(
-        l10n(QStringLiteral("Current export range: [%1, %2]"),
-             QStringLiteral("当前导出区间：[%1, %2]"))
-            .arg(formatSecond(start), formatSecond(end)));
+        l10n(QStringLiteral("Current export range: [%1, %2], %3 s total."),
+             QStringLiteral("当前导出区间：[%1, %2]，共 %3 秒。"))
+            .arg(formatSecond(start), formatSecond(end),
+                 QString::number(durationSeconds, 'f', 3)));
 }
 
 void VideoExportDialog::seekPreview(double second)
