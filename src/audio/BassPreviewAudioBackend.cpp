@@ -2004,10 +2004,23 @@ void BassPreviewAudioBackend::applyPausedPreviewState(
         rebuildPreparedTimeline(noteMarkers, playbackRate, timingSettings);
     }
     const double clampedPauseSecond = clampTimelineSecond(pauseSecond);
+    // G1 fix (seek-into-片头 A/V desync): the reuse "same second" check must
+    // compare against where the BGM ACTUALLY is, not retainedTransportSecond()
+    // (= lastAuthoritativeSecond) — that field no longer tracks the live BGM
+    // cursor (G1 Commit 6, see the KeepPaused note below). A drag into the
+    // negative 片头 region moves it to match the target while the BGM stays parked
+    // at its old position; trusting it then "reuses" the transport and resumes the
+    // BGM from the wrong second. When a BGM is the live clock, use its real
+    // chart-second so a mismatch falls through to repositionPausedTransportToSecond.
+    const double reuseCompareSecond =
+        (hasBackgroundTrack() && backgroundTrackSample_ != nullptr
+         && !playbackSession_.backgroundTrackPendingStart)
+            ? backgroundTrackSample_->currentSec() - playbackSession_.backgroundTrackOffsetSeconds
+            : retainedTransportSecond();
     if (miacode::preview_audio::bass::canReusePausedTransport(
             retainedPlaybackMode_,
             transportInvalidated,
-            retainedTransportSecond(),
+            reuseCompareSecond,
             clampedPauseSecond)) {
         playbackSession_.lastAuthoritativeSecond = clampedPauseSecond;
         appendBassDebugLog(
