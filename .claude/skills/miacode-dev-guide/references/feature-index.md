@@ -380,6 +380,28 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   path as `backgroundImage` (the pre-2026-06-16 bug: blur toggle did nothing in preview + custom
   bg wrongly replaced the card jacket). Both QML edited → touch their qrc (`preview_runtime_qml.qrc`
   + `quick_shell_qml.qrc`).
+  ⚠ **片头 audio (2026-06-16):** (a) the **opening jingle** (`track_start.wav`) is a PERSISTENT,
+  preloaded `QSoundEffect` (`exportIntroStartSound_` + `ensureExportIntroStartSound()`), extracted
+  qrc→temp file (qrc: source is flaky for `QSoundEffect` on Windows — the working invalidStar
+  sounds use on-disk files) and `stop()+play()`d from `startExportIntroAdvance` (head-gated). A
+  fresh-create+source+play-in-one-breath dropped the first play (the old "no startup sound").
+  🔴 **STILL UNRESOLVED (GUI 2026-06-16): track_start is INAUDIBLE even after the preload + temp-file
+  extraction** — so the QSoundEffect async-load race was NOT the (only) cause. Next suspects: the
+  jingle plays but `clearIntroOverlay`/region teardown or the playback start stops/steals the device;
+  the temp copy not actually landing; or QSoundEffect being globally dead on this build (try a
+  `BassPreviewAudioBackend::audition`-style path / a loaded SFX kind instead of QSoundEffect). (b)
+  **clock_count count-in** plays on the chart audition AFTER the 片头 hands off at 0 (✅ GUI-confirmed
+  audible 2026-06-16): a per-tick
+  scheduler (`setExportAuditionClockSchedule`/`resetExportAuditionClockCursor`/
+  `maybeFireExportAuditionClockTicks` in `MainWindow.TimelinePlayback.cpp`, gated on
+  `exportPreviewAuditionActive_`) fires `audition("clock")` at chart-time `index*60/clockBpm` for
+  `index∈[0,clockCount)` — mirroring the export's `appendClockCountPlaybacks`. **NOT** injected into
+  the SFX prepared timeline (the resume hand-off `resetCursor(0,false)` would skip the downbeat).
+  Seeded from `installExportPreviewAuditionScene` (`clockCountFromDocument`+`clockBpmForChart`),
+  cleared in `teardownExportPreviewAuditionScene`. ⚠ **Both backends must load a `"clock"` sample
+  for `audition("clock")` to make sound** — added to `BassPreviewAudioBackend` (Windows:
+  `clockSample_`, load+reset+`applySampleLevels`); the miniaudio (non-Windows) backend gracefully
+  no-ops (`sampleForKind` miss → silent count-in there). `clock.wav` ships in `assets/SFX/`.
   ⚠⚠ **The on-screen preview transport (default shell too) is the QML
   `QuickShellPreviewTransport.qml`** — its slider was hardcoded `from: 0` (the real clamp) — NOT the
   QWidget `ui_.previewSlider_`, which is null on the export page (so `updatePreviewSliderRange`
