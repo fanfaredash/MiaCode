@@ -8,6 +8,8 @@
 #include "UiText.h"
 #include "UiTheme.h"
 
+#include "common/ChartClockCount.h"
+
 #include <QApplication>
 #include <QButtonGroup>
 #include <QCursor>
@@ -817,9 +819,16 @@ double LatencyDetectionPage::documentWholeBpm() const
     if (owner_.isNull()) {
         return 0.0;
     }
+    // Resolve the BPM default the same way export count-in does
+    // (miacode::chart_clock::clockBpmForChart): prefer &wholebpm, then fall back
+    // to the first inline (BPM) in the active chart. If neither is present this
+    // returns 0 and refreshFromDocument() applies the final 120 fallback.
     bool ok = false;
-    const double value = owner_->parsedWholeBpm(&ok);
-    return ok ? value : 0.0;
+    const double whole = owner_->parsedWholeBpm(&ok);
+    if (ok && whole > 0.0) {
+        return whole;
+    }
+    return miacode::chart_clock::firstBpmFromChart(owner_->activeChartText());
 }
 
 int LatencyDetectionPage::documentClockCount() const
