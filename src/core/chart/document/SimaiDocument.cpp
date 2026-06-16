@@ -7,15 +7,18 @@
 
 namespace {
 
-QString stripSingleTrailingLineBreak(QString value)
+// Trim every trailing whitespace character (spaces, tabs, CR/LF — i.e. any
+// trailing blank lines too) from a field value. A &key= header is now allowed
+// to sit behind leading horizontal whitespace, and that indentation is ignored
+// rather than soaked into the preceding field's value; this right-trim is the
+// matching half of that contract for the value's own tail.
+QString trimTrailingWhitespace(QString value)
 {
-    if (value.endsWith("\r\n")) {
-        value.chop(2);
-        return value;
+    int end = value.size();
+    while (end > 0 && value.at(end - 1).isSpace()) {
+        --end;
     }
-    if (value.endsWith('\n') || value.endsWith('\r')) {
-        value.chop(1);
-    }
+    value.truncate(end);
     return value;
 }
 
@@ -177,7 +180,12 @@ QVector<SimaiRawField> SimaiDocument::parseRawFields(const QString& text, bool p
         }
     }
 
-    const QRegularExpression headerRe(R"((?m)^&([^\r\n=]+)=)");
+    // `&key=` may now sit behind leading horizontal whitespace (spaces/tabs and
+    // other non-newline blanks) instead of strictly at the line start. The
+    // indentation is matched but not captured, so it lands in neither the key
+    // nor the previous field's value. `[^\S\r\n]` = whitespace minus CR/LF, so
+    // the `^` line anchor still only fires at true line starts.
+    const QRegularExpression headerRe(R"((?m)^[^\S\r\n]*&([^\r\n=]+)=)");
     QVector<QRegularExpressionMatch> matches;
     QRegularExpressionMatchIterator it = headerRe.globalMatch(source);
     while (it.hasNext()) {
@@ -194,7 +202,7 @@ QVector<SimaiRawField> SimaiDocument::parseRawFields(const QString& text, bool p
         const int valueEnd = (i + 1 < matches.size()) ? matches.at(i + 1).capturedStart(0) : source.size();
         SimaiRawField field;
         field.key = match.captured(1);
-        field.value = stripSingleTrailingLineBreak(source.mid(valueStart, valueEnd - valueStart));
+        field.value = trimTrailingWhitespace(source.mid(valueStart, valueEnd - valueStart));
         fields.append(field);
     }
 

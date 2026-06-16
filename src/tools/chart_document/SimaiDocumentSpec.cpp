@@ -164,6 +164,35 @@ void runSpecs(QTextStream& out, int* failed)
         SimaiDocument::ensureDefaultClockCount(&dupFields);
         expectTrue(dupFields.size() == 1, "ensureDefaultClockCount collapses duplicate &clock_count entries", failed, out);
     }
+
+    // --- A &key= header may sit behind leading horizontal whitespace, and a
+    //     field's value is right-trimmed of trailing blanks / blank lines. ---
+    {
+        // Spaces/tabs before the `&` are ignored (the key/value never absorb
+        // them); the value loses every trailing whitespace char, including
+        // trailing blank lines, while interior content (newlines, leading
+        // spaces after `=`) is preserved verbatim.
+        const QString src =
+            "\t&title=Song   \n"
+            "   &artist=  Composer\t\n"
+            "  &first=0\n"
+            "&inote_5=(120){1}1,\n\n   \n";
+        const SimaiDocument doc = SimaiDocument::fromText(src);
+        expectEqual(doc.title, "Song", "indented &title parsed; trailing spaces trimmed", failed, out);
+        expectEqual(doc.artist, "  Composer", "indented &artist parsed; leading value space kept, tail trimmed", failed, out);
+        expectEqual(doc.first, "0", "indented &first parsed", failed, out);
+        const SimaiDifficultyData* master = doc.difficulty(5);
+        expectTrue(master != nullptr, "indented file still produces difficulty 5", failed, out);
+        if (master != nullptr) {
+            expectEqual(master->chart, "(120){1}1,", "inote value loses trailing blank lines/whitespace", failed, out);
+        }
+
+        // A value that spans multiple lines keeps its interior line breaks; only
+        // the trailing run of blank lines/whitespace is shaved off.
+        const QString multiline = SimaiDocument::fromText(
+            "&inote_1=(120){1}1,\n2,\n\t\n  \n").difficulty(1)->chart;
+        expectEqual(multiline, "(120){1}1,\n2,", "interior newlines preserved, tail trimmed", failed, out);
+    }
 }
 
 }  // namespace
