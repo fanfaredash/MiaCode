@@ -1141,13 +1141,19 @@ void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
 
     if (!batchTransformActions_.isEmpty() || !moreBatchTransformActions_.isEmpty()) {
         menu->addSeparator();
-        if (!batchTransformActions_.isEmpty()) {
-            addStyledSubmenu(
-                translated(QStringLiteral("context.batch_transform"), QStringLiteral("Batch Transform")),
-                batchTransformActions_
-            );
+        // Surface the primary batch transforms inline so the right-click menu matches the top
+        // "修改" menu one-for-one (镜像/旋转 + 清空, then 分音); embedded separator actions carry
+        // the same group splits across. Only the less-frequent toggles stay under "更多".
+        for (QAction* action : batchTransformActions_) {
+            if (action == nullptr) {
+                continue;
+            }
+            menu->addAction(action);
         }
         if (!moreBatchTransformActions_.isEmpty()) {
+            if (!batchTransformActions_.isEmpty()) {
+                menu->addSeparator();
+            }
             addStyledSubmenu(
                 translated(QStringLiteral("context.more_transform"), QStringLiteral("More...")),
                 moreBatchTransformActions_

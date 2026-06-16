@@ -203,6 +203,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     editor->setLineWrapMode(QTextEdit::WidgetWidth);
     editor->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     editor->setPlainText(QString());
+    auto* batchTransformGroupSeparator = new QAction(this);
+    batchTransformGroupSeparator->setSeparator(true);
     editor->setBatchTransformActions({
         transformMirrorLeftRightAction_,
         transformMirrorUpDownAction_,
@@ -210,6 +212,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         transformRotate45CounterClockwiseAction_,
         transformRotate45ClockwiseAction_,
         transformClearCompleteElementsAction_,
+        batchTransformGroupSeparator,
         transformRaiseSubdivisionAction_,
         transformLowerSubdivisionAction_,
         transformRaiseSubdivisionHalfStepAction_,

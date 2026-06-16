@@ -429,7 +429,9 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.transformRotate45ClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45Clockwise);
     transformMenu->addAction(owner_.transformRotate45ClockwiseAction_);
 
-    owner_.transformClearCompleteElementsAction_ = new QAction(QStringLiteral("一键清空要素"), &owner_);
+    owner_.transformClearCompleteElementsAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("一键清空要素") : QStringLiteral("Clear Complete Elements"),
+        &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.transformClearCompleteElementsAction_,
         QStringLiteral("transform.clear_complete_elements"),

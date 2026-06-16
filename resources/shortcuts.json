@@ -105,7 +105,7 @@
     },
     "transform.clear_complete_elements": {
       "label_zh": "一键清空要素",
-      "label_en": "一键清空要素",
+      "label_en": "Clear Complete Elements",
       "default": "Ctrl+Q",
       "context": "application",
       "owner": "MainWindow.BootstrapAndMenus"
