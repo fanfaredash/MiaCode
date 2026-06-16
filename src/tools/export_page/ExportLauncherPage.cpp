@@ -23,6 +23,11 @@ ExportLauncherPage::ExportLauncherPage(MainWindow* owner, QWidget* parent)
     , owner_(owner)
 {
     setObjectName(QStringLiteral("ExportLauncherPage"));
+    // Required for the `#ExportLauncherPage { background }` rule in
+    // exportLauncherPageStyleSheet() to actually paint — a plain QWidget stays
+    // transparent otherwise and reveals whatever ancestor paints behind it,
+    // which on a theme switch could be a stale/light surface.
+    setAttribute(Qt::WA_StyledBackground, true);
     // Match the other editorStack_ pages (welcome / metadata / chart). Their
     // QSizePolicy::Ignored horizontal policy makes the page ignore its own
     // (large) sizeHint and fill the stack flush-left. Without it the embedded
@@ -35,6 +40,10 @@ ExportLauncherPage::ExportLauncherPage(MainWindow* owner, QWidget* parent)
 
 void ExportLauncherPage::applyThemeStyles()
 {
+    // Paints the page's own dark canvas (#ExportLauncherPage) so every sub-page
+    // — incl. the 批量导出 / 打包ZIP / 封面导出 panes — reads the theme instead of
+    // revealing a stale ancestor. The embedded video panel is re-themed in place
+    // by MainWindow::applyUiTheme() forwarding to its applyThemeStyles().
     setStyleSheet(UiTheme::exportLauncherPageStyleSheet());
 }
 
@@ -171,6 +180,10 @@ ExportLauncherPage::LauncherCard ExportLauncherPage::makePane(QWidget* parent, c
 
     auto* buttonRow = new QHBoxLayout();
     card.actionButton = new QPushButton(buttonText, card.frame);
+    // role lets exportLauncherPageStyleSheet() theme the 封面/批量/打包ZIP pane
+    // action buttons (otherwise unstyled QPushButtons that read as native/light
+    // chrome and don't follow a theme switch).
+    card.actionButton->setProperty("role", "paneAction");
     card.actionButton->setCursor(Qt::PointingHandCursor);
     buttonRow->addWidget(card.actionButton, 0, Qt::AlignLeft);
     buttonRow->addStretch(1);

@@ -512,6 +512,11 @@ QString exportLauncherPageStyleSheet()
     const Colors& c = colors();
     const QColor badgeCheckedBg = c.dark ? QColor("#263344") : QColor("#EDF4FF");
     return QStringLiteral(
+        // Paint the page's own canvas so it never reveals a stale/light ancestor
+        // on a theme switch. The page is otherwise transparent (flat redesign),
+        // which left the header/sub-nav band showing through to whatever painted
+        // behind it. Mirrors the metadata page's `#MetadataPage { background }`.
+        "QWidget#ExportLauncherPage { background: %7; }"
         "QLabel[role=\"disabledReason\"] {"
         " color: %4;"
         "}"
@@ -546,13 +551,34 @@ QString exportLauncherPageStyleSheet()
         "QWidget#ExportHeaderRule {"
         " background: %1;"
         "}"
+        // 封面/批量/打包ZIP pane action buttons (role set in makePane). Themed
+        // here so they follow light/dark switches via the page stylesheet.
+        "QPushButton[role=\"paneAction\"] {"
+        " color: %2;"
+        " background: transparent;"
+        " border: 1px solid %1;"
+        " border-radius: 8px;"
+        " padding: 6px 16px;"
+        "}"
+        "QPushButton[role=\"paneAction\"]:hover {"
+        " border-color: %4;"
+        " color: %4;"
+        "}"
+        "QPushButton[role=\"paneAction\"]:pressed {"
+        " background: %5;"
+        "}"
+        "QPushButton[role=\"paneAction\"]:disabled {"
+        " color: %3;"
+        " border-color: %1;"
+        "}"
     )
         .arg(css(c.border))
         .arg(css(c.textPrimary))
         .arg(css(c.textMuted))
         .arg(css(c.accent))
         .arg(css(c.menuHoverBg))
-        .arg(css(badgeCheckedBg));
+        .arg(css(badgeCheckedBg))
+        .arg(css(c.windowBg));
 }
 
 QString embeddedExportTabStyleSheet()
