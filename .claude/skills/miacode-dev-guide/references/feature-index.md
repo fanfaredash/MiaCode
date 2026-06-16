@@ -50,7 +50,17 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Appearance prefs + first-run onboarding: theme pref persisted via
   `UiText::preferredTheme`/`setPreferredTheme` (`preferences.json` `ui.theme`); live re-theme via
   `MainWindow::WindowSection::applyUiTheme` (triggers `ApplicationPaletteChange` → `QuickShellStyleBridge`
-  → QML chrome). Preview-pane side = `workspacePanelsSwapped_` (`preview.swap_side_panels`), live via
+  → QML chrome).
+  **Live re-theme contract for tools-layer pages/panels:** Qt does NOT regenerate a widget's
+  literal `setStyleSheet(...)` string or a baked `QIcon` on a palette change, so any persistent
+  surface that bakes theme colors at construction needs an explicit re-apply hook that `applyUiTheme`
+  calls. Today: `LatencyDetectionPage::applyThemeStyles()` (page sheet + the accent-tinted media-tools
+  gear icon) and `ExportLauncherPage::applyThemeStyles()` (page sheet) are called from `applyUiTheme`,
+  and `applyUiTheme` ALSO forwards to the export hub's live embedded `VideoExportDialog`
+  (`owner_.embeddedVideoExportPanel_->applyThemeStyles()`) which re-applies its own sheet + every
+  per-widget sheet (menu/push buttons, sliders, read-only edit, tab strip, footer rule) + the
+  transport icons. When you add a baked `setStyleSheet`/`setIcon(make*Icon(color))` to one of these,
+  mirror it in that class's `applyThemeStyles()` or it stays frozen at the startup theme. Preview-pane side = `workspacePanelsSwapped_` (`preview.swap_side_panels`), live via
   `MainWindow::setWorkspacePanelsSwapped` (QML reads `controller.workspacePanelsSwapped`, default =
   preview on right; swapped → preview on left). Both the theme row and a "谱面预览位置" (preview
   side) row live on the Preferences dialog's 外观 page
@@ -63,6 +73,18 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   rendering the artwork into an *inset* of the icon box (so the glyph reads ~menu-text size) — do
   NOT shrink `toolBar->setIconSize(...)` to size it: the gear is the toolbar's only icon, so its
   icon box drives the toolbar row height and a smaller iconSize visibly shortens the toolbar.
+- Slider value labels are click-to-edit. A `QSlider` + percent/value `QLabel` pair built through
+  the shared row helpers — `addAudioRow` / `addVideoSliderRow` (`MainWindow.Dialogs.cpp`),
+  `addPercentSliderOption` (`VideoExportDialog.cpp`), `createSliderOption`
+  (`BatchVideoExportDialog.cpp`), and the inline SFX-volume row (`LatencyDetectionPage.cpp`) —
+  uses `miacode::ui::EditableValueLabel` (`src/app/ui/EditableValueLabel.{h,cpp}`) in place of a
+  bare `QLabel`. Clicking the number opens an inline `QLineEdit` over the label's own `rect()`
+  (zero layout change — it is still a `QLabel` at rest) and commits via `slider->setValue()`,
+  so the typed edit re-fires every existing `valueChanged` connection (settings setter, label
+  refresh, runtime apply) — identical to dragging. New value slider → swap `new QLabel` for
+  `EditableValueLabel` and call `bindSlider(slider)`; nothing else changes. Deliberately NOT wired:
+  time scrubbers (`previewSlider_`, cover `frameSlider_`, `QuickShellPreviewTransport.qml`) and the
+  QML `TimelineTabSurface.qml` brightness slider (would need a QML-side editor).
 - Native title-bar theming (Windows DWM): single owner `UiNativeWindowTheme`
   (`src/app/ui/UiNativeWindowTheme.{h,cpp}`) — dark-mode flag + caption/text/border colors +
   system backdrop per top-level window. Applied three ways, all idempotent: (1) an app-wide

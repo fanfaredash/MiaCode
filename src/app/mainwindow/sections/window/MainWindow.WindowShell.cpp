@@ -19,6 +19,7 @@
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "tools/export_page/ExportLauncherPage.h"
 #include "tools/latency/LatencyDetectionPage.h"
+#include "tools/video_export/VideoExportDialog.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -929,6 +930,14 @@ void MainWindow::WindowSection::applyUiTheme()
     }
     if (owner_.exportPage_ != nullptr) {
         owner_.exportPage_->applyThemeStyles();
+    }
+    if (!owner_.embeddedVideoExportPanel_.isNull()) {
+        // The export hub's embedded video panel bakes its stylesheets/icons at
+        // construction; re-theme it in place so a switch while the 视频导出
+        // sub-page is showing follows light/dark. (The page now paints its own
+        // dark canvas, so the panel's reparented root is backstopped even if its
+        // own background rule is slow to repaint; this re-themes its children.)
+        owner_.embeddedVideoExportPanel_->applyThemeStyles();
     }
     if (owner_.metadataEmptyHintLabel_ != nullptr) {
         owner_.metadataEmptyHintLabel_->setStyleSheet(UiTheme::metadataEmptyHintLabelStyleSheet());

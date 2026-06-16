@@ -5,6 +5,7 @@
 
 #include "mainwindow/MainWindow.h"
 #include "mainwindow/MainWindowShared.h"
+#include "EditableValueLabel.h"
 #include "UiText.h"
 #include "UiTheme.h"
 
@@ -153,6 +154,14 @@ LatencyDetectionPage::~LatencyDetectionPage() = default;
 void LatencyDetectionPage::applyThemeStyles()
 {
     setStyleSheet(UiTheme::latencyDetectionPageStyleSheet());
+    // The page stylesheet re-themes every child control by cascade, but the
+    // media-tools gear is an accent-tinted QIcon baked at construction — it
+    // would keep the old theme's accent through a light/dark switch unless we
+    // re-render it here.
+    if (mediaToolsButton_ != nullptr) {
+        mediaToolsButton_->setIcon(
+            miacode::mainwindow::shared::makeSettingsGearIcon(UiTheme::colors().accent));
+    }
 }
 
 void LatencyDetectionPage::refreshFromDocument()
@@ -240,6 +249,7 @@ void LatencyDetectionPage::buildUi()
     // result.
     auto* mediaToolsButton = new QPushButton(
         localizedText(QStringLiteral("音频/视频处理"), QStringLiteral("Audio/Video Processing")), backBar);
+    mediaToolsButton_ = mediaToolsButton;
     mediaToolsButton->setObjectName(QStringLiteral("LatencyMediaToolsButton"));
     mediaToolsButton->setIcon(
         miacode::mainwindow::shared::makeMusicNoteIcon(UiTheme::colors().accent));
@@ -444,10 +454,13 @@ void LatencyDetectionPage::buildUi()
     sfxVolumeSlider_->setMinimumWidth(120);
     connect(sfxVolumeSlider_, &QSlider::valueChanged, this, &LatencyDetectionPage::onSfxVolumeChanged);
     volumeRow->addWidget(sfxVolumeSlider_, 1);
-    sfxVolumeValueLabel_ = new QLabel(QStringLiteral("%1%").arg(kDefaultSfxVolumePercent), auditionCard);
-    sfxVolumeValueLabel_->setMinimumWidth(48);
-    sfxVolumeValueLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    sfxVolumeValueLabel_->setFont(hintFont);
+    auto* sfxValueLabel = new miacode::ui::EditableValueLabel(
+        QStringLiteral("%1%").arg(kDefaultSfxVolumePercent), auditionCard);
+    sfxValueLabel->setMinimumWidth(48);
+    sfxValueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    sfxValueLabel->setFont(hintFont);
+    sfxValueLabel->bindSlider(sfxVolumeSlider_);
+    sfxVolumeValueLabel_ = sfxValueLabel;
     volumeRow->addWidget(sfxVolumeValueLabel_);
     auditionLayout->addLayout(volumeRow);
 

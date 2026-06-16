@@ -86,6 +86,11 @@ private:
     QPointer<MainWindow> owner_;
     QPointer<LatencySandboxController> sandbox_;
 
+    // Page header: its gear icon is tinted with the theme accent, baked into a
+    // QIcon (not reachable via the page stylesheet), so applyThemeStyles must
+    // re-render it on a light/dark switch — keep the pointer.
+    QPushButton* mediaToolsButton_ = nullptr;
+
     // BPM card
     QDoubleSpinBox* bpmEdit_ = nullptr;
     QPushButton* detectBpmButton_ = nullptr;
