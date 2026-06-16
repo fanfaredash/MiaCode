@@ -503,11 +503,13 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
             owner_.previewPlaybackRate_ > 0.0 ? owner_.previewPlaybackRate_ : 1.0,
             owner_.previewTimingSettings_);
     }
-    // clock_count count-in: the audition plays it on the chart (after the 片头 hands
-    // off at 0), so 所见即所导 includes the count-in. Same source as the export
-    // snapshot (clockCountFromDocument + clockBpmForChart).
+    // clock_count count-in is opt-in via the export dialog's "Enable clock_count"
+    // checkbox (default OFF), so the audition starts WITHOUT the count-in to match
+    // what will actually be exported (所见即所导). Toggling the checkbox re-seeds
+    // this live — see the clockCountEnabledChanged connection in
+    // createEmbeddedVideoExportPanel. The VALUE / BPM still come from the chart.
     owner_.setExportAuditionClockSchedule(
-        miacode::chart_clock::clockCountFromDocument(owner_.document_),
+        0,
         miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart));
 
     // Re-enable the preview play/pause/stop controls: they are difficulty-scoped
@@ -637,9 +639,9 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.showChartInfoHud = requestedTask.showChartInfoHud;
     built.centerDisplayMode = requestedTask.centerDisplayMode;
     built.skinLoadWaitMs = requestedTask.skinLoadWaitMs;
-    // Bake the dialog's clock_count gate into the snapshot so the worker honors it
-    // instead of re-deriving from the chart (snapshots elsewhere keep -1 = derive).
-    built.clockCount = requestedTask.clockCount;
+    // Bake the dialog's count-in on/off into the snapshot (default-true elsewhere
+    // keeps CLI / batch emitting it). The clock_count VALUE is re-derived worker-side.
+    built.clockCountEnabled = requestedTask.clockCountEnabled;
     built.intro = buildIntroBannerSpec(
         owner_.document_,
         resolvedDifficultyId,

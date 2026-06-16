@@ -1201,6 +1201,12 @@ VideoExportDialog::VideoExportDialog(
     // chart's clock_count beats (the value shown in the label, carried in
     // baseTask_) into the export; unchecked exports with no clock.wav ticks.
     clockCountCheck_->setChecked(false);
+    // Live WYSIWYG: re-seed the export-page audition count-in when toggled (the
+    // host listens via clockCountEnabledChanged). Export baking is separate
+    // (applyUiToTask sets task.clockCountEnabled).
+    connect(clockCountCheck_, &QCheckBox::toggled, this, [this](bool checked) {
+        emit clockCountEnabledChanged(checked);
+    });
     addIntroCheck_ = new QCheckBox(
         l10n(QStringLiteral("Add intro"), QStringLiteral("添加片头")),
         optionsContent_
@@ -2379,11 +2385,10 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     updated.showTimestamp = showTimestampCheck_ != nullptr ? showTimestampCheck_->isChecked() : true;
     updated.showObjectStatsHud = showObjectStatsCheck_ != nullptr ? showObjectStatsCheck_->isChecked() : false;
     updated.showChartInfoHud = showChartInfoCheck_ != nullptr ? showChartInfoCheck_->isChecked() : false;
-    // clock_count count-in is opt-in: off → 0 (no ticks), on → the document's
-    // clock_count value carried in baseTask_.
-    updated.clockCount = (clockCountCheck_ != nullptr && clockCountCheck_->isChecked())
-        ? baseTask_.clockCount
-        : 0;
+    // clock_count count-in is opt-in. The VALUE stays = the chart's (already copied
+    // via `updated = baseTask_`); only the on/off flag changes — so the label and
+    // the document's &clock_count= are never affected.
+    updated.clockCountEnabled = clockCountCheck_ != nullptr && clockCountCheck_->isChecked();
     updated.backgroundBrightnessOuter = brightnessOuterSlider_ != nullptr
         ? qBound(0.0, static_cast<double>(brightnessOuterSlider_->value()) / 100.0, 1.0)
         : updated.backgroundBrightnessOuter;

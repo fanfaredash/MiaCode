@@ -745,6 +745,19 @@ QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficult
     connect(panel, &VideoExportDialog::exportCancelRequested, &owner_, [this]() {
         this->cancelVideoExportWorker();
     });
+    connect(panel, &VideoExportDialog::clockCountEnabledChanged, &owner_, [this](bool enabled) {
+        // WYSIWYG: re-seed the audition count-in to match the export setting. The
+        // VALUE / BPM still come from the chart; disabled → 0 ticks. The document's
+        // &clock_count= is never touched.
+        const SimaiDifficultyData* difficulty =
+            owner_.document_.difficulty(owner_.embeddedVideoExportDifficultyId_);
+        if (difficulty == nullptr) {
+            return;
+        }
+        owner_.setExportAuditionClockSchedule(
+            enabled ? miacode::chart_clock::clockCountFromDocument(owner_.document_) : 0,
+            miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart));
+    });
     connect(panel, &VideoExportDialog::introPreviewSettingsChanged, &owner_, [this]() {
         owner_.refreshExportIntroState();
     });

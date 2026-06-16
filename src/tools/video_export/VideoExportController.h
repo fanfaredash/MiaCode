@@ -174,6 +174,10 @@ struct VideoExportTask {
         miacode::preview_gameplay::kDefaultCenterDisplayMode;
     int skinLoadWaitMs = 2000;
     int clockCount = 0;
+    // Count-in on/off, independent of the clock_count VALUE above. Default true so
+    // CLI / batch / legacy snapshots keep emitting the count-in; the video dialog's
+    // "Enable clock_count" checkbox toggles this without touching the value.
+    bool clockCountEnabled = true;
     double clockBpm = 0.0;
 };
 

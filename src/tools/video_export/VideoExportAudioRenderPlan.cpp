@@ -199,6 +199,7 @@ void appendClockCountPlaybacks(
 {
     if (plan == nullptr
         || !task.fullRangeExport
+        || !task.clockCountEnabled
         || task.clockCount <= 0
         || !qIsFinite(task.clockBpm)
         || task.clockBpm <= 0.0) {

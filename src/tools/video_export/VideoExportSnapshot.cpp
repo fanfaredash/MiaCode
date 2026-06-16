@@ -215,7 +215,7 @@ QJsonObject VideoExportSnapshot::toJson() const
     render.insert(QStringLiteral("show_timestamp"), showTimestamp);
     render.insert(QStringLiteral("show_object_stats_hud"), showObjectStatsHud);
     render.insert(QStringLiteral("show_chart_info_hud"), showChartInfoHud);
-    render.insert(QStringLiteral("clock_count"), clockCount);
+    render.insert(QStringLiteral("clock_count_enabled"), clockCountEnabled);
     render.insert(
         QStringLiteral("center_display_mode"),
         QString::fromLatin1(miacode::preview_gameplay::centerDisplayModeToken(centerDisplayMode))
@@ -348,8 +348,8 @@ bool VideoExportSnapshot::fromJson(
         render.value(QStringLiteral("show_object_stats_hud")).toBool(parsed.showObjectStatsHud);
     parsed.showChartInfoHud =
         render.value(QStringLiteral("show_chart_info_hud")).toBool(parsed.showChartInfoHud);
-    parsed.clockCount =
-        render.value(QStringLiteral("clock_count")).toInt(parsed.clockCount);
+    parsed.clockCountEnabled =
+        render.value(QStringLiteral("clock_count_enabled")).toBool(parsed.clockCountEnabled);
     parsed.centerDisplayMode = miacode::preview_gameplay::centerDisplayModeFromToken(
         render.value(QStringLiteral("center_display_mode")).toString(
             QString::fromLatin1(miacode::preview_gameplay::centerDisplayModeToken(parsed.centerDisplayMode))));
@@ -498,12 +498,11 @@ bool buildVideoExportTaskFromSnapshot(
     built.intro = snapshot.intro;
     built.centerDisplayMode = snapshot.centerDisplayMode;
     built.skinLoadWaitMs = qBound(0, snapshot.skinLoadWaitMs, 20000);
-    // Honor an explicit clock_count baked into the snapshot (the video dialog's
-    // "Enable clock_count" gate — 0 disables the count-in); otherwise derive it
-    // from the chart (legacy / CLI / batch, where the snapshot carries -1).
-    built.clockCount = snapshot.clockCount >= 0
-        ? snapshot.clockCount
-        : miacode::chart_clock::clockCountFromDocument(document);
+    // The clock_count VALUE is always derived from the chart; the count-in on/off
+    // is a separate flag the snapshot carries (the video dialog's checkbox). The
+    // audio render plan gates the ticks on clockCountEnabled.
+    built.clockCount = miacode::chart_clock::clockCountFromDocument(document);
+    built.clockCountEnabled = snapshot.clockCountEnabled;
     built.clockBpm = miacode::chart_clock::clockBpmForChart(document, difficulty->chart);
     built.muriAnalysisReport = MuriAnalyzer::analyze(
         built.noteMarkers,

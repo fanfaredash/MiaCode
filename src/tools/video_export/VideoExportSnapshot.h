@@ -48,10 +48,10 @@ struct VideoExportSnapshot {
     bool showTimestamp = true;
     bool showObjectStatsHud = false;
     bool showChartInfoHud = false;
-    // -1 = derive clock_count from the chart (legacy / CLI / batch); >= 0 = the
-    // explicit value baked by the video dialog's "Enable clock_count" checkbox
-    // (0 disables the count-in).
-    int clockCount = -1;
+    // Count-in on/off. The clock_count VALUE is always re-derived from the chart;
+    // only this gate is serialized. Default true so legacy / CLI / batch snapshots
+    // keep emitting the count-in; the video dialog's checkbox toggles it.
+    bool clockCountEnabled = true;
     miacode::preview_gameplay::CenterDisplayMode centerDisplayMode =
         miacode::preview_gameplay::kDefaultCenterDisplayMode;
     int skinLoadWaitMs = 2000;

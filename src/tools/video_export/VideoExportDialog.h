@@ -124,6 +124,10 @@ signals:
     // Embedded mode only: 添加片头 toggled or a 片头 setting changed — the host
     // refreshes the negative-time intro region (slider range + overlay).
     void introPreviewSettingsChanged();
+    // Embedded mode only: the "Enable clock_count" checkbox toggled — the host
+    // re-seeds the export-page audition's count-in so the preview matches what
+    // will be exported (WYSIWYG).
+    void clockCountEnabledChanged(bool enabled);
 
 private:
     void browseOutputPath();
