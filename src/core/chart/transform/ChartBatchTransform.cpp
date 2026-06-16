@@ -1020,16 +1020,20 @@ bool validateRaiseSubdivisionHalfStepChunk(const QString& chunk)
     return !slotHasContent || ((slot % 2) == 0);
 }
 
-QString raiseSubdivisionHalfStepChunk(const QString& chunk, int* changed)
+QString raiseSubdivisionHalfStepChunk(const QString& chunk, bool tripleFallback, int* changed)
 {
     QString output;
-    output.reserve(chunk.size() * 3 / 2);
+    output.reserve(chunk.size() * 3);
     int commaRun = 0;
     const auto flushCommas = [&]() {
         for (int i = 0; i < commaRun; ++i) {
             output.append(QChar(','));
         }
-        for (int i = 0; i < commaRun / 2; ++i) {
+        // A lossless x1.5 stretches every two comma slots into three (+commaRun/2). When the grid
+        // cannot be halved we instead stretch every slot into three (+commaRun*2) -- a plain x3 --
+        // so each surviving note still keeps its position in time.
+        const int insertedCommas = tripleFallback ? (commaRun * 2) : (commaRun / 2);
+        for (int i = 0; i < insertedCommas; ++i) {
             output.append(QChar(','));
             if (changed != nullptr) {
                 ++(*changed);
@@ -1078,9 +1082,10 @@ QString raiseSubdivisionHalfStepChunk(const QString& chunk, int* changed)
             int denominator = 0;
             const QString signature = chunk.mid(i, close - i + 1);
             if (isSubdivisionSignature(signature, &denominator)
-                && (denominator % 2) == 0
-                && denominator <= (std::numeric_limits<int>::max() / 3)) {
-                output.append(QStringLiteral("{%1}").arg((denominator / 2) * 3));
+                && denominator <= (std::numeric_limits<int>::max() / 3)
+                && (tripleFallback || (denominator % 2) == 0)) {
+                const int raised = tripleFallback ? (denominator * 3) : ((denominator / 2) * 3);
+                output.append(QStringLiteral("{%1}").arg(raised));
                 if (changed != nullptr) {
                     ++(*changed);
                 }
@@ -1277,15 +1282,37 @@ QString lowerSubdivisionHalfStepChunk(const QString& chunk, int* changed)
     return output;
 }
 
+bool leadingSubdivisionDenominator(const QString& chunk, int* denominator)
+{
+    if (chunk.isEmpty() || chunk.at(0) != QChar('{')) {
+        return false;
+    }
+    const int close = chunk.indexOf(QChar('}'), 1);
+    if (close < 0) {
+        return false;
+    }
+    return isSubdivisionSignature(chunk.mid(0, close + 1), denominator);
+}
+
 QString raiseSubdivisionHalfStepCore(const QString& input, int* changedCount)
 {
     int changed = 0;
     QString output;
-    output.reserve(input.size() * 3 / 2);
+    output.reserve(input.size() * 3);
     const QStringList chunks = splitSubdivisionChunks(input);
     for (const QString& chunk : chunks) {
         if (validateRaiseSubdivisionHalfStepChunk(chunk)) {
-            output.append(raiseSubdivisionHalfStepChunk(chunk, &changed));
+            // Lossless x1.5: an even subdivision whose occupied slots are all even-aligned.
+            output.append(raiseSubdivisionHalfStepChunk(chunk, /*tripleFallback=*/false, &changed));
+            continue;
+        }
+        // x1.5 is not representable losslessly (odd subdivision, or notes on odd slots). Triple
+        // instead -- always lossless -- so the grid still refines. Realizes "first x3; halve when
+        // possible, otherwise keep the x3 state".
+        int denominator = 0;
+        if (leadingSubdivisionDenominator(chunk, &denominator)
+            && denominator <= (std::numeric_limits<int>::max() / 3)) {
+            output.append(raiseSubdivisionHalfStepChunk(chunk, /*tripleFallback=*/true, &changed));
         } else {
             output.append(chunk);
         }

@@ -1251,12 +1251,68 @@ void runInlineSpecs(QTextStream& err, int* failed)
         const QString output = miacode::chart_transform::raiseSubdivisionHalfStepForSelection(input, &changed);
         expectEqual(
             output,
-            input,
-            QStringLiteral("subdivision +1/2 leaves odd-slot notes unchanged"),
+            QStringLiteral("{48}1,,,2,,,"),
+            QStringLiteral("subdivision +1/2 triples an even subdivision whose notes sit on odd slots, since a lossless halving is impossible"),
             failed,
             err
         );
-        expectTrue(changed == 0, QStringLiteral("subdivision +1/2 reports no changes when conversion is not lossless"), failed, err);
+        expectTrue(changed == 5, QStringLiteral("subdivision +1/2 counts the tripled signature and four inserted commas for the fallback"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{3}1,1,1,");
+        const QString output = miacode::chart_transform::raiseSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{9}1,,,1,,,1,,,"),
+            QStringLiteral("subdivision +1/2 triples an odd subdivision (3x cannot be halved) while keeping every note aligned"),
+            failed,
+            err
+        );
+        expectTrue(changed == 7, QStringLiteral("subdivision +1/2 counts the tripled signature and six inserted commas"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{3}1,,1,,");
+        const QString output = miacode::chart_transform::raiseSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{9}1,,,,,,1,,,,,,"),
+            QStringLiteral("subdivision +1/2 triples odd subdivisions across multi-rest runs without drifting note times"),
+            failed,
+            err
+        );
+        expectTrue(changed == 9, QStringLiteral("subdivision +1/2 counts the tripled signature and eight inserted commas"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{16}1,,1,,{3}1,1,1,");
+        const QString output = miacode::chart_transform::raiseSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{24}1,,,1,,,{9}1,,,1,,,1,,,"),
+            QStringLiteral("subdivision +1/2 halves the even-aligned chunk and triples the odd chunk in one pass"),
+            failed,
+            err
+        );
+        expectTrue(changed == 10, QStringLiteral("subdivision +1/2 counts both rewritten signatures and every inserted comma across chunks"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{715827883}1,1,");
+        const QString output = miacode::chart_transform::raiseSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            input,
+            QStringLiteral("subdivision +1/2 leaves an oversized odd subdivision untouched rather than overflowing the tripled denominator"),
+            failed,
+            err
+        );
+        expectTrue(changed == 0, QStringLiteral("subdivision +1/2 reports no changes when even a triple would overflow int"), failed, err);
     }
 
     {
