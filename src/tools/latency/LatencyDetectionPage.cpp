@@ -240,7 +240,7 @@ void LatencyDetectionPage::buildUi()
         localizedText(QStringLiteral("音频/视频处理"), QStringLiteral("Audio/Video Processing")), backBar);
     mediaToolsButton->setObjectName(QStringLiteral("LatencyMediaToolsButton"));
     mediaToolsButton->setIcon(
-        miacode::mainwindow::shared::makeSettingsGearIcon(UiTheme::colors().accent));
+        miacode::mainwindow::shared::makeMusicNoteIcon(UiTheme::colors().accent));
     mediaToolsButton->setIconSize(QSize(16, 16));
     mediaToolsButton->setCursor(Qt::PointingHandCursor);
     mediaToolsButton->setToolTip(localizedText(

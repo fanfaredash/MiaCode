@@ -1003,6 +1003,42 @@ QIcon makeToolboxAccessIcon(const QColor& toolboxColor, const QColor& gearColor)
     return QIcon(pixmap);
 }
 
+QIcon makeMusicNoteIcon(const QColor& color)
+{
+    // Single eighth note (♪): a slightly tilted filled head, a stem up its right
+    // side, and a flag — reads as "audio".
+    QPixmap pixmap(20, 20);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    QPen pen(color, 1.8);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+
+    // Stem, up from the right edge of the note head.
+    painter.drawLine(QPointF(12.2, 4.4), QPointF(12.2, 13.6));
+    // Eighth-note flag off the top of the stem.
+    QPainterPath flag;
+    flag.moveTo(12.2, 4.4);
+    flag.cubicTo(14.8, 5.2, 15.8, 7.0, 14.9, 9.2);
+    painter.drawPath(flag);
+
+    // Filled, slightly tilted note head.
+    painter.save();
+    painter.translate(9.4, 13.9);
+    painter.rotate(-22.0);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+    painter.drawEllipse(QPointF(0.0, 0.0), 2.9, 2.2);
+    painter.restore();
+
+    painter.end();
+    return QIcon(pixmap);
+}
+
 QIcon makeTransformMirrorLeftRightIcon(const QColor& color)
 {
     QPixmap pixmap(20, 20);
