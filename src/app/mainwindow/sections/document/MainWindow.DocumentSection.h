@@ -105,6 +105,10 @@ public:
     bool switchToDifficultyField(int difficultyId);
     bool switchToLatencyField();
     bool switchToExportField();
+    // Floats the busy spinner over the "Export" sidebar row / hides it. Shown
+    // while the (slow) export-page build runs after switchToExportField().
+    void showOutlineExportBusySpinner();
+    void hideOutlineExportBusySpinner();
     void activateInitialField();
     void loadDocument(const SimaiDocument& document);
     void clearTimelineAndPreview();
@@ -125,6 +129,9 @@ private:
     // Returns false if the user cancels — callers should revert the
     // checkbox to OFF in that case.
     bool promptCanonicalDesignerName(const QStringList& candidates, QString* out);
+    // The heavy body of switchToExportField(), run one event-loop tick later so
+    // the busy spinner can paint before the build blocks the UI thread.
+    void performSwitchToExportField();
     void setChartBottomTabsMode(bool enabled);
     void pruneChartSelectionTransformUndoEntriesFromStep(int undoStepThreshold);
     void updateLastObservedChartEditorUndoRedoSteps();

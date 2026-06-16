@@ -53,6 +53,9 @@ class LatencyDetectionPage;
 namespace miacode::export_page {
 class ExportLauncherPage;
 }
+namespace miacode::ui {
+class BusySpinner;
+}
 class QListWidget;
 class QListWidgetItem;
 class QJsonObject;
@@ -617,6 +620,11 @@ private:
     QTabWidget* bottomTabsContainerForTab(BottomTabsTabId tabId) const;
     void syncBottomTabsCurrentTabToContainers();
     void syncQuickShellBottomTabsProxyRoute();
+
+    // Synchronously advance the outline busy spinner one frame (no-op unless it
+    // is active). Called from inside the slow export-page build so the spinner
+    // visibly rotates while the GUI thread is blocked. See DocumentUi.cpp.
+    void tickOutlineBusySpinner();
 
     #include "MainWindowMemberStorage.inc"
 };

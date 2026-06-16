@@ -17,6 +17,7 @@
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "TimelineView.h"
+#include "BusySpinner.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "WindowParityMetrics.h"
@@ -940,6 +941,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             deleteDifficultyField(activeDifficultyId_);
         }
     });
+    // Busy spinner floated over the "Export" sidebar row — shown while the
+    // export page (its embedded video panel especially) is being built, which
+    // is noticeably slow. Same viewport-overlay pattern as the delete button.
+    outlineBusySpinner_ = new miacode::ui::BusySpinner(outlineList_->viewport());
+    outlineBusySpinner_->hide();
     connect(outlineCollapseButton_, &QToolButton::clicked, this, [this]() {
         windowSection_->setOutlineDockCollapsed(!outlineDockCollapsed_);
     });

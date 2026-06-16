@@ -133,6 +133,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/ui/FlowLayout.cpp
     src/app/ui/EditableValueLabel.h
     src/app/ui/EditableValueLabel.cpp
+    src/app/ui/BusySpinner.h
+    src/app/ui/BusySpinner.cpp
     src/common/MuriTypes.h
     src/common/MuriTypes.cpp
     src/common/MuriRenderOptions.h

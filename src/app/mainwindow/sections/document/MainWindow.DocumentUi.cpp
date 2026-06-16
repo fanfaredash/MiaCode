@@ -2,6 +2,7 @@
 #include "../../MainWindowShared.h"
 
 #include "BracketScopeHighlighter.h"
+#include "BusySpinner.h"
 #include "DialogLocalization.h"
 #include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
@@ -801,6 +802,73 @@ bool MainWindow::DocumentSection::switchToExportField()
     if (ui_.exportPage_ == nullptr || ui_.editorStack_ == nullptr) {
         return false;
     }
+    // The export page is noticeably slow to switch to — building its embedded
+    // video panel blocks the UI thread for a while. Show a busy spinner over
+    // the "Export" sidebar row and defer the heavy build one event-loop tick so
+    // the spinner paints (and starts spinning) before the thread blocks. The
+    // spinner's own active state guards against a double-trigger landing two
+    // deferred builds in flight.
+    if (ui_.outlineBusySpinner_ != nullptr && ui_.outlineBusySpinner_->isActive()) {
+        return true;
+    }
+    showOutlineExportBusySpinner();
+    QTimer::singleShot(0, &owner_, [this]() {
+        performSwitchToExportField();
+        hideOutlineExportBusySpinner();
+    });
+    return true;
+}
+
+void MainWindow::DocumentSection::showOutlineExportBusySpinner()
+{
+    if (ui_.outlineBusySpinner_ == nullptr || ui_.outlineList_ == nullptr) {
+        return;
+    }
+    QListWidgetItem* exportItem = nullptr;
+    for (int i = 0; i < ui_.outlineList_->count(); ++i) {
+        QListWidgetItem* item = ui_.outlineList_->item(i);
+        if (item != nullptr && item->data(Qt::UserRole).toString() == QLatin1String("export")) {
+            exportItem = item;
+            break;
+        }
+    }
+    if (exportItem == nullptr) {
+        return;
+    }
+    const QRect rowRect = ui_.outlineList_->visualItemRect(exportItem);
+    if (!rowRect.isValid() || rowRect.isEmpty()) {
+        return;
+    }
+    auto* spinner = ui_.outlineBusySpinner_;
+    const int x = rowRect.right() - spinner->width() - 8;
+    const int y = rowRect.top() + (rowRect.height() - spinner->height()) / 2;
+    spinner->move(x, y);
+    spinner->setColor(UiTheme::colors().iconPrimary);
+    spinner->start();
+    // Paint the first frame synchronously so the spinner is on screen before the
+    // deferred (and UI-thread-blocking) page build begins.
+    spinner->repaint();
+}
+
+void MainWindow::DocumentSection::hideOutlineExportBusySpinner()
+{
+    if (ui_.outlineBusySpinner_ != nullptr) {
+        ui_.outlineBusySpinner_->stop();
+    }
+}
+
+void MainWindow::tickOutlineBusySpinner()
+{
+    if (outlineBusySpinner_ != nullptr && outlineBusySpinner_->isActive()) {
+        outlineBusySpinner_->advance();
+    }
+}
+
+void MainWindow::DocumentSection::performSwitchToExportField()
+{
+    if (ui_.exportPage_ == nullptr || ui_.editorStack_ == nullptr) {
+        return;
+    }
     // Captured BEFORE the reset below: seeds the page's difficulty badge
     // default (decision D4 — "the difficulty that was active on entry").
     const int previousActiveDifficultyId = state_.activeDifficultyId_;
@@ -827,6 +895,7 @@ bool MainWindow::DocumentSection::switchToExportField()
     state_.pendingPreviewPlaybackSecond_ = 0.0;
     state_.activeDifficultyId_ = 0;
     state_.activeOutlineKey_ = "export";
+    owner_.tickOutlineBusySpinner();
     populateMetadataPage();  // keeps document fields in sync for sidebar use
     ui_.editorStack_->setCurrentWidget(ui_.exportPage_);
     setChartBottomTabsMode(false);
@@ -837,10 +906,14 @@ bool MainWindow::DocumentSection::switchToExportField()
     owner_.updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
+    owner_.tickOutlineBusySpinner();
+    // The expensive part — building the embedded video panel — happens inside
+    // onPageEntered. It ticks the spinner at its own sub-step boundaries so the
+    // ring keeps rotating across the build (see createEmbeddedVideoExportPanel).
     ui_.exportPage_->onPageEntered(previousActiveDifficultyId);
+    owner_.tickOutlineBusySpinner();
     owner_.refreshLayoutAfterPageSwitch();
     QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
-    return true;
 }
 
 bool MainWindow::DocumentSection::switchToMetadataField()

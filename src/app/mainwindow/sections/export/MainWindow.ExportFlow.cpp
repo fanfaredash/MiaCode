@@ -687,7 +687,9 @@ void MainWindow::ExportSection::beginExportPreviewSession(const VideoExportTask&
     // user sees the real exported look, ignoring the "暂停时显示判定区" pause-hide option.
     owner_.exportPreviewActive_ = true;
     owner_.applyEffectivePreviewOutlineVariantToCanvas();
+    owner_.tickOutlineBusySpinner();
     owner_.applyPreviewStageMediaRouteVisualSettings();
+    owner_.tickOutlineBusySpinner();
     // While the export dialog/panel is up the debug HUD is replaced by
     // the optional chart info HUD — the debug numbers don't reach the
     // exported video anyway, and the user wants to see chart metadata
@@ -735,7 +737,9 @@ QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficult
     }
 
     VideoExportTask task = buildVideoExportSeedTask(resolvedDifficultyId);
+    owner_.tickOutlineBusySpinner();
     VideoExportDialog* panel = buildConfiguredVideoExportDialog(task, parent);
+    owner_.tickOutlineBusySpinner();
     panel->setEmbeddedPanelMode(true);
     owner_.embeddedVideoExportPanel_ = panel;
     owner_.embeddedVideoExportDifficultyId_ = resolvedDifficultyId;
@@ -762,11 +766,13 @@ QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficult
         owner_.refreshExportIntroState();
     });
     beginExportPreviewSession(task);
+    owner_.tickOutlineBusySpinner();
     // Install the badge-selected difficulty as a playable preview audition so
     // the right-side transport plays/seeks it like the editor (所见即所导). This
     // also covers badge switches — syncEmbeddedVideoPanel recreates the panel,
     // which re-installs the newly-selected difficulty.
     installExportPreviewAuditionScene(resolvedDifficultyId);
+    owner_.tickOutlineBusySpinner();
     // Re-entering the video sub-page while an inline-launched export is still
     // rendering: re-arm the cancel affordance on the fresh panel.
     if (owner_.videoExportUseInlineProgress_

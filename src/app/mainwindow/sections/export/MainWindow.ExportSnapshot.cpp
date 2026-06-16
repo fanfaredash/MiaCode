@@ -471,6 +471,7 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
     const double effectiveFirst = firstOk ? firstSeconds : 0.0;
     const TimelinePreviewRefreshState previewState =
         buildTimelinePreviewRefreshState(parseResult, effectiveFirst);
+    owner_.tickOutlineBusySpinner();
 
     // Preview note markers + "snapshot ready" — the same state a slow-refresh
     // publishes for a real difficulty, so preparePreviewStartState accepts it.
@@ -486,6 +487,7 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
     if (owner_.timelineQuickStateBridge_ != nullptr) {
         owner_.timelineQuickStateBridge_->setTimelineData(owner_.timelineQuickModel_.snapshot());
     }
+    owner_.tickOutlineBusySpinner();
 
     // Reset the playhead to the start for the freshly-installed difficulty.
     owner_.qtPreviewPauseSecond_ = 0.0;
