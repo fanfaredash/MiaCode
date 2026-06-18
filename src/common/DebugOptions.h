@@ -194,6 +194,128 @@ inline bool previewForceSoftwareVideoDecodeEnabled()
     return envFlagEnabled("MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO");
 }
 
+// Three-state preview video decode preference, driven by the same
+// MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO env var:
+//   unset   -> Auto          (PreviewStageMediaHost auto-detects: integrated GPU
+//                             => software, discrete GPU => D3D11VA hardware)
+//   1/true  -> ForceSoftware (always software)
+//   0/false -> ForceHardware (always hardware; overrides the iGPU auto-detect)
+// Rationale: D3D11VA preview decode is unreliable on integrated GPUs (Intel/Arc:
+// startup stutter, NV12 green padding, AV1 hardware corruption — all absent in
+// software), while discrete GPUs are fine. Defaulting iGPUs to software makes the
+// preview correct out of the box without costing discrete-GPU performance.
+enum class PreviewVideoDecodePreference { Auto, ForceSoftware, ForceHardware };
+
+inline PreviewVideoDecodePreference previewVideoDecodePreference()
+{
+    if (!qEnvironmentVariableIsSet("MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO"))
+        return PreviewVideoDecodePreference::Auto;
+    return envFlagEnabled("MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO")
+        ? PreviewVideoDecodePreference::ForceSoftware
+        : PreviewVideoDecodePreference::ForceHardware;
+}
+
+inline bool previewSingleD3D11DeviceEnabled()
+{
+    // H2 (docs/PREVIEW_VIDEO_IGPU_STUTTER_INVESTIGATION_AND_FIX_ZH.md §4 Tier 3):
+    // share ONE ID3D11Device between the QtAVPlayer/FFmpeg D3D11VA decoder and the
+    // preview QQuickView's QRhi, instead of FFmpeg self-creating a private decode
+    // device and bridging every frame across to the render device via a keyed-mutex
+    // shared texture (the cross-device copy + render-thread AcquireSync(INFINITE)
+    // that freezes/garbles preview on Intel/Arc iGPUs). When enabled, MiaCode
+    // creates a video-capable, multithread-protected device, hands it to the
+    // QQuickView (setGraphicsDevice) AND publishes it to the decoder.
+    //
+    // Default OFF: experimental, needs GUI acceptance on an affected iGPU before
+    // it can become the default (priority #1 is "no regressions on any machine").
+    // If anything fails, every step falls back to the legacy two-device path, so
+    // the worst case with this set is "no change". Set
+    // MIACODE_PREVIEW_SINGLE_D3D11_DEVICE=1 to enable.
+    return envFlagEnabled("MIACODE_PREVIEW_SINGLE_D3D11_DEVICE");
+}
+
+inline int previewDumpHwFrameBudget()
+{
+    // Bounded D3D11VA hardware-frame readback (green/garble/seek debug plan
+    // docs/PREVIEW_HWDECODE_GREEN_GARBLE_SEEK_DEBUG_PLAN_ZH.md §3.2 + §9). N = how
+    // many decoder NV12 surfaces to read back + stat-classify per "arm" (an arm is the
+    // initial playback start, and is re-armed on each seek). 0 = OFF.
+    //
+    // The readback runs on the QSG render thread inside qavhwdevice_d3d11.cpp, so it
+    // is DELIBERATELY bounded: it Maps a STAGING copy of the decoder DPB slot (a
+    // CPU<->GPU sync point) at most N times, then permanently self-stops. Each readback
+    // emits ONE preview/hwframe stat line (y/uv stats + coded-vs-display + verdict hint);
+    // NO image files are written. When 0 (default) the hot path is a single relaxed-
+    // atomic load + compare — zero readback, zero stall. Gated on --debug
+    // (runtimeDebugOutputEnabled) because the stat lines are debug log artifacts. The
+    // literal lives HERE in src/ (not in third_party/qavhwdevice) so the
+    // debug_flag_index_spec drift guard governs its DEBUG_INDEX.md entry; the resolved
+    // int is PUBLISHED into the decoder via qavSetPreviewHwFrameDumpConfig (mirroring
+    // qavSetSharedRenderD3D11Device). Set MIACODE_PREVIEW_DUMP_HWFRAMES=15.
+    //
+    // ⚠ Repro precondition: on an integrated GPU the buggy D3D11VA path is NOT the
+    // default (previewVideoDecodePreference() Auto => software), so launch with
+    // MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO=0 (ForceHardware) [+ optionally
+    // MIACODE_PREVIEW_SINGLE_D3D11_DEVICE=1 for the H2 single-device path] + --debug.
+    if (!runtimeDebugOutputEnabled()) {
+        return 0;
+    }
+    const int value = envIntValue("MIACODE_PREVIEW_DUMP_HWFRAMES", 0);
+    return value > 0 ? value : 0;
+}
+
+inline bool previewSharedD3D11DebugLayerEnabled()
+{
+    // Add D3D11_CREATE_DEVICE_DEBUG to the H2 shared device at creation time
+    // (PreviewSharedD3D11Device::createSharedDevice) so the D3D11 debug layer reports
+    // typed-SRV / NV12 PlaneSlice format warnings (the decisive H-FMT signal) and
+    // resource-not-ready / device-removed errors (H-DEC) on the actual preview decode+
+    // render device. The shared device is IMPORTED into Qt's QRhi, so Qt's own
+    // QSG_RHI_DEBUG_LAYER=1 cannot reach it — the flag must be set at D3D11CreateDevice.
+    // (For the legacy two-device path use QSG_RHI_DEBUG_LAYER=1 instead; that device is
+    // created by Qt.) Creation falls back to no-debug when the SDK debug layer is absent.
+    // Gated on --debug. Set MIACODE_PREVIEW_D3D11_DEBUG_LAYER=1.
+    return runtimeDebugOutputEnabled() && envFlagEnabled("MIACODE_PREVIEW_D3D11_DEBUG_LAYER");
+}
+
+inline bool previewHwDecodeCompletionWaitEnabled()
+{
+    // PRIMARY FIX for the post-seek green / garble on D3D11VA hardware decode
+    // (docs/PREVIEW_HWDECODE_GREEN_GARBLE_SEEK_DEBUG_PLAN_ZH.md §10). Located root
+    // cause (logs_36, Arc 130T): the decoder's DecoderEndFrame and our
+    // CopySubresourceRegion of the DPB slot are not implicitly ordered on some
+    // Intel/Arc iGPU drivers, so just after a seek (decode queue backed up) the render
+    // thread copies a half-decoded slot whose chroma is still zeroed and samples as
+    // pure green. When ON, the copy paths in qavhwdevice_d3d11.cpp issue an
+    // ID3D11Query(EVENT) + Flush + bounded spin to force the decode GPU work to
+    // COMPLETE before the copy reads the slot. Codec-agnostic, low risk: the wait
+    // returns near-instantly in the common case (frames are decoded ahead of the
+    // render thread) and is bounded, so a stuck GPU drops a frame instead of freezing.
+    //
+    // Default ON (the fix is active in normal runs — NOT gated on --debug). Set
+    // MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT=0 to disable for an A/B repro (green
+    // returns => completion-order root cause confirmed). The resolved int is published
+    // into the decoder via qavSetPreviewHwDecodeFixConfig (mirroring the dump budget);
+    // the literal lives here in src/ so the debug_flag_index_spec drift guard governs it.
+    return envOptionalFlagValue("MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT").value_or(true);
+}
+
+inline bool previewHwDecodeDropCorruptFramesEnabled()
+{
+    // SAFETY NET (secondary) for the same green / garble bug. When ON, the D3D11VA copy
+    // path drops any decoded frame FFmpeg flagged corrupt / decode-error
+    // (AV_FRAME_FLAG_CORRUPT or AVFrame::decode_error_flags != 0) instead of sampling
+    // it, so the RHI holds the previous good frame (a brief freeze beats a green flash).
+    // FREE: it only reads existing AVFrame flags — no GPU readback. Default OFF because
+    // it only helps IF the driver/decoder actually reports these flags for the green
+    // frames (unverified on the affected Arc 130T) and because dropping on benign
+    // concealment flags could over-discard. First confirm via the preview/hwframe dump
+    // line (decode_err= / corrupt= fields) and the preview/hwdecode_summary
+    // frames_decode_error counter that FFmpeg flags the green frames, THEN enable. Set
+    // MIACODE_PREVIEW_HWDECODE_DROP_CORRUPT=1. Published via qavSetPreviewHwDecodeFixConfig.
+    return envFlagEnabled("MIACODE_PREVIEW_HWDECODE_DROP_CORRUPT");
+}
+
 inline bool previewVisualSmoothingEnabled()
 {
     // Visual-time smoothing (doc section 6.3): bound per-frame visual delta so render-time

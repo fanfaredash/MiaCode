@@ -217,6 +217,22 @@ static int setup_video_codec(const QString &inputVideoCodec, const QAVStream &st
     if (videoCodec)
         codec.setCodec(videoCodec);
 
+    // AV1 (MiaCode): always decode via libdav1d software. The trimmed FFmpeg's
+    // native 'av1' decoder is HWACCEL-ONLY (zero frames without a GPU), and its
+    // D3D11VA hardware path produces intermittent corruption on some iGPUs (Intel
+    // Arc: frames flicker/shift/go purple) — while libdav1d software decode is
+    // clean. AV1 is rare in chart PVs and a single muted PV's CPU cost is
+    // negligible. H.264/HEVC/VP9 are unaffected and keep GPU hardware decode via
+    // the device loop below. An explicit inputVideoCodec still wins.
+    if (!videoCodec && stream.stream() && stream.stream()->codecpar
+        && stream.stream()->codecpar->codec_id == AV_CODEC_ID_AV1) {
+        const AVCodec *dav1d = avcodec_find_decoder_by_name("libdav1d");
+        if (dav1d) {
+            codec.setCodec(dav1d);
+            ignoreHW = true; // libdav1d is software — don't attach a D3D11VA device for AV1
+        }
+    }
+
     QList<QSharedPointer<QAVHWDevice>> devices;
     QAVDictionaryHolder opts;
     Q_UNUSED(opts);
@@ -249,6 +265,24 @@ static int setup_video_codec(const QString &inputVideoCodec, const QAVStream &st
         AVBufferRef *hw_device_ctx = nullptr;
         for (auto &device : devices) {
             auto deviceName = av_hwdevice_get_type_name(device->type());
+#if defined(Q_OS_WIN)
+            // MiaCode H2: when the renderer has published its ID3D11Device, decode
+            // straight onto it (single-device) so there is no per-frame cross-device
+            // texture bridge in qavhwdevice_d3d11.cpp. Falls through to the normal
+            // av_hwdevice_ctx_create() below if nothing is published or shared init
+            // fails (e.g. the device lacks D3D11_CREATE_DEVICE_VIDEO_SUPPORT).
+            if (device->type() == AV_HWDEVICE_TYPE_D3D11VA) {
+                if (AVBufferRef *shared = qavCreateSharedD3D11VADeviceContext()) {
+                    qDebug() << "[" << streamInfo.title
+                             << "] Using shared (renderer) D3D11VA hardware device context";
+                    hw_device_ctx = shared;
+                    codec.avctx()->hw_device_ctx = hw_device_ctx;
+                    codec.avctx()->pix_fmt = device->format();
+                    codec.setDevice(device);
+                    break;
+                }
+            }
+#endif
             if (av_hwdevice_ctx_create(&hw_device_ctx, device->type(), nullptr, opts.dict, 0)
                 >= 0) {
                 qDebug() << "[" << streamInfo.title << "] Using" << deviceName << "hardware device context";

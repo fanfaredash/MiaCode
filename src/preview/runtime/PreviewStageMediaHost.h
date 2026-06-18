@@ -155,6 +155,10 @@ private:
     // re-open the source forcing FFmpeg software decode before giving up.
     void maybeRetryWithSoftwareDecode();
 #endif
+    // HW-decode diag (docs/PREVIEW_HWDECODE_GREEN_GARBLE_SEEK_DEBUG_PLAN_ZH.md §9):
+    // drain the QtAVPlayer copy-path cumulative counters into one runtime-log line on a
+    // low-frequency cadence (seek / end-of-media). No-op off the QtAVPlayer/Windows path.
+    void emitHwDecodeDiagSummary(const char* reason);
     void resetVideoFrameDiagnostics();
     bool updateVideoFrameStallState(bool logTransition);
     qint64 currentVideoFrameAgeForDiagnosticsMs() const;
@@ -232,6 +236,10 @@ private:
     bool preparedPlaybackReady_ = false;
     double lastTimelineSecond_ = 0.0;
     qint64 lastSeekMs_ = -1;
+    // HW-decode diag: seek-landing latency clock + one-shot flag, read at the first
+    // displayed frame after QAVPlayer::seeked to emit the preview/seek_landing line.
+    QElapsedTimer seekCatchupTimer_;
+    bool seekLatencyPending_ = false;
     qint64 pausedSeekTargetMs_ = -1;
     double pausedSeekTargetSecond_ = 0.0;
     quint64 pausedSeekGeneration_ = 0;

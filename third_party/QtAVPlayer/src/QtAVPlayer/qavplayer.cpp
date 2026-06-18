@@ -23,6 +23,10 @@
 #include <QLoggingCategory>
 #include <functional>
 
+#if defined(Q_OS_WIN)
+#include "qavd3d11sharedcontext_p.h"  // MiaCode diag: qavNotePreviewCatchupSkip (S-SEEK GOP-burst count)
+#endif
+
 extern "C" {
 #include <libavformat/avformat.h>
 }
@@ -716,10 +720,18 @@ bool QAVPlayerPrivate::skipFrame(
         }
         result = pos < requestedPos && !isQueueEOF && !lastFrame;
         if (master) {
-            if (result)
+            if (result) {
                 qCDebug(lcAVPlayer) << __FUNCTION__ << pos << "<" << requestedPos;
-            else
+#if defined(Q_OS_WIN)
+                // MiaCode diag: a decode-but-don't-display catch-up frame. The count
+                // between a seek and the first displayed frame == the GOP-burst size,
+                // the S-SEEK signature. Single relaxed-atomic increment; read+reset on
+                // the GUI thread at seek landing.
+                qavNotePreviewCatchupSkip();
+#endif
+            } else {
                 pendingPosition = 0;
+            }
         }
     }
 

@@ -6,9 +6,14 @@
  ***************************************************************/
 
 #include "qavhwdevice_d3d11_p.h"
+#include "qavd3d11sharedcontext_p.h"  // MiaCode H2: shared render device + preview diag
 #include "qavvideobuffer_gpu_p.h"
 #include <QDebug>
 #include <QOpenGLFunctions>  // GLuint
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <cstdlib>
 #include <d3d11.h>
 #include <d3d11_3.h>
 #include <d3dcompiler.h>
@@ -28,6 +33,7 @@ using Microsoft::WRL::ComPtr;
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavcodec/d3d11va.h>
+#include <libavutil/frame.h>            // AV_FRAME_FLAG_CORRUPT / decode_error_flags (§10)
 #include <libavutil/hwcontext_d3d11va.h>
 }
 
@@ -68,10 +74,442 @@ static wglDXObjectAccessNV s_wglDXObjectAccessNV = nullptr;
         } \
     } while (0)
 
+// MiaCode S1: bound the render-thread keyed-mutex AcquireSync so a busy/stalled
+// iGPU drops a frame instead of freezing the QSG render thread forever. AcquireSync
+// returns WAIT_TIMEOUT (0x102) / WAIT_ABANDONED (0x80) on timeout/abandon — both
+// POSITIVE HRESULTs that FAILED()/ENSURE do NOT catch, so callers must hand-check
+// "hr != S_OK" rather than wrap AcquireSync in ENSURE.
+static constexpr DWORD kPreviewAcquireSyncTimeoutMs = 180;
+
 QT_BEGIN_NAMESPACE
+
+// ---------------------------------------------------------------------------
+// MiaCode H2: single-device D3D11 sharing.
+//
+// The renderer publishes its ID3D11Device here; the FFmpeg D3D11VA decoder then
+// decodes onto that same device, so handle() below can skip the cross-device
+// keyed-mutex bridge (and its render-thread AcquireSync(INFINITE) freeze).
+// ---------------------------------------------------------------------------
+static std::atomic<void *> g_sharedRenderD3D11Device{ nullptr };
+
+void qavSetSharedRenderD3D11Device(void *device)
+{
+    g_sharedRenderD3D11Device.store(device, std::memory_order_release);
+}
+
+void *qavSharedRenderD3D11Device()
+{
+    return g_sharedRenderD3D11Device.load(std::memory_order_acquire);
+}
+
+AVBufferRef *qavCreateSharedD3D11VADeviceContext()
+{
+    auto *device = static_cast<ID3D11Device *>(qavSharedRenderD3D11Device());
+    if (!device)
+        return nullptr;
+
+    AVBufferRef *ref = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_D3D11VA);
+    if (!ref) {
+        qWarning() << "qavCreateSharedD3D11VADeviceContext: av_hwdevice_ctx_alloc failed";
+        return nullptr;
+    }
+
+    auto *hwdev = reinterpret_cast<AVHWDeviceContext *>(ref->data);
+    auto *d3dctx = static_cast<AVD3D11VADeviceContext *>(hwdev->hwctx);
+
+    // d3d11va_device_uninit() Releases ->device (and ->device_context), so hand
+    // FFmpeg an owned reference. device_context / video_device / video_context
+    // are left null on purpose: av_hwdevice_ctx_init() derives them from ->device
+    // (GetImmediateContext + QueryInterface(ID3D11VideoDevice/Context)). That
+    // QueryInterface REQUIRES the device to have D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
+    // if it doesn't, init fails here and the caller falls back to a private device.
+    device->AddRef();
+    d3dctx->device = device;
+
+    const int ret = av_hwdevice_ctx_init(ref);
+    if (ret < 0) {
+        qWarning() << "qavCreateSharedD3D11VADeviceContext: av_hwdevice_ctx_init failed:" << ret
+                   << "(shared device lacks video support? falling back to private device)";
+        av_buffer_unref(&ref);  // free callback runs d3d11va_device_uninit -> Release(device)
+        return nullptr;
+    }
+    return ref;
+}
+
+// ===========================================================================
+// MiaCode preview HW-decode diagnostics (declarations in qavd3d11sharedcontext_p.h;
+// design in docs/PREVIEW_HWDECODE_GREEN_GARBLE_SEEK_DEBUG_PLAN_ZH.md §9).
+//
+// Storm-safety contract: the per-frame copy path (copyTexture*, on the QSG render
+// thread) only ever does relaxed-atomic increments + ONE relaxed-atomic load+compare
+// for the dump gate. NO env reads (the resolved budget is published from src once),
+// NO QString formatting, NO logging, NO file I/O when the dump budget is 0 (default).
+// The heavy work (STAGING readback Map + stat walk + raw dump + the log line) runs at
+// most `budget` frames per arm, then permanently self-stops. The cumulative counters
+// are drained + logged by the GUI thread on a low-frequency cadence (pause/seek/eom),
+// never per frame on a hot thread.
+// ===========================================================================
+namespace {
+
+std::atomic<QAVPreviewDiagLogFn> g_diagLogFn{ nullptr };
+
+// Dump config (published once from src before any media loads) + per-arm budget.
+std::atomic<int> g_dumpBudgetPerArm{ 0 };
+std::atomic<int> g_dumpRemaining{ 0 };
+
+// Cumulative counters (relaxed atomics: render/decode-thread increment, GUI drains).
+std::atomic<unsigned long long> g_copiedSingle{ 0 };
+std::atomic<unsigned long long> g_copiedTwoDevice{ 0 };
+std::atomic<unsigned long long> g_texturesCreated{ 0 };
+std::atomic<unsigned long long> g_acquireTimeouts{ 0 };
+std::atomic<unsigned long long> g_copyFailures{ 0 };
+std::atomic<unsigned long long> g_resolutionChanges{ 0 };
+std::atomic<unsigned long long> g_hwFramesDumped{ 0 };
+std::atomic<unsigned long long> g_catchupSkips{ 0 };
+
+// §10 HW-decode FIX config (published once from src; default ON for the completion
+// wait so the green/garble fix is active in normal runs even before the publish lands)
+// + the FIX's cumulative counters.
+std::atomic<int> g_completionWait{ 1 };           // force decode GPU completion before copy
+std::atomic<int> g_dropCorrupt{ 0 };              // drop FFmpeg-flagged corrupt/error frames
+std::atomic<unsigned long long> g_completionWaits{ 0 };
+std::atomic<unsigned long long> g_completionWaitTimeouts{ 0 };
+std::atomic<unsigned long long> g_framesDecodeError{ 0 };
+std::atomic<unsigned long long> g_corruptDropped{ 0 };
+// avcodec_get_name() returns a process-stable static string, so storing the bare
+// pointer is safe to read from the GUI thread (set once per decode init).
+std::atomic<const char *> g_codecName{ nullptr };
+// steady_clock ns at the last arm (= playback start / each seek); the dump line's
+// since_seek_ms quantifies "green only within N ms after a seek" (§10.5).
+std::atomic<long long> g_seekEpochNs{ 0 };
+
+inline long long steadyNowNs()
+{
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+
+std::atomic<int> g_lastCodedW{ 0 };
+std::atomic<int> g_lastCodedH{ 0 };
+std::atomic<int> g_lastDispW{ 0 };
+std::atomic<int> g_lastDispH{ 0 };
+std::atomic<unsigned int> g_lastFormat{ 0 };
+std::atomic<int> g_lastPath{ -1 };
+
+void diagLog(const QString &payload)
+{
+    QAVPreviewDiagLogFn fn = g_diagLogFn.load(std::memory_order_acquire);
+    if (fn) {
+        fn(payload.toUtf8().constData());
+    }
+}
+
+// Per-frame geometry tracking: cheap atomic stores + a coded-size change compare.
+// Runs every frame on BOTH paths so coded-vs-display (the decisive H-CROP signal)
+// and the resolved decode path are always available in the GUI summary line even
+// when the readback dump is OFF (budget 0).
+void noteFrameGeometry(int codedW, int codedH, int dispW, int dispH,
+                       unsigned int dxgiFmt, int path)
+{
+    const int prevW = g_lastCodedW.exchange(codedW, std::memory_order_relaxed);
+    const int prevH = g_lastCodedH.exchange(codedH, std::memory_order_relaxed);
+    if ((prevW != 0 || prevH != 0) && (prevW != codedW || prevH != codedH)) {
+        g_resolutionChanges.fetch_add(1, std::memory_order_relaxed);
+    }
+    g_lastDispW.store(dispW, std::memory_order_relaxed);
+    g_lastDispH.store(dispH, std::memory_order_relaxed);
+    g_lastFormat.store(dxgiFmt, std::memory_order_relaxed);
+    g_lastPath.store(path, std::memory_order_relaxed);
+}
+
+struct Nv12Stats {
+    double yMean = -1.0;
+    double yRowDelta = -1.0;       // mean |row - row+step| of Y: garbage/noise proxy (high => corrupt)
+    double uvNeutralPct = -1.0;    // fraction of UV samples within 128±12 (flat/neutral chroma)
+    double uvZeroPct = -1.0;       // fraction with U,V <=12 (zeroed chroma => "green" in limited-range)
+    double interiorZeroPct = -1.0; // zeroed-chroma fraction inside the display rect
+    double edgeZeroPct = -1.0;     // zeroed-chroma fraction in the coded>display padding band
+    bool edgeExists = false;       // codedW>dispW || codedH>dispH
+    bool valid = false;
+};
+
+// Walk a sparse grid of the mapped NV12 staging surface. NV12 is semi-planar: a Y
+// plane of `codedH` rows at `rowPitch` stride, then a UV plane (interleaved U,V byte
+// pairs) of `codedH/2` rows at the SAME `rowPitch`, starting at offset
+// rowPitch*codedH. Getting the pitch/offset wrong would forge a false "garbage"
+// verdict, so we derive both from the driver-reported RowPitch + coded height.
+Nv12Stats computeNv12Stats(const uint8_t *base, UINT rowPitch,
+                           int codedW, int codedH, int dispW, int dispH)
+{
+    Nv12Stats s;
+    if (!base || codedW <= 0 || codedH <= 1 || rowPitch < static_cast<UINT>(codedW)) {
+        return s;
+    }
+    const int stepX = qMax(1, codedW / 256);
+    const int stepY = qMax(1, codedH / 256);
+    long long ySum = 0, yCount = 0;
+    double rowDeltaSum = 0.0;
+    long long rowDeltaCount = 0;
+    for (int y = 0; y + stepY < codedH; y += stepY) {
+        const uint8_t *row = base + static_cast<size_t>(y) * rowPitch;
+        const uint8_t *rowN = base + static_cast<size_t>(y + stepY) * rowPitch;
+        for (int x = 0; x < codedW; x += stepX) {
+            ySum += row[x];
+            ++yCount;
+            rowDeltaSum += std::abs(static_cast<int>(row[x]) - static_cast<int>(rowN[x]));
+            ++rowDeltaCount;
+        }
+    }
+    if (yCount > 0) s.yMean = static_cast<double>(ySum) / yCount;
+    if (rowDeltaCount > 0) s.yRowDelta = rowDeltaSum / rowDeltaCount;
+
+    const uint8_t *uvBase = base + static_cast<size_t>(rowPitch) * codedH;
+    const int chromaH = codedH / 2;
+    const int chromaPairs = codedW / 2;
+    if (chromaH > 0 && chromaPairs > 0) {
+        const int cStepX = qMax(1, chromaPairs / 256);
+        const int cStepY = qMax(1, chromaH / 256);
+        long long uvCount = 0, neutral = 0, zero = 0;
+        long long inCount = 0, inZero = 0, edCount = 0, edZero = 0;
+        for (int cy = 0; cy < chromaH; cy += cStepY) {
+            const uint8_t *row = uvBase + static_cast<size_t>(cy) * rowPitch;
+            for (int cx = 0; cx < chromaPairs; cx += cStepX) {
+                const int u = row[cx * 2];
+                const int v = row[cx * 2 + 1];
+                ++uvCount;
+                if (std::abs(u - 128) <= 12 && std::abs(v - 128) <= 12) ++neutral;
+                const bool isZero = u <= 12 && v <= 12;
+                if (isZero) ++zero;
+                const int lx = cx * 2;
+                const int ly = cy * 2;
+                if (lx < dispW && ly < dispH) { ++inCount; if (isZero) ++inZero; }
+                else { ++edCount; if (isZero) ++edZero; }
+            }
+        }
+        if (uvCount > 0) {
+            s.uvNeutralPct = static_cast<double>(neutral) / uvCount;
+            s.uvZeroPct = static_cast<double>(zero) / uvCount;
+        }
+        if (inCount > 0) s.interiorZeroPct = static_cast<double>(inZero) / inCount;
+        if (edCount > 0) { s.edgeZeroPct = static_cast<double>(edZero) / edCount; s.edgeExists = true; }
+    }
+    s.valid = true;
+    return s;
+}
+
+// NV12-domain verdict hint (matrix-independent: "green" == zeroed chroma in
+// limited-range YUV). The raw numbers are logged alongside so the reader can
+// override the heuristic.
+const char *nv12VerdictHint(const Nv12Stats &s)
+{
+    if (!s.valid) return "n/a";
+    if (s.yRowDelta > 45.0) return "garbage_interior(H-DEC?)";            // noisy/corrupt luma
+    if (s.interiorZeroPct > 0.40) return "green_fill_interior(H-DEC/decode-incomplete?)";
+    if (s.edgeExists && s.edgeZeroPct > 0.40 && s.interiorZeroPct < 0.10)
+        return "green_edge(H-CROP: coded>display padding)";
+    return "interior_clean(decode_ok->suspect_sampling/H-FMT)";
+}
+
+// §10 PRIMARY FIX: drain the decode GPU work for the DPB slot before a copy reads it.
+// The decoder's DecoderEndFrame was submitted earlier on this same immediate context
+// (under m_hwctx->lock); on some Intel/Arc drivers it is NOT implicitly ordered against
+// our CopySubresourceRegion, so a post-seek copy can read a half-decoded slot whose
+// chroma is still zeroed (=> samples as pure green). End(EVENT) + Flush + a bounded spin
+// establishes "decode complete -> copy". Returns true when the GPU drained; on the
+// bounded timeout it returns false and the caller copies anyway (the drop-corrupt safety
+// net / next frame handle it) rather than freeze the render thread under the device lock.
+// Normally returns almost immediately because frames are decoded ahead of the render
+// thread, so the slot is already complete by the time we get here.
+constexpr DWORD kPreviewCompletionWaitTimeoutMs = 100;
+
+bool waitForDecodeCompletion(ID3D11Device *dev, ID3D11DeviceContext *ctx)
+{
+    if (!dev || !ctx) return false;
+    D3D11_QUERY_DESC qd{};
+    qd.Query = D3D11_QUERY_EVENT;
+    ComPtr<ID3D11Query> query;
+    if (FAILED(dev->CreateQuery(&qd, query.GetAddressOf())) || !query) {
+        return false;
+    }
+    ctx->End(query.Get());
+    ctx->Flush();  // submit the pending decode commands + this event to the GPU
+    g_completionWaits.fetch_add(1, std::memory_order_relaxed);
+    const DWORD start = GetTickCount();
+    for (;;) {
+        const HRESULT hr = ctx->GetData(query.Get(), nullptr, 0, 0);
+        if (hr == S_OK) return true;       // all prior work (incl. the decode) completed
+        if (hr != S_FALSE) return false;   // genuine error
+        if (GetTickCount() - start > kPreviewCompletionWaitTimeoutMs) {
+            g_completionWaitTimeouts.fetch_add(1, std::memory_order_relaxed);
+            return false;                  // stuck GPU: proceed, don't freeze
+        }
+        SwitchToThread();                  // yield without burning a full core
+    }
+}
+
+// Read back one decoder NV12 slice into a STAGING surface, compute classifying
+// stats, and emit ONE event line. Consumes one dump budget unit on success. Returns
+// true if a readback happened. No image files are written — the NV12-domain stats +
+// verdict hint in the log line are the decisive output.
+//
+// Caller MUST hold m_hwctx->lock when src is the decoder DPB array (so the slot is
+// not recycled mid-copy), and must pass a ctx bound to the device that owns `src`.
+bool dumpNv12Slice(ID3D11Device *dev, ID3D11DeviceContext *ctx,
+                   ID3D11Texture2D *src, UINT srcSlice,
+                   int dispW, int dispH, const char *point, int path, double framePts,
+                   int decodeErr, bool corrupt)
+{
+    if (!dev || !ctx || !src) return false;
+    D3D11_TEXTURE2D_DESC d = {};
+    src->GetDesc(&d);
+    const int codedW = static_cast<int>(d.Width);
+    const int codedH = static_cast<int>(d.Height);
+
+    D3D11_TEXTURE2D_DESC sd = {};
+    sd.Width = d.Width;
+    sd.Height = d.Height;
+    sd.Format = d.Format;
+    sd.ArraySize = 1;          // single slice (DPB is a Texture2DArray; STAGING must be 1)
+    sd.MipLevels = 1;
+    sd.SampleDesc = { 1, 0 };
+    sd.Usage = D3D11_USAGE_STAGING;
+    sd.BindFlags = 0;          // STAGING forbids bind flags
+    sd.MiscFlags = 0;
+    sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+
+    ComPtr<ID3D11Texture2D> staging;
+    if (FAILED(dev->CreateTexture2D(&sd, nullptr, staging.GetAddressOf()))) {
+        return false;  // dump failure is non-fatal: skip this sample, do not drop the frame
+    }
+    ctx->CopySubresourceRegion(staging.Get(), 0, 0, 0, 0, src, srcSlice, nullptr);
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    if (FAILED(ctx->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped))) {
+        return false;
+    }
+    const uint8_t *base = static_cast<const uint8_t *>(mapped.pData);
+
+    Nv12Stats st;
+    if (d.Format == DXGI_FORMAT_NV12) {
+        st = computeNv12Stats(base, mapped.RowPitch, codedW, codedH, dispW, dispH);
+    }
+    ctx->Unmap(staging.Get(), 0);
+
+    // §10.5 decisive context for the verdict: how long after the last seek this frame
+    // landed (green clusters just after a seek), whether FFmpeg already flagged the
+    // frame bad (free safety-net signal), whether the completion-wait fix was active,
+    // and the codec — so a single line says "src green, 380ms after seek, FFmpeg
+    // decode_err=2 (missing ref), completion_wait was off" without external tooling.
+    const long long epochNs = g_seekEpochNs.load(std::memory_order_relaxed);
+    const long long sinceSeekMs =
+        epochNs > 0 ? (steadyNowNs() - epochNs) / 1000000LL : -1;
+    const char *codec = g_codecName.load(std::memory_order_relaxed);
+
+    diagLog(QStringLiteral(
+                "event=hwframe_dump point=%1 path=%2 frame_pts=%3 fmt=0x%4 coded=%5x%6 disp=%7x%8 "
+                "y_mean=%9 y_rowdelta=%10 uv_neutral=%11 uv_zero=%12 interior_zero=%13 edge_zero=%14 "
+                "hint=%15 since_seek_ms=%16 decode_err=%17 corrupt=%18 completion_wait=%19 codec=%20")
+                .arg(QString::fromLatin1(point))
+                .arg(path == 1 ? QStringLiteral("single") : path == 0 ? QStringLiteral("two-device") : QStringLiteral("?"))
+                .arg(framePts, 0, 'f', 0)
+                .arg(static_cast<unsigned int>(d.Format), 0, 16)
+                .arg(codedW).arg(codedH)
+                .arg(dispW).arg(dispH)
+                .arg(st.yMean, 0, 'f', 1)
+                .arg(st.yRowDelta, 0, 'f', 1)
+                .arg(st.uvNeutralPct, 0, 'f', 3)
+                .arg(st.uvZeroPct, 0, 'f', 3)
+                .arg(st.interiorZeroPct, 0, 'f', 3)
+                .arg(st.edgeZeroPct, 0, 'f', 3)
+                .arg(QString::fromLatin1(nv12VerdictHint(st)))
+                .arg(sinceSeekMs)
+                .arg(decodeErr)
+                .arg(corrupt ? 1 : 0)
+                .arg(g_completionWait.load(std::memory_order_relaxed) ? QStringLiteral("on") : QStringLiteral("off"))
+                .arg(codec ? QString::fromLatin1(codec) : QStringLiteral("?")));
+
+    g_hwFramesDumped.fetch_add(1, std::memory_order_relaxed);
+    return true;
+}
+
+// Try to consume one dump-budget unit. Returns true (and decrements) only while the
+// current arm still has budget. Single-threaded on the render thread except the GUI
+// re-arm store (benign).
+bool tryConsumeDumpBudget()
+{
+    if (g_dumpRemaining.load(std::memory_order_relaxed) <= 0) return false;
+    return g_dumpRemaining.fetch_sub(1, std::memory_order_relaxed) > 0;
+}
+
+}  // namespace
+
+void qavSetPreviewDiagLogSink(QAVPreviewDiagLogFn fn)
+{
+    g_diagLogFn.store(fn, std::memory_order_release);
+}
+
+void qavSetPreviewHwFrameDumpConfig(int budgetPerArm)
+{
+    const int budget = budgetPerArm > 0 ? budgetPerArm : 0;
+    g_dumpBudgetPerArm.store(budget, std::memory_order_release);
+    g_dumpRemaining.store(budget, std::memory_order_release);  // arm the initial window
+    g_seekEpochNs.store(steadyNowNs(), std::memory_order_release);  // start the since-seek clock
+}
+
+void qavArmPreviewHwFrameDump()
+{
+    g_dumpRemaining.store(g_dumpBudgetPerArm.load(std::memory_order_relaxed),
+                          std::memory_order_release);
+    g_seekEpochNs.store(steadyNowNs(), std::memory_order_release);  // reset since-seek clock
+}
+
+void qavSetPreviewHwDecodeFixConfig(int completionWait, int dropCorrupt)
+{
+    g_completionWait.store(completionWait != 0 ? 1 : 0, std::memory_order_release);
+    g_dropCorrupt.store(dropCorrupt != 0 ? 1 : 0, std::memory_order_release);
+}
+
+void qavGetPreviewDiagCounters(QAVPreviewDiagCounters *out)
+{
+    if (!out) return;
+    out->copiedFramesSingle = g_copiedSingle.load(std::memory_order_relaxed);
+    out->copiedFramesTwoDevice = g_copiedTwoDevice.load(std::memory_order_relaxed);
+    out->texturesCreated = g_texturesCreated.load(std::memory_order_relaxed);
+    out->acquireSyncTimeouts = g_acquireTimeouts.load(std::memory_order_relaxed);
+    out->copyFailures = g_copyFailures.load(std::memory_order_relaxed);
+    out->resolutionChanges = g_resolutionChanges.load(std::memory_order_relaxed);
+    out->hwFramesDumped = g_hwFramesDumped.load(std::memory_order_relaxed);
+    out->completionWaits = g_completionWaits.load(std::memory_order_relaxed);
+    out->completionWaitTimeouts = g_completionWaitTimeouts.load(std::memory_order_relaxed);
+    out->framesDecodeError = g_framesDecodeError.load(std::memory_order_relaxed);
+    out->corruptFramesDropped = g_corruptDropped.load(std::memory_order_relaxed);
+    out->codecName = g_codecName.load(std::memory_order_relaxed);
+    out->lastCodedWidth = g_lastCodedW.load(std::memory_order_relaxed);
+    out->lastCodedHeight = g_lastCodedH.load(std::memory_order_relaxed);
+    out->lastDisplayWidth = g_lastDispW.load(std::memory_order_relaxed);
+    out->lastDisplayHeight = g_lastDispH.load(std::memory_order_relaxed);
+    out->lastDxgiFormat = g_lastFormat.load(std::memory_order_relaxed);
+    out->lastPath = g_lastPath.load(std::memory_order_relaxed);
+}
+
+void qavNotePreviewCatchupSkip()
+{
+    g_catchupSkips.fetch_add(1, std::memory_order_relaxed);
+}
+
+unsigned long long qavTakePreviewCatchupSkipCount()
+{
+    return g_catchupSkips.exchange(0, std::memory_order_relaxed);
+}
 
 void QAVHWDevice_D3D11::init(AVCodecContext *avctx)
 {
+    // §10.5: stash the codec name for the diag lines so the user need not ffprobe.
+    // avcodec_get_name returns a process-stable static string (safe to store bare).
+    if (avctx) {
+        g_codecName.store(avcodec_get_name(avctx->codec_id), std::memory_order_relaxed);
+    }
+
     int ret = avcodec_get_hw_frames_parameters(avctx,
                                                avctx->hw_device_ctx,
                                                AV_PIX_FMT_D3D11,
@@ -86,6 +524,16 @@ void QAVHWDevice_D3D11::init(AVCodecContext *avctx)
     auto hwctx = (AVD3D11VAFramesContext *)frames_ctx->hwctx;
     hwctx->MiscFlags = D3D11_RESOURCE_MISC_SHARED;
     hwctx->BindFlags = D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE;
+    // MiaCode S2: give the D3D11VA decode pool headroom. QtAVPlayer builds the
+    // hw_frames_ctx manually via avcodec_get_hw_frames_parameters (above), which
+    // bypasses FFmpeg's internal +3 working-surface margin, so the default pool is
+    // tight; a slow render-thread consumer (the cross-device keyed-mutex bridge) can
+    // pin the last surface and stall the decode thread on av_hwframe_get_buffer. Add
+    // a small margin (DPB peak + in-flight bridge/QSG frames). Guarded on >0 so the
+    // software path (initial_pool_size==0) and any backend that didn't size the pool
+    // here are untouched. ~25MB extra @1080p NV12 — negligible, dGPU included.
+    if (frames_ctx->initial_pool_size > 0)
+        frames_ctx->initial_pool_size += 8;
     ret = av_hwframe_ctx_init(avctx->hw_frames_ctx);
     if (ret < 0) {
         qWarning() << "Failed to initialize HW frames context:" << ret;
@@ -161,6 +609,11 @@ public:
     QAVVideoFrame_D3D11(const AVFrame *frame)
         : m_texture((ID3D11Texture2D *)(uintptr_t)frame->data[0])
         , m_textureIndex((intptr_t)frame->data[1])
+        , m_displayW(frame->width)    // MiaCode diag: display size (vs coded/aligned texture size)
+        , m_displayH(frame->height)
+        , m_framePts(frame->pts != AV_NOPTS_VALUE ? double(frame->pts) : -1.0)  // raw stream-timebase pts
+        , m_decodeErrorFlags(frame->decode_error_flags)                          // §10 free corrupt signal
+        , m_corrupt((frame->flags & AV_FRAME_FLAG_CORRUPT) != 0)
     {
         auto ctx = reinterpret_cast<AVHWFramesContext *>(frame->hw_frames_ctx->data);
         m_hwctx = static_cast<AVD3D11VADeviceContext *>(ctx->device_ctx->hwctx);
@@ -168,11 +621,30 @@ public:
 
     ComPtr<ID3D11Texture2D> copyTexture(const ComPtr<ID3D11Device1> &dev,
                                         const ComPtr<ID3D11DeviceContext> &ctx);
+
+    // MiaCode H2: same-device fast path. When the decoder shares the renderer's
+    // ID3D11Device, copy straight out of the decoder DPB slot into a sampleable
+    // NV12 texture — no shared handle, no keyed mutex, no AcquireSync(INFINITE).
+    ComPtr<ID3D11Texture2D> copyTextureSameDevice(const ComPtr<ID3D11Device1> &dev,
+                                                  const ComPtr<ID3D11DeviceContext> &ctx);
+
+    // The ID3D11Device the frame was decoded on (for single-device detection).
+    ID3D11Device *decodeDevice() const { return m_hwctx ? m_hwctx->device : nullptr; }
+
+    // §10 free corrupt signals copied off the AVFrame at construction.
+    int decodeErrorFlags() const { return m_decodeErrorFlags; }
+    bool isCorrupt() const { return m_corrupt; }
+
 private:
     bool copyToShared();
 
     const ComPtr<ID3D11Texture2D> m_texture;
     const UINT m_textureIndex = 0;
+    const int m_displayW = 0;   // MiaCode diag: display (cropped) size for coded-vs-display H-CROP signal
+    const int m_displayH = 0;
+    const double m_framePts = -1.0;
+    const int m_decodeErrorFlags = 0;   // §10: AVFrame::decode_error_flags (FF_DECODE_ERROR_*)
+    const bool m_corrupt = false;       // §10: AVFrame flag AV_FRAME_FLAG_CORRUPT
     AVD3D11VADeviceContext *m_hwctx = nullptr;
 
     struct SharedTextureHandleTraits
@@ -205,13 +677,44 @@ bool QAVVideoFrame_D3D11::copyToShared()
     texDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
     texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
     ENSURE(m_hwctx->device->CreateTexture2D(&texDesc, nullptr, m_srcTex.ReleaseAndGetAddressOf()), false);
+    g_texturesCreated.fetch_add(1, std::memory_order_relaxed);
+
+    // §10 PRIMARY FIX: force the decode GPU work for this DPB slot to COMPLETE before we
+    // read it (the src dump below and the CopySubresourceRegion further down). The decode
+    // ran on this same decode-device immediate context; without this drain a post-seek
+    // copy can read a half-decoded (zero-chroma => green) slot. Done first so the readback
+    // dump reflects the post-wait state (so the A/B shows up in the dump's verdict hint).
+    if (g_completionWait.load(std::memory_order_relaxed)) {
+        waitForDecodeCompletion(m_hwctx->device, m_hwctx->device_context);
+    }
+
+    // MiaCode diag: read back the decoder DPB slot (the SOURCE) on the decode device
+    // while we hold m_hwctx->lock (so the slot isn't recycled). On the two-device path
+    // this is the only chance to see the decoder output before the cross-device bridge.
+    if (tryConsumeDumpBudget()) {
+        dumpNv12Slice(m_hwctx->device, m_hwctx->device_context, m_texture.Get(),
+                      m_textureIndex, m_displayW, m_displayH, "src", /*path=*/0, m_framePts,
+                      m_decodeErrorFlags, m_corrupt);
+    }
 
     ComPtr<IDXGIResource1> res;
     ENSURE(m_srcTex.As(&res), false);
     ENSURE(res->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ, nullptr, &m_sharedHandle), false);
     ENSURE(m_srcTex.As(&m_srcMutex), false);
     m_hwctx->device_context->Flush();
-    ENSURE(m_srcMutex->AcquireSync(m_srcKey, INFINITE), false);
+    // MiaCode S1: bounded acquire (was INFINITE). AcquireSync returns WAIT_TIMEOUT
+    // (0x102, POSITIVE) on timeout, which FAILED()/ENSURE do NOT catch — so hand-check
+    // hr != S_OK. On timeout we did NOT acquire the mutex: skip the copy AND the
+    // ReleaseSync, drop the frame (copyTexture/handle return {} -> RHI reuses the
+    // previous frame). m_srcTex + its keyed mutex are rebuilt next frame, so there is
+    // no lingering key state to rebalance.
+    const HRESULT srcAcq = m_srcMutex->AcquireSync(m_srcKey, kPreviewAcquireSyncTimeoutMs);
+    if (srcAcq != S_OK) {
+        g_acquireTimeouts.fetch_add(1, std::memory_order_relaxed);
+        qWarning() << QString::fromLatin1("Error@%1. AcquireSync(src) timeout/fail: (0x%2)")
+                          .arg(__LINE__).arg(static_cast<quint32>(srcAcq), 0, 16);
+        return false;
+    }
     m_hwctx->device_context->CopySubresourceRegion(m_srcTex.Get(), 0, 0, 0, 0, m_texture.Get(), m_textureIndex, nullptr);
     m_srcMutex->ReleaseSync(m_destKey);
     return true;
@@ -233,11 +736,103 @@ ComPtr<ID3D11Texture2D> QAVVideoFrame_D3D11::copyTexture(const ComPtr<ID3D11Devi
 
     ComPtr<ID3D11Texture2D> outputTex;
     ENSURE(dev->CreateTexture2D(&desc, nullptr, outputTex.ReleaseAndGetAddressOf()), {});
+    g_texturesCreated.fetch_add(1, std::memory_order_relaxed);
     ENSURE(m_destTex.As(&m_destMutex), {});
-    ENSURE(m_destMutex->AcquireSync(m_destKey, INFINITE), {});
+    // MiaCode S1: bounded acquire (was INFINITE). See copyToShared. A dest-side
+    // timeout just drops the frame (return {}); no rebalance — this whole per-frame
+    // QAVVideoFrame_D3D11 (srcTex/sharedHandle/destTex + keyed mutex) is rebuilt fresh
+    // next frame, so the 0->1->0 handoff self-resets.
+    const HRESULT destAcq = m_destMutex->AcquireSync(m_destKey, kPreviewAcquireSyncTimeoutMs);
+    if (destAcq != S_OK) {
+        g_acquireTimeouts.fetch_add(1, std::memory_order_relaxed);
+        qWarning() << QString::fromLatin1("Error@%1. AcquireSync(dest) timeout/fail: (0x%2)")
+                          .arg(__LINE__).arg(static_cast<quint32>(destAcq), 0, 16);
+        return {};
+    }
 
     ctx->CopySubresourceRegion(outputTex.Get(), 0, 0, 0, 0, m_destTex.Get(), 0, nullptr);
     m_destMutex->ReleaseSync(m_srcKey);
+
+    // MiaCode diag: geometry tracking (coded-vs-display, always) + bounded OUTPUT
+    // readback. On the two-device path the src vs output comparison localizes whether
+    // the cross-device keyed-mutex bridge corrupted the active region.
+    noteFrameGeometry(static_cast<int>(desc.Width), static_cast<int>(desc.Height),
+                      m_displayW, m_displayH, static_cast<unsigned int>(desc.Format), /*path=*/0);
+    g_copiedTwoDevice.fetch_add(1, std::memory_order_relaxed);
+    if (tryConsumeDumpBudget()) {
+        dumpNv12Slice(dev.Get(), ctx.Get(), outputTex.Get(), /*slice=*/0,
+                      m_displayW, m_displayH, "out", /*path=*/0, m_framePts,
+                      m_decodeErrorFlags, m_corrupt);
+    }
+    return outputTex;
+}
+
+ComPtr<ID3D11Texture2D> QAVVideoFrame_D3D11::copyTextureSameDevice(const ComPtr<ID3D11Device1> &dev,
+                                                                   const ComPtr<ID3D11DeviceContext> &ctx)
+{
+    // Decoder and renderer share one ID3D11Device, so the decoded NV12 surface
+    // already lives where the RHI samples. We still copy it out of the decoder's
+    // DPB array slot (which FFmpeg will recycle for the next frame) into a fresh
+    // single-slice texture — but with NO shared handle, NO keyed mutex and NO
+    // AcquireSync(INFINITE). This is the whole point of H2: factors A's render-
+    // thread accomplice (cross-device copy) and B (the INFINITE-wait freeze) are
+    // gone; one same-device CopySubresourceRegion remains (cf. mpv's copy_tex).
+    CD3D11_TEXTURE2D_DESC srcDesc{};
+    m_texture->GetDesc(&srcDesc);
+
+    CD3D11_TEXTURE2D_DESC outDesc{ srcDesc.Format, srcDesc.Width, srcDesc.Height };
+    outDesc.MipLevels = 1;
+    outDesc.ArraySize = 1;
+    outDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    outDesc.Usage = D3D11_USAGE_DEFAULT;
+    outDesc.SampleDesc = { 1, 0 };
+
+    ComPtr<ID3D11Texture2D> outputTex;
+    ENSURE(dev->CreateTexture2D(&outDesc, nullptr, outputTex.ReleaseAndGetAddressOf()), {});
+    g_texturesCreated.fetch_add(1, std::memory_order_relaxed);
+
+    // Hold the device lock around the copy: the D3D11VA decoder takes the same
+    // lock (ff_dxva2_lock) around DecoderBeginFrame..EndFrame, so this copy
+    // serializes against an in-flight decode and the DPB slot isn't recycled
+    // mid-copy.
+    //
+    // CAVEAT (single-device only): this lock covers the decode submission and
+    // THIS copy, but NOT Qt's ordinary QSG scene-graph draws, which run on the
+    // render thread and drive the *same* shared immediate context without taking
+    // lock_ctx. SetMultithreadProtected(TRUE) (set by the renderer when it
+    // creates the device) serializes each individual context call, which is the
+    // same guarantee mpv/Chromium rely on when sharing one device — but it does
+    // NOT make the decoder's multi-call BeginFrame..EndFrame atomic against
+    // unrelated render-thread draws. This is the key risk to validate on the
+    // target Arc iGPU under the D3D11 debug layer before H2 becomes the default;
+    // see docs/PREVIEW_VIDEO_IGPU_STUTTER_INVESTIGATION_AND_FIX_ZH.md §4 H2.
+    m_hwctx->lock(m_hwctx->lock_ctx);
+    QScopeGuard autoUnlock([&] { m_hwctx->unlock(m_hwctx->lock_ctx); });
+
+    // §10 PRIMARY FIX: drain the decode GPU work for this DPB slot before the copy reads
+    // it. `ctx` is the shared device's immediate context (== the context the decoder
+    // submitted DecoderEndFrame on), so the EVENT query here orders decode -> copy and
+    // kills the post-seek half-decoded green slot. Bounded; on timeout we copy anyway.
+    if (g_completionWait.load(std::memory_order_relaxed)) {
+        waitForDecodeCompletion(dev.Get(), ctx.Get());
+    }
+
+    ctx->CopySubresourceRegion(outputTex.Get(), 0, 0, 0, 0, m_texture.Get(), m_textureIndex, nullptr);
+
+    // MiaCode diag: geometry tracking (coded-vs-display, every frame, cheap atomics) +
+    // bounded SOURCE readback. On the single-device path outputTex is a bit-exact whole-
+    // slice copy of the DPB at coded size, so dumping the SOURCE slot here is the decisive
+    // experiment: source bad => H-DEC; source clean (interior) but screen bad => sampling/
+    // H-FMT or coded>display H-CROP (read coded vs disp + uv_zero edge/interior in the line).
+    // Done under m_hwctx->lock so the DPB slot can't be recycled mid-readback.
+    noteFrameGeometry(static_cast<int>(srcDesc.Width), static_cast<int>(srcDesc.Height),
+                      m_displayW, m_displayH, static_cast<unsigned int>(srcDesc.Format), /*path=*/1);
+    g_copiedSingle.fetch_add(1, std::memory_order_relaxed);
+    if (tryConsumeDumpBudget()) {
+        dumpNv12Slice(dev.Get(), ctx.Get(), m_texture.Get(), m_textureIndex,
+                      m_displayW, m_displayH, "src", /*path=*/1, m_framePts,
+                      m_decodeErrorFlags, m_corrupt);
+    }
     return outputTex;
 }
 
@@ -299,9 +894,51 @@ public:
             ComPtr<ID3D11DeviceContext> ctxRHI;
             devRHI->GetImmediateContext(ctxRHI.GetAddressOf());
 
+            // MiaCode H2: identity-compare the *raw* render device (the exact
+            // ID3D11Device* the renderer handed to QRhi, which is also what it
+            // published to the decoder) against the decode device. ID3D11Device1
+            // QI'd from it can have a different pointer, so don't compare devRHI.
+            auto nh = static_cast<const QRhiD3D11NativeHandles *>(rhi->nativeHandles());
+            ID3D11Device *renderDevice = nh ? static_cast<ID3D11Device *>(nh->dev) : nullptr;
+
             QAVVideoFrame_D3D11 videoFrame(frame().frame());
-            auto outputTex = videoFrame.copyTexture(devRHI, ctxRHI);
+
+            // §10 SAFETY NET: count frames FFmpeg flagged corrupt / decode-error, and —
+            // when the drop-corrupt fix is enabled — skip them entirely (return {} => RHI
+            // keeps the last good frame; a brief freeze beats a green flash). Free: reads
+            // the AVFrame flags copied at construction, no GPU work. The count is always
+            // tracked so the summary reveals whether FFmpeg even knows the green frames
+            // are bad (it may not — then completion-wait, not this, is the real fix).
+            if (videoFrame.isCorrupt() || videoFrame.decodeErrorFlags() != 0) {
+                g_framesDecodeError.fetch_add(1, std::memory_order_relaxed);
+                if (g_dropCorrupt.load(std::memory_order_relaxed)) {
+                    g_corruptDropped.fetch_add(1, std::memory_order_relaxed);
+                    return {};
+                }
+            }
+
+            const bool singleDevice =
+                renderDevice != nullptr && renderDevice == videoFrame.decodeDevice();
+            // Log on every transition of the resolved path (not once per process):
+            // the decision is per-(QAVPlayer, consumer RHI), so a single global
+            // latch could report a stale path for later media. -1 = nothing logged.
+            static std::atomic<int> lastLoggedPath{ -1 };
+            const int currentPath = singleDevice ? 1 : 0;
+            if (lastLoggedPath.exchange(currentPath) != currentPath) {
+                qDebug() << "QtAVPlayer D3D11 preview frame path:"
+                         << (singleDevice ? "single-device (H2, no cross-device bridge)"
+                                          : "two-device bridge (keyed-mutex)");
+                // MiaCode diag: sparse path-transition line into the structured runtime
+                // log (qDebug above only reaches the console). One line per path flip.
+                diagLog(QStringLiteral("event=hwframe_path path=%1 render_device=0x%2 decode_device=0x%3")
+                            .arg(singleDevice ? QStringLiteral("single") : QStringLiteral("two-device"))
+                            .arg(reinterpret_cast<quintptr>(renderDevice), 0, 16)
+                            .arg(reinterpret_cast<quintptr>(videoFrame.decodeDevice()), 0, 16));
+            }
+            auto outputTex = singleDevice ? videoFrame.copyTextureSameDevice(devRHI, ctxRHI)
+                                          : videoFrame.copyTexture(devRHI, ctxRHI);
             if (!outputTex) {
+                g_copyFailures.fetch_add(1, std::memory_order_relaxed);
                 qWarning() << "Could not copy d3d11 texture";
                 return {};
             }

@@ -3,8 +3,11 @@
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "preview/runtime/PreviewSharedD3D11Device.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
+#include <QQuickGraphicsDevice>
 #include <QQuickView>
+#include <QSGRendererInterface>
 #include <QSurfaceFormat>
 #include <QUrl>
 #include <QVariant>
@@ -31,6 +34,32 @@ QuickShellPreviewCompositeSurface::QuickShellPreviewCompositeSurface(QObject* pa
     ensureQuickShellPreviewTypesRegistered();
 
     view_ = new QQuickView();
+
+    // H2 single-device preview decode: when enabled, render this view's QRhi on the
+    // same ID3D11Device the FFmpeg D3D11VA decoder uses, so the per-frame cross-device
+    // video-texture bridge disappears (docs/PREVIEW_VIDEO_IGPU_STUTTER_*). Must run
+    // before the scene graph initialises (i.e. before setSource/show). Only meaningful
+    // for the Direct3D11 RHI; a null device (feature off / creation failed) leaves Qt
+    // to create its own device = legacy two-device path. The device is also published
+    // to the decoder inside sharedPreviewQuickGraphicsDevice().
+    //
+    // `Unknown` is accepted because when no backend was forced (no --rhi / no persisted
+    // choice) graphicsApi() stays Unknown here and Qt resolves to the platform default,
+    // which on Windows is Direct3D11 — the primary intended path. An explicitly-forced
+    // non-D3D11 backend (main.cpp setGraphicsApi for OpenGL/Vulkan/Software) returns a
+    // concrete value and is correctly rejected. If a non-D3D11 RHI ever resolved while
+    // still Unknown here, Qt ignores the mismatched imported device and handle()'s raw
+    // renderDevice==decodeDevice compare fails → legacy bridge (degrade, not crash).
+    const QSGRendererInterface::GraphicsApi graphicsApi = QQuickWindow::graphicsApi();
+    if (graphicsApi == QSGRendererInterface::Direct3D11
+        || graphicsApi == QSGRendererInterface::Unknown) {
+        const QQuickGraphicsDevice sharedDevice =
+            miacode::preview::sharedPreviewQuickGraphicsDevice();
+        if (!sharedDevice.isNull()) {
+            view_->setGraphicsDevice(sharedDevice);
+        }
+    }
+
     QSurfaceFormat format = view_->format();
     format.setAlphaBufferSize(0);
     view_->setFormat(format);

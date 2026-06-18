@@ -125,6 +125,7 @@ if(WIN32)
     set(QtAVPlayer_PRIVATE_HEADERS
         ${QtAVPlayer_PRIVATE_HEADERS}
         ${QT_AVPLAYER_DIR}/qavhwdevice_d3d11_p.h
+        ${QT_AVPLAYER_DIR}/qavd3d11sharedcontext_p.h
     )
 
     set(QtAVPlayer_SOURCES

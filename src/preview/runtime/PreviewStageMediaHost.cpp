@@ -5,6 +5,7 @@
 #include "common/DebugOptions.h"
 #include "common/FileContentStamp.h"
 #include "common/OperationLog.h"
+#include "preview/runtime/PreviewSharedD3D11Device.h"  // H2: single_device= log field
 
 #include <cstdio>  // G2 Diag: std::snprintf for sync rate-change beacon lines
 
@@ -13,6 +14,9 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <dxgi.h>          // F1: DXGI adapter probe to auto-detect integrated GPUs
+#include <wrl/client.h>
+#pragma comment(lib, "dxgi.lib")
 #endif
 
 #ifdef MIACODE_USE_QTAVPLAYER
@@ -26,6 +30,9 @@
 #include <QtAVPlayer/qavvideoframe.h>
 #include <QVideoFrame>
 #include <QVideoSink>
+#if defined(Q_OS_WIN)
+#include <QtAVPlayer/qavd3d11sharedcontext_p.h>  // HW-decode diag counters / seek catch-up
+#endif
 #elif defined(HAVE_QT_MULTIMEDIA)
 #include <QAudioOutput>
 #include <QMediaPlayer>
@@ -51,6 +58,47 @@ constexpr int kVideoBackendRecoveryMaxConsecutive = 3;
 constexpr int kVideoFrameIntervalWindowSize = 120;
 constexpr qint64 kVideoFrameStallMinMs = 120;
 constexpr double kVideoFrameStallMultiplier = 3.5;
+
+// F1: detect whether the render GPU is integrated, so auto mode can default
+// preview decode to software (D3D11VA is unreliable on iGPUs). Probes DXGI
+// adapter 0 — the adapter driving the primary output, which Qt's D3D11 RHI uses
+// by default. Integrated GPUs share system memory and report little/no
+// DedicatedVideoMemory; discrete GPUs report >=1GB. One-time, cached. Probe
+// failure or a discrete adapter => false (keep hardware). Caller logs the result.
+bool detectIntegratedRenderAdapter(QString *descOut)
+{
+#ifdef Q_OS_WIN
+    using Microsoft::WRL::ComPtr;
+    ComPtr<IDXGIFactory1> factory;
+    if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))))
+        return false;
+    ComPtr<IDXGIAdapter1> adapter;
+    if (FAILED(factory->EnumAdapters1(0, &adapter)))
+        return false;
+    DXGI_ADAPTER_DESC1 desc{};
+    if (FAILED(adapter->GetDesc1(&desc)))
+        return false;
+    if (descOut)
+        *descOut = QString::fromWCharArray(desc.Description);
+    if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
+        return false; // WARP / software renderer, not an iGPU
+    const quint64 dedicatedMb =
+        static_cast<quint64>(desc.DedicatedVideoMemory) / (1024ull * 1024ull);
+    return dedicatedMb < 512; // < 512 MB dedicated VRAM => integrated
+#else
+    Q_UNUSED(descOut);
+    return false;
+#endif
+}
+
+bool isIntegratedRenderAdapter(QString *descOut = nullptr)
+{
+    static QString cachedDesc;
+    static const bool cached = detectIntegratedRenderAdapter(&cachedDesc);
+    if (descOut)
+        *descOut = cachedDesc;
+    return cached;
+}
 
 unsigned long currentBeaconTid() noexcept
 {
@@ -236,20 +284,43 @@ void PreviewStageMediaHost::initializeBackendObjects()
     qRegisterMetaType<QAVVideoFrame>();
 
     player_ = new QAVPlayer(this);
+    // Wire the HW-decode diagnostics (log sink + bounded readback-dump budget) into the
+    // decode path before any media loads. Idempotent; covers both H2 and two-device paths.
+    miacode::preview::installPreviewDecodeDiagnostics();
     player_->setSpeed(static_cast<qreal>(playbackRate_));
-    // Software decode when: (a) a prior D3D11VA decode failed and we're retrying, or
-    // (b) MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO forces it (diagnostic + workaround for the
-    // green NV12-padding artifact on non-16-aligned hardware frames — see DebugOptions.h).
-    const bool forceSoftware = miacode::debug_options::previewForceSoftwareVideoDecodeEnabled();
-    if (softwareDecodeFallbackTried_ || forceSoftware) {
+    // F1: decide hardware vs software preview decode.
+    //   - softwareDecodeFallbackTried_: a prior D3D11VA decode failed -> retry in software.
+    //   - MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO tri-state: Auto / ForceSoftware / ForceHardware.
+    //   - Auto defaults INTEGRATED GPUs to software (D3D11VA preview decode is unreliable on
+    //     Intel/Arc iGPUs: startup stutter, NV12 green padding, AV1 hardware corruption — all
+    //     clean in software), while discrete GPUs keep hardware. ForceHardware overrides the
+    //     iGPU auto-detect; ForceSoftware always software. See DebugOptions.h.
+    using DecodePref = miacode::debug_options::PreviewVideoDecodePreference;
+    const DecodePref decodePref = miacode::debug_options::previewVideoDecodePreference();
+    QString adapterDesc;
+    const bool integratedGpu = isIntegratedRenderAdapter(&adapterDesc);
+    bool forceSoftware = false;
+    switch (decodePref) {
+    case DecodePref::ForceSoftware: forceSoftware = true; break;
+    case DecodePref::ForceHardware: forceSoftware = false; break;
+    case DecodePref::Auto:          forceSoftware = integratedGpu; break;
+    }
+    const bool useSoftware = softwareDecodeFallbackTried_ || forceSoftware;
+    if (useSoftware) {
         player_->setInputVideoCodec(QStringLiteral("software"));
     }
+    const char *prefName = decodePref == DecodePref::ForceSoftware ? "force_sw"
+                         : decodePref == DecodePref::ForceHardware ? "force_hw"
+                                                                   : "auto";
     appendPreviewStageMediaLog(
         QStringLiteral("media_backend"),
-        QString("backend=qtavplayer ffmpeg=1 qt_runtime_version=%1 force_software=%2 forced_env=%3")
+        QString("backend=qtavplayer ffmpeg=1 qt_runtime_version=%1 force_software=%2 pref=%3 igpu=%4 adapter=\"%5\" single_device=%6")
             .arg(QString::fromLatin1(qVersion()))
-            .arg((softwareDecodeFallbackTried_ || forceSoftware) ? 1 : 0)
-            .arg(forceSoftware ? 1 : 0));
+            .arg(useSoftware ? 1 : 0)
+            .arg(QString::fromLatin1(prefName))
+            .arg(integratedGpu ? 1 : 0)
+            .arg(adapterDesc)
+            .arg(miacode::preview::sharedPreviewD3D11DeviceActive() ? 1 : 0));
 
     // Seek landing (frame-accurate). Backs up the pts match in
     // handleDecodedVideoFrame for the paused-seek / prepared-start handshakes —
@@ -263,6 +334,17 @@ void PreviewStageMediaHost::initializeBackendObjects()
         lastTimelineSecond_ = qMax(0.0, mediaSecond - timelineOffsetSeconds_);
         settlePendingSeekAcks(mediaSecond, mediaSecond);
         updateClockDelta();
+#if defined(Q_OS_WIN)
+        // HW-decode diag: the demuxer seek landed; the decoder now catches up to the
+        // target GOP (skipFrame decode-but-don't-display bursts). Arm the bounded
+        // readback so seek-time green/garble is captured, zero the catch-up counter,
+        // and start the latency clock — read back at the first DISPLAYED frame below.
+        qavArmPreviewHwFrameDump();
+        qavTakePreviewCatchupSkipCount();  // discard pre-seek residual
+        seekCatchupTimer_.restart();
+        seekLatencyPending_ = true;
+        emitHwDecodeDiagSummary("seek");
+#endif
     });
 
     connect(player_, &QAVPlayer::mediaStatusChanged, this, [this](QAVPlayer::MediaStatus status) {
@@ -283,6 +365,7 @@ void PreviewStageMediaHost::initializeBackendObjects()
             videoPlaybackActiveElapsed_.invalidate();
             updateClockDelta();
             updateVideoFrameStallState(true);
+            emitHwDecodeDiagSummary("eom");
             emit diagnosticsChanged();
             emit playbackFinished();
             return;
@@ -2914,6 +2997,28 @@ void PreviewStageMediaHost::handleDecodedVideoFrame(const QVideoFrame& frame,
     videoFrameElapsed_.restart();
     ++videoFrameCountTotal_;
 
+#if defined(Q_OS_WIN) && defined(MIACODE_USE_QTAVPLAYER)
+    // HW-decode diag: this is the first DISPLAYED frame after a seek (skipped catch-up
+    // frames are not emitted as videoFrame). Latency since the demuxer seek landed +
+    // the catch-up GOP-burst count classify S-SEEK (burst>0 & latency spike, steady
+    // state clean) vs S-PACE (steady interval_max also high). One line per seek.
+    if (seekLatencyPending_) {
+        seekLatencyPending_ = false;
+        const qint64 latencyMs = seekCatchupTimer_.isValid() ? seekCatchupTimer_.elapsed() : -1;
+        const unsigned long long catchupSkips = qavTakePreviewCatchupSkipCount();
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("preview/seek_landing"),
+            QString("landing_latency_ms=%1 catchup_skips=%2 first_pts_ms=%3 "
+                    "interval_avg_ms=%4 interval_max_ms=%5")
+                .arg(latencyMs)
+                .arg(catchupSkips)
+                .arg(ptsSeconds >= 0.0 ? qRound64(ptsSeconds * 1000.0) : -1)
+                .arg(videoFrameIntervalAvgMs(), 0, 'f', 1)
+                .arg(videoFrameIntervalMaxMs(), 0, 'f', 1));
+    }
+#endif
+
     if (firstFrameForSource) {
         // Frame size + rotation diagnostics for the PV-scaling bug: phone PVs
         // carrying rotation metadata can flip portrait<->landscape. FFmpeg
@@ -2959,6 +3064,52 @@ void PreviewStageMediaHost::handleDecodedVideoFrame(const QVideoFrame& frame,
     updateVideoFrameStallState(true);
     emit playbackPositionChanged(lastTimelineSecond_);
     emit diagnosticsChanged();
+}
+
+void PreviewStageMediaHost::emitHwDecodeDiagSummary(const char* reason)
+{
+#if defined(Q_OS_WIN) && defined(MIACODE_USE_QTAVPLAYER)
+    // Form-A cumulative counter summary, drained on the GUI thread at low frequency
+    // (seek / end-of-media) — never per frame on the render/decode threads, which only
+    // do relaxed-atomic increments. Localizes the bug class without a per-frame log:
+    // coded!=display => H-CROP candidate; copy_fail/acq_timeout spikes => bridge drops;
+    // res_changes correlate format churn with artifact onset. Also flushes any pending
+    // D3D11 debug-layer (typed-SRV/NV12) messages from the H2 shared device.
+    QAVPreviewDiagCounters c{};
+    qavGetPreviewDiagCounters(&c);
+    if (c.copiedFramesSingle == 0 && c.copiedFramesTwoDevice == 0 && c.copyFailures == 0) {
+        return;  // nothing decoded yet — skip stale-zero lines
+    }
+    miacode::preview::drainSharedPreviewD3D11DebugMessages();
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/hwdecode_summary"),
+        QString("reason=%1 path=%2 copied_single=%3 copied_two=%4 tex_created=%5 "
+                "acq_timeout=%6 copy_fail=%7 res_changes=%8 dumped=%9 "
+                "completion_waits=%10 completion_wait_timeouts=%11 frames_decode_error=%12 "
+                "corrupt_dropped=%13 codec=%14 coded=%15x%16 disp=%17x%18 fmt=0x%19")
+            .arg(QString::fromLatin1(reason))
+            .arg(c.lastPath == 1 ? QStringLiteral("single")
+                                 : c.lastPath == 0 ? QStringLiteral("two-device")
+                                                   : QStringLiteral("none"))
+            .arg(c.copiedFramesSingle)
+            .arg(c.copiedFramesTwoDevice)
+            .arg(c.texturesCreated)
+            .arg(c.acquireSyncTimeouts)
+            .arg(c.copyFailures)
+            .arg(c.resolutionChanges)
+            .arg(c.hwFramesDumped)
+            .arg(c.completionWaits)
+            .arg(c.completionWaitTimeouts)
+            .arg(c.framesDecodeError)
+            .arg(c.corruptFramesDropped)
+            .arg(c.codecName != nullptr ? QString::fromLatin1(c.codecName) : QStringLiteral("?"))
+            .arg(c.lastCodedWidth).arg(c.lastCodedHeight)
+            .arg(c.lastDisplayWidth).arg(c.lastDisplayHeight)
+            .arg(c.lastDxgiFormat, 0, 16));
+#else
+    Q_UNUSED(reason);
+#endif
 }
 
 void PreviewStageMediaHost::settlePendingSeekAcks(double mediaSecondStart, double mediaSecondEnd)
