@@ -109,6 +109,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp
     src/app/mainwindow/sections/timeline/MainWindow.TimelineLayout.cpp
     src/app/mainwindow/sections/timeline/MainWindow.TimelinePlayback.cpp
+    src/app/mainwindow/sections/timeline/MainWindow.PreviewSeek.cpp
+    src/app/mainwindow/sections/timeline/MainWindow.PreviewPlaybackState.cpp
+    src/app/mainwindow/sections/timeline/MainWindow.PreviewIntroRegion.cpp
+    src/app/mainwindow/sections/timeline/MainWindow.PreviewTick.cpp
     src/app/mainwindow/sections/timeline/MainWindow.PreviewPlaybackGlue.cpp
     src/app/mainwindow/sections/validation/MainWindow.ValidationFlow.cpp
     src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp
