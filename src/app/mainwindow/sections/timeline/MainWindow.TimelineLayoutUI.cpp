@@ -1,0 +1,560 @@
+#include "MainWindow.TimelineSection.h"
+#include "../../MainWindowShared.h"
+#include "../window/MainWindow.WindowSection.h"
+
+#include "BracketScopeHighlighter.h"
+#include "DialogLocalization.h"
+#include "PlainCodeEditor.h"
+#include "QtPreviewSfxRuntime.h"
+#include "SimaiNativeParser.h"
+#include "TimelineView.h"
+#include "UiText.h"
+#include "UiTheme.h"
+#include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
+#include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
+#include "common/ChartAssetPaths.h"
+#include "common/ContentDurationConfig.h"
+#include "common/DebugLog.h"
+#include "common/DebugOptions.h"
+#include "common/PreviewInteractionConfig.h"
+#include "preview/runtime/PreviewRuntime.h"
+#include "preview/runtime/PreviewStageMediaHost.h"
+#include "core/scene/PreviewProgressStatsCache.h"
+#include "core/chart/transform/ChartBatchTransform.h"
+#include "core/chart/transform/ChartNormalization.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
+#include "tools/muri/MuriAnalyzer.h"
+#include "tools/muri/MuriPanelEntries.h"
+#include "tools/muri/MuriStaticChecker.h"
+
+#include <QtCore>
+#include <QtGui>
+#include <QtWidgets>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <mmsystem.h>
+#endif
+
+using namespace miacode::mainwindow::shared;
+
+double MainWindow::TimelineSection::previewDurationSeconds() const
+{
+    // Unified content-duration policy = max(chartEnd + tail, music) — see
+    // common/ContentDurationConfig.h. The chart end is the timeline bridge's
+    // durationSeconds (last note/beat/measure); the runtime cursors below are
+    // maxed in WITHOUT the tail so the range merely covers an active playhead.
+    double chartEndSeconds = 0.0;
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        chartEndSeconds = qMax(chartEndSeconds, state_.timelineQuickStateBridge_->durationSeconds());
+    }
+    double duration = miacode::content_duration::totalContentDurationSeconds(
+        chartEndSeconds, state_.previewTrackDurationSeconds_);
+    if (state_.qtPreviewPlaying_ && state_.qtPreviewPlaybackEndSecond_ > 0.0) {
+        duration = qMax(duration, state_.qtPreviewPlaybackEndSecond_);
+    }
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        duration = qMax(duration, state_.timelineQuickStateBridge_->playheadSeconds());
+        duration = qMax(duration, state_.timelineQuickStateBridge_->playbackEntrySeconds());
+    }
+    duration = qMax(duration, qMax(0.0, state_.qtPreviewPauseSecond_));
+    return qMax(0.0, duration);
+}
+
+double MainWindow::TimelineSection::previewPlaybackEndSeconds() const
+{
+    if (state_.qtPreviewPlaying_ && state_.qtPreviewPlaybackEndSecond_ > 0.0) {
+        return qMax(0.0, state_.qtPreviewPlaybackEndSecond_);
+    }
+    // Same unified content-duration policy as previewDurationSeconds(), so
+    // playback auto-stops exactly where the slider/total duration ends.
+    double chartEndSeconds = 0.0;
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        chartEndSeconds = qMax(chartEndSeconds, state_.timelineQuickStateBridge_->durationSeconds());
+    }
+    return miacode::content_duration::totalContentDurationSeconds(
+        chartEndSeconds, state_.previewTrackDurationSeconds_);
+}
+
+void MainWindow::TimelineSection::updatePreviewSliderRange()
+{
+    if (ui_.previewSlider_ == nullptr) {
+        return;
+    }
+    const int maximum = qMax(1, qRound(previewDurationSeconds() * 1000.0));
+    // Negative-time intro region (export page, 添加片头 on): the slider extends
+    // left to -introDuration so the intro can be scrubbed/played; otherwise 0.
+    const int minimum = qMin(0, qRound(exportIntroLowerBoundSeconds() * 1000.0));
+    QSignalBlocker blocker(ui_.previewSlider_);
+    ui_.previewSlider_->setMinimum(minimum);
+    ui_.previewSlider_->setMaximum(maximum);
+}
+
+void MainWindow::TimelineSection::updatePreviewSliderPosition(double second)
+{
+    if (ui_.previewSlider_ == nullptr || state_.previewScrubDragging_) {
+        return;
+    }
+    // The slider minimum is negative while the intro region is shown, so clamp to
+    // the slider's own minimum (not 0) to let the playhead sit in the intro.
+    const int value = qBound(
+        ui_.previewSlider_->minimum(), qRound(second * 1000.0), ui_.previewSlider_->maximum());
+    QSignalBlocker blocker(ui_.previewSlider_);
+    ui_.previewSlider_->setValue(value);
+}
+
+void MainWindow::TimelineSection::refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers)
+{
+    auto cache = std::make_shared<miacode::preview::scene::PreviewProgressStatsCache>();
+    cache->rebuild(noteMarkers);
+    state_.previewProgressStatsCache_ = cache;
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->setProgressStatsCache(state_.previewProgressStatsCache_);
+    }
+    updatePreviewObjectStats(state_.qtPreviewPauseSecond_);
+}
+
+void MainWindow::TimelineSection::clearPreviewObjectStats()
+{
+    state_.previewProgressStatsCache_.reset();
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->setProgressStatsCache(state_.previewProgressStatsCache_);
+    }
+    updatePreviewObjectStats(0.0);
+}
+
+int MainWindow::TimelineSection::updatePreviewStatsLayoutMode(int hostWidth)
+{
+    if (ui_.previewStatsCard_ == nullptr || ui_.previewStatsGridLayout_ == nullptr || ui_.previewStatsChips_.isEmpty()) {
+        return 0;
+    }
+
+    const int itemCount = ui_.previewStatsChips_.size();
+    const QWidget* gridHost = ui_.previewStatsGridLayout_->parentWidget();
+    const int horizontalSpacing = qMax(0, ui_.previewStatsGridLayout_->horizontalSpacing());
+    const int verticalSpacing = qMax(0, ui_.previewStatsGridLayout_->verticalSpacing());
+    const QMargins gridMargins = ui_.previewStatsGridLayout_->contentsMargins();
+    const int resolvedHostWidth =
+        (hostWidth >= 0)
+        ? hostWidth
+        : ((gridHost != nullptr) ? gridHost->contentsRect().width() : ui_.previewStatsCard_->contentsRect().width());
+    if (resolvedHostWidth <= 0) {
+        return ui_.previewStatsCard_->minimumHeight();
+    }
+    const int chipHeight = qMax(
+        miacode::window_parity::kPreviewStatsChipHeight,
+        !ui_.previewStatsChips_.isEmpty() && ui_.previewStatsChips_.constFirst() != nullptr
+            ? ui_.previewStatsChips_.constFirst()->sizeHint().height()
+            : miacode::window_parity::kPreviewStatsChipHeight
+    );
+    const miacode::window_parity::PreviewStatsLayout baseLayout = miacode::window_parity::computePreviewStatsLayout(
+        resolvedHostWidth,
+        itemCount,
+        horizontalSpacing,
+        verticalSpacing,
+        chipHeight,
+        gridMargins.top(),
+        gridMargins.bottom()
+    );
+    int cols = baseLayout.columns;
+    int rows = baseLayout.rows;
+
+    const QLabel* widthTemplateLabel =
+        ui_.previewTotalStatsLabel_ != nullptr ? ui_.previewTotalStatsLabel_ : ui_.previewStatsChips_.constFirst();
+    const QFontMetrics chipMetrics(widthTemplateLabel != nullptr ? widthTemplateLabel->font() : owner_.font());
+    constexpr int kPreviewStatsChipHorizontalPadding = 18;
+    const int maxChipHintWidth =
+        chipMetrics.horizontalAdvance(QStringLiteral("Total  xxxxx/xxxxx"))
+        + kPreviewStatsChipHorizontalPadding;
+
+    auto availableWidthForColumns = [&](int columnCount) {
+        const int totalSpacing = horizontalSpacing * qMax(0, columnCount - 1);
+        return qMax(0, resolvedHostWidth - gridMargins.left() - gridMargins.right() - totalSpacing);
+    };
+
+    constexpr int kMinimumAllowedStatsColumns = 2;
+    while (cols > kMinimumAllowedStatsColumns) {
+        const int availableWidth = availableWidthForColumns(cols);
+        const int columnWidth = cols > 0 ? (availableWidth / cols) : 0;
+        if (columnWidth >= maxChipHintWidth) {
+            break;
+        }
+        --cols;
+    }
+    rows = qMax(1, (itemCount + cols - 1) / cols);
+    const bool structureChanged = (rows != state_.previewStatsLayoutRows_) || (cols != state_.previewStatsLayoutCols_);
+    state_.previewStatsLayoutRows_ = rows;
+    state_.previewStatsLayoutCols_ = cols;
+
+    const int cardHeight = 16
+        + qMax(0, gridMargins.top())
+        + qMax(0, gridMargins.bottom())
+        + rows * chipHeight
+        + qMax(0, rows - 1) * verticalSpacing;
+    ui_.previewStatsCard_->setMinimumHeight(cardHeight);
+
+    if (structureChanged) {
+        while (QLayoutItem* item = ui_.previewStatsGridLayout_->takeAt(0)) {
+            delete item;
+        }
+        for (int col = 0; col < 6; ++col) {
+            ui_.previewStatsGridLayout_->setColumnStretch(col, 0);
+            ui_.previewStatsGridLayout_->setColumnMinimumWidth(col, 0);
+        }
+        for (int row = 0; row < 6; ++row) {
+            ui_.previewStatsGridLayout_->setRowStretch(row, 0);
+        }
+
+        for (int i = 0; i < itemCount; ++i) {
+            const int row = i / cols;
+            const int col = i % cols;
+            ui_.previewStatsGridLayout_->addWidget(ui_.previewStatsChips_.at(i), row, col);
+        }
+        for (int col = 0; col < cols; ++col) {
+            ui_.previewStatsGridLayout_->setColumnStretch(col, 1);
+        }
+        for (int row = 0; row < rows; ++row) {
+            ui_.previewStatsGridLayout_->setRowStretch(row, 1);
+        }
+    }
+
+    // Keep chip widths column-driven and independent from text metrics.
+    const int totalSpacing = horizontalSpacing * qMax(0, cols - 1);
+    const int availableWidth = qMax(0, resolvedHostWidth - gridMargins.left() - gridMargins.right() - totalSpacing);
+    const int columnWidth = (cols > 0) ? (availableWidth / cols) : 0;
+    for (QLabel* chip : ui_.previewStatsChips_) {
+        if (chip == nullptr) {
+            continue;
+        }
+        chip->setFixedWidth(qMax(0, columnWidth));
+    }
+
+    return cardHeight;
+}
+
+int MainWindow::TimelineSection::previewStatsMinimumHeightForPanelWidth(int panelWidth) const
+{
+    const int statsHostWidth = qMax(0, panelWidth - kPreviewPanelMarginX * 2 - 16);
+    if (ui_.previewStatsGridLayout_ == nullptr || ui_.previewStatsChips_.isEmpty()) {
+        return miacode::window_parity::computePreviewStatsLayout(statsHostWidth).minCardHeight;
+    }
+
+    const int itemCount = ui_.previewStatsChips_.size();
+    const int horizontalSpacing = qMax(0, ui_.previewStatsGridLayout_->horizontalSpacing());
+    const int verticalSpacing = qMax(0, ui_.previewStatsGridLayout_->verticalSpacing());
+    const QMargins gridMargins = ui_.previewStatsGridLayout_->contentsMargins();
+    const int chipHeight = qMax(
+        miacode::window_parity::kPreviewStatsChipHeight,
+        ui_.previewStatsChips_.constFirst() != nullptr
+            ? ui_.previewStatsChips_.constFirst()->sizeHint().height()
+            : miacode::window_parity::kPreviewStatsChipHeight
+    );
+    const QLabel* widthTemplateLabel =
+        ui_.previewTotalStatsLabel_ != nullptr ? ui_.previewTotalStatsLabel_ : ui_.previewStatsChips_.constFirst();
+    const QFontMetrics chipMetrics(widthTemplateLabel != nullptr ? widthTemplateLabel->font() : owner_.font());
+    constexpr int kPreviewStatsChipHorizontalPadding = 18;
+    const int minChipWidth =
+        chipMetrics.horizontalAdvance(QStringLiteral("Total  xxxxx/xxxxx"))
+        + kPreviewStatsChipHorizontalPadding;
+    int cols = qMin(
+        itemCount,
+        statsHostWidth >= minChipWidth * miacode::window_parity::kPreviewStatsWideLayoutCols
+                + horizontalSpacing * qMax(0, miacode::window_parity::kPreviewStatsWideLayoutCols - 1)
+            ? miacode::window_parity::kPreviewStatsWideLayoutCols
+            : miacode::window_parity::kPreviewStatsNarrowLayoutCols
+    );
+    constexpr int kMinimumAllowedStatsColumns = 2;
+    const auto availableWidthForColumns = [&](int columnCount) {
+        const int totalSpacing = horizontalSpacing * qMax(0, columnCount - 1);
+        return qMax(0, statsHostWidth - gridMargins.left() - gridMargins.right() - totalSpacing);
+    };
+    while (cols > kMinimumAllowedStatsColumns) {
+        const int availableColumnWidth = availableWidthForColumns(cols);
+        const int columnWidth = cols > 0 ? (availableColumnWidth / cols) : 0;
+        if (columnWidth >= minChipWidth) {
+            break;
+        }
+        --cols;
+    }
+    cols = qMax(1, cols);
+    const int rows = qMax(1, (itemCount + cols - 1) / cols);
+    return 16
+        + qMax(0, gridMargins.top())
+        + qMax(0, gridMargins.bottom())
+        + rows * chipHeight
+        + qMax(0, rows - 1) * verticalSpacing;
+}
+
+double MainWindow::TimelineSection::normalizedPreviewCanvasAspectRatio(double ratio) const
+{
+    if (!qIsFinite(ratio)) {
+        return 1.0;
+    }
+    return qBound(1.0, ratio, 3.0);
+}
+
+void MainWindow::TimelineSection::setPreviewCanvasAspectRatio(double ratio, bool persistState)
+{
+    const double normalized = normalizedPreviewCanvasAspectRatio(ratio);
+    if (qAbs(state_.previewCanvasAspectRatio_ - normalized) <= 1e-6) {
+        return;
+    }
+    const double previousRatio = state_.previewCanvasAspectRatio_;
+    state_.previewCanvasAspectRatio_ = normalized;
+    if (normalized + 1e-6 < previousRatio) {
+        updatePreviewWorkspaceLayout();
+    } else {
+        updatePreviewPanelLayout();
+    }
+    owner_.refreshQuickShellPreviewCompositeSurfaceState();
+    if (ui_.workspaceSplitter_ != nullptr && ui_.previewPanel_ != nullptr && ui_.previewLeftColumn_ != nullptr) {
+        const bool restoringToSquare = qAbs(normalized - 1.0) <= 1e-6 && previousRatio > 1.0 + 1e-6;
+        const int availableWidth = qMax(0, ui_.workspaceSplitter_->contentsRect().width());
+        const int availableHeight = qMax(0, ui_.workspaceSplitter_->contentsRect().height());
+        const int leftMinWidth = qMax(
+            miacode::window_parity::kWorkspaceContentMinWidth,
+            ui_.previewLeftColumn_->minimumWidth());
+        const int controlHeight =
+            ui_.previewControlCard_ != nullptr
+                ? qMax(ui_.previewControlCard_->minimumSizeHint().height(), ui_.previewControlCard_->sizeHint().height())
+                : 0;
+        const int targetRightWidth =
+            restoringToSquare
+                ? qMax(kEmbeddedPreviewPanelMinWidth, ui_.previewPanel_->width())
+                : miacode::window_parity::computePreviewPanelTargetWidthForAdaptiveStats(
+                    availableWidth,
+                    availableHeight,
+                    leftMinWidth,
+                    controlHeight,
+                    normalized
+                );
+        const int clampedRightWidth = qBound(
+            kEmbeddedPreviewPanelMinWidth,
+            targetRightWidth,
+            // Reserve the left column's minimum: a wider aspect ratio must
+            // letterbox the preview, never squeeze the content column below
+            // its design-width budget (spec: kWorkspaceContentMinWidth).
+            qMax(kEmbeddedPreviewPanelMinWidth, availableWidth - leftMinWidth)
+        );
+        ui_.previewPanel_->setMinimumWidth(clampedRightWidth);
+        if (availableWidth > 0) {
+            const int leftWidth = qMax(leftMinWidth, availableWidth - clampedRightWidth);
+            ui_.workspaceSplitter_->setSizes({leftWidth, clampedRightWidth});
+        }
+    }
+    refreshLayoutAfterPageSwitch();
+    if (persistState) {
+        owner_.savePortableState();
+    }
+}
+
+void MainWindow::TimelineSection::updatePreviewWorkspaceLayout()
+{
+    updatePreviewPanelLayout();
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.outlineDock_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.workspaceContentWidget_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
+    owner_.windowSection_->updateEditorFindBarGeometry();
+    owner_.windowSection_->applyFindOverlayInset();
+}
+
+void MainWindow::TimelineSection::cacheWorkspaceLayoutSizes()
+{
+}
+
+void MainWindow::TimelineSection::restoreWorkspaceLayoutSizes()
+{
+}
+
+void MainWindow::TimelineSection::setWorkspacePanelsSwapped(bool swapped, bool persistState)
+{
+    if (state_.workspacePanelsSwapped_ == swapped) {
+        if (ui_.swapWorkspaceSidesAction_ != nullptr) {
+            ui_.swapWorkspaceSidesAction_->blockSignals(true);
+            ui_.swapWorkspaceSidesAction_->setChecked(state_.workspacePanelsSwapped_);
+            ui_.swapWorkspaceSidesAction_->blockSignals(false);
+        }
+        return;
+    }
+
+    cacheWorkspaceLayoutSizes();
+    state_.workspacePanelsSwapped_ = swapped;
+    applyWorkspacePanelArrangement();
+    if (persistState) {
+        owner_.savePortableState();
+    }
+}
+
+void MainWindow::TimelineSection::applyWorkspacePanelArrangement()
+{
+    if (ui_.swapWorkspaceSidesAction_ != nullptr) {
+        ui_.swapWorkspaceSidesAction_->blockSignals(true);
+        ui_.swapWorkspaceSidesAction_->setChecked(state_.workspacePanelsSwapped_);
+        ui_.swapWorkspaceSidesAction_->setIcon(
+            makeMenuSelectionCheckIcon(UiTheme::colors().accent, state_.workspacePanelsSwapped_)
+        );
+        ui_.swapWorkspaceSidesAction_->blockSignals(false);
+    }
+    refreshLayoutAfterPageSwitch();
+}
+
+void MainWindow::TimelineSection::refreshLayoutAfterPageSwitch()
+{
+    if (ui_.previewLeftColumn_ != nullptr) {
+        ui_.previewLeftColumn_->updateGeometry();
+        if (QLayout* layout = ui_.previewLeftColumn_->layout(); layout != nullptr) {
+            layout->activate();
+        }
+    }
+    if (ui_.editorStack_ != nullptr) {
+        ui_.editorStack_->updateGeometry();
+    }
+    if (ui_.bottomTabs_ != nullptr) {
+        ui_.bottomTabs_->updateGeometry();
+    }
+    if (ui_.workspaceSplitter_ != nullptr) {
+        ui_.workspaceSplitter_->updateGeometry();
+        if (QLayout* layout = ui_.workspaceSplitter_->layout(); layout != nullptr) {
+            layout->activate();
+        }
+    }
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.outlineDock_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.workspaceContentWidget_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
+    owner_.updateEditorHeaderLayoutMode();
+    if (ui_.timelineView_ != nullptr) {
+        ui_.timelineView_->updateGeometry();
+        ui_.timelineView_->viewport()->update();
+    }
+}
+
+void MainWindow::TimelineSection::updatePreviewPanelLayout(int panelWidthOverride, int panelHeightOverride)
+{
+    if (ui_.previewPanel_ != nullptr) {
+        const QRect panelRect = ui_.previewPanel_->contentsRect();
+        const int resolvedWidth = panelWidthOverride >= 0 ? panelWidthOverride : panelRect.width();
+        const int resolvedHeight = panelHeightOverride >= 0 ? panelHeightOverride : panelRect.height();
+        const int controlHeight =
+            ui_.previewControlCard_ != nullptr
+                ? qMax(ui_.previewControlCard_->minimumSizeHint().height(), ui_.previewControlCard_->sizeHint().height())
+                : 0;
+        const miacode::window_parity::PreviewPanelLayout layout =
+            miacode::window_parity::computePreviewPanelLayout(
+                resolvedWidth,
+                resolvedHeight,
+                controlHeight,
+                state_.previewCanvasAspectRatio_
+            );
+
+        if (ui_.previewCanvasFrame_ != nullptr) {
+            ui_.previewCanvasFrame_->setGeometry(
+                panelRect.x() + layout.previewX,
+                panelRect.y() + layout.previewY,
+                layout.previewWidth,
+                layout.previewHeight
+            );
+            ui_.previewCanvasFrame_->show();
+        }
+        if (ui_.previewCanvasContainer_ != nullptr && ui_.previewCanvasFrame_ != nullptr) {
+            ui_.previewCanvasContainer_->setGeometry(ui_.previewCanvasFrame_->contentsRect());
+            ui_.previewCanvasContainer_->show();
+        }
+        if (ui_.previewControlCard_ != nullptr) {
+            ui_.previewControlCard_->setGeometry(
+                panelRect.x() + layout.controlX,
+                panelRect.y() + layout.controlY,
+                layout.controlWidth,
+                controlHeight
+            );
+            ui_.previewControlCard_->show();
+        }
+        if (ui_.previewStatsCard_ != nullptr) {
+            const int statsHeight = qMax(layout.statsHeight, previewStatsMinimumHeightForPanelWidth(layout.statsWidth));
+            ui_.previewStatsCard_->setGeometry(
+                panelRect.x() + layout.statsX,
+                panelRect.y() + layout.statsY,
+                layout.statsWidth,
+                statsHeight
+            );
+            updatePreviewStatsLayoutMode(layout.statsHostWidth);
+            ui_.previewStatsCard_->show();
+        }
+    }
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
+    owner_.updatePreviewPlaybackRateToastGeometry();
+}
+
+void MainWindow::TimelineSection::updatePreviewObjectStats(double second)
+{
+    if (ui_.previewTapStatsLabel_ == nullptr
+        || ui_.previewHoldStatsLabel_ == nullptr
+        || ui_.previewSlideStatsLabel_ == nullptr
+        || ui_.previewTouchStatsLabel_ == nullptr
+        || ui_.previewBreakStatsLabel_ == nullptr
+        || ui_.previewTotalStatsLabel_ == nullptr) {
+        return;
+    }
+
+    const miacode::preview::scene::PreviewObjectStatsSnapshot stats =
+        state_.previewProgressStatsCache_ != nullptr
+        ? state_.previewProgressStatsCache_->snapshotAt(second)
+        : miacode::preview::scene::PreviewObjectStatsSnapshot();
+
+    const auto fmt = [](const QString& name, int played, int total) {
+        return QString("%1  %2/%3")
+            .arg(name.leftJustified(5, QChar(' '), true))
+            .arg(played)
+            .arg(total);
+    };
+    ui_.previewTapStatsLabel_->setText(fmt("Tap", stats.tapPlayed, stats.tapTotal));
+    ui_.previewHoldStatsLabel_->setText(fmt("Hold", stats.holdPlayed, stats.holdTotal));
+    ui_.previewSlideStatsLabel_->setText(fmt("Slide", stats.slidePlayed, stats.slideTotal));
+    ui_.previewTouchStatsLabel_->setText(fmt("Touch", stats.touchPlayed, stats.touchTotal));
+    ui_.previewBreakStatsLabel_->setText(fmt("Break", stats.breakPlayed, stats.breakTotal));
+    ui_.previewTotalStatsLabel_->setText(fmt("Total", stats.totalPlayed, stats.totalCount));
+    updatePreviewStatsLayoutMode(-1);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
+}
+
+QString MainWindow::TimelineSection::formatPreviewTimestamp(double second) const
+{
+    const int totalCentiseconds = qMax(0, qRound(second * 100.0));
+    const int minutes = totalCentiseconds / 6000;
+    const int secondsPart = (totalCentiseconds / 100) % 60;
+    const int centiseconds = totalCentiseconds % 100;
+    return QString("%1:%2.%3")
+        .arg(minutes, 2, 10, QChar('0'))
+        .arg(secondsPart, 2, 10, QChar('0'))
+        .arg(centiseconds, 2, 10, QChar('0'));
+}
+
+void MainWindow::TimelineSection::showPreviewSliderTimeHint(int sliderValue)
+{
+    if (ui_.previewSlider_ == nullptr) {
+        return;
+    }
+    const double second = static_cast<double>(sliderValue) / 1000.0;
+    QStyleOptionSlider option;
+    option.initFrom(ui_.previewSlider_);
+    option.subControls = QStyle::SC_SliderHandle;
+    option.orientation = ui_.previewSlider_->orientation();
+    option.minimum = ui_.previewSlider_->minimum();
+    option.maximum = ui_.previewSlider_->maximum();
+    option.sliderPosition = sliderValue;
+    option.sliderValue = sliderValue;
+    option.upsideDown = false;
+    const QRect handleRect = ui_.previewSlider_->style()->subControlRect(
+        QStyle::CC_Slider,
+        &option,
+        QStyle::SC_SliderHandle,
+        ui_.previewSlider_
+    );
+    const QPoint global = ui_.previewSlider_->mapToGlobal(handleRect.center() + QPoint(0, -18));
+    QToolTip::showText(global, formatPreviewTimestamp(second), ui_.previewSlider_, ui_.previewSlider_->rect(), 600);
+}

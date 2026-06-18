@@ -1,0 +1,486 @@
+﻿#include "MainWindow.DocumentSection.h"
+#include "../../MainWindowShared.h"
+#include "../window/MainWindow.WindowSection.h"
+
+#include "BracketScopeHighlighter.h"
+#include "DialogLocalization.h"
+#include "PlainCodeEditor.h"
+#include "QtPreviewSfxRuntime.h"
+#include "SimaiNativeParser.h"
+#include "TimelineView.h"
+#include "UiText.h"
+#include "UiTheme.h"
+#include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
+#include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
+#include "common/ChartAssetPaths.h"
+#include "common/CrashRecovery.h"
+#include "common/DebugLog.h"
+#include "common/DebugOptions.h"
+#include "common/OperationLog.h"
+#include "common/ProjectPreferences.h"
+#include "common/WaveformCache.h"
+#include "preview/runtime/PreviewRuntime.h"
+#include "preview/runtime/PreviewStageMediaHost.h"
+#include "core/scene/PreviewProgressStatsCache.h"
+#include "core/chart/transform/ChartBatchTransform.h"
+#include "core/chart/transform/ChartNormalization.h"
+#include "tools/muri/MuriAnalyzer.h"
+#include "tools/muri/MuriPanelEntries.h"
+#include "tools/muri/MuriStaticChecker.h"
+
+#include <algorithm>
+
+#include <QtCore>
+#include <QtGui>
+#include <QtWidgets>
+
+using namespace miacode::mainwindow::shared;
+#include "MainWindow.DocumentFlow.Internal.h"
+
+using namespace miacode::mainwindow::documentflow_detail;
+
+namespace {
+
+struct PreparedDocumentOpenPayload {
+    bool success = false;
+    bool usedSystemEncoding = false;
+    QString normalizedPath;
+    SimaiDocument document;
+    QString resolvedTrackPath;
+    double trackDurationSeconds = 0.0;
+    bool hasTrackDuration = false;
+    qint64 readElapsedMs = 0;
+    qint64 decodeElapsedMs = 0;
+    qint64 parseElapsedMs = 0;
+    qint64 trackProbeElapsedMs = 0;
+    qint64 totalElapsedMs = 0;
+};
+
+PreparedDocumentOpenPayload prepareDocumentOpenPayload(const QString& path, bool probeTrackDuration)
+{
+    PreparedDocumentOpenPayload payload;
+    payload.normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+    if (payload.normalizedPath.isEmpty()) {
+        return payload;
+    }
+
+    QFile file(payload.normalizedPath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return payload;
+    }
+
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    QElapsedTimer phaseTimer;
+    phaseTimer.start();
+    const QByteArray bytes = file.readAll();
+    payload.readElapsedMs = phaseTimer.elapsed();
+
+    phaseTimer.restart();
+    QString text;
+    if (bytes.startsWith("\xEF\xBB\xBF")) {
+        text = QString::fromUtf8(bytes.mid(3));
+    } else {
+        QStringDecoder utf8Decoder(QStringConverter::Utf8);
+        text = utf8Decoder.decode(bytes);
+        if (utf8Decoder.hasError()) {
+            QStringDecoder systemDecoder(QStringConverter::System);
+            text = systemDecoder.decode(bytes);
+            payload.usedSystemEncoding = true;
+        }
+    }
+    payload.decodeElapsedMs = phaseTimer.elapsed();
+
+    phaseTimer.restart();
+    payload.document = SimaiDocument::fromText(text);
+    payload.parseElapsedMs = phaseTimer.elapsed();
+
+    if (probeTrackDuration) {
+        payload.resolvedTrackPath = miacode::chart_assets::resolveTrackPath(payload.normalizedPath);
+        phaseTimer.restart();
+        if (!payload.resolvedTrackPath.isEmpty()) {
+            payload.trackDurationSeconds = probeAudioDurationSeconds(payload.resolvedTrackPath);
+            payload.hasTrackDuration = payload.trackDurationSeconds > 0.0;
+        }
+        payload.trackProbeElapsedMs = phaseTimer.elapsed();
+    }
+
+    payload.totalElapsedMs = totalTimer.elapsed();
+    payload.success = true;
+    return payload;
+}
+
+}  // namespace
+
+bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
+{
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+
+    QElapsedTimer autosaveTimer;
+    autosaveTimer.start();
+    runAutosaveCheck(false);
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/document"),
+        QStringLiteral("autosave_check"),
+        autosaveTimer.elapsed(),
+        QStringLiteral("trigger=maybe_save_before_continue allow_history=0")
+    );
+
+    if (!state_.documentDirty_ && !state_.currentFieldDirty_) {
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/document"),
+            QStringLiteral("maybe_save_before_continue"),
+            totalTimer.elapsed(),
+            QStringLiteral("result=clean_document")
+        );
+        return true;
+    }
+
+    QElapsedTimer dialogTimer;
+    dialogTimer.start();
+    const UnsavedChangesChoice choice = showUnsavedChangesDialog(
+        &owner_,
+        uiText("dialog.unsaved_changes.title", "Unsaved Changes"),
+        uiText("dialog.unsaved_changes.message", "Current document has unsaved changes. Save before continue?")
+    );
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/document"),
+        QStringLiteral("unsaved_document_dialog"),
+        dialogTimer.elapsed(),
+        QStringLiteral("choice=%1").arg(unsavedChangesChoiceName(choice))
+    );
+    if (choice == UnsavedChangesChoice::Save) {
+        QElapsedTimer saveTimer;
+        saveTimer.start();
+        const bool saved = onSaveFile();
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/document"),
+            QStringLiteral("on_save_file"),
+            saveTimer.elapsed(),
+            QStringLiteral("trigger=maybe_save_before_continue result=%1")
+                .arg(saved ? QStringLiteral("saved") : QStringLiteral("failed"))
+        );
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/document"),
+            QStringLiteral("maybe_save_before_continue"),
+            totalTimer.elapsed(),
+            QStringLiteral("result=%1").arg(saved ? QStringLiteral("saved") : QStringLiteral("save_failed"))
+        );
+        return saved;
+    }
+    const bool shouldContinue = choice == UnsavedChangesChoice::Discard;
+    if (shouldContinue) {
+        anchorCurrentFieldCleanState();
+        state_.documentDirty_ = false;
+        state_.currentFieldDirty_ = false;
+        updateDirtyState();
+        owner_.updateWindowTitle();
+    }
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/document"),
+        QStringLiteral("maybe_save_before_continue"),
+        totalTimer.elapsed(),
+        QStringLiteral("result=%1").arg(shouldContinue ? QStringLiteral("discard") : QStringLiteral("cancel"))
+    );
+    return shouldContinue;
+}
+
+void MainWindow::DocumentSection::onNewFile()
+{
+    MC_OP("MainWindow::DocumentSection::onNewFile");
+    if (!maybeSaveBeforeContinue()) {
+        return;
+    }
+
+    const QString targetDirectory = QFileDialog::getExistingDirectory(
+        &owner_,
+        UiText::isChineseUi() ? QStringLiteral("选择谱面文件夹") : QStringLiteral("Select Chart Folder"),
+        owner_.resolveInitialOpenDirectory(),
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
+    );
+    if (targetDirectory.isEmpty()) {
+        return;
+    }
+
+    const QString normalizedDirectory = QDir::cleanPath(targetDirectory);
+    const QString targetPath = QDir(normalizedDirectory).filePath(QStringLiteral("maidata.txt"));
+    if (QFileInfo::exists(targetPath)) {
+        const QMessageBox::StandardButton choice = UiDialogs::showMessageBox(
+            QMessageBox::Warning,
+            &owner_,
+            UiText::isChineseUi() ? QStringLiteral("文件已存在") : QStringLiteral("File Already Exists"),
+            UiText::isChineseUi()
+                ? QStringLiteral("所选文件夹下已存在 maidata.txt，是否覆盖？")
+                : QStringLiteral("maidata.txt already exists in the selected folder. Overwrite it?"),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No
+        );
+        if (choice != QMessageBox::Yes) {
+            return;
+        }
+    }
+
+    const SimaiDocument newDocument = SimaiDocument::createEmpty();
+    QStringEncoder encoder(QStringConverter::Utf8);
+    const QByteArray payload = encoder.encode(newDocument.toText());
+    QSaveFile file(targetPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Create Failed", "Cannot write file:\n" + targetPath);
+        return;
+    }
+    if (file.write(payload) != payload.size() || !file.commit()) {
+        UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Create Failed", "Write failed:\n" + targetPath);
+        return;
+    }
+
+    cancelPendingStartupRestore();
+    loadDocument(newDocument);
+    owner_.clearValidationCache();
+    state_.currentEncoding_ = TextEncoding::Utf8;
+    owner_.setCurrentFilePath(targetPath);
+    owner_.statusBar()->showMessage(QString("Created: %1").arg(targetPath));
+}
+
+void MainWindow::DocumentSection::onOpenFile()
+{
+    MC_OP("MainWindow::DocumentSection::onOpenFile");
+    owner_.windowSection_->logTopLevelWindowSnapshot("open_file_flow/begin");
+    const bool canContinue = maybeSaveBeforeContinue();
+    if (!canContinue) {
+        owner_.windowSection_->logTopLevelWindowSnapshot("open_file_flow/cancelled_before_dialog");
+        return;
+    }
+
+    owner_.windowSection_->logWindowGeometryDebug("open_file_before_dialog");
+    owner_.windowSection_->logTopLevelWindowSnapshot("open_file_before_dialog");
+    const QString path = QFileDialog::getOpenFileName(
+        &owner_,
+        QStringLiteral("Open simai file"),
+        owner_.resolveInitialOpenDirectory(),
+        QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
+    );
+    owner_.windowSection_->logWindowGeometryDebug("open_file_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
+    owner_.windowSection_->logTopLevelWindowSnapshot("open_file_after_dialog");
+    if (path.isEmpty()) {
+        return;
+    }
+    openFileAtPath(path, true, true);
+}
+
+bool MainWindow::DocumentSection::openFileAtPath(const QString& path, bool showStatusMessage, bool showErrors)
+{
+    MC_OP("MainWindow::DocumentSection::openFileAtPath");
+    _mc_op_.note(QStringLiteral("path=%1").arg(path));
+    const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+    if (normalizedPath.isEmpty()) {
+        _mc_op_.fail(QStringLiteral("empty path"));
+        return false;
+    }
+
+    cancelPendingStartupRestore();
+    const PreparedDocumentOpenPayload payload = prepareDocumentOpenPayload(normalizedPath, true);
+    if (!payload.success) {
+        if (showErrors) {
+            UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Open Failed", "Cannot open file:\n" + normalizedPath);
+        }
+        _mc_op_.fail(QStringLiteral("prepareDocumentOpenPayload failed"));
+        return false;
+    }
+
+    applyOpenedDocumentState(
+        payload.normalizedPath,
+        payload.usedSystemEncoding ? TextEncoding::System : TextEncoding::Utf8,
+        payload.document,
+        showStatusMessage,
+        payload.hasTrackDuration ? payload.trackDurationSeconds : -1.0
+    );
+    return true;
+}
+
+bool MainWindow::DocumentSection::restoreLastSessionFile()
+{
+    MC_OP("MainWindow::DocumentSection::restoreLastSessionFile");
+    _mc_op_.note(QStringLiteral("path=%1").arg(state_.lastSessionFilePath_));
+    if (state_.lastSessionFilePath_.isEmpty()) {
+        return false;  // not a failure — first run or cleared session
+    }
+    const QFileInfo fileInfo(state_.lastSessionFilePath_);
+    if (!fileInfo.exists() || !fileInfo.isFile()) {
+        _mc_op_.fail(QStringLiteral("session_file_missing"));
+        state_.lastSessionFilePath_.clear();
+        return false;
+    }
+    const PreparedDocumentOpenPayload payload = prepareDocumentOpenPayload(fileInfo.absoluteFilePath(), true);
+    if (!payload.success) {
+        _mc_op_.fail(QStringLiteral("prepareDocumentOpenPayload failed"));
+        return false;
+    }
+    applyOpenedDocumentState(
+        payload.normalizedPath,
+        payload.usedSystemEncoding ? TextEncoding::System : TextEncoding::Utf8,
+        payload.document,
+        false,
+        payload.hasTrackDuration ? payload.trackDurationSeconds : -1.0
+    );
+    return true;
+}
+
+void MainWindow::DocumentSection::scheduleStartupRestoreLastSessionFile()
+{
+    if (!state_.autoRestoreLastSessionFile_ || state_.lastSessionFilePath_.isEmpty()) {
+        state_.startupRestorePending_ = false;
+        return;
+    }
+
+    const QFileInfo fileInfo(state_.lastSessionFilePath_);
+    if (!fileInfo.exists() || !fileInfo.isFile()) {
+        state_.lastSessionFilePath_.clear();
+        state_.startupRestorePending_ = false;
+        return;
+    }
+
+    state_.startupRestorePending_ = true;
+    const quint64 generation = ++state_.startupRestoreGeneration_;
+    const QString normalizedPath = fileInfo.absoluteFilePath();
+    QPointer<MainWindow> guard(&owner_);
+    QThreadPool* const pool = state_.previewWarmupPool_ != nullptr
+        ? state_.previewWarmupPool_
+        : QThreadPool::globalInstance();
+    pool->start([guard, generation, normalizedPath]() {
+        const PreparedDocumentOpenPayload payload = prepareDocumentOpenPayload(normalizedPath, true);
+        if (guard.isNull()) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            guard.data(),
+            [guard, generation, payload]() {
+                if (guard.isNull() || generation != guard->state_.startupRestoreGeneration_ || !guard->state_.startupRestorePending_) {
+                    return;
+                }
+
+                guard->state_.startupRestorePending_ = false;
+                if (!payload.success) {
+                    appendStartupTimingStage("mainwindow/startup_restore_prepare_failed", 0, 0);
+                    guard->scheduleDeferredQuickShellStartupStageMediaLoadIfReady();
+                    return;
+                }
+
+                PreparedStartupRestoreDocument prepared;
+                prepared.generation = generation;
+                prepared.normalizedPath = payload.normalizedPath;
+                prepared.document = payload.document;
+                prepared.encodingUsed = payload.usedSystemEncoding ? TextEncoding::System : TextEncoding::Utf8;
+                prepared.resolvedTrackPath = payload.resolvedTrackPath;
+                prepared.trackDurationSeconds = payload.trackDurationSeconds;
+                prepared.hasTrackDuration = payload.hasTrackDuration;
+                prepared.readElapsedMs = payload.readElapsedMs;
+                prepared.decodeElapsedMs = payload.decodeElapsedMs;
+                prepared.parseElapsedMs = payload.parseElapsedMs;
+                prepared.trackProbeElapsedMs = payload.trackProbeElapsedMs;
+                prepared.totalElapsedMs = payload.totalElapsedMs;
+                guard->applyPreparedStartupRestoreDocument(prepared);
+            },
+            Qt::QueuedConnection
+        );
+    });
+}
+
+void MainWindow::DocumentSection::applyPreparedStartupRestoreDocument(const PreparedStartupRestoreDocument& prepared)
+{
+    if (prepared.generation != state_.startupRestoreGeneration_) {
+        return;
+    }
+
+    appendStartupTimingStage("mainwindow/startup_restore_read_bytes", prepared.readElapsedMs, prepared.readElapsedMs);
+    appendStartupTimingStage("mainwindow/startup_restore_decode_text", prepared.decodeElapsedMs, prepared.decodeElapsedMs);
+    appendStartupTimingStage("mainwindow/startup_restore_parse_document", prepared.parseElapsedMs, prepared.parseElapsedMs);
+    appendStartupTimingStage("mainwindow/startup_restore_probe_track_duration", prepared.trackProbeElapsedMs, prepared.trackProbeElapsedMs);
+    appendStartupTimingStage("mainwindow/startup_restore_prepare_total", prepared.totalElapsedMs, prepared.totalElapsedMs);
+
+    QElapsedTimer applyTimer;
+    applyTimer.start();
+    applyOpenedDocumentState(
+        prepared.normalizedPath,
+        prepared.encodingUsed,
+        prepared.document,
+        false,
+        prepared.hasTrackDuration ? prepared.trackDurationSeconds : -1.0
+    );
+    const qint64 applyElapsedMs = applyTimer.elapsed();
+    appendStartupTimingStage("mainwindow/startup_restore_apply_document_ui", applyElapsedMs, applyElapsedMs);
+    appendStartupTimingStage(
+        "mainwindow/restored_last_document_applied",
+        prepared.totalElapsedMs + applyElapsedMs,
+        prepared.totalElapsedMs + applyElapsedMs
+    );
+    owner_.scheduleDeferredQuickShellStartupStageMediaLoadIfReady();
+}
+
+void MainWindow::DocumentSection::applyOpenedDocumentState(
+    const QString& normalizedPath,
+    TextEncoding encodingUsed,
+    const SimaiDocument& document,
+    bool showStatusMessage,
+    double knownTrackDurationSeconds)
+{
+    MC_OP("MainWindow::DocumentSection::applyOpenedDocumentState");
+    _mc_op_.note(QStringLiteral("path=%1 dur=%2")
+                     .arg(normalizedPath)
+                     .arg(knownTrackDurationSeconds, 0, 'f', 3));
+    state_.currentEncoding_ = encodingUsed;
+    owner_.applyWaveformData(
+        miacode::waveform::makeWaveformPlaceholder(
+            knownTrackDurationSeconds > 0.0 ? knownTrackDurationSeconds : 0.0));
+    owner_.setCurrentFilePath(normalizedPath, true);
+    owner_.addRecentFilePath(normalizedPath);
+
+    // Eagerly create the crash-recovery directory BEFORE the user can
+    // edit. Without this, a crash in the first ~1 ms after a keystroke
+    // (before the lazy mkpath inside updateSnapshot has run) would find
+    // the parent directory missing and fail CreateFileW. mkpath is
+    // re-entrant and cheap on warm runs (one stat()).
+    miacode::crash_recovery::prepareForChart(normalizedPath);
+
+    // Abnormal-exit recovery intentionally reuses File -> Restore Backup.
+    // Opening the chart must finish first so the restore prompt appears over
+    // the fully loaded window and the old on-disk content remains the restore
+    // baseline, exactly like a manual menu action.
+    const bool previousSessionAbandoned =
+        miacode::crash_recovery::consumeAbandonedSessionChartMatch(normalizedPath);
+    const QString crashRecoveryPath = miacode::crash_recovery::crashRecoveryFilePath(normalizedPath);
+    const bool crashRecoveryFileExists =
+        !crashRecoveryPath.isEmpty() && QFileInfo(crashRecoveryPath).exists();
+    if (previousSessionAbandoned || crashRecoveryFileExists) {
+        state_.pendingAbnormalExitBackupRestorePath_ =
+            latestBackupRestoreFilePathForChart(normalizedPath);
+        state_.pendingAbnormalExitBackupRestoreChartPath_ =
+            state_.pendingAbnormalExitBackupRestorePath_.isEmpty() ? QString() : normalizedPath;
+        if (!state_.pendingAbnormalExitBackupRestorePath_.isEmpty()) {
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("crash_recovery"),
+                QStringLiteral("action=defer_restore_backup path=%1 chart=%2")
+                    .arg(state_.pendingAbnormalExitBackupRestorePath_, normalizedPath));
+        }
+    }
+
+    loadDocument(document);
+    owner_.refreshWaveformCache(knownTrackDurationSeconds);
+    if (!state_.pendingAbnormalExitBackupRestorePath_.isEmpty()) {
+        schedulePendingAbnormalExitBackupRestore();
+    }
+    if (showStatusMessage) {
+        owner_.statusBar()->showMessage(
+            QString("Opened: %1 (%2)")
+                .arg(QFileInfo(normalizedPath).fileName())
+                .arg(encodingUsed == TextEncoding::Utf8 ? "UTF-8" : "System encoding")
+        );
+    }
+}

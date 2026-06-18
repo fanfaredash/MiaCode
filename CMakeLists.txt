@@ -87,10 +87,17 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/MainWindowShared.h
     src/app/mainwindow/MainWindowShared.cpp
     src/app/mainwindow/sections/document/MainWindow.DocumentFlow.cpp
+    src/app/mainwindow/sections/document/MainWindow.DocumentFileFlow.cpp
+    src/app/mainwindow/sections/document/MainWindow.DocumentDesignerFlow.cpp
+    src/app/mainwindow/sections/document/MainWindow.DocumentAutosaveFlow.cpp
     src/app/mainwindow/sections/document/MainWindow.DocumentEditorState.cpp
     src/app/mainwindow/sections/document/MainWindow.DocumentTransforms.cpp
     src/app/mainwindow/sections/document/MainWindow.DocumentUi.cpp
     src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.cpp
+    src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.AudioSettings.cpp
+    src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.MediaTools.cpp
+    src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.TrackMetadata.cpp
+    src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.ExportSettings.cpp
     src/app/mainwindow/sections/dialogs/MainWindow.DialogsSection.cpp
     src/app/mainwindow/sections/editor/MainWindow.EditorDisplay.cpp
     src/app/mainwindow/sections/editor/MainWindow.EditorState.cpp
@@ -107,7 +114,14 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/preview/MainWindow.PreviewStageMediaRoute.cpp
     src/app/mainwindow/sections/preview/MainWindow.PreviewWarmupAndSettings.cpp
     src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp
+    src/app/mainwindow/sections/timeline/MainWindow.TimelinePreviewFollowSync.cpp
+    src/app/mainwindow/sections/timeline/MainWindow.TimelineAnalysisFlow.cpp
+    src/app/mainwindow/sections/timeline/MainWindow.TimelineQuickParse.cpp
     src/app/mainwindow/sections/timeline/MainWindow.TimelineLayout.cpp
+    src/app/mainwindow/sections/timeline/MainWindow.TimelineFramePacing.cpp
+    src/app/mainwindow/sections/timeline/MainWindow.TimelineFullscreenUI.cpp
+    src/app/mainwindow/sections/timeline/MainWindow.TimelineLayoutUI.cpp
+    src/app/mainwindow/sections/timeline/MainWindow.TimelineForwarding.cpp
     src/app/mainwindow/sections/timeline/MainWindow.TimelinePlayback.cpp
     src/app/mainwindow/sections/timeline/MainWindow.PreviewSeek.cpp
     src/app/mainwindow/sections/timeline/MainWindow.PreviewPlaybackState.cpp
