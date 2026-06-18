@@ -238,7 +238,10 @@ if ($PrintPlanOnly) {
 # ---- 1. toolchain ----------------------------------------------------------
 if (-not $SkipToolchainInstall) {
     Write-Host "== Toolchain (pacman) =="
-    Invoke-Msys2Bash "$(To-Msys2Path $pacmanExe) -S --needed --noconfirm make diffutils pkgconf git mingw-w64-x86_64-gcc mingw-w64-x86_64-nasm"
+    # mingw-w64-x86_64-dav1d: software AV1 decoder (libdav1d), required by the
+    # --enable-libdav1d flag in trim-allowlist.psd1 ExtraConfigureArgs. Ships a
+    # static libdav1d.a so it can link into avcodec-61.dll (self-contained).
+    Invoke-Msys2Bash "$(To-Msys2Path $pacmanExe) -S --needed --noconfirm make diffutils pkgconf git mingw-w64-x86_64-gcc mingw-w64-x86_64-nasm mingw-w64-x86_64-dav1d"
 } else {
     Write-Host "== Toolchain install skipped (-SkipToolchainInstall) =="
 }

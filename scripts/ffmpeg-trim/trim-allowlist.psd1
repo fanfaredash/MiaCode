@@ -92,7 +92,12 @@
         #    the app won't open. -static links those (and zlib, kept for PNG) INTO the
         #    DLLs, matching how the full BtbN SDK is self-contained. The build verifies
         #    no such external dep remains (objdump assert).
-        ExtraConfigureArgs = @('--enable-d3d11va', '--enable-dxva2', '--disable-iconv', '--extra-ldflags=-static')
+        #  --enable-libdav1d: software AV1 decoder (see the 'libdav1d' decoder note
+        #    below). Needs mingw-w64-x86_64-dav1d installed in the toolchain step.
+        #    dav1d must link STATICALLY into avcodec-61.dll or the self-containment
+        #    objdump assert (no external libdav1d.dll/libwinpthread) will fail; if it
+        #    trips, add '--pkg-config-flags=--static' here and rebuild.
+        ExtraConfigureArgs = @('--enable-d3d11va', '--enable-dxva2', '--disable-iconv', '--enable-libdav1d', '--extra-ldflags=-static')
     }
 
     # ---------------------------------------------------------------------
@@ -104,6 +109,21 @@
     Decoders = @(
         # video
         'h264', 'hevc', 'vp8', 'vp9', 'av1',
+        # AV1 SOFTWARE decode. The built-in 'av1' decoder above is HWACCEL-ONLY
+        # ("Supported hardware devices: d3d11va", no software path) — forcing
+        # software with it yields ZERO frames (black screen). libdav1d (BSD-2,
+        # LGPL-compatible) is the real software AV1 decoder; it also outputs
+        # display-size frames (no decoder alignment padding), which sidesteps the
+        # 1080->1152 hardware-padding 花屏 on AV1. Requires --enable-libdav1d
+        # (ExtraConfigureArgs) + mingw-w64-x86_64-dav1d in the toolchain step.
+        'libdav1d',
+        # Legacy codecs that were unsupported (no decoder) even though their
+        # containers are already demuxable: VC-1 / WMV (asf), Theora (ogg),
+        # Sorenson FLV1 (flv), VP6 (flv/swf). Native LGPL decoders, tens of KB
+        # each; added per this list's conservative-superset rule so a stray PV
+        # in one of these formats doesn't silently fail.
+        'vc1', 'wmv1', 'wmv2', 'wmv3', 'msmpeg4v2', 'msmpeg4v3',
+        'theora', 'flv1', 'vp6', 'vp6f',
         'mpeg4', 'mpeg2video', 'mpeg1video', 'mjpeg', 'prores', 'rawvideo',
         'png', 'gif',
         # audio
@@ -122,6 +142,9 @@
     Parsers = @(
         'h264', 'hevc', 'vp8', 'vp9', 'av1',
         'mpeg4video', 'mpegvideo', 'mjpeg', 'png',
+        # vc1 parser pairs with the vc1/wmv3 decoders added above; the other new
+        # decoders' parsers are auto-pulled by configure as dependencies.
+        'vc1',
         'aac', 'ac3', 'mpegaudio', 'flac', 'opus', 'vorbis'
     )
 }
