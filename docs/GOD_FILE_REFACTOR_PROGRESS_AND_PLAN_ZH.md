@@ -1,7 +1,7 @@
 # 上帝文件拆分 —— 进度、方法论与完整知识存档
 
 > 分支：`refactor/god-file-split`（从 `test` 切出）
-> 状态：进行中，**已完成并验证 8 / 13（计划内产品代码）**，3 个提交已落地
+> 状态：**✅ 全部完成 13 / 13（计划内产品代码），均构建 + CTest 25/25 验证**，5 个重构提交已落地（见末尾 §11 完成更新）
 > 本文档为可续接的交接档：包含完整审计结果、已验证的拆分配方、每个文件的拆分设计与语义风险、计划外文件清单、踩过的坑与回滚方式。
 
 ---
@@ -265,3 +265,24 @@ src/app/
 ```
 
 （✅ = 已完成并验证）
+
+---
+
+## 11. 完成状态更新（2026-06-19）
+
+**✅ 计划内 13 / 13 全部完成**，每个文件均 byte-faithful 拆分 + 构建 + CTest 25/25 验证后提交。
+
+旗舰收尾（§5.1 已落地）：
+- `VideoExportController.cpp` 5144 → **94**（仅 `exportFullPreview`）+ `VideoExportControllerInternal.h`（17 结构体 + 68 原型 + using/常量，`miacode::video_export::detail`）+ `VideoExportEncoder/Diagnostics/FrameRender/Pipeline/PreparedTask.cpp`。匿名命名空间→具名 detail；4 个默认参数迁到头原型（ODR）；71 定义清单一致、重建体逐行字节相同；首次构建即过。
+- ⚠ `VideoExportPreparedTask.cpp` 仍 **2197 行** = 单个 2017 行的 `exportPreparedTask` 方法 + `ExportTempDirRegistry` 单例。这是不可机械再拆的内核（进一步缩减需把方法拆成子函数=设计改动），属后续工作。
+
+提交序（分支 `refactor/god-file-split`，与并行 Codex 提交交错，但每个重构 commit 仅含本次拆分文件）：
+`9d6f7d0`(TimelinePlayback) → `4735223`(MainWindow×4) → `96d08a5`(PreviewStageMediaHost/VideoExportDialog/PlainCodeEditor) → `6926238`(TimelineQuickModel/Bass/ChartBatchTransform/main) → `bc0c445`(VideoExportController)；文档 `2a9a2dc`。
+
+新增教训（补 §7）：
+9. **文件局部「类型」被多 TU 用 = 完整类型需求**：`PlainCodeEditor::LineNumberArea`、`BassPreviewAudioBackend::Sample`（嵌套类/结构体，定义原在 .cpp）拆开后其它 TU 只见前向声明 → `C2027 未定义类型` / `unique_ptr 不能删不完整类型`。修法 = 把类型定义整体搬进共享内部头。凡 .cpp 内定义、被 >1 TU 用的 class/struct（含持有 `unique_ptr<T>` 成员、其析构在另一 TU 的情况），都要进共享头。
+10. **默认参数 ODR**：自由函数拆「头原型 + .cpp 定义」时默认实参只能出现一处（放头原型、定义里删），否则 `redefinition of default argument`。VideoExportController 有 4 个：truncateForLog / appendVideoExportLog / writeAllToProcess / processOutputAndErrorForLog。
+11. **共享 git index 并发**：与并行会话共用工作树时，`git add … && git commit`（无 pathspec）会把对方 staged 文件扫进我的 commit。全程改用 `git commit <pathspec>` 或先核 `git diff --cached --name-status`。曾有一次 doc commit 被污染，用 `reset --soft` + 重组三个 commit 修干净（最终 tree 与污染前 1:1 相同）。
+12. **链接锁**：`MiaCode.exe` 重链接前需关掉运行中的实例（`LNK1104` 文件锁）；dev-tool spec 二进制不依赖 MiaCode.exe，可独立跑 CTest。
+
+剩余（计划外，见 §6 / §10）：DComp×2（默认关、解耦中）、`ChartBatchTransformSpec.cpp`（测试）、`QuickShellMain.qml`（仅建议）、§6B ~30 文件盲区（未审计）。dev-guide 的 god-file watch-list（`architecture-and-layout.md §5`）已同步更新。

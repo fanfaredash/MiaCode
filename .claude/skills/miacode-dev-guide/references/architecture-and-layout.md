@@ -101,17 +101,51 @@ code. Mainline features go in the QSG path.
   non-Windows uses the stretched SoundTouch path with an engine-time anchor clock.
 - Asset lookup is file-based and convention-driven, not database-driven.
 
-## 5. God-file / structure watch-list (audit 2026-05-29)
+## 5. God-file / structure watch-list
 
-Do not grow these; refactor or add new units instead.
+**2026-06-19 god-file split (branch `refactor/god-file-split`)** — 13 product-code god-files
+decomposed into focused translation units, byte-faithful (sed moves, zero logic change), each
+gated on build + CTest 25/25. Full archive (methodology, per-file designs, semantic-risk notes,
+out-of-plan inventory, rollback): `docs/GOD_FILE_REFACTOR_PROGRESS_AND_PLAN_ZH.md`.
 
-| File | ~lines | Problem | Refactor direction |
-|---|---|---|---|
-| `src/tools/video_export/VideoExportController.cpp` | 5000 | 97-line header, monster procedural .cpp | split EncoderSelection / FfmpegPipeline / FrameRenderLoop / ExportDiagnostics |
-| `src/tools/muri/MuriAnalyzer.cpp` | ~1300 (was 4600) | **decomposition ✅ done** — `analyze()` is now a ~187-line thin orchestrator over per-stage TUs in `miacode::muri::detail` (Geometry/Model/SlideReferenceData/RuntimeModelBuilder/OverlayBuilder/SlideWifiJudge/SimpleNoteJudge/DiagnosticLabels/DiagnosticCollector). What remains is cross-stage shared primitives (Internal.h-declared) + the orchestrator — don't regrow it. Optional further splits + history: `.claude/MURI_DECOMPOSITION_HANDOFF.md` |
-| `src/app/mainwindow/MainWindow.h` + `sections/*` | 176 methods | god class sliced by `#include`/friend, not real components | promote sections to state-owning cooperators |
-| `src/app/main.cpp` | 2400 | GUI + CLI + export + worker + startup all in one | split CLI/export/worker entry points |
-| `src/core/chart/parser/SimaiNativeParser.cpp` | — | `#include "*.cpp"` unity split (`:1584`) |真正 multi-TU, or rename includes to `.inc`/`.ipp` |
+Conventions established by that pass — reuse, don't reinvent:
+- A single class's method bodies split across several `.cpp` (the `MainWindow.<Section>.cpp`
+  partial pattern) is the default; the class's public `.h` does not change.
+- Stateless file-local helpers/constants shared by >1 split TU → a per-file `<Base>.Internal.h`
+  in a named `…_detail` namespace (`inline`/`inline constexpr`); each TU `#include`s it +
+  `using namespace …_detail;`. (Was an anonymous namespace = internal linkage = link error if moved.)
+- Mutable shared file-static state → `extern` in the internal header, defined in exactly ONE TU.
+- A file-local **type** (nested struct / inner class) used by >1 TU → move its definition to the
+  shared header (e.g. `PlainCodeEditor::LineNumberArea`, `BassPreviewAudioBackend::Sample`).
+- Free-function god-files → named `detail` namespace + prototypes in the internal header, defs
+  split across group TUs; **default arguments live in the header prototype only** (ODR).
+- CMake source lists are explicit (no glob): register every new `.cpp` in `target_sources(MiaCode …)`
+  AND every dev-tool `miacode_add_dev_tool(… SOURCES …)` that also lists the original.
+
+Done — do NOT regrow these (add a new focused unit instead):
+
+| File (now) | was | result |
+|---|---|---|
+| `tools/video_export/VideoExportController.cpp` | 5144 | → 94 (`exportFullPreview`) + `VideoExportControllerInternal.h` + `VideoExportEncoder/Diagnostics/FrameRender/Pipeline/PreparedTask.cpp`. The 2017-line `exportPreparedTask` + `ExportTempDirRegistry` live in `…PreparedTask.cpp` — that TU stays large until the *method itself* is decomposed (a design change, not a TU split). |
+| `tools/video_export/VideoExportDialog.cpp` | 3105 | → core (ctor + file-local `TimestampSpinBox`/`ExportRangeTrack` + range/preview cluster) + `.SettingsPersistence/.IntroControls/.ExportFlow` + `Internal.h` |
+| `preview/runtime/PreviewStageMediaHost.cpp` | 3335 | → core (ctor/dtor) + `_Backend/_Media/_Playback/_Diagnostics/_Timeout` + `Internal.h` (the `isIntegratedRenderAdapter` static cache stays single-TU; dual `MIACODE_USE_QTAVPLAYER`/`HAVE_QT_MULTIMEDIA` `#ifdef` paths preserved) |
+| `audio/BassPreviewAudioBackend.cpp` | 2487 | → core + `_EngineInit/_Assets/_Transport/_PlaybackClock/_EventDrain` + `…Impl.h` (`extern gBassDeviceRefCount`) + `…Sample.h` (nested `Sample` shared across 6 TUs incl. the dtor) |
+| `timeline/TimelineQuickModel.cpp` | 2614 | → core + `…Parser/…Snapshot/…Indexing` + `TimelineQuickModelPrivate.h` (also fed `timeline_model_spec`) |
+| `core/chart/transform/ChartBatchTransform.cpp` | 2302 | → `.Parsers/.Subdivision/.Selection/.Transform` + `…Internal.h` (`MC_OP` via `OperationLog.h`; also fed `chart_batch_transform_spec`) |
+| `editor/PlainCodeEditor.cpp` | 2019 | → `.Layout/.HighlightAndCaret/.BracketCompletion/.Input/.Bookmarks` + `.Internal.h` (`LineNumberArea` moved to header; also fed `plain_code_editor_spec`) |
+| `app/main.cpp` | 1864 | → core (`main`) + `startup_diagnostics_win32/graphics_backend/cli_shared/cli_video_export/cli_video_export_worker.cpp` + `MainEntrypoints.h` (`miacode::app::entry`) |
+| `app/mainwindow/sections/{dialogs,document,timeline}/` — the 5 biggest section files | 1.8–3.5k each | each sub-split into more `MainWindow.<Section>.cpp` partial slices (Dialogs→AudioSettings/MediaTools/TrackMetadata/ExportSettings; TimelinePlayback→PreviewSeek/PreviewPlaybackState/PreviewIntroRegion/PreviewTick; DocumentFlow→FileFlow/DesignerFlow/AutosaveFlow; PreviewTimelineFlow→3; TimelineLayout→4) + per-file `Internal.h` where helpers are shared |
+| `tools/muri/MuriAnalyzer.cpp` | ~1300 (was 4600) | (earlier) `analyze()` thin orchestrator over `miacode::muri::detail` stage TUs — don't regrow. History: `.claude/MURI_DECOMPOSITION_HANDOFF.md` |
+
+Still standing / out of scope of the 2026-06-19 pass:
+
+| File | ~lines | Note / direction |
+|---|---|---|
+| `app/mainwindow/MainWindow.h` + remaining `sections/*` | 176 methods; ~11 sections still 1.0–1.7k | god class sliced by friend partials; further reduction = promote sections to state-owning cooperators (design change) |
+| `app/quick_shell/qml/QuickShellMain.qml` | 1582 | **SUGGEST-only**: extract a C++ surface-routing controller + layout engine first, then split QML — 38 root props + timers + layout call-chain are too coupled to move mechanically |
+| `render/backend_d3d11/PreviewDComp{Surface,SpritePipeline}.cpp` | ~1.8k each | DEFAULT-OFF, being decoupled — split deferred (low value, may be deleted) |
+| `core/chart/parser/SimaiNativeParser.cpp` | — | `#include "*.cpp"` unity split (`:1584`) → 真正 multi-TU, or rename includes to `.inc`/`.ipp` |
+| `core/chart/transform/ChartNormalization.cpp`, `preview/runtime/PreviewRuntime.cpp`, `timeline/TimelineSceneStateBuilder.cpp`, … | 1.0–1.7k (~30 files) | never deep-audited (the blind-spot tier — doc §6B); audit before splitting |
 
 ## Update this file when
 
