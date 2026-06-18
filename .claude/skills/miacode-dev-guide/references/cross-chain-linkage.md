@@ -63,6 +63,19 @@ Implications:
 - Firework visuals use the custom `PreviewQuickJudgeFireworkLayer` material; state in
   `src/core/scene/PreviewJudgeFireworkLayerState.*`, shader in
   `src/preview/quick_scene/shaders/PreviewFireworkMaterial.*`.
+  - **Firework PSO/texture warm-up is a 3-file contract — don't break the loop.** Qt RHI compiles
+    the firework pipeline + uploads the colour-ball texture lazily on the FIRST firework draw
+    (a render-thread stall, worst on weak iGPUs). `PreviewRuntime` warms it by injecting a synthetic
+    off-screen firework marker (`armFireworkPsoWarmupIfReady` / `appendFireworkWarmupMarker`).
+    Completion is gated on a CONFIRMED draw, not a present count: `PreviewQuickSceneRoot::updatePaintNode`
+    MUST call `runtime_->notifyFireworkLayerProducedNode()` whenever the firework layer returns a
+    non-null node (render thread → atomic `fireworkLayerDrawSignal_`), and `handlePresentedFrame`
+    flips `fireworkWarmupDone_` only once that signal advances past the arm snapshot (present-count cap
+    = backstop). The synthetic is RE-CENTERED on the live playhead via `refreshFireworkWarmupForPlayheadChange`
+    in `setPlayheadSeconds` (+ `setNoteMarkers`) so a seek / negative pre-roll can't strand it outside
+    its lifecycle window. Dropping the notify call or the re-center silently regresses to the old
+    probabilistic first-firework stutter. Logs: `preview/runtime action=firework_pso_warmup_arm|_done`
+    (Runtime channel).
 - During playback: slow-refresh markers feed validation/Muri inputs, but preview audio/canvas/stats
   stay on the frozen play-start snapshot until stop; validation/Muri UI may defer to a paused edge.
 

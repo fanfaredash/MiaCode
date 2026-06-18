@@ -8,6 +8,7 @@
 #include <QVector>
 #include <QVariantMap>
 
+#include <atomic>
 #include <memory>
 
 #include "common/MuriRenderOptions.h"
@@ -84,6 +85,9 @@ public:
     void setVisibleHostWindow(QQuickWindow* window);
     void clearVisibleHostWindow(QQuickWindow* window);
     void notifyVisibleFramePresented();
+    // Called from the QSG render thread when the firework layer emits a node;
+    // drives the firework warm-up completion check (atomic — thread-safe).
+    void notifyFireworkLayerProducedNode();
     QQuickWindow* visibleHostWindow() const;
     void requestActivate();
     void update();
@@ -234,6 +238,10 @@ private:
     void armFireworkPsoWarmupIfReady();
     void appendFireworkWarmupMarker();
     void removeFireworkWarmupMarkers();
+    // Re-center the synthetic warm-up marker on the live playhead (no-op
+    // unless armed-but-not-done) so a playhead move can't strand it outside
+    // its lifecycle window before the firework layer draws it.
+    void refreshFireworkWarmupForPlayheadChange();
 
     miacode::preview::runtime::PreviewSceneAssetRepository* assets_ = nullptr;
     QPointer<QQuickWindow> visibleHostWindow_;
@@ -257,15 +265,33 @@ private:
     // at chart load — compiling the PSO + uploading the texture at a
     // benign moment.
     //
-    // `armed_` flips true when assets are ready; while armed-but-not-done the
-    // synthetic is re-appended on every setNoteMarkers so a coalesced marker
-    // refresh can never drop it before it renders. `done_` flips once the
-    // synthetic has actually been presented, at which point it is removed.
-    // Re-armed on visible-window change (a new QQuickWindow == a fresh QRhi
-    // pipeline cache, so the previously-warmed PSO/texture are gone).
+    // `armed_` flips true when assets are ready. COMPLETION IS GATED ON A
+    // CONFIRMED DRAW, not a blind present count: the firework layer bumps
+    // `fireworkLayerDrawSignal_` (render thread) every time it actually emits a
+    // node, and `done_` only flips once that signal has advanced past the value
+    // captured at arm (`fireworkWarmupArmDrawSignal_`) — i.e. once the synthetic
+    // has genuinely compiled the PSO + uploaded the texture. To guarantee the
+    // synthetic is drawable wherever the playhead happens to be, it is
+    // RE-CENTERED on the live playhead on every playhead change and every marker
+    // refresh while armed-but-not-done (its lifecycle window is fixed relative
+    // to its trigger second, so a seek / negative pre-roll / play-start would
+    // otherwise move the playhead out of the window and the layer would never
+    // draw it — the historical "probabilistic first-firework hitch").
+    // `fireworkWarmupArmPresentCount_` + a present-count cap is only a backstop:
+    // if the firework never renders at all (layer disabled, non-rendering
+    // surface) the warm-up is abandoned so the synthetic and the per-playhead
+    // re-center work cannot linger for the whole session. Re-armed on
+    // visible-window change (a new QQuickWindow == a fresh QRhi pipeline cache,
+    // so the previously-warmed PSO/texture are gone).
     bool fireworkWarmupArmed_ = false;
     bool fireworkWarmupDone_ = false;
     qint64 fireworkWarmupArmPresentCount_ = -1;
+    // Monotonic count of firework-layer node emissions, bumped on the QSG render
+    // thread (notifyFireworkLayerProducedNode) and read on the GUI thread
+    // (handlePresentedFrame / armFireworkPsoWarmupIfReady) — std::atomic crosses
+    // that boundary. `armDrawSignal_` snapshots it at arm time.
+    std::atomic<quint64> fireworkLayerDrawSignal_{0};
+    quint64 fireworkWarmupArmDrawSignal_ = 0;
     bool requestedShowObjectStatsHud_ = false;
     bool suppressObjectStatsHud_ = false;
     bool requestedShowDebugInfo_ = false;

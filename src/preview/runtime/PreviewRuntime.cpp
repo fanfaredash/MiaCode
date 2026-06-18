@@ -364,6 +364,7 @@ void PreviewRuntime::setFramePacingDebugState(
 void PreviewRuntime::setPlayheadSeconds(double seconds, bool requestUpdate)
 {
     frameState_.playheadSeconds = seconds;
+    refreshFireworkWarmupForPlayheadChange();
     if (requestUpdate) {
         update();
     }
@@ -1585,19 +1586,36 @@ void PreviewRuntime::handlePresentedFrame()
     frameState_.presentedFrameCount = presentedFrameCountTotal_;
     updatePresentedFrameStats();
     pendingPresentedStatsRefresh_ = false;
-    // Firework warm-up completion. Requiring >= 2 presents past the arm
-    // point clears any frame that was already in flight before the synthetic
-    // was injected, so by now a frame containing the synthetic firework has
-    // definitely been presented — the PSO is compiled and the colour-ball
-    // texture uploaded. Drop the synthetic so it stops costing an off-screen
-    // draw every frame.
+    // Firework warm-up completion. PRIMARY criterion: the firework layer has
+    // actually emitted a node since the warm-up was armed (its draw signal
+    // advanced past the arm-time snapshot). That draw is what binds the
+    // material pipeline (PSO compiled on first use) and samples the colour-ball
+    // texture (uploaded on first use), so it is the only reliable proof the
+    // warm-up did its job — counting bare presents was the historical bug
+    // (presents accrue even on frames where the synthetic was outside its
+    // lifecycle window and never drawn). The present-count delta is a BACKSTOP
+    // only: if the firework never renders (layer disabled / non-rendering
+    // surface) abandon the warm-up after a generous cap so the synthetic marker
+    // and the per-playhead re-center work don't linger the whole session.
     if (fireworkWarmupArmed_ && !fireworkWarmupDone_
-        && fireworkWarmupArmPresentCount_ >= 0
-        && (presentedFrameCountTotal_ - fireworkWarmupArmPresentCount_) >= 2) {
-        fireworkWarmupDone_ = true;
-        removeFireworkWarmupMarkers();
-        frameState_.sceneContentRevision += 1;
-        update();
+        && fireworkWarmupArmPresentCount_ >= 0) {
+        constexpr qint64 kFireworkWarmupMaxPresents = 240;  // backstop ≈ 2-4 s
+        const bool fireworkDrawn =
+            fireworkLayerDrawSignal_.load(std::memory_order_acquire) != fireworkWarmupArmDrawSignal_;
+        const bool warmupTimedOut =
+            (presentedFrameCountTotal_ - fireworkWarmupArmPresentCount_) >= kFireworkWarmupMaxPresents;
+        if (fireworkDrawn || warmupTimedOut) {
+            fireworkWarmupDone_ = true;
+            removeFireworkWarmupMarkers();
+            frameState_.sceneContentRevision += 1;
+            update();
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("preview/runtime"),
+                QStringLiteral("action=firework_pso_warmup_done reason=%1 present_count=%2")
+                    .arg(fireworkDrawn ? QStringLiteral("drawn") : QStringLiteral("timeout"))
+                    .arg(presentedFrameCountTotal_));
+        }
     }
     emit framePresented();
 }
@@ -1630,6 +1648,9 @@ void PreviewRuntime::armFireworkPsoWarmupIfReady()
     }
     fireworkWarmupArmed_ = true;
     fireworkWarmupArmPresentCount_ = presentedFrameCountTotal_;
+    // Snapshot the layer draw signal: completion needs it to advance past this,
+    // i.e. a firework node emitted AFTER this arm (see handlePresentedFrame).
+    fireworkWarmupArmDrawSignal_ = fireworkLayerDrawSignal_.load(std::memory_order_acquire);
     removeFireworkWarmupMarkers();  // guarantee exactly one synthetic
     appendFireworkWarmupMarker();
     frameState_.sceneContentRevision += 1;
@@ -1678,6 +1699,35 @@ void PreviewRuntime::removeFireworkWarmupMarkers()
                     && qFuzzyCompare(marker.touchPoint.y(), -1.0e6);
             }),
         markers.end());
+}
+
+void PreviewRuntime::notifyFireworkLayerProducedNode()
+{
+    // Called on the QSG render thread (from PreviewQuickSceneRoot, after the
+    // firework layer returns a non-null node). A non-null node means the
+    // material pipeline was bound (PSO compiled on first use) and the
+    // colour-ball texture sampled (uploaded on first use) — exactly the work
+    // the warm-up exists to front-load. Bump the signal the GUI-thread
+    // completion check reads. Atomic-only: touch no other member from here.
+    fireworkLayerDrawSignal_.fetch_add(1, std::memory_order_release);
+}
+
+void PreviewRuntime::refreshFireworkWarmupForPlayheadChange()
+{
+    // The synthetic warm-up marker's lifecycle window is fixed relative to its
+    // trigger second (set from the playhead at append time). A seek / negative
+    // pre-roll / play-start moves the live playhead and would strand the
+    // synthetic outside its window so the firework layer never draws it (and
+    // the warm-up never confirms). While armed-but-not-done, re-center it on the
+    // current playhead, bumping the scene-content revision so the prepared-scene
+    // cache rebuilds the window. No-op once warm-up is done, so this is free on
+    // the playback hot path.
+    if (!fireworkWarmupArmed_ || fireworkWarmupDone_) {
+        return;
+    }
+    removeFireworkWarmupMarkers();
+    appendFireworkWarmupMarker();
+    frameState_.sceneContentRevision += 1;
 }
 
 void PreviewRuntime::updatePresentedFrameStats()

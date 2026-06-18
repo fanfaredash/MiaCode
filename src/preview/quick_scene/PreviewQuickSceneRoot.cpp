@@ -837,13 +837,14 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         [&](QSGNode* oldChild) {
             return muriActionLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
         });
+    bool judgeFireworkNodeProduced = false;
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::JudgeFireworkLayer),
         "judge_firework",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return judgeFireworkLayer_.updateNode(
+            QSGNode* node = judgeFireworkLayer_.updateNode(
                 oldChild,
                 *state,
                 &preparedCache_,
@@ -851,7 +852,15 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 renderSize,
                 window(),
                 &textures_);
+            judgeFireworkNodeProduced = (node != nullptr);
+            return node;
         });
+    if (judgeFireworkNodeProduced && runtime_ != nullptr) {
+        // Confirms to the runtime that the firework material PSO was bound +
+        // colour-ball texture uploaded this frame — drives warm-up completion
+        // (PreviewRuntime::handlePresentedFrame). Render-thread safe (atomic).
+        runtime_->notifyFireworkLayerProducedNode();
+    }
     applyWindowCounts(
         "judge_firework",
         preparedCache_.judgeFireworkLayer().entries.size(),
