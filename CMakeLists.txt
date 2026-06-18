@@ -70,6 +70,11 @@ endif()
 
 add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
+    src/app/startup_diagnostics_win32.cpp
+    src/app/graphics_backend.cpp
+    src/app/cli_shared.cpp
+    src/app/cli_video_export.cpp
+    src/app/cli_video_export_worker.cpp
     src/app/quick_shell/QuickShellBootstrap.h
     src/app/quick_shell/QuickShellBootstrap.cpp
     src/app/quick_shell/QuickShellContracts.h
@@ -455,12 +460,20 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/audio/PreviewAudioSettings.cpp
     src/audio/BassPreviewAudioBackend.h
     src/audio/BassPreviewAudioBackend.cpp
+    src/audio/BassPreviewAudioBackend_EngineInit.cpp
+    src/audio/BassPreviewAudioBackend_Assets.cpp
+    src/audio/BassPreviewAudioBackend_Transport.cpp
+    src/audio/BassPreviewAudioBackend_PlaybackClock.cpp
+    src/audio/BassPreviewAudioBackend_EventDrain.cpp
     src/audio/MiniaudioPreviewAudioBackend.h
     src/audio/MiniaudioPreviewAudioBackend.cpp
     src/audio/QtPreviewSfxRuntime.h
     src/audio/QtPreviewSfxRuntime.cpp
     src/core/chart/transform/ChartBatchTransform.h
-    src/core/chart/transform/ChartBatchTransform.cpp
+    src/core/chart/transform/ChartBatchTransform.Parsers.cpp
+    src/core/chart/transform/ChartBatchTransform.Subdivision.cpp
+    src/core/chart/transform/ChartBatchTransform.Selection.cpp
+    src/core/chart/transform/ChartBatchTransform.Transform.cpp
     src/core/chart/transform/ChartNormalization.h
     src/core/chart/transform/ChartNormalization.cpp
     src/core/chart/transform/Non384SnapTable.h
@@ -475,6 +488,9 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/TimelineRenderData.h
     src/timeline/TimelineQuickModel.h
     src/timeline/TimelineQuickModel.cpp
+    src/timeline/TimelineQuickModelParser.cpp
+    src/timeline/TimelineQuickModelSnapshot.cpp
+    src/timeline/TimelineQuickModelIndexing.cpp
     src/timeline/TimelineSceneState.h
     src/timeline/TimelineSceneState.cpp
     src/timeline/TimelineSceneStateBuilder.h
@@ -887,6 +903,11 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/audio/PreviewAudioSettings.cpp
             src/audio/BassPreviewAudioBackend.h
             src/audio/BassPreviewAudioBackend.cpp
+            src/audio/BassPreviewAudioBackend_EngineInit.cpp
+            src/audio/BassPreviewAudioBackend_Assets.cpp
+            src/audio/BassPreviewAudioBackend_Transport.cpp
+            src/audio/BassPreviewAudioBackend_PlaybackClock.cpp
+            src/audio/BassPreviewAudioBackend_EventDrain.cpp
             src/audio/MiniaudioPreviewAudioBackend.h
             src/audio/MiniaudioPreviewAudioBackend.cpp
             src/audio/QtPreviewSfxRuntime.h
@@ -953,7 +974,10 @@ if (MIACODE_BUILD_DEV_TOOLS)
         SOURCES
             src/tools/chart_transform/ChartBatchTransformSpec.cpp
             src/core/chart/transform/ChartBatchTransform.h
-            src/core/chart/transform/ChartBatchTransform.cpp
+            src/core/chart/transform/ChartBatchTransform.Parsers.cpp
+            src/core/chart/transform/ChartBatchTransform.Subdivision.cpp
+            src/core/chart/transform/ChartBatchTransform.Selection.cpp
+            src/core/chart/transform/ChartBatchTransform.Transform.cpp
             src/core/chart/transform/ChartNormalization.h
             src/core/chart/transform/ChartNormalization.cpp
             src/core/chart/transform/Non384SnapTable.h
@@ -1020,6 +1044,9 @@ if (MIACODE_BUILD_DEV_TOOLS)
             ${_miacode_chart_core}
             src/timeline/TimelineQuickModel.h
             src/timeline/TimelineQuickModel.cpp
+            src/timeline/TimelineQuickModelParser.cpp
+            src/timeline/TimelineQuickModelSnapshot.cpp
+            src/timeline/TimelineQuickModelIndexing.cpp
             ${_miacode_log_core}
             resources/fonts.qrc
             resources/slide_data.qrc
