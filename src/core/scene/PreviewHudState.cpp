@@ -284,8 +284,8 @@ QFont previewHudTimestampFont(int pointSize, QFont::Weight weight)
         return font;
     }
 
-    static const QString embeddedJetBrainsMonoFamily = []() -> QString {
-        const int fontId = QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/jetbrains_mono.ttf"));
+    static const QString embeddedXiaolaiMonoFamily = []() -> QString {
+        const int fontId = QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/xiaolai_mono.ttf"));
         if (fontId < 0) {
             return QString();
         }
@@ -294,10 +294,10 @@ QFont previewHudTimestampFont(int pointSize, QFont::Weight weight)
     }();
 
     QFont font;
-    if (!embeddedJetBrainsMonoFamily.isEmpty()) {
-        font.setFamily(embeddedJetBrainsMonoFamily);
+    if (!embeddedXiaolaiMonoFamily.isEmpty()) {
+        font.setFamily(embeddedXiaolaiMonoFamily);
     } else {
-        font.setFamily(QStringLiteral("JetBrains Mono"));
+        font.setFamily(QStringLiteral("Xiaolai Mono"));
     }
     if (font.family().isEmpty() || QFontInfo(font).family().compare(font.family(), Qt::CaseInsensitive) != 0) {
         font = previewHudMonoFont(pointSize, weight);
