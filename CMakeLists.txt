@@ -241,6 +241,11 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/BatchVideoExportDialog.cpp
     src/tools/video_export/VideoExportController.h
     src/tools/video_export/VideoExportController.cpp
+    src/tools/video_export/VideoExportEncoder.cpp
+    src/tools/video_export/VideoExportDiagnostics.cpp
+    src/tools/video_export/VideoExportFrameRender.cpp
+    src/tools/video_export/VideoExportPipeline.cpp
+    src/tools/video_export/VideoExportPreparedTask.cpp
     src/tools/video_export/VideoExportRuntimePolicy.h
     src/tools/video_export/VideoExportRuntimePolicy.cpp
     src/tools/video_export/VideoExportQuickRenderBackend.h
