@@ -56,6 +56,8 @@ docs/*
 !docs/TIMELINE_QTQUICK_GPU_FEASIBILITY_SPEC_ZH.md
 !docs/TIMELINE_QTQUICK_GPU_PARITY_CHECKLIST_ZH.md
 !docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC_ZH.md
+# Logging-mechanism audit: remaining refactor backlog (continuation handoff).
+!docs/LOGGING_AUDIT_REMAINING_REFACTORS_ZH.md
 
 # Local ffmpeg binaries should not be versioned.
 third_party/ffmpeg/**/ffmpeg
