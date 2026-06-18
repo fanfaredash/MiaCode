@@ -356,6 +356,19 @@ if (!(Test-Path $debugLauncherSrc)) {
 }
 Copy-Item $debugLauncherSrc (Join-Path $DistDir "Start_MiaCode_Debug.bat") -Force
 
+# Beta16 HW-decode GREEN-fix A/B verification launchers. Both force D3D11VA
+# hardware decode (MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO=0) + --debug logging +
+# a bounded NV12 frame dump; FixON sets MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT=1
+# (the fix), FixOFF sets it to 0 (reproduce the green). Diagnostic-only — drop
+# these two copies once the completion-order fix is confirmed on the affected iGPU.
+foreach ($abLauncher in @("Start_MiaCode_HWDecode_FixON_Debug.bat", "Start_MiaCode_HWDecode_FixOFF_Debug.bat")) {
+    $abSrc = Join-Path $repoRoot "scripts\\$abLauncher"
+    if (!(Test-Path $abSrc)) {
+        throw "Missing required A/B launcher script: $abSrc"
+    }
+    Copy-Item $abSrc (Join-Path $DistDir $abLauncher) -Force
+}
+
 # Diagnostic launchers were dropped in 0.5.0-beta: Start_MiaCode_Debug.bat is now
 # the only launcher shipped. Start_MiaCode_DisablePerPixelAlpha.bat (DComp
 # per-pixel-alpha A/B) and Start_MiaCode_ExportNoPboReadback.bat
@@ -607,6 +620,8 @@ $requiredPackagePaths = @(
     # Root: user-facing entry points + content + log dirs only.
     "MiaCode.exe",
     "Start_MiaCode_Debug.bat",
+    "Start_MiaCode_HWDecode_FixON_Debug.bat",
+    "Start_MiaCode_HWDecode_FixOFF_Debug.bat",
     "logs",
     "logs\\worker-hwnd",
     "assets\\SFX",

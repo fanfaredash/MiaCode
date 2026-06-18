@@ -93,6 +93,8 @@ scripts/*
 !scripts/Start_MiaCode_QtPluginDiag.bat
 !scripts/Start_MiaCode_ExportNoPboReadback.bat
 !scripts/Start_MiaCode_SoftwareVideoDecode.bat
+!scripts/Start_MiaCode_HWDecode_FixON_Debug.bat
+!scripts/Start_MiaCode_HWDecode_FixOFF_Debug.bat
 !scripts/build-macos.sh
 !scripts/build-win.ps1
 !scripts/compare-export-encode-profiles.ps1

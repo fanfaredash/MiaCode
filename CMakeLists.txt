@@ -9,7 +9,7 @@ set(MIACODE_VERSION_PATCH "0")
 # split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
 # they always drifted apart in practice (e.g. beta20 zip shipping with
 # beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "beta10")
+set(MIACODE_VERSION_PRERELEASE "beta16")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
@@ -244,6 +244,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/runtime/PreviewSceneAssetRepository.cpp
     src/preview/runtime/PreviewStageMediaHost.h
     src/preview/runtime/PreviewStageMediaHost.cpp
+    src/preview/runtime/PreviewSharedD3D11Device.h
+    src/preview/runtime/PreviewSharedD3D11Device.cpp
     src/preview/runtime/PreviewRuntime.h
     src/preview/runtime/PreviewRuntime.cpp
     src/core/scene/PreviewFrameState.h
