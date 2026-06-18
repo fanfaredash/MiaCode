@@ -507,6 +507,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/quick/TimelineQuickOverlayLayer.cpp
     resources/app_icons.qrc
     resources/fonts.qrc
+    resources/slide_data.qrc
     resources/preview_runtime_qml.qrc
     resources/quick_shell_qml.qrc
     resources/intro.qrc
@@ -860,6 +861,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/muri/MuriStaticChecker.h
             src/tools/muri/MuriStaticChecker.cpp
             resources/fonts.qrc
+            resources/slide_data.qrc
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
         INCLUDES
             src src/app/ui src/common src/core/chart
@@ -872,6 +874,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             ${_miacode_chart_core}
             ${_miacode_log_core}
             resources/fonts.qrc
+            resources/slide_data.qrc
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
         INCLUDES src src/core/chart src/core/chart/parser src/timeline
     )
@@ -941,6 +944,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             ${_miacode_chart_core}
             ${_miacode_log_core}
             resources/fonts.qrc
+            resources/slide_data.qrc
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
         INCLUDES src src/app/ui src/core/chart src/core/chart/parser src/timeline
     )
@@ -957,6 +961,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             ${_miacode_chart_core}
             ${_miacode_log_core}
             resources/fonts.qrc
+            resources/slide_data.qrc
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
         INCLUDES
             src src/app/ui src/common src/core/chart
@@ -1004,6 +1009,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/muri/MuriStaticChecker.h
             src/tools/muri/MuriStaticChecker.cpp
             resources/fonts.qrc
+            resources/slide_data.qrc
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
         INCLUDES src src/app/ui src/common src/core/chart src/core/chart/parser src/timeline src/tools
     )
@@ -1016,6 +1022,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/timeline/TimelineQuickModel.cpp
             ${_miacode_log_core}
             resources/fonts.qrc
+            resources/slide_data.qrc
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
         INCLUDES src src/app/ui src/core/chart src/core/chart/parser src/timeline src/tools
     )
@@ -1106,6 +1113,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/common/MuriTypes.cpp
             src/timeline/TimelineData.h
             resources/fonts.qrc
+            resources/slide_data.qrc
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
         INCLUDES
             src src/common src/preview src/core/scene src/core/chart

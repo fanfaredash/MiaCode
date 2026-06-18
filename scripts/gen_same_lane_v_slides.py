@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add same-lane v-slide entries (1v1..8v8) to assets/generated/slide_data.json.
+"""Add same-lane v-slide entries (1v1..8v8) to assets/reference/slide_data.json.
 
 The original slide table (merged from the MajdataPlay data dump) covers XvY for
 Y != X and Y != opposite(X) only.  XvX ("go to center, come back") is a valid
@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-DATA = REPO / "assets" / "generated" / "slide_data.json"
+DATA = REPO / "assets" / "reference" / "slide_data.json"
 
 # Sample-array midpoints: v paths are sampled symmetrically, the center sample
 # sits exactly halfway (verified for every v key below).

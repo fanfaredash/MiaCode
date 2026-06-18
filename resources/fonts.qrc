@@ -2,6 +2,5 @@
     <qresource prefix="/">
         <file alias="fonts/consola.ttf">../assets/fonts/consola.ttf</file>
         <file alias="fonts/jetbrains_mono.ttf">../assets/fonts/JetBrainsMono-VariableFont_wght.ttf</file>
-        <file alias="data/slide_data.json">../assets/generated/slide_data.json</file>
     </qresource>
 </RCC>

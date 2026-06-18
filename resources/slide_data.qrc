@@ -1,0 +1,10 @@
+<RCC>
+    <qresource prefix="/">
+        <!-- Curated Muri slide-shape reference dataset (merged MajdataPlay dump +
+             same-lane v-slide splices). Read at runtime via :/data/slide_data.json
+             by the native parser and Muri judge. Kept in its own qrc — it is a
+             ~17 MB dataset and does not belong in fonts.qrc. AUTORCC misses the
+             json dep, so touch this qrc after regenerating slide_data.json. -->
+        <file alias="data/slide_data.json">../assets/reference/slide_data.json</file>
+    </qresource>
+</RCC>

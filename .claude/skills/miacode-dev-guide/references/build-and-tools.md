@@ -99,10 +99,10 @@ Rules going forward:
 - Asset root resolution: `src/common/AssetPaths.h` (`findAssetRoot`, `assetPath`).
 - Asset areas: `assets/skin` (`skinSTD`/`skinDX` + user skins), `assets/SFX`,
   `assets/background` (+ `outlines/` custom judge-line PNGs), `assets/noteguide`,
-  `assets/generated` (`slide_data.json`), `assets/fonts`.
+  `assets/reference` (`slide_data.json`), `assets/fonts`.
 - `slide_data.json` is the single source of slide-shape support (parser "unknown shape"
   errors, preview geometry, and Muri judge data all key into it; embedded via
-  `resources/fonts.qrc` as `:/data/slide_data.json` — touch the qrc after editing the
+  `resources/slide_data.qrc` as `:/data/slide_data.json` — touch the qrc after editing the
   json, AUTORCC misses the dep). Same-lane v slides (`1v1`..`8v8`, out to center and
   back) are an editor extension spliced from the MajdataPlay-dump donor entries by
   `scripts/gen_same_lane_v_slides.py` (idempotent); opposite-lane `Xv(X+4)` stays

@@ -186,6 +186,13 @@ required_sfx_files=(
   rm -rf "$bundle_assets_dir"
   mkdir -p "$(dirname "$bundle_assets_dir")"
   cp -R "$ROOT_DIR/assets" "$bundle_assets_dir"
+  # slide_data.json + the bundled fonts are embedded in the binary via qrc
+  # (:/data/slide_data.json, :/fonts/*); the loose copies are never read. Drop
+  # them from both asset trees so the package does not ship ~17 MB twice.
+  for redundant in reference fonts; do
+    rm -rf "$DIST_DIR/assets/$redundant"
+    rm -rf "$bundle_assets_dir/$redundant"
+  done
 fi
 
 ffmpeg_src="$ROOT_DIR/third_party/ffmpeg/macos/ffmpeg"

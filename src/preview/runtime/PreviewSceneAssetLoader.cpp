@@ -300,9 +300,9 @@ void populateSkinAssets(const QString& skinDirectory, miacode::preview::scene::P
     skin->touchHoldBreakBorderImage = loadImageIfExists(dir.filePath("touchhold_break_border.png"));
     skin->touchHoldOffImage = loadImageIfExists(dir.filePath("touchhold_off.png"));
 
-    // Mine-note sprites (simai `m`). Convention: <base>_mine.png. Optional —
-    // a skin without these (e.g. skinDX, pending color-derivation work) leaves
-    // them null and the selectors fall back to the normal sprite.
+    // Mine-note sprites (simai `m`). Convention: <base>_mine.png. Both built-in
+    // skins (skinSTD, skinDX) ship these; user skins may omit them, in which case
+    // the images stay null and the selectors fall back to the normal sprite.
     skin->tapMineImage = loadImageIfExists(dir.filePath("tap_mine.png"));
     skin->holdMineImage = loadImageIfExists(dir.filePath("hold_mine.png"));
     skin->starMineImage = loadImageIfExists(dir.filePath("star_mine.png"));

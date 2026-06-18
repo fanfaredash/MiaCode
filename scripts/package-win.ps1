@@ -574,6 +574,16 @@ if (Test-Path $assetsSrc) {
         }
     }
     Copy-Item $assetsSrc (Join-Path $DistDir "assets") -Recurse -Force
+
+    # slide_data.json + the bundled fonts are embedded in MiaCode.exe via qrc
+    # (:/data/slide_data.json, :/fonts/*); the loose copies under assets/ are
+    # never read at runtime. Drop them so the package does not ship ~17 MB twice.
+    foreach ($redundant in @("reference", "fonts")) {
+        $redundantPath = Join-Path $DistDir "assets\$redundant"
+        if (Test-Path $redundantPath) {
+            Remove-Item $redundantPath -Recurse -Force
+        }
+    }
 }
 
 # Third-party font license (SIL OFL 1.1) for the bundled Resource Han Rounded

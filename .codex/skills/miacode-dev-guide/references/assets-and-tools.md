@@ -14,11 +14,12 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
   - `assets/background`
   - Custom judge-line PNGs live under `assets/background/outlines`; the render settings import action only opens this folder
   - `assets/noteguide`
-  - `assets/generated`
+  - `assets/reference`
   - `assets/fonts`
 - Qt resources:
   - `resources/app_icons.qrc`
   - `resources/fonts.qrc`
+  - `resources/slide_data.qrc`
   - `resources/preview_runtime_qml.qrc`
   - `resources/icons/*`
 
@@ -110,8 +111,8 @@ The toolbox blank-media submenu operates on the current chart directory only. It
   - Source helper art for rebuilding the labeled-area variant currently lives at `background/region_labels_overlay_transparent_v3.png`, and `scripts/build_outline_area_labeled.py` regenerates the final labeled outline by compositing that overlay over `outline_area.png`
   - The active outline assets are currently `1080x1080` canvases with built-in transparent border; preview/export map them across the full playfield square, and the selected variant is a shared render setting rather than an asset-size inference
 - Generated slide data:
-  - Stored under `assets/generated`
-  - Current merged asset file: `assets/generated/slide_data.json`
+  - Stored under `assets/reference`
+  - Current merged asset file: `assets/reference/slide_data.json`
   - Treat as runtime input data, not ordinary decorative assets
 
 ## 4. SFX Naming Convention
