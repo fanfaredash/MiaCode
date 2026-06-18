@@ -126,9 +126,39 @@ inline std::atomic_bool& debugModeState()
     return enabled;
 }
 
+// Cached per-category gate state. The per-category disable env vars (e.g.
+// MIACODE_DISABLE_RUNTIME_DEBUG_OUTPUT) are launch-time vars constant for a run, so
+// we snapshot them ONCE when debug mode is applied rather than hitting the
+// process-global environment lock on every log line via channelEnabled(). Each is a
+// function-local-static atomic (one instance across TUs, like debugModeState).
+inline std::atomic_bool& startupTimingCategoryState() { static std::atomic_bool s{false}; return s; }
+inline std::atomic_bool& runtimeDebugCategoryState() { static std::atomic_bool s{false}; return s; }
+inline std::atomic_bool& audioDebugCategoryState() { static std::atomic_bool s{false}; return s; }
+inline std::atomic_bool& exportDebugCategoryState() { static std::atomic_bool s{false}; return s; }
+inline std::atomic_bool& previewProfileCategoryState() { static std::atomic_bool s{false}; return s; }
+
+// Re-read the per-category disable env vars into the cached atomics. Called from
+// setDebugModeEnabled; also public so a test (or any future runtime env mutation)
+// can force a re-snapshot after changing one of those env vars.
+inline void refreshDebugCategoryCache()
+{
+    const bool dbg = debugModeState().load(std::memory_order_relaxed);
+    startupTimingCategoryState().store(
+        dbg && !envFlagEnabled("MIACODE_DISABLE_STARTUP_TIMING"), std::memory_order_relaxed);
+    runtimeDebugCategoryState().store(
+        dbg && !envFlagEnabled("MIACODE_DISABLE_RUNTIME_DEBUG_OUTPUT"), std::memory_order_relaxed);
+    audioDebugCategoryState().store(
+        dbg && !envFlagEnabled("MIACODE_DISABLE_AUDIO_DEBUG_OUTPUT"), std::memory_order_relaxed);
+    exportDebugCategoryState().store(
+        dbg && !envFlagEnabled("MIACODE_DISABLE_EXPORT_DEBUG_OUTPUT"), std::memory_order_relaxed);
+    previewProfileCategoryState().store(
+        dbg && !envFlagEnabled("MIACODE_DISABLE_PREVIEW_PROFILE_OUTPUT"), std::memory_order_relaxed);
+}
+
 inline void setDebugModeEnabled(bool enabled)
 {
     debugModeState().store(enabled, std::memory_order_relaxed);
+    refreshDebugCategoryCache();
 }
 
 inline bool debugModeEnabled()
@@ -136,6 +166,8 @@ inline bool debugModeEnabled()
     return debugModeState().load(std::memory_order_relaxed);
 }
 
+// Live (uncached) category check. Retained for ad-hoc use; the per-channel
+// accessors below read the cached atomics so the logging hot path never reads env.
 inline bool debugCategoryEnabled(const char* disableKey)
 {
     return debugModeEnabled() && !envFlagEnabled(disableKey);
@@ -143,27 +175,27 @@ inline bool debugCategoryEnabled(const char* disableKey)
 
 inline bool startupTimingEnabled()
 {
-    return debugCategoryEnabled("MIACODE_DISABLE_STARTUP_TIMING");
+    return startupTimingCategoryState().load(std::memory_order_relaxed);
 }
 
 inline bool runtimeDebugOutputEnabled()
 {
-    return debugCategoryEnabled("MIACODE_DISABLE_RUNTIME_DEBUG_OUTPUT");
+    return runtimeDebugCategoryState().load(std::memory_order_relaxed);
 }
 
 inline bool audioDebugOutputEnabled()
 {
-    return debugCategoryEnabled("MIACODE_DISABLE_AUDIO_DEBUG_OUTPUT");
+    return audioDebugCategoryState().load(std::memory_order_relaxed);
 }
 
 inline bool exportDebugOutputEnabled()
 {
-    return debugCategoryEnabled("MIACODE_DISABLE_EXPORT_DEBUG_OUTPUT");
+    return exportDebugCategoryState().load(std::memory_order_relaxed);
 }
 
 inline bool previewProfileOutputEnabled()
 {
-    return debugCategoryEnabled("MIACODE_DISABLE_PREVIEW_PROFILE_OUTPUT");
+    return previewProfileCategoryState().load(std::memory_order_relaxed);
 }
 
 inline bool previewFramePacingDiagnosticsEnabled()

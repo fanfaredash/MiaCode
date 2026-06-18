@@ -17,6 +17,7 @@
 #include <QtMath>
 
 #include "common/DebugLog.h"
+#include "common/ProcessDiagnostics.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewInteractionConfig.h"
 #include "common/TimelineThemeConfig.h"
@@ -982,7 +983,7 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     ++updatePaintNodeCount_;
     // beta7 leak gauge (probe ④) — count every timeline present so the pause gauge can report how
     // many actually ran during the playback window (a stall = starved RHI deferred-release queue).
-    miacode::debug_log::leak_gauge::noteTimelinePresent();
+    miacode::diag::leak_gauge::noteTimelinePresent();
     updatePaintNodeSumNs_ += elapsedNs;
     if (elapsedNs > updatePaintNodeMaxNs_) updatePaintNodeMaxNs_ = elapsedNs;
     const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
@@ -1020,8 +1021,8 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     {
         qint64 pausePrivBytes = -1;
         quint64 gaugeTxn = 0;
-        if (miacode::debug_log::leak_gauge::takeRenderSample(&pausePrivBytes, &gaugeTxn)) {
-            const qint64 presentPrivBytes = miacode::debug_log::processPrivateBytes();
+        if (miacode::diag::leak_gauge::takeRenderSample(&pausePrivBytes, &gaugeTxn)) {
+            const qint64 presentPrivBytes = miacode::diag::processPrivateBytes();
             const qint64 gpuKb = timelineGpuProcessMemoryKb(window());
             SceneGraphStats total;
             accumulateSceneGraphStats(root, &total);

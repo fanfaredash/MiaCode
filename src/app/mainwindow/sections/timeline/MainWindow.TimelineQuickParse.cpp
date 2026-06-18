@@ -17,6 +17,7 @@
 #include "common/ChartClockCount.h"
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
+#include "common/ProcessDiagnostics.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewInteractionConfig.h"
 #include "common/WaveformCache.h"
@@ -46,7 +47,7 @@ void MainWindow::TimelineSection::applyTimelineQuickChange(int position, int cha
         return;
     }
 
-    miacode::debug_log::MemoryStageScope memScope("preview/mem_stage", "timeline_quick_change");
+    miacode::diag::MemoryStageScope memScope("preview/mem_stage", "timeline_quick_change");
     QElapsedTimer timer;
     timer.start();
 

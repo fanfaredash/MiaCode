@@ -317,7 +317,8 @@ Scope::~Scope() noexcept
             miacode::debug_log::Channel::Operation,
             QStringLiteral("failed"),
             payload,
-            /*force=*/true);
+            /*force=*/true,
+            miacode::debug_log::Level::Error);
     } catch (...) {
         // Swallow — destructor is noexcept; letting an exception out
         // during unwind would call std::terminate.
@@ -355,7 +356,8 @@ void Scope::fail(QString reason) noexcept
             miacode::debug_log::Channel::Operation,
             QStringLiteral("failed"),
             payload,
-            /*force=*/true);
+            /*force=*/true,
+            miacode::debug_log::Level::Error);
     } catch (...) {
         // fail() is noexcept; drop on failure to log.
     }

@@ -8,16 +8,18 @@ Pair docs (design / rollout history): `OPERATION_BREADCRUMB_LOGGING_PLAN.md` (En
 
 | Channel | File | Purpose | Sync | Trim |
 |---|---|---|---|---|
-| `Operation` | `miacode_operation.log` | Op-chain failures from `MC_OP` `~Scope` / `fail()` | Async | 2 MB cap, `--debug` only |
-| `Fatal` | `miacode_fatal.log` | Death events; `appendFatalMessage` (chain auto-inlined) | **Synchronous + fsync** | 2 MB cap, `--debug` only |
-| `Runtime` | `miacode_runtime_debug.log` | General trace events, supervisor events, IPC events | Async | 2 MB cap, `--debug` only |
-| `Audio` | `miacode_audio_debug.log` | BASS / miniaudio engine trace | Async | 2 MB cap, `--debug` only |
-| `Export` | `miacode_video_export.log` | Video export pipeline; `fail_*` stages also fan to `Fatal` | Async | 2 MB cap, `--debug` only |
-| `StartupTiming` | `miacode_startup_timing.log` | Stage timings during application bringup | Async | 2 MB cap, always-on if `MIACODE_STARTUP_TIMING=1` |
-| `PreviewProfile` | `miacode_preview_profile_summary.txt` | Per-session render profile summary | Async | Not auto-trimmed |
+| `Operation` | `miacode_operation.log` | Op-chain failures from `MC_OP` `~Scope` / `fail()` (Error level) | Async | 4 MB → rotated `.1/.2/.3`; **always-on** (failure-only, NOT `--debug`-gated) |
+| `Fatal` | `miacode_fatal.log` | Death events; `appendFatalMessage` (chain auto-inlined, Fatal level) | **Synchronous + fsync** | 4 MB → rotated; **always-on** (keyed off `level==Fatal`, any channel) |
+| `Runtime` | `miacode_runtime_debug.log` | General trace events, supervisor events, IPC events | Async | 4 MB → rotated `.1/.2/.3`, `--debug` only |
+| `Audio` | `miacode_audio_debug.log` | BASS / miniaudio engine trace **+ preview video/decode** (`preview/stage_media`) | Async | 4 MB → rotated `.1/.2/.3`, `--debug` only |
+| `Export` | `miacode_video_export.log` | Video export pipeline; `fail_*` stages also fan to `Fatal` | Async | 4 MB → rotated `.1/.2/.3`, `--debug` only |
+| `StartupTiming` | `miacode_startup_timing.log` | Stage timings during application bringup | Async | 4 MB → rotated, `--debug` (opt-out `MIACODE_DISABLE_STARTUP_TIMING`) |
+| `PreviewProfile` | `miacode_preview_profile_summary.txt` | Per-session render profile summary | **Sync Truncate snapshot** — written out-of-band by `writeProfilingSummaryToFile`, NOT the async writer | Rewritten whole each write; not rotated |
 | Shadow | `miacode_op_chain_<pid>.log` | Heap-free op-chain on hard SEH crash | One-shot, `CREATE_ALWAYS` | Overwritten each crash |
 
-**Caveat — trim only fires under `--debug`.** Outside `--debug` mode, files grow unbounded. See [DebugLog.cpp:541](../src/common/DebugLog.cpp:541). Production retention is up to the user.
+**Caveat — rotation only fires under `--debug`.** Outside `--debug` mode the worker's size-rotation is skipped, so files grow unbounded. Production retention is up to the user.
+
+**Line format** (every `appendLine` record): `<UTC-ISO8601-Z> <LEVEL> pid=<n> tid=<n> [<channel>/<scope>] <payload>` — e.g. `2026-06-18T18:36:51Z ERROR pid=68408 tid=52460 [op/failed] op=… reason=…`. Timestamps are **UTC** (so they line up with the UTC shadow/beacon); `LEVEL` is `TRACE/DEBUG/INFO/WARN/ERROR/FATAL`; `pid`/`tid` disambiguate co-located processes (editor vs worker) and threads (GUI vs render).
 
 ## 2. File location
 
@@ -256,7 +258,7 @@ If you find a log gap that hit one of these areas, you don't need `MC_OP` at the
 
 ### 7.3 Async writer drops under load
 
-`Channel::Operation` and most others use the async writer at [DebugLog.cpp::AsyncLogWriter](../src/common/DebugLog.cpp:296). Queue cap is 4096 entries; overflow drops the oldest. Drop count is exposed via `LogWriterStats::droppedCount`. If you see suspiciously few `op/failed` lines for a noisy time window, check `Channel::Runtime` for writer-stats summaries.
+`Channel::Operation` and most others use the async writer at [DebugLog.cpp::AsyncLogWriter](../src/common/DebugLog.cpp). Queue cap is 4096 entries; overflow drops the **oldest** but now emits a coalesced `[<channel>/asynclog] dropped=N reason=queue_overflow` **gap marker** into the affected channel, so the loss is visible inline rather than a silently-continuous stream. The cumulative count is also in `LogWriterStats::droppedCount` (preview-profile summary). If you see a `dropped=N` marker — or suspiciously few `op/failed` lines for a noisy window — the writer shed load there.
 
 `Channel::Fatal` is synchronous and never drops.
 

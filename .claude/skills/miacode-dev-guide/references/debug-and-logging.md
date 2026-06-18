@@ -9,21 +9,38 @@ canonical doc is `docs/DEBUG_INDEX.md`; this file is the code-owner-oriented sum
   writer** (background thread + queue + overflow/drop stats + flush/shutdown).
 - Channels (`debug_log::Channel`): `Runtime`, `Audio`, `Export`, `StartupTiming`, `Fatal`,
   `PreviewProfile`, `Operation`.
-- API: `debug_log::appendLine(channel, scope, payload)` / `appendTimingLine(...)` /
-  `appendFatalMessage(...)`. ~183 call sites go through this; there is essentially no raw
-  `qDebug`/`std::cout` in mainline code — **keep it that way.**
+- API: `debug_log::appendLine(channel, scope, payload, force=false, level=Level::Info)` /
+  `appendTimingLine(...)` / `appendFatalMessage(...)`. ~183 call sites go through this; there is
+  essentially no raw `qDebug`/`std::cout` in mainline code — **keep it that way.**
+- **Line format** (`appendLine`): `<UTC-ISO8601-Z> <LEVEL> pid=<n> tid=<n> [<channel>/<scope>] <payload>`
+  (e.g. `2026-06-18T18:36:51.109Z ERROR pid=68408 tid=52460 [op/failed] op=… reason=…`). Timestamps are
+  **UTC** (aligned with the crash shadow/beacon). `Level` (`Trace/Debug/Info/Warn/Error/Fatal`) is
+  **orthogonal** to `Channel`: a fatal-grade line on ANY channel gets a durable synchronous flush (the
+  sync path keys off `level==Fatal`, not the Fatal *channel*); `Channel::Fatal` always renders/flushes
+  `FATAL`; oplog failures log at `Error`.
+- **Overflow** (async queue full, `kMaxQueueSize=4096`): drops the OLDEST entry but emits a coalesced
+  `[<channel>/asynclog] dropped=N reason=queue_overflow` gap marker so loss is visible, not silent.
+- **Rotation** is rename-based: a channel file over 4 MB rotates to `miacode_<x>.1.log` (chain `.1`→`.2`→`.3`,
+  `kMaxLogSegments=3`), preserving the session start — NOT in-place head-truncation.
+- **Process/leak diagnostics** (`processResourceGaugePayload`, `MemoryStageScope`, `processPrivateBytes`,
+  `leak_gauge`) are in `src/common/ProcessDiagnostics.{h,cpp}` (namespace **`miacode::diag`**), split OUT of
+  DebugLog so the writer stays a pure channelized log (the profiler depends on it, not the reverse).
 - One process-level `qInstallMessageHandler` is installed in `src/app/main.cpp` (~`:2066`).
 - Options live in `src/common/DebugOptions.h` (env reads via `envFlagEnabled` /
   `envOptionalFlagValue`).
 
 **Rule:** new logging = a `debug_log` channel line gated by `--debug`. Do not add raw
-`qDebug`/`qInfo`/`std::cout`/`printf`/`OutputDebugString`. The only existing raw sites are in the
-off-by-default DComp path — do not copy that pattern into mainline.
+`qDebug`/`qInfo`/`std::cout`/`printf`/`OutputDebugString`. (`PreviewPopupHwndTracker`'s old quadruple-write —
+force=true debug_log + qDebug + raw fopen + OutputDebugStringW — was the last such offender and is now a single
+gated `appendLine`; don't reintroduce that pattern.)
 
 ### Gating
 - Runtime/Audio/StartupTiming/PreviewProfile detail is gated by process debug mode (`--debug`).
 - `Fatal` is intentionally **not** gated.
 - `Export` keeps a concise stage/failure summary even without `--debug`; detail needs `--debug`.
+- The per-category `MIACODE_DISABLE_*` gates are **snapshot into atomics at `setDebugModeEnabled`** (not
+  re-read per log line). If code/tests mutate one of those env vars at runtime, call
+  `debug_options::refreshDebugCategoryCache()` to re-snapshot. `MIACODE_SKIP_ASYNCLOG_FLUSH` is read once.
 
 ### Log file locations
 - Shared dir env: `MIACODE_LOG_DIR`. Default: project-local `.miacode/logs/` once a chart is
@@ -146,7 +163,7 @@ legacy two-device path on failure. Confirm via `media_backend … single_device=
 **DComp/D3D11 (DEFAULT OFF — being decoupled):** `MIACODE_PREVIEW_USE_DCOMP` (default off,
 `DebugOptions.h:194`), `MIACODE_TIMELINE_USE_DCOMP`, `MIACODE_PREVIEW_DCOMP_EXCLUSIVE`,
 `MIACODE_PREVIEW_DCOMP_PER_PIXEL_ALPHA`, `MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND`,
-`MIACODE_PREVIEW_DCOMP_QUIESCE_QSG`, `MIACODE_PREVIEW_QSG_FULL_DISABLE`, `MIACODE_POPUP_TRACKER`,
+`MIACODE_PREVIEW_DCOMP_QUIESCE_QSG`, `MIACODE_PREVIEW_QSG_FULL_DISABLE`,
 `MIACODE_SKIP_DIAG_D3D11`.
 
 **Export diagnostics/tuning** (owner: `src/tools/video_export/VideoExportController.cpp` +
@@ -173,7 +190,9 @@ Stable tags include: `window/focus`, `app_shutdown`, `close_timing/*`, `preview/
 performance tags. High-frequency tags (`timeline/bridge` scroll pushes, `timeline/quick_scene`
 scroll-only paints) require `MIACODE_TIMELINE_HOTPATH_DIAG=1` even in debug mode.
 
-Leak/resource gauges (beta4→beta7, both **once per user pause**, never per-frame, `--debug`-gated):
+Leak/resource gauges (beta4→beta7, both **once per user pause**, never per-frame, `--debug`-gated; the gauge
+APIs `MemoryStageScope` / `leak_gauge::*` / `processPrivateBytes` / `processResourceGaugePayload` now live in
+`src/common/ProcessDiagnostics.h`, namespace `miacode::diag`):
 `preview/resource_gauge` (GUI thread, `pauseQtPreviewPlaybackExact` — process handles/commit/
 page_faults + `d_play_kb` private-bytes-grown-during-play + `presents_in_play` + preview
 `scene_revision`/`cached_tex*`/`present_total`) and `timeline/leak_gauge` (render thread, end of

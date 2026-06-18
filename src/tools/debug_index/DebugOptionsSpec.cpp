@@ -9,8 +9,10 @@
 // cascade and nothing would catch it.
 //
 // Registered with CTest as `debug_options_spec`. Drives the accessors by
-// setting/clearing env vars (they read live, no caching), so cases must clean up
-// after themselves. The Windows-on-ARM64 emulation auto-disable branch depends on
+// setting/clearing env vars; most read live, but the per-channel category gates
+// (startup/runtime/audio/export/preview-profile) are snapshot into atomics at
+// setDebugModeEnabled time, so a disable flag changed afterwards needs an explicit
+// refreshDebugCategoryCache() to take effect. Cases must clean up after themselves. The Windows-on-ARM64 emulation auto-disable branch depends on
 // real hardware detection and is not exercised here; every assertion below holds
 // regardless of that branch (override is checked first; the default is false
 // either way).
@@ -125,6 +127,11 @@ bool verifyDebugCategoryGating(QTextStream& err)
     ok &= require(dbg::startupTimingEnabled(), "category on when debug mode on + not disabled", err);
 
     setEnv("MIACODE_DISABLE_STARTUP_TIMING", "1");
+    // Category gates are now SNAPSHOT into atomics at setDebugModeEnabled time
+    // (no per-line env read), so a disable flag set after debug mode was applied
+    // requires an explicit re-snapshot to take effect. This mirrors production,
+    // where the disable flags are launch-time env vars resolved once at startup.
+    dbg::refreshDebugCategoryCache();
     ok &= require(!dbg::startupTimingEnabled(), "category off when its disable key is set", err);
 
     unsetEnv("MIACODE_DISABLE_STARTUP_TIMING");

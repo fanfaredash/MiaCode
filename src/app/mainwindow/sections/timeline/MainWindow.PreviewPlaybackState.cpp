@@ -13,6 +13,7 @@
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
+#include "common/ProcessDiagnostics.h"
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
 #include "common/PreviewGameplayConfig.h"
@@ -206,9 +207,9 @@ void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiv
     // beta7 leak gauge — anchor private bytes at play start so the pause handler can report the
     // playback-window delta (d_play), the largest previously-unbracketed slice of the cycle.
     if (miacode::debug_options::runtimeDebugOutputEnabled()) {
-        miacode::debug_log::leak_gauge::notePlayStartPrivateBytes(
-            miacode::debug_log::processPrivateBytes());
-        miacode::debug_log::leak_gauge::markPlayStartTimelinePresents();
+        miacode::diag::leak_gauge::notePlayStartPrivateBytes(
+            miacode::diag::processPrivateBytes());
+        miacode::diag::leak_gauge::markPlayStartTimelinePresents();
     }
     state_.qtPreviewAwaitingFrameSwap_ = false;
     state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
@@ -341,8 +342,8 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
         // previously-unmeasured slice); inflight/inflight_peak = outstanding worker→GUI queued
         // lambdas (≈0 here exonerates async backlog). Then arm the render thread to emit one
         // timeline/leak_gauge line (nodes/tex/d_render) on its next present, correlated by txn.
-        const qint64 pausePrivBytes = miacode::debug_log::processPrivateBytes();
-        const qint64 playStartPrivBytes = miacode::debug_log::leak_gauge::playStartPrivateBytes();
+        const qint64 pausePrivBytes = miacode::diag::processPrivateBytes();
+        const qint64 playStartPrivBytes = miacode::diag::leak_gauge::playStartPrivateBytes();
         const qint64 dPlayKb = (pausePrivBytes >= 0 && playStartPrivBytes >= 0)
             ? (pausePrivBytes - playStartPrivBytes) / 1024
             : 0;
@@ -354,14 +355,14 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
                 .arg(playbackTxn)
                 .arg(static_cast<qint64>(owner_.findChildren<QObject*>().size()))
                 .arg(dPlayKb)
-                .arg(miacode::debug_log::leak_gauge::inflightDepth())
-                .arg(miacode::debug_log::leak_gauge::inflightPeak())
-                .arg(miacode::debug_log::leak_gauge::timelinePresentsSincePlayStart())
-                .arg(miacode::debug_log::processResourceGaugePayload())
+                .arg(miacode::diag::leak_gauge::inflightDepth())
+                .arg(miacode::diag::leak_gauge::inflightPeak())
+                .arg(miacode::diag::leak_gauge::timelinePresentsSincePlayStart())
+                .arg(miacode::diag::processResourceGaugePayload())
                 .arg(state_.previewCanvas_ != nullptr
                          ? state_.previewCanvas_->resourceGaugePayload()
                          : QStringLiteral("scene_revision=-")));
-        miacode::debug_log::leak_gauge::armRenderSample(pausePrivBytes, playbackTxn);
+        miacode::diag::leak_gauge::armRenderSample(pausePrivBytes, playbackTxn);
     }
     scheduleDeferredPreviewUiTail(
         true,

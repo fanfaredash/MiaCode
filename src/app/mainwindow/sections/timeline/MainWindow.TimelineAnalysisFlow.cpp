@@ -17,6 +17,7 @@
 #include "common/ChartClockCount.h"
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
+#include "common/ProcessDiagnostics.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewInteractionConfig.h"
 #include "common/WaveformCache.h"
@@ -133,26 +134,26 @@ void MainWindow::TimelineSection::dispatchTimelineAnalysisRefresh()
         ? state_.timelineAnalysisPool_
         : QThreadPool::globalInstance();
     pool->start([guard, request]() {
-        miacode::debug_log::MemoryStageScope memScope("preview/mem_stage", "analysis_build");
+        miacode::diag::MemoryStageScope memScope("preview/mem_stage", "analysis_build");
         TimelineAnalysisRefreshResult result;
         {
             // beta7 probe 2.1 — tight core bracket around the parse + Muri-analyze build only.
-            miacode::debug_log::MemoryStageScope memScopeCore("preview/mem_stage", "analysis_core");
+            miacode::diag::MemoryStageScope memScopeCore("preview/mem_stage", "analysis_core");
             result = buildTimelineAnalysisRefreshResult(request);
         }
         if (guard.isNull()) {
             return;
         }
-        miacode::debug_log::leak_gauge::noteInflightDispatch();
+        miacode::diag::leak_gauge::noteInflightDispatch();
         QMetaObject::invokeMethod(
             guard.data(),
             [guard, result = std::move(result)]() mutable {
-                miacode::debug_log::leak_gauge::noteInflightApplied();
+                miacode::diag::leak_gauge::noteInflightApplied();
                 if (guard.isNull()) {
                     return;
                 }
 
-                miacode::debug_log::MemoryStageScope memScope("preview/mem_stage", "analysis_apply");
+                miacode::diag::MemoryStageScope memScope("preview/mem_stage", "analysis_apply");
                 QElapsedTimer applyTimer;
                 applyTimer.start();
 

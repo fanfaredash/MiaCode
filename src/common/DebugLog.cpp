@@ -13,7 +13,9 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QTextStream>
+#include <QThread>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -24,10 +26,6 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
-#include <psapi.h>
-#if defined(_MSC_VER)
-#pragma comment(lib, "psapi.lib")
-#endif
 #elif defined(Q_OS_MAC)
 #include <mach-o/dyld.h>
 #elif defined(Q_OS_UNIX)
@@ -168,6 +166,70 @@ bool shouldWrite(Channel channel, bool force)
     return force || channelEnabled(channel);
 }
 
+// MIACODE_SKIP_ASYNCLOG_FLUSH is a process-lifetime constant (a launch-time
+// diagnostic bypass for a historical Win10-22H2 singleton-construction fault).
+// Read it ONCE and cache, instead of hitting the global environment lock on
+// every appendText / reset / shutdown call.
+bool skipAsyncLogFlush()
+{
+    static const bool value =
+        qEnvironmentVariableIntValue("MIACODE_SKIP_ASYNCLOG_FLUSH") == 1;
+    return value;
+}
+
+// Fixed-width severity token rendered into every appendLine() line.
+const char* levelToken(Level level)
+{
+    switch (level) {
+    case Level::Trace: return "TRACE";
+    case Level::Debug: return "DEBUG";
+    case Level::Info:  return "INFO ";
+    case Level::Warn:  return "WARN ";
+    case Level::Error: return "ERROR";
+    case Level::Fatal: return "FATAL";
+    }
+    return "INFO ";
+}
+
+// Process id is constant for the run; cache it once. Lets co-located processes
+// (export worker + main app sharing MIACODE_LOG_DIR write the same fixed-name
+// channel files) be told apart line-by-line.
+qint64 cachedProcessId()
+{
+    static const qint64 pid = QCoreApplication::applicationPid();
+    return pid;
+}
+
+// Numeric current-thread id. Matches the value the heap-free crash shadow dumps
+// via GetCurrentThreadId on Windows, so channel lines and the shadow share one
+// tid namespace. Lets GUI- vs render-thread lines (the leak gauge) be attributed.
+quint64 currentThreadIdNumeric()
+{
+#ifdef Q_OS_WIN
+    return static_cast<quint64>(::GetCurrentThreadId());
+#else
+    return static_cast<quint64>(reinterpret_cast<quintptr>(QThread::currentThreadId()));
+#endif
+}
+
+// Coalesced queue-overflow gap marker. On overflow we drop the OLDEST queued
+// entries (so the worker keeps the lead-up context it is about to write) and
+// emit ONE marker per channel per drain recording how many lines were lost —
+// so a reader sees the gap instead of a silently-continuous stream.
+QByteArray buildDropMarker(Channel channel, quint64 droppedCount)
+{
+    const QString bracket = channelLabel(channel) + QStringLiteral("/asynclog");
+    QString line =
+        QStringLiteral("%1 %2 pid=%3 tid=%4 [%5] dropped=%6 reason=queue_overflow")
+            .arg(timestampString(), QString::fromLatin1(levelToken(Level::Warn)))
+            .arg(cachedProcessId())
+            .arg(currentThreadIdNumeric())
+            .arg(bracket)
+            .arg(droppedCount);
+    line.append(QLatin1Char('\n'));
+    return line.toUtf8();
+}
+
 void ensureParentDirectory(const QString& path)
 {
     const QFileInfo info(path);
@@ -234,62 +296,54 @@ qint64 startupTrimMaxBytes()
     return 4 * 1024 * 1024;
 }
 
-bool trimFileToMaxBytesLocked(const QString& path, qint64 maxBytes)
+// Number of archived segments kept per channel (miacode_x.1.log .. .N.log).
+// Total on-disk per channel is bounded by (N + 1) × startupTrimMaxBytes().
+constexpr int kMaxLogSegments = 3;
+
+// Build the rotated-segment path: ".../miacode_runtime_debug.log" + index 1 ->
+// ".../miacode_runtime_debug.1.log" (index inserted before the suffix).
+QString rotatedSegmentPath(const QString& path, int index)
 {
-    if (maxBytes <= 0) {
-        return true;
-    }
-
-    // Short-circuit on file size (cheap stat call) before doing readAll. The previous
-    // implementation read the entire file into memory on every call, which was the per-write
-    // hot path under --debug mode — for a 100KB log file at ~5 logs/sec that was ~500KB/sec
-    // of file I/O on the GUI thread with the global log mutex held, causing 12-69ms hot-path
-    // stalls on every per-tick diagnostic write.
     const QFileInfo info(path);
-    if (!info.exists()) {
+    const QString dir = info.absolutePath();
+    const QString base = info.completeBaseName();
+    const QString suffix = info.suffix();
+    QString name = suffix.isEmpty()
+        ? QStringLiteral("%1.%2").arg(base).arg(index)
+        : QStringLiteral("%1.%2.%3").arg(base).arg(index).arg(suffix);
+    return dir.isEmpty() ? name : QDir(dir).filePath(name);
+}
+
+// Rename-based rotation. When `path` exceeds maxBytes, shift the archive chain up
+// (.N-1 -> .N, …, .1 -> .2) and rename the live file to .1, leaving the caller to
+// reopen a fresh empty base. Replaces the old in-place head-truncation, which
+// permanently discarded the session start (startup-timing / qt_config /
+// media_backend — the context a late-session repro needs). O(1) renames, bounded
+// disk, and the head is preserved in an archived segment. Defensive: any failed
+// rename (e.g. a still-open handle on Windows) just leaves the file to retry next
+// round — never throws, never truncates.
+bool rotateFileLocked(const QString& path, qint64 maxBytes, int maxSegments = kMaxLogSegments)
+{
+    if (maxBytes <= 0 || maxSegments < 1) {
         return true;
     }
-    const qint64 currentSize = info.size();
-    if (currentSize <= maxBytes) {
+    const QFileInfo info(path);
+    if (!info.exists() || info.size() <= maxBytes) {
         return true;
     }
-
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        return false;
+    // Drop the oldest archive, then shift the rest up by one.
+    QFile::remove(rotatedSegmentPath(path, maxSegments));
+    for (int i = maxSegments - 1; i >= 1; --i) {
+        const QString from = rotatedSegmentPath(path, i);
+        if (QFile::exists(from)) {
+            const QString to = rotatedSegmentPath(path, i + 1);
+            QFile::remove(to);
+            QFile::rename(from, to);
+        }
     }
-    const QByteArray data = file.readAll();
-    file.close();
-    if (data.size() <= maxBytes) {
-        return true;
-    }
-
-    // Trim down to 75% of maxBytes (low watermark) instead of right at maxBytes. Without
-    // this, every single write while the file is at the cap triggers a full readAll + rewrite
-    // because each write pushes the size 1 byte over and we trim back to exactly the cap.
-    // Trimming to a lower watermark gives us ~25% × maxBytes of headroom — at ~150B/log line
-    // and 100KB cap that's ~165 writes between trim operations.
-    const qint64 lowWatermark = (maxBytes * 3) / 4;
-    const qint64 retain = lowWatermark > 0 ? lowWatermark : maxBytes;
-    int start = qMax(0, data.size() - static_cast<int>(retain));
-    while (start < data.size() && start > 0 && data.at(start - 1) != '\n') {
-        ++start;
-    }
-    if (start >= data.size()) {
-        start = qMax(0, data.size() - static_cast<int>(retain));
-    }
-    QByteArray trimmed = data.mid(start);
-    if (trimmed.size() > retain) {
-        trimmed = trimmed.right(static_cast<int>(retain));
-    }
-
-    ensureParentDirectory(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        return false;
-    }
-    const qint64 written = file.write(trimmed);
-    file.close();
-    return written == trimmed.size();
+    const QString firstArchive = rotatedSegmentPath(path, 1);
+    QFile::remove(firstArchive);
+    return QFile::rename(path, firstArchive);
 }
 
 void trimDebugLogsInCurrentDirectoryLocked()
@@ -302,7 +356,7 @@ void trimDebugLogsInCurrentDirectoryLocked()
              Channel::StartupTiming,
              Channel::Fatal,
              Channel::Operation}) {
-        (void)trimFileToMaxBytesLocked(logPath(channel), maxBytes);
+        (void)rotateFileLocked(logPath(channel), maxBytes);
     }
 }
 
@@ -335,7 +389,7 @@ public:
         int newSize = 0;
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            if (permanentShutdown_) {
+            if (permanentShutdown_.load(std::memory_order_relaxed)) {
                 // Worker has been torn down (app exit). Late-arriving logs go straight to
                 // disk synchronously so we don't lose them.
                 writeEntrySync(channel, bytes);
@@ -343,6 +397,10 @@ public:
                 return true;
             }
             if (queue_.size() >= kMaxQueueSize) {
+                // Drop the OLDEST entry, but record it per-channel so the worker
+                // can emit a visible "dropped=N" gap marker into that channel's
+                // file instead of leaving a silently-continuous stream.
+                pendingDrops_[static_cast<size_t>(queue_.front().channel)] += 1;
                 queue_.pop_front();
                 dropped = true;
             }
@@ -411,7 +469,7 @@ public:
         s.currentQueueSize = currentQueueSize_.load(std::memory_order_relaxed);
         s.peakQueueSize = peakQueueSize_.load(std::memory_order_relaxed);
         s.workerRunning = workerStartedAtomic_.load(std::memory_order_acquire)
-                          && !permanentShutdown_;
+                          && !permanentShutdown_.load(std::memory_order_relaxed);
         s.asyncEnabled = true;
         return s;
     }
@@ -419,6 +477,13 @@ public:
 private:
     static constexpr int kMaxQueueSize = 4096;
     static constexpr int kTrimEveryWritesPerChannel = 200;
+    // Must match the number of Channel enum values (index = static_cast<size_t>).
+    // Channel::Operation is the last value; a channel added after it must bump this
+    // (and the four channel switch statements). The static_assert catches a stale
+    // count so the per-channel arrays below can never be indexed out of bounds.
+    static constexpr size_t kChannelCount = 7;
+    static_assert(static_cast<size_t>(Channel::Operation) + 1 == kChannelCount,
+                  "kChannelCount out of sync with the Channel enum");
 
     struct Entry {
         Channel channel;
@@ -441,7 +506,7 @@ private:
             return;
         }
         std::lock_guard<std::mutex> lock(mutex_);
-        if (workerStarted_ || permanentShutdown_) {
+        if (workerStarted_ || permanentShutdown_.load(std::memory_order_relaxed)) {
             return;
         }
         stopRequested_ = false;
@@ -457,7 +522,7 @@ private:
             std::lock_guard<std::mutex> lock(mutex_);
             if (!workerStarted_) {
                 if (permanent) {
-                    permanentShutdown_ = true;
+                    permanentShutdown_.store(true, std::memory_order_relaxed);
                 }
                 return;
             }
@@ -472,12 +537,24 @@ private:
         }
 
         std::deque<Entry> remaining;
+        std::array<quint64, kChannelCount> drops{};
         {
             std::lock_guard<std::mutex> lock(mutex_);
             remaining.swap(queue_);
+            drops = pendingDrops_;
+            pendingDrops_.fill(0);
             currentQueueSize_.store(0, std::memory_order_relaxed);
             if (permanent) {
-                permanentShutdown_ = true;
+                permanentShutdown_.store(true, std::memory_order_relaxed);
+            }
+        }
+        // Flush any overflow gap markers accumulated since the last drain before
+        // the surviving tail, so a shutdown-window drop is still recorded.
+        for (size_t i = 0; i < kChannelCount; ++i) {
+            if (drops[i] > 0) {
+                const Channel ch = static_cast<Channel>(i);
+                writeEntrySync(ch, buildDropMarker(ch, drops[i]));
+                writtenCount_.fetch_add(1, std::memory_order_relaxed);
             }
         }
         for (const Entry& entry : remaining) {
@@ -492,6 +569,7 @@ private:
     {
         std::deque<Entry> batch;
         for (;;) {
+            std::array<quint64, kChannelCount> drops{};
             {
                 std::unique_lock<std::mutex> lock(mutex_);
                 cv_.wait(lock, [this]() { return !queue_.empty() || stopRequested_; });
@@ -499,8 +577,20 @@ private:
                     return;
                 }
                 batch.swap(queue_);
+                drops = pendingDrops_;
+                pendingDrops_.fill(0);
                 currentQueueSize_.store(0, std::memory_order_relaxed);
                 writing_ = true;
+            }
+
+            // Emit one coalesced gap marker per channel that overflowed since the
+            // last drain. The dropped entries were the oldest, so the marker
+            // correctly precedes this batch's surviving (newer) lines.
+            for (size_t i = 0; i < kChannelCount; ++i) {
+                if (drops[i] > 0) {
+                    const Channel ch = static_cast<Channel>(i);
+                    writeEntryWorker(Entry{ch, buildDropMarker(ch, drops[i])});
+                }
             }
 
             const auto batchStart = std::chrono::steady_clock::now();
@@ -526,39 +616,49 @@ private:
     // Worker-thread-only: write one entry using the cached file handle for that channel.
     void writeEntryWorker(const Entry& entry)
     {
-        const QString path = logPath(entry.channel);
-        QFile* file = openFiles_.value(path, nullptr);
+        const size_t idx = static_cast<size_t>(entry.channel);
+        // Resolve the channel's path ONCE per worker lifetime. It only changes when
+        // the project log dir changes, which stops the worker and clears this cache,
+        // so the per-entry drain path is free of the env reads + project-dir mutex +
+        // QString churn that logPath() would otherwise incur on every single line.
+        if (channelPaths_[idx].isEmpty()) {
+            channelPaths_[idx] = logPath(entry.channel);
+        }
+        const QString& path = channelPaths_[idx];
+        QFile* file = openFiles_[idx];
         if (file == nullptr || !file->isOpen()) {
             ensureParentDirectory(path);
             file = new QFile(path);
             if (!file->open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
                 delete file;
-                openFiles_.remove(path);
+                openFiles_[idx] = nullptr;
                 return;
             }
-            openFiles_.insert(path, file);
-            writeCountSinceTrim_.insert(path, 0);
+            openFiles_[idx] = file;
+            writeCountSinceTrim_[idx] = 0;
         }
         file->write(entry.bytes);
         // No flush here — Qt's QFile writes go through the OS file cache, and we let the
         // OS flush on its own schedule. Trade-off: a hard crash may lose the last few log
         // lines, but the alternative (flush per write) re-introduces the I/O stall we're
         // trying to eliminate.
-        const qint64 newCount = writeCountSinceTrim_.value(path, 0) + 1;
+        const qint64 newCount = writeCountSinceTrim_[idx] + 1;
         if (newCount >= kTrimEveryWritesPerChannel
             && miacode::debug_options::debugModeEnabled()) {
-            // Close the handle, run trim, then reopen for further appends.
+            // Close the handle, rotate if oversized (rename-based, preserves the
+            // session start in an archived segment), then reopen a fresh base for
+            // further appends. rotateFileLocked short-circuits when under the cap.
             file->close();
-            trimFileToMaxBytesLocked(path, startupTrimMaxBytes());
+            rotateFileLocked(path, startupTrimMaxBytes());
             if (!file->open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
                 delete file;
-                openFiles_.remove(path);
-                writeCountSinceTrim_.remove(path);
+                openFiles_[idx] = nullptr;
+                writeCountSinceTrim_[idx] = 0;
                 return;
             }
-            writeCountSinceTrim_.insert(path, 0);
+            writeCountSinceTrim_[idx] = 0;
         } else {
-            writeCountSinceTrim_.insert(path, newCount);
+            writeCountSinceTrim_[idx] = newCount;
         }
     }
 
@@ -577,17 +677,19 @@ private:
 
     void closeAllCachedHandles()
     {
-        for (auto it = openFiles_.begin(); it != openFiles_.end(); ++it) {
-            QFile* f = it.value();
+        for (QFile*& f : openFiles_) {
             if (f != nullptr) {
                 if (f->isOpen()) {
                     f->close();
                 }
                 delete f;
+                f = nullptr;
             }
         }
-        openFiles_.clear();
-        writeCountSinceTrim_.clear();
+        writeCountSinceTrim_.fill(0);
+        // Drop cached paths too, so a project-dir change (which stops the worker)
+        // forces re-resolution against the new directory on the next write.
+        channelPaths_.fill(QString());
     }
 
     static void updateMaxAtomic(std::atomic<quint64>& target, quint64 candidate)
@@ -602,16 +704,23 @@ private:
     std::condition_variable cv_;
     std::condition_variable drained_;
     std::deque<Entry> queue_;
+    // Per-channel count of entries dropped on overflow since the last drain
+    // (guarded by mutex_). The worker turns these into visible gap markers.
+    std::array<quint64, kChannelCount> pendingDrops_{};
     std::thread worker_;
     bool workerStarted_ = false;
     bool stopRequested_ = false;
-    bool permanentShutdown_ = false;
+    std::atomic<bool> permanentShutdown_{false};
     bool writing_ = false;
     std::atomic<bool> workerStartedAtomic_{false};
 
-    // Worker-thread-only state (no locking needed).
-    QHash<QString, QFile*> openFiles_;
-    QHash<QString, qint64> writeCountSinceTrim_;
+    // Worker-thread-only state (no locking needed), indexed by Channel so the drain
+    // path needs no QString key derivation. channelPaths_ caches each channel's
+    // resolved log path (filled once per worker lifetime; cleared on stop, so a
+    // project-dir change re-resolves it).
+    std::array<QFile*, kChannelCount> openFiles_{};
+    std::array<qint64, kChannelCount> writeCountSinceTrim_{};
+    std::array<QString, kChannelCount> channelPaths_;
 
     // Stats — atomics so snapshot() does not contend with the hot path.
     std::atomic<quint64> enqueuedCount_{0};
@@ -638,7 +747,11 @@ QByteArray prepareLogPayload(const QString& text)
 
 QString timestampString()
 {
-    return QDateTime::currentDateTime().toString(Qt::ISODateWithMs);
+    // UTC with a trailing 'Z'. The crash shadow + startup beacon already stamp
+    // GetSystemTime (UTC); using local wall-clock here made the channel logs and
+    // those crash files un-correlatable across the local offset (and the local
+    // stamp carried no offset to recover it). One clock convention everywhere.
+    return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
 }
 
 QString logDirectory()
@@ -781,60 +894,34 @@ void trimDebugSessionLogsForStartup()
 
 bool resetChannel(Channel channel, const QStringList& initialLines, bool force)
 {
-    miacode::oplog::appendStartupBeaconLine("reset/entry");
     if (!shouldWrite(channel, force)) {
-        miacode::oplog::appendStartupBeaconLine("reset/should_not_write");
         return false;
     }
-    // Diagnostic bypass: setting MIACODE_SKIP_ASYNCLOG_FLUSH=1 short-circuits
-    // the flush+stop calls below. On the user's broken Win10 22H2 the first
-    // touch of AsyncLogWriter::instance() (Meyers singleton construction)
-    // appears to fault — if this env var lets the app start, we've localised
-    // the regression to that singleton's construction.
-    const bool skipAsyncLog =
-        qEnvironmentVariableIntValue("MIACODE_SKIP_ASYNCLOG_FLUSH") == 1;
-    if (skipAsyncLog) {
-        miacode::oplog::appendStartupBeaconLine("reset/asynclog_skipped_via_env");
-    } else {
-        miacode::oplog::appendStartupBeaconLine("reset/before_asynclog_instance_call");
+    // MIACODE_SKIP_ASYNCLOG_FLUSH (cached) short-circuits the flush+stop below —
+    // the diagnostic escape hatch for the historical Win10-22H2 singleton-
+    // construction fault that avoids ever touching AsyncLogWriter::instance().
+    if (!skipAsyncLogFlush()) {
         // Truncate is destructive — drain and stop the worker so it isn't writing to the
         // file we're about to wipe (and so its cached handle is closed before we open in
         // Truncate mode, which is otherwise a Windows sharing-violation hazard).
         AsyncLogWriter& writer = AsyncLogWriter::instance();
-        miacode::oplog::appendStartupBeaconLine("reset/after_asynclog_instance_call");
-        miacode::oplog::appendStartupBeaconLine("reset/before_asynclog_flush");
         writer.flush(2000);
-        miacode::oplog::appendStartupBeaconLine("reset/after_asynclog_flush");
-        miacode::oplog::appendStartupBeaconLine("reset/before_asynclog_stop");
         writer.stop();
-        miacode::oplog::appendStartupBeaconLine("reset/after_asynclog_stop");
     }
-    miacode::oplog::appendStartupBeaconLine("reset/before_log_mutex_lock");
     QMutexLocker locker(&logMutex());
-    miacode::oplog::appendStartupBeaconLine("reset/before_log_path");
     const QString path = logPath(channel);
-    {
-        const QByteArray pathUtf8 = path.toUtf8();
-        char buf[1024];
-        std::snprintf(buf, sizeof(buf), "reset/log_path=%.900s", pathUtf8.constData());
-        miacode::oplog::appendStartupBeaconLine(buf);
-    }
-    miacode::oplog::appendStartupBeaconLine("reset/before_ensure_parent_dir");
     ensureParentDirectory(path);
-    miacode::oplog::appendStartupBeaconLine("reset/before_qfile_ctor");
     QFile file(path);
-    miacode::oplog::appendStartupBeaconLine("reset/before_qfile_open");
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
-        const QFile::FileError err = file.error();
+        // Keep one breadcrumb on the genuine failure branch — a reset failure is
+        // exactly the kind of silent-startup-crash signal the beacon exists for.
         const QByteArray errStr = file.errorString().toUtf8();
         char buf[768];
-        std::snprintf(buf, sizeof(buf),
-            "reset/qfile_open_failed err=%d msg=%.500s",
-            static_cast<int>(err), errStr.constData());
+        std::snprintf(buf, sizeof(buf), "reset/qfile_open_failed err=%d msg=%.500s",
+            static_cast<int>(file.error()), errStr.constData());
         miacode::oplog::appendStartupBeaconLine(buf);
         return false;
     }
-    miacode::oplog::appendStartupBeaconLine("reset/qfile_open_ok");
     QTextStream stream(&file);
     for (const QString& line : initialLines) {
         stream << line;
@@ -842,23 +929,21 @@ bool resetChannel(Channel channel, const QStringList& initialLines, bool force)
             stream << '\n';
         }
     }
-    miacode::oplog::appendStartupBeaconLine("reset/return_ok");
     return true;
 }
 
-bool appendText(Channel channel, const QString& text, bool force)
+bool appendText(Channel channel, const QString& text, bool force, Level level)
 {
     if (!shouldWrite(channel, force)) {
         return false;
     }
     QByteArray bytes = prepareLogPayload(text);
-    // Diagnostic bypass: when MIACODE_SKIP_ASYNCLOG_FLUSH=1 is set, write
-    // synchronously and never touch AsyncLogWriter::instance(). Used to
-    // localise startup crashes that happen in the singleton's first-time
-    // construction on certain Win10 22H2 builds.
-    const bool skipAsyncLog =
-        qEnvironmentVariableIntValue("MIACODE_SKIP_ASYNCLOG_FLUSH") == 1;
-    if (skipAsyncLog || channel == Channel::Fatal) {
+    // Durable synchronous write for fatal-grade lines (keyed off the LEVEL, so a
+    // Level::Fatal line on any channel is flushed to disk before the next
+    // instruction — not just the dedicated Fatal channel) and for the cached
+    // MIACODE_SKIP_ASYNCLOG_FLUSH diagnostic bypass.
+    const bool skipAsyncLog = skipAsyncLogFlush();
+    if (skipAsyncLog || level == Level::Fatal || channel == Channel::Fatal) {
         if (!skipAsyncLog) {
             AsyncLogWriter::instance().flush(1000);
         }
@@ -878,17 +963,26 @@ bool appendText(Channel channel, const QString& text, bool force)
     return true;
 }
 
-bool appendLine(Channel channel, const QString& scope, const QString& payload, bool force)
+bool appendLine(Channel channel, const QString& scope, const QString& payload, bool force, Level level)
 {
     QString bracket = channelLabel(channel);
     if (!scope.trimmed().isEmpty()) {
         bracket += QLatin1Char('/') + scope.trimmed();
     }
-    QString text = QStringLiteral("%1 [%2]").arg(timestampString(), bracket);
+    // The dedicated Fatal channel always renders (and flushes) at Fatal level,
+    // regardless of the level the caller passed, so lines in miacode_fatal.log
+    // are never mislabelled INFO.
+    const Level effective = (channel == Channel::Fatal) ? Level::Fatal : level;
+    // Canonical record grammar: <ts> <LEVEL> pid=<n> tid=<n> [<channel>/<scope>] <payload>
+    QString text = QStringLiteral("%1 %2 pid=%3 tid=%4 [%5]")
+                       .arg(timestampString(), QString::fromLatin1(levelToken(effective)))
+                       .arg(cachedProcessId())
+                       .arg(currentThreadIdNumeric())
+                       .arg(bracket);
     if (!payload.trimmed().isEmpty()) {
         text += QStringLiteral(" ") + payload;
     }
-    return appendText(channel, text, force);
+    return appendText(channel, text, force, effective);
 }
 
 bool appendTimingLine(
@@ -897,7 +991,8 @@ bool appendTimingLine(
     const QString& step,
     qint64 elapsedMs,
     const QString& detail,
-    bool force)
+    bool force,
+    Level level)
 {
     QString payload = QStringLiteral("step=%1 elapsed_ms=%2")
                           .arg(step.trimmed().isEmpty() ? QStringLiteral("unknown") : step.trimmed())
@@ -905,7 +1000,7 @@ bool appendTimingLine(
     if (!detail.trimmed().isEmpty()) {
         payload += QStringLiteral(" ") + detail.trimmed();
     }
-    return appendLine(channel, scope, payload, force);
+    return appendLine(channel, scope, payload, force, level);
 }
 
 bool initializeStartupTimingLogSession()
@@ -945,192 +1040,13 @@ bool appendFatalMessage(const QString& scope, const QString& payload)
     const QString fullPayload = chain.isEmpty()
         ? payload
         : QStringLiteral("%1 | chain=%2").arg(payload, chain);
-    return appendLine(Channel::Fatal, scope, fullPayload, true);
+    return appendLine(Channel::Fatal, scope, fullPayload, /*force=*/true, Level::Fatal);
 }
 
-QString processResourceGaugePayload()
-{
-#ifdef Q_OS_WIN
-    const HANDLE process = GetCurrentProcess();
-    const DWORD gdiObjects = GetGuiResources(process, GR_GDIOBJECTS);
-    const DWORD userObjects = GetGuiResources(process, GR_USEROBJECTS);
-    DWORD kernelHandles = 0;
-    GetProcessHandleCount(process, &kernelHandles);
-    quint64 workingSetMb = 0;
-    quint64 peakWorkingSetMb = 0;
-    quint64 privateMb = 0;
-    quint64 commitMb = 0;
-    quint64 pagedPoolKb = 0;
-    quint64 nonPagedPoolKb = 0;
-    quint64 pageFaults = 0;
-    PROCESS_MEMORY_COUNTERS_EX pmc;
-    ZeroMemory(&pmc, sizeof(pmc));
-    pmc.cb = sizeof(pmc);
-    if (GetProcessMemoryInfo(
-            process, reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc), sizeof(pmc))) {
-        workingSetMb = static_cast<quint64>(pmc.WorkingSetSize) / (1024ull * 1024ull);
-        peakWorkingSetMb = static_cast<quint64>(pmc.PeakWorkingSetSize) / (1024ull * 1024ull);
-        privateMb = static_cast<quint64>(pmc.PrivateUsage) / (1024ull * 1024ull);
-        commitMb = static_cast<quint64>(pmc.PagefileUsage) / (1024ull * 1024ull);
-        pagedPoolKb = static_cast<quint64>(pmc.QuotaPagedPoolUsage) / 1024ull;
-        nonPagedPoolKb = static_cast<quint64>(pmc.QuotaNonPagedPoolUsage) / 1024ull;
-        pageFaults = static_cast<quint64>(pmc.PageFaultCount);
-    }
-    return QStringLiteral(
-               "gdi_objects=%1 user_objects=%2 kernel_handles=%3 working_set_mb=%4 "
-               "peak_working_set_mb=%5 private_mb=%6 commit_mb=%7 paged_pool_kb=%8 "
-               "nonpaged_pool_kb=%9 page_faults=%10")
-        .arg(static_cast<quint64>(gdiObjects))
-        .arg(static_cast<quint64>(userObjects))
-        .arg(static_cast<quint64>(kernelHandles))
-        .arg(workingSetMb)
-        .arg(peakWorkingSetMb)
-        .arg(privateMb)
-        .arg(commitMb)
-        .arg(pagedPoolKb)
-        .arg(nonPagedPoolKb)
-        .arg(pageFaults);
-#else
-    return QStringLiteral(
-        "gdi_objects=0 user_objects=0 kernel_handles=0 working_set_mb=0 peak_working_set_mb=0 "
-        "private_mb=0 commit_mb=0 paged_pool_kb=0 nonpaged_pool_kb=0 page_faults=0");
-#endif
-}
-
-static qint64 stageScopePrivateBytes()
-{
-#ifdef Q_OS_WIN
-    PROCESS_MEMORY_COUNTERS_EX pmc;
-    ZeroMemory(&pmc, sizeof(pmc));
-    pmc.cb = sizeof(pmc);
-    if (GetProcessMemoryInfo(
-            GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc), sizeof(pmc))) {
-        return static_cast<qint64>(pmc.PrivateUsage);
-    }
-#endif
-    return -1;
-}
-
-qint64 processPrivateBytes()
-{
-    return stageScopePrivateBytes();
-}
-
-namespace {
-// beta7 render-vs-GUI leak gauge cross-thread state. Cheap atomics; written/read from the GUI
-// thread (play-start, pause) and the render thread (present). See DebugLog.h leak_gauge.
-std::atomic<qint64> g_leakPlayStartPriv{-1};
-std::atomic<qint64> g_leakPausePriv{-1};
-std::atomic<quint64> g_leakPauseTxn{0};
-std::atomic<bool> g_leakArmed{false};
-std::atomic<int> g_leakInflight{0};
-std::atomic<int> g_leakInflightPeak{0};
-std::atomic<quint64> g_timelinePresents{0};
-std::atomic<quint64> g_playStartPresents{0};
-}  // namespace
-
-namespace leak_gauge {
-
-void notePlayStartPrivateBytes(qint64 bytes)
-{
-    g_leakPlayStartPriv.store(bytes, std::memory_order_relaxed);
-}
-
-qint64 playStartPrivateBytes()
-{
-    return g_leakPlayStartPriv.load(std::memory_order_relaxed);
-}
-
-void armRenderSample(qint64 pausePrivateBytes, quint64 txn)
-{
-    g_leakPausePriv.store(pausePrivateBytes, std::memory_order_relaxed);
-    g_leakPauseTxn.store(txn, std::memory_order_relaxed);
-    g_leakArmed.store(true, std::memory_order_release);
-}
-
-bool takeRenderSample(qint64* outPausePrivateBytes, quint64* outTxn)
-{
-    if (!g_leakArmed.exchange(false, std::memory_order_acquire)) {
-        return false;
-    }
-    if (outPausePrivateBytes != nullptr) {
-        *outPausePrivateBytes = g_leakPausePriv.load(std::memory_order_relaxed);
-    }
-    if (outTxn != nullptr) {
-        *outTxn = g_leakPauseTxn.load(std::memory_order_relaxed);
-    }
-    return true;
-}
-
-void noteInflightDispatch()
-{
-    const int depth = g_leakInflight.fetch_add(1, std::memory_order_relaxed) + 1;
-    int prevPeak = g_leakInflightPeak.load(std::memory_order_relaxed);
-    while (depth > prevPeak
-           && !g_leakInflightPeak.compare_exchange_weak(prevPeak, depth, std::memory_order_relaxed)) {
-    }
-}
-
-void noteInflightApplied()
-{
-    g_leakInflight.fetch_sub(1, std::memory_order_relaxed);
-}
-
-int inflightDepth()
-{
-    return g_leakInflight.load(std::memory_order_relaxed);
-}
-
-int inflightPeak()
-{
-    return g_leakInflightPeak.load(std::memory_order_relaxed);
-}
-
-void noteTimelinePresent()
-{
-    g_timelinePresents.fetch_add(1, std::memory_order_relaxed);
-}
-
-void markPlayStartTimelinePresents()
-{
-    g_playStartPresents.store(
-        g_timelinePresents.load(std::memory_order_relaxed), std::memory_order_relaxed);
-}
-
-quint64 timelinePresentsSincePlayStart()
-{
-    const quint64 now = g_timelinePresents.load(std::memory_order_relaxed);
-    const quint64 start = g_playStartPresents.load(std::memory_order_relaxed);
-    return now >= start ? now - start : 0;
-}
-
-}  // namespace leak_gauge
-
-MemoryStageScope::MemoryStageScope(const char* scope, const char* stage)
-    : scope_(scope), stage_(stage), startBytes_(-1)
-{
-    if (miacode::debug_options::runtimeDebugOutputEnabled()) {
-        startBytes_ = stageScopePrivateBytes();
-    }
-}
-
-MemoryStageScope::~MemoryStageScope()
-{
-    if (startBytes_ < 0) {
-        return;
-    }
-    const qint64 endBytes = stageScopePrivateBytes();
-    if (endBytes < 0) {
-        return;
-    }
-    appendLine(
-        Channel::Runtime,
-        QString::fromLatin1(scope_),
-        QStringLiteral("stage=%1 private_mb=%2 delta_kb=%3")
-            .arg(QString::fromLatin1(stage_))
-            .arg(endBytes / (1024 * 1024))
-            .arg((endBytes - startBytes_) / 1024));
-}
+// NOTE: processResourceGaugePayload / stageScopePrivateBytes / processPrivateBytes /
+// the leak_gauge cross-thread state + namespace / MemoryStageScope were all moved to
+// src/common/ProcessDiagnostics.cpp (namespace miacode::diag). DebugLog is now a pure
+// channelized writer; the profiler depends on it, not the reverse.
 
 LogWriterStats logWriterStatsSnapshot()
 {
@@ -1144,10 +1060,10 @@ bool flushAsyncLogWriter(int timeoutMs)
 
 void shutdownAsyncLogWriter()
 {
-    // Diagnostic bypass: never touch the singleton if the user has opted out
-    // for the duration of this run. Reading the env var here covers the case
-    // where the singleton was never constructed during startup.
-    if (qEnvironmentVariableIntValue("MIACODE_SKIP_ASYNCLOG_FLUSH") == 1) {
+    // Diagnostic bypass (cached): never touch the singleton if the user has opted
+    // out for the duration of this run. Covers the case where the singleton was
+    // never constructed during startup.
+    if (skipAsyncLogFlush()) {
         return;
     }
     AsyncLogWriter::instance().shutdown();

@@ -164,6 +164,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/MuriConfig.h
     src/common/DebugLog.h
     src/common/DebugLog.cpp
+    src/common/ProcessDiagnostics.h
+    src/common/ProcessDiagnostics.cpp
     src/common/OperationLog.h
     src/common/OperationLog.cpp
     src/common/CrashRecovery.h

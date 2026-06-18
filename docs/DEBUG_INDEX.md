@@ -65,7 +65,12 @@ These only matter while debug mode is active for the detailed channels. The alwa
 - `MIACODE_DISABLE_PREVIEW_PROFILE_OUTPUT`
 - `MIACODE_DISABLE_STARTUP_TIMING`
 
-Fatal logging is intentionally not gated by debug mode.
+Fatal logging is intentionally not gated by debug mode. The `Operation` channel
+(op-chain failures from `MC_OP` `~Scope`/`fail()`) is **also always-on** — it has no
+per-category disable flag and ignores `--debug`, by design: it fires only on failure
+paths (silent on the happy path) so the logical-call-chain is captured whenever
+something goes wrong. The per-category gates above are snapshot into atomics at
+`setDebugModeEnabled` (not re-read per log line).
 
 ## Current Preview / Export Backend Notes
 
@@ -216,7 +221,6 @@ DirectComposition / D3D11 preview (`src/common/DebugOptions.h`; default OFF, bei
 - `MIACODE_PREVIEW_DCOMP_QUIESCE_QSG` — skip QSG repaint subscriptions while DComp is active.
 - `MIACODE_PREVIEW_QSG_FULL_DISABLE` — force QSG to the software/basic path (GPU-contention isolation test).
 - `MIACODE_PREVIEW_FORCE_BASIC_RENDER_LOOP` — force `QSG_RENDER_LOOP=basic` at startup.
-- `MIACODE_POPUP_TRACKER` — log owned-popup HWND topology.
 - `MIACODE_SKIP_DIAG_D3D11` — skip the startup D3D11 diagnostic probe.
 
 ## Misc / Platform

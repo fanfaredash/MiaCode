@@ -2,13 +2,10 @@
 
 #include "common/DebugLog.h"
 
-#include <QDebug>
 #include <QElapsedTimer>
 #include <QString>
 #include <QStringLiteral>
 
-#include <cstdio>
-#include <ctime>
 #include <utility>
 #include <vector>
 
@@ -39,41 +36,14 @@ void logTracker(const char* action, const QString& extra = QString())
     if (!extra.isEmpty()) {
         payload += QStringLiteral(" ") + extra;
     }
-    // force=true so this bypasses runtimeDebugOutputEnabled(). The
-    // tracker's diagnostics are intentionally always-on for now —
-    // they're rate-limited (notify is ≤1/sec) and rare otherwise
-    // (register/unregister fire only on attach/detach), so the cost
-    // is negligible and they're invaluable for confirming the hook
-    // is wired up at all.
+    // Single sink, gated by --debug like every other mainline log line. The old
+    // verification-only quadruple-write (force=true debug_log + qDebug + a direct
+    // fopen to popup_tracker_alive.log + OutputDebugStringW) is gone now that the
+    // WM_ hook is confirmed working — it was the lone raw-output offender in src/.
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("render/backend_d3d11/popup_tracker"),
-        payload,
-        /*force=*/true);
-    // Also emit to qDebug() as a parallel signal; goes through whatever
-    // QtMessageHandler is installed (default: stderr / OutputDebugString
-    // on Windows). Removed once the WM_ hook is verified working.
-    qDebug().noquote() << QStringLiteral("[popup_tracker]") << payload;
-    // Last-resort diagnostic: write to .miacode/logs/popup_tracker_alive.log
-    // so the app definitely has write access. Bypasses Qt's async
-    // logger entirely (direct fopen).
-    {
-        const QString markerPath = miacode::debug_log::logDirectory()
-            + QStringLiteral("/popup_tracker_alive.log");
-        FILE* f = nullptr;
-        if (::_wfopen_s(&f, reinterpret_cast<const wchar_t*>(markerPath.utf16()),
-                        L"ab") == 0 && f != nullptr) {
-            const auto t = std::time(nullptr);
-            std::fprintf(f, "[%lld] %s\n",
-                         static_cast<long long>(t),
-                         payload.toUtf8().constData());
-            std::fclose(f);
-        }
-        // Also OutputDebugStringW — visible in DebugView++ regardless
-        // of file I/O. Distinct prefix so it's easy to filter.
-        QString line = QStringLiteral("MIACODE_POPUP_TRACKER ") + payload + QStringLiteral("\n");
-        ::OutputDebugStringW(reinterpret_cast<LPCWSTR>(line.utf16()));
-    }
+        payload);
 }
 
 }  // namespace

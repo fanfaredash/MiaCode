@@ -17,6 +17,7 @@
 #include "common/ChartClockCount.h"
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
+#include "common/ProcessDiagnostics.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewInteractionConfig.h"
 #include "common/WaveformCache.h"
@@ -825,7 +826,7 @@ void MainWindow::TimelineSection::applyLatestTimelinePreviewStateToPausedPreview
         return;
     }
 
-    miacode::debug_log::MemoryStageScope memScope("preview/mem_stage", "preview_state_push");
+    miacode::diag::MemoryStageScope memScope("preview/mem_stage", "preview_state_push");
     const bool noteMarkersChanged = state_.latestTimelineNoteMarkerSignature_ != state_.lastPreviewNoteMarkerSignature_;
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->applyPausedPreviewState(
@@ -879,13 +880,13 @@ void MainWindow::TimelineSection::dispatchTimelineSlowRefresh()
         ? state_.timelineSlowRefreshPool_
         : QThreadPool::globalInstance();
     pool->start([guard, request]() {
-        miacode::debug_log::MemoryStageScope memScope("preview/mem_stage", "slow_refresh_build");
+        miacode::diag::MemoryStageScope memScope("preview/mem_stage", "slow_refresh_build");
         SimaiNativeParseResult parseResult;
         TimelinePreviewRefreshState previewState;
         {
             // beta7 probe 2.1 — tight core bracket excludes the invokeMethod result COPY below,
             // so (slow_refresh_build − slow_refresh_core) isolates the in-flight handoff cost.
-            miacode::debug_log::MemoryStageScope memScopeCore(
+            miacode::diag::MemoryStageScope memScopeCore(
                 "preview/mem_stage", "slow_refresh_core");
             parseResult = SimaiNativeParser::parseForTimeline(
                 request.chartText,
@@ -895,11 +896,11 @@ void MainWindow::TimelineSection::dispatchTimelineSlowRefresh()
         if (guard.isNull()) {
             return;
         }
-        miacode::debug_log::leak_gauge::noteInflightDispatch();
+        miacode::diag::leak_gauge::noteInflightDispatch();
         QMetaObject::invokeMethod(
             guard.data(),
             [guard, request, parseResult, previewState]() mutable {
-                miacode::debug_log::leak_gauge::noteInflightApplied();
+                miacode::diag::leak_gauge::noteInflightApplied();
                 if (guard.isNull()) {
                     return;
                 }
