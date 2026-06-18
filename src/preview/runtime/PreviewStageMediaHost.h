@@ -113,6 +113,16 @@ public:
     void setObservedPlayheadSecond(double second);
     QString debugMediaTypeName() const;
 
+    // Video decode-mode preference (硬件渲染 / 软件渲染 toggle). false = hardware
+    // (D3D11VA, the default), true = software (FFmpeg CPU). Hot-switchable at
+    // RUNTIME with no app restart: when a PV is loaded this reloads it in place on
+    // the same QAVPlayer (reusing the sink, restoring position + play state);
+    // otherwise it just takes effect on the next load. The persisted user
+    // preference is owned by MainWindow and pushed here; the dev env override
+    // MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO still wins on top.
+    void setVideoDecodePreference(bool preferSoftware);
+    bool videoDecodePrefersSoftware() const { return videoDecodePreferSoftware_; }
+
 signals:
     void mediaStateChanged();
     void mediaVisibilityChanged();
@@ -154,6 +164,11 @@ private:
     // One-shot fallback: if hardware (D3D11VA) decode reports InvalidMedia,
     // re-open the source forcing FFmpeg software decode before giving up.
     void maybeRetryWithSoftwareDecode();
+    // Hot-switch the currently-loaded PV's decode mode in place on the same
+    // QAVPlayer (stop -> setInputVideoCodec -> reload -> seek -> restore play
+    // state). Same in-place reload as the software fallback, but driven by the
+    // user's hardware/software preference and bidirectional. No app restart.
+    void reloadVideoDecodeInPlace();
 #endif
     // HW-decode diag (docs/PREVIEW_HWDECODE_GREEN_GARBLE_SEEK_DEBUG_PLAN_ZH.md §9):
     // drain the QtAVPlayer copy-path cumulative counters into one runtime-log line on a
@@ -165,6 +180,11 @@ private:
     qint64 videoFrameStallThresholdMs() const;
 
     MediaKind mediaKind_ = MediaKind::None;
+    // 硬件/软件渲染 preference: false = hardware D3D11VA decode (default), true =
+    // software. Set by MainWindow from the persisted user preference; read in
+    // initializeBackendObjects (initial/rebuild decode choice) and applied live by
+    // setVideoDecodePreference / reloadVideoDecodeInPlace.
+    bool videoDecodePreferSoftware_ = false;
     QString chartPath_;
     QString mediaPath_;
     // Phase 4c — last-set raw `&video=` value. Part of the setChartPath skip key.

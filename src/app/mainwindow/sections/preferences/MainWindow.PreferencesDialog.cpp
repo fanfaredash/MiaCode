@@ -1088,6 +1088,53 @@ void MainWindow::PreferencesSection::onPreferences()
             owner_.setTimelineFrameRateMode(mode, true);
         }
     );
+
+    // Preview video decode mode: 硬件渲染 (hardware, default) vs 软件渲染 (software).
+    // Two fixed options, built with the same QToolButton+QMenu visual pattern as
+    // the frame-rate rows. preferSoftware == false selects hardware.
+    {
+        struct VideoDecodeOption {
+            bool preferSoftware;
+            QString label;
+        };
+        const QList<VideoDecodeOption> videoDecodeOptions = {
+            {false, uiText("dialog.preferences.performance.video_decode.hardware", "Hardware")},
+            {true, uiText("dialog.preferences.performance.video_decode.software", "Software")},
+        };
+        const auto videoDecodeLabel = [&](bool preferSoftware) -> QString {
+            for (const VideoDecodeOption& option : videoDecodeOptions) {
+                if (option.preferSoftware == preferSoftware) {
+                    return option.label;
+                }
+            }
+            return videoDecodeOptions.front().label;
+        };
+        auto* button = new QToolButton(performanceGroup);
+        button->setObjectName("PreferenceMenuButton");
+        button->setFont(uiAccentFont(10, QFont::DemiBold));
+        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        button->setText(videoDecodeLabel(owner_.currentVideoDecodePrefersSoftware()));
+        auto* menu = new QMenu(button);
+        menu->setFont(uiAccentFont(10));
+        styleRoundedMenu(*menu);
+        for (const VideoDecodeOption& option : videoDecodeOptions) {
+            QAction* action = menu->addAction(option.label);
+            action->setData(option.preferSoftware);
+            connect(action, &QAction::triggered, &dialog, [&, option, button]() {
+                button->setText(option.label);
+                owner_.setVideoDecodePrefersSoftware(option.preferSoftware, true);
+                owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+            });
+        }
+        connect(button, &QToolButton::clicked, &dialog, [button, menu]() {
+            menu->popup(button->mapToGlobal(QPoint(0, button->height())));
+        });
+        performanceLayout->addRow(
+            uiText("dialog.preferences.performance.video_decode", "Video Decode"),
+            button);
+    }
+
     flattenPageGroup(performanceGroup);
     performancePageLayout->addWidget(performanceGroup);
     performancePageLayout->addStretch(1);

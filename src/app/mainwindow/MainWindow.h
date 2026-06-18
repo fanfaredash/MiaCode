@@ -427,6 +427,11 @@ public:
     PreviewCanvasFrameRateMode currentPreviewCanvasFrameRateMode() const;
     PreviewCanvasFrameRateMode currentPreviewStageMediaFrameRateMode() const;
     PreviewCanvasFrameRateMode currentTimelineFrameRateMode() const;
+    // Preview video decode-mode preference (硬件渲染 / 软件渲染 toggle). false =
+    // hardware (D3D11VA, the default), true = software (FFmpeg CPU). Mirrors the
+    // PV-refresh-rate preference: persisted in portable state and pushed to
+    // PreviewStageMediaHost::setVideoDecodePreference (which hot-switches live).
+    bool currentVideoDecodePrefersSoftware() const;
 private:
     PreviewOutlineVariant previewOutlineVariantFromStorageValue(const QString& value) const;
     QString previewOutlineVariantStorageValue() const;
@@ -445,6 +450,7 @@ private:
     double currentPreviewCanvasRefreshRate() const;
     void refreshPreviewFrameRateTimers();
     void setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    void setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState);
     void setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     double timelineSecondForCursor(int line, int col) const;
     void jumpToLocation(int line, int col);

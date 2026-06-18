@@ -100,6 +100,7 @@ public:
     QString timelineFrameRateModeStorageValue() const;
     double currentPreviewCanvasRefreshRate() const;
     PreviewCanvasFrameRateMode currentPreviewStageMediaFrameRateMode() const;
+    bool currentVideoDecodePrefersSoftware() const;
     PreviewCanvasFrameRateMode currentTimelineFrameRateMode() const;
     bool previewCanvasUsesFrameSwappedPacing() const;
     double targetRefreshRateForFrameRateMode(PreviewCanvasFrameRateMode mode) const;
@@ -116,6 +117,7 @@ public:
     void refreshPreviewFrameRateTimers();
     void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     void setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    void setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState);
     void setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
     void togglePreviewFullscreen();

@@ -409,6 +409,7 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.previewSkinVariant_ = PreviewSkinVariant::Standard;
     state_.previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
     state_.previewStageMediaFrameRateMode_ = PreviewCanvasFrameRateMode::Fps30;
+    state_.videoDecodePrefersSoftware_ = false;
     state_.timelineFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
     state_.previewCanvasAspectRatio_ = 1.0;
     state_.previewAutoRestoreSquareAfterExport_ = false;
@@ -572,6 +573,10 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
             preview.value("pv_frame_rate_mode").toString(),
             PreviewCanvasFrameRateMode::Fps30);
     }
+    if (preview.value("video_decode_prefers_software").isBool()) {
+        state_.videoDecodePrefersSoftware_ =
+            preview.value("video_decode_prefers_software").toBool(state_.videoDecodePrefersSoftware_);
+    }
     if (preview.value("timeline_frame_rate_mode").isString()) {
         state_.timelineFrameRateMode_ = owner_.previewFrameRateModeFromStorageValue(
             preview.value("timeline_frame_rate_mode").toString(),
@@ -733,6 +738,7 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("skin_variant", owner_.previewSkinVariantStorageValue());
     preview.insert("canvas_frame_rate_mode", owner_.previewCanvasFrameRateModeStorageValue());
     preview.insert("pv_frame_rate_mode", owner_.previewStageMediaFrameRateModeStorageValue());
+    preview.insert("video_decode_prefers_software", owner_.currentVideoDecodePrefersSoftware());
     preview.insert("timeline_frame_rate_mode", owner_.timelineFrameRateModeStorageValue());
     preview.insert(
         "force_labeled_judge_line_when_paused",

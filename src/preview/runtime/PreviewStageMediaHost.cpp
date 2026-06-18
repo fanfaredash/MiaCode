@@ -295,15 +295,23 @@ void PreviewStageMediaHost::initializeBackendObjects()
     //     Intel/Arc iGPUs: startup stutter, NV12 green padding, AV1 hardware corruption — all
     //     clean in software), while discrete GPUs keep hardware. ForceHardware overrides the
     //     iGPU auto-detect; ForceSoftware always software. See DebugOptions.h.
+    // Decode mode: the persisted user preference (硬件渲染 / 软件渲染, default
+    // HARDWARE) decides. MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO stays a dev override on
+    // top (ForceSoftware / ForceHardware win; Auto / unset honors the user pref).
+    // The legacy "Auto => integrated GPU silently defaults to software" behaviour is
+    // gone: the default is hardware for everyone, and a user on an affected iGPU flips
+    // the preference to software at runtime (hot-switch, no restart). The session-only
+    // softwareDecodeFallbackTried_ latch still forces software after a hardware
+    // InvalidMedia. adapterDesc/integratedGpu are kept for the diagnostic line only.
     using DecodePref = miacode::debug_options::PreviewVideoDecodePreference;
     const DecodePref decodePref = miacode::debug_options::previewVideoDecodePreference();
     QString adapterDesc;
     const bool integratedGpu = isIntegratedRenderAdapter(&adapterDesc);
-    bool forceSoftware = false;
+    bool forceSoftware = videoDecodePreferSoftware_;
     switch (decodePref) {
     case DecodePref::ForceSoftware: forceSoftware = true; break;
     case DecodePref::ForceHardware: forceSoftware = false; break;
-    case DecodePref::Auto:          forceSoftware = integratedGpu; break;
+    case DecodePref::Auto:          break;  // env unset -> honor the user preference
     }
     const bool useSoftware = softwareDecodeFallbackTried_ || forceSoftware;
     if (useSoftware) {
@@ -3188,7 +3196,70 @@ void PreviewStageMediaHost::maybeRetryWithSoftwareDecode()
         player_->pause();
     }
 }
+
+void PreviewStageMediaHost::reloadVideoDecodeInPlace()
+{
+    if (player_ == nullptr || mediaKind_ != MediaKind::Video || mediaPath_.isEmpty()) {
+        return;
+    }
+    // Capture the live position + play state, flip the decoder on the SAME player,
+    // reload in place (the empty setSource forces a reload since setSource(sameUrl)
+    // is a no-op), then restore position + play state. Reuses the existing video
+    // sink — no player recreation, no app restart. Bidirectional vs the one-way
+    // software fallback: empty codec => hardware D3D11VA, "software" => FFmpeg CPU.
+    const double second = qMax(0.0, currentPlaybackSecond());
+    const qint64 resumeMs = qMax<qint64>(0, qRound64((second + timelineOffsetSeconds_) * 1000.0));
+    const bool resumePlaying = videoPlaybackActive_;
+    appendPreviewStageMediaLog(
+        QStringLiteral("video_decode_reload"),
+        QString("prefer_software=%1 resume_ms=%2 resume_playing=%3 path=%4")
+            .arg(videoDecodePreferSoftware_ ? 1 : 0)
+            .arg(resumeMs)
+            .arg(resumePlaying ? 1 : 0)
+            .arg(mediaPath_));
+    player_->stop();
+    player_->setInputVideoCodec(
+        videoDecodePreferSoftware_ ? QStringLiteral("software") : QString());
+    player_->setSource(QString());
+    player_->setSource(mediaPath_);
+    player_->setSpeed(static_cast<qreal>(playbackRate_));
+    player_->seek(resumeMs);
+    if (resumePlaying) {
+        player_->play();
+    } else {
+        player_->pause();
+    }
+}
 #endif  // MIACODE_USE_QTAVPLAYER
+
+void PreviewStageMediaHost::setVideoDecodePreference(bool preferSoftware)
+{
+    if (videoDecodePreferSoftware_ == preferSoftware) {
+        return;
+    }
+    videoDecodePreferSoftware_ = preferSoftware;
+    appendPreviewStageMediaLog(
+        QStringLiteral("video_decode_preference"),
+        QString("prefer_software=%1 has_player=%2 kind=%3")
+            .arg(preferSoftware ? 1 : 0)
+            .arg(player_ != nullptr ? 1 : 0)
+            .arg(debugMediaTypeName()));
+#ifdef MIACODE_USE_QTAVPLAYER
+    // An explicit user choice clears the session-only auto-fallback latch so a
+    // future backend rebuild honors the chosen mode (and so switching back to
+    // hardware isn't immediately re-forced to software by a stale fallback flag).
+    softwareDecodeFallbackTried_ = false;
+    if (player_ != nullptr) {
+        if (mediaKind_ == MediaKind::Video && !mediaPath_.isEmpty()) {
+            reloadVideoDecodeInPlace();  // hot-switch the currently-loaded PV
+        } else {
+            // No PV loaded yet: apply now so the next load uses the chosen decoder.
+            player_->setInputVideoCodec(
+                preferSoftware ? QStringLiteral("software") : QString());
+        }
+    }
+#endif
+}
 
 void PreviewStageMediaHost::resetVideoFrameDiagnostics()
 {

@@ -516,6 +516,11 @@ MainWindow::PreviewCanvasFrameRateMode MainWindow::currentPreviewStageMediaFrame
     return timelineSection_->currentPreviewStageMediaFrameRateMode();
 }
 
+bool MainWindow::currentVideoDecodePrefersSoftware() const
+{
+    return timelineSection_->currentVideoDecodePrefersSoftware();
+}
+
 MainWindow::PreviewCanvasFrameRateMode MainWindow::currentTimelineFrameRateMode() const
 {
     return timelineSection_->currentTimelineFrameRateMode();
@@ -524,6 +529,11 @@ MainWindow::PreviewCanvasFrameRateMode MainWindow::currentTimelineFrameRateMode(
 MainWindow::PreviewCanvasFrameRateMode MainWindow::TimelineSection::currentPreviewStageMediaFrameRateMode() const
 {
     return state_.previewStageMediaFrameRateMode_;
+}
+
+bool MainWindow::TimelineSection::currentVideoDecodePrefersSoftware() const
+{
+    return state_.videoDecodePrefersSoftware_;
 }
 
 MainWindow::PreviewCanvasFrameRateMode MainWindow::TimelineSection::currentTimelineFrameRateMode() const
@@ -915,6 +925,22 @@ void MainWindow::TimelineSection::setPreviewStageMediaFrameRateMode(PreviewCanva
     applyPreviewStageMediaFrameRateMode();
     if (persistState) {
         owner_.savePortableState();
+    }
+}
+
+void MainWindow::TimelineSection::setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState)
+{
+    if (state_.videoDecodePrefersSoftware_ == preferSoftware) {
+        return;
+    }
+    state_.videoDecodePrefersSoftware_ = preferSoftware;
+    if (persistState) {
+        owner_.savePortableState();
+    }
+    // Push to the host if it already exists; otherwise the cached value is
+    // applied once at host construction (ensurePreviewStageMediaHostInitialized).
+    if (auto* host = owner_.previewStageMediaHost()) {
+        host->setVideoDecodePreference(preferSoftware);
     }
 }
 
@@ -1642,6 +1668,11 @@ void MainWindow::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, 
 void MainWindow::setPreviewStageMediaFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
 {
     timelineSection_->setPreviewStageMediaFrameRateMode(mode, persistState);
+}
+
+void MainWindow::setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState)
+{
+    timelineSection_->setVideoDecodePrefersSoftware(preferSoftware, persistState);
 }
 
 void MainWindow::setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)

@@ -506,6 +506,9 @@
         QString previewSkinDirectoryName_ = QStringLiteral("skinSTD");
         PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
         PreviewCanvasFrameRateMode previewStageMediaFrameRateMode_ = PreviewCanvasFrameRateMode::Fps30;
+        // Preview video decode mode preference: false = hardware (default), true =
+        // software. Pushed to PreviewStageMediaHost::setVideoDecodePreference.
+        bool videoDecodePrefersSoftware_ = false;
         PreviewCanvasFrameRateMode timelineFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
         double previewCanvasAspectRatio_ = 1.0;
         bool previewAutoRestoreSquareAfterExport_ = false;

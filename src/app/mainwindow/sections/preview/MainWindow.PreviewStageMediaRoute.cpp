@@ -360,6 +360,12 @@ void MainWindow::PreviewSection::ensurePreviewStageMediaHostInitialized()
     state_.previewStageMediaHost_ = new PreviewStageMediaHost(&owner_);
     state_.previewStageMediaHost_->setBackgroundScaleMode(state_.previewBackgroundScaleMode_);
     owner_.setPreviewStageMediaFrameRateMode(state_.previewStageMediaFrameRateMode_, false);
+    // Push the persisted video decode-mode preference (硬件渲染 / 软件渲染) once,
+    // before any PV is resolved, so the user's choice applies on the first load.
+    // Done directly (not via owner_.setVideoDecodePrefersSoftware) because that
+    // setter early-returns when the value is unchanged, which would skip the
+    // initial host hand-off when the cached value equals the default (false).
+    state_.previewStageMediaHost_->setVideoDecodePreference(owner_.currentVideoDecodePrefersSoftware());
     connect(state_.previewStageMediaHost_, &PreviewStageMediaHost::mediaStateChanged, &owner_, [this]() {
         applyPreviewStageMediaRouteVisualSettings();
         refreshQuickShellPreviewCompositeSurfaceState();
