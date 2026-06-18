@@ -194,16 +194,18 @@ inline bool previewForceSoftwareVideoDecodeEnabled()
     return envFlagEnabled("MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO");
 }
 
-// Three-state preview video decode preference, driven by the same
-// MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO env var:
-//   unset   -> Auto          (PreviewStageMediaHost auto-detects: integrated GPU
-//                             => software, discrete GPU => D3D11VA hardware)
-//   1/true  -> ForceSoftware (always software)
-//   0/false -> ForceHardware (always hardware; overrides the iGPU auto-detect)
-// Rationale: D3D11VA preview decode is unreliable on integrated GPUs (Intel/Arc:
-// startup stutter, NV12 green padding, AV1 hardware corruption — all absent in
-// software), while discrete GPUs are fine. Defaulting iGPUs to software makes the
-// preview correct out of the box without costing discrete-GPU performance.
+// Three-state preview video decode preference. The MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO
+// env var is now a DEV OVERRIDE on top of the persisted 硬件渲染 / 软件渲染 user
+// preference (owned by MainWindow in preferences.json, pushed to
+// PreviewStageMediaHost::setVideoDecodePreference, hot-switched live with no restart):
+//   unset   -> Auto          (honor the user preference; default = hardware D3D11VA)
+//   1/true  -> ForceSoftware (always software, overrides the preference)
+//   0/false -> ForceHardware (always hardware, overrides the preference)
+// The legacy "Auto => integrated GPU silently defaults to software" behaviour was
+// removed in the render-mode-toggle wrap-up: the default is hardware for everyone, and
+// a user on an affected iGPU flips the preference to software (D3D11VA preview decode is
+// unreliable on some Intel/Arc iGPUs — startup stutter, NV12 green, AV1 corruption — all
+// absent in software, but most machines are fine, so default hardware + opt-in software).
 enum class PreviewVideoDecodePreference { Auto, ForceSoftware, ForceHardware };
 
 inline PreviewVideoDecodePreference previewVideoDecodePreference()
@@ -231,6 +233,12 @@ inline bool previewSingleD3D11DeviceEnabled()
     // If anything fails, every step falls back to the legacy two-device path, so
     // the worst case with this set is "no change". Set
     // MIACODE_PREVIEW_SINGLE_D3D11_DEVICE=1 to enable.
+    //
+    // ⚠ RESERVED / UI-hidden (render-mode-toggle wrap-up): single-device is
+    // intentionally NOT surfaced in the 硬件渲染 / 软件渲染 preference. It is kept as
+    // env-gated reserved code in the repo and is NOT a priority for further updates;
+    // the shipped hardware path is the legacy two-device bridge. Leave it here for a
+    // future revisit rather than deleting it.
     return envFlagEnabled("MIACODE_PREVIEW_SINGLE_D3D11_DEVICE");
 }
 
@@ -292,12 +300,15 @@ inline bool previewHwDecodeCompletionWaitEnabled()
     // returns near-instantly in the common case (frames are decoded ahead of the
     // render thread) and is bounded, so a stuck GPU drops a frame instead of freezing.
     //
-    // Default ON (the fix is active in normal runs — NOT gated on --debug). Set
-    // MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT=0 to disable for an A/B repro (green
-    // returns => completion-order root cause confirmed). The resolved int is published
-    // into the decoder via qavSetPreviewHwDecodeFixConfig (mirroring the dump budget);
-    // the literal lives here in src/ so the debug_flag_index_spec drift guard governs it.
-    return envOptionalFlagValue("MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT").value_or(true);
+    // ⚠ Default OFF as of the render-mode-toggle wrap-up: this completion-wait did
+    // NOT resolve the post-seek green on the user's Arc 130T (verified A/B), so it is
+    // no longer worth the per-frame GPU sync on every hardware-decode user. The
+    // user-facing fix is now the 硬件渲染 / 软件渲染 preference (default hardware; flip
+    // to software on an affected iGPU — hot-switchable). The completion-wait is kept as
+    // env-gated RESERVED experimental code (it is a legitimate D3D11 sync that may help
+    // on other hardware); set MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT=1 to re-enable.
+    // Published via qavSetPreviewHwDecodeFixConfig; literal lives in src/ for the guard.
+    return envOptionalFlagValue("MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT").value_or(false);
 }
 
 inline bool previewHwDecodeDropCorruptFramesEnabled()

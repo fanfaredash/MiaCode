@@ -70,7 +70,7 @@ the agent-facing quick index. Guidance:
 `MIACODE_PREVIEW_DISABLE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS`,
 `MIACODE_PREVIEW_SFX_DIR`, `MIACODE_TRACK_PATH`, `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_{FRAMES,DIR,MAX_SAMPLES}`,
 `MIACODE_PREVIEW_DUMP_HWFRAMES`, `MIACODE_PREVIEW_D3D11_DEBUG_LAYER`,
-`MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT` (default **on**, the §10 fix), `MIACODE_PREVIEW_HWDECODE_DROP_CORRUPT`.
+`MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT` (default **off** — §10 fix attempt, did NOT fix Arc 130T; reserved), `MIACODE_PREVIEW_HWDECODE_DROP_CORRUPT`.
 
 **HW-decode green/garble/seek diagnostics (Windows D3D11VA, `DebugOptions.h` accessors
 `previewDumpHwFrameBudget()` / `previewSharedD3D11DebugLayerEnabled()`, both `--debug`-gated):**
@@ -92,12 +92,15 @@ copy/timeout/copy-fail/res-change counters + coded-vs-display, drained on the GU
 seek/EoM), `preview/seek_landing` (seek→first-display latency + catch-up GOP-burst count). Spec:
 `docs/PREVIEW_HWDECODE_GREEN_GARBLE_SEEK_DEBUG_PLAN_ZH.md` §9.
 
-**HW-decode green/garble FIX (§10, located on Arc 130T = decoder output, completion-order; NOT
-`--debug`-gated — real fixes that apply in normal runs):** `MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT`
-(default **on**, accessor `previewHwDecodeCompletionWaitEnabled()`) makes the copy paths force the
+**HW-decode green/garble FIX ATTEMPT (§10, located on Arc 130T = decoder output, completion-order; NOT
+`--debug`-gated):** `MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT` (default **OFF** as of the
+render-mode-toggle wrap-up — it did NOT fix the Arc 130T green (A/B verified); kept as env-gated
+RESERVED code, accessor `previewHwDecodeCompletionWaitEnabled()`) makes the copy paths force the
 decode GPU work to complete (`ID3D11Query(EVENT)` + `Flush` + bounded ~100ms spin via
-`waitForDecodeCompletion`) before `CopySubresourceRegion` reads the DPB slot, killing the post-seek
-half-decoded green frame; set `=0` for an A/B repro (green returns). `MIACODE_PREVIEW_HWDECODE_DROP_CORRUPT`
+`waitForDecodeCompletion`) before `CopySubresourceRegion` reads the DPB slot. The shipped fix is now
+the **硬件渲染/软件渲染 user preference** (default hardware; `PreviewStageMediaHost::setVideoDecodePreference`
+hot-switches the live `QAVPlayer` in place — `setInputVideoCodec("")`⇄`"software"` + reload + seek,
+no restart). `MIACODE_PREVIEW_HWDECODE_DROP_CORRUPT`
 (default off, `previewHwDecodeDropCorruptFramesEnabled()`) drops frames FFmpeg flagged
 corrupt/`decode_error_flags` (free, from the AVFrame) so RHI holds the last good frame. Both are
 published via `qavSetPreviewHwDecodeFixConfig`. New diag fields: `preview/hwframe` dump line gains
