@@ -180,6 +180,11 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/PreviewSfxTimeline.h
     src/editor/PlainCodeEditor.h
     src/editor/PlainCodeEditor.cpp
+    src/editor/PlainCodeEditor.Layout.cpp
+    src/editor/PlainCodeEditor.HighlightAndCaret.cpp
+    src/editor/PlainCodeEditor.BracketCompletion.cpp
+    src/editor/PlainCodeEditor.Input.cpp
+    src/editor/PlainCodeEditor.Bookmarks.cpp
     src/editor/BracketCompletionPopup.h
     src/editor/BracketCompletionPopup.cpp
     src/editor/SimaiCompletionCatalog.h
@@ -222,6 +227,9 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/muri/MuriStaticChecker.cpp
     src/tools/video_export/VideoExportDialog.h
     src/tools/video_export/VideoExportDialog.cpp
+    src/tools/video_export/VideoExportDialog.SettingsPersistence.cpp
+    src/tools/video_export/VideoExportDialog.IntroControls.cpp
+    src/tools/video_export/VideoExportDialog.ExportFlow.cpp
     src/tools/video_export/HudFontSettings.h
     src/tools/video_export/HudFontSettings.cpp
     src/tools/video_export/BatchVideoExportDialog.h
@@ -262,6 +270,11 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/runtime/PreviewSceneAssetRepository.cpp
     src/preview/runtime/PreviewStageMediaHost.h
     src/preview/runtime/PreviewStageMediaHost.cpp
+    src/preview/runtime/PreviewStageMediaHost_Backend.cpp
+    src/preview/runtime/PreviewStageMediaHost_Media.cpp
+    src/preview/runtime/PreviewStageMediaHost_Playback.cpp
+    src/preview/runtime/PreviewStageMediaHost_Diagnostics.cpp
+    src/preview/runtime/PreviewStageMediaHost_Timeout.cpp
     src/preview/runtime/PreviewSharedD3D11Device.h
     src/preview/runtime/PreviewSharedD3D11Device.cpp
     src/preview/runtime/PreviewRuntime.h
@@ -1012,6 +1025,11 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/editor/PlainCodeEditorSpec.cpp
             src/editor/PlainCodeEditor.h
             src/editor/PlainCodeEditor.cpp
+            src/editor/PlainCodeEditor.Layout.cpp
+            src/editor/PlainCodeEditor.HighlightAndCaret.cpp
+            src/editor/PlainCodeEditor.BracketCompletion.cpp
+            src/editor/PlainCodeEditor.Input.cpp
+            src/editor/PlainCodeEditor.Bookmarks.cpp
             src/editor/BracketCompletionPopup.h
             src/editor/BracketCompletionPopup.cpp
             src/editor/SimaiCompletionCatalog.h
