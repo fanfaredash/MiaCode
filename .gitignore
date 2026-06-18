@@ -33,6 +33,10 @@ tmp*/
 logs/
 experimental/
 
+# CTest scratch + local build/audit artifacts — never version-controlled.
+Testing/
+build_artifacts/
+
 # Keep only docs spec/checklist files under version control.
 docs/*
 !docs/DEBUG_INDEX.md
@@ -46,6 +50,8 @@ docs/*
 !docs/*CHECKLIST.md
 # Allow bilingual ZH variants of SPEC/CHECKLIST docs without listing each by name.
 !docs/*SPEC_ZH.md
+# God-file refactor progress + knowledge archive (continuation handoff).
+!docs/GOD_FILE_REFACTOR_PROGRESS_AND_PLAN_ZH.md
 !docs/*CHECKLIST_ZH.md
 !docs/TIMELINE_QTQUICK_GPU_FEASIBILITY_SPEC_ZH.md
 !docs/TIMELINE_QTQUICK_GPU_PARITY_CHECKLIST_ZH.md
