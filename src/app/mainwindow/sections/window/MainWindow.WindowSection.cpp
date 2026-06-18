@@ -69,6 +69,11 @@ void MainWindow::setShellPreviewRate(double rate)
     windowSection_->setShellPreviewRate(rate);
 }
 
+void MainWindow::nudgeShellPreviewRate(int direction)
+{
+    windowSection_->nudgeShellPreviewRate(direction);
+}
+
 bool MainWindow::stepShellPreviewBySeconds(double deltaSeconds, bool centerView)
 {
     return windowSection_->stepShellPreviewBySeconds(deltaSeconds, centerView);

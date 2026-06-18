@@ -208,6 +208,7 @@ public:
     void updateShellPreviewScrub(double second, bool centerView) override;
     void endShellPreviewScrub(double second, bool centerView) override;
     void setShellPreviewRate(double rate) override;
+    void nudgeShellPreviewRate(int direction) override;
     bool stepShellPreviewBySeconds(double deltaSeconds, bool centerView) override;
     void beginShellPreviewHeldSeek(int direction, int key) override;
     void stopShellPreviewHeldSeek(int key = 0) override;

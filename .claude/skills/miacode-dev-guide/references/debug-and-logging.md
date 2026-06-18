@@ -33,7 +33,17 @@ off-by-default DComp path — do not copy that pattern into mainline.
   `MIACODE_OPERATION_LOG_PATH`, `MIACODE_PREVIEW_PROFILE_PATH`.
 - Default channel files: `miacode_runtime_debug.log`, `miacode_audio_debug.log`,
   `miacode_video_export.log`, `miacode_startup_timing.log`, `miacode_fatal.log`,
-  `miacode_preview_profile_summary.txt`.
+  `miacode_preview_profile_summary.txt`. Logs live per-chart under `<chart>/.miacode/logs/`.
+- **⚠ Preview-log channel split (easy time-sink):** `PreviewStageMediaHost::appendPreviewStageMediaLog`
+  (`src/preview/runtime/PreviewStageMediaHost.cpp:127`) routes to **`Channel::Audio`** (scope
+  `preview/stage_media`) → **`miacode_audio_debug.log`**, NOT the runtime log. So `media_backend`,
+  `media_status`, `video_frame_first`, `set_chart_path`, `bind_video_output`, and the render-mode
+  toggle's `video_decode_preference` / `video_decode_reload` are in the **audio** log
+  (`[audio/preview/stage_media] action=…`). The HW-decode green diagnostics in the SAME file use a
+  direct `appendLine(Channel::Runtime, "preview/hwframe"|"preview/hwdecode_summary"|"preview/seek_landing", …)`
+  → **runtime** log. So: video decode / PV playback / decode-toggle ⇒ grep `miacode_audio_debug.log`;
+  hwframe / seek / summary ⇒ grep `miacode_runtime_debug.log`. (Grepping the runtime log for decode
+  activity finds only the `runtime/app_shutdown/...stage_media_host` teardown lines — looks like "nothing logged.")
 
 ## 2. The env-flag situation (audit 2026-05-29)
 

@@ -927,7 +927,7 @@ QString preferencesDialogStyleSheet()
         "QGroupBox { background: %2; border: 1px solid %3; border-radius: 10px; margin-top: 12px; padding-top: 10px; font-weight: 600; }"
         "QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; }"
         "QLabel { color: %4; }"
-        "QToolButton#PreferenceMenuButton { min-height: 30px; min-width: 180px; border: 1px solid %3; border-radius: 6px; padding: 4px 10px; background: %2; color: %4; font-weight: 600; text-align: left; }"
+        "QToolButton#PreferenceMenuButton { min-height: 30px; min-width: 150px; border: 1px solid %3; border-radius: 6px; padding: 4px 10px; background: %2; color: %4; font-weight: 600; text-align: left; }"
         "QToolButton#PreferenceMenuButton:hover { background: %5; border-color: %6; }"
         "QToolButton#PreferenceMenuButton:pressed, QToolButton#PreferenceMenuButton:checked { background: %7; border-color: %6; color: %8; }"
         "QPushButton { min-width: 92px; min-height: 30px; padding: 0 12px; border: 1px solid %3; border-radius: 8px; background: %2; color: %4; font-weight: 500; }"

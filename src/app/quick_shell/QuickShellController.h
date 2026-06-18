@@ -119,6 +119,10 @@ public:
     Q_INVOKABLE void updatePreviewScrub(double second, bool centerView = true);
     Q_INVOKABLE void endPreviewScrub(double second, bool centerView = true);
     Q_INVOKABLE void setPreviewRate(double rate);
+    // Step the preview rate one stop (direction = -1 slower / +1 faster). Used
+    // by the fullscreen QML Ctrl+O/Ctrl+P shortcuts; mirrors the main window's
+    // speed menu actions.
+    Q_INVOKABLE void adjustPreviewSpeed(int direction);
     Q_INVOKABLE void setBottomTabsHostHeight(int height);
     Q_INVOKABLE void setBottomTabsCurrentTabId(const QString& tabId);
     Q_INVOKABLE void timelineHeaderNavigate(double second);

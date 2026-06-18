@@ -43,11 +43,28 @@ using namespace miacode::mainwindow::shared;
 
 namespace {
 
-// Shared helper for the title/artist buttons. Resolves track.mp3, reads
-// its ID3v2 tag, and returns the requested field's value. Reports any
-// failure through QMessageBox at `parent`; on success returns the
-// trimmed field value, or an empty string if the tag exists but the
-// requested field is blank (the caller decides whether to warn).
+// Prompts the user to pick an MP3 to read ID3 metadata from. Returns an empty
+// string if the dialog is cancelled. Opens in the current chart's directory
+// when known (where track.mp3 usually lives), but the user is free to point at
+// any MP3.
+QString promptForMetadataMp3(QWidget* parent, const QString& initialDir, const QString& dialogTitle)
+{
+    return QFileDialog::getOpenFileName(
+        parent,
+        dialogTitle,
+        initialDir,
+        UiText::isChineseUi()
+            ? QStringLiteral("MP3 音频 (*.mp3);;所有文件 (*.*)")
+            : QStringLiteral("MP3 audio (*.mp3);;All files (*.*)")
+    );
+}
+
+// Shared helper for the title/artist buttons. Reads the ID3v2 tag of the
+// user-selected MP3 at `trackPath` and returns the requested field's value.
+// Reports any failure through QMessageBox at `parent`; on success returns the
+// trimmed field value, or an empty string if the tag exists but the requested
+// field is blank (the caller decides whether to warn). `trackPath` is assumed
+// non-empty — callers handle a cancelled file picker before calling.
 enum class TrackTagField {
     Title,
     Artist,
@@ -60,13 +77,6 @@ QString readTrackTagField(
     const QString& dialogTitle)
 {
     if (trackPath.isEmpty()) {
-        QMessageBox::warning(
-            parent,
-            dialogTitle,
-            UiText::isChineseUi()
-                ? QStringLiteral("当前谱面目录缺少 track.mp3。")
-                : QStringLiteral("track.mp3 was not found next to the current chart.")
-        );
         return QString();
     }
     const miacode::id3::Tag tag = miacode::id3::readTagFromFile(trackPath);
@@ -75,8 +85,8 @@ QString readTrackTagField(
             parent,
             dialogTitle,
             UiText::isChineseUi()
-                ? QStringLiteral("没能在 track.mp3 中读取到 ID3v2 标签。")
-                : QStringLiteral("No ID3v2 tag was found in track.mp3.")
+                ? QStringLiteral("没能在所选 MP3 中读取到 ID3v2 标签。")
+                : QStringLiteral("No ID3v2 tag was found in the selected MP3.")
         );
         return QString();
     }
@@ -90,8 +100,8 @@ QString readTrackTagField(
             parent,
             dialogTitle,
             UiText::isChineseUi()
-                ? QStringLiteral("track.mp3 的 ID3 标签里没有%1信息。").arg(fieldLabelZh)
-                : QStringLiteral("track.mp3's ID3 tag carries no %1.").arg(fieldLabelEn)
+                ? QStringLiteral("所选 MP3 的 ID3 标签里没有%1信息。").arg(fieldLabelZh)
+                : QStringLiteral("The selected MP3's ID3 tag carries no %1.").arg(fieldLabelEn)
         );
         return QString();
     }
@@ -106,7 +116,11 @@ void MainWindow::DialogsSection::onReadTitleFromTrack()
     const QString title = UiText::isChineseUi()
         ? QStringLiteral("从 MP3 读取标题")
         : QStringLiteral("Read Title from MP3");
-    const QString trackPath = resolveLatencyDetectorTrackPath();
+    const QString trackPath = promptForMetadataMp3(
+        UiDialogs::effectiveParentWidget(&owner_), resolveCurrentChartDirectory(), title);
+    if (trackPath.isEmpty()) {
+        return;  // user cancelled the file picker
+    }
     const QString value = readTrackTagField(
         trackPath, TrackTagField::Title, UiDialogs::effectiveParentWidget(&owner_), title);
     if (value.isEmpty() || ui_.titleEdit_ == nullptr) {
@@ -119,8 +133,8 @@ void MainWindow::DialogsSection::onReadTitleFromTrack()
     _mc_op_.note(QStringLiteral("track=%1 title=%2").arg(trackPath, value));
     owner_.statusBar()->showMessage(
         UiText::isChineseUi()
-            ? QStringLiteral("已从 track.mp3 读取标题。")
-            : QStringLiteral("Loaded title from track.mp3."),
+            ? QStringLiteral("已从 MP3 读取标题。")
+            : QStringLiteral("Loaded title from MP3."),
         6000
     );
 }
@@ -131,7 +145,11 @@ void MainWindow::DialogsSection::onReadArtistFromTrack()
     const QString title = UiText::isChineseUi()
         ? QStringLiteral("从 MP3 读取曲师")
         : QStringLiteral("Read Artist from MP3");
-    const QString trackPath = resolveLatencyDetectorTrackPath();
+    const QString trackPath = promptForMetadataMp3(
+        UiDialogs::effectiveParentWidget(&owner_), resolveCurrentChartDirectory(), title);
+    if (trackPath.isEmpty()) {
+        return;  // user cancelled the file picker
+    }
     const QString value = readTrackTagField(
         trackPath, TrackTagField::Artist, UiDialogs::effectiveParentWidget(&owner_), title);
     if (value.isEmpty() || ui_.artistEdit_ == nullptr) {
@@ -141,8 +159,8 @@ void MainWindow::DialogsSection::onReadArtistFromTrack()
     _mc_op_.note(QStringLiteral("track=%1 artist=%2").arg(trackPath, value));
     owner_.statusBar()->showMessage(
         UiText::isChineseUi()
-            ? QStringLiteral("已从 track.mp3 读取曲师。")
-            : QStringLiteral("Loaded artist from track.mp3."),
+            ? QStringLiteral("已从 MP3 读取曲师。")
+            : QStringLiteral("Loaded artist from MP3."),
         6000
     );
 }
@@ -164,16 +182,10 @@ void MainWindow::DialogsSection::onExtractBackgroundFromTrack()
         );
         return;
     }
-    const QString trackPath = resolveLatencyDetectorTrackPath();
+    const QString trackPath = promptForMetadataMp3(
+        UiDialogs::effectiveParentWidget(&owner_), chartDirPath, title);
     if (trackPath.isEmpty()) {
-        QMessageBox::warning(
-            UiDialogs::effectiveParentWidget(&owner_),
-            title,
-            UiText::isChineseUi()
-                ? QStringLiteral("当前谱面目录缺少 track.mp3。")
-                : QStringLiteral("track.mp3 was not found next to the current chart.")
-        );
-        return;
+        return;  // user cancelled the file picker
     }
 
     const miacode::id3::Tag tag = miacode::id3::readTagFromFile(trackPath);
@@ -182,8 +194,8 @@ void MainWindow::DialogsSection::onExtractBackgroundFromTrack()
             UiDialogs::effectiveParentWidget(&owner_),
             title,
             UiText::isChineseUi()
-                ? QStringLiteral("track.mp3 中没有内嵌的封面图。")
-                : QStringLiteral("track.mp3 has no embedded cover artwork.")
+                ? QStringLiteral("所选 MP3 中没有内嵌的封面图。")
+                : QStringLiteral("The selected MP3 has no embedded cover artwork.")
         );
         return;
     }
@@ -254,11 +266,11 @@ void MainWindow::DialogsSection::onExtractBackgroundFromTrack()
     owner_.statusBar()->showMessage(
         UiText::isChineseUi()
             ? (existed
-                   ? QStringLiteral("已覆盖 bg.jpg（来源：track.mp3 内嵌封面）。")
-                   : QStringLiteral("已生成 bg.jpg（来源：track.mp3 内嵌封面）。"))
+                   ? QStringLiteral("已覆盖 bg.jpg（来源：所选 MP3 内嵌封面）。")
+                   : QStringLiteral("已生成 bg.jpg（来源：所选 MP3 内嵌封面）。"))
             : (existed
-                   ? QStringLiteral("Overwrote bg.jpg with embedded cover from track.mp3.")
-                   : QStringLiteral("Wrote bg.jpg from track.mp3's embedded cover.")),
+                   ? QStringLiteral("Overwrote bg.jpg with embedded cover from the selected MP3.")
+                   : QStringLiteral("Wrote bg.jpg from the selected MP3's embedded cover.")),
         6000
     );
 }

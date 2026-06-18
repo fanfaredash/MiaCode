@@ -769,46 +769,9 @@ void MainWindow::PreferencesSection::onPreferences()
     bool selectedIgnoreMuriIssuePrompts = state_.ignoreMuriIssuePrompts_;
     bool selectedEditorImeInputDisabled = state_.editorImeInputDisabled_;
 
-    // 顶部显示 — what the difficulty-page header edits next to Lv: the
-    // chart-wide offset (延迟, default) or the per-difficulty designer (谱师).
-    // First row of the page per the preference's prominence.
-    const auto headerTopDisplayLabel = [](EditorHeaderTopDisplay mode) -> QString {
-        return mode == EditorHeaderTopDisplay::Designer
-            ? uiText("dialog.preferences.editor_top_display.designer", "Designer")
-            : uiText("dialog.preferences.editor_top_display.latency", "Latency");
-    };
-    auto* headerTopDisplayLabelWidget =
-        new QLabel(uiText("dialog.preferences.editor_top_display", "Header Field"), editorGroup);
-    // Plain combo box, same idiom as the 行距 row below — the two-option
-    // pick doesn't warrant the styled PreferenceMenuButton treatment.
-    auto* headerTopDisplayCombo = new QComboBox(editorGroup);
-    const QList<EditorHeaderTopDisplay> headerTopDisplayOptions{
-        EditorHeaderTopDisplay::Offset,
-        EditorHeaderTopDisplay::Designer,
-    };
-    for (EditorHeaderTopDisplay mode : headerTopDisplayOptions) {
-        headerTopDisplayCombo->addItem(headerTopDisplayLabel(mode), static_cast<int>(mode));
-    }
-    const int headerTopDisplayIndex =
-        headerTopDisplayCombo->findData(static_cast<int>(state_.editorHeaderTopDisplay_));
-    headerTopDisplayCombo->setCurrentIndex(qMax(0, headerTopDisplayIndex));
-    headerTopDisplayCombo->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("谱面编辑页顶部 Lv 旁边显示的字段：延迟（&first 偏移）或当前难度的谱师（&des_N）。")
-            : QStringLiteral("The field next to Lv in the chart header: the &first offset or this difficulty's &des_N designer.")
-    );
-    connect(headerTopDisplayCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
-            [&, headerTopDisplayCombo](int index) {
-        if (index < 0) {
-            return;
-        }
-        const auto mode =
-            static_cast<EditorHeaderTopDisplay>(headerTopDisplayCombo->itemData(index).toInt());
-        owner_.applyEditorHeaderTopDisplay(mode, true);
-        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
-    });
-    editorLayout->addRow(headerTopDisplayLabelWidget, headerTopDisplayCombo);
-
+    // Row order (top→bottom): 字号 · 行距 · 自动补全 · 顶部显示 · 忽略无理报错 ·
+    // 中文输入. 中文输入 is the advanced input-mode picker the user did not call
+    // out, so it trails the prioritised rows.
     auto* editorFontSizeLabel = new QLabel(uiText("dialog.preferences.editor_font_size", "Text Font Size"), editorGroup);
     auto* fontSizeRow = new QWidget(editorGroup);
     auto* fontSizeRowLayout = new QHBoxLayout(fontSizeRow);
@@ -853,11 +816,96 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(lineSpacingLabel, lineSpacingCombo);
 
+    // 自动补全 — one unified preference replacing the former three (auto-close
+    // brackets / hold duration / bracket suggestions). It drives bracket
+    // auto-close + type-over + empty-pair backspace, the bracket suggestion
+    // popup, and the 'h' hold-duration suggestions together. Presented as a
+    // 开启/关闭 menu (same idiom as the other editor rows) rather than a checkbox.
+    auto* autoCompletionLabel = new QLabel(
+        UiText::isChineseUi() ? QStringLiteral("自动补全") : QStringLiteral("Auto-completion"),
+        editorGroup
+    );
+    auto* autoCompletionCombo = new QComboBox(editorGroup);
+    autoCompletionCombo->addItem(UiText::isChineseUi() ? QStringLiteral("开启") : QStringLiteral("On"));
+    autoCompletionCombo->addItem(UiText::isChineseUi() ? QStringLiteral("关闭") : QStringLiteral("Off"));
+    autoCompletionCombo->setCurrentIndex(selectedAutoCompletionEnabled ? 0 : 1);
+    autoCompletionCombo->setToolTip(
+        UiText::isChineseUi()
+            ? QStringLiteral("自动补全括号、给出括号/时值建议，并在输入 h 时提示 [8:1] 等 hold 时值。")
+            : QStringLiteral("Auto-closes brackets, suggests durations/BPMs inside them, and offers [8:1]-style hold tokens after typing 'h'.")
+    );
+    connect(autoCompletionCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedAutoCompletionEnabled = (index == 0);
+        owner_.applyEditorAutoCompletionEnabled(selectedAutoCompletionEnabled, true);
+        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+    });
+    editorLayout->addRow(autoCompletionLabel, autoCompletionCombo);
+
+    // 顶部显示 — what the difficulty-page header edits next to Lv: the
+    // chart-wide offset (偏移, default) or the per-difficulty designer (谱师).
+    const auto headerTopDisplayLabel = [](EditorHeaderTopDisplay mode) -> QString {
+        return mode == EditorHeaderTopDisplay::Designer
+            ? uiText("dialog.preferences.editor_top_display.designer", "Designer")
+            : uiText("dialog.preferences.editor_top_display.latency", "Offset");
+    };
+    auto* headerTopDisplayLabelWidget =
+        new QLabel(uiText("dialog.preferences.editor_top_display", "Header Field"), editorGroup);
+    // Plain combo box, same idiom as the 行距 row above — the two-option
+    // pick doesn't warrant the styled PreferenceMenuButton treatment.
+    auto* headerTopDisplayCombo = new QComboBox(editorGroup);
+    const QList<EditorHeaderTopDisplay> headerTopDisplayOptions{
+        EditorHeaderTopDisplay::Offset,
+        EditorHeaderTopDisplay::Designer,
+    };
+    for (EditorHeaderTopDisplay mode : headerTopDisplayOptions) {
+        headerTopDisplayCombo->addItem(headerTopDisplayLabel(mode), static_cast<int>(mode));
+    }
+    const int headerTopDisplayIndex =
+        headerTopDisplayCombo->findData(static_cast<int>(state_.editorHeaderTopDisplay_));
+    headerTopDisplayCombo->setCurrentIndex(qMax(0, headerTopDisplayIndex));
+    headerTopDisplayCombo->setToolTip(
+        UiText::isChineseUi()
+            ? QStringLiteral("谱面编辑页顶部 Lv 旁边显示的字段：偏移（&first）或当前难度的谱师（&des_N）。")
+            : QStringLiteral("The field next to Lv in the chart header: the &first offset or this difficulty's &des_N designer.")
+    );
+    connect(headerTopDisplayCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
+            [&, headerTopDisplayCombo](int index) {
+        if (index < 0) {
+            return;
+        }
+        const auto mode =
+            static_cast<EditorHeaderTopDisplay>(headerTopDisplayCombo->itemData(index).toInt());
+        owner_.applyEditorHeaderTopDisplay(mode, true);
+        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+    });
+    editorLayout->addRow(headerTopDisplayLabelWidget, headerTopDisplayCombo);
+
+    auto* ignoreMuriIssuePromptsCheckbox = new QCheckBox(
+        UiText::isChineseUi()
+            ? QStringLiteral("忽略无理报错提示")
+            : QStringLiteral("Ignore muri issue prompts"),
+        editorGroup
+    );
+    ignoreMuriIssuePromptsCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    ignoreMuriIssuePromptsCheckbox->setChecked(selectedIgnoreMuriIssuePrompts);
+    ignoreMuriIssuePromptsCheckbox->setToolTip(
+        UiText::isChineseUi()
+            ? QStringLiteral("开启后不在编辑器标题栏和时间轴小点中提示无理。设置保存到当前谱面文件夹的 .miacode。")
+            : QStringLiteral("Hides muri from the editor header and timeline dots. Saved in the current chart folder's .miacode data.")
+    );
+    connect(ignoreMuriIssuePromptsCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
+        selectedIgnoreMuriIssuePrompts = checked;
+        owner_.applyIgnoreMuriIssuePrompts(selectedIgnoreMuriIssuePrompts, true);
+        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+    });
     // 中文输入 combo — merges the former "Lock half-width symbol input" checkbox
     // and "Disable IME input" checkbox into three graduated levels:
-    //   0 关闭          halfWidth=OFF  imeDisabled=OFF  (plain IME, no filtering)
-    //   1 仅过滤全角字符 halfWidth=ON   imeDisabled=OFF  (default: normalize commits)
-    //   2 开启          halfWidth=ON   imeDisabled=ON   (block IME candidate window)
+    //   index 0 开启           halfWidth=OFF imeDisabled=OFF (plain IME, no filtering)
+    //   index 1 仅过滤全角字符  halfWidth=ON  imeDisabled=OFF (default: normalize commits)
+    //   index 2 禁止中文输入法  halfWidth=ON  imeDisabled=ON  (block IME candidate window)
     auto* chineseInputLabel = new QLabel(
         UiText::isChineseUi() ? QStringLiteral("中文输入") : QStringLiteral("Chinese input"),
         editorGroup
@@ -890,46 +938,7 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(chineseInputLabel, chineseInputCombo);
 
-    // One unified toggle replacing the former three (auto-close brackets / hold
-    // duration / bracket suggestions). It drives bracket auto-close + type-over +
-    // empty-pair backspace, the bracket suggestion popup, and the 'h' hold-
-    // duration suggestions together.
-    auto* autoCompletionCheckbox = new QCheckBox(
-        uiText("dialog.preferences.editor_auto_completion", "Auto-complete brackets"),
-        editorGroup
-    );
-    autoCompletionCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    autoCompletionCheckbox->setChecked(selectedAutoCompletionEnabled);
-    autoCompletionCheckbox->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("自动补全括号、给出括号/时值建议，并在输入 h 时提示 [8:1] 等 hold 时值。")
-            : QStringLiteral("Auto-closes brackets, suggests durations/BPMs inside them, and offers [8:1]-style hold tokens after typing 'h'.")
-    );
-    connect(autoCompletionCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
-        selectedAutoCompletionEnabled = checked;
-        owner_.applyEditorAutoCompletionEnabled(selectedAutoCompletionEnabled, true);
-        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
-    });
-    editorLayout->addRow(QString(), autoCompletionCheckbox);
-
-    auto* ignoreMuriIssuePromptsCheckbox = new QCheckBox(
-        UiText::isChineseUi()
-            ? QStringLiteral("忽略无理报错提示")
-            : QStringLiteral("Ignore muri issue prompts"),
-        editorGroup
-    );
-    ignoreMuriIssuePromptsCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    ignoreMuriIssuePromptsCheckbox->setChecked(selectedIgnoreMuriIssuePrompts);
-    ignoreMuriIssuePromptsCheckbox->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("开启后不在编辑器标题栏和时间轴小点中提示无理。设置保存到当前谱面文件夹的 .miacode。")
-            : QStringLiteral("Hides muri from the editor header and timeline dots. Saved in the current chart folder's .miacode data.")
-    );
-    connect(ignoreMuriIssuePromptsCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
-        selectedIgnoreMuriIssuePrompts = checked;
-        owner_.applyIgnoreMuriIssuePrompts(selectedIgnoreMuriIssuePrompts, true);
-        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
-    });
+    // 忽略无理报错提示 sits below 中文输入 (last row) per the 2026-06-19 review.
     editorLayout->addRow(QString(), ignoreMuriIssuePromptsCheckbox);
 
 
@@ -1064,34 +1073,10 @@ void MainWindow::PreferencesSection::onPreferences()
         displayRefreshLabel,
     });
 
-    addFrameRateRow(
-        uiText("dialog.render_settings.preview.canvas_frame_rate", "Preview Refresh Rate"),
-        owner_.currentPreviewCanvasFrameRateMode(),
-        canvasFrameRateOptions,
-        [&](PreviewCanvasFrameRateMode mode) {
-            owner_.setPreviewCanvasFrameRateMode(mode, true);
-        }
-    );
-    addFrameRateRow(
-        uiText("dialog.preferences.performance.pv_frame_rate", "PV Refresh Rate"),
-        owner_.currentPreviewStageMediaFrameRateMode(),
-        appFrameRateOptions,
-        [&](PreviewCanvasFrameRateMode mode) {
-            owner_.setPreviewStageMediaFrameRateMode(mode, true);
-        }
-    );
-    addFrameRateRow(
-        uiText("dialog.preferences.performance.timeline_frame_rate", "Timeline Refresh Rate"),
-        owner_.currentTimelineFrameRateMode(),
-        appFrameRateOptions,
-        [&](PreviewCanvasFrameRateMode mode) {
-            owner_.setTimelineFrameRateMode(mode, true);
-        }
-    );
-
-    // Preview video decode mode: 硬件渲染 (hardware, default) vs 软件渲染 (software).
-    // Two fixed options, built with the same QToolButton+QMenu visual pattern as
-    // the frame-rate rows. preferSoftware == false selects hardware.
+    // PV渲染 (preview video decode): 硬件渲染 (hardware, default) vs 软件渲染
+    // (software). Placed first on the page per the user request. Two fixed
+    // options, same QToolButton+QMenu visual pattern as the frame-rate rows
+    // below. preferSoftware == false selects hardware.
     {
         struct VideoDecodeOption {
             bool preferSoftware;
@@ -1131,9 +1116,34 @@ void MainWindow::PreferencesSection::onPreferences()
             menu->popup(button->mapToGlobal(QPoint(0, button->height())));
         });
         performanceLayout->addRow(
-            uiText("dialog.preferences.performance.video_decode", "Video Decode"),
+            uiText("dialog.preferences.performance.video_decode", "PV Render"),
             button);
     }
+
+    addFrameRateRow(
+        uiText("dialog.render_settings.preview.canvas_frame_rate", "Preview Refresh Rate"),
+        owner_.currentPreviewCanvasFrameRateMode(),
+        canvasFrameRateOptions,
+        [&](PreviewCanvasFrameRateMode mode) {
+            owner_.setPreviewCanvasFrameRateMode(mode, true);
+        }
+    );
+    addFrameRateRow(
+        uiText("dialog.preferences.performance.pv_frame_rate", "PV Refresh Rate"),
+        owner_.currentPreviewStageMediaFrameRateMode(),
+        appFrameRateOptions,
+        [&](PreviewCanvasFrameRateMode mode) {
+            owner_.setPreviewStageMediaFrameRateMode(mode, true);
+        }
+    );
+    addFrameRateRow(
+        uiText("dialog.preferences.performance.timeline_frame_rate", "Timeline Refresh Rate"),
+        owner_.currentTimelineFrameRateMode(),
+        appFrameRateOptions,
+        [&](PreviewCanvasFrameRateMode mode) {
+            owner_.setTimelineFrameRateMode(mode, true);
+        }
+    );
 
     flattenPageGroup(performanceGroup);
     performancePageLayout->addWidget(performanceGroup);
@@ -1483,7 +1493,38 @@ void MainWindow::PreferencesSection::onPreferences()
     if (pageStackInner != nullptr && pageStack->width() > pageStackInner->width()) {
         tabChrome = pageStack->width() - pageStackInner->width();
     }
-    pageStack->setMinimumWidth(maxPageWidth + tabChrome);
+    // FIX (2026-06-19): a plain minimumWidth floor never narrowed the dialog —
+    // the SetFixedSize root layout sizes the dialog to the QTabWidget's sizeHint,
+    // which over-reports well past the widest page, so the floor sat below it and
+    // never bound (the "didn't get narrower" report). Pin the tab widget to the
+    // measured content width instead; SetFixedSize then collapses the dialog onto
+    // it. Clamp up to the tab strip's own width so pinning can never clip the
+    // tabs, and to maxPageWidth so every page still fits — no clipping, just the
+    // dead right-hand margin removed.
+    int tabBarWidth = 0;
+    if (auto* tabBar = pageStack->findChild<QTabBar*>()) {
+        tabBarWidth = tabBar->sizeHint().width();
+    }
+    const int pinnedWidth = qMax(maxPageWidth, tabBarWidth) + tabChrome;
+    pageStack->setFixedWidth(pinnedWidth);
+    // The adjustSize() above locked the dialog onto its (wide) natural sizeHint;
+    // SetFixedSize won't recompute from a child's fixedWidth until the layout
+    // re-activates, so force it now or the narrowing silently never lands (the
+    // 2026-06-19 "still not narrower" report).
+    rootLayout->activate();
+    dialog.adjustSize();
+    // --debug breadcrumb: if the dialog is still wide, this prints the real
+    // per-page hint so the over-reporting page can be pinned without guessing.
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preferences/width"),
+        QStringLiteral("maxPage=%1 tabBar=%2 chrome=%3 pinned=%4 dialogW=%5")
+            .arg(maxPageWidth)
+            .arg(tabBarWidth)
+            .arg(tabChrome)
+            .arg(pinnedWidth)
+            .arg(dialog.width()),
+        true);
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
     UiDialogs::localizeButtonBox(buttonBox);

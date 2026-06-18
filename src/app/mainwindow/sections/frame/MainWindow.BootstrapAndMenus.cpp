@@ -435,16 +435,6 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.transformRotate45ClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45Clockwise);
     transformMenu->addAction(owner_.transformRotate45ClockwiseAction_);
 
-    owner_.transformClearCompleteElementsAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("一键清空要素") : QStringLiteral("Clear Complete Elements"),
-        &owner_);
-    ShortcutRegistry::instance().applyShortcut(
-        owner_.transformClearCompleteElementsAction_,
-        QStringLiteral("transform.clear_complete_elements"),
-        QKeySequence(Qt::CTRL | Qt::Key_Q));
-    connect(owner_.transformClearCompleteElementsAction_, &QAction::triggered, &owner_, &MainWindow::onClearCompleteElementsSelection);
-    transformMenu->addAction(owner_.transformClearCompleteElementsAction_);
-
     transformMenu->addSeparator();
     owner_.transformRaiseSubdivisionAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("分音提升一档") : QStringLiteral("Subdivision +1"),
@@ -485,6 +475,17 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         {QKeySequence(QStringLiteral("Ctrl+Shift+-")), QKeySequence(QStringLiteral("Ctrl+_"))});
     connect(owner_.transformLowerSubdivisionHalfStepAction_, &QAction::triggered, &owner_, &MainWindow::onLowerSubdivisionHalfStepSelection);
     transformMenu->addAction(owner_.transformLowerSubdivisionHalfStepAction_);
+    transformMenu->addSeparator();
+
+    owner_.transformClearCompleteElementsAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("一键清空") : QStringLiteral("Clear Elements"),
+        &owner_);
+    ShortcutRegistry::instance().applyShortcut(
+        owner_.transformClearCompleteElementsAction_,
+        QStringLiteral("transform.clear_complete_elements"),
+        QKeySequence(Qt::CTRL | Qt::Key_Q));
+    connect(owner_.transformClearCompleteElementsAction_, &QAction::triggered, &owner_, &MainWindow::onClearCompleteElementsSelection);
+    transformMenu->addAction(owner_.transformClearCompleteElementsAction_);
     transformMenu->addSeparator();
 
     auto* moreTransformMenu = transformMenu->addMenu(uiText("action.transform.more", "More..."));
@@ -563,6 +564,9 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         previewSlowerAction,
         QStringLiteral("preview.speed_down"),
         QKeySequence(QStringLiteral("Ctrl+O")));
+    // Default Qt::WindowShortcut: fires while the main window is active. Preview
+    // FULLSCREEN is a separate QML window, so its Ctrl+O/P are handled by the
+    // QML Shortcut block in QuickShellMain.qml → controller.adjustPreviewSpeed().
     connect(previewSlowerAction, &QAction::triggered, &owner_, [this]() {
         owner_.applyPreviewPlaybackRate(steppedPreviewPlaybackRate(owner_.previewPlaybackRate_, -1));
     });
@@ -577,6 +581,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         previewFasterAction,
         QStringLiteral("preview.speed_up"),
         QKeySequence(QStringLiteral("Ctrl+P")));
+    // Fullscreen Ctrl+P is handled in QML (see the speed-down action above).
     connect(previewFasterAction, &QAction::triggered, &owner_, [this]() {
         owner_.applyPreviewPlaybackRate(steppedPreviewPlaybackRate(owner_.previewPlaybackRate_, 1));
     });
@@ -648,7 +653,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.previewAudioSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewAudioSettings);
     previewMenu->addAction(owner_.previewAudioSettingsAction_);
 
-    owner_.previewVideoSettingsAction_ = new QAction(uiText("action.video_settings", "Video"), &owner_);
+    owner_.previewVideoSettingsAction_ = new QAction(uiText("action.video_settings", "Preview Settings"), &owner_);
     connect(owner_.previewVideoSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewVideoSettings);
     previewMenu->addAction(owner_.previewVideoSettingsAction_);
 

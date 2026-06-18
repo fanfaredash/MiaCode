@@ -553,11 +553,13 @@
         // to Lv — the chart-wide offset (default) or the per-difficulty
         // designer. Persisted as ui.editor_header_top_display.
         EditorHeaderTopDisplay editorHeaderTopDisplay_ = EditorHeaderTopDisplay::Offset;
-        // beta51+ — "禁止中文輸入法輸入" preference. Off by default so existing
-        // users / non-CJK locales aren't surprised by a sudden IME disable on
-        // first launch. When on, each editor widget gets Qt::WA_InputMethodEnabled
-        // toggled off so the OS bypasses the IME composition window entirely.
-        bool editorImeInputDisabled_ = false;
+        // beta51+ — "禁止中文輸入法輸入" preference. On by default (user-voted
+        // default): the editor is for chart notation, so blocking the IME
+        // candidate window avoids accidental CJK composition on first launch.
+        // Existing users keep whatever they stored. When on, each editor widget
+        // gets Qt::WA_InputMethodEnabled toggled off so the OS bypasses the IME
+        // composition window entirely.
+        bool editorImeInputDisabled_ = true;
         bool pendingDifficultySwitchPreviewRestore_ = false;
         quint64 pendingDifficultySwitchPreviewRestoreRevision_ = 0;
         int pendingDifficultySwitchPreviewRestoreDifficultyId_ = 0;

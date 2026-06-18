@@ -991,6 +991,16 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
 
     const auto applySlot = [showSummary, &summaryTooltipWithJump](QLabel* icon, QLabel* count, const SummaryEntry* entry) {
         const bool occupied = showSummary && entry != nullptr && entry->count > 0;
+        // These three icon/count widget pairs are positional SLOTS, not
+        // fixed-purpose badges: any kind (error/warning/muri) can land in any
+        // pair depending on which kinds are present. Stamp the bottom tab the
+        // shown badge should jump to so the header click handler routes by the
+        // badge kind actually displayed, not by the widget's name. Red/yellow
+        // (error/warning) → "validation" (语法); purple (muri) → "muri" (无理).
+        const QString targetTab =
+            (occupied && entry->kind == EditorValidationSummaryIconKind::Muri)
+                ? QStringLiteral("muri")
+                : QStringLiteral("validation");
         if (icon != nullptr) {
             if (occupied) {
                 icon->setPixmap(makeEditorValidationSummaryIcon(entry->color, entry->kind));
@@ -998,6 +1008,7 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
                 icon->clear();
             }
             icon->setProperty("hasContent", occupied);
+            icon->setProperty("validationSummaryTab", occupied ? targetTab : QString());
             icon->setVisible(occupied);
             icon->setToolTip(summaryTooltipWithJump);
         }
@@ -1010,6 +1021,7 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
                 count->setStyleSheet(QString());
             }
             count->setProperty("hasContent", occupied);
+            count->setProperty("validationSummaryTab", occupied ? targetTab : QString());
             count->setVisible(occupied);
             count->setToolTip(summaryTooltipWithJump);
         }

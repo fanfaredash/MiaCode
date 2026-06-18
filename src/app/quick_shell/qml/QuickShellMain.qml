@@ -746,6 +746,24 @@ ApplicationWindow {
         onActivated: controller.togglePreviewPlayback()
     }
 
+    // Speed (倍速) stepping in fullscreen. The C++ Ctrl+O/Ctrl+P menu actions are
+    // Qt::WindowShortcut and go dead once this separate fullscreen window owns
+    // focus, so mirror them here. Enabled only while fullscreen so they don't
+    // collide with those still-active menu actions in the normal layout.
+    Shortcut {
+        sequence: "Ctrl+O"
+        enabled: controller.previewFullscreen
+        context: Qt.ApplicationShortcut
+        onActivated: controller.adjustPreviewSpeed(-1)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+P"
+        enabled: controller.previewFullscreen
+        context: Qt.ApplicationShortcut
+        onActivated: controller.adjustPreviewSpeed(1)
+    }
+
     Menu {
         id: previewSpeedMenu
         popupType: Popup.Window

@@ -92,7 +92,9 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
         ui.insert(kThemeKey, raw.value("ui_theme").toString("system"));
     }
     if (!ui.contains(kThemeKey)) {
-        ui.insert(kThemeKey, "system");
+        // Default theme for fresh installs is dark (user-voted default). Existing
+        // users keep whatever they explicitly stored (incl. "system"/"light").
+        ui.insert(kThemeKey, "dark");
     }
     normalized.insert(kUiSectionKey, ui);
 
@@ -405,7 +407,7 @@ const QHash<QString, QString>& zhMap()
         {"action.preview_speed_down", "播放速度 ↓"},
         {"action.preview_speed_up", "播放速度 ↑"},
         {"action.audio_settings", "音频设置"},
-        {"action.video_settings", "视频设置"},
+        {"action.video_settings", "预览设置"},
         {"toolbar.export", "导出"},
         {"action.export_chart", "导出"},
         {"action.export_cover", "导出封面"},
@@ -483,7 +485,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.welcome.get_started", "开始使用"},
         {"dialog.preferences.editor_group", "编辑器"},
         {"dialog.preferences.editor_top_display", "顶部显示"},
-        {"dialog.preferences.editor_top_display.latency", "延迟"},
+        {"dialog.preferences.editor_top_display.latency", "偏移"},
         {"dialog.preferences.editor_top_display.designer", "谱师"},
         {"dialog.preferences.editor_font_size", "字号"},
         {"dialog.preferences.editor_line_spacing", "行距"},
@@ -513,7 +515,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.unsaved_field_changes.field.metadata", "谱面信息"},
 
         {"dialog.audio_settings.title", "音频设置"},
-        {"dialog.video_settings.title", "视频设置"},
+        {"dialog.video_settings.title", "预览设置"},
         {"dialog.render_settings.audio_group", "音频"},
         {"dialog.render_settings.video_group", "视频"},
         {"dialog.render_settings.gameplay_group", "游戏"},
@@ -587,7 +589,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.preview.canvas_frame_rate.display", "屏幕最大刷新率"},
         {"dialog.preferences.performance.pv_frame_rate", "PV刷新率"},
         {"dialog.preferences.performance.timeline_frame_rate", "时间轴刷新率"},
-        {"dialog.preferences.performance.video_decode", "视频解码"},
+        {"dialog.preferences.performance.video_decode", "PV渲染"},
         {"dialog.preferences.performance.video_decode.hardware", "硬件渲染"},
         {"dialog.preferences.performance.video_decode.software", "软件渲染"},
         {"dialog.render_settings.preview.show_object_stats", "预览/导出显示物件统计"},

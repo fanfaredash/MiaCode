@@ -16,6 +16,7 @@ public:
     void updateShellPreviewScrub(double second, bool centerView);
     void endShellPreviewScrub(double second, bool centerView);
     void setShellPreviewRate(double rate);
+    void nudgeShellPreviewRate(int direction);
     bool stepShellPreviewBySeconds(double deltaSeconds, bool centerView);
     void beginShellPreviewHeldSeek(int direction, int key);
     void stopShellPreviewHeldSeek(int key = 0);

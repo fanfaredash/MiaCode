@@ -309,7 +309,7 @@ void MainWindow::EditorSection::loadPortableState()
         state_.bottomTabsContentScale_ =
             ui.value("bottom_tabs_content_scale").toDouble(state_.bottomTabsContentScale_);
     }
-    state_.editorImeInputDisabled_ = ui.value("editor_ime_input_disabled").toBool(false);
+    state_.editorImeInputDisabled_ = ui.value("editor_ime_input_disabled").toBool(true);
     applyEditorTextFontSize(state_.editorTextFontPointSize_, false);
     applyEditorHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_, false);
     applyEditorOverwriteModeEnabled(state_.editorOverwriteModeEnabled_, false);

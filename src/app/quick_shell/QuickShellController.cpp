@@ -566,6 +566,15 @@ void QuickShellController::setPreviewRate(double rate)
     refreshFromStateSource();
 }
 
+void QuickShellController::adjustPreviewSpeed(int direction)
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    commandSink_->nudgeShellPreviewRate(direction);
+    refreshFromStateSource();
+}
+
 void QuickShellController::setBottomTabsCurrentTabId(const QString& tabId)
 {
     if (commandSink_ == nullptr || stateSource_ == nullptr) {
@@ -981,12 +990,17 @@ void QuickShellController::refreshFromStateSource()
         surfaceHost_->refreshBottomTabsSurfaceVisibility();
     }
     if (surfaceHost_ != nullptr) {
+        // The bottom-tabs speed toast is anchored to the timeline strip, which is
+        // gone in fullscreen — there, MainWindow's own centered
+        // previewPlaybackRateToast_ (shown from applyPreviewPlaybackRate) is the
+        // speed feedback. Showing both gave the "两个 widget" report, so suppress
+        // this one whenever fullscreen.
         if (!previewSpeedToastInitialized_) {
             previewSpeedToastInitialized_ = true;
-        } else if (previousPreviewSpeedLabel != previewSpeedLabel_) {
+        } else if (previousPreviewSpeedLabel != previewSpeedLabel_ && !previewFullscreen_) {
             surfaceHost_->showBottomTabsSpeedToast(previewSpeedLabel_);
         }
-        if (!bottomTabsVisible_) {
+        if (!bottomTabsVisible_ || previewFullscreen_) {
             surfaceHost_->hideBottomTabsSpeedToast();
         }
     }

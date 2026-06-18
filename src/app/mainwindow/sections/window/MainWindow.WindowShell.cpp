@@ -484,6 +484,12 @@ void MainWindow::WindowSection::setShellPreviewRate(double rate)
     owner_.applyPreviewPlaybackRate(rate);
 }
 
+void MainWindow::WindowSection::nudgeShellPreviewRate(int direction)
+{
+    owner_.applyPreviewPlaybackRate(
+        steppedPreviewPlaybackRate(owner_.previewPlaybackRate_, direction));
+}
+
 bool MainWindow::WindowSection::stepShellPreviewBySeconds(double deltaSeconds, bool centerView)
 {
     appendQuickShellBackendLog(
@@ -913,6 +919,12 @@ void MainWindow::WindowSection::applyUiTheme()
     }
     if (owner_.editorFindBar_ != nullptr) {
         owner_.editorFindBar_->setStyleSheet(UiTheme::editorFindBarStyleSheet());
+    }
+    if (owner_.editorFindCloseButton_ != nullptr) {
+        // The ✕ is a baked QIcon, so unlike the QSS text color it doesn't follow
+        // the palette on its own — re-tint it to the find bar's button text
+        // color (textPrimary) so it tracks the light/dark theme.
+        owner_.editorFindCloseButton_->setIcon(makeOutlineCloseIcon(UiTheme::colors().textPrimary));
     }
     if (owner_.welcomePage_ != nullptr) {
         owner_.welcomePage_->setStyleSheet(UiTheme::metadataPageStyleSheet());

@@ -206,18 +206,21 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     editor->setPlainText(QString());
     auto* batchTransformGroupSeparator = new QAction(this);
     batchTransformGroupSeparator->setSeparator(true);
+    auto* batchTransformClearSeparator = new QAction(this);
+    batchTransformClearSeparator->setSeparator(true);
     editor->setBatchTransformActions({
         transformMirrorLeftRightAction_,
         transformMirrorUpDownAction_,
         transformRotate180Action_,
         transformRotate45CounterClockwiseAction_,
         transformRotate45ClockwiseAction_,
-        transformClearCompleteElementsAction_,
         batchTransformGroupSeparator,
         transformRaiseSubdivisionAction_,
         transformLowerSubdivisionAction_,
         transformRaiseSubdivisionHalfStepAction_,
         transformLowerSubdivisionHalfStepAction_,
+        batchTransformClearSeparator,
+        transformClearCompleteElementsAction_,
     });
     editor->setMoreBatchTransformActions({
         transformToggleBreakAction_,
@@ -563,7 +566,13 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     editorFindNextButton_->setFixedWidth(24);
     editorFindCloseButton_ = new QToolButton(findBar);
     editorFindCloseButton_->setObjectName("EditorFindCloseButton");
-    editorFindCloseButton_->setText(QStringLiteral("✕"));
+    // Crisp painter-drawn ✕ (the bare U+2715 glyph rendered thin/misaligned in
+    // the button font). Reuses the outline list's close icon so every close
+    // affordance matches; colored to the find bar's button text (textPrimary,
+    // the same %7 editorFindBarStyleSheet() paints the glyph buttons with). The
+    // baked icon is re-tinted on theme change in WindowSection::applyUiTheme.
+    editorFindCloseButton_->setIcon(makeOutlineCloseIcon(UiTheme::colors().textPrimary));
+    editorFindCloseButton_->setIconSize(QSize(12, 12));
     editorFindCloseButton_->setToolTip(UiText::isChineseUi() ? QStringLiteral("关闭查找栏") : QStringLiteral("Close"));
     editorFindCloseButton_->setFixedWidth(28);
     findRow->addWidget(editorFindEdit_, 1);
@@ -671,8 +680,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         ? QStringLiteral("从 MP3 读取")
         : QStringLiteral("Read from MP3"));
     readTitleButton->setToolTip(UiText::isChineseUi()
-        ? QStringLiteral("从 track.mp3 的 ID3 标签里读取标题。")
-        : QStringLiteral("Pull the title from track.mp3's ID3 tag."));
+        ? QStringLiteral("选择一个 MP3，从它的 ID3 标签里读取标题。")
+        : QStringLiteral("Choose an MP3 and pull the title from its ID3 tag."));
     connect(readTitleButton, &QToolButton::clicked, this, &MainWindow::onReadTitleFromTrack);
     titleWrapLayout->addWidget(readTitleButton, 0, Qt::AlignRight);
 
@@ -686,8 +695,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         ? QStringLiteral("从 MP3 读取")
         : QStringLiteral("Read from MP3"));
     readArtistButton->setToolTip(UiText::isChineseUi()
-        ? QStringLiteral("从 track.mp3 的 ID3 标签里读取曲师。")
-        : QStringLiteral("Pull the artist from track.mp3's ID3 tag."));
+        ? QStringLiteral("选择一个 MP3，从它的 ID3 标签里读取曲师。")
+        : QStringLiteral("Choose an MP3 and pull the artist from its ID3 tag."));
     connect(readArtistButton, &QToolButton::clicked, this, &MainWindow::onReadArtistFromTrack);
     artistWrapLayout->addWidget(readArtistButton, 0, Qt::AlignRight);
 
@@ -721,11 +730,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     coverWrapLayout->setSpacing(6);
     auto* extractCoverButton = new QToolButton(metadataPage_);
     extractCoverButton->setText(UiText::isChineseUi()
-        ? QStringLiteral("从 track.mp3 中提取")
-        : QStringLiteral("Extract from track.mp3"));
+        ? QStringLiteral("从 MP3 读取")
+        : QStringLiteral("Read from MP3"));
     extractCoverButton->setToolTip(UiText::isChineseUi()
-        ? QStringLiteral("把 track.mp3 内嵌的封面图写到当前谱面目录的 bg.jpg。")
-        : QStringLiteral("Write track.mp3's embedded cover artwork as bg.jpg next to the chart."));
+        ? QStringLiteral("选择一个 MP3，把它内嵌的封面图写到当前谱面目录的 bg.jpg。")
+        : QStringLiteral("Choose an MP3 and write its embedded cover artwork as bg.jpg next to the chart."));
     connect(extractCoverButton, &QToolButton::clicked, this, &MainWindow::onExtractBackgroundFromTrack);
     coverWrapLayout->addWidget(extractCoverButton, 0, Qt::AlignLeft);
     coverWrapLayout->addStretch(1);

@@ -458,22 +458,26 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         if (mouseEvent != nullptr
             && mouseEvent->button() == Qt::LeftButton
             && watchedWidget->rect().contains(mouseEvent->pos())) {
-            const bool isErrorBadge =
+            // The header summary icon/count labels are positional SLOTS — any
+            // badge kind (error/warning/muri) can be rendered into any of these
+            // six widgets depending on which kinds are present (see
+            // updateEditorValidationSummary). Route by the badge kind actually
+            // shown, stamped on the widget as "validationSummaryTab", NOT by the
+            // widget's name (red/yellow → 语法, purple → 无理).
+            const bool isSummaryBadge =
                 watched == owner_.editorValidationErrorIconLabel_
-                || watched == owner_.editorValidationErrorCountLabel_;
-            const bool isWarningBadge =
-                watched == owner_.editorValidationWarningIconLabel_
-                || watched == owner_.editorValidationWarningCountLabel_;
-            const bool isMuriBadge =
-                watched == owner_.editorValidationMuriIconLabel_
+                || watched == owner_.editorValidationErrorCountLabel_
+                || watched == owner_.editorValidationWarningIconLabel_
+                || watched == owner_.editorValidationWarningCountLabel_
+                || watched == owner_.editorValidationMuriIconLabel_
                 || watched == owner_.editorValidationMuriCountLabel_;
-            if (isErrorBadge || isWarningBadge) {
-                owner_.setCurrentBottomTabsTabId(MainWindow::BottomTabsTabId::Validation);
-                return true;
-            }
-            if (isMuriBadge) {
-                owner_.setCurrentBottomTabsTabId(MainWindow::BottomTabsTabId::Muri);
-                return true;
+            if (isSummaryBadge) {
+                const QString targetTab =
+                    watchedWidget->property("validationSummaryTab").toString();
+                if (!targetTab.isEmpty()) {
+                    owner_.setCurrentBottomTabsTabId(targetTab);
+                    return true;
+                }
             }
         }
     }

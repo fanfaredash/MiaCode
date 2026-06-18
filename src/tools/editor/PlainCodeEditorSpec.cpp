@@ -192,6 +192,47 @@ int main(int argc, char** argv)
             out,
             &failed);
     }
+    {
+        // A passage spanning several {} subdivisions must keep every directive
+        // and line break — clearing must NOT collapse it into one {} (the bug).
+        const QString multi = QStringLiteral("{8}1,2,\n{16}3,4,");
+        expectClearCompleteElements(
+            multi,
+            0,
+            multi.size(),
+            QStringLiteral("{8},,\n{16},,"),
+            4,
+            QStringLiteral("Ctrl+Q keeps every subdivision across line breaks"),
+            out,
+            &failed);
+    }
+    {
+        // A subdivision directive after whitespace (not tight against the prior
+        // comma) must still survive the clear.
+        const QString spaced = QStringLiteral("{8}1, {16}2,");
+        expectClearCompleteElements(
+            spaced,
+            0,
+            spaced.size(),
+            QStringLiteral("{8}, {16},"),
+            2,
+            QStringLiteral("Ctrl+Q keeps a space-preceded subdivision prefix"),
+            out,
+            &failed);
+    }
+    {
+        // BPM marks and subdivisions both survive across a line break.
+        const QString bpm = QStringLiteral("(120){8}1,\n(140){4}2,");
+        expectClearCompleteElements(
+            bpm,
+            0,
+            bpm.size(),
+            QStringLiteral("(120){8},\n(140){4},"),
+            2,
+            QStringLiteral("Ctrl+Q keeps BPM marks and subdivisions across line breaks"),
+            out,
+            &failed);
+    }
 
     PlainCodeEditor editor;
     int clearShortcutCount = 0;

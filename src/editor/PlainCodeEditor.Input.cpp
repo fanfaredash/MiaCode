@@ -215,6 +215,41 @@ QString clearCompleteElementsInSelection(
             || beforePrefix == QChar::ParagraphSeparator
             || beforePrefix == QChar::LineSeparator;
     };
+    // Emit [spanStart, spanEnd) with the note tokens removed but every {…}/(…)
+    // directive AND all whitespace/newlines kept verbatim. This preserves the
+    // "{} ," timing skeleton (subdivisions, BPM marks, line breaks) even when a
+    // directive sits behind a newline/space instead of tight against the prior
+    // comma — clearing a passage that spans several {} subdivisions must NOT
+    // collapse them into one. Returns true if a note token was actually dropped.
+    const auto appendClearedNoteSpan = [&](int spanStart, int spanEnd) {
+        bool droppedNote = false;
+        int pos = spanStart;
+        while (pos < spanEnd) {
+            const QChar ch = text.at(pos);
+            if (ch == QLatin1Char('{') || ch == QLatin1Char('(')) {
+                const QChar closing = ch == QLatin1Char('{')
+                    ? QLatin1Char('}')
+                    : QLatin1Char(')');
+                const int closeIndex = text.indexOf(closing, pos + 1);
+                if (closeIndex < 0 || closeIndex >= spanEnd) {
+                    // Unterminated directive — preserve the remainder verbatim
+                    // rather than risk dropping structural text.
+                    output.append(text.mid(pos, spanEnd - pos));
+                    return droppedNote;
+                }
+                output.append(text.mid(pos, closeIndex - pos + 1));
+                pos = closeIndex + 1;
+            } else if (ch.isSpace()) {
+                output.append(ch);
+                ++pos;
+            } else {
+                // Note token — cleared.
+                droppedNote = true;
+                ++pos;
+            }
+        }
+        return droppedNote;
+    };
     const auto appendClearedSegment = [&](int commaIndex) {
         const int fullPrefixEnd = leadingPrefixEnd(segmentStart, commaIndex);
         const int partialPrefixEnd = partialLeadingPrefixEnd(segmentStart, commaIndex);
@@ -223,7 +258,9 @@ QString clearCompleteElementsInSelection(
             && (isElementBoundary(segmentStart) || partialPrefixEnd > segmentStart);
         output.append(text.mid(segmentStart, prefixEnd - segmentStart));
         if (canClear) {
-            ++changed;
+            if (appendClearedNoteSpan(prefixEnd, commaIndex)) {
+                ++changed;
+            }
             output.append(QLatin1Char(','));
         } else {
             output.append(text.mid(prefixEnd, commaIndex - prefixEnd + 1));
@@ -529,7 +566,7 @@ void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
     if (!batchTransformActions_.isEmpty() || !moreBatchTransformActions_.isEmpty()) {
         menu->addSeparator();
         // Surface the primary batch transforms inline so the right-click menu matches the top
-        // "修改" menu one-for-one (镜像/旋转 + 清空, then 分音); embedded separator actions carry
+        // "修改" menu one-for-one (镜像/旋转, then 分音, then 清空); embedded separator actions carry
         // the same group splits across. Only the less-frequent toggles stay under "更多".
         for (QAction* action : batchTransformActions_) {
             if (action == nullptr) {

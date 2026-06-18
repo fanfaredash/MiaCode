@@ -499,14 +499,14 @@ void MainWindow::DocumentSection::onClearCompleteElementsSelection()
     }
     auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
     if (editor == nullptr) {
-        owner_.statusBar()->showMessage(QStringLiteral("一键清空要素: editor unavailable."));
+        owner_.statusBar()->showMessage(QStringLiteral("一键清空: editor unavailable."));
         return;
     }
 
     int startPos = -1;
     int endPos = -1;
     if (!currentSelectionRange(&startPos, &endPos)) {
-        owner_.statusBar()->showMessage(QStringLiteral("一键清空要素: no selection."));
+        owner_.statusBar()->showMessage(QStringLiteral("一键清空: no selection."));
         return;
     }
 
@@ -517,7 +517,7 @@ void MainWindow::DocumentSection::onClearCompleteElementsSelection()
     const int begin = qMin(startPos, endPos);
     const int finish = qMax(startPos, endPos);
     if (begin < 0 || finish <= begin || finish > original.size()) {
-        owner_.statusBar()->showMessage(QStringLiteral("一键清空要素: invalid selection range."));
+        owner_.statusBar()->showMessage(QStringLiteral("一键清空: invalid selection range."));
         return;
     }
 
@@ -525,7 +525,7 @@ void MainWindow::DocumentSection::onClearCompleteElementsSelection()
     const QString transformedFull =
         miacode::editor::clearCompleteElementsInSelection(original, begin, finish, &changed);
     if (transformedFull == original) {
-        owner_.statusBar()->showMessage(QStringLiteral("一键清空要素: no note index changed."));
+        owner_.statusBar()->showMessage(QStringLiteral("一键清空: no note index changed."));
         return;
     }
 
@@ -572,7 +572,7 @@ void MainWindow::DocumentSection::onClearCompleteElementsSelection()
     markCurrentFieldDirty();
     state_.lastPreviewNoteMarkerSignature_.clear();
     owner_.refreshTimelineMetadata();
-    owner_.statusBar()->showMessage(QStringLiteral("一键清空要素 applied on selection: %1 replacement(s).").arg(changed));
+    owner_.statusBar()->showMessage(QStringLiteral("一键清空 applied on selection: %1 replacement(s).").arg(changed));
 }
 
 void MainWindow::DocumentSection::onRaiseSubdivisionSelection()
