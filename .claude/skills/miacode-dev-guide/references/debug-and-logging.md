@@ -68,7 +68,45 @@ the agent-facing quick index. Guidance:
 `MIACODE_PREVIEW_FRAME_PACING_DIAG`(`_SAMPLE_MS`), `MIACODE_PREVIEW_QSG_RENDER_TIMING`,
 `MIACODE_PREVIEW_FORCE_BASIC_RENDER_LOOP`, `MIACODE_TIMELINE_HOTPATH_DIAG`,
 `MIACODE_PREVIEW_DISABLE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS`,
-`MIACODE_PREVIEW_SFX_DIR`, `MIACODE_TRACK_PATH`, `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_{FRAMES,DIR,MAX_SAMPLES}`.
+`MIACODE_PREVIEW_SFX_DIR`, `MIACODE_TRACK_PATH`, `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_{FRAMES,DIR,MAX_SAMPLES}`,
+`MIACODE_PREVIEW_DUMP_HWFRAMES`, `MIACODE_PREVIEW_D3D11_DEBUG_LAYER`,
+`MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT` (default **on**, the §10 fix), `MIACODE_PREVIEW_HWDECODE_DROP_CORRUPT`.
+
+**HW-decode green/garble/seek diagnostics (Windows D3D11VA, `DebugOptions.h` accessors
+`previewDumpHwFrameBudget()` / `previewSharedD3D11DebugLayerEnabled()`, both `--debug`-gated):**
+The decode/copy path lives in `third_party/QtAVPlayer/.../qavhwdevice_d3d11.cpp` (render thread)
+and `qavplayer.cpp` `skipFrame` (decode thread). Per the drift-guard (`DebugFlagIndexSpec` scans
+only `src/`), the env literals stay in `src/common/DebugOptions.h` and the resolved values are
+PUBLISHED into the decoder via setters in `qavd3d11sharedcontext_p.h`
+(`qavSetPreviewDiagLogSink` / `qavSetPreviewHwFrameDumpConfig` / `qavArmPreviewHwFrameDump` /
+`qavGetPreviewDiagCounters` / `qavTakePreviewCatchupSkipCount`), wired once by
+`miacode::preview::installPreviewDecodeDiagnostics()` (called from
+`PreviewStageMediaHost::initializeBackendObjects`). Storm-safety: the per-frame copy path only
+does relaxed-atomic counter increments + ONE atomic load+compare for the dump gate — no env read,
+no string, no log, no I/O when `MIACODE_PREVIEW_DUMP_HWFRAMES=0` (default). `MIACODE_PREVIEW_DUMP_HWFRAMES=N`
+bounds a STAGING NV12 readback to N frames/arm (re-armed on seek) that emits NV12-domain stats +
+verdict `hint` as one log line per readback (no image files written). Log scopes (all `Channel::Runtime`): `preview/hwframe`
+(per-dump stat line + path transitions, via the published sink), `preview/hwframe_d3d11dbg`
+(drained `ID3D11InfoQueue` debug-layer messages), `preview/hwdecode_summary` (cumulative
+copy/timeout/copy-fail/res-change counters + coded-vs-display, drained on the GUI thread at
+seek/EoM), `preview/seek_landing` (seek→first-display latency + catch-up GOP-burst count). Spec:
+`docs/PREVIEW_HWDECODE_GREEN_GARBLE_SEEK_DEBUG_PLAN_ZH.md` §9.
+
+**HW-decode green/garble FIX (§10, located on Arc 130T = decoder output, completion-order; NOT
+`--debug`-gated — real fixes that apply in normal runs):** `MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT`
+(default **on**, accessor `previewHwDecodeCompletionWaitEnabled()`) makes the copy paths force the
+decode GPU work to complete (`ID3D11Query(EVENT)` + `Flush` + bounded ~100ms spin via
+`waitForDecodeCompletion`) before `CopySubresourceRegion` reads the DPB slot, killing the post-seek
+half-decoded green frame; set `=0` for an A/B repro (green returns). `MIACODE_PREVIEW_HWDECODE_DROP_CORRUPT`
+(default off, `previewHwDecodeDropCorruptFramesEnabled()`) drops frames FFmpeg flagged
+corrupt/`decode_error_flags` (free, from the AVFrame) so RHI holds the last good frame. Both are
+published via `qavSetPreviewHwDecodeFixConfig`. New diag fields: `preview/hwframe` dump line gains
+`since_seek_ms` / `decode_err` / `corrupt` / `completion_wait` / `codec`; `preview/hwdecode_summary`
+gains `completion_waits` / `completion_wait_timeouts` / `frames_decode_error` / `corrupt_dropped` /
+`codec`. Detail: `docs/PREVIEW_HWDECODE_GREEN_GARBLE_SEEK_DEBUG_PLAN_ZH.md` §10–§11. ⚠ Repro: iGPUs default to software
+decode — launch with `MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO=0` (+ `MIACODE_PREVIEW_SINGLE_D3D11_DEVICE=1`
+for H2). For the two-device path's RHI debug layer use the Qt env `QSG_RHI_DEBUG_LAYER=1` (Qt creates
+that device; `MIACODE_PREVIEW_D3D11_DEBUG_LAYER` only reaches the imported H2 device).
 
 **Preview video decode backend (Windows):** `MIACODE_USE_QTAVPLAYER` is a **build-time compile
 macro** (CMake-defined on Windows, NOT an environment flag — it can't be toggled at runtime). It
@@ -80,6 +118,15 @@ On hardware-decode `InvalidMedia` the host retries once forcing software decode 
 `Channel::Audio` scope `preview/stage_media`, `action=video_software_fallback`. The QtAVPlayer path
 drops the QMediaPlayer-only `recoverVideoBackend` / playback watchdog / soft-recovery / deferred-rate
 scaffolding (no silent WMF fallback, no converter-rebuild crash to recover from).
+`MIACODE_PREVIEW_SINGLE_D3D11_DEVICE` (default off; env flag, `DebugOptions.h`) enables **H2
+single-device decode**: `PreviewSharedD3D11Device` creates one video-capable, multithread-protected
+`ID3D11Device`, hands it to the preview `QQuickView` (`QuickShellPreviewCompositeSurface` →
+`setGraphicsDevice`) AND publishes it to the decoder (`qavSetSharedRenderD3D11Device` →
+`qavdemuxer.cpp` `setup_video_codec` → `av_hwdevice_ctx_alloc`+init). Then `qavhwdevice_d3d11.cpp`
+`handle()` takes a same-device fast path (`copyTextureSameDevice`, no shared handle/keyed-mutex/
+`AcquireSync(INFINITE)`) instead of the two-device keyed-mutex bridge. Every step falls back to the
+legacy two-device path on failure. Confirm via `media_backend … single_device=1`. See
+`docs/PREVIEW_VIDEO_IGPU_STUTTER_INVESTIGATION_AND_FIX_ZH.md` §4 Tier 3 H2.
 
 **DComp/D3D11 (DEFAULT OFF — being decoupled):** `MIACODE_PREVIEW_USE_DCOMP` (default off,
 `DebugOptions.h:194`), `MIACODE_TIMELINE_USE_DCOMP`, `MIACODE_PREVIEW_DCOMP_EXCLUSIVE`,
