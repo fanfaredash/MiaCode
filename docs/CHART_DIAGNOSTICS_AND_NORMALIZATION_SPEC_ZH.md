@@ -158,6 +158,38 @@ Parser **不强制 `b / x / h / f` 的典范字母顺序**。
 不是修饰符*顺序*。仅当 `[duration]` 块存在 AND `]` 之后还有非空后缀
 修饰符时才触发。
 
+### 地雷修饰符 `m`（Mine note）
+
+`m` 是 Majdata 扩展的**地雷**修饰符（maimai 官方没有）。MiaCode 是 autoplay
+模拟器（无玩家输入），所以地雷被建模为「永远被完美躲过」的音符：**有独立贴图，
+但不发任何 SFX、不出判定特效、被无理分析跳过**；按产品决策**计入物量**。
+
+- **接受位置**：`m` 像 `b` / `x` 一样被消费，大小写均可（与 `h` 一致；不像
+  `b`/`x` 那样拒绝大写）：
+  - tap / hold：`1m`、`1bm`（break+雷）、`1xm`（ex+雷）、`1hm[4:1]`（hold 雷）。
+  - touch / touch-hold：`A1m`、`C2hm[4:1]`。
+  - slide：`1-3[2:1]m`（`m` 在末尾）。`m` 置位 `trackMine`**和** `headMine`
+    —— 头星与轨道都渲染成地雷（对标 MajdataPlay 的 `IsMine` 头星 + `IsMineSlide`
+    轨道）。`m` 字符在构建 slide shape lookup key 时被剥离（同 `b`）。
+  - **slide 上 `m` 的位置不限**：`1w5[8:1]m`（末尾）与 `1w5m[8:1]`（shape 后、
+    bracket 前）**均合法，且都不报警告**。这与 `b` **不同**——`b` 的非典范位置
+    （非紧贴 slide token 第一个 `[` 之前）会触发 strict 警告（上表 #8 的
+    `kInvalidBreakSlideModifierPosition`）；`m` 没有这条位置约束:解析器扫描整段
+    `noteCore` 任意位置的 `m`（`SimaiNativeParser.Slide.cpp` 的 trackMine 扫描
+    循环,无 strict 位置检查）。
+- **数据模型**：`TimelineNoteMarker.isMine`（tap/hold/touch/touch_hold）、
+  `trackMine` + `headMine`（slide/wifi）；timeline 镜像 = `TimelineRenderFlagIsMine` /
+  `TimelineRenderFlagTrackMine`（`TimelineRenderData.h`）。
+- **EX 抑制**：地雷头覆盖 break/each/ex —— 用专用 mine 贴图，**不叠 EX overlay**
+  （对标 MajdataPlay `if (isEX && !isMine)`）。
+- **贴图**：`<base>_mine.png`（`tap_mine` / `hold_mine` / `star_mine` /
+  `star_mine_double` / `slide_mine` / `touch_mine` / `touchhold_*_mine` /
+  `wifi_mine_*`）。skinSTD 已入库（源自 MajMine 皮肤）；skinDX 待补（由普通贴图
+  色彩派生，延后）。缺图时各 selector 回退到普通贴图。
+- **三方同步**：parser 落 `isMine`/`trackMine` ↔ `SimaiParserSpec.cpp` 地雷用例 +
+  `ChartBatchTransformSpec.cpp` round-trip 用例 ↔ 本文档。归一化/变换通过
+  `extraModifiers`（tap）与 segment-text 保留（slide）让 `m` round-trip。
+
 ### 1.2 验证报告 —— `buildValidationReport()`
 
 `buildValidationReport()`（`SimaiNativeParser.Driver.cpp:971-1042`）

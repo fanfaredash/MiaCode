@@ -34,6 +34,7 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
     bool hasHold = false;
     bool hasFirework = false;
     bool hasBreak = false;
+    bool hasMine = false;
     bool hasNonCanonicalHoldModifierPlacement = false;
     QString errorMessage;
     if (!parseTouchSuffix(
@@ -42,6 +43,7 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
             &hasHold,
             &hasFirework,
             &hasBreak,
+            &hasMine,
             &hasNonCanonicalHoldModifierPlacement,
             &errorMessage)) {
         appendTokenError(state, lineNumber, column, errorMessage.isEmpty() ? QString("Invalid touch token: %1").arg(token) : errorMessage);
@@ -59,6 +61,7 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
     marker.touchPad = touchPadForToken(normalizedToken);
     marker.isBreak = hasBreak;
     marker.isFirework = hasFirework;
+    marker.isMine = hasMine;
 
     if (hasHold) {
         double durationSecond = 0.0;
@@ -152,6 +155,7 @@ void parseTapOrHoldToken(ParseState* state, const QString& token, int lineNumber
     marker.tapStarDouble = modifierState.tapStarDouble;
     marker.isBreak = modifierState.hasBreak;
     marker.isEx = modifierState.hasEx;
+    marker.isMine = modifierState.hasMine;
 
     if (!hasHold && hasOpenBracket) {
         appendTokenError(state, lineNumber, column, QString("Invalid hold duration: %1").arg(token));

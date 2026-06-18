@@ -20,9 +20,11 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
     sensorMarkers.reserve(16);
     // Per-marker touch timing: hsMultiplier scales touchFlowSpeed, no
     // upper clamp on the effective speed (Q4).
+    // Per-type sign policy: touch takes the HS magnitude (never reverses;
+    // only tap/star/each-line honor a negative HS). qAbs makes that explicit.
     const auto markerTouchTiming = [&state](double hsMultiplier) {
         return previewTouchTimingForEffectiveFlowSpeed(
-            static_cast<qreal>(state.render.touchFlowSpeed * hsMultiplier));
+            static_cast<qreal>(state.render.touchFlowSpeed * qAbs(hsMultiplier)));
     };
 
     for (int markerIndex = 0; markerIndex < markers.size(); ++markerIndex) {
@@ -86,13 +88,17 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
         }
 
         const QImage& basePointImage =
-            (marker.isBreak && !state.skin.touchPointBreakImage.isNull())
-                ? state.skin.touchPointBreakImage
-                : ((marker.isEach && !state.skin.touchPointEachImage.isNull()) ? state.skin.touchPointEachImage : state.skin.touchPointImage);
+            (marker.isMine && !state.skin.touchPointMineImage.isNull())
+                ? state.skin.touchPointMineImage
+                : (marker.isBreak && !state.skin.touchPointBreakImage.isNull())
+                    ? state.skin.touchPointBreakImage
+                    : ((marker.isEach && !state.skin.touchPointEachImage.isNull()) ? state.skin.touchPointEachImage : state.skin.touchPointImage);
         const QImage& baseCornerImage =
-            (marker.isBreak && !state.skin.touchCornerBreakImage.isNull())
-                ? state.skin.touchCornerBreakImage
-                : ((marker.isEach && !state.skin.touchCornerEachImage.isNull()) ? state.skin.touchCornerEachImage : state.skin.touchCornerImage);
+            (marker.isMine && !state.skin.touchCornerMineImage.isNull())
+                ? state.skin.touchCornerMineImage
+                : (marker.isBreak && !state.skin.touchCornerBreakImage.isNull())
+                    ? state.skin.touchCornerBreakImage
+                    : ((marker.isEach && !state.skin.touchCornerEachImage.isNull()) ? state.skin.touchCornerEachImage : state.skin.touchCornerImage);
         if (basePointImage.isNull() || baseCornerImage.isNull()) {
             continue;
         }
@@ -150,11 +156,13 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
         // pops to 1.0 instantly rather than tracking the front touch's pre-hit fade.
         if (isFrontOnSensor && sensorList.size() >= kTouchOverlapBorder2Threshold) {
             const TimelineNoteMarker& secondMarker = markers.markerAt(sensorList.at(1));
-            const QImage* secondBorder2 = secondMarker.isBreak
-                ? &state.skin.touchBorder2BreakImage
-                : (secondMarker.isEach
-                    ? &state.skin.touchBorder2EachImage
-                    : &state.skin.touchBorder2Image);
+            const QImage* secondBorder2 = (secondMarker.isMine && !state.skin.touchBorder2MineImage.isNull())
+                ? &state.skin.touchBorder2MineImage
+                : secondMarker.isBreak
+                    ? &state.skin.touchBorder2BreakImage
+                    : (secondMarker.isEach
+                        ? &state.skin.touchBorder2EachImage
+                        : &state.skin.touchBorder2Image);
             if (secondBorder2 != nullptr && !secondBorder2->isNull()) {
                 appendSprite(
                     secondBorder2,
@@ -167,11 +175,13 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
             }
             if (sensorList.size() >= kTouchOverlapBorder3Threshold) {
                 const TimelineNoteMarker& thirdMarker = markers.markerAt(sensorList.at(2));
-                const QImage* thirdBorder3 = thirdMarker.isBreak
-                    ? &state.skin.touchBorder3BreakImage
-                    : (thirdMarker.isEach
-                        ? &state.skin.touchBorder3EachImage
-                        : &state.skin.touchBorder3Image);
+                const QImage* thirdBorder3 = (thirdMarker.isMine && !state.skin.touchBorder3MineImage.isNull())
+                    ? &state.skin.touchBorder3MineImage
+                    : thirdMarker.isBreak
+                        ? &state.skin.touchBorder3BreakImage
+                        : (thirdMarker.isEach
+                            ? &state.skin.touchBorder3EachImage
+                            : &state.skin.touchBorder3Image);
                 if (thirdBorder3 != nullptr && !thirdBorder3->isNull()) {
                     appendSprite(
                         thirdBorder3,

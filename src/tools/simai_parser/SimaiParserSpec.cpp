@@ -914,6 +914,47 @@ int main(int argc, char** argv)
     }
 
     {
+        // Mine notes (simai `m`). The `m` is accepted on tap / hold / touch /
+        // touch-hold / slide; slides set trackMine + headMine. Mines must NOT
+        // turn the chart unparseable (the historical motivation for this work).
+        const SimaiNativeParseResult tap = SimaiNativeParser::parseForTimeline(QStringLiteral("1m,2bm,3xm,\nE"));
+        expect(tap.ok, QStringLiteral("mine taps `1m` / `2bm` / `3xm` parse ok"));
+        expect(tap.noteMarkers.size() == 3, QStringLiteral("mine tap chart emits three markers"));
+        if (tap.noteMarkers.size() == 3) {
+            expect(tap.noteMarkers.at(0).isMine && tap.noteMarkers.at(0).type == QLatin1String("tap"),
+                   QStringLiteral("`1m` sets isMine on a tap"));
+            expect(tap.noteMarkers.at(1).isMine && tap.noteMarkers.at(1).isBreak,
+                   QStringLiteral("`2bm` keeps break + mine together"));
+            expect(tap.noteMarkers.at(2).isMine && tap.noteMarkers.at(2).isEx,
+                   QStringLiteral("`3xm` keeps ex + mine together"));
+        }
+
+        const SimaiNativeParseResult hold = SimaiNativeParser::parseForTimeline(QStringLiteral("1hm[4:1],\nE"));
+        expect(hold.ok, QStringLiteral("mine hold `1hm[4:1]` parses ok"));
+        const TimelineNoteMarker* holdMarker = firstMarkerOfType(hold, QStringLiteral("hold"));
+        expect(holdMarker != nullptr && holdMarker->isMine, QStringLiteral("`1hm` sets isMine on a hold"));
+
+        const SimaiNativeParseResult touch = SimaiNativeParser::parseForTimeline(QStringLiteral("A1m,C2hm[4:1],\nE"));
+        expect(touch.ok, QStringLiteral("mine touch `A1m` and touch-hold `C2hm[4:1]` parse ok"));
+        const TimelineNoteMarker* touchMarker = firstMarkerOfType(touch, QStringLiteral("touch"));
+        const TimelineNoteMarker* touchHoldMarker = firstMarkerOfType(touch, QStringLiteral("touch_hold"));
+        expect(touchMarker != nullptr && touchMarker->isMine, QStringLiteral("`A1m` sets isMine on a touch"));
+        expect(touchHoldMarker != nullptr && touchHoldMarker->isMine,
+               QStringLiteral("`C2hm` sets isMine on a touch-hold"));
+
+        const SimaiNativeParseResult slide = SimaiNativeParser::parseForTimeline(QStringLiteral("1-3[2:1]m,\nE"));
+        expect(slide.ok, QStringLiteral("mine slide `1-3[2:1]m` parses ok"));
+        const TimelineNoteMarker* slideMarker = firstSlideLikeMarker(slide);
+        expect(slideMarker != nullptr, QStringLiteral("mine slide emits a slide marker"));
+        if (slideMarker != nullptr) {
+            expect(slideMarker->trackMine, QStringLiteral("`1-3[2:1]m` sets trackMine on the slide"));
+            expect(slideMarker->headMine, QStringLiteral("`1-3[2:1]m` sets headMine on the slide head star"));
+            expect(!slideMarker->slideDisplayKey.contains(QLatin1Char('m')),
+                   QStringLiteral("mine `m` is stripped from the slide shape lookup key"));
+        }
+    }
+
+    {
         const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(QStringLiteral("1-5[0.5##8:1],\nE"));
         expect(parsed.ok, QStringLiteral("delay slide accepts [wait##fraction] syntax"));
         const TimelineNoteMarker* marker = firstSlideLikeMarker(parsed);
@@ -1004,17 +1045,44 @@ int main(int argc, char** argv)
     }
 
     {
-        // Q7: negative rejected.
-        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+        // Q7: negative HS is accepted by DEFAULT (negative-HS is ON) — it
+        // parses and freezes the signed multiplier onto the marker.
+        const SimaiNativeParseResult neg = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("<HS*-2>1,2,E"));
+        expect(neg.ok, QStringLiteral("<HS*-2> parses ok by default (negative HS on)"));
+        if (neg.noteMarkers.size() >= 1) {
+            expect(nearlyEqual(neg.noteMarkers.at(0).hsMultiplier, -2.0),
+                   QStringLiteral("note under <HS*-2> freezes hsMultiplier = -2.0 by default"));
+        }
+    }
+
+    {
+        // Opt-out escape hatch: disabling negative HS restores the strict
+        // reject-hs<=0 stance; zero is rejected in BOTH modes. Restore the
+        // default (on) afterward so later cases are unaffected.
+        SimaiNativeParser::setAllowNegativeHsEnabled(false);
+        const SimaiNativeParseResult rejected = SimaiNativeParser::parseForTimeline(
             QStringLiteral("<HS*-2>1,E"));
-        bool sawInvalidHs = false;
-        for (const SimaiNativeMessage& err : parsed.errors) {
+        bool sawNegError = false;
+        for (const SimaiNativeMessage& err : rejected.errors) {
             if (err.message.contains(QStringLiteral("HS"))) {
-                sawInvalidHs = true;
+                sawNegError = true;
                 break;
             }
         }
-        expect(sawInvalidHs, QStringLiteral("<HS*-2> emits an HS-related parse error"));
+        expect(sawNegError, QStringLiteral("<HS*-2> rejected when negative HS is disabled (opt-out)"));
+
+        SimaiNativeParser::setAllowNegativeHsEnabled(true);
+        const SimaiNativeParseResult zero = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("<HS*0>1,E"));
+        bool sawZeroError = false;
+        for (const SimaiNativeMessage& err : zero.errors) {
+            if (err.message.contains(QStringLiteral("HS"))) {
+                sawZeroError = true;
+                break;
+            }
+        }
+        expect(sawZeroError, QStringLiteral("<HS*0> stays rejected even with negative HS on"));
     }
 
     {

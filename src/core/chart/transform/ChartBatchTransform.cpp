@@ -81,6 +81,7 @@ struct NoteTokenParts {
     bool hasHold = false;
     bool hasBreak = false;
     bool hasEx = false;
+    bool hasMine = false;
     bool tapUsesStarMaterial = false;
     bool tapStarDouble = false;
     bool valid = false;
@@ -194,6 +195,9 @@ bool parseNoteTokenParts(const QString& token, NoteTokenParts* parts)
             ++i;
         } else if (lower == QChar('h')) {
             parts->hasHold = true;
+            ++i;
+        } else if (lower == QChar('m')) {
+            parts->hasMine = true;
             ++i;
         } else if (ch == QChar('$')) {
             if (parts->tapUsesStarMaterial) {
@@ -309,6 +313,9 @@ QString buildNoteToken(const NoteTokenParts& parts, bool hasBreak, bool hasEx)
     }
     if (hasEx) {
         token.append(QChar('x'));
+    }
+    if (parts.hasMine) {
+        token.append(QChar('m'));
     }
     if (parts.tapUsesStarMaterial) {
         token.append(QChar('$'));

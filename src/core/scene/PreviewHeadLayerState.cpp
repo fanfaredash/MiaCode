@@ -295,7 +295,8 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
             timing.flyDurationSeconds,
             timing.unitsPerSecond,
             kLogicalDistanceTap,
-            kLogicalDistanceEdge
+            kLogicalDistanceEdge,
+            timing.directionSign
         );
     };
 
@@ -367,8 +368,9 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
                 continue;
             }
             // Q5: hold body uses HS frozen at note emission; tail uses the
-            // same timing as the head.
-            const PreviewTapTiming tapTiming = markerTapTiming(marker.hsMultiplier);
+            // same timing as the head. Per-type sign policy: holds take the
+            // HS magnitude (never reverse), matching MajdataPlay's Math.Abs.
+            const PreviewTapTiming tapTiming = markerTapTiming(qAbs(marker.hsMultiplier));
             const TapApproachSample headApproach = tapApproachWith(tapTiming, deltaSeconds);
             if (headApproach.scale <= 0.0) {
                 continue;
@@ -376,7 +378,10 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
             const QPointF unit = laneUnitVector(marker.lane);
             const bool holdActive = deltaSeconds >= 0.0;
             const QImage* holdImage = nullptr;
-            if (marker.isBreak) {
+            if (marker.isMine && !state.skin.holdMineImage.isNull()) {
+                // Mine overrides break/each (one mine sprite, no _on variant).
+                holdImage = &state.skin.holdMineImage;
+            } else if (marker.isBreak) {
                 holdImage = (holdActive && !state.skin.holdBreakOnImage.isNull()) ? &state.skin.holdBreakOnImage : &state.skin.holdBreakImage;
             } else if (marker.isEach) {
                 holdImage = (holdActive && !state.skin.holdEachOnImage.isNull()) ? &state.skin.holdEachOnImage : &state.skin.holdEachImage;
@@ -519,6 +524,9 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
         const bool headEach = slideLike ? marker.headEach : marker.isEach;
         const bool headEx = slideLike ? marker.headEx : marker.isEx;
         const bool doubleStarHead = starMaterialHead && (slideLike ? marker.sameHeadSlide : marker.tapStarDouble);
+        // A mine head uses its dedicated sprite (selectTap/SlideStarImage) and
+        // suppresses the EX overlay, matching MajdataPlay (EX visual is `!isMine`).
+        const bool headIsMine = slideLike ? marker.headMine : marker.isMine;
 
         const qreal deltaSeconds = static_cast<qreal>(state.playheadSeconds - marker.second);
         if (slideLike ? deltaSeconds >= 0.0 : deltaSeconds > 0.0) {
@@ -542,7 +550,7 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
         }
         const QImage* headImage = baseImage;
         bool headImageCacheable = true;
-        if (starMaterialHead && headEx) {
+        if (starMaterialHead && headEx && !headIsMine) {
             const QImage& overlay = (doubleStarHead && !state.skin.starExDoubleImage.isNull())
                 ? state.skin.starExDoubleImage
                 : state.skin.starExImage;
@@ -562,7 +570,7 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
                     headImageCacheable = false;
                 }
             }
-        } else if (!starMaterialHead && headEx && !state.skin.tapExImage.isNull()) {
+        } else if (!starMaterialHead && headEx && !headIsMine && !state.skin.tapExImage.isNull()) {
             const QColor tint = exTintColor(headBreak, headEach);
             if (renderAssetCache != nullptr) {
                 headImage = renderAssetCache->composedImage(

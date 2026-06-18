@@ -599,6 +599,12 @@ QHash<QString, RuntimeSlideJudgeResult> simulateRuntimeSlideAndWifiJudgments(
     wifiNotes.reserve(noteMarkers.size());
 
     for (const TimelineNoteMarker& marker : noteMarkers) {
+        // Mine slides/wifi are dodged by autoplay — exclude them from the
+        // runtime judgment simulation entirely (no judged result is consumed,
+        // and they must not occupy pads that real notes are judged against).
+        if (marker.isMine || marker.trackMine) {
+            continue;
+        }
         if (marker.type == QLatin1String("slide")) {
             RuntimeSlideNoteState note;
             if (buildRuntimeSlideNoteState(marker, &note)) {

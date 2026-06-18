@@ -70,7 +70,13 @@ PreviewTouchTiming previewTouchTimingForFlowSpeed(qreal flowSpeed)
 
 PreviewTapTiming previewTapTimingForEffectiveFlowSpeed(qreal effectiveFlowSpeed)
 {
-    const double safeFlowSpeed = qMax(0.0001, static_cast<double>(effectiveFlowSpeed));
+    // Magnitude/sign split: the magnitude drives all durations and the
+    // (positive) radial speed; the sign is carried out separately as
+    // directionSign so a negative HS reverses the flow direction WITHOUT
+    // collapsing the timing (a naive qMax(0.0001, speed) floor would turn a
+    // negative speed into a ~5h crawl instead of reverse flow).
+    const double signedFlowSpeed = static_cast<double>(effectiveFlowSpeed);
+    const double safeFlowSpeed = qMax(0.0001, qAbs(signedFlowSpeed));
     const double timingScaleFrames =
         miacode::preview_gameplay::kPreviewTimingBaseFrames
         + miacode::preview_gameplay::kPreviewTimingFlowFramesNumerator / safeFlowSpeed;
@@ -87,12 +93,15 @@ PreviewTapTiming previewTapTimingForEffectiveFlowSpeed(qreal effectiveFlowSpeed)
         (miacode::preview_gameplay::kLogicalDistanceEdge - miacode::preview_gameplay::kLogicalDistanceTap)
         / qMax(0.0001, static_cast<double>(timing.flyDurationSeconds))
     );
+    timing.directionSign = signedFlowSpeed < 0.0 ? -1.0 : 1.0;
     return timing;
 }
 
 PreviewSlideTrackTiming previewSlideTrackTimingForEffectiveFlowSpeed(qreal effectiveFlowSpeed)
 {
-    const double safeFlowSpeed = qMax(0.0001, static_cast<double>(effectiveFlowSpeed));
+    // Slides never reverse (per-type policy uses the magnitude), so fold the
+    // sign defensively here too — a leaked negative must not collapse timing.
+    const double safeFlowSpeed = qMax(0.0001, qAbs(static_cast<double>(effectiveFlowSpeed)));
     const double timingScaleFrames =
         miacode::preview_gameplay::kPreviewTimingBaseFrames
         + miacode::preview_gameplay::kPreviewTimingFlowFramesNumerator / safeFlowSpeed;
@@ -284,11 +293,24 @@ TapApproachSample sampleTapApproach(
     qreal tapFlyDurationSeconds,
     qreal tapUnitsPerSecond,
     qreal logicalDistanceTap,
-    qreal logicalDistanceEdge
+    qreal logicalDistanceEdge,
+    qreal directionSign
 )
 {
+    // directionSign defaults to +1 (forward). With +1 this function is
+    // byte-identical to the original inner->ring flow. directionSign < 0 is
+    // reverse flow (negative HS): the note comes from the OUTER side and flies
+    // INWARD to the judgement ring, HIT AT THE RING (delta=0 -> edge) exactly
+    // like a forward note — only the approach direction is mirrored. This is
+    // the MajdataPlay-faithful semantics. Per product decision NO clipping is
+    // applied — semantic correctness only; the off-screen outer portion of the
+    // flight is simply not visible (natural preview bounds), it is not masked.
+    const bool reverse = directionSign < 0.0;
+    const qreal outerSpawnDistance = 2.0 * logicalDistanceEdge - logicalDistanceTap;
+    const qreal spawnDistance = reverse ? outerSpawnDistance : logicalDistanceTap;
+
     TapApproachSample approach;
-    approach.distance = logicalDistanceTap;
+    approach.distance = spawnDistance;
     if (tapLifecycleDurationSeconds <= 0.0 || deltaSeconds <= -tapLifecycleDurationSeconds) {
         return approach;
     }
@@ -304,11 +326,22 @@ TapApproachSample sampleTapApproach(
     }
 
     if (deltaSeconds < 0.0) {
-        approach.distance = qBound<qreal>(
-            logicalDistanceTap,
-            logicalDistanceTap + (deltaSeconds + tapFlyDurationSeconds) * tapUnitsPerSecond,
-            logicalDistanceEdge
-        );
+        if (reverse) {
+            // [outer -> edge] as delta goes -fly -> 0: starts beyond the ring
+            // and decreases to the ring. Hit position is the ring (edge), same
+            // as forward — semantics preserved.
+            approach.distance = qBound<qreal>(
+                logicalDistanceEdge,
+                logicalDistanceEdge - deltaSeconds * tapUnitsPerSecond,
+                outerSpawnDistance
+            );
+        } else {
+            approach.distance = qBound<qreal>(
+                logicalDistanceTap,
+                logicalDistanceTap + (deltaSeconds + tapFlyDurationSeconds) * tapUnitsPerSecond,
+                logicalDistanceEdge
+            );
+        }
         approach.scale = 1.0;
         return approach;
     }

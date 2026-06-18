@@ -54,6 +54,7 @@ struct PreviewSkinAssets {
     QImage noteGuideNormalImage;
     QImage noteGuideBreakImage;
     QImage noteGuideEachImage;
+    QImage noteGuideMineImage;
     QImage noteGuideEachLine1Image;
     QImage noteGuideEachLine2Image;
     QImage noteGuideEachLine3Image;
@@ -85,6 +86,25 @@ struct PreviewSkinAssets {
     QImage touchHoldBreak3Image;
     QImage touchHoldBreakBorderImage;
     QImage touchHoldOffImage;
+    // Mine-note sprites (simai `m`). A mine overrides break/each, so there is
+    // a single sprite per note type (no break/each variants). Sourced from the
+    // MajMine skin (same sd layout/sizes). Empty = skin has no mine art; the
+    // selectors then fall back to the normal note sprite.
+    QImage tapMineImage;
+    QImage holdMineImage;
+    QImage starMineImage;
+    QImage starMineDoubleImage;
+    QImage slideTrackMineImage;
+    QVector<QImage> wifiMineImages;
+    QImage touchCornerMineImage;
+    QImage touchBorder2MineImage;
+    QImage touchBorder3MineImage;
+    QImage touchPointMineImage;
+    QImage touchHoldMine0Image;
+    QImage touchHoldMine1Image;
+    QImage touchHoldMine2Image;
+    QImage touchHoldMine3Image;
+    QImage touchHoldBorderMineImage;
 };
 
 struct PreviewJudgeTextSprite {

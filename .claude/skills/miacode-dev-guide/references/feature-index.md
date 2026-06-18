@@ -226,6 +226,21 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `.StrictChecks.cpp` (see `SimaiNativeParser.cpp:1584`).
 - Validation UI: `sections/validation/MainWindow.ValidationFlow.cpp` (`runValidateSimai*`,
   `addValidationError`, `addValidationDecoration`).
+- Note-modifier sync set (one patch touches all): native parser (`.cpp`/`.TouchTap`/`.Slide`) →
+  marker flags (`src/timeline/TimelineData.h`) → mirror (`TimelineQuickModel.cpp` +
+  `TimelineRenderData.h` flags) → transform (`ChartBatchTransform.cpp`, must NOT `return false` on
+  unknowns) + normalization round-trip (`ChartNormalization.cpp`) → skin selectors + timeline icons
+  → specs (`SimaiParserSpec`, `ChartBatchTransformSpec`, `TimelineModelSpec`) + diagnostics docs.
+- **Mine notes** (`m` suffix): `isMine`/`trackMine`/`headMine`; mine OVERRIDES break/each (one
+  `<base>_mine.png` per type, skinSTD only); suppressed in SFX (`PreviewSfxTimeline.buildTimeline`) +
+  Muri (`MuriAnalyzer`, `MuriRuntimeModelBuilder`); counted in stats. Docs:
+  `docs/MINE_NOTE_RESEARCH_AND_MIACODE_PORT_HANDOFF_ZH.md` §7.
+- **HS (`<HS*N>`)**: per-note `hsMultiplier` (frozen at emit, Q5), parsed in `Driver.cpp` (Q1/Q2/Q7);
+  applied in scene via `previewTapTimingForEffectiveFlowSpeed` (`PreviewOpacityCurves`). **Negative HS**
+  is ON by default (`SimaiNativeParser::g_allowNegativeHs` defaults true; opt-out
+  `MIACODE_PREVIEW_REJECT_NEGATIVE_HS` at boot); reverse flow via `PreviewTapTiming.directionSign` + `sampleTapApproach`
+  reverse branch; per-type sign policy (tap/star/line signed, hold/touch/slide abs). Docs:
+  `docs/HS_MECHANISM_AND_NEGATIVE_HS_FEASIBILITY_ZH.md` §8.
 
 ## 5. Timeline, cursor mapping, preview sync
 

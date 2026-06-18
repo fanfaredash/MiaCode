@@ -65,6 +65,8 @@ the agent-facing quick index. Guidance:
 
 **Preview (active QSG path) tuning/diag:** `MIACODE_PREVIEW_VISUAL_SMOOTHING`,
 `MIACODE_PREVIEW_VISUAL_LOOKAHEAD_VSYNCS`, `MIACODE_PREVIEW_FIXED_TIMER_HIGH_RES`,
+`MIACODE_PREVIEW_REJECT_NEGATIVE_HS` (default off; opt-OUT — negative-HS `<HS*-N>` reverse-flow is ON
+by default, `=1` restores strict reject of hs<=0 per Q7; read once at boot into `SimaiNativeParser::setAllowNegativeHsEnabled` as `!reject`),
 `MIACODE_PREVIEW_FRAME_PACING_DIAG`(`_SAMPLE_MS`), `MIACODE_PREVIEW_QSG_RENDER_TIMING`,
 `MIACODE_PREVIEW_FORCE_BASIC_RENDER_LOOP`, `MIACODE_TIMELINE_HOTPATH_DIAG`,
 `MIACODE_PREVIEW_DISABLE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS`,

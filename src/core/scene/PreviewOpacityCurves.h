@@ -14,6 +14,11 @@ struct PreviewTapTiming {
     qreal spawnDurationSeconds = 0.0;
     qreal flyDurationSeconds = 0.0;
     qreal unitsPerSecond = 0.0;
+    // +1 = normal forward flow (inner spawn -> judgement ring). -1 = reverse
+    // flow (negative HS): the note flies inward from OUTSIDE the ring to the
+    // ring. Magnitude lives in the duration/speed fields above; only the sign
+    // distinguishes direction. Always +1 unless negative HS is in effect.
+    qreal directionSign = 1.0;
 };
 
 struct PreviewSlideTrackTiming {
@@ -67,7 +72,8 @@ TapApproachSample sampleTapApproach(
     qreal tapFlyDurationSeconds,
     qreal tapUnitsPerSecond,
     qreal logicalDistanceTap,
-    qreal logicalDistanceEdge
+    qreal logicalDistanceEdge,
+    qreal directionSign = 1.0
 );
 qreal sampleSlideTrackPreTraceOpacity(
     qreal markerSecond,

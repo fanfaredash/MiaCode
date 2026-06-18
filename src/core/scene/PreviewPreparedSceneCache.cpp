@@ -210,9 +210,10 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
         return previewSlideTrackTimingForEffectiveFlowSpeed(
             static_cast<qreal>(state.render.tapFlowSpeed * hsMultiplier));
     };
+    // Per-type sign policy: touch takes the HS magnitude (never reverses).
     const auto markerTouchTiming = [&state](double hsMultiplier) {
         return previewTouchTimingForEffectiveFlowSpeed(
-            static_cast<qreal>(state.render.touchFlowSpeed * hsMultiplier));
+            static_cast<qreal>(state.render.touchFlowSpeed * qAbs(hsMultiplier)));
     };
     QHash<QString, int> markerIndexByKey;
     markerIndexByKey.reserve(state.noteMarkers.size() * 2);

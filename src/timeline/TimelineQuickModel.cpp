@@ -283,6 +283,7 @@ struct TapModifierState {
     bool hasBreak = false;
     bool hasEx = false;
     bool hasHold = false;
+    bool hasMine = false;
     bool tapUsesStarMaterial = false;
     bool tapStarDouble = false;
 };
@@ -330,6 +331,14 @@ bool parseTapModifierSequence(
                     return false;
                 }
                 state->hasHold = true;
+                ++i;
+                continue;
+            }
+            if (lower == QLatin1Char('m')) {
+                if (state->hasMine) {
+                    return false;
+                }
+                state->hasMine = true;
                 ++i;
                 continue;
             }
@@ -649,15 +658,18 @@ bool parseTouchSuffix(
     QString* durationSignature,
     bool* hasHold,
     bool* hasFirework,
-    bool* hasBreak)
+    bool* hasBreak,
+    bool* hasMine)
 {
-    if (durationSignature == nullptr || hasHold == nullptr || hasFirework == nullptr || hasBreak == nullptr) {
+    if (durationSignature == nullptr || hasHold == nullptr || hasFirework == nullptr || hasBreak == nullptr
+        || hasMine == nullptr) {
         return false;
     }
     durationSignature->clear();
     *hasHold = false;
     *hasFirework = false;
     *hasBreak = false;
+    *hasMine = false;
 
     const int prefixLength = touchPrefixLength(token);
     if (prefixLength <= 0 || prefixLength > token.size()) {
@@ -682,7 +694,7 @@ bool parseTouchSuffix(
         *durationSignature = suffix.mid(openBracket + 1, closeBracket - openBracket - 1);
     }
 
-    const auto parseModifierPart = [hasHold, hasFirework, hasBreak](const QString& modifiers) -> bool {
+    const auto parseModifierPart = [hasHold, hasFirework, hasBreak, hasMine](const QString& modifiers) -> bool {
         for (QChar ch : modifiers) {
             if (ch == QLatin1Char('h')) {
                 *hasHold = true;
@@ -690,6 +702,8 @@ bool parseTouchSuffix(
                 *hasFirework = true;
             } else if (ch == QLatin1Char('b')) {
                 *hasBreak = true;
+            } else if (ch == QLatin1Char('m') || ch == QLatin1Char('M')) {
+                *hasMine = true;
             } else if (ch == QLatin1Char('x') || ch.isSpace()) {
                 continue;
             } else {
@@ -2228,7 +2242,8 @@ bool TimelineQuickModel::parseNoteToken(
         bool hasHold = false;
         bool hasFirework = false;
         bool hasBreak = false;
-        if (!parseTouchSuffix(normalizedToken, &durationSignature, &hasHold, &hasFirework, &hasBreak)) {
+        bool hasMine = false;
+        if (!parseTouchSuffix(normalizedToken, &durationSignature, &hasHold, &hasFirework, &hasBreak, &hasMine)) {
             return false;
         }
 
@@ -2244,6 +2259,9 @@ bool TimelineQuickModel::parseNoteToken(
         }
         if (hasFirework) {
             note.flags |= TimelineRenderFlagIsFirework;
+        }
+        if (hasMine) {
+            note.flags |= TimelineRenderFlagIsMine;
         }
         if (hasHold) {
             bool ok = false;
@@ -2302,9 +2320,14 @@ bool TimelineQuickModel::parseNoteToken(
         QString sanitizedCore;
         sanitizedCore.reserve(core.size());
         bool trackBreak = false;
+        bool trackMine = false;
         for (QChar ch : core) {
             if (ch == QLatin1Char('b')) {
                 trackBreak = true;
+                continue;
+            }
+            if (ch == QLatin1Char('m') || ch == QLatin1Char('M')) {
+                trackMine = true;
                 continue;
             }
             sanitizedCore.append(ch);
@@ -2345,6 +2368,9 @@ bool TimelineQuickModel::parseNoteToken(
         if (trackBreak) {
             note.flags |= TimelineRenderFlagTrackBreak | TimelineRenderFlagIsBreak;
         }
+        if (trackMine) {
+            note.flags |= TimelineRenderFlagTrackMine | TimelineRenderFlagIsMine;
+        }
         appendNote(note);
         return true;
     }
@@ -2378,6 +2404,9 @@ bool TimelineQuickModel::parseNoteToken(
     }
     if (modifierState.hasEx) {
         note.flags |= TimelineRenderFlagIsEx;
+    }
+    if (modifierState.hasMine) {
+        note.flags |= TimelineRenderFlagIsMine;
     }
     if (modifierState.tapUsesStarMaterial) {
         note.flags |= TimelineRenderFlagTapUsesStarMaterial;
@@ -2477,8 +2506,14 @@ void TimelineQuickModel::finalizeEachGroup(LineState* lineState, const QVector<i
         if (index < 0 || index >= lineState->render.notes.size()) {
             continue;
         }
-        lineState->render.notes[index].eachGroupId = eachGroupId;
         const TimelineRenderNote& note = lineState->render.notes.at(index);
+        // Mines never participate in each-grouping (parity with the native
+        // parser's finalizeEachGroup) — no eachGroupId, no IsEach flag.
+        if (timelineRenderFlagSet(note, TimelineRenderFlagIsMine)
+            || timelineRenderFlagSet(note, TimelineRenderFlagTrackMine)) {
+            continue;
+        }
+        lineState->render.notes[index].eachGroupId = eachGroupId;
         switch (note.kind) {
         case TimelineRenderNoteKind::Touch:
             touchIndices.append(index);
@@ -2515,6 +2550,9 @@ void TimelineQuickModel::finalizeEachGroup(LineState* lineState, const QVector<i
         if (left.kind != TimelineRenderNoteKind::Slide && left.kind != TimelineRenderNoteKind::Wifi) {
             continue;
         }
+        if (timelineRenderFlagSet(left, TimelineRenderFlagTrackMine)) {
+            continue;  // mines never form a same-head (double-star) each pair
+        }
         for (int j = 0; j < groupIndices.size(); ++j) {
             if (i == j) {
                 continue;
@@ -2525,6 +2563,7 @@ void TimelineQuickModel::finalizeEachGroup(LineState* lineState, const QVector<i
             }
             const TimelineRenderNote& right = lineState->render.notes.at(rightIndex);
             if ((right.kind == TimelineRenderNoteKind::Slide || right.kind == TimelineRenderNoteKind::Wifi)
+                && !timelineRenderFlagSet(right, TimelineRenderFlagTrackMine)
                 && right.lane == left.lane) {
                 left.flags |= static_cast<quint32>(TimelineRenderFlagSameHeadSlide);
                 break;

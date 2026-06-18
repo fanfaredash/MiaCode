@@ -125,7 +125,8 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
             timing.flyDurationSeconds,
             timing.unitsPerSecond,
             kLogicalDistanceTap,
-            kLogicalDistanceEdge
+            kLogicalDistanceEdge,
+            timing.directionSign
         );
     };
 
@@ -159,7 +160,9 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
                 continue;
             }
             const qreal deltaSeconds = static_cast<qreal>(state.playheadSeconds - marker.second);
-            const PreviewTapTiming tapTiming = markerTapTiming(marker.hsMultiplier);
+            // Hold guides take the HS magnitude (never reverse), matching the
+            // head layer's per-type sign policy.
+            const PreviewTapTiming tapTiming = markerTapTiming(qAbs(marker.hsMultiplier));
             const TapApproachSample approach = tapApproachWith(tapTiming, deltaSeconds);
             if (approach.scale <= 0.0) {
                 continue;

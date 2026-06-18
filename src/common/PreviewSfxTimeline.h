@@ -288,6 +288,13 @@ inline void buildTimeline(
 
     for (const TimelineNoteMarker& marker : noteMarkers) {
         const QString type = marker.type.toLower();
+        // Mine notes (simai `m`) are "avoid" notes — autoplay always dodges
+        // them, so they emit NO answer/judge/break/ex/touch/touchhold SFX.
+        // This single guard covers realtime preview AND video export (both
+        // call buildTimeline). Slides use trackMine.
+        if (marker.isMine || marker.trackMine) {
+            continue;
+        }
         const double answerCompensationSeconds =
             miacode::preview_sfx_timing::answerPreTriggerChartSeconds(playbackRate);
         if (type == QLatin1String("tap")) {

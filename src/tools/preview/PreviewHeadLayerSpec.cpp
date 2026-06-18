@@ -544,6 +544,69 @@ bool verifyHoldExUsesHeadRenderAssetCache(QTextStream& err)
     return true;
 }
 
+bool verifyNegativeHsReverseFlow(QTextStream& err)
+{
+    using miacode::preview::scene::previewTapTimingForEffectiveFlowSpeed;
+    using miacode::preview::scene::sampleTapApproach;
+    using miacode::preview::scene::TapApproachSample;
+    using miacode::preview::scene::kLogicalDistanceTap;
+    using miacode::preview::scene::kLogicalDistanceEdge;
+
+    // Sign split: magnitude drives durations (identical for ±speed); sign maps
+    // to directionSign without collapsing timing.
+    const PreviewTapTiming fwd = previewTapTimingForEffectiveFlowSpeed(7.5);
+    const PreviewTapTiming rev = previewTapTimingForEffectiveFlowSpeed(-7.5);
+    if (!require(fwd.directionSign > 0.0, QStringLiteral("positive effective speed -> directionSign +1"), err)) {
+        return false;
+    }
+    if (!require(rev.directionSign < 0.0, QStringLiteral("negative effective speed -> directionSign -1"), err)) {
+        return false;
+    }
+    if (!require(rev.flyDurationSeconds > 0.0
+                     && qFuzzyCompare(rev.flyDurationSeconds + 1.0, fwd.flyDurationSeconds + 1.0),
+                 QStringLiteral("negative HS keeps the same (magnitude) fly duration, not a ~5h collapse"), err)) {
+        return false;
+    }
+
+    const qreal fly = fwd.flyDurationSeconds;
+
+    // Forward stays inner->ring: distance never exceeds the judgement ring.
+    const TapApproachSample fwdMid = sampleTapApproach(
+        -fly * 0.5, fwd.lifecycleDurationSeconds, fwd.spawnDurationSeconds,
+        fwd.flyDurationSeconds, fwd.unitsPerSecond, kLogicalDistanceTap, kLogicalDistanceEdge, fwd.directionSign);
+    if (!require(fwdMid.distance <= kLogicalDistanceEdge + 0.001 && fwdMid.distance >= kLogicalDistanceTap - 0.001,
+                 QStringLiteral("forward note flies within [tap, edge]"), err)) {
+        return false;
+    }
+
+    // Reverse flies outer->ring: distance starts beyond the ring and decreases
+    // to the ring as the playhead approaches the hit time. Hit position is the
+    // ring (edge), same as forward — semantics preserved. No clipping is applied
+    // (product decision): the trajectory is the whole contract here.
+    const TapApproachSample revEarly = sampleTapApproach(
+        -fly * 0.5, rev.lifecycleDurationSeconds, rev.spawnDurationSeconds,
+        rev.flyDurationSeconds, rev.unitsPerSecond, kLogicalDistanceTap, kLogicalDistanceEdge, rev.directionSign);
+    const TapApproachSample revLate = sampleTapApproach(
+        -fly * 0.1, rev.lifecycleDurationSeconds, rev.spawnDurationSeconds,
+        rev.flyDurationSeconds, rev.unitsPerSecond, kLogicalDistanceTap, kLogicalDistanceEdge, rev.directionSign);
+    const TapApproachSample revHit = sampleTapApproach(
+        0.0, rev.lifecycleDurationSeconds, rev.spawnDurationSeconds,
+        rev.flyDurationSeconds, rev.unitsPerSecond, kLogicalDistanceTap, kLogicalDistanceEdge, rev.directionSign);
+    if (!require(revEarly.distance > kLogicalDistanceEdge,
+                 QStringLiteral("reverse note approaches from OUTSIDE the ring (distance > edge during flight)"), err)) {
+        return false;
+    }
+    if (!require(revEarly.distance > revLate.distance && revLate.distance >= kLogicalDistanceEdge - 0.001,
+                 QStringLiteral("reverse note flies inward toward the ring as the playhead advances"), err)) {
+        return false;
+    }
+    if (!require(qAbs(revHit.distance - kLogicalDistanceEdge) < 0.001,
+                 QStringLiteral("reverse note is HIT at the ring (edge), same as forward"), err)) {
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -568,6 +631,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyHoldExUsesHeadRenderAssetCache(err)) {
+        return 1;
+    }
+    if (!verifyNegativeHsReverseFlow(err)) {
         return 1;
     }
 

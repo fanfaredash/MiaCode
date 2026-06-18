@@ -240,6 +240,20 @@ int main(int argc, char** argv)
     }
 
     {
+        // Mine suppression: the anchor repro above emits one SlideHeadTap when
+        // the slide head star is judgeable. Mine-ifying the slide (`8>3[4:1]m`)
+        // makes the head star a mine, so no synthetic head-star judge note is
+        // created and the slide never enters runtime judgment — zero diagnostics.
+        const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(240){16}\n8>3[4:1]m,,,,,\n8,\nE\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("mine slide-head repro chart parses"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::SlideHeadTap) == 0,
+            QStringLiteral("mine slide head star emits NO slide-head-tap diagnostic"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::SlideTooFast) == 0,
+            QStringLiteral("mine slide emits NO slide-too-fast diagnostic"));
+    }
+
+    {
         const AnalyzedChart analyzed = analyzeChart(
             QStringLiteral("(240){16}\n8>3[4:1],,,,,\n8,\nE\n"),
             -0.125);

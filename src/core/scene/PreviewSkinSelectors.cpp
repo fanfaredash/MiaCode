@@ -14,7 +14,13 @@ const QImage* selectTapNoteGuideImage(const PreviewSkinAssets& skin, const Timel
     const bool starMaterialHead = slideLike ? !marker.slideHeadUsesTapMaterial : marker.tapUsesStarMaterial;
     const bool isBreak = slideLike ? marker.headBreak : marker.isBreak;
     const bool isEach = slideLike ? marker.headEach : marker.isEach;
+    const bool isMine = slideLike ? marker.headMine : marker.isMine;
 
+    // Mine notes use a distinct approach guide (overrides break/each), matching
+    // MajdataMine_View where the mine note has its own guide ring.
+    if (isMine && !skin.noteGuideMineImage.isNull()) {
+        return &skin.noteGuideMineImage;
+    }
     if (isBreak && !skin.noteGuideBreakImage.isNull()) {
         return &skin.noteGuideBreakImage;
     }
@@ -29,6 +35,9 @@ const QImage* selectTapNoteGuideImage(const PreviewSkinAssets& skin, const Timel
 
 const QImage* selectHoldEndNoteGuideImage(const PreviewSkinAssets& skin, const TimelineNoteMarker& marker)
 {
+    if (marker.isMine && !skin.noteGuideMineImage.isNull()) {
+        return &skin.noteGuideMineImage;
+    }
     if (marker.isBreak && !skin.noteGuideHoldBreakEndImage.isNull()) {
         return &skin.noteGuideHoldBreakEndImage;
     }
@@ -45,6 +54,11 @@ const QImage* selectTapImage(const PreviewSkinAssets& skin, const TimelineNoteMa
         && marker.slideHeadUsesTapMaterial;
     const bool isBreak = slideHeadTapMaterial ? marker.headBreak : marker.isBreak;
     const bool isEach = slideHeadTapMaterial ? marker.headEach : marker.isEach;
+    const bool isMine = slideHeadTapMaterial ? marker.headMine : marker.isMine;
+    // Mine overrides break/each (matches MajdataPlay's note sprite swap).
+    if (isMine && !skin.tapMineImage.isNull()) {
+        return &skin.tapMineImage;
+    }
     const QImage* tapImage = &skin.tapImage;
     if (isBreak && !skin.tapBreakImage.isNull()) {
         tapImage = &skin.tapBreakImage;
@@ -56,6 +70,9 @@ const QImage* selectTapImage(const PreviewSkinAssets& skin, const TimelineNoteMa
 
 const QImage* selectHoldImage(const PreviewSkinAssets& skin, const TimelineNoteMarker& marker)
 {
+    if (marker.isMine && !skin.holdMineImage.isNull()) {
+        return &skin.holdMineImage;
+    }
     const QImage* holdImage = &skin.holdImage;
     if (marker.isBreak && !skin.holdBreakImage.isNull()) {
         holdImage = &skin.holdBreakImage;
@@ -72,6 +89,13 @@ const QImage* selectSlideStarImage(const PreviewSkinAssets& skin, const Timeline
     const bool isBreak = useHeadFlags ? marker.headBreak : marker.isBreak;
     const bool isEach = useHeadFlags ? marker.headEach : marker.isEach;
     const bool useDouble = useHeadFlags ? marker.sameHeadSlide : marker.tapStarDouble;
+    const bool isMine = useHeadFlags ? marker.headMine : marker.isMine;
+    if (isMine && !skin.starMineImage.isNull()) {
+        if (useDouble && !skin.starMineDoubleImage.isNull()) {
+            return &skin.starMineDoubleImage;
+        }
+        return &skin.starMineImage;
+    }
     const QImage* starImage = &skin.starImage;
     if (isBreak) {
         if (useDouble && !skin.starBreakDoubleImage.isNull()) {
@@ -95,6 +119,9 @@ const QImage* selectSlideStarImage(const PreviewSkinAssets& skin, const Timeline
 
 const QImage* selectSlideMovingStarImage(const PreviewSkinAssets& skin, const TimelineNoteMarker& marker)
 {
+    if (marker.trackMine && !skin.starMineImage.isNull()) {
+        return &skin.starMineImage;
+    }
     const QImage* starImage = &skin.starImage;
     if (marker.trackBreak && !skin.starBreakImage.isNull()) {
         starImage = &skin.starBreakImage;
@@ -106,6 +133,9 @@ const QImage* selectSlideMovingStarImage(const PreviewSkinAssets& skin, const Ti
 
 const QImage* selectSlideTrackImage(const PreviewSkinAssets& skin, const TimelineNoteMarker& marker)
 {
+    if (marker.trackMine && !skin.slideTrackMineImage.isNull()) {
+        return &skin.slideTrackMineImage;
+    }
     const QImage* image = &skin.slideTrackImage;
     if (marker.trackBreak && !skin.slideTrackBreakImage.isNull()) {
         image = &skin.slideTrackBreakImage;
@@ -118,7 +148,9 @@ const QImage* selectSlideTrackImage(const PreviewSkinAssets& skin, const Timelin
 const QImage* selectWifiTrackImage(const PreviewSkinAssets& skin, const TimelineNoteMarker& marker, int sampleIndex, int sampleCount)
 {
     const QVector<QImage>* images = &skin.wifiImages;
-    if (marker.trackBreak && !skin.wifiBreakImages.isEmpty()) {
+    if (marker.trackMine && !skin.wifiMineImages.isEmpty()) {
+        images = &skin.wifiMineImages;
+    } else if (marker.trackBreak && !skin.wifiBreakImages.isEmpty()) {
         images = &skin.wifiBreakImages;
     } else if (marker.slideEach && !skin.wifiEachImages.isEmpty()) {
         images = &skin.wifiEachImages;

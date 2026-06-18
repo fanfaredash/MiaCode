@@ -17,9 +17,10 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
     layerState.sprites.reserve(markers.size() * 5);
     layerState.arcs.reserve(markers.size());
     // Per-marker touch-hold timing: hsMultiplier scales touchFlowSpeed.
+    // Per-type sign policy: touch-hold takes the HS magnitude (never reverses).
     const auto markerTouchTiming = [&state](double hsMultiplier) {
         return previewTouchTimingForEffectiveFlowSpeed(
-            static_cast<qreal>(state.render.touchFlowSpeed * hsMultiplier));
+            static_cast<qreal>(state.render.touchFlowSpeed * qAbs(hsMultiplier)));
     };
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
@@ -96,21 +97,29 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
         }
 
         const QImage& pointBase =
-            (marker.isBreak && !state.skin.touchPointBreakImage.isNull())
-                ? state.skin.touchPointBreakImage
-                : ((marker.isEach && !state.skin.touchPointEachImage.isNull()) ? state.skin.touchPointEachImage : state.skin.touchPointImage);
+            (marker.isMine && !state.skin.touchPointMineImage.isNull())
+                ? state.skin.touchPointMineImage
+                : (marker.isBreak && !state.skin.touchPointBreakImage.isNull())
+                    ? state.skin.touchPointBreakImage
+                    : ((marker.isEach && !state.skin.touchPointEachImage.isNull()) ? state.skin.touchPointEachImage : state.skin.touchPointImage);
         const QImage& borderBase =
-            (marker.isBreak && !state.skin.touchHoldBreakBorderImage.isNull())
-                ? state.skin.touchHoldBreakBorderImage
-                : state.skin.touchHoldBorderImage;
+            (marker.isMine && !state.skin.touchHoldBorderMineImage.isNull())
+                ? state.skin.touchHoldBorderMineImage
+                : (marker.isBreak && !state.skin.touchHoldBreakBorderImage.isNull())
+                    ? state.skin.touchHoldBreakBorderImage
+                    : state.skin.touchHoldBorderImage;
         const QImage& fan0Base =
-            (marker.isBreak && !state.skin.touchHoldBreak0Image.isNull()) ? state.skin.touchHoldBreak0Image : state.skin.touchHold0Image;
+            (marker.isMine && !state.skin.touchHoldMine0Image.isNull()) ? state.skin.touchHoldMine0Image
+            : (marker.isBreak && !state.skin.touchHoldBreak0Image.isNull()) ? state.skin.touchHoldBreak0Image : state.skin.touchHold0Image;
         const QImage& fan1Base =
-            (marker.isBreak && !state.skin.touchHoldBreak1Image.isNull()) ? state.skin.touchHoldBreak1Image : state.skin.touchHold1Image;
+            (marker.isMine && !state.skin.touchHoldMine1Image.isNull()) ? state.skin.touchHoldMine1Image
+            : (marker.isBreak && !state.skin.touchHoldBreak1Image.isNull()) ? state.skin.touchHoldBreak1Image : state.skin.touchHold1Image;
         const QImage& fan2Base =
-            (marker.isBreak && !state.skin.touchHoldBreak2Image.isNull()) ? state.skin.touchHoldBreak2Image : state.skin.touchHold2Image;
+            (marker.isMine && !state.skin.touchHoldMine2Image.isNull()) ? state.skin.touchHoldMine2Image
+            : (marker.isBreak && !state.skin.touchHoldBreak2Image.isNull()) ? state.skin.touchHoldBreak2Image : state.skin.touchHold2Image;
         const QImage& fan3Base =
-            (marker.isBreak && !state.skin.touchHoldBreak3Image.isNull()) ? state.skin.touchHoldBreak3Image : state.skin.touchHold3Image;
+            (marker.isMine && !state.skin.touchHoldMine3Image.isNull()) ? state.skin.touchHoldMine3Image
+            : (marker.isBreak && !state.skin.touchHoldBreak3Image.isNull()) ? state.skin.touchHoldBreak3Image : state.skin.touchHold3Image;
         if (pointBase.isNull() || borderBase.isNull() || fan0Base.isNull() || fan1Base.isNull() || fan2Base.isNull() || fan3Base.isNull()) {
             continue;
         }

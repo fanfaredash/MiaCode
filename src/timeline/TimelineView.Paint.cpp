@@ -651,6 +651,33 @@ void TimelineView::paintEvent(QPaintEvent* event)
             break;
         }
 
+        // Mine notes (simai `m`) override the break/each icon (see the QSG
+        // builder TimelineSceneStateBuilder.cpp for the parity logic).
+        if (timelineRenderFlagSet(note, TimelineRenderFlagIsMine)) {
+            switch (note.kind) {
+            case TimelineRenderNoteKind::Tap:
+                iconType = timelineRenderFlagSet(note, TimelineRenderFlagTapUsesStarMaterial)
+                    ? QStringLiteral("star_mine")
+                    : QStringLiteral("tap_mine");
+                break;
+            case TimelineRenderNoteKind::Hold:
+                iconType = QStringLiteral("hold_mine");
+                break;
+            case TimelineRenderNoteKind::Touch:
+                iconType = QStringLiteral("touch_mine");
+                break;
+            case TimelineRenderNoteKind::TouchHold:
+                iconType = QStringLiteral("touch_hold_mine");
+                break;
+            case TimelineRenderNoteKind::Slide:
+            case TimelineRenderNoteKind::Wifi:
+                iconType = QStringLiteral("star_mine");
+                break;
+            default:
+                break;
+            }
+        }
+
         if (drawTrackLayer) {
             if (!drawSlideTracks || !isSlideTrack) {
                 return;
@@ -664,7 +691,9 @@ void TimelineView::paintEvent(QPaintEvent* event)
             const qreal length = qSqrt(dx * dx + dy * dy);
             const bool forward = slideEndX >= slideStartX;
             QString baseTrackType = QStringLiteral("slide_track");
-            if (timelineRenderFlagSet(note, TimelineRenderFlagTrackBreak)) {
+            if (timelineRenderFlagSet(note, TimelineRenderFlagTrackMine)) {
+                baseTrackType = QStringLiteral("slide_track_mine");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagTrackBreak)) {
                 baseTrackType = QStringLiteral("slide_track_break");
             } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideEach)) {
                 baseTrackType = QStringLiteral("slide_track_each");

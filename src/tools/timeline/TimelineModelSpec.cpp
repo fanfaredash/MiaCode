@@ -128,6 +128,8 @@ QString flagsLabel(quint32 flags)
     appendIf(TimelineRenderFlagTapStarDouble, QStringLiteral("tap_star_double"));
     appendIf(TimelineRenderFlagSlideHeadUsesTapMaterial, QStringLiteral("slide_head_tap_material"));
     appendIf(TimelineRenderFlagHeadlessImmediate, QStringLiteral("headless_immediate"));
+    appendIf(TimelineRenderFlagIsMine, QStringLiteral("is_mine"));
+    appendIf(TimelineRenderFlagTrackMine, QStringLiteral("track_mine"));
     return parts.join(QLatin1Char('|'));
 }
 

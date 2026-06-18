@@ -83,6 +83,7 @@ struct TapModifierState {
     bool hasBreak = false;
     bool hasEx = false;
     bool hasHold = false;
+    bool hasMine = false;
     bool tapUsesStarMaterial = false;
     bool tapStarDouble = false;
 };
@@ -96,6 +97,14 @@ struct SlideHeadModifierState {
 };
 
 bool g_invalidStarPreviewEnabled = false;
+
+// Negative HS (`<HS*-N>`, a Majdata reverse-flow gimmick). DEFAULT ON: the
+// parser accepts negative hs and freezes it onto the marker; the preview/export
+// renderer interprets the sign as reverse flow (tap/star/line fly inward from
+// outside the ring; hold/touch/slide take the magnitude). Zero is ALWAYS
+// rejected. An opt-out escape hatch (MIACODE_PREVIEW_REJECT_NEGATIVE_HS) can
+// restore the strict "reject hs<=0" stance at app boot; CTest sets it directly.
+bool g_allowNegativeHs = true;
 
 bool containsUppercaseTapBreakOrExModifier(const QString& modifiers)
 {
@@ -142,6 +151,14 @@ bool parseTapModifierSequence(
                     return false;
                 }
                 state->hasHold = true;
+                ++i;
+                continue;
+            }
+            if (lower == QChar('m')) {
+                if (state->hasMine) {
+                    return false;
+                }
+                state->hasMine = true;
                 ++i;
                 continue;
             }
@@ -251,7 +268,7 @@ QString detectFullwidthSyntaxIssueMessage(const QString& token)
 
     static const QString kFullwidthDigits = QStringLiteral("０１２３４５６７８９");
     static const QString kFullwidthTouchRegionLetters = QStringLiteral("ＡＢＣＤＥａｂｃｄｅ");
-    static const QString kFullwidthModifiers = QStringLiteral("ｂｘｈｆＢＸＨＦ");
+    static const QString kFullwidthModifiers = QStringLiteral("ｂｘｈｆｍＢＸＨＦＭ");
     static const QString kFullwidthBrackets = QStringLiteral("（）［］｛｝【】");
     static const QString kFullwidthSeparators = QStringLiteral("，：／；＃");
     static const QString kFullwidthSlideSymbols = QStringLiteral("－＜＞＾ｖＶｐｑｓｚｗ＊？！");
@@ -354,6 +371,7 @@ bool parseTouchSuffix(
     bool* hasHold,
     bool* hasFirework,
     bool* hasBreak,
+    bool* hasMine,
     bool* hasNonCanonicalHoldModifierPlacement,
     QString* errorMessage)
 {
@@ -361,6 +379,7 @@ bool parseTouchSuffix(
         || hasHold == nullptr
         || hasFirework == nullptr
         || hasBreak == nullptr
+        || hasMine == nullptr
         || hasNonCanonicalHoldModifierPlacement == nullptr
         || errorMessage == nullptr) {
         return false;
@@ -369,6 +388,7 @@ bool parseTouchSuffix(
     *hasHold = false;
     *hasFirework = false;
     *hasBreak = false;
+    *hasMine = false;
     *hasNonCanonicalHoldModifierPlacement = false;
     errorMessage->clear();
 
@@ -402,7 +422,7 @@ bool parseTouchSuffix(
         *durationSignature = suffix.mid(openBracket + 1, closeBracket - openBracket - 1);
     }
 
-    auto parseModifierPart = [token, hasHold, hasFirework, hasBreak, errorMessage](const QString& modifierPart) {
+    auto parseModifierPart = [token, hasHold, hasFirework, hasBreak, hasMine, errorMessage](const QString& modifierPart) {
         for (QChar ch : modifierPart) {
             if (ch == QChar('h')) {
                 *hasHold = true;
@@ -410,6 +430,8 @@ bool parseTouchSuffix(
                 *hasFirework = true;
             } else if (ch == QChar('b')) {
                 *hasBreak = true;
+            } else if (ch == QChar('m') || ch == QChar('M')) {
+                *hasMine = true;
             } else if (!ch.isSpace()) {
                 *errorMessage = QString("Invalid touch modifier: %1").arg(token);
                 return false;
@@ -754,8 +776,15 @@ void finalizeEachGroup(ParseState* state, const QVector<int>& groupIndices)
         if (index < 0 || index >= noteMarkers->size()) {
             continue;
         }
-        (*noteMarkers)[index].eachGroupId = eachGroupId;
         const TimelineNoteMarker& marker = noteMarkers->at(index);
+        // Mines never participate in each-grouping in ANY form: no eachGroupId,
+        // no isEach/headEach/slideEach, not counted toward "is this an each?",
+        // and no each-line connector is drawn to them. Matches MajdataPlay,
+        // whose each calc is gated `!isMine`.
+        if (marker.isMine || marker.trackMine) {
+            continue;
+        }
+        (*noteMarkers)[index].eachGroupId = eachGroupId;
         if (marker.type == "touch") {
             touchIndices.append(index);
             continue;
@@ -833,6 +862,9 @@ void finalizeEachGroup(ParseState* state, const QVector<int>& groupIndices)
         if (a.type != "slide" && a.type != "wifi") {
             continue;
         }
+        if (a.trackMine) {
+            continue;  // mines never form a same-head (double-star) each pair
+        }
         for (int j = 0; j < groupIndices.size(); ++j) {
             if (i == j) {
                 continue;
@@ -842,7 +874,7 @@ void finalizeEachGroup(ParseState* state, const QVector<int>& groupIndices)
                 continue;
             }
             const TimelineNoteMarker& b = noteMarkers->at(bIndex);
-            if ((b.type == "slide" || b.type == "wifi") && b.lane == a.lane) {
+            if ((b.type == "slide" || b.type == "wifi") && !b.trackMine && b.lane == a.lane) {
                 a.sameHeadSlide = true;
                 break;
             }

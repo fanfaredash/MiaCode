@@ -182,6 +182,18 @@ inline bool previewFixedTimerHighResolutionEnabled()
     return envFlagEnabled("MIACODE_PREVIEW_FIXED_TIMER_HIGH_RES");
 }
 
+inline bool previewRejectNegativeHsEnabled()
+{
+    // Opt-OUT escape hatch for negative HS (`<HS*-N>`, a Majdata reverse-flow
+    // gimmick). Negative HS is ON by default — the parser accepts negative hs
+    // and the preview/export renderer flies tap/star/line notes inward from
+    // outside the judgement ring (hold/touch/slide keep the magnitude). Set
+    // MIACODE_PREVIEW_REJECT_NEGATIVE_HS=1 to restore the strict stance where
+    // the parser rejects hs <= 0 (Q7). Read once at app boot into
+    // SimaiNativeParser::setAllowNegativeHsEnabled (zero is always rejected).
+    return envFlagEnabled("MIACODE_PREVIEW_REJECT_NEGATIVE_HS");
+}
+
 inline bool previewForceSoftwareVideoDecodeEnabled()
 {
     // Force QtAVPlayer to decode preview video in software (setInputVideoCodec("software"))

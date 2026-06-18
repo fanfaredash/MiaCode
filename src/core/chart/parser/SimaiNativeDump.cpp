@@ -79,6 +79,10 @@ QJsonObject dumpMarker(const TimelineNoteMarker& marker)
     item.insert("is_break", marker.isBreak);
     item.insert("is_ex", marker.isEx);
     item.insert("is_firework", marker.isFirework);
+    item.insert("is_mine", marker.isMine);
+    item.insert("track_mine", marker.trackMine);
+    item.insert("head_mine", marker.headMine);
+    item.insert("hs_multiplier", marker.hsMultiplier);
     item.insert("head_break", marker.headBreak);
     item.insert("track_break", marker.trackBreak);
     item.insert("head_ex", marker.headEx);

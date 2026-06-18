@@ -198,6 +198,12 @@ TimelineNoteAssetSet loadTimelineNoteAssets()
     loadIcon("wifi_track", {"wifi_0.png", "slide.png"}, kSlideTrackBasePixelSize);
     loadIcon("wifi_track_each", {"wifi_each_0.png", "wifi_0.png", "slide_each.png", "slide.png"}, kSlideTrackBasePixelSize);
     loadIcon("wifi_track_break", {"wifi_break_0.png", "wifi_0.png", "slide_break.png", "slide.png"}, kSlideTrackBasePixelSize);
+    // Mine-note timeline icons (simai `m`). Fall back to the normal note icon
+    // when a skin ships no mine art.
+    loadIcon("tap_mine", {"tap_mine.png", "tap.png"}, kNoteSize);
+    loadIcon("hold_mine", {"hold_mine.png", "hold.png"}, kNoteSize);
+    loadIcon("star_mine", {"star_mine.png", "star.png"}, kNoteSize + 3);
+    loadIcon("slide_track_mine", {"slide_mine.png", "slide.png"}, kSlideTrackBasePixelSize);
 
     putOverlayCompositeIcon("tap_ex", {"tap.png"}, {"tap_ex.png"}, kNoteSize);
     putOverlayCompositeIcon("tap_break_ex", {"tap_break.png", "tap.png"}, {"tap_ex.png"}, kNoteSize);
@@ -284,6 +290,25 @@ TimelineNoteAssetSet loadTimelineNoteAssets()
         putIcon("touch_hold_border_only_break", touchHoldBreakBorderOnly, kNoteSize + 3);
     } else if (!touchHoldBorderOnly.isNull()) {
         putIcon("touch_hold_border_only_break", touchHoldBorderOnly, kNoteSize + 3);
+    }
+
+    // Mine-note touch / touch-hold icons (simai `m`); fall back to the normal
+    // composite when the skin ships no mine art.
+    const QPixmap touchMineComposite =
+        buildTouchCornerCompositeIcon(loadRawIcon({"touch_mine.png", "touch.png", "tap.png"}));
+    if (!touchMineComposite.isNull()) {
+        putIcon("touch_mine", touchMineComposite, kNoteSize + 3);
+    } else if (!touchComposite.isNull()) {
+        putIcon("touch_mine", touchComposite, kNoteSize + 3);
+    }
+    const QPixmap touchHoldMineComposite = buildTouchHoldCompositeIcon(
+        loadRawIcon({"touchhold_border_mine.png", "touchhold_border.png", "touch.png", "tap.png"}),
+        loadRawIcon({"touchhold_1_mine.png", "touchhold_1.png", "tap.png"}),
+        loadRawIcon({"touch_point_mine.png", "touch_point.png", "tap.png"}));
+    if (!touchHoldMineComposite.isNull()) {
+        putIcon("touch_hold_mine", touchHoldMineComposite, kNoteSize + 3);
+    } else if (!touchHoldComposite.isNull()) {
+        putIcon("touch_hold_mine", touchHoldComposite, kNoteSize + 3);
     }
 
     return assets;

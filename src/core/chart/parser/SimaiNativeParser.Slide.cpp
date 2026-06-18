@@ -97,11 +97,24 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
         }
     }
 
+    // Mine slide (`m` suffix, = MajdataPlay IsMineSlide). Canonically the
+    // `m` sits at the very end (`1-3[2:1]m`), but we scan the whole core
+    // like the `b` loop above so any placement is tolerated. The `m`
+    // characters are stripped from sanitizedCore below so slide-shape
+    // resolution is unaffected; head star + track both render as mines.
+    bool trackMine = false;
+    for (int i = 1; i < noteCore.size(); ++i) {
+        const QChar ch = noteCore.at(i);
+        if (ch == QChar('m') || ch == QChar('M')) {
+            trackMine = true;
+        }
+    }
+
     QString sanitizedCore;
     sanitizedCore.reserve(noteCore.size());
     for (int i = 0; i < noteCore.size(); ++i) {
         const QChar ch = noteCore.at(i);
-        if (ch == QChar('b')) {
+        if (ch == QChar('b') || ch == QChar('m') || ch == QChar('M')) {
             continue;
         }
         sanitizedCore.append(ch);
@@ -138,6 +151,8 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     marker.headBreak = modifierState.headBreak;
     marker.trackBreak = trackBreak;
     marker.isBreak = marker.headBreak || marker.trackBreak;
+    marker.trackMine = trackMine;
+    marker.headMine = trackMine;
     marker.headEx = modifierState.headEx;
     marker.slideHeadUsesTapMaterial = modifierState.slideHeadUsesTapMaterial;
     marker.isEx = false;

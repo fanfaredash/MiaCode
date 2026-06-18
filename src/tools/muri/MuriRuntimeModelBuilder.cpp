@@ -48,6 +48,11 @@ QVector<JudgeableSimpleNote> buildJudgeableSimpleNotes(
     notes.reserve(noteMarkers.size());
 
     for (const TimelineNoteMarker& marker : noteMarkers) {
+        // Mine notes (simai `m`) are dodged by autoplay — no judge window,
+        // no judge sprite/perfect-text/firework.
+        if (marker.isMine || marker.trackMine) {
+            continue;
+        }
         QString pad;
         double criticalSeconds = 0.0;
         double availableSeconds = 0.0;

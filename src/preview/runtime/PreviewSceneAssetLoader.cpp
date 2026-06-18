@@ -300,6 +300,24 @@ void populateSkinAssets(const QString& skinDirectory, miacode::preview::scene::P
     skin->touchHoldBreakBorderImage = loadImageIfExists(dir.filePath("touchhold_break_border.png"));
     skin->touchHoldOffImage = loadImageIfExists(dir.filePath("touchhold_off.png"));
 
+    // Mine-note sprites (simai `m`). Convention: <base>_mine.png. Optional —
+    // a skin without these (e.g. skinDX, pending color-derivation work) leaves
+    // them null and the selectors fall back to the normal sprite.
+    skin->tapMineImage = loadImageIfExists(dir.filePath("tap_mine.png"));
+    skin->holdMineImage = loadImageIfExists(dir.filePath("hold_mine.png"));
+    skin->starMineImage = loadImageIfExists(dir.filePath("star_mine.png"));
+    skin->starMineDoubleImage = loadImageIfExists(dir.filePath("star_mine_double.png"));
+    skin->slideTrackMineImage = loadImageIfExists(dir.filePath("slide_mine.png"));
+    skin->touchCornerMineImage = loadImageIfExists(dir.filePath("touch_mine.png"));
+    skin->touchBorder2MineImage = loadImageIfExists(dir.filePath("touch_border_2_mine.png"));
+    skin->touchBorder3MineImage = loadImageIfExists(dir.filePath("touch_border_3_mine.png"));
+    skin->touchPointMineImage = loadImageIfExists(dir.filePath("touch_point_mine.png"));
+    skin->touchHoldMine0Image = loadImageIfExists(dir.filePath("touchhold_0_mine.png"));
+    skin->touchHoldMine1Image = loadImageIfExists(dir.filePath("touchhold_1_mine.png"));
+    skin->touchHoldMine2Image = loadImageIfExists(dir.filePath("touchhold_2_mine.png"));
+    skin->touchHoldMine3Image = loadImageIfExists(dir.filePath("touchhold_3_mine.png"));
+    skin->touchHoldBorderMineImage = loadImageIfExists(dir.filePath("touchhold_border_mine.png"));
+
     skin->noteGuideNormalImage = loadGuideImageScaled(noteGuideDir, "Normal.png");
     skin->noteGuideBreakImage = loadGuideImageScaled(noteGuideDir, "Break.png");
     if (skin->noteGuideBreakImage.isNull()) {
@@ -308,6 +326,13 @@ void populateSkinAssets(const QString& skinDirectory, miacode::preview::scene::P
     skin->noteGuideEachImage = loadGuideImageScaled(noteGuideDir, "Each.png");
     if (skin->noteGuideEachImage.isNull()) {
         skin->noteGuideEachImage = skin->noteGuideNormalImage;
+    }
+    // Mine approach guide (distinct from the normal/break/each guide). Source:
+    // MajdataMine_View Mine.png (the mine note's approach ring). Falls back to
+    // the normal guide if the skin/noteguide set has no mine guide.
+    skin->noteGuideMineImage = loadGuideImageScaled(noteGuideDir, "Mine.png");
+    if (skin->noteGuideMineImage.isNull()) {
+        skin->noteGuideMineImage = skin->noteGuideNormalImage;
     }
     skin->noteGuideEachLine1Image = loadGuideImageScaled(noteGuideDir, "EachLine1.png");
     skin->noteGuideEachLine2Image = loadGuideImageScaled(noteGuideDir, "EachLine2.png");
@@ -331,6 +356,7 @@ void populateSkinAssets(const QString& skinDirectory, miacode::preview::scene::P
         const QImage wifiImage = loadImageIfExists(dir.filePath(QStringLiteral("wifi_%1.png").arg(i)));
         const QImage wifiEachImage = loadImageIfExists(dir.filePath(QStringLiteral("wifi_each_%1.png").arg(i)));
         const QImage wifiBreakImage = loadImageIfExists(dir.filePath(QStringLiteral("wifi_break_%1.png").arg(i)));
+        const QImage wifiMineImage = loadImageIfExists(dir.filePath(QStringLiteral("wifi_mine_%1.png").arg(i)));
         if (!wifiImage.isNull()) {
             skin->wifiImages.append(wifiImage);
         }
@@ -339,6 +365,9 @@ void populateSkinAssets(const QString& skinDirectory, miacode::preview::scene::P
         }
         if (!wifiBreakImage.isNull()) {
             skin->wifiBreakImages.append(wifiBreakImage);
+        }
+        if (!wifiMineImage.isNull()) {
+            skin->wifiMineImages.append(wifiMineImage);
         }
     }
 }

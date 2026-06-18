@@ -64,6 +64,9 @@ public:
         const miacode::simai::SimaiTimingMetadata& timingMetadata = miacode::simai::SimaiTimingMetadata());
     static void setInvalidStarPreviewEnabled(bool enabled);
     static bool invalidStarPreviewEnabled();
+    // Negative-HS compat switch (`<HS*-N>`). Default off → hs <= 0 rejected.
+    static void setAllowNegativeHsEnabled(bool enabled);
+    static bool allowNegativeHsEnabled();
     static SimaiNativeValidationReport buildValidationReport(
         const QString& text,
         SimaiNativeValidationLocale locale,

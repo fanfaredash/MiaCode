@@ -92,7 +92,10 @@ QString headStarJudgeEmitKey(const TimelineNoteMarker& marker)
 
 bool shouldCreateHeadStarJudgeNote(const TimelineNoteMarker& marker)
 {
-    return isSlideLike(marker) && marker.hasHeadStar && marker.lane >= 1 && marker.lane <= 8;
+    // Mine slide head stars (headMine) are dodged by autoplay — no synthetic
+    // head-star judge note, so they emit no judge effect.
+    return isSlideLike(marker) && marker.hasHeadStar && !marker.headMine
+        && marker.lane >= 1 && marker.lane <= 8;
 }
 
 QString slideHeadPad(int lane)
@@ -460,6 +463,11 @@ QVector<MuriPadWindow> buildRuntimePadWindows(
     QVector<MuriActionTrail> ignoredActionTrails;
 
     for (const TimelineNoteMarker& marker : noteMarkers) {
+        // Mine notes (simai `m`) are dodged by autoplay — they generate no
+        // pad window, hand path, or overlap conflict.
+        if (marker.isMine || marker.trackMine) {
+            continue;
+        }
         const QString markerKey = makeMarkerAnalysisKey(marker);
         const QString pad = notePad(marker);
         if (marker.type == QLatin1String("tap")) {
@@ -1022,6 +1030,11 @@ QMap<int, QMap<QString, RuntimePadEvent>> buildRuntimePadEvents(
     QMap<int, QMap<QString, RuntimePadEvent>> eventsByTick;
 
     for (const TimelineNoteMarker& marker : noteMarkers) {
+        // Autoplay dodges mines — they generate no pad-down press (which could
+        // otherwise perturb a neighbouring real note's runtime judgment).
+        if (marker.isMine || marker.trackMine) {
+            continue;
+        }
         const QString pad = slideHeadPad(marker.lane);
         const double eventSecond = extraPadDownSecond(marker);
         if (pad.isEmpty() || !std::isfinite(eventSecond)) {
@@ -1044,6 +1057,9 @@ QMap<int, QMap<QString, RuntimePadEvent>> buildRuntimePadEvents(
     }
 
     for (const TimelineNoteMarker& marker : noteMarkers) {
+        if (marker.isMine || marker.trackMine) {
+            continue;
+        }
         if (!hasUsableSlideTraceTiming(marker)) {
             continue;
         }
@@ -1232,6 +1248,12 @@ MuriAnalysisReport MuriAnalyzer::analyze(
     }
 
     for (const TimelineNoteMarker& marker : noteMarkers) {
+        // Mine slides/wifi (trackMine) are dodged — no slide/wifi judge sprite
+        // or SlideTooFast diagnostic. (pad windows + judgeable simple notes are
+        // already mine-skipped upstream; this is the judgment-emission loop.)
+        if (marker.isMine || marker.trackMine) {
+            continue;
+        }
         const QString markerKey = makeMarkerAnalysisKey(marker);
         if (marker.type == QLatin1String("slide")) {
             MarkerMuriState state = buildSlideState(marker, windowsByPad, report.padWindows);

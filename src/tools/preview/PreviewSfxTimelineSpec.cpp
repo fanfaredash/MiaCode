@@ -674,6 +674,61 @@ bool verifyTouchholdVoiceLatestWinsOwnership(QTextStream& err)
     return true;
 }
 
+bool verifyMineNotesEmitNoSfx(QTextStream& err)
+{
+    // Mine notes (simai `m`) are dodged by autoplay, so buildTimeline must emit
+    // ZERO events for them — no answer/judge/break/ex/touch/touchhold. A normal
+    // tap alongside confirms the suppression is mine-specific, not global.
+    QVector<TimelineNoteMarker> markers;
+
+    TimelineNoteMarker mineTap;
+    mineTap.type = QStringLiteral("tap");
+    mineTap.second = 1.0;
+    mineTap.isMine = true;
+    mineTap.isBreak = true;  // even a break mine stays silent
+    markers.append(mineTap);
+
+    TimelineNoteMarker mineTouchHold;
+    mineTouchHold.type = QStringLiteral("touch_hold");
+    mineTouchHold.second = 2.0;
+    mineTouchHold.endSecond = 3.0;
+    mineTouchHold.isMine = true;
+    markers.append(mineTouchHold);
+
+    TimelineNoteMarker mineSlide;
+    mineSlide.type = QStringLiteral("slide");
+    mineSlide.second = 4.0;
+    mineSlide.endSecond = 5.0;
+    mineSlide.trackMine = true;
+    markers.append(mineSlide);
+
+    TimelineNoteMarker normalTap;
+    normalTap.type = QStringLiteral("tap");
+    normalTap.second = 6.0;
+    markers.append(normalTap);
+
+    QVector<Event> events;
+    QVector<TouchholdSpan> spans;
+    miacode::preview_sfx_timeline::buildTimeline(markers, 1.0, PreviewTimingSettings(), &events, &spans);
+
+    if (!require(spans.isEmpty(), QStringLiteral("[mine] mine notes emit no touch-hold spans"), err)) {
+        return false;
+    }
+    int answerCount = 0;
+    for (const Event& event : events) {
+        if (event.kind == QLatin1String("answer")) {
+            ++answerCount;
+        }
+    }
+    // The lone normal tap contributes exactly one answer; the three mines none.
+    if (!require(answerCount == 1,
+                 QStringLiteral("[mine] only the non-mine tap emits an answer event (mines suppressed)"),
+                 err)) {
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -713,6 +768,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyTouchholdVoiceLatestWinsOwnership(err)) {
+        return 1;
+    }
+    if (!verifyMineNotesEmitNoSfx(err)) {
         return 1;
     }
 

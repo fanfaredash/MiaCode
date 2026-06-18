@@ -791,7 +791,12 @@ SimaiNativeParseResult parseInternal(
                     warnDirectiveAfterNote(lineNumber, line, i, close);
                     bool hsOk = false;
                     const double hs = line.mid(i + 4, close - i - 4).trimmed().toDouble(&hsOk);
-                    if (!hsOk || !(hs > 0.0)) {
+                    // Q7: zero is always invalid. Negative is invalid UNLESS the
+                    // negative-HS compat switch is on (reverse-flow gimmick).
+                    const bool hsValueValid = hsOk
+                        && hs != 0.0
+                        && (g_allowNegativeHs || hs > 0.0);
+                    if (!hsValueValid) {
                         appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kInvalidHsValue());
                     } else {
                         state.hs = hs;
@@ -1237,6 +1242,16 @@ void SimaiNativeParser::setInvalidStarPreviewEnabled(bool enabled)
 bool SimaiNativeParser::invalidStarPreviewEnabled()
 {
     return g_invalidStarPreviewEnabled;
+}
+
+void SimaiNativeParser::setAllowNegativeHsEnabled(bool enabled)
+{
+    g_allowNegativeHs = enabled;
+}
+
+bool SimaiNativeParser::allowNegativeHsEnabled()
+{
+    return g_allowNegativeHs;
 }
 
 SimaiNativeValidationReport SimaiNativeParser::buildValidationReport(

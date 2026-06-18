@@ -1074,6 +1074,39 @@ void runInlineSpecs(QTextStream& err, int* failed)
     }
 
     {
+        // Mine `m` must survive the transform pipeline. ChartBatchTransform's
+        // tap parser historically rejected unknown modifiers (return false),
+        // which would have made any chart with a mine untransformable.
+        int changed = 0;
+        const QString output = miacode::chart_transform::transformChartText(
+            QStringLiteral("1m 2bm"),
+            miacode::chart_transform::ChartTransformOp::MirrorLeftRight,
+            &changed
+        );
+        expectEqual(
+            output,
+            QStringLiteral("8m 7bm"),
+            QStringLiteral("mirror keeps the mine `m` modifier while remapping note lanes"),
+            failed,
+            err
+        );
+        expectTrue(changed == 2, QStringLiteral("mirror counts both mine taps as changed"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString output = miacode::chart_transform::toggleBreakForSelection(QStringLiteral("1m"), &changed);
+        expectEqual(
+            output,
+            QStringLiteral("1bm"),
+            QStringLiteral("toggle break adds `b` to a mine tap while preserving `m`"),
+            failed,
+            err
+        );
+        expectTrue(changed == 1, QStringLiteral("toggle break counts the mine tap as changed"), failed, err);
+    }
+
+    {
         int changed = 0;
         const QString input = QStringLiteral("1[8:1");
         const QString output = miacode::chart_transform::transformChartSelectionText(
