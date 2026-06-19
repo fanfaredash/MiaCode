@@ -204,6 +204,8 @@ void MainWindow::PreferencesSection::showWelcomeDialog()
         UiText::setPreferredTheme(theme);
         owner_.windowSection_->applyUiTheme();
         if (!dialogGuard.isNull()) {
+            // Re-applying the sheet also re-themes the "?" help badge
+            // (QLabel#WelcomeHelpBadge) for the freshly chosen theme.
             dialogGuard->setStyleSheet(UiTheme::preferencesDialogStyleSheet());
             owner_.windowSection_->applySystemWindowBackdrop(dialogGuard.data());
         }
@@ -225,6 +227,87 @@ void MainWindow::PreferencesSection::showWelcomeDialog()
         }
     });
 
+    // --- Chinese-input group ------------------------------------------------
+    // The same three graduated levels as Preferences' 中文输入 combo, surfaced on
+    // first run (default 关闭输入法). The two underlying editor preferences are:
+    //   关闭输入法   imeDisabled=ON  halfWidth=ON  (block the IME entirely)
+    //   开启输入法   imeDisabled=OFF halfWidth=OFF (plain IME, no filtering)
+    //   转换全角字符 imeDisabled=OFF halfWidth=ON  (IME on, normalize full-width)
+    // The "?" badge next to the group title explains the choice.
+    auto* chineseInputHeaderRow = new QWidget(&dialog);
+    auto* chineseInputHeaderLayout = new QHBoxLayout(chineseInputHeaderRow);
+    chineseInputHeaderLayout->setContentsMargins(0, 0, 0, 0);
+    chineseInputHeaderLayout->setSpacing(6);
+    auto* chineseInputLabel = new QLabel(
+        uiText("dialog.welcome.chinese_input", "Chinese input"), chineseInputHeaderRow);
+    chineseInputLabel->setFont(uiAccentFont(10, QFont::DemiBold));
+    // Round "?" help badge. Styled via QLabel#WelcomeHelpBadge in
+    // preferencesDialogStyleSheet (theme-safe). Opt past the app-wide tooltip
+    // suppression (MainWindow's global event filter hides tooltips outside the
+    // preview area) with the miacodeAllowTooltip property.
+    auto* chineseInputHelp = new QLabel(QStringLiteral("?"), chineseInputHeaderRow);
+    chineseInputHelp->setObjectName(QStringLiteral("WelcomeHelpBadge"));
+    chineseInputHelp->setAlignment(Qt::AlignCenter);
+    chineseInputHelp->setFixedSize(16, 16);
+    chineseInputHelp->setProperty("miacodeAllowTooltip", true);
+    chineseInputHelp->setCursor(Qt::WhatsThisCursor);
+    chineseInputHelp->setToolTip(uiText("dialog.welcome.chinese_input.hint",
+        "If you don't use comments, choose \"Disable IME\". If you do use comments and "
+        "want to avoid mistyped input such as 1h【8:1】, choose \"Convert full-width\"."));
+    chineseInputHeaderLayout->addWidget(chineseInputLabel, 0);
+    chineseInputHeaderLayout->addWidget(chineseInputHelp, 0, Qt::AlignVCenter);
+    chineseInputHeaderLayout->addStretch(1);
+    root->addWidget(chineseInputHeaderRow);
+
+    auto* imeRow = new QWidget(&dialog);
+    auto* imeRowLayout = new QHBoxLayout(imeRow);
+    imeRowLayout->setContentsMargins(0, 0, 0, 0);
+    imeRowLayout->setSpacing(18);
+    auto* imeDisableRadio = new QRadioButton(
+        uiText("dialog.welcome.chinese_input.disable", "Disable IME"), imeRow);
+    auto* imeEnableRadio = new QRadioButton(
+        uiText("dialog.welcome.chinese_input.enable", "Enable IME"), imeRow);
+    auto* imeFullWidthRadio = new QRadioButton(
+        uiText("dialog.welcome.chinese_input.fullwidth", "Convert full-width"), imeRow);
+    auto* imeGroup = new QButtonGroup(&dialog);
+    imeGroup->addButton(imeDisableRadio);
+    imeGroup->addButton(imeEnableRadio);
+    imeGroup->addButton(imeFullWidthRadio);
+    // Reflect the current stored state (default imeDisabled=ON => 关闭输入法).
+    if (!state_.editorImeInputDisabled_ && state_.editorHalfWidthInputEnabled_) {
+        imeFullWidthRadio->setChecked(true);
+    } else if (!state_.editorImeInputDisabled_) {
+        imeEnableRadio->setChecked(true);
+    } else {
+        imeDisableRadio->setChecked(true);
+    }
+    imeRowLayout->addWidget(imeDisableRadio, 0);
+    imeRowLayout->addWidget(imeFullWidthRadio, 0);
+    imeRowLayout->addWidget(imeEnableRadio, 0);
+    imeRowLayout->addStretch(1);
+    root->addWidget(imeRow);
+
+    // imeDisabled, halfWidth. halfWidth persists last so the pair is written once.
+    const auto applyChineseInput = [this](bool imeDisabled, bool halfWidth) {
+        owner_.applyEditorHalfWidthInputEnabled(halfWidth, false);
+        owner_.applyEditorImeInputDisabled(imeDisabled, true);
+    };
+    QObject::connect(imeDisableRadio, &QRadioButton::toggled, &dialog, [applyChineseInput](bool checked) {
+        if (checked) {
+            applyChineseInput(true, true);
+        }
+    });
+    QObject::connect(imeEnableRadio, &QRadioButton::toggled, &dialog, [applyChineseInput](bool checked) {
+        if (checked) {
+            applyChineseInput(false, false);
+        }
+    });
+    QObject::connect(imeFullWidthRadio, &QRadioButton::toggled, &dialog, [applyChineseInput](bool checked) {
+        if (checked) {
+            applyChineseInput(false, true);
+        }
+    });
+
     // --- Confirm ------------------------------------------------------------
     auto* getStarted = new QPushButton(uiText("dialog.welcome.get_started", "Get Started"), &dialog);
     getStarted->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(true));
@@ -243,13 +326,21 @@ void MainWindow::PreferencesSection::showWelcomeDialog()
     });
     dialog.exec();
 
-    // Persist the final choices even if the user never toggled a radio, so
-    // the explicit selection sticks (preference would otherwise stay
-    // "Follow System" / the prior swap state). The setters are idempotent.
+    // Persist the final choices even if the user never toggled a radio, so the
+    // explicit selection sticks AND the preferences file is rewritten under the
+    // current schema (which is what stops the welcome dialog re-appearing next
+    // launch). The setters are idempotent.
     UiText::setPreferredTheme(
         darkRadio->isChecked() ? UiText::ThemePreference::Dark : UiText::ThemePreference::Light);
     owner_.windowSection_->applyUiTheme();
     owner_.setWorkspacePanelsSwapped(previewLeftRadio->isChecked(), true);
+    if (imeEnableRadio->isChecked()) {
+        applyChineseInput(false, false);
+    } else if (imeFullWidthRadio->isChecked()) {
+        applyChineseInput(false, true);
+    } else {
+        applyChineseInput(true, true);   // 关闭输入法 (default)
+    }
 }
 
 void MainWindow::showWelcomeDialog()

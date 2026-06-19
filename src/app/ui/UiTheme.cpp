@@ -933,6 +933,9 @@ QString preferencesDialogStyleSheet()
         "QPushButton { min-width: 92px; min-height: 30px; padding: 0 12px; border: 1px solid %3; border-radius: 8px; background: %2; color: %4; font-weight: 500; }"
         "QPushButton:hover { background: %5; border-color: %6; }"
         "QPushButton:pressed, QPushButton:checked { background: %7; border-color: %6; color: %8; }"
+        // Round "?" help badge (welcome dialog's 中文输入法 hint). Styled here so
+        // it re-themes whenever the dialog re-applies this sheet on theme toggle.
+        "QLabel#WelcomeHelpBadge { color: %9; border: 1px solid %9; border-radius: 8px; font-weight: 700; font-size: 11px; }"
     )
         .arg(css(c.windowBg))
         .arg(css(c.cardBg))
@@ -942,6 +945,7 @@ QString preferencesDialogStyleSheet()
         .arg(css(c.accent))
         .arg(css(c.accentPressed))
         .arg(css(c.accentText))
+        .arg(css(c.textSecondary))
         + dialogTabStripStyleSheet(c.windowBg);
 }
 
@@ -1034,11 +1038,17 @@ QString exportDialogStyleSheet()
         "QLineEdit, QDoubleSpinBox { background: %2; color: %4; border: 1px solid %3; border-radius: 8px; padding: 4px 8px; min-height: 24px; }"
         "QLabel { color: %4; }"
         "QCheckBox { color: %4; spacing: 6px; }"
+        // "添加片头" master switch sits in a neutral rounded box matching the
+        // 游戏 tab's dropdown chrome (皮肤 etc.) — distinct enough to read as the
+        // tab's switch without the loud accent fill it used to carry.
+        "QFrame#AddIntroCapsule { background: %5; border: 1px solid %6; border-radius: 8px; }"
     )
         .arg(css(c.windowAltBg))
         .arg(css(c.cardBg))
         .arg(css(c.border))
         .arg(css(c.textPrimary))
+        .arg(css(c.inputBg))
+        .arg(css(c.border))
         + dialogTabStripStyleSheet(c.windowAltBg)
         // Export-dialog-only: widen the tab pane's inset (shared default is
         // 8px) so the dense Visuals page leaves a clear margin to the rounded

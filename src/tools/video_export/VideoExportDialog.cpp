@@ -1328,15 +1328,28 @@ VideoExportDialog::VideoExportDialog(
     introControlsLayout->setContentsMargins(0, 0, 0, 0);
     introControlsLayout->setSpacing(6);
 
-    // "添加片头" — THE master switch of this tab; bold + one size up so it
-    // reads as such (moved from the Video tab).
+    // "添加片头" — THE master switch of this tab; bold + one size up, wrapped in
+    // an accent-tinted capsule so it reads as the prominent toggle that gates
+    // the tab. The pill is styled via exportDialogStyleSheet()'s
+    // QFrame#AddIntroCapsule rule (so it re-themes with applyThemeStyles).
+    // (Moved from the Video tab.)
     {
         QFont introCheckFont = addIntroCheck_->font();
         introCheckFont.setBold(true);
         introCheckFont.setPointSizeF(introCheckFont.pointSizeF() + 1.0);
         addIntroCheck_->setFont(introCheckFont);
     }
-    introControlsLayout->addWidget(addIntroCheck_, 0, Qt::AlignLeft);   // reparents to introControls
+    auto* addIntroCapsule = new QFrame(introControls);
+    addIntroCapsule->setObjectName(QStringLiteral("AddIntroCapsule"));
+    auto* addIntroCapsuleLayout = new QHBoxLayout(addIntroCapsule);
+    // Horizontal padding hugs the checkbox+label into a pill; the vertical
+    // padding sets the capsule height (and thus how round the radius reads).
+    addIntroCapsuleLayout->setContentsMargins(14, 7, 18, 7);
+    addIntroCapsuleLayout->setSpacing(0);
+    addIntroCapsuleLayout->addWidget(addIntroCheck_, 0, Qt::AlignVCenter);   // reparents into the capsule
+    // AlignLeft so the capsule sizes to its content instead of stretching to
+    // the full controls-column width.
+    introControlsLayout->addWidget(addIntroCapsule, 0, Qt::AlignLeft);
 
     // 背景 group — backdrop source + blur (size follows the export resolution).
     auto* introBgGroup = new QGroupBox(

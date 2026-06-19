@@ -9,9 +9,15 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `startupOpenTargetFromArguments` (Qt startup, theme/font, window launch, startup-timing log,
   `--quick-shell-beta` routing, file/folder drag-open).
 - First-run welcome / initial-config dialog: `wantsWelcomeDialog` (`--welcome` flag) + first-run
-  probe `QFile::exists(UiText::preferencesFilePath())` captured right after `app.setApplicationName`
-  (must be BEFORE the first `UiTheme::applyApplicationTheme` / `UiText::isChineseUi` read — that read
-  auto-creates `preferences.json`). Result is passed to
+  probe `QFile::exists(UiText::preferencesFilePath())` **OR** a schema-outdated probe
+  `UiText::storedPreferencesSchema() != UiText::currentPreferencesSchema()` — both captured right
+  after `app.setApplicationName` (must be BEFORE the first `UiTheme::applyApplicationTheme` /
+  `UiText::isChineseUi` read — that read auto-creates/rewrites `preferences.json` with the current
+  schema). Bumping `kPreferencesSchema` (`UiText.cpp`, currently `miacode_preferences_v4`) thus
+  re-runs onboarding for existing users; the welcome dialog re-saves prefs under the new schema on
+  close, so it fires only once. `storedPreferencesSchema()` reads the RAW on-disk tag (it does NOT
+  go through `loadPreferencesObject`/`normalizedPreferencesRoot`, which would inject the current
+  token and mask an old file). Result is passed to
   `QuickShellBootstrap::setShowWelcomeDialogOnStartup`, which fires `MainWindow::showWelcomeDialog()`
   from its post-show hook. Dialog body: `sections/preferences/MainWindow.WelcomeDialog.cpp` (see §2).
 - CLI export: `wantsCliVideoExport`, `runCliVideoExport`.
@@ -73,8 +79,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   side) row live on the Preferences dialog's 外观 page
   (`MainWindow::PreferencesSection::onPreferences`, `MainWindow.PreferencesDialog.cpp`) AND in the
   first-run welcome dialog (`PreferencesSection::showWelcomeDialog`, `MainWindow.WelcomeDialog.cpp`)
-  — both drive the same setters; the welcome dialog adds a self-contained `WelcomeLayoutPreview`
-  schematic. zh strings under `dialog.welcome.*` / `dialog.preferences.preview_side*` in `UiText.cpp`.
+  — both drive the same setters; the welcome dialog keeps its self-contained `WelcomeLayoutPreview`
+  schematic. The welcome dialog also exposes a 中文输入法 radio group (关闭输入法 default / 开启输入法 /
+  转换全角字符) wired to `applyEditorHalfWidthInputEnabled` + `applyEditorImeInputDisabled` — the same
+  two prefs as the Preferences 中文输入 combo (2026-06-19). A round "?" help badge
+  (`QLabel#WelcomeHelpBadge`, styled in `preferencesDialogStyleSheet` so it re-themes, +
+  `miacodeAllowTooltip` to bypass the global tooltip suppression) sits beside the 中文输入法 title.
+  zh strings under `dialog.welcome.*` / `dialog.preferences.preview_side*` in `UiText.cpp`.
   Toolbar settings/Preferences icon = `makeSettingsGearIcon` (`MainWindowShared.cpp`): the Google
   Material "settings" gear rendered via `QSvgRenderer` (**Qt6::Svg**). The gear is font-matched by
   rendering the artwork into an *inset* of the icon box (so the glyph reads ~menu-text size) — do
@@ -795,8 +806,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   / touch `resources/intro.qrc` to force RCC (cf. the over-long-text mirror note above).
 - **Export dialog "片头" tab (2026-06-11):** the 添加片头 checkbox moved from the 视频 tab to a
   dedicated **片头 tab** (between 游戏 and 字体) carrying the cover-dialog-style controls —
-  添加片头 as the bold master switch (the old "?" dev-status badge + tooltip were REMOVED per
-  user), 背景 group (背景源 曲绘/自定义图片 + path/browse + 背景虚化) and 难度卡 group
+  添加片头 as the bold master switch wrapped in a neutral rounded box (`QFrame#AddIntroCapsule` —
+  inputBg + border + 8px radius, matching the 游戏 tab dropdown chrome; styled by
+  `UiTheme::exportDialogStyleSheet` so it re-themes; 2026-06-19. The old "?" dev-status badge +
+  tooltip were REMOVED per user), 背景 group (背景源 曲绘/自定义图片 + path/browse + 背景虚化)
+  and 难度卡 group
   (谱面类型 DX|SD / 难度卡阴影 / 等级文本渲染 with a `miacodeAllowTooltip` tooltip "atlas only
   covers 0-9/+") — plus a **read-only live preview** (`IntroPreviewWidget`,
   `src/tools/video_export/IntroPreviewWidget.{h,cpp}`: a native `QQuickView` in a

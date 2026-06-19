@@ -14,7 +14,10 @@
 
 namespace {
 
-constexpr auto kPreferencesSchema = "miacode_preferences_v3";
+// v4 (2026-06-19): re-runs first-run onboarding so existing users see the
+// welcome dialog's new 中文输入法 choice. Bump this whenever onboarding gains a
+// setting whose default should be re-confirmed by users with stored prefs.
+constexpr auto kPreferencesSchema = "miacode_preferences_v4";
 constexpr auto kUiSectionKey = "ui";
 constexpr auto kAppSectionKey = "app";
 constexpr auto kPreviewSectionKey = "preview";
@@ -482,6 +485,13 @@ const QHash<QString, QString>& zhMap()
         {"dialog.welcome.theme", "颜色主题"},
         {"dialog.welcome.theme.light", "浅色"},
         {"dialog.welcome.theme.dark", "深色"},
+        {"dialog.welcome.chinese_input", "中文输入法"},
+        {"dialog.welcome.chinese_input.disable", "关闭输入法"},
+        {"dialog.welcome.chinese_input.enable", "开启输入法"},
+        {"dialog.welcome.chinese_input.fullwidth", "转换全角字符"},
+        {"dialog.welcome.chinese_input.hint",
+         "如果您不使用注释功能，推荐选择“关闭输入法”；如果您使用注释功能且希望减少类似 "
+         "1h【8:1】 的错误输入，请选择转换全角字符。"},
         {"dialog.welcome.get_started", "开始使用"},
         {"dialog.preferences.editor_group", "编辑器"},
         {"dialog.preferences.editor_top_display", "顶部显示"},
@@ -767,6 +777,26 @@ bool isChineseUi()
 QString preferencesFilePath()
 {
     return preferencesPath();
+}
+
+QString currentPreferencesSchema()
+{
+    return QString::fromLatin1(kPreferencesSchema);
+}
+
+QString storedPreferencesSchema()
+{
+    // Raw read mirroring loadPreferencesObject()'s file precedence (primary then
+    // legacy), but WITHOUT normalizedPreferencesRoot() — that helper always
+    // injects the current token, which would hide an outdated on-disk schema and
+    // defeat the upgrade-detection gate in main(). An empty string (no readable
+    // preferences file) compares unequal to the current token, so callers treat
+    // it as "needs onboarding".
+    QJsonObject root = loadJsonObjectFromFile(preferencesPath());
+    if (root.isEmpty()) {
+        root = loadJsonObjectFromFile(legacyPreferencesFilePath());
+    }
+    return root.value(QStringLiteral("schema")).toString();
 }
 
 QJsonObject loadPreferencesObject()

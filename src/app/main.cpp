@@ -513,8 +513,19 @@ int main(int argc, char* argv[])
     // machine" == show the welcome / initial-config dialog. The --welcome flag
     // force-shows it for debugging even when preferences already exist.
     const bool miacodePreferencesExistedAtStartup = QFile::exists(UiText::preferencesFilePath());
+    // A preferences-schema bump (UiText kPreferencesSchema) intentionally
+    // re-runs onboarding: an existing user whose stored preferences predate the
+    // current schema gets the welcome dialog once more so new first-run choices
+    // (e.g. the Chinese-input mode) are surfaced and re-saved under the new
+    // schema. Probe the RAW on-disk schema HERE — storedPreferencesSchema()
+    // does not normalize, and this must run before applyApplicationTheme() below
+    // auto-creates/rewrites the file with the current schema.
+    const bool miacodePreferencesSchemaOutdated =
+        UiText::storedPreferencesSchema() != UiText::currentPreferencesSchema();
     const bool shouldShowWelcomeDialog =
-        !miacodePreferencesExistedAtStartup || wantsWelcomeDialog(rawArgs);
+        !miacodePreferencesExistedAtStartup
+        || miacodePreferencesSchemaOutdated
+        || wantsWelcomeDialog(rawArgs);
     const QIcon appIcon(QStringLiteral(":/icons/app.png"));
     app.setWindowIcon(appIcon);
     app.setStyle(QStyleFactory::create("Fusion"));
