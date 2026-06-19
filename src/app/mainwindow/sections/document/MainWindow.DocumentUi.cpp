@@ -912,6 +912,12 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     // ring keeps rotating across the build (see createEmbeddedVideoExportPanel).
     ui_.exportPage_->onPageEntered(previousActiveDifficultyId);
     owner_.tickOutlineBusySpinner();
+    // Entering the export page changes the preview aspect (square → export video
+    // ratio) and collapses the bottom tabs; both drive the workspace surface to a
+    // new size ASYNCHRONOUSLY from QML, after the two refreshes below have already
+    // run. Arm the settle watch so that late resize re-runs the finalize and the
+    // page doesn't stay composited at its stale, scrambled pre-resize geometry.
+    owner_.armWorkspaceSurfaceSettleRelayout();
     owner_.refreshLayoutAfterPageSwitch();
     QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
 }

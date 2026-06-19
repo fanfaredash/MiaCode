@@ -363,6 +363,13 @@
         int exportAuditionClockNextIndex_ = 0;
         bool restoreSquareAfterVideoExport_ = false;
         quint64 previewPaneRestoreGeneration_ = 0;
+        // Armed by armWorkspaceSurfaceSettleRelayout() right after a page switch
+        // that triggers an async QML-driven resize of the workspace surface (e.g.
+        // entering the export page: aspect change + bottom-tabs collapse). While
+        // armed, the workspaceContentWidget_ resize event re-runs the page-switch
+        // layout finalize so the page settles + repaints at its final geometry
+        // instead of staying composited at the stale pre-resize arrangement.
+        bool workspaceSurfaceSettleRelayoutArmed_ = false;
         int videoExportWorkerLastProgressPercent_ = 0;
         qint64 videoExportWorkerLastEtaSeconds_ = -1;
         int projectLastOpenedDifficultyId_ = 0;
@@ -788,6 +795,7 @@
     double& exportIntroPlayheadSeconds_ = state_.exportIntroPlayheadSeconds_;
     bool& restoreSquareAfterVideoExport_ = state_.restoreSquareAfterVideoExport_;
     quint64& previewPaneRestoreGeneration_ = state_.previewPaneRestoreGeneration_;
+    bool& workspaceSurfaceSettleRelayoutArmed_ = state_.workspaceSurfaceSettleRelayoutArmed_;
     int& videoExportWorkerLastProgressPercent_ = state_.videoExportWorkerLastProgressPercent_;
     qint64& videoExportWorkerLastEtaSeconds_ = state_.videoExportWorkerLastEtaSeconds_;
     int& projectLastOpenedDifficultyId_ = state_.projectLastOpenedDifficultyId_;

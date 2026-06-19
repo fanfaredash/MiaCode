@@ -446,6 +446,21 @@ void MainWindow::WindowSection::restoreFocusedTextEditStateAttempt(
 bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
 {
     auto* watchedWidget = qobject_cast<QWidget*>(watched);
+    // Post-page-switch workspace-surface settle (armWorkspaceSurfaceSettleRelayout).
+    // A switch that changes the preview aspect (export page) or the bottom-tabs
+    // height drives the rehosted workspace surface to a new size ASYNCHRONOUSLY
+    // from QML — after the synchronous page-build + refresh already ran. This
+    // resize on the surface-filling workspace content is the reliable signal that
+    // the final geometry has landed; re-run the layout finalize queued (after the
+    // resize is fully processed) so the just-built page reflows + repaints instead
+    // of staying composited at its stale, scrambled pre-resize arrangement. Observe
+    // only — never consume the event.
+    if (event != nullptr
+        && event->type() == QEvent::Resize
+        && watched == owner_.workspaceContentWidget_
+        && owner_.workspaceSurfaceSettleRelayoutArmed_) {
+        QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
+    }
     // Top header validation/muri summary icons + counts route a left-button
     // press to the matching bottom panel tab so the user can jump straight
     // from the "?" / "!" badge into the issue list. The icons are only

@@ -254,6 +254,14 @@
     void restoreWorkspaceLayoutSizes();
     void refreshQuickShellRehostedWidgetParent(QWidget* widget);
     void refreshLayoutAfterPageSwitch();
+    // Arms a short watch window during which the NEXT resize of the rehosted
+    // workspace surface re-runs refreshLayoutAfterPageSwitch(). Page switches that
+    // change the preview aspect (export page) or the bottom-tabs height drive the
+    // workspace surface to a new size ASYNCHRONOUSLY from QML, AFTER the synchronous
+    // page-build + refresh have already run; without this, the just-built page is
+    // left composited at its pre-resize (scrambled) geometry until an input event
+    // forces a repaint. Self-disarms after a short grace.
+    void armWorkspaceSurfaceSettleRelayout();
     int bottomTabsTabIndex(BottomTabsTabId tabId) const;
     BottomTabsTabId bottomTabsTabIdFromString(const QString& tabId) const;
     QString bottomTabsTabIdString(BottomTabsTabId tabId) const;

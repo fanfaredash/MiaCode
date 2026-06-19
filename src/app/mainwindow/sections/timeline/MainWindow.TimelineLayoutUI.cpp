@@ -410,6 +410,21 @@ void MainWindow::TimelineSection::refreshLayoutAfterPageSwitch()
     }
     if (ui_.editorStack_ != nullptr) {
         ui_.editorStack_->updateGeometry();
+        // updateGeometry() alone only marks the stack's size hint dirty — it does
+        // NOT re-lay-out the current page. The export page inserts a heavy embedded
+        // VideoExportDialog panel on entry, so its (and any freshly-shown page's)
+        // internal layout must be invalidated + activated here, or its children
+        // keep the geometry they were first built with. invalidate() clears cached
+        // sizeHints so the just-inserted panel is measured fresh; activate() does a
+        // full geometry pass that cascades into the panel's own nested layout.
+        if (QWidget* currentPage = ui_.editorStack_->currentWidget(); currentPage != nullptr) {
+            if (QLayout* pageLayout = currentPage->layout(); pageLayout != nullptr) {
+                pageLayout->invalidate();
+                pageLayout->activate();
+            }
+            currentPage->updateGeometry();
+            currentPage->update();
+        }
     }
     if (ui_.bottomTabs_ != nullptr) {
         ui_.bottomTabs_->updateGeometry();
