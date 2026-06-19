@@ -66,6 +66,21 @@ bool isReservedMetadataKey(const QString& key)
     return false;
 }
 
+// Simai metadata fields that strict third-party players parse as a number
+// (e.g. MajdataPlay does `double.Parse` on them). A *bare* `&key=` with an
+// empty value crashes those parsers, and unlike `&first` these have no
+// meaningful 0 default — an empty `&wholebpm`/`&pvstart`/`&pvlen` simply means
+// "unset". So on save we drop the empty line entirely rather than emit a
+// value the user never set or a `0` that would lie. (`&first` is handled
+// separately: it always serializes, empty → `&first=0`; `&clock_count` is
+// always materialized to a concrete value upstream.)
+bool isDroppableWhenEmptyNumericField(const QString& key)
+{
+    return key.compare(QLatin1String("wholebpm"), Qt::CaseInsensitive) == 0
+        || key.compare(QLatin1String("pvstart"), Qt::CaseInsensitive) == 0
+        || key.compare(QLatin1String("pvlen"), Qt::CaseInsensitive) == 0;
+}
+
 }  // namespace
 
 SimaiDocument SimaiDocument::createEmpty()
@@ -319,7 +334,10 @@ QString SimaiDocument::toText() const
     blocks.reserve(3 + extraFields.size() + difficulties_.size() * 3);
     blocks.append(serializeField("title", title));
     blocks.append(serializeField("artist", artist));
-    blocks.append(serializeField("first", first));
+    // `&first` must always carry a value strict third-party players can parse
+    // as a number — a bare `&first=` crashes MajdataPlay's `double.Parse`. An
+    // unset offset means "no offset", whose canonical, lossless encoding is 0.
+    blocks.append(serializeField("first", first.trimmed().isEmpty() ? QStringLiteral("0") : first));
     if (!designer.isEmpty()) {
         blocks.append(serializeField("des", designer));
     }
@@ -334,6 +352,12 @@ QString SimaiDocument::toText() const
     ensureDefaultClockCount(&serializedExtraFields);
     for (const SimaiRawField& field : serializedExtraFields) {
         if (field.key.isEmpty()) {
+            continue;
+        }
+        // Strip empty numeric metadata (&wholebpm/&pvstart/&pvlen) on save:
+        // a bare `&wholebpm=` etc. has no meaningful 0 default and crashes
+        // strict third-party parsers, so drop the line rather than write it.
+        if (field.value.trimmed().isEmpty() && isDroppableWhenEmptyNumericField(field.key)) {
             continue;
         }
         blocks.append(serializeField(field.key, field.value));

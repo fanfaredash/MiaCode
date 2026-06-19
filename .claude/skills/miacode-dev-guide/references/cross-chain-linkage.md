@@ -90,6 +90,12 @@ Implications:
   `document_.first` via `applyLatencyDetectorOffset` — same single source of truth.
 - `TimelineQuickModel` receives `first` on every rebuild; `buildTimelineSlowRefreshResult` shifts
   markers by `first`; `MainWindow::applyLatencyDetectorOffset` writes raw `first` back.
+- **Serialization compat contract (`SimaiDocument::toText`):** we read an empty/missing `&first`
+  as `0`, but strict third-party players (e.g. MajdataPlay `double.Parse`) crash on a bare
+  `&first=`. So `toText()` always emits a parseable value — empty `first` → `&first=0` — and
+  drops empty *numeric* extra-metadata whose 0 is meaningless (`&wholebpm`/`&pvstart`/`&pvlen`,
+  via `isDroppableWhenEmptyNumericField`) instead of writing a bare `&key=`. Do NOT revert these
+  guards to an unconditional `serializeField`. Covered by `simai_document_spec`.
 - Review together on change: `sections/timeline/MainWindow.PreviewTimelineFlow.cpp`,
   `src/tools/latency/` analysis, `src/tools/video_export/VideoExportSnapshot.cpp`,
   `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`.

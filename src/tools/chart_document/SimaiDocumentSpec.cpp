@@ -53,6 +53,13 @@ bool hasKeyLine(const QString& text, const QString& key)
     return false;
 }
 
+// True when `text` contains `exact` as a whole line (used to assert an exact
+// `&key=value`, e.g. distinguishing `&first=0` from a bare `&first=`).
+bool hasLine(const QString& text, const QString& exact)
+{
+    return text.split('\n').contains(exact);
+}
+
 void runSpecs(QTextStream& out, int* failed)
 {
     // --- A real charted difficulty keeps its designer and round-trips. ---
@@ -192,6 +199,44 @@ void runSpecs(QTextStream& out, int* failed)
         const QString multiline = SimaiDocument::fromText(
             "&inote_1=(120){1}1,\n2,\n\t\n  \n").difficulty(1)->chart;
         expectEqual(multiline, "(120){1}1,\n2,", "interior newlines preserved, tail trimmed", failed, out);
+    }
+
+    // --- `&first` always serializes as a parseable number, never a bare
+    //     `&first=` that crashes strict third-party players. ---
+    {
+        // New / untouched offset: the model holds an empty `first`. A bare
+        // `&first=` is what MajdataPlay's double.Parse chokes on, so we must
+        // emit `&first=0` (the lossless encoding of "no offset").
+        const SimaiDocument fresh = SimaiDocument::createEmpty();
+        expectTrue(fresh.first.isEmpty(), "fresh document has an empty first", failed, out);
+        expectTrue(hasLine(fresh.toText(), "&first=0"), "empty first serializes as &first=0", failed, out);
+        expectTrue(!hasLine(fresh.toText(), "&first="), "no bare &first= is ever emitted", failed, out);
+
+        // A chart authored elsewhere with NO &first line must not gain a bare
+        // `&first=` on open→save; it gains a valid `&first=0` instead.
+        const SimaiDocument noFirst = SimaiDocument::fromText("&title=T\n&lv_5=12\n&inote_5=(120){1}1,\n");
+        expectTrue(hasLine(noFirst.toText(), "&first=0"), "missing &first is injected as &first=0", failed, out);
+
+        // An explicit value is preserved verbatim (no clobber to 0).
+        const SimaiDocument withFirst = SimaiDocument::fromText("&title=T\n&first=-0.123\n&lv_5=12\n&inote_5=(120){1}1,\n");
+        expectTrue(hasLine(withFirst.toText(), "&first=-0.123"), "explicit &first value is preserved", failed, out);
+    }
+
+    // --- Empty numeric metadata (&wholebpm/&pvstart/&pvlen) is dropped on
+    //     save; a populated value round-trips untouched. ---
+    {
+        const SimaiDocument cleared = SimaiDocument::fromText(
+            "&title=T\n&first=0\n&wholebpm=\n&pvstart=\n&pvlen=  \n&lv_5=12\n&inote_5=(120){1}1,\n");
+        const QString out2 = cleared.toText();
+        expectTrue(!hasKeyLine(out2, "wholebpm"), "empty &wholebpm is dropped on save", failed, out);
+        expectTrue(!hasKeyLine(out2, "pvstart"), "empty &pvstart is dropped on save", failed, out);
+        expectTrue(!hasKeyLine(out2, "pvlen"), "empty (whitespace) &pvlen is dropped on save", failed, out);
+
+        const SimaiDocument kept = SimaiDocument::fromText(
+            "&title=T\n&first=0\n&wholebpm=180\n&pvstart=3.5\n&lv_5=12\n&inote_5=(120){1}1,\n");
+        const QString out3 = kept.toText();
+        expectTrue(hasLine(out3, "&wholebpm=180"), "populated &wholebpm is preserved", failed, out);
+        expectTrue(hasLine(out3, "&pvstart=3.5"), "populated &pvstart is preserved", failed, out);
     }
 }
 
