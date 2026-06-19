@@ -217,7 +217,11 @@ Rectangle {
         id: transportLayout
         anchors.fill: parent
         anchors.margins: fullscreenMode ? 14 : 8
-        spacing: metric("previewStatsVerticalSpacing", 6)
+        // Transport-only gap between the scrubber row and the button row.
+        // Deliberately a literal (not previewStatsVerticalSpacing) so widening
+        // the scrubber↔buttons distance here does NOT also loosen the right-side
+        // stats panel, which reads the same shared metric.
+        spacing: 10
 
         Item {
             Layout.fillWidth: true
