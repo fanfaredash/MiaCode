@@ -963,6 +963,14 @@ bool MainWindow::DocumentSection::switchToMetadataField()
     owner_.updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
+    // setChartBottomTabsMode(false) above collapses the bottom tabs, which drives
+    // the rehosted workspace surface to a new size ASYNCHRONOUSLY from QML — after
+    // the two refreshes below have already run. Arm the settle watch so that late
+    // resize re-runs the finalize; without it the just-switched page can stay
+    // composited at its stale pre-resize geometry until an input event forces a
+    // repaint (same root cause as the export page, milder here: height-only change
+    // on a static, top-anchored layout rather than a preview-aspect width change).
+    owner_.armWorkspaceSurfaceSettleRelayout();
     owner_.refreshLayoutAfterPageSwitch();
         QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
     return true;
@@ -1008,6 +1016,11 @@ bool MainWindow::DocumentSection::switchToWelcomePage()
     owner_.updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
+    // Same async-resize settle as switchToMetadataField: setChartBottomTabsMode(false)
+    // above collapses the bottom tabs, resizing the rehosted workspace surface from
+    // QML after the refreshes below run. Arm the watch so the page repaints at its
+    // final geometry instead of a stale, pre-resize composite.
+    owner_.armWorkspaceSurfaceSettleRelayout();
     owner_.refreshLayoutAfterPageSwitch();
         QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
     return true;
