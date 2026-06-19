@@ -56,6 +56,7 @@ public:
     bool shellTimelineTabVisible() const;
     bool shellValidationTabVisible() const;
     bool shellMuriTabVisible() const;
+    bool shellExportPageActive() const;
     QWidget* shellWindowWidget() const;
     QDockWidget* shellOutlineDockWidget() const;
     bool shellOutlineDockCollapsed() const;

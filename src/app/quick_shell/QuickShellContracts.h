@@ -96,6 +96,12 @@ public:
     virtual bool shellTimelineTabVisible() const = 0;
     virtual bool shellValidationTabVisible() const = 0;
     virtual bool shellMuriTabVisible() const = 0;
+    // True while the Export page is the active editor-stack page. The QML
+    // preview transport hides its fullscreen button there as a stop-gap: on the
+    // export page, entering preview fullscreen with hardware video decode
+    // deterministically crashes the Intel iGPU D3D11 UMD (igd10um64xe). Default
+    // false so non-MainWindow state sources don't have to implement it.
+    virtual bool shellExportPageActive() const { return false; }
 };
 
 class QuickShellNativeContentProvider

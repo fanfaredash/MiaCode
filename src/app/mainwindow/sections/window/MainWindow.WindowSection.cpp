@@ -278,6 +278,11 @@ bool MainWindow::shellMuriTabVisible() const
     return windowSection_->shellMuriTabVisible();
 }
 
+bool MainWindow::shellExportPageActive() const
+{
+    return windowSection_->shellExportPageActive();
+}
+
 QWidget* MainWindow::shellWindowWidget() const
 {
     return windowSection_->shellWindowWidget();

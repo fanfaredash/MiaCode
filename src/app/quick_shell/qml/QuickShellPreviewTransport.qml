@@ -468,6 +468,11 @@ Rectangle {
                         enabled: !root.inputBlocked
                         focusPolicy: Qt.NoFocus
                         padding: 0
+                        // Stop-gap: entering fullscreen from the export page crashes
+                        // the Intel iGPU D3D11 user-mode driver during hardware video
+                        // decode (see docs/EXPORT_FULLSCREEN_CRASH_INVESTIGATION_ZH.md).
+                        // Hide the fullscreen entry while the export page is active.
+                        visible: !(controller && controller.exportPageActive)
                         onPressed: root.focusRequested()
                         onClicked: {
                             root.focusRequested()
@@ -582,6 +587,11 @@ Rectangle {
                         enabled: !root.inputBlocked
                         focusPolicy: Qt.NoFocus
                         padding: 0
+                        // Stop-gap: entering fullscreen from the export page crashes
+                        // the Intel iGPU D3D11 user-mode driver during hardware video
+                        // decode (see docs/EXPORT_FULLSCREEN_CRASH_INVESTIGATION_ZH.md).
+                        // Hide the fullscreen entry while the export page is active.
+                        visible: !(controller && controller.exportPageActive)
                         onPressed: root.focusRequested()
                         onClicked: {
                             root.focusRequested()

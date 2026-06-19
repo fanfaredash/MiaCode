@@ -831,6 +831,18 @@ bool MainWindow::WindowSection::shellMuriTabVisible() const
     return owner_.bottomTabsTabVisible(MainWindow::BottomTabsTabId::Muri);
 }
 
+bool MainWindow::WindowSection::shellExportPageActive() const
+{
+    // Stop-gap for the export-page + fullscreen Intel iGPU D3D11 crash
+    // (hardware video decode; see docs/EXPORT_FULLSCREEN_CRASH_INVESTIGATION_ZH.md).
+    // performSwitchToExportField() sets activeOutlineKey_ = "export" on entry and
+    // every other page sets a different key, so this is true iff the export page
+    // is the active workspace page. The shared preview transport binds the
+    // fullscreen button's visibility to !exportPageActive so it can't be triggered
+    // there until the underlying crash is fixed.
+    return state_.activeOutlineKey_ == QLatin1String("export");
+}
+
 QWidget* MainWindow::WindowSection::shellWindowWidget() const
 {
     return const_cast<MainWindow*>(&owner_);

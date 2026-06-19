@@ -50,6 +50,10 @@ class QuickShellController : public QObject
     Q_PROPERTY(bool timelineTabVisible READ timelineTabVisible NOTIFY shellStateChanged)
     Q_PROPERTY(bool validationTabVisible READ validationTabVisible NOTIFY shellStateChanged)
     Q_PROPERTY(bool muriTabVisible READ muriTabVisible NOTIFY shellStateChanged)
+    // True while the Export page is active. The preview transport binds its
+    // fullscreen button's visibility to !exportPageActive (stop-gap for the
+    // export-page fullscreen + hardware-decode Intel UMD crash).
+    Q_PROPERTY(bool exportPageActive READ exportPageActive NOTIFY shellStateChanged)
     // Localized labels — read here so the QML side doesn't have to know
     // about the UiText::isChineseUi() switch. Constant per session
     // (locale isn't switched at runtime), so a CONSTANT property is fine.
@@ -97,6 +101,7 @@ public:
     bool timelineTabVisible() const;
     bool validationTabVisible() const;
     bool muriTabVisible() const;
+    bool exportPageActive() const;
     QString timelineTabLabel() const;
     QString validationTabLabel() const;
     QString muriTabLabel() const;
@@ -194,6 +199,7 @@ private:
     bool timelineTabVisible_ = false;
     bool validationTabVisible_ = false;
     bool muriTabVisible_ = false;
+    bool exportPageActive_ = false;
     bool previewSpeedToastInitialized_ = false;
     bool closeConfirmedExternally_ = false;
 };

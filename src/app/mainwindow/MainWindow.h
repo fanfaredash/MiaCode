@@ -250,6 +250,7 @@ public:
     bool shellTimelineTabVisible() const override;
     bool shellValidationTabVisible() const override;
     bool shellMuriTabVisible() const override;
+    bool shellExportPageActive() const override;
     QWidget* shellWindowWidget() const override;
     QDockWidget* shellOutlineDockWidget() const override;
     bool shellOutlineDockCollapsed() const override;

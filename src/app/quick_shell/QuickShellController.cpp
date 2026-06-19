@@ -354,6 +354,11 @@ bool QuickShellController::muriTabVisible() const
     return muriTabVisible_;
 }
 
+bool QuickShellController::exportPageActive() const
+{
+    return exportPageActive_;
+}
+
 QString QuickShellController::timelineTabLabel() const
 {
     // Mirrors MainWindow::bottomTabsFallbackLabel for the legacy QSG
@@ -979,6 +984,7 @@ void QuickShellController::refreshFromStateSource()
     stateChanged |= assignIfChanged(timelineTabVisible_, stateSource_->shellTimelineTabVisible());
     stateChanged |= assignIfChanged(validationTabVisible_, stateSource_->shellValidationTabVisible());
     stateChanged |= assignIfChanged(muriTabVisible_, stateSource_->shellMuriTabVisible());
+    stateChanged |= assignIfChanged(exportPageActive_, stateSource_->shellExportPageActive());
 
     const bool nextPreviewFullscreen = stateSource_->shellPreviewFullscreen();
     if (assignIfChanged(previewFullscreen_, nextPreviewFullscreen)) {
