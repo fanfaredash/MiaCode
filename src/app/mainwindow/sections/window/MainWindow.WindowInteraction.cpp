@@ -601,10 +601,13 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
             constexpr int kOptInTooltipWidthPx = 300;
             // A <td width=...> cell is the reliable way to bound tooltip width in
             // Qt's rich-text engine; word-wrap then happens inside that width.
+            // Escape first (the rich-text cell is HTML), then turn explicit
+            // newlines into <br> so a tooltip body can force line breaks —
+            // otherwise Qt's rich-text engine collapses the newline to a space.
             const QString wrapped =
                 QStringLiteral("<table><tr><td width=\"%1\">%2</td></tr></table>")
                     .arg(kOptInTooltipWidthPx)
-                    .arg(body.toHtmlEscaped());
+                    .arg(body.toHtmlEscaped().replace(QLatin1Char('\n'), QStringLiteral("<br>")));
             const QPoint globalPos = event->type() == QEvent::ToolTip
                 ? static_cast<QHelpEvent*>(event)->globalPos()
                 : QCursor::pos();

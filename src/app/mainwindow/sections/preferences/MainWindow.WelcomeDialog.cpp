@@ -252,8 +252,9 @@ void MainWindow::PreferencesSection::showWelcomeDialog()
     chineseInputHelp->setProperty("miacodeAllowTooltip", true);
     chineseInputHelp->setCursor(Qt::WhatsThisCursor);
     chineseInputHelp->setToolTip(uiText("dialog.welcome.chinese_input.hint",
-        "If you don't use comments, choose \"Disable IME\". If you do use comments and "
-        "want to avoid mistyped input such as 1h【8:1】, choose \"Convert full-width\"."));
+        "If you don't use comments, choose \"Disable IME\".\n"
+        "If you do use comments and want to avoid mistyped input such as 1h【8:1】, "
+        "choose \"Convert full-width\"."));
     chineseInputHeaderLayout->addWidget(chineseInputLabel, 0);
     chineseInputHeaderLayout->addWidget(chineseInputHelp, 0, Qt::AlignVCenter);
     chineseInputHeaderLayout->addStretch(1);

@@ -490,8 +490,8 @@ const QHash<QString, QString>& zhMap()
         {"dialog.welcome.chinese_input.enable", "开启输入法"},
         {"dialog.welcome.chinese_input.fullwidth", "转换全角字符"},
         {"dialog.welcome.chinese_input.hint",
-         "如果您不使用注释功能，推荐选择“关闭输入法”；如果您使用注释功能且希望减少类似 "
-         "1h【8:1】 的错误输入，请选择转换全角字符。"},
+         "如果您不使用注释功能，推荐选择“关闭输入法”；\n"
+         "如果您使用注释功能，且希望减少类似1h【8:1】的错误输入，推荐转换“全角字符”。"},
         {"dialog.welcome.get_started", "开始使用"},
         {"dialog.preferences.editor_group", "编辑器"},
         {"dialog.preferences.editor_top_display", "顶部显示"},
