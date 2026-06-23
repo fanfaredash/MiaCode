@@ -578,17 +578,25 @@ VideoExportDialog* MainWindow::ExportSection::buildConfiguredVideoExportDialog(
             owner_.seekPreviewToSecond(second, false);
         },
         [this](double second) {
+            if (second <= 0.0005
+                && state_.exportPreviewAuditionActive_
+                && owner_.currentExportIntroLeadInSpec(nullptr)) {
+                owner_.refreshExportIntroState();
+                owner_.onTogglePreviewPause();
+                owner_.updatePauseButtonAppearance();
+                return;
+            }
             owner_.startQtPreviewPlayback(second, true);
             owner_.updatePauseButtonAppearance();
         },
         [this]() {
-            if (owner_.qtPreviewPlaying_) {
-                owner_.pauseQtPreviewPlaybackExact();
+            if (owner_.qtPreviewPlaying_ || state_.exportIntroLeadInActive_) {
+                owner_.onTogglePreviewPause();
                 owner_.updatePauseButtonAppearance();
             }
         },
         [this]() -> bool {
-            return owner_.qtPreviewPlaying_;
+            return owner_.qtPreviewPlaying_ || state_.exportIntroLeadInActive_;
         },
         currentPreviewSecond,
         [this](bool showTimestamp) {

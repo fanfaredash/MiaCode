@@ -115,6 +115,7 @@
     // animated intro before the chart. cancelExportIntroLeadIn() forwards to the
     // timeline driver (used by teardown).
     bool currentExportIntroLeadInSpec(IntroBannerSpec* outSpec) const;
+    bool exportIntroLeadInPlaying() const;
     void cancelExportIntroLeadIn();
     // Negative-time intro region forwarders: handleExportIntroSliderSeek routes a
     // slider seek into the intro (returns true if handled); lowerBound is the

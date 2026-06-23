@@ -149,6 +149,11 @@ void MainWindow::TimelineSection::exitExportIntroRegion()
     }
 }
 
+bool MainWindow::TimelineSection::exportIntroLeadInPlaying() const
+{
+    return state_.exportIntroLeadInActive_;
+}
+
 void MainWindow::TimelineSection::cancelExportIntroLeadIn()
 {
     // Full exit (clears the overlay) — used by stop / teardown.

@@ -187,6 +187,11 @@ void MainWindow::cancelExportIntroLeadIn()
     timelineSection_->cancelExportIntroLeadIn();
 }
 
+bool MainWindow::exportIntroLeadInPlaying() const
+{
+    return timelineSection_->exportIntroLeadInPlaying();
+}
+
 bool MainWindow::handleExportIntroSliderSeek(double second)
 {
     return timelineSection_->handleExportIntroSliderSeek(second);

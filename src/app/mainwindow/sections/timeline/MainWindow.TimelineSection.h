@@ -174,6 +174,7 @@ public:
     void renderExportIntroFrame(double positionSeconds);
     void enterExportIntroRegion(double positionSeconds);
     void exitExportIntroRegion();
+    bool exportIntroLeadInPlaying() const;
     void pauseExportIntroAdvance();
     void startExportIntroAdvance(double fromPositionSeconds);
     void tickExportIntroLeadIn();
