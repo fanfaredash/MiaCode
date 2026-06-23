@@ -38,15 +38,17 @@ Use this checklist before making the repository public. It intentionally separat
 - [x] Run a full-history secret scan.
 - [ ] Rotate any credential that ever appeared in Git history.
 - [x] Generate a largest-object report for Git history.
-- [ ] Remove historical build outputs and binary blobs with `git-filter-repo` if public history must be clean.
+- [x] Remove historical build outputs and binary blobs with `git-filter-repo` if public history must be clean.
 - [ ] Re-clone the filtered repository and verify build/package scripts from the cleaned history.
+- [ ] Force-push the filtered `main` and `test` histories after owner approval.
 
 Current history scan result:
 
 - Current tracked tree has no secret/local-path hits from the open-source scan patterns.
-- Full history still contains local paths and investigation notes from old docs/scripts, including `<local-chart-root>\...`, `<QtRoot>\...`, and `<UserProfile>\...` examples.
-- Full history still contains removed build artifacts under `build-mingw-ascii/` and removed prototype assets under `tools/intro_remotion/`.
-- Public release should use a filtered history, or publish from a fresh clean repository, before making the repository public.
+- Filtered history has no hits from the open-source secret/local-path scan patterns, excluding intentionally vendored third-party code.
+- Filtered history removed historical build artifacts under `build-mingw-ascii/` / `build-mingw/`, probe files under `_audio_probe/`, generated slide data under `assets/generated/`, Remotion prototype files under `tools/intro_remotion/`, old FFmpeg backup files under `third_party/ffmpeg/windows/dev.full.bak/`, old M PLUS font copies, and superseded private investigation docs/scripts.
+- Largest remaining Git objects are current distribution assets and third-party/source files that are intentionally retained.
+- A pre-filter bundle backup exists outside the repository; do not publish it.
 
 ## Branches And Tags
 
