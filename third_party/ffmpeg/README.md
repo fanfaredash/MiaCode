@@ -7,7 +7,8 @@ This directory stores prebuilt `ffmpeg` executables used by MiaCode video export
 - Windows
   - Binary: `windows/ffmpeg.exe`
   - Source package:
-    `https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-7.1.1-essentials_build.7z`
+    `https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-essentials_build.7z`
+  - Upstream build family: Gyan.dev `essentials_build`
   - Runtime version pattern: `ffmpeg version 7.1.1-essentials_build-www.gyan.dev`
   - SHA256 (`ffmpeg.exe`): `B90225987BDD042CCA09A1EFB5E34E9848F2D1DBF5FBCD388753A44145522997`
 

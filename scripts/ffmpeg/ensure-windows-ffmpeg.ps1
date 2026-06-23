@@ -110,7 +110,7 @@ $ffmpegDir = Join-Path $RepoRoot "third_party\ffmpeg\windows"
 $ffmpegPath = Join-Path $ffmpegDir "ffmpeg.exe"
 $ffprobePath = Join-Path $ffmpegDir "ffprobe.exe"
 $ffmpegUrl = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_URL)) {
-    "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-7.1.1-essentials_build.7z"
+    "https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-essentials_build.7z"
 } else {
     $env:MIACODE_WINDOWS_FFMPEG_URL
 }
