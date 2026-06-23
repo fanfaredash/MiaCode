@@ -59,8 +59,14 @@ Current history scan result:
 ## Release Readiness
 
 - [ ] Build from a clean clone.
-- [ ] Package Windows release artifacts.
-- [ ] Generate SHA256 checksums.
-- [ ] Write release notes with known issues and license notes.
+- [x] Package Windows release artifacts.
+- [x] Generate SHA256 checksums.
+- [x] Write release notes with known issues and license notes.
 - [x] Keep the current first public version number.
 - [x] Publish the first public release as a prerelease.
+
+Current Windows smoke package:
+
+- `dist/MiaCode-v0.5.2-beta3-win64.zip`
+- SHA256: `B86CD85E65E95CAB155734A90EAA4ED20BD26D822410D38A108853F02CF0030A`
+- Release notes draft: [RELEASE_NOTES_DRAFT_0.5.2-beta3.md](RELEASE_NOTES_DRAFT_0.5.2-beta3.md)
