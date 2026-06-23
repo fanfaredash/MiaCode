@@ -100,7 +100,7 @@ The toolbox blank-media submenu operates on the current chart directory only. It
     - `third_party/bass/bin/win64/bassopus.dll`
   - Current build contract:
     - `CMakeLists.txt` links `bass.lib` and `bassmix.lib` on Windows for `MiaCode` and `soundtouch_probe`
-    - post-build copy now deploys the repo-local `bass*.dll` files into the executable directory so both preview audio and Windows export audio never depend on MajdataPlay's install path or any external machine-global location
+    - post-build copy deploys the repo-local `bass*.dll` files into the executable directory
 - Background outlines and auxiliary background art:
   - Consumers: preview and export overlay composition
   - Current active variant files:
