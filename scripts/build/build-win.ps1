@@ -95,7 +95,7 @@ $qtInstallArgs = @(
 ) + $QtModules
 Invoke-Python -PythonCommand $pythonCommand -Arguments $qtInstallArgs
 
-$qtRoot = Join-Path $QtOutputDir $QtVersion "msvc2022_64"
+$qtRoot = Join-Path (Join-Path $QtOutputDir $QtVersion) "msvc2022_64"
 if (!(Test-Path $qtRoot)) {
     $qtRoot = Get-ChildItem -Path (Join-Path $QtOutputDir $QtVersion) -Directory -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -like "msvc*" } |
