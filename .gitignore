@@ -59,7 +59,7 @@ third_party/ffmpeg/**/ffprobe
 third_party/ffmpeg/**/ffprobe.exe
 
 # FFmpeg dev SDK (headers + import libs + runtime DLLs) for the QtAVPlayer
-# preview decode backend. Provisioned by scripts/ensure-windows-ffmpeg-dev.ps1,
+# preview decode backend. Provisioned by scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1,
 # never committed — the .dll are caught by the third_party/**/*.dll rule below,
 # this also keeps the headers + .lib import libraries out of version control.
 third_party/ffmpeg/windows/dev/
@@ -87,27 +87,39 @@ third_party/**/*.a
 
 # scripts whitelist: ignore all by default, allow only release/infra scripts.
 scripts/*
-!scripts/Start_MiaCode_Debug.bat
-!scripts/Start_MiaCode_QtPluginDiag.bat
-!scripts/Start_MiaCode_SoftwareVideoDecode.bat
-!scripts/build-macos.sh
-!scripts/build-win.ps1
-!scripts/compare-export-encode-profiles.ps1
-!scripts/ensure-macos-ffmpeg.sh
-!scripts/ensure-windows-ffmpeg.ps1
-!scripts/ensure-windows-ffmpeg-dev.ps1
+!scripts/build/
+scripts/build/*
+!scripts/build/build-macos.sh
+!scripts/build/build-win.ps1
+!scripts/build/package-mac.sh
+!scripts/build/package-win.ps1
+!scripts/debug/
+scripts/debug/*
+!scripts/debug/Start_MiaCode_Debug.bat
+!scripts/debug/Start_MiaCode_QtPluginDiag.bat
+!scripts/debug/Start_MiaCode_SoftwareVideoDecode.bat
+!scripts/ffmpeg/
+scripts/ffmpeg/*
+!scripts/ffmpeg/ensure-macos-ffmpeg.sh
+!scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1
+!scripts/ffmpeg/ensure-windows-ffmpeg.ps1
+!scripts/ffmpeg/trim/
+scripts/ffmpeg/trim/*
+!scripts/ffmpeg/trim/README.md
+!scripts/ffmpeg/trim/build-trimmed-ffmpeg.ps1
+!scripts/ffmpeg/trim/survey-chart-codecs.bat
+!scripts/ffmpeg/trim/survey-chart-codecs.ps1
+!scripts/ffmpeg/trim/trim-allowlist.psd1
+!scripts/assets/
+scripts/assets/*
+!scripts/assets/README_font_subset.md
+!scripts/assets/gen_same_lane_v_slides.py
+!scripts/assets/subset_hud_font.py
+!scripts/assets/tongyong_guifan.txt
 # FFmpeg decode-only trim toolchain (build scripts + allowlist config + docs).
-!scripts/ffmpeg-trim
-!scripts/ffmpeg-trim/**
 # ...but never the per-run report the survey .bat generates next to itself.
-scripts/ffmpeg-trim/ffmpeg-codec-survey.txt
+scripts/ffmpeg/trim/ffmpeg-codec-survey.txt
 # HUD font subsetting toolchain (script + 通用规范汉字表 charset + docs).
-!scripts/subset_hud_font.py
-!scripts/tongyong_guifan.txt
-!scripts/README_font_subset.md
-!scripts/gen_same_lane_v_slides.py
-!scripts/package-mac.sh
-!scripts/package-win.ps1
 !scripts/README.md
 !scripts/README_EN.md
 # Ignore local Claude config, but version-control the repo-guide skill.

@@ -45,7 +45,7 @@ See [scripts/README_EN.md](scripts/README_EN.md) for packaging details.
 The recommended entry point installs Qt, prepares dependencies, builds, and packages:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build-win.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1
 ```
 
 If Qt is already installed locally, you can also build with the CMake preset:
@@ -59,7 +59,7 @@ cmake --build --preset release
 To package an existing build:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot <QtRoot>
+powershell -ExecutionPolicy Bypass -File .\scripts\build\package-win.ps1 -QtRoot <QtRoot>
 ```
 
 ## Repository Layout

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 QT_VERSION="${QT_VERSION:-6.8.3}"
 QT_OUTPUT_DIR="${QT_OUTPUT_DIR:-$ROOT_DIR/.qt}"
@@ -46,8 +46,8 @@ export CMAKE_OSX_ARCHITECTURES="$CMAKE_ARCH"
 export CMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET"
 export MIACODE_BUILD_DEV_TOOLS
 
-chmod +x "$ROOT_DIR/scripts/ensure-macos-ffmpeg.sh"
-bash "$ROOT_DIR/scripts/ensure-macos-ffmpeg.sh"
+chmod +x "$ROOT_DIR/scripts/ffmpeg/ensure-macos-ffmpeg.sh"
+bash "$ROOT_DIR/scripts/ffmpeg/ensure-macos-ffmpeg.sh"
 
-chmod +x "$ROOT_DIR/scripts/package-mac.sh"
-bash "$ROOT_DIR/scripts/package-mac.sh"
+chmod +x "$ROOT_DIR/scripts/build/package-mac.sh"
+bash "$ROOT_DIR/scripts/build/package-mac.sh"

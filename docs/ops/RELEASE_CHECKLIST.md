@@ -17,7 +17,7 @@ This checklist documents the current local-release flow. GitHub Actions were rem
 ## Windows Package
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build-win.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1
 ```
 
 - [ ] Verify `dist/MiaCode-v<version>-win64`.

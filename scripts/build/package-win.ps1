@@ -293,7 +293,7 @@ function Assert-PackageEntries {
     }
 }
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $BuildDir = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $BuildDir
 if (![string]::IsNullOrWhiteSpace($QtRoot)) {
     $QtRoot = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $QtRoot
@@ -350,7 +350,7 @@ if (!(Test-Path $launcherExe)) {
 }
 Copy-Item $launcherExe (Join-Path $DistDir "MiaCode.exe") -Force
 
-$debugLauncherSrc = Join-Path $repoRoot "scripts\\Start_MiaCode_Debug.bat"
+$debugLauncherSrc = Join-Path $repoRoot "scripts\\debug\\Start_MiaCode_Debug.bat"
 if (!(Test-Path $debugLauncherSrc)) {
     throw "Missing required launcher script: $debugLauncherSrc"
 }
@@ -515,7 +515,7 @@ $requiredFfmpegRuntimeDlls = @(
 foreach ($runtimeDll in $requiredFfmpegRuntimeDlls) {
     $srcDll = Join-Path $ffmpegDevBin $runtimeDll
     if (!(Test-Path $srcDll)) {
-        Write-Host "Run .\scripts\ensure-windows-ffmpeg-dev.ps1 to provision the FFmpeg dev SDK (headers + import libs + runtime DLLs)."
+        Write-Host "Run .\scripts\ffmpeg\ensure-windows-ffmpeg-dev.ps1 to provision the FFmpeg dev SDK (headers + import libs + runtime DLLs)."
         throw "Missing required FFmpeg runtime DLL: $srcDll"
     }
     Copy-Item $srcDll (Join-Path $appDir $runtimeDll) -Force
@@ -610,7 +610,7 @@ if (Test-Path $ffmpegSrc) {
     New-Item -ItemType Directory -Path $ffmpegDstDir -Force | Out-Null
     Copy-Item $ffmpegSrc (Join-Path $ffmpegDstDir "ffmpeg.exe") -Force
 } else {
-    Write-Host "Run .\scripts\ensure-windows-ffmpeg.ps1 to download the pinned Windows ffmpeg binary."
+    Write-Host "Run .\scripts\ffmpeg\ensure-windows-ffmpeg.ps1 to download the pinned Windows ffmpeg binary."
     throw "Missing required ffmpeg binary: $ffmpegSrc"
 }
 

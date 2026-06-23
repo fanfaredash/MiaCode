@@ -141,26 +141,26 @@ Do not rename sound files casually; both preview-time and export-time behavior d
   - do not create or maintain a separate `Debug` build just for ordinary compile/test runs
   - use debug-only launch paths or diagnostics only when the task explicitly requires debug-specific investigation
 - Windows build/package:
-  - `scripts/build-win.ps1`
-  - `scripts/package-win.ps1`
-  - `scripts/package-win.ps1` defaults to `build/`, prechecks version freshness against `CMakeLists.txt` and `build/generated/AppVersion.h`, treats version/header drift as a normal refresh instead of a warning, and auto-runs `cmake --build <BuildDir> --target MiaCode --config <Config> --parallel 8` when the packaged executable or generated version metadata needs refreshing
-  - `scripts/build-win.ps1` and `scripts/package-win.ps1` resolve relative `BuildDir`, `DistDir`, `QtRoot`, and Qt output paths from the repo root instead of the caller's current working directory; this prevents `windeployqt` output from spilling into the desktop when launched from outside the repo
-  - `scripts/build-win.ps1` now installs `qtmultimedia`, `qtdeclarative`, and `qtsvg` so the Qt Quick runtime can be reproduced from a clean machine
-  - both the CMake post-build deploy step and `scripts/package-win.ps1` now pass `--qmldir src/preview/runtime/qml` to `windeployqt` so the Qt Quick runtime imports are deployed
-  - both the CMake post-build deploy step and `scripts/package-win.ps1` explicitly keep the Qt Quick runtime DLL set (`Qt6Quick`, `Qt6Qml`, `Qt6QmlMeta`, `Qt6QmlModels`, `Qt6QmlWorkerScript`) and remove stale `Qt6OpenGLWidgets.dll`
+  - `scripts/build/build-win.ps1`
+  - `scripts/build/package-win.ps1`
+  - `scripts/build/package-win.ps1` defaults to `build/`, prechecks version freshness against `CMakeLists.txt` and `build/generated/AppVersion.h`, treats version/header drift as a normal refresh instead of a warning, and auto-runs `cmake --build <BuildDir> --target MiaCode --config <Config> --parallel 8` when the packaged executable or generated version metadata needs refreshing
+  - `scripts/build/build-win.ps1` and `scripts/build/package-win.ps1` resolve relative `BuildDir`, `DistDir`, `QtRoot`, and Qt output paths from the repo root instead of the caller's current working directory; this prevents `windeployqt` output from spilling into the desktop when launched from outside the repo
+  - `scripts/build/build-win.ps1` now installs `qtmultimedia`, `qtdeclarative`, and `qtsvg` so the Qt Quick runtime can be reproduced from a clean machine
+  - both the CMake post-build deploy step and `scripts/build/package-win.ps1` now pass `--qmldir src/preview/runtime/qml` to `windeployqt` so the Qt Quick runtime imports are deployed
+  - both the CMake post-build deploy step and `scripts/build/package-win.ps1` explicitly keep the Qt Quick runtime DLL set (`Qt6Quick`, `Qt6Qml`, `Qt6QmlMeta`, `Qt6QmlModels`, `Qt6QmlWorkerScript`) and remove stale `Qt6OpenGLWidgets.dll`
   - the CMake post-build deploy step now also copies the repo-local BASS runtime DLL set (`bass`, `bassmix`, `bass_fx`, `bass_aac`, `bassopus`) into the executable directory
 - Windows release packages now also include:
     - root-level `Start_MiaCode_Debug.bat`
     - root-level `logs/` helper folder only for explicit debug-launch scripts; normal project-bound runtime logs default to `.miacode/logs/`
     - root-level `LICENSE`, `LICENSE_SCOPE.md`, `THIRD_PARTY_NOTICES.md`, `README.md`, `README_EN.md`, and `licenses/`
-  - optional Windows dev-tool packaging currently includes only `simai_native_dump.exe`; `soundtouch_probe.exe` is no longer copied by `scripts/package-win.ps1`
+  - optional Windows dev-tool packaging currently includes only `simai_native_dump.exe`; `soundtouch_probe.exe` is no longer copied by `scripts/build/package-win.ps1`
 - macOS build/package:
-  - `scripts/build-macos.sh`
-  - `scripts/package-mac.sh`
-  - `scripts/build-macos.sh` now installs `qtmultimedia`, `qtdeclarative`, and `qtsvg`
+  - `scripts/build/build-macos.sh`
+  - `scripts/build/package-mac.sh`
+  - `scripts/build/build-macos.sh` now installs `qtmultimedia`, `qtdeclarative`, and `qtsvg`
 - ffmpeg provisioning:
-  - `scripts/ensure-windows-ffmpeg.ps1`
-  - `scripts/ensure-macos-ffmpeg.sh`
+  - `scripts/ffmpeg/ensure-windows-ffmpeg.ps1`
+  - `scripts/ffmpeg/ensure-macos-ffmpeg.sh`
 - Script docs:
   - `scripts/README.md`
   - `scripts/README_EN.md`
@@ -169,9 +169,9 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 
 Current repo-local helper scripts include:
 
-- `scripts/Start_MiaCode_Debug.bat`
-- `scripts/Start_MiaCode_SoftwareVideoDecode.bat`
-- `scripts/Start_MiaCode_QtPluginDiag.bat`
+- `scripts/debug/Start_MiaCode_Debug.bat`
+- `scripts/debug/Start_MiaCode_SoftwareVideoDecode.bat`
+- `scripts/debug/Start_MiaCode_QtPluginDiag.bat`
 
 Other one-off analysis and A/B scripts are local maintainer tools and stay ignored unless they become part of a repeatable public workflow.
 
@@ -198,8 +198,8 @@ When these helpers change scope, update both this file and any packaging assumpt
 If ffmpeg is upgraded, review together:
 
 - `third_party/ffmpeg/README.md`
-- `scripts/ensure-windows-ffmpeg.ps1`
-- `scripts/ensure-macos-ffmpeg.sh`
+- `scripts/ffmpeg/ensure-windows-ffmpeg.ps1`
+- `scripts/ffmpeg/ensure-macos-ffmpeg.sh`
 - packaging scripts
 - any export documentation that mentions version assumptions
 

@@ -45,7 +45,7 @@ MiaCode 自有源代码使用 MIT License；仓库整体、随仓库分发的资
 推荐使用一键脚本自动安装 Qt、准备依赖、构建并打包：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build-win.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1
 ```
 
 如果本机已经安装 Qt，也可以使用 CMake preset：
@@ -59,7 +59,7 @@ cmake --build --preset release
 已有构建产物时，可以单独打包：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot <QtRoot>
+powershell -ExecutionPolicy Bypass -File .\scripts\build\package-win.ps1 -QtRoot <QtRoot>
 ```
 
 ## 仓库结构

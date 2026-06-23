@@ -60,7 +60,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $scriptDir = $PSScriptRoot
-$repoRoot = Split-Path -Parent (Split-Path -Parent $scriptDir)
+$repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $scriptDir))
 
 if ([string]::IsNullOrWhiteSpace($AllowlistPath)) { $AllowlistPath = Join-Path $scriptDir 'trim-allowlist.psd1' }
 if ([string]::IsNullOrWhiteSpace($OutputDir))     { $OutputDir = Join-Path $repoRoot 'third_party\ffmpeg\windows\dev' }

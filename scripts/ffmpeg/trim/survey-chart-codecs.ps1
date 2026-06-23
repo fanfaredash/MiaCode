@@ -52,7 +52,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $scriptDir = $PSScriptRoot
-$repoRoot = Split-Path -Parent (Split-Path -Parent $scriptDir)
+$repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $scriptDir))
 
 if ($null -eq $ChartRoots -or $ChartRoots.Count -eq 0) { $ChartRoots = @($scriptDir) }
 if ([string]::IsNullOrWhiteSpace($ReportPath)) {

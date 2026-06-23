@@ -4,7 +4,7 @@ Produces a **minimal, decode-only FFmpeg** (n7.1, LGPL, shared) for MiaCode's
 QtAVPlayer preview backend, replacing the full ~110 MB BtbN DLL set with a
 trimmed build (~15–20 MB target) without breaking playback.
 
-This is the build-it-yourself counterpart to `scripts/ensure-windows-ffmpeg-dev.ps1`
+This is the build-it-yourself counterpart to `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1`
 (which just downloads the full upstream SDK). It installs into the same place —
 `third_party/ffmpeg/windows/dev/` — so the rest of the build (CMake + packaging)
 consumes it unchanged.
@@ -81,23 +81,23 @@ needs and that video silently fails. Five guards, layered:
 
 ```powershell
 # 1. (Recommended) calibrate the allowlist against real charts:
-scripts\ffmpeg-trim\survey-chart-codecs.ps1 -ChartRoots '<chart-root-1>','<chart-root-2>'
+scripts\ffmpeg\trim\survey-chart-codecs.ps1 -ChartRoots '<chart-root-1>','<chart-root-2>'
 #    → add any reported gaps to trim-allowlist.psd1 (Decoders / Demuxers).
 
 # 2. Review the build plan without building:
-scripts\ffmpeg-trim\build-trimmed-ffmpeg.ps1 -PrintPlanOnly
+scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1 -PrintPlanOnly
 
 # 3. Build + install into third_party/ffmpeg/windows/dev (~30–60 min):
-scripts\ffmpeg-trim\build-trimmed-ffmpeg.ps1
+scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1
 
 # 4. Rebuild MiaCode against the trimmed SDK + re-verify:
 cmake --preset vs2022-qt6
 cmake --build build --config Release --target MiaCode
-#    then launch + play a few real PVs (or re-run scripts\package-win.ps1 + smoke test).
+#    then launch + play a few real PVs (or re-run scripts\build\package-win.ps1 + smoke test).
 ```
 
 To revert to the full SDK: delete `third_party/ffmpeg/windows/dev`, restore
-`dev.full.bak`, or re-run `scripts\ensure-windows-ffmpeg-dev.ps1`.
+`dev.full.bak`, or re-run `scripts\ffmpeg\ensure-windows-ffmpeg-dev.ps1`.
 
 ## Notes / limits
 
@@ -118,7 +118,7 @@ To revert to the full SDK: delete `third_party/ffmpeg/windows/dev`, restore
 - **`dev.full.bak` preserves the ORIGINAL full SDK** across rebuilds: the first build
   backs it up there; later rebuilds discard the previous *trimmed* `dev/` without
   clobbering that baseline. (If it was already overwritten, re-fetch the full SDK via
-  `scripts\ensure-windows-ffmpeg-dev.ps1` for an A/B baseline.)
+  `scripts\ffmpeg\ensure-windows-ffmpeg-dev.ps1` for an A/B baseline.)
 - The trim scripts are saved **UTF-8 with BOM** so Windows PowerShell 5.1 (ANSI/GBK
   default codepage) renders their non-ASCII text correctly instead of mojibake.
 - Keep `trim-allowlist.psd1` under review in PRs: it's the contract for "which

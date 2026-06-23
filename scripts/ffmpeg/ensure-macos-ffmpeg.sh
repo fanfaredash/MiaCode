@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FFMPEG_DIR="${MIACODE_MACOS_FFMPEG_DIR:-$ROOT_DIR/third_party/ffmpeg/macos}"
 FFMPEG_PATH="$FFMPEG_DIR/ffmpeg"
 FFMPEG_URL="${MIACODE_MACOS_FFMPEG_URL:-https://evermeet.cx/ffmpeg/ffmpeg-7.1.zip}"

@@ -24,7 +24,7 @@
 ## 用法
 
 ```sh
-python scripts/subset_hud_font.py \
+python scripts/assets/subset_hud_font.py \
     --input  C:/path/to/SomeBigCJK-Regular.ttf \
     --output assets/fonts/XiaolaiMono-Regular.subset.ttf
 ```

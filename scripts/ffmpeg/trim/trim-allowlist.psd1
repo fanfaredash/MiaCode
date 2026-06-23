@@ -6,7 +6,7 @@
     # Consumed by build-trimmed-ffmpeg.ps1 (turns these into FFmpeg
     # `./configure --enable-*` flags) and extended by survey-chart-codecs.ps1
     # (which ADDS observed codecs/containers from real chart PVs — it never
-    # removes). See scripts/ffmpeg-trim/README.md for the methodology.
+    # removes). See scripts/ffmpeg/trim/README.md for the methodology.
     #
     # Editing rule: this list is conservative-superset by design. Adding a
     # decoder/demuxer costs tens-to-hundreds of KB; OMITTING one a user's PV
@@ -15,7 +15,7 @@
 
     # FFmpeg source tag to build. MUST stay on the n7.1 series so the produced
     # DLL/import-lib basenames keep the major versions the rest of the build
-    # is pinned to (CMakeLists.txt + scripts/package-win.ps1).
+    # is pinned to (CMakeLists.txt + scripts/build/package-win.ps1).
     FFmpegVersion = 'n7.1'
 
     # ABI-pinned outputs this build must produce (major-version-locked).

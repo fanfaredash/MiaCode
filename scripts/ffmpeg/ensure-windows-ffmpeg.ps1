@@ -87,7 +87,7 @@ function Expand-DownloadedArchive {
 }
 
 if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
-    $RepoRoot = Split-Path -Parent $PSScriptRoot
+    $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 }
 
 $ffmpegDir = Join-Path $RepoRoot "third_party\ffmpeg\windows"

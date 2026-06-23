@@ -70,18 +70,18 @@ Rules going forward:
 
 ## 4. Build & packaging scripts (`scripts/`, whitelisted in `.gitignore`)
 
-- Windows build/package: `build-win.ps1`, `package-win.ps1` (defaults to `build/`, prechecks
+- Windows build/package: `scripts/build/build-win.ps1`, `scripts/build/package-win.ps1` (defaults to `build/`, prechecks
   version freshness against `CMakeLists.txt` + generated `AppVersion.h`, auto-rebuilds MiaCode,
   runs windeployqt with `--qmldir src`, keeps the Qt Quick DLL set, copies repo-local BASS DLLs).
-- macOS build/package: `build-macos.sh`, `package-mac.sh`.
-- ffmpeg provisioning: `ensure-windows-ffmpeg.ps1`, `ensure-macos-ffmpeg.sh` (the standalone
+- macOS build/package: `scripts/build/build-macos.sh`, `scripts/build/package-mac.sh`.
+- ffmpeg provisioning: `scripts/ffmpeg/ensure-windows-ffmpeg.ps1`, `scripts/ffmpeg/ensure-macos-ffmpeg.sh` (the standalone
   `ffmpeg.exe` used by **export**).
-- ffmpeg **dev SDK** provisioning (Windows): `ensure-windows-ffmpeg-dev.ps1` downloads the BtbN
+- ffmpeg **dev SDK** provisioning (Windows): `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1` downloads the BtbN
   n7.1 LGPL *shared* build (headers + import libs + runtime DLLs) into
   `third_party/ffmpeg/windows/dev/` for the **QtAVPlayer preview decode backend**. Gitignored,
   never committed. CMake finds it via the `MIACODE_FFMPEG_DEV_DIR` cache var.
-- Public debug launchers: `Start_MiaCode_Debug.bat`, `Start_MiaCode_SoftwareVideoDecode.bat`,
-  and `Start_MiaCode_QtPluginDiag.bat`. One-off A/B launchers stay as ignored maintainer-local
+- Public debug launchers: `scripts/debug/Start_MiaCode_Debug.bat`, `scripts/debug/Start_MiaCode_SoftwareVideoDecode.bat`,
+  and `scripts/debug/Start_MiaCode_QtPluginDiag.bat`. One-off A/B launchers stay as ignored maintainer-local
   tools unless they become part of a repeatable public support workflow.
 
 ## 5. Helper binaries (behind `MIACODE_BUILD_DEV_TOOLS`)
@@ -102,7 +102,7 @@ Rules going forward:
   `resources/slide_data.qrc` as `:/data/slide_data.json` — touch the qrc after editing the
   json, AUTORCC misses the dep). Same-lane v slides (`1v1`..`8v8`, out to center and
   back) are an editor extension spliced from the MajdataPlay-dump donor entries by
-  `scripts/gen_same_lane_v_slides.py` (idempotent); opposite-lane `Xv(X+4)` stays
+  `scripts/assets/gen_same_lane_v_slides.py` (idempotent); opposite-lane `Xv(X+4)` stays
   unsupported on purpose — it is identical to the straight slide `X-(X+4)`. Return-leg
   track arrows mirror the inbound arrows IN PLACE (same positions, flipped rotation)
   instead of continuing the equidistant generation — staggered opposite arrows on the
@@ -127,7 +127,7 @@ Rules going forward:
   **Packaging:** `package-win.ps1` stages 6 `av*.dll` into `app/` next to `MiaCode.exe`
   (`avcodec-61`/`avformat-61`/`avutil-59`/`swresample-5`/`swscale-8` overlap windeployqt's set;
   `avfilter-10` is net-new) and asserts them in `$requiredPackagePaths`. avcodec (≈63 MB) +
-  avfilter (≈24 MB) ship as un-trimmed full-LGPL builds by default; the **`scripts/ffmpeg-trim/`**
+  avfilter (≈24 MB) ship as un-trimmed full-LGPL builds by default; the **`scripts/ffmpeg/trim/`**
   toolchain builds a decode-only LGPL n7.1 replacement (~70 MB → ~15–20 MB) from a reviewed
   allowlist (`trim-allowlist.psd1`) + `survey-chart-codecs.ps1` calibration, installs into
   `third_party/ffmpeg/windows/dev/` (backs up to `dev.full.bak`). Decode-only ⇒ stays LGPL (no

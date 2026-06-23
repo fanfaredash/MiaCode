@@ -65,7 +65,7 @@ function Invoke-Python {
     }
 }
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if ([string]::IsNullOrWhiteSpace($QtOutputDir)) {
     $QtOutputDir = Join-Path $repoRoot ".qt"
 } else {
@@ -73,7 +73,7 @@ if ([string]::IsNullOrWhiteSpace($QtOutputDir)) {
 }
 $BuildDir = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $BuildDir
 
-& (Join-Path $repoRoot "scripts\ensure-windows-ffmpeg.ps1") -RepoRoot $repoRoot
+& (Join-Path $repoRoot "scripts\ffmpeg\ensure-windows-ffmpeg.ps1") -RepoRoot $repoRoot
 if ($LASTEXITCODE -ne 0) {
     throw "Windows ffmpeg preparation failed."
 }
@@ -117,7 +117,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "CMake build failed."
 }
 
-& (Join-Path $repoRoot "scripts\package-win.ps1") -BuildDir $BuildDir -Config $Config -QtRoot $qtRoot -IncludeDevTools:($buildDevTools -eq "ON")
+& (Join-Path $repoRoot "scripts\build\package-win.ps1") -BuildDir $BuildDir -Config $Config -QtRoot $qtRoot -IncludeDevTools:($buildDevTools -eq "ON")
 if ($LASTEXITCODE -ne 0) {
     throw "Windows packaging failed."
 }

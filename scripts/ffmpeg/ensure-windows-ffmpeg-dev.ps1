@@ -16,7 +16,7 @@
 # no --enable-gpl/--enable-nonfree) matches the existing redistribution terms.
 # Major versions MUST stay avcodec-61 / avformat-61 / avutil-59 / swresample-5 /
 # swscale-8 / avfilter-10 to match the packaged runtime + the hard-coded DLL
-# names in CMakeLists.txt and scripts/package-win.ps1. (avdevice is dropped —
+# names in CMakeLists.txt and scripts/build/package-win.ps1. (avdevice is dropped —
 # capture-device only, see third_party/ffmpeg/README.md → Size trimming.)
 
 param(
@@ -37,7 +37,7 @@ try {
 }
 
 if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
-    $RepoRoot = Split-Path -Parent $PSScriptRoot
+    $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 }
 
 $devDir = Join-Path $RepoRoot "third_party\ffmpeg\windows\dev"

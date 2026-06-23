@@ -15,7 +15,7 @@ font_candidates/_subset/do_subset.py:
   * Japanese kanji: JIS X 0208 (anything encodable as shift_jis in the CJK range)
 
 Usage:
-    python scripts/subset_hud_font.py \
+    python scripts/assets/subset_hud_font.py \
         --input  <path-to-XiaolaiMono-Regular.ttf> \
         --output assets/fonts/XiaolaiMono-Regular.subset.ttf
 """
@@ -30,7 +30,7 @@ from fontTools.subset import Options, Subsetter
 from fontTools.ttLib import TTFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT = os.path.dirname(HERE)
+REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
 
 
 def _tongyong_txt() -> str:

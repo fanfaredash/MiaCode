@@ -691,7 +691,7 @@ target_link_libraries(MiaCode PRIVATE Qt6::Svg)
 # MIT-licensed source vendored under third_party/QtAVPlayer, compiled straight
 # into MiaCode. It links the external FFmpeg shared libraries (n7.1 LGPL) whose
 # dev SDK (headers + import libs + runtime DLLs) is provisioned under
-# third_party/ffmpeg/windows/dev by scripts/ensure-windows-ffmpeg-dev.ps1.
+# third_party/ffmpeg/windows/dev by scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1.
 #
 # Windows-only for now (D3D11VA hwdevice + provisioned FFmpeg dev SDK). Other
 # platforms keep the QMediaPlayer path — MIACODE_USE_QTAVPLAYER stays undefined
@@ -703,7 +703,7 @@ if (WIN32)
     if (NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/include" OR NOT EXISTS "${MIACODE_FFMPEG_DEV_DIR}/lib")
         message(FATAL_ERROR
             "FFmpeg dev SDK not found at '${MIACODE_FFMPEG_DEV_DIR}'. "
-            "Run scripts/ensure-windows-ffmpeg-dev.ps1, or pass "
+            "Run scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1, or pass "
             "-DMIACODE_FFMPEG_DEV_DIR=<root containing include/ lib/ bin/>.")
     endif()
 

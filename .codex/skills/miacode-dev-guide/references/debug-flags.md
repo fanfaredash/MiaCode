@@ -279,8 +279,8 @@ Current normalization rules:
   - `simai_native_dump`
   - `soundtouch_probe`
 - Common debug scripts:
-  - `scripts/Start_MiaCode_Debug.bat`
-  - `scripts/Start_MiaCode_SoftwareVideoDecode.bat`
-  - `scripts/Start_MiaCode_QtPluginDiag.bat`
+  - `scripts/debug/Start_MiaCode_Debug.bat`
+  - `scripts/debug/Start_MiaCode_SoftwareVideoDecode.bat`
+  - `scripts/debug/Start_MiaCode_QtPluginDiag.bat`
 
 Update this file when a debug switch, log path, log channel, release debug workflow, or export diagnostic family changes.

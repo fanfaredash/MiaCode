@@ -230,9 +230,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - File: `CMakeLists.txt`
   - Owns: app target plus dev helper binaries such as `miacode_muri_dump`, `simai_native_dump`, `soundtouch_probe`, `simai_parser_spec`, `chart_batch_transform_spec`
 - Packaging scripts:
-  - Files: `scripts/build-win.ps1`, `scripts/package-win.ps1`, `scripts/build-macos.sh`, `scripts/package-mac.sh`
+  - Files: `scripts/build/build-win.ps1`, `scripts/build/package-win.ps1`, `scripts/build/build-macos.sh`, `scripts/build/package-mac.sh`
 - ffmpeg provisioning:
-  - Files: `scripts/ensure-windows-ffmpeg.ps1`, `scripts/ensure-macos-ffmpeg.sh`, `third_party/ffmpeg/README.md`
+  - Files: `scripts/ffmpeg/ensure-windows-ffmpeg.ps1`, `scripts/ffmpeg/ensure-macos-ffmpeg.sh`, `third_party/ffmpeg/README.md`
 - Analysis scripts:
   - Files under `scripts/`
   - Owns: export diagnostics, duplicate frame checks, trajectory comparisons, crop analysis

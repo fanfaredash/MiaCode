@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-build}"
 QT_ROOT="${QT_ROOT:-}"
 DEPLOYMENT_TARGET="${CMAKE_OSX_DEPLOYMENT_TARGET:-}"
@@ -222,7 +222,7 @@ if [[ -f "$ffmpeg_src" && -s "$ffmpeg_src" ]]; then
   fi
 else
   echo "Missing required ffmpeg binary: $ffmpeg_src" >&2
-  echo "Run bash scripts/ensure-macos-ffmpeg.sh to download the pinned macOS ffmpeg binary." >&2
+  echo "Run bash scripts/ffmpeg/ensure-macos-ffmpeg.sh to download the pinned macOS ffmpeg binary." >&2
   exit 1
 fi
 
