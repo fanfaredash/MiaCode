@@ -167,6 +167,7 @@ function Ensure-PackageBuildReady {
     $cachePath = Join-Path $BuildDir "CMakeCache.txt"
     $generatedHeaderPath = Join-Path $BuildDir "generated\\AppVersion.h"
     $exePath = Join-Path $BuildDir "$Config\\MiaCode.exe"
+    $launcherExePath = Join-Path $BuildDir "$Config\\MiaCodeLauncher.exe"
 
     if (!(Test-Path $cachePath)) {
         throw "Build directory is not configured: $BuildDir. Configure/build it first."
@@ -176,6 +177,9 @@ function Ensure-PackageBuildReady {
     $versionMetadataChanged = $false
     if (!(Test-Path $exePath)) {
         $needsBuildReasons.Add("MiaCode executable is missing")
+    }
+    if (!(Test-Path $launcherExePath)) {
+        $needsBuildReasons.Add("MiaCodeLauncher executable is missing")
     }
 
     $generatedVersionInfo = Read-VersionInfoFromGeneratedHeader -HeaderPath $generatedHeaderPath
@@ -213,6 +217,9 @@ function Ensure-PackageBuildReady {
 
     if (!(Test-Path $exePath)) {
         throw "Executable not found after precheck build: $exePath"
+    }
+    if (!(Test-Path $launcherExePath)) {
+        throw "Launcher executable not found after precheck build: $launcherExePath"
     }
 
     $generatedVersionInfo = Read-VersionInfoFromGeneratedHeader -HeaderPath $generatedHeaderPath

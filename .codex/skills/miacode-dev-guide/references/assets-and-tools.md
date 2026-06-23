@@ -144,7 +144,7 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 - Windows build/package:
   - `scripts/build/build-win.ps1`
   - `scripts/build/package-win.ps1`
-  - `scripts/build/package-win.ps1` defaults to `build/`, prechecks version freshness against `CMakeLists.txt` and `build/generated/AppVersion.h`, treats version/header drift as a normal refresh instead of a warning, and auto-runs `cmake --build <BuildDir> --target MiaCode --config <Config> --parallel 8` when the packaged executable or generated version metadata needs refreshing
+  - `scripts/build/package-win.ps1` defaults to `build/`, prechecks version freshness against `CMakeLists.txt` and `build/generated/AppVersion.h`, treats version/header drift as a normal refresh instead of a warning, and auto-runs `cmake --build <BuildDir> --target MiaCode` / `MiaCodeLauncher --config <Config> --parallel 8` when the packaged executables or generated version metadata need refreshing
   - `scripts/build/build-win.ps1` and `scripts/build/package-win.ps1` resolve relative `BuildDir`, `DistDir`, `QtRoot`, and Qt output paths from the repo root instead of the caller's current working directory; this prevents `windeployqt` output from spilling into the desktop when launched from outside the repo
   - `scripts/build/build-win.ps1` installs the add-on Qt modules `qtmultimedia` and `qtshadertools`; `qtdeclarative`/Qt Quick and `qtsvg` are provided by the base Qt desktop package for Qt 6.8.3
   - `scripts/build/build-win.ps1` provisions both FFmpeg inputs needed by a clean Windows clone: standalone export `third_party/ffmpeg/windows/ffmpeg.exe` and the QtAVPlayer preview-decode dev SDK under `third_party/ffmpeg/windows/dev/`

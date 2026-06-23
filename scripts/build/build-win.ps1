@@ -114,7 +114,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "CMake configure failed."
 }
 
-$buildTargets = @("MiaCode")
+$buildTargets = @("MiaCode", "MiaCodeLauncher")
 if ($buildDevTools -eq "ON") {
     $buildTargets += @("simai_native_dump", "soundtouch_probe")
 }
