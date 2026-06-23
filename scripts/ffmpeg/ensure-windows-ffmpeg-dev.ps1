@@ -88,30 +88,28 @@ try {
     New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
 
     Write-Host "Downloading FFmpeg dev SDK from $ffmpegUrl"
-    $downloadError = $null
-    for ($attempt = 1; $attempt -le 5; $attempt++) {
-        try {
-            Invoke-WebRequest -Uri $ffmpegUrl -OutFile $archivePath
-            $downloadError = $null
-            break
-        } catch {
-            $downloadError = $_.Exception
-            if ($attempt -ge 5) {
-                break
-            }
-            Start-Sleep -Seconds 2
-        }
-    }
-    if ($null -ne $downloadError) {
-        $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
-        if ($null -eq $curl) {
-            throw "Failed to download FFmpeg dev SDK after 5 attempts: $($downloadError.Message)"
-        }
-
-        Write-Warning "Invoke-WebRequest failed: $($downloadError.Message). Retrying with curl.exe..."
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($null -ne $curl) {
         & $curl.Source -L --fail --retry 5 --retry-delay 2 -o $archivePath $ffmpegUrl
         if ($LASTEXITCODE -ne 0) {
             throw "curl.exe failed to download FFmpeg dev SDK with exit code $LASTEXITCODE."
+        }
+    } else {
+        $downloadError = $null
+        for ($attempt = 1; $attempt -le 5; $attempt++) {
+            try {
+                Invoke-WebRequest -Uri $ffmpegUrl -OutFile $archivePath
+                $downloadError = $null
+                break
+            } catch {
+                $downloadError = $_.Exception
+                if ($attempt -lt 5) {
+                    Start-Sleep -Seconds 2
+                }
+            }
+        }
+        if ($null -ne $downloadError) {
+            throw "Failed to download FFmpeg dev SDK after 5 attempts: $($downloadError.Message)"
         }
     }
 
