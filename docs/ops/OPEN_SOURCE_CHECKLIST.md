@@ -44,7 +44,7 @@ Use this checklist before making the repository public. It intentionally separat
 - [ ] Rotate any credential that ever appeared in Git history.
 - [x] Generate a largest-object report for Git history.
 - [x] Remove historical build outputs and binary blobs with `git-filter-repo` if public history must be clean.
-- [ ] Re-clone the filtered repository and verify build/package scripts from the cleaned history.
+- [x] Re-clone the filtered repository and verify build/package scripts from the cleaned history.
 - [ ] Force-push the filtered `main` and `test` histories after owner approval.
 
 Current history scan result:
@@ -65,7 +65,7 @@ Current history scan result:
 
 ## Release Readiness
 
-- [ ] Build from a clean clone.
+- [x] Build from a clean clone.
 - [x] Package Windows release artifacts.
 - [x] Generate SHA256 checksums.
 - [x] Write release notes with known issues and license notes.
@@ -75,8 +75,16 @@ Current history scan result:
 Current Windows smoke package:
 
 - `dist/MiaCode-v0.5.2-beta3-win64.zip`
-- SHA256: `B86CD85E65E95CAB155734A90EAA4ED20BD26D822410D38A108853F02CF0030A`
+- SHA256: `50E6564E96866AF2B0D8C29EACCED1E9FC2684E8AC21F48104FD0EAD33B4BC57`
 - Release notes draft: [RELEASE_NOTES_DRAFT_0.5.2-beta3.md](RELEASE_NOTES_DRAFT_0.5.2-beta3.md)
+
+Clean-clone verification:
+
+- Checked on 2026-06-24 from `D:/Desktop/maimuri/MiaCode-clean-build-check`.
+- `scripts/build/build-win.ps1` completed successfully from a fresh local clone of `test`.
+- The build script provisioned Qt 6.8.3, Windows export FFmpeg, and the Windows QtAVPlayer FFmpeg dev SDK from the documented sources.
+- Verified package layout includes the wrapper `MiaCode.exe`, real app `app/MiaCode.exe`, FFmpeg at `app/ffmpeg/ffmpeg.exe`, BASS runtime DLLs, Qt/QML runtime files, `assets/`, `licenses/`, `LICENSE`, `LICENSE_SCOPE.md`, `THIRD_PARTY_NOTICES.md`, `README.md`, and `README_EN.md`.
+- Smoke-ran the packaged wrapper with `--export-video`; it reached the app CLI and exited with the expected missing `--chart` argument error.
 
 ## Third-Party Download Verification
 

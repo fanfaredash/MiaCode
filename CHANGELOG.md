@@ -19,7 +19,7 @@
 - 更新 Windows 构建文档和脚本，覆盖固定版本 FFmpeg 准备与 QtAVPlayer FFmpeg dev SDK 设置。
 - 修复固定 Windows FFmpeg 下载链接。
 - 发布打包继续以本地 Windows 预发布产物为中心。
-- 验证 `MiaCode-v0.5.2-beta3-win64.zip`，SHA256 为 `B86CD85E65E95CAB155734A90EAA4ED20BD26D822410D38A108853F02CF0030A`。
+- 从干净 clone 验证 `MiaCode-v0.5.2-beta3-win64.zip` 构建与打包，SHA256 为 `50E6564E96866AF2B0D8C29EACCED1E9FC2684E8AC21F48104FD0EAD33B4BC57`。
 
 ### 修复
 

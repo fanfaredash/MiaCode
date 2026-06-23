@@ -11,14 +11,17 @@ MiaCode is a Qt 6 / CMake editor, previewer, and export tool for simai chart aut
 Windows:
 
 - `MiaCode-v0.5.2-beta3-win64.zip`
-- SHA256: `B86CD85E65E95CAB155734A90EAA4ED20BD26D822410D38A108853F02CF0030A`
+- SHA256: `50E6564E96866AF2B0D8C29EACCED1E9FC2684E8AC21F48104FD0EAD33B4BC57`
 
 ## Build And Packaging Verification
 
-Verified on 2026-06-23:
+Verified on 2026-06-24 from a clean clone:
 
-- `scripts/build/package-win.ps1 -QtRoot <QtRoot> -BuildJobs 8`
-- Package content audit passed for required app, Qt/QML, FFmpeg, BASS, assets, license, and readme files.
+- `scripts/build/build-win.ps1`
+- The build script provisioned Qt 6.8.3, Windows export FFmpeg, and the Windows QtAVPlayer FFmpeg dev SDK from the documented sources.
+- Package content audit passed for required app, wrapper, Qt/QML, FFmpeg, BASS, assets, license, third-party notice, and readme files.
+- Packaged FFmpeg is located at `app/ffmpeg/ffmpeg.exe`; the package root `MiaCode.exe` is the launcher wrapper and the real app is `app/MiaCode.exe`.
+- Smoke-ran the packaged wrapper with `--export-video`; it reached the app CLI and exited with the expected missing `--chart` argument error.
 - Deprecated debug launchers and public docs are not included in the Windows package.
 
 ## License And Distribution Notes
@@ -50,5 +53,5 @@ Get-FileHash .\MiaCode-v0.5.2-beta3-win64.zip -Algorithm SHA256
 Expected SHA256:
 
 ```text
-B86CD85E65E95CAB155734A90EAA4ED20BD26D822410D38A108853F02CF0030A
+50E6564E96866AF2B0D8C29EACCED1E9FC2684E8AC21F48104FD0EAD33B4BC57
 ```
