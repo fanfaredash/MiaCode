@@ -18,6 +18,11 @@ Use this checklist before making the repository public. It intentionally separat
 - [x] Add [DOCS_PUBLICATION_AUDIT.md](../audit/DOCS_PUBLICATION_AUDIT.md) for tracked-docs publication review.
 - [x] Review package contents against THIRD_PARTY_NOTICES.md after removing Remotion prototype files.
 - [x] Ensure BASS runtime DLLs are explicitly tracked for the intended non-commercial Windows build.
+- [x] Audit third-party build inputs from a clean-clone perspective: required vendored headers/libs/assets are tracked, and intentionally untracked FFmpeg binaries/SDKs have provisioning scripts and documented URLs.
+- [x] Verify pinned FFmpeg download URLs are reachable: Windows export package, Windows QtAVPlayer dev SDK, macOS package, and FFmpeg `n7.1` source mirrors.
+- [x] Fix Windows export FFmpeg URL after the old Gyan.dev package path returned 404.
+- [x] Update Windows/macOS build scripts to install the Qt ShaderTools module required by CMake.
+- [x] Update Windows build script to provision both standalone export FFmpeg and the QtAVPlayer FFmpeg dev SDK.
 
 ## Owner Confirmation Required
 
@@ -54,7 +59,7 @@ Current history scan result:
 
 - [ ] Make `main` the public default branch.
 - [x] Keep `main` and `test` as the public branches.
-- [ ] Delete local experiment branches.
+- [x] Delete local experiment branches.
 - [ ] Delete remote experiment branches.
 - [x] Old tags may remain public.
 
@@ -72,3 +77,20 @@ Current Windows smoke package:
 - `dist/MiaCode-v0.5.2-beta3-win64.zip`
 - SHA256: `B86CD85E65E95CAB155734A90EAA4ED20BD26D822410D38A108853F02CF0030A`
 - Release notes draft: [RELEASE_NOTES_DRAFT_0.5.2-beta3.md](RELEASE_NOTES_DRAFT_0.5.2-beta3.md)
+
+## Third-Party Download Verification
+
+- Windows export FFmpeg: `https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-essentials_build.7z`
+  - Checked: reachable via redirect to `200 OK`.
+  - Expected `ffmpeg.exe` SHA256: `B90225987BDD042CCA09A1EFB5E34E9848F2D1DBF5FBCD388753A44145522997`.
+- Windows QtAVPlayer FFmpeg dev SDK: `https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-lgpl-shared-7.1.zip`
+  - Checked: reachable via redirect to `200 OK`.
+  - Installed by: `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1`.
+- macOS export FFmpeg: `https://evermeet.cx/ffmpeg/ffmpeg-7.1.zip`
+  - Checked: reachable via redirect to `200 OK`.
+  - Expected SHA256: `430D60FBF419DAB28DAEE9B679E7929A31EE9BAE53F6E42E8AE26B725584290F`.
+- FFmpeg trim source mirrors for tag `n7.1`:
+  - `https://gitee.com/mirrors/ffmpeg.git`
+  - `https://github.com/FFmpeg/FFmpeg.git`
+  - `https://git.ffmpeg.org/ffmpeg.git`
+  - Checked: all returned `refs/tags/n7.1` at `507a51fbe9732f0f6f12f43ce12431e8faa834b7`.
