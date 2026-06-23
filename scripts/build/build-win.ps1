@@ -2,7 +2,7 @@ param(
     [string]$PythonExe = "",
     [string]$QtVersion = "6.8.3",
     [string]$QtArch = "win64_msvc2022_64",
-    [string[]]$QtModules = @("qtmultimedia", "qtdeclarative", "qtshadertools", "qtsvg"),
+    [string[]]$QtModules = @("qtmultimedia", "qtshadertools"),
     [string]$QtOutputDir = "",
     [string]$BuildDir = "build",
     [ValidateSet("Release", "Debug")]
