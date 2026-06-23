@@ -14,11 +14,13 @@ Use this checklist before making the repository public. It intentionally separat
 - [x] Record that `docs/` will be decided later.
 - [x] Record that OpenMoji/Remotion prototype assets are not distributed.
 - [x] Record that assets are distributed with the non-commercial repository/release.
+- [x] Add [LICENSE_SCOPE.md](../LICENSE_SCOPE.md) for scheme A: project-owned source code under MIT, bundled assets/releases under non-commercial distribution notes.
+- [x] Add [DOCS_PUBLICATION_AUDIT.md](DOCS_PUBLICATION_AUDIT.md) for tracked-docs publication review.
 - [ ] Review package contents against THIRD_PARTY_NOTICES.md after removing Remotion prototype files.
 
 ## Owner Confirmation Required
 
-- [ ] Decide whether [LICENSE](../LICENSE) should be replaced or amended to match the non-commercial positioning.
+- [x] Use scheme A: keep [LICENSE](../LICENSE) as MIT for project-owned source code and document repository/release non-commercial scope separately.
 - [x] Confirm BASS headers, import libs, and runtime DLLs stay in the non-commercial repository/release.
 - [x] Confirm `assets/skin` is distributed.
 - [x] Confirm `assets/SFX` is distributed.
@@ -41,7 +43,7 @@ Use this checklist before making the repository public. It intentionally separat
 ## Branches And Tags
 
 - [ ] Make `main` the public default branch.
-- [x] Keep only `main` as the public branch.
+- [x] Keep `main` and `test` as the public branches.
 - [ ] Delete local experiment branches.
 - [ ] Delete remote experiment branches.
 - [x] Old tags may remain public.

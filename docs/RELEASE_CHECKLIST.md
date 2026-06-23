@@ -40,6 +40,7 @@ shasum -a 256 dist/*.zip
 ## License And Notices
 
 - [ ] Review [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+- [ ] Review [LICENSE_SCOPE.md](../LICENSE_SCOPE.md).
 - [ ] Confirm package contents match the non-commercial distribution notes.
 - [ ] Confirm BASS files are present only in the intended non-commercial release package.
 - [ ] Confirm FFmpeg build flags and license notes match the packaged binaries.

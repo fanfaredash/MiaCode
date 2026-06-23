@@ -4,9 +4,9 @@ This file inventories libraries, tools, fonts, media assets, and reference proje
 
 ## Project License
 
-- MiaCode repository and release packages are intended for non-commercial use.
-- Current main-code license text: [LICENSE](LICENSE).
-- The main project license does not replace the licenses of bundled libraries, tools, fonts, SFX, image assets, or reference material.
+- Project-owned MiaCode source code is licensed under the MIT License; see [LICENSE](LICENSE).
+- The repository as a whole, bundled runtime assets, packaged binaries, and release packages are intended for non-commercial use; see [LICENSE_SCOPE.md](LICENSE_SCOPE.md).
+- The project license does not replace the licenses of bundled libraries, tools, fonts, SFX, image assets, packaged runtime dependencies, or reference material.
 
 ## Direct Dependencies And Bundled Code
 
@@ -52,5 +52,6 @@ These projects are acknowledged as behavioral or engineering references. They sh
 ## Before Public Release
 
 - Keep this file in sync with [README.md](README.md), [README_EN.md](README_EN.md), release notes, and package contents.
+- Keep [LICENSE_SCOPE.md](LICENSE_SCOPE.md) in sync with actual repository and release package contents.
 - Re-run a package-content audit before each release and remove entries that are development-only.
 - If a dependency is downloaded by script instead of committed, document the script, version, URL, checksum, and license.

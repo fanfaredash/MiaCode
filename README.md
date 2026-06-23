@@ -27,7 +27,7 @@ MiaCode 包含大量项目内实现，而不是只把外部工具拼在一起：
 - Muri 分析、谱面诊断和开发者辅助工具
 - Windows 构建、依赖准备和打包脚本
 
-本仓库和发布包定位为非商业使用。第三方库、资源和参考项目的说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+MiaCode 自有源代码使用 MIT License；仓库整体、随仓库分发的资源和发布包定位为非商业使用。许可证边界见 [LICENSE_SCOPE.md](LICENSE_SCOPE.md)，第三方库、资源和参考项目的说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 构建
 
@@ -78,7 +78,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot <QtRo
 
 ## 许可证与鸣谢
 
-MiaCode 仓库和发布包定位为非商业使用；当前主代码许可证见 [LICENSE](LICENSE)。第三方库、字体、音效、图片、FFmpeg、BASS、Qt 以及参考实现可能有各自的许可证或分发限制，请以 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 为准。
+MiaCode 自有源代码使用 MIT License，见 [LICENSE](LICENSE)。仓库整体、随仓库分发的资源、打包产物和发布包定位为非商业使用；具体边界见 [LICENSE_SCOPE.md](LICENSE_SCOPE.md)。第三方库、字体、音效、图片、FFmpeg、BASS、Qt 以及参考实现可能有各自的许可证或分发限制，请以 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 为准。
 
 感谢 [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) 等项目提供的 simai 解析、预览和工程实现参考。片头转场参考了 [gfdfdxc/maimai-transition](https://github.com/gfdfdxc/maimai-transition)。
 

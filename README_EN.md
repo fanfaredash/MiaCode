@@ -27,7 +27,7 @@ MiaCode contains substantial project-owned implementation rather than only wirin
 - Muri analysis, chart diagnostics, and developer helper tools
 - Windows build, dependency-provisioning, and packaging scripts
 
-This repository and its release packages are intended for non-commercial use. Third-party libraries, assets, and reference projects are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Project-owned MiaCode source code is MIT-licensed; the repository as a whole, bundled assets, and release packages are intended for non-commercial use. See [LICENSE_SCOPE.md](LICENSE_SCOPE.md) for the license boundary and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party libraries, assets, and reference projects.
 
 ## Build
 
@@ -78,7 +78,7 @@ Release packages are currently produced locally by maintainers using the scripts
 
 ## License And Acknowledgements
 
-The MiaCode repository and release packages are intended for non-commercial use; see [LICENSE](LICENSE) for the current main-code license. Third-party libraries, fonts, SFX, images, FFmpeg, BASS, Qt, and reference implementations may have their own licenses or redistribution limits; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Project-owned MiaCode source code is MIT-licensed; see [LICENSE](LICENSE). The repository as a whole, bundled assets, packaged binaries, and release packages are intended for non-commercial use; see [LICENSE_SCOPE.md](LICENSE_SCOPE.md). Third-party libraries, fonts, SFX, images, FFmpeg, BASS, Qt, and reference implementations may have their own licenses or redistribution limits; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Thanks to [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) and related projects for simai parsing, preview, and engineering references. The intro transition references [gfdfdxc/maimai-transition](https://github.com/gfdfdxc/maimai-transition).
 
