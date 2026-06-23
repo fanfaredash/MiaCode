@@ -2,38 +2,53 @@
 
 [中文](README.md) | [English](README_EN.md)
 
-`MiaCode` 是一个基于 Qt 6 + OpenGL 实现的 simai 编辑器与预览器。
+MiaCode 是一个面向 simai 谱面创作的桌面编辑器、预览器与导出工具。项目基于 Qt 6 / CMake 构建，核心工作流覆盖文本编辑、谱面校验、时间轴预览、实时播放、音视频同步辅助以及谱面视频导出。
 
-## 功能
+## 功能概览
 
-- 文本编辑器
-- 校验错误列表并支持跳转定位
-- 原生时间轴视图
-  - 波形背景
-  - 缩放等级
-  - 播放线与光标线
-  - tap、hold、slide、wifi、touch、touch-hold 预览
-- 原生 OpenGL 预览
-- 本地渲染设置，包含音频与视频
+- simai 文本编辑、语法高亮、查找替换与多难度字段管理
+- 谱面解析、语法校验、问题列表与跳转定位
+- 原生时间轴视图，包含波形、缩放、播放线、光标线与谱面对象预览
+- Qt Quick 实时预览与离屏导出管线
+- tap、hold、slide、wifi、touch、touch-hold、mine、break touch 等对象预览
+- BPM / offset / 播放延迟辅助检测
+- Muri 检测与谱面诊断工具
+- 谱面视频导出、片段导出、批量导出与 ZIP 打包辅助
+- 本地资源、皮肤、音效、背景图片/视频与片头模板支持
+
+## 自建内容
+
+MiaCode 包含大量项目内实现，而不是只把外部工具拼在一起：
+
+- simai 文档模型、解析、校验与批量变换逻辑
+- 时间轴数据源、绘制与编辑器联动
+- 预览场景状态、Qt Quick 渲染层与导出快照管线
+- 音频预览、SFX 时间线、延迟检测与导出音频计划
+- Muri 分析、谱面诊断和开发者辅助工具
+- Windows 构建、依赖准备和打包脚本
+
+本仓库和发布包定位为非商业使用。第三方库、资源和参考项目的说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 构建
 
-依赖：
+### 依赖
+
 - CMake 3.21+
-- Qt 6.8+，需要 `Core`、`Gui`、`Widgets`、`OpenGLWidgets`
-- `Qt6::Multimedia`
+- C++17 编译器
+- Qt 6.8+，需要 `Core`、`Gui`、`Widgets`、`OpenGL`、`Qml`、`Quick`、`Multimedia`、`Svg`
+- Windows：Visual Studio 2022 / MSVC，FFmpeg dev SDK 由脚本准备
 
-打包的详细说明在 [scripts/README.md](scripts/README.md)。
+更详细的打包说明见 [scripts/README.md](scripts/README.md)。
 
-### Windows 构建
+### Windows
 
-推荐直接使用脚本自动安装 Qt、构建并打包：
+推荐使用一键脚本自动安装 Qt、准备依赖、构建并打包：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build-win.ps1
 ```
 
-如果你已经手动安装好 Qt，也可以使用仓库内的 [CMakePresets.json](CMakePresets.json)：
+如果本机已经安装 Qt，也可以使用 CMake preset：
 
 ```powershell
 cmake --preset vs2022-qt6
@@ -41,83 +56,32 @@ cmake --build --preset release
 .\build\Release\MiaCode.exe
 ```
 
-### macOS 构建
+已有构建产物时，可以单独打包：
 
-推荐直接使用脚本自动安装 Qt、构建并打包：
-
-```bash
-bash scripts/build-macos.sh
-```
-
-如果你已经手动安装好 Qt，也可以显式传入 `QT_ROOT` 调用打包脚本：
-
-```bash
-QT_ROOT="$HOME/Qt/6.8.3/macos" bash scripts/package-mac.sh
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot <QtRoot>
 ```
 
 ## 仓库结构
 
-- [src](src)：源码
-- [assets](assets)：运行资源与生成数据
-- [resources](resources)：Qt 资源文件
-- [scripts](scripts)：打包脚本
-- [third_party](third_party)：第三方依赖
+- [src](src)：应用源码、核心模型、预览、音频、导出和工具实现
+- [assets](assets)：运行资源、皮肤、音效、背景素材与生成数据
+- [resources](resources)：Qt resource collection 与应用图标
+- [scripts](scripts)：构建、依赖准备、打包和维护脚本
+- [third_party](third_party)：随仓库 vendored 或引用的第三方依赖
+- [docs](docs)：架构、调试、导出、时间轴和开源准备文档
+- [samples](samples)：示例谱面和验收材料
 
----
+## 发布
 
-## 致谢
+当前 release 包由维护者在本地使用脚本生成；废弃的 GitHub Actions 已移除。发布前检查项见 [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)，开源前剩余确认项见 [docs/OPEN_SOURCE_CHECKLIST.md](docs/OPEN_SOURCE_CHECKLIST.md)。
 
-感谢 [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) 提供的 simai 语法解析与渲染逻辑参考。
+## 许可证与鸣谢
+
+MiaCode 仓库和发布包定位为非商业使用；当前主代码许可证见 [LICENSE](LICENSE)。第三方库、字体、音效、图片、FFmpeg、BASS、Qt 以及参考实现可能有各自的许可证或分发限制，请以 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 为准。
+
+感谢 [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) 等项目提供的 simai 解析、预览和工程实现参考。片头转场参考了 [gfdfdxc/maimai-transition](https://github.com/gfdfdxc/maimai-transition)。
 
 ## 更新日志
 
-### 3.0
-
-- 导出稳定性提升
-- note流速控制
-- UI新增深色主题
-- break touch 支持
-
-### 0.2.1
-
-- 修复导出链路中 ffmpeg 合成节拍异常，消除周期性重复帧卡顿。
-- 修复"timeline 跟随预览"在非播放状态下锁定编辑光标的问题。
-
-### 0.2.0
-
-- **Simai文本编辑器**
-  - 支持 Ctrl+F 文本查找与替换
-  - 能够调整字体与行距
-  - 增加 simai 代码高亮
-- **BPM与偏移检测**
-  - 完全自动的 BPM 与延迟检测
-  - 谱面创作者无需手动测量 BPM 和延迟
-- **谱面视频导出**
-  - 不仅能够导出完整谱面视频
-  - 还支持谱面小片段的导出
-  - 便于快速分享你的创作片段
-- **语法检测**
-  - 现在能够检测谱面语法错误
-  - 且能对潜在问题给出警告
-  - 避免创作谱面在非 Maj 系平台上无法正常解析
-- **功能补完**
-  - 补充了各种 note 的判定效果动画
-  - 补充了 firework 的渲染效果
-
-### 0.1.1
-
-- UI 美化
-- 增加 icon
-
-### 0.1.0
-
-- **Simai 编辑**
-  - 完整支持 simai 文本解析与编辑流程。
-  - 支持多难度字段管理，包含新增、删除与自动切换。
-  - 支持镜像与旋转批量操作。
-  - 支持多难度和谱面信息设置。
-- **渲染与预览**
-  - 预览区升级为播放器式控制，支持时间条与倍速播放。
-  - 支持文本区 Timeline 与谱面预览联动播放。
-- **其它**
-  - 完成中英文界面适配。
+历史更新记录已移至 [CHANGELOG.md](CHANGELOG.md)。

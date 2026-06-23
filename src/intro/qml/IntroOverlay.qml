@@ -5,7 +5,7 @@ import QtQuick.Effects
 // maimai wipe, composited OVER the chart export frame (mounted by the export
 // session in P3). For now it is self-contained (renders over its own backdrop).
 //
-// Difference vs the tools/intro_remotion LvCardIntro prototype:
+// Difference vs the earlier standalone LvCardIntro prototype:
 //   • the card is the LIVE MaimaiBannerCard (driven by `bannerTrack` from the
 //     chart) rendered transparent and composited here — no pre-rendered PNG.
 //   • P0 micro-tweak: cycle 1 starts already at the held "complete maimai

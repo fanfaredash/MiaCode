@@ -38,17 +38,16 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TST = os.path.join(ROOT, "src", "intro", "assets", "trackstart")
 ATLAS_SRC = os.path.join(ROOT, "src", "intro", "assets", "lv_atlas")
-ATLAS_PUB = os.path.join(ROOT, "tools", "intro_remotion", "public", "assets", "intro", "lv_atlas")
 # The baked difficulty-name text uses SEGA's FOT-NewRodin Pro UB — the same font
 # family the prefab cards use (matched against the rasterised "MASTER" glyphs:
 # UB weight, ~0.87 horizontal condense, cap height 28). It is a commercial font,
 # so it is NOT bundled — only the rasterised pixels ship. Point NEWRODIN at a
 # local copy (e.g. extracted under build/fonts_ref/) to regenerate. Falls back to
-# the bundled MPLUS1p-Black if absent (visibly off — see project note).
+# Resource Han Rounded if absent (visibly off — see project note).
 NEWRODIN = os.environ.get(
     "NEWRODIN_UB",
     os.path.join(ROOT, "build", "fonts_ref", "FOT-NewRodin Pro UB.otf"))
-FONT_FALLBACK = os.path.join(ROOT, "tools", "intro_remotion", "public", "assets", "fonts", "MPLUS1p-Black.ttf")
+FONT_FALLBACK = os.path.join(ROOT, "src", "intro", "assets", "fonts", "ResourceHanRoundedCN-Heavy.ttf")
 NAME_FONT = NEWRODIN if os.path.exists(NEWRODIN) else FONT_FALLBACK
 PREVIEW = os.path.join(ROOT, "build", "lvcard_preview")
 os.makedirs(PREVIEW, exist_ok=True)
@@ -315,7 +314,6 @@ def gen(key):
                       th, sc, tol=80.0, sat_scale=ss)
     out_atlas = f"UI_NUM_MLevel_{key}.png"
     atlas.save(os.path.join(ATLAS_SRC, out_atlas))
-    atlas.save(os.path.join(ATLAS_PUB, out_atlas))
 
     # preview composite: frame + tab + pill
     comp = Image.new("RGBA", (420, 732), (40, 40, 48, 255))

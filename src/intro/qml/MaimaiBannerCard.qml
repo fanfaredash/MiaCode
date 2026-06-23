@@ -7,7 +7,7 @@
 // Layout coords are expressed in the TST card's native 420×636 space, scaled
 // up to fill `card.heightRatio` of the 1080×1080 canvas.
 //
-// Integrated-export edge cases (vs the tools/intro_remotion prototype):
+// Integrated-export edge cases (vs the earlier standalone intro prototype):
 //   • title / artist / designer auto-shrink to a width cap then elide, and any
 //     newline is filtered to a space (oneLine()), so a runaway metadata string
 //     can never break the layout or wrap to a second line.

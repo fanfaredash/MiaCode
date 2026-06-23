@@ -2,35 +2,53 @@
 
 [中文](README.md) | [English](README_EN.md)
 
-`MiaCode` is a simai editor and preview tool built on Qt 6 with a Qt Quick scene-graph preview/export pipeline. The current Windows build keeps Qt Quick on the OpenGL backend for parity with the existing desktop renderer assumptions.
+MiaCode is a desktop editor, previewer, and export tool for simai chart authoring. It is built with Qt 6 and CMake, and covers the core workflow from text editing and validation to timeline preview, realtime playback, audio/video alignment helpers, and chart-video export.
 
 ## Features
 
-- Text editor
-- Validation error list with jump-to-location
-- Native timeline view
-  - Waveform background
-  - Zoom levels
-  - Playback line and cursor line
-  - Tap, hold, slide, wifi, touch, and touch-hold preview
-- Qt Quick realtime preview and headless Qt Quick export
-- Local render settings for audio and video
+- simai text editing, syntax highlighting, find/replace, and multi-difficulty field management
+- Chart parsing, validation diagnostics, issue list, and jump-to-location navigation
+- Native timeline view with waveform, zoom, playhead, cursor line, and note previews
+- Qt Quick realtime preview and offscreen export pipeline
+- Preview support for tap, hold, slide, wifi, touch, touch-hold, mine, break touch, and related objects
+- BPM / offset / playback-latency helper tools
+- Muri detection and chart diagnostics
+- Full-video export, clip export, batch export, and chart ZIP packaging helpers
+- Local resources, skins, SFX, background images/videos, and intro-template support
+
+## In-House Components
+
+MiaCode contains substantial project-owned implementation rather than only wiring external tools together:
+
+- simai document model, parsing, validation, and batch transforms
+- Timeline data sources, rendering, and editor synchronization
+- Preview scene state, Qt Quick rendering layers, and export snapshots
+- Preview audio, SFX timelines, latency detection, and export audio planning
+- Muri analysis, chart diagnostics, and developer helper tools
+- Windows build, dependency-provisioning, and packaging scripts
+
+This repository and its release packages are intended for non-commercial use. Third-party libraries, assets, and reference projects are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Build
 
-Requirements:
+### Requirements
+
 - CMake 3.21+
-- Qt 6.8+ with `Core`, `Gui`, `Widgets`, `OpenGL`, `Qml`, `Quick`, `Multimedia`
+- C++17 compiler
+- Qt 6.8+ with `Core`, `Gui`, `Widgets`, `OpenGL`, `Qml`, `Quick`, `Multimedia`, `Svg`
+- Windows: Visual Studio 2022 / MSVC; the FFmpeg dev SDK is provisioned by scripts
 
-### Windows Build
+See [scripts/README_EN.md](scripts/README_EN.md) for packaging details.
 
-The recommended entry point is the helper script that installs Qt, builds, and packages:
+### Windows
+
+The recommended entry point installs Qt, prepares dependencies, builds, and packages:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build-win.ps1
 ```
 
-If Qt is already installed locally, you can also build with [CMakePresets.json](CMakePresets.json):
+If Qt is already installed locally, you can also build with the CMake preset:
 
 ```powershell
 cmake --preset vs2022-qt6
@@ -38,86 +56,32 @@ cmake --build --preset release
 .\build\Release\MiaCode.exe
 ```
 
-### macOS Build
+To package an existing build:
 
-The recommended entry point is the helper script that installs Qt, builds, and packages:
-
-```bash
-bash scripts/build-macos.sh
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot <QtRoot>
 ```
-
-If Qt is already installed locally, you can also pass `QT_ROOT` explicitly to the packaging script:
-
-```bash
-QT_ROOT="$HOME/Qt/6.8.3/macos" bash scripts/package-mac.sh
-```
-
-Packaging details have been moved to [scripts/README_EN.md](scripts/README_EN.md).
 
 ## Repository Layout
 
-- [src](src): source code
-- [assets](assets): runtime assets and generated data
-- [resources](resources): Qt resource files
-- [scripts](scripts): packaging scripts
-- [third_party](third_party): third-party dependencies
+- [src](src): application source, core models, preview, audio, export, and tools
+- [assets](assets): runtime resources, skins, SFX, background media, and generated data
+- [resources](resources): Qt resource collections and application icons
+- [scripts](scripts): build, dependency-provisioning, packaging, and maintenance scripts
+- [third_party](third_party): vendored or referenced third-party dependencies
+- [docs](docs): architecture, diagnostics, export, timeline, and open-source preparation docs
+- [samples](samples): sample charts and acceptance materials
 
----
+## Releases
 
-## Acknowledgements
+Release packages are currently produced locally by maintainers using the scripts in this repository; obsolete GitHub Actions have been removed. See [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) for release steps and [docs/OPEN_SOURCE_CHECKLIST.md](docs/OPEN_SOURCE_CHECKLIST.md) for remaining open-source readiness checks.
 
-Thanks to [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) for reference implementations of simai syntax parsing and rendering logic.
+## License And Acknowledgements
+
+The MiaCode repository and release packages are intended for non-commercial use; see [LICENSE](LICENSE) for the current main-code license. Third-party libraries, fonts, SFX, images, FFmpeg, BASS, Qt, and reference implementations may have their own licenses or redistribution limits; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Thanks to [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) and related projects for simai parsing, preview, and engineering references. The intro transition references [gfdfdxc/maimai-transition](https://github.com/gfdfdxc/maimai-transition).
 
 ## Changelog
 
-### 3.0
-
-- Improved export stability
-- Note scroll speed control
-- Added a dark UI theme
-- Added break touch support
-
-### 0.2.1
-
-- Fixed ffmpeg compositing cadence to eliminate periodic duplicate-frame stutter during export.
-- Fixed timeline follow-preview behavior so the editor cursor is only controlled during playback.
-
-### 0.2.0
-
-- **Simai Text Editor**
-  - Added Ctrl+F find and replace
-  - Added adjustable font size and line spacing
-  - Added simai syntax highlighting
-- **BPM and Offset Detection**
-  - Added fully automatic BPM and delay detection
-  - Chart creators no longer need to measure BPM and delay by hand
-- **Chart Video Export**
-  - Added full chart video export
-  - Added partial clip export
-  - Makes it easier to share short parts of your work
-- **Syntax Validation**
-  - Can now detect chart syntax errors
-  - Can now warn about potential issues
-  - Helps avoid parsing problems on non-Maj platforms
-- **Feature Completion**
-  - Added judgment effect animations for multiple note types
-  - Added firework rendering effects
-
-### 0.1.1
-
-- UI polish.
-- Added application icon.
-
-### 0.1.0
-
-- **Simai Editing**
-  - Full support for simai parsing and editing workflow.
-  - Multi-difficulty field management, including add, delete, and auto-switch.
-  - Batch mirror and rotate operations.
-  - Support for both difficulty pages and chart metadata settings.
-- **Rendering and Preview**
-  - Player-style preview controls with timeline and speed options.
-  - Optimized video and audio preview pipeline to reduce stutter.
-  - Stronger timeline-preview synchronization for drag and seek behavior.
-- **Others**
-  - Chinese and English UI support.
+Historical release notes have moved to [CHANGELOG.md](CHANGELOG.md).
