@@ -16,7 +16,8 @@ Use this checklist before making the repository public. It intentionally separat
 - [x] Record that assets are distributed with the non-commercial repository/release.
 - [x] Add [LICENSE_SCOPE.md](../../LICENSE_SCOPE.md) for scheme A: project-owned source code under MIT, bundled assets/releases under non-commercial distribution notes.
 - [x] Add [DOCS_PUBLICATION_AUDIT.md](../audit/DOCS_PUBLICATION_AUDIT.md) for tracked-docs publication review.
-- [ ] Review package contents against THIRD_PARTY_NOTICES.md after removing Remotion prototype files.
+- [x] Review package contents against THIRD_PARTY_NOTICES.md after removing Remotion prototype files.
+- [x] Ensure BASS runtime DLLs are explicitly tracked for the intended non-commercial Windows build.
 
 ## Owner Confirmation Required
 
@@ -33,12 +34,19 @@ Use this checklist before making the repository public. It intentionally separat
 
 ## History And Sensitive Data
 
-- [ ] Run a current-tree secret scan.
-- [ ] Run a full-history secret scan.
+- [x] Run a current-tree secret scan.
+- [x] Run a full-history secret scan.
 - [ ] Rotate any credential that ever appeared in Git history.
-- [ ] Generate a largest-object report for Git history.
+- [x] Generate a largest-object report for Git history.
 - [ ] Remove historical build outputs and binary blobs with `git-filter-repo` if public history must be clean.
 - [ ] Re-clone the filtered repository and verify build/package scripts from the cleaned history.
+
+Current history scan result:
+
+- Current tracked tree has no secret/local-path hits from the open-source scan patterns.
+- Full history still contains local paths and investigation notes from old docs/scripts, including `<local-chart-root>\...`, `<QtRoot>\...`, and `<UserProfile>\...` examples.
+- Full history still contains removed build artifacts under `build-mingw-ascii/` and removed prototype assets under `tools/intro_remotion/`.
+- Public release should use a filtered history, or publish from a fresh clean repository, before making the repository public.
 
 ## Branches And Tags
 
