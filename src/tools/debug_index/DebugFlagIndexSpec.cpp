@@ -1,7 +1,7 @@
-// Drift guard for docs/DEBUG_INDEX.md.
+// Drift guard for docs/ops/DEBUG_INDEX.md.
 //
 // Every `MIACODE_*` environment flag read anywhere in src/ must be documented in
-// docs/DEBUG_INDEX.md, and every flag the doc mentions must either still be read
+// docs/ops/DEBUG_INDEX.md, and every flag the doc mentions must either still be read
 // in the code or be an explicitly-retired flag (kept in the doc's retired
 // section for history). This catches the two drift directions that have bitten
 // before: a new flag added without a doc entry, and a removed flag left stale in
@@ -29,7 +29,7 @@
 
 namespace {
 
-// Flags intentionally removed from the code but kept in docs/DEBUG_INDEX.md's
+// Flags intentionally removed from the code but kept in docs/ops/DEBUG_INDEX.md's
 // retired section for history. Keep this in lock-step with that section: when a
 // flag is genuinely retired, move it to the doc's retired list AND add it here.
 const QSet<QString> kRetiredFlags = {
@@ -75,7 +75,7 @@ int main(int argc, char* argv[])
 
     const QString root = QStringLiteral(MIACODE_SOURCE_ROOT);
     const QString srcDir = root + QStringLiteral("/src");
-    const QString docPath = root + QStringLiteral("/docs/DEBUG_INDEX.md");
+    const QString docPath = root + QStringLiteral("/docs/ops/DEBUG_INDEX.md");
 
     // 1. Every MIACODE_* literal read across the source tree (this spec's own
     //    file excluded — it embeds the retired allowlist).
@@ -129,17 +129,17 @@ int main(int argc, char* argv[])
     if (!undocumented.isEmpty()) {
         ok = false;
         err << undocumented.size()
-            << " MIACODE_* flag(s) read in src/ but missing from docs/DEBUG_INDEX.md:" << Qt::endl;
+            << " MIACODE_* flag(s) read in src/ but missing from docs/ops/DEBUG_INDEX.md:" << Qt::endl;
         for (const QString& flag : undocumented) {
             err << "  - " << flag << Qt::endl;
         }
-        err << "Fix: document each in docs/DEBUG_INDEX.md (and mirror in "
+        err << "Fix: document each in docs/ops/DEBUG_INDEX.md (and mirror in "
                ".claude/skills/miacode-dev-guide/references/debug-and-logging.md)." << Qt::endl;
     }
     if (!stale.isEmpty()) {
         ok = false;
         err << stale.size()
-            << " MIACODE_* flag(s) in docs/DEBUG_INDEX.md no longer read anywhere in src/:" << Qt::endl;
+            << " MIACODE_* flag(s) in docs/ops/DEBUG_INDEX.md no longer read anywhere in src/:" << Qt::endl;
         for (const QString& flag : stale) {
             err << "  - " << flag << Qt::endl;
         }

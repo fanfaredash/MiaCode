@@ -81,7 +81,7 @@ needs and that video silently fails. Five guards, layered:
 
 ```powershell
 # 1. (Recommended) calibrate the allowlist against real charts:
-scripts\ffmpeg-trim\survey-chart-codecs.ps1 -ChartRoots '<local-chart-root>','<chart-root>'
+scripts\ffmpeg-trim\survey-chart-codecs.ps1 -ChartRoots '<chart-root-1>','<chart-root-2>'
 #    → add any reported gaps to trim-allowlist.psd1 (Decoders / Demuxers).
 
 # 2. Review the build plan without building:

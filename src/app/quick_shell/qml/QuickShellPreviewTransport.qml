@@ -474,7 +474,7 @@ Rectangle {
                         padding: 0
                         // Stop-gap: entering fullscreen from the export page crashes
                         // the Intel iGPU D3D11 user-mode driver during hardware video
-                        // decode (see docs/EXPORT_FULLSCREEN_CRASH_INVESTIGATION_ZH.md).
+                        // decode. Keep the fullscreen entry hidden while the export page is active.
                         // Hide the fullscreen entry while the export page is active.
                         visible: !(controller && controller.exportPageActive)
                         onPressed: root.focusRequested()
@@ -593,7 +593,7 @@ Rectangle {
                         padding: 0
                         // Stop-gap: entering fullscreen from the export page crashes
                         // the Intel iGPU D3D11 user-mode driver during hardware video
-                        // decode (see docs/EXPORT_FULLSCREEN_CRASH_INVESTIGATION_ZH.md).
+                        // decode. Keep the fullscreen entry hidden while the export page is active.
                         // Hide the fullscreen entry while the export page is active.
                         visible: !(controller && controller.exportPageActive)
                         onPressed: root.focusRequested()

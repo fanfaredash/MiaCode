@@ -156,8 +156,8 @@ Do not rename sound files casually; both preview-time and export-time behavior d
     - root-level `Start_MiaCode_Legacy_QML.bat`, which opts into the DComp preview + DComp timeline route for A/B testing against the default QSG-only startup path (the out-of-process preview worker was removed, so this launcher now only sets the DComp toggles)
     - root-level `Start_MiaCode_QuickShell_Debug.bat`
     - root-level `logs/` helper folder only for explicit debug-launch scripts; normal project-bound runtime logs default to `.miacode/logs/`
-    - `docs/DEBUG_INDEX.md`
-    - `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
+    - `docs/ops/DEBUG_INDEX.md`
+    - `docs/specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
   - optional Windows dev-tool packaging currently includes only `simai_native_dump.exe`; `soundtouch_probe.exe` is no longer copied by `scripts/package-win.ps1`
 - macOS build/package:
   - `scripts/build-macos.sh`

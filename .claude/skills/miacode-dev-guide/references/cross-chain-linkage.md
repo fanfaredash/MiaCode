@@ -98,7 +98,7 @@ Implications:
   guards to an unconditional `serializeField`. Covered by `simai_document_spec`.
 - Review together on change: `sections/timeline/MainWindow.PreviewTimelineFlow.cpp`,
   `src/tools/latency/` analysis, `src/tools/video_export/VideoExportSnapshot.cpp`,
-  `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`.
+  `docs/specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`.
 
 ## 3. Timing metadata / default meter chain
 
@@ -229,7 +229,7 @@ affects both live diagnostics and exported overlays.
   emit points, the spec tests (`src/tools/simai_parser/SimaiParserSpec.cpp` AND
   `src/tools/chart_transform/ChartBatchTransformSpec.cpp` — normalization gates on
   `buildValidationReport`, so tightening the parser breaks transform fixtures too), and the
-  diagnostics docs (`docs/CHART_DIAGNOSTICS_AND_NORMALIZATION_SPEC.md` + `_ZH.md`). Severity
+  diagnostics docs (`docs/specs/chart/CHART_DIAGNOSTICS_AND_NORMALIZATION_SPEC.md` + `_ZH.md`). Severity
   contract since the 2026-05-03 decoupling: UI severity = strict-pass emit, NO lenient downgrade.
   The 2026-05/06 drift (C1/C2 + break-slide-b + {N}∤384 flipped to Warning; touch `x` and
   uppercase `B`/`X` rejected) shipped without updating the specs and sat as 10 CTest failures

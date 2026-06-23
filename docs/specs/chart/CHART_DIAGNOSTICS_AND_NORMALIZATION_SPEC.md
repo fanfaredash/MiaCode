@@ -342,7 +342,7 @@ UI 上的呈现：
 > 检测）不同，本次修订**没有**在代码层面逐行核对实现；这里描述的规则与
 > 示例可能与当前 `MuriAnalyzer` / `MuriStaticChecker` 的实际行为存在
 > 偏差。**仍需对代码做人工核对**，才能把本节当作权威参考。本子系统的
-> 权威参考是 `docs/MURI_DETECTION_SPEC.md`，以及下方入口表中引用的
+> 权威参考是 `docs/specs/muri/MURI_DETECTION_SPEC.md`，以及下方入口表中引用的
 > 源文件。
 
 检测 **手不可达** 模式。作用于已经 parse 出的 timeline marker，不是原始
@@ -373,7 +373,7 @@ UI 上的呈现：
 | `MultiTouch` | 多押 | 所需手数超过 2（仅 runtime 模式） |
 
 每个 kind 对应一个 `MuriAlertLevel`（`Muri` 硬错 / `Warning` 软警告）。
-映射规则 —— 共六条 —— 收录在已有的 `docs/MURI_DETECTION_SPEC.md` 里，
+映射规则 —— 共六条 —— 收录在已有的 `docs/specs/muri/MURI_DETECTION_SPEC.md` 里，
 连同共享的 180-TPS 常量、面板合并 / 去重规则。
 
 ### 静态 vs 运行时拆分
@@ -401,9 +401,9 @@ UI 上的呈现：
 
 ### 已有详细规格
 
-`docs/MURI_DETECTION_SPEC.md` 是该子系统的权威参考（覆盖所有六条 alert-level
+`docs/specs/muri/MURI_DETECTION_SPEC.md` 是该子系统的权威参考（覆盖所有六条 alert-level
 规则、180-TPS 基准、面板合并 / 去重、跳转语义）。测试覆盖：
-`docs/MURI_DETECTION_TEST_CHECKLIST.md`。
+`docs/tests/MURI_DETECTION_TEST_CHECKLIST.md`。
 
 ---
 
@@ -656,7 +656,7 @@ selectionStart`、`selectionEnd > fullText.size()`）→
 
 ### 3.9 已有详细规格
 
-`docs/SIMAI_NORMALIZATION_TIME_SIGNATURE_RESEARCH.md` 是设计依据：10 条
+规范化早期研究记录已转为本地私有资料；公开版以本节为准。
 最终决策、9 项架构发现、前置条件、输出规则、空行策略、modifier 顺序
 规范、5 阶段实现拆分。该文档写于实现之前，部分决策已在代码中变形 ——
 例如 decision 9 把 384-grid 描述为唯一基准 + fallback rounding，而当前
@@ -714,6 +714,6 @@ selectionStart`、`selectionEnd > fullText.size()`）→
   级文档。
 - 无理检测的 alert-level 规则 —— 见 `MURI_DETECTION_SPEC.md`。
 - 规范化的设计依据 —— 见
-  `SIMAI_NORMALIZATION_TIME_SIGNATURE_RESEARCH.md`。
+  本文 §3。
 
 本文档是导航索引。详细规格才是唯一真相。

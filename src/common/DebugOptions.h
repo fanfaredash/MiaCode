@@ -263,7 +263,7 @@ inline PreviewVideoDecodePreference previewVideoDecodePreference()
 
 inline bool previewSingleD3D11DeviceEnabled()
 {
-    // H2 (docs/PREVIEW_VIDEO_IGPU_STUTTER_INVESTIGATION_AND_FIX_ZH.md §4 Tier 3):
+    // H2 single-device preview decode experiment:
     // share ONE ID3D11Device between the QtAVPlayer/FFmpeg D3D11VA decoder and the
     // preview QQuickView's QRhi, instead of FFmpeg self-creating a private decode
     // device and bridging every frame across to the render device via a keyed-mutex
@@ -288,8 +288,7 @@ inline bool previewSingleD3D11DeviceEnabled()
 
 inline int previewDumpHwFrameBudget()
 {
-    // Bounded D3D11VA hardware-frame readback (green/garble/seek debug plan
-    // docs/PREVIEW_HWDECODE_GREEN_GARBLE_SEEK_DEBUG_PLAN_ZH.md §3.2 + §9). N = how
+    // Bounded D3D11VA hardware-frame readback for green/garble/seek diagnostics. N = how
     // many decoder NV12 surfaces to read back + stat-classify per "arm" (an arm is the
     // initial playback start, and is re-armed on each seek). 0 = OFF.
     //
@@ -333,7 +332,7 @@ inline bool previewSharedD3D11DebugLayerEnabled()
 inline bool previewHwDecodeCompletionWaitEnabled()
 {
     // PRIMARY FIX for the post-seek green / garble on D3D11VA hardware decode
-    // (docs/PREVIEW_HWDECODE_GREEN_GARBLE_SEEK_DEBUG_PLAN_ZH.md §10). Located root
+    // for the post-seek green / garble on D3D11VA hardware decode. Located root
     // cause (logs_36, Arc 130T): the decoder's DecoderEndFrame and our
     // CopySubresourceRegion of the DPB slot are not implicitly ordered on some
     // Intel/Arc iGPU drivers, so just after a seek (decode queue backed up) the render

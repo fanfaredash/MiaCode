@@ -43,7 +43,7 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   `video_export_runtime_policy_spec`, `video_export_audio_render_plan_spec`,
   `chart_zip_packager_spec` (verifies the Export-as-ZIP packager against real zip read-back),
   `debug_flag_index_spec` (drift guard — every `MIACODE_*` flag read in `src/` must appear in
-  `docs/DEBUG_INDEX.md`, and every flag the doc names must still be read in code or be in the
+  `docs/ops/DEBUG_INDEX.md`, and every flag the doc names must still be read in code or be in the
   spec's retired allowlist; repo root injected via a `MIACODE_SOURCE_ROOT` compile define)
 
 ## 3. Spec / dev-tool convention (audit 2026-05-29 — being standardized)

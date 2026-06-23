@@ -4,9 +4,9 @@ This checklist documents the current local-release flow. GitHub Actions were rem
 
 ## Version
 
-- [ ] Update `MIACODE_VERSION_MAJOR`, `MIACODE_VERSION_MINOR`, `MIACODE_VERSION_PATCH`, and `MIACODE_VERSION_PRERELEASE` in [CMakeLists.txt](../CMakeLists.txt).
+- [ ] Update `MIACODE_VERSION_MAJOR`, `MIACODE_VERSION_MINOR`, `MIACODE_VERSION_PATCH`, and `MIACODE_VERSION_PRERELEASE` in [CMakeLists.txt](../../CMakeLists.txt).
 - [ ] Confirm the About dialog and package filename use the same version.
-- [ ] Add release notes to [CHANGELOG.md](../CHANGELOG.md).
+- [ ] Add release notes to [CHANGELOG.md](../../CHANGELOG.md).
 
 ## Clean Build
 
@@ -39,8 +39,8 @@ shasum -a 256 dist/*.zip
 
 ## License And Notices
 
-- [ ] Review [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
-- [ ] Review [LICENSE_SCOPE.md](../LICENSE_SCOPE.md).
+- [ ] Review [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md).
+- [ ] Review [LICENSE_SCOPE.md](../../LICENSE_SCOPE.md).
 - [ ] Confirm package contents match the non-commercial distribution notes.
 - [ ] Confirm BASS files are present only in the intended non-commercial release package.
 - [ ] Confirm FFmpeg build flags and license notes match the packaged binaries.

@@ -251,7 +251,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   is ON by default (`SimaiNativeParser::g_allowNegativeHs` defaults true; opt-out
   `MIACODE_PREVIEW_REJECT_NEGATIVE_HS` at boot); reverse flow via `PreviewTapTiming.directionSign` + `sampleTapApproach`
   reverse branch; per-type sign policy (tap/star/line signed, hold/touch/slide abs). Docs:
-  `docs/HS_MECHANISM_AND_NEGATIVE_HS_FEASIBILITY_ZH.md` §8.
+  `docs/ops/DEBUG_INDEX.md` (`MIACODE_PREVIEW_REJECT_NEGATIVE_HS`).
 
 ## 5. Timeline, cursor mapping, preview sync
 
@@ -289,7 +289,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     `QVideoSink` (`handleDecodedVideoFrame`) rather than observed; `setSpeed` (not `setPlaybackRate`)
     + `seek` drive playback, and the paused-seek / prepared-start acks settle on frame `pts`.
     The public method/signal contract is unchanged, so `MainWindow.*` callers don't change.
-    See `docs/VIDEO_DECODE_BACKEND_QTAVPLAYER_MIGRATION_ZH.md`.
+    See `docs/ops/DEBUG_INDEX.md` for the public backend summary.
 - Backend-neutral scene state (NO GPU deps): `src/core/scene/` — `PreviewFrameState.h`,
   `PreviewLayerOrder.h`, `PreviewOpacityCurves.*`, `PreviewSceneGeometry.*`, `PreviewHudState.*`,
   `PreviewProgressStatsCache.*`, `PreviewPreparedSceneCache.*`, `PreviewMarkerDrawOrder.*`,
@@ -335,7 +335,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - MainWindow ownership: `MainWindow.cpp` / `sections/export/*` (`onExportPreviewVideo`,
   `buildVideoExportSnapshot`, `launchVideoExportWorker`, `handleVideoExportWorkerEvent`).
 - **Export hub page (E-C hybrid since 2026-06-11 — phases 1+2 of the export-page migration,
-  spec `docs/EXPORT_PAGE_AND_LATENCY_ENTRY_MIGRATION_SPEC_ZH.md`):**
+  implementation record; kept as local private notes):**
   `src/tools/export_page/ExportLauncherPage.{h,cpp}` (`miacode::export_page::ExportLauncherPage`,
   a `MainWindow`-friend widget like the latency page) — an `editorStack_` page reached via the
   sidebar `export` item, the toolbar Export button (now a direct jump; the old dropdown menu +

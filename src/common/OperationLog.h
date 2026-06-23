@@ -1,6 +1,6 @@
 #pragma once
 
-// Operation breadcrumb logging — see docs/OPERATION_BREADCRUMB_LOGGING_PLAN.md
+// Operation breadcrumb logging; see docs/ops/OPERATION_LOG_PATTERNS_SPEC.md.
 //
 // Lightweight RAII helper that records a thread-local chain of "what
 // operation am I currently inside". Designed to add ~1 line per

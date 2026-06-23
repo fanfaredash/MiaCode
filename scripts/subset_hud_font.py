@@ -16,7 +16,7 @@ font_candidates/_subset/do_subset.py:
 
 Usage:
     python scripts/subset_hud_font.py \
-        --input  <Downloads>/XiaolaiMono-Regular.ttf \
+        --input  <path-to-XiaolaiMono-Regular.ttf> \
         --output assets/fonts/XiaolaiMono-Regular.subset.ttf
 """
 

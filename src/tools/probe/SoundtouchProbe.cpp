@@ -23,7 +23,11 @@ int main(int argc, char* argv[])
     QTextStream out(stdout);
 
     const QStringList args = app.arguments();
-    const QString chartPath = args.size() > 1 ? QDir::cleanPath(args.at(1)) : QStringLiteral("D:/Files/snowloop/maidata.txt");
+    if (args.size() <= 1) {
+        out << "usage: soundtouch_probe <path-to-maidata.txt> [rate] [runMs]\n";
+        return 2;
+    }
+    const QString chartPath = QDir::cleanPath(args.at(1));
     const double rate = args.size() > 2 ? args.at(2).toDouble() : 0.5;
     const int runMs = args.size() > 3 ? args.at(3).toInt() : 8000;
 

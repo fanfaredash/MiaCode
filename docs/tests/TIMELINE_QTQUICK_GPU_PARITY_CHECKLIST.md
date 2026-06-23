@@ -1,4 +1,4 @@
-Status: 实施检查清单草案
+状态：实施检查清单草案
 
 # Timeline Qt Quick + GPU 一致性检查清单
 

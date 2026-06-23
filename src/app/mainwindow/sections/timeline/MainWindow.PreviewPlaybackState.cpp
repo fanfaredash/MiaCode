@@ -297,7 +297,7 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
             .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6)
             .arg(static_cast<int>(pauseResult.retainedMode)));
     state_.qtPreviewPendingTimelineSecond_ = state_.qtPreviewPauseSecond_;
-    // Per docs/TIMELINE_COORDINATE_FOCUS_SPEC.md §5: 播放中 → 点击暂停 → 暂停-R,
+    // Per docs/specs/timeline/TIMELINE_COORDINATE_FOCUS_SPEC.md §5: 播放中 → 点击暂停 → 暂停-R,
     // Timeline 聚焦 R. The next paused-flush must call
     // setPlayheadSeconds(s, /*centerView=*/true) so centerOnSecond
     // recomputes horizontalScrollValue around the freeze point. Was

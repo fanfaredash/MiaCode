@@ -146,6 +146,21 @@ rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR/docs"
 cp -R "$APP_PATH" "$DIST_DIR/"
 
+for release_doc in LICENSE LICENSE_SCOPE.md THIRD_PARTY_NOTICES.md README.md README_EN.md; do
+  if [[ ! -f "$ROOT_DIR/$release_doc" ]]; then
+    echo "Missing release documentation file: $ROOT_DIR/$release_doc" >&2
+    exit 1
+  fi
+  cp "$ROOT_DIR/$release_doc" "$DIST_DIR/$release_doc"
+done
+
+if [[ -d "$ROOT_DIR/licenses" ]]; then
+  cp -R "$ROOT_DIR/licenses" "$DIST_DIR/licenses"
+else
+  echo "Missing licenses dir: $ROOT_DIR/licenses" >&2
+  exit 1
+fi
+
 if [[ "$BUILD_DEV_TOOLS" == "ON" ]]; then
   for helper_bin in simai_native_dump soundtouch_probe; do
     helper_path="$BUILD_DIR/$helper_bin"
@@ -211,7 +226,7 @@ else
   exit 1
 fi
 
-for doc in README.md README_EN.md docs/DEBUG_INDEX.md docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md; do
+for doc in docs/ops/DEBUG_INDEX.md docs/specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md; do
   if [[ -f "$ROOT_DIR/$doc" ]]; then
     cp "$ROOT_DIR/$doc" "$DIST_DIR/docs/$(basename "$doc")"
   fi

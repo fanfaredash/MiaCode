@@ -105,8 +105,8 @@ code. Mainline features go in the QSG path.
 
 **2026-06-19 god-file split (branch `refactor/god-file-split`)** — 13 product-code god-files
 decomposed into focused translation units, byte-faithful (sed moves, zero logic change), each
-gated on build + CTest 25/25. Full archive (methodology, per-file designs, semantic-risk notes,
-out-of-plan inventory, rollback): `docs/GOD_FILE_REFACTOR_PROGRESS_AND_PLAN_ZH.md`.
+gated on build + CTest 25/25. The full methodology and rollback notes are kept as maintainer-only
+local archives.
 
 Conventions established by that pass — reuse, don't reinvent:
 - A single class's method bodies split across several `.cpp` (the `MainWindow.<Section>.cpp`

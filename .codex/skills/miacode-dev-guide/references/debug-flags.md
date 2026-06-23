@@ -2,7 +2,7 @@
 
 Use this file to locate repo-wide debug switches, log channels, preview overrides, and export-only diagnostic environment variables.
 
-The user-facing canonical doc lives at `docs/DEBUG_INDEX.md`. This file stays shorter and points to the owning code.
+The user-facing canonical doc lives at `docs/ops/DEBUG_INDEX.md`. This file stays shorter and points to the owning code.
 
 ## 1. Generic Debug Controls
 

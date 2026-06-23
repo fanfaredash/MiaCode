@@ -14,7 +14,7 @@
 class QVideoSink;
 #ifdef MIACODE_USE_QTAVPLAYER
 // Preview decode backend on Windows: FFmpeg via QtAVPlayer (vendored under
-// third_party/QtAVPlayer). See docs/VIDEO_DECODE_BACKEND_QTAVPLAYER_MIGRATION_ZH.md.
+// third_party/QtAVPlayer).
 // QVideoFrame is included (not just forward-declared) because lastVideoFrame_
 // is held by value for frame-replay when a VideoOutput attaches late.
 #include <QVideoFrame>
@@ -170,7 +170,7 @@ private:
     // user's hardware/software preference and bidirectional. No app restart.
     void reloadVideoDecodeInPlace();
 #endif
-    // HW-decode diag (docs/PREVIEW_HWDECODE_GREEN_GARBLE_SEEK_DEBUG_PLAN_ZH.md §9):
+    // HW-decode diagnostics:
     // drain the QtAVPlayer copy-path cumulative counters into one runtime-log line on a
     // low-frequency cadence (seek / end-of-media). No-op off the QtAVPlayer/Windows path.
     void emitHwDecodeDiagSummary(const char* reason);

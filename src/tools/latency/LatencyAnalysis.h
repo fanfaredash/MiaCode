@@ -66,8 +66,8 @@ struct DetectionTuning {
     // sharp onsets the slope peaks at the same place (no shift, protects the
     // already-accurate charts); for soft onsets it leads the peak. 0 reproduces
     // the original envelope exactly. Default 0.5 from Phase-1 corpus tuning:
-    // near-optimal on BOTH the tuning set (<local-chart-root> 64.9%) and the held-out set
-    // (<local-test-set> 60.0%); the tuning-set peak at 0.6 was dropped as it regressed
+    // near-optimal on BOTH the tuning corpus (64.9%) and the held-out corpus
+    // (60.0%); the tuning-set peak at 0.6 was dropped as it regressed
     // on the holdout (overfit). Pure slope (1.0) is noisy and collapses.
     double offsetEdgeWeight = 0.5;
     // A snap candidate is only accepted when its score is at least

@@ -5,7 +5,7 @@ Use this file to separate hard contracts from adjustable implementation choices.
 ## 1. Source Of Truth Rule
 
 - Code is the source of truth.
-- `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md` and other notes are guidance and memory aids.
+- `docs/specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md` and other notes are guidance and memory aids.
 - When docs and code diverge, trust code first, then update the docs.
 
 ## 2. Must-Keep Contracts

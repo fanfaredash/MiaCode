@@ -37,27 +37,20 @@ experimental/
 Testing/
 build_artifacts/
 
-# Keep only docs spec/checklist files under version control.
+# Keep the public docs tree explicit and leave local/private notes untracked.
 docs/*
-!docs/DEBUG_INDEX.md
-!docs/PREVIEW_RUNTIME_WORKFLOW.md
-!docs/VIDEO_EXPORT_MEMORY_ANALYSIS.md
-!docs/VIDEO_EXPORT_SUBPROCESS_ISOLATION.md
-!docs/QT_QUICK_FULL_FRONTEND_MIGRATION_PLAN.md
-!docs/PLAYBACK_START_LATENCY_PLAN.md
-!docs/REFACTOR_HANDOFF.md
-!docs/*SPEC.md
-!docs/*CHECKLIST.md
-# Allow bilingual ZH variants of SPEC/CHECKLIST docs without listing each by name.
-!docs/*SPEC_ZH.md
-# God-file refactor progress + knowledge archive (continuation handoff).
-!docs/GOD_FILE_REFACTOR_PROGRESS_AND_PLAN_ZH.md
-!docs/*CHECKLIST_ZH.md
-!docs/TIMELINE_QTQUICK_GPU_FEASIBILITY_SPEC_ZH.md
-!docs/TIMELINE_QTQUICK_GPU_PARITY_CHECKLIST_ZH.md
-!docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC_ZH.md
-# Logging-mechanism audit: remaining refactor backlog (continuation handoff).
-!docs/LOGGING_AUDIT_REMAINING_REFACTORS_ZH.md
+!docs/README.md
+!docs/specs/
+!docs/specs/**
+!docs/tests/
+!docs/tests/**
+!docs/ops/
+!docs/ops/**
+!docs/archive/
+!docs/archive/**
+!docs/audit/
+!docs/audit/**
+docs/_private/
 
 # Local ffmpeg binaries should not be versioned.
 third_party/ffmpeg/**/ffmpeg
@@ -70,6 +63,7 @@ third_party/ffmpeg/**/ffprobe.exe
 # never committed — the .dll are caught by the third_party/**/*.dll rule below,
 # this also keeps the headers + .lib import libraries out of version control.
 third_party/ffmpeg/windows/dev/
+third_party/ffmpeg/windows/dev.full.bak/
 third_party/ffmpeg/macos/dev/
 third_party/ffmpeg/linux/dev/
 

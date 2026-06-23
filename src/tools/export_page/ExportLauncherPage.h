@@ -20,9 +20,7 @@ class FlowLayout;
 namespace miacode::export_page {
 
 // Central-area "Export" hub page wired into MainWindow::editorStack_ — the
-// phase-2 hybrid form (E-C) of the export-page migration
-// (docs/EXPORT_PAGE_AND_LATENCY_ENTRY_MIGRATION_SPEC_ZH.md §6, layout
-// redesigned 2026-06-12). Fixed-frame layout: a difficulty badge row + an
+// phase-2 hybrid form (E-C) of the export-page migration. Fixed-frame layout: a difficulty badge row + an
 // underline-style HORIZONTAL sub-nav row pinned on top (a left nav column
 // did not fit: the quick-shell workspace surface can be ~700 logical px
 // total and the embedded 6-tab panel needs the full content width), then

@@ -834,7 +834,7 @@ bool MainWindow::WindowSection::shellMuriTabVisible() const
 bool MainWindow::WindowSection::shellExportPageActive() const
 {
     // Stop-gap for the export-page + fullscreen Intel iGPU D3D11 crash
-    // (hardware video decode; see docs/EXPORT_FULLSCREEN_CRASH_INVESTIGATION_ZH.md).
+    // (hardware video decode).
     // performSwitchToExportField() sets activeOutlineKey_ = "export" on entry and
     // every other page sets a different key, so this is true iff the export page
     // is the active workspace page. The shared preview transport binds the

@@ -37,7 +37,7 @@ QuickShellPreviewCompositeSurface::QuickShellPreviewCompositeSurface(QObject* pa
 
     // H2 single-device preview decode: when enabled, render this view's QRhi on the
     // same ID3D11Device the FFmpeg D3D11VA decoder uses, so the per-frame cross-device
-    // video-texture bridge disappears (docs/PREVIEW_VIDEO_IGPU_STUTTER_*). Must run
+    // video-texture bridge disappears. Must run
     // before the scene graph initialises (i.e. before setSource/show). Only meaningful
     // for the Direct3D11 RHI; a null device (feature off / creation failed) leaves Qt
     // to create its own device = legacy two-device path. The device is also published

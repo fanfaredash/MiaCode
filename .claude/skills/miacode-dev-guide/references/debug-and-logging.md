@@ -1,7 +1,7 @@
 # Debug & Logging
 
 The `--debug` logging system, log channels, and the `MIACODE_*` env-var index. The legacy
-canonical doc is `docs/DEBUG_INDEX.md`; this file is the code-owner-oriented summary.
+canonical doc is `docs/ops/DEBUG_INDEX.md`; this file is the code-owner-oriented summary.
 
 > **Remaining-refactor backlog:** the 2026-06-19 logging-design audit shipped its high-priority
 > fixes in commit `034769c` (Level/UTC/pid-tid records, drop markers, rename rotation, flag cache,
@@ -75,15 +75,15 @@ gated `appendLine`; don't reintroduce that pattern.)
 The *writer* is unified and healthy. The *control surface* is fragmented: **72 distinct
 `MIACODE_*` env vars** (reconciled 2026-06-02, after the out-of-process preview worker was
 deleted) read as string literals across the code, with no single in-code registry. Fullest
-catalog: `docs/DEBUG_INDEX.md` (reconciled to match the code — all by category); this file is
+catalog: `docs/ops/DEBUG_INDEX.md` (reconciled to match the code — all by category); this file is
 the agent-facing quick index. Guidance:
 
 - **Prefer not to add a new flag.** If you must, add it to `DebugOptions.h` with a default and a
-  one-line purpose, and list it in `docs/DEBUG_INDEX.md` in the same change — otherwise the
+  one-line purpose, and list it in `docs/ops/DEBUG_INDEX.md` in the same change — otherwise the
   `debug_flag_index_spec` CTest fails (it greps every `MIACODE_*` literal in `src/` and requires a
   doc entry, and flags doc entries with no code as stale). That guard is the current drift defense.
 - **Intended direction (still pending):** a single table-driven registry in `DebugOptions.h`
-  ({name, default, category, purpose}) that can *generate* `docs/DEBUG_INDEX.md` (today it is
+  ({name, default, category, purpose}) that can *generate* `docs/ops/DEBUG_INDEX.md` (today it is
   hand-written + `debug_flag_index_spec`-guarded), plus a clean split between user-facing `--debug`
   and developer-only diagnostic flags. Reduce the count further as DComp retires.
 - **Already-dead flags** (removed from code; do not reintroduce): `MIACODE_PREVIEW_DIAG_COMPARE_VIDEO_FALLBACK_EVERY`,
@@ -127,7 +127,7 @@ verdict `hint` as one log line per readback (no image files written). Log scopes
 (drained `ID3D11InfoQueue` debug-layer messages), `preview/hwdecode_summary` (cumulative
 copy/timeout/copy-fail/res-change counters + coded-vs-display, drained on the GUI thread at
 seek/EoM), `preview/seek_landing` (seek→first-display latency + catch-up GOP-burst count). Spec:
-`docs/PREVIEW_HWDECODE_GREEN_GARBLE_SEEK_DEBUG_PLAN_ZH.md` §9.
+public summary in `docs/ops/DEBUG_INDEX.md`.
 
 **HW-decode green/garble FIX ATTEMPT (§10, located on Arc 130T = decoder output, completion-order; NOT
 `--debug`-gated):** `MIACODE_PREVIEW_HWDECODE_COMPLETION_WAIT` (default **OFF** as of the
@@ -143,7 +143,7 @@ corrupt/`decode_error_flags` (free, from the AVFrame) so RHI holds the last good
 published via `qavSetPreviewHwDecodeFixConfig`. New diag fields: `preview/hwframe` dump line gains
 `since_seek_ms` / `decode_err` / `corrupt` / `completion_wait` / `codec`; `preview/hwdecode_summary`
 gains `completion_waits` / `completion_wait_timeouts` / `frames_decode_error` / `corrupt_dropped` /
-`codec`. Detail: `docs/PREVIEW_HWDECODE_GREEN_GARBLE_SEEK_DEBUG_PLAN_ZH.md` §10–§11. ⚠ Repro: iGPUs default to software
+`codec`. Detailed investigation is kept in local private notes. ⚠ Repro: iGPUs default to software
 decode — launch with `MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO=0` (+ `MIACODE_PREVIEW_SINGLE_D3D11_DEVICE=1`
 for H2). For the two-device path's RHI debug layer use the Qt env `QSG_RHI_DEBUG_LAYER=1` (Qt creates
 that device; `MIACODE_PREVIEW_D3D11_DEBUG_LAYER` only reaches the imported H2 device).
@@ -151,7 +151,7 @@ that device; `MIACODE_PREVIEW_D3D11_DEBUG_LAYER` only reaches the imported H2 de
 **Preview video decode backend (Windows):** `MIACODE_USE_QTAVPLAYER` is a **build-time compile
 macro** (CMake-defined on Windows, NOT an environment flag — it can't be toggled at runtime). It
 switches `PreviewStageMediaHost` onto the FFmpeg/QtAVPlayer backend; other platforms keep the
-`QMediaPlayer` path. It still appears in `docs/DEBUG_INDEX.md` because the `debug_flag_index_spec`
+`QMediaPlayer` path. It still appears in `docs/ops/DEBUG_INDEX.md` because the `debug_flag_index_spec`
 drift guard greps every `MIACODE_*` literal in `src/`. The FFmpeg dev SDK path is a CMake cache
 variable (not in `src/`, so keep its literal out of `DEBUG_INDEX.md` or the guard flags it stale).
 On hardware-decode `InvalidMedia` the host retries once forcing software decode — log line
@@ -166,7 +166,7 @@ single-device decode**: `PreviewSharedD3D11Device` creates one video-capable, mu
 `handle()` takes a same-device fast path (`copyTextureSameDevice`, no shared handle/keyed-mutex/
 `AcquireSync(INFINITE)`) instead of the two-device keyed-mutex bridge. Every step falls back to the
 legacy two-device path on failure. Confirm via `media_backend … single_device=1`. See
-`docs/PREVIEW_VIDEO_IGPU_STUTTER_INVESTIGATION_AND_FIX_ZH.md` §4 Tier 3 H2.
+the H2 single-device summary in `docs/ops/DEBUG_INDEX.md`.
 
 **DComp/D3D11 (DEFAULT OFF — being decoupled):** `MIACODE_PREVIEW_USE_DCOMP` (default off,
 `DebugOptions.h:194`), `MIACODE_TIMELINE_USE_DCOMP`, `MIACODE_PREVIEW_DCOMP_EXCLUSIVE`,
@@ -187,7 +187,7 @@ FILTER_THREADS,X264_PRESET,X264_CRF,X264_BFRAMES}`.
 
 **Build-time (CMake, not env):** `MIACODE_USE_QTAVPLAYER` (see above), `MIACODE_BUILD_DEV_TOOLS`
 (configure option gating dev-tool spec executables + CTest registration; appears in
-`docs/DEBUG_INDEX.md` only because the `debug_flag_index_spec` guard greps every `MIACODE_*`
+`docs/ops/DEBUG_INDEX.md` only because the `debug_flag_index_spec` guard greps every `MIACODE_*`
 literal in `src/`, including comments).
 
 ## 4. Runtime trace tags (Runtime channel `scope` values)

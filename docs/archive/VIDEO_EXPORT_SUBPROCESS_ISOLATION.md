@@ -8,7 +8,7 @@ It is not the active architecture spec for the current Qt Quick export path.
 
 Use these files for current ownership and wiring:
 
-- `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
+- `../specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
 - `.codex/skills/miacode-dev-guide/references/cross-chain-linkage.md`
 
 Legacy points that still conceptually apply:

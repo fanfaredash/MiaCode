@@ -4,8 +4,7 @@
 
 namespace miacode::preview {
 
-// H2 single-device preview decode
-// (docs/PREVIEW_VIDEO_IGPU_STUTTER_INVESTIGATION_AND_FIX_ZH.md §4 Tier 3).
+// H2 single-device preview decode.
 //
 // Lazily creates ONE video-capable, multithread-protected ID3D11Device, publishes
 // it to the FFmpeg D3D11VA decoder (via QtAVPlayer's qavSetSharedRenderD3D11Device)
@@ -28,8 +27,7 @@ QQuickGraphicsDevice sharedPreviewQuickGraphicsDevice();
 // device (for diagnostics/logging). False when disabled or creation failed.
 bool sharedPreviewD3D11DeviceActive();
 
-// Wire the preview HW-decode diagnostics into the QtAVPlayer decode path
-// (docs/PREVIEW_HWDECODE_GREEN_GARBLE_SEEK_DEBUG_PLAN_ZH.md §9). Installs the logging
+// Wire the preview HW-decode diagnostics into the QtAVPlayer decode path. Installs the logging
 // sink (so the render/decode-thread copy path can emit structured lines into the async
 // runtime log) and publishes the resolved MIACODE_PREVIEW_DUMP_HWFRAMES budget + dump
 // directory into the decoder. Idempotent and cheap; call once on the GUI thread before

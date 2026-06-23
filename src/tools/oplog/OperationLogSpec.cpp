@@ -3,7 +3,7 @@
 // unwind) and asserts the resulting log lines contain the expected
 // chain shape.
 //
-// See docs/OPERATION_BREADCRUMB_LOGGING_PLAN.md §5.1.
+// See docs/ops/OPERATION_LOG_PATTERNS_SPEC.md.
 
 #include <QCoreApplication>
 #include <QDir>
@@ -346,7 +346,7 @@ void runRealisticScenarioDemos(const QString& logPath, const QString& fatalPath)
     };
     auto onSaveFile = [&]() -> bool {
         MC_OP("MainWindow::DocumentSection::onSaveFile");
-        return saveDocument(QStringLiteral("D:/charts/readonly/maidata.txt"));
+        return saveDocument(QStringLiteral("<chart-root>/readonly/maidata.txt"));
     };
     (void)onSaveFile();
 
@@ -443,7 +443,7 @@ void runRealisticScenarioDemos(const QString& logPath, const QString& fatalPath)
     // request and what it was trying to do.
     auto ensureBassFxLoadedSim = [] {
         MC_OP("BassPreviewAudioBackend::ensureBassFxLoaded");
-        const QString libraryPath = QStringLiteral("D:/Apps/MiaCode/bass_fx.dll");
+        const QString libraryPath = QStringLiteral("<app-dir>/bass_fx.dll");
         _mc_op_.note(QStringLiteral("path=%1").arg(libraryPath));
         _mc_op_.fail(QStringLiteral("LoadLibraryW failed err=126"));
         return false;

@@ -31,7 +31,7 @@
     Defaults to the sibling file.
 
 .EXAMPLE
-    ./survey-chart-codecs.ps1 -ChartRoots '<local-chart-root>', '<chart-root>'
+    ./survey-chart-codecs.ps1 -ChartRoots '<chart-root-1>', '<chart-root-2>'
 #>
 param(
     # Folders to scan recursively. With NONE given, scans this script's own

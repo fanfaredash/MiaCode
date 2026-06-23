@@ -8,8 +8,8 @@ It is not the current design document for the active export backend.
 
 Use these files for current behavior:
 
-- `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
-- `docs/DEBUG_INDEX.md`
+- `../specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
+- `../ops/DEBUG_INDEX.md`
 
 Legacy topics covered by the old analysis and still worth remembering:
 

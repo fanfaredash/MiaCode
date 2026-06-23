@@ -1035,7 +1035,7 @@ bool appendFatalMessage(const QString& scope, const QString& payload)
 {
     // Inline the current thread's operation chain so existing top-level
     // catch (...) sites pick up logical-call-chain context for free.
-    // See docs/OPERATION_BREADCRUMB_LOGGING_PLAN.md §3.5.
+    // See docs/ops/OPERATION_LOG_PATTERNS_SPEC.md.
     const QString chain = miacode::oplog::currentChain();
     const QString fullPayload = chain.isEmpty()
         ? payload

@@ -74,7 +74,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot <QtRo
 
 ## 发布
 
-当前 release 包由维护者在本地使用脚本生成；废弃的 GitHub Actions 已移除。发布前检查项见 [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)，开源前剩余确认项见 [docs/OPEN_SOURCE_CHECKLIST.md](docs/OPEN_SOURCE_CHECKLIST.md)。
+当前 release 包由维护者在本地使用脚本生成；废弃的 GitHub Actions 已移除。发布前检查项见 [docs/ops/RELEASE_CHECKLIST.md](docs/ops/RELEASE_CHECKLIST.md)，开源前剩余确认项见 [docs/ops/OPEN_SOURCE_CHECKLIST.md](docs/ops/OPEN_SOURCE_CHECKLIST.md)。
 
 ## 许可证与鸣谢
 

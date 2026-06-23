@@ -1086,12 +1086,13 @@ int main(int argc, char** argv)
     }
 
     {
-        // Real-chart repro: extracted difficulty-5 from 蒼鷺之火 -
-        // 250604/maidata.txt. Verifies HS=1 reset works in the actual
-        // chart that the user reported as buggy.
+        // Optional real-chart repro: set MIACODE_SIMAI_REPRO_CHART to a
+        // maidata.txt containing difficulty 5. This keeps the public test
+        // binary deterministic while still allowing local corpus checks.
         QTextStream debug(stdout);
-        QFile f(QStringLiteral("D:/MaiChartWorkspace/Original/蒼鷺之火 - 250604/maidata.txt"));
-        if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        const QString reproChartPath = QString::fromLocal8Bit(qgetenv("MIACODE_SIMAI_REPRO_CHART"));
+        QFile f(reproChartPath);
+        if (!reproChartPath.isEmpty() && f.open(QIODevice::ReadOnly | QIODevice::Text)) {
             const QString full = QString::fromUtf8(f.readAll());
             const int diffStart = full.indexOf(QStringLiteral("&inote_5="));
             if (diffStart >= 0) {
@@ -1100,7 +1101,7 @@ int main(int argc, char** argv)
                 if (chartEnd < 0) chartEnd = full.size();
                 const QString chartText = full.mid(chartStart, chartEnd - chartStart + 2);
                 const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(chartText);
-                debug << "[debug] 蒼鷺之火 diff5: ok=" << (parsed.ok ? 1 : 0)
+                debug << "[debug] optional diff5 repro: ok=" << (parsed.ok ? 1 : 0)
                       << " notes=" << parsed.noteMarkers.size()
                       << " errors=" << parsed.errors.size() << "\n";
                 for (const auto& err : parsed.errors) {
@@ -1125,18 +1126,18 @@ int main(int argc, char** argv)
                     }
                 }
                 expect(sawHs1AfterReset,
-                       QStringLiteral("蒼鷺之火 diff5: HS=1 reset region has a marker with hsMultiplier=1.0"));
+                       QStringLiteral("optional diff5 repro: HS=1 reset region has a marker with hsMultiplier=1.0"));
                 debug << "  HS=1-after-HS=2 reset note at sourceLine=" << lastHs1Line << "\n";
             } else {
-                debug << "[debug] 蒼鷺之火 diff5: &inote_5= not found, skipping\n";
+                debug << "[debug] optional diff5 repro: &inote_5= not found, skipping\n";
             }
             f.close();
         }
     }
 
     {
-        // Multi-line repro mirroring the 蒼鷺之火 chart: directive on its
-        // own line, blank line before, beat block on next line. Reported
+        // Multi-line repro mirroring the real-chart failure shape: directive on
+        // its own line, blank line before, beat block on next line. Reported
         // bug: after `<HS*1>`, notes still rendered at 2x.
         const QString chart = QStringLiteral(
             "(174)\n"

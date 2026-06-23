@@ -687,7 +687,7 @@ target_link_libraries(MiaCode PRIVATE Qt6::Svg)
 # QtAVPlayer (FFmpeg) — preview background-video decode backend.
 #
 # Replaces QMediaPlayer for PV/BG decoding inside PreviewStageMediaHost; see
-# docs/VIDEO_DECODE_BACKEND_QTAVPLAYER_MIGRATION_ZH.md. QtAVPlayer is the
+# docs/ops/DEBUG_INDEX.md. QtAVPlayer is the
 # MIT-licensed source vendored under third_party/QtAVPlayer, compiled straight
 # into MiaCode. It links the external FFmpeg shared libraries (n7.1 LGPL) whose
 # dev SDK (headers + import libs + runtime DLLs) is provisioned under
@@ -1313,7 +1313,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
 
     # Drift guard: every MIACODE_* env flag read in src/ must be documented in
-    # docs/DEBUG_INDEX.md, and every flag the doc names must still be read in code
+    # docs/ops/DEBUG_INDEX.md, and every flag the doc names must still be read in code
     # (or be in the spec's retired allowlist). Reads the tree + doc from disk;
     # the repo root is injected as a compile definition.
     miacode_add_dev_tool(debug_flag_index_spec TEST

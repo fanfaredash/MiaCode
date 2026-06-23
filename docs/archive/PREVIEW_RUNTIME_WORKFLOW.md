@@ -8,8 +8,8 @@ Do not treat this file as the current source of truth for active rendering archi
 
 Use these files instead when changing the live preview/export path:
 
-- `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
-- `docs/DEBUG_INDEX.md`
+- `../specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
+- `../ops/DEBUG_INDEX.md`
 - `.codex/skills/miacode-dev-guide/references/cross-chain-linkage.md`
 
 Legacy scope retained here:

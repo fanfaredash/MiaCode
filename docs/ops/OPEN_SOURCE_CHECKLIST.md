@@ -11,16 +11,16 @@ Use this checklist before making the repository public. It intentionally separat
 - [x] Add THIRD_PARTY_NOTICES.md inventory.
 - [x] Record repository/release non-commercial positioning.
 - [x] Record that `.codex/` and `.claude/` remain public.
-- [x] Record that `docs/` will be decided later.
+- [x] Organize public `docs/` into topic subdirectories and keep private notes untracked.
 - [x] Record that OpenMoji/Remotion prototype assets are not distributed.
 - [x] Record that assets are distributed with the non-commercial repository/release.
-- [x] Add [LICENSE_SCOPE.md](../LICENSE_SCOPE.md) for scheme A: project-owned source code under MIT, bundled assets/releases under non-commercial distribution notes.
-- [x] Add [DOCS_PUBLICATION_AUDIT.md](DOCS_PUBLICATION_AUDIT.md) for tracked-docs publication review.
+- [x] Add [LICENSE_SCOPE.md](../../LICENSE_SCOPE.md) for scheme A: project-owned source code under MIT, bundled assets/releases under non-commercial distribution notes.
+- [x] Add [DOCS_PUBLICATION_AUDIT.md](../audit/DOCS_PUBLICATION_AUDIT.md) for tracked-docs publication review.
 - [ ] Review package contents against THIRD_PARTY_NOTICES.md after removing Remotion prototype files.
 
 ## Owner Confirmation Required
 
-- [x] Use scheme A: keep [LICENSE](../LICENSE) as MIT for project-owned source code and document repository/release non-commercial scope separately.
+- [x] Use scheme A: keep [LICENSE](../../LICENSE) as MIT for project-owned source code and document repository/release non-commercial scope separately.
 - [x] Confirm BASS headers, import libs, and runtime DLLs stay in the non-commercial repository/release.
 - [x] Confirm `assets/skin` is distributed.
 - [x] Confirm `assets/SFX` is distributed.

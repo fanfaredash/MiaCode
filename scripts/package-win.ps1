@@ -516,7 +516,7 @@ foreach ($runtimeDll in $requiredBassRuntimeDlls) {
 # other five overlap with what windeployqt stages for Qt
 # Multimedia's ffmpeg plugin, so we copy our own build AFTER windeployqt
 # (-Force overwrite) to keep the runtime matched to the import libs MiaCode
-# linked against. See docs/VIDEO_DECODE_BACKEND_QTAVPLAYER_MIGRATION_ZH.md.
+# linked against.
 $ffmpegDevBin = Join-Path $repoRoot "third_party\\ffmpeg\\windows\\dev\\bin"
 $requiredFfmpegRuntimeDlls = @(
     "avcodec-61.dll",
@@ -596,6 +596,21 @@ if (Test-Path $licensesSrc) {
     throw "Missing licenses dir: $licensesSrc"
 }
 
+$releaseDocs = @(
+    "LICENSE",
+    "LICENSE_SCOPE.md",
+    "THIRD_PARTY_NOTICES.md",
+    "README.md",
+    "README_EN.md"
+)
+foreach ($releaseDoc in $releaseDocs) {
+    $releaseDocSrc = Join-Path $repoRoot $releaseDoc
+    if (!(Test-Path $releaseDocSrc)) {
+        throw "Missing release documentation file: $releaseDocSrc"
+    }
+    Copy-Item $releaseDocSrc (Join-Path $DistDir $releaseDoc) -Force
+}
+
 $ffmpegSrc = Join-Path $repoRoot "third_party\\ffmpeg\\windows\\ffmpeg.exe"
 if (Test-Path $ffmpegSrc) {
     $ffmpegSize = (Get-Item $ffmpegSrc).Length
@@ -621,6 +636,11 @@ $requiredPackagePaths = @(
     "logs\\worker-hwnd",
     "assets\\SFX",
     "licenses\\Resource-Han-Rounded-OFL.txt",
+    "LICENSE",
+    "LICENSE_SCOPE.md",
+    "THIRD_PARTY_NOTICES.md",
+    "README.md",
+    "README_EN.md",
     # app/: the real exe and its DLL/plugin/QML retinue.
     "app\\MiaCode.exe",
     "app\\ffmpeg\\ffmpeg.exe",
