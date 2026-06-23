@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="resources/icons/app.png" alt="MiaCode avatar" width="128">
+</p>
+
 # MiaCode
 
 [中文](README.md) | [English](README_EN.md)
@@ -89,3 +93,11 @@ Thanks to [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) and related 
 ## Changelog
 
 Historical release notes have moved to [CHANGELOG.md](CHANGELOG.md).
+
+## Community
+
+QQ group: 1095435375
+
+<p align="center">
+  <img src="resources/community/qq-group.png" alt="MiaCode QQ group QR code" width="360">
+</p>

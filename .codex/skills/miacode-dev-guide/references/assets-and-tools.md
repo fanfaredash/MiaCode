@@ -22,6 +22,7 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
   - `resources/slide_data.qrc`
   - `resources/preview_runtime_qml.qrc`
   - `resources/icons/*`
+  - `resources/community/*` for README/community-facing repository images
 
 ## 2. Runtime File Conventions Near A Chart
 

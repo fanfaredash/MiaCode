@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="resources/icons/app.png" alt="MiaCode avatar" width="128">
+</p>
+
 # MiaCode
 
 [中文](README.md) | [English](README_EN.md)
@@ -89,3 +93,11 @@ MiaCode 自有源代码使用 MIT License，见 [LICENSE](LICENSE)。仓库整�
 ## 更新日志
 
 历史更新记录已移至 [CHANGELOG.md](CHANGELOG.md)。
+
+## 社群
+
+QQ 群：1095435375
+
+<p align="center">
+  <img src="resources/community/qq-group.png" alt="MiaCode QQ 群二维码" width="360">
+</p>
