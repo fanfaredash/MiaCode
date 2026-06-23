@@ -45,7 +45,7 @@ Use this checklist before making the repository public. It intentionally separat
 - [x] Generate a largest-object report for Git history.
 - [x] Remove historical build outputs and binary blobs with `git-filter-repo` if public history must be clean.
 - [x] Re-clone the filtered repository and verify build/package scripts from the cleaned history.
-- [ ] Force-push the filtered `main` and `test` histories after owner approval.
+- [x] Force-push the filtered `main` and `test` histories after owner approval.
 
 Current history scan result:
 
@@ -53,14 +53,15 @@ Current history scan result:
 - Filtered history has no hits from the open-source secret/local-path scan patterns, excluding intentionally vendored third-party code.
 - Filtered history removed historical build artifacts under `build-mingw-ascii/` / `build-mingw/`, probe files under `_audio_probe/`, generated slide data under `assets/generated/`, Remotion prototype files under `tools/intro_remotion/`, old FFmpeg backup files under `third_party/ffmpeg/windows/dev.full.bak/`, old M PLUS font copies, and superseded private investigation docs/scripts.
 - Largest remaining Git objects are current distribution assets and third-party/source files that are intentionally retained.
+- Filtered `main` and `test` were force-pushed to GitHub on 2026-06-24; both point to `e150dfcd94c20877a0f212164040e3979e05f1c0`.
 - A pre-filter bundle backup exists outside the repository; do not publish it.
 
 ## Branches And Tags
 
-- [ ] Make `main` the public default branch.
+- [x] Make `main` the public default branch.
 - [x] Keep `main` and `test` as the public branches.
 - [x] Delete local experiment branches.
-- [ ] Delete remote experiment branches.
+- [x] Delete remote experiment branches.
 - [x] Old tags may remain public.
 
 ## Release Readiness
