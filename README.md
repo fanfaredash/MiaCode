@@ -34,9 +34,9 @@ MiaCode 自有源代码使用 MIT License；仓库整体、随仓库分发的资
 ### 依赖
 
 - CMake 3.21+
-- C++17 编译器
-- Qt 6.8+，需要 `Core`、`Gui`、`Widgets`、`OpenGL`、`Qml`、`Quick`、`Multimedia`、`Svg`
-- Windows：Visual Studio 2022 / MSVC，FFmpeg dev SDK 由脚本准备
+- C++20 编译器
+- Qt 6.8+，需要 `Core`、`Gui`、`Widgets`、`Network`、`OpenGL`、`Qml`、`Quick`、`QuickControls2`、`ShaderTools`、`Multimedia`、`Svg`
+- Windows：Visual Studio 2022 / MSVC；导出用 FFmpeg 和 QtAVPlayer 预览解码用 FFmpeg dev SDK 由脚本准备
 
 更详细的打包说明见 [scripts/README.md](scripts/README.md)。
 
@@ -48,13 +48,17 @@ MiaCode 自有源代码使用 MIT License；仓库整体、随仓库分发的资
 powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1
 ```
 
-如果本机已经安装 Qt，也可以使用 CMake preset：
+如果本机已经安装 Qt，也可以使用 CMake preset。此路径需要先准备 FFmpeg 运行文件和 dev SDK：
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\ffmpeg\ensure-windows-ffmpeg.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\ffmpeg\ensure-windows-ffmpeg-dev.ps1
 cmake --preset vs2022-qt6
 cmake --build --preset release
 .\build\Release\MiaCode.exe
 ```
+
+CMake preset 路径要求 Qt 能被 CMake 找到，或通过 `CMAKE_PREFIX_PATH` 指向 Qt 根目录。Windows 下还要求 `third_party/ffmpeg/windows/ffmpeg.exe` 与 `third_party/ffmpeg/windows/dev/` 已存在；上面两个脚本会下载固定版本并校验必需文件。
 
 已有构建产物时，可以单独打包：
 

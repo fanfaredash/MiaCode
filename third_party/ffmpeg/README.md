@@ -42,8 +42,9 @@ third_party/ffmpeg/windows/dev/
              swscale-8, avfilter-10)   # avdevice intentionally dropped — see Size trimming
 ```
 
-- Provision: `scripts/ensure-windows-ffmpeg-dev.ps1` (downloads the BtbN n7.1 LGPL **shared** build;
-  override URL via `MIACODE_WINDOWS_FFMPEG_DEV_URL`).
+- Provision: `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1` (downloads the BtbN n7.1 LGPL **shared** build;
+  override URL via `MIACODE_WINDOWS_FFMPEG_DEV_URL`). The recommended Windows entry point
+  `scripts/build/build-win.ps1` runs this automatically on a clean clone.
 - CMake finds it via the `MIACODE_FFMPEG_DEV_DIR` cache variable (defaults to `windows/dev/`).
 - Major versions must match the packaged runtime: avcodec-61 / avformat-61 / avutil-59 /
   swresample-5 / swscale-8 / avfilter-10 (avdevice dropped).
@@ -62,21 +63,21 @@ The default BtbN n7.1 LGPL *shared* build is full-featured and large (`avcodec-6
    define `QT_AVPLAYER_NO_AVDEVICE`), so `avdevice-61.dll` is neither built-against nor shipped.
 
 2. **Minimal decode-only `avcodec`/`avfilter` (the big lever, ~70 MB → ~15–20 MB).** Automated by
-   the **`scripts/ffmpeg-trim/`** toolchain — see its [README](../../scripts/ffmpeg-trim/README.md).
+   the **`scripts/ffmpeg/trim/`** toolchain — see its [README](../../scripts/ffmpeg/trim/README.md).
    It builds a decode-only LGPL n7.1 *shared* FFmpeg from a reviewed allowlist
-   (`scripts/ffmpeg-trim/trim-allowlist.psd1`), generates MSVC import libs, and installs into
+   (`scripts/ffmpeg/trim/trim-allowlist.psd1`), generates MSVC import libs, and installs into
    `third_party/ffmpeg/windows/dev/` (backing up the full set to `dev.full.bak`):
 
    ```powershell
-   scripts\ffmpeg-trim\survey-chart-codecs.ps1 -ChartRoots <dirs>   # calibrate allowlist vs real PVs
-   scripts\ffmpeg-trim\build-trimmed-ffmpeg.ps1 -PrintPlanOnly      # review the configure plan
-   scripts\ffmpeg-trim\build-trimmed-ffmpeg.ps1                     # build + install (~30–60 min)
+   scripts\ffmpeg\trim\survey-chart-codecs.ps1 -ChartRoots <dirs>   # calibrate allowlist vs real PVs
+   scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1 -PrintPlanOnly      # review the configure plan
+   scripts\ffmpeg\trim\build-trimmed-ffmpeg.ps1                     # build + install (~30–60 min)
    ```
 
    It keeps major versions pinned (avcodec-61 / avfilter-10 / …) to match CMakeLists.txt +
-   `scripts/package-win.ps1`, keeps the mandatory QtAVPlayer filtergraph endpoints
+   `scripts/build/package-win.ps1`, keeps the mandatory QtAVPlayer filtergraph endpoints
    (`buffer`/`buffersink`/`abuffer`/`abuffersink`) + `scale`/`format`/`fps` + `protocol=file` +
    D3D11VA hwaccels, and validates the allowlist against `./configure --list-*` so a missing
    component is reported (not silently 误删'd). Alternatively, drop a pre-built trimmed
    `include/ lib/ bin/` into `third_party/ffmpeg/windows/dev/`, or point
-   `scripts/ensure-windows-ffmpeg-dev.ps1` at it via `MIACODE_WINDOWS_FFMPEG_DEV_URL=<your-zip>`.
+   `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1` at it via `MIACODE_WINDOWS_FFMPEG_DEV_URL=<your-zip>`.

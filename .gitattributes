@@ -19,3 +19,7 @@
 # PowerShell scripts also benefit from CRLF on Windows, though
 # powershell.exe is more lenient than cmd.exe.
 *.ps1 eol=crlf
+
+# POSIX shell scripts must stay LF. CRLF makes bash report syntax errors
+# such as `unexpected token $'in\r''` on macOS/Linux and in Git Bash.
+*.sh eol=lf

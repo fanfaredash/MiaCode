@@ -34,9 +34,9 @@ Project-owned MiaCode source code is MIT-licensed; the repository as a whole, bu
 ### Requirements
 
 - CMake 3.21+
-- C++17 compiler
-- Qt 6.8+ with `Core`, `Gui`, `Widgets`, `OpenGL`, `Qml`, `Quick`, `Multimedia`, `Svg`
-- Windows: Visual Studio 2022 / MSVC; the FFmpeg dev SDK is provisioned by scripts
+- C++20 compiler
+- Qt 6.8+ with `Core`, `Gui`, `Widgets`, `Network`, `OpenGL`, `Qml`, `Quick`, `QuickControls2`, `ShaderTools`, `Multimedia`, `Svg`
+- Windows: Visual Studio 2022 / MSVC; the FFmpeg export binary and QtAVPlayer FFmpeg dev SDK are provisioned by scripts
 
 See [scripts/README_EN.md](scripts/README_EN.md) for packaging details.
 
@@ -51,10 +51,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build\build-win.ps1
 If Qt is already installed locally, you can also build with the CMake preset:
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\ffmpeg\ensure-windows-ffmpeg.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\ffmpeg\ensure-windows-ffmpeg-dev.ps1
 cmake --preset vs2022-qt6
 cmake --build --preset release
 .\build\Release\MiaCode.exe
 ```
+
+The preset path expects Qt to be discoverable by CMake or `CMAKE_PREFIX_PATH`. On Windows, it also expects `third_party/ffmpeg/windows/ffmpeg.exe` and `third_party/ffmpeg/windows/dev/` to exist; the two FFmpeg scripts above download the pinned contents and validate the required files.
 
 To package an existing build:
 

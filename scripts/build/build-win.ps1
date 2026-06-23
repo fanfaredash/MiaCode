@@ -2,7 +2,7 @@ param(
     [string]$PythonExe = "",
     [string]$QtVersion = "6.8.3",
     [string]$QtArch = "win64_msvc2022_64",
-    [string[]]$QtModules = @("qtmultimedia", "qtdeclarative", "qtsvg"),
+    [string[]]$QtModules = @("qtmultimedia", "qtdeclarative", "qtshadertools", "qtsvg"),
     [string]$QtOutputDir = "",
     [string]$BuildDir = "build",
     [ValidateSet("Release", "Debug")]
@@ -73,14 +73,20 @@ if ([string]::IsNullOrWhiteSpace($QtOutputDir)) {
 }
 $BuildDir = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $BuildDir
 
+$pythonCommand = Resolve-PythonExe -Preferred $PythonExe
+
+Invoke-Python -PythonCommand $pythonCommand -Arguments @("-m", "pip", "install", "--user", "aqtinstall==3.3.*", "py7zr==1.0.*")
+
 & (Join-Path $repoRoot "scripts\ffmpeg\ensure-windows-ffmpeg.ps1") -RepoRoot $repoRoot
 if ($LASTEXITCODE -ne 0) {
     throw "Windows ffmpeg preparation failed."
 }
 
-$pythonCommand = Resolve-PythonExe -Preferred $PythonExe
+& (Join-Path $repoRoot "scripts\ffmpeg\ensure-windows-ffmpeg-dev.ps1") -RepoRoot $repoRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "Windows FFmpeg dev SDK preparation failed."
+}
 
-Invoke-Python -PythonCommand $pythonCommand -Arguments @("-m", "pip", "install", "--user", "aqtinstall==3.3.*", "py7zr==1.0.*")
 $qtInstallArgs = @(
     "-m", "aqt", "install-qt",
     "windows", "desktop", $QtVersion, $QtArch,

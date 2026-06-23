@@ -145,7 +145,8 @@ Do not rename sound files casually; both preview-time and export-time behavior d
   - `scripts/build/package-win.ps1`
   - `scripts/build/package-win.ps1` defaults to `build/`, prechecks version freshness against `CMakeLists.txt` and `build/generated/AppVersion.h`, treats version/header drift as a normal refresh instead of a warning, and auto-runs `cmake --build <BuildDir> --target MiaCode --config <Config> --parallel 8` when the packaged executable or generated version metadata needs refreshing
   - `scripts/build/build-win.ps1` and `scripts/build/package-win.ps1` resolve relative `BuildDir`, `DistDir`, `QtRoot`, and Qt output paths from the repo root instead of the caller's current working directory; this prevents `windeployqt` output from spilling into the desktop when launched from outside the repo
-  - `scripts/build/build-win.ps1` now installs `qtmultimedia`, `qtdeclarative`, and `qtsvg` so the Qt Quick runtime can be reproduced from a clean machine
+  - `scripts/build/build-win.ps1` now installs `qtmultimedia`, `qtdeclarative`, `qtshadertools`, and `qtsvg` so the Qt Quick runtime and qsb shader compilation can be reproduced from a clean machine
+  - `scripts/build/build-win.ps1` provisions both FFmpeg inputs needed by a clean Windows clone: standalone export `third_party/ffmpeg/windows/ffmpeg.exe` and the QtAVPlayer preview-decode dev SDK under `third_party/ffmpeg/windows/dev/`
   - both the CMake post-build deploy step and `scripts/build/package-win.ps1` now pass `--qmldir src/preview/runtime/qml` to `windeployqt` so the Qt Quick runtime imports are deployed
   - both the CMake post-build deploy step and `scripts/build/package-win.ps1` explicitly keep the Qt Quick runtime DLL set (`Qt6Quick`, `Qt6Qml`, `Qt6QmlMeta`, `Qt6QmlModels`, `Qt6QmlWorkerScript`) and remove stale `Qt6OpenGLWidgets.dll`
   - the CMake post-build deploy step now also copies the repo-local BASS runtime DLL set (`bass`, `bassmix`, `bass_fx`, `bass_aac`, `bassopus`) into the executable directory
@@ -157,7 +158,7 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 - macOS build/package:
   - `scripts/build/build-macos.sh`
   - `scripts/build/package-mac.sh`
-  - `scripts/build/build-macos.sh` now installs `qtmultimedia`, `qtdeclarative`, and `qtsvg`
+  - `scripts/build/build-macos.sh` now installs `qtmultimedia`, `qtdeclarative`, `qtshadertools`, and `qtsvg`
 - ffmpeg provisioning:
   - `scripts/ffmpeg/ensure-windows-ffmpeg.ps1`
   - `scripts/ffmpeg/ensure-macos-ffmpeg.sh`

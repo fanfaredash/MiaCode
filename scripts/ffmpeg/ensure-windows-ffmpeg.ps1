@@ -81,7 +81,23 @@ function Expand-DownloadedArchive {
                 return
             }
         }
-        throw "Unable to extract .7z archive. Install 7z or tar and retry."
+
+        foreach ($python in @("python", "py")) {
+            $pythonCmd = Get-Command $python -ErrorAction SilentlyContinue
+            if ($null -eq $pythonCmd) {
+                continue
+            }
+            if ($python -eq "py") {
+                & $pythonCmd.Source -3 -m py7zr x $ArchivePath "-o$ExtractDir" | Out-Host
+            } else {
+                & $pythonCmd.Source -m py7zr x $ArchivePath "-o$ExtractDir" | Out-Host
+            }
+            if ($LASTEXITCODE -eq 0) {
+                return
+            }
+        }
+
+        throw "Unable to extract .7z archive. Install 7z/tar or run python -m pip install --user py7zr and retry."
     }
     throw "Unsupported archive extension: $ArchiveExtension"
 }
