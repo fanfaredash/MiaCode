@@ -80,12 +80,9 @@ Rules going forward:
   n7.1 LGPL *shared* build (headers + import libs + runtime DLLs) into
   `third_party/ffmpeg/windows/dev/` for the **QtAVPlayer preview decode backend**. Gitignored,
   never committed. CMake finds it via the `MIACODE_FFMPEG_DEV_DIR` cache var.
-- Debug launchers (release package + repo): `Start_MiaCode_Debug.bat`,
-  `Start_MiaCode_Legacy_QML.bat`, `Start_MiaCode_QuickShell_Debug.bat`, plus diagnostic A/B
-  launchers (`Start_MiaCode_DiagBypass.bat`, `Start_MiaCode_SkipBoth.bat`,
-  `Start_MiaCode_SkipDiagD3D11.bat`, `Start_MiaCode_QtPluginDiag.bat`,
-  `Start_MiaCode_ExportNoPboReadback.bat`). These set `MIACODE_*` env combos; keep them in sync
-  with `debug-and-logging.md`.
+- Public debug launchers: `Start_MiaCode_Debug.bat`, `Start_MiaCode_SoftwareVideoDecode.bat`,
+  and `Start_MiaCode_QtPluginDiag.bat`. One-off A/B launchers stay as ignored maintainer-local
+  tools unless they become part of a repeatable public support workflow.
 
 ## 5. Helper binaries (behind `MIACODE_BUILD_DEV_TOOLS`)
 

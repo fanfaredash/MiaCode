@@ -544,18 +544,9 @@ void PreviewStageMediaHost::setPlaybackRate(double rate)
         // even at 0.5x / 1.5x (logs_24 startup line 134-161).
         return;
     }
-    // beta55 diagnostic build: revert beta54's recoverVideoBackend rebuild
-    // path so the 0.5x / 1.5x crash recurs on demand. This release ships
-    // alongside Start_MiaCode_DisablePerPixelAlpha.bat and
-    // Start_MiaCode_FFmpegBackend.bat — users compare default-launcher
-    // behaviour (crash) against env-toggle behaviour (does it survive?)
-    // to confirm hypothesis #1 (DComp per-pixel-alpha + QRhi D3D11
-    // texture invalidation during Qt's setPlaybackRate-triggered
-    // converter rebuild). beta54's rebuild fix is intentionally absent
-    // here; if hypothesis #1 confirms, the proper fix targets the QML /
-    // DComp surface layer instead. Sync beacon trail is preserved so
-    // late tail-truncation in the async DebugLog doesn't lose the
-    // breadcrumb when the crash recurs.
+    // Keep the media-status snapshot before applying a rate change so
+    // diagnostics can still reconstruct whether the backend was loaded,
+    // buffering, or stalled when the request arrived.
     const QMediaPlayer::MediaStatus status = player_->mediaStatus();
     const QMediaPlayer::PlaybackState playbackState = playerPlaybackState(player_);
     const qreal playerRateBefore = player_->playbackRate();

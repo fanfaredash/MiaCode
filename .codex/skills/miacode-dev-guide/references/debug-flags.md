@@ -72,10 +72,6 @@ The Windows release package also ships:
 
 - `Start_MiaCode_Debug.bat`
   - sets debug mode, creates a local `logs/` directory, and launches `MiaCode.exe --debug`
-- `Start_MiaCode_Legacy_QML.bat`
-  - creates `logs/worker-hwnd/` and launches the DComp preview + DComp timeline route by setting `MIACODE_PREVIEW_USE_DCOMP=1` and `MIACODE_TIMELINE_USE_DCOMP=1` (the out-of-process preview worker was removed, so the old `MIACODE_PREVIEW_OUT_OF_PROCESS` / `MIACODE_PREVIEW_WORKER_QSG_RENDER` toggles are gone)
-- `Start_MiaCode_QuickShell_Debug.bat`
-  - sets debug mode, creates a dedicated `logs/quick-shell-beta/` directory, and launches `MiaCode.exe --quick-shell-beta --debug`
 
 ## 3. Preview And Runtime Overrides
 
@@ -284,11 +280,7 @@ Current normalization rules:
   - `soundtouch_probe`
 - Common debug scripts:
   - `scripts/Start_MiaCode_Debug.bat`
-  - `scripts/Start_MiaCode_QuickShell_Debug.bat`
-  - `scripts/Start_MiaCode_Debug_CompareDump.bat`
-  - `scripts/analyze_ffmpeg_chain_variants.py`
-  - `scripts/analyze_video_duplicate_frames.py`
-  - `scripts/compare_log_vs_video_trajectory.py`
-  - `scripts/export_and_analyze_duplicates.py`
+  - `scripts/Start_MiaCode_SoftwareVideoDecode.bat`
+  - `scripts/Start_MiaCode_QtPluginDiag.bat`
 
 Update this file when a debug switch, log path, log channel, release debug workflow, or export diagnostic family changes.

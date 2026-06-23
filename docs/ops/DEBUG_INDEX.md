@@ -9,8 +9,9 @@ This document is the current user-facing index for MiaCode debug mode, log files
 - Preferred CLI switch: `--debug`
 - Windows release helper:
   - `Start_MiaCode_Debug.bat`
-- Windows quick-shell-beta debug helper:
-  - `Start_MiaCode_QuickShell_Debug.bat`
+- Windows focused diagnostic helpers retained in the public repo:
+  - `Start_MiaCode_SoftwareVideoDecode.bat`
+  - `Start_MiaCode_QtPluginDiag.bat`
 
 Inside debug mode, runtime, audio, export, startup-timing, and preview-profile outputs are enabled unless they are individually disabled.
 Outside debug mode, the export log still keeps a concise stage/failure summary so users can report export issues without reproducing under `--debug`.

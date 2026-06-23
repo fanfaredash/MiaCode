@@ -5,11 +5,8 @@ canonical doc is `docs/ops/DEBUG_INDEX.md`; this file is the code-owner-oriented
 
 > **Remaining-refactor backlog:** the 2026-06-19 logging-design audit shipped its high-priority
 > fixes in commit `034769c` (Level/UTC/pid-tid records, drop markers, rename rotation, flag cache,
-> `ProcessDiagnostics` split, scaffolding cleanup). The **un-done** items — `Channel` three-axis
-> split (root cause), in-code flag registry, `PreviewProfile` phantom-channel removal, scope
-> registry, Audio/bass taxonomy, line-shape unification, Qt-`QtMsgType` folding, etc. — are each
-> spelled out (definition / location / fix / risk / dependency / priority) in
-> **`docs/LOGGING_AUDIT_REMAINING_REFACTORS_ZH.md`**. Read it before touching logging design again.
+> `ProcessDiagnostics` split, scaffolding cleanup). The remaining logging-design backlog is kept
+> in maintainer-local notes; re-audit the channel model before changing logging design again.
 
 ## 1. Logging architecture (this is the ONE mechanism — use it)
 

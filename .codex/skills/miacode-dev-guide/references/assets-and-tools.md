@@ -108,7 +108,7 @@ The toolbox blank-media submenu operates on the current chart directory only. It
     - `background/outline_area.png`
     - `background/outline_area_labeled.png`
   - Optional custom judge-line PNGs are selected by file name from `background/outlines/*.png`; if the selected file is missing, preview/export fall back to the saved built-in `PreviewOutlineVariant`
-  - Source helper art for rebuilding the labeled-area variant currently lives at `background/region_labels_overlay_transparent_v3.png`, and `scripts/build_outline_area_labeled.py` regenerates the final labeled outline by compositing that overlay over `outline_area.png`
+  - Source helper art for rebuilding the labeled-area variant currently lives at `background/region_labels_overlay_transparent_v3.png`; rebuilding the final labeled outline is a maintainer-local asset task unless the helper becomes part of a repeatable public workflow
   - The active outline assets are currently `1080x1080` canvases with built-in transparent border; preview/export map them across the full playfield square, and the selected variant is a shared render setting rather than an asset-size inference
 - Generated slide data:
   - Stored under `assets/reference`
@@ -143,21 +143,16 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 - Windows build/package:
   - `scripts/build-win.ps1`
   - `scripts/package-win.ps1`
-  - `scripts/build-local-dev2.ps1`
   - `scripts/package-win.ps1` defaults to `build/`, prechecks version freshness against `CMakeLists.txt` and `build/generated/AppVersion.h`, treats version/header drift as a normal refresh instead of a warning, and auto-runs `cmake --build <BuildDir> --target MiaCode --config <Config> --parallel 8` when the packaged executable or generated version metadata needs refreshing
   - `scripts/build-win.ps1` and `scripts/package-win.ps1` resolve relative `BuildDir`, `DistDir`, `QtRoot`, and Qt output paths from the repo root instead of the caller's current working directory; this prevents `windeployqt` output from spilling into the desktop when launched from outside the repo
   - `scripts/build-win.ps1` now installs `qtmultimedia`, `qtdeclarative`, and `qtsvg` so the Qt Quick runtime can be reproduced from a clean machine
-  - `scripts/build-local-dev2.ps1` is the local one-click wrapper used by the desktop shortcut; it reuses repo-local `build/` and `.qt/`, then delegates packaging to `scripts/package-win.ps1`
   - both the CMake post-build deploy step and `scripts/package-win.ps1` now pass `--qmldir src/preview/runtime/qml` to `windeployqt` so the Qt Quick runtime imports are deployed
   - both the CMake post-build deploy step and `scripts/package-win.ps1` explicitly keep the Qt Quick runtime DLL set (`Qt6Quick`, `Qt6Qml`, `Qt6QmlMeta`, `Qt6QmlModels`, `Qt6QmlWorkerScript`) and remove stale `Qt6OpenGLWidgets.dll`
   - the CMake post-build deploy step now also copies the repo-local BASS runtime DLL set (`bass`, `bassmix`, `bass_fx`, `bass_aac`, `bassopus`) into the executable directory
 - Windows release packages now also include:
     - root-level `Start_MiaCode_Debug.bat`
-    - root-level `Start_MiaCode_Legacy_QML.bat`, which opts into the DComp preview + DComp timeline route for A/B testing against the default QSG-only startup path (the out-of-process preview worker was removed, so this launcher now only sets the DComp toggles)
-    - root-level `Start_MiaCode_QuickShell_Debug.bat`
     - root-level `logs/` helper folder only for explicit debug-launch scripts; normal project-bound runtime logs default to `.miacode/logs/`
-    - `docs/ops/DEBUG_INDEX.md`
-    - `docs/specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
+    - root-level `LICENSE`, `LICENSE_SCOPE.md`, `THIRD_PARTY_NOTICES.md`, `README.md`, `README_EN.md`, and `licenses/`
   - optional Windows dev-tool packaging currently includes only `simai_native_dump.exe`; `soundtouch_probe.exe` is no longer copied by `scripts/package-win.ps1`
 - macOS build/package:
   - `scripts/build-macos.sh`
@@ -175,17 +170,10 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 Current repo-local helper scripts include:
 
 - `scripts/Start_MiaCode_Debug.bat`
-- `scripts/Start_MiaCode_Debug_CompareDump.bat`
-- `scripts/analyze_ffmpeg_chain_variants.py`
-- `scripts/analyze_video_duplicate_frames.py`
-- `scripts/compare_log_vs_video_trajectory.py`
-- `scripts/export_and_analyze_duplicates.py`
-- `scripts/calc_hold_crop_ratio.py`
-- `tools/intro_remotion/qml/build-exporter.ps1`
-- `tools/intro_remotion/qml/render-qml-video.ps1`
-- `tools/intro_remotion/qml/render-remotion-video.ps1`
+- `scripts/Start_MiaCode_SoftwareVideoDecode.bat`
+- `scripts/Start_MiaCode_QtPluginDiag.bat`
 
-These are developer aids, not runtime dependencies. If a debugging workflow starts depending on one of them regularly, keep this list and its purpose notes up to date.
+Other one-off analysis and A/B scripts are local maintainer tools and stay ignored unless they become part of a repeatable public workflow.
 
 Repo-wide debug flags and diagnostic env vars are indexed separately in `references/debug-flags.md`.
 

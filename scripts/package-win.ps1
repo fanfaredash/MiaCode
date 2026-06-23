@@ -356,24 +356,10 @@ if (!(Test-Path $debugLauncherSrc)) {
 }
 Copy-Item $debugLauncherSrc (Join-Path $DistDir "Start_MiaCode_Debug.bat") -Force
 
-# Diagnostic launchers were dropped in 0.5.0-beta: Start_MiaCode_Debug.bat is now
-# the only launcher shipped. Start_MiaCode_DisablePerPixelAlpha.bat (DComp
-# per-pixel-alpha A/B) and Start_MiaCode_ExportNoPboReadback.bat
-# (MIACODE_EXPORT_DISABLE_PBO_READBACK=1) probed regressions long since closed and
-# only confused testers about which .bat to double-click. The source files remain
-# under scripts/ for ad-hoc use; they're just no longer copied into DistDir (and
-# are asserted absent via $unexpectedPackagePaths below).
-# (Start_MiaCode_FFmpegBackend.bat was removed earlier — the Windows preview now
-# decodes via QtAVPlayer/FFmpeg, so QT_MEDIA_BACKEND no longer affects it.)
-
-# beta51: Start_MiaCode_Debug.bat is the only "normal" launcher shipped now.
-# The legacy QML launcher and the beta45 D3D11/Plugin/AsyncLog triage
-# launchers (Start_MiaCode_Legacy_QML / SkipDiagD3D11 / DiagBypass /
-# SkipBoth / QtPluginDiag) used to land here too. They were diagnostic
-# probes for regressions long since closed; keeping them around mostly
-# confused testers about which .bat to double-click. The source files
-# in scripts/ are kept (cheap, useful for one-off reproducions) but
-# they no longer flow into the distributed zip.
+# Start_MiaCode_Debug.bat is the only launcher shipped in the Windows package.
+# Focused diagnostic launchers may exist in the repository for support work,
+# but they stay out of DistDir and are asserted absent below so testers have
+# one obvious entry point.
 
 New-Item -ItemType Directory -Path (Join-Path $DistDir "logs") -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $DistDir "logs\\worker-hwnd") -Force | Out-Null
@@ -688,17 +674,15 @@ $unexpectedPackagePaths = @(
     "Start_MiaCode_Debug_View.bat",
     "Start_MiaCode_Debug_Widget.bat",
     "Start_MiaCode_QuickShell_Debug.bat",
-    # beta51: Start_MiaCode_Debug.bat is the only launcher shipped. The
-    # legacy QML and beta45 triage launchers are no longer copied into
-    # DistDir; assert they don't accidentally come back via a stray
+    # Start_MiaCode_Debug.bat is the only launcher shipped. Assert old
+    # local/A-B diagnostic launchers don't accidentally come back via a stray
     # build step or leftover output dir.
     "Start_MiaCode_Legacy_QML.bat",
     "Start_MiaCode_SkipDiagD3D11.bat",
     "Start_MiaCode_DiagBypass.bat",
     "Start_MiaCode_SkipBoth.bat",
     "Start_MiaCode_QtPluginDiag.bat",
-    # 0.5.0-beta: the two remaining diagnostic launchers were dropped from the
-    # package (sources kept under scripts/). Assert they don't sneak back in.
+    # Extra local/A-B diagnostic launchers stay out of the release package.
     "Start_MiaCode_DisablePerPixelAlpha.bat",
     "Start_MiaCode_ExportNoPboReadback.bat",
     "logs\\quick-shell-beta",
