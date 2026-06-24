@@ -307,6 +307,34 @@ bool CoverLayoutModel::removeLayer(const QString& key)
     return true;
 }
 
+QString CoverLayoutModel::selectionAfterRemoval(const QString& key) const
+{
+    // Mirror the list view order (CoverLayerListModel::layerAt): z descending.
+    QList<CoverLayer*> ordered = layers_;
+    std::sort(ordered.begin(), ordered.end(), [](const CoverLayer* a, const CoverLayer* b) {
+        return a->z() > b->z();
+    });
+    int idx = -1;
+    for (int i = 0; i < ordered.size(); ++i) {
+        if (ordered.at(i)->key_ == key) {
+            idx = i;
+            break;
+        }
+    }
+    if (idx < 0) {
+        return cardKey();
+    }
+    // After removing row idx, the row below (idx+1) shifts up into idx — select it;
+    // if idx was the last row, fall back to the previous; else the stable card.
+    if (idx + 1 < ordered.size()) {
+        return ordered.at(idx + 1)->key_;
+    }
+    if (idx - 1 >= 0) {
+        return ordered.at(idx - 1)->key_;
+    }
+    return cardKey();
+}
+
 QList<CoverLayer*> CoverLayoutModel::chartFrameLayers() const
 {
     QList<CoverLayer*> out;
@@ -355,6 +383,33 @@ bool CoverLayoutModel::moveLayerAfter(const QString& key, const QString& afterKe
     assignZOrderFromList();
     emit layersChanged();
     return true;
+}
+
+void CoverLayoutModel::moveByViewRows(int fromRow, int toRow)
+{
+    // View order = z descending (mirror CoverLayerListModel::layerAt).
+    QList<CoverLayer*> view = layers_;
+    std::sort(view.begin(), view.end(), [](const CoverLayer* a, const CoverLayer* b) {
+        return a->z() > b->z();
+    });
+    const int n = view.size();
+    if (fromRow < 0 || fromRow >= n) {
+        return;
+    }
+    int dest = toRow;
+    if (dest < 0 || dest > n) {
+        dest = n;   // drop past the end → send to back
+    }
+    CoverLayer* moving = view.takeAt(fromRow);
+    if (dest > fromRow) {
+        dest -= 1;   // removing fromRow shifted everything after it left by one
+    }
+    view.insert(qBound(0, dest, view.size()), moving);
+    // Reassign z so the new view order holds: view row 0 = highest z (front).
+    for (int i = 0; i < view.size(); ++i) {
+        view.at(i)->setZ(view.size() - 1 - i);
+    }
+    emit layersChanged();
 }
 
 void CoverLayoutModel::normalizeZOrder()

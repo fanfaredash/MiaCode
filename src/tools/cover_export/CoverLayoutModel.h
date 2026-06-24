@@ -145,10 +145,19 @@ public:
     CoverLayer* addChartFrameLayer(double frameSeconds = 0.0);
     CoverLayer* duplicateLayer(const QString& key);
     bool removeLayer(const QString& key);
+    // Key to select after removing `key`, in the layer LIST's visible order
+    // (z descending, row 0 = front): the next item below, else the previous,
+    // else the stable card. Drives "delete then auto-select neighbour" so the
+    // delete key can be held to clear layers. Computed BEFORE the removal.
+    QString selectionAfterRemoval(const QString& key) const;
     QList<CoverLayer*> chartFrameLayers() const;
     QList<CoverLayer*> visibleChartFrameLayers() const;
     bool moveLayerBefore(const QString& key, const QString& beforeKey);
     bool moveLayerAfter(const QString& key, const QString& afterKey);
+    // Reorder by the layer LIST's VISIBLE rows (z descending, row 0 = front). Used
+    // by the list's drag-to-reorder; handles the view↔z reversal (§12.12) here so
+    // callers pass plain view-row indices.
+    void moveByViewRows(int fromRow, int toRow);
     void normalizeZOrder();
 
     // Store a freshly-rendered chart still on `key`'s layer and bump its

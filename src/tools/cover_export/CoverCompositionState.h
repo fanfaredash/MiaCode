@@ -2,6 +2,7 @@
 
 #include <QJsonObject>
 #include <QSize>
+#include <QStringList>
 
 namespace miacode::cover_export {
 
@@ -20,7 +21,15 @@ struct CoverCompositionState {
     static QJsonObject migrateToCurrent(const QJsonObject& root);
 
     static QJsonObject loadPreferences();
+    // Saving the last composition must NOT wipe the sibling recentFiles/presets
+    // lists stored alongside it under app.cover_export — they are merged back in.
     static void savePreferences(const QJsonObject& root);
+
+    // Recent .miacover files (most-recent first, capped at 8), stored under
+    // app.cover_export.recentFiles. Independent of the composition payload.
+    static QStringList loadRecentFiles();
+    static void pushRecentFile(const QString& path);
+    static void clearRecentFiles();
 };
 
 }  // namespace miacode::cover_export

@@ -150,6 +150,93 @@ bool testSparseV1Migration(QTextStream& err)
     return true;
 }
 
+bool testDeleteSelectsNeighbour(QTextStream& err)
+{
+    CoverLayoutModel model;
+    CoverLayer* f1 = model.addChartFrameLayer(1.0);   // z = 2
+    CoverLayer* f2 = model.addChartFrameLayer(2.0);   // z = 3
+    CoverLayer* f3 = model.addChartFrameLayer(3.0);   // z = 4
+    if (!require(f1 != nullptr && f2 != nullptr && f3 != nullptr,
+                 QStringLiteral("delete-neighbour setup creates frames"), err)) return false;
+
+    // List view order is z descending: f3, f2, f1, card. Deleting a row selects the
+    // next row below; the bottom-most frame falls through to the stable card.
+    if (!require(model.selectionAfterRemoval(f3->key()) == f2->key(),
+                 QStringLiteral("delete top frame selects the next"), err)) return false;
+    if (!require(model.selectionAfterRemoval(f2->key()) == f1->key(),
+                 QStringLiteral("delete middle frame selects the next"), err)) return false;
+    if (!require(model.selectionAfterRemoval(f1->key()) == CoverLayoutModel::cardKey(),
+                 QStringLiteral("delete bottom frame selects the card"), err)) return false;
+
+    // Hold-Delete: the selection walks down f3 → f2 → f1 → card, clearing the frames.
+    const QString k1 = f1->key();
+    const QString k2 = f2->key();
+    const QString k3 = f3->key();
+    QString sel = model.selectionAfterRemoval(k3);
+    model.removeLayer(k3);
+    if (!require(sel == k2, QStringLiteral("hold-delete step 1 → next frame"), err)) return false;
+    sel = model.selectionAfterRemoval(k2);
+    model.removeLayer(k2);
+    if (!require(sel == k1, QStringLiteral("hold-delete step 2 → next frame"), err)) return false;
+    sel = model.selectionAfterRemoval(k1);
+    model.removeLayer(k1);
+    if (!require(sel == CoverLayoutModel::cardKey(), QStringLiteral("hold-delete step 3 → card"), err)) return false;
+    if (!require(model.chartFrameLayers().isEmpty(), QStringLiteral("hold-delete cleared all frames"), err)) return false;
+    return true;
+}
+
+bool testBackgroundBrightnessRoundTrip(QTextStream& err)
+{
+    CoverCompositionState state;
+    state.size = QSize(1080, 1080);
+    QJsonObject bg;
+    bg.insert(QStringLiteral("mode"), QStringLiteral("jacket"));
+    bg.insert(QStringLiteral("brightness"), 0.7);
+    state.background = bg;
+
+    CoverCompositionState restored;
+    if (!require(CoverCompositionState::fromJson(state.toJson(), &restored),
+                 QStringLiteral("background-brightness composition parses"), err)) return false;
+    if (!require(qAbs(restored.background.value(QStringLiteral("brightness")).toDouble(-1.0) - 0.7) < 0.001,
+                 QStringLiteral("background.brightness round-trips"), err)) return false;
+
+    // Old layouts predate the key; the composition still parses (the 0.45 default
+    // is applied by the inspector when restoring, not stored).
+    QJsonObject legacy = state.toJson();
+    QJsonObject legacyBg = legacy.value(QStringLiteral("background")).toObject();
+    legacyBg.remove(QStringLiteral("brightness"));
+    legacy.insert(QStringLiteral("background"), legacyBg);
+    CoverCompositionState legacyState;
+    if (!require(CoverCompositionState::fromJson(legacy, &legacyState),
+                 QStringLiteral("legacy composition without brightness parses"), err)) return false;
+    if (!require(!legacyState.background.contains(QStringLiteral("brightness")),
+                 QStringLiteral("legacy composition keeps no brightness key"), err)) return false;
+    return true;
+}
+
+bool testMoveByViewRows(QTextStream& err)
+{
+    CoverLayoutModel model;
+    CoverLayer* f1 = model.addChartFrameLayer(1.0);   // z = 2
+    CoverLayer* f2 = model.addChartFrameLayer(2.0);   // z = 3
+    CoverLayer* f3 = model.addChartFrameLayer(3.0);   // z = 4
+    CoverLayer* card = model.layer(CoverLayoutModel::cardKey());
+    if (!require(f1 != nullptr && f2 != nullptr && f3 != nullptr && card != nullptr,
+                 QStringLiteral("move-by-view-rows setup"), err)) return false;
+
+    // View order is z descending: rows [f3, f2, f1, card]. Drag the bottom frame
+    // f1 (row 2) to the front (row 0) — z must invert relative to the view rows.
+    model.moveByViewRows(2, 0);
+    if (!require(f1->z() > f3->z() && f3->z() > f2->z() && f2->z() > card->z(),
+                 QStringLiteral("moveByViewRows brings the dragged row to the front"), err)) return false;
+
+    // Drag f1 (now the front row) past the end → it sinks below the card.
+    model.moveByViewRows(0, 99);
+    if (!require(card->z() > f1->z(),
+                 QStringLiteral("moveByViewRows can send a layer to the back"), err)) return false;
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -161,5 +248,8 @@ int main(int argc, char** argv)
     if (!testZOrder(err)) return 1;
     if (!testV1Migration(err)) return 1;
     if (!testSparseV1Migration(err)) return 1;
+    if (!testDeleteSelectsNeighbour(err)) return 1;
+    if (!testBackgroundBrightnessRoundTrip(err)) return 1;
+    if (!testMoveByViewRows(err)) return 1;
     return 0;
 }

@@ -113,7 +113,71 @@ void CoverCompositionState::savePreferences(const QJsonObject& preferences)
 {
     QJsonObject root = UiText::loadPreferencesObject();
     QJsonObject app = root.value(QStringLiteral("app")).toObject();
-    app.insert(QStringLiteral("cover_export"), preferences);
+    const QJsonObject existing = app.value(QStringLiteral("cover_export")).toObject();
+    QJsonObject merged = preferences;
+    // Preserve sibling lists that live alongside the composition but aren't part
+    // of its payload — otherwise every export would wipe recent files / presets.
+    for (const char* siblingKey : {"recentFiles", "presets"}) {
+        const QString key = QString::fromLatin1(siblingKey);
+        if (existing.contains(key) && !merged.contains(key)) {
+            merged.insert(key, existing.value(key));
+        }
+    }
+    app.insert(QStringLiteral("cover_export"), merged);
+    root.insert(QStringLiteral("app"), app);
+    UiText::savePreferencesObject(root);
+}
+
+QStringList CoverCompositionState::loadRecentFiles()
+{
+    const QJsonObject cover = loadPreferences();
+    QStringList out;
+    const QJsonArray arr = cover.value(QStringLiteral("recentFiles")).toArray();
+    for (const QJsonValue& value : arr) {
+        const QString path = value.toString();
+        if (!path.isEmpty()) {
+            out.append(path);
+        }
+    }
+    return out;
+}
+
+void CoverCompositionState::pushRecentFile(const QString& path)
+{
+    const QString trimmed = path.trimmed();
+    if (trimmed.isEmpty()) {
+        return;
+    }
+    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject app = root.value(QStringLiteral("app")).toObject();
+    QJsonObject cover = app.value(QStringLiteral("cover_export")).toObject();
+
+    QStringList list;
+    list.append(trimmed);
+    const QJsonArray prior = cover.value(QStringLiteral("recentFiles")).toArray();
+    for (const QJsonValue& value : prior) {
+        const QString p = value.toString();
+        if (!p.isEmpty() && p != trimmed && list.size() < 8) {
+            list.append(p);
+        }
+    }
+    QJsonArray arr;
+    for (const QString& p : list) {
+        arr.append(p);
+    }
+    cover.insert(QStringLiteral("recentFiles"), arr);
+    app.insert(QStringLiteral("cover_export"), cover);
+    root.insert(QStringLiteral("app"), app);
+    UiText::savePreferencesObject(root);
+}
+
+void CoverCompositionState::clearRecentFiles()
+{
+    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject app = root.value(QStringLiteral("app")).toObject();
+    QJsonObject cover = app.value(QStringLiteral("cover_export")).toObject();
+    cover.insert(QStringLiteral("recentFiles"), QJsonArray());
+    app.insert(QStringLiteral("cover_export"), cover);
     root.insert(QStringLiteral("app"), app);
     UiText::savePreferencesObject(root);
 }
