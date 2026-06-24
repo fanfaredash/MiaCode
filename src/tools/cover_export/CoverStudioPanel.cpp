@@ -179,6 +179,9 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
 
     model_ = new miacode::cover_export::CoverLayoutModel(this);
     composerView_ = new miacode::cover_export::CoverComposerView(model_, this);
+    // §4 — a canvas tap/drag selects a layer; route it to the single source of truth.
+    connect(composerView_, &miacode::cover_export::CoverComposerView::layerSelectionRequested,
+            this, &CoverStudioPanel::setActiveLayerKey);
     cachedTemplate_ = loadBannerTemplate();
 
     // Bootstrap the in-process chart-frame renderer once from the export task.
@@ -257,7 +260,8 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     controlsColumn->setSpacing(10);
 
     auto* canvasGroup = new QGroupBox(
-        l10n(QStringLiteral("Size / Background"), QStringLiteral("尺寸 / 背景")), this);
+        l10n(QStringLiteral("Canvas"), QStringLiteral("画板")), this);
+    canvasGroup_ = canvasGroup;
     auto* form = new QFormLayout(canvasGroup);
     form->setSpacing(10);
     form->setLabelAlignment(Qt::AlignLeft);
@@ -310,20 +314,35 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     blurCheck_->setChecked(true);
     form->addRow(QString(), blurCheck_);
 
+    // Backdrop brightness (§3.4.4): adjustable dim. 0..100 → coverBgBrightness 0..1;
+    // default 45 reproduces the old fixed dim pixel-for-pixel.
+    bgBrightnessSlider_ = new QSlider(Qt::Horizontal, this);
+    bgBrightnessSlider_->setRange(0, 100);
+    bgBrightnessSlider_->setValue(45);
+    bgBrightnessSlider_->setStyleSheet(UiTheme::dialogSliderStyleSheet());
+    bgBrightnessSlider_->setToolTip(
+        l10n(QStringLiteral("Backdrop brightness"), QStringLiteral("背景亮度（底图明暗）")));
+    form->addRow(l10n(QStringLiteral("Brightness"), QStringLiteral("背景亮度")), bgBrightnessSlider_);
+
     controlsColumn->addWidget(canvasGroup);
 
     // ---- Difficulty-card section (an opt-in layer, like the chart frame) ----
     auto* cardGroup = new QGroupBox(
-        l10n(QStringLiteral("Difficulty card"), QStringLiteral("难度卡")), this);
+        l10n(QStringLiteral("Difficulty card options"), QStringLiteral("难度卡选项")), this);
+    cardGroup_ = cardGroup;
     auto* cardForm = new QFormLayout(cardGroup);
     cardForm->setSpacing(10);
     cardForm->setLabelAlignment(Qt::AlignLeft);
     cardForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
+    // The card's "shown" state is now the inspector's 显示 checkbox (§3.2). This
+    // legacy "add card" toggle is kept (it still mirrors card visibility for
+    // reset / import / enable-gating) but hidden so there is only one control.
     cardCheck_ = new QCheckBox(
         l10n(QStringLiteral("Add difficulty card"), QStringLiteral("添加难度卡")), this);
     cardCheck_->setChecked(true);
     cardForm->addRow(QString(), cardCheck_);
+    cardCheck_->hide();
 
     // DX / SD chart type. "Standard" is the QML-side mode value (the card shows
     // the スタンダード plate top-right and mirrors the tab shoulder); anything
@@ -494,6 +513,10 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
         pushInputs();
         emit compositionChanged();
     });
+    connect(bgBrightnessSlider_, &QSlider::valueChanged, this, [this] {
+        pushInputs();
+        emit compositionChanged();
+    });
     // Card add-toggle drives the card layer's `visible` on the shared model — the
     // QML delegate and the export composite both follow it (NOTIFY binding).
     connect(cardCheck_, &QCheckBox::toggled, this, [this](bool on) {
@@ -612,13 +635,37 @@ void CoverStudioPanel::setActiveLayerKey(const QString& key)
     if (model_ == nullptr || model_->layer(key) == nullptr || activeLayerKey_ == key) {
         return;
     }
+    // P3 / §7.1 — freeze the OUTGOING chart frame into a still (only if its time
+    // changed since the last grab, §12.8) so it stays visible after it loses the
+    // live scene. activeChartFrameLayer() still reads the OLD active key here.
+    if (miacode::cover_export::CoverLayer* outgoing = activeChartFrameLayer()) {
+        if (outgoing->visible() && chartFrameStillDirty(outgoing)) {
+            renderChartFrameLayerNow(outgoing);
+        }
+    }
     activeLayerKey_ = key;
     if (composerView_ != nullptr) {
         const miacode::cover_export::CoverLayer* layer = activeChartFrameLayer();
         composerView_->setActiveChartFrameKey(layer != nullptr ? layer->key() : QString());
+        composerView_->setSelectedKey(activeLayerKey_);   // §4 — move the canvas chrome
     }
     syncActiveLayerControls();
     emit activeLayerChanged(activeLayerKey_);
+}
+
+bool CoverStudioPanel::chartFrameStillDirty(const miacode::cover_export::CoverLayer* layer) const
+{
+    if (layer == nullptr) {
+        return false;
+    }
+    if (layer->imageRevision() < 0) {
+        return true;   // never grabbed
+    }
+    const auto it = grabbedSeconds_.constFind(layer->key());
+    if (it == grabbedSeconds_.constEnd()) {
+        return true;
+    }
+    return qAbs(it.value() - layer->frameSeconds()) > 1e-4;
 }
 
 void CoverStudioPanel::addChartFrameLayer()
@@ -628,11 +675,25 @@ void CoverStudioPanel::addChartFrameLayer()
     }
     miacode::cover_export::CoverLayer* layer =
         model_->addChartFrameLayer(sceneFrameRenderer_ != nullptr ? sceneFrameRenderer_->playheadSeconds() : 0.0);
+    // Stagger the new frame so it doesn't perfectly cover the centred card / prior
+    // frames — visibility no longer depends on z (§12.7); z stays user-adjustable.
+    const int frameCount = model_->chartFrameLayers().size();
+    const qreal offset = 0.04 * ((frameCount - 1) % 6);
+    if (offset > 0.0) {
+        layer->setNx(0.5 + offset);
+        layer->setNy(0.5 + offset);
+    }
     setActiveLayerKey(layer->key());
     if (chartFrameCheck_ != nullptr) {
         const QSignalBlocker block(chartFrameCheck_);
         chartFrameCheck_->setChecked(true);
     }
+    // P3 / §7.1 — grab a still immediately so the new frame stays visible the moment
+    // another layer is selected (active frame = live scene, the rest = cached still).
+    // The cold first grab settles (~0.3 s) → flag the GUI busy.
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    renderChartFrameLayerNow(layer);
+    QApplication::restoreOverrideCursor();
     syncActiveLayerControls();
     emit compositionChanged();
 }
@@ -649,8 +710,19 @@ void CoverStudioPanel::duplicateActiveLayer()
 void CoverStudioPanel::removeActiveLayer()
 {
     if (model_ == nullptr) return;
-    if (!model_->removeLayer(activeLayerKey_)) return;
-    setActiveLayerKey(miacode::cover_export::CoverLayoutModel::cardKey());
+    const QString toRemove = activeLayerKey_;
+    // Card is the stable layer — Delete on it is a no-op (don't error, don't move
+    // selection), so holding Delete clears the chart frames one by one then stops.
+    if (toRemove == miacode::cover_export::CoverLayoutModel::cardKey()) {
+        return;
+    }
+    // Compute the neighbour to select BEFORE removing (needs the current ordering),
+    // so repeated Delete walks down the list instead of jumping back to the card.
+    const QString nextKey = model_->selectionAfterRemoval(toRemove);
+    if (!model_->removeLayer(toRemove)) return;
+    setActiveLayerKey(model_->layer(nextKey) != nullptr
+                          ? nextKey
+                          : miacode::cover_export::CoverLayoutModel::cardKey());
     emit compositionChanged();
 }
 
@@ -750,6 +822,9 @@ void CoverStudioPanel::setActiveLayerCenter(qreal nx, qreal ny)
 void CoverStudioPanel::setActiveLayerFrameSeconds(double seconds)
 {
     if (activeChartFrameLayer() == nullptr) return;
+    if (playing_) {
+        stopPlayback();   // a user scrub (transport slider / Home-End) pauses playback
+    }
     if (frameSlider_ != nullptr) {
         const QSignalBlocker block(frameSlider_);
         frameSlider_->setValue(qRound(qBound(0.0, seconds, contentDurationSeconds_) * 1000.0));
@@ -785,14 +860,25 @@ void CoverStudioPanel::stepActiveFrameBySeconds(double deltaSeconds)
     emit compositionChanged();
 }
 
-QWidget* CoverStudioPanel::takeSettingsPanel(QWidget* parent)
+QWidget* CoverStudioPanel::canvasOptionsGroup(QWidget* parent)
 {
-    if (hiddenControlsHost_ == nullptr) {
-        return nullptr;
+    if (canvasGroup_ != nullptr) {
+        canvasGroup_->setParent(parent);
+        canvasGroup_->show();
     }
-    hiddenControlsHost_->setParent(parent);
-    hiddenControlsHost_->show();
-    return hiddenControlsHost_;
+    return canvasGroup_;
+}
+
+QWidget* CoverStudioPanel::cardOptionsGroup(QWidget* parent)
+{
+    if (cardGroup_ != nullptr) {
+        cardGroup_->setParent(parent);
+        // Polymorphic §3.3 slot: the card-options group is only shown while the card
+        // layer is selected; seed from the current selection so it isn't flashed on open.
+        const miacode::cover_export::CoverLayer* sel = activeLayer();
+        cardGroup_->setVisible(sel != nullptr && sel->kind() == QStringLiteral("card"));
+    }
+    return cardGroup_;
 }
 
 void CoverStudioPanel::resetLayout()
@@ -906,6 +992,11 @@ void CoverStudioPanel::syncActiveLayerControls()
     if (composerView_ != nullptr) {
         composerView_->refreshLiveChartScene();
     }
+    // Polymorphic §3.3 slot: the card-options group follows the selection.
+    if (cardGroup_ != nullptr) {
+        const miacode::cover_export::CoverLayer* sel = activeLayer();
+        cardGroup_->setVisible(sel != nullptr && sel->kind() == QStringLiteral("card"));
+    }
     syncControlEnabled();
 }
 
@@ -946,6 +1037,7 @@ bool CoverStudioPanel::renderChartFrameLayerNow(miacode::cover_export::CoverLaye
     bool produced = false;
     if (!frame.isNull()) {
         model_->setLayerImage(layer->key(), frame);
+        grabbedSeconds_[layer->key()] = seconds;   // P3 dirty-check baseline
         produced = true;
     }
     // else: leave the previous still (if any) in place rather than blanking the layer.
@@ -975,6 +1067,7 @@ void CoverStudioPanel::applyFrameSeconds(double seconds)
     if (composerView_ != nullptr) {
         composerView_->refreshLiveChartScene();
     }
+    emit playheadChanged(seconds);   // §12.9 — drive the transport view
 }
 
 void CoverStudioPanel::togglePlayback()
@@ -1007,6 +1100,7 @@ void CoverStudioPanel::startPlayback()
     if (playButton_ != nullptr) {
         playButton_->setIcon(pauseIcon_);
     }
+    emit playbackStateChanged(true);
 }
 
 void CoverStudioPanel::stopPlayback()
@@ -1018,6 +1112,7 @@ void CoverStudioPanel::stopPlayback()
     if (playButton_ != nullptr) {
         playButton_->setIcon(playIcon_);
     }
+    emit playbackStateChanged(false);
 }
 
 void CoverStudioPanel::onPlayTick()
@@ -1042,6 +1137,88 @@ void CoverStudioPanel::onPlayTick()
     }
 }
 
+bool CoverStudioPanel::handleShortcutKey(QKeyEvent* event)
+{
+    if (event == nullptr) {
+        return false;
+    }
+    const Qt::KeyboardModifiers mods = event->modifiers();
+    const bool ctrl = mods.testFlag(Qt::ControlModifier);
+    const bool shift = mods.testFlag(Qt::ShiftModifier);
+    miacode::cover_export::CoverLayer* layer = activeLayer();
+    switch (event->key()) {
+    case Qt::Key_Space:
+        togglePlayback();
+        return true;
+    case Qt::Key_Delete:
+    case Qt::Key_Backspace:
+        if (!ctrl && !shift) { removeActiveLayer(); return true; }
+        break;
+    case Qt::Key_A:
+        if (mods == Qt::NoModifier) { addChartFrameLayer(); return true; }
+        break;
+    case Qt::Key_V:
+        if (mods == Qt::NoModifier && layer != nullptr) { setActiveLayerVisible(!layer->visible()); return true; }
+        break;
+    case Qt::Key_L:
+        if (mods == Qt::NoModifier && layer != nullptr) { setActiveLayerLocked(!layer->locked()); return true; }
+        break;
+    case Qt::Key_BracketLeft:
+        if (ctrl) moveActiveLayerToBottom(); else moveActiveLayerDown();
+        return true;
+    case Qt::Key_BracketRight:
+        if (ctrl) moveActiveLayerToTop(); else moveActiveLayerUp();
+        return true;
+    case Qt::Key_Plus:
+    case Qt::Key_Equal:
+        nudgeActiveLayerScale(0.02);
+        return true;
+    case Qt::Key_Minus:
+        nudgeActiveLayerScale(-0.02);
+        return true;
+    case Qt::Key_Left:
+    case Qt::Key_Right:
+    case Qt::Key_Up:
+    case Qt::Key_Down:
+        if (!ctrl) { nudgeActiveLayerPosition(event->key(), shift); return true; }
+        break;
+    default:
+        break;
+    }
+    return false;
+}
+
+void CoverStudioPanel::nudgeActiveLayerPosition(int key, bool coarse)
+{
+    miacode::cover_export::CoverLayer* layer = activeLayer();
+    if (layer == nullptr || layer->locked()) {
+        return;   // lock freezes position (§12.6)
+    }
+    const QSize size = currentSize();
+    // §12.3 — fine = 1 output px, coarse (Shift) = 10 px, in normalized units.
+    const qreal stepX = (coarse ? 10.0 : 1.0) / qMax(1, size.width());
+    const qreal stepY = (coarse ? 10.0 : 1.0) / qMax(1, size.height());
+    qreal nx = layer->nx();
+    qreal ny = layer->ny();
+    switch (key) {
+    case Qt::Key_Left:  nx -= stepX; break;
+    case Qt::Key_Right: nx += stepX; break;
+    case Qt::Key_Up:    ny -= stepY; break;
+    case Qt::Key_Down:  ny += stepY; break;
+    default: return;
+    }
+    setActiveLayerCenter(nx, ny);
+}
+
+void CoverStudioPanel::nudgeActiveLayerScale(qreal delta)
+{
+    miacode::cover_export::CoverLayer* layer = activeLayer();
+    if (layer == nullptr || layer->locked()) {
+        return;   // lock freezes size (§12.6)
+    }
+    setActiveLayerSizeFraction(layer->sizeFraction() + delta);
+}
+
 bool CoverStudioPanel::eventFilter(QObject* watched, QEvent* event)
 {
     // Esc from inside the embedded Quick window → close, mirroring QDialog's
@@ -1052,6 +1229,10 @@ bool CoverStudioPanel::eventFilter(QObject* watched, QEvent* event)
         if (keyEvent->key() == Qt::Key_Escape && keyEvent->modifiers() == Qt::NoModifier
             && !keyEvent->isAutoRepeat()) {
             emit cancelRequested();
+            return true;
+        }
+        // §8 keymap — the canvas (native quick window) is the primary editing focus.
+        if (handleShortcutKey(keyEvent)) {
             return true;
         }
     }
@@ -1210,6 +1391,7 @@ miacode::cover_export::CoverComposerInputs CoverStudioPanel::buildInputs() const
     }
 
     in.blurBackground = blurCheck_ != nullptr && blurCheck_->isChecked();
+    in.coverBgBrightness = bgBrightnessSlider_ != nullptr ? bgBrightnessSlider_->value() / 100.0 : 0.45;
     in.cardShadow = cardShadowCheck_ != nullptr && cardShadowCheck_->isChecked();
 
     // B1 — chart-frame inner-ring background (reuses the cover background image via
@@ -1318,12 +1500,16 @@ void CoverStudioPanel::syncControlEnabled()
     const bool isTransparent = (bg == QStringLiteral("transparent"));
     if (backgroundPathEdit_ != nullptr) backgroundPathEdit_->setEnabled(isCustom);
     if (backgroundBrowse_ != nullptr) backgroundBrowse_->setEnabled(isCustom);
-    // Blur only applies when there is a backdrop behind the card.
+    // Blur + backdrop brightness only apply when there is a backdrop behind the card.
     if (blurCheck_ != nullptr) blurCheck_->setEnabled(!isTransparent);
+    if (bgBrightnessSlider_ != nullptr) bgBrightnessSlider_->setEnabled(!isTransparent);
 
-    // Card sub-options only matter while the card layer is added. (The drop
-    // shadow itself works in EVERY background mode, incl. Transparent.)
-    const bool cardOn = cardCheck_ == nullptr || cardCheck_->isChecked();
+    // Card sub-options only matter while the card layer is shown. Read the card's
+    // visibility from the model (the inspector's 显示 drives it now; the legacy
+    // cardCheck_ is hidden), so gating stays correct however it was toggled.
+    const miacode::cover_export::CoverLayer* cardLayer =
+        model_ != nullptr ? model_->layer(miacode::cover_export::CoverLayoutModel::cardKey()) : nullptr;
+    const bool cardOn = cardLayer == nullptr || cardLayer->visible();
     if (cardModeCombo_ != nullptr) cardModeCombo_->setEnabled(cardOn);
     if (cardShadowCheck_ != nullptr) cardShadowCheck_->setEnabled(cardOn);
     if (levelTextRenderCheck_ != nullptr) levelTextRenderCheck_->setEnabled(cardOn);
@@ -1382,6 +1568,8 @@ QJsonObject CoverStudioPanel::exportCompositionJson() const
     bg.insert(QStringLiteral("customPath"),
               backgroundPathEdit_ != nullptr ? backgroundPathEdit_->text().trimmed() : QString());
     bg.insert(QStringLiteral("blur"), blurCheck_ != nullptr && blurCheck_->isChecked());
+    bg.insert(QStringLiteral("brightness"),
+              bgBrightnessSlider_ != nullptr ? bgBrightnessSlider_->value() / 100.0 : 0.45);
     state.background = bg;
 
     QJsonObject card;
@@ -1428,7 +1616,9 @@ void CoverStudioPanel::saveLayout()
             l10n(QStringLiteral("Save layout"), QStringLiteral("保存布局")),
             l10n(QStringLiteral("Could not write the layout file."),
                  QStringLiteral("无法写入布局文件。")));
+        return;
     }
+    miacode::cover_export::CoverCompositionState::pushRecentFile(path);
 }
 
 void CoverStudioPanel::importLayout()
@@ -1441,6 +1631,14 @@ void CoverStudioPanel::importLayout()
         QString(),
         l10n(QStringLiteral("Cover layout (*.miacover);;Legacy JSON (*.json)"),
              QStringLiteral("封面布局 (*.miacover);;旧版 JSON (*.json)")));
+    if (path.isEmpty()) {
+        return;
+    }
+    importLayoutFromPath(path);
+}
+
+void CoverStudioPanel::importLayoutFromPath(const QString& path)
+{
     if (path.isEmpty()) {
         return;
     }
@@ -1475,6 +1673,7 @@ void CoverStudioPanel::importLayout()
         return;
     }
     applyCompositionJson(root);
+    miacode::cover_export::CoverCompositionState::pushRecentFile(path);
 }
 
 void CoverStudioPanel::applyCompositionJson(const QJsonObject& root, bool interactive)
@@ -1527,6 +1726,11 @@ void CoverStudioPanel::applyCompositionJson(const QJsonObject& root, bool intera
     if (blurCheck_ != nullptr) {
         const QSignalBlocker block(blurCheck_);
         blurCheck_->setChecked(bg.value(QStringLiteral("blur")).toBool(blurCheck_->isChecked()));
+    }
+    if (bgBrightnessSlider_ != nullptr) {
+        // Old layouts predate this key → fall back to 0.45 (the legacy fixed look).
+        const QSignalBlocker block(bgBrightnessSlider_);
+        bgBrightnessSlider_->setValue(qBound(0, qRound(bg.value(QStringLiteral("brightness")).toDouble(0.45) * 100.0), 100));
     }
 
     // --- Card ---

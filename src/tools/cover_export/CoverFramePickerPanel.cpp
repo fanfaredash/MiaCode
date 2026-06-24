@@ -5,14 +5,21 @@
 #include "UiText.h"
 #include "UiTheme.h"
 
+#include <QEvent>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLabel>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSlider>
 
 namespace miacode::cover_export {
 namespace {
+
+constexpr double kStepSeconds = 1.0 / 120.0;
 
 QString l10n(const QString& en, const QString& zh)
 {
@@ -31,6 +38,69 @@ QString formatSeconds(double seconds)
         .arg(cs, 2, 10, QLatin1Char('0'));
 }
 
+// Painted play / pause icon in the theme text colour (font glyphs render as a
+// colour emoji on Windows). Mirrors CoverStudioPanel's makeTransportIcon.
+QIcon makeTransportIcon(bool pause, const QColor& color)
+{
+    constexpr int kSize = 16;
+    constexpr qreal kDpr = 2.0;
+    QPixmap pixmap(qRound(kSize * kDpr), qRound(kSize * kDpr));
+    pixmap.setDevicePixelRatio(kDpr);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+    if (pause) {
+        const qreal barWidth = 2.5;
+        const qreal gap = 3.0;
+        const qreal barHeight = 10.0;
+        const qreal top = (kSize - barHeight) / 2.0;
+        painter.drawRoundedRect(QRectF(kSize / 2.0 - gap / 2.0 - barWidth, top, barWidth, barHeight), 1.0, 1.0);
+        painter.drawRoundedRect(QRectF(kSize / 2.0 + gap / 2.0, top, barWidth, barHeight), 1.0, 1.0);
+    } else {
+        const qreal height = 10.0;
+        const qreal width = 9.0;
+        const qreal left = (kSize - width) / 2.0 + 0.5;
+        const qreal top = (kSize - height) / 2.0;
+        QPainterPath triangle;
+        triangle.moveTo(left, top);
+        triangle.lineTo(left, top + height);
+        triangle.lineTo(left + width, top + height / 2.0);
+        triangle.closeSubpath();
+        painter.fillPath(triangle, color);
+    }
+    return QIcon(pixmap);
+}
+
+QString transportSliderStyle()
+{
+    const UiTheme::Colors& c = UiTheme::colors();
+    // Rounded track + accent fill + circular handle, matching the realtime
+    // QuickShellPreviewTransport look (§5).
+    return QStringLiteral(
+        "QSlider::groove:horizontal { height: 6px; background: %1; border-radius: 3px; }"
+        "QSlider::sub-page:horizontal { background: %2; border-radius: 3px; }"
+        "QSlider::add-page:horizontal { background: %1; border-radius: 3px; }"
+        "QSlider::handle:horizontal { width: 18px; margin: -6px 0; border-radius: 9px;"
+        " background: #FFFFFF; border: 1px solid %3; }"
+        "QSlider::handle:horizontal:hover { border-color: %2; }"
+        "QSlider:disabled::sub-page:horizontal { background: %1; }")
+        .arg(c.inputDisabledBg.name(QColor::HexRgb),
+             c.accent.name(QColor::HexRgb),
+             c.borderSoft.name(QColor::HexRgb));
+}
+
+QPushButton* makeTransportButton(QWidget* parent)
+{
+    auto* button = new QPushButton(parent);
+    button->setStyleSheet(UiTheme::dialogPushButtonStyleSheet()
+        + QStringLiteral("QPushButton { min-width: 28px; max-width: 30px;"
+                         " min-height: 26px; max-height: 28px; padding: 0; border-radius: 6px; }"));
+    button->setFixedSize(30, 28);
+    return button;
+}
+
 }  // namespace
 
 CoverFramePickerPanel::CoverFramePickerPanel(CoverStudioPanel* studio, QWidget* parent)
@@ -41,34 +111,52 @@ CoverFramePickerPanel::CoverFramePickerPanel(CoverStudioPanel* studio, QWidget* 
     layout->setContentsMargins(8, 6, 8, 6);
     layout->setSpacing(8);
 
-    backButton_ = new QPushButton(QStringLiteral("<"), this);
-    forwardButton_ = new QPushButton(QStringLiteral(">"), this);
-    slider_ = new QSlider(Qt::Horizontal, this);
-    label_ = new QLabel(formatSeconds(0.0), this);
-    label_->setMinimumWidth(64);
-    auto* title = new QLabel(l10n(QStringLiteral("Frame"), QStringLiteral("帧")), this);
-    title->setMinimumWidth(42);
+    playIcon_ = makeTransportIcon(/*pause=*/false, UiTheme::colors().textPrimary);
+    pauseIcon_ = makeTransportIcon(/*pause=*/true, UiTheme::colors().textPrimary);
 
-    backButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    forwardButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    slider_->setStyleSheet(UiTheme::dialogSliderStyleSheet());
-    backButton_->setToolTip(l10n(QStringLiteral("Previous frame"), QStringLiteral("上一帧")));
-    forwardButton_->setToolTip(l10n(QStringLiteral("Next frame"), QStringLiteral("下一帧")));
-    slider_->setToolTip(l10n(QStringLiteral("Frame time for the selected chart frame"), QStringLiteral("当前谱面帧的时间")));
+    playButton_ = makeTransportButton(this);
+    playButton_->setIcon(playIcon_);
+    playButton_->setIconSize(QSize(16, 16));
+    playButton_->setToolTip(l10n(QStringLiteral("Play / pause (Space)"),
+                                 QStringLiteral("播放 / 暂停（空格）")));
+    backButton_ = new QPushButton(QStringLiteral("‹"), this);
+    forwardButton_ = new QPushButton(QStringLiteral("›"), this);
+    backButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet()
+        + QStringLiteral("QPushButton { min-width: 26px; max-width: 28px; padding: 0; }"));
+    forwardButton_->setStyleSheet(backButton_->styleSheet());
+    slider_ = new QSlider(Qt::Horizontal, this);
+    label_ = new QLabel(formatSeconds(0.0) + QStringLiteral(" / ") + formatSeconds(0.0), this);
+    label_->setMinimumWidth(116);
+    label_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    auto* title = new QLabel(l10n(QStringLiteral("Frame"), QStringLiteral("帧")), this);
+    title->setMinimumWidth(28);
+
+    slider_->setStyleSheet(transportSliderStyle());
+    backButton_->setToolTip(l10n(QStringLiteral("Step back (←)"), QStringLiteral("后退一步（←）")));
+    forwardButton_->setToolTip(l10n(QStringLiteral("Step forward (→)"), QStringLiteral("前进一步（→）")));
+    slider_->setToolTip(l10n(QStringLiteral("Frame time for the selected chart frame"),
+                             QStringLiteral("当前谱面帧的时间")));
+    playButton_->setAccessibleName(playButton_->toolTip());
     backButton_->setAccessibleName(backButton_->toolTip());
     forwardButton_->setAccessibleName(forwardButton_->toolTip());
 
     layout->addWidget(title);
+    layout->addWidget(playButton_);
     layout->addWidget(backButton_);
     layout->addWidget(slider_, 1);
     layout->addWidget(forwardButton_);
     layout->addWidget(label_);
 
+    slider_->installEventFilter(this);
+
+    connect(playButton_, &QPushButton::clicked, this, [this] {
+        if (studio_ != nullptr) studio_->togglePlayback();
+    });
     connect(backButton_, &QPushButton::clicked, this, [this] {
-        if (studio_ != nullptr) studio_->stepActiveFrameBySeconds(-1.0 / 120.0);
+        if (studio_ != nullptr) studio_->stepActiveFrameBySeconds(-kStepSeconds);
     });
     connect(forwardButton_, &QPushButton::clicked, this, [this] {
-        if (studio_ != nullptr) studio_->stepActiveFrameBySeconds(1.0 / 120.0);
+        if (studio_ != nullptr) studio_->stepActiveFrameBySeconds(kStepSeconds);
     });
     connect(slider_, &QSlider::valueChanged, this, [this](int value) {
         if (studio_ != nullptr) studio_->setActiveLayerFrameSeconds(value / 1000.0);
@@ -77,6 +165,8 @@ CoverFramePickerPanel::CoverFramePickerPanel(CoverStudioPanel* studio, QWidget* 
     if (studio_ != nullptr) {
         connect(studio_, &CoverStudioPanel::activeLayerChanged, this, &CoverFramePickerPanel::refresh);
         connect(studio_, &CoverStudioPanel::compositionChanged, this, &CoverFramePickerPanel::refresh);
+        connect(studio_, &CoverStudioPanel::playheadChanged, this, &CoverFramePickerPanel::setPositionSeconds);
+        connect(studio_, &CoverStudioPanel::playbackStateChanged, this, &CoverFramePickerPanel::setPlaying);
     }
     refresh();
 }
@@ -89,16 +179,71 @@ void CoverFramePickerPanel::refresh()
     }
     const bool enabled = layer != nullptr && layer->kind() == QStringLiteral("chartFrame")
         && studio_ != nullptr && studio_->chartFrameAvailable();
-    const int maxMs = studio_ != nullptr ? qMax(1, qRound(studio_->contentDurationSeconds() * 1000.0)) : 1;
+    const double duration = studio_ != nullptr ? studio_->contentDurationSeconds() : 0.0;
+    const int maxMs = qMax(1, qRound(duration * 1000.0));
     {
-        const QSignalBlocker b(slider_);
+        const QSignalBlocker block(slider_);
         slider_->setRange(0, maxMs);
         slider_->setValue(enabled ? qRound(layer->frameSeconds() * 1000.0) : 0);
     }
-    label_->setText(formatSeconds(enabled ? layer->frameSeconds() : 0.0));
+    label_->setText(formatSeconds(enabled ? layer->frameSeconds() : 0.0)
+                    + QStringLiteral(" / ") + formatSeconds(duration));
+    playButton_->setEnabled(enabled);
     backButton_->setEnabled(enabled);
     forwardButton_->setEnabled(enabled);
     slider_->setEnabled(enabled);
+    playButton_->setToolTip(enabled
+        ? l10n(QStringLiteral("Play / pause (Space)"), QStringLiteral("播放 / 暂停（空格）"))
+        : l10n(QStringLiteral("Select a chart-frame layer to edit its time"),
+               QStringLiteral("选择谱面帧图层以编辑帧时间")));
+}
+
+void CoverFramePickerPanel::setPositionSeconds(double seconds)
+{
+    if (!slider_->isEnabled()) {
+        return;
+    }
+    {
+        const QSignalBlocker block(slider_);   // reflect playback/scrub without re-seeking
+        slider_->setValue(qRound(seconds * 1000.0));
+    }
+    const double duration = studio_ != nullptr ? studio_->contentDurationSeconds() : 0.0;
+    label_->setText(formatSeconds(seconds) + QStringLiteral(" / ") + formatSeconds(duration));
+}
+
+void CoverFramePickerPanel::setPlaying(bool playing)
+{
+    playButton_->setIcon(playing ? pauseIcon_ : playIcon_);
+}
+
+bool CoverFramePickerPanel::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == slider_ && event->type() == QEvent::KeyPress && studio_ != nullptr
+        && slider_->isEnabled()) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent->modifiers() == Qt::NoModifier) {
+            switch (keyEvent->key()) {
+            case Qt::Key_Space:
+                studio_->togglePlayback();
+                return true;
+            case Qt::Key_Left:
+                studio_->stepActiveFrameBySeconds(-kStepSeconds);
+                return true;
+            case Qt::Key_Right:
+                studio_->stepActiveFrameBySeconds(kStepSeconds);
+                return true;
+            case Qt::Key_Home:
+                studio_->setActiveLayerFrameSeconds(0.0);
+                return true;
+            case Qt::Key_End:
+                studio_->setActiveLayerFrameSeconds(studio_->contentDurationSeconds());
+                return true;
+            default:
+                break;
+            }
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 }  // namespace miacode::cover_export

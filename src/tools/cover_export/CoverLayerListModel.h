@@ -35,6 +35,17 @@ public:
     bool setData(const QModelIndex& index, const QVariant& value, int role) override;
     QHash<int, QByteArray> roleNames() const override;
 
+    // Drag-to-reorder (InternalMove). The move is applied by reordering z on the
+    // CoverLayoutModel (view-row based, §12.12); dropMimeData returns false so the
+    // view's default move/removeRows machinery doesn't also touch the rows.
+    Qt::DropActions supportedDropActions() const override;
+    QStringList mimeTypes() const override;
+    QMimeData* mimeData(const QModelIndexList& indexes) const override;
+    bool canDropMimeData(const QMimeData* data, Qt::DropAction action,
+                         int row, int column, const QModelIndex& parent) const override;
+    bool dropMimeData(const QMimeData* data, Qt::DropAction action,
+                      int row, int column, const QModelIndex& parent) override;
+
 public slots:
     void refresh();
 

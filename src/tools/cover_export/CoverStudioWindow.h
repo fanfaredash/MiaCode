@@ -5,6 +5,7 @@
 
 #include "tools/cover_export/CoverComposerView.h"
 
+class QMenu;
 struct VideoExportTask;
 
 namespace miacode::cover_export {
@@ -24,6 +25,9 @@ public:
 private:
     void fitToScreen(QWidget* parent);
     void exportNow();
+    // 布局 menu actions.
+    void confirmAndReset();
+    void rebuildRecentMenu(QMenu* menu);
 
     CoverStudioPanel* studio_ = nullptr;
     QString outputDirectory_;

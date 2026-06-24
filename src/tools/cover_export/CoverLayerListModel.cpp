@@ -3,10 +3,17 @@
 #include "tools/cover_export/CoverLayoutModel.h"
 #include "UiText.h"
 
+#include <QDataStream>
+#include <QIODevice>
+#include <QMimeData>
+#include <QStringList>
+
 #include <algorithm>
 
 namespace miacode::cover_export {
 namespace {
+
+constexpr char kRowMimeType[] = "application/x-miacode-cover-layer-row";
 
 QString l10n(const QString& en, const QString& zh)
 {
@@ -120,10 +127,66 @@ QVariant CoverLayerListModel::data(const QModelIndex& index, int role) const
 
 Qt::ItemFlags CoverLayerListModel::flags(const QModelIndex& index) const
 {
+    // Dropping onto empty space (invalid index) is allowed → "send to back".
     if (!index.isValid()) {
-        return Qt::NoItemFlags;
+        return Qt::ItemIsDropEnabled;
     }
-    return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable;
+    return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable
+         | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled;
+}
+
+Qt::DropActions CoverLayerListModel::supportedDropActions() const
+{
+    return Qt::MoveAction;
+}
+
+QStringList CoverLayerListModel::mimeTypes() const
+{
+    return {QString::fromLatin1(kRowMimeType)};
+}
+
+QMimeData* CoverLayerListModel::mimeData(const QModelIndexList& indexes) const
+{
+    auto* data = new QMimeData();
+    for (const QModelIndex& index : indexes) {
+        if (index.isValid()) {
+            QByteArray bytes;
+            QDataStream stream(&bytes, QIODevice::WriteOnly);
+            stream << index.row();
+            data->setData(QString::fromLatin1(kRowMimeType), bytes);
+            break;   // single-selection list — one row
+        }
+    }
+    return data;
+}
+
+bool CoverLayerListModel::canDropMimeData(const QMimeData* data, Qt::DropAction,
+                                          int, int, const QModelIndex&) const
+{
+    return data != nullptr && data->hasFormat(QString::fromLatin1(kRowMimeType));
+}
+
+bool CoverLayerListModel::dropMimeData(const QMimeData* data, Qt::DropAction,
+                                       int row, int, const QModelIndex& parent)
+{
+    if (model_ == nullptr || data == nullptr || !data->hasFormat(QString::fromLatin1(kRowMimeType))) {
+        return false;
+    }
+    QByteArray bytes = data->data(QString::fromLatin1(kRowMimeType));
+    QDataStream stream(&bytes, QIODevice::ReadOnly);
+    int sourceRow = -1;
+    stream >> sourceRow;
+    if (sourceRow < 0) {
+        return false;
+    }
+    int targetRow = row;
+    if (targetRow < 0) {
+        targetRow = parent.isValid() ? parent.row() : rowCount();
+    }
+    model_->moveByViewRows(sourceRow, targetRow);
+    // The reorder already triggered a model reset (via layersChanged); return false
+    // so the view's own InternalMove machinery doesn't ALSO move/remove the rows.
+    return false;
 }
 
 bool CoverLayerListModel::setData(const QModelIndex& index, const QVariant& value, int role)

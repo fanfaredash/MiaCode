@@ -2,6 +2,7 @@
 
 #include <QWidget>
 #include <QElapsedTimer>
+#include <QHash>
 #include <QIcon>
 #include <QSize>
 #include <QString>
@@ -14,7 +15,9 @@
 
 class QCheckBox;
 class QComboBox;
+class QGroupBox;
 class QJsonObject;
+class QKeyEvent;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -77,12 +80,20 @@ public:
     void setActiveLayerFrameBgEnabled(bool enabled);
     void setActiveLayerFrameBgBrightness(qreal brightness);
     void stepActiveFrameBySeconds(double deltaSeconds);
+    void togglePlayback();   // play/pause the active chart frame (transport + Space)
     bool chartFrameAvailable() const { return chartFrameAvailable_; }
     double contentDurationSeconds() const { return contentDurationSeconds_; }
-    QWidget* takeSettingsPanel(QWidget* parent = nullptr);
+    // §3.1 / §3.3-A — the inspector column reparents these out of the panel so it
+    // can interleave them around the layer inspector (画板 on top, 难度卡选项 below).
+    // The card-options group is polymorphic: shown only while the card is selected.
+    QWidget* canvasOptionsGroup(QWidget* parent = nullptr);
+    QWidget* cardOptionsGroup(QWidget* parent = nullptr);
     void resetLayout();
     void saveLayout();
     void importLayout();
+    // Import a specific .miacover (used by the toolbar 布局 menu's "open recent");
+    // validates + applies + records the path in the recent list.
+    void importLayoutFromPath(const QString& path);
     void requestExport();
     void requestCancel();
 
@@ -91,8 +102,20 @@ signals:
     void cancelRequested();
     void activeLayerChanged(const QString& key);
     void compositionChanged();
+    // §12.9 — drive the bottom transport (a dumb view): the playhead moved
+    // (scrub/play) and the play/pause state changed.
+    void playheadChanged(double seconds);
+    void playbackStateChanged(bool playing);
+
+public:
+    // §8 keymap — process a global editing shortcut (nudge / scale / z-order /
+    // visibility / lock / play / add / delete). Returns true if it consumed the key.
+    // Driven from the window + embedded-quick-window event filters (§12.4).
+    bool handleShortcutKey(QKeyEvent* event);
 
 private:
+    void nudgeActiveLayerPosition(int key, bool coarse);   // §12.3 normalized nudge
+    void nudgeActiveLayerScale(qreal delta);
     void pushInputs();
     void browseBackground();
     void syncControlEnabled();
@@ -115,13 +138,15 @@ private:
     miacode::cover_export::CoverLayer* activeChartFrameLayer() const;
     bool renderChartFrameNow();            // grab a still at the current playhead + push to the active frame layer; true if a still was produced
     bool renderChartFrameLayerNow(miacode::cover_export::CoverLayer* layer);
+    // P3 — true when `layer`'s still is missing or was grabbed at a different time,
+    // so the deactivate-grab can skip frames whose time hasn't changed (§12.8).
+    bool chartFrameStillDirty(const miacode::cover_export::CoverLayer* layer) const;
     int chartFrameRenderPx(const miacode::cover_export::CoverLayer* layer) const;        // square render size = layer-export px
 
     // A2 — live edit scene + visual play/pause. Scrubbing/playing only moves the
     // shared playhead and repaints the in-QML live scene (zero readback); the
     // offscreen grab is reserved for the export still.
     void applyFrameSeconds(double seconds);   // set playhead + repaint live scene + readout
-    void togglePlayback();
     void startPlayback();
     void stopPlayback();
     void onPlayTick();
@@ -149,6 +174,9 @@ private:
     QWidget* previewFrame_ = nullptr;
     QWidget* previewContainer_ = nullptr;
     QWidget* hiddenControlsHost_ = nullptr;
+    // §3.1 画板 and §3.3-A 难度卡选项 groups, reparented into the inspector column.
+    QGroupBox* canvasGroup_ = nullptr;
+    QGroupBox* cardGroup_ = nullptr;
     // Height of the three stacked control groups (+ inter-group gaps); the preview
     // frame is sized to this so its bottom aligns with the 谱面帧 group bottom.
 
@@ -157,6 +185,8 @@ private:
     QLineEdit* backgroundPathEdit_ = nullptr;
     QPushButton* backgroundBrowse_ = nullptr;
     QCheckBox* blurCheck_ = nullptr;
+    // Full-bleed backdrop brightness (§3.4.4): 0..100 → coverBgBrightness 0..1.
+    QSlider* bgBrightnessSlider_ = nullptr;
     // Difficulty-card section: the card is opt-in like the chart frame (its
     // checkbox drives the card layer's `visible` on the shared model).
     QCheckBox* cardCheck_ = nullptr;
@@ -186,6 +216,8 @@ private:
     QCheckBox* chartFrameBgCheck_ = nullptr;
     QSlider* chartFrameBgBrightnessSlider_ = nullptr;   // 0..100 → brightness 0..1
     bool rendering_ = false;               // re-entrancy guard (renderAt pumps the event loop)
+    // P3 — frameSeconds each chart frame's still was last grabbed at (dirty check).
+    QHash<QString, double> grabbedSeconds_;
 
     // Visual-only playback clock (no audio): a wall-clock timer advancing the
     // shared playhead while the live scene repaints. playWall_ measures elapsed
