@@ -265,20 +265,25 @@ void TimelineView::paintEvent(QPaintEvent* event)
                 const miacode::waveform::WaveformColumn& column = waveformLevel->columns.at(index);
                 const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
                 const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
-                const qreal xMid =
-                    (secondToX(columnStartSecond) + secondToX(columnEndSecond)) * 0.5 - xOffset;
-                if (xMid < left - 2.0 || xMid > viewport()->width() + 2.0) {
+                const qreal x0 = static_cast<qreal>(secondToX(columnStartSecond) - xOffset);
+                qreal x1 = static_cast<qreal>(secondToX(columnEndSecond) - xOffset);
+                if (x1 <= x0) {
+                    x1 = x0 + 1.0;
+                }
+                if (x1 < left - 2.0 || x0 > viewport()->width() + 2.0) {
                     continue;
                 }
                 const qreal topY = centerY - (qBound(-1.0f, column.max, 1.0f) * maxAmplitude);
                 const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
                 if (!wavePathStarted) {
-                    wavePath.moveTo(xMid, topY);
+                    wavePath.moveTo(x0, topY);
                     wavePathStarted = true;
                 } else {
-                    wavePath.lineTo(xMid, topY);
+                    wavePath.lineTo(x0, topY);
                 }
-                bottomEnvelope.append(QPointF(xMid, bottomY));
+                wavePath.lineTo(x1, topY);
+                bottomEnvelope.append(QPointF(x0, bottomY));
+                bottomEnvelope.append(QPointF(x1, bottomY));
             }
             if (wavePathStarted) {
                 for (int i = bottomEnvelope.size() - 1; i >= 0; --i) {
@@ -1029,17 +1034,22 @@ void TimelineView::paintWaveformOnly(QPainter& painter, const QRect& dirtyRect)
                 const miacode::waveform::WaveformColumn& column = waveformLevel->columns.at(index);
                 const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
                 const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
-                const qreal xMid =
-                    (secondToX(columnStartSecond) + secondToX(columnEndSecond)) * 0.5 - xOffset;
+                const qreal x0 = static_cast<qreal>(secondToX(columnStartSecond) - xOffset);
+                qreal x1 = static_cast<qreal>(secondToX(columnEndSecond) - xOffset);
+                if (x1 <= x0) {
+                    x1 = x0 + 1.0;
+                }
                 const qreal topY = centerY - (qBound(-1.0f, column.max, 1.0f) * maxAmplitude);
                 const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
                 if (!wavePathStarted) {
-                    wavePath.moveTo(xMid, topY);
+                    wavePath.moveTo(x0, topY);
                     wavePathStarted = true;
                 } else {
-                    wavePath.lineTo(xMid, topY);
+                    wavePath.lineTo(x0, topY);
                 }
-                bottomEnvelope.append(QPointF(xMid, bottomY));
+                wavePath.lineTo(x1, topY);
+                bottomEnvelope.append(QPointF(x0, bottomY));
+                bottomEnvelope.append(QPointF(x1, bottomY));
             }
             if (wavePathStarted) {
                 for (int i = bottomEnvelope.size() - 1; i >= 0; --i) {

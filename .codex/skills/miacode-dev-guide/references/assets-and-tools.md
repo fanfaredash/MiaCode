@@ -45,8 +45,9 @@ Current chart-directory conventions:
   - `.miacode/miacode_settings.json`
 - waveform cache container root:
   - `.miacode/waveform/`
-  - stores hashed per-track waveform cache blobs reused by timeline and latency detection
+  - stores hashed per-track waveform cache blobs used by widget and Quick timeline waveform rendering
   - cache validity is tied to normalized track path plus file size and last-modified timestamp
+  - Windows cache generation decodes through repo-local BASS so MP3 delay/padding matches the Windows preview BGM playback backend; non-Windows falls back to miniaudio
 - autosave container root:
   - `.miacode/.autosave/<chart file>/`
   - contains `<chart file>.bak`, `history/*.bak`, and `autosave.json`
@@ -101,6 +102,7 @@ The toolbox blank-media submenu operates on the current chart directory only. It
   - Current build contract:
     - `CMakeLists.txt` links `bass.lib` and `bassmix.lib` on Windows for `MiaCode` and `soundtouch_probe`
     - post-build copy deploys the repo-local `bass*.dll` files into the executable directory
+    - `src/common/WaveformCache.cpp` also uses BASS on Windows to keep timeline waveform cache timing aligned with preview BGM playback
 - Background outlines and auxiliary background art:
   - Consumers: preview and export overlay composition
   - Current active variant files:

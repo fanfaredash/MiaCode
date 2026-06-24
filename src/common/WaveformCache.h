@@ -13,7 +13,7 @@ class QThreadPool;
 
 namespace miacode::waveform {
 
-inline constexpr quint32 kWaveformCacheSchemaVersion = 2;
+inline constexpr quint32 kWaveformCacheSchemaVersion = 3;
 inline constexpr int kWaveformMinTopLevelColumns = 2048;
 inline constexpr double kWaveformTopLevelColumnsPerSecond = 128.0;
 inline constexpr int kWaveformDecodeSampleRate = 24000;
@@ -46,6 +46,8 @@ QString normalizeTrackPath(const QString& trackPath);
 QString projectDataDirectoryPathForFile(const QString& filePath);
 QString waveformCacheDirectoryPath(const QString& projectDataDirectoryPath);
 QString waveformCacheFilePath(const QString& normalizedTrackPath, const QString& cacheDirectoryPath);
+QString waveformTrackDebugId(const QString& normalizedTrackPath);
+QString waveformDataDebugSummary(const WaveformData& data);
 int recommendedTopLevelColumnCount(double durationSeconds);
 WaveformDataPtr makeWaveformPlaceholder(double durationSeconds);
 WaveformDataPtr buildWaveformDataFromSamples(

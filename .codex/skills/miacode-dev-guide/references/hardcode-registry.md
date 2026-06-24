@@ -123,8 +123,12 @@ Use this file to track where important constants live, what they mean, and wheth
   - Rule: keep local while these values only shape diagnostics-list rendering in the main window and are not reused by other widgets or the Quick frontend
 - `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
   - Owns: analysis idle scheduling debounce for low-priority validation/Muri work
-  - Current tuning note: `kTimelineAnalysisIdleDelayMs` is `180 ms`, used to coalesce rapid edits before dispatching the combined validation+Muri analysis worker once preview snapshot publication has already completed
+  - Current tuning note: `kTimelineAnalysisIdleDelayMs` is `180 ms`, used to coalesce rapid edits before dispatching the combined validation+Muri analysis worker once preview snapshot publication has already completed. Waveform alignment diagnostics additionally log per-waveform onset probes at amplitudes `0.02`, `0.05`, and `0.10` from `src/common/WaveformCache.cpp`; those thresholds are diagnostic-only and exist to compare quiet intro, medium onset, and loud transient timing in user logs.
   - Rule: keep local while it only expresses main-window preview-vs-analysis priority; promote it if the same debounce becomes shared across dialogs, subprocess workers, or user-facing settings
+- `src/common/DebugOptions.h`
+  - Owns: preview diagnostic env parsing defaults such as `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG_SAMPLE_MS`
+  - Current tuning note: waveform-alignment focused BASS status sampling defaults to `250 ms`, intentionally lower than the normal ~`1 s` `bass_status` cadence so short 1x offset reports can be captured without making high-frequency logging the default.
+  - Rule: keep local while this remains a debug-only sampling cadence; promote only if multiple diagnostics share the same sampling policy
 - `src/common/PreviewInteractionConfig.h`
   - Owns: shared preview-slider keyboard and wheel seek defaults for the main window plus export dialog
   - Current tuning note: discrete seek steps use a `120 FPS` frame (`1 / 120 s`), held seeking ramps linearly at `+1.0x / s` up to `3.0x`, and the held-seek timer currently ticks every `16 ms`

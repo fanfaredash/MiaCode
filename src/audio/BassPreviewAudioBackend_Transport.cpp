@@ -315,9 +315,9 @@ void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double
     }
     // G2 Commit 2: the pause-modify-resume sequence from
     // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §6.2. Pause first so the
-    // BASS_FX tempo stream stops being pulled by the master mixer, then
-    // the Sample::setSpeed guard introduced in G1 Commit 6 passes its
-    // MIXER_CHAN_PAUSE check and the TEMPO write lands. Re-anchor the
+    // BGM source stops being pulled by the master mixer, then
+    // Sample::setSpeed passes its MIXER_CHAN_PAUSE check and writes the
+    // selected rate attribute. Re-anchor the
     // cursor to the wall-clock chart-second to keep audio/visual aligned
     // across the rate change, then resume. The whole atomic step happens
     // while the master mixer continues to play silence — the only audible

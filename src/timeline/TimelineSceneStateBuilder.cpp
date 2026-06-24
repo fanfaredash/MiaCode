@@ -643,10 +643,10 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 }
                 const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
                 const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
-                int x0 = secondToSceneX(state, columnStartSecond);
-                int x1 = secondToSceneX(state, columnEndSecond);
+                const qreal x0 = secondToXExact(state, columnStartSecond);
+                qreal x1 = secondToXExact(state, columnEndSecond);
                 if (x1 <= x0) {
-                    x1 = x0 + 1;
+                    x1 = x0 + 1.0;
                 }
                 const qreal topY = centerY - (qBound(-1.0f, column.max, 1.0f) * maxAmplitude);
                 const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
@@ -657,7 +657,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 // stays linked — the multiply touches RGB only, so the alpha
                 // (grid see-through amount) is preserved across the slider.
                 state.waveformBars.append(TimelineSceneRect{
-                    QRectF(x0, qMin(topY, bottomY), qMax(1, x1 - x0), qMax<qreal>(1.0, qAbs(bottomY - topY))),
+                    QRectF(x0, qMin(topY, bottomY), qMax<qreal>(1.0, x1 - x0), qMax<qreal>(1.0, qAbs(bottomY - topY))),
                     adjustedTimelineWaveformColor(theme.waveform, request.waveformBrightness),
                 });
             }

@@ -78,9 +78,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Class: `TimelineQuickModel`
   - Owns: lightweight timeline parsing, cursor anchors, preview-follow lookup, and incremental edit application for the editor fast path
 - Timeline data model and widget:
-  - Files: `src/timeline/TimelineView.h`, `src/timeline/TimelineView.cpp`, `src/timeline/TimelineView.Core.cpp`, `src/timeline/TimelineView.Interaction.cpp`, `src/timeline/TimelineView.Paint.cpp`
+  - Files: `src/common/WaveformCache.h`, `src/common/WaveformCache.cpp`, `src/timeline/TimelineView.h`, `src/timeline/TimelineView.cpp`, `src/timeline/TimelineView.Core.cpp`, `src/timeline/TimelineView.Interaction.cpp`, `src/timeline/TimelineView.Paint.cpp`
   - Class: `TimelineView`
-  - Owns: the widget reference implementation for lightweight timeline rendering, visible-range painting, playhead/cursor movement, waveform strip, follow-preview behavior, and the shared state surface currently mirrored by the Quick timeline route
+  - Owns: waveform cache generation, the widget reference implementation for lightweight timeline rendering, visible-range painting, playhead/cursor movement, waveform strip, follow-preview behavior, and the shared state surface currently mirrored by the Quick timeline route
 - Timeline scene-state and Quick surface:
   - Files: `src/common/TimelineThemeConfig.h`, `src/timeline/TimelineNoteAssets.h`, `src/timeline/TimelineNoteAssets.cpp`, `src/timeline/TimelineSceneState.h`, `src/timeline/TimelineSceneState.cpp`, `src/timeline/TimelineSceneStateBuilder.h`, `src/timeline/TimelineSceneStateBuilder.cpp`, `src/timeline/quick/TimelineQuickStateBridge.h`, `src/timeline/quick/TimelineQuickStateBridge.cpp`, `src/timeline/quick/TimelineQuickTextureCache.h`, `src/timeline/quick/TimelineQuickTextureCache.cpp`, `src/timeline/quick/TimelineQuickLayerUtils.h`, `src/timeline/quick/TimelineQuickLayerUtils.cpp`, `src/timeline/quick/TimelineQuickGridLayer.*`, `src/timeline/quick/TimelineQuickWaveformLayer.*`, `src/timeline/quick/TimelineQuickHeaderLayer.*`, `src/timeline/quick/TimelineQuickNotesLayer.*`, `src/timeline/quick/TimelineQuickOverlayLayer.*`, `src/timeline/quick/TimelineQuickItem.h`, `src/timeline/quick/TimelineQuickItem.cpp`, `src/app/quick_shell/qml/TimelineTabSurface.qml`
   - Classes: `TimelineQuickStateBridge`, `TimelineQuickTextureCache`, `TimelineQuickGridLayer`, `TimelineQuickWaveformLayer`, `TimelineQuickHeaderLayer`, `TimelineQuickNotesLayer`, `TimelineQuickOverlayLayer`, `TimelineQuickItem`
@@ -165,19 +165,21 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 
 ## 9. BPM And Offset Detection
 
-- Dialog shell:
-  - Files: `src/tools/latency/LatencyDetectorDialog.h`, `src/tools/latency/LatencyDetectorDialog.cpp`
-  - Class: `LatencyDetectorDialog`
-  - Owns: dialog lifetime, waveform widget, meter presets, decoded audio buffers
+- Latency page shell:
+  - Files: `src/tools/latency/LatencyDetectionPage.h`, `src/tools/latency/LatencyDetectionPage.cpp`
+  - Class: `LatencyDetectionPage`
+  - Owns: embedded latency settings page, BPM / offset / `clock_count` controls, track-envelope preview, auto-detect buttons, and latency-audition UI
 - Analysis:
-  - File: `src/tools/latency/LatencyDetectorDialog.Analysis.cpp`
-  - Key functions: `detectBpm`, `detectOffset`, `parsedBpm`, `parsedOffset`, `selectedOffsetSnapModeId`
-- Playback and UI:
-  - Files: `src/tools/latency/LatencyDetectorDialog.Playback.cpp`, `src/tools/latency/LatencyDetectorDialog.Ui.cpp`
-  - Owns: local transport controls, beat audition, visible-range tracking
+  - Files: `src/tools/latency/LatencyAnalysis.h`, `src/tools/latency/LatencyAnalysis.cpp`
+  - Namespace: `miacode::latency`
+  - Owns: direct audio decoding for BPM / offset detection and audio envelope extraction
+- Audition sandbox:
+  - Files: `src/tools/latency/LatencySandboxController.h`, `src/tools/latency/LatencySandboxController.cpp`, `src/tools/latency/LatencyTestChartBuilder.h`, `src/tools/latency/LatencyTestChartBuilder.cpp`
+  - Class: `LatencySandboxController`
+  - Owns: temporary latency-audition chart/timeline state, transport controls, page-local SFX volume, and restoration of the original preview timeline
 - Main window entry:
-  - File: `src/app/mainwindow/MainWindow.cpp`
-  - Key function: `onOpenLatencyDetector`
+  - Files: `src/app/mainwindow/sections/document/MainWindow.DocumentFlow.cpp`, `src/app/mainwindow/sections/frame/MainWindow.BootstrapAndMenus.cpp`
+  - Key functions: `switchToLatencyField`, latency settings page actions
 - Metadata writeback:
   - Files: `src/tools/latency/LatencyDetectionPage.cpp`, `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`, `src/core/chart/document/SimaiDocument.cpp`
   - Owns: latency-page BPM / offset / `clock_count` controls, BPM auto-detection meter-to-`clock_count` writeback, and default `&clock_count=4` materialization in metadata extra fields

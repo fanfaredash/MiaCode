@@ -209,6 +209,17 @@ inline int previewFramePacingDiagnosticSampleMs()
     return value > 0 ? value : 1000;
 }
 
+inline bool previewWaveformAlignmentDiagnosticsEnabled()
+{
+    return audioDebugOutputEnabled() && envFlagEnabled("MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG");
+}
+
+inline int previewWaveformAlignmentDiagnosticSampleMs()
+{
+    const int value = envIntValue("MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG_SAMPLE_MS", 250);
+    return value > 0 ? value : 250;
+}
+
 inline bool previewFixedTimerHighResolutionEnabled()
 {
     return envFlagEnabled("MIACODE_PREVIEW_FIXED_TIMER_HIGH_RES");

@@ -7,16 +7,27 @@
 #include <QCryptographicHash>
 #include <QDataStream>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QMutex>
 #include <QMetaObject>
 #include <QPointer>
 #include <QSaveFile>
 #include <QThreadPool>
+#include <QtMath>
 
+#include "common/DebugLog.h"
+#include "common/DebugOptions.h"
 #include "common/MiniaudioFileAccess.h"
 
 #include "../../third_party/miniaudio/miniaudio.h"
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+
+#include "bass.h"
+#endif
 
 namespace miacode::waveform {
 
@@ -24,6 +35,137 @@ namespace {
 
 constexpr quint32 kWaveformCacheMagic = 0x4D435746;  // MCWF
 constexpr quint32 kWaveformCacheCurrentVersion = kWaveformCacheSchemaVersion;
+constexpr double kWaveformDiagThresholdLow = 0.02;
+constexpr double kWaveformDiagThresholdMid = 0.05;
+constexpr double kWaveformDiagThresholdHigh = 0.10;
+
+enum class WaveformDecodeBackend {
+    None,
+    Bass,
+    Miniaudio,
+};
+
+QString waveformDecodeBackendLabel(WaveformDecodeBackend backend)
+{
+    switch (backend) {
+    case WaveformDecodeBackend::Bass:
+        return QStringLiteral("bass");
+    case WaveformDecodeBackend::Miniaudio:
+        return QStringLiteral("miniaudio");
+    case WaveformDecodeBackend::None:
+    default:
+        return QStringLiteral("none");
+    }
+}
+
+void appendWaveformDebugLog(const QString& payload)
+{
+    if (!miacode::debug_options::audioDebugOutputEnabled()) {
+        return;
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Audio,
+        QStringLiteral("preview/waveform"),
+        payload);
+}
+
+void appendWaveformAlignmentDebugLog(const QString& payload)
+{
+    if (!miacode::debug_options::previewWaveformAlignmentDiagnosticsEnabled()) {
+        return;
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Audio,
+        QStringLiteral("preview/waveform_align"),
+        payload);
+}
+
+QString waveformDebugIdFromNormalizedPath(const QString& normalizedTrackPath)
+{
+    if (normalizedTrackPath.isEmpty()) {
+        return QStringLiteral("none");
+    }
+    const QByteArray hash =
+        QCryptographicHash::hash(normalizedTrackPath.toUtf8(), QCryptographicHash::Sha256).toHex();
+    return QString::fromLatin1(hash.left(12));
+}
+
+double columnEnergy(const WaveformColumn& column)
+{
+    return qMax(qAbs(static_cast<double>(column.min)), qAbs(static_cast<double>(column.max)));
+}
+
+double firstColumnSecondAtThreshold(const WaveformLevel& level, double threshold)
+{
+    if (level.secondsPerColumn <= 0.0) {
+        return -1.0;
+    }
+    for (int index = 0; index < level.columns.size(); ++index) {
+        if (columnEnergy(level.columns.at(index)) >= threshold) {
+            return static_cast<double>(index) * level.secondsPerColumn;
+        }
+    }
+    return -1.0;
+}
+
+double peakColumnSecond(const WaveformLevel& level, double* peakEnergy)
+{
+    if (peakEnergy != nullptr) {
+        *peakEnergy = 0.0;
+    }
+    if (level.columns.isEmpty() || level.secondsPerColumn <= 0.0) {
+        return -1.0;
+    }
+    int peakIndex = -1;
+    double bestEnergy = 0.0;
+    for (int index = 0; index < level.columns.size(); ++index) {
+        const double energy = columnEnergy(level.columns.at(index));
+        if (peakIndex < 0 || energy > bestEnergy) {
+            peakIndex = index;
+            bestEnergy = energy;
+        }
+    }
+    if (peakEnergy != nullptr) {
+        *peakEnergy = bestEnergy;
+    }
+    return peakIndex >= 0 ? static_cast<double>(peakIndex) * level.secondsPerColumn : -1.0;
+}
+
+#ifdef Q_OS_WIN
+QMutex& bassWaveformDecodeMutex()
+{
+    static QMutex mutex;
+    return mutex;
+}
+
+class ScopedBassWaveformDevice
+{
+public:
+    ScopedBassWaveformDevice()
+    {
+        const DWORD currentDevice = BASS_GetDevice();
+        if (currentDevice != static_cast<DWORD>(-1)) {
+            available_ = true;
+            return;
+        }
+        ownsDevice_ = BASS_Init(0, kWaveformDecodeSampleRate, BASS_DEVICE_NOSPEAKER, nullptr, nullptr);
+        available_ = ownsDevice_;
+    }
+
+    ~ScopedBassWaveformDevice()
+    {
+        if (ownsDevice_) {
+            BASS_Free();
+        }
+    }
+
+    bool available() const { return available_; }
+
+private:
+    bool available_ = false;
+    bool ownsDevice_ = false;
+};
+#endif
 
 int nextPowerOfTwoAtLeast(int value)
 {
@@ -100,7 +242,7 @@ WaveformDataPtr buildWaveformData(
     return data;
 }
 
-QVector<float> decodeMonoSamples(const QString& trackPath, double* durationSeconds)
+QVector<float> decodeMonoSamplesWithMiniaudio(const QString& trackPath, double* durationSeconds)
 {
     QVector<float> samples;
     if (durationSeconds != nullptr) {
@@ -149,6 +291,127 @@ QVector<float> decodeMonoSamples(const QString& trackPath, double* durationSecon
         *durationSeconds = static_cast<double>(samples.size()) / static_cast<double>(kWaveformDecodeSampleRate);
     }
     return samples;
+}
+
+#ifdef Q_OS_WIN
+QVector<float> decodeMonoSamplesWithBass(const QString& trackPath, double* durationSeconds)
+{
+    QVector<float> samples;
+    if (durationSeconds != nullptr) {
+        *durationSeconds = 0.0;
+    }
+    if (trackPath.isEmpty() || !QFileInfo::exists(trackPath)) {
+        return samples;
+    }
+
+    QMutexLocker locker(&bassWaveformDecodeMutex());
+    ScopedBassWaveformDevice device;
+    if (!device.available()) {
+        return samples;
+    }
+
+    QFile file(trackPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return samples;
+    }
+    QByteArray bytes = file.readAll();
+    file.close();
+    if (bytes.isEmpty()) {
+        return samples;
+    }
+
+    HSTREAM stream = BASS_StreamCreateFile(
+        TRUE,
+        bytes.constData(),
+        0,
+        static_cast<QWORD>(bytes.size()),
+        BASS_STREAM_DECODE | BASS_STREAM_PRESCAN | BASS_SAMPLE_FLOAT);
+    if (stream == 0) {
+        return samples;
+    }
+
+    BASS_CHANNELINFO info{};
+    if (!BASS_ChannelGetInfo(stream, &info) || info.chans == 0) {
+        BASS_StreamFree(stream);
+        return samples;
+    }
+    const int channels = qBound(1, static_cast<int>(info.chans), 8);
+    const int sampleRate = qMax(1, static_cast<int>(info.freq));
+
+    const QWORD lengthBytes = BASS_ChannelGetLength(stream, BASS_POS_BYTE);
+    if (lengthBytes != static_cast<QWORD>(-1) && lengthBytes > 0) {
+        const double seconds = BASS_ChannelBytes2Seconds(stream, lengthBytes);
+        if (qIsFinite(seconds) && seconds > 0.0) {
+            if (durationSeconds != nullptr) {
+                *durationSeconds = seconds;
+            }
+            samples.reserve(static_cast<int>(qMin<double>(
+                static_cast<double>(INT_MAX),
+                std::ceil(seconds * static_cast<double>(sampleRate)))));
+        }
+    }
+
+    constexpr int kBassDecodeFramesPerChunk = 4096;
+    QVector<float> interleaved(kBassDecodeFramesPerChunk * channels, 0.0f);
+    while (true) {
+        const DWORD requestedBytes = static_cast<DWORD>(interleaved.size() * static_cast<int>(sizeof(float)));
+        const DWORD bytesRead = BASS_ChannelGetData(
+            stream,
+            interleaved.data(),
+            requestedBytes | BASS_DATA_FLOAT);
+        if (bytesRead == static_cast<DWORD>(-1) || bytesRead == 0) {
+            break;
+        }
+
+        const int floatsRead = static_cast<int>(bytesRead / sizeof(float));
+        const int framesRead = floatsRead / channels;
+        if (framesRead <= 0) {
+            break;
+        }
+
+        const int oldSize = samples.size();
+        samples.resize(oldSize + framesRead);
+        for (int frame = 0; frame < framesRead; ++frame) {
+            double mixed = 0.0;
+            const int base = frame * channels;
+            for (int channel = 0; channel < channels; ++channel) {
+                mixed += static_cast<double>(interleaved.at(base + channel));
+            }
+            samples[oldSize + frame] = static_cast<float>(mixed / static_cast<double>(channels));
+        }
+    }
+
+    BASS_StreamFree(stream);
+    if (durationSeconds != nullptr && *durationSeconds <= 0.0 && !samples.isEmpty()) {
+        *durationSeconds =
+            static_cast<double>(samples.size()) / static_cast<double>(sampleRate);
+    }
+    return samples;
+}
+#endif
+
+QVector<float> decodeMonoSamples(
+    const QString& trackPath,
+    double* durationSeconds,
+    WaveformDecodeBackend* backend)
+{
+    if (backend != nullptr) {
+        *backend = WaveformDecodeBackend::None;
+    }
+#ifdef Q_OS_WIN
+    const QVector<float> bassSamples = decodeMonoSamplesWithBass(trackPath, durationSeconds);
+    if (!bassSamples.isEmpty()) {
+        if (backend != nullptr) {
+            *backend = WaveformDecodeBackend::Bass;
+        }
+        return bassSamples;
+    }
+#endif
+    const QVector<float> miniaudioSamples = decodeMonoSamplesWithMiniaudio(trackPath, durationSeconds);
+    if (!miniaudioSamples.isEmpty() && backend != nullptr) {
+        *backend = WaveformDecodeBackend::Miniaudio;
+    }
+    return miniaudioSamples;
 }
 
 }  // namespace
@@ -208,6 +471,45 @@ QString waveformCacheFilePath(const QString& normalizedTrackPath, const QString&
     return QDir(cacheDirectoryPath).filePath(QStringLiteral("%1.wvfm").arg(QString::fromLatin1(hash)));
 }
 
+QString waveformTrackDebugId(const QString& normalizedTrackPath)
+{
+    return waveformDebugIdFromNormalizedPath(normalizedTrackPath);
+}
+
+QString waveformDataDebugSummary(const WaveformData& data)
+{
+    const int levelCount = data.levels.size();
+    const WaveformLevel* topLevel = data.levels.isEmpty() ? nullptr : &data.levels.constFirst();
+    const int topColumns = topLevel != nullptr ? topLevel->columns.size() : 0;
+    const double topSecondsPerColumn = topLevel != nullptr ? topLevel->secondsPerColumn : 0.0;
+    double peakEnergy = 0.0;
+    const double peakSecond = topLevel != nullptr ? peakColumnSecond(*topLevel, &peakEnergy) : -1.0;
+    const double onsetLow = topLevel != nullptr
+        ? firstColumnSecondAtThreshold(*topLevel, kWaveformDiagThresholdLow)
+        : -1.0;
+    const double onsetMid = topLevel != nullptr
+        ? firstColumnSecondAtThreshold(*topLevel, kWaveformDiagThresholdMid)
+        : -1.0;
+    const double onsetHigh = topLevel != nullptr
+        ? firstColumnSecondAtThreshold(*topLevel, kWaveformDiagThresholdHigh)
+        : -1.0;
+
+    return QStringLiteral("track_id=%1 duration=%2 file_size=%3 mtime_ms=%4 levels=%5 top_cols=%6 top_spc_ms=%7 onset02=%8 onset05=%9 onset10=%10 peak_sec=%11 peak_amp=%12 empty=%13")
+        .arg(waveformDebugIdFromNormalizedPath(data.normalizedTrackPath))
+        .arg(data.durationSeconds, 0, 'f', 6)
+        .arg(data.fileSize)
+        .arg(data.lastModifiedMs)
+        .arg(levelCount)
+        .arg(topColumns)
+        .arg(topSecondsPerColumn * 1000.0, 0, 'f', 3)
+        .arg(onsetLow, 0, 'f', 6)
+        .arg(onsetMid, 0, 'f', 6)
+        .arg(onsetHigh, 0, 'f', 6)
+        .arg(peakSecond, 0, 'f', 6)
+        .arg(peakEnergy, 0, 'f', 6)
+        .arg(data.isEmpty() ? 1 : 0);
+}
+
 int recommendedTopLevelColumnCount(double durationSeconds)
 {
     const int minimumTarget = qMax(1, kWaveformMinTopLevelColumns);
@@ -221,6 +523,9 @@ WaveformDataPtr makeWaveformPlaceholder(double durationSeconds)
 {
     auto data = std::make_shared<WaveformData>();
     data->durationSeconds = qMax(0.0, durationSeconds);
+    appendWaveformAlignmentDebugLog(
+        QStringLiteral("event=placeholder %1")
+            .arg(waveformDataDebugSummary(*data)));
     return data;
 }
 
@@ -244,14 +549,24 @@ WaveformDataPtr buildWaveformDataFromFile(
     qint64 fileSize,
     qint64 lastModifiedMs)
 {
+    QElapsedTimer timer;
+    timer.start();
     double durationSeconds = 0.0;
-    const QVector<float> samples = decodeMonoSamples(trackPath, &durationSeconds);
-    return buildWaveformData(
+    WaveformDecodeBackend backend = WaveformDecodeBackend::None;
+    const QVector<float> samples = decodeMonoSamples(trackPath, &durationSeconds, &backend);
+    WaveformDataPtr data = buildWaveformData(
         normalizeTrackPath(trackPath),
         fileSize,
         lastModifiedMs,
         samples,
         durationSeconds);
+    appendWaveformDebugLog(
+        QStringLiteral("event=build decoder=%1 samples=%2 elapsed_ms=%3 %4")
+            .arg(waveformDecodeBackendLabel(backend))
+            .arg(samples.size())
+            .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+            .arg(data ? waveformDataDebugSummary(*data) : QStringLiteral("data=0")));
+    return data;
 }
 
 WaveformDataPtr readWaveformDataCache(
@@ -424,6 +739,10 @@ void WaveformCacheService::requestWaveform(
     const QString normalizedTrackPath = normalizeTrackPath(trackPath);
     const QFileInfo trackInfo(trackPath);
     if (normalizedTrackPath.isEmpty() || !trackInfo.exists() || !trackInfo.isFile()) {
+        appendWaveformDebugLog(
+            QStringLiteral("event=request source=placeholder reason=missing_or_invalid track_id=%1 path_empty=%2")
+                .arg(waveformDebugIdFromNormalizedPath(normalizedTrackPath))
+                .arg(trackPath.isEmpty() ? 1 : 0));
         if (callback) {
             callback(makeWaveformPlaceholder(0.0));
         }
@@ -434,13 +753,23 @@ void WaveformCacheService::requestWaveform(
     const qint64 lastModifiedMs = trackInfo.lastModified().toMSecsSinceEpoch();
     const QString cacheKey = cacheKeyForTrack(normalizedTrackPath, fileSize, lastModifiedMs);
     if (memoryCache_.contains(cacheKey)) {
+        const WaveformDataPtr cached = memoryCache_.value(cacheKey);
+        appendWaveformDebugLog(
+            QStringLiteral("event=request source=memory cache_key_hit=1 cache_file=%1 %2")
+                .arg(waveformCacheFilePath(normalizedTrackPath, cacheDirectoryPath).isEmpty() ? 0 : 1)
+                .arg(cached ? waveformDataDebugSummary(*cached) : QStringLiteral("data=0")));
         if (callback) {
-            callback(memoryCache_.value(cacheKey));
+            callback(cached);
         }
         return;
     }
 
     if (pendingRequests_.contains(cacheKey)) {
+        appendWaveformDebugLog(
+            QStringLiteral("event=request source=pending track_id=%1 file_size=%2 mtime_ms=%3")
+                .arg(waveformDebugIdFromNormalizedPath(normalizedTrackPath))
+                .arg(fileSize)
+                .arg(lastModifiedMs));
         if (callback) {
             pendingRequests_.value(cacheKey)->callbacks.append(std::move(callback));
         }
@@ -458,30 +787,55 @@ void WaveformCacheService::requestWaveform(
         request->callbacks.append(std::move(callback));
     }
     pendingRequests_.insert(cacheKey, request);
+    appendWaveformDebugLog(
+        QStringLiteral("event=request source=worker track_id=%1 file_size=%2 mtime_ms=%3 cache_file=%4 cache_dir=%5")
+            .arg(waveformDebugIdFromNormalizedPath(normalizedTrackPath))
+            .arg(fileSize)
+            .arg(lastModifiedMs)
+            .arg(request->cacheFilePath.isEmpty() ? 0 : 1)
+            .arg(cacheDirectoryPath.isEmpty() ? 0 : 1));
 
     QPointer<WaveformCacheService> guard(this);
     QThreadPool* const pool = threadPool_ != nullptr ? threadPool_ : QThreadPool::globalInstance();
     pool->start([guard, request]() {
+        QElapsedTimer timer;
+        timer.start();
         WaveformDataPtr data;
+        QString source = QStringLiteral("disk_miss");
         if (!request->cacheFilePath.isEmpty()) {
             data = readWaveformDataCache(
                 request->cacheFilePath,
                 request->normalizedTrackPath,
                 request->fileSize,
                 request->lastModifiedMs);
+            if (data) {
+                source = QStringLiteral("disk");
+            }
         }
         if (!data) {
+            source = QStringLiteral("build");
             data = buildWaveformDataFromFile(
                 request->trackPath,
                 request->fileSize,
                 request->lastModifiedMs);
             if (data && !data->levels.isEmpty() && !request->cacheFilePath.isEmpty()) {
-                writeWaveformDataCache(request->cacheFilePath, *data);
+                const bool wrote = writeWaveformDataCache(request->cacheFilePath, *data);
+                appendWaveformDebugLog(
+                    QStringLiteral("event=cache_write ok=%1 cache_file=1 %2")
+                        .arg(wrote ? 1 : 0)
+                        .arg(waveformDataDebugSummary(*data)));
             }
         }
         if (!data) {
+            source = QStringLiteral("placeholder");
             data = makeWaveformPlaceholder(0.0);
         }
+        appendWaveformDebugLog(
+            QStringLiteral("event=worker_done source=%1 elapsed_ms=%2 cache_file=%3 %4")
+                .arg(source)
+                .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+                .arg(request->cacheFilePath.isEmpty() ? 0 : 1)
+                .arg(data ? waveformDataDebugSummary(*data) : QStringLiteral("data=0")));
         if (guard.isNull()) {
             return;
         }
