@@ -73,6 +73,12 @@ The Windows release package also ships:
 - `Start_MiaCode_Debug.bat`
   - sets debug mode, creates a local `logs/` directory, and launches `MiaCode.exe --debug`
 
+Dev-tool-only parser repro hook:
+
+- `MIACODE_SIMAI_REPRO_CHART`
+  - optional `simai_parser_spec` real-chart repro path; point it at a `maidata.txt` containing `&inote_5=` to add a local corpus parse check while keeping the public CTest run deterministic when unset
+  - owner: `src/tools/simai_parser/SimaiParserSpec.cpp`
+
 ## 3. Preview And Runtime Overrides
 
 - `MIACODE_PREVIEW_SESSION_SCRIPT`
