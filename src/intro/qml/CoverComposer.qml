@@ -33,6 +33,9 @@ Item {
     property url backgroundImage: ""        // custom backdrop (Custom mode)
     property int backgroundMode: 0          // 0=jacket, 1=custom, 2=transparent
     property bool blurEnabled: true
+    // Full-bleed backdrop brightness (0..1). The dim overlay opacity = 1 − this,
+    // so 0.45 reproduces the old fixed dimOpacity 0.55. (C++ CoverComposerInputs.)
+    property real coverBgBrightness: 0.45
     property bool cardShadowEnabled: false
     // B1 — chart-frame inner-ring background. When enabled, the chart-frame disk
     // shows the cover background (曲绘/custom) crisp, circular-masked to the playfield
@@ -41,6 +44,11 @@ Item {
     property real chartFrameBgBrightness: 0.8   // 0..1; MultiEffect.brightness = this − 1
     property real chartFrameDiskDiameter: 0.0   // ring diameter / square side (0 = no disk)
     property string activeChartFrameKey: ""      // only this chart frame hosts the live scene
+    // §4 — which layer wears the selection chrome (any kind, incl. the card). Driven
+    // two-way: C++ pushes it (list / inspector selection → blue box moves), and a
+    // canvas tap / drag pushes it back via chartSceneBinder.selectLayerKey. The
+    // editor's selectedIndex is DERIVED from this (key-based → reorder/add/remove safe).
+    property string selectedKey: ""
     property bool editable: true            // false in the export render (no chrome/handlers)
     // A2 — the CoverComposerView (live path only) sets this so the chart-frame
     // layer can host a LIVE PreviewQuickSceneRoot instead of the static grab Image:
@@ -49,7 +57,17 @@ Item {
     property var chartSceneBinder: null
 
     // ---- Editor state ----
-    property int selectedIndex: -1
+    // Derived from selectedKey so reordering / adding / removing layers never points
+    // the chrome at the wrong delegate. C++ owns the selection (selectedKey).
+    readonly property int selectedIndex: {
+        if (!coverLayout || selectedKey === "")
+            return -1
+        var layers = coverLayout.layers
+        for (var i = 0; i < layers.length; i++)
+            if (layers[i] && layers[i].key === selectedKey)
+                return i
+        return -1
+    }
     property real guideX: -1                // active vertical snap guide (canvas px); <0 = none
     property real guideY: -1                // active horizontal snap guide
 
@@ -164,18 +182,9 @@ Item {
         return Qt.point(cx, cy)
     }
 
-    // Initial selection must fire when C++ ASSIGNS coverLayout — the host create()s
-    // the scene (running Component.onCompleted) and only THEN sets coverLayout, so
-    // onCompleted alone never sees the model. The `editable` guard keeps the export
-    // path (editable=false) from ever auto-selecting / baking chrome into the image.
-    onCoverLayoutChanged: {
-        if (editable && coverLayout && coverLayout.layers.length > 0 && selectedIndex < 0)
-            selectedIndex = 0
-    }
-    Component.onCompleted: {
-        if (editable && coverLayout && coverLayout.layers.length > 0 && selectedIndex < 0)
-            selectedIndex = 0
-    }
+    // Initial selection is owned by C++: the panel sets its active layer (the card)
+    // and pushes selectedKey on load, so no QML-side auto-select is needed. The
+    // export path (editable=false) never receives a selectedKey → no chrome baked in.
 
     // ===================== Background fill layer =====================
     Rectangle {
@@ -190,6 +199,12 @@ Item {
         anchors.fill: parent
         source: canvas.backdropSourceUrl
         fillMode: Image.PreserveAspectCrop
+        // Cap the decoded texture to the canvas size — at export the canvas IS the
+        // output resolution (full quality), at preview it's small (saves VRAM); a
+        // huge custom backdrop no longer decodes at its native megapixels.
+        sourceSize: canvas.width > 1 && canvas.height > 1
+                    ? Qt.size(Math.ceil(canvas.width), Math.ceil(canvas.height))
+                    : undefined
         // Gate on a successful load so a bad/missing source cleanly falls through
         // to the black+dim backdrop instead of showing a half/errored image.
         visible: !canvas.transparentBg && !canvas.blurEnabled
@@ -214,7 +229,9 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: canvas.dimColor()
-        opacity: canvas.dimOpacity()
+        // User-adjustable backdrop dim (was the fixed template dimOpacity). The tint
+        // colour stays from the template; brightness only drives how much shows.
+        opacity: Math.max(0, Math.min(1, 1 - canvas.coverBgBrightness))
         visible: !canvas.transparentBg
     }
 
@@ -352,13 +369,16 @@ Item {
                             && layerItem.isActiveChartFrame
                             && layerItem.ld && layerItem.ld.visible
                     sourceComponent: liveChartComponent
+                    // Only ever BIND (the active frame's loader is the one that has an
+                    // item). Never unbind on item==null: when a second frame is added
+                    // the Repeater rebuilds every delegate, and an old loader's unload
+                    // would otherwise clear the binding the NEW active frame just made
+                    // (order isn't guaranteed) → the active frame renders blank and you
+                    // only see the first frame's still. The bound root is a QPointer, so
+                    // it self-nulls when the loader genuinely unloads it.
                     onItemChanged: {
-                        if (!canvas.chartSceneBinder)
-                            return
-                        if (item)
+                        if (canvas.chartSceneBinder && item)
                             canvas.chartSceneBinder.bindLiveChartScene(item)
-                        else
-                            canvas.chartSceneBinder.unbindLiveChartScene()
                     }
                 }
                 // Static grab still: a square playfield grab served by the
@@ -383,7 +403,10 @@ Item {
 
             TapHandler {
                 enabled: canvas.editable
-                onTapped: canvas.selectedIndex = layerItem.index
+                onTapped: {
+                    if (canvas.chartSceneBinder)
+                        canvas.chartSceneBinder.selectLayerKey(layerItem.ld.key)
+                }
             }
 
             // Drag to move, with canvas centre/edge snapping. target:null — we
@@ -400,7 +423,8 @@ Item {
                 property real grabSceneY: 0
                 onActiveChanged: {
                     if (active) {
-                        canvas.selectedIndex = layerItem.index
+                        if (canvas.chartSceneBinder)
+                            canvas.chartSceneBinder.selectLayerKey(layerItem.ld.key)
                         startNx = layerItem.ld.nx
                         startNy = layerItem.ld.ny
                         // Reference the delta from the centroid AT ACTIVATION, not the

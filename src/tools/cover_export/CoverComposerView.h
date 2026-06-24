@@ -44,6 +44,10 @@ struct CoverComposerInputs {
     QString backgroundPath;      // custom backdrop (Custom mode only)
     CoverBackgroundMode backgroundMode = CoverBackgroundMode::Jacket;
     bool blurBackground = true;
+    // Full-bleed backdrop brightness (0..1). Replaces the template's fixed dim:
+    // the dim overlay opacity = 1 − this. Default 0.45 reproduces the old fixed
+    // dimOpacity 0.55 pixel-for-pixel. Disabled (ignored) in Transparent mode.
+    double coverBgBrightness = 0.45;
     bool cardShadow = false;
     // B1 — chart-frame inner-ring background. When enabled (and the background is
     // not Transparent), the chart-frame playfield disk shows the SAME background
@@ -92,6 +96,14 @@ public:
     void setInputs(const CoverComposerInputs& inputs);
     void setActiveChartFrameKey(const QString& key);
 
+    // §4 selection sync. setSelectedKey pushes which layer wears the selection
+    // chrome (any kind, incl. the card) INTO QML, so list / inspector selections
+    // move the blue box. selectLayerKey is the QML→C++ direction (a canvas tap or
+    // drag), forwarded to the panel via layerSelectionRequested — the panel's
+    // setActiveLayerKey is the single source of truth (no echo back to the gesture).
+    void setSelectedKey(const QString& key);
+    Q_INVOKABLE void selectLayerKey(const QString& key);
+
     // ---- A2: live chart-frame edit scene -------------------------------------
     // Hand the live edit scene the shared, already-bootstrapped frame state
     // (owned by the dialog's SceneFrameRenderer). The in-QML PreviewQuickSceneRoot
@@ -118,6 +130,10 @@ public:
     bool isValid() const { return root_ != nullptr; }
     QString lastError() const { return lastError_; }
 
+signals:
+    // A canvas tap/drag asked to select this layer (forwarded to the panel).
+    void layerSelectionRequested(const QString& key);
+
 private:
     bool ensureLoaded();
     void applyInputs();
@@ -130,6 +146,7 @@ private:
     QWidget* container_ = nullptr;
     CoverComposerInputs inputs_;
     QString activeChartFrameKey_;
+    QString selectedKey_;
     QString lastError_;
 
     // A2 live edit scene. chartFrameState_ is borrowed (owned by the dialog's
