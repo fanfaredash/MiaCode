@@ -304,7 +304,6 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
             .arg(wasPlaying ? 1 : 0)
             .arg(chartNow, 0, 'f', 6));
     state_.previewPlaybackRate_ = clampedRate;
-    refreshTimelineWaveformPhaseCompensation();
     // G2 Commit 2: re-anchor the wall-clock master to the captured chart-second
     // so the next tick reads chartNow + 0*newRate = chartNow (no jump), then
     // advances at the new rate.

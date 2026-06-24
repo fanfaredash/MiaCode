@@ -336,9 +336,8 @@ void MainWindow::TimelineSection::refreshTimelineWaveformPhaseCompensation()
         return;
     }
     const qint64 frameIntervalNs = qMax<qint64>(1, previewCanvasTargetFrameIntervalNs());
-    const double playbackRate = qMax(0.0, state_.previewPlaybackRate_);
     state_.timelineQuickStateBridge_->setWaveformPhaseCompensationSeconds(
-        (static_cast<double>(frameIntervalNs) / 1000000000.0) * playbackRate);
+        static_cast<double>(frameIntervalNs) / 1000000000.0);
 }
 
 void MainWindow::TimelineSection::resetQtPreviewFixedFramePacing()
