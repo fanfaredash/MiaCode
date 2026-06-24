@@ -219,6 +219,11 @@ Implication:
 - `snapshot.outputPath` should already be the final `.mp4` path by the time the worker starts; `MainWindow` resolves missing suffixes and duplicate-name fallbacks before launching the worker so completion UI and worker results can treat it as authoritative.
 - Static Muri thresholds that affect analyzer timing, such as the tap-on-slide threshold, must also cross this boundary; otherwise preview-time diagnostics and export-time overlays will drift.
 
+Cover export note:
+
+- Cover export is not a video-export worker snapshot path, but its chart-frame stills are rendered from a `VideoExportTask` seed through `SceneFrameRenderer` and `PreviewQuickSceneRoot`. If chart-frame render settings or layer flags change, review `SceneFrameRenderer.*`, `CoverComposerView.*`, `CoverComposer.qml`, and video export's Quick render setup together.
+- Cover Studio supports multiple chart-frame layers with only one live `PreviewQuickSceneRoot`: the active chart-frame is live, while other visible frames use cached stills refreshed before final cover export.
+
 ## 9. Shared Render State Flows Through Preview And Export
 
 Wifi-specific note:

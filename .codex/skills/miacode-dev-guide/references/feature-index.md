@@ -162,6 +162,10 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Main window export ownership:
   - File: `src/app/mainwindow/MainWindow.cpp`
   - Key functions: `onExportPreviewVideo`, `buildVideoExportSnapshot`, `launchVideoExportWorker`, `handleVideoExportWorkerEvent`
+- Cover export studio:
+  - Files: `src/tools/cover_export/CoverStudioWindow.*`, `CoverStudioPanel.*`, `CoverLayoutModel.*`, `CoverCompositionState.*`, `CoverComposerView.*`, `SceneFrameRenderer.*`, `src/intro/qml/CoverComposer.qml`, `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`
+  - Classes: `CoverStudioWindow`, `CoverStudioPanel`, `CoverLayoutModel`, `CoverCompositionState`, `CoverComposerView`, `SceneFrameRenderer`
+  - Owns: cover composition UI, multi chart-frame layer state, v1/v2 `.miacover` JSON migration, active-live-frame editing, cached still refresh, and final PNG/JPG cover export beside the chart
 
 ## 9. BPM And Offset Detection
 
