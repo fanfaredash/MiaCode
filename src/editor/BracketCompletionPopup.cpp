@@ -10,9 +10,11 @@
 BracketCompletionPopup::BracketCompletionPopup(QWidget* parent)
     : QListWidget(parent)
 {
-    // ToolTip + ShowWithoutActivating keeps the editor focused so it still owns
-    // the keyboard. NoFocus stops the list from ever grabbing the caret.
-    setWindowFlags(Qt::ToolTip | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+    // Tool + ShowWithoutActivating keeps the editor focused so it still owns
+    // the keyboard, while still behaving like an interactive widget. ToolTip
+    // windows are display-only on some platforms and can drop mouse clicks.
+    // NoFocus stops the list from ever grabbing the caret.
+    setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint | Qt::WindowDoesNotAcceptFocus);
     setAttribute(Qt::WA_ShowWithoutActivating, true);
     setFocusPolicy(Qt::NoFocus);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -23,8 +25,9 @@ BracketCompletionPopup::BracketCompletionPopup(QWidget* parent)
     setEditTriggers(QAbstractItemView::NoEditTriggers);
     setFrameShape(QFrame::Box);
 
-    connect(this, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
+    connect(this, &QListWidget::itemPressed, this, [this](QListWidgetItem* item) {
         if (item != nullptr) {
+            setCurrentItem(item);
             emit candidateActivated(item->text());
         }
     });

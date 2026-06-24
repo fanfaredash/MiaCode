@@ -269,9 +269,9 @@ void PlainCodeEditor::ensureCompletionPopup()
         .arg(colors.border.name(QColor::HexRgb))
         .arg(colors.accent.name(QColor::HexRgb))
         .arg(colors.accentText.name(QColor::HexRgb)));
-    // A mouse click commits the highlighted row.
+    // A mouse press commits the clicked row.
     connect(completionPopup_, &BracketCompletionPopup::candidateActivated, this,
-            [this](const QString&) { acceptCompletionCandidate(); });
+            [this](const QString& candidate) { acceptCompletionCandidate(candidate); });
 }
 
 // Shared core: anchor the popup under the caret and record the slot state.
@@ -378,6 +378,14 @@ void PlainCodeEditor::acceptCompletionCandidate()
         return;
     }
     const QString candidate = completionPopup_->currentCandidate();
+    acceptCompletionCandidate(candidate);
+}
+
+void PlainCodeEditor::acceptCompletionCandidate(const QString& candidate)
+{
+    if (completionOpening_.isNull() || completionStartPos_ < 0) {
+        return;
+    }
     if (candidate.isEmpty()) {
         closeBracketCompletion();
         return;
