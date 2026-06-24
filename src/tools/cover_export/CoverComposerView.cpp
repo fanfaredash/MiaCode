@@ -133,6 +133,7 @@ void settleEvents(bool cold)
 void applyComposerInputs(QQuickItem* root,
                          CoverLayoutModel* model,
                          const CoverComposerInputs& inputs,
+                         const QString& activeChartFrameKey,
                          bool editable)
 {
     if (root == nullptr) {
@@ -149,6 +150,7 @@ void applyComposerInputs(QQuickItem* root,
     root->setProperty("chartFrameBgEnabled", inputs.chartFrameBackground);
     root->setProperty("chartFrameBgBrightness", inputs.chartFrameBgBrightness);
     root->setProperty("chartFrameDiskDiameter", inputs.chartFrameDiskDiameter);
+    root->setProperty("activeChartFrameKey", activeChartFrameKey);
     root->setProperty("editable", editable);
 }
 
@@ -265,9 +267,23 @@ void CoverComposerView::setInputs(const CoverComposerInputs& inputs)
     }
 }
 
+void CoverComposerView::setActiveChartFrameKey(const QString& key)
+{
+    if (activeChartFrameKey_ == key) {
+        return;
+    }
+    activeChartFrameKey_ = key;
+    if (root_ != nullptr) {
+        root_->setProperty("activeChartFrameKey", activeChartFrameKey_);
+        if (window_ != nullptr) {
+            window_->update();
+        }
+    }
+}
+
 void CoverComposerView::applyInputs()
 {
-    applyComposerInputs(root_, model_, inputs_, /*editable=*/true);
+    applyComposerInputs(root_, model_, inputs_, activeChartFrameKey_, /*editable=*/true);
     // Live path only — the export render (renderCoverComposite) never sets this,
     // so its editable=false Loader stays inactive and the static grab Image shows.
     if (root_ != nullptr) {
@@ -388,7 +404,7 @@ QImage renderCoverComposite(CoverLayoutModel* model,
     root->setParent(window->contentItem());
     root->setWidth(width);
     root->setHeight(height);
-    applyComposerInputs(root, model, inputs, /*editable=*/false);
+    applyComposerInputs(root, model, inputs, QString(), /*editable=*/false);
 
     window->setOpacity(0.0);
     window->show();

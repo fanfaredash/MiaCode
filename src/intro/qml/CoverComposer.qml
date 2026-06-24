@@ -40,6 +40,7 @@ Item {
     property bool chartFrameBgEnabled: false
     property real chartFrameBgBrightness: 0.8   // 0..1; MultiEffect.brightness = this − 1
     property real chartFrameDiskDiameter: 0.0   // ring diameter / square side (0 = no disk)
+    property string activeChartFrameKey: ""      // only this chart frame hosts the live scene
     property bool editable: true            // false in the export render (no chrome/handlers)
     // A2 — the CoverComposerView (live path only) sets this so the chart-frame
     // layer can host a LIVE PreviewQuickSceneRoot instead of the static grab Image:
@@ -228,9 +229,17 @@ Item {
             readonly property var ld: modelData       // CoverLayer
             readonly property bool isCard: ld && ld.kind === "card"
             readonly property bool isChartFrame: ld && ld.kind === "chartFrame"
+            readonly property bool isActiveChartFrame:
+                isChartFrame && layerItem.ld && layerItem.ld.key === canvas.activeChartFrameKey
+            readonly property bool frameBgEnabled:
+                isChartFrame && layerItem.ld && layerItem.ld.frameBgEnabled !== undefined
+                    ? layerItem.ld.frameBgEnabled : canvas.chartFrameBgEnabled
+            readonly property real frameBgBrightness:
+                isChartFrame && layerItem.ld && layerItem.ld.frameBgBrightness !== undefined
+                    ? layerItem.ld.frameBgBrightness : canvas.chartFrameBgBrightness
             // B1 disk background: shared gate for its image + dim overlay.
             readonly property bool showsDiskBg:
-                isChartFrame && canvas.chartFrameBgEnabled
+                isChartFrame && layerItem.frameBgEnabled
                 && canvas.chartFrameDiskDiameter > 0
                 && canvas.backdropSourceUrl.toString().length > 0
 
@@ -240,6 +249,7 @@ Item {
             y: (ld ? ld.ny : 0.5) * canvas.height - height / 2
             z: ld ? ld.z : 0
             visible: ld ? ld.visible : true
+            opacity: ld && ld.opacity !== undefined ? ld.opacity : 1.0
 
             // Card content, optionally drop-shadowed via a layer effect on the
             // content ONLY (so the selection chrome is never rasterised with it).
@@ -322,7 +332,7 @@ Item {
                     radius: width / 2
                     antialiasing: true
                     color: "#000000"
-                    opacity: Math.max(0, Math.min(1, 1.0 - canvas.chartFrameBgBrightness))
+                    opacity: Math.max(0, Math.min(1, 1.0 - layerItem.frameBgBrightness))
                 }
                 Loader {
                     anchors.fill: parent
@@ -339,6 +349,7 @@ Item {
                     anchors.fill: parent
                     active: layerItem.isChartFrame && canvas.editable
                             && canvas.chartSceneBinder !== null
+                            && layerItem.isActiveChartFrame
                             && layerItem.ld && layerItem.ld.visible
                     sourceComponent: liveChartComponent
                     onItemChanged: {

@@ -16,7 +16,7 @@
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
 #include "preview/runtime/PreviewRuntime.h"
-#include "tools/cover_export/ExportCoverDialog.h"
+#include "tools/cover_export/CoverStudioWindow.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/video_export/BatchVideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
@@ -886,37 +886,16 @@ void MainWindow::ExportSection::onExportCover(int difficultyId)
         seedSize = QSize(1024, 1024);
     }
 
-    ExportCoverDialog dialog(task, seedSize, UiDialogs::effectiveParentWidget(&owner_));
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-
     // The cover lands next to the chart (the same base the video export resolves
     // relative output paths against).
     const QFileInfo chartInfo(task.chartPath);
     const QString outputDirectory = !chartInfo.absoluteDir().path().isEmpty()
         ? chartInfo.absoluteDir().absolutePath()
         : QDir::currentPath();
-
-    const miacode::cover_export::CoverExportResult result = dialog.exportCover(outputDirectory);
-    const QString title = uiText("action.export_cover", QStringLiteral("Export Cover"));
-    if (result.success) {
-        UiDialogs::showMessageBox(
-            QMessageBox::Information,
-            &owner_,
-            title,
-            (UiText::isChineseUi() ? QStringLiteral("封面已导出：\n%1") : QStringLiteral("Cover exported:\n%1"))
-                .arg(QDir::toNativeSeparators(result.outputPath))
-        );
-    } else {
-        UiDialogs::showMessageBox(
-            QMessageBox::Warning,
-            &owner_,
-            title,
-            (UiText::isChineseUi() ? QStringLiteral("封面导出失败：\n%1") : QStringLiteral("Cover export failed:\n%1"))
-                .arg(result.errorMessage)
-        );
-    }
+    auto* window = new miacode::cover_export::CoverStudioWindow(
+        task, seedSize, outputDirectory, UiDialogs::effectiveParentWidget(&owner_));
+    window->setAttribute(Qt::WA_DeleteOnClose, true);
+    window->show();
 }
 
 void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)

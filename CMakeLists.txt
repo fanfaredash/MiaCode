@@ -268,6 +268,20 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/net/NetBatchDownloadDialog.cpp
     src/tools/cover_export/CoverLayoutModel.h
     src/tools/cover_export/CoverLayoutModel.cpp
+    src/tools/cover_export/CoverCompositionState.h
+    src/tools/cover_export/CoverCompositionState.cpp
+    src/tools/cover_export/CoverLayerListModel.h
+    src/tools/cover_export/CoverLayerListModel.cpp
+    src/tools/cover_export/CoverLayerListPanel.h
+    src/tools/cover_export/CoverLayerListPanel.cpp
+    src/tools/cover_export/CoverInspectorPanel.h
+    src/tools/cover_export/CoverInspectorPanel.cpp
+    src/tools/cover_export/CoverFramePickerPanel.h
+    src/tools/cover_export/CoverFramePickerPanel.cpp
+    src/tools/cover_export/CoverStudioPanel.h
+    src/tools/cover_export/CoverStudioPanel.cpp
+    src/tools/cover_export/CoverStudioWindow.h
+    src/tools/cover_export/CoverStudioWindow.cpp
     src/tools/cover_export/CoverComposerView.h
     src/tools/cover_export/CoverComposerView.cpp
     src/tools/cover_export/SceneFrameRenderer.h
@@ -1006,6 +1020,19 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/chart/document/SimaiDocument.cpp
         LIBS Qt6::Core
         INCLUDES src src/core/chart/document
+    )
+
+    miacode_add_dev_tool(cover_layout_model_spec TEST
+        SOURCES
+            src/tools/cover_export/CoverLayoutModelSpec.cpp
+            src/tools/cover_export/CoverLayoutModel.h
+            src/tools/cover_export/CoverLayoutModel.cpp
+            src/tools/cover_export/CoverCompositionState.h
+            src/tools/cover_export/CoverCompositionState.cpp
+            src/app/ui/UiText.h
+            src/app/ui/UiText.cpp
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
+        INCLUDES src src/app/ui
     )
 
     miacode_add_dev_tool(muri_spec TEST

@@ -90,6 +90,7 @@ public:
 
     // Push presentation inputs to the live scene.
     void setInputs(const CoverComposerInputs& inputs);
+    void setActiveChartFrameKey(const QString& key);
 
     // ---- A2: live chart-frame edit scene -------------------------------------
     // Hand the live edit scene the shared, already-bootstrapped frame state
@@ -128,6 +129,7 @@ private:
     QQuickItem* root_ = nullptr;
     QWidget* container_ = nullptr;
     CoverComposerInputs inputs_;
+    QString activeChartFrameKey_;
     QString lastError_;
 
     // A2 live edit scene. chartFrameState_ is borrowed (owned by the dialog's
