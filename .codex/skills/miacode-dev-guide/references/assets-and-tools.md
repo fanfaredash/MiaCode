@@ -156,7 +156,7 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 - Windows release packages now also include:
     - root-level `Start_MiaCode_Debug.bat`
     - root-level `logs/` helper folder only for explicit debug-launch scripts; normal project-bound runtime logs default to `.miacode/logs/`
-    - root-level `LICENSE`, `LICENSE_SCOPE.md`, `THIRD_PARTY_NOTICES.md`, `README.md`, `README_EN.md`, and `licenses/`
+    - root-level `LICENSE`, `LICENSE_SCOPE.md`, `THIRD_PARTY_NOTICES.md`, and `licenses/`; repository README files are developer-facing docs and are not shipped
   - optional Windows dev-tool packaging currently includes only `simai_native_dump.exe`; `soundtouch_probe.exe` is no longer copied by `scripts/build/package-win.ps1`
 - macOS build/package:
   - `scripts/build/build-macos.sh`
