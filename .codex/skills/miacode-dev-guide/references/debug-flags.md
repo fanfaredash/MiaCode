@@ -84,6 +84,16 @@ The Windows release package also ships:
 - `MIACODE_TRACK_PATH`
   - preview track-path override
   - owner: `src/app/mainwindow/MainWindow.cpp`
+- `MIACODE_BASS_BGM_RATE_MODE`
+  - Windows BASS preview BGM rate-mode override; unset defaults to pitch-preserving BASS_FX `tempo`, while `rate_transpose` / `transpose` / `source_time` / `accurate` switches to source-time-priority rate transpose for A/B listening
+  - owner: `src/audio/BassPreviewAudioBackendImpl.h`, applied in `src/audio/BassPreviewAudioBackend_Assets.cpp`
+- `MIACODE_BASS_BGM_TEMPO_PRESET`
+  - Windows BASS preview BGM BASS_FX window preset override; only active when `MIACODE_BASS_BGM_RATE_MODE=tempo`
+  - supported presets: unset = `compact40`, `stock` = plugin default, `auto` = `0/0/8`, `tight20` = `20/8/4`, `balanced30` = `30/10/6`, `compact40` = `40/15/8`, `smooth60` = `60/20/8`, `wide82` = `82/28/8`
+  - owner: `src/audio/BassPreviewAudioBackendImpl.h`, applied in `src/audio/BassPreviewAudioBackendSample.h`
+- `MIACODE_BASS_BGM_TEMPO_PARAMS`
+  - Windows BASS preview BGM custom BASS_FX window override; only active when tempo mode is active; overrides the preset with `sequence_ms,seek_ms,overlap_ms`
+  - owner: `src/audio/BassPreviewAudioBackendImpl.h`, applied in `src/audio/BassPreviewAudioBackendSample.h`
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG`
   - enables low-noise runtime `preview/frame_pacing` request/tick/present/watchdog diagnostics without requiring `--debug`
   - normal request/tick/present samples are rate-limited; watchdog timeout, fixed-timer present-miss/hard-resync, orphan-present, and large-step events log immediately
@@ -186,7 +196,7 @@ The `preview/playback` audio tag now traces realtime preview start transactions.
 The `preview/stage_media` audio tag is now switch-level only for quickshell media changes, presentation-mode flips, `VideoOutput` binding transitions, weak-sync video prepare / commit transitions (`action=prepare_playback_*`, `action=commit_prepared_playback*`), and low-noise external-video stall transitions (`action=video_frame_stall_begin` / `action=video_frame_stall_end`); the old per-frame quickshell video arrival line was retired.
 The audio log emits `stretched_clock_drift` for low-noise stretched-BGM drift sampling; current fields are `fallback`, `bg`, `delta_ms`, `rate`, `engine_now_frame`, `start_engine_frame`, and `tick_bg_gap_ms` (`fallback - backgroundTrackLastTimelineSecond`) so engine-time anchor drift can be separated from tick-to-tick catch-up.
 The preview audio facade now also emits `preview_audio_backend` selection lines so backend routing and BASS fallback decisions are visible in the audio log.
-The BASS preview backend now also emits low-noise `bass_schedule_arm` and `bass_status` lines. `bass_schedule_arm` shows which collapsed SFX group has been armed as the next mixer sync, while `bass_status` samples the current authoritative audio second, mixer-relative second, BGM transport second, fallback drift in milliseconds, the next armed SFX group, and the last triggered SFX group at roughly a `1s` interval.
+The BASS preview backend now also emits low-noise `bass_schedule_arm` and `bass_status` lines. `bass_schedule_arm` shows which collapsed SFX group has been armed as the next mixer sync, while `bass_status` samples the current authoritative audio second, mixer-relative second, BGM transport second, fallback drift in milliseconds, the next armed SFX group, and the last triggered SFX group at roughly a `1s` interval. Windows BGM rate mode is logged at load/rate-change boundaries via `bgm_speed_mode` and `bgm_rate_mode`; BASS_FX window experiments log `bgm_tempo_window` with requested and read-back `sequence_ms`, `seek_ms`, and `overlap_ms`. These are low-frequency A/B breadcrumbs and should not be emitted per tick.
 The export log now also emits `audio_backend_select`, `audio_mix_ok`, `audio_backend_render_complete`, and `fail_audio_*` lines so StageB backend routing and mixed-audio generation failures are visible without parsing ffmpeg arguments.
 Detailed export `frame_timing` sampling now defaults to every `300` frames unless a frame/render/write stall forces an earlier line.
 Normal document open/save now uses the direct native `QFileDialog::getOpenFileName` / `getSaveFileName` path. The old `window/dialog_event`, `window/native`, `window/native_hook`, and `window/native_related` probes were retired from the main app and should only return through a separate dev-only tool that is not packaged into release artifacts.

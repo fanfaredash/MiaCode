@@ -102,7 +102,7 @@ void BassPreviewAudioBackend::initializeAssets()
             return;
         }
         slot = std::make_unique<Sample>();
-        if (!slot->create(this, path, kind, kind, false, speedChange)) {
+        if (!slot->create(this, path, kind, kind, false, speedChange ? SampleSpeedMode::Tempo : SampleSpeedMode::None)) {
             slot.reset();
             return;
         }
@@ -132,17 +132,25 @@ void BassPreviewAudioBackend::initializeAssets()
 
     if (!preparedAssets_.trackPath.isEmpty() && QFileInfo::exists(preparedAssets_.trackPath)) {
         backgroundTrackSampleOwner_ = std::make_unique<Sample>();
+        const SampleSpeedMode bgmSpeedMode = backgroundTrackSpeedMode();
         if (backgroundTrackSampleOwner_->create(
                 this,
                 preparedAssets_.trackPath,
                 QStringLiteral("bgm"),
                 QStringLiteral("bgm"),
                 true,
-                true)) {
+                bgmSpeedMode)) {
             backgroundTrackSample_ = backgroundTrackSampleOwner_.get();
             backgroundTrackSample_->setLoop(false);
             backgroundTrackSample_->setSpeed(playbackSession_.backgroundTrackPlaybackRate);
             ++loadedSampleCount;
+            appendAudioDebugLog(
+                QString("bgm_speed_mode selected=%1 rate=%2 env=%3 tempo_preset=%4 tempo_params=%5")
+                    .arg(sampleSpeedModeLabel(bgmSpeedMode))
+                    .arg(playbackSession_.backgroundTrackPlaybackRate, 0, 'f', 3)
+                    .arg(qEnvironmentVariable("MIACODE_BASS_BGM_RATE_MODE"))
+                    .arg(qEnvironmentVariable("MIACODE_BASS_BGM_TEMPO_PRESET"))
+                    .arg(qEnvironmentVariable("MIACODE_BASS_BGM_TEMPO_PARAMS")));
         } else {
             backgroundTrackSampleOwner_.reset();
             backgroundTrackSample_ = nullptr;
