@@ -1,372 +1,301 @@
-# Cover Export UI Research
+# Cover Studio 封面导出实现计划
 
-Date: 2026-06-24
+Date: 2026-06-25
+Status: implementation-aligned plan
 
-## Scope
+> ⚠ **UI 部分已被 `COVER_STUDIO_UI_REDESIGN_SPEC_ZH.md`（2026-06-25 重设计）取代。**
+> 本文的渲染核心 / 数据模型 / `.miacover` JSON / 导出流程仍然有效并以本文为准；
+> 但工作台交互层（三栏布局、检查器、播放条、图层操作、勾选框、快捷键）以重设计 spec 为准。
 
-This document records the UI and technical-direction research for improving MiaCode's cover export workflow.
+## 验收状态（2026-06-25）
 
-The requested feature direction is:
+Cover Studio UI 重设计已验收完毕，已有内容基本符合需求。当前仍需补充的功能记录在 `COVER_STUDIO_UI_REDESIGN_SPEC_ZH.md` 的 §13，包括图层列表顶部越界拖拽落位、点击画布空白取消选择、新谱面帧继承上次谱面帧配置、交叠图层点击只命中一个图层，以及暂缓的画布视觉缩放/还原能力。
 
-- support multiple chart-frame layers;
-- improve chart-frame styling, including adjustable background brightness;
-- redesign the cover export UI while keeping enough workspace for real composition work;
-- prefer reusable open-source components only when they are modular, lightweight, and themeable.
+## 目标
 
-Final user-priority order for external candidates:
+本文重写早期 Cover Export UI Research，将研究结论、用户反馈和当前实现统一成一份可执行的封面导出计划文档。
 
-1. High modularity: the project should allow selecting only useful components and combining them with MiaCode's chart-frame renderer.
-2. Lightweight: avoid new runtime DLLs where possible.
-3. Themeable: the UI should be easy to adapt to the current MiaCode theme.
+本轮目标不是引入通用图片编辑器，而是在 MiaCode 现有封面渲染链路上完成可维护的 Cover Studio：
 
-## Current MiaCode Baseline
+- 支持多个谱面帧 chart-frame 图层；
+- chart-frame 的时间、内圈背景、亮度和透明度都作为图层属性保存；
+- 使用固定工作台窗口，避免旧 dialog 控件和新图层面板混在一起；
+- 保留现有导出入口、标题、按钮等既有用户可见文案；
+- 新增图层/属性/帧操作提供中文文字、中文 tooltip 和 accessible text；
+- 不引入外部 UI 依赖，继续使用 Qt Widgets + QML + MiaCode 自有渲染核心。
 
-The existing cover export implementation already has a strong custom rendering core. The main goal should be to improve the workspace and layer-management UX, not replace the renderer.
+## 当前基线
 
-Primary files:
+封面导出已经具备可复用的渲染核心，应继续保留并围绕它扩展：
 
-- `src/tools/cover_export/ExportCoverDialog.{h,cpp}`: current modal cover dialog, control wiring, composition JSON import/export, chart-frame time picker, export entry.
-- `src/tools/cover_export/CoverLayoutModel.{h,cpp}`: current layer model. It seeds a `card` layer and one fixed `chartFrame` layer.
-- `src/tools/cover_export/CoverComposerView.{h,cpp}`: embeds `CoverComposer.qml` in a bare `QQuickWindow`, applies composer inputs, exports the same scene offscreen.
-- `src/tools/cover_export/SceneFrameRenderer.{h,cpp}`: renders a single chart frame at arbitrary chart time through `PreviewQuickSceneRoot`.
-- `src/intro/qml/CoverComposer.qml`: QML composition scene. It renders background, difficulty card, chart frame, drag handles, snap guides, and export/static paths.
-- `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`: builds the seed `VideoExportTask`, opens `ExportCoverDialog`, and writes exported cover beside the chart.
-- `src/tools/export_page/ExportLauncherPage.{h,cpp}`: export hub page. Its cover tab currently launches the cover composer dialog.
+- `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`
+  - 从主窗口导出流程构造 seed `VideoExportTask`；
+  - 打开封面编辑器；
+  - 导出封面到谱面旁边。
+- `src/tools/cover_export/ExportCoverDialog.*`
+  - 保留兼容壳；
+  - 不再承载主要编辑界面。
+- `src/tools/cover_export/CoverStudioWindow.*`
+  - 独立固定工作台窗口；
+  - 负责顶层布局、屏幕尺寸适配和 toolbar action wiring。
+- `src/tools/cover_export/CoverStudioPanel.*`
+  - Cover Studio 的状态协调器；
+  - 承接预览、布局导入导出、最终导出、播放/拖动、active layer、still 缓存刷新等逻辑。
+- `src/tools/cover_export/CoverLayoutModel.*`
+  - 管理稳定 `card` 图层和任意多个 `chartFrame` 图层；
+  - 提供几何、显隐、锁定、透明度、z-order、chart-frame 样式属性。
+- `src/tools/cover_export/CoverCompositionState.*`
+  - 负责 v2 `.miacover` JSON、偏好恢复和 v1 迁移。
+- `src/tools/cover_export/CoverComposerView.*`
+  - 嵌入 `CoverComposer.qml`；
+  - 维护一个 live chart scene；
+  - 提供最终封面组合导出。
+- `src/tools/cover_export/SceneFrameRenderer.*`
+  - 按指定秒数渲染谱面帧 still。
+- `src/intro/qml/CoverComposer.qml`
+  - 负责背景、难度卡、chart-frame 图层、拖动缩放、辅助线和最终组合。
 
-Important existing strengths:
+## 已采纳的研究结论
 
-- The cover composer already uses normalized layer geometry, so preview and export share one layout model.
-- The export path uses the same QML scene as live preview, reducing preview/export drift.
-- `SceneFrameRenderer::renderAt(seconds, sidePx)` already supports arbitrary chart-frame capture.
-- The existing renderer can stay tightly coupled to MiaCode preview assets, skin loading, Muri overlays, and render settings.
+早期调研确认了几个边界，本计划沿用这些结论：
 
-Important existing limits:
+- 不集成 Krita、PhotoFlare、OpenToonz 等完整图片编辑器。
+- 不集成 kImageAnnotator 或 KQuickImageEditor；它们的依赖和文档模型都不适合 MiaCode 的谱面帧渲染。
+- 不引入 QtPropertyBrowser；当前属性数量适合用定制 inspector。
+- 第一版不引入 Qt Advanced Docking System，也不继续使用可拖拽 `QDockWidget`。
+- QtBitmapEditor 只作为图层列表交互参考，不作为代码依赖。
 
-- `CoverLayoutModel` currently assumes a single `chartFrame` key.
-- `ExportCoverDialog` hard-codes single-frame controls and a single chart-frame checkbox/slider.
-- `CoverComposerView` tracks only one live `PreviewQuickSceneRoot`; multiple live chart-frame scenes would require redesign. A safer design is to make only the selected chart-frame layer live and keep other chart frames as cached still images.
-- Chart-frame inner background and brightness are global `CoverComposerInputs` fields instead of per-frame layer properties.
-- `ExportCoverDialog.cpp` is already large and mixes window layout, model operations, import/export JSON, playback, frame capture, and presentation inputs.
+实际产品方向是：MiaCode 自有渲染核心 + 固定 native Qt 工作台 + 定制图层/属性/帧面板。
 
-## UI Direction
+## 工作台结构
 
-The cover editor should remain an independent large window/dialog, not an embedded export-page panel.
-
-Rationale:
-
-- Cover composition needs a large canvas and persistent side panels.
-- The export hub's embedded area is too small for multi-layer composition.
-- A standalone window can later become a separate executable without rewriting the editor body.
-
-Recommended product shape:
-
-```text
-MiaCode main window
-  -> Open Cover Studio
-       -> independent QMainWindow/QDialog workspace
-          central canvas: CoverComposerView / CoverComposer.qml
-          right panel: layer list + layer inspector
-          bottom/top panel: chart-frame time picker and export controls
-```
-
-The UI should treat chart frames as first-class layers, not as one toggle.
-
-Suggested workspace:
+Cover Studio 使用固定根布局，不允许浮动、关闭、拖出或重新停靠面板。
 
 ```text
-+---------------------------------------------------------------+
-| Cover Studio   [Layout] [Save Layout] [Import]        [Export] |
-+-------------+-----------------------------------+-------------+
-| Tools       | Canvas                            | Layers      |
-| Select      |                                   | eye lock    |
-| Add Frame   |  live cover composition           | Card        |
-| Add Card    |  drag / scale / snap guides       | Frame 12.34 |
-| Align       |                                   | Frame 65.20 |
-+-------------+-----------------------------------+-------------+
-| Frame Time [Play] ---------------------- 00:12.34 | Inspector  |
-|                                                   | brightness |
-+---------------------------------------------------+-------------+
++----------------------------------------------------------------+
+| toolbar: 保存布局 / 导入布局 / 重置 / 导出 / 关闭或取消          |
++-------------+-------------------------------+------------------+
+| 图层列表     |  CoverStudioPanel 预览画布     | 属性 + 旧设置区域 |
+|             |  CoverComposerView            |                  |
++-------------+-------------------------------+------------------+
+| CoverFramePickerPanel: 当前 chart-frame 的时间选择与播放控制     |
++----------------------------------------------------------------+
 ```
 
-## External Project Evaluation
+职责划分：
 
-### Recommended Only As Reference: QtBitmapEditor
+- `CoverStudioWindow`
+  - 创建固定三栏加底部帧选择器；
+  - 创建顶部 toolbar；
+  - 根据父窗口所在屏幕自动适配初始尺寸；
+  - 不直接修改模型内部状态。
+- `CoverStudioPanel`
+  - 作为唯一状态协调器；
+  - 对外暴露 layer、property、action API；
+  - 隐藏旧 dialog 的右侧控件列和底部按钮区；
+  - 通过 `takeSettingsPanel()` 把仍需保留的尺寸/背景/card 设置交给右侧区域承载。
+- `CoverLayerListPanel`
+  - 提供选择、显示/隐藏、锁定、添加谱面帧、复制、删除、上移、下移、置顶、置底。
+- `CoverInspectorPanel`
+  - 编辑当前图层的 visible、locked、opacity、位置、大小；
+  - 对 chart-frame 额外编辑 frameSeconds、frameBgEnabled、frameBgBrightness。
+- `CoverFramePickerPanel`
+  - 只服务当前选中的 chart-frame；
+  - 切换选中图层时同步 active frame；
+  - 非 active chart-frame 回落到 cached still。
 
-Repository: `https://github.com/0xMartin/QtBitmapEditor`
+## 窗口尺寸策略
 
-Relevant qualities:
+Cover Studio 打开时必须完整落在当前屏幕可用区域内。
 
-- C++/Qt Widgets project.
-- MIT license.
-- Uses CMake.
-- Its README describes layer preview, layer order, layer properties, opacity, blend modes, and masks.
-- Conceptually close to the required layer-list UX.
+规则：
 
-Fit:
+- 优先使用父窗口所在 screen 的 `availableGeometry()`；
+- 如果父窗口无 screen，则 fallback 到 primary screen；
+- 默认尺寸取可用区域约 90%；
+- 实际尺寸不得超过可用区域；
+- minimum size 在小屏或高 DPI 下可按可用区域下调；
+- 窗口打开后居中显示；
+- 不再把 `1280x860` 作为无条件初始尺寸。
 
-- Good reference for `LayerWidget`, `LayerManager`, layer thumbnails, visibility, ordering, and per-layer properties.
-- Not recommended as a direct dependency because its layer manager is tied to its own project/document/image model.
-- Best use is to study and reimplement the patterns on top of MiaCode's `CoverLayoutModel`.
+## 数据模型
 
-Recommended MiaCode adaptation:
+`CoverLayer` 是封面图层的持久模型。所有几何信息都保存为相对画布的归一化值，确保预览和导出使用同一个布局。
 
-```text
-CoverLayerListPanel
-  backed by CoverLayoutModel / CoverLayerListModel
-  rows show:
-    thumbnail, visibility, lock, label, chart-frame time, z/order controls
-  operations:
-    add chart frame, duplicate, delete, move up/down, bring front/back
+稳定字段：
+
+- `key`
+- `kind`
+- `label`
+- `nx`
+- `ny`
+- `sizeFraction`
+- `z`
+- `visible`
+- `locked`
+- `opacity`
+
+chart-frame 专属字段：
+
+- `frameSeconds`
+- `frameBgEnabled`
+- `frameBgBrightness`
+- `frameStyle`
+- `imageRevision`
+- `frameImage`，仅运行时缓存，不直接写入 JSON。
+
+图层规则：
+
+- `card` key 保持稳定；
+- `card` 默认不可删除，但允许隐藏、锁定、移动和编辑；
+- chart-frame 可以添加、复制、删除、排序；
+- UI 选择态由 Cover Studio 持有，不写入布局文件；
+- z-order 是最终绘制顺序的来源，必要时通过 `normalizeZOrder()` 归一化。
+
+## JSON 与迁移
+
+当前 `.miacover` 使用 v2 schema：
+
+```json
+{
+  "kind": "miacode.cover",
+  "version": 2,
+  "size": {},
+  "background": {},
+  "card": {},
+  "layout": {
+    "layers": []
+  }
+}
 ```
 
-### Optional Later: Qt Advanced Docking System
+迁移规则：
 
-Repository: `https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System`
+- v1 的单个 `chartFrame` 迁移为一个 v2 `chartFrame` layer；
+- v1 根级 `chartFrame.innerBackground` 写入该 layer 的 `frameBgEnabled`；
+- v1 根级 `chartFrame.innerBrightness` 写入该 layer 的 `frameBgBrightness`；
+- `card` key 保持稳定，避免旧布局丢失卡片设置；
+- 读取失败时保留可恢复路径，不应阻塞 card-only 导出。
 
-Relevant qualities:
+## QML 与 live scene
 
-- Mature Qt docking system for IDE-like layouts.
-- Can provide professional floating/docking panels.
-- CMake-based and supports Qt Widgets style integration.
+`CoverComposer.qml` 继续使用 `Repeater` 渲染 `CoverLayoutModel.layers`。
 
-Fit:
+关键约束：
 
-- Useful if native `QDockWidget` is not enough.
-- Not necessary for the first implementation.
-- Adds dependency and licensing/packaging decisions. The project is commonly used as a separate library; this conflicts with the "avoid new DLLs" preference unless vendored/static-linking is explicitly accepted and license obligations are reviewed.
+- `CoverComposerView` 只维护一个 live `PreviewQuickSceneRoot`；
+- root 暴露 `activeChartFrameKey`；
+- 只有 active chart-frame 使用 live scene；
+- 非 active chart-frame 使用 `image://coverchart/<key>` cached still；
+- chart-frame 的背景、亮度、透明度从图层属性读取，不再使用单个全局设置；
+- 拖动、缩放、锁定、显隐等交互继续通过模型属性驱动。
 
-Recommendation:
+这个策略避免同时创建多个 live 预览场景，同时仍允许导出前逐层刷新 still。
 
-- Start with native `QMainWindow + QDockWidget`.
-- Reconsider ADS only after the basic cover studio works and there is a concrete need for detachable/floating saved workspace layouts.
+## 导出流程
 
-### Not Recommended For This Feature: QtPropertyBrowser
+导出前应冻结播放状态并刷新所有可见谱面帧。
 
-Relevant qualities:
+流程：
 
-- Generic property editor widgets.
-- Can represent enum/int/double/color-like properties.
+1. 停止 playback。
+2. 遍历 `visibleChartFrameLayers()`。
+3. 对每个 chart-frame：
+   - 根据 layer 的 `frameSeconds` 设置 renderer 时间；
+   - 按最终输出尺寸和 layer 大小计算 still 像素边长；
+   - 调用 `SceneFrameRenderer::renderAt(seconds, sidePx)`；
+   - 用 `CoverLayoutModel::setLayerImage(key, image)` 更新缓存。
+4. 调用 `CoverComposerView::renderCoverComposite(...)` 输出最终组合图。
+5. 透明背景导出 PNG，非透明背景导出 JPG。
 
-Fit:
+导出结果必须满足：
 
-- Could reduce custom inspector code, but only after property count becomes large.
-- Older Qt Solutions lineage and inconsistent modern Qt6 maintenance across forks.
-- Styling generic property-browser rows to match MiaCode may take as much work as a purpose-built inspector.
+- 多个 chart-frame 可以使用不同时间、位置、大小、透明度和亮度；
+- 预览与导出共享同一个 `CoverLayoutModel`；
+- 无 note 或 skin 失败时仍可导出 card-only 封面；
+- 导出阶段渲染 still 的清晰度按最终输出尺寸计算，而不是复用低分辨率预览图。
 
-Recommendation:
+## 本地化与文案
 
-- Build a custom `CoverInspectorPanel` using MiaCode-themed Qt Widgets controls.
-- Revisit a property-browser dependency only if the inspector grows into a large generic object editor.
+产品文案约束：
 
-### Not Recommended: kImageAnnotator
+- 既有入口、标题、导出、取消、保存布局、导入布局等用户可见文案不改名；
+- 新增功能必须补中文；
+- 图标按钮必须有中文 tooltip；
+- 没有图标库时可以使用简短符号按钮，但 tooltip 和 accessible text 必须中文化。
 
-Repository: `https://github.com/ksnip/kImageAnnotator`
+新增中文词汇应保持简短直接：
 
-Source-level notes from CMake inspection:
+- 图层
+- 属性
+- 帧
+- 显示
+- 锁定
+- 不透明度
+- 位置
+- 大小
+- 帧背景
+- 亮度
+- 添加谱面帧
+- 复制
+- 删除
+- 上移
+- 下移
+- 置顶
+- 置底
 
-- Builds against Qt Widgets and Svg.
-- Supports Qt6 via `BUILD_WITH_QT6`.
-- Requires `kColorPicker` as a package dependency.
-- Provides a full annotation tool stack, not just layer management.
+## 构建与测试
 
-Fit:
+Release 构建：
 
-- The secondary `kColorPicker` dependency conflicts with the "lightweight/no new DLL" priority.
-- Its annotation model does not map cleanly to MiaCode chart-frame layers.
-- It may be useful for future screenshot-annotation features, but not for cover-frame composition.
-
-Recommendation:
-
-- Do not adopt for cover export.
-
-### Not Recommended: KQuickImageEditor
-
-Repository family: KDE `kquickimageeditor`
-
-Fit:
-
-- QML image-editing component set, oriented toward operations such as crop/rotate rather than a custom layer composition workspace.
-- KDE dependency chain is heavier than desired for MiaCode's current Qt Widgets + QML architecture.
-
-Recommendation:
-
-- Do not adopt for cover export.
-
-### Not Recommended: Full Image Editors
-
-Examples considered: Krita, PhotoFlare, OpenToonz-style editors.
-
-Reasons:
-
-- Too large for this feature.
-- Their document/render models do not understand MiaCode chart frames, preview scene state, or export settings.
-- License and dependency scope are high.
-- Replacing MiaCode's existing `CoverComposerView` / `SceneFrameRenderer` would create more risk than value.
-
-Recommendation:
-
-- Use them only as UX inspiration, not as code dependencies.
-
-## Recommended Architecture
-
-Do not replace the current rendering stack. Instead, split the current dialog into a reusable studio window and focused panels.
-
-Recommended new files:
-
-```text
-src/tools/cover_export/
-  CoverStudioWindow.h/cpp        // independent large QMainWindow-style dialog/window
-  CoverStudioPanel.h/cpp         // reusable editor body; can later be hosted by a separate executable
-  CoverLayerListModel.h/cpp      // QAbstractListModel adapter over CoverLayoutModel
-  CoverLayerListPanel.h/cpp      // layer list UI
-  CoverInspectorPanel.h/cpp      // per-layer and background/card/frame properties
-  CoverFramePickerPanel.h/cpp    // chart-frame time picker and visual playback controls
-  CoverCompositionState.h/cpp    // v2 JSON state and v1 migration
+```powershell
+cmake --build build --config Release --target MiaCode
 ```
 
-Existing files to keep and evolve:
+模型测试：
 
-```text
-CoverLayoutModel.h/cpp
-CoverComposerView.h/cpp
-SceneFrameRenderer.h/cpp
-CoverComposer.qml
+```powershell
+ctest --test-dir build -C Release -R cover_layout_model_spec --output-on-failure
 ```
 
-Suggested widget shell:
+`cover_layout_model_spec` 应覆盖：
 
-```text
-CoverStudioWindow : QMainWindow
-  centralWidget = CoverComposerView container
-  right dock 1   = CoverLayerListPanel
-  right dock 2   = CoverInspectorPanel
-  bottom dock    = CoverFramePickerPanel
-  toolbar        = add frame, duplicate, delete, lock, snap, fit, export
-```
+- 多 chart-frame 增删复制；
+- z-order 调整与归一化；
+- `card` 删除约束；
+- v1 到 v2 迁移；
+- v2 JSON round trip；
+- chart-frame 图层属性持久化。
 
-This uses only Qt modules already present in MiaCode and keeps full control over `UiTheme`.
+## 手动验证清单
 
-## Layer Model Changes
+- 小屏或高 DPI 缩放下打开 Cover Studio，窗口不超出屏幕。
+- 界面只出现一套布局控件，没有旧右侧控件列和新面板重复出现。
+- 图层、属性、帧面板不可拖出、不可浮动、不可关闭。
+- 新增图层、复制、删除、上移、下移、置顶、置底、显示/隐藏、锁定都有中文文字或 tooltip。
+- 选择不同 chart-frame 时，只有当前图层是 live scene，其余显示 cached still。
+- 三个 chart-frame 设置不同时间、位置、亮度和不透明度后导出正确。
+- 透明背景导出 PNG，非透明背景导出 JPG。
+- 无 note 或 skin 失败时 card-only 仍可导出。
+- 导入旧 `.miacover` 不丢 card、chart-frame、inner background、brightness 设置。
 
-Chart frames should become multiple independent layers. The model should no longer expose a single fixed `chartFrame` helper as the main API.
+## 后续边界
 
-Suggested `CoverLayer` additions:
+本轮完成 fixed workbench 和多 chart-frame 的基础能力。后续如果继续增强，应保持以下边界：
 
-```text
-opacity: qreal
-selected/editable state: handled by UI, not necessarily persisted
-frameSeconds: double
-frameBgEnabled: bool
-frameBgBrightness: qreal
-frameStyle: QString or enum
-thumbnail/image revision: existing imageRevision can stay
-```
+- 不因为单个控件需求引入大型编辑器或重型 UI 依赖；
+- 如果需要图层缩略图，优先在 `CoverLayerListModel` 上生成轻量 preview；
+- 如果 inspector 属性继续增长，先整理本地控件分组，再重新评估通用 property browser；
+- 只有在确实需要可保存/可恢复的浮动工作区时，才重新评估高级 docking 系统；
+- 独立可执行文件可以作为后续目标，但应复用 `CoverStudioPanel`，不要复制导出逻辑。
 
-Suggested `CoverLayoutModel` additions:
+## 维护提示
 
-```text
-CoverLayer* addChartFrameLayer(double frameSeconds)
-CoverLayer* duplicateLayer(const QString& key)
-bool removeLayer(const QString& key)
-QList<CoverLayer*> chartFrameLayers() const
-QList<CoverLayer*> visibleChartFrameLayers() const
-void moveLayerBefore/After or normalizeZOrder()
-```
+修改 Cover Studio 时需要同步检查：
 
-Backwards compatibility:
-
-- Existing `card` key remains stable.
-- Old v1 composition with `chartFrame` migrates into one v2 chart-frame layer.
-- Existing `chartFrame.innerBackground` and `chartFrame.innerBrightness` fields migrate into that layer's per-frame style fields.
-
-## QML Changes
-
-`CoverComposer.qml` should keep one `Repeater` over `coverLayout.layers`.
-
-Recommended change:
-
-- Add root property `activeChartFrameKey`.
-- Only the active chart-frame layer uses the live `PreviewQuickSceneRoot`.
-- Non-active chart-frame layers show cached stills through `image://coverchart/<key>`.
-
-Reason:
-
-- Current `CoverComposerView` owns one `liveChartScene_`.
-- Multiple live chart scenes would complicate lifetime, performance, and frame-state binding.
-- A single live selected frame is enough for editing. Export can still refresh all visible frame stills before final composition.
-
-Per-layer chart-frame style should be read from `modelData`, not global composer inputs.
-
-## Export Behavior
-
-Before exporting:
-
-1. Stop visual playback.
-2. Iterate visible chart-frame layers.
-3. For each frame layer:
-   - set renderer playhead to `layer.frameSeconds`;
-   - render at the layer's export pixel size;
-   - store image through `CoverLayoutModel::setLayerImage(layer.key, image)`.
-4. Render `CoverComposer.qml` once at final output size.
-5. Save PNG for transparent background, JPG otherwise.
-
-This keeps exported chart frames crisp even when multiple frame layers have different sizes.
-
-## Standalone Executable Option
-
-The UI can later become a separate executable without changing the editor core if `CoverStudioPanel` is independent of `MainWindow`.
-
-Potential target:
-
-```text
-miacode_cover_editor.exe
-```
-
-Input:
-
-- chart path;
-- selected difficulty id or exported task/snapshot JSON;
-- cover composition JSON;
-- output directory/path.
-
-Recommended approach:
-
-- First build the shared studio panel inside the main app.
-- Only after the UI stabilizes, add a CLI/bootstrap path that constructs the same `VideoExportTask` or consumes a snapshot-like JSON.
-
-This keeps the first implementation focused and avoids duplicating export-task construction too early.
-
-## Phased Implementation Plan
-
-### Phase 1: Refactor Current Dialog Without Behavior Changes
-
-- Extract the current editor body from `ExportCoverDialog` into `CoverStudioPanel`.
-- Keep modal launch behavior from `ExportSection::onExportCover`.
-- Keep single chart frame for this phase.
-- No external dependencies.
-
-### Phase 2: Add Multi-Frame Data Model
-
-- Extend `CoverLayoutModel` to support multiple chart-frame layers.
-- Add v2 composition JSON with v1 migration.
-- Update `CoverComposer.qml` to support `activeChartFrameKey`.
-- Update export to refresh all visible chart-frame layers.
-
-### Phase 3: Add Large Studio Window
-
-- Add `CoverStudioWindow` using `QMainWindow + QDockWidget`.
-- Add layer list, inspector, and frame picker panels.
-- Keep all styling through `UiTheme`.
-- Keep existing export-page cover action as "open studio".
-
-### Phase 4: Optional Workspace Enhancements
-
-- If native `QDockWidget` is not enough, evaluate Qt Advanced Docking System.
-- Consider layer thumbnails and richer row controls inspired by QtBitmapEditor.
-- Consider a separate executable once the shared panel boundary is stable.
-
-## Final Recommendation
-
-Do not integrate a full open-source image editor. Do not replace the current renderer.
-
-Use MiaCode's current cover renderer as the core, build a dedicated independent Cover Studio window, and copy only proven UI patterns from lightweight Qt projects such as QtBitmapEditor. Avoid adding external DLLs in the first implementation. Revisit ADS or property-browser-style dependencies only if concrete UI needs exceed native Qt Widgets.
+- `CoverStudioWindow.*` 的固定布局和屏幕适配；
+- `CoverStudioPanel.*` 的状态协调 API；
+- `CoverLayoutModel.*` 与 `CoverCompositionState.*` 的持久 schema；
+- `CoverComposerView.*` 与 `CoverComposer.qml` 的 active live frame / cached still 约定；
+- `SceneFrameRenderer.*` 与视频导出 Quick 渲染设置的同步风险；
+- MiaCode dev guide 中 `feature-index.md`、`cross-chain-linkage.md`、`design-ledger.md` 的 Cover Studio 记录。
