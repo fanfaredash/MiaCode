@@ -247,11 +247,12 @@ void TimelineView::paintEvent(QPaintEvent* event)
                 qMax(0.001, visibleEndSecond - visibleStartSecond),
                 qMax(1, timelineRect.width()));
         if (waveformLevel != nullptr && !waveformLevel->columns.isEmpty()) {
+            const double phaseCompensationSeconds = qMax(0.0, waveformPhaseCompensationSeconds_);
             const QPair<int, int> visibleColumns =
                 miacode::waveform::visibleWaveformColumnRange(
                     *waveformLevel,
-                    qMax(0.0, visibleStartSecond),
-                    qMax(0.0, visibleEndSecond));
+                    qMax(0.0, visibleStartSecond + phaseCompensationSeconds),
+                    qMax(0.0, visibleEndSecond + phaseCompensationSeconds));
             const qreal centerY = top + h / 2.0;
             const qreal maxAmplitude = (qMax<qreal>(8.0, h / 2.0 - 8.0) * 7.0) / 9.0;
             const QColor waveformColor = miacode::timeline::adjustedTimelineWaveformColor(
@@ -263,7 +264,13 @@ void TimelineView::paintEvent(QPaintEvent* event)
             bool wavePathStarted = false;
             for (int index = visibleColumns.first; index < visibleColumns.second; ++index) {
                 const miacode::waveform::WaveformColumn& column = waveformLevel->columns.at(index);
-                const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
+                // Hard waveform phase compensation: logs from multiple devices
+                // (60 Hz and 120 Hz) show the authoritative audio clock leading
+                // the timeline-rendered playhead by about one frame. The root
+                // cause is still unclear, so keep this as an explicit rendering
+                // compensation rather than folding it into waveform cache data.
+                const double columnStartSecond =
+                    waveformLevel->secondsPerColumn * static_cast<double>(index) - phaseCompensationSeconds;
                 const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
                 const qreal x0 = static_cast<qreal>(secondToX(columnStartSecond) - xOffset);
                 qreal x1 = static_cast<qreal>(secondToX(columnEndSecond) - xOffset);
@@ -1013,11 +1020,12 @@ void TimelineView::paintWaveformOnly(QPainter& painter, const QRect& dirtyRect)
                 qMax(0.001, visibleEndSecond - visibleStartSecond),
                 qMax(1, static_cast<int>(cardRect.width())));
         if (waveformLevel != nullptr && !waveformLevel->columns.isEmpty()) {
+            const double phaseCompensationSeconds = qMax(0.0, waveformPhaseCompensationSeconds_);
             const QPair<int, int> visibleColumns =
                 miacode::waveform::visibleWaveformColumnRange(
                     *waveformLevel,
-                    qMax(0.0, visibleStartSecond),
-                    qMax(0.0, visibleEndSecond));
+                    qMax(0.0, visibleStartSecond + phaseCompensationSeconds),
+                    qMax(0.0, visibleEndSecond + phaseCompensationSeconds));
             const qreal centerY = cardRect.center().y();
             const qreal maxAmplitude = cardRect.height() * 0.38;
             const QColor waveformColor = miacode::timeline::adjustedTimelineWaveformColor(
@@ -1032,7 +1040,13 @@ void TimelineView::paintWaveformOnly(QPainter& painter, const QRect& dirtyRect)
             bool wavePathStarted = false;
             for (int index = visibleColumns.first; index < visibleColumns.second; ++index) {
                 const miacode::waveform::WaveformColumn& column = waveformLevel->columns.at(index);
-                const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
+                // Hard waveform phase compensation: logs from multiple devices
+                // (60 Hz and 120 Hz) show the authoritative audio clock leading
+                // the timeline-rendered playhead by about one frame. The root
+                // cause is still unclear, so keep this as an explicit rendering
+                // compensation rather than folding it into waveform cache data.
+                const double columnStartSecond =
+                    waveformLevel->secondsPerColumn * static_cast<double>(index) - phaseCompensationSeconds;
                 const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
                 const qreal x0 = static_cast<qreal>(secondToX(columnStartSecond) - xOffset);
                 qreal x1 = static_cast<qreal>(secondToX(columnEndSecond) - xOffset);

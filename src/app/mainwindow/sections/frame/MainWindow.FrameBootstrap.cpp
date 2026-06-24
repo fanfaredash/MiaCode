@@ -1420,6 +1420,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     timelineQuickStateBridge_->setViewportLockEnabled(previewViewportLockEnabled_);
     timelineQuickStateBridge_->setFollowProgressEnabled(previewProgressFollowEnabled_);
     timelineQuickStateBridge_->setTimelineSyncEnabled(timelineSyncEnabled_);
+    timelineSection_->refreshTimelineWaveformPhaseCompensation();
     connect(timelineQuickStateBridge_, &TimelineQuickStateBridge::zoomScaleChanged, this, [this](double) {
         savePortableState();
     });

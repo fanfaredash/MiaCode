@@ -485,6 +485,7 @@ void TimelineQuickStateBridge::refreshLayoutMetrics()
     request.zoomScale = zoomScale();
     request.contentScale = contentScale_;
     request.waveformBrightness = waveformBrightness_;
+    request.waveformPhaseCompensationSeconds = waveformPhaseCompensationSeconds_;
     request.playbackEntrySeconds = playbackEntrySeconds_;
     request.playheadSeconds = playheadSeconds_;
     request.cursorSeconds = cursorSeconds_;
@@ -568,6 +569,22 @@ void TimelineQuickStateBridge::setWaveformBrightness(double brightness)
     waveformBrightness_ = clamped;
     ++waveformRevision_;
     emit waveformBrightnessChanged(waveformBrightness_);
+    emit renderStateChanged();
+}
+
+double TimelineQuickStateBridge::waveformPhaseCompensationSeconds() const
+{
+    return waveformPhaseCompensationSeconds_;
+}
+
+void TimelineQuickStateBridge::setWaveformPhaseCompensationSeconds(double seconds)
+{
+    const double clamped = qIsFinite(seconds) ? qMax(0.0, seconds) : 0.0;
+    if (qFuzzyCompare(waveformPhaseCompensationSeconds_ + 1.0, clamped + 1.0)) {
+        return;
+    }
+    waveformPhaseCompensationSeconds_ = clamped;
+    ++waveformRevision_;
     emit renderStateChanged();
 }
 
