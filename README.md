@@ -90,6 +90,8 @@ MiaCode 自有源代码使用 MIT License，见 [LICENSE](LICENSE)。仓库整�
 
 感谢 [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) 等项目提供的 simai 解析、预览和工程实现参考。感谢 [gfdfdxc/maimai-transition](https://github.com/gfdfdxc/maimai-transition) 提供片头参考。感谢 [Majdata Net](https://majdata.net/) 提供社区谱面下载，感谢 [MaiViewer](https://www.maiviewer.net/) 提供官方谱面 simai 抄谱参考。
 
+特别感谢 hitomi 老师无偿提供 MiaCode logo 绘制。
+
 感谢内部测试时期给出建议、复现问题和协助调试的朋友们，名单见 [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md)。
 
 ## 更新日志
