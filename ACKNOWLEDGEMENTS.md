@@ -16,7 +16,7 @@ MiaCode 在内部测试时期得到了许多朋友的帮助。感谢大家提出
 
 也感谢以下朋友在内部测试时期提供帮助与建议，排名不分先后：
 
-- 江风、九四百二、千幻、星見カエデ、重太、Aery Bradish、CCBG、Holinality、Imris、IX未来、lushan、MIN、Mmmmk、shangle、slask、soxps、tcl葱花沫、Unknøwn、TangScend
+- 江风、九四百二、千幻、星見カエデ、重太、Aery Bradish、御坂12602号、Holinality、Imris、IX未来、lushan、MIN、Mmmmk、shangle、slask、soxps、tcl葱花沫、Unknøwn、TangScend
 
 感谢所有在内部测试时期试用 MiaCode、关注项目并默默支持我们工作的朋友。
 
@@ -34,6 +34,6 @@ The following friends repeatedly gave suggestions, reproduced issues, or helped 
 
 Thanks also to the following friends for helping and sugeestions during internal testing, in no particular order:
 
-- 江风、九四百二、千幻、星見カエデ、重太、Aery Bradish、CCBG、Holinality、Imris、IX未来、lushan、MIN、Mmmmk、shangle、slask、soxps、tcl葱花沫、Unknøwn、TangScend
+- 江风、九四百二、千幻、星見カエデ、重太、Aery Bradish、御坂12602号、Holinality、Imris、IX未来、lushan、MIN、Mmmmk、shangle、slask、soxps、tcl葱花沫、Unknøwn、TangScend
 
 Thanks also to everyone who tried MiaCode during internal testing, followed the project, and quietly supported our work.
