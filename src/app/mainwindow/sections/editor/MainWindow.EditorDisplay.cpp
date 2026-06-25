@@ -309,6 +309,20 @@ void MainWindow::EditorSection::loadPortableState()
         state_.bottomTabsContentScale_ =
             ui.value("bottom_tabs_content_scale").toDouble(state_.bottomTabsContentScale_);
     }
+    if (ui.value("preview_pane_width_ratio").isDouble()) {
+        state_.previewPaneWidthRatio_ =
+            qBound(0.0, ui.value("preview_pane_width_ratio").toDouble(state_.previewPaneWidthRatio_), 1.0);
+    }
+    if (ui.value("outline_dock_collapsed").isBool()) {
+        state_.outlineDockCollapsed_ = ui.value("outline_dock_collapsed").toBool(state_.outlineDockCollapsed_);
+    }
+    if (ui.value("outline_dock_expanded_width").isDouble()) {
+        state_.outlineDockExpandedWidth_ = qBound(
+            120,
+            qRound(ui.value("outline_dock_expanded_width").toDouble(state_.outlineDockExpandedWidth_)),
+            640
+        );
+    }
     state_.editorImeInputDisabled_ = ui.value("editor_ime_input_disabled").toBool(true);
     applyEditorTextFontSize(state_.editorTextFontPointSize_, false);
     applyEditorHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_, false);
@@ -677,6 +691,13 @@ void MainWindow::EditorSection::savePortableState() const
     // Bottom-tabs (timeline/validation/muri) divider height, persisted as a
     // content-scale ratio rather than pixels (see loadPortableState()).
     ui.insert("bottom_tabs_content_scale", state_.bottomTabsContentScale_);
+    if (state_.previewPaneWidthRatio_ > 0.0) {
+        ui.insert("preview_pane_width_ratio", state_.previewPaneWidthRatio_);
+    } else {
+        ui.remove("preview_pane_width_ratio");
+    }
+    ui.insert("outline_dock_collapsed", state_.outlineDockCollapsed_);
+    ui.insert("outline_dock_expanded_width", state_.outlineDockExpandedWidth_);
     ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);
     root.insert("ui", ui);
 

@@ -22,6 +22,7 @@ class QuickShellController : public QObject
     Q_PROPERTY(QStringList previewStatsTexts READ previewStatsTexts NOTIFY shellStateChanged)
     Q_PROPERTY(double previewCanvasAspectRatio READ previewCanvasAspectRatio NOTIFY shellStateChanged)
     Q_PROPERTY(qulonglong previewPaneRestoreGeneration READ previewPaneRestoreGeneration NOTIFY shellStateChanged)
+    Q_PROPERTY(double previewPaneWidthRatio READ previewPaneWidthRatio NOTIFY shellStateChanged)
     Q_PROPERTY(double previewSeekSingleStepSeconds READ previewSeekSingleStepSeconds CONSTANT)
     // Inline export progress (export launched from the Export page's embedded
     // video panel): the chart time rendered so far, < 0 = inactive. The
@@ -84,6 +85,7 @@ public:
     QStringList previewStatsTexts() const;
     double previewCanvasAspectRatio() const;
     qulonglong previewPaneRestoreGeneration() const;
+    double previewPaneWidthRatio() const;
     double previewSeekSingleStepSeconds() const;
     double videoExportProgressSeconds() const;
     bool previewFullscreen() const;
@@ -124,6 +126,7 @@ public:
     Q_INVOKABLE void updatePreviewScrub(double second, bool centerView = true);
     Q_INVOKABLE void endPreviewScrub(double second, bool centerView = true);
     Q_INVOKABLE void setPreviewRate(double rate);
+    Q_INVOKABLE void setPreviewPaneWidthRatio(double ratio);
     // Step the preview rate one stop (direction = -1 slower / +1 faster). Used
     // by the fullscreen QML Ctrl+O/Ctrl+P shortcuts; mirrors the main window's
     // speed menu actions.
@@ -189,6 +192,7 @@ private:
     QStringList previewStatsTexts_;
     double previewCanvasAspectRatio_ = 1.0;
     quint64 previewPaneRestoreGeneration_ = 0;
+    double previewPaneWidthRatio_ = 0.0;
     bool previewFullscreen_ = false;
     bool previewUsesSeparateSurface_ = false;
     bool timelineSurfaceReady_ = false;

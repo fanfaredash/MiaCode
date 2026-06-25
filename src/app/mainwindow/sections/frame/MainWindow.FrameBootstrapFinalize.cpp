@@ -283,6 +283,12 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     connect(bottomTabsContentScalePersistTimer_, &QTimer::timeout, this, [this]() {
         savePortableState();
     });
+    visualLayoutPersistTimer_ = new QTimer(this);
+    visualLayoutPersistTimer_->setSingleShot(true);
+    visualLayoutPersistTimer_->setInterval(500);
+    connect(visualLayoutPersistTimer_, &QTimer::timeout, this, [this]() {
+        savePortableState();
+    });
     previewHeldSeekTimer_ = new QTimer(this);
     previewHeldSeekTimer_->setTimerType(Qt::PreciseTimer);
     previewHeldSeekTimer_->setInterval(miacode::preview_interaction::kSeekHoldTickIntervalMs);
@@ -522,6 +528,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
 
     loadPortableState();
     applyWorkspacePanelArrangement();
+    windowSection_->setOutlineDockCollapsed(outlineDockCollapsed_);
     logStartupStage("portable_state_loaded");
     // beta4: the preview debug HUD ("显示预览调试信息") is NO LONGER force-enabled in
     // --debug / diagnostic builds. It used to default ON whenever runtime debug output was

@@ -40,6 +40,7 @@ public:
     virtual void beginShellPreviewHeldSeek(int direction, int key) = 0;
     virtual void stopShellPreviewHeldSeek(int key = 0) = 0;
     virtual void setShellPreviewFullscreen(bool fullscreen) = 0;
+    virtual void setShellPreviewPaneWidthRatio(double ratio) = 0;
     virtual void setShellBottomTabsHeight(int height) = 0;
     virtual void setShellBottomTabsCurrentTab(const QString& tabId) = 0;
     virtual void navigateShellTimelineToSecond(double second) = 0;
@@ -71,6 +72,7 @@ public:
     virtual QStringList shellPreviewStatsTexts() const = 0;
     virtual double shellPreviewCanvasAspectRatio() const = 0;
     virtual quint64 shellPreviewPaneRestoreGeneration() const = 0;
+    virtual double shellPreviewPaneWidthRatio() const = 0;
     virtual bool shellPreviewFullscreen() const = 0;
     // Inline export progress (an export launched from the Export page's
     // embedded video panel, A3 as amended 2026-06-11): the CHART TIME the
