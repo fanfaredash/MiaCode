@@ -25,6 +25,7 @@
 #include <QKeyEvent>
 #include <QKeySequence>
 #include <QComboBox>
+#include <QDesktopServices>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QListWidgetItem>
@@ -39,6 +40,7 @@
 #include <QTextEdit>
 #include <QStatusBar>
 #include <QStringList>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -611,12 +613,39 @@ void CoverStudioWindow::exportNow()
     const CoverExportResult result = studio_->exportCover(outputDirectory_);
     const QString title = l10n(QStringLiteral("Export Cover"), QStringLiteral("导出封面"));
     if (result.success) {
-        UiDialogs::showMessageBox(
+        const QFileInfo resolvedOutputInfo(result.outputPath);
+        const QString resolvedOutputName = resolvedOutputInfo.fileName().trimmed().isEmpty()
+            ? QDir::toNativeSeparators(result.outputPath)
+            : resolvedOutputInfo.fileName();
+        QMessageBox dialog(
             QMessageBox::Information,
-            this,
             title,
-            (UiText::isChineseUi() ? QStringLiteral("封面已导出：\n%1") : QStringLiteral("Cover exported:\n%1"))
-                .arg(QDir::toNativeSeparators(result.outputPath)));
+            QStringLiteral("%1\n\n%2")
+                .arg(l10n(QStringLiteral("Cover export completed."), QStringLiteral("封面导出完成。")))
+                .arg(resolvedOutputName),
+            QMessageBox::NoButton,
+            UiDialogs::effectiveParentWidget(this)
+        );
+        dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+        UiDialogs::configureDialogPreviewShortcuts(&dialog);
+        UiDialogs::applyDetachedParentBehavior(&dialog, this);
+        QPushButton* openButton = dialog.addButton(
+            l10n(QStringLiteral("Open"), QStringLiteral("打开")),
+            QMessageBox::AcceptRole
+        );
+        dialog.addButton(
+            l10n(QStringLiteral("Close"), QStringLiteral("关闭")),
+            QMessageBox::RejectRole
+        );
+        dialog.setDefaultButton(openButton);
+        UiDialogs::centerDialogOnAnchor(&dialog, this);
+        dialog.exec();
+        if (dialog.clickedButton() == openButton) {
+            const QString outputDir = resolvedOutputInfo.absoluteDir().absolutePath();
+            if (!outputDir.isEmpty()) {
+                QDesktopServices::openUrl(QUrl::fromLocalFile(outputDir));
+            }
+        }
         statusBar()->showMessage(QDir::toNativeSeparators(result.outputPath), 5000);
     } else {
         UiDialogs::showMessageBox(
