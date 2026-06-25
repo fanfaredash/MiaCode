@@ -191,6 +191,10 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         QAction* exportCoverAction = toolsMenu->addAction(uiText("action.export_cover", "Export Cover"));
         connect(exportCoverAction, &QAction::triggered, this, &MainWindow::onExportCover);
     }
+    if (netBatchDownloadAction_ != nullptr) {
+        toolsMenu->addSeparator();
+        toolsMenu->addAction(netBatchDownloadAction_);
+    }
     const QList<QAction*> editActions = editMenu->actions();
     if (!editActions.isEmpty() && editActions.constLast()->isSeparator()) {
         editMenu->removeAction(editActions.constLast());
