@@ -332,6 +332,35 @@ int main(int argc, char** argv)
                 &failed);
         }
     }
+    {
+        PlainCodeEditor holdEditor;
+        holdEditor.resize(480, 240);
+        holdEditor.show();
+        holdEditor.setFocus();
+        holdEditor.setPlainText(QStringLiteral("8,8,8,"));
+        QTextCursor cursor = holdEditor.textCursor();
+        const int selectedStart = QStringLiteral("8,").size();
+        cursor.setPosition(selectedStart);
+        cursor.setPosition(selectedStart + 1, QTextCursor::KeepAnchor);
+        holdEditor.setTextCursor(cursor);
+        QApplication::processEvents();
+
+        QKeyEvent holdKey(QEvent::KeyPress, Qt::Key_H, Qt::NoModifier, QStringLiteral("h"));
+        QApplication::sendEvent(&holdEditor, &holdKey);
+        expect(
+            holdEditor.toPlainText() == QStringLiteral("8,h,8,") && holdKey.isAccepted(),
+            QStringLiteral("typing h replaces selected text instead of wrapping or appending it"),
+            out,
+            &failed);
+
+        QKeyEvent tabKey(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier, QString());
+        QApplication::sendEvent(&holdEditor, &tabKey);
+        expect(
+            holdEditor.toPlainText() == QStringLiteral("8,h[8:1],8,") && tabKey.isAccepted(),
+            QStringLiteral("typing h on selected text still opens hold-duration completion"),
+            out,
+            &failed);
+    }
 
     if (failed != 0) {
         out << "PlainCodeEditor spec failed: " << failed << '\n';
