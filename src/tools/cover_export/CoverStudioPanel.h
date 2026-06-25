@@ -83,11 +83,14 @@ public:
     void setActiveLayerCenter(qreal nx, qreal ny);
     void setActiveLayerFrameSeconds(double seconds);
     void setActiveLayerFrameBgEnabled(bool enabled);
+    void setActiveLayerFrameBgMode(const QString& mode);
     void setActiveLayerFrameBgBrightness(qreal brightness);
+    void setActiveLayerFrameBgTransparency(qreal transparency);
     void stepActiveFrameBySeconds(double deltaSeconds);
     void togglePlayback();   // play/pause the active chart frame (transport + Space)
     void cancelFrameTransportHold();
     bool chartFrameAvailable() const { return chartFrameAvailable_; }
+    bool chartFrameImageBackgroundAvailable() const;
     double contentDurationSeconds() const { return contentDurationSeconds_; }
     qreal previewZoom() const { return previewZoom_; }
     void zoomPreviewIn();
@@ -237,6 +240,7 @@ private:
     // B1 — chart-frame inner-ring background (reuses the cover background image).
     QCheckBox* chartFrameBgCheck_ = nullptr;
     QSlider* chartFrameBgBrightnessSlider_ = nullptr;   // 0..100 → brightness 0..1
+    QSlider* chartFrameBgTransparencySlider_ = nullptr;
     bool rendering_ = false;               // re-entrancy guard (renderAt pumps the event loop)
     // P3 — frameSeconds each chart frame's still was last grabbed at (dirty check).
     QHash<QString, double> grabbedSeconds_;

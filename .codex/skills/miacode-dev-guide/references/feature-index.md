@@ -165,7 +165,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Cover export studio:
   - Files: `src/tools/cover_export/CoverStudioWindow.*`, `CoverStudioPanel.*`, `CoverLayerListPanel.*`, `CoverLayerListModel.*`, `CoverLayoutModel.*`, `CoverCompositionState.*`, `CoverComposerView.*`, `SceneFrameRenderer.*`, `src/intro/qml/CoverComposer.qml`, `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`
   - Classes: `CoverStudioWindow`, `CoverStudioPanel`, `CoverLayerListPanel`, `CoverLayerListModel`, `CoverLayoutModel`, `CoverCompositionState`, `CoverComposerView`, `SceneFrameRenderer`
-  - Owns: cover composition UI, multi chart-frame layer state, custom layer-list delegate and inline visibility/lock controls, v1/v2 `.miacover` JSON migration, app-scoped layout presets/recent layout files, active-live-frame editing, cached still refresh, and final PNG/JPG cover export beside the chart
+  - Owns: cover composition UI, multi chart-frame layer state, custom layer-list delegate and inline visibility/lock controls, v1/v2/v3 `.miacover` JSON migration, app-scoped layout presets/recent layout files, active-live-frame editing, chart-frame inner background modes, cached still refresh, and final PNG/JPG cover export beside the chart
 
 ## 9. BPM And Offset Detection
 

@@ -4,6 +4,7 @@
 #include <QWidget>
 
 class QCheckBox;
+class QComboBox;
 class QEvent;
 class QGroupBox;
 class QLabel;
@@ -59,9 +60,13 @@ private:
 
     // §3.3-frame — chart-frame-specific options (shown only for chart frames).
     QGroupBox* frameOptionsGroup_ = nullptr;
-    QCheckBox* frameBgCheck_ = nullptr;
+    QComboBox* frameBgModeCombo_ = nullptr;
     QSlider* frameBgBrightnessSlider_ = nullptr;
     miacode::ui::EditableValueLabel* frameBgBrightnessValue_ = nullptr;
+    QWidget* frameBgBrightnessRow_ = nullptr;
+    QSlider* frameBgTransparencySlider_ = nullptr;
+    miacode::ui::EditableValueLabel* frameBgTransparencyValue_ = nullptr;
+    QWidget* frameBgTransparencyRow_ = nullptr;
     QPushButton* framePlayButton_ = nullptr;
     QSlider* frameTimeSlider_ = nullptr;
     QLabel* frameTimeReadout_ = nullptr;

@@ -32,12 +32,15 @@ bool testMultiFrameModel(QTextStream& err)
 
     second->setFrameBgEnabled(false);
     second->setFrameBgBrightness(0.42);
+    second->setFrameBgTransparency(0.73);
     second->setOpacity(0.55);
     CoverLayer* copy = model.duplicateLayer(second->key());
     if (!require(copy != nullptr, QStringLiteral("duplicates frame layer"), err)) return false;
     if (!require(copy->frameSeconds() == second->frameSeconds(), QStringLiteral("duplicate keeps frame time"), err)) return false;
     if (!require(copy->frameBgEnabled() == second->frameBgEnabled(), QStringLiteral("duplicate keeps frame bg toggle"), err)) return false;
+    if (!require(copy->frameBgMode() == QStringLiteral("transparent"), QStringLiteral("duplicate keeps frame bg mode"), err)) return false;
     if (!require(qAbs(copy->frameBgBrightness() - 0.42) < 0.001, QStringLiteral("duplicate keeps brightness"), err)) return false;
+    if (!require(qAbs(copy->frameBgTransparency() - 0.73) < 0.001, QStringLiteral("duplicate keeps transparency"), err)) return false;
     if (!require(qAbs(copy->opacity() - 0.55) < 0.001, QStringLiteral("duplicate keeps opacity"), err)) return false;
 
     if (!require(!model.removeLayer(CoverLayoutModel::cardKey()), QStringLiteral("card cannot be removed"), err)) return false;
@@ -53,6 +56,8 @@ bool testRoundTrip(QTextStream& err)
     frame->setNx(0.25);
     frame->setNy(0.75);
     frame->setFrameBgBrightness(0.33);
+    frame->setFrameBgMode(QStringLiteral("transparent"));
+    frame->setFrameBgTransparency(0.25);
     frame->setOpacity(0.66);
 
     CoverLayoutModel restored;
@@ -61,7 +66,9 @@ bool testRoundTrip(QTextStream& err)
     if (!require(frames.size() == 1, QStringLiteral("round-trip restores one frame"), err)) return false;
     CoverLayer* restoredFrame = frames.constFirst();
     if (!require(qAbs(restoredFrame->frameSeconds() - 7.5) < 0.001, QStringLiteral("round-trip keeps frame time"), err)) return false;
+    if (!require(restoredFrame->frameBgMode() == QStringLiteral("transparent"), QStringLiteral("round-trip keeps frame bg mode"), err)) return false;
     if (!require(qAbs(restoredFrame->frameBgBrightness() - 0.33) < 0.001, QStringLiteral("round-trip keeps brightness"), err)) return false;
+    if (!require(qAbs(restoredFrame->frameBgTransparency() - 0.25) < 0.001, QStringLiteral("round-trip keeps transparency"), err)) return false;
     if (!require(qAbs(restoredFrame->opacity() - 0.66) < 0.001, QStringLiteral("round-trip keeps opacity"), err)) return false;
     return true;
 }
@@ -77,8 +84,9 @@ bool testTemplatedChartFrameKeepsSettingsExceptPosition(QTextStream& err)
     source->setVisible(false);
     source->setLocked(true);
     source->setOpacity(0.44);
-    source->setFrameBgEnabled(false);
+    source->setFrameBgMode(QStringLiteral("transparent"));
     source->setFrameBgBrightness(0.37);
+    source->setFrameBgTransparency(0.64);
     source->setFrameStyle(QStringLiteral("round"));
 
     CoverLayer* added = model.addChartFrameLayerFromTemplate(source, 99.0);
@@ -91,10 +99,12 @@ bool testTemplatedChartFrameKeepsSettingsExceptPosition(QTextStream& err)
     if (!require(added->locked(), QStringLiteral("template add keeps lock"), err)) return false;
     if (!require(qAbs(added->opacity() - 0.44) < 0.001,
                  QStringLiteral("template add keeps opacity"), err)) return false;
-    if (!require(!added->frameBgEnabled(),
-                 QStringLiteral("template add keeps frame bg toggle"), err)) return false;
+    if (!require(added->frameBgMode() == QStringLiteral("transparent"),
+                 QStringLiteral("template add keeps frame bg mode"), err)) return false;
     if (!require(qAbs(added->frameBgBrightness() - 0.37) < 0.001,
                  QStringLiteral("template add keeps frame bg brightness"), err)) return false;
+    if (!require(qAbs(added->frameBgTransparency() - 0.64) < 0.001,
+                 QStringLiteral("template add keeps frame bg transparency"), err)) return false;
     if (!require(added->frameStyle() == QStringLiteral("round"),
                  QStringLiteral("template add keeps frame style"), err)) return false;
     if (!require(qAbs(added->nx() - 0.5) < 0.001 && qAbs(added->ny() - 0.5) < 0.001,
@@ -157,7 +167,8 @@ bool testV1Migration(QTextStream& err)
     const QList<CoverLayer*> frames = model.chartFrameLayers();
     if (!require(frames.size() == 1, QStringLiteral("v1 chartFrame becomes one frame layer"), err)) return false;
     CoverLayer* frameLayer = frames.constFirst();
-    if (!require(!frameLayer->frameBgEnabled(), QStringLiteral("v1 innerBackground migrates"), err)) return false;
+    if (!require(frameLayer->frameBgMode() == QStringLiteral("transparent"), QStringLiteral("v1 innerBackground migrates to transparent"), err)) return false;
+    if (!require(qAbs(frameLayer->frameBgTransparency() - 1.0) < 0.001, QStringLiteral("v1 disabled innerBackground becomes fully transparent"), err)) return false;
     if (!require(qAbs(frameLayer->frameBgBrightness() - 0.25) < 0.001, QStringLiteral("v1 brightness migrates"), err)) return false;
     return true;
 }
@@ -181,8 +192,45 @@ bool testSparseV1Migration(QTextStream& err)
     if (!require(model.layer(CoverLayoutModel::cardKey()) != nullptr, QStringLiteral("sparse v1 keeps card layer"), err)) return false;
     const QList<CoverLayer*> frames = model.chartFrameLayers();
     if (!require(frames.size() == 1, QStringLiteral("sparse v1 creates one frame layer"), err)) return false;
-    if (!require(!frames.constFirst()->frameBgEnabled(), QStringLiteral("sparse v1 migrates inner bg toggle"), err)) return false;
+    if (!require(frames.constFirst()->frameBgMode() == QStringLiteral("transparent"), QStringLiteral("sparse v1 migrates inner bg mode"), err)) return false;
+    if (!require(qAbs(frames.constFirst()->frameBgTransparency() - 1.0) < 0.001, QStringLiteral("sparse v1 migrates transparent max"), err)) return false;
     if (!require(qAbs(frames.constFirst()->frameBgBrightness() - 0.35) < 0.001, QStringLiteral("sparse v1 migrates brightness"), err)) return false;
+    return true;
+}
+
+bool testV2Migration(QTextStream& err)
+{
+    QJsonObject layer;
+    layer.insert(QStringLiteral("key"), QStringLiteral("chartFrame"));
+    layer.insert(QStringLiteral("kind"), QStringLiteral("chartFrame"));
+    layer.insert(QStringLiteral("visible"), true);
+    layer.insert(QStringLiteral("frameBgEnabled"), false);
+    layer.insert(QStringLiteral("frameBgBrightness"), 0.18);
+
+    QJsonArray layers;
+    layers.append(layer);
+    QJsonObject layout;
+    layout.insert(QStringLiteral("layers"), layers);
+
+    QJsonObject root;
+    root.insert(QStringLiteral("kind"), QStringLiteral("miacode-cover-composition"));
+    root.insert(QStringLiteral("version"), 2);
+    root.insert(QStringLiteral("layout"), layout);
+
+    CoverCompositionState state;
+    if (!require(CoverCompositionState::fromJson(root, &state), QStringLiteral("v2 composition migrates"), err)) return false;
+
+    CoverLayoutModel model;
+    model.fromJson(state.layout);
+    const QList<CoverLayer*> frames = model.chartFrameLayers();
+    if (!require(frames.size() == 1, QStringLiteral("v2 keeps chart frame layer"), err)) return false;
+    const CoverLayer* frame = frames.constFirst();
+    if (!require(frame->frameBgMode() == QStringLiteral("transparent"),
+                 QStringLiteral("v2 disabled bg migrates to transparent mode"), err)) return false;
+    if (!require(qAbs(frame->frameBgTransparency() - 1.0) < 0.001,
+                 QStringLiteral("v2 disabled bg migrates to no background"), err)) return false;
+    if (!require(qAbs(frame->frameBgBrightness() - 0.18) < 0.001,
+                 QStringLiteral("v2 brightness is preserved"), err)) return false;
     return true;
 }
 
@@ -336,6 +384,7 @@ int main(int argc, char** argv)
     if (!testZOrder(err)) return 1;
     if (!testV1Migration(err)) return 1;
     if (!testSparseV1Migration(err)) return 1;
+    if (!testV2Migration(err)) return 1;
     if (!testDeleteSelectsNeighbour(err)) return 1;
     if (!testBackgroundBrightnessRoundTrip(err)) return 1;
     if (!testMoveByViewRows(err)) return 1;

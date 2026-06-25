@@ -501,10 +501,8 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     connect(frameSeekHoldTimer_, &QTimer::timeout, this, &CoverStudioPanel::onFrameHeldSeekTick);
     frameSlider_->installEventFilter(this);
 
-    // Chart-frame inner-ring background (B1): the playfield disk shows the cover
-    // background (曲绘/custom) crisp + dimmed; the outer ring stays transparent.
-    // Only meaningful when the chart frame is enabled and the background isn't
-    // Transparent — gated in syncControlEnabled().
+    // Legacy hidden controls kept as a compatibility bridge for older code paths;
+    // the visible inspector exposes the current [Jacket | Transparent] mode UI.
     chartFrameBgCheck_ = new QCheckBox(
         l10n(QStringLiteral("Chart-frame inner background"), QStringLiteral("谱面帧内圈背景")), this);
     chartFrameBgCheck_->setChecked(true);
@@ -522,6 +520,14 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     chartFrameBgBrightnessSlider_->setEnabled(false);
     frameForm->addRow(l10n(QStringLiteral("Background brightness"), QStringLiteral("背景亮度")),
                       chartFrameBgBrightnessSlider_);
+
+    chartFrameBgTransparencySlider_ = new QSlider(Qt::Horizontal, this);
+    chartFrameBgTransparencySlider_->setMinimum(0);
+    chartFrameBgTransparencySlider_->setMaximum(100);
+    chartFrameBgTransparencySlider_->setValue(50);
+    chartFrameBgTransparencySlider_->setEnabled(false);
+    frameForm->addRow(l10n(QStringLiteral("Background transparency"), QStringLiteral("背景透明度")),
+                      chartFrameBgTransparencySlider_);
 
     controlsColumn->addWidget(frameGroup);
     frameGroup->hide();
@@ -632,7 +638,11 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     // B1 inner-ring background controls.
     connect(chartFrameBgCheck_, &QCheckBox::toggled, this, [this] {
         if (miacode::cover_export::CoverLayer* layer = activeChartFrameLayer()) {
-            layer->setFrameBgEnabled(chartFrameBgCheck_ != nullptr && chartFrameBgCheck_->isChecked());
+            const bool imageMode = chartFrameBgCheck_ != nullptr && chartFrameBgCheck_->isChecked();
+            layer->setFrameBgMode(imageMode ? QStringLiteral("image") : QStringLiteral("transparent"));
+            if (!imageMode) {
+                layer->setFrameBgTransparency(1.0);
+            }
         }
         syncControlEnabled();
         pushInputs();
@@ -641,6 +651,13 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     connect(chartFrameBgBrightnessSlider_, &QSlider::valueChanged, this, [this](int value) {
         if (miacode::cover_export::CoverLayer* layer = activeChartFrameLayer()) {
             layer->setFrameBgBrightness(value / 100.0);
+        }
+        pushInputs();
+        emit compositionChanged();
+    });
+    connect(chartFrameBgTransparencySlider_, &QSlider::valueChanged, this, [this](int value) {
+        if (miacode::cover_export::CoverLayer* layer = activeChartFrameLayer()) {
+            layer->setFrameBgTransparency(value / 100.0);
         }
         pushInputs();
         emit compositionChanged();
@@ -680,6 +697,13 @@ miacode::cover_export::CoverLayer* CoverStudioPanel::activeChartFrameLayer() con
 {
     miacode::cover_export::CoverLayer* layer = activeLayer();
     return layer != nullptr && layer->kind() == QStringLiteral("chartFrame") ? layer : nullptr;
+}
+
+bool CoverStudioPanel::chartFrameImageBackgroundAvailable() const
+{
+    const QString bg = backgroundCombo_ != nullptr ? backgroundCombo_->currentData().toString()
+                                                   : QStringLiteral("jacket");
+    return bg != QStringLiteral("transparent");
 }
 
 void CoverStudioPanel::setActiveLayerKey(const QString& key)
@@ -935,7 +959,20 @@ void CoverStudioPanel::setActiveLayerFrameSeconds(double seconds)
 void CoverStudioPanel::setActiveLayerFrameBgEnabled(bool enabled)
 {
     if (miacode::cover_export::CoverLayer* layer = activeChartFrameLayer()) {
-        layer->setFrameBgEnabled(enabled);
+        layer->setFrameBgMode(enabled ? QStringLiteral("image") : QStringLiteral("transparent"));
+        if (!enabled) {
+            layer->setFrameBgTransparency(1.0);
+        }
+        syncActiveLayerControls();
+        pushInputs();
+        emit compositionChanged();
+    }
+}
+
+void CoverStudioPanel::setActiveLayerFrameBgMode(const QString& mode)
+{
+    if (miacode::cover_export::CoverLayer* layer = activeChartFrameLayer()) {
+        layer->setFrameBgMode(mode);
         syncActiveLayerControls();
         pushInputs();
         emit compositionChanged();
@@ -946,6 +983,16 @@ void CoverStudioPanel::setActiveLayerFrameBgBrightness(qreal brightness)
 {
     if (miacode::cover_export::CoverLayer* layer = activeChartFrameLayer()) {
         layer->setFrameBgBrightness(brightness);
+        syncActiveLayerControls();
+        pushInputs();
+        emit compositionChanged();
+    }
+}
+
+void CoverStudioPanel::setActiveLayerFrameBgTransparency(qreal transparency)
+{
+    if (miacode::cover_export::CoverLayer* layer = activeChartFrameLayer()) {
+        layer->setFrameBgTransparency(transparency);
         syncActiveLayerControls();
         pushInputs();
         emit compositionChanged();
@@ -1089,11 +1136,15 @@ void CoverStudioPanel::syncActiveLayerControls()
     }
     if (chartFrameBgCheck_ != nullptr && hasFrame) {
         const QSignalBlocker block(chartFrameBgCheck_);
-        chartFrameBgCheck_->setChecked(layer->frameBgEnabled());
+        chartFrameBgCheck_->setChecked(layer->frameBgMode() == QStringLiteral("image"));
     }
     if (chartFrameBgBrightnessSlider_ != nullptr && hasFrame) {
         const QSignalBlocker block(chartFrameBgBrightnessSlider_);
         chartFrameBgBrightnessSlider_->setValue(qRound(layer->frameBgBrightness() * 100.0));
+    }
+    if (chartFrameBgTransparencySlider_ != nullptr && hasFrame) {
+        const QSignalBlocker block(chartFrameBgTransparencySlider_);
+        chartFrameBgTransparencySlider_->setValue(qRound(layer->frameBgTransparency() * 100.0));
     }
     if (sceneFrameRenderer_ != nullptr && hasFrame) {
         sceneFrameRenderer_->setPlayheadSeconds(layer->frameSeconds());
@@ -1592,11 +1643,14 @@ miacode::cover_export::CoverComposerInputs CoverStudioPanel::buildInputs() const
     // fraction of the square frame; 0 when the renderer isn't bootstrapped.
     const miacode::cover_export::CoverLayer* frameLayer = activeChartFrameLayer();
     in.chartFrameBackground = frameLayer != nullptr
-        ? frameLayer->frameBgEnabled()
+        ? frameLayer->frameBgMode() == QStringLiteral("image")
         : (chartFrameBgCheck_ != nullptr && chartFrameBgCheck_->isChecked());
     in.chartFrameBgBrightness = frameLayer != nullptr
         ? frameLayer->frameBgBrightness()
         : (chartFrameBgBrightnessSlider_ != nullptr ? chartFrameBgBrightnessSlider_->value() / 100.0 : 0.8);
+    in.chartFrameBgTransparency = frameLayer != nullptr
+        ? frameLayer->frameBgTransparency()
+        : (chartFrameBgTransparencySlider_ != nullptr ? chartFrameBgTransparencySlider_->value() / 100.0 : 0.5);
     in.chartFrameDiskDiameter = (chartFrameAvailable_ && sceneFrameRenderer_ != nullptr)
         ? sceneFrameRenderer_->playfieldDiskDiameterFraction()
         : 0.0;
@@ -1762,17 +1816,19 @@ void CoverStudioPanel::syncControlEnabled()
     if (levelTextRenderCheck_ != nullptr) levelTextRenderCheck_->setEnabled(cardOn);
     if (textOverflowCombo_ != nullptr) textOverflowCombo_->setEnabled(cardOn);
 
-    // B1 inner-ring background: only when the chart frame is enabled AND the cover
-    // background isn't Transparent (no image to show in the disk). The brightness
-    // slider additionally needs the inner-bg checkbox on.
+    // B1 inner-ring background: image mode needs a cover background to sample;
+    // transparent mode draws its own black disk and remains available without one.
     const miacode::cover_export::CoverLayer* frameLayer = activeChartFrameLayer();
     const bool chartFrameOn =
         frameLayer != nullptr && frameLayer->visible() && chartFrameAvailable_;
-    const bool innerBgEnable = chartFrameOn && !isTransparent;
+    const bool innerBgEnable = chartFrameOn;
+    const bool imageMode = frameLayer != nullptr && frameLayer->frameBgMode() == QStringLiteral("image");
     if (chartFrameBgCheck_ != nullptr) chartFrameBgCheck_->setEnabled(innerBgEnable);
     if (chartFrameBgBrightnessSlider_ != nullptr) {
-        chartFrameBgBrightnessSlider_->setEnabled(
-            innerBgEnable && chartFrameBgCheck_ != nullptr && chartFrameBgCheck_->isChecked());
+        chartFrameBgBrightnessSlider_->setEnabled(innerBgEnable && imageMode && !isTransparent);
+    }
+    if (chartFrameBgTransparencySlider_ != nullptr) {
+        chartFrameBgTransparencySlider_->setEnabled(innerBgEnable && !imageMode);
     }
 }
 

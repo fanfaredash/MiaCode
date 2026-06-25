@@ -55,6 +55,7 @@ struct CoverComposerInputs {
     // brightness; the outer ring stays transparent. diskDiameter is the ring
     // diameter / square side (from SceneFrameRenderer::playfieldDiskDiameterFraction).
     bool chartFrameBackground = false;
+    double chartFrameBgTransparency = 0.5; // 0 = solid black, 1 = no background
     double chartFrameBgBrightness = 0.8;   // 0..1 (1 = full bright; maps to MultiEffect.brightness − 1)
     double chartFrameDiskDiameter = 0.0;   // 0 = unknown → no disk drawn
 };

@@ -41,6 +41,7 @@ Item {
     // shows the cover background (曲绘/custom) crisp, circular-masked to the playfield
     // ring, dimmed by chartFrameBgBrightness; the outer ring stays transparent.
     property bool chartFrameBgEnabled: false
+    property real chartFrameBgTransparency: 0.5
     property real chartFrameBgBrightness: 0.8   // 0..1; MultiEffect.brightness = this − 1
     property real chartFrameDiskDiameter: 0.0   // ring diameter / square side (0 = no disk)
     property string activeChartFrameKey: ""      // only this chart frame hosts the live scene
@@ -289,14 +290,24 @@ Item {
             readonly property bool frameBgEnabled:
                 isChartFrame && layerItem.ld && layerItem.ld.frameBgEnabled !== undefined
                     ? layerItem.ld.frameBgEnabled : canvas.chartFrameBgEnabled
+            readonly property string frameBgMode:
+                isChartFrame && layerItem.ld && layerItem.ld.frameBgMode !== undefined
+                    ? layerItem.ld.frameBgMode : (layerItem.frameBgEnabled ? "image" : "transparent")
             readonly property real frameBgBrightness:
                 isChartFrame && layerItem.ld && layerItem.ld.frameBgBrightness !== undefined
                     ? layerItem.ld.frameBgBrightness : canvas.chartFrameBgBrightness
+            readonly property real frameBgTransparency:
+                isChartFrame && layerItem.ld && layerItem.ld.frameBgTransparency !== undefined
+                    ? layerItem.ld.frameBgTransparency : canvas.chartFrameBgTransparency
             // B1 disk background: shared gate for its image + dim overlay.
-            readonly property bool showsDiskBg:
-                isChartFrame && layerItem.frameBgEnabled
+            readonly property bool showsImageDiskBg:
+                isChartFrame && layerItem.frameBgMode === "image"
                 && canvas.chartFrameDiskDiameter > 0
                 && canvas.backdropSourceUrl.toString().length > 0
+            readonly property bool showsTransparentDiskBg:
+                isChartFrame && layerItem.frameBgMode === "transparent"
+                && canvas.chartFrameDiskDiameter > 0
+                && layerItem.frameBgTransparency < 1.0
 
             width: canvas.layerContentW(ld)
             height: canvas.layerContentH(ld)
@@ -304,7 +315,7 @@ Item {
             y: (ld ? ld.ny : 0.5) * canvas.height - height / 2
             z: ld ? ld.z : 0
             visible: ld ? ld.visible : true
-            opacity: ld && ld.opacity !== undefined ? ld.opacity : 1.0
+            opacity: layerItem.isChartFrame ? 1.0 : (ld && ld.opacity !== undefined ? ld.opacity : 1.0)
 
             // Card content, optionally drop-shadowed via a layer effect on the
             // content ONLY (so the selection chrome is never rasterised with it).
@@ -369,7 +380,7 @@ Item {
                 }
                 MultiEffect {
                     anchors.fill: parent
-                    visible: layerItem.showsDiskBg
+                    visible: layerItem.showsImageDiskBg
                     source: chartBgDiskImage
                     maskEnabled: true
                     maskSource: chartBgDiskMaskTex
@@ -380,7 +391,7 @@ Item {
                 // → media × brightness). MultiEffect.brightness is ADDITIVE
                 // (crushes dark pixels straight to black) so it is NOT used here.
                 Rectangle {
-                    visible: layerItem.showsDiskBg
+                    visible: layerItem.showsImageDiskBg
                     anchors.centerIn: parent
                     width: canvas.chartFrameDiskDiameter * parent.width
                     height: width
@@ -388,6 +399,16 @@ Item {
                     antialiasing: true
                     color: "#000000"
                     opacity: Math.max(0, Math.min(1, 1.0 - layerItem.frameBgBrightness))
+                }
+                Rectangle {
+                    visible: layerItem.showsTransparentDiskBg
+                    anchors.centerIn: parent
+                    width: canvas.chartFrameDiskDiameter * parent.width
+                    height: width
+                    radius: width / 2
+                    antialiasing: true
+                    color: "#000000"
+                    opacity: Math.max(0, Math.min(1, 1.0 - layerItem.frameBgTransparency))
                 }
                 Loader {
                     anchors.fill: parent
@@ -402,6 +423,7 @@ Item {
                 Loader {
                     id: liveChartLoader
                     anchors.fill: parent
+                    opacity: layerItem.ld && layerItem.ld.opacity !== undefined ? layerItem.ld.opacity : 1.0
                     active: layerItem.isChartFrame && canvas.editable
                             && canvas.chartSceneBinder !== null
                             && layerItem.isActiveChartFrame
@@ -426,6 +448,7 @@ Item {
                 // imageRevision < 0 means "not rendered yet" → blank source.
                 Image {
                     anchors.fill: parent
+                    opacity: layerItem.ld && layerItem.ld.opacity !== undefined ? layerItem.ld.opacity : 1.0
                     visible: layerItem.isChartFrame && !liveChartLoader.active
                              && layerItem.ld && layerItem.ld.imageRevision >= 0
                     source: (layerItem.isChartFrame && layerItem.ld && layerItem.ld.imageRevision >= 0)

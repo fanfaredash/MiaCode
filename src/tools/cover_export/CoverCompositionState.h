@@ -15,7 +15,7 @@ struct CoverUserPreset {
 };
 
 struct CoverCompositionState {
-    static constexpr int kCurrentVersion = 2;
+    static constexpr int kCurrentVersion = 3;
 
     QSize size;
     QJsonObject background;

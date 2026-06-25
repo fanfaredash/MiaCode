@@ -50,6 +50,17 @@ bool isChartFrameKind(const QString& kind)
 {
     return kind == QString::fromLatin1(kChartFrameKey);
 }
+
+QString normalizedFrameBgMode(const QString& mode)
+{
+    if (mode == QStringLiteral("transparent") || mode == QStringLiteral("clear")) {
+        return QStringLiteral("transparent");
+    }
+    if (mode == QStringLiteral("image") || mode == QStringLiteral("jacket")) {
+        return QStringLiteral("image");
+    }
+    return QStringLiteral("image");
+}
 }  // namespace
 
 void CoverLayer::setNx(qreal v)
@@ -116,9 +127,29 @@ void CoverLayer::setFrameSeconds(double v)
 
 void CoverLayer::setFrameBgEnabled(bool v)
 {
-    if (frameBgEnabled_ == v) return;
-    frameBgEnabled_ = v;
-    emit frameBgEnabledChanged();
+    if (frameBgEnabled_ != v) {
+        frameBgEnabled_ = v;
+        emit frameBgEnabledChanged();
+    }
+    if (v) {
+        setFrameBgMode(QStringLiteral("image"));
+    } else {
+        setFrameBgMode(QStringLiteral("transparent"));
+        setFrameBgTransparency(1.0);
+    }
+}
+
+void CoverLayer::setFrameBgMode(const QString& v)
+{
+    const QString next = normalizedFrameBgMode(v);
+    if (frameBgMode_ == next) return;
+    frameBgMode_ = next;
+    emit frameBgModeChanged();
+    const bool nextEnabled = next == QStringLiteral("image");
+    if (frameBgEnabled_ != nextEnabled) {
+        frameBgEnabled_ = nextEnabled;
+        emit frameBgEnabledChanged();
+    }
 }
 
 void CoverLayer::setFrameBgBrightness(qreal v)
@@ -127,6 +158,14 @@ void CoverLayer::setFrameBgBrightness(qreal v)
     if (qFuzzyCompare(frameBgBrightness_, v)) return;
     frameBgBrightness_ = v;
     emit frameBgBrightnessChanged();
+}
+
+void CoverLayer::setFrameBgTransparency(qreal v)
+{
+    v = clampUnit(v);
+    if (qFuzzyCompare(frameBgTransparency_, v)) return;
+    frameBgTransparency_ = v;
+    emit frameBgTransparencyChanged();
 }
 
 void CoverLayer::setFrameStyle(const QString& v)
@@ -198,7 +237,9 @@ void CoverLayoutModel::applyDefaults(CoverLayer* layer) const
         layer->locked_ = false;
         layer->opacity_ = 1.0;
         layer->frameBgEnabled_ = true;
+        layer->frameBgMode_ = QStringLiteral("image");
         layer->frameBgBrightness_ = 0.8;
+        layer->frameBgTransparency_ = 0.5;
     }
 }
 
@@ -278,8 +319,9 @@ CoverLayer* CoverLayoutModel::addChartFrameLayerFromTemplate(const CoverLayer* s
     chartFrame->setVisible(source->visible());
     chartFrame->setLocked(source->locked());
     chartFrame->setOpacity(source->opacity());
-    chartFrame->setFrameBgEnabled(source->frameBgEnabled());
+    chartFrame->setFrameBgMode(source->frameBgMode());
     chartFrame->setFrameBgBrightness(source->frameBgBrightness());
+    chartFrame->setFrameBgTransparency(source->frameBgTransparency());
     chartFrame->setFrameStyle(source->frameStyle());
     return chartFrame;
 }
@@ -302,7 +344,9 @@ CoverLayer* CoverLayoutModel::duplicateLayer(const QString& key)
     copy->imageRevision_ = src->imageRevision_;
     copy->frameSeconds_ = src->frameSeconds_;
     copy->frameBgEnabled_ = src->frameBgEnabled_;
+    copy->frameBgMode_ = src->frameBgMode_;
     copy->frameBgBrightness_ = src->frameBgBrightness_;
+    copy->frameBgTransparency_ = src->frameBgTransparency_;
     copy->frameStyle_ = src->frameStyle_;
     emit layersChanged();
     return copy;
@@ -529,7 +573,9 @@ void CoverLayoutModel::resetLayout()
         emit layer->lockedChanged();
         emit layer->opacityChanged();
         emit layer->frameBgEnabledChanged();
+        emit layer->frameBgModeChanged();
         emit layer->frameBgBrightnessChanged();
+        emit layer->frameBgTransparencyChanged();
     }
     emit layersChanged();
 }
@@ -551,7 +597,9 @@ QJsonObject CoverLayoutModel::toJson() const
         o.insert(QStringLiteral("opacity"), layer->opacity_);
         o.insert(QStringLiteral("frameSeconds"), layer->frameSeconds_);
         o.insert(QStringLiteral("frameBgEnabled"), layer->frameBgEnabled_);
+        o.insert(QStringLiteral("frameBgMode"), layer->frameBgMode_);
         o.insert(QStringLiteral("frameBgBrightness"), layer->frameBgBrightness_);
+        o.insert(QStringLiteral("frameBgTransparency"), layer->frameBgTransparency_);
         o.insert(QStringLiteral("frameStyle"), layer->frameStyle_);
         arr.append(o);
     }
@@ -593,8 +641,13 @@ void CoverLayoutModel::fromJson(const QJsonObject& obj)
         layer->setLocked(o.value(QStringLiteral("locked")).toBool(layer->locked_));
         layer->setOpacity(o.value(QStringLiteral("opacity")).toDouble(layer->opacity_));
         layer->setFrameSeconds(o.value(QStringLiteral("frameSeconds")).toDouble(layer->frameSeconds_));
-        layer->setFrameBgEnabled(o.value(QStringLiteral("frameBgEnabled")).toBool(layer->frameBgEnabled_));
+        if (o.contains(QStringLiteral("frameBgMode"))) {
+            layer->setFrameBgMode(o.value(QStringLiteral("frameBgMode")).toString(layer->frameBgMode_));
+        } else {
+            layer->setFrameBgEnabled(o.value(QStringLiteral("frameBgEnabled")).toBool(layer->frameBgEnabled_));
+        }
         layer->setFrameBgBrightness(o.value(QStringLiteral("frameBgBrightness")).toDouble(layer->frameBgBrightness_));
+        layer->setFrameBgTransparency(o.value(QStringLiteral("frameBgTransparency")).toDouble(layer->frameBgTransparency_));
         layer->setFrameStyle(o.value(QStringLiteral("frameStyle")).toString(layer->frameStyle_));
     }
     for (int i = layers_.size() - 1; i >= 0; --i) {

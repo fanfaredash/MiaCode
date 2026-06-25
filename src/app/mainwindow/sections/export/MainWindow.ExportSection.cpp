@@ -12,15 +12,32 @@ MainWindow::ExportSection::ExportSection(MainWindow& owner, MainWindow::MainWind
     , state_(state)
 {}
 
+int MainWindow::resolveToolsMenuExportDifficultyId() const
+{
+    if (exportPage_ != nullptr) {
+        const int pageDifficultyId = exportPage_->menuActionDifficultyId();
+        if (SimaiDocument::isDifficultyId(pageDifficultyId)
+            && document_.difficulty(pageDifficultyId) != nullptr) {
+            return pageDifficultyId;
+        }
+        const int selectedDifficultyId = exportPage_->selectedDifficultyId();
+        if (SimaiDocument::isDifficultyId(selectedDifficultyId)
+            && document_.difficulty(selectedDifficultyId) != nullptr) {
+            return selectedDifficultyId;
+        }
+    }
+    return activeDifficultyId_;
+}
+
 void MainWindow::onExportCover()
 {
-    const int difficultyId = exportPage_ != nullptr ? exportPage_->menuActionDifficultyId() : 0;
+    const int difficultyId = resolveToolsMenuExportDifficultyId();
     exportSection_->onExportCover(difficultyId);
 }
 
 void MainWindow::onBatchExportPreviewVideo()
 {
-    const int difficultyId = exportPage_ != nullptr ? exportPage_->menuActionDifficultyId() : 0;
+    const int difficultyId = resolveToolsMenuExportDifficultyId();
     exportSection_->onBatchExportPreviewVideo(difficultyId);
 }
 

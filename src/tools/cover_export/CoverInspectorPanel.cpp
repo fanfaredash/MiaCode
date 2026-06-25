@@ -8,6 +8,7 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QEvent>
 #include <QFormLayout>
 #include <QFont>
@@ -257,18 +258,32 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
     frameForm->setSpacing(8);
     frameForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
-    frameBgCheck_ = new QCheckBox(this);
-    frameBgCheck_->setToolTip(l10n(QStringLiteral("Use cover background inside the chart frame"),
-                                   QStringLiteral("在谱面帧内圈使用封面背景")));
-    frameForm->addRow(l10n(QStringLiteral("Inner bg"), QStringLiteral("内圈背景")), frameBgCheck_);
+    frameBgModeCombo_ = new QComboBox(this);
+    frameBgModeCombo_->addItem(l10n(QStringLiteral("Jacket"), QStringLiteral("曲绘")),
+                               QStringLiteral("image"));
+    frameBgModeCombo_->addItem(l10n(QStringLiteral("Transparent"), QStringLiteral("透明")),
+                               QStringLiteral("transparent"));
+    frameBgModeCombo_->setToolTip(l10n(QStringLiteral("Chart-frame inner background"),
+                                       QStringLiteral("谱面帧内圈背景")));
+    frameForm->addRow(l10n(QStringLiteral("Inner bg"), QStringLiteral("内圈背景")), frameBgModeCombo_);
 
     frameBgBrightnessSlider_ = new QSlider(Qt::Horizontal, this);
     frameBgBrightnessSlider_->setRange(0, 100);
     frameBgBrightnessSlider_->setToolTip(l10n(QStringLiteral("Chart-frame background brightness"),
                                               QStringLiteral("谱面帧背景亮度")));
+    frameBgBrightnessRow_ = makeSliderValueRow(frameBgBrightnessSlider_, &frameBgBrightnessValue_,
+                                               QStringLiteral("%"), this);
     frameForm->addRow(l10n(QStringLiteral("Brightness"), QStringLiteral("亮度")),
-                      makeSliderValueRow(frameBgBrightnessSlider_, &frameBgBrightnessValue_,
-                                         QStringLiteral("%"), this));
+                      frameBgBrightnessRow_);
+
+    frameBgTransparencySlider_ = new QSlider(Qt::Horizontal, this);
+    frameBgTransparencySlider_->setRange(0, 100);
+    frameBgTransparencySlider_->setToolTip(l10n(QStringLiteral("Chart-frame background transparency"),
+                                                QStringLiteral("谱面帧背景透明度")));
+    frameBgTransparencyRow_ = makeSliderValueRow(frameBgTransparencySlider_, &frameBgTransparencyValue_,
+                                                 QStringLiteral("%"), this);
+    frameForm->addRow(l10n(QStringLiteral("Transparency"), QStringLiteral("透明度")),
+                      frameBgTransparencyRow_);
 
     auto* frameTimeRow = new QWidget(this);
     auto* frameTimeLayout = new QHBoxLayout(frameTimeRow);
@@ -329,9 +344,21 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
         }
         if (studio_ != nullptr && layer != nullptr) studio_->setActiveLayerCenter(layer->nx(), value / 100.0);
     });
-    connect(frameBgCheck_, &QCheckBox::toggled, studio_, &CoverStudioPanel::setActiveLayerFrameBgEnabled);
+    connect(frameBgModeCombo_, &QComboBox::currentIndexChanged, this, [this] {
+        if (studio_ != nullptr) {
+            const QString mode = frameBgModeCombo_ != nullptr
+                ? frameBgModeCombo_->currentData().toString()
+                : QStringLiteral("image");
+            studio_->setActiveLayerFrameBgMode(
+                mode == QStringLiteral("transparent") ? QStringLiteral("transparent")
+                                                      : QStringLiteral("image"));
+        }
+    });
     connect(frameBgBrightnessSlider_, &QSlider::valueChanged, this, [this](int value) {
         if (studio_ != nullptr) studio_->setActiveLayerFrameBgBrightness(value / 100.0);
+    });
+    connect(frameBgTransparencySlider_, &QSlider::valueChanged, this, [this](int value) {
+        if (studio_ != nullptr) studio_->setActiveLayerFrameBgTransparency(value / 100.0);
     });
     connect(framePlayButton_, &QPushButton::clicked, this, [this] {
         if (studio_ != nullptr) studio_->togglePlayback();
@@ -468,16 +495,28 @@ void CoverInspectorPanel::refresh()
 
     frameOptionsGroup_->setVisible(isFrame);
     if (isFrame) {
+        const QString frameBgMode = layer->frameBgMode() == QStringLiteral("transparent")
+            ? QStringLiteral("transparent")
+            : QStringLiteral("image");
         {
-            const QSignalBlocker b(frameBgCheck_);
-            frameBgCheck_->setChecked(layer->frameBgEnabled());
+            const QSignalBlocker b(frameBgModeCombo_);
+            const int modeIndex = frameBgModeCombo_->findData(frameBgMode);
+            if (modeIndex >= 0) {
+                frameBgModeCombo_->setCurrentIndex(modeIndex);
+            }
         }
         const int brightnessVal = qRound(layer->frameBgBrightness() * 100.0);
+        const int transparencyVal = qRound(layer->frameBgTransparency() * 100.0);
         {
             const QSignalBlocker b(frameBgBrightnessSlider_);
             frameBgBrightnessSlider_->setValue(brightnessVal);
         }
+        {
+            const QSignalBlocker b(frameBgTransparencySlider_);
+            frameBgTransparencySlider_->setValue(transparencyVal);
+        }
         frameBgBrightnessValue_->setText(QString::number(brightnessVal) + QStringLiteral("%"));
+        frameBgTransparencyValue_->setText(QString::number(transparencyVal) + QStringLiteral("%"));
         const int frameMs = qRound(layer->frameSeconds() * 1000.0);
         const int durationMs = qMax(1, qRound(studio_ != nullptr ? studio_->contentDurationSeconds() * 1000.0 : 1.0));
         {
@@ -489,8 +528,31 @@ void CoverInspectorPanel::refresh()
             layer->frameSeconds(), studio_ != nullptr ? studio_->contentDurationSeconds() : 0.0));
         framePlayButton_->setEnabled(studio_ != nullptr && studio_->chartFrameAvailable() && layer->visible());
         frameTimeSlider_->setEnabled(studio_ != nullptr && studio_->chartFrameAvailable());
-        frameBgBrightnessSlider_->setEnabled(layer->frameBgEnabled());
-        frameBgBrightnessValue_->setEnabled(layer->frameBgEnabled());
+        const bool imageMode = frameBgMode == QStringLiteral("image");
+        const bool frameControlsEnabled = studio_ != nullptr && studio_->chartFrameAvailable();
+        const bool imageBackgroundAvailable = studio_ != nullptr && studio_->chartFrameImageBackgroundAvailable();
+        if (frameBgModeCombo_ != nullptr) {
+            frameBgModeCombo_->setEnabled(frameControlsEnabled);
+            if (const int imageIndex = frameBgModeCombo_->findData(QStringLiteral("image")); imageIndex >= 0) {
+                frameBgModeCombo_->setItemData(
+                    imageIndex,
+                    frameControlsEnabled && imageBackgroundAvailable ? QVariant() : QVariant(0),
+                    Qt::UserRole - 1
+                );
+            }
+        }
+        if (auto* frameForm = qobject_cast<QFormLayout*>(frameOptionsGroup_->layout())) {
+            if (frameBgBrightnessRow_ != nullptr) {
+                frameForm->setRowVisible(frameBgBrightnessRow_, imageMode);
+            }
+            if (frameBgTransparencyRow_ != nullptr) {
+                frameForm->setRowVisible(frameBgTransparencyRow_, !imageMode);
+            }
+        }
+        frameBgBrightnessSlider_->setEnabled(frameControlsEnabled && imageMode && imageBackgroundAvailable);
+        frameBgBrightnessValue_->setEnabled(frameControlsEnabled && imageMode && imageBackgroundAvailable);
+        frameBgTransparencySlider_->setEnabled(frameControlsEnabled && !imageMode);
+        frameBgTransparencyValue_->setEnabled(frameControlsEnabled && !imageMode);
     }
 }
 

@@ -56,6 +56,32 @@ QJsonObject migrateLayoutV1ToV2(const QJsonObject& root)
     return layout;
 }
 
+QJsonObject migrateLayoutV2ToV3(const QJsonObject& root)
+{
+    QJsonObject layout = root.value(QStringLiteral("layout")).toObject();
+    QJsonArray layers = layout.value(QStringLiteral("layers")).toArray();
+    for (QJsonValueRef value : layers) {
+        QJsonObject layer = value.toObject();
+        if (layer.value(QStringLiteral("kind")).toString() == QStringLiteral("chartFrame")
+            || layer.value(QStringLiteral("key")).toString().startsWith(QStringLiteral("chartFrame"))) {
+            if (!layer.contains(QStringLiteral("frameBgMode"))) {
+                const bool enabled = layer.value(QStringLiteral("frameBgEnabled")).toBool(true);
+                layer.insert(QStringLiteral("frameBgMode"),
+                             enabled ? QStringLiteral("image") : QStringLiteral("transparent"));
+                if (!enabled && !layer.contains(QStringLiteral("frameBgTransparency"))) {
+                    layer.insert(QStringLiteral("frameBgTransparency"), 1.0);
+                }
+            }
+            if (!layer.contains(QStringLiteral("frameBgTransparency"))) {
+                layer.insert(QStringLiteral("frameBgTransparency"), 0.5);
+            }
+        }
+        value = layer;
+    }
+    layout.insert(QStringLiteral("layers"), layers);
+    return layout;
+}
+
 }  // namespace
 
 QJsonObject CoverCompositionState::toJson() const
@@ -102,6 +128,9 @@ QJsonObject CoverCompositionState::migrateToCurrent(const QJsonObject& root)
     if (version < 2) {
         migrated.insert(QStringLiteral("layout"), migrateLayoutV1ToV2(migrated));
         migrated.remove(QStringLiteral("chartFrame"));
+    }
+    if (version < 3) {
+        migrated.insert(QStringLiteral("layout"), migrateLayoutV2ToV3(migrated));
     }
     migrated.insert(QStringLiteral("version"), kCurrentVersion);
     return migrated;

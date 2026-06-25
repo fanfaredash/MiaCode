@@ -43,7 +43,9 @@ class CoverLayer : public QObject
     Q_PROPERTY(qreal opacity READ opacity WRITE setOpacity NOTIFY opacityChanged)
     Q_PROPERTY(double frameSeconds READ frameSeconds WRITE setFrameSeconds NOTIFY frameSecondsChanged)
     Q_PROPERTY(bool frameBgEnabled READ frameBgEnabled WRITE setFrameBgEnabled NOTIFY frameBgEnabledChanged)
+    Q_PROPERTY(QString frameBgMode READ frameBgMode WRITE setFrameBgMode NOTIFY frameBgModeChanged)
     Q_PROPERTY(qreal frameBgBrightness READ frameBgBrightness WRITE setFrameBgBrightness NOTIFY frameBgBrightnessChanged)
+    Q_PROPERTY(qreal frameBgTransparency READ frameBgTransparency WRITE setFrameBgTransparency NOTIFY frameBgTransparencyChanged)
     Q_PROPERTY(QString frameStyle READ frameStyle WRITE setFrameStyle NOTIFY frameStyleChanged)
     // -1 = no still rendered yet (QML shows nothing); >= 0 bumps on each new grab.
     Q_PROPERTY(int imageRevision READ imageRevision NOTIFY imageRevisionChanged)
@@ -65,7 +67,9 @@ public:
     QImage frameImage() const { return frameImage_; }
     double frameSeconds() const { return frameSeconds_; }
     bool frameBgEnabled() const { return frameBgEnabled_; }
+    QString frameBgMode() const { return frameBgMode_; }
     qreal frameBgBrightness() const { return frameBgBrightness_; }
+    qreal frameBgTransparency() const { return frameBgTransparency_; }
     QString frameStyle() const { return frameStyle_; }
 
     void setNx(qreal v);
@@ -77,7 +81,9 @@ public:
     void setOpacity(qreal v);
     void setFrameSeconds(double v);
     void setFrameBgEnabled(bool v);
+    void setFrameBgMode(const QString& v);
     void setFrameBgBrightness(qreal v);
+    void setFrameBgTransparency(qreal v);
     void setFrameStyle(const QString& v);
 
 signals:
@@ -90,7 +96,9 @@ signals:
     void opacityChanged();
     void frameSecondsChanged();
     void frameBgEnabledChanged();
+    void frameBgModeChanged();
     void frameBgBrightnessChanged();
+    void frameBgTransparencyChanged();
     void frameStyleChanged();
     void imageRevisionChanged();
 
@@ -110,7 +118,9 @@ private:
     int imageRevision_ = -1;
     double frameSeconds_ = 0.0;
     bool frameBgEnabled_ = true;
+    QString frameBgMode_ = QStringLiteral("image");
     qreal frameBgBrightness_ = 0.8;
+    qreal frameBgTransparency_ = 0.5;
     QString frameStyle_;
 };
 
