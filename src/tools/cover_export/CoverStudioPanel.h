@@ -22,6 +22,8 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QResizeEvent;
+class QScrollArea;
+class QShowEvent;
 class QSlider;
 class QTimer;
 class QWidget;
@@ -59,6 +61,7 @@ protected:
     // Intercepts ←/→ on the frame slider for the held-seek (below).
     bool eventFilter(QObject* watched, QEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
 public:
     miacode::cover_export::CoverLayoutModel* layoutModel() const { return model_; }
@@ -71,6 +74,8 @@ public:
     void moveActiveLayerDown();
     void moveActiveLayerToTop();
     void moveActiveLayerToBottom();
+    void setLayerVisible(const QString& key, bool visible);
+    void setLayerLocked(const QString& key, bool locked);
     void setActiveLayerVisible(bool visible);
     void setActiveLayerLocked(bool locked);
     void setActiveLayerOpacity(qreal opacity);
@@ -81,8 +86,13 @@ public:
     void setActiveLayerFrameBgBrightness(qreal brightness);
     void stepActiveFrameBySeconds(double deltaSeconds);
     void togglePlayback();   // play/pause the active chart frame (transport + Space)
+    void cancelFrameTransportHold();
     bool chartFrameAvailable() const { return chartFrameAvailable_; }
     double contentDurationSeconds() const { return contentDurationSeconds_; }
+    qreal previewZoom() const { return previewZoom_; }
+    void zoomPreviewIn();
+    void zoomPreviewOut();
+    void resetPreviewZoom();
     // §3.1 / §3.3-A — the inspector column reparents these out of the panel so it
     // can interleave them around the layer inspector (画板 on top, 难度卡选项 below).
     // The card-options group is polymorphic: shown only while the card is selected.
@@ -91,6 +101,8 @@ public:
     void resetLayout();
     void saveLayout();
     void importLayout();
+    QJsonObject exportPresetCompositionJson() const;
+    void applyPresetCompositionJson(const QJsonObject& root);
     // Import a specific .miacover (used by the toolbar 布局 menu's "open recent");
     // validates + applies + records the path in the recent list.
     void importLayoutFromPath(const QString& path);
@@ -102,6 +114,7 @@ signals:
     void cancelRequested();
     void activeLayerChanged(const QString& key);
     void compositionChanged();
+    void previewZoomChanged(qreal zoom);
     // §12.9 — drive the bottom transport (a dumb view): the playhead moved
     // (scrub/play) and the play/pause state changed.
     void playheadChanged(double seconds);
@@ -112,6 +125,7 @@ public:
     // visibility / lock / play / add / delete). Returns true if it consumed the key.
     // Driven from the window + embedded-quick-window event filters (§12.4).
     bool handleShortcutKey(QKeyEvent* event);
+    bool handleFrameTransportShortcut(QKeyEvent* event);
 
 private:
     void nudgeActiveLayerPosition(int key, bool coarse);   // §12.3 normalized nudge
@@ -119,6 +133,9 @@ private:
     void pushInputs();
     void browseBackground();
     void syncControlEnabled();
+    void setPreviewZoom(qreal zoom);
+    void centerPreviewScroll();
+    void schedulePreviewResize();
     void resizePreviewToAspect();
     miacode::cover_export::CoverComposerInputs buildInputs() const;
     QSize currentSize() const;
@@ -136,6 +153,7 @@ private:
     void syncActiveLayerControls();
     miacode::cover_export::CoverLayer* activeLayer() const;
     miacode::cover_export::CoverLayer* activeChartFrameLayer() const;
+    miacode::cover_export::CoverLayer* chartFrameTemplateLayer() const;
     bool renderChartFrameNow();            // grab a still at the current playhead + push to the active frame layer; true if a still was produced
     bool renderChartFrameLayerNow(miacode::cover_export::CoverLayer* layer);
     // P3 — true when `layer`'s still is missing or was grabbed at a different time,
@@ -171,8 +189,12 @@ private:
     miacode::cover_export::CoverLayoutModel* model_ = nullptr;
     miacode::cover_export::CoverComposerView* composerView_ = nullptr;
     QString activeLayerKey_;
+    QString lastChartFrameTemplateKey_;
     QWidget* previewFrame_ = nullptr;
+    QScrollArea* previewScrollArea_ = nullptr;
     QWidget* previewContainer_ = nullptr;
+    qreal previewZoom_ = 1.0;
+    bool previewResizeQueued_ = false;
     QWidget* hiddenControlsHost_ = nullptr;
     // §3.1 画板 and §3.3-A 难度卡选项 groups, reparented into the inspector column.
     QGroupBox* canvasGroup_ = nullptr;

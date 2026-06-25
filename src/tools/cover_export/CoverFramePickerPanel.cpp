@@ -13,6 +13,7 @@
 #include <QPainterPath>
 #include <QPixmap>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QSignalBlocker>
 #include <QSlider>
 
@@ -108,8 +109,8 @@ CoverFramePickerPanel::CoverFramePickerPanel(CoverStudioPanel* studio, QWidget* 
     , studio_(studio)
 {
     auto* layout = new QHBoxLayout(this);
-    layout->setContentsMargins(8, 6, 8, 6);
-    layout->setSpacing(8);
+    layout->setContentsMargins(8, 4, 8, 4);
+    layout->setSpacing(6);
 
     playIcon_ = makeTransportIcon(/*pause=*/false, UiTheme::colors().textPrimary);
     pauseIcon_ = makeTransportIcon(/*pause=*/true, UiTheme::colors().textPrimary);
@@ -126,10 +127,10 @@ CoverFramePickerPanel::CoverFramePickerPanel(CoverStudioPanel* studio, QWidget* 
     forwardButton_->setStyleSheet(backButton_->styleSheet());
     slider_ = new QSlider(Qt::Horizontal, this);
     label_ = new QLabel(formatSeconds(0.0) + QStringLiteral(" / ") + formatSeconds(0.0), this);
-    label_->setMinimumWidth(116);
+    label_->setMinimumWidth(112);
     label_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     auto* title = new QLabel(l10n(QStringLiteral("Frame"), QStringLiteral("帧")), this);
-    title->setMinimumWidth(28);
+    title->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
 
     slider_->setStyleSheet(transportSliderStyle());
     backButton_->setToolTip(l10n(QStringLiteral("Step back (←)"), QStringLiteral("后退一步（←）")));
@@ -218,29 +219,15 @@ void CoverFramePickerPanel::setPlaying(bool playing)
 
 bool CoverFramePickerPanel::eventFilter(QObject* watched, QEvent* event)
 {
-    if (watched == slider_ && event->type() == QEvent::KeyPress && studio_ != nullptr
-        && slider_->isEnabled()) {
-        auto* keyEvent = static_cast<QKeyEvent*>(event);
-        if (keyEvent->modifiers() == Qt::NoModifier) {
-            switch (keyEvent->key()) {
-            case Qt::Key_Space:
-                studio_->togglePlayback();
+    if (watched == slider_ && studio_ != nullptr) {
+        if ((event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease)
+            && slider_->isEnabled()) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (studio_->handleFrameTransportShortcut(keyEvent)) {
                 return true;
-            case Qt::Key_Left:
-                studio_->stepActiveFrameBySeconds(-kStepSeconds);
-                return true;
-            case Qt::Key_Right:
-                studio_->stepActiveFrameBySeconds(kStepSeconds);
-                return true;
-            case Qt::Key_Home:
-                studio_->setActiveLayerFrameSeconds(0.0);
-                return true;
-            case Qt::Key_End:
-                studio_->setActiveLayerFrameSeconds(studio_->contentDurationSeconds());
-                return true;
-            default:
-                break;
             }
+        } else if (event->type() == QEvent::FocusOut) {
+            studio_->cancelFrameTransportHold();
         }
     }
     return QWidget::eventFilter(watched, event);

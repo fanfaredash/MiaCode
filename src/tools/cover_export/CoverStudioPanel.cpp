@@ -32,11 +32,16 @@
 #include <QPainterPath>
 #include <QPixmap>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QShowEvent>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QVariantMap>
+
+#include <algorithm>
 
 namespace {
 
@@ -65,6 +70,9 @@ constexpr CoverResolutionPreset kCoverResolutionPresets[] = {
 // to the chosen output aspect so the layout matches the export exactly. Sized
 // generously so the card/frame are comfortable to drag-place and resize.
 constexpr int kPreviewBox = 560;
+constexpr qreal kPreviewZoomMin = 0.5;
+constexpr qreal kPreviewZoomMax = 2.0;
+constexpr qreal kPreviewZoomStep = 0.1;
 
 // Visual-only playback tick (~60 fps). The live scene repaints from the shared
 // playhead each tick; real elapsed wall time (not the tick count) sets the time,
@@ -111,6 +119,15 @@ QIcon makeTransportIcon(bool pause, const QColor& color)
         painter.fillPath(triangle, color);
     }
     return QIcon(pixmap);
+}
+
+QString inspectorSectionTitleStyle()
+{
+    const UiTheme::Colors& c = UiTheme::colors();
+    return QStringLiteral(
+        "QGroupBox::title { color: %1; font-size: 13px; font-weight: 700;"
+        " padding: 0 6px; }")
+        .arg(c.textPrimary.name(QColor::HexRgb));
 }
 
 // Chart-frame square render-size clamp (px); the natural size is the layer's
@@ -210,16 +227,31 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
 
     auto* previewFrame = new QFrame(this);
     previewFrame_ = previewFrame;
+    previewFrame->setObjectName(QStringLiteral("CoverPreviewFrame"));
     previewFrame->setFrameShape(QFrame::StyledPanel);
     previewFrame->setStyleSheet(QStringLiteral(
-        "QFrame { background: #14141C; border: 1px solid rgba(255,255,255,40); border-radius: 6px; }"));
+        "QFrame#CoverPreviewFrame { background: #14141C; border: 1px solid rgba(255,255,255,40); border-radius: 6px; }"));
     auto* previewFrameLayout = new QVBoxLayout(previewFrame);
     previewFrameLayout->setContentsMargins(1, 1, 1, 1);
 
-    QWidget* container = composerView_->createContainer(previewFrame);
+    auto* previewScroll = new QScrollArea(previewFrame);
+    previewScrollArea_ = previewScroll;
+    previewScroll->setWidgetResizable(false);
+    previewScroll->setAlignment(Qt::AlignCenter);
+    previewScroll->setFrameShape(QFrame::NoFrame);
+    previewScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    previewScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    previewScroll->viewport()->setAutoFillBackground(false);
+    previewScroll->viewport()->installEventFilter(this);
+    previewScroll->setStyleSheet(QStringLiteral(
+        "QScrollArea { background: transparent; border: none; }"
+        "QScrollArea > QWidget > QWidget { background: transparent; }"));
+    previewFrameLayout->addWidget(previewScrollArea_, 1);
+
+    QWidget* container = composerView_->createContainer(previewScroll);
     if (container != nullptr) {
         previewContainer_ = container;
-        previewFrameLayout->addWidget(previewContainer_, 0, Qt::AlignCenter);
+        previewScroll->setWidget(previewContainer_);
         // Esc must close the dialog even while focus sits inside the embedded
         // NATIVE Quick window (after clicking the preview, keys go there and
         // never reach QDialog's default Esc-reject) — filter it ourselves.
@@ -230,9 +262,9 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
         auto* failed = new QLabel(
             l10n(QStringLiteral("Failed to start the composer:\n%1"),
                  QStringLiteral("合成器启动失败：\n%1")).arg(composerView_->lastError()),
-            previewFrame);
+            previewScroll);
         failed->setWordWrap(true);
-        previewFrameLayout->addWidget(failed);
+        previewScroll->setWidget(failed);
     }
     previewColumn->addWidget(previewFrame, 1);
 
@@ -262,6 +294,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     auto* canvasGroup = new QGroupBox(
         l10n(QStringLiteral("Canvas"), QStringLiteral("画板")), this);
     canvasGroup_ = canvasGroup;
+    canvasGroup->setStyleSheet(inspectorSectionTitleStyle());
     auto* form = new QFormLayout(canvasGroup);
     form->setSpacing(10);
     form->setLabelAlignment(Qt::AlignLeft);
@@ -330,6 +363,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     auto* cardGroup = new QGroupBox(
         l10n(QStringLiteral("Difficulty card options"), QStringLiteral("难度卡选项")), this);
     cardGroup_ = cardGroup;
+    cardGroup->setStyleSheet(inspectorSectionTitleStyle());
     auto* cardForm = new QFormLayout(cardGroup);
     cardForm->setSpacing(10);
     cardForm->setLabelAlignment(Qt::AlignLeft);
@@ -595,7 +629,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     });
 
     syncControlEnabled();
-    resizePreviewToAspect();
+    schedulePreviewResize();
     pushInputs();
 
     // App-level preference restore: reopen with the last exported composition
@@ -632,9 +666,13 @@ miacode::cover_export::CoverLayer* CoverStudioPanel::activeChartFrameLayer() con
 
 void CoverStudioPanel::setActiveLayerKey(const QString& key)
 {
-    if (model_ == nullptr || model_->layer(key) == nullptr || activeLayerKey_ == key) {
+    if (model_ == nullptr || activeLayerKey_ == key) {
         return;
     }
+    if (!key.isEmpty() && model_->layer(key) == nullptr) {
+        return;
+    }
+    cancelFrameTransportHold();
     // P3 / §7.1 — freeze the OUTGOING chart frame into a still (only if its time
     // changed since the last grab, §12.8) so it stays visible after it loses the
     // live scene. activeChartFrameLayer() still reads the OLD active key here.
@@ -644,6 +682,10 @@ void CoverStudioPanel::setActiveLayerKey(const QString& key)
         }
     }
     activeLayerKey_ = key;
+    if (miacode::cover_export::CoverLayer* layer = activeLayer();
+        layer != nullptr && layer->kind() == QStringLiteral("chartFrame")) {
+        lastChartFrameTemplateKey_ = layer->key();
+    }
     if (composerView_ != nullptr) {
         const miacode::cover_export::CoverLayer* layer = activeChartFrameLayer();
         composerView_->setActiveChartFrameKey(layer != nullptr ? layer->key() : QString());
@@ -668,13 +710,36 @@ bool CoverStudioPanel::chartFrameStillDirty(const miacode::cover_export::CoverLa
     return qAbs(it.value() - layer->frameSeconds()) > 1e-4;
 }
 
+miacode::cover_export::CoverLayer* CoverStudioPanel::chartFrameTemplateLayer() const
+{
+    if (model_ == nullptr) {
+        return nullptr;
+    }
+    if (miacode::cover_export::CoverLayer* layer = model_->layer(lastChartFrameTemplateKey_);
+        layer != nullptr && layer->kind() == QStringLiteral("chartFrame")) {
+        return layer;
+    }
+
+    QList<miacode::cover_export::CoverLayer*> frames = model_->chartFrameLayers();
+    std::sort(frames.begin(), frames.end(), [](const auto* a, const auto* b) {
+        return a->z() > b->z();
+    });
+    return frames.isEmpty() ? nullptr : frames.constFirst();
+}
+
 void CoverStudioPanel::addChartFrameLayer()
 {
     if (model_ == nullptr || !chartFrameAvailable_) {
         return;
     }
+    miacode::cover_export::CoverLayer* templateLayer = chartFrameTemplateLayer();
     miacode::cover_export::CoverLayer* layer =
-        model_->addChartFrameLayer(sceneFrameRenderer_ != nullptr ? sceneFrameRenderer_->playheadSeconds() : 0.0);
+        model_->addChartFrameLayerFromTemplate(
+            templateLayer,
+            sceneFrameRenderer_ != nullptr ? sceneFrameRenderer_->playheadSeconds() : 0.0);
+    if (layer == nullptr) {
+        return;
+    }
     // Stagger the new frame so it doesn't perfectly cover the centred card / prior
     // frames — visibility no longer depends on z (§12.7); z stays user-adjustable.
     const int frameCount = model_->chartFrameLayers().size();
@@ -772,12 +837,18 @@ void CoverStudioPanel::moveActiveLayerToBottom()
     }
 }
 
-void CoverStudioPanel::setActiveLayerVisible(bool visible)
+void CoverStudioPanel::setLayerVisible(const QString& key, bool visible)
 {
-    if (miacode::cover_export::CoverLayer* layer = activeLayer()) {
+    if (miacode::cover_export::CoverLayer* layer = model_ != nullptr ? model_->layer(key) : nullptr) {
         layer->setVisible(visible);
         if (!visible && layer == activeChartFrameLayer()) {
             stopPlayback();
+            cancelFrameTransportHold();
+        }
+        if (visible && layer->kind() == QStringLiteral("chartFrame")
+            && layer != activeChartFrameLayer()
+            && chartFrameStillDirty(layer)) {
+            renderChartFrameLayerNow(layer);
         }
         syncActiveLayerControls();
         pushInputs();
@@ -785,13 +856,23 @@ void CoverStudioPanel::setActiveLayerVisible(bool visible)
     }
 }
 
-void CoverStudioPanel::setActiveLayerLocked(bool locked)
+void CoverStudioPanel::setLayerLocked(const QString& key, bool locked)
 {
-    if (miacode::cover_export::CoverLayer* layer = activeLayer()) {
+    if (miacode::cover_export::CoverLayer* layer = model_ != nullptr ? model_->layer(key) : nullptr) {
         layer->setLocked(locked);
         syncActiveLayerControls();
         emit compositionChanged();
     }
+}
+
+void CoverStudioPanel::setActiveLayerVisible(bool visible)
+{
+    setLayerVisible(activeLayerKey_, visible);
+}
+
+void CoverStudioPanel::setActiveLayerLocked(bool locked)
+{
+    setLayerLocked(activeLayerKey_, locked);
 }
 
 void CoverStudioPanel::setActiveLayerOpacity(qreal opacity)
@@ -860,6 +941,11 @@ void CoverStudioPanel::stepActiveFrameBySeconds(double deltaSeconds)
     emit compositionChanged();
 }
 
+void CoverStudioPanel::cancelFrameTransportHold()
+{
+    stopFrameHeldSeek();
+}
+
 QWidget* CoverStudioPanel::canvasOptionsGroup(QWidget* parent)
 {
     if (canvasGroup_ != nullptr) {
@@ -906,7 +992,9 @@ void CoverStudioPanel::onChartFrameToggled(bool on)
 {
     miacode::cover_export::CoverLayer* layer = activeChartFrameLayer();
     if (model_ != nullptr && layer == nullptr && on) {
-        layer = model_->addChartFrameLayer(sceneFrameRenderer_ != nullptr ? sceneFrameRenderer_->playheadSeconds() : 0.0);
+        layer = model_->addChartFrameLayerFromTemplate(
+            chartFrameTemplateLayer(),
+            sceneFrameRenderer_ != nullptr ? sceneFrameRenderer_->playheadSeconds() : 0.0);
         setActiveLayerKey(layer->key());
     }
     if (layer != nullptr) {
@@ -977,6 +1065,9 @@ void CoverStudioPanel::syncActiveLayerControls()
     }
     if (playButton_ != nullptr) {
         playButton_->setEnabled(hasFrame && layer->visible() && chartFrameAvailable_);
+    }
+    if (!hasFrame) {
+        stopPlayback();
     }
     if (chartFrameBgCheck_ != nullptr && hasFrame) {
         const QSignalBlocker block(chartFrameBgCheck_);
@@ -1171,11 +1262,16 @@ bool CoverStudioPanel::handleShortcutKey(QKeyEvent* event)
         return true;
     case Qt::Key_Plus:
     case Qt::Key_Equal:
+        if (ctrl) { zoomPreviewIn(); return true; }
         nudgeActiveLayerScale(0.02);
         return true;
     case Qt::Key_Minus:
+        if (ctrl) { zoomPreviewOut(); return true; }
         nudgeActiveLayerScale(-0.02);
         return true;
+    case Qt::Key_0:
+        if (ctrl) { resetPreviewZoom(); return true; }
+        break;
     case Qt::Key_Left:
     case Qt::Key_Right:
     case Qt::Key_Up:
@@ -1186,6 +1282,71 @@ bool CoverStudioPanel::handleShortcutKey(QKeyEvent* event)
         break;
     }
     return false;
+}
+
+bool CoverStudioPanel::handleFrameTransportShortcut(QKeyEvent* event)
+{
+    if (event == nullptr) {
+        return false;
+    }
+    if (event->type() == QEvent::KeyRelease) {
+        if ((event->key() == Qt::Key_Left || event->key() == Qt::Key_Right)
+            && frameSeekHoldKey_ == event->key()) {
+            if (event->isAutoRepeat()) {
+                return true;
+            }
+            stopFrameHeldSeek(event->key());
+            return true;
+        }
+        if (!chartFrameAvailable_ || activeChartFrameLayer() == nullptr) {
+            return false;
+        }
+        if (event->key() == Qt::Key_Space && event->modifiers() == Qt::NoModifier) {
+            return true;
+        }
+        return false;
+    }
+    if (!chartFrameAvailable_ || activeChartFrameLayer() == nullptr) {
+        return false;
+    }
+    if (event->type() != QEvent::KeyPress || event->modifiers() != Qt::NoModifier) {
+        return false;
+    }
+    switch (event->key()) {
+    case Qt::Key_Space:
+        if (!event->isAutoRepeat()) {
+            togglePlayback();
+        }
+        return true;
+    case Qt::Key_Left:
+    case Qt::Key_Right: {
+        if (event->isAutoRepeat()) {
+            return true;
+        }
+        if (playing_) {
+            stopPlayback();   // arrow scrub pauses, like any other scrub
+        }
+        const int direction = event->key() == Qt::Key_Left ? -1 : 1;
+        beginFrameHeldSeek(direction, event->key());
+        stepFrameBySeconds(
+            static_cast<double>(direction)
+            * miacode::preview_interaction::kSeekSingleStepSeconds);
+        emit compositionChanged();
+        return true;
+    }
+    case Qt::Key_Home:
+        if (!event->isAutoRepeat()) {
+            setActiveLayerFrameSeconds(0.0);
+        }
+        return true;
+    case Qt::Key_End:
+        if (!event->isAutoRepeat()) {
+            setActiveLayerFrameSeconds(contentDurationSeconds_);
+        }
+        return true;
+    default:
+        return false;
+    }
 }
 
 void CoverStudioPanel::nudgeActiveLayerPosition(int key, bool coarse)
@@ -1239,6 +1400,9 @@ bool CoverStudioPanel::eventFilter(QObject* watched, QEvent* event)
     if (watched == frameSlider_) {
         if (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease) {
             auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (handleFrameTransportShortcut(keyEvent)) {
+                return true;
+            }
             int direction = 0;
             if (keyEvent->key() == Qt::Key_Left) {
                 direction = -1;
@@ -1273,8 +1437,13 @@ bool CoverStudioPanel::eventFilter(QObject* watched, QEvent* event)
         } else if (event->type() == QEvent::FocusOut) {
             // Defensive: never leave the hold timer running once the slider
             // can no longer see the key release.
-            stopFrameHeldSeek();
+            cancelFrameTransportHold();
         }
+    }
+    if (previewScrollArea_ != nullptr
+        && watched == previewScrollArea_->viewport()
+        && event->type() == QEvent::Resize) {
+        schedulePreviewResize();
     }
     return QWidget::eventFilter(watched, event);
 }
@@ -1282,7 +1451,13 @@ bool CoverStudioPanel::eventFilter(QObject* watched, QEvent* event)
 void CoverStudioPanel::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
-    resizePreviewToAspect();
+    schedulePreviewResize();
+}
+
+void CoverStudioPanel::showEvent(QShowEvent* event)
+{
+    QWidget::showEvent(event);
+    schedulePreviewResize();
 }
 
 void CoverStudioPanel::beginFrameHeldSeek(int direction, int key)
@@ -1417,6 +1592,57 @@ void CoverStudioPanel::pushInputs()
     }
 }
 
+void CoverStudioPanel::zoomPreviewIn()
+{
+    setPreviewZoom(previewZoom_ + kPreviewZoomStep);
+}
+
+void CoverStudioPanel::zoomPreviewOut()
+{
+    setPreviewZoom(previewZoom_ - kPreviewZoomStep);
+}
+
+void CoverStudioPanel::resetPreviewZoom()
+{
+    setPreviewZoom(1.0);
+}
+
+void CoverStudioPanel::setPreviewZoom(qreal zoom)
+{
+    const qreal next = qBound(kPreviewZoomMin, zoom, kPreviewZoomMax);
+    if (qFuzzyCompare(previewZoom_, next)) {
+        return;
+    }
+    previewZoom_ = next;
+    resizePreviewToAspect();
+    emit previewZoomChanged(previewZoom_);
+}
+
+void CoverStudioPanel::centerPreviewScroll()
+{
+    if (previewScrollArea_ == nullptr) {
+        return;
+    }
+    if (QScrollBar* bar = previewScrollArea_->horizontalScrollBar()) {
+        bar->setValue((bar->minimum() + bar->maximum()) / 2);
+    }
+    if (QScrollBar* bar = previewScrollArea_->verticalScrollBar()) {
+        bar->setValue((bar->minimum() + bar->maximum()) / 2);
+    }
+}
+
+void CoverStudioPanel::schedulePreviewResize()
+{
+    if (previewResizeQueued_) {
+        return;
+    }
+    previewResizeQueued_ = true;
+    QTimer::singleShot(0, this, [this] {
+        previewResizeQueued_ = false;
+        resizePreviewToAspect();
+    });
+}
+
 void CoverStudioPanel::resizePreviewToAspect()
 {
     if (previewContainer_ == nullptr) {
@@ -1428,9 +1654,10 @@ void CoverStudioPanel::resizePreviewToAspect()
     // top+bottom margins), then let the WIDTH follow the chosen aspect ratio. Picking
     // a wider ratio (4:3 / 16:9) thus WIDENS the window rather than changing the
     // editing-area height. kPreviewBox is the fallback if the stack isn't measured.
-    QSize available = previewFrame_ != nullptr ? previewFrame_->contentsRect().size() : size();
+    QSize available = previewScrollArea_ != nullptr ? previewScrollArea_->viewport()->size()
+                                                    : (previewFrame_ != nullptr ? previewFrame_->contentsRect().size() : size());
     available -= QSize(2, 2);
-    if (available.width() <= 0 || available.height() <= 0) {
+    if (available.width() < 160 || available.height() < 160) {
         available = QSize(kPreviewBox, kPreviewBox);
     }
     const double aspect = sz.height() > 0 ? static_cast<double>(sz.width()) / sz.height() : 1.0;
@@ -1440,7 +1667,9 @@ void CoverStudioPanel::resizePreviewToAspect()
         ph = available.height();
         pw = qRound(ph * aspect);
     }
-    previewContainer_->setFixedSize(qMax(1, pw), qMax(1, ph));
+    previewContainer_->setFixedSize(qMax(1, qRound(pw * previewZoom_)),
+                                    qMax(1, qRound(ph * previewZoom_)));
+    centerPreviewScroll();
 
     // Once shown, a wider/narrower aspect ratio changes the dialog width; keep the
     // window on its previous CENTER so widening to 4:3 / 16:9 stays centered instead
@@ -1590,6 +1819,18 @@ QJsonObject CoverStudioPanel::exportCompositionJson() const
         state.layout = model_->toJson();
     }
     return state.toJson();
+}
+
+QJsonObject CoverStudioPanel::exportPresetCompositionJson() const
+{
+    QJsonObject root = exportCompositionJson();
+    root.remove(QStringLiteral("size"));
+    return root;
+}
+
+void CoverStudioPanel::applyPresetCompositionJson(const QJsonObject& root)
+{
+    applyCompositionJson(root, /*interactive=*/true);
 }
 
 void CoverStudioPanel::saveLayout()

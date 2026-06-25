@@ -267,6 +267,23 @@ CoverLayer* CoverLayoutModel::addChartFrameLayer(double frameSeconds)
     return chartFrame;
 }
 
+CoverLayer* CoverLayoutModel::addChartFrameLayerFromTemplate(const CoverLayer* source, double fallbackFrameSeconds)
+{
+    CoverLayer* chartFrame = addChartFrameLayer(source != nullptr ? source->frameSeconds() : fallbackFrameSeconds);
+    if (chartFrame == nullptr || source == nullptr || !isChartFrameKind(source->kind_)) {
+        return chartFrame;
+    }
+
+    chartFrame->setSizeFraction(source->sizeFraction());
+    chartFrame->setVisible(source->visible());
+    chartFrame->setLocked(source->locked());
+    chartFrame->setOpacity(source->opacity());
+    chartFrame->setFrameBgEnabled(source->frameBgEnabled());
+    chartFrame->setFrameBgBrightness(source->frameBgBrightness());
+    chartFrame->setFrameStyle(source->frameStyle());
+    return chartFrame;
+}
+
 CoverLayer* CoverLayoutModel::duplicateLayer(const QString& key)
 {
     CoverLayer* src = layer(key);
@@ -397,7 +414,10 @@ void CoverLayoutModel::moveByViewRows(int fromRow, int toRow)
         return;
     }
     int dest = toRow;
-    if (dest < 0 || dest > n) {
+    if (dest < 0) {
+        dest = 0;   // drop above the first row -> send to front
+    }
+    if (dest > n) {
         dest = n;   // drop past the end → send to back
     }
     CoverLayer* moving = view.takeAt(fromRow);

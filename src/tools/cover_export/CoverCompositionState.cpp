@@ -9,6 +9,11 @@ namespace {
 
 constexpr char kCompositionKind[] = "miacode-cover-composition";
 
+QString normalizedPresetName(QString name)
+{
+    return name.trimmed();
+}
+
 QJsonObject migrateLayoutV1ToV2(const QJsonObject& root)
 {
     QJsonObject layout = root.value(QStringLiteral("layout")).toObject();
@@ -177,6 +182,108 @@ void CoverCompositionState::clearRecentFiles()
     QJsonObject app = root.value(QStringLiteral("app")).toObject();
     QJsonObject cover = app.value(QStringLiteral("cover_export")).toObject();
     cover.insert(QStringLiteral("recentFiles"), QJsonArray());
+    app.insert(QStringLiteral("cover_export"), cover);
+    root.insert(QStringLiteral("app"), app);
+    UiText::savePreferencesObject(root);
+}
+
+QList<CoverUserPreset> CoverCompositionState::loadUserPresets()
+{
+    const QJsonObject cover = loadPreferences();
+    QList<CoverUserPreset> out;
+    const QJsonArray arr = cover.value(QStringLiteral("presets")).toArray();
+    for (const QJsonValue& value : arr) {
+        const QJsonObject obj = value.toObject();
+        const QString name = normalizedPresetName(obj.value(QStringLiteral("name")).toString());
+        const QJsonObject composition = obj.value(QStringLiteral("composition")).toObject();
+        if (!name.isEmpty() && !composition.isEmpty()) {
+            out.append(CoverUserPreset{name, composition});
+        }
+    }
+    return out;
+}
+
+void CoverCompositionState::saveUserPreset(const QString& name, const QJsonObject& composition)
+{
+    const QString trimmed = normalizedPresetName(name);
+    if (trimmed.isEmpty() || composition.isEmpty()) {
+        return;
+    }
+
+    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject app = root.value(QStringLiteral("app")).toObject();
+    QJsonObject cover = app.value(QStringLiteral("cover_export")).toObject();
+
+    QJsonArray arr;
+    QJsonObject saved;
+    saved.insert(QStringLiteral("name"), trimmed);
+    saved.insert(QStringLiteral("version"), 1);
+    saved.insert(QStringLiteral("composition"), composition);
+    arr.append(saved);
+
+    const QJsonArray prior = cover.value(QStringLiteral("presets")).toArray();
+    for (const QJsonValue& value : prior) {
+        const QJsonObject obj = value.toObject();
+        const QString existingName = normalizedPresetName(obj.value(QStringLiteral("name")).toString());
+        if (!existingName.isEmpty() && existingName != trimmed) {
+            arr.append(obj);
+        }
+    }
+
+    cover.insert(QStringLiteral("presets"), arr);
+    app.insert(QStringLiteral("cover_export"), cover);
+    root.insert(QStringLiteral("app"), app);
+    UiText::savePreferencesObject(root);
+}
+
+void CoverCompositionState::removeUserPreset(const QString& name)
+{
+    const QString trimmed = normalizedPresetName(name);
+    if (trimmed.isEmpty()) {
+        return;
+    }
+
+    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject app = root.value(QStringLiteral("app")).toObject();
+    QJsonObject cover = app.value(QStringLiteral("cover_export")).toObject();
+    QJsonArray arr;
+    const QJsonArray prior = cover.value(QStringLiteral("presets")).toArray();
+    for (const QJsonValue& value : prior) {
+        const QJsonObject obj = value.toObject();
+        if (normalizedPresetName(obj.value(QStringLiteral("name")).toString()) != trimmed) {
+            arr.append(obj);
+        }
+    }
+    cover.insert(QStringLiteral("presets"), arr);
+    app.insert(QStringLiteral("cover_export"), cover);
+    root.insert(QStringLiteral("app"), app);
+    UiText::savePreferencesObject(root);
+}
+
+void CoverCompositionState::renameUserPreset(const QString& oldName, const QString& newName)
+{
+    const QString oldTrimmed = normalizedPresetName(oldName);
+    const QString newTrimmed = normalizedPresetName(newName);
+    if (oldTrimmed.isEmpty() || newTrimmed.isEmpty()) {
+        return;
+    }
+
+    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject app = root.value(QStringLiteral("app")).toObject();
+    QJsonObject cover = app.value(QStringLiteral("cover_export")).toObject();
+    QJsonArray arr;
+    const QJsonArray prior = cover.value(QStringLiteral("presets")).toArray();
+    for (const QJsonValue& value : prior) {
+        QJsonObject obj = value.toObject();
+        const QString existingName = normalizedPresetName(obj.value(QStringLiteral("name")).toString());
+        if (existingName == oldTrimmed) {
+            obj.insert(QStringLiteral("name"), newTrimmed);
+            arr.append(obj);
+        } else if (existingName != newTrimmed) {
+            arr.append(obj);
+        }
+    }
+    cover.insert(QStringLiteral("presets"), arr);
     app.insert(QStringLiteral("cover_export"), cover);
     root.insert(QStringLiteral("app"), app);
     UiText::savePreferencesObject(root);

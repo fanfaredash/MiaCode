@@ -4,8 +4,10 @@
 #include <QWidget>
 
 class QCheckBox;
+class QEvent;
 class QGroupBox;
 class QLabel;
+class QPushButton;
 class QSlider;
 
 namespace miacode::ui {
@@ -29,6 +31,9 @@ class CoverInspectorPanel : public QWidget
 
 public:
     explicit CoverInspectorPanel(CoverStudioPanel* studio, QWidget* parent = nullptr);
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     void refresh();
@@ -57,6 +62,8 @@ private:
     QCheckBox* frameBgCheck_ = nullptr;
     QSlider* frameBgBrightnessSlider_ = nullptr;
     miacode::ui::EditableValueLabel* frameBgBrightnessValue_ = nullptr;
+    QPushButton* framePlayButton_ = nullptr;
+    QSlider* frameTimeSlider_ = nullptr;
     QLabel* frameTimeReadout_ = nullptr;
 };
 

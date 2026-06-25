@@ -143,6 +143,10 @@ public:
     Q_INVOKABLE bool chartFrameEnabled() const;
     Q_INVOKABLE void setChartFrameEnabled(bool enabled);
     CoverLayer* addChartFrameLayer(double frameSeconds = 0.0);
+    // Add a chart-frame layer whose non-position properties are copied from
+    // `source`, while geometry keeps the normal new-frame placement. Used by
+    // the studio's "add frame" command to inherit the user's last frame setup.
+    CoverLayer* addChartFrameLayerFromTemplate(const CoverLayer* source, double fallbackFrameSeconds = 0.0);
     CoverLayer* duplicateLayer(const QString& key);
     bool removeLayer(const QString& key);
     // Key to select after removing `key`, in the layer LIST's visible order

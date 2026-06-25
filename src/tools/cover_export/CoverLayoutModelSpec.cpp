@@ -66,6 +66,42 @@ bool testRoundTrip(QTextStream& err)
     return true;
 }
 
+bool testTemplatedChartFrameKeepsSettingsExceptPosition(QTextStream& err)
+{
+    CoverLayoutModel model;
+    CoverLayer* source = model.addChartFrameLayer(12.5);
+    if (!require(source != nullptr, QStringLiteral("template setup creates frame"), err)) return false;
+    source->setNx(0.25);
+    source->setNy(0.75);
+    source->setSizeFraction(0.61);
+    source->setVisible(false);
+    source->setLocked(true);
+    source->setOpacity(0.44);
+    source->setFrameBgEnabled(false);
+    source->setFrameBgBrightness(0.37);
+    source->setFrameStyle(QStringLiteral("round"));
+
+    CoverLayer* added = model.addChartFrameLayerFromTemplate(source, 99.0);
+    if (!require(added != nullptr, QStringLiteral("template add creates frame"), err)) return false;
+    if (!require(qAbs(added->frameSeconds() - 12.5) < 0.001,
+                 QStringLiteral("template add keeps frame time"), err)) return false;
+    if (!require(qAbs(added->sizeFraction() - 0.61) < 0.001,
+                 QStringLiteral("template add keeps size"), err)) return false;
+    if (!require(!added->visible(), QStringLiteral("template add keeps visibility"), err)) return false;
+    if (!require(added->locked(), QStringLiteral("template add keeps lock"), err)) return false;
+    if (!require(qAbs(added->opacity() - 0.44) < 0.001,
+                 QStringLiteral("template add keeps opacity"), err)) return false;
+    if (!require(!added->frameBgEnabled(),
+                 QStringLiteral("template add keeps frame bg toggle"), err)) return false;
+    if (!require(qAbs(added->frameBgBrightness() - 0.37) < 0.001,
+                 QStringLiteral("template add keeps frame bg brightness"), err)) return false;
+    if (!require(added->frameStyle() == QStringLiteral("round"),
+                 QStringLiteral("template add keeps frame style"), err)) return false;
+    if (!require(qAbs(added->nx() - 0.5) < 0.001 && qAbs(added->ny() - 0.5) < 0.001,
+                 QStringLiteral("template add does not copy position"), err)) return false;
+    return true;
+}
+
 bool testZOrder(QTextStream& err)
 {
     CoverLayoutModel model;
@@ -214,6 +250,54 @@ bool testBackgroundBrightnessRoundTrip(QTextStream& err)
     return true;
 }
 
+bool testCoverPresetPersistence(QTextStream& err)
+{
+    QJsonObject composition;
+    composition.insert(QStringLiteral("kind"), QStringLiteral("miacode-cover-composition"));
+    composition.insert(QStringLiteral("version"), CoverCompositionState::kCurrentVersion);
+    QJsonObject layout;
+    layout.insert(QStringLiteral("layers"), QJsonArray());
+    composition.insert(QStringLiteral("layout"), layout);
+
+    CoverCompositionState::saveUserPreset(QStringLiteral("Spec preset A"), composition);
+    QList<miacode::cover_export::CoverUserPreset> presets = CoverCompositionState::loadUserPresets();
+    bool found = false;
+    for (const miacode::cover_export::CoverUserPreset& preset : presets) {
+        if (preset.name == QStringLiteral("Spec preset A")
+            && preset.composition.value(QStringLiteral("kind")).toString() == QStringLiteral("miacode-cover-composition")) {
+            found = true;
+            break;
+        }
+    }
+    bool ok = require(found, QStringLiteral("user preset saves and loads"), err);
+
+    CoverCompositionState::renameUserPreset(QStringLiteral("Spec preset A"), QStringLiteral("Spec preset B"));
+    presets = CoverCompositionState::loadUserPresets();
+    bool renamed = false;
+    for (const miacode::cover_export::CoverUserPreset& preset : presets) {
+        if (preset.name == QStringLiteral("Spec preset B")) {
+            renamed = true;
+            break;
+        }
+    }
+    ok = require(renamed, QStringLiteral("user preset renames"), err) && ok;
+
+    CoverCompositionState::removeUserPreset(QStringLiteral("Spec preset B"));
+    presets = CoverCompositionState::loadUserPresets();
+    bool removed = true;
+    for (const miacode::cover_export::CoverUserPreset& preset : presets) {
+        if (preset.name == QStringLiteral("Spec preset B")) {
+            removed = false;
+            break;
+        }
+    }
+    ok = require(removed, QStringLiteral("user preset removes"), err) && ok;
+
+    CoverCompositionState::removeUserPreset(QStringLiteral("Spec preset A"));
+    CoverCompositionState::removeUserPreset(QStringLiteral("Spec preset B"));
+    return ok;
+}
+
 bool testMoveByViewRows(QTextStream& err)
 {
     CoverLayoutModel model;
@@ -234,6 +318,9 @@ bool testMoveByViewRows(QTextStream& err)
     model.moveByViewRows(0, 99);
     if (!require(card->z() > f1->z(),
                  QStringLiteral("moveByViewRows can send a layer to the back"), err)) return false;
+    model.moveByViewRows(1, -1);
+    if (!require(f2->z() > f3->z() && f3->z() > card->z() && card->z() > f1->z(),
+                 QStringLiteral("moveByViewRows can send a layer to the front"), err)) return false;
     return true;
 }
 
@@ -245,11 +332,13 @@ int main(int argc, char** argv)
     QTextStream err(stderr);
     if (!testMultiFrameModel(err)) return 1;
     if (!testRoundTrip(err)) return 1;
+    if (!testTemplatedChartFrameKeepsSettingsExceptPosition(err)) return 1;
     if (!testZOrder(err)) return 1;
     if (!testV1Migration(err)) return 1;
     if (!testSparseV1Migration(err)) return 1;
     if (!testDeleteSelectsNeighbour(err)) return 1;
     if (!testBackgroundBrightnessRoundTrip(err)) return 1;
     if (!testMoveByViewRows(err)) return 1;
+    if (!testCoverPresetPersistence(err)) return 1;
     return 0;
 }

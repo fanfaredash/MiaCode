@@ -20,6 +20,8 @@ public:
         LockedRole,
         FrameSecondsRole,
         OpacityRole,
+        SubtitleRole,
+        ThumbnailRole,
     };
 
     explicit CoverLayerListModel(QObject* parent = nullptr);
@@ -28,6 +30,7 @@ public:
     CoverLayoutModel* layoutModel() const { return model_; }
     CoverLayer* layerAt(int row) const;
     int rowForKey(const QString& key) const;
+    void setNextDropRowOverride(int row);
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
@@ -53,6 +56,7 @@ private:
     void connectLayerSignals(CoverLayer* layer);
 
     CoverLayoutModel* model_ = nullptr;
+    int nextDropRowOverride_ = -1;
 };
 
 }  // namespace miacode::cover_export

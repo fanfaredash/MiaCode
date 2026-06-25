@@ -151,6 +151,35 @@ Item {
     function layerContentW(l) {
         return layerContentH(l) * ((l && l.kind === "card") ? cardAspect : 1.0)
     }
+    function pointInLayer(l, px, py) {
+        if (!l || !l.visible)
+            return false
+        var w = layerContentW(l)
+        var h = layerContentH(l)
+        var left = l.nx * canvas.width - w / 2
+        var top = l.ny * canvas.height - h / 2
+        return px >= left && px <= left + w && py >= top && py <= top + h
+    }
+    function topHitLayerAt(px, py) {
+        if (!coverLayout)
+            return null
+        if (selectedLayer && pointInLayer(selectedLayer, px, py))
+            return selectedLayer
+        var layers = coverLayout.layers
+        var best = null
+        for (var i = 0; i < layers.length; ++i) {
+            var l = layers[i]
+            if (!pointInLayer(l, px, py))
+                continue
+            if (best === null || l.z > best.z)
+                best = l
+        }
+        return best
+    }
+    function hitKeyAt(px, py) {
+        var l = topHitLayerAt(px, py)
+        return l ? l.key : ""
+    }
     readonly property var selectedLayer:
         (coverLayout && selectedIndex >= 0 && selectedIndex < coverLayout.layers.length)
             ? coverLayout.layers[selectedIndex] : null
@@ -185,6 +214,15 @@ Item {
     // Initial selection is owned by C++: the panel sets its active layer (the card)
     // and pushes selectedKey on load, so no QML-side auto-select is needed. The
     // export path (editable=false) never receives a selectedKey → no chrome baked in.
+
+    TapHandler {
+        enabled: canvas.editable
+        gesturePolicy: TapHandler.WithinBounds
+        onTapped: {
+            if (canvas.chartSceneBinder)
+                canvas.chartSceneBinder.selectLayerKey(canvas.hitKeyAt(point.position.x, point.position.y))
+        }
+    }
 
     // ===================== Background fill layer =====================
     Rectangle {
@@ -404,8 +442,10 @@ Item {
             TapHandler {
                 enabled: canvas.editable
                 onTapped: {
-                    if (canvas.chartSceneBinder)
-                        canvas.chartSceneBinder.selectLayerKey(layerItem.ld.key)
+                    if (canvas.chartSceneBinder) {
+                        var p = layerItem.mapToItem(canvas, point.position.x, point.position.y)
+                        canvas.chartSceneBinder.selectLayerKey(canvas.hitKeyAt(p.x, p.y))
+                    }
                 }
             }
 
@@ -421,10 +461,15 @@ Item {
                 // Cursor position (scene px) AT ACTIVATION — the drag reference.
                 property real grabSceneX: 0
                 property real grabSceneY: 0
+                property bool ownsGesture: false
                 onActiveChanged: {
                     if (active) {
+                        var hitKey = canvas.hitKeyAt(centroid.scenePosition.x, centroid.scenePosition.y)
+                        ownsGesture = hitKey === layerItem.ld.key
                         if (canvas.chartSceneBinder)
-                            canvas.chartSceneBinder.selectLayerKey(layerItem.ld.key)
+                            canvas.chartSceneBinder.selectLayerKey(hitKey)
+                        if (!ownsGesture)
+                            return
                         startNx = layerItem.ld.nx
                         startNy = layerItem.ld.ny
                         // Reference the delta from the centroid AT ACTIVATION, not the
@@ -435,11 +480,12 @@ Item {
                         grabSceneX = centroid.scenePosition.x
                         grabSceneY = centroid.scenePosition.y
                     } else {
+                        ownsGesture = false
                         canvas.clearGuides()
                     }
                 }
                 onCentroidChanged: {
-                    if (!active || !layerItem.ld) return
+                    if (!active || !ownsGesture || !layerItem.ld) return
                     var dx = centroid.scenePosition.x - grabSceneX
                     var dy = centroid.scenePosition.y - grabSceneY
                     var cx = startNx * canvas.width + dx

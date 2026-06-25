@@ -5,7 +5,10 @@
 
 #include <QDataStream>
 #include <QIODevice>
+#include <QImage>
 #include <QMimeData>
+#include <QPainter>
+#include <QPen>
 #include <QStringList>
 
 #include <algorithm>
@@ -32,6 +35,69 @@ QString displayLabel(const CoverLayer* layer)
         return l10n(QStringLiteral("Chart frame"), QStringLiteral("谱面帧"));
     }
     return layer->label();
+}
+
+QString formatFrameTime(double seconds)
+{
+    const int totalCs = qMax(0, qRound(seconds * 100.0));
+    const int minutes = totalCs / 6000;
+    const int secs = (totalCs / 100) % 60;
+    const int cs = totalCs % 100;
+    return QStringLiteral("%1:%2.%3")
+        .arg(minutes, 2, 10, QChar('0'))
+        .arg(secs, 2, 10, QChar('0'))
+        .arg(cs, 2, 10, QChar('0'));
+}
+
+QImage cardThumbnail(const CoverLayer* layer)
+{
+    QImage image(48, 48, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const QColor border(92, 114, 146, 180);
+    const QColor cardFill(248, 250, 252, layer != nullptr && layer->visible() ? 245 : 95);
+    const QColor tabFill(59, 130, 246, layer != nullptr && layer->visible() ? 220 : 95);
+
+    QRectF card(13.0, 7.0, 22.0, 34.0);
+    painter.setPen(QPen(border, 1.2));
+    painter.setBrush(cardFill);
+    painter.drawRoundedRect(card, 4.0, 4.0);
+
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(tabFill);
+    painter.drawRoundedRect(QRectF(16.0, 11.0, 16.0, 7.0), 3.0, 3.0);
+
+    painter.setPen(QPen(QColor(100, 116, 139, layer != nullptr && layer->visible() ? 180 : 80), 1.0));
+    painter.drawLine(QPointF(17.0, 24.0), QPointF(31.0, 24.0));
+    painter.drawLine(QPointF(17.0, 29.0), QPointF(31.0, 29.0));
+    return image;
+}
+
+QImage chartFrameThumbnail(const CoverLayer* layer)
+{
+    if (layer == nullptr) {
+        return QImage();
+    }
+    QImage source = layer->frameImage();
+    if (!source.isNull()) {
+        return source.scaled(48, 48, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+    }
+
+    QImage image(48, 48, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const int alpha = layer->visible() ? 220 : 85;
+    painter.setPen(QPen(QColor(76, 96, 124, alpha), 1.2));
+    painter.setBrush(QColor(30, 41, 59, layer->visible() ? 185 : 75));
+    painter.drawRoundedRect(QRectF(7.5, 7.5, 33.0, 33.0), 5.0, 5.0);
+    painter.setPen(QPen(QColor(148, 163, 184, alpha), 1.0));
+    painter.drawEllipse(QPointF(24.0, 24.0), 10.0, 10.0);
+    painter.drawLine(QPointF(24.0, 9.0), QPointF(24.0, 39.0));
+    painter.drawLine(QPointF(9.0, 24.0), QPointF(39.0, 24.0));
+    return image;
 }
 
 }  // namespace
@@ -82,6 +148,11 @@ int CoverLayerListModel::rowForKey(const QString& key) const
     return -1;
 }
 
+void CoverLayerListModel::setNextDropRowOverride(int row)
+{
+    nextDropRowOverride_ = row;
+}
+
 int CoverLayerListModel::rowCount(const QModelIndex& parent) const
 {
     if (parent.isValid() || model_ == nullptr) {
@@ -102,9 +173,6 @@ QVariant CoverLayerListModel::data(const QModelIndex& index, int role) const
     switch (role) {
     case Qt::DisplayRole:
     case LabelRole:
-        if (layer->kind() == QStringLiteral("chartFrame")) {
-            return QStringLiteral("%1 %2").arg(displayLabel(layer), QString::number(layer->frameSeconds(), 'f', 2));
-        }
         return displayLabel(layer);
     case Qt::CheckStateRole:
         return layer->visible() ? Qt::Checked : Qt::Unchecked;
@@ -120,6 +188,15 @@ QVariant CoverLayerListModel::data(const QModelIndex& index, int role) const
         return layer->frameSeconds();
     case OpacityRole:
         return layer->opacity();
+    case SubtitleRole:
+        if (layer->kind() == QStringLiteral("chartFrame")) {
+            return l10n(QStringLiteral("Frame "), QStringLiteral("帧时间 ")) + formatFrameTime(layer->frameSeconds());
+        }
+        return l10n(QStringLiteral("Difficulty card"), QStringLiteral("难度卡"));
+    case ThumbnailRole:
+        return layer->kind() == QStringLiteral("chartFrame")
+            ? chartFrameThumbnail(layer)
+            : cardThumbnail(layer);
     default:
         return QVariant();
     }
@@ -131,7 +208,7 @@ Qt::ItemFlags CoverLayerListModel::flags(const QModelIndex& index) const
     if (!index.isValid()) {
         return Qt::ItemIsDropEnabled;
     }
-    return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable
+    return Qt::ItemIsEnabled | Qt::ItemIsSelectable
          | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled;
 }
 
@@ -180,6 +257,10 @@ bool CoverLayerListModel::dropMimeData(const QMimeData* data, Qt::DropAction,
         return false;
     }
     int targetRow = row;
+    if (nextDropRowOverride_ >= 0) {
+        targetRow = nextDropRowOverride_;
+        nextDropRowOverride_ = -1;
+    }
     if (targetRow < 0) {
         targetRow = parent.isValid() ? parent.row() : rowCount();
     }
@@ -213,6 +294,8 @@ QHash<int, QByteArray> CoverLayerListModel::roleNames() const
     roles.insert(LockedRole, "locked");
     roles.insert(FrameSecondsRole, "frameSeconds");
     roles.insert(OpacityRole, "opacity");
+    roles.insert(SubtitleRole, "subtitle");
+    roles.insert(ThumbnailRole, "thumbnail");
     return roles;
 }
 
@@ -245,6 +328,7 @@ void CoverLayerListModel::connectLayerSignals(CoverLayer* layer)
     connect(layer, &CoverLayer::lockedChanged, this, updateLayerRow);
     connect(layer, &CoverLayer::opacityChanged, this, updateLayerRow);
     connect(layer, &CoverLayer::frameSecondsChanged, this, updateLayerRow);
+    connect(layer, &CoverLayer::imageRevisionChanged, this, updateLayerRow);
     connect(layer, &CoverLayer::zChanged, this, &CoverLayerListModel::refresh);
 }
 

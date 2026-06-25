@@ -32,6 +32,7 @@ private:
     CoverStudioPanel* studio_ = nullptr;
     CoverLayerListModel* model_ = nullptr;
     QListView* view_ = nullptr;
+    int pressedInlineControl_ = 0;
 };
 
 }  // namespace miacode::cover_export
