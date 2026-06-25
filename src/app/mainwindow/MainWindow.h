@@ -213,6 +213,7 @@ public:
     void beginShellPreviewHeldSeek(int direction, int key) override;
     void stopShellPreviewHeldSeek(int key = 0) override;
     void setShellPreviewFullscreen(bool fullscreen) override;
+    void setShellPreviewPaneWidthRatio(double ratio) override;
     void setShellBottomTabsHeight(int height) override;
     void setShellBottomTabsCurrentTab(const QString& tabId) override;
     void navigateShellTimelineToSecond(double second) override;
@@ -238,6 +239,7 @@ public:
     QStringList shellPreviewStatsTexts() const override;
     double shellPreviewCanvasAspectRatio() const override;
     quint64 shellPreviewPaneRestoreGeneration() const override;
+    double shellPreviewPaneWidthRatio() const override;
     bool shellPreviewFullscreen() const override;
     double shellVideoExportProgressSeconds() const override;
     QObject* shellPreviewRuntimeObject() const override;

@@ -68,6 +68,7 @@
         QTimer* previewSeekDebounceTimer_ = nullptr;
         QTimer* timelineAnalysisIdleTimer_ = nullptr;
         QTimer* bottomTabsContentScalePersistTimer_ = nullptr;
+        QTimer* visualLayoutPersistTimer_ = nullptr;
         QObject* editorViewport_ = nullptr;
         QProgressDialog* videoExportProgressDialog_ = nullptr;
         QPointer<QDialog> netBatchDownloadDialog_;
@@ -215,6 +216,7 @@
         bool pendingQuickTimelineCursorCenterView_ = false;
         BottomTabsTabId currentBottomTabsTabId_ = BottomTabsTabId::Timeline;
         double bottomTabsContentScale_ = 1.0;
+        double previewPaneWidthRatio_ = 0.0;
         bool bottomTabsResizeDragActive_ = false;
         int bottomTabsResizeStartGlobalY_ = 0;
         int bottomTabsResizeStartHeight_ = 0;
@@ -696,6 +698,7 @@
     QTimer*& previewSeekDebounceTimer_ = ui_.previewSeekDebounceTimer_;
     QTimer*& timelineAnalysisIdleTimer_ = ui_.timelineAnalysisIdleTimer_;
     QTimer*& bottomTabsContentScalePersistTimer_ = ui_.bottomTabsContentScalePersistTimer_;
+    QTimer*& visualLayoutPersistTimer_ = ui_.visualLayoutPersistTimer_;
     QObject*& editorViewport_ = ui_.editorViewport_;
     QProcess*& videoExportWorkerProcess_ = state_.videoExportWorkerProcess_;
     QProgressDialog*& videoExportProgressDialog_ = ui_.videoExportProgressDialog_;
@@ -795,6 +798,7 @@
     double& exportIntroPlayheadSeconds_ = state_.exportIntroPlayheadSeconds_;
     bool& restoreSquareAfterVideoExport_ = state_.restoreSquareAfterVideoExport_;
     quint64& previewPaneRestoreGeneration_ = state_.previewPaneRestoreGeneration_;
+    double& previewPaneWidthRatio_ = state_.previewPaneWidthRatio_;
     bool& workspaceSurfaceSettleRelayoutArmed_ = state_.workspaceSurfaceSettleRelayoutArmed_;
     int& videoExportWorkerLastProgressPercent_ = state_.videoExportWorkerLastProgressPercent_;
     qint64& videoExportWorkerLastEtaSeconds_ = state_.videoExportWorkerLastEtaSeconds_;

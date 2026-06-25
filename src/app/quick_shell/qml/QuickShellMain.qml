@@ -404,6 +404,22 @@ ApplicationWindow {
         return Math.max(0, availableWidth - initialWorkspaceWidth)
     }
 
+    function previewPaneSavedWidth(totalWidth, totalHeight) {
+        const ratio = controller ? controller.previewPaneWidthRatio : 0
+        if (ratio <= 0 || ratio >= 1)
+            return 0
+        return clampPreviewPaneWidth(totalWidth * ratio, totalWidth, totalHeight)
+    }
+
+    function persistPreviewPaneWidthRatio() {
+        if (!controller || workspaceRow.width <= 0)
+            return
+        const boundedWidth = boundedWorkspaceWidth(workspaceRow.width)
+        if (boundedWidth <= 0)
+            return
+        controller.setPreviewPaneWidthRatio(previewPaneWidth / boundedWidth)
+    }
+
     function fittedPreviewFrameWidth(hostWidth, hostHeight) {
         const safeWidth = Math.max(1, hostWidth)
         const safeHeight = Math.max(1, hostHeight)
@@ -456,16 +472,19 @@ ApplicationWindow {
             startupLayoutSettleTimer.restart()
             return
         }
-        previewPaneUserResized = false
+        const savedWidth = previewPaneSavedWidth(resolvedWidth, resolvedHeight)
+        previewPaneUserResized = savedWidth > 0
         previewPaneStartupBalancePending = true
         startupMinimumWindowWidth = metric("minimumWindowWidth", 960)
         startupMinimumWindowHeight = metric("minimumWindowHeight", 640)
         applyWindowMinimumSize()
-        previewPaneWidth = clampPreviewPaneWidth(
-            previewPaneInitialWidth(resolvedWidth, resolvedHeight),
-            resolvedWidth,
-            resolvedHeight
-        )
+        previewPaneWidth = savedWidth > 0
+            ? savedWidth
+            : clampPreviewPaneWidth(
+                previewPaneInitialWidth(resolvedWidth, resolvedHeight),
+                resolvedWidth,
+                resolvedHeight
+            )
         previewPaneStartupBalancePending = false
         startupLayoutLocked = false
         startupContentReady = true
@@ -500,11 +519,16 @@ ApplicationWindow {
         }
         noteStartupLayoutActivity(boundedTotalWidth, totalHeight)
         if (startupLayoutLocked) {
-            previewPaneWidth = clampPreviewPaneWidth(
-                previewPaneInitialWidth(boundedTotalWidth, totalHeight),
-                boundedTotalWidth,
-                totalHeight
-            )
+            const savedWidth = previewPaneSavedWidth(boundedTotalWidth, totalHeight)
+            previewPaneWidth = savedWidth > 0
+                ? savedWidth
+                : clampPreviewPaneWidth(
+                    previewPaneInitialWidth(boundedTotalWidth, totalHeight),
+                    boundedTotalWidth,
+                    totalHeight
+                )
+            if (savedWidth > 0)
+                previewPaneUserResized = true
             return
         }
         const defaultWidth = previewPaneStartupBalancePending
@@ -1242,6 +1266,9 @@ ApplicationWindow {
                             )
                             previewPaneUserResized = true
                         }
+
+                        onReleased: persistPreviewPaneWidthRatio()
+                        onCanceled: persistPreviewPaneWidthRatio()
                     }
                 }
 

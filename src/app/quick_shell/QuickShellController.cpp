@@ -274,6 +274,11 @@ qulonglong QuickShellController::previewPaneRestoreGeneration() const
     return previewPaneRestoreGeneration_;
 }
 
+double QuickShellController::previewPaneWidthRatio() const
+{
+    return previewPaneWidthRatio_;
+}
+
 double QuickShellController::previewSeekSingleStepSeconds() const
 {
     return miacode::preview_interaction::kSeekSingleStepSeconds;
@@ -568,6 +573,15 @@ void QuickShellController::setPreviewRate(double rate)
         return;
     }
     commandSink_->setShellPreviewRate(rate);
+    refreshFromStateSource();
+}
+
+void QuickShellController::setPreviewPaneWidthRatio(double ratio)
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    commandSink_->setShellPreviewPaneWidthRatio(ratio);
     refreshFromStateSource();
 }
 
@@ -975,6 +989,7 @@ void QuickShellController::refreshFromStateSource()
     stateChanged |= assignIfChanged(previewStatsTexts_, stateSource_->shellPreviewStatsTexts());
     stateChanged |= assignIfChanged(previewCanvasAspectRatio_, stateSource_->shellPreviewCanvasAspectRatio());
     stateChanged |= assignIfChanged(previewPaneRestoreGeneration_, stateSource_->shellPreviewPaneRestoreGeneration());
+    stateChanged |= assignIfChanged(previewPaneWidthRatio_, stateSource_->shellPreviewPaneWidthRatio());
     stateChanged |= assignIfChanged(previewUsesSeparateSurface_, stateSource_->shellPreviewUsesSeparateSurface());
     stateChanged |= assignIfChanged(timelineSurfaceReady_, stateSource_->shellTimelineSurfaceReady());
     stateChanged |= assignIfChanged(bottomTabsCurrentTabId_, stateSource_->shellBottomTabsCurrentTabId());

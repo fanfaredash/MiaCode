@@ -554,6 +554,21 @@ void MainWindow::WindowSection::setShellPreviewFullscreen(bool fullscreen)
     }
 }
 
+void MainWindow::WindowSection::setShellPreviewPaneWidthRatio(double ratio)
+{
+    const double normalized = qBound(0.0, ratio, 1.0);
+    if (normalized <= 0.0) {
+        return;
+    }
+    if (qFuzzyCompare(owner_.previewPaneWidthRatio_ + 1.0, normalized + 1.0)) {
+        return;
+    }
+    owner_.previewPaneWidthRatio_ = normalized;
+    if (owner_.visualLayoutPersistTimer_ != nullptr) {
+        owner_.visualLayoutPersistTimer_->start();
+    }
+}
+
 void MainWindow::WindowSection::setShellBottomTabsHeight(int height)
 {
     if (owner_.bottomTabs_ == nullptr) {
@@ -759,6 +774,11 @@ double MainWindow::WindowSection::shellPreviewCanvasAspectRatio() const
 quint64 MainWindow::WindowSection::shellPreviewPaneRestoreGeneration() const
 {
     return owner_.previewPaneRestoreGeneration_;
+}
+
+double MainWindow::WindowSection::shellPreviewPaneWidthRatio() const
+{
+    return owner_.previewPaneWidthRatio_;
 }
 
 bool MainWindow::WindowSection::shellPreviewFullscreen() const
@@ -1133,6 +1153,9 @@ void MainWindow::WindowSection::setOutlineDockCollapsed(bool collapsed)
     }
     owner_.outlineDock_->updateGeometry();
     this->updateOutlineDockCollapseButton();
+    if (owner_.visualLayoutPersistTimer_ != nullptr) {
+        owner_.visualLayoutPersistTimer_->start();
+    }
 }
 
 void MainWindow::WindowSection::applySystemWindowBackdrop(QWidget* target) const

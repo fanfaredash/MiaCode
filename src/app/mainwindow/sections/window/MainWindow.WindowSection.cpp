@@ -94,6 +94,11 @@ void MainWindow::setShellPreviewFullscreen(bool fullscreen)
     windowSection_->setShellPreviewFullscreen(fullscreen);
 }
 
+void MainWindow::setShellPreviewPaneWidthRatio(double ratio)
+{
+    windowSection_->setShellPreviewPaneWidthRatio(ratio);
+}
+
 void MainWindow::setShellBottomTabsCurrentTab(const QString& tabId)
 {
     windowSection_->setShellBottomTabsCurrentTab(tabId);
@@ -221,6 +226,11 @@ double MainWindow::shellPreviewCanvasAspectRatio() const
 quint64 MainWindow::shellPreviewPaneRestoreGeneration() const
 {
     return windowSection_->shellPreviewPaneRestoreGeneration();
+}
+
+double MainWindow::shellPreviewPaneWidthRatio() const
+{
+    return windowSection_->shellPreviewPaneWidthRatio();
 }
 
 bool MainWindow::shellPreviewFullscreen() const
