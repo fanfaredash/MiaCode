@@ -228,7 +228,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Net batch download:
   - Files: `src/tools/net/NetClient.*`, `src/tools/net/NetBatchDownloadWorker.*`, `src/tools/net/NetBatchDownloadDialog.*`, `src/app/mainwindow/sections/export/MainWindow.ExportSection.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp`
   - Classes: `NetClient`, `NetBatchDownloadWorker`, `NetBatchDownloadDialog`
-  - Owns: toolbox entry for querying Net public charts by uploader ID or tag, filtering by local date range against the API `timestamp`, selecting rows, streaming `track.mp3` / `bg.jpg` / `maidata.txt` into one folder per chart on a background download thread, optionally writing an extra zip after successful folder download, and showing query/download diagnostic logs with per-resource speed and slowest-resource summaries. When a user ID is provided, the query prefers the uploader list and applies local ID/tag filtering, with an optional fuzzy case-insensitive mode exposed in the dialog.
+  - Owns: toolbox entry for querying Net public charts by uploader ID, tag, or song title, filtering by local date range against the API `timestamp`, selecting rows, streaming `track.mp3` / `bg.jpg` / `maidata.txt` into one folder per chart on a background download thread, optionally writing an extra zip after successful folder download, remembering the last valid output directory in app preferences, and showing query/download diagnostic logs with per-resource speed and slowest-resource summaries. When a user ID is provided, the query prefers the uploader list and applies local ID/tag/title filtering, with an optional fuzzy case-insensitive mode exposed in the dialog.
 
 ## 13. Build, Packaging, And Dev-Only Helper Binaries
 

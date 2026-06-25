@@ -41,6 +41,9 @@
 namespace miacode::net {
 namespace {
 
+constexpr char kPreferencesAppSection[] = "app";
+constexpr char kLastNetBatchOutputDirKey[] = "last_net_batch_output_dir";
+
 class NetCalendarBorderOverlay : public QWidget {
 public:
     explicit NetCalendarBorderOverlay(QWidget* parent = nullptr)
@@ -142,6 +145,45 @@ QString logTimestamp()
 QString displayTimestamp(const QDateTime& utc)
 {
     return utc.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+}
+
+QString defaultOutputDirectory()
+{
+    const QString desktop = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+    if (!desktop.trimmed().isEmpty()) {
+        return desktop;
+    }
+    return QDir::homePath();
+}
+
+QString storedOutputDirectory()
+{
+    const QJsonObject root = UiText::loadPreferencesObject();
+    const QString stored = root.value(QLatin1String(kPreferencesAppSection))
+        .toObject()
+        .value(QLatin1String(kLastNetBatchOutputDirKey))
+        .toString()
+        .trimmed();
+    if (!stored.isEmpty()) {
+        return stored;
+    }
+    return defaultOutputDirectory();
+}
+
+void saveStoredOutputDirectory(const QString& directoryPath)
+{
+    const QString normalized = QDir::cleanPath(QDir::fromNativeSeparators(directoryPath.trimmed()));
+    if (normalized.isEmpty()) {
+        return;
+    }
+    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject app = root.value(QLatin1String(kPreferencesAppSection)).toObject();
+    if (app.value(QLatin1String(kLastNetBatchOutputDirKey)).toString() == normalized) {
+        return;
+    }
+    app.insert(QLatin1String(kLastNetBatchOutputDirKey), normalized);
+    root.insert(QLatin1String(kPreferencesAppSection), app);
+    UiText::savePreferencesObject(root);
 }
 
 QString normalizedTagKeyword(const QString& tagKeyword)
@@ -288,7 +330,7 @@ void NetBatchDownloadDialog::buildUi()
     startDateEdit_->setCalendarWidget(createNetCalendar(startDateEdit_));
     endDateEdit_ = new NetDateEdit(QDate::currentDate(), this);
     endDateEdit_->setCalendarWidget(createNetCalendar(endDateEdit_));
-    outputDirEdit_ = new QLineEdit(QStandardPaths::writableLocation(QStandardPaths::DesktopLocation), this);
+    outputDirEdit_ = new QLineEdit(QDir::toNativeSeparators(storedOutputDirectory()), this);
     auto* browseButton = new QPushButton(trText("浏览...", "Browse..."), this);
     fuzzyMatchCheck_ = new QCheckBox(trText("模糊大小写匹配", "Fuzzy case-insensitive match"), this);
     fuzzyMatchCheck_->setChecked(true);
@@ -456,6 +498,7 @@ void NetBatchDownloadDialog::chooseOutputDirectory()
         outputDirEdit_->text().trimmed());
     if (!dir.isEmpty()) {
         outputDirEdit_->setText(QDir::toNativeSeparators(dir));
+        saveStoredOutputDirectory(dir);
     }
 }
 
@@ -575,6 +618,7 @@ void NetBatchDownloadDialog::downloadSelected()
         QMessageBox::warning(this, windowTitle(), trText("请选择有效的输出目录。", "Please choose a valid output directory."));
         return;
     }
+    saveStoredOutputDirectory(outputDir);
 
     int selectedCount = 0;
     for (int row = 0; row < jobs_.size(); ++row) {
