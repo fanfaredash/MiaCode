@@ -80,6 +80,7 @@ something goes wrong. The per-category gates above are snapshot into atomics at
 - Export PBO diagnostics now describe the headless Quick export session, not a removed legacy renderer.
 - Background **PV/BG video decoding** in realtime preview (and therefore the export preview dialog) uses **QtAVPlayer (FFmpeg)** on Windows instead of Qt Multimedia's `QMediaPlayer`. This is selected at **build time** by the `MIACODE_USE_QTAVPLAYER` compile macro — a CMake build-time macro, **not** an environment flag, so it cannot be toggled at runtime (CMake defines it on Windows when the FFmpeg dev SDK is present; other platforms keep the `QMediaPlayer` path). The FFmpeg dev SDK path is a separate CMake cache variable, provisioned by `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1`. The export *encoder output* is unaffected (still the standalone `ffmpeg.exe` filtergraph). On `InvalidMedia` the preview backend retries once forcing FFmpeg software decode (`preview/stage_media action=video_software_fallback`)..
 - `MIACODE_BUILD_DEV_TOOLS` is the **CMake configure option** (not an environment flag) that builds the developer spec/eval executables and registers them with CTest (`cmake -D MIACODE_BUILD_DEV_TOOLS=ON`; `scripts/build/build-win.ps1` turns it on for Debug configs). Some dev tools mention it in comments (e.g. `src/tools/latency/LatencyBatchTest.cpp`), which is why it appears in this index — it has no runtime effect in a shipped build.
+- `MIACODE_SIMAI_REPRO_CHART` is a **CTest/dev-tool-only** parser-spec repro hook. When set to a `maidata.txt` path containing `&inote_5=`, `simai_parser_spec` parses that real chart as an optional local corpus check; unset keeps the public spec deterministic. It has no runtime effect in `MiaCode.exe`.
 
 Relevant export backend toggles:
 
@@ -137,8 +138,13 @@ Still active:
 
 - `MIACODE_PREVIEW_SFX_DIR`
 - `MIACODE_TRACK_PATH`
+- `MIACODE_BASS_BGM_RATE_MODE` (Windows BASS preview BGM only; unset defaults to pitch-preserving BASS_FX `tempo`, while `rate_transpose` / `transpose` / `source_time` / `accurate` switches to source-time-priority rate transpose for A/B listening)
+- `MIACODE_BASS_BGM_TEMPO_PRESET` (Windows BASS preview BGM only, only when tempo mode is active; BASS_FX window presets: unset = `compact40`, `stock` = plugin default, `auto` = `0/0/8`, `tight20` = `20/8/4`, `balanced30` = `30/10/6`, `compact40` = `40/15/8`, `smooth60` = `60/20/8`, `wide82` = `82/28/8`)
+- `MIACODE_BASS_BGM_TEMPO_PARAMS` (Windows BASS preview BGM only, only when tempo mode is active; overrides preset with custom `sequence_ms,seek_ms,overlap_ms`, accepting comma, slash, semicolon, pipe, `x`, or spaces as separators)
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG`
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS`
+- `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG` (requires `--debug`; adds focused waveform/BGM alignment evidence in the audio log, raises BASS `bass_status` cadence for short-lived 1x offset repros, and emits runtime `timeline/render_map` rows from the final Quick timeline scene state)
+- `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG_SAMPLE_MS` (default `250`; BASS `bass_status` interval while waveform-alignment diagnostics are enabled)
 - `MIACODE_PREVIEW_FIXED_TIMER_HIGH_RES`
 - `MIACODE_PREVIEW_REJECT_NEGATIVE_HS` (default off; opt-OUT escape hatch — negative HS `<HS*-N>` is ON by default. `1` restores the strict stance where the parser rejects `hs <= 0` (Q7). Read once at app boot into `SimaiNativeParser::setAllowNegativeHsEnabled`. By default negative HS parses and the preview/export renderer flies tap / star / each-line notes inward from OUTSIDE the judgement ring (hold / touch / slide take the HS magnitude, never reverse); zero is always rejected. Inherited by the CLI export-worker subprocess so preview and export agree. Off-canvas reverse spawn relies on the playfield clip..)
 - `MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO` (`1` forces QtAVPlayer to decode preview video in software instead of D3D11VA — diagnostic + workaround for the green NV12-padding artifact on videos whose dimensions aren't 16-aligned, e.g. 300×300; hardware textures are allocated at the macroblock-aligned coded size and the uninitialized padding samples as pure green)
@@ -200,13 +206,16 @@ Preview diagnostics now split these timing sources instead of reporting a single
   - fixed timer high-resolution status events `fixed_timer_high_res_requested`, `fixed_timer_high_res_enabled`, `fixed_timer_high_res_failed`, and `fixed_timer_high_res_disabled` are written as sparse status lines so env propagation can be verified even when per-frame pacing diagnostics are off
   - `tick_sample` / `tick_large_step` include `fallback_second`, `audio_second`, `fallback_delta_ms`, `audio_delta_ms`, `visual_delta_ms`, `audio_minus_fallback_ms`, and `time_authority`
   - `preview/stage_media` now also emits low-noise `action=video_frame_stall_begin` / `action=video_frame_stall_end` transitions when external video stops delivering frames for longer than expected
+  - `preview/waveform` records waveform cache/request/apply evidence, including source (`memory`, `disk`, `build`, `placeholder`), track id, file stamp, duration, top-level column count, milliseconds per column, first onset at `0.02` / `0.05` / `0.10`, and peak position; `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG=1` adds focused `preview/waveform_align` breadcrumbs, lowers `bass_status` interval via `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG_SAMPLE_MS`, and adds runtime `timeline/render_map` rows with visible range, scroll, primitive counts, waveform/grid/note first-visible coordinates, playhead/cursor/entry second-to-X roundtrips, the waveform column under the playhead, and the strongest waveform column near the playhead
   - `window/focus` records app-level focus transitions, activation edges, watched editor focus events, and text-focus restore attempts for focus-regression diagnosis
-  - BASS `bass_status` sampling is now reduced to about once per second in debug mode
+  - BASS `bass_status` sampling is now reduced to about once per second in debug mode, and includes `bgm_delta_ms` (`auth - bgm_chart`) so waveform/playhead complaints can be separated from generic fallback-clock drift; waveform-alignment diagnostics can temporarily lower that interval
+  - BASS BGM rate-mode decisions log as low-frequency `bgm_speed_mode` / `bgm_rate_mode` rows, not per tick; BASS_FX tempo-window experiments additionally log `bgm_tempo_window` with requested and read-back `sequence_ms`, `seek_ms`, and `overlap_ms`
   - `preview/interaction` correlates user-facing preview actions such as `play`, `pause`, `stop`, and `ctrl+click` seek
   - `timeline/interaction` records quick timeline drag, wheel-scroll, and held-key horizontal scroll inputs
   - `timeline/bridge` records quick timeline hot-path state pushes such as `action=set_horizontal_scroll_value` only when `MIACODE_TIMELINE_HOTPATH_DIAG=1`
   - `timeline/quick_scene` records full `scene_state_rebuild_*` boundaries in debug mode; scroll-only `action=content_transform_update` paints require `MIACODE_TIMELINE_HOTPATH_DIAG=1`
   - `timeline/cursor_map` profiles `timelineSecondForCursor()` so editor cursor-to-second mapping can be separated from redraw cost
+  - `timeline/render_map` is emitted only with `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG=1` and samples final Quick scene-state mappings so waveform/playhead complaints can be checked against actual rendered world-X and viewport-X positions
 
 ## Render Path Toggles (diagnostics / A·B only)
 

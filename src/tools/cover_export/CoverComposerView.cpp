@@ -133,6 +133,7 @@ void settleEvents(bool cold)
 void applyComposerInputs(QQuickItem* root,
                          CoverLayoutModel* model,
                          const CoverComposerInputs& inputs,
+                         const QString& activeChartFrameKey,
                          bool editable)
 {
     if (root == nullptr) {
@@ -145,10 +146,12 @@ void applyComposerInputs(QQuickItem* root,
     root->setProperty("backgroundImage", localFileUrlOrEmpty(inputs.backgroundPath));
     root->setProperty("backgroundMode", static_cast<int>(inputs.backgroundMode));
     root->setProperty("blurEnabled", inputs.blurBackground);
+    root->setProperty("coverBgBrightness", inputs.coverBgBrightness);
     root->setProperty("cardShadowEnabled", inputs.cardShadow);
     root->setProperty("chartFrameBgEnabled", inputs.chartFrameBackground);
     root->setProperty("chartFrameBgBrightness", inputs.chartFrameBgBrightness);
     root->setProperty("chartFrameDiskDiameter", inputs.chartFrameDiskDiameter);
+    root->setProperty("activeChartFrameKey", activeChartFrameKey);
     root->setProperty("editable", editable);
 }
 
@@ -265,13 +268,50 @@ void CoverComposerView::setInputs(const CoverComposerInputs& inputs)
     }
 }
 
+void CoverComposerView::setActiveChartFrameKey(const QString& key)
+{
+    if (activeChartFrameKey_ == key) {
+        return;
+    }
+    activeChartFrameKey_ = key;
+    if (root_ != nullptr) {
+        root_->setProperty("activeChartFrameKey", activeChartFrameKey_);
+        if (window_ != nullptr) {
+            window_->update();
+        }
+    }
+}
+
+void CoverComposerView::setSelectedKey(const QString& key)
+{
+    if (selectedKey_ == key) {
+        return;
+    }
+    selectedKey_ = key;
+    if (root_ != nullptr) {
+        root_->setProperty("selectedKey", selectedKey_);
+        if (window_ != nullptr) {
+            window_->update();
+        }
+    }
+}
+
+void CoverComposerView::selectLayerKey(const QString& key)
+{
+    // QML→C++: the panel's setActiveLayerKey is the single source of truth and
+    // is idempotent on an unchanged key, so this never loops back into the gesture.
+    emit layerSelectionRequested(key);
+}
+
 void CoverComposerView::applyInputs()
 {
-    applyComposerInputs(root_, model_, inputs_, /*editable=*/true);
+    applyComposerInputs(root_, model_, inputs_, activeChartFrameKey_, /*editable=*/true);
     // Live path only — the export render (renderCoverComposite) never sets this,
     // so its editable=false Loader stays inactive and the static grab Image shows.
     if (root_ != nullptr) {
         root_->setProperty("chartSceneBinder", QVariant::fromValue<QObject*>(this));
+        // Re-assert the selection chrome on (re)load (export leaves it empty).
+        root_->setProperty("selectedKey", selectedKey_);
     }
 }
 
@@ -315,6 +355,9 @@ void CoverComposerView::bindLiveChartScene(QObject* sceneRoot)
     root->setDCompFallbackActive(true);
     root->setLayerFlags(miacode::preview::scene::kPreviewExportOverlayRenderLayers);
     root->setFrameState(chartFrameState_);
+    // Force an initial paint so a freshly-bound active frame shows immediately even
+    // if no scrub/refresh follows (e.g. right after a second frame is added).
+    root->update();
 }
 
 void CoverComposerView::unbindLiveChartScene()
@@ -388,7 +431,7 @@ QImage renderCoverComposite(CoverLayoutModel* model,
     root->setParent(window->contentItem());
     root->setWidth(width);
     root->setHeight(height);
-    applyComposerInputs(root, model, inputs, /*editable=*/false);
+    applyComposerInputs(root, model, inputs, QString(), /*editable=*/false);
 
     window->setOpacity(0.0);
     window->show();

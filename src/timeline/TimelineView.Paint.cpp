@@ -247,11 +247,12 @@ void TimelineView::paintEvent(QPaintEvent* event)
                 qMax(0.001, visibleEndSecond - visibleStartSecond),
                 qMax(1, timelineRect.width()));
         if (waveformLevel != nullptr && !waveformLevel->columns.isEmpty()) {
+            const double phaseCompensationSeconds = qMax(0.0, waveformPhaseCompensationSeconds_);
             const QPair<int, int> visibleColumns =
                 miacode::waveform::visibleWaveformColumnRange(
                     *waveformLevel,
-                    qMax(0.0, visibleStartSecond),
-                    qMax(0.0, visibleEndSecond));
+                    qMax(0.0, visibleStartSecond + phaseCompensationSeconds),
+                    qMax(0.0, visibleEndSecond + phaseCompensationSeconds));
             const qreal centerY = top + h / 2.0;
             const qreal maxAmplitude = (qMax<qreal>(8.0, h / 2.0 - 8.0) * 7.0) / 9.0;
             const QColor waveformColor = miacode::timeline::adjustedTimelineWaveformColor(
@@ -263,22 +264,33 @@ void TimelineView::paintEvent(QPaintEvent* event)
             bool wavePathStarted = false;
             for (int index = visibleColumns.first; index < visibleColumns.second; ++index) {
                 const miacode::waveform::WaveformColumn& column = waveformLevel->columns.at(index);
-                const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
+                // Hard waveform phase compensation: logs from multiple devices
+                // (60 Hz and 120 Hz) show the authoritative audio clock leading
+                // the timeline-rendered playhead by about one frame. The root
+                // cause is still unclear, so keep this as an explicit rendering
+                // compensation rather than folding it into waveform cache data.
+                const double columnStartSecond =
+                    waveformLevel->secondsPerColumn * static_cast<double>(index) - phaseCompensationSeconds;
                 const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
-                const qreal xMid =
-                    (secondToX(columnStartSecond) + secondToX(columnEndSecond)) * 0.5 - xOffset;
-                if (xMid < left - 2.0 || xMid > viewport()->width() + 2.0) {
+                const qreal x0 = static_cast<qreal>(secondToX(columnStartSecond) - xOffset);
+                qreal x1 = static_cast<qreal>(secondToX(columnEndSecond) - xOffset);
+                if (x1 <= x0) {
+                    x1 = x0 + 1.0;
+                }
+                if (x1 < left - 2.0 || x0 > viewport()->width() + 2.0) {
                     continue;
                 }
                 const qreal topY = centerY - (qBound(-1.0f, column.max, 1.0f) * maxAmplitude);
                 const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
                 if (!wavePathStarted) {
-                    wavePath.moveTo(xMid, topY);
+                    wavePath.moveTo(x0, topY);
                     wavePathStarted = true;
                 } else {
-                    wavePath.lineTo(xMid, topY);
+                    wavePath.lineTo(x0, topY);
                 }
-                bottomEnvelope.append(QPointF(xMid, bottomY));
+                wavePath.lineTo(x1, topY);
+                bottomEnvelope.append(QPointF(x0, bottomY));
+                bottomEnvelope.append(QPointF(x1, bottomY));
             }
             if (wavePathStarted) {
                 for (int i = bottomEnvelope.size() - 1; i >= 0; --i) {
@@ -1008,11 +1020,12 @@ void TimelineView::paintWaveformOnly(QPainter& painter, const QRect& dirtyRect)
                 qMax(0.001, visibleEndSecond - visibleStartSecond),
                 qMax(1, static_cast<int>(cardRect.width())));
         if (waveformLevel != nullptr && !waveformLevel->columns.isEmpty()) {
+            const double phaseCompensationSeconds = qMax(0.0, waveformPhaseCompensationSeconds_);
             const QPair<int, int> visibleColumns =
                 miacode::waveform::visibleWaveformColumnRange(
                     *waveformLevel,
-                    qMax(0.0, visibleStartSecond),
-                    qMax(0.0, visibleEndSecond));
+                    qMax(0.0, visibleStartSecond + phaseCompensationSeconds),
+                    qMax(0.0, visibleEndSecond + phaseCompensationSeconds));
             const qreal centerY = cardRect.center().y();
             const qreal maxAmplitude = cardRect.height() * 0.38;
             const QColor waveformColor = miacode::timeline::adjustedTimelineWaveformColor(
@@ -1027,19 +1040,30 @@ void TimelineView::paintWaveformOnly(QPainter& painter, const QRect& dirtyRect)
             bool wavePathStarted = false;
             for (int index = visibleColumns.first; index < visibleColumns.second; ++index) {
                 const miacode::waveform::WaveformColumn& column = waveformLevel->columns.at(index);
-                const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
+                // Hard waveform phase compensation: logs from multiple devices
+                // (60 Hz and 120 Hz) show the authoritative audio clock leading
+                // the timeline-rendered playhead by about one frame. The root
+                // cause is still unclear, so keep this as an explicit rendering
+                // compensation rather than folding it into waveform cache data.
+                const double columnStartSecond =
+                    waveformLevel->secondsPerColumn * static_cast<double>(index) - phaseCompensationSeconds;
                 const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
-                const qreal xMid =
-                    (secondToX(columnStartSecond) + secondToX(columnEndSecond)) * 0.5 - xOffset;
+                const qreal x0 = static_cast<qreal>(secondToX(columnStartSecond) - xOffset);
+                qreal x1 = static_cast<qreal>(secondToX(columnEndSecond) - xOffset);
+                if (x1 <= x0) {
+                    x1 = x0 + 1.0;
+                }
                 const qreal topY = centerY - (qBound(-1.0f, column.max, 1.0f) * maxAmplitude);
                 const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
                 if (!wavePathStarted) {
-                    wavePath.moveTo(xMid, topY);
+                    wavePath.moveTo(x0, topY);
                     wavePathStarted = true;
                 } else {
-                    wavePath.lineTo(xMid, topY);
+                    wavePath.lineTo(x0, topY);
                 }
-                bottomEnvelope.append(QPointF(xMid, bottomY));
+                wavePath.lineTo(x1, topY);
+                bottomEnvelope.append(QPointF(x0, bottomY));
+                bottomEnvelope.append(QPointF(x1, bottomY));
             }
             if (wavePathStarted) {
                 for (int i = bottomEnvelope.size() - 1; i >= 0; --i) {

@@ -107,6 +107,7 @@ public:
     qint64 previewCanvasTargetFrameIntervalNs() const;
     qint64 targetFrameIntervalNsForFrameRateMode(PreviewCanvasFrameRateMode mode) const;
     qint64 timelineTargetFrameIntervalNs() const;
+    void refreshTimelineWaveformPhaseCompensation();
     void applyPreviewStageMediaFrameRateMode();
     void resetQtPreviewFixedFramePacing();
     void scheduleNextQtPreviewTick();
@@ -174,6 +175,7 @@ public:
     void renderExportIntroFrame(double positionSeconds);
     void enterExportIntroRegion(double positionSeconds);
     void exitExportIntroRegion();
+    bool exportIntroLeadInPlaying() const;
     void pauseExportIntroAdvance();
     void startExportIntroAdvance(double fromPositionSeconds);
     void tickExportIntroLeadIn();

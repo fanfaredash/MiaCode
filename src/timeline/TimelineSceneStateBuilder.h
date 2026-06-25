@@ -39,6 +39,7 @@ struct TimelineSceneBuildRequest {
     double zoomScale = 0.5;
     double contentScale = 1.0;
     double waveformBrightness = kTimelineWaveformBrightnessDefault;
+    double waveformPhaseCompensationSeconds = 0.0;
     double playbackEntrySeconds = 0.0;
     double playheadSeconds = 0.0;
     double cursorSeconds = 0.0;

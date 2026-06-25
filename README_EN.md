@@ -90,6 +90,8 @@ Project-owned MiaCode source code is MIT-licensed; see [LICENSE](LICENSE). The r
 
 Thanks to [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) and related projects for simai parsing, preview, and engineering references. Thanks to [gfdfdxc/maimai-transition](https://github.com/gfdfdxc/maimai-transition) for providing intro references.
 
+Thanks to the friends who gave suggestions, reproduced issues, and helped with debugging during internal testing; see [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md).
+
 ## Changelog
 
 Historical release notes have moved to [CHANGELOG.md](CHANGELOG.md).

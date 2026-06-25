@@ -172,6 +172,7 @@ private:
     mutable qint64 updatePaintNodeSumNs_ = 0;
     mutable qint64 updatePaintNodeMaxNs_ = 0;
     mutable qint64 updatePaintNodeLastLogMs_ = 0;
+    mutable qint64 renderMapLastLogMs_ = 0;
     bool dragActive_ = false;
     int dragStartX_ = 0;
     int dragStartScrollValue_ = 0;

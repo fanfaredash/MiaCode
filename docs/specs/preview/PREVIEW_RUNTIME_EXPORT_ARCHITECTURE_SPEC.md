@@ -42,6 +42,29 @@ Preview 现在已经具备了应用级与模块级 Quick 策略拆分的雏形�
 - 模块级 inline 与 separate-surface 决策
 - 应在多个 Quick 模块间共享的 runtime diagnostics
 
+## QuickShell 嵌入预览布局契约
+
+QuickShell 的嵌入预览面板由 `QuickShellMain.qml`、`QuickShellPreviewSurface.qml`、
+`QuickShellStyleBridge.*` 和 Windows DComp 路径共同维护。布局行为必须满足以下约束：
+
+- 主窗口最小宽度必须覆盖“侧栏 + 中央工作区最小宽 + 预览分割柄 + 预览面板最小宽”。启动布局允许先等待 settle，但之后任何预览面板宽度计算都必须基于当前可见窗口容量。
+- 预览面板宽度必须同时受 `previewPaneMaxWidth(...)` 和 `previewPaneForcedMaxWidth(...)` 约束。用户拖动分割线后可以保留选择，但当整窗缩窄导致该宽度超过当前容量时，必须释放过期的 user-resized 状态并重新 clamp。
+- 普通编辑状态下，嵌入预览画布仍从预览面板剩余区域中选取居中的最大正方形；导出页或其他临时 aspect ratio 状态则按当前 aspect ratio 选取最大可容纳矩形。
+- inline preview surface 和 DComp tracked item 不得在 0 尺寸或过小几何下绑定。嵌入 inline surface 只有在 startup 内容就绪、窗口可见、非全屏且预览 frame 至少 `64x64` 后才可激活；DComp tracked item 几何低于 `64x64` 时必须 defer。
+- 左侧谱面栏展开/折叠、编辑器 header 最小宽变化、导出页 aspect ratio 切换、bottom tabs 显隐或高度调整，都属于会改变预览可用宽高的操作，必须走同一套 bounded width + clamp + stable geometry 规则。
+- 全屏预览使用独立全屏窗口，不受嵌入面板比例线约束；退出全屏回到嵌入预览时，应重新按嵌入面板规则布局并重新确认 surface 几何。
+
+| 用户操作 | 代码触发流程 | 必须保持的行为 |
+| --- | --- | --- |
+| 缩窄 / 拉宽整个 QuickShell 窗口 | `ApplicationWindow.onWidthChanged/onHeightChanged` -> `styleBridge.syncWindowSize(...)` -> backend layout refresh / metrics refresh -> `workspaceRow.onWidthChanged/onHeightChanged` -> `syncPreviewPaneWidth(...)` -> `boundedWorkspaceWidth(...)` + `previewPaneForcedMaxWidth(...)` | 预览面板不得按旧窗口宽度继续占位；普通编辑预览画布在剩余区域内保持居中的最大正方形。 |
+| 拖动编辑区 / 预览区分割线 | `previewResizeMouseArea.onPositionChanged` -> `boundedWorkspaceWidth(workspaceRow.width)` -> `clampPreviewPaneWidth(...)` | 用户拖出的宽度不得超过当前窗口容量；后续窗口缩窄时，如果该用户宽度溢出，`syncPreviewPaneWidth(...)` 必须释放过期 user-resized 状态并重新 clamp。 |
+| 启动 / 首次显示 QuickShell | `Component.onCompleted` -> `noteStartupLayoutActivity(...)` -> `startupLayoutSettleTimer` -> `finalizeStartupLayout()` -> `requestEmbeddedInlineSurfaceActivation("startup_layout_ready")` | 启动阶段先用稳定后的 `boundedWorkspaceWidth(...)` 计算预览面板；嵌入 inline surface 不能在 frame 小于 `64x64` 时提前激活。 |
+| 左侧谱面栏展开 / 折叠，或编辑器 header 最小宽变化 | backend layout / `QuickShellStyleBridge::eventFilter` -> `metricsChanged` -> `onMetricsMapChanged` -> `syncPreviewPaneWidth(...)` | 侧栏和中央工作区最小宽改变后，预览面板不得侵占中央工作区；必要时按新的 bounded width 重新计算。 |
+| 导出页切换预览 aspect ratio，或回到普通编辑正方形预览 | `QuickShellController::refreshFromStateSource()` -> `shellStateChanged` -> `onShellStateChanged` aspect 检查 -> `boundedWorkspaceWidth(...)` -> `clampPreviewPaneWidth(...)` | 导出页按当前 aspect ratio 选取最大可容纳矩形；回到普通编辑时恢复或重新计算面板宽度，并让画布回到居中的最大正方形。 |
+| bottom tabs 显隐、切 tab、拖动 bottom-tabs 高度 | controller state / `setBottomTabsHostHeight(...)` -> `BottomTabsQuickHost` 高度变化 -> `workspaceRow.onHeightChanged` -> `syncPreviewPaneWidth(...)` | 预览可用高度改变后必须重新计算画布尺寸，不能沿用旧高度导致控制区或画布被截断。 |
+| inline / separate preview surface 绑定 | `QuickShellPreviewSurface.syncVideoOutputBinding()` / `PreviewDCompSurface::tryDiscoverTrackedItem()` / `PreviewDCompSurface::applyTrackedItemGeometry()` | surface 只在可见窗口和稳定几何下绑定；DComp tracked item 查找要允许延迟重试，过小 tracked item 几何要 defer，避免把 0/过小尺寸固化成预览位置。 |
+| 进入 / 退出全屏预览 | `onPreviewFullscreenChanged` / `fullscreenPreviewWindow.onVisibleChanged` -> surface route 切换 | 全屏窗口独立铺满屏幕；回到嵌入态后重新激活 embedded surface，并按嵌入面板规则确认 frame 几何。 |
+
 ## 共享运行时模型
 
 实时预览与导出都消费同一套后端无关的 scene payload：

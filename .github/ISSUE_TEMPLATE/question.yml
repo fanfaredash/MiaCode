@@ -1,0 +1,53 @@
+name: Question / Help
+description: Ask a usage question or request help.
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template when you are not sure whether something is a bug, or when you need help with a workflow.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      placeholder: "What would you like to know?"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: topic
+    attributes:
+      label: Topic
+      options:
+        - Installation
+        - Opening charts
+        - Preview
+        - Audio / latency
+        - Video export
+        - Cover export
+        - Simai syntax
+        - Packaging / startup
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: MiaCode version
+      placeholder: "e.g. 1.0.0"
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: Mention docs, settings, or steps you already checked.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add screenshots, logs, or example files if relevant.
+

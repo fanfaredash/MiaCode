@@ -12,15 +12,21 @@
 #include <QSGGeometryNode>
 #include <QSGNode>
 #include <QSGRendererInterface>
+#include <QStringList>
 #include <QToolTip>
 #include <QMetaObject>
 #include <QtMath>
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
 
 #include "common/DebugLog.h"
 #include "common/ProcessDiagnostics.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewInteractionConfig.h"
 #include "common/TimelineThemeConfig.h"
+#include "common/WaveformCache.h"
 #include "timeline/TimelineSceneStateBuilder.h"
 #include "timeline/quick/TimelineQuickGridLayer.h"
 #include "timeline/quick/TimelineQuickGridLinesLayer.h"
@@ -349,6 +355,455 @@ void applyDynamicSceneState(
             };
         }
     }
+}
+
+qreal renderMapSecondToSceneXExact(
+    const miacode::timeline::TimelineSceneState& state,
+    double second)
+{
+    return static_cast<qreal>(state.timelineLeft)
+        + static_cast<qreal>((second - state.displayStartSeconds) * state.pixelsPerSecond)
+        + static_cast<qreal>(state.leadingCenteringPadding);
+}
+
+double renderMapWorldXToSecond(
+    const miacode::timeline::TimelineSceneState& state,
+    qreal worldX)
+{
+    return miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(
+        state,
+        worldX - static_cast<qreal>(state.horizontalScrollValue));
+}
+
+QString renderMapPointPayload(
+    const QString& name,
+    const miacode::timeline::TimelineSceneState& state,
+    double second)
+{
+    const int worldX =
+        miacode::timeline::TimelineSceneStateBuilder::secondToSceneX(state, second);
+    const qreal worldXExact = renderMapSecondToSceneXExact(state, second);
+    const qreal viewX = static_cast<qreal>(worldX - state.horizontalScrollValue);
+    const qreal viewXExact = worldXExact - static_cast<qreal>(state.horizontalScrollValue);
+    const double roundtrip =
+        miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, viewX);
+    const double roundtripExact =
+        miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, viewXExact);
+    const bool inView = viewXExact >= static_cast<qreal>(state.timelineLeft)
+        && viewXExact <= static_cast<qreal>(state.viewportSize.width());
+    return QStringLiteral(
+               "action=sample name=%1 sec=%2 world_x=%3 world_x_exact=%4 "
+               "view_x=%5 view_x_exact=%6 roundtrip_delta_ms=%7 "
+               "roundtrip_exact_delta_ms=%8 in_view=%9")
+        .arg(name)
+        .arg(second, 0, 'f', 6)
+        .arg(worldX)
+        .arg(worldXExact, 0, 'f', 3)
+        .arg(viewX, 0, 'f', 3)
+        .arg(viewXExact, 0, 'f', 3)
+        .arg((roundtrip - second) * 1000.0, 0, 'f', 3)
+        .arg((roundtripExact - second) * 1000.0, 0, 'f', 3)
+        .arg(inView ? 1 : 0);
+}
+
+QString renderMapRectPayload(
+    const QString& prefix,
+    const miacode::timeline::TimelineSceneState& state,
+    const QRectF& rect)
+{
+    const qreal worldX = rect.left();
+    const qreal viewX = worldX - static_cast<qreal>(state.horizontalScrollValue);
+    return QStringLiteral(
+               "%1_sec=%2 %1_world_x=%3 %1_view_x=%4 %1_w=%5")
+        .arg(prefix)
+        .arg(renderMapWorldXToSecond(state, worldX), 0, 'f', 6)
+        .arg(worldX, 0, 'f', 3)
+        .arg(viewX, 0, 'f', 3)
+        .arg(rect.width(), 0, 'f', 3);
+}
+
+QString renderMapLinePayload(
+    const QString& prefix,
+    const miacode::timeline::TimelineSceneState& state,
+    qreal worldX)
+{
+    const qreal viewX = worldX - static_cast<qreal>(state.horizontalScrollValue);
+    return QStringLiteral("%1_sec=%2 %1_world_x=%3 %1_view_x=%4")
+        .arg(prefix)
+        .arg(renderMapWorldXToSecond(state, worldX), 0, 'f', 6)
+        .arg(worldX, 0, 'f', 3)
+        .arg(viewX, 0, 'f', 3);
+}
+
+double renderMapWaveformColumnEnergy(const miacode::waveform::WaveformColumn& column)
+{
+    return qMax(qAbs(static_cast<double>(column.min)), qAbs(static_cast<double>(column.max)));
+}
+
+QString renderMapWaveformPayload(
+    const miacode::timeline::TimelineSceneState& state,
+    const TimelineQuickStateBridge* stateBridge)
+{
+    if (stateBridge == nullptr) {
+        return QStringLiteral("wave=0");
+    }
+    const std::shared_ptr<const miacode::waveform::WaveformData> waveform =
+        stateBridge->waveformData();
+    if (!waveform || waveform->durationSeconds <= 0.0) {
+        return QStringLiteral("wave=0");
+    }
+
+    QString payload = QStringLiteral("wave=1 wave_duration=%1")
+        .arg(waveform->durationSeconds, 0, 'f', 6);
+    const miacode::waveform::WaveformLevel* level =
+        miacode::waveform::selectWaveformLevelForVisibleRange(
+            *waveform,
+            qMax(0.001, state.visibleEndSecond - state.visibleStartSecond),
+            qMax(1, state.viewportSize.width() - state.timelineLeft));
+    if (level == nullptr || level->columns.isEmpty()) {
+        payload += QStringLiteral(" wave_level=0");
+        return payload;
+    }
+
+    const double phaseCompensationSeconds = qMax(0.0, state.waveformPhaseCompensationSeconds);
+    const QPair<int, int> visibleColumns =
+        miacode::waveform::visibleWaveformColumnRange(
+            *level,
+            qMax(0.0, state.visibleStartSecond + phaseCompensationSeconds),
+            qMax(0.0, state.visibleEndSecond + phaseCompensationSeconds));
+    const double firstColumnSecond =
+        level->secondsPerColumn * static_cast<double>(visibleColumns.first);
+    const double firstColumnRenderedSecond = firstColumnSecond - phaseCompensationSeconds;
+    const qreal firstColumnWorldX = renderMapSecondToSceneXExact(state, firstColumnRenderedSecond);
+    payload += QStringLiteral(
+                   " wave_level=1 wave_spc_ms=%1 wave_cols=%2 "
+                   "wave_visible_col_begin=%3 wave_visible_col_end=%4 "
+                   "wave_phase_comp_ms=%5 wave_visible_first_sec=%6 "
+                   "wave_visible_first_render_sec=%7 wave_visible_first_world_x=%8 "
+                   "wave_visible_first_view_x=%9")
+        .arg(level->secondsPerColumn * 1000.0, 0, 'f', 3)
+        .arg(level->columns.size())
+        .arg(visibleColumns.first)
+        .arg(visibleColumns.second)
+        .arg(phaseCompensationSeconds * 1000.0, 0, 'f', 3)
+        .arg(firstColumnSecond, 0, 'f', 6)
+        .arg(firstColumnRenderedSecond, 0, 'f', 6)
+        .arg(firstColumnWorldX, 0, 'f', 3)
+        .arg(firstColumnWorldX - static_cast<qreal>(state.horizontalScrollValue), 0, 'f', 3);
+
+    const double playheadSecond = stateBridge->playheadSeconds();
+    const bool playheadInDuration =
+        playheadSecond >= 0.0 && playheadSecond <= waveform->durationSeconds;
+    if (level->secondsPerColumn <= 0.0 || !std::isfinite(playheadSecond)) {
+        payload += QStringLiteral(" wave_playhead_col=-1 wave_playhead_in_duration=%1")
+            .arg(playheadInDuration ? 1 : 0);
+        return payload;
+    }
+
+    const int playheadColumn = qBound(
+        0,
+        static_cast<int>(std::floor(qMax(0.0, playheadSecond) / level->secondsPerColumn)),
+        level->columns.size() - 1);
+    const double playheadColumnStartSecond =
+        level->secondsPerColumn * static_cast<double>(playheadColumn);
+    const double playheadColumnEndSecond = playheadColumnStartSecond + level->secondsPerColumn;
+    const double playheadColumnCenterSecond =
+        playheadColumnStartSecond + (level->secondsPerColumn * 0.5);
+    const double playheadColumnStartRenderedSecond =
+        playheadColumnStartSecond - phaseCompensationSeconds;
+    const double playheadColumnCenterRenderedSecond =
+        playheadColumnCenterSecond - phaseCompensationSeconds;
+    const double playheadColumnEndRenderedSecond =
+        playheadColumnEndSecond - phaseCompensationSeconds;
+    const qreal playheadViewX =
+        renderMapSecondToSceneXExact(state, playheadSecond)
+        - static_cast<qreal>(state.horizontalScrollValue);
+    const qreal playheadColumnStartWorldX =
+        renderMapSecondToSceneXExact(state, playheadColumnStartRenderedSecond);
+    const qreal playheadColumnCenterWorldX =
+        renderMapSecondToSceneXExact(state, playheadColumnCenterRenderedSecond);
+    const qreal playheadColumnEndWorldX =
+        renderMapSecondToSceneXExact(state, playheadColumnEndRenderedSecond);
+    const qreal playheadColumnCenterViewX =
+        playheadColumnCenterWorldX - static_cast<qreal>(state.horizontalScrollValue);
+    const miacode::waveform::WaveformColumn& playheadWaveColumn =
+        level->columns.at(playheadColumn);
+    const double playheadColumnEnergy = renderMapWaveformColumnEnergy(playheadWaveColumn);
+
+    constexpr double kPeakSearchHalfWindowSeconds = 0.125;
+    const int peakBeginColumn = qBound(
+        0,
+        static_cast<int>(std::floor(qMax(0.0, playheadSecond - kPeakSearchHalfWindowSeconds)
+                                    / level->secondsPerColumn)),
+        level->columns.size());
+    const int peakEndColumn = qBound(
+        peakBeginColumn,
+        static_cast<int>(std::ceil(qMax(0.0, playheadSecond + kPeakSearchHalfWindowSeconds)
+                                   / level->secondsPerColumn))
+            + 1,
+        level->columns.size());
+    int peakColumn = -1;
+    double peakEnergy = 0.0;
+    for (int index = peakBeginColumn; index < peakEndColumn; ++index) {
+        const double energy = renderMapWaveformColumnEnergy(level->columns.at(index));
+        if (peakColumn < 0 || energy > peakEnergy) {
+            peakColumn = index;
+            peakEnergy = energy;
+        }
+    }
+
+    payload += QStringLiteral(
+                   " wave_playhead_sec=%1 wave_playhead_view_x=%2 "
+                   "wave_playhead_col=%3 wave_playhead_in_duration=%4 "
+                   "wave_playhead_col_start_sec=%5 wave_playhead_col_center_sec=%6 "
+                   "wave_playhead_col_end_sec=%7 wave_playhead_col_start_render_sec=%8 "
+                   "wave_playhead_col_center_render_sec=%9 wave_playhead_col_end_render_sec=%10 "
+                   "wave_playhead_col_start_world_x=%11 wave_playhead_col_center_world_x=%12 "
+                   "wave_playhead_col_end_world_x=%13 wave_playhead_col_start_view_x=%14 "
+                   "wave_playhead_col_center_view_x=%15 wave_playhead_col_end_view_x=%16 "
+                   "wave_playhead_col_center_dx_px=%17 wave_playhead_col_center_dt_ms=%18 "
+                   "wave_playhead_col_amp=%19 wave_playhead_col_min=%20 wave_playhead_col_max=%21")
+        .arg(playheadSecond, 0, 'f', 6)
+        .arg(playheadViewX, 0, 'f', 3)
+        .arg(playheadColumn)
+        .arg(playheadInDuration ? 1 : 0)
+        .arg(playheadColumnStartSecond, 0, 'f', 6)
+        .arg(playheadColumnCenterSecond, 0, 'f', 6)
+        .arg(playheadColumnEndSecond, 0, 'f', 6)
+        .arg(playheadColumnStartRenderedSecond, 0, 'f', 6)
+        .arg(playheadColumnCenterRenderedSecond, 0, 'f', 6)
+        .arg(playheadColumnEndRenderedSecond, 0, 'f', 6)
+        .arg(playheadColumnStartWorldX, 0, 'f', 3)
+        .arg(playheadColumnCenterWorldX, 0, 'f', 3)
+        .arg(playheadColumnEndWorldX, 0, 'f', 3)
+        .arg(playheadColumnStartWorldX - static_cast<qreal>(state.horizontalScrollValue), 0, 'f', 3)
+        .arg(playheadColumnCenterViewX, 0, 'f', 3)
+        .arg(playheadColumnEndWorldX - static_cast<qreal>(state.horizontalScrollValue), 0, 'f', 3)
+        .arg(playheadColumnCenterViewX - playheadViewX, 0, 'f', 3)
+        .arg((playheadColumnCenterSecond - playheadSecond) * 1000.0, 0, 'f', 3)
+        .arg(playheadColumnEnergy, 0, 'f', 6)
+        .arg(playheadWaveColumn.min, 0, 'f', 6)
+        .arg(playheadWaveColumn.max, 0, 'f', 6);
+
+    if (peakColumn >= 0) {
+        const double peakCenterSecond =
+            (static_cast<double>(peakColumn) + 0.5) * level->secondsPerColumn;
+        const double peakCenterRenderedSecond = peakCenterSecond - phaseCompensationSeconds;
+        const qreal peakCenterWorldX = renderMapSecondToSceneXExact(state, peakCenterRenderedSecond);
+        const qreal peakCenterViewX =
+            peakCenterWorldX - static_cast<qreal>(state.horizontalScrollValue);
+        payload += QStringLiteral(
+                       " wave_near_peak_window_ms=%1 wave_near_peak_col=%2 "
+                       "wave_near_peak_sec=%3 wave_near_peak_render_sec=%4 "
+                       "wave_near_peak_view_x=%5 wave_near_peak_dx_px=%6 "
+                       "wave_near_peak_dt_ms=%7 wave_near_peak_amp=%8")
+            .arg(kPeakSearchHalfWindowSeconds * 2000.0, 0, 'f', 0)
+            .arg(peakColumn)
+            .arg(peakCenterSecond, 0, 'f', 6)
+            .arg(peakCenterRenderedSecond, 0, 'f', 6)
+            .arg(peakCenterViewX, 0, 'f', 3)
+            .arg(peakCenterViewX - playheadViewX, 0, 'f', 3)
+            .arg((peakCenterSecond - playheadSecond) * 1000.0, 0, 'f', 3)
+            .arg(peakEnergy, 0, 'f', 6);
+    } else {
+        payload += QStringLiteral(
+                       " wave_near_peak_window_ms=%1 wave_near_peak_col=-1")
+            .arg(kPeakSearchHalfWindowSeconds * 2000.0, 0, 'f', 0);
+    }
+    return payload;
+}
+
+QString renderMapPrimitivePayload(
+    const miacode::timeline::TimelineSceneState& state)
+{
+    QStringList parts;
+    const qreal worldLeft =
+        static_cast<qreal>(state.horizontalScrollValue + state.timelineLeft);
+    const qreal worldRight =
+        static_cast<qreal>(state.horizontalScrollValue + state.viewportSize.width());
+
+    if (!state.waveformBars.isEmpty()) {
+        parts.append(renderMapRectPayload(
+            QStringLiteral("wave_emit_first"),
+            state,
+            state.waveformBars.constFirst().rect));
+        for (const auto& bar : state.waveformBars) {
+            if (bar.rect.right() >= worldLeft && bar.rect.left() <= worldRight) {
+                parts.append(renderMapRectPayload(QStringLiteral("wave_view_first"), state, bar.rect));
+                break;
+            }
+        }
+    }
+
+    for (const auto& line : state.gridLines) {
+        const qreal x = line.start.x();
+        if (x >= worldLeft && x <= worldRight) {
+            parts.append(renderMapLinePayload(QStringLiteral("grid_view_first"), state, x));
+            break;
+        }
+    }
+
+    for (const auto& sprite : state.noteSprites) {
+        const qreal x = sprite.center.x();
+        if (x >= worldLeft && x <= worldRight) {
+            parts.append(renderMapLinePayload(QStringLiteral("note_sprite_first"), state, x));
+            parts.append(QStringLiteral("note_sprite_first_type=%1").arg(sprite.spriteType));
+            break;
+        }
+    }
+
+    return parts.join(QLatin1Char(' '));
+}
+
+QString renderMapDataAnchorPayload(
+    const miacode::timeline::TimelineSceneState& state,
+    const TimelineQuickStateBridge* stateBridge)
+{
+    if (stateBridge == nullptr) {
+        return QString();
+    }
+    const TimelineRenderSnapshot& snapshot = stateBridge->renderSnapshot();
+    QStringList parts;
+
+    const auto measureIt = std::lower_bound(
+        snapshot.measureLineSeconds.cbegin(),
+        snapshot.measureLineSeconds.cend(),
+        state.visibleStartSecond - 1e-6);
+    if (measureIt != snapshot.measureLineSeconds.cend()
+        && *measureIt <= state.visibleEndSecond + 1e-6) {
+        const double second = *measureIt;
+        const qreal worldX = renderMapSecondToSceneXExact(state, second);
+        parts.append(QStringLiteral(
+                         "measure_first_sec=%1 measure_first_world_x=%2 "
+                         "measure_first_view_x=%3")
+            .arg(second, 0, 'f', 6)
+            .arg(worldX, 0, 'f', 3)
+            .arg(worldX - static_cast<qreal>(state.horizontalScrollValue), 0, 'f', 3));
+    }
+
+    double firstNoteSecond = std::numeric_limits<double>::infinity();
+    int firstNoteLine = -1;
+    int firstNoteCol = -1;
+    int firstNoteLane = -1;
+    int firstNoteKind = -1;
+    for (const TimelineRenderLine& line : snapshot.lines) {
+        if (line.startSecond > state.visibleEndSecond + 1e-6) {
+            break;
+        }
+        if (line.endSecond < state.visibleStartSecond - 1e-6) {
+            continue;
+        }
+        for (const TimelineRenderNote& note : line.notes) {
+            const double second = timelineRenderAbsoluteSecond(line, note.secondOffset);
+            if (second < state.visibleStartSecond - 1e-6
+                || second > state.visibleEndSecond + 1e-6
+                || second >= firstNoteSecond) {
+                continue;
+            }
+            firstNoteSecond = second;
+            firstNoteLine = line.lineNumber;
+            firstNoteCol = note.sourceCol;
+            firstNoteLane = note.lane;
+            firstNoteKind = static_cast<int>(note.kind);
+        }
+    }
+    if (std::isfinite(firstNoteSecond)) {
+        const qreal worldX = renderMapSecondToSceneXExact(state, firstNoteSecond);
+        parts.append(QStringLiteral(
+                         "data_note_first_sec=%1 data_note_first_world_x=%2 "
+                         "data_note_first_view_x=%3 data_note_first_line=%4 "
+                         "data_note_first_col=%5 data_note_first_lane=%6 "
+                         "data_note_first_kind=%7")
+            .arg(firstNoteSecond, 0, 'f', 6)
+            .arg(worldX, 0, 'f', 3)
+            .arg(worldX - static_cast<qreal>(state.horizontalScrollValue), 0, 'f', 3)
+            .arg(firstNoteLine)
+            .arg(firstNoteCol)
+            .arg(firstNoteLane)
+            .arg(firstNoteKind));
+    }
+
+    return parts.join(QLatin1Char(' '));
+}
+
+void appendTimelineRenderMapDiagnostics(
+    const miacode::timeline::TimelineSceneState& state,
+    const TimelineQuickStateBridge* stateBridge,
+    int scrollBucket,
+    quint64 rebuildCount)
+{
+    if (stateBridge == nullptr || !miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+
+    const TimelineRenderSnapshot& snapshot = stateBridge->renderSnapshot();
+    QString payload = QStringLiteral(
+                          "action=state rebuild_count=%1 bucket=%2 viewport=%3x%4 "
+                          "scroll=%5 max_scroll=%6 timeline_left=%7 leading_pad=%8 "
+                          "content_width=%9 display_start=%10 display_end=%11 "
+                          "visible_start=%12 visible_end=%13 pps=%14 "
+                          "revs=grid:%15,wave:%16,header:%17,notes:%18,overlay:%19,dyn:%20 "
+                          "counts=wave:%21,grid:%22,notes:%23,tracks:%24,holds:%25,touch:%26,muri:%27 "
+                          "lines=%28 measure_lines=%29")
+        .arg(rebuildCount)
+        .arg(scrollBucket)
+        .arg(state.viewportSize.width())
+        .arg(state.viewportSize.height())
+        .arg(state.horizontalScrollValue)
+        .arg(qMax(0, state.contentWidth - state.viewportSize.width()))
+        .arg(state.timelineLeft)
+        .arg(state.leadingCenteringPadding)
+        .arg(state.contentWidth)
+        .arg(state.displayStartSeconds, 0, 'f', 6)
+        .arg(state.displayEndSeconds, 0, 'f', 6)
+        .arg(state.visibleStartSecond, 0, 'f', 6)
+        .arg(state.visibleEndSecond, 0, 'f', 6)
+        .arg(state.pixelsPerSecond, 0, 'f', 3)
+        .arg(state.gridRevision)
+        .arg(state.waveformRevision)
+        .arg(state.headerRevision)
+        .arg(state.notesRevision)
+        .arg(state.overlayRevision)
+        .arg(state.overlayDynamicRevision)
+        .arg(state.waveformBars.size())
+        .arg(state.gridLines.size())
+        .arg(state.noteSprites.size())
+        .arg(state.trackSprites.size())
+        .arg(state.holdSpans.size())
+        .arg(state.touchHoldLines.size())
+        .arg(state.muriDots.size())
+        .arg(snapshot.lines.size())
+        .arg(snapshot.measureLineSeconds.size());
+
+    const QString waveformPayload = renderMapWaveformPayload(state, stateBridge);
+    const QString primitivePayload = renderMapPrimitivePayload(state);
+    const QString dataPayload = renderMapDataAnchorPayload(state, stateBridge);
+    if (!waveformPayload.isEmpty()) {
+        payload += QLatin1Char(' ') + waveformPayload;
+    }
+    if (!primitivePayload.isEmpty()) {
+        payload += QLatin1Char(' ') + primitivePayload;
+    }
+    if (!dataPayload.isEmpty()) {
+        payload += QLatin1Char(' ') + dataPayload;
+    }
+
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("timeline/render_map"),
+        payload);
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("timeline/render_map"),
+        renderMapPointPayload(QStringLiteral("playhead"), state, stateBridge->playheadSeconds()));
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("timeline/render_map"),
+        renderMapPointPayload(QStringLiteral("cursor"), state, stateBridge->cursorSeconds()));
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("timeline/render_map"),
+        renderMapPointPayload(QStringLiteral("entry"), state, stateBridge->playbackEntrySeconds()));
 }
 
 }  // namespace
@@ -771,6 +1226,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.zoomScale = stateBridge_->zoomScale();
     request.contentScale = stateBridge_->contentScale();
     request.waveformBrightness = stateBridge_->waveformBrightness();
+    request.waveformPhaseCompensationSeconds = stateBridge_->waveformPhaseCompensationSeconds();
     request.playbackEntrySeconds = stateBridge_->playbackEntrySeconds();
     request.playheadSeconds = stateBridge_->playheadSeconds();
     request.cursorSeconds = stateBridge_->cursorSeconds();
@@ -828,6 +1284,19 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     }
     miacode::timeline::TimelineSceneState state = cachedSceneState_;
     applyDynamicSceneState(&state, stateBridge_, dragActive_);
+    if (miacode::debug_options::previewWaveformAlignmentDiagnosticsEnabled()
+        && miacode::debug_options::runtimeDebugOutputEnabled()) {
+        const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+        const int intervalMs = miacode::debug_options::previewWaveformAlignmentDiagnosticSampleMs();
+        if (renderMapLastLogMs_ == 0 || nowMs - renderMapLastLogMs_ >= intervalMs) {
+            renderMapLastLogMs_ = nowMs;
+            appendTimelineRenderMapDiagnostics(
+                state,
+                stateBridge_,
+                currentScrollBucket,
+                sceneStateRebuildCount_);
+        }
+    }
     return state;
 }
 

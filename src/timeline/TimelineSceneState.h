@@ -126,6 +126,7 @@ struct TimelineSceneState {
     double pixelsPerSecond = 0.0;
     double contentScale = 1.0;
     double maxNavigableSecond = 0.0;
+    double waveformPhaseCompensationSeconds = 0.0;
     quint64 appearanceRevision = 0;
     quint64 gridRevision = 0;
     quint64 waveformRevision = 0;

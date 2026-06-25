@@ -412,7 +412,8 @@ void MainWindow::DocumentSection::updatePauseButtonAppearance()
     }
     const QColor iconColor =
         state_.previewFullscreenActive_ ? previewFullscreenOverlayIconColor() : UiTheme::colors().iconPrimary;
-    if (state_.qtPreviewPlaying_) {
+    const bool previewPlaying = state_.qtPreviewPlaying_ || state_.exportIntroLeadInActive_;
+    if (previewPlaying) {
         ui_.pausePreviewAction_->setIcon(makePreviewPauseIcon(iconColor));
         ui_.pausePreviewAction_->setText(uiText("preview.pause", "Pause"));
     } else {
@@ -421,14 +422,14 @@ void MainWindow::DocumentSection::updatePauseButtonAppearance()
     }
     if (ui_.pausePreviewButton_ != nullptr) {
         ui_.pausePreviewButton_->setText(
-            state_.qtPreviewPlaying_
+            previewPlaying
                 ? uiText("preview.pause", "Pause")
                 : uiText("preview.play", "Play")
         );
         ui_.pausePreviewButton_->setStyleSheet(
             state_.previewFullscreenActive_
-                ? previewFullscreenPauseButtonStyleSheet(state_.qtPreviewPlaying_)
-                : UiTheme::pausePreviewButtonStyleSheet(state_.qtPreviewPlaying_)
+                ? previewFullscreenPauseButtonStyleSheet(previewPlaying)
+                : UiTheme::pausePreviewButtonStyleSheet(previewPlaying)
         );
     }
 }

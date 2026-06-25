@@ -330,6 +330,16 @@ qint64 MainWindow::TimelineSection::timelineTargetFrameIntervalNs() const
     return qMax<qint64>(1LL, qRound64(1000000000.0 / qMax(1.0, timelineTargetFps)));
 }
 
+void MainWindow::TimelineSection::refreshTimelineWaveformPhaseCompensation()
+{
+    if (state_.timelineQuickStateBridge_ == nullptr) {
+        return;
+    }
+    const qint64 frameIntervalNs = qMax<qint64>(1, previewCanvasTargetFrameIntervalNs());
+    state_.timelineQuickStateBridge_->setWaveformPhaseCompensationSeconds(
+        static_cast<double>(frameIntervalNs) / 1000000000.0);
+}
+
 void MainWindow::TimelineSection::resetQtPreviewFixedFramePacing()
 {
     state_.qtPreviewNextFixedTickDueNs_ = -1;
@@ -537,6 +547,7 @@ void MainWindow::TimelineSection::refreshPreviewFrameRateTimers()
             currentPreviewCanvasRefreshRate()
         );
     }
+    refreshTimelineWaveformPhaseCompensation();
 }
 
 void MainWindow::TimelineSection::applyPreviewStageMediaFrameRateMode()
