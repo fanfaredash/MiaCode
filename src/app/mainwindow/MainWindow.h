@@ -303,6 +303,7 @@ private slots:
     void onToggleJudgeMarkers(bool checked);
     void onToggleTouchTrail(bool checked);
     void onEditStaticTapOnSlideThreshold();
+    void onExportCover();
     void onBatchExportPreviewVideo();
     void onPackAsZip();
     void onNetBatchDownload();

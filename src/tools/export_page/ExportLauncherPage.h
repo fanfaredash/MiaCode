@@ -72,6 +72,7 @@ public:
     void onPageLeft();
 
     int selectedDifficultyId() const { return selectedDifficultyId_; }
+    int menuActionDifficultyId() const;
 
 private:
     enum SubPage {
