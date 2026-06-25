@@ -88,7 +88,7 @@ Release packages are currently produced locally by maintainers using the scripts
 
 Project-owned MiaCode source code is MIT-licensed; see [LICENSE](LICENSE). The repository as a whole, bundled assets, packaged binaries, and release packages are intended for non-commercial use; see [LICENSE_SCOPE.md](LICENSE_SCOPE.md). Third-party libraries, fonts, SFX, images, FFmpeg, BASS, Qt, and reference implementations may have their own licenses or redistribution limits; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Thanks to [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) and related projects for simai parsing, preview, and engineering references. Thanks to [gfdfdxc/maimai-transition](https://github.com/gfdfdxc/maimai-transition) for providing intro references.
+Thanks to [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) and related projects for simai parsing, preview, and engineering references. Thanks to [gfdfdxc/maimai-transition](https://github.com/gfdfdxc/maimai-transition) for providing intro references. Thanks to [Majdata Net](https://majdata.net/) for providing community chart downloads, and thanks to [MaiViewer](https://www.maiviewer.net/) for providing official chart simai transcription references.
 
 Thanks to the friends who gave suggestions, reproduced issues, and helped with debugging during internal testing; see [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md).
 
