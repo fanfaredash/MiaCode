@@ -48,6 +48,7 @@ struct NetDownloadResult {
 
 struct NetQueryOptions {
     bool fuzzyCaseInsensitive = true;
+    QString titleKeyword;
 };
 
 QList<NetChartSummary> parseChartListJson(const QByteArray& payload, QString* errorMessage);

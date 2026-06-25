@@ -1,6 +1,7 @@
 #include "BracketCompletionPopup.h"
 
 #include <QApplication>
+#include <QMouseEvent>
 #include <QPoint>
 #include <QRect>
 #include <QScreen>
@@ -28,7 +29,6 @@ BracketCompletionPopup::BracketCompletionPopup(QWidget* parent)
     connect(this, &QListWidget::itemPressed, this, [this](QListWidgetItem* item) {
         if (item != nullptr) {
             setCurrentItem(item);
-            emit candidateActivated(item->text());
         }
     });
 }
@@ -88,6 +88,20 @@ bool BracketCompletionPopup::applyFilter(const QString& prefix)
     const int previousRow = matched.indexOf(previous);
     setCurrentRow(previousRow >= 0 ? previousRow : 0);
     return true;
+}
+
+void BracketCompletionPopup::mouseReleaseEvent(QMouseEvent* event)
+{
+    QListWidget::mouseReleaseEvent(event);
+    if (event == nullptr || event->button() != Qt::LeftButton) {
+        return;
+    }
+    QListWidgetItem* item = itemAt(event->pos());
+    if (item == nullptr) {
+        return;
+    }
+    setCurrentItem(item);
+    emit candidateActivated(item->text());
 }
 
 void BracketCompletionPopup::relayout(const QPoint& globalTopLeft)

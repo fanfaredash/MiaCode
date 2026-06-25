@@ -48,6 +48,7 @@ private:
 
     QLineEdit* usernameEdit_ = nullptr;
     QLineEdit* tagEdit_ = nullptr;
+    QLineEdit* titleEdit_ = nullptr;
     QDateEdit* startDateEdit_ = nullptr;
     QDateEdit* endDateEdit_ = nullptr;
     QLineEdit* outputDirEdit_ = nullptr;

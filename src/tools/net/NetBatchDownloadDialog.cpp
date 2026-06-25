@@ -176,6 +176,15 @@ bool chartMatchesTagKeyword(const NetChartSummary& chart, const QString& tagKeyw
     return false;
 }
 
+bool chartMatchesTitleKeyword(const NetChartSummary& chart, const QString& titleKeyword, Qt::CaseSensitivity caseSensitivity)
+{
+    const QString normalized = titleKeyword.trimmed();
+    if (normalized.isEmpty()) {
+        return true;
+    }
+    return chart.title.contains(normalized, caseSensitivity);
+}
+
 QString netDialogStyleSheet()
 {
     const UiTheme::Colors& c = UiTheme::colors();
@@ -274,6 +283,7 @@ void NetBatchDownloadDialog::buildUi()
 
     usernameEdit_ = new QLineEdit(this);
     tagEdit_ = new QLineEdit(this);
+    titleEdit_ = new QLineEdit(this);
     startDateEdit_ = new NetDateEdit(QDate::currentDate().addMonths(-1), this);
     startDateEdit_->setCalendarWidget(createNetCalendar(startDateEdit_));
     endDateEdit_ = new NetDateEdit(QDate::currentDate(), this);
@@ -290,16 +300,18 @@ void NetBatchDownloadDialog::buildUi()
     form->addWidget(usernameEdit_, 0, 1);
     form->addWidget(new QLabel(QStringLiteral("Tag"), this), 0, 2);
     form->addWidget(tagEdit_, 0, 3);
-    form->addWidget(new QLabel(trText("开始", "Start"), this), 0, 4);
-    form->addWidget(startDateEdit_, 0, 5);
-    form->addWidget(new QLabel(trText("结束", "End"), this), 0, 6);
-    form->addWidget(endDateEdit_, 0, 7);
-    form->addWidget(queryButton_, 0, 8);
-    form->addWidget(fuzzyMatchCheck_, 0, 9);
+    form->addWidget(new QLabel(trText("歌曲名", "Song Title"), this), 0, 4);
+    form->addWidget(titleEdit_, 0, 5);
+    form->addWidget(new QLabel(trText("开始", "Start"), this), 0, 6);
+    form->addWidget(startDateEdit_, 0, 7);
+    form->addWidget(new QLabel(trText("结束", "End"), this), 0, 8);
+    form->addWidget(endDateEdit_, 0, 9);
+    form->addWidget(queryButton_, 0, 10);
+    form->addWidget(fuzzyMatchCheck_, 0, 11);
     form->addWidget(new QLabel(trText("输出目录", "Output Directory"), this), 1, 0);
-    form->addWidget(outputDirEdit_, 1, 1, 1, 7);
-    form->addWidget(browseButton, 1, 8);
-    form->addWidget(zipAfterDownloadCheck_, 1, 9);
+    form->addWidget(outputDirEdit_, 1, 1, 1, 9);
+    form->addWidget(browseButton, 1, 10);
+    form->addWidget(zipAfterDownloadCheck_, 1, 11);
     root->addLayout(form);
 
     table_ = new QTableWidget(this);
@@ -399,6 +411,7 @@ void NetBatchDownloadDialog::setBusy(bool busy)
     busy_ = busy;
     usernameEdit_->setEnabled(!busy);
     tagEdit_->setEnabled(!busy);
+    titleEdit_->setEnabled(!busy);
     startDateEdit_->setEnabled(!busy);
     endDateEdit_->setEnabled(!busy);
     outputDirEdit_->setEnabled(!busy);
@@ -450,10 +463,11 @@ void NetBatchDownloadDialog::queryCharts()
 {
     const QString username = usernameEdit_->text().trimmed();
     const QString tag = tagEdit_->text().trimmed();
+    const QString title = titleEdit_->text().trimmed();
     const bool fuzzyMatch = fuzzyMatchCheck_->isChecked();
     const Qt::CaseSensitivity caseSensitivity = fuzzyMatch ? Qt::CaseInsensitive : Qt::CaseSensitive;
-    if (username.isEmpty() && tag.isEmpty()) {
-        QMessageBox::warning(this, windowTitle(), trText("请输入用户 ID 或 Tag。", "Please enter a user ID or tag."));
+    if (username.isEmpty() && tag.isEmpty() && title.isEmpty()) {
+        QMessageBox::warning(this, windowTitle(), trText("请输入用户 ID、Tag 或歌曲名。", "Please enter a user ID, tag, or song title."));
         return;
     }
 
@@ -461,9 +475,10 @@ void NetBatchDownloadDialog::queryCharts()
     cancelRequested_ = false;
     progressBar_->setRange(0, 0);
     summaryLabel_->setText(trText("正在查询 Net...", "Querying Net..."));
-    appendLog(trText("开始查询：用户=%1，tag=%2，日期=%3..%4，模糊大小写=%5", "Start query: user=%1, tag=%2, dates=%3..%4, fuzzy case=%5")
-                  .arg(username)
+    appendLog(trText("开始查询：用户=%1，tag=%2，歌曲名=%3，日期=%4..%5，模糊大小写=%6", "Start query: user=%1, tag=%2, title=%3, dates=%4..%5, fuzzy case=%6")
+                  .arg(username.isEmpty() ? QStringLiteral("-") : username)
                   .arg(tag.isEmpty() ? QStringLiteral("-") : tag)
+                  .arg(title.isEmpty() ? QStringLiteral("-") : title)
                   .arg(startDateEdit_->date().toString(Qt::ISODate))
                   .arg(endDateEdit_->date().toString(Qt::ISODate))
                   .arg(fuzzyMatch ? QStringLiteral("yes") : QStringLiteral("no")));
@@ -474,6 +489,7 @@ void NetBatchDownloadDialog::queryCharts()
     QString error;
     NetQueryOptions options;
     options.fuzzyCaseInsensitive = fuzzyMatch;
+    options.titleKeyword = title;
     const QList<NetChartSummary> queriedCharts = client_.queryCharts(username, tag, options, &error);
     progressBar_->setRange(0, 100);
     progressBar_->setValue(0);
@@ -492,7 +508,8 @@ void NetBatchDownloadDialog::queryCharts()
     filtered.reserve(dateFiltered.size());
     for (const NetChartSummary& chart : dateFiltered) {
         if (chartMatchesUserKeyword(chart, username, caseSensitivity)
-            && chartMatchesTagKeyword(chart, tag, caseSensitivity)) {
+            && chartMatchesTagKeyword(chart, tag, caseSensitivity)
+            && chartMatchesTitleKeyword(chart, title, caseSensitivity)) {
             filtered.append(chart);
         }
     }
@@ -501,7 +518,7 @@ void NetBatchDownloadDialog::queryCharts()
         trText("找到 %1 个谱面（查询返回 %2 个）。", "Found %1 chart(s) from %2 returned chart(s).")
             .arg(filtered.size())
             .arg(queriedCharts.size()));
-    appendLog(trText("查询完成（%1 ms）：接口返回 %2，日期筛选后 %3，本地 ID/Tag 筛选后 %4。", "Query complete (%1 ms): API returned %2, date filter kept %3, local ID/tag filter kept %4.")
+    appendLog(trText("查询完成（%1 ms）：接口返回 %2，日期筛选后 %3，本地 ID/Tag/歌曲名筛选后 %4。", "Query complete (%1 ms): API returned %2, date filter kept %3, local ID/tag/title filter kept %4.")
                   .arg(elapsed.elapsed())
                   .arg(queriedCharts.size())
                   .arg(dateFiltered.size())

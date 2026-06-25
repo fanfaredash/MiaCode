@@ -141,6 +141,11 @@ void MainWindow::DocumentSection::refreshRestoreBackupMenu(QMenu* restoreBackupM
         return;
     }
     restoreBackupMenu->clear();
+    const QRect screenRect = restoreBackupMenu->screen() != nullptr
+        ? restoreBackupMenu->screen()->availableGeometry()
+        : QRect();
+    const int screenBound = screenRect.isValid() ? qMax(240, screenRect.height() - 120) : 640;
+    restoreBackupMenu->setMaximumHeight(qMin(520, screenBound));
 
     const QString autosaveDirectoryPath = resolveAutosaveDirectoryPath();
     const QList<BackupRestoreEntry> entries = backupRestoreEntriesForAutosaveDirectory(autosaveDirectoryPath);
