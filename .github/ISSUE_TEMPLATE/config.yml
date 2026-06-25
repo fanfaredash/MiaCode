@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security, licensing, or private asset concerns
+    url: https://github.com/fanfaredash/MiaCode/discussions
+    about: Please avoid posting sensitive files, private assets, or copyright-restricted material in public issues.

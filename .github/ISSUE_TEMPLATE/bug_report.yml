@@ -1,0 +1,83 @@
+name: Bug report
+description: Report a reproducible bug, crash, or incorrect behavior.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem. Please include enough detail for someone else to reproduce it.
+
+  - type: input
+    id: version
+    attributes:
+      label: MiaCode version
+      description: Use the version shown in About or the release package name.
+      placeholder: "e.g. 1.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Editor
+        - Preview
+        - Timeline
+        - Audio
+        - Video export
+        - Cover export
+        - Startup / packaging
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug clearly, including any error messages.
+      placeholder: "MiaCode crashed when..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: A small, repeatable case is the most helpful kind of report.
+      placeholder: |
+        1. Open...
+        2. Click...
+        3. See...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: "I expected..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the details that are relevant to this issue.
+      placeholder: |
+        - Windows version:
+        - GPU:
+        - Audio device/backend:
+        - Chart/video/audio files involved, if relevant:
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots, or sample files
+      description: Attach logs, screenshots, or a minimal sample project if possible. Do not upload copyrighted, private, or commercial assets unless you have permission.
+
