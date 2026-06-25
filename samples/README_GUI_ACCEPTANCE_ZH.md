@@ -41,7 +41,7 @@
 
 **测试谱**:`samples\negative_hs_demo\maidata.txt`
 
-**打开方式**:负 HS 现已**默认开启**,直接启动 `build\Release\MiaCode.exe`,File → Open 上面的 `maidata.txt`,进难度 `5`。(也可双击 `Start_MiaCode_NegativeHS.bat` 一键开谱。)要**关闭**负 HS(恢复严格拒负)则设 `MIACODE_PREVIEW_REJECT_NEGATIVE_HS=1`。
+**打开方式**:负 HS 现已**默认开启**,直接启动 `build\Release\MiaCode.exe`,File → Open 上面的 `maidata.txt`,进难度 `5`。要**关闭**负 HS(恢复严格拒负)则设 `MIACODE_PREVIEW_REJECT_NEGATIVE_HS=1`。
 
 谱面内容(120 BPM,已扩展 = 54 物件,HS 取值 [-4,-3,-2,-1.5,-1,0.5,1,2]):
 1. 正向基准 `1,2,3,4`,然后 `<HS*-1>` / `<HS*-2>` / `<HS*-4>` 逐档倒流(负越大越快),再 `<HS*1>` 复位。
