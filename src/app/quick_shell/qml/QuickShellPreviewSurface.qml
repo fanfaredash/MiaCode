@@ -21,6 +21,23 @@ Item {
     readonly property string instanceTag: surfaceRole + ":" + Math.round(Math.random() * 1000000000)
     readonly property var hostWindow: root.Window.window ? root.Window.window : null
 
+    function surfaceGeometryPayload() {
+        let payload = "item_x=" + x
+            + " item_y=" + y
+            + " item_width=" + width
+            + " item_height=" + height
+        if (parent) {
+            payload += " parent_width=" + parent.width
+            payload += " parent_height=" + parent.height
+        }
+        if (hostWindow && hostWindow.contentItem) {
+            const sceneTopLeft = root.mapToItem(hostWindow.contentItem, 0, 0)
+            payload += " scene_x=" + sceneTopLeft.x
+            payload += " scene_y=" + sceneTopLeft.y
+        }
+        return payload
+    }
+
     function logSurface(action, extra) {
         if (!logger)
             return
@@ -42,11 +59,16 @@ Item {
     function syncVideoOutputBinding() {
         const videoOutput = previewStageMedia.videoOutputObject
         const nextHost = mediaHost
-        const shouldAttach = visible && nextHost && videoOutput && hostWindow && hostWindow.visible
+        const hasStableGeometry = width >= 64 && height >= 64
+        const shouldAttach = visible && hasStableGeometry && nextHost && videoOutput && hostWindow && hostWindow.visible
 
         if (attachedMediaHost && (!shouldAttach || attachedMediaHost !== nextHost)) {
             attachedMediaHost.detachVideoOutputObject(attachedVideoOutputObject)
-            logSurface("preview_surface_video_output_detach", "has_video_output=" + (attachedVideoOutputObject ? 1 : 0))
+            logSurface(
+                "preview_surface_video_output_detach",
+                "has_video_output=" + (attachedVideoOutputObject ? 1 : 0)
+                    + " stable_geometry=" + (hasStableGeometry ? 1 : 0)
+            )
             attachedMediaHost = null
             attachedVideoOutputObject = null
         }
@@ -55,7 +77,11 @@ Item {
             nextHost.attachVideoOutputObject(videoOutput)
             attachedMediaHost = nextHost
             attachedVideoOutputObject = videoOutput
-            logSurface("preview_surface_video_output_attach", "has_video_output=" + (videoOutput ? 1 : 0))
+            logSurface(
+                "preview_surface_video_output_attach",
+                "has_video_output=" + (videoOutput ? 1 : 0)
+                    + " stable_geometry=" + (hasStableGeometry ? 1 : 0)
+            )
         }
     }
 
@@ -72,9 +98,14 @@ Item {
         logSurface("preview_surface_host_window_changed")
     }
     onRuntimeChanged: logSurface("preview_surface_runtime_changed")
+    onXChanged: geometryLogTimer.restart()
+    onYChanged: geometryLogTimer.restart()
+    onWidthChanged: geometryLogTimer.restart()
+    onHeightChanged: geometryLogTimer.restart()
     Component.onCompleted: {
         syncVideoOutputBinding()
-        logSurface("preview_surface_created")
+        geometryLogTimer.restart()
+        logSurface("preview_surface_created", surfaceGeometryPayload())
     }
     Component.onDestruction: {
         logSurface("preview_surface_destroyed")
@@ -82,6 +113,16 @@ Item {
             attachedMediaHost.detachVideoOutputObject(attachedVideoOutputObject)
             attachedMediaHost = null
             attachedVideoOutputObject = null
+        }
+    }
+
+    Timer {
+        id: geometryLogTimer
+        interval: 0
+        repeat: false
+        onTriggered: {
+            root.syncVideoOutputBinding()
+            root.logSurface("preview_surface_geometry_changed", root.surfaceGeometryPayload())
         }
     }
 
@@ -123,6 +164,9 @@ Item {
     PreviewQuickSceneRoot {
         anchors.fill: parent
         z: 1
+        objectName: root.surfaceRole === "embedded_inline"
+            ? "preview_dcomp_track_target"
+            : "preview_dcomp_track_target_" + root.surfaceRole
         runtime: root.runtime
         dcompFallbackActive: root.dcompFallbackActive
     }
