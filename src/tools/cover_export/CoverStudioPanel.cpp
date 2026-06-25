@@ -17,6 +17,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFont>
 #include <QFormLayout>
 #include <QFrame>
 #include <QGroupBox>
@@ -125,9 +126,26 @@ QString inspectorSectionTitleStyle()
 {
     const UiTheme::Colors& c = UiTheme::colors();
     return QStringLiteral(
-        "QGroupBox::title { color: %1; font-size: 13px; font-weight: 700;"
-        " padding: 0 6px; }")
-        .arg(c.textPrimary.name(QColor::HexRgb));
+        "QGroupBox { border: 1px solid %2; border-radius: 8px; margin-top: 13px;"
+        " padding-top: 8px; color: %1; font-weight: 700; }"
+        "QGroupBox::title { subcontrol-origin: margin; left: 10px;"
+        " color: %1; font-size: 13px; font-weight: 700; padding: 0 6px; }"
+        "QGroupBox QLabel, QGroupBox QCheckBox, QGroupBox QComboBox,"
+        " QGroupBox QLineEdit, QGroupBox QPushButton { font-weight: 400; }")
+        .arg(c.textPrimary.name(QColor::HexRgb),
+             c.borderSoft.name(QColor::HexRgb));
+}
+
+void emphasizeGroupTitle(QGroupBox* group)
+{
+    if (group == nullptr) {
+        return;
+    }
+    group->setStyleSheet(inspectorSectionTitleStyle());
+    QFont titleFont = group->font();
+    titleFont.setWeight(QFont::DemiBold);
+    titleFont.setPointSizeF(qMax<qreal>(titleFont.pointSizeF(), 10.5));
+    group->setFont(titleFont);
 }
 
 // Chart-frame square render-size clamp (px); the natural size is the layer's
@@ -294,7 +312,6 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     auto* canvasGroup = new QGroupBox(
         l10n(QStringLiteral("Canvas"), QStringLiteral("画板")), this);
     canvasGroup_ = canvasGroup;
-    canvasGroup->setStyleSheet(inspectorSectionTitleStyle());
     auto* form = new QFormLayout(canvasGroup);
     form->setSpacing(10);
     form->setLabelAlignment(Qt::AlignLeft);
@@ -358,12 +375,12 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     form->addRow(l10n(QStringLiteral("Brightness"), QStringLiteral("背景亮度")), bgBrightnessSlider_);
 
     controlsColumn->addWidget(canvasGroup);
+    emphasizeGroupTitle(canvasGroup);
 
     // ---- Difficulty-card section (an opt-in layer, like the chart frame) ----
     auto* cardGroup = new QGroupBox(
         l10n(QStringLiteral("Difficulty card options"), QStringLiteral("难度卡选项")), this);
     cardGroup_ = cardGroup;
-    cardGroup->setStyleSheet(inspectorSectionTitleStyle());
     auto* cardForm = new QFormLayout(cardGroup);
     cardForm->setSpacing(10);
     cardForm->setLabelAlignment(Qt::AlignLeft);
@@ -411,6 +428,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     cardForm->addRow(l10n(QStringLiteral("Long text"), QStringLiteral("文字超长")), textOverflowCombo_);
 
     controlsColumn->addWidget(cardGroup);
+    emphasizeGroupTitle(cardGroup);
 
     // ---- Chart-frame section (an opt-in layer) ----
     auto* frameGroup = new QGroupBox(

@@ -6,9 +6,11 @@
 #include "UiText.h"
 #include "UiTheme.h"
 
+#include <QApplication>
 #include <QCheckBox>
 #include <QEvent>
 #include <QFormLayout>
+#include <QFont>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -17,12 +19,15 @@
 #include <QPainterPath>
 #include <QPixmap>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QVBoxLayout>
 
 namespace miacode::cover_export {
 namespace {
+
+constexpr int kFrameTransportSliderHeight = 24;
 
 QString l10n(const QString& en, const QString& zh)
 {
@@ -96,23 +101,31 @@ QIcon makeTransportIcon(bool pause, const QColor& color)
     return QIcon(pixmap);
 }
 
-QString frameTimeSliderStyle()
+QString frameTransportSliderStyleSheet()
 {
     const UiTheme::Colors& c = UiTheme::colors();
-    return QStringLiteral(
-        "QSlider { background: transparent; }"
-        "QSlider::groove:horizontal { height: 6px; background: %1; border-radius: 3px; }"
-        "QSlider::sub-page:horizontal { height: 6px; background: %2; border-radius: 3px; }"
-        "QSlider::add-page:horizontal { height: 6px; background: %1; border-radius: 3px; }"
-        "QSlider::handle:horizontal { width: 18px; margin: -6px 0; border-radius: 9px;"
-        " background: #FFFFFF; border: 1px solid %3; }"
-        "QSlider::handle:horizontal:hover { border-color: %2; }"
-        "QSlider::handle:horizontal:pressed { background: #FFFFFF; border-color: %2; }"
-        "QSlider:disabled::sub-page:horizontal { background: %1; }"
-        "QSlider:disabled::add-page:horizontal { background: %1; }")
-        .arg(c.inputDisabledBg.name(QColor::HexRgb),
-             c.accent.name(QColor::HexRgb),
-             c.borderSoft.name(QColor::HexRgb));
+    const QColor handleBg = c.dark ? c.accentText : QColor(QStringLiteral("#FFFFFF"));
+    const QColor handleBorder = c.borderSoft;
+    return UiTheme::formSliderStyleSheet()
+        + QStringLiteral(
+              "QSlider::handle:horizontal { width: 18px; height: 18px; margin: -6px 0; border-radius: 9px;"
+              " background: %1; border: 1px solid %2; }"
+              "QSlider::handle:horizontal:hover { background: %1; border-color: %2; }"
+              "QSlider::handle:horizontal:pressed { background: %1; border-color: %2; }")
+              .arg(handleBg.name(QColor::HexRgb),
+                   handleBorder.name(QColor::HexRgb));
+}
+
+void configureTransportSlider(QSlider* slider)
+{
+    if (slider == nullptr) {
+        return;
+    }
+    // Keep the preview scrubber track, but make the frame playhead easier to see.
+    slider->setStyleSheet(frameTransportSliderStyleSheet());
+    // W4: the styled handle uses negative margins, so pin a measured height.
+    slider->ensurePolished();
+    slider->setFixedHeight(qMax(slider->sizeHint().height(), kFrameTransportSliderHeight));
 }
 
 QString frameTimeButtonStyle()
@@ -126,9 +139,36 @@ QString inspectorSectionTitleStyle()
 {
     const UiTheme::Colors& c = UiTheme::colors();
     return QStringLiteral(
-        "QGroupBox::title { color: %1; font-size: 13px; font-weight: 700;"
-        " padding: 0 6px; }")
-        .arg(c.textPrimary.name(QColor::HexRgb));
+        "QGroupBox { border: 1px solid %3; border-radius: 8px; margin-top: 13px;"
+        " padding-top: 8px; color: %1; font-weight: 700; }"
+        "QGroupBox::title { subcontrol-origin: margin; left: 10px;"
+        " color: %1; font-size: 13px; font-weight: 700;"
+        " padding: 0 6px; }"
+        "QGroupBox QLabel, QGroupBox QCheckBox, QGroupBox QComboBox,"
+        " QGroupBox QLineEdit, QGroupBox QPushButton { font-weight: 400; }"
+        "QLabel[role=\"coverFrameTimeLabel\"] { color: %2; font-weight: 600; }")
+        .arg(c.textPrimary.name(QColor::HexRgb),
+             c.textSecondary.name(QColor::HexRgb),
+             c.borderSoft.name(QColor::HexRgb));
+}
+
+void emphasizeGroupTitle(QGroupBox* group)
+{
+    if (group == nullptr) {
+        return;
+    }
+    group->setStyleSheet(inspectorSectionTitleStyle());
+    QFont titleFont = group->font();
+    titleFont.setWeight(QFont::DemiBold);
+    titleFont.setPointSizeF(qMax<qreal>(titleFont.pointSizeF(), 10.5));
+    group->setFont(titleFont);
+    const QFont contentFont = qApp != nullptr ? qApp->font() : QWidget().font();
+    const QList<QWidget*> children = group->findChildren<QWidget*>();
+    for (QWidget* child : children) {
+        if (child != nullptr) {
+            child->setFont(contentFont);
+        }
+    }
 }
 
 // A slider + click-to-type value readout (§10). The value mirrors the slider on
@@ -138,6 +178,8 @@ QWidget* makeSliderValueRow(QSlider* slider, miacode::ui::EditableValueLabel** v
                             const QString& suffix, QWidget* parent)
 {
     slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
+    slider->ensurePolished();
+    slider->setFixedHeight(qMax(slider->sizeHint().height(), 20) + 2);
     auto* row = new QWidget(parent);
     auto* layout = new QHBoxLayout(row);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -167,7 +209,6 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
 
     // ---- §3.2 layer (common) ----
     layerGroup_ = new QGroupBox(l10n(QStringLiteral("Layer"), QStringLiteral("图层")), this);
-    layerGroup_->setStyleSheet(inspectorSectionTitleStyle());
     auto* form = new QFormLayout(layerGroup_);
     form->setContentsMargins(8, 8, 8, 8);
     form->setSpacing(8);
@@ -211,7 +252,6 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
     // ---- §3.3 chart-frame options (polymorphic; shown only for chart frames) ----
     frameOptionsGroup_ = new QGroupBox(
         l10n(QStringLiteral("Chart frame options"), QStringLiteral("谱面帧选项")), this);
-    frameOptionsGroup_->setStyleSheet(inspectorSectionTitleStyle());
     auto* frameForm = new QFormLayout(frameOptionsGroup_);
     frameForm->setContentsMargins(8, 8, 8, 8);
     frameForm->setSpacing(8);
@@ -244,7 +284,7 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
     framePlayButton_->setAccessibleName(framePlayButton_->toolTip());
     frameTimeSlider_ = new QSlider(Qt::Horizontal, frameTimeRow);
     frameTimeSlider_->setRange(0, qMax(1, qRound(studio_ != nullptr ? studio_->contentDurationSeconds() * 1000.0 : 1.0)));
-    frameTimeSlider_->setStyleSheet(frameTimeSliderStyle());
+    configureTransportSlider(frameTimeSlider_);
     frameTimeSlider_->setToolTip(l10n(QStringLiteral("Frame time for the selected chart frame"),
                                       QStringLiteral("当前谱面帧的帧时间")));
     frameTimeSlider_->installEventFilter(this);
@@ -254,7 +294,14 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
     frameTimeLayout->addWidget(framePlayButton_, 0);
     frameTimeLayout->addWidget(frameTimeSlider_, 1);
     frameTimeLayout->addWidget(frameTimeReadout_, 0);
-    frameForm->addRow(l10n(QStringLiteral("Frame time"), QStringLiteral("帧时间")), frameTimeRow);
+    auto* frameTimeLabel = new QLabel(l10n(QStringLiteral("Frame time"), QStringLiteral("帧时间")), frameOptionsGroup_);
+    frameTimeLabel->setProperty("role", QStringLiteral("coverFrameTimeLabel"));
+    frameTimeLabel->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
+    frameTimeLayout->insertWidget(0, frameTimeLabel, 0);
+    frameForm->addRow(frameTimeRow);
+
+    emphasizeGroupTitle(layerGroup_);
+    emphasizeGroupTitle(frameOptionsGroup_);
 
     root->addWidget(frameOptionsGroup_);
     root->addStretch(1);

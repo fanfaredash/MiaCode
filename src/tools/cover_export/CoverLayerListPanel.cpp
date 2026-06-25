@@ -62,6 +62,19 @@ QString formatOpacity(qreal opacity)
     return QStringLiteral("%1%").arg(qRound(qBound<qreal>(0.0, opacity, 1.0) * 100.0));
 }
 
+void applyPanelTitleStyle(QLabel* title)
+{
+    if (title == nullptr) {
+        return;
+    }
+    QFont titleFont = title->font();
+    titleFont.setWeight(QFont::DemiBold);
+    titleFont.setPointSizeF(qMax<qreal>(titleFont.pointSizeF(), 10.5));
+    title->setFont(titleFont);
+    title->setStyleSheet(QStringLiteral("QLabel { color: %1; font-size: 13px; font-weight: 700; padding: 0 6px; }")
+        .arg(UiTheme::colors().textPrimary.name(QColor::HexRgb)));
+}
+
 QRect rowContentRect(const QStyleOptionViewItem& option)
 {
     return option.rect.adjusted(4, 3, -4, -3);
@@ -287,7 +300,7 @@ CoverLayerListPanel::CoverLayerListPanel(CoverStudioPanel* studio, QWidget* pare
     layout->setSpacing(8);
 
     auto* title = new QLabel(l10n(QStringLiteral("Layers"), QStringLiteral("图层")), this);
-    title->setStyleSheet(QStringLiteral("font-weight: 600;"));
+    applyPanelTitleStyle(title);
     layout->addWidget(title);
 
     model_ = new CoverLayerListModel(this);

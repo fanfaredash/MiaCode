@@ -21,6 +21,7 @@ namespace miacode::cover_export {
 namespace {
 
 constexpr double kStepSeconds = 1.0 / 120.0;
+constexpr int kFrameTransportSliderHeight = 24;
 
 QString l10n(const QString& en, const QString& zh)
 {
@@ -74,22 +75,19 @@ QIcon makeTransportIcon(bool pause, const QColor& color)
     return QIcon(pixmap);
 }
 
-QString transportSliderStyle()
+QString frameTransportSliderStyleSheet()
 {
     const UiTheme::Colors& c = UiTheme::colors();
-    // Rounded track + accent fill + circular handle, matching the realtime
-    // QuickShellPreviewTransport look (§5).
-    return QStringLiteral(
-        "QSlider::groove:horizontal { height: 6px; background: %1; border-radius: 3px; }"
-        "QSlider::sub-page:horizontal { background: %2; border-radius: 3px; }"
-        "QSlider::add-page:horizontal { background: %1; border-radius: 3px; }"
-        "QSlider::handle:horizontal { width: 18px; margin: -6px 0; border-radius: 9px;"
-        " background: #FFFFFF; border: 1px solid %3; }"
-        "QSlider::handle:horizontal:hover { border-color: %2; }"
-        "QSlider:disabled::sub-page:horizontal { background: %1; }")
-        .arg(c.inputDisabledBg.name(QColor::HexRgb),
-             c.accent.name(QColor::HexRgb),
-             c.borderSoft.name(QColor::HexRgb));
+    const QColor handleBg = c.dark ? c.accentText : QColor(QStringLiteral("#FFFFFF"));
+    const QColor handleBorder = c.borderSoft;
+    return UiTheme::formSliderStyleSheet()
+        + QStringLiteral(
+              "QSlider::handle:horizontal { width: 18px; height: 18px; margin: -6px 0; border-radius: 9px;"
+              " background: %1; border: 1px solid %2; }"
+              "QSlider::handle:horizontal:hover { background: %1; border-color: %2; }"
+              "QSlider::handle:horizontal:pressed { background: %1; border-color: %2; }")
+              .arg(handleBg.name(QColor::HexRgb),
+                   handleBorder.name(QColor::HexRgb));
 }
 
 QPushButton* makeTransportButton(QWidget* parent)
@@ -132,7 +130,10 @@ CoverFramePickerPanel::CoverFramePickerPanel(CoverStudioPanel* studio, QWidget* 
     auto* title = new QLabel(l10n(QStringLiteral("Frame"), QStringLiteral("帧")), this);
     title->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
 
-    slider_->setStyleSheet(transportSliderStyle());
+    // Keep the preview scrubber track, but make the frame playhead easier to see.
+    slider_->setStyleSheet(frameTransportSliderStyleSheet());
+    slider_->ensurePolished();
+    slider_->setFixedHeight(qMax(slider_->sizeHint().height(), kFrameTransportSliderHeight));
     backButton_->setToolTip(l10n(QStringLiteral("Step back (←)"), QStringLiteral("后退一步（←）")));
     forwardButton_->setToolTip(l10n(QStringLiteral("Step forward (→)"), QStringLiteral("前进一步（→）")));
     slider_->setToolTip(l10n(QStringLiteral("Frame time for the selected chart frame"),
