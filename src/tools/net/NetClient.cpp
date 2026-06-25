@@ -434,6 +434,7 @@ QList<NetChartSummary> NetClient::queryCharts(
 {
     const QString trimmedUser = username.trimmed();
     const QString tagSearch = tagSearchQueryFor(tagKeyword);
+    const QString titleSearch = options.titleKeyword.trimmed();
     QList<NetChartSummary> merged;
     QSet<QString> seenIds;
 
@@ -497,8 +498,23 @@ QList<NetChartSummary> NetClient::queryCharts(
             }
         }
     }
-    if (trimmedUser.isEmpty() && tagSearch.isEmpty() && errorMessage != nullptr) {
-        *errorMessage = QStringLiteral("Please enter a user ID or tag.");
+    if (!titleSearch.isEmpty()) {
+        appendUnique(querySearchText(titleSearch, QStringLiteral("https://majdata.net/"), errorMessage));
+        if (errorMessage != nullptr && !errorMessage->isEmpty()) {
+            return {};
+        }
+        if (options.fuzzyCaseInsensitive) {
+            const QString lowerTitleSearch = titleSearch.toLower();
+            if (lowerTitleSearch != titleSearch) {
+                appendUnique(querySearchText(lowerTitleSearch, QStringLiteral("https://majdata.net/"), errorMessage));
+                if (errorMessage != nullptr && !errorMessage->isEmpty()) {
+                    return {};
+                }
+            }
+        }
+    }
+    if (trimmedUser.isEmpty() && tagSearch.isEmpty() && titleSearch.isEmpty() && errorMessage != nullptr) {
+        *errorMessage = QStringLiteral("Please enter a user ID, tag, or song title.");
     }
     return merged;
 }

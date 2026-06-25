@@ -5,12 +5,13 @@
 #include <QStringList>
 
 class QPoint;
+class QMouseEvent;
 
 // Non-focusing dropdown shown beneath the caret while the user is filling a
 // just-opened bracket. It is a pure display surface: it never steals focus from
 // the editor (Qt::Tool + WA_ShowWithoutActivating), so the editor keeps
 // receiving every keystroke and drives selection/accept/dismiss itself. The
-// only thing it emits back is a mouse press on a row.
+// only thing it emits back is a mouse release on a row.
 class BracketCompletionPopup : public QListWidget
 {
     Q_OBJECT
@@ -37,6 +38,9 @@ public:
 
 signals:
     void candidateActivated(const QString& text);
+
+protected:
+    void mouseReleaseEvent(QMouseEvent* event) override;
 
 private:
     void relayout(const QPoint& globalTopLeft);
