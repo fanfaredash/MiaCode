@@ -1,6 +1,7 @@
 #include "MainWindow.ExportSection.h"
 
 #include "../window/MainWindow.WindowSection.h"
+#include "tools/export_page/ExportLauncherPage.h"
 #include "tools/net/NetBatchDownloadDialog.h"
 
 #include <QPointer>
@@ -11,9 +12,16 @@ MainWindow::ExportSection::ExportSection(MainWindow& owner, MainWindow::MainWind
     , state_(state)
 {}
 
+void MainWindow::onExportCover()
+{
+    const int difficultyId = exportPage_ != nullptr ? exportPage_->menuActionDifficultyId() : 0;
+    exportSection_->onExportCover(difficultyId);
+}
+
 void MainWindow::onBatchExportPreviewVideo()
 {
-    exportSection_->onBatchExportPreviewVideo();
+    const int difficultyId = exportPage_ != nullptr ? exportPage_->menuActionDifficultyId() : 0;
+    exportSection_->onBatchExportPreviewVideo(difficultyId);
 }
 
 void MainWindow::onPackAsZip()

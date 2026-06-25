@@ -1,15 +1,15 @@
 cmake_minimum_required(VERSION 3.21)
 
-set(MIACODE_VERSION_MAJOR "0")
-set(MIACODE_VERSION_MINOR "5")
-set(MIACODE_VERSION_PATCH "2")
+set(MIACODE_VERSION_MAJOR "1")
+set(MIACODE_VERSION_MINOR "0")
+set(MIACODE_VERSION_PATCH "0")
 # Single source of truth for the prerelease tag. Both the package
 # filename (MiaCode-v<version>-win64.zip via package-win.ps1) and the
 # user-visible "About" dialog read this. Beta20 unified the previously
 # split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
 # they always drifted apart in practice (e.g. beta20 zip shipping with
 # beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "beta3")
+set(MIACODE_VERSION_PRERELEASE "")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
@@ -268,6 +268,20 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/net/NetBatchDownloadDialog.cpp
     src/tools/cover_export/CoverLayoutModel.h
     src/tools/cover_export/CoverLayoutModel.cpp
+    src/tools/cover_export/CoverCompositionState.h
+    src/tools/cover_export/CoverCompositionState.cpp
+    src/tools/cover_export/CoverLayerListModel.h
+    src/tools/cover_export/CoverLayerListModel.cpp
+    src/tools/cover_export/CoverLayerListPanel.h
+    src/tools/cover_export/CoverLayerListPanel.cpp
+    src/tools/cover_export/CoverInspectorPanel.h
+    src/tools/cover_export/CoverInspectorPanel.cpp
+    src/tools/cover_export/CoverFramePickerPanel.h
+    src/tools/cover_export/CoverFramePickerPanel.cpp
+    src/tools/cover_export/CoverStudioPanel.h
+    src/tools/cover_export/CoverStudioPanel.cpp
+    src/tools/cover_export/CoverStudioWindow.h
+    src/tools/cover_export/CoverStudioWindow.cpp
     src/tools/cover_export/CoverComposerView.h
     src/tools/cover_export/CoverComposerView.cpp
     src/tools/cover_export/SceneFrameRenderer.h
@@ -1006,6 +1020,19 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/chart/document/SimaiDocument.cpp
         LIBS Qt6::Core
         INCLUDES src src/core/chart/document
+    )
+
+    miacode_add_dev_tool(cover_layout_model_spec TEST
+        SOURCES
+            src/tools/cover_export/CoverLayoutModelSpec.cpp
+            src/tools/cover_export/CoverLayoutModel.h
+            src/tools/cover_export/CoverLayoutModel.cpp
+            src/tools/cover_export/CoverCompositionState.h
+            src/tools/cover_export/CoverCompositionState.cpp
+            src/app/ui/UiText.h
+            src/app/ui/UiText.cpp
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
+        INCLUDES src src/app/ui
     )
 
     miacode_add_dev_tool(muri_spec TEST

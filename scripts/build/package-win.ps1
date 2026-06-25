@@ -592,9 +592,7 @@ if (Test-Path $licensesSrc) {
 $releaseDocs = @(
     "LICENSE",
     "LICENSE_SCOPE.md",
-    "THIRD_PARTY_NOTICES.md",
-    "README.md",
-    "README_EN.md"
+    "THIRD_PARTY_NOTICES.md"
 )
 foreach ($releaseDoc in $releaseDocs) {
     $releaseDocSrc = Join-Path $repoRoot $releaseDoc
@@ -632,8 +630,6 @@ $requiredPackagePaths = @(
     "LICENSE",
     "LICENSE_SCOPE.md",
     "THIRD_PARTY_NOTICES.md",
-    "README.md",
-    "README_EN.md",
     # app/: the real exe and its DLL/plugin/QML retinue.
     "app\\MiaCode.exe",
     "app\\ffmpeg\\ffmpeg.exe",
@@ -674,8 +670,10 @@ $requiredPackagePaths = @(
     "app\\qml\\QtQml\\WorkerScript\\workerscriptplugin.dll"
 )
 $unexpectedPackagePaths = @(
-    # docs/ + RELEASE_README.txt intentionally removed.
+    # docs/, developer READMEs, and RELEASE_README.txt intentionally removed.
     "docs",
+    "README.md",
+    "README_EN.md",
     "RELEASE_README.txt",
     "Start_MiaCode_Debug_CompareDump.bat",
     "Start_MiaCode_Debug_View.bat",
@@ -692,6 +690,9 @@ $unexpectedPackagePaths = @(
     # Extra local/A-B diagnostic launchers stay out of the release package.
     "Start_MiaCode_DisablePerPixelAlpha.bat",
     "Start_MiaCode_ExportNoPboReadback.bat",
+    "Start_MiaCode_WaveformAlignment_Test7.bat",
+    "test_charts",
+    "test_charts\\7",
     "logs\\quick-shell-beta",
     # No DLLs at root anymore — everything moved to app/.
     (Get-QtRuntimeDllName -BaseName "Qt6Core" -Config $Config),

@@ -480,6 +480,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     state.headerRightLimit = request.headerRightLimit > 0 ? request.headerRightLimit : request.viewportSize.width();
     state.visibleStartSecond = xToSecond(state, state.timelineLeft);
     state.visibleEndSecond = xToSecond(state, request.viewportSize.width());
+    state.waveformPhaseCompensationSeconds = qMax(0.0, request.waveformPhaseCompensationSeconds);
     state.appearanceRevision = request.appearanceRevision;
     state.gridRevision = request.gridRevision;
     state.waveformRevision = request.waveformRevision;
@@ -611,6 +612,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 qMax(0.001, state.visibleEndSecond - state.visibleStartSecond),
                 qMax(1, request.viewportSize.width() - state.timelineLeft));
         if (waveformLevel != nullptr && !waveformLevel->columns.isEmpty()) {
+            const double phaseCompensationSeconds = qMax(0.0, request.waveformPhaseCompensationSeconds);
             // Phase 7 — scroll-bucket culling. When the caller has
             // opted in via request.horizontalCullPaddingPx > 0 and
             // bumps revisions per scroll bucket (TimelineQuickItem
@@ -632,8 +634,8 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             const QPair<int, int> visibleColumns =
                 miacode::waveform::visibleWaveformColumnRange(
                     *waveformLevel,
-                    qMax(0.0, cullStartSecond),
-                    qMax(0.0, cullEndSecond));
+                    qMax(0.0, cullStartSecond + phaseCompensationSeconds),
+                    qMax(0.0, cullEndSecond + phaseCompensationSeconds));
             const qreal centerY = state.timelineTop + state.timelineHeight / 2.0;
             const qreal maxAmplitude = (qMax<qreal>(8.0, state.timelineHeight / 2.0 - 8.0) * 7.0) / 9.0;
             for (int index = visibleColumns.first; index < visibleColumns.second; ++index) {
@@ -641,12 +643,18 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 if (qAbs(column.max - column.min) <= 1e-5f) {
                     continue;
                 }
-                const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
+                // Hard waveform phase compensation: logs from multiple devices
+                // (60 Hz and 120 Hz) show the authoritative audio clock leading
+                // the timeline-rendered playhead by about one frame. The root
+                // cause is still unclear, so keep this as an explicit rendering
+                // compensation rather than folding it into waveform cache data.
+                const double columnStartSecond =
+                    waveformLevel->secondsPerColumn * static_cast<double>(index) - phaseCompensationSeconds;
                 const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
-                int x0 = secondToSceneX(state, columnStartSecond);
-                int x1 = secondToSceneX(state, columnEndSecond);
+                const qreal x0 = secondToXExact(state, columnStartSecond);
+                qreal x1 = secondToXExact(state, columnEndSecond);
                 if (x1 <= x0) {
-                    x1 = x0 + 1;
+                    x1 = x0 + 1.0;
                 }
                 const qreal topY = centerY - (qBound(-1.0f, column.max, 1.0f) * maxAmplitude);
                 const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
@@ -657,7 +665,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 // stays linked — the multiply touches RGB only, so the alpha
                 // (grid see-through amount) is preserved across the slider.
                 state.waveformBars.append(TimelineSceneRect{
-                    QRectF(x0, qMin(topY, bottomY), qMax(1, x1 - x0), qMax<qreal>(1.0, qAbs(bottomY - topY))),
+                    QRectF(x0, qMin(topY, bottomY), qMax<qreal>(1.0, x1 - x0), qMax<qreal>(1.0, qAbs(bottomY - topY))),
                     adjustedTimelineWaveformColor(theme.waveform, request.waveformBrightness),
                 });
             }

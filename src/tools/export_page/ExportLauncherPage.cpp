@@ -265,6 +265,13 @@ void ExportLauncherPage::onPageLeft()
     syncEmbeddedVideoPanel();
 }
 
+int ExportLauncherPage::menuActionDifficultyId() const
+{
+    return pageSessionActive_ && difficultyExists(selectedDifficultyId_)
+        ? selectedDifficultyId_
+        : 0;
+}
+
 void ExportLauncherPage::refreshFromDocument()
 {
     if (!difficultyExists(selectedDifficultyId_)) {

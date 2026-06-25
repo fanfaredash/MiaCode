@@ -46,8 +46,8 @@ public:
     // G2 Commit 2: live rate change during playback. Implements the
     // pause-modify-resume sequence per
     // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §6.2 so the BGM tempo
-    // stream is paused before BASS_ATTRIB_TEMPO is written and the cursor
-    // is re-anchored to the wall-clock chart-second the caller supplies.
+    // source is paused before its rate attribute is written and the cursor is
+    // re-anchored to the wall-clock chart-second the caller supplies.
     // The base default is a delegate to setBackgroundTrackPlaybackRate —
     // legacy / non-BASS backends keep the G1 "rate-change only when
     // already paused" behavior unless they override this slot.

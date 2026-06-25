@@ -380,6 +380,7 @@ void TimelineView::applyStateFromBridge()
     playheadIndicatorSuppressed_ = stateBridge_->playheadIndicatorSuppressed();
     contentScale_ = stateBridge_->contentScale();
     waveformBrightness_ = stateBridge_->waveformBrightness();
+    waveformPhaseCompensationSeconds_ = stateBridge_->waveformPhaseCompensationSeconds();
     pixelsPerSecond_ = 120.0 * stateBridge_->zoomScale();
     const int nextZoomIndex = qMax(0, zoomPresets_.indexOf(stateBridge_->zoomScale()));
     if (nextZoomIndex >= 0) {

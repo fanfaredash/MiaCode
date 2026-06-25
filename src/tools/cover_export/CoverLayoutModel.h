@@ -40,6 +40,11 @@ class CoverLayer : public QObject
     Q_PROPERTY(int z READ z WRITE setZ NOTIFY zChanged)
     Q_PROPERTY(bool visible READ visible WRITE setVisible NOTIFY visibleChanged)
     Q_PROPERTY(bool locked READ locked WRITE setLocked NOTIFY lockedChanged)
+    Q_PROPERTY(qreal opacity READ opacity WRITE setOpacity NOTIFY opacityChanged)
+    Q_PROPERTY(double frameSeconds READ frameSeconds WRITE setFrameSeconds NOTIFY frameSecondsChanged)
+    Q_PROPERTY(bool frameBgEnabled READ frameBgEnabled WRITE setFrameBgEnabled NOTIFY frameBgEnabledChanged)
+    Q_PROPERTY(qreal frameBgBrightness READ frameBgBrightness WRITE setFrameBgBrightness NOTIFY frameBgBrightnessChanged)
+    Q_PROPERTY(QString frameStyle READ frameStyle WRITE setFrameStyle NOTIFY frameStyleChanged)
     // -1 = no still rendered yet (QML shows nothing); >= 0 bumps on each new grab.
     Q_PROPERTY(int imageRevision READ imageRevision NOTIFY imageRevisionChanged)
 
@@ -55,10 +60,13 @@ public:
     int z() const { return z_; }
     bool visible() const { return visible_; }
     bool locked() const { return locked_; }
+    qreal opacity() const { return opacity_; }
     int imageRevision() const { return imageRevision_; }
     QImage frameImage() const { return frameImage_; }
     double frameSeconds() const { return frameSeconds_; }
-    void setFrameSeconds(double v) { frameSeconds_ = v; }
+    bool frameBgEnabled() const { return frameBgEnabled_; }
+    qreal frameBgBrightness() const { return frameBgBrightness_; }
+    QString frameStyle() const { return frameStyle_; }
 
     void setNx(qreal v);
     void setNy(qreal v);
@@ -66,6 +74,11 @@ public:
     void setZ(int v);
     void setVisible(bool v);
     void setLocked(bool v);
+    void setOpacity(qreal v);
+    void setFrameSeconds(double v);
+    void setFrameBgEnabled(bool v);
+    void setFrameBgBrightness(qreal v);
+    void setFrameStyle(const QString& v);
 
 signals:
     void nxChanged();
@@ -74,6 +87,11 @@ signals:
     void zChanged();
     void visibleChanged();
     void lockedChanged();
+    void opacityChanged();
+    void frameSecondsChanged();
+    void frameBgEnabledChanged();
+    void frameBgBrightnessChanged();
+    void frameStyleChanged();
     void imageRevisionChanged();
 
 private:
@@ -87,15 +105,18 @@ private:
     int z_ = 0;
     bool visible_ = true;
     bool locked_ = false;
+    qreal opacity_ = 1.0;
     QImage frameImage_;
     int imageRevision_ = -1;
     double frameSeconds_ = 0.0;
+    bool frameBgEnabled_ = true;
+    qreal frameBgBrightness_ = 0.8;
+    QString frameStyle_;
 };
 
-// Ordered set of composition layers, exposed to QML. Seeds the difficulty card
-// (always visible) plus the chart-frame layer (hidden until enabled); the design
-// carries z-order + extra kinds so badge layers slot in later without touching
-// this contract.
+// Ordered set of composition layers, exposed to QML. Seeds the stable difficulty
+// card and adds chart-frame layers on demand; the design carries z-order + extra
+// kinds so badge layers slot in later without touching this contract.
 class CoverLayoutModel : public QObject
 {
     Q_OBJECT
@@ -106,19 +127,42 @@ class CoverLayoutModel : public QObject
 public:
     explicit CoverLayoutModel(QObject* parent = nullptr);
 
-    // Seed the default composition (the difficulty card centred + a hidden
-    // chart-frame layer behind it). Idempotent — only creates missing layers.
+    // Seed the default composition (the centred difficulty card). Idempotent:
+    // only creates missing layers.
     void ensureDefaultLayers();
 
     QList<QObject*> layersAsObjects() const;
     const QList<CoverLayer*>& layers() const { return layers_; }
     CoverLayer* layer(const QString& key) const;
     int indexOfKey(const QString& key) const;
+    static QString cardKey();
+    static QString legacyChartFrameKey();
 
-    // Chart-frame layer toggle (drives its `visible`). When off, the layer stays
-    // in the model but the QML delegate (and the export grab) skip it.
+    // Legacy single-frame compatibility API. When enabled and no legacy frame
+    // exists, this creates a chart-frame layer; when disabled it hides that layer.
     Q_INVOKABLE bool chartFrameEnabled() const;
     Q_INVOKABLE void setChartFrameEnabled(bool enabled);
+    CoverLayer* addChartFrameLayer(double frameSeconds = 0.0);
+    // Add a chart-frame layer whose non-position properties are copied from
+    // `source`, while geometry keeps the normal new-frame placement. Used by
+    // the studio's "add frame" command to inherit the user's last frame setup.
+    CoverLayer* addChartFrameLayerFromTemplate(const CoverLayer* source, double fallbackFrameSeconds = 0.0);
+    CoverLayer* duplicateLayer(const QString& key);
+    bool removeLayer(const QString& key);
+    // Key to select after removing `key`, in the layer LIST's visible order
+    // (z descending, row 0 = front): the next item below, else the previous,
+    // else the stable card. Drives "delete then auto-select neighbour" so the
+    // delete key can be held to clear layers. Computed BEFORE the removal.
+    QString selectionAfterRemoval(const QString& key) const;
+    QList<CoverLayer*> chartFrameLayers() const;
+    QList<CoverLayer*> visibleChartFrameLayers() const;
+    bool moveLayerBefore(const QString& key, const QString& beforeKey);
+    bool moveLayerAfter(const QString& key, const QString& afterKey);
+    // Reorder by the layer LIST's VISIBLE rows (z descending, row 0 = front). Used
+    // by the list's drag-to-reorder; handles the view↔z reversal (§12.12) here so
+    // callers pass plain view-row indices.
+    void moveByViewRows(int fromRow, int toRow);
+    void normalizeZOrder();
 
     // Store a freshly-rendered chart still on `key`'s layer and bump its
     // imageRevision so the QML Image reloads it from the "coverchart" provider.
@@ -142,7 +186,10 @@ signals:
 
 private:
     CoverLayer* addLayer(const QString& key, const QString& kind, const QString& label);
+    CoverLayer* addLayerFromJson(const QJsonObject& obj);
     void applyDefaults(CoverLayer* layer) const;
+    QString nextChartFrameKey() const;
+    void assignZOrderFromList();
     int minZ() const;
     int maxZ() const;
 

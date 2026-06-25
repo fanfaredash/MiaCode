@@ -237,6 +237,7 @@ private:
     int zoomPresetIndex_ = 0;
     double contentScale_ = 1.0;
     double waveformBrightness_ = miacode::timeline::kTimelineWaveformBrightnessDefault;
+    double waveformPhaseCompensationSeconds_ = 0.0;
     PresentationMode presentationMode_ = PresentationMode::Full;
     FocusTarget focusTarget_ = FocusTarget::Playhead;
     bool timelineDragActive_ = false;

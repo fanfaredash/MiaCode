@@ -146,7 +146,8 @@ Timing contract:
 
 - Preview UI follow, export-dialog current second, and weak video late-start alignment must read `MainWindow::currentPreviewAuthoritativeAudioClockSecond` instead of branching between audio and `PreviewStageMediaHost::currentPlaybackSecond()`
 - `PreviewStageMediaHost::currentPlaybackSecond()` and `clockDeltaSeconds()` remain video-local observability only; they are not shared SFX/BGM/UI authority clocks
-- Realtime preview BGM rate control is backend-owned: Windows uses the BASS/BASS_FX tempo path for every playback rate, while the non-Windows compatibility backend still uses the stretched `SoundTouch` data-source path for every playback rate, including `1.0x`; do not reintroduce a separate normal-decoder runtime BGM path without reviewing preview clock ownership.
+- Realtime preview BGM rate control is backend-owned: Windows keeps the BASS/BASSmix path and defaults BGM rate changes to pitch-preserving BASS_FX tempo with the compact `40/15/8` window preset; `MIACODE_BASS_BGM_RATE_MODE=rate_transpose` switches Windows BGM to source-time-priority `BASS_ATTRIB_FREQ` rate transpose for A/B diagnosis. The non-Windows compatibility backend still uses the stretched `SoundTouch` data-source path for every playback rate, including `1.0x`; do not reintroduce another runtime BGM decoder path without reviewing preview clock ownership.
+- Timeline waveform cache generation is also decoder-sensitive: on Windows, `src/common/WaveformCache.cpp` decodes through BASS so MP3 delay/padding matches preview BGM playback. If the Windows preview BGM decoder changes away from BASS, review waveform cache generation and bump the waveform cache schema if the time mapping changes.
 - The non-Windows stretched runtime clock is not the data-source cursor. Runtime authoritative preview audio time there now anchors to `ma_engine_get_time_in_pcm_frames()` plus the chart-second start point recorded when background playback starts; `getCursorCallback()` may still expose a raw delivery cursor for diagnostics, but it is not the authority clock.
 - Before the non-Windows stretched source has emitted its first output frames after seek/start, realtime preview should keep using the fallback elapsed clock so SFX do not lock to a pre-output stretched cursor.
 
@@ -217,6 +218,11 @@ Implication:
 - Worker protocol changes must be reflected in both `main.cpp` and MainWindow worker-event handling.
 - `snapshot.outputPath` should already be the final `.mp4` path by the time the worker starts; `MainWindow` resolves missing suffixes and duplicate-name fallbacks before launching the worker so completion UI and worker results can treat it as authoritative.
 - Static Muri thresholds that affect analyzer timing, such as the tap-on-slide threshold, must also cross this boundary; otherwise preview-time diagnostics and export-time overlays will drift.
+
+Cover export note:
+
+- Cover export is not a video-export worker snapshot path, but its chart-frame stills are rendered from a `VideoExportTask` seed through `SceneFrameRenderer` and `PreviewQuickSceneRoot`. If chart-frame render settings or layer flags change, review `SceneFrameRenderer.*`, `CoverComposerView.*`, `CoverComposer.qml`, and video export's Quick render setup together.
+- Cover Studio supports multiple chart-frame layers with only one live `PreviewQuickSceneRoot`: the active chart-frame is live, while other visible frames use cached stills refreshed before final cover export.
 
 ## 9. Shared Render State Flows Through Preview And Export
 

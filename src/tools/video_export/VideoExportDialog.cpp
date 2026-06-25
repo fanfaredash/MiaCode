@@ -1678,7 +1678,7 @@ void VideoExportDialog::scrubPreviewFromTrack(double second, bool live)
 
 void VideoExportDialog::toggleRangePreview()
 {
-    if (rangePreviewPlaying_) {
+    if (rangePreviewPlaying_ || isPreviewPlaying()) {
         stopRangePreview(false);
         return;
     }
@@ -1746,7 +1746,8 @@ void VideoExportDialog::updatePreviewPlayPauseUi()
         return;
     }
     const QColor iconColor = UiTheme::colors().iconPrimary;
-    if (rangePreviewPlaying_) {
+    const bool previewPlaying = rangePreviewPlaying_ || isPreviewPlaying();
+    if (previewPlaying) {
         previewRangeButton_->setIcon(makePreviewPauseIcon(iconColor));
         previewRangeButton_->setToolTip(uiText("dialog.video_export.preview.pause", QStringLiteral("Pause")));
         previewRangeButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet(true));

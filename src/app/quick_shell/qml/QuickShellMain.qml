@@ -36,12 +36,14 @@ ApplicationWindow {
     property bool previewPaneWidthBeforeExportUserResized: false
     property bool previewPaneWidthRestorePending: false
     property real lastPreviewPaneRestoreGeneration: 0
+    property real lastPreviewPaneSyncWidth: 0
     property real pendingStartupLayoutWidth: 0
     property real pendingStartupLayoutHeight: 0
     property real startupMinimumWindowWidth: 960
     property real startupMinimumWindowHeight: 640
+    property string lastPreviewPaneLayoutLog: ""
     property bool embeddedSeparateSurfaceReady: true
-    property bool embeddedInlineSurfaceActive: !controller.previewFullscreen
+    property bool embeddedInlineSurfaceActive: false
     property bool fullscreenInlineSurfaceActive: false
     property bool fullscreenHoveringRevealZone: false
     property bool fullscreenHoveringControls: false
@@ -189,6 +191,19 @@ ApplicationWindow {
         embeddedInlineSurfaceActivateTimer.restart()
     }
 
+    function embeddedInlineSurfaceGeometryReady() {
+        return embeddedPreviewFrame
+            && embeddedPreviewFrame.width >= 64
+            && embeddedPreviewFrame.height >= 64
+    }
+
+    function requestEmbeddedInlineSurfaceActivation(reason) {
+        if (embeddedInlineSurfaceActive || controller.previewFullscreen)
+            return
+        logPreviewSurfaceTransition("preview_surface_route_arm", "target=embedded reason=" + reason)
+        embeddedInlineSurfaceActivateTimer.restart()
+    }
+
     function armFullscreenInlineSurface(reason) {
         disableInlinePreviewSurfaces(reason)
         logPreviewSurfaceTransition("preview_surface_route_arm", "target=fullscreen reason=" + reason)
@@ -221,6 +236,14 @@ ApplicationWindow {
 
     function previewPaneAvailableWidth(totalWidth) {
         return Math.max(0, totalWidth - sidebarPaneWidth() - previewPaneHandleWidth())
+    }
+
+    function boundedWorkspaceWidth(totalWidth) {
+        const safeTotalWidth = Math.max(0, totalWidth)
+        const visibleWidth = root && root.width > 0 ? root.width : safeTotalWidth
+        if (safeTotalWidth <= 0)
+            return Math.max(0, visibleWidth)
+        return Math.max(0, Math.min(safeTotalWidth, visibleWidth))
     }
 
     function previewCanvasAspectRatio() {
@@ -346,9 +369,22 @@ ApplicationWindow {
         return Math.max(minWidth, Math.min(metric("previewPanelMaxWidth", 900), maxByWindow))
     }
 
+    function previewPaneForcedMaxWidth(totalWidth, totalHeight) {
+        const availableWidth = Math.max(0, totalWidth - previewPaneHandleWidth())
+        const reservedWorkspaceWidth = workspacePaneMinWidth()
+        const maxByCurrentWindow = Math.max(
+            previewPaneMinWidth(),
+            availableWidth - reservedWorkspaceWidth
+        )
+        return Math.max(
+            previewPaneMinWidth(),
+            Math.min(previewPaneMaxWidth(totalWidth, totalHeight), maxByCurrentWindow)
+        )
+    }
+
     function clampPreviewPaneWidth(candidate, totalWidth, totalHeight) {
         const minWidth = previewPaneMinWidth()
-        const maxWidth = previewPaneMaxWidth(totalWidth, totalHeight)
+        const maxWidth = previewPaneForcedMaxWidth(totalWidth, totalHeight)
         if (maxWidth <= minWidth)
             return minWidth
         return Math.max(minWidth, Math.min(candidate, maxWidth))
@@ -412,7 +448,9 @@ ApplicationWindow {
     function finalizeStartupLayout() {
         if (!startupLayoutLocked)
             return
-        const resolvedWidth = pendingStartupLayoutWidth > 0 ? pendingStartupLayoutWidth : workspaceRow.width
+        const resolvedWidth = boundedWorkspaceWidth(
+            pendingStartupLayoutWidth > 0 ? pendingStartupLayoutWidth : workspaceRow.width
+        )
         const resolvedHeight = pendingStartupLayoutHeight > 0 ? pendingStartupLayoutHeight : workspaceRow.height
         if (!root.visible || resolvedWidth <= 0 || resolvedHeight <= 0) {
             startupLayoutSettleTimer.restart()
@@ -434,28 +472,49 @@ ApplicationWindow {
         applyWindowMinimumSize()
         styleBridge.refreshNow()
         controller.refresh()
+        requestEmbeddedInlineSurfaceActivation("startup_layout_ready")
     }
 
     function syncPreviewPaneWidth(totalWidth, totalHeight, preserveUserChoice, preserveCurrentWidth) {
-        if (totalWidth <= 0)
+        const boundedTotalWidth = boundedWorkspaceWidth(totalWidth)
+        if (boundedTotalWidth <= 0)
             return
-        noteStartupLayoutActivity(totalWidth, totalHeight)
+        const previousSyncWidth = lastPreviewPaneSyncWidth
+        lastPreviewPaneSyncWidth = boundedTotalWidth
+        const windowShrank = previousSyncWidth > 0 && boundedTotalWidth < previousSyncWidth - 1
+        const forcedMaxWidth = previewPaneForcedMaxWidth(boundedTotalWidth, totalHeight)
+        const userWidthOverflows = previewPaneWidth > forcedMaxWidth + 0.5
+        const releaseUserResizeForShrink = windowShrank
+            && previewPaneUserResized
+            && !preserveCurrentWidth
+            && userWidthOverflows
+        if (releaseUserResizeForShrink) {
+            controller.logPreviewInteraction(
+                "preview_pane_user_resize_released",
+                "reason=window_shrink previous_width=" + previousSyncWidth
+                    + " next_width=" + boundedTotalWidth
+                    + " preview_width=" + previewPaneWidth
+                    + " forced_max=" + forcedMaxWidth
+            )
+            previewPaneUserResized = false
+        }
+        noteStartupLayoutActivity(boundedTotalWidth, totalHeight)
         if (startupLayoutLocked) {
             previewPaneWidth = clampPreviewPaneWidth(
-                previewPaneInitialWidth(totalWidth, totalHeight),
-                totalWidth,
+                previewPaneInitialWidth(boundedTotalWidth, totalHeight),
+                boundedTotalWidth,
                 totalHeight
             )
             return
         }
         const defaultWidth = previewPaneStartupBalancePending
-            ? previewPaneInitialWidth(totalWidth, totalHeight)
-            : previewPaneDefaultWidth(totalWidth, totalHeight)
+            ? previewPaneInitialWidth(boundedTotalWidth, totalHeight)
+            : previewPaneDefaultWidth(boundedTotalWidth, totalHeight)
         const fallbackWidth = previewPaneStartupBalancePending
             ? defaultWidth
-            : clampPreviewPaneWidth(defaultWidth, totalWidth, totalHeight)
+            : clampPreviewPaneWidth(defaultWidth, boundedTotalWidth, totalHeight)
         if (preserveCurrentWidth && previewPaneWidth > 0) {
-            previewPaneWidth = clampPreviewPaneWidth(previewPaneWidth, totalWidth, totalHeight)
+            previewPaneWidth = clampPreviewPaneWidth(previewPaneWidth, boundedTotalWidth, totalHeight)
             previewPaneStartupBalancePending = false
             return
         }
@@ -471,8 +530,35 @@ ApplicationWindow {
             previewPaneStartupBalancePending = false
             return
         }
-        previewPaneWidth = clampPreviewPaneWidth(previewPaneWidth, totalWidth, totalHeight)
+        previewPaneWidth = clampPreviewPaneWidth(previewPaneWidth, boundedTotalWidth, totalHeight)
+        if (previewPaneWidth >= previewPaneForcedMaxWidth(boundedTotalWidth, totalHeight))
+            previewPaneUserResized = false
         previewPaneStartupBalancePending = false
+    }
+
+    function schedulePreviewPaneLayoutLog(reason) {
+        previewPaneLayoutLogTimer.reason = reason
+        previewPaneLayoutLogTimer.restart()
+    }
+
+    function logPreviewPaneLayout(reason) {
+        if (!controller || !previewPaneFrame)
+            return
+        const payload = "reason=" + reason
+            + " root=" + root.width + "x" + root.height
+            + " workspace_row=" + workspaceRow.width + "x" + workspaceRow.height
+            + " bounded_workspace=" + boundedWorkspaceWidth(workspaceRow.width)
+            + " preview_width_state=" + previewPaneWidth
+            + " preview_frame=" + previewPaneFrame.width + "x" + previewPaneFrame.height
+            + " preview_canvas=" + embeddedPreviewFrame.width + "x" + embeddedPreviewFrame.height
+            + " transport_host=" + embeddedTransportStackHost.width + "x" + embeddedTransportStackHost.height
+            + " transport=" + embeddedTransport.width + "x" + embeddedTransport.height
+            + " stats=" + embeddedStatsPanel.width + "x" + embeddedStatsPanel.height
+            + " user_resized=" + (previewPaneUserResized ? 1 : 0)
+        if (payload === lastPreviewPaneLayoutLog)
+            return
+        lastPreviewPaneLayoutLog = payload
+        controller.logPreviewInteraction("preview_pane_layout", payload)
     }
 
     visible: true
@@ -504,6 +590,14 @@ ApplicationWindow {
         interval: 120
         repeat: false
         onTriggered: finalizeStartupLayout()
+    }
+
+    Timer {
+        id: previewPaneLayoutLogTimer
+        property string reason: "changed"
+        interval: 0
+        repeat: false
+        onTriggered: logPreviewPaneLayout(reason)
     }
 
     palette.window: tone("windowBg", "#f8fafd")
@@ -611,10 +705,11 @@ ApplicationWindow {
             const restoringToSquare = Math.abs(nextAspectRatio - 1.0) <= 0.0001
                 && previousAspectRatio > 1.0001
             root.lastPreviewCanvasAspectRatio = nextAspectRatio
+            const boundedWidth = boundedWorkspaceWidth(workspaceRow.width)
             if (restoringToSquare && root.previewPaneWidthRestorePending && root.previewPaneWidthBeforeExport > 0) {
                 previewPaneWidth = clampPreviewPaneWidth(
                     root.previewPaneWidthBeforeExport,
-                    workspaceRow.width,
+                    boundedWidth,
                     workspaceRow.height
                 )
                 previewPaneUserResized = root.previewPaneWidthBeforeExportUserResized
@@ -623,8 +718,8 @@ ApplicationWindow {
             }
             previewPaneUserResized = false
             previewPaneWidth = clampPreviewPaneWidth(
-                previewPaneAdaptiveTargetWidth(workspaceRow.width, workspaceRow.height),
-                workspaceRow.width,
+                previewPaneAdaptiveTargetWidth(boundedWidth, workspaceRow.height),
+                boundedWidth,
                 workspaceRow.height
             )
         }
@@ -696,10 +791,19 @@ ApplicationWindow {
         interval: 16
         repeat: false
         onTriggered: {
-            const canActivate = !controller.previewFullscreen && !fullscreenPreviewWindow.visible
+            const geometryReady = embeddedInlineSurfaceGeometryReady()
+            const canActivate = !controller.previewFullscreen
+                && !fullscreenPreviewWindow.visible
+                && root.visible
+                && startupContentReady
+                && geometryReady
             logPreviewSurfaceTransition(
                 "preview_surface_route_timer",
                 "target=embedded can_activate=" + (canActivate ? 1 : 0)
+                    + " startup_ready=" + (startupContentReady ? 1 : 0)
+                    + " geometry_ready=" + (geometryReady ? 1 : 0)
+                    + " frame=" + (embeddedPreviewFrame ? embeddedPreviewFrame.width : 0)
+                    + "x" + (embeddedPreviewFrame ? embeddedPreviewFrame.height : 0)
             )
             if (!canActivate)
                 return
@@ -1130,9 +1234,10 @@ ApplicationWindow {
                             const sceneX = previewResizeHandle.mapToItem(root.contentItem, mouse.x, mouse.y).x
                             const deltaX = sceneX - dragStartSceneX
                             const signedDelta = controller.workspacePanelsSwapped ? deltaX : -deltaX
+                            const boundedWidth = boundedWorkspaceWidth(workspaceRow.width)
                             previewPaneWidth = clampPreviewPaneWidth(
                                 dragStartWidth + signedDelta,
-                                workspaceRow.width,
+                                boundedWidth,
                                 workspaceRow.height
                             )
                             previewPaneUserResized = true
@@ -1144,10 +1249,12 @@ ApplicationWindow {
                     id: previewPaneFrame
                     Layout.preferredWidth: previewPaneWidth
                     Layout.minimumWidth: previewPaneMinWidth()
-                    Layout.maximumWidth: previewPaneMaxWidth(workspaceRow.width, workspaceRow.height)
+                    Layout.maximumWidth: previewPaneMaxWidth(boundedWorkspaceWidth(workspaceRow.width), workspaceRow.height)
                     Layout.fillHeight: true
                     color: tone("panelBg", "#f5f7fa")
                     border.color: tone("border", "#d5e0ec")
+                    onWidthChanged: schedulePreviewPaneLayoutLog("preview_frame_width")
+                    onHeightChanged: schedulePreviewPaneLayoutLog("preview_frame_height")
 
                     FocusScope {
                         id: embeddedPreviewInteractionRoot
@@ -1184,6 +1291,8 @@ ApplicationWindow {
                                     color: tone("canvasBg", "#000000")
                                     border.color: tone("borderSoft", "#ccd6e2")
                                     clip: true
+                                    onWidthChanged: requestEmbeddedInlineSurfaceActivation("embedded_frame_width")
+                                    onHeightChanged: requestEmbeddedInlineSurfaceActivation("embedded_frame_height")
 
                                     Loader {
                                         id: embeddedInlineSurfaceLoader
@@ -1239,6 +1348,9 @@ ApplicationWindow {
                                 implicitHeight: embeddedTransportStack.implicitHeight
                                 Layout.preferredHeight: implicitHeight
                                 Layout.minimumHeight: implicitHeight
+                                Layout.maximumHeight: implicitHeight
+                                onWidthChanged: schedulePreviewPaneLayoutLog("transport_host_width")
+                                onHeightChanged: schedulePreviewPaneLayoutLog("transport_host_height")
 
                                 ColumnLayout {
                                     id: embeddedTransportStack
@@ -1250,22 +1362,31 @@ ApplicationWindow {
                                     QuickShellPreviewTransport {
                                         id: embeddedTransport
                                         Layout.fillWidth: true
+                                        Layout.minimumHeight: implicitHeight
+                                        Layout.preferredHeight: implicitHeight
+                                        Layout.maximumHeight: implicitHeight
                                         controller: root.shellController
                                         paletteMap: root.paletteMap
                                         metricsMap: root.metricsMap
                                         speedMenu: previewSpeedMenu
                                         inputBlocked: root.previewSpeedMenuInputShieldActive
                                         fullscreenMode: false
+                                        onWidthChanged: schedulePreviewPaneLayoutLog("transport_width")
+                                        onHeightChanged: schedulePreviewPaneLayoutLog("transport_height")
                                         onFocusRequested: embeddedPreviewInteractionRoot.forceActiveFocus()
                                     }
 
                                     QuickShellPreviewStatsPanel {
                                         id: embeddedStatsPanel
                                         Layout.fillWidth: true
+                                        Layout.minimumHeight: implicitHeight
                                         Layout.preferredHeight: implicitHeight
+                                        Layout.maximumHeight: implicitHeight
                                         controller: root.shellController
                                         paletteMap: root.paletteMap
                                         metricsMap: root.metricsMap
+                                        onWidthChanged: schedulePreviewPaneLayoutLog("stats_width")
+                                        onHeightChanged: schedulePreviewPaneLayoutLog("stats_height")
                                         onFocusRequested: embeddedPreviewInteractionRoot.forceActiveFocus()
                                     }
                                 }

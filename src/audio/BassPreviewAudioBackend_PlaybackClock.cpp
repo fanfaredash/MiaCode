@@ -134,8 +134,14 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
     if (!runtimeAudioDebugEnabled()) {
         return;
     }
+    const double statusLogIntervalSeconds =
+        miacode::debug_options::previewWaveformAlignmentDiagnosticsEnabled()
+            ? qMax(0.001, static_cast<double>(
+                  miacode::debug_options::previewWaveformAlignmentDiagnosticSampleMs()) / 1000.0)
+            : kBassPreviewStatusLogIntervalSeconds;
     if (playbackSession_.lastStatusLogSecond >= 0.0
-        && authoritativeSecond - playbackSession_.lastStatusLogSecond < kBassPreviewStatusLogIntervalSeconds) {
+        && authoritativeSecond - playbackSession_.lastStatusLogSecond >= 0.0
+        && authoritativeSecond - playbackSession_.lastStatusLogSecond < statusLogIntervalSeconds) {
         return;
     }
     playbackSession_.lastStatusLogSecond = authoritativeSecond;
@@ -146,6 +152,17 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
     const double bgmChartSecond = backgroundTrackSample_ != nullptr
         ? (bgmRawSecond - playbackSession_.backgroundTrackOffsetSeconds)
         : -1.0;
+    const double bgmExpectedRawSecond = backgroundTrackSample_ != nullptr
+        ? authoritativeSecond + playbackSession_.backgroundTrackOffsetSeconds
+        : -1.0;
+    const double bgmDeltaMs = backgroundTrackSample_ != nullptr
+        ? (authoritativeSecond - bgmChartSecond) * 1000.0
+        : 0.0;
+    const double bgmRawDeltaMs = backgroundTrackSample_ != nullptr
+        ? (bgmRawSecond - bgmExpectedRawSecond) * 1000.0
+        : 0.0;
+    const double bgmLengthSecond =
+        backgroundTrackSample_ != nullptr ? backgroundTrackSample_->lengthSeconds : -1.0;
     const double driftMs = (authoritativeSecond - fallbackSecond) * 1000.0;
     // G1 Commit 7: scheduledGroupIndex_ deleted with the BASS_SYNC_POS scheduler.
     // The next group to trigger is simply the current event-group cursor.
@@ -153,7 +170,7 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
     const double nextGroupSecond =
         (nextGroupIndex >= 0 && nextGroupIndex < preparedGroups_.size()) ? preparedGroups_[nextGroupIndex].second : -1.0;
     appendAudioDebugLog(
-        QString("bass_status txn=%1 auth=%2 mixer=%3 bgm_raw=%4 bgm_chart=%5 fallback=%6 drift_ms=%7 next_group_idx=%8 next_group_second=%9 last_trigger_idx=%10 last_trigger_second=%11 triggered_count=%12")
+        QString("bass_status txn=%1 auth=%2 mixer=%3 bgm_raw=%4 bgm_chart=%5 fallback=%6 drift_ms=%7 next_group_idx=%8 next_group_second=%9 last_trigger_idx=%10 last_trigger_second=%11 triggered_count=%12 rate=%13 speed_mode=%14 bgm_delta_ms=%15 bgm_raw_expected=%16 bgm_raw_delta_ms=%17 bgm_offset=%18 bgm_len=%19 bgm_running=%20 bgm_pending=%21 master_running=%22 retained_mode=%23 status_interval_ms=%24")
             .arg(playbackTransactionId_)
             .arg(authoritativeSecond, 0, 'f', 6)
             .arg(mixerSecond, 0, 'f', 6)
@@ -165,7 +182,21 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
             .arg(nextGroupSecond, 0, 'f', 6)
             .arg(playbackSession_.lastTriggeredGroupIndex)
             .arg(playbackSession_.lastTriggeredGroupSecond, 0, 'f', 6)
-            .arg(playbackSession_.triggeredGroupCount));
+            .arg(playbackSession_.triggeredGroupCount)
+            .arg(playbackSession_.backgroundTrackPlaybackRate, 0, 'f', 3)
+            .arg(backgroundTrackSample_ != nullptr
+                ? sampleSpeedModeLabel(backgroundTrackSample_->speedMode)
+                : QStringLiteral("none"))
+            .arg(bgmDeltaMs, 0, 'f', 3)
+            .arg(bgmExpectedRawSecond, 0, 'f', 6)
+            .arg(bgmRawDeltaMs, 0, 'f', 3)
+            .arg(playbackSession_.backgroundTrackOffsetSeconds, 0, 'f', 6)
+            .arg(bgmLengthSecond, 0, 'f', 6)
+            .arg(playbackSession_.backgroundTrackRunning ? 1 : 0)
+            .arg(playbackSession_.backgroundTrackPendingStart ? 1 : 0)
+            .arg(playbackSession_.masterRunning ? 1 : 0)
+            .arg(retainedPlaybackModeLabel(retainedPlaybackMode_))
+            .arg(statusLogIntervalSeconds * 1000.0, 0, 'f', 3));
 #else
     Q_UNUSED(authoritativeSecond);
     Q_UNUSED(fallbackSecond);
@@ -228,10 +259,10 @@ double BassPreviewAudioBackend::preparePreviewPlaybackTransaction(
     // back into BASS_MIXER_CHAN_PAUSE state. setBackgroundTrackPlaybackRate above
     // may have skipped its internal setSpeed if the previous session was still
     // playing when this prepare came in (the new Sample::setSpeed guard short-
-    // circuits writes to BASS_FX TEMPO whenever the source is being actively
+    // circuits BGM rate-attribute writes whenever the source is being actively
     // pulled — see PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §4.1 / §6.1).
     // The rate value is already stored in playbackSession_; this call just
-    // pushes it onto the now-paused tempo stream.
+    // pushes it onto the now-paused BGM source.
     setBackgroundTrackSampleSpeed(playbackSession_.backgroundTrackPlaybackRate);
     resetMasterMixerClock(startSecond);
     configureBackgroundTrackForSecond(
@@ -279,7 +310,7 @@ void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
         backgroundTrackSample_->play();
         playbackSession_.backgroundTrackRunning = true;
         // G1 Commit 8: bass_sample_play per §7.2 — confirms the BGM flag flipped
-        // *after* TEMPO was set (Commit 6 invariant) and records where in the
+        // after the rate attribute was set and records where in the
         // source we resumed reading.
         appendAudioDebugLog(
             QString("bass_sample_play kind=bgm rate_at_play=%1 offset_sec=%2 reason=commit")

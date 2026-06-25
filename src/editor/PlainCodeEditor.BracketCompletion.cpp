@@ -101,7 +101,7 @@ bool PlainCodeEditor::tryBracketInput(const QString& text)
     return false;
 }
 
-// simai "hold" shortcut: typing a lowercase `h` inserts a bare `h` and offers
+// simai "hold" shortcut: typing a lowercase `h` inserts/replaces with a bare `h` and offers
 // the full-bracket hold-duration tokens ("[8:1]" …) as a completion popup —
 // simai hold notation is `<lane>h[<beats>:<ticks>]`. Crucially it inserts NO
 // bracket of its own, so a following `[` produces the normal `h[]` rather than
@@ -125,15 +125,10 @@ bool PlainCodeEditor::tryHoldExpand(const QString& text)
     }
     QTextCursor cursor = textCursor();
     if (cursor.hasSelection()) {
-        // Wrap the selection: h[<sel>]. Mirrors auto-close's surround-with-pair.
-        const QString selected = cursor.selectedText();
-        cursor.beginEditBlock();
-        cursor.insertText(QStringLiteral("h[") + selected + QStringLiteral("]"));
-        cursor.endEditBlock();
-        setTextCursor(cursor);
-        return true;
+        cursor.insertText(QStringLiteral("h"));
+    } else {
+        cursor.insertText(QStringLiteral("h"));
     }
-    cursor.insertText(QStringLiteral("h"));
     setTextCursor(cursor);
     // Don't suggest when the caret already sits right before a '[': the user is
     // hold-filling the existing bracket, so the full-bracket tokens would only
@@ -269,9 +264,9 @@ void PlainCodeEditor::ensureCompletionPopup()
         .arg(colors.border.name(QColor::HexRgb))
         .arg(colors.accent.name(QColor::HexRgb))
         .arg(colors.accentText.name(QColor::HexRgb)));
-    // A mouse click commits the highlighted row.
+    // A mouse press commits the clicked row.
     connect(completionPopup_, &BracketCompletionPopup::candidateActivated, this,
-            [this](const QString&) { acceptCompletionCandidate(); });
+            [this](const QString& candidate) { acceptCompletionCandidate(candidate); });
 }
 
 // Shared core: anchor the popup under the caret and record the slot state.
@@ -378,6 +373,14 @@ void PlainCodeEditor::acceptCompletionCandidate()
         return;
     }
     const QString candidate = completionPopup_->currentCandidate();
+    acceptCompletionCandidate(candidate);
+}
+
+void PlainCodeEditor::acceptCompletionCandidate(const QString& candidate)
+{
+    if (completionOpening_.isNull() || completionStartPos_ < 0) {
+        return;
+    }
     if (candidate.isEmpty()) {
         closeBracketCompletion();
         return;

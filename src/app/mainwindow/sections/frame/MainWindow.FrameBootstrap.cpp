@@ -188,6 +188,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         toolsMenu->addAction(exportVideoAction_);
         QAction* batchExportAction = toolsMenu->addAction(uiText("action.batch_export", "Batch Export"));
         connect(batchExportAction, &QAction::triggered, this, &MainWindow::onBatchExportPreviewVideo);
+        QAction* exportCoverAction = toolsMenu->addAction(uiText("action.export_cover", "Export Cover"));
+        connect(exportCoverAction, &QAction::triggered, this, &MainWindow::onExportCover);
     }
     const QList<QAction*> editActions = editMenu->actions();
     if (!editActions.isEmpty() && editActions.constLast()->isSeparator()) {
@@ -1420,6 +1422,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     timelineQuickStateBridge_->setViewportLockEnabled(previewViewportLockEnabled_);
     timelineQuickStateBridge_->setFollowProgressEnabled(previewProgressFollowEnabled_);
     timelineQuickStateBridge_->setTimelineSyncEnabled(timelineSyncEnabled_);
+    timelineSection_->refreshTimelineWaveformPhaseCompensation();
     connect(timelineQuickStateBridge_, &TimelineQuickStateBridge::zoomScaleChanged, this, [this](double) {
         savePortableState();
     });

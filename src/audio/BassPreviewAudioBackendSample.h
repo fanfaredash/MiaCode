@@ -46,6 +46,8 @@ struct BassPreviewAudioBackend::Sample {
     double gain = 1.0;
     double lengthSeconds = 0.0;
     bool speedChangeSupported = false;
+    SampleSpeedMode speedMode = SampleSpeedMode::None;
+    float nativeFrequency = 0.0f;
     float baseVolume = 1.0f;
     // G1 Commit 8: per-sample pause-cycle counter for the §7.2 `bass_sample_pause`
     // line. Bumped each time the sample's MIXER_CHAN_PAUSE flag is re-set;
@@ -95,6 +97,9 @@ struct BassPreviewAudioBackend::Sample {
         }
         bytes.clear();
         lengthSeconds = 0.0;
+        speedChangeSupported = false;
+        speedMode = SampleSpeedMode::None;
+        nativeFrequency = 0.0f;
     }
 
     void applyVolume(double eventGain = 1.0)
@@ -107,13 +112,72 @@ struct BassPreviewAudioBackend::Sample {
         noteBassErr("sample_apply_volume");
     }
 
+    void applyTempoWindowConfig(DWORD tempoStream, const BassTempoWindowConfig& config)
+    {
+        if (tempoStream == 0 || kind != QLatin1String("bgm")) {
+            return;
+        }
+        if (!config.valid) {
+            appendAudioDebugLog(
+                QString("bgm_tempo_window label=%1 valid=0 apply=0 error=%2 preset=%3 params=%4")
+                    .arg(config.label)
+                    .arg(config.error)
+                    .arg(config.rawPreset)
+                    .arg(config.rawParams));
+            return;
+        }
+        if (!config.apply) {
+            appendAudioDebugLog(
+                QString("bgm_tempo_window label=%1 valid=1 apply=0 preset=%2 params=%3")
+                    .arg(config.label)
+                    .arg(config.rawPreset)
+                    .arg(config.rawParams));
+            return;
+        }
+
+        BASS_ChannelSetAttribute(tempoStream, kBassPreviewTempoOptionSequenceMs, config.sequenceMs);
+        noteBassErr("sample_tempo_window/set_sequence");
+        BASS_ChannelSetAttribute(tempoStream, kBassPreviewTempoOptionSeekWindowMs, config.seekWindowMs);
+        noteBassErr("sample_tempo_window/set_seek");
+        BASS_ChannelSetAttribute(tempoStream, kBassPreviewTempoOptionOverlapMs, config.overlapMs);
+        noteBassErr("sample_tempo_window/set_overlap");
+
+        float actualSequenceMs = -1.0f;
+        float actualSeekWindowMs = -1.0f;
+        float actualOverlapMs = -1.0f;
+        const bool gotSequence =
+            BASS_ChannelGetAttribute(tempoStream, kBassPreviewTempoOptionSequenceMs, &actualSequenceMs);
+        noteBassErr("sample_tempo_window/get_sequence");
+        const bool gotSeek =
+            BASS_ChannelGetAttribute(tempoStream, kBassPreviewTempoOptionSeekWindowMs, &actualSeekWindowMs);
+        noteBassErr("sample_tempo_window/get_seek");
+        const bool gotOverlap =
+            BASS_ChannelGetAttribute(tempoStream, kBassPreviewTempoOptionOverlapMs, &actualOverlapMs);
+        noteBassErr("sample_tempo_window/get_overlap");
+
+        appendAudioDebugLog(
+            QString("bgm_tempo_window label=%1 valid=1 apply=1 sequence_ms=%2 seek_ms=%3 overlap_ms=%4 actual_sequence_ms=%5 actual_seek_ms=%6 actual_overlap_ms=%7 got=%8%9%10 preset=%11 params=%12")
+                .arg(config.label)
+                .arg(static_cast<double>(config.sequenceMs), 0, 'f', 3)
+                .arg(static_cast<double>(config.seekWindowMs), 0, 'f', 3)
+                .arg(static_cast<double>(config.overlapMs), 0, 'f', 3)
+                .arg(static_cast<double>(actualSequenceMs), 0, 'f', 3)
+                .arg(static_cast<double>(actualSeekWindowMs), 0, 'f', 3)
+                .arg(static_cast<double>(actualOverlapMs), 0, 'f', 3)
+                .arg(gotSequence ? 1 : 0)
+                .arg(gotSeek ? 1 : 0)
+                .arg(gotOverlap ? 1 : 0)
+                .arg(config.rawPreset)
+                .arg(config.rawParams));
+    }
+
     bool create(
         BassPreviewAudioBackend* backend,
         const QString& samplePath,
         const QString& sampleName,
         const QString& sampleKind,
         bool normalize,
-        bool speedChange
+        SampleSpeedMode requestedSpeedMode
     )
     {
         free();
@@ -121,7 +185,8 @@ struct BassPreviewAudioBackend::Sample {
         path = samplePath;
         name = sampleName;
         kind = sampleKind;
-        speedChangeSupported = speedChange;
+        speedMode = requestedSpeedMode;
+        speedChangeSupported = speedMode != SampleSpeedMode::None;
 
         // G1 Commit 8 followup: per-sample create beacon per §7.3. The beacon is
         // heap-free / pure Win32, so if BASS_StreamCreateFile or BASS_FX_TempoCreate
@@ -133,11 +198,13 @@ struct BassPreviewAudioBackend::Sample {
             char buf[160];
             const QByteArray kindUtf8 = sampleKind.toUtf8();
             const QByteArray nameUtf8 = QFileInfo(samplePath).fileName().toUtf8();
+            const QByteArray modeUtf8 = sampleSpeedModeLabel(speedMode).toUtf8();
             std::snprintf(buf, sizeof(buf),
-                "audio/sample/create kind=%s file=%s speed_change=%d normalize=%d",
+                "audio/sample/create kind=%s file=%s speed_change=%d mode=%s normalize=%d",
                 kindUtf8.constData(),
                 nameUtf8.constData(),
-                speedChange ? 1 : 0,
+                speedChangeSupported ? 1 : 0,
+                modeUtf8.constData(),
                 normalize ? 1 : 0);
             miacode::oplog::appendStartupBeaconLine(buf);
         }
@@ -175,7 +242,7 @@ struct BassPreviewAudioBackend::Sample {
         const DWORD decodeHandle = stream;
         DWORD tempoHandle = 0;
 
-        if (speedChangeSupported) {
+        if (speedMode == SampleSpeedMode::Tempo) {
             const auto tempoCreate = reinterpret_cast<BassFxTempoCreateProc>(backend->bassFxTempoCreate_);
             if (tempoCreate == nullptr) {
                 BASS_StreamFree(stream);
@@ -194,6 +261,7 @@ struct BassPreviewAudioBackend::Sample {
             }
             stream = tempoStream;
             tempoHandle = tempoStream;
+            applyTempoWindowConfig(tempoStream, backgroundTrackTempoWindowConfig());
         }
 
         if (normalize) {
@@ -235,10 +303,11 @@ struct BassPreviewAudioBackend::Sample {
 
         float channelFrequency = static_cast<float>(backend->deviceSampleRate_);
         BASS_ChannelGetAttribute(stream, BASS_ATTRIB_FREQ, &channelFrequency);
+        nativeFrequency = qMax(1.0f, channelFrequency);
         const DWORD resamplerFlags = BASS_STREAM_DECODE | BASS_SAMPLE_FLOAT | BASS_MIXER_NONSTOP;
         const DWORD resamplerStream =
             BASS_Mixer_StreamCreate(
-                static_cast<DWORD>(qMax(1.0f, channelFrequency)),
+                static_cast<DWORD>(nativeFrequency),
                 miacode::preview_audio::kMixChannels,
                 resamplerFlags);
         if (resamplerStream == 0) {
@@ -282,9 +351,11 @@ struct BassPreviewAudioBackend::Sample {
         {
             char buf[200];
             const QByteArray kindUtf8 = kind.toUtf8();
+            const QByteArray modeUtf8 = sampleSpeedModeLabel(speedMode).toUtf8();
             std::snprintf(buf, sizeof(buf),
-                "audio/sample/create_ok kind=%s decode=0x%08x tempo=0x%08x resampler=0x%08x length_sec=%.3f",
+                "audio/sample/create_ok kind=%s mode=%s decode=0x%08x tempo=0x%08x resampler=0x%08x length_sec=%.3f",
                 kindUtf8.constData(),
+                modeUtf8.constData(),
                 static_cast<unsigned>(decodeHandle),
                 static_cast<unsigned>(tempoHandle),
                 static_cast<unsigned>(resamplerStream),
@@ -323,9 +394,75 @@ struct BassPreviewAudioBackend::Sample {
         noteBassErr("sample_set_loop");
     }
 
+    bool canWriteSpeedAttribute(double rate)
+    {
+        const QByteArray kindUtf8 = kind.toUtf8();
+        const QByteArray modeUtf8 = sampleSpeedModeLabel(speedMode).toUtf8();
+        {
+            char buf[190];
+            std::snprintf(buf, sizeof(buf),
+                "audio/rate/sample_read_flags kind=%s mode=%s source=0x%08x rate=%.3f",
+                kindUtf8.constData(),
+                modeUtf8.constData(),
+                static_cast<unsigned>(source),
+                rate);
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
+        const DWORD flags = BASS_Mixer_ChannelFlags(source, 0, 0);
+        noteBassErr("sample_set_speed/read_flags");
+        if (flags == static_cast<DWORD>(-1) || (flags & BASS_MIXER_CHAN_PAUSE) != 0) {
+            return true;
+        }
+        {
+            char buf[220];
+            std::snprintf(buf, sizeof(buf),
+                "audio/rate/sample_skip_playing kind=%s mode=%s source=0x%08x rate=%.3f flags=0x%08lx",
+                kindUtf8.constData(),
+                modeUtf8.constData(),
+                static_cast<unsigned>(source),
+                rate,
+                static_cast<unsigned long>(flags));
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
+        appendAudioDebugLog(
+            QString("sample_set_speed_skipped_playing kind=%1 mode=%2 rate=%3")
+                .arg(kind)
+                .arg(sampleSpeedModeLabel(speedMode))
+                .arg(rate, 0, 'f', 3));
+        return false;
+    }
+
     void setSpeed(double rate)
     {
         if (!valid() || !speedChangeSupported) {
+            return;
+        }
+        const double normalizedRate = qBound(kBassPreviewMinRate, rate, kBassPreviewMaxRate);
+        if (!canWriteSpeedAttribute(normalizedRate)) {
+            return;
+        }
+        if (speedMode == SampleSpeedMode::RateTranspose) {
+            float baseFrequency = nativeFrequency;
+            if (baseFrequency <= 0.0f) {
+                BASS_ChannelGetAttribute(source, BASS_ATTRIB_FREQ, &baseFrequency);
+                noteBassErr("sample_set_speed/read_freq");
+                nativeFrequency = qMax(1.0f, baseFrequency);
+                baseFrequency = nativeFrequency;
+            }
+            const float targetFrequency = static_cast<float>(baseFrequency * normalizedRate);
+            BASS_ChannelSetAttribute(source, BASS_ATTRIB_FREQ, targetFrequency);
+            noteBassErr("sample_set_speed/rate_transpose");
+            if (kind == QLatin1String("bgm")) {
+                appendAudioDebugLog(
+                    QString("bgm_rate_mode mode=%1 rate=%2 native_freq=%3 target_freq=%4")
+                        .arg(sampleSpeedModeLabel(speedMode))
+                        .arg(normalizedRate, 0, 'f', 3)
+                        .arg(static_cast<double>(baseFrequency), 0, 'f', 3)
+                        .arg(static_cast<double>(targetFrequency), 0, 'f', 3));
+            }
+            return;
+        }
+        if (speedMode != SampleSpeedMode::Tempo) {
             return;
         }
         // G1 Commit 6: BASS_ATTRIB_TEMPO must only be written while the sample is paused
@@ -370,14 +507,14 @@ struct BassPreviewAudioBackend::Sample {
                     .arg(rate, 0, 'f', 3));
             return;
         }
-        const float tempo = static_cast<float>((qBound(kBassPreviewMinRate, rate, kBassPreviewMaxRate) - 1.0) * 100.0);
+        const float tempo = static_cast<float>((normalizedRate - 1.0) * 100.0);
         {
             char buf[220];
             std::snprintf(buf, sizeof(buf),
                 "audio/rate/sample_about_to_setattr_tempo kind=%s source=0x%08x rate=%.3f tempo=%.3f flags=0x%08lx",
                 kindUtf8.constData(),
                 static_cast<unsigned>(source),
-                rate,
+                normalizedRate,
                 static_cast<double>(tempo),
                 static_cast<unsigned long>(flags));
             miacode::oplog::appendStartupBeaconLine(buf);
@@ -390,8 +527,15 @@ struct BassPreviewAudioBackend::Sample {
                 "audio/rate/sample_setattr_tempo_done kind=%s source=0x%08x rate=%.3f",
                 kindUtf8.constData(),
                 static_cast<unsigned>(source),
-                rate);
+                normalizedRate);
             miacode::oplog::appendStartupBeaconLine(buf);
+        }
+        if (kind == QLatin1String("bgm")) {
+            appendAudioDebugLog(
+                QString("bgm_rate_mode mode=%1 rate=%2 tempo=%3")
+                    .arg(sampleSpeedModeLabel(speedMode))
+                    .arg(normalizedRate, 0, 'f', 3)
+                    .arg(static_cast<double>(tempo), 0, 'f', 3));
         }
     }
 

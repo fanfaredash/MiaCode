@@ -73,6 +73,12 @@ The Windows release package also ships:
 - `Start_MiaCode_Debug.bat`
   - sets debug mode, creates a local `logs/` directory, and launches `MiaCode.exe --debug`
 
+Dev-tool-only parser repro hook:
+
+- `MIACODE_SIMAI_REPRO_CHART`
+  - optional `simai_parser_spec` real-chart repro path; point it at a `maidata.txt` containing `&inote_5=` to add a local corpus parse check while keeping the public CTest run deterministic when unset
+  - owner: `src/tools/simai_parser/SimaiParserSpec.cpp`
+
 ## 3. Preview And Runtime Overrides
 
 - `MIACODE_PREVIEW_SESSION_SCRIPT`
@@ -84,12 +90,28 @@ The Windows release package also ships:
 - `MIACODE_TRACK_PATH`
   - preview track-path override
   - owner: `src/app/mainwindow/MainWindow.cpp`
+- `MIACODE_BASS_BGM_RATE_MODE`
+  - Windows BASS preview BGM rate-mode override; unset defaults to pitch-preserving BASS_FX `tempo`, while `rate_transpose` / `transpose` / `source_time` / `accurate` switches to source-time-priority rate transpose for A/B listening
+  - owner: `src/audio/BassPreviewAudioBackendImpl.h`, applied in `src/audio/BassPreviewAudioBackend_Assets.cpp`
+- `MIACODE_BASS_BGM_TEMPO_PRESET`
+  - Windows BASS preview BGM BASS_FX window preset override; only active when `MIACODE_BASS_BGM_RATE_MODE=tempo`
+  - supported presets: unset = `compact40`, `stock` = plugin default, `auto` = `0/0/8`, `tight20` = `20/8/4`, `balanced30` = `30/10/6`, `compact40` = `40/15/8`, `smooth60` = `60/20/8`, `wide82` = `82/28/8`
+  - owner: `src/audio/BassPreviewAudioBackendImpl.h`, applied in `src/audio/BassPreviewAudioBackendSample.h`
+- `MIACODE_BASS_BGM_TEMPO_PARAMS`
+  - Windows BASS preview BGM custom BASS_FX window override; only active when tempo mode is active; overrides the preset with `sequence_ms,seek_ms,overlap_ms`
+  - owner: `src/audio/BassPreviewAudioBackendImpl.h`, applied in `src/audio/BassPreviewAudioBackendSample.h`
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG`
   - enables low-noise runtime `preview/frame_pacing` request/tick/present/watchdog diagnostics without requiring `--debug`
   - normal request/tick/present samples are rate-limited; watchdog timeout, fixed-timer present-miss/hard-resync, orphan-present, and large-step events log immediately
   - owners: `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp`, `src/app/mainwindow/sections/timeline/MainWindow.TimelineLayout.cpp`, `src/app/mainwindow/sections/timeline/MainWindow.TimelinePlayback.cpp`
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS`
   - pacing diagnostic normal-sample interval in milliseconds, default `1000`
+  - owner: `src/common/DebugOptions.h`
+- `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG`
+  - enables focused waveform/BGM/render-map alignment diagnostics inside debug mode; keeps the low-frequency waveform cache/apply lines, increases BASS `bass_status` sampling, and emits runtime `timeline/render_map` samples from the final Quick timeline scene state so short 1x offsets are less likely to be missed
+  - owners: `src/common/DebugOptions.h`, `src/common/WaveformCache.cpp`, `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`, `src/audio/BassPreviewAudioBackend_PlaybackClock.cpp`, `src/timeline/quick/TimelineQuickItem.cpp`
+- `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG_SAMPLE_MS`
+  - focused BASS `bass_status` sample interval while waveform-alignment diagnostics are enabled, default `250`
   - owner: `src/common/DebugOptions.h`
 - `MIACODE_PREVIEW_FIXED_TIMER_HIGH_RES`
   - Windows-only A/B switch for fixed 60/120 preview pacing; while fixed-FPS realtime preview is playing it requests `timeBeginPeriod(1)` and releases it on stop, mode switch, or shutdown
@@ -168,6 +190,7 @@ Runtime black-screen / dialog tracing in the main app currently uses these tags:
 - `timeline/bridge`
 - `timeline/quick_scene`
 - `timeline/cursor_map`
+- `timeline/render_map`
 
 The `preview/quick_runtime` stream now also emits `action=frame_stall` when the embedded Quick window stays visible/exposed but stops presenting for an extended interval.
 The `preview/frame_pacing` stream is off by default and turns on with `MIACODE_PREVIEW_FRAME_PACING_DIAG=1`; it emits low-frequency `display_request`, `display_present`, and `tick_sample` lines plus immediate `display_watchdog_timeout`, `fixed_timer_present_miss`, `fixed_timer_hard_resync`, `display_orphan_present`, and `tick_large_step` events. Sparse fixed-timer high-resolution status lines (`fixed_timer_high_res_requested`, `fixed_timer_high_res_enabled`, `fixed_timer_high_res_failed`, `fixed_timer_high_res_disabled`) are written even without per-frame pacing diagnostics so env propagation can be verified.
@@ -184,9 +207,10 @@ QuickShell accepted root-window closes now notify C++ from QML before the window
 The `close_timing/*` runtime tags now record close-path duration totals in milliseconds for document save-confirm work, QuickShell relay work, legacy window close hooks, export-worker teardown, and `aboutToQuit` export temp-dir cleanup so exit long tails can be triaged from one debug session.
 The `preview/playback` audio tag now traces realtime preview start transactions. Strong-sync startup should log `action=start_request`, `action=audio_prepared`, `action=canvas_presented`, and `action=commit` under one `txn`, while weak-video startup adds `action=weak_video_prepare_started`, `action=weak_video_ready_before_commit`, or `action=late_video_start_after_commit`.
 The `preview/stage_media` audio tag is now switch-level only for quickshell media changes, presentation-mode flips, `VideoOutput` binding transitions, weak-sync video prepare / commit transitions (`action=prepare_playback_*`, `action=commit_prepared_playback*`), and low-noise external-video stall transitions (`action=video_frame_stall_begin` / `action=video_frame_stall_end`); the old per-frame quickshell video arrival line was retired.
+The `preview/waveform` audio tag records waveform cache/request/apply evidence: memory/disk/build/placeholder source, normalized track id, file stamp, duration, top-level column count, milliseconds per column, first-column onset at `0.02` / `0.05` / `0.10` amplitude, and peak-column position. `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG=1` additionally keeps focused placeholder breadcrumbs under `preview/waveform_align`, raises `bass_status` cadence to `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG_SAMPLE_MS` (default `250 ms`), and emits runtime `timeline/render_map` state/sample rows with visible range, scroll, primitive counts, waveform/grid/note first-visible coordinates, playhead/cursor/entry second-to-X roundtrips, the waveform column under the playhead, and the strongest waveform column in a small playhead-centered window.
 The audio log emits `stretched_clock_drift` for low-noise stretched-BGM drift sampling; current fields are `fallback`, `bg`, `delta_ms`, `rate`, `engine_now_frame`, `start_engine_frame`, and `tick_bg_gap_ms` (`fallback - backgroundTrackLastTimelineSecond`) so engine-time anchor drift can be separated from tick-to-tick catch-up.
 The preview audio facade now also emits `preview_audio_backend` selection lines so backend routing and BASS fallback decisions are visible in the audio log.
-The BASS preview backend now also emits low-noise `bass_schedule_arm` and `bass_status` lines. `bass_schedule_arm` shows which collapsed SFX group has been armed as the next mixer sync, while `bass_status` samples the current authoritative audio second, mixer-relative second, BGM transport second, fallback drift in milliseconds, the next armed SFX group, and the last triggered SFX group at roughly a `1s` interval.
+The BASS preview backend now also emits low-noise `bass_schedule_arm` and `bass_status` lines. `bass_schedule_arm` shows which collapsed SFX group has been armed as the next mixer sync, while `bass_status` samples the current authoritative audio second, mixer-relative second, BGM raw/chart transport second, `bgm_delta_ms` (`auth - bgm_chart`), fallback drift in milliseconds, the next armed SFX group, and the last triggered SFX group at roughly a `1s` interval unless waveform-alignment diagnostics lower it. Windows BGM rate mode is logged at load/rate-change boundaries via `bgm_speed_mode` and `bgm_rate_mode`; BASS_FX window experiments log `bgm_tempo_window` with requested and read-back `sequence_ms`, `seek_ms`, and `overlap_ms`. These are low-frequency A/B breadcrumbs and should not be emitted per tick outside focused diagnostics.
 The export log now also emits `audio_backend_select`, `audio_mix_ok`, `audio_backend_render_complete`, and `fail_audio_*` lines so StageB backend routing and mixed-audio generation failures are visible without parsing ffmpeg arguments.
 Detailed export `frame_timing` sampling now defaults to every `300` frames unless a frame/render/write stall forces an earlier line.
 Normal document open/save now uses the direct native `QFileDialog::getOpenFileName` / `getSaveFileName` path. The old `window/dialog_event`, `window/native`, `window/native_hook`, and `window/native_related` probes were retired from the main app and should only return through a separate dev-only tool that is not packaged into release artifacts.

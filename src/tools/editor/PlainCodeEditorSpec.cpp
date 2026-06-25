@@ -1,7 +1,11 @@
 #include "editor/PlainCodeEditor.h"
+#include "editor/BracketCompletionPopup.h"
 
 #include <QApplication>
+#include <QCursor>
+#include <QFocusEvent>
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <QTextStream>
 
 namespace {
@@ -284,6 +288,79 @@ int main(int argc, char** argv)
         QStringLiteral("Ctrl+Shift+_ key press is forwarded as Ctrl+Shift+- by PlainCodeEditor"),
         out,
         &failed);
+    {
+        PlainCodeEditor completionEditor;
+        completionEditor.resize(480, 240);
+        completionEditor.show();
+        completionEditor.setFocus();
+        QApplication::processEvents();
+
+        QKeyEvent openBracketKey(QEvent::KeyPress, Qt::Key_BracketLeft, Qt::NoModifier, QStringLiteral("["));
+        QApplication::sendEvent(&completionEditor, &openBracketKey);
+        QApplication::processEvents();
+
+        auto* popup = completionEditor.findChild<BracketCompletionPopup*>();
+        const bool popupReady = popup != nullptr && popup->isVisible() && popup->count() > 0;
+        if (expect(
+                popupReady,
+                QStringLiteral("typing '[' opens a clickable completion popup"),
+                out,
+                &failed)) {
+            const QRect firstItemRect = popup->visualItemRect(popup->item(0));
+            const QPoint clickPos = firstItemRect.center();
+            const QPoint globalClickPos = popup->viewport()->mapToGlobal(clickPos);
+            QCursor::setPos(globalClickPos);
+
+            QFocusEvent focusOut(QEvent::FocusOut, Qt::MouseFocusReason);
+            QApplication::sendEvent(&completionEditor, &focusOut);
+            QApplication::processEvents();
+
+            QMouseEvent press(
+                QEvent::MouseButtonPress,
+                QPointF(clickPos),
+                QPointF(globalClickPos),
+                Qt::LeftButton,
+                Qt::LeftButton,
+                Qt::NoModifier);
+            QApplication::sendEvent(popup->viewport(), &press);
+            QApplication::processEvents();
+
+            expect(
+                completionEditor.toPlainText() == QStringLiteral("[8:1]"),
+                QStringLiteral("mouse press on completion candidate commits clicked row after editor focus-out"),
+                out,
+                &failed);
+        }
+    }
+    {
+        PlainCodeEditor holdEditor;
+        holdEditor.resize(480, 240);
+        holdEditor.show();
+        holdEditor.setFocus();
+        holdEditor.setPlainText(QStringLiteral("8,8,8,"));
+        QTextCursor cursor = holdEditor.textCursor();
+        const int selectedStart = QStringLiteral("8,").size();
+        cursor.setPosition(selectedStart);
+        cursor.setPosition(selectedStart + 1, QTextCursor::KeepAnchor);
+        holdEditor.setTextCursor(cursor);
+        QApplication::processEvents();
+
+        QKeyEvent holdKey(QEvent::KeyPress, Qt::Key_H, Qt::NoModifier, QStringLiteral("h"));
+        QApplication::sendEvent(&holdEditor, &holdKey);
+        expect(
+            holdEditor.toPlainText() == QStringLiteral("8,h,8,") && holdKey.isAccepted(),
+            QStringLiteral("typing h replaces selected text instead of wrapping or appending it"),
+            out,
+            &failed);
+
+        QKeyEvent tabKey(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier, QString());
+        QApplication::sendEvent(&holdEditor, &tabKey);
+        expect(
+            holdEditor.toPlainText() == QStringLiteral("8,h[8:1],8,") && tabKey.isAccepted(),
+            QStringLiteral("typing h on selected text still opens hold-duration completion"),
+            out,
+            &failed);
+    }
 
     if (failed != 0) {
         out << "PlainCodeEditor spec failed: " << failed << '\n';

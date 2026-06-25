@@ -34,6 +34,7 @@
 #include <QElapsedTimer>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <limits>
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
@@ -898,6 +899,9 @@ void PreviewDCompSurface::onWindowSceneGraphInitialized()
 {
     initialiseIfReady();
     tryDiscoverTrackedItem();
+    QTimer::singleShot(0, this, [this]() { tryDiscoverTrackedItem(); });
+    QTimer::singleShot(50, this, [this]() { tryDiscoverTrackedItem(); });
+    QTimer::singleShot(150, this, [this]() { tryDiscoverTrackedItem(); });
 }
 
 void PreviewDCompSurface::onWindowGeometryChanged()
@@ -1107,6 +1111,8 @@ void PreviewDCompSurface::tryDiscoverTrackedItem()
         QStringLiteral("preview_dcomp_track_target"));
     if (found != nullptr) {
         setTrackedItem(found);
+    } else {
+        logSurface("track_target_missing");
     }
 }
 
@@ -1167,6 +1173,15 @@ void PreviewDCompSurface::applyTrackedItemGeometry()
     const qreal itemW = trackedItem_->width();
     const qreal itemH = trackedItem_->height();
     if (itemW <= 0.0 || itemH <= 0.0) return;
+    constexpr qreal kMinimumStableTrackedItemSize = 64.0;
+    if (itemW < kMinimumStableTrackedItemSize || itemH < kMinimumStableTrackedItemSize) {
+        logSurface("track_target_geometry_deferred",
+                   QStringLiteral("reason=too_small item_w=%1 item_h=%2 obj=%3")
+                       .arg(itemW, 0, 'f', 2)
+                       .arg(itemH, 0, 'f', 2)
+                       .arg(trackedItem_->objectName()));
+        return;
+    }
 
     const QPointF topLeftScene = trackedItem_->mapToScene(QPointF(0, 0));
     const qreal dpr = window_->effectiveDevicePixelRatio() > 0.0
@@ -1280,8 +1295,8 @@ void PreviewDCompSurface::applyTrackedItemGeometry()
     // can confirm the tracked item's reported bounds match the visible
     // legacy preview frame. Only log when the values change to avoid
     // flooding on layout settle.
-    static thread_local int s_lastX = INT_MIN;
-    static thread_local int s_lastY = INT_MIN;
+    static thread_local int s_lastX = std::numeric_limits<int>::min();
+    static thread_local int s_lastY = std::numeric_limits<int>::min();
     static thread_local QSize s_lastSize;
     if (s_lastX != xPx || s_lastY != yPx || s_lastSize != pixelSize) {
         s_lastX = xPx;

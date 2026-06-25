@@ -11,6 +11,7 @@
 #include <QGuiApplication>
 #include <QInputMethod>
 #include <QContextMenuEvent>
+#include <QCursor>
 #include <QDrag>
 #include <QDragEnterEvent>
 #include <QDragLeaveEvent>
@@ -458,7 +459,13 @@ void PlainCodeEditor::focusOutEvent(QFocusEvent* event)
 {
     // The popup never takes focus, so losing focus means the user clicked or
     // tabbed away — dismiss any open suggestion list.
-    closeBracketCompletion();
+    const bool pointerInsideCompletionPopup =
+        completionPopup_ != nullptr
+        && completionPopup_->isVisible()
+        && completionPopup_->geometry().contains(QCursor::pos());
+    if (!pointerInsideCompletionPopup) {
+        closeBracketCompletion();
+    }
     const QRect previousRect = previewFollowVisualCaretRect();
     QTextEdit::focusOutEvent(event);
     const QRect currentRect = previewFollowVisualCaretRect();

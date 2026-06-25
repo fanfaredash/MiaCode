@@ -131,6 +131,22 @@ void appendTimelineInteractionLog(const QString& action, const QString& payload 
     );
 }
 
+void appendPreviewWaveformLog(const QString& action, const QString& payload = QString())
+{
+    if (!miacode::debug_options::audioDebugOutputEnabled()) {
+        return;
+    }
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Audio,
+        QStringLiteral("preview/waveform"),
+        text
+    );
+}
+
 QString workspaceSwapPreviewPanelStyleSheet(bool swapped)
 {
     QString style = UiTheme::previewPanelStyleSheet();
@@ -318,11 +334,34 @@ void MainWindow::TimelineSection::resetPreviewTrackTimelineOffsets()
 void MainWindow::TimelineSection::applyWaveformData(
     const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData)
 {
+    const double previousTrackDurationSeconds = state_.previewTrackDurationSeconds_;
     state_.previewTrackDurationSeconds_ = waveformData ? qMax(0.0, waveformData->durationSeconds) : 0.0;
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setWaveformData(waveformData);
     }
     updatePreviewSliderRange();
+    const double chartDurationSeconds = state_.timelineQuickStateBridge_ != nullptr
+        ? state_.timelineQuickStateBridge_->durationSeconds()
+        : 0.0;
+    const int sliderMinimum = ui_.previewSlider_ != nullptr ? ui_.previewSlider_->minimum() : 0;
+    const int sliderMaximum = ui_.previewSlider_ != nullptr ? ui_.previewSlider_->maximum() : 0;
+    const QString summary = waveformData
+        ? miacode::waveform::waveformDataDebugSummary(*waveformData)
+        : QStringLiteral("data=0");
+    appendPreviewWaveformLog(
+        QStringLiteral("apply"),
+        QStringLiteral("generation=%1 current_track_id=%2 old_track_duration=%3 new_track_duration=%4 chart_duration=%5 preview_duration=%6 slider_min_ms=%7 slider_max_ms=%8 bridge=%9 %10")
+            .arg(state_.waveformRefreshGeneration_)
+            .arg(miacode::waveform::waveformTrackDebugId(
+                miacode::waveform::normalizeTrackPath(state_.lastTrackPath_)))
+            .arg(previousTrackDurationSeconds, 0, 'f', 6)
+            .arg(state_.previewTrackDurationSeconds_, 0, 'f', 6)
+            .arg(chartDurationSeconds, 0, 'f', 6)
+            .arg(previewDurationSeconds(), 0, 'f', 6)
+            .arg(sliderMinimum)
+            .arg(sliderMaximum)
+            .arg(state_.timelineQuickStateBridge_ != nullptr ? 1 : 0)
+            .arg(summary));
 }
 
 void MainWindow::TimelineSection::refreshWaveformCache()
@@ -340,20 +379,48 @@ void MainWindow::TimelineSection::refreshWaveformCache(double knownDurationSecon
     ++state_.waveformRefreshGeneration_;
     const quint64 generation = state_.waveformRefreshGeneration_;
     const QString trackPath = state_.lastTrackPath_;
+    const QString normalizedTrackPath = miacode::waveform::normalizeTrackPath(trackPath);
+    appendPreviewWaveformLog(
+        QStringLiteral("refresh_start"),
+        QStringLiteral("generation=%1 track_id=%2 track_empty=%3 known_duration=%4 chart_path_empty=%5")
+            .arg(generation)
+            .arg(miacode::waveform::waveformTrackDebugId(normalizedTrackPath))
+            .arg(trackPath.isEmpty() ? 1 : 0)
+            .arg(knownDurationSeconds, 0, 'f', 6)
+            .arg(state_.currentFilePath_.isEmpty() ? 1 : 0));
     if (trackPath.isEmpty()) {
+        appendPreviewWaveformLog(
+            QStringLiteral("refresh_placeholder"),
+            QStringLiteral("generation=%1 reason=track_empty").arg(generation));
         applyWaveformData(miacode::waveform::makeWaveformPlaceholder(0.0));
         return;
     }
 
     const QFileInfo trackInfo(trackPath);
     if (!trackInfo.exists() || !trackInfo.isFile()) {
+        appendPreviewWaveformLog(
+            QStringLiteral("refresh_placeholder"),
+            QStringLiteral("generation=%1 reason=track_missing track_id=%2")
+                .arg(generation)
+                .arg(miacode::waveform::waveformTrackDebugId(normalizedTrackPath)));
         applyWaveformData(miacode::waveform::makeWaveformPlaceholder(0.0));
         return;
     }
 
     if (knownDurationSeconds > 0.0) {
+        appendPreviewWaveformLog(
+            QStringLiteral("refresh_placeholder"),
+            QStringLiteral("generation=%1 reason=known_duration track_id=%2 duration=%3")
+                .arg(generation)
+                .arg(miacode::waveform::waveformTrackDebugId(normalizedTrackPath))
+                .arg(knownDurationSeconds, 0, 'f', 6));
         applyWaveformData(miacode::waveform::makeWaveformPlaceholder(knownDurationSeconds));
     } else {
+        appendPreviewWaveformLog(
+            QStringLiteral("refresh_placeholder"),
+            QStringLiteral("generation=%1 reason=await_worker track_id=%2")
+                .arg(generation)
+                .arg(miacode::waveform::waveformTrackDebugId(normalizedTrackPath)));
         applyWaveformData(miacode::waveform::makeWaveformPlaceholder(0.0));
     }
 
@@ -364,20 +431,52 @@ void MainWindow::TimelineSection::refreshWaveformCache(double knownDurationSecon
         cacheDirectoryPath,
         [this, generation, trackPath](miacode::waveform::WaveformDataPtr waveformData) {
             if (generation != state_.waveformRefreshGeneration_ || state_.lastTrackPath_ != trackPath) {
+                appendPreviewWaveformLog(
+                    QStringLiteral("callback_discard"),
+                    QStringLiteral("reason=stale generation=%1 current_generation=%2 callback_track_id=%3 current_track_id=%4")
+                        .arg(generation)
+                        .arg(state_.waveformRefreshGeneration_)
+                        .arg(miacode::waveform::waveformTrackDebugId(
+                            miacode::waveform::normalizeTrackPath(trackPath)))
+                        .arg(miacode::waveform::waveformTrackDebugId(
+                            miacode::waveform::normalizeTrackPath(state_.lastTrackPath_))));
                 return;
             }
 
             const QFileInfo currentTrackInfo(trackPath);
             if (!currentTrackInfo.exists() || !currentTrackInfo.isFile()) {
+                appendPreviewWaveformLog(
+                    QStringLiteral("callback_discard"),
+                    QStringLiteral("reason=track_missing generation=%1 track_id=%2")
+                        .arg(generation)
+                        .arg(miacode::waveform::waveformTrackDebugId(
+                            miacode::waveform::normalizeTrackPath(trackPath))));
                 return;
             }
             if (waveformData && waveformData->fileSize >= 0) {
                 const qint64 currentLastModifiedMs = fileLastModifiedMs(currentTrackInfo);
                 if (currentTrackInfo.size() != waveformData->fileSize
                     || currentLastModifiedMs != waveformData->lastModifiedMs) {
+                    appendPreviewWaveformLog(
+                        QStringLiteral("callback_discard"),
+                        QStringLiteral("reason=file_stamp_mismatch generation=%1 track_id=%2 current_size=%3 data_size=%4 current_mtime_ms=%5 data_mtime_ms=%6")
+                            .arg(generation)
+                            .arg(miacode::waveform::waveformTrackDebugId(
+                                miacode::waveform::normalizeTrackPath(trackPath)))
+                            .arg(currentTrackInfo.size())
+                            .arg(waveformData->fileSize)
+                            .arg(currentLastModifiedMs)
+                            .arg(waveformData->lastModifiedMs));
                     return;
                 }
             }
+            appendPreviewWaveformLog(
+                QStringLiteral("callback_apply"),
+                QStringLiteral("generation=%1 %2")
+                    .arg(generation)
+                    .arg(waveformData
+                        ? miacode::waveform::waveformDataDebugSummary(*waveformData)
+                        : QStringLiteral("data=0")));
             applyWaveformData(waveformData);
         });
 }

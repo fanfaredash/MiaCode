@@ -711,7 +711,7 @@ QString MainWindow::WindowSection::shellPreviewSpeedLabel() const
 
 bool MainWindow::WindowSection::shellPreviewPlaying() const
 {
-    return owner_.qtPreviewPlaying_;
+    return owner_.qtPreviewPlaying_ || owner_.exportIntroLeadInPlaying();
 }
 
 double MainWindow::WindowSection::shellPreviewPositionSeconds() const

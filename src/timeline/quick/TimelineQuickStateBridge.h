@@ -62,6 +62,8 @@ public:
     void setContentScale(double scale);
     double waveformBrightness() const;
     void setWaveformBrightness(double brightness);
+    double waveformPhaseCompensationSeconds() const;
+    void setWaveformPhaseCompensationSeconds(double seconds);
     void cycleZoomPreset(double anchorSecond);
     void stepZoomPreset(int deltaSteps, double anchorSecond);
     void setPlaybackEntrySeconds(double second);
@@ -134,6 +136,7 @@ private:
     int horizontalScrollValue_ = 0;
     double contentScale_ = 1.0;
     double waveformBrightness_ = miacode::timeline::kTimelineWaveformBrightnessDefault;
+    double waveformPhaseCompensationSeconds_ = 0.0;
     double playbackEntrySeconds_ = 0.0;
     double playheadUpperLimitSeconds_ = -1.0;
     double playheadSeconds_ = 0.0;

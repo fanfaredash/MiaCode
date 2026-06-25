@@ -149,6 +149,7 @@ private:
     bool bracketCompletionActive() const;
     bool handleCompletionPopupKey(QKeyEvent* event);
     void acceptCompletionCandidate();
+    void acceptCompletionCandidate(const QString& candidate);
     void updateBracketCompletionFilter();
     void closeBracketCompletion();
 
