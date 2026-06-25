@@ -100,6 +100,14 @@ Use this file to track where important constants live, what they mean, and wheth
 - `src/tools/video_export/VideoExportDialog.cpp`
   - Owns: export-dialog UI sizing and preview control constants
   - Rule: local UI constants usually stay local unless reused across dialogs
+- `src/tools/cover_export/CoverStudioPanel.cpp`
+  - Owns: Cover Studio editor-only preview sizing and visual zoom constants
+  - Current tuning note: the live cover preview uses a `560 px` fallback fit box when no viewport size is available, and visual canvas zoom is clamped to `50%..200%` in `10%` steps. This zoom only resizes the embedded editor preview and does not affect `.miacover` layout geometry or export resolution.
+  - Rule: keep local while these values only shape Cover Studio inspection UX; promote only if another editor/viewer needs shared canvas-zoom behavior
+- `src/tools/cover_export/CoverLayerListPanel.cpp`
+  - Owns: Cover Studio layer-list delegate row geometry, inline eye/lock hitboxes, and thumbnail box sizing
+  - Current tuning note: layer rows are `58 px` tall, inline controls are `22 px`, and thumbnails are `38 px`. These constants only shape the local layer-list delegate and do not affect composition geometry or export output.
+  - Rule: keep local while the layer list is the only consumer; promote only if another panel starts sharing the same delegate contract
 - `src/app/mainwindow/MainWindow.cpp` and `src/app/mainwindow/sections/window/*.cpp`
   - Owns: embedded/fullscreen preview panel spacing, fullscreen overlay timing/opacity/reveal geometry constants, bottom-tab content resize bounds/hot-zone behavior, and the fixed Timeline-side preview UI cadence used by scrubbing/timeline refresh
   - Examples:

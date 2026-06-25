@@ -160,12 +160,12 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Struct: `VideoExportSnapshot`
   - Key functions: `toJson`, `fromJson`, `buildVideoExportTaskFromSnapshot`
 - Main window export ownership:
-  - File: `src/app/mainwindow/MainWindow.cpp`
-  - Key functions: `onExportPreviewVideo`, `buildVideoExportSnapshot`, `launchVideoExportWorker`, `handleVideoExportWorkerEvent`
+  - Files: `src/app/mainwindow/MainWindow.cpp`, `src/app/mainwindow/sections/export/MainWindow.ExportSection.cpp`, `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp`, `src/tools/export_page/ExportLauncherPage.*`
+  - Key functions: `onExportCover`, `onBatchExportPreviewVideo`, `onExportPreviewVideo`, `buildVideoExportSnapshot`, `launchVideoExportWorker`, `handleVideoExportWorkerEvent`
 - Cover export studio:
-  - Files: `src/tools/cover_export/CoverStudioWindow.*`, `CoverStudioPanel.*`, `CoverLayoutModel.*`, `CoverCompositionState.*`, `CoverComposerView.*`, `SceneFrameRenderer.*`, `src/intro/qml/CoverComposer.qml`, `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`
-  - Classes: `CoverStudioWindow`, `CoverStudioPanel`, `CoverLayoutModel`, `CoverCompositionState`, `CoverComposerView`, `SceneFrameRenderer`
-  - Owns: cover composition UI, multi chart-frame layer state, v1/v2 `.miacover` JSON migration, active-live-frame editing, cached still refresh, and final PNG/JPG cover export beside the chart
+  - Files: `src/tools/cover_export/CoverStudioWindow.*`, `CoverStudioPanel.*`, `CoverLayerListPanel.*`, `CoverLayerListModel.*`, `CoverLayoutModel.*`, `CoverCompositionState.*`, `CoverComposerView.*`, `SceneFrameRenderer.*`, `src/intro/qml/CoverComposer.qml`, `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`
+  - Classes: `CoverStudioWindow`, `CoverStudioPanel`, `CoverLayerListPanel`, `CoverLayerListModel`, `CoverLayoutModel`, `CoverCompositionState`, `CoverComposerView`, `SceneFrameRenderer`
+  - Owns: cover composition UI, multi chart-frame layer state, custom layer-list delegate and inline visibility/lock controls, v1/v2 `.miacover` JSON migration, app-scoped layout presets/recent layout files, active-live-frame editing, cached still refresh, and final PNG/JPG cover export beside the chart
 
 ## 9. BPM And Offset Detection
 
