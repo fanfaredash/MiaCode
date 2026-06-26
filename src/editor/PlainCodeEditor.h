@@ -85,6 +85,7 @@ signals:
     void editorOverwriteModeChanged(bool enabled);
     void lineNumberBookmarkMoveRequested(int fromLine, int toLine);
     void lineNumberBookmarkActivated(int line);
+    void lineNumberBookmarkCreateRequested(int line);
 
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override;

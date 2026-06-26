@@ -271,6 +271,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         applyEditorOverwriteModeEnabled(enabled, true);
     });
     connect(editor, &PlainCodeEditor::lineNumberBookmarkActivated, this, &MainWindow::openBookmarkAtLine);
+    connect(editor, &PlainCodeEditor::lineNumberBookmarkCreateRequested, this, [this](int line) {
+        if (editorSection_ != nullptr) {
+            editorSection_->showCreateBookmarkDialogForLine(line);
+        }
+    });
     connect(editor, &PlainCodeEditor::lineNumberBookmarkMoveRequested, this, [this](int fromLine, int toLine) {
         if (editorSection_ != nullptr) {
             editorSection_->replaceBookmarkLine(fromLine, toLine);
@@ -979,6 +984,20 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             switchToExportField();
             return;
         }
+        if (kind == "bookmark_toggle") {
+            if (editorSection_ != nullptr) {
+                editorSection_->toggleBookmarkSidebarExpanded();
+            }
+            rebuildFieldSidebar();
+            return;
+        }
+        if (kind == "bookmark") {
+            if (editorSection_ != nullptr) {
+                editorSection_->openBookmarkAtLine(difficultyId);
+            }
+            rebuildFieldSidebar();
+            return;
+        }
         if (kind == "add") {
             QMenu menu(this);
             menu.setFont(uiAccentFont(10));
@@ -1077,6 +1096,27 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         if (item == nullptr) {
             return;
         }
+        const QString kind = item->data(Qt::UserRole).toString();
+        if (kind == QLatin1String("bookmark")) {
+            QMenu menu(this);
+            menu.setFont(uiAccentFont(10));
+            styleRoundedMenu(menu);
+            const int line = item->data(Qt::UserRole + 1).toInt();
+            QAction* openAction = menu.addAction(UiText::isChineseUi() ? QStringLiteral("打开书签") : QStringLiteral("Open Bookmark"));
+            connect(openAction, &QAction::triggered, this, [this, line]() {
+                if (editorSection_ != nullptr) {
+                    editorSection_->openBookmarkAtLine(line);
+                }
+            });
+            QAction* deleteAction = menu.addAction(UiText::isChineseUi() ? QStringLiteral("删除书签") : QStringLiteral("Delete Bookmark"));
+            connect(deleteAction, &QAction::triggered, this, [this, line]() {
+                if (editorSection_ != nullptr) {
+                    editorSection_->deleteBookmarkAtLineWithConfirmation(line);
+                }
+            });
+            menu.exec(outlineList_->viewport()->mapToGlobal(pos));
+            return;
+        }
         const int difficultyId = item->data(Qt::UserRole + 1).toInt();
         if (!SimaiDocument::isDifficultyId(difficultyId) || document_.difficulty(difficultyId) == nullptr) {
             return;
@@ -1136,6 +1176,22 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         UiText::isChineseUi() ? QStringLiteral("书签管理") : QStringLiteral("Bookmark Manager")
     );
     connect(bookmarkManagerAction_, &QAction::triggered, this, &MainWindow::showBookmarkManager);
+    QAction* importBookmarksAction = bookmarkMenu->addAction(
+        UiText::isChineseUi() ? QStringLiteral("导入书签 JSON") : QStringLiteral("Import Bookmarks JSON")
+    );
+    connect(importBookmarksAction, &QAction::triggered, this, [this]() {
+        if (editorSection_ != nullptr) {
+            editorSection_->importBookmarksJson();
+        }
+    });
+    QAction* exportBookmarksAction = bookmarkMenu->addAction(
+        UiText::isChineseUi() ? QStringLiteral("导出书签 JSON") : QStringLiteral("Export Bookmarks JSON")
+    );
+    connect(exportBookmarksAction, &QAction::triggered, this, [this]() {
+        if (editorSection_ != nullptr) {
+            editorSection_->exportBookmarksJson();
+        }
+    });
 
     // "Export as ZIP" lives directly under the Bookmarks submenu here, and
     // also under File > Save As. The same QAction is reused in both places
@@ -1498,6 +1554,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             ++timelineRevision_;
             syncCopyAreaLineCount();
             applyTimelineQuickChange(position, charsRemoved, charsAdded);
+            if (editorSection_ != nullptr) {
+                editorSection_->syncBookmarksFromEditorText(position, charsRemoved, charsAdded);
+            }
             requestTimelineSlowRefresh();
             bool syncPreviewFollow = false;
             double previewFollowSecond = 0.0;

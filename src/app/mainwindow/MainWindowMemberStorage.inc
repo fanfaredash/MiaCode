@@ -259,6 +259,8 @@
         int metadataExtraUndoSaveAnchor_ = 0;
         QVector<SelectionTransformUndoEntry> chartSelectionTransformUndoEntries_;
         QVector<EditorBookmark> editorBookmarks_;
+        bool editorBookmarksSidebarExpanded_ = true;
+        QString editorBookmarkLastSyncedText_;
         int lastObservedEditorUndoSteps_ = 0;
         int lastObservedEditorRedoSteps_ = 0;
         bool editorSelectionUndoRedoRestoreInProgress_ = false;

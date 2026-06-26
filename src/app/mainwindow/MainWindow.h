@@ -600,12 +600,20 @@ private:
         int transformedPosition = -1;
     };
 
+public:
     struct EditorBookmark {
         QString title;
         QString text;
         int line = 1;
+        QString source;
+        QString commentText;
+        QString commentFingerprint;
+        QString contextBefore;
+        QString contextAfter;
+        double second = -1.0;
     };
 
+private:
     class EditorSection;
     class PreferencesSection;
     class PreviewSection;

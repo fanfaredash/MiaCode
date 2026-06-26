@@ -74,7 +74,11 @@ protected:
     {
         const int line = editor_->lineNumberAtAreaPosition(event->pos());
         if (line > 0) {
-            emit editor_->lineNumberBookmarkActivated(line);
+            if (editor_->bookmarkedLines_.contains(line)) {
+                emit editor_->lineNumberBookmarkActivated(line);
+            } else {
+                emit editor_->lineNumberBookmarkCreateRequested(line);
+            }
             event->accept();
             return;
         }
