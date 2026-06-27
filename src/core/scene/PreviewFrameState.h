@@ -85,7 +85,6 @@ struct PreviewSkinAssets {
     QImage touchHoldBreak2Image;
     QImage touchHoldBreak3Image;
     QImage touchHoldBreakBorderImage;
-    QImage touchHoldOffImage;
     // Mine-note sprites (simai `m`). A mine overrides break/each, so there is
     // a single sprite per note type (no break/each variants). Sourced from the
     // MajMine skin (same sd layout/sizes). Empty = skin has no mine art; the

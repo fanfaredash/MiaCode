@@ -19,6 +19,7 @@ constexpr qreal kSkinAssetScale = static_cast<qreal>(miacode::preview_skin::kTap
 constexpr qreal kJudgeEffectHoldSustainAlphaTightenGamma = 1.0;
 const QColor kJudgeEffectTouchCircleTint = QColor::fromRgbF(1.0, 0.9943893, 0.4669811, 1.0);
 const QColor kJudgeEffectTouchPartTint = QColor::fromRgbF(1.0, 0.9000474, 0.4666667, 1.0);
+constexpr const char* kJudgeEffectResourceRoot = ":/preview/judge_effects";
 
 QImage loadImageIfExists(const QString& path)
 {
@@ -60,6 +61,19 @@ QStringList rootThenLegacySlideJudgePaths(const QDir& dir, const QString& fileNa
         dir.filePath(fileName),
         dir.filePath(QStringLiteral("SlideOKSkins/%1").arg(fileName)),
     };
+}
+
+QStringList rootThenLegacyFileNames(const QDir& dir, const QString& primaryFile, const QString& legacyFile)
+{
+    return QStringList{
+        dir.filePath(primaryFile),
+        dir.filePath(legacyFile),
+    };
+}
+
+QString judgeEffectResourcePath(const QString& fileName)
+{
+    return QStringLiteral("%1/%2").arg(QLatin1String(kJudgeEffectResourceRoot), fileName);
 }
 
 void loadDirectionalSpriteSet(
@@ -281,27 +295,34 @@ void populateSkinAssets(const QString& skinDirectory, miacode::preview::scene::P
     skin->touchCornerBreakImage = loadImageIfExists(dir.filePath("touch_break.png"));
     skin->touchBorder2Image = loadImageIfExists(dir.filePath("touch_border_2.png"));
     skin->touchBorder2EachImage = loadImageIfExists(dir.filePath("touch_border_2_each.png"));
-    skin->touchBorder2BreakImage = loadImageIfExists(dir.filePath("touch_break_border_2.png"));
+    skin->touchBorder2BreakImage = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touch_break_border_2.png", "touch_border_2_break.png"));
     skin->touchBorder3Image = loadImageIfExists(dir.filePath("touch_border_3.png"));
     skin->touchBorder3EachImage = loadImageIfExists(dir.filePath("touch_border_3_each.png"));
-    skin->touchBorder3BreakImage = loadImageIfExists(dir.filePath("touch_break_border_3.png"));
+    skin->touchBorder3BreakImage = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touch_break_border_3.png", "touch_border_3_break.png"));
     skin->touchPointImage = loadImageIfExists(dir.filePath("touch_point.png"));
     skin->touchPointEachImage = loadImageIfExists(dir.filePath("touch_point_each.png"));
-    skin->touchPointBreakImage = loadImageIfExists(dir.filePath("touch_break_point.png"));
+    skin->touchPointBreakImage = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touch_break_point.png", "touch_point_break.png"));
     skin->touchHold0Image = loadImageIfExists(dir.filePath("touchhold_0.png"));
     skin->touchHold1Image = loadImageIfExists(dir.filePath("touchhold_1.png"));
     skin->touchHold2Image = loadImageIfExists(dir.filePath("touchhold_2.png"));
     skin->touchHold3Image = loadImageIfExists(dir.filePath("touchhold_3.png"));
     skin->touchHoldBorderImage = loadImageIfExists(dir.filePath("touchhold_border.png"));
-    skin->touchHoldBreak0Image = loadImageIfExists(dir.filePath("touchhold_break_0.png"));
-    skin->touchHoldBreak1Image = loadImageIfExists(dir.filePath("touchhold_break_1.png"));
-    skin->touchHoldBreak2Image = loadImageIfExists(dir.filePath("touchhold_break_2.png"));
-    skin->touchHoldBreak3Image = loadImageIfExists(dir.filePath("touchhold_break_3.png"));
-    skin->touchHoldBreakBorderImage = loadImageIfExists(dir.filePath("touchhold_break_border.png"));
-    skin->touchHoldOffImage = loadImageIfExists(dir.filePath("touchhold_off.png"));
+    skin->touchHoldBreak0Image = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touchhold_break_0.png", "touchhold_0_break.png"));
+    skin->touchHoldBreak1Image = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touchhold_break_1.png", "touchhold_1_break.png"));
+    skin->touchHoldBreak2Image = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touchhold_break_2.png", "touchhold_2_break.png"));
+    skin->touchHoldBreak3Image = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touchhold_break_3.png", "touchhold_3_break.png"));
+    skin->touchHoldBreakBorderImage = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touchhold_break_border.png", "touchhold_border_break.png"));
 
     // Mine-note sprites (simai `m`). Convention: <base>_mine.png. Both built-in
-    // skins (skinSTD, skinDX) ship these; user skins may omit them, in which case
+    // skins (skinSD, skinDX) ship these; user skins may omit them, in which case
     // the images stay null and the selectors fall back to the normal sprite.
     skin->tapMineImage = loadImageIfExists(dir.filePath("tap_mine.png"));
     skin->holdMineImage = loadImageIfExists(dir.filePath("hold_mine.png"));
@@ -450,38 +471,31 @@ void populateJudgeOverlayAssets(const QString& skinDirectory, miacode::preview::
     );
 }
 
-void populateJudgeEffectAssets(const QString& skinDirectory, miacode::preview::scene::PreviewJudgeEffectAssets* effect)
+void populateJudgeEffectAssets(miacode::preview::scene::PreviewJudgeEffectAssets* effect)
 {
     if (effect == nullptr) {
         return;
     }
-    const QDir dir(skinDirectory);
-    effect->tapImage = skinDirectory.isEmpty() ? QImage() : loadImageIfExists(dir.filePath("judge_effect_tap.png"));
+    effect->tapImage = loadImageIfExists(judgeEffectResourcePath("judge_effect_tap.png"));
     if (effect->tapImage.isNull()) {
         effect->tapImage = buildJudgeEffectTapFallbackImage();
     }
     effect->tapSourceRect = nonTransparentBounds(effect->tapImage);
-    effect->tapBreakImage = skinDirectory.isEmpty() ? QImage() : loadImageIfExists(dir.filePath("judge_effect_tap_break.png"));
+    effect->tapBreakImage = loadImageIfExists(judgeEffectResourcePath("judge_effect_tap_break.png"));
     if (effect->tapBreakImage.isNull()) {
         effect->tapBreakImage = buildJudgeEffectTapBreakFallbackImage();
     }
     effect->tapBreakSourceRect = nonTransparentBounds(effect->tapBreakImage);
 
-    QImage sustain = skinDirectory.isEmpty() ? QImage() : loadImageIfExists(dir.filePath("judge_effect_hold_sustain_circle.png"));
-    if (sustain.isNull() && !skinDirectory.isEmpty()) {
-        sustain = loadImageIfExists(dir.filePath("circle.png"));
-    }
+    QImage sustain = loadImageIfExists(judgeEffectResourcePath("judge_effect_hold_sustain_circle.png"));
     effect->holdSustainCircleImage = alphaTightenedSpriteImage(sustain, kJudgeEffectHoldSustainAlphaTightenGamma);
-    const QImage touchCircle = skinDirectory.isEmpty() ? QImage() : loadImageIfExists(dir.filePath("judge_effect_touch_circle.png"));
-    const QImage touchPart01 = skinDirectory.isEmpty() ? QImage() : loadImageIfExists(dir.filePath("judge_effect_touch_part_01.png"));
-    const QImage touchPart02 = skinDirectory.isEmpty() ? QImage() : loadImageIfExists(dir.filePath("judge_effect_touch_part_02.png"));
+    const QImage touchCircle = loadImageIfExists(judgeEffectResourcePath("judge_effect_touch_circle.png"));
+    const QImage touchPart01 = loadImageIfExists(judgeEffectResourcePath("judge_effect_touch_part_01.png"));
+    const QImage touchPart02 = loadImageIfExists(judgeEffectResourcePath("judge_effect_touch_part_02.png"));
     effect->touchCircleImage = touchCircle.isNull() ? QImage() : tintedSpriteImage(touchCircle, kJudgeEffectTouchCircleTint);
     effect->touchPart01Image = touchPart01.isNull() ? QImage() : tintedSpriteImage(touchPart01, kJudgeEffectTouchPartTint);
     effect->touchPart02Image = touchPart02.isNull() ? QImage() : tintedSpriteImage(touchPart02, kJudgeEffectTouchPartTint);
-    effect->fireworkColorBallImage = skinDirectory.isEmpty() ? QImage() : loadImageIfExists(dir.filePath("judge_effect_firework_color_ball.png"));
-    if (effect->fireworkColorBallImage.isNull() && !skinDirectory.isEmpty()) {
-        effect->fireworkColorBallImage = loadImageIfExists(dir.filePath("ColorBall.png"));
-    }
+    effect->fireworkColorBallImage = loadImageIfExists(judgeEffectResourcePath("judge_effect_firework_color_ball.png"));
     if (effect->fireworkColorBallImage.isNull()) {
         effect->fireworkColorBallImage = buildJudgeEffectFireworkColorBallFallbackImage();
     }
@@ -506,7 +520,7 @@ PreviewSceneAssetLoadResult PreviewSceneAssetLoader::load(
     result.assetState = loadAssetState(outlineVariant, outlineImagePath);
     populateSkinAssets(skinDirectory, &result.skinAssets);
     populateJudgeOverlayAssets(skinDirectory, &result.judgeOverlayAssets);
-    populateJudgeEffectAssets(skinDirectory, &result.judgeEffectAssets);
+    populateJudgeEffectAssets(&result.judgeEffectAssets);
     return result;
 }
 

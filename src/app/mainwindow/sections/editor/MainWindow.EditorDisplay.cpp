@@ -563,14 +563,15 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     }
     if (preview.value("skin_variant").isString()) {
         const QString skinValue = preview.value("skin_variant").toString().trimmed();
+        const QString normalizedSkinValue = skinValue.toLower();
         state_.previewSkinVariant_ = owner_.previewSkinVariantFromStorageValue(skinValue);
         state_.previewSkinDirectoryName_ =
-            state_.previewSkinVariant_ == PreviewSkinVariant::Dx ? QStringLiteral("skinDX") : QStringLiteral("skinSTD");
-        const QString normalizedSkinValue = skinValue.toLower();
+            state_.previewSkinVariant_ == PreviewSkinVariant::Dx ? QStringLiteral("skinDX") : QStringLiteral("skinSD");
         if (!skinValue.isEmpty()
             && normalizedSkinValue != QLatin1String("standard")
             && normalizedSkinValue != QLatin1String("std")
             && normalizedSkinValue != QLatin1String("skin")
+            && normalizedSkinValue != QLatin1String("skinsd")
             && normalizedSkinValue != QLatin1String("skinstd")
             && normalizedSkinValue != QLatin1String("dx")
             && normalizedSkinValue != QLatin1String("skin_dx")

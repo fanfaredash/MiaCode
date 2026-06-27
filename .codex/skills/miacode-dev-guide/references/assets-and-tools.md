@@ -9,7 +9,7 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
   - Functions: `findAssetRoot`, `assetPath`
 - Main repo asset areas:
   - `assets/skin`
-  - Built-in skins live under `assets/skin/skinSTD` and `assets/skin/skinDX`; user-imported skins are additional valid child folders under `assets/skin`
+  - Built-in skins live under `assets/skin/skinSD` and `assets/skin/skinDX`; user-imported skins are additional valid child folders under `assets/skin`
   - `assets/SFX`
   - `assets/background`
   - Custom judge-line PNGs live under `assets/background/outlines`; the render settings import action only opens this folder
@@ -20,6 +20,7 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
   - `resources/app_icons.qrc`
   - `resources/fonts.qrc`
   - `resources/slide_data.qrc`
+  - `resources/preview_judge_effects.qrc`
   - `resources/preview_runtime_qml.qrc`
   - `resources/icons/*`
   - `resources/community/*` for README/community-facing repository images
@@ -64,6 +65,26 @@ The toolbox blank-media submenu operates on the current chart directory only. It
   - Consumers: `PreviewRuntime`, `PreviewQuickExportSession`, `VideoExportQuickRenderBackend`
   - Entry: `MainWindow::resolvePreviewSkinDir`, `PreviewRuntime::setSkinDirectory`, `PreviewSceneAssetRepository::setSkinDirectory`, `PreviewSceneAssetLoader::load`
   - Skin selection enumerates child directories of `assets/skin`; a directory is shown only when core files such as `tap.png`, `hold.png`, and `star.png` exist
+  - Touch break assets use the external-skin naming convention first:
+    - `touch_break_border_2.png`
+    - `touch_break_border_3.png`
+    - `touch_break_point.png`
+    - `touchhold_break_0.png`
+    - `touchhold_break_1.png`
+    - `touchhold_break_2.png`
+    - `touchhold_break_3.png`
+    - `touchhold_break_border.png`
+  - The older MiaCode names remain a compatibility fallback for user skins:
+    - `touch_border_2_break.png`
+    - `touch_border_3_break.png`
+    - `touch_point_break.png`
+    - `touchhold_0_break.png`
+    - `touchhold_1_break.png`
+    - `touchhold_2_break.png`
+    - `touchhold_3_break.png`
+    - `touchhold_border_break.png`
+  - `touchhold_border_miss.png` / `touchhold_off.png` are not runtime assets and should not be shipped.
+  - Judge-effect textures are built into the program through `resources/preview_judge_effects.qrc`; they are not loaded from the selected skin directory and should not be shipped under `assets/skin/*`
   - Quick scene textures are uploaded through `PreviewTextureRepository` per Quick item/window, with cacheable reuse keyed by `QImage::cacheKey()`, per-frame transient cleanup, and debug/profile counters for cache hits, cache creates, sprite count, and sprite-batch count
   - `PreviewAnimatedSpriteHelpers` now only caches CPU overlay composites by source-image keys plus tint parameters; Quick runtime `BreakAnimate` / `HoldShine` effects no longer rebuild per-frame `QImage`s and instead run through `PreviewQuickSpriteNodes.cpp` plus `src/preview/quick_scene/shaders/PreviewSpriteMaterial.{vert,frag}`
   - Quick sprite rendering now expands sprites into layer-local contiguous batch geometry keyed by `(texture, effect)` without reordering; shared base images and `sourceRect` slicing are the intended path for atlas-like reuse this round
@@ -168,6 +189,12 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 - Script docs:
   - `scripts/README.md`
   - `scripts/README_EN.md`
+- Asset helper scripts:
+  - `scripts/assets/match_outline_canvas_ratio.py` pads/crops transparent outline PNGs so external 980-style art matches the alpha-bounds ratio of MiaCode's 1080x1080 outline canvases.
+  - `scripts/gen_skin_mine_sprites.py` generates `<base>_mine.png` skin sprites by applying the MajMine luminance grayscale transform while preserving alpha.
+  - `scripts/assets/build_skin_tool_exes.ps1` packages those two helpers as standalone Windows executables under `dist/skin-tools-win64`:
+    - `miacode-outline-canvas-tool.exe`
+    - `miacode-skin-mine-tool.exe`
 
 ## 6. Analysis And Debug Scripts
 

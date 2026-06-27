@@ -97,12 +97,25 @@ void warmupFileIntoOsCache(const QString& path, qint64 maxBytes = -1)
 
 QString standardPreviewSkinDirectoryName()
 {
-    return QStringLiteral("skinSTD");
+    return QStringLiteral("skinSD");
 }
 
 QString dxPreviewSkinDirectoryName()
 {
     return QStringLiteral("skinDX");
+}
+
+QString legacyStandardPreviewSkinDirectoryName()
+{
+    return QStringLiteral("skinSTD");
+}
+
+QString normalizePreviewSkinDirectoryName(QString name)
+{
+    name = name.trimmed();
+    return name.compare(legacyStandardPreviewSkinDirectoryName(), Qt::CaseInsensitive) == 0
+        ? standardPreviewSkinDirectoryName()
+        : name;
 }
 
 bool hasCorePreviewSkinAssets(const QString& directory)
@@ -481,9 +494,10 @@ MainWindow::PreviewSkinVariant MainWindow::PreviewSection::previewSkinVariantFro
 
 QString MainWindow::PreviewSection::previewSkinVariantStorageValue() const
 {
-    return state_.previewSkinDirectoryName_.trimmed().isEmpty()
+    const QString normalized = normalizePreviewSkinDirectoryName(state_.previewSkinDirectoryName_);
+    return normalized.isEmpty()
         ? standardPreviewSkinDirectoryName()
-        : state_.previewSkinDirectoryName_.trimmed();
+        : normalized;
 }
 
 QString MainWindow::PreviewSection::resolvePreviewSkinRootDir() const
@@ -529,13 +543,14 @@ QStringList MainWindow::PreviewSection::availablePreviewSkinDirectoryNames() con
 
 QString MainWindow::PreviewSection::previewSkinDisplayName(const QString& directoryName) const
 {
-    if (directoryName.compare(standardPreviewSkinDirectoryName(), Qt::CaseInsensitive) == 0) {
+    const QString normalized = normalizePreviewSkinDirectoryName(directoryName);
+    if (normalized.compare(standardPreviewSkinDirectoryName(), Qt::CaseInsensitive) == 0) {
         return uiText("dialog.render_settings.video.skin.standard", "Standard");
     }
-    if (directoryName.compare(dxPreviewSkinDirectoryName(), Qt::CaseInsensitive) == 0) {
+    if (normalized.compare(dxPreviewSkinDirectoryName(), Qt::CaseInsensitive) == 0) {
         return uiText("dialog.render_settings.video.skin.dx", "DX");
     }
-    return directoryName;
+    return normalized;
 }
 
 QString MainWindow::PreviewSection::resolvePreviewSkinDir() const
@@ -545,9 +560,10 @@ QString MainWindow::PreviewSection::resolvePreviewSkinDir() const
         return QString();
     }
 
-    const QString selected = state_.previewSkinDirectoryName_.trimmed().isEmpty()
+    const QString normalizedSelected = normalizePreviewSkinDirectoryName(state_.previewSkinDirectoryName_);
+    const QString selected = normalizedSelected.isEmpty()
         ? standardPreviewSkinDirectoryName()
-        : state_.previewSkinDirectoryName_.trimmed();
+        : normalizedSelected;
     const QString selectedDir = QDir(root).filePath(selected);
     if (hasCorePreviewSkinAssets(selectedDir)) {
         return QDir::cleanPath(selectedDir);

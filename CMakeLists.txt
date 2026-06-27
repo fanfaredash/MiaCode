@@ -2,14 +2,14 @@ cmake_minimum_required(VERSION 3.21)
 
 set(MIACODE_VERSION_MAJOR "1")
 set(MIACODE_VERSION_MINOR "0")
-set(MIACODE_VERSION_PATCH "0")
+set(MIACODE_VERSION_PATCH "1")
 # Single source of truth for the prerelease tag. Both the package
 # filename (MiaCode-v<version>-win64.zip via package-win.ps1) and the
 # user-visible "About" dialog read this. Beta20 unified the previously
 # split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
 # they always drifted apart in practice (e.g. beta20 zip shipping with
 # beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "")
+set(MIACODE_VERSION_PRERELEASE "beta.1")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
@@ -545,6 +545,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     resources/app_icons.qrc
     resources/fonts.qrc
     resources/slide_data.qrc
+    resources/preview_judge_effects.qrc
     resources/preview_runtime_qml.qrc
     resources/quick_shell_qml.qrc
     resources/intro.qrc
@@ -1129,6 +1130,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/preview/runtime/PreviewSceneAssetLoader.cpp
             src/core/scene/PreviewFrameState.h
             ${_miacode_log_core}
+            resources/preview_judge_effects.qrc
         LIBS Qt6::Core Qt6::Gui
         INCLUDES src src/common src/preview src/preview/runtime src/core/scene src/core/video src/timeline
     )

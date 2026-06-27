@@ -1,0 +1,12 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="preview/judge_effects/judge_effect_firework.png">preview/judge_effects/judge_effect_firework.png</file>
+        <file alias="preview/judge_effects/judge_effect_firework_color_ball.png">preview/judge_effects/judge_effect_firework_color_ball.png</file>
+        <file alias="preview/judge_effects/judge_effect_hold_sustain_circle.png">preview/judge_effects/judge_effect_hold_sustain_circle.png</file>
+        <file alias="preview/judge_effects/judge_effect_tap.png">preview/judge_effects/judge_effect_tap.png</file>
+        <file alias="preview/judge_effects/judge_effect_tap_break.png">preview/judge_effects/judge_effect_tap_break.png</file>
+        <file alias="preview/judge_effects/judge_effect_touch_circle.png">preview/judge_effects/judge_effect_touch_circle.png</file>
+        <file alias="preview/judge_effects/judge_effect_touch_part_01.png">preview/judge_effects/judge_effect_touch_part_01.png</file>
+        <file alias="preview/judge_effects/judge_effect_touch_part_02.png">preview/judge_effects/judge_effect_touch_part_02.png</file>
+    </qresource>
+</RCC>
