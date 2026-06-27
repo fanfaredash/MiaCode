@@ -82,7 +82,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     // button to a 64-px floor with 12-px synthetic side padding. That
     // floor was wider than the natural width of Qt's own
     // addAction()-managed buttons next to it (Open / Save), so after
-    // the recent label shortening (Audio Settings → Audio, etc.) the
+    // settings labels changed width over time, so the
     // pair sat in a visibly oversized cell with empty air on each side
     // of the text. We now let `sizeHint()` produce the natural width
     // exactly the way `addAction()` would, and only sync Audio/Video

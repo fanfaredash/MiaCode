@@ -649,7 +649,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
 
     previewMenu->addSeparator();
 
-    owner_.previewAudioSettingsAction_ = new QAction(uiText("action.audio_settings", "Audio"), &owner_);
+    owner_.previewAudioSettingsAction_ = new QAction(uiText("action.audio_settings", "Audio Settings"), &owner_);
     connect(owner_.previewAudioSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewAudioSettings);
     previewMenu->addAction(owner_.previewAudioSettingsAction_);
 
