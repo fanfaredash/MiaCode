@@ -190,7 +190,7 @@ Do not rename sound files casually; both preview-time and export-time behavior d
   - `scripts/README.md`
   - `scripts/README_EN.md`
 - Asset helper scripts:
-  - `scripts/assets/match_outline_canvas_ratio.py` pads/crops transparent outline PNGs so external 980-style art matches the alpha-bounds ratio of MiaCode's 1080x1080 outline canvases.
+  - `scripts/assets/match_outline_canvas_ratio.py` expands transparent outline PNG canvases by the fixed 980:1080 ratio without scaling the visible pixels.
   - `scripts/gen_skin_mine_sprites.py` generates `<base>_mine.png` skin sprites by applying the MajMine luminance grayscale transform while preserving alpha.
   - `scripts/assets/build_skin_tool_exes.ps1` packages those two helpers as standalone Windows executables under `dist/skin-tools-win64`:
     - `miacode-outline-canvas-tool.exe`
