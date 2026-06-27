@@ -1,6 +1,7 @@
 #include "timeline/TimelineSceneStateBuilder.h"
 
 #include <QFontMetrics>
+#include <QDir>
 #include <QtMath>
 
 #include <algorithm>
@@ -71,10 +72,27 @@ QString laneLabelForIndex(int laneIndex)
     return QString();
 }
 
-const miacode::timeline::TimelineNoteAssetSet& sceneNoteAssets()
+const miacode::timeline::TimelineNoteAssetSet& fallbackSceneNoteAssets()
 {
     static const miacode::timeline::TimelineNoteAssetSet assets = miacode::timeline::loadTimelineNoteAssets();
     return assets;
+}
+
+const miacode::timeline::TimelineNoteAssetSet& sceneNoteAssets(const TimelineSceneBuildRequest& request)
+{
+    if (request.skinDirectory.trimmed().isEmpty()) {
+        return fallbackSceneNoteAssets();
+    }
+
+    thread_local QString cachedSkinDirectory;
+    thread_local miacode::timeline::TimelineNoteAssetSet cachedAssets;
+    const QString trimmed = request.skinDirectory.trimmed();
+    const QString normalized = trimmed.isEmpty() ? QString() : QDir::cleanPath(trimmed);
+    if (cachedSkinDirectory != normalized) {
+        cachedSkinDirectory = normalized;
+        cachedAssets = miacode::timeline::loadTimelineNoteAssets(normalized);
+    }
+    return cachedAssets.noteIcons.isEmpty() ? fallbackSceneNoteAssets() : cachedAssets;
 }
 
 QFont timelineLaneLabelFont()
@@ -488,6 +506,8 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     state.notesRevision = request.notesRevision;
     state.overlayRevision = request.overlayRevision;
     state.overlayDynamicRevision = request.overlayDynamicRevision;
+    const QString trimmedSkinDirectory = request.skinDirectory.trimmed();
+    state.skinDirectory = trimmedSkinDirectory.isEmpty() ? QString() : QDir::cleanPath(trimmedSkinDirectory);
 
     const TimelineThemeColors theme = timelineThemeColors();
     const QFont laneLabelFont = scaledFontForContentScale(timelineLaneLabelFont(), state.contentScale);
@@ -1127,7 +1147,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             if (!request.showSlideTracks || !isSlideTrack) {
                 return;
             }
-            const auto& noteAssets = sceneNoteAssets();
+            const auto& noteAssets = sceneNoteAssets(request);
             const int startLane = qBound(1, note.lane, kPlayableLaneCount);
             const int endLane = qBound(1, note.endLane, kPlayableLaneCount);
             const int startY =
@@ -1233,7 +1253,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         const bool shouldDrawHead = !isSlideLike || timelineRenderFlagSet(note, TimelineRenderFlagHasHeadStar);
         if (!isHold && shouldDrawHead) {
             const QSize iconTargetSize =
-                miacode::timeline::targetSizeForNoteType(sceneNoteAssets(), iconType, baseIconScale);
+                miacode::timeline::targetSizeForNoteType(sceneNoteAssets(request), iconType, baseIconScale);
             if (!iconTargetSize.isValid()) {
                 return;
             }

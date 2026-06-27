@@ -95,6 +95,7 @@ public:
     int zoomPresetIndex() const;
     int zoomPresetCount() const;
     void refreshTheme();
+    void setSkinDirectory(const QString& skinDirectory);
 
 signals:
     void playheadChanged(double second);
@@ -193,6 +194,7 @@ private:
     qreal holdScaleForBaseIconScale(const QString& type, qreal baseIconScale) const;
     const HoldPixmapParts& holdPixmapPartsForType(const QString& type, qreal scale) const;
     void loadNoteIcons();
+    void loadNoteIcons(const QString& skinDirectory);
     void prewarmTransformedIconCache();
     int minimumContentHeightForCurrentDevice() const;
     void refreshMinimumHeightForCurrentDevice();
@@ -224,6 +226,7 @@ private:
     QHash<quint64, QVector<miacode::timeline::TimelineMuriMarkerPlacement>> muriMarkerPlacementsByLocation_;
     QHash<QString, QPixmap> noteIcons_;
     QHash<QString, int> noteIconBasePixelSizes_;
+    QString skinDirectory_;
     mutable QHash<QString, QPixmap> transformedIconCache_;
     mutable QHash<QString, HoldPixmapParts> holdPixmapPartsCache_;
     std::shared_ptr<const miacode::waveform::WaveformData> waveformData_;

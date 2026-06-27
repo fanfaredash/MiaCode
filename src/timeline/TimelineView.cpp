@@ -310,7 +310,7 @@ TimelineView::TimelineView(QWidget* parent)
 
     refreshTheme();
     updateZoomButtonAppearance();
-    loadNoteIcons();
+    loadNoteIcons(QString());
     refreshMinimumHeightForCurrentDevice();
     playheadIndicatorRestoreTimer_ = new QTimer(this);
     playheadIndicatorRestoreTimer_->setSingleShot(true);
@@ -371,6 +371,9 @@ void TimelineView::applyStateFromBridge()
     minimumDataSecond_ = snapshotCache_.minimumSecond;
     maximumDataSecond_ = snapshotCache_.maximumSecond;
     waveformData_ = stateBridge_->waveformData();
+    if (skinDirectory_ != stateBridge_->skinDirectory()) {
+        loadNoteIcons(stateBridge_->skinDirectory());
+    }
     muriMarkerPlacementsByLocation_ = stateBridge_->muriMarkersByLocation();
     playbackEntrySeconds_ = stateBridge_->playbackEntrySeconds();
     playheadUpperLimitSeconds_ = stateBridge_->playheadUpperLimitSeconds();
@@ -1055,6 +1058,23 @@ int TimelineView::zoomPresetIndex() const
 int TimelineView::zoomPresetCount() const
 {
     return zoomPresets_.size();
+}
+
+void TimelineView::setSkinDirectory(const QString& skinDirectory)
+{
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setSkinDirectory(skinDirectory);
+        return;
+    }
+    const QString trimmed = skinDirectory.trimmed();
+    const QString normalized = trimmed.isEmpty() ? QString() : QDir::cleanPath(trimmed);
+    if (skinDirectory_ == normalized) {
+        return;
+    }
+    loadNoteIcons(normalized);
+    refreshMinimumHeightForCurrentDevice();
+    viewport()->update();
+    emit renderStateChanged();
 }
 
 

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include <QDir>
 #include <QFontDatabase>
 
 #include "common/DebugLog.h"
@@ -453,6 +454,23 @@ QFont TimelineQuickStateBridge::headerLineNumberFont() const
     return headerLineNumberFont_;
 }
 
+QString TimelineQuickStateBridge::skinDirectory() const
+{
+    return skinDirectory_;
+}
+
+void TimelineQuickStateBridge::setSkinDirectory(const QString& skinDirectory)
+{
+    const QString trimmed = skinDirectory.trimmed();
+    const QString normalized = trimmed.isEmpty() ? QString() : QDir::cleanPath(trimmed);
+    if (skinDirectory_ == normalized) {
+        return;
+    }
+    skinDirectory_ = normalized;
+    bumpNotesRevision();
+    emit renderStateChanged();
+}
+
 void TimelineQuickStateBridge::setQuickViewportSize(const QSize& viewportSize)
 {
     if (!viewportSize.isValid()) {
@@ -482,6 +500,7 @@ void TimelineQuickStateBridge::refreshLayoutMetrics()
     request.snapshot = snapshot_;
     request.waveformData = waveformData_;
     request.viewportSize = effectiveViewportSize();
+    request.skinDirectory = skinDirectory_;
     request.zoomScale = zoomScale();
     request.contentScale = contentScale_;
     request.waveformBrightness = waveformBrightness_;

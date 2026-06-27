@@ -40,10 +40,12 @@ const QPixmap& iconForType(const miacode::timeline::TimelineNoteAssetSet& assets
 
 namespace miacode::timeline {
 
-TimelineNoteAssetSet loadTimelineNoteAssets()
+TimelineNoteAssetSet loadTimelineNoteAssets(const QString& skinDirectory)
 {
     TimelineNoteAssetSet assets;
-    const QString notesDir = miacode::assets::assetPath("skin/skinSD");
+    const QString notesDir = skinDirectory.trimmed().isEmpty()
+        ? miacode::assets::assetPath(QStringLiteral("skin/skinSD"))
+        : QDir::cleanPath(skinDirectory);
     if (!QFileInfo::exists(QDir(notesDir).filePath("tap.png"))) {
         return assets;
     }

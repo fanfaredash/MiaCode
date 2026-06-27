@@ -135,9 +135,7 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
                     ? PreviewSkinVariant::Dx
                     : PreviewSkinVariant::Standard;
             skinButton->setText(skinLabel);
-            if (owner_.previewCanvas_ != nullptr) {
-                owner_.previewCanvas_->setSkinDirectory(owner_.resolvePreviewSkinDir());
-            }
+            owner_.applyPreviewSkinDirectoryToSurfaces();
             owner_.savePortableState();
         });
     }

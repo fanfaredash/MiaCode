@@ -184,6 +184,7 @@ Asset root:
 - `miacode::assets::findAssetRoot`
 - `miacode::assets::assetPath`
 - Skin import opens `assets/skin`; built-in and user skins are sibling child directories and only complete core skins are listed
+- Timeline note art follows the current preview skin directory via `MainWindow::applyPreviewSkinDirectoryToSurfaces` -> `TimelineQuickStateBridge::setSkinDirectory`; keep `TimelineView`, `TimelineQuickTextureCache`, `TimelineSceneStateBuilder`, and DComp `TimelineSpriteAssetCache` cache invalidation aligned when changing skin lookup
 - Judge-line import opens `assets/background/outlines`; custom PNG selections must flow through realtime preview and export task/snapshot state together with the built-in `PreviewOutlineVariant` fallback
 
 Preview-time consumers:

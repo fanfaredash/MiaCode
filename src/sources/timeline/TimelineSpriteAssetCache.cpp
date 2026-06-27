@@ -1,5 +1,6 @@
 #include "sources/timeline/TimelineSpriteAssetCache.h"
 
+#include <QDir>
 #include <QPixmap>
 
 namespace miacode::sources::timeline {
@@ -7,7 +8,7 @@ namespace miacode::sources::timeline {
 void TimelineSpriteAssetCache::ensureLoaded()
 {
     if (assetsLoaded_) return;
-    assets_ = miacode::timeline::loadTimelineNoteAssets();
+    assets_ = miacode::timeline::loadTimelineNoteAssets(skinDirectory_);
     assetsLoaded_ = true;
 }
 
@@ -111,6 +112,19 @@ void TimelineSpriteAssetCache::clear()
 {
     cache_.clear();
     holdCache_.clear();
+}
+
+void TimelineSpriteAssetCache::setSkinDirectory(const QString& skinDirectory)
+{
+    const QString trimmed = skinDirectory.trimmed();
+    const QString normalized = trimmed.isEmpty() ? QString() : QDir::cleanPath(trimmed);
+    if (skinDirectory_ == normalized) {
+        return;
+    }
+    skinDirectory_ = normalized;
+    assets_ = miacode::timeline::TimelineNoteAssetSet();
+    assetsLoaded_ = false;
+    clear();
 }
 
 }  // namespace miacode::sources::timeline

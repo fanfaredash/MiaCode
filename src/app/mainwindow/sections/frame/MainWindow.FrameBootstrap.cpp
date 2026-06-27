@@ -1225,7 +1225,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     previewCanvas_ = new PreviewRuntime(this);
     logStartupStage("preview_canvas_created");
     applyEffectivePreviewOutlineVariantToCanvas();
-    previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
+    applyPreviewSkinDirectoryToSurfaces();
     updatePreviewStageMediaPresentationMode(false);
     if (previewUsesStageMediaHostRoute()) {
         ensurePreviewStageMediaRouteInitialized();
@@ -1423,6 +1423,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     timelineQuickStateBridge_ = new TimelineQuickStateBridge(this);
     timelineQuickStateBridge_->setHeaderLineNumberFont(timelineHeaderLineNumberFont());
     timelineQuickStateBridge_->setShowSlideTracks(true);
+    timelineQuickStateBridge_->setSkinDirectory(resolvePreviewSkinDir());
     timelineQuickStateBridge_->setViewportLockEnabled(previewViewportLockEnabled_);
     timelineQuickStateBridge_->setFollowProgressEnabled(previewProgressFollowEnabled_);
     timelineQuickStateBridge_->setTimelineSyncEnabled(timelineSyncEnabled_);

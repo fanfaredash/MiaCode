@@ -549,7 +549,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     }
     if (previewCanvas_ != nullptr) {
         applyEffectivePreviewOutlineVariantToCanvas();
-        previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
+        applyPreviewSkinDirectoryToSurfaces();
         previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
         previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
         previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);

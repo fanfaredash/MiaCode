@@ -6,6 +6,7 @@
 #include <QPointer>
 #include <QFont>
 #include <QSize>
+#include <QString>
 #include <QVector>
 
 #include <memory>
@@ -54,6 +55,8 @@ public:
     QHash<quint64, QString> muriMarkerTooltips() const;
     void setHeaderLineNumberFont(const QFont& font);
     QFont headerLineNumberFont() const;
+    QString skinDirectory() const;
+    void setSkinDirectory(const QString& skinDirectory);
     int horizontalScrollValue() const;
     void setHorizontalScrollValue(int value);
     double zoomScale() const;
@@ -130,6 +133,7 @@ private:
     QHash<quint64, QVector<miacode::timeline::TimelineMuriMarkerPlacement>> muriMarkersByLocation_;
     QHash<quint64, QString> muriMarkerTooltips_;
     QFont headerLineNumberFont_;
+    QString skinDirectory_;
     QSize quickViewportSize_;
     QVector<double> zoomPresets_;
     int zoomPresetIndex_ = 1;

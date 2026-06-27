@@ -1214,6 +1214,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.muriMarkerTooltips = stateBridge_->muriMarkerTooltips();
     request.viewportSize = viewportSize;
     request.headerLineNumberFont = stateBridge_->headerLineNumberFont();
+    request.skinDirectory = stateBridge_->skinDirectory();
     request.horizontalScrollValue = stateBridge_->horizontalScrollValue();
     // Phase 7 — opt into scroll-bucket culling. Builder emits
     // primitives for visible viewport ± bucketSize px (so 3 total
@@ -1386,6 +1387,7 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         return root;
     }
     textures_->setWindow(window());
+    textures_->setSkinDirectory(stateBridge_ != nullptr ? stateBridge_->skinDirectory() : QString());
     const qreal currentDpr = window()->effectiveDevicePixelRatio();
     if (!qFuzzyCompare(cachedDevicePixelRatio_ + 1.0, currentDpr + 1.0)) {
         cachedDevicePixelRatio_ = currentDpr;

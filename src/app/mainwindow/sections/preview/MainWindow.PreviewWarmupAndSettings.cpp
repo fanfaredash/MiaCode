@@ -21,6 +21,7 @@
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/latency/LatencySandboxController.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
@@ -768,6 +769,17 @@ QString MainWindow::resolvePreviewSkinDir() const
 QString MainWindow::resolvePreviewSkinRootDir() const
 {
     return previewSection_->resolvePreviewSkinRootDir();
+}
+
+void MainWindow::applyPreviewSkinDirectoryToSurfaces()
+{
+    const QString skinDir = resolvePreviewSkinDir();
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->setSkinDirectory(skinDir);
+    }
+    if (timelineQuickStateBridge_ != nullptr) {
+        timelineQuickStateBridge_->setSkinDirectory(skinDir);
+    }
 }
 
 void MainWindow::applyPreviewAudioSettingsToRuntime()

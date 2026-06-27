@@ -3,6 +3,7 @@
 #include <QFont>
 #include <QHash>
 #include <QSize>
+#include <QString>
 
 #include <memory>
 
@@ -20,6 +21,7 @@ struct TimelineSceneBuildRequest {
     QHash<quint64, QString> muriMarkerTooltips;
     QSize viewportSize;
     QFont headerLineNumberFont;
+    QString skinDirectory;
     int horizontalScrollValue = 0;
     int headerLeftLimit = 0;
     int headerRightLimit = 0;

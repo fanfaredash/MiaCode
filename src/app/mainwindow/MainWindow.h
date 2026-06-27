@@ -465,6 +465,7 @@ private:
     QString resolveDefaultTrackPath() const;
     QString resolvePreviewSkinDir() const;
     QString resolvePreviewSkinRootDir() const;
+    void applyPreviewSkinDirectoryToSurfaces();
     QString resolveProjectRenderStateFilePath() const;
     QString resolveInitialOpenDirectory() const;
     void resetPortablePreviewSettingsToDefaults();

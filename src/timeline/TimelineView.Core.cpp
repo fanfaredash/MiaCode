@@ -644,7 +644,14 @@ const TimelineView::HoldPixmapParts& TimelineView::holdPixmapPartsForType(const 
 
 void TimelineView::loadNoteIcons()
 {
-    const miacode::timeline::TimelineNoteAssetSet assets = miacode::timeline::loadTimelineNoteAssets();
+    loadNoteIcons(skinDirectory_);
+}
+
+void TimelineView::loadNoteIcons(const QString& skinDirectory)
+{
+    const QString trimmed = skinDirectory.trimmed();
+    skinDirectory_ = trimmed.isEmpty() ? QString() : QDir::cleanPath(trimmed);
+    const miacode::timeline::TimelineNoteAssetSet assets = miacode::timeline::loadTimelineNoteAssets(skinDirectory_);
     noteIcons_ = assets.noteIcons;
     noteIconBasePixelSizes_ = assets.noteIconBasePixelSizes;
     transformedIconCache_.clear();

@@ -1,5 +1,6 @@
 #include "timeline/quick/TimelineQuickTextureCache.h"
 
+#include <QDir>
 #include <QQuickWindow>
 #include <QSGTexture>
 #include <QStringList>
@@ -18,7 +19,7 @@ void TimelineQuickTextureCache::setWindow(QQuickWindow* window)
     }
     clear();
     window_ = window;
-    noteAssets_ = miacode::timeline::loadTimelineNoteAssets();
+    noteAssets_ = miacode::timeline::loadTimelineNoteAssets(skinDirectory_);
 }
 
 void TimelineQuickTextureCache::clear()
@@ -47,6 +48,18 @@ void TimelineQuickTextureCache::invalidateDprDependent()
     textures_.clear();
     transformedPixmaps_.clear();
     holdPixmapParts_.clear();
+}
+
+void TimelineQuickTextureCache::setSkinDirectory(const QString& skinDirectory)
+{
+    const QString trimmed = skinDirectory.trimmed();
+    const QString normalized = trimmed.isEmpty() ? QString() : QDir::cleanPath(trimmed);
+    if (skinDirectory_ == normalized) {
+        return;
+    }
+    clear();
+    skinDirectory_ = normalized;
+    noteAssets_ = miacode::timeline::loadTimelineNoteAssets(skinDirectory_);
 }
 
 QSGTexture* TimelineQuickTextureCache::textureForKey(const QString& key, const QImage& image)

@@ -134,6 +134,7 @@ struct TimelineSceneState {
     quint64 notesRevision = 0;
     quint64 overlayRevision = 0;
     quint64 overlayDynamicRevision = 0;
+    QString skinDirectory;
     QVector<TimelineSceneRect> baseBackgroundRects;
     QVector<TimelineSceneRect> laneOverlayRects;
     QVector<TimelineSceneRect> waveformBars;
