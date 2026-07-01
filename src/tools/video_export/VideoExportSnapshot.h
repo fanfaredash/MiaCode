@@ -56,6 +56,7 @@ struct VideoExportSnapshot {
         miacode::preview_gameplay::kDefaultCenterDisplayMode;
     int skinLoadWaitMs = 2000;
     IntroBannerSpec intro;
+    QString introSoundFileName;
 
     QJsonObject toJson() const;
     static bool fromJson(const QJsonObject& object, VideoExportSnapshot* snapshot, QString* errorMessage = nullptr);

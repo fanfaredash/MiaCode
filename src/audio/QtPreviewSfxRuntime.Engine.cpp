@@ -72,6 +72,7 @@ void QtPreviewSfxRuntime::initializeAssets()
     configureBank(touchSfx_, "touch", 1);
     // All note SFX kinds are now latest-wins to mirror MajdataPlay's runtime behavior.
     configureBank(fireworkSfx_, "firework", 1);
+    configureBank(trackStartSfx_, "track_start", 1);
 
     const QString touchholdPath = miacode::preview_sfx::assetFilePathForKind(preparedAssets_.sfxDir, "touchhold");
     if (QFileInfo::exists(touchholdPath)) {
@@ -147,6 +148,7 @@ void QtPreviewSfxRuntime::applyVolumes()
     applyVolume(exSfx_, previewSfxVolumeForKind(settings_, "ex"));
     applyVolume(touchSfx_, previewSfxVolumeForKind(settings_, "touch"));
     applyVolume(fireworkSfx_, previewSfxVolumeForKind(settings_, "firework"));
+    applyVolume(trackStartSfx_, previewSfxVolumeForKind(settings_, "track_start"));
     if (backgroundTrackVoice_ != nullptr && backgroundTrackVoice_->initialized) {
         ma_sound_set_volume(&backgroundTrackVoice_->sound, static_cast<float>(previewTrackVolume(settings_)));
     }

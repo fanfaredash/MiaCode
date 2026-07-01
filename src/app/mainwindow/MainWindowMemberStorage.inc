@@ -515,6 +515,7 @@
         bool previewSlideEarlierSecondAndTextOnTop_ = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
         PreviewSkinVariant previewSkinVariant_ = PreviewSkinVariant::Standard;
         QString previewSkinDirectoryName_ = QStringLiteral("skinSTD");
+        QString previewIntroSoundFileName_;
         PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
         PreviewCanvasFrameRateMode previewStageMediaFrameRateMode_ = PreviewCanvasFrameRateMode::Fps30;
         // Preview video decode mode preference: false = hardware (default), true =
@@ -920,6 +921,7 @@
     bool& previewSlideEarlierSecondAndTextOnTop_ = state_.previewSlideEarlierSecondAndTextOnTop_;
     PreviewSkinVariant& previewSkinVariant_ = state_.previewSkinVariant_;
     QString& previewSkinDirectoryName_ = state_.previewSkinDirectoryName_;
+    QString& previewIntroSoundFileName_ = state_.previewIntroSoundFileName_;
     PreviewCanvasFrameRateMode& previewCanvasFrameRateMode_ = state_.previewCanvasFrameRateMode_;
     double& previewCanvasAspectRatio_ = state_.previewCanvasAspectRatio_;
     bool& previewAutoRestoreSquareAfterExport_ = state_.previewAutoRestoreSquareAfterExport_;

@@ -16,6 +16,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/PreviewSfxAssets.h"
 #include "common/TimelineThemeConfig.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
@@ -715,6 +716,11 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
             state_.previewSkinDirectoryName_ = skinValue;
         }
     }
+    if (preview.value("intro_sound_file").isString()) {
+        state_.previewIntroSoundFileName_ =
+            miacode::preview_sfx::normalizeIntroSoundFileName(preview.value("intro_sound_file").toString());
+    }
+    miacode::preview_sfx::setSelectedIntroSoundFileName(state_.previewIntroSoundFileName_);
     if (preview.value("canvas_frame_rate_mode").isString()) {
         state_.previewCanvasFrameRateMode_ =
             owner_.previewCanvasFrameRateModeFromStorageValue(preview.value("canvas_frame_rate_mode").toString());
@@ -894,6 +900,11 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("touch_flow_speed", state_.previewTouchFlowSpeed_);
     preview.insert("slide_earlier_second_and_text_on_top", state_.previewSlideEarlierSecondAndTextOnTop_);
     preview.insert("skin_variant", owner_.previewSkinVariantStorageValue());
+    if (state_.previewIntroSoundFileName_.trimmed().isEmpty()) {
+        preview.remove("intro_sound_file");
+    } else {
+        preview.insert("intro_sound_file", state_.previewIntroSoundFileName_);
+    }
     preview.insert("canvas_frame_rate_mode", owner_.previewCanvasFrameRateModeStorageValue());
     preview.insert("pv_frame_rate_mode", owner_.previewStageMediaFrameRateModeStorageValue());
     preview.insert("video_decode_prefers_software", owner_.currentVideoDecodePrefersSoftware());

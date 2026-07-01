@@ -11,12 +11,16 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
   - `assets/skin`
   - Built-in skins live under `assets/skin/skinSTD` and `assets/skin/skinDX`; user-imported skins are additional valid child folders under `assets/skin`
   - `assets/SFX`
+  - `assets/music`
+  - `assets/music/README.txt` documents the `track_start.wav` replacement contract in Simplified Chinese, English, and Japanese
   - `assets/background`
   - Custom judge-line PNGs live under `assets/background/outlines`; the render settings import action only opens this folder
+  - `assets/background/outlines/README.txt` documents custom judge-line file format and notes in Simplified Chinese, English, and Japanese
   - `assets/noteguide`
   - Noteguide assets include tap/slide approach rings (`Normal.png`, `Break.png`, `Each.png`, `Mine.png`, `Slide.png`), each-line connectors, and hold-tail guides (`Hold_End.png`, `Hold_Each_End.png`, `Hold_Break_End.png`, `Hold_Mine_End.png`)
   - `assets/reference`
   - `assets/fonts`
+  - `assets/skin/README.txt` documents skin folder layout and required core filenames in Simplified Chinese, English, and Japanese
 - Qt resources:
   - `resources/app_icons.qrc`
   - `resources/fonts.qrc`
@@ -89,6 +93,7 @@ The toolbox blank-media submenu operates on the current chart directory only. It
 - SFX clips:
   - Consumer: `QtPreviewSfxRuntime`, `VideoExportAudioRenderPlan`, export audio backends
   - Entry: `miacode::preview_sfx::resolveSfxDirectory`
+  - `track_start` is the intro opening SFX kind. Runtime audition/playback and exported intro audio first check the selected `assets/music/<file>` entry, then legacy `assets/music/track_start.wav`, then the resolved SFX folder's `track_start.wav`, then the bundled `:/intro/audio/track_start.wav` for export-only extraction.
 - Windows BASS runtime assets:
   - Repo-local files:
     - `third_party/bass/include/bass.h`

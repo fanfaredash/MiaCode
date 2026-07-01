@@ -41,6 +41,256 @@
 
 using namespace miacode::mainwindow::shared;
 
+namespace {
+
+class DialogListPopup final : public QFrame {
+public:
+    explicit DialogListPopup(QWidget* parent)
+        : QFrame(parent, Qt::Popup | Qt::FramelessWindowHint)
+    {
+        setObjectName(QStringLiteral("DialogListPopup"));
+        setAttribute(Qt::WA_TranslucentBackground, true);
+        setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+
+        auto* rootLayout = new QVBoxLayout(this);
+        rootLayout->setContentsMargins(0, 0, 0, 0);
+        rootLayout->setSpacing(0);
+
+        scrollArea_ = new QScrollArea(this);
+        scrollArea_->setFrameShape(QFrame::NoFrame);
+        scrollArea_->setWidgetResizable(true);
+        scrollArea_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        scrollArea_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        scrollArea_->viewport()->setAutoFillBackground(false);
+
+        content_ = new QWidget(scrollArea_);
+        content_->setObjectName(QStringLiteral("DialogListPopupContent"));
+        listLayout_ = new QVBoxLayout(content_);
+        listLayout_->setContentsMargins(7, 7, 7, 7);
+        listLayout_->setSpacing(1);
+        scrollArea_->setWidget(content_);
+        rootLayout->addWidget(scrollArea_);
+
+        refreshStyle();
+    }
+
+    bool hasItems() const
+    {
+        return hasItems_;
+    }
+
+    QToolButton* addChoice(
+        const QString& text,
+        const std::function<void()>& onTriggered,
+        bool italic = false,
+        bool closeOnClick = true
+    )
+    {
+        auto* button = new QToolButton(content_);
+        button->setAutoRaise(true);
+        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        button->setText(text);
+        button->setCursor(Qt::PointingHandCursor);
+        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        QFont buttonFont = button->font();
+        buttonFont.setItalic(italic);
+        button->setFont(buttonFont);
+        button->setStyleSheet(itemButtonStyleSheet());
+        QObject::connect(button, &QToolButton::clicked, this, [this, onTriggered, closeOnClick]() {
+            if (onTriggered) {
+                onTriggered();
+            }
+            if (closeOnClick) {
+                close();
+            }
+        });
+        listLayout_->addWidget(button);
+        hasItems_ = true;
+        return button;
+    }
+
+    QCheckBox* addCheckChoice(
+        const QString& text,
+        bool checked,
+        const std::function<void(QCheckBox*, bool)>& onToggled
+    )
+    {
+        auto* checkbox = new QCheckBox(text, content_);
+        checkbox->setChecked(checked);
+        checkbox->setCursor(Qt::PointingHandCursor);
+        checkbox->setStyleSheet(checkBoxStyleSheet());
+        QObject::connect(checkbox, &QCheckBox::toggled, this, [checkbox, onToggled](bool isChecked) {
+            if (onToggled) {
+                onToggled(checkbox, isChecked);
+            }
+        });
+        listLayout_->addWidget(checkbox);
+        hasItems_ = true;
+        return checkbox;
+    }
+
+    void addSeparator()
+    {
+        auto* separator = new QFrame(content_);
+        separator->setFrameShape(QFrame::NoFrame);
+        separator->setFixedHeight(1);
+        const auto& c = UiTheme::colors();
+        separator->setStyleSheet(QStringLiteral("background: %1; margin: 7px 6px;")
+            .arg((c.dark ? c.borderStrong : c.border).name(QColor::HexRgb)));
+        listLayout_->addWidget(separator);
+    }
+
+    void popupBelow(QToolButton* anchor)
+    {
+        if (anchor == nullptr) {
+            return;
+        }
+        setActiveAnchor(anchor);
+        refreshStyle();
+        content_->adjustSize();
+        const int contentWidth = content_->sizeHint().width() + 18;
+        const int popupWidth = qMin(anchor->width(), qMax(kMinPopupWidth, contentWidth));
+        const int popupHeight = qMin(kMaxPopupHeight, content_->sizeHint().height() + 2);
+        resize(popupWidth, popupHeight);
+        scrollArea_->setFixedSize(popupWidth, popupHeight);
+
+        const QScreen* targetScreen = anchor->screen() != nullptr ? anchor->screen() : QGuiApplication::primaryScreen();
+        const QRect available = targetScreen != nullptr ? targetScreen->availableGeometry() : QRect();
+        const int spacing = 4;
+        QPoint pos = anchor->mapToGlobal(QPoint(0, anchor->height() + spacing));
+        if (available.isValid()) {
+            if (pos.y() + popupHeight > available.bottom()) {
+                const int aboveY = anchor->mapToGlobal(QPoint(0, -popupHeight - spacing)).y();
+                pos.setY(aboveY >= available.top() ? aboveY : qMax(available.top(), available.bottom() - popupHeight));
+            }
+            if (pos.x() < available.left()) {
+                pos.setX(available.left());
+            }
+            if (pos.x() + popupWidth > available.right()) {
+                pos.setX(qMax(available.left(), available.right() - popupWidth));
+            }
+        }
+        move(pos);
+        show();
+        raise();
+    }
+
+private:
+    static constexpr int kMaxPopupHeight = 320;
+    static constexpr int kMinPopupWidth = 96;
+
+    static void repolish(QWidget* widget)
+    {
+        if (widget == nullptr) {
+            return;
+        }
+        widget->style()->unpolish(widget);
+        widget->style()->polish(widget);
+        widget->update();
+    }
+
+    void setActiveAnchor(QToolButton* anchor)
+    {
+        if (activeAnchor_ != nullptr && activeAnchor_ != anchor) {
+            activeAnchor_->setProperty("miacodePopupOpen", false);
+            activeAnchor_->setDown(false);
+            activeAnchor_->clearFocus();
+            repolish(activeAnchor_);
+        }
+        activeAnchor_ = anchor;
+        activeAnchor_->setProperty("miacodePopupOpen", true);
+        activeAnchor_->setDown(false);
+        activeAnchor_->clearFocus();
+        repolish(activeAnchor_);
+    }
+
+    void hideEvent(QHideEvent* event) override
+    {
+        if (activeAnchor_ != nullptr) {
+            activeAnchor_->setProperty("miacodePopupOpen", false);
+            activeAnchor_->setDown(false);
+            activeAnchor_->clearFocus();
+            repolish(activeAnchor_);
+            activeAnchor_.clear();
+        }
+        QFrame::hideEvent(event);
+    }
+
+    QString itemButtonStyleSheet() const
+    {
+        const auto& c = UiTheme::colors();
+        return QStringLiteral(
+            "QToolButton {"
+            " color: %1;"
+            " background: transparent;"
+            " border: none;"
+            " padding: 6px 20px 6px 12px;"
+            " text-align: left;"
+            "}"
+            "QToolButton:hover {"
+            " background: %2;"
+            " border-radius: 6px;"
+            "}"
+        )
+            .arg(c.textPrimary.name(QColor::HexRgb))
+            .arg(c.menuHoverBg.name(QColor::HexRgb));
+    }
+
+    QString checkBoxStyleSheet() const
+    {
+        const auto& c = UiTheme::colors();
+        return QStringLiteral(
+            "QCheckBox {"
+            " color: %1;"
+            " background: transparent;"
+            " padding: 6px 20px 6px 12px;"
+            " spacing: 0px;"
+            "}"
+            "QCheckBox::indicator {"
+            " width: 0px;"
+            " height: 0px;"
+            " margin: 0px;"
+            " padding: 0px;"
+            "}"
+            "QCheckBox:hover {"
+            " background: %2;"
+            " border-radius: 6px;"
+            "}"
+        )
+            .arg(c.textPrimary.name(QColor::HexRgb))
+            .arg(c.menuHoverBg.name(QColor::HexRgb));
+    }
+
+    void refreshStyle()
+    {
+        const auto& c = UiTheme::colors();
+        QColor menuBg = c.menuBg;
+        menuBg.setAlpha(c.dark ? 246 : 245);
+        const QColor borderColor = c.dark ? c.borderStrong : c.menuBorder;
+        setPalette(UiTheme::applicationPalette());
+        setStyleSheet(
+            QStringLiteral(
+                "QFrame#DialogListPopup { background: %1; border: 1px solid %2; border-radius: 8px; }"
+                "QScrollArea { background: %1; border: none; }"
+                "QScrollArea > QWidget > QWidget { background: %1; }"
+                "QWidget#DialogListPopupContent { background: %1; }"
+                "%3"
+            )
+                .arg(menuBg.name(QColor::HexArgb))
+                .arg(borderColor.name(QColor::HexRgb))
+                .arg(UiTheme::scrollBarStyleSheet())
+        );
+    }
+
+    QScrollArea* scrollArea_ = nullptr;
+    QWidget* content_ = nullptr;
+    QVBoxLayout* listLayout_ = nullptr;
+    QPointer<QToolButton> activeAnchor_;
+    bool hasItems_ = false;
+};
+
+} // namespace
+
 void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSettings, bool includeVideoSettings, const QString& title)
 {
     if (!includeAudioSettings && !includeVideoSettings) {
@@ -73,7 +323,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
 
     const auto createDialogMenuButton = [](QWidget* parent, const QString& text) {
         auto* button = new QToolButton(parent);
-        button->setPopupMode(QToolButton::InstantPopup);
+        button->setPopupMode(QToolButton::DelayedPopup);
         button->setToolButtonStyle(Qt::ToolButtonTextOnly);
         button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         button->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
@@ -86,43 +336,19 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         const bool useSingleDecimal = qAbs(snapped - roundedOneDecimal) < 0.001;
         return QString::number(snapped, 'f', useSingleDecimal ? 1 : 2);
     };
-    const auto addDialogMenuChoice = [](QMenu* menu, const QString& text, const std::function<void()>& onTriggered, bool italic = false) {
-        auto* action = new QWidgetAction(menu);
-        auto* button = new QToolButton(menu);
-        button->setAutoRaise(true);
-        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-        button->setText(text);
-        QFont buttonFont = button->font();
-        buttonFont.setItalic(italic);
-        button->setFont(buttonFont);
-        button->setCursor(Qt::PointingHandCursor);
-        const auto& c = UiTheme::colors();
-        button->setStyleSheet(
-            QStringLiteral(
-                "QToolButton {"
-                " color: %1;"
-                " background: transparent;"
-                " border: none;"
-                " padding: 6px 20px 6px 12px;"
-                " text-align: left;"
-                "}"
-                "QToolButton:hover {"
-                " background: %2;"
-                " border-radius: 6px;"
-                "}"
-            )
-                .arg(c.textPrimary.name(QColor::HexRgb))
-                .arg(c.menuHoverBg.name(QColor::HexRgb))
-        );
-        QObject::connect(button, &QToolButton::clicked, menu, [action, menu, onTriggered]() {
-            if (onTriggered) {
-                onTriggered();
+    const auto attachDialogListPopup = [&dialog](QToolButton* button, DialogListPopup* popup) {
+        QObject::connect(button, &QToolButton::clicked, &dialog, [button, popup]() {
+            if (popup == nullptr) {
+                return;
             }
-            action->trigger();
-            menu->close();
+            if (popup->isVisible()) {
+                popup->close();
+                return;
+            }
+            button->setDown(false);
+            button->clearFocus();
+            popup->popupBelow(button);
         });
-        action->setDefaultWidget(button);
-        menu->addAction(action);
     };
 
     auto* rootLayout = new QVBoxLayout(&dialog);
@@ -299,6 +525,13 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     gameplayLayout->setVerticalSpacing(8);
     gameplayLayout->setColumnStretch(0, 1);
     gameplayLayout->setColumnStretch(1, 1);
+    auto* musicGroup = new QGroupBox(uiText("dialog.render_settings.music_group", "Music"), &dialog);
+    auto* musicLayout = new QGridLayout(musicGroup);
+    musicLayout->setContentsMargins(10, 8, 10, 8);
+    musicLayout->setHorizontalSpacing(10);
+    musicLayout->setVerticalSpacing(8);
+    musicLayout->setColumnStretch(0, 1);
+    musicLayout->setColumnStretch(1, 1);
 
     QSlider* outerBrightnessSlider = nullptr;
     QLabel* outerBrightnessLabel = nullptr;
@@ -446,17 +679,16 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         UiTheme::dialogMenuButtonStyleSheet()
         + QStringLiteral("QToolButton { text-align: center; padding: 2px 22px 2px 10px; }")
     );
-    auto* canvasFrameRateMenu = new QMenu(canvasFrameRateButton);
-    styleRoundedMenu(*canvasFrameRateMenu);
+    auto* canvasFrameRatePopup = new DialogListPopup(canvasFrameRateButton);
     for (const CanvasFrameRateOption& option : canvasFrameRateOptions) {
         const PreviewCanvasFrameRateMode mode = option.mode;
         const QString label = option.label;
-        addDialogMenuChoice(canvasFrameRateMenu, label, [this, canvasFrameRateButton, mode, label]() {
+        canvasFrameRatePopup->addChoice(label, [this, canvasFrameRateButton, mode, label]() {
             canvasFrameRateButton->setText(label);
             owner_.setPreviewCanvasFrameRateMode(mode, true);
         });
     }
-    canvasFrameRateButton->setMenu(canvasFrameRateMenu);
+    attachDialogListPopup(canvasFrameRateButton, canvasFrameRatePopup);
 
     const QString scaleFillLabel = uiText("dialog.render_settings.video.scale.fill", "Fill (crop if needed)");
     const QString scaleFitLabel = uiText("dialog.render_settings.video.scale.fit", "Fit (keep full image, may letterbox)");
@@ -481,11 +713,10 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         currentSkinButtonLabel
     );
     skinButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* skinMenu = new QMenu(skinButton);
-    styleRoundedMenu(*skinMenu);
+    auto* skinPopup = new DialogListPopup(skinButton);
     for (const QString& skinDirectoryName : owner_.availablePreviewSkinDirectoryNames()) {
         const QString skinLabel = owner_.previewSkinDisplayName(skinDirectoryName);
-        addDialogMenuChoice(skinMenu, skinLabel, [this, skinButton, skinDirectoryName, skinLabel]() {
+        skinPopup->addChoice(skinLabel, [this, skinButton, skinDirectoryName, skinLabel]() {
             owner_.previewSkinDirectoryName_ = skinDirectoryName;
             owner_.previewSkinVariant_ =
                 skinDirectoryName.compare(QStringLiteral("skinDX"), Qt::CaseInsensitive) == 0
@@ -498,17 +729,17 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             owner_.savePortableState();
         });
     }
-    if (!skinMenu->actions().isEmpty()) {
-        skinMenu->addSeparator();
+    if (skinPopup->hasItems()) {
+        skinPopup->addSeparator();
     }
-    addDialogMenuChoice(skinMenu, importSkinLabel, [this]() {
+    skinPopup->addChoice(importSkinLabel, [this]() {
         const QString skinRoot = owner_.resolvePreviewSkinRootDir();
         if (!skinRoot.isEmpty()) {
             QDir().mkpath(skinRoot);
             QDesktopServices::openUrl(QUrl::fromLocalFile(skinRoot));
         }
     });
-    skinButton->setMenu(skinMenu);
+    attachDialogListPopup(skinButton, skinPopup);
     const QString disabledLabel = uiText("dialog.render_settings.option.disabled", "Disabled");
     const QString slideJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.slide", "slide");
     const QString tapJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.tap", "tap");
@@ -534,8 +765,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     };
     auto* judgeEffectButton = createDialogMenuButton(gameplayGroup, judgeEffectButtonLabel());
     judgeEffectButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* judgeEffectMenu = new QMenu(judgeEffectButton);
-    styleRoundedMenu(*judgeEffectMenu);
+    auto* judgeEffectPopup = new DialogListPopup(judgeEffectButton);
     // QCheckBox-in-QWidgetAction so the menu stays open during multi-selection (regular QActions auto-close).
     // We hide the native indicator and prefix the label with √/× — visually matches the user's request to
     // surface state via a tick / cross rather than a checkbox glyph, while preserving QCheckBox's click
@@ -549,43 +779,15 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         &dialog,
         judgeEffectButton,
         judgeEffectButtonLabel,
-        judgeEffectMenu,
+        judgeEffectPopup,
         judgeEffectChoiceText
     ](const QString& label, bool MuriRenderOptions::*memberPtr) {
-        auto* action = new QWidgetAction(judgeEffectMenu);
         const bool initialChecked = owner_.muriRenderOptions_.*memberPtr;
-        auto* checkbox = new QCheckBox(judgeEffectChoiceText(label, initialChecked), judgeEffectMenu);
-        checkbox->setChecked(initialChecked);
-        checkbox->setCursor(Qt::PointingHandCursor);
-        const auto& c = UiTheme::colors();
-        checkbox->setStyleSheet(
-            QStringLiteral(
-                "QCheckBox {"
-                " color: %1;"
-                " background: transparent;"
-                " padding: 6px 20px 6px 12px;"
-                " spacing: 0px;"
-                "}"
-                "QCheckBox::indicator {"
-                " width: 0px;"
-                " height: 0px;"
-                " margin: 0px;"
-                " padding: 0px;"
-                "}"
-                "QCheckBox:hover {"
-                " background: %2;"
-                " border-radius: 6px;"
-                "}"
-            )
-                .arg(c.textPrimary.name(QColor::HexRgb))
-                .arg(c.menuHoverBg.name(QColor::HexRgb))
-        );
-        QObject::connect(
-            checkbox,
-            &QCheckBox::toggled,
-            &dialog,
+        judgeEffectPopup->addCheckChoice(
+            judgeEffectChoiceText(label, initialChecked),
+            initialChecked,
             [this, judgeEffectButton, judgeEffectButtonLabel, judgeEffectChoiceText,
-             checkbox, label, memberPtr](bool checked) {
+             label, memberPtr](QCheckBox* checkbox, bool checked) {
                 if (owner_.muriRenderOptions_.*memberPtr == checked) {
                     return;
                 }
@@ -596,13 +798,11 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
                 owner_.savePortableState();
             }
         );
-        action->setDefaultWidget(checkbox);
-        judgeEffectMenu->addAction(action);
     };
     addJudgeEffectChoice(slideJudgeChoiceLabel, &MuriRenderOptions::showChartReviewSlideJudgeOverlay);
     addJudgeEffectChoice(tapJudgeChoiceLabel, &MuriRenderOptions::showChartReviewTapJudgeOverlay);
     addJudgeEffectChoice(touchJudgeChoiceLabel, &MuriRenderOptions::showChartReviewTouchJudgeOverlay);
-    judgeEffectButton->setMenu(judgeEffectMenu);
+    attachDialogListPopup(judgeEffectButton, judgeEffectPopup);
     const QString judgeLinePointLabel = uiText("dialog.render_settings.gameplay.judge_line.point", "Point");
     const QString judgeLineLineLabel = uiText("dialog.render_settings.gameplay.judge_line.line", "Line");
     const QString judgeLineAreaLabel = uiText("dialog.render_settings.gameplay.judge_line.area", "Judge Area");
@@ -636,22 +836,20 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     };
     auto* judgeLineButton = createDialogMenuButton(gameplayGroup, judgeLineButtonLabel());
     judgeLineButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* judgeLineMenu = new QMenu(judgeLineButton);
-    styleRoundedMenu(*judgeLineMenu);
-    addDialogMenuChoice(judgeLineMenu, judgeLinePointLabel, [this, judgeLineButton, judgeLineLabelForVariant]() {
+    auto* judgeLinePopup = new DialogListPopup(judgeLineButton);
+    judgeLinePopup->addChoice(judgeLinePointLabel, [this, judgeLineButton, judgeLineLabelForVariant]() {
         owner_.applyPreviewOutlineVariant(PreviewOutlineVariant::Point, false, true);
         judgeLineButton->setText(judgeLineLabelForVariant(owner_.previewOutlineVariant_));
     });
-    addDialogMenuChoice(judgeLineMenu, judgeLineLineLabel, [this, judgeLineButton, judgeLineLabelForVariant]() {
+    judgeLinePopup->addChoice(judgeLineLineLabel, [this, judgeLineButton, judgeLineLabelForVariant]() {
         owner_.applyPreviewOutlineVariant(PreviewOutlineVariant::Line, false, true);
         judgeLineButton->setText(judgeLineLabelForVariant(owner_.previewOutlineVariant_));
     });
-    addDialogMenuChoice(judgeLineMenu, judgeLineAreaLabel, [this, judgeLineButton, judgeLineLabelForVariant]() {
+    judgeLinePopup->addChoice(judgeLineAreaLabel, [this, judgeLineButton, judgeLineLabelForVariant]() {
         owner_.applyPreviewOutlineVariant(PreviewOutlineVariant::JudgeArea, false, true);
         judgeLineButton->setText(judgeLineLabelForVariant(owner_.previewOutlineVariant_));
     });
-    addDialogMenuChoice(
-        judgeLineMenu,
+    judgeLinePopup->addChoice(
         judgeLineAreaLabeledLabel,
         [this, judgeLineButton, judgeLineLabelForVariant]() {
             owner_.applyPreviewOutlineVariant(PreviewOutlineVariant::JudgeAreaLabeled, false, true);
@@ -660,23 +858,23 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     );
     const QStringList customOutlineNames = owner_.availablePreviewCustomOutlineFileNames();
     if (!customOutlineNames.isEmpty()) {
-        judgeLineMenu->addSeparator();
+        judgeLinePopup->addSeparator();
     }
     for (const QString& fileName : customOutlineNames) {
-        addDialogMenuChoice(judgeLineMenu, fileName, [this, judgeLineButton, fileName]() {
+        judgeLinePopup->addChoice(fileName, [this, judgeLineButton, fileName]() {
             owner_.applyPreviewCustomOutlineFileName(fileName, true);
             judgeLineButton->setText(fileName);
         });
     }
-    judgeLineMenu->addSeparator();
-    addDialogMenuChoice(judgeLineMenu, judgeLineImportLabel, [this]() {
+    judgeLinePopup->addSeparator();
+    judgeLinePopup->addChoice(judgeLineImportLabel, [this]() {
         const QString outlineDir = owner_.resolvePreviewCustomOutlineDir();
         if (!outlineDir.isEmpty()) {
             QDir().mkpath(outlineDir);
             QDesktopServices::openUrl(QUrl::fromLocalFile(outlineDir));
         }
     });
-    judgeLineButton->setMenu(judgeLineMenu);
+    attachDialogListPopup(judgeLineButton, judgeLinePopup);
     auto* forceLabeledJudgeLineWhenPausedCheck = new QCheckBox(
         uiText(
             "dialog.render_settings.gameplay.force_labeled_judge_line_when_paused",
@@ -690,8 +888,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         slideStackOrderLabelForValue(owner_.previewSlideEarlierSecondAndTextOnTop_)
     );
     slideStackOrderButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* slideStackOrderMenu = new QMenu(slideStackOrderButton);
-    styleRoundedMenu(*slideStackOrderMenu);
+    auto* slideStackOrderPopup = new DialogListPopup(slideStackOrderButton);
     const auto setSlideStackOrder = [
         this,
         slideStackOrderButton,
@@ -708,13 +905,13 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         }
         owner_.savePortableState();
     };
-    addDialogMenuChoice(slideStackOrderMenu, slideStackOrderDxLabel, [setSlideStackOrder]() {
+    slideStackOrderPopup->addChoice(slideStackOrderDxLabel, [setSlideStackOrder]() {
         setSlideStackOrder(true);
     });
-    addDialogMenuChoice(slideStackOrderMenu, slideStackOrderFinaleLabel, [setSlideStackOrder]() {
+    slideStackOrderPopup->addChoice(slideStackOrderFinaleLabel, [setSlideStackOrder]() {
         setSlideStackOrder(false);
     });
-    slideStackOrderButton->setMenu(slideStackOrderMenu);
+    attachDialogListPopup(slideStackOrderButton, slideStackOrderPopup);
     PreviewBackgroundScaleMode selectedScaleMode = owner_.previewBackgroundScaleMode_;
     const auto scaleModeLabelFor = [&](PreviewBackgroundScaleMode mode) {
         switch (mode) {
@@ -731,8 +928,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         videoGroup,
         scaleModeLabelFor(selectedScaleMode)
     );
-    auto* scaleModeMenu = new QMenu(scaleModeButton);
-    styleRoundedMenu(*scaleModeMenu);
+    auto* scaleModePopup = new DialogListPopup(scaleModeButton);
     const auto setScaleMode = [&](PreviewBackgroundScaleMode mode) {
         selectedScaleMode = mode;
         scaleModeButton->setText(scaleModeLabelFor(selectedScaleMode));
@@ -743,16 +939,16 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         }
         owner_.savePortableState();
     };
-    addDialogMenuChoice(scaleModeMenu, scaleFillLabel, [&, setScaleMode]() {
+    scaleModePopup->addChoice(scaleFillLabel, [&, setScaleMode]() {
         setScaleMode(PreviewBackgroundScaleMode::FillCrop);
     });
-    addDialogMenuChoice(scaleModeMenu, scaleFitLabel, [&, setScaleMode]() {
+    scaleModePopup->addChoice(scaleFitLabel, [&, setScaleMode]() {
         setScaleMode(PreviewBackgroundScaleMode::FitContain);
     });
-    addDialogMenuChoice(scaleModeMenu, scaleSquareFitLabel, [&, setScaleMode]() {
+    scaleModePopup->addChoice(scaleSquareFitLabel, [&, setScaleMode]() {
         setScaleMode(PreviewBackgroundScaleMode::SquareFitContain);
     });
-    scaleModeButton->setMenu(scaleModeMenu);
+    attachDialogListPopup(scaleModeButton, scaleModePopup);
 
     auto* smoothBrightnessCheck = new QCheckBox(
         uiText("dialog.render_settings.video.smooth_brightness", "Smooth brightness"),
@@ -790,8 +986,8 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     videoCheckLayout->addWidget(forceLabeledJudgeLineWhenPausedCheck, 1, 1, Qt::AlignLeft);
     videoFormLayout->addRow(QString(), videoCheckRow);
 
-    const auto addGameplayField = [gameplayGroup, gameplayLayout](int row, int column, const QString& labelText, QWidget* control) {
-        auto* field = new QWidget(gameplayGroup);
+    const auto addSettingsField = [](QWidget* parent, QGridLayout* layout, int row, int column, const QString& labelText, QWidget* control) {
+        auto* field = new QWidget(parent);
         auto* fieldLayout = new QVBoxLayout(field);
         // 1px bottom margin so the rounded control underneath isn't flush
         // against the field's edge — otherwise its bottom border is clipped
@@ -804,7 +1000,15 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         // the bottom border needs; pad the height by 2px so it renders fully.
         control->setMinimumHeight(qMax(control->minimumHeight(), control->sizeHint().height() + 2));
         fieldLayout->addWidget(control, 0);
-        gameplayLayout->addWidget(field, row, column);
+        layout->addWidget(field, row, column);
+    };
+    const auto addGameplayField = [gameplayGroup, gameplayLayout, addSettingsField](
+        int row,
+        int column,
+        const QString& labelText,
+        QWidget* control
+    ) {
+        addSettingsField(gameplayGroup, gameplayLayout, row, column, labelText, control);
     };
     addGameplayField(
         0,
@@ -868,8 +1072,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         centerDisplayLabelForMode(owner_.previewCenterDisplayMode_)
     );
     centerDisplayButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* centerDisplayMenu = new QMenu(centerDisplayButton);
-    styleRoundedMenu(*centerDisplayMenu);
+    auto* centerDisplayPopup = new DialogListPopup(centerDisplayButton);
     const auto setCenterDisplay = [this, centerDisplayButton, centerDisplayLabelForMode](
         miacode::preview_gameplay::CenterDisplayMode mode
     ) {
@@ -884,40 +1087,146 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         }
         owner_.savePortableState();
     };
-    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::Off), [setCenterDisplay]() {
+    centerDisplayPopup->addChoice(centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::Off), [setCenterDisplay]() {
         setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::Off);
     });
-    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::Combo), [setCenterDisplay]() {
+    centerDisplayPopup->addChoice(centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::Combo), [setCenterDisplay]() {
         setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::Combo);
     });
-    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::AchievementDxPlus), [setCenterDisplay]() {
+    centerDisplayPopup->addChoice(centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::AchievementDxPlus), [setCenterDisplay]() {
         setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::AchievementDxPlus);
     });
-    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus100), [setCenterDisplay]() {
+    centerDisplayPopup->addChoice(centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus100), [setCenterDisplay]() {
         setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus100);
     });
-    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus101), [setCenterDisplay]() {
+    centerDisplayPopup->addChoice(centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus101), [setCenterDisplay]() {
         setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus101);
     });
-    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::DxScorePlus), [setCenterDisplay]() {
+    centerDisplayPopup->addChoice(centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::DxScorePlus), [setCenterDisplay]() {
         setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::DxScorePlus);
     });
-    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::DxScoreMinus), [setCenterDisplay]() {
+    centerDisplayPopup->addChoice(centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::DxScoreMinus), [setCenterDisplay]() {
         setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::DxScoreMinus);
     });
-    addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::AchievementFinalePlus), [setCenterDisplay]() {
+    centerDisplayPopup->addChoice(centerDisplayLabelForMode(miacode::preview_gameplay::CenterDisplayMode::AchievementFinalePlus), [setCenterDisplay]() {
         setCenterDisplay(miacode::preview_gameplay::CenterDisplayMode::AchievementFinalePlus);
     });
-    centerDisplayButton->setMenu(centerDisplayMenu);
+    attachDialogListPopup(centerDisplayButton, centerDisplayPopup);
     addGameplayField(
         3,
         0,
         uiText("dialog.render_settings.gameplay.center_display", "Center Display"),
         centerDisplayButton
     );
+    const auto availableIntroSoundFileNames = []() {
+        const QString musicDir = miacode::preview_sfx::assetMusicDirectory();
+        if (musicDir.isEmpty()) {
+            return QStringList();
+        }
+        const QFileInfoList entries = QDir(musicDir).entryInfoList(
+            miacode::preview_sfx::supportedIntroSoundFileExtensions(),
+            QDir::Files,
+            QDir::Name | QDir::IgnoreCase);
+        QStringList names;
+        for (const QFileInfo& entry : entries) {
+            names.append(entry.fileName());
+        }
+        names.removeDuplicates();
+        return names;
+    };
+    const auto introSoundButtonLabel = [this]() {
+        const QString selected = owner_.previewIntroSoundFileName_.trimmed();
+        if (!selected.isEmpty()) {
+            return selected;
+        }
+        const QString legacyPath = miacode::preview_sfx::introTrackStartFilePath();
+        if (!legacyPath.isEmpty()) {
+            return QFileInfo(legacyPath).fileName();
+        }
+        return uiText("dialog.render_settings.music.default_intro_sound", "Default Intro Sound");
+    };
+    auto* introSoundButton = createDialogMenuButton(musicGroup, introSoundButtonLabel());
+    introSoundButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* introSoundPopup = new DialogListPopup(introSoundButton);
+    const auto applyIntroSoundFile = [this, introSoundButton, introSoundButtonLabel](const QString& fileName) {
+        owner_.previewIntroSoundFileName_ = miacode::preview_sfx::normalizeIntroSoundFileName(fileName);
+        miacode::preview_sfx::setSelectedIntroSoundFileName(owner_.previewIntroSoundFileName_);
+        introSoundButton->setText(introSoundButtonLabel());
+        if (owner_.previewSfxRuntime_ != nullptr && owner_.previewSfxRuntime_->audioEngineInitialized()) {
+            owner_.previewSfxRuntime_->reloadAssets(owner_.previewAudioSettings_);
+        }
+        owner_.savePortableState();
+    };
+    introSoundPopup->addChoice(
+        uiText("dialog.render_settings.music.default_intro_sound", "Default Intro Sound"),
+        [applyIntroSoundFile]() {
+            applyIntroSoundFile(QString());
+        });
+    const QStringList introSoundFiles = availableIntroSoundFileNames();
+    if (!introSoundFiles.isEmpty()) {
+        introSoundPopup->addSeparator();
+    }
+    for (const QString& fileName : introSoundFiles) {
+        introSoundPopup->addChoice(fileName, [applyIntroSoundFile, fileName]() {
+            applyIntroSoundFile(fileName);
+        });
+    }
+    attachDialogListPopup(introSoundButton, introSoundPopup);
+    addSettingsField(
+        musicGroup,
+        musicLayout,
+        0,
+        0,
+        uiText("dialog.render_settings.music.intro_sound", "Intro Sound"),
+        introSoundButton);
+
+    auto* introSoundActions = new QWidget(musicGroup);
+    auto* introSoundActionsLayout = new QHBoxLayout(introSoundActions);
+    introSoundActionsLayout->setContentsMargins(0, 0, 0, 0);
+    introSoundActionsLayout->setSpacing(8);
+    auto* auditionIntroSoundButton = new QPushButton(
+        uiText("dialog.render_settings.music.audition", "Audition"),
+        introSoundActions);
+    auditionIntroSoundButton->setCursor(Qt::PointingHandCursor);
+    auditionIntroSoundButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    auto* openIntroSoundFolderButton = new QPushButton(
+        uiText("dialog.render_settings.music.open_folder", "Open Folder"),
+        introSoundActions);
+    openIntroSoundFolderButton->setCursor(Qt::PointingHandCursor);
+    openIntroSoundFolderButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    openIntroSoundFolderButton->setToolTip(uiText(
+        "dialog.render_settings.music.open_folder.tooltip",
+        "Put intro sound files here. Missing files fall back to assets/music/track_start.wav, then assets/SFX/track_start.wav."));
+    introSoundActionsLayout->addWidget(auditionIntroSoundButton, 1);
+    introSoundActionsLayout->addWidget(openIntroSoundFolderButton, 1);
+    addSettingsField(
+        musicGroup,
+        musicLayout,
+        0,
+        1,
+        QString(),
+        introSoundActions);
+    musicLayout->setRowStretch(1, 1);
+    connect(auditionIntroSoundButton, &QPushButton::clicked, &dialog, [this]() {
+        miacode::preview_sfx::setSelectedIntroSoundFileName(owner_.previewIntroSoundFileName_);
+        owner_.ensurePreviewSfxRuntimePrepared();
+        if (owner_.previewSfxRuntime_ != nullptr) {
+            owner_.previewSfxRuntime_->reloadAssets(owner_.previewAudioSettings_);
+            owner_.previewSfxRuntime_->stopAll();
+            owner_.previewSfxRuntime_->audition(QStringLiteral("track_start"), 1.0);
+        }
+    });
+    connect(openIntroSoundFolderButton, &QPushButton::clicked, &dialog, []() {
+        const QString musicDir = miacode::preview_sfx::assetMusicDirectory();
+        if (!musicDir.isEmpty()) {
+            QDir().mkpath(musicDir);
+            QDesktopServices::openUrl(QUrl::fromLocalFile(musicDir));
+        }
+    });
     audioGroup->setVisible(includeAudioSettings);
     videoGroup->setVisible(includeVideoSettings);
     gameplayGroup->setVisible(includeVideoSettings);
+    musicGroup->setVisible(includeVideoSettings);
 
     if (includeAudioSettings) {
         rootLayout->addWidget(audioGroup, 0);
@@ -944,6 +1253,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         };
         flattenGroup(videoGroup);
         flattenGroup(gameplayGroup);
+        flattenGroup(musicGroup);
         auto* videoSettingsTabs = new QTabWidget(&dialog);
         videoSettingsTabs->setObjectName(QStringLiteral("RenderSettingsTabs"));
         // Drive the dialog width from HERE, not from dialog.setMinimumWidth():
@@ -963,6 +1273,8 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             uiText("dialog.render_settings.video_group", "Video"));
         videoSettingsTabs->addTab(gameplayGroup,
             uiText("dialog.render_settings.gameplay_group", "Gameplay"));
+        videoSettingsTabs->addTab(musicGroup,
+            uiText("dialog.render_settings.music_group", "Music"));
         // Font tab — the same HUD-font page the video-export dialog hosts (shared
         // dialog in tools/video_export/HudFontSettings.cpp). Top-aligned content
         // with a trailing stretch; the smallest page, so it adds no pane height.

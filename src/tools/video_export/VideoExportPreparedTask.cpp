@@ -15,6 +15,7 @@
 #include "common/LayoutRingConfig.h"
 #include "common/PreviewAudioMixConfig.h"
 #include "common/PreviewGameplayConfig.h"
+#include "common/PreviewSfxAssets.h"
 #include "core/scene/PreviewSceneGeometry.h"
 #include "common/PreviewSfxTimeline.h"
 #include "preview/runtime/PreviewSceneAssetLoader.h"
@@ -453,18 +454,37 @@ VideoExportResult VideoExportController::exportPreparedTask(
     );
 
     // Opening SFX: when the intro front-pad is present, extract the bundled
-    // WAV from qrc to the temp dir so ffmpeg can read it (ffmpeg can't open
-    // qrc). It is mixed at output t=0 (== intro start) over the silent pad.
+    // WAV to the temp dir so ffmpeg can read it. Prefer assets/music, then the
+    // resolved SFX folder, so users can replace track_start.wav without touching
+    // qrc; fall back to the bundled qrc copy when the custom file is absent.
     const bool introAudioEnabled = audioRenderPlan.introLeadSeconds > 0.0;
     QString introSfxTempPath;
     if (introAudioEnabled) {
-        introSfxTempPath = QDir(tempDir.path()).filePath(QStringLiteral("intro_sfx.wav"));
+        const QString resolvedIntroSfxPath =
+            miacode::preview_sfx::assetFilePathForKind(
+                audioRenderPlan.sfxDirectory,
+                QStringLiteral("track_start"),
+                task.introSoundFileName);
+        const QString introSfxReadablePath =
+            (!resolvedIntroSfxPath.isEmpty() && QFileInfo::exists(resolvedIntroSfxPath))
+                ? resolvedIntroSfxPath
+                : QString::fromLatin1(miacode::intro::kOpeningSfxResource);
+        const QString introSfxSuffix = QFileInfo(introSfxReadablePath).suffix().trimmed().isEmpty()
+            ? QStringLiteral("wav")
+            : QFileInfo(introSfxReadablePath).suffix().trimmed();
+        introSfxTempPath = QDir(tempDir.path()).filePath(QStringLiteral("intro_sfx.%1").arg(introSfxSuffix));
         if (QFile::exists(introSfxTempPath)) {
             QFile::remove(introSfxTempPath);
         }
-        if (!QFile::copy(QString::fromLatin1(miacode::intro::kOpeningSfxResource), introSfxTempPath)) {
-            appendVideoExportLog(QStringLiteral("intro_sfx_extract_failed"), introSfxTempPath);
+        if (!QFile::copy(introSfxReadablePath, introSfxTempPath)) {
+            appendVideoExportLog(
+                QStringLiteral("intro_sfx_extract_failed"),
+                QStringLiteral("source=%1 temp=%2").arg(introSfxReadablePath, introSfxTempPath));
             introSfxTempPath.clear();  // fall back to a silent front-pad
+        } else {
+            appendVideoExportLog(
+                QStringLiteral("intro_sfx"),
+                QStringLiteral("source=%1 temp=%2").arg(introSfxReadablePath, introSfxTempPath));
         }
     }
 

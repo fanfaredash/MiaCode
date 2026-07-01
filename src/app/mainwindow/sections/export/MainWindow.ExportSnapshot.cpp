@@ -645,6 +645,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     // Bake the dialog's count-in on/off into the snapshot (default-true elsewhere
     // keeps CLI / batch emitting it). The clock_count VALUE is re-derived worker-side.
     built.clockCountEnabled = requestedTask.clockCountEnabled;
+    built.introSoundFileName = requestedTask.introSoundFileName;
     built.intro = buildIntroBannerSpec(
         owner_.document_,
         resolvedDifficultyId,
@@ -870,6 +871,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
     built.showChartInfoHud = requestedTask.showChartInfoHud;
     built.centerDisplayMode = requestedTask.centerDisplayMode;
     built.skinLoadWaitMs = requestedTask.skinLoadWaitMs;
+    built.introSoundFileName = requestedTask.introSoundFileName;
     built.intro = buildIntroBannerSpec(
         document,
         difficultyId,

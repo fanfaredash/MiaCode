@@ -12,6 +12,37 @@
 
 namespace miacode::preview_sfx {
 
+inline QStringList supportedIntroSoundFileExtensions()
+{
+    return {
+        QStringLiteral("*.wav"),
+        QStringLiteral("*.mp3"),
+        QStringLiteral("*.ogg"),
+        QStringLiteral("*.flac"),
+    };
+}
+
+inline QString normalizeIntroSoundFileName(const QString& fileName)
+{
+    return QFileInfo(fileName.trimmed()).fileName();
+}
+
+inline QString& selectedIntroSoundFileNameStorage()
+{
+    static QString selected;
+    return selected;
+}
+
+inline void setSelectedIntroSoundFileName(const QString& fileName)
+{
+    selectedIntroSoundFileNameStorage() = normalizeIntroSoundFileName(fileName);
+}
+
+inline QString selectedIntroSoundFileName()
+{
+    return selectedIntroSoundFileNameStorage();
+}
+
 inline QStringList assetFileNamesForKind(const QString& kind)
 {
     const QString lowered = kind.trimmed().toLower();
@@ -69,8 +100,41 @@ inline QString assetFileNameForKind(const QString& kind)
     return fileNames.isEmpty() ? QString() : fileNames.constFirst();
 }
 
-inline QString assetFilePathForKind(const QString& sfxDir, const QString& kind)
+inline QString assetMusicDirectory()
 {
+    return miacode::assets::assetPath(QStringLiteral("music"));
+}
+
+inline QString introTrackStartFilePath(const QString& selectedFileName = QString())
+{
+    const QString musicDir = assetMusicDirectory();
+    if (!musicDir.isEmpty()) {
+        const QDir dir(musicDir);
+        const QString normalizedSelected = normalizeIntroSoundFileName(
+            selectedFileName.trimmed().isEmpty() ? selectedIntroSoundFileName() : selectedFileName
+        );
+        if (!normalizedSelected.isEmpty()) {
+            const QString selectedPath = QDir::cleanPath(dir.filePath(normalizedSelected));
+            if (QFileInfo::exists(selectedPath)) {
+                return selectedPath;
+            }
+        }
+        const QString legacyPath = QDir::cleanPath(dir.filePath(QStringLiteral("track_start.wav")));
+        if (QFileInfo::exists(legacyPath)) {
+            return legacyPath;
+        }
+    }
+    return QString();
+}
+
+inline QString assetFilePathForKind(const QString& sfxDir, const QString& kind, const QString& introSoundFileName = QString())
+{
+    if (kind.trimmed().compare(QStringLiteral("track_start"), Qt::CaseInsensitive) == 0) {
+        const QString introPath = introTrackStartFilePath(introSoundFileName);
+        if (!introPath.isEmpty()) {
+            return introPath;
+        }
+    }
     if (sfxDir.isEmpty()) {
         return QString();
     }
