@@ -458,9 +458,16 @@ Item {
         property real basePixel: 20
         property real minPixel: 10
         property int baseAlign: Text.AlignHCenter
+        property bool scrollable: true
+        property real horizontalPadding: 0
         // True width at the FIXED render size (intro) — drives looping.
         readonly property real fixedContentWidth: mqMeasure.contentWidth
-        readonly property bool looping: root.revealStartFrame >= 0 && (fixedContentWidth - mq.width) > 0.5
+        readonly property real contentInset: Math.max(0, Math.min(mq.horizontalPadding, mq.width / 3))
+        readonly property real contentWidth: Math.max(0, mq.width - mq.contentInset * 2)
+        readonly property bool looping: mq.scrollable
+            && root.revealStartFrame >= 0
+            && mq.contentWidth > 0
+            && (fixedContentWidth - mq.contentWidth) > 0.5
         readonly property real period: fixedContentWidth + root.marqueeGap()
         readonly property real loopX: looping ? root.marqueeLoopOffset(mq.stageName, period) : 0
         // Still cover (revealStartFrame<0) only: "ellipsis" keeps the base font and
@@ -471,9 +478,9 @@ Item {
 
         Item {
             id: mqClip
-            x: 0
+            x: mq.contentInset
             y: -mq.verticalOverscan
-            width: mq.width
+            width: mq.contentWidth
             height: mq.height + mq.verticalOverscan * 2
             clip: true
 
@@ -504,7 +511,7 @@ Item {
                 maximumLineCount: 1
                 fontSizeMode: (root.revealStartFrame >= 0 || mq.stillEllipsis) ? Text.FixedSize : Text.HorizontalFit
                 elide: mq.stillEllipsis ? Text.ElideRight : Text.ElideNone
-                width: mq.looping ? mq.fixedContentWidth : mq.width
+                width: mq.looping ? mq.fixedContentWidth : mq.contentWidth
                 horizontalAlignment: mq.looping ? Text.AlignLeft : mq.baseAlign
                 x: mq.looping ? -mq.loopX : 0
             }
@@ -875,6 +882,7 @@ Item {
             basePixel: Math.round(b.h * 0.82)
             minPixel: Math.round(b.h * 0.42)
             baseAlign: Text.AlignHCenter
+            horizontalPadding: 10
         }
 
         // 6) Artist — prefab uses SEGA_MaruGothic-DB (body) → Bold.
@@ -889,6 +897,7 @@ Item {
             basePixel: Math.round(b.h * 0.82)
             minPixel: Math.round(b.h * 0.42)
             baseAlign: Text.AlignHCenter
+            horizontalPadding: 10
         }
 
         // 6a-d) Achievement-row placeholders — shown when chart hasn't been
@@ -967,6 +976,7 @@ Item {
             basePixel: Math.round(b.h * 0.96)
             minPixel: Math.round(b.h * 0.5)
             baseAlign: Text.AlignLeft
+            horizontalPadding: 4
         }
 
         // 9) BPM — prefab TMP_BPM uses MaruGothic DB → body font.

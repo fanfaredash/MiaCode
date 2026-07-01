@@ -14,6 +14,7 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
   - `assets/background`
   - Custom judge-line PNGs live under `assets/background/outlines`; the render settings import action only opens this folder
   - `assets/noteguide`
+  - Noteguide assets include tap/slide approach rings (`Normal.png`, `Break.png`, `Each.png`, `Mine.png`, `Slide.png`), each-line connectors, and hold-tail guides (`Hold_End.png`, `Hold_Each_End.png`, `Hold_Break_End.png`, `Hold_Mine_End.png`)
   - `assets/reference`
   - `assets/fonts`
 - Qt resources:

@@ -1377,6 +1377,62 @@ void runInlineSpecs(QTextStream& err, int* failed)
     }
 
     {
+        int changed = 0;
+        const QString input = QStringLiteral("{8}1,2,\nE");
+        const QString output = miacode::chart_transform::raiseSubdivisionForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{16}1,,2,,\nE"),
+            QStringLiteral("subdivision +1 treats a selected terminal E as protected suffix"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("subdivision +1 does not count terminal E as changed"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{16}1,,2,,\nE");
+        const QString output = miacode::chart_transform::lowerSubdivisionForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{8}1,2,\nE"),
+            QStringLiteral("subdivision -1 treats a selected terminal E as protected suffix"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("subdivision -1 does not let terminal E block reduction"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{16}1,,1,,\nE");
+        const QString output = miacode::chart_transform::raiseSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{24}1,,,1,,,\nE"),
+            QStringLiteral("subdivision +1/2 treats a selected terminal E as protected suffix"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("subdivision +1/2 does not count terminal E as changed"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{24}1,,,1,,,\nE");
+        const QString output = miacode::chart_transform::lowerSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{16}1,,1,,\nE"),
+            QStringLiteral("subdivision -1/2 treats a selected terminal E as protected suffix"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("subdivision -1/2 does not let terminal E block reduction"), failed, err);
+    }
+
+    {
         const miacode::chart_transform::ChartNormalizationResult normalized =
             miacode::chart_transform::normalizeChartText(QStringLiteral("A1fh[4:1],,,,\nE"));
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts a simple valid chart"), failed, err);
@@ -1384,6 +1440,33 @@ void runInlineSpecs(QTextStream& err, int* failed)
             normalized.text,
             QStringLiteral("{16}A1hf[4:1],,,, ,,,, ,,,, ,,,,\nE"),
             QStringLiteral("normalize whole chart leaves a 384-divisor touch-hold duration untouched while still canonicalizing modifier order"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(QStringLiteral("1,2,"));
+        expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts a fragment without terminal E"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16}1,,,, 2,,,,"),
+            QStringLiteral("normalize whole chart does not invent terminal E when the source did not have one"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const QString fullText = QStringLiteral("{8}1,2,\nE");
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartSelectionText(fullText, 0, fullText.size());
+        expectTrue(normalized.ok, QStringLiteral("normalize selection accepts a selected terminal E"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16}1,,2,,\nE"),
+            QStringLiteral("normalize selection preserves terminal E without padding the selected fragment or appending a trailing carry-over subdivision"),
             failed,
             err
         );

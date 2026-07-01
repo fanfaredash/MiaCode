@@ -778,6 +778,27 @@ bool lineTailIsTerminalMarker(const QString& line, int startIndex)
     return isTerminalMarkerText(tail);
 }
 
+bool textHasTerminalMarker(const QString& text)
+{
+    const QStringList lines = text.split(QLatin1Char('\n'), Qt::KeepEmptyParts);
+    for (QString line : lines) {
+        if (line.endsWith(QLatin1Char('\r'))) {
+            line.chop(1);
+        }
+        for (int index = 0; index < line.size(); ++index) {
+            if (line.at(index).isSpace()) {
+                continue;
+            }
+            if ((line.at(index) == QLatin1Char('E') || line.at(index) == QLatin1Char('e'))
+                && lineTailIsTerminalMarker(line, index)) {
+                return true;
+            }
+            break;
+        }
+    }
+    return false;
+}
+
 // In selection mode the fragment renderer appends a trailing {N} so the text
 // AFTER the selection keeps the beats value the selection ended on. That marker
 // is redundant — and shows up as noise like "{32} {4}" — when the very next
@@ -1660,7 +1681,8 @@ ChartNormalizationResult normalizeChartText(
         timingMetadata,
         seedFromTimingMetadata(timingMetadata),
         options,
-        true,
+        textHasTerminalMarker(input),
+        false,
         false);
 }
 
@@ -1691,15 +1713,18 @@ ChartNormalizationResult normalizeChartSelectionText(
     // Suppress the trailing {N} carry-over marker when the text right after the
     // selection already redefines the subdivision before using it — otherwise
     // we emit redundant "{32} {4}" noise.
+    const bool selectedTextHasTerminalMarker = textHasTerminalMarker(
+        fullText.mid(selectionStart, selectionEnd - selectionStart));
     const bool appendTrailingBeatsMarker =
-        !followingTextRedefinesBeatsBeforeUse(fullText.mid(selectionEnd));
+        !selectedTextHasTerminalMarker
+        && !followingTextRedefinesBeatsBeforeUse(fullText.mid(selectionEnd));
 
     return normalizeChartFragment(
         fullText.mid(selectionStart, selectionEnd - selectionStart),
         timingMetadata,
         seed,
         options,
-        false,
+        selectedTextHasTerminalMarker,
         shouldInjectLeadingTimeSignature,
         appendTrailingBeatsMarker);
 }

@@ -347,6 +347,10 @@ void populateSkinAssets(const QString& skinDirectory, miacode::preview::scene::P
     if (skin->noteGuideHoldBreakEndImage.isNull()) {
         skin->noteGuideHoldBreakEndImage = skin->noteGuideHoldEndImage;
     }
+    skin->noteGuideHoldMineEndImage = loadGuideImageScaled(noteGuideDir, "Hold_Mine_End.png");
+    if (skin->noteGuideHoldMineEndImage.isNull()) {
+        skin->noteGuideHoldMineEndImage = skin->noteGuideHoldEndImage;
+    }
     skin->noteGuideSlideImage = loadGuideImageScaled(noteGuideDir, "Slide.png");
     if (skin->noteGuideSlideImage.isNull()) {
         skin->noteGuideSlideImage = skin->noteGuideNormalImage;

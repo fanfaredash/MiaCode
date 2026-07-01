@@ -134,6 +134,14 @@ bool verifyDxRootLayout(QTextStream& err)
             err)) {
         return false;
     }
+    if (!require(
+            !result.skinAssets.noteGuideHoldMineEndImage.isNull()
+                && result.skinAssets.noteGuideHoldMineEndImage.size() == result.skinAssets.noteGuideHoldEndImage.size()
+                && result.skinAssets.noteGuideHoldMineEndImage.size() != result.skinAssets.noteGuideMineImage.size(),
+            QStringLiteral("Hold_Mine_End.png did not load as a dedicated hold-tail noteguide"),
+            err)) {
+        return false;
+    }
     return true;
 }
 
