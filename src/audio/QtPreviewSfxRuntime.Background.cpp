@@ -336,6 +336,7 @@ void QtPreviewSfxRuntime::stopAll()
     stopBank(exSfx_);
     stopBank(touchSfx_);
     stopBank(fireworkSfx_);
+    stopBank(trackStartSfx_);
     if (backgroundTrackVoice_ != nullptr && backgroundTrackVoice_->initialized) {
         ma_sound_stop(&backgroundTrackVoice_->sound);
     }
@@ -347,4 +348,3 @@ void QtPreviewSfxRuntime::stopAll()
     preparedPlayback_ = PreparedPlaybackState();
     pauseTouchholdVoices();
 }
-

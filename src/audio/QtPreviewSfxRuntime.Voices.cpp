@@ -28,6 +28,8 @@ bool QtPreviewSfxRuntime::playKindInternal(const QString& kind, double gain)
         bank = &touchSfx_;
     } else if (lowered == "firework") {
         bank = &fireworkSfx_;
+    } else if (lowered == "track_start") {
+        bank = &trackStartSfx_;
     } else if (lowered == "touchhold") {
         return playTouchholdAudition();
     }

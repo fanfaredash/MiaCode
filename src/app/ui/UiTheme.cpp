@@ -797,6 +797,7 @@ QString dialogMenuButtonStyleSheet()
         "QToolButton { min-height: 24px; padding: 2px 10px; border: 1px solid %1; border-radius: 8px; background: %2; color: %3; font-weight: 500; text-align: left; }"
         "QToolButton:hover { background: %4; border-color: %5; }"
         "QToolButton:pressed, QToolButton:checked { background: %6; border-color: %5; color: %7; }"
+        "QToolButton[miacodePopupOpen=\"true\"], QToolButton[miacodePopupOpen=\"true\"]:hover, QToolButton[miacodePopupOpen=\"true\"]:pressed, QToolButton[miacodePopupOpen=\"true\"]:checked { background: %2; border-color: %1; color: %3; }"
         "QToolButton::menu-indicator { image: none; width: 0px; }"
     )
         .arg(css(c.border))

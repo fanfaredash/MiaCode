@@ -161,6 +161,7 @@ struct VideoExportTask {
     // banner payload is filled by buildVideoExportSnapshot from the chart and
     // round-trips back onto the task via buildVideoExportTaskFromSnapshot.
     IntroBannerSpec intro;
+    QString introSoundFileName;
     // Chart metadata for the optional top-left chart info HUD. Populated
     // from the active SimaiDocument at task-construction time; the worker
     // re-derives these from the snapshot's chart text + difficulty id

@@ -428,7 +428,7 @@ void MainWindow::PreviewSection::applyEffectivePreviewOutlineVariantToCanvas()
 {
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setOutlineVariant(effectivePreviewOutlineVariant());
-        state_.previewCanvas_->setOutlineImagePath(resolvePreviewCustomOutlinePath());
+        state_.previewCanvas_->setOutlineImagePath(effectivePreviewCustomOutlinePath());
     }
 }
 
@@ -454,6 +454,18 @@ QString MainWindow::PreviewSection::resolvePreviewCustomOutlineDir() const
 QString MainWindow::PreviewSection::resolvePreviewCustomOutlinePath() const
 {
     return miacode::assets::customOutlinePathForFileName(state_.previewCustomOutlineFileName_);
+}
+
+QString MainWindow::PreviewSection::effectivePreviewCustomOutlinePath() const
+{
+    const bool forceJudgeAreaWhenPaused =
+        state_.previewForceLabeledJudgeLineWhenPaused_ != state_.pauseDisplayAltHoldActive_;
+    if (forceJudgeAreaWhenPaused
+        && !state_.qtPreviewPlaying_
+        && !state_.exportPreviewActive_) {
+        return QString();
+    }
+    return resolvePreviewCustomOutlinePath();
 }
 
 QStringList MainWindow::PreviewSection::availablePreviewCustomOutlineFileNames() const

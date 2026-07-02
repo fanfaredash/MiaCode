@@ -125,6 +125,25 @@ int protectedSuffixStartForSelectionEnd(const QString& line)
     return found ? suffixStart : line.size();
 }
 
+int terminalMarkerStartForSelectionEnd(const QString& line)
+{
+    const int commentStart = commentStartIndexInLine(line);
+    const int scanEnd = commentStart >= 0 ? commentStart : line.size();
+    int tailStart = scanEnd;
+    while (tailStart > 0 && line.at(tailStart - 1).isSpace()) {
+        --tailStart;
+    }
+    int tokenStart = tailStart;
+    while (tokenStart > 0 && !line.at(tokenStart - 1).isSpace()) {
+        --tokenStart;
+    }
+    if (tokenStart < tailStart
+        && line.mid(tokenStart, tailStart - tokenStart).compare(QStringLiteral("E"), Qt::CaseInsensitive) == 0) {
+        return tokenStart;
+    }
+    return line.size();
+}
+
 SelectionEdgeSplit splitSelectionEdges(const QString& input)
 {
     SelectionEdgeSplit split;
@@ -142,7 +161,10 @@ SelectionEdgeSplit splitSelectionEdges(const QString& input)
     while (lastLineStart > 0 && !isLineBreakChar(input.at(lastLineStart - 1))) {
         --lastLineStart;
     }
-    const int protectedSuffixStart = lastLineStart + protectedSuffixStartForSelectionEnd(input.mid(lastLineStart));
+    const QString lastLine = input.mid(lastLineStart);
+    const int syntaxSuffixStart = protectedSuffixStartForSelectionEnd(lastLine);
+    const int terminalSuffixStart = terminalMarkerStartForSelectionEnd(lastLine);
+    const int protectedSuffixStart = lastLineStart + qMin(syntaxSuffixStart, terminalSuffixStart);
 
     if (protectedPrefixLength >= protectedSuffixStart) {
         split.prefix = input;

@@ -252,6 +252,9 @@ QJsonObject VideoExportSnapshot::toJson() const
     introObject.insert(QStringLiteral("background_custom_path"), intro.customBackgroundPath);
     introObject.insert(QStringLiteral("background_blur"), intro.blurBackground);
     introObject.insert(QStringLiteral("card_shadow"), intro.cardShadow);
+    if (!introSoundFileName.trimmed().isEmpty()) {
+        introObject.insert(QStringLiteral("sound_file"), QFileInfo(introSoundFileName).fileName());
+    }
     root.insert(QStringLiteral("intro"), introObject);
     return root;
 }
@@ -390,6 +393,7 @@ bool VideoExportSnapshot::fromJson(
         introObject.value(QStringLiteral("background_blur")).toBool(parsed.intro.blurBackground);
     parsed.intro.cardShadow =
         introObject.value(QStringLiteral("card_shadow")).toBool(parsed.intro.cardShadow);
+    parsed.introSoundFileName = QFileInfo(introObject.value(QStringLiteral("sound_file")).toString()).fileName();
 
     if (parsed.chartTextUtf8.isEmpty()) {
         if (errorMessage != nullptr) {
@@ -496,6 +500,7 @@ bool buildVideoExportTaskFromSnapshot(
             .trimmed();
     }
     built.intro = snapshot.intro;
+    built.introSoundFileName = snapshot.introSoundFileName;
     built.centerDisplayMode = snapshot.centerDisplayMode;
     built.skinLoadWaitMs = qBound(0, snapshot.skinLoadWaitMs, 20000);
     // The clock_count VALUE is always derived from the chart; the count-in on/off

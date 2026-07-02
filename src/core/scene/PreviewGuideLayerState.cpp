@@ -167,12 +167,9 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
             if (approach.scale <= 0.0) {
                 continue;
             }
-            const QImage* headImage = marker.isBreak ? &state.skin.noteGuideBreakImage
-                : marker.isEach ? &state.skin.noteGuideEachImage
-                : &state.skin.noteGuideNormalImage;
             appendConcentricGuide(
                 &sprites,
-                headImage,
+                selectTapNoteGuideImage(state.skin, marker),
                 approach.distance,
                 kNoteGuideSourceRadius,
                 laneRotationDegrees(marker.lane),

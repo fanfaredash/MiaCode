@@ -62,6 +62,7 @@ struct PreviewSkinAssets {
     QImage noteGuideHoldEndImage;
     QImage noteGuideHoldEachEndImage;
     QImage noteGuideHoldBreakEndImage;
+    QImage noteGuideHoldMineEndImage;
     QImage noteGuideSlideImage;
     QImage touchCornerImage;
     QImage touchCornerEachImage;

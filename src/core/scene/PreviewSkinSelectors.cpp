@@ -35,8 +35,8 @@ const QImage* selectTapNoteGuideImage(const PreviewSkinAssets& skin, const Timel
 
 const QImage* selectHoldEndNoteGuideImage(const PreviewSkinAssets& skin, const TimelineNoteMarker& marker)
 {
-    if (marker.isMine && !skin.noteGuideMineImage.isNull()) {
-        return &skin.noteGuideMineImage;
+    if (marker.isMine && !skin.noteGuideHoldMineEndImage.isNull()) {
+        return &skin.noteGuideHoldMineEndImage;
     }
     if (marker.isBreak && !skin.noteGuideHoldBreakEndImage.isNull()) {
         return &skin.noteGuideHoldBreakEndImage;

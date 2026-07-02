@@ -1,5 +1,6 @@
 #include "MainWindow.DocumentSection.h"
 #include "../../MainWindowShared.h"
+#include "../editor/MainWindow.EditorSection.h"
 
 #include "BracketScopeHighlighter.h"
 #include "BusySpinner.h"
@@ -554,6 +555,41 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
         addItem->setData(Qt::UserRole, "add");
         addItem->setToolTip(addDifficultyLabel);
     }
+    const QString bookmarkGroupLabel = UiText::isChineseUi() ? QStringLiteral("书签") : QStringLiteral("Bookmarks");
+    auto* bookmarkGroupItem = new QListWidgetItem(
+        owner_.style()->standardIcon(state_.editorBookmarksSidebarExpanded_
+            ? QStyle::SP_ArrowDown
+            : QStyle::SP_ArrowRight),
+        bookmarkGroupLabel,
+        ui_.outlineList_
+    );
+    bookmarkGroupItem->setData(Qt::UserRole, "bookmark_toggle");
+    bookmarkGroupItem->setToolTip(bookmarkGroupLabel);
+    if (state_.editorBookmarksSidebarExpanded_) {
+        QVector<MainWindow::EditorBookmark> sortedBookmarks = state_.editorBookmarks_;
+        std::sort(sortedBookmarks.begin(), sortedBookmarks.end(), [](const MainWindow::EditorBookmark& left, const MainWindow::EditorBookmark& right) {
+            if (left.line != right.line) {
+                return left.line < right.line;
+            }
+            return left.title.localeAwareCompare(right.title) < 0;
+        });
+        for (const MainWindow::EditorBookmark& bookmark : std::as_const(sortedBookmarks)) {
+            const QString title = bookmark.title.trimmed().isEmpty()
+                ? (UiText::isChineseUi() ? QStringLiteral("未命名书签") : QStringLiteral("Untitled Bookmark"))
+                : bookmark.title.trimmed();
+            const QString label = UiText::isChineseUi()
+                ? QStringLiteral("  %1 行  %2").arg(bookmark.line).arg(title)
+                : QStringLiteral("  Line %1  %2").arg(bookmark.line).arg(title);
+            auto* bookmarkItem = new QListWidgetItem(
+                owner_.style()->standardIcon(QStyle::SP_DialogYesButton),
+                label,
+                ui_.outlineList_
+            );
+            bookmarkItem->setData(Qt::UserRole, "bookmark");
+            bookmarkItem->setData(Qt::UserRole + 1, bookmark.line);
+            bookmarkItem->setToolTip(label);
+        }
+    }
     const QString exportLabel = uiText("sidebar.export", "Export");
     auto* exportItem = new QListWidgetItem(
         makeExportAccessIcon(UiTheme::colors().iconPrimary),
@@ -1087,6 +1123,9 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
         state_.activeOutlineKey_ = "chart";
     }
     populateDifficultyPage(difficultyId);
+    if (owner_.editorSection_ != nullptr) {
+        owner_.editorSection_->syncBookmarksFromEditorText();
+    }
     if (restoreSwitchView) {
         applyDifficultySwitchEditorScrollRestore(restoreVerticalScrollValue, restoreHorizontalScrollValue);
         QTimer::singleShot(0, &owner_, [this, difficultyId, restoreVerticalScrollValue, restoreHorizontalScrollValue]() {

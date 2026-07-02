@@ -52,6 +52,12 @@ void MainWindow::EditorSection::loadProjectRenderState()
                         bookmarkObject.value("title").toString(),
                         bookmarkObject.value("text").toString(),
                         line,
+                        bookmarkObject.value("source").toString(),
+                        bookmarkObject.value("comment_text").toString(),
+                        bookmarkObject.value("comment_fingerprint").toString(),
+                        bookmarkObject.value("context_before").toString(),
+                        bookmarkObject.value("context_after").toString(),
+                        bookmarkObject.value("second").toDouble(-1.0),
                     });
                 }
                 std::sort(state_.editorBookmarks_.begin(), state_.editorBookmarks_.end(), [](const MainWindow::EditorBookmark& left, const MainWindow::EditorBookmark& right) {
@@ -91,6 +97,24 @@ void MainWindow::EditorSection::saveProjectRenderState() const
         bookmarkObject.insert("line", qMax(1, bookmark.line));
         bookmarkObject.insert("title", bookmark.title);
         bookmarkObject.insert("text", bookmark.text);
+        if (!bookmark.source.isEmpty()) {
+            bookmarkObject.insert("source", bookmark.source);
+        }
+        if (!bookmark.commentText.isEmpty()) {
+            bookmarkObject.insert("comment_text", bookmark.commentText);
+        }
+        if (!bookmark.commentFingerprint.isEmpty()) {
+            bookmarkObject.insert("comment_fingerprint", bookmark.commentFingerprint);
+        }
+        if (!bookmark.contextBefore.isEmpty()) {
+            bookmarkObject.insert("context_before", bookmark.contextBefore);
+        }
+        if (!bookmark.contextAfter.isEmpty()) {
+            bookmarkObject.insert("context_after", bookmark.contextAfter);
+        }
+        if (bookmark.second >= 0.0) {
+            bookmarkObject.insert("second", bookmark.second);
+        }
         bookmarks.append(bookmarkObject);
     }
     root.insert("editor_bookmarks", bookmarks);

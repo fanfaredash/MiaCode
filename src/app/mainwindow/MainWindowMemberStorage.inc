@@ -259,6 +259,8 @@
         int metadataExtraUndoSaveAnchor_ = 0;
         QVector<SelectionTransformUndoEntry> chartSelectionTransformUndoEntries_;
         QVector<EditorBookmark> editorBookmarks_;
+        bool editorBookmarksSidebarExpanded_ = true;
+        QString editorBookmarkLastSyncedText_;
         int lastObservedEditorUndoSteps_ = 0;
         int lastObservedEditorRedoSteps_ = 0;
         bool editorSelectionUndoRedoRestoreInProgress_ = false;
@@ -513,6 +515,7 @@
         bool previewSlideEarlierSecondAndTextOnTop_ = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
         PreviewSkinVariant previewSkinVariant_ = PreviewSkinVariant::Standard;
         QString previewSkinDirectoryName_ = QStringLiteral("skinSD");
+        QString previewIntroSoundFileName_;
         PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
         PreviewCanvasFrameRateMode previewStageMediaFrameRateMode_ = PreviewCanvasFrameRateMode::Fps30;
         // Preview video decode mode preference: false = hardware (default), true =
@@ -918,6 +921,7 @@
     bool& previewSlideEarlierSecondAndTextOnTop_ = state_.previewSlideEarlierSecondAndTextOnTop_;
     PreviewSkinVariant& previewSkinVariant_ = state_.previewSkinVariant_;
     QString& previewSkinDirectoryName_ = state_.previewSkinDirectoryName_;
+    QString& previewIntroSoundFileName_ = state_.previewIntroSoundFileName_;
     PreviewCanvasFrameRateMode& previewCanvasFrameRateMode_ = state_.previewCanvasFrameRateMode_;
     double& previewCanvasAspectRatio_ = state_.previewCanvasAspectRatio_;
     bool& previewAutoRestoreSquareAfterExport_ = state_.previewAutoRestoreSquareAfterExport_;

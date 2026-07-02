@@ -19,11 +19,17 @@ public:
     void applyEditorImeInputDisabled(bool disabled, bool persistPreference);
     void applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference);
     void showCreateBookmarkDialog();
+    void showCreateBookmarkDialogForLine(int line);
     void showBookmarkManager();
     void openBookmarkAtLine(int line);
+    void deleteBookmarkAtLineWithConfirmation(int line);
     void addBookmark(int line, const QString& title, const QString& text);
     void replaceBookmarkLine(int fromLine, int toLine);
     void refreshEditorBookmarkLines();
+    void toggleBookmarkSidebarExpanded();
+    void syncBookmarksFromEditorText(int changePosition = -1, int charsRemoved = 0, int charsAdded = 0);
+    void exportBookmarksJson();
+    void importBookmarksJson();
     void setFullCopyAreaVisible(bool visible);
     void syncCopyAreaEditorAppearance();
     void syncCopyAreaLineCount();

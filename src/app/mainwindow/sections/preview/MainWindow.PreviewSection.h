@@ -72,6 +72,7 @@ public:
     void applyPreviewOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection, bool persistState);
     QString resolvePreviewCustomOutlineDir() const;
     QString resolvePreviewCustomOutlinePath() const;
+    QString effectivePreviewCustomOutlinePath() const;
     QStringList availablePreviewCustomOutlineFileNames() const;
     void applyPreviewCustomOutlineFileName(const QString& fileName, bool persistState);
     MainWindow::PreviewSkinVariant previewSkinVariantFromStorageValue(const QString& value) const;

@@ -398,6 +398,7 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask(int difficul
     task.staticTapOnSlideThresholdSeconds = static_cast<double>(owner_.staticTapOnSlideThresholdMs_) / 1000.0;
     task.audioSettings = owner_.previewAudioSettings_;
     task.timingSettings = owner_.previewTimingSettings_;
+    task.introSoundFileName = owner_.previewIntroSoundFileName_;
     task.backgroundBrightnessOuter = owner_.previewBackgroundBrightnessOuter_;
     task.backgroundBrightnessInner = owner_.previewBackgroundBrightnessInner_;
     task.layoutSquareScale = owner_.previewLayoutSquareScale_;
