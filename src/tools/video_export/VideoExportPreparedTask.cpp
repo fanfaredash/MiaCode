@@ -857,9 +857,17 @@ VideoExportResult VideoExportController::exportPreparedTask(
             QStringLiteral("pbo_readback_disabled_by_quality"),
             QStringLiteral("exportQuality=high_quality readback=synchronous"));
     }
+    // P1 — the current export path is always the OpenGL QQuickRenderControl
+    // offscreen session (CLI export / worker force OpenGL). Spell that out plus
+    // the readback mode and actual GL renderer so a support log can compare the
+    // export GPU against the GUI's `quick_shell/device` line at a glance.
+    const QString exportReadbackMode = useOffscreenPboReadback
+        ? QStringLiteral("offscreen_pbo")
+        : (useOffscreenGpu ? QStringLiteral("offscreen_gpu_direct") : QStringLiteral("cpu_fallback"));
+    const QString exportGlRenderer = exportCanvas.lastGlRendererForDebug();
     appendVideoExportLog(
         QStringLiteral("render_backend"),
-        QStringLiteral("quickRequired=1 envGpuRequested=%1 sourceCtx=%2 offscreenInit=%3 exportGpuReady=%4 pboRequested=%5 pboEnabled=%6 initError=%7 pboError=%8")
+        QStringLiteral("quickRequired=1 render_backend=opengl_qquick_rendercontrol rhi_api=OpenGL adapter_or_renderer=\"%9\" readback_mode=%10 envGpuRequested=%1 sourceCtx=%2 offscreenInit=%3 exportGpuReady=%4 pboRequested=%5 pboEnabled=%6 initError=%7 pboError=%8")
             .arg(exportConfig.renderBackend.requestGpuRender ? 1 : 0)
             .arg(shareContext != nullptr ? 1 : 0)
             .arg(useOffscreenGpu ? 1 : 0)
@@ -868,6 +876,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(useOffscreenPboReadback ? 1 : 0)
             .arg(offscreenInitError.isEmpty() ? QStringLiteral("ok") : offscreenInitError)
             .arg(offscreenPboError.isEmpty() ? QStringLiteral("ok") : offscreenPboError)
+            .arg(exportGlRenderer.isEmpty() ? QStringLiteral("(unknown)") : exportGlRenderer)
+            .arg(exportReadbackMode)
     );
 
     // Raw RGBA frames are packed after conversion to non-premultiplied RGBA8888.

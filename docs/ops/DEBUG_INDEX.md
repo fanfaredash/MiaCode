@@ -2,7 +2,7 @@
 
 This document is the current user-facing index for MiaCode debug mode, log files, and preview/export diagnostics after the Qt Quick migration.
 
-> Reconciled against the code on 2026-05-29: 79 live `MIACODE_*` environment flags across ~27 files. When you add/remove a flag, update this index (and `.claude/skills/miacode-dev-guide/references/debug-and-logging.md`).
+> Reconciled against the code on 2026-05-29 (82 live `MIACODE_*` environment flags across ~28 files after the P3/P4 GPU additions `MIACODE_GPU_POLICY` / `MIACODE_GPU_ADAPTER_LUID` / `MIACODE_GPU_BIND_HIGH_PERFORMANCE`). When you add/remove a flag, update this index (and `.claude/skills/miacode-dev-guide/references/debug-and-logging.md`).
 
 ## Debug Entry Points
 
@@ -76,7 +76,10 @@ something goes wrong. The per-category gates above are snapshot into atomics at
 ## Current Preview / Export Backend Notes
 
 - Realtime preview and export both use Qt Quick scene graph.
-- The desktop app currently forces Qt Quick to the OpenGL backend.
+- **GUI RHI backend:** the desktop GUI no longer forces OpenGL. It uses `--rhi=<name>`, the persisted choice, or Qt's platform default (Direct3D11 on Windows / Qt 6). See the `startup/graphics_backend` and `quick_shell/device` runtime logs for the applied backend + the actual bound adapter.
+- **CLI export / export worker:** `--export-video` and `--export-video-worker` still force Qt Quick to the OpenGL backend (the offscreen `QQuickRenderControl` + FBO/PBO readback pipeline depends on it). The export log's `render_backend` line reports `render_backend=opengl_qquick_rendercontrol rhi_api=OpenGL adapter_or_renderer=… readback_mode=…`, and `export_gl_renderer` records `GL_VENDOR`/`GL_RENDERER`/`GL_VERSION`.
+- **Windows dist package:** the clickable `MiaCode.exe` at the package root is only the launcher; the real GUI/export worker is `app\MiaCode.exe`. Windows Graphics Settings and the NVIDIA/AMD control panels must target `app\MiaCode.exe`, not the root launcher. The `startup/process_identity` runtime log spells out the real exe path, whether it is running from the packaged `app\` dir, and the launcher parent process.
+- **High-performance GPU hint (P2):** `MiaCode.exe` and `MiaCodeLauncher.exe` export the `NvOptimusEnablement` / `AmdPowerXpressRequestHighPerformance` symbols so hybrid-graphics laptops prefer the discrete GPU. This is a process-level *preference*, not a precise adapter binding — Windows Graphics Settings / vendor control panels can still override it. Confirmed by the `startup/gpu_hint` runtime log.
 - Export PBO diagnostics now describe the headless Quick export session, not a removed legacy renderer.
 - Background **PV/BG video decoding** in realtime preview (and therefore the export preview dialog) uses **QtAVPlayer (FFmpeg)** on Windows instead of Qt Multimedia's `QMediaPlayer`. This is selected at **build time** by the `MIACODE_USE_QTAVPLAYER` compile macro — a CMake build-time macro, **not** an environment flag, so it cannot be toggled at runtime (CMake defines it on Windows when the FFmpeg dev SDK is present; other platforms keep the `QMediaPlayer` path). The FFmpeg dev SDK path is a separate CMake cache variable, provisioned by `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1`. The export *encoder output* is unaffected (still the standalone `ffmpeg.exe` filtergraph). On `InvalidMedia` the preview backend retries once forcing FFmpeg software decode (`preview/stage_media action=video_software_fallback`)..
 - `MIACODE_BUILD_DEV_TOOLS` is the **CMake configure option** (not an environment flag) that builds the developer spec/eval executables and registers them with CTest (`cmake -D MIACODE_BUILD_DEV_TOOLS=ON`; `scripts/build/build-win.ps1` turns it on for Debug configs). Some dev tools mention it in comments (e.g. `src/tools/latency/LatencyBatchTest.cpp`), which is why it appears in this index — it has no runtime effect in a shipped build.
@@ -131,6 +134,16 @@ FFmpeg binary + extra readback toggle:
 
 - `MIACODE_FFMPEG` / `MIACODE_FFMPEG_PATH` — override the ffmpeg executable path used by export (and the dialog's ffmpeg probe).
 - `MIACODE_EXPORT_DISABLE_PBO_READBACK=1` — extra PBO-readback opt-out, narrower than `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO`.
+
+## GPU Device Policy (P3/P4 — hidden, diagnostic)
+
+Internal high-performance GPU device-policy skeleton (`src/common/GpuDevicePolicy.*`, namespace `miacode::gpu`; provider `src/app/gpu_device_provider.cpp`). These are **hidden developer/support overrides**, not surfaced in the settings UI. **P3** **resolves + logs** the preferred adapter (`startup/gpu_policy` runtime log, gated on `--debug`); adapter enumeration is read-only DXGI (`IDXGIFactory6::EnumAdapterByGpuPreference` high-performance ordering, software adapters skipped) — no device creation. The GUI forwards the raw request to the export worker via env so both processes log a matching policy. **P4** can then actually **bind** the root Quick window to the resolved adapter via `QQuickGraphicsDevice::fromAdapter` (Qt owns the device) — logged at `startup/gpu_provider`, verified by the `quick_shell/device` actual-adapter probe.
+
+- `MIACODE_GPU_POLICY` — `auto_high_performance` (default) | `platform_default` | `software`. Selects the internal device policy. The `--gpu-policy=<value>` CLI flag takes precedence over this env var. `auto_high_performance` resolves to the first DXGI high-performance hardware adapter's LUID; on failure it falls back to `platform_default` and logs the reason.
+- `MIACODE_GPU_ADAPTER_LUID` — `<high>:<low>` (each hex `0x…` or decimal). Forces the policy to `adapter_luid` and A/B-selects a specific DXGI adapter by LUID. The `--gpu-adapter-luid=<high>:<low>` CLI flag takes precedence. An unknown / illegal LUID never blocks startup — the policy falls back to `platform_default` and logs `fallback_reason=adapter_luid_not_found_among_hw_adapters`.
+- `MIACODE_GPU_BIND_HIGH_PERFORMANCE` — **P4 master gate, default OFF.** `1` actually binds the **root** Quick window to the resolved high-performance adapter (`fromAdapter`), but only when the RHI is D3D11, the policy yields a hardware LUID, and it **differs** from the default adapter (else redundant → skipped). Default OFF because binding a render surface to a non-default adapter can break the QtAVPlayer D3D11VA **two-device keyed-mutex video bridge** (same-adapter only) for **video-background charts** on dual-GPU machines — opt in to A/B on a dual-GPU machine and validate via `startup/gpu_provider` + `quick_shell/device` before flipping the default (plan P4.4). The **preview composite** (video surface) is never `fromAdapter`-bound — it keeps Qt's default adapter (or the H2 `MIACODE_PREVIEW_SINGLE_D3D11_DEVICE` path) to preserve the bridge.
+
+Related CLI flags (same resolver, no env literal): `--gpu-policy=<value>`, `--gpu-adapter-luid=<high>:<low>`.
 
 ## Preview-Side Notes
 

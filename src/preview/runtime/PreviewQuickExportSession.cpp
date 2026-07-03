@@ -176,6 +176,29 @@ bool PreviewQuickExportSession::initialize(
         return false;
     }
 
+    // P1 — record the actual OpenGL renderer for the export session. The CLI
+    // export / worker path forces OpenGL, and on hybrid-graphics Windows the
+    // GL renderer string is the only signal we get about which GPU the export
+    // context landed on (an adapter is not guaranteed for OpenGL). Stashed for
+    // the render_backend summary line too.
+    if (QOpenGLFunctions* gl = context_->functions(); gl != nullptr) {
+        const auto glStr = [gl](GLenum name) -> QString {
+            const GLubyte* value = gl->glGetString(name);
+            return value != nullptr
+                ? QString::fromLatin1(reinterpret_cast<const char*>(value))
+                : QStringLiteral("(null)");
+        };
+        lastGlRenderer_ = glStr(GL_RENDERER);
+        appendExportSessionLog(
+            QStringLiteral("export_gl_renderer"),
+            QStringLiteral(
+                "rhi_api=OpenGL gl_vendor=\"%1\" gl_renderer=\"%2\" gl_version=\"%3\" "
+                "note=renderer_string_only_adapter_not_guaranteed")
+                .arg(glStr(GL_VENDOR))
+                .arg(lastGlRenderer_)
+                .arg(glStr(GL_VERSION)));
+    }
+
     renderControl_ = new QQuickRenderControl();
     quickWindow_ = new QQuickWindow(renderControl_);
     quickWindow_->setColor(Qt::transparent);

@@ -12,6 +12,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/GpuDevicePolicy.h"
 #include "common/OperationLog.h"
 #include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
@@ -581,6 +582,12 @@ bool MainWindow::ExportSection::startVideoExportWorkerProcess(
     if (forceDisableOffscreenPbo) {
         workerEnvironment.insert(QStringLiteral("MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO"), QStringLiteral("1"));
     }
+    // P3 — forward the resolved GPU device-policy request (raw form) so the
+    // export worker resolves + logs the same high-performance adapter as the
+    // GUI. Via env rather than argv because the worker's CLI parser is strict
+    // about unknown options; no-op for the plain default policy.
+    miacode::gpu::applyGpuPolicyToChildEnvironment(
+        workerEnvironment, miacode::gpu::resolveGpuPolicyOnce());
     process->setProcessEnvironment(workerEnvironment);
     QStringList workerArgs;
     if (miacode::debug_options::debugModeEnabled()) {

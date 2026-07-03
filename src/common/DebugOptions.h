@@ -638,6 +638,43 @@ inline QString previewCompareDumpDirectoryOverride()
     return envValue("MIACODE_PREVIEW_DIAG_COMPARE_DUMP_DIR");
 }
 
+inline QString gpuPolicyRequestRaw()
+{
+    // P3 — hidden internal GPU device policy override (diagnostic / support
+    // only; not surfaced in the user settings UI). Values:
+    //   auto_high_performance (default) | platform_default | software
+    // The `--gpu-policy=<value>` CLI flag takes precedence over this env var.
+    // Resolved + logged by miacode::gpu (src/common/GpuDevicePolicy.*); P3 only
+    // logs the resolved adapter — it does NOT yet bind a device to it.
+    return envValue("MIACODE_GPU_POLICY");
+}
+
+inline QString gpuAdapterLuidRaw()
+{
+    // P3 — hidden diagnostic adapter override, "<high>:<low>" (hex 0x.. or
+    // decimal). Forces the internal policy to `adapter_luid` and A/B-selects a
+    // specific DXGI adapter by LUID. `--gpu-adapter-luid=<high>:<low>` CLI flag
+    // takes precedence. An unknown / illegal LUID never blocks startup — the
+    // policy falls back to platform_default and the reason is logged.
+    return envValue("MIACODE_GPU_ADAPTER_LUID");
+}
+
+inline bool gpuBindHighPerformanceEnabled()
+{
+    // P4 master gate — actually BIND the root Quick window to the resolved
+    // high-performance DXGI adapter (QQuickGraphicsDevice::fromAdapter). Default
+    // OFF: P3 resolves + logs the preferred adapter, but binding a render
+    // surface to a non-default adapter can break the QtAVPlayer D3D11VA
+    // two-device keyed-mutex video bridge (same-adapter only) for
+    // video-background charts on dual-GPU machines. Opt in
+    // (MIACODE_GPU_BIND_HIGH_PERFORMANCE=1) to A/B the high-performance chain on
+    // a dual-GPU machine and validate via the startup/gpu_provider +
+    // quick_shell/device logs before this becomes the default (plan P4.4). The
+    // preview composite (video surface) is never fromAdapter-bound; it keeps
+    // Qt's default adapter (or the H2 single-device path) to preserve the bridge.
+    return envFlagEnabled("MIACODE_GPU_BIND_HIGH_PERFORMANCE");
+}
+
 inline bool hasDebugArg(const QStringList& args)
 {
     return args.contains(QStringLiteral("--debug"));

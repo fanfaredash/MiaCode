@@ -500,6 +500,14 @@ int main(int argc, char* argv[])
                 .arg(cliVideoExportWorkerRequested ? 1 : 0)
         );
     }
+
+    // P0/P2/P3 — process identity + GPU hint + resolved GPU policy, emitted for
+    // every role (gui / cli_export / export_worker). CLI export + worker return
+    // early just below, so this has to run before that dispatch. Gated on
+    // --debug inside the call; re-emitted after the log dir rebinds to a chart
+    // (see logProcessStartupDiagnostics) so the collected project log has them.
+    logProcessStartupDiagnostics(QStringLiteral("boot"));
+
 #ifdef Q_OS_WIN
     setWindowsAppUserModelId();
 #endif

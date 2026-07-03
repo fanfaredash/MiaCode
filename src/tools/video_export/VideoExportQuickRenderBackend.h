@@ -89,6 +89,9 @@ public:
     int cpuFallbackCountLastFrameForDebug() const;
     qint64 offscreenDrawNsLastFrameForDebug() const;
     qint64 offscreenReadbackNsLastFrameForDebug() const;
+    // P1 — actual GL renderer string for the offscreen export session (empty
+    // until the offscreen renderer is initialized).
+    QString lastGlRendererForDebug() const { return session_.lastGlRenderer(); }
     double layoutRingDiameterRatio() const;
 
 private:
