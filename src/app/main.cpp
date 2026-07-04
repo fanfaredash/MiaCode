@@ -8,6 +8,7 @@
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
+#include "common/UiHangWatchdog.h"
 #include "common/DebugOptions.h"
 #include "common/WaveformCache.h"
 #include "SimaiNativeParser.h"
@@ -429,6 +430,7 @@ int main(int argc, char* argv[])
     miacode::oplog::appendStartupBeaconLine("phase=before_qapplication_construct");
 #endif
     QApplication app(argc, argv);
+    miacode::hang_watchdog::installGuiHeartbeat(&app);
 #ifdef Q_OS_WIN
     miacode::oplog::appendStartupBeaconLine("phase=after_qapplication_construct");
 #endif

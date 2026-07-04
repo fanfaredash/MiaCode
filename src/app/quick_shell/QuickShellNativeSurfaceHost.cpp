@@ -1,10 +1,14 @@
 #include "QuickShellNativeSurfaceHost.h"
 
 #include "common/DebugLog.h"
+#include "common/DebugOptions.h"
+#include "common/OperationLog.h"
+#include "common/UiHangWatchdog.h"
 
 #include <QBoxLayout>
 #include <QDockWidget>
 #include <QEasingCurve>
+#include <QElapsedTimer>
 #include <QLabel>
 #include <QMainWindow>
 #include <QMenuBar>
@@ -20,28 +24,139 @@
 
 namespace {
 
-void activateLayout(QWidget* widget)
+constexpr qint64 kSurfaceStepSlowMs = 50;
+constexpr qint64 kSurfaceTotalSlowMs = 80;
+
+QString widgetSummary(QWidget* widget)
+{
+    if (widget == nullptr) {
+        return QStringLiteral("(null)");
+    }
+    return QStringLiteral("class=%1 name=%2 size=%3x%4 visible=%5")
+        .arg(QString::fromUtf8(widget->metaObject()->className()))
+        .arg(widget->objectName().isEmpty() ? QStringLiteral("(empty)") : widget->objectName())
+        .arg(widget->width())
+        .arg(widget->height())
+        .arg(widget->isVisible() ? 1 : 0);
+}
+
+void appendSurfaceLayoutDiag(
+    const QString& action,
+    const char* role,
+    QWidget* widget,
+    qint64 elapsedMs,
+    const QString& detail = QString(),
+    miacode::debug_log::Level level = miacode::debug_log::Level::Info)
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    QString payload = QStringLiteral("action=%1 role=%2 elapsed_ms=%3 widget=\"%4\"")
+        .arg(action)
+        .arg(QString::fromUtf8(role != nullptr ? role : "unknown"))
+        .arg(elapsedMs)
+        .arg(widgetSummary(widget));
+    if (!detail.trimmed().isEmpty()) {
+        payload += QStringLiteral(" %1").arg(detail.trimmed());
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("quick_shell/layout"),
+        payload,
+        /*force=*/false,
+        level);
+}
+
+void activateLayout(QWidget* widget, const char* role)
 {
     if (widget == nullptr) {
         return;
     }
     if (QLayout* layout = widget->layout(); layout != nullptr) {
+        QElapsedTimer stepTimer;
+        stepTimer.start();
+        MIACODE_HANG_PHASE(
+            "QuickShellNativeSurfaceHost::activateLayout",
+            QStringLiteral("role=%1 %2")
+                .arg(QString::fromUtf8(role != nullptr ? role : "unknown"), widgetSummary(widget)));
         layout->activate();
+        const qint64 elapsedMs = stepTimer.elapsed();
+        if (elapsedMs >= kSurfaceStepSlowMs) {
+            appendSurfaceLayoutDiag(
+                QStringLiteral("surface_layout_activate_slow"),
+                role,
+                widget,
+                elapsedMs,
+                QString(),
+                miacode::debug_log::Level::Warn);
+        }
     }
 }
 
-void resizeSurface(QWidget* surface, int width, int height)
+void resizeSurface(QWidget* surface, int width, int height, const char* role)
 {
     if (surface == nullptr) {
         return;
     }
+    MC_OP("QuickShellNativeSurfaceHost::resizeSurface");
+    QElapsedTimer totalTimer;
+    totalTimer.start();
     const QSize nextSize(qMax(1, width), qMax(1, height));
     if (surface->size() != nextSize) {
+        QElapsedTimer stepTimer;
+        stepTimer.start();
+        MIACODE_HANG_PHASE(
+            "QuickShellNativeSurfaceHost::resizeSurface.resize",
+            QStringLiteral("role=%1 from=%2x%3 to=%4x%5 %6")
+                .arg(QString::fromUtf8(role != nullptr ? role : "unknown"))
+                .arg(surface->width())
+                .arg(surface->height())
+                .arg(nextSize.width())
+                .arg(nextSize.height())
+                .arg(widgetSummary(surface)));
         surface->resize(nextSize);
         surface->update();
+        const qint64 elapsedMs = stepTimer.elapsed();
+        if (elapsedMs >= kSurfaceStepSlowMs) {
+            appendSurfaceLayoutDiag(
+                QStringLiteral("surface_resize_slow"),
+                role,
+                surface,
+                elapsedMs,
+                QStringLiteral("requested=%1x%2").arg(width).arg(height),
+                miacode::debug_log::Level::Warn);
+        }
     }
-    activateLayout(surface);
-    surface->updateGeometry();
+    activateLayout(surface, role);
+    {
+        QElapsedTimer stepTimer;
+        stepTimer.start();
+        MIACODE_HANG_PHASE(
+            "QuickShellNativeSurfaceHost::resizeSurface.updateGeometry",
+            QStringLiteral("role=%1 %2")
+                .arg(QString::fromUtf8(role != nullptr ? role : "unknown"), widgetSummary(surface)));
+        surface->updateGeometry();
+        const qint64 elapsedMs = stepTimer.elapsed();
+        if (elapsedMs >= kSurfaceStepSlowMs) {
+            appendSurfaceLayoutDiag(
+                QStringLiteral("surface_update_geometry_slow"),
+                role,
+                surface,
+                elapsedMs,
+                QString(),
+                miacode::debug_log::Level::Warn);
+        }
+    }
+    const qint64 totalMs = totalTimer.elapsed();
+    if (totalMs >= kSurfaceTotalSlowMs) {
+        appendSurfaceLayoutDiag(
+            QStringLiteral("surface_resize_total_slow"),
+            role,
+            surface,
+            totalMs,
+            QStringLiteral("requested=%1x%2").arg(width).arg(height),
+            miacode::debug_log::Level::Warn);
+    }
 }
 
 bool shouldUseBottomTabsNativeSurface(QuickShellStateSource* stateSource)
@@ -338,12 +453,12 @@ void QuickShellNativeSurfaceHost::refreshSurfaceStyles()
 
 void QuickShellNativeSurfaceHost::syncTopChromeSurfaceSize(int width, int height)
 {
-    resizeSurface(topChromeSurfaceWidget_, width, height);
+    resizeSurface(topChromeSurfaceWidget_, width, height, "top_chrome");
 }
 
 void QuickShellNativeSurfaceHost::syncSidebarSurfaceSize(int width, int height)
 {
-    resizeSurface(sidebarSurfaceWidget_, width, height);
+    resizeSurface(sidebarSurfaceWidget_, width, height, "sidebar");
     setSurfaceVisible(sidebarSurfaceWidget_, true);
     if (QDockWidget* outlineDock = contentProvider_ != nullptr ? contentProvider_->shellOutlineDockWidget() : nullptr;
         outlineDock != nullptr) {
@@ -359,7 +474,7 @@ void QuickShellNativeSurfaceHost::syncSidebarSurfaceSize(int width, int height)
 
 void QuickShellNativeSurfaceHost::syncWorkspaceSurfaceSize(int width, int height)
 {
-    resizeSurface(workspaceSurfaceWidget_, width, height);
+    resizeSurface(workspaceSurfaceWidget_, width, height, "workspace");
     setSurfaceVisible(workspaceSurfaceWidget_, true);
     if (QWidget* workspaceWidget = contentProvider_ != nullptr ? contentProvider_->shellWorkspaceWidget() : nullptr;
         workspaceWidget != nullptr) {
@@ -376,7 +491,7 @@ void QuickShellNativeSurfaceHost::syncBottomTabsSurfaceSize(int width, int heigh
         setSurfaceVisible(bottomTabsSurfaceWidget_, false);
         return;
     }
-    resizeSurface(bottomTabsSurfaceWidget_, width, height);
+    resizeSurface(bottomTabsSurfaceWidget_, width, height, "bottom_tabs");
     setSurfaceVisible(bottomTabsSurfaceWidget_, true);
     if (QWidget* bottomTabsWidget =
             contentProvider_ != nullptr ? contentProvider_->shellBottomTabsWidget() : nullptr;
@@ -401,7 +516,7 @@ void QuickShellNativeSurfaceHost::syncBottomTabsToastAnchor(int x, int y, int wi
 
 void QuickShellNativeSurfaceHost::syncStatusSurfaceSize(int width, int height)
 {
-    resizeSurface(statusSurfaceWidget_, width, height);
+    resizeSurface(statusSurfaceWidget_, width, height, "status");
     setSurfaceVisible(statusSurfaceWidget_, true);
     if (QMainWindow* mainWindow =
             qobject_cast<QMainWindow*>(contentProvider_ != nullptr ? contentProvider_->shellWindowWidget() : nullptr);
@@ -595,11 +710,11 @@ void QuickShellNativeSurfaceHost::attachNativeWidgets()
         previewPanel->hide();
     }
 
-    activateLayout(topChromeSurfaceWidget_);
-    activateLayout(sidebarSurfaceWidget_);
-    activateLayout(workspaceSurfaceWidget_);
-    activateLayout(bottomTabsSurfaceWidget_);
-    activateLayout(statusSurfaceWidget_);
+    activateLayout(topChromeSurfaceWidget_, "top_chrome");
+    activateLayout(sidebarSurfaceWidget_, "sidebar");
+    activateLayout(workspaceSurfaceWidget_, "workspace");
+    activateLayout(bottomTabsSurfaceWidget_, "bottom_tabs");
+    activateLayout(statusSurfaceWidget_, "status");
 }
 
 void QuickShellNativeSurfaceHost::ensureSurfaceLayouts()

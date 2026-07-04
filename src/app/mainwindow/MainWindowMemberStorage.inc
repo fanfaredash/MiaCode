@@ -52,6 +52,7 @@
         QAction* editStaticTapOnSlideThresholdAction_ = nullptr;
         QAction* previewAudioSettingsAction_ = nullptr;
         QAction* previewVideoSettingsAction_ = nullptr;
+        QAction* skinSettingsAction_ = nullptr;
         QAction* swapWorkspaceSidesAction_ = nullptr;
         QAction* createBookmarkAction_ = nullptr;
         QAction* bookmarkManagerAction_ = nullptr;
@@ -163,6 +164,7 @@
         QMenu* toolboxMenu_ = nullptr;
         QToolButton* previewAudioSettingsButton_ = nullptr;
         QToolButton* previewVideoSettingsButton_ = nullptr;
+        QToolButton* skinSettingsButton_ = nullptr;
         QSlider* previewSlider_ = nullptr;
         QToolButton* previewSpeedButton_ = nullptr;
         QToolButton* previewFullscreenButton_ = nullptr;
@@ -685,6 +687,7 @@
     QAction*& editStaticTapOnSlideThresholdAction_ = ui_.editStaticTapOnSlideThresholdAction_;
     QAction*& previewAudioSettingsAction_ = ui_.previewAudioSettingsAction_;
     QAction*& previewVideoSettingsAction_ = ui_.previewVideoSettingsAction_;
+    QAction*& skinSettingsAction_ = ui_.skinSettingsAction_;
     QAction*& swapWorkspaceSidesAction_ = ui_.swapWorkspaceSidesAction_;
     QAction*& createBookmarkAction_ = ui_.createBookmarkAction_;
     QAction*& bookmarkManagerAction_ = ui_.bookmarkManagerAction_;
@@ -1022,6 +1025,7 @@
     QMenu*& toolboxMenu_ = ui_.toolboxMenu_;
     QToolButton*& previewAudioSettingsButton_ = ui_.previewAudioSettingsButton_;
     QToolButton*& previewVideoSettingsButton_ = ui_.previewVideoSettingsButton_;
+    QToolButton*& skinSettingsButton_ = ui_.skinSettingsButton_;
     QSlider*& previewSlider_ = ui_.previewSlider_;
     QToolButton*& previewSpeedButton_ = ui_.previewSpeedButton_;
     QToolButton*& previewFullscreenButton_ = ui_.previewFullscreenButton_;

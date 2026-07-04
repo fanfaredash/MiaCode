@@ -15,6 +15,7 @@
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/WaveformCache.h"
+#include "core/scene/PreviewHudState.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/latency/LatencyAnalysis.h"
 #include "tools/video_export/HudFontSettings.h"
@@ -121,92 +122,7 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
         gameplayLayout->addWidget(field, row, column);
     };
 
-    // Skin.
-    auto* skinButton = createDialogMenuButton(gameplay, owner_.previewSkinDisplayName(owner_.previewSkinDirectoryName_));
-    skinButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* skinMenu = new QMenu(skinButton);
-    UiTheme::styleRoundedMenu(*skinMenu);
-    for (const QString& skinDirectoryName : owner_.availablePreviewSkinDirectoryNames()) {
-        const QString skinLabel = owner_.previewSkinDisplayName(skinDirectoryName);
-        addDialogMenuChoice(skinMenu, skinLabel, [this, skinButton, skinDirectoryName, skinLabel]() {
-            owner_.previewSkinDirectoryName_ = skinDirectoryName;
-            owner_.previewSkinVariant_ =
-                skinDirectoryName.compare(QStringLiteral("skinDX"), Qt::CaseInsensitive) == 0
-                    ? PreviewSkinVariant::Dx
-                    : PreviewSkinVariant::Standard;
-            skinButton->setText(skinLabel);
-            owner_.applyPreviewSkinDirectoryToSurfaces();
-            owner_.savePortableState();
-        });
-    }
-    if (!skinMenu->actions().isEmpty()) {
-        skinMenu->addSeparator();
-    }
-    addDialogMenuChoice(skinMenu, uiText("dialog.render_settings.video.skin.import", "Import..."), [this]() {
-        const QString skinRoot = owner_.resolvePreviewSkinRootDir();
-        if (!skinRoot.isEmpty()) {
-            QDir().mkpath(skinRoot);
-            QDesktopServices::openUrl(QUrl::fromLocalFile(skinRoot));
-        }
-    });
-    skinButton->setMenu(skinMenu);
-
-    // Judge line (outline variant + custom outlines).
-    const QString judgeLinePointLabel = uiText("dialog.render_settings.gameplay.judge_line.point", "Point");
-    const QString judgeLineLineLabel = uiText("dialog.render_settings.gameplay.judge_line.line", "Line");
-    const QString judgeLineAreaLabel = uiText("dialog.render_settings.gameplay.judge_line.area", "Judge Area");
-    const QString judgeLineAreaLabeledLabel = uiText("dialog.render_settings.gameplay.judge_line.area_labeled", "Judge Area (Labeled)");
-    const auto judgeLineLabelForVariant = [=](PreviewOutlineVariant variant) {
-        switch (variant) {
-        case PreviewOutlineVariant::Point:
-            return judgeLinePointLabel;
-        case PreviewOutlineVariant::JudgeArea:
-            return judgeLineAreaLabel;
-        case PreviewOutlineVariant::JudgeAreaLabeled:
-            return judgeLineAreaLabeledLabel;
-        case PreviewOutlineVariant::Line:
-        default:
-            return judgeLineLineLabel;
-        }
-    };
-    const auto judgeLineButtonText = [this, judgeLineLabelForVariant]() {
-        return owner_.previewCustomOutlineFileName_.isEmpty()
-            ? judgeLineLabelForVariant(owner_.previewOutlineVariant_)
-            : owner_.previewCustomOutlineFileName_;
-    };
-    auto* judgeLineButton = createDialogMenuButton(gameplay, judgeLineButtonText());
-    judgeLineButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* judgeLineMenu = new QMenu(judgeLineButton);
-    UiTheme::styleRoundedMenu(*judgeLineMenu);
-    const auto addOutlineVariantChoice = [&](const QString& label, PreviewOutlineVariant variant) {
-        addDialogMenuChoice(judgeLineMenu, label, [this, judgeLineButton, judgeLineLabelForVariant, variant]() {
-            owner_.applyPreviewOutlineVariant(variant, false, true);
-            judgeLineButton->setText(judgeLineLabelForVariant(owner_.previewOutlineVariant_));
-        });
-    };
-    addOutlineVariantChoice(judgeLinePointLabel, PreviewOutlineVariant::Point);
-    addOutlineVariantChoice(judgeLineLineLabel, PreviewOutlineVariant::Line);
-    addOutlineVariantChoice(judgeLineAreaLabel, PreviewOutlineVariant::JudgeArea);
-    addOutlineVariantChoice(judgeLineAreaLabeledLabel, PreviewOutlineVariant::JudgeAreaLabeled);
-    const QStringList customOutlineNames = owner_.availablePreviewCustomOutlineFileNames();
-    if (!customOutlineNames.isEmpty()) {
-        judgeLineMenu->addSeparator();
-    }
-    for (const QString& fileName : customOutlineNames) {
-        addDialogMenuChoice(judgeLineMenu, fileName, [this, judgeLineButton, fileName]() {
-            owner_.applyPreviewCustomOutlineFileName(fileName, true);
-            judgeLineButton->setText(fileName);
-        });
-    }
-    judgeLineMenu->addSeparator();
-    addDialogMenuChoice(judgeLineMenu, uiText("dialog.render_settings.gameplay.judge_line.import", "Import..."), [this]() {
-        const QString outlineDir = owner_.resolvePreviewCustomOutlineDir();
-        if (!outlineDir.isEmpty()) {
-            QDir().mkpath(outlineDir);
-            QDesktopServices::openUrl(QUrl::fromLocalFile(outlineDir));
-        }
-    });
-    judgeLineButton->setMenu(judgeLineMenu);
+    // Skin + judge line moved to the shared 皮肤 tab (buildSkinSettings).
 
     // Judge effect (multi-select tap/touch/slide overlays).
     const QString slideJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.slide", "slide");
@@ -345,13 +261,245 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     }
     centerDisplayButton->setMenu(centerDisplayMenu);
 
-    addGameplayField(0, 0, uiText("dialog.render_settings.video.skin", "Skin"), skinButton);
-    addGameplayField(0, 1, uiText("dialog.render_settings.gameplay.judge_line", "Judge Line"), judgeLineButton);
-    addGameplayField(1, 0, uiText("dialog.render_settings.gameplay.judge_effect", "Judge Effect Display"), judgeEffectButton);
-    addGameplayField(1, 1, uiText("dialog.render_settings.gameplay.slide_stack_order", "Slide Stack Order"), slideStackOrderButton);
-    addGameplayField(2, 0, uiText("dialog.render_settings.gameplay.center_display", "Center Display"), centerDisplayButton);
+    addGameplayField(0, 0, uiText("dialog.render_settings.gameplay.judge_effect", "Judge Effect Display"), judgeEffectButton);
+    addGameplayField(0, 1, uiText("dialog.render_settings.gameplay.slide_stack_order", "Slide Stack Order"), slideStackOrderButton);
+    addGameplayField(1, 0, uiText("dialog.render_settings.gameplay.center_display", "Center Display"), centerDisplayButton);
 
     if (gameplayOut != nullptr) {
         *gameplayOut = gameplay;
     }
+}
+
+void MainWindow::DialogsSection::buildSkinSettings(
+    QWidget* parent,
+    QWidget** skinOut,
+    bool includeFolderButtons)
+{
+    // Same self-contained menu-button / menu-choice helpers used by
+    // buildExportInjectedSettings — kept local so this builder can be dropped
+    // both into a standalone popup and injected into the export dialog tab.
+    const auto createDialogMenuButton = [](QWidget* owner, const QString& text) {
+        auto* button = new QToolButton(owner);
+        button->setPopupMode(QToolButton::InstantPopup);
+        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        button->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
+        button->setText(text);
+        button->ensurePolished();
+        button->setFixedHeight(qMax(button->sizeHint().height(), 30) + 4);
+        return button;
+    };
+    const auto addDialogMenuChoice = [](QMenu* menu, const QString& text, const std::function<void()>& onTriggered) {
+        auto* action = new QWidgetAction(menu);
+        auto* button = new QToolButton(menu);
+        button->setAutoRaise(true);
+        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        button->setText(text);
+        button->setCursor(Qt::PointingHandCursor);
+        const auto& c = UiTheme::colors();
+        button->setStyleSheet(
+            QStringLiteral(
+                "QToolButton {"
+                " color: %1;"
+                " background: transparent;"
+                " border: none;"
+                " padding: 6px 20px 6px 12px;"
+                " text-align: left;"
+                "}"
+                "QToolButton:hover {"
+                " background: %2;"
+                " border-radius: 6px;"
+                "}"
+            )
+                .arg(c.textPrimary.name(QColor::HexRgb))
+                .arg(c.menuHoverBg.name(QColor::HexRgb))
+        );
+        QObject::connect(button, &QToolButton::clicked, menu, [action, menu, onTriggered]() {
+            if (onTriggered) {
+                onTriggered();
+            }
+            action->trigger();
+            menu->close();
+        });
+        action->setDefaultWidget(button);
+        menu->addAction(action);
+    };
+    const auto makePushButton = [](QWidget* owner, const QString& text) {
+        auto* button = new QPushButton(text, owner);
+        button->setCursor(Qt::PointingHandCursor);
+        button->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+        return button;
+    };
+
+    auto* root = new QWidget(parent);
+    auto* rootLayout = new QVBoxLayout(root);
+    rootLayout->setContentsMargins(0, 0, 0, 0);
+    rootLayout->setSpacing(10);
+
+    const auto makeGroupForm = [root, rootLayout](const QString& title) -> QFormLayout* {
+        auto* group = new QGroupBox(title, root);
+        auto* form = new QFormLayout(group);
+        form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+        form->setHorizontalSpacing(10);
+        form->setVerticalSpacing(8);
+        form->setContentsMargins(10, 8, 10, 8);
+        rootLayout->addWidget(group);
+        return form;
+    };
+    // Wraps action buttons in a left-aligned row (trailing stretch) so they keep
+    // their natural width inside the form's expanding field column.
+    const auto leftRow = [root](const QList<QWidget*>& widgets) -> QWidget* {
+        auto* row = new QWidget(root);
+        auto* layout = new QHBoxLayout(row);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(8);
+        for (QWidget* widget : widgets) {
+            layout->addWidget(widget, 0);
+        }
+        layout->addStretch(1);
+        return row;
+    };
+
+    // ---- 谱面皮肤: skin + judge line (+ optional open-folder actions) ----
+    auto* skinForm = makeGroupForm(uiText("dialog.skin_settings.section.chart_skin", "Chart Skin"));
+
+    auto* skinButton = createDialogMenuButton(root, owner_.previewSkinDisplayName(owner_.previewSkinDirectoryName_));
+    auto* skinMenu = new QMenu(skinButton);
+    UiTheme::styleRoundedMenu(*skinMenu);
+    for (const QString& skinDirectoryName : owner_.availablePreviewSkinDirectoryNames()) {
+        const QString skinLabel = owner_.previewSkinDisplayName(skinDirectoryName);
+        addDialogMenuChoice(skinMenu, skinLabel, [this, skinButton, skinDirectoryName, skinLabel]() {
+            owner_.previewSkinDirectoryName_ = skinDirectoryName;
+            owner_.previewSkinVariant_ =
+                skinDirectoryName.compare(QStringLiteral("skinDX"), Qt::CaseInsensitive) == 0
+                    ? PreviewSkinVariant::Dx
+                    : PreviewSkinVariant::Standard;
+            skinButton->setText(skinLabel);
+            owner_.applyPreviewSkinDirectoryToSurfaces();
+            owner_.savePortableState();
+        });
+    }
+    skinButton->setMenu(skinMenu);
+    skinForm->addRow(uiText("dialog.render_settings.video.skin", "Skin"), skinButton);
+
+    const QString judgeLinePointLabel = uiText("dialog.render_settings.gameplay.judge_line.point", "Point");
+    const QString judgeLineLineLabel = uiText("dialog.render_settings.gameplay.judge_line.line", "Line");
+    const QString judgeLineAreaLabel = uiText("dialog.render_settings.gameplay.judge_line.area", "Judge Area");
+    const QString judgeLineAreaLabeledLabel = uiText("dialog.render_settings.gameplay.judge_line.area_labeled", "Judge Area (Labeled)");
+    const auto judgeLineLabelForVariant = [=](PreviewOutlineVariant variant) {
+        switch (variant) {
+        case PreviewOutlineVariant::Point:
+            return judgeLinePointLabel;
+        case PreviewOutlineVariant::JudgeArea:
+            return judgeLineAreaLabel;
+        case PreviewOutlineVariant::JudgeAreaLabeled:
+            return judgeLineAreaLabeledLabel;
+        case PreviewOutlineVariant::Line:
+        default:
+            return judgeLineLineLabel;
+        }
+    };
+    const auto judgeLineButtonText = [this, judgeLineLabelForVariant]() {
+        return owner_.previewCustomOutlineFileName_.isEmpty()
+            ? judgeLineLabelForVariant(owner_.previewOutlineVariant_)
+            : owner_.previewCustomOutlineFileName_;
+    };
+    auto* judgeLineButton = createDialogMenuButton(root, judgeLineButtonText());
+    auto* judgeLineMenu = new QMenu(judgeLineButton);
+    UiTheme::styleRoundedMenu(*judgeLineMenu);
+    const auto addOutlineVariantChoice = [&](const QString& label, PreviewOutlineVariant variant) {
+        addDialogMenuChoice(judgeLineMenu, label, [this, judgeLineButton, judgeLineLabelForVariant, variant]() {
+            owner_.applyPreviewOutlineVariant(variant, false, true);
+            judgeLineButton->setText(judgeLineLabelForVariant(owner_.previewOutlineVariant_));
+        });
+    };
+    addOutlineVariantChoice(judgeLinePointLabel, PreviewOutlineVariant::Point);
+    addOutlineVariantChoice(judgeLineLineLabel, PreviewOutlineVariant::Line);
+    addOutlineVariantChoice(judgeLineAreaLabel, PreviewOutlineVariant::JudgeArea);
+    addOutlineVariantChoice(judgeLineAreaLabeledLabel, PreviewOutlineVariant::JudgeAreaLabeled);
+    const QStringList customOutlineNames = owner_.availablePreviewCustomOutlineFileNames();
+    if (!customOutlineNames.isEmpty()) {
+        judgeLineMenu->addSeparator();
+    }
+    for (const QString& fileName : customOutlineNames) {
+        addDialogMenuChoice(judgeLineMenu, fileName, [this, judgeLineButton, fileName]() {
+            owner_.applyPreviewCustomOutlineFileName(fileName, true);
+            judgeLineButton->setText(fileName);
+        });
+    }
+    judgeLineButton->setMenu(judgeLineMenu);
+    skinForm->addRow(uiText("dialog.render_settings.gameplay.judge_line", "Judge Line"), judgeLineButton);
+
+    if (includeFolderButtons) {
+        auto* openSkinFolderButton = makePushButton(root, uiText("dialog.skin_settings.open_skin_folder", "Open Skin Folder"));
+        connect(openSkinFolderButton, &QPushButton::clicked, root, [this]() {
+            const QString skinRoot = owner_.resolvePreviewSkinRootDir();
+            if (!skinRoot.isEmpty()) {
+                QDir().mkpath(skinRoot);
+                QDesktopServices::openUrl(QUrl::fromLocalFile(skinRoot));
+            }
+        });
+        auto* openJudgeFolderButton = makePushButton(root, uiText("dialog.skin_settings.open_judge_line_folder", "Open Judge Line Folder"));
+        connect(openJudgeFolderButton, &QPushButton::clicked, root, [this]() {
+            const QString outlineDir = owner_.resolvePreviewCustomOutlineDir();
+            if (!outlineDir.isEmpty()) {
+                QDir().mkpath(outlineDir);
+                QDesktopServices::openUrl(QUrl::fromLocalFile(outlineDir));
+            }
+        });
+        skinForm->addRow(leftRow({openSkinFolderButton, openJudgeFolderButton}));
+    }
+
+    // ---- 字体: embedded HUD-font picker (combo + import/reset + live sample),
+    //      the same controls the old "字体设置" sub-dialog hosted, inlined. ----
+    auto* fontGroup = new QGroupBox(uiText("dialog.video_export.section.font", "Font"), root);
+    auto* fontGroupLayout = new QVBoxLayout(fontGroup);
+    fontGroupLayout->setContentsMargins(10, 8, 10, 8);
+    fontGroupLayout->setSpacing(8);
+    // {} refresh callback: the preview HUD re-reads the global font on its next
+    // repaint (scrub/play), matching the former font-tab behavior.
+    fontGroupLayout->addWidget(miacode::video_export::createHudFontSettingsWidget(fontGroup, {}));
+    rootLayout->addWidget(fontGroup);
+
+    if (skinOut != nullptr) {
+        *skinOut = root;
+    }
+}
+
+void MainWindow::DialogsSection::onSkinSettings()
+{
+    MC_OP("MainWindow::DialogsSection::onSkinSettings");
+    openSkinSettingsDialog();
+}
+
+void MainWindow::DialogsSection::openSkinSettingsDialog()
+{
+    QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
+    dialog.setWindowTitle(uiText("dialog.skin_settings.dialog_title", "Skin Settings"));
+    dialog.setModal(true);
+    dialog.setStyleSheet(UiTheme::settingsDialogStyleSheet());
+    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
+    UiDialogs::prepareDialogWindow(&dialog, &owner_);
+
+    auto* rootLayout = new QVBoxLayout(&dialog);
+    rootLayout->setContentsMargins(12, 12, 12, 12);
+    rootLayout->setSpacing(10);
+    rootLayout->setSizeConstraint(QLayout::SetFixedSize);
+
+    QWidget* skinContent = nullptr;
+    buildSkinSettings(&dialog, &skinContent, /*includeFolderButtons=*/true);
+    if (skinContent != nullptr) {
+        skinContent->setMinimumWidth(360);
+        rootLayout->addWidget(skinContent, 0);
+    }
+
+    auto* buttonBox = new QDialogButtonBox(&dialog);
+    if (QPushButton* closeButton = buttonBox->addButton(uiText("dialog.render_settings.button.close", "Close"), QDialogButtonBox::RejectRole)) {
+        closeButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    }
+    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::accept);
+    rootLayout->addWidget(buttonBox);
+
+    dialog.adjustSize();
+    dialog.exec();
 }

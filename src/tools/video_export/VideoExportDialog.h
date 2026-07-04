@@ -81,9 +81,10 @@ public:
 
     // Injects MainWindow-built, owner-wired settings widgets: videoExtras is
     // appended to the bottom of the Video tab; gameplayWidget to the Gameplay
-    // tab (below the dialog's own flow-speed rows). Call once after
-    // construction, before exec().
-    void injectOwnerWiredSettings(QWidget* videoExtras, QWidget* gameplayWidget);
+    // tab (below the dialog's own flow-speed rows); skinWidget to the 皮肤 tab
+    // (skin / judge line / HUD font). Call once after construction, before
+    // exec().
+    void injectOwnerWiredSettings(QWidget* videoExtras, QWidget* gameplayWidget, QWidget* skinWidget = nullptr);
 
     // ---- Embedded panel mode (E-C, export-page phase 2) ----
     // The same dialog doubles as the Export hub page's in-page video panel:
@@ -139,8 +140,6 @@ private:
     void syncLivePreviewObjectStatsVisibility();
     void syncLivePreviewChartInfoVisibility();
     void restoreLivePreviewState();
-    void openHudFontSettingsDialog();
-    void refreshLivePreviewHudFont();
     void loadPersistedSettings();
     void savePersistedSettings(const VideoExportTask& task) const;
     void persistExportOnlySettings() const;
@@ -272,7 +271,6 @@ private:
     QCheckBox* introLevelTextCheck_ = nullptr;
     IntroPreviewWidget* introPreview_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
-    QPushButton* hudFontSettingsButton_ = nullptr;
     QToolButton* backgroundScaleModeButton_ = nullptr;
     QMenu* backgroundScaleModeMenu_ = nullptr;
     PreviewBackgroundScaleMode selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
@@ -303,8 +301,10 @@ private:
     QWidget* optionsContent_ = nullptr;
     QWidget* rangeContent_ = nullptr;
     QWidget* gameplayPage_ = nullptr;
+    QWidget* skinPage_ = nullptr;
     QVBoxLayout* visualsPageLayout_ = nullptr;
     QVBoxLayout* gameplayPageLayout_ = nullptr;
+    QVBoxLayout* skinPageLayout_ = nullptr;
     QTabWidget* settingsTabs_ = nullptr;
     QFrame* previewStrip_ = nullptr;
     QDialogButtonBox* buttonBox_ = nullptr;

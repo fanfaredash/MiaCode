@@ -186,6 +186,12 @@ Runtime black-screen / dialog tracing in the main app currently uses these tags:
 - `close_timing/quick_shell`
 - `close_timing/export_worker`
 - `close_timing/export_temp_dirs`
+- `ui/hang_watchdog`
+- `layout/export_page`
+- `layout/rehosted_widget`
+- `export_page/embedded_video_panel`
+- `video_export/embedded_layout`
+- `quick_shell/layout`
 - `preview/host_window_event`
 - `preview/embedded_refresh`
 - `logging/crash_breadcrumb_hint`
@@ -209,6 +215,8 @@ The `timeline/interaction` runtime tag now traces quick timeline drag, wheel-scr
 The `timeline/bridge` runtime tag now records high-frequency quick timeline bridge pushes such as `action=set_horizontal_scroll_value` only when `MIACODE_TIMELINE_HOTPATH_DIAG=1`.
 The `timeline/quick_scene` runtime tag now distinguishes full `scene_state_rebuild_*` passes from `action=content_transform_update` scroll-only paints; the scroll-only hot-path paint log requires `MIACODE_TIMELINE_HOTPATH_DIAG=1`.
 The `timeline/cursor_map` runtime tag now profiles cursor-to-second mapping in `timelineSecondForCursor()`.
+The `ui/hang_watchdog` runtime tag is installed only when runtime debug output is active. It records the active GUI phase if a marked `MIACODE_HANG_PHASE` stays active for more than about `2s`, flushes the op-chain shadow, and includes async-log writer stats so UI hangs can be separated from logging backpressure. Current marked phases focus on QuickShell native surface sizing, rehosted widget relayout, and embedded export video-panel creation/layout.
+The `layout/export_page`, `layout/rehosted_widget`, `export_page/embedded_video_panel`, `video_export/embedded_layout`, and `quick_shell/layout` runtime tags are slow-path layout diagnostics. They emit only in runtime debug mode and log warnings when layout/rehost/embedded-panel steps cross their local slow thresholds.
 The `app_shutdown` runtime tag now traces `lastWindowClosed`, periodic post-close heartbeats, `aboutToQuit`, `app.exec()` exit, and post-event-loop object teardown so "window disappeared but process still lives" tails can be separated from close-event time.
 QuickShell accepted root-window closes now notify C++ from QML before the window hide tail, logging `root_close_accepted_notify` and `accepted_close_shutdown_*`; the immediate pass shuts down preview and closes the hidden backend `MainWindow`, then a queued pre-quit pass logs `accepted_close_destroy_*` while destroying the QML engine, native surfaces, controller, style bridge, and backend before explicitly requesting `quit()`.
 The `close_timing/*` runtime tags now record close-path duration totals in milliseconds for document save-confirm work, QuickShell relay work, legacy window close hooks, export-worker teardown, and `aboutToQuit` export temp-dir cleanup so exit long tails can be triaged from one debug session.

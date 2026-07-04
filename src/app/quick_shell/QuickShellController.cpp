@@ -6,7 +6,9 @@
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 #include "common/PreviewInteractionConfig.h"
+#include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 
@@ -172,7 +174,10 @@ bool assignIfChanged(T& target, const T& value)
     return true;
 }
 
-void appendQuickShellControllerLog(const QString& action, const QString& payload = QString())
+void appendQuickShellControllerLog(
+    const QString& action,
+    const QString& payload = QString(),
+    miacode::debug_log::Level level = miacode::debug_log::Level::Info)
 {
     QString text = QStringLiteral("action=%1").arg(action);
     if (!payload.trimmed().isEmpty()) {
@@ -181,7 +186,9 @@ void appendQuickShellControllerLog(const QString& action, const QString& payload
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("quick_shell/controller"),
-        text
+        text,
+        /*force=*/false,
+        level
     );
 }
 
@@ -942,17 +949,30 @@ void QuickShellController::syncSidebarSurfaceSize(int width, int height)
 
 void QuickShellController::syncWorkspaceSurfaceSize(int width, int height)
 {
+    MC_OP("QuickShellController::syncWorkspaceSurfaceSize");
+    QElapsedTimer elapsed;
+    elapsed.start();
+    MIACODE_HANG_PHASE(
+        "QuickShellController::syncWorkspaceSurfaceSize",
+        QStringLiteral("requested=%1x%2").arg(width).arg(height));
     if (surfaceHost_ == nullptr) {
         return;
     }
     surfaceHost_->syncWorkspaceSurfaceSize(width, height);
     if (QWidget* surface = surfaceHost_->workspaceSurfaceWidget(); surface != nullptr) {
+        const qint64 elapsedMs = elapsed.elapsed();
         appendQuickShellControllerLog(
             QStringLiteral("sync_workspace"),
-            QString("size=%1x%2 handle=0x%3")
+            QString("size=%1x%2 requested=%3x%4 elapsed_ms=%5 handle=0x%6")
                 .arg(surface->width())
                 .arg(surface->height())
-                .arg(static_cast<quintptr>(surface->winId()), 0, 16)
+                .arg(width)
+                .arg(height)
+                .arg(elapsedMs)
+                .arg(static_cast<quintptr>(surface->winId()), 0, 16),
+            elapsedMs >= 50
+                ? miacode::debug_log::Level::Warn
+                : miacode::debug_log::Level::Info
         );
     }
 }

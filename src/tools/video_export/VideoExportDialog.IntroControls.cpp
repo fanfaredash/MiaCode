@@ -111,25 +111,9 @@ void VideoExportDialog::restoreLivePreviewState()
     }
 }
 
-void VideoExportDialog::openHudFontSettingsDialog()
-{
-    // Shared dialog (tools/video_export/HudFontSettings.cpp). The callback
-    // re-renders this dialog's paused preview frame so the new HUD font shows
-    // immediately.
-    miacode::video_export::openHudFontSettingsDialog(this, [this]() {
-        refreshLivePreviewHudFont();
-    });
-}
-
-void VideoExportDialog::refreshLivePreviewHudFont()
-{
-    const double second = currentPreviewSecond();
-    if (qIsFinite(second)) {
-        seekPreview(second);
-    } else {
-        seekPreview(previewCursorSecond_);
-    }
-}
+// HUD font is edited from the shared 皮肤 tab (buildSkinSettings) now; the
+// dialog no longer owns a font button. The global font applies process-wide and
+// the on-screen preview re-reads it on its next repaint.
 
 void VideoExportDialog::refreshAddIntroEnabledState()
 {

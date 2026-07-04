@@ -6,7 +6,10 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/DebugLog.h"
+#include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 #include "common/PreviewInteractionConfig.h"
+#include "common/UiHangWatchdog.h"
 #include "core/scene/PreviewHudState.h"
 #include "tools/video_export/HudFontSettings.h"
 #include "tools/video_export/IntroPreviewWidget.h"
@@ -24,6 +27,7 @@
 #include <QDoubleValidator>
 #include <QDir>
 #include <QDoubleSpinBox>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -106,10 +110,56 @@ QString resolveOutputPathForExport(const QString& outputPath, const QString& bas
     return QDir::cleanPath(absolutePath);
 }
 
+QString videoExportWidgetSummary(QWidget* widget)
+{
+    if (widget == nullptr) {
+        return QStringLiteral("(null)");
+    }
+    return QStringLiteral("class=%1 name=%2 size=%3x%4 min=%5x%6 max=%7x%8 visible=%9")
+        .arg(QString::fromUtf8(widget->metaObject()->className()))
+        .arg(widget->objectName().isEmpty() ? QStringLiteral("(empty)") : widget->objectName())
+        .arg(widget->width())
+        .arg(widget->height())
+        .arg(widget->minimumWidth())
+        .arg(widget->minimumHeight())
+        .arg(widget->maximumWidth())
+        .arg(widget->maximumHeight())
+        .arg(widget->isVisible() ? 1 : 0);
+}
+
+void appendEmbeddedDialogLayoutDiag(
+    const QString& action,
+    qint64 elapsedMs,
+    const QString& detail = QString(),
+    miacode::debug_log::Level level = miacode::debug_log::Level::Info)
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    QString payload = QStringLiteral("action=%1 elapsed_ms=%2").arg(action).arg(elapsedMs);
+    if (!detail.trimmed().isEmpty()) {
+        payload += QStringLiteral(" %1").arg(detail.trimmed());
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("video_export/embedded_layout"),
+        payload,
+        /*force=*/false,
+        level);
+}
+
 }  // namespace
 
 void VideoExportDialog::setEmbeddedPanelMode(bool embedded)
 {
+    MC_OP("VideoExportDialog::setEmbeddedPanelMode");
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    MIACODE_HANG_PHASE(
+        "VideoExportDialog::setEmbeddedPanelMode",
+        QStringLiteral("embedded=%1 dialog=%2")
+            .arg(embedded ? 1 : 0)
+            .arg(videoExportWidgetSummary(this)));
     if (embeddedPanelMode_ == embedded) {
         return;
     }
@@ -184,6 +234,13 @@ void VideoExportDialog::setEmbeddedPanelMode(bool embedded)
     // tallest page — undo that first; pages now keep natural height and the
     // scroll area is only a too-short-window fallback.
     if (settingsTabs_ != nullptr) {
+        QElapsedTimer rehostTimer;
+        rehostTimer.start();
+        MIACODE_HANG_PHASE(
+            "VideoExportDialog::setEmbeddedPanelMode.rehostTabs",
+            QStringLiteral("tab_count=%1 tabs=%2")
+                .arg(settingsTabs_->count())
+                .arg(videoExportWidgetSummary(settingsTabs_)));
         const int currentIndex = settingsTabs_->currentIndex();
         QStringList tabLabels;
         QList<QWidget*> tabPages;
@@ -205,9 +262,29 @@ void VideoExportDialog::setEmbeddedPanelMode(bool embedded)
             pageScroll->viewport()->setAutoFillBackground(false);
             pageScroll->setWidget(page);
             settingsTabs_->addTab(pageScroll, tabLabels.at(i));
+            appendEmbeddedDialogLayoutDiag(
+                QStringLiteral("embedded_tab_wrapped"),
+                rehostTimer.elapsed(),
+                QStringLiteral("index=%1 label=\"%2\" page=\"%3\" scroll=\"%4\"")
+                    .arg(i)
+                    .arg(tabLabels.at(i))
+                    .arg(videoExportWidgetSummary(page))
+                    .arg(videoExportWidgetSummary(pageScroll)));
         }
         settingsTabs_->setCurrentIndex(qMax(0, currentIndex));
         settingsTabs_->setStyleSheet(UiTheme::embeddedExportTabStyleSheet());
+        appendEmbeddedDialogLayoutDiag(
+            rehostTimer.elapsed() >= 80
+                ? QStringLiteral("embedded_tabs_rehost_slow")
+                : QStringLiteral("embedded_tabs_rehost_complete"),
+            rehostTimer.elapsed(),
+            QStringLiteral("tab_count=%1 current_index=%2 tabs=\"%3\"")
+                .arg(settingsTabs_->count())
+                .arg(settingsTabs_->currentIndex())
+                .arg(videoExportWidgetSummary(settingsTabs_)),
+            rehostTimer.elapsed() >= 80
+                ? miacode::debug_log::Level::Warn
+                : miacode::debug_log::Level::Info);
     }
 
     if (auto* root = qobject_cast<QVBoxLayout*>(layout()); root != nullptr) {
@@ -234,7 +311,32 @@ void VideoExportDialog::setEmbeddedPanelMode(bool embedded)
         previewTimer_->start();
     }
 
-    refreshDialogGeometry();
+    {
+        QElapsedTimer refreshTimer;
+        refreshTimer.start();
+        MIACODE_HANG_PHASE(
+            "VideoExportDialog::setEmbeddedPanelMode.refreshDialogGeometry",
+            videoExportWidgetSummary(this));
+        refreshDialogGeometry();
+        if (refreshTimer.elapsed() >= 50) {
+            appendEmbeddedDialogLayoutDiag(
+                QStringLiteral("embedded_refresh_geometry_slow"),
+                refreshTimer.elapsed(),
+                QStringLiteral("dialog=\"%1\"").arg(videoExportWidgetSummary(this)),
+                miacode::debug_log::Level::Warn);
+        }
+    }
+    appendEmbeddedDialogLayoutDiag(
+        totalTimer.elapsed() >= 120
+            ? QStringLiteral("embedded_panel_mode_slow")
+            : QStringLiteral("embedded_panel_mode_complete"),
+        totalTimer.elapsed(),
+        QStringLiteral("dialog=\"%1\" tabs=\"%2\"")
+            .arg(videoExportWidgetSummary(this))
+            .arg(videoExportWidgetSummary(settingsTabs_)),
+        totalTimer.elapsed() >= 120
+            ? miacode::debug_log::Level::Warn
+            : miacode::debug_log::Level::Info);
 }
 
 void VideoExportDialog::setEmbeddedExportRunning(bool running)
@@ -284,7 +386,7 @@ void VideoExportDialog::applyThemeStyles()
 
     // Plain push buttons.
     for (QPushButton* button : {outputBrowseButton_, setStartButton_, setEndButton_,
-                                hudFontSettingsButton_, introBackgroundBrowse_, cancelButton_}) {
+                                introBackgroundBrowse_, cancelButton_}) {
         if (button != nullptr) {
             button->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
         }
@@ -335,7 +437,7 @@ void VideoExportDialog::applyThemeStyles()
     }
 }
 
-void VideoExportDialog::injectOwnerWiredSettings(QWidget* videoExtras, QWidget* gameplayWidget)
+void VideoExportDialog::injectOwnerWiredSettings(QWidget* videoExtras, QWidget* gameplayWidget, QWidget* skinWidget)
 {
     // The injected widgets are built by MainWindow (they need owner-side data
     // + wiring the decoupled dialog can't reach). Drop them in just before each
@@ -347,6 +449,10 @@ void VideoExportDialog::injectOwnerWiredSettings(QWidget* videoExtras, QWidget* 
     if (gameplayWidget != nullptr && gameplayPageLayout_ != nullptr) {
         const int insertIndex = qMax(0, gameplayPageLayout_->count() - 1);
         gameplayPageLayout_->insertWidget(insertIndex, gameplayWidget, 0, Qt::AlignTop);
+    }
+    if (skinWidget != nullptr && skinPageLayout_ != nullptr) {
+        const int insertIndex = qMax(0, skinPageLayout_->count() - 1);
+        skinPageLayout_->insertWidget(insertIndex, skinWidget, 0, Qt::AlignTop);
     }
     refreshDialogGeometry();
 }

@@ -312,6 +312,7 @@ private slots:
     void onNetBatchDownload();
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
+    void onSkinSettings();
     void onMediaProcessingTools();
     void onPrependTrackSilence();
     void onPrependPvBlack();

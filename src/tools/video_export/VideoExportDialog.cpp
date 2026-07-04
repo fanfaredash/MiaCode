@@ -632,6 +632,13 @@ VideoExportDialog::VideoExportDialog(
     gameplayPageLayout_->setContentsMargins(4, 6, 4, 6);
     gameplayPageLayout_->setSpacing(8);
 
+    // 皮肤 page — owner-wired skin / judge line / HUD font injected
+    // post-construction via injectOwnerWiredSettings().
+    skinPage_ = new QWidget(settingsTabs_);
+    skinPageLayout_ = new QVBoxLayout(skinPage_);
+    skinPageLayout_->setContentsMargins(4, 6, 4, 6);
+    skinPageLayout_->setSpacing(8);
+
     auto* rangePage = new QWidget(settingsTabs_);
     auto* rangePageLayout = new QVBoxLayout(rangePage);
     rangePageLayout->setContentsMargins(4, 6, 4, 6);
@@ -1205,6 +1212,8 @@ VideoExportDialog::VideoExportDialog(
     // value; the Gameplay tab below carries only the injected owner-wired
     // controls (skin / judge line / judge effect / slide stack / center).
     gameplayPageLayout_->addStretch(1);
+    // 皮肤 tab carries only the injected owner-wired panel (buildSkinSettings).
+    skinPageLayout_->addStretch(1);
     const QString scaleFillLabel = uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)"));
     const QString scaleFitLabel = uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)"));
     const QString scaleSquareFitLabel = uiText(
@@ -1281,25 +1290,8 @@ VideoExportDialog::VideoExportDialog(
     visualsPageLayout->addStretch(1);
     miacode::ui::busyTick();
 
-    // Font tab — the HUD font picker on its own page. (The cover export moved to
-    // the toolbar Export dropdown, 2026-06-10.)
-    auto* fontPage = new QWidget(settingsTabs_);
-    auto* fontPageLayout = new QVBoxLayout(fontPage);
-    fontPageLayout->setContentsMargins(kSectionContentLeftInset, 6, kSectionContentLeftInset, 6);
-    fontPageLayout->setSpacing(8);
-    auto* fontPageLabel = new QLabel(
-        uiText("dialog.video_export.option.hud_font", l10n(QStringLiteral("HUD font"), QStringLiteral("HUD 字体"))),
-        fontPage
-    );
-    hudFontSettingsButton_ = new QPushButton(
-        uiText("dialog.video_export.option.hud_font_settings", QStringLiteral("Font Settings")),
-        fontPage
-    );
-    hudFontSettingsButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    fontPageLayout->addWidget(fontPageLabel, 0, Qt::AlignLeft);
-    fontPageLayout->addWidget(hudFontSettingsButton_, 0, Qt::AlignLeft);
-
-    fontPageLayout->addStretch(1);
+    // HUD font moved to the shared 皮肤 tab (buildSkinSettings). The former
+    // standalone 字体 tab is gone.
     miacode::ui::busyTick();
 
     // ---- Intro tab ("片头") — pre-roll settings + read-only live preview ----
@@ -1460,12 +1452,12 @@ VideoExportDialog::VideoExportDialog(
         uiText("dialog.render_settings.gameplay_group", l10n(QStringLiteral("Gameplay"), QStringLiteral("游戏")))
     );
     settingsTabs_->addTab(
-        introPage,
-        uiText("dialog.video_export.section.intro", l10n(QStringLiteral("Intro"), QStringLiteral("片头")))
+        skinPage_,
+        uiText("dialog.skin_settings.title", l10n(QStringLiteral("Skin"), QStringLiteral("皮肤")))
     );
     settingsTabs_->addTab(
-        fontPage,
-        uiText("dialog.video_export.section.font", l10n(QStringLiteral("Font"), QStringLiteral("字体")))
+        introPage,
+        uiText("dialog.video_export.section.intro", l10n(QStringLiteral("Intro"), QStringLiteral("片头")))
     );
     settingsTabs_->addTab(
         rangePage,
@@ -1524,7 +1516,6 @@ VideoExportDialog::VideoExportDialog(
         syncLivePreviewChartInfoVisibility();
         initialShowChartInfo_ = checked;
     });
-    connect(hudFontSettingsButton_, &QPushButton::clicked, this, &VideoExportDialog::openHudFontSettingsDialog);
     connect(smoothBrightnessCheck_, &QCheckBox::toggled, this, [this](bool checked) {
         if (previewSmoothBrightnessCallback_) {
             previewSmoothBrightnessCallback_(checked);

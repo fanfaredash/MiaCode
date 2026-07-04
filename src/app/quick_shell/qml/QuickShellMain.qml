@@ -1246,10 +1246,18 @@ ApplicationWindow {
 
                         property real dragStartSceneX: 0
                         property real dragStartWidth: 0
+                        property int dragMoveCount: 0
 
                         onPressed: function(mouse) {
                             dragStartSceneX = previewResizeHandle.mapToItem(root.contentItem, mouse.x, mouse.y).x
                             dragStartWidth = previewPaneWidth
+                            dragMoveCount = 0
+                            controller.logPreviewInteraction(
+                                "preview_resize_drag_begin",
+                                "start_width=" + dragStartWidth
+                                    + " workspace_row=" + workspaceRow.width + "x" + workspaceRow.height
+                                    + " preview_canvas=" + embeddedPreviewFrame.width + "x" + embeddedPreviewFrame.height
+                            )
                         }
 
                         onPositionChanged: function(mouse) {
@@ -1265,10 +1273,42 @@ ApplicationWindow {
                                 workspaceRow.height
                             )
                             previewPaneUserResized = true
+                            dragMoveCount += 1
+                            if (dragMoveCount === 1 || dragMoveCount % 15 === 0) {
+                                controller.logPreviewInteraction(
+                                    "preview_resize_drag_move_sample",
+                                    "move_count=" + dragMoveCount
+                                        + " scene_x=" + sceneX
+                                        + " delta=" + signedDelta
+                                        + " width=" + previewPaneWidth
+                                        + " bounded_width=" + boundedWidth
+                                        + " workspace_row=" + workspaceRow.width + "x" + workspaceRow.height
+                                )
+                            }
                         }
 
-                        onReleased: persistPreviewPaneWidthRatio()
-                        onCanceled: persistPreviewPaneWidthRatio()
+                        onReleased: {
+                            controller.logPreviewInteraction(
+                                "preview_resize_drag_end",
+                                "move_count=" + dragMoveCount
+                                    + " start_width=" + dragStartWidth
+                                    + " end_width=" + previewPaneWidth
+                                    + " workspace_row=" + workspaceRow.width + "x" + workspaceRow.height
+                                    + " preview_canvas=" + embeddedPreviewFrame.width + "x" + embeddedPreviewFrame.height
+                            )
+                            persistPreviewPaneWidthRatio()
+                        }
+                        onCanceled: {
+                            controller.logPreviewInteraction(
+                                "preview_resize_drag_cancel",
+                                "move_count=" + dragMoveCount
+                                    + " start_width=" + dragStartWidth
+                                    + " end_width=" + previewPaneWidth
+                                    + " workspace_row=" + workspaceRow.width + "x" + workspaceRow.height
+                                    + " preview_canvas=" + embeddedPreviewFrame.width + "x" + embeddedPreviewFrame.height
+                            )
+                            persistPreviewPaneWidthRatio()
+                        }
                     }
                 }
 

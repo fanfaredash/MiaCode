@@ -144,9 +144,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 ## 8. Video Export UI, Snapshot Boundary, And Encoder Pipeline
 
 - Export dialog:
-  - Files: `src/tools/video_export/VideoExportDialog.h`, `src/tools/video_export/VideoExportDialog.cpp`, `src/tools/video_export/VideoExportPreferences.h`
+  - Files: `src/tools/video_export/VideoExportDialog.h`, `src/tools/video_export/VideoExportDialog.cpp`, `src/tools/video_export/VideoExportPreferences.h`, `src/tools/video_export/HudFontSettings.{h,cpp}`
   - Class: `VideoExportDialog`
-  - Owns: export parameters, export-only preference persistence, preview-in-dialog, range selection, and the export-dialog live preview controls that reuse `MainWindow` preview transport callbacks so pause/seek behavior stays aligned with the main preview route
+  - Owns: export parameters, export-only preference persistence, preview-in-dialog, range selection, the export-dialog live preview controls that reuse `MainWindow` preview transport callbacks so pause/seek behavior stays aligned with the main preview route, and the owner-wired settings injection points for the Gameplay and Skin tabs. Skin / judge-line / HUD-font controls are supplied by `DialogsSection::buildSkinSettings(...)`; the old standalone export Font tab and modal HUD-font settings dialog were removed in favor of `miacode::video_export::createHudFontSettingsWidget(...)`.
 - Batch export dialog:
   - Files: `src/tools/video_export/BatchVideoExportDialog.h`, `src/tools/video_export/BatchVideoExportDialog.cpp`, `src/tools/video_export/VideoExportPreferences.h`
   - Class: `BatchVideoExportDialog`
@@ -160,8 +160,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Struct: `VideoExportSnapshot`
   - Key functions: `toJson`, `fromJson`, `buildVideoExportTaskFromSnapshot`
 - Main window export ownership:
-  - Files: `src/app/mainwindow/MainWindow.cpp`, `src/app/mainwindow/sections/export/MainWindow.ExportSection.cpp`, `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp`, `src/tools/export_page/ExportLauncherPage.*`
-  - Key functions: `onExportCover`, `onBatchExportPreviewVideo`, `onExportPreviewVideo`, `buildVideoExportSnapshot`, `launchVideoExportWorker`, `handleVideoExportWorkerEvent`
+  - Files: `src/app/mainwindow/MainWindow.cpp`, `src/app/mainwindow/sections/export/MainWindow.ExportSection.cpp`, `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`, `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.ExportSettings.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp`, `src/tools/export_page/ExportLauncherPage.*`
+  - Key functions: `onExportCover`, `onBatchExportPreviewVideo`, `onExportPreviewVideo`, `buildVideoExportSnapshot`, `launchVideoExportWorker`, `handleVideoExportWorkerEvent`, `DialogsSection::buildSkinSettings`, `DialogsSection::openSkinSettingsDialog`
+  - Owns: toolbar/menu entry points for export and skin settings, including the shared Skin popup used by the main window and injected into the export dialog's Skin tab
 - Cover export studio:
   - Files: `src/tools/cover_export/CoverStudioWindow.*`, `CoverStudioPanel.*`, `CoverLayerListPanel.*`, `CoverLayerListModel.*`, `CoverLayoutModel.*`, `CoverCompositionState.*`, `CoverComposerView.*`, `SceneFrameRenderer.*`, `src/intro/qml/CoverComposer.qml`, `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`
   - Classes: `CoverStudioWindow`, `CoverStudioPanel`, `CoverLayerListPanel`, `CoverLayerListModel`, `CoverLayoutModel`, `CoverCompositionState`, `CoverComposerView`, `SceneFrameRenderer`

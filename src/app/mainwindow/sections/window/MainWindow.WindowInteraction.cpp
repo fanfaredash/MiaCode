@@ -459,6 +459,21 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         && event->type() == QEvent::Resize
         && watched == owner_.workspaceContentWidget_
         && owner_.workspaceSurfaceSettleRelayoutArmed_) {
+        if (owner_.runtimeDebugOutputEnabled_) {
+            const QSize size = watchedWidget != nullptr ? watchedWidget->size() : QSize();
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("layout/export_page"),
+                QStringLiteral("action=workspace_surface_settle_relayout_queued size=%1x%2 armed=1 watched_class=%3 watched_name=%4")
+                    .arg(size.width())
+                    .arg(size.height())
+                    .arg(watchedWidget != nullptr
+                        ? QString::fromUtf8(watchedWidget->metaObject()->className())
+                        : QStringLiteral("(null)"))
+                    .arg(watchedWidget != nullptr && !watchedWidget->objectName().isEmpty()
+                        ? watchedWidget->objectName()
+                        : QStringLiteral("(empty)")));
+        }
         QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
     }
     // Top header validation/muri summary icons + counts route a left-button

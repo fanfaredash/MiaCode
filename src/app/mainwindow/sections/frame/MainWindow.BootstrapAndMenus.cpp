@@ -657,6 +657,10 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.previewVideoSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewVideoSettings);
     previewMenu->addAction(owner_.previewVideoSettingsAction_);
 
+    owner_.skinSettingsAction_ = new QAction(uiText("action.skin_settings", "Skin"), &owner_);
+    connect(owner_.skinSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onSkinSettings);
+    previewMenu->addAction(owner_.skinSettingsAction_);
+
     owner_.swapWorkspaceSidesAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("左右面板互换") : QStringLiteral("Swap Side Panels"),
         &owner_

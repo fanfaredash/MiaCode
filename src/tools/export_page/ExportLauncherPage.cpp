@@ -6,7 +6,12 @@
 #include "FlowLayout.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "common/DebugLog.h"
+#include "common/DebugOptions.h"
+#include "common/OperationLog.h"
+#include "common/UiHangWatchdog.h"
 
+#include <QElapsedTimer>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -17,6 +22,46 @@
 #include <QVBoxLayout>
 
 namespace miacode::export_page {
+
+namespace {
+
+constexpr qint64 kEmbeddedPanelSyncSlowMs = 80;
+
+QString exportPageWidgetSummary(QWidget* widget)
+{
+    if (widget == nullptr) {
+        return QStringLiteral("(null)");
+    }
+    return QStringLiteral("class=%1 name=%2 size=%3x%4 visible=%5")
+        .arg(QString::fromUtf8(widget->metaObject()->className()))
+        .arg(widget->objectName().isEmpty() ? QStringLiteral("(empty)") : widget->objectName())
+        .arg(widget->width())
+        .arg(widget->height())
+        .arg(widget->isVisible() ? 1 : 0);
+}
+
+void appendEmbeddedPanelDiag(
+    const QString& action,
+    qint64 elapsedMs,
+    const QString& detail = QString(),
+    miacode::debug_log::Level level = miacode::debug_log::Level::Info)
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    QString payload = QStringLiteral("action=%1 elapsed_ms=%2").arg(action).arg(elapsedMs);
+    if (!detail.trimmed().isEmpty()) {
+        payload += QStringLiteral(" %1").arg(detail.trimmed());
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("export_page/embedded_video_panel"),
+        payload,
+        /*force=*/false,
+        level);
+}
+
+}  // namespace
 
 ExportLauncherPage::ExportLauncherPage(MainWindow* owner, QWidget* parent)
     : QWidget(parent)
@@ -366,6 +411,15 @@ void ExportLauncherPage::setCurrentSubPage(int subPage)
 
 void ExportLauncherPage::syncEmbeddedVideoPanel()
 {
+    MC_OP("ExportLauncherPage::syncEmbeddedVideoPanel");
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    MIACODE_HANG_PHASE(
+        "ExportLauncherPage::syncEmbeddedVideoPanel",
+        QStringLiteral("sub_page=%1 difficulty=%2 host=%3")
+            .arg(static_cast<int>(currentSubPage_))
+            .arg(selectedDifficultyId_)
+            .arg(exportPageWidgetSummary(videoPanelHost_)));
     if (owner_.isNull() || owner_->exportSection_ == nullptr) {
         return;
     }
@@ -376,6 +430,13 @@ void ExportLauncherPage::syncEmbeddedVideoPanel()
         if (!embeddedVideoPanel_.isNull()) {
             embeddedVideoPanel_.clear();
             owner_->exportSection_->destroyEmbeddedVideoExportPanel();
+            appendEmbeddedPanelDiag(
+                QStringLiteral("destroy_embedded_video_panel"),
+                totalTimer.elapsed(),
+                QStringLiteral("video_active=%1 target_available=%2 difficulty=%3")
+                    .arg(videoSubPageActive ? 1 : 0)
+                    .arg(targetAvailable ? 1 : 0)
+                    .arg(selectedDifficultyId_));
         }
         if (videoUnavailableLabel_ != nullptr) {
             const QString reason = difficultyExists(selectedDifficultyId_)
@@ -417,6 +478,19 @@ void ExportLauncherPage::syncEmbeddedVideoPanel()
     // Start-Export footer pins to the bottom — fixed-frame layout).
     videoPanelHostLayout_->insertWidget(videoPanelHostLayout_->count() - 1, panel, 1);
     panel->show();
+    const qint64 elapsedMs = totalTimer.elapsed();
+    appendEmbeddedPanelDiag(
+        elapsedMs >= kEmbeddedPanelSyncSlowMs
+            ? QStringLiteral("sync_embedded_video_panel_slow")
+            : QStringLiteral("sync_embedded_video_panel_complete"),
+        elapsedMs,
+        QStringLiteral("difficulty=%1 panel=\"%2\" host=\"%3\"")
+            .arg(selectedDifficultyId_)
+            .arg(exportPageWidgetSummary(panel))
+            .arg(exportPageWidgetSummary(videoPanelHost_)),
+        elapsedMs >= kEmbeddedPanelSyncSlowMs
+            ? miacode::debug_log::Level::Warn
+            : miacode::debug_log::Level::Info);
 }
 
 void ExportLauncherPage::onExportCoverClicked()

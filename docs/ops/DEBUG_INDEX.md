@@ -219,6 +219,8 @@ Preview diagnostics now split these timing sources instead of reporting a single
   - BASS `bass_status` sampling is now reduced to about once per second in debug mode, and includes `bgm_delta_ms` (`auth - bgm_chart`) so waveform/playhead complaints can be separated from generic fallback-clock drift; waveform-alignment diagnostics can temporarily lower that interval
   - BASS BGM rate-mode decisions log as low-frequency `bgm_speed_mode` / `bgm_rate_mode` rows, not per tick; BASS_FX tempo-window experiments additionally log `bgm_tempo_window` with requested and read-back `sequence_ms`, `seek_ms`, and `overlap_ms`
   - `preview/interaction` correlates user-facing preview actions such as `play`, `pause`, `stop`, and `ctrl+click` seek
+  - `ui/hang_watchdog` is installed only when runtime debug output is active; if a marked GUI phase remains active for about `2s`, it writes a fatal-grade runtime line, flushes the op-chain shadow, and includes async-log writer stats
+  - `layout/export_page`, `layout/rehosted_widget`, `export_page/embedded_video_panel`, `video_export/embedded_layout`, and `quick_shell/layout` are runtime-debug-only slow-path layout diagnostics for QuickShell/native-surface and embedded export-panel relayout work
   - `timeline/interaction` records quick timeline drag, wheel-scroll, and held-key horizontal scroll inputs
   - `timeline/bridge` records quick timeline hot-path state pushes such as `action=set_horizontal_scroll_value` only when `MIACODE_TIMELINE_HOTPATH_DIAG=1`
   - `timeline/quick_scene` records full `scene_state_rebuild_*` boundaries in debug mode; scroll-only `action=content_transform_update` paints require `MIACODE_TIMELINE_HOTPATH_DIAG=1`

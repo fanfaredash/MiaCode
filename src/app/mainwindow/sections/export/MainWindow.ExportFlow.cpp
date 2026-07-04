@@ -15,6 +15,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
+#include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/cover_export/CoverStudioWindow.h"
 #include "tools/muri/MuriAnalyzer.h"
@@ -30,6 +31,40 @@
 using namespace miacode::mainwindow::shared;
 
 namespace {
+QString exportFlowWidgetSummary(QWidget* widget)
+{
+    if (widget == nullptr) {
+        return QStringLiteral("(null)");
+    }
+    return QStringLiteral("class=%1 name=%2 size=%3x%4 visible=%5")
+        .arg(QString::fromUtf8(widget->metaObject()->className()))
+        .arg(widget->objectName().isEmpty() ? QStringLiteral("(empty)") : widget->objectName())
+        .arg(widget->width())
+        .arg(widget->height())
+        .arg(widget->isVisible() ? 1 : 0);
+}
+
+void appendEmbeddedExportPanelDiag(
+    const QString& action,
+    qint64 elapsedMs,
+    const QString& detail = QString(),
+    miacode::debug_log::Level level = miacode::debug_log::Level::Info)
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    QString payload = QStringLiteral("action=%1 elapsed_ms=%2").arg(action).arg(elapsedMs);
+    if (!detail.trimmed().isEmpty()) {
+        payload += QStringLiteral(" %1").arg(detail.trimmed());
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("export_page/embedded_video_panel"),
+        payload,
+        /*force=*/false,
+        level);
+}
+
 QString sanitizeExportFileStem(QString text, const QString& fallback = QStringLiteral("out"))
 {
     text = text.trimmed();
@@ -681,9 +716,13 @@ VideoExportDialog* MainWindow::ExportSection::buildConfiguredVideoExportDialog(
     // mutate owner_ live; their values are re-sourced into the task when the
     // export is confirmed.
     QWidget* injectedGameplay = nullptr;
+    QWidget* injectedSkin = nullptr;
     if (owner_.dialogsSection_ != nullptr) {
         owner_.dialogsSection_->buildExportInjectedSettings(dialog, &injectedGameplay);
-        dialog->injectOwnerWiredSettings(nullptr, injectedGameplay);
+        // 皮肤 tab shares the same owner-wired panel as the main-window 皮肤 popup;
+        // the export tab hides the "打开…文件夹" actions for a compact layout.
+        owner_.dialogsSection_->buildSkinSettings(dialog, &injectedSkin, /*includeFolderButtons=*/false);
+        dialog->injectOwnerWiredSettings(nullptr, injectedGameplay, injectedSkin);
     }
     return dialog;
 }
@@ -734,6 +773,14 @@ void MainWindow::ExportSection::endExportPreviewSession()
 
 QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficultyId, QWidget* parent)
 {
+    MC_OP("MainWindow::ExportSection::createEmbeddedVideoExportPanel");
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    MIACODE_HANG_PHASE(
+        "ExportSection::createEmbeddedVideoExportPanel",
+        QStringLiteral("difficulty=%1 parent=%2")
+            .arg(difficultyId)
+            .arg(exportFlowWidgetSummary(parent)));
     destroyEmbeddedVideoExportPanel();
     const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : owner_.activeDifficultyId_;
     if (!SimaiDocument::isDifficultyId(resolvedDifficultyId)
@@ -747,9 +794,44 @@ QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficult
 
     VideoExportTask task = buildVideoExportSeedTask(resolvedDifficultyId);
     owner_.tickOutlineBusySpinner();
-    VideoExportDialog* panel = buildConfiguredVideoExportDialog(task, parent);
+    QElapsedTimer buildDialogTimer;
+    buildDialogTimer.start();
+    VideoExportDialog* panel = nullptr;
+    {
+        MIACODE_HANG_PHASE(
+            "ExportSection::createEmbeddedVideoExportPanel.buildConfiguredVideoExportDialog",
+            QStringLiteral("difficulty=%1 parent=%2")
+                .arg(resolvedDifficultyId)
+                .arg(exportFlowWidgetSummary(parent)));
+        panel = buildConfiguredVideoExportDialog(task, parent);
+    }
+    appendEmbeddedExportPanelDiag(
+        QStringLiteral("build_configured_dialog_complete"),
+        buildDialogTimer.elapsed(),
+        QStringLiteral("difficulty=%1 panel=%2")
+            .arg(resolvedDifficultyId)
+            .arg(exportFlowWidgetSummary(panel)),
+        buildDialogTimer.elapsed() >= 80
+            ? miacode::debug_log::Level::Warn
+            : miacode::debug_log::Level::Info);
     owner_.tickOutlineBusySpinner();
-    panel->setEmbeddedPanelMode(true);
+    QElapsedTimer embeddedModeTimer;
+    embeddedModeTimer.start();
+    {
+        MIACODE_HANG_PHASE(
+            "ExportSection::createEmbeddedVideoExportPanel.setEmbeddedPanelMode",
+            exportFlowWidgetSummary(panel));
+        panel->setEmbeddedPanelMode(true);
+    }
+    appendEmbeddedExportPanelDiag(
+        QStringLiteral("set_embedded_panel_mode_complete"),
+        embeddedModeTimer.elapsed(),
+        QStringLiteral("difficulty=%1 panel=%2")
+            .arg(resolvedDifficultyId)
+            .arg(exportFlowWidgetSummary(panel)),
+        embeddedModeTimer.elapsed() >= 80
+            ? miacode::debug_log::Level::Warn
+            : miacode::debug_log::Level::Info);
     owner_.embeddedVideoExportPanel_ = panel;
     owner_.embeddedVideoExportDifficultyId_ = resolvedDifficultyId;
     connect(panel, &VideoExportDialog::exportConfirmed, &owner_, [this]() {
@@ -774,13 +856,41 @@ QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficult
     connect(panel, &VideoExportDialog::introPreviewSettingsChanged, &owner_, [this]() {
         owner_.refreshExportIntroState();
     });
-    beginExportPreviewSession(task);
+    {
+        QElapsedTimer previewSessionTimer;
+        previewSessionTimer.start();
+        MIACODE_HANG_PHASE(
+            "ExportSection::createEmbeddedVideoExportPanel.beginExportPreviewSession",
+            QStringLiteral("difficulty=%1").arg(resolvedDifficultyId));
+        beginExportPreviewSession(task);
+        appendEmbeddedExportPanelDiag(
+            QStringLiteral("begin_export_preview_session_complete"),
+            previewSessionTimer.elapsed(),
+            QStringLiteral("difficulty=%1").arg(resolvedDifficultyId),
+            previewSessionTimer.elapsed() >= 80
+                ? miacode::debug_log::Level::Warn
+                : miacode::debug_log::Level::Info);
+    }
     owner_.tickOutlineBusySpinner();
     // Install the badge-selected difficulty as a playable preview audition so
     // the right-side transport plays/seeks it like the editor (所见即所导). This
     // also covers badge switches — syncEmbeddedVideoPanel recreates the panel,
     // which re-installs the newly-selected difficulty.
-    installExportPreviewAuditionScene(resolvedDifficultyId);
+    {
+        QElapsedTimer auditionTimer;
+        auditionTimer.start();
+        MIACODE_HANG_PHASE(
+            "ExportSection::createEmbeddedVideoExportPanel.installExportPreviewAuditionScene",
+            QStringLiteral("difficulty=%1").arg(resolvedDifficultyId));
+        installExportPreviewAuditionScene(resolvedDifficultyId);
+        appendEmbeddedExportPanelDiag(
+            QStringLiteral("install_export_preview_audition_scene_complete"),
+            auditionTimer.elapsed(),
+            QStringLiteral("difficulty=%1").arg(resolvedDifficultyId),
+            auditionTimer.elapsed() >= 80
+                ? miacode::debug_log::Level::Warn
+                : miacode::debug_log::Level::Info);
+    }
     owner_.tickOutlineBusySpinner();
     // Re-entering the video sub-page while an inline-launched export is still
     // rendering: re-arm the cancel affordance on the fresh panel.
@@ -789,6 +899,17 @@ QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficult
         && owner_.videoExportWorkerProcess_->state() != QProcess::NotRunning) {
         panel->setEmbeddedExportRunning(true);
     }
+    appendEmbeddedExportPanelDiag(
+        totalTimer.elapsed() >= 120
+            ? QStringLiteral("create_embedded_video_panel_slow")
+            : QStringLiteral("create_embedded_video_panel_complete"),
+        totalTimer.elapsed(),
+        QStringLiteral("difficulty=%1 panel=%2")
+            .arg(resolvedDifficultyId)
+            .arg(exportFlowWidgetSummary(panel)),
+        totalTimer.elapsed() >= 120
+            ? miacode::debug_log::Level::Warn
+            : miacode::debug_log::Level::Info);
     return panel;
 }
 

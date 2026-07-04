@@ -197,60 +197,27 @@ QString importHudFontFromUser(QWidget* parent, const std::function<void()>& onFo
 
 }  // namespace
 
-void openHudFontSettingsDialog(QWidget* parent, const std::function<void()>& onFontChanged)
+QWidget* createHudFontSettingsWidget(QWidget* parent, const std::function<void()>& onFontChanged)
 {
-    QDialog dialog(parent);
-    const QString title = uiText("dialog.video_export.option.hud_font_settings", QStringLiteral("Font Settings"));
-    dialog.setWindowTitle(title);
-    dialog.setModal(true);
-    dialog.setWindowFlags((dialog.windowFlags() | Qt::FramelessWindowHint) & ~Qt::WindowContextHelpButtonHint);
-    dialog.setStyleSheet(UiTheme::exportDialogStyleSheet());
+    auto* root = new QWidget(parent);
+    auto* layout = new QVBoxLayout(root);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
 
-    auto* layout = new QVBoxLayout(&dialog);
-    layout->setContentsMargins(12, 12, 12, 12);
-    layout->setSpacing(0);
-
-    auto* panel = new QFrame(&dialog);
-    panel->setObjectName(QStringLiteral("VideoExportPrimaryPanel"));
-    auto* panelLayout = new QVBoxLayout(panel);
-    panelLayout->setContentsMargins(14, 12, 14, 14);
-    panelLayout->setSpacing(10);
-
-    auto* headerRow = new QWidget(panel);
-    auto* headerLayout = new QHBoxLayout(headerRow);
-    headerLayout->setContentsMargins(0, 0, 0, 0);
-    headerLayout->setSpacing(8);
-    auto* titleLabel = new QLabel(title, headerRow);
-    QFont titleFont = titleLabel->font();
-    titleFont.setWeight(QFont::DemiBold);
-    titleLabel->setFont(titleFont);
-    auto* headerCloseButton = new QToolButton(headerRow);
-    headerCloseButton->setText(QStringLiteral("×"));
-    headerCloseButton->setFixedSize(28, 28);
-    headerCloseButton->setAutoRaise(false);
-    headerCloseButton->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet());
-    headerCloseButton->setToolTip(uiText("dialog.video_export.button.close", QStringLiteral("Close")));
-    headerLayout->addWidget(titleLabel, 1);
-    headerLayout->addWidget(headerCloseButton, 0);
-
-    auto* currentLabel = new QLabel(panel);
+    auto* currentLabel = new QLabel(root);
     currentLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    auto* fontCombo = new QComboBox(panel);
+    auto* fontCombo = new QComboBox(root);
     fontCombo->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
-    fontCombo->setMinimumWidth(320);
-    auto* sampleLabel = new QLabel(panel);
-    sampleLabel->setMinimumWidth(320);
+    fontCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* sampleLabel = new QLabel(root);
     sampleLabel->setAlignment(Qt::AlignCenter);
     sampleLabel->setText(QStringLiteral("12:34:567  TAP  HOLD  SLIDE  101.0000%"));
     sampleLabel->setStyleSheet(QStringLiteral(
-        "QLabel { min-height: 48px; padding: 8px 10px; border: 1px solid rgba(128,128,128,80);"
+        "QLabel { min-height: 44px; padding: 8px 10px; border: 1px solid rgba(128,128,128,80);"
         " border-radius: 8px; background: rgba(128,128,128,20); color: palette(text); }"
     ));
 
-    populateHudFontCombo(fontCombo, currentHudFontPath());
-
-    const auto refreshDialogFont = [&](const QString& selectedPath = currentHudFontPath()) {
-        populateHudFontCombo(fontCombo, selectedPath);
+    const auto applyReadout = [currentLabel, sampleLabel]() {
         const QString family = miacode::preview::scene::previewHudFontDisplayName();
         const QString displayName = family == QLatin1String("Default")
             ? uiText("dialog.video_export.option.hud_font_default", QStringLiteral("Default font"))
@@ -260,9 +227,11 @@ void openHudFontSettingsDialog(QWidget* parent, const std::function<void()>& onF
         );
         sampleLabel->setFont(miacode::preview::scene::previewHudTimestampFont(13, QFont::DemiBold));
     };
-    refreshDialogFont();
 
-    auto* buttonRow = new QWidget(panel);
+    populateHudFontCombo(fontCombo, currentHudFontPath());
+    applyReadout();
+
+    auto* buttonRow = new QWidget(root);
     auto* buttonLayout = new QHBoxLayout(buttonRow);
     buttonLayout->setContentsMargins(0, 0, 0, 0);
     buttonLayout->setSpacing(8);
@@ -274,53 +243,38 @@ void openHudFontSettingsDialog(QWidget* parent, const std::function<void()>& onF
         uiText("dialog.video_export.option.reset_hud_font", QStringLiteral("Reset")),
         buttonRow
     );
-    auto* closeButton = new QPushButton(
-        uiText("dialog.video_export.button.close", QStringLiteral("Close")),
-        buttonRow
-    );
     importButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     resetButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    closeButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     buttonLayout->addWidget(importButton, 0);
     buttonLayout->addWidget(resetButton, 0);
     buttonLayout->addStretch(1);
-    buttonLayout->addWidget(closeButton, 0);
 
-    panelLayout->addWidget(headerRow, 0);
-    panelLayout->addWidget(currentLabel, 0);
-    panelLayout->addWidget(fontCombo, 0);
-    panelLayout->addWidget(sampleLabel, 0);
-    panelLayout->addWidget(buttonRow, 0);
-    layout->addWidget(panel, 0);
+    layout->addWidget(currentLabel, 0);
+    layout->addWidget(fontCombo, 0);
+    layout->addWidget(sampleLabel, 0);
+    layout->addWidget(buttonRow, 0);
 
-    QObject::connect(fontCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
+    QObject::connect(fontCombo, qOverload<int>(&QComboBox::currentIndexChanged), root, [fontCombo, applyReadout, onFontChanged](int index) {
         const QString selectedPath = fontCombo->itemData(index).toString();
         miacode::preview::scene::setPreviewHudCustomFontPath(selectedPath);
         notifyFontChanged(onFontChanged);
-        const QString family = miacode::preview::scene::previewHudFontDisplayName();
-        const QString displayName = family == QLatin1String("Default")
-            ? uiText("dialog.video_export.option.hud_font_default", QStringLiteral("Default font"))
-            : family;
-        currentLabel->setText(
-            uiText("dialog.video_export.option.hud_font_current", QStringLiteral("Current font: %1")).arg(displayName)
-        );
-        sampleLabel->setFont(miacode::preview::scene::previewHudTimestampFont(13, QFont::DemiBold));
+        applyReadout();
     });
-    QObject::connect(importButton, &QPushButton::clicked, &dialog, [&]() {
-        const QString importedPath = importHudFontFromUser(&dialog, onFontChanged);
+    QObject::connect(importButton, &QPushButton::clicked, root, [root, fontCombo, applyReadout, onFontChanged]() {
+        const QString importedPath = importHudFontFromUser(root, onFontChanged);
         if (!importedPath.isEmpty()) {
-            refreshDialogFont(importedPath);
+            populateHudFontCombo(fontCombo, importedPath);
+            applyReadout();
         }
     });
-    QObject::connect(resetButton, &QPushButton::clicked, &dialog, [&]() {
+    QObject::connect(resetButton, &QPushButton::clicked, root, [fontCombo, applyReadout, onFontChanged]() {
         miacode::preview::scene::setPreviewHudCustomFontPath(QString());
         notifyFontChanged(onFontChanged);
-        refreshDialogFont(QString());
+        populateHudFontCombo(fontCombo, QString());
+        applyReadout();
     });
-    QObject::connect(closeButton, &QPushButton::clicked, &dialog, &QDialog::accept);
-    QObject::connect(headerCloseButton, &QToolButton::clicked, &dialog, &QDialog::accept);
 
-    dialog.exec();
+    return root;
 }
 
 }  // namespace miacode::video_export

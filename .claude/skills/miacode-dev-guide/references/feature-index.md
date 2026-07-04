@@ -790,12 +790,26 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `buildIntroBannerSpec` in `MainWindow.ExportSnapshot.cpp`) drives the card, and
   `task.noteMarkers`/`skinDirectory`/`outlineImagePath`/render-settings/`contentDurationSeconds`
   feed the chart-frame `SceneFrameRenderer`. Output dir = the chart directory. (The former
-  `VideoExportDialog::openExportCoverDialog` + its Font-tab button are REMOVED; the export
-  dialog's Font tab is back to HUD-font-only. The HUD-font settings dialog itself moved to
-  `tools/video_export/HudFontSettings.{h,cpp}` —
-  `miacode::video_export::openHudFontSettingsDialog(parent, onFontChanged)` — shared by the
-  export dialog's Font tab and a new **"字体" tab in the 视频设置 dialog**
-  (`MainWindow.Dialogs.cpp::onPreviewVideoSettings`).) The **default** (no custom font) HUD
+  `VideoExportDialog::openExportCoverDialog` + its Font-tab button are REMOVED.
+  **皮肤 panel reorg (2026-07-04/05):** skin / judge line / 字体 (embedded HUD-font picker) are
+  now ONE shared owner-wired panel — `DialogsSection::buildSkinSettings(parent, skinOut,
+  includeFolderButtons)` (`MainWindow.Dialogs.ExportSettings.cpp`, alongside
+  `buildExportInjectedSettings`) — reused by BOTH a main-window **皮肤设置 popup** (`onSkinSettings`
+  → `openSkinSettingsDialog`; toolbar button `skinSettingsButton_`/`skinSettingsAction_` sits
+  between 预览设置 and 导出 at the SAME width as the 导出 button, wired in
+  `MainWindow.FrameBootstrapFinalize.cpp`) AND the export dialog's **皮肤 tab** (injected via
+  `VideoExportDialog::injectOwnerWiredSettings(videoExtras, gameplayWidget, skinWidget)`). Intro
+  sound + a 当前谱面资源 readout were part of an earlier draft but were DROPPED (2026-07-05) — the
+  panel is skin / judge line / font only. The HUD-font controls are an EMBEDDABLE widget
+  `miacode::video_export::createHudFontSettingsWidget(parent, onFontChanged)`
+  (`tools/video_export/HudFontSettings.{h,cpp}` — the former modal `openHudFontSettingsDialog` +
+  the export dialog's `hudFontSettingsButton_`/`openHudFontSettingsDialog()`/`refreshLivePreviewHudFont()`
+  are REMOVED). The export dialog's standalone **字体 tab is GONE**; the 视频设置 dialog
+  (`onPreviewVideoSettings` → `openPreviewSettingsDialog`) dropped its skin/judge-line rows + the
+  音乐 + 字体 tabs and now reads **视频 / 游戏 / 性能** (性能 = 预览刷新率). `buildExportInjectedSettings`
+  keeps only 判定效果 / slide 层叠 / 中心显示. ⚠ **W1 note:** the preview-settings
+  `createDialogMenuButton` must keep the `ensurePolished()`+`setFixedHeight(qMax(sizeHint,30)+4)`
+  or its dropdowns clip their bottom border (`qt-ui-layout-pitfalls` W1).) The **default** (no custom font) HUD
   family is **"Xiaolai Mono"** — embedded resource `:/fonts/xiaolai_mono.ttf`
   (`resources/fonts.qrc` → `assets/fonts/XiaolaiMono-Regular.subset.ttf`), loaded in
   `PreviewHudState.cpp::previewHudTimestampFont` (replaced the old JetBrains Mono, 2026-06-19).
@@ -805,7 +819,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   editing it (or `MaimaiBannerCard.qml`) DOES need the AUTORCC repack — delete `build/**/qrc_intro.cpp*`
   / touch `resources/intro.qrc` to force RCC (cf. the over-long-text mirror note above).
 - **Export dialog "片头" tab (2026-06-11):** the 添加片头 checkbox moved from the 视频 tab to a
-  dedicated **片头 tab** (between 游戏 and 字体) carrying the cover-dialog-style controls —
+  dedicated **片头 tab** (tab order: 输出 / 视频 / 游戏 / 皮肤 / 片头 / 导出区间) carrying the cover-dialog-style controls —
   添加片头 as the bold master switch wrapped in a neutral rounded box (`QFrame#AddIntroCapsule` —
   inputBg + border + 8px radius, matching the 游戏 tab dropdown chrome; styled by
   `UiTheme::exportDialogStyleSheet` so it re-themes; 2026-06-19. The old "?" dev-status badge +

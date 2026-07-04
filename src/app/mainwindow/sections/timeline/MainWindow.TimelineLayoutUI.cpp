@@ -16,7 +16,9 @@
 #include "common/ContentDurationConfig.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 #include "common/PreviewInteractionConfig.h"
+#include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
@@ -37,6 +39,52 @@
 #endif
 
 using namespace miacode::mainwindow::shared;
+
+namespace {
+
+constexpr qint64 kPageLayoutStepSlowMs = 50;
+constexpr qint64 kPageLayoutTotalSlowMs = 100;
+
+QString layoutWidgetSummary(QWidget* widget)
+{
+    if (widget == nullptr) {
+        return QStringLiteral("(null)");
+    }
+    return QStringLiteral("class=%1 name=%2 size=%3x%4 visible=%5")
+        .arg(QString::fromUtf8(widget->metaObject()->className()))
+        .arg(widget->objectName().isEmpty() ? QStringLiteral("(empty)") : widget->objectName())
+        .arg(widget->width())
+        .arg(widget->height())
+        .arg(widget->isVisible() ? 1 : 0);
+}
+
+void appendPageLayoutDiag(
+    const QString& action,
+    const QString& step,
+    QWidget* widget,
+    qint64 elapsedMs,
+    miacode::debug_log::Level level = miacode::debug_log::Level::Info,
+    const QString& detail = QString())
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    QString payload = QStringLiteral("action=%1 step=%2 elapsed_ms=%3 widget=\"%4\"")
+        .arg(action, step)
+        .arg(elapsedMs)
+        .arg(layoutWidgetSummary(widget));
+    if (!detail.trimmed().isEmpty()) {
+        payload += QStringLiteral(" %1").arg(detail.trimmed());
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("layout/export_page"),
+        payload,
+        /*force=*/false,
+        level);
+}
+
+}  // namespace
 
 double MainWindow::TimelineSection::previewDurationSeconds() const
 {
@@ -402,13 +450,39 @@ void MainWindow::TimelineSection::applyWorkspacePanelArrangement()
 
 void MainWindow::TimelineSection::refreshLayoutAfterPageSwitch()
 {
+    MC_OP("MainWindow::TimelineSection::refreshLayoutAfterPageSwitch");
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    QWidget* currentPageForDiag = ui_.editorStack_ != nullptr ? ui_.editorStack_->currentWidget() : nullptr;
+    MIACODE_HANG_PHASE(
+        "TimelineSection::refreshLayoutAfterPageSwitch",
+        QStringLiteral("current_page=%1").arg(layoutWidgetSummary(currentPageForDiag)));
     if (ui_.previewLeftColumn_ != nullptr) {
+        QElapsedTimer stepTimer;
+        stepTimer.start();
+        MIACODE_HANG_PHASE(
+            "TimelineSection::refreshLayoutAfterPageSwitch.previewLeftColumn",
+            layoutWidgetSummary(ui_.previewLeftColumn_));
         ui_.previewLeftColumn_->updateGeometry();
         if (QLayout* layout = ui_.previewLeftColumn_->layout(); layout != nullptr) {
             layout->activate();
         }
+        const qint64 elapsedMs = stepTimer.elapsed();
+        if (elapsedMs >= kPageLayoutStepSlowMs) {
+            appendPageLayoutDiag(
+                QStringLiteral("refresh_layout_step_slow"),
+                QStringLiteral("preview_left_column"),
+                ui_.previewLeftColumn_,
+                elapsedMs,
+                miacode::debug_log::Level::Warn);
+        }
     }
     if (ui_.editorStack_ != nullptr) {
+        QElapsedTimer stackTimer;
+        stackTimer.start();
+        MIACODE_HANG_PHASE(
+            "TimelineSection::refreshLayoutAfterPageSwitch.editorStack",
+            layoutWidgetSummary(ui_.editorStack_));
         ui_.editorStack_->updateGeometry();
         // updateGeometry() alone only marks the stack's size hint dirty — it does
         // NOT re-lay-out the current page. The export page inserts a heavy embedded
@@ -419,20 +493,58 @@ void MainWindow::TimelineSection::refreshLayoutAfterPageSwitch()
         // full geometry pass that cascades into the panel's own nested layout.
         if (QWidget* currentPage = ui_.editorStack_->currentWidget(); currentPage != nullptr) {
             if (QLayout* pageLayout = currentPage->layout(); pageLayout != nullptr) {
+                QElapsedTimer pageTimer;
+                pageTimer.start();
+                MIACODE_HANG_PHASE(
+                    "TimelineSection::refreshLayoutAfterPageSwitch.currentPage.activate",
+                    layoutWidgetSummary(currentPage));
                 pageLayout->invalidate();
                 pageLayout->activate();
+                const qint64 elapsedMs = pageTimer.elapsed();
+                if (elapsedMs >= kPageLayoutStepSlowMs) {
+                    appendPageLayoutDiag(
+                        QStringLiteral("refresh_layout_step_slow"),
+                        QStringLiteral("current_page_layout_activate"),
+                        currentPage,
+                        elapsedMs,
+                        miacode::debug_log::Level::Warn);
+                }
             }
             currentPage->updateGeometry();
             currentPage->update();
+        }
+        const qint64 elapsedMs = stackTimer.elapsed();
+        if (elapsedMs >= kPageLayoutStepSlowMs) {
+            appendPageLayoutDiag(
+                QStringLiteral("refresh_layout_step_slow"),
+                QStringLiteral("editor_stack"),
+                ui_.editorStack_,
+                elapsedMs,
+                miacode::debug_log::Level::Warn,
+                QStringLiteral("current_page=\"%1\"").arg(layoutWidgetSummary(ui_.editorStack_->currentWidget())));
         }
     }
     if (ui_.bottomTabs_ != nullptr) {
         ui_.bottomTabs_->updateGeometry();
     }
     if (ui_.workspaceSplitter_ != nullptr) {
+        QElapsedTimer stepTimer;
+        stepTimer.start();
+        MIACODE_HANG_PHASE(
+            "TimelineSection::refreshLayoutAfterPageSwitch.workspaceSplitter",
+            layoutWidgetSummary(ui_.workspaceSplitter_));
         ui_.workspaceSplitter_->updateGeometry();
         if (QLayout* layout = ui_.workspaceSplitter_->layout(); layout != nullptr) {
             layout->activate();
+        }
+        const qint64 elapsedMs = stepTimer.elapsed();
+        if (elapsedMs >= kPageLayoutStepSlowMs) {
+            appendPageLayoutDiag(
+                QStringLiteral("refresh_layout_step_slow"),
+                QStringLiteral("workspace_splitter"),
+                ui_.workspaceSplitter_,
+                elapsedMs,
+                miacode::debug_log::Level::Warn);
         }
     }
     owner_.refreshQuickShellRehostedWidgetParent(ui_.outlineDock_);
@@ -444,6 +556,15 @@ void MainWindow::TimelineSection::refreshLayoutAfterPageSwitch()
     if (ui_.timelineView_ != nullptr) {
         ui_.timelineView_->updateGeometry();
         ui_.timelineView_->viewport()->update();
+    }
+    const qint64 totalMs = totalTimer.elapsed();
+    if (totalMs >= kPageLayoutTotalSlowMs) {
+        appendPageLayoutDiag(
+            QStringLiteral("refresh_layout_total_slow"),
+            QStringLiteral("total"),
+            currentPageForDiag,
+            totalMs,
+            miacode::debug_log::Level::Warn);
     }
 }
 

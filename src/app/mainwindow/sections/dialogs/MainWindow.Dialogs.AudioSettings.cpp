@@ -328,6 +328,12 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         button->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
         button->setText(text);
+        // W1 (qt-ui-layout-pitfalls): QSizePolicy::Fixed pins height to the QSS
+        // sizeHint, which under-reports the rounded border by 1–2px → clipped
+        // bottom edge. Pin an explicit height a few px taller (matches the
+        // skin/export builders' createDialogMenuButton).
+        button->ensurePolished();
+        button->setFixedHeight(qMax(button->sizeHint().height(), 30) + 4);
         return button;
     };
     const auto flowSpeedValueLabel = [](double flowSpeed) {
@@ -525,13 +531,11 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     gameplayLayout->setVerticalSpacing(8);
     gameplayLayout->setColumnStretch(0, 1);
     gameplayLayout->setColumnStretch(1, 1);
-    auto* musicGroup = new QGroupBox(uiText("dialog.render_settings.music_group", "Music"), &dialog);
-    auto* musicLayout = new QGridLayout(musicGroup);
-    musicLayout->setContentsMargins(10, 8, 10, 8);
-    musicLayout->setHorizontalSpacing(10);
-    musicLayout->setVerticalSpacing(8);
-    musicLayout->setColumnStretch(0, 1);
-    musicLayout->setColumnStretch(1, 1);
+    auto* performanceGroup = new QGroupBox(uiText("dialog.render_settings.performance_group", "Performance"), &dialog);
+    auto* performanceFormLayout = new QFormLayout(performanceGroup);
+    performanceFormLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    performanceFormLayout->setHorizontalSpacing(10);
+    performanceFormLayout->setVerticalSpacing(8);
 
     QSlider* outerBrightnessSlider = nullptr;
     QLabel* outerBrightnessLabel = nullptr;
@@ -674,7 +678,8 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         }
     }
     auto* canvasFrameRateButton = createDialogMenuButton(videoGroup, selectedCanvasFrameRateLabel);
-    canvasFrameRateButton->setFixedHeight(tapFlowSpeedEdit->sizeHint().height());
+    // Keep the W1 fixed height from createDialogMenuButton (was matched to the
+    // flow-speed edit, but that now lives on a different tab).
     canvasFrameRateButton->setStyleSheet(
         UiTheme::dialogMenuButtonStyleSheet()
         + QStringLiteral("QToolButton { text-align: center; padding: 2px 22px 2px 10px; }")
@@ -695,7 +700,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     const QString scaleSquareFitLabel = uiText(
         "dialog.render_settings.video.scale.square_fit",
         "1:1 Fit (center square)");
-    const QString importSkinLabel = uiText("dialog.render_settings.video.skin.import", "Import...");
     const QString slideStackOrderDxLabel = uiText(
         "dialog.render_settings.gameplay.slide_stack_order.dx_style",
         "DX Style"
@@ -707,37 +711,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     const auto slideStackOrderLabelForValue = [slideStackOrderDxLabel, slideStackOrderFinaleLabel](bool earlierOnTop) {
         return earlierOnTop ? slideStackOrderDxLabel : slideStackOrderFinaleLabel;
     };
-    const QString currentSkinButtonLabel = owner_.previewSkinDisplayName(owner_.previewSkinDirectoryName_);
-    auto* skinButton = createDialogMenuButton(
-        gameplayGroup,
-        currentSkinButtonLabel
-    );
-    skinButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* skinPopup = new DialogListPopup(skinButton);
-    for (const QString& skinDirectoryName : owner_.availablePreviewSkinDirectoryNames()) {
-        const QString skinLabel = owner_.previewSkinDisplayName(skinDirectoryName);
-        skinPopup->addChoice(skinLabel, [this, skinButton, skinDirectoryName, skinLabel]() {
-            owner_.previewSkinDirectoryName_ = skinDirectoryName;
-            owner_.previewSkinVariant_ =
-                skinDirectoryName.compare(QStringLiteral("skinDX"), Qt::CaseInsensitive) == 0
-                    ? PreviewSkinVariant::Dx
-                    : PreviewSkinVariant::Standard;
-            skinButton->setText(skinLabel);
-            owner_.applyPreviewSkinDirectoryToSurfaces();
-            owner_.savePortableState();
-        });
-    }
-    if (skinPopup->hasItems()) {
-        skinPopup->addSeparator();
-    }
-    skinPopup->addChoice(importSkinLabel, [this]() {
-        const QString skinRoot = owner_.resolvePreviewSkinRootDir();
-        if (!skinRoot.isEmpty()) {
-            QDir().mkpath(skinRoot);
-            QDesktopServices::openUrl(QUrl::fromLocalFile(skinRoot));
-        }
-    });
-    attachDialogListPopup(skinButton, skinPopup);
+    // 皮肤 / 判定线 moved to the shared 皮肤 popup (buildSkinSettings).
     const QString disabledLabel = uiText("dialog.render_settings.option.disabled", "Disabled");
     const QString slideJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.slide", "slide");
     const QString tapJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.tap", "tap");
@@ -801,78 +775,8 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     addJudgeEffectChoice(tapJudgeChoiceLabel, &MuriRenderOptions::showChartReviewTapJudgeOverlay);
     addJudgeEffectChoice(touchJudgeChoiceLabel, &MuriRenderOptions::showChartReviewTouchJudgeOverlay);
     attachDialogListPopup(judgeEffectButton, judgeEffectPopup);
-    const QString judgeLinePointLabel = uiText("dialog.render_settings.gameplay.judge_line.point", "Point");
-    const QString judgeLineLineLabel = uiText("dialog.render_settings.gameplay.judge_line.line", "Line");
-    const QString judgeLineAreaLabel = uiText("dialog.render_settings.gameplay.judge_line.area", "Judge Area");
-    const QString judgeLineAreaLabeledLabel = uiText(
-        "dialog.render_settings.gameplay.judge_line.area_labeled",
-        "Judge Area (Labeled)"
-    );
-    const QString judgeLineImportLabel = uiText("dialog.render_settings.gameplay.judge_line.import", "Import...");
-    const auto judgeLineLabelForVariant = [
-        judgeLinePointLabel,
-        judgeLineLineLabel,
-        judgeLineAreaLabel,
-        judgeLineAreaLabeledLabel
-    ](PreviewOutlineVariant variant) {
-        switch (variant) {
-        case PreviewOutlineVariant::Point:
-            return judgeLinePointLabel;
-        case PreviewOutlineVariant::JudgeArea:
-            return judgeLineAreaLabel;
-        case PreviewOutlineVariant::JudgeAreaLabeled:
-            return judgeLineAreaLabeledLabel;
-        case PreviewOutlineVariant::Line:
-        default:
-            return judgeLineLineLabel;
-        }
-    };
-    const auto judgeLineButtonLabel = [&]() {
-        return owner_.previewCustomOutlineFileName_.isEmpty()
-            ? judgeLineLabelForVariant(owner_.previewOutlineVariant_)
-            : owner_.previewCustomOutlineFileName_;
-    };
-    auto* judgeLineButton = createDialogMenuButton(gameplayGroup, judgeLineButtonLabel());
-    judgeLineButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* judgeLinePopup = new DialogListPopup(judgeLineButton);
-    judgeLinePopup->addChoice(judgeLinePointLabel, [this, judgeLineButton, judgeLineLabelForVariant]() {
-        owner_.applyPreviewOutlineVariant(PreviewOutlineVariant::Point, false, true);
-        judgeLineButton->setText(judgeLineLabelForVariant(owner_.previewOutlineVariant_));
-    });
-    judgeLinePopup->addChoice(judgeLineLineLabel, [this, judgeLineButton, judgeLineLabelForVariant]() {
-        owner_.applyPreviewOutlineVariant(PreviewOutlineVariant::Line, false, true);
-        judgeLineButton->setText(judgeLineLabelForVariant(owner_.previewOutlineVariant_));
-    });
-    judgeLinePopup->addChoice(judgeLineAreaLabel, [this, judgeLineButton, judgeLineLabelForVariant]() {
-        owner_.applyPreviewOutlineVariant(PreviewOutlineVariant::JudgeArea, false, true);
-        judgeLineButton->setText(judgeLineLabelForVariant(owner_.previewOutlineVariant_));
-    });
-    judgeLinePopup->addChoice(
-        judgeLineAreaLabeledLabel,
-        [this, judgeLineButton, judgeLineLabelForVariant]() {
-            owner_.applyPreviewOutlineVariant(PreviewOutlineVariant::JudgeAreaLabeled, false, true);
-            judgeLineButton->setText(judgeLineLabelForVariant(owner_.previewOutlineVariant_));
-        }
-    );
-    const QStringList customOutlineNames = owner_.availablePreviewCustomOutlineFileNames();
-    if (!customOutlineNames.isEmpty()) {
-        judgeLinePopup->addSeparator();
-    }
-    for (const QString& fileName : customOutlineNames) {
-        judgeLinePopup->addChoice(fileName, [this, judgeLineButton, fileName]() {
-            owner_.applyPreviewCustomOutlineFileName(fileName, true);
-            judgeLineButton->setText(fileName);
-        });
-    }
-    judgeLinePopup->addSeparator();
-    judgeLinePopup->addChoice(judgeLineImportLabel, [this]() {
-        const QString outlineDir = owner_.resolvePreviewCustomOutlineDir();
-        if (!outlineDir.isEmpty()) {
-            QDir().mkpath(outlineDir);
-            QDesktopServices::openUrl(QUrl::fromLocalFile(outlineDir));
-        }
-    });
-    attachDialogListPopup(judgeLineButton, judgeLinePopup);
+    // 判定线 (outline variant) moved to the shared 皮肤 popup (buildSkinSettings).
+    // The "暂停时显示判定区" toggle stays here — it is a video-side option.
     auto* forceLabeledJudgeLineWhenPausedCheck = new QCheckBox(
         uiText(
             "dialog.render_settings.gameplay.force_labeled_judge_line_when_paused",
@@ -967,7 +871,8 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Inner Brightness"), innerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Stage Display Scale"), layoutSquareScaleRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"), scaleModeButton);
-    videoFormLayout->addRow(
+    // 预览刷新率 lives on the 性能 tab now.
+    performanceFormLayout->addRow(
         uiText("dialog.render_settings.preview.canvas_frame_rate", "Preview Refresh Rate"),
         canvasFrameRateButton
     );
@@ -1023,23 +928,11 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     addGameplayField(
         1,
         0,
-        uiText("dialog.render_settings.video.skin", "Skin"),
-        skinButton
-    );
-    addGameplayField(
-        1,
-        1,
-        uiText("dialog.render_settings.gameplay.judge_line", "Judge Line"),
-        judgeLineButton
-    );
-    addGameplayField(
-        2,
-        0,
         uiText("dialog.render_settings.gameplay.judge_effect", "Judge Effect Display"),
         judgeEffectButton
     );
     addGameplayField(
-        2,
+        1,
         1,
         uiText("dialog.render_settings.gameplay.slide_stack_order", "Slide Stack Order"),
         slideStackOrderButton
@@ -1111,120 +1004,17 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     });
     attachDialogListPopup(centerDisplayButton, centerDisplayPopup);
     addGameplayField(
-        3,
+        2,
         0,
         uiText("dialog.render_settings.gameplay.center_display", "Center Display"),
         centerDisplayButton
     );
-    const auto availableIntroSoundFileNames = []() {
-        const QString musicDir = miacode::preview_sfx::assetMusicDirectory();
-        if (musicDir.isEmpty()) {
-            return QStringList();
-        }
-        const QFileInfoList entries = QDir(musicDir).entryInfoList(
-            miacode::preview_sfx::supportedIntroSoundFileExtensions(),
-            QDir::Files,
-            QDir::Name | QDir::IgnoreCase);
-        QStringList names;
-        for (const QFileInfo& entry : entries) {
-            names.append(entry.fileName());
-        }
-        names.removeDuplicates();
-        return names;
-    };
-    const auto introSoundButtonLabel = [this]() {
-        const QString selected = owner_.previewIntroSoundFileName_.trimmed();
-        if (!selected.isEmpty()) {
-            return selected;
-        }
-        const QString legacyPath = miacode::preview_sfx::introTrackStartFilePath();
-        if (!legacyPath.isEmpty()) {
-            return QFileInfo(legacyPath).fileName();
-        }
-        return uiText("dialog.render_settings.music.default_intro_sound", "Default Intro Sound");
-    };
-    auto* introSoundButton = createDialogMenuButton(musicGroup, introSoundButtonLabel());
-    introSoundButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* introSoundPopup = new DialogListPopup(introSoundButton);
-    const auto applyIntroSoundFile = [this, introSoundButton, introSoundButtonLabel](const QString& fileName) {
-        owner_.previewIntroSoundFileName_ = miacode::preview_sfx::normalizeIntroSoundFileName(fileName);
-        miacode::preview_sfx::setSelectedIntroSoundFileName(owner_.previewIntroSoundFileName_);
-        introSoundButton->setText(introSoundButtonLabel());
-        if (owner_.previewSfxRuntime_ != nullptr && owner_.previewSfxRuntime_->audioEngineInitialized()) {
-            owner_.previewSfxRuntime_->reloadAssets(owner_.previewAudioSettings_);
-        }
-        owner_.savePortableState();
-    };
-    introSoundPopup->addChoice(
-        uiText("dialog.render_settings.music.default_intro_sound", "Default Intro Sound"),
-        [applyIntroSoundFile]() {
-            applyIntroSoundFile(QString());
-        });
-    const QStringList introSoundFiles = availableIntroSoundFileNames();
-    if (!introSoundFiles.isEmpty()) {
-        introSoundPopup->addSeparator();
-    }
-    for (const QString& fileName : introSoundFiles) {
-        introSoundPopup->addChoice(fileName, [applyIntroSoundFile, fileName]() {
-            applyIntroSoundFile(fileName);
-        });
-    }
-    attachDialogListPopup(introSoundButton, introSoundPopup);
-    addSettingsField(
-        musicGroup,
-        musicLayout,
-        0,
-        0,
-        uiText("dialog.render_settings.music.intro_sound", "Intro Sound"),
-        introSoundButton);
-
-    auto* introSoundActions = new QWidget(musicGroup);
-    auto* introSoundActionsLayout = new QHBoxLayout(introSoundActions);
-    introSoundActionsLayout->setContentsMargins(0, 0, 0, 0);
-    introSoundActionsLayout->setSpacing(8);
-    auto* auditionIntroSoundButton = new QPushButton(
-        uiText("dialog.render_settings.music.audition", "Audition"),
-        introSoundActions);
-    auditionIntroSoundButton->setCursor(Qt::PointingHandCursor);
-    auditionIntroSoundButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    auto* openIntroSoundFolderButton = new QPushButton(
-        uiText("dialog.render_settings.music.open_folder", "Open Folder"),
-        introSoundActions);
-    openIntroSoundFolderButton->setCursor(Qt::PointingHandCursor);
-    openIntroSoundFolderButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    openIntroSoundFolderButton->setToolTip(uiText(
-        "dialog.render_settings.music.open_folder.tooltip",
-        "Put intro sound files here. Missing files fall back to assets/music/track_start.wav, then assets/SFX/track_start.wav."));
-    introSoundActionsLayout->addWidget(auditionIntroSoundButton, 1);
-    introSoundActionsLayout->addWidget(openIntroSoundFolderButton, 1);
-    addSettingsField(
-        musicGroup,
-        musicLayout,
-        0,
-        1,
-        QString(),
-        introSoundActions);
-    musicLayout->setRowStretch(1, 1);
-    connect(auditionIntroSoundButton, &QPushButton::clicked, &dialog, [this]() {
-        miacode::preview_sfx::setSelectedIntroSoundFileName(owner_.previewIntroSoundFileName_);
-        owner_.ensurePreviewSfxRuntimePrepared();
-        if (owner_.previewSfxRuntime_ != nullptr) {
-            owner_.previewSfxRuntime_->reloadAssets(owner_.previewAudioSettings_);
-            owner_.previewSfxRuntime_->stopAll();
-            owner_.previewSfxRuntime_->audition(QStringLiteral("track_start"), 1.0);
-        }
-    });
-    connect(openIntroSoundFolderButton, &QPushButton::clicked, &dialog, []() {
-        const QString musicDir = miacode::preview_sfx::assetMusicDirectory();
-        if (!musicDir.isEmpty()) {
-            QDir().mkpath(musicDir);
-            QDesktopServices::openUrl(QUrl::fromLocalFile(musicDir));
-        }
-    });
+    // Intro sound is no longer hosted by this preview-settings dialog; the
+    // shared skin panel stays focused on skin / judge line / HUD font.
     audioGroup->setVisible(includeAudioSettings);
     videoGroup->setVisible(includeVideoSettings);
     gameplayGroup->setVisible(includeVideoSettings);
-    musicGroup->setVisible(includeVideoSettings);
+    performanceGroup->setVisible(includeVideoSettings);
 
     if (includeAudioSettings) {
         rootLayout->addWidget(audioGroup, 0);
@@ -1251,7 +1041,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         };
         flattenGroup(videoGroup);
         flattenGroup(gameplayGroup);
-        flattenGroup(musicGroup);
+        flattenGroup(performanceGroup);
         auto* videoSettingsTabs = new QTabWidget(&dialog);
         videoSettingsTabs->setObjectName(QStringLiteral("RenderSettingsTabs"));
         // Drive the dialog width from HERE, not from dialog.setMinimumWidth():
@@ -1271,34 +1061,10 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             uiText("dialog.render_settings.video_group", "Video"));
         videoSettingsTabs->addTab(gameplayGroup,
             uiText("dialog.render_settings.gameplay_group", "Gameplay"));
-        videoSettingsTabs->addTab(musicGroup,
-            uiText("dialog.render_settings.music_group", "Music"));
-        // Font tab — the same HUD-font page the video-export dialog hosts (shared
-        // dialog in tools/video_export/HudFontSettings.cpp). Top-aligned content
-        // with a trailing stretch; the smallest page, so it adds no pane height.
-        {
-            auto* fontGroup = new QGroupBox(&dialog);
-            auto* fontLayout = new QVBoxLayout(fontGroup);
-            fontLayout->setContentsMargins(12, 10, 12, 10);
-            fontLayout->setSpacing(8);
-            auto* hudFontLabel = new QLabel(
-                uiText("dialog.video_export.option.hud_font", "HUD font"), fontGroup);
-            auto* hudFontSettingsButton = new QPushButton(
-                uiText("dialog.video_export.option.hud_font_settings", "Font Settings"), fontGroup);
-            hudFontSettingsButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-            fontLayout->addWidget(hudFontLabel, 0, Qt::AlignLeft);
-            fontLayout->addWidget(hudFontSettingsButton, 0, Qt::AlignLeft);
-            fontLayout->addStretch(1);
-            connect(hudFontSettingsButton, &QPushButton::clicked, &dialog, [&dialog]() {
-                // No live-refresh callback: the editor preview HUD re-reads the
-                // global font on its next repaint (scrub/play), which is enough
-                // outside the export dialog's frozen-frame preview.
-                miacode::video_export::openHudFontSettingsDialog(&dialog);
-            });
-            flattenGroup(fontGroup);
-            videoSettingsTabs->addTab(fontGroup,
-                uiText("dialog.video_export.section.font", "Font"));
-        }
+        // 皮肤 / 判定线 / HUD 字体 / 片头音效 moved to the shared 皮肤 popup; the
+        // former 音乐 / 字体 tabs are gone. 预览刷新率 lives on the 性能 tab.
+        videoSettingsTabs->addTab(performanceGroup,
+            uiText("dialog.render_settings.performance_group", "Performance"));
         rootLayout->addWidget(videoSettingsTabs, 0);
     }
     auto* buttonBox = new QDialogButtonBox(&dialog);
