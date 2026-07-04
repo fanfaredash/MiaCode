@@ -90,6 +90,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/quick_shell/QuickShellContracts.h
     src/app/quick_shell/QuickShellNativeSurfaceHost.h
     src/app/quick_shell/QuickShellNativeSurfaceHost.cpp
+    src/app/quick_shell/QuickShellMacSurfaceSupport.h
     src/app/quick_shell/QuickShellPreviewCompositeSurface.h
     src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp
     src/app/quick_shell/QuickShellPreviewSurfacePolicy.h
@@ -702,6 +703,16 @@ if (WIN32)
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassopus.dll"
             $<TARGET_FILE_DIR:MiaCode>
     )
+endif()
+
+if (APPLE)
+    # macOS-only Objective-C++ helper that hides the orphan Qt::Tool NSPanel left
+    # behind by each QuickShell bridge surface once its content view is adopted by
+    # the QML WindowContainer (otherwise it floats over the UI as a white block).
+    target_sources(MiaCode PRIVATE
+        src/app/quick_shell/QuickShellMacSurfaceSupport.mm
+    )
+    target_link_libraries(MiaCode PRIVATE "-framework AppKit")
 endif()
 
 target_link_libraries(MiaCode PRIVATE Qt6::Multimedia)
