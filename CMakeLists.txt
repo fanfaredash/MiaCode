@@ -60,6 +60,16 @@ configure_file(
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network OpenGL Multimedia Quick Qml QuickControls2 ShaderTools Svg)
 
+if (APPLE AND TARGET WrapOpenGL::WrapOpenGL)
+    find_library(MIACODE_AGL_FRAMEWORK NAMES AGL)
+    if (NOT MIACODE_AGL_FRAMEWORK)
+        # Xcode 27 SDK no longer ships AGL.framework, but Qt 6.8's
+        # WrapOpenGL helper still injects -framework AGL on macOS.
+        # QtGui already links AppKit/OpenGL, so drop the stale AGL edge.
+        set_property(TARGET WrapOpenGL::WrapOpenGL PROPERTY INTERFACE_LINK_LIBRARIES "")
+    endif()
+endif()
+
 # MultimediaQuickPrivate exposes the private QtMultimedia headers
 # (qhwvideobuffer_p.h / qvideotexturehelper_p.h) that QtAVPlayer's
 # QAVVideoFrame -> QVideoFrame bridge needs. Optional: only the Windows
@@ -459,33 +469,9 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/sources/timeline/TimelineLabelCache.cpp
     src/sources/timeline/TimelineSpriteAssetCache.h
     src/sources/timeline/TimelineSpriteAssetCache.cpp
-    src/render/backend_d3d11/PreviewDCompCore.h
-    src/render/backend_d3d11/PreviewDCompCore.cpp
-    src/render/backend_d3d11/TimelineRenderView.h
-    src/render/backend_d3d11/TimelineRenderView.cpp
-    src/render/backend_d3d11/PreviewDCompFrameStateSnapshot.h
-    src/render/PreviewDCompRenderer.h
-    src/render/PreviewDCompRenderer.cpp
-    src/render/backend_d3d11/PreviewDCompSpritePipeline.h
-    src/render/backend_d3d11/PreviewDCompSpritePipeline.cpp
-    src/render/backend_d3d11/PreviewDCompTextureCache.h
-    src/render/backend_d3d11/PreviewDCompTextureCache.cpp
-    src/render/backend_d3d11/PreviewDCompSurface.h
-    src/render/backend_d3d11/PreviewDCompSurface.cpp
-    src/render/backend_d3d11/PreviewPopupHwndTracker.h
-    src/render/backend_d3d11/PreviewPopupHwndTracker.cpp
-    src/render/backend_d3d11/OwnerHwndTracker.h
-    src/render/backend_d3d11/OwnerHwndTracker.cpp
     src/audio/PreviewAudioBackend.h
     src/audio/PreviewAudioSettings.h
     src/audio/PreviewAudioSettings.cpp
-    src/audio/BassPreviewAudioBackend.h
-    src/audio/BassPreviewAudioBackend.cpp
-    src/audio/BassPreviewAudioBackend_EngineInit.cpp
-    src/audio/BassPreviewAudioBackend_Assets.cpp
-    src/audio/BassPreviewAudioBackend_Transport.cpp
-    src/audio/BassPreviewAudioBackend_PlaybackClock.cpp
-    src/audio/BassPreviewAudioBackend_EventDrain.cpp
     src/audio/MiniaudioPreviewAudioBackend.h
     src/audio/MiniaudioPreviewAudioBackend.cpp
     src/audio/QtPreviewSfxRuntime.h
@@ -567,6 +553,7 @@ qt_add_shaders(MiaCode "intro_shaders"
 )
 set_target_properties(MiaCode PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "MiaCode"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "app.miacodemac.kaedekr"
 )
 
 if (WIN32 AND EXISTS "${MIACODE_APP_ICON}")
@@ -665,11 +652,37 @@ target_sources(MiaCode PRIVATE
     src/tools/video_export/VideoExportAudioBackend.h
     src/tools/video_export/LegacyExportAudioBackend.h
     src/tools/video_export/LegacyExportAudioBackend.cpp
-    src/tools/video_export/BassExportAudioBackend.h
-    src/tools/video_export/BassExportAudioBackend.cpp
 )
 
 if (WIN32)
+    target_sources(MiaCode PRIVATE
+        src/audio/BassPreviewAudioBackend.h
+        src/audio/BassPreviewAudioBackend.cpp
+        src/audio/BassPreviewAudioBackend_EngineInit.cpp
+        src/audio/BassPreviewAudioBackend_Assets.cpp
+        src/audio/BassPreviewAudioBackend_Transport.cpp
+        src/audio/BassPreviewAudioBackend_PlaybackClock.cpp
+        src/audio/BassPreviewAudioBackend_EventDrain.cpp
+        src/tools/video_export/BassExportAudioBackend.h
+        src/tools/video_export/BassExportAudioBackend.cpp
+        src/render/backend_d3d11/PreviewDCompCore.h
+        src/render/backend_d3d11/PreviewDCompCore.cpp
+        src/render/backend_d3d11/TimelineRenderView.h
+        src/render/backend_d3d11/TimelineRenderView.cpp
+        src/render/backend_d3d11/PreviewDCompFrameStateSnapshot.h
+        src/render/PreviewDCompRenderer.h
+        src/render/PreviewDCompRenderer.cpp
+        src/render/backend_d3d11/PreviewDCompSpritePipeline.h
+        src/render/backend_d3d11/PreviewDCompSpritePipeline.cpp
+        src/render/backend_d3d11/PreviewDCompTextureCache.h
+        src/render/backend_d3d11/PreviewDCompTextureCache.cpp
+        src/render/backend_d3d11/PreviewDCompSurface.h
+        src/render/backend_d3d11/PreviewDCompSurface.cpp
+        src/render/backend_d3d11/PreviewPopupHwndTracker.h
+        src/render/backend_d3d11/PreviewPopupHwndTracker.cpp
+        src/render/backend_d3d11/OwnerHwndTracker.h
+        src/render/backend_d3d11/OwnerHwndTracker.cpp
+    )
     target_link_libraries(MiaCode PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"

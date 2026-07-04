@@ -260,7 +260,7 @@ else
 EOF
 fi
 
-macdeployqt "$DIST_DIR/MiaCode.app" -always-overwrite
+macdeployqt "$DIST_DIR/MiaCode.app" -qmldir="$ROOT_DIR/src" -always-overwrite
 
 # macdeployqt may rewrite Qt binaries and invalidate bundled signatures.
 # Re-sign the packaged app (ad-hoc by default) so macOS won't kill it at launch.

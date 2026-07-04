@@ -1,9 +1,13 @@
 build/
 build-mingw*/
 Build-Mingw*/
+build610/
 dist/
 font_candidates/
 .qt/
+.qt610/
+.agents/
+.DS_Store
 .vs/
 .idea/
 .vscode/

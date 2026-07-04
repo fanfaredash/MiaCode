@@ -18,9 +18,11 @@ class QuickShellController;
 class QuickShellNativeSurfaceHost;
 class QuickShellStyleBridge;
 
+#ifdef Q_OS_WIN
 namespace miacode::preview::dcomp {
 class PreviewDCompSurface;
 }
+#endif
 
 class QuickShellBootstrap : public QObject
 {
@@ -68,8 +70,8 @@ private:
     std::unique_ptr<QuickShellController> controller_;
     std::unique_ptr<QuickShellStyleBridge> styleBridge_;
     std::unique_ptr<QQmlApplicationEngine> engine_;
-    std::unique_ptr<miacode::preview::dcomp::PreviewDCompSurface> previewDCompSurface_;
 #ifdef Q_OS_WIN
+    std::unique_ptr<miacode::preview::dcomp::PreviewDCompSurface> previewDCompSurface_;
     std::unique_ptr<QAbstractNativeEventFilter> nativeCloseEventFilter_;
     quintptr rootWindowNativeHwnd_ = 0;
 #endif

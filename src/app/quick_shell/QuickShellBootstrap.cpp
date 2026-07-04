@@ -11,8 +11,10 @@
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
 #include "mainwindow/MainWindow.h"
+#ifdef Q_OS_WIN
 #include "render/backend_d3d11/PreviewDCompSurface.h"
 #include "render/backend_d3d11/PreviewPopupHwndTracker.h"
+#endif
 // Phase 4c — needed for the host pointer type in the bootstrap
 // wiring lambda; the lambda passes it straight to setStageMediaHost.
 #include "preview/runtime/PreviewStageMediaHost.h"
@@ -503,6 +505,7 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
 
 bool QuickShellBootstrap::createInProcessPreviewSurface(QQuickWindow* window, const QString& reason)
 {
+#ifdef Q_OS_WIN
     MC_OP("QuickShellBootstrap::createInProcessPreviewSurface");
     _mc_op_.note(QStringLiteral("reason=%1").arg(reason));
     if (window == nullptr) {
@@ -608,6 +611,11 @@ bool QuickShellBootstrap::createInProcessPreviewSurface(QQuickWindow* window, co
         QStringLiteral("dcomp_surface_attached"),
         QStringLiteral("phase=3.2 reason=%1").arg(reason));
     return true;
+#else
+    Q_UNUSED(window);
+    Q_UNUSED(reason);
+    return false;
+#endif
 }
 
 bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
@@ -1183,8 +1191,10 @@ void QuickShellBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QStrin
     // sequence it before MainWindow goes away. Mirror of the same
     // ordering discipline applied for the timeline render view in
     // commits 8ec8c18 / 55107cf / 7ebab94.
+#ifdef Q_OS_WIN
     logResetTiming(QStringLiteral("accepted_close_destroy_preview_dcomp_surface"),
                    previewDCompSurface_);
+#endif
     logResetTiming(QStringLiteral("accepted_close_destroy_engine"), engine_);
     rootWindow_ = nullptr;
 #ifdef Q_OS_WIN
