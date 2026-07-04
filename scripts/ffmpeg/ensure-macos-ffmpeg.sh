@@ -4,9 +4,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FFMPEG_DIR="${MIACODE_MACOS_FFMPEG_DIR:-$ROOT_DIR/third_party/ffmpeg/macos}"
 FFMPEG_PATH="$FFMPEG_DIR/ffmpeg"
-FFMPEG_URL="${MIACODE_MACOS_FFMPEG_URL:-https://evermeet.cx/ffmpeg/ffmpeg-7.1.zip}"
-EXPECTED_SHA256="${MIACODE_MACOS_FFMPEG_SHA256:-31B54CE40088787BC967D9938863A28A6BED0FDF54C42F51F04E1E178B35D536}"
-EXPECTED_VERSION_PATTERN="${MIACODE_MACOS_FFMPEG_VERSION_PATTERN:-^ffmpeg version 7\\.1([.-]|$)}"
+# Pinned to the arm64 (Apple Silicon) static ffmpeg 8.1.1 build from
+# https://www.martin-riedl.de that is committed at third_party/ffmpeg/macos/.
+# It ships h264_videotoolbox/hevc_videotoolbox, which the export encoder
+# selection relies on (VideoExportEncoder.cpp). There is no stable pinned
+# download URL for that build, so when the committed binary is missing pass
+# MIACODE_MACOS_FFMPEG_URL explicitly (and update the SHA/version pins together
+# if you bump the build). Do NOT point this back at evermeet.cx — those are
+# x86_64 builds.
+FFMPEG_URL="${MIACODE_MACOS_FFMPEG_URL:-}"
+EXPECTED_SHA256="${MIACODE_MACOS_FFMPEG_SHA256:-EF4FE121377039053B0D7BED4A9AA46E7912918F5BA6424A1DD155F4EED625B0}"
+EXPECTED_VERSION_PATTERN="${MIACODE_MACOS_FFMPEG_VERSION_PATTERN:-^ffmpeg version 8\\.1\\.1([.-]|$)}"
+EXPECTED_ARCH="${MIACODE_MACOS_FFMPEG_ARCH:-arm64}"
 
 compute_sha256() {
   shasum -a 256 "$1" | awk '{print toupper($1)}'
@@ -18,6 +27,17 @@ require_command() {
     echo "Required command not found: $name" >&2
     exit 1
   fi
+}
+
+validate_arch() {
+  local binary_path="$1"
+  local archs
+  archs="$(lipo -archs "$binary_path" 2>/dev/null || true)"
+  if [[ "$archs" != *"$EXPECTED_ARCH"* ]]; then
+    echo "ffmpeg binary is not $EXPECTED_ARCH (got: ${archs:-unknown}): $binary_path" >&2
+    return 1
+  fi
+  return 0
 }
 
 validate_version_output() {
@@ -50,6 +70,9 @@ validate_existing_binary() {
   fi
 
   chmod +x "$FFMPEG_PATH"
+  if ! validate_arch "$FFMPEG_PATH"; then
+    return 1
+  fi
   if ! validate_version_output "$FFMPEG_PATH"; then
     return 1
   fi
@@ -63,6 +86,14 @@ require_command shasum
 
 if validate_existing_binary; then
   exit 0
+fi
+
+if [[ -z "$FFMPEG_URL" ]]; then
+  echo "No valid ffmpeg at $FFMPEG_PATH and no download URL configured." >&2
+  echo "The pinned arm64 ffmpeg 8.1.1 build is normally committed in the repo;" >&2
+  echo "restore it from git, or set MIACODE_MACOS_FFMPEG_URL (plus matching" >&2
+  echo "MIACODE_MACOS_FFMPEG_SHA256 / _VERSION_PATTERN) to download a build." >&2
+  exit 1
 fi
 
 tmp_dir="$(mktemp -d)"
@@ -104,6 +135,9 @@ fi
 
 mkdir -p "$FFMPEG_DIR"
 install -m 755 "$downloaded_path" "$FFMPEG_PATH"
+if ! validate_arch "$FFMPEG_PATH"; then
+  exit 1
+fi
 if ! validate_version_output "$FFMPEG_PATH"; then
   exit 1
 fi
