@@ -118,6 +118,10 @@ Use this file to track where important constants live, what they mean, and wheth
     - bottom-tab invisible top-edge resize hot zone (`8 px`), content-scale clamp (`50%..100%`), derived header/list-font scale (`75%..100%`), and Timeline host height calculation from scaled header plus scaled lanes
     - fixed `30 Hz` Timeline UI cadence (`33 ms` timer interval / `1/30 s` seek-throttle threshold)
   - Rule: keep local while they only shape the main-window preview UX and do not need preview/export parity
+- `src/editor/BracketScopeHighlighter.cpp`
+  - Owns: editor bracket-scope and comment colors for the chart/metadata text highlighter
+  - Current tuning note: dark theme keeps the existing warm/square/comment colors; light theme uses `#A23B2A` for `()` and `{}`, `#1D4ED8` for `[]` duration scopes, and `#15803D` for `||` comments so duration brackets stand apart from normal `#203040` text
+  - Rule: keep local while this is only editor syntax color polish; promote if another syntax renderer needs the same palette
 - `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.cpp`
   - Owns: toolbox media-prepend ffmpeg defaults and local file conventions
   - Current tuning note: prepended background-video black frames are encoded as `1920x1080` at `30 FPS`, the original video is letterboxed into that canvas, output uses x264 `CRF 18` / `veryfast`, and the generated background video is video-only. Prepended `track.mp3` silence uses stereo `44100 Hz` anullsrc and libmp3lame `-q:a 2`. Backups are fixed at `track_bak.mp3` for audio and `<video-stem>_bak.mp4` for video. Blank duration defaults detect beat count from `&clock_count=` / `&clockcount=` before falling back to `4`, and BPM from `&wholebpm=` before the first half-width chart BPM token before falling back to `120`.
@@ -133,6 +137,10 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: analysis idle scheduling debounce for low-priority validation/Muri work
   - Current tuning note: `kTimelineAnalysisIdleDelayMs` is `180 ms`, used to coalesce rapid edits before dispatching the combined validation+Muri analysis worker once preview snapshot publication has already completed. Waveform alignment diagnostics additionally log per-waveform onset probes at amplitudes `0.02`, `0.05`, and `0.10` from `src/common/WaveformCache.cpp`; those thresholds are diagnostic-only and exist to compare quiet intro, medium onset, and loud transient timing in user logs.
   - Rule: keep local while it only expresses main-window preview-vs-analysis priority; promote it if the same debounce becomes shared across dialogs, subprocess workers, or user-facing settings
+- `src/app/quick_shell/qml/TimelineTabSurface.qml`
+  - Owns: QuickShell Timeline header-control layout constants
+  - Current tuning note: the waveform brightness control remains `128 * headerScale` wide inside a `22 * headerScale` header control box, but the active slider is reduced to `12 * headerScale` height with an `8 * headerScale` handle and `3 * headerScale` track so marker triangles can use the lower header lane beneath the slider while the track center stays in its previous position
+  - Rule: keep local while this only shapes QuickShell Timeline header ergonomics; document changes that affect marker/control overlap
 - `src/common/DebugOptions.h`
   - Owns: preview diagnostic env parsing defaults such as `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG_SAMPLE_MS`
   - Current tuning note: waveform-alignment focused BASS status sampling defaults to `250 ms`, intentionally lower than the normal ~`1 s` `bass_status` cadence so short 1x offset reports can be captured without making high-frequency logging the default.
