@@ -1383,7 +1383,12 @@ void MainWindow::flushDeferredEditorUiUpdate()
             ensurePreviewFollowVisible);
     }
 
-    if (syncTimelineCursor && !previewFollowHandled) {
+    const bool previewFollowOwnsPlaybackCursor =
+        previewFollowHandled
+        && (state_.qtPreviewPlaying_
+            || state_.previewStartupSyncPending_
+            || state_.previewLateVideoStartPending_);
+    if (syncTimelineCursor && !previewFollowOwnsPlaybackCursor) {
         syncTimelineToEditorCursor(centerView);
     }
 }

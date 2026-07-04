@@ -198,33 +198,20 @@ Rectangle {
                     Layout.fillWidth: true
                 }
 
-                // Timeline-tab follow toggles. Live in the tab strip
-                // (rather than inside TimelineTabSurface's cramped
-                // header band) so there's room for both checkboxes
-                // and so the visible state is driven by ONE QML
-                // control per toggle - no QSG-layer / DComp dual
-                // rendering path that previously dropped the
-                // progress-follow checkbox in QSG-only mode. Only
-                // surfaced when the timeline tab is the current
-                // tab; the validation / muri tabs leave the right
-                // side empty as before.
+                // Timeline-tab follow toggle. View Lock and Progress
+                // Follow keep fixed default behavior in backend state;
+                // only Follow Code remains user-facing here.
                 CheckBox {
                     id: viewportLockCheck
 
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredHeight: tabStrip.height - Math.round(6 * root.headerScale)
                     Layout.rightMargin: Math.round(4 * root.headerScale)
-                    // Hidden inline - surfaced only through the timeline
-                    // surface's settings gear menu (see TimelineTabSurface.qml).
-                    // Kept here so the QML state-binding plumbing stays intact;
-                    // setting visible: false also pulls it out of the layout.
                     visible: false
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
                     text: root.isChineseUi() ? "光标居中" : "View Lock"
-                    checked: controller && controller.timelineStateBridge
-                        ? controller.timelineStateBridge.viewportLockEnabled
-                        : false
+                    checked: true
 
                     indicator: Rectangle {
                         implicitWidth: Math.max(1, Math.round(14 * root.headerScale))
@@ -287,10 +274,8 @@ Rectangle {
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredHeight: tabStrip.height - Math.round(6 * root.headerScale)
                     Layout.rightMargin: Math.round(4 * root.headerScale)
-                    // Inline surface for the Follow Code toggle. The
-                    // gear menu in TimelineTabSurface.qml exposes the
-                    // remaining View Lock / Follow Progress toggles
-                    // and a mirror of this one.
+                    // Inline surface for the Follow Code toggle in the
+                    // bottom tab strip.
                     visible: controller && controller.bottomTabsCurrentTabId === "timeline"
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
@@ -360,15 +345,11 @@ Rectangle {
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredHeight: tabStrip.height - Math.round(6 * root.headerScale)
                     Layout.rightMargin: Math.round(8 * root.headerScale)
-                    // Hidden inline - surfaced only through the timeline
-                    // surface's settings gear menu (see TimelineTabSurface.qml).
                     visible: false
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
                     text: root.isChineseUi() ? "进度跟随" : "Timeline Sync"
-                    checked: controller && controller.timelineStateBridge
-                        ? controller.timelineStateBridge.followProgressEnabled
-                        : false
+                    checked: true
 
                     indicator: Rectangle {
                         implicitWidth: Math.max(1, Math.round(14 * root.headerScale))

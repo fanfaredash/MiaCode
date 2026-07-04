@@ -25,11 +25,10 @@ void TimelineOverlaySource::contributeToSnapshot(
     //   3. cursor line (vertical under mouse, when present)
     //   4. playhead line (vertical at the audio playhead)
     //   5. drag-center line (horizontal crosshair during drag-select)
-    //   6. entry marker triangle (indicates "chart starts here")
-    //   7. cursor marker triangle (indicates editor cursor position)
+    //   6. header marker triangles (line starts, playback entry, editor cursor)
     //
     // The single-element optionals (cursor, playhead, drag-center,
-    // entry marker) only push a batch when the corresponding `has*`
+    // entry marker, cursor marker) only push a batch when the corresponding `has*`
     // flag is true, mirroring the QSG path's gated-add pattern.
 
     // Phase 9a-fix3 — frameRects + frameLines moved to
@@ -54,15 +53,15 @@ void TimelineOverlaySource::contributeToSnapshot(
         tmp.append(state->dragCenterLine);
         sb::pushTimelineLineBatch(snapshot, tmp);
     }
+    QVector<miacode::timeline::TimelineSceneTriangle> triangles = state->headerMarkers;
     if (state->hasEntryMarker) {
-        QVector<miacode::timeline::TimelineSceneTriangle> tmp;
-        tmp.append(state->entryMarker);
-        sb::pushTimelineTriangleBatch(snapshot, tmp);
+        triangles.append(state->entryMarker);
     }
     if (state->hasCursorMarker) {
-        QVector<miacode::timeline::TimelineSceneTriangle> tmp;
-        tmp.append(state->cursorMarker);
-        sb::pushTimelineTriangleBatch(snapshot, tmp);
+        triangles.append(state->cursorMarker);
+    }
+    if (!triangles.isEmpty()) {
+        sb::pushTimelineTriangleBatch(snapshot, triangles);
     }
 }
 

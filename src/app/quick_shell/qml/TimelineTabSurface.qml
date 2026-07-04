@@ -49,12 +49,9 @@ Item {
         anchors.fill: parent
         stateBridge: controller ? controller.timelineStateBridge : null
         headerLeftLimit: brightnessControl.x + brightnessControl.width + 2
-        // The follow checkboxes used to live here too and bounded the
-        // header band on the right; they moved to BottomTabsQuickHost
-        // tab strip. Without them, the band can use the full viewport
-        // width minus a small right pad for the scrollbar / scroll
-        // gutter.
         headerRightLimit: width - 8
+        headerMarkerLeftLimit: zoomButton.x + zoomButton.width + 2
+        headerMarkerRightLimit: width - 8
 
         onHeaderNavigateRequested: function(second) {
             if (controller)
@@ -104,7 +101,10 @@ Item {
         anchors.left: parent.left
         anchors.leftMargin: Math.round(4 * root.headerScale)
         y: Math.max(0, (timelineItem.timelineTop - height) / 2)
+        width: bodyWidth + stepperWidth
         implicitHeight: Math.max(1, Math.round(22 * root.headerScale))
+        property int bodyWidth: Math.max(42, Math.round(54 * root.headerScale))
+        property int stepperWidth: Math.max(14, Math.round(18 * root.headerScale))
         padding: 1
         leftPadding: 2
         rightPadding: Math.round(8 * root.headerScale)
@@ -194,18 +194,78 @@ Item {
             }
         }
 
-        onClicked: timelineItem.cycleZoomPreset()
+        MouseArea {
+            z: 10
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: zoomButton.bodyWidth
+            cursorShape: Qt.PointingHandCursor
+            onPressed: timelineItem.setZoomControlPressedPart(1)
+            onReleased: timelineItem.setZoomControlPressedPart(0)
+            onCanceled: timelineItem.setZoomControlPressedPart(0)
+            onClicked: {
+                if (!controller)
+                    return
+                const point = zoomButton.mapToGlobal(0, 0)
+                controller.openTimelineZoomMenu(
+                    Math.round(point.x),
+                    Math.round(point.y),
+                    Math.round(zoomButton.width))
+            }
+        }
+
+        MouseArea {
+            z: 10
+            anchors.left: parent.left
+            anchors.leftMargin: zoomButton.bodyWidth
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: Math.ceil(parent.height / 2)
+            cursorShape: Qt.PointingHandCursor
+            onPressed: timelineItem.setZoomControlPressedPart(2)
+            onReleased: timelineItem.setZoomControlPressedPart(0)
+            onCanceled: timelineItem.setZoomControlPressedPart(0)
+            onClicked: timelineItem.stepZoomPreset(1)
+        }
+
+        MouseArea {
+            z: 10
+            anchors.left: parent.left
+            anchors.leftMargin: zoomButton.bodyWidth
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: Math.floor(parent.height / 2)
+            cursorShape: Qt.PointingHandCursor
+            onPressed: timelineItem.setZoomControlPressedPart(-2)
+            onReleased: timelineItem.setZoomControlPressedPart(0)
+            onCanceled: timelineItem.setZoomControlPressedPart(0)
+            onClicked: timelineItem.stepZoomPreset(-1)
+        }
+
+        onClicked: {
+            if (!controller)
+                return
+            const point = zoomButton.mapToGlobal(0, 0)
+            controller.openTimelineZoomMenu(
+                Math.round(point.x),
+                Math.round(point.y),
+                Math.round(zoomButton.width))
+        }
     }
 
     Item {
         id: brightnessControl
 
-       anchors.left: zoomButton.right
-       anchors.leftMargin: Math.round(6 * root.headerScale)
-       y: Math.max(0, (timelineItem.timelineTop - height) / 2)
+        anchors.left: zoomButton.right
+        anchors.leftMargin: Math.round(6 * root.headerScale)
+        y: Math.max(0, (timelineItem.timelineTop - height) / 2)
         width: Math.max(1, Math.round(128 * root.headerScale))
         height: Math.max(1, Math.round(22 * root.headerScale))
         visible: timelineItem.stateBridge !== null
+        property int sliderActiveHeight: Math.max(1, Math.round(12 * root.headerScale))
+        property int sliderHandleSize: Math.max(6, Math.round(8 * root.headerScale))
+        property int sliderTrackHeight: Math.max(2, Math.round(3 * root.headerScale))
 
         function isInvertedForTheme() {
             return !(root.paletteMap && root.paletteMap["dark"] === true)
@@ -286,7 +346,7 @@ Item {
             anchors.leftMargin: Math.round(4 * root.headerScale)
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            height: parent.height
+            height: brightnessControl.sliderActiveHeight
             from: 20
             to: 200
             stepSize: 5
@@ -302,7 +362,7 @@ Item {
                 x: brightnessSlider.leftPadding
                 y: Math.round((brightnessSlider.height - height) / 2)
                 width: brightnessSlider.availableWidth
-                height: Math.max(3, Math.round(4 * root.headerScale))
+                height: brightnessControl.sliderTrackHeight
 
                 Rectangle {
                     anchors.fill: parent
@@ -322,7 +382,7 @@ Item {
                 x: brightnessSlider.leftPadding
                     + brightnessSlider.visualPosition * (brightnessSlider.availableWidth - width)
                 y: Math.round((brightnessSlider.height - height) / 2)
-                width: Math.max(8, Math.round(10 * root.headerScale))
+                width: brightnessControl.sliderHandleSize
                 height: width
                 radius: width / 2
                 color: brightnessSlider.pressed
@@ -338,99 +398,9 @@ Item {
         }
     }
 
-    // Settings gear at the top-right of the timeline header band,
-    // mirroring the zoom button on the left. Click triggers the
-    // controller's openTimelineFollowSettingsMenu, which spawns a
-    // Qt Widgets QMenu (View Lock / Follow Progress / Follow Code).
-    // The bottom-most menu item is Follow Code so its Y aligns
-    // with the inline Follow Code chip in the tab strip above.
-    // QMenu rides the OS popup path used by every other native menu
-    // in MiaCode, so it draws above the workspace and preview
-    // WindowContainers without the focus quirks the prior QtQuick
-    // Popup.Window draft had.
-    ToolButton {
-        id: settingsGearButton
-
-        anchors.right: parent.right
-        anchors.rightMargin: Math.round(8 * root.headerScale)
-        y: Math.max(0, (timelineItem.timelineTop - height) / 2)
-        implicitWidth: Math.max(1, Math.round(28 * root.headerScale))
-        implicitHeight: Math.max(1, Math.round(22 * root.headerScale))
-        padding: 1
-        hoverEnabled: true
-
-        background: Rectangle {
-            radius: 6
-            color: settingsGearButton.down
-                ? root.tone("accentPressed", "#2563eb")
-                : (settingsGearButton.hovered
-                    ? root.tone("menuHoverBg", "#334155")
-                    : root.tone("cardBg", "#1f2937"))
-            border.width: 1
-            border.color: settingsGearButton.hovered && !settingsGearButton.down
-                ? root.tone("accent", "#60a5fa")
-                : root.tone("borderStrong", "#475569")
-        }
-
-        contentItem: Canvas {
-            id: gearGlyph
-
-            property color strokeColor: settingsGearButton.down
-                ? root.tone("accentText", "#ffffff")
-                : root.tone("timelineLabel", "#d4dce8")
-
-            onStrokeColorChanged: requestPaint()
-
-            onPaint: {
-                const ctx = getContext("2d")
-                ctx.reset()
-                const cx = width / 2
-                const cy = height / 2
-                const minDim = Math.min(width, height)
-                const outerR = minDim * 0.40
-                const innerR = outerR * 0.62
-                const hubR = innerR * 0.55
-                const toothCount = 6
-                ctx.fillStyle = strokeColor
-                ctx.beginPath()
-                for (let i = 0; i < toothCount * 2; ++i) {
-                    const angle = (i * Math.PI / toothCount) - Math.PI / 2
-                    const r = (i % 2 === 0) ? outerR : innerR
-                    const px = cx + Math.cos(angle) * r
-                    const py = cy + Math.sin(angle) * r
-                    if (i === 0)
-                        ctx.moveTo(px, py)
-                    else
-                        ctx.lineTo(px, py)
-                }
-                ctx.closePath()
-                ctx.fill()
-                // Punch the central hub.
-                ctx.globalCompositeOperation = "destination-out"
-                ctx.beginPath()
-                ctx.ellipse(cx - hubR, cy - hubR, hubR * 2, hubR * 2, 0, 0, Math.PI * 2)
-                ctx.fill()
-                ctx.globalCompositeOperation = "source-over"
-            }
-        }
-
-        onClicked: {
-            if (!controller)
-                return
-            // mapToGlobal returns the gear button's top-right corner
-            // in screen coords; the C++ side aligns the QMenu's
-            // bottom-right to (x, y - menuHeight - 4) so the menu
-            // expands upward over the tab-strip Progress Follow chip.
-            const topRight = settingsGearButton.mapToGlobal(settingsGearButton.width, 0)
-            controller.openTimelineFollowSettingsMenu(topRight.x, topRight.y)
-        }
-    }
-
-    // View Lock / Code Follow / Progress Follow checkboxes moved to
-    // BottomTabsQuickHost.qml's tab strip \u2014 see the long comment in
-    // TimelineSceneStateBuilder.cpp where the matching scene-state
-    // emit was retired. The deletion below removes the QML controls
-    // that were anchored to this surface's right edge.
+    // Follow controls no longer live in this header surface. Code
+    // Follow is exposed in BottomTabsQuickHost.qml; View Lock and
+    // Progress Follow use fixed default behavior.
     /*
     CheckBox {
         id: followPreviewCheck

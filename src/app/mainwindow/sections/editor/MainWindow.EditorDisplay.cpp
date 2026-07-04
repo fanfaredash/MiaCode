@@ -784,9 +784,7 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     if (preview.value("follow_preview").isBool()) {
         state_.previewFollowEnabled_ = preview.value("follow_preview").toBool(false);
     }
-    if (preview.value("viewport_lock").isBool()) {
-        state_.previewViewportLockEnabled_ = preview.value("viewport_lock").toBool(true);
-    }
+    state_.previewViewportLockEnabled_ = true;
     state_.previewProgressFollowEnabled_ = true;
     if (preview.value("timeline_sync").isBool()) {
         state_.timelineSyncEnabled_ = preview.value("timeline_sync").toBool(false);
@@ -926,8 +924,8 @@ void MainWindow::EditorSection::savePortableState() const
     );
     preview.insert("show_validation_summary", state_.previewShowValidationSummary_);
     preview.insert("follow_preview", state_.previewFollowEnabled_);
-    preview.insert("viewport_lock", state_.previewViewportLockEnabled_);
-    preview.insert("follow_progress", state_.previewProgressFollowEnabled_);
+    preview.insert("viewport_lock", true);
+    preview.insert("follow_progress", true);
     preview.insert("timeline_sync", state_.timelineSyncEnabled_);
     preview.insert(
         "timeline_zoom_scale",

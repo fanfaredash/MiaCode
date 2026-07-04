@@ -555,6 +555,28 @@ double TimelineQuickStateBridge::zoomScale() const
     return zoomPresets_.value(zoomPresetIndex_, 0.5);
 }
 
+QVector<double> TimelineQuickStateBridge::zoomPresets() const
+{
+    return zoomPresets_;
+}
+
+double TimelineQuickStateBridge::viewportCenterSecond()
+{
+    if (!layoutMetricsValid_) {
+        refreshLayoutMetrics();
+    }
+    const double pixelsPerSecond = qMax(1e-9, layoutMetrics_.pixelsPerSecond);
+    const double sceneX = static_cast<double>(horizontalScrollValue_)
+        + (static_cast<double>(layoutMetrics_.viewportSize.width()) * 0.5);
+    return qMax(
+        0.0,
+        layoutMetrics_.displayStartSeconds
+            + ((sceneX
+                - static_cast<double>(layoutMetrics_.leadingCenteringPadding)
+                - static_cast<double>(layoutMetrics_.timelineLeft))
+               / pixelsPerSecond));
+}
+
 double TimelineQuickStateBridge::contentScale() const
 {
     return contentScale_;
@@ -618,6 +640,23 @@ void TimelineQuickStateBridge::setZoomScale(double scale)
     }
     zoomPresetIndex_ = nextIndex;
     refreshLayoutMetrics();
+    bumpAllRevisions();
+    emit zoomScaleChanged(zoomScale());
+    emit renderStateChanged();
+}
+
+void TimelineQuickStateBridge::setZoomScaleAnchored(double scale, double anchorSecond)
+{
+    if (zoomPresets_.isEmpty()) {
+        return;
+    }
+    const int nextIndex = zoomPresetIndexForScale(zoomPresets_, scale, zoomPresetIndex_);
+    if (nextIndex == zoomPresetIndex_) {
+        return;
+    }
+    zoomPresetIndex_ = nextIndex;
+    refreshLayoutMetrics();
+    centerOnSecond(anchorSecond);
     bumpAllRevisions();
     emit zoomScaleChanged(zoomScale());
     emit renderStateChanged();

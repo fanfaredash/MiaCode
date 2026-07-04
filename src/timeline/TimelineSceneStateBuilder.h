@@ -25,6 +25,8 @@ struct TimelineSceneBuildRequest {
     int horizontalScrollValue = 0;
     int headerLeftLimit = 0;
     int headerRightLimit = 0;
+    int headerMarkerLeftLimit = 0;
+    int headerMarkerRightLimit = 0;
     // Phase 7 — scroll-bucket viewport culling. When > 0, the builder
     // emits waveform / grid / note primitives only for the visible
     // second range expanded by this many pixels on each side. The
@@ -49,11 +51,11 @@ struct TimelineSceneBuildRequest {
     bool showSlideTracks = true;
     bool playheadIndicatorSuppressed = false;
     bool dragActive = false;
-    // Phase 9d-native — header control state (mirrors the QML
-    // ToolButton + CheckBox in TimelineTabSurface.qml). The DComp
-    // path renders these natively in the popup composition plane
-    // because DWM stacks the popup HWND above the QQuickWindow's
-    // surface and QML siblings can't paint above it.
+    // Phase 9d-native — header control state. The DComp path renders
+    // the zoom visual natively in the popup composition plane because
+    // DWM stacks the popup HWND above the QQuickWindow's surface and
+    // QML siblings can't paint above it.
+    int zoomControlPressedPart = 0;
     bool followPreviewEnabled = false;
     bool followProgressEnabled = true;
     bool isChineseUi = false;

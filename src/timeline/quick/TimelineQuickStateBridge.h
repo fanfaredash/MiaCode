@@ -61,6 +61,9 @@ public:
     void setHorizontalScrollValue(int value);
     double zoomScale() const;
     void setZoomScale(double scale);
+    QVector<double> zoomPresets() const;
+    double viewportCenterSecond();
+    void setZoomScaleAnchored(double scale, double anchorSecond);
     double contentScale() const;
     void setContentScale(double scale);
     double waveformBrightness() const;

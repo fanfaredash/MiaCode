@@ -941,6 +941,7 @@ void TimelineQuickItem::setHeaderLeftLimit(int value)
         return;
     }
     headerLeftLimit_ = normalized;
+    ++appearanceRevision_;
     update();
     emit headerInsetsChanged();
 }
@@ -957,6 +958,41 @@ void TimelineQuickItem::setHeaderRightLimit(int value)
         return;
     }
     headerRightLimit_ = normalized;
+    ++appearanceRevision_;
+    update();
+    emit headerInsetsChanged();
+}
+
+int TimelineQuickItem::headerMarkerLeftLimit() const
+{
+    return headerMarkerLeftLimit_;
+}
+
+void TimelineQuickItem::setHeaderMarkerLeftLimit(int value)
+{
+    const int normalized = qMax(0, value);
+    if (headerMarkerLeftLimit_ == normalized) {
+        return;
+    }
+    headerMarkerLeftLimit_ = normalized;
+    ++appearanceRevision_;
+    update();
+    emit headerInsetsChanged();
+}
+
+int TimelineQuickItem::headerMarkerRightLimit() const
+{
+    return headerMarkerRightLimit_;
+}
+
+void TimelineQuickItem::setHeaderMarkerRightLimit(int value)
+{
+    const int normalized = qMax(0, value);
+    if (headerMarkerRightLimit_ == normalized) {
+        return;
+    }
+    headerMarkerRightLimit_ = normalized;
+    ++appearanceRevision_;
     update();
     emit headerInsetsChanged();
 }
@@ -1058,6 +1094,39 @@ void TimelineQuickItem::cycleZoomPreset()
     const miacode::timeline::TimelineSceneState state = currentSceneState();
     stateBridge_->cycleZoomPreset(
         miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, width() / 2.0));
+}
+
+void TimelineQuickItem::stepZoomPreset(int deltaSteps)
+{
+    if (stateBridge_ == nullptr || deltaSteps == 0) {
+        return;
+    }
+    const miacode::timeline::TimelineSceneState state = currentSceneState();
+    stateBridge_->stepZoomPreset(
+        deltaSteps,
+        miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, width() / 2.0));
+}
+
+void TimelineQuickItem::setZoomScale(qreal scale)
+{
+    if (stateBridge_ == nullptr) {
+        return;
+    }
+    const miacode::timeline::TimelineSceneState state = currentSceneState();
+    stateBridge_->setZoomScaleAnchored(
+        static_cast<double>(scale),
+        miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, width() / 2.0));
+}
+
+void TimelineQuickItem::setZoomControlPressedPart(int part)
+{
+    const int normalized = qBound(-2, part, 2);
+    if (zoomControlPressedPart_ == normalized) {
+        return;
+    }
+    zoomControlPressedPart_ = normalized;
+    ++appearanceRevision_;
+    update();
 }
 
 void TimelineQuickItem::refreshTheme()
@@ -1180,6 +1249,8 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         || cachedScrollBucket_ != currentScrollBucket
         || cachedSceneBuildHeaderLeftLimit_ != headerLeftLimit_
         || cachedSceneBuildHeaderRightLimit_ != headerRightLimit_
+        || cachedSceneBuildHeaderMarkerLeftLimit_ != headerMarkerLeftLimit_
+        || cachedSceneBuildHeaderMarkerRightLimit_ != headerMarkerRightLimit_
         || cachedSceneBuildAppearanceRevision_ != appearanceRevision_
         || cachedSceneBuildGridRevision_ != stateBridge_->gridRevision()
         || cachedSceneBuildWaveformRevision_ != stateBridge_->waveformRevision()
@@ -1224,6 +1295,9 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.horizontalCullPaddingPx = bucketSize;
     request.headerLeftLimit = headerLeftLimit_;
     request.headerRightLimit = headerRightLimit_ > 0 ? headerRightLimit_ : request.viewportSize.width();
+    request.headerMarkerLeftLimit = headerMarkerLeftLimit_;
+    request.headerMarkerRightLimit =
+        headerMarkerRightLimit_ > 0 ? headerMarkerRightLimit_ : request.viewportSize.width();
     request.zoomScale = stateBridge_->zoomScale();
     request.contentScale = stateBridge_->contentScale();
     request.waveformBrightness = stateBridge_->waveformBrightness();
@@ -1236,7 +1310,8 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.playheadIndicatorSuppressed = stateBridge_->playheadIndicatorSuppressed();
     request.dragActive = dragActive_;
     // Phase 9d-native — header-control state for native rendering of
-    // the zoom button + follow checkbox in the DComp pipeline.
+    // the zoom button in the DComp pipeline.
+    request.zoomControlPressedPart = zoomControlPressedPart_;
     request.followPreviewEnabled = stateBridge_->followPreviewEnabled();
     request.followProgressEnabled = stateBridge_->followProgressEnabled();
     // Use the app's UI language selector (UiText::isChineseUi()) — not
@@ -1258,6 +1333,8 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         cachedScrollBucket_ = currentScrollBucket;
         cachedSceneBuildHeaderLeftLimit_ = headerLeftLimit_;
         cachedSceneBuildHeaderRightLimit_ = headerRightLimit_;
+        cachedSceneBuildHeaderMarkerLeftLimit_ = headerMarkerLeftLimit_;
+        cachedSceneBuildHeaderMarkerRightLimit_ = headerMarkerRightLimit_;
         cachedSceneBuildAppearanceRevision_ = appearanceRevision_;
         cachedSceneBuildGridRevision_ = stateBridge_->gridRevision();
         cachedSceneBuildWaveformRevision_ = stateBridge_->waveformRevision();

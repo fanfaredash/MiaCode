@@ -116,6 +116,8 @@ struct TimelineSceneState {
     int horizontalScrollValue = 0;
     int headerLeftLimit = 0;
     int headerRightLimit = 0;
+    int headerMarkerLeftLimit = 0;
+    int headerMarkerRightLimit = 0;
     int leadingCenteringPadding = 0;
     int trailingCenteringPadding = 0;
     int contentWidth = 0;
@@ -168,18 +170,19 @@ struct TimelineSceneState {
     bool hasDragCenterLine = false;
     TimelineSceneLine dragCenterLine;
 
-    // Phase 9d-native — header control visuals (zoom button + follow
-    // checkbox). Emitted by the builder when the request carries the
-    // matching state; rendered natively in the DComp pipeline so the
-    // controls paint on the popup's composition plane (QML siblings
-    // of TimelineQuickItem can't, since DWM stacks the popup HWND
-    // above the QQuickWindow surface). The QML ToolButton/CheckBox
-    // in TimelineTabSurface.qml stay alive (with opacity 0) for
-    // input handling — DComp popup is WS_EX_TRANSPARENT so clicks
-    // pass through to the QQuickItem layer.
+    // Phase 9d-native — header zoom-control visual. Emitted by the
+    // builder and rendered natively in the DComp pipeline so the
+    // control paints on the popup's composition plane (QML siblings of
+    // TimelineQuickItem can't, since DWM stacks the popup HWND above
+    // the QQuickWindow surface). The invisible QML ToolButton in
+    // TimelineTabSurface.qml stays alive for input handling — DComp
+    // popup is WS_EX_TRANSPARENT so clicks pass through to the
+    // QQuickItem layer.
     bool hasHeaderControls = false;
     TimelineSceneRect zoomButtonBg;
+    QVector<TimelineSceneRect> zoomButtonOverlayRects;
     TimelineSceneRect zoomButtonBorder;        // 1-px stroke as a thin rect set
+    QVector<TimelineSceneLine> zoomButtonInteriorLines;
     TimelineSceneTextLabel zoomButtonLabel;
     TimelineSceneRect followCheckBg;           // Phase 9d-native — opaque
                                                // backdrop spanning indicator

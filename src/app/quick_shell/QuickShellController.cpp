@@ -20,6 +20,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPoint>
+#include <QPointer>
 #include <QTimer>
 #include <QWidget>
 #include <QWidgetAction>
@@ -32,6 +33,11 @@ namespace {
 
 constexpr int kQuickShellActiveRefreshIntervalMs = 16;
 constexpr int kQuickShellIdleRefreshIntervalMs = 250;
+
+QString timelineZoomMenuLabel(double scale)
+{
+    return QStringLiteral("%1%").arg(qRound(scale * 100.0));
+}
 
 // Custom QMenu item widget for the timeline-follow settings menu.
 // Paints a 14×14 rounded-square indicator + checkmark + label that
@@ -772,6 +778,48 @@ void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, i
     const QSize menuSize = menu->sizeHint();
     const int x = gearGlobalRight - menuSize.width();
     const int y = gearGlobalTop - menuSize.height() - 4;
+    menu->popup(QPoint(x, y));
+}
+
+void QuickShellController::openTimelineZoomMenu(int controlGlobalLeft, int controlGlobalTop, int controlWidth)
+{
+    if (stateSource_ == nullptr) {
+        return;
+    }
+    auto* bridge = qobject_cast<TimelineQuickStateBridge*>(
+        stateSource_->shellTimelineStateBridgeObject());
+    if (bridge == nullptr) {
+        return;
+    }
+
+    const QVector<double> presets = bridge->zoomPresets();
+    if (presets.isEmpty()) {
+        return;
+    }
+
+    auto* menu = new QMenu();
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    UiTheme::styleRoundedMenu(*menu);
+    menu->setMinimumWidth(qMax(1, controlWidth));
+
+    const QPointer<TimelineQuickStateBridge> bridgeGuard(bridge);
+    const double currentScale = bridge->zoomScale();
+    for (double preset : presets) {
+        QAction* action = menu->addAction(timelineZoomMenuLabel(preset));
+        action->setCheckable(true);
+        action->setChecked(qAbs(preset - currentScale) <= 1e-6);
+        QObject::connect(action, &QAction::triggered, menu, [bridgeGuard, preset]() {
+            if (bridgeGuard == nullptr) {
+                return;
+            }
+            bridgeGuard->setZoomScaleAnchored(preset, bridgeGuard->viewportCenterSecond());
+        });
+    }
+
+    menu->adjustSize();
+    const QSize menuSize = menu->sizeHint();
+    const int x = controlGlobalLeft;
+    const int y = controlGlobalTop - menuSize.height() - 4;
     menu->popup(QPoint(x, y));
 }
 

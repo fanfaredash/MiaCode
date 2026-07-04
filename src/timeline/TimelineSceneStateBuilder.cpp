@@ -496,6 +496,9 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     state.horizontalScrollValue = qMax(0, request.horizontalScrollValue);
     state.headerLeftLimit = qMax(0, request.headerLeftLimit);
     state.headerRightLimit = request.headerRightLimit > 0 ? request.headerRightLimit : request.viewportSize.width();
+    state.headerMarkerLeftLimit = qMax(0, request.headerMarkerLeftLimit);
+    state.headerMarkerRightLimit =
+        request.headerMarkerRightLimit > 0 ? request.headerMarkerRightLimit : request.viewportSize.width();
     state.visibleStartSecond = xToSecond(state, state.timelineLeft);
     state.visibleEndSecond = xToSecond(state, request.viewportSize.width());
     state.waveformPhaseCompensationSeconds = qMax(0.0, request.waveformPhaseCompensationSeconds);
@@ -509,6 +512,28 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     const QString trimmedSkinDirectory = request.skinDirectory.trimmed();
     state.skinDirectory = trimmedSkinDirectory.isEmpty() ? QString() : QDir::cleanPath(trimmedSkinDirectory);
 
+    const qreal headerScrollX = static_cast<qreal>(state.horizontalScrollValue);
+    const qreal headerSafeLeft = qMax<qreal>(state.timelineLeft, state.headerLeftLimit);
+    const qreal headerSafeRight =
+        qMin<qreal>(state.viewportSize.width(), qMax<qreal>(headerSafeLeft, state.headerRightLimit));
+    const qreal headerMarkerSafeLeft = qMax<qreal>(state.timelineLeft, state.headerMarkerLeftLimit);
+    const qreal headerMarkerSafeRight =
+        qMin<qreal>(state.viewportSize.width(), qMax<qreal>(headerMarkerSafeLeft, state.headerMarkerRightLimit));
+    const auto headerSpanFits = [&](qreal sceneCenterX, qreal halfWidth, qreal safeLeft, qreal safeRight) {
+        if (safeRight < safeLeft) {
+            return false;
+        }
+        const qreal screenCenterX = sceneCenterX - headerScrollX;
+        return screenCenterX - halfWidth >= safeLeft
+            && screenCenterX + halfWidth <= safeRight;
+    };
+    const auto headerLabelSpanFits = [&](qreal sceneCenterX, qreal halfWidth) {
+        return headerSpanFits(sceneCenterX, halfWidth, headerSafeLeft, headerSafeRight);
+    };
+    const auto headerMarkerSpanFits = [&](qreal sceneCenterX, qreal halfWidth) {
+        return headerSpanFits(sceneCenterX, halfWidth, headerMarkerSafeLeft, headerMarkerSafeRight);
+    };
+
     const TimelineThemeColors theme = timelineThemeColors();
     const QFont laneLabelFont = scaledFontForContentScale(timelineLaneLabelFont(), state.contentScale);
     state.baseBackgroundRects.append(TimelineSceneRect{
@@ -517,8 +542,8 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     });
     {
         // Phase 9d-native polish — force the header-band fill opaque
-        // so the native-rendered controls (zoom button + follow check
-        // text) sit on a solid background. theme.header inherits a
+        // so the native-rendered zoom control sits on a solid
+        // background. theme.header inherits a
         // semi-transparent alpha from the palette which lets
         // scrolling content leak through the text label area.
         QColor opaqueHeader = theme.header;
@@ -827,30 +852,21 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         }
     }
 
-    QVector<HeaderLineLabel> headerLabels;
+    QVector<HeaderLineLabel> collapsedHeaderLabels;
     if (!request.snapshot.lines.isEmpty()) {
-        QVector<HeaderLineLabel> collapsed;
         for (auto it = request.snapshot.lines.cbegin(); it != request.snapshot.lines.cend(); ++it) {
             const TimelineRenderLine& line = *it;
             const int screenX = secondToSceneX(state, line.startSecond);
             HeaderLineLabel label{qMax(1, line.lineNumber), line.startSecond, screenX};
-            if (!collapsed.isEmpty()) {
-                HeaderLineLabel& previous = collapsed.last();
+            if (!collapsedHeaderLabels.isEmpty()) {
+                HeaderLineLabel& previous = collapsedHeaderLabels.last();
                 if (previous.screenX == label.screenX
                     || qAbs(previous.second - label.second) <= kTimelineHeaderLineAnchorToleranceSeconds) {
                     previous = label;
                     continue;
                 }
             }
-            collapsed.append(label);
-        }
-        for (const HeaderLineLabel& label : collapsed) {
-            if (!headerLabels.isEmpty()
-                && label.screenX - headerLabels.constLast().screenX
-                    < scaledMetric(kTimelineHeaderLineLabelMinSpacingPx, headerContentScale(state.contentScale))) {
-                continue;
-            }
-            headerLabels.append(label);
+            collapsedHeaderLabels.append(label);
         }
     }
 
@@ -875,31 +891,48 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 headerContentScale(state.contentScale))),
         singleDigitWidth * kTimelineHeaderAnchorMarkerLegacyWidthFactor
             * kTimelineHeaderAnchorMarkerLegacyHeightFactor);
-    for (const HeaderLineLabel& label : headerLabels) {
+    QVector<HeaderLineLabel> headerLabels;
+    const qreal headerMarkerHalfWidth =
+        markerHeight >= 2.0 ? markerHeight * kTimelineTopMarkerHalfWidthPerHeight : 0.0;
+    bool hasLastHeaderMarker = false;
+    int lastHeaderMarkerX = 0;
+    const qreal headerLabelMinSpacing =
+        scaledMetric(kTimelineHeaderLineLabelMinSpacingPx, headerContentScale(state.contentScale));
+    for (const HeaderLineLabel& label : collapsedHeaderLabels) {
         const QString labelText = QString::number(label.lineNumber);
         const QFont labelFont = scaledTimelineHeaderFont(
             request.headerLineNumberFont,
             timelineHeaderLabelScale(request.headerLineNumberFont, labelText.size())
                 * static_cast<qreal>(headerContentScale(state.contentScale)));
         const QFontMetricsF labelMetrics(labelFont);
-        state.headerLabels.append(TimelineSceneTextLabel{
-            labelText,
-            QPointF(
-                label.screenX - (labelMetrics.horizontalAdvance(labelText) * 0.5) - kTimelineTextHorizontalPadding,
-                headerTextBottom - labelMetrics.height() - kTimelineTextVerticalPadding),
-            labelFont,
-            theme.textSecondary,
-            timelineTextLogicalSize(labelFont, labelText),
-        });
-        if (markerHeight >= 2.0) {
+        const qreal labelHalfWidth =
+            (labelMetrics.horizontalAdvance(labelText) * 0.5) + kTimelineTextHorizontalPadding;
+        if (headerLabelSpanFits(label.screenX, labelHalfWidth)
+            && (headerLabels.isEmpty()
+                || label.screenX - headerLabels.constLast().screenX >= headerLabelMinSpacing)) {
+            headerLabels.append(label);
+            state.headerLabels.append(TimelineSceneTextLabel{
+                labelText,
+                QPointF(
+                    label.screenX - (labelMetrics.horizontalAdvance(labelText) * 0.5) - kTimelineTextHorizontalPadding,
+                    headerTextBottom - labelMetrics.height() - kTimelineTextVerticalPadding),
+                labelFont,
+                theme.textSecondary,
+                timelineTextLogicalSize(labelFont, labelText),
+            });
+        }
+        if (markerHeight >= 2.0
+            && headerMarkerSpanFits(label.screenX, headerMarkerHalfWidth)
+            && (!hasLastHeaderMarker || label.screenX - lastHeaderMarkerX >= headerLabelMinSpacing)) {
             const qreal markerBaseY = markerTipY - markerHeight;
-            const qreal markerHalfWidth = markerHeight * kTimelineTopMarkerHalfWidthPerHeight;
             state.headerMarkers.append(TimelineSceneTriangle{
-                QPointF(label.screenX - markerHalfWidth, markerBaseY),
-                QPointF(label.screenX + markerHalfWidth, markerBaseY),
+                QPointF(label.screenX - headerMarkerHalfWidth, markerBaseY),
+                QPointF(label.screenX + headerMarkerHalfWidth, markerBaseY),
                 QPointF(label.screenX, markerTipY),
                 theme.textSecondary,
             });
+            hasLastHeaderMarker = true;
+            lastHeaderMarkerX = label.screenX;
         }
     }
 
@@ -1311,38 +1344,37 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         }
     }
 
+    const qreal playbackHeaderScale = headerContentScale(state.contentScale);
+    const qreal playbackMarkerTipY =
+        static_cast<qreal>(state.timelineTop) - scaledMetric(kTimelineTopMarkerTipOffsetPx, playbackHeaderScale);
+    const qreal playbackMarkerHeight =
+        scaledMetric(kTimelinePlaybackEntryMarkerHeightPx, playbackHeaderScale);
+    const qreal playbackMarkerHalfWidth =
+        scaledMetric(kTimelinePlaybackEntryMarkerHalfWidthPx, playbackHeaderScale);
+    const qreal playbackMarkerBaseY = qMax<qreal>(0.0, playbackMarkerTipY - playbackMarkerHeight);
+
     const int entryX = secondToSceneX(state, request.playbackEntrySeconds);
-    if (entryX > state.timelineLeft) {
+    if (entryX > state.timelineLeft && headerMarkerSpanFits(entryX, playbackMarkerHalfWidth)) {
         state.hasEntryMarker = true;
-        const qreal headerScale = headerContentScale(state.contentScale);
-        const qreal tipY =
-            static_cast<qreal>(state.timelineTop) - scaledMetric(kTimelineTopMarkerTipOffsetPx, headerScale);
-        const qreal markerHeight = scaledMetric(kTimelinePlaybackEntryMarkerHeightPx, headerScale);
-        const qreal markerHalfWidth = scaledMetric(kTimelinePlaybackEntryMarkerHalfWidthPx, headerScale);
-        const qreal baseY = qMax<qreal>(0.0, tipY - markerHeight);
         state.entryMarker = TimelineSceneTriangle{
-            QPointF(entryX, tipY),
-            QPointF(entryX - markerHalfWidth, baseY),
-            QPointF(entryX + markerHalfWidth, baseY),
+            QPointF(entryX, playbackMarkerTipY),
+            QPointF(entryX - playbackMarkerHalfWidth, playbackMarkerBaseY),
+            QPointF(entryX + playbackMarkerHalfWidth, playbackMarkerBaseY),
             theme.entryMarker,
         };
     }
 
     const int cursorX = secondToSceneX(state, request.cursorSeconds);
     if (cursorX > state.timelineLeft) {
-        state.hasCursorMarker = true;
-        const qreal headerScale = headerContentScale(state.contentScale);
-        const qreal tipY =
-            static_cast<qreal>(state.timelineTop) - scaledMetric(kTimelineTopMarkerTipOffsetPx, headerScale);
-        const qreal markerHeight = scaledMetric(kTimelinePlaybackEntryMarkerHeightPx, headerScale);
-        const qreal markerHalfWidth = scaledMetric(kTimelinePlaybackEntryMarkerHalfWidthPx, headerScale);
-        const qreal baseY = qMax<qreal>(0.0, tipY - markerHeight);
-        state.cursorMarker = TimelineSceneTriangle{
-            QPointF(cursorX, tipY),
-            QPointF(cursorX - markerHalfWidth, baseY),
-            QPointF(cursorX + markerHalfWidth, baseY),
-            theme.cursorMarker,
-        };
+        if (headerMarkerSpanFits(cursorX, playbackMarkerHalfWidth)) {
+            state.hasCursorMarker = true;
+            state.cursorMarker = TimelineSceneTriangle{
+                QPointF(cursorX, playbackMarkerTipY),
+                QPointF(cursorX - playbackMarkerHalfWidth, playbackMarkerBaseY),
+                QPointF(cursorX + playbackMarkerHalfWidth, playbackMarkerBaseY),
+                theme.cursorMarker,
+            };
+        }
         state.hasCursorLine = true;
         state.cursorLine = TimelineSceneLine{
             QPointF(cursorX, state.timelineTop),
@@ -1374,12 +1406,9 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         }
     }
 
-    // Phase 9d-native — emit header control visuals (zoom button +
-    // follow checkbox). Mirrors the QML ToolButton + CheckBox in
-    // TimelineTabSurface.qml: zoom on the left at parent.left + 4,
-    // follow on the right at parent.right - 8. Vertically centred in
-    // the header band (y in [0, timelineTop)). Sized to roughly
-    // match the QML controls.
+    // Phase 9d-native - emit the header zoom control visual. Mirrors
+    // the invisible QML hit zones in TimelineTabSurface.qml: body opens
+    // the preset menu, right-side upper/lower zones step zoom in/out.
     if (state.timelineTop > 4 && request.viewportSize.width() > 0) {
         state.hasHeaderControls = true;
         const qreal headerControlScale = static_cast<qreal>(headerContentScale(state.contentScale));
@@ -1395,18 +1424,46 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         const QColor cardBg = theme.window.lightnessF() < 0.5
             ? QColor(31, 41, 55) : QColor(243, 244, 246);
         const QColor borderColor = theme.border;
+        const QColor arrowColor = theme.label;
+        const QColor pressedOverlay = theme.window.lightnessF() < 0.5
+            ? QColor(96, 165, 250, 74)
+            : QColor(46, 119, 208, 38);
 
         // ---- Zoom button (left) ----
         const QString zoomText = QStringLiteral("%1%").arg(
             qRound(request.zoomScale * 100.0));
         const qreal zoomTextW = controlMetrics.horizontalAdvance(zoomText);
-        // Padding: 12 left for glyph slot, 8 right
-        const int zoomBtnW = qRound(zoomTextW + (12.0 + 8.0) * headerControlScale);
+        const int zoomBodyW = qMax(42, qRound(54.0 * headerControlScale));
+        const int zoomStepperW = qMax(14, qRound(18.0 * headerControlScale));
+        const int zoomBtnW = zoomBodyW + zoomStepperW;
         const int zoomBtnX = qRound(4.0 * headerControlScale);
+        const bool bodyPressed = request.zoomControlPressedPart == 1;
+        const bool upPressed = request.zoomControlPressedPart == 2;
+        const bool downPressed = request.zoomControlPressedPart == -2;
+        const qreal pressedOffset = qMax<qreal>(1.0, qRound(headerControlScale));
         state.zoomButtonBg = TimelineSceneRect{
             QRectF(zoomBtnX, btnY, zoomBtnW, btnHeight),
             cardBg,
         };
+        const qreal separatorX = zoomBtnX + zoomBodyW;
+        if (bodyPressed) {
+            state.zoomButtonOverlayRects.append(TimelineSceneRect{
+                QRectF(zoomBtnX + 1.0, btnY + 1.0, qMax<qreal>(1.0, zoomBodyW - 1.0), qMax<qreal>(1.0, btnHeight - 2.0)),
+                pressedOverlay,
+            });
+        }
+        if (upPressed) {
+            state.zoomButtonOverlayRects.append(TimelineSceneRect{
+                QRectF(separatorX + 1.0, btnY + 1.0, qMax<qreal>(1.0, zoomStepperW - 2.0), qMax<qreal>(1.0, (btnHeight * 0.5) - 1.0)),
+                pressedOverlay,
+            });
+        }
+        if (downPressed) {
+            state.zoomButtonOverlayRects.append(TimelineSceneRect{
+                QRectF(separatorX + 1.0, btnY + (btnHeight * 0.5), qMax<qreal>(1.0, zoomStepperW - 2.0), qMax<qreal>(1.0, (btnHeight * 0.5) - 1.0)),
+                pressedOverlay,
+            });
+        }
         state.zoomButtonBorder = TimelineSceneRect{
             // Drawn as a thin frame via 4 hairlines below; we keep one
             // descriptor for "the border colour" so the source can pick
@@ -1422,24 +1479,52 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         zoomLabel.color = theme.label;
         zoomLabel.logicalSize = timelineTextLogicalSize(controlFont, zoomText);
         zoomLabel.topLeft = QPointF(
-            zoomBtnX + 12.0 * headerControlScale - kTimelineTextHorizontalPadding,
+            zoomBtnX + ((zoomBodyW - zoomTextW) * 0.5) - kTimelineTextHorizontalPadding,
             btnY + (btnHeight - controlMetrics.height()) * 0.5
-                - kTimelineTextVerticalPadding);
+                - kTimelineTextVerticalPadding
+                + (bodyPressed ? pressedOffset : 0.0));
         state.zoomButtonLabel = zoomLabel;
 
-        // The "Code Follow" / "Progress Follow" checkboxes used to
-        // be drawn here in the timeline header band. They moved to
-        // BottomTabsQuickHost.qml's tab strip \u2014 there's enough
-        // horizontal space next to the "\u65f6\u95f4\u8f74 / \u8bed\u6cd5\u68c0\u67e5 /
-        // \u65e0\u7406\u68c0\u67e5" tab labels for both controls without crowding,
-        // and real QML CheckBoxes there avoid the multi-render-mode
-        // footgun we hit when the QSG header layer rendered
-        // followPreview but no path rendered followProgress (only
-        // DComp drew progress in QSG mode). The follow flags still
-        // flow through `request.followPreviewEnabled` /
-        // `request.followProgressEnabled` from the bridge to the
-        // marker culling path; we just don't materialise visuals
-        // for them in the scene state any more.
+        state.zoomButtonInteriorLines.append(TimelineSceneLine{
+            QPointF(separatorX, btnY),
+            QPointF(separatorX, btnY + btnHeight),
+            borderColor,
+            1.0,
+        });
+        const qreal arrowCx = separatorX + (zoomStepperW * 0.5);
+        const qreal arrowHalfW = qMax<qreal>(2.0, 3.0 * headerControlScale);
+        const qreal arrowHalfH = qMax<qreal>(1.5, 2.0 * headerControlScale);
+        const qreal upCy = btnY + (btnHeight * 0.32) + (upPressed ? pressedOffset : 0.0);
+        const qreal downCy = btnY + (btnHeight * 0.68) + (downPressed ? pressedOffset : 0.0);
+        state.zoomButtonInteriorLines.append(TimelineSceneLine{
+            QPointF(arrowCx - arrowHalfW, upCy + arrowHalfH),
+            QPointF(arrowCx, upCy - arrowHalfH),
+            arrowColor,
+            1.2,
+        });
+        state.zoomButtonInteriorLines.append(TimelineSceneLine{
+            QPointF(arrowCx, upCy - arrowHalfH),
+            QPointF(arrowCx + arrowHalfW, upCy + arrowHalfH),
+            arrowColor,
+            1.2,
+        });
+        state.zoomButtonInteriorLines.append(TimelineSceneLine{
+            QPointF(arrowCx - arrowHalfW, downCy - arrowHalfH),
+            QPointF(arrowCx, downCy + arrowHalfH),
+            arrowColor,
+            1.2,
+        });
+        state.zoomButtonInteriorLines.append(TimelineSceneLine{
+            QPointF(arrowCx, downCy + arrowHalfH),
+            QPointF(arrowCx + arrowHalfW, downCy - arrowHalfH),
+            arrowColor,
+            1.2,
+        });
+
+        // Follow controls are no longer drawn in the timeline header.
+        // Code Follow lives in BottomTabsQuickHost.qml, while View Lock
+        // and Progress Follow keep fixed default behavior and are not
+        // materialised as scene-state visuals.
 #if 0
         const QString followText = request.isChineseUi
             ? QStringLiteral("\u4ee3\u7801\u8ddf\u968f")
