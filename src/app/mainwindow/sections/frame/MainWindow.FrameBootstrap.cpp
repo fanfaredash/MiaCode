@@ -174,6 +174,12 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // artwork into an inset of the icon box so the glyph reads at ~menu-text size
     // while the icon box — and thus the toolbar height — stays at the default.
     setupMenusAndActions(fileMenu, editMenu, transformMenu, previewMenu, helpMenu);
+    QAction* metadataSettingsAction = toolsMenu->addAction(uiText("sidebar.metadata", "Metadata"));
+    connect(metadataSettingsAction, &QAction::triggered, this, [this]() {
+        if (switchToMetadataField() && titleEdit_ != nullptr) {
+            titleEdit_->setFocus();
+        }
+    });
     if (latencyDetectorAction_ != nullptr) {
         editMenu->removeAction(latencyDetectorAction_);
         toolsMenu->addAction(latencyDetectorAction_);
