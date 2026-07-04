@@ -18,6 +18,7 @@ The user-facing canonical doc lives at `docs/ops/DEBUG_INDEX.md`. This file stay
   - project-local `.miacode/logs/` once a chart file is bound, otherwise app-local `logs/` next to the running executable when `MIACODE_LOG_DIR` and per-channel overrides are unset
   - export worker launches now pre-bind `MIACODE_LOG_DIR` to the snapshot chart's `.miacode/logs/` directory when no explicit shared log-dir override is present, and the worker also restores the same path after snapshot parse for direct CLI-worker runs
   - in debug mode, startup now trims retained runtime/audio/export/startup/fatal logs down to at most `100 KB` each by dropping the oldest lines first
+  - editor startup beacon / op-chain shadow paths are captured before chart-local project logs are bound; when runtime debug output or `MIACODE_PREVIEW_HUD_PAINT_DIAG=1` is active, project-log binding writes a `runtime/logging/crash_breadcrumb_hint` signpost with PID, project log dir, and startup-beacon/op-chain path hints
 - Channel-specific path overrides:
   - `MIACODE_RUNTIME_LOG_PATH`
   - `MIACODE_AUDIO_LOG_PATH`
@@ -107,7 +108,8 @@ Dev-tool-only parser repro hook:
 - `MIACODE_PREVIEW_HUD_PAINT_DIAG`
   - enables focused runtime `preview/hud_state` and `preview/hud_paint` breadcrumbs for export-preview / HUD paint crashes without requiring `--debug`
   - force-writes GUI-thread HUD mutations, render-thread `PreviewQuickHudLayer::paint()` entry/skip/overlay stages, and a flushed `draw_text_before` line before each HUD `QPainter::drawText` call so access violations leave the exact HUD branch/text tag on disk
-  - owners: `src/common/DebugOptions.h`, `src/preview/runtime/PreviewRuntime.cpp`, `src/preview/quick_scene/PreviewQuickHudLayer.cpp`
+  - also lets project-log binding write `runtime/logging/crash_breadcrumb_hint` without global `--debug`, so users checking chart-local logs are pointed to `%TEMP%` / startup env crash breadcrumbs when the startup shadow path was captured earlier
+  - owners: `src/common/DebugOptions.h`, `src/common/DebugLog.cpp`, `src/preview/runtime/PreviewRuntime.cpp`, `src/preview/quick_scene/PreviewQuickHudLayer.cpp`
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS`
   - pacing diagnostic normal-sample interval in milliseconds, default `1000`
   - owner: `src/common/DebugOptions.h`
@@ -186,6 +188,7 @@ Runtime black-screen / dialog tracing in the main app currently uses these tags:
 - `close_timing/export_temp_dirs`
 - `preview/host_window_event`
 - `preview/embedded_refresh`
+- `logging/crash_breadcrumb_hint`
 - `preview/quick_runtime`
 - `preview/quick_scene`
 - `preview/interaction`

@@ -2,7 +2,7 @@
 
 This document is the current user-facing index for MiaCode debug mode, log files, and preview/export diagnostics after the Qt Quick migration.
 
-> Reconciled against the code on 2026-05-29: 79 live `MIACODE_*` environment flags across ~27 files. When you add/remove a flag, update this index (and `.claude/skills/miacode-dev-guide/references/debug-and-logging.md`).
+> Reconciled against the code on 2026-05-29: 79 live `MIACODE_*` environment flags across ~27 files. When you add/remove a flag, update this index and `.codex/skills/miacode-dev-guide/references/debug-flags.md`.
 
 ## Debug Entry Points
 
@@ -40,6 +40,13 @@ Default filenames:
 - startup timing: `miacode_startup_timing.log`
 - fatal: `miacode_fatal.log`
 - preview profile: `miacode_preview_profile_summary.txt`
+
+Crash breadcrumb path note:
+
+- `miacode_startup_beacon_<pid>.txt` and `miacode_op_chain_<pid>.log` are resolved at process startup from `MIACODE_OPLOG_SHADOW_PATH`, then `MIACODE_LOG_DIR`, then `%TEMP%`.
+- Binding a chart-local `.miacode/logs/` directory later does not rebind those already-captured crash breadcrumb paths yet.
+- When a project log dir is bound while runtime debug output or `MIACODE_PREVIEW_HUD_PAINT_DIAG=1` is active, the runtime log writes `logging/crash_breadcrumb_hint` with the current PID plus `startup_beacon_hint` and `op_chain_hint`.
+- Longer-term work should rebind or mirror the crash shadow safely; the current line is a path signpost so investigations do not only check the chart log directory.
 
 Path overrides:
 
@@ -142,7 +149,7 @@ Still active:
 - `MIACODE_BASS_BGM_TEMPO_PRESET` (Windows BASS preview BGM only, only when tempo mode is active; BASS_FX window presets: unset = `compact40`, `stock` = plugin default, `auto` = `0/0/8`, `tight20` = `20/8/4`, `balanced30` = `30/10/6`, `compact40` = `40/15/8`, `smooth60` = `60/20/8`, `wide82` = `82/28/8`)
 - `MIACODE_BASS_BGM_TEMPO_PARAMS` (Windows BASS preview BGM only, only when tempo mode is active; overrides preset with custom `sequence_ms,seek_ms,overlap_ms`, accepting comma, slash, semicolon, pipe, `x`, or spaces as separators)
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG`
-- `MIACODE_PREVIEW_HUD_PAINT_DIAG` (`1` enables focused `PreviewQuickHudLayer` / HUD painter crash breadcrumbs in the runtime log. It force-writes `preview/hud_state` GUI-thread HUD mutations and `preview/hud_paint` render-thread paint stages, including a flushed `draw_text_before` line before each HUD `QPainter::drawText` call.)
+- `MIACODE_PREVIEW_HUD_PAINT_DIAG` (`1` enables focused `PreviewQuickHudLayer` / HUD painter crash breadcrumbs in the runtime log. It force-writes `preview/hud_state` GUI-thread HUD mutations and `preview/hud_paint` render-thread paint stages, including a flushed `draw_text_before` line before each HUD `QPainter::drawText` call. It also allows the project-log binding `logging/crash_breadcrumb_hint` signpost to be written without global `--debug`.)
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS`
 - `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG` (requires `--debug`; adds focused waveform/BGM alignment evidence in the audio log, raises BASS `bass_status` cadence for short-lived 1x offset repros, and emits runtime `timeline/render_map` rows from the final Quick timeline scene state)
 - `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG_SAMPLE_MS` (default `250`; BASS `bass_status` interval while waveform-alignment diagnostics are enabled)

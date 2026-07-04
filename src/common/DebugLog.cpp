@@ -283,6 +283,82 @@ QString defaultDebugLogDirectory()
     return QDir(executableDir).filePath(QStringLiteral("logs"));
 }
 
+QString quotedLogValue(QString value)
+{
+    value.replace(QLatin1Char('"'), QLatin1Char('\''));
+    return QStringLiteral("\"%1\"").arg(value);
+}
+
+void appendCrashBreadcrumbPathHint(const QString& normalizedProjectLogDirectory)
+{
+    if (normalizedProjectLogDirectory.isEmpty()) {
+        return;
+    }
+    const bool forceForFocusedCrashDiag =
+        miacode::debug_options::previewHudPaintDiagnosticsEnabled();
+    if (!forceForFocusedCrashDiag
+        && !miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+
+    const qint64 pid = QCoreApplication::applicationPid();
+    const QString explicitShadowPath =
+        qEnvironmentVariable("MIACODE_OPLOG_SHADOW_PATH").trimmed();
+    const QString envLogDir = qEnvironmentVariable("MIACODE_LOG_DIR").trimmed();
+
+    QString source;
+    QString breadcrumbDir;
+    QString opChainPath;
+    if (!explicitShadowPath.isEmpty()) {
+        source = QStringLiteral("MIACODE_OPLOG_SHADOW_PATH");
+        opChainPath = QDir::cleanPath(explicitShadowPath);
+        breadcrumbDir = QFileInfo(opChainPath).absolutePath();
+    } else if (!envLogDir.isEmpty()) {
+        source = QStringLiteral("MIACODE_LOG_DIR");
+        breadcrumbDir = QDir::cleanPath(envLogDir);
+        opChainPath = QDir(breadcrumbDir).filePath(
+            QStringLiteral("miacode_op_chain_%1.log").arg(pid));
+    } else {
+        source = QStringLiteral("TEMP");
+        breadcrumbDir = QDir::tempPath();
+        opChainPath = QDir(breadcrumbDir).filePath(
+            QStringLiteral("miacode_op_chain_%1.log").arg(pid));
+    }
+
+    const QString startupBeaconPath = QDir(breadcrumbDir).filePath(
+        QStringLiteral("miacode_startup_beacon_%1.txt").arg(pid));
+    const QString runtimeOverride =
+        resolvedOverridePath(Channel::Runtime, channelPathOverride(Channel::Runtime));
+    const QString runtimePath = runtimeOverride.isEmpty()
+        ? QDir(logDirectory()).filePath(channelFileName(Channel::Runtime))
+        : runtimeOverride;
+
+    const QString payload =
+        QStringLiteral(
+            "action=project_log_dir_bound pid=%1 project_log_dir=%2 runtime_log_path=%3 "
+            "crash_path_source=%4 env_log_dir_present=%5 env_shadow_override_present=%6 "
+            "startup_beacon_hint=%7 op_chain_hint=%8 "
+            "note=shadow_path_is_captured_before_project_log_dir_bind "
+            "future=crash_shadow_rebind_or_mirror")
+            .arg(pid)
+            .arg(quotedLogValue(normalizedProjectLogDirectory),
+                 quotedLogValue(runtimePath),
+                 source)
+            .arg(envLogDir.isEmpty() ? 0 : 1)
+            .arg(explicitShadowPath.isEmpty() ? 0 : 1)
+            .arg(quotedLogValue(startupBeaconPath),
+                 quotedLogValue(opChainPath));
+
+    if (appendLine(
+            Channel::Runtime,
+            QStringLiteral("logging/crash_breadcrumb_hint"),
+            payload,
+            /*force=*/forceForFocusedCrashDiag,
+            Level::Info)) {
+        flushAsyncLogWriter(100);
+    }
+}
+
 qint64 startupTrimMaxBytes()
 {
     // Beta35 — bumped from 2 MB to 4 MB so a single project session
@@ -800,7 +876,8 @@ void setSessionProjectLogDirectory(const QString& directoryPath)
     // writer here closes every cached handle synchronously, and the
     // next enqueue() lazily restarts the worker — which then opens
     // fresh handles in the new project directory.
-    if (previousDirectory != normalizedNewDirectory) {
+    const bool directoryChanged = previousDirectory != normalizedNewDirectory;
+    if (directoryChanged) {
         AsyncLogWriter::instance().flush(2000);
         AsyncLogWriter::instance().stop();
     }
@@ -808,6 +885,9 @@ void setSessionProjectLogDirectory(const QString& directoryPath)
     {
         QMutexLocker locker(&projectLogDirectoryMutex());
         sessionProjectLogDirectoryStorage() = normalizedNewDirectory;
+    }
+    if (directoryChanged) {
+        appendCrashBreadcrumbPathHint(normalizedNewDirectory);
     }
     if (miacode::debug_options::debugModeEnabled()) {
         trimDebugLogsInCurrentDirectoryLocked();

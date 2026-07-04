@@ -70,9 +70,23 @@ QuickShell 的嵌入预览面板由 `QuickShellMain.qml`、`QuickShellPreviewSur
 实时预览与导出都消费同一套后端无关的 scene payload：
 
 - `PreviewFrameState`
+- `PreviewRuntime::frameStateSnapshot()`
 - `PreviewRenderLayerFlags`
 - `PreviewSceneAssetRepository`
 - `PreviewSceneAssetLoader`
+
+快照边界：
+
+- GUI/runtime 线程可以继续维护 live `PreviewFrameState`，但 QSG render thread、HUD paint、DComp fallback 和 prepared-scene cache 不得直接持有并读取这份 live state。
+- 跨线程消费必须先通过 `PreviewRuntime::frameStateSnapshot()` 取得不可变快照；快照内部携带 HUD 所需的 `hudStatsSnapshot`，render thread 不得回调 live `PreviewProgressStatsCache::hudStatsAt()`。
+- 导出 worker / 无头 Quick export 仍使用导出 snapshot 重建任务；这里的 `PreviewFrameState` 也应视为一次 frame 的 immutable payload，而不是 GUI 状态的共享引用。
+- 任何后续新增的 render-layer state 字段，如果会被 QSG/HUD/DComp/export 读取，必须确认它进入同一个 snapshot 发布边界。
+
+调试契约：
+
+- `MIACODE_PREVIEW_HUD_PAINT_DIAG=1` 是 focused crash diagnostic，用于导出预览 / HUD paint 崩溃排障，不需要全局 `--debug`。
+- 该开关允许 `preview/hud_state`、`preview/hud_paint` 以及项目日志绑定时的 `logging/crash_breadcrumb_hint` 写入 runtime log；它不改变预览/导出的业务渲染语义。
+- `logging/crash_breadcrumb_hint` 只负责指路：startup beacon / op-chain shadow 仍按启动时的 `MIACODE_OPLOG_SHADOW_PATH`、`MIACODE_LOG_DIR`、`%TEMP%` 规则解析。未来若实现 crash shadow 安全重绑或镜像，应更新本 SPEC 和 `docs/ops/DEBUG_INDEX.md`。
 
 职责拆分：
 
