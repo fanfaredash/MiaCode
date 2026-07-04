@@ -8,22 +8,22 @@
 namespace {
 QColor parenColor()
 {
-    return UiTheme::isDarkTheme() ? QColor(QStringLiteral("#F29A83")) : QColor(QStringLiteral("#66221B"));
+    return UiTheme::isDarkTheme() ? QColor(QStringLiteral("#F29A83")) : QColor(QStringLiteral("#A23B2A"));
 }
 
 QColor braceColor()
 {
-    return UiTheme::isDarkTheme() ? QColor(QStringLiteral("#F29A83")) : QColor(QStringLiteral("#66221B"));
+    return UiTheme::isDarkTheme() ? QColor(QStringLiteral("#F29A83")) : QColor(QStringLiteral("#A23B2A"));
 }
 
 QColor squareColor()
 {
-    return UiTheme::isDarkTheme() ? QColor(QStringLiteral("#88A4FF")) : QColor(QStringLiteral("#282F60"));
+    return UiTheme::isDarkTheme() ? QColor(QStringLiteral("#88A4FF")) : QColor(QStringLiteral("#1D4ED8"));
 }
 
 QColor commentMarkerColor()
 {
-    return UiTheme::isDarkTheme() ? QColor(QStringLiteral("#71B77A")) : QColor(QStringLiteral("#368E4E"));
+    return UiTheme::isDarkTheme() ? QColor(QStringLiteral("#71B77A")) : QColor(QStringLiteral("#15803D"));
 }
 
 int commentStartIndex(const QString& text)
