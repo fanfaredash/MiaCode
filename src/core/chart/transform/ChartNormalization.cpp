@@ -786,14 +786,11 @@ bool textHasTerminalMarker(const QString& text)
             line.chop(1);
         }
         for (int index = 0; index < line.size(); ++index) {
-            if (line.at(index).isSpace()) {
-                continue;
-            }
-            if ((line.at(index) == QLatin1Char('E') || line.at(index) == QLatin1Char('e'))
+            const QChar ch = line.at(index);
+            if ((ch == QLatin1Char('E') || ch == QLatin1Char('e'))
                 && lineTailIsTerminalMarker(line, index)) {
                 return true;
             }
-            break;
         }
     }
     return false;

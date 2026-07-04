@@ -37,6 +37,9 @@ experimental/
 Testing/
 build_artifacts/
 
+# Local CI workflow changes (not in dev branch)
+.github/workflows/build-win.yml
+
 # Keep the public docs tree explicit and leave local/private notes untracked.
 docs/*
 !docs/README.md
