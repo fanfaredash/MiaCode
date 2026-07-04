@@ -192,14 +192,20 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
                 staticRoot->appendChildNode(buildTimelineLineNode(line));
             }
             if (textures != nullptr) {
-                const TimelineQuickTextureHandle zoomHandle =
-                    textures->textTexture(state.zoomButtonLabel);
-                if (zoomHandle.texture != nullptr) {
-                    auto* node = new QSGSimpleTextureNode();
-                    node->setTexture(zoomHandle.texture);
-                    node->setRect(QRectF(state.zoomButtonLabel.topLeft,
-                                          zoomHandle.logicalSize));
-                    staticRoot->appendChildNode(node);
+                const auto pushLabel =
+                    [&](const miacode::timeline::TimelineSceneTextLabel& label) {
+                        const TimelineQuickTextureHandle handle = textures->textTexture(label);
+                        if (handle.texture == nullptr) {
+                            return;
+                        }
+                        auto* node = new QSGSimpleTextureNode();
+                        node->setTexture(handle.texture);
+                        node->setRect(QRectF(label.topLeft, handle.logicalSize));
+                        staticRoot->appendChildNode(node);
+                    };
+                pushLabel(state.zoomButtonLabel);
+                for (const auto& label : state.zoomButtonGlyphLabels) {
+                    pushLabel(label);
                 }
             }
         }

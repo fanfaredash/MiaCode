@@ -198,7 +198,11 @@ void TimelineHeaderSource::contributeToSnapshot(
         // Labels (text) — chart-preview Sprites batch, no scroll
         // translate applied by pipeline, so applyScrollOffsetX=0.
         QVector<miacode::timeline::TimelineSceneTextLabel> controlLabels;
+        controlLabels.reserve(1 + state->zoomButtonGlyphLabels.size());
         controlLabels.append(state->zoomButtonLabel);
+        for (const auto& label : state->zoomButtonGlyphLabels) {
+            controlLabels.append(label);
+        }
         rasteriseLabels(controlLabels, /*applyScrollOffsetX=*/0.0);
     }
 }

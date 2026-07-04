@@ -279,7 +279,7 @@ void applyDynamicSceneState(
         miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(*state, state->viewportSize.width());
 
     // Phase 7 — bucket-bump revisions. The QSG layers
-    // (TimelineQuickWaveformLayer / Header (grid) / Notes) only
+    // (TimelineQuickWaveformLayer / Header / Notes) only
     // rebuild their child node tree when the corresponding revision
     // counter changes. With Phase 7 build-time culling, the cached
     // primitive set is bucket-specific, but the bridge's revisions
@@ -289,15 +289,19 @@ void applyDynamicSceneState(
     // that flips when the user scrolls into a new bucket. Combined
     // with the matching cache invalidation in
     // TimelineQuickItem::currentSceneState, the layer rebuilds its
-    // children to match the freshly emitted primitives. Within a
-    // bucket the bumped revision is constant, so layers happily
-    // skip rebuilds and the per-frame cost stays at "set transform".
+    // children to match the freshly emitted primitives. Header line
+    // numbers and line-start triangles use the same low-frequency
+    // bucket boundary so paging within a bucket stays transform-only.
+    // Within a bucket the bumped revision is constant, so layers
+    // happily skip rebuilds and the per-frame cost stays at "set
+    // transform".
     if (state->viewportSize.width() > 0) {
         const int bucketSize = state->viewportSize.width();
         const quint64 bucket =
             static_cast<quint64>(state->horizontalScrollValue / bucketSize);
         state->waveformRevision += bucket;
         state->gridRevision += bucket;
+        state->headerRevision += bucket;
         state->notesRevision += bucket;
     }
 
