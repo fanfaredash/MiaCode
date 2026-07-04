@@ -98,6 +98,7 @@ bool SceneFrameRenderer::bootstrap(const VideoExportTask& task, QString* errorMe
     frameState_.judgeOverlay = assets_.judgeOverlayAssets();
     frameState_.judgeEffect = assets_.judgeEffectAssets();
     frameState_.playheadSeconds = 0.0;
+    miacode::preview::scene::refreshPreviewFrameStateHudStatsSnapshot(frameState_);
 
     contentDurationSeconds_ = qMax(0.0, task.contentDurationSeconds);
 
@@ -166,6 +167,7 @@ QImage SceneFrameRenderer::renderAt(double seconds, int sidePx, QString* errorMe
     sceneRoot_->setSize(QSizeF(side, side));
 
     frameState_.playheadSeconds = seconds;
+    miacode::preview::scene::refreshPreviewFrameStateHudStatsSnapshot(frameState_);
     // Re-point the (unchanged) state pointer so the scene root marks itself dirty
     // and re-runs updatePaintNode against the new playhead on the next render.
     sceneRoot_->setFrameState(&frameState_);

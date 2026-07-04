@@ -47,6 +47,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <memory>
 
 namespace {
 // Monotonic, high-resolution timestamp in nanoseconds. Same clock as
@@ -281,8 +282,8 @@ void PreviewDCompSurface::setRuntime(PreviewRuntime* runtime)
         //         → frameState.playhead = visualSecond, NO emit
         // A DirectConnection slot fires inside step 1, so it captures
         // the audio-time playhead — without the +16.67ms visual
-        // lookahead the legacy QSG path got because it reads
-        // frameState() at QSG render time (after step 3 settled).
+        // lookahead the QSG path gets because it consumes the runtime
+        // frame-state snapshot published after step 3 settles.
         // Result: DComp lags audio by one vsync vs legacy. Queueing
         // defers the slot until after the tick completes; by then
         // step 3 has overwritten the playhead with the
@@ -509,7 +510,11 @@ void PreviewDCompSurface::buildAndPublishSnapshot(qint64 emittedAtNs)
     QElapsedTimer tickBuildTimer;
     tickBuildTimer.start();
 
-    const auto& state = runtime_->frameState();
+    const auto stateSnapshot = runtime_->frameStateSnapshot();
+    if (stateSnapshot == nullptr) {
+        return;
+    }
+    const auto& state = *stateSnapshot;
 
     // Render-thread playhead clock. When the call originates from
     // onRendererPresented, emittedAtNs is the render thread's monotonic

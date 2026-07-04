@@ -203,6 +203,11 @@ inline bool previewFramePacingDiagnosticsEnabled()
     return envFlagEnabled("MIACODE_PREVIEW_FRAME_PACING_DIAG");
 }
 
+inline bool previewHudPaintDiagnosticsEnabled()
+{
+    return envFlagEnabled("MIACODE_PREVIEW_HUD_PAINT_DIAG");
+}
+
 inline int previewFramePacingDiagnosticSampleMs()
 {
     const int value = envIntValue("MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS", 1000);

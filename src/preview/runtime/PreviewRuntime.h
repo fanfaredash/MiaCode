@@ -216,6 +216,9 @@ public:
     bool hasCoreSkinAssetsLoadedForDebug() const;
 
     void setFrameSize(const QSize& size);
+    std::shared_ptr<const miacode::preview::scene::PreviewFrameState> frameStateSnapshot() const;
+    // GUI-thread builder state. Render/QSG/DComp consumers must use
+    // frameStateSnapshot() so a frame never observes partially-mutated state.
     const miacode::preview::scene::PreviewFrameState& frameState() const { return frameState_; }
     // Detailed render-side resource snapshot for the leak gauge ("key=val …"): scene content
     // revision (rebuild count), current cached/transient texture count + GPU bytes, cumulative
@@ -230,6 +233,7 @@ signals:
     void introOverlayStateChanged();
 
 private:
+    void publishFrameStateSnapshot();
     void handlePresentedFrame();
     void refreshAssetStateFromRepository();
     void updatePresentedFrameStats();
@@ -247,6 +251,7 @@ private:
     QPointer<QQuickWindow> visibleHostWindow_;
     QSize frameSize_;
     miacode::preview::scene::PreviewFrameState frameState_;
+    std::atomic<std::shared_ptr<const miacode::preview::scene::PreviewFrameState>> publishedFrameState_;
     bool introOverlayActive_ = false;
     int introOverlayFrame_ = 0;
     QVariantMap introBannerTrack_;

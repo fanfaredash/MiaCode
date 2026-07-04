@@ -322,6 +322,13 @@ void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second, double 
         if (state_.qtPreviewFramePacingDiagLastTickLogMs_ < 0
             || nowMs - state_.qtPreviewFramePacingDiagLastTickLogMs_ >= sampleMs) {
             state_.qtPreviewFramePacingDiagLastTickLogMs_ = nowMs;
+            qint64 previewTickCount = 0;
+            if (state_.previewCanvas_ != nullptr) {
+                const auto snapshot = state_.previewCanvas_->frameStateSnapshot();
+                if (snapshot != nullptr) {
+                    previewTickCount = snapshot->tickCount;
+                }
+            }
             appendPreviewFramePacingDiagLog(
                 isAnomaly ? QStringLiteral("tick_large_step") : QStringLiteral("tick_sample"),
                 QStringLiteral(
@@ -329,7 +336,7 @@ void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second, double 
                     "fallback_delta_ms=%7 audio_delta_ms=%8 audio_minus_fallback_ms=%9 time_authority=%10 "
                     "tick_exec_ms=%11 sync_media_ms=%12 notes_ms=%13 apply_position_ms=%14 smoothing_ms=%15 drain_events_ms=%16"
                 )
-                    .arg(state_.previewCanvas_ != nullptr ? state_.previewCanvas_->frameState().tickCount : 0)
+                    .arg(previewTickCount)
                     .arg(static_cast<double>(wallDeltaNs) / 1000000.0, 0, 'f', 3)
                     .arg(playheadDeltaSeconds * 1000.0, 0, 'f', 3)
                     .arg(speedRatio, 0, 'f', 4)

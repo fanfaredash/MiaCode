@@ -13,6 +13,7 @@
 #include "common/PreviewVideoGeometryConfig.h"
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
+#include "core/scene/PreviewProgressStatsCache.h"
 #include "core/video/PreviewRenderSettings.h"
 #include "timeline/TimelineData.h"
 
@@ -21,8 +22,6 @@
 #endif
 
 namespace miacode::preview::scene {
-
-class PreviewProgressStatsCache;
 
 struct PreviewSkinAssets {
     QImage tapImage;
@@ -270,6 +269,26 @@ struct PreviewFrameState {
     bool framePacingUsesDisplayRefresh = false;
     int cpuFallbackCount = 0;
     bool usedGpuRendererThisFrame = false;
+    PreviewHudStats hudStatsSnapshot;
+    double hudStatsSnapshotSecond = std::numeric_limits<double>::quiet_NaN();
+    bool hudStatsSnapshotValid = false;
 };
+
+inline double previewFrameStateHudPlayheadSeconds(const PreviewFrameState& state)
+{
+    return qIsFinite(state.hudPlayheadSecondsOverride)
+        ? state.hudPlayheadSecondsOverride
+        : state.playheadSeconds;
+}
+
+inline void refreshPreviewFrameStateHudStatsSnapshot(PreviewFrameState& state)
+{
+    const double hudSecond = previewFrameStateHudPlayheadSeconds(state);
+    state.hudStatsSnapshotSecond = hudSecond;
+    state.hudStatsSnapshot = state.progressStatsCache != nullptr
+        ? state.progressStatsCache->hudStatsAt(hudSecond)
+        : PreviewHudStats();
+    state.hudStatsSnapshotValid = true;
+}
 
 }  // namespace miacode::preview::scene

@@ -72,6 +72,7 @@ PreviewQuickExportSession::~PreviewQuickExportSession()
 void PreviewQuickExportSession::setFrameState(const miacode::preview::scene::PreviewFrameState& state)
 {
     frameState_ = state;
+    miacode::preview::scene::refreshPreviewFrameStateHudStatsSnapshot(frameState_);
     applyFrameState();
 }
 
@@ -91,6 +92,7 @@ void PreviewQuickExportSession::applyExportFrameTick(
     frameState_.usedGpuRendererThisFrame = usedGpuRendererThisFrame;
     frameState_.cpuFallbackCount = cpuFallbackCount;
     frameState_.fpsDisplay = fpsDisplay;
+    miacode::preview::scene::refreshPreviewFrameStateHudStatsSnapshot(frameState_);
     requestFrameRefresh();
 }
 

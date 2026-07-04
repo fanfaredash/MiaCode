@@ -104,6 +104,10 @@ Dev-tool-only parser repro hook:
   - enables low-noise runtime `preview/frame_pacing` request/tick/present/watchdog diagnostics without requiring `--debug`
   - normal request/tick/present samples are rate-limited; watchdog timeout, fixed-timer present-miss/hard-resync, orphan-present, and large-step events log immediately
   - owners: `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp`, `src/app/mainwindow/sections/timeline/MainWindow.TimelineLayout.cpp`, `src/app/mainwindow/sections/timeline/MainWindow.TimelinePlayback.cpp`
+- `MIACODE_PREVIEW_HUD_PAINT_DIAG`
+  - enables focused runtime `preview/hud_state` and `preview/hud_paint` breadcrumbs for export-preview / HUD paint crashes without requiring `--debug`
+  - force-writes GUI-thread HUD mutations, render-thread `PreviewQuickHudLayer::paint()` entry/skip/overlay stages, and a flushed `draw_text_before` line before each HUD `QPainter::drawText` call so access violations leave the exact HUD branch/text tag on disk
+  - owners: `src/common/DebugOptions.h`, `src/preview/runtime/PreviewRuntime.cpp`, `src/preview/quick_scene/PreviewQuickHudLayer.cpp`
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS`
   - pacing diagnostic normal-sample interval in milliseconds, default `1000`
   - owner: `src/common/DebugOptions.h`

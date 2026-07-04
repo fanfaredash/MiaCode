@@ -20,6 +20,8 @@
 #include <QSGSimpleTextureNode>
 #include <QSGNode>
 
+#include <memory>
+
 namespace {
 
 constexpr int kPreviewQuickSceneLayerSlotCount = 18;
@@ -83,13 +85,8 @@ void updateCenterDisplaySlot(
         state.render.centerDisplayMode == miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus101;
     const bool isBreakOnlyDisplay =
         state.render.centerDisplayMode == miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus100;
-    const double playheadSeconds = qIsFinite(state.hudPlayheadSecondsOverride)
-        ? state.hudPlayheadSecondsOverride
-        : state.playheadSeconds;
-    miacode::preview::scene::PreviewHudStats stats;
-    if (!isConstantDisplay && state.progressStatsCache != nullptr) {
-        stats = state.progressStatsCache->hudStatsAt(playheadSeconds);
-    }
+    const miacode::preview::scene::PreviewHudStats stats =
+        !isConstantDisplay ? state.hudStatsSnapshot : miacode::preview::scene::PreviewHudStats();
     if (!isConstantDisplay && !isBreakOnlyDisplay) {
         if (cachedMode == state.render.centerDisplayMode
             && qFuzzyCompare(cachedDeluxeRate + 1.0, stats.deluxeRate + 1.0)
@@ -695,8 +692,10 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
     textures_.beginFrame();
     layerProfileStats_.clear();
     const miacode::preview::scene::PreviewFrameState* state = nullptr;
+    std::shared_ptr<const miacode::preview::scene::PreviewFrameState> runtimeStateSnapshot;
     if (runtime_ != nullptr) {
-        state = &runtime_->frameState();
+        runtimeStateSnapshot = runtime_->frameStateSnapshot();
+        state = runtimeStateSnapshot.get();
     } else {
         state = frameState_;
     }

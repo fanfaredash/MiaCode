@@ -32,6 +32,41 @@ double fpsFromAverageMs(double averageMs)
     return averageMs > 1e-6 ? 1000.0 / averageMs : 0.0;
 }
 
+QString pointerHex(const void* pointer)
+{
+    return QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(pointer), 0, 16);
+}
+
+QString logTextPreview(QString text)
+{
+    text.replace(QLatin1Char('\r'), QLatin1Char(' '));
+    text.replace(QLatin1Char('\n'), QLatin1Char(' '));
+    text.replace(QLatin1Char('\t'), QLatin1Char(' '));
+    text.replace(QLatin1Char('"'), QLatin1Char('\''));
+    constexpr int kMaxPreviewChars = 96;
+    if (text.size() > kMaxPreviewChars) {
+        text = text.left(kMaxPreviewChars) + QStringLiteral("...");
+    }
+    return text;
+}
+
+void appendHudStateDiagLine(const QString& action, const QString& detail = QString())
+{
+    if (!miacode::debug_options::previewHudPaintDiagnosticsEnabled()) {
+        return;
+    }
+    QString payload = QStringLiteral("action=%1").arg(action);
+    if (!detail.trimmed().isEmpty()) {
+        payload += QStringLiteral(" ") + detail.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/hud_state"),
+        payload,
+        /*force=*/true);
+    miacode::debug_log::flushAsyncLogWriter(100);
+}
+
 double rollingAverageMs(const QVector<double>& samples, int count)
 {
     if (count <= 0) {
@@ -162,6 +197,7 @@ PreviewRuntime::PreviewRuntime(QObject* parent)
     tickIntervalsMs_.fill(0.0);
     updateRequestIntervalsMs_.resize(kPreviewIntervalWindowSize);
     updateRequestIntervalsMs_.fill(0.0);
+    publishFrameStateSnapshot();
     connect(assets_, &miacode::preview::runtime::PreviewSceneAssetRepository::assetsChanged, this, [this]() {
         refreshAssetStateFromRepository();
         // Assets (incl. the firework colour ball) just became available —
@@ -193,6 +229,19 @@ PreviewRuntime::~PreviewRuntime()
             .arg(profilingWasDirty ? 1 : 0)
             .arg(profilingWriteElapsedMs)
     );
+}
+
+std::shared_ptr<const miacode::preview::scene::PreviewFrameState> PreviewRuntime::frameStateSnapshot() const
+{
+    return publishedFrameState_.load(std::memory_order_acquire);
+}
+
+void PreviewRuntime::publishFrameStateSnapshot()
+{
+    auto snapshot =
+        std::make_shared<miacode::preview::scene::PreviewFrameState>(frameState_);
+    miacode::preview::scene::refreshPreviewFrameStateHudStatsSnapshot(*snapshot);
+    publishedFrameState_.store(std::move(snapshot), std::memory_order_release);
 }
 
 void PreviewRuntime::setVisibleHostWindow(QQuickWindow* window)
@@ -269,6 +318,7 @@ void PreviewRuntime::update()
             updateRequestIntervalsMs_, updateRequestIntervalCount_, thresholdMs);
     }
     pendingPresentedStatsRefresh_ = true;
+    publishFrameStateSnapshot();
     emit frameStateChanged();
     if (visibleHostWindow_ != nullptr) {
         visibleHostWindow_->requestUpdate();
@@ -294,6 +344,8 @@ void PreviewRuntime::setStageMediaPresentationMode(
     frameState_.media.presentationMode = mode;
     if (requestUpdate) {
         update();
+    } else {
+        publishFrameStateSnapshot();
     }
 }
 
@@ -314,6 +366,8 @@ void PreviewRuntime::setExternalStageMediaDebugState(
     frameState_.media.externalVideoFrameStalled = videoFrameStalled;
     if (requestUpdate) {
         update();
+    } else {
+        publishFrameStateSnapshot();
     }
 }
 
@@ -339,6 +393,7 @@ void PreviewRuntime::setExternalStageMediaProfileSummary(
     frameState_.media.externalVideoFrameIntervalAvgMs = qMax(0.0, videoFrameIntervalAvgMs);
     frameState_.media.externalVideoFrameIntervalMaxMs = qMax(0.0, videoFrameIntervalMaxMs);
     frameState_.media.externalVideoFrameStallCount = qMax<qint64>(0, videoFrameStallCount);
+    publishFrameStateSnapshot();
 }
 
 void PreviewRuntime::setFramePacingDebugState(
@@ -367,6 +422,8 @@ void PreviewRuntime::setPlayheadSeconds(double seconds, bool requestUpdate)
     refreshFireworkWarmupForPlayheadChange();
     if (requestUpdate) {
         update();
+    } else {
+        publishFrameStateSnapshot();
     }
 }
 
@@ -375,6 +432,8 @@ void PreviewRuntime::setHudPlayheadSecondsOverride(double seconds, bool requestU
     frameState_.hudPlayheadSecondsOverride = seconds;
     if (requestUpdate) {
         update();
+    } else {
+        publishFrameStateSnapshot();
     }
 }
 
@@ -383,6 +442,8 @@ void PreviewRuntime::clearHudPlayheadSecondsOverride(bool requestUpdate)
     frameState_.hudPlayheadSecondsOverride = std::numeric_limits<double>::quiet_NaN();
     if (requestUpdate) {
         update();
+    } else {
+        publishFrameStateSnapshot();
     }
 }
 
@@ -454,6 +515,7 @@ void PreviewRuntime::setVideoFrame(const QVideoFrame& frame)
 #else
     Q_UNUSED(frame);
 #endif
+    publishFrameStateSnapshot();
 }
 
 void PreviewRuntime::setResolvedStageVideoFrame(
@@ -500,7 +562,16 @@ void PreviewRuntime::setProgressStatsCache(
     std::shared_ptr<const miacode::preview::scene::PreviewProgressStatsCache> cache
 )
 {
+    const void* oldCache = frameState_.progressStatsCache.get();
+    const void* newCache = cache.get();
     frameState_.progressStatsCache = std::move(cache);
+    appendHudStateDiagLine(
+        QStringLiteral("set_progress_stats_cache"),
+        QStringLiteral("runtime=%1 state=%2 old_cache=%3 new_cache=%4")
+            .arg(pointerHex(this))
+            .arg(pointerHex(&frameState_))
+            .arg(pointerHex(oldCache))
+            .arg(pointerHex(newCache)));
     update();
 }
 
@@ -634,27 +705,65 @@ void PreviewRuntime::setSuppressDebugInfo(bool suppress)
     if (suppressDebugInfo_ == suppress) {
         return;
     }
+    const bool oldEffective = frameState_.render.showDebugInfo;
     suppressDebugInfo_ = suppress;
     frameState_.render.showDebugInfo = requestedShowDebugInfo_ && !suppressDebugInfo_;
+    appendHudStateDiagLine(
+        QStringLiteral("set_suppress_debug_info"),
+        QStringLiteral("runtime=%1 state=%2 suppress=%3 requested=%4 old_effective=%5 new_effective=%6")
+            .arg(pointerHex(this))
+            .arg(pointerHex(&frameState_))
+            .arg(suppressDebugInfo_ ? 1 : 0)
+            .arg(requestedShowDebugInfo_ ? 1 : 0)
+            .arg(oldEffective ? 1 : 0)
+            .arg(frameState_.render.showDebugInfo ? 1 : 0));
     update();
 }
 
 void PreviewRuntime::setShowTimestamp(bool show)
 {
+    const bool oldShow = frameState_.render.showTimestamp;
     frameState_.render.showTimestamp = show;
+    appendHudStateDiagLine(
+        QStringLiteral("set_show_timestamp"),
+        QStringLiteral("runtime=%1 state=%2 old=%3 new=%4")
+            .arg(pointerHex(this))
+            .arg(pointerHex(&frameState_))
+            .arg(oldShow ? 1 : 0)
+            .arg(frameState_.render.showTimestamp ? 1 : 0));
     update();
 }
 
 void PreviewRuntime::setShowObjectStatsHud(bool show)
 {
+    const bool oldRequested = requestedShowObjectStatsHud_;
+    const bool oldEffective = frameState_.render.showObjectStatsHud;
     requestedShowObjectStatsHud_ = show;
     frameState_.render.showObjectStatsHud = requestedShowObjectStatsHud_ && !suppressObjectStatsHud_;
+    appendHudStateDiagLine(
+        QStringLiteral("set_show_object_stats_hud"),
+        QStringLiteral("runtime=%1 state=%2 old_requested=%3 new_requested=%4 suppress=%5 old_effective=%6 new_effective=%7")
+            .arg(pointerHex(this))
+            .arg(pointerHex(&frameState_))
+            .arg(oldRequested ? 1 : 0)
+            .arg(requestedShowObjectStatsHud_ ? 1 : 0)
+            .arg(suppressObjectStatsHud_ ? 1 : 0)
+            .arg(oldEffective ? 1 : 0)
+            .arg(frameState_.render.showObjectStatsHud ? 1 : 0));
     update();
 }
 
 void PreviewRuntime::setCenterDisplayMode(miacode::preview_gameplay::CenterDisplayMode mode)
 {
+    const auto oldMode = frameState_.render.centerDisplayMode;
     frameState_.render.centerDisplayMode = mode;
+    appendHudStateDiagLine(
+        QStringLiteral("set_center_display_mode"),
+        QStringLiteral("runtime=%1 state=%2 old=%3 new=%4")
+            .arg(pointerHex(this))
+            .arg(pointerHex(&frameState_))
+            .arg(static_cast<int>(oldMode))
+            .arg(static_cast<int>(frameState_.render.centerDisplayMode)));
     update();
 }
 
@@ -663,8 +772,18 @@ void PreviewRuntime::setSuppressObjectStatsHud(bool suppress)
     if (suppressObjectStatsHud_ == suppress) {
         return;
     }
+    const bool oldEffective = frameState_.render.showObjectStatsHud;
     suppressObjectStatsHud_ = suppress;
     frameState_.render.showObjectStatsHud = requestedShowObjectStatsHud_ && !suppressObjectStatsHud_;
+    appendHudStateDiagLine(
+        QStringLiteral("set_suppress_object_stats_hud"),
+        QStringLiteral("runtime=%1 state=%2 suppress=%3 requested=%4 old_effective=%5 new_effective=%6")
+            .arg(pointerHex(this))
+            .arg(pointerHex(&frameState_))
+            .arg(suppressObjectStatsHud_ ? 1 : 0)
+            .arg(requestedShowObjectStatsHud_ ? 1 : 0)
+            .arg(oldEffective ? 1 : 0)
+            .arg(frameState_.render.showObjectStatsHud ? 1 : 0));
     update();
 }
 
@@ -683,7 +802,19 @@ void PreviewRuntime::setShowChartInfoHud(bool show)
     if (frameState_.render.showChartInfoHud == show) {
         return;
     }
+    const bool oldShow = frameState_.render.showChartInfoHud;
     frameState_.render.showChartInfoHud = show;
+    appendHudStateDiagLine(
+        QStringLiteral("set_show_chart_info_hud"),
+        QStringLiteral("runtime=%1 state=%2 old=%3 new=%4 title_len=%5 artist_len=%6 diff_len=%7 designer_len=%8")
+            .arg(pointerHex(this))
+            .arg(pointerHex(&frameState_))
+            .arg(oldShow ? 1 : 0)
+            .arg(frameState_.render.showChartInfoHud ? 1 : 0)
+            .arg(frameState_.chartTitle.size())
+            .arg(frameState_.chartArtist.size())
+            .arg(frameState_.chartDifficultyLabel.size())
+            .arg(frameState_.chartDesigner.size()));
     update();
 }
 
@@ -702,6 +833,20 @@ void PreviewRuntime::setChartInfo(const QString& title,
     frameState_.chartArtist = artist;
     frameState_.chartDifficultyLabel = difficultyLabel;
     frameState_.chartDesigner = designer;
+    appendHudStateDiagLine(
+        QStringLiteral("set_chart_info"),
+        QStringLiteral(
+            "runtime=%1 state=%2 title_len=%3 artist_len=%4 diff_len=%5 designer_len=%6 title_preview=\"%7\" artist_preview=\"%8\" diff_preview=\"%9\" designer_preview=\"%10\"")
+            .arg(pointerHex(this))
+            .arg(pointerHex(&frameState_))
+            .arg(frameState_.chartTitle.size())
+            .arg(frameState_.chartArtist.size())
+            .arg(frameState_.chartDifficultyLabel.size())
+            .arg(frameState_.chartDesigner.size())
+            .arg(logTextPreview(frameState_.chartTitle))
+            .arg(logTextPreview(frameState_.chartArtist))
+            .arg(logTextPreview(frameState_.chartDifficultyLabel))
+            .arg(logTextPreview(frameState_.chartDesigner)));
     update();
 }
 
@@ -717,6 +862,14 @@ miacode::preview_gameplay::CenterDisplayMode PreviewRuntime::centerDisplayMode()
 
 void PreviewRuntime::reset()
 {
+    appendHudStateDiagLine(
+        QStringLiteral("reset"),
+        QStringLiteral("runtime=%1 state=%2 old_progress_stats=%3 old_chart_title_len=%4 old_show_chart_info=%5")
+            .arg(pointerHex(this))
+            .arg(pointerHex(&frameState_))
+            .arg(pointerHex(frameState_.progressStatsCache.get()))
+            .arg(frameState_.chartTitle.size())
+            .arg(frameState_.render.showChartInfoHud ? 1 : 0));
     const auto presentationMode = frameState_.media.presentationMode;
     frameState_.noteMarkers.clear();
     frameState_.progressStatsCache.reset();
@@ -779,6 +932,7 @@ void PreviewRuntime::noteTickForProfiling()
         frameState_.tickStutterCountDisplay = rollingStutterCount(
             tickIntervalsMs_, tickIntervalCount_, thresholdMs);
     }
+    publishFrameStateSnapshot();
 }
 
 QString PreviewRuntime::resourceGaugePayload() const
@@ -1150,6 +1304,7 @@ void PreviewRuntime::resetProfilingSession()
     frameState_.tickCount = 0;
     frameState_.updateRequestCount = 0;
     frameState_.presentedFrameCount = 0;
+    publishFrameStateSnapshot();
     profilingSummaryDirty_ = false;
     profiledTextureFrameCount_ = 0;
     profiledActiveSpriteFrameCount_ = 0;
@@ -1575,7 +1730,17 @@ void PreviewRuntime::setFrameSize(const QSize& size)
     if (frameSize_ == safeSize) {
         return;
     }
+    const QSize oldSize = frameSize_;
     frameSize_ = safeSize;
+    appendHudStateDiagLine(
+        QStringLiteral("set_frame_size"),
+        QStringLiteral("runtime=%1 state=%2 old=%3x%4 new=%5x%6")
+            .arg(pointerHex(this))
+            .arg(pointerHex(&frameState_))
+            .arg(oldSize.width())
+            .arg(oldSize.height())
+            .arg(frameSize_.width())
+            .arg(frameSize_.height()));
     pendingPresentedStatsRefresh_ = true;
     update();
 }
@@ -1617,6 +1782,7 @@ void PreviewRuntime::handlePresentedFrame()
                     .arg(presentedFrameCountTotal_));
         }
     }
+    publishFrameStateSnapshot();
     emit framePresented();
 }
 
