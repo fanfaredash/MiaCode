@@ -1,12 +1,10 @@
 build/
 build-mingw*/
 Build-Mingw*/
-build610/
+build-macos/
 dist/
 font_candidates/
 .qt/
-.qt610/
-.agents/
 .DS_Store
 .vs/
 .idea/

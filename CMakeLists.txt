@@ -554,7 +554,7 @@ qt_add_shaders(MiaCode "intro_shaders"
 )
 set_target_properties(MiaCode PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "MiaCode"
-    MACOSX_BUNDLE_GUI_IDENTIFIER "app.miacodemac.kaedekr"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "com.fanfaredash.MiaCode"
 )
 
 if (WIN32 AND EXISTS "${MIACODE_APP_ICON}")
