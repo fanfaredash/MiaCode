@@ -675,6 +675,32 @@ inline bool gpuBindHighPerformanceEnabled()
     return envFlagEnabled("MIACODE_GPU_BIND_HIGH_PERFORMANCE");
 }
 
+// P5.3 — hidden export render-backend selector (diagnostic / A-B only; not in
+// the user settings UI). Chooses the offscreen chart-render session used by
+// CLI export (--export-video) and the export worker (--export-video-worker):
+//   opengl (default) -> the stable QQuickRenderControl OpenGL FBO/PBO path
+//   d3d11_qrhi       -> the new D3D11/QRhi session (plan P5); the session
+//                       binds the P3-resolved policy adapter and reads back
+//                       synchronously; init failure auto-falls-back to OpenGL
+//   auto             -> currently identical to d3d11_qrhi; reserved so the
+//                       default can later flip to "auto -> d3d11 -> opengl
+//                       fallback" once validated (plan P5.4)
+// Windows-only (the request is ignored elsewhere). Unknown values keep the
+// default OpenGL path. Set MIACODE_EXPORT_RENDER_BACKEND=d3d11_qrhi.
+enum class ExportRenderBackendRequest { OpenGl, D3D11Qrhi, Auto };
+
+inline ExportRenderBackendRequest exportRenderBackendRequest()
+{
+    const QString raw = envValue("MIACODE_EXPORT_RENDER_BACKEND").toLower();
+    if (raw == QStringLiteral("d3d11_qrhi") || raw == QStringLiteral("d3d11")) {
+        return ExportRenderBackendRequest::D3D11Qrhi;
+    }
+    if (raw == QStringLiteral("auto")) {
+        return ExportRenderBackendRequest::Auto;
+    }
+    return ExportRenderBackendRequest::OpenGl;
+}
+
 inline bool hasDebugArg(const QStringList& args)
 {
     return args.contains(QStringLiteral("--debug"));

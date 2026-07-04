@@ -34,7 +34,7 @@ Windows release 包根目录的 `MiaCode.exe` 是 launcher，真正的 GUI/导�
 
 当前 GUI 不再强制 OpenGL：
 
-- `src/app/main.cpp` 中 CLI 导出和导出 worker 会强制 `QSGRendererInterface::OpenGL`。
+- `src/app/main.cpp` 中 CLI 导出和导出 worker 默认使用 `QSGRendererInterface::OpenGL`；隐藏开关 `MIACODE_EXPORT_RENDER_BACKEND=d3d11_qrhi` 会把导出进程切到 Direct3D11。
 - GUI 启动会读取 `--rhi=<name>`、持久化配置或平台默认后端。
 - `src/app/graphics_backend.cpp` 支持 `d3d11`、`d3d12`、`opengl`、`vulkan`、`metal`、`software`。
 - 因此当前前端默认不是 MiaCode 显式强制 D3D11，而是 `platform_default`；在 Windows / Qt 6 Quick 场景下通常会解析为 Direct3D11。`QuickShellPreviewCompositeSurface.cpp` 也按这个假设处理 `QQuickWindow::graphicsApi() == Unknown` 的启动阶段。
@@ -53,9 +53,9 @@ Windows release 包根目录的 `MiaCode.exe` 是 launcher，真正的 GUI/导�
 
 ### 导出渲染路径
 
-当前导出强制 OpenGL：
+当前导出默认 OpenGL，并保留隐藏 D3D11 诊断链路：
 
-- `src/app/main.cpp` 对 `--export-video` / `--export-video-worker` 强制 `QQuickWindow::setGraphicsApi(OpenGL)`。
+- `src/app/main.cpp` 对 `--export-video` / `--export-video-worker` 默认调用 `QQuickWindow::setGraphicsApi(OpenGL)`；`MIACODE_EXPORT_RENDER_BACKEND=d3d11_qrhi|auto` 时改为 `Direct3D11`。
 - `src/preview/runtime/PreviewQuickExportSession.cpp` 创建 `QOffscreenSurface`、`QOpenGLContext`、`QQuickRenderControl`。
 - 导出窗口通过 `QQuickGraphicsDevice::fromOpenGLContext(context_)` 绑定到 OpenGL context。
 - 渲染目标是 `QOpenGLFramebufferObject`，读回通过同步 `glReadPixels` 或 PBO。
@@ -310,6 +310,19 @@ Windows release 包根目录的 `MiaCode.exe` 是 launcher，真正的 GUI/导�
 ### P5：D3D11 QRhi 导出链路
 
 目标：新增一条与实时谱面渲染策略一致的 D3D11/QRhi 导出链路。第一版只要求 Windows D3D11 稳定可用、日志清晰、OpenGL 可回退；不追求跨 RHI 通用抽象。
+
+> **实施状态（2026-07-04）**：P5.1–P5.4 已实现，默认 OFF（`MIACODE_EXPORT_RENDER_BACKEND`
+> 默认 `opengl`，行为与 P5 之前完全一致）。落点：
+> `src/preview/runtime/PreviewQuickD3D11ExportSession.{h,cpp}`（新 session，与 OpenGL
+> session 并行、场景挂载逻辑同构）；backend 分发在 `VideoExportQuickRenderBackend`
+> （`setRenderSessionBackend`）；选择 + fallback + `render_backend` 摘要日志在
+> `VideoExportPreparedTask.cpp`；导出进程 graphics API 选择在 `main.cpp`。
+> 设备绑定 P3 策略 adapter（`fromDeviceAndContext`，导出无视频解码桥 → 绑非默认
+> adapter 安全，无需 P4 的 `MIACODE_GPU_BIND_HIGH_PERFORMANCE` 门）。readback 为
+> 同步 CopyResource→staging→Map（top-down，无需垂直翻转；R8G8B8A8_UNORM 与 GL_RGBA8
+> 字节序一致；同一 premultiplied→straight 转换）。P5.2 的像素一致性（premultiply/
+> mirror/通道序）与 P5.4 的默认切换条件待 hidden 开关下的固定样例 A/B 与双显卡
+> GUI 验收后再核。P5.5 生产化未开始。
 
 #### P5.1：独立 D3D11 render-control spike
 

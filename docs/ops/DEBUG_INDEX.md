@@ -2,7 +2,7 @@
 
 This document is the current user-facing index for MiaCode debug mode, log files, and preview/export diagnostics after the Qt Quick migration.
 
-> Reconciled against the code on 2026-05-29 (82 live `MIACODE_*` environment flags across ~28 files after the P3/P4 GPU additions `MIACODE_GPU_POLICY` / `MIACODE_GPU_ADAPTER_LUID` / `MIACODE_GPU_BIND_HIGH_PERFORMANCE`). When you add/remove a flag, update this index (and `.claude/skills/miacode-dev-guide/references/debug-and-logging.md`).
+> Reconciled against the code on 2026-05-29 (83 live `MIACODE_*` environment flags across ~28 files after the P3/P4 GPU additions `MIACODE_GPU_POLICY` / `MIACODE_GPU_ADAPTER_LUID` / `MIACODE_GPU_BIND_HIGH_PERFORMANCE` and the P5 export addition `MIACODE_EXPORT_RENDER_BACKEND`). When you add/remove a flag, update this index (and `.codex/skills/miacode-dev-guide/references/debug-flags.md`).
 
 ## Debug Entry Points
 
@@ -77,7 +77,7 @@ something goes wrong. The per-category gates above are snapshot into atomics at
 
 - Realtime preview and export both use Qt Quick scene graph.
 - **GUI RHI backend:** the desktop GUI no longer forces OpenGL. It uses `--rhi=<name>`, the persisted choice, or Qt's platform default (Direct3D11 on Windows / Qt 6). See the `startup/graphics_backend` and `quick_shell/device` runtime logs for the applied backend + the actual bound adapter.
-- **CLI export / export worker:** `--export-video` and `--export-video-worker` still force Qt Quick to the OpenGL backend (the offscreen `QQuickRenderControl` + FBO/PBO readback pipeline depends on it). The export log's `render_backend` line reports `render_backend=opengl_qquick_rendercontrol rhi_api=OpenGL adapter_or_renderer=… readback_mode=…`, and `export_gl_renderer` records `GL_VENDOR`/`GL_RENDERER`/`GL_VERSION`.
+- **CLI export / export worker:** `--export-video` and `--export-video-worker` default Qt Quick to the OpenGL backend (the stable offscreen `QQuickRenderControl` + FBO/PBO readback pipeline). The hidden `MIACODE_EXPORT_RENDER_BACKEND=d3d11_qrhi` switch puts the export process on Direct3D11 and drives the D3D11/QRhi render-control session. The export log's `render_backend` line reports `render_backend=opengl_qquick_rendercontrol` or `render_backend=d3d11_qrhi_rendercontrol`, the active RHI, adapter/renderer, and readback mode.
 - **Windows dist package:** the clickable `MiaCode.exe` at the package root is only the launcher; the real GUI/export worker is `app\MiaCode.exe`. Windows Graphics Settings and the NVIDIA/AMD control panels must target `app\MiaCode.exe`, not the root launcher. The `startup/process_identity` runtime log spells out the real exe path, whether it is running from the packaged `app\` dir, and the launcher parent process.
 - **High-performance GPU hint (P2):** `MiaCode.exe` and `MiaCodeLauncher.exe` export the `NvOptimusEnablement` / `AmdPowerXpressRequestHighPerformance` symbols so hybrid-graphics laptops prefer the discrete GPU. This is a process-level *preference*, not a precise adapter binding — Windows Graphics Settings / vendor control panels can still override it. Confirmed by the `startup/gpu_hint` runtime log.
 - Export PBO diagnostics now describe the headless Quick export session, not a removed legacy renderer.
@@ -134,6 +134,10 @@ FFmpeg binary + extra readback toggle:
 
 - `MIACODE_FFMPEG` / `MIACODE_FFMPEG_PATH` — override the ffmpeg executable path used by export (and the dialog's ffmpeg probe).
 - `MIACODE_EXPORT_DISABLE_PBO_READBACK=1` — extra PBO-readback opt-out, narrower than `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO`.
+
+Render-session backend (P5 — hidden, diagnostic):
+
+- `MIACODE_EXPORT_RENDER_BACKEND` — `opengl` (default) | `d3d11_qrhi` | `auto`. Selects the offscreen chart-render session for CLI export and the export worker. `d3d11_qrhi` puts the export process on the Direct3D11 Qt Quick graphics API and drives the new `PreviewQuickD3D11ExportSession` (device created on the P3-policy adapter via `QQuickGraphicsDevice::fromDeviceAndContext`, `QQuickRenderTarget::fromD3D11Texture` R8G8B8A8 target, synchronous CopyResource+Map readback — no PBO pipeline). Init failure auto-falls-back to the OpenGL session (`render_backend_fallback` export-log line: `fallback_from=d3d11_qrhi fallback_to=opengl reason=…`). `auto` is currently identical to `d3d11_qrhi`; reserved as the future default once validated (plan P5.4). Windows-only; unknown values keep OpenGL. Selected backend, adapter LUID and readback mode appear in the `render_backend` export-log summary line.
 
 ## GPU Device Policy (P3/P4 — hidden, diagnostic)
 

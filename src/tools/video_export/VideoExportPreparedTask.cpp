@@ -41,6 +41,8 @@
 #include <QRect>
 #include <QRegularExpression>
 #include <QSet>
+#include <QQuickWindow>
+#include <QSGRendererInterface>
 #include <QStandardPaths>
 #include <QSurfaceFormat>
 #include <QTemporaryDir>
@@ -776,11 +778,64 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const QSurfaceFormat requestedFormat = QSurfaceFormat::defaultFormat();
     QOpenGLContext* shareContext = nullptr;
     QString offscreenInitError;
-    bool useOffscreenGpu = exportCanvas.initializeOffscreenRenderer(
-        requestedFormat,
-        shareContext,
-        &offscreenInitError
-    );
+
+    // P5.3 — offscreen render-session backend selection. Hidden env switch
+    // (MIACODE_EXPORT_RENDER_BACKEND, default opengl); when it requests the
+    // D3D11/QRhi session, main.cpp already put this export process on the
+    // Direct3D11 graphics API. A failed D3D11 init falls back to OpenGL in
+    // process (P5.4): tear the D3D11 attempt down, flip the process graphics
+    // API back (no scene graph exists yet on the failed window), re-init.
+    const miacode::debug_options::ExportRenderBackendRequest exportBackendRequest =
+        miacode::debug_options::exportRenderBackendRequest();
+    bool d3d11Eligible =
+        exportBackendRequest != miacode::debug_options::ExportRenderBackendRequest::OpenGl;
+    QString d3d11IneligibleReason;
+#if defined(Q_OS_WIN)
+    if (d3d11Eligible && QQuickWindow::graphicsApi() != QSGRendererInterface::Direct3D11) {
+        d3d11Eligible = false;
+        d3d11IneligibleReason = QStringLiteral("process_graphics_api_not_d3d11");
+    }
+#else
+    if (d3d11Eligible) {
+        d3d11Eligible = false;
+        d3d11IneligibleReason = QStringLiteral("non_windows");
+    }
+#endif
+    if (!d3d11IneligibleReason.isEmpty()) {
+        appendVideoExportLog(
+            QStringLiteral("render_backend_fallback"),
+            QStringLiteral("fallback_from=d3d11_qrhi fallback_to=opengl reason=%1")
+                .arg(d3d11IneligibleReason));
+    }
+    bool useOffscreenGpu = false;
+    if (d3d11Eligible) {
+        exportCanvas.setRenderSessionBackend(ExportQuickRenderSessionBackend::D3D11Qrhi);
+        useOffscreenGpu = exportCanvas.initializeOffscreenRenderer(
+            requestedFormat,
+            shareContext,
+            &offscreenInitError
+        );
+        if (!useOffscreenGpu) {
+            appendVideoExportLog(
+                QStringLiteral("render_backend_fallback"),
+                QStringLiteral("fallback_from=d3d11_qrhi fallback_to=opengl reason=%1")
+                    .arg(offscreenInitError.isEmpty() ? QStringLiteral("init_failed")
+                                                      : offscreenInitError));
+            exportCanvas.shutdownOffscreenRenderer();
+            exportCanvas.setRenderSessionBackend(ExportQuickRenderSessionBackend::OpenGl);
+            QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+            offscreenInitError.clear();
+        }
+    }
+    if (!useOffscreenGpu) {
+        useOffscreenGpu = exportCanvas.initializeOffscreenRenderer(
+            requestedFormat,
+            shareContext,
+            &offscreenInitError
+        );
+    }
+    const bool d3d11SessionActive =
+        exportCanvas.renderSessionBackend() == ExportQuickRenderSessionBackend::D3D11Qrhi;
     if (!useOffscreenGpu) {
         result.message = QStringLiteral("Failed to initialize Quick export renderer.");
         result.details = withExportLogPath(
@@ -839,6 +894,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         qEnvironmentVariableIntValue("MIACODE_EXPORT_DISABLE_PBO_READBACK") == 1;
     const bool requestOffscreenPboReadback =
         useOffscreenGpu
+        && !d3d11SessionActive
         && exportConfig.renderBackend.requestOffscreenPboReadback
         && !disablePboReadbackViaEnv
         && !highQualityForcesSyncReadback;
@@ -846,6 +902,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
     bool useOffscreenPboReadback = false;
     if (requestOffscreenPboReadback) {
         useOffscreenPboReadback = exportCanvas.supportsOffscreenPboReadback(&offscreenPboError);
+    }
+    if (d3d11SessionActive) {
+        appendVideoExportLog(
+            QStringLiteral("pbo_readback_disabled_by_backend"),
+            QStringLiteral("render_backend=d3d11_qrhi readback=synchronous_staging_map"));
     }
     if (disablePboReadbackViaEnv) {
         appendVideoExportLog(
@@ -857,17 +918,21 @@ VideoExportResult VideoExportController::exportPreparedTask(
             QStringLiteral("pbo_readback_disabled_by_quality"),
             QStringLiteral("exportQuality=high_quality readback=synchronous"));
     }
-    // P1 — the current export path is always the OpenGL QQuickRenderControl
-    // offscreen session (CLI export / worker force OpenGL). Spell that out plus
-    // the readback mode and actual GL renderer so a support log can compare the
-    // export GPU against the GUI's `quick_shell/device` line at a glance.
+    // P1/P5.3 — spell out which offscreen session the export uses (OpenGL
+    // QQuickRenderControl by default; d3d11_qrhi via the hidden switch), the
+    // readback mode, and the actual GPU (GL renderer string / DXGI adapter +
+    // LUID) so a support log can compare the export GPU against the GUI's
+    // `quick_shell/device` line at a glance.
     const QString exportReadbackMode = useOffscreenPboReadback
         ? QStringLiteral("offscreen_pbo")
-        : (useOffscreenGpu ? QStringLiteral("offscreen_gpu_direct") : QStringLiteral("cpu_fallback"));
-    const QString exportGlRenderer = exportCanvas.lastGlRendererForDebug();
+        : (useOffscreenGpu
+               ? (d3d11SessionActive ? QStringLiteral("d3d11_staging_map_sync")
+                                     : QStringLiteral("offscreen_gpu_direct"))
+               : QStringLiteral("cpu_fallback"));
+    const QString exportAdapterOrRenderer = exportCanvas.adapterOrRendererForDebug();
     appendVideoExportLog(
         QStringLiteral("render_backend"),
-        QStringLiteral("quickRequired=1 render_backend=opengl_qquick_rendercontrol rhi_api=OpenGL adapter_or_renderer=\"%9\" readback_mode=%10 envGpuRequested=%1 sourceCtx=%2 offscreenInit=%3 exportGpuReady=%4 pboRequested=%5 pboEnabled=%6 initError=%7 pboError=%8")
+        QStringLiteral("quickRequired=1 render_backend=%11 rhi_api=%12 adapter_or_renderer=\"%9\" adapter_luid=%13 rt_format=%14 readback_mode=%10 envGpuRequested=%1 sourceCtx=%2 offscreenInit=%3 exportGpuReady=%4 pboRequested=%5 pboEnabled=%6 initError=%7 pboError=%8")
             .arg(exportConfig.renderBackend.requestGpuRender ? 1 : 0)
             .arg(shareContext != nullptr ? 1 : 0)
             .arg(useOffscreenGpu ? 1 : 0)
@@ -876,8 +941,19 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(useOffscreenPboReadback ? 1 : 0)
             .arg(offscreenInitError.isEmpty() ? QStringLiteral("ok") : offscreenInitError)
             .arg(offscreenPboError.isEmpty() ? QStringLiteral("ok") : offscreenPboError)
-            .arg(exportGlRenderer.isEmpty() ? QStringLiteral("(unknown)") : exportGlRenderer)
+            .arg(exportAdapterOrRenderer.isEmpty() ? QStringLiteral("(unknown)")
+                                                   : exportAdapterOrRenderer)
             .arg(exportReadbackMode)
+            .arg(d3d11SessionActive ? QStringLiteral("d3d11_qrhi_rendercontrol")
+                                    : QStringLiteral("opengl_qquick_rendercontrol"))
+            .arg(d3d11SessionActive ? QStringLiteral("Direct3D11") : QStringLiteral("OpenGL"))
+            .arg(d3d11SessionActive
+                     ? (exportCanvas.d3d11AdapterLuidForDebug().isEmpty()
+                            ? QStringLiteral("(unknown)")
+                            : exportCanvas.d3d11AdapterLuidForDebug())
+                     : QStringLiteral("(gl)"))
+            .arg(d3d11SessionActive ? exportCanvas.d3d11RenderTargetFormatForDebug()
+                                    : QStringLiteral("GL_RGBA8"))
     );
 
     // Raw RGBA frames are packed after conversion to non-premultiplied RGBA8888.

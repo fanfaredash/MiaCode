@@ -433,15 +433,29 @@ int main(int argc, char* argv[])
     miacode::oplog::appendStartupBeaconLine("phase=after_qapplication_construct");
 #endif
 
-    // Backend selection. CLI export always forces OpenGL (legacy export pipeline relies on
-    // it). Otherwise: honour user's --rhi=<name> if present (and persist for next launch),
-    // else fall back to the persisted choice from the prior run, else Qt's platform default.
+    // Backend selection. CLI export / export worker default to OpenGL (the stable export
+    // session depends on GL FBO/PBO readback); the hidden MIACODE_EXPORT_RENDER_BACKEND
+    // switch flips those processes to Direct3D11 for the P5 D3D11/QRhi export session
+    // (Windows only — the session itself falls back to OpenGL if init fails, see
+    // VideoExportPreparedTask). Otherwise: honour user's --rhi=<name> if present (and
+    // persist for next launch), else fall back to the persisted choice from the prior
+    // run, else Qt's platform default.
     QString appliedGraphicsBackend;
     QString graphicsBackendSource;
     if (forceOpenGlGraphicsApi) {
-        QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-        appliedGraphicsBackend = QStringLiteral("opengl");
-        graphicsBackendSource = QStringLiteral("cli_video_export_force");
+#ifdef Q_OS_WIN
+        if (miacode::debug_options::exportRenderBackendRequest()
+            != miacode::debug_options::ExportRenderBackendRequest::OpenGl) {
+            QQuickWindow::setGraphicsApi(QSGRendererInterface::Direct3D11);
+            appliedGraphicsBackend = QStringLiteral("d3d11");
+            graphicsBackendSource = QStringLiteral("cli_video_export_env_d3d11_qrhi");
+        } else
+#endif
+        {
+            QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+            appliedGraphicsBackend = QStringLiteral("opengl");
+            graphicsBackendSource = QStringLiteral("cli_video_export_force");
+        }
     } else if (qsgFullDisable) {
         // Diagnostic mode: completely exclude Qt Quick's native render
         // path. Force software backend regardless of CLI / persisted
@@ -494,7 +508,7 @@ int main(int argc, char* argv[])
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("startup/qt_config"),
             QString("graphics_api=%1 dont_create_native_widget_siblings=%2 cli_export=%3 cli_export_worker=%4")
-                .arg(forceOpenGlGraphicsApi ? QStringLiteral("OpenGL") : QStringLiteral("PlatformDefault"))
+                .arg(forceOpenGlGraphicsApi ? appliedGraphicsBackend : QStringLiteral("PlatformDefault"))
                 .arg(QApplication::testAttribute(Qt::AA_DontCreateNativeWidgetSiblings) ? 1 : 0)
                 .arg(cliVideoExportRequested ? 1 : 0)
                 .arg(cliVideoExportWorkerRequested ? 1 : 0)

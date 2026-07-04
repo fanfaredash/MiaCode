@@ -271,10 +271,12 @@ Owner: `src/tools/video_export/VideoExportController.cpp`
   - `MIACODE_EXPORT_ENABLE_GPU_RENDER`
   - `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO`
   - `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO`
+  - `MIACODE_EXPORT_RENDER_BACKEND`
   - these now drive `VideoExportQuickRenderBackend` plus `PreviewQuickExportSession`, not the removed legacy offscreen renderer
   - default export path keeps GPU offscreen render enabled and requests PBO readback unless `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1`
   - `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1` is the standard safety override and the forced env used by worker crash retry
   - `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO=1` now only makes the default explicit
+  - `MIACODE_EXPORT_RENDER_BACKEND=opengl|d3d11_qrhi|auto` selects the offscreen chart-render session for CLI export and the export worker; default `opengl` keeps the stable OpenGL QQuickRenderControl FBO/PBO path, while `d3d11_qrhi`/`auto` use `PreviewQuickD3D11ExportSession` on Windows with P3-policy adapter selection, `QQuickGraphicsDevice::fromDeviceAndContext`, `QQuickRenderTarget::fromD3D11Texture`, and synchronous CopyResource+Map readback
 - Encoder selection and tuning:
   - `MIACODE_EXPORT_SKIP_ENCODER_RUNTIME_PROBE`
   - `MIACODE_EXPORT_FORCE_ENCODER`
@@ -292,6 +294,7 @@ Current normalization rules:
 - `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO` wins over `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO`.
 - `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO` implies GPU render should be requested.
 - offscreen PBO readback defaults to enabled unless explicitly disabled.
+- D3D11 QRhi export has no PBO path; the controller logs `pbo_readback_disabled_by_backend` and uses synchronous staging-map readback.
 - export log tags `pbo_capability_probe`, `pbo_cleanup_deferred`, and `export_context_not_current_on_teardown` are the primary probe / teardown breadcrumbs for PBO stability issues.
 - export worker `CrashExit` retries exactly once, only when the crashing attempt still requested PBO, and the retry injects `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1`.
 - encoder auto mode defaults to `balanced`.
