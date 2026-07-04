@@ -504,9 +504,6 @@ bool parseTouchSuffix(
     if (openBracket >= 0 && !*hasHold) {
         return false;
     }
-    if (*hasHold && (openBracket < 0 || durationSignature->isEmpty())) {
-        return false;
-    }
     return true;
 }
 
@@ -854,10 +851,13 @@ bool TimelineQuickModel::parseNoteToken(
             note.flags |= TimelineRenderFlagIsMine;
         }
         if (hasHold) {
-            bool ok = false;
-            const double durationSecond = parseHoldDurationSignature(durationSignature, state->bpm, &ok);
-            if (!ok) {
-                return false;
+            bool ok = true;
+            double durationSecond = 0.0;
+            if (!durationSignature.isEmpty()) {
+                durationSecond = parseHoldDurationSignature(durationSignature, state->bpm, &ok);
+                if (!ok) {
+                    return false;
+                }
             }
             note.endSecondOffset = note.secondOffset + qMax(0.0, durationSecond);
         }

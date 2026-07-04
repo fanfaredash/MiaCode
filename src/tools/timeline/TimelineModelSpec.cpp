@@ -1789,6 +1789,54 @@ int main(int argc, char** argv)
     }
 
     {
+        const QString chart = QStringLiteral("Ch/A1h/Ch[]/1h,\nE");
+        QString diff;
+        const bool matches = snapshotMatchesParser(chart, &diff);
+        if (!matches) {
+            err << diff << '\n';
+        }
+        expect(matches,
+               QStringLiteral("quick model matches parser for bare and empty-bracket zero-duration touch-holds"));
+
+        TimelineQuickModel model;
+        model.rebuildFromText(chart, 0.0);
+        const TimelineRenderSnapshot snapshot = model.snapshot();
+        expect(!snapshot.lines.isEmpty(), QStringLiteral("quick model builds snapshot for zero-duration touch-holds"));
+        if (!snapshot.lines.isEmpty()) {
+            const QVector<TimelineRenderNote>& notes = snapshot.lines.constFirst().notes;
+            expect(notes.size() == 4, QStringLiteral("quick model keeps Ch, A1h, Ch[], and 1h"));
+            if (notes.size() == 4) {
+                int touchHoldCount = 0;
+                int tapHoldCount = 0;
+                for (const TimelineRenderNote& note : notes) {
+                    if (note.kind == TimelineRenderNoteKind::TouchHold) {
+                        ++touchHoldCount;
+                        expect(nearlyEqual(note.endSecondOffset, note.secondOffset),
+                               QStringLiteral("zero-duration touch-hold ends on its head timing"));
+                    } else if (note.kind == TimelineRenderNoteKind::Hold) {
+                        ++tapHoldCount;
+                        expect(nearlyEqual(note.endSecondOffset, note.secondOffset),
+                               QStringLiteral("bare tap hold remains zero-duration"));
+                    }
+                }
+                expect(touchHoldCount == 3, QStringLiteral("quick model emits three touch-hold notes"));
+                expect(tapHoldCount == 1, QStringLiteral("quick model emits one tap hold note"));
+            }
+        }
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("C[],\nE"), 0.0);
+        const TimelineRenderSnapshot snapshot = model.snapshot();
+        expect(!snapshot.lines.isEmpty(), QStringLiteral("quick model builds snapshot for invalid ordinary touch bracket"));
+        if (!snapshot.lines.isEmpty()) {
+            expect(snapshot.lines.constFirst().notes.isEmpty(),
+                   QStringLiteral("quick model rejects bracketed ordinary touch without h"));
+        }
+    }
+
+    {
         TimelineQuickModel model;
         model.rebuildFromText(QStringLiteral("1<5[4:1],8-3[8:1],\nE"), 0.0);
         const TimelineRenderSnapshot snapshot = model.snapshot();
