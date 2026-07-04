@@ -93,11 +93,11 @@ ApplicationWindow {
     function handlePreviewSeekPress(event) {
         if (!event || event.modifiers !== Qt.NoModifier)
             return
-        if (!event.isAutoRepeat && event.key === Qt.Key_F11) {
-            controller.previewFullscreen = !controller.previewFullscreen
-            event.accepted = true
-            return
-        }
+        // if (!event.isAutoRepeat && event.key === Qt.Key_F11) {
+        //     controller.previewFullscreen = !controller.previewFullscreen
+        //     event.accepted = true
+        //     return
+        // }
         if (!event.isAutoRepeat && event.key === Qt.Key_Space) {
             controller.togglePreviewPlayback()
             event.accepted = true
@@ -862,11 +862,11 @@ ApplicationWindow {
         onActivated: controller.previewFullscreen = false
     }
 
-    Shortcut {
-        sequence: "F11"
-        context: Qt.ApplicationShortcut
-        onActivated: controller.previewFullscreen = !controller.previewFullscreen
-    }
+    // Shortcut {
+    //     sequence: "F11"
+    //     context: Qt.ApplicationShortcut
+    //     onActivated: controller.previewFullscreen = !controller.previewFullscreen
+    // }
 
     Shortcut {
         sequence: "Space"

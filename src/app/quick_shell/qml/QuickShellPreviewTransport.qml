@@ -476,12 +476,13 @@ Rectangle {
                         // the Intel iGPU D3D11 user-mode driver during hardware video
                         // decode. Keep the fullscreen entry hidden while the export page is active.
                         // Hide the fullscreen entry while the export page is active.
-                        visible: !(controller && controller.exportPageActive)
+                        // visible: !(controller && controller.exportPageActive)
+                        visible: false
                         onPressed: root.focusRequested()
                         onClicked: {
                             root.focusRequested()
-                            if (controller)
-                                controller.previewFullscreen = !fullscreenMode
+                            // if (controller)
+                            //     controller.previewFullscreen = !fullscreenMode
                         }
                         background: Rectangle {
                             color: root.transportButtonFillColor(parent.down)
@@ -595,12 +596,13 @@ Rectangle {
                         // the Intel iGPU D3D11 user-mode driver during hardware video
                         // decode. Keep the fullscreen entry hidden while the export page is active.
                         // Hide the fullscreen entry while the export page is active.
-                        visible: !(controller && controller.exportPageActive)
+                        // visible: !(controller && controller.exportPageActive)
+                        visible: false
                         onPressed: root.focusRequested()
                         onClicked: {
                             root.focusRequested()
-                            if (controller)
-                                controller.previewFullscreen = !fullscreenMode
+                            // if (controller)
+                            //     controller.previewFullscreen = !fullscreenMode
                         }
                         background: Rectangle {
                             color: root.transportButtonFillColor(parent.down)

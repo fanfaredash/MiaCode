@@ -410,6 +410,11 @@ QWindow* QuickShellController::statusWindow() const
 
 void QuickShellController::setPreviewFullscreen(bool fullscreen)
 {
+    if (fullscreen) {
+        // Disabled until the preview fullscreen path is reworked upstream.
+        // commandSink_->setShellPreviewFullscreen(fullscreen);
+        return;
+    }
     if (commandSink_ == nullptr || stateSource_ == nullptr) {
         return;
     }
