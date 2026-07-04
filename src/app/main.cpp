@@ -433,9 +433,9 @@ int main(int argc, char* argv[])
     miacode::oplog::appendStartupBeaconLine("phase=after_qapplication_construct");
 #endif
 
-    // Backend selection. CLI export / export worker default to OpenGL (the stable export
-    // session depends on GL FBO/PBO readback); the hidden MIACODE_EXPORT_RENDER_BACKEND
-    // switch flips those processes to Direct3D11 for the P5 D3D11/QRhi export session
+    // Backend selection. CLI export / export worker default to Direct3D11 for
+    // the P5 D3D11/QRhi export session; MIACODE_EXPORT_RENDER_BACKEND=opengl
+    // keeps the stable OpenGL FBO/PBO path as an explicit rollback
     // (Windows only — the session itself falls back to OpenGL if init fails, see
     // VideoExportPreparedTask). Otherwise: honour user's --rhi=<name> if present (and
     // persist for next launch), else fall back to the persisted choice from the prior
@@ -444,11 +444,14 @@ int main(int argc, char* argv[])
     QString graphicsBackendSource;
     if (forceOpenGlGraphicsApi) {
 #ifdef Q_OS_WIN
-        if (miacode::debug_options::exportRenderBackendRequest()
-            != miacode::debug_options::ExportRenderBackendRequest::OpenGl) {
+        const miacode::debug_options::ExportRenderBackendRequest exportBackendRequest =
+            miacode::debug_options::exportRenderBackendRequest();
+        if (exportBackendRequest != miacode::debug_options::ExportRenderBackendRequest::OpenGl) {
             QQuickWindow::setGraphicsApi(QSGRendererInterface::Direct3D11);
             appliedGraphicsBackend = QStringLiteral("d3d11");
-            graphicsBackendSource = QStringLiteral("cli_video_export_env_d3d11_qrhi");
+            graphicsBackendSource = miacode::debug_options::envValue("MIACODE_EXPORT_RENDER_BACKEND").isEmpty()
+                ? QStringLiteral("cli_video_export_default_d3d11_qrhi")
+                : QStringLiteral("cli_video_export_env_d3d11_qrhi");
         } else
 #endif
         {

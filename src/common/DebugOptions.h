@@ -661,37 +661,37 @@ inline QString gpuAdapterLuidRaw()
 
 inline bool gpuBindHighPerformanceEnabled()
 {
-    // P4 master gate — actually BIND the root Quick window to the resolved
-    // high-performance DXGI adapter (QQuickGraphicsDevice::fromAdapter). Default
-    // OFF: P3 resolves + logs the preferred adapter, but binding a render
-    // surface to a non-default adapter can break the QtAVPlayer D3D11VA
-    // two-device keyed-mutex video bridge (same-adapter only) for
-    // video-background charts on dual-GPU machines. Opt in
-    // (MIACODE_GPU_BIND_HIGH_PERFORMANCE=1) to A/B the high-performance chain on
-    // a dual-GPU machine and validate via the startup/gpu_provider +
-    // quick_shell/device logs before this becomes the default (plan P4.4). The
-    // preview composite (video surface) is never fromAdapter-bound; it keeps
-    // Qt's default adapter (or the H2 single-device path) to preserve the bridge.
-    return envFlagEnabled("MIACODE_GPU_BIND_HIGH_PERFORMANCE");
+    // P4 master gate: bind the root Quick window to the resolved high-performance
+    // DXGI adapter (QQuickGraphicsDevice::fromAdapter) by default. Set
+    // MIACODE_GPU_BIND_HIGH_PERFORMANCE=0/off/false to roll back to Qt's default
+    // adapter. The preview composite (video surface) is never fromAdapter-bound;
+    // it keeps Qt's default adapter (or the H2 single-device path) to preserve
+    // the QtAVPlayer D3D11VA same-adapter video bridge.
+    if (const std::optional<bool> enabled =
+            envOptionalFlagValue("MIACODE_GPU_BIND_HIGH_PERFORMANCE")) {
+        return *enabled;
+    }
+    return true;
 }
 
-// P5.3 — hidden export render-backend selector (diagnostic / A-B only; not in
-// the user settings UI). Chooses the offscreen chart-render session used by
-// CLI export (--export-video) and the export worker (--export-video-worker):
-//   opengl (default) -> the stable QQuickRenderControl OpenGL FBO/PBO path
-//   d3d11_qrhi       -> the new D3D11/QRhi session (plan P5); the session
-//                       binds the P3-resolved policy adapter and reads back
-//                       synchronously; init failure auto-falls-back to OpenGL
-//   auto             -> currently identical to d3d11_qrhi; reserved so the
-//                       default can later flip to "auto -> d3d11 -> opengl
-//                       fallback" once validated (plan P5.4)
-// Windows-only (the request is ignored elsewhere). Unknown values keep the
-// default OpenGL path. Set MIACODE_EXPORT_RENDER_BACKEND=d3d11_qrhi.
+// P5.3/P5.4 hidden export render-backend selector. Chooses the offscreen chart
+// render session used by CLI export (--export-video) and the export worker
+// (--export-video-worker):
+//   d3d11_qrhi (default) -> D3D11/QRhi session on Windows, binding the P3 policy
+//                           adapter and using synchronous staging-map readback;
+//                           init failure auto-falls back to OpenGL
+//   opengl               -> stable QQuickRenderControl OpenGL FBO/PBO rollback
+//   auto                 -> currently identical to d3d11_qrhi
+// Windows-only; unknown values intentionally keep the OpenGL rollback path.
 enum class ExportRenderBackendRequest { OpenGl, D3D11Qrhi, Auto };
 
 inline ExportRenderBackendRequest exportRenderBackendRequest()
 {
     const QString raw = envValue("MIACODE_EXPORT_RENDER_BACKEND").toLower();
+    // Current default is D3D11 QRhi; set the env var to opengl for rollback.
+    if (raw.isEmpty()) {
+        return ExportRenderBackendRequest::D3D11Qrhi;
+    }
     if (raw == QStringLiteral("d3d11_qrhi") || raw == QStringLiteral("d3d11")) {
         return ExportRenderBackendRequest::D3D11Qrhi;
     }

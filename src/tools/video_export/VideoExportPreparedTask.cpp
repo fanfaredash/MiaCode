@@ -780,11 +780,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
     QString offscreenInitError;
 
     // P5.3 — offscreen render-session backend selection. Hidden env switch
-    // (MIACODE_EXPORT_RENDER_BACKEND, default opengl); when it requests the
-    // D3D11/QRhi session, main.cpp already put this export process on the
-    // Direct3D11 graphics API. A failed D3D11 init falls back to OpenGL in
-    // process (P5.4): tear the D3D11 attempt down, flip the process graphics
-    // API back (no scene graph exists yet on the failed window), re-init.
+    // (MIACODE_EXPORT_RENDER_BACKEND, default d3d11_qrhi); main.cpp already
+    // put the default export process on the Direct3D11 graphics API. A failed
+    // D3D11 init falls back to OpenGL in process: tear the D3D11 attempt down,
+    // flip the process graphics API back (no scene graph exists yet on the
+    // failed window), re-init.
     const miacode::debug_options::ExportRenderBackendRequest exportBackendRequest =
         miacode::debug_options::exportRenderBackendRequest();
     bool d3d11Eligible =

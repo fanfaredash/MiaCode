@@ -113,7 +113,7 @@ bool bindHighPerformanceQuickGraphicsDevice(
     if (!miacode::debug_options::gpuBindHighPerformanceEnabled()) {
         logProvider(surfaceLabel,
             QStringLiteral("action=skip source=qt_default "
-                           "reason=bind_disabled_default flag=MIACODE_GPU_BIND_HIGH_PERFORMANCE"));
+                           "reason=bind_disabled_by_env flag=MIACODE_GPU_BIND_HIGH_PERFORMANCE"));
         return false;
     }
 

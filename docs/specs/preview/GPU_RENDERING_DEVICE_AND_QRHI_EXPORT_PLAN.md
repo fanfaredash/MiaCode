@@ -1,5 +1,9 @@
 # GPU 渲染设备策略与 QRhi 导出计划
 
+> 2026-07-04 update: after dual-GPU, forced-iGPU, visual-consistency, and full-export validation,
+> root Quick GPU binding is default ON (rollback: `MIACODE_GPU_BIND_HIGH_PERFORMANCE=0`) and
+> CLI export / export worker default to D3D11 QRhi (rollback: `MIACODE_EXPORT_RENDER_BACKEND=opengl`).
+
 ## 目标
 
 最终目标：
@@ -32,10 +36,11 @@ Windows release 包根目录的 `MiaCode.exe` 是 launcher，真正的 GUI/导�
 
 ### GUI RHI 选择
 
-当前 GUI 不再强制 OpenGL：
+当前 GUI 不再强制 OpenGL，导出在 beta.5-test 起默认改为 D3D11 QRhi：
 
-- `src/app/main.cpp` 中 CLI 导出和导出 worker 默认使用 `QSGRendererInterface::OpenGL`；隐藏开关 `MIACODE_EXPORT_RENDER_BACKEND=d3d11_qrhi` 会把导出进程切到 Direct3D11。
 - GUI 启动会读取 `--rhi=<name>`、持久化配置或平台默认后端。
+- CLI 导出和导出 worker 默认使用 `QSGRendererInterface::Direct3D11`，并驱动 `d3d11_qrhi_rendercontrol` 导出链路。
+- `MIACODE_EXPORT_RENDER_BACKEND=opengl` 会把导出进程切回 OpenGL，作为显式回滚路径。
 - `src/app/graphics_backend.cpp` 支持 `d3d11`、`d3d12`、`opengl`、`vulkan`、`metal`、`software`。
 - 因此当前前端默认不是 MiaCode 显式强制 D3D11，而是 `platform_default`；在 Windows / Qt 6 Quick 场景下通常会解析为 Direct3D11。`QuickShellPreviewCompositeSurface.cpp` 也按这个假设处理 `QQuickWindow::graphicsApi() == Unknown` 的启动阶段。
 
@@ -53,12 +58,12 @@ Windows release 包根目录的 `MiaCode.exe` 是 launcher，真正的 GUI/导�
 
 ### 导出渲染路径
 
-当前导出默认 OpenGL，并保留隐藏 D3D11 诊断链路：
+当前导出默认 D3D11 QRhi，并保留 OpenGL 回滚链路：
 
-- `src/app/main.cpp` 对 `--export-video` / `--export-video-worker` 默认调用 `QQuickWindow::setGraphicsApi(OpenGL)`；`MIACODE_EXPORT_RENDER_BACKEND=d3d11_qrhi|auto` 时改为 `Direct3D11`。
-- `src/preview/runtime/PreviewQuickExportSession.cpp` 创建 `QOffscreenSurface`、`QOpenGLContext`、`QQuickRenderControl`。
-- 导出窗口通过 `QQuickGraphicsDevice::fromOpenGLContext(context_)` 绑定到 OpenGL context。
-- 渲染目标是 `QOpenGLFramebufferObject`，读回通过同步 `glReadPixels` 或 PBO。
+- `src/app/main.cpp` 对 `--export-video` / `--export-video-worker` 默认调用 `QQuickWindow::setGraphicsApi(Direct3D11)`；`MIACODE_EXPORT_RENDER_BACKEND=opengl` 时回滚到 `OpenGL`。
+- `src/preview/runtime/PreviewQuickD3D11ExportSession.cpp` 创建 D3D11 device / render target / staging readback，并通过 `QQuickGraphicsDevice::fromDeviceAndContext(...)` 绑定导出窗口。
+- D3D11 渲染目标是 `QQuickRenderTarget::fromD3D11Texture(...)`，读回通过同步 CopyResource -> staging -> Map。
+- `src/preview/runtime/PreviewQuickExportSession.cpp` 仍保留 OpenGL `QOffscreenSurface` / `QOpenGLContext` / `QQuickRenderControl` / FBO/PBO 路径，作为 fallback 和 A/B 对照。
 
 历史原因：
 
@@ -69,9 +74,9 @@ Windows release 包根目录的 `MiaCode.exe` 是 launcher，真正的 GUI/导�
 
 结论：
 
-- “导出强制 OpenGL”不是历史遗留文档误写，而是当前实现的硬依赖。
-- 不能简单把导出 worker 改成 `d3d11`；必须新增 D3D11/QRhi 导出 session，并保留 OpenGL 作为回退。
-- 这也意味着当前 GUI 前端和导出并不对齐：GUI 多数 Windows 设备上会走 Qt 默认 D3D11，导出仍固定 OpenGL。
+- “导出强制 OpenGL”曾是实现硬依赖；P5 已通过新增 D3D11/QRhi 导出 session 解耦。
+- 当前不能删除 OpenGL：它仍是 D3D11 初始化失败、用户回滚、视觉 A/B 对照的稳定路径。
+- beta.5-test 起 GUI 默认 high-performance 策略与导出默认 D3D11 QRhi 已基本对齐；是否同一 adapter 由 `startup/gpu_policy`、`startup/gpu_provider`、`quick_shell/device` 和 export `render_backend` 日志共同验证。
 
 ### QuickShell 与隐藏 MainWindow
 
@@ -311,8 +316,9 @@ Windows release 包根目录的 `MiaCode.exe` 是 launcher，真正的 GUI/导�
 
 目标：新增一条与实时谱面渲染策略一致的 D3D11/QRhi 导出链路。第一版只要求 Windows D3D11 稳定可用、日志清晰、OpenGL 可回退；不追求跨 RHI 通用抽象。
 
-> **实施状态（2026-07-04）**：P5.1–P5.4 已实现，默认 OFF（`MIACODE_EXPORT_RENDER_BACKEND`
-> 默认 `opengl`，行为与 P5 之前完全一致）。落点：
+> **实施状态（2026-07-04）**：P5.1–P5.4 已实现，beta.5-test 起默认 ON
+> （未设置 `MIACODE_EXPORT_RENDER_BACKEND` 时选择 `d3d11_qrhi`；回滚：
+> `MIACODE_EXPORT_RENDER_BACKEND=opengl`）。落点：
 > `src/preview/runtime/PreviewQuickD3D11ExportSession.{h,cpp}`（新 session，与 OpenGL
 > session 并行、场景挂载逻辑同构）；backend 分发在 `VideoExportQuickRenderBackend`
 > （`setRenderSessionBackend`）；选择 + fallback + `render_backend` 摘要日志在
@@ -321,8 +327,7 @@ Windows release 包根目录的 `MiaCode.exe` 是 launcher，真正的 GUI/导�
 > adapter 安全，无需 P4 的 `MIACODE_GPU_BIND_HIGH_PERFORMANCE` 门）。readback 为
 > 同步 CopyResource→staging→Map（top-down，无需垂直翻转；R8G8B8A8_UNORM 与 GL_RGBA8
 > 字节序一致；同一 premultiplied→straight 转换）。P5.2 的像素一致性（premultiply/
-> mirror/通道序）与 P5.4 的默认切换条件待 hidden 开关下的固定样例 A/B 与双显卡
-> GUI 验收后再核。P5.5 生产化未开始。
+> mirror/通道序）与完整导出已通过 beta.5 默认切换前验收。P5.5 生产化优化未开始。
 
 #### P5.1：独立 D3D11 render-control spike
 
@@ -359,8 +364,8 @@ Windows release 包根目录的 `MiaCode.exe` 是 launcher，真正的 GUI/导�
   - `d3d11_qrhi_rendercontrol`：新路径。
   - `auto`：先仅通过 hidden env/CLI 开启；验证后再默认 D3D11。
 - 建议隐藏开关：
-  - `MIACODE_EXPORT_RENDER_BACKEND=opengl|d3d11_qrhi|auto`
-  - 默认初期仍为 `opengl`。
+  - `MIACODE_EXPORT_RENDER_BACKEND=d3d11_qrhi|opengl|auto`
+  - 默认已切到 `d3d11_qrhi`；`opengl` 保留为回滚。
 - 复用现有：
   - `PreviewSceneAssetRepository`
   - `PreviewFrameState`

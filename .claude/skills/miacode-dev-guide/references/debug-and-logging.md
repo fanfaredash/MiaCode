@@ -178,7 +178,7 @@ PIPE_HASH(`_MAX_LINES`), RAW_DUMP_PATH, LOG_ALL_REPEATS); backend forcing
 `MIACODE_EXPORT_{ENABLE_GPU_RENDER,ENABLE_OFFSCREEN_PBO,DISABLE_OFFSCREEN_PBO,DISABLE_PBO_READBACK}`;
 encoder `MIACODE_EXPORT_{SKIP_ENCODER_RUNTIME_PROBE,FORCE_ENCODER,ENCODER_MODE,ENCODER_THREADS,
 FILTER_THREADS,X264_PRESET,X264_CRF,X264_BFRAMES}`.
-`MIACODE_EXPORT_RENDER_BACKEND` (**P5 — default `opengl`**, `exportRenderBackendRequest()` in
+`MIACODE_EXPORT_RENDER_BACKEND` (**P5 — default `d3d11_qrhi`**, `exportRenderBackendRequest()` in
 `DebugOptions.h`): `opengl` | `d3d11_qrhi` | `auto` selects the offscreen chart-render session for CLI
 export + the export worker. `d3d11_qrhi` makes `main.cpp` put the export process on the Direct3D11
 Quick graphics API and `VideoExportPreparedTask` drive the new
@@ -189,11 +189,14 @@ CopyResource+Map readback, top-down so no vertical flip, same premultiplied→st
 GL). No PBO path — `supportsOffscreenPboReadback` returns false on d3d11 so the loop uses the sync
 branch. Init failure auto-falls-back to the OpenGL session in-process (graphics API flipped back;
 export log `render_backend_fallback` `fallback_from=d3d11_qrhi fallback_to=opengl reason=…`). `auto`
-currently == `d3d11_qrhi`; reserved as the future default (plan P5.4). Session backend dispatch lives
+currently == `d3d11_qrhi`; set `MIACODE_EXPORT_RENDER_BACKEND=opengl` for rollback. Session backend dispatch lives
 in `VideoExportQuickRenderBackend` (`setRenderSessionBackend`); selected backend/adapter
 LUID/rt_format/readback_mode appear in the `render_backend` export-log summary line. Sync pair: the
 D3D11 session mirrors the OpenGL session's scene mounting (scene root + HUD + intro overlay +
 DCompFallbackActive override) — change both together.
+
+Current default: unset `MIACODE_EXPORT_RENDER_BACKEND` selects `d3d11_qrhi`; set it to `opengl` for
+the stable OpenGL rollback path. `auto` remains equivalent to `d3d11_qrhi`.
 
 **Misc/runtime:** `MIACODE_FFMPEG`(`_PATH`), `MIACODE_LANG`, `MIACODE_DISPLAY_VERSION_STRING`,
 `MIACODE_DISABLE_MMCSS`, `MIACODE_SKIP_PREFLIGHT`.
@@ -214,13 +217,16 @@ also guards `resolvedKind ∈ {AutoHighPerformance, AdapterLuid}` before binding
 (`reason=policy_not_adapter_binding` on any fallback). **P4** `bindHighPerformanceQuickGraphicsDevice(window, label,
 preferVideoShareDevice)` optionally binds the **root** Quick window to the resolved adapter via
 `QQuickGraphicsDevice::fromAdapter` (Qt owns the device) — gated behind
-`MIACODE_GPU_BIND_HIGH_PERFORMANCE` (**default OFF**, `gpuBindHighPerformanceEnabled()`) and skipped
+`MIACODE_GPU_BIND_HIGH_PERFORMANCE` (**default ON**, `gpuBindHighPerformanceEnabled()`) and skipped
 when the high-perf LUID equals the DXGI default adapter (`defaultAdapterLuid()` — single-GPU no-op).
 The **preview composite** (`preferVideoShareDevice=true`) is never `fromAdapter`-bound: it uses the H2
 `sharedPreviewQuickGraphicsDevice()` (default OFF) or keeps Qt's default adapter, because the D3D11VA
 two-device keyed-mutex bridge is **same-adapter only** (a non-default render adapter breaks
 video-background playback). Decisions log to `startup/gpu_provider`; verify the actual bound adapter
 via `quick_shell/device`.
+
+Current default: root-window binding is ON; set `MIACODE_GPU_BIND_HIGH_PERFORMANCE=0` / `off` /
+`false` to keep Qt's platform-default adapter.
 
 **Build-time (CMake, not env):** `MIACODE_USE_QTAVPLAYER` (see above), `MIACODE_BUILD_DEV_TOOLS`
 (configure option gating dev-tool spec executables + CTest registration; appears in
