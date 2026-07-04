@@ -49,4 +49,11 @@ void* captureOrphanShellWindow(void* nativeViewHandle);
 // captureOrphanShellWindow(nativeViewHandle).
 bool neutralizeOrphanShellWindow(void* nativeViewHandle, void* capturedPanel);
 
+// Force the NSView's hidden state directly, bypassing Qt's cached QWindow
+// visibility. Needed because the WindowContainer's initial setVisible(false)
+// can be clobbered by the native reparent during adoption: Qt then believes
+// the window is hidden while the NSView is actually showing (validation page
+// painted over the QML timeline at startup). Idempotent.
+void setContentViewHidden(void* nativeViewHandle, bool hidden);
+
 }  // namespace miacode::quick_shell::mac

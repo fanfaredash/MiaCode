@@ -57,4 +57,15 @@ bool neutralizeOrphanShellWindow(void* nativeViewHandle, void* capturedPanel)
     return true;
 }
 
+void setContentViewHidden(void* nativeViewHandle, bool hidden)
+{
+    NSView* view = (__bridge NSView*)nativeViewHandle;
+    if (view == nil) {
+        return;
+    }
+    if (view.hidden != hidden) {
+        view.hidden = hidden;
+    }
+}
+
 }  // namespace miacode::quick_shell::mac

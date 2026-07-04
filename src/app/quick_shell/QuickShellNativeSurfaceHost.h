@@ -57,6 +57,12 @@ private:
     // stops floating over the UI. See QuickShellMacSurfaceSupport.
     void captureOrphanShellWindows();
     void runOrphanShellNeutralizePass(int attemptsLeft);
+    // macOS only (no-op elsewhere). Force the adopted bottom-tabs foreign
+    // window's visibility to match the current tab. The QML WindowContainer
+    // owns this normally, but its initial visible=false can race the native
+    // adoption at startup, leaving the validation page painted over the
+    // timeline until the user switches tabs once.
+    void syncBottomTabsForeignWindowVisibility();
 
     QuickShellNativeContentProvider* contentProvider_ = nullptr;
     QuickShellStateSource* stateSource_ = nullptr;

@@ -448,6 +448,7 @@ void QuickShellNativeSurfaceHost::refreshBottomTabsSurfaceVisibility()
     if (kBridgeSurfaceVisibilityFollowsTabs) {
         setSurfaceVisible(bottomTabsSurfaceWidget_, shouldUseBottomTabsNativeSurface(stateSource_));
     }
+    syncBottomTabsForeignWindowVisibility();
     if (stateSource_ != nullptr && !stateSource_->shellBottomTabsVisible()) {
         hideBottomTabsSpeedToast();
     }
@@ -524,14 +525,44 @@ void QuickShellNativeSurfaceHost::runOrphanShellNeutralizePass(int attemptsLeft)
             allDone = false;
         }
     }
-    if (!allDone && attemptsLeft > 1) {
-        // Content view not reparented yet on at least one surface — retry shortly.
+    // Piggyback on the startup retry window: re-assert the bottom-tabs foreign
+    // window's visibility each pass, covering the WindowContainer-vs-adoption
+    // race that could leave the validation page painted over the timeline.
+    syncBottomTabsForeignWindowVisibility();
+    // Keep ticking through the whole startup window even once every panel is
+    // neutralized (allDone): the visibility sync above must keep re-asserting
+    // the bottom-tabs NSView state, because the AppKit-level clobber can land
+    // after adoption completes. Each extra tick is an idempotent no-op check.
+    Q_UNUSED(allDone);
+    if (attemptsLeft > 1) {
         QTimer::singleShot(100, this, [this, attemptsLeft]() {
             runOrphanShellNeutralizePass(attemptsLeft - 1);
         });
     }
 #else
     Q_UNUSED(attemptsLeft);
+#endif
+}
+
+void QuickShellNativeSurfaceHost::syncBottomTabsForeignWindowVisibility()
+{
+#ifdef Q_OS_MACOS
+    QWindow* foreignWindow = surfaceBundle_.bottomTabs;
+    if (foreignWindow == nullptr || foreignWindow->parent() == nullptr) {
+        // Not adopted by the QML WindowContainer yet — showing/hiding the
+        // standalone foreign window here would surface it as its own window.
+        return;
+    }
+    const bool shouldShow = shouldUseBottomTabsNativeSurface(stateSource_);
+    if (foreignWindow->isVisible() != shouldShow) {
+        foreignWindow->setVisible(shouldShow);
+    }
+    // Qt's cached visibility can already agree while the NSView itself is
+    // still showing: the adoption-time reparent clobbers the container's
+    // initial setVisible(false) at the AppKit level. Enforce the state on the
+    // NSView directly; idempotent, and later Qt setVisible calls stay in sync.
+    miacode::quick_shell::mac::setContentViewHidden(
+        nativeViewHandleOf(foreignWindow), !shouldShow);
 #endif
 }
 
