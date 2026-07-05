@@ -191,6 +191,9 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
             for (const auto& line : state.zoomButtonInteriorLines) {
                 staticRoot->appendChildNode(buildTimelineLineNode(line));
             }
+            for (const auto& triangle : state.zoomButtonGlyphTriangles) {
+                staticRoot->appendChildNode(buildTimelineTriangleNode(triangle));
+            }
             if (textures != nullptr) {
                 const auto pushLabel =
                     [&](const miacode::timeline::TimelineSceneTextLabel& label) {
@@ -204,9 +207,6 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
                         staticRoot->appendChildNode(node);
                     };
                 pushLabel(state.zoomButtonLabel);
-                for (const auto& label : state.zoomButtonGlyphLabels) {
-                    pushLabel(label);
-                }
             }
         }
         root->staticRevision = state.gridRevision;

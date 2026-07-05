@@ -145,6 +145,10 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: QuickShell Timeline header-control layout constants
   - Current tuning note: the waveform brightness control remains `128 * headerScale` wide inside a `22 * headerScale` header control box, but the active slider is reduced to `12 * headerScale` height with an `8 * headerScale` handle and `3 * headerScale` track so marker triangles can use the lower header lane beneath the slider while the track center stays in its previous position
   - Rule: keep local while this only shapes QuickShell Timeline header ergonomics; document changes that affect marker/control overlap
+- `src/timeline/TimelineSceneStateBuilder.cpp`
+  - Owns: native Quick/DComp Timeline header zoom-stepper triangle geometry emitted for the invisible QML zoom-button hit zones
+  - Current tuning note: the zoom-stepper triangles are centered as a compact pair within the `22 * headerControlScale` control height, using a local inner gap of `max(2 px, 4 * headerControlScale)` while preserving the separately tuned triangle width and height
+  - Rule: keep local while this only shapes the native zoom-stepper visual; promote only if another control needs the same paired-triangle geometry
 - `src/common/DebugOptions.h`
   - Owns: preview diagnostic env parsing defaults such as `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG_SAMPLE_MS`
   - Current tuning note: waveform-alignment focused BASS status sampling defaults to `250 ms`, intentionally lower than the normal ~`1 s` `bass_status` cadence so short 1x offset reports can be captured without making high-frequency logging the default.

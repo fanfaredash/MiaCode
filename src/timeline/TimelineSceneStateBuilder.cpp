@@ -1508,26 +1508,34 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             1.0,
         });
         const qreal arrowCx = separatorX + (zoomStepperW * 0.5);
-        const qreal upCy = btnY + (btnHeight * 0.32) + (upPressed ? pressedOffset : 0.0);
-        const qreal downCy = btnY + (btnHeight * 0.68) + (downPressed ? pressedOffset : 0.0);
         QFont arrowFont = controlFont;
         arrowFont.setPixelSize(qMax(7, qRound(9.0 * headerControlScale)));
         arrowFont.setWeight(QFont::DemiBold);
+        arrowFont.setStretch(QFont::Expanded);
         const QFontMetricsF arrowMetrics(arrowFont);
-        const auto appendStepperGlyph =
-            [&](const QString& glyph, qreal centerY) {
-                TimelineSceneTextLabel label;
-                label.text = glyph;
-                label.font = arrowFont;
-                label.color = arrowColor;
-                label.logicalSize = timelineTextLogicalSize(label.font, label.text);
-                label.topLeft = QPointF(
-                    arrowCx - (arrowMetrics.horizontalAdvance(label.text) * 0.5) - kTimelineTextHorizontalPadding,
-                    centerY - (arrowMetrics.height() * 0.5) - kTimelineTextVerticalPadding);
-                state.zoomButtonGlyphLabels.append(label);
-            };
-        appendStepperGlyph(QStringLiteral("\u25B2"), upCy);
-        appendStepperGlyph(QStringLiteral("\u25BC"), downCy);
+        const qreal arrowHalfWidth =
+            arrowMetrics.horizontalAdvance(QStringLiteral("\u25B2")) * 0.3;
+        const qreal arrowTriangleHeight = qMax<qreal>(1.0, arrowMetrics.height() * 0.3);
+        const qreal arrowInnerGap = qMax<qreal>(2.0, qRound(4.0 * headerControlScale));
+        const qreal arrowStackCenterY = btnY + (btnHeight * 0.5);
+        const qreal upBaseY =
+            arrowStackCenterY - (arrowInnerGap * 0.5) + (upPressed ? pressedOffset : 0.0);
+        const qreal downBaseY =
+            arrowStackCenterY + (arrowInnerGap * 0.5) + (downPressed ? pressedOffset : 0.0);
+        const qreal upTipY = upBaseY - arrowTriangleHeight;
+        const qreal downTipY = downBaseY + arrowTriangleHeight;
+        state.zoomButtonGlyphTriangles.append(TimelineSceneTriangle{
+            QPointF(arrowCx, upTipY),
+            QPointF(arrowCx - arrowHalfWidth, upBaseY),
+            QPointF(arrowCx + arrowHalfWidth, upBaseY),
+            arrowColor,
+        });
+        state.zoomButtonGlyphTriangles.append(TimelineSceneTriangle{
+            QPointF(arrowCx, downTipY),
+            QPointF(arrowCx + arrowHalfWidth, downBaseY),
+            QPointF(arrowCx - arrowHalfWidth, downBaseY),
+            arrowColor,
+        });
 
         // Follow controls are no longer drawn in the timeline header.
         // Code Follow lives in BottomTabsQuickHost.qml, while View Lock

@@ -195,14 +195,24 @@ void TimelineHeaderSource::contributeToSnapshot(
         }
         sb::pushTimelineLineBatch(snapshot, overlayLines);
 
+        if (!state->zoomButtonGlyphTriangles.isEmpty()) {
+            QVector<miacode::timeline::TimelineSceneTriangle> glyphTriangles;
+            glyphTriangles.reserve(state->zoomButtonGlyphTriangles.size());
+            for (const auto& triangle : state->zoomButtonGlyphTriangles) {
+                miacode::timeline::TimelineSceneTriangle shiftedTriangle = triangle;
+                shiftedTriangle.a.rx() += scrollOffsetX;
+                shiftedTriangle.b.rx() += scrollOffsetX;
+                shiftedTriangle.c.rx() += scrollOffsetX;
+                glyphTriangles.append(shiftedTriangle);
+            }
+            sb::pushTimelineTriangleBatch(snapshot, glyphTriangles);
+        }
+
         // Labels (text) — chart-preview Sprites batch, no scroll
         // translate applied by pipeline, so applyScrollOffsetX=0.
         QVector<miacode::timeline::TimelineSceneTextLabel> controlLabels;
-        controlLabels.reserve(1 + state->zoomButtonGlyphLabels.size());
+        controlLabels.reserve(1);
         controlLabels.append(state->zoomButtonLabel);
-        for (const auto& label : state->zoomButtonGlyphLabels) {
-            controlLabels.append(label);
-        }
         rasteriseLabels(controlLabels, /*applyScrollOffsetX=*/0.0);
     }
 }
