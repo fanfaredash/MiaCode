@@ -674,6 +674,7 @@ VideoExportDialog* MainWindow::ExportSection::buildConfiguredVideoExportDialog(
         },
         [this](double scale) {
             owner_.previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(scale);
+            owner_.applyPreviewStageMediaRouteVisualSettings();
             if (owner_.previewCanvas_ != nullptr) {
                 owner_.previewCanvas_->setLayoutSquareScale(owner_.previewLayoutSquareScale_);
             }

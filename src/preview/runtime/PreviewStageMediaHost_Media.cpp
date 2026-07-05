@@ -5,6 +5,7 @@
 #include "common/DebugOptions.h"
 #include "common/FileContentStamp.h"
 #include "common/OperationLog.h"
+#include "common/PreviewVideoGeometryConfig.h"
 #include "preview/runtime/PreviewSharedD3D11Device.h"  // H2: single_device= log field
 
 #include <cstdio>  // G2 Diag: std::snprintf for sync rate-change beacon lines
@@ -137,6 +138,21 @@ void PreviewStageMediaHost::setBackgroundScaleMode(PreviewBackgroundScaleMode mo
     }
     backgroundScaleMode_ = mode;
     emit backgroundScaleModeChanged();
+}
+
+double PreviewStageMediaHost::layoutSquareScale() const
+{
+    return layoutSquareScale_;
+}
+
+void PreviewStageMediaHost::setLayoutSquareScale(double scale)
+{
+    const double normalized = miacode::preview_video::normalizedLayoutSquareScale(scale);
+    if (qFuzzyCompare(layoutSquareScale_ + 1.0, normalized + 1.0)) {
+        return;
+    }
+    layoutSquareScale_ = normalized;
+    emit layoutSquareScaleChanged();
 }
 
 
@@ -490,29 +506,38 @@ void PreviewStageMediaHost::bindVideoOutput()
     // signal connection itself is owned by loadVideoMedia (per source
     // generation), so this only (re)binds the sink target.
     videoSink_.clear();
-    if (videoOutputObject_ == nullptr) {
-        appendPreviewStageMediaLog(QStringLiteral("bind_video_output"), QStringLiteral("attached=0 sink=0"));
-        return;
-    }
-    QObject* sinkObject = nullptr;
-    const QVariant sinkVariant = videoOutputObject_->property("videoSink");
-    if (sinkVariant.isValid()) {
-        sinkObject = sinkVariant.value<QObject*>();
-    }
-    videoSink_ = qobject_cast<QVideoSink*>(sinkObject);
-    if (videoSink_ != nullptr) {
-        appendPreviewStageMediaLog(QStringLiteral("bind_video_output"), QStringLiteral("attached=1 sink=1"));
-        // Replay the latest decoded frame so a VideoOutput that attaches after
-        // decode started (or while paused) shows the bg immediately, rather
-        // than waiting for the next decoded frame.
-        if (lastVideoFrame_.isValid()) {
+    innerVideoSink_.clear();
+    const auto resolveSink = [](QObject* videoOutputObject) -> QVideoSink* {
+        if (videoOutputObject == nullptr) {
+            return nullptr;
+        }
+        QObject* sinkObject = nullptr;
+        const QVariant sinkVariant = videoOutputObject->property("videoSink");
+        if (sinkVariant.isValid()) {
+            sinkObject = sinkVariant.value<QObject*>();
+        }
+        return qobject_cast<QVideoSink*>(sinkObject);
+    };
+    videoSink_ = resolveSink(videoOutputObject_);
+    innerVideoSink_ = resolveSink(innerVideoOutputObject_);
+    if (lastVideoFrame_.isValid()) {
+        if (videoSink_ != nullptr) {
             videoSink_->setVideoFrame(lastVideoFrame_);
         }
-        return;
+        if (innerVideoSink_ != nullptr && innerVideoSink_ != videoSink_) {
+            innerVideoSink_->setVideoFrame(lastVideoFrame_);
+        }
     }
-    appendPreviewStageMediaLog(QStringLiteral("bind_video_output"), QStringLiteral("attached=1 sink=0"));
+    appendPreviewStageMediaLog(
+        QStringLiteral("bind_video_output"),
+        QStringLiteral("attached=%1 sink=%2 inner_attached=%3 inner_sink=%4")
+            .arg(videoOutputObject_ != nullptr ? 1 : 0)
+            .arg(videoSink_ != nullptr ? 1 : 0)
+            .arg(innerVideoOutputObject_ != nullptr ? 1 : 0)
+            .arg(innerVideoSink_ != nullptr ? 1 : 0));
     return;
 #elif !defined(HAVE_QT_MULTIMEDIA)
+    innerVideoSink_.clear();
     return;
 #else
     if (videoSinkFrameConnection_) {
@@ -520,6 +545,7 @@ void PreviewStageMediaHost::bindVideoOutput()
         videoSinkFrameConnection_ = QMetaObject::Connection();
     }
     videoSink_.clear();
+    innerVideoSink_.clear();
 
     if (player_ == nullptr) {
         return;

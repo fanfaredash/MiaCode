@@ -18,6 +18,7 @@ Item {
     property bool dcompFallbackActive: false
     property var attachedMediaHost: null
     property var attachedVideoOutputObject: null
+    property var attachedInnerVideoOutputObject: null
     readonly property string instanceTag: surfaceRole + ":" + Math.round(Math.random() * 1000000000)
     readonly property var hostWindow: root.Window.window ? root.Window.window : null
 
@@ -58,28 +59,42 @@ Item {
 
     function syncVideoOutputBinding() {
         const videoOutput = previewStageMedia.videoOutputObject
+        const innerVideoOutput = previewStageMedia.innerVideoOutputObject
         const nextHost = mediaHost
         const hasStableGeometry = width >= 64 && height >= 64
         const shouldAttach = visible && hasStableGeometry && nextHost && videoOutput && hostWindow && hostWindow.visible
 
         if (attachedMediaHost && (!shouldAttach || attachedMediaHost !== nextHost)) {
-            attachedMediaHost.detachVideoOutputObject(attachedVideoOutputObject)
+            if (attachedInnerVideoOutputObject && attachedMediaHost.detachVideoOutputObjects)
+                attachedMediaHost.detachVideoOutputObjects(attachedVideoOutputObject, attachedInnerVideoOutputObject)
+            else
+                attachedMediaHost.detachVideoOutputObject(attachedVideoOutputObject)
             logSurface(
                 "preview_surface_video_output_detach",
                 "has_video_output=" + (attachedVideoOutputObject ? 1 : 0)
+                    + " has_inner_video_output=" + (attachedInnerVideoOutputObject ? 1 : 0)
                     + " stable_geometry=" + (hasStableGeometry ? 1 : 0)
             )
             attachedMediaHost = null
             attachedVideoOutputObject = null
+            attachedInnerVideoOutputObject = null
         }
 
-        if (shouldAttach && attachedMediaHost !== nextHost) {
-            nextHost.attachVideoOutputObject(videoOutput)
+        if (shouldAttach
+                && (attachedMediaHost !== nextHost
+                    || attachedVideoOutputObject !== videoOutput
+                    || attachedInnerVideoOutputObject !== innerVideoOutput)) {
+            if (innerVideoOutput && nextHost.attachVideoOutputObjects)
+                nextHost.attachVideoOutputObjects(videoOutput, innerVideoOutput)
+            else
+                nextHost.attachVideoOutputObject(videoOutput)
             attachedMediaHost = nextHost
             attachedVideoOutputObject = videoOutput
+            attachedInnerVideoOutputObject = innerVideoOutput
             logSurface(
                 "preview_surface_video_output_attach",
                 "has_video_output=" + (videoOutput ? 1 : 0)
+                    + " has_inner_video_output=" + (innerVideoOutput ? 1 : 0)
                     + " stable_geometry=" + (hasStableGeometry ? 1 : 0)
             )
         }
@@ -110,9 +125,13 @@ Item {
     Component.onDestruction: {
         logSurface("preview_surface_destroyed")
         if (attachedMediaHost && attachedVideoOutputObject) {
-            attachedMediaHost.detachVideoOutputObject(attachedVideoOutputObject)
+            if (attachedInnerVideoOutputObject && attachedMediaHost.detachVideoOutputObjects)
+                attachedMediaHost.detachVideoOutputObjects(attachedVideoOutputObject, attachedInnerVideoOutputObject)
+            else
+                attachedMediaHost.detachVideoOutputObject(attachedVideoOutputObject)
             attachedMediaHost = null
             attachedVideoOutputObject = null
+            attachedInnerVideoOutputObject = null
         }
     }
 

@@ -1519,6 +1519,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     connect(layoutSquareScaleSlider, &QSlider::valueChanged, &dialog, [this, layoutSquareScaleLabel](int value) {
         owner_.previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(static_cast<double>(value) / 100.0);
         layoutSquareScaleLabel->setText(QString::number(qRound(owner_.previewLayoutSquareScale_ * 100.0)) + "%");
+        owner_.applyPreviewStageMediaRouteVisualSettings();
         if (owner_.previewCanvas_ != nullptr) {
             owner_.previewCanvas_->setLayoutSquareScale(owner_.previewLayoutSquareScale_);
         }

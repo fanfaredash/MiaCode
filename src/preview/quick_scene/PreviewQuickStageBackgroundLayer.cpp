@@ -459,13 +459,15 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
             mediaNode->setSourceRect(texture->convertToNormalizedSourceRect(placement.sourceRect));
             mediaNode->setFiltering(QSGTexture::Linear);
             if (innerCircleFitOuterFill) {
-                const QRectF innerCircleRect =
-                    miacode::preview::scene::centeredMaxSquareRectForStage(stageRect);
+                const QRectF innerCircleRect = miacode::preview_video::centeredLayoutRectForStage(
+                    stageRect,
+                    state.render.layoutSquareScale
+                );
                 const miacode::preview::scene::PreviewMediaPlacement innerPlacement =
                     miacode::preview::scene::mediaPlacement(
                         mediaImage.size(),
-                        stageRect,
-                        PreviewBackgroundScaleMode::SquareFitContain
+                        innerCircleRect,
+                        PreviewBackgroundScaleMode::FitContain
                     );
                 auto* innerCircleNode = ensureInnerCircleMediaNode(root);
                 auto* innerMediaNode = innerCircleNode->mediaNode();
