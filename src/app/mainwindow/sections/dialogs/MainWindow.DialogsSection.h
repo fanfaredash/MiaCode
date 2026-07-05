@@ -2,6 +2,8 @@
 
 #include "../../MainWindow.h"
 
+#include <functional>
+
 class MainWindow::DialogsSection {
 public:
     DialogsSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state);
@@ -48,12 +50,19 @@ public:
     // tab. Mutates owner_ + previewCanvas_ live and persists via
     // savePortableState(), exactly like the settings dialog — the two dialogs
     // stay independently wired.
-    void buildExportInjectedSettings(QWidget* parent, QWidget** gameplayOut);
+    void buildExportInjectedSettings(
+        QWidget* parent,
+        QWidget** gameplayOut,
+        std::function<void()>* refreshOut = nullptr);
     // Builds the owner_-wired 皮肤 panel content (skin / judge line / HUD font),
     // reused by openSkinSettingsDialog() and injected into the export dialog's
     // 皮肤 tab. `includeFolderButtons` toggles the folder actions (shown in the
     // popup, hidden in the export tab per its compact layout).
-    void buildSkinSettings(QWidget* parent, QWidget** skinOut, bool includeFolderButtons);
+    void buildSkinSettings(
+        QWidget* parent,
+        QWidget** skinOut,
+        bool includeFolderButtons,
+        std::function<void()>* refreshOut = nullptr);
 
 private:
     MainWindow& owner_;

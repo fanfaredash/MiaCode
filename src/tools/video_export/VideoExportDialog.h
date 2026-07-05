@@ -50,6 +50,7 @@ public:
     using PreviewTapFlowSpeedCallback = std::function<void(double flowSpeed)>;
     using PreviewTouchFlowSpeedCallback = std::function<void(double flowSpeed)>;
     using SharedSettingsSnapshotCallback = std::function<VideoExportTask()>;
+    using OwnerWiredSettingsRefreshCallback = std::function<void()>;
 
     VideoExportDialog(
         const VideoExportTask& baseTask,
@@ -86,7 +87,11 @@ public:
     // tab (below the dialog's own flow-speed rows); skinWidget to the 皮肤 tab
     // (skin / judge line / HUD font). Call once after construction, before
     // exec().
-    void injectOwnerWiredSettings(QWidget* videoExtras, QWidget* gameplayWidget, QWidget* skinWidget = nullptr);
+    void injectOwnerWiredSettings(
+        QWidget* videoExtras,
+        QWidget* gameplayWidget,
+        QWidget* skinWidget = nullptr,
+        OwnerWiredSettingsRefreshCallback refreshCallback = {});
 
     // ---- Embedded panel mode (E-C, export-page phase 2) ----
     // The same dialog doubles as the Export hub page's in-page video panel:
@@ -222,6 +227,7 @@ private:
     PreviewTapFlowSpeedCallback previewTapFlowSpeedCallback_;
     PreviewTouchFlowSpeedCallback previewTouchFlowSpeedCallback_;
     SharedSettingsSnapshotCallback sharedSettingsSnapshotCallback_;
+    OwnerWiredSettingsRefreshCallback ownerWiredSettingsRefreshCallback_;
 
     double totalDurationSeconds_ = 0.0;
     double previewCursorSecond_ = 0.0;

@@ -733,11 +733,28 @@ VideoExportDialog* MainWindow::ExportSection::buildConfiguredVideoExportDialog(
     QWidget* injectedGameplay = nullptr;
     QWidget* injectedSkin = nullptr;
     if (owner_.dialogsSection_ != nullptr) {
-        owner_.dialogsSection_->buildExportInjectedSettings(dialog, &injectedGameplay);
+        std::function<void()> refreshInjectedGameplay;
+        std::function<void()> refreshInjectedSkin;
+        owner_.dialogsSection_->buildExportInjectedSettings(dialog, &injectedGameplay, &refreshInjectedGameplay);
         // 皮肤 tab shares the same owner-wired panel as the main-window 皮肤 popup;
         // the export tab hides the "打开…文件夹" actions for a compact layout.
-        owner_.dialogsSection_->buildSkinSettings(dialog, &injectedSkin, /*includeFolderButtons=*/false);
-        dialog->injectOwnerWiredSettings(nullptr, injectedGameplay, injectedSkin);
+        owner_.dialogsSection_->buildSkinSettings(
+            dialog,
+            &injectedSkin,
+            /*includeFolderButtons=*/false,
+            &refreshInjectedSkin);
+        dialog->injectOwnerWiredSettings(
+            nullptr,
+            injectedGameplay,
+            injectedSkin,
+            [refreshInjectedGameplay, refreshInjectedSkin]() {
+                if (refreshInjectedGameplay) {
+                    refreshInjectedGameplay();
+                }
+                if (refreshInjectedSkin) {
+                    refreshInjectedSkin();
+                }
+            });
     }
     return dialog;
 }

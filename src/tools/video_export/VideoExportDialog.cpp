@@ -1710,10 +1710,12 @@ VideoExportDialog::VideoExportDialog(
 
 void VideoExportDialog::refreshSharedSettingsFromCallback()
 {
-    if (!sharedSettingsSnapshotCallback_) {
-        return;
+    if (sharedSettingsSnapshotCallback_) {
+        refreshSharedSettingsFromTask(sharedSettingsSnapshotCallback_());
     }
-    refreshSharedSettingsFromTask(sharedSettingsSnapshotCallback_());
+    if (ownerWiredSettingsRefreshCallback_) {
+        ownerWiredSettingsRefreshCallback_();
+    }
 }
 
 void VideoExportDialog::refreshSharedSettingsFromTask(const VideoExportTask& task)

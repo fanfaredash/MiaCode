@@ -197,7 +197,10 @@ QString importHudFontFromUser(QWidget* parent, const std::function<void()>& onFo
 
 }  // namespace
 
-QWidget* createHudFontSettingsWidget(QWidget* parent, const std::function<void()>& onFontChanged)
+QWidget* createHudFontSettingsWidget(
+    QWidget* parent,
+    const std::function<void()>& onFontChanged,
+    std::function<void()>* refreshOut)
 {
     auto* root = new QWidget(parent);
     auto* layout = new QVBoxLayout(root);
@@ -228,8 +231,15 @@ QWidget* createHudFontSettingsWidget(QWidget* parent, const std::function<void()
         sampleLabel->setFont(miacode::preview::scene::previewHudTimestampFont(13, QFont::DemiBold));
     };
 
-    populateHudFontCombo(fontCombo, currentHudFontPath());
-    applyReadout();
+    const auto refreshFromPreferences = [fontCombo, applyReadout]() {
+        populateHudFontCombo(fontCombo, currentHudFontPath());
+        applyReadout();
+    };
+
+    refreshFromPreferences();
+    if (refreshOut != nullptr) {
+        *refreshOut = refreshFromPreferences;
+    }
 
     auto* buttonRow = new QWidget(root);
     auto* buttonLayout = new QHBoxLayout(buttonRow);

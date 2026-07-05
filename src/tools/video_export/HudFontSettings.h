@@ -14,8 +14,10 @@ namespace miacode::video_export {
 // persisted by that setter. `onFontChanged` (optional) fires after EVERY font
 // change (pick / import / reset) so the host can refresh a live preview that
 // is currently showing the HUD — pass {} when the next natural repaint is
-// soon enough. The returned widget is parented to `parent`.
+// soon enough. `refreshOut` can receive a callback that re-reads the active
+// persisted/global font into this widget. The returned widget is parented to `parent`.
 QWidget* createHudFontSettingsWidget(QWidget* parent,
-                                     const std::function<void()>& onFontChanged = {});
+                                     const std::function<void()>& onFontChanged = {},
+                                     std::function<void()>* refreshOut = nullptr);
 
 }  // namespace miacode::video_export

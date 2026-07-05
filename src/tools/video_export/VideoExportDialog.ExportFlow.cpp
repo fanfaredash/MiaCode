@@ -437,7 +437,11 @@ void VideoExportDialog::applyThemeStyles()
     }
 }
 
-void VideoExportDialog::injectOwnerWiredSettings(QWidget* videoExtras, QWidget* gameplayWidget, QWidget* skinWidget)
+void VideoExportDialog::injectOwnerWiredSettings(
+    QWidget* videoExtras,
+    QWidget* gameplayWidget,
+    QWidget* skinWidget,
+    OwnerWiredSettingsRefreshCallback refreshCallback)
 {
     // The injected widgets are built by MainWindow (they need owner-side data
     // + wiring the decoupled dialog can't reach). Drop them in just before each
@@ -454,6 +458,8 @@ void VideoExportDialog::injectOwnerWiredSettings(QWidget* videoExtras, QWidget* 
         const int insertIndex = qMax(0, skinPageLayout_->count() - 1);
         skinPageLayout_->insertWidget(insertIndex, skinWidget, 0, Qt::AlignTop);
     }
+    ownerWiredSettingsRefreshCallback_ = std::move(refreshCallback);
+    refreshSharedSettingsFromCallback();
     refreshDialogGeometry();
 }
 

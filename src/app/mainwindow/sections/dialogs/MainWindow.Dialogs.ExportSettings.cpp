@@ -44,7 +44,8 @@ using namespace miacode::mainwindow::shared;
 
 void MainWindow::DialogsSection::buildExportInjectedSettings(
     QWidget* parent,
-    QWidget** gameplayOut)
+    QWidget** gameplayOut,
+    std::function<void()>* refreshOut)
 {
     // Local clones of the menu-button / menu-choice helpers used by the
     // standalone settings dialog. Kept independent so this builder doesn't
@@ -149,11 +150,18 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     const auto judgeEffectChoiceText = [](const QString& label, bool enabled) {
         return QStringLiteral("%1  %2").arg(enabled ? QStringLiteral("√") : QStringLiteral("×"), label);
     };
+    struct JudgeEffectRefreshEntry {
+        QCheckBox* checkbox = nullptr;
+        QString label;
+        bool MuriRenderOptions::*memberPtr = nullptr;
+    };
+    QVector<JudgeEffectRefreshEntry> judgeEffectRefreshEntries;
     const auto addJudgeEffectChoice = [&](const QString& label, bool MuriRenderOptions::*memberPtr) {
         auto* action = new QWidgetAction(judgeEffectMenu);
         const bool initialChecked = owner_.muriRenderOptions_.*memberPtr;
         auto* checkbox = new QCheckBox(judgeEffectChoiceText(label, initialChecked), judgeEffectMenu);
         checkbox->setChecked(initialChecked);
+        judgeEffectRefreshEntries.push_back({checkbox, label, memberPtr});
         checkbox->setCursor(Qt::PointingHandCursor);
         const auto& c = UiTheme::colors();
         checkbox->setStyleSheet(
@@ -265,6 +273,44 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     addGameplayField(0, 1, uiText("dialog.render_settings.gameplay.slide_stack_order", "Slide Stack Order"), slideStackOrderButton);
     addGameplayField(1, 0, uiText("dialog.render_settings.gameplay.center_display", "Center Display"), centerDisplayButton);
 
+    if (refreshOut != nullptr) {
+        const QPointer<QWidget> gameplayGuard(gameplay);
+        *refreshOut =
+            [this,
+             gameplayGuard,
+             judgeEffectButton,
+             judgeEffectButtonLabel,
+             judgeEffectChoiceText,
+             judgeEffectRefreshEntries,
+             slideStackOrderButton,
+             slideStackOrderLabelForValue,
+             centerDisplayButton,
+             centerDisplayLabelForMode]() {
+                if (gameplayGuard.isNull()) {
+                    return;
+                }
+                if (judgeEffectButton != nullptr) {
+                    judgeEffectButton->setText(judgeEffectButtonLabel());
+                }
+                for (const JudgeEffectRefreshEntry& entry : judgeEffectRefreshEntries) {
+                    if (entry.checkbox == nullptr || entry.memberPtr == nullptr) {
+                        continue;
+                    }
+                    const bool checked = owner_.muriRenderOptions_.*(entry.memberPtr);
+                    const QSignalBlocker blocker(entry.checkbox);
+                    entry.checkbox->setChecked(checked);
+                    entry.checkbox->setText(judgeEffectChoiceText(entry.label, checked));
+                }
+                if (slideStackOrderButton != nullptr) {
+                    slideStackOrderButton->setText(
+                        slideStackOrderLabelForValue(owner_.previewSlideEarlierSecondAndTextOnTop_));
+                }
+                if (centerDisplayButton != nullptr) {
+                    centerDisplayButton->setText(centerDisplayLabelForMode(owner_.previewCenterDisplayMode_));
+                }
+            };
+    }
+
     if (gameplayOut != nullptr) {
         *gameplayOut = gameplay;
     }
@@ -273,7 +319,8 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
 void MainWindow::DialogsSection::buildSkinSettings(
     QWidget* parent,
     QWidget** skinOut,
-    bool includeFolderButtons)
+    bool includeFolderButtons,
+    std::function<void()>* refreshOut)
 {
     // Same self-contained menu-button / menu-choice helpers used by
     // buildExportInjectedSettings — kept local so this builder can be dropped
@@ -458,8 +505,29 @@ void MainWindow::DialogsSection::buildSkinSettings(
     fontGroupLayout->setSpacing(8);
     // {} refresh callback: the preview HUD re-reads the global font on its next
     // repaint (scrub/play), matching the former font-tab behavior.
-    fontGroupLayout->addWidget(miacode::video_export::createHudFontSettingsWidget(fontGroup, {}));
+    std::function<void()> refreshHudFontSettings;
+    fontGroupLayout->addWidget(
+        miacode::video_export::createHudFontSettingsWidget(fontGroup, {}, &refreshHudFontSettings));
     rootLayout->addWidget(fontGroup);
+
+    if (refreshOut != nullptr) {
+        const QPointer<QWidget> rootGuard(root);
+        *refreshOut =
+            [this, rootGuard, skinButton, judgeLineButton, judgeLineButtonText, refreshHudFontSettings]() {
+                if (rootGuard.isNull()) {
+                    return;
+                }
+                if (skinButton != nullptr) {
+                    skinButton->setText(owner_.previewSkinDisplayName(owner_.previewSkinDirectoryName_));
+                }
+                if (judgeLineButton != nullptr) {
+                    judgeLineButton->setText(judgeLineButtonText());
+                }
+                if (refreshHudFontSettings) {
+                    refreshHudFontSettings();
+                }
+            };
+    }
 
     if (skinOut != nullptr) {
         *skinOut = root;
