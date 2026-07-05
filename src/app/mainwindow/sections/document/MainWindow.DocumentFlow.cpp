@@ -443,6 +443,9 @@ void MainWindow::openRecentFilePath(const QString& path)
         UiDialogs::showMessageBox(QMessageBox::Warning, this, uiText("action.open_recent", "Open Recent"), "File no longer exists:\n" + normalizedPath);
         return;
     }
+    if (!maybeSaveBeforeContinue()) {
+        return;
+    }
     openFileAtPath(normalizedPath, true, true);
 }
 
