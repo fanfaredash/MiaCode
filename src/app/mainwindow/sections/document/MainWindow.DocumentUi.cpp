@@ -32,6 +32,8 @@
 #include <QtGui>
 #include <QtWidgets>
 
+#include <initializer_list>
+
 using namespace miacode::mainwindow::shared;
 
 void MainWindow::DocumentSection::updateEditorHeader()
@@ -281,30 +283,59 @@ void MainWindow::DocumentSection::syncEditorHeaderMinimumWidth()
     int headerMinimumWidth = 0;
     if (QLayout* headerLayout = ui_.editorHeaderWidget_->layout(); headerLayout != nullptr) {
         headerLayout->activate();
-        const auto widgetMinimumWidth = [](const QWidget* widget) {
-            if (widget == nullptr || widget->isHidden()) {
+        const auto widgetMinimumWidth = [](const QWidget* widget, bool includeHidden = false) {
+            if (widget == nullptr || (!includeHidden && widget->isHidden())) {
                 return 0;
             }
-            return qMax(widget->minimumSizeHint().width(), widget->sizeHint().width());
+            return qMax(widget->minimumWidth(), qMax(widget->minimumSizeHint().width(), widget->sizeHint().width()));
         };
         const QMargins margins = headerLayout->contentsMargins();
-        headerMinimumWidth = margins.left() + margins.right();
-        int visibleSectionCount = 0;
-        const auto addSectionWidth = [&](int width) {
-            if (width <= 0) {
-                return;
+        const auto composedHeaderMinimumWidth = [&](std::initializer_list<int> sectionWidths) {
+            int width = margins.left() + margins.right();
+            int visibleSectionCount = 0;
+            for (int sectionWidth : sectionWidths) {
+                if (sectionWidth <= 0) {
+                    continue;
+                }
+                if (visibleSectionCount > 0) {
+                    width += qMax(0, headerLayout->spacing());
+                }
+                width += sectionWidth;
+                ++visibleSectionCount;
             }
-            if (visibleSectionCount > 0) {
-                headerMinimumWidth += qMax(0, headerLayout->spacing());
-            }
-            headerMinimumWidth += width;
-            ++visibleSectionCount;
+            return qMax(width, margins.left() + margins.right());
         };
-        addSectionWidth(widgetMinimumWidth(ui_.editorContextLabel_));
-        addSectionWidth(widgetMinimumWidth(ui_.editorDifficultyControls_));
-        addSectionWidth(widgetMinimumWidth(ui_.editorValidationSummaryWidget_));
-        addSectionWidth(widgetMinimumWidth(ui_.editorCursorLabel_ != nullptr ? ui_.editorCursorLabel_->parentWidget() : nullptr));
-        headerMinimumWidth = qMax(headerMinimumWidth, margins.left() + margins.right());
+        const auto difficultyContextMinimumWidth = [&]() {
+            if (ui_.editorContextLabel_ == nullptr) {
+                return 0;
+            }
+            int difficultyId = state_.activeDifficultyId_;
+            if (!SimaiDocument::isDifficultyId(difficultyId) && ui_.exportPage_ != nullptr) {
+                difficultyId = ui_.exportPage_->selectedDifficultyId();
+            }
+            const QString labelText = SimaiDocument::isDifficultyId(difficultyId)
+                ? SimaiDocument::difficultyShortName(difficultyId)
+                : ui_.editorContextLabel_->text();
+            return QFontMetrics(ui_.editorContextLabel_->font()).horizontalAdvance(labelText) + 8;
+        };
+        const auto cursorMinimumWidth = [&]() {
+            return widgetMinimumWidth(ui_.editorCursorLabel_, true);
+        };
+        headerMinimumWidth = composedHeaderMinimumWidth({
+            widgetMinimumWidth(ui_.editorContextLabel_),
+            widgetMinimumWidth(ui_.editorDifficultyControls_),
+            widgetMinimumWidth(ui_.editorValidationSummaryWidget_),
+            widgetMinimumWidth(ui_.editorCursorLabel_ != nullptr ? ui_.editorCursorLabel_->parentWidget() : nullptr),
+        });
+        if (state_.activeOutlineKey_ == QLatin1String("export")) {
+            const int difficultyHeaderMinimumWidth = composedHeaderMinimumWidth({
+                difficultyContextMinimumWidth(),
+                widgetMinimumWidth(ui_.editorDifficultyControls_, true),
+                widgetMinimumWidth(ui_.editorValidationSummaryWidget_, true),
+                cursorMinimumWidth(),
+            });
+            headerMinimumWidth = qMax(headerMinimumWidth, difficultyHeaderMinimumWidth);
+        }
         ui_.editorHeaderWidget_->setMinimumWidth(headerMinimumWidth);
     }
     ui_.editorHeaderWidget_->updateGeometry();
