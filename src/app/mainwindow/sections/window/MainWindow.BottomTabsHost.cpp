@@ -1,6 +1,7 @@
 #include "../../MainWindow.h"
 #include "MainWindow.WindowSection.h"
 #include "../timeline/MainWindow.TimelineSection.h"
+#include "../validation/MainWindow.ValidationSection.h"
 
 #include "common/DebugLog.h"
 #include "TimelineView.h"
@@ -293,6 +294,9 @@ void MainWindow::setCurrentBottomTabsTabId(BottomTabsTabId tabId)
     }
     currentBottomTabsTabId_ = tabId;
     syncBottomTabsCurrentTabToContainers();
+    if (tabId == BottomTabsTabId::Muri && validationSection_ != nullptr) {
+        validationSection_->flushPendingMuriDiagnosticsPanelRefresh();
+    }
     if (tabId == BottomTabsTabId::Timeline && timelineSection_ != nullptr) {
         timelineSection_->flushDeferredTimelineBridgeState();
     }

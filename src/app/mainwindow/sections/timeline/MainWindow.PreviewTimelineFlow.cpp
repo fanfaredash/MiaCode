@@ -743,11 +743,14 @@ QString MainWindow::TimelineSection::editorText() const
 
 void MainWindow::TimelineSection::scheduleTimelineRefresh()
 {
-    if (!hasActiveDifficulty() || state_.timelineQuickStateBridge_ == nullptr) {
+    if (!hasActiveDifficulty()) {
         return;
     }
     ++state_.timelineRevision_;
-    refreshTimelineQuickModelFromCurrentText();
+
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        refreshTimelineQuickModelFromCurrentText();
+    }
     requestTimelineSlowRefresh();
 }
 
