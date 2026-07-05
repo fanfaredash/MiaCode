@@ -52,6 +52,7 @@ public:
     bool saveToPath(const QString& path);
     bool applyBatchTransform(const QString& opName, const BatchTransform& transform);
     bool applySelectionBatchTransform(const QString& opName, const BatchTransform& transform);
+    bool applySelectionBatchTransform(const QString& opName, const SelectionContextBatchTransform& transform);
     std::pair<int, int> currentCursorLineCol() const;
     std::pair<int, int> currentSelectionOrCursorLineCol() const;
     bool currentSelectionRange(int* startPos, int* endPos) const;

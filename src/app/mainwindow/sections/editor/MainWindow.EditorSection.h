@@ -26,8 +26,8 @@ public:
     void addBookmark(int line, const QString& title, const QString& text);
     void replaceBookmarkLine(int fromLine, int toLine);
     void refreshEditorBookmarkLines();
-    void toggleBookmarkSidebarExpanded();
     void syncBookmarksFromEditorText(int changePosition = -1, int charsRemoved = 0, int charsAdded = 0);
+    void reanchorActiveBookmarksAfterChartTransform();
     void exportBookmarksJson();
     void importBookmarksJson();
     void setFullCopyAreaVisible(bool visible);

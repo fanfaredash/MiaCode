@@ -44,10 +44,22 @@ void MainWindow::EditorSection::loadProjectRenderState()
                 if (SimaiDocument::isDifficultyId(savedDifficultyId)) {
                     state_.projectLastOpenedDifficultyId_ = savedDifficultyId;
                 }
+                int legacyBookmarkDifficultyId = state_.projectLastOpenedDifficultyId_;
+                if (!SimaiDocument::isDifficultyId(legacyBookmarkDifficultyId) && SimaiDocument::isDifficultyId(state_.activeDifficultyId_)) {
+                    legacyBookmarkDifficultyId = state_.activeDifficultyId_;
+                }
+                const QVector<int> documentDifficultyIds = state_.document_.difficultyIds();
+                if (!SimaiDocument::isDifficultyId(legacyBookmarkDifficultyId) && documentDifficultyIds.size() == 1) {
+                    legacyBookmarkDifficultyId = documentDifficultyIds.first();
+                }
                 const QJsonArray bookmarks = root.value("editor_bookmarks").toArray();
                 for (const QJsonValue& value : bookmarks) {
                     const QJsonObject bookmarkObject = value.toObject();
                     const int line = qMax(1, bookmarkObject.value("line").toInt(1));
+                    int difficultyId = bookmarkObject.value("difficulty_id").toInt(0);
+                    if (!SimaiDocument::isDifficultyId(difficultyId)) {
+                        difficultyId = legacyBookmarkDifficultyId;
+                    }
                     state_.editorBookmarks_.append(MainWindow::EditorBookmark{
                         bookmarkObject.value("title").toString(),
                         bookmarkObject.value("text").toString(),
@@ -58,9 +70,13 @@ void MainWindow::EditorSection::loadProjectRenderState()
                         bookmarkObject.value("context_before").toString(),
                         bookmarkObject.value("context_after").toString(),
                         bookmarkObject.value("second").toDouble(-1.0),
+                        difficultyId,
                     });
                 }
                 std::sort(state_.editorBookmarks_.begin(), state_.editorBookmarks_.end(), [](const MainWindow::EditorBookmark& left, const MainWindow::EditorBookmark& right) {
+                    if (left.difficultyId != right.difficultyId) {
+                        return left.difficultyId < right.difficultyId;
+                    }
                     if (left.line != right.line) {
                         return left.line < right.line;
                     }
@@ -94,6 +110,9 @@ void MainWindow::EditorSection::saveProjectRenderState() const
     QJsonArray bookmarks;
     for (const MainWindow::EditorBookmark& bookmark : state_.editorBookmarks_) {
         QJsonObject bookmarkObject;
+        if (SimaiDocument::isDifficultyId(bookmark.difficultyId)) {
+            bookmarkObject.insert("difficulty_id", bookmark.difficultyId);
+        }
         bookmarkObject.insert("line", qMax(1, bookmark.line));
         bookmarkObject.insert("title", bookmark.title);
         bookmarkObject.insert("text", bookmark.text);

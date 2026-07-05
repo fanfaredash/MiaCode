@@ -8,12 +8,14 @@ If bookmark sharing through `maidata.txt` is added later, use one single-line
 metadata field:
 
 ```txt
-&bookmark={"version":1,"items":[{"title":"Chorus","text":"Check 1/5 overlap","line":42,"second":36.5}]}
+&bookmark={"version":1,"items":[{"difficulty_id":4,"title":"Chorus","text":"Check 1/5 overlap","line":42,"second":36.5}]}
 ```
 
 Rules for a future implementation:
 
 - Never write real newlines into `&bookmark=`.
+- Store the difficulty id with each bookmark. Bookmarks are scoped to one
+  difficulty and must not appear on other difficulty charts.
 - Reject or normalize bookmark title/note input that contains line breaks before
   syncing to `maidata.txt`.
 - Write compact JSON only. If compatibility testing shows another editor

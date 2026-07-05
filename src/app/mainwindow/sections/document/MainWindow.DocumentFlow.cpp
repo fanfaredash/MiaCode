@@ -302,6 +302,18 @@ bool MainWindow::DocumentSection::applyBatchTransform(const QString& opName, con
 
 bool MainWindow::DocumentSection::applySelectionBatchTransform(const QString& opName, const BatchTransform& transform)
 {
+    if (!transform) {
+        return false;
+    }
+    return applySelectionBatchTransform(
+        opName,
+        [transform](const QString& selected, const QString&, int* changedCount) {
+            return transform(selected, changedCount);
+        });
+}
+
+bool MainWindow::DocumentSection::applySelectionBatchTransform(const QString& opName, const SelectionContextBatchTransform& transform)
+{
     MC_OP("MainWindow::DocumentSection::applySelectionBatchTransform");
     _mc_op_.note(QStringLiteral("op=%1").arg(opName));
     auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
@@ -324,8 +336,9 @@ bool MainWindow::DocumentSection::applySelectionBatchTransform(const QString& op
     }
 
     const QString selected = original.mid(begin, finish - begin);
+    const QString suffixContext = original.mid(finish);
     int changed = 0;
-    const QString transformed = transform(selected, &changed);
+    const QString transformed = transform(selected, suffixContext, &changed);
     if (transformed == selected) {
         owner_.statusBar()->showMessage(QString("%1: no note index changed.").arg(opName));
         return false;

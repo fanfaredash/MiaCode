@@ -348,6 +348,7 @@ public:
     };
 private:
     using BatchTransform = std::function<QString(const QString&, int*)>;
+    using SelectionContextBatchTransform = std::function<QString(const QString&, const QString&, int*)>;
     enum class ChartTransformOp {
         MirrorLeftRight,
         MirrorUpDown,
@@ -614,6 +615,7 @@ public:
         QString contextBefore;
         QString contextAfter;
         double second = -1.0;
+        int difficultyId = 0;
     };
 
 private:

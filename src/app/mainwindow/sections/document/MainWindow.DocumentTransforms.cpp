@@ -1,4 +1,5 @@
 #include "MainWindow.DocumentSection.h"
+#include "../editor/MainWindow.EditorSection.h"
 #include "../../MainWindowShared.h"
 
 #include "DialogLocalization.h"
@@ -428,6 +429,9 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
     markCurrentFieldDirty();
     state_.lastPreviewNoteMarkerSignature_.clear();
     owner_.refreshTimelineMetadata();
+    if (owner_.editorSection_ != nullptr) {
+        owner_.editorSection_->reanchorActiveBookmarksAfterChartTransform();
+    }
 
     owner_.statusBar()->showMessage(
         uiText(
@@ -585,8 +589,8 @@ void MainWindow::DocumentSection::onRaiseSubdivisionSelection()
     }
     applySelectionBatchTransform(
         UiText::isChineseUi() ? QStringLiteral("分音提升一档") : QStringLiteral("Subdivision +1"),
-        [](const QString& text, int* changedCount) {
-            return miacode::chart_transform::raiseSubdivisionForSelection(text, changedCount);
+        [](const QString& text, const QString& suffixContext, int* changedCount) {
+            return miacode::chart_transform::raiseSubdivisionForSelection(text, suffixContext, changedCount);
         });
 }
 
@@ -600,8 +604,8 @@ void MainWindow::DocumentSection::onLowerSubdivisionSelection()
     }
     applySelectionBatchTransform(
         UiText::isChineseUi() ? QStringLiteral("分音降低一档") : QStringLiteral("Subdivision -1"),
-        [](const QString& text, int* changedCount) {
-            return miacode::chart_transform::lowerSubdivisionForSelection(text, changedCount);
+        [](const QString& text, const QString& suffixContext, int* changedCount) {
+            return miacode::chart_transform::lowerSubdivisionForSelection(text, suffixContext, changedCount);
         });
 }
 
@@ -615,8 +619,8 @@ void MainWindow::DocumentSection::onRaiseSubdivisionHalfStepSelection()
     }
     applySelectionBatchTransform(
         UiText::isChineseUi() ? QStringLiteral("分音提升半档") : QStringLiteral("Subdivision +1/2"),
-        [](const QString& text, int* changedCount) {
-            return miacode::chart_transform::raiseSubdivisionHalfStepForSelection(text, changedCount);
+        [](const QString& text, const QString& suffixContext, int* changedCount) {
+            return miacode::chart_transform::raiseSubdivisionHalfStepForSelection(text, suffixContext, changedCount);
         });
 }
 
@@ -630,8 +634,8 @@ void MainWindow::DocumentSection::onLowerSubdivisionHalfStepSelection()
     }
     applySelectionBatchTransform(
         UiText::isChineseUi() ? QStringLiteral("分音降低半档") : QStringLiteral("Subdivision -1/2"),
-        [](const QString& text, int* changedCount) {
-            return miacode::chart_transform::lowerSubdivisionHalfStepForSelection(text, changedCount);
+        [](const QString& text, const QString& suffixContext, int* changedCount) {
+            return miacode::chart_transform::lowerSubdivisionHalfStepForSelection(text, suffixContext, changedCount);
         });
 }
 
