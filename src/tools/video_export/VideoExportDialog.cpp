@@ -128,9 +128,21 @@ QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
     }
 }
 
+double snappedFlowSpeed(double flowSpeed)
+{
+    const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
+    const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
+    const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
+    return qBound(
+        flowSpeedMin,
+        flowSpeedMin + qRound((flowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
+        flowSpeedMax
+    );
+}
+
 QString flowSpeedValueLabel(double flowSpeed)
 {
-    const double snapped = qRound(flowSpeed * 4.0) / 4.0;
+    const double snapped = snappedFlowSpeed(flowSpeed);
     const double roundedOneDecimal = qRound(snapped * 10.0) / 10.0;
     const bool useSingleDecimal = qAbs(snapped - roundedOneDecimal) < 0.001;
     return QString::number(snapped, 'f', useSingleDecimal ? 1 : 2);
@@ -573,6 +585,7 @@ VideoExportDialog::VideoExportDialog(
     PreviewScaleModeCallback previewScaleModeCallback,
     PreviewTapFlowSpeedCallback previewTapFlowSpeedCallback,
     PreviewTouchFlowSpeedCallback previewTouchFlowSpeedCallback,
+    SharedSettingsSnapshotCallback sharedSettingsSnapshotCallback,
     QWidget* parent
 )
     : QDialog(parent)
@@ -592,6 +605,7 @@ VideoExportDialog::VideoExportDialog(
     , previewScaleModeCallback_(std::move(previewScaleModeCallback))
     , previewTapFlowSpeedCallback_(std::move(previewTapFlowSpeedCallback))
     , previewTouchFlowSpeedCallback_(std::move(previewTouchFlowSpeedCallback))
+    , sharedSettingsSnapshotCallback_(std::move(sharedSettingsSnapshotCallback))
     , totalDurationSeconds_(qMax(0.0, baseTask.contentDurationSeconds))
 {
     setWindowTitle(uiText("dialog.video_export.title", QStringLiteral("Export Video")));
@@ -1573,6 +1587,9 @@ VideoExportDialog::VideoExportDialog(
         rangePage,
         uiText("dialog.video_export.section.range", l10n(QStringLiteral("Export Range"), QStringLiteral("导出区间")))
     );
+    connect(settingsTabs_, &QTabWidget::currentChanged, this, [this]() {
+        refreshSharedSettingsFromCallback();
+    });
 
     buttonBox_ = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
     QDialogButtonBox* buttonBox = buttonBox_;
@@ -1689,6 +1706,75 @@ VideoExportDialog::VideoExportDialog(
             move(desiredDialogTopLeft(owner, size()));
         }
     });
+}
+
+void VideoExportDialog::refreshSharedSettingsFromCallback()
+{
+    if (!sharedSettingsSnapshotCallback_) {
+        return;
+    }
+    refreshSharedSettingsFromTask(sharedSettingsSnapshotCallback_());
+}
+
+void VideoExportDialog::refreshSharedSettingsFromTask(const VideoExportTask& task)
+{
+    const auto setCheckBoxSilently = [](QCheckBox* checkbox, bool checked) {
+        if (checkbox == nullptr) {
+            return;
+        }
+        const QSignalBlocker blocker(checkbox);
+        checkbox->setChecked(checked);
+    };
+    setCheckBoxSilently(showTimestampCheck_, task.showTimestamp);
+    setCheckBoxSilently(showObjectStatsCheck_, task.showObjectStatsHud);
+    setCheckBoxSilently(showChartInfoCheck_, task.showChartInfoHud);
+    setCheckBoxSilently(smoothBrightnessCheck_, task.smoothBrightness);
+    initialShowTimestamp_ = task.showTimestamp;
+    initialShowObjectStats_ = task.showObjectStatsHud;
+    initialShowChartInfo_ = task.showChartInfoHud;
+
+    const int outerBrightness = qRound(qBound(0.0, task.backgroundBrightnessOuter, 1.0) * 100.0);
+    if (brightnessOuterSlider_ != nullptr) {
+        const QSignalBlocker blocker(brightnessOuterSlider_);
+        brightnessOuterSlider_->setValue(outerBrightness);
+    }
+    if (brightnessOuterValueLabel_ != nullptr) {
+        brightnessOuterValueLabel_->setText(QStringLiteral("%1%").arg(outerBrightness));
+    }
+
+    const int innerBrightness = qRound(qBound(0.0, task.backgroundBrightnessInner, 1.0) * 100.0);
+    if (brightnessInnerSlider_ != nullptr) {
+        const QSignalBlocker blocker(brightnessInnerSlider_);
+        brightnessInnerSlider_->setValue(innerBrightness);
+    }
+    if (brightnessInnerValueLabel_ != nullptr) {
+        brightnessInnerValueLabel_->setText(QStringLiteral("%1%").arg(innerBrightness));
+    }
+
+    const int layoutScale = qRound(miacode::preview_video::normalizedLayoutSquareScale(task.layoutSquareScale) * 100.0);
+    if (layoutSquareScaleSlider_ != nullptr) {
+        const QSignalBlocker blocker(layoutSquareScaleSlider_);
+        layoutSquareScaleSlider_->setValue(layoutScale);
+    }
+    if (layoutSquareScaleValueLabel_ != nullptr) {
+        layoutSquareScaleValueLabel_->setText(QStringLiteral("%1%").arg(layoutScale));
+    }
+
+    selectedBackgroundScaleMode_ = task.backgroundScaleMode;
+    if (backgroundScaleModeButton_ != nullptr) {
+        backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
+    }
+
+    selectedTapFlowSpeed_ = snappedFlowSpeed(task.tapFlowSpeed);
+    if (tapFlowSpeedEdit_ != nullptr && !tapFlowSpeedEdit_->hasFocus()) {
+        const QSignalBlocker blocker(tapFlowSpeedEdit_);
+        tapFlowSpeedEdit_->setText(flowSpeedValueLabel(selectedTapFlowSpeed_));
+    }
+    selectedTouchFlowSpeed_ = snappedFlowSpeed(task.touchFlowSpeed);
+    if (touchFlowSpeedEdit_ != nullptr && !touchFlowSpeedEdit_->hasFocus()) {
+        const QSignalBlocker blocker(touchFlowSpeedEdit_);
+        touchFlowSpeedEdit_->setText(flowSpeedValueLabel(selectedTouchFlowSpeed_));
+    }
 }
 
 void VideoExportDialog::onRangeSpinChanged()

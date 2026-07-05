@@ -49,6 +49,7 @@ public:
     using PreviewScaleModeCallback = std::function<void(PreviewBackgroundScaleMode mode)>;
     using PreviewTapFlowSpeedCallback = std::function<void(double flowSpeed)>;
     using PreviewTouchFlowSpeedCallback = std::function<void(double flowSpeed)>;
+    using SharedSettingsSnapshotCallback = std::function<VideoExportTask()>;
 
     VideoExportDialog(
         const VideoExportTask& baseTask,
@@ -67,6 +68,7 @@ public:
         PreviewScaleModeCallback previewScaleModeCallback = {},
         PreviewTapFlowSpeedCallback previewTapFlowSpeedCallback = {},
         PreviewTouchFlowSpeedCallback previewTouchFlowSpeedCallback = {},
+        SharedSettingsSnapshotCallback sharedSettingsSnapshotCallback = {},
         QWidget* parent = nullptr
     );
     bool exportSucceeded() const { return exportSucceeded_; }
@@ -140,6 +142,8 @@ private:
     void syncLivePreviewObjectStatsVisibility();
     void syncLivePreviewChartInfoVisibility();
     void restoreLivePreviewState();
+    void refreshSharedSettingsFromCallback();
+    void refreshSharedSettingsFromTask(const VideoExportTask& task);
     void loadPersistedSettings();
     void savePersistedSettings(const VideoExportTask& task) const;
     void persistExportOnlySettings() const;
@@ -217,6 +221,7 @@ private:
     PreviewScaleModeCallback previewScaleModeCallback_;
     PreviewTapFlowSpeedCallback previewTapFlowSpeedCallback_;
     PreviewTouchFlowSpeedCallback previewTouchFlowSpeedCallback_;
+    SharedSettingsSnapshotCallback sharedSettingsSnapshotCallback_;
 
     double totalDurationSeconds_ = 0.0;
     double previewCursorSecond_ = 0.0;

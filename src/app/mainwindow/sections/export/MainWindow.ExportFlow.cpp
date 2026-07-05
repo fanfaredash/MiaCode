@@ -709,6 +709,20 @@ VideoExportDialog* MainWindow::ExportSection::buildConfiguredVideoExportDialog(
             }
             owner_.savePortableState();
         },
+        [this, task]() {
+            VideoExportTask shared = task;
+            shared.showTimestamp = owner_.previewShowTimestamp_;
+            shared.showObjectStatsHud = owner_.exportShowObjectStatsHud_;
+            shared.showChartInfoHud = owner_.exportShowChartInfoHud_;
+            shared.backgroundBrightnessOuter = owner_.previewBackgroundBrightnessOuter_;
+            shared.backgroundBrightnessInner = owner_.previewBackgroundBrightnessInner_;
+            shared.layoutSquareScale = owner_.previewLayoutSquareScale_;
+            shared.smoothBrightness = owner_.previewSmoothBrightness_;
+            shared.backgroundScaleMode = owner_.previewBackgroundScaleMode_;
+            shared.tapFlowSpeed = owner_.previewTapFlowSpeed_;
+            shared.touchFlowSpeed = owner_.previewTouchFlowSpeed_;
+            return shared;
+        },
         parent
     );
     // Inject the owner-wired Gameplay controls (skin / judge line / judge

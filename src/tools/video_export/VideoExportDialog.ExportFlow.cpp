@@ -830,6 +830,7 @@ void VideoExportDialog::onExportButtonClicked()
 void VideoExportDialog::startExport()
 {
     stopRangePreview(false);
+    refreshSharedSettingsFromCallback();
 
     VideoExportTask task;
     QString errorMessage;
