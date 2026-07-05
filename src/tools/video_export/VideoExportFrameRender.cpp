@@ -402,8 +402,7 @@ QImage buildCircularDimMaskImage(
 
 QImage buildCircularMediaMaskImage(
     int frameWidth,
-    int frameHeight,
-    double layoutSquareScale
+    int frameHeight
 )
 {
     const int width = qMax(1, frameWidth);
@@ -411,11 +410,7 @@ QImage buildCircularMediaMaskImage(
     QImage mask(width, height, QImage::Format_Grayscale8);
     mask.fill(0);
 
-    const double layoutSide = miacode::preview_video::layoutSquareSideForCanvasHeight(
-        static_cast<double>(height),
-        layoutSquareScale
-    );
-    const double radius = qMax(1.0, layoutSide * 0.5);
+    const double radius = qMax(1.0, static_cast<double>(qMin(width, height)) * 0.5);
     const double centerX = (static_cast<double>(width) - 1.0) * 0.5;
     const double centerY = (static_cast<double>(height) - 1.0) * 0.5;
 
@@ -447,7 +442,6 @@ bool stageStaticBackgroundImageForExport(
     const QString& sourcePath,
     const QSize& outputSize,
     PreviewBackgroundScaleMode scaleMode,
-    double layoutSquareScale,
     const QString& stagedPath,
     QString* detail)
 {
@@ -480,10 +474,7 @@ bool stageStaticBackgroundImageForExport(
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     if (scaleMode == PreviewBackgroundScaleMode::InnerCircleFitOuterFill) {
         const QRectF stageRect(0.0, 0.0, outputSize.width(), outputSize.height());
-        const QRectF innerCircleRect = miacode::preview_video::centeredLayoutRectForStage(
-            stageRect,
-            layoutSquareScale
-        );
+        const QRectF innerCircleRect = miacode::preview::scene::centeredMaxSquareRectForStage(stageRect);
         painter.drawImage(
             staticMediaTargetRect(sourceImage.size(), outputSize, PreviewBackgroundScaleMode::FillCrop),
             sourceImage,
@@ -493,13 +484,13 @@ bool stageStaticBackgroundImageForExport(
         innerCircleClip.addEllipse(innerCircleRect);
         painter.setClipPath(innerCircleClip);
         painter.drawImage(
-            miacode::preview::scene::mediaTargetRect(
+            staticMediaTargetRect(
                 sourceImage.size(),
-                innerCircleRect,
-                PreviewBackgroundScaleMode::FitContain
+                outputSize,
+                PreviewBackgroundScaleMode::SquareFitContain
             ),
             sourceImage,
-            miacode::preview::scene::mediaSourceRect(sourceImage.size(), PreviewBackgroundScaleMode::FitContain)
+            miacode::preview::scene::mediaSourceRect(sourceImage.size(), PreviewBackgroundScaleMode::SquareFitContain)
         );
     } else {
         painter.drawImage(

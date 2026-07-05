@@ -463,8 +463,7 @@ QImage buildCircularDimMaskImage(
 );
 QImage buildCircularMediaMaskImage(
     int frameWidth,
-    int frameHeight,
-    double layoutSquareScale
+    int frameHeight
 );
 QRectF staticMediaTargetRect(
     const QSize& mediaSize,
@@ -474,7 +473,6 @@ bool stageStaticBackgroundImageForExport(
     const QString& sourcePath,
     const QSize& outputSize,
     PreviewBackgroundScaleMode scaleMode,
-    double layoutSquareScale,
     const QString& stagedPath,
     QString* detail);
 bool preparePackedRgbaFrame(

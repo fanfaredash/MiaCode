@@ -377,7 +377,6 @@ VideoExportResult VideoExportController::exportPreparedTask(
                 mediaPath,
                 frameSize,
                 task.backgroundScaleMode,
-                task.layoutSquareScale,
                 stagedImagePath,
                 &stagedImageDetail)) {
             ffmpegMediaPath = stagedImagePath;
@@ -534,17 +533,15 @@ VideoExportResult VideoExportController::exportPreparedTask(
         const QString innerMediaMaskPath = QDir(tempDir.path()).filePath(QStringLiteral("inner_circle_media_mask.png"));
         const QImage innerMediaMask = buildCircularMediaMaskImage(
             frameWidth,
-            frameHeight,
-            task.layoutSquareScale
+            frameHeight
         );
         if (innerMediaMask.isNull() || !innerMediaMask.save(innerMediaMaskPath)) {
             result.message = QStringLiteral("Unable to create inner media mask image.");
             result.details = withExportLogPath(innerMediaMaskPath);
             appendVideoExportLog(
                 QStringLiteral("fail_inner_media_mask"),
-                QStringLiteral("path=%1 layoutScale=%2")
+                QStringLiteral("path=%1")
                     .arg(innerMediaMaskPath)
-                    .arg(task.layoutSquareScale, 0, 'f', 6)
             );
             return result;
         }
@@ -557,10 +554,9 @@ VideoExportResult VideoExportController::exportPreparedTask(
              << innerMediaMaskPath;
         appendVideoExportLog(
             QStringLiteral("inner_media_mask"),
-            QStringLiteral("path=%1 inputIndex=%2 layoutScale=%3")
+            QStringLiteral("path=%1 inputIndex=%2")
                 .arg(innerMediaMaskPath)
                 .arg(innerMediaMaskInputIndex)
-                .arg(task.layoutSquareScale, 0, 'f', 6)
         );
     }
     if (hasDimMask) {
@@ -648,15 +644,9 @@ VideoExportResult VideoExportController::exportPreparedTask(
         };
 
         if (innerCircleFitOuterFill) {
-            const int innerSide = qMax(
-                1,
-                qRound(miacode::preview_video::layoutSquareSideForCanvasHeight(
-                    static_cast<double>(frameHeight),
-                    task.layoutSquareScale
-                ))
-            );
-            const int innerOffsetX = (frameWidth - innerSide) / 2;
-            const int innerOffsetY = (frameHeight - innerSide) / 2;
+            const int innerSide = squareSide;
+            const int innerOffsetX = squareOffsetX;
+            const int innerOffsetY = squareOffsetY;
             filterParts << QStringLiteral("[%1:v]split=2[media_outer_in][media_inner_in]").arg(mediaInputIndex);
 
             QStringList outerFilters;
