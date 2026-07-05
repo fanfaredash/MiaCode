@@ -194,6 +194,12 @@ const QString& kMissingBeatSeparator()
     return value;
 }
 
+const QString& kLineEndNoteMissingComma()
+{
+    static const QString value = QStringLiteral("Line-end note is missing trailing ','");
+    return value;
+}
+
 const QString& kMissingCommaBeforeDirectivePrefix()
 {
     static const QString value = QStringLiteral("Missing ',' between note and directive: ");
@@ -631,12 +637,27 @@ SimaiNativeParseResult parseInternal(
     // since the last ','; deliberately survives whitespace and line breaks
     // because neither is a beat separator.
     bool noteSinceComma = false;
+    int pendingLineEndNoteCol = -1;
+    int pendingLineEndNoteEndCol = -1;
+    bool lineSawComma = false;
+
+    const auto clearPendingLineEndNote = [&]() {
+        pendingLineEndNoteCol = -1;
+        pendingLineEndNoteEndCol = -1;
+    };
 
     const auto flushToken = [&](int lineNumber) {
         if (token.isEmpty()) {
             return;
         }
+        const int parsedTokenColumn = tokenColumn;
+        const int parsedTokenEndCol = tokenColumn + token.size() - 1;
+        const int noteCountBefore = state.result.noteMarkers.size();
         parseToken(&state, token, lineNumber, tokenColumn, &currentGroup);
+        if (state.result.noteMarkers.size() > noteCountBefore) {
+            pendingLineEndNoteCol = parsedTokenColumn;
+            pendingLineEndNoteEndCol = parsedTokenEndCol;
+        }
         token.clear();
     };
     const auto warnDirectiveAfterNote = [&](int lineNumber, const QString& line, int openIndex, int closeIndex) {
@@ -654,6 +675,7 @@ SimaiNativeParseResult parseInternal(
         // One warning per forgotten ',' — a directive run like "1{16}(120)"
         // is a single missing separator, not two.
         noteSinceComma = false;
+        clearPendingLineEndNote();
     };
     const auto advanceMeasureLinesTo = [&](double targetSecond) {
         const double measureDuration = measureDurationSeconds(
@@ -667,6 +689,39 @@ SimaiNativeParseResult parseInternal(
     };
 
     const QStringList lines = text.split('\n');
+    const auto nextSignificantLineStartsDirective = [&](int nextLineIndex) {
+        for (int i = nextLineIndex; i < lines.size(); ++i) {
+            QString nextLine = lines.at(i);
+            if (nextLine.endsWith('\r')) {
+                nextLine.chop(1);
+            }
+            const QString trimmed = nextLine.trimmed();
+            if (trimmed.isEmpty() || trimmed.startsWith(QStringLiteral("||"))) {
+                continue;
+            }
+            return trimmed.startsWith(QChar('('))
+                || trimmed.startsWith(QChar('{'))
+                || trimmed.startsWith(QStringLiteral("<HS*"));
+        }
+        return false;
+    };
+    const auto warnLineEndNoteMissingComma = [&](int lineNumber, int nextLineIndex) {
+        if (!strictMode
+            || !lineSawComma
+            || pendingLineEndNoteCol < 0
+            || nextSignificantLineStartsDirective(nextLineIndex)) {
+            return;
+        }
+        appendTokenWarning(
+            &state,
+            lineNumber,
+            pendingLineEndNoteCol,
+            ValidationMessage::kLineEndNoteMissingComma(),
+            pendingLineEndNoteEndCol
+        );
+        noteSinceComma = false;
+        clearPendingLineEndNote();
+    };
     for (int lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
         QString line = lines.at(lineIndex);
         if (line.endsWith('\r')) {
@@ -677,6 +732,8 @@ SimaiNativeParseResult parseInternal(
         // scoped to the current line.
         eachOperandPending = false;
         pendingSeparatorCol = -1;
+        clearPendingLineEndNote();
+        lineSawComma = false;
         if (isTerminalMarkerText(line)) {
             continue;
         }
@@ -808,6 +865,7 @@ SimaiNativeParseResult parseInternal(
             if (ch == QChar('/')) {
                 if (strictMode && i + 1 < line.size() && line.at(i + 1) == QChar('/')) {
                     flushToken(lineNumber);
+                    clearPendingLineEndNote();
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kRepeatedSlashSeparator(), i + 2);
                     eachOperandPending = false;
                     pendingSeparatorCol = -1;
@@ -817,11 +875,13 @@ SimaiNativeParseResult parseInternal(
                 if (strictMode && !eachOperandPending) {
                     // e.g. ",/7" or a leading '/': nothing to the left.
                     flushToken(lineNumber);
+                    clearPendingLineEndNote();
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kSeparatorMissingOperand());
                     pendingSeparatorCol = -1;
                     continue;
                 }
                 flushToken(lineNumber);
+                clearPendingLineEndNote();
                 if (strictMode) {
                     pendingSeparatorCol = i + 1;
                     eachOperandPending = false;
@@ -832,6 +892,7 @@ SimaiNativeParseResult parseInternal(
             if (ch == QChar('`')) {
                 if (strictMode && i + 1 < line.size() && line.at(i + 1) == QChar('`')) {
                     flushToken(lineNumber);
+                    clearPendingLineEndNote();
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kRepeatedBacktickSeparator(), i + 2);
                     finalizeEachGroup(&state, currentGroup);
                     currentGroup.clear();
@@ -843,6 +904,7 @@ SimaiNativeParseResult parseInternal(
                 if (strictMode && !eachOperandPending) {
                     // e.g. ",`7" or a leading '`': nothing to the left.
                     flushToken(lineNumber);
+                    clearPendingLineEndNote();
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kSeparatorMissingOperand());
                     finalizeEachGroup(&state, currentGroup);
                     currentGroup.clear();
@@ -850,6 +912,7 @@ SimaiNativeParseResult parseInternal(
                     continue;
                 }
                 flushToken(lineNumber);
+                clearPendingLineEndNote();
                 finalizeEachGroup(&state, currentGroup);
                 currentGroup.clear();
                 if (strictMode) {
@@ -868,6 +931,8 @@ SimaiNativeParseResult parseInternal(
                 pendingSeparatorCol = -1;
                 noteSinceComma = false;
                 flushToken(lineNumber);
+                clearPendingLineEndNote();
+                lineSawComma = true;
                 finalizeEachGroup(&state, currentGroup);
                 currentGroup.clear();
                 TimelineBeatMarker marker;
@@ -911,6 +976,7 @@ SimaiNativeParseResult parseInternal(
         eachOperandPending = false;
 
         flushToken(lineNumber);
+        warnLineEndNoteMissingComma(lineNumber, lineIndex + 1);
         finalizeEachGroup(&state, currentGroup);
         currentGroup.clear();
     }
@@ -1176,6 +1242,10 @@ QString localizeValidationDetail(QString detail, SimaiNativeValidationLocale loc
 {
     if (locale == SimaiNativeValidationLocale::English) {
         return detail;
+    }
+
+    if (detail == ValidationMessage::kLineEndNoteMissingComma()) {
+        return QStringLiteral("行尾音符缺少结尾 ','");
     }
 
     const auto exactIt = ValidationMessage::zhExactMap().constFind(detail);

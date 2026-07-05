@@ -549,6 +549,44 @@ int main(int argc, char** argv)
     }
 
     {
+        const QString trailingCommaMessage = QStringLiteral("Line-end note is missing trailing ','");
+        const SimaiNativeParseResult lenientTrailingNote = SimaiNativeParser::parseForTimeline(QStringLiteral("1,2\nE"));
+        const SimaiNativeParseResult strictTrailingNote = SimaiNativeParser::validateSyntax(QStringLiteral("1,2\nE"));
+        const SimaiNativeParseResult strictTrailingNoteOk = SimaiNativeParser::validateSyntax(QStringLiteral("1,2,\nE"));
+        const SimaiNativeParseResult strictDirectiveAfterLineEndNote = SimaiNativeParser::validateSyntax(
+            QStringLiteral("{16}1,1,1,1,1\n{16},,,\nE"));
+
+        expect(lenientTrailingNote.ok && lenientTrailingNote.warnings.isEmpty(),
+            QStringLiteral("lenient parse stays quiet for line-end note without trailing comma"));
+        expect(strictTrailingNote.ok && strictTrailingNote.errors.isEmpty(),
+            QStringLiteral("validate keeps line-end note without trailing comma warning-only"));
+        expect(
+            strictTrailingNote.warnings.size() == 1
+                && strictTrailingNote.warnings.constFirst().message == trailingCommaMessage,
+            QStringLiteral("validate warns when a line-end note is missing trailing comma"));
+        if (strictTrailingNote.warnings.size() == 1) {
+            expect(
+                strictTrailingNote.warnings.constFirst().line == 1
+                    && strictTrailingNote.warnings.constFirst().col == 3,
+                QStringLiteral("line-end trailing comma warning points at the note"));
+        }
+        expect(strictTrailingNoteOk.ok && strictTrailingNoteOk.warnings.isEmpty(),
+            QStringLiteral("validate stays quiet when line-end note has trailing comma"));
+        expect(
+            strictDirectiveAfterLineEndNote.warnings.size() == 1
+                && strictDirectiveAfterLineEndNote.warnings.constFirst().message
+                    == QStringLiteral("Missing ',' between note and directive: {16}"),
+            QStringLiteral("next-line directive keeps the directive-specific missing-comma warning"));
+
+        const SimaiNativeValidationReport trailingNoteReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("1,2\nE"),
+            SimaiNativeValidationLocale::English
+        );
+        expect(trailingNoteReport.ok && trailingNoteReport.warningCount == 1,
+            QStringLiteral("validation report treats line-end note without trailing comma as warning-only"));
+    }
+
+    {
         const SimaiNativeParseResult lenientDoubleSlash = SimaiNativeParser::parseForTimeline(QStringLiteral("1//2,\nE"));
         const SimaiNativeParseResult strictDoubleSlash = SimaiNativeParser::validateSyntax(QStringLiteral("1//2,\nE"));
         const SimaiNativeParseResult lenientDoubleBacktick = SimaiNativeParser::parseForTimeline(QStringLiteral("1``2,\nE"));
