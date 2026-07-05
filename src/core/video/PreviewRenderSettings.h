@@ -11,4 +11,5 @@ enum class PreviewBackgroundScaleMode {
     FillCrop = 0,
     FitContain = 1,
     SquareFitContain = 2,
+    InnerCircleFitOuterFill = 3,
 };

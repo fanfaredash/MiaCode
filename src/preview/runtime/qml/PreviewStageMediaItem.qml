@@ -18,7 +18,8 @@ Item {
     Item {
         id: mediaFrame
         objectName: "previewStageMediaFrame"
-        property bool squareFit: root.mediaHost && root.mediaHost.backgroundScaleMode === 2
+        property bool squareFit: root.mediaHost
+            && (root.mediaHost.backgroundScaleMode === 2 || root.mediaHost.backgroundScaleMode === 3)
         width: squareFit ? Math.min(root.width, root.height) : root.width
         height: squareFit ? Math.min(root.width, root.height) : root.height
         anchors.centerIn: parent
@@ -32,7 +33,10 @@ Item {
                 && root.mediaHost.mediaVisible
                 && root.mediaHost.hasResolvedMedia
                 && !root.mediaHost.hasVideoMedia
-            fillMode: root.mediaHost && (root.mediaHost.backgroundScaleMode === 1 || root.mediaHost.backgroundScaleMode === 2)
+            fillMode: root.mediaHost
+                && (root.mediaHost.backgroundScaleMode === 1
+                    || root.mediaHost.backgroundScaleMode === 2
+                    || root.mediaHost.backgroundScaleMode === 3)
                 ? Image.PreserveAspectFit
                 : Image.PreserveAspectCrop
             source: root.mediaHost ? root.mediaHost.imageSource : ""
@@ -50,7 +54,10 @@ Item {
                 && root.mediaHost.mediaVisible
                 && root.mediaHost.hasVideoMedia
                 && root.mediaHost.hasVideoFrame
-            fillMode: root.mediaHost && (root.mediaHost.backgroundScaleMode === 1 || root.mediaHost.backgroundScaleMode === 2)
+            fillMode: root.mediaHost
+                && (root.mediaHost.backgroundScaleMode === 1
+                    || root.mediaHost.backgroundScaleMode === 2
+                    || root.mediaHost.backgroundScaleMode === 3)
                 ? VideoOutput.PreserveAspectFit
                 : VideoOutput.PreserveAspectCrop
         }

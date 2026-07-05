@@ -215,7 +215,7 @@ The `timeline/interaction` runtime tag now traces quick timeline drag, wheel-scr
 The `timeline/bridge` runtime tag now records high-frequency quick timeline bridge pushes such as `action=set_horizontal_scroll_value` only when `MIACODE_TIMELINE_HOTPATH_DIAG=1`.
 The `timeline/quick_scene` runtime tag now distinguishes full `scene_state_rebuild_*` passes from `action=content_transform_update` scroll-only paints; the scroll-only hot-path paint log requires `MIACODE_TIMELINE_HOTPATH_DIAG=1`.
 The `timeline/cursor_map` runtime tag now profiles cursor-to-second mapping in `timelineSecondForCursor()`.
-The `ui/hang_watchdog` runtime tag is installed only when runtime debug output is active. It records the active GUI phase if a marked `MIACODE_HANG_PHASE` stays active for more than about `2s`, flushes the op-chain shadow, and includes async-log writer stats so UI hangs can be separated from logging backpressure. Current marked phases focus on QuickShell native surface sizing, rehosted widget relayout, and embedded export video-panel creation/layout.
+The `ui/hang_watchdog` runtime tag is installed only when runtime debug output is active. It records the active GUI phase if a marked `MIACODE_HANG_PHASE` stays active for more than about `2s`, flushes the op-chain shadow, and includes async-log writer stats so UI hangs can be separated from logging backpressure. `MIACODE_HANG_JOIN` and `MIACODE_HANG_JOIN_IMPL` are helper macros for those scoped phase markers, not environment variables. Current marked phases focus on QuickShell native surface sizing, rehosted widget relayout, and embedded export video-panel creation/layout.
 The `layout/export_page`, `layout/rehosted_widget`, `export_page/embedded_video_panel`, `video_export/embedded_layout`, and `quick_shell/layout` runtime tags are slow-path layout diagnostics. They emit only in runtime debug mode and log warnings when layout/rehost/embedded-panel steps cross their local slow thresholds.
 The `app_shutdown` runtime tag now traces `lastWindowClosed`, periodic post-close heartbeats, `aboutToQuit`, `app.exec()` exit, and post-event-loop object teardown so "window disappeared but process still lives" tails can be separated from close-event time.
 QuickShell accepted root-window closes now notify C++ from QML before the window hide tail, logging `root_close_accepted_notify` and `accepted_close_shutdown_*`; the immediate pass shuts down preview and closes the hidden backend `MainWindow`, then a queued pre-quit pass logs `accepted_close_destroy_*` while destroying the QML engine, native surfaces, controller, style bridge, and backend before explicitly requesting `quit()`.
@@ -286,10 +286,12 @@ Owner: `src/tools/video_export/VideoExportController.cpp`
   - `MIACODE_EXPORT_ENABLE_GPU_RENDER`
   - `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO`
   - `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO`
+  - `MIACODE_EXPORT_RENDER_BACKEND`
   - these now drive `VideoExportQuickRenderBackend` plus `PreviewQuickExportSession`, not the removed legacy offscreen renderer
-  - default export path keeps GPU offscreen render enabled and requests PBO readback unless `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1`
+  - default export path keeps GPU offscreen render enabled and now uses D3D11 QRhi synchronous staging-map readback; set `MIACODE_EXPORT_RENDER_BACKEND=opengl` to use the OpenGL FBO/PBO rollback path, where `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1` still disables PBO readback
   - `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1` is the standard safety override and the forced env used by worker crash retry
   - `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO=1` now only makes the default explicit
+  - `MIACODE_EXPORT_RENDER_BACKEND=d3d11_qrhi|opengl|auto` selects the offscreen chart-render session for CLI export and the export worker; default `d3d11_qrhi` uses `PreviewQuickD3D11ExportSession` on Windows with P3-policy adapter selection, `QQuickGraphicsDevice::fromDeviceAndContext`, `QQuickRenderTarget::fromD3D11Texture`, and synchronous CopyResource+Map readback, while `opengl` keeps the stable OpenGL QQuickRenderControl FBO/PBO rollback path
 - Encoder selection and tuning:
   - `MIACODE_EXPORT_SKIP_ENCODER_RUNTIME_PROBE`
   - `MIACODE_EXPORT_FORCE_ENCODER`
@@ -306,7 +308,8 @@ Current normalization rules:
 - object-trace max-lines defaults to `max(diag_max_lines, 5000)` unless explicitly overridden.
 - `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO` wins over `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO`.
 - `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO` implies GPU render should be requested.
-- offscreen PBO readback defaults to enabled unless explicitly disabled.
+- D3D11 QRhi export does not use PBO; OpenGL rollback export keeps offscreen PBO readback enabled unless explicitly disabled.
+- D3D11 QRhi export has no PBO path; the controller logs `pbo_readback_disabled_by_backend` and uses synchronous staging-map readback.
 - export log tags `pbo_capability_probe`, `pbo_cleanup_deferred`, and `export_context_not_current_on_teardown` are the primary probe / teardown breadcrumbs for PBO stability issues.
 - export worker `CrashExit` retries exactly once, only when the crashing attempt still requested PBO, and the retry injects `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1`.
 - encoder auto mode defaults to `balanced`.

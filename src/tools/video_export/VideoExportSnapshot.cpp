@@ -19,6 +19,8 @@ QString backgroundScaleModeToken(PreviewBackgroundScaleMode mode)
         return QStringLiteral("fit");
     case PreviewBackgroundScaleMode::SquareFitContain:
         return QStringLiteral("square_fit");
+    case PreviewBackgroundScaleMode::InnerCircleFitOuterFill:
+        return QStringLiteral("inner_circle_fit_outer_fill");
     case PreviewBackgroundScaleMode::FillCrop:
     default:
         return QStringLiteral("fill");
@@ -100,6 +102,16 @@ PreviewBackgroundScaleMode backgroundScaleModeFromToken(const QString& token)
         || normalized == QLatin1String("square-fill")
         || normalized == QLatin1String("square")) {
         return PreviewBackgroundScaleMode::SquareFitContain;
+    }
+    if (normalized == QLatin1String("inner_circle_fit_outer_fill")
+        || normalized == QLatin1String("inner-circle-fit-outer-fill")
+        || normalized == QLatin1String("inner_fit_outer_fill")
+        || normalized == QLatin1String("inner-fit-outer-fill")
+        || normalized == QLatin1String("circle_fit_outer_fill")
+        || normalized == QLatin1String("circle-fit-outer-fill")
+        || normalized == QLatin1String("inner_circle_fit")
+        || normalized == QLatin1String("inner-circle-fit")) {
+        return PreviewBackgroundScaleMode::InnerCircleFitOuterFill;
     }
     return PreviewBackgroundScaleMode::FillCrop;
 }

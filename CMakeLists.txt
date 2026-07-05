@@ -9,7 +9,7 @@ set(MIACODE_VERSION_PATCH "1")
 # split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
 # they always drifted apart in practice (e.g. beta20 zip shipping with
 # beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "beta.3")
+set(MIACODE_VERSION_PRERELEASE "beta.5-test")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
@@ -72,6 +72,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
     src/app/startup_diagnostics_win32.cpp
     src/app/graphics_backend.cpp
+    src/app/process_identity.cpp
+    src/app/gpu_adapter_probe.cpp
+    src/app/gpu_device_provider.cpp
+    src/app/gpu_high_performance_hint.cpp
     src/app/cli_shared.cpp
     src/app/cli_video_export.cpp
     src/app/cli_video_export_worker.cpp
@@ -168,6 +172,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/UiHangWatchdog.cpp
     src/common/ProcessDiagnostics.h
     src/common/ProcessDiagnostics.cpp
+    src/common/GpuDevicePolicy.h
+    src/common/GpuDevicePolicy.cpp
     src/common/OperationLog.h
     src/common/OperationLog.cpp
     src/common/CrashRecovery.h
@@ -292,6 +298,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/cover_export/ExportCoverDialog.cpp
     src/preview/runtime/PreviewQuickExportSession.h
     src/preview/runtime/PreviewQuickExportSession.cpp
+    src/preview/runtime/PreviewQuickD3D11ExportSession.h
+    src/preview/runtime/PreviewQuickD3D11ExportSession.cpp
     src/preview/runtime/PreviewSceneAssetLoader.h
     src/preview/runtime/PreviewSceneAssetLoader.cpp
     src/preview/runtime/PreviewSceneAssetRepository.h
@@ -791,6 +799,10 @@ endif()
 if (WIN32)
     add_executable(MiaCodeLauncher WIN32
         src/wrapper/MiaCodeLauncher.cpp
+        # P2 — export the same NVIDIA Optimus / AMD PowerXpress high-performance
+        # GPU hint symbols from the launcher's export table as well as the real
+        # app, so the preference is declared whichever binary the OS inspects.
+        src/app/gpu_high_performance_hint.cpp
     )
     set_target_properties(MiaCodeLauncher PROPERTIES
         OUTPUT_NAME "MiaCodeLauncher"

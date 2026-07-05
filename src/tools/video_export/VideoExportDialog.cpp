@@ -118,6 +118,10 @@ QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
         return uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)"));
     case PreviewBackgroundScaleMode::SquareFitContain:
         return uiText("dialog.video_export.option.scale.square_fit", QStringLiteral("1:1 Fit (center square)"));
+    case PreviewBackgroundScaleMode::InnerCircleFitOuterFill:
+        return uiText(
+            "dialog.video_export.option.scale.inner_circle_fit_outer_fill",
+            QStringLiteral("Inner 1:1 Fit + Outer Fill"));
     case PreviewBackgroundScaleMode::FillCrop:
     default:
         return uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)"));
@@ -1219,6 +1223,9 @@ VideoExportDialog::VideoExportDialog(
     const QString scaleSquareFitLabel = uiText(
         "dialog.video_export.option.scale.square_fit",
         QStringLiteral("1:1 Fit (center square)"));
+    const QString scaleInnerCircleFitOuterFillLabel = uiText(
+        "dialog.video_export.option.scale.inner_circle_fit_outer_fill",
+        QStringLiteral("Inner 1:1 Fit + Outer Fill"));
     selectedBackgroundScaleMode_ = baseTask_.backgroundScaleMode;
     backgroundScaleModeButton_ = createDialogMenuButton(
         optionsContent_,
@@ -1246,6 +1253,15 @@ VideoExportDialog::VideoExportDialog(
     });
     addDialogMenuChoice(backgroundScaleModeMenu_, scaleSquareFitLabel, [this]() {
         selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::SquareFitContain;
+        if (backgroundScaleModeButton_ != nullptr) {
+            backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
+        }
+        if (previewScaleModeCallback_) {
+            previewScaleModeCallback_(selectedBackgroundScaleMode_);
+        }
+    });
+    addDialogMenuChoice(backgroundScaleModeMenu_, scaleInnerCircleFitOuterFillLabel, [this]() {
+        selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::InnerCircleFitOuterFill;
         if (backgroundScaleModeButton_ != nullptr) {
             backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
         }

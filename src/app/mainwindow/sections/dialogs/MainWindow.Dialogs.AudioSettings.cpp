@@ -700,6 +700,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     const QString scaleSquareFitLabel = uiText(
         "dialog.render_settings.video.scale.square_fit",
         "1:1 Fit (center square)");
+    const QString scaleInnerCircleFitOuterFillLabel = uiText(
+        "dialog.render_settings.video.scale.inner_circle_fit_outer_fill",
+        "Inner 1:1 Fit + Outer Fill");
     const QString slideStackOrderDxLabel = uiText(
         "dialog.render_settings.gameplay.slide_stack_order.dx_style",
         "DX Style"
@@ -821,6 +824,8 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             return scaleFitLabel;
         case PreviewBackgroundScaleMode::SquareFitContain:
             return scaleSquareFitLabel;
+        case PreviewBackgroundScaleMode::InnerCircleFitOuterFill:
+            return scaleInnerCircleFitOuterFillLabel;
         case PreviewBackgroundScaleMode::FillCrop:
         default:
             return scaleFillLabel;
@@ -849,6 +854,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     });
     scaleModePopup->addChoice(scaleSquareFitLabel, [&, setScaleMode]() {
         setScaleMode(PreviewBackgroundScaleMode::SquareFitContain);
+    });
+    scaleModePopup->addChoice(scaleInnerCircleFitOuterFillLabel, [&, setScaleMode]() {
+        setScaleMode(PreviewBackgroundScaleMode::InnerCircleFitOuterFill);
     });
     attachDialogListPopup(scaleModeButton, scaleModePopup);
 

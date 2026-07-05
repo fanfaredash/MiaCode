@@ -9,6 +9,7 @@
 #include <QImage>
 #include <QMatrix4x4>
 #include <QQuickWindow>
+#include <QSGClipNode>
 #include <QSGGeometry>
 #include <QSGMaterial>
 #include <QSGMaterialShader>
@@ -16,6 +17,7 @@
 #include <QSGSimpleRectNode>
 #include <QSGSimpleTextureNode>
 #include <QSGTexture>
+#include <QtMath>
 
 #include <cstring>
 
@@ -47,6 +49,7 @@ struct StageDimParams {
 };
 
 constexpr int kStageDimUniformBufferSize = 112;
+constexpr int kInnerCircleClipSegments = 96;
 
 class StageBackgroundDimMaterial;
 
@@ -181,6 +184,61 @@ private:
     StageBackgroundDimMaterial* material_ = nullptr;
 };
 
+class StageBackgroundCircleMediaNode final : public QSGClipNode
+{
+public:
+    StageBackgroundCircleMediaNode()
+    {
+        geometry_ = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), kInnerCircleClipSegments * 3);
+        geometry_->setDrawingMode(QSGGeometry::DrawTriangles);
+        geometry_->setVertexDataPattern(QSGGeometry::DynamicPattern);
+        setGeometry(geometry_);
+        setFlag(QSGNode::OwnsGeometry, true);
+        setIsRectangular(false);
+
+        mediaNode_ = new QSGSimpleTextureNode();
+        mediaNode_->setOwnsTexture(false);
+        appendChildNode(mediaNode_);
+    }
+
+    QSGSimpleTextureNode* mediaNode() const
+    {
+        return mediaNode_;
+    }
+
+    void updateClip(const QRectF& circleRect)
+    {
+        const QPointF center = circleRect.center();
+        const qreal radius = qMax<qreal>(1.0, qMin(circleRect.width(), circleRect.height()) * 0.5);
+        auto* vertices = geometry_->vertexDataAsPoint2D();
+        for (int segmentIndex = 0; segmentIndex < kInnerCircleClipSegments; ++segmentIndex) {
+            const qreal t0 = static_cast<qreal>(segmentIndex) / static_cast<qreal>(kInnerCircleClipSegments);
+            const qreal t1 = static_cast<qreal>(segmentIndex + 1) / static_cast<qreal>(kInnerCircleClipSegments);
+            const qreal angle0 = -t0 * 360.0;
+            const qreal angle1 = -t1 * 360.0;
+            const QPointF p0(
+                center.x() + radius * qCos(qDegreesToRadians(angle0)),
+                center.y() + radius * qSin(qDegreesToRadians(angle0))
+            );
+            const QPointF p1(
+                center.x() + radius * qCos(qDegreesToRadians(angle1)),
+                center.y() + radius * qSin(qDegreesToRadians(angle1))
+            );
+            const int vertexIndex = segmentIndex * 3;
+            vertices[vertexIndex + 0].set(static_cast<float>(center.x()), static_cast<float>(center.y()));
+            vertices[vertexIndex + 1].set(static_cast<float>(p0.x()), static_cast<float>(p0.y()));
+            vertices[vertexIndex + 2].set(static_cast<float>(p1.x()), static_cast<float>(p1.y()));
+        }
+        geometry_->markVertexDataDirty();
+        setClipRect(QRectF(center.x() - radius, center.y() - radius, radius * 2.0, radius * 2.0));
+        markDirty(QSGNode::DirtyGeometry);
+    }
+
+private:
+    QSGGeometry* geometry_ = nullptr;
+    QSGSimpleTextureNode* mediaNode_ = nullptr;
+};
+
 class StageBackgroundRootNode : public QSGNode
 {
 public:
@@ -192,6 +250,7 @@ public:
 
     QSGSimpleRectNode* baseNode = nullptr;
     QSGSimpleTextureNode* mediaNode = nullptr;
+    StageBackgroundCircleMediaNode* innerCircleMediaNode = nullptr;
     StageBackgroundDimNode* dimNode = nullptr;
 };
 
@@ -265,6 +324,20 @@ StageBackgroundDimNode* ensureDimNode(StageBackgroundRootNode* root)
     return root->dimNode;
 }
 
+StageBackgroundCircleMediaNode* ensureInnerCircleMediaNode(StageBackgroundRootNode* root)
+{
+    Q_ASSERT(root != nullptr);
+    if (root->innerCircleMediaNode == nullptr) {
+        root->innerCircleMediaNode = new StageBackgroundCircleMediaNode();
+        if (root->dimNode != nullptr) {
+            root->insertChildNodeBefore(root->innerCircleMediaNode, root->dimNode);
+        } else {
+            root->appendChildNode(root->innerCircleMediaNode);
+        }
+    }
+    return root->innerCircleMediaNode;
+}
+
 void removeMediaNode(StageBackgroundRootNode* root)
 {
     if (root == nullptr || root->mediaNode == nullptr) {
@@ -273,6 +346,16 @@ void removeMediaNode(StageBackgroundRootNode* root)
     root->removeChildNode(root->mediaNode);
     delete root->mediaNode;
     root->mediaNode = nullptr;
+}
+
+void removeInnerCircleMediaNode(StageBackgroundRootNode* root)
+{
+    if (root == nullptr || root->innerCircleMediaNode == nullptr) {
+        return;
+    }
+    root->removeChildNode(root->innerCircleMediaNode);
+    delete root->innerCircleMediaNode;
+    root->innerCircleMediaNode = nullptr;
 }
 
 void removeDimNode(StageBackgroundRootNode* root)
@@ -360,22 +443,50 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
         }
         profile.mediaTextureMs = static_cast<double>(mediaTextureTimer.nsecsElapsed()) / 1000000.0;
         if (texture != nullptr) {
+            const bool innerCircleFitOuterFill =
+                state.render.backgroundScaleMode == PreviewBackgroundScaleMode::InnerCircleFitOuterFill;
             const miacode::preview::scene::PreviewMediaPlacement placement =
                 miacode::preview::scene::mediaPlacement(
                     mediaImage.size(),
                     stageRect,
-                    state.render.backgroundScaleMode
+                    innerCircleFitOuterFill
+                        ? PreviewBackgroundScaleMode::FillCrop
+                        : state.render.backgroundScaleMode
                 );
             mediaNode->setOwnsTexture(false);
             mediaNode->setTexture(texture);
             mediaNode->setRect(placement.targetRect);
             mediaNode->setSourceRect(texture->convertToNormalizedSourceRect(placement.sourceRect));
             mediaNode->setFiltering(QSGTexture::Linear);
+            if (innerCircleFitOuterFill) {
+                const QRectF innerCircleRect = miacode::preview_video::centeredLayoutRectForStage(
+                    stageRect,
+                    state.render.layoutSquareScale
+                );
+                const miacode::preview::scene::PreviewMediaPlacement innerPlacement =
+                    miacode::preview::scene::mediaPlacement(
+                        mediaImage.size(),
+                        innerCircleRect,
+                        PreviewBackgroundScaleMode::FitContain
+                    );
+                auto* innerCircleNode = ensureInnerCircleMediaNode(root);
+                auto* innerMediaNode = innerCircleNode->mediaNode();
+                innerCircleNode->updateClip(innerCircleRect);
+                innerMediaNode->setOwnsTexture(false);
+                innerMediaNode->setTexture(texture);
+                innerMediaNode->setRect(innerPlacement.targetRect);
+                innerMediaNode->setSourceRect(texture->convertToNormalizedSourceRect(innerPlacement.sourceRect));
+                innerMediaNode->setFiltering(QSGTexture::Linear);
+            } else {
+                removeInnerCircleMediaNode(root);
+            }
         } else {
             removeMediaNode(root);
+            removeInnerCircleMediaNode(root);
         }
     } else {
         removeMediaNode(root);
+        removeInnerCircleMediaNode(root);
     }
 
     if (outerDarkAlpha > 1e-6 || innerDarkAlpha > 1e-6) {

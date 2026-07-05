@@ -131,6 +131,10 @@ int runCliVideoExportWorker(QApplication& app, QString* errorMessage)
     }
     workerJobId = snapshot.jobId;
     miacode::debug_log::setSessionProjectLogDirectory(videoExportWorkerProjectLogDirectory(snapshot));
+    // Re-emit the P0/P2/P3 startup diagnostics into the worker's now-bound
+    // project log so the export-worker's GPU policy (which the GUI forwards via
+    // env) is visible alongside the GUI's in the same collected .miacode/logs/.
+    logProcessStartupDiagnostics(QStringLiteral("log_dir_rebound"));
 
     writeWorkerJsonLine(QJsonObject{
         {QStringLiteral("event"), QStringLiteral("accepted")},

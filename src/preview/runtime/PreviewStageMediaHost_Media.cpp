@@ -118,6 +118,10 @@ void PreviewStageMediaHost::setBackgroundScaleModeValue(int mode)
         setBackgroundScaleMode(PreviewBackgroundScaleMode::SquareFitContain);
         return;
     }
+    if (mode == static_cast<int>(PreviewBackgroundScaleMode::InnerCircleFitOuterFill)) {
+        setBackgroundScaleMode(PreviewBackgroundScaleMode::InnerCircleFitOuterFill);
+        return;
+    }
     setBackgroundScaleMode(
         mode == static_cast<int>(PreviewBackgroundScaleMode::FitContain)
             ? PreviewBackgroundScaleMode::FitContain

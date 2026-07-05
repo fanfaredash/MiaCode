@@ -11,6 +11,7 @@
 #include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "MainEntrypoints.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -658,6 +659,13 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
             ? QString()
             : QDir(projectDataDirectoryPath).filePath(QStringLiteral("logs"))
     );
+    // The runtime log directory just rebound to this chart's .miacode/logs/;
+    // re-emit the P0/P2/P3 startup diagnostics (process identity / GPU hint /
+    // resolved GPU policy) so the per-chart log a user collects is self-contained
+    // rather than only holding them in the app-local boot log.
+    if (!projectDataDirectoryPath.isEmpty()) {
+        miacode::app::entry::logProcessStartupDiagnostics(QStringLiteral("log_dir_rebound"));
+    }
     if (!state_.currentFilePath_.isEmpty()) {
         owner_.setLastOpenDirectory(state_.currentFilePath_);
 

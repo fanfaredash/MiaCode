@@ -674,6 +674,15 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
         || scaleMode == QLatin1String("square-fill")
         || scaleMode == QLatin1String("square")) {
         state_.previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::SquareFitContain;
+    } else if (scaleMode == QLatin1String("inner_circle_fit_outer_fill")
+        || scaleMode == QLatin1String("inner-circle-fit-outer-fill")
+        || scaleMode == QLatin1String("inner_fit_outer_fill")
+        || scaleMode == QLatin1String("inner-fit-outer-fill")
+        || scaleMode == QLatin1String("circle_fit_outer_fill")
+        || scaleMode == QLatin1String("circle-fit-outer-fill")
+        || scaleMode == QLatin1String("inner_circle_fit")
+        || scaleMode == QLatin1String("inner-circle-fit")) {
+        state_.previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::InnerCircleFitOuterFill;
     } else if (!scaleMode.isEmpty()) {
         state_.previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     }
@@ -893,7 +902,9 @@ void MainWindow::EditorSection::savePortableState() const
             ? QStringLiteral("fit")
             : (state_.previewBackgroundScaleMode_ == PreviewBackgroundScaleMode::SquareFitContain
                    ? QStringLiteral("square_fit")
-                   : QStringLiteral("fill"))
+                   : (state_.previewBackgroundScaleMode_ == PreviewBackgroundScaleMode::InnerCircleFitOuterFill
+                          ? QStringLiteral("inner_circle_fit_outer_fill")
+                          : QStringLiteral("fill")))
     );
     preview.insert("tap_flow_speed", state_.previewTapFlowSpeed_);
     preview.insert("touch_flow_speed", state_.previewTouchFlowSpeed_);

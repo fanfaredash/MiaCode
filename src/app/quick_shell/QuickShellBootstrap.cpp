@@ -3,6 +3,7 @@
 #include "QuickShellNativeSurfaceHost.h"
 #include "QuickShellController.h"
 #include "QuickShellStyleBridge.h"
+#include "MainEntrypoints.h"
 #include "DialogLocalization.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -365,6 +366,21 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
 #endif
         window->installEventFilter(this);
 
+        // P4 — bind the root window to the resolved high-performance DXGI
+        // adapter BEFORE its scene graph initializes (still pre-event-loop
+        // here; winId() above created only the HWND, not the RHI device).
+        // No-op on single-GPU / explicit-RHI / non-Windows; falls through to
+        // Qt's default adapter on any miss. The P1 probe below runs on first
+        // render and logs the ACTUAL adapter, verifying whether the bind hit.
+        miacode::app::entry::bindHighPerformanceQuickGraphicsDevice(
+            window, QStringLiteral("quick_shell_root_window"), /*preferVideoShareDevice=*/false);
+
+        // P1 — log the RHI adapter Qt Quick actually bound for the root window
+        // (D3D11 DXGI adapter desc, or GL renderer string). Scheduled onto the
+        // render thread; no-op unless --debug is active.
+        miacode::app::entry::logQuickWindowGpuDevice(
+            window, QStringLiteral("quick_shell_root_window"));
+
         // Phase 1 of the DComp preview path. Opt-in via
         // MIACODE_PREVIEW_USE_DCOMP=1. Renders a red test rectangle in the
         // top-left of the window to verify the DComp visual tree attaches
@@ -473,6 +489,20 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
                     .arg(window->width())
                     .arg(window->height())
             );
+            // P1 — QuickShell hosting topology snapshot. Confirms the default
+            // frontend is the QML root window + a hidden MainWindow backend +
+            // N bridge/preview native surfaces, and that the preview stage media
+            // route is the QuickShell host — the mixed-topology risk the GPU
+            // device policy has to respect (see the plan's QuickShell专项).
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("quick_shell/topology"),
+                QStringLiteral(
+                    "frontend=quickshell hidden_mainwindow=%1 stage_media_route=QuickShellStageHost "
+                    "root_window=1 top_level_windows=%2 top_level_widgets=%3")
+                    .arg(backend_ != nullptr && !backend_->isVisible() ? 1 : 0)
+                    .arg(QGuiApplication::topLevelWindows().size())
+                    .arg(QApplication::topLevelWidgets().size()));
             if (surfaceHost_ != nullptr) {
                 surfaceHost_->noteQuickShellUiReady();
             }

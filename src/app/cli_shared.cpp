@@ -17,6 +17,19 @@ void addSharedCliDebugOption(QCommandLineParser& parser)
         QStringLiteral("debug"),
         QStringLiteral("Enable debug mode and debug-only log output.")
     ));
+    // P3 — hidden internal GPU device-policy overrides. Declared so the CLI
+    // export / export-worker parsers accept them without erroring; the values
+    // are consumed by miacode::gpu (raw-arg scan), not read back off the parser.
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("gpu-policy"),
+        QStringLiteral("Internal GPU device policy (auto_high_performance|platform_default|software)."),
+        QStringLiteral("policy")
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("gpu-adapter-luid"),
+        QStringLiteral("Internal GPU adapter override, <high>:<low>."),
+        QStringLiteral("luid")
+    ));
 }
 
 QString currentExceptionDetail()

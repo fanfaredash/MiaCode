@@ -158,7 +158,7 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     ));
     parser.addOption(QCommandLineOption(
         QStringLiteral("background-scale"),
-        QStringLiteral("Background scale mode: fill, fit, or square_fit."),
+        QStringLiteral("Background scale mode: fill, fit, square_fit, or inner_circle_fit_outer_fill."),
         QStringLiteral("mode"),
         QStringLiteral("fill")
     ));
@@ -273,11 +273,21 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
         || backgroundScaleToken == QStringLiteral("square_fill")
         || backgroundScaleToken == QStringLiteral("square-fill")
         || backgroundScaleToken == QStringLiteral("square");
+    const bool innerCircleFitOuterFillScaleToken =
+        backgroundScaleToken == QStringLiteral("inner_circle_fit_outer_fill")
+        || backgroundScaleToken == QStringLiteral("inner-circle-fit-outer-fill")
+        || backgroundScaleToken == QStringLiteral("inner_fit_outer_fill")
+        || backgroundScaleToken == QStringLiteral("inner-fit-outer-fill")
+        || backgroundScaleToken == QStringLiteral("circle_fit_outer_fill")
+        || backgroundScaleToken == QStringLiteral("circle-fit-outer-fill")
+        || backgroundScaleToken == QStringLiteral("inner_circle_fit")
+        || backgroundScaleToken == QStringLiteral("inner-circle-fit");
     if (backgroundScaleToken != QStringLiteral("fill")
         && backgroundScaleToken != QStringLiteral("fit")
-        && !squareFitScaleToken) {
+        && !squareFitScaleToken
+        && !innerCircleFitOuterFillScaleToken) {
         if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("--background-scale must be fill, fit, or square_fit");
+            *errorMessage = QStringLiteral("--background-scale must be fill, fit, square_fit, or inner_circle_fit_outer_fill");
         }
         return 2;
     }
@@ -322,11 +332,13 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     request.backgroundBrightnessOuter = outerBrightness;
     request.backgroundBrightnessInner = innerBrightness;
     request.layoutSquareScale = layoutSquareScale;
-    request.backgroundScaleMode = squareFitScaleToken
-        ? PreviewBackgroundScaleMode::SquareFitContain
-        : (backgroundScaleToken == QStringLiteral("fit")
-               ? PreviewBackgroundScaleMode::FitContain
-               : PreviewBackgroundScaleMode::FillCrop);
+    request.backgroundScaleMode = innerCircleFitOuterFillScaleToken
+        ? PreviewBackgroundScaleMode::InnerCircleFitOuterFill
+        : (squareFitScaleToken
+               ? PreviewBackgroundScaleMode::SquareFitContain
+               : (backgroundScaleToken == QStringLiteral("fit")
+                      ? PreviewBackgroundScaleMode::FitContain
+                      : PreviewBackgroundScaleMode::FillCrop));
     request.noteFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
     request.touchFlowSpeed = request.noteFlowSpeed;
     request.skinLoadWaitMs = skinWaitMs;

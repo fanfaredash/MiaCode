@@ -242,7 +242,7 @@ Shared render settings include:
 - fixed outline playfield diameter ratio from `src/common/LayoutRingConfig.h`; preview and export should not diverge by re-detecting ring size from texture pixels
 - outline variant / judge-line background overlay selection
 - smooth brightness
-- background scale mode (`fill`, `fit`, and `square_fit`; `square_fit` means center the largest 1:1 square in the render canvas, keep the outside black, and fit-contain the full PV/BG inside that square)
+- background scale mode (`fill`, `fit`, `square_fit`, and `inner_circle_fit_outer_fill`; `square_fit` means center the largest 1:1 square in the render canvas, keep the outside black, and fit-contain the full PV/BG inside that square; `inner_circle_fit_outer_fill` draws a fill-cropped outer PV/BG plus a fit-contained inner copy clipped to the layout-size circle)
 - tap/touch flow speed (persisted as separate values with legacy single-speed fallback)
 - chart-review judge overlay toggles for slide/wifi-family and tap/hold-family effects
 - timestamp/object-stats HUD flags

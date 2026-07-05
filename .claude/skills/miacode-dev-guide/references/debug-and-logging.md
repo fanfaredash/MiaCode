@@ -87,6 +87,10 @@ the agent-facing quick index. Guidance:
   `MIACODE_PREVIEW_DIAG_COMPARE_PRESENT_EVERY`, `MIACODE_PREVIEW_DONT_CREATE_NATIVE_WIDGET_SIBLINGS`,
   `MIACODE_PREVIEW_SESSION_SCRIPT`, `MIACODE_DISABLE_GL_DEBUG_MESSAGES`.
   `MIACODE_BUILD_DCOMP_SMOKE` is tied to the deleted `PreviewDCompPhase0Smoke.cpp`.
+- **Hang-watchdog instrumentation macros, not env vars:** `MIACODE_HANG_PHASE`,
+  `MIACODE_HANG_JOIN`, and `MIACODE_HANG_JOIN_IMPL` live in `src/common/UiHangWatchdog.h`;
+  they are documented here and in `docs/ops/DEBUG_INDEX.md` because `debug_flag_index_spec`
+  indexes every `MIACODE_*` token in `src/`.
 
 ## 3. Env-var index by category
 
@@ -178,9 +182,55 @@ PIPE_HASH(`_MAX_LINES`), RAW_DUMP_PATH, LOG_ALL_REPEATS); backend forcing
 `MIACODE_EXPORT_{ENABLE_GPU_RENDER,ENABLE_OFFSCREEN_PBO,DISABLE_OFFSCREEN_PBO,DISABLE_PBO_READBACK}`;
 encoder `MIACODE_EXPORT_{SKIP_ENCODER_RUNTIME_PROBE,FORCE_ENCODER,ENCODER_MODE,ENCODER_THREADS,
 FILTER_THREADS,X264_PRESET,X264_CRF,X264_BFRAMES}`.
+`MIACODE_EXPORT_RENDER_BACKEND` (**P5 — default `d3d11_qrhi`**, `exportRenderBackendRequest()` in
+`DebugOptions.h`): `opengl` | `d3d11_qrhi` | `auto` selects the offscreen chart-render session for CLI
+export + the export worker. `d3d11_qrhi` makes `main.cpp` put the export process on the Direct3D11
+Quick graphics API and `VideoExportPreparedTask` drive the new
+`src/preview/runtime/PreviewQuickD3D11ExportSession` (device on the P3-policy adapter imported via
+`fromDeviceAndContext` — export has NO video-decode bridge, so a non-default adapter is safe here,
+unlike GUI surfaces; `QQuickRenderTarget::fromD3D11Texture` R8G8B8A8_UNORM target; synchronous
+CopyResource+Map readback, top-down so no vertical flip, same premultiplied→straight RGBA convert as
+GL). No PBO path — `supportsOffscreenPboReadback` returns false on d3d11 so the loop uses the sync
+branch. Init failure auto-falls-back to the OpenGL session in-process (graphics API flipped back;
+export log `render_backend_fallback` `fallback_from=d3d11_qrhi fallback_to=opengl reason=…`). `auto`
+currently == `d3d11_qrhi`; set `MIACODE_EXPORT_RENDER_BACKEND=opengl` for rollback. Session backend dispatch lives
+in `VideoExportQuickRenderBackend` (`setRenderSessionBackend`); selected backend/adapter
+LUID/rt_format/readback_mode appear in the `render_backend` export-log summary line. Sync pair: the
+D3D11 session mirrors the OpenGL session's scene mounting (scene root + HUD + intro overlay +
+DCompFallbackActive override) — change both together.
+
+Current default: unset `MIACODE_EXPORT_RENDER_BACKEND` selects `d3d11_qrhi`; set it to `opengl` for
+the stable OpenGL rollback path. `auto` remains equivalent to `d3d11_qrhi`.
 
 **Misc/runtime:** `MIACODE_FFMPEG`(`_PATH`), `MIACODE_LANG`, `MIACODE_DISPLAY_VERSION_STRING`,
 `MIACODE_DISABLE_MMCSS`, `MIACODE_SKIP_PREFLIGHT`.
+
+**GPU device policy (P3/P4 — hidden diagnostic, `src/common/GpuDevicePolicy.{h,cpp}` ns `miacode::gpu`;
+provider `src/app/gpu_device_provider.cpp` ns `miacode::app::entry`):**
+`MIACODE_GPU_POLICY` (`auto_high_performance` default | `platform_default` | `software`) and
+`MIACODE_GPU_ADAPTER_LUID` (`<high>:<low>` hex/dec → forces `adapter_luid`). Equivalent CLI flags
+`--gpu-policy=` / `--gpu-adapter-luid=` (registered in `addSharedCliDebugOption`; GUI reads them via
+raw-arg scan, so no strict-parser conflict). **P3** **resolves + logs** the preferred high-perf DXGI
+adapter (read-only `IDXGIFactory6::EnumAdapterByGpuPreference`, no device creation) via
+`resolveGpuPolicyOnce()`; forwards the raw request to the export worker via
+`applyGpuPolicyToChildEnvironment` (env, not argv — the worker parser is strict). Accessors in
+`DebugOptions.h` (`gpuPolicyRequestRaw` / `gpuAdapterLuidRaw`). Illegal LUID never blocks startup →
+falls back to `platform_default` AND leaves `ResolvedGpuPolicy::adapterLuid` **empty** (the requested
+LUID stays only in `request.explicitLuid` for logging), so nothing binds a stale LUID; the provider
+also guards `resolvedKind ∈ {AutoHighPerformance, AdapterLuid}` before binding
+(`reason=policy_not_adapter_binding` on any fallback). **P4** `bindHighPerformanceQuickGraphicsDevice(window, label,
+preferVideoShareDevice)` optionally binds the **root** Quick window to the resolved adapter via
+`QQuickGraphicsDevice::fromAdapter` (Qt owns the device) — gated behind
+`MIACODE_GPU_BIND_HIGH_PERFORMANCE` (**default ON**, `gpuBindHighPerformanceEnabled()`) and skipped
+when the high-perf LUID equals the DXGI default adapter (`defaultAdapterLuid()` — single-GPU no-op).
+The **preview composite** (`preferVideoShareDevice=true`) is never `fromAdapter`-bound: it uses the H2
+`sharedPreviewQuickGraphicsDevice()` (default OFF) or keeps Qt's default adapter, because the D3D11VA
+two-device keyed-mutex bridge is **same-adapter only** (a non-default render adapter breaks
+video-background playback). Decisions log to `startup/gpu_provider`; verify the actual bound adapter
+via `quick_shell/device`.
+
+Current default: root-window binding is ON; set `MIACODE_GPU_BIND_HIGH_PERFORMANCE=0` / `off` /
+`false` to keep Qt's platform-default adapter.
 
 **Build-time (CMake, not env):** `MIACODE_USE_QTAVPLAYER` (see above), `MIACODE_BUILD_DEV_TOOLS`
 (configure option gating dev-tool spec executables + CTest registration; appears in
@@ -192,7 +242,23 @@ literal in `src/`, including comments).
 Stable tags include: `window/focus`, `app_shutdown`, `close_timing/*`, `preview/quick_runtime`,
 `preview/quick_scene`, `preview/interaction`, `preview/frame_pacing`, `timeline/interaction`,
 `timeline/bridge`, `timeline/quick_scene`, `timeline/cursor_map`, and `edit/*_perf` editor
-performance tags. High-frequency tags (`timeline/bridge` scroll pushes, `timeline/quick_scene`
+performance tags. **GPU/startup diagnostics (P0–P3, all `--debug`-gated):** `startup/process_identity`
+(pid/ppid/real-exe/packaged-app-dir/launcher-parent/cwd/argv/role — answers "which exe did the user
+run"), `startup/gpu_hint` (Windows; confirms the NvOptimus/AMD PowerXpress export symbols compiled
+in), `startup/gpu_policy` (resolved GPU device policy request→adapter LUID + fallback reason). ⚠ These
+three are a bundle emitted by `logProcessStartupDiagnostics(phase)` (`process_identity.cpp`): once
+early in `main()` (`phase=boot`, lands in the app-local `logs/` **before** a chart binds) and again
+after the runtime log dir rebinds to a chart's `.miacode/logs/` (`phase=log_dir_rebound`, from both
+`MainWindow.PreviewTimelineFlow` chart-open and the export worker) — so a collected per-chart log is
+self-contained instead of missing the pre-bind boot lines. Also:
+`startup/gpu_provider` (P4 root/composite device-bind decision: `action=bound|skip source=… reason=…`),
+`quick_shell/device` (actual RHI adapter Qt Quick bound per surface — D3D11 DXGI desc or GL renderer
+string; scheduled render-thread probe in `gpu_adapter_probe.cpp`), `quick_shell/topology` (frontend /
+hidden-MainWindow / stage-media-route / window counts). Export channel gains `export_gl_renderer`
+(GL vendor/renderer/version at `PreviewQuickExportSession::initialize`) and the `render_backend`
+summary now carries `render_backend=opengl_qquick_rendercontrol rhi_api=OpenGL adapter_or_renderer=…
+readback_mode=…`. The old `media_backend adapter="…"` field was renamed `probe_adapter` (+
+`probe_adapter_source=dxgi_enum0_heuristic`) to stop it being read as the Qt RHI device. High-frequency tags (`timeline/bridge` scroll pushes, `timeline/quick_scene`
 scroll-only paints) require `MIACODE_TIMELINE_HOTPATH_DIAG=1` even in debug mode.
 
 Leak/resource gauges (beta4→beta7, both **once per user pause**, never per-frame, `--debug`-gated; the gauge
