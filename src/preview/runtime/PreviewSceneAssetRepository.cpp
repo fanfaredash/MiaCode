@@ -11,7 +11,12 @@ namespace miacode::preview::runtime {
 PreviewSceneAssetRepository::PreviewSceneAssetRepository(QObject* parent)
     : QObject(parent)
 {
-    currentAssets_ = PreviewSceneAssetLoader::load(QString(), outlineVariant_, loadGeneration_);
+    currentAssets_ = PreviewSceneAssetLoader::load(
+        QString(),
+        outlineVariant_,
+        loadGeneration_,
+        outlineImagePath_,
+        outlineImageMode_);
 }
 
 void PreviewSceneAssetRepository::setStageMediaAvailable(bool hasMedia)
@@ -24,22 +29,32 @@ void PreviewSceneAssetRepository::setStageMediaAvailable(bool hasMedia)
 
 void PreviewSceneAssetRepository::setOutlineVariant(PreviewOutlineVariant variant)
 {
-    if (outlineVariant_ == variant) {
-        return;
-    }
-    outlineVariant_ = variant;
-    currentAssets_.assetState = PreviewSceneAssetLoader::loadAssetState(outlineVariant_, outlineImagePath_);
-    emit assetsChanged();
+    setOutlineSelection(variant, outlineImagePath_, outlineImageMode_);
 }
 
 void PreviewSceneAssetRepository::setOutlineImagePath(const QString& path)
 {
+    setOutlineSelection(outlineVariant_, path, outlineImageMode_);
+}
+
+void PreviewSceneAssetRepository::setOutlineSelection(
+    PreviewOutlineVariant variant,
+    const QString& path,
+    PreviewOutlineImageMode imageMode)
+{
     const QString normalized = path.trimmed();
-    if (outlineImagePath_ == normalized) {
+    if (outlineVariant_ == variant
+        && outlineImagePath_ == normalized
+        && outlineImageMode_ == imageMode) {
         return;
     }
+    outlineVariant_ = variant;
     outlineImagePath_ = normalized;
-    currentAssets_.assetState = PreviewSceneAssetLoader::loadAssetState(outlineVariant_, outlineImagePath_);
+    outlineImageMode_ = imageMode;
+    currentAssets_.assetState = PreviewSceneAssetLoader::loadAssetState(
+        outlineVariant_,
+        outlineImagePath_,
+        outlineImageMode_);
     emit assetsChanged();
 }
 
@@ -55,10 +70,16 @@ void PreviewSceneAssetRepository::setSkinDirectory(const QString& skinDirectory)
         skinDirectory,
         outlineVariant = outlineVariant_,
         outlineImagePath = outlineImagePath_,
+        outlineImageMode = outlineImageMode_,
         generation
     ]() {
         PreviewSceneAssetLoadResult result =
-            PreviewSceneAssetLoader::load(skinDirectory, outlineVariant, generation, outlineImagePath);
+            PreviewSceneAssetLoader::load(
+                skinDirectory,
+                outlineVariant,
+                generation,
+                outlineImagePath,
+                outlineImageMode);
         if (guard.isNull()) {
             return;
         }
@@ -80,7 +101,12 @@ bool PreviewSceneAssetRepository::loadSkinDirectorySync(const QString& skinDirec
     _mc_op_.note(QStringLiteral("skin=%1").arg(skinDirectory));
     skinDirectory_ = skinDirectory;
     const quint64 generation = ++loadGeneration_;
-    applyLoadResult(PreviewSceneAssetLoader::load(skinDirectory, outlineVariant_, generation, outlineImagePath_));
+    applyLoadResult(PreviewSceneAssetLoader::load(
+        skinDirectory,
+        outlineVariant_,
+        generation,
+        outlineImagePath_,
+        outlineImageMode_));
     const bool ok = hasCoreSkinAssetsLoaded();
     if (!ok) {
         _mc_op_.fail(QStringLiteral("core skin assets missing after load"));
@@ -100,7 +126,10 @@ void PreviewSceneAssetRepository::applyLoadResult(PreviewSceneAssetLoadResult&& 
     if (result.generation != loadGeneration_) {
         return;
     }
-    result.assetState = PreviewSceneAssetLoader::loadAssetState(outlineVariant_, outlineImagePath_);
+    result.assetState = PreviewSceneAssetLoader::loadAssetState(
+        outlineVariant_,
+        outlineImagePath_,
+        outlineImageMode_);
     currentAssets_ = std::move(result);
     emit assetsChanged();
 }

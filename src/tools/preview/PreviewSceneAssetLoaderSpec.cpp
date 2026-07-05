@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
+#include <QPainter>
 #include <QTemporaryDir>
 #include <QTextStream>
 
@@ -47,6 +48,67 @@ bool saveDummyPng(const QString& destination, const QSize& size, QTextStream& er
     if (!image.save(destination)) {
         err << "failed to save dummy image: " << destination << Qt::endl;
         return false;
+    }
+    return true;
+}
+
+bool saveSinglePixelPng(
+    const QString& destination,
+    const QSize& size,
+    const QPoint& point,
+    QRgb color,
+    QTextStream& err)
+{
+    QDir().mkpath(QFileInfo(destination).absolutePath());
+    QImage image(size, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    if (point.x() >= 0 && point.x() < image.width() && point.y() >= 0 && point.y() < image.height()) {
+        image.setPixel(point, color);
+    }
+    if (!image.save(destination)) {
+        err << "failed to save single-pixel image: " << destination << Qt::endl;
+        return false;
+    }
+    return true;
+}
+
+QImage imageForAlphaSearch(const QImage& source, const QSize& size)
+{
+    if (source.size() == size) {
+        return source.convertToFormat(QImage::Format_ARGB32);
+    }
+    return source.scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+        .convertToFormat(QImage::Format_ARGB32);
+}
+
+template <typename Predicate>
+QPoint findPixel(const QSize& size, Predicate predicate)
+{
+    for (int y = 0; y < size.height(); ++y) {
+        for (int x = 0; x < size.width(); ++x) {
+            if (predicate(x, y)) {
+                return QPoint(x, y);
+            }
+        }
+    }
+    return QPoint(-1, -1);
+}
+
+bool imagesEqualPixels(const QImage& left, const QImage& right)
+{
+    if (left.size() != right.size()) {
+        return false;
+    }
+    const QImage leftRgba = left.convertToFormat(QImage::Format_ARGB32);
+    const QImage rightRgba = right.convertToFormat(QImage::Format_ARGB32);
+    for (int y = 0; y < leftRgba.height(); ++y) {
+        const auto* leftLine = reinterpret_cast<const QRgb*>(leftRgba.constScanLine(y));
+        const auto* rightLine = reinterpret_cast<const QRgb*>(rightRgba.constScanLine(y));
+        for (int x = 0; x < leftRgba.width(); ++x) {
+            if (leftLine[x] != rightLine[x]) {
+                return false;
+            }
+        }
     }
     return true;
 }
@@ -215,6 +277,123 @@ bool verifyLegacyFallback(QTextStream& err)
         err);
 }
 
+bool verifyDirectCustomOutlineMode(QTextStream& err)
+{
+    QTemporaryDir tempDir;
+    if (!require(tempDir.isValid(), QStringLiteral("failed to allocate temporary directory"), err)) {
+        return false;
+    }
+    const QString customPath = QDir(tempDir.path()).filePath(QStringLiteral("custom_outline.png"));
+    if (!saveDummyPng(customPath, QSize(13, 17), err)) {
+        return false;
+    }
+
+    const auto directState = miacode::preview::runtime::PreviewSceneAssetLoader::loadAssetState(
+        PreviewOutlineVariant::JudgeAreaLabeled,
+        customPath,
+        miacode::preview::runtime::PreviewOutlineImageMode::Direct);
+    if (!require(
+            directState.outlineImage.size() == QSize(13, 17),
+            QStringLiteral("direct custom outline mode unexpectedly used the built-in labeled area"),
+            err)) {
+        return false;
+    }
+    const QRgb pixel = directState.outlineImage.convertToFormat(QImage::Format_ARGB32).pixel(0, 0);
+    return require(
+        qRed(pixel) == 255 && qGreen(pixel) == 0 && qBlue(pixel) == 0 && qAlpha(pixel) == 255,
+        QStringLiteral("direct custom outline mode did not preserve the custom outline image"),
+        err);
+}
+
+bool verifyPausedCustomOutlineComposite(QTextStream& err)
+{
+    const QImage judgeArea(miacode::assets::outlineJudgeAreaPath());
+    const QImage labelsOverlay(miacode::assets::outlineRegionLabelsOverlayPath());
+    if (!require(!judgeArea.isNull(), QStringLiteral("outline_area.png did not load"), err)) {
+        return false;
+    }
+    if (!require(!labelsOverlay.isNull(), QStringLiteral("region label overlay did not load"), err)) {
+        return false;
+    }
+
+    const QImage areaSearch = imageForAlphaSearch(judgeArea, judgeArea.size());
+    const QImage labelsSearch = imageForAlphaSearch(labelsOverlay, judgeArea.size());
+    const QPoint customPoint = findPixel(judgeArea.size(), [&areaSearch, &labelsSearch](int x, int y) {
+        return qAlpha(areaSearch.pixel(x, y)) == 0 && qAlpha(labelsSearch.pixel(x, y)) == 0;
+    });
+    if (!require(customPoint.x() >= 0, QStringLiteral("could not find a transparent custom-outline test pixel"), err)) {
+        return false;
+    }
+    const QPoint areaPoint = findPixel(judgeArea.size(), [&areaSearch, &labelsSearch](int x, int y) {
+        return qAlpha(areaSearch.pixel(x, y)) > 0 && qAlpha(labelsSearch.pixel(x, y)) == 0;
+    });
+    if (!require(areaPoint.x() >= 0, QStringLiteral("could not find an area-only test pixel"), err)) {
+        return false;
+    }
+
+    QTemporaryDir tempDir;
+    if (!require(tempDir.isValid(), QStringLiteral("failed to allocate temporary directory"), err)) {
+        return false;
+    }
+    const QString customPath = QDir(tempDir.path()).filePath(QStringLiteral("custom_outline.png"));
+    if (!saveSinglePixelPng(customPath, judgeArea.size(), customPoint, qRgba(255, 0, 0, 255), err)) {
+        return false;
+    }
+
+    const auto compositeState = miacode::preview::runtime::PreviewSceneAssetLoader::loadAssetState(
+        PreviewOutlineVariant::JudgeAreaLabeled,
+        customPath,
+        miacode::preview::runtime::PreviewOutlineImageMode::PausedJudgeAreaComposite);
+    const QImage composite = compositeState.outlineImage.convertToFormat(QImage::Format_ARGB32);
+    if (!require(
+            composite.size() == judgeArea.size(),
+            QStringLiteral("paused custom outline composite did not use the judge-area canvas size"),
+            err)) {
+        return false;
+    }
+
+    const QRgb customPixel = composite.pixel(customPoint);
+    if (!require(
+            qRed(customPixel) > 200 && qGreen(customPixel) < 20 && qBlue(customPixel) < 20 && qAlpha(customPixel) == 255,
+            QStringLiteral("paused custom outline composite did not include the custom outline base"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            qAlpha(composite.pixel(areaPoint)) > 0,
+            QStringLiteral("paused custom outline composite did not include outline_area.png"),
+            err)) {
+        return false;
+    }
+
+    QImage areaOnly(judgeArea.size(), QImage::Format_ARGB32_Premultiplied);
+    areaOnly.fill(Qt::transparent);
+    {
+        QPainter painter(&areaOnly);
+        painter.drawImage(QRect(QPoint(0, 0), judgeArea.size()), judgeArea);
+    }
+    const QImage areaOnlyRgba = areaOnly.convertToFormat(QImage::Format_ARGB32);
+    const QPoint labelPoint = findPixel(judgeArea.size(), [&labelsSearch, &composite, &areaOnlyRgba](int x, int y) {
+        return qAlpha(labelsSearch.pixel(x, y)) > 0 && composite.pixel(x, y) != areaOnlyRgba.pixel(x, y);
+    });
+    if (!require(
+            labelPoint.x() >= 0,
+            QStringLiteral("paused custom outline composite did not include the region label overlay"),
+            err)) {
+        return false;
+    }
+
+    const QImage builtInLabeled(miacode::assets::outlineJudgeAreaLabeledPath());
+    const auto fallbackState = miacode::preview::runtime::PreviewSceneAssetLoader::loadAssetState(
+        PreviewOutlineVariant::JudgeAreaLabeled,
+        QDir(tempDir.path()).filePath(QStringLiteral("missing.png")),
+        miacode::preview::runtime::PreviewOutlineImageMode::PausedJudgeAreaComposite);
+    return require(
+        imagesEqualPixels(fallbackState.outlineImage, builtInLabeled),
+        QStringLiteral("paused custom outline composite did not fall back to the built-in labeled area"),
+        err);
+}
+
 bool verifyTouchBreakNamePriority(QTextStream& err)
 {
     QTemporaryDir tempDir;
@@ -365,6 +544,12 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyLegacyFallback(err)) {
+        return 1;
+    }
+    if (!verifyDirectCustomOutlineMode(err)) {
+        return 1;
+    }
+    if (!verifyPausedCustomOutlineComposite(err)) {
         return 1;
     }
     if (!verifyTouchBreakNamePriority(err)) {

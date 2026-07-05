@@ -17,6 +17,7 @@ namespace {
 
 constexpr qreal kSkinAssetScale = static_cast<qreal>(miacode::preview_skin::kTapHeadScale);
 constexpr qreal kJudgeEffectHoldSustainAlphaTightenGamma = 1.0;
+constexpr qreal kPausedJudgeAreaLabelBrightness = 0.25;
 const QColor kJudgeEffectTouchCircleTint = QColor::fromRgbF(1.0, 0.9943893, 0.4669811, 1.0);
 const QColor kJudgeEffectTouchPartTint = QColor::fromRgbF(1.0, 0.9000474, 0.4666667, 1.0);
 constexpr const char* kJudgeEffectResourceRoot = ":/preview/judge_effects";
@@ -35,6 +36,49 @@ QImage loadFirstImageIfExists(const QStringList& paths)
         }
     }
     return QImage();
+}
+
+QImage brightnessAdjustedImage(const QImage& source, qreal brightness)
+{
+    if (source.isNull()) {
+        return QImage();
+    }
+    QImage image = source.convertToFormat(QImage::Format_ARGB32);
+    const qreal clampedBrightness = qBound<qreal>(0.0, brightness, 1.0);
+    for (int y = 0; y < image.height(); ++y) {
+        auto* line = reinterpret_cast<QRgb*>(image.scanLine(y));
+        for (int x = 0; x < image.width(); ++x) {
+            const QRgb pixel = line[x];
+            line[x] = qRgba(
+                qBound(0, qRound(qRed(pixel) * clampedBrightness), 255),
+                qBound(0, qRound(qGreen(pixel) * clampedBrightness), 255),
+                qBound(0, qRound(qBlue(pixel) * clampedBrightness), 255),
+                qAlpha(pixel)
+            );
+        }
+    }
+    return image;
+}
+
+QImage buildPausedJudgeAreaComposite(const QString& customOutlinePath)
+{
+    const QImage customOutline = loadImageIfExists(customOutlinePath);
+    const QImage judgeArea = loadImageIfExists(miacode::assets::outlineJudgeAreaPath());
+    const QImage labelsOverlay = loadImageIfExists(miacode::assets::outlineRegionLabelsOverlayPath());
+    if (customOutline.isNull() || judgeArea.isNull() || labelsOverlay.isNull()) {
+        return QImage();
+    }
+
+    QImage composite(judgeArea.size(), QImage::Format_ARGB32_Premultiplied);
+    composite.fill(Qt::transparent);
+
+    const QRect targetRect(QPoint(0, 0), judgeArea.size());
+    QPainter painter(&composite);
+    painter.drawImage(targetRect, customOutline);
+    painter.drawImage(targetRect, judgeArea);
+    painter.drawImage(targetRect, brightnessAdjustedImage(labelsOverlay, kPausedJudgeAreaLabelBrightness));
+    painter.end();
+    return composite;
 }
 
 QRectF nonTransparentBounds(const QImage& image);
@@ -512,7 +556,8 @@ PreviewSceneAssetLoadResult PreviewSceneAssetLoader::load(
     const QString& skinDirectory,
     PreviewOutlineVariant outlineVariant,
     quint64 generation,
-    const QString& outlineImagePath)
+    const QString& outlineImagePath,
+    PreviewOutlineImageMode outlineImageMode)
 {
     MC_OP("PreviewSceneAssetLoader::load");
     _mc_op_.note(QStringLiteral("skin=%1 generation=%2")
@@ -521,7 +566,7 @@ PreviewSceneAssetLoadResult PreviewSceneAssetLoader::load(
     PreviewSceneAssetLoadResult result;
     result.generation = generation;
     result.skinDirectory = skinDirectory;
-    result.assetState = loadAssetState(outlineVariant, outlineImagePath);
+    result.assetState = loadAssetState(outlineVariant, outlineImagePath, outlineImageMode);
     populateSkinAssets(skinDirectory, &result.skinAssets);
     populateJudgeOverlayAssets(skinDirectory, &result.judgeOverlayAssets);
     populateJudgeEffectAssets(&result.judgeEffectAssets);
@@ -530,11 +575,20 @@ PreviewSceneAssetLoadResult PreviewSceneAssetLoader::load(
 
 miacode::preview::scene::PreviewAssetState PreviewSceneAssetLoader::loadAssetState(
     PreviewOutlineVariant outlineVariant,
-    const QString& outlineImagePath)
+    const QString& outlineImagePath,
+    PreviewOutlineImageMode outlineImageMode)
 {
     miacode::preview::scene::PreviewAssetState assets;
-    const QString outlinePath = miacode::assets::outlinePathForVariantOrCustom(outlineVariant, outlineImagePath);
-    assets.outlineImage = outlinePath.isEmpty() ? QImage() : QImage(outlinePath);
+    if (outlineImageMode == PreviewOutlineImageMode::PausedJudgeAreaComposite) {
+        assets.outlineImage = buildPausedJudgeAreaComposite(outlineImagePath);
+        if (assets.outlineImage.isNull()) {
+            const QString fallbackPath = miacode::assets::outlinePathForVariant(PreviewOutlineVariant::JudgeAreaLabeled);
+            assets.outlineImage = fallbackPath.isEmpty() ? QImage() : QImage(fallbackPath);
+        }
+    } else {
+        const QString outlinePath = miacode::assets::outlinePathForVariantOrCustom(outlineVariant, outlineImagePath);
+        assets.outlineImage = outlinePath.isEmpty() ? QImage() : QImage(outlinePath);
+    }
     assets.layoutRingDiameterRatio = miacode::layout_ring::kOutlinePlayfieldDiameterRatio;
     return assets;
 }

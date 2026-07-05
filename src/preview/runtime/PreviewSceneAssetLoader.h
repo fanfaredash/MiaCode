@@ -6,6 +6,11 @@
 
 namespace miacode::preview::runtime {
 
+enum class PreviewOutlineImageMode {
+    Direct = 0,
+    PausedJudgeAreaComposite = 1,
+};
+
 struct PreviewSceneAssetLoadResult {
     quint64 generation = 0;
     QString skinDirectory;
@@ -22,12 +27,14 @@ public:
         const QString& skinDirectory,
         PreviewOutlineVariant outlineVariant,
         quint64 generation = 0,
-        const QString& outlineImagePath = QString()
+        const QString& outlineImagePath = QString(),
+        PreviewOutlineImageMode outlineImageMode = PreviewOutlineImageMode::Direct
     );
 
     static scene::PreviewAssetState loadAssetState(
         PreviewOutlineVariant outlineVariant,
-        const QString& outlineImagePath = QString());
+        const QString& outlineImagePath = QString(),
+        PreviewOutlineImageMode outlineImageMode = PreviewOutlineImageMode::Direct);
 };
 
 }  // namespace miacode::preview::runtime

@@ -12,7 +12,7 @@ MiaCode Judge Line Import Guide
 
 注意事项：
 - 导入按钮只会打开此文件夹，不会复制或转换文件。
-- 自定义判定线只负责外观覆盖层；暂停时的判定区标识仍使用内置 JudgeAreaLabeled，不允许被玩家替换。
+- 自定义判定线会作为普通预览的外观覆盖层；启用“暂停时显示判定区”时，暂停辅助视图会按“自定义判定线 + outline_area.png + region_labels_overlay_transparent_v3.png”合成显示。
 - 修改后若列表没有刷新，请重新打开预览设置。
 
 [English]
@@ -27,7 +27,7 @@ File names and formats:
 
 Notes:
 - The import button only opens this folder; it does not copy or convert files.
-- Custom judge lines are visual overlay assets only. The paused judge-area label still uses the built-in JudgeAreaLabeled asset and cannot be replaced by players.
+- Custom judge lines are the normal visual overlay. When "show judge area while paused" is enabled, the paused helper view composites the custom judge line + outline_area.png + region_labels_overlay_transparent_v3.png.
 - If the list does not refresh after editing files, reopen Preview Settings.
 
 [日本語]
@@ -42,5 +42,5 @@ Notes:
 
 注意：
 - インポートボタンはこのフォルダーを開くだけで、ファイルのコピーや変換は行いません。
-- カスタム判定線は外観用のオーバーレイです。一時停止中の判定エリア表示は内蔵の JudgeAreaLabeled を使用し、ユーザーによる置き換えはできません。
+- カスタム判定線は通常プレビューの外観用オーバーレイです。「一時停止中に判定エリアを表示」が有効な場合、一時停止中の補助表示は「カスタム判定線 + outline_area.png + region_labels_overlay_transparent_v3.png」を合成して表示します。
 - 編集後にリストへ反映されない場合は、プレビュー設定を開き直してください。

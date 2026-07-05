@@ -71,6 +71,10 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: shader-side `BreakAnimate` / `HoldShine` brightness and contrast coefficients, custom sprite-material uniform layout, and the layer-local contiguous batch policy keyed by texture only while per-sprite effect selection stays in vertex data
   - Current tuning note: this file is now the owner for runtime sprite effect math and for the “merge only adjacent compatible sprites, never reorder” rule; changes here affect both runtime preview and export preview because both share the Quick scene graph path
   - Rule: keep local while the values are renderer-internal, but document any changes that alter visual parity or layer-order guarantees
+- `src/preview/runtime/PreviewSceneAssetLoader.cpp`
+  - Owns: preview asset-loader image preprocessing for custom paused judge-area composites
+  - Current tuning note: `kPausedJudgeAreaLabelBrightness` is `0.25`, matching `scripts/build_outline_area_labeled.py`, so labels in the runtime `custom outline + outline_area.png + region_labels_overlay_transparent_v3.png` composite match the maintained built-in labeled outline style
+  - Rule: keep local while only the asset loader and the maintainer script use this label-overlay treatment; promote if another runtime/export path needs to tune the same value directly
 - `src/preview/runtime/PreviewStageMediaHost.cpp`
   - Owns: QtMultimedia stage-video watchdog and recovery thresholds for realtime background video
   - Current tuning note: playback watchdog fires after `600 ms` without a fresh frame / with a stale frame / when not playing, then tries at most `2` soft recoveries before giving up for that playback stretch: first a pause + seek-flush + play, then a video-output rebind + seek-flush + play. Full backend rebuild remains reserved for explicit media errors, invalid media, and existing seek/prepare timeout recovery paths.

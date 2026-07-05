@@ -156,6 +156,11 @@ public:
     QString skinDirectory() const;
     void setOutlineVariant(PreviewOutlineVariant variant);
     void setOutlineImagePath(const QString& path);
+    void setOutlineSelection(
+        PreviewOutlineVariant variant,
+        const QString& path,
+        miacode::preview::runtime::PreviewOutlineImageMode imageMode =
+            miacode::preview::runtime::PreviewOutlineImageMode::Direct);
     void setBackgroundBrightness(double brightness);
     void setBackgroundBrightnessOuter(double brightness);
     void setBackgroundBrightnessInner(double brightness);

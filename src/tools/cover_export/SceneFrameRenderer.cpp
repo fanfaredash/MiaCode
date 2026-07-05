@@ -54,8 +54,7 @@ SceneFrameRenderer::~SceneFrameRenderer()
 
 bool SceneFrameRenderer::bootstrap(const VideoExportTask& task, QString* errorMessage)
 {
-    assets_.setOutlineVariant(task.outlineVariant);
-    assets_.setOutlineImagePath(task.outlineImagePath);
+    assets_.setOutlineSelection(task.outlineVariant, task.outlineImagePath);
     assets_.setStageMediaAvailable(false);   // the cover frame never shows the song bg
     if (!assets_.loadSkinDirectorySync(task.skinDirectory)) {
         if (errorMessage != nullptr) {

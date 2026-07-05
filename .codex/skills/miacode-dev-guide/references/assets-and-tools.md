@@ -139,7 +139,7 @@ The toolbox blank-media submenu operates on the current chart directory only. It
     - `background/outline_area.png`
     - `background/outline_area_labeled.png`
   - Optional custom judge-line PNGs are selected by file name from `background/outlines/*.png`; if the selected file is missing, preview/export fall back to the saved built-in `PreviewOutlineVariant`
-  - Source helper art for rebuilding the labeled-area variant currently lives at `background/region_labels_overlay_transparent_v3.png`; rebuilding the final labeled outline is a maintainer-local asset task unless the helper becomes part of a repeatable public workflow
+  - Source helper art for the labeled-area view lives at `background/region_labels_overlay_transparent_v3.png`; `outline_area_labeled.png` is still the built-in labeled asset, while the paused helper view with a custom outline composites custom outline + `outline_area.png` + this label overlay at runtime
   - The active outline assets are currently `1080x1080` canvases with built-in transparent border; preview/export map them across the full playfield square, and the selected variant is a shared render setting rather than an asset-size inference
 - Generated slide data:
   - Stored under `assets/reference`

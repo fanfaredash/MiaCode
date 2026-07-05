@@ -427,8 +427,21 @@ void MainWindow::PreviewSection::setPauseDisplayAltHoldActive(bool active)
 void MainWindow::PreviewSection::applyEffectivePreviewOutlineVariantToCanvas()
 {
     if (state_.previewCanvas_ != nullptr) {
-        state_.previewCanvas_->setOutlineVariant(effectivePreviewOutlineVariant());
-        state_.previewCanvas_->setOutlineImagePath(effectivePreviewCustomOutlinePath());
+        const bool forceJudgeAreaWhenPaused =
+            state_.previewForceLabeledJudgeLineWhenPaused_ != state_.pauseDisplayAltHoldActive_;
+        const bool pausedJudgeAreaView =
+            forceJudgeAreaWhenPaused
+            && !state_.qtPreviewPlaying_
+            && !state_.exportPreviewActive_;
+        const QString customOutlinePath = effectivePreviewCustomOutlinePath();
+        const auto outlineImageMode =
+            pausedJudgeAreaView && !customOutlinePath.isEmpty()
+            ? miacode::preview::runtime::PreviewOutlineImageMode::PausedJudgeAreaComposite
+            : miacode::preview::runtime::PreviewOutlineImageMode::Direct;
+        state_.previewCanvas_->setOutlineSelection(
+            effectivePreviewOutlineVariant(),
+            customOutlinePath,
+            outlineImageMode);
     }
 }
 
@@ -458,13 +471,6 @@ QString MainWindow::PreviewSection::resolvePreviewCustomOutlinePath() const
 
 QString MainWindow::PreviewSection::effectivePreviewCustomOutlinePath() const
 {
-    const bool forceJudgeAreaWhenPaused =
-        state_.previewForceLabeledJudgeLineWhenPaused_ != state_.pauseDisplayAltHoldActive_;
-    if (forceJudgeAreaWhenPaused
-        && !state_.qtPreviewPlaying_
-        && !state_.exportPreviewActive_) {
-        return QString();
-    }
     return resolvePreviewCustomOutlinePath();
 }
 

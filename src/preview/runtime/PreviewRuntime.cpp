@@ -630,6 +630,16 @@ void PreviewRuntime::setOutlineImagePath(const QString& path)
     }
 }
 
+void PreviewRuntime::setOutlineSelection(
+    PreviewOutlineVariant variant,
+    const QString& path,
+    miacode::preview::runtime::PreviewOutlineImageMode imageMode)
+{
+    if (assets_ != nullptr) {
+        assets_->setOutlineSelection(variant, path, imageMode);
+    }
+}
+
 void PreviewRuntime::setBackgroundBrightness(double brightness)
 {
     frameState_.render.backgroundBrightnessOuter = qBound(0.0, brightness, 1.0);
