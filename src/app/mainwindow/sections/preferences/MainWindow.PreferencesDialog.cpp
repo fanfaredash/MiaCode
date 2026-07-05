@@ -777,10 +777,64 @@ void MainWindow::PreferencesSection::onPreferences()
     auto* fontSizeRowLayout = new QHBoxLayout(fontSizeRow);
     fontSizeRowLayout->setContentsMargins(0, 0, 0, 0);
     fontSizeRowLayout->setSpacing(8);
-    auto* editorFontSizeSpin = new QSpinBox(fontSizeRow);
+    auto* fontSizeControl = new QWidget(fontSizeRow);
+    fontSizeControl->setObjectName(QStringLiteral("DialogSpinBoxFrame"));
+    fontSizeControl->setStyleSheet(UiTheme::dialogSpinBoxStyleSheet());
+    fontSizeControl->setFixedHeight(25);
+    fontSizeControl->setFixedWidth(80);
+    auto* fontSizeControlLayout = new QHBoxLayout(fontSizeControl);
+    fontSizeControlLayout->setContentsMargins(0, 0, 4, 0);
+    fontSizeControlLayout->setSpacing(0);
+    auto* editorFontSizeSpin = new QSpinBox(fontSizeControl);
+    editorFontSizeSpin->setObjectName(QStringLiteral("DialogSpinBoxEditor"));
     editorFontSizeSpin->setRange(kEditorTextFontSizeMin, kEditorTextFontSizeMax);
     editorFontSizeSpin->setValue(selectedEditorFontSize);
     editorFontSizeSpin->setSuffix(" pt");
+    editorFontSizeSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    editorFontSizeSpin->setFrame(false);
+    editorFontSizeSpin->setFixedHeight(23);
+    editorFontSizeSpin->setMinimumWidth(editorFontSizeSpin->fontMetrics().horizontalAdvance(QStringLiteral("28 pt")) + 28);
+    const auto makeSpinArrowIcon = [](Qt::ArrowType arrowType) {
+        const QColor arrowColor = UiTheme::colors().textSecondary;
+        QPixmap pixmap(9, 9);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(arrowColor);
+        QPolygon triangle;
+        if (arrowType == Qt::UpArrow) {
+            triangle << QPoint(4, 2) << QPoint(7, 6) << QPoint(1, 6);
+        } else {
+            triangle << QPoint(1, 3) << QPoint(7, 3) << QPoint(4, 7);
+        }
+        painter.drawPolygon(triangle);
+        return QIcon(pixmap);
+    };
+    auto* stepButtons = new QWidget(fontSizeControl);
+    stepButtons->setFixedSize(16, 23);
+    auto* stepLayout = new QVBoxLayout(stepButtons);
+    stepLayout->setContentsMargins(0, 1, 0, 1);
+    stepLayout->setSpacing(1);
+    auto* increaseFontSizeButton = new QToolButton(stepButtons);
+    auto* decreaseFontSizeButton = new QToolButton(stepButtons);
+    for (QToolButton* button : {increaseFontSizeButton, decreaseFontSizeButton}) {
+        button->setObjectName(QStringLiteral("DialogSpinBoxStepButton"));
+        button->setCursor(Qt::PointingHandCursor);
+        button->setAutoRepeat(true);
+        button->setAutoRepeatDelay(300);
+        button->setAutoRepeatInterval(70);
+        button->setFixedSize(16, 10);
+        button->setIconSize(QSize(9, 9));
+        stepLayout->addWidget(button, 0);
+    }
+    increaseFontSizeButton->setIcon(makeSpinArrowIcon(Qt::UpArrow));
+    decreaseFontSizeButton->setIcon(makeSpinArrowIcon(Qt::DownArrow));
+    connect(increaseFontSizeButton, &QToolButton::clicked, editorFontSizeSpin, &QSpinBox::stepUp);
+    connect(decreaseFontSizeButton, &QToolButton::clicked, editorFontSizeSpin, &QSpinBox::stepDown);
+    fontSizeControlLayout->addWidget(editorFontSizeSpin, 1);
+    fontSizeControlLayout->addWidget(stepButtons, 0);
+    fontSizeControl->setFocusProxy(editorFontSizeSpin);
     auto* shortcutHint = new QLabel(fontShortcutHintText(), fontSizeRow);
     shortcutHint->setStyleSheet(QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
     connect(editorFontSizeSpin, qOverload<int>(&QSpinBox::valueChanged), &dialog, [&](int value) {
@@ -788,7 +842,7 @@ void MainWindow::PreferencesSection::onPreferences()
         owner_.applyEditorTextFontSize(selectedEditorFontSize, true);
         owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
     });
-    fontSizeRowLayout->addWidget(editorFontSizeSpin, 0);
+    fontSizeRowLayout->addWidget(fontSizeControl, 0);
     fontSizeRowLayout->addWidget(shortcutHint, 0);
     fontSizeRowLayout->addStretch(1);
     editorLayout->addRow(editorFontSizeLabel, fontSizeRow);
@@ -806,6 +860,7 @@ void MainWindow::PreferencesSection::onPreferences()
         lineSpacingIndex = 0;
     }
     lineSpacingCombo->setCurrentIndex(lineSpacingIndex);
+    UiTheme::applyComboBoxPopupLimit(lineSpacingCombo, 12);
     connect(lineSpacingCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
         if (index < 0) {
             return;
@@ -829,6 +884,7 @@ void MainWindow::PreferencesSection::onPreferences()
     autoCompletionCombo->addItem(UiText::isChineseUi() ? QStringLiteral("开启") : QStringLiteral("On"));
     autoCompletionCombo->addItem(UiText::isChineseUi() ? QStringLiteral("关闭") : QStringLiteral("Off"));
     autoCompletionCombo->setCurrentIndex(selectedAutoCompletionEnabled ? 0 : 1);
+    UiTheme::applyComboBoxPopupLimit(autoCompletionCombo, 12);
     autoCompletionCombo->setToolTip(
         UiText::isChineseUi()
             ? QStringLiteral("自动补全括号、给出括号/时值建议，并在输入 h 时提示 [8:1] 等 hold 时值。")
@@ -866,6 +922,7 @@ void MainWindow::PreferencesSection::onPreferences()
     const int headerTopDisplayIndex =
         headerTopDisplayCombo->findData(static_cast<int>(state_.editorHeaderTopDisplay_));
     headerTopDisplayCombo->setCurrentIndex(qMax(0, headerTopDisplayIndex));
+    UiTheme::applyComboBoxPopupLimit(headerTopDisplayCombo, 12);
     headerTopDisplayCombo->setToolTip(
         UiText::isChineseUi()
             ? QStringLiteral("谱面编辑页顶部 Lv 旁边显示的字段：偏移（&first）或当前难度的谱师（&des_N）。")
@@ -925,6 +982,7 @@ void MainWindow::PreferencesSection::onPreferences()
         chineseInputCombo->addItem(QStringLiteral("Disable IME"));
     }
     chineseInputCombo->setCurrentIndex(selectedChineseInputMode);
+    UiTheme::applyComboBoxPopupLimit(chineseInputCombo, 12);
     connect(chineseInputCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
         if (index < 0) {
             return;

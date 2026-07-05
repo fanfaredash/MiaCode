@@ -8,7 +8,9 @@
 #include <QString>
 
 class QApplication;
+class QComboBox;
 class QMenu;
+class QToolButton;
 
 namespace UiTheme {
 
@@ -102,9 +104,15 @@ QString pausePreviewButtonStyleSheet(bool active);
 QString formSliderStyleSheet();
 QString dialogSliderStyleSheet();
 QString dialogComboBoxStyleSheet();
+QString dialogSpinBoxStyleSheet();
 QString dialogMenuButtonStyleSheet();
+QString dialogMenuCheckBoxStyleSheet();
 QString dialogMenuLineEditStyleSheet();
+QString dialogMenuLineEditStyleSheet(const QColor& backgroundColor);
 QString dialogPushButtonStyleSheet(bool emphasized = false);
+QString dialogAuxiliaryButtonStyleSheet();
+void bindDialogMenuButtonPopupState(QToolButton* button, QMenu* menu);
+void applyComboBoxPopupLimit(QComboBox* combo, int maxVisibleItems = 12);
 QString dialogIconToolButtonStyleSheet(bool active = false);
 QIcon dialogTransportPlayIcon(const QColor& color);
 QIcon dialogTransportPauseIcon(const QColor& color);

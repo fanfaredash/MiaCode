@@ -18,7 +18,6 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSignalBlocker>
-#include <QToolButton>
 #include <QVBoxLayout>
 #include <QVector>
 
@@ -207,11 +206,9 @@ QWidget* createHudFontSettingsWidget(
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
-    auto* currentLabel = new QLabel(root);
-    currentLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     auto* fontCombo = new QComboBox(root);
-    fontCombo->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
     fontCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    UiTheme::applyComboBoxPopupLimit(fontCombo, 12);
     auto* sampleLabel = new QLabel(root);
     sampleLabel->setAlignment(Qt::AlignCenter);
     sampleLabel->setText(QStringLiteral("12:34:567  TAP  HOLD  SLIDE  101.0000%"));
@@ -220,20 +217,14 @@ QWidget* createHudFontSettingsWidget(
         " border-radius: 8px; background: rgba(128,128,128,20); color: palette(text); }"
     ));
 
-    const auto applyReadout = [currentLabel, sampleLabel]() {
-        const QString family = miacode::preview::scene::previewHudFontDisplayName();
-        const QString displayName = family == QLatin1String("Default")
-            ? uiText("dialog.video_export.option.hud_font_default", QStringLiteral("Default font"))
-            : family;
-        currentLabel->setText(
-            uiText("dialog.video_export.option.hud_font_current", QStringLiteral("Current font: %1")).arg(displayName)
-        );
+    const auto applySampleFont = [sampleLabel]() {
         sampleLabel->setFont(miacode::preview::scene::previewHudTimestampFont(13, QFont::DemiBold));
     };
 
-    const auto refreshFromPreferences = [fontCombo, applyReadout]() {
+    const auto refreshFromPreferences = [fontCombo, applySampleFont]() {
         populateHudFontCombo(fontCombo, currentHudFontPath());
-        applyReadout();
+        UiTheme::applyComboBoxPopupLimit(fontCombo, 12);
+        applySampleFont();
     };
 
     refreshFromPreferences();
@@ -253,35 +244,41 @@ QWidget* createHudFontSettingsWidget(
         uiText("dialog.video_export.option.reset_hud_font", QStringLiteral("Reset")),
         buttonRow
     );
-    importButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    resetButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    for (QPushButton* button : {importButton, resetButton}) {
+        button->setObjectName(QStringLiteral("DialogAuxiliaryButton"));
+        button->setProperty("miacodeAuxiliaryButton", true);
+        button->setCursor(Qt::PointingHandCursor);
+    }
+    importButton->setStyleSheet(UiTheme::dialogAuxiliaryButtonStyleSheet());
+    resetButton->setStyleSheet(UiTheme::dialogAuxiliaryButtonStyleSheet());
     buttonLayout->addWidget(importButton, 0);
     buttonLayout->addWidget(resetButton, 0);
     buttonLayout->addStretch(1);
 
-    layout->addWidget(currentLabel, 0);
     layout->addWidget(fontCombo, 0);
     layout->addWidget(sampleLabel, 0);
     layout->addWidget(buttonRow, 0);
 
-    QObject::connect(fontCombo, qOverload<int>(&QComboBox::currentIndexChanged), root, [fontCombo, applyReadout, onFontChanged](int index) {
+    QObject::connect(fontCombo, qOverload<int>(&QComboBox::currentIndexChanged), root, [fontCombo, applySampleFont, onFontChanged](int index) {
         const QString selectedPath = fontCombo->itemData(index).toString();
         miacode::preview::scene::setPreviewHudCustomFontPath(selectedPath);
         notifyFontChanged(onFontChanged);
-        applyReadout();
+        applySampleFont();
     });
-    QObject::connect(importButton, &QPushButton::clicked, root, [root, fontCombo, applyReadout, onFontChanged]() {
+    QObject::connect(importButton, &QPushButton::clicked, root, [root, fontCombo, applySampleFont, onFontChanged]() {
         const QString importedPath = importHudFontFromUser(root, onFontChanged);
         if (!importedPath.isEmpty()) {
             populateHudFontCombo(fontCombo, importedPath);
-            applyReadout();
+            UiTheme::applyComboBoxPopupLimit(fontCombo, 12);
+            applySampleFont();
         }
     });
-    QObject::connect(resetButton, &QPushButton::clicked, root, [fontCombo, applyReadout, onFontChanged]() {
+    QObject::connect(resetButton, &QPushButton::clicked, root, [fontCombo, applySampleFont, onFontChanged]() {
         miacode::preview::scene::setPreviewHudCustomFontPath(QString());
         notifyFontChanged(onFontChanged);
         populateHudFontCombo(fontCombo, QString());
-        applyReadout();
+        UiTheme::applyComboBoxPopupLimit(fontCombo, 12);
+        applySampleFont();
     });
 
     return root;

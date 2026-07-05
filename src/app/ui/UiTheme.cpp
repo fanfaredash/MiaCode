@@ -1,12 +1,17 @@
 ﻿#include "UiTheme.h"
 
 #include <QApplication>
+#include <QAbstractItemView>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QMenu>
 #include <QPainter>
 #include <QPixmap>
 #include <QPolygonF>
+#include <QProxyStyle>
+#include <QStyleOption>
+#include <QToolButton>
 #include <QStyleHints>
 
 namespace {
@@ -24,6 +29,55 @@ QString cssRgba(const QColor& color, int alpha)
         .arg(color.blue())
         .arg(alpha);
 }
+
+void repolish(QWidget* widget)
+{
+    if (widget == nullptr) {
+        return;
+    }
+    widget->style()->unpolish(widget);
+    widget->style()->polish(widget);
+    widget->update();
+}
+
+class ComboBoxPopupLimitStyle final : public QProxyStyle {
+public:
+    QRect subControlRect(
+        ComplexControl control,
+        const QStyleOptionComplex* option,
+        SubControl subControl,
+        const QWidget* widget = nullptr) const override
+    {
+        QRect rect = QProxyStyle::subControlRect(control, option, subControl, widget);
+        if (control == QStyle::CC_ComboBox
+            && subControl == QStyle::SC_ComboBoxEditField
+            && qobject_cast<const QComboBox*>(widget) != nullptr) {
+            rect.adjust(10, 0, -2, 0);
+        }
+        return rect;
+    }
+
+    QRect subElementRect(SubElement element, const QStyleOption* option, const QWidget* widget) const override
+    {
+        QRect rect = QProxyStyle::subElementRect(element, option, widget);
+        if (element == QStyle::SE_ComboBoxLayoutItem && qobject_cast<const QComboBox*>(widget) != nullptr) {
+            rect.adjust(10, 0, -2, 0);
+        }
+        return rect;
+    }
+
+    int styleHint(
+        StyleHint hint,
+        const QStyleOption* option = nullptr,
+        const QWidget* widget = nullptr,
+        QStyleHintReturn* returnData = nullptr) const override
+    {
+        if (hint == QStyle::SH_ComboBox_Popup) {
+            return 0;
+        }
+        return QProxyStyle::styleHint(hint, option, widget, returnData);
+    }
+};
 
 const UiTheme::Colors& lightColors()
 {
@@ -790,6 +844,29 @@ QString dialogComboBoxStyleSheet()
         .arg(css(c.textPrimary));
 }
 
+QString dialogSpinBoxStyleSheet()
+{
+    const Colors& c = colors();
+    return QStringLiteral(
+        "QWidget#DialogSpinBoxFrame { background: %1; border: 1px solid %3; border-radius: 8px; }"
+        "QSpinBox#DialogSpinBoxEditor { background: transparent; color: %2; border: none;"
+        " padding: 0 0 0 10px; min-height: 23px; font-weight: 500; }"
+        "QToolButton#DialogSpinBoxStepButton { border: none; border-radius: 4px; background: transparent; padding: 0;"
+        " min-width: 16px; max-width: 16px; min-height: 10px; max-height: 10px; }"
+        "QToolButton#DialogSpinBoxStepButton:hover { background: %4; }"
+        "QToolButton#DialogSpinBoxStepButton:pressed { background: %5; }"
+        "QWidget#DialogSpinBoxFrame:disabled { background: %6; border-color: %3; }"
+        "QSpinBox#DialogSpinBoxEditor:disabled { color: %7; }"
+    )
+        .arg(css(c.inputBg))
+        .arg(css(c.textPrimary))
+        .arg(css(c.border))
+        .arg(css(c.menuHoverBg))
+        .arg(css(c.cardAltBg))
+        .arg(css(c.inputDisabledBg))
+        .arg(css(c.textMuted));
+}
+
 QString dialogMenuButtonStyleSheet()
 {
     const Colors& c = colors();
@@ -809,18 +886,71 @@ QString dialogMenuButtonStyleSheet()
         .arg(css(c.accentText));
 }
 
+QString dialogMenuCheckBoxStyleSheet()
+{
+    const Colors& c = colors();
+    const QColor indicatorBg = c.dark ? c.windowAltBg : QColor("#FFFFFF");
+    return QStringLiteral(
+        "QCheckBox { color: %1; background: transparent; min-height: 22px; padding: 6px 18px 6px 10px; spacing: 8px; }"
+        "QCheckBox:hover { background: %2; border-radius: 6px; }"
+        "QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid %3; border-radius: 3px; background: %4; }"
+        "QCheckBox::indicator:hover { border-color: %5; }"
+        "QCheckBox::indicator:checked { background: %5; border-color: %5; image: url(\":/icons/checkmark.svg\"); }"
+        "QCheckBox::indicator:checked:hover { background: %6; border-color: %6; }"
+    )
+        .arg(css(c.textPrimary))
+        .arg(css(c.menuHoverBg))
+        .arg(css(c.borderStrong))
+        .arg(css(indicatorBg))
+        .arg(css(c.accent))
+        .arg(css(c.accentHover));
+}
+
+void bindDialogMenuButtonPopupState(QToolButton* button, QMenu* menu)
+{
+    if (button == nullptr || menu == nullptr) {
+        return;
+    }
+
+    QObject::connect(menu, &QMenu::aboutToShow, button, [button, menu]() {
+        menu->setMinimumWidth(qMax(menu->minimumWidth(), button->width()));
+        button->setProperty("miacodePopupOpen", true);
+        button->setDown(false);
+        button->clearFocus();
+        repolish(button);
+    });
+    QObject::connect(menu, &QMenu::aboutToHide, button, [button]() {
+        button->setProperty("miacodePopupOpen", false);
+        button->setDown(false);
+        button->clearFocus();
+        repolish(button);
+    });
+}
+
 QString dialogMenuLineEditStyleSheet()
 {
     const Colors& c = colors();
+    return dialogMenuLineEditStyleSheet(c.inputBg);
+}
+
+QString dialogMenuLineEditStyleSheet(const QColor& backgroundColor)
+{
+    const Colors& c = colors();
+    const bool customBackground = backgroundColor.isValid() && backgroundColor != c.inputBg;
+    const QColor baseBackground = backgroundColor.isValid() ? backgroundColor : c.inputBg;
+    const QColor disabledBackground = customBackground ? baseBackground : c.inputDisabledBg;
     return QStringLiteral(
         "QLineEdit { min-height: 24px; padding: 2px 10px; border: 1px solid %1; border-radius: 8px; background: %2; color: %3; font-weight: 500; }"
         "QLineEdit:hover { border-color: %4; }"
         "QLineEdit:focus { border-color: %4; background: %2; }"
+        "QLineEdit:disabled { background: %5; border-color: %1; color: %6; }"
     )
         .arg(css(c.border))
-        .arg(css(c.inputBg))
+        .arg(css(baseBackground))
         .arg(css(c.textPrimary))
-        .arg(css(c.accent));
+        .arg(css(c.accent))
+        .arg(css(disabledBackground))
+        .arg(css(c.textMuted));
 }
 
 QString dialogPushButtonStyleSheet(bool emphasized)
@@ -847,6 +977,79 @@ QString dialogPushButtonStyleSheet(bool emphasized)
         .arg(css(c.accentText))
         .arg(css(c.inputDisabledBg))
         .arg(css(c.textMuted));
+}
+
+QString dialogAuxiliaryButtonStyleSheet()
+{
+    const Colors& c = colors();
+    const QColor baseBackground = c.inputBg;
+    const QColor hoverBackground = c.menuHoverBg;
+    const QColor pressedBackground = c.dark ? c.cardAltBg : c.windowAltBg;
+    return QStringLiteral(
+        "QPushButton, QPushButton#DialogAuxiliaryButton, QPushButton[miacodeAuxiliaryButton=\"true\"] {"
+        " min-width: 72px; min-height: 24px; padding: 3px 12px;"
+        " border: 1px solid %1; border-radius: 8px; background: %2;"
+        " color: %3; font-weight: 500;"
+        "}"
+        "QPushButton:hover, QPushButton#DialogAuxiliaryButton:hover, QPushButton[miacodeAuxiliaryButton=\"true\"]:hover {"
+        " background: %4; border-color: %5; color: %3;"
+        "}"
+        "QPushButton:pressed, QPushButton:checked,"
+        "QPushButton#DialogAuxiliaryButton:pressed, QPushButton#DialogAuxiliaryButton:checked,"
+        "QPushButton[miacodeAuxiliaryButton=\"true\"]:pressed, QPushButton[miacodeAuxiliaryButton=\"true\"]:checked {"
+        " background: %6; border-color: %7; color: %3;"
+        "}"
+        "QPushButton:disabled, QPushButton#DialogAuxiliaryButton:disabled, QPushButton[miacodeAuxiliaryButton=\"true\"]:disabled {"
+        " background: %8; border-color: %1; color: %9;"
+        "}"
+    )
+        .arg(css(c.border))
+        .arg(css(baseBackground))
+        .arg(css(c.textPrimary))
+        .arg(css(hoverBackground))
+        .arg(css(c.borderStrong))
+        .arg(css(pressedBackground))
+        .arg(css(c.accent))
+        .arg(css(c.inputDisabledBg))
+        .arg(css(c.textMuted));
+}
+
+void applyComboBoxPopupLimit(QComboBox* combo, int maxVisibleItems)
+{
+    if (combo == nullptr) {
+        return;
+    }
+
+    const int visibleItems = maxVisibleItems > 0 ? maxVisibleItems : 1;
+    combo->setMaxVisibleItems(visibleItems);
+    if (!combo->property("miacode.combo_popup_limited").toBool()) {
+        auto* popupLimitStyle = new ComboBoxPopupLimitStyle;
+        popupLimitStyle->setParent(combo);
+        combo->setStyle(popupLimitStyle);
+        combo->setProperty("miacode.combo_popup_limited", true);
+    }
+
+    QAbstractItemView* popupView = combo->view();
+    if (popupView == nullptr) {
+        return;
+    }
+
+    popupView->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    popupView->setMinimumHeight(0);
+
+    int rowHeight = -1;
+    const int sampleRows = combo->count() < visibleItems ? combo->count() : visibleItems;
+    for (int row = 0; row < sampleRows; ++row) {
+        const int hint = popupView->sizeHintForRow(row);
+        if (hint > rowHeight) {
+            rowHeight = hint;
+        }
+    }
+    if (rowHeight <= 0) {
+        rowHeight = combo->fontMetrics().height() + 8;
+    }
+
+    popupView->setMaximumHeight(rowHeight * visibleItems + popupView->frameWidth() * 2 + 4);
 }
 
 QString dialogIconToolButtonStyleSheet(bool active)
@@ -1040,15 +1243,14 @@ QString exportDialogStyleSheet()
         "QLabel { color: %4; }"
         "QCheckBox { color: %4; spacing: 6px; }"
         // "添加片头" master switch sits in a neutral rounded box matching the
-        // 游戏 tab's dropdown chrome (皮肤 etc.) — distinct enough to read as the
-        // tab's switch without the loud accent fill it used to carry.
+        // intro option groups, distinct from the louder export action buttons.
         "QFrame#AddIntroCapsule { background: %5; border: 1px solid %6; border-radius: 8px; }"
     )
         .arg(css(c.windowAltBg))
         .arg(css(c.cardBg))
         .arg(css(c.border))
         .arg(css(c.textPrimary))
-        .arg(css(c.inputBg))
+        .arg(css(c.windowAltBg))
         .arg(css(c.border))
         + dialogTabStripStyleSheet(c.windowAltBg)
         // Export-dialog-only: widen the tab pane's inset (shared default is

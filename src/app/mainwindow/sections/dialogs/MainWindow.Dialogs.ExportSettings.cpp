@@ -147,8 +147,9 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     judgeEffectButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto* judgeEffectMenu = new QMenu(judgeEffectButton);
     UiTheme::styleRoundedMenu(*judgeEffectMenu);
-    const auto judgeEffectChoiceText = [](const QString& label, bool enabled) {
-        return QStringLiteral("%1  %2").arg(enabled ? QStringLiteral("√") : QStringLiteral("×"), label);
+    UiTheme::bindDialogMenuButtonPopupState(judgeEffectButton, judgeEffectMenu);
+    const auto judgeEffectChoiceText = [](const QString& label, bool /*enabled*/) {
+        return label;
     };
     struct JudgeEffectRefreshEntry {
         QCheckBox* checkbox = nullptr;
@@ -163,16 +164,8 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
         checkbox->setChecked(initialChecked);
         judgeEffectRefreshEntries.push_back({checkbox, label, memberPtr});
         checkbox->setCursor(Qt::PointingHandCursor);
-        const auto& c = UiTheme::colors();
-        checkbox->setStyleSheet(
-            QStringLiteral(
-                "QCheckBox { color: %1; background: transparent; padding: 6px 20px 6px 12px; spacing: 0px; }"
-                "QCheckBox::indicator { width: 0px; height: 0px; margin: 0px; padding: 0px; }"
-                "QCheckBox:hover { background: %2; border-radius: 6px; }"
-            )
-                .arg(c.textPrimary.name(QColor::HexRgb))
-                .arg(c.menuHoverBg.name(QColor::HexRgb))
-        );
+        checkbox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        checkbox->setStyleSheet(UiTheme::dialogMenuCheckBoxStyleSheet());
         QObject::connect(checkbox, &QCheckBox::toggled, parent,
             [this, judgeEffectButton, judgeEffectButtonLabel, judgeEffectChoiceText, checkbox, label, memberPtr](bool checked) {
                 if (owner_.muriRenderOptions_.*memberPtr == checked) {
@@ -202,6 +195,7 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     slideStackOrderButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto* slideStackOrderMenu = new QMenu(slideStackOrderButton);
     UiTheme::styleRoundedMenu(*slideStackOrderMenu);
+    UiTheme::bindDialogMenuButtonPopupState(slideStackOrderButton, slideStackOrderMenu);
     const auto setSlideStackOrder = [this, slideStackOrderButton, slideStackOrderLabelForValue](bool earlierOnTop) {
         slideStackOrderButton->setText(slideStackOrderLabelForValue(earlierOnTop));
         if (owner_.previewSlideEarlierSecondAndTextOnTop_ == earlierOnTop) {
@@ -243,6 +237,7 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     centerDisplayButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto* centerDisplayMenu = new QMenu(centerDisplayButton);
     UiTheme::styleRoundedMenu(*centerDisplayMenu);
+    UiTheme::bindDialogMenuButtonPopupState(centerDisplayButton, centerDisplayMenu);
     const auto setCenterDisplay = [this, centerDisplayButton, centerDisplayLabelForMode](miacode::preview_gameplay::CenterDisplayMode mode) {
         centerDisplayButton->setText(centerDisplayLabelForMode(mode));
         if (owner_.previewCenterDisplayMode_ == mode) {
@@ -322,59 +317,18 @@ void MainWindow::DialogsSection::buildSkinSettings(
     bool includeFolderButtons,
     std::function<void()>* refreshOut)
 {
-    // Same self-contained menu-button / menu-choice helpers used by
-    // buildExportInjectedSettings — kept local so this builder can be dropped
-    // both into a standalone popup and injected into the export dialog tab.
-    const auto createDialogMenuButton = [](QWidget* owner, const QString& text) {
-        auto* button = new QToolButton(owner);
-        button->setPopupMode(QToolButton::InstantPopup);
-        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        button->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
-        button->setText(text);
-        button->ensurePolished();
-        button->setFixedHeight(qMax(button->sizeHint().height(), 30) + 4);
-        return button;
-    };
-    const auto addDialogMenuChoice = [](QMenu* menu, const QString& text, const std::function<void()>& onTriggered) {
-        auto* action = new QWidgetAction(menu);
-        auto* button = new QToolButton(menu);
-        button->setAutoRaise(true);
-        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-        button->setText(text);
-        button->setCursor(Qt::PointingHandCursor);
-        const auto& c = UiTheme::colors();
-        button->setStyleSheet(
-            QStringLiteral(
-                "QToolButton {"
-                " color: %1;"
-                " background: transparent;"
-                " border: none;"
-                " padding: 6px 20px 6px 12px;"
-                " text-align: left;"
-                "}"
-                "QToolButton:hover {"
-                " background: %2;"
-                " border-radius: 6px;"
-                "}"
-            )
-                .arg(c.textPrimary.name(QColor::HexRgb))
-                .arg(c.menuHoverBg.name(QColor::HexRgb))
-        );
-        QObject::connect(button, &QToolButton::clicked, menu, [action, menu, onTriggered]() {
-            if (onTriggered) {
-                onTriggered();
-            }
-            action->trigger();
-            menu->close();
-        });
-        action->setDefaultWidget(button);
-        menu->addAction(action);
+    const auto createDialogComboBox = [](QWidget* owner) {
+        auto* combo = new QComboBox(owner);
+        combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        UiTheme::applyComboBoxPopupLimit(combo, 12);
+        return combo;
     };
     const auto makePushButton = [](QWidget* owner, const QString& text) {
         auto* button = new QPushButton(text, owner);
+        button->setObjectName(QStringLiteral("DialogAuxiliaryButton"));
+        button->setProperty("miacodeAuxiliaryButton", true);
         button->setCursor(Qt::PointingHandCursor);
-        button->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+        button->setStyleSheet(UiTheme::dialogAuxiliaryButtonStyleSheet());
         return button;
     };
 
@@ -393,109 +347,191 @@ void MainWindow::DialogsSection::buildSkinSettings(
         rootLayout->addWidget(group);
         return form;
     };
-    // Wraps action buttons in a left-aligned row (trailing stretch) so they keep
-    // their natural width inside the form's expanding field column.
-    const auto leftRow = [root](const QList<QWidget*>& widgets) -> QWidget* {
+    const auto comboActionRow = [root](QComboBox* combo, QPushButton* button) -> QWidget* {
         auto* row = new QWidget(root);
+        row->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         auto* layout = new QHBoxLayout(row);
         layout->setContentsMargins(0, 0, 0, 0);
         layout->setSpacing(8);
-        for (QWidget* widget : widgets) {
-            layout->addWidget(widget, 0);
-        }
-        layout->addStretch(1);
+        combo->ensurePolished();
+        button->ensurePolished();
+        const int rowHeight = qMax(combo->sizeHint().height(), button->sizeHint().height());
+        combo->setMinimumHeight(rowHeight);
+        button->setFixedHeight(rowHeight);
+        layout->addWidget(combo, 1);
+        layout->addWidget(button, 0);
         return row;
     };
 
     // ---- 谱面皮肤: skin + judge line (+ optional open-folder actions) ----
     auto* skinForm = makeGroupForm(uiText("dialog.skin_settings.section.chart_skin", "Chart Skin"));
 
-    auto* skinButton = createDialogMenuButton(root, owner_.previewSkinDisplayName(owner_.previewSkinDirectoryName_));
-    auto* skinMenu = new QMenu(skinButton);
-    UiTheme::styleRoundedMenu(*skinMenu);
-    for (const QString& skinDirectoryName : owner_.availablePreviewSkinDirectoryNames()) {
-        const QString skinLabel = owner_.previewSkinDisplayName(skinDirectoryName);
-        addDialogMenuChoice(skinMenu, skinLabel, [this, skinButton, skinDirectoryName, skinLabel]() {
-            owner_.previewSkinDirectoryName_ = skinDirectoryName;
-            owner_.previewSkinVariant_ =
-                skinDirectoryName.compare(QStringLiteral("skinDX"), Qt::CaseInsensitive) == 0
-                    ? PreviewSkinVariant::Dx
-                    : PreviewSkinVariant::Standard;
-            skinButton->setText(skinLabel);
-            owner_.applyPreviewSkinDirectoryToSurfaces();
-            owner_.savePortableState();
-        });
-    }
-    skinButton->setMenu(skinMenu);
-    skinForm->addRow(uiText("dialog.render_settings.video.skin", "Skin"), skinButton);
-
-    const QString judgeLinePointLabel = uiText("dialog.render_settings.gameplay.judge_line.point", "Point");
-    const QString judgeLineLineLabel = uiText("dialog.render_settings.gameplay.judge_line.line", "Line");
-    const QString judgeLineAreaLabel = uiText("dialog.render_settings.gameplay.judge_line.area", "Judge Area");
-    const QString judgeLineAreaLabeledLabel = uiText("dialog.render_settings.gameplay.judge_line.area_labeled", "Judge Area (Labeled)");
-    const auto judgeLineLabelForVariant = [=](PreviewOutlineVariant variant) {
-        switch (variant) {
-        case PreviewOutlineVariant::Point:
-            return judgeLinePointLabel;
-        case PreviewOutlineVariant::JudgeArea:
-            return judgeLineAreaLabel;
-        case PreviewOutlineVariant::JudgeAreaLabeled:
-            return judgeLineAreaLabeledLabel;
-        case PreviewOutlineVariant::Line:
-        default:
-            return judgeLineLineLabel;
-        }
-    };
-    const auto judgeLineButtonText = [this, judgeLineLabelForVariant]() {
-        return owner_.previewCustomOutlineFileName_.isEmpty()
-            ? judgeLineLabelForVariant(owner_.previewOutlineVariant_)
-            : owner_.previewCustomOutlineFileName_;
-    };
-    auto* judgeLineButton = createDialogMenuButton(root, judgeLineButtonText());
-    auto* judgeLineMenu = new QMenu(judgeLineButton);
-    UiTheme::styleRoundedMenu(*judgeLineMenu);
-    const auto addOutlineVariantChoice = [&](const QString& label, PreviewOutlineVariant variant) {
-        addDialogMenuChoice(judgeLineMenu, label, [this, judgeLineButton, judgeLineLabelForVariant, variant]() {
-            owner_.applyPreviewOutlineVariant(variant, false, true);
-            judgeLineButton->setText(judgeLineLabelForVariant(owner_.previewOutlineVariant_));
-        });
-    };
-    addOutlineVariantChoice(judgeLinePointLabel, PreviewOutlineVariant::Point);
-    addOutlineVariantChoice(judgeLineLineLabel, PreviewOutlineVariant::Line);
-    addOutlineVariantChoice(judgeLineAreaLabel, PreviewOutlineVariant::JudgeArea);
-    addOutlineVariantChoice(judgeLineAreaLabeledLabel, PreviewOutlineVariant::JudgeAreaLabeled);
-    const QStringList customOutlineNames = owner_.availablePreviewCustomOutlineFileNames();
-    if (!customOutlineNames.isEmpty()) {
-        judgeLineMenu->addSeparator();
-    }
-    for (const QString& fileName : customOutlineNames) {
-        addDialogMenuChoice(judgeLineMenu, fileName, [this, judgeLineButton, fileName]() {
-            owner_.applyPreviewCustomOutlineFileName(fileName, true);
-            judgeLineButton->setText(fileName);
-        });
-    }
-    judgeLineButton->setMenu(judgeLineMenu);
-    skinForm->addRow(uiText("dialog.render_settings.gameplay.judge_line", "Judge Line"), judgeLineButton);
-
+    auto* skinCombo = createDialogComboBox(root);
+    QPushButton* openSkinDirectoryButton = nullptr;
     if (includeFolderButtons) {
-        auto* openSkinFolderButton = makePushButton(root, uiText("dialog.skin_settings.open_skin_folder", "Open Skin Folder"));
-        connect(openSkinFolderButton, &QPushButton::clicked, root, [this]() {
+        openSkinDirectoryButton = makePushButton(root, uiText("dialog.skin_settings.open_directory", "Open Directory"));
+        connect(openSkinDirectoryButton, &QPushButton::clicked, root, [this]() {
             const QString skinRoot = owner_.resolvePreviewSkinRootDir();
             if (!skinRoot.isEmpty()) {
                 QDir().mkpath(skinRoot);
                 QDesktopServices::openUrl(QUrl::fromLocalFile(skinRoot));
             }
         });
-        auto* openJudgeFolderButton = makePushButton(root, uiText("dialog.skin_settings.open_judge_line_folder", "Open Judge Line Folder"));
-        connect(openJudgeFolderButton, &QPushButton::clicked, root, [this]() {
+    }
+    const auto refreshSkinCombo = [this, skinCombo]() {
+        const QSignalBlocker blocker(skinCombo);
+        skinCombo->clear();
+        QStringList skinDirectoryNames = owner_.availablePreviewSkinDirectoryNames();
+        const QString currentSkinDirectoryName = owner_.previewSkinDirectoryName_;
+        const bool currentListed = std::any_of(
+            skinDirectoryNames.cbegin(),
+            skinDirectoryNames.cend(),
+            [&currentSkinDirectoryName](const QString& name) {
+                return name.compare(currentSkinDirectoryName, Qt::CaseInsensitive) == 0;
+            });
+        if (!currentSkinDirectoryName.isEmpty() && !currentListed) {
+            skinDirectoryNames.prepend(currentSkinDirectoryName);
+        }
+
+        int selectedIndex = 0;
+        for (int i = 0; i < skinDirectoryNames.size(); ++i) {
+            const QString& skinDirectoryName = skinDirectoryNames.at(i);
+            skinCombo->addItem(owner_.previewSkinDisplayName(skinDirectoryName), skinDirectoryName);
+            if (skinDirectoryName.compare(currentSkinDirectoryName, Qt::CaseInsensitive) == 0) {
+                selectedIndex = i;
+            }
+        }
+        skinCombo->setCurrentIndex(skinCombo->count() > 0 ? selectedIndex : -1);
+        UiTheme::applyComboBoxPopupLimit(skinCombo, 12);
+    };
+    refreshSkinCombo();
+    connect(skinCombo, qOverload<int>(&QComboBox::currentIndexChanged), root, [this, skinCombo](int index) {
+        if (index < 0) {
+            return;
+        }
+        const QString skinDirectoryName = skinCombo->itemData(index).toString();
+        if (owner_.previewSkinDirectoryName_.compare(skinDirectoryName, Qt::CaseInsensitive) == 0) {
+            return;
+        }
+        owner_.previewSkinDirectoryName_ = skinDirectoryName;
+        owner_.previewSkinVariant_ =
+            skinDirectoryName.compare(QStringLiteral("skinDX"), Qt::CaseInsensitive) == 0
+                ? PreviewSkinVariant::Dx
+                : PreviewSkinVariant::Standard;
+        owner_.applyPreviewSkinDirectoryToSurfaces();
+        owner_.savePortableState();
+    });
+    skinForm->addRow(
+        uiText("dialog.render_settings.video.skin", "Skin"),
+        openSkinDirectoryButton != nullptr ? comboActionRow(skinCombo, openSkinDirectoryButton) : skinCombo);
+
+    const QString judgeLinePointLabel = uiText("dialog.render_settings.gameplay.judge_line.point", "Point");
+    const QString judgeLineLineLabel = uiText("dialog.render_settings.gameplay.judge_line.line", "Line");
+    const QString judgeLineAreaLabel = uiText("dialog.render_settings.gameplay.judge_line.area", "Judge Area");
+    const QString judgeLineAreaLabeledLabel = uiText("dialog.render_settings.gameplay.judge_line.area_labeled", "Judge Area (Labeled)");
+    auto* judgeLineCombo = createDialogComboBox(root);
+    QPushButton* openJudgeLineDirectoryButton = nullptr;
+    if (includeFolderButtons) {
+        openJudgeLineDirectoryButton = makePushButton(root, uiText("dialog.skin_settings.open_directory", "Open Directory"));
+        connect(openJudgeLineDirectoryButton, &QPushButton::clicked, root, [this]() {
             const QString outlineDir = owner_.resolvePreviewCustomOutlineDir();
             if (!outlineDir.isEmpty()) {
                 QDir().mkpath(outlineDir);
                 QDesktopServices::openUrl(QUrl::fromLocalFile(outlineDir));
             }
         });
-        skinForm->addRow(leftRow({openSkinFolderButton, openJudgeFolderButton}));
     }
+    constexpr int kOutlineVariantKind = 0;
+    constexpr int kCustomOutlineKind = 1;
+    const auto addOutlineVariantComboItem = [judgeLineCombo, kOutlineVariantKind](const QString& label, PreviewOutlineVariant variant) {
+        judgeLineCombo->addItem(label);
+        const int index = judgeLineCombo->count() - 1;
+        judgeLineCombo->setItemData(index, kOutlineVariantKind, Qt::UserRole);
+        judgeLineCombo->setItemData(index, static_cast<int>(variant), Qt::UserRole + 1);
+    };
+    const auto addCustomOutlineComboItem = [judgeLineCombo, kCustomOutlineKind](const QString& fileName) {
+        judgeLineCombo->addItem(fileName);
+        const int index = judgeLineCombo->count() - 1;
+        judgeLineCombo->setItemData(index, kCustomOutlineKind, Qt::UserRole);
+        judgeLineCombo->setItemData(index, fileName, Qt::UserRole + 1);
+    };
+    const auto refreshJudgeLineCombo = [
+        this,
+        judgeLineCombo,
+        addOutlineVariantComboItem,
+        addCustomOutlineComboItem,
+        judgeLinePointLabel,
+        judgeLineLineLabel,
+        judgeLineAreaLabel,
+        judgeLineAreaLabeledLabel,
+        kOutlineVariantKind,
+        kCustomOutlineKind
+    ]() {
+        const QSignalBlocker blocker(judgeLineCombo);
+        judgeLineCombo->clear();
+        addOutlineVariantComboItem(judgeLinePointLabel, PreviewOutlineVariant::Point);
+        addOutlineVariantComboItem(judgeLineLineLabel, PreviewOutlineVariant::Line);
+        addOutlineVariantComboItem(judgeLineAreaLabel, PreviewOutlineVariant::JudgeArea);
+        addOutlineVariantComboItem(judgeLineAreaLabeledLabel, PreviewOutlineVariant::JudgeAreaLabeled);
+
+        QStringList customOutlineNames = owner_.availablePreviewCustomOutlineFileNames();
+        const QString currentCustomOutline = owner_.previewCustomOutlineFileName_;
+        const bool currentCustomListed = std::any_of(
+            customOutlineNames.cbegin(),
+            customOutlineNames.cend(),
+            [&currentCustomOutline](const QString& name) {
+                return name.compare(currentCustomOutline, Qt::CaseInsensitive) == 0;
+            });
+        if (!currentCustomOutline.isEmpty() && !currentCustomListed) {
+            customOutlineNames.prepend(currentCustomOutline);
+        }
+        for (const QString& fileName : customOutlineNames) {
+            addCustomOutlineComboItem(fileName);
+        }
+
+        int selectedIndex = 0;
+        for (int i = 0; i < judgeLineCombo->count(); ++i) {
+            const int kind = judgeLineCombo->itemData(i, Qt::UserRole).toInt();
+            if (currentCustomOutline.isEmpty()
+                && kind == kOutlineVariantKind
+                && static_cast<PreviewOutlineVariant>(judgeLineCombo->itemData(i, Qt::UserRole + 1).toInt()) == owner_.previewOutlineVariant_) {
+                selectedIndex = i;
+                break;
+            }
+            if (!currentCustomOutline.isEmpty()
+                && kind == kCustomOutlineKind
+                && judgeLineCombo->itemData(i, Qt::UserRole + 1).toString().compare(currentCustomOutline, Qt::CaseInsensitive) == 0) {
+                selectedIndex = i;
+                break;
+            }
+        }
+        judgeLineCombo->setCurrentIndex(selectedIndex);
+        UiTheme::applyComboBoxPopupLimit(judgeLineCombo, 12);
+    };
+    refreshJudgeLineCombo();
+    connect(judgeLineCombo, qOverload<int>(&QComboBox::currentIndexChanged), root, [this, judgeLineCombo, kOutlineVariantKind](int index) {
+        if (index < 0) {
+            return;
+        }
+        const int kind = judgeLineCombo->itemData(index, Qt::UserRole).toInt();
+        if (kind == kOutlineVariantKind) {
+            const auto variant =
+                static_cast<PreviewOutlineVariant>(judgeLineCombo->itemData(index, Qt::UserRole + 1).toInt());
+            if (owner_.previewCustomOutlineFileName_.isEmpty() && owner_.previewOutlineVariant_ == variant) {
+                return;
+            }
+            owner_.applyPreviewOutlineVariant(variant, false, true);
+            return;
+        }
+        const QString fileName = judgeLineCombo->itemData(index, Qt::UserRole + 1).toString();
+        if (owner_.previewCustomOutlineFileName_.compare(fileName, Qt::CaseInsensitive) == 0) {
+            return;
+        }
+        owner_.applyPreviewCustomOutlineFileName(fileName, true);
+    });
+    skinForm->addRow(
+        uiText("dialog.render_settings.gameplay.judge_line", "Judge Line"),
+        openJudgeLineDirectoryButton != nullptr ? comboActionRow(judgeLineCombo, openJudgeLineDirectoryButton) : judgeLineCombo);
 
     // ---- 字体: embedded HUD-font picker (combo + import/reset + live sample),
     //      the same controls the old "字体设置" sub-dialog hosted, inlined. ----
@@ -513,16 +549,12 @@ void MainWindow::DialogsSection::buildSkinSettings(
     if (refreshOut != nullptr) {
         const QPointer<QWidget> rootGuard(root);
         *refreshOut =
-            [this, rootGuard, skinButton, judgeLineButton, judgeLineButtonText, refreshHudFontSettings]() {
+            [rootGuard, refreshSkinCombo, refreshJudgeLineCombo, refreshHudFontSettings]() {
                 if (rootGuard.isNull()) {
                     return;
                 }
-                if (skinButton != nullptr) {
-                    skinButton->setText(owner_.previewSkinDisplayName(owner_.previewSkinDirectoryName_));
-                }
-                if (judgeLineButton != nullptr) {
-                    judgeLineButton->setText(judgeLineButtonText());
-                }
+                refreshSkinCombo();
+                refreshJudgeLineCombo();
                 if (refreshHudFontSettings) {
                     refreshHudFontSettings();
                 }

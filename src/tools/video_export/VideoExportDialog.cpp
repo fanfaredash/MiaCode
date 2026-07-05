@@ -1479,6 +1479,7 @@ VideoExportDialog::VideoExportDialog(
         l10n(QStringLiteral("Chart jacket (曲绘)"), QStringLiteral("曲绘")), QStringLiteral("jacket"));
     introBackgroundCombo_->addItem(
         l10n(QStringLiteral("Custom image"), QStringLiteral("自定义图片")), QStringLiteral("custom"));
+    UiTheme::applyComboBoxPopupLimit(introBackgroundCombo_, 12);
     introBgForm->addRow(l10n(QStringLiteral("Background"), QStringLiteral("背景")), introBackgroundCombo_);
     auto* introBgPathRow = new QWidget(introBgGroup);
     auto* introBgPathLayout = new QHBoxLayout(introBgPathRow);
@@ -1487,9 +1488,13 @@ VideoExportDialog::VideoExportDialog(
     introBackgroundPathEdit_ = new QLineEdit(introBgPathRow);
     introBackgroundPathEdit_->setPlaceholderText(
         l10n(QStringLiteral("Custom background image path"), QStringLiteral("自定义背景图片路径")));
+    introBackgroundPathEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet(UiTheme::colors().windowAltBg));
     introBackgroundBrowse_ = new QPushButton(
         l10n(QStringLiteral("Browse…"), QStringLiteral("浏览…")), introBgPathRow);
-    introBackgroundBrowse_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    introBackgroundBrowse_->setObjectName(QStringLiteral("DialogAuxiliaryButton"));
+    introBackgroundBrowse_->setProperty("miacodeAuxiliaryButton", true);
+    introBackgroundBrowse_->setCursor(Qt::PointingHandCursor);
+    introBackgroundBrowse_->setStyleSheet(UiTheme::dialogAuxiliaryButtonStyleSheet());
     introBgPathLayout->addWidget(introBackgroundPathEdit_, 1);
     introBgPathLayout->addWidget(introBackgroundBrowse_, 0);
     introBgForm->addRow(QString(), introBgPathRow);
@@ -1512,6 +1517,7 @@ VideoExportDialog::VideoExportDialog(
     introCardModeCombo_ = new QComboBox(introCardGroup);
     introCardModeCombo_->addItem(QStringLiteral("DX"), QStringLiteral("DX"));
     introCardModeCombo_->addItem(QStringLiteral("SD"), QStringLiteral("Standard"));
+    UiTheme::applyComboBoxPopupLimit(introCardModeCombo_, 12);
     {
         const int modeIdx = introCardModeCombo_->findData(baseTask_.intro.mode);
         if (modeIdx >= 0) {

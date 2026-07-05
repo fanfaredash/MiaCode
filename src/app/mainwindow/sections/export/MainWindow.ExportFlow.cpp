@@ -736,12 +736,12 @@ VideoExportDialog* MainWindow::ExportSection::buildConfiguredVideoExportDialog(
         std::function<void()> refreshInjectedGameplay;
         std::function<void()> refreshInjectedSkin;
         owner_.dialogsSection_->buildExportInjectedSettings(dialog, &injectedGameplay, &refreshInjectedGameplay);
-        // 皮肤 tab shares the same owner-wired panel as the main-window 皮肤 popup;
-        // the export tab hides the "打开…文件夹" actions for a compact layout.
+        // Skin tab shares the same owner-wired panel as the main-window skin popup,
+        // including the compact same-row directory actions.
         owner_.dialogsSection_->buildSkinSettings(
             dialog,
             &injectedSkin,
-            /*includeFolderButtons=*/false,
+            /*includeFolderButtons=*/true,
             &refreshInjectedSkin);
         dialog->injectOwnerWiredSettings(
             nullptr,

@@ -385,11 +385,22 @@ void VideoExportDialog::applyThemeStyles()
     }
 
     // Plain push buttons.
-    for (QPushButton* button : {outputBrowseButton_, setStartButton_, setEndButton_,
-                                introBackgroundBrowse_, cancelButton_}) {
+    for (QPushButton* button : {outputBrowseButton_, setStartButton_, setEndButton_, cancelButton_}) {
         if (button != nullptr) {
             button->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
         }
+    }
+    if (introBackgroundBrowse_ != nullptr) {
+        introBackgroundBrowse_->setStyleSheet(UiTheme::dialogAuxiliaryButtonStyleSheet());
+    }
+    if (introBackgroundPathEdit_ != nullptr) {
+        introBackgroundPathEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet(UiTheme::colors().windowAltBg));
+    }
+    if (introBackgroundCombo_ != nullptr) {
+        UiTheme::applyComboBoxPopupLimit(introBackgroundCombo_, 12);
+    }
+    if (introCardModeCombo_ != nullptr) {
+        UiTheme::applyComboBoxPopupLimit(introCardModeCombo_, 12);
     }
     if (exportButton_ != nullptr) {
         exportButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(true));
