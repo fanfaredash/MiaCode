@@ -900,16 +900,16 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     const auto addSettingsField = [](QWidget* parent, QGridLayout* layout, int row, int column, const QString& labelText, QWidget* control) {
         auto* field = new QWidget(parent);
         auto* fieldLayout = new QVBoxLayout(field);
-        // 1px bottom margin so the rounded control underneath isn't flush
+        // 3px bottom margin so the rounded control underneath isn't flush
         // against the field's edge — otherwise its bottom border is clipped
         // (visible as the "missing bottom edge" on every box).
-        fieldLayout->setContentsMargins(0, 0, 0, 1);
+        fieldLayout->setContentsMargins(0, 0, 0, 3);
         fieldLayout->setSpacing(6);
         auto* label = new QLabel(labelText, field);
         fieldLayout->addWidget(label, 0);
         // The QSS border-radius controls report a sizeHint a hair short of what
-        // the bottom border needs; pad the height by 2px so it renders fully.
-        control->setMinimumHeight(qMax(control->minimumHeight(), control->sizeHint().height() + 2));
+        // the bottom border needs; pad the height so it renders fully.
+        control->setMinimumHeight(qMax(control->minimumHeight(), control->sizeHint().height() + 4));
         fieldLayout->addWidget(control, 0);
         layout->addWidget(field, row, column);
     };

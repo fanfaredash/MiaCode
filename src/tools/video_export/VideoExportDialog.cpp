@@ -128,6 +128,14 @@ QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
     }
 }
 
+QString flowSpeedValueLabel(double flowSpeed)
+{
+    const double snapped = qRound(flowSpeed * 4.0) / 4.0;
+    const double roundedOneDecimal = qRound(snapped * 10.0) / 10.0;
+    const bool useSingleDecimal = qAbs(snapped - roundedOneDecimal) < 0.001;
+    return QString::number(snapped, 'f', useSingleDecimal ? 1 : 2);
+}
+
 int secondToSliderValue(double second)
 {
     return qMax(0, qRound(second * kPreviewSliderScale));
@@ -627,10 +635,9 @@ VideoExportDialog::VideoExportDialog(
     visualsPageLayout->setContentsMargins(4, 6, 4, 6);
     visualsPageLayout->setSpacing(8);
 
-    // Gameplay page — owner-wired controls (skin / judge line / judge effect /
-    // slide stack order / center display) are injected post-construction via
-    // injectOwnerWiredSettings(); the dialog's own Tap/Touch flow-speed rows
-    // are placed here too (they belong to the gameplay group).
+    // Gameplay page — Tap/Touch flow-speed rows live here, and owner-wired
+    // controls (judge effect / slide stack / center display) are injected
+    // post-construction via injectOwnerWiredSettings().
     gameplayPage_ = new QWidget(settingsTabs_);
     gameplayPageLayout_ = new QVBoxLayout(gameplayPage_);
     gameplayPageLayout_->setContentsMargins(4, 6, 4, 6);
@@ -1210,11 +1217,98 @@ VideoExportDialog::VideoExportDialog(
     selectedTouchFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(baseTask_.touchFlowSpeed);
     selectedTapFlowSpeed_ = snapFlowSpeed(selectedTapFlowSpeed_);
     selectedTouchFlowSpeed_ = snapFlowSpeed(selectedTouchFlowSpeed_);
-    // Tap/Touch flow speed are no longer shown in the export dialog (they are
-    // tuned in the standalone 视频设置 dialog). selectedTap/TouchFlowSpeed_ stay
-    // initialised from baseTask_ above so applyUiToTask still bakes the current
-    // value; the Gameplay tab below carries only the injected owner-wired
-    // controls (skin / judge line / judge effect / slide stack / center).
+    auto* gameplayFlowControls = new QWidget(gameplayPage_);
+    auto* gameplayFlowLayout = new QGridLayout(gameplayFlowControls);
+    gameplayFlowLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
+    gameplayFlowLayout->setHorizontalSpacing(10);
+    gameplayFlowLayout->setVerticalSpacing(8);
+    gameplayFlowLayout->setColumnStretch(0, 1);
+    gameplayFlowLayout->setColumnStretch(1, 1);
+    const auto createFlowSpeedEdit = [this, snapFlowSpeed, flowSpeedMin, flowSpeedMax](
+        QWidget* parent,
+        double* selectedFlowSpeed,
+        const std::function<void(double)>& applyFlowSpeed
+    ) {
+        auto* flowSpeedEdit = new QLineEdit(parent);
+        flowSpeedEdit->setAlignment(Qt::AlignCenter);
+        flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed != nullptr
+            ? *selectedFlowSpeed
+            : miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed));
+        flowSpeedEdit->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
+        flowSpeedEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        flowSpeedEdit->ensurePolished();
+        flowSpeedEdit->setMinimumHeight(qMax(flowSpeedEdit->sizeHint().height(), 30) + 4);
+        auto* flowSpeedValidator = new QDoubleValidator(flowSpeedMin, flowSpeedMax, 2, flowSpeedEdit);
+        flowSpeedValidator->setNotation(QDoubleValidator::StandardNotation);
+        flowSpeedEdit->setValidator(flowSpeedValidator);
+        QObject::connect(flowSpeedEdit, &QLineEdit::editingFinished, this,
+            [flowSpeedEdit, selectedFlowSpeed, snapFlowSpeed, applyFlowSpeed]() {
+                if (flowSpeedEdit == nullptr || selectedFlowSpeed == nullptr) {
+                    return;
+                }
+                bool ok = false;
+                const double typedSpeed = flowSpeedEdit->text().trimmed().toDouble(&ok);
+                if (!ok) {
+                    flowSpeedEdit->setText(flowSpeedValueLabel(*selectedFlowSpeed));
+                    return;
+                }
+                *selectedFlowSpeed = snapFlowSpeed(typedSpeed);
+                flowSpeedEdit->setText(flowSpeedValueLabel(*selectedFlowSpeed));
+                if (applyFlowSpeed) {
+                    applyFlowSpeed(*selectedFlowSpeed);
+                }
+            });
+        return flowSpeedEdit;
+    };
+    const auto addGameplayFlowField = [](
+        QWidget* parent,
+        QGridLayout* layout,
+        int row,
+        int column,
+        const QString& labelText,
+        QWidget* control
+    ) {
+        auto* field = new QWidget(parent);
+        auto* fieldLayout = new QVBoxLayout(field);
+        fieldLayout->setContentsMargins(0, 0, 0, 3);
+        fieldLayout->setSpacing(6);
+        auto* label = new QLabel(labelText, field);
+        fieldLayout->addWidget(label, 0);
+        control->setMinimumHeight(qMax(control->minimumHeight(), control->sizeHint().height() + 4));
+        fieldLayout->addWidget(control, 0);
+        layout->addWidget(field, row, column);
+    };
+    tapFlowSpeedEdit_ = createFlowSpeedEdit(
+        gameplayFlowControls,
+        &selectedTapFlowSpeed_,
+        [this](double flowSpeed) {
+            if (previewTapFlowSpeedCallback_) {
+                previewTapFlowSpeedCallback_(flowSpeed);
+            }
+        });
+    touchFlowSpeedEdit_ = createFlowSpeedEdit(
+        gameplayFlowControls,
+        &selectedTouchFlowSpeed_,
+        [this](double flowSpeed) {
+            if (previewTouchFlowSpeedCallback_) {
+                previewTouchFlowSpeedCallback_(flowSpeed);
+            }
+        });
+    addGameplayFlowField(
+        gameplayFlowControls,
+        gameplayFlowLayout,
+        0,
+        0,
+        uiText("dialog.video_export.option.tap_flow_speed", QStringLiteral("Tap Flow Speed")),
+        tapFlowSpeedEdit_);
+    addGameplayFlowField(
+        gameplayFlowControls,
+        gameplayFlowLayout,
+        0,
+        1,
+        uiText("dialog.video_export.option.touch_flow_speed", QStringLiteral("Touch Flow Speed")),
+        touchFlowSpeedEdit_);
+    gameplayPageLayout_->addWidget(gameplayFlowControls, 0, Qt::AlignTop);
     gameplayPageLayout_->addStretch(1);
     // 皮肤 tab carries only the injected owner-wired panel (buildSkinSettings).
     skinPageLayout_->addStretch(1);

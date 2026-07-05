@@ -101,8 +101,8 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     };
 
     // ---- Gameplay page: skin / judge line / judge effect / slide stack /
-    //      center display (matches the settings dialog's Gameplay grid, minus
-    //      the flow-speed pair the export dialog already owns). ----
+    //      center display. The VideoExportDialog owns the Tap/Touch flow-speed
+    //      row above this injected MainWindow-wired grid. ----
     auto* gameplay = new QWidget(parent);
     auto* gameplayLayout = new QGridLayout(gameplay);
     gameplayLayout->setContentsMargins(12, 0, 12, 0);
@@ -113,11 +113,11 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     const auto addGameplayField = [gameplay, gameplayLayout](int row, int column, const QString& labelText, QWidget* control) {
         auto* field = new QWidget(gameplay);
         auto* fieldLayout = new QVBoxLayout(field);
-        fieldLayout->setContentsMargins(0, 0, 0, 1);
+        fieldLayout->setContentsMargins(0, 0, 0, 3);
         fieldLayout->setSpacing(6);
         auto* label = new QLabel(labelText, field);
         fieldLayout->addWidget(label, 0);
-        control->setMinimumHeight(qMax(control->minimumHeight(), control->sizeHint().height() + 2));
+        control->setMinimumHeight(qMax(control->minimumHeight(), control->sizeHint().height() + 4));
         fieldLayout->addWidget(control, 0);
         gameplayLayout->addWidget(field, row, column);
     };
