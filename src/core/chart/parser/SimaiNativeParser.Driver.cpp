@@ -664,13 +664,15 @@ SimaiNativeParseResult parseInternal(
         if (!strictMode || !noteSinceComma) {
             return;
         }
+        const int warningCol = pendingLineEndNoteCol >= 0 ? pendingLineEndNoteCol : openIndex + 1;
+        const int warningEndCol = pendingLineEndNoteEndCol >= 0 ? pendingLineEndNoteEndCol : closeIndex + 1;
         appendTokenWarning(
             &state,
             lineNumber,
-            openIndex + 1,
+            warningCol,
             ValidationMessage::kMissingCommaBeforeDirectivePrefix()
                 + line.mid(openIndex, closeIndex - openIndex + 1),
-            closeIndex + 1
+            warningEndCol
         );
         // One warning per forgotten ',' — a directive run like "1{16}(120)"
         // is a single missing separator, not two.
@@ -689,7 +691,7 @@ SimaiNativeParseResult parseInternal(
     };
 
     const QStringList lines = text.split('\n');
-    const auto nextSignificantLineStartsDirective = [&](int nextLineIndex) {
+    const auto nextSignificantLineDirectiveText = [&](int nextLineIndex) {
         for (int i = nextLineIndex; i < lines.size(); ++i) {
             QString nextLine = lines.at(i);
             if (nextLine.endsWith('\r')) {
@@ -699,24 +701,37 @@ SimaiNativeParseResult parseInternal(
             if (trimmed.isEmpty() || trimmed.startsWith(QStringLiteral("||"))) {
                 continue;
             }
-            return trimmed.startsWith(QChar('('))
-                || trimmed.startsWith(QChar('{'))
-                || trimmed.startsWith(QStringLiteral("<HS*"));
+            if (trimmed.startsWith(QChar('('))) {
+                const int close = trimmed.indexOf(QChar(')'), 1);
+                return close >= 0 ? trimmed.left(close + 1) : QString();
+            }
+            if (trimmed.startsWith(QChar('{'))) {
+                const int close = trimmed.indexOf(QChar('}'), 1);
+                return close >= 0 ? trimmed.left(close + 1) : QString();
+            }
+            if (trimmed.startsWith(QStringLiteral("<HS*"))) {
+                const int close = trimmed.indexOf(QChar('>'), 4);
+                return close >= 0 ? trimmed.left(close + 1) : QString();
+            }
+            return QString();
         }
-        return false;
+        return QString();
     };
     const auto warnLineEndNoteMissingComma = [&](int lineNumber, int nextLineIndex) {
         if (!strictMode
             || !lineSawComma
-            || pendingLineEndNoteCol < 0
-            || nextSignificantLineStartsDirective(nextLineIndex)) {
+            || pendingLineEndNoteCol < 0) {
             return;
         }
+        const QString nextDirective = nextSignificantLineDirectiveText(nextLineIndex);
+        const QString message = nextDirective.isEmpty()
+            ? ValidationMessage::kLineEndNoteMissingComma()
+            : ValidationMessage::kMissingCommaBeforeDirectivePrefix() + nextDirective;
         appendTokenWarning(
             &state,
             lineNumber,
             pendingLineEndNoteCol,
-            ValidationMessage::kLineEndNoteMissingComma(),
+            message,
             pendingLineEndNoteEndCol
         );
         noteSinceComma = false;

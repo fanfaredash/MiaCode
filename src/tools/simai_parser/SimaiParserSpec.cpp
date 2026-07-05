@@ -555,6 +555,10 @@ int main(int argc, char** argv)
         const SimaiNativeParseResult strictTrailingNoteOk = SimaiNativeParser::validateSyntax(QStringLiteral("1,2,\nE"));
         const SimaiNativeParseResult strictDirectiveAfterLineEndNote = SimaiNativeParser::validateSyntax(
             QStringLiteral("{16}1,1,1,1,1\n{16},,,\nE"));
+        const SimaiNativeParseResult strictUserReproDirective = SimaiNativeParser::validateSyntax(
+            QStringLiteral("(121){1},A1 \n{1},\nE"));
+        const SimaiNativeParseResult strictUserReproComma = SimaiNativeParser::validateSyntax(
+            QStringLiteral("(121){1},A1\n,\nE"));
 
         expect(lenientTrailingNote.ok && lenientTrailingNote.warnings.isEmpty(),
             QStringLiteral("lenient parse stays quiet for line-end note without trailing comma"));
@@ -577,6 +581,33 @@ int main(int argc, char** argv)
                 && strictDirectiveAfterLineEndNote.warnings.constFirst().message
                     == QStringLiteral("Missing ',' between note and directive: {16}"),
             QStringLiteral("next-line directive keeps the directive-specific missing-comma warning"));
+        if (strictDirectiveAfterLineEndNote.warnings.size() == 1) {
+            expect(
+                strictDirectiveAfterLineEndNote.warnings.constFirst().line == 1
+                    && strictDirectiveAfterLineEndNote.warnings.constFirst().col == 13,
+                QStringLiteral("next-line directive missing-comma warning points at the previous note"));
+        }
+        expect(
+            strictUserReproDirective.warnings.size() == 1
+                && strictUserReproDirective.warnings.constFirst().message
+                    == QStringLiteral("Missing ',' between note and directive: {1}"),
+            QStringLiteral("user repro next-line beat directive keeps directive-specific warning"));
+        if (strictUserReproDirective.warnings.size() == 1) {
+            expect(
+                strictUserReproDirective.warnings.constFirst().line == 1
+                    && strictUserReproDirective.warnings.constFirst().col == 10,
+                QStringLiteral("user repro next-line directive warning points at A1"));
+        }
+        expect(
+            strictUserReproComma.warnings.size() == 1
+                && strictUserReproComma.warnings.constFirst().message == trailingCommaMessage,
+            QStringLiteral("user repro next-line comma uses the line-end trailing-comma warning"));
+        if (strictUserReproComma.warnings.size() == 1) {
+            expect(
+                strictUserReproComma.warnings.constFirst().line == 1
+                    && strictUserReproComma.warnings.constFirst().col == 10,
+                QStringLiteral("user repro next-line comma warning points at A1"));
+        }
 
         const SimaiNativeValidationReport trailingNoteReport = SimaiNativeParser::buildValidationReport(
             QStringLiteral("1,2\nE"),
@@ -671,9 +702,9 @@ int main(int argc, char** argv)
             QStringLiteral("note directly before {beats} directive emits one missing-comma warning"));
         if (strictBeatDirective.warnings.size() == 1) {
             expect(
-                strictBeatDirective.warnings.constFirst().line == 2
-                    && strictBeatDirective.warnings.constFirst().col == 1,
-                QStringLiteral("missing-comma warning points at the directive position"));
+                strictBeatDirective.warnings.constFirst().line == 1
+                    && strictBeatDirective.warnings.constFirst().col == 13,
+                QStringLiteral("missing-comma warning points at the note before the directive"));
         }
 
         const SimaiNativeParseResult strictBeatDirectiveOk = SimaiNativeParser::validateSyntax(
@@ -685,21 +716,28 @@ int main(int argc, char** argv)
             QStringLiteral("1(120)2,\nE"));
         expect(
             strictBpmDirective.warnings.size() == 1
-                && strictBpmDirective.warnings.constFirst().message == missingCommaPrefix + QStringLiteral("(120)"),
+                && strictBpmDirective.warnings.constFirst().message == missingCommaPrefix + QStringLiteral("(120)")
+                && strictBpmDirective.warnings.constFirst().line == 1
+                && strictBpmDirective.warnings.constFirst().col == 1,
             QStringLiteral("note directly before (bpm) directive emits missing-comma warning"));
 
         const SimaiNativeParseResult strictHsDirective = SimaiNativeParser::validateSyntax(
             QStringLiteral("1<HS*2>2,\nE"));
         expect(
             strictHsDirective.warnings.size() == 1
-                && strictHsDirective.warnings.constFirst().message == missingCommaPrefix + QStringLiteral("<HS*2>"),
+                && strictHsDirective.warnings.constFirst().message == missingCommaPrefix + QStringLiteral("<HS*2>")
+                && strictHsDirective.warnings.constFirst().line == 1
+                && strictHsDirective.warnings.constFirst().col == 1,
             QStringLiteral("note directly before <HS*N> directive emits missing-comma warning"));
 
         // A directive run after one note is a single forgotten ',', not two.
         const SimaiNativeParseResult strictDirectiveRun = SimaiNativeParser::validateSyntax(
             QStringLiteral("1{16}(120)2,\nE"));
-        expect(strictDirectiveRun.warnings.size() == 1,
-            QStringLiteral("directive run after a note emits one missing-comma warning"));
+        expect(
+            strictDirectiveRun.warnings.size() == 1
+                && strictDirectiveRun.warnings.constFirst().line == 1
+                && strictDirectiveRun.warnings.constFirst().col == 1,
+            QStringLiteral("directive run after a note emits one missing-comma warning at the note"));
 
         // Lenient (timeline) parsing stays quiet.
         const SimaiNativeParseResult lenientBeatDirective = SimaiNativeParser::parseForTimeline(
