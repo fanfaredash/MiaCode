@@ -24,16 +24,15 @@ public:
     // ---- E-C embedded video panel (hosted by the Export hub page) ----
     // Builds a VideoExportDialog in embedded panel mode seeded with the given
     // difficulty, begins the export-preview session (exportPreviewActive_,
-    // debug-HUD suppression, chart-info HUD), and wires exportConfirmed →
-    // snapshot + worker launch with INLINE progress (preview-area transport,
-    // no QProgressDialog). Returns nullptr when the difficulty/preview isn't
+    // debug-HUD suppression, chart-info HUD), and wires exportConfirmed to a
+    // snapshot + worker launch with the normal progress popup.
+    // Returns nullptr when the difficulty/preview isn't
     // available. The host inserts the widget into its layout; ownership stays
     // with this section (destroyEmbeddedVideoExportPanel deletes it).
     QWidget* createEmbeddedVideoExportPanel(int difficultyId, QWidget* parent);
     // Finalizes the embedded panel session (range-preview stop + live-preview
     // restore + export-preview session end) and deletes the panel. Idempotent;
-    // a running worker is NOT cancelled (its inline progress stays on the
-    // preview transport).
+    // a running worker is NOT cancelled.
     void destroyEmbeddedVideoExportPanel();
     bool buildVideoExportSnapshot(
         const VideoExportTask& requestedTask,

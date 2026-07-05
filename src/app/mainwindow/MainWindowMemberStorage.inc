@@ -324,15 +324,9 @@
         bool videoExportWorkerSuccess_ = false;
         bool videoExportWorkerCompletionReceived_ = false;
         bool videoExportWorkerCancelRequested_ = false;
-        // E-C inline export progress (A3 as amended 2026-06-11): an export
-        // launched from the embedded panel skips the QProgressDialog and
-        // rides the preview-area PLAYBACK transport instead — the slider
-        // advances through CHART TIME (exportStart + percent × duration)
-        // like a playback, range untouched; stage/ETA text goes to the
-        // status bar only. useInlineProgress_ marks the launch mode
-        // (survives the safe-mode retry; cleared by
-        // clearVideoExportWorkerState); second < 0 = no inline progress
-        // showing.
+        // Legacy inline-progress state. The embedded export panel now uses the
+        // normal QProgressDialog path; this state is still cleared defensively
+        // so any stale inline session cannot keep the panel button in cancel mode.
         bool videoExportUseInlineProgress_ = false;
         double videoExportInlineProgressSecond_ = -1.0;
         // Difficulty the embedded video panel was seeded with (0 = none).

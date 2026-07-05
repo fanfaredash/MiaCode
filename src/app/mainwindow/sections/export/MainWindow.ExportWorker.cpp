@@ -847,13 +847,9 @@ bool MainWindow::ExportSection::launchVideoExportWorker(const VideoExportSnapsho
 
     this->clearVideoExportWorkerState();
 
-    // Panel-launched export (E-C): progress rides the preview-area playback
-    // transport instead of a QProgressDialog — every dialog-update site below
-    // is null-guarded on videoExportProgressDialog_, so simply not creating
-    // it keeps the rest of this flow untouched; cancel comes from the
-    // embedded panel's 取消导出 button. beginInlineExportProgress() is called
-    // AFTER videoExportWorkerSnapshot_ is stored below (it reads the export
-    // start second from it).
+    // Panel-launched exports currently keep the same progress popup as the
+    // modal path. The embedded panel's main button is still switched to
+    // 取消导出 by the caller and forwards cancellation to this worker.
     if (!owner_.videoExportUseInlineProgress_) {
         auto* progress = new QProgressDialog(
             systemL10n(QStringLiteral("Preparing export..."), QStringLiteral("准备导出...")),
@@ -1514,7 +1510,11 @@ void MainWindow::ExportSection::updateInlineExportProgress(int percent, const QS
 
 void MainWindow::ExportSection::endInlineExportProgress()
 {
-    if (owner_.videoExportInlineProgressSecond_ < 0.0) {
+    const bool inlineProgressActive = owner_.videoExportInlineProgressSecond_ >= 0.0;
+    if (!owner_.embeddedVideoExportPanel_.isNull()) {
+        owner_.embeddedVideoExportPanel_->setEmbeddedExportRunning(false);
+    }
+    if (!inlineProgressActive) {
         return;
     }
     owner_.videoExportInlineProgressSecond_ = -1.0;
@@ -1522,8 +1522,5 @@ void MainWindow::ExportSection::endInlineExportProgress()
     // Hand the slider back to the playback clock.
     if (owner_.timelineSection_ != nullptr) {
         owner_.timelineSection_->updatePreviewSliderPosition(owner_.qtPreviewPauseSecond_);
-    }
-    if (!owner_.embeddedVideoExportPanel_.isNull()) {
-        owner_.embeddedVideoExportPanel_->setEmbeddedExportRunning(false);
     }
 }

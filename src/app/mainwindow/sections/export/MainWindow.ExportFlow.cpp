@@ -924,10 +924,9 @@ QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficult
                 : miacode::debug_log::Level::Info);
     }
     owner_.tickOutlineBusySpinner();
-    // Re-entering the video sub-page while an inline-launched export is still
-    // rendering: re-arm the cancel affordance on the fresh panel.
-    if (owner_.videoExportUseInlineProgress_
-        && owner_.videoExportWorkerProcess_ != nullptr
+    // Re-entering the video sub-page while an export is still rendering:
+    // re-arm the cancel affordance on the fresh panel.
+    if (owner_.videoExportWorkerProcess_ != nullptr
         && owner_.videoExportWorkerProcess_->state() != QProcess::NotRunning) {
         panel->setEmbeddedExportRunning(true);
     }
@@ -976,9 +975,8 @@ void MainWindow::ExportSection::handleEmbeddedExportConfirmed()
     this->applySharedExportTaskSettings(requestedTask);
     VideoExportSnapshot snapshot;
     QString launchError;
-    // Panel-launched exports show progress on the preview-area transport
-    // (A3 as amended 2026-06-11) — no QProgressDialog.
-    owner_.videoExportUseInlineProgress_ = true;
+    // Panel-launched exports use the same progress popup as the modal path.
+    owner_.videoExportUseInlineProgress_ = false;
     if (!this->buildVideoExportSnapshot(
             requestedTask, &snapshot, &launchError, owner_.embeddedVideoExportDifficultyId_)
         || !this->launchVideoExportWorker(snapshot, &launchError)) {
