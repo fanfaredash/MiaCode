@@ -325,9 +325,19 @@ int main(int argc, char** argv)
             QApplication::sendEvent(popup->viewport(), &press);
             QApplication::processEvents();
 
+            QMouseEvent release(
+                QEvent::MouseButtonRelease,
+                QPointF(clickPos),
+                QPointF(globalClickPos),
+                Qt::LeftButton,
+                Qt::NoButton,
+                Qt::NoModifier);
+            QApplication::sendEvent(popup->viewport(), &release);
+            QApplication::processEvents();
+
             expect(
                 completionEditor.toPlainText() == QStringLiteral("[8:1]"),
-                QStringLiteral("mouse press on completion candidate commits clicked row after editor focus-out"),
+                QStringLiteral("mouse release on completion candidate commits clicked row after editor focus-out"),
                 out,
                 &failed);
         }
