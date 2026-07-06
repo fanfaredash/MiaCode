@@ -994,18 +994,16 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             switchToExportField();
             return;
         }
-        if (kind == "bookmark_toggle") {
-            if (editorSection_ != nullptr) {
-                editorSection_->toggleBookmarkSidebarExpanded();
-            }
-            rebuildFieldSidebar();
-            return;
-        }
         if (kind == "bookmark") {
-            if (editorSection_ != nullptr) {
-                editorSection_->openBookmarkAtLine(difficultyId);
+            const int bookmarkDifficultyId = current->data(Qt::UserRole + 1).toInt();
+            const int bookmarkLine = current->data(Qt::UserRole + 2).toInt();
+            if (SimaiDocument::isDifficultyId(bookmarkDifficultyId) && bookmarkDifficultyId != activeDifficultyId_) {
+                activeOutlineKey_ = "chart";
+                if (!switchToDifficultyField(bookmarkDifficultyId)) {
+                    return;
+                }
             }
-            rebuildFieldSidebar();
+            jumpToLocation(bookmarkLine, 1);
             return;
         }
         if (kind == "add") {
@@ -1097,6 +1095,32 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             }
         }
     });
+    connect(outlineList_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* current) {
+        if (current == nullptr) {
+            return;
+        }
+        const QString kind = current->data(Qt::UserRole).toString();
+        if (kind != QLatin1String("bookmark")) {
+            return;
+        }
+        const int bookmarkDifficultyId = current->data(Qt::UserRole + 1).toInt();
+        const int bookmarkLine = current->data(Qt::UserRole + 2).toInt();
+        double bookmarkSecond = current->data(Qt::UserRole + 3).toDouble();
+        if (SimaiDocument::isDifficultyId(bookmarkDifficultyId) && bookmarkDifficultyId != activeDifficultyId_) {
+            activeOutlineKey_ = "chart";
+            if (!switchToDifficultyField(bookmarkDifficultyId)) {
+                return;
+            }
+        }
+        if (bookmarkSecond < 0.0 || !qIsFinite(bookmarkSecond)) {
+            bookmarkSecond = timelineSecondForCursor(bookmarkLine, 1);
+        }
+        if (bookmarkSecond >= 0.0 && qIsFinite(bookmarkSecond)) {
+            navigateTimelineToSecond(bookmarkSecond, true);
+        } else {
+            jumpToLocation(bookmarkLine, 1);
+        }
+    });
     outlineList_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(outlineList_, &QListWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
         if (outlineList_ == nullptr) {
@@ -1111,15 +1135,28 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             QMenu menu(this);
             menu.setFont(uiAccentFont(10));
             styleRoundedMenu(menu);
-            const int line = item->data(Qt::UserRole + 1).toInt();
-            QAction* openAction = menu.addAction(UiText::isChineseUi() ? QStringLiteral("打开书签") : QStringLiteral("Open Bookmark"));
-            connect(openAction, &QAction::triggered, this, [this, line]() {
+            const int bookmarkDifficultyId = item->data(Qt::UserRole + 1).toInt();
+            const int line = item->data(Qt::UserRole + 2).toInt();
+            QAction* detailAction = menu.addAction(UiText::isChineseUi() ? QStringLiteral("详情") : QStringLiteral("Details"));
+            connect(detailAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line]() {
+                if (SimaiDocument::isDifficultyId(bookmarkDifficultyId) && bookmarkDifficultyId != activeDifficultyId_) {
+                    activeOutlineKey_ = "chart";
+                    if (!switchToDifficultyField(bookmarkDifficultyId)) {
+                        return;
+                    }
+                }
                 if (editorSection_ != nullptr) {
                     editorSection_->openBookmarkAtLine(line);
                 }
             });
             QAction* deleteAction = menu.addAction(UiText::isChineseUi() ? QStringLiteral("删除书签") : QStringLiteral("Delete Bookmark"));
-            connect(deleteAction, &QAction::triggered, this, [this, line]() {
+            connect(deleteAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line]() {
+                if (SimaiDocument::isDifficultyId(bookmarkDifficultyId) && bookmarkDifficultyId != activeDifficultyId_) {
+                    activeOutlineKey_ = "chart";
+                    if (!switchToDifficultyField(bookmarkDifficultyId)) {
+                        return;
+                    }
+                }
                 if (editorSection_ != nullptr) {
                     editorSection_->deleteBookmarkAtLineWithConfirmation(line);
                 }

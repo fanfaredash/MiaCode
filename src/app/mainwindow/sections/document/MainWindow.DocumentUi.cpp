@@ -556,17 +556,6 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     QListWidgetItem* selectedItem = nullptr;
     bool hasMissingDifficulty = false;
     const QVector<int> ids = state_.document_.difficultyIds();
-    for (int id : ids) {
-        const QString difficultyLabel = SimaiDocument::difficultyName(id);
-        auto* difficultyItem = new QListWidgetItem(difficultyLabel, ui_.outlineList_);
-        difficultyItem->setIcon(makeDifficultyBadgeIcon(id));
-        difficultyItem->setData(Qt::UserRole, "difficulty_chart");
-        difficultyItem->setData(Qt::UserRole + 1, id);
-        difficultyItem->setToolTip(difficultyLabel);
-        if (id == state_.activeDifficultyId_) {
-            selectedItem = difficultyItem;
-        }
-    }
     for (int id = 1; id <= 7; ++id) {
         if (state_.document_.difficulty(id) == nullptr) {
             hasMissingDifficulty = true;
@@ -586,39 +575,52 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
         addItem->setData(Qt::UserRole, "add");
         addItem->setToolTip(addDifficultyLabel);
     }
-    const QString bookmarkGroupLabel = UiText::isChineseUi() ? QStringLiteral("书签") : QStringLiteral("Bookmarks");
-    auto* bookmarkGroupItem = new QListWidgetItem(
-        owner_.style()->standardIcon(state_.editorBookmarksSidebarExpanded_
-            ? QStyle::SP_ArrowDown
-            : QStyle::SP_ArrowRight),
-        bookmarkGroupLabel,
-        ui_.outlineList_
-    );
-    bookmarkGroupItem->setData(Qt::UserRole, "bookmark_toggle");
-    bookmarkGroupItem->setToolTip(bookmarkGroupLabel);
-    if (state_.editorBookmarksSidebarExpanded_) {
-        QVector<MainWindow::EditorBookmark> sortedBookmarks = state_.editorBookmarks_;
-        std::sort(sortedBookmarks.begin(), sortedBookmarks.end(), [](const MainWindow::EditorBookmark& left, const MainWindow::EditorBookmark& right) {
+    auto bookmarksForDifficulty = [this](int difficultyId) {
+        QVector<MainWindow::EditorBookmark> bookmarks;
+        for (const MainWindow::EditorBookmark& bookmark : std::as_const(state_.editorBookmarks_)) {
+            if (bookmark.difficultyId == difficultyId) {
+                bookmarks.append(bookmark);
+            }
+        }
+        std::sort(bookmarks.begin(), bookmarks.end(), [](const MainWindow::EditorBookmark& left, const MainWindow::EditorBookmark& right) {
             if (left.line != right.line) {
                 return left.line < right.line;
             }
             return left.title.localeAwareCompare(right.title) < 0;
         });
-        for (const MainWindow::EditorBookmark& bookmark : std::as_const(sortedBookmarks)) {
+        return bookmarks;
+    };
+
+    for (int id : ids) {
+        const QVector<MainWindow::EditorBookmark> bookmarks = bookmarksForDifficulty(id);
+        const QString difficultyLabel = SimaiDocument::difficultyName(id);
+        auto* difficultyItem = new QListWidgetItem(difficultyLabel, ui_.outlineList_);
+        difficultyItem->setIcon(makeDifficultyBadgeIcon(id));
+        difficultyItem->setData(Qt::UserRole, "difficulty_chart");
+        difficultyItem->setData(Qt::UserRole + 1, id);
+        difficultyItem->setToolTip(difficultyLabel);
+        if (id == state_.activeDifficultyId_) {
+            selectedItem = difficultyItem;
+        }
+
+        for (const MainWindow::EditorBookmark& bookmark : bookmarks) {
             const QString title = bookmark.title.trimmed().isEmpty()
                 ? (UiText::isChineseUi() ? QStringLiteral("未命名书签") : QStringLiteral("Untitled Bookmark"))
                 : bookmark.title.trimmed();
-            const QString label = UiText::isChineseUi()
-                ? QStringLiteral("  %1 行  %2").arg(bookmark.line).arg(title)
-                : QStringLiteral("  Line %1  %2").arg(bookmark.line).arg(title);
+            const QString label = QStringLiteral("    %1").arg(title);
+            const QString tooltip = UiText::isChineseUi()
+                ? QStringLiteral("代码行：%1").arg(bookmark.line)
+                : QStringLiteral("Code line: %1").arg(bookmark.line);
             auto* bookmarkItem = new QListWidgetItem(
-                owner_.style()->standardIcon(QStyle::SP_DialogYesButton),
+                owner_.style()->standardIcon(QStyle::SP_ArrowRight),
                 label,
                 ui_.outlineList_
             );
             bookmarkItem->setData(Qt::UserRole, "bookmark");
-            bookmarkItem->setData(Qt::UserRole + 1, bookmark.line);
-            bookmarkItem->setToolTip(label);
+            bookmarkItem->setData(Qt::UserRole + 1, id);
+            bookmarkItem->setData(Qt::UserRole + 2, bookmark.line);
+            bookmarkItem->setData(Qt::UserRole + 3, bookmark.second);
+            bookmarkItem->setToolTip(tooltip);
         }
     }
     const QString exportLabel = uiText("sidebar.export", "Export");

@@ -1154,6 +1154,50 @@ void runInlineSpecs(QTextStream& err, int* failed)
 
     {
         int changed = 0;
+        const QString input = QStringLiteral("{32}") + QString(19, QLatin1Char(','));
+        const QString output = miacode::chart_transform::lowerSubdivisionForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{16}") + QString(9, QLatin1Char(',')) + QStringLiteral("{32},"),
+            QStringLiteral("subdivision -1 floors a trailing odd slot and restores the original subdivision for the remainder"),
+            failed,
+            err
+        );
+        expectTrue(changed == 10, QStringLiteral("subdivision -1 counts the signature and removed full-pair commas only"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        QString output = QStringLiteral("{32}") + QString(19, QLatin1Char(','));
+        output = miacode::chart_transform::lowerSubdivisionForSelection(output, &changed);
+        output = miacode::chart_transform::lowerSubdivisionForSelection(output, &changed);
+        output = miacode::chart_transform::lowerSubdivisionForSelection(output, &changed);
+        output = miacode::chart_transform::lowerSubdivisionForSelection(output, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{2},{16},{32},"),
+            QStringLiteral("subdivision -1 repeated floors do not keep lowering restored remainder chunks into zero-length subdivision piles"),
+            failed,
+            err
+        );
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{32},");
+        const QString output = miacode::chart_transform::lowerSubdivisionForSelection(input, &changed);
+        expectEqual(
+            output,
+            input,
+            QStringLiteral("subdivision -1 leaves a lone restored remainder chunk unchanged"),
+            failed,
+            err
+        );
+        expectTrue(changed == 0, QStringLiteral("subdivision -1 reports no changes for a lone remainder chunk"), failed, err);
+    }
+
+    {
+        int changed = 0;
         const QString input = QStringLiteral("{16},,7,6,5,4,1,2,3,4,");
         const QString output = miacode::chart_transform::lowerSubdivisionForSelection(input, &changed);
         expectEqual(
@@ -1248,6 +1292,34 @@ void runInlineSpecs(QTextStream& err, int* failed)
             err
         );
         expectTrue(changed == 4, QStringLiteral("subdivision +1/2 counts one signature and three inserted commas"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{32}") + QString(19, QLatin1Char(','));
+        const QString output = miacode::chart_transform::raiseSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{48}") + QString(27, QLatin1Char(',')) + QStringLiteral("{32},"),
+            QStringLiteral("subdivision +1/2 floors a trailing odd slot and restores the original subdivision for the remainder"),
+            failed,
+            err
+        );
+        expectTrue(changed == 10, QStringLiteral("subdivision +1/2 counts the signature and inserted full-pair commas only"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{32},");
+        const QString output = miacode::chart_transform::raiseSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            input,
+            QStringLiteral("subdivision +1/2 leaves a lone restored remainder chunk unchanged when x1.5 is not representable"),
+            failed,
+            err
+        );
+        expectTrue(changed == 0, QStringLiteral("subdivision +1/2 reports no changes for a lone non-pair remainder chunk"), failed, err);
     }
 
     {
@@ -1364,6 +1436,34 @@ void runInlineSpecs(QTextStream& err, int* failed)
 
     {
         int changed = 0;
+        const QString input = QStringLiteral("{24}") + QString(20, QLatin1Char(','));
+        const QString output = miacode::chart_transform::lowerSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{16}") + QString(12, QLatin1Char(',')) + QStringLiteral("{24},,"),
+            QStringLiteral("subdivision -1/2 floors a trailing non-third slot range and restores the original subdivision for the remainder"),
+            failed,
+            err
+        );
+        expectTrue(changed == 7, QStringLiteral("subdivision -1/2 counts the signature and removed full-third commas only"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("{24},,");
+        const QString output = miacode::chart_transform::lowerSubdivisionHalfStepForSelection(input, &changed);
+        expectEqual(
+            output,
+            input,
+            QStringLiteral("subdivision -1/2 leaves a lone restored remainder chunk unchanged"),
+            failed,
+            err
+        );
+        expectTrue(changed == 0, QStringLiteral("subdivision -1/2 reports no changes for a lone non-third remainder chunk"), failed, err);
+    }
+
+    {
+        int changed = 0;
         const QString input = QStringLiteral("{24}1,,2,,");
         const QString output = miacode::chart_transform::lowerSubdivisionHalfStepForSelection(input, &changed);
         expectEqual(
@@ -1374,6 +1474,102 @@ void runInlineSpecs(QTextStream& err, int* failed)
             err
         );
         expectTrue(changed == 0, QStringLiteral("subdivision -1/2 reports no changes when reduction is not lossless"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString output = miacode::chart_transform::raiseSubdivisionForSelection(
+            QStringLiteral("{16},,"),
+            QStringLiteral(",,"),
+            &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{32},,,,{16}"),
+            QStringLiteral("subdivision +1 restores the previous subdivision after a partial selection when following chart text has no subdivision"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("subdivision +1 restore suffix does not count as an extra replacement"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString output = miacode::chart_transform::raiseSubdivisionForSelection(
+            QStringLiteral("{16},,"),
+            QStringLiteral("{32},,"),
+            &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{32},,,,"),
+            QStringLiteral("subdivision +1 does not restore the previous subdivision when the suffix already starts with a subdivision"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("subdivision +1 still reports the selected changes when suffix has its own subdivision"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString output = miacode::chart_transform::raiseSubdivisionForSelection(
+            QStringLiteral("{16},,"),
+            QStringLiteral("E"),
+            &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{32},,,,"),
+            QStringLiteral("subdivision +1 does not restore the previous subdivision before terminal E"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("subdivision +1 terminal E suffix still reports selected changes"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString output = miacode::chart_transform::lowerSubdivisionForSelection(
+            QStringLiteral("{32},,,,"),
+            QStringLiteral(",,"),
+            &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{16},,{32}"),
+            QStringLiteral("subdivision -1 restores the previous subdivision after a partial selection"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("subdivision -1 restore suffix does not count as an extra replacement"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString output = miacode::chart_transform::raiseSubdivisionHalfStepForSelection(
+            QStringLiteral("{15},,"),
+            QStringLiteral(",,"),
+            &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{45},,,,,,{15}"),
+            QStringLiteral("subdivision +1/2 restores odd fallback subdivisions after a partial selection"),
+            failed,
+            err
+        );
+        expectTrue(changed == 5, QStringLiteral("subdivision +1/2 odd fallback counts only selected signature and inserted commas"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString output = miacode::chart_transform::lowerSubdivisionHalfStepForSelection(
+            QStringLiteral("{16},,"),
+            QStringLiteral(",,"),
+            &changed);
+        expectEqual(
+            output,
+            QStringLiteral("{16},,"),
+            QStringLiteral("subdivision -1/2 does not restore a subdivision when the selected text cannot be reduced"),
+            failed,
+            err
+        );
+        expectTrue(changed == 0, QStringLiteral("subdivision -1/2 impossible reduction reports no changes"), failed, err);
     }
 
     {
