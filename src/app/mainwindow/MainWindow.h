@@ -54,6 +54,9 @@ class LatencyDetectionPage;
 namespace miacode::export_page {
 class ExportLauncherPage;
 }
+namespace miacode::extensions {
+class ExtensionManager;
+}
 namespace miacode::ui {
 class BusySpinner;
 }
@@ -645,6 +648,7 @@ private:
     std::unique_ptr<DocumentSection> documentSection_;
     std::unique_ptr<FrameSection> frameSection_;
     std::unique_ptr<TimelineSection> timelineSection_;
+    std::unique_ptr<miacode::extensions::ExtensionManager> extensionManager_;
 
     bool quickShellBottomTabsProxyActive() const;
     QString bottomTabsFallbackLabel(BottomTabsTabId tabId) const;

@@ -552,6 +552,12 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/quick/TimelineQuickNotesLayer.cpp
     src/timeline/quick/TimelineQuickOverlayLayer.h
     src/timeline/quick/TimelineQuickOverlayLayer.cpp
+    src/extensions/ExtensionManifest.h
+    src/extensions/ExtensionManifest.cpp
+    src/extensions/ExtensionHostProcess.h
+    src/extensions/ExtensionHostProcess.cpp
+    src/extensions/ExtensionManager.h
+    src/extensions/ExtensionManager.cpp
     resources/app_icons.qrc
     resources/fonts.qrc
     resources/slide_data.qrc
@@ -667,6 +673,18 @@ target_include_directories(MiaCode PRIVATE
     src/tools/latency
     src/tools/video_export
     src/tools/net
+)
+
+add_custom_command(TARGET MiaCode POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:MiaCode>/extensions"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/extensions/extensionHost.js"
+        "$<TARGET_FILE_DIR:MiaCode>/extensions/extensionHost.js"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/extensions/README.md"
+        "$<TARGET_FILE_DIR:MiaCode>/extensions/README.md"
+    COMMENT "Deploying MiaCode extension support files"
+    VERBATIM
 )
 
 target_sources(MiaCode PRIVATE
@@ -1135,6 +1153,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/editor/SimaiCompletionCatalog.cpp
         LIBS Qt6::Core
         INCLUDES src src/editor
+    )
+
+    miacode_add_dev_tool(extension_manifest_spec TEST
+        SOURCES
+            src/tools/extensions/ExtensionManifestSpec.cpp
+            src/extensions/ExtensionManifest.h
+            src/extensions/ExtensionManifest.cpp
+        LIBS Qt6::Core
+        INCLUDES src
     )
 
     miacode_add_dev_tool(preview_asset_loader_spec TEST

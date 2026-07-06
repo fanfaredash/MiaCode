@@ -532,6 +532,8 @@ int main(int argc, char* argv[])
 #endif
     app.setApplicationName("MiaCode");
     app.setApplicationVersion(MIACODE_DISPLAY_VERSION_STRING);
+    UiText::reloadExtensionLanguagePacks();
+    UiText::ensurePreferredLanguageAvailable();
     // First-run detection. The preferences file is auto-created the first
     // time a UiText/UiTheme preference is read (the UiTheme::applyApplicationTheme
     // call just below is the first such read), so we must probe its existence

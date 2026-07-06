@@ -27,6 +27,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewInteractionConfig.h"
+#include "extensions/ExtensionManager.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
@@ -201,6 +202,56 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         toolsMenu->addSeparator();
         toolsMenu->addAction(netBatchDownloadAction_);
     }
+    extensionManager_ = std::make_unique<miacode::extensions::ExtensionManager>(this);
+    miacode::extensions::ExtensionHostCallbacks extensionCallbacks;
+    extensionCallbacks.activeDocument = [this]() {
+        miacode::extensions::ExtensionDocumentSnapshot snapshot;
+        snapshot.uri = currentFilePath_.isEmpty()
+            ? QStringLiteral("untitled:active")
+            : QUrl::fromLocalFile(currentFilePath_).toString();
+        snapshot.text = hasActiveDifficulty() ? editorText() : QString();
+        snapshot.activeDifficultyId = activeDifficultyId_;
+        snapshot.dirty = currentFieldDirty_;
+        return snapshot;
+    };
+    extensionCallbacks.replaceActiveDocumentText = [this](const QString& text, QString* error) {
+        if (!hasActiveDifficulty()) {
+            if (error != nullptr) {
+                *error = QStringLiteral("No active chart difficulty is open.");
+            }
+            return false;
+        }
+        setEditorText(text);
+        markCurrentFieldDirty();
+        refreshTimelineMetadata();
+        return true;
+    };
+    extensionCallbacks.validateActiveDocument = [this]() {
+        return runValidateSimaiSilently(false);
+    };
+    extensionCallbacks.showMessage = [this](const QString& severity, const QString& message) {
+        const QMessageBox::Icon icon = severity == QStringLiteral("error")
+            ? QMessageBox::Critical
+            : (severity == QStringLiteral("warning") ? QMessageBox::Warning : QMessageBox::Information);
+        UiDialogs::showMessageBox(
+            icon,
+            this,
+            UiText::isChineseUi() ? QStringLiteral("扩展") : QStringLiteral("Extension"),
+            message
+        );
+    };
+    extensionCallbacks.logMessage = [this](const QString& message) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("extensions"),
+            message
+        );
+        if (statusBar() != nullptr) {
+            statusBar()->showMessage(message, 5000);
+        }
+    };
+    extensionManager_->setCallbacks(std::move(extensionCallbacks));
+    extensionManager_->initialize(toolsMenu);
     const QList<QAction*> editActions = editMenu->actions();
     if (!editActions.isEmpty() && editActions.constLast()->isSeparator()) {
         editMenu->removeAction(editActions.constLast());

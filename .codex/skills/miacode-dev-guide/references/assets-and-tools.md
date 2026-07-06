@@ -29,6 +29,13 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
   - `resources/preview_runtime_qml.qrc`
   - `resources/icons/*`
   - `resources/community/*` for README/community-facing repository images
+- Extension system support files:
+  - `resources/extensions/extensionHost.js` is copied next to the built app as `extensions/extensionHost.js`; Node runs this file as the out-of-process Extension Host
+  - `resources/extensions/miacode-extension.schema.json` documents the VSCode-like v1 manifest format
+  - `resources/extensions/README.md` is copied into release packages so users can hand the extension format, language-pack format, coding notes, and AI prompt template to an assistant when creating local extensions
+  - `templates/extensions/hello-world` is the local starter extension
+  - `packages/miacode-extension-api` contains the local TypeScript declarations for `global.miacode`
+  - `tools/extensions/validate-extension.mjs` validates local extension manifests and language-pack translation files from Node
 
 ## 2. Runtime File Conventions Near A Chart
 
@@ -184,6 +191,7 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 - Windows release packages now also include:
     - root-level `Start_MiaCode_Debug.bat`
     - root-level `logs/` helper folder only for explicit debug-launch scripts; normal project-bound runtime logs default to `.miacode/logs/`
+    - root-level `extensions/README.md` for user extension authoring; app-local `app/extensions/extensionHost.js` and `app/extensions/README.md` are also shipped
     - root-level `LICENSE`, `LICENSE_SCOPE.md`, `THIRD_PARTY_NOTICES.md`, and `licenses/`; repository README files are developer-facing docs and are not shipped
   - optional Windows dev-tool packaging currently includes only `simai_native_dump.exe`; `soundtouch_probe.exe` is no longer copied by `scripts/build/package-win.ps1`
 - macOS build/package:
@@ -202,6 +210,8 @@ Do not rename sound files casually; both preview-time and export-time behavior d
   - `scripts/assets/build_skin_tool_exes.ps1` packages those two helpers as standalone Windows executables under `dist/skin-tools-win64`:
     - `miacode-outline-canvas-tool.exe`
     - `miacode-skin-mine-tool.exe`
+- Extension helper:
+  - `tools/extensions/validate-extension.mjs` checks `miacode-extension.json` or `package.json#miacodeExtension` for required fields, command id shape, duplicate commands, menu references, language ids, and translation JSON files.
 
 ## 6. Analysis And Debug Scripts
 
@@ -224,6 +234,7 @@ Defined in `CMakeLists.txt` behind `MIACODE_BUILD_DEV_TOOLS`:
 - `soundtouch_probe`
 - `simai_parser_spec`
 - `chart_batch_transform_spec`
+- `extension_manifest_spec`
 
 When these helpers change scope, update both this file and any packaging assumptions.
 

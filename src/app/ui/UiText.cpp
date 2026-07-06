@@ -1,5 +1,7 @@
 ﻿#include "UiText.h"
 
+#include "extensions/ExtensionManifest.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -9,8 +11,10 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 #include <QStringList>
+#include <QVector>
 
 namespace {
 
@@ -21,8 +25,17 @@ constexpr auto kPreferencesSchema = "miacode_preferences_v4";
 constexpr auto kUiSectionKey = "ui";
 constexpr auto kAppSectionKey = "app";
 constexpr auto kPreviewSectionKey = "preview";
+constexpr auto kExtensionsSectionKey = "extensions";
+constexpr auto kDisabledExtensionsKey = "disabled";
 constexpr auto kLanguageKey = "language";
 constexpr auto kThemeKey = "theme";
+
+struct ExternalLanguagePack {
+    QString id;
+    QString label;
+    QString ownerExtensionId;
+    QHash<QString, QString> translations;
+};
 
 QString preferencesPath()
 {
@@ -215,6 +228,7 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
         app.insert(kPreviewSectionKey, preview);
     }
     normalized.insert(kAppSectionKey, app);
+    normalized.insert(kExtensionsSectionKey, raw.value(kExtensionsSectionKey).toObject());
     return normalized;
 }
 
@@ -352,6 +366,139 @@ UiText::LanguagePreference resolvedLanguagePreference()
     }
 
     return UiText::LanguagePreference::English;
+}
+
+QVector<ExternalLanguagePack>& externalLanguagePacksStorage()
+{
+    static QVector<ExternalLanguagePack> packs;
+    return packs;
+}
+
+bool isBuiltInLanguageToken(const QString& raw)
+{
+    const QString token = normalizedLanguageToken(raw);
+    return token == "system" || token == "en" || token == "en_us" || token == "en_gb"
+        || token == "zh" || token == "zh_cn" || token == "zh_hans" || token == "zh_hans_cn" || token == "cn";
+}
+
+QString builtInLanguageToken(const QString& raw)
+{
+    const QString token = normalizedLanguageToken(raw);
+    if (token == "en_us" || token == "en_gb") {
+        return QStringLiteral("en");
+    }
+    if (token == "zh_cn" || token == "zh_hans" || token == "zh_hans_cn" || token == "cn") {
+        return QStringLiteral("zh");
+    }
+    if (token == "en" || token == "zh") {
+        return token;
+    }
+    return QStringLiteral("system");
+}
+
+QJsonObject disabledExtensionsObject()
+{
+    const QJsonObject root = UiText::loadPreferencesObject();
+    return root.value(QString::fromLatin1(kExtensionsSectionKey)).toObject()
+        .value(QString::fromLatin1(kDisabledExtensionsKey)).toObject();
+}
+
+bool isExtensionDisabled(const QString& qualifiedId)
+{
+    return disabledExtensionsObject().value(qualifiedId).toBool(false);
+}
+
+void appendExtensionRootLanguagePacks(const QFileInfo& entry, QVector<ExternalLanguagePack>* packs, QSet<QString>* seenLanguageIds)
+{
+    if (packs == nullptr || seenLanguageIds == nullptr) {
+        return;
+    }
+    const auto parsed = miacode::extensions::loadExtensionManifest(entry.absoluteFilePath());
+    if (!parsed.ok || isExtensionDisabled(parsed.manifest.qualifiedId())) {
+        return;
+    }
+    for (const auto& language : parsed.manifest.languages) {
+        const QString languageId = normalizedLanguageToken(language.id);
+        if (languageId.isEmpty() || seenLanguageIds->contains(languageId)) {
+            continue;
+        }
+        const QString translationsPath = QDir(parsed.manifest.rootPath).absoluteFilePath(language.translations);
+        const QJsonObject translationsObject = loadJsonObjectFromFile(translationsPath);
+        if (translationsObject.isEmpty()) {
+            continue;
+        }
+        ExternalLanguagePack pack;
+        pack.id = languageId;
+        pack.label = language.label;
+        pack.ownerExtensionId = parsed.manifest.qualifiedId();
+        for (auto it = translationsObject.constBegin(); it != translationsObject.constEnd(); ++it) {
+            if (it.value().isString()) {
+                pack.translations.insert(it.key(), it.value().toString());
+            }
+        }
+        if (pack.translations.isEmpty()) {
+            continue;
+        }
+        seenLanguageIds->insert(languageId);
+        packs->append(pack);
+    }
+}
+
+QVector<ExternalLanguagePack> scanExtensionLanguagePacks()
+{
+    QVector<ExternalLanguagePack> packs;
+    QSet<QString> seenLanguageIds;
+    for (const QString& rootPath : miacode::extensions::defaultExtensionSearchPaths()) {
+        QDir root(rootPath);
+        if (!root.exists()) {
+            continue;
+        }
+        if (QFileInfo::exists(root.filePath(QStringLiteral("miacode-extension.json")))
+            || QFileInfo::exists(root.filePath(QStringLiteral("package.json")))) {
+            appendExtensionRootLanguagePacks(QFileInfo(root.absolutePath()), &packs, &seenLanguageIds);
+            continue;
+        }
+        const QFileInfoList entries = root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QFileInfo& entry : entries) {
+            appendExtensionRootLanguagePacks(entry, &packs, &seenLanguageIds);
+        }
+    }
+    return packs;
+}
+
+QString resolvedLanguageTokenFromStorage()
+{
+    const QByteArray env = qgetenv("MIACODE_LANG").trimmed();
+    if (!env.isEmpty()) {
+        const QString envToken = normalizedLanguageToken(QString::fromUtf8(env));
+        if (isBuiltInLanguageToken(envToken)) {
+            return builtInLanguageToken(envToken);
+        }
+        for (const auto& pack : externalLanguagePacksStorage()) {
+            if (pack.id == envToken) {
+                return envToken;
+            }
+        }
+    }
+
+    const QString storedToken = normalizedLanguageToken(
+        UiText::loadPreferencesObject().value(QString::fromLatin1(kUiSectionKey)).toObject()
+            .value(QString::fromLatin1(kLanguageKey)).toString(QStringLiteral("system")));
+    if (isBuiltInLanguageToken(storedToken)) {
+        const QString normalized = builtInLanguageToken(storedToken);
+        if (normalized != QStringLiteral("system")) {
+            return normalized;
+        }
+    } else {
+        for (const auto& pack : externalLanguagePacksStorage()) {
+            if (pack.id == storedToken) {
+                return storedToken;
+            }
+        }
+    }
+
+    const UiText::LanguagePreference resolved = resolvedLanguagePreference();
+    return resolved == UiText::LanguagePreference::Chinese ? QStringLiteral("zh") : QStringLiteral("en");
 }
 
 const QHash<QString, QString>& zhMap()
@@ -517,6 +664,15 @@ const QHash<QString, QString>& zhMap()
         {"dialog.preferences.shortcuts.capture_prompt_hold", "按下要用于按住的按键（可以是单个修饰键，如 Alt），再按 Enter 键。"},
         {"dialog.preferences.shortcuts.reset_confirm_title", "还原快捷键"},
         {"dialog.preferences.shortcuts.reset_confirm_message", "是否将所有可修改快捷键还原为默认值？"},
+        {"dialog.preferences.extensions_group", "扩展"},
+        {"dialog.preferences.extensions.open_folder", "打开扩展文件夹"},
+        {"dialog.preferences.extensions.refresh", "刷新扩展"},
+        {"dialog.preferences.extensions.open_logs", "打开日志位置"},
+        {"dialog.preferences.extensions.enabled", "启用"},
+        {"dialog.preferences.extensions.name", "扩展"},
+        {"dialog.preferences.extensions.version", "版本"},
+        {"dialog.preferences.extensions.contributions", "贡献"},
+        {"dialog.preferences.extensions.status", "状态"},
         {"action.reset", "还原"},
         {"dialog.preferences.restart_title", "需要重启"},
         {"dialog.preferences.restart_message", "语言设置已保存。请重启 MiaCode 以应用菜单、字体和界面文本。"},
@@ -771,8 +927,81 @@ LanguagePreference preferredLanguage()
 
 void setPreferredLanguage(LanguagePreference preference)
 {
-    preferredLanguageStorage() = preference;
-    saveStoredLanguagePreference(preference);
+    setPreferredLanguageToken(languagePreferenceToken(preference));
+    preferredLanguageStorage() = parseLanguagePreference(preferredLanguageToken());
+}
+
+QString preferredLanguageToken()
+{
+    const QJsonObject root = loadPreferencesObject();
+    return normalizedLanguageToken(
+        root.value(QString::fromLatin1(kUiSectionKey)).toObject()
+            .value(QString::fromLatin1(kLanguageKey)).toString(QStringLiteral("system")));
+}
+
+void setPreferredLanguageToken(const QString& token)
+{
+    const QString normalized = normalizedLanguageToken(token);
+    QJsonObject root = loadPreferencesObject();
+    QJsonObject ui = root.value(QString::fromLatin1(kUiSectionKey)).toObject();
+    ui.insert(QString::fromLatin1(kLanguageKey), normalized.isEmpty() ? QStringLiteral("system") : normalized);
+    root.insert(QString::fromLatin1(kUiSectionKey), ui);
+    root.insert(QStringLiteral("schema"), QString::fromLatin1(kPreferencesSchema));
+    savePreferencesObject(root);
+    preferredLanguageStorage() = parseLanguagePreference(preferredLanguageToken());
+}
+
+QString resolvedLanguageToken()
+{
+    return resolvedLanguageTokenFromStorage();
+}
+
+QVector<LanguageOption> availableLanguageOptions()
+{
+    QVector<LanguageOption> options{
+        {QStringLiteral("system"), text(QStringLiteral("dialog.preferences.language.system")).isEmpty()
+            ? QStringLiteral("Follow System")
+            : text(QStringLiteral("dialog.preferences.language.system")), true},
+        {QStringLiteral("en"), text(QStringLiteral("dialog.preferences.language.english")).isEmpty()
+            ? QStringLiteral("English")
+            : text(QStringLiteral("dialog.preferences.language.english")), true},
+        {QStringLiteral("zh"), text(QStringLiteral("dialog.preferences.language.chinese")).isEmpty()
+            ? QStringLiteral("Simplified Chinese")
+            : text(QStringLiteral("dialog.preferences.language.chinese")), true},
+    };
+    for (const auto& pack : externalLanguagePacksStorage()) {
+        options.append(LanguageOption{pack.id, pack.label, false});
+    }
+    return options;
+}
+
+bool isLanguageAvailable(const QString& token)
+{
+    const QString normalized = normalizedLanguageToken(token);
+    if (isBuiltInLanguageToken(normalized)) {
+        return true;
+    }
+    for (const auto& pack : externalLanguagePacksStorage()) {
+        if (pack.id == normalized) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ensurePreferredLanguageAvailable()
+{
+    const QString token = preferredLanguageToken();
+    if (token.isEmpty() || isLanguageAvailable(token)) {
+        return false;
+    }
+    setPreferredLanguageToken(QStringLiteral("system"));
+    return true;
+}
+
+void reloadExtensionLanguagePacks()
+{
+    externalLanguagePacksStorage() = scanExtensionLanguagePacks();
 }
 
 ThemePreference preferredTheme()
@@ -788,7 +1017,7 @@ void setPreferredTheme(ThemePreference preference)
 
 bool isChineseUi()
 {
-    return resolvedLanguagePreference() == LanguagePreference::Chinese;
+    return resolvedLanguageToken() == QStringLiteral("zh");
 }
 
 QString preferencesFilePath()
@@ -836,14 +1065,25 @@ bool savePreferencesObject(const QJsonObject& root)
 
 QString text(const QString& key)
 {
-    if (!isChineseUi()) {
-        return QString();
+    const QString language = resolvedLanguageToken();
+    if (language == QStringLiteral("zh")) {
+        const auto it = zhMap().constFind(key);
+        if (it == zhMap().constEnd()) {
+            return QString();
+        }
+        return it.value();
     }
-    const auto it = zhMap().constFind(key);
-    if (it == zhMap().constEnd()) {
-        return QString();
+    for (const auto& pack : externalLanguagePacksStorage()) {
+        if (pack.id != language) {
+            continue;
+        }
+        const auto it = pack.translations.constFind(key);
+        if (it != pack.translations.constEnd()) {
+            return it.value();
+        }
+        break;
     }
-    return it.value();
+    return QString();
 }
 
 }  // namespace UiText
