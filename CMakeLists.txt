@@ -1,15 +1,15 @@
 cmake_minimum_required(VERSION 3.21)
 
 set(MIACODE_VERSION_MAJOR "1")
-set(MIACODE_VERSION_MINOR "0")
-set(MIACODE_VERSION_PATCH "1")
+set(MIACODE_VERSION_MINOR "1")
+set(MIACODE_VERSION_PATCH "0")
 # Single source of truth for the prerelease tag. Both the package
 # filename (MiaCode-v<version>-win64.zip via package-win.ps1) and the
 # user-visible "About" dialog read this. Beta20 unified the previously
 # split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
 # they always drifted apart in practice (e.g. beta20 zip shipping with
 # beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "beta.5-test")
+set(MIACODE_VERSION_PRERELEASE "beta")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
