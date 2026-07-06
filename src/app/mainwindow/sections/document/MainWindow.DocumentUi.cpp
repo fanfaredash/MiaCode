@@ -696,8 +696,7 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
             bookmarkItem->setData(kOutlineItemKindRole, "bookmark");
             bookmarkItem->setData(kOutlineItemDifficultyRole, id);
             bookmarkItem->setData(kOutlineItemLineRole, bookmark.line);
-            bookmarkItem->setData(kOutlineItemActiveRole,
-                                  id == state_.activeBookmarkDifficultyId_ && bookmark.line == state_.activeBookmarkLine_);
+            bookmarkItem->setData(kOutlineItemActiveRole, false);
             // Group-wide max line (list is sorted ascending) — fixed badge
             // width so the name column aligns vertically.
             bookmarkItem->setData(kOutlineItemMaxLineRole, bookmarks.last().line);

@@ -1223,8 +1223,7 @@ void MainWindow::ValidationSection::jumpToLocation(int line, int col)
         return;
     }
     cursor.clearSelection();
-    editor->setTextCursor(cursor);
-    editor->ensureCursorVisible();
+    editor->applyPreviewFollowCursor(cursor, true, false);
     editor->setFocus();
     clearPreviewFollowDecoration();
 }

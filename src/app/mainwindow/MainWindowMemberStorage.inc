@@ -262,9 +262,6 @@
         // user toggles are recorded; an absent difficulty defaults to expanded
         // when it is the active difficulty and collapsed otherwise.
         QHash<int, bool> outlineBookmarkGroupExpanded_;
-        // Last activated bookmark (sidebar accent marker). Line <= 0 = none.
-        int activeBookmarkDifficultyId_ = 0;
-        int activeBookmarkLine_ = -1;
         int lastObservedEditorUndoSteps_ = 0;
         int lastObservedEditorRedoSteps_ = 0;
         bool editorSelectionUndoRedoRestoreInProgress_ = false;
@@ -737,8 +734,6 @@
     QVector<SelectionTransformUndoEntry>& chartSelectionTransformUndoEntries_ = state_.chartSelectionTransformUndoEntries_;
     QVector<EditorBookmark>& editorBookmarks_ = state_.editorBookmarks_;
     QHash<int, bool>& outlineBookmarkGroupExpanded_ = state_.outlineBookmarkGroupExpanded_;
-    int& activeBookmarkDifficultyId_ = state_.activeBookmarkDifficultyId_;
-    int& activeBookmarkLine_ = state_.activeBookmarkLine_;
     int& lastObservedEditorUndoSteps_ = state_.lastObservedEditorUndoSteps_;
     int& lastObservedEditorRedoSteps_ = state_.lastObservedEditorRedoSteps_;
     bool& editorSelectionUndoRedoRestoreInProgress_ = state_.editorSelectionUndoRedoRestoreInProgress_;

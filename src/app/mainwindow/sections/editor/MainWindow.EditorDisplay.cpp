@@ -1099,20 +1099,6 @@ void MainWindow::EditorSection::syncBookmarksFromEditorText(int changePosition, 
     const bool mutated = !editorBookmarkListsEqual(state_.editorBookmarks_, derived);
     state_.editorBookmarks_ = derived;
 
-    if (state_.activeBookmarkLine_ > 0) {
-        const auto activeIt = std::find_if(
-            state_.editorBookmarks_.cbegin(),
-            state_.editorBookmarks_.cend(),
-            [this](const EditorBookmark& bookmark) {
-                return bookmark.difficultyId == state_.activeBookmarkDifficultyId_
-                    && bookmark.line == state_.activeBookmarkLine_;
-            });
-        if (activeIt == state_.editorBookmarks_.cend()) {
-            state_.activeBookmarkDifficultyId_ = 0;
-            state_.activeBookmarkLine_ = -1;
-        }
-    }
-
     refreshEditorBookmarkLines();
     if (mutated && owner_.documentSection_ != nullptr) {
         owner_.documentSection_->rebuildFieldSidebar();
@@ -1320,19 +1306,7 @@ bool MainWindow::EditorSection::renameBookmark(int difficultyId, int line, const
 
 void MainWindow::EditorSection::activateBookmarkAtLine(int line)
 {
-    const int activeDifficultyId = state_.activeDifficultyId_;
     owner_.jumpToLocation(qMax(1, line), 1);
-    const auto it = std::find_if(state_.editorBookmarks_.cbegin(), state_.editorBookmarks_.cend(), [activeDifficultyId, line](const EditorBookmark& bookmark) {
-        return bookmark.difficultyId == activeDifficultyId && bookmark.line == line;
-    });
-    if (it == state_.editorBookmarks_.cend()) {
-        return;
-    }
-    state_.activeBookmarkDifficultyId_ = activeDifficultyId;
-    state_.activeBookmarkLine_ = line;
-    if (owner_.documentSection_ != nullptr) {
-        owner_.documentSection_->revealBookmarkInSidebar(activeDifficultyId, line, false);
-    }
 }
 
 void MainWindow::EditorSection::deleteBookmarkAtLineWithConfirmation(int line)
