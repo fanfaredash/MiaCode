@@ -209,7 +209,17 @@ public:
                 lineEdit->setFont(nameFont);
                 lineEdit->setFrame(false);
                 lineEdit->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-                lineEdit->setStyleSheet(QStringLiteral("QLineEdit { background: transparent; border: none; padding: 0px; }"));
+                lineEdit->setContentsMargins(0, 0, 0, 0);
+                lineEdit->setTextMargins(0, 0, 0, 0);
+                const QColor bg = bookmarkEditorBackgroundColor(option);
+                const QColor fg = UiTheme::colors().textSecondary;
+                lineEdit->setStyleSheet(QStringLiteral(
+                    "QLineEdit { background: %1; color: %2; border: none; padding: 0px;"
+                    " selection-background-color: %3; selection-color: %4; }")
+                    .arg(bg.name(QColor::HexRgb),
+                         fg.name(QColor::HexRgb),
+                         UiTheme::colors().accent.name(QColor::HexRgb),
+                         UiTheme::colors().accentText.name(QColor::HexRgb)));
             }
         }
         return editor;
@@ -220,7 +230,7 @@ public:
     void updateEditorGeometry(QWidget* editor, const QStyleOptionViewItem& option, const QModelIndex& index) const override
     {
         if (editor != nullptr && index.data(kOutlineItemKindRole).toString() == QLatin1String("bookmark")) {
-            QRect rect = option.rect.adjusted(kBookmarkRowIndent + badgeWidth(option, index) + 7, 1, -2, -1);
+            QRect rect = bookmarkNameRect(option, index).adjusted(0, 0, -2, 0);
             if (rect.width() < 60) {
                 rect.setLeft(qMax(option.rect.left() + 2, option.rect.right() - 60));
             }
@@ -282,6 +292,39 @@ private:
         return qMax(18, metrics.horizontalAdvance(QString::number(maxLine)) + 8);
     }
 
+    QRect bookmarkBadgeRect(const QStyleOptionViewItem& option, const QModelIndex& index, bool iconOnly) const
+    {
+        const int badgeW = badgeWidth(option, index);
+        const int badgeH = qMin(option.rect.height() - 8, 15);
+        return QRect(
+            option.rect.left() + (iconOnly ? kBookmarkGroupIndent : kBookmarkRowIndent),
+            option.rect.top() + (option.rect.height() - badgeH) / 2,
+            badgeW,
+            badgeH);
+    }
+
+    QRect bookmarkNameRect(const QStyleOptionViewItem& option, const QModelIndex& index) const
+    {
+        const int listWidth = option.widget != nullptr ? option.widget->width() : option.rect.width();
+        const bool iconOnly = listWidth > 0 && listWidth < kIconOnlyThreshold;
+        const QRect badgeRect = bookmarkBadgeRect(option, index, iconOnly);
+        return QRect(
+            badgeRect.right() + 7,
+            option.rect.top(),
+            option.rect.right() - badgeRect.right() - 12,
+            option.rect.height());
+    }
+
+    QColor bookmarkEditorBackgroundColor(const QStyleOptionViewItem& option) const
+    {
+        const UiTheme::Colors& colors = UiTheme::colors();
+        if (option.state.testFlag(QStyle::State_Selected)
+            || option.state.testFlag(QStyle::State_MouseOver)) {
+            return colors.dark ? QColor("#2A3442") : QColor("#F3F7FD");
+        }
+        return colors.dark ? QColor("#1E2733") : QColor("#FFFFFF");
+    }
+
     void paintBookmarkRow(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const
     {
         const UiTheme::Colors& colors = UiTheme::colors();
@@ -305,18 +348,24 @@ private:
 
         painter->setRenderHint(QPainter::Antialiasing, true);
 
+        if (selected) {
+            const QRect fillRect = option.rect.adjusted(1, 1, -1, -1);
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(colors.accent);
+            const QRect barRect(fillRect.left(), fillRect.top() + 5, 3, fillRect.height() - 10);
+            painter->drawRoundedRect(barRect, 1.5, 1.5);
+        }
+
         // Line-number badge: neutral and compact; bookmark jumps are one-shot
         // actions, so the badge does not persist as a current-position marker.
-        const int badgeW = badgeWidth(option, index);
-        const int badgeH = qMin(option.rect.height() - 8, 15);
-        const QRect badgeRect(
-            option.rect.left() + (iconOnly ? kBookmarkGroupIndent : kBookmarkRowIndent),
-            option.rect.top() + (option.rect.height() - badgeH) / 2,
-            badgeW,
-            badgeH);
+        const QRect badgeRect = bookmarkBadgeRect(option, index, iconOnly);
         QColor badgeBg = colors.textSecondary;
         badgeBg.setAlpha(colors.dark ? 40 : 34);
-        const QColor badgeFg = colors.textSecondary;
+        QColor badgeFg = colors.textSecondary;
+        if (selected) {
+            badgeBg = colors.accent;
+            badgeFg = colors.accentText;
+        }
         painter->setPen(Qt::NoPen);
         painter->setBrush(badgeBg);
         painter->drawRoundedRect(badgeRect, 3.0, 3.0);
@@ -327,13 +376,12 @@ private:
 
         // Bookmark name, elided to the remaining width (full name in tooltip).
         if (!iconOnly) {
-            const QRect nameRect(badgeRect.right() + 7, option.rect.top(),
-                                 option.rect.right() - badgeRect.right() - 12, option.rect.height());
+            const QRect nameRect = bookmarkNameRect(option, index);
             if (nameRect.width() > 8) {
                 QFont nameFont = option.font;
                 nameFont.setPointSize(qMax(8, option.font.pointSize() - 2));
                 painter->setFont(nameFont);
-                painter->setPen(selected ? colors.textPrimary : colors.textSecondary);
+                painter->setPen(colors.textSecondary);
                 const QFontMetrics metrics(nameFont);
                 painter->drawText(nameRect, Qt::AlignLeft | Qt::AlignVCenter,
                                   metrics.elidedText(index.data(Qt::DisplayRole).toString(), Qt::ElideRight, nameRect.width()));
