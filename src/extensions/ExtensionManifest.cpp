@@ -6,7 +6,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QRegularExpression>
-#include <QStandardPaths>
 #include <QSet>
 
 namespace miacode::extensions {
@@ -67,6 +66,12 @@ QString manifestPathForRoot(const QString& extensionRootPath)
         return packageManifest;
     }
     return QString();
+}
+
+bool isSupportedMenuLocation(const QString& location)
+{
+    return location == QStringLiteral("tools/menu")
+        || location == QStringLiteral("menubar/beforeHelp");
 }
 
 }  // namespace
@@ -186,6 +191,10 @@ ExtensionManifestParseResult loadExtensionManifest(const QString& extensionRootP
     const QJsonObject menusObject = contributes.value(QStringLiteral("menus")).toObject();
     for (auto it = menusObject.constBegin(); it != menusObject.constEnd(); ++it) {
         const QString location = it.key().trimmed();
+        if (!isSupportedMenuLocation(location)) {
+            errors.append(QStringLiteral("Unsupported menu location '%1'.").arg(location));
+            continue;
+        }
         const QJsonArray items = it.value().toArray();
         for (const QJsonValue& value : items) {
             const QString command = value.toObject().value(QStringLiteral("command")).toString().trimmed();
@@ -265,11 +274,16 @@ QStringList defaultExtensionSearchPaths()
 
 QString userExtensionDirectoryPath()
 {
-    const QString appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (appData.isEmpty()) {
+    const QString appPath = QCoreApplication::applicationDirPath();
+    if (appPath.isEmpty()) {
         return QString();
     }
-    return QDir(appData).filePath(QStringLiteral("extensions"));
+
+    QDir installRoot(appPath);
+    if (installRoot.dirName().compare(QStringLiteral("app"), Qt::CaseInsensitive) == 0) {
+        installRoot.cdUp();
+    }
+    return installRoot.filePath(QStringLiteral("extensions"));
 }
 
 }  // namespace miacode::extensions

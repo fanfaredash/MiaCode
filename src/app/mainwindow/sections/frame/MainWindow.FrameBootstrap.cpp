@@ -229,6 +229,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     extensionCallbacks.validateActiveDocument = [this]() {
         return runValidateSimaiSilently(false);
     };
+    extensionCallbacks.openPreferences = [this]() {
+        onPreferences();
+    };
     extensionCallbacks.showMessage = [this](const QString& severity, const QString& message) {
         const QMessageBox::Icon icon = severity == QStringLiteral("error")
             ? QMessageBox::Critical
@@ -251,7 +254,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         }
     };
     extensionManager_->setCallbacks(std::move(extensionCallbacks));
-    extensionManager_->initialize(toolsMenu);
+    extensionManager_->initialize(menuBar(), toolsMenu, helpMenu);
     const QList<QAction*> editActions = editMenu->actions();
     if (!editActions.isEmpty() && editActions.constLast()->isSeparator()) {
         editMenu->removeAction(editActions.constLast());

@@ -8,6 +8,9 @@ function activate(context) {
       `Hello from MiaCode extension. Active document has ${document.text.length} characters.`
     );
   });
+  miacode.commands.registerCommand("hello-world.open-preferences", async () => {
+    await miacode.window.openPreferences();
+  });
 }
 
 function deactivate() {}

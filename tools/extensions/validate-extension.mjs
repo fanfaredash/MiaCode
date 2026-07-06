@@ -85,7 +85,11 @@ for (const language of languages) {
 }
 
 const menus = manifest.contributes?.menus || {};
+const supportedMenuLocations = new Set(["tools/menu", "menubar/beforeHelp"]);
 for (const [location, items] of Object.entries(menus)) {
+  if (!supportedMenuLocations.has(location)) {
+    fail(`unsupported menu location '${location}'`);
+  }
   if (!Array.isArray(items)) {
     fail(`contributes.menus.${location} must be an array`);
   }

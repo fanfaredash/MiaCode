@@ -7,6 +7,7 @@
 #include <QFileSystemWatcher>
 #include <QJsonArray>
 #include <QMenu>
+#include <QMenuBar>
 
 #include "UiText.h"
 
@@ -74,9 +75,11 @@ void ExtensionManager::setCallbacks(ExtensionHostCallbacks callbacks)
     callbacks_ = std::move(callbacks);
 }
 
-void ExtensionManager::initialize(QMenu* toolsMenu)
+void ExtensionManager::initialize(QMenuBar* menuBar, QMenu* toolsMenu, QMenu* helpMenu)
 {
+    menuBar_ = menuBar;
     toolsMenu_ = toolsMenu;
+    helpMenu_ = helpMenu;
     watcher_ = new QFileSystemWatcher(this);
     connect(watcher_, &QFileSystemWatcher::directoryChanged, this, [this]() {
         scheduleRefresh();
@@ -86,7 +89,7 @@ void ExtensionManager::initialize(QMenu* toolsMenu)
     });
     QDir().mkpath(userExtensionsDirectory());
     discoverExtensions();
-    rebuildMenuContributions(toolsMenu);
+    rebuildMenuContributions();
     UiText::reloadExtensionLanguagePacks();
     UiText::ensurePreferredLanguageAvailable();
     restartHost();
@@ -165,7 +168,7 @@ QString ExtensionManager::extensionLogDirectory() const
 void ExtensionManager::refreshExtensions()
 {
     discoverExtensions();
-    rebuildMenuContributions(toolsMenu_);
+    rebuildMenuContributions();
     UiText::reloadExtensionLanguagePacks();
     const bool resetLanguage = UiText::ensurePreferredLanguageAvailable();
     restartHost();
@@ -281,42 +284,76 @@ void ExtensionManager::discoverExtensions()
     }
 }
 
-void ExtensionManager::rebuildMenuContributions(QMenu* toolsMenu)
+void ExtensionManager::rebuildMenuContributions()
 {
-    if (toolsMenu == nullptr) {
-        return;
-    }
     if (extensionsMenu_ != nullptr) {
         QAction* menuAction = extensionsMenu_->menuAction();
-        toolsMenu->removeAction(menuAction);
+        if (toolsMenu_ != nullptr) {
+            toolsMenu_->removeAction(menuAction);
+        }
         extensionsMenu_->deleteLater();
         extensionsMenu_ = nullptr;
     }
-    auto* extensionsMenu = toolsMenu->addMenu(QStringLiteral("Extensions"));
-    extensionsMenu_ = extensionsMenu;
+    for (const QPointer<QAction>& action : topLevelMenuActions_) {
+        if (action.isNull()) {
+            continue;
+        }
+        if (menuBar_ != nullptr) {
+            menuBar_->removeAction(action);
+        }
+        action->deleteLater();
+    }
+    topLevelMenuActions_.clear();
+
     commandActions_.clear();
-    bool addedAny = false;
+    bool addedToolsCommand = false;
     for (const ExtensionManifest& manifest : manifests_) {
         for (const ExtensionMenuContribution& menu : manifest.menus) {
-            if (menu.location != QStringLiteral("tools/menu")) {
-                continue;
-            }
             const ExtensionCommandContribution command = commandContribution(menu.command);
             if (command.id.isEmpty()) {
                 continue;
             }
-            QAction* action = extensionsMenu->addAction(displayLabelForCommand(command));
+            QAction* action = nullptr;
+            if (menu.location == QStringLiteral("tools/menu")) {
+                if (toolsMenu_ == nullptr) {
+                    continue;
+                }
+                if (extensionsMenu_ == nullptr) {
+                    extensionsMenu_ = toolsMenu_->addMenu(QStringLiteral("Extensions"));
+                }
+                action = extensionsMenu_->addAction(displayLabelForCommand(command));
+                addedToolsCommand = true;
+            } else if (menu.location == QStringLiteral("menubar/beforeHelp")) {
+                if (menuBar_ == nullptr) {
+                    continue;
+                }
+                action = new QAction(command.title, this);
+                const QAction* beforeAction = helpMenu_ != nullptr ? helpMenu_->menuAction() : nullptr;
+                if (beforeAction != nullptr) {
+                    menuBar_->insertAction(const_cast<QAction*>(beforeAction), action);
+                } else {
+                    menuBar_->addAction(action);
+                }
+                topLevelMenuActions_.append(action);
+            } else {
+                continue;
+            }
+            if (action == nullptr) {
+                continue;
+            }
             action->setData(command.id);
             action->setToolTip(QStringLiteral("%1 (%2)").arg(command.title, manifest.qualifiedId()));
             connect(action, &QAction::triggered, this, [this, command]() {
                 invokeCommand(command.id);
             });
             commandActions_.insert(command.id, action);
-            addedAny = true;
         }
     }
-    if (!addedAny) {
-        QAction* emptyAction = extensionsMenu->addAction(QStringLiteral("No extension commands"));
+    if (extensionsMenu_ == nullptr && toolsMenu_ != nullptr) {
+        extensionsMenu_ = toolsMenu_->addMenu(QStringLiteral("Extensions"));
+    }
+    if (extensionsMenu_ != nullptr && !addedToolsCommand) {
+        QAction* emptyAction = extensionsMenu_->addAction(QStringLiteral("No extension commands"));
         emptyAction->setEnabled(false);
     }
 }
@@ -392,6 +429,13 @@ QJsonObject ExtensionManager::handleHostRequest(const QString& method, const QJs
                 params.value(QStringLiteral("message")).toString());
         }
         return QJsonObject{{QStringLiteral("ok"), true}};
+    }
+    if (method == QStringLiteral("window/openPreferences")) {
+        if (callbacks_.openPreferences) {
+            callbacks_.openPreferences();
+            return QJsonObject{{QStringLiteral("ok"), true}};
+        }
+        return QJsonObject{{QStringLiteral("ok"), false}, {QStringLiteral("error"), QStringLiteral("Preferences are unavailable.")}};
     }
     if (method == QStringLiteral("workspace/getActiveDocument")) {
         const ExtensionDocumentSnapshot snapshot = callbacks_.activeDocument ? callbacks_.activeDocument() : ExtensionDocumentSnapshot();

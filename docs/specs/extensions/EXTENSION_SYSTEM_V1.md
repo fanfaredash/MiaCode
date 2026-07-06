@@ -6,10 +6,10 @@ MiaCode does not ship test languages as hidden built-ins. If a language such as 
 
 ## Runtime
 
-- Host process: `node resources/extensions/extensionHost.js`, deployed beside `MiaCode.exe` as `extensions/extensionHost.js`.
+- Host process: `node resources/extensions/extensionHost.js`, deployed inside the app runtime directory as `app/extensions/extensionHost.js` in release packages.
 - IPC: one JSON-RPC message per line over stdio.
 - Discovery paths:
-  - User data: `QStandardPaths::AppDataLocation/extensions`
+  - User installation: `<install-root>/extensions`, which is the folder beside the top-level `MiaCode.exe` launcher in release packages
   - Development: `MIACODE_EXTENSION_DEV_PATHS`, separated with the platform path-list separator; each entry may point directly at an extension root or at a parent directory containing extension roots
   - Local build helper: `<app-dir>/extensions-dev`
 - User management: Preferences > Extensions lists discovered extensions, diagnostics, contribution summaries, and an enable/disable checkbox.
@@ -42,6 +42,9 @@ Extensions may use `miacode-extension.json`, or `package.json` with a `miacodeEx
     "menus": {
       "tools/menu": [
         { "command": "hello-world.say-hello" }
+      ],
+      "menubar/beforeHelp": [
+        { "command": "hello-world.open-preferences" }
       ]
     }
   }
@@ -82,9 +85,10 @@ Language translation files are UTF-8 JSON objects keyed by `UiText` ids:
 
 If the current language belongs to an extension that is deleted or disabled, MiaCode falls back to `Follow System` and warns the user that the language pack is unavailable.
 
-Supported v1 menu contribution point:
+Supported v1 menu contribution points:
 
-- `tools/menu`
+- `tools/menu`: adds commands under `Tools -> Extensions`.
+- `menubar/beforeHelp`: adds top-level command entries before `Help`.
 
 Reserved but not yet wired contribution points:
 
@@ -108,6 +112,7 @@ The Extension Host exposes `global.miacode`:
 - `miacode.window.showInformationMessage(message)`
 - `miacode.window.showWarningMessage(message)`
 - `miacode.window.showErrorMessage(message)`
+- `miacode.window.openPreferences()`
 - `miacode.workspace.getActiveDocument()`
 - `miacode.workspace.applyDocumentEdit({ text })`
 - `miacode.diagnostics.validateDocument()`

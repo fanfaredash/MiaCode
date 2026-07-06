@@ -14,12 +14,22 @@
         "command": "hello-world.say-hello",
         "title": "Say Hello",
         "category": "Hello World"
+      },
+      {
+        "command": "hello-world.open-preferences",
+        "title": "Preferences",
+        "category": "Hello World"
       }
     ],
     "menus": {
       "tools/menu": [
         {
           "command": "hello-world.say-hello"
+        }
+      ],
+      "menubar/beforeHelp": [
+        {
+          "command": "hello-world.open-preferences"
         }
       ]
     }

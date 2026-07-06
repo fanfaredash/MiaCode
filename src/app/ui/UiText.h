@@ -10,6 +10,7 @@ enum class LanguagePreference {
     System,
     English,
     Chinese,
+    Japanese,
 };
 
 struct LanguageOption {

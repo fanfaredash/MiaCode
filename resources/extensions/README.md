@@ -1,10 +1,12 @@
 # MiaCode Extension Guide
 
-This folder is a guide for local MiaCode extensions. User-installed extensions should be placed in:
+This folder is the user extension folder for this MiaCode installation. User-installed extensions should be placed here, next to this README:
 
 ```text
-%APPDATA%\MiaCode\extensions
+<MiaCode install root>\extensions
 ```
+
+In release packages this is the `extensions` folder beside the top-level `MiaCode.exe` launcher. Do not install user extensions into `app\extensions`; that folder is reserved for MiaCode's internal Extension Host runtime.
 
 Each extension is one folder. The manifest must be either:
 
@@ -69,16 +71,25 @@ Command extensions need a JavaScript entry file.
   "activationEvents": ["onStartupFinished"],
   "contributes": {
     "commands": [
-      { "command": "hello-world.say-hello", "title": "Say Hello", "category": "Hello World" }
+      { "command": "hello-world.say-hello", "title": "Say Hello", "category": "Hello World" },
+      { "command": "hello-world.open-preferences", "title": "Preferences", "category": "Hello World" }
     ],
     "menus": {
       "tools/menu": [
         { "command": "hello-world.say-hello" }
+      ],
+      "menubar/beforeHelp": [
+        { "command": "hello-world.open-preferences" }
       ]
     }
   }
 }
 ```
+
+Menu locations:
+
+- `tools/menu`: adds commands under `Tools -> Extensions`.
+- `menubar/beforeHelp`: adds a top-level command entry before `Help`.
 
 `extension.js` exports `activate(context)`:
 
@@ -89,6 +100,9 @@ function activate(context) {
   context.log("activated");
   miacode.commands.registerCommand("hello-world.say-hello", async () => {
     await miacode.window.showInformationMessage("Hello from MiaCode.");
+  });
+  miacode.commands.registerCommand("hello-world.open-preferences", async () => {
+    await miacode.window.openPreferences();
   });
 }
 
@@ -102,6 +116,7 @@ miacode.commands.registerCommand(id, callback)
 miacode.window.showInformationMessage(message)
 miacode.window.showWarningMessage(message)
 miacode.window.showErrorMessage(message)
+miacode.window.openPreferences()
 miacode.workspace.getActiveDocument()
 miacode.workspace.applyDocumentEdit({ text })
 miacode.diagnostics.validateDocument()

@@ -51,6 +51,9 @@
         },
         "menus": {
           "type": "object",
+          "propertyNames": {
+            "enum": ["tools/menu", "menubar/beforeHelp"]
+          },
           "additionalProperties": {
             "type": "array",
             "items": {

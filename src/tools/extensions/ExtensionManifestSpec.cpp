@@ -37,6 +37,9 @@ QString validManifestJson(const QString& commandId = QStringLiteral("sample.hell
     ],
     "menus": {
       "tools/menu": [
+      { "command": "%1" }
+      ],
+      "menubar/beforeHelp": [
         { "command": "%1" }
       ]
     }
@@ -68,7 +71,7 @@ int main(int argc, char** argv)
         const auto result = miacode::extensions::loadExtensionManifest(dir.path());
         ok = expect(result.ok, QStringLiteral("valid manifest should parse: %1").arg(result.error)) && ok;
         ok = expect(result.manifest.commands.size() == 1, QStringLiteral("valid manifest command count")) && ok;
-        ok = expect(result.manifest.menus.size() == 1, QStringLiteral("valid manifest menu count")) && ok;
+        ok = expect(result.manifest.menus.size() == 2, QStringLiteral("valid manifest menu count")) && ok;
     }
 
     {
@@ -123,6 +126,16 @@ int main(int argc, char** argv)
         writeText(QDir(dir.path()).filePath(QStringLiteral("miacode-extension.json")), json);
         const auto result = miacode::extensions::loadExtensionManifest(dir.path());
         ok = expect(!result.ok && result.error.contains(QStringLiteral("unknown command")), QStringLiteral("unknown menu command fails")) && ok;
+    }
+
+    {
+        QTemporaryDir dir;
+        writeText(QDir(dir.path()).filePath(QStringLiteral("extension.js")), QStringLiteral("module.exports = {};"));
+        QString json = validManifestJson();
+        json.replace(QStringLiteral("tools/menu"), QStringLiteral("main/window"));
+        writeText(QDir(dir.path()).filePath(QStringLiteral("miacode-extension.json")), json);
+        const auto result = miacode::extensions::loadExtensionManifest(dir.path());
+        ok = expect(!result.ok && result.error.contains(QStringLiteral("Unsupported menu location")), QStringLiteral("unsupported menu location fails")) && ok;
     }
 
     return ok ? 0 : 1;

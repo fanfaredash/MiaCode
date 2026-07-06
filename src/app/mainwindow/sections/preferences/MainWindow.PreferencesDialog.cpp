@@ -277,6 +277,89 @@ protected:
     }
 };
 
+class DelayedTableTooltipFilter final : public QObject {
+public:
+    explicit DelayedTableTooltipFilter(QTableWidget* table, QObject* parent = nullptr)
+        : QObject(parent)
+        , table_(table)
+    {
+        timer_.setSingleShot(true);
+        timer_.setInterval(2000);
+        connect(&timer_, &QTimer::timeout, this, [this]() {
+            showPendingTooltip();
+        });
+    }
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (table_.isNull() || watched != table_->viewport() || event == nullptr) {
+            return QObject::eventFilter(watched, event);
+        }
+
+        switch (event->type()) {
+        case QEvent::MouseMove: {
+            auto* mouseEvent = static_cast<QMouseEvent*>(event);
+            const QModelIndex index = table_->indexAt(mouseEvent->pos());
+            if (!index.isValid()) {
+                clearPendingTooltip();
+                break;
+            }
+            globalPos_ = mouseEvent->globalPosition().toPoint();
+            if (index == pendingIndex_) {
+                break;
+            }
+            pendingIndex_ = QPersistentModelIndex(index);
+            timer_.start();
+            break;
+        }
+        case QEvent::Leave:
+        case QEvent::MouseButtonPress:
+        case QEvent::Wheel:
+            clearPendingTooltip();
+            break;
+        case QEvent::ToolTip:
+            return true;
+        default:
+            break;
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    void clearPendingTooltip()
+    {
+        timer_.stop();
+        pendingIndex_ = QPersistentModelIndex();
+        QToolTip::hideText();
+    }
+
+    void showPendingTooltip()
+    {
+        if (table_.isNull() || !pendingIndex_.isValid()) {
+            return;
+        }
+        const auto* item = table_->item(pendingIndex_.row(), pendingIndex_.column());
+        if (item == nullptr) {
+            return;
+        }
+        QString text = item->toolTip().trimmed();
+        if (text.isEmpty()) {
+            text = item->text().trimmed();
+        }
+        if (text.isEmpty()) {
+            return;
+        }
+        const QRect cellRect = table_->visualRect(pendingIndex_);
+        QToolTip::showText(globalPos_, text, table_->viewport(), cellRect);
+    }
+
+    QPointer<QTableWidget> table_;
+    QTimer timer_;
+    QPersistentModelIndex pendingIndex_;
+    QPoint globalPos_;
+};
+
 // Item delegate that gives every row a consistent text inset. Two passes:
 //   1) Paint the panel (selection bg, hover, item bg) at the FULL cell rect
 //      so a row-selected item gets one continuous blue band across both
@@ -635,7 +718,9 @@ void MainWindow::PreferencesSection::onPreferences()
     languageButton->setObjectName("PreferenceMenuButton");
     languageButton->setFont(uiAccentFont(10, QFont::DemiBold));
     languageButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    languageButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    languageButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    languageButton->setMinimumWidth(
+        languageButton->fontMetrics().horizontalAdvance(QStringLiteral("システムに合わせる")) + 28);
     languageButton->setText(languageLabel(selectedLanguageToken));
     auto* languageMenu = new QMenu(languageButton);
     languageMenu->setFont(uiAccentFont(10));
@@ -1285,6 +1370,9 @@ void MainWindow::PreferencesSection::onPreferences()
         "QTableWidget::item:selected { background: rgba(88, 145, 220, 58); }"
         "QHeaderView::section { padding: 6px 9px; border: 0; border-bottom: 1px solid rgba(128,128,128,72); font-weight: 600; }"
     ));
+    extensionsTable->setMouseTracking(true);
+    extensionsTable->viewport()->setMouseTracking(true);
+    extensionsTable->viewport()->installEventFilter(new DelayedTableTooltipFilter(extensionsTable, extensionsTable));
 
     const auto contributionSummary = [](const miacode::extensions::ExtensionManifest& manifest) {
         QStringList parts;
@@ -1328,15 +1416,19 @@ void MainWindow::PreferencesSection::onPreferences()
                 ? QStringLiteral("%1\n%2").arg(record.manifest.name, record.manifest.qualifiedId())
                 : QFileInfo(record.sourcePath).fileName();
             auto* nameItem = new QTableWidgetItem(title);
-            nameItem->setToolTip(record.sourcePath);
+            nameItem->setToolTip(QStringLiteral("%1\n%2").arg(title, record.sourcePath));
             extensionsTable->setItem(row, 1, nameItem);
-            extensionsTable->setItem(row, 2, new QTableWidgetItem(record.valid ? record.manifest.version : QStringLiteral("-")));
-            extensionsTable->setItem(row, 3, new QTableWidgetItem(record.valid ? contributionSummary(record.manifest) : QStringLiteral("-")));
+            auto* versionItem = new QTableWidgetItem(record.valid ? record.manifest.version : QStringLiteral("-"));
+            versionItem->setToolTip(versionItem->text());
+            extensionsTable->setItem(row, 2, versionItem);
+            auto* contributionItem = new QTableWidgetItem(record.valid ? contributionSummary(record.manifest) : QStringLiteral("-"));
+            contributionItem->setToolTip(contributionItem->text());
+            extensionsTable->setItem(row, 3, contributionItem);
             const QString status = !record.valid
                 ? QStringLiteral("Invalid: %1").arg(record.diagnostic)
                 : (record.enabled ? QStringLiteral("Enabled") : QStringLiteral("Disabled"));
             auto* statusItem = new QTableWidgetItem(status);
-            statusItem->setToolTip(record.diagnostic);
+            statusItem->setToolTip(record.diagnostic.trimmed().isEmpty() ? status : record.diagnostic);
             extensionsTable->setItem(row, 4, statusItem);
             if (record.valid) {
                 QObject::connect(enabledBox, &QCheckBox::toggled, &dialog, [&, id = record.manifest.qualifiedId()](bool enabled) {

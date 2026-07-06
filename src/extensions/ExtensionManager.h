@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QList>
 #include <QObject>
 #include <QPointer>
 #include <QStringList>
@@ -18,6 +19,7 @@
 class QAction;
 class QFileSystemWatcher;
 class QMenu;
+class QMenuBar;
 
 namespace miacode::extensions {
 
@@ -33,6 +35,7 @@ struct ExtensionHostCallbacks {
     std::function<ExtensionDocumentSnapshot()> activeDocument;
     std::function<bool(const QString& text, QString* error)> replaceActiveDocumentText;
     std::function<bool()> validateActiveDocument;
+    std::function<void()> openPreferences;
     std::function<void(const QString& severity, const QString& message)> showMessage;
     std::function<void(const QString& message)> logMessage;
 };
@@ -53,7 +56,7 @@ public:
     ~ExtensionManager() override;
 
     void setCallbacks(ExtensionHostCallbacks callbacks);
-    void initialize(QMenu* toolsMenu);
+    void initialize(QMenuBar* menuBar, QMenu* toolsMenu, QMenu* helpMenu);
     void shutdown();
     const QVector<ExtensionManifest>& manifests() const;
     const QVector<ExtensionRecord>& records() const;
@@ -65,7 +68,7 @@ public:
 
 private:
     void discoverExtensions();
-    void rebuildMenuContributions(QMenu* toolsMenu);
+    void rebuildMenuContributions();
     void restartHost();
     void rebuildFilesystemWatchers();
     void scheduleRefresh();
@@ -81,8 +84,11 @@ private:
     QHash<QString, QAction*> commandActions_;
     QHash<QString, QString> commandOwnerById_;
     QHash<QString, QString> languageOwnerById_;
+    QPointer<QMenuBar> menuBar_;
     QPointer<QMenu> toolsMenu_;
+    QPointer<QMenu> helpMenu_;
     QPointer<QMenu> extensionsMenu_;
+    QList<QPointer<QAction>> topLevelMenuActions_;
     QFileSystemWatcher* watcher_ = nullptr;
     QTimer refreshDebounce_;
     std::unique_ptr<ExtensionHostProcess> host_;

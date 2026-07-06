@@ -83,6 +83,9 @@ function createApi(extension) {
       showErrorMessage(message) {
         return request("window/showMessage", { severity: "error", message: String(message) });
       },
+      openPreferences() {
+        return request("window/openPreferences");
+      },
     },
     workspace: {
       getActiveDocument() {

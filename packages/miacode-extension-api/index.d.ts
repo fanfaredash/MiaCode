@@ -24,6 +24,7 @@ export interface MiaCodeApi {
     showInformationMessage(message: string): Promise<unknown>;
     showWarningMessage(message: string): Promise<unknown>;
     showErrorMessage(message: string): Promise<unknown>;
+    openPreferences(): Promise<{ ok: boolean; error?: string }>;
   };
   workspace: {
     getActiveDocument(): Promise<ActiveDocumentSnapshot>;
