@@ -517,6 +517,37 @@ void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
         return value.isEmpty() ? fallback : value;
     };
 
+    // Bookmark section (redesign): actions for the right-clicked line sit on
+    // top of the menu. The editor only emits intent signals — MainWindow owns
+    // the sidebar reveal / rename / delete flows.
+    {
+        const int line = cursorForPosition(event->pos()).blockNumber() + 1;
+        if (!bookmarkedLines_.contains(line)) {
+            auto* createAction = menu->addAction(
+                UiText::isChineseUi() ? QStringLiteral("插入书签") : QStringLiteral("Insert Bookmark"));
+            connect(createAction, &QAction::triggered, this, [this, line]() {
+                emit lineNumberBookmarkCreateRequested(line);
+            });
+        } else {
+            auto* renameAction = menu->addAction(
+                UiText::isChineseUi() ? QStringLiteral("重命名书签") : QStringLiteral("Rename Bookmark"));
+            connect(renameAction, &QAction::triggered, this, [this, line]() {
+                emit lineNumberBookmarkRenameRequested(line);
+            });
+            auto* deleteAction = menu->addAction(
+                UiText::isChineseUi() ? QStringLiteral("删除书签") : QStringLiteral("Delete Bookmark"));
+            connect(deleteAction, &QAction::triggered, this, [this, line]() {
+                emit lineNumberBookmarkDeleteRequested(line);
+            });
+            auto* revealAction = menu->addAction(
+                UiText::isChineseUi() ? QStringLiteral("在侧边栏显示") : QStringLiteral("Show in Sidebar"));
+            connect(revealAction, &QAction::triggered, this, [this, line]() {
+                emit lineNumberBookmarkActivated(line);
+            });
+        }
+        menu->addSeparator();
+    }
+
     auto* cutAction = menu->addAction(translated(QStringLiteral("action.cut"), QStringLiteral("Cut")));
     ShortcutRegistry::instance().applyShortcut(
         cutAction,

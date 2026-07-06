@@ -1,29 +1,25 @@
 # Bookmark maidata sync plan
 
-MiaCode bookmarks are local-first. The primary store remains
-`.miacode/miacode_settings.json` beside the chart file, so normal chart saves do
-not add private editing notes to `maidata.txt`.
+Status: superseded by [BOOKMARK_REDESIGN_SPEC.md](BOOKMARK_REDESIGN_SPEC.md).
 
-If bookmark sharing through `maidata.txt` is added later, use one single-line
-metadata field:
+The earlier local-first proposal kept bookmark data in
+`.miacode/miacode_settings.json` and treated `maidata.txt` sync as an optional
+future export path. The current design changes that direction: bookmarks should
+be stored in the simai file itself as one managed metadata field.
+
+Current storage direction:
 
 ```txt
-&bookmark={"version":1,"items":[{"difficulty_id":4,"title":"Chorus","text":"Check 1/5 overlap","line":42,"second":36.5}]}
+&miacode_bookmarks={"schema":"miacode_bookmarks_v2","items":[{"d":5,"l":8,"n":"Intro","s":8.796}]}
 ```
 
-Rules for a future implementation:
+High-level rules retained from the old plan:
 
-- Never write real newlines into `&bookmark=`.
-- Store the difficulty id with each bookmark. Bookmarks are scoped to one
-  difficulty and must not appear on other difficulty charts.
-- Reject or normalize bookmark title/note input that contains line breaks before
-  syncing to `maidata.txt`.
-- Write compact JSON only. If compatibility testing shows another editor
-  damages JSON punctuation or non-ASCII text, switch to
-  `&bookmark=miacode:v1:<base64url-json>`.
-- Keep `.miacode/miacode_settings.json` as the source of truth unless the user
-  explicitly imports from `maidata.txt`.
-- Do not sync to `maidata.txt` by default. Provide explicit "sync/export to
-  maidata" and "remove bookmark metadata from maidata" actions.
-- Bad or unknown bookmark metadata must not block chart loading; report it as a
-  bookmark import problem only.
+- Store all bookmark payload in one single-line field.
+- Store the difficulty id with each bookmark.
+- Bad bookmark metadata must not block chart loading.
+- If compact JSON proves fragile with external editors, switch the value body to
+  a `miacode:v2:<base64url-json>` payload.
+
+See the redesign spec for the sidebar, naming, migration, and hidden-field
+filtering details.

@@ -3,8 +3,11 @@
 #include <QByteArray>
 #include <QColor>
 #include <QFont>
+#include <QFontMetrics>
 #include <QIcon>
 #include <QLineEdit>
+#include <QPointF>
+#include <QPolygonF>
 #include <QList>
 #include <QPainter>
 #include <QPaintEvent>
@@ -102,16 +105,82 @@ void styleRoundedMenu(QMenu& menu);
 qint64 fileLastModifiedMs(const QFileInfo& fileInfo);
 double probeAudioDurationSeconds(const QString& trackPath);
 
+// Sidebar (outlineList_) item data roles, shared by the list builder
+// (DocumentSection::rebuildFieldSidebar), the click/context-menu wiring
+// (FrameBootstrap) and OutlineItemDelegate below. Kinds in use: "metadata",
+// "add", "difficulty_chart", "bookmark_group", "bookmark", "export", "toolbox".
+inline constexpr int kOutlineItemKindRole = Qt::UserRole;
+inline constexpr int kOutlineItemDifficultyRole = Qt::UserRole + 1;
+inline constexpr int kOutlineItemLineRole = Qt::UserRole + 2;
+inline constexpr int kOutlineItemSecondRole = Qt::UserRole + 3;
+// bookmark_group rows: bool — chevron/fold state.
+inline constexpr int kOutlineItemExpandedRole = Qt::UserRole + 4;
+// bookmark rows: bool — draws the "last activated" accent marker.
+inline constexpr int kOutlineItemActiveRole = Qt::UserRole + 5;
+
 class OutlineItemDelegate : public QStyledItemDelegate {
 public:
     explicit OutlineItemDelegate(QObject* parent = nullptr)
         : QStyledItemDelegate(parent)
     {}
 
+    // Left inset of second-level bookmark rows and their group header.
+    static constexpr int kBookmarkRowIndent = 22;
+    static constexpr int kBookmarkGroupIndent = 10;
+    static constexpr int kIconOnlyThreshold = 120;
+
     void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
     {
+        const QString kind = index.data(kOutlineItemKindRole).toString();
+        if (kind == QLatin1String("bookmark")) {
+            paintRowFill(painter, option);
+            paintBookmarkRow(painter, option, index);
+            return;
+        }
+        if (kind == QLatin1String("bookmark_group")) {
+            paintRowFill(painter, option);
+            paintBookmarkGroupRow(painter, option, index);
+            return;
+        }
+
         QStyleOptionViewItem drawOption(option);
         initStyleOption(&drawOption, index);
+        const UiTheme::Colors& colors = UiTheme::colors();
+        paintRowFill(painter, option);
+
+        const int listWidth = option.widget != nullptr ? option.widget->width() : option.rect.width();
+        const bool iconOnly = listWidth > 0 && listWidth < kIconOnlyThreshold;
+        if (iconOnly) {
+            drawOption.text.clear();
+            drawOption.features &= ~QStyleOptionViewItem::HasDisplay;
+            drawOption.decorationAlignment = Qt::AlignLeft | Qt::AlignVCenter;
+        }
+
+        drawOption.state &= ~QStyle::State_Selected;
+        drawOption.state &= ~QStyle::State_MouseOver;
+        drawOption.backgroundBrush = Qt::NoBrush;
+        drawOption.palette.setColor(QPalette::HighlightedText, colors.textPrimary);
+        QStyledItemDelegate::paint(painter, drawOption, index);
+    }
+
+    // Inline rename: the editor covers the name area of a bookmark row (after
+    // the indent + line badge) so the typed text lines up with the display.
+    void updateEditorGeometry(QWidget* editor, const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        if (editor != nullptr && index.data(kOutlineItemKindRole).toString() == QLatin1String("bookmark")) {
+            QRect rect = option.rect.adjusted(kBookmarkRowIndent + badgeWidth(option, index) + 6, 1, -2, -1);
+            if (rect.width() < 60) {
+                rect.setLeft(qMax(option.rect.left() + 2, option.rect.right() - 60));
+            }
+            editor->setGeometry(rect);
+            return;
+        }
+        QStyledItemDelegate::updateEditorGeometry(editor, option, index);
+    }
+
+private:
+    void paintRowFill(QPainter* painter, const QStyleOptionViewItem& option) const
+    {
         const UiTheme::Colors& colors = UiTheme::colors();
         const QColor selectedBorder = colors.dark ? QColor("#6B8BB8") : QColor("#9EC2EF");
         const QColor selectedFill = colors.dark ? QColor("#314158") : QColor("#F1F6FF");
@@ -131,21 +200,114 @@ public:
             painter->drawRoundedRect(fillRect, 6.0, 6.0);
         }
         painter->restore();
+    }
 
+    QFont badgeFont(const QStyleOptionViewItem& option) const
+    {
+        QFont font = option.font;
+        font.setPointSize(qMax(7, font.pointSize() - 2));
+        return font;
+    }
+
+    int badgeWidth(const QStyleOptionViewItem& option, const QModelIndex& index) const
+    {
+        const QFontMetrics metrics(badgeFont(option));
+        const QString lineText = QString::number(qMax(1, index.data(kOutlineItemLineRole).toInt()));
+        return qMax(18, metrics.horizontalAdvance(lineText) + 10);
+    }
+
+    void paintBookmarkRow(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const
+    {
+        const UiTheme::Colors& colors = UiTheme::colors();
+        const bool active = index.data(kOutlineItemActiveRole).toBool();
         const int listWidth = option.widget != nullptr ? option.widget->width() : option.rect.width();
-        constexpr int kIconOnlyThreshold = 120;
         const bool iconOnly = listWidth > 0 && listWidth < kIconOnlyThreshold;
-        if (iconOnly) {
-            drawOption.text.clear();
-            drawOption.features &= ~QStyleOptionViewItem::HasDisplay;
-            drawOption.decorationAlignment = Qt::AlignLeft | Qt::AlignVCenter;
+
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+
+        // Last-activated marker: a slim accent bar inside the indent gutter.
+        // Deliberately different from the first-level selected-row treatment.
+        if (active) {
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(colors.accent);
+            const QRect barRect(option.rect.left() + 9, option.rect.top() + 7, 3, option.rect.height() - 14);
+            painter->drawRoundedRect(barRect, 1.5, 1.5);
         }
 
-        drawOption.state &= ~QStyle::State_Selected;
-        drawOption.state &= ~QStyle::State_MouseOver;
-        drawOption.backgroundBrush = Qt::NoBrush;
-        drawOption.palette.setColor(QPalette::HighlightedText, colors.textPrimary);
-        QStyledItemDelegate::paint(painter, drawOption, index);
+        // Short line-number badge.
+        const int badgeW = badgeWidth(option, index);
+        const int badgeH = qMin(option.rect.height() - 10, 16);
+        const QRect badgeRect(
+            option.rect.left() + (iconOnly ? kBookmarkGroupIndent : kBookmarkRowIndent),
+            option.rect.top() + (option.rect.height() - badgeH) / 2,
+            badgeW,
+            badgeH);
+        QColor badgeBg = colors.accent;
+        badgeBg.setAlpha(colors.dark ? 56 : 32);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(badgeBg);
+        painter->drawRoundedRect(badgeRect, 4.0, 4.0);
+        painter->setFont(badgeFont(option));
+        painter->setPen(colors.dark ? colors.textPrimary : colors.accent.darker(120));
+        painter->drawText(badgeRect, Qt::AlignCenter,
+                          QString::number(qMax(1, index.data(kOutlineItemLineRole).toInt())));
+
+        // Bookmark name, elided to the remaining width (full name in tooltip).
+        if (!iconOnly) {
+            const QRect nameRect(badgeRect.right() + 6, option.rect.top(),
+                                 option.rect.right() - badgeRect.right() - 12, option.rect.height());
+            if (nameRect.width() > 8) {
+                painter->setFont(option.font);
+                painter->setPen(colors.textPrimary);
+                const QFontMetrics metrics(option.font);
+                painter->drawText(nameRect, Qt::AlignLeft | Qt::AlignVCenter,
+                                  metrics.elidedText(index.data(Qt::DisplayRole).toString(), Qt::ElideRight, nameRect.width()));
+            }
+        }
+        painter->restore();
+    }
+
+    void paintBookmarkGroupRow(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const
+    {
+        const UiTheme::Colors& colors = UiTheme::colors();
+        const bool expanded = index.data(kOutlineItemExpandedRole).toBool();
+        const int listWidth = option.widget != nullptr ? option.widget->width() : option.rect.width();
+        const bool iconOnly = listWidth > 0 && listWidth < kIconOnlyThreshold;
+
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+
+        // Fold chevron: ▾ when expanded, ▸ when collapsed.
+        const int chevronSize = 7;
+        const QPointF center(option.rect.left() + kBookmarkGroupIndent + chevronSize / 2.0,
+                             option.rect.top() + option.rect.height() / 2.0);
+        QPolygonF chevron;
+        if (expanded) {
+            chevron << QPointF(center.x() - chevronSize / 2.0, center.y() - chevronSize / 4.0)
+                    << QPointF(center.x() + chevronSize / 2.0, center.y() - chevronSize / 4.0)
+                    << QPointF(center.x(), center.y() + chevronSize / 2.0);
+        } else {
+            chevron << QPointF(center.x() - chevronSize / 4.0, center.y() - chevronSize / 2.0)
+                    << QPointF(center.x() - chevronSize / 4.0, center.y() + chevronSize / 2.0)
+                    << QPointF(center.x() + chevronSize / 2.0, center.y());
+        }
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(colors.textSecondary);
+        painter->drawPolygon(chevron);
+
+        if (!iconOnly) {
+            QFont font = option.font;
+            font.setPointSize(qMax(7, font.pointSize() - 1));
+            painter->setFont(font);
+            painter->setPen(colors.textSecondary);
+            const QRect textRect(option.rect.left() + kBookmarkGroupIndent + chevronSize + 8, option.rect.top(),
+                                 option.rect.width() - kBookmarkGroupIndent - chevronSize - 16, option.rect.height());
+            const QFontMetrics metrics(font);
+            painter->drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter,
+                              metrics.elidedText(index.data(Qt::DisplayRole).toString(), Qt::ElideRight, textRect.width()));
+        }
+        painter->restore();
     }
 };
 

@@ -2,10 +2,108 @@
 
 #include <algorithm>
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRegularExpression>
 #include <QStringList>
 
 namespace {
+
+constexpr QLatin1StringView kBookmarksFieldKey{"miacode_bookmarks"};
+constexpr QLatin1StringView kBookmarksSchema{"miacode_bookmarks_v2"};
+
+// Parses the `&miacode_bookmarks=` compact-JSON value. Returns false only for
+// a present-but-invalid payload (malformed JSON / not an object); an empty
+// value is a valid "no bookmarks". Items missing a valid difficulty id are
+// dropped item-by-item rather than failing the whole field.
+bool parseBookmarksFieldValue(const QString& value, QVector<SimaiBookmarkData>* out)
+{
+    if (out == nullptr) {
+        return false;
+    }
+    const QString trimmed = value.trimmed();
+    if (trimmed.isEmpty()) {
+        return true;
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(trimmed.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        return false;
+    }
+    const QJsonArray items = doc.object().value(QLatin1String("items")).toArray();
+    out->reserve(out->size() + items.size());
+    for (const QJsonValue& itemValue : items) {
+        if (!itemValue.isObject()) {
+            continue;
+        }
+        const QJsonObject item = itemValue.toObject();
+        SimaiBookmarkData bookmark;
+        bookmark.difficultyId = item.value(QLatin1String("d")).toInt(0);
+        if (!SimaiDocument::isDifficultyId(bookmark.difficultyId)) {
+            continue;
+        }
+        bookmark.line = qMax(1, item.value(QLatin1String("l")).toInt(1));
+        bookmark.name = item.value(QLatin1String("n")).toString();
+        bookmark.second = item.value(QLatin1String("s")).toDouble(-1.0);
+        bookmark.source = item.value(QLatin1String("src")).toString();
+        bookmark.commentFingerprint = item.value(QLatin1String("fp")).toString();
+        bookmark.contextBefore = item.value(QLatin1String("cb")).toString();
+        bookmark.contextAfter = item.value(QLatin1String("ca")).toString();
+        bookmark.nameLocked = item.value(QLatin1String("locked")).toBool(false);
+        out->append(bookmark);
+    }
+    return true;
+}
+
+// Serializes bookmarks as one compact single-line JSON object (never contains
+// a real newline, so parseRawFields round-trips it as a single field value).
+// Optional keys are omitted at their defaults to keep the line short.
+QString serializeBookmarksFieldValue(QVector<SimaiBookmarkData> bookmarks)
+{
+    std::sort(bookmarks.begin(), bookmarks.end(), [](const SimaiBookmarkData& left, const SimaiBookmarkData& right) {
+        if (left.difficultyId != right.difficultyId) {
+            return left.difficultyId < right.difficultyId;
+        }
+        if (left.line != right.line) {
+            return left.line < right.line;
+        }
+        return left.name < right.name;
+    });
+    QJsonArray items;
+    for (const SimaiBookmarkData& bookmark : bookmarks) {
+        if (!SimaiDocument::isDifficultyId(bookmark.difficultyId)) {
+            continue;
+        }
+        QJsonObject item;
+        item.insert(QLatin1String("d"), bookmark.difficultyId);
+        item.insert(QLatin1String("l"), qMax(1, bookmark.line));
+        item.insert(QLatin1String("n"), bookmark.name);
+        if (bookmark.second >= 0.0) {
+            item.insert(QLatin1String("s"), bookmark.second);
+        }
+        if (!bookmark.source.isEmpty()) {
+            item.insert(QLatin1String("src"), bookmark.source);
+        }
+        if (!bookmark.commentFingerprint.isEmpty()) {
+            item.insert(QLatin1String("fp"), bookmark.commentFingerprint);
+        }
+        if (!bookmark.contextBefore.isEmpty()) {
+            item.insert(QLatin1String("cb"), bookmark.contextBefore);
+        }
+        if (!bookmark.contextAfter.isEmpty()) {
+            item.insert(QLatin1String("ca"), bookmark.contextAfter);
+        }
+        if (bookmark.nameLocked) {
+            item.insert(QLatin1String("locked"), true);
+        }
+        items.append(item);
+    }
+    QJsonObject root;
+    root.insert(QLatin1String("schema"), QString(kBookmarksSchema));
+    root.insert(QLatin1String("items"), items);
+    return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+}
 
 // Trim every trailing whitespace character (spaces, tabs, CR/LF — i.e. any
 // trailing blank lines too) from a field value. A &key= header is now allowed
@@ -54,7 +152,7 @@ bool isReservedMetadataKey(const QString& key)
 {
     if (key == QLatin1String("title") || key == QLatin1String("artist")
         || key == QLatin1String("first") || key == QLatin1String("des")
-        || key == QLatin1String("video")) {
+        || key == QLatin1String("video") || key == kBookmarksFieldKey) {
         return true;
     }
     QString prefix;
@@ -135,6 +233,21 @@ SimaiDocument SimaiDocument::fromText(const QString& text)
             // path resolution to absolute filesystem location happens at
             // chart-load time in the calling code.
             doc.videoPath = field.value;
+            continue;
+        }
+        if (field.key == kBookmarksFieldKey) {
+            // Managed bookmark payload — routed into doc.bookmarks, NEVER into
+            // extraFields (a copy there would duplicate on save and surface in
+            // the "Other &xx Fields" editor). A malformed value is ignored so
+            // bookmark metadata can never block chart loading; the flag lets
+            // callers report the loss. If duplicate lines exist, the first one
+            // that parses wins.
+            if (!doc.bookmarks.isEmpty()) {
+                continue;
+            }
+            if (!parseBookmarksFieldValue(field.value, &doc.bookmarks)) {
+                doc.bookmarksParseError = true;
+            }
             continue;
         }
 
@@ -361,6 +474,14 @@ QString SimaiDocument::toText() const
             continue;
         }
         blocks.append(serializeField(field.key, field.value));
+    }
+
+    // Managed bookmarks — one compact single-line field after the free-form
+    // extra fields and before the difficulty triples. Omitted entirely when
+    // there are no bookmarks, so deleting the last bookmark also removes the
+    // line from the file.
+    if (!bookmarks.isEmpty()) {
+        blocks.append(serializeField(QString(kBookmarksFieldKey), serializeBookmarksFieldValue(bookmarks)));
     }
 
     // Emit real difficulties (full lv/des/inote triple) and chart-less

@@ -98,6 +98,17 @@ public:
     bool deleteDifficultyField(int difficultyId);
     void updateDifficultyDeleteButton(bool visible);
     void rebuildFieldSidebar();
+    // Sidebar bookmark-group fold state. Only explicit toggles are recorded;
+    // an untouched difficulty defaults to expanded when active, collapsed
+    // otherwise (see the bookmark redesign spec).
+    bool isBookmarkGroupExpanded(int difficultyId) const;
+    void setBookmarkGroupExpanded(int difficultyId, bool expanded);
+    // Expands the difficulty's bookmark group, rebuilds the sidebar, selects
+    // and centers the bookmark row; beginRename additionally starts the
+    // inline name editor. Safe no-op when the bookmark does not exist.
+    void revealBookmarkInSidebar(int difficultyId, int line, bool beginRename);
+    // The bookmark list item for (difficultyId, line), or nullptr.
+    QListWidgetItem* findBookmarkSidebarItem(int difficultyId, int line) const;
     void populateMetadataPage();
     void populateDifficultyPage(int difficultyId);
     void syncHeaderDesignerEditFromModel();

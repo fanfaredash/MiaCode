@@ -484,9 +484,7 @@ private:
     // Transient Alt-hold override: while the preview is paused, holding Alt
     // flips the "暂停时显示判定区" pause display (judge area ⇄ PV/BG) until released.
     void setPauseDisplayAltHoldActive(bool active);
-    void showCreateBookmarkDialog();
-    void showBookmarkManager();
-    void openBookmarkAtLine(int line);
+    void activateBookmarkAtLine(int line);
     void setFullCopyAreaVisible(bool visible);
     void syncCopyAreaEditorAppearance();
     void syncCopyAreaLineCount();
@@ -605,6 +603,10 @@ private:
     };
 
 public:
+    // In-memory editor bookmark. The user-visible face is `title` (the
+    // bookmark name) + line; everything else is an internal anchoring aid.
+    // `text` is a legacy free-note field kept only so old JSON exports still
+    // import — it is never shown or written to the simai payload anymore.
     struct EditorBookmark {
         QString title;
         QString text;
@@ -616,6 +618,10 @@ public:
         QString contextAfter;
         double second = -1.0;
         int difficultyId = 0;
+        // Set when the user explicitly renamed the bookmark. Default names are
+        // generated once at creation; no automatic logic may rename after that,
+        // locked or not — the flag exists so future auto-naming stays honest.
+        bool nameLocked = false;
     };
 
 private:

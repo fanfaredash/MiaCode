@@ -229,6 +229,48 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   path) + batch `MainWindow.ExportFlow.cpp`, and the snapshot rebuild in `VideoExportSnapshot.cpp`
   (`buildVideoExportTaskFromSnapshot`).
 
+## 3b. Editor bookmarks (2026-07-06 redesign)
+
+- Spec: `docs/specs/editor/BOOKMARK_REDESIGN_SPEC.md` (includes the implemented detailed design).
+- **Storage — simai file is authoritative:** one managed single-line field
+  `&miacode_bookmarks={"schema":"miacode_bookmarks_v2","items":[{"d","l","n","s","src","fp","cb","ca","locked"}]}`.
+  Model: `SimaiBookmarkData` + `SimaiDocument::bookmarks` / `bookmarksParseError`
+  (`src/core/chart/document/SimaiDocument.{h,cpp}`). `fromText` routes the key into `bookmarks`
+  (never `extraFields`; bad JSON → ignored + flag, never blocks loading); `toText` emits it after
+  extra fields, before the difficulty triples, and omits it when empty; `parseUnmanagedFields`
+  treats it as reserved so it never shows in the metadata "Other &xx Fields" editor. Spec cases in
+  `simai_document_spec`.
+- **Legacy fallback / migration:** `.miacode/miacode_settings.json` `editor_bookmarks` is read into
+  `state_.legacyJsonEditorBookmarks_` by `EditorSection::loadProjectRenderState` and consumed by
+  `adoptBookmarksForLoadedDocument()` (called from `DocumentSection::loadDocument`) only when the
+  simai payload is absent. `state_.editorBookmarksInSimai_` gates the legacy JSON mirror in
+  `saveProjectRenderState` (kept for crash safety until the first simai save, dropped after).
+  `saveToPath` pushes `editorBookmarks_` into the document via `syncBookmarksIntoDocument` before
+  `toText()` and flips the flag.
+- **In-memory model:** `MainWindow::EditorBookmark` (user-visible face = `title` + `line`;
+  `nameLocked` set on explicit rename; `text` is a legacy import-only field). User-initiated
+  mutations call `EditorSection::markBookmarksMutatedByUser()` (marks the document dirty so the
+  change reaches the file on save); the comment auto-sync (`syncBookmarksFromEditorText`) never
+  dirties and NEVER renames — default names are generated exactly once at creation
+  (`defaultBookmarkNameFromComment`: first token of the `||` comment, else `fallbackBookmarkNameForLine`
+  "第 N 行"/"LN").
+- **Sidebar (two-level, `outlineList_`):** built by `DocumentSection::rebuildFieldSidebar`
+  (`MainWindow.DocumentUi.cpp`) with item kinds `bookmark_group` (fold header, per-difficulty state
+  in `outlineBookmarkGroupExpanded_`; untouched groups default expanded only for the active
+  difficulty) and `bookmark` (item text = bare name; indent + line badge painted by
+  `OutlineItemDelegate` in `MainWindowShared.h` from the shared `kOutlineItem*Role` constants).
+  Rebuild preserves fold state, bookmark selection and scroll position. Single click = jump to
+  line (+ accent marker `activeBookmark*`), double click = inline rename (`editItem`; commit via
+  `itemChanged` → `EditorSection::renameBookmark`, empty name reverts), right click = 重命名 /
+  删除 / 跳到时间轴位置 (difficulty & group rows add 插入书签). Reveal/rename entry:
+  `DocumentSection::revealBookmarkInSidebar`.
+- **Editor entry points (`PlainCodeEditor`):** gutter double-click activates/creates; gutter drag
+  moves; body & gutter right-click add 插入/重命名/删除/在侧边栏显示 via intent signals only
+  (`lineNumberBookmarkCreateRequested/RenameRequested/DeleteRequested/Activated/ContextMenuRequested`)
+  — MainWindow (`FrameBootstrap`) owns the actions. Dialog-free: the old create/detail/manager
+  dialogs and the toolbox 创建书签/书签管理 entries were REMOVED (toolbox keeps JSON
+  import/export as compatibility tools; import marks the document dirty).
+
 ## 4. Parser, validation, markers
 
 - API: `src/core/chart/parser/SimaiNativeParser.h` + `SimaiNativeParser.Driver.cpp`

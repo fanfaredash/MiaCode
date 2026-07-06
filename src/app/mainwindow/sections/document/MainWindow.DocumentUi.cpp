@@ -532,6 +532,60 @@ void MainWindow::DocumentSection::updateDifficultyDeleteButton(bool visible)
     ui_.deleteDifficultyButton_->show();
 }
 
+bool MainWindow::DocumentSection::isBookmarkGroupExpanded(int difficultyId) const
+{
+    const auto it = state_.outlineBookmarkGroupExpanded_.constFind(difficultyId);
+    if (it != state_.outlineBookmarkGroupExpanded_.cend()) {
+        return it.value();
+    }
+    // Untouched groups: the active difficulty starts expanded, others folded.
+    return difficultyId == state_.activeDifficultyId_;
+}
+
+void MainWindow::DocumentSection::setBookmarkGroupExpanded(int difficultyId, bool expanded)
+{
+    state_.outlineBookmarkGroupExpanded_.insert(difficultyId, expanded);
+    rebuildFieldSidebar();
+}
+
+QListWidgetItem* MainWindow::DocumentSection::findBookmarkSidebarItem(int difficultyId, int line) const
+{
+    if (ui_.outlineList_ == nullptr) {
+        return nullptr;
+    }
+    for (int i = 0; i < ui_.outlineList_->count(); ++i) {
+        QListWidgetItem* item = ui_.outlineList_->item(i);
+        if (item != nullptr
+            && item->data(kOutlineItemKindRole).toString() == QLatin1String("bookmark")
+            && item->data(kOutlineItemDifficultyRole).toInt() == difficultyId
+            && item->data(kOutlineItemLineRole).toInt() == line) {
+            return item;
+        }
+    }
+    return nullptr;
+}
+
+void MainWindow::DocumentSection::revealBookmarkInSidebar(int difficultyId, int line, bool beginRename)
+{
+    if (ui_.outlineList_ == nullptr) {
+        return;
+    }
+    state_.outlineBookmarkGroupExpanded_.insert(difficultyId, true);
+    rebuildFieldSidebar();
+    QListWidgetItem* item = findBookmarkSidebarItem(difficultyId, line);
+    if (item == nullptr) {
+        return;
+    }
+    {
+        QSignalBlocker blocker(ui_.outlineList_);
+        ui_.outlineList_->setCurrentItem(item);
+    }
+    ui_.outlineList_->scrollToItem(item, QAbstractItemView::PositionAtCenter);
+    if (beginRename) {
+        ui_.outlineList_->editItem(item);
+    }
+}
+
 void MainWindow::DocumentSection::rebuildFieldSidebar()
 {
     if (ui_.outlineList_ == nullptr) {
@@ -539,6 +593,20 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     }
     updateDifficultyDeleteButton(false);
     QSignalBlocker blocker(ui_.outlineList_);
+    // Keep the viewport where the user left it across rebuilds (the list is
+    // torn down and rebuilt on most document/sidebar state changes).
+    const int restoreScrollValue = ui_.outlineList_->verticalScrollBar() != nullptr
+        ? ui_.outlineList_->verticalScrollBar()->value()
+        : 0;
+    // Preserve a selected bookmark row across the rebuild (difficulty rows are
+    // re-selected via activeDifficultyId_ / activeOutlineKey_ as before).
+    int restoreBookmarkDifficultyId = 0;
+    int restoreBookmarkLine = -1;
+    if (QListWidgetItem* currentItem = ui_.outlineList_->currentItem();
+        currentItem != nullptr && currentItem->data(kOutlineItemKindRole).toString() == QLatin1String("bookmark")) {
+        restoreBookmarkDifficultyId = currentItem->data(kOutlineItemDifficultyRole).toInt();
+        restoreBookmarkLine = currentItem->data(kOutlineItemLineRole).toInt();
+    }
     ui_.outlineList_->clear();
     const QString metadataLabel = uiText("sidebar.metadata", "Metadata");
     auto* metadataItem = new QListWidgetItem(
@@ -596,31 +664,55 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
         const QString difficultyLabel = SimaiDocument::difficultyName(id);
         auto* difficultyItem = new QListWidgetItem(difficultyLabel, ui_.outlineList_);
         difficultyItem->setIcon(makeDifficultyBadgeIcon(id));
-        difficultyItem->setData(Qt::UserRole, "difficulty_chart");
-        difficultyItem->setData(Qt::UserRole + 1, id);
+        difficultyItem->setData(kOutlineItemKindRole, "difficulty_chart");
+        difficultyItem->setData(kOutlineItemDifficultyRole, id);
         difficultyItem->setToolTip(difficultyLabel);
         if (id == state_.activeDifficultyId_) {
             selectedItem = difficultyItem;
+        }
+
+        if (bookmarks.isEmpty()) {
+            continue;
+        }
+        // Bookmark group header: shows the count and the fold chevron; clicking
+        // it toggles the fold without switching the difficulty (FrameBootstrap).
+        const bool expanded = isBookmarkGroupExpanded(id);
+        const QString groupLabel = UiText::isChineseUi()
+            ? QStringLiteral("书签 %1").arg(bookmarks.size())
+            : QStringLiteral("Bookmarks %1").arg(bookmarks.size());
+        auto* groupItem = new QListWidgetItem(groupLabel, ui_.outlineList_);
+        groupItem->setData(kOutlineItemKindRole, "bookmark_group");
+        groupItem->setData(kOutlineItemDifficultyRole, id);
+        groupItem->setData(kOutlineItemExpandedRole, expanded);
+        groupItem->setToolTip(UiText::isChineseUi()
+            ? QStringLiteral("%1 的书签（点击展开/收起）").arg(difficultyLabel)
+            : QStringLiteral("Bookmarks of %1 (click to fold/unfold)").arg(difficultyLabel));
+        if (!expanded) {
+            continue;
         }
 
         for (const MainWindow::EditorBookmark& bookmark : bookmarks) {
             const QString title = bookmark.title.trimmed().isEmpty()
                 ? (UiText::isChineseUi() ? QStringLiteral("未命名书签") : QStringLiteral("Untitled Bookmark"))
                 : bookmark.title.trimmed();
-            const QString label = QStringLiteral("    %1").arg(title);
             const QString tooltip = UiText::isChineseUi()
-                ? QStringLiteral("代码行：%1").arg(bookmark.line)
-                : QStringLiteral("Code line: %1").arg(bookmark.line);
-            auto* bookmarkItem = new QListWidgetItem(
-                owner_.style()->standardIcon(QStyle::SP_ArrowRight),
-                label,
-                ui_.outlineList_
-            );
-            bookmarkItem->setData(Qt::UserRole, "bookmark");
-            bookmarkItem->setData(Qt::UserRole + 1, id);
-            bookmarkItem->setData(Qt::UserRole + 2, bookmark.line);
-            bookmarkItem->setData(Qt::UserRole + 3, bookmark.second);
+                ? QStringLiteral("%1\n第 %2 行 · 双击重命名").arg(title).arg(bookmark.line)
+                : QStringLiteral("%1\nLine %2 · double-click to rename").arg(title).arg(bookmark.line);
+            // Item text = the bare name (QListWidgetItem aliases EditRole to
+            // DisplayRole, so the inline editor edits exactly the name); the
+            // delegate paints the indent + line badge from the data roles.
+            auto* bookmarkItem = new QListWidgetItem(title, ui_.outlineList_);
+            bookmarkItem->setFlags(bookmarkItem->flags() | Qt::ItemIsEditable);
+            bookmarkItem->setData(kOutlineItemKindRole, "bookmark");
+            bookmarkItem->setData(kOutlineItemDifficultyRole, id);
+            bookmarkItem->setData(kOutlineItemLineRole, bookmark.line);
+            bookmarkItem->setData(kOutlineItemSecondRole, bookmark.second);
+            bookmarkItem->setData(kOutlineItemActiveRole,
+                                  id == state_.activeBookmarkDifficultyId_ && bookmark.line == state_.activeBookmarkLine_);
             bookmarkItem->setToolTip(tooltip);
+            if (id == restoreBookmarkDifficultyId && bookmark.line == restoreBookmarkLine) {
+                selectedItem = bookmarkItem;
+            }
         }
     }
     const QString exportLabel = uiText("sidebar.export", "Export");
@@ -665,6 +757,9 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
             ui_.outlineList_->selectionModel()->clearCurrentIndex();
             ui_.outlineList_->selectionModel()->clearSelection();
         }
+    }
+    if (ui_.outlineList_->verticalScrollBar() != nullptr) {
+        ui_.outlineList_->verticalScrollBar()->setValue(restoreScrollValue);
     }
     // The export page derives its difficulty badges + card availability from
     // the same document state this sidebar reflects — refresh it on the same
@@ -1269,6 +1364,12 @@ void MainWindow::DocumentSection::loadDocument(const SimaiDocument& document)
 {
     clearDeletedDifficultyUndoState();
     state_.document_ = document;
+    // Adopt bookmarks before activateInitialField(): the difficulty switch it
+    // triggers runs syncBookmarksFromEditorText(), which must see the loaded
+    // set (simai payload first, legacy project-JSON staging as fallback).
+    if (owner_.editorSection_ != nullptr) {
+        owner_.editorSection_->adoptBookmarksForLoadedDocument();
+    }
     resetAutosaveState(state_.document_.toText());
     state_.documentDirty_ = false;
     state_.currentFieldDirty_ = false;

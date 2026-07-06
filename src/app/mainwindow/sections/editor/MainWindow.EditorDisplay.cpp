@@ -35,8 +35,11 @@
 using namespace miacode::mainwindow::shared;
 
 namespace {
-constexpr int kBookmarkManagerVisibleRows = 5;
-constexpr int kBookmarkAutoTitleMaxChars = 20;
+// Default bookmark names come from the line's `||` comment: first token up to
+// kBookmarkAutoNameTokenMaxChars, else a raw prefix of the comment capped at
+// kBookmarkAutoNameMaxChars. Generated once at creation — never rewritten.
+constexpr int kBookmarkAutoNameTokenMaxChars = 16;
+constexpr int kBookmarkAutoNameMaxChars = 20;
 constexpr int kBookmarkContextChars = 48;
 
 QString normalizedBookmarkCommentText(QString text)
@@ -65,13 +68,35 @@ bool isControlBookmarkComment(const QString& text)
     return meterRe.match(normalized).hasMatch();
 }
 
-QString defaultBookmarkTitleFromComment(const QString& text)
+// Comment → default name: take the first delimiter-separated token (space,
+// half/full-width commas, 顿号, semicolons, colons, slashes), truncated when
+// overlong; a comment with no usable token falls back to a raw prefix. The
+// original language is kept verbatim; empty for control comments.
+QString defaultBookmarkNameFromComment(const QString& text)
 {
     const QString normalized = normalizedBookmarkCommentText(text);
-    if (normalized.size() <= kBookmarkAutoTitleMaxChars) {
-        return normalized;
+    if (normalized.isEmpty() || isControlBookmarkComment(normalized)) {
+        return QString();
     }
-    return normalized.left(kBookmarkAutoTitleMaxChars);
+    static const QRegularExpression separatorRe(
+        QStringLiteral("[\\s,\\x{FF0C}\\x{3001};\\x{FF1B}:\\x{FF1A}/\\x{FF0F}]+"));
+    const QStringList tokens = normalized.split(separatorRe, Qt::SkipEmptyParts);
+    if (!tokens.isEmpty() && !tokens.first().isEmpty()) {
+        const QString& token = tokens.first();
+        return token.size() > kBookmarkAutoNameTokenMaxChars
+            ? token.left(kBookmarkAutoNameTokenMaxChars)
+            : token;
+    }
+    return normalized.left(kBookmarkAutoNameMaxChars);
+}
+
+// Line-number fallback used when a bookmark is created on a line without a
+// usable comment: "第 8 行" / "L8".
+QString fallbackBookmarkNameForLine(int line)
+{
+    return UiText::isChineseUi()
+        ? QStringLiteral("第 %1 行").arg(qMax(1, line))
+        : QStringLiteral("L%1").arg(qMax(1, line));
 }
 
 struct BookmarkCommentCandidate {
@@ -144,6 +169,9 @@ QJsonObject bookmarkToJsonObject(const MainWindow::EditorBookmark& bookmark)
     if (bookmark.second >= 0.0) {
         object.insert(QStringLiteral("second"), bookmark.second);
     }
+    if (bookmark.nameLocked) {
+        object.insert(QStringLiteral("name_locked"), true);
+    }
     return object;
 }
 
@@ -160,6 +188,7 @@ MainWindow::EditorBookmark bookmarkFromJsonObject(const QJsonObject& object)
         object.value(QStringLiteral("context_after")).toString(),
         object.value(QStringLiteral("second")).toDouble(-1.0),
         object.value(QStringLiteral("difficulty_id")).toInt(0),
+        object.value(QStringLiteral("name_locked")).toBool(false),
     };
 }
 
@@ -179,202 +208,6 @@ bool confirmDeleteBookmark(QWidget* parent, const MainWindow::EditorBookmark& bo
         message,
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No) == QMessageBox::Yes;
-}
-
-template <typename Bookmark>
-QString bookmarkTitleForDisplay(const Bookmark& bookmark)
-{
-    const QString title = bookmark.title.trimmed().isEmpty()
-        ? (UiText::isChineseUi() ? QStringLiteral("未命名书签") : QStringLiteral("Untitled Bookmark"))
-        : bookmark.title.trimmed();
-    return UiText::isChineseUi()
-        ? QStringLiteral("%1 行  %2").arg(bookmark.line).arg(title)
-        : QStringLiteral("Line %1  %2").arg(bookmark.line).arg(title);
-}
-
-QString bookmarkDialogStyleSheet()
-{
-    const UiTheme::Colors& c = UiTheme::colors();
-    return QStringLiteral(
-        "QDialog#BookmarkDialog { background: %1; }"
-        "QFrame#BookmarkDialogFrame { background: %1; border: 1px solid %2; border-radius: 8px; }"
-        "QWidget#BookmarkDialogHeader { background: %3; border-bottom: 1px solid %2; }"
-        "QLabel#BookmarkDialogTitle { color: %4; font-weight: 700; }"
-        "QToolButton#BookmarkDialogWindowButton { color: %4; border: none; background: transparent; min-width: 24px; min-height: 24px; border-radius: 6px; font-size: 16px; padding: 0; }"
-        "QToolButton#BookmarkDialogWindowButton:hover { background: %5; }"
-        "QLineEdit, QTextEdit, QPlainTextEdit { background: %6; color: %4; border: 1px solid %7; border-radius: 6px; padding: 6px 8px; selection-background-color: %8; selection-color: %9; }"
-        "QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus { border-color: %10; }"
-        "QPushButton, QToolButton { color: %4; border: 1px solid %2; border-radius: 6px; background: %6; padding: 4px 8px; }"
-        "QPushButton:hover, QToolButton:hover { background: %5; border-color: %10; }"
-    )
-        .arg(c.cardBg.name(QColor::HexRgb))
-        .arg(c.border.name(QColor::HexRgb))
-        .arg(c.cardAltBg.name(QColor::HexRgb))
-        .arg(c.textPrimary.name(QColor::HexRgb))
-        .arg(c.menuHoverBg.name(QColor::HexRgb))
-        .arg(c.inputBg.name(QColor::HexRgb))
-        .arg(c.borderSoft.name(QColor::HexRgb))
-        .arg(c.selection.name(QColor::HexRgb))
-        .arg(c.selectionText.name(QColor::HexRgb))
-        .arg(c.accent.name(QColor::HexRgb));
-}
-
-class BookmarkDialogHeader final : public QWidget
-{
-public:
-    using MoveCallback = std::function<void(const QPoint&, bool)>;
-    using ReleaseCallback = std::function<void(const QPoint&, bool)>;
-
-    explicit BookmarkDialogHeader(QWidget* parent = nullptr, bool allowWindowButtons = true)
-        : QWidget(parent)
-    {
-        setObjectName(QStringLiteral("BookmarkDialogHeader"));
-        setCursor(Qt::OpenHandCursor);
-
-        auto* layout = new QHBoxLayout(this);
-        layout->setContentsMargins(12, 8, 8, 8);
-        layout->setSpacing(8);
-
-        titleLabel_ = new QLabel(this);
-        titleLabel_->setObjectName(QStringLiteral("BookmarkDialogTitle"));
-        titleLabel_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-        layout->addWidget(titleLabel_, 1);
-
-        if (allowWindowButtons) {
-            minimizeButton_ = new QToolButton(this);
-            minimizeButton_->setObjectName(QStringLiteral("BookmarkDialogWindowButton"));
-            minimizeButton_->setText(QStringLiteral("-"));
-            minimizeButton_->setCursor(Qt::PointingHandCursor);
-            minimizeButton_->setAutoRaise(true);
-            minimizeButton_->setFixedSize(24, 24);
-            layout->addWidget(minimizeButton_, 0, Qt::AlignTop);
-
-            closeButton_ = new QToolButton(this);
-            closeButton_->setObjectName(QStringLiteral("BookmarkDialogWindowButton"));
-            closeButton_->setText(QStringLiteral("×"));
-            closeButton_->setCursor(Qt::PointingHandCursor);
-            closeButton_->setAutoRaise(true);
-            closeButton_->setFixedSize(24, 24);
-            layout->addWidget(closeButton_, 0, Qt::AlignTop);
-        }
-    }
-
-    void setTitle(const QString& title)
-    {
-        titleLabel_->setText(title);
-        titleLabel_->setToolTip(title);
-    }
-
-    QToolButton* closeButton() const { return closeButton_; }
-    QToolButton* minimizeButton() const { return minimizeButton_; }
-    void setMoveCallback(MoveCallback callback) { moveCallback_ = std::move(callback); }
-    void setReleaseCallback(ReleaseCallback callback) { releaseCallback_ = std::move(callback); }
-
-protected:
-    void mousePressEvent(QMouseEvent* event) override
-    {
-        if (event != nullptr && event->button() == Qt::LeftButton) {
-            dragActive_ = true;
-            dragStartPos_ = event->pos();
-            dragOffset_ = event->globalPosition().toPoint() - window()->frameGeometry().topLeft();
-            setCursor(Qt::ClosedHandCursor);
-            event->accept();
-            return;
-        }
-        QWidget::mousePressEvent(event);
-    }
-
-    void mouseMoveEvent(QMouseEvent* event) override
-    {
-        if (!dragActive_ || event == nullptr || !(event->buttons() & Qt::LeftButton)) {
-            QWidget::mouseMoveEvent(event);
-            return;
-        }
-        if ((event->pos() - dragStartPos_).manhattanLength() >= QApplication::startDragDistance()) {
-            dragged_ = true;
-        }
-        if (QWidget* top = window(); top != nullptr) {
-            top->move(event->globalPosition().toPoint() - dragOffset_);
-        }
-        if (moveCallback_) {
-            moveCallback_(event->globalPosition().toPoint(), dragged_);
-        }
-        event->accept();
-    }
-
-    void mouseReleaseEvent(QMouseEvent* event) override
-    {
-        if (event != nullptr && event->button() == Qt::LeftButton) {
-            const bool wasDragged = dragActive_ && dragged_;
-            const QPoint releaseGlobalPos = event->globalPosition().toPoint();
-            dragActive_ = false;
-            dragged_ = false;
-            setCursor(Qt::OpenHandCursor);
-            if (releaseCallback_) {
-                releaseCallback_(releaseGlobalPos, wasDragged);
-            }
-            event->accept();
-            return;
-        }
-        QWidget::mouseReleaseEvent(event);
-    }
-
-private:
-    QLabel* titleLabel_ = nullptr;
-    QToolButton* minimizeButton_ = nullptr;
-    QToolButton* closeButton_ = nullptr;
-    QPoint dragOffset_;
-    QPoint dragStartPos_;
-    MoveCallback moveCallback_;
-    ReleaseCallback releaseCallback_;
-    bool dragActive_ = false;
-    bool dragged_ = false;
-};
-
-QFrame* makeBookmarkDialogShell(QWidget* parent, BookmarkDialogHeader** headerOut, bool allowWindowButtons = true)
-{
-    auto* frame = new QFrame(parent);
-    frame->setObjectName(QStringLiteral("BookmarkDialogFrame"));
-    auto* layout = new QVBoxLayout(frame);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(0);
-    auto* header = new BookmarkDialogHeader(frame, allowWindowButtons);
-    if (headerOut != nullptr) {
-        *headerOut = header;
-    }
-    layout->addWidget(header, 0);
-    return frame;
-}
-
-QWidget* makeBookmarkDialogBody(QWidget* parent)
-{
-    auto* body = new QWidget(parent);
-    auto* layout = new QVBoxLayout(body);
-    layout->setContentsMargins(12, 12, 12, 12);
-    layout->setSpacing(10);
-    return body;
-}
-
-QWidget* makeBookmarkDialogListArea(QWidget* parent)
-{
-    auto* body = new QWidget(parent);
-    auto* layout = new QVBoxLayout(body);
-    layout->setContentsMargins(12, 12, 12, 12);
-    layout->setSpacing(10);
-    return body;
-}
-
-void wireBookmarkDialogWindowButtons(BookmarkDialogHeader* header, QDialog* dialog)
-{
-    if (header == nullptr || dialog == nullptr) {
-        return;
-    }
-    if (header->minimizeButton() != nullptr) {
-        QObject::connect(header->minimizeButton(), &QToolButton::clicked, dialog, &QDialog::showMinimized);
-    }
-    if (header->closeButton() != nullptr) {
-        QObject::connect(header->closeButton(), &QToolButton::clicked, dialog, &QDialog::close);
-    }
 }
 
 template <typename Bookmark>
@@ -1218,12 +1051,9 @@ void MainWindow::EditorSection::syncBookmarksFromEditorText(int changePosition, 
         if (existingLineBookmark == state_.editorBookmarks_.end()) {
             continue;
         }
-        const QString previousCommentText = existingLineBookmark->commentText;
-        existingLineBookmark->title = defaultBookmarkTitleFromComment(candidate.text);
-        if (existingLineBookmark->text.trimmed().isEmpty()
-            || existingLineBookmark->text == previousCommentText) {
-            existingLineBookmark->text = candidate.text;
-        }
+        // Re-bind the bookmark to the line's rewritten comment. Only anchoring
+        // aids are refreshed — the NAME is never rewritten after creation
+        // (default names are generated exactly once; see the redesign spec).
         existingLineBookmark->commentText = candidate.text;
         existingLineBookmark->commentFingerprint = candidate.fingerprint;
         existingLineBookmark->contextBefore = candidate.contextBefore;
@@ -1253,9 +1083,13 @@ void MainWindow::EditorSection::syncBookmarksFromEditorText(int changePosition, 
         if (existing != state_.editorBookmarks_.cend()) {
             continue;
         }
+        QString defaultName = defaultBookmarkNameFromComment(candidate.text);
+        if (defaultName.isEmpty()) {
+            defaultName = fallbackBookmarkNameForLine(candidate.line);
+        }
         state_.editorBookmarks_.append(EditorBookmark{
-            defaultBookmarkTitleFromComment(candidate.text),
-            candidate.text,
+            defaultName,
+            QString(),
             candidate.line,
             QStringLiteral("comment"),
             candidate.text,
@@ -1264,6 +1098,7 @@ void MainWindow::EditorSection::syncBookmarksFromEditorText(int changePosition, 
             candidate.contextAfter,
             owner_.timelineSecondForCursor(candidate.line, candidate.col),
             activeDifficultyId,
+            false,
         });
         usedFingerprints.insert(candidate.fingerprint);
         usedCommentLines.insert(candidate.line);
@@ -1362,176 +1197,103 @@ void MainWindow::EditorSection::replaceBookmarkLine(int fromLine, int toLine)
     }
     sortBookmarks(state_.editorBookmarks_);
     refreshEditorBookmarkLines();
+    markBookmarksMutatedByUser();
     owner_.saveProjectRenderState();
     if (owner_.documentSection_ != nullptr) {
         owner_.documentSection_->rebuildFieldSidebar();
     }
 }
 
-void MainWindow::EditorSection::addBookmark(int line, const QString& title, const QString& text)
+void MainWindow::EditorSection::createBookmarkAtLine(int line, bool beginRenameInSidebar)
 {
     const int normalizedLine = qMax(1, line);
     const int activeDifficultyId = state_.activeDifficultyId_;
     if (!SimaiDocument::isDifficultyId(activeDifficultyId)) {
         return;
     }
-    for (EditorBookmark& bookmark : state_.editorBookmarks_) {
+    for (const EditorBookmark& bookmark : std::as_const(state_.editorBookmarks_)) {
         if (bookmark.difficultyId == activeDifficultyId && bookmark.line == normalizedLine) {
-            bookmark.title = title.trimmed().isEmpty()
-                ? (UiText::isChineseUi() ? QStringLiteral("未命名书签") : QStringLiteral("Untitled Bookmark"))
-                : title.trimmed();
-            bookmark.text = text;
-            bookmark.source = QStringLiteral("manual");
-            bookmark.second = owner_.timelineSecondForCursor(normalizedLine, 1);
-            sortBookmarks(state_.editorBookmarks_);
-            refreshEditorBookmarkLines();
-            owner_.saveProjectRenderState();
+            // Already bookmarked — just surface it in the sidebar.
             if (owner_.documentSection_ != nullptr) {
-                owner_.documentSection_->rebuildFieldSidebar();
+                owner_.documentSection_->revealBookmarkInSidebar(activeDifficultyId, normalizedLine, false);
             }
             return;
         }
     }
-    state_.editorBookmarks_.append(EditorBookmark{
-        title.trimmed().isEmpty()
-            ? (UiText::isChineseUi() ? QStringLiteral("未命名书签") : QStringLiteral("Untitled Bookmark"))
-            : title.trimmed(),
-        text,
-        normalizedLine,
-        QStringLiteral("manual"),
-        QString(),
-        QString(),
-        QString(),
-        QString(),
-        owner_.timelineSecondForCursor(normalizedLine, 1),
-        activeDifficultyId,
-    });
+
+    // Default name (generated exactly once): the line's `||` comment wins,
+    // else the line-number fallback. A comment also seeds the fingerprint +
+    // context anchors so the bookmark follows the comment when it moves.
+    EditorBookmark bookmark;
+    bookmark.line = normalizedLine;
+    bookmark.source = QStringLiteral("manual");
+    bookmark.second = owner_.timelineSecondForCursor(normalizedLine, 1);
+    bookmark.difficultyId = activeDifficultyId;
+    const QVector<BookmarkCommentCandidate> candidates = collectBookmarkCommentCandidates(owner_.editorText());
+    for (const BookmarkCommentCandidate& candidate : candidates) {
+        if (candidate.line != normalizedLine) {
+            continue;
+        }
+        bookmark.title = defaultBookmarkNameFromComment(candidate.text);
+        bookmark.commentText = candidate.text;
+        bookmark.commentFingerprint = candidate.fingerprint;
+        bookmark.contextBefore = candidate.contextBefore;
+        bookmark.contextAfter = candidate.contextAfter;
+        bookmark.second = owner_.timelineSecondForCursor(candidate.line, candidate.col);
+        break;
+    }
+    if (bookmark.title.isEmpty()) {
+        bookmark.title = fallbackBookmarkNameForLine(normalizedLine);
+    }
+    state_.editorBookmarks_.append(bookmark);
     sortBookmarks(state_.editorBookmarks_);
     refreshEditorBookmarkLines();
+    markBookmarksMutatedByUser();
     owner_.saveProjectRenderState();
     if (owner_.documentSection_ != nullptr) {
-        owner_.documentSection_->rebuildFieldSidebar();
+        owner_.documentSection_->revealBookmarkInSidebar(activeDifficultyId, normalizedLine, beginRenameInSidebar);
     }
 }
 
-void MainWindow::EditorSection::openBookmarkAtLine(int line)
+bool MainWindow::EditorSection::renameBookmark(int difficultyId, int line, const QString& name)
 {
-    const int activeDifficultyId = state_.activeDifficultyId_;
-    const auto it = std::find_if(state_.editorBookmarks_.begin(), state_.editorBookmarks_.end(), [activeDifficultyId, line](const EditorBookmark& bookmark) {
-        return bookmark.difficultyId == activeDifficultyId && bookmark.line == line;
-    });
-    if (it == state_.editorBookmarks_.end()) {
-        owner_.jumpToLocation(line, 1);
-        return;
+    const QString trimmed = name.trimmed();
+    if (trimmed.isEmpty()) {
+        return false;
     }
-
-    const int bookmarkIndex = static_cast<int>(std::distance(state_.editorBookmarks_.begin(), it));
-    owner_.jumpToLocation(it->line, 1);
-    auto* dialog = new QDialog(UiDialogs::effectiveParentWidget(&owner_));
-    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    dialog->setObjectName(QStringLiteral("BookmarkDialog"));
-    dialog->setWindowTitle(bookmarkTitleForDisplay(*it));
-    dialog->setWindowModality(Qt::NonModal);
-    dialog->setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
-    UiDialogs::applyDetachedParentBehavior(dialog, UiDialogs::effectiveParentWidget(&owner_));
-    dialog->resize(460, 260);
-    dialog->setStyleSheet(bookmarkDialogStyleSheet());
-
-    BookmarkDialogHeader* header = nullptr;
-    auto* shell = makeBookmarkDialogShell(dialog, &header);
-    header->setTitle(bookmarkTitleForDisplay(*it));
-    wireBookmarkDialogWindowButtons(header, dialog);
-
-    auto* shellLayout = new QVBoxLayout(dialog);
-    shellLayout->setContentsMargins(0, 0, 0, 0);
-    shellLayout->setSpacing(0);
-    shellLayout->addWidget(shell, 1);
-
-    auto* shellVBox = qobject_cast<QVBoxLayout*>(shell->layout());
-    auto* body = makeBookmarkDialogBody(shell);
-    shellVBox->addWidget(body, 1);
-    auto* layout = qobject_cast<QVBoxLayout*>(body->layout());
-
-    auto* metaRow = new QWidget(body);
-    auto* metaLayout = new QHBoxLayout(metaRow);
-    metaLayout->setContentsMargins(0, 0, 0, 0);
-    metaLayout->setSpacing(8);
-    auto* lineEdit = new QLineEdit(body);
-    lineEdit->setValidator(new QIntValidator(1, 999999, lineEdit));
-    lineEdit->setReadOnly(true);
-    lineEdit->setText(QString::number(it->line));
-    lineEdit->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("行号") : QStringLiteral("Line"));
-    lineEdit->setFixedWidth(88);
-    metaLayout->addWidget(lineEdit, 0);
-
-    auto* titleEdit = new QLineEdit(body);
-    titleEdit->setReadOnly(true);
-    titleEdit->setText(it->title);
-    metaLayout->addWidget(titleEdit, 1);
-    layout->addWidget(metaRow, 0);
-
-    auto* edit = new QTextEdit(body);
-    edit->setReadOnly(true);
-    edit->setPlainText(it->text);
-    layout->addWidget(edit, 1);
-
-    auto* buttonBox = new QDialogButtonBox(body);
-    auto* editButton = buttonBox->addButton(
-        UiText::isChineseUi() ? QStringLiteral("修改") : QStringLiteral("Edit"),
-        QDialogButtonBox::ActionRole);
-    auto* deleteButton = buttonBox->addButton(
-        UiText::isChineseUi() ? QStringLiteral("删除") : QStringLiteral("Delete"),
-        QDialogButtonBox::DestructiveRole);
-    auto* saveButton = buttonBox->addButton(
-        UiText::isChineseUi() ? QStringLiteral("保存") : QStringLiteral("Save"),
-        QDialogButtonBox::ActionRole);
-    saveButton->setVisible(false);
-    connect(editButton, &QPushButton::clicked, dialog, [lineEdit, titleEdit, edit, editButton, saveButton]() {
-        lineEdit->setReadOnly(false);
-        titleEdit->setReadOnly(false);
-        edit->setReadOnly(false);
-        lineEdit->setFocus();
-        editButton->setVisible(false);
-        saveButton->setVisible(true);
-    });
-    connect(saveButton, &QPushButton::clicked, dialog, [this, bookmarkIndex, dialog, lineEdit, titleEdit, edit, header]() {
-        if (bookmarkIndex < 0 || bookmarkIndex >= state_.editorBookmarks_.size()) {
-            return;
+    for (EditorBookmark& bookmark : state_.editorBookmarks_) {
+        if (bookmark.difficultyId != difficultyId || bookmark.line != line) {
+            continue;
         }
-        EditorBookmark& bookmark = state_.editorBookmarks_[bookmarkIndex];
-        const int targetLine = qMax(1, lineEdit->text().trimmed().toInt());
-        bookmark.title = titleEdit->text().trimmed().isEmpty()
-            ? (UiText::isChineseUi() ? QStringLiteral("未命名书签") : QStringLiteral("Untitled Bookmark"))
-            : titleEdit->text().trimmed();
-        bookmark.text = edit->toPlainText();
-        bookmark.line = targetLine;
-        const QString updatedTitle = bookmarkTitleForDisplay(bookmark);
+        if (bookmark.title == trimmed && bookmark.nameLocked) {
+            return false;
+        }
+        bookmark.title = trimmed;
+        bookmark.nameLocked = true;
         sortBookmarks(state_.editorBookmarks_);
         refreshEditorBookmarkLines();
+        markBookmarksMutatedByUser();
         owner_.saveProjectRenderState();
-        header->setTitle(updatedTitle);
-        dialog->setWindowTitle(updatedTitle);
-        dialog->close();
+        return true;
+    }
+    return false;
+}
+
+void MainWindow::EditorSection::activateBookmarkAtLine(int line)
+{
+    const int activeDifficultyId = state_.activeDifficultyId_;
+    owner_.jumpToLocation(qMax(1, line), 1);
+    const auto it = std::find_if(state_.editorBookmarks_.cbegin(), state_.editorBookmarks_.cend(), [activeDifficultyId, line](const EditorBookmark& bookmark) {
+        return bookmark.difficultyId == activeDifficultyId && bookmark.line == line;
     });
-    connect(deleteButton, &QPushButton::clicked, dialog, [this, bookmarkIndex, dialog]() {
-        if (bookmarkIndex < 0 || bookmarkIndex >= state_.editorBookmarks_.size()) {
-            return;
-        }
-        if (!confirmDeleteBookmark(UiDialogs::effectiveParentWidget(&owner_), state_.editorBookmarks_.at(bookmarkIndex))) {
-            return;
-        }
-        state_.editorBookmarks_.removeAt(bookmarkIndex);
-        refreshEditorBookmarkLines();
-        owner_.saveProjectRenderState();
-        if (owner_.documentSection_ != nullptr) {
-            owner_.documentSection_->rebuildFieldSidebar();
-        }
-        dialog->close();
-    });
-    connect(buttonBox, &QDialogButtonBox::rejected, dialog, &QDialog::close);
-    UiDialogs::localizeButtonBox(buttonBox);
-    layout->addWidget(buttonBox, 0);
-    dialog->show();
+    if (it == state_.editorBookmarks_.cend()) {
+        return;
+    }
+    state_.activeBookmarkDifficultyId_ = activeDifficultyId;
+    state_.activeBookmarkLine_ = line;
+    if (owner_.documentSection_ != nullptr) {
+        owner_.documentSection_->revealBookmarkInSidebar(activeDifficultyId, line, false);
+    }
 }
 
 void MainWindow::EditorSection::deleteBookmarkAtLineWithConfirmation(int line)
@@ -1547,232 +1309,16 @@ void MainWindow::EditorSection::deleteBookmarkAtLineWithConfirmation(int line)
         return;
     }
     state_.editorBookmarks_.erase(it);
+    if (state_.activeBookmarkDifficultyId_ == activeDifficultyId && state_.activeBookmarkLine_ == line) {
+        state_.activeBookmarkDifficultyId_ = 0;
+        state_.activeBookmarkLine_ = -1;
+    }
     refreshEditorBookmarkLines();
+    markBookmarksMutatedByUser();
     owner_.saveProjectRenderState();
     if (owner_.documentSection_ != nullptr) {
         owner_.documentSection_->rebuildFieldSidebar();
     }
-}
-
-void MainWindow::EditorSection::showCreateBookmarkDialog()
-{
-    int targetLine = 0;
-    if (auto* sourceEditor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); sourceEditor != nullptr) {
-        targetLine = qMax(1, sourceEditor->textCursor().blockNumber() + 1);
-    }
-    showCreateBookmarkDialogForLine(targetLine);
-}
-
-void MainWindow::EditorSection::showCreateBookmarkDialogForLine(int initialLine)
-{
-    auto* dialog = new QDialog(UiDialogs::effectiveParentWidget(&owner_));
-    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    dialog->setObjectName(QStringLiteral("BookmarkDialog"));
-    dialog->setWindowTitle(UiText::isChineseUi() ? QStringLiteral("创建书签") : QStringLiteral("Create Bookmark"));
-    dialog->setWindowModality(Qt::NonModal);
-    dialog->setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
-    UiDialogs::applyDetachedParentBehavior(dialog, UiDialogs::effectiveParentWidget(&owner_));
-    dialog->resize(520, 400);
-    dialog->setStyleSheet(bookmarkDialogStyleSheet());
-
-    BookmarkDialogHeader* header = nullptr;
-    auto* shell = makeBookmarkDialogShell(dialog, &header);
-    header->setTitle(UiText::isChineseUi() ? QStringLiteral("创建书签") : QStringLiteral("Create Bookmark"));
-    wireBookmarkDialogWindowButtons(header, dialog);
-
-    auto* shellLayout = new QVBoxLayout(dialog);
-    shellLayout->setContentsMargins(0, 0, 0, 0);
-    shellLayout->setSpacing(0);
-    shellLayout->addWidget(shell, 1);
-
-    auto* shellVBox = qobject_cast<QVBoxLayout*>(shell->layout());
-    auto* body = makeBookmarkDialogBody(shell);
-    shellVBox->addWidget(body, 1);
-    auto* layout = qobject_cast<QVBoxLayout*>(body->layout());
-
-    auto* metaRow = new QWidget(body);
-    auto* metaLayout = new QHBoxLayout(metaRow);
-    metaLayout->setContentsMargins(0, 0, 0, 0);
-    metaLayout->setSpacing(8);
-    auto* lineEdit = new QLineEdit(body);
-    lineEdit->setValidator(new QIntValidator(1, 999999, lineEdit));
-    lineEdit->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("行号") : QStringLiteral("Line"));
-    if (initialLine > 0) {
-        lineEdit->setText(QString::number(initialLine));
-    }
-    lineEdit->setFixedWidth(88);
-    auto* lineEditedByUser = new bool(false);
-    connect(lineEdit, &QLineEdit::textEdited, dialog, [lineEditedByUser](const QString&) {
-        *lineEditedByUser = true;
-    });
-    connect(dialog, &QObject::destroyed, dialog, [lineEditedByUser]() {
-        delete lineEditedByUser;
-    });
-    auto* titleEdit = new QLineEdit(body);
-    titleEdit->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("书签名称") : QStringLiteral("Bookmark name"));
-    metaLayout->addWidget(lineEdit, 0);
-    metaLayout->addWidget(titleEdit, 1);
-    layout->addWidget(metaRow, 0);
-
-    auto* edit = new PlainCodeEditor(body);
-    edit->setFont(editorFont(state_.editorTextFontPointSize_));
-    edit->setBlockSpacingPixels(blockSpacingPixelsForPointSize(
-        state_.editorTextFontPointSize_,
-        state_.editorLineSpacingFactor_));
-    edit->setHalfWidthInputEnabled(state_.editorHalfWidthInputEnabled_);
-    edit->setImeInputDisabled(state_.editorImeInputDisabled_);
-    edit->setEditorOverwriteMode(state_.editorOverwriteModeEnabled_);
-    connect(edit, &PlainCodeEditor::editorOverwriteModeChanged, &owner_, [this](bool enabled) {
-        applyEditorOverwriteModeEnabled(enabled, true);
-    });
-    edit->setAutoCompletionEnabled(state_.editorAutoCompletionEnabled_);
-    edit->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("书签内容") : QStringLiteral("Bookmark notes"));
-    edit->setStyleSheet(UiTheme::editorTextEditStyleSheet());
-    if (auto* vbar = edit->verticalScrollBar()) {
-        vbar->setStyleSheet(modernScrollBarStyle());
-    }
-    if (auto* hbar = edit->horizontalScrollBar()) {
-        hbar->setStyleSheet(modernScrollBarStyle());
-    }
-    layout->addWidget(edit, 1);
-
-    auto* buttonBox = new QDialogButtonBox(body);
-    auto* createButton = buttonBox->addButton(
-        UiText::isChineseUi() ? QStringLiteral("创建") : QStringLiteral("Create"),
-        QDialogButtonBox::AcceptRole);
-    buttonBox->addButton(QDialogButtonBox::Close);
-    connect(createButton, &QPushButton::clicked, dialog, [this, dialog, lineEdit, titleEdit, edit]() {
-        int targetLine = lineEdit->text().trimmed().toInt();
-        if (targetLine <= 0) {
-            if (auto* sourceEditor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); sourceEditor != nullptr) {
-                targetLine = qMax(1, sourceEditor->textCursor().blockNumber() + 1);
-            }
-        }
-        targetLine = qMax(1, targetLine);
-        addBookmark(targetLine, titleEdit->text(), edit->toPlainText());
-        dialog->close();
-    });
-    connect(buttonBox, &QDialogButtonBox::rejected, dialog, &QDialog::close);
-    UiDialogs::localizeButtonBox(buttonBox);
-    layout->addWidget(buttonBox, 0);
-
-    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
-    if (editor != nullptr) {
-        QPointer<QDialog> dialogPtr(dialog);
-        const auto createBookmarkOnLine = [this, dialogPtr, lineEdit, lineEditedByUser, titleEdit, edit, header](int line) {
-            if (dialogPtr.isNull()) {
-                return;
-            }
-            const int typedLine = lineEdit->text().trimmed().toInt();
-            addBookmark(*lineEditedByUser && typedLine > 0 ? typedLine : line, titleEdit->text(), edit->toPlainText());
-            header->setTitle(titleEdit->text().trimmed().isEmpty()
-                ? (UiText::isChineseUi() ? QStringLiteral("创建书签") : QStringLiteral("Create Bookmark"))
-                : titleEdit->text().trimmed());
-            dialogPtr->close();
-        };
-        header->setMoveCallback([editor](const QPoint& globalPos, bool wasDragged) {
-            if (editor == nullptr) {
-                return;
-            }
-            editor->setBookmarkDropPreviewLine(wasDragged ? editor->lineNumberAtGlobalPosition(globalPos) : -1);
-        });
-        header->setReleaseCallback([editor, createBookmarkOnLine](const QPoint& globalPos, bool wasDragged) {
-            if (editor == nullptr) {
-                return;
-            }
-            editor->setBookmarkDropPreviewLine(-1);
-            if (!wasDragged) {
-                return;
-            }
-            const int line = editor->lineNumberAtGlobalPosition(globalPos);
-            if (line > 0) {
-                createBookmarkOnLine(line);
-            }
-        });
-        connect(dialog, &QObject::destroyed, editor, [editor]() {
-            editor->setBookmarkDropPreviewLine(-1);
-        });
-    }
-    dialog->show();
-}
-
-void MainWindow::EditorSection::showBookmarkManager()
-{
-    auto* menu = new QMenu(UiDialogs::effectiveParentWidget(&owner_));
-    menu->setAttribute(Qt::WA_DeleteOnClose, true);
-    menu->setWindowFlags(Qt::Popup | Qt::FramelessWindowHint);
-    menu->setObjectName(QStringLiteral("BookmarkDialog"));
-    menu->setStyleSheet(bookmarkDialogStyleSheet());
-
-    const int activeDifficultyId = state_.activeDifficultyId_;
-    QVector<EditorBookmark> sorted;
-    for (const EditorBookmark& bookmark : std::as_const(state_.editorBookmarks_)) {
-        if (bookmark.difficultyId == activeDifficultyId) {
-            sorted.append(bookmark);
-        }
-    }
-    sortBookmarks(sorted);
-
-    if (sorted.isEmpty()) {
-        QAction* emptyAction = menu->addAction(UiText::isChineseUi() ? QStringLiteral("暂无书签") : QStringLiteral("No bookmarks"));
-        emptyAction->setEnabled(false);
-    } else {
-        BookmarkDialogHeader* header = nullptr;
-        auto* shell = makeBookmarkDialogShell(menu, &header);
-        header->setTitle(UiText::isChineseUi() ? QStringLiteral("书签管理") : QStringLiteral("Bookmark Manager"));
-        if (header->minimizeButton() != nullptr) {
-            header->minimizeButton()->setVisible(false);
-        }
-        QObject::connect(header->closeButton(), &QToolButton::clicked, menu, &QMenu::close);
-        auto* shellLayout = new QVBoxLayout(menu);
-        shellLayout->setContentsMargins(0, 0, 0, 0);
-        shellLayout->setSpacing(0);
-        shellLayout->addWidget(shell, 1);
-
-        auto* shellVBox = qobject_cast<QVBoxLayout*>(shell->layout());
-        auto* body = makeBookmarkDialogListArea(shell);
-        shellVBox->addWidget(body, 1);
-        auto* bodyLayout = qobject_cast<QVBoxLayout*>(body->layout());
-
-        auto* list = new QListWidget(body);
-        list->setFrameShape(QFrame::NoFrame);
-        list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-        list->setVerticalScrollBarPolicy(sorted.size() > kBookmarkManagerVisibleRows ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
-        list->setSelectionMode(QAbstractItemView::SingleSelection);
-        list->setUniformItemSizes(true);
-        list->setStyleSheet(UiTheme::outlineListStyleSheet());
-        if (auto* vbar = list->verticalScrollBar()) {
-            vbar->setStyleSheet(modernScrollBarStyle());
-        }
-        for (const EditorBookmark& bookmark : std::as_const(sorted)) {
-            auto* item = new QListWidgetItem(bookmarkTitleForDisplay(bookmark), list);
-            item->setData(Qt::UserRole, bookmark.line);
-        }
-        const int visibleRows = qMin(kBookmarkManagerVisibleRows, sorted.size());
-        list->setFixedWidth(240);
-        list->setFixedHeight(qMax(1, visibleRows) * 34 + 8);
-        connect(list, &QListWidget::itemClicked, menu, [this, menu](QListWidgetItem* item) {
-            if (item == nullptr) {
-                return;
-            }
-            const int line = item->data(Qt::UserRole).toInt();
-            menu->close();
-            openBookmarkAtLine(line);
-        });
-
-        auto* widgetAction = new QWidgetAction(menu);
-        widgetAction->setDefaultWidget(list);
-        bodyLayout->addWidget(list, 1);
-        menu->addAction(widgetAction);
-    }
-
-    QPoint anchor = QCursor::pos();
-    if (ui_.toolboxMenu_ != nullptr) {
-        anchor = ui_.toolboxMenu_->parentWidget() != nullptr
-            ? ui_.toolboxMenu_->parentWidget()->mapToGlobal(QPoint(24, 24))
-            : QCursor::pos();
-    }
-    menu->popup(anchor);
 }
 
 void MainWindow::EditorSection::exportBookmarksJson()
@@ -1877,6 +1423,9 @@ void MainWindow::EditorSection::importBookmarksJson()
     if (imported > 0) {
         sortBookmarks(state_.editorBookmarks_);
         refreshEditorBookmarkLines();
+        // Imported bookmarks reach the simai file on the next save — mark the
+        // document dirty so that save actually happens.
+        markBookmarksMutatedByUser();
         owner_.saveProjectRenderState();
         if (owner_.documentSection_ != nullptr) {
             owner_.documentSection_->rebuildFieldSidebar();
@@ -2013,19 +1562,9 @@ void MainWindow::applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool p
     editorSection_->applyEditorHeaderTopDisplay(mode, persistPreference);
 }
 
-void MainWindow::showCreateBookmarkDialog()
+void MainWindow::activateBookmarkAtLine(int line)
 {
-    editorSection_->showCreateBookmarkDialog();
-}
-
-void MainWindow::showBookmarkManager()
-{
-    editorSection_->showBookmarkManager();
-}
-
-void MainWindow::openBookmarkAtLine(int line)
-{
-    editorSection_->openBookmarkAtLine(line);
+    editorSection_->activateBookmarkAtLine(line);
 }
 
 void MainWindow::setFullCopyAreaVisible(bool visible)

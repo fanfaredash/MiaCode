@@ -280,16 +280,67 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     connect(editor, &PlainCodeEditor::editorOverwriteModeChanged, this, [this](bool enabled) {
         applyEditorOverwriteModeEnabled(enabled, true);
     });
-    connect(editor, &PlainCodeEditor::lineNumberBookmarkActivated, this, &MainWindow::openBookmarkAtLine);
+    connect(editor, &PlainCodeEditor::lineNumberBookmarkActivated, this, &MainWindow::activateBookmarkAtLine);
     connect(editor, &PlainCodeEditor::lineNumberBookmarkCreateRequested, this, [this](int line) {
         if (editorSection_ != nullptr) {
-            editorSection_->showCreateBookmarkDialogForLine(line);
+            // Dialog-free creation: default name now, inline rename in the
+            // sidebar for the final name (see the bookmark redesign spec).
+            editorSection_->createBookmarkAtLine(line, true);
+        }
+    });
+    connect(editor, &PlainCodeEditor::lineNumberBookmarkRenameRequested, this, [this](int line) {
+        if (documentSection_ != nullptr) {
+            documentSection_->revealBookmarkInSidebar(activeDifficultyId_, line, true);
+        }
+    });
+    connect(editor, &PlainCodeEditor::lineNumberBookmarkDeleteRequested, this, [this](int line) {
+        if (editorSection_ != nullptr) {
+            editorSection_->deleteBookmarkAtLineWithConfirmation(line);
         }
     });
     connect(editor, &PlainCodeEditor::lineNumberBookmarkMoveRequested, this, [this](int fromLine, int toLine) {
         if (editorSection_ != nullptr) {
             editorSection_->replaceBookmarkLine(fromLine, toLine);
         }
+    });
+    connect(editor, &PlainCodeEditor::lineNumberBookmarkContextMenuRequested, this,
+            [this, editor](int line, const QPoint& globalPos) {
+        // Line-number-gutter right-click: the same bookmark actions the editor
+        // body menu offers, anchored at the gutter position.
+        QMenu menu(this);
+        menu.setFont(uiAccentFont(10));
+        styleRoundedMenu(menu);
+        const bool hasBookmark = editor->bookmarkedLines().contains(line);
+        if (!hasBookmark) {
+            QAction* createAction = menu.addAction(
+                UiText::isChineseUi() ? QStringLiteral("插入书签") : QStringLiteral("Insert Bookmark"));
+            connect(createAction, &QAction::triggered, this, [this, line]() {
+                if (editorSection_ != nullptr) {
+                    editorSection_->createBookmarkAtLine(line, true);
+                }
+            });
+        } else {
+            QAction* renameAction = menu.addAction(
+                UiText::isChineseUi() ? QStringLiteral("重命名书签") : QStringLiteral("Rename Bookmark"));
+            connect(renameAction, &QAction::triggered, this, [this, line]() {
+                if (documentSection_ != nullptr) {
+                    documentSection_->revealBookmarkInSidebar(activeDifficultyId_, line, true);
+                }
+            });
+            QAction* deleteAction = menu.addAction(
+                UiText::isChineseUi() ? QStringLiteral("删除书签") : QStringLiteral("Delete Bookmark"));
+            connect(deleteAction, &QAction::triggered, this, [this, line]() {
+                if (editorSection_ != nullptr) {
+                    editorSection_->deleteBookmarkAtLineWithConfirmation(line);
+                }
+            });
+            QAction* revealAction = menu.addAction(
+                UiText::isChineseUi() ? QStringLiteral("在侧边栏显示") : QStringLiteral("Show in Sidebar"));
+            connect(revealAction, &QAction::triggered, this, [this, line]() {
+                activateBookmarkAtLine(line);
+            });
+        }
+        menu.exec(globalPos);
     });
     chartBracketHighlighter_ = new BracketScopeHighlighter(editor->document());
     editorWidget_ = editor;
@@ -907,9 +958,17 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     outlineList_->setIconSize(QSize(14, 14));
     outlineList_->setSpacing(2);
     outlineList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    outlineList_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    if (auto* vbar = outlineList_->verticalScrollBar()) {
+        vbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
+    }
     outlineList_->setTextElideMode(Qt::ElideRight);
     outlineList_->setFont(uiAccentFont(11));
     outlineList_->setItemDelegate(new OutlineItemDelegate(outlineList_));
+    // Inline bookmark rename is started programmatically (double-click /
+    // context menu → editItem); automatic edit triggers stay off so plain
+    // clicks never open an editor.
+    outlineList_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     outlineList_->setStyleSheet(
         "QListWidget {"
         " background: #FFFFFF;"
@@ -994,16 +1053,46 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             switchToExportField();
             return;
         }
+        if (kind == "bookmark_group") {
+            // Toggle the fold; never switches the difficulty.
+            const int groupDifficultyId = current->data(kOutlineItemDifficultyRole).toInt();
+            if (documentSection_ != nullptr) {
+                documentSection_->setBookmarkGroupExpanded(
+                    groupDifficultyId,
+                    !documentSection_->isBookmarkGroupExpanded(groupDifficultyId));
+            }
+            return;
+        }
         if (kind == "bookmark") {
-            const int bookmarkDifficultyId = current->data(Qt::UserRole + 1).toInt();
-            const int bookmarkLine = current->data(Qt::UserRole + 2).toInt();
+            const int bookmarkDifficultyId = current->data(kOutlineItemDifficultyRole).toInt();
+            const int bookmarkLine = current->data(kOutlineItemLineRole).toInt();
             if (SimaiDocument::isDifficultyId(bookmarkDifficultyId) && bookmarkDifficultyId != activeDifficultyId_) {
                 activeOutlineKey_ = "chart";
+                // NOTE: switching rebuilds the sidebar — `current` dangles from
+                // here on; only the role values read above may be used.
                 if (!switchToDifficultyField(bookmarkDifficultyId)) {
                     return;
                 }
             }
             jumpToLocation(bookmarkLine, 1);
+            // Move the "last activated" accent marker (in-place role updates;
+            // itemChanged is blocked so the rename handler stays quiet).
+            {
+                QSignalBlocker blocker(outlineList_);
+                if (documentSection_ != nullptr) {
+                    if (QListWidgetItem* previousActive = documentSection_->findBookmarkSidebarItem(
+                            activeBookmarkDifficultyId_, activeBookmarkLine_)) {
+                        previousActive->setData(kOutlineItemActiveRole, false);
+                    }
+                    if (QListWidgetItem* nowActive = documentSection_->findBookmarkSidebarItem(
+                            bookmarkDifficultyId, bookmarkLine)) {
+                        nowActive->setData(kOutlineItemActiveRole, true);
+                    }
+                }
+                activeBookmarkDifficultyId_ = bookmarkDifficultyId;
+                activeBookmarkLine_ = bookmarkLine;
+            }
+            outlineList_->viewport()->update();
             return;
         }
         if (kind == "add") {
@@ -1096,30 +1185,38 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         }
     });
     connect(outlineList_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* current) {
-        if (current == nullptr) {
+        if (current == nullptr || outlineList_ == nullptr) {
             return;
         }
-        const QString kind = current->data(Qt::UserRole).toString();
+        const QString kind = current->data(kOutlineItemKindRole).toString();
         if (kind != QLatin1String("bookmark")) {
             return;
         }
-        const int bookmarkDifficultyId = current->data(Qt::UserRole + 1).toInt();
-        const int bookmarkLine = current->data(Qt::UserRole + 2).toInt();
-        double bookmarkSecond = current->data(Qt::UserRole + 3).toDouble();
-        if (SimaiDocument::isDifficultyId(bookmarkDifficultyId) && bookmarkDifficultyId != activeDifficultyId_) {
-            activeOutlineKey_ = "chart";
-            if (!switchToDifficultyField(bookmarkDifficultyId)) {
-                return;
+        // Double-click = inline rename (the old jump-to-timeline action moved
+        // to the context menu's "跳到时间轴位置").
+        outlineList_->editItem(current);
+    });
+    connect(outlineList_, &QListWidget::itemChanged, this, [this](QListWidgetItem* item) {
+        // Inline-rename commit. Rebuilds run under QSignalBlocker and the
+        // accent-marker updates block signals too, so reaching here means the
+        // item editor wrote a new display text.
+        if (item == nullptr || editorSection_ == nullptr) {
+            return;
+        }
+        if (item->data(kOutlineItemKindRole).toString() != QLatin1String("bookmark")) {
+            return;
+        }
+        const int difficultyId = item->data(kOutlineItemDifficultyRole).toInt();
+        const int line = item->data(kOutlineItemLineRole).toInt();
+        editorSection_->renameBookmark(difficultyId, line, item->text());
+        // Rebuild queued (not inline): the view may still hold the closing
+        // editor for this item. Restores canonical text on an empty/refused
+        // rename and refreshes the tooltip on success.
+        QTimer::singleShot(0, this, [this]() {
+            if (documentSection_ != nullptr) {
+                documentSection_->rebuildFieldSidebar();
             }
-        }
-        if (bookmarkSecond < 0.0 || !qIsFinite(bookmarkSecond)) {
-            bookmarkSecond = timelineSecondForCursor(bookmarkLine, 1);
-        }
-        if (bookmarkSecond >= 0.0 && qIsFinite(bookmarkSecond)) {
-            navigateTimelineToSecond(bookmarkSecond, true);
-        } else {
-            jumpToLocation(bookmarkLine, 1);
-        }
+        });
     });
     outlineList_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(outlineList_, &QListWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
@@ -1130,26 +1227,38 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         if (item == nullptr) {
             return;
         }
-        const QString kind = item->data(Qt::UserRole).toString();
+        const QString kind = item->data(kOutlineItemKindRole).toString();
+        // Inserts a bookmark on the editor's current cursor line, switching to
+        // the target difficulty first when the row belongs to another one.
+        const auto insertBookmarkAtCursor = [this](int targetDifficultyId) {
+            if (SimaiDocument::isDifficultyId(targetDifficultyId) && targetDifficultyId != activeDifficultyId_) {
+                activeOutlineKey_ = "chart";
+                if (!switchToDifficultyField(targetDifficultyId)) {
+                    return;
+                }
+            }
+            int line = 1;
+            if (auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_); editor != nullptr) {
+                line = qMax(1, editor->textCursor().blockNumber() + 1);
+            }
+            if (editorSection_ != nullptr) {
+                editorSection_->createBookmarkAtLine(line, true);
+            }
+        };
         if (kind == QLatin1String("bookmark")) {
             QMenu menu(this);
             menu.setFont(uiAccentFont(10));
             styleRoundedMenu(menu);
-            const int bookmarkDifficultyId = item->data(Qt::UserRole + 1).toInt();
-            const int line = item->data(Qt::UserRole + 2).toInt();
-            QAction* detailAction = menu.addAction(UiText::isChineseUi() ? QStringLiteral("详情") : QStringLiteral("Details"));
-            connect(detailAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line]() {
-                if (SimaiDocument::isDifficultyId(bookmarkDifficultyId) && bookmarkDifficultyId != activeDifficultyId_) {
-                    activeOutlineKey_ = "chart";
-                    if (!switchToDifficultyField(bookmarkDifficultyId)) {
-                        return;
-                    }
-                }
-                if (editorSection_ != nullptr) {
-                    editorSection_->openBookmarkAtLine(line);
+            const int bookmarkDifficultyId = item->data(kOutlineItemDifficultyRole).toInt();
+            const int line = item->data(kOutlineItemLineRole).toInt();
+            const double second = item->data(kOutlineItemSecondRole).toDouble();
+            QAction* renameAction = menu.addAction(UiText::isChineseUi() ? QStringLiteral("重命名") : QStringLiteral("Rename"));
+            connect(renameAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line]() {
+                if (documentSection_ != nullptr) {
+                    documentSection_->revealBookmarkInSidebar(bookmarkDifficultyId, line, true);
                 }
             });
-            QAction* deleteAction = menu.addAction(UiText::isChineseUi() ? QStringLiteral("删除书签") : QStringLiteral("Delete Bookmark"));
+            QAction* deleteAction = menu.addAction(UiText::isChineseUi() ? QStringLiteral("删除") : QStringLiteral("Delete"));
             connect(deleteAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line]() {
                 if (SimaiDocument::isDifficultyId(bookmarkDifficultyId) && bookmarkDifficultyId != activeDifficultyId_) {
                     activeOutlineKey_ = "chart";
@@ -1161,16 +1270,54 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
                     editorSection_->deleteBookmarkAtLineWithConfirmation(line);
                 }
             });
+            QAction* timelineAction = menu.addAction(
+                UiText::isChineseUi() ? QStringLiteral("跳到时间轴位置") : QStringLiteral("Jump to Timeline Position"));
+            connect(timelineAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line, second]() {
+                if (SimaiDocument::isDifficultyId(bookmarkDifficultyId) && bookmarkDifficultyId != activeDifficultyId_) {
+                    activeOutlineKey_ = "chart";
+                    if (!switchToDifficultyField(bookmarkDifficultyId)) {
+                        return;
+                    }
+                }
+                double bookmarkSecond = second;
+                if (bookmarkSecond < 0.0 || !qIsFinite(bookmarkSecond)) {
+                    bookmarkSecond = timelineSecondForCursor(line, 1);
+                }
+                if (bookmarkSecond >= 0.0 && qIsFinite(bookmarkSecond)) {
+                    navigateTimelineToSecond(bookmarkSecond, true);
+                } else {
+                    jumpToLocation(line, 1);
+                }
+            });
             menu.exec(outlineList_->viewport()->mapToGlobal(pos));
             return;
         }
-        const int difficultyId = item->data(Qt::UserRole + 1).toInt();
+        if (kind == QLatin1String("bookmark_group")) {
+            const int groupDifficultyId = item->data(kOutlineItemDifficultyRole).toInt();
+            QMenu menu(this);
+            menu.setFont(uiAccentFont(10));
+            styleRoundedMenu(menu);
+            QAction* insertAction = menu.addAction(
+                UiText::isChineseUi() ? QStringLiteral("插入书签") : QStringLiteral("Insert Bookmark"));
+            connect(insertAction, &QAction::triggered, this, [insertBookmarkAtCursor, groupDifficultyId]() {
+                insertBookmarkAtCursor(groupDifficultyId);
+            });
+            menu.exec(outlineList_->viewport()->mapToGlobal(pos));
+            return;
+        }
+        const int difficultyId = item->data(kOutlineItemDifficultyRole).toInt();
         if (!SimaiDocument::isDifficultyId(difficultyId) || document_.difficulty(difficultyId) == nullptr) {
             return;
         }
         QMenu menu(this);
         menu.setFont(uiAccentFont(10));
         styleRoundedMenu(menu);
+        QAction* insertAction = menu.addAction(
+            UiText::isChineseUi() ? QStringLiteral("插入书签") : QStringLiteral("Insert Bookmark"));
+        connect(insertAction, &QAction::triggered, this, [insertBookmarkAtCursor, difficultyId]() {
+            insertBookmarkAtCursor(difficultyId);
+        });
+        menu.addSeparator();
         QAction* deleteAction = menu.addAction(
             makeOutlineCloseIcon(QColor("#5D6876")),
             QString("Delete %1").arg(SimaiDocument::difficultyName(difficultyId))
@@ -1211,18 +1358,12 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 
     toolboxMenu_->addSeparator();
 
+    // Creation and management now live in the sidebar + editor context menus
+    // (bookmark redesign); the toolbox keeps only the JSON compatibility tools.
     QMenu* bookmarkMenu = toolboxMenu_->addMenu(
         UiText::isChineseUi() ? QStringLiteral("书签") : QStringLiteral("Bookmarks")
     );
     styleRoundedMenu(*bookmarkMenu);
-    createBookmarkAction_ = bookmarkMenu->addAction(
-        UiText::isChineseUi() ? QStringLiteral("创建书签") : QStringLiteral("Create Bookmark")
-    );
-    connect(createBookmarkAction_, &QAction::triggered, this, &MainWindow::showCreateBookmarkDialog);
-    bookmarkManagerAction_ = bookmarkMenu->addAction(
-        UiText::isChineseUi() ? QStringLiteral("书签管理") : QStringLiteral("Bookmark Manager")
-    );
-    connect(bookmarkManagerAction_, &QAction::triggered, this, &MainWindow::showBookmarkManager);
     QAction* importBookmarksAction = bookmarkMenu->addAction(
         UiText::isChineseUi() ? QStringLiteral("导入书签 JSON") : QStringLiteral("Import Bookmarks JSON")
     );

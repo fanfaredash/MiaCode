@@ -54,8 +54,6 @@
         QAction* previewVideoSettingsAction_ = nullptr;
         QAction* skinSettingsAction_ = nullptr;
         QAction* swapWorkspaceSidesAction_ = nullptr;
-        QAction* createBookmarkAction_ = nullptr;
-        QAction* bookmarkManagerAction_ = nullptr;
         QAction* fullCopyAreaAction_ = nullptr;
         QAction* aboutAction_ = nullptr;
         QAction* fontDecreaseAction_ = nullptr;
@@ -262,6 +260,24 @@
         QVector<SelectionTransformUndoEntry> chartSelectionTransformUndoEntries_;
         QVector<EditorBookmark> editorBookmarks_;
         QString editorBookmarkLastSyncedText_;
+        // Staging for bookmarks read from the legacy .miacode/miacode_settings.json
+        // `editor_bookmarks` key. loadProjectRenderState() fills it; the loadDocument
+        // adopt step consumes it only when the simai file carries no
+        // &miacode_bookmarks= field of its own (migration fallback).
+        QVector<EditorBookmark> legacyJsonEditorBookmarks_;
+        // True once the simai file is the authoritative bookmark store for the
+        // open chart (bookmarks were loaded from &miacode_bookmarks=, or a save
+        // has written them there). While false, saveProjectRenderState() keeps
+        // mirroring bookmarks into the legacy JSON so a crash before the first
+        // save cannot lose them; once true the legacy key is dropped.
+        bool editorBookmarksInSimai_ = false;
+        // Sidebar bookmark-group fold state per difficulty id. Only explicit
+        // user toggles are recorded; an absent difficulty defaults to expanded
+        // when it is the active difficulty and collapsed otherwise.
+        QHash<int, bool> outlineBookmarkGroupExpanded_;
+        // Last activated bookmark (sidebar accent marker). Line <= 0 = none.
+        int activeBookmarkDifficultyId_ = 0;
+        int activeBookmarkLine_ = -1;
         int lastObservedEditorUndoSteps_ = 0;
         int lastObservedEditorRedoSteps_ = 0;
         bool editorSelectionUndoRedoRestoreInProgress_ = false;
@@ -682,8 +698,6 @@
     QAction*& previewVideoSettingsAction_ = ui_.previewVideoSettingsAction_;
     QAction*& skinSettingsAction_ = ui_.skinSettingsAction_;
     QAction*& swapWorkspaceSidesAction_ = ui_.swapWorkspaceSidesAction_;
-    QAction*& createBookmarkAction_ = ui_.createBookmarkAction_;
-    QAction*& bookmarkManagerAction_ = ui_.bookmarkManagerAction_;
     QAction*& fullCopyAreaAction_ = ui_.fullCopyAreaAction_;
     QAction*& aboutAction_ = ui_.aboutAction_;
     QAction*& fontDecreaseAction_ = ui_.fontDecreaseAction_;
@@ -735,6 +749,11 @@
     int& metadataExtraUndoSaveAnchor_ = state_.metadataExtraUndoSaveAnchor_;
     QVector<SelectionTransformUndoEntry>& chartSelectionTransformUndoEntries_ = state_.chartSelectionTransformUndoEntries_;
     QVector<EditorBookmark>& editorBookmarks_ = state_.editorBookmarks_;
+    QVector<EditorBookmark>& legacyJsonEditorBookmarks_ = state_.legacyJsonEditorBookmarks_;
+    bool& editorBookmarksInSimai_ = state_.editorBookmarksInSimai_;
+    QHash<int, bool>& outlineBookmarkGroupExpanded_ = state_.outlineBookmarkGroupExpanded_;
+    int& activeBookmarkDifficultyId_ = state_.activeBookmarkDifficultyId_;
+    int& activeBookmarkLine_ = state_.activeBookmarkLine_;
     int& lastObservedEditorUndoSteps_ = state_.lastObservedEditorUndoSteps_;
     int& lastObservedEditorRedoSteps_ = state_.lastObservedEditorRedoSteps_;
     bool& editorSelectionUndoRedoRestoreInProgress_ = state_.editorSelectionUndoRedoRestoreInProgress_;
