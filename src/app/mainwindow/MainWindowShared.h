@@ -115,9 +115,8 @@ inline constexpr int kOutlineItemLineRole = Qt::UserRole + 2;
 // difficulty_chart rows: bool — bookmark chevron/fold state.
 inline constexpr int kOutlineItemExpandedRole = Qt::UserRole + 3;
 // metadata/export/difficulty_chart rows: bool — persistent "you are here"
-// marker (accent edge bar + fill), driven by app state instead of the list
-// selection so it survives the selection moving onto a bookmark row.
-// bookmark rows: bool — "last activated" marker (solid accent line badge).
+// marker (accent edge bar + fill), driven by app state instead of transient
+// list selection. Bookmark rows intentionally do not use a persistent marker.
 inline constexpr int kOutlineItemActiveRole = Qt::UserRole + 4;
 // difficulty_chart rows: int — number of derived comment bookmarks.
 inline constexpr int kOutlineItemBookmarkCountRole = Qt::UserRole + 5;
@@ -200,6 +199,22 @@ public:
         }
     }
 
+    QWidget* createEditor(QWidget* parent, const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        QWidget* editor = QStyledItemDelegate::createEditor(parent, option, index);
+        if (editor != nullptr && index.data(kOutlineItemKindRole).toString() == QLatin1String("bookmark")) {
+            if (auto* lineEdit = qobject_cast<QLineEdit*>(editor)) {
+                QFont nameFont = option.font;
+                nameFont.setPointSize(qMax(8, option.font.pointSize() - 2));
+                lineEdit->setFont(nameFont);
+                lineEdit->setFrame(false);
+                lineEdit->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+                lineEdit->setStyleSheet(QStringLiteral("QLineEdit { background: transparent; border: none; padding: 0px; }"));
+            }
+        }
+        return editor;
+    }
+
     // Inline rename: the editor covers the name area of a bookmark row (after
     // the indent + line badge) so the typed text lines up with the display.
     void updateEditorGeometry(QWidget* editor, const QStyleOptionViewItem& option, const QModelIndex& index) const override
@@ -216,11 +231,10 @@ public:
     }
 
 private:
-    // One selection language for every level: the persistent "you are here"
-    // row (active difficulty / metadata / export page) gets a borderless fill
-    // plus a 3px accent bar on its left edge; transient list selection and
-    // hover share a weaker flat fill. Bookmark rows never get the bar — their
-    // "active" treatment is the solid accent line badge (paintBookmarkRow).
+    // One selection language for every non-bookmark level: the persistent
+    // "you are here" row gets a borderless fill plus a 3px accent bar on its
+    // left edge; transient list selection and hover share a weaker flat fill.
+    // Bookmark rows only use the transient fill.
     void paintRowFill(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const
     {
         const UiTheme::Colors& colors = UiTheme::colors();
@@ -271,7 +285,6 @@ private:
     void paintBookmarkRow(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const
     {
         const UiTheme::Colors& colors = UiTheme::colors();
-        const bool active = index.data(kOutlineItemActiveRole).toBool();
         const bool selected = option.state.testFlag(QStyle::State_Selected);
         const int listWidth = option.widget != nullptr ? option.widget->width() : option.rect.width();
         const bool iconOnly = listWidth > 0 && listWidth < kIconOnlyThreshold;
@@ -292,8 +305,8 @@ private:
 
         painter->setRenderHint(QPainter::Antialiasing, true);
 
-        // Line-number badge: neutral by default; the last-activated bookmark
-        // flips it to a solid accent chip ("current position" marker).
+        // Line-number badge: neutral and compact; bookmark jumps are one-shot
+        // actions, so the badge does not persist as a current-position marker.
         const int badgeW = badgeWidth(option, index);
         const int badgeH = qMin(option.rect.height() - 8, 15);
         const QRect badgeRect(
@@ -301,16 +314,9 @@ private:
             option.rect.top() + (option.rect.height() - badgeH) / 2,
             badgeW,
             badgeH);
-        QColor badgeBg;
-        QColor badgeFg;
-        if (active) {
-            badgeBg = colors.accent;
-            badgeFg = colors.accentText;
-        } else {
-            badgeBg = colors.textSecondary;
-            badgeBg.setAlpha(colors.dark ? 40 : 34);
-            badgeFg = colors.textSecondary;
-        }
+        QColor badgeBg = colors.textSecondary;
+        badgeBg.setAlpha(colors.dark ? 40 : 34);
+        const QColor badgeFg = colors.textSecondary;
         painter->setPen(Qt::NoPen);
         painter->setBrush(badgeBg);
         painter->drawRoundedRect(badgeRect, 3.0, 3.0);
@@ -327,7 +333,7 @@ private:
                 QFont nameFont = option.font;
                 nameFont.setPointSize(qMax(8, option.font.pointSize() - 2));
                 painter->setFont(nameFont);
-                painter->setPen(active || selected ? colors.textPrimary : colors.textSecondary);
+                painter->setPen(selected ? colors.textPrimary : colors.textSecondary);
                 const QFontMetrics metrics(nameFont);
                 painter->drawText(nameRect, Qt::AlignLeft | Qt::AlignVCenter,
                                   metrics.elidedText(index.data(Qt::DisplayRole).toString(), Qt::ElideRight, nameRect.width()));

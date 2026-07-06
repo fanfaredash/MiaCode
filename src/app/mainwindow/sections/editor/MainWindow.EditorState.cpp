@@ -52,8 +52,6 @@ void MainWindow::EditorSection::loadProjectRenderState()
 void MainWindow::EditorSection::adoptBookmarksForLoadedDocument()
 {
     state_.editorBookmarks_.clear();
-    state_.activeBookmarkDifficultyId_ = 0;
-    state_.activeBookmarkLine_ = -1;
     syncBookmarksFromEditorText();
 }
 

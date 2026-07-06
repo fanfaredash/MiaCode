@@ -337,7 +337,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             QAction* revealAction = menu.addAction(
                 UiText::isChineseUi() ? QStringLiteral("在侧边栏显示") : QStringLiteral("Show in Sidebar"));
             connect(revealAction, &QAction::triggered, this, [this, line]() {
-                activateBookmarkAtLine(line);
+                if (documentSection_ != nullptr) {
+                    documentSection_->revealBookmarkInSidebar(activeDifficultyId_, line, false);
+                }
             });
         }
         menu.exec(globalPos);
@@ -1015,6 +1017,19 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         }
         const QString kind = current->data(Qt::UserRole).toString();
         const int difficultyId = current->data(Qt::UserRole + 1).toInt();
+        const auto clearOutlineSelection = [this]() {
+            if (outlineList_ == nullptr) {
+                return;
+            }
+            QSignalBlocker blocker(outlineList_);
+            outlineList_->setCurrentItem(nullptr);
+            outlineList_->clearSelection();
+            if (outlineList_->selectionModel() != nullptr) {
+                outlineList_->selectionModel()->clearCurrentIndex();
+                outlineList_->selectionModel()->clearSelection();
+            }
+            outlineList_->viewport()->update();
+        };
         const auto clickedDifficultyFoldChevron = [this, current]() {
             if (outlineList_ == nullptr || current == nullptr) {
                 return false;
@@ -1059,25 +1074,17 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
                     return;
                 }
             }
-            jumpToLocation(bookmarkLine, 1);
-            // Move the "last activated" accent marker (in-place role updates;
-            // itemChanged is blocked so the rename handler stays quiet).
-            {
-                QSignalBlocker blocker(outlineList_);
-                if (documentSection_ != nullptr) {
-                    if (QListWidgetItem* previousActive = documentSection_->findBookmarkSidebarItem(
-                            activeBookmarkDifficultyId_, activeBookmarkLine_)) {
-                        previousActive->setData(kOutlineItemActiveRole, false);
-                    }
-                    if (QListWidgetItem* nowActive = documentSection_->findBookmarkSidebarItem(
-                            bookmarkDifficultyId, bookmarkLine)) {
-                        nowActive->setData(kOutlineItemActiveRole, true);
-                    }
+            if (QApplication::keyboardModifiers().testFlag(Qt::ControlModifier)) {
+                const double bookmarkSecond = timelineSecondForCursor(bookmarkLine, 1);
+                if (bookmarkSecond >= 0.0 && qIsFinite(bookmarkSecond)) {
+                    navigateTimelineToSecond(bookmarkSecond, true);
+                } else {
+                    jumpToLocation(bookmarkLine, 1);
                 }
-                activeBookmarkDifficultyId_ = bookmarkDifficultyId;
-                activeBookmarkLine_ = bookmarkLine;
+            } else {
+                jumpToLocation(bookmarkLine, 1);
             }
-            outlineList_->viewport()->update();
+            clearOutlineSelection();
             return;
         }
         if (kind == "add") {

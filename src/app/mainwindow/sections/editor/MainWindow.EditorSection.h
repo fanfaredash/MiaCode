@@ -18,7 +18,7 @@ public:
     void applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference);
     void applyEditorImeInputDisabled(bool disabled, bool persistPreference);
     void applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference);
-    // Jump to the bookmark's line and highlight it in the sidebar (no dialog).
+    // Jump to the bookmark's line without leaving a persistent sidebar marker.
     void activateBookmarkAtLine(int line);
     void deleteBookmarkAtLineWithConfirmation(int line);
     // Creates a bookmark by inserting a visible `|| [label]` comment on `line`.
