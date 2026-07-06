@@ -1310,15 +1310,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         toolboxMenu_->addAction(normalizeWholeChartAction_);
     }
 
-    toolboxMenu_->addSeparator();
-
-    // "Export as ZIP" also lives under File > Save As. The same QAction is
-    // reused in both places (created in setupMenusAndActions) so the wiring and
-    // enabled-state stay in one spot.
-    if (packAsZipAction_ != nullptr) {
-        toolboxMenu_->addAction(packAsZipAction_);
-    }
     if (netBatchDownloadAction_ != nullptr) {
+        toolboxMenu_->addSeparator();
         toolboxMenu_->addAction(netBatchDownloadAction_);
     }
 
