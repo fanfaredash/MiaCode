@@ -254,12 +254,18 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   dirties and NEVER renames — default names are generated exactly once at creation
   (`defaultBookmarkNameFromComment`: first token of the `||` comment, else `fallbackBookmarkNameForLine`
   "第 N 行"/"LN").
-- **Sidebar (two-level, `outlineList_`):** built by `DocumentSection::rebuildFieldSidebar`
-  (`MainWindow.DocumentUi.cpp`) with item kinds `bookmark_group` (fold header, per-difficulty state
-  in `outlineBookmarkGroupExpanded_`; untouched groups default expanded only for the active
-  difficulty) and `bookmark` (item text = bare name; indent + line badge painted by
-  `OutlineItemDelegate` in `MainWindowShared.h` from the shared `kOutlineItem*Role` constants).
-  Rebuild preserves fold state, bookmark selection and scroll position. Single click = jump to
+- **Sidebar (IDE-style tree, `outlineList_`):** built by `DocumentSection::rebuildFieldSidebar`
+  (`MainWindow.DocumentUi.cpp`); painted by `OutlineItemDelegate` in `MainWindowShared.h` from the
+  shared `kOutlineItem*Role` constants. Difficulty rows carry the fold chevron at the ROW START
+  (path chevron, `kDifficultyFoldHitZone` click zone in FrameBootstrap; per-difficulty state in
+  `outlineBookmarkGroupExpanded_`, untouched groups default expanded only for the active
+  difficulty); `bookmark` rows (item text = bare name) draw a 1px indent guide + a fixed-width
+  neutral line badge (`kOutlineItemMaxLineRole` sizes it group-wide; solid accent = last-activated).
+  `kOutlineItemActiveRole` on metadata/export/difficulty rows is the persistent "you are here"
+  marker (borderless fill + 3px left accent bar), driven by `activeOutlineKey_`/`activeDifficultyId_`
+  — NOT the list selection, so it survives bookmark clicks. Non-interactive `spacer` kind rows
+  separate the sidebar sections. Rebuild preserves fold state, bookmark selection and scroll
+  position. Single click = jump to
   line (+ accent marker `activeBookmark*`), double click = inline rename (`editItem`; commit via
   `itemChanged` → `EditorSection::renameBookmark`, empty name reverts), right click = 重命名 /
   删除 / 跳到时间轴位置 (difficulty & group rows add 插入书签). Reveal/rename entry:

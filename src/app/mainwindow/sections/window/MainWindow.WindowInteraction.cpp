@@ -737,21 +737,6 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
             }
         }
     }
-    if (owner_.outlineList_ != nullptr && watched == owner_.outlineList_->viewport()) {
-        if (event->type() == QEvent::MouseMove) {
-            auto* mouseEvent = static_cast<QMouseEvent*>(event);
-            QListWidgetItem* hoveredItem = owner_.outlineList_->itemAt(mouseEvent->pos());
-            const bool showButton =
-                hoveredItem != nullptr
-                && hoveredItem == owner_.outlineList_->currentItem()
-                && SimaiDocument::isDifficultyId(hoveredItem->data(Qt::UserRole + 1).toInt());
-            owner_.updateDifficultyDeleteButton(showButton);
-        } else if (event->type() == QEvent::Leave || event->type() == QEvent::Wheel) {
-            owner_.updateDifficultyDeleteButton(false);
-        } else if (event->type() == QEvent::Resize && owner_.deleteDifficultyButton_ != nullptr && owner_.deleteDifficultyButton_->isVisible()) {
-            owner_.updateDifficultyDeleteButton(true);
-        }
-    }
     if ((owner_.errorList_ != nullptr && watched == owner_.errorList_->viewport())
         || (owner_.muriList_ != nullptr && watched == owner_.muriList_->viewport())) {
         if (event->type() == QEvent::Resize

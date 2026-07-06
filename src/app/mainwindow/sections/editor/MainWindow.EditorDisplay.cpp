@@ -35,9 +35,8 @@
 using namespace miacode::mainwindow::shared;
 
 namespace {
-// Default bookmark names come from the line's `||` comment: first token up to
-// kBookmarkAutoNameTokenMaxChars, else a raw prefix of the comment capped at
-// kBookmarkAutoNameMaxChars. Generated once at creation — never rewritten.
+// Derived bookmark names come from the line's first non-control `||` comment:
+// an explicit `[label]` prefix wins, otherwise the first short token is used.
 constexpr int kBookmarkAutoNameTokenMaxChars = 16;
 constexpr int kBookmarkAutoNameMaxChars = 20;
 constexpr int kBookmarkContextChars = 48;
@@ -66,6 +65,46 @@ bool isControlBookmarkComment(const QString& text)
     }
     static const QRegularExpression meterRe(QStringLiteral(R"(^\d+\s*/\s*\d+$)"));
     return meterRe.match(normalized).hasMatch();
+}
+
+struct BookmarkLabelParts {
+    QString normalizedComment;
+    QString explicitLabel;
+    QString bodyAfterExplicitLabel;
+    int labelStartInRawComment = -1;
+    int labelEndInRawComment = -1;
+    int afterLabelInRawComment = -1;
+    bool hasExplicitLabel = false;
+};
+
+BookmarkLabelParts parseBookmarkLabelParts(const QString& rawComment)
+{
+    BookmarkLabelParts parts;
+    parts.normalizedComment = normalizedBookmarkCommentText(rawComment);
+    int firstContent = 0;
+    while (firstContent < rawComment.size() && rawComment.at(firstContent).isSpace()) {
+        ++firstContent;
+    }
+    if (firstContent < rawComment.size() && rawComment.at(firstContent) == QLatin1Char('[')) {
+        const int close = rawComment.indexOf(QLatin1Char(']'), firstContent + 1);
+        if (close > firstContent + 1) {
+            const QString label = rawComment.mid(firstContent + 1, close - firstContent - 1).trimmed();
+            if (!label.isEmpty()) {
+                parts.hasExplicitLabel = true;
+                parts.explicitLabel = label;
+                parts.labelStartInRawComment = firstContent + 1;
+                parts.labelEndInRawComment = close;
+                parts.afterLabelInRawComment = close + 1;
+                while (parts.afterLabelInRawComment < rawComment.size()
+                       && rawComment.at(parts.afterLabelInRawComment).isSpace()) {
+                    ++parts.afterLabelInRawComment;
+                }
+                parts.bodyAfterExplicitLabel =
+                    normalizedBookmarkCommentText(rawComment.mid(parts.afterLabelInRawComment));
+            }
+        }
+    }
+    return parts;
 }
 
 // Comment → default name: take the first delimiter-separated token (space,
@@ -99,14 +138,24 @@ QString fallbackBookmarkNameForLine(int line)
         : QStringLiteral("L%1").arg(qMax(1, line));
 }
 
+QString defaultExplicitBookmarkLabel()
+{
+    return UiText::isChineseUi()
+        ? QStringLiteral("新书签")
+        : QStringLiteral("New Bookmark");
+}
+
 struct BookmarkCommentCandidate {
     int line = 1;
     int col = 1;
     int position = 0;
+    int markerInLine = -1;
     QString text;
+    QString title;
     QString fingerprint;
     QString contextBefore;
     QString contextAfter;
+    bool hasExplicitLabel = false;
 };
 
 QVector<BookmarkCommentCandidate> collectBookmarkCommentCandidates(const QString& text)
@@ -118,78 +167,34 @@ QVector<BookmarkCommentCandidate> collectBookmarkCommentCandidates(const QString
         const QString& lineText = lines.at(i);
         const int marker = lineText.indexOf(QStringLiteral("||"));
         if (marker >= 0) {
-            const QString commentText = normalizedBookmarkCommentText(lineText.mid(marker + 2));
+            const QString rawComment = lineText.mid(marker + 2);
+            const BookmarkLabelParts labelParts = parseBookmarkLabelParts(rawComment);
+            const QString commentText = labelParts.normalizedComment;
             if (!isControlBookmarkComment(commentText)) {
                 BookmarkCommentCandidate candidate;
                 candidate.line = i + 1;
                 candidate.col = marker + 1;
                 candidate.position = position + marker;
+                candidate.markerInLine = marker;
                 candidate.text = commentText;
+                candidate.title = labelParts.hasExplicitLabel
+                    ? labelParts.explicitLabel
+                    : defaultBookmarkNameFromComment(commentText);
+                if (candidate.title.isEmpty()) {
+                    candidate.title = fallbackBookmarkNameForLine(candidate.line);
+                }
                 candidate.fingerprint = bookmarkFingerprintForText(commentText);
                 const int beforeStart = qMax(0, candidate.position - kBookmarkContextChars);
                 candidate.contextBefore = text.mid(beforeStart, candidate.position - beforeStart);
                 const int afterStart = qMin(text.size(), candidate.position + 2 + commentText.size());
                 candidate.contextAfter = text.mid(afterStart, qMin(kBookmarkContextChars, text.size() - afterStart));
+                candidate.hasExplicitLabel = labelParts.hasExplicitLabel;
                 candidates.append(candidate);
             }
         }
         position += lineText.size() + 1;
     }
     return candidates;
-}
-
-bool bookmarksReferToSameImportIdentity(const MainWindow::EditorBookmark& left, const MainWindow::EditorBookmark& right)
-{
-    if (left.difficultyId != right.difficultyId) {
-        return false;
-    }
-    if (!left.commentFingerprint.isEmpty() && left.commentFingerprint == right.commentFingerprint) {
-        return true;
-    }
-    if (left.line == right.line && left.title.trimmed() == right.title.trimmed()) {
-        return true;
-    }
-    return false;
-}
-
-QJsonObject bookmarkToJsonObject(const MainWindow::EditorBookmark& bookmark)
-{
-    QJsonObject object;
-    object.insert(QStringLiteral("line"), qMax(1, bookmark.line));
-    if (SimaiDocument::isDifficultyId(bookmark.difficultyId)) {
-        object.insert(QStringLiteral("difficulty_id"), bookmark.difficultyId);
-    }
-    object.insert(QStringLiteral("title"), bookmark.title);
-    object.insert(QStringLiteral("text"), bookmark.text);
-    object.insert(QStringLiteral("source"), bookmark.source);
-    object.insert(QStringLiteral("comment_text"), bookmark.commentText);
-    object.insert(QStringLiteral("comment_fingerprint"), bookmark.commentFingerprint);
-    object.insert(QStringLiteral("context_before"), bookmark.contextBefore);
-    object.insert(QStringLiteral("context_after"), bookmark.contextAfter);
-    if (bookmark.second >= 0.0) {
-        object.insert(QStringLiteral("second"), bookmark.second);
-    }
-    if (bookmark.nameLocked) {
-        object.insert(QStringLiteral("name_locked"), true);
-    }
-    return object;
-}
-
-MainWindow::EditorBookmark bookmarkFromJsonObject(const QJsonObject& object)
-{
-    return MainWindow::EditorBookmark{
-        object.value(QStringLiteral("title")).toString(),
-        object.value(QStringLiteral("text")).toString(),
-        qMax(1, object.value(QStringLiteral("line")).toInt(1)),
-        object.value(QStringLiteral("source")).toString(),
-        object.value(QStringLiteral("comment_text")).toString(),
-        object.value(QStringLiteral("comment_fingerprint")).toString(),
-        object.value(QStringLiteral("context_before")).toString(),
-        object.value(QStringLiteral("context_after")).toString(),
-        object.value(QStringLiteral("second")).toDouble(-1.0),
-        object.value(QStringLiteral("difficulty_id")).toInt(0),
-        object.value(QStringLiteral("name_locked")).toBool(false),
-    };
 }
 
 bool confirmDeleteBookmark(QWidget* parent, const MainWindow::EditorBookmark& bookmark)
@@ -199,8 +204,8 @@ bool confirmDeleteBookmark(QWidget* parent, const MainWindow::EditorBookmark& bo
         ? (UiText::isChineseUi() ? QStringLiteral("未命名书签") : QStringLiteral("Untitled Bookmark"))
         : bookmark.title.trimmed();
     const QString message = UiText::isChineseUi()
-        ? QStringLiteral("确定删除书签“%1”吗？此操作不会删除谱面注释。").arg(name)
-        : QStringLiteral("Delete bookmark \"%1\"? This will not remove chart comments.").arg(name);
+        ? QStringLiteral("确定删除书签“%1”吗？这会删除该行的谱面注释。").arg(name)
+        : QStringLiteral("Delete bookmark \"%1\"? This will delete the chart comment on that line.").arg(name);
     return UiDialogs::showMessageBox(
         QMessageBox::Question,
         parent,
@@ -222,6 +227,109 @@ void sortBookmarks(QVector<Bookmark>& bookmarks)
         }
         return left.title.localeAwareCompare(right.title) < 0;
     });
+}
+
+bool editorBookmarkListsEqual(const QVector<MainWindow::EditorBookmark>& left,
+                              const QVector<MainWindow::EditorBookmark>& right)
+{
+    if (left.size() != right.size()) {
+        return false;
+    }
+    for (int i = 0; i < left.size(); ++i) {
+        const MainWindow::EditorBookmark& a = left.at(i);
+        const MainWindow::EditorBookmark& b = right.at(i);
+        if (a.difficultyId != b.difficultyId
+            || a.line != b.line
+            || a.title != b.title
+            || a.commentText != b.commentText
+            || a.commentFingerprint != b.commentFingerprint) {
+            return false;
+        }
+    }
+    return true;
+}
+
+QVector<MainWindow::EditorBookmark> derivedBookmarksForChart(
+    const QString& chartText,
+    int difficultyId)
+{
+    QVector<MainWindow::EditorBookmark> bookmarks;
+    if (!SimaiDocument::isDifficultyId(difficultyId)) {
+        return bookmarks;
+    }
+    const QVector<BookmarkCommentCandidate> candidates = collectBookmarkCommentCandidates(chartText);
+    bookmarks.reserve(candidates.size());
+    for (const BookmarkCommentCandidate& candidate : candidates) {
+        bookmarks.append(MainWindow::EditorBookmark{
+            candidate.title,
+            QString(),
+            candidate.line,
+            QStringLiteral("comment"),
+            candidate.text,
+            candidate.fingerprint,
+            candidate.contextBefore,
+            candidate.contextAfter,
+            difficultyId,
+            candidate.hasExplicitLabel,
+        });
+    }
+    return bookmarks;
+}
+
+QTextBlock blockForOneBasedLine(QTextDocument* document, int line)
+{
+    if (document == nullptr || line <= 0) {
+        return QTextBlock();
+    }
+    return document->findBlockByNumber(line - 1);
+}
+
+struct LineBookmarkCommentInfo {
+    int marker = -1;
+    int rawCommentStart = -1;
+    int labelStart = -1;
+    int labelEnd = -1;
+    int afterLabel = -1;
+    bool hasMarker = false;
+    bool isBookmark = false;
+    bool hasExplicitLabel = false;
+    QString normalizedComment;
+};
+
+LineBookmarkCommentInfo inspectLineBookmarkComment(const QString& lineText)
+{
+    LineBookmarkCommentInfo info;
+    info.marker = lineText.indexOf(QStringLiteral("||"));
+    info.hasMarker = info.marker >= 0;
+    if (!info.hasMarker) {
+        return info;
+    }
+    info.rawCommentStart = info.marker + 2;
+    const QString rawComment = lineText.mid(info.rawCommentStart);
+    const BookmarkLabelParts labelParts = parseBookmarkLabelParts(rawComment);
+    info.normalizedComment = labelParts.normalizedComment;
+    info.isBookmark = !isControlBookmarkComment(info.normalizedComment);
+    info.hasExplicitLabel = labelParts.hasExplicitLabel;
+    if (labelParts.hasExplicitLabel) {
+        info.labelStart = info.rawCommentStart + labelParts.labelStartInRawComment;
+        info.labelEnd = info.rawCommentStart + labelParts.labelEndInRawComment;
+        info.afterLabel = info.rawCommentStart + labelParts.afterLabelInRawComment;
+    }
+    return info;
+}
+
+QString bookmarkCommentSegmentForLine(const QString& lineText)
+{
+    const LineBookmarkCommentInfo info = inspectLineBookmarkComment(lineText);
+    if (!info.isBookmark) {
+        return QString();
+    }
+    return lineText.mid(info.marker);
+}
+
+bool lineIsStandaloneComment(const QString& lineText, const LineBookmarkCommentInfo& info)
+{
+    return info.isBookmark && lineText.left(info.marker).trimmed().isEmpty();
 }
 }  // namespace
 
@@ -967,210 +1075,47 @@ void MainWindow::EditorSection::refreshEditorBookmarkLines()
 
 void MainWindow::EditorSection::syncBookmarksFromEditorText(int changePosition, int charsRemoved, int charsAdded)
 {
-    const QString text = owner_.editorText();
-    const QString previousText = state_.editorBookmarkLastSyncedText_;
-    const QVector<BookmarkCommentCandidate> candidates = collectBookmarkCommentCandidates(text);
+    Q_UNUSED(changePosition);
+    Q_UNUSED(charsRemoved);
+    Q_UNUSED(charsAdded);
+
+    QVector<EditorBookmark> derived;
     const int activeDifficultyId = state_.activeDifficultyId_;
-    if (!SimaiDocument::isDifficultyId(activeDifficultyId)) {
-        refreshEditorBookmarkLines();
-        state_.editorBookmarkLastSyncedText_ = text;
-        return;
-    }
-
-    bool mutated = false;
-    if (changePosition >= 0) {
-        const int addedLineCount = charsAdded > 0
-            ? text.mid(changePosition, charsAdded).count(QLatin1Char('\n'))
-            : 0;
-        const int removedLineCount = charsRemoved > 0
-            ? previousText.mid(changePosition, charsRemoved).count(QLatin1Char('\n'))
-            : 0;
-        const int lineDelta = addedLineCount - removedLineCount;
-        if (lineDelta != 0) {
-            int changedLine = 1;
-            const QString& lineSource = !previousText.isEmpty() ? previousText : text;
-            for (int i = 0; i < changePosition && i < lineSource.size(); ++i) {
-                if (lineSource.at(i) == QLatin1Char('\n')) {
-                    ++changedLine;
-                }
-            }
-            for (EditorBookmark& bookmark : state_.editorBookmarks_) {
-                if (bookmark.difficultyId != activeDifficultyId) {
-                    continue;
-                }
-                if (bookmark.line > changedLine || (lineDelta > 0 && bookmark.line >= changedLine)) {
-                    const int shiftedLine = qMax(1, bookmark.line + lineDelta);
-                    if (bookmark.line != shiftedLine) {
-                        bookmark.line = shiftedLine;
-                        mutated = true;
-                    }
-                }
-            }
-        }
-    }
-
-    QSet<QString> usedFingerprints;
-    QSet<int> usedCommentLines;
-    for (EditorBookmark& bookmark : state_.editorBookmarks_) {
-        if (bookmark.difficultyId != activeDifficultyId || bookmark.commentFingerprint.isEmpty()) {
+    const bool hasActiveDifficulty = owner_.hasActiveDifficulty();
+    const QVector<int> ids = state_.document_.difficultyIds();
+    for (int difficultyId : ids) {
+        const SimaiDifficultyData* difficultyData = state_.document_.difficulty(difficultyId);
+        if (difficultyData == nullptr) {
             continue;
         }
-        for (const BookmarkCommentCandidate& candidate : candidates) {
-            if (candidate.fingerprint != bookmark.commentFingerprint) {
-                continue;
-            }
-            usedFingerprints.insert(candidate.fingerprint);
-            usedCommentLines.insert(candidate.line);
-            if (bookmark.line != candidate.line
-                || bookmark.commentText != candidate.text
-                || bookmark.contextBefore != candidate.contextBefore
-                || bookmark.contextAfter != candidate.contextAfter) {
-                bookmark.line = candidate.line;
-                bookmark.commentText = candidate.text;
-                bookmark.contextBefore = candidate.contextBefore;
-                bookmark.contextAfter = candidate.contextAfter;
-                bookmark.second = owner_.timelineSecondForCursor(candidate.line, candidate.col);
-                mutated = true;
-            }
-            break;
-        }
+        const bool useLiveEditorText = hasActiveDifficulty && difficultyId == activeDifficultyId;
+        const QString chartText = useLiveEditorText ? owner_.editorText() : difficultyData->chart;
+        QVector<EditorBookmark> perDifficulty = derivedBookmarksForChart(
+            chartText,
+            difficultyId);
+        derived.append(perDifficulty);
     }
+    sortBookmarks(derived);
+    const bool mutated = !editorBookmarkListsEqual(state_.editorBookmarks_, derived);
+    state_.editorBookmarks_ = derived;
 
-    for (const BookmarkCommentCandidate& candidate : candidates) {
-        if (candidate.fingerprint.isEmpty() || usedCommentLines.contains(candidate.line)) {
-            continue;
-        }
-        auto existingLineBookmark = std::find_if(
-            state_.editorBookmarks_.begin(),
-            state_.editorBookmarks_.end(),
-            [activeDifficultyId, &candidate](const EditorBookmark& bookmark) {
-                return bookmark.line == candidate.line
-                    && bookmark.difficultyId == activeDifficultyId
-                    && bookmark.source == QLatin1String("comment");
-            });
-        if (existingLineBookmark == state_.editorBookmarks_.end()) {
-            continue;
-        }
-        // Re-bind the bookmark to the line's rewritten comment. Only anchoring
-        // aids are refreshed — the NAME is never rewritten after creation
-        // (default names are generated exactly once; see the redesign spec).
-        existingLineBookmark->commentText = candidate.text;
-        existingLineBookmark->commentFingerprint = candidate.fingerprint;
-        existingLineBookmark->contextBefore = candidate.contextBefore;
-        existingLineBookmark->contextAfter = candidate.contextAfter;
-        existingLineBookmark->second = owner_.timelineSecondForCursor(candidate.line, candidate.col);
-        usedFingerprints.insert(candidate.fingerprint);
-        usedCommentLines.insert(candidate.line);
-        mutated = true;
-    }
-
-    for (const BookmarkCommentCandidate& candidate : candidates) {
-        if (candidate.fingerprint.isEmpty()
-            || usedFingerprints.contains(candidate.fingerprint)
-            || usedCommentLines.contains(candidate.line)) {
-            continue;
-        }
-        const auto existing = std::find_if(
+    if (state_.activeBookmarkLine_ > 0) {
+        const auto activeIt = std::find_if(
             state_.editorBookmarks_.cbegin(),
             state_.editorBookmarks_.cend(),
-            [activeDifficultyId, &candidate](const EditorBookmark& bookmark) {
-                if (bookmark.difficultyId != activeDifficultyId) {
-                    return false;
-                }
-                return bookmark.commentFingerprint == candidate.fingerprint
-                    || bookmark.line == candidate.line;
+            [this](const EditorBookmark& bookmark) {
+                return bookmark.difficultyId == state_.activeBookmarkDifficultyId_
+                    && bookmark.line == state_.activeBookmarkLine_;
             });
-        if (existing != state_.editorBookmarks_.cend()) {
-            continue;
-        }
-        QString defaultName = defaultBookmarkNameFromComment(candidate.text);
-        if (defaultName.isEmpty()) {
-            defaultName = fallbackBookmarkNameForLine(candidate.line);
-        }
-        state_.editorBookmarks_.append(EditorBookmark{
-            defaultName,
-            QString(),
-            candidate.line,
-            QStringLiteral("comment"),
-            candidate.text,
-            candidate.fingerprint,
-            candidate.contextBefore,
-            candidate.contextAfter,
-            owner_.timelineSecondForCursor(candidate.line, candidate.col),
-            activeDifficultyId,
-            false,
-        });
-        usedFingerprints.insert(candidate.fingerprint);
-        usedCommentLines.insert(candidate.line);
-        mutated = true;
-    }
-
-    QSet<int> seenAutoBookmarkLines;
-    for (int i = 0; i < state_.editorBookmarks_.size();) {
-        const EditorBookmark& bookmark = state_.editorBookmarks_.at(i);
-        if (bookmark.difficultyId == activeDifficultyId && bookmark.source == QLatin1String("comment")) {
-            if (seenAutoBookmarkLines.contains(bookmark.line)) {
-                state_.editorBookmarks_.removeAt(i);
-                mutated = true;
-                continue;
-            }
-            seenAutoBookmarkLines.insert(bookmark.line);
-        }
-        ++i;
-    }
-
-    if (mutated) {
-        sortBookmarks(state_.editorBookmarks_);
-        refreshEditorBookmarkLines();
-        owner_.saveProjectRenderState();
-        if (owner_.documentSection_ != nullptr) {
-            owner_.documentSection_->rebuildFieldSidebar();
-        }
-    } else {
-        refreshEditorBookmarkLines();
-    }
-    state_.editorBookmarkLastSyncedText_ = text;
-}
-
-void MainWindow::EditorSection::reanchorActiveBookmarksAfterChartTransform()
-{
-    const int activeDifficultyId = state_.activeDifficultyId_;
-    if (!SimaiDocument::isDifficultyId(activeDifficultyId)) {
-        return;
-    }
-
-    syncBookmarksFromEditorText();
-
-    bool mutated = false;
-    for (EditorBookmark& bookmark : state_.editorBookmarks_) {
-        if (bookmark.difficultyId != activeDifficultyId
-            || !bookmark.commentFingerprint.isEmpty()
-            || bookmark.second < 0.0
-            || !qIsFinite(bookmark.second)) {
-            continue;
-        }
-
-        int line = 0;
-        int col = 0;
-        double cursorSecond = 0.0;
-        if (!state_.timelineQuickModel_.resolveTimelineNavigateCursor(bookmark.second, &line, &col, &cursorSecond)) {
-            continue;
-        }
-        const int resolvedLine = qMax(1, line);
-        if (bookmark.line != resolvedLine) {
-            bookmark.line = resolvedLine;
-            bookmark.second = cursorSecond >= 0.0 ? cursorSecond : owner_.timelineSecondForCursor(resolvedLine, qMax(1, col));
-            mutated = true;
+        if (activeIt == state_.editorBookmarks_.cend()) {
+            state_.activeBookmarkDifficultyId_ = 0;
+            state_.activeBookmarkLine_ = -1;
         }
     }
 
-    if (mutated) {
-        sortBookmarks(state_.editorBookmarks_);
-        refreshEditorBookmarkLines();
-        owner_.saveProjectRenderState();
-        if (owner_.documentSection_ != nullptr) {
-            owner_.documentSection_->rebuildFieldSidebar();
-        }
+    refreshEditorBookmarkLines();
+    if (mutated && owner_.documentSection_ != nullptr) {
+        owner_.documentSection_->rebuildFieldSidebar();
     }
 }
 
@@ -1178,29 +1123,82 @@ void MainWindow::EditorSection::replaceBookmarkLine(int fromLine, int toLine)
 {
     const int normalizedFrom = qMax(1, fromLine);
     const int normalizedTo = qMax(1, toLine);
-    const int activeDifficultyId = state_.activeDifficultyId_;
     if (normalizedFrom == normalizedTo) {
         return;
     }
-    bool moved = false;
-    for (EditorBookmark& bookmark : state_.editorBookmarks_) {
-        if (bookmark.difficultyId == activeDifficultyId && bookmark.line == normalizedFrom) {
-            bookmark.line = normalizedTo;
-            bookmark.source = QStringLiteral("manual");
-            bookmark.second = owner_.timelineSecondForCursor(normalizedTo, 1);
-            moved = true;
-            break;
-        }
-    }
-    if (!moved) {
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr || editor->document() == nullptr) {
         return;
     }
-    sortBookmarks(state_.editorBookmarks_);
-    refreshEditorBookmarkLines();
-    markBookmarksMutatedByUser();
-    owner_.saveProjectRenderState();
+    const QTextBlock sourceBlock = blockForOneBasedLine(editor->document(), normalizedFrom);
+    const QTextBlock targetBlock = blockForOneBasedLine(editor->document(), normalizedTo);
+    if (!sourceBlock.isValid() || !targetBlock.isValid()) {
+        return;
+    }
+    const QString sourceLine = sourceBlock.text();
+    const LineBookmarkCommentInfo sourceInfo = inspectLineBookmarkComment(sourceLine);
+    if (!sourceInfo.isBookmark) {
+        return;
+    }
+    const QString targetLine = targetBlock.text();
+    const LineBookmarkCommentInfo targetInfo = inspectLineBookmarkComment(targetLine);
+    if (targetInfo.hasMarker) {
+        owner_.statusBar()->showMessage(
+            UiText::isChineseUi()
+                ? QStringLiteral("目标行已经有注释，已取消移动书签。")
+                : QStringLiteral("Target line already has a comment; bookmark move canceled."),
+            5000);
+        return;
+    }
+
+    const QString commentSegment = bookmarkCommentSegmentForLine(sourceLine);
+    if (commentSegment.isEmpty()) {
+        return;
+    }
+    const bool sourceStandalone = lineIsStandaloneComment(sourceLine, sourceInfo);
+    QTextCursor cursor(editor->document());
+    cursor.beginEditBlock();
+    if (sourceStandalone) {
+        if (sourceBlock.next().isValid()) {
+            cursor.setPosition(sourceBlock.position());
+            cursor.setPosition(sourceBlock.next().position(), QTextCursor::KeepAnchor);
+            cursor.removeSelectedText();
+        } else if (sourceBlock.previous().isValid()) {
+            const QTextBlock previousBlock = sourceBlock.previous();
+            cursor.setPosition(previousBlock.position() + previousBlock.length() - 1);
+            cursor.setPosition(sourceBlock.position() + sourceBlock.length() - 1, QTextCursor::KeepAnchor);
+            cursor.removeSelectedText();
+        } else {
+            cursor.setPosition(sourceBlock.position());
+            cursor.setPosition(sourceBlock.position() + sourceLine.size(), QTextCursor::KeepAnchor);
+            cursor.removeSelectedText();
+        }
+    } else {
+        const int removeStartInLine =
+            sourceInfo.marker > 0 && sourceLine.at(sourceInfo.marker - 1).isSpace()
+            ? sourceInfo.marker - 1
+            : sourceInfo.marker;
+        cursor.setPosition(sourceBlock.position() + removeStartInLine);
+        cursor.setPosition(sourceBlock.position() + sourceLine.size(), QTextCursor::KeepAnchor);
+        cursor.removeSelectedText();
+    }
+
+    const int adjustedTargetLine = sourceStandalone && normalizedFrom < normalizedTo
+        ? normalizedTo - 1
+        : normalizedTo;
+    const QTextBlock adjustedTargetBlock = blockForOneBasedLine(editor->document(), adjustedTargetLine);
+    if (adjustedTargetBlock.isValid()) {
+        const QString adjustedTargetText = adjustedTargetBlock.text();
+        cursor.setPosition(adjustedTargetBlock.position() + adjustedTargetText.size());
+        cursor.insertText(adjustedTargetText.trimmed().isEmpty()
+            ? commentSegment
+            : QStringLiteral(" ") + commentSegment);
+    }
+    cursor.endEditBlock();
+
+    syncBookmarksFromEditorText();
     if (owner_.documentSection_ != nullptr) {
-        owner_.documentSection_->rebuildFieldSidebar();
+        owner_.documentSection_->revealBookmarkInSidebar(state_.activeDifficultyId_, adjustedTargetLine, false);
     }
 }
 
@@ -1211,72 +1209,113 @@ void MainWindow::EditorSection::createBookmarkAtLine(int line, bool beginRenameI
     if (!SimaiDocument::isDifficultyId(activeDifficultyId)) {
         return;
     }
-    for (const EditorBookmark& bookmark : std::as_const(state_.editorBookmarks_)) {
-        if (bookmark.difficultyId == activeDifficultyId && bookmark.line == normalizedLine) {
-            // Already bookmarked — just surface it in the sidebar.
-            if (owner_.documentSection_ != nullptr) {
-                owner_.documentSection_->revealBookmarkInSidebar(activeDifficultyId, normalizedLine, false);
-            }
-            return;
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr || editor->document() == nullptr) {
+        return;
+    }
+    const QTextBlock block = blockForOneBasedLine(editor->document(), normalizedLine);
+    if (!block.isValid()) {
+        return;
+    }
+    const QString lineText = block.text();
+    const LineBookmarkCommentInfo info = inspectLineBookmarkComment(lineText);
+    if (info.isBookmark) {
+        if (owner_.documentSection_ != nullptr) {
+            owner_.documentSection_->revealBookmarkInSidebar(activeDifficultyId, normalizedLine, false);
         }
+        return;
     }
 
-    // Default name (generated exactly once): the line's `||` comment wins,
-    // else the line-number fallback. A comment also seeds the fingerprint +
-    // context anchors so the bookmark follows the comment when it moves.
-    EditorBookmark bookmark;
-    bookmark.line = normalizedLine;
-    bookmark.source = QStringLiteral("manual");
-    bookmark.second = owner_.timelineSecondForCursor(normalizedLine, 1);
-    bookmark.difficultyId = activeDifficultyId;
-    const QVector<BookmarkCommentCandidate> candidates = collectBookmarkCommentCandidates(owner_.editorText());
-    for (const BookmarkCommentCandidate& candidate : candidates) {
-        if (candidate.line != normalizedLine) {
-            continue;
-        }
-        bookmark.title = defaultBookmarkNameFromComment(candidate.text);
-        bookmark.commentText = candidate.text;
-        bookmark.commentFingerprint = candidate.fingerprint;
-        bookmark.contextBefore = candidate.contextBefore;
-        bookmark.contextAfter = candidate.contextAfter;
-        bookmark.second = owner_.timelineSecondForCursor(candidate.line, candidate.col);
-        break;
+    const QString label = QStringLiteral("|| [%1]").arg(defaultExplicitBookmarkLabel());
+    int revealLine = normalizedLine;
+    QTextCursor cursor(editor->document());
+    cursor.beginEditBlock();
+    if (info.hasMarker) {
+        cursor.setPosition(block.position() + lineText.size());
+        cursor.insertText(QStringLiteral("\n") + label);
+        revealLine = normalizedLine + 1;
+    } else {
+        cursor.setPosition(block.position() + lineText.size());
+        cursor.insertText(lineText.trimmed().isEmpty()
+            ? label
+            : QStringLiteral(" ") + label);
     }
-    if (bookmark.title.isEmpty()) {
-        bookmark.title = fallbackBookmarkNameForLine(normalizedLine);
-    }
-    state_.editorBookmarks_.append(bookmark);
-    sortBookmarks(state_.editorBookmarks_);
-    refreshEditorBookmarkLines();
-    markBookmarksMutatedByUser();
-    owner_.saveProjectRenderState();
+    cursor.endEditBlock();
+
+    syncBookmarksFromEditorText();
     if (owner_.documentSection_ != nullptr) {
-        owner_.documentSection_->revealBookmarkInSidebar(activeDifficultyId, normalizedLine, beginRenameInSidebar);
+        owner_.documentSection_->revealBookmarkInSidebar(activeDifficultyId, revealLine, beginRenameInSidebar);
     }
 }
 
 bool MainWindow::EditorSection::renameBookmark(int difficultyId, int line, const QString& name)
 {
     const QString trimmed = name.trimmed();
-    if (trimmed.isEmpty()) {
+    if (!SimaiDocument::isDifficultyId(difficultyId)) {
         return false;
     }
-    for (EditorBookmark& bookmark : state_.editorBookmarks_) {
-        if (bookmark.difficultyId != difficultyId || bookmark.line != line) {
-            continue;
-        }
-        if (bookmark.title == trimmed && bookmark.nameLocked) {
+    if (difficultyId != state_.activeDifficultyId_) {
+        state_.activeOutlineKey_ = QStringLiteral("chart");
+        if (!owner_.switchToDifficultyField(difficultyId)) {
             return false;
         }
-        bookmark.title = trimmed;
-        bookmark.nameLocked = true;
-        sortBookmarks(state_.editorBookmarks_);
-        refreshEditorBookmarkLines();
-        markBookmarksMutatedByUser();
-        owner_.saveProjectRenderState();
-        return true;
     }
-    return false;
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr || editor->document() == nullptr) {
+        return false;
+    }
+    const QTextBlock block = blockForOneBasedLine(editor->document(), qMax(1, line));
+    if (!block.isValid()) {
+        return false;
+    }
+    const QString lineText = block.text();
+    const LineBookmarkCommentInfo info = inspectLineBookmarkComment(lineText);
+    if (!info.isBookmark) {
+        return false;
+    }
+    QString currentDerivedTitle = defaultBookmarkNameFromComment(info.normalizedComment);
+    if (currentDerivedTitle.isEmpty()) {
+        currentDerivedTitle = fallbackBookmarkNameForLine(qMax(1, line));
+    }
+
+    QTextCursor cursor(editor->document());
+    cursor.beginEditBlock();
+    bool changed = false;
+    if (trimmed.isEmpty()) {
+        if (info.hasExplicitLabel) {
+            const int removeStart = info.labelStart - 1;
+            const int removeEnd = qMax(info.afterLabel, info.labelEnd + 1);
+            cursor.setPosition(block.position() + removeStart);
+            cursor.setPosition(block.position() + removeEnd, QTextCursor::KeepAnchor);
+            cursor.removeSelectedText();
+            changed = true;
+        }
+    } else if (info.hasExplicitLabel) {
+        const QString oldLabel = lineText.mid(info.labelStart, info.labelEnd - info.labelStart).trimmed();
+        if (oldLabel != trimmed) {
+            cursor.setPosition(block.position() + info.labelStart);
+            cursor.setPosition(block.position() + info.labelEnd, QTextCursor::KeepAnchor);
+            cursor.insertText(trimmed);
+            changed = true;
+        }
+    } else if (trimmed != currentDerivedTitle) {
+        int insertPos = info.rawCommentStart;
+        while (insertPos < lineText.size() && lineText.at(insertPos).isSpace()) {
+            ++insertPos;
+        }
+        cursor.setPosition(block.position() + insertPos);
+        cursor.insertText(QStringLiteral("[%1] ").arg(trimmed));
+        changed = true;
+    }
+    cursor.endEditBlock();
+
+    if (changed) {
+        syncBookmarksFromEditorText();
+        if (owner_.documentSection_ != nullptr) {
+            owner_.documentSection_->revealBookmarkInSidebar(difficultyId, qMax(1, line), false);
+        }
+    }
+    return changed;
 }
 
 void MainWindow::EditorSection::activateBookmarkAtLine(int line)
@@ -1308,136 +1347,52 @@ void MainWindow::EditorSection::deleteBookmarkAtLineWithConfirmation(int line)
     if (!confirmDeleteBookmark(UiDialogs::effectiveParentWidget(&owner_), *it)) {
         return;
     }
-    state_.editorBookmarks_.erase(it);
-    if (state_.activeBookmarkDifficultyId_ == activeDifficultyId && state_.activeBookmarkLine_ == line) {
-        state_.activeBookmarkDifficultyId_ = 0;
-        state_.activeBookmarkLine_ = -1;
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr || editor->document() == nullptr) {
+        return;
     }
-    refreshEditorBookmarkLines();
-    markBookmarksMutatedByUser();
-    owner_.saveProjectRenderState();
+    const QTextBlock block = blockForOneBasedLine(editor->document(), qMax(1, line));
+    if (!block.isValid()) {
+        return;
+    }
+    const QString lineText = block.text();
+    const LineBookmarkCommentInfo info = inspectLineBookmarkComment(lineText);
+    if (!info.isBookmark) {
+        return;
+    }
+    const bool standalone = lineIsStandaloneComment(lineText, info);
+    QTextCursor cursor(editor->document());
+    cursor.beginEditBlock();
+    if (standalone) {
+        if (block.next().isValid()) {
+            cursor.setPosition(block.position());
+            cursor.setPosition(block.next().position(), QTextCursor::KeepAnchor);
+            cursor.removeSelectedText();
+        } else if (block.previous().isValid()) {
+            const QTextBlock previousBlock = block.previous();
+            cursor.setPosition(previousBlock.position() + previousBlock.length() - 1);
+            cursor.setPosition(block.position() + block.length() - 1, QTextCursor::KeepAnchor);
+            cursor.removeSelectedText();
+        } else {
+            cursor.setPosition(block.position());
+            cursor.setPosition(block.position() + lineText.size(), QTextCursor::KeepAnchor);
+            cursor.removeSelectedText();
+        }
+    } else {
+        const int removeStartInLine =
+            info.marker > 0 && lineText.at(info.marker - 1).isSpace()
+            ? info.marker - 1
+            : info.marker;
+        cursor.setPosition(block.position() + removeStartInLine);
+        cursor.setPosition(block.position() + lineText.size(), QTextCursor::KeepAnchor);
+        cursor.removeSelectedText();
+    }
+    cursor.endEditBlock();
+
+    syncBookmarksFromEditorText();
     if (owner_.documentSection_ != nullptr) {
         owner_.documentSection_->rebuildFieldSidebar();
     }
-}
-
-void MainWindow::EditorSection::exportBookmarksJson()
-{
-    const QString defaultDir = state_.currentFilePath_.isEmpty()
-        ? QDir::homePath()
-        : QFileInfo(state_.currentFilePath_).absolutePath();
-    const QString path = QFileDialog::getSaveFileName(
-        UiDialogs::effectiveParentWidget(&owner_),
-        UiText::isChineseUi() ? QStringLiteral("导出书签") : QStringLiteral("Export Bookmarks"),
-        QDir(defaultDir).filePath(QStringLiteral("miacode_bookmarks.json")),
-        QStringLiteral("JSON (*.json)"));
-    if (path.isEmpty()) {
-        return;
-    }
-
-    QJsonObject root;
-    root.insert(QStringLiteral("schema"), QStringLiteral("miacode_bookmarks_v1"));
-    QJsonArray items;
-    for (const EditorBookmark& bookmark : std::as_const(state_.editorBookmarks_)) {
-        items.append(bookmarkToJsonObject(bookmark));
-    }
-    root.insert(QStringLiteral("bookmarks"), items);
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        UiDialogs::showMessageBox(
-            QMessageBox::Critical,
-            &owner_,
-            UiText::isChineseUi() ? QStringLiteral("导出失败") : QStringLiteral("Export Failed"),
-            UiText::isChineseUi() ? QStringLiteral("无法写入文件：\n%1").arg(path) : QStringLiteral("Cannot write file:\n%1").arg(path));
-        return;
-    }
-    const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Indented);
-    if (file.write(payload) != payload.size() || !file.commit()) {
-        UiDialogs::showMessageBox(
-            QMessageBox::Critical,
-            &owner_,
-            UiText::isChineseUi() ? QStringLiteral("导出失败") : QStringLiteral("Export Failed"),
-            UiText::isChineseUi() ? QStringLiteral("写入失败：\n%1").arg(path) : QStringLiteral("Write failed:\n%1").arg(path));
-    }
-}
-
-void MainWindow::EditorSection::importBookmarksJson()
-{
-    const QString defaultDir = state_.currentFilePath_.isEmpty()
-        ? QDir::homePath()
-        : QFileInfo(state_.currentFilePath_).absolutePath();
-    const QString path = QFileDialog::getOpenFileName(
-        UiDialogs::effectiveParentWidget(&owner_),
-        UiText::isChineseUi() ? QStringLiteral("导入书签") : QStringLiteral("Import Bookmarks"),
-        defaultDir,
-        QStringLiteral("JSON (*.json)"));
-    if (path.isEmpty()) {
-        return;
-    }
-
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        UiDialogs::showMessageBox(
-            QMessageBox::Critical,
-            &owner_,
-            UiText::isChineseUi() ? QStringLiteral("导入失败") : QStringLiteral("Import Failed"),
-            UiText::isChineseUi() ? QStringLiteral("无法打开文件：\n%1").arg(path) : QStringLiteral("Cannot open file:\n%1").arg(path));
-        return;
-    }
-    QJsonParseError error;
-    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
-    if (error.error != QJsonParseError::NoError || !doc.isObject()) {
-        UiDialogs::showMessageBox(
-            QMessageBox::Critical,
-            &owner_,
-            UiText::isChineseUi() ? QStringLiteral("导入失败") : QStringLiteral("Import Failed"),
-            UiText::isChineseUi() ? QStringLiteral("书签 JSON 格式无效。") : QStringLiteral("Invalid bookmark JSON."));
-        return;
-    }
-
-    const QJsonArray items = doc.object().value(QStringLiteral("bookmarks")).toArray();
-    int imported = 0;
-    for (const QJsonValue& value : items) {
-        if (!value.isObject()) {
-            continue;
-        }
-        EditorBookmark bookmark = bookmarkFromJsonObject(value.toObject());
-        if (!SimaiDocument::isDifficultyId(bookmark.difficultyId)) {
-            bookmark.difficultyId = state_.activeDifficultyId_;
-        }
-        if (!SimaiDocument::isDifficultyId(bookmark.difficultyId)) {
-            continue;
-        }
-        const auto existing = std::find_if(
-            state_.editorBookmarks_.cbegin(),
-            state_.editorBookmarks_.cend(),
-            [&bookmark](const EditorBookmark& current) {
-                return bookmarksReferToSameImportIdentity(current, bookmark);
-            });
-        if (existing != state_.editorBookmarks_.cend()) {
-            continue;
-        }
-        state_.editorBookmarks_.append(bookmark);
-        ++imported;
-    }
-    if (imported > 0) {
-        sortBookmarks(state_.editorBookmarks_);
-        refreshEditorBookmarkLines();
-        // Imported bookmarks reach the simai file on the next save — mark the
-        // document dirty so that save actually happens.
-        markBookmarksMutatedByUser();
-        owner_.saveProjectRenderState();
-        if (owner_.documentSection_ != nullptr) {
-            owner_.documentSection_->rebuildFieldSidebar();
-        }
-    }
-    UiDialogs::showMessageBox(
-        QMessageBox::Information,
-        &owner_,
-        UiText::isChineseUi() ? QStringLiteral("导入书签") : QStringLiteral("Import Bookmarks"),
-        UiText::isChineseUi()
-            ? QStringLiteral("已导入 %1 个书签。").arg(imported)
-            : QStringLiteral("Imported %1 bookmark(s).").arg(imported));
 }
 
 void MainWindow::EditorSection::setFullCopyAreaVisible(bool visible)

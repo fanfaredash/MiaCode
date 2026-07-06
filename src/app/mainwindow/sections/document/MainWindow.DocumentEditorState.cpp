@@ -399,7 +399,6 @@ void MainWindow::DocumentSection::setEditorText(const QString& text)
     editor->document()->clearUndoRedoStacks();
     editor->document()->setModified(false);
     state_.editorUndoSaveAnchor_ = editor->document()->availableUndoSteps();
-    state_.editorBookmarkLastSyncedText_ = text;
     clearChartSelectionTransformUndoEntries();
     // QSignalBlocker suppresses blockCountChanged, so force line-number gutter recompute.
     editor->refreshLineNumberAreaLayout();

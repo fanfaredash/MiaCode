@@ -603,10 +603,8 @@ private:
     };
 
 public:
-    // In-memory editor bookmark. The user-visible face is `title` (the
-    // bookmark name) + line; everything else is an internal anchoring aid.
-    // `text` is a legacy free-note field kept only so old JSON exports still
-    // import — it is never shown or written to the simai payload anymore.
+    // Derived sidebar bookmark for a non-control `||` chart comment. This is a
+    // transient view cache rebuilt from chart text, never a persisted object.
     struct EditorBookmark {
         QString title;
         QString text;
@@ -616,11 +614,8 @@ public:
         QString commentFingerprint;
         QString contextBefore;
         QString contextAfter;
-        double second = -1.0;
         int difficultyId = 0;
-        // Set when the user explicitly renamed the bookmark. Default names are
-        // generated once at creation; no automatic logic may rename after that,
-        // locked or not — the flag exists so future auto-naming stays honest.
+        // True when the name comes from an explicit `[label]` comment prefix.
         bool nameLocked = false;
     };
 

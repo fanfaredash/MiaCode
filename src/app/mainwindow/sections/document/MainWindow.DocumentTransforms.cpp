@@ -430,7 +430,7 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
     state_.lastPreviewNoteMarkerSignature_.clear();
     owner_.refreshTimelineMetadata();
     if (owner_.editorSection_ != nullptr) {
-        owner_.editorSection_->reanchorActiveBookmarksAfterChartTransform();
+        owner_.editorSection_->syncBookmarksFromEditorText();
     }
 
     owner_.statusBar()->showMessage(

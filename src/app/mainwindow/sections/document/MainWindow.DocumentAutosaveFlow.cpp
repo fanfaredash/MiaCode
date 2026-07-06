@@ -585,12 +585,6 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
         return false;
     }
     QByteArray data;
-    // Bookmarks live in memory (state_.editorBookmarks_) between saves; push
-    // them into the document now so toText() serializes the managed
-    // &miacode_bookmarks= field alongside the chart data.
-    if (owner_.editorSection_ != nullptr) {
-        owner_.editorSection_->syncBookmarksIntoDocument(&state_.document_);
-    }
     const QString serialized = state_.document_.toText();
     if (state_.currentEncoding_ == TextEncoding::System) {
         QStringEncoder encoder(QStringConverter::System);
@@ -616,9 +610,6 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
     }
     owner_.saveProjectValidationPreferences(normalizedPath);
     owner_.addRecentFilePath(normalizedPath);
-    // The simai file is now the authoritative bookmark store for this chart;
-    // the follow-up saveProjectRenderState() drops the legacy JSON mirror.
-    state_.editorBookmarksInSimai_ = true;
     owner_.saveProjectRenderState();
     resetAutosaveState(serialized);
     const QString autosaveDirectoryPath = resolveAutosaveDirectoryPath();

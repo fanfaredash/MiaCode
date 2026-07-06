@@ -108,15 +108,22 @@ double probeAudioDurationSeconds(const QString& trackPath);
 // Sidebar (outlineList_) item data roles, shared by the list builder
 // (DocumentSection::rebuildFieldSidebar), the click/context-menu wiring
 // (FrameBootstrap) and OutlineItemDelegate below. Kinds in use: "metadata",
-// "add", "difficulty_chart", "bookmark_group", "bookmark", "export", "toolbox".
+// "add", "difficulty_chart", "bookmark", "export", "toolbox", "spacer".
 inline constexpr int kOutlineItemKindRole = Qt::UserRole;
 inline constexpr int kOutlineItemDifficultyRole = Qt::UserRole + 1;
 inline constexpr int kOutlineItemLineRole = Qt::UserRole + 2;
-inline constexpr int kOutlineItemSecondRole = Qt::UserRole + 3;
-// bookmark_group rows: bool — chevron/fold state.
-inline constexpr int kOutlineItemExpandedRole = Qt::UserRole + 4;
-// bookmark rows: bool — draws the "last activated" accent marker.
-inline constexpr int kOutlineItemActiveRole = Qt::UserRole + 5;
+// difficulty_chart rows: bool — bookmark chevron/fold state.
+inline constexpr int kOutlineItemExpandedRole = Qt::UserRole + 3;
+// metadata/export/difficulty_chart rows: bool — persistent "you are here"
+// marker (accent edge bar + fill), driven by app state instead of the list
+// selection so it survives the selection moving onto a bookmark row.
+// bookmark rows: bool — "last activated" marker (solid accent line badge).
+inline constexpr int kOutlineItemActiveRole = Qt::UserRole + 4;
+// difficulty_chart rows: int — number of derived comment bookmarks.
+inline constexpr int kOutlineItemBookmarkCountRole = Qt::UserRole + 5;
+// bookmark rows: int — largest bookmark line in the same difficulty group;
+// sizes the line badge uniformly so bookmark names align vertically.
+inline constexpr int kOutlineItemMaxLineRole = Qt::UserRole + 6;
 
 class OutlineItemDelegate : public QStyledItemDelegate {
 public:
@@ -124,36 +131,63 @@ public:
         : QStyledItemDelegate(parent)
     {}
 
-    // Left inset of second-level bookmark rows and their group header.
-    static constexpr int kBookmarkRowIndent = 22;
-    static constexpr int kBookmarkGroupIndent = 10;
+    // Left inset of the bookmark line badge (third tree level).
+    static constexpr int kBookmarkRowIndent = 44;
+    static constexpr int kBookmarkGroupIndent = 8;
     static constexpr int kIconOnlyThreshold = 120;
+    // Row-start column vacated on difficulty rows for the fold chevron.
+    static constexpr int kDifficultyChevronColumn = 14;
+    // X of the chevron glyph center; the bookmark indent guide shares it.
+    static constexpr int kDifficultyFoldGlyphX = 13;
+    // Click zone (from the row's left edge) that toggles the fold state.
+    static constexpr int kDifficultyFoldHitZone = 24;
+
+    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        QSize size = QStyledItemDelegate::sizeHint(option, index);
+        const QString kind = index.data(kOutlineItemKindRole).toString();
+        if (kind == QLatin1String("spacer")) {
+            // Keep the item's own tiny size hint — the generic minimum below
+            // would inflate the 4px section gap to a full row.
+            size.setHeight(4);
+        } else if (kind == QLatin1String("bookmark")) {
+            size.setHeight(24);
+        } else if (kind == QLatin1String("difficulty_chart")) {
+            size.setHeight(30);
+        } else {
+            size.setHeight(qMax(size.height(), 28));
+        }
+        return size;
+    }
 
     void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
     {
         const QString kind = index.data(kOutlineItemKindRole).toString();
-        if (kind == QLatin1String("bookmark")) {
-            paintRowFill(painter, option);
-            paintBookmarkRow(painter, option, index);
-            return;
+        if (kind == QLatin1String("spacer")) {
+            return;  // pure visual gap between sidebar sections
         }
-        if (kind == QLatin1String("bookmark_group")) {
-            paintRowFill(painter, option);
-            paintBookmarkGroupRow(painter, option, index);
+        if (kind == QLatin1String("bookmark")) {
+            paintRowFill(painter, option, index);
+            paintBookmarkRow(painter, option, index);
             return;
         }
 
         QStyleOptionViewItem drawOption(option);
         initStyleOption(&drawOption, index);
         const UiTheme::Colors& colors = UiTheme::colors();
-        paintRowFill(painter, option);
+        paintRowFill(painter, option, index);
 
         const int listWidth = option.widget != nullptr ? option.widget->width() : option.rect.width();
         const bool iconOnly = listWidth > 0 && listWidth < kIconOnlyThreshold;
+        const bool isDifficulty = kind == QLatin1String("difficulty_chart");
         if (iconOnly) {
             drawOption.text.clear();
             drawOption.features &= ~QStyleOptionViewItem::HasDisplay;
             drawOption.decorationAlignment = Qt::AlignLeft | Qt::AlignVCenter;
+        } else if (isDifficulty) {
+            // Vacate the fold-chevron column at the row start (IDE-tree
+            // layout); the chevron itself is painted after the styled body.
+            drawOption.rect.adjust(kDifficultyChevronColumn, 0, 0, 0);
         }
 
         drawOption.state &= ~QStyle::State_Selected;
@@ -161,6 +195,9 @@ public:
         drawOption.backgroundBrush = Qt::NoBrush;
         drawOption.palette.setColor(QPalette::HighlightedText, colors.textPrimary);
         QStyledItemDelegate::paint(painter, drawOption, index);
+        if (isDifficulty && !iconOnly) {
+            paintDifficultyFoldChevron(painter, option, index);
+        }
     }
 
     // Inline rename: the editor covers the name area of a bookmark row (after
@@ -168,7 +205,7 @@ public:
     void updateEditorGeometry(QWidget* editor, const QStyleOptionViewItem& option, const QModelIndex& index) const override
     {
         if (editor != nullptr && index.data(kOutlineItemKindRole).toString() == QLatin1String("bookmark")) {
-            QRect rect = option.rect.adjusted(kBookmarkRowIndent + badgeWidth(option, index) + 6, 1, -2, -1);
+            QRect rect = option.rect.adjusted(kBookmarkRowIndent + badgeWidth(option, index) + 7, 1, -2, -1);
             if (rect.width() < 60) {
                 rect.setLeft(qMax(option.rect.left() + 2, option.rect.right() - 60));
             }
@@ -179,24 +216,36 @@ public:
     }
 
 private:
-    void paintRowFill(QPainter* painter, const QStyleOptionViewItem& option) const
+    // One selection language for every level: the persistent "you are here"
+    // row (active difficulty / metadata / export page) gets a borderless fill
+    // plus a 3px accent bar on its left edge; transient list selection and
+    // hover share a weaker flat fill. Bookmark rows never get the bar — their
+    // "active" treatment is the solid accent line badge (paintBookmarkRow).
+    void paintRowFill(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const
     {
         const UiTheme::Colors& colors = UiTheme::colors();
-        const QColor selectedBorder = colors.dark ? QColor("#6B8BB8") : QColor("#9EC2EF");
-        const QColor selectedFill = colors.dark ? QColor("#314158") : QColor("#F1F6FF");
-        const QColor hoverFill = colors.dark ? QColor("#2A3442") : QColor("#F3F7FD");
+        const QColor activeFill = colors.dark ? QColor("#314158") : QColor("#E7F0FD");
+        const QColor weakFill = colors.dark ? QColor("#2A3442") : QColor("#F3F7FD");
+        const bool activeMarker = index.data(kOutlineItemActiveRole).toBool()
+            && index.data(kOutlineItemKindRole).toString() != QLatin1String("bookmark");
 
         painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        painter->setPen(Qt::NoPen);
         const QRect fillRect = option.rect.adjusted(1, 1, -1, -1);
-        if (option.state.testFlag(QStyle::State_Selected)) {
-            painter->setRenderHint(QPainter::Antialiasing, true);
-            painter->setPen(QPen(selectedBorder, 1.0));
-            painter->setBrush(selectedFill);
+        if (activeMarker) {
+            QColor fill = activeFill;
+            if (option.state.testFlag(QStyle::State_MouseOver)) {
+                fill = colors.dark ? activeFill.lighter(115) : QColor("#DCE9FB");
+            }
+            painter->setBrush(fill);
             painter->drawRoundedRect(fillRect, 6.0, 6.0);
-        } else if (option.state.testFlag(QStyle::State_MouseOver)) {
-            painter->setRenderHint(QPainter::Antialiasing, true);
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(hoverFill);
+            painter->setBrush(colors.accent);
+            const QRect barRect(fillRect.left(), fillRect.top() + 5, 3, fillRect.height() - 10);
+            painter->drawRoundedRect(barRect, 1.5, 1.5);
+        } else if (option.state.testFlag(QStyle::State_Selected)
+                   || option.state.testFlag(QStyle::State_MouseOver)) {
+            painter->setBrush(weakFill);
             painter->drawRoundedRect(fillRect, 6.0, 6.0);
         }
         painter->restore();
@@ -205,62 +254,81 @@ private:
     QFont badgeFont(const QStyleOptionViewItem& option) const
     {
         QFont font = option.font;
-        font.setPointSize(qMax(7, font.pointSize() - 2));
+        font.setPointSize(qMax(6, font.pointSize() - 3));
         return font;
     }
 
     int badgeWidth(const QStyleOptionViewItem& option, const QModelIndex& index) const
     {
         const QFontMetrics metrics(badgeFont(option));
-        const QString lineText = QString::number(qMax(1, index.data(kOutlineItemLineRole).toInt()));
-        return qMax(18, metrics.horizontalAdvance(lineText) + 10);
+        // Uniform width across the difficulty group (sized to its largest
+        // line number) so the bookmark names align vertically.
+        const int maxLine = qMax(qMax(1, index.data(kOutlineItemLineRole).toInt()),
+                                 index.data(kOutlineItemMaxLineRole).toInt());
+        return qMax(18, metrics.horizontalAdvance(QString::number(maxLine)) + 8);
     }
 
     void paintBookmarkRow(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const
     {
         const UiTheme::Colors& colors = UiTheme::colors();
         const bool active = index.data(kOutlineItemActiveRole).toBool();
+        const bool selected = option.state.testFlag(QStyle::State_Selected);
         const int listWidth = option.widget != nullptr ? option.widget->width() : option.rect.width();
         const bool iconOnly = listWidth > 0 && listWidth < kIconOnlyThreshold;
 
         painter->save();
-        painter->setRenderHint(QPainter::Antialiasing, true);
 
-        // Last-activated marker: a slim accent bar inside the indent gutter.
-        // Deliberately different from the first-level selected-row treatment.
-        if (active) {
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(colors.accent);
-            const QRect barRect(option.rect.left() + 9, option.rect.top() + 7, 3, option.rect.height() - 14);
-            painter->drawRoundedRect(barRect, 1.5, 1.5);
+        // Tree indent guide: a 1px segment per row under the parent
+        // difficulty's fold-chevron column; each segment overshoots the row
+        // by 1px so the list's 2px item spacing doesn't break the line.
+        // Drawn before the AA hint so it stays a crisp hairline.
+        if (!iconOnly) {
+            QColor guide = colors.textSecondary;
+            guide.setAlpha(colors.dark ? 48 : 58);
+            painter->fillRect(
+                QRect(option.rect.left() + kDifficultyFoldGlyphX, option.rect.top() - 1, 1, option.rect.height() + 2),
+                guide);
         }
 
-        // Short line-number badge.
+        painter->setRenderHint(QPainter::Antialiasing, true);
+
+        // Line-number badge: neutral by default; the last-activated bookmark
+        // flips it to a solid accent chip ("current position" marker).
         const int badgeW = badgeWidth(option, index);
-        const int badgeH = qMin(option.rect.height() - 10, 16);
+        const int badgeH = qMin(option.rect.height() - 8, 15);
         const QRect badgeRect(
             option.rect.left() + (iconOnly ? kBookmarkGroupIndent : kBookmarkRowIndent),
             option.rect.top() + (option.rect.height() - badgeH) / 2,
             badgeW,
             badgeH);
-        QColor badgeBg = colors.accent;
-        badgeBg.setAlpha(colors.dark ? 56 : 32);
+        QColor badgeBg;
+        QColor badgeFg;
+        if (active) {
+            badgeBg = colors.accent;
+            badgeFg = colors.accentText;
+        } else {
+            badgeBg = colors.textSecondary;
+            badgeBg.setAlpha(colors.dark ? 40 : 34);
+            badgeFg = colors.textSecondary;
+        }
         painter->setPen(Qt::NoPen);
         painter->setBrush(badgeBg);
-        painter->drawRoundedRect(badgeRect, 4.0, 4.0);
+        painter->drawRoundedRect(badgeRect, 3.0, 3.0);
         painter->setFont(badgeFont(option));
-        painter->setPen(colors.dark ? colors.textPrimary : colors.accent.darker(120));
+        painter->setPen(badgeFg);
         painter->drawText(badgeRect, Qt::AlignCenter,
                           QString::number(qMax(1, index.data(kOutlineItemLineRole).toInt())));
 
         // Bookmark name, elided to the remaining width (full name in tooltip).
         if (!iconOnly) {
-            const QRect nameRect(badgeRect.right() + 6, option.rect.top(),
+            const QRect nameRect(badgeRect.right() + 7, option.rect.top(),
                                  option.rect.right() - badgeRect.right() - 12, option.rect.height());
             if (nameRect.width() > 8) {
-                painter->setFont(option.font);
-                painter->setPen(colors.textPrimary);
-                const QFontMetrics metrics(option.font);
+                QFont nameFont = option.font;
+                nameFont.setPointSize(qMax(8, option.font.pointSize() - 2));
+                painter->setFont(nameFont);
+                painter->setPen(active || selected ? colors.textPrimary : colors.textSecondary);
+                const QFontMetrics metrics(nameFont);
                 painter->drawText(nameRect, Qt::AlignLeft | Qt::AlignVCenter,
                                   metrics.elidedText(index.data(Qt::DisplayRole).toString(), Qt::ElideRight, nameRect.width()));
             }
@@ -268,45 +336,37 @@ private:
         painter->restore();
     }
 
-    void paintBookmarkGroupRow(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const
+    // Row-start fold chevron (IDE-tree convention). Difficulties without
+    // bookmarks skip the glyph but keep the vacated column, so the badge
+    // icons of sibling difficulty rows stay aligned.
+    void paintDifficultyFoldChevron(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const
     {
+        if (index.data(kOutlineItemBookmarkCountRole).toInt() <= 0) {
+            return;
+        }
         const UiTheme::Colors& colors = UiTheme::colors();
         const bool expanded = index.data(kOutlineItemExpandedRole).toBool();
-        const int listWidth = option.widget != nullptr ? option.widget->width() : option.rect.width();
-        const bool iconOnly = listWidth > 0 && listWidth < kIconOnlyThreshold;
 
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing, true);
-
-        // Fold chevron: ▾ when expanded, ▸ when collapsed.
-        const int chevronSize = 7;
-        const QPointF center(option.rect.left() + kBookmarkGroupIndent + chevronSize / 2.0,
+        QPen pen(colors.textSecondary, 1.6);
+        pen.setCapStyle(Qt::RoundCap);
+        pen.setJoinStyle(Qt::RoundJoin);
+        painter->setPen(pen);
+        painter->setBrush(Qt::NoBrush);
+        const QPointF center(option.rect.left() + kDifficultyFoldGlyphX + 0.5,
                              option.rect.top() + option.rect.height() / 2.0);
         QPolygonF chevron;
         if (expanded) {
-            chevron << QPointF(center.x() - chevronSize / 2.0, center.y() - chevronSize / 4.0)
-                    << QPointF(center.x() + chevronSize / 2.0, center.y() - chevronSize / 4.0)
-                    << QPointF(center.x(), center.y() + chevronSize / 2.0);
+            chevron << QPointF(center.x() - 3.5, center.y() - 1.75)
+                    << QPointF(center.x(), center.y() + 1.75)
+                    << QPointF(center.x() + 3.5, center.y() - 1.75);
         } else {
-            chevron << QPointF(center.x() - chevronSize / 4.0, center.y() - chevronSize / 2.0)
-                    << QPointF(center.x() - chevronSize / 4.0, center.y() + chevronSize / 2.0)
-                    << QPointF(center.x() + chevronSize / 2.0, center.y());
+            chevron << QPointF(center.x() - 1.75, center.y() - 3.5)
+                    << QPointF(center.x() + 1.75, center.y())
+                    << QPointF(center.x() - 1.75, center.y() + 3.5);
         }
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(colors.textSecondary);
-        painter->drawPolygon(chevron);
-
-        if (!iconOnly) {
-            QFont font = option.font;
-            font.setPointSize(qMax(7, font.pointSize() - 1));
-            painter->setFont(font);
-            painter->setPen(colors.textSecondary);
-            const QRect textRect(option.rect.left() + kBookmarkGroupIndent + chevronSize + 8, option.rect.top(),
-                                 option.rect.width() - kBookmarkGroupIndent - chevronSize - 16, option.rect.height());
-            const QFontMetrics metrics(font);
-            painter->drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter,
-                              metrics.elidedText(index.data(Qt::DisplayRole).toString(), Qt::ElideRight, textRect.width()));
-        }
+        painter->drawPolyline(chevron);
         painter->restore();
     }
 };

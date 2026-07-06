@@ -753,11 +753,6 @@ bool MainWindow::deleteDifficultyField(int difficultyId)
     return documentSection_->deleteDifficultyField(difficultyId);
 }
 
-void MainWindow::updateDifficultyDeleteButton(bool visible)
-{
-    documentSection_->updateDifficultyDeleteButton(visible);
-}
-
 void MainWindow::rebuildFieldSidebar()
 {
     documentSection_->rebuildFieldSidebar();
