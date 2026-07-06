@@ -27,22 +27,6 @@ struct SimaiDifficultyData {
     QString chart;
 };
 
-// One editor bookmark as stored in the managed `&miacode_bookmarks=` field —
-// a single-line compact-JSON payload MiaCode owns end to end. Third-party
-// players never parse it; parseUnmanagedFields() hides it from the free-form
-// "Other &xx Fields" editor so users can't corrupt it by accident.
-struct SimaiBookmarkData {
-    int difficultyId = 0;        // "d"
-    int line = 1;                // "l"
-    QString name;                // "n" — the only user-visible text
-    double second = -1.0;        // "s" — timeline anchor; < 0 = unknown
-    QString source;              // "src" — "manual" / "comment"
-    QString commentFingerprint;  // "fp" — re-anchor aid for moved comments
-    QString contextBefore;       // "cb"
-    QString contextAfter;        // "ca"
-    bool nameLocked = false;     // "locked" — user renamed; no auto-naming
-};
-
 class SimaiDocument
 {
 public:
@@ -122,15 +106,6 @@ public:
     // here, because SimaiDocument is location-agnostic.
     QString videoPath;
     QVector<SimaiRawField> extraFields;
-    // Managed bookmark payload (`&miacode_bookmarks=`). fromText() fills this
-    // (never extraFields); toText() emits one compact single-line field after
-    // the extra fields and before the difficulty triples — or nothing when
-    // empty. Items with an invalid difficulty id or line are dropped on parse.
-    QVector<SimaiBookmarkData> bookmarks;
-    // True when the parsed text carried a `&miacode_bookmarks=` value that was
-    // not valid JSON. The field is ignored (chart loading must never block on
-    // bookmark metadata); callers may surface a non-fatal warning.
-    bool bookmarksParseError = false;
 
 private:
     QMap<int, SimaiDifficultyData> difficulties_;

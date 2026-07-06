@@ -696,14 +696,6 @@ QString outlineListStyleSheet()
         .arg(css(c.menuHoverBg));
 }
 
-QString deleteDifficultyButtonStyleSheet()
-{
-    return QStringLiteral(
-        "QToolButton { border: none; border-radius: 5px; background: transparent; }"
-        "QToolButton:hover { background: %1; }"
-    ).arg(css(colors().menuHoverBg));
-}
-
 QString previewPanelStyleSheet()
 {
     const Colors& c = colors();

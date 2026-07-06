@@ -239,7 +239,7 @@ void runSpecs(QTextStream& out, int* failed)
         expectTrue(hasLine(out3, "&pvstart=3.5"), "populated &pvstart is preserved", failed, out);
     }
 
-    // --- Managed &miacode_bookmarks= field: parse, round-trip, filtering. ---
+    // --- Obsolete &miacode_bookmarks= field: reserved, ignored, not persisted. ---
     {
         const QString src =
             "&title=Song\n&first=0\n"
@@ -249,40 +249,16 @@ void runSpecs(QTextStream& out, int* failed)
             "{\"d\":9,\"l\":1,\"n\":\"bad difficulty — dropped\"}]}\n"
             "&lv_5=12\n&inote_5=(120){1}1,\n";
         const SimaiDocument doc = SimaiDocument::fromText(src);
-        expectTrue(doc.bookmarks.size() == 2, "bookmarks parsed; invalid difficulty item dropped", failed, out);
-        expectTrue(!doc.bookmarksParseError, "valid payload sets no parse error", failed, out);
-        if (doc.bookmarks.size() == 2) {
-            expectEqual(doc.bookmarks.at(0).name, QString::fromUtf8("Intro 引入"), "bookmark name round-trips non-ASCII", failed, out);
-            expectTrue(doc.bookmarks.at(0).difficultyId == 5 && doc.bookmarks.at(0).line == 8, "bookmark d/l parsed", failed, out);
-            expectTrue(qAbs(doc.bookmarks.at(0).second - 8.796) < 1e-9, "bookmark second parsed", failed, out);
-            expectEqual(doc.bookmarks.at(0).commentFingerprint, "9e6a1d", "bookmark fingerprint parsed", failed, out);
-            expectTrue(!doc.bookmarks.at(0).nameLocked, "locked defaults to false", failed, out);
-            expectTrue(doc.bookmarks.at(1).nameLocked, "locked=true parsed", failed, out);
-        }
         bool inExtraFields = false;
         for (const SimaiRawField& field : doc.extraFields) {
             inExtraFields = inExtraFields || field.key == QLatin1String("miacode_bookmarks");
         }
-        expectTrue(!inExtraFields, "miacode_bookmarks never lands in extraFields", failed, out);
+        expectTrue(!inExtraFields, "obsolete miacode_bookmarks never lands in extraFields", failed, out);
 
         const QString round = doc.toText();
-        int bookmarkLines = 0;
-        for (const QString& line : round.split('\n')) {
-            if (line.startsWith(QStringLiteral("&miacode_bookmarks="))) {
-                ++bookmarkLines;
-                expectTrue(!line.contains('\r'), "bookmark field is a single line", failed, out);
-            }
-        }
-        expectTrue(bookmarkLines == 1, "exactly one &miacode_bookmarks line on save", failed, out);
+        expectTrue(!hasKeyLine(round, "miacode_bookmarks"), "obsolete miacode_bookmarks is removed on save", failed, out);
 
-        const SimaiDocument reparsed = SimaiDocument::fromText(round);
-        expectTrue(reparsed.bookmarks.size() == 2, "bookmarks survive a full round-trip", failed, out);
-        if (reparsed.bookmarks.size() == 2) {
-            expectEqual(reparsed.bookmarks.at(0).name, QString::fromUtf8("Intro 引入"), "round-tripped name intact", failed, out);
-            expectTrue(reparsed.bookmarks.at(1).nameLocked, "round-tripped locked intact", failed, out);
-        }
-
-        // The managed key stays out of the "Other &xx Fields" editor.
+        // The obsolete key stays out of the "Other &xx Fields" editor.
         const QVector<SimaiRawField> unmanaged = SimaiDocument::parseUnmanagedFields(src);
         bool inUnmanaged = false;
         for (const SimaiRawField& field : unmanaged) {
@@ -291,38 +267,20 @@ void runSpecs(QTextStream& out, int* failed)
         expectTrue(!inUnmanaged, "parseUnmanagedFields hides miacode_bookmarks", failed, out);
     }
 
-    // --- Bad bookmark JSON never blocks parsing; empty list emits no field. ---
+    // --- Bad/empty obsolete bookmark payload never blocks parsing and is never emitted. ---
     {
         const QString src =
             "&title=Song\n&first=0\n"
             "&miacode_bookmarks={not json at all\n"
             "&lv_5=12\n&inote_5=(120){1}1,\n";
         const SimaiDocument doc = SimaiDocument::fromText(src);
-        expectTrue(doc.bookmarks.isEmpty(), "bad bookmark JSON yields no bookmarks", failed, out);
-        expectTrue(doc.bookmarksParseError, "bad bookmark JSON sets the parse-error flag", failed, out);
         expectEqual(doc.title, "Song", "bad bookmark JSON does not block other fields", failed, out);
         expectTrue(doc.difficulty(5) != nullptr, "bad bookmark JSON keeps difficulty parsing", failed, out);
-        expectTrue(!hasKeyLine(doc.toText(), "miacode_bookmarks"), "empty bookmarks emit no field on save", failed, out);
+        expectTrue(!hasKeyLine(doc.toText(), "miacode_bookmarks"), "obsolete bookmark field emits no field on save", failed, out);
 
-        // A bare `&miacode_bookmarks=` is a valid "no bookmarks", not an error.
+        // A bare `&miacode_bookmarks=` is ignored as an obsolete field.
         const SimaiDocument bare = SimaiDocument::fromText("&title=T\n&first=0\n&miacode_bookmarks=\n&lv_5=1\n&inote_5=(120){1}1,\n");
-        expectTrue(bare.bookmarks.isEmpty() && !bare.bookmarksParseError, "bare bookmark field is empty, not an error", failed, out);
-
-        // Programmatic write: setting bookmarks emits the field; clearing removes it.
-        SimaiDocument writer = SimaiDocument::fromText("&title=T\n&first=0\n&lv_5=1\n&inote_5=(120){1}1,\n");
-        SimaiBookmarkData bookmark;
-        bookmark.difficultyId = 5;
-        bookmark.line = 3;
-        bookmark.name = QStringLiteral("A \"quoted\" name");
-        writer.bookmarks.append(bookmark);
-        const QString withBookmarks = writer.toText();
-        expectTrue(hasKeyLine(withBookmarks, "miacode_bookmarks"), "non-empty bookmarks emit the managed field", failed, out);
-        const SimaiDocument writerRound = SimaiDocument::fromText(withBookmarks);
-        expectTrue(writerRound.bookmarks.size() == 1
-                       && writerRound.bookmarks.at(0).name == QStringLiteral("A \"quoted\" name"),
-                   "JSON escaping survives quote-heavy names", failed, out);
-        writer.bookmarks.clear();
-        expectTrue(!hasKeyLine(writer.toText(), "miacode_bookmarks"), "clearing all bookmarks removes the field", failed, out);
+        expectTrue(!hasKeyLine(bare.toText(), "miacode_bookmarks"), "bare obsolete bookmark field is removed on save", failed, out);
     }
 }
 

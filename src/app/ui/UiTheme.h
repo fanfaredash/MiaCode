@@ -97,7 +97,6 @@ QString exportLauncherPageStyleSheet();
 QString embeddedExportTabStyleSheet();
 QString metadataEmptyHintLabelStyleSheet();
 QString outlineListStyleSheet();
-QString deleteDifficultyButtonStyleSheet();
 QString previewPanelStyleSheet();
 QString compactToolbarButtonStyleSheet();
 QString pausePreviewButtonStyleSheet(bool active);

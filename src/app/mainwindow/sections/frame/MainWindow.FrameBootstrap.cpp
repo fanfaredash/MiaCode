@@ -954,7 +954,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     outlineTitle->setFixedHeight(0);
     outlineDock->setTitleBarWidget(outlineTitle);
     outlineList_ = new QListWidget(outlineDock);
-    outlineList_->setUniformItemSizes(true);
+    outlineList_->setUniformItemSizes(false);
     outlineList_->setIconSize(QSize(14, 14));
     outlineList_->setSpacing(2);
     outlineList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -978,8 +978,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         " outline: none;"
         "}"
         "QListWidget::item {"
-        " min-height: 28px;"
-        " padding: 4px 12px;"
+        " min-height: 0px;"
+        " padding: 2px 8px;"
         " border: 1px solid transparent;"
         " border-radius: 6px;"
         "}"
@@ -1001,31 +1001,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     outlineDock->setWidget(outlineDockShell);
     outlineList_->setMouseTracking(true);
     outlineList_->viewport()->setMouseTracking(true);
-    outlineList_->viewport()->installEventFilter(this);
-    deleteDifficultyButton_ = new QToolButton(outlineList_->viewport());
-    deleteDifficultyButton_->setAutoRaise(true);
-    deleteDifficultyButton_->setIcon(makeOutlineCloseIcon(QColor("#5D6876")));
-    deleteDifficultyButton_->setIconSize(QSize(12, 12));
-    deleteDifficultyButton_->setToolTip("Delete the current difficulty");
-    deleteDifficultyButton_->setCursor(Qt::PointingHandCursor);
-    deleteDifficultyButton_->setFocusPolicy(Qt::NoFocus);
-    deleteDifficultyButton_->setFixedSize(18, 18);
-    deleteDifficultyButton_->setStyleSheet(
-        "QToolButton {"
-        " border: none;"
-        " border-radius: 5px;"
-        " background: transparent;"
-        "}"
-        "QToolButton:hover {"
-        " background: #E9EEF4;"
-        "}"
-    );
-    deleteDifficultyButton_->hide();
-    connect(deleteDifficultyButton_, &QToolButton::clicked, this, [this]() {
-        if (hasActiveDifficulty()) {
-            deleteDifficultyField(activeDifficultyId_);
-        }
-    });
     // Busy spinner floated over the "Export" sidebar row — shown while the
     // export page (its embedded video panel especially) is being built, which
     // is noticeably slow. Same viewport-overlay pattern as the delete button.
@@ -1035,12 +1010,32 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         windowSection_->setOutlineDockCollapsed(!outlineDockCollapsed_);
     });
     connect(outlineList_, &QListWidget::itemClicked, this, [this](QListWidgetItem* current) {
-        updateDifficultyDeleteButton(false);
         if (current == nullptr) {
             return;
         }
         const QString kind = current->data(Qt::UserRole).toString();
         const int difficultyId = current->data(Qt::UserRole + 1).toInt();
+        const auto clickedDifficultyFoldChevron = [this, current]() {
+            if (outlineList_ == nullptr || current == nullptr) {
+                return false;
+            }
+            if (current->data(kOutlineItemKindRole).toString() != QLatin1String("difficulty_chart")
+                || current->data(kOutlineItemBookmarkCountRole).toInt() <= 0) {
+                return false;
+            }
+            // Icon-only sidebar paints no chevron — the whole row switches
+            // the difficulty there.
+            const int listWidth = outlineList_->width();
+            if (listWidth > 0 && listWidth < OutlineItemDelegate::kIconOnlyThreshold) {
+                return false;
+            }
+            const QRect rowRect = outlineList_->visualItemRect(current);
+            if (!rowRect.isValid()) {
+                return false;
+            }
+            const QPoint pos = outlineList_->viewport()->mapFromGlobal(QCursor::pos());
+            return pos.x() <= rowRect.left() + OutlineItemDelegate::kDifficultyFoldHitZone;
+        };
         if (kind == "metadata") {
             activeOutlineKey_ = "metadata";
             if (switchToMetadataField() && titleEdit_ != nullptr) {
@@ -1051,16 +1046,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         if (kind == "export") {
             activeOutlineKey_ = "export";
             switchToExportField();
-            return;
-        }
-        if (kind == "bookmark_group") {
-            // Toggle the fold; never switches the difficulty.
-            const int groupDifficultyId = current->data(kOutlineItemDifficultyRole).toInt();
-            if (documentSection_ != nullptr) {
-                documentSection_->setBookmarkGroupExpanded(
-                    groupDifficultyId,
-                    !documentSection_->isBookmarkGroupExpanded(groupDifficultyId));
-            }
             return;
         }
         if (kind == "bookmark") {
@@ -1178,6 +1163,14 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             return;
         }
         if (SimaiDocument::isDifficultyId(difficultyId)) {
+            if (clickedDifficultyFoldChevron()) {
+                if (documentSection_ != nullptr) {
+                    documentSection_->setBookmarkGroupExpanded(
+                        difficultyId,
+                        !documentSection_->isBookmarkGroupExpanded(difficultyId));
+                }
+                return;
+            }
             activeOutlineKey_ = "chart";
             if (switchToDifficultyField(difficultyId) && editorWidget_ != nullptr) {
                 editorWidget_->setFocus();
@@ -1228,30 +1221,12 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             return;
         }
         const QString kind = item->data(kOutlineItemKindRole).toString();
-        // Inserts a bookmark on the editor's current cursor line, switching to
-        // the target difficulty first when the row belongs to another one.
-        const auto insertBookmarkAtCursor = [this](int targetDifficultyId) {
-            if (SimaiDocument::isDifficultyId(targetDifficultyId) && targetDifficultyId != activeDifficultyId_) {
-                activeOutlineKey_ = "chart";
-                if (!switchToDifficultyField(targetDifficultyId)) {
-                    return;
-                }
-            }
-            int line = 1;
-            if (auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_); editor != nullptr) {
-                line = qMax(1, editor->textCursor().blockNumber() + 1);
-            }
-            if (editorSection_ != nullptr) {
-                editorSection_->createBookmarkAtLine(line, true);
-            }
-        };
         if (kind == QLatin1String("bookmark")) {
             QMenu menu(this);
             menu.setFont(uiAccentFont(10));
             styleRoundedMenu(menu);
             const int bookmarkDifficultyId = item->data(kOutlineItemDifficultyRole).toInt();
             const int line = item->data(kOutlineItemLineRole).toInt();
-            const double second = item->data(kOutlineItemSecondRole).toDouble();
             QAction* renameAction = menu.addAction(UiText::isChineseUi() ? QStringLiteral("重命名") : QStringLiteral("Rename"));
             connect(renameAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line]() {
                 if (documentSection_ != nullptr) {
@@ -1272,35 +1247,19 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             });
             QAction* timelineAction = menu.addAction(
                 UiText::isChineseUi() ? QStringLiteral("跳到时间轴位置") : QStringLiteral("Jump to Timeline Position"));
-            connect(timelineAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line, second]() {
+            connect(timelineAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line]() {
                 if (SimaiDocument::isDifficultyId(bookmarkDifficultyId) && bookmarkDifficultyId != activeDifficultyId_) {
                     activeOutlineKey_ = "chart";
                     if (!switchToDifficultyField(bookmarkDifficultyId)) {
                         return;
                     }
                 }
-                double bookmarkSecond = second;
-                if (bookmarkSecond < 0.0 || !qIsFinite(bookmarkSecond)) {
-                    bookmarkSecond = timelineSecondForCursor(line, 1);
-                }
+                const double bookmarkSecond = timelineSecondForCursor(line, 1);
                 if (bookmarkSecond >= 0.0 && qIsFinite(bookmarkSecond)) {
                     navigateTimelineToSecond(bookmarkSecond, true);
                 } else {
                     jumpToLocation(line, 1);
                 }
-            });
-            menu.exec(outlineList_->viewport()->mapToGlobal(pos));
-            return;
-        }
-        if (kind == QLatin1String("bookmark_group")) {
-            const int groupDifficultyId = item->data(kOutlineItemDifficultyRole).toInt();
-            QMenu menu(this);
-            menu.setFont(uiAccentFont(10));
-            styleRoundedMenu(menu);
-            QAction* insertAction = menu.addAction(
-                UiText::isChineseUi() ? QStringLiteral("插入书签") : QStringLiteral("Insert Bookmark"));
-            connect(insertAction, &QAction::triggered, this, [insertBookmarkAtCursor, groupDifficultyId]() {
-                insertBookmarkAtCursor(groupDifficultyId);
             });
             menu.exec(outlineList_->viewport()->mapToGlobal(pos));
             return;
@@ -1312,15 +1271,10 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         QMenu menu(this);
         menu.setFont(uiAccentFont(10));
         styleRoundedMenu(menu);
-        QAction* insertAction = menu.addAction(
-            UiText::isChineseUi() ? QStringLiteral("插入书签") : QStringLiteral("Insert Bookmark"));
-        connect(insertAction, &QAction::triggered, this, [insertBookmarkAtCursor, difficultyId]() {
-            insertBookmarkAtCursor(difficultyId);
-        });
-        menu.addSeparator();
         QAction* deleteAction = menu.addAction(
-            makeOutlineCloseIcon(QColor("#5D6876")),
-            QString("Delete %1").arg(SimaiDocument::difficultyName(difficultyId))
+            UiText::isChineseUi()
+                ? QStringLiteral("删除 %1").arg(SimaiDocument::difficultyName(difficultyId))
+                : QStringLiteral("Delete %1").arg(SimaiDocument::difficultyName(difficultyId))
         );
         connect(deleteAction, &QAction::triggered, this, [this, difficultyId]() {
             deleteDifficultyField(difficultyId);
@@ -1358,33 +1312,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 
     toolboxMenu_->addSeparator();
 
-    // Creation and management now live in the sidebar + editor context menus
-    // (bookmark redesign); the toolbox keeps only the JSON compatibility tools.
-    QMenu* bookmarkMenu = toolboxMenu_->addMenu(
-        UiText::isChineseUi() ? QStringLiteral("书签") : QStringLiteral("Bookmarks")
-    );
-    styleRoundedMenu(*bookmarkMenu);
-    QAction* importBookmarksAction = bookmarkMenu->addAction(
-        UiText::isChineseUi() ? QStringLiteral("导入书签 JSON") : QStringLiteral("Import Bookmarks JSON")
-    );
-    connect(importBookmarksAction, &QAction::triggered, this, [this]() {
-        if (editorSection_ != nullptr) {
-            editorSection_->importBookmarksJson();
-        }
-    });
-    QAction* exportBookmarksAction = bookmarkMenu->addAction(
-        UiText::isChineseUi() ? QStringLiteral("导出书签 JSON") : QStringLiteral("Export Bookmarks JSON")
-    );
-    connect(exportBookmarksAction, &QAction::triggered, this, [this]() {
-        if (editorSection_ != nullptr) {
-            editorSection_->exportBookmarksJson();
-        }
-    });
-
-    // "Export as ZIP" lives directly under the Bookmarks submenu here, and
-    // also under File > Save As. The same QAction is reused in both places
-    // (created in setupMenusAndActions) so the wiring and enabled-state stay
-    // in one spot.
+    // "Export as ZIP" also lives under File > Save As. The same QAction is
+    // reused in both places (created in setupMenusAndActions) so the wiring and
+    // enabled-state stay in one spot.
     if (packAsZipAction_ != nullptr) {
         toolboxMenu_->addAction(packAsZipAction_);
     }

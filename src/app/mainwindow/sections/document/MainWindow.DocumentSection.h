@@ -96,7 +96,6 @@ public:
     void updateEditorEmptyState();
     void updateMetadataPageMode();
     bool deleteDifficultyField(int difficultyId);
-    void updateDifficultyDeleteButton(bool visible);
     void rebuildFieldSidebar();
     // Sidebar bookmark-group fold state. Only explicit toggles are recorded;
     // an untouched difficulty defaults to expanded when active, collapsed

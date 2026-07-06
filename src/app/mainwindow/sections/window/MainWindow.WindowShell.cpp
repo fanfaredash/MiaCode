@@ -1010,10 +1010,6 @@ void MainWindow::WindowSection::applyUiTheme()
     if (owner_.outlineList_ != nullptr) {
         owner_.outlineList_->setStyleSheet(UiTheme::outlineListStyleSheet());
     }
-    if (owner_.deleteDifficultyButton_ != nullptr) {
-        owner_.deleteDifficultyButton_->setStyleSheet(UiTheme::deleteDifficultyButtonStyleSheet());
-        owner_.deleteDifficultyButton_->setIcon(makeOutlineCloseIcon(UiTheme::colors().iconSecondary));
-    }
     if (owner_.timelineView_ != nullptr) {
         owner_.timelineView_->refreshTheme();
     }
@@ -1140,9 +1136,6 @@ void MainWindow::WindowSection::setOutlineDockCollapsed(bool collapsed)
 
     owner_.outlineDockCollapsed_ = collapsed;
     owner_.outlineList_->setVisible(!collapsed);
-    if (collapsed) {
-        owner_.updateDifficultyDeleteButton(false);
-    }
 
     const int targetWidth = collapsed ? kCollapsedWidth : qMax(kExpandedMinWidth, owner_.outlineDockExpandedWidth_);
     owner_.outlineDock_->setMinimumWidth(targetWidth);

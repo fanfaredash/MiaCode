@@ -143,7 +143,6 @@
         QLabel* editorEmptyStateLabel_ = nullptr;
         QTabWidget* bottomTabs_ = nullptr;
         QTabWidget* quickShellBottomTabsProxy_ = nullptr;
-        QToolButton* deleteDifficultyButton_ = nullptr;
         // Indeterminate spinner floated over the "Export" sidebar row while the
         // (synchronous, ~hundreds-of-ms) export-page build runs.
         miacode::ui::BusySpinner* outlineBusySpinner_ = nullptr;
@@ -259,18 +258,6 @@
         int metadataExtraUndoSaveAnchor_ = 0;
         QVector<SelectionTransformUndoEntry> chartSelectionTransformUndoEntries_;
         QVector<EditorBookmark> editorBookmarks_;
-        QString editorBookmarkLastSyncedText_;
-        // Staging for bookmarks read from the legacy .miacode/miacode_settings.json
-        // `editor_bookmarks` key. loadProjectRenderState() fills it; the loadDocument
-        // adopt step consumes it only when the simai file carries no
-        // &miacode_bookmarks= field of its own (migration fallback).
-        QVector<EditorBookmark> legacyJsonEditorBookmarks_;
-        // True once the simai file is the authoritative bookmark store for the
-        // open chart (bookmarks were loaded from &miacode_bookmarks=, or a save
-        // has written them there). While false, saveProjectRenderState() keeps
-        // mirroring bookmarks into the legacy JSON so a crash before the first
-        // save cannot lose them; once true the legacy key is dropped.
-        bool editorBookmarksInSimai_ = false;
         // Sidebar bookmark-group fold state per difficulty id. Only explicit
         // user toggles are recorded; an absent difficulty defaults to expanded
         // when it is the active difficulty and collapsed otherwise.
@@ -749,8 +736,6 @@
     int& metadataExtraUndoSaveAnchor_ = state_.metadataExtraUndoSaveAnchor_;
     QVector<SelectionTransformUndoEntry>& chartSelectionTransformUndoEntries_ = state_.chartSelectionTransformUndoEntries_;
     QVector<EditorBookmark>& editorBookmarks_ = state_.editorBookmarks_;
-    QVector<EditorBookmark>& legacyJsonEditorBookmarks_ = state_.legacyJsonEditorBookmarks_;
-    bool& editorBookmarksInSimai_ = state_.editorBookmarksInSimai_;
     QHash<int, bool>& outlineBookmarkGroupExpanded_ = state_.outlineBookmarkGroupExpanded_;
     int& activeBookmarkDifficultyId_ = state_.activeBookmarkDifficultyId_;
     int& activeBookmarkLine_ = state_.activeBookmarkLine_;
@@ -1020,7 +1005,6 @@
     QPushButton*& editorReplaceAllButton_ = ui_.editorReplaceAllButton_;
     QLabel*& editorEmptyStateLabel_ = ui_.editorEmptyStateLabel_;
     QTabWidget*& bottomTabs_ = ui_.bottomTabs_;
-    QToolButton*& deleteDifficultyButton_ = ui_.deleteDifficultyButton_;
     miacode::ui::BusySpinner*& outlineBusySpinner_ = ui_.outlineBusySpinner_;
     QSplitter*& workspaceSplitter_ = ui_.workspaceSplitter_;
     QWidget*& previewPanel_ = ui_.previewPanel_;

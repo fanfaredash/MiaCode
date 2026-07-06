@@ -86,9 +86,8 @@ protected:
         QWidget::mouseDoubleClickEvent(event);
     }
 
-    // Gutter right-click: same bookmark actions as the editor-body context
-    // menu, resolved for the clicked row. The menu itself is assembled by
-    // MainWindow (the editor layer stays UI-policy-free).
+    // Gutter right-click: bookmark actions for the clicked row. The menu
+    // itself is assembled by MainWindow (the editor layer stays UI-policy-free).
     void contextMenuEvent(QContextMenuEvent* event) override
     {
         const int line = editor_->lineNumberAtAreaPosition(event->pos());
