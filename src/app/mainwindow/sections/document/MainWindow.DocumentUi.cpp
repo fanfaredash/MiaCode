@@ -636,8 +636,9 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     };
 
     // Non-interactive 4px spacer rows (plus the list's 2px item spacing on
-    // both sides) separate the sidebar's sections — document pages | the
-    // difficulty tree | export/toolbox — so the first level reads as blocks.
+    // both sides) separate the sidebar's sections. When "+ Add Diff." is
+    // visible, it stays attached to the first difficulty row so that whole
+    // authoring block reads as one tight group.
     auto addSectionSpacer = [this]() {
         auto* spacer = new QListWidgetItem(ui_.outlineList_);
         spacer->setFlags(Qt::NoItemFlags);
@@ -645,7 +646,7 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
         spacer->setSizeHint(QSize(1, 4));
     };
 
-    if (!ids.isEmpty()) {
+    if (!ids.isEmpty() && !hasMissingDifficulty) {
         addSectionSpacer();
     }
     for (int id : ids) {
