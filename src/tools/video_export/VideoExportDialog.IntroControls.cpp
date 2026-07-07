@@ -164,10 +164,9 @@ void VideoExportDialog::browseIntroBackground()
 {
     const QString file = QFileDialog::getOpenFileName(
         this,
-        l10n(QStringLiteral("Choose background image"), QStringLiteral("选择背景图片")),
+        UiText::text(QStringLiteral("cover.choose_background_image")),
         QString(),
-        l10n(QStringLiteral("Images (*.png *.jpg *.jpeg *.bmp *.webp)"),
-             QStringLiteral("图片 (*.png *.jpg *.jpeg *.bmp *.webp)")));
+        UiText::text(QStringLiteral("cover.images_png_jpg_jpeg_bmp")));
     if (file.isEmpty()) {
         return;
     }

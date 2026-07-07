@@ -1469,28 +1469,28 @@ VideoExportDialog::VideoExportDialog(
 
     // 背景 group — backdrop source + blur (size follows the export resolution).
     auto* introBgGroup = new QGroupBox(
-        l10n(QStringLiteral("Background"), QStringLiteral("背景")), introControls);
+        UiText::text(QStringLiteral("cover.background")), introControls);
     auto* introBgForm = new QFormLayout(introBgGroup);
     introBgForm->setSpacing(8);
     introBgForm->setLabelAlignment(Qt::AlignLeft);
     introBgForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     introBackgroundCombo_ = new QComboBox(introBgGroup);
     introBackgroundCombo_->addItem(
-        l10n(QStringLiteral("Chart jacket (曲绘)"), QStringLiteral("曲绘")), QStringLiteral("jacket"));
+        UiText::text(QStringLiteral("cover.chart_jacket")), QStringLiteral("jacket"));
     introBackgroundCombo_->addItem(
-        l10n(QStringLiteral("Custom image"), QStringLiteral("自定义图片")), QStringLiteral("custom"));
+        UiText::text(QStringLiteral("cover.custom_image")), QStringLiteral("custom"));
     UiTheme::applyComboBoxPopupLimit(introBackgroundCombo_, 12);
-    introBgForm->addRow(l10n(QStringLiteral("Background"), QStringLiteral("背景")), introBackgroundCombo_);
+    introBgForm->addRow(UiText::text(QStringLiteral("cover.background")), introBackgroundCombo_);
     auto* introBgPathRow = new QWidget(introBgGroup);
     auto* introBgPathLayout = new QHBoxLayout(introBgPathRow);
     introBgPathLayout->setContentsMargins(0, 0, 0, 0);
     introBgPathLayout->setSpacing(8);
     introBackgroundPathEdit_ = new QLineEdit(introBgPathRow);
     introBackgroundPathEdit_->setPlaceholderText(
-        l10n(QStringLiteral("Custom background image path"), QStringLiteral("自定义背景图片路径")));
+        UiText::text(QStringLiteral("cover.custom_background_image_path")));
     introBackgroundPathEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet(UiTheme::colors().windowAltBg));
     introBackgroundBrowse_ = new QPushButton(
-        l10n(QStringLiteral("Browse…"), QStringLiteral("浏览…")), introBgPathRow);
+        UiText::text(QStringLiteral("cover.browse")), introBgPathRow);
     introBackgroundBrowse_->setObjectName(QStringLiteral("DialogAuxiliaryButton"));
     introBackgroundBrowse_->setProperty("miacodeAuxiliaryButton", true);
     introBackgroundBrowse_->setCursor(Qt::PointingHandCursor);
@@ -1499,7 +1499,7 @@ VideoExportDialog::VideoExportDialog(
     introBgPathLayout->addWidget(introBackgroundBrowse_, 0);
     introBgForm->addRow(QString(), introBgPathRow);
     introBlurCheck_ = new QCheckBox(
-        l10n(QStringLiteral("Blur background"), QStringLiteral("背景虚化")), introBgGroup);
+        UiText::text(QStringLiteral("cover.blur_background")), introBgGroup);
     introBlurCheck_->setChecked(baseTask_.intro.blurBackground);
     introBgForm->addRow(QString(), introBlurCheck_);
     introControlsLayout->addWidget(introBgGroup, 0);
@@ -1507,7 +1507,7 @@ VideoExportDialog::VideoExportDialog(
     // 难度卡 group — DX/SD type + shadow + level-text render. (No card toggle:
     // an intro always carries the difficulty card.)
     auto* introCardGroup = new QGroupBox(
-        l10n(QStringLiteral("Difficulty card"), QStringLiteral("难度卡")), introControls);
+        UiText::text(QStringLiteral("cover.difficulty_card")), introControls);
     auto* introCardForm = new QFormLayout(introCardGroup);
     introCardForm->setSpacing(8);
     introCardForm->setLabelAlignment(Qt::AlignLeft);
@@ -1525,13 +1525,13 @@ VideoExportDialog::VideoExportDialog(
         }
     }
     introCardForm->addRow(
-        l10n(QStringLiteral("Chart type"), QStringLiteral("谱面类型")), introCardModeCombo_);
+        UiText::text(QStringLiteral("cover.chart_type")), introCardModeCombo_);
     introCardShadowCheck_ = new QCheckBox(
-        l10n(QStringLiteral("Card drop shadow"), QStringLiteral("难度卡阴影")), introCardGroup);
+        UiText::text(QStringLiteral("cover.card_drop_shadow")), introCardGroup);
     introCardShadowCheck_->setChecked(baseTask_.intro.cardShadow);
     introCardForm->addRow(QString(), introCardShadowCheck_);
     introLevelTextCheck_ = new QCheckBox(
-        l10n(QStringLiteral("Render level as text"), QStringLiteral("等级文本渲染")), introCardGroup);
+        UiText::text(QStringLiteral("cover.render_level_as_text")), introCardGroup);
     introLevelTextCheck_->setChecked(baseTask_.intro.lvRenderMode == QStringLiteral("text"));
     // Opt past the app-wide tooltip suppression (MainWindow installs a global
     // event filter that hides tooltips outside the preview area).

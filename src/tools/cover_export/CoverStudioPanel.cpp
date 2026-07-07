@@ -196,7 +196,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     : QWidget(parent)
     , banner_(task.intro)
 {
-    setWindowTitle(l10n(QStringLiteral("Export Cover"), QStringLiteral("导出封面")));
+    setWindowTitle(UiText::text(QStringLiteral("cover.export_cover")));
     // Theme the native title bar — this dialog is opened from the tools
     // layer, so no MainWindow-side applySystemWindowBackdrop call covers it.
     UiNativeWindowTheme::applyToWidget(this);
@@ -278,8 +278,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
         }
     } else {
         auto* failed = new QLabel(
-            l10n(QStringLiteral("Failed to start the composer:\n%1"),
-                 QStringLiteral("合成器启动失败：\n%1")).arg(composerView_->lastError()),
+            UiText::text(QStringLiteral("cover.failed_to_start_the_composer")).arg(composerView_->lastError()),
             previewScroll);
         failed->setWordWrap(true);
         previewScroll->setWidget(failed);
@@ -287,13 +286,13 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     previewColumn->addWidget(previewFrame, 1);
 
     resetLayoutButton_ = new QPushButton(
-        l10n(QStringLiteral("Reset layout"), QStringLiteral("重置布局")), this);
+        UiText::text(QStringLiteral("cover.reset_layout")), this);
     resetLayoutButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     saveLayoutButton_ = new QPushButton(
-        l10n(QStringLiteral("Save layout…"), QStringLiteral("保存布局…")), this);
+        UiText::text(QStringLiteral("cover.save_layout")), this);
     saveLayoutButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     importLayoutButton_ = new QPushButton(
-        l10n(QStringLiteral("Import layout…"), QStringLiteral("导入布局…")), this);
+        UiText::text(QStringLiteral("cover.import_layout")), this);
     importLayoutButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     resetLayoutButton_->hide();
     saveLayoutButton_->hide();
@@ -310,7 +309,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     controlsColumn->setSpacing(10);
 
     auto* canvasGroup = new QGroupBox(
-        l10n(QStringLiteral("Canvas"), QStringLiteral("画板")), this);
+        UiText::text(QStringLiteral("cover.canvas")), this);
     canvasGroup_ = canvasGroup;
     auto* form = new QFormLayout(canvasGroup);
     form->setSpacing(10);
@@ -333,17 +332,17 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
         selectedIndex = sizeCombo_->count() - 1;
     }
     sizeCombo_->setCurrentIndex(selectedIndex);
-    form->addRow(l10n(QStringLiteral("Size"), QStringLiteral("尺寸")), sizeCombo_);
+    form->addRow(UiText::text(QStringLiteral("cover.size_2")), sizeCombo_);
 
     // Background source.
     backgroundCombo_ = new QComboBox(this);
-    backgroundCombo_->addItem(l10n(QStringLiteral("Chart jacket (曲绘)"), QStringLiteral("曲绘")),
+    backgroundCombo_->addItem(UiText::text(QStringLiteral("cover.chart_jacket")),
                               QStringLiteral("jacket"));
-    backgroundCombo_->addItem(l10n(QStringLiteral("Custom image"), QStringLiteral("自定义图片")),
+    backgroundCombo_->addItem(UiText::text(QStringLiteral("cover.custom_image")),
                               QStringLiteral("custom"));
-    backgroundCombo_->addItem(l10n(QStringLiteral("Transparent"), QStringLiteral("透明")),
+    backgroundCombo_->addItem(UiText::text(QStringLiteral("cover.transparent")),
                               QStringLiteral("transparent"));
-    form->addRow(l10n(QStringLiteral("Background"), QStringLiteral("背景")), backgroundCombo_);
+    form->addRow(UiText::text(QStringLiteral("cover.background")), backgroundCombo_);
 
     // Custom background path + browse.
     auto* pathRow = new QWidget(this);
@@ -352,15 +351,15 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     pathLayout->setSpacing(8);
     backgroundPathEdit_ = new QLineEdit(pathRow);
     backgroundPathEdit_->setPlaceholderText(
-        l10n(QStringLiteral("Custom background image path"), QStringLiteral("自定义背景图片路径")));
-    backgroundBrowse_ = new QPushButton(l10n(QStringLiteral("Browse…"), QStringLiteral("浏览…")), pathRow);
+        UiText::text(QStringLiteral("cover.custom_background_image_path")));
+    backgroundBrowse_ = new QPushButton(UiText::text(QStringLiteral("cover.browse")), pathRow);
     backgroundBrowse_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     pathLayout->addWidget(backgroundPathEdit_, 1);
     pathLayout->addWidget(backgroundBrowse_, 0);
     form->addRow(QString(), pathRow);
 
     // Backdrop blur.
-    blurCheck_ = new QCheckBox(l10n(QStringLiteral("Blur background"), QStringLiteral("背景虚化")), this);
+    blurCheck_ = new QCheckBox(UiText::text(QStringLiteral("cover.blur_background")), this);
     blurCheck_->setChecked(true);
     form->addRow(QString(), blurCheck_);
 
@@ -371,15 +370,15 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     bgBrightnessSlider_->setValue(45);
     bgBrightnessSlider_->setStyleSheet(UiTheme::dialogSliderStyleSheet());
     bgBrightnessSlider_->setToolTip(
-        l10n(QStringLiteral("Backdrop brightness"), QStringLiteral("背景亮度（底图明暗）")));
-    form->addRow(l10n(QStringLiteral("Brightness"), QStringLiteral("背景亮度")), bgBrightnessSlider_);
+        UiText::text(QStringLiteral("cover.backdrop_brightness")));
+    form->addRow(UiText::text(QStringLiteral("cover.brightness_2")), bgBrightnessSlider_);
 
     controlsColumn->addWidget(canvasGroup);
     emphasizeGroupTitle(canvasGroup);
 
     // ---- Difficulty-card section (an opt-in layer, like the chart frame) ----
     auto* cardGroup = new QGroupBox(
-        l10n(QStringLiteral("Difficulty card options"), QStringLiteral("难度卡选项")), this);
+        UiText::text(QStringLiteral("cover.difficulty_card_options")), this);
     cardGroup_ = cardGroup;
     auto* cardForm = new QFormLayout(cardGroup);
     cardForm->setSpacing(10);
@@ -390,7 +389,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     // legacy "add card" toggle is kept (it still mirrors card visibility for
     // reset / import / enable-gating) but hidden so there is only one control.
     cardCheck_ = new QCheckBox(
-        l10n(QStringLiteral("Add difficulty card"), QStringLiteral("添加难度卡")), this);
+        UiText::text(QStringLiteral("cover.add_difficulty_card")), this);
     cardCheck_->setChecked(true);
     cardForm->addRow(QString(), cardCheck_);
     cardCheck_->hide();
@@ -405,34 +404,34 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
         const int modeIdx = cardModeCombo_->findData(banner_.mode);
         if (modeIdx >= 0) cardModeCombo_->setCurrentIndex(modeIdx);
     }
-    cardForm->addRow(l10n(QStringLiteral("Chart type"), QStringLiteral("谱面类型")), cardModeCombo_);
+    cardForm->addRow(UiText::text(QStringLiteral("cover.chart_type")), cardModeCombo_);
 
     // Card drop shadow.
-    cardShadowCheck_ = new QCheckBox(l10n(QStringLiteral("Card drop shadow"), QStringLiteral("难度卡阴影")), this);
+    cardShadowCheck_ = new QCheckBox(UiText::text(QStringLiteral("cover.card_drop_shadow")), this);
     cardShadowCheck_->setChecked(false);
     cardForm->addRow(QString(), cardShadowCheck_);
 
     // Level text render.
     levelTextRenderCheck_ = new QCheckBox(
-        l10n(QStringLiteral("Render level as text"), QStringLiteral("等级文本渲染")), this);
+        UiText::text(QStringLiteral("cover.render_level_as_text")), this);
     levelTextRenderCheck_->setChecked(false);
     cardForm->addRow(QString(), levelTextRenderCheck_);
 
     // Long-text overflow.
     textOverflowCombo_ = new QComboBox(this);
     textOverflowCombo_->addItem(
-        l10n(QStringLiteral("Shrink to fit"), QStringLiteral("缩小字体以放入全部")), QStringLiteral("shrink"));
+        UiText::text(QStringLiteral("cover.shrink_to_fit")), QStringLiteral("shrink"));
     textOverflowCombo_->addItem(
-        l10n(QStringLiteral("Keep size, ellipsis (…)"), QStringLiteral("保持字号，省略号(…)截断")),
+        UiText::text(QStringLiteral("cover.keep_size_ellipsis")),
         QStringLiteral("ellipsis"));
-    cardForm->addRow(l10n(QStringLiteral("Long text"), QStringLiteral("文字超长")), textOverflowCombo_);
+    cardForm->addRow(UiText::text(QStringLiteral("cover.long_text")), textOverflowCombo_);
 
     controlsColumn->addWidget(cardGroup);
     emphasizeGroupTitle(cardGroup);
 
     // ---- Chart-frame section (an opt-in layer) ----
     auto* frameGroup = new QGroupBox(
-        l10n(QStringLiteral("Chart frame"), QStringLiteral("谱面帧")), this);
+        UiText::text(QStringLiteral("cover.chart_frame")), this);
     auto* frameForm = new QFormLayout(frameGroup);
     frameForm->setSpacing(10);
     frameForm->setLabelAlignment(Qt::AlignLeft);
@@ -440,13 +439,12 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
 
     // Chart frame (a square playfield grab at a picked time, added as a layer).
     chartFrameCheck_ = new QCheckBox(
-        l10n(QStringLiteral("Add chart frame"), QStringLiteral("添加谱面帧")), this);
+        UiText::text(QStringLiteral("cover.add_chart_frame")), this);
     chartFrameCheck_->setChecked(false);
     chartFrameCheck_->setEnabled(chartFrameAvailable_);
     if (!chartFrameAvailable_) {
         chartFrameCheck_->setToolTip(
-            l10n(QStringLiteral("This difficulty has no chart notes to render."),
-                 QStringLiteral("当前难度没有可渲染的谱面音符。")));
+            UiText::text(QStringLiteral("cover.this_difficulty_has_no_chart")));
     }
     frameForm->addRow(QString(), chartFrameCheck_);
 
@@ -464,8 +462,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     playButton_->setIcon(playIcon_);
     playButton_->setIconSize(QSize(16, 16));
     playButton_->setEnabled(false);
-    playButton_->setToolTip(l10n(QStringLiteral("Play / pause (visual only)"),
-                                 QStringLiteral("播放 / 暂停（仅画面）")));
+    playButton_->setToolTip(UiText::text(QStringLiteral("cover.play_pause_visual_only")));
     // Square transport button. Two QSS traps: the theme sheet's `min-width: 92px`
     // beats setFixedWidth, and its `min-height: 30px` is a CONTENT-box bound — with
     // the 1px borders the style wants 32px, so a 30px fixed height clipped the
@@ -486,7 +483,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     frameLayout->addWidget(playButton_, 0);
     frameLayout->addWidget(frameSlider_, 1);
     frameLayout->addWidget(frameTimeLabel_, 0);
-    frameForm->addRow(l10n(QStringLiteral("Frame time"), QStringLiteral("谱面时间")), frameRow);
+    frameForm->addRow(UiText::text(QStringLiteral("cover.frame_time_2")), frameRow);
 
     playClock_ = new QTimer(this);
     playClock_->setInterval(kPlayTickMs);
@@ -504,7 +501,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     // Legacy hidden controls kept as a compatibility bridge for older code paths;
     // the visible inspector exposes the current [Jacket | Transparent] mode UI.
     chartFrameBgCheck_ = new QCheckBox(
-        l10n(QStringLiteral("Chart-frame inner background"), QStringLiteral("谱面帧内圈背景")), this);
+        UiText::text(QStringLiteral("cover.chart_frame_inner_background")), this);
     chartFrameBgCheck_->setChecked(true);
     chartFrameBgCheck_->setEnabled(false);
     frameForm->addRow(QString(), chartFrameBgCheck_);
@@ -518,7 +515,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     chartFrameBgBrightnessSlider_->setValue(
         qBound(0, qRound(qBound(0.0, task.backgroundBrightnessInner, 1.0) * 100.0), 100));
     chartFrameBgBrightnessSlider_->setEnabled(false);
-    frameForm->addRow(l10n(QStringLiteral("Background brightness"), QStringLiteral("背景亮度")),
+    frameForm->addRow(UiText::text(QStringLiteral("cover.background_brightness")),
                       chartFrameBgBrightnessSlider_);
 
     chartFrameBgTransparencySlider_ = new QSlider(Qt::Horizontal, this);
@@ -526,7 +523,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     chartFrameBgTransparencySlider_->setMaximum(100);
     chartFrameBgTransparencySlider_->setValue(50);
     chartFrameBgTransparencySlider_->setEnabled(false);
-    frameForm->addRow(l10n(QStringLiteral("Background transparency"), QStringLiteral("背景透明度")),
+    frameForm->addRow(UiText::text(QStringLiteral("cover.background_transparency")),
                       chartFrameBgTransparencySlider_);
 
     controlsColumn->addWidget(frameGroup);
@@ -538,7 +535,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     // with the bottom of the 谱面帧 group — both columns start at the same top.
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
     auto* exportButton = buttonBox->addButton(
-        l10n(QStringLiteral("Export"), QStringLiteral("导出")), QDialogButtonBox::AcceptRole);
+        UiText::text(QStringLiteral("cover.export")), QDialogButtonBox::AcceptRole);
     exportButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(true));
     if (QPushButton* cancelButton = buttonBox->button(QDialogButtonBox::Cancel)) {
         cancelButton->setText(l10n(QStringLiteral("Cancel"), QStringLiteral("取消")));
@@ -1100,9 +1097,8 @@ void CoverStudioPanel::onChartFrameToggled(bool on)
         syncControlEnabled();   // re-disable the inner-bg controls after revert
         QMessageBox::warning(
             this,
-            l10n(QStringLiteral("Chart frame"), QStringLiteral("谱面帧")),
-            l10n(QStringLiteral("Could not render the chart frame."),
-                 QStringLiteral("无法渲染谱面帧。")));
+            UiText::text(QStringLiteral("cover.chart_frame")),
+            UiText::text(QStringLiteral("cover.could_not_render_the_chart")));
         return;
     }
     if (playButton_ != nullptr) {
@@ -1784,9 +1780,8 @@ miacode::cover_export::CoverExportResult CoverStudioPanel::exportCover(const QSt
         if (missingFrame) {
             QMessageBox::warning(
                 this,
-                l10n(QStringLiteral("Chart frame"), QStringLiteral("谱面帧")),
-                l10n(QStringLiteral("The chart frame could not be rendered; the cover will not include it."),
-                     QStringLiteral("谱面帧无法渲染，封面将不包含它。")));
+                UiText::text(QStringLiteral("cover.chart_frame")),
+                UiText::text(QStringLiteral("cover.the_chart_frame_could_not")));
         }
     }
     return miacode::cover_export::exportCoverComposite(
@@ -1839,10 +1834,9 @@ void CoverStudioPanel::browseBackground()
         : QString();
     const QString file = QFileDialog::getOpenFileName(
         this,
-        l10n(QStringLiteral("Choose background image"), QStringLiteral("选择背景图片")),
+        UiText::text(QStringLiteral("cover.choose_background_image")),
         start,
-        l10n(QStringLiteral("Images (*.png *.jpg *.jpeg *.bmp *.webp)"),
-             QStringLiteral("图片 (*.png *.jpg *.jpeg *.bmp *.webp)")));
+        UiText::text(QStringLiteral("cover.images_png_jpg_jpeg_bmp")));
     if (file.isEmpty()) {
         return;
     }
@@ -1912,9 +1906,9 @@ void CoverStudioPanel::saveLayout()
     stopPlayback();
     QString path = QFileDialog::getSaveFileName(
         this,
-        l10n(QStringLiteral("Save cover layout"), QStringLiteral("保存封面布局")),
+        UiText::text(QStringLiteral("cover.save_cover_layout")),
         QStringLiteral("cover-layout.miacover"),
-        l10n(QStringLiteral("Cover layout (*.miacover)"), QStringLiteral("封面布局 (*.miacover)")));
+        UiText::text(QStringLiteral("cover.cover_layout_miacover")));
     if (path.isEmpty()) {
         return;
     }
@@ -1928,9 +1922,8 @@ void CoverStudioPanel::saveLayout()
         || file.write(doc.toJson(QJsonDocument::Indented)) < 0) {
         QMessageBox::warning(
             this,
-            l10n(QStringLiteral("Save layout"), QStringLiteral("保存布局")),
-            l10n(QStringLiteral("Could not write the layout file."),
-                 QStringLiteral("无法写入布局文件。")));
+            UiText::text(QStringLiteral("cover.save_layout_2")),
+            UiText::text(QStringLiteral("cover.could_not_write_the_layout")));
         return;
     }
     miacode::cover_export::CoverCompositionState::pushRecentFile(path);
@@ -1942,10 +1935,9 @@ void CoverStudioPanel::importLayout()
     // the identity check inside is what actually validates the file.
     const QString path = QFileDialog::getOpenFileName(
         this,
-        l10n(QStringLiteral("Import cover layout"), QStringLiteral("导入封面布局")),
+        UiText::text(QStringLiteral("cover.import_cover_layout")),
         QString(),
-        l10n(QStringLiteral("Cover layout (*.miacover);;Legacy JSON (*.json)"),
-             QStringLiteral("封面布局 (*.miacover);;旧版 JSON (*.json)")));
+        UiText::text(QStringLiteral("cover.cover_layout_miacover_legacy_json")));
     if (path.isEmpty()) {
         return;
     }
@@ -1961,9 +1953,8 @@ void CoverStudioPanel::importLayoutFromPath(const QString& path)
     if (!file.open(QIODevice::ReadOnly)) {
         QMessageBox::warning(
             this,
-            l10n(QStringLiteral("Import layout"), QStringLiteral("导入布局")),
-            l10n(QStringLiteral("Could not read the layout file."),
-                 QStringLiteral("无法读取布局文件。")));
+            UiText::text(QStringLiteral("cover.import_layout_2")),
+            UiText::text(QStringLiteral("cover.could_not_read_the_layout")));
         return;
     }
     QJsonParseError parseError{};
@@ -1971,9 +1962,8 @@ void CoverStudioPanel::importLayoutFromPath(const QString& path)
     if (!doc.isObject()) {
         QMessageBox::warning(
             this,
-            l10n(QStringLiteral("Import layout"), QStringLiteral("导入布局")),
-            l10n(QStringLiteral("The layout file is not valid JSON."),
-                 QStringLiteral("布局文件不是有效的 JSON。")));
+            UiText::text(QStringLiteral("cover.import_layout_2")),
+            UiText::text(QStringLiteral("cover.the_layout_file_is_not")));
         return;
     }
     const QJsonObject root = doc.object();
@@ -1982,9 +1972,8 @@ void CoverStudioPanel::importLayoutFromPath(const QString& path)
     if (root.value(QStringLiteral("kind")).toString() != QStringLiteral("miacode-cover-composition")) {
         QMessageBox::warning(
             this,
-            l10n(QStringLiteral("Import layout"), QStringLiteral("导入布局")),
-            l10n(QStringLiteral("This file is not a MiaCode cover layout."),
-                 QStringLiteral("该文件不是 MiaCode 封面布局文件。")));
+            UiText::text(QStringLiteral("cover.import_layout_2")),
+            UiText::text(QStringLiteral("cover.this_file_is_not_a")));
         return;
     }
     applyCompositionJson(root);
@@ -2141,9 +2130,7 @@ void CoverStudioPanel::applyCompositionJson(const QJsonObject& root, bool intera
     }
     QString notice;
     if (fellBack) {
-        notice += l10n(
-            QStringLiteral("The custom background image was not found; using the chart jacket instead."),
-            QStringLiteral("自定义背景图片未找到，已回退为曲绘背景。"));
+        notice += UiText::text(QStringLiteral("cover.the_custom_background_image_was"));
     }
     if (chartFrameDropped) {
         if (!notice.isEmpty()) {
@@ -2156,7 +2143,7 @@ void CoverStudioPanel::applyCompositionJson(const QJsonObject& root, bool intera
     }
     if (!notice.isEmpty()) {
         QMessageBox::information(
-            this, l10n(QStringLiteral("Import layout"), QStringLiteral("导入布局")), notice);
+            this, UiText::text(QStringLiteral("cover.import_layout_2")), notice);
     }
 }
 
