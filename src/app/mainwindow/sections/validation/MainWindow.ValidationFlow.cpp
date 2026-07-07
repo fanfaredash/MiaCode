@@ -726,14 +726,10 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
     const bool showMuri = muriIssueCount > 0;
 
     const QString summaryTooltip = showMuri
-        ? uiText(
-              "editor.validation_summary.tooltip_with_muri",
-              "%1 error(s), %2 warning(s), %3 muri issue(s)"
-          ).arg(errorCount).arg(warningCount).arg(muriIssueCount)
-        : uiText(
-              "editor.validation_summary.tooltip",
-              "%1 error(s), %2 warning(s)"
-          ).arg(errorCount).arg(warningCount);
+        ? UiText::text(QStringLiteral("editor.validation_summary.tooltip_with_muri"))
+              .arg(errorCount).arg(warningCount).arg(muriIssueCount)
+        : UiText::text(QStringLiteral("editor.validation_summary.tooltip"))
+              .arg(errorCount).arg(warningCount);
     const QString jumpHint = UiText::text(QStringLiteral("validation.click_an_icon_to_jump"));
     const QString summaryTooltipWithJump = summaryTooltip + QStringLiteral("\n") + jumpHint;
     const bool showSummary = state_.previewShowValidationSummary_ && (showError || showWarning || showMuri);

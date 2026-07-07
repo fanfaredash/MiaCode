@@ -98,8 +98,8 @@ void MainWindow::ValidationSection::onToggleJudgeMarkers(bool checked)
     owner_.savePortableState();
     owner_.statusBar()->showMessage(
         state_.showJudgeMarkers_
-            ? uiText("status.judge_marker_enabled", "Judge markers enabled.")
-            : uiText("status.judge_marker_disabled", "Judge markers hidden.")
+            ? UiText::text(QStringLiteral("status.judge_marker_enabled"))
+            : UiText::text(QStringLiteral("status.judge_marker_disabled"))
     );
 }
 
@@ -110,8 +110,8 @@ void MainWindow::ValidationSection::onToggleTouchTrail(bool checked)
     owner_.savePortableState();
     owner_.statusBar()->showMessage(
         state_.showTouchTrail_
-            ? uiText("status.touch_trail_enabled", "Touch trail enabled.")
-            : uiText("status.touch_trail_disabled", "Touch trail hidden.")
+            ? UiText::text(QStringLiteral("status.touch_trail_enabled"))
+            : UiText::text(QStringLiteral("status.touch_trail_disabled"))
     );
 }
 
@@ -233,8 +233,8 @@ void MainWindow::ValidationSection::setMuriRenderMode(RenderMode mode, bool pers
     }
     owner_.statusBar()->showMessage(
         mode == RenderMode::MaimuriDxStyle
-            ? uiText("status.muri_render_mode_dx", "Preview mode: muri check.")
-            : uiText("status.muri_render_mode_native", "Preview mode: chart review.")
+            ? UiText::text(QStringLiteral("status.muri_render_mode_dx"))
+            : UiText::text(QStringLiteral("status.muri_render_mode_native"))
     );
 }
 
