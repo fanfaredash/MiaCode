@@ -103,7 +103,6 @@ private:
     bool difficultyHasChartBody(int difficultyId) const;
     bool documentHasChartBody() const;
     bool documentHasPackableContent() const;
-    QString localizedText(const QString& zh, const QString& en) const;
 
     void setCurrentSubPage(int subPage);
     void onExportCoverClicked();

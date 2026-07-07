@@ -92,11 +92,6 @@ void ExportLauncherPage::applyThemeStyles()
     setStyleSheet(UiTheme::exportLauncherPageStyleSheet());
 }
 
-QString ExportLauncherPage::localizedText(const QString& zh, const QString& en) const
-{
-    return UiText::localized(en, zh);
-}
-
 void ExportLauncherPage::buildUi()
 {
     applyThemeStyles();
@@ -131,10 +126,10 @@ void ExportLauncherPage::buildUi()
     subNavRow->setContentsMargins(0, 2, 0, 0);
     subNavRow->setSpacing(18);
     const QStringList subNavLabels{
-        localizedText(QStringLiteral("视频导出"), QStringLiteral("Export Video")),
-        localizedText(QStringLiteral("封面导出"), QStringLiteral("Export Cover")),
-        localizedText(QStringLiteral("批量导出"), QStringLiteral("Batch Export")),
-        localizedText(QStringLiteral("打包 ZIP"), QStringLiteral("Pack as ZIP")),
+        UiText::text(QStringLiteral("export_page.export_video")),
+        UiText::text(QStringLiteral("export_page.export_cover")),
+        UiText::text(QStringLiteral("export_page.batch_export")),
+        UiText::text(QStringLiteral("export_page.pack_as_zip")),
     };
     for (int subPage = 0; subPage < subNavLabels.size(); ++subPage) {
         auto* navButton = new QToolButton(this);
@@ -187,21 +182,21 @@ void ExportLauncherPage::buildUi()
     // dialog launchers (descriptions and mode chips removed, 2026-06-12).
     coverCard_ = makePane(
         subPageStack_,
-        localizedText(QStringLiteral("打开合成器… ↗"), QStringLiteral("Open Composer… ↗")));
+        UiText::text(QStringLiteral("export_page.open_composer")));
     connect(coverCard_.actionButton, &QPushButton::clicked,
             this, &ExportLauncherPage::onExportCoverClicked);
     subPageStack_->addWidget(coverCard_.frame);
 
     batchCard_ = makePane(
         subPageStack_,
-        localizedText(QStringLiteral("打开队列… ↗"), QStringLiteral("Open Queue… ↗")));
+        UiText::text(QStringLiteral("export_page.open_queue")));
     connect(batchCard_.actionButton, &QPushButton::clicked,
             this, &ExportLauncherPage::onBatchExportClicked);
     subPageStack_->addWidget(batchCard_.frame);
 
     zipCard_ = makePane(
         subPageStack_,
-        localizedText(QStringLiteral("立即打包"), QStringLiteral("Pack Now")));
+        UiText::text(QStringLiteral("export_page.pack_now")));
     connect(zipCard_.actionButton, &QPushButton::clicked,
             this, &ExportLauncherPage::onPackAsZipClicked);
     subPageStack_->addWidget(zipCard_.frame);
@@ -383,14 +378,13 @@ void ExportLauncherPage::setCardEnabled(LauncherCard& card, bool enabled, const 
 void ExportLauncherPage::updatePaneStates()
 {
     const bool hasChartBody = documentHasChartBody();
-    const QString noChartReason = localizedText(
-        QStringLiteral("暂无包含谱面内容的难度，无法导出。"),
-        QStringLiteral("No difficulty has chart content yet, so there is nothing to export."));
+    const QString noChartReason = UiText::text(QStringLiteral("export_page.no_difficulty_has_chart_content"));
     setCardEnabled(coverCard_, hasChartBody, noChartReason);
     setCardEnabled(batchCard_, hasChartBody, noChartReason);
-    setCardEnabled(zipCard_, documentHasPackableContent(), localizedText(
-        QStringLiteral("谱面为空，没有可打包的内容。"),
-        QStringLiteral("The chart is empty; there is nothing to package.")));
+    setCardEnabled(
+        zipCard_,
+        documentHasPackableContent(),
+        UiText::text(QStringLiteral("export.the_chart_is_empty_there")));
 }
 
 void ExportLauncherPage::setCurrentSubPage(int subPage)
@@ -440,10 +434,8 @@ void ExportLauncherPage::syncEmbeddedVideoPanel()
         }
         if (videoUnavailableLabel_ != nullptr) {
             const QString reason = difficultyExists(selectedDifficultyId_)
-                ? localizedText(QStringLiteral("当前难度暂无谱面内容，无法导出视频。"),
-                                QStringLiteral("The selected difficulty has no chart content to export."))
-                : localizedText(QStringLiteral("暂无可导出的难度。"),
-                                QStringLiteral("No difficulty is available to export."));
+                ? UiText::text(QStringLiteral("export_page.the_selected_difficulty_has_no"))
+                : UiText::text(QStringLiteral("export_page.no_difficulty_is_available_to"));
             videoUnavailableLabel_->setText(reason);
             videoUnavailableLabel_->setVisible(videoSubPageActive && !targetAvailable);
         }
@@ -462,9 +454,8 @@ void ExportLauncherPage::syncEmbeddedVideoPanel()
         owner_->exportSection_->createEmbeddedVideoExportPanel(selectedDifficultyId_, videoPanelHost_);
     if (panel == nullptr) {
         if (videoUnavailableLabel_ != nullptr) {
-            videoUnavailableLabel_->setText(localizedText(
-                QStringLiteral("视频导出面板暂不可用。"),
-                QStringLiteral("The video export panel is unavailable right now.")));
+            videoUnavailableLabel_->setText(
+                UiText::text(QStringLiteral("export_page.the_video_export_panel_is")));
             videoUnavailableLabel_->show();
         }
         return;

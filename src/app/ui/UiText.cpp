@@ -927,6 +927,20 @@ const QHash<QString, QString>& enMap()
         {"cover.zoom_canvas_out", "Zoom canvas out"},
         {"cover.zoom_canvas_out_ctrl", "Zoom canvas out (Ctrl+-)"},
 
+        {"export.the_chart_is_empty_there", "The chart is empty; there is nothing to package."},
+
+        {"export_page.batch_export", "Batch Export"},
+        {"export_page.export_cover", "Export Cover"},
+        {"export_page.export_video", "Export Video"},
+        {"export_page.no_difficulty_has_chart_content", "No difficulty has chart content yet, so there is nothing to export."},
+        {"export_page.no_difficulty_is_available_to", "No difficulty is available to export."},
+        {"export_page.open_composer", "Open Composer… ↗"},
+        {"export_page.open_queue", "Open Queue… ↗"},
+        {"export_page.pack_as_zip", "Pack as ZIP"},
+        {"export_page.pack_now", "Pack Now"},
+        {"export_page.the_selected_difficulty_has_no", "The selected difficulty has no chart content to export."},
+        {"export_page.the_video_export_panel_is", "The video export panel is unavailable right now."},
+
         {"net.also_create_zip_after_success", "Also create ZIP after success"},
         {"net.artist", "Artist"},
         {"net.background_download_thread_started", "Background download thread started."},
@@ -1709,6 +1723,20 @@ const QHash<QString, QString>& zhMap()
         {"cover.zoom_canvas_out", "缩小画布视图"},
         {"cover.zoom_canvas_out_ctrl", "缩小画布视图（Ctrl+-）"},
 
+        {"export.the_chart_is_empty_there", "谱面为空，没有可打包的内容。"},
+
+        {"export_page.batch_export", "批量导出"},
+        {"export_page.export_cover", "封面导出"},
+        {"export_page.export_video", "视频导出"},
+        {"export_page.no_difficulty_has_chart_content", "暂无包含谱面内容的难度，无法导出。"},
+        {"export_page.no_difficulty_is_available_to", "暂无可导出的难度。"},
+        {"export_page.open_composer", "打开合成器… ↗"},
+        {"export_page.open_queue", "打开队列… ↗"},
+        {"export_page.pack_as_zip", "打包 ZIP"},
+        {"export_page.pack_now", "立即打包"},
+        {"export_page.the_selected_difficulty_has_no", "当前难度暂无谱面内容，无法导出视频。"},
+        {"export_page.the_video_export_panel_is", "视频导出面板暂不可用。"},
+
         {"net.also_create_zip_after_success", "成功后额外生成 ZIP"},
         {"net.artist", "曲师"},
         {"net.background_download_thread_started", "后台下载线程已启动。"},
@@ -2483,6 +2511,20 @@ const QHash<QString, QString>& jaMap()
         {"cover.zoom_canvas_in_ctrl", "キャンバスを拡大（Ctrl++）"},
         {"cover.zoom_canvas_out", "キャンバスを縮小"},
         {"cover.zoom_canvas_out_ctrl", "キャンバスを縮小（Ctrl+-）"},
+
+        {"export.the_chart_is_empty_there", "譜面が空で、パッケージ化する内容がありません。"},
+
+        {"export_page.batch_export", "一括出力"},
+        {"export_page.export_cover", "カバー出力"},
+        {"export_page.export_video", "動画出力"},
+        {"export_page.no_difficulty_has_chart_content", "譜面内容を含む難易度がまだないため、出力できません。"},
+        {"export_page.no_difficulty_is_available_to", "出力できる難易度がありません。"},
+        {"export_page.open_composer", "コンポーザーを開く… ↗"},
+        {"export_page.open_queue", "キューを開く… ↗"},
+        {"export_page.pack_as_zip", "ZIP パッケージ化"},
+        {"export_page.pack_now", "今すぐパッケージ化"},
+        {"export_page.the_selected_difficulty_has_no", "選択中の難易度には出力できる譜面内容がありません。"},
+        {"export_page.the_video_export_panel_is", "動画出力パネルは現在利用できません。"},
 
         {"net.also_create_zip_after_success", "Also create ZIP after success"},
         {"net.artist", "アーティスト"},
