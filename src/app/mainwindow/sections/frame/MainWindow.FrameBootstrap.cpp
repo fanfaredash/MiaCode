@@ -738,8 +738,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     titleWrapLayout->setSpacing(6);
     titleWrapLayout->addWidget(titleEdit_, 1);
     auto* readTitleButton = new QToolButton(metadataPage_);
-    readTitleButton->setText(UiText::localized(QStringLiteral("Read from MP3"), QStringLiteral("从 MP3 读取")));
-    readTitleButton->setToolTip(UiText::localized(QStringLiteral("Choose an MP3 and pull the title from its ID3 tag."), QStringLiteral("选择一个 MP3，从它的 ID3 标签里读取标题。")));
+    readTitleButton->setText(UiText::text(QStringLiteral("metadata.read_from_mp3")));
+    readTitleButton->setToolTip(UiText::text(QStringLiteral("metadata.choose_an_mp3_and_pull")));
     connect(readTitleButton, &QToolButton::clicked, this, &MainWindow::onReadTitleFromTrack);
     titleWrapLayout->addWidget(readTitleButton, 0, Qt::AlignRight);
 
@@ -749,8 +749,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     artistWrapLayout->setSpacing(6);
     artistWrapLayout->addWidget(artistEdit_, 1);
     auto* readArtistButton = new QToolButton(metadataPage_);
-    readArtistButton->setText(UiText::localized(QStringLiteral("Read from MP3"), QStringLiteral("从 MP3 读取")));
-    readArtistButton->setToolTip(UiText::localized(QStringLiteral("Choose an MP3 and pull the artist from its ID3 tag."), QStringLiteral("选择一个 MP3，从它的 ID3 标签里读取曲师。")));
+    readArtistButton->setText(UiText::text(QStringLiteral("metadata.read_from_mp3")));
+    readArtistButton->setToolTip(UiText::text(QStringLiteral("metadata.choose_an_mp3_and_pull_2")));
     connect(readArtistButton, &QToolButton::clicked, this, &MainWindow::onReadArtistFromTrack);
     artistWrapLayout->addWidget(readArtistButton, 0, Qt::AlignRight);
 
@@ -765,11 +765,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     designerWrapLayout->setSpacing(6);
     designerWrapLayout->addWidget(designerEdit_, 1);
     auto* manageDesignersButton = new QToolButton(metadataPage_);
-    manageDesignersButton->setText(UiText::localized(QStringLiteral("Manage per-difficulty designers"), QStringLiteral("管理多个难度名义")));
-    manageDesignersButton->setToolTip(UiText::localized(
-        QStringLiteral("Set each difficulty's designer (&des_1 … &des_7); includes the "
-                       "\"all difficulties share one designer\" toggle."),
-        QStringLiteral("为每个难度（&des_1 … &des_7）分别填写谱师名义，并可勾选「所有难度采用相同名义」。")));
+    manageDesignersButton->setText(UiText::text(QStringLiteral("metadata.manage_per_difficulty_designers")));
+    manageDesignersButton->setToolTip(UiText::text(QStringLiteral("metadata.set_each_difficulty_designer")));
     connect(manageDesignersButton, &QToolButton::clicked, this, &MainWindow::onManagePerDifficultyDesigners);
     designerWrapLayout->addWidget(manageDesignersButton, 0, Qt::AlignRight);
 
@@ -781,8 +778,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     coverWrapLayout->setContentsMargins(0, 0, 0, 0);
     coverWrapLayout->setSpacing(6);
     auto* extractCoverButton = new QToolButton(metadataPage_);
-    extractCoverButton->setText(UiText::localized(QStringLiteral("Read from MP3"), QStringLiteral("从 MP3 读取")));
-    extractCoverButton->setToolTip(UiText::localized(QStringLiteral("Choose an MP3 and write its embedded cover artwork as bg.jpg next to the chart."), QStringLiteral("选择一个 MP3，把它内嵌的封面图写到当前谱面目录的 bg.jpg。")));
+    extractCoverButton->setText(UiText::text(QStringLiteral("metadata.read_from_mp3")));
+    extractCoverButton->setToolTip(UiText::text(QStringLiteral("metadata.choose_an_mp3_and_write")));
     connect(extractCoverButton, &QToolButton::clicked, this, &MainWindow::onExtractBackgroundFromTrack);
     coverWrapLayout->addWidget(extractCoverButton, 0, Qt::AlignLeft);
     coverWrapLayout->addStretch(1);
@@ -865,7 +862,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     latencyEntryRow->addWidget(latencyEntrySummaryLabel_, 1);
     auto* openLatencyPageButton = new QToolButton(metadataPage_);
     openLatencyPageButton->setText(uiText("metadata.latency_card.open", "Open Latency Settings →"));
-    openLatencyPageButton->setToolTip(UiText::localized(QStringLiteral("Open the Latency Settings page: adjust BPM/Offset and audition for calibration."), QStringLiteral("打开延迟设置页：调整 BPM/Offset，并通过试听校准。")));
+    openLatencyPageButton->setToolTip(UiText::text(QStringLiteral("metadata.open_the_latency_settings_page")));
     connect(openLatencyPageButton, &QToolButton::clicked, this, [this]() {
         switchToLatencyField();
     });
@@ -892,7 +889,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     copyAreaEditor_ = new PlainCodeEditor(copyAreaPanel_);
     copyAreaEditor_->setLineWrapMode(QTextEdit::WidgetWidth);
     copyAreaEditor_->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    copyAreaEditor_->setPlaceholderText(UiText::localized(QStringLiteral("Copy area"), QStringLiteral("复制区")));
+    copyAreaEditor_->setPlaceholderText(UiText::text(QStringLiteral("metadata.copy_area")));
     copyAreaEditor_->setStyleSheet(UiTheme::editorTextEditStyleSheet());
     connect(copyAreaEditor_, &PlainCodeEditor::editorOverwriteModeChanged, this, [this](bool enabled) {
         applyEditorOverwriteModeEnabled(enabled, true);
