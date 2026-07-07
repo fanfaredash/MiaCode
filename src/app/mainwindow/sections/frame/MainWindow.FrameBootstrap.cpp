@@ -147,7 +147,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // labels). The trailing `(L)` parens render in both locales which
     // matches the existing Chinese convention.
     auto* fileMenu = menuBar()->addMenu(uiText("menu.file", "File(&F)"));
-    auto* editMenu = menuBar()->addMenu(UiText::localized(QStringLiteral("Edit(&E)"), QStringLiteral("编辑(&E)")));
+    auto* editMenu = menuBar()->addMenu(UiText::text(QStringLiteral("metadata.edit_e")));
     auto* toolsMenu = menuBar()->addMenu(uiText("menu.tools", "Tools(&T)"));
     // Beta20-fix — Transform menu renamed to "Modify" / "调整" in both
     // languages so the Alt-T mnemonic is unambiguous for the Tools
@@ -155,7 +155,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // user requested a synonym, not just a different mnemonic letter.
     // The Chinese key in UiText.cpp likewise uses 调整(&M).
     auto* transformMenu = menuBar()->addMenu(uiText("menu.transform", "Modify(&M)"));
-    auto* previewMenu = menuBar()->addMenu(UiText::localized(QStringLiteral("Preview(&P)"), QStringLiteral("预览(&P)")));
+    auto* previewMenu = menuBar()->addMenu(UiText::text(QStringLiteral("metadata.preview_p")));
     auto* helpMenu = menuBar()->addMenu(uiText("menu.help", "Help(&H)"));
     styleRoundedMenu(*fileMenu);
     styleRoundedMenu(*editMenu);
@@ -312,30 +312,26 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         styleRoundedMenu(menu);
         const bool hasBookmark = editor->bookmarkedLines().contains(line);
         if (!hasBookmark) {
-            QAction* createAction = menu.addAction(
-                UiText::localized(QStringLiteral("Insert Bookmark"), QStringLiteral("插入书签")));
+            QAction* createAction = menu.addAction(UiText::text(QStringLiteral("metadata.insert_bookmark")));
             connect(createAction, &QAction::triggered, this, [this, line]() {
                 if (editorSection_ != nullptr) {
                     editorSection_->createBookmarkAtLine(line, true);
                 }
             });
         } else {
-            QAction* renameAction = menu.addAction(
-                UiText::localized(QStringLiteral("Rename Bookmark"), QStringLiteral("重命名书签")));
+            QAction* renameAction = menu.addAction(UiText::text(QStringLiteral("metadata.rename_bookmark")));
             connect(renameAction, &QAction::triggered, this, [this, line]() {
                 if (documentSection_ != nullptr) {
                     documentSection_->revealBookmarkInSidebar(activeDifficultyId_, line, true);
                 }
             });
-            QAction* deleteAction = menu.addAction(
-                UiText::localized(QStringLiteral("Delete Bookmark"), QStringLiteral("删除书签")));
+            QAction* deleteAction = menu.addAction(UiText::text(QStringLiteral("editor.delete_bookmark")));
             connect(deleteAction, &QAction::triggered, this, [this, line]() {
                 if (editorSection_ != nullptr) {
                     editorSection_->deleteBookmarkAtLineWithConfirmation(line);
                 }
             });
-            QAction* revealAction = menu.addAction(
-                UiText::localized(QStringLiteral("Show in Sidebar"), QStringLiteral("在侧边栏显示")));
+            QAction* revealAction = menu.addAction(UiText::text(QStringLiteral("metadata.show_in_sidebar")));
             connect(revealAction, &QAction::triggered, this, [this, line]() {
                 if (documentSection_ != nullptr) {
                     documentSection_->revealBookmarkInSidebar(activeDifficultyId_, line, false);
