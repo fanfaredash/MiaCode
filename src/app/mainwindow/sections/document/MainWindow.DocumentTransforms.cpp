@@ -46,7 +46,7 @@ NormalizeDialogResult showNormalizeSelectionDialog(
     result.options = initialOptions;
 
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner));
-    dialog.setWindowTitle(uiText("dialog.normalize.title", QStringLiteral("Format Chart")));
+    dialog.setWindowTitle(UiText::text(QStringLiteral("dialog.normalize.title")));
     dialog.setModal(true);
     dialog.setMinimumWidth(300);
     dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
@@ -213,12 +213,12 @@ void MainWindow::DocumentSection::onMirrorLeftRight()
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
-    if (!applySelectionBatchTransform(uiText("action.transform.mirror_lr", "Mirror Left/Right"), [this](const QString& text, int* changedCount) {
+    if (!applySelectionBatchTransform(UiText::text(QStringLiteral("action.transform.mirror_lr")), [this](const QString& text, int* changedCount) {
         return miacode::chart_transform::transformChartSelectionText(text, miacode::chart_transform::ChartTransformOp::MirrorLeftRight, changedCount);
     })) {
         return;
     }
-    owner_.statusBar()->showMessage(uiText("status.transform.mirror_lr", "Mirror Left/Right applied."));
+    owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.transform.mirror_lr")));
 }
 
 void MainWindow::DocumentSection::onMirrorUpDown()
@@ -229,12 +229,12 @@ void MainWindow::DocumentSection::onMirrorUpDown()
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
-    if (!applySelectionBatchTransform(uiText("action.transform.mirror_ud", "Mirror Up/Down"), [this](const QString& text, int* changedCount) {
+    if (!applySelectionBatchTransform(UiText::text(QStringLiteral("action.transform.mirror_ud")), [this](const QString& text, int* changedCount) {
         return miacode::chart_transform::transformChartSelectionText(text, miacode::chart_transform::ChartTransformOp::MirrorUpDown, changedCount);
     })) {
         return;
     }
-    owner_.statusBar()->showMessage(uiText("status.transform.mirror_ud", "Mirror Up/Down applied."));
+    owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.transform.mirror_ud")));
 }
 
 void MainWindow::DocumentSection::onRotate180()
@@ -245,12 +245,12 @@ void MainWindow::DocumentSection::onRotate180()
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
-    if (!applySelectionBatchTransform(uiText("action.transform.rotate_180", "Rotate 180"), [this](const QString& text, int* changedCount) {
+    if (!applySelectionBatchTransform(UiText::text(QStringLiteral("action.transform.rotate_180")), [this](const QString& text, int* changedCount) {
         return miacode::chart_transform::transformChartSelectionText(text, miacode::chart_transform::ChartTransformOp::Rotate180, changedCount);
     })) {
         return;
     }
-    owner_.statusBar()->showMessage(uiText("status.transform.rotate_180", "Rotate 180 applied."));
+    owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.transform.rotate_180")));
 }
 
 void MainWindow::DocumentSection::onRotate45CounterClockwise()
@@ -261,12 +261,12 @@ void MainWindow::DocumentSection::onRotate45CounterClockwise()
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
-    if (!applySelectionBatchTransform(uiText("action.transform.rotate_ccw_45", "Rotate -45"), [this](const QString& text, int* changedCount) {
+    if (!applySelectionBatchTransform(UiText::text(QStringLiteral("action.transform.rotate_ccw_45")), [this](const QString& text, int* changedCount) {
         return miacode::chart_transform::transformChartSelectionText(text, miacode::chart_transform::ChartTransformOp::Rotate45CounterClockwise, changedCount);
     })) {
         return;
     }
-    owner_.statusBar()->showMessage(uiText("status.transform.rotate_ccw_45", "Rotate -45 applied."));
+    owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.transform.rotate_ccw_45")));
 }
 
 void MainWindow::DocumentSection::onRotate45Clockwise()
@@ -277,12 +277,12 @@ void MainWindow::DocumentSection::onRotate45Clockwise()
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
-    if (!applySelectionBatchTransform(uiText("action.transform.rotate_cw_45", "Rotate +45"), [this](const QString& text, int* changedCount) {
+    if (!applySelectionBatchTransform(UiText::text(QStringLiteral("action.transform.rotate_cw_45")), [this](const QString& text, int* changedCount) {
         return miacode::chart_transform::transformChartSelectionText(text, miacode::chart_transform::ChartTransformOp::Rotate45Clockwise, changedCount);
     })) {
         return;
     }
-    owner_.statusBar()->showMessage(uiText("status.transform.rotate_cw_45", "Rotate +45 applied."));
+    owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.transform.rotate_cw_45")));
 }
 
 void MainWindow::DocumentSection::onNormalizeWholeChart()
@@ -358,11 +358,9 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
         UiDialogs::showMessageBox(
             QMessageBox::Warning,
             &owner_,
-            uiText("dialog.normalize.title", QStringLiteral("Format Chart")),
+            UiText::text(QStringLiteral("dialog.normalize.title")),
             normalized.errorMessage.isEmpty()
-                ? uiText(
-                      "dialog.normalize.failed",
-                      QStringLiteral("Failed to normalize the current chart."))
+                ? UiText::text(QStringLiteral("dialog.normalize.failed"))
                 : normalized.errorMessage
         );
         return;
@@ -371,9 +369,7 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
     const QString replacement = composeNormalizedSelectionReplacement(original, begin, finish, normalized.text);
     if (replacement == original.mid(begin, finish - begin)) {
         owner_.statusBar()->showMessage(
-            uiText(
-                "status.normalize.already_normalized",
-                QStringLiteral("Format Chart: already normalized."))
+            UiText::text(QStringLiteral("status.normalize.already_normalized"))
         );
         return;
     }
@@ -421,9 +417,7 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
     }
 
     owner_.statusBar()->showMessage(
-        uiText(
-            "status.normalize.applied",
-            QStringLiteral("Format Chart applied: %1 measure line(s)."))
+        UiText::text(QStringLiteral("status.normalize.applied"))
             .arg(normalized.measureLineCount)
     );
 }

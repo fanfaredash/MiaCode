@@ -64,9 +64,9 @@ inline UnsavedChangesChoice showUnsavedChangesDialog(QWidget* parent, const QStr
     dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     UiDialogs::configureDialogPreviewShortcuts(&dialog);
     UiDialogs::applyDetachedParentBehavior(&dialog, parent);
-    QPushButton* saveButton = dialog.addButton(uiText("action.save", "Save"), QMessageBox::AcceptRole);
-    QPushButton* discardButton = dialog.addButton(uiText("action.discard", "Discard"), QMessageBox::DestructiveRole);
-    QPushButton* cancelButton = dialog.addButton(uiText("action.cancel", "Cancel"), QMessageBox::RejectRole);
+    QPushButton* saveButton = dialog.addButton(UiText::text(QStringLiteral("action.save")), QMessageBox::AcceptRole);
+    QPushButton* discardButton = dialog.addButton(UiText::text(QStringLiteral("action.discard")), QMessageBox::DestructiveRole);
+    QPushButton* cancelButton = dialog.addButton(UiText::text(QStringLiteral("action.cancel")), QMessageBox::RejectRole);
     dialog.setDefaultButton(saveButton);
     dialog.setEscapeButton(cancelButton);
     UiDialogs::localizeMessageBox(&dialog);

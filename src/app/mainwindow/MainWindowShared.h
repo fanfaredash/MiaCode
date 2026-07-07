@@ -22,6 +22,7 @@
 #include <QtGlobal>
 
 #include "SimaiNativeParser.h"
+#include "UiText.h"
 #include "UiTheme.h"
 #include "WindowParityMetrics.h"
 

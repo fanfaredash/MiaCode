@@ -47,13 +47,13 @@ void MainWindow::DocumentSection::updateEditorHeader()
             ui_.editorContextLabel_->setText(UiText::text(QStringLiteral("document.latency_settings")));
             ui_.editorContextLabel_->setFont(uiAccentFont(12, QFont::DemiBold));
         } else if (state_.activeOutlineKey_ == QLatin1String("export")) {
-            ui_.editorContextLabel_->setText(uiText("editor.export", "Export"));
+            ui_.editorContextLabel_->setText(UiText::text(QStringLiteral("editor.export")));
             ui_.editorContextLabel_->setFont(uiAccentFont(12, QFont::DemiBold));
         } else if (state_.document_.difficultyIds().isEmpty() && state_.activeOutlineKey_ == QLatin1String("welcome")) {
-            ui_.editorContextLabel_->setText(uiText("editor.welcome", "Welcome to MiaCode!"));
+            ui_.editorContextLabel_->setText(UiText::text(QStringLiteral("editor.welcome")));
             ui_.editorContextLabel_->setFont(uiAccentFont(15, QFont::DemiBold));
         } else {
-            ui_.editorContextLabel_->setText(uiText("editor.metadata", "Metadata"));
+            ui_.editorContextLabel_->setText(UiText::text(QStringLiteral("editor.metadata")));
             ui_.editorContextLabel_->setFont(uiAccentFont(12, QFont::DemiBold));
         }
         ui_.editorContextLabel_->setStyleSheet(QString());
@@ -565,7 +565,7 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
         restoreBookmarkLine = currentItem->data(kOutlineItemLineRole).toInt();
     }
     ui_.outlineList_->clear();
-    const QString metadataLabel = uiText("sidebar.metadata", "Metadata");
+    const QString metadataLabel = UiText::text(QStringLiteral("sidebar.metadata"));
     auto* metadataItem = new QListWidgetItem(
         owner_.style()->standardIcon(QStyle::SP_FileDialogDetailedView),
         metadataLabel,
@@ -596,7 +596,7 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
         // Abbreviated to "+ Add Diff." in English so the label fits the
         // narrow sidebar list-item column without truncation. Chinese
         // version "添加难度" already fits.
-        const QString addDifficultyLabel = uiText("sidebar.add_difficulty", "+ Add Diff.");
+        const QString addDifficultyLabel = UiText::text(QStringLiteral("sidebar.add_difficulty"));
         auto* addItem = new QListWidgetItem(
             owner_.style()->standardIcon(QStyle::SP_FileDialogNewFolder),
             addDifficultyLabel,
@@ -692,7 +692,7 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     if (!ids.isEmpty()) {
         addSectionSpacer();
     }
-    const QString exportLabel = uiText("sidebar.export", "Export");
+    const QString exportLabel = UiText::text(QStringLiteral("sidebar.export"));
     auto* exportItem = new QListWidgetItem(
         makeExportAccessIcon(UiTheme::colors().iconPrimary),
         exportLabel,

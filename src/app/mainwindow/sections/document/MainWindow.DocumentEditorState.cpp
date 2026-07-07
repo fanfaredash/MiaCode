@@ -415,16 +415,16 @@ void MainWindow::DocumentSection::updatePauseButtonAppearance()
     const bool previewPlaying = state_.qtPreviewPlaying_ || state_.exportIntroLeadInActive_;
     if (previewPlaying) {
         ui_.pausePreviewAction_->setIcon(makePreviewPauseIcon(iconColor));
-        ui_.pausePreviewAction_->setText(uiText("preview.pause", "Pause"));
+        ui_.pausePreviewAction_->setText(UiText::text(QStringLiteral("preview.pause")));
     } else {
         ui_.pausePreviewAction_->setIcon(makePreviewPlayIcon(iconColor));
-        ui_.pausePreviewAction_->setText(uiText("preview.play", "Play"));
+        ui_.pausePreviewAction_->setText(UiText::text(QStringLiteral("preview.play")));
     }
     if (ui_.pausePreviewButton_ != nullptr) {
         ui_.pausePreviewButton_->setText(
             previewPlaying
-                ? uiText("preview.pause", "Pause")
-                : uiText("preview.play", "Play")
+                ? UiText::text(QStringLiteral("preview.pause"))
+                : UiText::text(QStringLiteral("preview.play"))
         );
         ui_.pausePreviewButton_->setStyleSheet(
             state_.previewFullscreenActive_

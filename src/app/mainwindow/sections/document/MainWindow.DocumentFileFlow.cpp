@@ -143,8 +143,8 @@ bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
     dialogTimer.start();
     const UnsavedChangesChoice choice = showUnsavedChangesDialog(
         &owner_,
-        uiText("dialog.unsaved_changes.title", "Unsaved Changes"),
-        uiText("dialog.unsaved_changes.message", "Current document has unsaved changes. Save before continue?")
+        UiText::text(QStringLiteral("dialog.unsaved_changes.title")),
+        UiText::text(QStringLiteral("dialog.unsaved_changes.message"))
     );
     miacode::debug_log::appendTimingLine(
         miacode::debug_log::Channel::Runtime,
