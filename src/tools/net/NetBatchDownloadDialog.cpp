@@ -132,11 +132,6 @@ protected:
     }
 };
 
-QString trText(const char* zh, const char* en)
-{
-    return UiText::localized(QString::fromLatin1(en), QString::fromUtf8(zh));
-}
-
 QString logTimestamp()
 {
     return QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss.zzz"));
@@ -305,7 +300,7 @@ NetBatchDownloadDialog::NetBatchDownloadDialog(QWidget* parent)
 
 void NetBatchDownloadDialog::buildUi()
 {
-    setWindowTitle(trText("Net 批量下载", "Net Batch Download"));
+    setWindowTitle(UiText::text(QStringLiteral("net.net_batch_download")));
     setWindowFlags(Qt::Window | Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowMinimizeButtonHint | Qt::WindowCloseButtonHint);
     resize(1040, 640);
     setPalette(UiTheme::applicationPalette());
@@ -331,26 +326,26 @@ void NetBatchDownloadDialog::buildUi()
     endDateEdit_ = new NetDateEdit(QDate::currentDate(), this);
     endDateEdit_->setCalendarWidget(createNetCalendar(endDateEdit_));
     outputDirEdit_ = new QLineEdit(QDir::toNativeSeparators(storedOutputDirectory()), this);
-    auto* browseButton = new QPushButton(trText("浏览...", "Browse..."), this);
-    fuzzyMatchCheck_ = new QCheckBox(trText("模糊大小写匹配", "Fuzzy case-insensitive match"), this);
+    auto* browseButton = new QPushButton(UiText::text(QStringLiteral("net.browse")), this);
+    fuzzyMatchCheck_ = new QCheckBox(UiText::text(QStringLiteral("net.fuzzy_case_insensitive_match")), this);
     fuzzyMatchCheck_->setChecked(true);
-    zipAfterDownloadCheck_ = new QCheckBox(trText("成功后额外生成 ZIP", "Also create ZIP after success"), this);
+    zipAfterDownloadCheck_ = new QCheckBox(UiText::text(QStringLiteral("net.also_create_zip_after_success")), this);
     zipAfterDownloadCheck_->setChecked(false);
-    queryButton_ = new QPushButton(trText("查询", "Query"), this);
+    queryButton_ = new QPushButton(UiText::text(QStringLiteral("net.query")), this);
 
-    form->addWidget(new QLabel(trText("用户 ID", "User ID"), this), 0, 0);
+    form->addWidget(new QLabel(UiText::text(QStringLiteral("net.user_id")), this), 0, 0);
     form->addWidget(usernameEdit_, 0, 1);
     form->addWidget(new QLabel(QStringLiteral("Tag"), this), 0, 2);
     form->addWidget(tagEdit_, 0, 3);
-    form->addWidget(new QLabel(trText("歌曲名", "Song Title"), this), 0, 4);
+    form->addWidget(new QLabel(UiText::text(QStringLiteral("net.song_title")), this), 0, 4);
     form->addWidget(titleEdit_, 0, 5);
-    form->addWidget(new QLabel(trText("开始", "Start"), this), 0, 6);
+    form->addWidget(new QLabel(UiText::text(QStringLiteral("net.start")), this), 0, 6);
     form->addWidget(startDateEdit_, 0, 7);
-    form->addWidget(new QLabel(trText("结束", "End"), this), 0, 8);
+    form->addWidget(new QLabel(UiText::text(QStringLiteral("net.end")), this), 0, 8);
     form->addWidget(endDateEdit_, 0, 9);
     form->addWidget(queryButton_, 0, 10);
     form->addWidget(fuzzyMatchCheck_, 0, 11);
-    form->addWidget(new QLabel(trText("输出目录", "Output Directory"), this), 1, 0);
+    form->addWidget(new QLabel(UiText::text(QStringLiteral("net.output_directory")), this), 1, 0);
     form->addWidget(outputDirEdit_, 1, 1, 1, 9);
     form->addWidget(browseButton, 1, 10);
     form->addWidget(zipAfterDownloadCheck_, 1, 11);
@@ -359,14 +354,14 @@ void NetBatchDownloadDialog::buildUi()
     table_ = new QTableWidget(this);
     table_->setColumnCount(8);
     table_->setHorizontalHeaderLabels({
-        trText("选择", "Select"),
-        trText("标题", "Title"),
-        trText("曲师", "Artist"),
-        trText("谱师", "Designer"),
-        trText("等级", "Levels"),
-        trText("上传时间", "Uploaded"),
+        UiText::text(QStringLiteral("net.select")),
+        UiText::text(QStringLiteral("net.title")),
+        UiText::text(QStringLiteral("net.artist")),
+        UiText::text(QStringLiteral("net.designer")),
+        UiText::text(QStringLiteral("net.levels")),
+        UiText::text(QStringLiteral("net.uploaded")),
         QStringLiteral("ID"),
-        trText("状态", "Status"),
+        UiText::text(QStringLiteral("net.status")),
     });
     table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive);
@@ -387,15 +382,15 @@ void NetBatchDownloadDialog::buildUi()
     root->addWidget(table_, 1);
 
     auto* bottom = new QGridLayout;
-    summaryLabel_ = new QLabel(trText("输入用户 ID 或 Tag，再选择日期范围查询。", "Enter a user ID or tag, choose a date range, then query."), this);
+    summaryLabel_ = new QLabel(UiText::text(QStringLiteral("net.enter_a_user_id_or")), this);
     progressBar_ = new QProgressBar(this);
     progressBar_->setRange(0, 100);
     progressBar_->setValue(0);
-    selectAllButton_ = new QPushButton(trText("全选", "Select All"), this);
-    clearSelectionButton_ = new QPushButton(trText("取消全选", "Clear Selection"), this);
-    downloadButton_ = new QPushButton(trText("下载选中", "Download Selected"), this);
-    logButton_ = new QPushButton(trText("查看日志", "Show Log"), this);
-    closeButton_ = new QPushButton(trText("关闭", "Close"), this);
+    selectAllButton_ = new QPushButton(UiText::text(QStringLiteral("net.select_all")), this);
+    clearSelectionButton_ = new QPushButton(UiText::text(QStringLiteral("net.clear_selection")), this);
+    downloadButton_ = new QPushButton(UiText::text(QStringLiteral("net.download_selected")), this);
+    logButton_ = new QPushButton(UiText::text(QStringLiteral("net.show_log")), this);
+    closeButton_ = new QPushButton(UiText::text(QStringLiteral("action.close")), this);
     bottom->addWidget(summaryLabel_, 0, 0, 1, 3);
     bottom->addWidget(progressBar_, 1, 0, 1, 3);
     bottom->addWidget(selectAllButton_, 0, 3);
@@ -409,7 +404,7 @@ void NetBatchDownloadDialog::buildUi()
     logEdit_->setReadOnly(true);
     logEdit_->setMaximumBlockCount(1200);
     logEdit_->setVisible(false);
-    logEdit_->setPlaceholderText(trText("查询和下载诊断日志会显示在这里。", "Query and download diagnostics will appear here."));
+    logEdit_->setPlaceholderText(UiText::text(QStringLiteral("net.query_and_download_diagnostics_will")));
     root->addWidget(logEdit_);
 
     connect(browseButton, &QPushButton::clicked, this, [this]() { chooseOutputDirectory(); });
@@ -420,7 +415,7 @@ void NetBatchDownloadDialog::buildUi()
     connect(downloadButton_, &QPushButton::clicked, this, [this]() {
         if (busy_) {
             cancelRequested_ = true;
-            summaryLabel_->setText(trText("正在取消...", "Canceling..."));
+            summaryLabel_->setText(UiText::text(QStringLiteral("net.canceling")));
             return;
         }
         downloadSelected();
@@ -428,7 +423,7 @@ void NetBatchDownloadDialog::buildUi()
     connect(closeButton_, &QPushButton::clicked, this, [this]() {
         if (busy_) {
             cancelRequested_ = true;
-            summaryLabel_->setText(trText("正在取消...", "Canceling..."));
+            summaryLabel_->setText(UiText::text(QStringLiteral("net.canceling")));
             return;
         }
         close();
@@ -440,7 +435,7 @@ void NetBatchDownloadDialog::closeEvent(QCloseEvent* event)
     if (busy_) {
         cancelRequested_ = true;
         if (summaryLabel_ != nullptr) {
-            summaryLabel_->setText(trText("正在取消...", "Canceling..."));
+            summaryLabel_->setText(UiText::text(QStringLiteral("net.canceling")));
         }
         event->ignore();
         return;
@@ -462,8 +457,10 @@ void NetBatchDownloadDialog::setBusy(bool busy)
     queryButton_->setEnabled(!busy);
     selectAllButton_->setEnabled(!busy);
     clearSelectionButton_->setEnabled(!busy);
-    closeButton_->setText(busy ? trText("取消", "Cancel") : trText("关闭", "Close"));
-    downloadButton_->setText(busy ? trText("取消下载", "Cancel Download") : trText("下载选中", "Download Selected"));
+    closeButton_->setText(
+        busy ? UiText::text(QStringLiteral("action.cancel")) : UiText::text(QStringLiteral("action.close")));
+    downloadButton_->setText(
+        busy ? UiText::text(QStringLiteral("net.cancel_download")) : UiText::text(QStringLiteral("net.download_selected")));
     downloadButton_->setEnabled(!jobs_.isEmpty());
 }
 
@@ -474,7 +471,7 @@ void NetBatchDownloadDialog::appendLog(const QString& message)
     }
     logEdit_->appendPlainText(QStringLiteral("[%1] %2").arg(logTimestamp(), message));
     if (!logVisible_) {
-        logButton_->setText(trText("查看日志 *", "Show Log *"));
+        logButton_->setText(UiText::text(QStringLiteral("net.show_log_2")));
     }
     qApp->processEvents(QEventLoop::AllEvents, 20);
 }
@@ -484,7 +481,7 @@ void NetBatchDownloadDialog::toggleLogVisible()
     logVisible_ = !logVisible_;
     const int currentWidth = width();
     logEdit_->setVisible(logVisible_);
-    logButton_->setText(logVisible_ ? trText("隐藏日志", "Hide Log") : trText("查看日志", "Show Log"));
+    logButton_->setText(logVisible_ ? UiText::text(QStringLiteral("net.hide_log")) : UiText::text(QStringLiteral("net.show_log")));
     if (logVisible_) {
         resize(currentWidth, qMax(height(), 760));
     }
@@ -494,7 +491,7 @@ void NetBatchDownloadDialog::chooseOutputDirectory()
 {
     const QString dir = QFileDialog::getExistingDirectory(
         this,
-        trText("选择输出目录", "Choose Output Directory"),
+        UiText::text(QStringLiteral("net.choose_output_directory")),
         outputDirEdit_->text().trimmed());
     if (!dir.isEmpty()) {
         outputDirEdit_->setText(QDir::toNativeSeparators(dir));
@@ -510,15 +507,15 @@ void NetBatchDownloadDialog::queryCharts()
     const bool fuzzyMatch = fuzzyMatchCheck_->isChecked();
     const Qt::CaseSensitivity caseSensitivity = fuzzyMatch ? Qt::CaseInsensitive : Qt::CaseSensitive;
     if (username.isEmpty() && tag.isEmpty() && title.isEmpty()) {
-        QMessageBox::warning(this, windowTitle(), trText("请输入用户 ID、Tag 或歌曲名。", "Please enter a user ID, tag, or song title."));
+        QMessageBox::warning(this, windowTitle(), UiText::text(QStringLiteral("net.please_enter_a_user_id")));
         return;
     }
 
     setBusy(true);
     cancelRequested_ = false;
     progressBar_->setRange(0, 0);
-    summaryLabel_->setText(trText("正在查询 Net...", "Querying Net..."));
-    appendLog(trText("开始查询：用户=%1，tag=%2，歌曲名=%3，日期=%4..%5，模糊大小写=%6", "Start query: user=%1, tag=%2, title=%3, dates=%4..%5, fuzzy case=%6")
+    summaryLabel_->setText(UiText::text(QStringLiteral("net.querying_net")));
+    appendLog(UiText::text(QStringLiteral("net.start_query_user_1_tag"))
                   .arg(username.isEmpty() ? QStringLiteral("-") : username)
                   .arg(tag.isEmpty() ? QStringLiteral("-") : tag)
                   .arg(title.isEmpty() ? QStringLiteral("-") : title)
@@ -539,9 +536,9 @@ void NetBatchDownloadDialog::queryCharts()
     setBusy(false);
 
     if (!error.isEmpty()) {
-        appendLog(trText("查询失败（%1 ms）：%2", "Query failed (%1 ms): %2").arg(elapsed.elapsed()).arg(error));
+        appendLog(UiText::text(QStringLiteral("net.query_failed_1_ms_2")).arg(elapsed.elapsed()).arg(error));
         QMessageBox::critical(this, windowTitle(), error);
-        summaryLabel_->setText(trText("查询失败。", "Query failed."));
+        summaryLabel_->setText(UiText::text(QStringLiteral("net.query_failed")));
         return;
     }
 
@@ -558,10 +555,10 @@ void NetBatchDownloadDialog::queryCharts()
     }
     populateTable(filtered);
     summaryLabel_->setText(
-        trText("找到 %1 个谱面（查询返回 %2 个）。", "Found %1 chart(s) from %2 returned chart(s).")
+        UiText::text(QStringLiteral("net.found_1_chart_s_from"))
             .arg(filtered.size())
             .arg(queriedCharts.size()));
-    appendLog(trText("查询完成（%1 ms）：接口返回 %2，日期筛选后 %3，本地 ID/Tag/歌曲名筛选后 %4。", "Query complete (%1 ms): API returned %2, date filter kept %3, local ID/tag/title filter kept %4.")
+    appendLog(UiText::text(QStringLiteral("net.query_complete_1_ms_api"))
                   .arg(elapsed.elapsed())
                   .arg(queriedCharts.size())
                   .arg(dateFiltered.size())
@@ -576,7 +573,7 @@ void NetBatchDownloadDialog::populateTable(const QList<NetChartSummary>& charts)
         NetDownloadJob job;
         job.chart = charts.at(row);
         job.selected = true;
-        job.status = trText("待下载", "Pending");
+        job.status = UiText::text(QStringLiteral("net.pending"));
         jobs_.append(job);
 
         auto* check = new QTableWidgetItem;
@@ -615,7 +612,7 @@ void NetBatchDownloadDialog::downloadSelected()
 {
     const QString outputDir = QDir::fromNativeSeparators(outputDirEdit_->text().trimmed());
     if (outputDir.isEmpty() || !QDir().mkpath(outputDir)) {
-        QMessageBox::warning(this, windowTitle(), trText("请选择有效的输出目录。", "Please choose a valid output directory."));
+        QMessageBox::warning(this, windowTitle(), UiText::text(QStringLiteral("net.please_choose_a_valid_output")));
         return;
     }
     saveStoredOutputDirectory(outputDir);
@@ -628,7 +625,7 @@ void NetBatchDownloadDialog::downloadSelected()
         }
     }
     if (selectedCount <= 0) {
-        QMessageBox::information(this, windowTitle(), trText("没有选中的谱面。", "No charts are selected."));
+        QMessageBox::information(this, windowTitle(), UiText::text(QStringLiteral("net.no_charts_are_selected")));
         return;
     }
 
@@ -640,7 +637,7 @@ void NetBatchDownloadDialog::downloadSelected()
     request.jobs = jobs_;
     request.outputDirectory = outputDir;
     request.createZip = zipAfterDownloadCheck_->isChecked();
-    appendLog(trText("开始下载队列：选中 %1，输出 %2，额外 ZIP=%3", "Start download queue: selected=%1, output=%2, extra ZIP=%3")
+    appendLog(UiText::text(QStringLiteral("net.start_download_queue_selected_1"))
                   .arg(selectedCount)
                   .arg(outputDir)
                   .arg(request.createZip ? QStringLiteral("yes") : QStringLiteral("no")));
@@ -666,16 +663,16 @@ void NetBatchDownloadDialog::downloadSelected()
         setBusy(false);
         downloadThread_ = nullptr;
         if (paused) {
-            summaryLabel_->setText(trText("队列已暂停：Net/Cloudflare 阻断了请求。", "Queue paused: Net/Cloudflare blocked a request."));
+            summaryLabel_->setText(UiText::text(QStringLiteral("net.queue_paused_net_cloudflare_blocked")));
             QMessageBox::warning(this, windowTitle(), summaryLabel_->text());
             return;
         }
         if (canceled) {
-            summaryLabel_->setText(trText("下载已取消。", "Download canceled."));
+            summaryLabel_->setText(UiText::text(QStringLiteral("net.download_canceled")));
             return;
         }
         summaryLabel_->setText(
-            trText("下载完成：成功 %1，失败 %2。", "Download complete: %1 succeeded, %2 failed.")
+            UiText::text(QStringLiteral("net.download_complete_1_succeeded_2"))
                 .arg(succeeded)
                 .arg(failed));
     });
