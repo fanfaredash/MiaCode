@@ -146,17 +146,17 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // `Name(&L)` suffix form, producing visually inconsistent menu
     // labels). The trailing `(L)` parens render in both locales which
     // matches the existing Chinese convention.
-    auto* fileMenu = menuBar()->addMenu(uiText("menu.file", "File(&F)"));
+    auto* fileMenu = menuBar()->addMenu(UiText::text(QStringLiteral("menu.file")));
     auto* editMenu = menuBar()->addMenu(UiText::text(QStringLiteral("metadata.edit_e")));
-    auto* toolsMenu = menuBar()->addMenu(uiText("menu.tools", "Tools(&T)"));
+    auto* toolsMenu = menuBar()->addMenu(UiText::text(QStringLiteral("menu.tools")));
     // Beta20-fix — Transform menu renamed to "Modify" / "调整" in both
     // languages so the Alt-T mnemonic is unambiguous for the Tools
     // menu. Picked "Modify" (Alt+M) over "Transform(&R)" because the
     // user requested a synonym, not just a different mnemonic letter.
     // The Chinese key in UiText.cpp likewise uses 调整(&M).
-    auto* transformMenu = menuBar()->addMenu(uiText("menu.transform", "Modify(&M)"));
+    auto* transformMenu = menuBar()->addMenu(UiText::text(QStringLiteral("menu.transform")));
     auto* previewMenu = menuBar()->addMenu(UiText::text(QStringLiteral("metadata.preview_p")));
-    auto* helpMenu = menuBar()->addMenu(uiText("menu.help", "Help(&H)"));
+    auto* helpMenu = menuBar()->addMenu(UiText::text(QStringLiteral("menu.help")));
     styleRoundedMenu(*fileMenu);
     styleRoundedMenu(*editMenu);
     styleRoundedMenu(*toolsMenu);
@@ -174,7 +174,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // artwork into an inset of the icon box so the glyph reads at ~menu-text size
     // while the icon box — and thus the toolbar height — stays at the default.
     setupMenusAndActions(fileMenu, editMenu, transformMenu, previewMenu, helpMenu);
-    QAction* metadataSettingsAction = toolsMenu->addAction(uiText("sidebar.metadata", "Metadata"));
+    QAction* metadataSettingsAction = toolsMenu->addAction(UiText::text(QStringLiteral("sidebar.metadata")));
     connect(metadataSettingsAction, &QAction::triggered, this, [this]() {
         if (switchToMetadataField() && titleEdit_ != nullptr) {
             titleEdit_->setFocus();
@@ -192,9 +192,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         previewMenu->removeAction(exportVideoAction_);
         toolsMenu->addSeparator();
         toolsMenu->addAction(exportVideoAction_);
-        QAction* batchExportAction = toolsMenu->addAction(uiText("action.batch_export", "Batch Export"));
+        QAction* batchExportAction = toolsMenu->addAction(UiText::text(QStringLiteral("action.batch_export")));
         connect(batchExportAction, &QAction::triggered, this, &MainWindow::onBatchExportPreviewVideo);
-        QAction* exportCoverAction = toolsMenu->addAction(uiText("action.export_cover", "Export Cover"));
+        QAction* exportCoverAction = toolsMenu->addAction(UiText::text(QStringLiteral("action.export_cover")));
         connect(exportCoverAction, &QAction::triggered, this, &MainWindow::onExportCover);
     }
     if (netBatchDownloadAction_ != nullptr) {
@@ -378,7 +378,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     auto* editorHeaderLayout = new QHBoxLayout(editorHeader);
     editorHeaderLayout->setContentsMargins(12, 8, 12, 8);
     editorHeaderLayout->setSpacing(10);
-    editorContextLabel_ = new QLabel(uiText("editor.welcome", "Welcome to MiaCode!"), editorHeader);
+    editorContextLabel_ = new QLabel(UiText::text(QStringLiteral("editor.welcome")), editorHeader);
     editorContextLabel_->setObjectName("EditorContext");
     editorContextLabel_->setFont(uiAccentFont(15, QFont::DemiBold));
     editorContextLabel_->setMinimumWidth(0);
@@ -411,7 +411,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // (document_.first) with the latency page; it used to sit on the metadata
     // page but lives here now so charters can tune it against the live
     // timeline/preview.
-    auto* difficultyFirstLabel = new QLabel(uiText("metadata.field.first", "Offset"), editorDifficultyControls_);
+    auto* difficultyFirstLabel = new QLabel(UiText::text(QStringLiteral("metadata.field.first")), editorDifficultyControls_);
     difficultyFirstLabel_ = difficultyFirstLabel;
     difficultyFirstLabel->setFont(uiAccentFont(10));
     auto* difficultyFirstLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
@@ -424,7 +424,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // Exactly one of the offset/designer pairs is visible at a time, driven by
     // the 顶部显示 preference (updateEditorHeaderLayoutMode); designer names can
     // always also be managed from the metadata page's designer dialog.
-    auto* difficultyDesignerLabel = new QLabel(uiText("editor.des", "Des"), editorDifficultyControls_);
+    auto* difficultyDesignerLabel = new QLabel(UiText::text(QStringLiteral("editor.des")), editorDifficultyControls_);
     difficultyDesignerLabel_ = difficultyDesignerLabel;
     difficultyDesignerLabel->setFont(uiAccentFont(10));
     auto* difficultyDesignerLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
@@ -666,7 +666,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     auto* welcomeLayout = new QVBoxLayout(welcomePage_);
     welcomeLayout->setContentsMargins(12, 8, 12, 12);
     welcomeLayout->setSpacing(8);
-    welcomeEmptyHintLabel_ = new QLabel(uiText("metadata.empty_hint", "← Click to add a chart difficulty"), welcomePage_);
+    welcomeEmptyHintLabel_ = new QLabel(UiText::text(QStringLiteral("metadata.empty_hint")), welcomePage_);
     welcomeEmptyHintLabel_->setFont(uiAccentFont(11));
     welcomeEmptyHintLabel_->setStyleSheet("color: #6A7890; background: transparent; padding-left: 6px;");
     welcomeLayout->addWidget(welcomeEmptyHintLabel_, 0, Qt::AlignLeft | Qt::AlignTop);
@@ -703,7 +703,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     metadataCardLayout->setContentsMargins(14, 12, 14, 14);
     metadataCardLayout->setSpacing(12);
 
-    auto* infoTitle = new QLabel(uiText("metadata.information", "Information"), metadataPage_);
+    auto* infoTitle = new QLabel(UiText::text(QStringLiteral("metadata.information")), metadataPage_);
     infoTitle->setObjectName("SectionTitle");
     infoTitle->setFont(uiAccentFont(12));
     metadataCardLayout->addWidget(infoTitle);
@@ -784,13 +784,13 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     coverWrapLayout->addWidget(extractCoverButton, 0, Qt::AlignLeft);
     coverWrapLayout->addStretch(1);
 
-    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.title", "title")), titleWrap);
-    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.artist", "artist")), artistWrap);
-    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.des", "des")), designerWrap);
-    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.cover", "cover")), coverWrap);
+    metadataForm->addRow(makeMetadataFieldLabel(UiText::text(QStringLiteral("metadata.field.title"))), titleWrap);
+    metadataForm->addRow(makeMetadataFieldLabel(UiText::text(QStringLiteral("metadata.field.artist"))), artistWrap);
+    metadataForm->addRow(makeMetadataFieldLabel(UiText::text(QStringLiteral("metadata.field.des"))), designerWrap);
+    metadataForm->addRow(makeMetadataFieldLabel(UiText::text(QStringLiteral("metadata.field.cover"))), coverWrap);
     metadataCardLayout->addLayout(metadataForm);
 
-    auto* extraMetadataLabel = new QLabel(uiText("metadata.other_fields", "Other &xx Fields"), metadataPage_);
+    auto* extraMetadataLabel = new QLabel(UiText::text(QStringLiteral("metadata.other_fields")), metadataPage_);
     extraMetadataLabel->setObjectName("SectionTitle");
     extraMetadataLabel->setFont(uiAccentFont(11));
     metadataCardLayout->addWidget(extraMetadataLabel);
@@ -832,7 +832,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     metadataCardLayout->addWidget(metadataExtraEdit_, 1);
     metadataBracketHighlighter_ = new BracketScopeHighlighter(metadataExtraEdit_->document());
     applyEditorTextFontSize(editorTextFontPointSize_, false);
-    metadataEmptyHintLabel_ = new QLabel(uiText("metadata.empty_hint", "← Click to add a chart difficulty"), metadataPage_);
+    metadataEmptyHintLabel_ = new QLabel(UiText::text(QStringLiteral("metadata.empty_hint")), metadataPage_);
     metadataEmptyHintLabel_->setFont(uiAccentFont(11));
     metadataEmptyHintLabel_->setStyleSheet("color: #6A7890; background: transparent; padding-left: 6px;");
     metadataEmptyHintLabel_->hide();
@@ -850,7 +850,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     latencyEntryLayout->setContentsMargins(14, 12, 14, 14);
     latencyEntryLayout->setSpacing(8);
     auto* latencyEntryTitle = new QLabel(
-        uiText("metadata.latency_card.title", "Latency && Offset Calibration"), metadataPage_);
+        UiText::text(QStringLiteral("metadata.latency_card.title")), metadataPage_);
     latencyEntryTitle->setObjectName("SectionTitle");
     latencyEntryTitle->setFont(uiAccentFont(12));
     latencyEntryLayout->addWidget(latencyEntryTitle);
@@ -861,7 +861,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     latencyEntrySummaryLabel_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     latencyEntryRow->addWidget(latencyEntrySummaryLabel_, 1);
     auto* openLatencyPageButton = new QToolButton(metadataPage_);
-    openLatencyPageButton->setText(uiText("metadata.latency_card.open", "Open Latency Settings →"));
+    openLatencyPageButton->setText(UiText::text(QStringLiteral("metadata.latency_card.open")));
     openLatencyPageButton->setToolTip(UiText::text(QStringLiteral("metadata.open_the_latency_settings_page")));
     connect(openLatencyPageButton, &QToolButton::clicked, this, [this]() {
         switchToLatencyField();
@@ -1600,7 +1600,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         connect(timelineView_, &TimelineView::followProgressToggled, this, [this](bool enabled) {
             timelineSection_->onTimelineFollowProgressToggled(enabled);
         });
-        bottomTabs_->addTab(timelineView_, uiText("tab.timeline", "Timeline"));
+        bottomTabs_->addTab(timelineView_, UiText::text(QStringLiteral("tab.timeline")));
     }
 
     if (auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_); editor != nullptr) {

@@ -60,7 +60,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         QDesktopServices::openUrl(QUrl(url));
     };
 
-    owner_.newAction_ = new QAction(uiText("action.new", "New"), &owner_);
+    owner_.newAction_ = new QAction(UiText::text(QStringLiteral("action.new")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.newAction_,
         QStringLiteral("file.new"),
@@ -68,7 +68,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.newAction_, &QAction::triggered, &owner_, &MainWindow::onNewFile);
     fileMenu->addAction(owner_.newAction_);
 
-    owner_.openAction_ = new QAction(uiText("action.open", "Open..."), &owner_);
+    owner_.openAction_ = new QAction(UiText::text(QStringLiteral("action.open")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.openAction_,
         QStringLiteral("file.open"),
@@ -78,16 +78,16 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
 
     fileMenu->addSeparator();
 
-    owner_.openCurrentFolderAction_ = new QAction(uiText("action.open_current_folder", "Open Current Folder"), &owner_);
+    owner_.openCurrentFolderAction_ = new QAction(UiText::text(QStringLiteral("action.open_current_folder")), &owner_);
     connect(owner_.openCurrentFolderAction_, &QAction::triggered, &owner_, &MainWindow::onOpenCurrentFolder);
     fileMenu->addAction(owner_.openCurrentFolderAction_);
 
-    owner_.recentFilesMenu_ = fileMenu->addMenu(uiText("action.open_recent", "Open Recent"));
+    owner_.recentFilesMenu_ = fileMenu->addMenu(UiText::text(QStringLiteral("action.open_recent")));
     connect(owner_.recentFilesMenu_, &QMenu::aboutToShow, &owner_, [this]() {
         owner_.refreshRecentFilesMenu(owner_.recentFilesMenu_);
     });
 
-    owner_.restoreBackupMenu_ = fileMenu->addMenu(uiText("action.restore_backup", "Restore Backup"));
+    owner_.restoreBackupMenu_ = fileMenu->addMenu(UiText::text(QStringLiteral("action.restore_backup")));
     connect(owner_.restoreBackupMenu_, &QMenu::aboutToShow, &owner_, [this]() {
         owner_.refreshRestoreBackupMenu(owner_.restoreBackupMenu_);
     });
@@ -105,7 +105,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
 
     fileMenu->addSeparator();
 
-    owner_.saveAction_ = new QAction(uiText("action.save", "Save"), &owner_);
+    owner_.saveAction_ = new QAction(UiText::text(QStringLiteral("action.save")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.saveAction_,
         QStringLiteral("file.save"),
@@ -113,7 +113,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.saveAction_, &QAction::triggered, &owner_, &MainWindow::onSaveFile);
     fileMenu->addAction(owner_.saveAction_);
 
-    owner_.saveAsAction_ = new QAction(uiText("action.save_as", "Save As..."), &owner_);
+    owner_.saveAsAction_ = new QAction(UiText::text(QStringLiteral("action.save_as")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.saveAsAction_,
         QStringLiteral("file.save_as"),
@@ -128,7 +128,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.packAsZipAction_, &QAction::triggered, &owner_, &MainWindow::onPackAsZip);
     fileMenu->addAction(owner_.packAsZipAction_);
 
-    owner_.preferencesAction_ = new QAction(uiText("action.preferences", "Preferences..."), &owner_);
+    owner_.preferencesAction_ = new QAction(UiText::text(QStringLiteral("action.preferences")), &owner_);
     connect(owner_.preferencesAction_, &QAction::triggered, &owner_, &MainWindow::onPreferences);
     fileMenu->addAction(owner_.preferencesAction_);
 
@@ -171,7 +171,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         }
     };
 
-    auto* cutAction = new QAction(uiText("action.cut", "Cut"), &owner_);
+    auto* cutAction = new QAction(UiText::text(QStringLiteral("action.cut")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         cutAction,
         QStringLiteral("edit.cut"),
@@ -184,7 +184,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     });
     editMenu->addAction(cutAction);
 
-    auto* copyAction = new QAction(uiText("action.copy", "Copy"), &owner_);
+    auto* copyAction = new QAction(UiText::text(QStringLiteral("action.copy")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         copyAction,
         QStringLiteral("edit.copy"),
@@ -197,7 +197,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     });
     editMenu->addAction(copyAction);
 
-    auto* pasteAction = new QAction(uiText("action.paste", "Paste"), &owner_);
+    auto* pasteAction = new QAction(UiText::text(QStringLiteral("action.paste")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         pasteAction,
         QStringLiteral("edit.paste"),
@@ -212,7 +212,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
 
     editMenu->addSeparator();
 
-    owner_.undoAction_ = new QAction(uiText("action.undo", "Undo"), &owner_);
+    owner_.undoAction_ = new QAction(UiText::text(QStringLiteral("action.undo")), &owner_);
     ShortcutRegistry::instance().applyShortcuts(
         owner_.undoAction_,
         QStringLiteral("edit.undo"),
@@ -283,7 +283,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     });
     editMenu->addAction(owner_.undoAction_);
 
-    owner_.redoAction_ = new QAction(uiText("action.redo", "Redo"), &owner_);
+    owner_.redoAction_ = new QAction(UiText::text(QStringLiteral("action.redo")), &owner_);
     ShortcutRegistry::instance().applyShortcuts(
         owner_.redoAction_,
         QStringLiteral("edit.redo"),
@@ -395,7 +395,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     );
     connect(owner_.normalizeWholeChartAction_, &QAction::triggered, &owner_, &MainWindow::onNormalizeWholeChart);
 
-    owner_.transformMirrorLeftRightAction_ = new QAction(uiText("action.transform.mirror_lr", "Mirror Left/Right"), &owner_);
+    owner_.transformMirrorLeftRightAction_ = new QAction(UiText::text(QStringLiteral("action.transform.mirror_lr")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.transformMirrorLeftRightAction_,
         QStringLiteral("transform.mirror_lr"),
@@ -403,7 +403,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.transformMirrorLeftRightAction_, &QAction::triggered, &owner_, &MainWindow::onMirrorLeftRight);
     transformMenu->addAction(owner_.transformMirrorLeftRightAction_);
 
-    owner_.transformMirrorUpDownAction_ = new QAction(uiText("action.transform.mirror_ud", "Mirror Up/Down"), &owner_);
+    owner_.transformMirrorUpDownAction_ = new QAction(UiText::text(QStringLiteral("action.transform.mirror_ud")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.transformMirrorUpDownAction_,
         QStringLiteral("transform.mirror_ud"),
@@ -411,7 +411,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.transformMirrorUpDownAction_, &QAction::triggered, &owner_, &MainWindow::onMirrorUpDown);
     transformMenu->addAction(owner_.transformMirrorUpDownAction_);
 
-    owner_.transformRotate180Action_ = new QAction(uiText("action.transform.rotate_180", "Rotate 180"), &owner_);
+    owner_.transformRotate180Action_ = new QAction(UiText::text(QStringLiteral("action.transform.rotate_180")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.transformRotate180Action_,
         QStringLiteral("transform.rotate_180"),
@@ -419,7 +419,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.transformRotate180Action_, &QAction::triggered, &owner_, &MainWindow::onRotate180);
     transformMenu->addAction(owner_.transformRotate180Action_);
 
-    owner_.transformRotate45CounterClockwiseAction_ = new QAction(uiText("action.transform.rotate_ccw_45", "Rotate -45"), &owner_);
+    owner_.transformRotate45CounterClockwiseAction_ = new QAction(UiText::text(QStringLiteral("action.transform.rotate_ccw_45")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.transformRotate45CounterClockwiseAction_,
         QStringLiteral("transform.rotate_ccw_45"),
@@ -427,7 +427,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.transformRotate45CounterClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45CounterClockwise);
     transformMenu->addAction(owner_.transformRotate45CounterClockwiseAction_);
 
-    owner_.transformRotate45ClockwiseAction_ = new QAction(uiText("action.transform.rotate_cw_45", "Rotate +45"), &owner_);
+    owner_.transformRotate45ClockwiseAction_ = new QAction(UiText::text(QStringLiteral("action.transform.rotate_cw_45")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.transformRotate45ClockwiseAction_,
         QStringLiteral("transform.rotate_cw_45"),
@@ -488,8 +488,8 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     transformMenu->addAction(owner_.transformClearCompleteElementsAction_);
     transformMenu->addSeparator();
 
-    auto* moreTransformMenu = transformMenu->addMenu(uiText("action.transform.more", "More..."));
-    owner_.transformToggleBreakAction_ = new QAction(uiText("action.transform.toggle_break", "Toggle Break"), &owner_);
+    auto* moreTransformMenu = transformMenu->addMenu(UiText::text(QStringLiteral("action.transform.more")));
+    owner_.transformToggleBreakAction_ = new QAction(UiText::text(QStringLiteral("action.transform.toggle_break")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.transformToggleBreakAction_,
         QStringLiteral("transform.toggle_break"),
@@ -497,7 +497,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.transformToggleBreakAction_, &QAction::triggered, &owner_, &MainWindow::onToggleBreakSelection);
     moreTransformMenu->addAction(owner_.transformToggleBreakAction_);
 
-    owner_.transformToggleExAction_ = new QAction(uiText("action.transform.toggle_ex", "Toggle EX"), &owner_);
+    owner_.transformToggleExAction_ = new QAction(UiText::text(QStringLiteral("action.transform.toggle_ex")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.transformToggleExAction_,
         QStringLiteral("transform.toggle_ex"),
@@ -505,7 +505,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.transformToggleExAction_, &QAction::triggered, &owner_, &MainWindow::onToggleExSelection);
     moreTransformMenu->addAction(owner_.transformToggleExAction_);
 
-    owner_.transformToggleFireworkAction_ = new QAction(uiText("action.transform.toggle_firework", "Toggle Firework"), &owner_);
+    owner_.transformToggleFireworkAction_ = new QAction(UiText::text(QStringLiteral("action.transform.toggle_firework")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.transformToggleFireworkAction_,
         QStringLiteral("transform.toggle_firework"),
@@ -513,7 +513,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.transformToggleFireworkAction_, &QAction::triggered, &owner_, &MainWindow::onToggleFireworkSelection);
     moreTransformMenu->addAction(owner_.transformToggleFireworkAction_);
 
-    owner_.transformRandomRotateAction_ = new QAction(uiText("action.transform.random_rotate", "Random Rotate"), &owner_);
+    owner_.transformRandomRotateAction_ = new QAction(UiText::text(QStringLiteral("action.transform.random_rotate")), &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.transformRandomRotateAction_,
         QStringLiteral("transform.random_rotate"),
@@ -521,13 +521,13 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.transformRandomRotateAction_, &QAction::triggered, &owner_, &MainWindow::onRandomRotateSelection);
     moreTransformMenu->addAction(owner_.transformRandomRotateAction_);
 
-    owner_.stopPreviewAction_ = new QAction(uiText("action.stop_preview", "Stop Preview"), &owner_);
+    owner_.stopPreviewAction_ = new QAction(UiText::text(QStringLiteral("action.stop_preview")), &owner_);
     owner_.stopPreviewAction_->setIcon(makePreviewStopIcon(QColor("#2B3C4E")));
     owner_.stopPreviewAction_->setToolTip(QString());
     connect(owner_.stopPreviewAction_, &QAction::triggered, &owner_, &MainWindow::onStopPreview);
     previewMenu->addAction(owner_.stopPreviewAction_);
 
-    owner_.pausePreviewAction_ = new QAction(uiText("action.pause_preview", "Play/Pause Preview"), &owner_);
+    owner_.pausePreviewAction_ = new QAction(UiText::text(QStringLiteral("action.pause_preview")), &owner_);
     owner_.pausePreviewAction_->setIcon(makePreviewPlayIcon(QColor("#2B3C4E")));
     owner_.pausePreviewAction_->setToolTip(QString());
     connect(owner_.pausePreviewAction_, &QAction::triggered, &owner_, &MainWindow::onTogglePreviewPause);
@@ -556,7 +556,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.playPausePreviewShortcutAction_, &QAction::triggered, &owner_, &MainWindow::onTogglePreviewPause);
 
     auto* previewSlowerAction = new QAction(
-        uiText("action.preview_speed_down", "Playback Speed -"),
+        UiText::text(QStringLiteral("action.preview_speed_down")),
         &owner_
     );
     owner_.previewSlowerAction_ = previewSlowerAction;
@@ -573,7 +573,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     previewMenu->addAction(previewSlowerAction);
 
     auto* previewFasterAction = new QAction(
-        uiText("action.preview_speed_up", "Playback Speed +"),
+        UiText::text(QStringLiteral("action.preview_speed_up")),
         &owner_
     );
     owner_.previewFasterAction_ = previewFasterAction;
@@ -588,7 +588,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     previewMenu->addAction(previewFasterAction);
 
     owner_.exportVideoAction_ = new QAction(
-        uiText("action.export_chart", "Export Chart"),
+        UiText::text(QStringLiteral("action.export_chart")),
         &owner_
     );
     // Jumps to the Export hub page (same as the toolbar Export button) — the
@@ -649,15 +649,15 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
 
     previewMenu->addSeparator();
 
-    owner_.previewAudioSettingsAction_ = new QAction(uiText("action.audio_settings", "Audio Settings"), &owner_);
+    owner_.previewAudioSettingsAction_ = new QAction(UiText::text(QStringLiteral("action.audio_settings")), &owner_);
     connect(owner_.previewAudioSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewAudioSettings);
     previewMenu->addAction(owner_.previewAudioSettingsAction_);
 
-    owner_.previewVideoSettingsAction_ = new QAction(uiText("action.video_settings", "Preview Settings"), &owner_);
+    owner_.previewVideoSettingsAction_ = new QAction(UiText::text(QStringLiteral("action.video_settings")), &owner_);
     connect(owner_.previewVideoSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewVideoSettings);
     previewMenu->addAction(owner_.previewVideoSettingsAction_);
 
-    owner_.skinSettingsAction_ = new QAction(uiText("action.skin_settings", "Skins"), &owner_);
+    owner_.skinSettingsAction_ = new QAction(UiText::text(QStringLiteral("action.skin_settings")), &owner_);
     connect(owner_.skinSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onSkinSettings);
     previewMenu->addAction(owner_.skinSettingsAction_);
 
@@ -693,7 +693,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     helpMenu->addAction(simaiWikiAction);
     helpMenu->addSeparator();
 
-    owner_.aboutAction_ = new QAction(uiText("action.about", "About"), &owner_);
+    owner_.aboutAction_ = new QAction(UiText::text(QStringLiteral("action.about")), &owner_);
     connect(owner_.aboutAction_, &QAction::triggered, &owner_, &MainWindow::onAbout);
     helpMenu->addAction(owner_.aboutAction_);
 }
