@@ -1,4 +1,4 @@
-﻿#include "MainWindow.PreferencesSection.h"
+#include "MainWindow.PreferencesSection.h"
 #include "../../MainWindowShared.h"
 #include "../window/MainWindow.WindowSection.h"
 
@@ -612,6 +612,8 @@ void MainWindow::PreferencesSection::onPreferences()
             return uiText("dialog.preferences.language.english", "English");
         case UiText::LanguagePreference::Chinese:
             return uiText("dialog.preferences.language.chinese", "Simplified Chinese");
+        case UiText::LanguagePreference::Japanese:
+            return uiText("dialog.preferences.language.japanese", "Japanese");
         case UiText::LanguagePreference::System:
         default:
             return uiText("dialog.preferences.language.system", "Follow System");
@@ -637,7 +639,9 @@ void MainWindow::PreferencesSection::onPreferences()
     languageButton->setObjectName("PreferenceMenuButton");
     languageButton->setFont(uiAccentFont(10, QFont::DemiBold));
     languageButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    languageButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    languageButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    languageButton->setMinimumWidth(
+        languageButton->fontMetrics().horizontalAdvance(QStringLiteral("システムに合わせる")) + 28);
     languageButton->setText(languageLabel(selectedPreference));
     auto* languageMenu = new QMenu(languageButton);
     languageMenu->setFont(uiAccentFont(10));
@@ -646,6 +650,7 @@ void MainWindow::PreferencesSection::onPreferences()
         UiText::LanguagePreference::System,
         UiText::LanguagePreference::English,
         UiText::LanguagePreference::Chinese,
+        UiText::LanguagePreference::Japanese,
     };
     for (UiText::LanguagePreference preference : languageOptions) {
         QAction* action = languageMenu->addAction(languageLabel(preference));
