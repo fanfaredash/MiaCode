@@ -133,12 +133,12 @@ QString defaultBookmarkNameFromComment(const QString& text)
 // usable comment: "第 8 行" / "L8".
 QString fallbackBookmarkNameForLine(int line)
 {
-    return UiText::localized(QStringLiteral("L%1"), QStringLiteral("第 %1 行")).arg(qMax(1, line));
+    return UiText::text(QStringLiteral("editor.l_1")).arg(qMax(1, line));
 }
 
 QString defaultExplicitBookmarkLabel()
 {
-    return UiText::localized(QStringLiteral("New Bookmark"), QStringLiteral("新书签"));
+    return UiText::text(QStringLiteral("editor.new_bookmark"));
 }
 
 struct BookmarkCommentCandidate {
@@ -195,11 +195,11 @@ QVector<BookmarkCommentCandidate> collectBookmarkCommentCandidates(const QString
 
 bool confirmDeleteBookmark(QWidget* parent, const MainWindow::EditorBookmark& bookmark)
 {
-    const QString title = UiText::localized(QStringLiteral("Delete Bookmark"), QStringLiteral("删除书签"));
+    const QString title = UiText::text(QStringLiteral("editor.delete_bookmark"));
     const QString name = bookmark.title.trimmed().isEmpty()
-        ? (UiText::localized(QStringLiteral("Untitled Bookmark"), QStringLiteral("未命名书签")))
+        ? UiText::text(QStringLiteral("editor.untitled_bookmark"))
         : bookmark.title.trimmed();
-    const QString message = UiText::localized(QStringLiteral("Delete bookmark \"%1\"? This will delete the chart comment on that line."), QStringLiteral("确定删除书签“%1”吗？这会删除该行的谱面注释。")).arg(name);
+    const QString message = UiText::text(QStringLiteral("editor.delete_bookmark_1_this_will")).arg(name);
     return UiDialogs::showMessageBox(
         QMessageBox::Question,
         parent,
@@ -1124,7 +1124,7 @@ void MainWindow::EditorSection::replaceBookmarkLine(int fromLine, int toLine)
     const LineBookmarkCommentInfo targetInfo = inspectLineBookmarkComment(targetLine);
     if (targetInfo.hasMarker) {
         owner_.statusBar()->showMessage(
-            UiText::localized(QStringLiteral("Target line already has a comment; bookmark move canceled."), QStringLiteral("目标行已经有注释，已取消移动书签。")),
+            UiText::text(QStringLiteral("editor.target_line_already_has_a")),
             5000);
         return;
     }
