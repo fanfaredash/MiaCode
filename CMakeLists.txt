@@ -148,7 +148,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/window/MainWindow.WindowShell.cpp
     src/app/ui/UiText.h
     src/app/ui/UiText.cpp
-    src/app/ui/UiTextJaDictionary.cpp
     src/app/ui/ShortcutRegistry.h
     src/app/ui/ShortcutRegistry.cpp
     src/app/ui/UiTheme.h
@@ -1047,7 +1046,6 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/cover_export/CoverCompositionState.cpp
             src/app/ui/UiText.h
             src/app/ui/UiText.cpp
-            src/app/ui/UiTextJaDictionary.cpp
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
         INCLUDES src src/app/ui
     )
@@ -1121,7 +1119,6 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/editor/SimaiCompletionCatalog.cpp
             src/app/ui/UiText.h
             src/app/ui/UiText.cpp
-            src/app/ui/UiTextJaDictionary.cpp
             src/app/ui/UiTheme.h
             src/app/ui/UiTheme.cpp
             src/app/ui/ShortcutRegistry.h
@@ -1370,16 +1367,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(debug_flag_index_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
-    # Drift guard for the UiText localization tables: zhMap/jaMap key parity +
-    # every inline UiText::localized(en, zh) string has a Japanese dictionary
-    # entry (Simplified Chinese is the reference language). Reads the tree from
-    # disk; repo root injected as a compile definition.
+    # Drift guard for the UiText localization tables: en/zh/ja key parity plus
+    # source/resource literal key checks. Reads the tree from disk; repo root
+    # injected as a compile definition.
     miacode_add_dev_tool(ui_text_locale_spec TEST
         SOURCES
             src/tools/ui_text/UiTextLocaleSpec.cpp
             src/app/ui/UiText.h
             src/app/ui/UiText.cpp
-            src/app/ui/UiTextJaDictionary.cpp
         LIBS Qt6::Core
         INCLUDES src src/app/ui
     )

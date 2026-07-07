@@ -6,9 +6,10 @@
 //      English is now centralized instead of living only at call-site fallback
 //      strings.
 //
-//   2. Literal key-based lookups in src/ must reference keys present in the
-//      tables. This catches typoed `UiText::text(<key>)`, `uiText(<key>, ...)`,
-//      and related helper calls while Part A removes the old inline path.
+//   2. Literal key-based lookups in src/ and resources/ must reference keys
+//      present in the tables. This catches typoed `UiText::text(<key>)`,
+//      `uiText(<key>, ...)`, related helper calls, and shortcut registry
+//      `label_key` values.
 //
 // The repo root is injected at configure time via MIACODE_SOURCE_ROOT.
 
@@ -18,6 +19,10 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QJsonValue>
 #include <QRegularExpression>
 #include <QRegularExpressionMatchIterator>
 #include <QSet>
@@ -147,6 +152,42 @@ int main(int argc, char* argv[])
         ++scanned;
     }
 
+    const QString shortcutsPath = root + QStringLiteral("/resources/shortcuts.json");
+    const QString shortcutsText = readFile(shortcutsPath);
+    QStringList shortcutActionsMissingLabelKey;
+    if (shortcutsText.isEmpty()) {
+        ok = false;
+        err << "ui_text_locale_spec: could not read " << shortcutsPath << Qt::endl;
+    } else {
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(shortcutsText.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+            ok = false;
+            err << "ui_text_locale_spec: could not parse " << shortcutsPath
+                << ": " << parseError.errorString() << Qt::endl;
+        } else {
+            const QJsonObject actions =
+                doc.object().value(QStringLiteral("actions")).toObject();
+            if (actions.isEmpty()) {
+                ok = false;
+                err << "ui_text_locale_spec: shortcuts.json has no actions object"
+                    << Qt::endl;
+            }
+            for (auto actionIt = actions.constBegin(); actionIt != actions.constEnd(); ++actionIt) {
+                const QJsonObject action = actionIt.value().toObject();
+                const QString key = action.value(QStringLiteral("label_key")).toString();
+                if (key.isEmpty()) {
+                    shortcutActionsMissingLabelKey.append(actionIt.key());
+                    continue;
+                }
+                literalKeys.insert(key);
+                if (!UiText::hasTranslationKey(key)) {
+                    missingKeys.insert(key);
+                }
+            }
+        }
+    }
+
     if (scanned == 0) {
         err << "ui_text_locale_spec: scanned 0 source files under " << srcDir
             << " - is MIACODE_SOURCE_ROOT correct?" << Qt::endl;
@@ -158,7 +199,7 @@ int main(int argc, char* argv[])
         QStringList sorted(missingKeys.begin(), missingKeys.end());
         sorted.sort();
         err << sorted.size()
-            << " source literal UiText key(s) missing from the translation tables:"
+            << " source/resource literal UiText key(s) missing from the translation tables:"
             << Qt::endl;
         for (const QString& key : sorted) {
             err << "  - " << key << Qt::endl;
@@ -167,11 +208,25 @@ int main(int argc, char* argv[])
                "call-site typo." << Qt::endl;
     }
 
+    if (!shortcutActionsMissingLabelKey.isEmpty()) {
+        ok = false;
+        shortcutActionsMissingLabelKey.sort();
+        err << shortcutActionsMissingLabelKey.size()
+            << " shortcut action(s) missing label_key in resources/shortcuts.json:"
+            << Qt::endl;
+        for (const QString& actionId : shortcutActionsMissingLabelKey) {
+            err << "  - " << actionId << Qt::endl;
+        }
+        err << "Fix: add a label_key that exists in enMap, zhMap, and jaMap."
+            << Qt::endl;
+    }
+
     if (!ok) {
         return 1;
     }
 
     out << "ui_text_locale_spec ok (" << literalKeys.size()
-        << " literal key lookup(s) checked across " << scanned << " files)" << Qt::endl;
+        << " literal key lookup(s) checked across " << scanned
+        << " source files plus shortcuts.json)" << Qt::endl;
     return 0;
 }

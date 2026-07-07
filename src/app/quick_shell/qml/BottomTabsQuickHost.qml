@@ -17,18 +17,6 @@ Rectangle {
         return paletteMap && paletteMap[key] !== undefined ? paletteMap[key] : fallback
     }
 
-    // Inline three-way localizer mirroring UiText::localized(en, zh, ja).
-    // Simplified Chinese is the reference language; Japanese falls back to
-    // English when no ja string is supplied.
-    function localized(en, zh, ja) {
-        const lang = paletteMap ? paletteMap["uiLanguage"] : "en"
-        if (lang === "zh")
-            return zh
-        if (lang === "ja")
-            return ja !== undefined && ja !== "" ? ja : en
-        return en
-    }
-
     function usesNativeBottomTabsSurface() {
         return controller
             && (controller.bottomTabsCurrentTabId === "validation"
@@ -58,7 +46,7 @@ Rectangle {
     readonly property int resizeHotzoneHeight: metric("bottomTabsResizeHotzoneHeight", 8)
     readonly property real headerScale: controller ? controller.bottomTabsHeaderScale : 1.0
     readonly property var visibleTabs: {
-        // Labels come from the controller (which honours UiText::localized)
+        // Labels come from the controller (which uses UiText::text)
         // rather than QML's qsTr - qsTr requires a .ts translation file
         // that the project doesn't ship, so it'd just leak the English
         // literal. The controller mirrors MainWindow::bottomTabsFallbackLabel.
@@ -218,7 +206,7 @@ Rectangle {
                     visible: false
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
-                    text: root.localized("View Lock", "光标居中", "ビューロック")
+                    text: controller ? controller.timelineViewLockLabel : ""
                     checked: true
 
                     indicator: Rectangle {
@@ -287,7 +275,7 @@ Rectangle {
                     visible: controller && controller.bottomTabsCurrentTabId === "timeline"
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
-                    text: root.localized("Follow Code", "代码跟随", "コード追従")
+                    text: controller ? controller.timelineFollowCodeLabel : ""
                     checked: controller && controller.timelineStateBridge
                         ? controller.timelineStateBridge.followPreviewEnabled
                         : false
@@ -356,7 +344,7 @@ Rectangle {
                     visible: false
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
-                    text: root.localized("Timeline Sync", "进度跟随", "進捗追従")
+                    text: controller ? controller.timelineSyncLabel : ""
                     checked: true
 
                     indicator: Rectangle {

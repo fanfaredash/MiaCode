@@ -55,12 +55,15 @@ class QuickShellController : public QObject
     // fullscreen button's visibility to !exportPageActive (stop-gap for the
     // export-page fullscreen + hardware-decode Intel UMD crash).
     Q_PROPERTY(bool exportPageActive READ exportPageActive NOTIFY shellStateChanged)
-    // Localized labels — read here so the QML side doesn't have to know
-    // about the UiText::localized() switch. Constant per session
-    // (locale isn't switched at runtime), so a CONSTANT property is fine.
+    // Localized labels — read here so the QML side stays on the central
+    // UiText::text() key path. Constant per session (locale isn't switched at
+    // runtime), so CONSTANT properties are fine.
     Q_PROPERTY(QString timelineTabLabel READ timelineTabLabel CONSTANT)
     Q_PROPERTY(QString validationTabLabel READ validationTabLabel CONSTANT)
     Q_PROPERTY(QString muriTabLabel READ muriTabLabel CONSTANT)
+    Q_PROPERTY(QString timelineViewLockLabel READ timelineViewLockLabel CONSTANT)
+    Q_PROPERTY(QString timelineSyncLabel READ timelineSyncLabel CONSTANT)
+    Q_PROPERTY(QString timelineFollowCodeLabel READ timelineFollowCodeLabel CONSTANT)
     Q_PROPERTY(QWindow* topChromeWindow READ topChromeWindow CONSTANT)
     Q_PROPERTY(QWindow* sidebarWindow READ sidebarWindow CONSTANT)
     Q_PROPERTY(QWindow* workspaceWindow READ workspaceWindow CONSTANT)
@@ -107,6 +110,9 @@ public:
     QString timelineTabLabel() const;
     QString validationTabLabel() const;
     QString muriTabLabel() const;
+    QString timelineViewLockLabel() const;
+    QString timelineSyncLabel() const;
+    QString timelineFollowCodeLabel() const;
     QWindow* topChromeWindow() const;
     QWindow* sidebarWindow() const;
     QWindow* workspaceWindow() const;

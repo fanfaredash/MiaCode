@@ -3161,28 +3161,6 @@ LanguagePreference resolvedLanguage()
     return resolvedLanguagePreference();
 }
 
-QString localized(const QString& en, const QString& zh, const QString& ja)
-{
-    switch (resolvedLanguagePreference()) {
-    case LanguagePreference::Chinese:
-        return zh.isEmpty() ? en : zh;
-    case LanguagePreference::Japanese: {
-        if (!ja.isEmpty()) {
-            return ja;
-        }
-        const auto it = japaneseByChineseText().constFind(zh);
-        if (it != japaneseByChineseText().constEnd()) {
-            return it.value();
-        }
-        return en;
-    }
-    case LanguagePreference::English:
-    case LanguagePreference::System:
-    default:
-        return en;
-    }
-}
-
 QStringList translationKeyMismatches()
 {
     QStringList mismatches;

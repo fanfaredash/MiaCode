@@ -1,6 +1,5 @@
 #pragma once
 
-#include <QHash>
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>
@@ -29,12 +28,6 @@ bool isChineseUi();
 // Resolved UI language for this session (MIACODE_LANG env > stored preference
 // > system locale > English). Constant per session — changes apply on restart.
 LanguagePreference resolvedLanguage();
-// Legacy inline-localized string path kept only until Part A migrates the
-// remaining call sites to text("feature.key"). New shared UI strings should go
-// through text().
-QString localized(const QString& en, const QString& zh, const QString& ja = QString());
-// zh-text → Japanese dictionary backing localized() (UiTextJaDictionary.cpp).
-const QHash<QString, QString>& japaneseByChineseText();
 // Key-map drift guard for ui_text_locale_spec: descriptions of keys present
 // in one of enMap/zhMap/jaMap but missing from another. Empty when in sync.
 QStringList translationKeyMismatches();

@@ -395,6 +395,21 @@ QString QuickShellController::muriTabLabel() const
     return UiText::text(QStringLiteral("window.muri"));
 }
 
+QString QuickShellController::timelineViewLockLabel() const
+{
+    return UiText::text(QStringLiteral("shell.view_lock"));
+}
+
+QString QuickShellController::timelineSyncLabel() const
+{
+    return UiText::text(QStringLiteral("shell.timeline_sync"));
+}
+
+QString QuickShellController::timelineFollowCodeLabel() const
+{
+    return UiText::text(QStringLiteral("shell.follow_code"));
+}
+
 QWindow* QuickShellController::topChromeWindow() const
 {
     return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().topChrome : nullptr;

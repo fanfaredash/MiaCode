@@ -25,16 +25,6 @@ Item {
         return scale >= 1.999
     }
 
-    // Inline three-way localizer mirroring UiText::localized(en, zh, ja).
-    function localized(en, zh, ja) {
-        const lang = paletteMap ? paletteMap["uiLanguage"] : "en"
-        if (lang === "zh")
-            return zh
-        if (lang === "ja")
-            return ja !== undefined && ja !== "" ? ja : en
-        return en
-    }
-
     function tone(key, fallback) {
         return paletteMap && paletteMap[key] !== undefined ? paletteMap[key] : fallback
     }
@@ -416,7 +406,7 @@ Item {
         y: Math.max(0, (timelineItem.timelineTop - height) / 2)
         hoverEnabled: true
         spacing: 4
-        text: root.localized("Cursor Follow", "\u4ee3\u7801\u8ddf\u968f", "\u30ab\u30fc\u30bd\u30eb\u8ffd\u5f93")
+        text: "Cursor Follow"
         checked: timelineItem.followPreviewEnabled
         // Phase 9d-native — invisible (DComp renders natively in the
         // popup composition plane) but still receives input. DComp
@@ -479,7 +469,7 @@ Item {
         y: Math.max(0, (timelineItem.timelineTop - height) / 2)
         hoverEnabled: true
         spacing: 4
-        text: root.localized("Progress Follow", "\u8fdb\u5ea6\u8ddf\u968f", "\u9032\u6357\u8ffd\u5f93")
+        text: "Progress Follow"
         checked: timelineItem.followProgressEnabled
         opacity: 0
 
