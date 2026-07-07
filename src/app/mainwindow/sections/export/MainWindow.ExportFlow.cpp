@@ -305,30 +305,30 @@ QString localizeExportWorkerMessageForUiLanguage(const QString& rawMessage)
     );
     const QRegularExpressionMatch renderMatch = renderProgressPattern.match(trimmed);
     if (renderMatch.hasMatch()) {
-        return uiText("dialog.video_export.progress.rendering_count", "Rendering frames... %1/%2")
+        return UiText::text(QStringLiteral("dialog.video_export.progress.rendering_count"))
             .arg(renderMatch.captured(1), renderMatch.captured(2));
     }
 
     if (trimmed == QLatin1String("Preparing SFX track...")) {
-        return uiText("dialog.video_export.progress.preparing_audio", "Preparing audio...");
+        return UiText::text(QStringLiteral("dialog.video_export.progress.preparing_audio"));
     }
     if (trimmed == QLatin1String("Starting ffmpeg...")) {
-        return uiText("dialog.video_export.progress.starting_ffmpeg", "Starting ffmpeg...");
+        return UiText::text(QStringLiteral("dialog.video_export.progress.starting_ffmpeg"));
     }
     if (trimmed == QLatin1String("Rendering frames and encoding...")) {
-        return uiText("dialog.video_export.progress.rendering", "Rendering frames...");
+        return UiText::text(QStringLiteral("dialog.video_export.progress.rendering"));
     }
     if (trimmed == QLatin1String("Finalizing encoded video stream...")) {
-        return uiText("dialog.video_export.progress.finalizing_encode", "Finalizing video...");
+        return UiText::text(QStringLiteral("dialog.video_export.progress.finalizing_encode"));
     }
     if (trimmed == QLatin1String("Repacking MP4 for fast start...")) {
-        return uiText("dialog.video_export.progress.repacking", "Finalizing video...");
+        return UiText::text(QStringLiteral("dialog.video_export.progress.repacking"));
     }
     if (trimmed == QLatin1String("Collecting export summary...")) {
-        return uiText("dialog.video_export.progress.finishing", "Finishing up...");
+        return UiText::text(QStringLiteral("dialog.video_export.progress.finishing"));
     }
     if (trimmed == QLatin1String("Export completed.")) {
-        return uiText("dialog.video_export.progress.done", "Done.");
+        return UiText::text(QStringLiteral("dialog.video_export.progress.done"));
     }
     return rawMessage;
 }
@@ -592,9 +592,9 @@ void MainWindow::ExportSection::onExportPreviewVideo(int difficultyId)
             UiDialogs::showMessageBox(
                 QMessageBox::Critical,
                 &owner_,
-                uiText("dialog.video_export.title", "Export Video"),
+                UiText::text(QStringLiteral("dialog.video_export.title")),
                 launchError.isEmpty()
-                    ? uiText("dialog.video_export.error.launch_failed", "Failed to start background export.")
+                    ? UiText::text(QStringLiteral("dialog.video_export.error.launch_failed"))
                     : launchError
             );
         }
@@ -984,9 +984,9 @@ void MainWindow::ExportSection::handleEmbeddedExportConfirmed()
         UiDialogs::showMessageBox(
             QMessageBox::Critical,
             &owner_,
-            uiText("dialog.video_export.title", "Export Video"),
+            UiText::text(QStringLiteral("dialog.video_export.title")),
             launchError.isEmpty()
-                ? uiText("dialog.video_export.error.launch_failed", "Failed to start background export.")
+                ? UiText::text(QStringLiteral("dialog.video_export.error.launch_failed"))
                 : launchError
         );
         return;
@@ -1057,20 +1057,20 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
     if (!SimaiDocument::isDifficultyId(resolvedDifficultyId)
         || owner_.document_.difficulty(resolvedDifficultyId) == nullptr) {
         _mc_op_.fail(QStringLiteral("no target difficulty"));
-        owner_.statusBar()->showMessage(uiText("dialog.batch_export.error.no_difficulty", QStringLiteral("No active difficulty is selected.")));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("dialog.batch_export.error.no_difficulty")));
         return;
     }
     if (owner_.previewCanvas_ == nullptr) {
         _mc_op_.fail(QStringLiteral("previewCanvas_ null"));
-        owner_.statusBar()->showMessage(uiText("dialog.batch_export.error.no_preview", QStringLiteral("Preview canvas is not initialized.")));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("dialog.batch_export.error.no_preview")));
         return;
     }
     if (owner_.videoExportWorkerProcess_ != nullptr && owner_.videoExportWorkerProcess_->state() != QProcess::NotRunning) {
         UiDialogs::showMessageBox(
             QMessageBox::Warning,
             &owner_,
-            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
-            uiText("dialog.video_export.error.worker_busy", QStringLiteral("Another export is already running."))
+            UiText::text(QStringLiteral("dialog.batch_export.title")),
+            UiText::text(QStringLiteral("dialog.video_export.error.worker_busy"))
         );
         return;
     }
@@ -1163,8 +1163,8 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
         UiDialogs::showMessageBox(
             QMessageBox::Warning,
             &owner_,
-            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
-            uiText("dialog.batch_export.error.no_output_dir", QStringLiteral("Please choose an output folder."))
+            UiText::text(QStringLiteral("dialog.batch_export.title")),
+            UiText::text(QStringLiteral("dialog.batch_export.error.no_output_dir"))
         );
         return;
     }
@@ -1172,8 +1172,8 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
         UiDialogs::showMessageBox(
             QMessageBox::Critical,
             &owner_,
-            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
-            uiText("dialog.batch_export.error.output_dir_create_failed", QStringLiteral("Failed to create output folder."))
+            UiText::text(QStringLiteral("dialog.batch_export.title")),
+            UiText::text(QStringLiteral("dialog.batch_export.error.output_dir_create_failed"))
                 + QStringLiteral("\n") + QDir::toNativeSeparators(outputDirectory)
         );
         return;
@@ -1196,7 +1196,7 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
             failedCharts.append(
                 QDir::toNativeSeparators(chartDirectory)
                 + QStringLiteral(" - ")
-                + uiText("dialog.batch_export.error.missing_track_file", QStringLiteral("Missing track.mp3."))
+                + UiText::text(QStringLiteral("dialog.batch_export.error.missing_track_file"))
             );
             continue;
         }
@@ -1205,7 +1205,7 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
             failedCharts.append(
                 QDir::toNativeSeparators(chartDirectory)
                 + QStringLiteral(" - ")
-                + uiText("dialog.batch_export.error.missing_chart_file", QStringLiteral("Missing majdata.txt (or maidata.txt)."))
+                + UiText::text(QStringLiteral("dialog.batch_export.error.missing_chart_file"))
             );
             continue;
         }
@@ -1216,7 +1216,7 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
             failedCharts.append(
                 QDir::toNativeSeparators(chartDirectory)
                 + QStringLiteral(" - ")
-                + uiText("dialog.batch_export.error.read_chart_failed", QStringLiteral("Failed to read %1."))
+                + UiText::text(QStringLiteral("dialog.batch_export.error.read_chart_failed"))
                     .arg(QFileInfo(chartPath).fileName())
             );
             continue;
@@ -1248,22 +1248,19 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
             failedCharts.append(
                 QDir::toNativeSeparators(chartDirectory)
                 + QStringLiteral(" - ")
-                + uiText(
-                    "dialog.batch_export.error.no_selected_difficulties_in_folder",
-                    QStringLiteral("None of the selected difficulties exist in this folder: %1")
-                ).arg(requested)
+                + UiText::text(QStringLiteral("dialog.batch_export.error.no_selected_difficulties_in_folder")).arg(requested)
             );
         }
     }
 
     QProgressDialog progress(
-        uiText("dialog.batch_export.progress.preparing", QStringLiteral("Preparing batch export...")),
+        UiText::text(QStringLiteral("dialog.batch_export.progress.preparing")),
         systemL10n(QStringLiteral("Cancel"), QStringLiteral("取消")),
         0,
         100,
         &owner_
     );
-    progress.setWindowTitle(uiText("dialog.batch_export.title", QStringLiteral("Batch Export")));
+    progress.setWindowTitle(UiText::text(QStringLiteral("dialog.batch_export.title")));
     progress.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     progress.setWindowModality(Qt::WindowModal);
     progress.setMinimumDuration(0);
@@ -1282,7 +1279,7 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
         const BatchExportJob& job = jobs.at(index);
         progress.setValue(qRound(static_cast<double>(index) * 100.0 / totalJobs));
         progress.setLabelText(
-            uiText("dialog.batch_export.progress.exporting_named", QStringLiteral("Exporting %1/%2\n%3"))
+            UiText::text(QStringLiteral("dialog.batch_export.progress.exporting_named"))
                 .arg(index + 1)
                 .arg(jobs.size())
                 .arg(job.displayName)
@@ -1315,7 +1312,7 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
                 / static_cast<double>(totalJobs);
             progress.setValue(qBound(0, qRound(overall * 100.0), 100));
             progress.setLabelText(
-                uiText("dialog.batch_export.progress.current_item", QStringLiteral("%1\n%2"))
+                UiText::text(QStringLiteral("dialog.batch_export.progress.current_item"))
                     .arg(job.displayName)
                     .arg(localizeExportWorkerMessageForUiLanguage(rawMessage))
             );
@@ -1340,8 +1337,8 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
         UiDialogs::showMessageBox(
             QMessageBox::Information,
             &owner_,
-            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
-            uiText("dialog.batch_export.message.canceled", QStringLiteral("Batch export canceled."))
+            UiText::text(QStringLiteral("dialog.batch_export.title")),
+            UiText::text(QStringLiteral("dialog.batch_export.message.canceled"))
         );
         return;
     }
@@ -1354,8 +1351,8 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
         UiDialogs::showMessageBox(
             QMessageBox::Information,
             &owner_,
-            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
-            uiText("dialog.batch_export.message.success", QStringLiteral("Batch export completed: %1 file(s)."))
+            UiText::text(QStringLiteral("dialog.batch_export.title")),
+            UiText::text(QStringLiteral("dialog.batch_export.message.success"))
                 .arg(successCount)
                 + (details.isEmpty() ? QString() : QStringLiteral("\n\n") + details)
         );
@@ -1373,11 +1370,11 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
     UiDialogs::showMessageBox(
         QMessageBox::Warning,
         &owner_,
-        uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
-        uiText("dialog.batch_export.message.partial_failed", QStringLiteral("Batch export finished with failures.\nSucceeded: %1\nFailed: %2"))
+        UiText::text(QStringLiteral("dialog.batch_export.title")),
+        UiText::text(QStringLiteral("dialog.batch_export.message.partial_failed"))
             .arg(successCount)
             .arg(failedCharts.size())
-            + (successDetails.isEmpty() ? QString() : QStringLiteral("\n\n") + uiText("dialog.batch_export.message.output_files", QStringLiteral("Output files:")) + QStringLiteral("\n") + successDetails)
+            + (successDetails.isEmpty() ? QString() : QStringLiteral("\n\n") + UiText::text(QStringLiteral("dialog.batch_export.message.output_files")) + QStringLiteral("\n") + successDetails)
             + QStringLiteral("\n\n") + details
     );
 }
