@@ -271,6 +271,34 @@ QString muriIssueTypeKey(MuriKind kind)
     return QStringLiteral("muri:%1").arg(static_cast<int>(kind));
 }
 
+QString muriAlertLevelText(MuriAlertLevel level)
+{
+    switch (level) {
+    case MuriAlertLevel::Muri:
+        return UiText::text(QStringLiteral("validation.muri.alert.muri"));
+    case MuriAlertLevel::Warning:
+        return UiText::text(QStringLiteral("validation.muri.alert.warning"));
+    }
+    return UiText::text(QStringLiteral("validation.muri.alert.muri"));
+}
+
+QString muriKindText(MuriKind kind)
+{
+    switch (kind) {
+    case MuriKind::SlideTooFast:
+        return UiText::text(QStringLiteral("validation.muri.kind.slide_too_fast"));
+    case MuriKind::SlideHeadTap:
+        return UiText::text(QStringLiteral("validation.muri.kind.slide_head_tap"));
+    case MuriKind::TapOnSlide:
+        return UiText::text(QStringLiteral("validation.muri.kind.tap_on_slide"));
+    case MuriKind::Overlap:
+        return UiText::text(QStringLiteral("validation.muri.kind.overlap"));
+    case MuriKind::MultiTouch:
+        return UiText::text(QStringLiteral("validation.muri.kind.multi_touch"));
+    }
+    return UiText::text(QStringLiteral("validation.muri.alert.muri"));
+}
+
 struct WrappedListEntryText {
     QString html;
     QString plainText;
@@ -307,10 +335,8 @@ WrappedListEntryText buildMuriPanelEntryText(const MuriPanelEntry& entry, bool i
     const QColor summaryColor = ignoredInHeader
         ? UiTheme::colors().textMuted
         : severityColor(severity);
-    const QString alertText = QStringLiteral("[%1]").arg(UiText::localized(
-        muriAlertLevelDisplayName(entry.alertLevel, false), muriAlertLevelDisplayName(entry.alertLevel, true)));
-    const QString typeText = UiText::localized(
-        muriKindDisplayName(entry.kind, false), muriKindDisplayName(entry.kind, true));
+    const QString alertText = QStringLiteral("[%1]").arg(muriAlertLevelText(entry.alertLevel));
+    const QString typeText = muriKindText(entry.kind);
     const QString locationText = muriLocationText(entry.line, entry.col);
     const QString renderedDetail =
         renderMuriDetail(entry.detailKind, entry.detailArgs, uiValidationLocale()).trimmed();
@@ -534,8 +560,7 @@ void MainWindow::ValidationSection::rebuildMuriDiagnosticsPanel()
     for (const MuriPanelEntry& entry : entries) {
         const QString issueTypeKey = muriIssueTypeKey(entry.kind);
         const bool ignoredInHeader = isIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey);
-        const QString title = UiText::localized(
-            muriKindDisplayName(entry.kind, false), muriKindDisplayName(entry.kind, true));
+        const QString title = muriKindText(entry.kind);
         const WrappedListEntryText text = buildMuriPanelEntryText(entry, ignoredInHeader);
         QListWidgetItem* item = addWrappedListEntry(
             ui_.muriList_,
