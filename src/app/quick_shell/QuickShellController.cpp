@@ -383,17 +383,17 @@ QString QuickShellController::timelineTabLabel() const
     // path — keeps the QuickShell bottom-tab labels identical to the
     // ones the legacy QTabBar code uses, with the same Chinese /
     // English split.
-    return UiText::isChineseUi() ? QStringLiteral("时间轴") : QStringLiteral("Timeline");
+    return UiText::localized(QStringLiteral("Timeline"), QStringLiteral("时间轴"));
 }
 
 QString QuickShellController::validationTabLabel() const
 {
-    return UiText::isChineseUi() ? QStringLiteral("语法") : QStringLiteral("Syntax");
+    return UiText::localized(QStringLiteral("Syntax"), QStringLiteral("语法"));
 }
 
 QString QuickShellController::muriTabLabel() const
 {
-    return UiText::isChineseUi() ? QStringLiteral("无理") : QStringLiteral("Muri");
+    return UiText::localized(QStringLiteral("Muri"), QStringLiteral("无理"));
 }
 
 QWindow* QuickShellController::topChromeWindow() const
@@ -744,8 +744,6 @@ void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, i
     menu->setAttribute(Qt::WA_DeleteOnClose);
     UiTheme::styleRoundedMenu(*menu);
 
-    const bool chinese = UiText::isChineseUi();
-
     // Each item is a custom QWidget that paints the QML-CheckBox look
     // (rounded square indicator + accent fill + white checkmark + hover
     // background) and toggles via its own mouseReleaseEvent. The widget
@@ -763,18 +761,18 @@ void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, i
     };
 
     addToggleWidget(
-        chinese ? QStringLiteral("光标居中") : QStringLiteral("View Lock"),
+        UiText::localized(QStringLiteral("View Lock"), QStringLiteral("光标居中")),
         bridge->viewportLockEnabled(),
         &QuickShellController::timelineViewportLockToggled);
     // Timeline Sync sits above Follow Code so the bottom-most menu
     // item matches the inline tab-strip chip (which now shows Follow
     // Code) — visually the two anchors are at the same Y on screen.
     addToggleWidget(
-        chinese ? QStringLiteral("时轴同步") : QStringLiteral("Timeline Sync"),
+        UiText::localized(QStringLiteral("Timeline Sync"), QStringLiteral("时轴同步")),
         bridge->timelineSyncEnabled(),
         &QuickShellController::timelineSyncToggled);
     addToggleWidget(
-        chinese ? QStringLiteral("代码跟随") : QStringLiteral("Follow Code"),
+        UiText::localized(QStringLiteral("Follow Code"), QStringLiteral("代码跟随")),
         bridge->followPreviewEnabled(),
         &QuickShellController::timelineFollowPreviewToggled);
 

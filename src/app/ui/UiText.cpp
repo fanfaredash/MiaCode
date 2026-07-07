@@ -757,6 +757,58 @@ const QHash<QString, QString>& zhMap()
         {"status.preferences_saved", "首选项已保存，重启后生效。"},
         {"status.syntax.select_difficulty", "请先选择一个难度文本。"},
         {"status.syntax.failed_counts", "语法检查未通过：%1 个错误，%2 个警告。"},
+
+        // 2026-07-07 audit backfill: these keys existed only in jaMap, so the
+        // Chinese UI silently fell back to the call-site English string. Keep
+        // zhMap and jaMap key sets identical — ui_text_locale_spec enforces it.
+        {"about.platform", "发行环境"},
+        {"about.build_type", "构建类型"},
+        {"dialog.batch_export.error.export_failed", "导出失败。"},
+        {"dialog.batch_export.error.invalid_first", "谱面信息的 &first 数值无效。"},
+        {"dialog.batch_export.error.skin_missing", "未找到预览皮肤素材。"},
+        {"dialog.normalize.title", "整理谱面"},
+        {"dialog.normalize.failed", "无法整理当前谱面。"},
+        {"dialog.preferences.extensions_group", "扩展"},
+        {"dialog.preferences.extensions.open_folder", "打开扩展文件夹"},
+        {"dialog.preferences.extensions.refresh", "刷新扩展"},
+        {"dialog.preferences.extensions.open_logs", "打开日志位置"},
+        {"dialog.preferences.extensions.enabled", "已启用"},
+        {"dialog.preferences.extensions.name", "扩展"},
+        {"dialog.preferences.extensions.version", "版本"},
+        {"dialog.preferences.extensions.contributions", "提供内容"},
+        {"dialog.preferences.extensions.status", "状态"},
+        {"dialog.render_settings.gameplay.center_display.achievement_dx_minus_100", "ACHIEVEMENT DX (100-)"},
+        {"dialog.render_settings.gameplay.center_display.achievement_dx_minus_101", "ACHIEVEMENT DX (101-)"},
+        {"dialog.render_settings.gameplay.center_display.achievement_dx_plus", "ACHIEVEMENT DX (+)"},
+        {"dialog.render_settings.gameplay.center_display.achievement_finale_plus", "ACHIEVEMENT FINALE (+)"},
+        {"dialog.render_settings.gameplay.center_display.combo", "COMBO"},
+        {"dialog.render_settings.gameplay.center_display.dx_score_minus", "DX SCORE (-)"},
+        {"dialog.render_settings.gameplay.center_display.dx_score_plus", "DX SCORE (+)"},
+        {"dialog.render_settings.gameplay.center_display.off", "无"},
+        {"dialog.render_settings.gameplay.force_labeled_judge_line_when_paused", "暂停时显示判定范围"},
+        {"dialog.video_export.button.cancel_export", "取消导出"},
+        {"dialog.video_export.button.start_export", "开始导出"},
+        {"dialog.video_export.error.executable_missing", "未找到 MiaCode 可执行文件。"},
+        {"dialog.video_export.error.invalid_flow_speed", "流速数值无效。"},
+        {"dialog.video_export.error.launch_failed", "无法启动后台导出。"},
+        {"dialog.video_export.error.no_difficulty", "未选择有效难度。"},
+        {"dialog.video_export.error.no_markers", "没有可导出的解析物件。"},
+        {"dialog.video_export.error.skin_missing", "未找到预览皮肤素材。"},
+        {"dialog.video_export.error.sync_failed", "无法同步当前编辑状态。"},
+        {"dialog.video_export.error.worker_busy", "已有另一个导出正在进行。"},
+        {"dialog.video_export.error.worker_write_failed", "无法将导出快照发送给导出子进程。"},
+        {"dialog.video_export.section.intro", "片头"},
+        {"dialog.video_export.section.output", "输出"},
+        {"editor.validation_summary.tooltip", "错误 %1，警告 %2"},
+        {"status.muri_render_mode_dx", "预览模式：无理检查。"},
+        {"status.muri_render_mode_native", "预览模式：谱面确认。"},
+        {"status.normalize.already_normalized", "谱面整理：已经是整理后的格式。"},
+        {"status.normalize.applied", "已应用谱面整理：%1 小节行。"},
+        {"status.transform.mirror_lr", "已应用左右镜像。"},
+        {"status.transform.mirror_ud", "已应用上下镜像。"},
+        {"status.transform.rotate_180", "已应用旋转 180°。"},
+        {"status.transform.rotate_ccw_45", "已应用逆时针旋转 45°。"},
+        {"status.transform.rotate_cw_45", "已应用顺时针旋转 45°。"},
     };
     return map;
 }
@@ -1238,6 +1290,50 @@ void setPreferredTheme(ThemePreference preference)
 bool isChineseUi()
 {
     return resolvedLanguagePreference() == LanguagePreference::Chinese;
+}
+
+LanguagePreference resolvedLanguage()
+{
+    return resolvedLanguagePreference();
+}
+
+QString localized(const QString& en, const QString& zh, const QString& ja)
+{
+    switch (resolvedLanguagePreference()) {
+    case LanguagePreference::Chinese:
+        return zh.isEmpty() ? en : zh;
+    case LanguagePreference::Japanese: {
+        if (!ja.isEmpty()) {
+            return ja;
+        }
+        const auto it = japaneseByChineseText().constFind(zh);
+        if (it != japaneseByChineseText().constEnd()) {
+            return it.value();
+        }
+        return en;
+    }
+    case LanguagePreference::English:
+    case LanguagePreference::System:
+    default:
+        return en;
+    }
+}
+
+QStringList translationKeyMismatches()
+{
+    QStringList mismatches;
+    for (auto it = zhMap().constBegin(); it != zhMap().constEnd(); ++it) {
+        if (!jaMap().contains(it.key())) {
+            mismatches.append(QStringLiteral("jaMap missing key: %1").arg(it.key()));
+        }
+    }
+    for (auto it = jaMap().constBegin(); it != jaMap().constEnd(); ++it) {
+        if (!zhMap().contains(it.key())) {
+            mismatches.append(QStringLiteral("zhMap missing key: %1").arg(it.key()));
+        }
+    }
+    mismatches.sort();
+    return mismatches;
 }
 
 QString preferencesFilePath()

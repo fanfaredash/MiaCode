@@ -27,9 +27,21 @@ namespace {
 QVariantMap buildPaletteMap()
 {
     const UiTheme::Colors& c = UiTheme::colors();
+    const QString languageToken = []() -> QString {
+        switch (UiText::resolvedLanguage()) {
+        case UiText::LanguagePreference::Chinese:
+            return QStringLiteral("zh");
+        case UiText::LanguagePreference::Japanese:
+            return QStringLiteral("ja");
+        case UiText::LanguagePreference::English:
+        case UiText::LanguagePreference::System:
+        default:
+            return QStringLiteral("en");
+        }
+    }();
     return QVariantMap{
         {QStringLiteral("dark"), c.dark},
-        {QStringLiteral("isChineseUi"), UiText::isChineseUi()},
+        {QStringLiteral("uiLanguage"), languageToken},
         {QStringLiteral("windowBg"), c.windowBg},
         {QStringLiteral("windowAltBg"), c.windowAltBg},
         {QStringLiteral("toolbarBg"), c.toolbarBg},

@@ -1318,11 +1318,6 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.zoomControlPressedPart = zoomControlPressedPart_;
     request.followPreviewEnabled = stateBridge_->followPreviewEnabled();
     request.followProgressEnabled = stateBridge_->followProgressEnabled();
-    // Use the app's UI language selector (UiText::isChineseUi()) — not
-    // the OS locale. A user with a Chinese OS who selected English in
-    // the preferences would otherwise still see Chinese labels instead of
-    // English labels on the timeline header.
-    request.isChineseUi = UiText::isChineseUi();
     request.appearanceRevision = appearanceRevision_;
     request.gridRevision = stateBridge_->gridRevision();
     request.waveformRevision = stateBridge_->waveformRevision();

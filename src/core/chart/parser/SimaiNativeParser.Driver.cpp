@@ -326,6 +326,60 @@ const QHash<QString, QString>& zhPrefixMap()
     return map;
 }
 
+const QHash<QString, QString>& jaExactMap()
+{
+    static const QHash<QString, QString> map{
+        {kInvalidBpmValue(), QStringLiteral("BPM の値が無効です")},
+        {kInvalidBeatValue(), QStringLiteral("分音数の値が無効です")},
+        {kUnterminatedBpmBlock(), QStringLiteral("BPM 括弧が閉じられていません")},
+        {kUnterminatedBeatBlock(), QStringLiteral("分音括弧が閉じられていません")},
+        {kUnterminatedHsBracket(), QStringLiteral("<HS*> 括弧が閉じられていません")},
+        {kInvalidHsValue(), QStringLiteral("<HS*N> の値が無効です")},
+        {kMissingBeatSeparator(), QStringLiteral("拍区切りの ',' がありません")},
+        {kRepeatedSlashSeparator(), QStringLiteral("連続する区切り記号 '//' は使えません")},
+        {kRepeatedBacktickSeparator(), QStringLiteral("連続する区切り記号 '``' は使えません")},
+        {kSeparatorMissingOperand(), QStringLiteral("区切り記号 '/' または '`' の隣にノーツがありません")},
+        {kChartEmpty(), QStringLiteral("譜面が空です。")},
+    };
+    return map;
+}
+
+const QHash<QString, QString>& jaPrefixMap()
+{
+    static const QHash<QString, QString> map{
+        {kInvalidBreakSlideModifierPositionPrefix(), QStringLiteral("Break Slide の修飾子 b の位置により譜面変換でエラーになる可能性があります：")},
+        {kInvalidSlideDurationPlacementPrefix(), QStringLiteral("Slide の音価ブロックの位置により譜面変換でエラーになる可能性があります：")},
+        {kInvalidSlideDurationPrefix(), QStringLiteral("Slide の音価が無効です：")},
+        {kInvalidHoldDurationPrefix(), QStringLiteral("Hold の音価が無効です：")},
+        {kInvalidHoldModifierSequencePrefix(), QStringLiteral("Hold の修飾子の順序が無効です：")},
+        {kNonCanonicalHoldModifierPlacementPrefix(), QStringLiteral("Hold の修飾子の位置により実機変換でエラーになる可能性があります：")},
+        {kInvalidTouchHoldDurationPrefix(), QStringLiteral("TouchHold の音価が無効です：")},
+        {kTouchDurationRequiresHPrefix(), QStringLiteral("Touch の音価には 'h' 修飾子が必要です：")},
+        {kInvalidTouchTokenPrefix(), QStringLiteral("Touch ノーツが無効です：")},
+        {kNonCanonicalCenterTouchPrefix(), QStringLiteral("中央 Touch の非標準表記です（C を使ってください）：")},
+        {kInvalidTouchModifierPrefix(), QStringLiteral("Touch の修飾子が無効です：")},
+        {kMisplacedSlideHeadModifierPrefix(), QStringLiteral("Slide head 修飾子（?、!、@）は slide head と shape の間にのみ置けます：")},
+        {kMisplacedTapStarModifierPrefix(), QStringLiteral("Tap-star 修飾子（$）は tap にのみ置けます：")},
+        {kInvalidSlideChainPrefix(), QStringLiteral("Slide チェーンの構文が無効です：")},
+        {kMissingCommaBeforeDirectivePrefix(), QStringLiteral("ノーツと指令（{} () <HS*>）の間に区切りの ',' がありません：")},
+        {kInvalidSlideStarBranchPrefix(), QStringLiteral("'*' による同一始点 Slide 分岐の構文が無効です（* の後は slide 頭部を省略します。例：5q2[4:1]*p8[4:1]）：")},
+        {kFullwidthDigitPrefix(), QStringLiteral("全角数字が見つかりました。半角数字を使ってください：")},
+        {kFullwidthTouchRegionPrefix(), QStringLiteral("全角のタッチ領域文字が見つかりました。半角文字を使ってください：")},
+        {kFullwidthModifierPrefix(), QStringLiteral("全角の修飾子が見つかりました。半角を使ってください：")},
+        {kFullwidthBracketPrefix(), QStringLiteral("全角括弧が見つかりました。半角括弧を使ってください：")},
+        {kFullwidthSeparatorPrefix(), QStringLiteral("全角の区切り記号が見つかりました。半角を使ってください：")},
+        {kFullwidthSlideSymbolPrefix(), QStringLiteral("全角の Slide 記号が見つかりました。半角を使ってください：")},
+        {kFullwidthLatinLetterPrefix(), QStringLiteral("全角の英字が見つかりました。半角を使ってください：")},
+        {kInvalidTerminalMarkerPrefix(), QStringLiteral("終端マーカー E の位置が無効です：")},
+        {kInvalidNotePrefix(), QStringLiteral("ノーツが無効です：")},
+        {kInvalidBeatValueStrictPrefix(), QStringLiteral("分音数の値により譜面変換でエラーになる可能性があります：")},
+        {kBeatValueAbove384Prefix(), QStringLiteral("分音数が 384 を超えています。譜面変換でエラーになる可能性があります：")},
+        {kUnmatchedClosingBracketPrefix(), QStringLiteral("対応していない閉じ括弧 '")},
+        {kUnclosedBracketPrefix(), QStringLiteral("閉じられていない開き括弧 '")},
+    };
+    return map;
+}
+
 const QVector<QString>& zhPrefixOrder()
 {
     static const QVector<QString> order{
@@ -1258,17 +1312,23 @@ QString localizeValidationDetail(QString detail, SimaiNativeValidationLocale loc
     if (locale == SimaiNativeValidationLocale::English) {
         return detail;
     }
+    const bool japanese = locale == SimaiNativeValidationLocale::Japanese;
 
     if (detail == ValidationMessage::kLineEndNoteMissingComma()) {
-        return QStringLiteral("行尾音符缺少结尾 ','");
+        return japanese
+            ? QStringLiteral("行末のノーツに終わりの ',' がありません")
+            : QStringLiteral("行尾音符缺少结尾 ','");
     }
 
-    const auto exactIt = ValidationMessage::zhExactMap().constFind(detail);
-    if (exactIt != ValidationMessage::zhExactMap().constEnd()) {
+    const QHash<QString, QString>& exactMap =
+        japanese ? ValidationMessage::jaExactMap() : ValidationMessage::zhExactMap();
+    const auto exactIt = exactMap.constFind(detail);
+    if (exactIt != exactMap.constEnd()) {
         return exactIt.value();
     }
 
-    const QHash<QString, QString>& prefixMap = ValidationMessage::zhPrefixMap();
+    const QHash<QString, QString>& prefixMap =
+        japanese ? ValidationMessage::jaPrefixMap() : ValidationMessage::zhPrefixMap();
     for (const QString& prefix : ValidationMessage::zhPrefixOrder()) {
         if (!detail.startsWith(prefix)) {
             continue;
@@ -1277,7 +1337,9 @@ QString localizeValidationDetail(QString detail, SimaiNativeValidationLocale loc
         if (prefix == ValidationMessage::kInvalidBeatValueStrictPrefix()) {
             localized.replace(
                 ValidationMessage::kStrictDivisorSuffix(),
-                QStringLiteral("（必须是 384 的正整数约数）")
+                japanese
+                    ? QStringLiteral("（384 の正の約数である必要があります）")
+                    : QStringLiteral("（必须是 384 的正整数约数）")
             );
         }
         return localized;
@@ -1291,6 +1353,11 @@ QString validationSeverityPrefix(SimaiNativeValidationSeverity severity, SimaiNa
     if (locale == SimaiNativeValidationLocale::Chinese) {
         return severity == SimaiNativeValidationSeverity::Error
             ? QStringLiteral("[错误]")
+            : QStringLiteral("[警告]");
+    }
+    if (locale == SimaiNativeValidationLocale::Japanese) {
+        return severity == SimaiNativeValidationSeverity::Error
+            ? QStringLiteral("[エラー]")
             : QStringLiteral("[警告]");
     }
     return severity == SimaiNativeValidationSeverity::Error

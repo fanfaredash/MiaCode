@@ -155,7 +155,7 @@ constexpr int kChartFrameMaxPx = 2048;
 
 QString l10n(const QString& en, const QString& zh)
 {
-    return UiText::isChineseUi() ? zh : en;
+    return UiText::localized(en, zh);
 }
 
 // mm:ss.cs (centiseconds) for the frame-time readout.

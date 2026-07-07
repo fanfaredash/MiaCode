@@ -72,17 +72,13 @@ NormalizeDialogResult showNormalizeSelectionDialog(
     rootLayout->addWidget(summaryRow);
 
     auto* startAtNewMeasureCheck = new QCheckBox(
-        UiText::isChineseUi()
-            ? QStringLiteral("选区起点视作小节线开始")
-            : QStringLiteral("Treat selection start as measure boundary"),
+        UiText::localized(QStringLiteral("Treat selection start as measure boundary"), QStringLiteral("选区起点视作小节线开始")),
         &dialog);
     startAtNewMeasureCheck->setChecked(initialOptions.startAtNewMeasure);
     rootLayout->addWidget(startAtNewMeasureCheck);
 
     auto* reduceTo384Check = new QCheckBox(
-        UiText::isChineseUi()
-            ? QStringLiteral("统一近似至384分音")
-            : QStringLiteral("Snap approximately to 384 grid"),
+        UiText::localized(QStringLiteral("Snap approximately to 384 grid"), QStringLiteral("统一近似至384分音")),
         &dialog);
     reduceTo384Check->setChecked(initialOptions.reduceTo384Grid);
     rootLayout->addWidget(reduceTo384Check);
@@ -312,20 +308,11 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
 
     QString dialogDescription;
     if (wholeTextSelected) {
-        dialogDescription = UiText::isChineseUi()
-            ? QStringLiteral("选中范围：全文")
-            : QStringLiteral("Selection: full chart");
+        dialogDescription = UiText::localized(QStringLiteral("Selection: full chart"), QStringLiteral("选中范围：全文"));
     } else {
         const auto [startLine, startCol] = lineColForPosition(editor->document(), begin);
         const auto [endLine, endCol] = lineColForPosition(editor->document(), qMax(begin, finish - 1));
-        dialogDescription = UiText::isChineseUi()
-            ? QStringLiteral("选中范围：%1行%2列 ~ %3行%4列")
-                  .arg(startLine)
-                  .arg(startCol)
-                  .arg(endLine)
-                  .arg(endCol)
-            : QStringLiteral("Selection: L%1C%2 ~ L%3C%4")
-                  .arg(startLine)
+        dialogDescription = UiText::localized(QStringLiteral("Selection: L%1C%2 ~ L%3C%4"), QStringLiteral("选中范围：%1行%2列 ~ %3行%4列")).arg(startLine)
                   .arg(startCol)
                   .arg(endLine)
                   .arg(endCol);
@@ -588,7 +575,7 @@ void MainWindow::DocumentSection::onRaiseSubdivisionSelection()
         return;
     }
     applySelectionBatchTransform(
-        UiText::isChineseUi() ? QStringLiteral("分音提升一档") : QStringLiteral("Subdivision +1"),
+        UiText::localized(QStringLiteral("Subdivision +1"), QStringLiteral("分音提升一档")),
         [](const QString& text, const QString& suffixContext, int* changedCount) {
             return miacode::chart_transform::raiseSubdivisionForSelection(text, suffixContext, changedCount);
         });
@@ -603,7 +590,7 @@ void MainWindow::DocumentSection::onLowerSubdivisionSelection()
         return;
     }
     applySelectionBatchTransform(
-        UiText::isChineseUi() ? QStringLiteral("分音降低一档") : QStringLiteral("Subdivision -1"),
+        UiText::localized(QStringLiteral("Subdivision -1"), QStringLiteral("分音降低一档")),
         [](const QString& text, const QString& suffixContext, int* changedCount) {
             return miacode::chart_transform::lowerSubdivisionForSelection(text, suffixContext, changedCount);
         });
@@ -618,7 +605,7 @@ void MainWindow::DocumentSection::onRaiseSubdivisionHalfStepSelection()
         return;
     }
     applySelectionBatchTransform(
-        UiText::isChineseUi() ? QStringLiteral("分音提升半档") : QStringLiteral("Subdivision +1/2"),
+        UiText::localized(QStringLiteral("Subdivision +1/2"), QStringLiteral("分音提升半档")),
         [](const QString& text, const QString& suffixContext, int* changedCount) {
             return miacode::chart_transform::raiseSubdivisionHalfStepForSelection(text, suffixContext, changedCount);
         });
@@ -633,7 +620,7 @@ void MainWindow::DocumentSection::onLowerSubdivisionHalfStepSelection()
         return;
     }
     applySelectionBatchTransform(
-        UiText::isChineseUi() ? QStringLiteral("分音降低半档") : QStringLiteral("Subdivision -1/2"),
+        UiText::localized(QStringLiteral("Subdivision -1/2"), QStringLiteral("分音降低半档")),
         [](const QString& text, const QString& suffixContext, int* changedCount) {
             return miacode::chart_transform::lowerSubdivisionHalfStepForSelection(text, suffixContext, changedCount);
         });

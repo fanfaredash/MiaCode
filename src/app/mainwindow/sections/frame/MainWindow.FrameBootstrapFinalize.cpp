@@ -142,9 +142,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     exportVideoButton_ = makeCompactToolbarButton(nullptr);
     if (exportVideoButton_ != nullptr) {
         exportVideoButton_->setText(uiText("toolbar.export", "Export"));
-        exportVideoButton_->setToolTip(UiText::isChineseUi()
-            ? QStringLiteral("打开导出页：导出视频 / 导出封面 / 批量导出 / 打包ZIP")
-            : QStringLiteral("Open the Export page: video / cover / batch / ZIP"));
+        exportVideoButton_->setToolTip(UiText::localized(QStringLiteral("Open the Export page: video / cover / batch / ZIP"), QStringLiteral("打开导出页：导出视频 / 导出封面 / 批量导出 / 打包ZIP")));
         exportVideoButton_->setFixedWidth(actionButtonWidth);
         toolBar->insertWidget(settingsPlaceholderAction_, exportVideoButton_);
         connect(exportVideoButton_, &QToolButton::clicked, this, [this]() {

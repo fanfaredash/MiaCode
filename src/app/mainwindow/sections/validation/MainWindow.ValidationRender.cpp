@@ -116,7 +116,7 @@ void MainWindow::ValidationSection::onToggleTouchTrail(bool checked)
 void MainWindow::ValidationSection::onEditStaticTapOnSlideThreshold()
 {
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
-    dialog.setWindowTitle(UiText::isChineseUi() ? QStringLiteral("撞尾阈值") : QStringLiteral("Tap-On-Slide Threshold"));
+    dialog.setWindowTitle(UiText::localized(QStringLiteral("Tap-On-Slide Threshold"), QStringLiteral("撞尾阈值")));
     dialog.setModal(true);
     dialog.setMinimumWidth(360);
     dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
@@ -128,9 +128,7 @@ void MainWindow::ValidationSection::onEditStaticTapOnSlideThreshold()
     rootLayout->setSpacing(10);
 
     auto* hintLabel = new QLabel(
-        UiText::isChineseUi()
-            ? QStringLiteral("调整静态“撞尾无理”参考检查阈值。")
-            : QStringLiteral("Adjust the static Tap-On-Slide reference threshold."),
+        UiText::localized(QStringLiteral("Adjust the static Tap-On-Slide reference threshold."), QStringLiteral("调整静态“撞尾无理”参考检查阈值。")),
         &dialog);
     hintLabel->setWordWrap(true);
     rootLayout->addWidget(hintLabel);
@@ -185,9 +183,7 @@ void MainWindow::ValidationSection::onEditStaticTapOnSlideThreshold()
         refreshMuriDiagnosticsPanel();
     }
     owner_.statusBar()->showMessage(
-        UiText::isChineseUi()
-            ? QStringLiteral("撞尾阈值已更新为 %1 ms。").arg(state_.staticTapOnSlideThresholdMs_)
-            : QStringLiteral("Tap-On-Slide threshold set to %1 ms.").arg(state_.staticTapOnSlideThresholdMs_));
+        UiText::localized(QStringLiteral("Tap-On-Slide threshold set to %1 ms."), QStringLiteral("撞尾阈值已更新为 %1 ms。")).arg(state_.staticTapOnSlideThresholdMs_));
 }
 
 void MainWindow::ValidationSection::applyMuriRenderOptions()

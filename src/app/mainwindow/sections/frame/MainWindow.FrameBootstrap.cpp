@@ -147,7 +147,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // labels). The trailing `(L)` parens render in both locales which
     // matches the existing Chinese convention.
     auto* fileMenu = menuBar()->addMenu(uiText("menu.file", "File(&F)"));
-    auto* editMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("编辑(&E)") : QStringLiteral("Edit(&E)"));
+    auto* editMenu = menuBar()->addMenu(UiText::localized(QStringLiteral("Edit(&E)"), QStringLiteral("编辑(&E)")));
     auto* toolsMenu = menuBar()->addMenu(uiText("menu.tools", "Tools(&T)"));
     // Beta20-fix — Transform menu renamed to "Modify" / "调整" in both
     // languages so the Alt-T mnemonic is unambiguous for the Tools
@@ -155,7 +155,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // user requested a synonym, not just a different mnemonic letter.
     // The Chinese key in UiText.cpp likewise uses 调整(&M).
     auto* transformMenu = menuBar()->addMenu(uiText("menu.transform", "Modify(&M)"));
-    auto* previewMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("预览(&P)") : QStringLiteral("Preview(&P)"));
+    auto* previewMenu = menuBar()->addMenu(UiText::localized(QStringLiteral("Preview(&P)"), QStringLiteral("预览(&P)")));
     auto* helpMenu = menuBar()->addMenu(uiText("menu.help", "Help(&H)"));
     styleRoundedMenu(*fileMenu);
     styleRoundedMenu(*editMenu);
@@ -313,7 +313,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         const bool hasBookmark = editor->bookmarkedLines().contains(line);
         if (!hasBookmark) {
             QAction* createAction = menu.addAction(
-                UiText::isChineseUi() ? QStringLiteral("插入书签") : QStringLiteral("Insert Bookmark"));
+                UiText::localized(QStringLiteral("Insert Bookmark"), QStringLiteral("插入书签")));
             connect(createAction, &QAction::triggered, this, [this, line]() {
                 if (editorSection_ != nullptr) {
                     editorSection_->createBookmarkAtLine(line, true);
@@ -321,21 +321,21 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             });
         } else {
             QAction* renameAction = menu.addAction(
-                UiText::isChineseUi() ? QStringLiteral("重命名书签") : QStringLiteral("Rename Bookmark"));
+                UiText::localized(QStringLiteral("Rename Bookmark"), QStringLiteral("重命名书签")));
             connect(renameAction, &QAction::triggered, this, [this, line]() {
                 if (documentSection_ != nullptr) {
                     documentSection_->revealBookmarkInSidebar(activeDifficultyId_, line, true);
                 }
             });
             QAction* deleteAction = menu.addAction(
-                UiText::isChineseUi() ? QStringLiteral("删除书签") : QStringLiteral("Delete Bookmark"));
+                UiText::localized(QStringLiteral("Delete Bookmark"), QStringLiteral("删除书签")));
             connect(deleteAction, &QAction::triggered, this, [this, line]() {
                 if (editorSection_ != nullptr) {
                     editorSection_->deleteBookmarkAtLineWithConfirmation(line);
                 }
             });
             QAction* revealAction = menu.addAction(
-                UiText::isChineseUi() ? QStringLiteral("在侧边栏显示") : QStringLiteral("Show in Sidebar"));
+                UiText::localized(QStringLiteral("Show in Sidebar"), QStringLiteral("在侧边栏显示")));
             connect(revealAction, &QAction::triggered, this, [this, line]() {
                 if (documentSection_ != nullptr) {
                     documentSection_->revealBookmarkInSidebar(activeDifficultyId_, line, false);
@@ -470,12 +470,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     editorValidationErrorIconLabel_->setFixedSize(14, 14);
     editorValidationErrorIconLabel_->setCursor(Qt::PointingHandCursor);
     editorValidationErrorIconLabel_->installEventFilter(this);
-    const QString jumpToValidationToolTip = UiText::isChineseUi()
-        ? QStringLiteral("点击跳转到「语法」选项卡")
-        : QStringLiteral("Click to open the Syntax tab");
-    const QString jumpToMuriToolTip = UiText::isChineseUi()
-        ? QStringLiteral("点击跳转到「无理」选项卡")
-        : QStringLiteral("Click to open the Muri tab");
+    const QString jumpToValidationToolTip = UiText::localized(QStringLiteral("Click to open the Syntax tab"), QStringLiteral("点击跳转到「语法」选项卡"));
+    const QString jumpToMuriToolTip = UiText::localized(QStringLiteral("Click to open the Muri tab"), QStringLiteral("点击跳转到「无理」选项卡"));
     editorValidationErrorIconLabel_->setToolTip(jumpToValidationToolTip);
     editorValidationErrorCountLabel_ = new QLabel(QStringLiteral("0"), editorValidationErrorGroup);
     editorValidationErrorCountLabel_->setFont(uiMonoFont(10, QFont::DemiBold));
@@ -552,13 +548,13 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     editorHeaderTrailingLayout->setSpacing(16);
 
     editorCursorLabel_ = new QLabel(
-        UiText::isChineseUi() ? QStringLiteral("1行 1列") : QStringLiteral("Ln 1, Col 1"),
+        UiText::localized(QStringLiteral("Ln 1, Col 1"), QStringLiteral("1行 1列")),
         editorHeaderTrailingWidget);
     editorCursorLabel_->setObjectName("EditorMeta");
     editorCursorLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     editorCursorLabel_->setFixedWidth(
         QFontMetrics(uiMonoFont(10)).horizontalAdvance(
-            UiText::isChineseUi() ? QStringLiteral("9999行 9999列") : QStringLiteral("Ln 9999, Col 9999")) + 10);
+            UiText::localized(QStringLiteral("Ln 9999, Col 9999"), QStringLiteral("9999行 9999列"))) + 10);
     editorCursorLabel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     editorHeaderTrailingLayout->addWidget(editorCursorLabel_, 0, Qt::AlignRight);
     editorHeaderLayout->addWidget(editorHeaderTrailingWidget, 0, Qt::AlignRight);
@@ -623,16 +619,16 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     findRow->setContentsMargins(0, 0, 0, 0);
     findRow->setSpacing(6);
     editorFindEdit_ = new QLineEdit(findBar);
-    editorFindEdit_->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("查找") : QStringLiteral("Find"));
+    editorFindEdit_->setPlaceholderText(UiText::localized(QStringLiteral("Find"), QStringLiteral("查找")));
     editorFindPrevButton_ = new QToolButton(findBar);
     editorFindPrevButton_->setObjectName("EditorFindPrevButton");
     editorFindPrevButton_->setText(QStringLiteral("↑"));
-    editorFindPrevButton_->setToolTip(UiText::isChineseUi() ? QStringLiteral("查找上一个") : QStringLiteral("Find Previous"));
+    editorFindPrevButton_->setToolTip(UiText::localized(QStringLiteral("Find Previous"), QStringLiteral("查找上一个")));
     editorFindPrevButton_->setFixedWidth(24);
     editorFindNextButton_ = new QToolButton(findBar);
     editorFindNextButton_->setObjectName("EditorFindNextButton");
     editorFindNextButton_->setText(QStringLiteral("↓"));
-    editorFindNextButton_->setToolTip(UiText::isChineseUi() ? QStringLiteral("查找下一个") : QStringLiteral("Find Next"));
+    editorFindNextButton_->setToolTip(UiText::localized(QStringLiteral("Find Next"), QStringLiteral("查找下一个")));
     editorFindNextButton_->setFixedWidth(24);
     editorFindCloseButton_ = new QToolButton(findBar);
     editorFindCloseButton_->setObjectName("EditorFindCloseButton");
@@ -643,7 +639,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // baked icon is re-tinted on theme change in WindowSection::applyUiTheme.
     editorFindCloseButton_->setIcon(makeOutlineCloseIcon(UiTheme::colors().textPrimary));
     editorFindCloseButton_->setIconSize(QSize(12, 12));
-    editorFindCloseButton_->setToolTip(UiText::isChineseUi() ? QStringLiteral("关闭查找栏") : QStringLiteral("Close"));
+    editorFindCloseButton_->setToolTip(UiText::localized(QStringLiteral("Close"), QStringLiteral("关闭查找栏")));
     editorFindCloseButton_->setFixedWidth(28);
     findRow->addWidget(editorFindEdit_, 1);
     findRow->addWidget(editorFindPrevButton_, 0);
@@ -655,9 +651,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     replaceRow->setContentsMargins(0, 0, 0, 0);
     replaceRow->setSpacing(4);
     editorReplaceEdit_ = new QLineEdit(findBar);
-    editorReplaceEdit_->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("替换") : QStringLiteral("Replace"));
-    editorReplaceButton_ = new QPushButton(UiText::isChineseUi() ? QStringLiteral("替换") : QStringLiteral("Replace"), findBar);
-    editorReplaceAllButton_ = new QPushButton(UiText::isChineseUi() ? QStringLiteral("全部替换") : QStringLiteral("Replace All"), findBar);
+    editorReplaceEdit_->setPlaceholderText(UiText::localized(QStringLiteral("Replace"), QStringLiteral("替换")));
+    editorReplaceButton_ = new QPushButton(UiText::localized(QStringLiteral("Replace"), QStringLiteral("替换")), findBar);
+    editorReplaceAllButton_ = new QPushButton(UiText::localized(QStringLiteral("Replace All"), QStringLiteral("全部替换")), findBar);
     replaceRow->addWidget(editorReplaceEdit_, 1);
     replaceRow->addWidget(editorReplaceButton_, 0);
     replaceRow->addWidget(editorReplaceAllButton_, 0);
@@ -746,12 +742,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     titleWrapLayout->setSpacing(6);
     titleWrapLayout->addWidget(titleEdit_, 1);
     auto* readTitleButton = new QToolButton(metadataPage_);
-    readTitleButton->setText(UiText::isChineseUi()
-        ? QStringLiteral("从 MP3 读取")
-        : QStringLiteral("Read from MP3"));
-    readTitleButton->setToolTip(UiText::isChineseUi()
-        ? QStringLiteral("选择一个 MP3，从它的 ID3 标签里读取标题。")
-        : QStringLiteral("Choose an MP3 and pull the title from its ID3 tag."));
+    readTitleButton->setText(UiText::localized(QStringLiteral("Read from MP3"), QStringLiteral("从 MP3 读取")));
+    readTitleButton->setToolTip(UiText::localized(QStringLiteral("Choose an MP3 and pull the title from its ID3 tag."), QStringLiteral("选择一个 MP3，从它的 ID3 标签里读取标题。")));
     connect(readTitleButton, &QToolButton::clicked, this, &MainWindow::onReadTitleFromTrack);
     titleWrapLayout->addWidget(readTitleButton, 0, Qt::AlignRight);
 
@@ -761,12 +753,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     artistWrapLayout->setSpacing(6);
     artistWrapLayout->addWidget(artistEdit_, 1);
     auto* readArtistButton = new QToolButton(metadataPage_);
-    readArtistButton->setText(UiText::isChineseUi()
-        ? QStringLiteral("从 MP3 读取")
-        : QStringLiteral("Read from MP3"));
-    readArtistButton->setToolTip(UiText::isChineseUi()
-        ? QStringLiteral("选择一个 MP3，从它的 ID3 标签里读取曲师。")
-        : QStringLiteral("Choose an MP3 and pull the artist from its ID3 tag."));
+    readArtistButton->setText(UiText::localized(QStringLiteral("Read from MP3"), QStringLiteral("从 MP3 读取")));
+    readArtistButton->setToolTip(UiText::localized(QStringLiteral("Choose an MP3 and pull the artist from its ID3 tag."), QStringLiteral("选择一个 MP3，从它的 ID3 标签里读取曲师。")));
     connect(readArtistButton, &QToolButton::clicked, this, &MainWindow::onReadArtistFromTrack);
     artistWrapLayout->addWidget(readArtistButton, 0, Qt::AlignRight);
 
@@ -781,13 +769,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     designerWrapLayout->setSpacing(6);
     designerWrapLayout->addWidget(designerEdit_, 1);
     auto* manageDesignersButton = new QToolButton(metadataPage_);
-    manageDesignersButton->setText(UiText::isChineseUi()
-        ? QStringLiteral("管理多个难度名义")
-        : QStringLiteral("Manage per-difficulty designers"));
-    manageDesignersButton->setToolTip(UiText::isChineseUi()
-        ? QStringLiteral("为每个难度（&des_1 … &des_7）分别填写谱师名义，并可勾选「所有难度采用相同名义」。")
-        : QStringLiteral("Set each difficulty's designer (&des_1 … &des_7); includes the "
-                         "\"all difficulties share one designer\" toggle."));
+    manageDesignersButton->setText(UiText::localized(QStringLiteral("Manage per-difficulty designers"), QStringLiteral("管理多个难度名义")));
+    manageDesignersButton->setToolTip(UiText::localized(
+        QStringLiteral("Set each difficulty's designer (&des_1 … &des_7); includes the "
+                       "\"all difficulties share one designer\" toggle."),
+        QStringLiteral("为每个难度（&des_1 … &des_7）分别填写谱师名义，并可勾选「所有难度采用相同名义」。")));
     connect(manageDesignersButton, &QToolButton::clicked, this, &MainWindow::onManagePerDifficultyDesigners);
     designerWrapLayout->addWidget(manageDesignersButton, 0, Qt::AlignRight);
 
@@ -799,12 +785,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     coverWrapLayout->setContentsMargins(0, 0, 0, 0);
     coverWrapLayout->setSpacing(6);
     auto* extractCoverButton = new QToolButton(metadataPage_);
-    extractCoverButton->setText(UiText::isChineseUi()
-        ? QStringLiteral("从 MP3 读取")
-        : QStringLiteral("Read from MP3"));
-    extractCoverButton->setToolTip(UiText::isChineseUi()
-        ? QStringLiteral("选择一个 MP3，把它内嵌的封面图写到当前谱面目录的 bg.jpg。")
-        : QStringLiteral("Choose an MP3 and write its embedded cover artwork as bg.jpg next to the chart."));
+    extractCoverButton->setText(UiText::localized(QStringLiteral("Read from MP3"), QStringLiteral("从 MP3 读取")));
+    extractCoverButton->setToolTip(UiText::localized(QStringLiteral("Choose an MP3 and write its embedded cover artwork as bg.jpg next to the chart."), QStringLiteral("选择一个 MP3，把它内嵌的封面图写到当前谱面目录的 bg.jpg。")));
     connect(extractCoverButton, &QToolButton::clicked, this, &MainWindow::onExtractBackgroundFromTrack);
     coverWrapLayout->addWidget(extractCoverButton, 0, Qt::AlignLeft);
     coverWrapLayout->addStretch(1);
@@ -887,9 +869,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     latencyEntryRow->addWidget(latencyEntrySummaryLabel_, 1);
     auto* openLatencyPageButton = new QToolButton(metadataPage_);
     openLatencyPageButton->setText(uiText("metadata.latency_card.open", "Open Latency Settings →"));
-    openLatencyPageButton->setToolTip(UiText::isChineseUi()
-        ? QStringLiteral("打开延迟设置页：调整 BPM/Offset，并通过试听校准。")
-        : QStringLiteral("Open the Latency Settings page: adjust BPM/Offset and audition for calibration."));
+    openLatencyPageButton->setToolTip(UiText::localized(QStringLiteral("Open the Latency Settings page: adjust BPM/Offset and audition for calibration."), QStringLiteral("打开延迟设置页：调整 BPM/Offset，并通过试听校准。")));
     connect(openLatencyPageButton, &QToolButton::clicked, this, [this]() {
         switchToLatencyField();
     });
@@ -916,7 +896,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     copyAreaEditor_ = new PlainCodeEditor(copyAreaPanel_);
     copyAreaEditor_->setLineWrapMode(QTextEdit::WidgetWidth);
     copyAreaEditor_->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    copyAreaEditor_->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("复制区") : QStringLiteral("Copy area"));
+    copyAreaEditor_->setPlaceholderText(UiText::localized(QStringLiteral("Copy area"), QStringLiteral("复制区")));
     copyAreaEditor_->setStyleSheet(UiTheme::editorTextEditStyleSheet());
     connect(copyAreaEditor_, &PlainCodeEditor::editorOverwriteModeChanged, this, [this](bool enabled) {
         applyEditorOverwriteModeEnabled(enabled, true);
@@ -1229,13 +1209,13 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             styleRoundedMenu(menu);
             const int bookmarkDifficultyId = item->data(kOutlineItemDifficultyRole).toInt();
             const int line = item->data(kOutlineItemLineRole).toInt();
-            QAction* renameAction = menu.addAction(UiText::isChineseUi() ? QStringLiteral("重命名") : QStringLiteral("Rename"));
+            QAction* renameAction = menu.addAction(UiText::localized(QStringLiteral("Rename"), QStringLiteral("重命名")));
             connect(renameAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line]() {
                 if (documentSection_ != nullptr) {
                     documentSection_->revealBookmarkInSidebar(bookmarkDifficultyId, line, true);
                 }
             });
-            QAction* deleteAction = menu.addAction(UiText::isChineseUi() ? QStringLiteral("删除") : QStringLiteral("Delete"));
+            QAction* deleteAction = menu.addAction(UiText::localized(QStringLiteral("Delete"), QStringLiteral("删除")));
             connect(deleteAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line]() {
                 if (SimaiDocument::isDifficultyId(bookmarkDifficultyId) && bookmarkDifficultyId != activeDifficultyId_) {
                     activeOutlineKey_ = "chart";
@@ -1248,7 +1228,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
                 }
             });
             QAction* timelineAction = menu.addAction(
-                UiText::isChineseUi() ? QStringLiteral("跳到时间轴位置") : QStringLiteral("Jump to Timeline Position"));
+                UiText::localized(QStringLiteral("Jump to Timeline Position"), QStringLiteral("跳到时间轴位置")));
             connect(timelineAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line]() {
                 if (SimaiDocument::isDifficultyId(bookmarkDifficultyId) && bookmarkDifficultyId != activeDifficultyId_) {
                     activeOutlineKey_ = "chart";
@@ -1274,9 +1254,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         menu.setFont(uiAccentFont(10));
         styleRoundedMenu(menu);
         QAction* deleteAction = menu.addAction(
-            UiText::isChineseUi()
-                ? QStringLiteral("删除 %1").arg(SimaiDocument::difficultyName(difficultyId))
-                : QStringLiteral("Delete %1").arg(SimaiDocument::difficultyName(difficultyId))
+            UiText::localized(QStringLiteral("Delete %1"), QStringLiteral("删除 %1")).arg(SimaiDocument::difficultyName(difficultyId))
         );
         connect(deleteAction, &QAction::triggered, this, [this, difficultyId]() {
             deleteDifficultyField(difficultyId);
@@ -1303,7 +1281,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         // DialogsSection::onMediaProcessingTools(), which calls the same
         // handlers the old submenu actions were wired to.
         QAction* mediaProcessingAction = toolboxMenu_->addAction(
-            UiText::isChineseUi() ? QStringLiteral("音频/视频处理") : QStringLiteral("Audio/Video Processing")
+            UiText::localized(QStringLiteral("Audio/Video Processing"), QStringLiteral("音频/视频处理"))
         );
         connect(mediaProcessingAction, &QAction::triggered, this, &MainWindow::onMediaProcessingTools);
     }
@@ -1324,11 +1302,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     constexpr bool kCopyAreaIntegratedIntoToolbox = false;
     if (kCopyAreaIntegratedIntoToolbox) {
         QMenu* copyAreaMenu = toolboxMenu_->addMenu(
-            UiText::isChineseUi() ? QStringLiteral("复制区") : QStringLiteral("Copy Area")
+            UiText::localized(QStringLiteral("Copy Area"), QStringLiteral("复制区"))
         );
         styleRoundedMenu(*copyAreaMenu);
         fullCopyAreaAction_ = copyAreaMenu->addAction(
-            UiText::isChineseUi() ? QStringLiteral("完整复制区") : QStringLiteral("Full Copy Area")
+            UiText::localized(QStringLiteral("Full Copy Area"), QStringLiteral("完整复制区"))
         );
         fullCopyAreaAction_->setCheckable(true);
         connect(fullCopyAreaAction_, &QAction::toggled, this, &MainWindow::setFullCopyAreaVisible);
@@ -1337,7 +1315,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     toolboxMenu_->addSeparator();
 
     QAction* toolboxOfficialChartMirrorAction = toolboxMenu_->addAction(
-        UiText::isChineseUi() ? QStringLiteral("官谱镜像站") : QStringLiteral("Official Chart Mirror")
+        UiText::localized(QStringLiteral("Official Chart Mirror"), QStringLiteral("官谱镜像站"))
     );
     connect(toolboxOfficialChartMirrorAction, &QAction::triggered, this, [openToolboxUrl]() {
         openToolboxUrl(QStringLiteral("https://www.maiviewer.net/"));
@@ -1758,7 +1736,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     });
     bottomTabs_->addTab(
         errorList_,
-        UiText::isChineseUi() ? QStringLiteral("语法") : QStringLiteral("Syntax")
+        UiText::localized(QStringLiteral("Syntax"), QStringLiteral("语法"))
     );
 
     muriList_ = new QListWidget(bottomTabs_);
@@ -1779,7 +1757,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     });
     bottomTabs_->addTab(
         muriList_,
-        UiText::isChineseUi() ? QStringLiteral("无理") : QStringLiteral("Muri")
+        UiText::localized(QStringLiteral("Muri"), QStringLiteral("无理"))
     );
     connect(bottomTabs_, &QTabWidget::currentChanged, this, [this](int) {
         if (!quickShellBottomTabsProxyActive() && !timelineWidgetlessQuickRoute_) {

@@ -806,7 +806,7 @@ QString LatencyDetectionPage::formatPosition(double seconds) const
 
 QString LatencyDetectionPage::localizedText(const QString& zh, const QString& en) const
 {
-    return UiText::isChineseUi() ? zh : en;
+    return UiText::localized(en, zh);
 }
 
 QString LatencyDetectionPage::currentTrackPath() const

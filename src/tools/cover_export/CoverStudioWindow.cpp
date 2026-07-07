@@ -52,7 +52,7 @@ namespace {
 
 QString l10n(const QString& en, const QString& zh)
 {
-    return UiText::isChineseUi() ? zh : en;
+    return UiText::localized(en, zh);
 }
 
 QPushButton* makeToolbarButton(const QString& text, QWidget* parent, bool primary = false)
@@ -652,7 +652,7 @@ void CoverStudioWindow::exportNow()
             QMessageBox::Warning,
             this,
             title,
-            (UiText::isChineseUi() ? QStringLiteral("封面导出失败：\n%1") : QStringLiteral("Cover export failed:\n%1"))
+            (UiText::localized(QStringLiteral("Cover export failed:\n%1"), QStringLiteral("封面导出失败：\n%1")))
                 .arg(result.errorMessage));
     }
 }

@@ -567,9 +567,13 @@ WrappedListEntryText buildMuriPanelEntryText(const MuriPanelEntry& entry, bool i
     const QColor summaryColor = ignoredInHeader
         ? UiTheme::colors().textMuted
         : severityColor(severity);
-    const QString alertText = QStringLiteral("[%1]").arg(muriAlertLevelDisplayName(entry.alertLevel, chineseUi));
-    const QString typeText = muriKindDisplayName(entry.kind, chineseUi);
+    const QString alertText = QStringLiteral("[%1]").arg(UiText::localized(
+        muriAlertLevelDisplayName(entry.alertLevel, false), muriAlertLevelDisplayName(entry.alertLevel, true)));
+    const QString typeText = UiText::localized(
+        muriKindDisplayName(entry.kind, false), muriKindDisplayName(entry.kind, true));
     const QString locationText = muriLocationText(entry.line, entry.col);
+    // Muri detail text stays English/Chinese only: the detail localizer is a
+    // text transform, not a table — Japanese falls back to English here.
     const QString detailText = localizeMuriDetail(entry.rawDetail, chineseUi).trimmed();
     const QString summaryText = QStringLiteral("%1 %2 %3").arg(alertText, typeText, locationText);
     QString contentHtml = QStringLiteral("<span style=\"font-weight:700;color:%1;\">%2</span>")
@@ -903,7 +907,7 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
     if (cacheIt != state_.validationCacheByDifficulty_.constEnd()) {
         const ValidationCacheEntry& entry = cacheIt.value();
         if (entry.chartText == owner_.activeChartText()
-            && entry.chineseUi == UiText::isChineseUi()
+            && entry.validationLocale == uiValidationLocale()
             && entry.timingMetadata == owner_.currentTimingMetadata()) {
             for (const ValidationCachedIssue& issue : entry.issues) {
                 const QString issueTypeKey = issue.issueTypeKey.isEmpty()
@@ -953,9 +957,7 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
               "editor.validation_summary.tooltip",
               "%1 error(s), %2 warning(s)"
           ).arg(errorCount).arg(warningCount);
-    const QString jumpHint = UiText::isChineseUi()
-        ? QStringLiteral("点击图标可跳转到对应选项卡")
-        : QStringLiteral("Click an icon to jump to its tab");
+    const QString jumpHint = UiText::localized(QStringLiteral("Click an icon to jump to its tab"), QStringLiteral("点击图标可跳转到对应选项卡"));
     const QString summaryTooltipWithJump = summaryTooltip + QStringLiteral("\n") + jumpHint;
     const bool showSummary = state_.previewShowValidationSummary_ && (showError || showWarning || showMuri);
     ui_.editorValidationSummaryWidget_->setProperty("hasContent", showSummary);

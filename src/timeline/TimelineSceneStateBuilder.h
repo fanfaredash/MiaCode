@@ -58,7 +58,6 @@ struct TimelineSceneBuildRequest {
     int zoomControlPressedPart = 0;
     bool followPreviewEnabled = false;
     bool followProgressEnabled = true;
-    bool isChineseUi = false;
     quint64 appearanceRevision = 0;
     quint64 gridRevision = 0;
     quint64 waveformRevision = 0;

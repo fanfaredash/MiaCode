@@ -676,7 +676,7 @@ VideoExportDialog::VideoExportDialog(
     auto* outputColumn = new QVBoxLayout(outputRow);
     outputColumn->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     outputColumn->setSpacing(6);
-    auto* outputLabel = new QLabel(l10n(QStringLiteral("Output"), QStringLiteral("杈撳嚭")), outputRow);
+    auto* outputLabel = new QLabel(l10n(QStringLiteral("Output"), QStringLiteral("输出")), outputRow);
     outputLabel->setText(uiText("dialog.video_export.output", QStringLiteral("Output")));
     outputColumn->addWidget(outputLabel, 0);
     auto* outputControlRow = new QWidget(outputRow);
@@ -685,7 +685,7 @@ VideoExportDialog::VideoExportDialog(
     outputControlLayout->setSpacing(kFormRowSpacing);
     outputPathEdit_ = new QLineEdit(outputControlRow);
     outputPathEdit_->setText(displayOutputPathForDialog(baseTask_.outputPath, exportBaseDirectory(baseTask_)));
-    auto* browseButton = new QPushButton(l10n(QStringLiteral("Browse..."), QStringLiteral("娴忚...")), outputRow);
+    auto* browseButton = new QPushButton(l10n(QStringLiteral("Browse..."), QStringLiteral("浏览...")), outputRow);
     outputBrowseButton_ = browseButton;
     browseButton->setText(uiText("dialog.video_export.browse", QStringLiteral("Browse...")));
     browseButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
@@ -1078,7 +1078,7 @@ VideoExportDialog::VideoExportDialog(
     optionsLayout->setColumnStretch(0, 1);
     optionsLayout->setColumnStretch(1, 1);
     showTimestampCheck_ = new QCheckBox(
-        l10n(QStringLiteral("Show bottom-left timestamp"), QStringLiteral("鏄剧ず宸︿笅瑙掓椂闂存埑")),
+        l10n(QStringLiteral("Show bottom-left timestamp"), QStringLiteral("显示左下角时间戳")),
         optionsContent_
     );
     showTimestampCheck_->setChecked(baseTask_.showTimestamp);
@@ -1114,7 +1114,7 @@ VideoExportDialog::VideoExportDialog(
     );
     addIntroCheck_->setChecked(baseTask_.intro.enabled);
     smoothBrightnessCheck_ = new QCheckBox(
-        l10n(QStringLiteral("Smooth brightness"), QStringLiteral("骞虫粦浜害")),
+        l10n(QStringLiteral("Smooth brightness"), QStringLiteral("平滑亮度")),
         optionsContent_
     );
     smoothBrightnessCheck_->setChecked(baseTask_.smoothBrightness);
@@ -1207,7 +1207,7 @@ VideoExportDialog::VideoExportDialog(
     optionsLayout->addWidget(innerBrightnessOption, 1, 1, 1, 1);
     QWidget* layoutSquareScaleOption = addPercentSliderOption(
         optionsContent_,
-        l10n(QStringLiteral("Layout Size"), QStringLiteral("Layout鏁村浘澶у皬")),
+        l10n(QStringLiteral("Layout Size"), QStringLiteral("Layout整图大小")),
         qRound(miacode::preview_video::kLayoutSquareScaleMin * 100.0),
         qRound(miacode::preview_video::kLayoutSquareScaleMax * 100.0),
         qRound(miacode::preview_video::kLayoutSquareScaleStep * 100.0),

@@ -733,9 +733,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
         return false;
     }
 
-    const auto validationLocale = UiText::isChineseUi()
-        ? SimaiNativeValidationLocale::Chinese
-        : SimaiNativeValidationLocale::English;
+    const SimaiNativeValidationLocale validationLocale = uiValidationLocale();
     const miacode::simai::SimaiTimingMetadata timingMetadata = miacode::simai::buildTimingMetadata(document);
     const SimaiNativeValidationReport report =
         SimaiNativeParser::buildValidationReport(difficulty->chart, validationLocale, nullptr, timingMetadata);

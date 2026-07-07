@@ -44,7 +44,11 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   `chart_zip_packager_spec` (verifies the Export-as-ZIP packager against real zip read-back),
   `debug_flag_index_spec` (drift guard — every `MIACODE_*` flag read in `src/` must appear in
   `docs/ops/DEBUG_INDEX.md`, and every flag the doc names must still be read in code or be in the
-  spec's retired allowlist; repo root injected via a `MIACODE_SOURCE_ROOT` compile define)
+  spec's retired allowlist; repo root injected via a `MIACODE_SOURCE_ROOT` compile define. Note:
+  `MIACODE_SOURCE_ROOT` itself is a compile def, not an env flag, so the spec filters it via
+  `kCompileDefinitions` — any new spec that consumes the source-root define is fine),
+  `ui_text_locale_spec` (i18n drift guard — see the localization note in
+  `architecture-and-layout.md`; also uses the `MIACODE_SOURCE_ROOT` compile define)
 
 ## 3. Spec / dev-tool convention (audit 2026-05-29 — being standardized)
 

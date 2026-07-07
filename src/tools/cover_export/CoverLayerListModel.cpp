@@ -20,7 +20,7 @@ constexpr char kRowMimeType[] = "application/x-miacode-cover-layer-row";
 
 QString l10n(const QString& en, const QString& zh)
 {
-    return UiText::isChineseUi() ? zh : en;
+    return UiText::localized(en, zh);
 }
 
 QString displayLabel(const CoverLayer* layer)

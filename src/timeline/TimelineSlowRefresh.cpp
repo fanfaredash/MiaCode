@@ -215,11 +215,11 @@ TimelineAnalysisRefreshResult buildTimelineAnalysisRefreshResult(const TimelineA
     result.revision = request.revision;
     result.difficultyId = request.difficultyId;
     result.chartText = request.chartText;
-    result.chineseUi = request.chineseUi;
+    result.validationLocale = request.validationLocale;
     result.timingMetadata = request.timingMetadata;
     result.validationReport = SimaiNativeParser::buildValidationReport(
         request.chartText,
-        request.chineseUi ? SimaiNativeValidationLocale::Chinese : SimaiNativeValidationLocale::English,
+        request.validationLocale,
         &request.parseResult,
         request.timingMetadata);
     result.noteMarkerSignature = request.noteMarkerSignature;

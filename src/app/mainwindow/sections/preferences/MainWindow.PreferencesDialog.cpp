@@ -71,9 +71,7 @@ QString shortcutSequenceKey(const QKeySequence& sequence)
 
 QString shortcutDefinitionLabel(const ShortcutRegistry::ShortcutDefinition& definition)
 {
-    return UiText::isChineseUi() && !definition.labelZh.isEmpty()
-        ? definition.labelZh
-        : definition.labelEn;
+    return UiText::localized(definition.labelEn, definition.labelZh);
 }
 
 QString conflictingShortcutLabel(
@@ -882,18 +880,16 @@ void MainWindow::PreferencesSection::onPreferences()
     // popup, and the 'h' hold-duration suggestions together. Presented as a
     // 开启/关闭 menu (same idiom as the other editor rows) rather than a checkbox.
     auto* autoCompletionLabel = new QLabel(
-        UiText::isChineseUi() ? QStringLiteral("自动补全") : QStringLiteral("Auto-completion"),
+        UiText::localized(QStringLiteral("Auto-completion"), QStringLiteral("自动补全")),
         editorGroup
     );
     auto* autoCompletionCombo = new QComboBox(editorGroup);
-    autoCompletionCombo->addItem(UiText::isChineseUi() ? QStringLiteral("开启") : QStringLiteral("On"));
-    autoCompletionCombo->addItem(UiText::isChineseUi() ? QStringLiteral("关闭") : QStringLiteral("Off"));
+    autoCompletionCombo->addItem(UiText::localized(QStringLiteral("On"), QStringLiteral("开启")));
+    autoCompletionCombo->addItem(UiText::localized(QStringLiteral("Off"), QStringLiteral("关闭")));
     autoCompletionCombo->setCurrentIndex(selectedAutoCompletionEnabled ? 0 : 1);
     UiTheme::applyComboBoxPopupLimit(autoCompletionCombo, 12);
     autoCompletionCombo->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("自动补全括号、给出括号/时值建议，并在输入 h 时提示 [8:1] 等 hold 时值。")
-            : QStringLiteral("Auto-closes brackets, suggests durations/BPMs inside them, and offers [8:1]-style hold tokens after typing 'h'.")
+        UiText::localized(QStringLiteral("Auto-closes brackets, suggests durations/BPMs inside them, and offers [8:1]-style hold tokens after typing 'h'."), QStringLiteral("自动补全括号、给出括号/时值建议，并在输入 h 时提示 [8:1] 等 hold 时值。"))
     );
     connect(autoCompletionCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
         if (index < 0) {
@@ -929,9 +925,7 @@ void MainWindow::PreferencesSection::onPreferences()
     headerTopDisplayCombo->setCurrentIndex(qMax(0, headerTopDisplayIndex));
     UiTheme::applyComboBoxPopupLimit(headerTopDisplayCombo, 12);
     headerTopDisplayCombo->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("谱面编辑页顶部 Lv 旁边显示的字段：偏移（&first）或当前难度的谱师（&des_N）。")
-            : QStringLiteral("The field next to Lv in the chart header: the &first offset or this difficulty's &des_N designer.")
+        UiText::localized(QStringLiteral("The field next to Lv in the chart header: the &first offset or this difficulty's &des_N designer."), QStringLiteral("谱面编辑页顶部 Lv 旁边显示的字段：偏移（&first）或当前难度的谱师（&des_N）。"))
     );
     connect(headerTopDisplayCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
             [&, headerTopDisplayCombo](int index) {
@@ -946,17 +940,13 @@ void MainWindow::PreferencesSection::onPreferences()
     editorLayout->addRow(headerTopDisplayLabelWidget, headerTopDisplayCombo);
 
     auto* ignoreMuriIssuePromptsCheckbox = new QCheckBox(
-        UiText::isChineseUi()
-            ? QStringLiteral("忽略无理报错提示")
-            : QStringLiteral("Ignore muri issue prompts"),
+        UiText::localized(QStringLiteral("Ignore muri issue prompts"), QStringLiteral("忽略无理报错提示")),
         editorGroup
     );
     ignoreMuriIssuePromptsCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     ignoreMuriIssuePromptsCheckbox->setChecked(selectedIgnoreMuriIssuePrompts);
     ignoreMuriIssuePromptsCheckbox->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("开启后不在编辑器标题栏和时间轴小点中提示无理。设置保存到当前谱面文件夹的 .miacode。")
-            : QStringLiteral("Hides muri from the editor header and timeline dots. Saved in the current chart folder's .miacode data.")
+        UiText::localized(QStringLiteral("Hides muri from the editor header and timeline dots. Saved in the current chart folder's .miacode data."), QStringLiteral("开启后不在编辑器标题栏和时间轴小点中提示无理。设置保存到当前谱面文件夹的 .miacode。"))
     );
     connect(ignoreMuriIssuePromptsCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
         selectedIgnoreMuriIssuePrompts = checked;
@@ -969,7 +959,7 @@ void MainWindow::PreferencesSection::onPreferences()
     //   index 1 仅过滤全角字符  halfWidth=ON  imeDisabled=OFF (default: normalize commits)
     //   index 2 禁止中文输入法  halfWidth=ON  imeDisabled=ON  (block IME candidate window)
     auto* chineseInputLabel = new QLabel(
-        UiText::isChineseUi() ? QStringLiteral("中文输入") : QStringLiteral("Chinese input"),
+        UiText::localized(QStringLiteral("Chinese input"), QStringLiteral("中文输入")),
         editorGroup
     );
     const int initialChineseInputMode =
@@ -977,15 +967,11 @@ void MainWindow::PreferencesSection::onPreferences()
         state_.editorHalfWidthInputEnabled_ ? 1 : 0;
     int selectedChineseInputMode = initialChineseInputMode;
     auto* chineseInputCombo = new QComboBox(editorGroup);
-    if (UiText::isChineseUi()) {
-        chineseInputCombo->addItem(QStringLiteral("开启"));
-        chineseInputCombo->addItem(QStringLiteral("仅过滤全角字符"));
-        chineseInputCombo->addItem(QStringLiteral("禁止中文输入法"));
-    } else {
-        chineseInputCombo->addItem(QStringLiteral("On"));
-        chineseInputCombo->addItem(QStringLiteral("Filter full-width chars"));
-        chineseInputCombo->addItem(QStringLiteral("Disable IME"));
-    }
+    chineseInputCombo->addItem(UiText::localized(QStringLiteral("On"), QStringLiteral("开启")));
+    chineseInputCombo->addItem(
+        UiText::localized(QStringLiteral("Filter full-width chars"), QStringLiteral("仅过滤全角字符")));
+    chineseInputCombo->addItem(
+        UiText::localized(QStringLiteral("Disable IME"), QStringLiteral("禁止中文输入法")));
     chineseInputCombo->setCurrentIndex(selectedChineseInputMode);
     UiTheme::applyComboBoxPopupLimit(chineseInputCombo, 12);
     connect(chineseInputCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
@@ -1442,9 +1428,7 @@ void MainWindow::PreferencesSection::onPreferences()
                 }
                 previewLabel->setStyleSheet(QStringLiteral("font-weight: 600; color: #D93232;"));
                 conflictLabel->setText(
-                    UiText::isChineseUi()
-                        ? QStringLiteral("与「%1」重复").arg(conflict)
-                        : QStringLiteral("Conflicts with \"%1\"").arg(conflict));
+                    UiText::localized(QStringLiteral("Conflicts with \"%1\""), QStringLiteral("与「%1」重复")).arg(conflict));
             };
             QObject::connect(captureEdit, &QLineEdit::textChanged, &captureDialog, updateConflictState);
             QObject::connect(captureButtons, &QDialogButtonBox::accepted, &captureDialog, [&]() {

@@ -1328,9 +1328,7 @@ void MainWindow::WindowSection::onReplaceAll()
     }
     editCursor.endEditBlock();
     owner_.statusBar()->showMessage(
-        UiText::isChineseUi()
-            ? QStringLiteral("已替换 %1 处。").arg(replacedCount)
-            : QStringLiteral("Replaced %1 occurrence(s).").arg(replacedCount)
+        UiText::localized(QStringLiteral("Replaced %1 occurrence(s)."), QStringLiteral("已替换 %1 处。")).arg(replacedCount)
     );
 }
 

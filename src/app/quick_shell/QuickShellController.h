@@ -56,7 +56,7 @@ class QuickShellController : public QObject
     // export-page fullscreen + hardware-decode Intel UMD crash).
     Q_PROPERTY(bool exportPageActive READ exportPageActive NOTIFY shellStateChanged)
     // Localized labels — read here so the QML side doesn't have to know
-    // about the UiText::isChineseUi() switch. Constant per session
+    // about the UiText::localized() switch. Constant per session
     // (locale isn't switched at runtime), so a CONSTANT property is fine.
     Q_PROPERTY(QString timelineTabLabel READ timelineTabLabel CONSTANT)
     Q_PROPERTY(QString validationTabLabel READ validationTabLabel CONSTANT)

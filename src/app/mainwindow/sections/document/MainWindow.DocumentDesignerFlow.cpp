@@ -138,9 +138,7 @@ void MainWindow::DocumentSection::openPerDifficultyDesignerDialog()
 
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
     dialog.setModal(true);
-    dialog.setWindowTitle(UiText::isChineseUi()
-        ? QStringLiteral("谱师名义管理")
-        : QStringLiteral("Designer management"));
+    dialog.setWindowTitle(UiText::localized(QStringLiteral("Designer management"), QStringLiteral("谱师名义管理")));
     // Reuse the picker dialog's themed chrome (QLabel/QPushButton), then layer on:
     //  - a dark outer dialog (windowAltBg) so the content reads as a card on a
     //    dark page — matching the audio-settings dialog;
@@ -173,7 +171,7 @@ void MainWindow::DocumentSection::openPerDifficultyDesignerDialog()
     // The rows + checkbox live inside a titled card (like the "音频" group in
     // the audio-settings dialog); the OK/Cancel buttons stay outside it.
     auto* designerGroup = new QGroupBox(
-        UiText::isChineseUi() ? QStringLiteral("谱师") : QStringLiteral("Designers"),
+        UiText::localized(QStringLiteral("Designers"), QStringLiteral("谱师")),
         &dialog);
     auto* groupLayout = new QVBoxLayout(designerGroup);
     groupLayout->setContentsMargins(12, 6, 12, 12);
@@ -189,12 +187,9 @@ void MainWindow::DocumentSection::openPerDifficultyDesignerDialog()
     bool localUnified = state_.unifiedDesignerEnabled_;
 
     auto* unifiedBox = new QCheckBox(
-        UiText::isChineseUi() ? QStringLiteral("所有难度采用相同名义")
-                              : QStringLiteral("All difficulties share this designer"),
+        UiText::localized(QStringLiteral("All difficulties share this designer"), QStringLiteral("所有难度采用相同名义")),
         &dialog);
-    unifiedBox->setToolTip(UiText::isChineseUi()
-        ? QStringLiteral("勾选后，&des 与每个难度的 &des_N 会保持一致。")
-        : QStringLiteral("When checked, &des and every &des_N stay identical."));
+    unifiedBox->setToolTip(UiText::localized(QStringLiteral("When checked, &des and every &des_N stay identical."), QStringLiteral("勾选后，&des 与每个难度的 &des_N 会保持一致。")));
     unifiedBox->setStyleSheet(UiTheme::darkAwareCheckBoxStyleSheet());
     {
         QSignalBlocker block(unifiedBox);
@@ -220,9 +215,7 @@ void MainWindow::DocumentSection::openPerDifficultyDesignerDialog()
         // A small marker shows which slots already have a chart, so a name on a
         // chart-less slot is an obvious "designer-only" entry.
         if (state_.document_.difficulty(id) == nullptr) {
-            label->setToolTip(UiText::isChineseUi()
-                ? QStringLiteral("该难度暂无谱面，仅记录 &des_%1。").arg(id)
-                : QStringLiteral("No chart yet — records &des_%1 only.").arg(id));
+            label->setToolTip(UiText::localized(QStringLiteral("No chart yet — records &des_%1 only."), QStringLiteral("该难度暂无谱面，仅记录 &des_%1。")).arg(id));
         }
         form->addRow(label, edit);
     }
@@ -380,9 +373,7 @@ bool MainWindow::DocumentSection::promptCanonicalDesignerName(const QStringList&
     }
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
     dialog.setModal(true);
-    dialog.setWindowTitle(UiText::isChineseUi()
-        ? QStringLiteral("选择统一的谱师名")
-        : QStringLiteral("Pick the canonical designer"));
+    dialog.setWindowTitle(UiText::localized(QStringLiteral("Pick the canonical designer"), QStringLiteral("选择统一的谱师名")));
     // Themed background and visible radio indicators (the Windows default
     // disc is nearly invisible against the dark card background).
     dialog.setStyleSheet(UiTheme::designerPickerDialogStyleSheet());
@@ -395,12 +386,12 @@ bool MainWindow::DocumentSection::promptCanonicalDesignerName(const QStringList&
     outerLayout->setContentsMargins(14, 14, 14, 12);
     outerLayout->setSpacing(10);
     auto* prompt = new QLabel(
-        UiText::isChineseUi()
-            ? QStringLiteral(
-                  "检测到多个不同的谱师名义，请选择一个作为统一名义（写入所有难度），或选择「直接清除」让所有字段置空。")
-            : QStringLiteral(
-                  "Multiple distinct designer names were detected. Pick one to use everywhere, "
-                  "or choose \"Clear all\" to empty every field."),
+        UiText::localized(
+            QStringLiteral(
+                "Multiple distinct designer names were detected. Pick one to use everywhere, "
+                "or choose \"Clear all\" to empty every field."),
+            QStringLiteral(
+                "检测到多个不同的谱师名义，请选择一个作为统一名义（写入所有难度），或选择「直接清除」让所有字段置空。")),
         &dialog);
     prompt->setWordWrap(true);
     outerLayout->addWidget(prompt);
@@ -436,9 +427,7 @@ bool MainWindow::DocumentSection::promptCanonicalDesignerName(const QStringList&
     // selection"), so -1 would never round-trip back as the clear-all choice.
     const int kClearAllId = candidates.size();
     auto* clearAllRadio = new QRadioButton(
-        UiText::isChineseUi()
-            ? QStringLiteral("直接清除")
-            : QStringLiteral("Clear all"),
+        UiText::localized(QStringLiteral("Clear all"), QStringLiteral("直接清除")),
         listHost);
     group->addButton(clearAllRadio, kClearAllId);
     listLayout->addWidget(clearAllRadio);

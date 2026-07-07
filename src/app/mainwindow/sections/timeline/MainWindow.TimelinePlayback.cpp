@@ -743,9 +743,7 @@ void MainWindow::applyPreviewPlaybackRate(double rate)
 QString MainWindow::formatPreviewPlaybackRateToastText(double rate) const
 {
     const int percent = qRound(rate * 100.0);
-    const QString title = UiText::isChineseUi()
-        ? QStringLiteral("当前倍速")
-        : QStringLiteral("Playback Speed");
+    const QString title = UiText::localized(QStringLiteral("Playback Speed"), QStringLiteral("当前倍速"));
     return QStringLiteral(
                "<div style='text-align:center;'>"
                "<div style='font-size:14px;font-weight:600;line-height:1.2;'>%1</div>"

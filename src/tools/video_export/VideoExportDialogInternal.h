@@ -45,7 +45,7 @@ inline QString uiText(const char* key, const QString& fallback)
 
 inline QString l10n(const QString& en, const QString& zh)
 {
-    return UiText::isChineseUi() ? zh : en;
+    return UiText::localized(en, zh);
 }
 
 inline QString exportDialogPresetLabel(VideoExportPreset preset)

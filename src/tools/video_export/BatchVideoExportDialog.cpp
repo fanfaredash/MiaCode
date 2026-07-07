@@ -698,12 +698,10 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     showChartInfoCheck_ = new QCheckBox(uiText("dialog.video_export.option.show_chart_info", QStringLiteral("Show chart info")), optionsCard);
     showChartInfoCheck_->setChecked(baseTask_.showChartInfoHud);
     addIntroCheck_ = new QCheckBox(
-        UiText::isChineseUi() ? QStringLiteral("添加片头") : QStringLiteral("Add intro"),
+        UiText::localized(QStringLiteral("Add intro"), QStringLiteral("添加片头")),
         optionsCard);
     addIntroCheck_->setChecked(baseTask_.intro.enabled);
-    addIntroCheck_->setToolTip(UiText::isChineseUi()
-        ? QStringLiteral("在每个视频开头加入 maimai 风格片头（批量导出整谱）。")
-        : QStringLiteral("Prepend the maimai track-start intro to each export."));
+    addIntroCheck_->setToolTip(UiText::localized(QStringLiteral("Prepend the maimai track-start intro to each export."), QStringLiteral("在每个视频开头加入 maimai 风格片头（批量导出整谱）。")));
     smoothBrightnessCheck_ = new QCheckBox(uiText("dialog.video_export.option.smooth_brightness", QStringLiteral("Smooth brightness")), optionsCard);
     smoothBrightnessCheck_->setChecked(baseTask_.smoothBrightness);
     checkboxLayout->addWidget(showTimestampCheck_, 0);

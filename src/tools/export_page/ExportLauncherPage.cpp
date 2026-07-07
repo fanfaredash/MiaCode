@@ -94,7 +94,7 @@ void ExportLauncherPage::applyThemeStyles()
 
 QString ExportLauncherPage::localizedText(const QString& zh, const QString& en) const
 {
-    return UiText::isChineseUi() ? zh : en;
+    return UiText::localized(en, zh);
 }
 
 void ExportLauncherPage::buildUi()

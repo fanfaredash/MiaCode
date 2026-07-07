@@ -55,7 +55,7 @@ void MainWindow::TimelineSection::scheduleTimelineAnalysisRefresh(
     state_.pendingTimelineAnalysisRefresh_.revision = request.revision;
     state_.pendingTimelineAnalysisRefresh_.difficultyId = request.difficultyId;
     state_.pendingTimelineAnalysisRefresh_.chartText = request.chartText;
-    state_.pendingTimelineAnalysisRefresh_.chineseUi = request.chineseUi;
+    state_.pendingTimelineAnalysisRefresh_.validationLocale = request.validationLocale;
     state_.pendingTimelineAnalysisRefresh_.timingMetadata = request.timingMetadata;
     state_.pendingTimelineAnalysisRefresh_.parseResult = parseResult;
     state_.pendingTimelineAnalysisRefresh_.noteMarkerSignature = previewState.noteMarkerSignature;
@@ -82,12 +82,12 @@ bool MainWindow::TimelineSection::scheduleTimelineAnalysisRefreshFromLatestPrevi
     request.difficultyId = activeDifficultyId();
     request.chartText = state_.lastTimelineParseChartText_;
     request.timingMetadata = state_.lastTimelineParseTimingMetadata_;
-    request.chineseUi = UiText::isChineseUi();
+    request.validationLocale = uiValidationLocale();
 
     state_.pendingTimelineAnalysisRefresh_.revision = request.revision;
     state_.pendingTimelineAnalysisRefresh_.difficultyId = request.difficultyId;
     state_.pendingTimelineAnalysisRefresh_.chartText = request.chartText;
-    state_.pendingTimelineAnalysisRefresh_.chineseUi = request.chineseUi;
+    state_.pendingTimelineAnalysisRefresh_.validationLocale = request.validationLocale;
     state_.pendingTimelineAnalysisRefresh_.timingMetadata = request.timingMetadata;
     state_.pendingTimelineAnalysisRefresh_.parseResult = state_.lastTimelineParseResult_;
     state_.pendingTimelineAnalysisRefresh_.noteMarkerSignature = state_.latestTimelineNoteMarkerSignature_;
@@ -169,7 +169,7 @@ void MainWindow::TimelineSection::dispatchTimelineAnalysisRefresh()
 
                 ValidationCacheEntry entry;
                 entry.chartText = result.chartText;
-                entry.chineseUi = result.validationReport.issues.isEmpty() ? UiText::isChineseUi() : result.chineseUi;
+                entry.validationLocale = result.validationReport.issues.isEmpty() ? uiValidationLocale() : result.validationLocale;
                 entry.timingMetadata = result.timingMetadata;
                 entry.ok = result.validationReport.ok;
                 entry.errorCount = result.validationReport.errorCount;

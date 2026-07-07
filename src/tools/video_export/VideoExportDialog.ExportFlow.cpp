@@ -673,7 +673,7 @@ void VideoExportDialog::browseOutputPath()
         : QString();
     const QString selected = QFileDialog::getSaveFileName(
         this,
-        l10n(QStringLiteral("Export Video"), QStringLiteral("瀵煎嚭瑙嗛")),
+        l10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")),
         initial,
         QStringLiteral("MP4 Video (*.mp4)")
     );

@@ -1,7 +1,9 @@
 #pragma once
 
+#include <QHash>
 #include <QJsonObject>
 #include <QString>
+#include <QStringList>
 
 namespace UiText {
 
@@ -20,6 +22,24 @@ enum class ThemePreference {
 
 QString text(const QString& key);
 bool isChineseUi();
+// Resolved UI language for this session (MIACODE_LANG env > stored preference
+// > system locale > English). Constant per session — changes apply on restart.
+LanguagePreference resolvedLanguage();
+// Single entry point for inline-localized strings; replaces the scattered
+// `isChineseUi() ? zh : en` ternaries and the per-file l10n/trText/
+// localizedText helpers. Chinese returns `zh`; Japanese returns `ja` when
+// provided, else the central zh-keyed dictionary (UiTextJaDictionary.cpp),
+// else `en`; every other language returns `en`. Simplified Chinese is the
+// reference language: author new UI strings as (en, zh) pairs and add the
+// Japanese translation to the dictionary — ui_text_locale_spec fails when a
+// pair is missing there, and when a zh string is edited without re-keying its
+// dictionary entry.
+QString localized(const QString& en, const QString& zh, const QString& ja = QString());
+// zh-text → Japanese dictionary backing localized() (UiTextJaDictionary.cpp).
+const QHash<QString, QString>& japaneseByChineseText();
+// Key-map drift guard for ui_text_locale_spec: descriptions of keys present
+// in one of zhMap/jaMap but missing from the other. Empty when in sync.
+QStringList translationKeyMismatches();
 LanguagePreference preferredLanguage();
 void setPreferredLanguage(LanguagePreference preference);
 ThemePreference preferredTheme();

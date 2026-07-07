@@ -575,7 +575,7 @@ private:
 
     struct ValidationCacheEntry {
         QString chartText;
-        bool chineseUi = false;
+        SimaiNativeValidationLocale validationLocale = SimaiNativeValidationLocale::English;
         miacode::simai::SimaiTimingMetadata timingMetadata;
         bool ok = true;
         int errorCount = 0;

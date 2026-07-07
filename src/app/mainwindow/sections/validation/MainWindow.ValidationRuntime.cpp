@@ -556,9 +556,13 @@ WrappedListEntryText buildMuriPanelEntryText(const MuriPanelEntry& entry, bool i
     const QColor summaryColor = ignoredInHeader
         ? UiTheme::colors().textMuted
         : severityColor(severity);
-    const QString alertText = QStringLiteral("[%1]").arg(muriAlertLevelDisplayName(entry.alertLevel, chineseUi));
-    const QString typeText = muriKindDisplayName(entry.kind, chineseUi);
+    const QString alertText = QStringLiteral("[%1]").arg(UiText::localized(
+        muriAlertLevelDisplayName(entry.alertLevel, false), muriAlertLevelDisplayName(entry.alertLevel, true)));
+    const QString typeText = UiText::localized(
+        muriKindDisplayName(entry.kind, false), muriKindDisplayName(entry.kind, true));
     const QString locationText = muriLocationText(entry.line, entry.col);
+    // Muri detail text stays English/Chinese only: the detail localizer is a
+    // text transform, not a table — Japanese falls back to English here.
     const QString detailText = localizeMuriDetail(entry.rawDetail, chineseUi).trimmed();
     const QString summaryText = QStringLiteral("%1 %2 %3").arg(alertText, typeText, locationText);
     QString contentHtml = QStringLiteral("<span style=\"font-weight:700;color:%1;\">%2</span>")
@@ -646,20 +650,20 @@ void MainWindow::ValidationSection::showIssueListContextMenu(QListWidget* list, 
     styleRoundedMenu(menu);
 
     QAction* copyAction = menu.addAction(
-        UiText::isChineseUi() ? QStringLiteral("复制信息") : QStringLiteral("Copy Info")
+        UiText::localized(QStringLiteral("Copy Info"), QStringLiteral("复制信息"))
     );
     connect(copyAction, &QAction::triggered, &owner_, [this, item]() {
         const QString text = item->toolTip().trimmed();
         QGuiApplication::clipboard()->setText(text);
         if (owner_.statusBar() != nullptr) {
             owner_.statusBar()->showMessage(
-                UiText::isChineseUi() ? QStringLiteral("已复制信息。") : QStringLiteral("Issue info copied.")
+                UiText::localized(QStringLiteral("Issue info copied."), QStringLiteral("已复制信息。"))
             );
         }
     });
 
     QAction* jumpAction = menu.addAction(
-        UiText::isChineseUi() ? QStringLiteral("跳转到源") : QStringLiteral("Jump to Source")
+        UiText::localized(QStringLiteral("Jump to Source"), QStringLiteral("跳转到源"))
     );
     connect(jumpAction, &QAction::triggered, &owner_, [this, item, muriList]() {
         if (muriList) {
@@ -672,10 +676,8 @@ void MainWindow::ValidationSection::showIssueListContextMenu(QListWidget* list, 
     if (!issueTypeKey.isEmpty()) {
         QAction* ignoreAction = menu.addAction(
             ignoredInHeader
-                ? (UiText::isChineseUi() ? QStringLiteral("取消忽视该类型提示")
-                                         : QStringLiteral("Stop Ignoring This Issue Type"))
-                : (UiText::isChineseUi() ? QStringLiteral("忽视该类型提示")
-                                         : QStringLiteral("Ignore This Issue Type"))
+                ? (UiText::localized(QStringLiteral("Stop Ignoring This Issue Type"), QStringLiteral("取消忽视该类型提示")))
+                : (UiText::localized(QStringLiteral("Ignore This Issue Type"), QStringLiteral("忽视该类型提示")))
         );
         connect(ignoreAction, &QAction::triggered, &owner_, [this, issueTypeKey, ignoredInHeader]() {
             const MainWindow::BottomTabsTabId previousTabId = owner_.currentBottomTabsTabId();
@@ -748,9 +750,7 @@ void MainWindow::ValidationSection::rebuildMuriDiagnosticsPanel()
         state_.muriStaticReferences_);
     if (alignedMuriReport.diagnostics.isEmpty() && alignedStaticReferences.isEmpty()) {
         auto* item = new QListWidgetItem(
-            UiText::isChineseUi()
-                ? QStringLiteral("未检测到无理。")
-                : QStringLiteral("No muri issues detected."),
+            UiText::localized(QStringLiteral("No muri issues detected."), QStringLiteral("未检测到无理。")),
             ui_.muriList_
         );
         item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
@@ -783,7 +783,8 @@ void MainWindow::ValidationSection::rebuildMuriDiagnosticsPanel()
     for (const MuriPanelEntry& entry : entries) {
         const QString issueTypeKey = muriIssueTypeKey(entry.kind);
         const bool ignoredInHeader = isIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey);
-        const QString title = muriKindDisplayName(entry.kind, UiText::isChineseUi());
+        const QString title = UiText::localized(
+            muriKindDisplayName(entry.kind, false), muriKindDisplayName(entry.kind, true));
         const WrappedListEntryText text = buildMuriPanelEntryText(entry, ignoredInHeader);
         QListWidgetItem* item = addWrappedListEntry(
             ui_.muriList_,
@@ -890,11 +891,11 @@ void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
     }
 
     const QString chartText = owner_.activeChartText();
-    const bool chineseUi = UiText::isChineseUi();
+    const SimaiNativeValidationLocale validationLocale = uiValidationLocale();
     const miacode::simai::SimaiTimingMetadata timingMetadata = owner_.currentTimingMetadata();
     const ValidationCacheEntry& entry = it.value();
     if (entry.chartText != chartText
-        || entry.chineseUi != chineseUi
+        || entry.validationLocale != validationLocale
         || entry.timingMetadata != timingMetadata) {
         clearValidationErrors();
         clearValidationDecorations();
@@ -906,9 +907,7 @@ void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
     state_.validationDecorations_.clear();
     if (entry.issues.isEmpty() && ui_.errorList_ != nullptr) {
         auto* item = new QListWidgetItem(
-            UiText::isChineseUi()
-                ? QStringLiteral("未检测到语法错误。")
-                : QStringLiteral("No syntax errors detected."),
+            UiText::localized(QStringLiteral("No syntax errors detected."), QStringLiteral("未检测到语法错误。")),
             ui_.errorList_
         );
         item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
@@ -945,7 +944,7 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
 
     const int difficultyId = owner_.activeDifficultyId();
     const QString chartText = owner_.activeChartText();
-    const bool chineseUi = UiText::isChineseUi();
+    const SimaiNativeValidationLocale validationLocale = uiValidationLocale();
     const miacode::simai::SimaiTimingMetadata timingMetadata = owner_.currentTimingMetadata();
     const SimaiNativeParseResult* cachedLenientResult =
         (state_.lastTimelineParseDifficultyId_ == difficultyId
@@ -958,19 +957,16 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
     const auto cacheIt = state_.validationCacheByDifficulty_.constFind(difficultyId);
     if (cacheIt != state_.validationCacheByDifficulty_.constEnd()
         && cacheIt->chartText == chartText
-        && cacheIt->chineseUi == chineseUi
+        && cacheIt->validationLocale == validationLocale
         && cacheIt->timingMetadata == timingMetadata) {
         entry = cacheIt.value();
     } else {
         QElapsedTimer reportTimer;
         reportTimer.start();
-        const SimaiNativeValidationLocale locale = chineseUi
-            ? SimaiNativeValidationLocale::Chinese
-            : SimaiNativeValidationLocale::English;
         const SimaiNativeValidationReport report =
-            SimaiNativeParser::buildValidationReport(chartText, locale, cachedLenientResult, timingMetadata);
+            SimaiNativeParser::buildValidationReport(chartText, validationLocale, cachedLenientResult, timingMetadata);
         entry.chartText = chartText;
-        entry.chineseUi = chineseUi;
+        entry.validationLocale = validationLocale;
         entry.timingMetadata = timingMetadata;
         entry.ok = report.ok;
         entry.errorCount = report.errorCount;
@@ -1011,9 +1007,7 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
     state_.validationDecorations_.clear();
     if (entry.issues.isEmpty() && ui_.errorList_ != nullptr) {
         auto* item = new QListWidgetItem(
-            UiText::isChineseUi()
-                ? QStringLiteral("未检测到语法错误。")
-                : QStringLiteral("No syntax errors detected."),
+            UiText::localized(QStringLiteral("No syntax errors detected."), QStringLiteral("未检测到语法错误。")),
             ui_.errorList_
         );
         item->setFlags(item->flags() & ~Qt::ItemIsEnabled);

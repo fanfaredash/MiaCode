@@ -1119,8 +1119,8 @@ void MainWindow::WindowSection::updateOutlineDockCollapseButton()
     owner_.outlineCollapseButton_->setText(owner_.outlineDockCollapsed_ ? QStringLiteral("▶") : QStringLiteral("◀"));
     owner_.outlineCollapseButton_->setToolTip(
         owner_.outlineDockCollapsed_
-            ? (UiText::isChineseUi() ? QStringLiteral("展开左侧字段栏") : QStringLiteral("Expand left sidebar"))
-            : (UiText::isChineseUi() ? QStringLiteral("折叠左侧字段栏") : QStringLiteral("Collapse left sidebar"))
+            ? (UiText::localized(QStringLiteral("Expand left sidebar"), QStringLiteral("展开左侧字段栏")))
+            : (UiText::localized(QStringLiteral("Collapse left sidebar"), QStringLiteral("折叠左侧字段栏")))
     );
 }
 

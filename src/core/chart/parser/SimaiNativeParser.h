@@ -26,6 +26,7 @@ struct SimaiNativeParseResult {
 enum class SimaiNativeValidationLocale {
     English,
     Chinese,
+    Japanese,
 };
 
 enum class SimaiNativeValidationSeverity {

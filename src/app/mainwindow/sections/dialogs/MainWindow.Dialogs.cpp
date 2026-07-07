@@ -245,7 +245,7 @@ void MainWindow::DialogsSection::showMediaOperationCompleteDialog(
     );
     dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     QPushButton* openButton = dialog.addButton(
-        UiText::isChineseUi() ? QStringLiteral("打开文件夹") : QStringLiteral("Open Folder"),
+        UiText::localized(QStringLiteral("Open Folder"), QStringLiteral("打开文件夹")),
         QMessageBox::AcceptRole
     );
     dialog.addButton(uiText("action.close", "Close"), QMessageBox::RejectRole);

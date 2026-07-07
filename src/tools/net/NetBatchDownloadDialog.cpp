@@ -134,7 +134,7 @@ protected:
 
 QString trText(const char* zh, const char* en)
 {
-    return UiText::isChineseUi() ? QString::fromUtf8(zh) : QString::fromLatin1(en);
+    return UiText::localized(QString::fromLatin1(en), QString::fromUtf8(zh));
 }
 
 QString logTimestamp()

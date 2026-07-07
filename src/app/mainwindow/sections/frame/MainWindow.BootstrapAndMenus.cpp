@@ -122,7 +122,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     fileMenu->addAction(owner_.saveAsAction_);
 
     owner_.packAsZipAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("导出为ZIP") : QStringLiteral("Export as ZIP..."),
+        UiText::localized(QStringLiteral("Export as ZIP..."), QStringLiteral("导出为ZIP")),
         &owner_
     );
     connect(owner_.packAsZipAction_, &QAction::triggered, &owner_, &MainWindow::onPackAsZip);
@@ -143,7 +143,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     fileMenu->addAction(quitAction);
 
     owner_.findReplaceAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("查找/替换") : QStringLiteral("Find/Replace"),
+        UiText::localized(QStringLiteral("Find/Replace"), QStringLiteral("查找/替换")),
         &owner_
     );
     ShortcutRegistry::instance().applyShortcut(
@@ -354,7 +354,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     editMenu->addSeparator();
 
     owner_.latencyDetectorAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("BPM && 延迟检测") : QStringLiteral("BPM && Latency"),
+        UiText::localized(QStringLiteral("BPM && Latency"), QStringLiteral("BPM && 延迟检测")),
         &owner_);
     connect(owner_.latencyDetectorAction_, &QAction::triggered, &owner_, [this]() {
         owner_.switchToLatencyField();
@@ -363,34 +363,34 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     editMenu->addSeparator();
 
     owner_.prependTrackSilenceAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("音频开头静音处理") : QStringLiteral("Prepend Track Silence..."),
+        UiText::localized(QStringLiteral("Prepend Track Silence..."), QStringLiteral("音频开头静音处理")),
         &owner_
     );
     connect(owner_.prependTrackSilenceAction_, &QAction::triggered, &owner_, &MainWindow::onPrependTrackSilence);
     owner_.prependPvBlackAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("视频开头黑幕处理") : QStringLiteral("Prepend PV Black Screen..."),
+        UiText::localized(QStringLiteral("Prepend PV Black Screen..."), QStringLiteral("视频开头黑幕处理")),
         &owner_
     );
     connect(owner_.prependPvBlackAction_, &QAction::triggered, &owner_, &MainWindow::onPrependPvBlack);
     owner_.compressBackgroundVideoAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("视频压缩") : QStringLiteral("Compress Video..."),
+        UiText::localized(QStringLiteral("Compress Video..."), QStringLiteral("视频压缩")),
         &owner_
     );
     connect(owner_.compressBackgroundVideoAction_, &QAction::triggered, &owner_, &MainWindow::onCompressBackgroundVideo);
     owner_.convertTrackTo44100HzAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("采样率转换") : QStringLiteral("Sample Rate..."),
+        UiText::localized(QStringLiteral("Sample Rate..."), QStringLiteral("采样率转换")),
         &owner_
     );
     connect(owner_.convertTrackTo44100HzAction_, &QAction::triggered, &owner_, &MainWindow::onConvertTrackTo44100Hz);
 
     owner_.netBatchDownloadAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("Net 批量下载...") : QStringLiteral("Net Batch Download..."),
+        UiText::localized(QStringLiteral("Net Batch Download..."), QStringLiteral("Net 批量下载...")),
         &owner_
     );
     connect(owner_.netBatchDownloadAction_, &QAction::triggered, &owner_, &MainWindow::onNetBatchDownload);
 
     owner_.normalizeWholeChartAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("谱面整理") : QStringLiteral("Format Chart"),
+        UiText::localized(QStringLiteral("Format Chart"), QStringLiteral("谱面整理")),
         &owner_
     );
     connect(owner_.normalizeWholeChartAction_, &QAction::triggered, &owner_, &MainWindow::onNormalizeWholeChart);
@@ -437,7 +437,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
 
     transformMenu->addSeparator();
     owner_.transformRaiseSubdivisionAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("分音提升一档") : QStringLiteral("Subdivision +1"),
+        UiText::localized(QStringLiteral("Subdivision +1"), QStringLiteral("分音提升一档")),
         &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.transformRaiseSubdivisionAction_,
@@ -447,7 +447,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     transformMenu->addAction(owner_.transformRaiseSubdivisionAction_);
 
     owner_.transformLowerSubdivisionAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("分音降低一档") : QStringLiteral("Subdivision -1"),
+        UiText::localized(QStringLiteral("Subdivision -1"), QStringLiteral("分音降低一档")),
         &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.transformLowerSubdivisionAction_,
@@ -457,7 +457,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     transformMenu->addAction(owner_.transformLowerSubdivisionAction_);
 
     owner_.transformRaiseSubdivisionHalfStepAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("分音提升半档") : QStringLiteral("Subdivision +1/2"),
+        UiText::localized(QStringLiteral("Subdivision +1/2"), QStringLiteral("分音提升半档")),
         &owner_);
     ShortcutRegistry::instance().applyShortcuts(
         owner_.transformRaiseSubdivisionHalfStepAction_,
@@ -467,7 +467,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     transformMenu->addAction(owner_.transformRaiseSubdivisionHalfStepAction_);
 
     owner_.transformLowerSubdivisionHalfStepAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("分音降低半档") : QStringLiteral("Subdivision -1/2"),
+        UiText::localized(QStringLiteral("Subdivision -1/2"), QStringLiteral("分音降低半档")),
         &owner_);
     ShortcutRegistry::instance().applyShortcuts(
         owner_.transformLowerSubdivisionHalfStepAction_,
@@ -478,7 +478,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     transformMenu->addSeparator();
 
     owner_.transformClearCompleteElementsAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("一键清空") : QStringLiteral("Clear Elements"),
+        UiText::localized(QStringLiteral("Clear Elements"), QStringLiteral("一键清空")),
         &owner_);
     ShortcutRegistry::instance().applyShortcut(
         owner_.transformClearCompleteElementsAction_,
@@ -607,7 +607,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     const QIcon unselectedRenderModeIcon = makeMenuSelectionCheckIcon(UiTheme::colors().accent, false);
 
     owner_.renderModeNativeAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("预览模式：谱面确认") : QStringLiteral("Preview Mode: Chart Review"),
+        UiText::localized(QStringLiteral("Preview Mode: Chart Review"), QStringLiteral("预览模式：谱面确认")),
         &owner_
     );
     owner_.renderModeNativeAction_->setCheckable(true);
@@ -622,7 +622,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     previewMenu->addAction(owner_.renderModeNativeAction_);
 
     owner_.renderModeMaimuriDxAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("预览模式：无理检测") : QStringLiteral("Preview Mode: Muri Check"),
+        UiText::localized(QStringLiteral("Preview Mode: Muri Check"), QStringLiteral("预览模式：无理检测")),
         &owner_
     );
     owner_.renderModeMaimuriDxAction_->setCheckable(true);
@@ -637,7 +637,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     previewMenu->addAction(owner_.renderModeMaimuriDxAction_);
 
     owner_.editStaticTapOnSlideThresholdAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("撞尾阈值...") : QStringLiteral("Tap-On-Slide Threshold..."),
+        UiText::localized(QStringLiteral("Tap-On-Slide Threshold..."), QStringLiteral("撞尾阈值...")),
         &owner_
     );
     connect(
@@ -662,7 +662,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     previewMenu->addAction(owner_.skinSettingsAction_);
 
     owner_.swapWorkspaceSidesAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("左右面板互换") : QStringLiteral("Swap Side Panels"),
+        UiText::localized(QStringLiteral("Swap Side Panels"), QStringLiteral("左右面板互换")),
         &owner_
     );
     owner_.swapWorkspaceSidesAction_->setCheckable(true);
@@ -675,7 +675,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     previewMenu->addAction(owner_.swapWorkspaceSidesAction_);
 
     auto* officialChartMirrorAction = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("官谱镜像站") : QStringLiteral("Official Chart Mirror"),
+        UiText::localized(QStringLiteral("Official Chart Mirror"), QStringLiteral("官谱镜像站")),
         &owner_
     );
     connect(officialChartMirrorAction, &QAction::triggered, &owner_, [openExternalUrl]() {
@@ -684,7 +684,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     helpMenu->addAction(officialChartMirrorAction);
 
     auto* simaiWikiAction = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("simaiwiki") : QStringLiteral("simaiwiki"),
+        UiText::localized(QStringLiteral("simaiwiki"), QStringLiteral("simaiwiki")),
         &owner_
     );
     connect(simaiWikiAction, &QAction::triggered, &owner_, [openExternalUrl]() {

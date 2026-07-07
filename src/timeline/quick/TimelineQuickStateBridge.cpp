@@ -293,8 +293,12 @@ QHash<quint64, QString> muriMarkerTooltipsForReport(const MuriAnalysisReport& re
     for (const MuriDiagnostic& diagnostic : report.diagnostics) {
         const quint64 locationId = timelineRenderLocationId(diagnostic.line, diagnostic.col);
         QString text = QStringLiteral("%1 · %2")
-                           .arg(muriAlertLevelDisplayName(diagnostic.alertLevel, chineseUi))
-                           .arg(muriKindDisplayName(diagnostic.kind, chineseUi));
+                           .arg(UiText::localized(
+                               muriAlertLevelDisplayName(diagnostic.alertLevel, false),
+                               muriAlertLevelDisplayName(diagnostic.alertLevel, true)))
+                           .arg(UiText::localized(
+                               muriKindDisplayName(diagnostic.kind, false),
+                               muriKindDisplayName(diagnostic.kind, true)));
         const QString detail = localizeMuriDetail(diagnostic.detail, chineseUi).trimmed();
         if (!detail.isEmpty()) {
             text += QStringLiteral("\n") + detail;
