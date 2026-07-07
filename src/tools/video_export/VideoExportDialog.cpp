@@ -115,16 +115,14 @@ QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
 {
     switch (mode) {
     case PreviewBackgroundScaleMode::FitContain:
-        return uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)"));
+        return UiText::text(QStringLiteral("dialog.video_export.option.scale.fit"));
     case PreviewBackgroundScaleMode::SquareFitContain:
-        return uiText("dialog.video_export.option.scale.square_fit", QStringLiteral("1:1 Fit (center square)"));
+        return UiText::text(QStringLiteral("dialog.video_export.option.scale.square_fit"));
     case PreviewBackgroundScaleMode::InnerCircleFitOuterFill:
-        return uiText(
-            "dialog.video_export.option.scale.inner_circle_fit_outer_fill",
-            QStringLiteral("Inner 1:1 Fit + Outer Fill"));
+        return UiText::text(QStringLiteral("dialog.video_export.option.scale.inner_circle_fit_outer_fill"));
     case PreviewBackgroundScaleMode::FillCrop:
     default:
-        return uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)"));
+        return UiText::text(QStringLiteral("dialog.video_export.option.scale.fill"));
     }
 }
 
@@ -608,7 +606,7 @@ VideoExportDialog::VideoExportDialog(
     , sharedSettingsSnapshotCallback_(std::move(sharedSettingsSnapshotCallback))
     , totalDurationSeconds_(qMax(0.0, baseTask.contentDurationSeconds))
 {
-    setWindowTitle(uiText("dialog.video_export.title", QStringLiteral("Export Video")));
+    setWindowTitle(UiText::text(QStringLiteral("dialog.video_export.title")));
     setModal(true);
     setMinimumWidth(kDialogMinWidth);
     resize(680, 360);
@@ -786,7 +784,7 @@ VideoExportDialog::VideoExportDialog(
         });
     }
     resolutionButton_->setMenu(resolutionMenu_);
-    addOptionField(0, 0, uiText("dialog.video_export.resolution", QStringLiteral("Resolution")), resolutionButton_);
+    addOptionField(0, 0, UiText::text(QStringLiteral("dialog.video_export.resolution")), resolutionButton_);
 
     // FPS dropdown (row 0, col 1).
     selectedFps_ = baseTask_.fps >= 90 ? 120 : 60;
@@ -804,7 +802,7 @@ VideoExportDialog::VideoExportDialog(
         });
     }
     fpsButton_->setMenu(fpsMenu_);
-    addOptionField(0, 1, uiText("dialog.video_export.fps", QStringLiteral("FPS")), fpsButton_);
+    addOptionField(0, 1, UiText::text(QStringLiteral("dialog.video_export.fps")), fpsButton_);
 
     // Audio quality dropdown (row 1, col 0) — picks AAC bitrate forwarded
     // to ffmpeg as `-b:a <kbps>k`. Default 192 is a step above the previous
@@ -831,7 +829,7 @@ VideoExportDialog::VideoExportDialog(
     addOptionField(
         1,
         0,
-        uiText("dialog.video_export.audio_bitrate", QStringLiteral("Audio quality")),
+        UiText::text(QStringLiteral("dialog.video_export.audio_bitrate")),
         audioBitrateButton_
     );
 
@@ -842,7 +840,7 @@ VideoExportDialog::VideoExportDialog(
     UiTheme::styleRoundedMenu(*presetMenu_);
     addDialogMenuChoice(
         presetMenu_,
-        uiText("dialog.video_export.preset.fast", QStringLiteral("Fast")),
+        UiText::text(QStringLiteral("dialog.video_export.preset.fast")),
         [this]() {
             selectedPreset_ = VideoExportPreset::Fast;
             if (presetButton_ != nullptr) {
@@ -853,7 +851,7 @@ VideoExportDialog::VideoExportDialog(
     );
     addDialogMenuChoice(
         presetMenu_,
-        uiText("dialog.video_export.preset.high_quality", QStringLiteral("High Quality")),
+        UiText::text(QStringLiteral("dialog.video_export.preset.high_quality")),
         [this]() {
             selectedPreset_ = VideoExportPreset::HighQuality;
             if (presetButton_ != nullptr) {
@@ -866,7 +864,7 @@ VideoExportDialog::VideoExportDialog(
     addOptionField(
         1,
         1,
-        uiText("dialog.video_export.preset", QStringLiteral("Export Quality")),
+        UiText::text(QStringLiteral("dialog.video_export.preset")),
         presetButton_
     );
 
@@ -878,7 +876,7 @@ VideoExportDialog::VideoExportDialog(
     rangeLayout->setSpacing(6);
 
     auto* rangeTitleLabel = new QLabel(
-        uiText("dialog.video_export.section.range", QStringLiteral("Export Range")),
+        UiText::text(QStringLiteral("dialog.video_export.section.range")),
         rangeContent_
     );
     QFont rangeTitleFont = rangeTitleLabel->font();
@@ -917,7 +915,7 @@ VideoExportDialog::VideoExportDialog(
     track->setTotalSeconds(totalDurationSeconds_);
     track->setRange(defaultStart, defaultEnd);
     track->setPlayheadSeconds(previewCursorSecond_);
-    track->setIntroBannerText(uiText("dialog.video_export.range.intro_tag", QStringLiteral("intro")));
+    track->setIntroBannerText(UiText::text(QStringLiteral("dialog.video_export.range.intro_tag")));
     track->onPressed = [this]() {
         // Trimming should reveal frames, not fight playback -- pause on grab.
         if (isPreviewPlaying()) {
@@ -945,14 +943,14 @@ VideoExportDialog::VideoExportDialog(
     auto* startRowLayout = new QHBoxLayout(startRow);
     startRowLayout->setContentsMargins(0, 0, 0, 0);
     startRowLayout->setSpacing(kSetButtonLeftGap);
-    auto* startLabel = new QLabel(uiText("dialog.video_export.range.start", QStringLiteral("Start")), startRow);
+    auto* startLabel = new QLabel(UiText::text(QStringLiteral("dialog.video_export.range.start")), startRow);
     startLabel->setFixedWidth(kRangeLabelWidth);
     startLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     auto* setStartButton = new QPushButton(
-        uiText("dialog.video_export.range.set_current", QStringLiteral("Set to current value")), startRow);
+        UiText::text(QStringLiteral("dialog.video_export.range.set_current")), startRow);
     setStartButton_ = setStartButton;
     setStartButton->setToolTip(
-        uiText("dialog.video_export.range.set_current.tip", QStringLiteral("Set to the current preview position")));
+        UiText::text(QStringLiteral("dialog.video_export.range.set_current.tip")));
     setStartButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     startRowLayout->addWidget(startLabel, 0);
     startRowLayout->addWidget(startSecondSpin_, 1);
@@ -963,14 +961,14 @@ VideoExportDialog::VideoExportDialog(
     auto* endRowLayout = new QHBoxLayout(endRow);
     endRowLayout->setContentsMargins(0, 0, 0, 0);
     endRowLayout->setSpacing(kSetButtonLeftGap);
-    auto* endLabel = new QLabel(uiText("dialog.video_export.range.end", QStringLiteral("End")), endRow);
+    auto* endLabel = new QLabel(UiText::text(QStringLiteral("dialog.video_export.range.end")), endRow);
     endLabel->setFixedWidth(kRangeLabelWidth);
     endLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     auto* setEndButton = new QPushButton(
-        uiText("dialog.video_export.range.set_current", QStringLiteral("Set to current value")), endRow);
+        UiText::text(QStringLiteral("dialog.video_export.range.set_current")), endRow);
     setEndButton_ = setEndButton;
     setEndButton->setToolTip(
-        uiText("dialog.video_export.range.set_current.tip", QStringLiteral("Set to the current preview position")));
+        UiText::text(QStringLiteral("dialog.video_export.range.set_current.tip")));
     setEndButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     endRowLayout->addWidget(endLabel, 0);
     endRowLayout->addWidget(endSecondSpin_, 1);
@@ -1044,7 +1042,7 @@ VideoExportDialog::VideoExportDialog(
     stopPreviewButton_->setIconSize(QSize(16, 16));
     stopPreviewButton_->setFixedSize(QSize(kPreviewControlButtonWidth, kPreviewControlButtonHeight));
     stopPreviewButton_->setIcon(makePreviewStopIcon(UiTheme::colors().iconPrimary));
-    stopPreviewButton_->setToolTip(uiText("dialog.video_export.preview.stop", QStringLiteral("Stop")));
+    stopPreviewButton_->setToolTip(UiText::text(QStringLiteral("dialog.video_export.preview.stop")));
     stopPreviewButton_->setAutoRaise(false);
     stopPreviewButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet());
     previewRangeButton_ = new QToolButton(previewControlsRow);
@@ -1082,12 +1080,12 @@ VideoExportDialog::VideoExportDialog(
     showTimestampCheck_->setChecked(baseTask_.showTimestamp);
     showTimestampCheck_->setText(UiText::text(QStringLiteral("video_export.show_bottom_left_timestamp")));
     showObjectStatsCheck_ = new QCheckBox(
-        uiText("dialog.video_export.option.show_object_stats", QStringLiteral("Show object stats")),
+        UiText::text(QStringLiteral("dialog.video_export.option.show_object_stats")),
         optionsContent_
     );
     showObjectStatsCheck_->setChecked(baseTask_.showObjectStatsHud);
     showChartInfoCheck_ = new QCheckBox(
-        uiText("dialog.video_export.option.show_chart_info", QStringLiteral("Show chart info")),
+        UiText::text(QStringLiteral("dialog.video_export.option.show_chart_info")),
         optionsContent_
     );
     showChartInfoCheck_->setChecked(baseTask_.showChartInfoHud);
@@ -1181,7 +1179,7 @@ VideoExportDialog::VideoExportDialog(
     };
     QWidget* outerBrightnessOption = addPercentSliderOption(
         optionsContent_,
-        uiText("dialog.video_export.option.brightness_outer", QStringLiteral("Brightness (Outer)")),
+        UiText::text(QStringLiteral("dialog.video_export.option.brightness_outer")),
         0,
         100,
         1,
@@ -1191,7 +1189,7 @@ VideoExportDialog::VideoExportDialog(
     );
     QWidget* innerBrightnessOption = addPercentSliderOption(
         optionsContent_,
-        uiText("dialog.video_export.option.brightness_inner", QStringLiteral("Brightness (Inner)")),
+        UiText::text(QStringLiteral("dialog.video_export.option.brightness_inner")),
         0,
         100,
         1,
@@ -1199,8 +1197,8 @@ VideoExportDialog::VideoExportDialog(
         &brightnessInnerSlider_,
         &brightnessInnerValueLabel_
     );
-    setSliderOptionTitle(outerBrightnessOption, uiText("dialog.video_export.option.brightness_outer", QStringLiteral("Brightness (Outer)")));
-    setSliderOptionTitle(innerBrightnessOption, uiText("dialog.video_export.option.brightness_inner", QStringLiteral("Brightness (Inner)")));
+    setSliderOptionTitle(outerBrightnessOption, UiText::text(QStringLiteral("dialog.video_export.option.brightness_outer")));
+    setSliderOptionTitle(innerBrightnessOption, UiText::text(QStringLiteral("dialog.video_export.option.brightness_inner")));
     optionsLayout->addWidget(outerBrightnessOption, 1, 0, 1, 1);
     optionsLayout->addWidget(innerBrightnessOption, 1, 1, 1, 1);
     QWidget* layoutSquareScaleOption = addPercentSliderOption(
@@ -1311,27 +1309,23 @@ VideoExportDialog::VideoExportDialog(
         gameplayFlowLayout,
         0,
         0,
-        uiText("dialog.video_export.option.tap_flow_speed", QStringLiteral("Tap Flow Speed")),
+        UiText::text(QStringLiteral("dialog.video_export.option.tap_flow_speed")),
         tapFlowSpeedEdit_);
     addGameplayFlowField(
         gameplayFlowControls,
         gameplayFlowLayout,
         0,
         1,
-        uiText("dialog.video_export.option.touch_flow_speed", QStringLiteral("Touch Flow Speed")),
+        UiText::text(QStringLiteral("dialog.video_export.option.touch_flow_speed")),
         touchFlowSpeedEdit_);
     gameplayPageLayout_->addWidget(gameplayFlowControls, 0, Qt::AlignTop);
     gameplayPageLayout_->addStretch(1);
     // 皮肤 tab carries only the injected owner-wired panel (buildSkinSettings).
     skinPageLayout_->addStretch(1);
-    const QString scaleFillLabel = uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)"));
-    const QString scaleFitLabel = uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)"));
-    const QString scaleSquareFitLabel = uiText(
-        "dialog.video_export.option.scale.square_fit",
-        QStringLiteral("1:1 Fit (center square)"));
-    const QString scaleInnerCircleFitOuterFillLabel = uiText(
-        "dialog.video_export.option.scale.inner_circle_fit_outer_fill",
-        QStringLiteral("Inner 1:1 Fit + Outer Fill"));
+    const QString scaleFillLabel = UiText::text(QStringLiteral("dialog.video_export.option.scale.fill"));
+    const QString scaleFitLabel = UiText::text(QStringLiteral("dialog.video_export.option.scale.fit"));
+    const QString scaleSquareFitLabel = UiText::text(QStringLiteral("dialog.video_export.option.scale.square_fit"));
+    const QString scaleInnerCircleFitOuterFillLabel = UiText::text(QStringLiteral("dialog.video_export.option.scale.inner_circle_fit_outer_fill"));
     selectedBackgroundScaleMode_ = baseTask_.backgroundScaleMode;
     backgroundScaleModeButton_ = createDialogMenuButton(
         optionsContent_,
@@ -1381,7 +1375,7 @@ VideoExportDialog::VideoExportDialog(
     backgroundScaleModeLayout->setContentsMargins(0, 0, 0, 0);
     backgroundScaleModeLayout->setSpacing(6);
     auto* backgroundScaleModeLabel = new QLabel(
-        uiText("dialog.video_export.option.scale_mode", QStringLiteral("Background / PV Scale Mode")),
+        UiText::text(QStringLiteral("dialog.video_export.option.scale_mode")),
         backgroundScaleModeRow
     );
     backgroundScaleModeLayout->addWidget(backgroundScaleModeLabel, 0);
@@ -1594,12 +1588,12 @@ VideoExportDialog::VideoExportDialog(
 
     buttonBox_ = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
     QDialogButtonBox* buttonBox = buttonBox_;
-    exportButton_ = buttonBox->addButton(uiText("dialog.video_export.button.export", QStringLiteral("Export")), QDialogButtonBox::AcceptRole);
+    exportButton_ = buttonBox->addButton(UiText::text(QStringLiteral("dialog.video_export.button.export")), QDialogButtonBox::AcceptRole);
     exportButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(true));
     exportButton_->setMinimumWidth(kDialogActionButtonMinWidth);
     cancelButton_ = buttonBox->button(QDialogButtonBox::Cancel);
     if (cancelButton_ != nullptr) {
-        cancelButton_->setText(uiText("dialog.video_export.button.cancel", QStringLiteral("Cancel")));
+        cancelButton_->setText(UiText::text(QStringLiteral("dialog.video_export.button.cancel")));
         cancelButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
         cancelButton_->setMinimumWidth(kDialogActionButtonMinWidth);
     }
@@ -1939,11 +1933,11 @@ void VideoExportDialog::updatePreviewPlayPauseUi()
     const bool previewPlaying = rangePreviewPlaying_ || isPreviewPlaying();
     if (previewPlaying) {
         previewRangeButton_->setIcon(makePreviewPauseIcon(iconColor));
-        previewRangeButton_->setToolTip(uiText("dialog.video_export.preview.pause", QStringLiteral("Pause")));
+        previewRangeButton_->setToolTip(UiText::text(QStringLiteral("dialog.video_export.preview.pause")));
         previewRangeButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet(true));
     } else {
         previewRangeButton_->setIcon(makePreviewPlayIcon(iconColor));
-        previewRangeButton_->setToolTip(uiText("dialog.video_export.preview.play", QStringLiteral("Play")));
+        previewRangeButton_->setToolTip(UiText::text(QStringLiteral("dialog.video_export.preview.play")));
         previewRangeButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet());
     }
 }

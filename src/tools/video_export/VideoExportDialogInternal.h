@@ -37,20 +37,14 @@ inline int normaliseAudioBitrateKbps(int requested)
     return closest;
 }
 
-inline QString uiText(const char* key, const QString& fallback)
-{
-    const QString translated = UiText::text(QString::fromLatin1(key));
-    return translated.isEmpty() ? fallback : translated;
-}
-
 inline QString exportDialogPresetLabel(VideoExportPreset preset)
 {
     switch (preset) {
     case VideoExportPreset::HighQuality:
-        return uiText("dialog.video_export.preset.high_quality", QStringLiteral("High Quality"));
+        return UiText::text(QStringLiteral("dialog.video_export.preset.high_quality"));
     case VideoExportPreset::Fast:
     default:
-        return uiText("dialog.video_export.preset.fast", QStringLiteral("Fast"));
+        return UiText::text(QStringLiteral("dialog.video_export.preset.fast"));
     }
 }
 

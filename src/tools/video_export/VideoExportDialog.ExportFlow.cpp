@@ -851,7 +851,7 @@ void VideoExportDialog::startExport()
         UiDialogs::showMessageBox(
             QMessageBox::Warning,
             this,
-            uiText("dialog.video_export.title", QStringLiteral("Export Video")),
+            UiText::text(QStringLiteral("dialog.video_export.title")),
             errorMessage
         );
         return;
