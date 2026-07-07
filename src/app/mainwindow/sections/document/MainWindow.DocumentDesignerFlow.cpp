@@ -138,7 +138,7 @@ void MainWindow::DocumentSection::openPerDifficultyDesignerDialog()
 
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
     dialog.setModal(true);
-    dialog.setWindowTitle(UiText::localized(QStringLiteral("Designer management"), QStringLiteral("谱师名义管理")));
+    dialog.setWindowTitle(UiText::text(QStringLiteral("document.designer_management")));
     // Reuse the picker dialog's themed chrome (QLabel/QPushButton), then layer on:
     //  - a dark outer dialog (windowAltBg) so the content reads as a card on a
     //    dark page — matching the audio-settings dialog;
@@ -171,7 +171,7 @@ void MainWindow::DocumentSection::openPerDifficultyDesignerDialog()
     // The rows + checkbox live inside a titled card (like the "音频" group in
     // the audio-settings dialog); the OK/Cancel buttons stay outside it.
     auto* designerGroup = new QGroupBox(
-        UiText::localized(QStringLiteral("Designers"), QStringLiteral("谱师")),
+        UiText::text(QStringLiteral("document.designers")),
         &dialog);
     auto* groupLayout = new QVBoxLayout(designerGroup);
     groupLayout->setContentsMargins(12, 6, 12, 12);
@@ -187,9 +187,9 @@ void MainWindow::DocumentSection::openPerDifficultyDesignerDialog()
     bool localUnified = state_.unifiedDesignerEnabled_;
 
     auto* unifiedBox = new QCheckBox(
-        UiText::localized(QStringLiteral("All difficulties share this designer"), QStringLiteral("所有难度采用相同名义")),
+        UiText::text(QStringLiteral("document.all_difficulties_share_this_designer")),
         &dialog);
-    unifiedBox->setToolTip(UiText::localized(QStringLiteral("When checked, &des and every &des_N stay identical."), QStringLiteral("勾选后，&des 与每个难度的 &des_N 会保持一致。")));
+    unifiedBox->setToolTip(UiText::text(QStringLiteral("document.when_checked_des_and_every")));
     unifiedBox->setStyleSheet(UiTheme::darkAwareCheckBoxStyleSheet());
     {
         QSignalBlocker block(unifiedBox);
@@ -215,7 +215,7 @@ void MainWindow::DocumentSection::openPerDifficultyDesignerDialog()
         // A small marker shows which slots already have a chart, so a name on a
         // chart-less slot is an obvious "designer-only" entry.
         if (state_.document_.difficulty(id) == nullptr) {
-            label->setToolTip(UiText::localized(QStringLiteral("No chart yet — records &des_%1 only."), QStringLiteral("该难度暂无谱面，仅记录 &des_%1。")).arg(id));
+            label->setToolTip(UiText::text(QStringLiteral("document.no_chart_yet_records_des")).arg(id));
         }
         form->addRow(label, edit);
     }
@@ -373,7 +373,7 @@ bool MainWindow::DocumentSection::promptCanonicalDesignerName(const QStringList&
     }
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
     dialog.setModal(true);
-    dialog.setWindowTitle(UiText::localized(QStringLiteral("Pick the canonical designer"), QStringLiteral("选择统一的谱师名")));
+    dialog.setWindowTitle(UiText::text(QStringLiteral("document.pick_the_canonical_designer")));
     // Themed background and visible radio indicators (the Windows default
     // disc is nearly invisible against the dark card background).
     dialog.setStyleSheet(UiTheme::designerPickerDialogStyleSheet());
@@ -386,12 +386,7 @@ bool MainWindow::DocumentSection::promptCanonicalDesignerName(const QStringList&
     outerLayout->setContentsMargins(14, 14, 14, 12);
     outerLayout->setSpacing(10);
     auto* prompt = new QLabel(
-        UiText::localized(
-            QStringLiteral(
-                "Multiple distinct designer names were detected. Pick one to use everywhere, "
-                "or choose \"Clear all\" to empty every field."),
-            QStringLiteral(
-                "检测到多个不同的谱师名义，请选择一个作为统一名义（写入所有难度），或选择「直接清除」让所有字段置空。")),
+        UiText::text(QStringLiteral("document.multiple_distinct_designer_names_were_detected")),
         &dialog);
     prompt->setWordWrap(true);
     outerLayout->addWidget(prompt);
@@ -427,7 +422,7 @@ bool MainWindow::DocumentSection::promptCanonicalDesignerName(const QStringList&
     // selection"), so -1 would never round-trip back as the clear-all choice.
     const int kClearAllId = candidates.size();
     auto* clearAllRadio = new QRadioButton(
-        UiText::localized(QStringLiteral("Clear all"), QStringLiteral("直接清除")),
+        UiText::text(QStringLiteral("document.clear_all")),
         listHost);
     group->addButton(clearAllRadio, kClearAllId);
     listLayout->addWidget(clearAllRadio);

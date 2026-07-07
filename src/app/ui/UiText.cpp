@@ -938,9 +938,17 @@ const QHash<QString, QString>& enMap()
 
         {"dialogs.open_folder", "Open Folder"},
 
+        {"document.all_difficulties_share_this_designer", "All difficulties share this designer"},
+        {"document.clear_all", "Clear all"},
+        {"document.designer_management", "Designer management"},
+        {"document.designers", "Designers"},
         {"document.file_already_exists", "File Already Exists"},
         {"document.maidata_txt_already_exists_in", "maidata.txt already exists in the selected folder. Overwrite it?"},
+        {"document.multiple_distinct_designer_names_were_detected", "Multiple distinct designer names were detected. Pick one to use everywhere, or choose \"Clear all\" to empty every field."},
+        {"document.no_chart_yet_records_des", "No chart yet — records &des_%1 only."},
+        {"document.pick_the_canonical_designer", "Pick the canonical designer"},
         {"document.select_chart_folder", "Select Chart Folder"},
+        {"document.when_checked_des_and_every", "When checked, &des and every &des_N stay identical."},
 
         {"export.export_as_zip", "Export as ZIP"},
         {"export.exported_to_1_2_file", "Exported to:\n%1\n\n%2 file(s) included:\n%3"},
@@ -1782,9 +1790,17 @@ const QHash<QString, QString>& zhMap()
 
         {"dialogs.open_folder", "打开文件夹"},
 
+        {"document.all_difficulties_share_this_designer", "所有难度采用相同名义"},
+        {"document.clear_all", "直接清除"},
+        {"document.designer_management", "谱师名义管理"},
+        {"document.designers", "谱师"},
         {"document.file_already_exists", "文件已存在"},
         {"document.maidata_txt_already_exists_in", "所选文件夹下已存在 maidata.txt，是否覆盖？"},
+        {"document.multiple_distinct_designer_names_were_detected", "检测到多个不同的谱师名义，请选择一个作为统一名义（写入所有难度），或选择「直接清除」让所有字段置空。"},
+        {"document.no_chart_yet_records_des", "该难度暂无谱面，仅记录 &des_%1。"},
+        {"document.pick_the_canonical_designer", "选择统一的谱师名"},
         {"document.select_chart_folder", "选择谱面文件夹"},
+        {"document.when_checked_des_and_every", "勾选后，&des 与每个难度的 &des_N 会保持一致。"},
 
         {"export.export_as_zip", "导出为ZIP"},
         {"export.exported_to_1_2_file", "已导出到：\n%1\n\n包含 %2 个文件：\n%3"},
@@ -2619,9 +2635,17 @@ const QHash<QString, QString>& jaMap()
 
         {"dialogs.open_folder", "フォルダーを開く"},
 
+        {"document.all_difficulties_share_this_designer", "すべての難易度で同じ作者名を使用"},
+        {"document.clear_all", "すべて消去"},
+        {"document.designer_management", "譜面作者名の管理"},
+        {"document.designers", "譜面作者"},
         {"document.file_already_exists", "ファイルが既に存在します"},
         {"document.maidata_txt_already_exists_in", "選択したフォルダーに既に maidata.txt があります。上書きしますか？"},
+        {"document.multiple_distinct_designer_names_were_detected", "複数の異なる譜面作者名が検出されました。すべてで使用する名前を 1 つ選ぶか、「すべて消去」を選んで全フィールドを空にしてください。"},
+        {"document.no_chart_yet_records_des", "譜面がまだないため、&des_%1 のみ記録します。"},
+        {"document.pick_the_canonical_designer", "統一する作者名を選択"},
         {"document.select_chart_folder", "譜面フォルダーを選択"},
+        {"document.when_checked_des_and_every", "チェックすると &des と各難易度の &des_N が一致します。"},
 
         {"export.export_as_zip", "ZIP で出力"},
         {"export.exported_to_1_2_file", "出力先：\n%1\n\n%2 個のファイルを含みます：\n%3"},
