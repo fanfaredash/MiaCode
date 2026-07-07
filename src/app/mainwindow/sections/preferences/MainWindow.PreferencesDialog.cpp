@@ -71,7 +71,13 @@ QString shortcutSequenceKey(const QKeySequence& sequence)
 
 QString shortcutDefinitionLabel(const ShortcutRegistry::ShortcutDefinition& definition)
 {
-    return UiText::localized(definition.labelEn, definition.labelZh);
+    if (!definition.labelKey.isEmpty()) {
+        const QString label = UiText::text(definition.labelKey);
+        if (label != definition.labelKey) {
+            return label;
+        }
+    }
+    return definition.labelEn.isEmpty() ? definition.id : definition.labelEn;
 }
 
 QString conflictingShortcutLabel(
