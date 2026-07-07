@@ -927,6 +927,12 @@ const QHash<QString, QString>& enMap()
         {"cover.zoom_canvas_out", "Zoom canvas out"},
         {"cover.zoom_canvas_out_ctrl", "Zoom canvas out (Ctrl+-)"},
 
+        {"export.export_as_zip", "Export as ZIP"},
+        {"export.exported_to_1_2_file", "Exported to:\n%1\n\n%2 file(s) included:\n%3"},
+        {"export.packaging_1_2_3", "Packaging %1/%2\n%3"},
+        {"export.packaging_canceled", "Packaging canceled."},
+        {"export.packaging_failed_1", "Packaging failed.\n\n%1"},
+        {"export.preparing_package", "Preparing package..."},
         {"export.the_chart_is_empty_there", "The chart is empty; there is nothing to package."},
 
         {"export_page.batch_export", "Batch Export"},
@@ -1749,6 +1755,12 @@ const QHash<QString, QString>& zhMap()
         {"cover.zoom_canvas_out", "缩小画布视图"},
         {"cover.zoom_canvas_out_ctrl", "缩小画布视图（Ctrl+-）"},
 
+        {"export.export_as_zip", "导出为ZIP"},
+        {"export.exported_to_1_2_file", "已导出到：\n%1\n\n包含 %2 个文件：\n%3"},
+        {"export.packaging_1_2_3", "正在打包 %1/%2\n%3"},
+        {"export.packaging_canceled", "已取消打包。"},
+        {"export.packaging_failed_1", "打包失败。\n\n%1"},
+        {"export.preparing_package", "正在准备打包…"},
         {"export.the_chart_is_empty_there", "谱面为空，没有可打包的内容。"},
 
         {"export_page.batch_export", "批量导出"},
@@ -2564,6 +2576,12 @@ const QHash<QString, QString>& jaMap()
         {"cover.zoom_canvas_out", "キャンバスを縮小"},
         {"cover.zoom_canvas_out_ctrl", "キャンバスを縮小（Ctrl+-）"},
 
+        {"export.export_as_zip", "ZIP で出力"},
+        {"export.exported_to_1_2_file", "出力先：\n%1\n\n%2 個のファイルを含みます：\n%3"},
+        {"export.packaging_1_2_3", "パッケージ化中 %1/%2\n%3"},
+        {"export.packaging_canceled", "パッケージ化をキャンセルしました。"},
+        {"export.packaging_failed_1", "パッケージ化に失敗しました。\n\n%1"},
+        {"export.preparing_package", "パッケージ化を準備中…"},
         {"export.the_chart_is_empty_there", "譜面が空で、パッケージ化する内容がありません。"},
 
         {"export_page.batch_export", "一括出力"},

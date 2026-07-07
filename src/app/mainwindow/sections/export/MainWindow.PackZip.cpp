@@ -18,7 +18,7 @@ void MainWindow::ExportSection::onPackAsZip()
 {
     MC_OP("MainWindow::ExportSection::onPackAsZip");
 
-    const QString dialogTitle = UiText::localized(QStringLiteral("Export as ZIP"), QStringLiteral("导出为ZIP"));
+    const QString dialogTitle = UiText::text(QStringLiteral("export.export_as_zip"));
 
     // Flush the in-progress editor field into the document so the packaged
     // maidata.txt matches what the user sees (same contract as save-to-path).
@@ -43,9 +43,7 @@ void MainWindow::ExportSection::onPackAsZip()
             QMessageBox::Warning,
             &owner_,
             dialogTitle,
-            UiText::localized(
-                QStringLiteral("The chart is empty; there is nothing to package."),
-                QStringLiteral("谱面为空，没有可打包的内容。")));
+            UiText::text(QStringLiteral("export.the_chart_is_empty_there")));
         return;
     }
 
@@ -78,8 +76,8 @@ void MainWindow::ExportSection::onPackAsZip()
     // Progress dialog modeled on the batch-export one: window-modal, shows
     // immediately, cancelable.
     QProgressDialog progress(
-        UiText::localized(QStringLiteral("Preparing package..."), QStringLiteral("正在准备打包…")),
-        UiText::localized(QStringLiteral("Cancel"), QStringLiteral("取消")),
+        UiText::text(QStringLiteral("export.preparing_package")),
+        UiText::text(QStringLiteral("action.cancel")),
         0,
         100,
         &owner_);
@@ -104,7 +102,7 @@ void MainWindow::ExportSection::onPackAsZip()
         const int safeTotal = qMax(1, total);
         progress.setValue(qBound(0, qRound(static_cast<double>(current - 1) * 100.0 / safeTotal), 100));
         progress.setLabelText(
-            UiText::localized(QStringLiteral("Packaging %1/%2\n%3"), QStringLiteral("正在打包 %1/%2\n%3"))
+            UiText::text(QStringLiteral("export.packaging_1_2_3"))
                 .arg(current)
                 .arg(total)
                 .arg(entryName));
@@ -124,7 +122,7 @@ void MainWindow::ExportSection::onPackAsZip()
             QMessageBox::Information,
             &owner_,
             dialogTitle,
-            UiText::localized(QStringLiteral("Packaging canceled."), QStringLiteral("已取消打包。")));
+            UiText::text(QStringLiteral("export.packaging_canceled")));
         return;
     }
 
@@ -134,7 +132,7 @@ void MainWindow::ExportSection::onPackAsZip()
             QMessageBox::Critical,
             &owner_,
             dialogTitle,
-            UiText::localized(QStringLiteral("Packaging failed.\n\n%1"), QStringLiteral("打包失败。\n\n%1"))
+            UiText::text(QStringLiteral("export.packaging_failed_1"))
                 .arg(result.errorMessage));
         return;
     }
@@ -144,9 +142,7 @@ void MainWindow::ExportSection::onPackAsZip()
         details = details.left(3000) + QStringLiteral("\n...");
     }
     const QString body =
-        UiText::localized(
-            QStringLiteral("Exported to:\n%1\n\n%2 file(s) included:\n%3"),
-            QStringLiteral("已导出到：\n%1\n\n包含 %2 个文件：\n%3"))
+        UiText::text(QStringLiteral("export.exported_to_1_2_file"))
             .arg(QDir::toNativeSeparators(outputPath))
             .arg(result.includedEntries.size())
             .arg(details);
