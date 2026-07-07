@@ -201,7 +201,7 @@ void MainWindow::DocumentSection::onNewFile()
 
     const QString targetDirectory = QFileDialog::getExistingDirectory(
         &owner_,
-        UiText::localized(QStringLiteral("Select Chart Folder"), QStringLiteral("选择谱面文件夹")),
+        UiText::text(QStringLiteral("document.select_chart_folder")),
         owner_.resolveInitialOpenDirectory(),
         QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
     );
@@ -215,8 +215,8 @@ void MainWindow::DocumentSection::onNewFile()
         const QMessageBox::StandardButton choice = UiDialogs::showMessageBox(
             QMessageBox::Warning,
             &owner_,
-            UiText::localized(QStringLiteral("File Already Exists"), QStringLiteral("文件已存在")),
-            UiText::localized(QStringLiteral("maidata.txt already exists in the selected folder. Overwrite it?"), QStringLiteral("所选文件夹下已存在 maidata.txt，是否覆盖？")),
+            UiText::text(QStringLiteral("document.file_already_exists")),
+            UiText::text(QStringLiteral("document.maidata_txt_already_exists_in")),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No
         );

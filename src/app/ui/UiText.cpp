@@ -938,6 +938,10 @@ const QHash<QString, QString>& enMap()
 
         {"dialogs.open_folder", "Open Folder"},
 
+        {"document.file_already_exists", "File Already Exists"},
+        {"document.maidata_txt_already_exists_in", "maidata.txt already exists in the selected folder. Overwrite it?"},
+        {"document.select_chart_folder", "Select Chart Folder"},
+
         {"export.export_as_zip", "Export as ZIP"},
         {"export.exported_to_1_2_file", "Exported to:\n%1\n\n%2 file(s) included:\n%3"},
         {"export.packaging_1_2_3", "Packaging %1/%2\n%3"},
@@ -1778,6 +1782,10 @@ const QHash<QString, QString>& zhMap()
 
         {"dialogs.open_folder", "打开文件夹"},
 
+        {"document.file_already_exists", "文件已存在"},
+        {"document.maidata_txt_already_exists_in", "所选文件夹下已存在 maidata.txt，是否覆盖？"},
+        {"document.select_chart_folder", "选择谱面文件夹"},
+
         {"export.export_as_zip", "导出为ZIP"},
         {"export.exported_to_1_2_file", "已导出到：\n%1\n\n包含 %2 个文件：\n%3"},
         {"export.packaging_1_2_3", "正在打包 %1/%2\n%3"},
@@ -2610,6 +2618,10 @@ const QHash<QString, QString>& jaMap()
         {"cover.zoom_canvas_out_ctrl", "キャンバスを縮小（Ctrl+-）"},
 
         {"dialogs.open_folder", "フォルダーを開く"},
+
+        {"document.file_already_exists", "ファイルが既に存在します"},
+        {"document.maidata_txt_already_exists_in", "選択したフォルダーに既に maidata.txt があります。上書きしますか？"},
+        {"document.select_chart_folder", "譜面フォルダーを選択"},
 
         {"export.export_as_zip", "ZIP で出力"},
         {"export.exported_to_1_2_file", "出力先：\n%1\n\n%2 個のファイルを含みます：\n%3"},
