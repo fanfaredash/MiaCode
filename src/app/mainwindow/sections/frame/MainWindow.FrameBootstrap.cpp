@@ -1074,16 +1074,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
                     return;
                 }
             }
-            if (QApplication::keyboardModifiers().testFlag(Qt::ControlModifier)) {
-                const double bookmarkSecond = timelineSecondForCursor(bookmarkLine, 1);
-                if (bookmarkSecond >= 0.0 && qIsFinite(bookmarkSecond)) {
-                    navigateTimelineToSecond(bookmarkSecond, true);
-                } else {
-                    jumpToLocation(bookmarkLine, 1);
-                }
-            } else {
-                jumpToLocation(bookmarkLine, 1);
+            const double bookmarkSecond = timelineSecondForCursor(bookmarkLine, 1);
+            if (bookmarkSecond >= 0.0 && qIsFinite(bookmarkSecond)) {
+                navigateTimelineToSecond(bookmarkSecond, true);
             }
+            jumpToLocation(bookmarkLine, 1);
             clearOutlineSelection();
             return;
         }
