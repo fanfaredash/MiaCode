@@ -466,8 +466,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     editorValidationErrorIconLabel_->setFixedSize(14, 14);
     editorValidationErrorIconLabel_->setCursor(Qt::PointingHandCursor);
     editorValidationErrorIconLabel_->installEventFilter(this);
-    const QString jumpToValidationToolTip = UiText::localized(QStringLiteral("Click to open the Syntax tab"), QStringLiteral("点击跳转到「语法」选项卡"));
-    const QString jumpToMuriToolTip = UiText::localized(QStringLiteral("Click to open the Muri tab"), QStringLiteral("点击跳转到「无理」选项卡"));
+    const QString jumpToValidationToolTip = UiText::text(QStringLiteral("metadata.click_to_open_the_syntax"));
+    const QString jumpToMuriToolTip = UiText::text(QStringLiteral("metadata.click_to_open_the_muri"));
     editorValidationErrorIconLabel_->setToolTip(jumpToValidationToolTip);
     editorValidationErrorCountLabel_ = new QLabel(QStringLiteral("0"), editorValidationErrorGroup);
     editorValidationErrorCountLabel_->setFont(uiMonoFont(10, QFont::DemiBold));
@@ -1732,7 +1732,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     });
     bottomTabs_->addTab(
         errorList_,
-        UiText::localized(QStringLiteral("Syntax"), QStringLiteral("语法"))
+        UiText::text(QStringLiteral("window.syntax"))
     );
 
     muriList_ = new QListWidget(bottomTabs_);
@@ -1753,7 +1753,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     });
     bottomTabs_->addTab(
         muriList_,
-        UiText::localized(QStringLiteral("Muri"), QStringLiteral("无理"))
+        UiText::text(QStringLiteral("window.muri"))
     );
     connect(bottomTabs_, &QTabWidget::currentChanged, this, [this](int) {
         if (!quickShellBottomTabsProxyActive() && !timelineWidgetlessQuickRoute_) {
