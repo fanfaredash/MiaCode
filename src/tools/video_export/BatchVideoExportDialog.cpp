@@ -87,12 +87,6 @@ int normaliseAudioBitrateKbps(int requested)
     return closest;
 }
 
-QString uiText(const char* key, const QString& fallback)
-{
-    const QString translated = UiText::text(QString::fromLatin1(key));
-    return translated.isEmpty() ? fallback : translated;
-}
-
 QString systemL10n(const QString& en, const QString& zh)
 {
     const QLocale locale = QLocale::system();
@@ -156,10 +150,10 @@ QString exportDialogPresetLabel(VideoExportPreset preset)
 {
     switch (preset) {
     case VideoExportPreset::HighQuality:
-        return uiText("dialog.video_export.preset.high_quality", QStringLiteral("High Quality"));
+        return UiText::text(QStringLiteral("dialog.video_export.preset.high_quality"));
     case VideoExportPreset::Fast:
     default:
-        return uiText("dialog.video_export.preset.fast", QStringLiteral("Fast"));
+        return UiText::text(QStringLiteral("dialog.video_export.preset.fast"));
     }
 }
 
@@ -167,16 +161,14 @@ QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
 {
     switch (mode) {
     case PreviewBackgroundScaleMode::FitContain:
-        return uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)"));
+        return UiText::text(QStringLiteral("dialog.video_export.option.scale.fit"));
     case PreviewBackgroundScaleMode::SquareFitContain:
-        return uiText("dialog.video_export.option.scale.square_fit", QStringLiteral("1:1 Fit (center square)"));
+        return UiText::text(QStringLiteral("dialog.video_export.option.scale.square_fit"));
     case PreviewBackgroundScaleMode::InnerCircleFitOuterFill:
-        return uiText(
-            "dialog.video_export.option.scale.inner_circle_fit_outer_fill",
-            QStringLiteral("Inner 1:1 Fit + Outer Fill"));
+        return UiText::text(QStringLiteral("dialog.video_export.option.scale.inner_circle_fit_outer_fill"));
     case PreviewBackgroundScaleMode::FillCrop:
     default:
-        return uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)"));
+        return UiText::text(QStringLiteral("dialog.video_export.option.scale.fill"));
     }
 }
 
@@ -246,10 +238,7 @@ bool validateBatchChartDirectory(const QString& directoryPath, QString* chartPat
     const QFileInfo directoryInfo(directoryPath);
     if (!directoryInfo.exists() || !directoryInfo.isDir()) {
         if (errorMessage != nullptr) {
-            *errorMessage = uiText(
-                "dialog.batch_export.error.invalid_folder",
-                QStringLiteral("The selected path is not a valid folder.")
-            );
+            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.invalid_folder"));
         }
         return false;
     }
@@ -257,20 +246,14 @@ bool validateBatchChartDirectory(const QString& directoryPath, QString* chartPat
     const QString resolvedChartPath = preferredChartFilePathInDirectory(directoryInfo.absoluteFilePath());
     if (resolvedChartPath.isEmpty()) {
         if (errorMessage != nullptr) {
-            *errorMessage = uiText(
-                "dialog.batch_export.error.missing_chart_file",
-                QStringLiteral("Missing majdata.txt (or maidata.txt).")
-            );
+            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.missing_chart_file"));
         }
         return false;
     }
 
     if (miacode::chart_assets::resolveTrackPathForDirectory(directoryInfo.absoluteFilePath()).isEmpty()) {
         if (errorMessage != nullptr) {
-            *errorMessage = uiText(
-                "dialog.batch_export.error.missing_track_file",
-                QStringLiteral("Missing track.mp3.")
-            );
+            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.missing_track_file"));
         }
         return false;
     }
@@ -373,9 +356,7 @@ QStringList selectMultipleDirectoriesNativeWin(QWidget* parent, const QString& s
             startItem->Release();
         }
     }
-    const QString title = uiText(
-        "dialog.batch_export.select_charts",
-        QStringLiteral("Select Chart Folders"));
+    const QString title = UiText::text(QStringLiteral("dialog.batch_export.select_charts"));
     dialog->SetTitle(reinterpret_cast<LPCWSTR>(title.utf16()));
 
     HWND parentHwnd = nullptr;
@@ -431,7 +412,7 @@ QStringList selectMultipleDirectories(QWidget* parent, const QString& startDirec
     // closing the native dialog doesn't pop a second one.
     return nativeResult;
 #else
-    QFileDialog dialog(parent, uiText("dialog.batch_export.select_charts", QStringLiteral("Select Chart Folders")), startDirectory);
+    QFileDialog dialog(parent, UiText::text(QStringLiteral("dialog.batch_export.select_charts")), startDirectory);
     dialog.setFileMode(QFileDialog::Directory);
     dialog.setOption(QFileDialog::ShowDirsOnly, true);
     dialog.setOption(QFileDialog::DontUseNativeDialog, true);
@@ -508,7 +489,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     , selectedTapFlowSpeed_(baseTask.tapFlowSpeed)
     , selectedTouchFlowSpeed_(baseTask.touchFlowSpeed)
 {
-    setWindowTitle(uiText("dialog.batch_export.title", QStringLiteral("Batch Export")));
+    setWindowTitle(UiText::text(QStringLiteral("dialog.batch_export.title")));
     setModal(true);
     setMinimumWidth(kDialogMinWidth);
     setStyleSheet(UiTheme::exportDialogStyleSheet());
@@ -522,7 +503,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     topForm->setVerticalSpacing(8);
     int row = 0;
 
-    auto* difficultyLabelTitle = new QLabel(uiText("dialog.batch_export.difficulty", QStringLiteral("Difficulty")), this);
+    auto* difficultyLabelTitle = new QLabel(UiText::text(QStringLiteral("dialog.batch_export.difficulty")), this);
     difficultyLabelTitle->setFixedWidth(kFormLabelWidth);
     auto* difficultySelector = new QWidget(this);
     auto* difficultyLayout = new QHBoxLayout(difficultySelector);
@@ -540,7 +521,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     topForm->addWidget(difficultySelector, row, 1, 1, 2);
     ++row;
 
-    auto* outputLabel = new QLabel(uiText("dialog.batch_export.output_dir", QStringLiteral("Output Folder")), this);
+    auto* outputLabel = new QLabel(UiText::text(QStringLiteral("dialog.batch_export.output_dir")), this);
     outputLabel->setFixedWidth(kFormLabelWidth);
     outputDirectoryEdit_ = new QLineEdit(this);
     const QString rememberedOutputDirectory = lastOutputBrowseDirectory();
@@ -549,7 +530,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
         : rememberedOutputDirectory;
     outputDirectoryEdit_->setText(QDir::toNativeSeparators(initialOutputDirectory));
     outputDirectoryEdit_->setStyleSheet(batchExportLineEditStyleSheet());
-    auto* outputBrowseButton = new QPushButton(uiText("action.browse", QStringLiteral("Browse...")), this);
+    auto* outputBrowseButton = new QPushButton(UiText::text(QStringLiteral("action.browse")), this);
     outputBrowseButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     connect(outputBrowseButton, &QPushButton::clicked, this, &BatchVideoExportDialog::browseOutputDirectory);
     topForm->addWidget(outputLabel, row, 0);
@@ -557,7 +538,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     topForm->addWidget(outputBrowseButton, row, 2);
     ++row;
 
-    auto* resolutionLabel = new QLabel(uiText("dialog.video_export.resolution", QStringLiteral("Resolution")), this);
+    auto* resolutionLabel = new QLabel(UiText::text(QStringLiteral("dialog.video_export.resolution")), this);
     resolutionLabel->setFixedWidth(kFormLabelWidth);
     resolutionButton_ = createDialogMenuButton(this, exportDialogResolutionLabel(selectedResolution_));
     resolutionMenu_ = new QMenu(resolutionButton_);
@@ -576,7 +557,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     topForm->addWidget(resolutionButton_, row, 1, 1, 2);
     ++row;
 
-    auto* fpsLabel = new QLabel(uiText("dialog.video_export.fps", QStringLiteral("FPS")), this);
+    auto* fpsLabel = new QLabel(UiText::text(QStringLiteral("dialog.video_export.fps")), this);
     fpsLabel->setFixedWidth(kFormLabelWidth);
     fpsButton_ = createDialogMenuButton(this, QStringLiteral("%1 FPS").arg(selectedFps_));
     fpsMenu_ = new QMenu(fpsButton_);
@@ -599,7 +580,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     // the single-export VideoExportDialog implementation; both dialogs
     // load/save through the same dialog-preferences JSON object.
     selectedAudioBitrateKbps_ = normaliseAudioBitrateKbps(selectedAudioBitrateKbps_);
-    auto* audioBitrateLabel = new QLabel(uiText("dialog.video_export.audio_bitrate", QStringLiteral("Audio quality")), this);
+    auto* audioBitrateLabel = new QLabel(UiText::text(QStringLiteral("dialog.video_export.audio_bitrate")), this);
     audioBitrateLabel->setFixedWidth(kFormLabelWidth);
     audioBitrateButton_ = createDialogMenuButton(this, QStringLiteral("%1 kbps").arg(selectedAudioBitrateKbps_));
     audioBitrateMenu_ = new QMenu(audioBitrateButton_);
@@ -618,13 +599,13 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     topForm->addWidget(audioBitrateButton_, row, 1, 1, 2);
     ++row;
 
-    auto* presetLabel = new QLabel(uiText("dialog.video_export.preset", QStringLiteral("Export Quality")), this);
+    auto* presetLabel = new QLabel(UiText::text(QStringLiteral("dialog.video_export.preset")), this);
     presetLabel->setFixedWidth(kFormLabelWidth);
     presetButton_ = createDialogMenuButton(this, exportDialogPresetLabel(selectedPreset_));
     presetMenu_ = new QMenu(presetButton_);
     UiTheme::styleRoundedMenu(*presetMenu_);
     presetButton_->setMenu(presetMenu_);
-    addDialogMenuChoice(presetMenu_, uiText("dialog.video_export.preset.fast", QStringLiteral("Fast")), [this]() {
+    addDialogMenuChoice(presetMenu_, UiText::text(QStringLiteral("dialog.video_export.preset.fast")), [this]() {
         selectedPreset_ = VideoExportPreset::Fast;
         if (presetButton_ != nullptr) {
             presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
@@ -633,7 +614,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     });
     addDialogMenuChoice(
         presetMenu_,
-        uiText("dialog.video_export.preset.high_quality", QStringLiteral("High Quality")),
+        UiText::text(QStringLiteral("dialog.video_export.preset.high_quality")),
         [this]() {
             selectedPreset_ = VideoExportPreset::HighQuality;
             if (presetButton_ != nullptr) {
@@ -648,7 +629,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
 
     rootLayout->addLayout(topForm);
 
-    auto* chartLabel = new QLabel(uiText("dialog.batch_export.chart_folders", QStringLiteral("Chart Folders")), this);
+    auto* chartLabel = new QLabel(UiText::text(QStringLiteral("dialog.batch_export.chart_folders")), this);
     rootLayout->addWidget(chartLabel);
 
     auto* chartSectionLayout = new QHBoxLayout();
@@ -661,15 +642,15 @@ BatchVideoExportDialog::BatchVideoExportDialog(
 
     auto* chartButtonsLayout = new QVBoxLayout();
     chartButtonsLayout->setSpacing(6);
-    auto* addButton = new QPushButton(uiText("dialog.batch_export.add_folders", QStringLiteral("Add Folders")), this);
+    auto* addButton = new QPushButton(UiText::text(QStringLiteral("dialog.batch_export.add_folders")), this);
     addButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     connect(addButton, &QPushButton::clicked, this, &BatchVideoExportDialog::browseChartDirectories);
     chartButtonsLayout->addWidget(addButton);
-    auto* removeButton = new QPushButton(uiText("dialog.batch_export.remove_selected", QStringLiteral("Remove Selected")), this);
+    auto* removeButton = new QPushButton(UiText::text(QStringLiteral("dialog.batch_export.remove_selected")), this);
     removeButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     connect(removeButton, &QPushButton::clicked, this, &BatchVideoExportDialog::removeSelectedChartDirectories);
     chartButtonsLayout->addWidget(removeButton);
-    auto* clearButton = new QPushButton(uiText("dialog.batch_export.clear", QStringLiteral("Clear")), this);
+    auto* clearButton = new QPushButton(UiText::text(QStringLiteral("dialog.batch_export.clear")), this);
     clearButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     connect(clearButton, &QPushButton::clicked, this, &BatchVideoExportDialog::clearChartDirectories);
     chartButtonsLayout->addWidget(clearButton);
@@ -691,18 +672,18 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     auto* checkboxLayout = new QHBoxLayout(checkboxRow);
     checkboxLayout->setContentsMargins(0, 0, 0, 0);
     checkboxLayout->setSpacing(14);
-    showTimestampCheck_ = new QCheckBox(uiText("dialog.video_export.option.show_timestamp", QStringLiteral("Show timestamp")), optionsCard);
+    showTimestampCheck_ = new QCheckBox(UiText::text(QStringLiteral("dialog.video_export.option.show_timestamp")), optionsCard);
     showTimestampCheck_->setChecked(baseTask_.showTimestamp);
-    showObjectStatsCheck_ = new QCheckBox(uiText("dialog.video_export.option.show_object_stats", QStringLiteral("Show object stats")), optionsCard);
+    showObjectStatsCheck_ = new QCheckBox(UiText::text(QStringLiteral("dialog.video_export.option.show_object_stats")), optionsCard);
     showObjectStatsCheck_->setChecked(baseTask_.showObjectStatsHud);
-    showChartInfoCheck_ = new QCheckBox(uiText("dialog.video_export.option.show_chart_info", QStringLiteral("Show chart info")), optionsCard);
+    showChartInfoCheck_ = new QCheckBox(UiText::text(QStringLiteral("dialog.video_export.option.show_chart_info")), optionsCard);
     showChartInfoCheck_->setChecked(baseTask_.showChartInfoHud);
     addIntroCheck_ = new QCheckBox(
         UiText::text(QStringLiteral("video_export.add_intro")),
         optionsCard);
     addIntroCheck_->setChecked(baseTask_.intro.enabled);
     addIntroCheck_->setToolTip(UiText::text(QStringLiteral("video_export.prepend_the_maimai_track_start")));
-    smoothBrightnessCheck_ = new QCheckBox(uiText("dialog.video_export.option.smooth_brightness", QStringLiteral("Smooth brightness")), optionsCard);
+    smoothBrightnessCheck_ = new QCheckBox(UiText::text(QStringLiteral("dialog.video_export.option.smooth_brightness")), optionsCard);
     smoothBrightnessCheck_->setChecked(baseTask_.smoothBrightness);
     checkboxLayout->addWidget(showTimestampCheck_, 0);
     checkboxLayout->addWidget(showObjectStatsCheck_, 0);
@@ -715,7 +696,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
 
     QWidget* outerBrightnessOption = createSliderOption(
         optionsCard,
-        uiText("dialog.video_export.option.brightness_outer", QStringLiteral("Brightness (Outer)")),
+        UiText::text(QStringLiteral("dialog.video_export.option.brightness_outer")),
         qRound(qBound(0.0, baseTask_.backgroundBrightnessOuter, 1.0) * 100.0),
         &brightnessOuterSlider_,
         &brightnessOuterValueLabel_
@@ -725,7 +706,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
 
     QWidget* innerBrightnessOption = createSliderOption(
         optionsCard,
-        uiText("dialog.video_export.option.brightness_inner", QStringLiteral("Brightness (Inner)")),
+        UiText::text(QStringLiteral("dialog.video_export.option.brightness_inner")),
         qRound(qBound(0.0, baseTask_.backgroundBrightnessInner, 1.0) * 100.0),
         &brightnessInnerSlider_,
         &brightnessInnerValueLabel_
@@ -735,7 +716,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
 
     QWidget* judgeLineOption = createSliderOption(
         optionsCard,
-        uiText("dialog.video_export.option.layout_size", QStringLiteral("Stage Display Scale")),
+        UiText::text(QStringLiteral("dialog.video_export.option.layout_size")),
         qRound(miacode::preview_video::normalizedLayoutSquareScale(baseTask_.layoutSquareScale) * 100.0),
         &layoutSquareScaleSlider_,
         &layoutSquareScaleValueLabel_
@@ -746,7 +727,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     optionsLayout->addWidget(judgeLineOption, optionRow, 0, 1, 4);
     ++optionRow;
 
-    auto* scaleModeLabel = new QLabel(uiText("dialog.video_export.option.scale_mode", QStringLiteral("Background / PV Scale")), optionsCard);
+    auto* scaleModeLabel = new QLabel(UiText::text(QStringLiteral("dialog.video_export.option.scale_mode")), optionsCard);
     backgroundScaleModeButton_ = createDialogMenuButton(optionsCard, exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
     backgroundScaleModeMenu_ = new QMenu(backgroundScaleModeButton_);
     UiTheme::styleRoundedMenu(*backgroundScaleModeMenu_);
@@ -816,12 +797,12 @@ BatchVideoExportDialog::BatchVideoExportDialog(
         return flowSpeedEdit;
     };
     auto* tapFlowSpeedLabel = new QLabel(
-        uiText("dialog.video_export.option.tap_flow_speed", QStringLiteral("Tap Flow Speed")),
+        UiText::text(QStringLiteral("dialog.video_export.option.tap_flow_speed")),
         optionsCard
     );
     tapFlowSpeedEdit_ = createFlowSpeedEdit(&tapFlowSpeedEdit_, &selectedTapFlowSpeed_);
     auto* touchFlowSpeedLabel = new QLabel(
-        uiText("dialog.video_export.option.touch_flow_speed", QStringLiteral("Touch Flow Speed")),
+        UiText::text(QStringLiteral("dialog.video_export.option.touch_flow_speed")),
         optionsCard
     );
     touchFlowSpeedEdit_ = createFlowSpeedEdit(&touchFlowSpeedEdit_, &selectedTouchFlowSpeed_);
@@ -867,7 +848,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     rootLayout->addWidget(optionsCard);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
-    auto* exportButton = new QPushButton(uiText("dialog.video_export.button.export", QStringLiteral("Export")), this);
+    auto* exportButton = new QPushButton(UiText::text(QStringLiteral("dialog.video_export.button.export")), this);
     exportButton->setMinimumWidth(kDialogActionButtonMinWidth);
     exportButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(true));
     buttons->addButton(exportButton, QDialogButtonBox::AcceptRole);
@@ -959,11 +940,8 @@ void BatchVideoExportDialog::addChartDirectories(const QStringList& directories)
     if (!invalidDescriptions.isEmpty()) {
         QMessageBox::warning(
             this,
-            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
-            uiText(
-                "dialog.batch_export.error.invalid_selection",
-                QStringLiteral("Some folders were skipped because required files are missing.")
-            ) + QStringLiteral("\n\n") + invalidDescriptions.join(QLatin1Char('\n'))
+            UiText::text(QStringLiteral("dialog.batch_export.title")),
+            UiText::text(QStringLiteral("dialog.batch_export.error.invalid_selection")) + QStringLiteral("\n\n") + invalidDescriptions.join(QLatin1Char('\n'))
         );
     }
 }
@@ -988,7 +966,7 @@ void BatchVideoExportDialog::browseOutputDirectory()
     }
     const QString selected = QFileDialog::getExistingDirectory(
         this,
-        uiText("dialog.batch_export.output_dir", QStringLiteral("Output Folder")),
+        UiText::text(QStringLiteral("dialog.batch_export.output_dir")),
         startDir.trimmed().isEmpty() ? exportBaseDirectory(baseTask_) : startDir
     );
     if (!selected.trimmed().isEmpty()) {
@@ -1041,7 +1019,7 @@ bool BatchVideoExportDialog::applyUiToTask(VideoExportTask* task, QString* error
     const double touchFlowSpeed = touchFlowSpeedEdit_->text().trimmed().toDouble(&touchFlowSpeedOk);
     if (!tapFlowSpeedOk || !touchFlowSpeedOk) {
         if (errorMessage != nullptr) {
-            *errorMessage = uiText("dialog.video_export.error.invalid_flow_speed", QStringLiteral("Flow speed is invalid."));
+            *errorMessage = UiText::text(QStringLiteral("dialog.video_export.error.invalid_flow_speed"));
         }
         return false;
     }
@@ -1070,8 +1048,8 @@ void BatchVideoExportDialog::startExport()
     if (selectedDifficultyIds().isEmpty()) {
         QMessageBox::warning(
             this,
-            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
-            uiText("dialog.batch_export.error.no_difficulties", QStringLiteral("Please select at least one difficulty."))
+            UiText::text(QStringLiteral("dialog.batch_export.title")),
+            UiText::text(QStringLiteral("dialog.batch_export.error.no_difficulties"))
         );
         return;
     }
@@ -1079,8 +1057,8 @@ void BatchVideoExportDialog::startExport()
     if (selectedChartDirectories().isEmpty()) {
         QMessageBox::warning(
             this,
-            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
-            uiText("dialog.batch_export.error.no_chart_dirs", QStringLiteral("Please add at least one chart folder."))
+            UiText::text(QStringLiteral("dialog.batch_export.title")),
+            UiText::text(QStringLiteral("dialog.batch_export.error.no_chart_dirs"))
         );
         return;
     }
@@ -1089,8 +1067,8 @@ void BatchVideoExportDialog::startExport()
     if (outputDir.trimmed().isEmpty()) {
         QMessageBox::warning(
             this,
-            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
-            uiText("dialog.batch_export.error.no_output_dir", QStringLiteral("Please choose an output folder."))
+            UiText::text(QStringLiteral("dialog.batch_export.title")),
+            UiText::text(QStringLiteral("dialog.batch_export.error.no_output_dir"))
         );
         return;
     }
@@ -1100,7 +1078,7 @@ void BatchVideoExportDialog::startExport()
     if (!applyUiToTask(&task, &errorMessage)) {
         QMessageBox::warning(
             this,
-            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
+            UiText::text(QStringLiteral("dialog.batch_export.title")),
             errorMessage
         );
         return;
