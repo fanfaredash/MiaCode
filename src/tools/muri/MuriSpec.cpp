@@ -728,6 +728,37 @@ int main(int argc, char** argv)
 
     {
         const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(180)\n"
+                           "{16} 1^2^3^4[8:1],3,4,, ,,,, ,,,, ,,,, \n"
+                           "{16} 1>4[8:1],3,4,, ,,,, ,,,, ,,,, \n"
+                           "{16} 1^2^3[8:1],3,,, ,,,, ,,,, ,,,,  \n"
+                           "{16} 1>3[8:1],3,,, ,,,, ,,,, ,,,,\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("chained-vs-direct slide-too-fast sample parses"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::SlideTooFast) == 2,
+            QStringLiteral("chained-vs-direct slide-too-fast sample matches MaiMuriDX dynamic count"));
+        expect(countStaticReferences(analyzed.staticReferences, MuriKind::SlideTooFast) == 0,
+            QStringLiteral("chained-vs-direct slide-too-fast sample has no static slide-too-fast references"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::SlideTooFast) == 2,
+            QStringLiteral("chained-vs-direct slide-too-fast sample keeps two visible entries"));
+
+        bool sawLine2 = false;
+        bool sawLine3 = false;
+        bool sawLine4Or5 = false;
+        for (const MuriDiagnostic& diagnostic : analyzed.report.diagnostics) {
+            if (diagnostic.kind != MuriKind::SlideTooFast) {
+                continue;
+            }
+            sawLine2 = sawLine2 || diagnostic.line == 2;
+            sawLine3 = sawLine3 || diagnostic.line == 3;
+            sawLine4Or5 = sawLine4Or5 || diagnostic.line == 4 || diagnostic.line == 5;
+        }
+        expect(sawLine2, QStringLiteral("chained-vs-direct slide-too-fast sample reports 1^2^3^4"));
+        expect(sawLine3, QStringLiteral("chained-vs-direct slide-too-fast sample reports 1>4"));
+        expect(!sawLine4Or5, QStringLiteral("chained-vs-direct slide-too-fast sample does not report 1^2^3 or 1>3"));
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
             QStringLiteral("(128.6){1}3v1[1:11]/7v5[1:11],\nE\n"));
         expect(analyzed.parsed.ok, QStringLiteral("long-slide repro chart parses"));
         expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::SlideTooFast) == 0,
