@@ -401,20 +401,20 @@ void MainWindow::ValidationSection::showIssueListContextMenu(QListWidget* list, 
     styleRoundedMenu(menu);
 
     QAction* copyAction = menu.addAction(
-        UiText::localized(QStringLiteral("Copy Info"), QStringLiteral("复制信息"))
+        UiText::text(QStringLiteral("validation.copy_info"))
     );
     connect(copyAction, &QAction::triggered, &owner_, [this, item]() {
         const QString text = item->toolTip().trimmed();
         QGuiApplication::clipboard()->setText(text);
         if (owner_.statusBar() != nullptr) {
             owner_.statusBar()->showMessage(
-                UiText::localized(QStringLiteral("Issue info copied."), QStringLiteral("已复制信息。"))
+                UiText::text(QStringLiteral("validation.issue_info_copied"))
             );
         }
     });
 
     QAction* jumpAction = menu.addAction(
-        UiText::localized(QStringLiteral("Jump to Source"), QStringLiteral("跳转到源"))
+        UiText::text(QStringLiteral("validation.jump_to_source"))
     );
     connect(jumpAction, &QAction::triggered, &owner_, [this, item, muriList]() {
         if (muriList) {
@@ -427,8 +427,8 @@ void MainWindow::ValidationSection::showIssueListContextMenu(QListWidget* list, 
     if (!issueTypeKey.isEmpty()) {
         QAction* ignoreAction = menu.addAction(
             ignoredInHeader
-                ? (UiText::localized(QStringLiteral("Stop Ignoring This Issue Type"), QStringLiteral("取消忽视该类型提示")))
-                : (UiText::localized(QStringLiteral("Ignore This Issue Type"), QStringLiteral("忽视该类型提示")))
+                ? UiText::text(QStringLiteral("validation.stop_ignoring_this_issue_type"))
+                : UiText::text(QStringLiteral("validation.ignore_this_issue_type"))
         );
         connect(ignoreAction, &QAction::triggered, &owner_, [this, issueTypeKey, ignoredInHeader]() {
             const MainWindow::BottomTabsTabId previousTabId = owner_.currentBottomTabsTabId();
@@ -501,7 +501,7 @@ void MainWindow::ValidationSection::rebuildMuriDiagnosticsPanel()
         state_.muriStaticReferences_);
     if (alignedMuriReport.diagnostics.isEmpty() && alignedStaticReferences.isEmpty()) {
         auto* item = new QListWidgetItem(
-            UiText::localized(QStringLiteral("No muri issues detected."), QStringLiteral("未检测到无理。")),
+            UiText::text(QStringLiteral("validation.no_muri_issues_detected")),
             ui_.muriList_
         );
         item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
@@ -658,7 +658,7 @@ void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
     state_.validationDecorations_.clear();
     if (entry.issues.isEmpty() && ui_.errorList_ != nullptr) {
         auto* item = new QListWidgetItem(
-            UiText::localized(QStringLiteral("No syntax errors detected."), QStringLiteral("未检测到语法错误。")),
+            UiText::text(QStringLiteral("validation.no_syntax_errors_detected")),
             ui_.errorList_
         );
         item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
@@ -758,7 +758,7 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
     state_.validationDecorations_.clear();
     if (entry.issues.isEmpty() && ui_.errorList_ != nullptr) {
         auto* item = new QListWidgetItem(
-            UiText::localized(QStringLiteral("No syntax errors detected."), QStringLiteral("未检测到语法错误。")),
+            UiText::text(QStringLiteral("validation.no_syntax_errors_detected")),
             ui_.errorList_
         );
         item->setFlags(item->flags() & ~Qt::ItemIsEnabled);

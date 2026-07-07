@@ -708,7 +708,7 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
               "editor.validation_summary.tooltip",
               "%1 error(s), %2 warning(s)"
           ).arg(errorCount).arg(warningCount);
-    const QString jumpHint = UiText::localized(QStringLiteral("Click an icon to jump to its tab"), QStringLiteral("点击图标可跳转到对应选项卡"));
+    const QString jumpHint = UiText::text(QStringLiteral("validation.click_an_icon_to_jump"));
     const QString summaryTooltipWithJump = summaryTooltip + QStringLiteral("\n") + jumpHint;
     const bool showSummary = state_.previewShowValidationSummary_ && (showError || showWarning || showMuri);
     ui_.editorValidationSummaryWidget_->setProperty("hasContent", showSummary);

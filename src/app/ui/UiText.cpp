@@ -1015,6 +1015,18 @@ const QHash<QString, QString>& enMap()
 
         {"ui.click_to_type_a_value", "Click to type a value"},
 
+        {"validation.adjust_the_static_tap_on", "Adjust the static Tap-On-Slide reference threshold."},
+        {"validation.click_an_icon_to_jump", "Click an icon to jump to its tab"},
+        {"validation.copy_info", "Copy Info"},
+        {"validation.ignore_this_issue_type", "Ignore This Issue Type"},
+        {"validation.issue_info_copied", "Issue info copied."},
+        {"validation.jump_to_source", "Jump to Source"},
+        {"validation.no_muri_issues_detected", "No muri issues detected."},
+        {"validation.no_syntax_errors_detected", "No syntax errors detected."},
+        {"validation.stop_ignoring_this_issue_type", "Stop Ignoring This Issue Type"},
+        {"validation.tap_on_slide_threshold", "Tap-On-Slide Threshold"},
+        {"validation.tap_on_slide_threshold_set", "Tap-On-Slide threshold set to %1 ms."},
+
         {"track_metadata.artist", "artist"},
         {"track_metadata.bg_jpg_already_exists_overwrite", "bg.jpg already exists. Overwrite?"},
         {"track_metadata.extract_cover_to_bg_jpg", "Extract Cover to bg.jpg"},
@@ -1749,6 +1761,18 @@ const QHash<QString, QString>& zhMap()
 
         {"ui.click_to_type_a_value", "点击可输入数值"},
 
+        {"validation.adjust_the_static_tap_on", "调整静态“撞尾无理”参考检查阈值。"},
+        {"validation.click_an_icon_to_jump", "点击图标可跳转到对应选项卡"},
+        {"validation.copy_info", "复制信息"},
+        {"validation.ignore_this_issue_type", "忽视该类型提示"},
+        {"validation.issue_info_copied", "已复制信息。"},
+        {"validation.jump_to_source", "跳转到源"},
+        {"validation.no_muri_issues_detected", "未检测到无理。"},
+        {"validation.no_syntax_errors_detected", "未检测到语法错误。"},
+        {"validation.stop_ignoring_this_issue_type", "取消忽视该类型提示"},
+        {"validation.tap_on_slide_threshold", "撞尾阈值"},
+        {"validation.tap_on_slide_threshold_set", "撞尾阈值已更新为 %1 ms。"},
+
         {"track_metadata.artist", "曲师"},
         {"track_metadata.bg_jpg_already_exists_overwrite", "bg.jpg 已经存在，是否覆盖？"},
         {"track_metadata.extract_cover_to_bg_jpg", "提取封面为 bg.jpg"},
@@ -2475,6 +2499,18 @@ const QHash<QString, QString>& jaMap()
         {"timeline.playback_speed", "再生速度"},
 
         {"ui.click_to_type_a_value", "クリックして数値を入力"},
+
+        {"validation.adjust_the_static_tap_on", "静的な「末尾衝突無理」の参照チェックしきい値を調整します。"},
+        {"validation.click_an_icon_to_jump", "アイコンをクリックして対応するタブへ移動"},
+        {"validation.copy_info", "情報をコピー"},
+        {"validation.ignore_this_issue_type", "この種類の警告を無視"},
+        {"validation.issue_info_copied", "情報をコピーしました。"},
+        {"validation.jump_to_source", "ソースへジャンプ"},
+        {"validation.no_muri_issues_detected", "無理は検出されませんでした。"},
+        {"validation.no_syntax_errors_detected", "構文エラーは検出されませんでした。"},
+        {"validation.stop_ignoring_this_issue_type", "この種類の警告表示を再開"},
+        {"validation.tap_on_slide_threshold", "末尾衝突しきい値"},
+        {"validation.tap_on_slide_threshold_set", "末尾衝突しきい値を %1 ms に更新しました。"},
 
         {"track_metadata.artist", "アーティスト"},
         {"track_metadata.bg_jpg_already_exists_overwrite", "bg.jpg は既に存在します。上書きしますか？"},
