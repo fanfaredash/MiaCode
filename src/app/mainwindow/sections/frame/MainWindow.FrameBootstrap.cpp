@@ -1202,13 +1202,13 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             styleRoundedMenu(menu);
             const int bookmarkDifficultyId = item->data(kOutlineItemDifficultyRole).toInt();
             const int line = item->data(kOutlineItemLineRole).toInt();
-            QAction* renameAction = menu.addAction(UiText::localized(QStringLiteral("Rename"), QStringLiteral("重命名")));
+            QAction* renameAction = menu.addAction(UiText::text(QStringLiteral("metadata.rename")));
             connect(renameAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line]() {
                 if (documentSection_ != nullptr) {
                     documentSection_->revealBookmarkInSidebar(bookmarkDifficultyId, line, true);
                 }
             });
-            QAction* deleteAction = menu.addAction(UiText::localized(QStringLiteral("Delete"), QStringLiteral("删除")));
+            QAction* deleteAction = menu.addAction(UiText::text(QStringLiteral("metadata.delete")));
             connect(deleteAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line]() {
                 if (SimaiDocument::isDifficultyId(bookmarkDifficultyId) && bookmarkDifficultyId != activeDifficultyId_) {
                     activeOutlineKey_ = "chart";
@@ -1220,8 +1220,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
                     editorSection_->deleteBookmarkAtLineWithConfirmation(line);
                 }
             });
-            QAction* timelineAction = menu.addAction(
-                UiText::localized(QStringLiteral("Jump to Timeline Position"), QStringLiteral("跳到时间轴位置")));
+            QAction* timelineAction = menu.addAction(UiText::text(QStringLiteral("metadata.jump_to_timeline_position")));
             connect(timelineAction, &QAction::triggered, this, [this, bookmarkDifficultyId, line]() {
                 if (SimaiDocument::isDifficultyId(bookmarkDifficultyId) && bookmarkDifficultyId != activeDifficultyId_) {
                     activeOutlineKey_ = "chart";
@@ -1247,7 +1246,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         menu.setFont(uiAccentFont(10));
         styleRoundedMenu(menu);
         QAction* deleteAction = menu.addAction(
-            UiText::localized(QStringLiteral("Delete %1"), QStringLiteral("删除 %1")).arg(SimaiDocument::difficultyName(difficultyId))
+            UiText::text(QStringLiteral("metadata.delete_1")).arg(SimaiDocument::difficultyName(difficultyId))
         );
         connect(deleteAction, &QAction::triggered, this, [this, difficultyId]() {
             deleteDifficultyField(difficultyId);
@@ -1274,7 +1273,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         // DialogsSection::onMediaProcessingTools(), which calls the same
         // handlers the old submenu actions were wired to.
         QAction* mediaProcessingAction = toolboxMenu_->addAction(
-            UiText::localized(QStringLiteral("Audio/Video Processing"), QStringLiteral("音频/视频处理"))
+            UiText::text(QStringLiteral("media_tools.audio_video_processing"))
         );
         connect(mediaProcessingAction, &QAction::triggered, this, &MainWindow::onMediaProcessingTools);
     }
@@ -1295,11 +1294,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     constexpr bool kCopyAreaIntegratedIntoToolbox = false;
     if (kCopyAreaIntegratedIntoToolbox) {
         QMenu* copyAreaMenu = toolboxMenu_->addMenu(
-            UiText::localized(QStringLiteral("Copy Area"), QStringLiteral("复制区"))
+            UiText::text(QStringLiteral("metadata.copy_area_2"))
         );
         styleRoundedMenu(*copyAreaMenu);
         fullCopyAreaAction_ = copyAreaMenu->addAction(
-            UiText::localized(QStringLiteral("Full Copy Area"), QStringLiteral("完整复制区"))
+            UiText::text(QStringLiteral("metadata.full_copy_area"))
         );
         fullCopyAreaAction_->setCheckable(true);
         connect(fullCopyAreaAction_, &QAction::toggled, this, &MainWindow::setFullCopyAreaVisible);
@@ -1308,7 +1307,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     toolboxMenu_->addSeparator();
 
     QAction* toolboxOfficialChartMirrorAction = toolboxMenu_->addAction(
-        UiText::localized(QStringLiteral("Official Chart Mirror"), QStringLiteral("官谱镜像站"))
+        UiText::text(QStringLiteral("menu.official_chart_mirror"))
     );
     connect(toolboxOfficialChartMirrorAction, &QAction::triggered, this, [openToolboxUrl]() {
         openToolboxUrl(QStringLiteral("https://www.maiviewer.net/"));
