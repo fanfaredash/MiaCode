@@ -1011,7 +1011,13 @@ const QHash<QString, QString>& enMap()
         {"shell.timeline_sync", "Timeline Sync"},
         {"shell.view_lock", "View Lock"},
 
+        {"timeline.follow_code", "Follow Code"},
+        {"timeline.follow_code_tooltip", "During playback, bind the editor cursor to the latest comma at or before preview time"},
         {"timeline.playback_speed", "Playback Speed"},
+        {"timeline.progress_follow", "Progress Follow"},
+        {"timeline.progress_follow_tooltip", "During playback, keep the timeline view centered on the preview progress line"},
+        {"timeline.view_lock", "View Lock"},
+        {"timeline.view_lock_tooltip", "Keep the editor cursor near the middle of the code area when possible"},
 
         {"ui.click_to_type_a_value", "Click to type a value"},
 
@@ -1787,7 +1793,13 @@ const QHash<QString, QString>& zhMap()
         {"shell.timeline_sync", "时轴同步"},
         {"shell.view_lock", "光标居中"},
 
+        {"timeline.follow_code", "代码跟随"},
+        {"timeline.follow_code_tooltip", "仅在播放中将编辑器光标绑定到预览时间前最近的逗号"},
         {"timeline.playback_speed", "当前倍速"},
+        {"timeline.progress_follow", "进度跟随"},
+        {"timeline.progress_follow_tooltip", "播放中让时间轴视图跟随预览进度线"},
+        {"timeline.view_lock", "光标居中"},
+        {"timeline.view_lock_tooltip", "将编辑器光标尽量保持在代码区中央"},
 
         {"ui.click_to_type_a_value", "点击可输入数值"},
 
@@ -2556,7 +2568,13 @@ const QHash<QString, QString>& jaMap()
         {"shell.timeline_sync", "タイムライン同期"},
         {"shell.view_lock", "ビューロック"},
 
+        {"timeline.follow_code", "コード追従"},
+        {"timeline.follow_code_tooltip", "再生中、エディタカーソルをプレビュー時刻以前の直近のカンマに連動させます"},
         {"timeline.playback_speed", "再生速度"},
+        {"timeline.progress_follow", "進行追従"},
+        {"timeline.progress_follow_tooltip", "再生中、タイムライン表示をプレビュー進行線の中央に保ちます"},
+        {"timeline.view_lock", "ビューロック"},
+        {"timeline.view_lock_tooltip", "可能な場合、エディタカーソルをコード領域の中央付近に保ちます"},
 
         {"ui.click_to_type_a_value", "クリックして数値を入力"},
 
