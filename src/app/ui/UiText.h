@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QJsonObject>
+#include <QVector>
 #include <QString>
 
 namespace UiText {
@@ -9,7 +10,6 @@ enum class LanguagePreference {
     System,
     English,
     Chinese,
-    Japanese,
 };
 
 enum class ThemePreference {
@@ -18,10 +18,23 @@ enum class ThemePreference {
     Dark,
 };
 
+struct LanguageOption {
+    QString id;
+    QString label;
+    bool builtIn = false;
+};
+
 QString text(const QString& key);
 bool isChineseUi();
 LanguagePreference preferredLanguage();
 void setPreferredLanguage(LanguagePreference preference);
+QString preferredLanguageToken();
+void setPreferredLanguageToken(const QString& token);
+QString resolvedLanguageToken();
+QVector<LanguageOption> availableLanguageOptions();
+bool isLanguageAvailable(const QString& token);
+bool ensurePreferredLanguageAvailable();
+void reloadExtensionLanguagePacks();
 ThemePreference preferredTheme();
 void setPreferredTheme(ThemePreference preference);
 QString preferencesFilePath();

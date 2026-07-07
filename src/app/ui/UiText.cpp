@@ -9,8 +9,11 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 #include <QStringList>
+
+#include "extensions/ExtensionManifest.h"
 
 namespace {
 
@@ -21,8 +24,17 @@ constexpr auto kPreferencesSchema = "miacode_preferences_v4";
 constexpr auto kUiSectionKey = "ui";
 constexpr auto kAppSectionKey = "app";
 constexpr auto kPreviewSectionKey = "preview";
+constexpr auto kExtensionsSectionKey = "extensions";
+constexpr auto kDisabledExtensionsKey = "disabled";
 constexpr auto kLanguageKey = "language";
 constexpr auto kThemeKey = "theme";
+
+struct ExternalLanguagePack {
+    QString id;
+    QString label;
+    QString ownerExtensionId;
+    QHash<QString, QString> translations;
+};
 
 QString preferencesPath()
 {
@@ -215,6 +227,11 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
         app.insert(kPreviewSectionKey, preview);
     }
     normalized.insert(kAppSectionKey, app);
+
+    const QJsonObject extensions = raw.value(kExtensionsSectionKey).toObject();
+    if (!extensions.isEmpty()) {
+        normalized.insert(kExtensionsSectionKey, extensions);
+    }
     return normalized;
 }
 
@@ -231,9 +248,6 @@ UiText::LanguagePreference parseLanguagePreference(const QString& raw)
     if (token == "zh" || token == "zh_cn" || token == "zh_hans" || token == "zh_hans_cn" || token == "cn") {
         return UiText::LanguagePreference::Chinese;
     }
-    if (token == "ja" || token == "ja_jp" || token == "jp") {
-        return UiText::LanguagePreference::Japanese;
-    }
     if (token == "en" || token == "en_us" || token == "en_gb") {
         return UiText::LanguagePreference::English;
     }
@@ -247,8 +261,6 @@ QString languagePreferenceToken(UiText::LanguagePreference preference)
         return "en";
     case UiText::LanguagePreference::Chinese:
         return "zh";
-    case UiText::LanguagePreference::Japanese:
-        return "ja";
     case UiText::LanguagePreference::System:
     default:
         return "system";
@@ -324,9 +336,6 @@ UiText::LanguagePreference languageListPreference(const QStringList& languages)
         if (token.startsWith("zh")) {
             return UiText::LanguagePreference::Chinese;
         }
-        if (token.startsWith("ja") || token == "jp") {
-            return UiText::LanguagePreference::Japanese;
-        }
         if (token.startsWith("en")) {
             return UiText::LanguagePreference::English;
         }
@@ -359,11 +368,147 @@ UiText::LanguagePreference resolvedLanguagePreference()
     if (localeName.startsWith("zh")) {
         return UiText::LanguagePreference::Chinese;
     }
-    if (localeName.startsWith("ja") || localeName == "jp") {
-        return UiText::LanguagePreference::Japanese;
+    return UiText::LanguagePreference::English;
+}
+
+QVector<ExternalLanguagePack>& externalLanguagePacksStorage()
+{
+    static QVector<ExternalLanguagePack> packs;
+    return packs;
+}
+
+bool isBuiltInLanguageToken(const QString& raw)
+{
+    const QString token = normalizedLanguageToken(raw);
+    return token == "system" || token == "en" || token == "en_us" || token == "en_gb"
+        || token == "zh" || token == "zh_cn" || token == "zh_hans" || token == "zh_hans_cn" || token == "cn";
+}
+
+QString builtInLanguageToken(const QString& raw)
+{
+    const QString token = normalizedLanguageToken(raw);
+    if (token == "en_us" || token == "en_gb") {
+        return QStringLiteral("en");
+    }
+    if (token == "zh_cn" || token == "zh_hans" || token == "zh_hans_cn" || token == "cn") {
+        return QStringLiteral("zh");
+    }
+    if (token == "en" || token == "zh") {
+        return token;
+    }
+    return QStringLiteral("system");
+}
+
+QJsonObject disabledExtensionsObject()
+{
+    const QJsonObject root = UiText::loadPreferencesObject();
+    return root.value(QString::fromLatin1(kExtensionsSectionKey)).toObject()
+        .value(QString::fromLatin1(kDisabledExtensionsKey)).toObject();
+}
+
+bool isExtensionDisabled(const QString& qualifiedId)
+{
+    return disabledExtensionsObject().value(qualifiedId).toBool(false);
+}
+
+void appendExtensionRootLanguagePacks(const QFileInfo& entry, QVector<ExternalLanguagePack>* packs, QSet<QString>* seenLanguageIds)
+{
+    if (packs == nullptr || seenLanguageIds == nullptr) {
+        return;
+    }
+    const auto parsed = miacode::extensions::loadExtensionManifest(entry.absoluteFilePath());
+    if (!parsed.ok || isExtensionDisabled(parsed.manifest.qualifiedId())) {
+        return;
+    }
+    for (const auto& language : parsed.manifest.languages) {
+        const QString languageId = normalizedLanguageToken(language.id);
+        if (languageId.isEmpty() || seenLanguageIds->contains(languageId)) {
+            continue;
+        }
+        const QString translationsPath = QDir(parsed.manifest.rootPath).absoluteFilePath(language.translations);
+        const QJsonObject translationsObject = loadJsonObjectFromFile(translationsPath);
+        if (translationsObject.isEmpty()) {
+            continue;
+        }
+        ExternalLanguagePack pack;
+        pack.id = languageId;
+        pack.label = language.label;
+        pack.ownerExtensionId = parsed.manifest.qualifiedId();
+        for (auto it = translationsObject.constBegin(); it != translationsObject.constEnd(); ++it) {
+            if (it.value().isString()) {
+                pack.translations.insert(it.key(), it.value().toString());
+            }
+        }
+        if (pack.translations.isEmpty()) {
+            continue;
+        }
+        seenLanguageIds->insert(languageId);
+        packs->append(pack);
+    }
+}
+
+QVector<ExternalLanguagePack> scanExtensionLanguagePacks()
+{
+    QVector<ExternalLanguagePack> packs;
+    QSet<QString> seenLanguageIds;
+    for (const QString& rootPath : miacode::extensions::defaultExtensionSearchPaths()) {
+        QDir root(rootPath);
+        if (!root.exists()) {
+            continue;
+        }
+        if (QFileInfo::exists(root.filePath(QStringLiteral("miacode-extension.json")))
+            || QFileInfo::exists(root.filePath(QStringLiteral("package.json")))) {
+            appendExtensionRootLanguagePacks(QFileInfo(root.absolutePath()), &packs, &seenLanguageIds);
+            continue;
+        }
+        const QFileInfoList entries = root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QFileInfo& entry : entries) {
+            appendExtensionRootLanguagePacks(entry, &packs, &seenLanguageIds);
+        }
+    }
+    return packs;
+}
+
+QString resolvedLanguageTokenFromStorage()
+{
+    const QByteArray env = qgetenv("MIACODE_LANG").trimmed();
+    if (!env.isEmpty()) {
+        const QString envToken = normalizedLanguageToken(QString::fromUtf8(env));
+        if (isBuiltInLanguageToken(envToken)) {
+            return builtInLanguageToken(envToken);
+        }
+        for (const auto& pack : externalLanguagePacksStorage()) {
+            if (pack.id == envToken) {
+                return envToken;
+            }
+        }
     }
 
-    return UiText::LanguagePreference::English;
+    const QString storedToken = normalizedLanguageToken(
+        UiText::loadPreferencesObject().value(QString::fromLatin1(kUiSectionKey)).toObject()
+            .value(QString::fromLatin1(kLanguageKey)).toString(QStringLiteral("system")));
+    if (isBuiltInLanguageToken(storedToken)) {
+        const QString normalized = builtInLanguageToken(storedToken);
+        if (normalized != QStringLiteral("system")) {
+            return normalized;
+        }
+    } else {
+        for (const auto& pack : externalLanguagePacksStorage()) {
+            if (pack.id == storedToken) {
+                return storedToken;
+            }
+        }
+    }
+
+    const UiText::LanguagePreference resolved = resolvedLanguagePreference();
+    switch (resolved) {
+    case UiText::LanguagePreference::Chinese:
+        return QStringLiteral("zh");
+    case UiText::LanguagePreference::English:
+    case UiText::LanguagePreference::System:
+    default:
+        return QStringLiteral("en");
+    }
 }
 
 const QHash<QString, QString>& zhMap()
@@ -480,7 +625,6 @@ const QHash<QString, QString>& zhMap()
         {"dialog.preferences.language.system", "跟随系统"},
         {"dialog.preferences.language.english", "English"},
         {"dialog.preferences.language.chinese", "简体中文"},
-        {"dialog.preferences.language.japanese", "日本語"},
         {"dialog.preferences.theme", "主题"},
         {"dialog.preferences.theme.system", "跟随系统"},
         {"dialog.preferences.theme.light", "浅色"},
@@ -519,6 +663,35 @@ const QHash<QString, QString>& zhMap()
         {"dialog.preferences.editor_ime_input_disabled", "禁止中文输入法输入"},
         {"dialog.preferences.performance_group", "性能"},
         {"dialog.preferences.shortcuts_group", "快捷键"},
+        {"dialog.preferences.extensions_group", "扩展"},
+        {"dialog.preferences.extensions.open_folder", "打开扩展文件夹"},
+        {"dialog.preferences.extensions.refresh", "刷新扩展"},
+        {"dialog.preferences.extensions.open_logs", "打开日志位置"},
+        {"dialog.preferences.extensions.enabled", "启用"},
+        {"dialog.preferences.extensions.name", "扩展"},
+        {"dialog.preferences.extensions.version", "版本"},
+        {"dialog.preferences.extensions.contributions", "贡献"},
+        {"dialog.preferences.extensions.permissions", "权限"},
+        {"dialog.preferences.extensions.status", "状态"},
+        {"extension.menu.extensions", "扩展"},
+        {"extension.menu.empty", "没有扩展命令"},
+        {"extension.dialog.permission_title", "扩展权限"},
+        {"extension.dialog.permission_message", "扩展 %1 请求高风险权限：\n%2\n\n目标：%3\n\n是否允许并记住此授权？"},
+        {"extension.dialog.input_title", "扩展输入"},
+        {"extension.dialog.quick_pick_title", "扩展选择"},
+        {"extension.dialog.canceled", "已取消。"},
+        {"extension.command.unavailable",
+         "扩展命令不可用：%1\n\n可能原因：该扩展已禁用、manifest 无效，或刷新后该命令已经不存在。"},
+        {"extension.command.runtime_not_running",
+         "扩展运行时未启动，MiaCode 无法运行：%1\n\n可能原因：该扩展没有可加载的 JS 入口、激活失败，或需要刷新扩展。"},
+        {"extension.command.failed", "扩展命令未正常响应：%1\n\n原因：%2"},
+        {"extension.command.ran", "扩展命令已运行：%1"},
+        {"editor.bookmark.insert", "插入书签"},
+        {"editor.bookmark.rename", "重命名书签"},
+        {"editor.bookmark.delete", "删除书签"},
+        {"editor.bookmark.show_in_sidebar", "在侧边栏显示"},
+        {"editor.bookmark.untitled", "未命名书签"},
+        {"editor.bookmark.delete_confirm", "确定删除书签“%1”吗？这会删除该行的谱面注释。"},
         {"dialog.preferences.shortcuts.edit", "修改快捷键"},
         {"dialog.preferences.shortcuts.reset", "还原快捷键"},
         {"dialog.preferences.shortcuts.title", "键盘快捷方式"},
@@ -761,442 +934,6 @@ const QHash<QString, QString>& zhMap()
     return map;
 }
 
-const QHash<QString, QString>& jaMap()
-{
-    static const QHash<QString, QString> map{
-        {"menu.file", "ファイル(&F)"},
-        {"menu.tools", "道具(&T)"},
-        {"menu.transform", "編集(&M)"},
-        {"menu.help", "ヘルプ(&H)"},
-
-        {"action.new", "新規"},
-        {"action.open", "開く"},
-        {"action.open_folder", "フォルダーを開く"},
-        {"action.open_current_folder", "今のフォルダーを開く"},
-        {"action.open_recent", "最近開いたファイル"},
-        {"action.open_recent.empty", "最近開いたファイルはありません"},
-        {"dialog.open_startup_folder.missing_maidata.title", "maidata.txt が見つかりません"},
-        {"dialog.open_startup_folder.missing_maidata.message", "ドロップしたフォルダーに maidata.txt がありません：\n%1"},
-        {"dialog.open_startup_target.missing.title", "開けませんでした"},
-        {"dialog.open_startup_target.missing.message", "ドロップしたファイルまたはフォルダーが存在しません：\n%1"},
-        {"action.save", "保存"},
-        {"action.ok", "OK"},
-        {"action.discard", "破棄"},
-        {"action.cancel", "取り消し"},
-        {"action.close", "閉じる"},
-        {"action.yes", "はい"},
-        {"action.no", "いいえ"},
-        {"action.browse", "参照..."},
-        {"action.save_as", "名前を付けて保存"},
-        {"action.preferences", "設定..."},
-        {"action.restore_backup", "予備から復元"},
-        {"action.restore_backup.empty", "使える予備はありません"},
-        {"dialog.restore_backup.title", "予備から復元"},
-        {"dialog.restore_backup.missing", "予備ファイルがありません：\n%1"},
-        {"dialog.restore_backup.read_failed", "予備ファイルを読めません：\n%1"},
-        {"dialog.restore_backup.confirm", "%1 の予備を復元しますか？"},
-        {"dialog.restore_backup.abnormal_exit_confirm", "前回 MiaCode は正常に終了しませんでした。\n\n%1 の予備を復元しますか？"},
-        {"status.restore_backup.loaded", "予備から復元しました。変更を残すには保存してください。"},
-        {"action.about", "MiaCode について"},
-        {"dialog.invalid_star_preview.title", "隠し設定"},
-        {"dialog.invalid_star_preview.enable", "不正な星の表示を有効にしました。今回の起動中だけ有効です。"},
-        {"dialog.invalid_star_preview.already_enabled", "不正な星の表示はすでに有効です。今回の起動中だけ有効です。"},
-        {"dialog.invalid_star_preview.enabled_status", "不正な星の表示を有効にしました（今回の起動中のみ）。"},
-        {"action.cut", "切り取り"},
-        {"action.copy", "コピー"},
-        {"action.paste", "貼り付け"},
-        {"action.undo", "元に戻す"},
-        {"action.redo", "やり直し"},
-        {"action.stop_preview", "停止"},
-        {"action.pause_preview", "再生/一時停止"},
-        {"action.preview_speed_down", "再生速度 ↓"},
-        {"action.preview_speed_up", "再生速度 ↑"},
-        {"action.audio_settings", "音の設定"},
-        {"action.video_settings", "表示設定"},
-        {"action.skin_settings", "スキン"},
-        {"toolbar.skin", "スキン"},
-        {"toolbar.export", "出力"},
-        {"action.export_chart", "出力"},
-        {"action.export_cover", "ジャケット出力"},
-        {"action.batch_export", "一括出力"},
-        {"action.transform.mirror_lr", "左右反転"},
-        {"action.transform.mirror_ud", "上下反転"},
-        {"action.transform.rotate_180", "180° 回転"},
-        {"action.transform.rotate_ccw_45", "左へ 45° 回転"},
-        {"action.transform.rotate_cw_45", "右へ 45° 回転"},
-        {"action.transform.more", "さらに..."},
-        {"action.transform.toggle_break", "すべて Break 切替"},
-        {"action.transform.toggle_ex", "すべて Ex 切替"},
-        {"action.transform.toggle_firework", "すべて Firework 切替"},
-        {"action.transform.random_rotate", "すべてランダム回転"},
-        {"context.batch_transform", "一括操作"},
-        {"context.more_transform", "さらに..."},
-
-        {"toolbar.settings_placeholder", "設定"},
-
-        {"preview.play", "再生"},
-        {"preview.pause", "一時停止"},
-        {"preview.fullscreen.window_title", "全画面表示"},
-        {"preview.fullscreen.exit_hint", "Esc で全画面を終了"},
-        {"preview.fullscreen.exit_tooltip", "全画面表示を終了（Esc）"},
-        {"preview.fullscreen.enter_tooltip", "全画面表示を開く"},
-
-        {"editor.metadata", "譜面情報設定"},
-        {"editor.welcome", "MiaCode へようこそ！"},
-        {"editor.des", "譜面作者"},
-        {"editor.export", "出力"},
-
-        {"metadata.information", "基本情報"},
-        {"metadata.other_fields", "その他の &xx 欄"},
-        {"metadata.field.title", "タイトル"},
-        {"metadata.field.artist", "作曲者"},
-        {"metadata.field.first", "開始ずれ"},
-        {"metadata.field.des", "譜面作者"},
-        {"metadata.field.cover", "ジャケット"},
-        {"metadata.empty_hint", "← クリックして難易度を追加"},
-        {"metadata.latency_card.title", "遅延と開始ずれの調整"},
-        {"metadata.latency_card.open", "遅延設定を開く →"},
-
-        {"sidebar.metadata", "譜面情報設定"},
-        {"sidebar.add_difficulty", "難易度を追加"},
-        {"sidebar.export", "出力"},
-
-        {"tab.timeline", "時間軸"},
-        {"tab.validation_errors", "検査エラー"},
-
-        {"dialog.preferences.title", "設定"},
-        {"dialog.preferences.interface_group", "外観"},
-        {"dialog.preferences.language", "言語"},
-        {"dialog.preferences.language.system", "システムに合わせる"},
-        {"dialog.preferences.language.english", "English"},
-        {"dialog.preferences.language.chinese", "简体中文"},
-        {"dialog.preferences.language.japanese", "日本語"},
-        {"dialog.preferences.theme", "テーマ"},
-        {"dialog.preferences.theme.system", "システムに合わせる"},
-        {"dialog.preferences.theme.light", "明るい"},
-        {"dialog.preferences.theme.dark", "暗い"},
-        {"dialog.preferences.preview_side", "プレビュー位置"},
-        {"dialog.preferences.preview_side.right", "右"},
-        {"dialog.preferences.preview_side.left", "左"},
-
-        {"dialog.welcome.title", "MiaCode へようこそ"},
-        {"dialog.welcome.heading", "MiaCode へようこそ！"},
-        {"dialog.welcome.subtitle", "作業画面の見た目を選びます。あとで上部メニューの歯車からいつでも変更できます。"},
-        {"dialog.welcome.preview.editor", "編集欄"},
-        {"dialog.welcome.preview.preview", "プレビュー"},
-        {"dialog.welcome.preview_side", "プレビュー位置"},
-        {"dialog.welcome.preview_side.right", "右側"},
-        {"dialog.welcome.preview_side.left", "左側"},
-        {"dialog.welcome.theme", "色テーマ"},
-        {"dialog.welcome.theme.light", "明るい"},
-        {"dialog.welcome.theme.dark", "暗い"},
-        {"dialog.welcome.chinese_input", "中国語入力"},
-        {"dialog.welcome.chinese_input.disable", "入力を無効"},
-        {"dialog.welcome.chinese_input.enable", "入力を有効"},
-        {"dialog.welcome.chinese_input.fullwidth", "全角文字へ変換"},
-        {"dialog.welcome.chinese_input.hint",
-         "コメント機能を使わない場合は「入力を無効」がおすすめです。\n"
-         "コメント機能を使い、1h【8:1】のような誤入力を減らしたい場合は「全角文字へ変換」がおすすめです。"},
-        {"dialog.welcome.get_started", "始める"},
-        {"dialog.preferences.editor_group", "編集"},
-        {"dialog.preferences.editor_top_display", "上部表示"},
-        {"dialog.preferences.editor_top_display.latency", "開始ずれ"},
-        {"dialog.preferences.editor_top_display.designer", "譜面作者"},
-        {"dialog.preferences.editor_font_size", "文字サイズ"},
-        {"dialog.preferences.editor_line_spacing", "行間"},
-        {"dialog.preferences.editor_half_width_input", "半角記号入力に固定"},
-        {"dialog.preferences.editor_auto_completion", "括弧を自動補完"},
-        {"dialog.preferences.editor_ime_input_disabled", "中国語入力を無効"},
-        {"dialog.preferences.performance_group", "性能"},
-        {"dialog.preferences.shortcuts_group", "ショートカット"},
-        {"dialog.preferences.shortcuts.edit", "キー設定を編集"},
-        {"dialog.preferences.shortcuts.reset", "キー設定を戻す"},
-        {"dialog.preferences.shortcuts.title", "キー設定"},
-        {"dialog.preferences.shortcuts.command", "命令"},
-        {"dialog.preferences.shortcuts.keybinding", "キー"},
-        {"dialog.preferences.shortcuts.change", "キーを変更"},
-        {"dialog.preferences.shortcuts.capture_title", "キーを変更"},
-        {"dialog.preferences.shortcuts.capture_prompt", "使うキーの組み合わせを押してから Enter を押してください。"},
-        {"dialog.preferences.shortcuts.capture_prompt_hold", "押し続け用のキーを押してから Enter を押してください（Alt など単独の修飾キーも可）。"},
-        {"dialog.preferences.shortcuts.reset_confirm_title", "キー設定を戻す"},
-        {"dialog.preferences.shortcuts.reset_confirm_message", "変更できるキー設定をすべて初期値に戻しますか？"},
-        {"dialog.preferences.extensions_group", "拡張"},
-        {"dialog.preferences.extensions.open_folder", "拡張フォルダーを開く"},
-        {"dialog.preferences.extensions.refresh", "拡張を更新"},
-        {"dialog.preferences.extensions.open_logs", "ログの場所を開く"},
-        {"dialog.preferences.extensions.enabled", "有効"},
-        {"dialog.preferences.extensions.name", "拡張"},
-        {"dialog.preferences.extensions.version", "版"},
-        {"dialog.preferences.extensions.contributions", "追加内容"},
-        {"dialog.preferences.extensions.status", "状態"},
-        {"action.reset", "戻す"},
-        {"dialog.preferences.restart_title", "再起動が必要です"},
-        {"dialog.preferences.restart_message", "言語設定を保存しました。メニュー、字体、画面の文字に反映するには MiaCode を再起動してください。"},
-        {"dialog.unsaved_changes.title", "未保存の変更"},
-        {"dialog.unsaved_changes.message", "今の文書に未保存の変更があります。先に保存しますか？"},
-        {"dialog.unsaved_field_changes.title", "未保存の欄があります"},
-        {"dialog.unsaved_field_changes.message", "%1 に未保存の変更があります。切り替える前に保存しますか？"},
-        {"dialog.unsaved_field_changes.field.metadata", "譜面情報"},
-
-        {"dialog.audio_settings.title", "音の設定"},
-        {"dialog.video_settings.title", "表示設定"},
-        {"dialog.render_settings.audio_group", "音"},
-        {"dialog.render_settings.video_group", "映像"},
-        {"dialog.render_settings.gameplay_group", "ゲーム"},
-        {"dialog.render_settings.music_group", "音楽"},
-        {"dialog.render_settings.performance_group", "性能"},
-        {"dialog.render_settings.preview_group", "プレビュー"},
-
-        {"dialog.skin_settings.title", "スキン"},
-        {"dialog.skin_settings.dialog_title", "スキン設定"},
-        {"dialog.skin_settings.section.chart_skin", "譜面スキン"},
-        {"dialog.skin_settings.open_skin_folder", "スキンフォルダーを開く"},
-        {"dialog.skin_settings.open_judge_line_folder", "判定線フォルダーを開く"},
-        {"dialog.skin_settings.open_directory", "フォルダーを開く"},
-        {"dialog.render_settings.button.close", "閉じる"},
-        {"dialog.render_settings.button.set_software_default_audio", "本体の初期値として保存"},
-        {"dialog.render_settings.button.restore_project_default", "本体の初期値を適用"},
-        {"dialog.render_settings.button.mute_non_bgm", "BGM 以外を消音"},
-        {"dialog.render_settings.button.restore_non_bgm", "BGM 以外の音量を戻す"},
-        {"dialog.render_settings.option.enabled", "有効"},
-        {"dialog.render_settings.option.disabled", "無効"},
-        {"dialog.render_settings.audio.master", "全体音量"},
-        {"dialog.render_settings.audio.bgm", "BGM 音量"},
-        {"dialog.render_settings.audio.answer", "Answer 音量"},
-        {"dialog.render_settings.audio.tap", "Tap 音量"},
-        {"dialog.render_settings.audio.break", "Break 音量"},
-        {"dialog.render_settings.audio.break_slide", "Break Slide 音量"},
-        {"dialog.render_settings.audio.slide", "Slide 音量"},
-        {"dialog.render_settings.audio.break_slide_tail_cheer_mute", "breakslide 終端の歓声音を消す"},
-        {"dialog.render_settings.audio.ex", "EX 音量"},
-        {"dialog.render_settings.audio.touch", "Touch 音量"},
-        {"dialog.render_settings.audio.track", "Track 音量"},
-        {"dialog.render_settings.audio.global", "Global 音量"},
-        {"dialog.render_settings.audio.firework", "Firework 音量"},
-        {"dialog.render_settings.audio.button.mute", "%1 を消音"},
-        {"dialog.render_settings.audio.button.unmute", "%1 を戻す"},
-        {"dialog.render_settings.music.intro_sound", "開始音"},
-        {"dialog.render_settings.music.default_intro_sound", "既定の開始音"},
-        {"dialog.render_settings.music.audition", "試聴"},
-        {"dialog.render_settings.music.open_folder", "フォルダーを開く"},
-        {"dialog.render_settings.music.open_folder.tooltip", "ここに開始音ファイルを置きます。ない場合は assets/music/track_start.wav、assets/SFX/track_start.wav の順に読みます。"},
-        {"dialog.render_settings.video.brightness", "背景/PV 明るさ"},
-        {"dialog.render_settings.video.scale.fill", "埋める（必要なら切り取り）"},
-        {"dialog.render_settings.video.scale.fit", "収める（全体を表示）"},
-        {"dialog.render_settings.video.scale.square_fit", "1:1 に収める（中央正方形）"},
-        {"dialog.render_settings.video.scale.inner_circle_fit_outer_fill", "内側 1:1 + 外側を埋める"},
-        {"dialog.render_settings.video.canvas_aspect.square", "1:1（正方形）"},
-        {"dialog.render_settings.video.canvas_aspect.4_3", "4:3"},
-        {"dialog.render_settings.video.canvas_aspect.16_9", "16:9"},
-        {"dialog.render_settings.video.auto_restore_square", "出力後に 1:1 へ自動復帰"},
-        {"dialog.render_settings.video.smooth_brightness", "明るさをなめらかに"},
-        {"dialog.render_settings.video.brightness_outer", "明るさ（外側）"},
-        {"dialog.render_settings.video.brightness_inner", "明るさ（内側）"},
-        {"dialog.render_settings.video.layout_square_scale", "譜面表示範囲"},
-        {"dialog.render_settings.video.flow_speed", "流速"},
-        {"dialog.render_settings.video.tap_flow_speed", "Tap 流速"},
-        {"dialog.render_settings.video.touch_flow_speed", "Touch 流速"},
-        {"dialog.render_settings.video.skin", "スキン"},
-        {"dialog.render_settings.video.skin.standard", "標準"},
-        {"dialog.render_settings.video.skin.dx", "DX"},
-        {"dialog.render_settings.video.skin.import", "取り込み..."},
-        {"dialog.render_settings.video.scale_mode", "背景 / PV 拡大方法"},
-        {"dialog.render_settings.video.canvas_aspect", "プレビュー画面比"},
-        {"dialog.render_settings.gameplay.judge_effect", "判定演出表示"},
-        {"dialog.render_settings.gameplay.judge_effect.slide", "slide"},
-        {"dialog.render_settings.gameplay.judge_effect.tap", "tap"},
-        {"dialog.render_settings.gameplay.judge_effect.touch", "touch"},
-        {"dialog.render_settings.gameplay.judge_line", "判定線"},
-        {"dialog.render_settings.gameplay.judge_line.point", "点"},
-        {"dialog.render_settings.gameplay.judge_line.line", "線"},
-        {"dialog.render_settings.gameplay.judge_line.area", "判定範囲"},
-        {"dialog.render_settings.gameplay.judge_line.area_labeled", "判定範囲（番号付き）"},
-        {"dialog.render_settings.gameplay.judge_line.import", "取り込み..."},
-        {"dialog.render_settings.gameplay.force_labeled_judge_line_when_paused", "一時停止中は判定範囲を表示"},
-        {"dialog.render_settings.gameplay.center_display", "中央表示"},
-        {"dialog.render_settings.gameplay.slide_stack_order", "slide の重なり順"},
-        {"dialog.render_settings.gameplay.slide_stack_order.dx_style", "DX 風"},
-        {"dialog.render_settings.gameplay.slide_stack_order.finale_style", "FiNALE 風"},
-        {"dialog.render_settings.preview.debug", "プレビューの検査情報を表示"},
-        {"dialog.render_settings.preview.canvas_frame_rate", "プレビュー更新率"},
-        {"dialog.render_settings.preview.canvas_frame_rate.30", "30 FPS"},
-        {"dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS"},
-        {"dialog.render_settings.preview.canvas_frame_rate.120", "120 FPS"},
-        {"dialog.render_settings.preview.canvas_frame_rate.display", "画面の最大更新率"},
-        {"dialog.preferences.performance.pv_frame_rate", "PV 更新率"},
-        {"dialog.preferences.performance.timeline_frame_rate", "時間軸更新率"},
-        {"dialog.preferences.performance.video_decode", "PV 描画"},
-        {"dialog.preferences.performance.video_decode.hardware", "ハード描画"},
-        {"dialog.preferences.performance.video_decode.software", "ソフト描画"},
-        {"dialog.render_settings.preview.show_object_stats", "プレビュー/出力に物量を表示"},
-        {"dialog.render_settings.preview.show_validation_summary", "上部にエラー/警告数を表示"},
-        {"editor.validation_summary.tooltip_with_muri", "エラー %1、警告 %2、無理 %3"},
-        {"dialog.render_settings.preview.show_object_stats_preview", "プレビューに物量を表示"},
-        {"dialog.render_settings.preview.show_object_stats_export", "出力に物量を表示"},
-
-        {"dialog.video_export.title", "動画出力"},
-        {"dialog.video_export.output", "出力先"},
-        {"dialog.video_export.browse", "参照..."},
-        {"dialog.video_export.resolution", "解像度"},
-        {"dialog.video_export.fps", "FPS"},
-        {"dialog.video_export.audio_bitrate", "音質"},
-        {"dialog.video_export.preset", "出力品質"},
-        {"dialog.video_export.preset.fast", "高速"},
-        {"dialog.video_export.preset.high_quality", "高品質"},
-        {"dialog.video_export.section.options", "項目"},
-        {"dialog.video_export.section.font", "字体"},
-        {"dialog.video_export.section.range", "出力範囲"},
-        {"dialog.video_export.range.start", "開始"},
-        {"dialog.video_export.range.end", "終了"},
-        {"dialog.video_export.range.set_left", "← 設定"},
-        {"dialog.video_export.range.set_end", "終了を設定"},
-        {"dialog.video_export.range.set_current", "今の値に設定"},
-        {"dialog.video_export.range.set_current.tip", "今のプレビュー位置を使います"},
-        {"dialog.video_export.range.intro_tag", "開始演出あり"},
-        {"dialog.video_export.preview.stop", "停止"},
-        {"dialog.video_export.preview.play", "再生"},
-        {"dialog.video_export.preview.pause", "一時停止"},
-        {"dialog.video_export.button.export", "出力"},
-        {"dialog.video_export.button.cancel", "取り消し"},
-        {"dialog.video_export.button.close", "閉じる"},
-        {"dialog.video_export.option.show_object_stats", "物量を表示"},
-        {"dialog.video_export.option.show_chart_info", "左上に譜面情報を表示"},
-        {"dialog.video_export.option.hud_font", "HUD 字体"},
-        {"dialog.video_export.option.hud_font_settings", "字体設定"},
-        {"dialog.video_export.option.import_hud_font", "字体を取り込む"},
-        {"dialog.video_export.option.reset_hud_font", "戻す"},
-        {"dialog.video_export.option.hud_font_default", "既定の字体"},
-        {"dialog.video_export.error.invalid_hud_font", "有効な .ttf または .otf 字体ファイルを選んでください。"},
-        {"dialog.video_export.error.copy_hud_font_failed", "字体を字体置き場へコピーできませんでした。"},
-        {"dialog.video_export.option.show_timestamp", "左下に時刻を表示"},
-        {"dialog.video_export.option.smooth_brightness", "明るさをなめらかに"},
-        {"dialog.video_export.option.brightness_outer", "明るさ（外側）"},
-        {"dialog.video_export.option.brightness_inner", "明るさ（内側）"},
-        {"dialog.video_export.option.layout_size", "譜面表示範囲"},
-        {"dialog.video_export.option.flow_speed", "流速"},
-        {"dialog.video_export.option.tap_flow_speed", "Tap 流速"},
-        {"dialog.video_export.option.touch_flow_speed", "Touch 流速"},
-        {"dialog.video_export.option.scale_mode", "背景 / PV 拡大方法"},
-        {"dialog.video_export.option.scale.fill", "埋める（必要なら切り取り）"},
-        {"dialog.video_export.option.scale.fit", "収める（全体を表示）"},
-        {"dialog.video_export.option.scale.square_fit", "1:1 に収める（中央正方形）"},
-        {"dialog.video_export.option.scale.inner_circle_fit_outer_fill", "内側 1:1 + 外側を埋める"},
-        {"dialog.batch_export.title", "一括出力"},
-        {"dialog.batch_export.difficulty", "難易度"},
-        {"dialog.batch_export.output_dir", "出力フォルダー"},
-        {"dialog.batch_export.chart_folders", "譜面フォルダー"},
-        {"dialog.batch_export.add_folders", "フォルダーを追加"},
-        {"dialog.batch_export.remove_selected", "選択を削除"},
-        {"dialog.batch_export.clear", "空にする"},
-        {"dialog.batch_export.select_charts", "譜面フォルダーを選択"},
-        {"dialog.batch_export.error.no_difficulty", "有効な難易度がありません。"},
-        {"dialog.batch_export.error.no_preview", "プレビュー画面がまだ初期化されていません。"},
-        {"dialog.batch_export.error.no_chart_dirs", "譜面フォルダーを 1 つ以上追加してください。"},
-        {"dialog.batch_export.error.no_difficulties", "難易度を 1 つ以上選んでください。"},
-        {"dialog.batch_export.error.no_output_dir", "出力フォルダーを選んでください。"},
-        {"dialog.batch_export.error.output_dir_create_failed", "出力フォルダーを作成できません。"},
-        {"dialog.batch_export.error.invalid_selection", "必要なファイルがないフォルダーは飛ばしました。"},
-        {"dialog.batch_export.error.invalid_folder", "選んだ場所は有効なフォルダーではありません。"},
-        {"dialog.batch_export.error.missing_chart_file", "net.txt（または maidata.txt）がありません。"},
-        {"dialog.batch_export.error.missing_track_file", "track.mp3 がありません。"},
-        {"dialog.batch_export.error.read_chart_failed", "%1 を読めません。"},
-        {"dialog.batch_export.error.missing_requested_difficulty", "選んだフォルダーに現在の難易度がありません。"},
-        {"dialog.batch_export.error.no_selected_difficulties_in_folder", "このフォルダーには選択中の難易度がありません：%1"},
-        {"dialog.batch_export.error.no_markers", "この難易度には出力できる解析済み物件がありません。"},
-        {"dialog.batch_export.error.invalid_duration", "この譜面の出力時間を決められません。"},
-        {"dialog.batch_export.error.validation_failed_count", "構文検査に失敗しました。エラー %1 件。"},
-        {"dialog.batch_export.error.validation_failed_detail", "構文検査に失敗しました：%1"},
-        {"dialog.batch_export.progress.preparing", "一括出力を準備中..."},
-        {"dialog.batch_export.progress.exporting", "%1/%2 を出力中...\n%3"},
-        {"dialog.batch_export.progress.exporting_named", "%1/%2 を出力中\n%3"},
-        {"dialog.batch_export.progress.current_item", "%1\n%2"},
-        {"dialog.batch_export.message.canceled", "一括出力を取り消しました。"},
-        {"dialog.batch_export.message.success", "一括出力が完了しました：成功 %1 件。"},
-        {"dialog.batch_export.message.partial_failed", "一括出力は完了しましたが、一部失敗しました。\n成功：%1\n失敗：%2"},
-        {"dialog.batch_export.message.output_files", "出力ファイル："},
-        {"dialog.video_export.error.preview_unavailable", "プレビュー画面が初期化されていません。"},
-        {"dialog.video_export.progress.preparing", "出力を準備中..."},
-        {"dialog.video_export.progress.worker_ready", "裏側の処理を準備済み..."},
-        {"dialog.video_export.progress.starting_export", "出力を開始中..."},
-        {"dialog.video_export.progress.preparing_audio", "音を準備中..."},
-        {"dialog.video_export.progress.starting_ffmpeg", "ffmpeg を起動中..."},
-        {"dialog.video_export.progress.rendering", "フレームを描画中..."},
-        {"dialog.video_export.progress.rendering_count", "フレームを描画中... %1/%2"},
-        {"dialog.video_export.progress.finalizing_encode", "動画を仕上げ中..."},
-        {"dialog.video_export.progress.repacking", "動画を仕上げ中..."},
-        {"dialog.video_export.progress.finishing", "最後の処理中..."},
-        {"dialog.video_export.progress.remaining", "残り約 %1"},
-        {"dialog.video_export.progress.generic", "出力中..."},
-        {"dialog.video_export.progress.canceling", "出力を取り消し中..."},
-        {"dialog.video_export.progress.retrying_safe_mode", "出力用の別処理が落ちました。安全設定で再試行中..."},
-        {"dialog.video_export.progress.done", "出力完了。"},
-        {"dialog.video_export.status.canceled", "出力を取り消しました。"},
-        {"dialog.video_export.status.completed", "出力完了。"},
-        {"dialog.video_export.message.canceled", "出力を取り消しました。"},
-        {"dialog.video_export.message.completed", "出力完了。"},
-        {"dialog.video_export.error.failed", "出力に失敗しました。"},
-        {"dialog.video_export.error.worker_crash", "出力用の別処理が落ちました。"},
-        {"dialog.video_export.error.worker_exit", "出力用の別処理が異常終了しました。"},
-        {"dialog.video_export.error.worker_retry_note", "出力用の別処理が一度落ちたため、PBO を自動で無効にして再試行しました。"},
-        {"dialog.video_export.error.worker_retry_first_attempt", "初回試行の診断"},
-        {"dialog.video_export.error.worker_retry_final_attempt", "安全設定での再試行診断"},
-        {"dialog.video_export.error.failed_title", "出力失敗"},
-
-        {"status.audio_restored_default", "既定の音量設定に戻しました"},
-        {"status.audio_saved_software_default", "今の音量設定を本体の初期値として保存しました"},
-        {"status.touch_trail_enabled", "Touch 軌跡を表示しました"},
-        {"status.touch_trail_disabled", "Touch 軌跡を隠しました"},
-        {"status.judge_marker_enabled", "判定印を表示しました"},
-        {"status.judge_marker_disabled", "判定印を隠しました"},
-        {"status.editor_text_display_updated", "文字欄の表示を更新しました。"},
-        {"status.preferences_updated", "設定を更新しました。"},
-        {"status.preferences_saved", "設定を保存しました。再起動後に反映されます。"},
-        {"status.syntax.select_difficulty", "先に難易度の本文を選んでください。"},
-        {"status.syntax.failed_counts", "構文検査に失敗しました：エラー %1 件、警告 %2 件。"},
-
-        {"about.platform", "リリース環境"},
-        {"about.build_type", "ビルド種別"},
-        {"dialog.batch_export.error.export_failed", "出力に失敗しました。"},
-        {"dialog.batch_export.error.invalid_first", "譜面情報の &first の値が正しくありません。"},
-        {"dialog.batch_export.error.skin_missing", "プレビュー用スキン素材が見つかりません。"},
-        {"dialog.normalize.title", "譜面を整形"},
-        {"dialog.normalize.failed", "現在の譜面を整形できませんでした。"},
-        {"dialog.render_settings.gameplay.center_display.off", "なし"},
-        {"dialog.render_settings.gameplay.center_display.combo", "COMBO"},
-        {"dialog.render_settings.gameplay.center_display.achievement_dx_plus", "ACHIEVEMENT DX (+)"},
-        {"dialog.render_settings.gameplay.center_display.achievement_dx_minus_100", "ACHIEVEMENT DX (100-)"},
-        {"dialog.render_settings.gameplay.center_display.achievement_dx_minus_101", "ACHIEVEMENT DX (101-)"},
-        {"dialog.render_settings.gameplay.center_display.dx_score_plus", "DX SCORE (+)"},
-        {"dialog.render_settings.gameplay.center_display.dx_score_minus", "DX SCORE (-)"},
-        {"dialog.render_settings.gameplay.center_display.achievement_finale_plus", "ACHIEVEMENT FINALE (+)"},
-        {"dialog.video_export.button.cancel_export", "出力を取り消す"},
-        {"dialog.video_export.button.start_export", "出力開始"},
-        {"dialog.video_export.error.executable_missing", "MiaCode の実行ファイルが見つかりません。"},
-        {"dialog.video_export.error.invalid_flow_speed", "流速の値が正しくありません。"},
-        {"dialog.video_export.error.launch_failed", "バックグラウンド出力を開始できませんでした。"},
-        {"dialog.video_export.error.no_difficulty", "有効な難易度が選択されていません。"},
-        {"dialog.video_export.error.no_markers", "出力できる解析済みノーツがありません。"},
-        {"dialog.video_export.error.skin_missing", "プレビュー用スキン素材が見つかりません。"},
-        {"dialog.video_export.error.sync_failed", "現在の編集状態を同期できませんでした。"},
-        {"dialog.video_export.error.worker_busy", "別の出力がすでに実行中です。"},
-        {"dialog.video_export.error.worker_write_failed", "出力スナップショットをワーカーへ送信できませんでした。"},
-        {"dialog.video_export.section.intro", "開始演出"},
-        {"dialog.video_export.section.output", "出力"},
-        {"editor.validation_summary.tooltip", "エラー %1、警告 %2"},
-        {"status.muri_render_mode_dx", "プレビューモード：無理チェック。"},
-        {"status.muri_render_mode_native", "プレビューモード：譜面確認。"},
-        {"status.normalize.already_normalized", "譜面整形：すでに整形済みです。"},
-        {"status.normalize.applied", "譜面整形を適用しました：%1 小節行。"},
-        {"status.transform.mirror_lr", "左右反転を適用しました。"},
-        {"status.transform.mirror_ud", "上下反転を適用しました。"},
-        {"status.transform.rotate_180", "180° 回転を適用しました。"},
-        {"status.transform.rotate_ccw_45", "-45° 回転を適用しました。"},
-        {"status.transform.rotate_cw_45", "+45° 回転を適用しました。"},
-
-    };
-    return map;
-}
-
 UiText::LanguagePreference& preferredLanguageStorage()
 {
     static UiText::LanguagePreference preference = loadStoredLanguagePreference();
@@ -1211,46 +948,116 @@ UiText::ThemePreference& preferredThemeStorage()
 
 }  // namespace
 
-namespace UiText {
-
-LanguagePreference preferredLanguage()
+UiText::LanguagePreference UiText::preferredLanguage()
 {
     return preferredLanguageStorage();
 }
 
-void setPreferredLanguage(LanguagePreference preference)
+void UiText::setPreferredLanguage(LanguagePreference preference)
 {
     preferredLanguageStorage() = preference;
     saveStoredLanguagePreference(preference);
 }
+QString UiText::preferredLanguageToken()
+{
+    const QJsonObject root = loadPreferencesObject();
+    return normalizedLanguageToken(
+        root.value(QString::fromLatin1(kUiSectionKey)).toObject()
+            .value(QString::fromLatin1(kLanguageKey)).toString(QStringLiteral("system")));
+}
 
-ThemePreference preferredTheme()
+void UiText::setPreferredLanguageToken(const QString& token)
+{
+    const QString normalized = normalizedLanguageToken(token);
+    QJsonObject root = loadPreferencesObject();
+    QJsonObject ui = root.value(QString::fromLatin1(kUiSectionKey)).toObject();
+    ui.insert(QString::fromLatin1(kLanguageKey), normalized.isEmpty() ? QStringLiteral("system") : normalized);
+    root.insert(QString::fromLatin1(kUiSectionKey), ui);
+    root.insert(QStringLiteral("schema"), QString::fromLatin1(kPreferencesSchema));
+    savePreferencesObject(root);
+    preferredLanguageStorage() = parseLanguagePreference(preferredLanguageToken());
+}
+
+QString UiText::resolvedLanguageToken()
+{
+    return resolvedLanguageTokenFromStorage();
+}
+
+QVector<UiText::LanguageOption> UiText::availableLanguageOptions()
+{
+    QVector<UiText::LanguageOption> options{
+        {QStringLiteral("system"), text(QStringLiteral("dialog.preferences.language.system")).isEmpty()
+            ? QStringLiteral("Follow System")
+            : text(QStringLiteral("dialog.preferences.language.system")), true},
+        {QStringLiteral("en"), text(QStringLiteral("dialog.preferences.language.english")).isEmpty()
+            ? QStringLiteral("English")
+            : text(QStringLiteral("dialog.preferences.language.english")), true},
+        {QStringLiteral("zh"), text(QStringLiteral("dialog.preferences.language.chinese")).isEmpty()
+            ? QStringLiteral("Simplified Chinese")
+            : text(QStringLiteral("dialog.preferences.language.chinese")), true},
+    };
+    for (const auto& pack : externalLanguagePacksStorage()) {
+        options.append(UiText::LanguageOption{pack.id, pack.label, false});
+    }
+    return options;
+}
+
+bool UiText::isLanguageAvailable(const QString& token)
+{
+    const QString normalized = normalizedLanguageToken(token);
+    if (isBuiltInLanguageToken(normalized)) {
+        return true;
+    }
+    for (const auto& pack : externalLanguagePacksStorage()) {
+        if (pack.id == normalized) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool UiText::ensurePreferredLanguageAvailable()
+{
+    const QString token = preferredLanguageToken();
+    if (token.isEmpty() || isLanguageAvailable(token)) {
+        return false;
+    }
+    setPreferredLanguageToken(QStringLiteral("system"));
+    return true;
+}
+
+void UiText::reloadExtensionLanguagePacks()
+{
+    externalLanguagePacksStorage() = scanExtensionLanguagePacks();
+}
+
+UiText::ThemePreference UiText::preferredTheme()
 {
     return preferredThemeStorage();
 }
 
-void setPreferredTheme(ThemePreference preference)
+void UiText::setPreferredTheme(ThemePreference preference)
 {
     preferredThemeStorage() = preference;
     saveStoredThemePreference(preference);
 }
 
-bool isChineseUi()
+bool UiText::isChineseUi()
 {
     return resolvedLanguagePreference() == LanguagePreference::Chinese;
 }
 
-QString preferencesFilePath()
+QString UiText::preferencesFilePath()
 {
     return preferencesPath();
 }
 
-QString currentPreferencesSchema()
+QString UiText::currentPreferencesSchema()
 {
     return QString::fromLatin1(kPreferencesSchema);
 }
 
-QString storedPreferencesSchema()
+QString UiText::storedPreferencesSchema()
 {
     // Raw read mirroring loadPreferencesObject()'s file precedence (primary then
     // legacy), but WITHOUT normalizedPreferencesRoot() — that helper always
@@ -1265,7 +1072,7 @@ QString storedPreferencesSchema()
     return root.value(QStringLiteral("schema")).toString();
 }
 
-QJsonObject loadPreferencesObject()
+QJsonObject UiText::loadPreferencesObject()
 {
     const QJsonObject primary = loadJsonObjectFromFile(preferencesPath());
     if (!primary.isEmpty()) {
@@ -1278,12 +1085,12 @@ QJsonObject loadPreferencesObject()
     return normalizedPreferencesRoot(QJsonObject());
 }
 
-bool savePreferencesObject(const QJsonObject& root)
+bool UiText::savePreferencesObject(const QJsonObject& root)
 {
     return saveJsonObjectToFile(preferencesPath(), normalizedPreferencesRoot(root));
 }
 
-QString text(const QString& key)
+QString UiText::text(const QString& key)
 {
     if (resolvedLanguagePreference() == LanguagePreference::Chinese) {
         const auto it = zhMap().constFind(key);
@@ -1292,14 +1099,16 @@ QString text(const QString& key)
         }
         return it.value();
     }
-    if (resolvedLanguagePreference() == LanguagePreference::Japanese) {
-        const auto it = jaMap().constFind(key);
-        if (it == jaMap().constEnd()) {
-            return QString();
+    const QString language = resolvedLanguageToken();
+    for (const auto& pack : externalLanguagePacksStorage()) {
+        if (pack.id != language) {
+            continue;
         }
-        return it.value();
+        const auto it = pack.translations.constFind(key);
+        if (it != pack.translations.constEnd()) {
+            return it.value();
+        }
+        break;
     }
     return QString();
 }
-
-}  // namespace UiText

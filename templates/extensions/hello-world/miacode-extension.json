@@ -1,0 +1,28 @@
+{
+  "id": "hello-world",
+  "name": "Hello World",
+  "version": "0.0.1",
+  "publisher": "local",
+  "main": "./extension.js",
+  "permissions": ["ui.message", "workspace.read"],
+  "engines": {
+    "miacode": ">=1.0.0"
+  },
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [
+      {
+        "command": "hello-world.say-hello",
+        "title": "Say Hello",
+        "category": "Hello World"
+      }
+    ],
+    "menus": {
+      "tools/menu": [
+        {
+          "command": "hello-world.say-hello"
+        }
+      ]
+    }
+  }
+}

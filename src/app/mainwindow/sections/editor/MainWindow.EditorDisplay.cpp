@@ -199,13 +199,14 @@ QVector<BookmarkCommentCandidate> collectBookmarkCommentCandidates(const QString
 
 bool confirmDeleteBookmark(QWidget* parent, const MainWindow::EditorBookmark& bookmark)
 {
-    const QString title = UiText::isChineseUi() ? QStringLiteral("删除书签") : QStringLiteral("Delete Bookmark");
+    const QString title = uiText("editor.bookmark.delete", "Delete Bookmark");
     const QString name = bookmark.title.trimmed().isEmpty()
-        ? (UiText::isChineseUi() ? QStringLiteral("未命名书签") : QStringLiteral("Untitled Bookmark"))
+        ? uiText("editor.bookmark.untitled", "Untitled Bookmark")
         : bookmark.title.trimmed();
-    const QString message = UiText::isChineseUi()
-        ? QStringLiteral("确定删除书签“%1”吗？这会删除该行的谱面注释。").arg(name)
-        : QStringLiteral("Delete bookmark \"%1\"? This will delete the chart comment on that line.").arg(name);
+    const QString message = uiText(
+        "editor.bookmark.delete_confirm",
+        "Delete bookmark \"%1\"? This will delete the chart comment on that line.")
+                                .arg(name);
     return UiDialogs::showMessageBox(
         QMessageBox::Question,
         parent,

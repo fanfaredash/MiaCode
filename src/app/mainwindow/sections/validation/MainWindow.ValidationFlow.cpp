@@ -682,6 +682,7 @@ void ensureEditorSelectionVisible(PlainCodeEditor* editor, const QTextCursor& se
 
 QByteArray buildEditorExtraSelectionsSignature(
     const QByteArray& validationSignature,
+    const QHash<QString, QVector<QTextEdit::ExtraSelection>>& extensionSelections,
     bool previewFollowActive,
     int previewFollowStartLine,
     int previewFollowStartCol,
@@ -694,6 +695,7 @@ QByteArray buildEditorExtraSelectionsSignature(
     QDataStream stream(&signature, QIODevice::WriteOnly);
     stream
         << validationSignature
+        << static_cast<quint32>(extensionSelections.size())
         << previewFollowActive
         << previewFollowStartLine
         << previewFollowStartCol
@@ -701,6 +703,11 @@ QByteArray buildEditorExtraSelectionsSignature(
         << previewFollowEndCol
         << previewFollowCursorLine
         << previewFollowCursorCol;
+    QStringList owners = extensionSelections.keys();
+    owners.sort(Qt::CaseInsensitive);
+    for (const QString& owner : owners) {
+        stream << owner << static_cast<quint32>(extensionSelections.value(owner).size());
+    }
     return signature;
 }
 
@@ -797,6 +804,7 @@ void MainWindow::ValidationSection::applyEditorExtraSelectionsForReason(const QS
 
     const QByteArray signature = buildEditorExtraSelectionsSignature(
         state_.validationExtraSelectionsSignature_,
+        state_.extensionEditorExtraSelections_,
         state_.previewFollowDecorationActive_,
         state_.previewFollowDecorationStartLine_,
         state_.previewFollowDecorationStartCol_,
@@ -828,6 +836,9 @@ void MainWindow::ValidationSection::applyEditorExtraSelectionsForReason(const QS
     }
 
     state_.currentEditorExtraSelections_ = state_.cachedValidationExtraSelections_;
+    for (const QVector<QTextEdit::ExtraSelection>& selections : std::as_const(state_.extensionEditorExtraSelections_)) {
+        state_.currentEditorExtraSelections_ += selections;
+    }
     if (state_.previewFollowDecorationActive_) {
         QTextCursor cursor;
         if (miacode::mainwindow::editor_selection::buildSelectionCursor(

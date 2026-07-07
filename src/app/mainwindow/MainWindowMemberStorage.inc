@@ -584,6 +584,16 @@
         QHash<int, ValidationCacheEntry> validationCacheByDifficulty_;
         QHash<QString, QSet<QString>> ignoredHeaderIssueTypesByFile_;
         QVector<ValidationDecoration> validationDecorations_;
+        QHash<QString, QVector<QTextEdit::ExtraSelection>> extensionEditorExtraSelections_;
+        QHash<QString, QVector<ExtensionDiagnosticEntry>> extensionDiagnosticsByOwner_;
+        QHash<QString, QVector<ExtensionTimelineMarkerEntry>> extensionTimelineMarkersByOwner_;
+        QVector<QJsonObject> extensionExportPresets_;
+        QHash<QString, QJsonArray> extensionRegistrationsByKind_;
+        QJsonArray extensionTimelineVisuals_;
+        QJsonArray extensionPreviewOverlays_;
+        QJsonArray extensionUiContributions_;
+        QJsonArray extensionExportHooks_;
+        QJsonObject extensionProjectData_;
         DeletedDifficultyUndoState deletedDifficultyUndoState_;
         bool previewFollowDecorationActive_ = false;
         int previewFollowDecorationStartLine_ = 1;
@@ -603,6 +613,7 @@
     MainWindowUiRefs ui_;
     MainWindowState state_;
     std::unique_ptr<miacode::latency::LatencySandboxController> latencySandboxController_;
+    std::unique_ptr<miacode::extensions::ExtensionManager> extensionManager_;
     QWidget*& editorWidget_ = ui_.editorWidget_;
     PreviewRuntime*& previewCanvas_ = state_.previewCanvas_;
     PreviewStageMediaHost*& previewStageMediaHost_ = state_.previewStageMediaHost_;

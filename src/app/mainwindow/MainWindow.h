@@ -7,6 +7,7 @@
 #include <QChronoTimer>
 #include <QElapsedTimer>
 #include <QHash>
+#include <QJsonObject>
 #include <QMainWindow>
 #include <QPointer>
 #include <QPoint>
@@ -32,6 +33,7 @@
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
+#include "extensions/ExtensionManager.h"
 
 class QAction;
 class QByteArray;
@@ -585,6 +587,25 @@ private:
         int strictNoteCount = 0;
         int strictErrorCount = 0;
         QVector<ValidationCachedIssue> issues;
+    };
+
+    struct ExtensionDiagnosticEntry {
+        QString ownerId;
+        int line = 1;
+        int col = 1;
+        int endCol = 1;
+        QString message;
+        QString severity;
+        QString source;
+    };
+
+    struct ExtensionTimelineMarkerEntry {
+        QString ownerId;
+        QString id;
+        double second = 0.0;
+        double endSecond = -1.0;
+        QString label;
+        QString color;
     };
 
     struct DeletedDifficultyUndoState {

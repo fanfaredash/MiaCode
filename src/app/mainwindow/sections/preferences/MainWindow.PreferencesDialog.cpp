@@ -1,4 +1,4 @@
-#include "MainWindow.PreferencesSection.h"
+﻿#include "MainWindow.PreferencesSection.h"
 #include "../../MainWindowShared.h"
 #include "../window/MainWindow.WindowSection.h"
 
@@ -17,6 +17,8 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
+#include "extensions/ExtensionManager.h"
+#include "extensions/ExtensionManifest.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
@@ -133,7 +135,7 @@ protected:
         // Esc closes the capture dialog without storing a new binding.
         // The line edit otherwise consumes every key, so without this
         // shortcut Esc would simply be captured as the user's chosen
-        // sequence ("Esc") — which is never what the user means by
+        // sequence ("Esc"), which is never what the user means by
         // pressing Esc on a popup.
         if (event->key() == Qt::Key_Escape && event->modifiers() == Qt::NoModifier) {
             if (auto* dialog = qobject_cast<QDialog*>(window()); dialog != nullptr) {
@@ -276,10 +278,114 @@ protected:
     }
 };
 
+class DelayedTableToolTipFilter final : public QObject {
+public:
+    explicit DelayedTableToolTipFilter(QTableWidget* table, int delayMs, QObject* parent = nullptr)
+        : QObject(parent)
+        , table_(table)
+    {
+        timer_.setSingleShot(true);
+        timer_.setInterval(delayMs);
+        connect(&timer_, &QTimer::timeout, this, [this]() {
+            showPendingToolTip();
+        });
+    }
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (table_ == nullptr || watched != table_->viewport()) {
+            return QObject::eventFilter(watched, event);
+        }
+        switch (event->type()) {
+        case QEvent::MouseMove: {
+            auto* mouseEvent = static_cast<QMouseEvent*>(event);
+            const QModelIndex index = table_->indexAt(mouseEvent->pos());
+            if (!index.isValid()) {
+                clearPendingToolTip();
+                break;
+            }
+            if (index.row() == pendingRow_ && index.column() == pendingColumn_) {
+                pendingViewportPos_ = mouseEvent->pos();
+                break;
+            }
+            pendingRow_ = index.row();
+            pendingColumn_ = index.column();
+            pendingViewportPos_ = mouseEvent->pos();
+            timer_.start();
+            QToolTip::hideText();
+            break;
+        }
+        case QEvent::Leave:
+        case QEvent::MouseButtonPress:
+        case QEvent::Wheel:
+            clearPendingToolTip();
+            break;
+        default:
+            break;
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    QString toolTipTextForCell(int row, int column) const
+    {
+        if (table_ == nullptr || row < 0 || column < 0) {
+            return QString();
+        }
+        if (QTableWidgetItem* item = table_->item(row, column); item != nullptr) {
+            const QString tip = item->toolTip().trimmed();
+            return tip.isEmpty() ? item->text().trimmed() : tip;
+        }
+        if (QWidget* widget = table_->cellWidget(row, column); widget != nullptr) {
+            const QString tip = widget->toolTip().trimmed();
+            return tip.isEmpty() ? widget->accessibleDescription().trimmed() : tip;
+        }
+        return QString();
+    }
+
+    void clearPendingToolTip()
+    {
+        timer_.stop();
+        pendingRow_ = -1;
+        pendingColumn_ = -1;
+        pendingViewportPos_ = QPoint();
+        QToolTip::hideText();
+    }
+
+    void showPendingToolTip()
+    {
+        if (table_ == nullptr || pendingRow_ < 0 || pendingColumn_ < 0) {
+            return;
+        }
+        const QModelIndex currentIndex = table_->indexAt(pendingViewportPos_);
+        if (!currentIndex.isValid()
+            || currentIndex.row() != pendingRow_
+            || currentIndex.column() != pendingColumn_) {
+            return;
+        }
+        const QString text = toolTipTextForCell(pendingRow_, pendingColumn_);
+        if (text.isEmpty() || text == QStringLiteral("-")) {
+            return;
+        }
+        QToolTip::showText(
+            table_->viewport()->mapToGlobal(pendingViewportPos_),
+            text,
+            table_->viewport(),
+            table_->visualRect(currentIndex));
+    }
+
+    QPointer<QTableWidget> table_;
+    QTimer timer_;
+    int pendingRow_ = -1;
+    int pendingColumn_ = -1;
+    QPoint pendingViewportPos_;
+};
+
 // Item delegate that gives every row a consistent text inset. Two passes:
 //   1) Paint the panel (selection bg, hover, item bg) at the FULL cell rect
 //      so a row-selected item gets one continuous blue band across both
-//      columns — adjusting `opt.rect` in a single-pass paint would shrink
+//      columns; adjusting `opt.rect` in a single-pass paint would shrink
 //      the selection visual on every cell, leaving a darker stripe at the
 //      column-1 left edge where the inset selection bg stops short.
 //   2) Draw the cell text manually at the inset rect. The inset differs
@@ -435,7 +541,7 @@ QList<QPair<QString, QStringList>> shortcutCategoryGroups()
             },
         },
         {
-            QStringLiteral("编辑器"),
+            UiText::isChineseUi() ? QStringLiteral("编辑器") : QStringLiteral("Editor"),
             {
                 QStringLiteral("editor.font_decrease"),
                 QStringLiteral("editor.font_increase"),
@@ -561,7 +667,7 @@ void MainWindow::PreferencesSection::onPreferences()
     rootLayout->setSpacing(10);
     rootLayout->setSizeConstraint(QLayout::SetFixedSize);
 
-    // Tab strip across the top — matches the render-settings dialog so
+    // Tab strip across the top matches the render-settings dialog so
     // the two preference-style surfaces share one visual pattern. The
     // shared CSS lives in UiTheme::dialogTabStripStyleSheet(), already
     // appended to the preferences stylesheet. We still call the page
@@ -572,7 +678,7 @@ void MainWindow::PreferencesSection::onPreferences()
     rootLayout->addWidget(pageStack);
 
     // Each preference page wraps its controls in a QGroupBox whose
-    // title duplicates the tab name (e.g. "外观" inside the "外观"
+    // title duplicates the tab name (e.g. "Appearance" inside the "Appearance"
     // tab). The tab strip already labels the page, so strip the inner
     // title + frame chrome before the group enters the tab. Same
     // recipe as the render-settings dialog.
@@ -602,22 +708,17 @@ void MainWindow::PreferencesSection::onPreferences()
     interfaceLayout->setHorizontalSpacing(12);
     interfaceLayout->setVerticalSpacing(8);
 
-    const UiText::LanguagePreference currentPreference = UiText::preferredLanguage();
-    UiText::LanguagePreference selectedPreference = currentPreference;
+    QString selectedLanguageToken = UiText::preferredLanguageToken();
     const UiText::ThemePreference currentThemePreference = UiText::preferredTheme();
     UiText::ThemePreference selectedThemePreference = currentThemePreference;
-    const auto languageLabel = [](UiText::LanguagePreference preference) -> QString {
-        switch (preference) {
-        case UiText::LanguagePreference::English:
-            return uiText("dialog.preferences.language.english", "English");
-        case UiText::LanguagePreference::Chinese:
-            return uiText("dialog.preferences.language.chinese", "Simplified Chinese");
-        case UiText::LanguagePreference::Japanese:
-            return uiText("dialog.preferences.language.japanese", "Japanese");
-        case UiText::LanguagePreference::System:
-        default:
-            return uiText("dialog.preferences.language.system", "Follow System");
+    const auto languageLabelForToken = [](const QString& token) -> QString {
+        const QString normalized = token.trimmed().toLower();
+        for (const auto& option : UiText::availableLanguageOptions()) {
+            if (option.id == normalized) {
+                return option.label;
+            }
         }
+        return uiText("dialog.preferences.language.system", "Follow System");
     };
     const auto themeLabel = [](UiText::ThemePreference preference) -> QString {
         switch (preference) {
@@ -640,28 +741,26 @@ void MainWindow::PreferencesSection::onPreferences()
     languageButton->setFont(uiAccentFont(10, QFont::DemiBold));
     languageButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
     languageButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
-    languageButton->setMinimumWidth(
-        languageButton->fontMetrics().horizontalAdvance(QStringLiteral("システムに合わせる")) + 28);
-    languageButton->setText(languageLabel(selectedPreference));
+    languageButton->setMinimumWidth(languageButton->fontMetrics().horizontalAdvance(QStringLiteral("Simplified Chinese")) + 28);
+    languageButton->setText(languageLabelForToken(selectedLanguageToken));
     auto* languageMenu = new QMenu(languageButton);
     languageMenu->setFont(uiAccentFont(10));
     styleRoundedMenu(*languageMenu);
-    const QList<UiText::LanguagePreference> languageOptions{
-        UiText::LanguagePreference::System,
-        UiText::LanguagePreference::English,
-        UiText::LanguagePreference::Chinese,
-        UiText::LanguagePreference::Japanese,
+    std::function<void()> rebuildLanguageMenu;
+    rebuildLanguageMenu = [&]() {
+        languageMenu->clear();
+        for (const auto& option : UiText::availableLanguageOptions()) {
+            QAction* action = languageMenu->addAction(option.label);
+            action->setData(option.id);
+            connect(action, &QAction::triggered, &dialog, [&, id = option.id, languageButton]() {
+                selectedLanguageToken = id;
+                languageButton->setText(languageLabelForToken(selectedLanguageToken));
+                UiText::setPreferredLanguageToken(selectedLanguageToken);
+                owner_.statusBar()->showMessage(uiText("status.preferences_saved", "Preferences saved. Restart to apply."));
+            });
+        }
     };
-    for (UiText::LanguagePreference preference : languageOptions) {
-        QAction* action = languageMenu->addAction(languageLabel(preference));
-        action->setData(static_cast<int>(preference));
-        connect(action, &QAction::triggered, &dialog, [&, preference, languageButton]() {
-            selectedPreference = preference;
-            languageButton->setText(languageLabel(selectedPreference));
-            UiText::setPreferredLanguage(selectedPreference);
-            owner_.statusBar()->showMessage(uiText("status.preferences_saved", "Preferences saved. Restart to apply."));
-        });
-    }
+    rebuildLanguageMenu();
     // No manual setFixedWidth here: the QSS PreferenceMenuButton rule
     // (min-width + padding + border) already defines the styled size, and
     // pinning a metrics-derived width below it is what clipped the button's
@@ -713,7 +812,7 @@ void MainWindow::PreferencesSection::onPreferences()
     interfaceLayout->addRow(themeLabelWidget, themeRow);
 
     // Chart-preview position (the same workspace left/right swap exposed by
-    // the Preview menu's "左右面板互换"). false = preview on the right
+    // the Preview menu's left/right panel swap. false = preview on the right
     // (default), true = preview on the left.
     const auto previewSideLabel = [](bool previewOnLeft) -> QString {
         return previewOnLeft
@@ -774,8 +873,8 @@ void MainWindow::PreferencesSection::onPreferences()
     bool selectedIgnoreMuriIssuePrompts = state_.ignoreMuriIssuePrompts_;
     bool selectedEditorImeInputDisabled = state_.editorImeInputDisabled_;
 
-    // Row order (top→bottom): 字号 · 行距 · 自动补全 · 顶部显示 · 忽略无理报错 ·
-    // 中文输入. 中文输入 is the advanced input-mode picker the user did not call
+    // Row order (top to bottom): font size, line spacing, auto-completion,
+    // header display, Chinese input, and ignore muri issue prompts.
     // out, so it trails the prioritised rows.
     auto* editorFontSizeLabel = new QLabel(uiText("dialog.preferences.editor_font_size", "Text Font Size"), editorGroup);
     auto* fontSizeRow = new QWidget(editorGroup);
@@ -876,11 +975,11 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(lineSpacingLabel, lineSpacingCombo);
 
-    // 自动补全 — one unified preference replacing the former three (auto-close
+    // Auto-completion is one unified preference replacing the former three (auto-close
     // brackets / hold duration / bracket suggestions). It drives bracket
     // auto-close + type-over + empty-pair backspace, the bracket suggestion
     // popup, and the 'h' hold-duration suggestions together. Presented as a
-    // 开启/关闭 menu (same idiom as the other editor rows) rather than a checkbox.
+    // On/Off menu (same idiom as the other editor rows) rather than a checkbox.
     auto* autoCompletionLabel = new QLabel(
         UiText::isChineseUi() ? QStringLiteral("自动补全") : QStringLiteral("Auto-completion"),
         editorGroup
@@ -905,8 +1004,8 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(autoCompletionLabel, autoCompletionCombo);
 
-    // 顶部显示 — what the difficulty-page header edits next to Lv: the
-    // chart-wide offset (偏移, default) or the per-difficulty designer (谱师).
+    // Header display controls what the difficulty-page header edits next to Lv:
+    // the chart-wide offset (default) or the per-difficulty designer.
     const auto headerTopDisplayLabel = [](EditorHeaderTopDisplay mode) -> QString {
         return mode == EditorHeaderTopDisplay::Designer
             ? uiText("dialog.preferences.editor_top_display.designer", "Designer")
@@ -914,7 +1013,7 @@ void MainWindow::PreferencesSection::onPreferences()
     };
     auto* headerTopDisplayLabelWidget =
         new QLabel(uiText("dialog.preferences.editor_top_display", "Header Field"), editorGroup);
-    // Plain combo box, same idiom as the 行距 row above — the two-option
+    // Plain combo box, same idiom as the line-spacing row above; the two-option
     // pick doesn't warrant the styled PreferenceMenuButton treatment.
     auto* headerTopDisplayCombo = new QComboBox(editorGroup);
     const QList<EditorHeaderTopDisplay> headerTopDisplayOptions{
@@ -963,11 +1062,11 @@ void MainWindow::PreferencesSection::onPreferences()
         owner_.applyIgnoreMuriIssuePrompts(selectedIgnoreMuriIssuePrompts, true);
         owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
     });
-    // 中文输入 combo — merges the former "Lock half-width symbol input" checkbox
+    // Chinese input combo merges the former "Lock half-width symbol input" checkbox
     // and "Disable IME input" checkbox into three graduated levels:
-    //   index 0 开启           halfWidth=OFF imeDisabled=OFF (plain IME, no filtering)
-    //   index 1 仅过滤全角字符  halfWidth=ON  imeDisabled=OFF (default: normalize commits)
-    //   index 2 禁止中文输入法  halfWidth=ON  imeDisabled=ON  (block IME candidate window)
+    //   index 0 enabled                 halfWidth=OFF imeDisabled=OFF (plain IME, no filtering)
+    //   index 1 filter full-width chars halfWidth=ON  imeDisabled=OFF (default: normalize commits)
+    //   index 2 disable IME input       halfWidth=ON  imeDisabled=ON  (block IME candidate window)
     auto* chineseInputLabel = new QLabel(
         UiText::isChineseUi() ? QStringLiteral("中文输入") : QStringLiteral("Chinese input"),
         editorGroup
@@ -980,7 +1079,7 @@ void MainWindow::PreferencesSection::onPreferences()
     if (UiText::isChineseUi()) {
         chineseInputCombo->addItem(QStringLiteral("开启"));
         chineseInputCombo->addItem(QStringLiteral("仅过滤全角字符"));
-        chineseInputCombo->addItem(QStringLiteral("禁止中文输入法"));
+        chineseInputCombo->addItem(QStringLiteral("禁用中文输入法"));
     } else {
         chineseInputCombo->addItem(QStringLiteral("On"));
         chineseInputCombo->addItem(QStringLiteral("Filter full-width chars"));
@@ -1001,12 +1100,12 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(chineseInputLabel, chineseInputCombo);
 
-    // 忽略无理报错提示 sits below 中文输入 (last row) per the 2026-06-19 review.
+    // Ignore muri issue prompts sits below Chinese input (last row) per the 2026-06-19 review.
     editorLayout->addRow(QString(), ignoreMuriIssuePromptsCheckbox);
 
 
     // The preferences dialog font spin-box reuses the editor.font_* shortcut
-    // IDs so a single binding controls both the editor and the dialog —
+    // IDs so a single binding controls both the editor and the dialog.
     // there is no longer a separate preferences.font_* registry entry.
     auto* dialogDecreaseShortcut = new QShortcut(&dialog);
     ShortcutRegistry::instance().applyShortcut(
@@ -1136,7 +1235,7 @@ void MainWindow::PreferencesSection::onPreferences()
         displayRefreshLabel,
     });
 
-    // PV渲染 (preview video decode): 硬件渲染 (hardware, default) vs 软件渲染
+    // Preview video decode: hardware (default) vs software.
     // (software). Placed first on the page per the user request. Two fixed
     // options, same QToolButton+QMenu visual pattern as the frame-rate rows
     // below. preferSoftware == false selects hardware.
@@ -1235,6 +1334,170 @@ void MainWindow::PreferencesSection::onPreferences()
     shortcutsPageLayout->addStretch(1);
     pageStack->addTab(shortcutsPage, uiText("dialog.preferences.shortcuts_group", "Shortcuts"));
 
+    auto* extensionsPage = new QWidget(pageStack);
+    auto* extensionsPageLayout = new QHBoxLayout(extensionsPage);
+    extensionsPageLayout->setContentsMargins(0, 0, 0, 0);
+    extensionsPageLayout->setSpacing(10);
+    auto* extensionsActions = new QWidget(extensionsPage);
+    auto* extensionsActionsLayout = new QVBoxLayout(extensionsActions);
+    extensionsActionsLayout->setContentsMargins(12, 10, 8, 12);
+    extensionsActionsLayout->setSpacing(8);
+    auto* openExtensionsFolderButton =
+        new QPushButton(uiText("dialog.preferences.extensions.open_folder", "Open Extensions Folder"), extensionsActions);
+    auto* refreshExtensionsButton =
+        new QPushButton(uiText("dialog.preferences.extensions.refresh", "Refresh Extensions"), extensionsActions);
+    auto* openExtensionLogsButton =
+        new QPushButton(uiText("dialog.preferences.extensions.open_logs", "Open Logs"), extensionsActions);
+    openExtensionsFolderButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    refreshExtensionsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    openExtensionLogsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    extensionsActionsLayout->addWidget(openExtensionsFolderButton);
+    extensionsActionsLayout->addWidget(refreshExtensionsButton);
+    extensionsActionsLayout->addWidget(openExtensionLogsButton);
+    extensionsActionsLayout->addStretch(1);
+
+    auto* extensionsTable = new QTableWidget(extensionsPage);
+    extensionsTable->setColumnCount(4);
+    extensionsTable->setHorizontalHeaderLabels({
+        uiText("dialog.preferences.extensions.enabled", "Enabled"),
+        uiText("dialog.preferences.extensions.name", "Extension"),
+        uiText("dialog.preferences.extensions.version", "Version"),
+        uiText("dialog.preferences.extensions.status", "Status"),
+    });
+    extensionsTable->verticalHeader()->hide();
+    extensionsTable->setShowGrid(false);
+    extensionsTable->setAlternatingRowColors(true);
+    extensionsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    extensionsTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    extensionsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    extensionsTable->setTextElideMode(Qt::ElideRight);
+    extensionsTable->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
+    extensionsTable->horizontalHeader()->setMinimumSectionSize(24);
+    extensionsTable->horizontalHeader()->setDefaultSectionSize(96);
+    extensionsTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    extensionsTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    extensionsTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Interactive);
+    extensionsTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Interactive);
+    extensionsTable->setColumnWidth(2, 112);
+    extensionsTable->setColumnWidth(3, 136);
+    extensionsTable->setSizeAdjustPolicy(QAbstractScrollArea::AdjustIgnored);
+    extensionsTable->setMinimumSize(0, 280);
+    extensionsTable->setStyleSheet(QStringLiteral(
+        "QTableWidget { border: 1px solid rgba(128,128,128,72); border-radius: 6px; }"
+        "QTableWidget::item:selected { background: rgba(88, 145, 220, 58); }"
+        "QHeaderView::section { padding: 6px 9px; border: 0; border-bottom: 1px solid rgba(128,128,128,72); font-weight: 600; }"
+    ));
+    extensionsTable->setMouseTracking(true);
+    extensionsTable->viewport()->setMouseTracking(true);
+    auto* extensionsToolTipFilter = new DelayedTableToolTipFilter(extensionsTable, 1000, extensionsTable);
+    extensionsTable->viewport()->installEventFilter(extensionsToolTipFilter);
+
+    std::function<void()> refreshExtensionRows;
+    refreshExtensionRows = [&]() {
+        extensionsTable->setRowCount(0);
+        if (owner_.extensionManager_ == nullptr) {
+            return;
+        }
+        const auto records = owner_.extensionManager_->records();
+        extensionsTable->setRowCount(records.size());
+        int row = 0;
+        for (const auto& record : records) {
+            const QString enabledToolTip = record.valid
+                ? (record.enabled
+                    ? (UiText::isChineseUi()
+                        ? QStringLiteral("当前扩展已启用。取消勾选后，该扩展贡献的命令、菜单、语言、诊断等内容都会消失。")
+                        : QStringLiteral("This extension is enabled. Uncheck it to remove its commands, menus, languages, diagnostics, and other contributions."))
+                    : (UiText::isChineseUi()
+                        ? QStringLiteral("当前扩展已禁用。勾选后，该扩展贡献的命令、菜单、语言、诊断等内容会重新加载。")
+                        : QStringLiteral("This extension is disabled. Check it to reload its commands, menus, languages, diagnostics, and other contributions.")))
+                : (UiText::isChineseUi()
+                    ? QStringLiteral("此扩展 manifest 无效，修复错误后才能启用。")
+                    : QStringLiteral("This extension manifest is invalid. Fix the error before enabling it."));
+            auto* enabledBox = new QCheckBox(extensionsTable);
+            enabledBox->setChecked(record.valid && record.enabled);
+            enabledBox->setEnabled(record.valid);
+            enabledBox->setToolTip(enabledToolTip);
+            auto* enabledCell = new QWidget(extensionsTable);
+            enabledCell->setToolTip(enabledToolTip);
+            auto* enabledCellLayout = new QHBoxLayout(enabledCell);
+            enabledCellLayout->setContentsMargins(8, 0, 8, 0);
+            enabledCellLayout->setAlignment(Qt::AlignCenter);
+            enabledCellLayout->addWidget(enabledBox);
+            extensionsTable->setCellWidget(row, 0, enabledCell);
+
+            const QString title = record.valid
+                ? QStringLiteral("%1\n%2").arg(record.manifest.name, record.manifest.qualifiedId())
+                : QFileInfo(record.sourcePath).fileName();
+            auto* nameItem = new QTableWidgetItem(title);
+            nameItem->setToolTip(QStringLiteral("%1\n%2").arg(title, record.sourcePath));
+            extensionsTable->setItem(row, 1, nameItem);
+            auto* versionItem = new QTableWidgetItem(record.valid ? record.manifest.version : QStringLiteral("-"));
+            versionItem->setToolTip(versionItem->text());
+            extensionsTable->setItem(row, 2, versionItem);
+            const QString status = !record.valid
+                ? (UiText::isChineseUi()
+                    ? QStringLiteral("无效：%1").arg(record.diagnostic)
+                    : QStringLiteral("Invalid: %1").arg(record.diagnostic))
+                : (record.enabled
+                    ? (UiText::isChineseUi() ? QStringLiteral("已启用") : QStringLiteral("Enabled"))
+                    : (UiText::isChineseUi() ? QStringLiteral("已禁用") : QStringLiteral("Disabled")));
+            auto* statusItem = new QTableWidgetItem(status);
+            statusItem->setToolTip(record.diagnostic.trimmed().isEmpty() ? status : record.diagnostic);
+            extensionsTable->setItem(row, 3, statusItem);
+            if (record.valid) {
+                QObject::connect(enabledBox, &QCheckBox::clicked, &dialog, [&, box = QPointer<QCheckBox>(enabledBox), id = record.manifest.qualifiedId()](bool enabled) {
+                    if (owner_.extensionManager_ == nullptr) {
+                        return;
+                    }
+                    QToolTip::hideText();
+                    if (box != nullptr) {
+                        box->setEnabled(false);
+                    }
+                    QTimer::singleShot(0, &dialog, [&, id, enabled]() {
+                        if (owner_.extensionManager_ == nullptr) {
+                            return;
+                        }
+                        owner_.extensionManager_->setExtensionEnabled(id, enabled);
+                        rebuildLanguageMenu();
+                        refreshExtensionRows();
+                        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+                    });
+                });
+            }
+            ++row;
+        }
+    };
+
+    QObject::connect(openExtensionsFolderButton, &QPushButton::clicked, &dialog, [&]() {
+        const QString dir = owner_.extensionManager_ != nullptr
+            ? owner_.extensionManager_->userExtensionsDirectory()
+            : miacode::extensions::userExtensionDirectoryPath();
+        QDir().mkpath(dir);
+        QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+    });
+    QObject::connect(refreshExtensionsButton, &QPushButton::clicked, &dialog, [&]() {
+        if (owner_.extensionManager_ != nullptr) {
+            owner_.extensionManager_->refreshExtensions();
+        } else {
+            UiText::reloadExtensionLanguagePacks();
+            UiText::ensurePreferredLanguageAvailable();
+        }
+        rebuildLanguageMenu();
+        refreshExtensionRows();
+        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+    });
+    QObject::connect(openExtensionLogsButton, &QPushButton::clicked, &dialog, [&]() {
+        const QString dir = owner_.extensionManager_ != nullptr
+            ? owner_.extensionManager_->extensionLogDirectory()
+            : QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("logs"));
+        QDir().mkpath(dir);
+        QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+    });
+    refreshExtensionRows();
+    extensionsPageLayout->addWidget(extensionsActions, 0);
+    extensionsPageLayout->addWidget(extensionsTable, 1);
+    pageStack->addTab(extensionsPage, uiText("dialog.preferences.extensions_group", "Extensions"));
+
     const auto openShortcutEditDialog = [&]() {
         QDialog shortcutsDialog(&dialog);
         shortcutsDialog.setWindowTitle(uiText("dialog.preferences.shortcuts.title", "Keyboard Shortcuts"));
@@ -1257,7 +1520,7 @@ void MainWindow::PreferencesSection::onPreferences()
         table->verticalHeader()->hide();
         table->setShowGrid(false);
         table->setAlternatingRowColors(true);
-        // Highlight the whole row when a shortcut is clicked — the previous
+        // Highlight the whole row when a shortcut is clicked; the previous
         // per-cell selection left an uneven look where only the command
         // cell got the blue tint and the keybinding cell kept its row
         // background. A click on either column of a content row opens the
@@ -1275,14 +1538,14 @@ void MainWindow::PreferencesSection::onPreferences()
         // Horizontal padding is applied via ShortcutItemDelegate (installed
         // below) instead of QSS so it renders identically in selected and
         // unselected states. The QSS rule for `::item:selected` only sets
-        // the selection background — the inset comes from the delegate.
+        // the selection background; the inset comes from the delegate.
         table->setStyleSheet(QStringLiteral(
             "QTableWidget { border: 1px solid rgba(128,128,128,72); border-radius: 6px; }"
             "QTableWidget::item:selected { background: rgba(88, 145, 220, 58); }"
             "QHeaderView::section { padding: 6px 9px; border: 0; border-bottom: 1px solid rgba(128,128,128,72); font-weight: 600; }"
         ));
-        // Content rows get a generous ±28 px inset; category section
-        // headers use the smaller ±14 px so the section title sits closer
+        // Content rows get a generous +/-28 px inset; category section
+        // headers use the smaller +/-14 px so the section title sits closer
         // to the cell edge than the commands listed beneath it.
         table->setItemDelegate(new ShortcutItemDelegate(28, 14, table));
         shortcutRootLayout->addWidget(table, 1);
@@ -1311,7 +1574,7 @@ void MainWindow::PreferencesSection::onPreferences()
             int row = 0;
             table->setRowCount(0);
             // Theme-aware category-row colors. The background is fully
-            // opaque so it overrides QTableWidget's alternating-row brush —
+            // opaque so it overrides QTableWidget's alternating-row brush.
             // otherwise the first category row (which falls on the base
             // brush) looks visibly dimmer than the subsequent ones (which
             // fall on the alternate brush). The foreground uses an accent
@@ -1443,7 +1706,7 @@ void MainWindow::PreferencesSection::onPreferences()
                 previewLabel->setStyleSheet(QStringLiteral("font-weight: 600; color: #D93232;"));
                 conflictLabel->setText(
                     UiText::isChineseUi()
-                        ? QStringLiteral("与「%1」重复").arg(conflict)
+                        ? QStringLiteral("与「%1」冲突").arg(conflict)
                         : QStringLiteral("Conflicts with \"%1\"").arg(conflict));
             };
             QObject::connect(captureEdit, &QLineEdit::textChanged, &captureDialog, updateConflictState);
@@ -1476,7 +1739,7 @@ void MainWindow::PreferencesSection::onPreferences()
         };
 
         QObject::connect(table, &QTableWidget::cellClicked, &shortcutsDialog, [&](int row, int column) {
-            // Category header rows span both columns and aren't editable —
+            // Category header rows span both columns and aren't editable.
             // clicking them just clears the stray selection. Every other
             // row opens the capture dialog from either column so users can
             // hit either the command name or its key binding to rebind.
@@ -1511,9 +1774,9 @@ void MainWindow::PreferencesSection::onPreferences()
         if (ShortcutRegistry::instance().resetEditableShortcuts()) {
             applyConfiguredShortcuts();
             shortcutHint->setText(fontShortcutHintText());
-            // beta51+ — overwriteModeShortcutHint label was bound to the
+            // beta51+ overwriteModeShortcutHint label was bound to the
             // former overwrite-mode preference row, which was removed in
-            // favour of the "禁止中文輸入法輸入" toggle. The Insert key
+            // favour of the "Disable IME input" toggle. The Insert key
             // binding still lives in the shortcuts registry under
             // `editor.overwrite_mode`; reset still affects it, just no
             // dialog label needs refreshing now.
@@ -1556,13 +1819,13 @@ void MainWindow::PreferencesSection::onPreferences()
     if (pageStackInner != nullptr && pageStack->width() > pageStackInner->width()) {
         tabChrome = pageStack->width() - pageStackInner->width();
     }
-    // FIX (2026-06-19): a plain minimumWidth floor never narrowed the dialog —
+    // FIX (2026-06-19): a plain minimumWidth floor never narrowed the dialog.
     // the SetFixedSize root layout sizes the dialog to the QTabWidget's sizeHint,
     // which over-reports well past the widest page, so the floor sat below it and
     // never bound (the "didn't get narrower" report). Pin the tab widget to the
     // measured content width instead; SetFixedSize then collapses the dialog onto
     // it. Clamp up to the tab strip's own width so pinning can never clip the
-    // tabs, and to maxPageWidth so every page still fits — no clipping, just the
+    // tabs, and to maxPageWidth so every page still fits; no clipping, just the
     // dead right-hand margin removed.
     int tabBarWidth = 0;
     if (auto* tabBar = pageStack->findChild<QTabBar*>()) {

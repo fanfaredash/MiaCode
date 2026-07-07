@@ -29,6 +29,13 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
   - `resources/preview_runtime_qml.qrc`
   - `resources/icons/*`
   - `resources/community/*` for README/community-facing repository images
+- Extension system support files:
+  - `resources/extensions/miacode-extension.schema.json` documents the VSCode-like v1 manifest format
+  - `resources/extensions/README.md` is copied into release packages so users can hand the extension format, contribution-point format, coding notes, and AI prompt template to an assistant when creating local extensions
+  - `src/extensions/EmbeddedExtensionRuntime.*` runs command extensions inside MiaCode with Qt `QJSEngine`; user machines do not need Node.js for command extensions
+  - `templates/extensions/hello-world` is the local starter extension
+  - `packages/miacode-extension-api` contains the local TypeScript declarations for `global.miacode`
+  - `tools/extensions/validate-extension.mjs` validates local extension manifests and language-pack translation files from Node
 
 ## 2. Runtime File Conventions Near A Chart
 
@@ -184,6 +191,7 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 - Windows release packages now also include:
     - root-level `Start_MiaCode_Debug.bat`
     - root-level `logs/` helper folder only for explicit debug-launch scripts; normal project-bound runtime logs default to `.miacode/logs/`
+    - root-level `extensions/README.md` for user extension authoring
     - root-level `LICENSE`, `LICENSE_SCOPE.md`, `THIRD_PARTY_NOTICES.md`, and `licenses/`; repository README files are developer-facing docs and are not shipped
   - optional Windows dev-tool packaging currently includes only `simai_native_dump.exe`; `soundtouch_probe.exe` is no longer copied by `scripts/build/package-win.ps1`
 - macOS build/package:

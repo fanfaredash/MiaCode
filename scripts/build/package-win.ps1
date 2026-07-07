@@ -619,6 +619,16 @@ if (Test-Path $ffmpegSrc) {
     throw "Missing required ffmpeg binary: $ffmpegSrc"
 }
 
+$extensionGuideSrc = Join-Path $repoRoot "resources\\extensions\\README.md"
+Remove-Item (Join-Path $appDir "extensions") -Recurse -Force -ErrorAction SilentlyContinue
+
+$extensionsDistDir = Join-Path $DistDir "extensions"
+New-Item -ItemType Directory -Path $extensionsDistDir -Force | Out-Null
+if (!(Test-Path $extensionGuideSrc)) {
+    throw "Missing extension guide: $extensionGuideSrc"
+}
+Copy-Item $extensionGuideSrc (Join-Path $extensionsDistDir "README.md") -Force
+
 $requiredPackagePaths = @(
     # Root: user-facing entry points + content + log dirs only.
     "MiaCode.exe",
@@ -626,6 +636,7 @@ $requiredPackagePaths = @(
     "logs",
     "logs\\worker-hwnd",
     "assets\\SFX",
+    "extensions\\README.md",
     "licenses\\Resource-Han-Rounded-OFL.txt",
     "LICENSE",
     "LICENSE_SCOPE.md",
@@ -679,6 +690,7 @@ $unexpectedPackagePaths = @(
     "Start_MiaCode_Debug_View.bat",
     "Start_MiaCode_Debug_Widget.bat",
     "Start_MiaCode_QuickShell_Debug.bat",
+    "app\\extensions",
     # Start_MiaCode_Debug.bat is the only launcher shipped. Assert old
     # local/A-B diagnostic launchers don't accidentally come back via a stray
     # build step or leftover output dir.

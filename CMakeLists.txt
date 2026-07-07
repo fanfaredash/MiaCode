@@ -552,6 +552,12 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/quick/TimelineQuickNotesLayer.cpp
     src/timeline/quick/TimelineQuickOverlayLayer.h
     src/timeline/quick/TimelineQuickOverlayLayer.cpp
+    src/extensions/ExtensionManifest.h
+    src/extensions/ExtensionManifest.cpp
+    src/extensions/EmbeddedExtensionRuntime.h
+    src/extensions/EmbeddedExtensionRuntime.cpp
+    src/extensions/ExtensionManager.h
+    src/extensions/ExtensionManager.cpp
     resources/app_icons.qrc
     resources/fonts.qrc
     resources/slide_data.qrc
@@ -1028,6 +1034,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/chart/document src/core/chart/parser src/core/chart/transform src/timeline
     )
 
+    miacode_add_dev_tool(extension_manifest_spec TEST
+        SOURCES
+            src/tools/extensions/ExtensionManifestSpec.cpp
+            src/extensions/ExtensionManifest.h
+            src/extensions/ExtensionManifest.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+
     miacode_add_dev_tool(simai_document_spec TEST
         SOURCES
             src/tools/chart_document/SimaiDocumentSpec.cpp
@@ -1046,8 +1061,10 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/cover_export/CoverCompositionState.cpp
             src/app/ui/UiText.h
             src/app/ui/UiText.cpp
+            src/extensions/ExtensionManifest.h
+            src/extensions/ExtensionManifest.cpp
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES src src/app/ui
+        INCLUDES src src/app/ui src/extensions
     )
 
     miacode_add_dev_tool(muri_spec TEST
@@ -1119,13 +1136,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/editor/SimaiCompletionCatalog.cpp
             src/app/ui/UiText.h
             src/app/ui/UiText.cpp
+            src/extensions/ExtensionManifest.h
+            src/extensions/ExtensionManifest.cpp
             src/app/ui/UiTheme.h
             src/app/ui/UiTheme.cpp
             src/app/ui/ShortcutRegistry.h
             src/app/ui/ShortcutRegistry.cpp
             ${_miacode_log_core}
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES src src/app/ui src/common
+        INCLUDES src src/app/ui src/common src/extensions
     )
 
     miacode_add_dev_tool(simai_completion_catalog_spec TEST
