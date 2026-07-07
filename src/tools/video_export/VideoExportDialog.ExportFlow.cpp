@@ -203,9 +203,7 @@ void VideoExportDialog::setEmbeddedPanelMode(bool embedded)
         cancelButton_->hide();
     }
     if (exportButton_ != nullptr) {
-        exportButton_->setText(uiText(
-            "dialog.video_export.button.start_export",
-            l10n(QStringLiteral("Start Export"), QStringLiteral("开始导出"))));
+        exportButton_->setText(UiText::text(QStringLiteral("video_export.start_export")));
     }
 
     // ---- Fixed-frame page layout (2026-06-12 redesign) ----
@@ -346,10 +344,8 @@ void VideoExportDialog::setEmbeddedExportRunning(bool running)
         return;
     }
     exportButton_->setText(running
-        ? uiText("dialog.video_export.button.cancel_export",
-                 l10n(QStringLiteral("Cancel Export"), QStringLiteral("取消导出")))
-        : uiText("dialog.video_export.button.start_export",
-                 l10n(QStringLiteral("Start Export"), QStringLiteral("开始导出"))));
+        ? UiText::text(QStringLiteral("video_export.cancel_export"))
+        : UiText::text(QStringLiteral("video_export.start_export")));
 }
 
 void VideoExportDialog::finalizeEmbeddedSession()
@@ -673,7 +669,7 @@ void VideoExportDialog::browseOutputPath()
         : QString();
     const QString selected = QFileDialog::getSaveFileName(
         this,
-        l10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")),
+        UiText::text(QStringLiteral("video_export.export_video")),
         initial,
         QStringLiteral("MP4 Video (*.mp4)")
     );
@@ -693,7 +689,7 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     const QString outputPath = outputPathEdit_ != nullptr ? outputPathEdit_->text().trimmed() : QString();
     if (outputPath.isEmpty()) {
         if (errorMessage != nullptr) {
-            *errorMessage = l10n(QStringLiteral("Please choose an output path."), QStringLiteral("请先选择输出路径。"));
+            *errorMessage = UiText::text(QStringLiteral("video_export.please_choose_an_output_path"));
         }
         return false;
     }
@@ -790,25 +786,25 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     const QDir outputDir = outputInfo.absoluteDir();
     if (!outputDir.exists()) {
         if (errorMessage != nullptr) {
-            *errorMessage = l10n(QStringLiteral("Output directory does not exist."), QStringLiteral("输出目录不存在。"));
+            *errorMessage = UiText::text(QStringLiteral("video_export.output_directory_does_not_exist"));
         }
         return false;
     }
     if (updated.outputWidth <= 0 || updated.outputHeight <= 0) {
         if (errorMessage != nullptr) {
-            *errorMessage = l10n(QStringLiteral("Resolution is invalid."), QStringLiteral("分辨率无效。"));
+            *errorMessage = UiText::text(QStringLiteral("video_export.resolution_is_invalid"));
         }
         return false;
     }
     if (updated.contentDurationSeconds <= 0.0) {
         if (errorMessage != nullptr) {
-            *errorMessage = l10n(QStringLiteral("Export range is empty."), QStringLiteral("导出区间为空。"));
+            *errorMessage = UiText::text(QStringLiteral("video_export.export_range_is_empty"));
         }
         return false;
     }
     if (updated.exportStartSeconds < 0.0 || updated.exportStartSeconds > totalDurationSeconds_ + 1e-6) {
         if (errorMessage != nullptr) {
-            *errorMessage = l10n(QStringLiteral("Export start is out of range."), QStringLiteral("导出起始时间超出范围。"));
+            *errorMessage = UiText::text(QStringLiteral("video_export.export_start_is_out_of"));
         }
         return false;
     }

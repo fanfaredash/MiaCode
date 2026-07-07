@@ -676,8 +676,7 @@ VideoExportDialog::VideoExportDialog(
     auto* outputColumn = new QVBoxLayout(outputRow);
     outputColumn->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     outputColumn->setSpacing(6);
-    auto* outputLabel = new QLabel(l10n(QStringLiteral("Output"), QStringLiteral("输出")), outputRow);
-    outputLabel->setText(uiText("dialog.video_export.output", QStringLiteral("Output")));
+    auto* outputLabel = new QLabel(UiText::text(QStringLiteral("video_export.output")), outputRow);
     outputColumn->addWidget(outputLabel, 0);
     auto* outputControlRow = new QWidget(outputRow);
     auto* outputControlLayout = new QHBoxLayout(outputControlRow);
@@ -685,9 +684,8 @@ VideoExportDialog::VideoExportDialog(
     outputControlLayout->setSpacing(kFormRowSpacing);
     outputPathEdit_ = new QLineEdit(outputControlRow);
     outputPathEdit_->setText(displayOutputPathForDialog(baseTask_.outputPath, exportBaseDirectory(baseTask_)));
-    auto* browseButton = new QPushButton(l10n(QStringLiteral("Browse..."), QStringLiteral("浏览...")), outputRow);
+    auto* browseButton = new QPushButton(UiText::text(QStringLiteral("dialog.video_export.browse")), outputRow);
     outputBrowseButton_ = browseButton;
-    browseButton->setText(uiText("dialog.video_export.browse", QStringLiteral("Browse...")));
     browseButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     const int rightAlignedButtonWidth = qMax(browseButton->sizeHint().width(), kDialogActionButtonMinWidth);
     browseButton->setFixedWidth(rightAlignedButtonWidth);
@@ -1078,11 +1076,11 @@ VideoExportDialog::VideoExportDialog(
     optionsLayout->setColumnStretch(0, 1);
     optionsLayout->setColumnStretch(1, 1);
     showTimestampCheck_ = new QCheckBox(
-        l10n(QStringLiteral("Show bottom-left timestamp"), QStringLiteral("显示左下角时间戳")),
+        UiText::text(QStringLiteral("video_export.show_bottom_left_timestamp")),
         optionsContent_
     );
     showTimestampCheck_->setChecked(baseTask_.showTimestamp);
-    showTimestampCheck_->setText(uiText("dialog.video_export.option.show_timestamp", QStringLiteral("Show bottom-left timestamp")));
+    showTimestampCheck_->setText(UiText::text(QStringLiteral("video_export.show_bottom_left_timestamp")));
     showObjectStatsCheck_ = new QCheckBox(
         uiText("dialog.video_export.option.show_object_stats", QStringLiteral("Show object stats")),
         optionsContent_
@@ -1094,7 +1092,7 @@ VideoExportDialog::VideoExportDialog(
     );
     showChartInfoCheck_->setChecked(baseTask_.showChartInfoHud);
     clockCountCheck_ = new QCheckBox(
-        l10n(QStringLiteral("Enable clock_count (%1)"), QStringLiteral("启用 clock_count (%1)"))
+        UiText::text(QStringLiteral("video_export.enable_clock_count_1"))
             .arg(baseTask_.clockCount),
         optionsContent_
     );
@@ -1109,16 +1107,16 @@ VideoExportDialog::VideoExportDialog(
         emit clockCountEnabledChanged(checked);
     });
     addIntroCheck_ = new QCheckBox(
-        l10n(QStringLiteral("Add intro"), QStringLiteral("添加片头")),
+        UiText::text(QStringLiteral("video_export.add_intro")),
         optionsContent_
     );
     addIntroCheck_->setChecked(baseTask_.intro.enabled);
     smoothBrightnessCheck_ = new QCheckBox(
-        l10n(QStringLiteral("Smooth brightness"), QStringLiteral("平滑亮度")),
+        UiText::text(QStringLiteral("video_export.smooth_brightness")),
         optionsContent_
     );
     smoothBrightnessCheck_->setChecked(baseTask_.smoothBrightness);
-    smoothBrightnessCheck_->setText(uiText("dialog.video_export.option.smooth_brightness", QStringLiteral("Smooth brightness")));
+    smoothBrightnessCheck_->setText(UiText::text(QStringLiteral("video_export.smooth_brightness")));
     const auto addPercentSliderOption = [](
         QWidget* parent,
         const QString& title,
@@ -1207,7 +1205,7 @@ VideoExportDialog::VideoExportDialog(
     optionsLayout->addWidget(innerBrightnessOption, 1, 1, 1, 1);
     QWidget* layoutSquareScaleOption = addPercentSliderOption(
         optionsContent_,
-        l10n(QStringLiteral("Layout Size"), QStringLiteral("Layout整图大小")),
+        UiText::text(QStringLiteral("video_export.layout_size")),
         qRound(miacode::preview_video::kLayoutSquareScaleMin * 100.0),
         qRound(miacode::preview_video::kLayoutSquareScaleMax * 100.0),
         qRound(miacode::preview_video::kLayoutSquareScaleStep * 100.0),
@@ -1215,7 +1213,7 @@ VideoExportDialog::VideoExportDialog(
         &layoutSquareScaleSlider_,
         &layoutSquareScaleValueLabel_
     );
-    setSliderOptionTitle(layoutSquareScaleOption, uiText("dialog.video_export.option.layout_size", QStringLiteral("Stage Display Scale")));
+    setSliderOptionTitle(layoutSquareScaleOption, UiText::text(QStringLiteral("video_export.layout_size")));
     optionsLayout->addWidget(layoutSquareScaleOption, 2, 0, 1, 2);
     const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
     const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
@@ -1536,10 +1534,7 @@ VideoExportDialog::VideoExportDialog(
     // Opt past the app-wide tooltip suppression (MainWindow installs a global
     // event filter that hides tooltips outside the preview area).
     introLevelTextCheck_->setProperty("miacodeAllowTooltip", true);
-    introLevelTextCheck_->setToolTip(l10n(
-        QStringLiteral("The baked LV sprites only cover digits 0-9 and \"+\". Tick this to render "
-                       "the level as text when it needs any other character."),
-        QStringLiteral("原生材质仅支持等级为数字0~9与“+”；如果等级需要其他字符，请勾选这个选项。")));
+    introLevelTextCheck_->setToolTip(UiText::text(QStringLiteral("video_export.level_text_tooltip")));
     introCardForm->addRow(QString(), introLevelTextCheck_);
     introControlsLayout->addWidget(introCardGroup, 0);
     introControlsLayout->addStretch(1);
@@ -1571,27 +1566,27 @@ VideoExportDialog::VideoExportDialog(
 
     settingsTabs_->addTab(
         outputPage,
-        uiText("dialog.video_export.section.output", l10n(QStringLiteral("Output"), QStringLiteral("输出")))
+        UiText::text(QStringLiteral("video_export.output"))
     );
     settingsTabs_->addTab(
         visualsPage,
-        uiText("dialog.render_settings.video_group", l10n(QStringLiteral("Video"), QStringLiteral("视频")))
+        UiText::text(QStringLiteral("video_export.video"))
     );
     settingsTabs_->addTab(
         gameplayPage_,
-        uiText("dialog.render_settings.gameplay_group", l10n(QStringLiteral("Gameplay"), QStringLiteral("游戏")))
+        UiText::text(QStringLiteral("video_export.gameplay"))
     );
     settingsTabs_->addTab(
         skinPage_,
-        uiText("dialog.skin_settings.title", l10n(QStringLiteral("Skin"), QStringLiteral("皮肤")))
+        UiText::text(QStringLiteral("video_export.skin"))
     );
     settingsTabs_->addTab(
         introPage,
-        uiText("dialog.video_export.section.intro", l10n(QStringLiteral("Intro"), QStringLiteral("片头")))
+        UiText::text(QStringLiteral("video_export.intro"))
     );
     settingsTabs_->addTab(
         rangePage,
-        uiText("dialog.video_export.section.range", l10n(QStringLiteral("Export Range"), QStringLiteral("导出区间")))
+        UiText::text(QStringLiteral("video_export.export_range"))
     );
     connect(settingsTabs_, &QTabWidget::currentChanged, this, [this]() {
         refreshSharedSettingsFromCallback();
@@ -2035,8 +2030,7 @@ void VideoExportDialog::refreshRangeSummaryLabel()
     const double end = qBound(start, rangeEndSeconds(), totalDurationSeconds_);
     const double durationSeconds = qMax(0.0, end - start);
     rangeSummaryLabel_->setText(
-        l10n(QStringLiteral("Current export range: [%1, %2], %3 s total."),
-             QStringLiteral("当前导出区间：[%1, %2]，共 %3 秒。"))
+        UiText::text(QStringLiteral("video_export.current_export_range_1_2"))
             .arg(formatSecond(start), formatSecond(end),
                  QString::number(durationSeconds, 'f', 3)));
 }

@@ -43,11 +43,6 @@ inline QString uiText(const char* key, const QString& fallback)
     return translated.isEmpty() ? fallback : translated;
 }
 
-inline QString l10n(const QString& en, const QString& zh)
-{
-    return UiText::localized(en, zh);
-}
-
 inline QString exportDialogPresetLabel(VideoExportPreset preset)
 {
     switch (preset) {
