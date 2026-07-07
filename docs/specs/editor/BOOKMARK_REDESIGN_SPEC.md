@@ -133,12 +133,12 @@
 
 对首版实现的 UI 复审结论：三级仅有行高差、缩进感弱；右侧折叠药丸过于突出且位置反直觉；折叠钮与删除钮挤在行尾；书签独有的左竖线比一二级选中态更抢眼，且点击书签后难度行高亮丢失。重设计参照 VS Code / JetBrains 树形导航惯例，规则如下（实现全部在 `OutlineItemDelegate` + `rebuildFieldSidebar` + FrameBootstrap 点击接线，未迁移 `QTreeView`）：
 
-统一选中语言（一套语言、两档强度）：
+统一选中语言（一套语言、两档强度；二轮复审 2026-07-07 收紧）：
 
 - 「当前所在」（激活难度 / 谱面信息页 / 导出页）= 无描边填充 + 左缘 3px accent 圆角竖条。由 `kOutlineItemActiveRole` 驱动（难度行 = `activeDifficultyId_ && activeOutlineKey_=="chart"`；metadata 行含 latency 子页；export 行同理），**不跟随列表 selection**，因此选中书签后难度行高亮保留。悬停激活行时填充轻微提亮。
 - 旧的选中态圆角描边框删除（描边是视觉笨重的主因）。
-- 列表 selection / 悬停 = 弱一级纯填充（hoverFill）。
-- 活动书签（最近激活）= 行号徽章变 accent 实心 + accentText；书签行的左竖线删除，左缘竖条元素让给难度层级专用。
+- **QListWidget selection 一律不绘制**（二轮复审：hover 与"按下"同色被判不合理，且书签驻留选中读作卡住的按压态）。悬停 = 弱一级纯填充（hoverFill），是唯一的瞬时反馈；「当前」只由 active 标记表达。
+- 书签行无任何持久标记（跳转是一次性动作）：无左竖线、无选中变色徽章、无驻留填充；徽章恒为中性灰。书签行的 hover 填充左边界收进到缩进导线右侧（`kDifficultyFoldGlyphX`+5），不得压线。
 
 树形结构：
 
@@ -151,6 +151,11 @@
 行尾动作：
 
 - 悬浮删除难度按钮（`deleteDifficultyButton_`）**整体移除**（2026-07-07 复审拍板）：删除难度只走右键菜单（无图标，中文「删除 %1」）；确认弹窗与状态栏文案已中文化。行尾不再有任何行内控件。
+
+配套修复（二轮复审）：
+
+- 导出 busy spinner：`positionOutlineExportBusySpinner()` 从 show 拆出，`rebuildFieldSidebar()` 末尾在 spinner 活跃时重新锚定——切到导出页时 `activeDifficultyId_→0` 会让原激活难度的自动展开书签组收起、Export 行上移，旧实现的圈圈会留在原位。
+- 侧栏滚动条主题：`applyUiTheme()` 重刷 `outlineList_` 样式时必须同步重刷其 vertical scrollbar 的 `scrollBarStyleSheet()`（构造时捕获的是当时主题，暗色下否则残留浅色）。
 
 ## 背景
 

@@ -1009,6 +1009,11 @@ void MainWindow::WindowSection::applyUiTheme()
     }
     if (owner_.outlineList_ != nullptr) {
         owner_.outlineList_->setStyleSheet(UiTheme::outlineListStyleSheet());
+        // The scroll bar was styled once at construction — re-style it here or
+        // it keeps the previous theme's colors after a light/dark switch.
+        if (QScrollBar* vbar = owner_.outlineList_->verticalScrollBar()) {
+            vbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
+        }
     }
     if (owner_.timelineView_ != nullptr) {
         owner_.timelineView_->refreshTheme();
