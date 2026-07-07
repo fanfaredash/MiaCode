@@ -1,4 +1,4 @@
-﻿#include "MainWindow.EditorSection.h"
+#include "MainWindow.EditorSection.h"
 #include "../../MainWindowShared.h"
 #include "../document/MainWindow.DocumentSection.h"
 #include "../window/MainWindow.WindowSection.h"
@@ -133,16 +133,12 @@ QString defaultBookmarkNameFromComment(const QString& text)
 // usable comment: "第 8 行" / "L8".
 QString fallbackBookmarkNameForLine(int line)
 {
-    return UiText::isChineseUi()
-        ? QStringLiteral("第 %1 行").arg(qMax(1, line))
-        : QStringLiteral("L%1").arg(qMax(1, line));
+    return UiText::text(QStringLiteral("editor.l_1")).arg(qMax(1, line));
 }
 
 QString defaultExplicitBookmarkLabel()
 {
-    return UiText::isChineseUi()
-        ? QStringLiteral("新书签")
-        : QStringLiteral("New Bookmark");
+    return UiText::text(QStringLiteral("editor.new_bookmark"));
 }
 
 struct BookmarkCommentCandidate {
@@ -199,14 +195,11 @@ QVector<BookmarkCommentCandidate> collectBookmarkCommentCandidates(const QString
 
 bool confirmDeleteBookmark(QWidget* parent, const MainWindow::EditorBookmark& bookmark)
 {
-    const QString title = uiText("editor.bookmark.delete", "Delete Bookmark");
+    const QString title = UiText::text(QStringLiteral("editor.delete_bookmark"));
     const QString name = bookmark.title.trimmed().isEmpty()
-        ? uiText("editor.bookmark.untitled", "Untitled Bookmark")
+        ? UiText::text(QStringLiteral("editor.untitled_bookmark"))
         : bookmark.title.trimmed();
-    const QString message = uiText(
-        "editor.bookmark.delete_confirm",
-        "Delete bookmark \"%1\"? This will delete the chart comment on that line.")
-                                .arg(name);
+    const QString message = UiText::text(QStringLiteral("editor.delete_bookmark_1_this_will")).arg(name);
     return UiDialogs::showMessageBox(
         QMessageBox::Question,
         parent,
@@ -1131,9 +1124,7 @@ void MainWindow::EditorSection::replaceBookmarkLine(int fromLine, int toLine)
     const LineBookmarkCommentInfo targetInfo = inspectLineBookmarkComment(targetLine);
     if (targetInfo.hasMarker) {
         owner_.statusBar()->showMessage(
-            UiText::isChineseUi()
-                ? QStringLiteral("目标行已经有注释，已取消移动书签。")
-                : QStringLiteral("Target line already has a comment; bookmark move canceled."),
+            UiText::text(QStringLiteral("editor.target_line_already_has_a")),
             5000);
         return;
     }

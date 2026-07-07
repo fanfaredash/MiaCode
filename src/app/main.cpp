@@ -563,17 +563,26 @@ int main(int argc, char* argv[])
     QApplication::setEffectEnabled(Qt::UI_AnimateTooltip, false);
     logStartupStage("app_style_ready");
 
-    if (UiText::isChineseUi()) {
-        QFont zhUiFont;
-        for (const QString& family : QStringList{"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC"}) {
-            zhUiFont.setFamily(family);
-            if (zhUiFont.family().compare(family, Qt::CaseInsensitive) == 0) {
-                break;
-            }
+    {
+        QStringList cjkUiFamilies;
+        const QString uiLanguageToken = UiText::resolvedLanguageToken();
+        if (uiLanguageToken.startsWith(QStringLiteral("zh"))) {
+            cjkUiFamilies = QStringList{"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC"};
+        } else if (uiLanguageToken.startsWith(QStringLiteral("ja"))) {
+            cjkUiFamilies = QStringList{"Yu Gothic UI", "Meiryo UI", "Meiryo", "Noto Sans CJK JP"};
         }
-        zhUiFont.setStyleStrategy(QFont::PreferAntialias);
-        zhUiFont.setHintingPreference(QFont::PreferNoHinting);
-        app.setFont(zhUiFont);
+        if (!cjkUiFamilies.isEmpty()) {
+            QFont cjkUiFont;
+            for (const QString& family : cjkUiFamilies) {
+                cjkUiFont.setFamily(family);
+                if (cjkUiFont.family().compare(family, Qt::CaseInsensitive) == 0) {
+                    break;
+                }
+            }
+            cjkUiFont.setStyleStrategy(QFont::PreferAntialias);
+            cjkUiFont.setHintingPreference(QFont::PreferNoHinting);
+            app.setFont(cjkUiFont);
+        }
     }
     logStartupStage("ui_font_ready");
 

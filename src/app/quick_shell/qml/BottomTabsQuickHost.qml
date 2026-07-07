@@ -17,10 +17,6 @@ Rectangle {
         return paletteMap && paletteMap[key] !== undefined ? paletteMap[key] : fallback
     }
 
-    function isChineseUi() {
-        return paletteMap && paletteMap["isChineseUi"] === true
-    }
-
     function usesNativeBottomTabsSurface() {
         return controller
             && (controller.bottomTabsCurrentTabId === "validation"
@@ -50,7 +46,7 @@ Rectangle {
     readonly property int resizeHotzoneHeight: metric("bottomTabsResizeHotzoneHeight", 8)
     readonly property real headerScale: controller ? controller.bottomTabsHeaderScale : 1.0
     readonly property var visibleTabs: {
-        // Labels come from the controller (which honours UiText::isChineseUi)
+        // Labels come from the controller (which uses UiText::text)
         // rather than QML's qsTr - qsTr requires a .ts translation file
         // that the project doesn't ship, so it'd just leak the English
         // literal. The controller mirrors MainWindow::bottomTabsFallbackLabel.
@@ -210,7 +206,7 @@ Rectangle {
                     visible: false
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
-                    text: root.isChineseUi() ? "光标居中" : "View Lock"
+                    text: controller ? controller.timelineViewLockLabel : ""
                     checked: true
 
                     indicator: Rectangle {
@@ -279,7 +275,7 @@ Rectangle {
                     visible: controller && controller.bottomTabsCurrentTabId === "timeline"
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
-                    text: root.isChineseUi() ? "代码跟随" : "Follow Code"
+                    text: controller ? controller.timelineFollowCodeLabel : ""
                     checked: controller && controller.timelineStateBridge
                         ? controller.timelineStateBridge.followPreviewEnabled
                         : false
@@ -348,7 +344,7 @@ Rectangle {
                     visible: false
                     hoverEnabled: true
                     spacing: Math.round(4 * root.headerScale)
-                    text: root.isChineseUi() ? "进度跟随" : "Timeline Sync"
+                    text: controller ? controller.timelineSyncLabel : ""
                     checked: true
 
                     indicator: Rectangle {

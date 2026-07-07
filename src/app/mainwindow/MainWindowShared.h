@@ -21,6 +21,8 @@
 #include <QVector>
 #include <QtGlobal>
 
+#include "SimaiNativeParser.h"
+#include "UiText.h"
 #include "UiTheme.h"
 #include "WindowParityMetrics.h"
 
@@ -64,7 +66,8 @@ double normalizeEditorLineSpacingFactor(double factor);
 QString editorLineSpacingFactorLabel(double factor);
 int nearestPreviewPlaybackRateIndex(double rate);
 double steppedPreviewPlaybackRate(double rate, int direction);
-QString uiText(const QString& key, const QString& fallback);
+// The parser validation locale matching the session UI language.
+SimaiNativeValidationLocale uiValidationLocale();
 void centerDialogOnAnchor(QDialog* dialog, QWidget* parent);
 QByteArray autosaveContentSignature(const QString& text);
 QString resolveProjectDataDirectoryPath(const QString& filePath);

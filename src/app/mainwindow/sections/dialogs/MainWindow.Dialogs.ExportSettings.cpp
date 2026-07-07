@@ -126,10 +126,10 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     // Skin + judge line moved to the shared 皮肤 tab (buildSkinSettings).
 
     // Judge effect (multi-select tap/touch/slide overlays).
-    const QString slideJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.slide", "slide");
-    const QString tapJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.tap", "tap");
-    const QString touchJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.touch", "touch");
-    const QString disabledLabel = uiText("dialog.render_settings.option.disabled", "Disabled");
+    const QString slideJudgeChoiceLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect.slide"));
+    const QString tapJudgeChoiceLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect.tap"));
+    const QString touchJudgeChoiceLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect.touch"));
+    const QString disabledLabel = UiText::text(QStringLiteral("dialog.render_settings.option.disabled"));
     const auto judgeEffectButtonLabel = [this, slideJudgeChoiceLabel, tapJudgeChoiceLabel, touchJudgeChoiceLabel, disabledLabel]() {
         QStringList parts;
         if (owner_.muriRenderOptions_.showChartReviewSlideJudgeOverlay) {
@@ -186,8 +186,8 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     judgeEffectButton->setMenu(judgeEffectMenu);
 
     // Slide stack order.
-    const QString slideStackOrderDxLabel = uiText("dialog.render_settings.gameplay.slide_stack_order.dx_style", "DX Style");
-    const QString slideStackOrderFinaleLabel = uiText("dialog.render_settings.gameplay.slide_stack_order.finale_style", "FiNALE Style");
+    const QString slideStackOrderDxLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.slide_stack_order.dx_style"));
+    const QString slideStackOrderFinaleLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.slide_stack_order.finale_style"));
     const auto slideStackOrderLabelForValue = [=](bool earlierOnTop) {
         return earlierOnTop ? slideStackOrderDxLabel : slideStackOrderFinaleLabel;
     };
@@ -215,23 +215,23 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     const auto centerDisplayLabelForMode = [](miacode::preview_gameplay::CenterDisplayMode mode) -> QString {
         switch (mode) {
         case miacode::preview_gameplay::CenterDisplayMode::Off:
-            return uiText("dialog.render_settings.gameplay.center_display.off", "Off");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.off"));
         case miacode::preview_gameplay::CenterDisplayMode::Combo:
-            return uiText("dialog.render_settings.gameplay.center_display.combo", "Combo");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.combo"));
         case miacode::preview_gameplay::CenterDisplayMode::AchievementDxPlus:
-            return uiText("dialog.render_settings.gameplay.center_display.achievement_dx_plus", "ACHIEVEMENT DX (+)");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.achievement_dx_plus"));
         case miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus100:
-            return uiText("dialog.render_settings.gameplay.center_display.achievement_dx_minus_100", "ACHIEVEMENT DX (100-)");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.achievement_dx_minus_100"));
         case miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus101:
-            return uiText("dialog.render_settings.gameplay.center_display.achievement_dx_minus_101", "ACHIEVEMENT DX (101-)");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.achievement_dx_minus_101"));
         case miacode::preview_gameplay::CenterDisplayMode::DxScorePlus:
-            return uiText("dialog.render_settings.gameplay.center_display.dx_score_plus", "DX SCORE (+)");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.dx_score_plus"));
         case miacode::preview_gameplay::CenterDisplayMode::DxScoreMinus:
-            return uiText("dialog.render_settings.gameplay.center_display.dx_score_minus", "DX SCORE (-)");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.dx_score_minus"));
         case miacode::preview_gameplay::CenterDisplayMode::AchievementFinalePlus:
-            return uiText("dialog.render_settings.gameplay.center_display.achievement_finale_plus", "ACHIEVEMENT FINALE (+)");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.achievement_finale_plus"));
         }
-        return uiText("dialog.render_settings.gameplay.center_display.off", "Off");
+        return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.off"));
     };
     auto* centerDisplayButton = createDialogMenuButton(gameplay, centerDisplayLabelForMode(owner_.previewCenterDisplayMode_));
     centerDisplayButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -264,9 +264,9 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     }
     centerDisplayButton->setMenu(centerDisplayMenu);
 
-    addGameplayField(0, 0, uiText("dialog.render_settings.gameplay.judge_effect", "Judge Effect Display"), judgeEffectButton);
-    addGameplayField(0, 1, uiText("dialog.render_settings.gameplay.slide_stack_order", "Slide Stack Order"), slideStackOrderButton);
-    addGameplayField(1, 0, uiText("dialog.render_settings.gameplay.center_display", "Center Display"), centerDisplayButton);
+    addGameplayField(0, 0, UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect")), judgeEffectButton);
+    addGameplayField(0, 1, UiText::text(QStringLiteral("dialog.render_settings.gameplay.slide_stack_order")), slideStackOrderButton);
+    addGameplayField(1, 0, UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display")), centerDisplayButton);
 
     if (refreshOut != nullptr) {
         const QPointer<QWidget> gameplayGuard(gameplay);
@@ -364,12 +364,12 @@ void MainWindow::DialogsSection::buildSkinSettings(
     };
 
     // ---- 谱面皮肤: skin + judge line (+ optional open-folder actions) ----
-    auto* skinForm = makeGroupForm(uiText("dialog.skin_settings.section.chart_skin", "Chart Skin"));
+    auto* skinForm = makeGroupForm(UiText::text(QStringLiteral("dialog.skin_settings.section.chart_skin")));
 
     auto* skinCombo = createDialogComboBox(root);
     QPushButton* openSkinDirectoryButton = nullptr;
     if (includeFolderButtons) {
-        openSkinDirectoryButton = makePushButton(root, uiText("dialog.skin_settings.open_directory", "Open Directory"));
+        openSkinDirectoryButton = makePushButton(root, UiText::text(QStringLiteral("dialog.skin_settings.open_directory")));
         connect(openSkinDirectoryButton, &QPushButton::clicked, root, [this]() {
             const QString skinRoot = owner_.resolvePreviewSkinRootDir();
             if (!skinRoot.isEmpty()) {
@@ -422,17 +422,17 @@ void MainWindow::DialogsSection::buildSkinSettings(
         owner_.savePortableState();
     });
     skinForm->addRow(
-        uiText("dialog.render_settings.video.skin", "Skin"),
+        UiText::text(QStringLiteral("dialog.render_settings.video.skin")),
         openSkinDirectoryButton != nullptr ? comboActionRow(skinCombo, openSkinDirectoryButton) : skinCombo);
 
-    const QString judgeLinePointLabel = uiText("dialog.render_settings.gameplay.judge_line.point", "Point");
-    const QString judgeLineLineLabel = uiText("dialog.render_settings.gameplay.judge_line.line", "Line");
-    const QString judgeLineAreaLabel = uiText("dialog.render_settings.gameplay.judge_line.area", "Judge Area");
-    const QString judgeLineAreaLabeledLabel = uiText("dialog.render_settings.gameplay.judge_line.area_labeled", "Judge Area (Labeled)");
+    const QString judgeLinePointLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.point"));
+    const QString judgeLineLineLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.line"));
+    const QString judgeLineAreaLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.area"));
+    const QString judgeLineAreaLabeledLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.area_labeled"));
     auto* judgeLineCombo = createDialogComboBox(root);
     QPushButton* openJudgeLineDirectoryButton = nullptr;
     if (includeFolderButtons) {
-        openJudgeLineDirectoryButton = makePushButton(root, uiText("dialog.skin_settings.open_directory", "Open Directory"));
+        openJudgeLineDirectoryButton = makePushButton(root, UiText::text(QStringLiteral("dialog.skin_settings.open_directory")));
         connect(openJudgeLineDirectoryButton, &QPushButton::clicked, root, [this]() {
             const QString outlineDir = owner_.resolvePreviewCustomOutlineDir();
             if (!outlineDir.isEmpty()) {
@@ -530,12 +530,12 @@ void MainWindow::DialogsSection::buildSkinSettings(
         owner_.applyPreviewCustomOutlineFileName(fileName, true);
     });
     skinForm->addRow(
-        uiText("dialog.render_settings.gameplay.judge_line", "Judge Line"),
+        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line")),
         openJudgeLineDirectoryButton != nullptr ? comboActionRow(judgeLineCombo, openJudgeLineDirectoryButton) : judgeLineCombo);
 
     // ---- 字体: embedded HUD-font picker (combo + import/reset + live sample),
     //      the same controls the old "字体设置" sub-dialog hosted, inlined. ----
-    auto* fontGroup = new QGroupBox(uiText("dialog.video_export.section.font", "Font"), root);
+    auto* fontGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.video_export.section.font")), root);
     auto* fontGroupLayout = new QVBoxLayout(fontGroup);
     fontGroupLayout->setContentsMargins(10, 8, 10, 8);
     fontGroupLayout->setSpacing(8);
@@ -575,7 +575,7 @@ void MainWindow::DialogsSection::onSkinSettings()
 void MainWindow::DialogsSection::openSkinSettingsDialog()
 {
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
-    dialog.setWindowTitle(uiText("dialog.skin_settings.dialog_title", "Skin Settings"));
+    dialog.setWindowTitle(UiText::text(QStringLiteral("dialog.skin_settings.dialog_title")));
     dialog.setModal(true);
     dialog.setStyleSheet(UiTheme::settingsDialogStyleSheet());
     owner_.windowSection_->applySystemWindowBackdrop(&dialog);
@@ -594,7 +594,7 @@ void MainWindow::DialogsSection::openSkinSettingsDialog()
     }
 
     auto* buttonBox = new QDialogButtonBox(&dialog);
-    if (QPushButton* closeButton = buttonBox->addButton(uiText("dialog.render_settings.button.close", "Close"), QDialogButtonBox::RejectRole)) {
+    if (QPushButton* closeButton = buttonBox->addButton(UiText::text(QStringLiteral("dialog.render_settings.button.close")), QDialogButtonBox::RejectRole)) {
         closeButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     }
     connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::accept);

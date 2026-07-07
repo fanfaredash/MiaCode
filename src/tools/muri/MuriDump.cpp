@@ -450,6 +450,31 @@ QJsonObject jsonFromParseMessage(const SimaiNativeMessage& message)
     return item;
 }
 
+QJsonObject jsonFromMuriDetailArgs(const MuriDetailArgs& args)
+{
+    QJsonObject item;
+    if (!args.left.isEmpty()) {
+        item.insert(QStringLiteral("left"), args.left);
+    }
+    if (!args.right.isEmpty()) {
+        item.insert(QStringLiteral("right"), args.right);
+    }
+    if (!args.gapText.isEmpty()) {
+        item.insert(QStringLiteral("gap_text"), args.gapText);
+    }
+    if (!args.deltaText.isEmpty()) {
+        item.insert(QStringLiteral("delta_text"), args.deltaText);
+    }
+    if (!args.handCount.isEmpty()) {
+        item.insert(QStringLiteral("hand_count"), args.handCount);
+    }
+    if (!args.actions.isEmpty()) {
+        item.insert(QStringLiteral("actions"), args.actions);
+    }
+    item.insert(QStringLiteral("alert"), muriAlertLevelKey(args.alert));
+    return item;
+}
+
 QJsonObject jsonFromDiagnostic(const MuriDiagnostic& diagnostic)
 {
     QJsonObject item;
@@ -460,7 +485,11 @@ QJsonObject jsonFromDiagnostic(const MuriDiagnostic& diagnostic)
     item.insert(QStringLiteral("col"), diagnostic.col);
     item.insert(QStringLiteral("marker_key"), diagnostic.markerKey);
     item.insert(QStringLiteral("title"), diagnostic.title);
-    item.insert(QStringLiteral("detail"), diagnostic.detail);
+    item.insert(QStringLiteral("detail_kind"), muriDetailKindKey(diagnostic.detailKind));
+    item.insert(QStringLiteral("detail_args"), jsonFromMuriDetailArgs(diagnostic.detailArgs));
+    item.insert(QStringLiteral("detail"), renderMuriDiagnosticDetail(
+        diagnostic,
+        SimaiNativeValidationLocale::English));
     return item;
 }
 
@@ -1192,6 +1221,8 @@ int main(int argc, char* argv[])
         obj.insert(QStringLiteral("col"), entry.col);
         obj.insert(QStringLiteral("second"), entry.second);
         obj.insert(QStringLiteral("occurrence_second"), entry.occurrenceSecond);
+        obj.insert(QStringLiteral("detail_kind"), muriDetailKindKey(entry.detailKind));
+        obj.insert(QStringLiteral("detail_args"), jsonFromMuriDetailArgs(entry.detailArgs));
         obj.insert(QStringLiteral("detail"), entry.rawDetail);
         visibleEntriesArray.append(obj);
     }

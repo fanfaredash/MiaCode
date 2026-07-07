@@ -50,11 +50,6 @@
 namespace miacode::cover_export {
 namespace {
 
-QString l10n(const QString& en, const QString& zh)
-{
-    return UiText::isChineseUi() ? zh : en;
-}
-
 QPushButton* makeToolbarButton(const QString& text, QWidget* parent, bool primary = false)
 {
     auto* button = new QPushButton(text, parent);
@@ -140,20 +135,20 @@ QList<miacode::cover_export::CoverUserPreset> builtInPresets()
     using miacode::cover_export::CoverUserPreset;
     return {
         CoverUserPreset{
-            l10n(QStringLiteral("Centered card (default)"), QStringLiteral("卡片居中（默认）")),
+            UiText::text(QStringLiteral("cover.centered_card_default")),
             makePresetComposition({
                 makeLayer(QStringLiteral("card"), QStringLiteral("card"), 0.5, 0.5, 0.85, 0, true),
             }),
         },
         CoverUserPreset{
-            l10n(QStringLiteral("Card + chart frame"), QStringLiteral("卡片 + 谱面帧")),
+            UiText::text(QStringLiteral("cover.card_chart_frame")),
             makePresetComposition({
                 makeLayer(QStringLiteral("chartFrame"), QStringLiteral("chartFrame"), 0.32, 0.5, 0.82, 0, true),
                 makeLayer(QStringLiteral("card"), QStringLiteral("card"), 0.64, 0.5, 0.78, 1, true),
             }),
         },
         CoverUserPreset{
-            l10n(QStringLiteral("Dual chart-frame collage"), QStringLiteral("双谱面帧拼贴")),
+            UiText::text(QStringLiteral("cover.dual_chart_frame_collage")),
             makePresetComposition({
                 makeLayer(QStringLiteral("card"), QStringLiteral("card"), 0.5, 0.5, 0.85, 0, false),
                 makeLayer(QStringLiteral("chartFrame"), QStringLiteral("chartFrame"), 0.30, 0.40, 0.56, 1, true),
@@ -161,7 +156,7 @@ QList<miacode::cover_export::CoverUserPreset> builtInPresets()
             }),
         },
         CoverUserPreset{
-            l10n(QStringLiteral("Pure chart frame"), QStringLiteral("纯谱面帧（无卡片）")),
+            UiText::text(QStringLiteral("cover.pure_chart_frame")),
             makePresetComposition({
                 makeLayer(QStringLiteral("card"), QStringLiteral("card"), 0.5, 0.5, 0.85, 0, false),
                 makeLayer(QStringLiteral("chartFrame"), QStringLiteral("chartFrame"), 0.5, 0.5, 0.92, 1, true),
@@ -179,7 +174,7 @@ CoverStudioWindow::CoverStudioWindow(const VideoExportTask& task,
     : QMainWindow(parent)
     , outputDirectory_(outputDirectory)
 {
-    setWindowTitle(l10n(QStringLiteral("Export Cover"), QStringLiteral("导出封面")));
+    setWindowTitle(UiText::text(QStringLiteral("cover.export_cover")));
     UiNativeWindowTheme::applyToWidget(this);
     // exportDialogStyleSheet only colours QCheckBox TEXT — no ::indicator rule, so
     // the box itself is near-invisible in dark mode. Append the dark-aware indicator
@@ -201,32 +196,31 @@ CoverStudioWindow::CoverStudioWindow(const VideoExportTask& task,
 
     // 布局 ▾ — the whole-composition file operations collapsed into one structured
     // menu (reset / save / import / recent), replacing the old three loose buttons.
-    auto* layoutButton = makeToolbarButton(l10n(QStringLiteral("Layout ▾"), QStringLiteral("布局 ▾")), toolbar);
+    auto* layoutButton = makeToolbarButton(UiText::text(QStringLiteral("cover.layout")), toolbar);
     layoutButton->setStyleSheet(compactToolbarButtonStyle());
-    layoutButton->setToolTip(l10n(QStringLiteral("Reset / save / import / recent layouts"),
-                                  QStringLiteral("重置 / 保存 / 导入 / 最近布局")));
+    layoutButton->setToolTip(UiText::text(QStringLiteral("cover.reset_save_import_recent_layouts")));
     auto* layoutMenu = new QMenu(layoutButton);
     UiTheme::styleRoundedMenu(*layoutMenu);
 
     auto* resetAction = layoutMenu->addAction(
-        l10n(QStringLiteral("Reset to default…"), QStringLiteral("重置为默认布局…")));
+        UiText::text(QStringLiteral("cover.reset_to_default")));
     resetAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
     layoutMenu->addSeparator();
-    auto* presetMenu = layoutMenu->addMenu(l10n(QStringLiteral("Apply preset"), QStringLiteral("应用预设")));
+    auto* presetMenu = layoutMenu->addMenu(UiText::text(QStringLiteral("cover.apply_preset")));
     UiTheme::styleRoundedMenu(*presetMenu);
     presetMenu->setToolTipsVisible(true);
     auto* savePresetAction = layoutMenu->addAction(
-        l10n(QStringLiteral("Save current as preset..."), QStringLiteral("保存当前为预设...")));
+        UiText::text(QStringLiteral("cover.save_current_as_preset")));
     auto* managePresetsAction = layoutMenu->addAction(
-        l10n(QStringLiteral("Manage presets..."), QStringLiteral("管理预设...")));
+        UiText::text(QStringLiteral("cover.manage_presets")));
     layoutMenu->addSeparator();
     auto* saveAction = layoutMenu->addAction(
-        l10n(QStringLiteral("Save layout to file…"), QStringLiteral("保存布局到文件…")));
+        UiText::text(QStringLiteral("cover.save_layout_to_file")));
     saveAction->setShortcut(QKeySequence::Save);
     auto* importAction = layoutMenu->addAction(
-        l10n(QStringLiteral("Import layout file…"), QStringLiteral("导入布局文件…")));
+        UiText::text(QStringLiteral("cover.import_layout_file")));
     importAction->setShortcut(QKeySequence::Open);
-    auto* recentMenu = layoutMenu->addMenu(l10n(QStringLiteral("Open recent"), QStringLiteral("打开最近")));
+    auto* recentMenu = layoutMenu->addMenu(UiText::text(QStringLiteral("cover.open_recent")));
     UiTheme::styleRoundedMenu(*recentMenu);
     recentMenu->setToolTipsVisible(true);
     layoutButton->setMenu(layoutMenu);
@@ -240,17 +234,13 @@ CoverStudioWindow::CoverStudioWindow(const VideoExportTask& task,
     auto* zoomOutButton = makeToolbarButton(QStringLiteral("−"), toolbar);
     zoomOutButton->setStyleSheet(zoomButtonStyle());
     zoomOutButton->setFixedSize(28, 24);
-    zoomOutButton->setToolTip(l10n(QStringLiteral("Zoom canvas out (Ctrl+-)"),
-                                   QStringLiteral("缩小画布视图（Ctrl+-）")));
-    zoomOutButton->setAccessibleName(l10n(QStringLiteral("Zoom canvas out"),
-                                          QStringLiteral("缩小画布视图")));
+    zoomOutButton->setToolTip(UiText::text(QStringLiteral("cover.zoom_canvas_out_ctrl")));
+    zoomOutButton->setAccessibleName(UiText::text(QStringLiteral("cover.zoom_canvas_out")));
     auto* zoomResetButton = makeToolbarButton(formatPreviewZoom(studio_->previewZoom()), toolbar);
     zoomResetButton->setStyleSheet(zoomButtonStyle());
     zoomResetButton->setFixedSize(62, 24);
-    zoomResetButton->setToolTip(l10n(QStringLiteral("Reset canvas zoom (Ctrl+0)"),
-                                     QStringLiteral("还原画布缩放（Ctrl+0）")));
-    zoomResetButton->setAccessibleName(l10n(QStringLiteral("Reset canvas zoom"),
-                                            QStringLiteral("还原画布缩放")));
+    zoomResetButton->setToolTip(UiText::text(QStringLiteral("cover.reset_canvas_zoom_ctrl_0")));
+    zoomResetButton->setAccessibleName(UiText::text(QStringLiteral("cover.reset_canvas_zoom")));
     auto* zoomInButton = makeToolbarButton(QStringLiteral("+"), toolbar);
     zoomInButton->setStyleSheet(zoomButtonStyle());
     zoomInButton->setFixedSize(28, 24);
@@ -264,19 +254,15 @@ CoverStudioWindow::CoverStudioWindow(const VideoExportTask& task,
     auto* zoomResetAction = new QAction(this);
     zoomResetAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+0")));
     addAction(zoomResetAction);
-    zoomInButton->setToolTip(l10n(QStringLiteral("Zoom canvas in (Ctrl++)"),
-                                  QStringLiteral("放大画布视图（Ctrl++）")));
-    zoomInButton->setAccessibleName(l10n(QStringLiteral("Zoom canvas in"),
-                                         QStringLiteral("放大画布视图")));
+    zoomInButton->setToolTip(UiText::text(QStringLiteral("cover.zoom_canvas_in_ctrl")));
+    zoomInButton->setAccessibleName(UiText::text(QStringLiteral("cover.zoom_canvas_in")));
 
-    auto* exportButton = makeToolbarButton(l10n(QStringLiteral("Export"), QStringLiteral("导出")), toolbar, true);
+    auto* exportButton = makeToolbarButton(UiText::text(QStringLiteral("cover.export")), toolbar, true);
     exportButton->setStyleSheet(compactToolbarButtonStyle(true));
-    exportButton->setToolTip(l10n(QStringLiteral("Render and save the cover image"),
-                                  QStringLiteral("渲染并保存封面图片")));
-    auto* cancelButton = makeToolbarButton(l10n(QStringLiteral("Cancel"), QStringLiteral("取消")), toolbar);
+    exportButton->setToolTip(UiText::text(QStringLiteral("cover.render_and_save_the_cover")));
+    auto* cancelButton = makeToolbarButton(UiText::text(QStringLiteral("media_tools.cancel")), toolbar);
     cancelButton->setStyleSheet(compactToolbarButtonStyle());
-    cancelButton->setToolTip(l10n(QStringLiteral("Close without exporting (Esc)"),
-                                  QStringLiteral("关闭而不导出（Esc）")));
+    cancelButton->setToolTip(UiText::text(QStringLiteral("cover.close_without_exporting_esc")));
 
     toolbarLayout->addWidget(layoutButton);
     toolbarLayout->addWidget(zoomOutButton);
@@ -383,9 +369,8 @@ void CoverStudioWindow::confirmAndReset()
 {
     const QMessageBox::StandardButton reply = QMessageBox::question(
         this,
-        l10n(QStringLiteral("Reset layout"), QStringLiteral("重置布局")),
-        l10n(QStringLiteral("Reset discards all current layers and positions. Continue?"),
-             QStringLiteral("重置将丢弃当前所有图层与位置，继续？")),
+        UiText::text(QStringLiteral("cover.reset_layout")),
+        UiText::text(QStringLiteral("cover.reset_discards_all_current_layers")),
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No);
     if (reply == QMessageBox::Yes && studio_ != nullptr) {
@@ -401,8 +386,8 @@ void CoverStudioWindow::saveCurrentAsPreset()
     bool ok = false;
     const QString name = QInputDialog::getText(
         this,
-        l10n(QStringLiteral("Save preset"), QStringLiteral("保存预设")),
-        l10n(QStringLiteral("Preset name:"), QStringLiteral("预设名称：")),
+        UiText::text(QStringLiteral("cover.save_preset")),
+        UiText::text(QStringLiteral("cover.preset_name")),
         QLineEdit::Normal,
         QString(),
         &ok).trimmed();
@@ -416,7 +401,7 @@ void CoverStudioWindow::saveCurrentAsPreset()
 void CoverStudioWindow::managePresets()
 {
     QDialog dialog(this);
-    dialog.setWindowTitle(l10n(QStringLiteral("Manage presets"), QStringLiteral("管理预设")));
+    dialog.setWindowTitle(UiText::text(QStringLiteral("cover.manage_presets_2")));
     dialog.setModal(true);
     UiNativeWindowTheme::applyToWidget(&dialog);
 
@@ -440,9 +425,9 @@ void CoverStudioWindow::managePresets()
 
     auto* buttons = new QDialogButtonBox(&dialog);
     QPushButton* renameButton = buttons->addButton(
-        l10n(QStringLiteral("Rename"), QStringLiteral("重命名")), QDialogButtonBox::ActionRole);
+        UiText::text(QStringLiteral("metadata.rename")), QDialogButtonBox::ActionRole);
     QPushButton* deleteButton = buttons->addButton(
-        l10n(QStringLiteral("Delete"), QStringLiteral("删除")), QDialogButtonBox::DestructiveRole);
+        UiText::text(QStringLiteral("metadata.delete")), QDialogButtonBox::DestructiveRole);
     buttons->addButton(QDialogButtonBox::Close);
     layout->addWidget(buttons);
     UiDialogs::localizeButtonBox(buttons);
@@ -465,8 +450,8 @@ void CoverStudioWindow::managePresets()
         bool ok = false;
         const QString newName = QInputDialog::getText(
             &dialog,
-            l10n(QStringLiteral("Rename preset"), QStringLiteral("重命名预设")),
-            l10n(QStringLiteral("Preset name:"), QStringLiteral("预设名称：")),
+            UiText::text(QStringLiteral("cover.rename_preset")),
+            UiText::text(QStringLiteral("cover.preset_name")),
             QLineEdit::Normal,
             oldName,
             &ok).trimmed();
@@ -483,8 +468,8 @@ void CoverStudioWindow::managePresets()
         const QString name = item->data(Qt::UserRole).toString();
         const QMessageBox::StandardButton reply = QMessageBox::question(
             &dialog,
-            l10n(QStringLiteral("Delete preset"), QStringLiteral("删除预设")),
-            l10n(QStringLiteral("Delete this preset?"), QStringLiteral("删除这个预设？")),
+            UiText::text(QStringLiteral("cover.delete_preset")),
+            UiText::text(QStringLiteral("cover.delete_this_preset")),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No);
         if (reply == QMessageBox::Yes) {
@@ -518,8 +503,7 @@ void CoverStudioWindow::rebuildPresetMenu(QMenu* menu)
         }
         if (needsChartFrame && studio_ != nullptr && !studio_->chartFrameAvailable()) {
             action->setEnabled(false);
-            action->setToolTip(l10n(QStringLiteral("This preset needs a renderable chart frame"),
-                                    QStringLiteral("该预设需要可渲染的谱面帧")));
+            action->setToolTip(UiText::text(QStringLiteral("cover.this_preset_needs_a_renderable")));
         }
         connect(action, &QAction::triggered, this, [this, preset] {
             if (studio_ != nullptr) {
@@ -549,8 +533,7 @@ void CoverStudioWindow::rebuildRecentMenu(QMenu* menu)
     menu->clear();
     const QStringList recent = miacode::cover_export::CoverCompositionState::loadRecentFiles();
     if (recent.isEmpty()) {
-        QAction* empty = menu->addAction(l10n(QStringLiteral("(No recent files)"),
-                                              QStringLiteral("（无最近文件）")));
+        QAction* empty = menu->addAction(UiText::text(QStringLiteral("cover.no_recent_files")));
         empty->setEnabled(false);
         return;
     }
@@ -559,14 +542,14 @@ void CoverStudioWindow::rebuildRecentMenu(QMenu* menu)
         QAction* action = menu->addAction(QDir::toNativeSeparators(path));
         action->setEnabled(exists);
         if (!exists) {
-            action->setToolTip(l10n(QStringLiteral("File not found"), QStringLiteral("文件不存在")));
+            action->setToolTip(UiText::text(QStringLiteral("cover.file_not_found")));
         }
         connect(action, &QAction::triggered, this, [this, path] {
             if (studio_ != nullptr) studio_->importLayoutFromPath(path);
         });
     }
     menu->addSeparator();
-    QAction* clear = menu->addAction(l10n(QStringLiteral("Clear recent"), QStringLiteral("清除最近")));
+    QAction* clear = menu->addAction(UiText::text(QStringLiteral("cover.clear_recent")));
     connect(clear, &QAction::triggered, this, [] {
         miacode::cover_export::CoverCompositionState::clearRecentFiles();
     });
@@ -611,7 +594,7 @@ void CoverStudioWindow::fitToScreen(QWidget* parent)
 void CoverStudioWindow::exportNow()
 {
     const CoverExportResult result = studio_->exportCover(outputDirectory_);
-    const QString title = l10n(QStringLiteral("Export Cover"), QStringLiteral("导出封面"));
+    const QString title = UiText::text(QStringLiteral("cover.export_cover"));
     if (result.success) {
         const QFileInfo resolvedOutputInfo(result.outputPath);
         const QString resolvedOutputName = resolvedOutputInfo.fileName().trimmed().isEmpty()
@@ -621,7 +604,7 @@ void CoverStudioWindow::exportNow()
             QMessageBox::Information,
             title,
             QStringLiteral("%1\n\n%2")
-                .arg(l10n(QStringLiteral("Cover export completed."), QStringLiteral("封面导出完成。")))
+                .arg(UiText::text(QStringLiteral("cover.cover_export_completed")))
                 .arg(resolvedOutputName),
             QMessageBox::NoButton,
             UiDialogs::effectiveParentWidget(this)
@@ -630,11 +613,11 @@ void CoverStudioWindow::exportNow()
         UiDialogs::configureDialogPreviewShortcuts(&dialog);
         UiDialogs::applyDetachedParentBehavior(&dialog, this);
         QPushButton* openButton = dialog.addButton(
-            l10n(QStringLiteral("Open"), QStringLiteral("打开")),
+            UiText::text(QStringLiteral("cover.open")),
             QMessageBox::AcceptRole
         );
         dialog.addButton(
-            l10n(QStringLiteral("Close"), QStringLiteral("关闭")),
+            UiText::text(QStringLiteral("cover.close")),
             QMessageBox::RejectRole
         );
         dialog.setDefaultButton(openButton);
@@ -652,7 +635,7 @@ void CoverStudioWindow::exportNow()
             QMessageBox::Warning,
             this,
             title,
-            (UiText::isChineseUi() ? QStringLiteral("封面导出失败：\n%1") : QStringLiteral("Cover export failed:\n%1"))
+            (UiText::text(QStringLiteral("cover.cover_export_failed_1")))
                 .arg(result.errorMessage));
     }
 }

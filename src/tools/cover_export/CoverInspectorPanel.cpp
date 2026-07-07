@@ -30,21 +30,16 @@ namespace {
 
 constexpr int kFrameTransportSliderHeight = 24;
 
-QString l10n(const QString& en, const QString& zh)
-{
-    return UiText::isChineseUi() ? zh : en;
-}
-
 QString displayLabel(const CoverLayer* layer)
 {
     if (layer == nullptr) {
         return QString();
     }
     if (layer->kind() == QStringLiteral("card")) {
-        return l10n(QStringLiteral("Difficulty card"), QStringLiteral("难度卡"));
+        return UiText::text(QStringLiteral("cover.difficulty_card"));
     }
     if (layer->kind() == QStringLiteral("chartFrame")) {
-        return l10n(QStringLiteral("Chart frame"), QStringLiteral("谱面帧"));
+        return UiText::text(QStringLiteral("cover.chart_frame"));
     }
     return layer->label();
 }
@@ -209,7 +204,7 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
     root->setSpacing(8);
 
     // ---- §3.2 layer (common) ----
-    layerGroup_ = new QGroupBox(l10n(QStringLiteral("Layer"), QStringLiteral("图层")), this);
+    layerGroup_ = new QGroupBox(UiText::text(QStringLiteral("cover.layer")), this);
     auto* form = new QFormLayout(layerGroup_);
     form->setContentsMargins(8, 8, 8, 8);
     form->setSpacing(8);
@@ -217,72 +212,67 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
 
     visibleCheck_ = new QCheckBox(this);
     lockedCheck_ = new QCheckBox(this);
-    visibleCheck_->setToolTip(l10n(QStringLiteral("Show or hide this layer (V)"),
-                                   QStringLiteral("显示或隐藏当前图层（快捷键 V）")));
-    lockedCheck_->setToolTip(l10n(QStringLiteral("Lock position and size (L)"),
-                                  QStringLiteral("锁定位置与大小，防止拖动（快捷键 L）")));
-    form->addRow(l10n(QStringLiteral("Visible"), QStringLiteral("显示")), visibleCheck_);
-    form->addRow(l10n(QStringLiteral("Lock"), QStringLiteral("锁定")), lockedCheck_);
+    visibleCheck_->setToolTip(UiText::text(QStringLiteral("cover.show_or_hide_this_layer")));
+    lockedCheck_->setToolTip(UiText::text(QStringLiteral("cover.lock_position_and_size_l")));
+    form->addRow(UiText::text(QStringLiteral("cover.visible")), visibleCheck_);
+    form->addRow(UiText::text(QStringLiteral("cover.lock")), lockedCheck_);
 
     opacitySlider_ = new QSlider(Qt::Horizontal, this);
     opacitySlider_->setRange(0, 100);
-    opacitySlider_->setToolTip(l10n(QStringLiteral("Layer opacity"), QStringLiteral("图层不透明度")));
-    form->addRow(l10n(QStringLiteral("Opacity"), QStringLiteral("不透明度")),
+    opacitySlider_->setToolTip(UiText::text(QStringLiteral("cover.layer_opacity")));
+    form->addRow(UiText::text(QStringLiteral("cover.opacity")),
                  makeSliderValueRow(opacitySlider_, &opacityValue_, QStringLiteral("%"), this));
 
     sizeSlider_ = new QSlider(Qt::Horizontal, this);
     sizeSlider_->setRange(5, 200);
-    sizeSlider_->setToolTip(l10n(QStringLiteral("Layer size"), QStringLiteral("图层大小")));
-    form->addRow(l10n(QStringLiteral("Size"), QStringLiteral("大小")),
+    sizeSlider_->setToolTip(UiText::text(QStringLiteral("cover.layer_size")));
+    form->addRow(UiText::text(QStringLiteral("cover.size")),
                  makeSliderValueRow(sizeSlider_, &sizeValue_, QStringLiteral("%"), this));
 
     xSlider_ = new QSlider(Qt::Horizontal, this);
     xSlider_->setRange(0, 100);
-    xSlider_->setToolTip(l10n(QStringLiteral("Horizontal position"), QStringLiteral("水平位置")));
-    form->addRow(l10n(QStringLiteral("X"), QStringLiteral("水平位置")),
+    xSlider_->setToolTip(UiText::text(QStringLiteral("cover.horizontal_position")));
+    form->addRow(UiText::text(QStringLiteral("cover.x")),
                  makeSliderValueRow(xSlider_, &xValue_, QString(), this));
 
     ySlider_ = new QSlider(Qt::Horizontal, this);
     ySlider_->setRange(0, 100);
-    ySlider_->setToolTip(l10n(QStringLiteral("Vertical position"), QStringLiteral("垂直位置")));
-    form->addRow(l10n(QStringLiteral("Y"), QStringLiteral("垂直位置")),
+    ySlider_->setToolTip(UiText::text(QStringLiteral("cover.vertical_position")));
+    form->addRow(UiText::text(QStringLiteral("cover.y")),
                  makeSliderValueRow(ySlider_, &yValue_, QString(), this));
 
     root->addWidget(layerGroup_);
 
     // ---- §3.3 chart-frame options (polymorphic; shown only for chart frames) ----
     frameOptionsGroup_ = new QGroupBox(
-        l10n(QStringLiteral("Chart frame options"), QStringLiteral("谱面帧选项")), this);
+        UiText::text(QStringLiteral("cover.chart_frame_options")), this);
     auto* frameForm = new QFormLayout(frameOptionsGroup_);
     frameForm->setContentsMargins(8, 8, 8, 8);
     frameForm->setSpacing(8);
     frameForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
     frameBgModeCombo_ = new QComboBox(this);
-    frameBgModeCombo_->addItem(l10n(QStringLiteral("Jacket"), QStringLiteral("曲绘")),
+    frameBgModeCombo_->addItem(UiText::text(QStringLiteral("cover.jacket")),
                                QStringLiteral("image"));
-    frameBgModeCombo_->addItem(l10n(QStringLiteral("Transparent"), QStringLiteral("透明")),
+    frameBgModeCombo_->addItem(UiText::text(QStringLiteral("cover.transparent")),
                                QStringLiteral("transparent"));
-    frameBgModeCombo_->setToolTip(l10n(QStringLiteral("Chart-frame inner background"),
-                                       QStringLiteral("谱面帧内圈背景")));
-    frameForm->addRow(l10n(QStringLiteral("Inner bg"), QStringLiteral("内圈背景")), frameBgModeCombo_);
+    frameBgModeCombo_->setToolTip(UiText::text(QStringLiteral("cover.chart_frame_inner_background")));
+    frameForm->addRow(UiText::text(QStringLiteral("cover.inner_bg")), frameBgModeCombo_);
 
     frameBgBrightnessSlider_ = new QSlider(Qt::Horizontal, this);
     frameBgBrightnessSlider_->setRange(0, 100);
-    frameBgBrightnessSlider_->setToolTip(l10n(QStringLiteral("Chart-frame background brightness"),
-                                              QStringLiteral("谱面帧背景亮度")));
+    frameBgBrightnessSlider_->setToolTip(UiText::text(QStringLiteral("cover.chart_frame_background_brightness")));
     frameBgBrightnessRow_ = makeSliderValueRow(frameBgBrightnessSlider_, &frameBgBrightnessValue_,
                                                QStringLiteral("%"), this);
-    frameForm->addRow(l10n(QStringLiteral("Brightness"), QStringLiteral("亮度")),
+    frameForm->addRow(UiText::text(QStringLiteral("cover.brightness")),
                       frameBgBrightnessRow_);
 
     frameBgTransparencySlider_ = new QSlider(Qt::Horizontal, this);
     frameBgTransparencySlider_->setRange(0, 100);
-    frameBgTransparencySlider_->setToolTip(l10n(QStringLiteral("Chart-frame background transparency"),
-                                                QStringLiteral("谱面帧背景透明度")));
+    frameBgTransparencySlider_->setToolTip(UiText::text(QStringLiteral("cover.chart_frame_background_transparency")));
     frameBgTransparencyRow_ = makeSliderValueRow(frameBgTransparencySlider_, &frameBgTransparencyValue_,
                                                  QStringLiteral("%"), this);
-    frameForm->addRow(l10n(QStringLiteral("Transparency"), QStringLiteral("透明度")),
+    frameForm->addRow(UiText::text(QStringLiteral("cover.transparency")),
                       frameBgTransparencyRow_);
 
     auto* frameTimeRow = new QWidget(this);
@@ -294,14 +284,12 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
     framePlayButton_->setIconSize(QSize(16, 16));
     framePlayButton_->setStyleSheet(frameTimeButtonStyle());
     framePlayButton_->setFixedSize(28, 28);
-    framePlayButton_->setToolTip(l10n(QStringLiteral("Play / pause (Space)"),
-                                      QStringLiteral("播放 / 暂停（空格）")));
+    framePlayButton_->setToolTip(UiText::text(QStringLiteral("cover.play_pause_space")));
     framePlayButton_->setAccessibleName(framePlayButton_->toolTip());
     frameTimeSlider_ = new QSlider(Qt::Horizontal, frameTimeRow);
     frameTimeSlider_->setRange(0, qMax(1, qRound(studio_ != nullptr ? studio_->contentDurationSeconds() * 1000.0 : 1.0)));
     configureTransportSlider(frameTimeSlider_);
-    frameTimeSlider_->setToolTip(l10n(QStringLiteral("Frame time for the selected chart frame"),
-                                      QStringLiteral("当前谱面帧的帧时间")));
+    frameTimeSlider_->setToolTip(UiText::text(QStringLiteral("cover.frame_time_for_the_selected_2")));
     frameTimeSlider_->installEventFilter(this);
     frameTimeReadout_ = new QLabel(formatFrameTimeWithDuration(0.0, studio_ != nullptr ? studio_->contentDurationSeconds() : 0.0), frameTimeRow);
     frameTimeReadout_->setMinimumWidth(100);
@@ -309,7 +297,7 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
     frameTimeLayout->addWidget(framePlayButton_, 0);
     frameTimeLayout->addWidget(frameTimeSlider_, 1);
     frameTimeLayout->addWidget(frameTimeReadout_, 0);
-    auto* frameTimeLabel = new QLabel(l10n(QStringLiteral("Frame time"), QStringLiteral("帧时间")), frameOptionsGroup_);
+    auto* frameTimeLabel = new QLabel(UiText::text(QStringLiteral("cover.frame_time")), frameOptionsGroup_);
     frameTimeLabel->setProperty("role", QStringLiteral("coverFrameTimeLabel"));
     frameTimeLabel->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
     frameTimeLayout->insertWidget(0, frameTimeLabel, 0);
@@ -442,8 +430,8 @@ void CoverInspectorPanel::refresh()
 
     layerGroup_->setVisible(hasLayer);
     layerGroup_->setTitle(hasLayer
-        ? l10n(QStringLiteral("Layer · "), QStringLiteral("图层 · ")) + displayLabel(layer)
-        : l10n(QStringLiteral("Layer"), QStringLiteral("图层")));
+        ? UiText::text(QStringLiteral("cover.layer_2")) + displayLabel(layer)
+        : UiText::text(QStringLiteral("cover.layer")));
 
     {
         const QSignalBlocker b(visibleCheck_);

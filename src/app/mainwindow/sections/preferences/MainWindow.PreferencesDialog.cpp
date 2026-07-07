@@ -1,4 +1,4 @@
-﻿#include "MainWindow.PreferencesSection.h"
+#include "MainWindow.PreferencesSection.h"
 #include "../../MainWindowShared.h"
 #include "../window/MainWindow.WindowSection.h"
 
@@ -73,9 +73,13 @@ QString shortcutSequenceKey(const QKeySequence& sequence)
 
 QString shortcutDefinitionLabel(const ShortcutRegistry::ShortcutDefinition& definition)
 {
-    return UiText::isChineseUi() && !definition.labelZh.isEmpty()
-        ? definition.labelZh
-        : definition.labelEn;
+    if (!definition.labelKey.isEmpty()) {
+        const QString label = UiText::text(definition.labelKey);
+        if (label != definition.labelKey) {
+            return label;
+        }
+    }
+    return definition.labelEn.isEmpty() ? definition.id : definition.labelEn;
 }
 
 QString conflictingShortcutLabel(
@@ -656,7 +660,7 @@ void MainWindow::PreferencesSection::onPreferences()
 {
     MC_OP("MainWindow::PreferencesSection::onPreferences");
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
-    dialog.setWindowTitle(uiText("dialog.preferences.title", "Preferences"));
+    dialog.setWindowTitle(UiText::text(QStringLiteral("dialog.preferences.title")));
     dialog.setModal(true);
     dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
     owner_.windowSection_->applySystemWindowBackdrop(&dialog);
@@ -697,7 +701,7 @@ void MainWindow::PreferencesSection::onPreferences()
     auto* appearancePageLayout = new QVBoxLayout(appearancePage);
     appearancePageLayout->setContentsMargins(0, 0, 0, 0);
     appearancePageLayout->setSpacing(10);
-    auto* interfaceGroup = new QGroupBox(uiText("dialog.preferences.interface_group", "Appearance"), appearancePage);
+    auto* interfaceGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.preferences.interface_group")), appearancePage);
     auto* interfaceLayout = new QFormLayout(interfaceGroup);
     // Explicit margins like the editor/performance pages. The flattened
     // group box (border: none via flattenPageGroup) zeroes the default
@@ -718,20 +722,20 @@ void MainWindow::PreferencesSection::onPreferences()
                 return option.label;
             }
         }
-        return uiText("dialog.preferences.language.system", "Follow System");
+        return UiText::text(QStringLiteral("dialog.preferences.language.system"));
     };
     const auto themeLabel = [](UiText::ThemePreference preference) -> QString {
         switch (preference) {
         case UiText::ThemePreference::Light:
-            return uiText("dialog.preferences.theme.light", "Light");
+            return UiText::text(QStringLiteral("dialog.preferences.theme.light"));
         case UiText::ThemePreference::Dark:
-            return uiText("dialog.preferences.theme.dark", "Dark");
+            return UiText::text(QStringLiteral("dialog.preferences.theme.dark"));
         case UiText::ThemePreference::System:
         default:
-            return uiText("dialog.preferences.theme.system", "Follow System");
+            return UiText::text(QStringLiteral("dialog.preferences.theme.system"));
         }
     };
-    auto* languageLabelWidget = new QLabel(uiText("dialog.preferences.language", "Language"), interfaceGroup);
+    auto* languageLabelWidget = new QLabel(UiText::text(QStringLiteral("dialog.preferences.language")), interfaceGroup);
     auto* languageRow = new QWidget(interfaceGroup);
     auto* languageRowLayout = new QHBoxLayout(languageRow);
     languageRowLayout->setContentsMargins(0, 0, 0, 0);
@@ -756,7 +760,7 @@ void MainWindow::PreferencesSection::onPreferences()
                 selectedLanguageToken = id;
                 languageButton->setText(languageLabelForToken(selectedLanguageToken));
                 UiText::setPreferredLanguageToken(selectedLanguageToken);
-                owner_.statusBar()->showMessage(uiText("status.preferences_saved", "Preferences saved. Restart to apply."));
+                owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_saved")));
             });
         }
     };
@@ -772,7 +776,7 @@ void MainWindow::PreferencesSection::onPreferences()
     languageRowLayout->addStretch(1);
     interfaceLayout->addRow(languageLabelWidget, languageRow);
 
-    auto* themeLabelWidget = new QLabel(uiText("dialog.preferences.theme", "Theme"), interfaceGroup);
+    auto* themeLabelWidget = new QLabel(UiText::text(QStringLiteral("dialog.preferences.theme")), interfaceGroup);
     auto* themeRow = new QWidget(interfaceGroup);
     auto* themeRowLayout = new QHBoxLayout(themeRow);
     themeRowLayout->setContentsMargins(0, 0, 0, 0);
@@ -801,7 +805,7 @@ void MainWindow::PreferencesSection::onPreferences()
             owner_.windowSection_->applyUiTheme();
             dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
             owner_.windowSection_->applySystemWindowBackdrop(&dialog);
-            owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+            owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
         });
     }
     connect(themeButton, &QToolButton::clicked, &dialog, [themeButton, themeMenu]() {
@@ -816,11 +820,11 @@ void MainWindow::PreferencesSection::onPreferences()
     // (default), true = preview on the left.
     const auto previewSideLabel = [](bool previewOnLeft) -> QString {
         return previewOnLeft
-            ? uiText("dialog.preferences.preview_side.left", "Left")
-            : uiText("dialog.preferences.preview_side.right", "Right");
+            ? UiText::text(QStringLiteral("dialog.preferences.preview_side.left"))
+            : UiText::text(QStringLiteral("dialog.preferences.preview_side.right"));
     };
     auto* previewSideLabelWidget =
-        new QLabel(uiText("dialog.preferences.preview_side", "Preview Position"), interfaceGroup);
+        new QLabel(UiText::text(QStringLiteral("dialog.preferences.preview_side")), interfaceGroup);
     auto* previewSideRow = new QWidget(interfaceGroup);
     auto* previewSideRowLayout = new QHBoxLayout(previewSideRow);
     previewSideRowLayout->setContentsMargins(0, 0, 0, 0);
@@ -841,7 +845,7 @@ void MainWindow::PreferencesSection::onPreferences()
         connect(action, &QAction::triggered, &dialog, [&, previewOnLeft, previewSideButton]() {
             previewSideButton->setText(previewSideLabel(previewOnLeft));
             owner_.setWorkspacePanelsSwapped(previewOnLeft, true);
-            owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+            owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
         });
     }
     connect(previewSideButton, &QToolButton::clicked, &dialog, [previewSideButton, previewSideMenu]() {
@@ -854,13 +858,13 @@ void MainWindow::PreferencesSection::onPreferences()
     flattenPageGroup(interfaceGroup);
     appearancePageLayout->addWidget(interfaceGroup);
     appearancePageLayout->addStretch(1);
-    pageStack->addTab(appearancePage, uiText("dialog.preferences.interface_group", "Appearance"));
+    pageStack->addTab(appearancePage, UiText::text(QStringLiteral("dialog.preferences.interface_group")));
 
     auto* editorPage = new QWidget(pageStack);
     auto* editorPageLayout = new QVBoxLayout(editorPage);
     editorPageLayout->setContentsMargins(0, 0, 0, 0);
     editorPageLayout->setSpacing(10);
-    auto* editorGroup = new QGroupBox(uiText("dialog.preferences.editor_group", "Editor"), editorPage);
+    auto* editorGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.preferences.editor_group")), editorPage);
     auto* editorLayout = new QFormLayout(editorGroup);
     editorLayout->setContentsMargins(12, 10, 12, 12);
     editorLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
@@ -876,7 +880,7 @@ void MainWindow::PreferencesSection::onPreferences()
     // Row order (top to bottom): font size, line spacing, auto-completion,
     // header display, Chinese input, and ignore muri issue prompts.
     // out, so it trails the prioritised rows.
-    auto* editorFontSizeLabel = new QLabel(uiText("dialog.preferences.editor_font_size", "Text Font Size"), editorGroup);
+    auto* editorFontSizeLabel = new QLabel(UiText::text(QStringLiteral("dialog.preferences.editor_font_size")), editorGroup);
     auto* fontSizeRow = new QWidget(editorGroup);
     auto* fontSizeRowLayout = new QHBoxLayout(fontSizeRow);
     fontSizeRowLayout->setContentsMargins(0, 0, 0, 0);
@@ -944,14 +948,14 @@ void MainWindow::PreferencesSection::onPreferences()
     connect(editorFontSizeSpin, qOverload<int>(&QSpinBox::valueChanged), &dialog, [&](int value) {
         selectedEditorFontSize = value;
         owner_.applyEditorTextFontSize(selectedEditorFontSize, true);
-        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.editor_text_display_updated")));
     });
     fontSizeRowLayout->addWidget(fontSizeControl, 0);
     fontSizeRowLayout->addWidget(shortcutHint, 0);
     fontSizeRowLayout->addStretch(1);
     editorLayout->addRow(editorFontSizeLabel, fontSizeRow);
 
-    auto* lineSpacingLabel = new QLabel(uiText("dialog.preferences.editor_line_spacing", "Line Spacing"), editorGroup);
+    auto* lineSpacingLabel = new QLabel(UiText::text(QStringLiteral("dialog.preferences.editor_line_spacing")), editorGroup);
     auto* lineSpacingCombo = new QComboBox(editorGroup);
     for (double factor : kEditorLineSpacingFactorOptions) {
         lineSpacingCombo->addItem(editorLineSpacingFactorLabel(factor), factor);
@@ -971,7 +975,7 @@ void MainWindow::PreferencesSection::onPreferences()
         }
         selectedEditorLineSpacingFactor = lineSpacingCombo->itemData(index).toDouble();
         owner_.applyEditorLineSpacingFactor(selectedEditorLineSpacingFactor, true);
-        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.editor_text_display_updated")));
     });
     editorLayout->addRow(lineSpacingLabel, lineSpacingCombo);
 
@@ -981,18 +985,16 @@ void MainWindow::PreferencesSection::onPreferences()
     // popup, and the 'h' hold-duration suggestions together. Presented as a
     // On/Off menu (same idiom as the other editor rows) rather than a checkbox.
     auto* autoCompletionLabel = new QLabel(
-        UiText::isChineseUi() ? QStringLiteral("自动补全") : QStringLiteral("Auto-completion"),
+        UiText::text(QStringLiteral("preferences.auto_completion")),
         editorGroup
     );
     auto* autoCompletionCombo = new QComboBox(editorGroup);
-    autoCompletionCombo->addItem(UiText::isChineseUi() ? QStringLiteral("开启") : QStringLiteral("On"));
-    autoCompletionCombo->addItem(UiText::isChineseUi() ? QStringLiteral("关闭") : QStringLiteral("Off"));
+    autoCompletionCombo->addItem(UiText::text(QStringLiteral("preferences.on")));
+    autoCompletionCombo->addItem(UiText::text(QStringLiteral("preferences.off")));
     autoCompletionCombo->setCurrentIndex(selectedAutoCompletionEnabled ? 0 : 1);
     UiTheme::applyComboBoxPopupLimit(autoCompletionCombo, 12);
     autoCompletionCombo->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("自动补全括号、给出括号/时值建议，并在输入 h 时提示 [8:1] 等 hold 时值。")
-            : QStringLiteral("Auto-closes brackets, suggests durations/BPMs inside them, and offers [8:1]-style hold tokens after typing 'h'.")
+        UiText::text(QStringLiteral("preferences.auto_closes_brackets_suggests_durations"))
     );
     connect(autoCompletionCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
         if (index < 0) {
@@ -1000,7 +1002,7 @@ void MainWindow::PreferencesSection::onPreferences()
         }
         selectedAutoCompletionEnabled = (index == 0);
         owner_.applyEditorAutoCompletionEnabled(selectedAutoCompletionEnabled, true);
-        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.editor_text_display_updated")));
     });
     editorLayout->addRow(autoCompletionLabel, autoCompletionCombo);
 
@@ -1008,12 +1010,12 @@ void MainWindow::PreferencesSection::onPreferences()
     // the chart-wide offset (default) or the per-difficulty designer.
     const auto headerTopDisplayLabel = [](EditorHeaderTopDisplay mode) -> QString {
         return mode == EditorHeaderTopDisplay::Designer
-            ? uiText("dialog.preferences.editor_top_display.designer", "Designer")
-            : uiText("dialog.preferences.editor_top_display.latency", "Offset");
+            ? UiText::text(QStringLiteral("dialog.preferences.editor_top_display.designer"))
+            : UiText::text(QStringLiteral("dialog.preferences.editor_top_display.latency"));
     };
     auto* headerTopDisplayLabelWidget =
-        new QLabel(uiText("dialog.preferences.editor_top_display", "Header Field"), editorGroup);
-    // Plain combo box, same idiom as the line-spacing row above; the two-option
+        new QLabel(UiText::text(QStringLiteral("dialog.preferences.editor_top_display")), editorGroup);
+    // Plain combo box, same idiom as the 行距 row above — the two-option
     // pick doesn't warrant the styled PreferenceMenuButton treatment.
     auto* headerTopDisplayCombo = new QComboBox(editorGroup);
     const QList<EditorHeaderTopDisplay> headerTopDisplayOptions{
@@ -1028,9 +1030,7 @@ void MainWindow::PreferencesSection::onPreferences()
     headerTopDisplayCombo->setCurrentIndex(qMax(0, headerTopDisplayIndex));
     UiTheme::applyComboBoxPopupLimit(headerTopDisplayCombo, 12);
     headerTopDisplayCombo->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("谱面编辑页顶部 Lv 旁边显示的字段：偏移（&first）或当前难度的谱师（&des_N）。")
-            : QStringLiteral("The field next to Lv in the chart header: the &first offset or this difficulty's &des_N designer.")
+        UiText::text(QStringLiteral("preferences.the_field_next_to_lv"))
     );
     connect(headerTopDisplayCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
             [&, headerTopDisplayCombo](int index) {
@@ -1040,27 +1040,23 @@ void MainWindow::PreferencesSection::onPreferences()
         const auto mode =
             static_cast<EditorHeaderTopDisplay>(headerTopDisplayCombo->itemData(index).toInt());
         owner_.applyEditorHeaderTopDisplay(mode, true);
-        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
     });
     editorLayout->addRow(headerTopDisplayLabelWidget, headerTopDisplayCombo);
 
     auto* ignoreMuriIssuePromptsCheckbox = new QCheckBox(
-        UiText::isChineseUi()
-            ? QStringLiteral("忽略无理报错提示")
-            : QStringLiteral("Ignore muri issue prompts"),
+        UiText::text(QStringLiteral("preferences.ignore_muri_issue_prompts")),
         editorGroup
     );
     ignoreMuriIssuePromptsCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     ignoreMuriIssuePromptsCheckbox->setChecked(selectedIgnoreMuriIssuePrompts);
     ignoreMuriIssuePromptsCheckbox->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("开启后不在编辑器标题栏和时间轴小点中提示无理。设置保存到当前谱面文件夹的 .miacode。")
-            : QStringLiteral("Hides muri from the editor header and timeline dots. Saved in the current chart folder's .miacode data.")
+        UiText::text(QStringLiteral("preferences.hides_muri_from_the_editor"))
     );
     connect(ignoreMuriIssuePromptsCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
         selectedIgnoreMuriIssuePrompts = checked;
         owner_.applyIgnoreMuriIssuePrompts(selectedIgnoreMuriIssuePrompts, true);
-        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
     });
     // Chinese input combo merges the former "Lock half-width symbol input" checkbox
     // and "Disable IME input" checkbox into three graduated levels:
@@ -1068,7 +1064,7 @@ void MainWindow::PreferencesSection::onPreferences()
     //   index 1 filter full-width chars halfWidth=ON  imeDisabled=OFF (default: normalize commits)
     //   index 2 disable IME input       halfWidth=ON  imeDisabled=ON  (block IME candidate window)
     auto* chineseInputLabel = new QLabel(
-        UiText::isChineseUi() ? QStringLiteral("中文输入") : QStringLiteral("Chinese input"),
+        UiText::text(QStringLiteral("preferences.chinese_input")),
         editorGroup
     );
     const int initialChineseInputMode =
@@ -1076,15 +1072,11 @@ void MainWindow::PreferencesSection::onPreferences()
         state_.editorHalfWidthInputEnabled_ ? 1 : 0;
     int selectedChineseInputMode = initialChineseInputMode;
     auto* chineseInputCombo = new QComboBox(editorGroup);
-    if (UiText::isChineseUi()) {
-        chineseInputCombo->addItem(QStringLiteral("开启"));
-        chineseInputCombo->addItem(QStringLiteral("仅过滤全角字符"));
-        chineseInputCombo->addItem(QStringLiteral("禁用中文输入法"));
-    } else {
-        chineseInputCombo->addItem(QStringLiteral("On"));
-        chineseInputCombo->addItem(QStringLiteral("Filter full-width chars"));
-        chineseInputCombo->addItem(QStringLiteral("Disable IME"));
-    }
+    chineseInputCombo->addItem(UiText::text(QStringLiteral("preferences.on")));
+    chineseInputCombo->addItem(
+        UiText::text(QStringLiteral("preferences.filter_full_width_chars")));
+    chineseInputCombo->addItem(
+        UiText::text(QStringLiteral("preferences.disable_ime")));
     chineseInputCombo->setCurrentIndex(selectedChineseInputMode);
     UiTheme::applyComboBoxPopupLimit(chineseInputCombo, 12);
     connect(chineseInputCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
@@ -1096,7 +1088,7 @@ void MainWindow::PreferencesSection::onPreferences()
         selectedEditorImeInputDisabled = (index >= 2);
         owner_.applyEditorHalfWidthInputEnabled(selectedEditorHalfWidthInputEnabled, false);
         owner_.applyEditorImeInputDisabled(selectedEditorImeInputDisabled, true);
-        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
     });
     editorLayout->addRow(chineseInputLabel, chineseInputCombo);
 
@@ -1128,13 +1120,13 @@ void MainWindow::PreferencesSection::onPreferences()
     flattenPageGroup(editorGroup);
     editorPageLayout->addWidget(editorGroup);
     editorPageLayout->addStretch(1);
-    pageStack->addTab(editorPage, uiText("dialog.preferences.editor_group", "Editor"));
+    pageStack->addTab(editorPage, UiText::text(QStringLiteral("dialog.preferences.editor_group")));
 
     auto* performancePage = new QWidget(pageStack);
     auto* performancePageLayout = new QVBoxLayout(performancePage);
     performancePageLayout->setContentsMargins(0, 0, 0, 0);
     performancePageLayout->setSpacing(10);
-    auto* performanceGroup = new QGroupBox(uiText("dialog.preferences.performance_group", "Performance"), performancePage);
+    auto* performanceGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.preferences.performance_group")), performancePage);
     auto* performanceLayout = new QFormLayout(performanceGroup);
     performanceLayout->setContentsMargins(12, 10, 12, 12);
     performanceLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
@@ -1147,10 +1139,7 @@ void MainWindow::PreferencesSection::onPreferences()
     };
     const double detectedRefreshRate = owner_.currentPreviewCanvasRefreshRate();
     const QString displayRefreshLabel = QStringLiteral("%1 (%2 Hz)")
-        .arg(uiText(
-            "dialog.render_settings.preview.canvas_frame_rate.display",
-            "Display Refresh Rate"
-        ))
+        .arg(UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.display")))
         .arg(QString::number(detectedRefreshRate, 'f', detectedRefreshRate >= 100.0 ? 0 : 1));
     const auto frameRateLabelForMode =
         [](PreviewCanvasFrameRateMode mode, const QList<FrameRateOption>& options) -> QString {
@@ -1186,7 +1175,7 @@ void MainWindow::PreferencesSection::onPreferences()
                 connect(action, &QAction::triggered, &dialog, [&, option, button, applyMode]() {
                     button->setText(option.label);
                     applyMode(option.mode);
-                    owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+                    owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
                 });
             }
             connect(button, &QToolButton::clicked, &dialog, [button, menu]() {
@@ -1198,12 +1187,12 @@ void MainWindow::PreferencesSection::onPreferences()
     QList<FrameRateOption> canvasFrameRateOptions;
     canvasFrameRateOptions.append({
         PreviewCanvasFrameRateMode::Fps60,
-        uiText("dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS"),
+        UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.60")),
     });
     if (detectedRefreshRate >= 119.5) {
         canvasFrameRateOptions.append({
             PreviewCanvasFrameRateMode::Fps120,
-            uiText("dialog.render_settings.preview.canvas_frame_rate.120", "120 FPS"),
+            UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.120")),
         });
     }
     canvasFrameRateOptions.append({
@@ -1215,19 +1204,19 @@ void MainWindow::PreferencesSection::onPreferences()
     if (detectedRefreshRate >= 29.5) {
         appFrameRateOptions.append({
             PreviewCanvasFrameRateMode::Fps30,
-            uiText("dialog.render_settings.preview.canvas_frame_rate.30", "30 FPS"),
+            UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.30")),
         });
     }
     if (detectedRefreshRate >= 59.5) {
         appFrameRateOptions.append({
             PreviewCanvasFrameRateMode::Fps60,
-            uiText("dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS"),
+            UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.60")),
         });
     }
     if (detectedRefreshRate >= 119.5) {
         appFrameRateOptions.append({
             PreviewCanvasFrameRateMode::Fps120,
-            uiText("dialog.render_settings.preview.canvas_frame_rate.120", "120 FPS"),
+            UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.120")),
         });
     }
     appFrameRateOptions.append({
@@ -1245,8 +1234,8 @@ void MainWindow::PreferencesSection::onPreferences()
             QString label;
         };
         const QList<VideoDecodeOption> videoDecodeOptions = {
-            {false, uiText("dialog.preferences.performance.video_decode.hardware", "Hardware")},
-            {true, uiText("dialog.preferences.performance.video_decode.software", "Software")},
+            {false, UiText::text(QStringLiteral("dialog.preferences.performance.video_decode.hardware"))},
+            {true, UiText::text(QStringLiteral("dialog.preferences.performance.video_decode.software"))},
         };
         const auto videoDecodeLabel = [&](bool preferSoftware) -> QString {
             for (const VideoDecodeOption& option : videoDecodeOptions) {
@@ -1271,19 +1260,19 @@ void MainWindow::PreferencesSection::onPreferences()
             connect(action, &QAction::triggered, &dialog, [&, option, button]() {
                 button->setText(option.label);
                 owner_.setVideoDecodePrefersSoftware(option.preferSoftware, true);
-                owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+                owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
             });
         }
         connect(button, &QToolButton::clicked, &dialog, [button, menu]() {
             menu->popup(button->mapToGlobal(QPoint(0, button->height())));
         });
         performanceLayout->addRow(
-            uiText("dialog.preferences.performance.video_decode", "PV Render"),
+            UiText::text(QStringLiteral("dialog.preferences.performance.video_decode")),
             button);
     }
 
     addFrameRateRow(
-        uiText("dialog.render_settings.preview.canvas_frame_rate", "Preview Refresh Rate"),
+        UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate")),
         owner_.currentPreviewCanvasFrameRateMode(),
         canvasFrameRateOptions,
         [&](PreviewCanvasFrameRateMode mode) {
@@ -1291,7 +1280,7 @@ void MainWindow::PreferencesSection::onPreferences()
         }
     );
     addFrameRateRow(
-        uiText("dialog.preferences.performance.pv_frame_rate", "PV Refresh Rate"),
+        UiText::text(QStringLiteral("dialog.preferences.performance.pv_frame_rate")),
         owner_.currentPreviewStageMediaFrameRateMode(),
         appFrameRateOptions,
         [&](PreviewCanvasFrameRateMode mode) {
@@ -1299,7 +1288,7 @@ void MainWindow::PreferencesSection::onPreferences()
         }
     );
     addFrameRateRow(
-        uiText("dialog.preferences.performance.timeline_frame_rate", "Timeline Refresh Rate"),
+        UiText::text(QStringLiteral("dialog.preferences.performance.timeline_frame_rate")),
         owner_.currentTimelineFrameRateMode(),
         appFrameRateOptions,
         [&](PreviewCanvasFrameRateMode mode) {
@@ -1310,18 +1299,18 @@ void MainWindow::PreferencesSection::onPreferences()
     flattenPageGroup(performanceGroup);
     performancePageLayout->addWidget(performanceGroup);
     performancePageLayout->addStretch(1);
-    pageStack->addTab(performancePage, uiText("dialog.preferences.performance_group", "Performance"));
+    pageStack->addTab(performancePage, UiText::text(QStringLiteral("dialog.preferences.performance_group")));
 
     auto* shortcutsPage = new QWidget(pageStack);
     auto* shortcutsPageLayout = new QVBoxLayout(shortcutsPage);
     shortcutsPageLayout->setContentsMargins(0, 0, 0, 0);
     shortcutsPageLayout->setSpacing(10);
-    auto* shortcutsGroup = new QGroupBox(uiText("dialog.preferences.shortcuts_group", "Shortcuts"), shortcutsPage);
+    auto* shortcutsGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.preferences.shortcuts_group")), shortcutsPage);
     auto* shortcutsLayout = new QVBoxLayout(shortcutsGroup);
     shortcutsLayout->setContentsMargins(12, 10, 12, 12);
     shortcutsLayout->setSpacing(8);
-    auto* editShortcutsButton = new QPushButton(uiText("dialog.preferences.shortcuts.edit", "Edit Shortcuts"), shortcutsGroup);
-    auto* resetShortcutsButton = new QPushButton(uiText("dialog.preferences.shortcuts.reset", "Restore Shortcuts"), shortcutsGroup);
+    auto* editShortcutsButton = new QPushButton(UiText::text(QStringLiteral("dialog.preferences.shortcuts.edit")), shortcutsGroup);
+    auto* resetShortcutsButton = new QPushButton(UiText::text(QStringLiteral("dialog.preferences.shortcuts.reset")), shortcutsGroup);
     editShortcutsButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     resetShortcutsButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     shortcutsLayout->addWidget(editShortcutsButton, 0, Qt::AlignLeft);
@@ -1332,7 +1321,7 @@ void MainWindow::PreferencesSection::onPreferences()
     flattenPageGroup(shortcutsGroup);
     shortcutsPageLayout->addWidget(shortcutsGroup);
     shortcutsPageLayout->addStretch(1);
-    pageStack->addTab(shortcutsPage, uiText("dialog.preferences.shortcuts_group", "Shortcuts"));
+    pageStack->addTab(shortcutsPage, UiText::text(QStringLiteral("dialog.preferences.shortcuts_group")));
 
     auto* extensionsPage = new QWidget(pageStack);
     auto* extensionsPageLayout = new QHBoxLayout(extensionsPage);
@@ -1343,11 +1332,11 @@ void MainWindow::PreferencesSection::onPreferences()
     extensionsActionsLayout->setContentsMargins(12, 10, 8, 12);
     extensionsActionsLayout->setSpacing(8);
     auto* openExtensionsFolderButton =
-        new QPushButton(uiText("dialog.preferences.extensions.open_folder", "Open Extensions Folder"), extensionsActions);
+        new QPushButton(UiText::text(QStringLiteral("dialog.preferences.extensions.open_folder")), extensionsActions);
     auto* refreshExtensionsButton =
-        new QPushButton(uiText("dialog.preferences.extensions.refresh", "Refresh Extensions"), extensionsActions);
+        new QPushButton(UiText::text(QStringLiteral("dialog.preferences.extensions.refresh")), extensionsActions);
     auto* openExtensionLogsButton =
-        new QPushButton(uiText("dialog.preferences.extensions.open_logs", "Open Logs"), extensionsActions);
+        new QPushButton(UiText::text(QStringLiteral("dialog.preferences.extensions.open_logs")), extensionsActions);
     openExtensionsFolderButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
     refreshExtensionsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
     openExtensionLogsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
@@ -1359,10 +1348,10 @@ void MainWindow::PreferencesSection::onPreferences()
     auto* extensionsTable = new QTableWidget(extensionsPage);
     extensionsTable->setColumnCount(4);
     extensionsTable->setHorizontalHeaderLabels({
-        uiText("dialog.preferences.extensions.enabled", "Enabled"),
-        uiText("dialog.preferences.extensions.name", "Extension"),
-        uiText("dialog.preferences.extensions.version", "Version"),
-        uiText("dialog.preferences.extensions.status", "Status"),
+        UiText::text(QStringLiteral("dialog.preferences.extensions.enabled")),
+        UiText::text(QStringLiteral("dialog.preferences.extensions.name")),
+        UiText::text(QStringLiteral("dialog.preferences.extensions.version")),
+        UiText::text(QStringLiteral("dialog.preferences.extensions.status")),
     });
     extensionsTable->verticalHeader()->hide();
     extensionsTable->setShowGrid(false);
@@ -1460,7 +1449,7 @@ void MainWindow::PreferencesSection::onPreferences()
                         owner_.extensionManager_->setExtensionEnabled(id, enabled);
                         rebuildLanguageMenu();
                         refreshExtensionRows();
-                        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+                        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
                     });
                 });
             }
@@ -1484,7 +1473,7 @@ void MainWindow::PreferencesSection::onPreferences()
         }
         rebuildLanguageMenu();
         refreshExtensionRows();
-        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
     });
     QObject::connect(openExtensionLogsButton, &QPushButton::clicked, &dialog, [&]() {
         const QString dir = owner_.extensionManager_ != nullptr
@@ -1496,11 +1485,11 @@ void MainWindow::PreferencesSection::onPreferences()
     refreshExtensionRows();
     extensionsPageLayout->addWidget(extensionsActions, 0);
     extensionsPageLayout->addWidget(extensionsTable, 1);
-    pageStack->addTab(extensionsPage, uiText("dialog.preferences.extensions_group", "Extensions"));
+    pageStack->addTab(extensionsPage, UiText::text(QStringLiteral("dialog.preferences.extensions_group")));
 
     const auto openShortcutEditDialog = [&]() {
         QDialog shortcutsDialog(&dialog);
-        shortcutsDialog.setWindowTitle(uiText("dialog.preferences.shortcuts.title", "Keyboard Shortcuts"));
+        shortcutsDialog.setWindowTitle(UiText::text(QStringLiteral("dialog.preferences.shortcuts.title")));
         shortcutsDialog.setModal(true);
         shortcutsDialog.resize(740, 500);
         shortcutsDialog.setMinimumSize(680, 440);
@@ -1514,8 +1503,8 @@ void MainWindow::PreferencesSection::onPreferences()
         auto* table = new ShortcutTableWidget(&shortcutsDialog);
         table->setColumnCount(2);
         table->setHorizontalHeaderLabels({
-            uiText("dialog.preferences.shortcuts.command", "Command"),
-            uiText("dialog.preferences.shortcuts.keybinding", "Keybinding"),
+            UiText::text(QStringLiteral("dialog.preferences.shortcuts.command")),
+            UiText::text(QStringLiteral("dialog.preferences.shortcuts.keybinding")),
         });
         table->verticalHeader()->hide();
         table->setShowGrid(false);
@@ -1619,7 +1608,7 @@ void MainWindow::PreferencesSection::onPreferences()
                     auto* keybindingItem = new QTableWidgetItem(shortcutSequenceText(sequences));
                     keybindingItem->setData(Qt::UserRole, definition.id);
                     keybindingItem->setTextAlignment(Qt::AlignVCenter | Qt::AlignLeft);
-                    keybindingItem->setToolTip(uiText("dialog.preferences.shortcuts.change", "Change Keybinding"));
+                    keybindingItem->setToolTip(UiText::text(QStringLiteral("dialog.preferences.shortcuts.change")));
                     bool duplicate = false;
                     for (const QKeySequence& sequence : sequences) {
                         if (!sequence.isEmpty() && shortcutUseCounts.value(shortcutSequenceKey(sequence)) > 1) {
@@ -1647,7 +1636,7 @@ void MainWindow::PreferencesSection::onPreferences()
                 return;
             }
             QDialog captureDialog(&shortcutsDialog);
-            captureDialog.setWindowTitle(uiText("dialog.preferences.shortcuts.capture_title", "Change Keybinding"));
+            captureDialog.setWindowTitle(UiText::text(QStringLiteral("dialog.preferences.shortcuts.capture_title")));
             captureDialog.setModal(true);
             captureDialog.resize(600, 270);
             captureDialog.setMinimumSize(520, 240);
@@ -1662,12 +1651,8 @@ void MainWindow::PreferencesSection::onPreferences()
             const bool allowBareModifier = (id == QStringLiteral("preview.pause_display_hold"));
             auto* prompt = new QLabel(
                 allowBareModifier
-                    ? uiText(
-                          "dialog.preferences.shortcuts.capture_prompt_hold",
-                          "Press the key to hold (a bare modifier like Alt works), then press Enter.")
-                    : uiText(
-                          "dialog.preferences.shortcuts.capture_prompt",
-                          "Press the desired key combination, then press Enter."),
+                    ? UiText::text(QStringLiteral("dialog.preferences.shortcuts.capture_prompt_hold"))
+                    : UiText::text(QStringLiteral("dialog.preferences.shortcuts.capture_prompt")),
                 &captureDialog);
             prompt->setAlignment(Qt::AlignCenter);
             auto* captureEdit = new ShortcutCaptureEdit(&captureDialog, allowBareModifier);
@@ -1705,9 +1690,7 @@ void MainWindow::PreferencesSection::onPreferences()
                 }
                 previewLabel->setStyleSheet(QStringLiteral("font-weight: 600; color: #D93232;"));
                 conflictLabel->setText(
-                    UiText::isChineseUi()
-                        ? QStringLiteral("与「%1」冲突").arg(conflict)
-                        : QStringLiteral("Conflicts with \"%1\"").arg(conflict));
+                    UiText::text(QStringLiteral("preferences.conflicts_with_1")).arg(conflict));
             };
             QObject::connect(captureEdit, &QLineEdit::textChanged, &captureDialog, updateConflictState);
             QObject::connect(captureButtons, &QDialogButtonBox::accepted, &captureDialog, [&]() {
@@ -1718,7 +1701,7 @@ void MainWindow::PreferencesSection::onPreferences()
                     applyConfiguredShortcuts();
                     shortcutHint->setText(fontShortcutHintText());
                     refreshRows();
-                    owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+                    owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
                 }
                 captureDialog.accept();
             });
@@ -1729,7 +1712,7 @@ void MainWindow::PreferencesSection::onPreferences()
                         applyConfiguredShortcuts();
                         shortcutHint->setText(fontShortcutHintText());
                         refreshRows();
-                        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+                        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
                     }
                     captureDialog.accept();
                 });
@@ -1763,8 +1746,8 @@ void MainWindow::PreferencesSection::onPreferences()
     connect(resetShortcutsButton, &QPushButton::clicked, &dialog, [&]() {
         const int choice = QMessageBox::question(
             &dialog,
-            uiText("dialog.preferences.shortcuts.reset_confirm_title", "Restore Shortcuts"),
-            uiText("dialog.preferences.shortcuts.reset_confirm_message", "Restore all editable shortcuts to their defaults?"),
+            UiText::text(QStringLiteral("dialog.preferences.shortcuts.reset_confirm_title")),
+            UiText::text(QStringLiteral("dialog.preferences.shortcuts.reset_confirm_message")),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No
         );
@@ -1780,7 +1763,7 @@ void MainWindow::PreferencesSection::onPreferences()
             // binding still lives in the shortcuts registry under
             // `editor.overwrite_mode`; reset still affects it, just no
             // dialog label needs refreshing now.
-            owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+            owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
         }
     });
 

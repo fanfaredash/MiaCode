@@ -282,6 +282,34 @@ QString muriIssueTypeKey(MuriKind kind)
     return QStringLiteral("muri:%1").arg(static_cast<int>(kind));
 }
 
+QString muriAlertLevelText(MuriAlertLevel level)
+{
+    switch (level) {
+    case MuriAlertLevel::Muri:
+        return UiText::text(QStringLiteral("validation.muri.alert.muri"));
+    case MuriAlertLevel::Warning:
+        return UiText::text(QStringLiteral("validation.muri.alert.warning"));
+    }
+    return UiText::text(QStringLiteral("validation.muri.alert.muri"));
+}
+
+QString muriKindText(MuriKind kind)
+{
+    switch (kind) {
+    case MuriKind::SlideTooFast:
+        return UiText::text(QStringLiteral("validation.muri.kind.slide_too_fast"));
+    case MuriKind::SlideHeadTap:
+        return UiText::text(QStringLiteral("validation.muri.kind.slide_head_tap"));
+    case MuriKind::TapOnSlide:
+        return UiText::text(QStringLiteral("validation.muri.kind.tap_on_slide"));
+    case MuriKind::Overlap:
+        return UiText::text(QStringLiteral("validation.muri.kind.overlap"));
+    case MuriKind::MultiTouch:
+        return UiText::text(QStringLiteral("validation.muri.kind.multi_touch"));
+    }
+    return UiText::text(QStringLiteral("validation.muri.alert.muri"));
+}
+
 struct WrappedListEntryText {
     QString html;
     QString plainText;
@@ -310,267 +338,20 @@ QString muriLocationText(int line, int col)
     return QStringLiteral("L%1C%2").arg(qMax(1, line)).arg(qMax(1, col));
 }
 
-QString localizeMuriEntityText(QString text, bool chineseUi)
-{
-    text = text.trimmed();
-    if (!chineseUi || text.isEmpty()) {
-        return text;
-    }
-    static const QString kProtectedPrefix = QStringLiteral("protected ");
-    if (text.startsWith(kProtectedPrefix, Qt::CaseInsensitive)) {
-        text = QStringLiteral("保护 %1").arg(text.mid(kProtectedPrefix.size()).trimmed());
-    }
-    return text;
-}
-
-QString localizeMuriDetail(QString rawDetail, bool chineseUi)
-{
-    rawDetail = rawDetail.trimmed();
-    if (!chineseUi || rawDetail.isEmpty()) {
-        return rawDetail;
-    }
-
-    const auto unwrap = [](const QString& text, const QString& prefix, const QString& suffix, QString* middle) {
-        if (middle == nullptr || !text.startsWith(prefix) || !text.endsWith(suffix)) {
-            return false;
-        }
-        *middle = text.mid(prefix.size(), text.size() - prefix.size() - suffix.size()).trimmed();
-        return true;
-    };
-    const auto trimTrailingPeriod = [](QString text) {
-        text = text.trimmed();
-        if (text.endsWith(QLatin1Char('.'))) {
-            text.chop(1);
-        }
-        return text.trimmed();
-    };
-    const auto splitText = [](const QString& text, const QString& separator, QString* left, QString* right) {
-        if (left == nullptr || right == nullptr) {
-            return false;
-        }
-        const int splitIndex = text.indexOf(separator);
-        if (splitIndex < 0) {
-            return false;
-        }
-        *left = text.left(splitIndex).trimmed();
-        *right = text.mid(splitIndex + separator.size()).trimmed();
-        return !left->isEmpty() && !right->isEmpty();
-    };
-    const auto splitGapText =
-        [&trimTrailingPeriod](const QString& text,
-                              const QString& separator,
-                              QString* left,
-                              QString* right,
-                              QString* gapText) {
-            if (left == nullptr || right == nullptr || gapText == nullptr) {
-                return false;
-            }
-            const int splitIndex = text.indexOf(separator);
-            const int gapIndex = text.lastIndexOf(QStringLiteral(", gap "));
-            if (splitIndex < 0 || gapIndex < 0 || gapIndex <= splitIndex) {
-                return false;
-            }
-            *left = text.left(splitIndex).trimmed();
-            *right =
-                text.mid(splitIndex + separator.size(), gapIndex - splitIndex - separator.size()).trimmed();
-            *gapText = trimTrailingPeriod(text.mid(gapIndex + QStringLiteral(", gap ").size()));
-            return !left->isEmpty() && !right->isEmpty() && gapText->endsWith(QStringLiteral(" ms"));
-        };
-    const auto splitSingleGapText =
-        [&trimTrailingPeriod](const QString& text,
-                              const QString& separator,
-                              QString* left,
-                              QString* gapText) {
-            if (left == nullptr || gapText == nullptr) {
-                return false;
-            }
-            const int splitIndex = text.indexOf(separator);
-            if (splitIndex < 0) {
-                return false;
-            }
-            *left = text.left(splitIndex).trimmed();
-            *gapText = trimTrailingPeriod(text.mid(splitIndex + separator.size()));
-            return !left->isEmpty() && gapText->endsWith(QStringLiteral(" ms"));
-        };
-
-    QString middle;
-    QString left;
-    QString right;
-    QString gapText;
-    if (splitSingleGapText(
-            rawDetail,
-            QStringLiteral(" start will early-judge a following tap, gap "),
-            &left,
-            &gapText)) {
-        return QStringLiteral("%1 启动，会提前判定后续 tap，间隔 %2。").arg(left, gapText);
-    }
-    if (splitSingleGapText(
-            rawDetail,
-            QStringLiteral(" jump-start will early-judge a following tap, gap "),
-            &left,
-            &gapText)) {
-        return QStringLiteral("%1 偷跑，会提前判定后续 tap，间隔 %2。").arg(left, gapText);
-    }
-    if (splitGapText(rawDetail, QStringLiteral(" start will early-judge "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 启动，会提前判定 %2，间隔 %3。")
-            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
-    }
-    if (splitGapText(rawDetail, QStringLiteral(" start may early-judge "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 启动，可能会提前判定 %2，间隔 %3。")
-            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
-    }
-    if (splitGapText(rawDetail, QStringLiteral(" start early-judges "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 启动，会提前判定 %2，间隔 %3。")
-            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
-    }
-    if (splitGapText(rawDetail, QStringLiteral(" jump-start will early-judge "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 偷跑，会提前判定 %2，间隔 %3。")
-            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
-    }
-    if (splitGapText(rawDetail, QStringLiteral(" jump-start may early-judge "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 偷跑，可能会提前判定 %2，间隔 %3。")
-            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
-    }
-    if (splitGapText(rawDetail, QStringLiteral(" jump-start early-judges "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 偷跑，会提前判定 %2，间隔 %3。")
-            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
-    }
-    if (splitGapText(rawDetail, QStringLiteral(" trajectory may collide with "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 运行轨迹可能会撞到 %2，间隔 %3。")
-            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
-    }
-    if (splitGapText(rawDetail, QStringLiteral(" trajectory will collide with "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 运行轨迹会撞到 %2，间隔 %3。")
-            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
-    }
-    if (splitGapText(rawDetail, QStringLiteral(" trajectory collides with "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 运行轨迹会撞到 %2，间隔 %3。")
-            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
-    }
-    if (splitGapText(rawDetail, QStringLiteral(" was early-judged by "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 被 %2 提前判定，间隔 %3。")
-            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
-    }
-    if (rawDetail.endsWith(QStringLiteral(" resolved outside its critical window."))
-        || rawDetail.contains(QStringLiteral(" resolved outside its critical window, gap "))) {
-        const int splitIndex = rawDetail.indexOf(QStringLiteral(" resolved outside its critical window"));
-        if (splitIndex > 0) {
-            const QString target = rawDetail.left(splitIndex).trimmed();
-            const int gapIndex = rawDetail.lastIndexOf(QStringLiteral(", gap "));
-            if (gapIndex > splitIndex) {
-                gapText = trimTrailingPeriod(rawDetail.mid(gapIndex + QStringLiteral(", gap ").size()));
-                return QStringLiteral("%1 提前完成，间隔 %2。").arg(target, gapText);
-            }
-            return QStringLiteral("%1 的判定落在临界窗之外。").arg(target);
-        }
-    }
-    if (unwrap(rawDetail, QStringLiteral("Multi-touch formed by "), QStringLiteral("."), &middle)) {
-        return QStringLiteral("%1 构成多押。").arg(middle);
-    }
-    if (rawDetail.endsWith(QStringLiteral(" formed overlap."))
-        && splitText(
-            trimTrailingPeriod(rawDetail.left(rawDetail.size() - QStringLiteral(" formed overlap.").size())),
-            QStringLiteral(" and same-position "),
-            &left,
-            &right)) {
-        return QStringLiteral("%1 与相同位置的 %2 构成叠键。").arg(left, right);
-    }
-    if (rawDetail.endsWith(QStringLiteral(" formed overlap at the same position."))) {
-        const QString target = rawDetail.left(
-            rawDetail.size() - QStringLiteral(" formed overlap at the same position.").size()).trimmed();
-        if (!target.isEmpty()) {
-            return QStringLiteral("%1 在相同位置构成叠键。").arg(target);
-        }
-    }
-
-    if (unwrap(
-            rawDetail,
-            QStringLiteral("Slide-head trigger from "),
-            QStringLiteral(" early-judged this note."),
-            &middle)) {
-        return QStringLiteral("来自 %1 的滑键头触发提前判定了此物件。").arg(middle);
-    }
-    if (unwrap(
-            rawDetail,
-            QStringLiteral("Pad trigger from "),
-            QStringLiteral(" early-judged this note."),
-            &middle)) {
-        return QStringLiteral("来自 %1 的按下触发提前判定了此物件。").arg(middle);
-    }
-    if (unwrap(
-            rawDetail,
-            QStringLiteral("Runtime simple-note judge for "),
-            QStringLiteral(" missed the critical window and resolved as overlap."),
-            &middle)) {
-        return QStringLiteral("运行时普通物件判定 %1 错过了判定临界窗，并最终判为叠键。").arg(middle);
-    }
-    if (unwrap(
-            rawDetail,
-            QStringLiteral("Slide runtime judge for "),
-            QStringLiteral(" resolved outside its critical window."),
-            &middle)) {
-        return QStringLiteral("Slide 运行时判定 %1 落在判定临界窗之外。").arg(middle);
-    }
-    if (unwrap(
-            rawDetail,
-            QStringLiteral("Slide "),
-            QStringLiteral(" was cleared earlier than its normal judge timing."),
-            &middle)) {
-        return QStringLiteral("Slide %1 的完成时间早于正常判定时机。").arg(middle);
-    }
-    if (unwrap(
-            rawDetail,
-            QStringLiteral("Wifi runtime judge for "),
-            QStringLiteral(" resolved outside its critical window."),
-            &middle)) {
-        return QStringLiteral("Wifi 运行时判定 %1 落在判定临界窗之外。").arg(middle);
-    }
-    if (unwrap(
-            rawDetail,
-            QStringLiteral("Wifi "),
-            QStringLiteral(" was cleared earlier than its normal judge timing."),
-            &middle)) {
-        return QStringLiteral("Wifi %1 的完成时间早于正常判定时机。").arg(middle);
-    }
-
-    if (rawDetail.startsWith(QStringLiteral("Static reference from "))) {
-        const QString tail = rawDetail.mid(QStringLiteral("Static reference from ").size()).trimmed();
-        const int deltaIndex = tail.lastIndexOf(QStringLiteral(", Δ "));
-        if (deltaIndex >= 0 && tail.endsWith(QStringLiteral(" ms"))) {
-            const QString source = tail.left(deltaIndex).trimmed();
-            const QString deltaText = tail.mid(deltaIndex + QStringLiteral(", Δ ").size());
-            return QStringLiteral("静态参考：%1，Δ %2").arg(source, deltaText);
-        }
-        return QStringLiteral("静态参考：%1").arg(tail);
-    }
-
-    if (rawDetail.startsWith(QStringLiteral("Runtime hand actions formed "))) {
-        const QString tail = rawDetail.mid(QStringLiteral("Runtime hand actions formed ").size()).trimmed();
-        const QString marker = QStringLiteral("-hand multi-touch: ");
-        const int split = tail.indexOf(marker);
-        if (split > 0) {
-            const QString handCount = tail.left(split).trimmed();
-            const QString actions = tail.mid(split + marker.size()).trimmed();
-            return QStringLiteral("运行时手部动作形成了 %1 手多押：%2").arg(handCount, actions);
-        }
-    }
-
-    return rawDetail;
-}
-
 WrappedListEntryText buildMuriPanelEntryText(const MuriPanelEntry& entry, bool ignoredInHeader)
 {
-    const bool chineseUi = UiText::isChineseUi();
     const ValidationSeverityLevel severity = entry.alertLevel == MuriAlertLevel::Warning
         ? ValidationSeverityLevel::Warning
         : ValidationSeverityLevel::Error;
     const QColor summaryColor = ignoredInHeader
         ? UiTheme::colors().textMuted
         : severityColor(severity);
-    const QString alertText = QStringLiteral("[%1]").arg(muriAlertLevelDisplayName(entry.alertLevel, chineseUi));
-    const QString typeText = muriKindDisplayName(entry.kind, chineseUi);
+    const QString alertText = QStringLiteral("[%1]").arg(muriAlertLevelText(entry.alertLevel));
+    const QString typeText = muriKindText(entry.kind);
     const QString locationText = muriLocationText(entry.line, entry.col);
-    const QString detailText = localizeMuriDetail(entry.rawDetail, chineseUi).trimmed();
+    const QString renderedDetail =
+        renderMuriDetail(entry.detailKind, entry.detailArgs, uiValidationLocale()).trimmed();
+    const QString detailText = renderedDetail.isEmpty() ? entry.rawDetail.trimmed() : renderedDetail;
     const QString summaryText = QStringLiteral("%1 %2 %3").arg(alertText, typeText, locationText);
     QString contentHtml = QStringLiteral("<span style=\"font-weight:700;color:%1;\">%2</span>")
                               .arg(summaryColor.name(QColor::HexRgb), summaryText.toHtmlEscaped());
@@ -914,7 +695,7 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
     if (cacheIt != state_.validationCacheByDifficulty_.constEnd()) {
         const ValidationCacheEntry& entry = cacheIt.value();
         if (entry.chartText == owner_.activeChartText()
-            && entry.chineseUi == UiText::isChineseUi()
+            && entry.validationLocale == uiValidationLocale()
             && entry.timingMetadata == owner_.currentTimingMetadata()) {
             for (const ValidationCachedIssue& issue : entry.issues) {
                 const QString issueTypeKey = issue.issueTypeKey.isEmpty()
@@ -956,17 +737,11 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
     const bool showMuri = muriIssueCount > 0;
 
     const QString summaryTooltip = showMuri
-        ? uiText(
-              "editor.validation_summary.tooltip_with_muri",
-              "%1 error(s), %2 warning(s), %3 muri issue(s)"
-          ).arg(errorCount).arg(warningCount).arg(muriIssueCount)
-        : uiText(
-              "editor.validation_summary.tooltip",
-              "%1 error(s), %2 warning(s)"
-          ).arg(errorCount).arg(warningCount);
-    const QString jumpHint = UiText::isChineseUi()
-        ? QStringLiteral("点击图标可跳转到对应选项卡")
-        : QStringLiteral("Click an icon to jump to its tab");
+        ? UiText::text(QStringLiteral("editor.validation_summary.tooltip_with_muri"))
+              .arg(errorCount).arg(warningCount).arg(muriIssueCount)
+        : UiText::text(QStringLiteral("editor.validation_summary.tooltip"))
+              .arg(errorCount).arg(warningCount);
+    const QString jumpHint = UiText::text(QStringLiteral("validation.click_an_icon_to_jump"));
     const QString summaryTooltipWithJump = summaryTooltip + QStringLiteral("\n") + jumpHint;
     const bool showSummary = state_.previewShowValidationSummary_ && (showError || showWarning || showMuri);
     ui_.editorValidationSummaryWidget_->setProperty("hasContent", showSummary);

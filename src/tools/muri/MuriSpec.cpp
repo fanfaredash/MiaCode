@@ -218,6 +218,10 @@ int main(int argc, char** argv)
                 QStringLiteral("runtime anchor repro detail names the affected tap lane"));
             expect(diagnostic->detail.contains(QStringLiteral("will early-judge")),
                 QStringLiteral("runtime anchor repro uses definite slide-head-tap wording for muri"));
+            expect(diagnostic->detailKind == MuriDetailKind::SlideHeadJumpStartEarlyJudge,
+                QStringLiteral("runtime anchor repro stores structured slide-head detail kind"));
+            expect(diagnostic->detailArgs.right == QStringLiteral("tap 8"),
+                QStringLiteral("runtime anchor repro stores affected tap as structured detail arg"));
         }
 
         if (const MuriStaticReference* reference =
@@ -509,6 +513,10 @@ int main(int argc, char** argv)
                 QStringLiteral("head-star tap-on-slide repro visible detail names the affected star lane"));
             expect(entry->rawDetail.contains(QStringLiteral("trajectory may collide with")),
                 QStringLiteral("head-star tap-on-slide repro visible detail uses warning wording when severity is warning"));
+            expect(entry->detailKind == MuriDetailKind::TapOnSlideCollide,
+                QStringLiteral("head-star tap-on-slide repro visible entry stores structured collision kind"));
+            expect(entry->detailArgs.alert == MuriAlertLevel::Warning,
+                QStringLiteral("head-star tap-on-slide repro visible entry keeps warning in structured args"));
             expect(entry->line == 2 && entry->col == 7,
                 QStringLiteral("head-star tap-on-slide repro visible entry anchors to the affected helper star"));
         }

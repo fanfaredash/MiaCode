@@ -13,6 +13,7 @@ class ShortcutRegistry
 public:
     struct ShortcutDefinition {
         QString id;
+        QString labelKey;
         QString labelZh;
         QString labelEn;
         QList<QKeySequence> defaultSequences;

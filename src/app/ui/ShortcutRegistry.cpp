@@ -292,6 +292,7 @@ void ShortcutRegistry::mergeJsonBytes(const QByteArray& bytes)
             if (editableShortcutIds().contains(it.key()) && !definitions_.contains(it.key())) {
                 definitions_.insert(it.key(), {
                     it.key(),
+                    actionObject.value(QStringLiteral("label_key")).toString(),
                     actionObject.value(QStringLiteral("label_zh")).toString(),
                     actionObject.value(QStringLiteral("label_en")).toString(),
                     defaultShortcuts_.value(it.key()),
@@ -317,6 +318,7 @@ void ShortcutRegistry::mergeJsonBytes(const QByteArray& bytes)
         if (editableShortcutIds().contains(it.key()) && !definitions_.contains(it.key())) {
             definitions_.insert(it.key(), {
                 it.key(),
+                shortcutObject.value(QStringLiteral("label_key")).toString(),
                 shortcutObject.value(QStringLiteral("label_zh")).toString(),
                 shortcutObject.value(QStringLiteral("label_en")).toString(),
                 defaultShortcuts_.value(it.key()),
@@ -346,6 +348,9 @@ bool ShortcutRegistry::saveUserOverrides() const
         }
         const ShortcutDefinition definition = definitions_.value(id);
         QJsonObject object;
+        if (!definition.labelKey.isEmpty()) {
+            object.insert(QStringLiteral("label_key"), definition.labelKey);
+        }
         if (!definition.labelZh.isEmpty()) {
             object.insert(QStringLiteral("label_zh"), definition.labelZh);
         }

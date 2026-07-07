@@ -7,19 +7,10 @@
 
 #include <QVBoxLayout>
 
-namespace {
-
-QString l10n(const QString& en, const QString& zh)
-{
-    return UiText::isChineseUi() ? zh : en;
-}
-
-}  // namespace
-
 ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& initialSize, QWidget* parent)
     : QDialog(parent)
 {
-    setWindowTitle(l10n(QStringLiteral("Export Cover"), QStringLiteral("导出封面")));
+    setWindowTitle(UiText::text(QStringLiteral("cover.export_cover")));
     setModal(true);
     UiNativeWindowTheme::applyToWidget(this);
 

@@ -130,9 +130,9 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     }
     settingsPlaceholderAction_ = toolBar->addAction(
         makeSettingsGearIcon(QColor("#5D6E83")),
-        uiText("action.preferences", "Preferences...")
+        UiText::text(QStringLiteral("action.preferences"))
     );
-    settingsPlaceholderAction_->setToolTip(uiText("action.preferences", "Preferences..."));
+    settingsPlaceholderAction_->setToolTip(UiText::text(QStringLiteral("action.preferences")));
     connect(settingsPlaceholderAction_, &QAction::triggered, this, &MainWindow::onPreferences);
     // The toolbar Export button jumps straight to the Export hub page (the
     // sidebar "export" item equivalent) — the old dropdown menu + 250ms
@@ -141,10 +141,8 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     // page is reachable without an active difficulty and greys its own cards.
     exportVideoButton_ = makeCompactToolbarButton(nullptr);
     if (exportVideoButton_ != nullptr) {
-        exportVideoButton_->setText(uiText("toolbar.export", "Export"));
-        exportVideoButton_->setToolTip(UiText::isChineseUi()
-            ? QStringLiteral("打开导出页：导出视频 / 导出封面 / 批量导出 / 打包ZIP")
-            : QStringLiteral("Open the Export page: video / cover / batch / ZIP"));
+        exportVideoButton_->setText(UiText::text(QStringLiteral("toolbar.export")));
+        exportVideoButton_->setToolTip(UiText::text(QStringLiteral("document.open_the_export_page_video")));
         exportVideoButton_->setFixedWidth(actionButtonWidth);
         toolBar->insertWidget(settingsPlaceholderAction_, exportVideoButton_);
         connect(exportVideoButton_, &QToolButton::clicked, this, [this]() {
@@ -510,7 +508,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     windowSection_->applyFindOverlayInset();
     const auto applyEditorFontDelta = [this](int delta) {
         applyEditorTextFontSize(editorTextFontPointSize_ + delta, true);
-        statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+        statusBar()->showMessage(UiText::text(QStringLiteral("status.editor_text_display_updated")));
     };
     fontDecreaseAction_ = new QAction(QStringLiteral("Decrease Editor Font"), this);
     ShortcutRegistry::instance().applyShortcut(

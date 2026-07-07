@@ -377,7 +377,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     rootLayout->setSpacing(10);
     rootLayout->setSizeConstraint(QLayout::SetFixedSize);
 
-    auto* audioGroup = new QGroupBox(uiText("dialog.render_settings.audio_group", "Audio"), &dialog);
+    auto* audioGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.render_settings.audio_group")), &dialog);
     auto* audioFormLayout = new QFormLayout(audioGroup);
     audioFormLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     audioFormLayout->setHorizontalSpacing(10);
@@ -422,7 +422,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         }
     };
 
-    const QString masterAudioLabelText = uiText("dialog.render_settings.audio.global", "Global Volume");
+    const QString masterAudioLabelText = UiText::text(QStringLiteral("dialog.render_settings.audio.global"));
     QSlider* masterSlider = nullptr;
     QLabel* masterLabel = nullptr;
     QToolButton* masterMuteButton = nullptr;
@@ -434,12 +434,12 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         &masterMuteButton,
         100
     );
-    const QString bgmAudioLabelText = uiText("dialog.render_settings.audio.track", "Track Volume");
+    const QString bgmAudioLabelText = UiText::text(QStringLiteral("dialog.render_settings.audio.track"));
     QSlider* bgmSlider = nullptr;
     QLabel* bgmLabel = nullptr;
     QToolButton* bgmMuteButton = nullptr;
     addAudioRow(bgmAudioLabelText, owner_.previewAudioSettings_.trackPercent(), &bgmSlider, &bgmLabel, &bgmMuteButton);
-    const QString answerAudioLabelText = uiText("dialog.render_settings.audio.answer", "Answer Volume");
+    const QString answerAudioLabelText = UiText::text(QStringLiteral("dialog.render_settings.audio.answer"));
     QSlider* answerSlider = nullptr;
     QLabel* answerLabel = nullptr;
     QToolButton* answerMuteButton = nullptr;
@@ -450,22 +450,22 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         &answerLabel,
         &answerMuteButton
     );
-    const QString judgeAudioLabelText = uiText("dialog.render_settings.audio.tap", "Tap Volume");
+    const QString judgeAudioLabelText = UiText::text(QStringLiteral("dialog.render_settings.audio.tap"));
     QSlider* judgeSlider = nullptr;
     QLabel* judgeLabel = nullptr;
     QToolButton* judgeMuteButton = nullptr;
     addAudioRow(judgeAudioLabelText, owner_.previewAudioSettings_.tapPercent(), &judgeSlider, &judgeLabel, &judgeMuteButton);
-    const QString exAudioLabelText = uiText("dialog.render_settings.audio.ex", "EX Volume");
+    const QString exAudioLabelText = UiText::text(QStringLiteral("dialog.render_settings.audio.ex"));
     QSlider* exSlider = nullptr;
     QLabel* exLabel = nullptr;
     QToolButton* exMuteButton = nullptr;
     addAudioRow(exAudioLabelText, owner_.previewAudioSettings_.exPercent(), &exSlider, &exLabel, &exMuteButton);
-    const QString breakAudioLabelText = uiText("dialog.render_settings.audio.break", "Break Volume");
+    const QString breakAudioLabelText = UiText::text(QStringLiteral("dialog.render_settings.audio.break"));
     QSlider* breakSlider = nullptr;
     QLabel* breakLabel = nullptr;
     QToolButton* breakMuteButton = nullptr;
     addAudioRow(breakAudioLabelText, owner_.previewAudioSettings_.breakPercent(), &breakSlider, &breakLabel, &breakMuteButton);
-    const QString breakSlideAudioLabelText = uiText("dialog.render_settings.audio.break_slide", "Break Slide Volume");
+    const QString breakSlideAudioLabelText = UiText::text(QStringLiteral("dialog.render_settings.audio.break_slide"));
     QSlider* breakSlideSlider = nullptr;
     QLabel* breakSlideLabel = nullptr;
     QToolButton* breakSlideMuteButton = nullptr;
@@ -476,21 +476,21 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         &breakSlideLabel,
         &breakSlideMuteButton
     );
-    const QString slideAudioLabelText = uiText("dialog.render_settings.audio.slide", "Slide Volume");
+    const QString slideAudioLabelText = UiText::text(QStringLiteral("dialog.render_settings.audio.slide"));
     QSlider* slideSlider = nullptr;
     QLabel* slideLabel = nullptr;
     QToolButton* slideMuteButton = nullptr;
     addAudioRow(slideAudioLabelText, owner_.previewAudioSettings_.slidePercent(), &slideSlider, &slideLabel, &slideMuteButton);
     auto* breakSlideTailCheerCheck = new QCheckBox(
-        uiText("dialog.render_settings.audio.break_slide_tail_cheer_mute", "Disable breakslide tail cheer"),
+        UiText::text(QStringLiteral("dialog.render_settings.audio.break_slide_tail_cheer_mute")),
         audioGroup);
     breakSlideTailCheerCheck->setChecked(owner_.previewAudioSettings_.breakSlideTailCheerMuted);
-    const QString touchAudioLabelText = uiText("dialog.render_settings.audio.touch", "Touch Volume");
+    const QString touchAudioLabelText = UiText::text(QStringLiteral("dialog.render_settings.audio.touch"));
     QSlider* touchSlider = nullptr;
     QLabel* touchLabel = nullptr;
     QToolButton* touchMuteButton = nullptr;
     addAudioRow(touchAudioLabelText, owner_.previewAudioSettings_.touchPercent(), &touchSlider, &touchLabel, &touchMuteButton);
-    const QString fireworkAudioLabelText = uiText("dialog.render_settings.audio.firework", "Firework Volume");
+    const QString fireworkAudioLabelText = UiText::text(QStringLiteral("dialog.render_settings.audio.firework"));
     QSlider* fireworkSlider = nullptr;
     QLabel* fireworkLabel = nullptr;
     QToolButton* fireworkMuteButton = nullptr;
@@ -534,19 +534,19 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         return row;
     };
 
-    auto* videoGroup = new QGroupBox(uiText("dialog.render_settings.video_group", "Video"), &dialog);
+    auto* videoGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.render_settings.video_group")), &dialog);
     auto* videoFormLayout = new QFormLayout(videoGroup);
     videoFormLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     videoFormLayout->setHorizontalSpacing(10);
     videoFormLayout->setVerticalSpacing(8);
-    auto* gameplayGroup = new QGroupBox(uiText("dialog.render_settings.gameplay_group", "Gameplay"), &dialog);
+    auto* gameplayGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.render_settings.gameplay_group")), &dialog);
     auto* gameplayLayout = new QGridLayout(gameplayGroup);
     gameplayLayout->setContentsMargins(10, 8, 10, 8);
     gameplayLayout->setHorizontalSpacing(10);
     gameplayLayout->setVerticalSpacing(8);
     gameplayLayout->setColumnStretch(0, 1);
     gameplayLayout->setColumnStretch(1, 1);
-    auto* performanceGroup = new QGroupBox(uiText("dialog.render_settings.performance_group", "Performance"), &dialog);
+    auto* performanceGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.render_settings.performance_group")), &dialog);
     auto* performanceFormLayout = new QFormLayout(performanceGroup);
     performanceFormLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     performanceFormLayout->setHorizontalSpacing(10);
@@ -642,15 +642,12 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     };
     const double detectedRefreshRate = owner_.currentPreviewCanvasRefreshRate();
     const QString displayRefreshLabel = QStringLiteral("%1 (%2 Hz)")
-        .arg(uiText(
-            "dialog.render_settings.preview.canvas_frame_rate.display",
-            "Display Refresh Rate"
-        ))
+        .arg(UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.display")))
         .arg(QString::number(detectedRefreshRate, 'f', detectedRefreshRate >= 100.0 ? 0 : 1));
     QList<CanvasFrameRateOption> canvasFrameRateOptions;
     canvasFrameRateOptions.append({
         PreviewCanvasFrameRateMode::Fps60,
-        uiText("dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS"),
+        UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.60")),
     });
     // Only expose the 120 FPS option on a display that can sustain it.
     // The backend clamps Fps120 to display refresh at runtime (see
@@ -662,7 +659,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     if (detectedRefreshRate >= 119.5) {
         canvasFrameRateOptions.append({
             PreviewCanvasFrameRateMode::Fps120,
-            uiText("dialog.render_settings.preview.canvas_frame_rate.120", "120 FPS"),
+            UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.120")),
         });
     }
     canvasFrameRateOptions.append({
@@ -710,30 +707,20 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     }
     attachDialogListPopup(canvasFrameRateButton, canvasFrameRatePopup);
 
-    const QString scaleFillLabel = uiText("dialog.render_settings.video.scale.fill", "Fill (crop if needed)");
-    const QString scaleFitLabel = uiText("dialog.render_settings.video.scale.fit", "Fit (keep full image, may letterbox)");
-    const QString scaleSquareFitLabel = uiText(
-        "dialog.render_settings.video.scale.square_fit",
-        "1:1 Fit (center square)");
-    const QString scaleInnerCircleFitOuterFillLabel = uiText(
-        "dialog.render_settings.video.scale.inner_circle_fit_outer_fill",
-        "Inner 1:1 Fit + Outer Fill");
-    const QString slideStackOrderDxLabel = uiText(
-        "dialog.render_settings.gameplay.slide_stack_order.dx_style",
-        "DX Style"
-    );
-    const QString slideStackOrderFinaleLabel = uiText(
-        "dialog.render_settings.gameplay.slide_stack_order.finale_style",
-        "FiNALE Style"
-    );
+    const QString scaleFillLabel = UiText::text(QStringLiteral("dialog.render_settings.video.scale.fill"));
+    const QString scaleFitLabel = UiText::text(QStringLiteral("dialog.render_settings.video.scale.fit"));
+    const QString scaleSquareFitLabel = UiText::text(QStringLiteral("dialog.render_settings.video.scale.square_fit"));
+    const QString scaleInnerCircleFitOuterFillLabel = UiText::text(QStringLiteral("dialog.render_settings.video.scale.inner_circle_fit_outer_fill"));
+    const QString slideStackOrderDxLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.slide_stack_order.dx_style"));
+    const QString slideStackOrderFinaleLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.slide_stack_order.finale_style"));
     const auto slideStackOrderLabelForValue = [slideStackOrderDxLabel, slideStackOrderFinaleLabel](bool earlierOnTop) {
         return earlierOnTop ? slideStackOrderDxLabel : slideStackOrderFinaleLabel;
     };
     // 皮肤 / 判定线 moved to the shared 皮肤 popup (buildSkinSettings).
-    const QString disabledLabel = uiText("dialog.render_settings.option.disabled", "Disabled");
-    const QString slideJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.slide", "slide");
-    const QString tapJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.tap", "tap");
-    const QString touchJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.touch", "touch");
+    const QString disabledLabel = UiText::text(QStringLiteral("dialog.render_settings.option.disabled"));
+    const QString slideJudgeChoiceLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect.slide"));
+    const QString tapJudgeChoiceLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect.tap"));
+    const QString touchJudgeChoiceLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect.touch"));
     const auto judgeEffectButtonLabel = [
         this,
         slideJudgeChoiceLabel,
@@ -800,10 +787,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     // 判定线 (outline variant) moved to the shared 皮肤 popup (buildSkinSettings).
     // The "暂停时显示判定区" toggle stays here — it is a video-side option.
     auto* forceLabeledJudgeLineWhenPausedCheck = new QCheckBox(
-        uiText(
-            "dialog.render_settings.gameplay.force_labeled_judge_line_when_paused",
-            "Show judge area while preview is paused"
-        ),
+        UiText::text(QStringLiteral("dialog.render_settings.gameplay.force_labeled_judge_line_when_paused")),
         videoGroup
     );
     forceLabeledJudgeLineWhenPausedCheck->setChecked(owner_.previewForceLabeledJudgeLineWhenPaused_);
@@ -883,27 +867,27 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     attachDialogListPopup(scaleModeButton, scaleModePopup);
 
     auto* smoothBrightnessCheck = new QCheckBox(
-        uiText("dialog.render_settings.video.smooth_brightness", "Smooth brightness"),
+        UiText::text(QStringLiteral("dialog.render_settings.video.smooth_brightness")),
         videoGroup
     );
     smoothBrightnessCheck->setChecked(owner_.previewSmoothBrightness_);
     auto* timestampCheck = new QCheckBox(
-        uiText("dialog.video_export.option.show_timestamp", "Show bottom-left timestamp"),
+        UiText::text(QStringLiteral("dialog.video_export.option.show_timestamp")),
         videoGroup
     );
     timestampCheck->setChecked(owner_.previewShowTimestamp_);
     auto* debugCheck = new QCheckBox(
-        uiText("dialog.render_settings.preview.debug", "Show preview debug info"),
+        UiText::text(QStringLiteral("dialog.render_settings.preview.debug")),
         videoGroup
     );
     debugCheck->setChecked(owner_.previewShowDebugInfo_);
-    videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Outer Brightness"), outerBrightnessRow);
-    videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Inner Brightness"), innerBrightnessRow);
-    videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Stage Display Scale"), layoutSquareScaleRow);
-    videoFormLayout->addRow(uiText("dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"), scaleModeButton);
+    videoFormLayout->addRow(UiText::text(QStringLiteral("dialog.render_settings.video.brightness_outer")), outerBrightnessRow);
+    videoFormLayout->addRow(UiText::text(QStringLiteral("dialog.render_settings.video.brightness_inner")), innerBrightnessRow);
+    videoFormLayout->addRow(UiText::text(QStringLiteral("dialog.render_settings.video.layout_square_scale")), layoutSquareScaleRow);
+    videoFormLayout->addRow(UiText::text(QStringLiteral("dialog.render_settings.video.scale_mode")), scaleModeButton);
     // 预览刷新率 lives on the 性能 tab now.
     performanceFormLayout->addRow(
-        uiText("dialog.render_settings.preview.canvas_frame_rate", "Preview Refresh Rate"),
+        UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate")),
         canvasFrameRateButton
     );
     auto* videoCheckRow = new QWidget(videoGroup);
@@ -946,47 +930,47 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     addGameplayField(
         0,
         0,
-        uiText("dialog.render_settings.video.tap_flow_speed", "Tap Flow Speed"),
+        UiText::text(QStringLiteral("dialog.render_settings.video.tap_flow_speed")),
         tapFlowSpeedEdit
     );
     addGameplayField(
         0,
         1,
-        uiText("dialog.render_settings.video.touch_flow_speed", "Touch Flow Speed"),
+        UiText::text(QStringLiteral("dialog.render_settings.video.touch_flow_speed")),
         touchFlowSpeedEdit
     );
     addGameplayField(
         1,
         0,
-        uiText("dialog.render_settings.gameplay.judge_effect", "Judge Effect Display"),
+        UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect")),
         judgeEffectButton
     );
     addGameplayField(
         1,
         1,
-        uiText("dialog.render_settings.gameplay.slide_stack_order", "Slide Stack Order"),
+        UiText::text(QStringLiteral("dialog.render_settings.gameplay.slide_stack_order")),
         slideStackOrderButton
     );
     const auto centerDisplayLabelForMode = [](miacode::preview_gameplay::CenterDisplayMode mode) -> QString {
         switch (mode) {
         case miacode::preview_gameplay::CenterDisplayMode::Off:
-            return uiText("dialog.render_settings.gameplay.center_display.off", "Off");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.off"));
         case miacode::preview_gameplay::CenterDisplayMode::Combo:
-            return uiText("dialog.render_settings.gameplay.center_display.combo", "Combo");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.combo"));
         case miacode::preview_gameplay::CenterDisplayMode::AchievementDxPlus:
-            return uiText("dialog.render_settings.gameplay.center_display.achievement_dx_plus", "ACHIEVEMENT DX (+)");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.achievement_dx_plus"));
         case miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus100:
-            return uiText("dialog.render_settings.gameplay.center_display.achievement_dx_minus_100", "ACHIEVEMENT DX (100-)");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.achievement_dx_minus_100"));
         case miacode::preview_gameplay::CenterDisplayMode::AchievementDxMinus101:
-            return uiText("dialog.render_settings.gameplay.center_display.achievement_dx_minus_101", "ACHIEVEMENT DX (101-)");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.achievement_dx_minus_101"));
         case miacode::preview_gameplay::CenterDisplayMode::DxScorePlus:
-            return uiText("dialog.render_settings.gameplay.center_display.dx_score_plus", "DX SCORE (+)");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.dx_score_plus"));
         case miacode::preview_gameplay::CenterDisplayMode::DxScoreMinus:
-            return uiText("dialog.render_settings.gameplay.center_display.dx_score_minus", "DX SCORE (-)");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.dx_score_minus"));
         case miacode::preview_gameplay::CenterDisplayMode::AchievementFinalePlus:
-            return uiText("dialog.render_settings.gameplay.center_display.achievement_finale_plus", "ACHIEVEMENT FINALE (+)");
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.achievement_finale_plus"));
         }
-        return uiText("dialog.render_settings.gameplay.center_display.off", "Off");
+        return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.off"));
     };
     auto* centerDisplayButton = createDialogMenuButton(
         gameplayGroup,
@@ -1039,7 +1023,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     addGameplayField(
         2,
         0,
-        uiText("dialog.render_settings.gameplay.center_display", "Center Display"),
+        UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display")),
         centerDisplayButton
     );
     // Intro sound is no longer hosted by this preview-settings dialog; the
@@ -1091,13 +1075,13 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         // takes effect; documentMode=true would skip drawing the pane
         // frame and re-expose the global hair line above the tab strip.
         videoSettingsTabs->addTab(videoGroup,
-            uiText("dialog.render_settings.video_group", "Video"));
+            UiText::text(QStringLiteral("dialog.render_settings.video_group")));
         videoSettingsTabs->addTab(gameplayGroup,
-            uiText("dialog.render_settings.gameplay_group", "Gameplay"));
+            UiText::text(QStringLiteral("dialog.render_settings.gameplay_group")));
         // 皮肤 / 判定线 / HUD 字体 / 片头音效 moved to the shared 皮肤 popup; the
         // former 音乐 / 字体 tabs are gone. 预览刷新率 lives on the 性能 tab.
         videoSettingsTabs->addTab(performanceGroup,
-            uiText("dialog.render_settings.performance_group", "Performance"));
+            UiText::text(QStringLiteral("dialog.render_settings.performance_group")));
         rootLayout->addWidget(videoSettingsTabs, 0);
     }
     auto* buttonBox = new QDialogButtonBox(&dialog);
@@ -1105,11 +1089,11 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     QPushButton* applyLocalAudioPresetButton = nullptr;
     if (includeAudioSettings) {
         saveLocalAudioPresetButton = buttonBox->addButton(
-            uiText("dialog.render_settings.button.set_software_default_audio", "Save Local Preset"),
+            UiText::text(QStringLiteral("dialog.render_settings.button.set_software_default_audio")),
             QDialogButtonBox::ActionRole
         );
         applyLocalAudioPresetButton = buttonBox->addButton(
-            uiText("dialog.render_settings.button.restore_project_default", "Apply Local Preset"),
+            UiText::text(QStringLiteral("dialog.render_settings.button.restore_project_default")),
             QDialogButtonBox::ActionRole
         );
         if (saveLocalAudioPresetButton != nullptr) {
@@ -1119,7 +1103,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             applyLocalAudioPresetButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
         }
     }
-    if (QPushButton* closeButton = buttonBox->addButton(uiText("dialog.render_settings.button.close", "Close"), QDialogButtonBox::RejectRole)) {
+    if (QPushButton* closeButton = buttonBox->addButton(UiText::text(QStringLiteral("dialog.render_settings.button.close")), QDialogButtonBox::RejectRole)) {
         closeButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     }
     connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::accept);
@@ -1175,8 +1159,8 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         return dialogAuditionRuntime->audition(resolvedKind);
     };
 
-    const QString muteAudioButtonTooltip = uiText("dialog.render_settings.audio.button.mute", "Mute %1");
-    const QString unmuteAudioButtonTooltip = uiText("dialog.render_settings.audio.button.unmute", "Unmute %1");
+    const QString muteAudioButtonTooltip = UiText::text(QStringLiteral("dialog.render_settings.audio.button.mute"));
+    const QString unmuteAudioButtonTooltip = UiText::text(QStringLiteral("dialog.render_settings.audio.button.unmute"));
     const QString muteButtonStyleSheet = QStringLiteral(
         "QToolButton { border: none; background: transparent; padding: 0; margin: 0; }"
         "QToolButton:hover { border: none; background: transparent; }"

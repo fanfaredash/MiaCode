@@ -1386,8 +1386,24 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(debug_flag_index_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+    # Drift guard for the UiText localization tables: built-in en/zh key parity plus
+    # source/resource literal key checks. Reads the tree from disk; repo root
+    # injected as a compile definition.
+    miacode_add_dev_tool(ui_text_locale_spec TEST
+        SOURCES
+            src/tools/ui_text/UiTextLocaleSpec.cpp
+            src/app/ui/UiText.h
+            src/app/ui/UiText.cpp
+            src/extensions/ExtensionManifest.h
+            src/extensions/ExtensionManifest.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/app/ui src/extensions
+    )
+    target_compile_definitions(ui_text_locale_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
     # Behavior spec locking DebugOptions.h accessor semantics (defaults, clamps,
-    # debug-category gating, DComp cascade) — the safety net for any future
+    # debug-category gating, DComp cascade), the safety net for any future
     # table-driven registry refactor.
     miacode_add_dev_tool(debug_options_spec TEST
         SOURCES

@@ -25,10 +25,6 @@ Item {
         return scale >= 1.999
     }
 
-    function isChineseUi() {
-        return paletteMap && paletteMap["isChineseUi"] === true
-    }
-
     function tone(key, fallback) {
         return paletteMap && paletteMap[key] !== undefined ? paletteMap[key] : fallback
     }
@@ -410,7 +406,7 @@ Item {
         y: Math.max(0, (timelineItem.timelineTop - height) / 2)
         hoverEnabled: true
         spacing: 4
-        text: root.isChineseUi() ? "\u4ee3\u7801\u8ddf\u968f" : "Cursor Follow"
+        text: "Cursor Follow"
         checked: timelineItem.followPreviewEnabled
         // Phase 9d-native — invisible (DComp renders natively in the
         // popup composition plane) but still receives input. DComp
@@ -473,7 +469,7 @@ Item {
         y: Math.max(0, (timelineItem.timelineTop - height) / 2)
         hoverEnabled: true
         spacing: 4
-        text: root.isChineseUi() ? "\u8fdb\u5ea6\u8ddf\u968f" : "Progress Follow"
+        text: "Progress Follow"
         checked: timelineItem.followProgressEnabled
         opacity: 0
 

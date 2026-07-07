@@ -65,13 +65,13 @@ bool MainWindow::DocumentSection::maybeSaveCurrentFieldChanges()
 
     const QString fieldName = owner_.hasActiveDifficulty()
         ? SimaiDocument::difficultyName(state_.activeDifficultyId_)
-        : uiText("dialog.unsaved_field_changes.field.metadata", "Metadata");
+        : UiText::text(QStringLiteral("dialog.unsaved_field_changes.field.metadata"));
     QElapsedTimer dialogTimer;
     dialogTimer.start();
     const UnsavedChangesChoice choice = showUnsavedChangesDialog(
         &owner_,
-        uiText("dialog.unsaved_field_changes.title", "Unsaved Field Changes"),
-        uiText("dialog.unsaved_field_changes.message", "%1 has unsaved changes. Save before switch?").arg(fieldName)
+        UiText::text(QStringLiteral("dialog.unsaved_field_changes.title")),
+        UiText::text(QStringLiteral("dialog.unsaved_field_changes.message")).arg(fieldName)
     );
     miacode::debug_log::appendTimingLine(
         miacode::debug_log::Channel::Runtime,
@@ -453,7 +453,7 @@ void MainWindow::openRecentFilePath(const QString& path)
     if (!fileInfo.exists() || !fileInfo.isFile()) {
         recentFilePaths_.removeAll(normalizedPath);
         savePortableState();
-        UiDialogs::showMessageBox(QMessageBox::Warning, this, uiText("action.open_recent", "Open Recent"), "File no longer exists:\n" + normalizedPath);
+        UiDialogs::showMessageBox(QMessageBox::Warning, this, UiText::text(QStringLiteral("action.open_recent")), "File no longer exists:\n" + normalizedPath);
         return;
     }
     if (!maybeSaveBeforeContinue()) {
@@ -492,7 +492,7 @@ void MainWindow::refreshRecentFilesMenu(QMenu* recentFilesMenu)
         savePortableState();
     }
     if (existingPaths.isEmpty()) {
-        QAction* emptyAction = recentFilesMenu->addAction(uiText("action.open_recent.empty", "No Recent Files"));
+        QAction* emptyAction = recentFilesMenu->addAction(UiText::text(QStringLiteral("action.open_recent.empty")));
         emptyAction->setEnabled(false);
         return;
     }
@@ -540,12 +540,9 @@ bool MainWindow::openStartupTarget(const QString& path)
         UiDialogs::showMessageBox(
             QMessageBox::Warning,
             this,
-            uiText("dialog.open_startup_folder.missing_maidata.title", "maidata.txt Not Found"),
-            uiText(
-                "dialog.open_startup_folder.missing_maidata.message",
-                QStringLiteral("No maidata.txt was found in the dropped folder:\n%1")
-                    .arg(QDir::toNativeSeparators(info.absoluteFilePath()))
-            )
+            UiText::text(QStringLiteral("dialog.open_startup_folder.missing_maidata.title")),
+            UiText::text(QStringLiteral("dialog.open_startup_folder.missing_maidata.message"))
+                .arg(QDir::toNativeSeparators(info.absoluteFilePath()))
         );
         return false;
     }
@@ -557,12 +554,9 @@ bool MainWindow::openStartupTarget(const QString& path)
     UiDialogs::showMessageBox(
         QMessageBox::Warning,
         this,
-        uiText("dialog.open_startup_target.missing.title", "Open Failed"),
-        uiText(
-            "dialog.open_startup_target.missing.message",
-            QStringLiteral("The dropped file or folder does not exist:\n%1")
-                .arg(QDir::toNativeSeparators(normalizedPath))
-        )
+        UiText::text(QStringLiteral("dialog.open_startup_target.missing.title")),
+        UiText::text(QStringLiteral("dialog.open_startup_target.missing.message"))
+            .arg(QDir::toNativeSeparators(normalizedPath))
     );
     return false;
 }

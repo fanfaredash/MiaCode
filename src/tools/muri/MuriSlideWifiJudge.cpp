@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QSet>
 
+#include "SimaiNativeParser.h"
 #include "timeline/TimelineData.h"
 #include "common/MuriConfig.h"
 #include "common/MuriTypes.h"  // makeMarkerAnalysisKey + Muri* state types
@@ -954,11 +955,12 @@ DiagnosticAnchor diagnosticAnchorForSlideJudge(
     return diagnosticAnchorFromMarker(marker);
 }
 
-QString formatSlideTooFastDetail(
+MuriDetailArgs slideTooFastDetailArgs(
     const TimelineNoteMarker& marker,
     const MarkerMuriState& state,
     const QHash<QString, QString>& markerConfigLabels,
-    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys)
+    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys,
+    MuriDetailKind* detailKind)
 {
     const EarlyJudgeCauseInfo latestCause = latestEarlyJudgeCauseForState(state);
     const double expectedSecond = marker.type == QLatin1String("wifi")
@@ -970,17 +972,42 @@ QString formatSlideTooFastDetail(
     const double normalJudgeSecond = marker.endSecond >= 0.0 ? marker.endSecond : expectedSecond;
     const double gapMs = qMax(0.0, normalJudgeSecond - resolvedSecond) * 1000.0;
     const QString targetLabel = formatMarkerConfigLabel(marker);
+    MuriDetailArgs args;
+    args.left = targetLabel;
+    args.gapText = QStringLiteral("%1 ms").arg(QString::number(gapMs, 'f', 1));
+    args.alert = MuriAlertLevel::Muri;
     if (latestCause.valid) {
         const QString causeLabel = markerConfigLabelForSource(
             markerConfigLabels,
             syntheticSlideHeadOwnerKeys,
             latestCause.markerKey,
             latestCause.causeType);
-        return QStringLiteral("%1 was early-judged by %2, gap %3 ms.")
-            .arg(targetLabel, causeLabel, QString::number(gapMs, 'f', 1));
+        args.right = causeLabel;
+        if (detailKind != nullptr) {
+            *detailKind = MuriDetailKind::EarlyJudgedBy;
+        }
+        return args;
     }
-    return QStringLiteral("%1 resolved outside its critical window, gap %2 ms.")
-        .arg(targetLabel, QString::number(gapMs, 'f', 1));
+    if (detailKind != nullptr) {
+        *detailKind = MuriDetailKind::ResolvedOutsideWindow;
+    }
+    return args;
+}
+
+QString formatSlideTooFastDetail(
+    const TimelineNoteMarker& marker,
+    const MarkerMuriState& state,
+    const QHash<QString, QString>& markerConfigLabels,
+    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys)
+{
+    MuriDetailKind detailKind = MuriDetailKind::None;
+    const MuriDetailArgs args = slideTooFastDetailArgs(
+        marker,
+        state,
+        markerConfigLabels,
+        syntheticSlideHeadOwnerKeys,
+        &detailKind);
+    return renderMuriDetail(detailKind, args, SimaiNativeValidationLocale::English);
 }
 
 }  // namespace miacode::muri::detail

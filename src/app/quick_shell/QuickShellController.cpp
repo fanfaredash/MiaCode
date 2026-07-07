@@ -381,19 +381,33 @@ QString QuickShellController::timelineTabLabel() const
 {
     // Mirrors MainWindow::bottomTabsFallbackLabel for the legacy QSG
     // path — keeps the QuickShell bottom-tab labels identical to the
-    // ones the legacy QTabBar code uses, with the same Chinese /
-    // English split.
-    return UiText::isChineseUi() ? QStringLiteral("时间轴") : QStringLiteral("Timeline");
+    // ones the legacy QTabBar code uses.
+    return UiText::text(QStringLiteral("window.timeline"));
 }
 
 QString QuickShellController::validationTabLabel() const
 {
-    return UiText::isChineseUi() ? QStringLiteral("语法") : QStringLiteral("Syntax");
+    return UiText::text(QStringLiteral("window.syntax"));
 }
 
 QString QuickShellController::muriTabLabel() const
 {
-    return UiText::isChineseUi() ? QStringLiteral("无理") : QStringLiteral("Muri");
+    return UiText::text(QStringLiteral("window.muri"));
+}
+
+QString QuickShellController::timelineViewLockLabel() const
+{
+    return UiText::text(QStringLiteral("shell.view_lock"));
+}
+
+QString QuickShellController::timelineSyncLabel() const
+{
+    return UiText::text(QStringLiteral("shell.timeline_sync"));
+}
+
+QString QuickShellController::timelineFollowCodeLabel() const
+{
+    return UiText::text(QStringLiteral("shell.follow_code"));
 }
 
 QWindow* QuickShellController::topChromeWindow() const
@@ -744,8 +758,6 @@ void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, i
     menu->setAttribute(Qt::WA_DeleteOnClose);
     UiTheme::styleRoundedMenu(*menu);
 
-    const bool chinese = UiText::isChineseUi();
-
     // Each item is a custom QWidget that paints the QML-CheckBox look
     // (rounded square indicator + accent fill + white checkmark + hover
     // background) and toggles via its own mouseReleaseEvent. The widget
@@ -763,18 +775,18 @@ void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, i
     };
 
     addToggleWidget(
-        chinese ? QStringLiteral("光标居中") : QStringLiteral("View Lock"),
+        UiText::text(QStringLiteral("shell.view_lock")),
         bridge->viewportLockEnabled(),
         &QuickShellController::timelineViewportLockToggled);
     // Timeline Sync sits above Follow Code so the bottom-most menu
     // item matches the inline tab-strip chip (which now shows Follow
     // Code) — visually the two anchors are at the same Y on screen.
     addToggleWidget(
-        chinese ? QStringLiteral("时轴同步") : QStringLiteral("Timeline Sync"),
+        UiText::text(QStringLiteral("shell.timeline_sync")),
         bridge->timelineSyncEnabled(),
         &QuickShellController::timelineSyncToggled);
     addToggleWidget(
-        chinese ? QStringLiteral("代码跟随") : QStringLiteral("Follow Code"),
+        UiText::text(QStringLiteral("shell.follow_code")),
         bridge->followPreviewEnabled(),
         &QuickShellController::timelineFollowPreviewToggled);
 

@@ -4,6 +4,8 @@
 #include <QSet>
 #include <QtMath>
 
+#include "SimaiNativeParser.h"
+
 namespace {
 
 using miacode::muri::MuriPanelEntry;
@@ -141,40 +143,51 @@ QString muriStaticReferenceConfigText(const MuriStaticReferenceNote& note)
     return markerType;
 }
 
-QString buildMuriStaticReferenceDetail(const MuriStaticReference& reference)
+MuriDetailArgs buildMuriStaticReferenceDetailArgs(
+    const MuriStaticReference& reference,
+    MuriDetailKind* detailKind)
 {
     const QString affectedText = muriStaticReferenceConfigText(reference.affected);
     const QString causeText = muriStaticReferenceConfigText(reference.cause);
     const double gapMs = qAbs(reference.deltaSecond) * 1000.0;
+    MuriDetailArgs args;
+    args.left = causeText;
+    args.right = affectedText;
+    args.gapText = QStringLiteral("%1 ms").arg(QString::number(gapMs, 'f', 1));
+    args.alert = reference.alertLevel;
     if (reference.kind == MuriKind::SlideHeadTap) {
-        return reference.slideHeadHasTapOnSlide
-            ? (reference.alertLevel == MuriAlertLevel::Warning
-                   ? QStringLiteral("%1 start may early-judge %2, gap %3 ms.")
-                         .arg(causeText, affectedText, QString::number(gapMs, 'f', 1))
-                   : QStringLiteral("%1 start will early-judge %2, gap %3 ms.")
-                         .arg(causeText, affectedText, QString::number(gapMs, 'f', 1)))
-            : (reference.alertLevel == MuriAlertLevel::Warning
-                   ? QStringLiteral("%1 jump-start may early-judge %2, gap %3 ms.")
-                         .arg(causeText, affectedText, QString::number(gapMs, 'f', 1))
-                   : QStringLiteral("%1 jump-start will early-judge %2, gap %3 ms.")
-                         .arg(causeText, affectedText, QString::number(gapMs, 'f', 1)));
+        if (detailKind != nullptr) {
+            *detailKind = reference.slideHeadHasTapOnSlide
+                ? MuriDetailKind::SlideHeadStartEarlyJudge
+                : MuriDetailKind::SlideHeadJumpStartEarlyJudge;
+        }
+        return args;
     }
     if (reference.kind == MuriKind::TapOnSlide) {
-        return reference.alertLevel == MuriAlertLevel::Warning
-            ? QStringLiteral("%1 trajectory may collide with %2, gap %3 ms.")
-                  .arg(causeText, affectedText, QString::number(gapMs, 'f', 1))
-            : QStringLiteral("%1 trajectory will collide with %2, gap %3 ms.")
-                  .arg(causeText, affectedText, QString::number(gapMs, 'f', 1));
+        if (detailKind != nullptr) {
+            *detailKind = MuriDetailKind::TapOnSlideCollide;
+        }
+        return args;
     }
     if (reference.kind == MuriKind::Overlap) {
-        return QStringLiteral("%1 and same-position %2 formed overlap.")
-            .arg(affectedText, causeText);
+        args.left = affectedText;
+        args.right = causeText;
+        if (detailKind != nullptr) {
+            *detailKind = MuriDetailKind::FormedOverlapSamePosition;
+        }
+        return args;
     }
 
-    return reference.hasDelta
-        ? QStringLiteral("Static reference from %1, Δ %2 ms")
-              .arg(causeText, QString::number(reference.deltaSecond * 1000.0, 'f', 1))
-        : QStringLiteral("Static reference from %1").arg(causeText);
+    args.left = causeText;
+    args.right.clear();
+    args.gapText.clear();
+    args.deltaText = reference.hasDelta
+        ? QStringLiteral("%1 ms").arg(QString::number(reference.deltaSecond * 1000.0, 'f', 1))
+        : QString();
+    if (detailKind != nullptr) {
+        *detailKind = MuriDetailKind::StaticReference;
+    }
+    return args;
 }
 
 MuriPanelEntry makeMuriPanelEntry(const MuriDiagnostic& diagnostic)
@@ -186,7 +199,11 @@ MuriPanelEntry makeMuriPanelEntry(const MuriDiagnostic& diagnostic)
     entry.occurrenceSecond = diagnostic.second;
     entry.line = diagnostic.line;
     entry.col = diagnostic.col;
-    entry.rawDetail = diagnostic.detail;
+    entry.detailKind = diagnostic.detailKind;
+    entry.detailArgs = diagnostic.detailArgs;
+    entry.rawDetail = diagnostic.detail.isEmpty()
+        ? renderMuriDetail(entry.detailKind, entry.detailArgs, SimaiNativeValidationLocale::English)
+        : diagnostic.detail;
     return entry;
 }
 
@@ -202,7 +219,11 @@ MuriPanelEntry makeMuriPanelEntry(const MuriStaticReference& reference)
     entry.occurrenceSecond = reference.affected.second;
     entry.line = anchor.valid ? anchor.line : reference.affected.line;
     entry.col = anchor.valid ? anchor.col : reference.affected.col;
-    entry.rawDetail = buildMuriStaticReferenceDetail(reference);
+    entry.detailArgs = buildMuriStaticReferenceDetailArgs(reference, &entry.detailKind);
+    entry.rawDetail = renderMuriDetail(
+        entry.detailKind,
+        entry.detailArgs,
+        SimaiNativeValidationLocale::English);
     return entry;
 }
 

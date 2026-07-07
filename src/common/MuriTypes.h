@@ -7,6 +7,7 @@
 #include <QVector>
 
 struct TimelineNoteMarker;
+enum class SimaiNativeValidationLocale;
 
 struct MuriPadTimeEntry {
     QString pad;
@@ -24,6 +25,29 @@ enum class MuriKind {
 enum class MuriAlertLevel {
     Muri,
     Warning,
+};
+
+enum class MuriDetailKind {
+    None,
+    SlideHeadStartEarlyJudgeTap,
+    SlideHeadJumpStartEarlyJudgeTap,
+    SlideHeadStartEarlyJudge,
+    SlideHeadJumpStartEarlyJudge,
+    TapOnSlideCollide,
+    EarlyJudgedBy,
+    ResolvedOutsideWindow,
+    MultiTouchFormedBy,
+    FormedOverlapSamePosition,
+    FormedOverlapAtSamePosition,
+    SlideHeadTriggerEarlyJudged,
+    PadTriggerEarlyJudged,
+    SimpleNoteMissedWindowOverlap,
+    SlideRuntimeOutsideWindow,
+    WifiRuntimeOutsideWindow,
+    SlideClearedEarly,
+    WifiClearedEarly,
+    StaticReference,
+    RuntimeHandMultiTouch,
 };
 
 enum class AreaJudgeCause {
@@ -62,6 +86,16 @@ struct MuriActionTrail {
     double endSecond = 0.0;
     double radius = 0.0;
     QVector<QPointF> points;
+};
+
+struct MuriDetailArgs {
+    QString left;
+    QString right;
+    QString gapText;
+    QString deltaText;
+    QString handCount;
+    QString actions;
+    MuriAlertLevel alert = MuriAlertLevel::Muri;
 };
 
 struct MuriCheckpointState {
@@ -109,6 +143,8 @@ struct MuriDiagnostic {
     QString markerKey;
     QString title;
     QString detail;
+    MuriDetailKind detailKind = MuriDetailKind::None;
+    MuriDetailArgs detailArgs;
 };
 
 struct MuriJudgeSpriteEvent {
@@ -175,3 +211,11 @@ struct MuriAnalysisReport {
 QString makeMarkerAnalysisKey(const TimelineNoteMarker& marker);
 QString muriKindDisplayName(MuriKind kind, bool chineseUi);
 QString muriAlertLevelDisplayName(MuriAlertLevel level, bool chineseUi);
+QString muriDetailKindKey(MuriDetailKind kind);
+QString renderMuriDetail(
+    MuriDetailKind kind,
+    const MuriDetailArgs& args,
+    SimaiNativeValidationLocale locale);
+QString renderMuriDiagnosticDetail(
+    const MuriDiagnostic& diagnostic,
+    SimaiNativeValidationLocale locale);

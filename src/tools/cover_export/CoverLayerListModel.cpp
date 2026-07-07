@@ -18,21 +18,16 @@ namespace {
 
 constexpr char kRowMimeType[] = "application/x-miacode-cover-layer-row";
 
-QString l10n(const QString& en, const QString& zh)
-{
-    return UiText::isChineseUi() ? zh : en;
-}
-
 QString displayLabel(const CoverLayer* layer)
 {
     if (layer == nullptr) {
         return QString();
     }
     if (layer->kind() == QStringLiteral("card")) {
-        return l10n(QStringLiteral("Difficulty card"), QStringLiteral("难度卡片"));
+        return UiText::text(QStringLiteral("cover.difficulty_card_2"));
     }
     if (layer->kind() == QStringLiteral("chartFrame")) {
-        return l10n(QStringLiteral("Chart frame"), QStringLiteral("谱面帧"));
+        return UiText::text(QStringLiteral("cover.chart_frame"));
     }
     return layer->label();
 }
@@ -190,9 +185,9 @@ QVariant CoverLayerListModel::data(const QModelIndex& index, int role) const
         return layer->opacity();
     case SubtitleRole:
         if (layer->kind() == QStringLiteral("chartFrame")) {
-            return l10n(QStringLiteral("Frame "), QStringLiteral("帧时间 ")) + formatFrameTime(layer->frameSeconds());
+            return UiText::text(QStringLiteral("cover.frame_2")) + formatFrameTime(layer->frameSeconds());
         }
-        return l10n(QStringLiteral("Difficulty card"), QStringLiteral("难度卡"));
+        return UiText::text(QStringLiteral("cover.difficulty_card"));
     case ThumbnailRole:
         return layer->kind() == QStringLiteral("chartFrame")
             ? chartFrameThumbnail(layer)

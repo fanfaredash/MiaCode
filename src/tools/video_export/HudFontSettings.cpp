@@ -27,12 +27,6 @@ namespace {
 // (Moved verbatim from VideoExportDialog.cpp, 2026-06-10, so the 视频设置
 // dialog can host the same font page without depending on the export dialog.)
 
-QString uiText(const char* key, const QString& fallback)
-{
-    const QString translated = UiText::text(QString::fromLatin1(key));
-    return translated.isEmpty() ? fallback : translated;
-}
-
 struct HudFontChoice {
     QString label;
     QString path;
@@ -152,7 +146,7 @@ QString importHudFontFromUser(QWidget* parent, const std::function<void()>& onFo
 {
     const QString selected = QFileDialog::getOpenFileName(
         parent,
-        uiText("dialog.video_export.option.import_hud_font", QStringLiteral("Import Font")),
+        UiText::text(QStringLiteral("dialog.video_export.option.import_hud_font")),
         QString(),
         QStringLiteral("Font Files (*.ttf *.otf)")
     );
@@ -164,8 +158,8 @@ QString importHudFontFromUser(QWidget* parent, const std::function<void()>& onFo
     if (!info.isFile() || (suffix != QStringLiteral("ttf") && suffix != QStringLiteral("otf"))) {
         QMessageBox::warning(
             parent,
-            uiText("dialog.video_export.option.import_hud_font", QStringLiteral("Import Font")),
-            uiText("dialog.video_export.error.invalid_hud_font", QStringLiteral("Please select a .ttf or .otf font file."))
+            UiText::text(QStringLiteral("dialog.video_export.option.import_hud_font")),
+            UiText::text(QStringLiteral("dialog.video_export.error.invalid_hud_font"))
         );
         return QString();
     }
@@ -175,8 +169,8 @@ QString importHudFontFromUser(QWidget* parent, const std::function<void()>& onFo
     if (families.isEmpty()) {
         QMessageBox::warning(
             parent,
-            uiText("dialog.video_export.option.import_hud_font", QStringLiteral("Import Font")),
-            uiText("dialog.video_export.error.invalid_hud_font", QStringLiteral("Please select a .ttf or .otf font file."))
+            UiText::text(QStringLiteral("dialog.video_export.option.import_hud_font")),
+            UiText::text(QStringLiteral("dialog.video_export.error.invalid_hud_font"))
         );
         return QString();
     }
@@ -184,8 +178,8 @@ QString importHudFontFromUser(QWidget* parent, const std::function<void()>& onFo
     if (!QFile::copy(info.absoluteFilePath(), targetPath)) {
         QMessageBox::warning(
             parent,
-            uiText("dialog.video_export.option.import_hud_font", QStringLiteral("Import Font")),
-            uiText("dialog.video_export.error.copy_hud_font_failed", QStringLiteral("Failed to copy the font into the font library."))
+            UiText::text(QStringLiteral("dialog.video_export.option.import_hud_font")),
+            UiText::text(QStringLiteral("dialog.video_export.error.copy_hud_font_failed"))
         );
         return QString();
     }
@@ -237,11 +231,11 @@ QWidget* createHudFontSettingsWidget(
     buttonLayout->setContentsMargins(0, 0, 0, 0);
     buttonLayout->setSpacing(8);
     auto* importButton = new QPushButton(
-        uiText("dialog.video_export.option.import_hud_font", QStringLiteral("Import Font")),
+        UiText::text(QStringLiteral("dialog.video_export.option.import_hud_font")),
         buttonRow
     );
     auto* resetButton = new QPushButton(
-        uiText("dialog.video_export.option.reset_hud_font", QStringLiteral("Reset")),
+        UiText::text(QStringLiteral("dialog.video_export.option.reset_hud_font")),
         buttonRow
     );
     for (QPushButton* button : {importButton, resetButton}) {

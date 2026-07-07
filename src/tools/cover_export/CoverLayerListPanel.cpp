@@ -52,11 +52,6 @@ enum InlineLayerControl {
     LockInlineControl = 2,
 };
 
-QString l10n(const QString& en, const QString& zh)
-{
-    return UiText::isChineseUi() ? zh : en;
-}
-
 QString formatOpacity(qreal opacity)
 {
     return QStringLiteral("%1%").arg(qRound(qBound<qreal>(0.0, opacity, 1.0) * 100.0));
@@ -198,7 +193,7 @@ public:
         const QString title = index.data(CoverLayerListModel::LabelRole).toString();
         QString subtitle = index.data(CoverLayerListModel::SubtitleRole).toString();
         if (!visible) {
-            subtitle += l10n(QStringLiteral(" · Hidden"), QStringLiteral(" · 已隐藏"));
+            subtitle += UiText::text(QStringLiteral("cover.hidden"));
         } else if (!qFuzzyCompare(opacity, 1.0)) {
             subtitle += QStringLiteral(" · ") + formatOpacity(opacity);
         }
@@ -299,7 +294,7 @@ CoverLayerListPanel::CoverLayerListPanel(CoverStudioPanel* studio, QWidget* pare
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(8);
 
-    auto* title = new QLabel(l10n(QStringLiteral("Layers"), QStringLiteral("图层")), this);
+    auto* title = new QLabel(UiText::text(QStringLiteral("cover.layers")), this);
     applyPanelTitleStyle(title);
     layout->addWidget(title);
 
@@ -342,15 +337,14 @@ CoverLayerListPanel::CoverLayerListPanel(CoverStudioPanel* studio, QWidget* pare
         + QStringLiteral("QPushButton { min-width: 0px; min-height: 28px; padding: 0 10px; border-radius: 7px; }");
     auto* row = new QHBoxLayout();
     row->setSpacing(6);
-    auto* addButton = new QPushButton(l10n(QStringLiteral("＋ Add frame"), QStringLiteral("＋ 添加谱面帧")), this);
-    auto* removeButton = new QPushButton(l10n(QStringLiteral("Delete"), QStringLiteral("删除")), this);
+    auto* addButton = new QPushButton(UiText::text(QStringLiteral("cover.add_frame")), this);
+    auto* removeButton = new QPushButton(UiText::text(QStringLiteral("metadata.delete")), this);
     addButton->setStyleSheet(compactButton);
     removeButton->setStyleSheet(compactButton);
     addButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
     removeButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
-    addButton->setToolTip(l10n(QStringLiteral("Add a chart frame (A)"), QStringLiteral("添加谱面帧（快捷键 A）")));
-    removeButton->setToolTip(l10n(QStringLiteral("Delete the selected layer (Delete)"),
-                                  QStringLiteral("删除当前图层（Delete）")));
+    addButton->setToolTip(UiText::text(QStringLiteral("cover.add_a_chart_frame_a")));
+    removeButton->setToolTip(UiText::text(QStringLiteral("cover.delete_the_selected_layer_delete")));
     addButton->setAccessibleName(addButton->toolTip());
     removeButton->setAccessibleName(removeButton->toolTip());
     row->addWidget(addButton);
@@ -457,13 +451,13 @@ bool CoverLayerListPanel::eventFilter(QObject* watched, QEvent* event)
                 if (control == VisibilityInlineControl) {
                     const bool visible = model_->data(index, CoverLayerListModel::VisibleRole).toBool();
                     tooltip = visible
-                        ? l10n(QStringLiteral("Hide layer (V)"), QStringLiteral("隐藏图层（快捷键 V）"))
-                        : l10n(QStringLiteral("Show layer (V)"), QStringLiteral("显示图层（快捷键 V）"));
+                        ? UiText::text(QStringLiteral("cover.hide_layer_v"))
+                        : UiText::text(QStringLiteral("cover.show_layer_v"));
                 } else if (control == LockInlineControl) {
                     const bool locked = model_->data(index, CoverLayerListModel::LockedRole).toBool();
                     tooltip = locked
-                        ? l10n(QStringLiteral("Unlock geometry (L)"), QStringLiteral("解锁位置和大小（快捷键 L）"))
-                        : l10n(QStringLiteral("Lock geometry (L)"), QStringLiteral("锁定位置和大小（快捷键 L）"));
+                        ? UiText::text(QStringLiteral("cover.unlock_geometry_l"))
+                        : UiText::text(QStringLiteral("cover.lock_geometry_l"));
                 }
             }
             view_->viewport()->setCursor(overInlineControl ? Qt::PointingHandCursor : Qt::ArrowCursor);
@@ -518,18 +512,18 @@ void CoverLayerListPanel::showContextMenu(const QPoint& pos)
     QMenu menu(this);
     UiTheme::styleRoundedMenu(menu);
     QAction* visAction = menu.addAction(layer->visible()
-        ? l10n(QStringLiteral("Hide"), QStringLiteral("隐藏"))
-        : l10n(QStringLiteral("Show"), QStringLiteral("显示")));
+        ? UiText::text(QStringLiteral("cover.hide"))
+        : UiText::text(QStringLiteral("cover.show")));
     QAction* lockAction = menu.addAction(layer->locked()
-        ? l10n(QStringLiteral("Unlock"), QStringLiteral("解锁"))
-        : l10n(QStringLiteral("Lock"), QStringLiteral("锁定")));
+        ? UiText::text(QStringLiteral("cover.unlock"))
+        : UiText::text(QStringLiteral("cover.lock")));
     menu.addSeparator();
-    QAction* upAction = menu.addAction(l10n(QStringLiteral("Move up"), QStringLiteral("上移")));
-    QAction* downAction = menu.addAction(l10n(QStringLiteral("Move down"), QStringLiteral("下移")));
-    QAction* topAction = menu.addAction(l10n(QStringLiteral("Bring to front"), QStringLiteral("置顶")));
-    QAction* bottomAction = menu.addAction(l10n(QStringLiteral("Send to back"), QStringLiteral("置底")));
+    QAction* upAction = menu.addAction(UiText::text(QStringLiteral("cover.move_up")));
+    QAction* downAction = menu.addAction(UiText::text(QStringLiteral("cover.move_down")));
+    QAction* topAction = menu.addAction(UiText::text(QStringLiteral("cover.bring_to_front")));
+    QAction* bottomAction = menu.addAction(UiText::text(QStringLiteral("cover.send_to_back")));
     menu.addSeparator();
-    QAction* deleteAction = menu.addAction(l10n(QStringLiteral("Delete"), QStringLiteral("删除")));
+    QAction* deleteAction = menu.addAction(UiText::text(QStringLiteral("metadata.delete")));
     deleteAction->setEnabled(!isCard);   // the card is the stable, non-deletable layer
 
     QAction* chosen = menu.exec(view_->viewport()->mapToGlobal(pos));

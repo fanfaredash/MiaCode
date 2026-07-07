@@ -246,16 +246,8 @@ TimelineView::TimelineView(QWidget* parent)
     connect(zoomButton_, &QToolButton::clicked, this, [this]() { cycleZoomPreset(); });
     viewportLockCheckBox_ = new QCheckBox(this);
     viewportLockCheckBox_->setCursor(Qt::PointingHandCursor);
-    viewportLockCheckBox_->setText(
-        UiText::isChineseUi()
-            ? QStringLiteral("\u5149\u6807\u5c45\u4e2d")
-            : QStringLiteral("View Lock")
-    );
-    viewportLockCheckBox_->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("\u5c06\u7f16\u8f91\u5668\u5149\u6807\u5c3d\u91cf\u4fdd\u6301\u5728\u4ee3\u7801\u533a\u4e2d\u592e")
-            : QStringLiteral("Keep the editor cursor near the middle of the code area when possible")
-    );
+    viewportLockCheckBox_->setText(UiText::text(QStringLiteral("timeline.view_lock")));
+    viewportLockCheckBox_->setToolTip(UiText::text(QStringLiteral("timeline.view_lock_tooltip")));
     connect(viewportLockCheckBox_, &QCheckBox::toggled, this, [this](bool enabled) {
         if (stateBridge_ != nullptr && !applyingBridgeState_) {
             stateBridge_->setViewportLockEnabled(enabled);
@@ -264,16 +256,8 @@ TimelineView::TimelineView(QWidget* parent)
     });
     followPreviewCheckBox_ = new QCheckBox(this);
     followPreviewCheckBox_->setCursor(Qt::PointingHandCursor);
-    followPreviewCheckBox_->setText(
-        UiText::isChineseUi()
-            ? QStringLiteral("\u4ee3\u7801\u8ddf\u968f")
-            : QStringLiteral("Follow Code")
-    );
-    followPreviewCheckBox_->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("\u4ec5\u5728\u64ad\u653e\u4e2d\u5c06\u7f16\u8f91\u5668\u5149\u6807\u7ed1\u5b9a\u5230\u9884\u89c8\u65f6\u95f4\u524d\u6700\u8fd1\u7684\u9017\u53f7")
-            : QStringLiteral("During playback, bind the editor cursor to the latest comma at or before preview time")
-    );
+    followPreviewCheckBox_->setText(UiText::text(QStringLiteral("timeline.follow_code")));
+    followPreviewCheckBox_->setToolTip(UiText::text(QStringLiteral("timeline.follow_code_tooltip")));
     connect(followPreviewCheckBox_, &QCheckBox::toggled, this, [this](bool enabled) {
         if (stateBridge_ != nullptr && !applyingBridgeState_) {
             stateBridge_->setFollowPreviewEnabled(enabled);
@@ -282,16 +266,8 @@ TimelineView::TimelineView(QWidget* parent)
     });
     followProgressCheckBox_ = new QCheckBox(this);
     followProgressCheckBox_->setCursor(Qt::PointingHandCursor);
-    followProgressCheckBox_->setText(
-        UiText::isChineseUi()
-            ? QStringLiteral("\u8fdb\u5ea6\u8ddf\u968f")
-            : QStringLiteral("Progress Follow")
-    );
-    followProgressCheckBox_->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("\u64ad\u653e\u4e2d\u8ba9\u65f6\u95f4\u8f74\u89c6\u56fe\u8ddf\u968f\u9884\u89c8\u8fdb\u5ea6\u7ebf")
-            : QStringLiteral("During playback, keep the timeline view centered on the preview progress line")
-    );
+    followProgressCheckBox_->setText(UiText::text(QStringLiteral("timeline.progress_follow")));
+    followProgressCheckBox_->setToolTip(UiText::text(QStringLiteral("timeline.progress_follow_tooltip")));
     followProgressCheckBox_->setChecked(true);
     connect(followProgressCheckBox_, &QCheckBox::toggled, this, [this](bool enabled) {
         if (stateBridge_ != nullptr && !applyingBridgeState_) {

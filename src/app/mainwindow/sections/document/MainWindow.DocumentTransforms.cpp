@@ -46,7 +46,7 @@ NormalizeDialogResult showNormalizeSelectionDialog(
     result.options = initialOptions;
 
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner));
-    dialog.setWindowTitle(uiText("dialog.normalize.title", QStringLiteral("Format Chart")));
+    dialog.setWindowTitle(UiText::text(QStringLiteral("dialog.normalize.title")));
     dialog.setModal(true);
     dialog.setMinimumWidth(300);
     dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
@@ -72,17 +72,13 @@ NormalizeDialogResult showNormalizeSelectionDialog(
     rootLayout->addWidget(summaryRow);
 
     auto* startAtNewMeasureCheck = new QCheckBox(
-        UiText::isChineseUi()
-            ? QStringLiteral("选区起点视作小节线开始")
-            : QStringLiteral("Treat selection start as measure boundary"),
+        UiText::text(QStringLiteral("document.treat_selection_start_as_measure")),
         &dialog);
     startAtNewMeasureCheck->setChecked(initialOptions.startAtNewMeasure);
     rootLayout->addWidget(startAtNewMeasureCheck);
 
     auto* reduceTo384Check = new QCheckBox(
-        UiText::isChineseUi()
-            ? QStringLiteral("统一近似至384分音")
-            : QStringLiteral("Snap approximately to 384 grid"),
+        UiText::text(QStringLiteral("document.snap_approximately_to_384_grid")),
         &dialog);
     reduceTo384Check->setChecked(initialOptions.reduceTo384Grid);
     rootLayout->addWidget(reduceTo384Check);
@@ -217,12 +213,12 @@ void MainWindow::DocumentSection::onMirrorLeftRight()
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
-    if (!applySelectionBatchTransform(uiText("action.transform.mirror_lr", "Mirror Left/Right"), [this](const QString& text, int* changedCount) {
+    if (!applySelectionBatchTransform(UiText::text(QStringLiteral("action.transform.mirror_lr")), [this](const QString& text, int* changedCount) {
         return miacode::chart_transform::transformChartSelectionText(text, miacode::chart_transform::ChartTransformOp::MirrorLeftRight, changedCount);
     })) {
         return;
     }
-    owner_.statusBar()->showMessage(uiText("status.transform.mirror_lr", "Mirror Left/Right applied."));
+    owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.transform.mirror_lr")));
 }
 
 void MainWindow::DocumentSection::onMirrorUpDown()
@@ -233,12 +229,12 @@ void MainWindow::DocumentSection::onMirrorUpDown()
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
-    if (!applySelectionBatchTransform(uiText("action.transform.mirror_ud", "Mirror Up/Down"), [this](const QString& text, int* changedCount) {
+    if (!applySelectionBatchTransform(UiText::text(QStringLiteral("action.transform.mirror_ud")), [this](const QString& text, int* changedCount) {
         return miacode::chart_transform::transformChartSelectionText(text, miacode::chart_transform::ChartTransformOp::MirrorUpDown, changedCount);
     })) {
         return;
     }
-    owner_.statusBar()->showMessage(uiText("status.transform.mirror_ud", "Mirror Up/Down applied."));
+    owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.transform.mirror_ud")));
 }
 
 void MainWindow::DocumentSection::onRotate180()
@@ -249,12 +245,12 @@ void MainWindow::DocumentSection::onRotate180()
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
-    if (!applySelectionBatchTransform(uiText("action.transform.rotate_180", "Rotate 180"), [this](const QString& text, int* changedCount) {
+    if (!applySelectionBatchTransform(UiText::text(QStringLiteral("action.transform.rotate_180")), [this](const QString& text, int* changedCount) {
         return miacode::chart_transform::transformChartSelectionText(text, miacode::chart_transform::ChartTransformOp::Rotate180, changedCount);
     })) {
         return;
     }
-    owner_.statusBar()->showMessage(uiText("status.transform.rotate_180", "Rotate 180 applied."));
+    owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.transform.rotate_180")));
 }
 
 void MainWindow::DocumentSection::onRotate45CounterClockwise()
@@ -265,12 +261,12 @@ void MainWindow::DocumentSection::onRotate45CounterClockwise()
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
-    if (!applySelectionBatchTransform(uiText("action.transform.rotate_ccw_45", "Rotate -45"), [this](const QString& text, int* changedCount) {
+    if (!applySelectionBatchTransform(UiText::text(QStringLiteral("action.transform.rotate_ccw_45")), [this](const QString& text, int* changedCount) {
         return miacode::chart_transform::transformChartSelectionText(text, miacode::chart_transform::ChartTransformOp::Rotate45CounterClockwise, changedCount);
     })) {
         return;
     }
-    owner_.statusBar()->showMessage(uiText("status.transform.rotate_ccw_45", "Rotate -45 applied."));
+    owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.transform.rotate_ccw_45")));
 }
 
 void MainWindow::DocumentSection::onRotate45Clockwise()
@@ -281,12 +277,12 @@ void MainWindow::DocumentSection::onRotate45Clockwise()
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
-    if (!applySelectionBatchTransform(uiText("action.transform.rotate_cw_45", "Rotate +45"), [this](const QString& text, int* changedCount) {
+    if (!applySelectionBatchTransform(UiText::text(QStringLiteral("action.transform.rotate_cw_45")), [this](const QString& text, int* changedCount) {
         return miacode::chart_transform::transformChartSelectionText(text, miacode::chart_transform::ChartTransformOp::Rotate45Clockwise, changedCount);
     })) {
         return;
     }
-    owner_.statusBar()->showMessage(uiText("status.transform.rotate_cw_45", "Rotate +45 applied."));
+    owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.transform.rotate_cw_45")));
 }
 
 void MainWindow::DocumentSection::onNormalizeWholeChart()
@@ -312,20 +308,11 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
 
     QString dialogDescription;
     if (wholeTextSelected) {
-        dialogDescription = UiText::isChineseUi()
-            ? QStringLiteral("选中范围：全文")
-            : QStringLiteral("Selection: full chart");
+        dialogDescription = UiText::text(QStringLiteral("document.selection_full_chart"));
     } else {
         const auto [startLine, startCol] = lineColForPosition(editor->document(), begin);
         const auto [endLine, endCol] = lineColForPosition(editor->document(), qMax(begin, finish - 1));
-        dialogDescription = UiText::isChineseUi()
-            ? QStringLiteral("选中范围：%1行%2列 ~ %3行%4列")
-                  .arg(startLine)
-                  .arg(startCol)
-                  .arg(endLine)
-                  .arg(endCol)
-            : QStringLiteral("Selection: L%1C%2 ~ L%3C%4")
-                  .arg(startLine)
+        dialogDescription = UiText::text(QStringLiteral("document.selection_l_1c_2_l")).arg(startLine)
                   .arg(startCol)
                   .arg(endLine)
                   .arg(endCol);
@@ -371,11 +358,9 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
         UiDialogs::showMessageBox(
             QMessageBox::Warning,
             &owner_,
-            uiText("dialog.normalize.title", QStringLiteral("Format Chart")),
+            UiText::text(QStringLiteral("dialog.normalize.title")),
             normalized.errorMessage.isEmpty()
-                ? uiText(
-                      "dialog.normalize.failed",
-                      QStringLiteral("Failed to normalize the current chart."))
+                ? UiText::text(QStringLiteral("dialog.normalize.failed"))
                 : normalized.errorMessage
         );
         return;
@@ -384,9 +369,7 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
     const QString replacement = composeNormalizedSelectionReplacement(original, begin, finish, normalized.text);
     if (replacement == original.mid(begin, finish - begin)) {
         owner_.statusBar()->showMessage(
-            uiText(
-                "status.normalize.already_normalized",
-                QStringLiteral("Format Chart: already normalized."))
+            UiText::text(QStringLiteral("status.normalize.already_normalized"))
         );
         return;
     }
@@ -434,9 +417,7 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
     }
 
     owner_.statusBar()->showMessage(
-        uiText(
-            "status.normalize.applied",
-            QStringLiteral("Format Chart applied: %1 measure line(s)."))
+        UiText::text(QStringLiteral("status.normalize.applied"))
             .arg(normalized.measureLineCount)
     );
 }
@@ -588,7 +569,7 @@ void MainWindow::DocumentSection::onRaiseSubdivisionSelection()
         return;
     }
     applySelectionBatchTransform(
-        UiText::isChineseUi() ? QStringLiteral("分音提升一档") : QStringLiteral("Subdivision +1"),
+        UiText::text(QStringLiteral("document.subdivision_plus_1")),
         [](const QString& text, const QString& suffixContext, int* changedCount) {
             return miacode::chart_transform::raiseSubdivisionForSelection(text, suffixContext, changedCount);
         });
@@ -603,7 +584,7 @@ void MainWindow::DocumentSection::onLowerSubdivisionSelection()
         return;
     }
     applySelectionBatchTransform(
-        UiText::isChineseUi() ? QStringLiteral("分音降低一档") : QStringLiteral("Subdivision -1"),
+        UiText::text(QStringLiteral("document.subdivision_minus_1")),
         [](const QString& text, const QString& suffixContext, int* changedCount) {
             return miacode::chart_transform::lowerSubdivisionForSelection(text, suffixContext, changedCount);
         });
@@ -618,7 +599,7 @@ void MainWindow::DocumentSection::onRaiseSubdivisionHalfStepSelection()
         return;
     }
     applySelectionBatchTransform(
-        UiText::isChineseUi() ? QStringLiteral("分音提升半档") : QStringLiteral("Subdivision +1/2"),
+        UiText::text(QStringLiteral("document.subdivision_plus_half")),
         [](const QString& text, const QString& suffixContext, int* changedCount) {
             return miacode::chart_transform::raiseSubdivisionHalfStepForSelection(text, suffixContext, changedCount);
         });
@@ -633,7 +614,7 @@ void MainWindow::DocumentSection::onLowerSubdivisionHalfStepSelection()
         return;
     }
     applySelectionBatchTransform(
-        UiText::isChineseUi() ? QStringLiteral("分音降低半档") : QStringLiteral("Subdivision -1/2"),
+        UiText::text(QStringLiteral("document.subdivision_minus_half")),
         [](const QString& text, const QString& suffixContext, int* changedCount) {
             return miacode::chart_transform::lowerSubdivisionHalfStepForSelection(text, suffixContext, changedCount);
         });

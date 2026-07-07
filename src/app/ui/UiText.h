@@ -3,6 +3,7 @@
 #include <QJsonObject>
 #include <QVector>
 #include <QString>
+#include <QStringList>
 
 namespace UiText {
 
@@ -24,8 +25,18 @@ struct LanguageOption {
     bool builtIn = false;
 };
 
+// Single key-based lookup for shared UI strings. The resolved language is tried
+// first, then English, then the key itself as the final missing-translation
+// marker. Extension language packs are loaded from enabled extensions.
 QString text(const QString& key);
+bool hasTranslationKey(const QString& key);
 bool isChineseUi();
+// Resolved UI language for this session (MIACODE_LANG env > stored preference
+// > system locale > English). Constant per session — changes apply on restart.
+LanguagePreference resolvedLanguage();
+// Key-map drift guard for ui_text_locale_spec: descriptions of keys present
+// in one of the built-in maps but missing from another. Empty when in sync.
+QStringList translationKeyMismatches();
 LanguagePreference preferredLanguage();
 void setPreferredLanguage(LanguagePreference preference);
 QString preferredLanguageToken();

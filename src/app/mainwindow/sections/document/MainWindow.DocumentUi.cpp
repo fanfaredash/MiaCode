@@ -44,18 +44,16 @@ void MainWindow::DocumentSection::updateEditorHeader()
     }
     if (!owner_.hasActiveDifficulty()) {
         if (state_.activeOutlineKey_ == QLatin1String("latency")) {
-            ui_.editorContextLabel_->setText(UiText::isChineseUi()
-                ? QStringLiteral("延迟设置")
-                : QStringLiteral("Latency Settings"));
+            ui_.editorContextLabel_->setText(UiText::text(QStringLiteral("document.latency_settings")));
             ui_.editorContextLabel_->setFont(uiAccentFont(12, QFont::DemiBold));
         } else if (state_.activeOutlineKey_ == QLatin1String("export")) {
-            ui_.editorContextLabel_->setText(uiText("editor.export", "Export"));
+            ui_.editorContextLabel_->setText(UiText::text(QStringLiteral("editor.export")));
             ui_.editorContextLabel_->setFont(uiAccentFont(12, QFont::DemiBold));
         } else if (state_.document_.difficultyIds().isEmpty() && state_.activeOutlineKey_ == QLatin1String("welcome")) {
-            ui_.editorContextLabel_->setText(uiText("editor.welcome", "Welcome to MiaCode!"));
+            ui_.editorContextLabel_->setText(UiText::text(QStringLiteral("editor.welcome")));
             ui_.editorContextLabel_->setFont(uiAccentFont(15, QFont::DemiBold));
         } else {
-            ui_.editorContextLabel_->setText(uiText("editor.metadata", "Metadata"));
+            ui_.editorContextLabel_->setText(UiText::text(QStringLiteral("editor.metadata")));
             ui_.editorContextLabel_->setFont(uiAccentFont(12, QFont::DemiBold));
         }
         ui_.editorContextLabel_->setStyleSheet(QString());
@@ -250,18 +248,12 @@ void MainWindow::DocumentSection::updateEditorHeaderLayoutMode()
     }
 
     const auto [line, col] = currentCursorLineCol();
-    const QString cursorText = UiText::isChineseUi()
-        ? QStringLiteral("%1行 %2列").arg(line).arg(col)
-        : QStringLiteral("Ln %1, Col %2").arg(line).arg(col);
+    const QString cursorText = UiText::text(QStringLiteral("document.ln_1_col_2")).arg(line).arg(col);
     ui_.editorCursorLabel_->setText(cursorText);
     ui_.editorCursorLabel_->setFixedWidth(QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(cursorText) + 10);
     ui_.editorCursorLabel_->setVisible(true);
-    const QString correctedCursorText = UiText::isChineseUi()
-        ? QStringLiteral("%1行 %2列").arg(line).arg(col)
-        : QStringLiteral("Ln %1, Col %2").arg(line).arg(col);
-    const QString correctedCursorWidthTemplate = UiText::isChineseUi()
-        ? QStringLiteral("9999行 9999列")
-        : QStringLiteral("Ln 9999, Col 9999");
+    const QString correctedCursorText = UiText::text(QStringLiteral("document.ln_1_col_2")).arg(line).arg(col);
+    const QString correctedCursorWidthTemplate = UiText::text(QStringLiteral("document.ln_9999_col_9999"));
     ui_.editorCursorLabel_->setText(correctedCursorText);
     ui_.editorCursorLabel_->setFixedWidth(
         QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(correctedCursorWidthTemplate) + 10);
@@ -426,10 +418,8 @@ bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId)
         const QMessageBox::StandardButton choice = UiDialogs::showMessageBox(
             QMessageBox::Question,
             &owner_,
-            UiText::isChineseUi() ? QStringLiteral("删除难度") : QStringLiteral("Delete Difficulty"),
-            UiText::isChineseUi()
-                ? QStringLiteral("确定删除 %1 吗？该难度的等级、谱师与谱面内容将一并移除。").arg(difficultyName)
-                : QStringLiteral("Delete %1?").arg(difficultyName),
+            UiText::text(QStringLiteral("document.delete_difficulty")),
+            UiText::text(QStringLiteral("document.delete_1")).arg(difficultyName),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No
         );
@@ -491,15 +481,11 @@ bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId)
     updateEditorStatus();
     updateDirtyState();
     if (state_.currentFilePath_.isEmpty()) {
-        owner_.statusBar()->showMessage(UiText::isChineseUi()
-            ? QStringLiteral("已删除 %1。").arg(difficultyName)
-            : QStringLiteral("Deleted %1.").arg(difficultyName));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("document.deleted_1")).arg(difficultyName));
         return true;
     }
     if (!saveToPath(state_.currentFilePath_)) {
-        owner_.statusBar()->showMessage(UiText::isChineseUi()
-            ? QStringLiteral("已删除 %1，更改尚未保存。").arg(difficultyName)
-            : QStringLiteral("Deleted %1. Changes are still unsaved.").arg(difficultyName));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("document.deleted_1_changes_are_still")).arg(difficultyName));
     }
     return true;
 }
@@ -579,7 +565,7 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
         restoreBookmarkLine = currentItem->data(kOutlineItemLineRole).toInt();
     }
     ui_.outlineList_->clear();
-    const QString metadataLabel = uiText("sidebar.metadata", "Metadata");
+    const QString metadataLabel = UiText::text(QStringLiteral("sidebar.metadata"));
     auto* metadataItem = new QListWidgetItem(
         owner_.style()->standardIcon(QStyle::SP_FileDialogDetailedView),
         metadataLabel,
@@ -610,7 +596,7 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
         // Abbreviated to "+ Add Diff." in English so the label fits the
         // narrow sidebar list-item column without truncation. Chinese
         // version "添加难度" already fits.
-        const QString addDifficultyLabel = uiText("sidebar.add_difficulty", "+ Add Diff.");
+        const QString addDifficultyLabel = UiText::text(QStringLiteral("sidebar.add_difficulty"));
         auto* addItem = new QListWidgetItem(
             owner_.style()->standardIcon(QStyle::SP_FileDialogNewFolder),
             addDifficultyLabel,
@@ -666,9 +652,7 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
         difficultyItem->setSizeHint(QSize(1, 30));
         difficultyItem->setToolTip(bookmarks.isEmpty()
             ? difficultyLabel
-            : (UiText::isChineseUi()
-                  ? QStringLiteral("%1 · 注释书签").arg(difficultyLabel)
-                  : QStringLiteral("%1 · comment bookmarks").arg(difficultyLabel)));
+            : UiText::text(QStringLiteral("document.1_comment_bookmarks")).arg(difficultyLabel));
         if (id == state_.activeDifficultyId_) {
             selectedItem = difficultyItem;
         }
@@ -683,11 +667,9 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
 
         for (const MainWindow::EditorBookmark& bookmark : bookmarks) {
             const QString title = bookmark.title.trimmed().isEmpty()
-                ? (UiText::isChineseUi() ? QStringLiteral("未命名书签") : QStringLiteral("Untitled Bookmark"))
+                ? UiText::text(QStringLiteral("document.untitled_bookmark"))
                 : bookmark.title.trimmed();
-            const QString tooltip = UiText::isChineseUi()
-                ? QStringLiteral("%1\n第 %2 行 · 双击重命名").arg(title).arg(bookmark.line)
-                : QStringLiteral("%1\nLine %2 · double-click to rename").arg(title).arg(bookmark.line);
+            const QString tooltip = UiText::text(QStringLiteral("document.1_line_2_double_click")).arg(title).arg(bookmark.line);
             // Item text = the bare name (QListWidgetItem aliases EditRole to
             // DisplayRole, so the inline editor edits exactly the name); the
             // delegate paints the indent + line badge from the data roles.
@@ -710,7 +692,7 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     if (!ids.isEmpty()) {
         addSectionSpacer();
     }
-    const QString exportLabel = uiText("sidebar.export", "Export");
+    const QString exportLabel = UiText::text(QStringLiteral("sidebar.export"));
     auto* exportItem = new QListWidgetItem(
         makeExportAccessIcon(UiTheme::colors().iconPrimary),
         exportLabel,
@@ -719,20 +701,16 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     exportItem->setData(Qt::UserRole, "export");
     exportItem->setData(kOutlineItemActiveRole, state_.activeOutlineKey_ == QLatin1String("export"));
     exportItem->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("打开导出页：导出视频 / 导出封面 / 批量导出 / 打包ZIP")
-            : QStringLiteral("Open the Export page: video / cover / batch / ZIP")
+        UiText::text(QStringLiteral("document.open_the_export_page_video"))
     );
     auto* toolboxItem = new QListWidgetItem(
         makeToolboxAccessIcon(UiTheme::colors().iconPrimary, QColor(QStringLiteral("#E6B84A"))),
-        UiText::isChineseUi() ? QStringLiteral("工具箱") : QStringLiteral("Toolbox"),
+        UiText::text(QStringLiteral("document.toolbox")),
         ui_.outlineList_
     );
     toolboxItem->setData(Qt::UserRole, "toolbox");
     toolboxItem->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("打开工具箱：无理检测 / 谱面整理 / 官谱镜像站")
-            : QStringLiteral("Open toolbox: Muri Check / Format Chart / Official Chart Mirror")
+        UiText::text(QStringLiteral("document.open_toolbox_muri_check_format"))
     );
     if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
         selectedItem = metadataItem;
@@ -806,9 +784,7 @@ void MainWindow::DocumentSection::populateMetadataPage()
         }
         const QString offsetRaw = state_.document_.first.trimmed();
         const QString offsetText = offsetRaw.isEmpty() ? QStringLiteral("0") : offsetRaw;
-        ui_.latencyEntrySummaryLabel_->setText(UiText::isChineseUi()
-            ? QStringLiteral("BPM %1　·　偏移 %2 s").arg(bpmText, offsetText)
-            : QStringLiteral("BPM %1  ·  Offset %2 s").arg(bpmText, offsetText));
+        ui_.latencyEntrySummaryLabel_->setText(UiText::text(QStringLiteral("document.bpm_1_offset_2_s")).arg(bpmText, offsetText));
     }
     updateMetadataPageMode();
     updateEditorHeader();

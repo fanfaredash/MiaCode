@@ -62,11 +62,11 @@ QString MainWindow::bottomTabsFallbackLabel(BottomTabsTabId tabId) const
 {
     switch (tabId) {
     case BottomTabsTabId::Timeline:
-        return UiText::isChineseUi() ? QStringLiteral("时间轴") : QStringLiteral("Timeline");
+        return UiText::text(QStringLiteral("window.timeline"));
     case BottomTabsTabId::Validation:
-        return UiText::isChineseUi() ? QStringLiteral("语法") : QStringLiteral("Syntax");
+        return UiText::text(QStringLiteral("window.syntax"));
     case BottomTabsTabId::Muri:
-        return UiText::isChineseUi() ? QStringLiteral("无理") : QStringLiteral("Muri");
+        return UiText::text(QStringLiteral("window.muri"));
     case BottomTabsTabId::Unknown:
         break;
     }

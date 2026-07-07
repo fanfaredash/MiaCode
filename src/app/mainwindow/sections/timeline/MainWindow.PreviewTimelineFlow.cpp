@@ -966,7 +966,7 @@ void MainWindow::TimelineSection::requestTimelineSlowRefresh()
     state_.pendingTimelineSlowRefresh_.chartText = activeChartText();
     state_.pendingTimelineSlowRefresh_.firstSeconds = parsedFirstSeconds();
     state_.pendingTimelineSlowRefresh_.timingMetadata = currentTimingMetadata();
-    state_.pendingTimelineSlowRefresh_.chineseUi = UiText::isChineseUi();
+    state_.pendingTimelineSlowRefresh_.validationLocale = uiValidationLocale();
     state_.timelineSlowRequestedRevision_ = state_.pendingTimelineSlowRefresh_.revision;
     if (state_.pendingPreviewPlaybackStart_) {
         state_.pendingPreviewPlaybackRevision_ = state_.timelineRevision_;
