@@ -927,6 +927,8 @@ const QHash<QString, QString>& enMap()
         {"cover.zoom_canvas_out", "Zoom canvas out"},
         {"cover.zoom_canvas_out_ctrl", "Zoom canvas out (Ctrl+-)"},
 
+        {"dialogs.open_folder", "Open Folder"},
+
         {"export.export_as_zip", "Export as ZIP"},
         {"export.exported_to_1_2_file", "Exported to:\n%1\n\n%2 file(s) included:\n%3"},
         {"export.packaging_1_2_3", "Packaging %1/%2\n%3"},
@@ -1755,6 +1757,8 @@ const QHash<QString, QString>& zhMap()
         {"cover.zoom_canvas_out", "缩小画布视图"},
         {"cover.zoom_canvas_out_ctrl", "缩小画布视图（Ctrl+-）"},
 
+        {"dialogs.open_folder", "打开文件夹"},
+
         {"export.export_as_zip", "导出为ZIP"},
         {"export.exported_to_1_2_file", "已导出到：\n%1\n\n包含 %2 个文件：\n%3"},
         {"export.packaging_1_2_3", "正在打包 %1/%2\n%3"},
@@ -2575,6 +2579,8 @@ const QHash<QString, QString>& jaMap()
         {"cover.zoom_canvas_in_ctrl", "キャンバスを拡大（Ctrl++）"},
         {"cover.zoom_canvas_out", "キャンバスを縮小"},
         {"cover.zoom_canvas_out_ctrl", "キャンバスを縮小（Ctrl+-）"},
+
+        {"dialogs.open_folder", "フォルダーを開く"},
 
         {"export.export_as_zip", "ZIP で出力"},
         {"export.exported_to_1_2_file", "出力先：\n%1\n\n%2 個のファイルを含みます：\n%3"},
