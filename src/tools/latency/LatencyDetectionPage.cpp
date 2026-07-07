@@ -248,7 +248,7 @@ void LatencyDetectionPage::buildUi()
     // row lets every parameter row stay the same shape: label / spin / detect /
     // result.
     auto* mediaToolsButton = new QPushButton(
-        localizedText(QStringLiteral("音频/视频处理"), QStringLiteral("Audio/Video Processing")), backBar);
+        UiText::text(QStringLiteral("media_tools.audio_video_processing")), backBar);
     mediaToolsButton_ = mediaToolsButton;
     mediaToolsButton->setObjectName(QStringLiteral("LatencyMediaToolsButton"));
     mediaToolsButton->setIcon(

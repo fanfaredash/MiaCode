@@ -363,22 +363,22 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     editMenu->addSeparator();
 
     owner_.prependTrackSilenceAction_ = new QAction(
-        UiText::localized(QStringLiteral("Prepend Track Silence..."), QStringLiteral("音频开头静音处理")),
+        UiText::text(QStringLiteral("media_tools.prepend_track_silence_action")),
         &owner_
     );
     connect(owner_.prependTrackSilenceAction_, &QAction::triggered, &owner_, &MainWindow::onPrependTrackSilence);
     owner_.prependPvBlackAction_ = new QAction(
-        UiText::localized(QStringLiteral("Prepend PV Black Screen..."), QStringLiteral("视频开头黑幕处理")),
+        UiText::text(QStringLiteral("media_tools.prepend_pv_black_screen_action")),
         &owner_
     );
     connect(owner_.prependPvBlackAction_, &QAction::triggered, &owner_, &MainWindow::onPrependPvBlack);
     owner_.compressBackgroundVideoAction_ = new QAction(
-        UiText::localized(QStringLiteral("Compress Video..."), QStringLiteral("视频压缩")),
+        UiText::text(QStringLiteral("media_tools.compress_video_action")),
         &owner_
     );
     connect(owner_.compressBackgroundVideoAction_, &QAction::triggered, &owner_, &MainWindow::onCompressBackgroundVideo);
     owner_.convertTrackTo44100HzAction_ = new QAction(
-        UiText::localized(QStringLiteral("Sample Rate..."), QStringLiteral("采样率转换")),
+        UiText::text(QStringLiteral("media_tools.sample_rate_action")),
         &owner_
     );
     connect(owner_.convertTrackTo44100HzAction_, &QAction::triggered, &owner_, &MainWindow::onConvertTrackTo44100Hz);
