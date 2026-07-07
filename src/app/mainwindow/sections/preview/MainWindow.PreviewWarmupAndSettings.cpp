@@ -564,10 +564,10 @@ QString MainWindow::PreviewSection::previewSkinDisplayName(const QString& direct
 {
     const QString normalized = normalizePreviewSkinDirectoryName(directoryName);
     if (normalized.compare(standardPreviewSkinDirectoryName(), Qt::CaseInsensitive) == 0) {
-        return uiText("dialog.render_settings.video.skin.standard", "Standard");
+        return UiText::text(QStringLiteral("dialog.render_settings.video.skin.standard"));
     }
     if (normalized.compare(dxPreviewSkinDirectoryName(), Qt::CaseInsensitive) == 0) {
-        return uiText("dialog.render_settings.video.skin.dx", "DX");
+        return UiText::text(QStringLiteral("dialog.render_settings.video.skin.dx"));
     }
     return normalized;
 }
