@@ -761,18 +761,18 @@ void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, i
     };
 
     addToggleWidget(
-        UiText::localized(QStringLiteral("View Lock"), QStringLiteral("光标居中")),
+        UiText::text(QStringLiteral("shell.view_lock")),
         bridge->viewportLockEnabled(),
         &QuickShellController::timelineViewportLockToggled);
     // Timeline Sync sits above Follow Code so the bottom-most menu
     // item matches the inline tab-strip chip (which now shows Follow
     // Code) — visually the two anchors are at the same Y on screen.
     addToggleWidget(
-        UiText::localized(QStringLiteral("Timeline Sync"), QStringLiteral("时轴同步")),
+        UiText::text(QStringLiteral("shell.timeline_sync")),
         bridge->timelineSyncEnabled(),
         &QuickShellController::timelineSyncToggled);
     addToggleWidget(
-        UiText::localized(QStringLiteral("Follow Code"), QStringLiteral("代码跟随")),
+        UiText::text(QStringLiteral("shell.follow_code")),
         bridge->followPreviewEnabled(),
         &QuickShellController::timelineFollowPreviewToggled);
 
