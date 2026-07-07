@@ -27,7 +27,9 @@ public:
         const TimelineNoteMarker& marker,
         const QString& markerKey,
         const QString& detail,
-        const DiagnosticAnchor& anchor = DiagnosticAnchor());
+        const DiagnosticAnchor& anchor = DiagnosticAnchor(),
+        MuriDetailKind detailKind = MuriDetailKind::None,
+        const MuriDetailArgs& detailArgs = MuriDetailArgs());
 
     // Simple-note-anchored diagnostic (tap-on-slide / slide-head-tap / overlap).
     void addSimpleNoteDiagnostic(
@@ -36,7 +38,9 @@ public:
         double second,
         const JudgeableSimpleNote& note,
         const QString& detail,
-        const DiagnosticAnchor& anchor = DiagnosticAnchor());
+        const DiagnosticAnchor& anchor = DiagnosticAnchor(),
+        MuriDetailKind detailKind = MuriDetailKind::None,
+        const MuriDetailArgs& detailArgs = MuriDetailArgs());
 
     // Judge-sprite events. The simple-note variant is a no-op unless the note was
     // judged bad on a real pad; the slide variant returns false for unusable lanes.

@@ -60,5 +60,11 @@ QString formatSlideTooFastDetail(
     const MarkerMuriState& state,
     const QHash<QString, QString>& markerConfigLabels,
     const QHash<QString, QString>& syntheticSlideHeadOwnerKeys);
+MuriDetailArgs slideTooFastDetailArgs(
+    const TimelineNoteMarker& marker,
+    const MarkerMuriState& state,
+    const QHash<QString, QString>& markerConfigLabels,
+    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys,
+    MuriDetailKind* detailKind);
 
 }  // namespace miacode::muri::detail

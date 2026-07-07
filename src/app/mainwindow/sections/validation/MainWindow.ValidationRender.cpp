@@ -42,6 +42,8 @@ MuriAnalysisReport muriPromptReportForTimelineDots(
         diagnostic.line = entry.line;
         diagnostic.col = entry.col;
         diagnostic.detail = entry.rawDetail;
+        diagnostic.detailKind = entry.detailKind;
+        diagnostic.detailArgs = entry.detailArgs;
         promptReport.diagnostics.append(diagnostic);
     }
     promptReport.sourceSignature = alignedReport.sourceSignature;

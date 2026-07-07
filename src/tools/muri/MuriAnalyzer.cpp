@@ -10,6 +10,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include "SimaiNativeParser.h"
 #include "timeline/TimelineData.h"
 #include "common/MuriConfig.h"
 #include "tools/muri/MuriAnalyzerGeometry.h"
@@ -1261,22 +1262,27 @@ MuriAnalysisReport MuriAnalyzer::analyze(
             applyRuntimeJudgeResultToState(runtimeResult, &state);
             if (runtimeResult.valid) {
                 if (runtimeResult.judgeBad) {
+                    MuriDetailKind detailKind = MuriDetailKind::None;
+                    const MuriDetailArgs detailArgs = slideTooFastDetailArgs(
+                        marker,
+                        state,
+                        markerConfigLabels,
+                        syntheticSlideHeadOwnerKeys,
+                        &detailKind);
                     collector.addDiagnostic(
                         MuriKind::SlideTooFast,
                         MuriAlertLevel::Muri,
                         runtimeResult.judgeSecond,
                         marker,
                         markerKey,
-                        formatSlideTooFastDetail(
-                            marker,
-                            state,
-                            markerConfigLabels,
-                            syntheticSlideHeadOwnerKeys),
+                        renderMuriDetail(detailKind, detailArgs, SimaiNativeValidationLocale::English),
                         diagnosticAnchorForSlideJudge(
                             marker,
                             state,
                             markerRefs,
-                            syntheticSlideHeadOwnerKeys));
+                            syntheticSlideHeadOwnerKeys),
+                        detailKind,
+                        detailArgs);
                     collector.appendSlideJudgeSpriteEvent(marker, runtimeResult.judgeSecond);
                 }
             } else if (!state.slideSegments.isEmpty()) {
@@ -1292,23 +1298,27 @@ MuriAnalysisReport MuriAnalyzer::analyze(
                     (1.0 - criticalProportion) * lastDurationSecond
                 );
                 if (slideJudgeIsBad(lastSegment.completedSecond, lastSegment.criticalSecond, criticalDeltaSecond)) {
+                    MuriDetailKind detailKind = MuriDetailKind::None;
+                    const MuriDetailArgs detailArgs = slideTooFastDetailArgs(
+                        marker,
+                        state,
+                        markerConfigLabels,
+                        syntheticSlideHeadOwnerKeys,
+                        &detailKind);
                     collector.addDiagnostic(
                         MuriKind::SlideTooFast,
                         MuriAlertLevel::Muri,
                         lastSegment.completedSecond,
                         marker,
                         markerKey,
-                        formatSlideTooFastDetail(
-                            marker,
-                            state,
-                            markerConfigLabels,
-                            syntheticSlideHeadOwnerKeys),
+                        renderMuriDetail(detailKind, detailArgs, SimaiNativeValidationLocale::English),
                         diagnosticAnchorForSlideJudge(
                             marker,
                             state,
                             markerRefs,
-                            syntheticSlideHeadOwnerKeys)
-                    );
+                            syntheticSlideHeadOwnerKeys),
+                        detailKind,
+                        detailArgs);
                     collector.appendSlideJudgeSpriteEvent(marker, lastSegment.completedSecond);
                 }
             }
@@ -1322,22 +1332,27 @@ MuriAnalysisReport MuriAnalyzer::analyze(
             applyRuntimeJudgeResultToState(runtimeResult, &state);
             if (runtimeResult.valid) {
                 if (runtimeResult.judgeBad) {
+                    MuriDetailKind detailKind = MuriDetailKind::None;
+                    const MuriDetailArgs detailArgs = slideTooFastDetailArgs(
+                        marker,
+                        state,
+                        markerConfigLabels,
+                        syntheticSlideHeadOwnerKeys,
+                        &detailKind);
                     collector.addDiagnostic(
                         MuriKind::SlideTooFast,
                         MuriAlertLevel::Muri,
                         runtimeResult.judgeSecond,
                         marker,
                         markerKey,
-                        formatSlideTooFastDetail(
-                            marker,
-                            state,
-                            markerConfigLabels,
-                            syntheticSlideHeadOwnerKeys),
+                        renderMuriDetail(detailKind, detailArgs, SimaiNativeValidationLocale::English),
                         diagnosticAnchorForSlideJudge(
                             marker,
                             state,
                             markerRefs,
-                            syntheticSlideHeadOwnerKeys));
+                            syntheticSlideHeadOwnerKeys),
+                        detailKind,
+                        detailArgs);
                     collector.appendSlideJudgeSpriteEvent(marker, runtimeResult.judgeSecond);
                 }
             } else {
@@ -1346,23 +1361,27 @@ MuriAnalysisReport MuriAnalyzer::analyze(
                     (1.0 - marker.wifiCriticalProportion) * durationSecond
                 );
                 if (wifiJudgeIsBad(state.wifiCompletedSecond, state.wifiCriticalSecond, criticalDeltaSecond)) {
+                    MuriDetailKind detailKind = MuriDetailKind::None;
+                    const MuriDetailArgs detailArgs = slideTooFastDetailArgs(
+                        marker,
+                        state,
+                        markerConfigLabels,
+                        syntheticSlideHeadOwnerKeys,
+                        &detailKind);
                     collector.addDiagnostic(
                         MuriKind::SlideTooFast,
                         MuriAlertLevel::Muri,
                         state.wifiCompletedSecond,
                         marker,
                         markerKey,
-                        formatSlideTooFastDetail(
-                            marker,
-                            state,
-                            markerConfigLabels,
-                            syntheticSlideHeadOwnerKeys),
+                        renderMuriDetail(detailKind, detailArgs, SimaiNativeValidationLocale::English),
                         diagnosticAnchorForSlideJudge(
                             marker,
                             state,
                             markerRefs,
-                            syntheticSlideHeadOwnerKeys)
-                    );
+                            syntheticSlideHeadOwnerKeys),
+                        detailKind,
+                        detailArgs);
                     collector.appendSlideJudgeSpriteEvent(marker, state.wifiCompletedSecond);
                 }
             }

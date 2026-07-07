@@ -8,6 +8,7 @@
 #include <QStringList>
 #include <QVector>
 
+#include "SimaiNativeParser.h"
 #include "timeline/TimelineData.h"
 #include "common/MuriConfig.h"
 #include "common/MuriTypes.h"  // makeMarkerAnalysisKey
@@ -454,6 +455,27 @@ MuriAlertLevel tapOnSlideAlertLevel(double gapSecond, double thresholdSecond)
     return MuriAlertLevel::Muri;
 }
 
+MuriDetailKind slideHeadTapDetailKind(bool hasTapOnSlideHead)
+{
+    return hasTapOnSlideHead
+        ? MuriDetailKind::SlideHeadStartEarlyJudge
+        : MuriDetailKind::SlideHeadJumpStartEarlyJudge;
+}
+
+MuriDetailArgs simpleGapDetailArgs(
+    MuriAlertLevel alertLevel,
+    const QString& left,
+    const QString& right,
+    double gapMs)
+{
+    MuriDetailArgs args;
+    args.left = left;
+    args.right = right;
+    args.gapText = QStringLiteral("%1 ms").arg(QString::number(gapMs, 'f', 1));
+    args.alert = alertLevel;
+    return args;
+}
+
 QString slideHeadTapDetailText(
     bool hasTapOnSlideHead,
     MuriAlertLevel alertLevel,
@@ -461,19 +483,10 @@ QString slideHeadTapDetailText(
     const QString& affectedTarget,
     double gapMs)
 {
-    const QString gapText = QString::number(gapMs, 'f', 1);
-    if (hasTapOnSlideHead) {
-        return alertLevel == MuriAlertLevel::Warning
-            ? QStringLiteral("%1 start may early-judge %2, gap %3 ms.")
-                  .arg(causeConfig, affectedTarget, gapText)
-            : QStringLiteral("%1 start will early-judge %2, gap %3 ms.")
-                  .arg(causeConfig, affectedTarget, gapText);
-    }
-    return alertLevel == MuriAlertLevel::Warning
-        ? QStringLiteral("%1 jump-start may early-judge %2, gap %3 ms.")
-              .arg(causeConfig, affectedTarget, gapText)
-        : QStringLiteral("%1 jump-start will early-judge %2, gap %3 ms.")
-              .arg(causeConfig, affectedTarget, gapText);
+    return renderMuriDetail(
+        slideHeadTapDetailKind(hasTapOnSlideHead),
+        simpleGapDetailArgs(alertLevel, causeConfig, affectedTarget, gapMs),
+        SimaiNativeValidationLocale::English);
 }
 
 QString tapOnSlideDetailText(
@@ -482,11 +495,10 @@ QString tapOnSlideDetailText(
     const QString& affectedTarget,
     double gapMs)
 {
-    return alertLevel == MuriAlertLevel::Warning
-        ? QStringLiteral("%1 trajectory may collide with %2, gap %3 ms.")
-              .arg(causeConfig, affectedTarget, QString::number(gapMs, 'f', 1))
-        : QStringLiteral("%1 trajectory will collide with %2, gap %3 ms.")
-              .arg(causeConfig, affectedTarget, QString::number(gapMs, 'f', 1));
+    return renderMuriDetail(
+        MuriDetailKind::TapOnSlideCollide,
+        simpleGapDetailArgs(alertLevel, causeConfig, affectedTarget, gapMs),
+        SimaiNativeValidationLocale::English);
 }
 
 }  // namespace miacode::muri::detail
