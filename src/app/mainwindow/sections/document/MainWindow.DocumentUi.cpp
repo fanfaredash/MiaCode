@@ -757,6 +757,12 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     if (ui_.outlineList_->verticalScrollBar() != nullptr) {
         ui_.outlineList_->verticalScrollBar()->setValue(restoreScrollValue);
     }
+    // The rebuild can move the Export row (e.g. the previously active
+    // difficulty's auto-expanded bookmark group collapses when the export
+    // page takes over) — re-anchor the busy spinner to the row's new rect.
+    if (ui_.outlineBusySpinner_ != nullptr && ui_.outlineBusySpinner_->isActive()) {
+        positionOutlineExportBusySpinner();
+    }
     // The export page derives its difficulty badges + card availability from
     // the same document state this sidebar reflects — refresh it on the same
     // triggers (document load, difficulty add/delete, page switches). Cheap.
@@ -979,10 +985,10 @@ bool MainWindow::DocumentSection::switchToExportField()
     return true;
 }
 
-void MainWindow::DocumentSection::showOutlineExportBusySpinner()
+bool MainWindow::DocumentSection::positionOutlineExportBusySpinner()
 {
     if (ui_.outlineBusySpinner_ == nullptr || ui_.outlineList_ == nullptr) {
-        return;
+        return false;
     }
     QListWidgetItem* exportItem = nullptr;
     for (int i = 0; i < ui_.outlineList_->count(); ++i) {
@@ -993,16 +999,25 @@ void MainWindow::DocumentSection::showOutlineExportBusySpinner()
         }
     }
     if (exportItem == nullptr) {
-        return;
+        return false;
     }
     const QRect rowRect = ui_.outlineList_->visualItemRect(exportItem);
     if (!rowRect.isValid() || rowRect.isEmpty()) {
-        return;
+        return false;
     }
     auto* spinner = ui_.outlineBusySpinner_;
     const int x = rowRect.right() - spinner->width() - 8;
     const int y = rowRect.top() + (rowRect.height() - spinner->height()) / 2;
     spinner->move(x, y);
+    return true;
+}
+
+void MainWindow::DocumentSection::showOutlineExportBusySpinner()
+{
+    if (!positionOutlineExportBusySpinner()) {
+        return;
+    }
+    auto* spinner = ui_.outlineBusySpinner_;
     spinner->setColor(UiTheme::colors().iconPrimary);
     spinner->start();
     // Paint the first frame synchronously so the spinner is on screen before the

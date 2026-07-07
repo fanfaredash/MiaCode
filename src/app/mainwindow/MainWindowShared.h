@@ -241,22 +241,28 @@ public:
     }
 
 private:
-    // One selection language for every non-bookmark level: the persistent
-    // "you are here" row gets a borderless fill plus a 3px accent bar on its
-    // left edge; transient list selection and hover share a weaker flat fill.
-    // Bookmark rows only use the transient fill.
+    // One selection language for every level: the persistent "you are here"
+    // row gets a borderless fill plus a 3px accent bar on its left edge;
+    // hovering any other row shows a weaker flat fill. The QListWidget
+    // selection itself is deliberately NOT painted — "current" is expressed
+    // by the active marker (pages/difficulties) or not at all (bookmark jumps
+    // are one-shot actions).
     void paintRowFill(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const
     {
         const UiTheme::Colors& colors = UiTheme::colors();
         const QColor activeFill = colors.dark ? QColor("#314158") : QColor("#E7F0FD");
         const QColor weakFill = colors.dark ? QColor("#2A3442") : QColor("#F3F7FD");
-        const bool activeMarker = index.data(kOutlineItemActiveRole).toBool()
-            && index.data(kOutlineItemKindRole).toString() != QLatin1String("bookmark");
+        const bool isBookmark = index.data(kOutlineItemKindRole).toString() == QLatin1String("bookmark");
+        const bool activeMarker = index.data(kOutlineItemActiveRole).toBool() && !isBookmark;
 
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing, true);
         painter->setPen(Qt::NoPen);
-        const QRect fillRect = option.rect.adjusted(1, 1, -1, -1);
+        QRect fillRect = option.rect.adjusted(1, 1, -1, -1);
+        if (isBookmark) {
+            // Keep the hover fill clear of the tree indent guide.
+            fillRect.setLeft(option.rect.left() + kDifficultyFoldGlyphX + 5);
+        }
         if (activeMarker) {
             QColor fill = activeFill;
             if (option.state.testFlag(QStyle::State_MouseOver)) {
@@ -267,8 +273,7 @@ private:
             painter->setBrush(colors.accent);
             const QRect barRect(fillRect.left(), fillRect.top() + 5, 3, fillRect.height() - 10);
             painter->drawRoundedRect(barRect, 1.5, 1.5);
-        } else if (option.state.testFlag(QStyle::State_Selected)
-                   || option.state.testFlag(QStyle::State_MouseOver)) {
+        } else if (option.state.testFlag(QStyle::State_MouseOver)) {
             painter->setBrush(weakFill);
             painter->drawRoundedRect(fillRect, 6.0, 6.0);
         }
@@ -317,18 +322,15 @@ private:
 
     QColor bookmarkEditorBackgroundColor(const QStyleOptionViewItem& option) const
     {
-        const UiTheme::Colors& colors = UiTheme::colors();
-        if (option.state.testFlag(QStyle::State_Selected)
-            || option.state.testFlag(QStyle::State_MouseOver)) {
-            return colors.dark ? QColor("#2A3442") : QColor("#F3F7FD");
-        }
-        return colors.dark ? QColor("#1E2733") : QColor("#FFFFFF");
+        // Selection is not painted anymore, so the editor sits on the plain
+        // list background.
+        Q_UNUSED(option);
+        return UiTheme::colors().dark ? QColor("#1E2733") : QColor("#FFFFFF");
     }
 
     void paintBookmarkRow(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const
     {
         const UiTheme::Colors& colors = UiTheme::colors();
-        const bool selected = option.state.testFlag(QStyle::State_Selected);
         const int listWidth = option.widget != nullptr ? option.widget->width() : option.rect.width();
         const bool iconOnly = listWidth > 0 && listWidth < kIconOnlyThreshold;
 
@@ -348,24 +350,12 @@ private:
 
         painter->setRenderHint(QPainter::Antialiasing, true);
 
-        if (selected) {
-            const QRect fillRect = option.rect.adjusted(1, 1, -1, -1);
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(colors.accent);
-            const QRect barRect(fillRect.left(), fillRect.top() + 5, 3, fillRect.height() - 10);
-            painter->drawRoundedRect(barRect, 1.5, 1.5);
-        }
-
         // Line-number badge: neutral and compact; bookmark jumps are one-shot
-        // actions, so the badge does not persist as a current-position marker.
+        // actions, so no selected/pressed treatment lingers on the row.
         const QRect badgeRect = bookmarkBadgeRect(option, index, iconOnly);
         QColor badgeBg = colors.textSecondary;
         badgeBg.setAlpha(colors.dark ? 40 : 34);
-        QColor badgeFg = colors.textSecondary;
-        if (selected) {
-            badgeBg = colors.accent;
-            badgeFg = colors.accentText;
-        }
+        const QColor badgeFg = colors.textSecondary;
         painter->setPen(Qt::NoPen);
         painter->setBrush(badgeBg);
         painter->drawRoundedRect(badgeRect, 3.0, 3.0);
