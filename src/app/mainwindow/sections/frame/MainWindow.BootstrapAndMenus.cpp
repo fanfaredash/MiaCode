@@ -657,7 +657,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.previewVideoSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewVideoSettings);
     previewMenu->addAction(owner_.previewVideoSettingsAction_);
 
-    owner_.skinSettingsAction_ = new QAction(uiText("action.skin_settings", "Skin"), &owner_);
+    owner_.skinSettingsAction_ = new QAction(uiText("action.skin_settings", "Skins"), &owner_);
     connect(owner_.skinSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onSkinSettings);
     previewMenu->addAction(owner_.skinSettingsAction_);
 
