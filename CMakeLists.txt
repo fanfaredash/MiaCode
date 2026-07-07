@@ -1386,7 +1386,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(debug_flag_index_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
-    # Drift guard for the UiText localization tables: built-in en/zh key parity plus
+    # Drift guard for the UiText localization tables: built-in en/zh/ja key parity plus
     # source/resource literal key checks. Reads the tree from disk; repo root
     # injected as a compile definition.
     miacode_add_dev_tool(ui_text_locale_spec TEST

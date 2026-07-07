@@ -2,7 +2,7 @@
 //
 // Two invariants:
 //
-//   1. Built-in enMap and zhMap in UiText.cpp must have identical key sets.
+//   1. Built-in enMap, zhMap, and jaMap in UiText.cpp must have identical key sets.
 //      English is now centralized instead of living only at call-site fallback
 //      strings.
 //
@@ -78,17 +78,31 @@ int main(int argc, char* argv[])
 
     bool ok = true;
 
-    // --- Invariant 1: built-in enMap / zhMap key-set parity. ---------------
+    // --- Invariant 1: built-in enMap / zhMap / jaMap key-set parity. -------
     const QStringList mismatches = UiText::translationKeyMismatches();
     if (!mismatches.isEmpty()) {
         ok = false;
         err << mismatches.size()
-            << " enMap/zhMap key-set mismatch(es) in UiText.cpp:" << Qt::endl;
+            << " enMap/zhMap/jaMap key-set mismatch(es) in UiText.cpp:" << Qt::endl;
         for (const QString& m : mismatches) {
             err << "  - " << m << Qt::endl;
         }
         err << "Fix: add the missing key to each built-in map. External language "
-               "packs are validated through extension manifest diagnostics." << Qt::endl;
+               "packs are still validated through extension manifest diagnostics." << Qt::endl;
+    }
+
+    const bool japaneseAvailable = UiText::isLanguageAvailable(QStringLiteral("ja"));
+    bool hasBuiltInJapanese = false;
+    for (const UiText::LanguageOption& option : UiText::availableLanguageOptions()) {
+        if (option.id == QStringLiteral("ja") && option.builtIn) {
+            hasBuiltInJapanese = true;
+            break;
+        }
+    }
+    if (!japaneseAvailable || !hasBuiltInJapanese) {
+        ok = false;
+        err << "ui_text_locale_spec: built-in Japanese language option 'ja' is missing."
+            << Qt::endl;
     }
 
     // --- Invariant 2: source literal keys exist in the tables. --------------

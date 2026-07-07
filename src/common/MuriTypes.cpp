@@ -1,6 +1,6 @@
 #include "common/MuriTypes.h"
 
-#include "SimaiNativeParser.h"
+#include "core/chart/parser/SimaiNativeParser.h"
 #include "timeline/TimelineData.h"
 
 namespace {
