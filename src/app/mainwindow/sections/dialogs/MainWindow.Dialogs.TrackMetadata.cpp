@@ -53,7 +53,7 @@ QString promptForMetadataMp3(QWidget* parent, const QString& initialDir, const Q
         parent,
         dialogTitle,
         initialDir,
-        UiText::localized(QStringLiteral("MP3 audio (*.mp3);;All files (*.*)"), QStringLiteral("MP3 音频 (*.mp3);;所有文件 (*.*)"))
+        UiText::text(QStringLiteral("track_metadata.mp3_audio_mp3_all_files"))
     );
 }
 
@@ -82,21 +82,19 @@ QString readTrackTagField(
         QMessageBox::information(
             parent,
             dialogTitle,
-            UiText::localized(QStringLiteral("No ID3v2 tag was found in the selected MP3."), QStringLiteral("没能在所选 MP3 中读取到 ID3v2 标签。"))
+            UiText::text(QStringLiteral("track_metadata.no_id3v2_tag_was_found"))
         );
         return QString();
     }
     const QString value = (field == TrackTagField::Title ? tag.title : tag.artist).trimmed();
     if (value.isEmpty()) {
         const QString fieldLabel = (field == TrackTagField::Title)
-            ? UiText::localized(QStringLiteral("title"), QStringLiteral("标题"))
-            : UiText::localized(QStringLiteral("artist"), QStringLiteral("曲师"));
+            ? UiText::text(QStringLiteral("track_metadata.title"))
+            : UiText::text(QStringLiteral("track_metadata.artist"));
         QMessageBox::information(
             parent,
             dialogTitle,
-            UiText::localized(
-                QStringLiteral("The selected MP3's ID3 tag carries no %1."),
-                QStringLiteral("所选 MP3 的 ID3 标签里没有%1信息。"))
+            UiText::text(QStringLiteral("track_metadata.the_selected_mp3_s_id3"))
                 .arg(fieldLabel)
         );
         return QString();
@@ -109,7 +107,7 @@ QString readTrackTagField(
 void MainWindow::DialogsSection::onReadTitleFromTrack()
 {
     MC_OP("MainWindow::DialogsSection::onReadTitleFromTrack");
-    const QString title = UiText::localized(QStringLiteral("Read Title from MP3"), QStringLiteral("从 MP3 读取标题"));
+    const QString title = UiText::text(QStringLiteral("track_metadata.read_title_from_mp3"));
     const QString trackPath = promptForMetadataMp3(
         UiDialogs::effectiveParentWidget(&owner_), resolveCurrentChartDirectory(), title);
     if (trackPath.isEmpty()) {
@@ -126,7 +124,7 @@ void MainWindow::DialogsSection::onReadTitleFromTrack()
     ui_.titleEdit_->setText(value);
     _mc_op_.note(QStringLiteral("track=%1 title=%2").arg(trackPath, value));
     owner_.statusBar()->showMessage(
-        UiText::localized(QStringLiteral("Loaded title from MP3."), QStringLiteral("已从 MP3 读取标题。")),
+        UiText::text(QStringLiteral("track_metadata.loaded_title_from_mp3")),
         6000
     );
 }
@@ -134,7 +132,7 @@ void MainWindow::DialogsSection::onReadTitleFromTrack()
 void MainWindow::DialogsSection::onReadArtistFromTrack()
 {
     MC_OP("MainWindow::DialogsSection::onReadArtistFromTrack");
-    const QString title = UiText::localized(QStringLiteral("Read Artist from MP3"), QStringLiteral("从 MP3 读取曲师"));
+    const QString title = UiText::text(QStringLiteral("track_metadata.read_artist_from_mp3"));
     const QString trackPath = promptForMetadataMp3(
         UiDialogs::effectiveParentWidget(&owner_), resolveCurrentChartDirectory(), title);
     if (trackPath.isEmpty()) {
@@ -148,7 +146,7 @@ void MainWindow::DialogsSection::onReadArtistFromTrack()
     ui_.artistEdit_->setText(value);
     _mc_op_.note(QStringLiteral("track=%1 artist=%2").arg(trackPath, value));
     owner_.statusBar()->showMessage(
-        UiText::localized(QStringLiteral("Loaded artist from MP3."), QStringLiteral("已从 MP3 读取曲师。")),
+        UiText::text(QStringLiteral("track_metadata.loaded_artist_from_mp3")),
         6000
     );
 }
@@ -156,13 +154,13 @@ void MainWindow::DialogsSection::onReadArtistFromTrack()
 void MainWindow::DialogsSection::onExtractBackgroundFromTrack()
 {
     MC_OP("MainWindow::DialogsSection::onExtractBackgroundFromTrack");
-    const QString title = UiText::localized(QStringLiteral("Extract Cover to bg.jpg"), QStringLiteral("提取封面为 bg.jpg"));
+    const QString title = UiText::text(QStringLiteral("track_metadata.extract_cover_to_bg_jpg"));
     const QString chartDirPath = resolveCurrentChartDirectory();
     if (chartDirPath.isEmpty()) {
         QMessageBox::warning(
             UiDialogs::effectiveParentWidget(&owner_),
             title,
-            UiText::localized(QStringLiteral("Open or save a chart file first."), QStringLiteral("请先打开或保存一个谱面文件。"))
+            UiText::text(QStringLiteral("media_tools.open_or_save_a_chart"))
         );
         return;
     }
@@ -177,7 +175,7 @@ void MainWindow::DialogsSection::onExtractBackgroundFromTrack()
         QMessageBox::information(
             UiDialogs::effectiveParentWidget(&owner_),
             title,
-            UiText::localized(QStringLiteral("The selected MP3 has no embedded cover artwork."), QStringLiteral("所选 MP3 中没有内嵌的封面图。"))
+            UiText::text(QStringLiteral("track_metadata.the_selected_mp3_has_no"))
         );
         return;
     }
@@ -192,7 +190,7 @@ void MainWindow::DialogsSection::onExtractBackgroundFromTrack()
         QMessageBox::warning(
             UiDialogs::effectiveParentWidget(&owner_),
             title,
-            UiText::localized(QStringLiteral("Failed to decode embedded cover (MIME=%1)."), QStringLiteral("内嵌封面解码失败（MIME=%1）。")).arg(tag.pictureMimeType)
+            UiText::text(QStringLiteral("track_metadata.failed_to_decode_embedded_cover")).arg(tag.pictureMimeType)
         );
         return;
     }
@@ -203,7 +201,7 @@ void MainWindow::DialogsSection::onExtractBackgroundFromTrack()
         const auto answer = QMessageBox::question(
             UiDialogs::effectiveParentWidget(&owner_),
             title,
-            UiText::localized(QStringLiteral("bg.jpg already exists. Overwrite?"), QStringLiteral("bg.jpg 已经存在，是否覆盖？")),
+            UiText::text(QStringLiteral("track_metadata.bg_jpg_already_exists_overwrite")),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No
         );
@@ -221,7 +219,7 @@ void MainWindow::DialogsSection::onExtractBackgroundFromTrack()
         QMessageBox::critical(
             UiDialogs::effectiveParentWidget(&owner_),
             title,
-            UiText::localized(QStringLiteral("Failed to write bg.jpg."), QStringLiteral("写入 bg.jpg 失败。"))
+            UiText::text(QStringLiteral("track_metadata.failed_to_write_bg_jpg"))
         );
         // Still try to reload — the previous file (if any) is back.
         reloadPreviewMediaAfterFileOperation(false);
@@ -241,12 +239,8 @@ void MainWindow::DialogsSection::onExtractBackgroundFromTrack()
                      .arg(tag.pictureBytes.size()));
     owner_.statusBar()->showMessage(
         existed
-            ? UiText::localized(
-                  QStringLiteral("Overwrote bg.jpg with embedded cover from the selected MP3."),
-                  QStringLiteral("已覆盖 bg.jpg（来源：所选 MP3 内嵌封面）。"))
-            : UiText::localized(
-                  QStringLiteral("Wrote bg.jpg from the selected MP3's embedded cover."),
-                  QStringLiteral("已生成 bg.jpg（来源：所选 MP3 内嵌封面）。")),
+            ? UiText::text(QStringLiteral("track_metadata.overwrote_bg_jpg_with_embedded"))
+            : UiText::text(QStringLiteral("track_metadata.wrote_bg_jpg_from_the")),
         6000
     );
 }
