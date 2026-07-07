@@ -9,6 +9,7 @@ enum class LanguagePreference {
     System,
     English,
     Chinese,
+    Japanese,
 };
 
 enum class ThemePreference {
