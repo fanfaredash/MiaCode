@@ -327,6 +327,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
         selectedIndex = sizeCombo_->count() - 1;
     }
     sizeCombo_->setCurrentIndex(selectedIndex);
+    UiTheme::styleDialogComboBox(sizeCombo_);
     form->addRow(UiText::text(QStringLiteral("cover.size_2")), sizeCombo_);
 
     // Background source.
@@ -337,6 +338,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
                               QStringLiteral("custom"));
     backgroundCombo_->addItem(UiText::text(QStringLiteral("cover.transparent")),
                               QStringLiteral("transparent"));
+    UiTheme::styleDialogComboBox(backgroundCombo_);
     form->addRow(UiText::text(QStringLiteral("cover.background")), backgroundCombo_);
 
     // Custom background path + browse.
@@ -399,6 +401,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
         const int modeIdx = cardModeCombo_->findData(banner_.mode);
         if (modeIdx >= 0) cardModeCombo_->setCurrentIndex(modeIdx);
     }
+    UiTheme::styleDialogComboBox(cardModeCombo_);
     cardForm->addRow(UiText::text(QStringLiteral("cover.chart_type")), cardModeCombo_);
 
     // Card drop shadow.
@@ -419,6 +422,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     textOverflowCombo_->addItem(
         UiText::text(QStringLiteral("cover.keep_size_ellipsis")),
         QStringLiteral("ellipsis"));
+    UiTheme::styleDialogComboBox(textOverflowCombo_);
     cardForm->addRow(UiText::text(QStringLiteral("cover.long_text")), textOverflowCombo_);
 
     controlsColumn->addWidget(cardGroup);

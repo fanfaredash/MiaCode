@@ -715,6 +715,26 @@ void MainWindow::PreferencesSection::onPreferences()
     QString selectedLanguageToken = UiText::preferredLanguageToken();
     const UiText::ThemePreference currentThemePreference = UiText::preferredTheme();
     UiText::ThemePreference selectedThemePreference = currentThemePreference;
+    QList<QPointer<QComboBox>> themedDialogCombos;
+    const auto styleRegisteredDialogCombo = [&themedDialogCombos](QComboBox* combo, int maxVisibleItems = 12) {
+        if (combo == nullptr) {
+            return;
+        }
+        UiTheme::styleDialogComboBox(combo, maxVisibleItems);
+        for (const QPointer<QComboBox>& registered : themedDialogCombos) {
+            if (registered == combo) {
+                return;
+            }
+        }
+        themedDialogCombos.append(combo);
+    };
+    const auto refreshRegisteredDialogCombos = [&themedDialogCombos]() {
+        for (const QPointer<QComboBox>& combo : themedDialogCombos) {
+            if (!combo.isNull()) {
+                UiTheme::styleDialogComboBox(combo.data(), 12);
+            }
+        }
+    };
     const auto languageLabelForToken = [](const QString& token) -> QString {
         const QString normalized = token.trimmed().toLower();
         for (const auto& option : UiText::availableLanguageOptions()) {
@@ -804,6 +824,7 @@ void MainWindow::PreferencesSection::onPreferences()
             UiText::setPreferredTheme(selectedThemePreference);
             owner_.windowSection_->applyUiTheme();
             dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
+            refreshRegisteredDialogCombos();
             owner_.windowSection_->applySystemWindowBackdrop(&dialog);
             owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
         });
@@ -968,7 +989,7 @@ void MainWindow::PreferencesSection::onPreferences()
         lineSpacingIndex = 0;
     }
     lineSpacingCombo->setCurrentIndex(lineSpacingIndex);
-    UiTheme::applyComboBoxPopupLimit(lineSpacingCombo, 12);
+    styleRegisteredDialogCombo(lineSpacingCombo, 12);
     connect(lineSpacingCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
         if (index < 0) {
             return;
@@ -992,7 +1013,7 @@ void MainWindow::PreferencesSection::onPreferences()
     autoCompletionCombo->addItem(UiText::text(QStringLiteral("preferences.on")));
     autoCompletionCombo->addItem(UiText::text(QStringLiteral("preferences.off")));
     autoCompletionCombo->setCurrentIndex(selectedAutoCompletionEnabled ? 0 : 1);
-    UiTheme::applyComboBoxPopupLimit(autoCompletionCombo, 12);
+    styleRegisteredDialogCombo(autoCompletionCombo, 12);
     autoCompletionCombo->setToolTip(
         UiText::text(QStringLiteral("preferences.auto_closes_brackets_suggests_durations"))
     );
@@ -1028,7 +1049,7 @@ void MainWindow::PreferencesSection::onPreferences()
     const int headerTopDisplayIndex =
         headerTopDisplayCombo->findData(static_cast<int>(state_.editorHeaderTopDisplay_));
     headerTopDisplayCombo->setCurrentIndex(qMax(0, headerTopDisplayIndex));
-    UiTheme::applyComboBoxPopupLimit(headerTopDisplayCombo, 12);
+    styleRegisteredDialogCombo(headerTopDisplayCombo, 12);
     headerTopDisplayCombo->setToolTip(
         UiText::text(QStringLiteral("preferences.the_field_next_to_lv"))
     );
@@ -1078,7 +1099,7 @@ void MainWindow::PreferencesSection::onPreferences()
     chineseInputCombo->addItem(
         UiText::text(QStringLiteral("preferences.disable_ime")));
     chineseInputCombo->setCurrentIndex(selectedChineseInputMode);
-    UiTheme::applyComboBoxPopupLimit(chineseInputCombo, 12);
+    styleRegisteredDialogCombo(chineseInputCombo, 12);
     connect(chineseInputCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
         if (index < 0) {
             return;

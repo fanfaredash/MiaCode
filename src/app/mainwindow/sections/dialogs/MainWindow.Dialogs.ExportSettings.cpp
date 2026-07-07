@@ -320,7 +320,7 @@ void MainWindow::DialogsSection::buildSkinSettings(
     const auto createDialogComboBox = [](QWidget* owner) {
         auto* combo = new QComboBox(owner);
         combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        UiTheme::applyComboBoxPopupLimit(combo, 12);
+        UiTheme::styleDialogComboBox(combo, 12);
         return combo;
     };
     const auto makePushButton = [](QWidget* owner, const QString& text) {
@@ -402,7 +402,7 @@ void MainWindow::DialogsSection::buildSkinSettings(
             }
         }
         skinCombo->setCurrentIndex(skinCombo->count() > 0 ? selectedIndex : -1);
-        UiTheme::applyComboBoxPopupLimit(skinCombo, 12);
+        UiTheme::styleDialogComboBox(skinCombo, 12);
     };
     refreshSkinCombo();
     connect(skinCombo, qOverload<int>(&QComboBox::currentIndexChanged), root, [this, skinCombo](int index) {
@@ -506,7 +506,7 @@ void MainWindow::DialogsSection::buildSkinSettings(
             }
         }
         judgeLineCombo->setCurrentIndex(selectedIndex);
-        UiTheme::applyComboBoxPopupLimit(judgeLineCombo, 12);
+        UiTheme::styleDialogComboBox(judgeLineCombo, 12);
     };
     refreshJudgeLineCombo();
     connect(judgeLineCombo, qOverload<int>(&QComboBox::currentIndexChanged), root, [this, judgeLineCombo, kOutlineVariantKind](int index) {

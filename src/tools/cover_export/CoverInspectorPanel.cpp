@@ -257,6 +257,7 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
     frameBgModeCombo_->addItem(UiText::text(QStringLiteral("cover.transparent")),
                                QStringLiteral("transparent"));
     frameBgModeCombo_->setToolTip(UiText::text(QStringLiteral("cover.chart_frame_inner_background")));
+    UiTheme::styleDialogComboBox(frameBgModeCombo_);
     frameForm->addRow(UiText::text(QStringLiteral("cover.inner_bg")), frameBgModeCombo_);
 
     frameBgBrightnessSlider_ = new QSlider(Qt::Horizontal, this);

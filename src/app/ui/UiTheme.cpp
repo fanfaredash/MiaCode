@@ -836,6 +836,17 @@ QString dialogComboBoxStyleSheet()
         .arg(css(c.textPrimary));
 }
 
+void styleDialogComboBox(QComboBox* combo, int maxVisibleItems)
+{
+    if (combo == nullptr) {
+        return;
+    }
+    if (maxVisibleItems > 0) {
+        applyComboBoxPopupLimit(combo, maxVisibleItems);
+    }
+    combo->setStyleSheet(dialogComboBoxStyleSheet());
+}
+
 QString dialogSpinBoxStyleSheet()
 {
     const Colors& c = colors();

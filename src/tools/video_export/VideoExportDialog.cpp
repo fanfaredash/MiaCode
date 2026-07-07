@@ -1471,7 +1471,7 @@ VideoExportDialog::VideoExportDialog(
         UiText::text(QStringLiteral("cover.chart_jacket")), QStringLiteral("jacket"));
     introBackgroundCombo_->addItem(
         UiText::text(QStringLiteral("cover.custom_image")), QStringLiteral("custom"));
-    UiTheme::applyComboBoxPopupLimit(introBackgroundCombo_, 12);
+    UiTheme::styleDialogComboBox(introBackgroundCombo_, 12);
     introBgForm->addRow(UiText::text(QStringLiteral("cover.background")), introBackgroundCombo_);
     auto* introBgPathRow = new QWidget(introBgGroup);
     auto* introBgPathLayout = new QHBoxLayout(introBgPathRow);
@@ -1509,7 +1509,7 @@ VideoExportDialog::VideoExportDialog(
     introCardModeCombo_ = new QComboBox(introCardGroup);
     introCardModeCombo_->addItem(QStringLiteral("DX"), QStringLiteral("DX"));
     introCardModeCombo_->addItem(QStringLiteral("SD"), QStringLiteral("Standard"));
-    UiTheme::applyComboBoxPopupLimit(introCardModeCombo_, 12);
+    UiTheme::styleDialogComboBox(introCardModeCombo_, 12);
     {
         const int modeIdx = introCardModeCombo_->findData(baseTask_.intro.mode);
         if (modeIdx >= 0) {

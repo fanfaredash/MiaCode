@@ -103,6 +103,7 @@ QString pausePreviewButtonStyleSheet(bool active);
 QString formSliderStyleSheet();
 QString dialogSliderStyleSheet();
 QString dialogComboBoxStyleSheet();
+void styleDialogComboBox(QComboBox* combo, int maxVisibleItems = 0);
 QString dialogSpinBoxStyleSheet();
 QString dialogMenuButtonStyleSheet();
 QString dialogMenuCheckBoxStyleSheet();

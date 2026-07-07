@@ -393,10 +393,10 @@ void VideoExportDialog::applyThemeStyles()
         introBackgroundPathEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet(UiTheme::colors().windowAltBg));
     }
     if (introBackgroundCombo_ != nullptr) {
-        UiTheme::applyComboBoxPopupLimit(introBackgroundCombo_, 12);
+        UiTheme::styleDialogComboBox(introBackgroundCombo_, 12);
     }
     if (introCardModeCombo_ != nullptr) {
-        UiTheme::applyComboBoxPopupLimit(introCardModeCombo_, 12);
+        UiTheme::styleDialogComboBox(introCardModeCombo_, 12);
     }
     if (exportButton_ != nullptr) {
         exportButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(true));

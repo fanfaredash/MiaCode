@@ -202,7 +202,7 @@ QWidget* createHudFontSettingsWidget(
 
     auto* fontCombo = new QComboBox(root);
     fontCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    UiTheme::applyComboBoxPopupLimit(fontCombo, 12);
+    UiTheme::styleDialogComboBox(fontCombo, 12);
     auto* sampleLabel = new QLabel(root);
     sampleLabel->setAlignment(Qt::AlignCenter);
     sampleLabel->setText(QStringLiteral("12:34:567  TAP  HOLD  SLIDE  101.0000%"));
@@ -217,7 +217,7 @@ QWidget* createHudFontSettingsWidget(
 
     const auto refreshFromPreferences = [fontCombo, applySampleFont]() {
         populateHudFontCombo(fontCombo, currentHudFontPath());
-        UiTheme::applyComboBoxPopupLimit(fontCombo, 12);
+        UiTheme::styleDialogComboBox(fontCombo, 12);
         applySampleFont();
     };
 
@@ -263,7 +263,7 @@ QWidget* createHudFontSettingsWidget(
         const QString importedPath = importHudFontFromUser(root, onFontChanged);
         if (!importedPath.isEmpty()) {
             populateHudFontCombo(fontCombo, importedPath);
-            UiTheme::applyComboBoxPopupLimit(fontCombo, 12);
+            UiTheme::styleDialogComboBox(fontCombo, 12);
             applySampleFont();
         }
     });
@@ -271,7 +271,7 @@ QWidget* createHudFontSettingsWidget(
         miacode::preview::scene::setPreviewHudCustomFontPath(QString());
         notifyFontChanged(onFontChanged);
         populateHudFontCombo(fontCombo, QString());
-        UiTheme::applyComboBoxPopupLimit(fontCombo, 12);
+        UiTheme::styleDialogComboBox(fontCombo, 12);
         applySampleFont();
     });
 
