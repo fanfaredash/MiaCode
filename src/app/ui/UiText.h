@@ -20,25 +20,23 @@ enum class ThemePreference {
     Dark,
 };
 
+// Single key-based lookup for shared UI strings. The resolved language is tried
+// first, then English, then the key itself as the final missing-translation
+// marker. ui_text_locale_spec enforces en/zh/ja key-set parity.
 QString text(const QString& key);
+bool hasTranslationKey(const QString& key);
 bool isChineseUi();
 // Resolved UI language for this session (MIACODE_LANG env > stored preference
 // > system locale > English). Constant per session — changes apply on restart.
 LanguagePreference resolvedLanguage();
-// Single entry point for inline-localized strings; replaces the scattered
-// `isChineseUi() ? zh : en` ternaries and the per-file l10n/trText/
-// localizedText helpers. Chinese returns `zh`; Japanese returns `ja` when
-// provided, else the central zh-keyed dictionary (UiTextJaDictionary.cpp),
-// else `en`; every other language returns `en`. Simplified Chinese is the
-// reference language: author new UI strings as (en, zh) pairs and add the
-// Japanese translation to the dictionary — ui_text_locale_spec fails when a
-// pair is missing there, and when a zh string is edited without re-keying its
-// dictionary entry.
+// Legacy inline-localized string path kept only until Part A migrates the
+// remaining call sites to text("feature.key"). New shared UI strings should go
+// through text().
 QString localized(const QString& en, const QString& zh, const QString& ja = QString());
 // zh-text → Japanese dictionary backing localized() (UiTextJaDictionary.cpp).
 const QHash<QString, QString>& japaneseByChineseText();
 // Key-map drift guard for ui_text_locale_spec: descriptions of keys present
-// in one of zhMap/jaMap but missing from the other. Empty when in sync.
+// in one of enMap/zhMap/jaMap but missing from another. Empty when in sync.
 QStringList translationKeyMismatches();
 LanguagePreference preferredLanguage();
 void setPreferredLanguage(LanguagePreference preference);

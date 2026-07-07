@@ -366,6 +366,437 @@ UiText::LanguagePreference resolvedLanguagePreference()
     return UiText::LanguagePreference::English;
 }
 
+QString mapValue(const QHash<QString, QString>& map, const QString& key)
+{
+    const auto it = map.constFind(key);
+    if (it == map.constEnd()) {
+        return QString();
+    }
+    return it.value();
+}
+
+const QHash<QString, QString>& enMap()
+{
+    static const QHash<QString, QString> map{
+        {"menu.file", "File(&F)"},
+        {"menu.tools", "Tools(&T)"},
+        {"menu.transform", "Modify(&M)"},
+        {"menu.help", "Help(&H)"},
+        {"action.new", "New"},
+        {"action.open", "Open"},
+        {"action.open_folder", "Open Folder"},
+        {"action.open_current_folder", "Open Current Folder"},
+        {"action.open_recent", "Open Recent"},
+        {"action.open_recent.empty", "No Recent Files"},
+        {"dialog.open_startup_folder.missing_maidata.title", "maidata.txt Not Found"},
+        {"dialog.open_startup_folder.missing_maidata.message", "No maidata.txt was found in the dropped folder:\n%1"},
+        {"dialog.open_startup_target.missing.title", "Open Failed"},
+        {"dialog.open_startup_target.missing.message", "The dropped file or folder does not exist:\n%1"},
+        {"action.save", "Save"},
+        {"action.ok", "OK"},
+        {"action.discard", "Discard"},
+        {"action.cancel", "Cancel"},
+        {"action.close", "Close"},
+        {"action.yes", "Yes"},
+        {"action.no", "No"},
+        {"action.browse", "Browse..."},
+        {"action.save_as", "Save As..."},
+        {"action.preferences", "Preferences..."},
+        {"action.restore_backup", "Restore Backup"},
+        {"action.restore_backup.empty", "No Backups Available"},
+        {"dialog.restore_backup.title", "Restore Backup"},
+        {"dialog.restore_backup.missing", "Backup file does not exist:\n%1"},
+        {"dialog.restore_backup.read_failed", "Cannot read backup file:\n%1"},
+        {"dialog.restore_backup.confirm", "Restore the backup from %1?"},
+        {"dialog.restore_backup.abnormal_exit_confirm", "MiaCode did not exit normally last time.\n\nRestore the backup from %1?"},
+        {"status.restore_backup.loaded", "Restored from backup. Save to keep the changes."},
+        {"action.about", "About"},
+        {"dialog.invalid_star_preview.title", "Hidden Options"},
+        {"dialog.invalid_star_preview.enable", "Invalid star preview mode has been enabled for this run only."},
+        {"dialog.invalid_star_preview.already_enabled", "Invalid star preview mode is already enabled, and only for this run."},
+        {"dialog.invalid_star_preview.enabled_status", "Invalid star preview mode is enabled (this run only)."},
+        {"action.cut", "Cut"},
+        {"action.copy", "Copy"},
+        {"action.paste", "Paste"},
+        {"action.undo", "Undo"},
+        {"action.redo", "Redo"},
+        {"action.stop_preview", "Stop Preview"},
+        {"action.pause_preview", "Play/Pause Preview"},
+        {"action.preview_speed_down", "Playback Speed -"},
+        {"action.preview_speed_up", "Playback Speed +"},
+        {"action.audio_settings", "Audio Settings"},
+        {"action.video_settings", "Preview Settings"},
+        {"action.skin_settings", "Skins"},
+        {"toolbar.skin", "Skin"},
+        {"toolbar.export", "Export"},
+        {"action.export_chart", "Export Chart"},
+        {"action.export_cover", "Export Cover"},
+        {"action.batch_export", "Batch Export"},
+        {"action.transform.mirror_lr", "Mirror Left/Right"},
+        {"action.transform.mirror_ud", "Mirror Up/Down"},
+        {"action.transform.rotate_180", "Rotate 180"},
+        {"action.transform.rotate_ccw_45", "Rotate -45"},
+        {"action.transform.rotate_cw_45", "Rotate +45"},
+        {"action.transform.more", "More..."},
+        {"action.transform.toggle_break", "Toggle Break"},
+        {"action.transform.toggle_ex", "Toggle EX"},
+        {"action.transform.toggle_firework", "Toggle Firework"},
+        {"action.transform.random_rotate", "Random Rotate"},
+        {"context.batch_transform", "Batch Operations"},
+        {"context.more_transform", "More..."},
+        {"toolbar.settings_placeholder", "Settings"},
+        {"preview.play", "Play"},
+        {"preview.pause", "Pause"},
+        {"preview.fullscreen.window_title", "Fullscreen Preview"},
+        {"preview.fullscreen.exit_hint", "Press Esc to exit fullscreen"},
+        {"preview.fullscreen.exit_tooltip", "Exit fullscreen preview (Esc)"},
+        {"preview.fullscreen.enter_tooltip", "Open fullscreen preview"},
+        {"editor.metadata", "Metadata"},
+        {"editor.welcome", "Welcome to MiaCode!"},
+        {"editor.des", "Des"},
+        {"editor.export", "Export"},
+        {"metadata.information", "Information"},
+        {"metadata.other_fields", "Other &xx Fields"},
+        {"metadata.field.title", "title"},
+        {"metadata.field.artist", "artist"},
+        {"metadata.field.first", "Offset"},
+        {"metadata.field.des", "des"},
+        {"metadata.field.cover", "cover"},
+        {"metadata.empty_hint", "← Click to add a chart difficulty"},
+        {"metadata.latency_card.title", "Latency && Offset Calibration"},
+        {"metadata.latency_card.open", "Open Latency Settings →"},
+        {"sidebar.metadata", "Metadata"},
+        {"sidebar.add_difficulty", "+ Add Diff."},
+        {"sidebar.export", "Export"},
+        {"tab.timeline", "Timeline"},
+        {"tab.validation_errors", "Validation Errors"},
+        {"dialog.preferences.title", "Preferences"},
+        {"dialog.preferences.interface_group", "Appearance"},
+        {"dialog.preferences.language", "Language"},
+        {"dialog.preferences.language.system", "Follow System"},
+        {"dialog.preferences.language.english", "English"},
+        {"dialog.preferences.language.chinese", "Simplified Chinese"},
+        {"dialog.preferences.language.japanese", "Japanese"},
+        {"dialog.preferences.theme", "Theme"},
+        {"dialog.preferences.theme.system", "Follow System"},
+        {"dialog.preferences.theme.light", "Light"},
+        {"dialog.preferences.theme.dark", "Dark"},
+        {"dialog.preferences.preview_side", "Preview Position"},
+        {"dialog.preferences.preview_side.right", "Right"},
+        {"dialog.preferences.preview_side.left", "Left"},
+        {"dialog.welcome.title", "Welcome to MiaCode"},
+        {"dialog.welcome.heading", "Welcome to MiaCode!"},
+        {"dialog.welcome.subtitle", "Choose how your workspace looks. You can change these anytime later in Preferences (the gear icon in the top menu)."},
+        {"dialog.welcome.preview.editor", "Editor"},
+        {"dialog.welcome.preview.preview", "Preview"},
+        {"dialog.welcome.preview_side", "Preview pane"},
+        {"dialog.welcome.preview_side.right", "On the right"},
+        {"dialog.welcome.preview_side.left", "On the left"},
+        {"dialog.welcome.theme", "Color theme"},
+        {"dialog.welcome.theme.light", "Light"},
+        {"dialog.welcome.theme.dark", "Dark"},
+        {"dialog.welcome.chinese_input", "Chinese input"},
+        {"dialog.welcome.chinese_input.disable", "Disable IME"},
+        {"dialog.welcome.chinese_input.enable", "Enable IME"},
+        {"dialog.welcome.chinese_input.fullwidth", "Convert full-width"},
+        {"dialog.welcome.chinese_input.hint",
+         "If you don't use comments, choose \"Disable IME\".\n"
+         "If you do use comments and want to avoid mistyped input such as 1h【8:1】, "
+         "choose \"Convert full-width\"."},
+        {"dialog.welcome.get_started", "Get Started"},
+        {"dialog.preferences.editor_group", "Editor"},
+        {"dialog.preferences.editor_top_display", "Header Field"},
+        {"dialog.preferences.editor_top_display.latency", "Offset"},
+        {"dialog.preferences.editor_top_display.designer", "Designer"},
+        {"dialog.preferences.editor_font_size", "Text Font Size"},
+        {"dialog.preferences.editor_line_spacing", "Line Spacing"},
+        {"dialog.preferences.editor_half_width_input", "Lock half-width symbol input"},
+        {"dialog.preferences.editor_auto_completion", "Auto-complete brackets"},
+        {"dialog.preferences.editor_ime_input_disabled", "Disable Chinese IME input"},
+        {"dialog.preferences.performance_group", "Performance"},
+        {"dialog.preferences.shortcuts_group", "Shortcuts"},
+        {"dialog.preferences.shortcuts.edit", "Edit Shortcuts"},
+        {"dialog.preferences.shortcuts.reset", "Restore Shortcuts"},
+        {"dialog.preferences.shortcuts.title", "Keyboard Shortcuts"},
+        {"dialog.preferences.shortcuts.command", "Command"},
+        {"dialog.preferences.shortcuts.keybinding", "Keybinding"},
+        {"dialog.preferences.shortcuts.change", "Change Keybinding"},
+        {"dialog.preferences.shortcuts.capture_title", "Change Keybinding"},
+        {"dialog.preferences.shortcuts.capture_prompt", "Press the desired key combination, then press Enter."},
+        {"dialog.preferences.shortcuts.capture_prompt_hold", "Press the key to hold (a bare modifier like Alt works), then press Enter."},
+        {"dialog.preferences.shortcuts.reset_confirm_title", "Restore Shortcuts"},
+        {"dialog.preferences.shortcuts.reset_confirm_message", "Restore all editable shortcuts to their defaults?"},
+        {"action.reset", "Reset"},
+        {"dialog.preferences.restart_title", "Restart Required"},
+        {"dialog.preferences.restart_message", "Language settings have been saved. Restart MiaCode to apply menus, fonts, and interface text."},
+        {"dialog.unsaved_changes.title", "Unsaved Changes"},
+        {"dialog.unsaved_changes.message", "Current document has unsaved changes. Save before continue?"},
+        {"dialog.unsaved_field_changes.title", "Unsaved Field Changes"},
+        {"dialog.unsaved_field_changes.message", "%1 has unsaved changes. Save before switch?"},
+        {"dialog.unsaved_field_changes.field.metadata", "Metadata"},
+        {"dialog.audio_settings.title", "Audio Settings"},
+        {"dialog.video_settings.title", "Preview Settings"},
+        {"dialog.render_settings.audio_group", "Audio"},
+        {"dialog.render_settings.video_group", "Video"},
+        {"dialog.render_settings.gameplay_group", "Gameplay"},
+        {"dialog.render_settings.music_group", "Music"},
+        {"dialog.render_settings.performance_group", "Performance"},
+        {"dialog.render_settings.preview_group", "Preview"},
+        {"dialog.skin_settings.title", "Skin"},
+        {"dialog.skin_settings.dialog_title", "Skin Settings"},
+        {"dialog.skin_settings.section.chart_skin", "Chart Skin"},
+        {"dialog.skin_settings.open_skin_folder", "Open Skin Folder"},
+        {"dialog.skin_settings.open_judge_line_folder", "Open Judge Line Folder"},
+        {"dialog.skin_settings.open_directory", "Open Directory"},
+        {"dialog.render_settings.button.close", "Close"},
+        {"dialog.render_settings.button.set_software_default_audio", "Save Local Preset"},
+        {"dialog.render_settings.button.restore_project_default", "Apply Local Preset"},
+        {"dialog.render_settings.button.mute_non_bgm", "Mute non-BGM"},
+        {"dialog.render_settings.button.restore_non_bgm", "Restore non-BGM volume"},
+        {"dialog.render_settings.option.enabled", "Enabled"},
+        {"dialog.render_settings.option.disabled", "Disabled"},
+        {"dialog.render_settings.audio.master", "Master Volume"},
+        {"dialog.render_settings.audio.bgm", "BGM Volume"},
+        {"dialog.render_settings.audio.answer", "Answer Volume"},
+        {"dialog.render_settings.audio.tap", "Tap Volume"},
+        {"dialog.render_settings.audio.break", "Break Volume"},
+        {"dialog.render_settings.audio.break_slide", "Break Slide Volume"},
+        {"dialog.render_settings.audio.slide", "Slide Volume"},
+        {"dialog.render_settings.audio.break_slide_tail_cheer_mute", "Disable breakslide tail cheer"},
+        {"dialog.render_settings.audio.ex", "EX Volume"},
+        {"dialog.render_settings.audio.touch", "Touch Volume"},
+        {"dialog.render_settings.audio.track", "Track Volume"},
+        {"dialog.render_settings.audio.global", "Global Volume"},
+        {"dialog.render_settings.audio.firework", "Firework Volume"},
+        {"dialog.render_settings.audio.button.mute", "Mute %1"},
+        {"dialog.render_settings.audio.button.unmute", "Unmute %1"},
+        {"dialog.render_settings.music.intro_sound", "Intro sound"},
+        {"dialog.render_settings.music.default_intro_sound", "Default intro sound"},
+        {"dialog.render_settings.music.audition", "Audition"},
+        {"dialog.render_settings.music.open_folder", "Open Folder"},
+        {"dialog.render_settings.music.open_folder.tooltip", "Put intro sound files here; when missing, MiaCode checks assets/music/track_start.wav, then assets/SFX/track_start.wav."},
+        {"dialog.render_settings.video.brightness", "Background/PV Brightness"},
+        {"dialog.render_settings.video.scale.fill", "Fill (crop if needed)"},
+        {"dialog.render_settings.video.scale.fit", "Fit (keep full image, may letterbox)"},
+        {"dialog.render_settings.video.scale.square_fit", "1:1 Fit (center square)"},
+        {"dialog.render_settings.video.scale.inner_circle_fit_outer_fill", "Inner 1:1 Fit + Outer Fill"},
+        {"dialog.render_settings.video.canvas_aspect.square", "1:1 (Square)"},
+        {"dialog.render_settings.video.canvas_aspect.4_3", "4:3"},
+        {"dialog.render_settings.video.canvas_aspect.16_9", "16:9"},
+        {"dialog.render_settings.video.auto_restore_square", "Auto-restore 1:1 after export"},
+        {"dialog.render_settings.video.smooth_brightness", "Smooth brightness"},
+        {"dialog.render_settings.video.brightness_outer", "Outer Brightness"},
+        {"dialog.render_settings.video.brightness_inner", "Inner Brightness"},
+        {"dialog.render_settings.video.layout_square_scale", "Stage Display Scale"},
+        {"dialog.render_settings.video.flow_speed", "Flow Speed"},
+        {"dialog.render_settings.video.tap_flow_speed", "Tap Flow Speed"},
+        {"dialog.render_settings.video.touch_flow_speed", "Touch Flow Speed"},
+        {"dialog.render_settings.video.skin", "Skin"},
+        {"dialog.render_settings.video.skin.standard", "Standard"},
+        {"dialog.render_settings.video.skin.dx", "DX"},
+        {"dialog.render_settings.video.skin.import", "Import..."},
+        {"dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"},
+        {"dialog.render_settings.video.canvas_aspect", "Preview Canvas Aspect"},
+        {"dialog.render_settings.gameplay.judge_effect", "Judge Effect Display"},
+        {"dialog.render_settings.gameplay.judge_effect.slide", "slide"},
+        {"dialog.render_settings.gameplay.judge_effect.tap", "tap"},
+        {"dialog.render_settings.gameplay.judge_effect.touch", "touch"},
+        {"dialog.render_settings.gameplay.judge_line", "Judge Line"},
+        {"dialog.render_settings.gameplay.judge_line.point", "Point"},
+        {"dialog.render_settings.gameplay.judge_line.line", "Line"},
+        {"dialog.render_settings.gameplay.judge_line.area", "Judge Area"},
+        {"dialog.render_settings.gameplay.judge_line.area_labeled", "Judge Area (Labeled)"},
+        {"dialog.render_settings.gameplay.judge_line.import", "Import..."},
+        {"dialog.render_settings.gameplay.force_labeled_judge_line_when_paused", "Show judge area while preview is paused"},
+        {"dialog.render_settings.gameplay.center_display", "Center Display"},
+        {"dialog.render_settings.gameplay.slide_stack_order", "Slide Stack Order"},
+        {"dialog.render_settings.gameplay.slide_stack_order.dx_style", "DX Style"},
+        {"dialog.render_settings.gameplay.slide_stack_order.finale_style", "FiNALE Style"},
+        {"dialog.render_settings.preview.debug", "Show preview debug info"},
+        {"dialog.render_settings.preview.canvas_frame_rate", "Preview Refresh Rate"},
+        {"dialog.render_settings.preview.canvas_frame_rate.30", "30 FPS"},
+        {"dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS"},
+        {"dialog.render_settings.preview.canvas_frame_rate.120", "120 FPS"},
+        {"dialog.render_settings.preview.canvas_frame_rate.display", "Display Refresh Rate"},
+        {"dialog.preferences.performance.pv_frame_rate", "PV Refresh Rate"},
+        {"dialog.preferences.performance.timeline_frame_rate", "Timeline Refresh Rate"},
+        {"dialog.preferences.performance.video_decode", "PV Render"},
+        {"dialog.preferences.performance.video_decode.hardware", "Hardware"},
+        {"dialog.preferences.performance.video_decode.software", "Software"},
+        {"dialog.render_settings.preview.show_object_stats", "Show object stats in preview/export"},
+        {"dialog.render_settings.preview.show_validation_summary", "Show top error/warning summary"},
+        {"editor.validation_summary.tooltip_with_muri", "%1 error(s), %2 warning(s), %3 muri issue(s)"},
+        {"dialog.render_settings.preview.show_object_stats_preview", "Show object stats in preview"},
+        {"dialog.render_settings.preview.show_object_stats_export", "Show object stats in export"},
+        {"dialog.video_export.title", "Export Video"},
+        {"dialog.video_export.output", "Output"},
+        {"dialog.video_export.browse", "Browse..."},
+        {"dialog.video_export.resolution", "Resolution"},
+        {"dialog.video_export.fps", "FPS"},
+        {"dialog.video_export.audio_bitrate", "Audio quality"},
+        {"dialog.video_export.preset", "Export Quality"},
+        {"dialog.video_export.preset.fast", "Fast"},
+        {"dialog.video_export.preset.high_quality", "High Quality"},
+        {"dialog.video_export.section.options", "Options"},
+        {"dialog.video_export.section.font", "Font"},
+        {"dialog.video_export.section.range", "Export Range"},
+        {"dialog.video_export.range.start", "Start"},
+        {"dialog.video_export.range.end", "End"},
+        {"dialog.video_export.range.set_left", "Set ?"},
+        {"dialog.video_export.range.set_end", "Set End"},
+        {"dialog.video_export.range.set_current", "Set to current value"},
+        {"dialog.video_export.range.set_current.tip", "Set to the current preview position"},
+        {"dialog.video_export.range.intro_tag", "intro"},
+        {"dialog.video_export.preview.stop", "Stop"},
+        {"dialog.video_export.preview.play", "Play"},
+        {"dialog.video_export.preview.pause", "Pause"},
+        {"dialog.video_export.button.export", "Export"},
+        {"dialog.video_export.button.cancel", "Cancel"},
+        {"dialog.video_export.button.close", "Close"},
+        {"dialog.video_export.option.show_object_stats", "Show object stats"},
+        {"dialog.video_export.option.show_chart_info", "Show chart info"},
+        {"dialog.video_export.option.hud_font", "HUD Font"},
+        {"dialog.video_export.option.hud_font_settings", "Font Settings"},
+        {"dialog.video_export.option.import_hud_font", "Import Font"},
+        {"dialog.video_export.option.reset_hud_font", "Reset"},
+        {"dialog.video_export.option.hud_font_default", "Default font"},
+        {"dialog.video_export.error.invalid_hud_font", "Please select a .ttf or .otf font file."},
+        {"dialog.video_export.error.copy_hud_font_failed", "Failed to copy the font into the font library."},
+        {"dialog.video_export.option.show_timestamp", "Show bottom-left timestamp"},
+        {"dialog.video_export.option.smooth_brightness", "Smooth brightness"},
+        {"dialog.video_export.option.brightness_outer", "Brightness (Outer)"},
+        {"dialog.video_export.option.brightness_inner", "Brightness (Inner)"},
+        {"dialog.video_export.option.layout_size", "Stage Display Scale"},
+        {"dialog.video_export.option.flow_speed", "Flow Speed"},
+        {"dialog.video_export.option.tap_flow_speed", "Tap Flow Speed"},
+        {"dialog.video_export.option.touch_flow_speed", "Touch Flow Speed"},
+        {"dialog.video_export.option.scale_mode", "Background / PV Scale Mode"},
+        {"dialog.video_export.option.scale.fill", "Fill (crop if needed)"},
+        {"dialog.video_export.option.scale.fit", "Fit (keep full image, may letterbox)"},
+        {"dialog.video_export.option.scale.square_fit", "1:1 Fit (center square)"},
+        {"dialog.video_export.option.scale.inner_circle_fit_outer_fill", "Inner 1:1 Fit + Outer Fill"},
+        {"dialog.batch_export.title", "Batch Export"},
+        {"dialog.batch_export.difficulty", "Difficulty"},
+        {"dialog.batch_export.output_dir", "Output Folder"},
+        {"dialog.batch_export.chart_folders", "Chart Folders"},
+        {"dialog.batch_export.add_folders", "Add Folders"},
+        {"dialog.batch_export.remove_selected", "Remove Selected"},
+        {"dialog.batch_export.clear", "Clear"},
+        {"dialog.batch_export.select_charts", "Select Chart Folders"},
+        {"dialog.batch_export.error.no_difficulty", "No active difficulty is selected."},
+        {"dialog.batch_export.error.no_preview", "Preview canvas is not initialized."},
+        {"dialog.batch_export.error.no_chart_dirs", "Please add at least one chart folder."},
+        {"dialog.batch_export.error.no_difficulties", "Please select at least one difficulty."},
+        {"dialog.batch_export.error.no_output_dir", "Please choose an output folder."},
+        {"dialog.batch_export.error.output_dir_create_failed", "Failed to create output folder."},
+        {"dialog.batch_export.error.invalid_selection", "Some folders were skipped because required files are missing."},
+        {"dialog.batch_export.error.invalid_folder", "The selected path is not a valid folder."},
+        {"dialog.batch_export.error.missing_chart_file", "Missing majdata.txt (or maidata.txt)."},
+        {"dialog.batch_export.error.missing_track_file", "Missing track.mp3."},
+        {"dialog.batch_export.error.read_chart_failed", "Failed to read %1."},
+        {"dialog.batch_export.error.missing_requested_difficulty", "Requested difficulty is missing."},
+        {"dialog.batch_export.error.no_selected_difficulties_in_folder", "None of the selected difficulties exist in this folder: %1"},
+        {"dialog.batch_export.error.no_markers", "No parsed note markers are available for this difficulty."},
+        {"dialog.batch_export.error.invalid_duration", "Failed to determine export duration for this chart."},
+        {"dialog.batch_export.error.validation_failed_count", "Syntax check failed with %1 error(s)."},
+        {"dialog.batch_export.error.validation_failed_detail", "Syntax check failed: %1"},
+        {"dialog.batch_export.progress.preparing", "Preparing batch export..."},
+        {"dialog.batch_export.progress.exporting", "Exporting %1/%2...\n%3"},
+        {"dialog.batch_export.progress.exporting_named", "Exporting %1/%2\n%3"},
+        {"dialog.batch_export.progress.current_item", "%1\n%2"},
+        {"dialog.batch_export.message.canceled", "Batch export canceled."},
+        {"dialog.batch_export.message.success", "Batch export completed: %1 file(s)."},
+        {"dialog.batch_export.message.partial_failed", "Batch export finished with failures.\nSucceeded: %1\nFailed: %2"},
+        {"dialog.batch_export.message.output_files", "Output files:"},
+        {"dialog.video_export.error.preview_unavailable", "Preview canvas is not initialized."},
+        {"dialog.video_export.progress.preparing", "Preparing export..."},
+        {"dialog.video_export.progress.worker_ready", "Worker ready..."},
+        {"dialog.video_export.progress.starting_export", "Starting export..."},
+        {"dialog.video_export.progress.preparing_audio", "Preparing audio..."},
+        {"dialog.video_export.progress.starting_ffmpeg", "Starting ffmpeg..."},
+        {"dialog.video_export.progress.rendering", "Rendering frames..."},
+        {"dialog.video_export.progress.rendering_count", "Rendering frames... %1/%2"},
+        {"dialog.video_export.progress.finalizing_encode", "Finalizing video..."},
+        {"dialog.video_export.progress.repacking", "Finalizing video..."},
+        {"dialog.video_export.progress.finishing", "Finishing up..."},
+        {"dialog.video_export.progress.remaining", "About %1 remaining"},
+        {"dialog.video_export.progress.generic", "Exporting..."},
+        {"dialog.video_export.progress.canceling", "Canceling export..."},
+        {"dialog.video_export.progress.retrying_safe_mode", "Export worker crashed. Retrying in safe mode..."},
+        {"dialog.video_export.progress.done", "Done."},
+        {"dialog.video_export.status.canceled", "Export canceled."},
+        {"dialog.video_export.status.completed", "Export completed."},
+        {"dialog.video_export.message.canceled", "Export canceled."},
+        {"dialog.video_export.message.completed", "Export completed."},
+        {"dialog.video_export.error.failed", "Export failed."},
+        {"dialog.video_export.error.worker_crash", "Export worker crashed."},
+        {"dialog.video_export.error.worker_exit", "Export worker exited unexpectedly."},
+        {"dialog.video_export.error.worker_retry_note", "The export worker crashed once and was retried automatically with PBO disabled."},
+        {"dialog.video_export.error.worker_retry_first_attempt", "First attempt diagnostics"},
+        {"dialog.video_export.error.worker_retry_final_attempt", "Safe-mode retry diagnostics"},
+        {"dialog.video_export.error.failed_title", "Export Failed"},
+        {"status.audio_restored_default", "Restored default audio settings"},
+        {"status.audio_saved_software_default", "Saved current audio settings as the software default"},
+        {"status.touch_trail_enabled", "Touch trail enabled."},
+        {"status.touch_trail_disabled", "Touch trail hidden."},
+        {"status.judge_marker_enabled", "Judge markers enabled."},
+        {"status.judge_marker_disabled", "Judge markers hidden."},
+        {"status.editor_text_display_updated", "Editor text display updated."},
+        {"status.preferences_updated", "Preferences updated."},
+        {"status.preferences_saved", "Preferences saved. Restart to apply."},
+        {"status.syntax.select_difficulty", "Select a difficulty text first."},
+        {"status.syntax.failed_counts", "Syntax check failed: %1 error(s), %2 warning(s)."},
+        {"about.platform", "Release Platform"},
+        {"about.build_type", "Build Type"},
+        {"dialog.batch_export.error.export_failed", "Export failed."},
+        {"dialog.batch_export.error.invalid_first", "Invalid &first value in chart metadata."},
+        {"dialog.batch_export.error.skin_missing", "Preview skin assets were not found."},
+        {"dialog.normalize.title", "Format Chart"},
+        {"dialog.normalize.failed", "Failed to normalize the current chart."},
+        {"dialog.preferences.extensions_group", "Extensions"},
+        {"dialog.preferences.extensions.open_folder", "Open Extensions Folder"},
+        {"dialog.preferences.extensions.refresh", "Refresh Extensions"},
+        {"dialog.preferences.extensions.open_logs", "Open Logs Folder"},
+        {"dialog.preferences.extensions.enabled", "Enabled"},
+        {"dialog.preferences.extensions.name", "Extension"},
+        {"dialog.preferences.extensions.version", "Version"},
+        {"dialog.preferences.extensions.contributions", "Contributions"},
+        {"dialog.preferences.extensions.status", "Status"},
+        {"dialog.render_settings.gameplay.center_display.achievement_dx_minus_100", "ACHIEVEMENT DX (100-)"},
+        {"dialog.render_settings.gameplay.center_display.achievement_dx_minus_101", "ACHIEVEMENT DX (101-)"},
+        {"dialog.render_settings.gameplay.center_display.achievement_dx_plus", "ACHIEVEMENT DX (+)"},
+        {"dialog.render_settings.gameplay.center_display.achievement_finale_plus", "ACHIEVEMENT FINALE (+)"},
+        {"dialog.render_settings.gameplay.center_display.combo", "Combo"},
+        {"dialog.render_settings.gameplay.center_display.dx_score_minus", "DX SCORE (-)"},
+        {"dialog.render_settings.gameplay.center_display.dx_score_plus", "DX SCORE (+)"},
+        {"dialog.render_settings.gameplay.center_display.off", "Off"},
+        {"dialog.video_export.button.cancel_export", "Cancel Export"},
+        {"dialog.video_export.button.start_export", "Start Export"},
+        {"dialog.video_export.error.executable_missing", "Failed to locate MiaCode executable."},
+        {"dialog.video_export.error.invalid_flow_speed", "Flow speed is invalid."},
+        {"dialog.video_export.error.launch_failed", "Failed to start background export."},
+        {"dialog.video_export.error.no_difficulty", "No active difficulty is selected."},
+        {"dialog.video_export.error.no_markers", "No parsed note markers are available for export."},
+        {"dialog.video_export.error.skin_missing", "Preview skin assets were not found."},
+        {"dialog.video_export.error.sync_failed", "Failed to sync current editor state."},
+        {"dialog.video_export.error.worker_busy", "Another export is already running."},
+        {"dialog.video_export.error.worker_write_failed", "Failed to send export snapshot to worker."},
+        {"dialog.video_export.section.intro", "Intro"},
+        {"dialog.video_export.section.output", "Output"},
+        {"editor.validation_summary.tooltip", "%1 error(s), %2 warning(s)"},
+        {"status.muri_render_mode_dx", "Preview mode: muri check."},
+        {"status.muri_render_mode_native", "Preview mode: chart review."},
+        {"status.normalize.already_normalized", "Format Chart: already normalized."},
+        {"status.normalize.applied", "Format Chart applied: %1 measure line(s)."},
+        {"status.transform.mirror_lr", "Mirror Left/Right applied."},
+        {"status.transform.mirror_ud", "Mirror Up/Down applied."},
+        {"status.transform.rotate_180", "Rotate 180 applied."},
+        {"status.transform.rotate_ccw_45", "Rotate -45 applied."},
+        {"status.transform.rotate_cw_45", "Rotate +45 applied."},
+    };
+    return map;
+}
+
 const QHash<QString, QString>& zhMap()
 {
     static const QHash<QString, QString> map{
@@ -613,10 +1044,6 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.gameplay.judge_line.area", "判定区"},
         {"dialog.render_settings.gameplay.judge_line.area_labeled", "判定区（带编号）"},
         {"dialog.render_settings.gameplay.judge_line.import", "导入..."},
-        {
-            "dialog.render_settings.gameplay.force_labeled_judge_line_when_paused",
-            "暂停时显示判定区"
-        },
         {"dialog.render_settings.gameplay.center_display", "中心显示"},
         {"dialog.render_settings.gameplay.slide_stack_order", "slide层叠顺序"},
         {"dialog.render_settings.gameplay.slide_stack_order.dx_style", "DX风格"},
@@ -1322,18 +1749,36 @@ QString localized(const QString& en, const QString& zh, const QString& ja)
 QStringList translationKeyMismatches()
 {
     QStringList mismatches;
-    for (auto it = zhMap().constBegin(); it != zhMap().constEnd(); ++it) {
-        if (!jaMap().contains(it.key())) {
-            mismatches.append(QStringLiteral("jaMap missing key: %1").arg(it.key()));
-        }
-    }
-    for (auto it = jaMap().constBegin(); it != jaMap().constEnd(); ++it) {
-        if (!zhMap().contains(it.key())) {
-            mismatches.append(QStringLiteral("zhMap missing key: %1").arg(it.key()));
+    const struct {
+        const char* name;
+        const QHash<QString, QString>* map;
+    } maps[] = {
+        {"enMap", &enMap()},
+        {"zhMap", &zhMap()},
+        {"jaMap", &jaMap()},
+    };
+
+    for (const auto& expected : maps) {
+        for (const auto& actual : maps) {
+            if (expected.map == actual.map) {
+                continue;
+            }
+            for (auto it = expected.map->constBegin(); it != expected.map->constEnd(); ++it) {
+                if (!actual.map->contains(it.key())) {
+                    mismatches.append(QStringLiteral("%1 missing key from %2: %3")
+                        .arg(QString::fromLatin1(actual.name), QString::fromLatin1(expected.name), it.key()));
+                }
+            }
         }
     }
     mismatches.sort();
+    mismatches.removeDuplicates();
     return mismatches;
+}
+
+bool hasTranslationKey(const QString& key)
+{
+    return enMap().contains(key) && zhMap().contains(key) && jaMap().contains(key);
 }
 
 QString preferencesFilePath()
@@ -1381,21 +1826,30 @@ bool savePreferencesObject(const QJsonObject& root)
 
 QString text(const QString& key)
 {
-    if (resolvedLanguagePreference() == LanguagePreference::Chinese) {
-        const auto it = zhMap().constFind(key);
-        if (it == zhMap().constEnd()) {
-            return QString();
-        }
-        return it.value();
+    const QHash<QString, QString>* preferredMap = &enMap();
+    switch (resolvedLanguagePreference()) {
+    case LanguagePreference::Chinese:
+        preferredMap = &zhMap();
+        break;
+    case LanguagePreference::Japanese:
+        preferredMap = &jaMap();
+        break;
+    case LanguagePreference::English:
+    case LanguagePreference::System:
+    default:
+        preferredMap = &enMap();
+        break;
     }
-    if (resolvedLanguagePreference() == LanguagePreference::Japanese) {
-        const auto it = jaMap().constFind(key);
-        if (it == jaMap().constEnd()) {
-            return QString();
-        }
-        return it.value();
+
+    const QString localized = mapValue(*preferredMap, key);
+    if (!localized.isEmpty()) {
+        return localized;
     }
-    return QString();
+    const QString english = mapValue(enMap(), key);
+    if (!english.isEmpty()) {
+        return english;
+    }
+    return key;
 }
 
 }  // namespace UiText

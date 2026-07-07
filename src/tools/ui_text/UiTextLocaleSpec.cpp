@@ -1,24 +1,14 @@
 // Drift guard for the UiText localization tables.
 //
-// Two invariants, both of which have silently broken before (see the 2026-07-07
-// audit, docs/audit/I18N_AND_UI_COMPONENT_AUDIT_ZH.md):
+// Two invariants:
 //
-//   1. zhMap and jaMap in UiText.cpp must have identical key sets. When they
-//      drift, the *most complete* language (Simplified Chinese, the reference
-//      language) falls back to the call-site English string for the keys the
-//      other table added — exactly the 48-key drift the audit found.
+//   1. enMap, zhMap, and jaMap in UiText.cpp must have identical key sets.
+//      English is now centralized instead of living only at call-site fallback
+//      strings.
 //
-//   2. Every inline `UiText::localized(QStringLiteral(en), QStringLiteral(zh))`
-//      2-argument call in src/ must have a Japanese entry in the central
-//      zh-keyed dictionary (UiTextJaDictionary.cpp). Without it, Japanese
-//      silently falls back to English for that string. Simplified Chinese is
-//      the reference language: new UI strings are authored as (en, zh) and the
-//      Japanese is filled in from the Chinese here.
-//
-// The 3-argument form `localized(en, zh, ja)` supplies Japanese inline and is
-// intentionally NOT required to have a dictionary entry. Helper forwarders
-// (l10n / localizedText / trText) are also not enforced — a missing entry there
-// is a safe English fallback, not a silent regression of the canonical API.
+//   2. Literal key-based lookups in src/ must reference keys present in the
+//      tables. This catches typoed `UiText::text(<key>)`, `uiText(<key>, ...)`,
+//      and related helper calls while Part A removes the old inline path.
 //
 // The repo root is injected at configure time via MIACODE_SOURCE_ROOT.
 
@@ -28,7 +18,6 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
-#include <QHash>
 #include <QRegularExpression>
 #include <QRegularExpressionMatchIterator>
 #include <QSet>
@@ -53,7 +42,7 @@ QString readFile(const QString& path)
 
 // Turn a raw C++ string-literal body (as it appears in source, with two-char
 // escapes like backslash-n) into the runtime QString that QStringLiteral would
-// produce, so it can be matched against dictionary keys.
+// produce, so it can be matched against table keys.
 QString unescapeLiteral(const QString& raw)
 {
     QString out;
@@ -75,17 +64,6 @@ QString unescapeLiteral(const QString& raw)
     return out;
 }
 
-bool hasCjk(const QString& s)
-{
-    for (const QChar c : s) {
-        const ushort u = c.unicode();
-        if (u >= 0x4E00 && u <= 0x9FFF) {
-            return true;
-        }
-    }
-    return false;
-}
-
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -96,39 +74,57 @@ int main(int argc, char* argv[])
 
     bool ok = true;
 
-    // --- Invariant 1: zhMap / jaMap key-set parity. ------------------------
+    // --- Invariant 1: enMap / zhMap / jaMap key-set parity. ----------------
     const QStringList mismatches = UiText::translationKeyMismatches();
     if (!mismatches.isEmpty()) {
         ok = false;
         err << mismatches.size()
-            << " zhMap/jaMap key-set mismatch(es) in UiText.cpp:" << Qt::endl;
+            << " enMap/zhMap/jaMap key-set mismatch(es) in UiText.cpp:" << Qt::endl;
         for (const QString& m : mismatches) {
             err << "  - " << m << Qt::endl;
         }
-        err << "Fix: add the missing key to the other map. Simplified Chinese is the "
-               "reference language; translate from it." << Qt::endl;
+        err << "Fix: add the missing key to each map. Keep English, Simplified "
+               "Chinese, and Japanese in sync." << Qt::endl;
     }
 
-    // --- Invariant 2: inline localized(en, zh) zh strings are in the dict. --
+    // --- Invariant 2: source literal keys exist in the tables. --------------
     const QString root = QStringLiteral(MIACODE_SOURCE_ROOT);
     const QString srcDir = root + QStringLiteral("/src");
 
-    // Match UiText::localized( QStringLiteral("EN") , QStringLiteral("ZH") )
-    // where the argument list closes right after the second literal — i.e. the
-    // 2-arg form. A trailing comma before ')' would indicate a 3-arg call and
-    // is deliberately excluded by requiring ')' after optional whitespace.
-    static const QRegularExpression re(
-        QStringLiteral(
-            "UiText::localized\\(\\s*"
-            "QStringLiteral\\(\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*\\)\\s*,\\s*"
-            "QStringLiteral\\(\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*\\)\\s*\\)"),
-        QRegularExpression::DotMatchesEverythingOption);
+    const struct {
+        QRegularExpression re;
+        int keyGroup;
+    } keyPatterns[] = {
+        {
+            QRegularExpression(QStringLiteral(
+                "UiText::text\\(\\s*(?:QStringLiteral\\(\\s*)?\"((?:[^\"\\\\]|\\\\.)*)\"")),
+            1
+        },
+        {
+            QRegularExpression(QStringLiteral(
+                "(^|[^A-Za-z0-9_:])uiText\\(\\s*(?:QStringLiteral\\(\\s*)?\"((?:[^\"\\\\]|\\\\.)*)\"")),
+            2
+        },
+        {
+            QRegularExpression(QStringLiteral(
+                "UiDialogs::text\\(\\s*(?:QStringLiteral\\(\\s*)?\"((?:[^\"\\\\]|\\\\.)*)\"")),
+            1
+        },
+        {
+            QRegularExpression(QStringLiteral(
+                "(^|[^A-Za-z0-9_:])translated\\(\\s*QStringLiteral\\(\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")),
+            2
+        },
+        {
+            QRegularExpression(QStringLiteral(
+                "\\{\\s*(?:QDialogButtonBox|QMessageBox)::[A-Za-z0-9_]+\\s*,\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")),
+            1
+        },
+    };
 
-    const QHash<QString, QString>& jaDict = UiText::japaneseByChineseText();
-
-    QSet<QString> missing;
+    QSet<QString> missingKeys;
+    QSet<QString> literalKeys;
     int scanned = 0;
-    int callsChecked = 0;
     QDirIterator it(
         srcDir,
         {QStringLiteral("*.cpp"), QStringLiteral("*.h")},
@@ -137,20 +133,15 @@ int main(int argc, char* argv[])
     while (it.hasNext()) {
         const QString path = it.next();
         const QString text = readFile(path);
-        if (!text.contains(QStringLiteral("UiText::localized"))) {
-            ++scanned;
-            continue;
-        }
-        QRegularExpressionMatchIterator mi = re.globalMatch(text);
-        while (mi.hasNext()) {
-            const QRegularExpressionMatch m = mi.next();
-            const QString zh = unescapeLiteral(m.captured(2));
-            if (!hasCjk(zh)) {
-                continue;  // en/en pair (rare) — nothing to translate.
-            }
-            ++callsChecked;
-            if (!jaDict.contains(zh)) {
-                missing.insert(zh);
+        for (const auto& pattern : keyPatterns) {
+            QRegularExpressionMatchIterator mi = pattern.re.globalMatch(text);
+            while (mi.hasNext()) {
+                const QRegularExpressionMatch m = mi.next();
+                const QString key = unescapeLiteral(m.captured(pattern.keyGroup));
+                literalKeys.insert(key);
+                if (!UiText::hasTranslationKey(key)) {
+                    missingKeys.insert(key);
+                }
             }
         }
         ++scanned;
@@ -158,32 +149,29 @@ int main(int argc, char* argv[])
 
     if (scanned == 0) {
         err << "ui_text_locale_spec: scanned 0 source files under " << srcDir
-            << " — is MIACODE_SOURCE_ROOT correct?" << Qt::endl;
+            << " - is MIACODE_SOURCE_ROOT correct?" << Qt::endl;
         return 1;
     }
 
-    if (!missing.isEmpty()) {
+    if (!missingKeys.isEmpty()) {
         ok = false;
-        QStringList sorted(missing.begin(), missing.end());
+        QStringList sorted(missingKeys.begin(), missingKeys.end());
         sorted.sort();
         err << sorted.size()
-            << " inline UiText::localized(en, zh) string(s) missing a Japanese "
-               "dictionary entry (UiTextJaDictionary.cpp):" << Qt::endl;
-        for (const QString& zh : sorted) {
-            QString oneLine = zh;
-            oneLine.replace(QLatin1Char('\n'), QStringLiteral("\\n"));
-            err << "  - " << oneLine << Qt::endl;
+            << " source literal UiText key(s) missing from the translation tables:"
+            << Qt::endl;
+        for (const QString& key : sorted) {
+            err << "  - " << key << Qt::endl;
         }
-        err << "Fix: add each zh key with its Japanese translation to "
-               "japaneseByChineseText() in src/app/ui/UiTextJaDictionary.cpp." << Qt::endl;
+        err << "Fix: add each key to enMap, zhMap, and jaMap, or correct the "
+               "call-site typo." << Qt::endl;
     }
 
     if (!ok) {
         return 1;
     }
 
-    out << "ui_text_locale_spec ok (" << jaDict.size() << " ja dict entries, "
-        << callsChecked << " inline localized() calls checked across "
-        << scanned << " files)" << Qt::endl;
+    out << "ui_text_locale_spec ok (" << literalKeys.size()
+        << " literal key lookup(s) checked across " << scanned << " files)" << Qt::endl;
     return 0;
 }
