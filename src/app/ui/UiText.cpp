@@ -1011,6 +1011,8 @@ const QHash<QString, QString>& enMap()
         {"shell.timeline_sync", "Timeline Sync"},
         {"shell.view_lock", "View Lock"},
 
+        {"timeline.playback_speed", "Playback Speed"},
+
         {"media_tools.1_was_not_found_next", "%1 was not found next to the current chart."},
         {"media_tools.a_black_screen", "a black screen"},
         {"media_tools.audio_video_processing", "Audio/Video Processing"},
@@ -1724,6 +1726,8 @@ const QHash<QString, QString>& zhMap()
         {"shell.timeline_sync", "时轴同步"},
         {"shell.view_lock", "光标居中"},
 
+        {"timeline.playback_speed", "当前倍速"},
+
         {"media_tools.1_was_not_found_next", "当前谱面目录缺少 %1。"},
         {"media_tools.a_black_screen", "黑幕"},
         {"media_tools.audio_video_processing", "音频/视频处理"},
@@ -2429,6 +2433,8 @@ const QHash<QString, QString>& jaMap()
         {"shell.follow_code", "コード追従"},
         {"shell.timeline_sync", "タイムライン同期"},
         {"shell.view_lock", "ビューロック"},
+
+        {"timeline.playback_speed", "再生速度"},
 
         {"media_tools.1_was_not_found_next", "現在の譜面フォルダーに %1 がありません。"},
         {"media_tools.a_black_screen", "黒画面"},
