@@ -22,7 +22,6 @@
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
-#include "extensions/ExtensionManager.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -275,89 +274,6 @@ protected:
         QTableWidget::leaveEvent(event);
         setCurrentCell(-1, -1);
     }
-};
-
-class DelayedTableTooltipFilter final : public QObject {
-public:
-    explicit DelayedTableTooltipFilter(QTableWidget* table, QObject* parent = nullptr)
-        : QObject(parent)
-        , table_(table)
-    {
-        timer_.setSingleShot(true);
-        timer_.setInterval(2000);
-        connect(&timer_, &QTimer::timeout, this, [this]() {
-            showPendingTooltip();
-        });
-    }
-
-protected:
-    bool eventFilter(QObject* watched, QEvent* event) override
-    {
-        if (table_.isNull() || watched != table_->viewport() || event == nullptr) {
-            return QObject::eventFilter(watched, event);
-        }
-
-        switch (event->type()) {
-        case QEvent::MouseMove: {
-            auto* mouseEvent = static_cast<QMouseEvent*>(event);
-            const QModelIndex index = table_->indexAt(mouseEvent->pos());
-            if (!index.isValid()) {
-                clearPendingTooltip();
-                break;
-            }
-            globalPos_ = mouseEvent->globalPosition().toPoint();
-            if (index == pendingIndex_) {
-                break;
-            }
-            pendingIndex_ = QPersistentModelIndex(index);
-            timer_.start();
-            break;
-        }
-        case QEvent::Leave:
-        case QEvent::MouseButtonPress:
-        case QEvent::Wheel:
-            clearPendingTooltip();
-            break;
-        case QEvent::ToolTip:
-            return true;
-        default:
-            break;
-        }
-        return QObject::eventFilter(watched, event);
-    }
-
-private:
-    void clearPendingTooltip()
-    {
-        timer_.stop();
-        pendingIndex_ = QPersistentModelIndex();
-        QToolTip::hideText();
-    }
-
-    void showPendingTooltip()
-    {
-        if (table_.isNull() || !pendingIndex_.isValid()) {
-            return;
-        }
-        const auto* item = table_->item(pendingIndex_.row(), pendingIndex_.column());
-        if (item == nullptr) {
-            return;
-        }
-        QString text = item->toolTip().trimmed();
-        if (text.isEmpty()) {
-            text = item->text().trimmed();
-        }
-        if (text.isEmpty()) {
-            return;
-        }
-        const QRect cellRect = table_->visualRect(pendingIndex_);
-        QToolTip::showText(globalPos_, text, table_->viewport(), cellRect);
-    }
-
-    QPointer<QTableWidget> table_;
-    QTimer timer_;
-    QPersistentModelIndex pendingIndex_;
-    QPoint globalPos_;
 };
 
 // Item delegate that gives every row a consistent text inset. Two passes:
@@ -686,17 +602,20 @@ void MainWindow::PreferencesSection::onPreferences()
     interfaceLayout->setHorizontalSpacing(12);
     interfaceLayout->setVerticalSpacing(8);
 
-    QString selectedLanguageToken = UiText::preferredLanguageToken();
+    const UiText::LanguagePreference currentPreference = UiText::preferredLanguage();
+    UiText::LanguagePreference selectedPreference = currentPreference;
     const UiText::ThemePreference currentThemePreference = UiText::preferredTheme();
     UiText::ThemePreference selectedThemePreference = currentThemePreference;
-    const auto languageLabel = [](const QString& token) -> QString {
-        const QString normalized = token.trimmed().toLower();
-        for (const auto& option : UiText::availableLanguageOptions()) {
-            if (option.id == normalized) {
-                return option.label;
-            }
+    const auto languageLabel = [](UiText::LanguagePreference preference) -> QString {
+        switch (preference) {
+        case UiText::LanguagePreference::English:
+            return uiText("dialog.preferences.language.english", "English");
+        case UiText::LanguagePreference::Chinese:
+            return uiText("dialog.preferences.language.chinese", "Simplified Chinese");
+        case UiText::LanguagePreference::System:
+        default:
+            return uiText("dialog.preferences.language.system", "Follow System");
         }
-        return uiText("dialog.preferences.language.system", "Follow System");
     };
     const auto themeLabel = [](UiText::ThemePreference preference) -> QString {
         switch (preference) {
@@ -718,32 +637,26 @@ void MainWindow::PreferencesSection::onPreferences()
     languageButton->setObjectName("PreferenceMenuButton");
     languageButton->setFont(uiAccentFont(10, QFont::DemiBold));
     languageButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    languageButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
-    languageButton->setMinimumWidth(
-        languageButton->fontMetrics().horizontalAdvance(QStringLiteral("システムに合わせる")) + 28);
-    languageButton->setText(languageLabel(selectedLanguageToken));
+    languageButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    languageButton->setText(languageLabel(selectedPreference));
     auto* languageMenu = new QMenu(languageButton);
     languageMenu->setFont(uiAccentFont(10));
     styleRoundedMenu(*languageMenu);
-    std::function<void()> rebuildLanguageMenu;
-    rebuildLanguageMenu = [&]() {
-        languageMenu->clear();
-        for (const auto& option : UiText::availableLanguageOptions()) {
-            QAction* action = languageMenu->addAction(option.label);
-            action->setData(option.id);
-            connect(action, &QAction::triggered, &dialog, [&, id = option.id, languageButton]() {
-                selectedLanguageToken = id;
-                languageButton->setText(languageLabel(selectedLanguageToken));
-                UiText::setPreferredLanguageToken(selectedLanguageToken);
-                owner_.statusBar()->showMessage(uiText("status.preferences_saved", "Preferences saved. Restart to apply."));
-            });
-        }
-        if (!UiText::isLanguageAvailable(selectedLanguageToken)) {
-            selectedLanguageToken = QStringLiteral("system");
-            languageButton->setText(languageLabel(selectedLanguageToken));
-        }
+    const QList<UiText::LanguagePreference> languageOptions{
+        UiText::LanguagePreference::System,
+        UiText::LanguagePreference::English,
+        UiText::LanguagePreference::Chinese,
     };
-    rebuildLanguageMenu();
+    for (UiText::LanguagePreference preference : languageOptions) {
+        QAction* action = languageMenu->addAction(languageLabel(preference));
+        action->setData(static_cast<int>(preference));
+        connect(action, &QAction::triggered, &dialog, [&, preference, languageButton]() {
+            selectedPreference = preference;
+            languageButton->setText(languageLabel(selectedPreference));
+            UiText::setPreferredLanguage(selectedPreference);
+            owner_.statusBar()->showMessage(uiText("status.preferences_saved", "Preferences saved. Restart to apply."));
+        });
+    }
     // No manual setFixedWidth here: the QSS PreferenceMenuButton rule
     // (min-width + padding + border) already defines the styled size, and
     // pinning a metrics-derived width below it is what clipped the button's
@@ -1316,164 +1229,6 @@ void MainWindow::PreferencesSection::onPreferences()
     shortcutsPageLayout->addWidget(shortcutsGroup);
     shortcutsPageLayout->addStretch(1);
     pageStack->addTab(shortcutsPage, uiText("dialog.preferences.shortcuts_group", "Shortcuts"));
-
-    auto* extensionsPage = new QWidget(pageStack);
-    auto* extensionsPageLayout = new QHBoxLayout(extensionsPage);
-    extensionsPageLayout->setContentsMargins(0, 0, 0, 0);
-    extensionsPageLayout->setSpacing(10);
-    auto* extensionsActions = new QWidget(extensionsPage);
-    auto* extensionsActionsLayout = new QVBoxLayout(extensionsActions);
-    extensionsActionsLayout->setContentsMargins(12, 10, 8, 12);
-    extensionsActionsLayout->setSpacing(8);
-    auto* openExtensionsFolderButton =
-        new QPushButton(uiText("dialog.preferences.extensions.open_folder", "Open Extensions Folder"), extensionsActions);
-    auto* refreshExtensionsButton =
-        new QPushButton(uiText("dialog.preferences.extensions.refresh", "Refresh Extensions"), extensionsActions);
-    auto* openExtensionLogsButton =
-        new QPushButton(uiText("dialog.preferences.extensions.open_logs", "Open Logs"), extensionsActions);
-    openExtensionsFolderButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
-    refreshExtensionsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
-    openExtensionLogsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
-    extensionsActionsLayout->addWidget(openExtensionsFolderButton);
-    extensionsActionsLayout->addWidget(refreshExtensionsButton);
-    extensionsActionsLayout->addWidget(openExtensionLogsButton);
-    extensionsActionsLayout->addStretch(1);
-
-    auto* extensionsTable = new QTableWidget(extensionsPage);
-    extensionsTable->setColumnCount(5);
-    extensionsTable->setHorizontalHeaderLabels({
-        uiText("dialog.preferences.extensions.enabled", "Enabled"),
-        uiText("dialog.preferences.extensions.name", "Extension"),
-        uiText("dialog.preferences.extensions.version", "Version"),
-        uiText("dialog.preferences.extensions.contributions", "Contributions"),
-        uiText("dialog.preferences.extensions.status", "Status"),
-    });
-    extensionsTable->verticalHeader()->hide();
-    extensionsTable->setShowGrid(false);
-    extensionsTable->setAlternatingRowColors(true);
-    extensionsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    extensionsTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    extensionsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    extensionsTable->setTextElideMode(Qt::ElideRight);
-    extensionsTable->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
-    extensionsTable->horizontalHeader()->setMinimumSectionSize(24);
-    extensionsTable->horizontalHeader()->setDefaultSectionSize(96);
-    extensionsTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-    extensionsTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-    extensionsTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    extensionsTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
-    extensionsTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
-    extensionsTable->setSizeAdjustPolicy(QAbstractScrollArea::AdjustIgnored);
-    extensionsTable->setMinimumSize(0, 280);
-    extensionsTable->setStyleSheet(QStringLiteral(
-        "QTableWidget { border: 1px solid rgba(128,128,128,72); border-radius: 6px; }"
-        "QTableWidget::item:selected { background: rgba(88, 145, 220, 58); }"
-        "QHeaderView::section { padding: 6px 9px; border: 0; border-bottom: 1px solid rgba(128,128,128,72); font-weight: 600; }"
-    ));
-    extensionsTable->setMouseTracking(true);
-    extensionsTable->viewport()->setMouseTracking(true);
-    extensionsTable->viewport()->installEventFilter(new DelayedTableTooltipFilter(extensionsTable, extensionsTable));
-
-    const auto contributionSummary = [](const miacode::extensions::ExtensionManifest& manifest) {
-        QStringList parts;
-        if (!manifest.commands.isEmpty()) {
-            parts.append(QStringLiteral("%1 command(s)").arg(manifest.commands.size()));
-        }
-        if (!manifest.menus.isEmpty()) {
-            parts.append(QStringLiteral("%1 menu item(s)").arg(manifest.menus.size()));
-        }
-        if (!manifest.languages.isEmpty()) {
-            QStringList languages;
-            for (const auto& language : manifest.languages) {
-                languages.append(QStringLiteral("%1 (%2)").arg(language.label, language.id));
-            }
-            parts.append(QStringLiteral("language: %1").arg(languages.join(QStringLiteral(", "))));
-        }
-        return parts.isEmpty() ? QStringLiteral("-") : parts.join(QStringLiteral("; "));
-    };
-
-    std::function<void()> refreshExtensionRows;
-    refreshExtensionRows = [&]() {
-        extensionsTable->setRowCount(0);
-        if (owner_.extensionManager_ == nullptr) {
-            return;
-        }
-        const auto records = owner_.extensionManager_->records();
-        extensionsTable->setRowCount(records.size());
-        int row = 0;
-        for (const auto& record : records) {
-            auto* enabledBox = new QCheckBox(extensionsTable);
-            enabledBox->setChecked(record.valid && record.enabled);
-            enabledBox->setEnabled(record.valid);
-            auto* enabledCell = new QWidget(extensionsTable);
-            auto* enabledCellLayout = new QHBoxLayout(enabledCell);
-            enabledCellLayout->setContentsMargins(0, 0, 0, 0);
-            enabledCellLayout->setAlignment(Qt::AlignCenter);
-            enabledCellLayout->addWidget(enabledBox);
-            extensionsTable->setCellWidget(row, 0, enabledCell);
-
-            const QString title = record.valid
-                ? QStringLiteral("%1\n%2").arg(record.manifest.name, record.manifest.qualifiedId())
-                : QFileInfo(record.sourcePath).fileName();
-            auto* nameItem = new QTableWidgetItem(title);
-            nameItem->setToolTip(QStringLiteral("%1\n%2").arg(title, record.sourcePath));
-            extensionsTable->setItem(row, 1, nameItem);
-            auto* versionItem = new QTableWidgetItem(record.valid ? record.manifest.version : QStringLiteral("-"));
-            versionItem->setToolTip(versionItem->text());
-            extensionsTable->setItem(row, 2, versionItem);
-            auto* contributionItem = new QTableWidgetItem(record.valid ? contributionSummary(record.manifest) : QStringLiteral("-"));
-            contributionItem->setToolTip(contributionItem->text());
-            extensionsTable->setItem(row, 3, contributionItem);
-            const QString status = !record.valid
-                ? QStringLiteral("Invalid: %1").arg(record.diagnostic)
-                : (record.enabled ? QStringLiteral("Enabled") : QStringLiteral("Disabled"));
-            auto* statusItem = new QTableWidgetItem(status);
-            statusItem->setToolTip(record.diagnostic.trimmed().isEmpty() ? status : record.diagnostic);
-            extensionsTable->setItem(row, 4, statusItem);
-            if (record.valid) {
-                QObject::connect(enabledBox, &QCheckBox::toggled, &dialog, [&, id = record.manifest.qualifiedId()](bool enabled) {
-                    if (owner_.extensionManager_ == nullptr) {
-                        return;
-                    }
-                    owner_.extensionManager_->setExtensionEnabled(id, enabled);
-                    rebuildLanguageMenu();
-                    refreshExtensionRows();
-                    owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
-                });
-            }
-            ++row;
-        }
-    };
-
-    QObject::connect(openExtensionsFolderButton, &QPushButton::clicked, &dialog, [&]() {
-        const QString dir = owner_.extensionManager_ != nullptr
-            ? owner_.extensionManager_->userExtensionsDirectory()
-            : miacode::extensions::userExtensionDirectoryPath();
-        QDir().mkpath(dir);
-        QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
-    });
-    QObject::connect(refreshExtensionsButton, &QPushButton::clicked, &dialog, [&]() {
-        if (owner_.extensionManager_ != nullptr) {
-            owner_.extensionManager_->refreshExtensions();
-        } else {
-            UiText::reloadExtensionLanguagePacks();
-            UiText::ensurePreferredLanguageAvailable();
-        }
-        rebuildLanguageMenu();
-        refreshExtensionRows();
-        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
-    });
-    QObject::connect(openExtensionLogsButton, &QPushButton::clicked, &dialog, [&]() {
-        const QString dir = owner_.extensionManager_ != nullptr
-            ? owner_.extensionManager_->extensionLogDirectory()
-            : QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("logs"));
-        QDir().mkpath(dir);
-        QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
-    });
-    refreshExtensionRows();
-    extensionsPageLayout->addWidget(extensionsActions, 0);
-    extensionsPageLayout->addWidget(extensionsTable, 1);
-    pageStack->addTab(extensionsPage, uiText("dialog.preferences.extensions_group", "Extensions"));
 
     const auto openShortcutEditDialog = [&]() {
         QDialog shortcutsDialog(&dialog);

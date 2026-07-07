@@ -619,31 +619,12 @@ if (Test-Path $ffmpegSrc) {
     throw "Missing required ffmpeg binary: $ffmpegSrc"
 }
 
-$extensionRuntimeSrc = Join-Path $buildOutputDir "extensions"
-$extensionGuideSrc = Join-Path $repoRoot "resources\\extensions\\README.md"
-if (!(Test-Path (Join-Path $extensionRuntimeSrc "extensionHost.js"))) {
-    throw "Missing built extension host script: $(Join-Path $extensionRuntimeSrc 'extensionHost.js')"
-}
-New-Item -ItemType Directory -Path (Join-Path $appDir "extensions") -Force | Out-Null
-Copy-Item (Join-Path $extensionRuntimeSrc "extensionHost.js") (Join-Path $appDir "extensions\\extensionHost.js") -Force
-if (Test-Path $extensionGuideSrc) {
-    Copy-Item $extensionGuideSrc (Join-Path $appDir "extensions\\README.md") -Force
-}
-
-$extensionsDistDir = Join-Path $DistDir "extensions"
-New-Item -ItemType Directory -Path $extensionsDistDir -Force | Out-Null
-if (!(Test-Path $extensionGuideSrc)) {
-    throw "Missing extension guide: $extensionGuideSrc"
-}
-Copy-Item $extensionGuideSrc (Join-Path $extensionsDistDir "README.md") -Force
-
 $requiredPackagePaths = @(
     # Root: user-facing entry points + content + log dirs only.
     "MiaCode.exe",
     "Start_MiaCode_Debug.bat",
     "logs",
     "logs\\worker-hwnd",
-    "extensions\\README.md",
     "assets\\SFX",
     "licenses\\Resource-Han-Rounded-OFL.txt",
     "LICENSE",
@@ -651,8 +632,6 @@ $requiredPackagePaths = @(
     "THIRD_PARTY_NOTICES.md",
     # app/: the real exe and its DLL/plugin/QML retinue.
     "app\\MiaCode.exe",
-    "app\\extensions\\extensionHost.js",
-    "app\\extensions\\README.md",
     "app\\ffmpeg\\ffmpeg.exe",
     (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6Core" -Config $Config)),
     (Join-Path "app" (Get-QtRuntimeDllName -BaseName "Qt6Gui" -Config $Config)),

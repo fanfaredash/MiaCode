@@ -21,7 +21,6 @@
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
 #include "common/UiHangWatchdog.h"
-#include "extensions/ExtensionManager.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/latency/LatencySandboxController.h"
 
@@ -297,9 +296,6 @@ MainWindow::~MainWindow()
 {
     QElapsedTimer totalTimer;
     totalTimer.start();
-    if (extensionManager_ != nullptr) {
-        extensionManager_->shutdown();
-    }
     // beta20-fix2 — first action in the destructor must be a force-logged
     // marker WITH NO MEMBER ACCESS, so we can tell from the runtime log
     // whether the destructor body even started executing. The previous

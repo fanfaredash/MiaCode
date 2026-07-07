@@ -2,7 +2,7 @@
 
 This document is the current user-facing index for MiaCode debug mode, log files, and preview/export diagnostics after the Qt Quick migration.
 
-> Reconciled against the code on 2026-07-06 (extension host additions `MIACODE_NODE_PATH` / `MIACODE_EXTENSION_DEV_PATHS` included). When you add/remove a flag, update this index (and `.codex/skills/miacode-dev-guide/references/debug-flags.md`).
+> Reconciled against the code on 2026-05-29 (83 live `MIACODE_*` environment flags across ~28 files after the P3/P4 GPU additions `MIACODE_GPU_POLICY` / `MIACODE_GPU_ADAPTER_LUID` / `MIACODE_GPU_BIND_HIGH_PERFORMANCE` and the P5 export addition `MIACODE_EXPORT_RENDER_BACKEND`). When you add/remove a flag, update this index (and `.codex/skills/miacode-dev-guide/references/debug-flags.md`).
 
 ## Debug Entry Points
 
@@ -169,8 +169,6 @@ Still active:
 
 - `MIACODE_PREVIEW_SFX_DIR`
 - `MIACODE_TRACK_PATH`
-- `MIACODE_NODE_PATH` (extension system only; overrides the Node.js executable used to launch the out-of-process Extension Host)
-- `MIACODE_EXTENSION_DEV_PATHS` (extension system only; platform path-list separated development extension paths scanned in addition to the user extension directory; each entry may point directly at an extension root or at a parent directory containing extension roots)
 - `MIACODE_BASS_BGM_RATE_MODE` (Windows BASS preview BGM only; unset defaults to pitch-preserving BASS_FX `tempo`, while `rate_transpose` / `transpose` / `source_time` / `accurate` switches to source-time-priority rate transpose for A/B listening)
 - `MIACODE_BASS_BGM_TEMPO_PRESET` (Windows BASS preview BGM only, only when tempo mode is active; BASS_FX window presets: unset = `compact40`, `stock` = plugin default, `auto` = `0/0/8`, `tight20` = `20/8/4`, `balanced30` = `30/10/6`, `compact40` = `40/15/8`, `smooth60` = `60/20/8`, `wide82` = `82/28/8`)
 - `MIACODE_BASS_BGM_TEMPO_PARAMS` (Windows BASS preview BGM only, only when tempo mode is active; overrides preset with custom `sequence_ms,seek_ms,overlap_ms`, accepting comma, slash, semicolon, pipe, `x`, or spaces as separators)
