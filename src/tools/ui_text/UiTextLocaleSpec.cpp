@@ -7,9 +7,8 @@
 //      strings.
 //
 //   2. Literal key-based lookups in src/ and resources/ must reference keys
-//      present in the tables. This catches typoed `UiText::text(<key>)`,
-//      `uiText(<key>, ...)`, related helper calls, and shortcut registry
-//      `label_key` values.
+//      present in the tables. This catches typoed `UiText::text(<key>)`
+//      lookups and shortcut registry `label_key` values.
 //
 // The repo root is injected at configure time via MIACODE_SOURCE_ROOT.
 

@@ -237,12 +237,6 @@ double steppedPreviewPlaybackRate(double rate, int direction)
     return kPreviewPlaybackRateOptions[targetIndex];
 }
 
-QString uiText(const QString& key, const QString& fallback)
-{
-    const QString localized = UiText::text(key);
-    return localized.isEmpty() ? fallback : localized;
-}
-
 SimaiNativeValidationLocale uiValidationLocale()
 {
     switch (UiText::resolvedLanguage()) {
