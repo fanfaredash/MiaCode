@@ -1050,6 +1050,13 @@ const QHash<QString, QString>& enMap()
         {"video_export.start_export", "Start Export"},
         {"video_export.video", "Video"},
 
+        {"window.collapse_left_sidebar", "Collapse left sidebar"},
+        {"window.expand_left_sidebar", "Expand left sidebar"},
+        {"window.muri", "Muri"},
+        {"window.replaced_1_occurrence_s", "Replaced %1 occurrence(s)."},
+        {"window.syntax", "Syntax"},
+        {"window.timeline", "Timeline"},
+
         {"track_metadata.artist", "artist"},
         {"track_metadata.bg_jpg_already_exists_overwrite", "bg.jpg already exists. Overwrite?"},
         {"track_metadata.extract_cover_to_bg_jpg", "Extract Cover to bg.jpg"},
@@ -1819,6 +1826,13 @@ const QHash<QString, QString>& zhMap()
         {"video_export.start_export", "开始导出"},
         {"video_export.video", "视频"},
 
+        {"window.collapse_left_sidebar", "折叠左侧字段栏"},
+        {"window.expand_left_sidebar", "展开左侧字段栏"},
+        {"window.muri", "无理"},
+        {"window.replaced_1_occurrence_s", "已替换 %1 处。"},
+        {"window.syntax", "语法"},
+        {"window.timeline", "时间轴"},
+
         {"track_metadata.artist", "曲师"},
         {"track_metadata.bg_jpg_already_exists_overwrite", "bg.jpg 已经存在，是否覆盖？"},
         {"track_metadata.extract_cover_to_bg_jpg", "提取封面为 bg.jpg"},
@@ -2580,6 +2594,13 @@ const QHash<QString, QString>& jaMap()
         {"video_export.smooth_brightness", "明るさを滑らかに"},
         {"video_export.start_export", "出力を開始"},
         {"video_export.video", "動画"},
+
+        {"window.collapse_left_sidebar", "左のフィールド欄を折りたたむ"},
+        {"window.expand_left_sidebar", "左のフィールド欄を展開"},
+        {"window.muri", "無理"},
+        {"window.replaced_1_occurrence_s", "%1 か所を置換しました。"},
+        {"window.syntax", "構文"},
+        {"window.timeline", "タイムライン"},
 
         {"track_metadata.artist", "アーティスト"},
         {"track_metadata.bg_jpg_already_exists_overwrite", "bg.jpg は既に存在します。上書きしますか？"},

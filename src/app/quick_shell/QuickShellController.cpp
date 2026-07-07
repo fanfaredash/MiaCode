@@ -381,19 +381,18 @@ QString QuickShellController::timelineTabLabel() const
 {
     // Mirrors MainWindow::bottomTabsFallbackLabel for the legacy QSG
     // path — keeps the QuickShell bottom-tab labels identical to the
-    // ones the legacy QTabBar code uses, with the same Chinese /
-    // English split.
-    return UiText::localized(QStringLiteral("Timeline"), QStringLiteral("时间轴"));
+    // ones the legacy QTabBar code uses.
+    return UiText::text(QStringLiteral("window.timeline"));
 }
 
 QString QuickShellController::validationTabLabel() const
 {
-    return UiText::localized(QStringLiteral("Syntax"), QStringLiteral("语法"));
+    return UiText::text(QStringLiteral("window.syntax"));
 }
 
 QString QuickShellController::muriTabLabel() const
 {
-    return UiText::localized(QStringLiteral("Muri"), QStringLiteral("无理"));
+    return UiText::text(QStringLiteral("window.muri"));
 }
 
 QWindow* QuickShellController::topChromeWindow() const

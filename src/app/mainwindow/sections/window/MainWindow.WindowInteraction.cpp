@@ -1328,7 +1328,7 @@ void MainWindow::WindowSection::onReplaceAll()
     }
     editCursor.endEditBlock();
     owner_.statusBar()->showMessage(
-        UiText::localized(QStringLiteral("Replaced %1 occurrence(s)."), QStringLiteral("已替换 %1 处。")).arg(replacedCount)
+        UiText::text(QStringLiteral("window.replaced_1_occurrence_s")).arg(replacedCount)
     );
 }
 
