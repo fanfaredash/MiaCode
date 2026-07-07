@@ -1013,6 +1013,8 @@ const QHash<QString, QString>& enMap()
 
         {"timeline.playback_speed", "Playback Speed"},
 
+        {"ui.click_to_type_a_value", "Click to type a value"},
+
         {"track_metadata.artist", "artist"},
         {"track_metadata.bg_jpg_already_exists_overwrite", "bg.jpg already exists. Overwrite?"},
         {"track_metadata.extract_cover_to_bg_jpg", "Extract Cover to bg.jpg"},
@@ -1745,6 +1747,8 @@ const QHash<QString, QString>& zhMap()
 
         {"timeline.playback_speed", "当前倍速"},
 
+        {"ui.click_to_type_a_value", "点击可输入数值"},
+
         {"track_metadata.artist", "曲师"},
         {"track_metadata.bg_jpg_already_exists_overwrite", "bg.jpg 已经存在，是否覆盖？"},
         {"track_metadata.extract_cover_to_bg_jpg", "提取封面为 bg.jpg"},
@@ -2469,6 +2473,8 @@ const QHash<QString, QString>& jaMap()
         {"shell.view_lock", "ビューロック"},
 
         {"timeline.playback_speed", "再生速度"},
+
+        {"ui.click_to_type_a_value", "クリックして数値を入力"},
 
         {"track_metadata.artist", "アーティスト"},
         {"track_metadata.bg_jpg_already_exists_overwrite", "bg.jpg は既に存在します。上書きしますか？"},

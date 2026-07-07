@@ -40,7 +40,7 @@ void EditableValueLabel::applyEditAffordance()
         // Resting-state appearance is unchanged; only the hover cursor + tooltip
         // hint that the number is clickable. Neither affects layout geometry.
         setCursor(Qt::PointingHandCursor);
-        setToolTip(UiText::localized(QStringLiteral("Click to type a value"), QStringLiteral("点击可输入数值")));
+        setToolTip(UiText::text(QStringLiteral("ui.click_to_type_a_value")));
     } else {
         unsetCursor();
         setToolTip(QString());
