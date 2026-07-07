@@ -544,13 +544,13 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     editorHeaderTrailingLayout->setSpacing(16);
 
     editorCursorLabel_ = new QLabel(
-        UiText::localized(QStringLiteral("Ln 1, Col 1"), QStringLiteral("1行 1列")),
+        UiText::text(QStringLiteral("metadata.ln_1_col_1")),
         editorHeaderTrailingWidget);
     editorCursorLabel_->setObjectName("EditorMeta");
     editorCursorLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     editorCursorLabel_->setFixedWidth(
         QFontMetrics(uiMonoFont(10)).horizontalAdvance(
-            UiText::localized(QStringLiteral("Ln 9999, Col 9999"), QStringLiteral("9999行 9999列"))) + 10);
+            UiText::text(QStringLiteral("document.ln_9999_col_9999"))) + 10);
     editorCursorLabel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     editorHeaderTrailingLayout->addWidget(editorCursorLabel_, 0, Qt::AlignRight);
     editorHeaderLayout->addWidget(editorHeaderTrailingWidget, 0, Qt::AlignRight);
@@ -615,16 +615,16 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     findRow->setContentsMargins(0, 0, 0, 0);
     findRow->setSpacing(6);
     editorFindEdit_ = new QLineEdit(findBar);
-    editorFindEdit_->setPlaceholderText(UiText::localized(QStringLiteral("Find"), QStringLiteral("查找")));
+    editorFindEdit_->setPlaceholderText(UiText::text(QStringLiteral("metadata.find")));
     editorFindPrevButton_ = new QToolButton(findBar);
     editorFindPrevButton_->setObjectName("EditorFindPrevButton");
     editorFindPrevButton_->setText(QStringLiteral("↑"));
-    editorFindPrevButton_->setToolTip(UiText::localized(QStringLiteral("Find Previous"), QStringLiteral("查找上一个")));
+    editorFindPrevButton_->setToolTip(UiText::text(QStringLiteral("metadata.find_previous")));
     editorFindPrevButton_->setFixedWidth(24);
     editorFindNextButton_ = new QToolButton(findBar);
     editorFindNextButton_->setObjectName("EditorFindNextButton");
     editorFindNextButton_->setText(QStringLiteral("↓"));
-    editorFindNextButton_->setToolTip(UiText::localized(QStringLiteral("Find Next"), QStringLiteral("查找下一个")));
+    editorFindNextButton_->setToolTip(UiText::text(QStringLiteral("metadata.find_next")));
     editorFindNextButton_->setFixedWidth(24);
     editorFindCloseButton_ = new QToolButton(findBar);
     editorFindCloseButton_->setObjectName("EditorFindCloseButton");
@@ -635,7 +635,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // baked icon is re-tinted on theme change in WindowSection::applyUiTheme.
     editorFindCloseButton_->setIcon(makeOutlineCloseIcon(UiTheme::colors().textPrimary));
     editorFindCloseButton_->setIconSize(QSize(12, 12));
-    editorFindCloseButton_->setToolTip(UiText::localized(QStringLiteral("Close"), QStringLiteral("关闭查找栏")));
+    editorFindCloseButton_->setToolTip(UiText::text(QStringLiteral("metadata.close")));
     editorFindCloseButton_->setFixedWidth(28);
     findRow->addWidget(editorFindEdit_, 1);
     findRow->addWidget(editorFindPrevButton_, 0);
@@ -647,9 +647,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     replaceRow->setContentsMargins(0, 0, 0, 0);
     replaceRow->setSpacing(4);
     editorReplaceEdit_ = new QLineEdit(findBar);
-    editorReplaceEdit_->setPlaceholderText(UiText::localized(QStringLiteral("Replace"), QStringLiteral("替换")));
-    editorReplaceButton_ = new QPushButton(UiText::localized(QStringLiteral("Replace"), QStringLiteral("替换")), findBar);
-    editorReplaceAllButton_ = new QPushButton(UiText::localized(QStringLiteral("Replace All"), QStringLiteral("全部替换")), findBar);
+    editorReplaceEdit_->setPlaceholderText(UiText::text(QStringLiteral("metadata.replace")));
+    editorReplaceButton_ = new QPushButton(UiText::text(QStringLiteral("metadata.replace")), findBar);
+    editorReplaceAllButton_ = new QPushButton(UiText::text(QStringLiteral("metadata.replace_all")), findBar);
     replaceRow->addWidget(editorReplaceEdit_, 1);
     replaceRow->addWidget(editorReplaceButton_, 0);
     replaceRow->addWidget(editorReplaceAllButton_, 0);
