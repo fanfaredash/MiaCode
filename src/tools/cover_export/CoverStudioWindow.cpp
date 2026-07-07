@@ -50,11 +50,6 @@
 namespace miacode::cover_export {
 namespace {
 
-QString l10n(const QString& en, const QString& zh)
-{
-    return UiText::localized(en, zh);
-}
-
 QPushButton* makeToolbarButton(const QString& text, QWidget* parent, bool primary = false)
 {
     auto* button = new QPushButton(text, parent);
@@ -265,7 +260,7 @@ CoverStudioWindow::CoverStudioWindow(const VideoExportTask& task,
     auto* exportButton = makeToolbarButton(UiText::text(QStringLiteral("cover.export")), toolbar, true);
     exportButton->setStyleSheet(compactToolbarButtonStyle(true));
     exportButton->setToolTip(UiText::text(QStringLiteral("cover.render_and_save_the_cover")));
-    auto* cancelButton = makeToolbarButton(l10n(QStringLiteral("Cancel"), QStringLiteral("取消")), toolbar);
+    auto* cancelButton = makeToolbarButton(UiText::text(QStringLiteral("media_tools.cancel")), toolbar);
     cancelButton->setStyleSheet(compactToolbarButtonStyle());
     cancelButton->setToolTip(UiText::text(QStringLiteral("cover.close_without_exporting_esc")));
 
@@ -430,9 +425,9 @@ void CoverStudioWindow::managePresets()
 
     auto* buttons = new QDialogButtonBox(&dialog);
     QPushButton* renameButton = buttons->addButton(
-        l10n(QStringLiteral("Rename"), QStringLiteral("重命名")), QDialogButtonBox::ActionRole);
+        UiText::text(QStringLiteral("metadata.rename")), QDialogButtonBox::ActionRole);
     QPushButton* deleteButton = buttons->addButton(
-        l10n(QStringLiteral("Delete"), QStringLiteral("删除")), QDialogButtonBox::DestructiveRole);
+        UiText::text(QStringLiteral("metadata.delete")), QDialogButtonBox::DestructiveRole);
     buttons->addButton(QDialogButtonBox::Close);
     layout->addWidget(buttons);
     UiDialogs::localizeButtonBox(buttons);

@@ -7,15 +7,6 @@
 
 #include <QVBoxLayout>
 
-namespace {
-
-QString l10n(const QString& en, const QString& zh)
-{
-    return UiText::localized(en, zh);
-}
-
-}  // namespace
-
 ExportCoverDialog::ExportCoverDialog(const VideoExportTask& task, const QSize& initialSize, QWidget* parent)
     : QDialog(parent)
 {

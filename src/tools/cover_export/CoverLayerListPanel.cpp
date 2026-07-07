@@ -52,11 +52,6 @@ enum InlineLayerControl {
     LockInlineControl = 2,
 };
 
-QString l10n(const QString& en, const QString& zh)
-{
-    return UiText::localized(en, zh);
-}
-
 QString formatOpacity(qreal opacity)
 {
     return QStringLiteral("%1%").arg(qRound(qBound<qreal>(0.0, opacity, 1.0) * 100.0));
@@ -343,7 +338,7 @@ CoverLayerListPanel::CoverLayerListPanel(CoverStudioPanel* studio, QWidget* pare
     auto* row = new QHBoxLayout();
     row->setSpacing(6);
     auto* addButton = new QPushButton(UiText::text(QStringLiteral("cover.add_frame")), this);
-    auto* removeButton = new QPushButton(l10n(QStringLiteral("Delete"), QStringLiteral("删除")), this);
+    auto* removeButton = new QPushButton(UiText::text(QStringLiteral("metadata.delete")), this);
     addButton->setStyleSheet(compactButton);
     removeButton->setStyleSheet(compactButton);
     addButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
@@ -528,7 +523,7 @@ void CoverLayerListPanel::showContextMenu(const QPoint& pos)
     QAction* topAction = menu.addAction(UiText::text(QStringLiteral("cover.bring_to_front")));
     QAction* bottomAction = menu.addAction(UiText::text(QStringLiteral("cover.send_to_back")));
     menu.addSeparator();
-    QAction* deleteAction = menu.addAction(l10n(QStringLiteral("Delete"), QStringLiteral("删除")));
+    QAction* deleteAction = menu.addAction(UiText::text(QStringLiteral("metadata.delete")));
     deleteAction->setEnabled(!isCard);   // the card is the stable, non-deletable layer
 
     QAction* chosen = menu.exec(view_->viewport()->mapToGlobal(pos));

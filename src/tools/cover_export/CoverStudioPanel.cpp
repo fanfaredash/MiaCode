@@ -153,11 +153,6 @@ void emphasizeGroupTitle(QGroupBox* group)
 constexpr int kChartFrameMinPx = 384;
 constexpr int kChartFrameMaxPx = 2048;
 
-QString l10n(const QString& en, const QString& zh)
-{
-    return UiText::localized(en, zh);
-}
-
 // mm:ss.cs (centiseconds) for the frame-time readout.
 QString formatFrameTime(double seconds)
 {
@@ -538,7 +533,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
         UiText::text(QStringLiteral("cover.export")), QDialogButtonBox::AcceptRole);
     exportButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(true));
     if (QPushButton* cancelButton = buttonBox->button(QDialogButtonBox::Cancel)) {
-        cancelButton->setText(l10n(QStringLiteral("Cancel"), QStringLiteral("取消")));
+        cancelButton->setText(UiText::text(QStringLiteral("media_tools.cancel")));
         cancelButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     }
     connect(buttonBox, &QDialogButtonBox::accepted, this, &CoverStudioPanel::exportRequested);
@@ -2136,10 +2131,7 @@ void CoverStudioPanel::applyCompositionJson(const QJsonObject& root, bool intera
         if (!notice.isEmpty()) {
             notice += QLatin1Char('\n');
         }
-        notice += l10n(
-            QStringLiteral("The imported layout included a chart frame, but this difficulty has no "
-                           "renderable notes; the chart frame was skipped."),
-            QStringLiteral("导入的布局包含谱面帧，但当前难度无可渲染音符，已跳过谱面帧。"));
+        notice += UiText::text(QStringLiteral("cover.the_imported_layout_included_a_chart_frame"));
     }
     if (!notice.isEmpty()) {
         QMessageBox::information(

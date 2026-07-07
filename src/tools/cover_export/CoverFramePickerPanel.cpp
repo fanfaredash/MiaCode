@@ -23,11 +23,6 @@ namespace {
 constexpr double kStepSeconds = 1.0 / 120.0;
 constexpr int kFrameTransportSliderHeight = 24;
 
-QString l10n(const QString& en, const QString& zh)
-{
-    return UiText::localized(en, zh);
-}
-
 QString formatSeconds(double seconds)
 {
     const int totalCs = qMax(0, qRound(seconds * 100.0));
