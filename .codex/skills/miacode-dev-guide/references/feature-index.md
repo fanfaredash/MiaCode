@@ -212,10 +212,10 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Namespace: `miacode::chart_transform`
   - Key functions: `transformChartText`, `toggleBreakForSelection`, `toggleExForSelection`, `toggleFireworkForSelection`, `randomRotateForSelection`
 - Whole-chart normalization:
-  - Files: `src/core/chart/transform/ChartNormalization.h`, `src/core/chart/transform/ChartNormalization.cpp`
+  - Files: `src/core/chart/transform/ChartNormalization.h`, `src/core/chart/transform/ChartNormalization.cpp`, `src/core/chart/transform/ChartNormalizationSegmentPolicy.h`, `src/core/chart/transform/ChartNormalizationSegmentPolicy.cpp`
   - Namespace: `miacode::chart_transform`
   - Key function: `normalizeChartText`
-  - Owns: current-difficulty full-chart normalization, one-measure-per-line rebuild, canonical modifier order, metadata-aware measure splitting, ordinary `||` comment preservation via standalone-line splits, per-beat subdivision minimization, and syntax-error blocking
+  - Owns: current-difficulty full-chart normalization, one-measure-per-line rebuild, canonical modifier order, metadata-aware measure splitting, ordinary `||` comment preservation via standalone-line splits, per-beat subdivision minimization, segment-level subdivision policy, selection carry restoration, and syntax-error blocking
 - Main window action entry points:
   - File: `src/app/mainwindow/MainWindow.cpp`
   - Key functions: `onMirrorLeftRight`, `onMirrorUpDown`, `onRotate180`, `onRotate45CounterClockwise`, `onRotate45Clockwise`, `onNormalizeWholeChart`, `onToggleBreakSelection`, `onToggleExSelection`, `onToggleFireworkSelection`, `onRandomRotateSelection`, `onClearCompleteElementsSelection`, `onRaiseSubdivisionHalfStepSelection`, `onLowerSubdivisionHalfStepSelection`

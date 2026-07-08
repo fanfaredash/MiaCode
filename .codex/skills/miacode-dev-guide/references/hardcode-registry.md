@@ -86,9 +86,9 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: Windows preview BGM BASS/BASS_FX rate-mode defaults and BASS_FX tempo-window presets for pitch-preserving A/B tests
   - Current tuning note: Windows BGM defaults to pitch-preserving tempo mode with the `compact40` (`40/15/8`) window preset. `MIACODE_BASS_BGM_RATE_MODE=rate_transpose` switches to source-time-priority `BASS_ATTRIB_FREQ` mode. `MIACODE_BASS_BGM_TEMPO_PRESET` is active only in tempo mode; presets are unset/`compact40` (`40/15/8`), `stock` (plugin default), `auto` (`0/0/8`), `tight20` (`20/8/4`), `balanced30` (`30/10/6`), `smooth60` (`60/20/8`), and `wide82` (`82/28/8`). `MIACODE_BASS_BGM_TEMPO_PARAMS` overrides those presets with custom `sequence_ms,seek_ms,overlap_ms`.
   - Rule: keep local while this is a Windows preview-only diagnostic path and export does not share live BASS_FX tempo playback
-- `src/simai/transform/ChartNormalization.cpp`
-  - Owns: whole-chart formatting snap constants for note-grid minimization and duration-signature rewriting
-  - Current tuning note: `384`-snap formatting keeps rendered `{beats}` selection independent from hold/slide duration syntax, still rewrites no-`#` duration signatures against a fixed `384` grid, and keeps rendered duration denominators at or above a `16th-note` floor
+- `src/core/chart/transform/ChartNormalization.cpp`, `src/core/chart/transform/ChartNormalizationSegmentPolicy.cpp`
+  - Owns: whole-chart formatting snap constants for note-grid minimization, segment-length preservation, selection carry restoration, and duration-signature rewriting
+  - Current tuning note: `384`-snap formatting keeps rendered `{beats}` selection independent from hold/slide duration syntax, still rewrites no-`#` duration signatures against a fixed `384` grid, keeps rendered duration denominators at or above a `16th-note` floor, and requires reduce=true segment output to exactly express each snapped 384-grid segment length
   - Rule: keep local while only the chart formatter consumes these thresholds, but document any user-visible formatting changes immediately
 - `src/simai/parser/SimaiNativeParser.cpp`
   - Owns: parser-default geometry and timing assumptions used to derive marker behavior

@@ -1957,6 +1957,174 @@ void runInlineSpecs(QTextStream& err, int* failed)
         );
     }
 
+    {
+        const QString fullText = QStringLiteral("{1},");
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartSelectionText(fullText, 0, fullText.size());
+        expectTrue(normalized.ok, QStringLiteral("selection normalize accepts a full rest-only {1} selection"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16},,,, ,,,, ,,,, ,,,,"),
+            QStringLiteral("selection normalize does not append a trailing {1} when the following text is empty"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const QString fullText = QStringLiteral("{1},\nE");
+        const int selectionEnd = fullText.indexOf(QLatin1Char('\n'));
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartSelectionText(fullText, 0, selectionEnd);
+        expectTrue(normalized.ok, QStringLiteral("selection normalize accepts a rest-only {1} selection before E"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16},,,, ,,,, ,,,, ,,,,"),
+            QStringLiteral("selection normalize does not append a trailing {1} when the following text reaches E first"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const QString fullText = QStringLiteral("{1},2,");
+        const int selectionEnd = QStringLiteral("{1},").size();
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartSelectionText(fullText, 0, selectionEnd);
+        expectTrue(normalized.ok, QStringLiteral("selection normalize accepts a rest-only {1} selection before chart text"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16},,,, ,,,, ,,,, ,,,,\n{1}"),
+            QStringLiteral("selection normalize appends a trailing {1} when following chart text consumes the current subdivision"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(QStringLiteral("{32},{1},"));
+        expectTrue(normalized.ok, QStringLiteral("normalize accepts a {32} rest followed by an overflow rest"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16},,,, ,,,, ,,,, ,,,,\n{32},"),
+            QStringLiteral("reduce=true preserves a 1/32 overflow segment instead of widening it to {16},"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(QStringLiteral("{24},{1},"));
+        expectTrue(normalized.ok, QStringLiteral("normalize accepts a {24} rest followed by an overflow rest"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16},,,, ,,,, ,,,, ,,,,\n{48},,"),
+            QStringLiteral("reduce=true expresses a 1/24 overflow segment exactly instead of widening it to {16},"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(QStringLiteral("{5},"));
+        expectTrue(normalized.ok, QStringLiteral("normalize accepts a rest-only {5} segment in reduce=true mode"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{384}%1").arg(QString(77, QLatin1Char(','))),
+            QStringLiteral("reduce=true snaps {5}, to 77/384 and emits an exact 384-grid duration"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationOptions exactOptions{true, false};
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(
+                QStringLiteral("{5},"),
+                miacode::simai::SimaiTimingMetadata(),
+                exactOptions);
+        expectTrue(normalized.ok, QStringLiteral("reduce=false accepts a rest-only special subdivision segment"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{5},"),
+            QStringLiteral("reduce=false preserves a non-half-grid rest-only {5} segment"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationOptions exactOptions{true, false};
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(
+                QStringLiteral("{10}1,,,,,"),
+                miacode::simai::SimaiTimingMetadata(),
+                exactOptions);
+        expectTrue(normalized.ok, QStringLiteral("reduce=false accepts a half-grid special segment with a start note"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{2}1,"),
+            QStringLiteral("reduce=false simplifies a half-grid {10} segment when only the boundary note needs representation"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationOptions exactOptions{true, false};
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(
+                QStringLiteral("{10},1,,,,"),
+                miacode::simai::SimaiTimingMetadata(),
+                exactOptions);
+        expectTrue(normalized.ok, QStringLiteral("reduce=false accepts a half-grid special segment with an internal note"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{10},1,,,,"),
+            QStringLiteral("reduce=false keeps a subdivision capable of representing an internal 1/10 note position"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationOptions exactOptions{true, false};
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(
+                QStringLiteral("{4},{10},,,,,{4},"),
+                miacode::simai::SimaiTimingMetadata(),
+                exactOptions);
+        expectTrue(normalized.ok, QStringLiteral("reduce=false accepts a half-grid-aligned special rest segment"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{1},"),
+            QStringLiteral("reduce=false lets half-grid-aligned special rest segments collapse through exact minimal rendering"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationOptions exactOptions{true, false};
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(
+                QStringLiteral("{4},{5},{4},"),
+                miacode::simai::SimaiTimingMetadata(),
+                exactOptions);
+        expectTrue(normalized.ok, QStringLiteral("reduce=false accepts a non-half-grid special segment with surrounding rests"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{4},\n{5},\n{4},"),
+            QStringLiteral("reduce=false resets layout around a non-half-grid special segment and preserves its {5} subdivision"),
+            failed,
+            err
+        );
+    }
+
     // Regression: chained slides (segments joined with `*`) must rotate
     // every lane digit in every segment, not just the first one.
     // Reported on 8b-3[8:1]*^5[8:1] — before the fix only "8b-3" got
