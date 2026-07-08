@@ -191,6 +191,7 @@ struct RenderMeasure {
     int meterDenominator = miacode::simai::kDefaultWholeTimeSignatureDenominator;
     Rational startPhaseWhole;
     Rational lengthWhole;
+    int subdivisionLcmHint = 4;  // LCM of all {N} subdivisions in fragment
     QVector<BoundaryItem> leadingItems;
     QVector<BoundaryItem> trailingItems;
     QVector<MeasureMoment> moments;
@@ -951,9 +952,20 @@ QString renderMeasureLineApproximate(const RenderMeasure& measure)
                 segmentQ = 1;
             }
             // Bump pure power-of-two subdivisions <= 16 up to 16 so an empty
-            // beat in a 4/4 chart still emits {16}, not {1}.
+            // beat in a 4/4 chart still emits {16}, not {1}. When the current
+            // measure itself is shorter than its time signature expects (i.e.
+            // an overflow/incomplete measure), use the fragment's subdivision
+            // LCM instead — this preserves precision for short segments like
+            // {32},,,,, (60 grid) and avoids spurious trailing markers.
             if (segmentQ <= 16 && (16 % segmentQ) == 0) {
-                segmentQ = 16;
+                if (segmentMomentIndices.isEmpty()
+                    && measure.lengthWhole < measureLengthWhole(measure.meterNumerator, measure.meterDenominator)
+                    && measure.subdivisionLcmHint > 16
+                    && (kSnap384Modulus % measure.subdivisionLcmHint) == 0) {
+                    segmentQ = measure.subdivisionLcmHint;
+                } else {
+                    segmentQ = 16;
+                }
             }
             // Align with the meter denominator so segmentLengthGrid * segmentQ
             // is a multiple of 384 (i.e., integer slot count per segment).
@@ -1317,6 +1329,7 @@ ChartNormalizationResult normalizeChartFragment(
 
     Rational currentPositionWhole;
     int currentBeats = qMax(1, seed.currentBeats);
+    qint64 subdivisionLcm = static_cast<qint64>(currentBeats);  // LCM of all {N} values seen
     double currentBpm = seed.currentBpm;
     QString token;
     QStringList currentGroupTokens;
@@ -1362,6 +1375,7 @@ ChartNormalizationResult normalizeChartFragment(
         stored.meterDenominator = currentMeasure.meterDenominator;
         stored.startPhaseWhole = currentMeasure.startPhaseWhole;
         stored.lengthWhole = lengthWhole;
+        stored.subdivisionLcmHint = static_cast<int>(subdivisionLcm);
         stored.leadingItems = currentMeasure.leadingItems;
         stored.trailingItems = currentMeasure.trailingItems;
         stored.moments = currentMeasure.moments;
@@ -1504,6 +1518,10 @@ ChartNormalizationResult normalizeChartFragment(
                 const int parsedBeats = line.mid(index + 1, close - index - 1).trimmed().toInt(&beatsOk);
                 if (beatsOk && parsedBeats > 0) {
                     currentBeats = parsedBeats;
+                    subdivisionLcm = safeLcm(subdivisionLcm, static_cast<qint64>(parsedBeats));
+                    if (subdivisionLcm <= 0 || subdivisionLcm > kSnap384Modulus) {
+                        subdivisionLcm = kSnap384Modulus;
+                    }
                 }
                 index = close;
                 continue;
@@ -1609,7 +1627,7 @@ ChartNormalizationResult normalizeChartFragment(
         // (The caller also suppresses this entirely when the text right after
         // the selection already opens with its own {N} — see
         // followingTextRedefinesBeatsBeforeUse.)
-        const int targetBeats = qMax(1, currentBeats);
+        const int targetBeats = qMax(1, static_cast<int>(subdivisionLcm));
         int lastEmittedBeats = -1;
         for (int i = outputLines.size() - 1; i >= 0; --i) {
             const QString& line = outputLines.at(i);
