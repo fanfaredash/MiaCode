@@ -1873,12 +1873,36 @@ void runInlineSpecs(QTextStream& err, int* failed)
     }
 
     {
+        miacode::chart_transform::ChartNormalizationOptions noSectionOptions;
+        noSectionOptions.splitEveryFourMeasures = false;
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(
+                QStringLiteral("%1\nE").arg(QString(20, QLatin1Char(','))),
+                miacode::simai::SimaiTimingMetadata(),
+                noSectionOptions);
+        expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts disabled chart sectioning"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral(
+                "{16},,,, ,,,, ,,,, ,,,,\n"
+                "{16},,,, ,,,, ,,,, ,,,,\n"
+                "{16},,,, ,,,, ,,,, ,,,,\n"
+                "{16},,,, ,,,, ,,,, ,,,,\n"
+                "{16},,,, ,,,, ,,,, ,,,,\n"
+                "E"),
+            QStringLiteral("normalize whole chart can skip the extra blank line after every fourth measure"),
+            failed,
+            err
+        );
+    }
+
+    {
         const miacode::chart_transform::ChartNormalizationOptions defaults;
         const miacode::chart_transform::ChartNormalizationOptions loaded =
             miacode::chart_transform::chartNormalizationOptionsFromPreferences(QJsonObject(), defaults);
         expectTrue(
-            loaded.startAtNewMeasure && loaded.reduceTo384Grid,
-            QStringLiteral("chart normalization preferences default both options to enabled"),
+            loaded.startAtNewMeasure && loaded.reduceTo384Grid && loaded.splitEveryFourMeasures,
+            QStringLiteral("chart normalization preferences default core options to enabled"),
             failed,
             err
         );
@@ -1886,11 +1910,13 @@ void runInlineSpecs(QTextStream& err, int* failed)
         QJsonObject preview;
         miacode::chart_transform::saveChartNormalizationOptionsToPreferences(
             &preview,
-            miacode::chart_transform::ChartNormalizationOptions{false, false});
+            miacode::chart_transform::ChartNormalizationOptions{false, false, false});
         const miacode::chart_transform::ChartNormalizationOptions restored =
             miacode::chart_transform::chartNormalizationOptionsFromPreferences(preview, defaults);
         expectTrue(
-            !restored.startAtNewMeasure && !restored.reduceTo384Grid,
+            !restored.startAtNewMeasure
+                && !restored.reduceTo384Grid
+                && !restored.splitEveryFourMeasures,
             QStringLiteral("chart normalization preferences round-trip through preview json"),
             failed,
             err

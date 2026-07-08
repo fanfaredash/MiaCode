@@ -1755,7 +1755,9 @@ ChartNormalizationResult normalizeChartFragment(
             ++sectionMeasureIndex;
         }
         appendBoundaryItems(&outputLines, measure.trailingItems);
-        if (sectionMeasureIndex > 0 && (sectionMeasureIndex % 4) == 0) {
+        if (options.splitEveryFourMeasures
+            && sectionMeasureIndex > 0
+            && (sectionMeasureIndex % 4) == 0) {
             outputLines.append(QString());
         }
     }
@@ -1808,6 +1810,10 @@ ChartNormalizationOptions chartNormalizationOptionsFromPreferences(
         options.reduceTo384Grid =
             preview.value(kChartNormalizeReduceTo384GridPreferenceKey).toBool(options.reduceTo384Grid);
     }
+    if (preview.value(kChartNormalizeSplitEveryFourMeasuresPreferenceKey).isBool()) {
+        options.splitEveryFourMeasures =
+            preview.value(kChartNormalizeSplitEveryFourMeasuresPreferenceKey).toBool(options.splitEveryFourMeasures);
+    }
     return options;
 }
 
@@ -1820,6 +1826,7 @@ void saveChartNormalizationOptionsToPreferences(
     }
     preview->insert(kChartNormalizeStartAtNewMeasurePreferenceKey, options.startAtNewMeasure);
     preview->insert(kChartNormalizeReduceTo384GridPreferenceKey, options.reduceTo384Grid);
+    preview->insert(kChartNormalizeSplitEveryFourMeasuresPreferenceKey, options.splitEveryFourMeasures);
 }
 
 ChartNormalizationResult normalizeChartText(

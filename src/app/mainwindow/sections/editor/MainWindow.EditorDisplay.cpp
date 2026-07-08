@@ -520,6 +520,7 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.previewShowValidationSummary_ = true;
     state_.chartNormalizeStartAtNewMeasure_ = true;
     state_.chartNormalizeReduceTo384Grid_ = false;
+    state_.chartNormalizeSplitEveryFourMeasures_ = true;
     state_.workspacePanelsSwapped_ = false;
 }
 
@@ -746,9 +747,10 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     const miacode::chart_transform::ChartNormalizationOptions normalizationOptions =
         miacode::chart_transform::chartNormalizationOptionsFromPreferences(
             preview,
-            miacode::chart_transform::ChartNormalizationOptions{true, false});
-    state_.chartNormalizeStartAtNewMeasure_ = normalizationOptions.startAtNewMeasure;
+            miacode::chart_transform::ChartNormalizationOptions{true, false, true});
+    state_.chartNormalizeStartAtNewMeasure_ = true;
     state_.chartNormalizeReduceTo384Grid_ = normalizationOptions.reduceTo384Grid;
+    state_.chartNormalizeSplitEveryFourMeasures_ = normalizationOptions.splitEveryFourMeasures;
     if (preview.value("swap_side_panels").isBool()) {
         state_.workspacePanelsSwapped_ = preview.value("swap_side_panels").toBool(false);
     }
@@ -896,8 +898,9 @@ void MainWindow::EditorSection::savePortableState() const
     miacode::chart_transform::saveChartNormalizationOptionsToPreferences(
         &preview,
         miacode::chart_transform::ChartNormalizationOptions{
-            state_.chartNormalizeStartAtNewMeasure_,
-            state_.chartNormalizeReduceTo384Grid_});
+            true,
+            state_.chartNormalizeReduceTo384Grid_,
+            state_.chartNormalizeSplitEveryFourMeasures_});
     preview.insert("swap_side_panels", state_.workspacePanelsSwapped_);
     preview.insert("canvas_aspect_ratio", 1.0);
     preview.insert("auto_restore_square_after_export", false);

@@ -543,6 +543,7 @@
         bool ignoreMuriIssuePrompts_ = false;
         bool chartNormalizeStartAtNewMeasure_ = true;
         bool chartNormalizeReduceTo384Grid_ = false;
+        bool chartNormalizeSplitEveryFourMeasures_ = true;
         bool workspacePanelsSwapped_ = false;
         PreviewAudioSettings softwarePreviewAudioSettings_;
         PreviewAudioSettings previewAudioSettings_;
@@ -944,6 +945,7 @@
     bool& ignoreMuriIssuePrompts_ = state_.ignoreMuriIssuePrompts_;
     bool& chartNormalizeStartAtNewMeasure_ = state_.chartNormalizeStartAtNewMeasure_;
     bool& chartNormalizeReduceTo384Grid_ = state_.chartNormalizeReduceTo384Grid_;
+    bool& chartNormalizeSplitEveryFourMeasures_ = state_.chartNormalizeSplitEveryFourMeasures_;
     bool& workspacePanelsSwapped_ = state_.workspacePanelsSwapped_;
     PreviewAudioSettings& softwarePreviewAudioSettings_ = state_.softwarePreviewAudioSettings_;
     PreviewAudioSettings& previewAudioSettings_ = state_.previewAudioSettings_;

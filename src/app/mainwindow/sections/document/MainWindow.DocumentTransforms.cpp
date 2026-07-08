@@ -44,11 +44,12 @@ NormalizeDialogResult showNormalizeSelectionDialog(
 {
     NormalizeDialogResult result;
     result.options = initialOptions;
+    result.options.startAtNewMeasure = true;
 
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner));
     dialog.setWindowTitle(UiText::text(QStringLiteral("dialog.normalize.title")));
     dialog.setModal(true);
-    dialog.setMinimumWidth(300);
+    dialog.setMinimumWidth(360);
     dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
     UiDialogs::prepareDialogWindow(&dialog, &owner);
 
@@ -71,28 +72,69 @@ NormalizeDialogResult showNormalizeSelectionDialog(
     summaryLayout->addWidget(hintLabel, 1);
     rootLayout->addWidget(summaryRow);
 
-    auto* startAtNewMeasureCheck = new QCheckBox(
-        UiText::text(QStringLiteral("document.treat_selection_start_as_measure")),
-        &dialog);
-    startAtNewMeasureCheck->setChecked(initialOptions.startAtNewMeasure);
-    rootLayout->addWidget(startAtNewMeasureCheck);
+    const auto createDialogComboBox = [&dialog]() {
+        auto* combo = new QComboBox(&dialog);
+        combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        UiTheme::styleDialogComboBox(combo, 2);
+        return combo;
+    };
+    const auto setComboToBool = [](QComboBox* combo, bool value) {
+        const int index = combo->findData(value);
+        combo->setCurrentIndex(index >= 0 ? index : 0);
+    };
+    const auto comboBoolValue = [](const QComboBox* combo, bool fallback) {
+        if (combo == nullptr || combo->currentIndex() < 0) {
+            return fallback;
+        }
+        const QVariant value = combo->itemData(combo->currentIndex());
+        return value.isValid() ? value.toBool() : fallback;
+    };
 
-    auto* reduceTo384Check = new QCheckBox(
+    auto* optionsGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.normalize.options")), &dialog);
+    auto* optionsForm = new QFormLayout(optionsGroup);
+    optionsForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    optionsForm->setHorizontalSpacing(10);
+    optionsForm->setVerticalSpacing(8);
+    optionsForm->setContentsMargins(10, 8, 10, 8);
+    rootLayout->addWidget(optionsGroup);
+
+    auto* reduceTo384Combo = createDialogComboBox();
+    reduceTo384Combo->addItem(UiText::text(QStringLiteral("preferences.on")), true);
+    reduceTo384Combo->addItem(UiText::text(QStringLiteral("preferences.off")), false);
+    setComboToBool(reduceTo384Combo, initialOptions.reduceTo384Grid);
+    optionsForm->addRow(
         UiText::text(QStringLiteral("document.snap_approximately_to_384_grid")),
-        &dialog);
-    reduceTo384Check->setChecked(initialOptions.reduceTo384Grid);
-    rootLayout->addWidget(reduceTo384Check);
+        reduceTo384Combo);
 
-    const auto publishOptionsChanged = [startAtNewMeasureCheck, reduceTo384Check, optionsChanged]() {
+    auto* sectioningCombo = createDialogComboBox();
+    sectioningCombo->addItem(
+        UiText::text(QStringLiteral("document.chart_section_every_4_measures")),
+        true);
+    sectioningCombo->addItem(
+        UiText::text(QStringLiteral("document.chart_section_none")),
+        false);
+    setComboToBool(sectioningCombo, initialOptions.splitEveryFourMeasures);
+    optionsForm->addRow(UiText::text(QStringLiteral("document.chart_sectioning")), sectioningCombo);
+
+    const auto publishOptionsChanged = [reduceTo384Combo, sectioningCombo, comboBoolValue, optionsChanged]() {
         if (!optionsChanged) {
             return;
         }
         optionsChanged(miacode::chart_transform::ChartNormalizationOptions{
-            startAtNewMeasureCheck->isChecked(),
-            reduceTo384Check->isChecked()});
+            true,
+            comboBoolValue(reduceTo384Combo, false),
+            comboBoolValue(sectioningCombo, true)});
     };
-    QObject::connect(startAtNewMeasureCheck, &QCheckBox::toggled, &dialog, publishOptionsChanged);
-    QObject::connect(reduceTo384Check, &QCheckBox::toggled, &dialog, publishOptionsChanged);
+    QObject::connect(
+        reduceTo384Combo,
+        qOverload<int>(&QComboBox::currentIndexChanged),
+        &dialog,
+        [publishOptionsChanged](int) { publishOptionsChanged(); });
+    QObject::connect(
+        sectioningCombo,
+        qOverload<int>(&QComboBox::currentIndexChanged),
+        &dialog,
+        [publishOptionsChanged](int) { publishOptionsChanged(); });
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     UiDialogs::localizeButtonBox(buttonBox);
@@ -105,8 +147,10 @@ NormalizeDialogResult showNormalizeSelectionDialog(
     }
 
     result.accepted = true;
-    result.options.startAtNewMeasure = startAtNewMeasureCheck->isChecked();
-    result.options.reduceTo384Grid = reduceTo384Check->isChecked();
+    result.options.startAtNewMeasure = true;
+    result.options.reduceTo384Grid = comboBoolValue(reduceTo384Combo, initialOptions.reduceTo384Grid);
+    result.options.splitEveryFourMeasures =
+        comboBoolValue(sectioningCombo, initialOptions.splitEveryFourMeasures);
     return result;
 }
 
@@ -319,28 +363,33 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
     }
 
     miacode::chart_transform::ChartNormalizationOptions options;
-    options.startAtNewMeasure = state_.chartNormalizeStartAtNewMeasure_;
+    options.startAtNewMeasure = true;
     options.reduceTo384Grid = state_.chartNormalizeReduceTo384Grid_;
+    options.splitEveryFourMeasures = state_.chartNormalizeSplitEveryFourMeasures_;
     const NormalizeDialogResult dialogResult =
         showNormalizeSelectionDialog(
             owner_,
             dialogDescription,
             options,
             [this](const miacode::chart_transform::ChartNormalizationOptions& changedOptions) {
-                if (state_.chartNormalizeStartAtNewMeasure_ == changedOptions.startAtNewMeasure
-                    && state_.chartNormalizeReduceTo384Grid_ == changedOptions.reduceTo384Grid) {
+                if (state_.chartNormalizeReduceTo384Grid_ == changedOptions.reduceTo384Grid
+                    && state_.chartNormalizeSplitEveryFourMeasures_
+                        == changedOptions.splitEveryFourMeasures) {
                     return;
                 }
-                state_.chartNormalizeStartAtNewMeasure_ = changedOptions.startAtNewMeasure;
+                state_.chartNormalizeStartAtNewMeasure_ = true;
                 state_.chartNormalizeReduceTo384Grid_ = changedOptions.reduceTo384Grid;
+                state_.chartNormalizeSplitEveryFourMeasures_ =
+                    changedOptions.splitEveryFourMeasures;
                 owner_.savePortableState();
             });
     if (!dialogResult.accepted) {
         return;
     }
 
-    state_.chartNormalizeStartAtNewMeasure_ = dialogResult.options.startAtNewMeasure;
+    state_.chartNormalizeStartAtNewMeasure_ = true;
     state_.chartNormalizeReduceTo384Grid_ = dialogResult.options.reduceTo384Grid;
+    state_.chartNormalizeSplitEveryFourMeasures_ = dialogResult.options.splitEveryFourMeasures;
 
     if (begin < 0 || finish < begin || finish > original.size()) {
         owner_.statusBar()->showMessage(QStringLiteral("Format Chart: invalid selection range."));
