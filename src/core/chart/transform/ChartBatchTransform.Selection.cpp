@@ -157,12 +157,15 @@ ToggleStats collectBreakStats(const QString& input)
 
         SlideTokenParts slide;
         if (parseSlideTokenParts(token, &slide) && slide.valid) {
-            stats.eligibleObjects += 2;
+            stats.eligibleObjects += 1;  // head
             if (slide.headBreak) {
                 ++stats.flaggedObjects;
             }
-            if (slide.trackBreak) {
-                ++stats.flaggedObjects;
+            stats.eligibleObjects += slide.segments.size();  // one per segment
+            for (const auto& seg : slide.segments) {
+                if (seg.segmentBreak) {
+                    ++stats.flaggedObjects;
+                }
             }
             return;
         }
@@ -253,9 +256,21 @@ QString toggleBreakToken(const QString& token, bool enable, int* changedCount)
 
     SlideTokenParts slide;
     if (parseSlideTokenParts(token, &slide) && slide.valid) {
-        const QString rebuilt = buildSlideToken(slide, enable, slide.headEx, enable, slide.coreWithoutTrackBreak);
+        // Count how many break flags would change
+        int delta = 0;
+        if (slide.headBreak != enable) ++delta;
+        for (const auto& seg : slide.segments) {
+            if (seg.segmentBreak != enable) ++delta;
+        }
+
+        slide.headBreak = enable;
+        for (auto& seg : slide.segments) {
+            seg.segmentBreak = enable;
+        }
+
+        const QString rebuilt = buildSlideToken(slide);
         if (rebuilt != token && changedCount != nullptr) {
-            *changedCount += (slide.headBreak != enable ? 1 : 0) + (slide.trackBreak != enable ? 1 : 0);
+            *changedCount += delta;
         }
         return rebuilt;
     }
@@ -291,7 +306,8 @@ QString toggleExToken(const QString& token, bool enable, int* changedCount)
 
     SlideTokenParts slide;
     if (parseSlideTokenParts(token, &slide) && slide.valid) {
-        const QString rebuilt = buildSlideToken(slide, slide.headBreak, enable, slide.trackBreak, slide.coreWithoutTrackBreak);
+        slide.headEx = enable;
+        const QString rebuilt = buildSlideToken(slide);
         if (rebuilt != token && changedCount != nullptr) {
             *changedCount += 1;
         }
@@ -362,8 +378,10 @@ QString rotateRandomToken(const QString& token, const std::function<int()>& next
     SlideTokenParts slide;
     if (parseSlideTokenParts(token, &slide) && slide.valid) {
         const int step = nextStep();
-        const QString rotatedCore = rotateSlideCoreOutsideBrackets(slide.coreWithoutTrackBreak, step);
-        const QString rebuilt = buildSlideToken(slide, slide.headBreak, slide.headEx, slide.trackBreak, rotatedCore);
+        for (auto& seg : slide.segments) {
+            seg.text = rotateSlideCoreOutsideBrackets(seg.text, step);
+        }
+        const QString rebuilt = buildSlideToken(slide);
         if (rebuilt != token && changedCount != nullptr) {
             *changedCount += 1;
         }
