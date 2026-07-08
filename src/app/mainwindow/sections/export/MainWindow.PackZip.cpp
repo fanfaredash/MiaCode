@@ -146,5 +146,32 @@ void MainWindow::ExportSection::onPackAsZip()
             .arg(QDir::toNativeSeparators(outputPath))
             .arg(result.includedEntries.size())
             .arg(details);
-    UiDialogs::showMessageBox(QMessageBox::Information, &owner_, dialogTitle, body);
+
+    QMessageBox dialog(
+        QMessageBox::Information,
+        dialogTitle,
+        body,
+        QMessageBox::NoButton,
+        UiDialogs::effectiveParentWidget(&owner_));
+    dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+    UiDialogs::configureDialogPreviewShortcuts(&dialog);
+    UiDialogs::applyDetachedParentBehavior(&dialog, &owner_);
+
+    QPushButton* openFolderButton = dialog.addButton(
+        UiText::text(QStringLiteral("action.open_folder")),
+        QMessageBox::AcceptRole);
+    dialog.addButton(
+        UiText::text(QStringLiteral("action.close")),
+        QMessageBox::RejectRole);
+    dialog.setDefaultButton(openFolderButton);
+
+    dialog.exec();
+
+    if (dialog.clickedButton() == openFolderButton) {
+        const QFileInfo zipFileInfo(outputPath);
+        const QString dir = zipFileInfo.absoluteDir().absolutePath();
+        if (!dir.isEmpty()) {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+        }
+    }
 }

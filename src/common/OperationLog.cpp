@@ -620,4 +620,69 @@ void appendStartupBeaconLine(const char* lineUtf8) noexcept
 #endif
 }
 
+void relocateLogs(const QString& targetDirectory)
+{
+#ifdef Q_OS_WIN
+    if (targetDirectory.trimmed().isEmpty()) {
+        return;
+    }
+    const QString dir = QDir::cleanPath(targetDirectory.trimmed());
+    QDir().mkpath(dir);
+
+    const qint64 pid = QCoreApplication::applicationPid();
+
+    // ---- Relocate startup beacon ----
+    {
+        const QString newBeaconPath =
+            QDir(dir).filePath(
+                QStringLiteral("miacode_startup_beacon_%1.txt").arg(pid));
+        const std::wstring newBeaconW = newBeaconPath.toStdWString();
+        if (newBeaconW.empty() || newBeaconW.size() + 1 > kShadowPathCap) {
+            // Path too long for static buffer — skip beacon relocation.
+        } else {
+            // Copy existing beacon content forward so the full startup
+            // diagnostic trail is preserved at the new location.
+            const QString oldBeaconPath = QString::fromWCharArray(g_beaconPathW);
+            if (g_beaconPathW[0] != L'\0' && oldBeaconPath != newBeaconPath) {
+                ::CopyFileW(g_beaconPathW, newBeaconW.c_str(), FALSE);
+            } else if (!QFileInfo::exists(newBeaconPath)) {
+                // No old beacon to copy and file doesn't exist at the new
+                // location yet — create an empty one so subsequent appends
+                // (which use OPEN_EXISTING) don't silently fail.
+                HANDLE h = ::CreateFileW(
+                    newBeaconW.c_str(), GENERIC_WRITE,
+                    FILE_SHARE_READ, nullptr,
+                    CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                if (h != INVALID_HANDLE_VALUE) {
+                    ::CloseHandle(h);
+                }
+            }
+
+            // Update the cached path so future appendStartupBeaconLine
+            // calls write to the new location.
+            std::memset(g_beaconPathW, 0, sizeof(g_beaconPathW));
+            std::memcpy(g_beaconPathW, newBeaconW.c_str(),
+                        (newBeaconW.size() + 1) * sizeof(wchar_t));
+        }
+    }
+
+    // ---- Relocate op-chain shadow ----
+    {
+        const QString newShadowPath =
+            QDir(dir).filePath(
+                QStringLiteral("miacode_op_chain_%1.log").arg(pid));
+        const std::wstring newShadowW = newShadowPath.toStdWString();
+        if (newShadowW.empty() || newShadowW.size() + 1 > kShadowPathCap) {
+            // Path too long — leave shadow at its current location.
+        } else {
+            std::memset(g_shadowPathW, 0, sizeof(g_shadowPathW));
+            std::memcpy(g_shadowPathW, newShadowW.c_str(),
+                        (newShadowW.size() + 1) * sizeof(wchar_t));
+        }
+    }
+#else
+    Q_UNUSED(targetDirectory);
+#endif
+}
+
 }  // namespace miacode::oplog

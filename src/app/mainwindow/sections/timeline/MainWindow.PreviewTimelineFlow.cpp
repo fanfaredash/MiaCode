@@ -17,6 +17,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/ChartClockCount.h"
 #include "common/CrashRecovery.h"
+#include "common/OperationLog.h"
 #include "common/DebugLog.h"
 #include "common/ProcessDiagnostics.h"
 #include "common/DebugOptions.h"
@@ -659,6 +660,12 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
             ? QString()
             : QDir(projectDataDirectoryPath).filePath(QStringLiteral("logs"))
     );
+    // Relocate the startup beacon and op-chain shadow so they co-locate
+    // with the runtime/export logs under this chart's .miacode/logs/.
+    if (!projectDataDirectoryPath.isEmpty()) {
+        miacode::oplog::relocateLogs(
+            QDir(projectDataDirectoryPath).filePath(QStringLiteral("logs")));
+    }
     // The runtime log directory just rebound to this chart's .miacode/logs/;
     // re-emit the P0/P2/P3 startup diagnostics (process identity / GPU hint /
     // resolved GPU policy) so the per-chart log a user collects is self-contained

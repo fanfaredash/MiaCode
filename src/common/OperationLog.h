@@ -137,6 +137,15 @@ void writeStartupBeacon(const char* versionUtf8);
 // trail in the same beacon file that's already proven to land on disk.
 void appendStartupBeaconLine(const char* lineUtf8) noexcept;
 
+// Relocate the startup beacon and op-chain shadow log paths to a
+// specific directory. Called when a chart opens so that all crash
+// diagnostics co-locate with the runtime/export logs under
+// <chart>/.miacode/logs/. Copies the existing beacon content forward;
+// the shadow file is re-created at the new path on the next flush.
+// Safe to call from the GUI thread; must NOT be called from a crash
+// handler (uses Qt heap for directory creation and file copy).
+void relocateLogs(const QString& targetDirectory);
+
 }  // namespace miacode::oplog
 
 // Convenience macro. The variable name _mc_op_ is conventional so

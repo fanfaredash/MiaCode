@@ -780,6 +780,11 @@ void MainWindow::PreferencesSection::onPreferences()
                 selectedLanguageToken = id;
                 languageButton->setText(languageLabelForToken(selectedLanguageToken));
                 UiText::setPreferredLanguageToken(selectedLanguageToken);
+                QMessageBox::information(
+                    &dialog,
+                    UiText::text(QStringLiteral("dialog.preferences.restart_title")),
+                    UiText::text(QStringLiteral("dialog.preferences.restart_message")),
+                    QMessageBox::Ok);
                 owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_saved")));
             });
         }
