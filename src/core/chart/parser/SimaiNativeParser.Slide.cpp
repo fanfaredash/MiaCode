@@ -22,6 +22,7 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     if (state == nullptr || token.isEmpty() || !isDigitLane(token.at(0))) {
         return;
     }
+    const int tokenEndCol = column + token.size() - 1;
 
     int modifierCount = 0;
     SlideHeadModifierState modifierState;
@@ -39,15 +40,25 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
         const QString prefix = token.left(1) + modifierState.rawModifiers;
         const QChar startLane = token.at(0);
         const QStringList branches = noteCore.split(QChar('*'), Qt::KeepEmptyParts);
-        bool flaggedHeadedBranch = false;
+        bool flaggedInvalidBranch = false;
         for (int branchIndex = 0; branchIndex < branches.size(); ++branchIndex) {
             QString branch = branches.at(branchIndex);
             if (branch.isEmpty()) {
+                if (state->strictMode && !flaggedInvalidBranch) {
+                    appendTokenError(
+                        state,
+                        lineNumber,
+                        column,
+                        QString("Invalid empty '*' slide branch: %1").arg(token),
+                        tokenEndCol
+                    );
+                    flaggedInvalidBranch = true;
+                }
                 continue;
             }
             if (!isDigitLane(branch.at(0))) {
                 branch.prepend(startLane);
-            } else if (branchIndex > 0 && state->strictMode && !flaggedHeadedBranch) {
+            } else if (branchIndex > 0 && state->strictMode && !flaggedInvalidBranch) {
                 // A '*' branch must be a headless slide body (`5q2[4:1]*p8[4:1]`).
                 // Repeating a lane digit after '*' is a syntax error — the digit
                 // is NOT a new head; lenient parsing below substitutes the shared
@@ -59,9 +70,9 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
                     lineNumber,
                     column,
                     QString("Invalid '*' slide branch (must omit the slide head): %1").arg(token),
-                    column + token.size() - 1
+                    tokenEndCol
                 );
-                flaggedHeadedBranch = true;
+                flaggedInvalidBranch = true;
             }
             const QString branchToken = prefix + branch.mid(1);
             parseSlideToken(state, branchToken, lineNumber, column, groupIndices);
@@ -71,6 +82,10 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
 
     if (slideCoreHasDisallowedModifiers(noteCore)) {
         appendTokenError(state, lineNumber, column, classifyInvalidNoteMessage(token));
+        return;
+    }
+    if (noteCore.contains(QChar('M'))) {
+        appendTokenError(state, lineNumber, column, classifyInvalidNoteMessage(token), tokenEndCol);
         return;
     }
 
@@ -105,7 +120,7 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     bool trackMine = false;
     for (int i = 1; i < noteCore.size(); ++i) {
         const QChar ch = noteCore.at(i);
-        if (ch == QChar('m') || ch == QChar('M')) {
+        if (ch == QChar('m')) {
             trackMine = true;
         }
     }
@@ -114,7 +129,7 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     sanitizedCore.reserve(noteCore.size());
     for (int i = 0; i < noteCore.size(); ++i) {
         const QChar ch = noteCore.at(i);
-        if (ch == QChar('b') || ch == QChar('m') || ch == QChar('M')) {
+        if (ch == QChar('b') || ch == QChar('m')) {
             continue;
         }
         sanitizedCore.append(ch);
@@ -129,7 +144,30 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     // the slide-data lookup at parse time).
     if (state->strictMode && !isValidSlideChainStrict(sanitizedCore)) {
         appendTokenError(state, lineNumber, column,
-            QString("Invalid slide chain syntax: %1").arg(token));
+            QString("Invalid slide chain syntax: %1").arg(token),
+            tokenEndCol);
+    }
+
+    if (state->strictMode) {
+        const SlideDurationPlacementStrict durationPlacement =
+            classifySlideDurationPlacementStrict(sanitizedCore);
+        if (durationPlacement == SlideDurationPlacementStrict::Invalid) {
+            appendTokenError(
+                state,
+                lineNumber,
+                column,
+                QString("Invalid slide duration placement: %1").arg(token),
+                tokenEndCol
+            );
+        } else if (durationPlacement == SlideDurationPlacementStrict::EverySegmentTimed) {
+            appendTokenWarning(
+                state,
+                lineNumber,
+                column,
+                QString("Invalid slide duration placement: %1").arg(token),
+                tokenEndCol
+            );
+        }
     }
 
     const int lane = token.at(0).digitValue();
@@ -156,14 +194,6 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     marker.headEx = modifierState.headEx;
     marker.slideHeadUsesTapMaterial = modifierState.slideHeadUsesTapMaterial;
     marker.isEx = false;
-
-    if (state->strictMode && marker.type == "slide" && sanitizedCore.count(QChar('[')) > 1) {
-        // Per-segment ("分段") slide timing — non-canonical; festival (fes)
-        // charts sometimes write it by mistake. Flag the syntax error but do
-        // NOT bail: the chain parser below folds the per-segment durations into
-        // the equivalent total-duration slide so the note still parses.
-        appendTokenError(state, lineNumber, column, QString("Invalid slide duration placement: %1").arg(token));
-    }
 
     if (marker.type == "slide"
         && parseStandardSlideChain(sanitizedCore, state->bpm, &chainShapes, &waitSecond, &chainDurations)) {

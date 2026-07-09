@@ -156,6 +156,32 @@ int main(int argc, char** argv)
     }
 
     {
+        const QString chart = QStringLiteral("1>3,\nE");
+        const SimaiNativeParseResult lenientMissingDuration = SimaiNativeParser::parseForTimeline(chart);
+        const SimaiNativeParseResult strictMissingDuration = SimaiNativeParser::validateSyntax(chart);
+        expect(!lenientMissingDuration.ok, QStringLiteral("timeline parse rejects missing slide duration as slide"));
+        expect(
+            !lenientMissingDuration.errors.isEmpty()
+                && lenientMissingDuration.errors.constFirst().message.startsWith(QStringLiteral("Invalid slide duration")),
+            QStringLiteral("timeline parse reports missing slide duration, not hold modifier sequence"));
+        expect(!strictMissingDuration.ok, QStringLiteral("validate rejects missing slide duration as slide"));
+        expect(
+            !strictMissingDuration.errors.isEmpty()
+                && strictMissingDuration.errors.constFirst().message.startsWith(QStringLiteral("Invalid slide duration")),
+            QStringLiteral("validate reports missing slide duration, not hold modifier sequence"));
+
+        const SimaiNativeValidationReport zhReport = SimaiNativeParser::buildValidationReport(
+            chart,
+            SimaiNativeValidationLocale::Chinese);
+        expect(
+            !zhReport.ok
+                && zhReport.issues.size() == 1
+                && zhReport.issues.constFirst().displayMessage.contains(QStringLiteral("Slide 时值无效"))
+                && !zhReport.issues.constFirst().displayMessage.contains(QStringLiteral("Hold 修饰符")),
+            QStringLiteral("zh report localizes missing slide duration without hold wording"));
+    }
+
+    {
         // Same-lane v slides (XvX = out to center, back to the same lane) are
         // a supported extension shape spliced into slide_data.json. The
         // opposite-lane form Xv(X+4) stays unsupported on purpose — it is
@@ -254,10 +280,14 @@ int main(int argc, char** argv)
 
     {
         const SimaiNativeParseResult strictFestival = SimaiNativeParser::validateSyntax(QStringLiteral("1-5[8:1]-1[8:2],\nE"));
-        // Per-segment ("分段") timing is still flagged as a syntax error in
-        // strict mode, but the note is no longer dropped — it folds into the
-        // equivalent total-duration slide so the chart still parses.
-        expect(!strictFestival.ok, QStringLiteral("validate flags per-segment duration for festival slide"));
+        // Per-segment ("分段") timing is non-canonical but warning-only:
+        // the note folds into the equivalent total-duration slide.
+        expect(strictFestival.ok && strictFestival.errors.isEmpty(),
+            QStringLiteral("validate keeps per-segment duration warning-only for festival slide"));
+        expect(
+            strictFestival.warnings.size() == 1
+                && strictFestival.warnings.constFirst().message.startsWith(QStringLiteral("Invalid slide duration placement")),
+            QStringLiteral("per-segment duration emits a slide-duration-placement warning"));
 
         const SimaiNativeParseResult lenientFestival = SimaiNativeParser::parseForTimeline(QStringLiteral("1-5[8:1]-1[8:2],\nE"));
         const SimaiNativeParseResult totalDuration = SimaiNativeParser::parseForTimeline(QStringLiteral("1-5-1[8:3],\nE"));
@@ -290,6 +320,22 @@ int main(int argc, char** argv)
                 }
             }
             expect(allSegmentMatch, QStringLiteral("festival per-segment syntax normalizes to uniform chain speed"));
+        }
+
+        const QVector<QString> invalidDurationPlacementCharts = {
+            QStringLiteral("1-5[8:1]-1,\nE"),
+            QStringLiteral("1>5[8:1]<5,\nE"),
+            QStringLiteral("1>5[8:1]V35,\nE"),
+            QStringLiteral("1w5[8:1]<5,\nE"),
+        };
+        for (const QString& chart : invalidDurationPlacementCharts) {
+            const SimaiNativeParseResult invalid = SimaiNativeParser::validateSyntax(chart);
+            expect(!invalid.ok, QStringLiteral("validate rejects invalid slide duration placement: %1").arg(chart.trimmed()));
+            expect(
+                !invalid.errors.isEmpty()
+                    && invalid.errors.constFirst().message.startsWith(QStringLiteral("Invalid slide duration placement"))
+                    && invalid.errors.constFirst().endCol > invalid.errors.constFirst().col,
+                QStringLiteral("invalid slide duration placement covers the whole token: %1").arg(chart.trimmed()));
         }
     }
 
@@ -761,6 +807,7 @@ int main(int argc, char** argv)
         // after '*' is not a new head — lenient parsing substitutes the shared
         // head lane, so `*4p8[4:1]` silently becomes 5p8[4:1]).
         const QString starBranchPrefix = QStringLiteral("Invalid '*' slide branch (must omit the slide head): ");
+        const QString emptyStarBranchPrefix = QStringLiteral("Invalid empty '*' slide branch: ");
         const SimaiNativeParseResult strictHeadless = SimaiNativeParser::validateSyntax(
             QStringLiteral("5q2[4:1]*p8[4:1],\nE"));
         expect(strictHeadless.ok && strictHeadless.errors.isEmpty(),
@@ -777,6 +824,23 @@ int main(int argc, char** argv)
         const SimaiNativeParseResult strictOtherHead = SimaiNativeParser::validateSyntax(
             QStringLiteral("5q2[4:1]*4p8[4:1],\nE"));
         expect(!strictOtherHead.ok, QStringLiteral("validate rejects '*' branch with a different head digit"));
+
+        const SimaiNativeParseResult strictTrailingEmpty = SimaiNativeParser::validateSyntax(
+            QStringLiteral("1-5[8:1]*,\nE"));
+        expect(!strictTrailingEmpty.ok, QStringLiteral("validate rejects trailing empty '*' branch"));
+        expect(
+            strictTrailingEmpty.errors.size() == 1
+                && strictTrailingEmpty.errors.constFirst().message.startsWith(emptyStarBranchPrefix)
+                && strictTrailingEmpty.errors.constFirst().endCol > strictTrailingEmpty.errors.constFirst().col,
+            QStringLiteral("trailing empty '*' branch emits one whole-token error"));
+
+        const SimaiNativeParseResult strictMiddleEmpty = SimaiNativeParser::validateSyntax(
+            QStringLiteral("1-5[8:1]**-6[8:1],\nE"));
+        expect(!strictMiddleEmpty.ok, QStringLiteral("validate rejects middle empty '*' branch"));
+        expect(
+            strictMiddleEmpty.errors.size() == 1
+                && strictMiddleEmpty.errors.constFirst().message.startsWith(emptyStarBranchPrefix),
+            QStringLiteral("middle empty '*' branch emits one empty-branch error"));
 
         // Lenient keeps the historical substitution so the chart still previews.
         const SimaiNativeParseResult lenientSameHead = SimaiNativeParser::parseForTimeline(
@@ -1027,6 +1091,21 @@ int main(int argc, char** argv)
             expect(slideMarker->headMine, QStringLiteral("`1-3[2:1]m` sets headMine on the slide head star"));
             expect(!slideMarker->slideDisplayKey.contains(QLatin1Char('m')),
                    QStringLiteral("mine `m` is stripped from the slide shape lookup key"));
+        }
+
+        const QVector<QString> uppercaseMineCharts = {
+            QStringLiteral("1M,\nE"),
+            QStringLiteral("1HM[4:1],\nE"),
+            QStringLiteral("A1M,\nE"),
+            QStringLiteral("C2hM[4:1],\nE"),
+            QStringLiteral("1-3[2:1]M,\nE"),
+            QStringLiteral("1M-3[2:1],\nE"),
+        };
+        for (const QString& chart : uppercaseMineCharts) {
+            const SimaiNativeParseResult lenient = SimaiNativeParser::parseForTimeline(chart);
+            const SimaiNativeParseResult strict = SimaiNativeParser::validateSyntax(chart);
+            expect(!lenient.ok, QStringLiteral("timeline parse rejects uppercase mine modifier: %1").arg(chart.trimmed()));
+            expect(!strict.ok, QStringLiteral("validate rejects uppercase mine modifier: %1").arg(chart.trimmed()));
         }
     }
 

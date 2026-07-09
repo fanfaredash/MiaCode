@@ -768,6 +768,20 @@ void runInlineSpecs(QTextStream& err, int* failed)
 
     {
         int changed = 0;
+        const QString input = QStringLiteral("1M/A1M/1-3[2:1]M");
+        const QString output = miacode::chart_transform::toggleBreakForSelection(input, &changed);
+        expectEqual(
+            output,
+            input,
+            QStringLiteral("toggle break leaves uppercase M mine variants unrecognized"),
+            failed,
+            err
+        );
+        expectTrue(changed == 0, QStringLiteral("toggle break does not count invalid uppercase M variants"), failed, err);
+    }
+
+    {
+        int changed = 0;
         const QString input = QStringLiteral("1 2h[4:1] A1 C1h[4:1] 1-5[8:1] 6b");
         const QString output = miacode::chart_transform::toggleExForSelection(input, &changed);
         expectEqual(

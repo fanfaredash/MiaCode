@@ -228,6 +228,12 @@ quint32 flagsForMarker(const TimelineNoteMarker& marker)
     if (marker.headlessImmediate) {
         flags |= TimelineRenderFlagHeadlessImmediate;
     }
+    if (marker.isMine) {
+        flags |= TimelineRenderFlagIsMine;
+    }
+    if (marker.trackMine) {
+        flags |= TimelineRenderFlagTrackMine;
+    }
     return flags;
 }
 
@@ -1764,6 +1770,27 @@ int main(int argc, char** argv)
                            && nearlyEqual(headlessSlide.endSecondOffset, 0.75),
                        QStringLiteral("quick model parses [wait##fraction] timing on headless slide"));
             }
+        }
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("1m/A1m/1-3[2:1]m,\n1M/A1M/1-3[2:1]M,\nE"), 0.0);
+        const TimelineRenderSnapshot snapshot = model.snapshot();
+        expect(snapshot.lines.size() >= 2, QStringLiteral("quick model builds snapshot for mine case-sensitivity repro"));
+        if (snapshot.lines.size() >= 2) {
+            const QVector<TimelineRenderNote>& lowerNotes = snapshot.lines.at(0).notes;
+            expect(lowerNotes.size() == 3, QStringLiteral("quick model keeps lowercase mine tap, touch, and slide"));
+            if (lowerNotes.size() == 3) {
+                expect(timelineRenderFlagSet(lowerNotes.at(0), TimelineRenderFlagIsMine),
+                       QStringLiteral("quick model marks lowercase tap mine"));
+                expect(timelineRenderFlagSet(lowerNotes.at(1), TimelineRenderFlagIsMine),
+                       QStringLiteral("quick model marks lowercase touch mine"));
+                expect(timelineRenderFlagSet(lowerNotes.at(2), TimelineRenderFlagTrackMine),
+                       QStringLiteral("quick model marks lowercase slide track mine"));
+            }
+            expect(snapshot.lines.at(1).notes.isEmpty(),
+                   QStringLiteral("quick model rejects uppercase M mine variants"));
         }
     }
 

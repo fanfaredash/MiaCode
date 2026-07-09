@@ -212,6 +212,12 @@ const QString& kInvalidSlideStarBranchPrefix()
     return value;
 }
 
+const QString& kEmptySlideStarBranchPrefix()
+{
+    static const QString value = QStringLiteral("Invalid empty '*' slide branch: ");
+    return value;
+}
+
 const QString& kRepeatedSlashSeparator()
 {
     static const QString value = QStringLiteral("Repeated separator '//' is not allowed");
@@ -309,6 +315,7 @@ const QHash<QString, QString>& zhPrefixMap()
         {kInvalidSlideChainPrefix(), QStringLiteral("Slide 段链语法无效：")},
         {kMissingCommaBeforeDirectivePrefix(), QStringLiteral("音符与指令（{} () <HS*>）之间缺少分隔符 ','：")},
         {kInvalidSlideStarBranchPrefix(), QStringLiteral("'*' 同头 Slide 分支语法无效（* 后必须省略 slide 头部，如 5q2[4:1]*p8[4:1]）：")},
+        {kEmptySlideStarBranchPrefix(), QStringLiteral("'*' 同头 Slide 分支不能为空：")},
         {kFullwidthDigitPrefix(), QStringLiteral("检测到全角数字，请改用半角数字：")},
         {kFullwidthTouchRegionPrefix(), QStringLiteral("检测到全角触摸区域字母，请改用半角区域字母：")},
         {kFullwidthModifierPrefix(), QStringLiteral("检测到全角修饰符，请改用半角修饰符：")},
@@ -363,6 +370,7 @@ const QHash<QString, QString>& jaPrefixMap()
         {kInvalidSlideChainPrefix(), QStringLiteral("Slide チェーンの構文が無効です：")},
         {kMissingCommaBeforeDirectivePrefix(), QStringLiteral("ノーツと指令（{} () <HS*>）の間に区切りの ',' がありません：")},
         {kInvalidSlideStarBranchPrefix(), QStringLiteral("'*' による同一始点 Slide 分岐の構文が無効です（* の後は slide 頭部を省略します。例：5q2[4:1]*p8[4:1]）：")},
+        {kEmptySlideStarBranchPrefix(), QStringLiteral("'*' による同一始点 Slide 分岐を空にはできません：")},
         {kFullwidthDigitPrefix(), QStringLiteral("全角数字が見つかりました。半角数字を使ってください：")},
         {kFullwidthTouchRegionPrefix(), QStringLiteral("全角のタッチ領域文字が見つかりました。半角文字を使ってください：")},
         {kFullwidthModifierPrefix(), QStringLiteral("全角の修飾子が見つかりました。半角を使ってください：")},
@@ -401,6 +409,7 @@ const QVector<QString>& zhPrefixOrder()
         kInvalidSlideChainPrefix(),
         kMissingCommaBeforeDirectivePrefix(),
         kInvalidSlideStarBranchPrefix(),
+        kEmptySlideStarBranchPrefix(),
         kFullwidthDigitPrefix(),
         kFullwidthTouchRegionPrefix(),
         kFullwidthModifierPrefix(),
@@ -417,26 +426,6 @@ const QVector<QString>& zhPrefixOrder()
 }
 
 }  // namespace ValidationMessage
-
-bool isSlideShapeChar(QChar ch)
-{
-    static const QString kSlideShapeChars = QStringLiteral("-^v<>VpqszwW");
-    return kSlideShapeChars.contains(ch);
-}
-
-bool tokenContainsSlideShape(const QString& token)
-{
-    // Match the dispatch heuristic in TouchTap.cpp::parseTapOrHoldToken — any
-    // shape character anywhere in the token (after the lane digit) marks the
-    // token as slide-bound. Position 0 is always the lane digit so we start
-    // at 1.
-    for (int i = 1; i < token.size(); ++i) {
-        if (isSlideShapeChar(token.at(i))) {
-            return true;
-        }
-    }
-    return false;
-}
 
 // Strict-only check. Returns the validation message to emit, or empty
 // string if the token has no `?`, `!`, `@` (or all of them are validly

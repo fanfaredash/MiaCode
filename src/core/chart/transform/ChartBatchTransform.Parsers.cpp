@@ -84,6 +84,9 @@ bool parseTouchTokenParts(const QString& token, TouchTokenParts* parts)
     const QString modifierPart = openBracket >= 0 ? suffix.left(openBracket) : suffix;
     for (QChar ch : modifierPart) {
         const QChar lower = ch.toLower();
+        if (ch == QChar('B') || ch == QChar('X')) {
+            return false;
+        }
         if (lower == QChar('b')) {
             parts->hasBreak = true;
         } else if (lower == QChar('x')) {
@@ -136,6 +139,9 @@ bool parseNoteTokenParts(const QString& token, NoteTokenParts* parts)
     for (int i = 1; i < core.size();) {
         const QChar ch = core.at(i);
         const QChar lower = ch.toLower();
+        if (ch == QChar('B') || ch == QChar('X') || ch == QChar('M')) {
+            return false;
+        }
         if (lower == QChar('b')) {
             parts->hasBreak = true;
             ++i;
@@ -145,7 +151,7 @@ bool parseNoteTokenParts(const QString& token, NoteTokenParts* parts)
         } else if (lower == QChar('h')) {
             parts->hasHold = true;
             ++i;
-        } else if (lower == QChar('m')) {
+        } else if (ch == QChar('m')) {
             parts->hasMine = true;
             ++i;
         } else if (ch == QChar('$')) {
@@ -188,6 +194,9 @@ bool parseSlideTokenParts(const QString& token, SlideTokenParts* parts)
     while ((1 + prefixLength) < token.size()) {
         const QChar ch = token.at(1 + prefixLength);
         const QChar lower = ch.toLower();
+        if (ch == QChar('B') || ch == QChar('X')) {
+            return false;
+        }
         if (lower != QChar('b')
             && lower != QChar('x')
             && ch != QChar('@')
@@ -208,8 +217,8 @@ bool parseSlideTokenParts(const QString& token, SlideTokenParts* parts)
     }
 
     const QString prefixModifiers = token.mid(1, prefixLength);
-    parts->headBreak = prefixModifiers.contains(QChar('b'), Qt::CaseInsensitive);
-    parts->headEx = prefixModifiers.contains(QChar('x'), Qt::CaseInsensitive);
+    parts->headBreak = prefixModifiers.contains(QChar('b'));
+    parts->headEx = prefixModifiers.contains(QChar('x'));
 
     const QString remainder = token.mid(1 + prefixLength);
     if (remainder.isEmpty()) {
@@ -226,7 +235,10 @@ bool parseSlideTokenParts(const QString& token, SlideTokenParts* parts)
         SlideSegmentParts seg;
         seg.text.reserve(raw.size());
         for (QChar ch : raw) {
-            if (ch.toLower() == QLatin1Char('b')) {
+            if (ch == QLatin1Char('M')) {
+                return false;
+            }
+            if (ch == QLatin1Char('b')) {
                 seg.segmentBreak = true;
                 continue;
             }

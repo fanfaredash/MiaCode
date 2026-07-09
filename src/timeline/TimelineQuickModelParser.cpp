@@ -91,6 +91,15 @@ bool parseTapModifierSequence(
     }
     *state = TapModifierState();
 
+    if (prefixModifiers.contains(QLatin1Char('B'))
+        || prefixModifiers.contains(QLatin1Char('X'))
+        || prefixModifiers.contains(QLatin1Char('M'))
+        || suffixModifiers.contains(QLatin1Char('B'))
+        || suffixModifiers.contains(QLatin1Char('X'))
+        || suffixModifiers.contains(QLatin1Char('M'))) {
+        return false;
+    }
+
     const auto parsePart = [state](const QString& part) -> bool {
         for (int i = 0; i < part.size();) {
             const QChar ch = part.at(i);
@@ -119,7 +128,7 @@ bool parseTapModifierSequence(
                 ++i;
                 continue;
             }
-            if (lower == QLatin1Char('m')) {
+            if (ch == QLatin1Char('m')) {
                 if (state->hasMine) {
                     return false;
                 }
@@ -164,6 +173,9 @@ bool parseSlideHeadModifierPrefix(const QString& token, int* modifierCount, Slid
 
     while ((1 + *modifierCount) < token.size()) {
         const QChar ch = token.at(1 + *modifierCount);
+        if (ch == QLatin1Char('B') || ch == QLatin1Char('X')) {
+            return false;
+        }
         const QChar lower = ch.toLower();
         if (lower == QLatin1Char('b')) {
             if (state->headBreak) {
@@ -487,7 +499,7 @@ bool parseTouchSuffix(
                 *hasFirework = true;
             } else if (ch == QLatin1Char('b')) {
                 *hasBreak = true;
-            } else if (ch == QLatin1Char('m') || ch == QLatin1Char('M')) {
+            } else if (ch == QLatin1Char('m')) {
                 *hasMine = true;
             } else if (ch == QLatin1Char('x') || ch.isSpace()) {
                 continue;
@@ -907,6 +919,9 @@ bool TimelineQuickModel::parseNoteToken(
         if (slideCoreHasDisallowedModifiers(core)) {
             return false;
         }
+        if (core.contains(QLatin1Char('M'))) {
+            return false;
+        }
         QString sanitizedCore;
         sanitizedCore.reserve(core.size());
         bool trackBreak = false;
@@ -916,7 +931,7 @@ bool TimelineQuickModel::parseNoteToken(
                 trackBreak = true;
                 continue;
             }
-            if (ch == QLatin1Char('m') || ch == QLatin1Char('M')) {
+            if (ch == QLatin1Char('m')) {
                 trackMine = true;
                 continue;
             }

@@ -97,8 +97,8 @@ time-signature 摆放风格。这些都是 strict-only。Lenient pass 在
 | 6 | Touch_hold 修饰符位置非典范 | Warning | `TouchTap.cpp:71-80` `kNonCanonicalHoldModifierPlacementPrefix` | `Ah[4:1]b` —— touch 同时有 `[duration]` 和 `]` 之后的非空后缀修饰符 |
 | 7 | Tap/hold 修饰符位置非典范 | Warning | `TouchTap.cpp:169-178` `kNonCanonicalHoldModifierPlacementPrefix` | `1h[4:1]x` —— hold 同时有 `[duration]` 和 `]` 之后的非空后缀修饰符 |
 | 8 | Break-slide `b` 修饰符位置非典范 | Warning | `Slide.cpp:60-82` `kInvalidBreakSlideModifierPositionPrefix` | `b` 不是紧挨在 slide token 第一个 `[` 之前。Slide 仍然能 parse，`trackBreak` 被置位；`b` 字符在构建 `sanitizedCore` 时被剥离。 |
-| 9 | Slide 时值块位置无效 | Error | `Slide.cpp:113-115` `kInvalidSlideDurationPlacementPrefix` | Slide token 包含多于一个 `[…]` 块 |
-| 10 | 多段 slide 带每段 wait+duration | Error（通过 parse 失败 → `classifyInvalidNoteMessage`） | `SimaiNativeParser.cpp:1206` strict 时 `parseStandardSlideChain` 返回 `false` | 多形 chain 每形都带 `[wait#duration]`，strict 拒绝；lenient 按形状长度比例分配总时值 |
+| 9 | Slide 时值块位置无效 | Error | `SimaiNativeParser.cpp` `classifySlideDurationPlacementStrict()` / `Slide.cpp::parseSlideToken` | `1-5[8:1]-1`、`1>5[8:1]<5` 报 Error；`1-5[8:1]-1[8:2]` 是 #10 的 Warning 例外 |
+| 10 | 多段 slide 每段都带 wait+duration | Warning | `classifySlideDurationPlacementStrict()`；`parseStandardSlideChain()` 继续折叠分段时值 | `1-5[8:1]-1[8:2]` —— 分段时值部分支持/非典范，提示但不阻断 |
 | 11 | 缺失 beat 分隔符 `,` | Error | `StrictChecks.cpp:119-123` `runStrictFormatChecks` | 含有 note 字符且非终止 `E` 的行，整行没有 `,` |
 | 12 | 不匹配的右括号 | Error | `StrictChecks.cpp:131-137`（在 `runStrictFormatChecks` 中） | `]` 没有对应的 `[`；`}` 没有 `{`；`)` 没有 `(` |
 | 13 | 未闭合的左括号 | Error | `StrictChecks.cpp:142-145`（在 `runStrictFormatChecks` 中） | `[` / `{` / `(` 在文件结尾仍残留在 stack 中 |
@@ -108,17 +108,33 @@ time-signature 摆放风格。这些都是 strict-only。Lenient pass 在
 | 17 | Slide 段链语法无效 | Error | `SimaiNativeParser.cpp` `isValidSlideChainStrict` / `kInvalidSlideChainPrefix`，由 `Slide.cpp::parseSlideToken` 调用 | 在 `*` 拆分 + head 还原 + 剥掉 `b` 之后，逐字符走过 slide core，确保每个字符都被一个合法构造消费。**Lane 数字。** head 必须是 1-8；每个 shape 的尾随数字也必须是 1-8。**Shape 格式。** `V` 必须紧跟两个 1-8 数字；`p` / `q` 后可跟一个数字（单环），或再跟一个相同字符再跟一个数字（双环 `pp` / `qq`）；`-^v<>szw` 中每个字符后必须恰好跟一个 1-8 数字。**无 orphan 字符。** 任何不是 shape / 不是 `[`、且未被任何 shape 的尾随数字槽消费的字符，都会被拒绝 —— 这正是用来抓 lenient chain parser 的 silent-skip：例如 `1v35-7[8:1]` 中的 `5` 会被 lenient 默默丢掉，parse 成 `[1v3, 3-7]`。**至少一个 shape。** 整段只有 bracket 的 token（如 `1[8:1]`）会被拒绝（不过这种 token 在上游 dispatch 时就走 hold 分支了，不会进到本检查）。**Chain 自动连接** —— 每个 shape 的 source 就是上一段的 destination，只要数字位数正确，chain 自然连得起来。**几何合法性**（start, V, via, end 是否真是合法的 V 组合）_不_ 在这里检查 —— 那是 `Slide.cpp:147` 已有的 slide-data 查表负责的，两种模式下都会对未知 shape key 报错（如 `1V32` 今天就已经会被拒绝）。 |
 | 18 | 音符与指令之间缺少 `,` | Warning | `Driver.cpp` `warnDirectiveAfterNote` / `kMissingCommaBeforeDirectivePrefix` | `{N}` / `(BPM)` / `<HS*N>` 指令紧跟在音符之后、中间没有 `,` —— 通常是漏写了拍间分隔符。追踪状态跨越空白与换行（典型 repro：`{16} 1,1,1,1,1` ↵ `{16},,,` —— 第一行以裸音符结尾）。每个漏掉的 `,` 只报一次：`1{16}(120)` 这样的指令连串只在第一个指令处报警。只有 `,` 会复位该状态。 |
 | 19 | `*` slide 分支携带 head 数字 | Error | `Slide.cpp::parseSlideToken` 的 `*` 拆分循环 / `kInvalidSlideStarBranchPrefix` | 同头 `*` 分支必须写成去掉头部的 slide：`5q2[4:1]*p8[4:1]` 是典范写法；`5q2[4:1]*5p8[4:1]` 与 `5q2[4:1]*4p8[4:1]` 都拒绝。`*` 后面的数字**不是**新的 head —— lenient 解析会把它替换为共享的 head lane（`*4p8[4:1]` 会被默默解析成 `5p8[4:1]`），所以 strict 必须把它标成错误。每个 token 只报一次；lenient 的替换行为保持不变，谱面仍可预览。 |
+| 20 | 空 `*` slide 分支 | Error | `Slide.cpp::parseSlideToken` 的 `*` 拆分循环 / `kEmptySlideStarBranchPrefix` | `1-5[8:1]*,`、`1-5[8:1]**-6[8:1],` 都拒绝；每个 token 只报一次并覆盖整个 token。 |
+
+#### Slide duration placement 审计与修复状态（2026-07-09）
+
+多段（拼接）slide 的目标判定规则：
+
+- **只有最后一段后面有时值：合法。** 例如 `1-5-1[8:3],`。
+- **每一段后面都有时值：Warning。** MiaCode 能把分段时值折叠为总时值并继续 parse，但分段时值只算部分支持/非典范。例如 `1-5[8:1]-1[8:2],`。
+- **其他情况：Error。** 包括非最后段带时值但不是每段都有时值，或时值后继续出现 shape 文本。例如 `1-5[8:1]-1,`、`1>5[8:1]<5,`。
+
+本次修复后的收口点：
+
+- **时值后的 shape-like 后缀不再被静默吞掉。** `classifySlideDurationPlacementStrict()` 在 strict 下把 `1>5[8:1]<5,`、`1>5[8:1]V35,`、`1-5[8:1]-1,`、`1w5[8:1]<5,` 等归为 #9 Error。
+- **每段都带时值不再被多 `[` 粗检查升成 Error。** `1-5[8:1]-1[8:2],` 现在是 #10 Warning，仍继续抽取 marker。
+- **空 `*` slide 分支不再被跳过。** strict 对任意空分支报 #20 Error；lenient 仍保留历史预览行为。
+- **诊断范围覆盖整个 token。** `Invalid slide chain syntax`、`Invalid slide duration placement`、空 `*` 分支和携带 head 的 `*` 分支都会传入 `endCol = column + token.size() - 1`。
 
 `runStrictFormatChecks(state, lines)` 在 `Driver.cpp:652` 即主 parse loop
 之**后**才跑。它会先剥掉控制块 `( … )`、`{ … }`、`<HS* … >`、以及整行
 `||`-前缀注释（`StrictChecks.cpp:101-115`），然后再做检查 #11-#13；
 所以注释掉的内容**不会**触发这三项 strict-only 检查。
 
-**仅 lenient 的行为**（strict 不会做的宽松处理）：
+**兼容解析行为**（用于继续抽 marker，不等于语法放行；strict 可在同一 token 上追加诊断）：
 
-| Lenient 宽松处理 | 来源 | 行为 |
+| 兼容处理 | 来源 | 行为 |
 |---|---|---|
-| 多段 slide chain 带每段 wait+duration | `SimaiNativeParser.cpp:1209-1213` | Lenient 按形状长度比例把总时值分配到各段；strict 拒绝（即上表 #10）。 |
+| 多段 slide chain 带每段 wait+duration | `parseStandardSlideChain()` + `classifySlideDurationPlacementStrict()` | parser 会折叠分段时值为总时值并按形状长度重新分配；strict severity 是 Warning。 |
 | 未闭合 `[HS*` 块 | `Driver.cpp:582-587` | Lenient 直接 silent break；strict 报上表 #3。 |
 
 > **关于 `C1`/`C2` 的说明。** 这一项以前是仅 lenient 的宽松处理（lenient
@@ -130,7 +146,7 @@ time-signature 摆放风格。这些都是 strict-only。Lenient pass 在
 
 Parser **不强制 `b / x / h / f` 的典范字母顺序**。
 `parseTapModifierSequence`（`SimaiNativeParser.cpp:90+`）按字符迭代，
-**仅在出现重复或大写 `B` / `X` 时拒绝**（修饰符只接受小写）。也就是说
+**仅在出现重复或大写 `B` / `X` 时拒绝**。也就是说
 `1bx`、`1xb`、`1xh`、`1hx`、`1bhxf`、`1fxhb` parse 出来都一样，而
 `2B` / `2X` 会被拒绝。
 
@@ -158,19 +174,60 @@ Parser **不强制 `b / x / h / f` 的典范字母顺序**。
 不是修饰符*顺序*。仅当 `[duration]` 块存在 AND `]` 之后还有非空后缀
 修饰符时才触发。
 
+### 大小写混淆风险审计（2026-07-09）
+
+simai 谱面语法原则上应严格区分大小写。本次审计只记录**用户输入层面**
+会被解析为相同功能的大小写兼容点；内部用于索引 / 显示的归一化（例如
+touch pad key 转大写、marker type 转小写）不计入风险。
+
+当前主 parser 中确认仍存在的大小写等价：
+
+| 输入类别 | 当前等价输入 | 当前行为 | 主要来源 |
+|---|---|---|---|
+| Tap / hold 的 hold 修饰符 | `1h[4:1]` 与 `1H[4:1]` | 都解析成 hold，strict 不报错/不报警告 | `parseTapModifierSequence` 对修饰符 `toLower()`；只专门拒绝大写 `B` / `X` |
+| Terminal marker | `E` 与 `e` | 独占行或行尾 terminal marker 都终止谱面；strict 不报错/不报警告 | `isTerminalMarkerText()` 用 `Qt::CaseInsensitive`，主循环也显式接受 `E` / `e` |
+
+已核对但**未**形成大小写等价放行的点：
+
+- `b/B`、`x/X`：主 parser 在 tap 和 slide head 上的大写 `B` / `X` 已被拒绝，
+  见上文表格。
+- `m/M`：地雷修饰符严格只接受小写 `m`。`1M`、`A1M`、`1-3[2:1]M`
+  和 `1M-3[2:1]` 在 lenient 与 strict 中都会被拒绝。
+- `w/W`：`Slide.cpp` 中有 `sanitizedCore.contains('w', Qt::CaseInsensitive)`，
+  但实际 shape lookup 不接受大写 `W`；`1W5[8:1]` 当前报错。
+- Touch 头 `A/B/C/D/E`：主 parser 的 `isTouchPrefix()` 仍大小写敏感；
+  `c1` 当前不会被当作中心 touch。
+- `v/V`：小写 `v` 与大写 `V` 是不同 slide shape，不是大小写 alias。
+
+需要同步审计/收紧的镜像解析入口：
+
+| 路径 | 当前大小写宽松点 | 风险 |
+|---|---|---|
+| `src/timeline/TimelineQuickModelParser.cpp` | 已同步拒绝 tap/touch/slide mine 的大写 `M`，也拒绝主 parser 已拒绝的 tap / slide-head 大写 `B` / `X`；`isTerminalMarkerText()` 仍接受 `E/e`，tap hold `H` 仍等价 | 剩余风险主要是 `1H[4:1]`、`e` 等还可能被快时间线当作有效对象；`1M` 不再渲染为地雷 |
+| `src/core/chart/transform/ChartBatchTransform.Parsers.cpp` | 已同步不把 note / slide 的大写 `M` 当作 mine，也拒绝 tap / slide-head / touch 修饰符上的大写 `B` / `X`；`touchPrefixLength()` 仍对 touch 头 `toUpper()`，部分 `H/F` 仍会被折叠 | 选择变换不再把 `1M`、`A1M`、`1-3[2:1]M` 识别或重写成合法地雷；剩余风险是小写 touch 头与非地雷大写修饰符的兼容解析 |
+| `src/core/chart/transform/ChartNormalization.cpp` | touch 头 `toUpper()`，touch / note / slide modifier 解析使用 `toLower()`，builder 输出典范小写修饰符 | 全文 normalization 入口当前会先过 strict validation，通常挡住非法大小写；但解析器本身仍有折叠逻辑，后续复用或选区路径调整时需要同步收紧 |
+| `src/core/chart/transform/ChartBatchTransform.Subdivision.cpp` | terminal marker 边界判断用 `Qt::CaseInsensitive` | 分段/细分变换会把小写 `e` 当作终止符处理 |
+
+目标收紧方向：如果把“simai 语法严格区分大小写”作为 strict 契约，
+则剩余的 `H`、小写 terminal `e` 等当前等价输入应至少进入 strict 诊断。
+主 parser 已拒绝的 `B` / `X` / `M` 要同步到快时间线和变换解析器，否则会出现
+“语法检查报错，但预览/选区操作仍按合法 token 处理”的分歧；本轮已先收紧 `M`，并补齐 `B` / `X` 的主要镜像入口。
+
 ### 地雷修饰符 `m`（Mine note）
 
 `m` 是 Majdata 扩展的**地雷**修饰符（maimai 官方没有）。MiaCode 是 autoplay
 模拟器（无玩家输入），所以地雷被建模为「永远被完美躲过」的音符：**有独立贴图，
 但不发任何 SFX、不出判定特效、被无理分析跳过**；按产品决策**计入物量**。
 
-- **接受位置**：`m` 像 `b` / `x` 一样被消费，大小写均可（与 `h` 一致；不像
-  `b`/`x` 那样拒绝大写）：
+- **接受位置**：地雷修饰符严格只接受小写 `m`；大写 `M` 是非法输入，
+  不会被当作地雷兼容解析：
   - tap / hold：`1m`、`1bm`（break+雷）、`1xm`（ex+雷）、`1hm[4:1]`（hold 雷）。
   - touch / touch-hold：`A1m`、`C2hm[4:1]`。
   - slide：`1-3[2:1]m`（`m` 在末尾）。`m` 置位 `trackMine`**和** `headMine`
     —— 头星与轨道都渲染成地雷（对标 MajdataPlay 的 `IsMine` 头星 + `IsMineSlide`
     轨道）。`m` 字符在构建 slide shape lookup key 时被剥离（同 `b`）。
+  - 拒绝示例：`1M`、`1HM[4:1]`、`A1M`、`C2hM[4:1]`、
+    `1-3[2:1]M`、`1M-3[2:1]` 均为无效 token。
   - **slide 上 `m` 的位置不限**：`1w5[8:1]m`（末尾）与 `1w5m[8:1]`（shape 后、
     bracket 前）**均合法，且都不报警告**。这与 `b` **不同**——`b` 的非典范位置
     （非紧贴 slide token 第一个 `[` 之前）会触发 strict 警告（上表 #8 的
@@ -186,9 +243,12 @@ Parser **不强制 `b / x / h / f` 的典范字母顺序**。
   `star_mine_double` / `slide_mine` / `touch_mine` / `touchhold_*_mine` /
   `wifi_mine_*`）。skinSTD 已入库（源自 MajMine 皮肤）；skinDX 待补（由普通贴图
   色彩派生，延后）。缺图时各 selector 回退到普通贴图。
-- **三方同步**：parser 落 `isMine`/`trackMine` ↔ `SimaiParserSpec.cpp` 地雷用例 +
-  `ChartBatchTransformSpec.cpp` round-trip 用例 ↔ 本文档。归一化/变换通过
-  `extraModifiers`（tap）与 segment-text 保留（slide）让 `m` round-trip。
+- **三方同步**：parser 落 `isMine`/`trackMine` 且拒绝大写 `M` ↔
+  `TimelineQuickModelParser.cpp` 不渲染大写 `M` 地雷 ↔
+  `ChartBatchTransform.Parsers.cpp` 不识别/重写大写 `M` ↔
+  `SimaiParserSpec.cpp`、`TimelineModelSpec.cpp`、`ChartBatchTransformSpec.cpp` 地雷用例 ↔
+  本文档。归一化/变换通过 `extraModifiers`（tap）与 segment-text 保留（slide）
+  让小写 `m` round-trip。
 
 ### 1.2 验证报告 —— `buildValidationReport()`
 
@@ -275,6 +335,7 @@ Lenient 的存在意义现在只剩一件事：抽取一组可用的 timeline ma
 | `1V35-7[8:1]`（V chain 接 `-`） | **不报** | `V35` 是两个数字（3、5），`-7` 是一个数字，chain 5→5 衔接。两个 shape 都能在 slide data 中查到。 |
 | `1v35-7[8:1]`（小写 `v` 跟两个数字） | **Error** | `kInvalidSlideChainPrefix` —— 小写 `v` 后面只跟一个数字，所以 `1v3` 之后的 `5` 是 orphan。lenient 默默丢掉它，parse 成 `[1v3, 3-7]`。 |
 | `1V32-7[8:1]`（V 组合无效） | **Error** | `Slide.cpp:147` `Invalid note: … unknown shape 1V32` —— 由已有的 slide-data 查表抓住，不是新的 strict 语法检查（后者只校验数字位数）。两种模式下都会报错；lenient 行为未变。 |
+| `1>3`（slide 缺失时值块） | **Error** | `kInvalidSlideDurationPrefix` —— 数字开头且含 slide shape 的 token 先走 slide parser；缺少 `[wait:duration]` 应显示为 Slide 时值错误，而不是 Hold 修饰符错误。 |
 | `1-5p6[8:1]`（多 shape chain `-` + `p`） | **不报** | 两个 shape 各跟一个数字，chain 5→5 衔接。 |
 | `1-5-p6[8:1]`（chain 中 orphan） | **Error** | `kInvalidSlideChainPrefix` —— 第二个 `-` 的尾随槽是 `p`，不是 1-8 数字；尾部的 `6` 同样是 orphan。 |
 | `1-5[8:1]*-6[8:1]`（同 head `*` 拆分） | **不报** | `*` 拆分后两个分支是 `1-5[8:1]` 与 `1-6[8:1]`（head `1` 继承），都合法。 |
@@ -407,261 +468,271 @@ UI 上的呈现：
 
 ---
 
-## 3. 谱面规范化 —— "调整 / Modify" 菜单
+## 3. 谱面规范化 —— "谱面整理 / Format Chart"
 
-把谱面文本重写为标准形式。**绝不会被隐式触发** —— 始终由用户从菜单触发，
-通过单个 undoable 编辑块完成（`editCursor.beginEditBlock()` /
-`endEditBlock()`，`MainWindow.DocumentTransforms.cpp:393-398`）。两个独立
-checkbox 选项控制行为，跨会话持久化在编辑器偏好里。
+谱面整理把当前难度文本或当前选区重写为标准形式。它**绝不会被隐式触发**，
+只从菜单 / 工具箱入口进入，并在编辑器里用单个 undoable edit block 写回。
+主窗口路径即使在“全文”场景下也会调用选区 API：无选区时把选区范围视作
+`0..全文长度`，有选区时只替换所选片段。
 
-### 入口
+### 入口与所有权
 
 | 表面 | 文件 / 符号 |
 |---|---|
-| 公共 API（全文） | `normalizeChartText()` —— `src/core/chart/transform/ChartNormalization.h:36` |
-| 公共 API（选区） | `normalizeChartSelectionText()` —— `:41` |
-| 内部主流程 | `normalizeChartFragment()` —— `src/core/chart/transform/ChartNormalization.cpp:1190+` |
-| 选项结构体 | `ChartNormalizationOptions` —— `:10-13` |
-| 结果结构体 | `ChartNormalizationResult { ok, text, errorMessage, changedCount, measureLineCount }` —— `:15-21` |
-| 菜单入口 | `MainWindow::DocumentSection::onNormalizeWholeChart()` —— `src/app/mainwindow/sections/document/MainWindow.DocumentTransforms.cpp:291` |
-| 内联回归测试 | `runInlineSpecs()` —— `src/tools/chart_transform/ChartBatchTransformSpec.cpp:736+` |
-| 偏好键名 | `kChartNormalizeStartAtNewMeasurePreferenceKey`、`kChartNormalizeReduceTo384GridPreferenceKey` —— `ChartNormalization.h:23-26` |
+| 菜单入口与写回 | `MainWindow::DocumentSection::onNormalizeWholeChart()` —— `src/app/mainwindow/sections/document/MainWindow.DocumentTransforms.cpp` |
+| 整理弹窗 | `showNormalizeSelectionDialog()` —— 同上；使用 `QComboBox` + `UiTheme::styleDialogComboBox` |
+| 公共 API（全文） | `normalizeChartText()` —— `src/core/chart/transform/ChartNormalization.h` |
+| 公共 API（选区） | `normalizeChartSelectionText()` —— 同上 |
+| 内部主流程 | `normalizeChartFragment()` —— `src/core/chart/transform/ChartNormalization.cpp` |
+| 选项结构体 | `ChartNormalizationOptions { startAtNewMeasure, reduceTo384Grid, splitEveryFourMeasures }` |
+| 结果结构体 | `ChartNormalizationResult { ok, text, errorMessage, changedCount, measureLineCount }` |
+| 分段策略 helpers | `src/core/chart/transform/ChartNormalizationSegmentPolicy.{h,cpp}` |
+| snap 规则 | `snapXOverY()` / `kSnap384Modulus` —— `src/core/chart/transform/Non384SnapTable.*` |
+| 回归测试 | `runInlineSpecs()` —— `src/tools/chart_transform/ChartBatchTransformSpec.cpp` |
+
+`docs/specs/chart/CHART_NORMALIZATION_SEGMENT_POLICY.md` 记录了 segment policy
+落地前的目标与迁移计划。本章描述的是当前代码事实；如两者冲突，以本章和代码为准。
 
 ### 3.1 输入与门控
 
-`normalizeChartFragment` 的第一步是
-`SimaiNativeParser::buildValidationReport(input, English, nullptr, timingMetadata)`
-（`ChartNormalization.cpp:1200-1208`）。按 §1.2 的拆解，`buildValidationReport`
-现在是**仅 strict** —— 因此：
+`normalizeChartFragment()` 的第一步是调用
+`SimaiNativeParser::buildValidationReport(input, English, nullptr, timingMetadata)`。
+按 §1.2 的拆解，`buildValidationReport` 是 strict validation 报告，因此：
 
-- 任何 strict pass 抓到的 **Error** 都会让 normalization 立刻返回
-  `{ ok: false, errorMessage: <第一条 issue 的本地化消息> }`，编辑器保持
-  文档不动。
-- strict pass 抓到的 **Warning**（如 `{7}` 非 384 因数、touch_hold 修饰符
-  位置非典范、`b` 不紧贴 slide `[` 等，详见 §1.1 表）**全部放行**。
+- 任意 **Error** 都会让 normalization 立刻返回
+  `{ ok=false, errorMessage=<第一条 issue 的本地化消息> }`，编辑器保持原文不动。
+- **Warning** 全部放行，例如 `{7}` 非 384 因数、非典范 hold 修饰符位置、
+  break-slide `b` 位置警告等。
+- 失败不会提交部分重写。主窗口只在 `normalized.ok == true` 且 replacement
+  与原选区不同的时候进入 `beginEditBlock()` / `endEditBlock()`。
 
-> **关于 §0 标签的修正。** §0 表把规范化标为 "lenient"，但代码实际通过
-> `buildValidationReport`（strict）做门控。具体后果：strict-only 的 Error
-> —— `1//5` 重复分隔符、`[HS*xyz` 未闭合 HS 块、缺逗号、misplaced slide
-> head modifier、misplaced tap-star modifier、invalid slide chain
-> —— 也会阻挡 normalization，即便 lenient pass 能跳过坏段继续抽 marker。
+`normalizeChartText()` 的 terminal `E` 行为不是“永远补 E”：它只在输入文本本来
+包含 terminal marker 时才让 fragment renderer 追加最终 `E`。没有 `E` 的片段会保持
+片段形态，这一点由 `ChartBatchTransformSpec.cpp` 的
+“does not invent terminal E” 回归覆盖。
 
-### 3.2 两个选项的实际语义
+### 3.2 可见选项与隐藏选项
 
-对话框（`MainWindow.DocumentTransforms.cpp:73-87`）显示两个 checkbox，但
-作用层级很不一样。
+核心 `ChartNormalizationOptions` 的 C++ 默认值是 `{ true, true, true }`，
+方便底层 API 与老测试保持“全功能打开”的默认。但应用层偏好使用
+`{ startAtNewMeasure=true, reduceTo384Grid=false, splitEveryFourMeasures=true }`。
 
-#### `startAtNewMeasure`（默认 true）
+| 选项 | UI 暴露 | 应用默认 | 核心默认 | 语义 |
+|---|---|---|---|---|
+| `startAtNewMeasure` | 不再显示 | 固定 true | true | 选区整理时把选区起点视为新小节线。若选区原本从半小节开始，会在输出前注入 `\|\| <meter>`，让选区内文本从 phase 0 开始。全文整理基本是 no-op。 |
+| `reduceTo384Grid` | `约分至384分音`：`开启/关闭` | 关闭 | true | 开启时把非 384 网格位置/无 `#` duration 近似到 384 体系；关闭时对不能被 384 精确表示的 measure 走 exact 渲染，尽量保留显式特殊分音。 |
+| `splitEveryFourMeasures` | `谱面分段`：`每4小节/不分段` | 每4小节 | true | 开启时每 4 个 emitted measure line 之后插入一个空行；遇到真正 `Bpm` / `TimeSignature` leading boundary 会重置计数。不分段时不插这些额外空行。 |
 
-| 调用路径 | 实际影响 |
+旧的 `chart_normalize_start_at_new_measure` 偏好键仍由底层读写函数支持，
+但主窗口加载和保存都会强制写回 true，避免用户被隐藏的历史 false 值困住。
+弹窗中的两个可见下拉项在切换时会立即调用 `savePortableState()`，即使用户随后取消
+整理对话框，偏好更改也会保留。
+
+本章后文使用的内部术语：
+
+| 术语 | 含义 | 简例 |
+|---|---|---|
+| token | 一个可独立规范化的谱面记号，通常是 note / touch / slide；不包含 `,`、`/`、反引号这些分隔符，也不包含 `{N}`、`(BPM)`、`\|\|`、`<HS*>` 这类控制项。 | `1b`、`2h[8:1]`、`C1h[4:1]`、`1-5[8:1]` |
+| group | 同一时刻内用 `/` 连接的一组 token，即一次合击组。 | `1/2h[8:1]` 是一个 group，里面有 `1` 与 `2h[8:1]` 两个 token。 |
+| moment | 一个时间相位上的全部内容；一个 moment 可以有多个 group，group 之间用反引号分隔，直到 `,` 推进到下一个相位。 | ``{4}1/2`3,`` 表示同一 moment 内有 `1/2` 和 `3` 两个 group，随后 `,` 推进 1/4 小节。 |
+| segment | 由 `{N}`、小节边界或终止符切出来的时间段，记录当前 subdivision、起止相位、是否消费过逗号等信息。 | `{5},` 会形成一个显式特殊 segment，exact 渲染时可能强制保留 `{5}`。 |
+| chunk | 渲染器为了选择某个 `{N}` 而处理的连续片段；exact 路径会优先在 beat boundary 或强制 reset 的特殊 segment 前后切 chunk。 | 4/4 小节通常可按 beat 切成 4 个 chunk；`{4},{5},{4},` 会让 `{5}` 前后成为不同 chunk。 |
+
+### 3.3 扫描模型与边界
+
+全文路径使用 `seedFromTimingMetadata()`：若 `&whole_time_signature=` 有效，就从
+对应拍号开始；否则用 simai 默认拍号。选区路径先用 `scanNormalizationSeed(prefix, timingMetadata)`
+扫描选区前缀，恢复当前 `{N}`、meter、BPM 和 measure phase。
+
+扫描与主流程都遵守同一组边界规则：
+
+| 输入事件 | 行为 |
 |---|---|
-| `normalizeChartText`（全文 / 无选区） | **实质 no-op**。seed 来自 `seedFromTimingMetadata`，`startPhaseWhole` 总是 0；不管选项真假，第一个 measure 都从 phase 0 开始。 |
-| `normalizeChartSelectionText`（有选区） | true：把选区起点视为小节边界，丢弃 `scanNormalizationSeed` 算出的相位偏移；如果原本相位非零，输出**会在最前面注入一行 `\|\| <meter>`**（`ChartNormalization.cpp:1561-1574`）。false：保留原相位，输出延续选区前一刻的 measure。 |
+| `,` | flush 当前 token/group/moment，按 `1/currentBeats` 推进相位；跨过当前 measure 末尾时 append 一个 `RenderMeasure` 并从新 measure 继续 overflow。 |
+| `/` | flush 当前 token，仍属于同一 each group。 |
+| `` ` `` | flush 当前 token 并结束当前 group；同一 moment 的多个 group 输出时用 `` ` `` 连接。 |
+| `{N}` | 更新 `currentBeats`，并开启一个显式 subdivision segment；该 segment 记录 beats、起止相位、是否消费过逗号、相对 moment 位置。 |
+| `(BPM)` | 任何合法 BPM 指令都会 `restartMeasureAtCurrentPosition()`，即使数值等于当前 BPM；输出为 `Bpm` boundary item。 |
+| 合法 `\|\| x/y` | 作为 time-signature 控制，关闭当前 measure，从新 meter 的 phase 0 开始，并输出 `TimeSignature` boundary item。 |
+| 普通 `\|\| ...` 注释 | `splitMeasureAtCurrentPosition()`：关闭当前 measure，但把累计相位带到下一 measure；注释原文作为 standalone boundary 保留。 |
+| `<HS*...>` | 作为 standalone boundary item 保留，不参与 token 规范化。 |
+| `E` / `e` terminal marker | 终止或关闭当前活动 segment；是否最终输出 `E` 由调用路径决定。 |
 
-回归测试 `ChartBatchTransformSpec.cpp:1342-1361` 是 mid-measure 选区 +
-`startAtNewMeasure=true` 注入 `\|\| 4/4` 的实证。
+`restartMeasureAtCurrentPosition()` 与 `splitMeasureAtCurrentPosition()` 的区别是
+phase：前者让下一 measure 从 0 开始，后者让下一 measure 继承
+`currentMeasure.startPhaseWhole + currentPositionWhole`，用于普通注释拆行后继续填满原小节。
 
-#### 核心 snap 规则（`snapXOverY`）
+### 3.4 渲染策略：approximate、exact 与 segment policy
 
-所有 384 网格归一都走 `snapXOverY(x, y)`（`Non384SnapTable.cpp:43+`），
-针对一个分数 `x/y` 返回 `(p, q)`：
+`renderMeasureLine(measure, options)` 是 dispatcher：
+
+- `reduceTo384Grid=true`：总是走 `renderMeasureLineApproximate()`。
+- `reduceTo384Grid=false`：先跑 `measureRequiresExactRendering()`；只有当前 measure
+  携带 384 grid 无法精确表示的信息时才走 `renderMeasureLineExact()`，否则仍走 approximate。
+
+`measureRequiresExactRendering()` 的触发条件包括：
+
+- measure 的 `startPhaseWhole` 或 `lengthWhole` 无法被 384 精确表示。
+- 存在消费过逗号、且 `beats` 不是 384 约数的显式 `{N}` segment。
+- 当前 meter 下的 beat boundary 无法被 384 精确表示。
+- 任一 moment 的 `positionWhole` 无法被 384 精确表示。
+
+#### approximate 路径
+
+approximate 路径先把 measure 的起点、长度和 moment 位置落到 384 内部网格。
+每个 beat segment 独立选择 `{N}`：
+
+1. 对段内每个 moment 调 `snapXOverY(position.numerator, position.denominator)`，
+   取所有 `snap.q` 的 LCM。
+2. 段内无 moment 时从 1 开始；若结果是 `1/2/4/8/16` 之一，则 bump 到 16，
+   保持空 beat 的默认视觉密度。
+3. 与 `meterDenominator` 对齐，保证拍内分段能拆成整数 slot。
+4. 交给 `segment_policy::approximateSegmentSubdivision()`，把 segment 自身长度的
+   denominator 纳入约束；如果 preferred `{N}` 不能精确表达这个 segment 的长度，
+   就提升到能表达的 subdivision，最高到 384。
+
+因此 `reduceTo384Grid=true` 的完整含义是：
+
+```text
+原始时间 -> 近似到 384-grid 时间 -> 输出必须精确表达这个近似后的时间
+```
+
+它允许 `{5},` 变成 77 个 `{384}` slot，但不允许已经能被 384 表达的
+`{32},{1},` 被空段 fallback 放大成 `{16},`。
+
+#### exact 路径
+
+exact 路径不把位置吸附到 384 grid。它对每个 chunk 选择能精确表达
+chunk 长度和 chunk 内 relative moment 位置的最小 `{N}`，并优先尝试在 beat boundary
+处切 chunk，使输出不会因为一个局部特殊分音把整行都提升到过密 subdivision。
+
+显式特殊 `{N}` segment 还会经过
+`segment_policy::specialSegmentForcesReset(segment, meterDenominator)`：
+
+- 必须是消费过逗号的 segment。
+- `beats` 必须不是 384 约数。
+- segment 的起点或终点若不在当前 meter 的半拍网格
+  `1 / (2 * meterDenominator)` 上，就强制 reset。
+
+强制 reset 的 segment 会在 exact renderer 中单独保留原 `{N}`，前后范围分别渲染。
+如果特殊 segment 起止都在半拍网格上，就允许 exact 最小表达自行约简：
+
+| 输入（`reduce=false`） | 结果倾向 | 原因 |
+|---|---|---|
+| `{5},` | 保留 `{5},` | 1/5 不在 4/4 半拍网格上，segment forces reset。 |
+| `{10}1,,,,,` | 可约为 `{2}1,` | 长度 1/2 在半拍网格上，且 note 在 segment 起点。 |
+| `{10},1,,,,` | 保留能表达 1/10 内部落点的 subdivision | 内部 moment 需要特殊分音表达。 |
+| `{4},{10},,,,,{4},` | `{10}` 段可被 exact 简化 | 起止在半拍网格上。 |
+| `{4},{5},{4},` | `{5}` 段前后 reset 并保留 `{5}` | 特殊段不在半拍网格上。 |
+
+### 3.5 时值渲染策略：`snapXOverY`
+
+所有 384 近似都使用 `snapXOverY(x, y)`。规则：
 
 | 输入情况 | 返回 |
 |---|---|
-| `y` 是 384 的约数（或 y == 1） | **`(x, y)` 直通**，不改 |
-| `y > 384` | fallback：`(round(384 * x / y), 384)` |
-| `0 < y ≤ 384` 且 `y ∤ 384` | **`q = max{d : d \| 384, d ≤ 4y}`**；**`p = round(q * x / y)`**（向最近整数舍入，half-away-from-zero） |
+| `y` 是 384 的约数（或 `y == 1`） | `(x, y)` 直通 |
+| `y > 384` | `(round(384 * x / y), 384)` |
+| `0 < y <= 384` 且 `y` 不是 384 约数 | `q = max{d : d \| 384, d <= 4y}`，`p = round(q * x / y)` |
 
-非 384 约数 y 的 q 是简单一查：
+典型映射：`1/5 -> 3/16`，`1/7 -> 3/24`，`1/28 -> 3/96`，
+`1/2000 -> 0/384`。`x >= y` 不做 carry split，直接按同一公式 round。
 
-| y | 4y | q（≤ 4y 的最大 384 约数） |
-|---|---|---|
-| 5 | 20 | 16 |
-| 7 | 28 | 24 |
-| 9 | 36 | 32 |
-| 10–11 | 40–44 | 32 |
-| 13–15 | 52–60 | 48 |
-| 17–23 | 68–92 | 64 |
-| 25–31 | 100–124 | 96 |
-| 28 | 112 | 96 |
-| 33–47 | 132–188 | 128 |
-| 49–63 | 196–252 | 192 |
-| ≥ 65 | ≥ 260 | 192（直到 4y ≥ 384）→ 384 |
+Duration 字符串只在以下条件同时满足时改写：
 
-规则非常简单：**单一 q 决定整个 y 系的网格密度，每个 x 独立 round 到该
-网格**。同 y 的相邻 x 偶尔会 round 到同一个 p（碰撞），但实际谱面里这
-对最终输出影响极小，规则换来的「无状态、可手算、表达干净」更划算。
+1. signature 是普通 `[beats:numerator]`，不含 `#`。
+2. `reduceTo384Grid=true`。
+3. 原始 `beats` 不是 384 约数。
 
-#### `reduceTo384Grid`（默认 true）— 选项的实际作用
+改写结果是 `[snap.q:snap.p]`。如果 `snap.p == 0`：
 
-`renderMeasureLine`（`ChartNormalization.cpp:1061+`）是 dispatcher：
-
-| 值 | 行为 |
+| Token 类 | 结果 |
 |---|---|
-| true | 所有 measure 走 `renderMeasureLineApproximate`（`ChartNormalization.cpp:839+`）。每个 beat-segment 把段内每个 moment 都过 `snapXOverY`，segment 的 `{N}` 取所有 moment q 的 **LCM**，再做两步调整（见下）。**非 384 约数 y 的 moment（如 1/28、1/56）也被映射到 q-grid，丢失少量精度（详见上表）**。 |
-| false | **每 measure 独立判定**：扫所有 `MeasureMoment::positionWhole.denominator`，若**全部都是 384 约数** → 走 approximate（与 reduce=true 行为一致）；若**任一非 384 约数** → 整个 measure 走 `renderMeasureLineExact`（`ChartNormalization.cpp:996+`），按 moment 位置分母的 LCM 选 subdivision，能产生 `{7}`、`{9}`、`{15}` 等非-384 因数 subdivision，**保留 moment 精度**。 |
+| Touch hold | 保留 bracket，输出 `[1:0]`。 |
+| Note hold | 删除整个 bracket，只留下 `h`。 |
+| Slide duration | slide 不允许零时长，floor 到 `[q:1]`，通常是 `[384:1]`。 |
 
-approximate 路径下每个 segment 的 `{N}` 计算：
+Hold / slide duration 不参与渲染 `{N}` 的选择；输出行的 subdivision 只由
+moment/rest segment 的位置与长度决定。带 `#` 的时值签名逐字保留。
 
-1. `segmentQ = LCM(每个 moment 的 snap.q)`；段内无 moment 则取 0。
-2. **空段/纯 2 幂 bump**：若 `segmentQ ≤ 16` 且 `16 % segmentQ == 0`（即
-   `segmentQ ∈ {1, 2, 4, 8, 16}`） → bump 到 16。这样空 beat 仍写 `{16}`，
-   不会写出 `{1},`。**`{12}`、`{24}` 等含 3 因子的 subdivision 不会被
-   bump**，保留原细分。
-3. **拍齐 align**：`segmentQ = LCM(segmentQ, meterDenominator)`。这保证
-   `segmentLengthGrid * segmentQ / 384` 是整数（每段整数个 slot）。
-4. 若超出 384 范围 → fallback 到 384。
+### 3.6 Token 规范化
 
-关键含意：
+`canonicalizeToken()` / `renderTokenForGrid()` 依次尝试 touch、note、slide 三类
+轻量 tokenizer。任一成功就重组 token；全部失败则输出 trimmed 原文
+（通常会先被 strict validation 拦住）。
 
-- 普通谱面（每个 moment 都在 384 grid 上）在 reduce=true / false 下
-  **输出完全一致**。
-- 只有真正含非 384 分音（`{7}`、`{9}`、`{28}` 等）的 measure 才会在
-  reduce=false 下走 exact 路径（保留 LCM 表达），在 reduce=true 下走
-  approximate（每 beat 取 `snapXOverY` 给的 q）。
-- 对话框文案「统一近似至 384 分音」对应 reduce=true；reduce=false 表达
-  「保留非 384 分音原位（其余照旧近似）」的语义。
-
-#### Duration 时长字符串（`[beats:numerator]` 或 `[ms#beats:numerator]`）
-
-时长由 `normalizePlainDurationSignature`（`ChartNormalization.cpp:330+`）处理。
-**当且仅当以下三个条件同时满足时，时长字符串才会被改写**；否则原 signature
-**逐字保留**：
-
-1. 时长字符串**不含 `#`**（`parsePlainDurationSignature` 见 `#` 直接 return false）
-2. `reduceTo384Grid=true`
-3. **原始 `beats` 值不是 384 的约数**
-
-改写直接调用 `snapXOverY(numerator, beats)`，得到 `(p, q)` 后输出 `[q:p]`。
-
-例：
-
-| 输入时长 | 原 `beats` | 384 约数？ | reduce=true 输出 | reduce=false 输出 |
-|---|---|---|---|---|
-| `[8:1]` | 8 | 是 | `[8:1]` 不动 | `[8:1]` 不动 |
-| `[24:6]` | 24 | 是 | `[24:6]` 不动 | `[24:6]` 不动 |
-| `[1:3]` | 1 | 是 | `[1:3]` 不动 | `[1:3]` 不动 |
-| `[5:1]` | 5 | 否 | **`[16:3]`**（q=16，p=round(16/5)=3） | `[5:1]` 不动 |
-| `[7:1]` | 7 | 否 | **`[24:3]`**（q=24，p=round(24/7)=3） | `[7:1]` 不动 |
-| `[28:6]` | 28 | 否 | **`[96:21]`**（q=96，p=round(96*6/28)=21） | `[28:6]` 不动 |
-| `[500:1]` | 500 > 384 | n/a | **`[384:1]`**（fallback：q=384，p=round(384/500)=1） | `[500:1]` 不动 |
-| `[2000:1]` | 2000 > 384 | n/a | snap.p=0 → 进零时长分支 | `[2000:1]` 不动 |
-| `[120#24:3]` | (含 `#`) | n/a | `[120#24:3]` 不动 | `[120#24:3]` 不动 |
-
-#### 触发改写时的零时长分支
-
-当条件都成立、且 `snap.p == 0`（duration 太短被舍入到 0）时，策略由
-token 类决定（`renderTokenForGrid` 传不同的 `DurationNormalizationOptions`）：
-
-| Token 类 | `allowZeroDuration` | `omitZeroDurationBracket` | 含义 |
+| Token 类 | 识别条件 | 重组顺序 | 注意点 |
 |---|---|---|---|
-| Touch hold | true | false | 输出 `[1:0]`，bracket 保留（touch 的 `[]` 语法有可见性） |
-| Note hold | true | true | **整段 bracket 删除**，token 留 `h` 字符（例：`2h[2000:1]` → `2h`） |
-| Slide duration | false | false | Slide 必须有时长，floor 到 `[q:1]`（typically `[384:1]`） |
+| Touch | `C`（可带 `1/2`）或 `A/B/D/E` + lane | prefix -> `b` -> `x` -> `h` -> `f` -> bracket | bracket 与 `h` 互为充要。主 parser 已拒绝 touch `x`，所以含 `x` 的 touch 通常进不到规范化输出。 |
+| Note | 1-8 lane、非 slide、非纯数字串 | lane -> sorted extra modifiers -> `b` -> `x` -> `h` -> bracket | `f`、`?`、`!`、`@` 等不是 note 的内建 modifier，会作为 extra modifier 按 codepoint 排序。 |
+| Slide head | 1-8 lane 且含 slide operator | lane -> sorted head extra modifiers -> `b` -> `x` -> slide body | head 区的 `h` 会让整个 token tokenizer 失败；`?`、`!`、`@` 作为 extra modifier 排序。 |
+| Slide `*` 分支 | slide body 内按 `*` 拆分 | 每个分支独立保留自己的 break `b`，插回该分支第一个 `[` 前 | 这是回归点：`1-5[8:1]*-4b[8:1]` 不能被重写成 `1-5b[8:1]*-4[8:1]`。 |
 
-回归 `ChartBatchTransformSpec.cpp:1217-1228` 验证 `[2000:1]`（fallback
-归零）→ `2h` 与 `[1:3]`（384 约数）→ 不动；`:1231-1241` 验证 `[500:1]` →
-`[384:1]`；`:1259-1269`/`:1272-1283` 验证 `1h[7:1]` → `1h[24:3]` 与
-`1-5[5:1]` → `1-5[16:3]`。
+### 3.7 输出版面规则
 
-### 3.3 触发小节切分的事件
-
-主 parse 循环（`ChartNormalization.cpp:1334-1463`）按字符走，下面四种事件
-会切小节，其余字符都只是更新 token 或推进 phase：
-
-| 事件 | 行为 | 实现 |
-|---|---|---|
-| `(BPM)` 且数值 ≠ currentBpm | 关闭当前 measure → 开新 measure（同 meter）→ 把 `(BPM)` 作为 leading boundary 放在新 measure 顶端 | `:1387-1392` `restartMeasureAtCurrentPosition` |
-| `(BPM)` 但数值 = currentBpm | **不切**，只挂在当前位置作 inline `StandaloneText` 注解 | `:1393-1396` `appendBoundaryItem` |
-| 合法 `\|\| x/y` 内联 time-signature | 关闭当前 measure → 开新 measure（**新 meter**）→ 把 `\|\| <normalized>` 作为 leading boundary | `:1352-1363`，靠 `parseInlineTimeSignatureComment`（`SimaiTimingMetadata.cpp:70+`） |
-| 其他 `\|\| ...` 注释（非 time-signature） | 关闭当前 measure → 开新 measure（**保留原 meter、保留相位进位**）→ 把注释原文作为 leading boundary | `:1364-1367` `splitMeasureAtCurrentPosition` |
-| `{N}` subdivision 变化 | **不切小节**，只更新 `currentBeats` | `:1403-1417` |
-
-`splitMeasureAtCurrentPosition` 与 `restartMeasureAtCurrentPosition` 的关键
-差别：前者把 `currentMeasure.startPhaseWhole + currentPositionWhole` 作为
-新 measure 的 startPhase（让后续 token 继续填满半个小节），后者把新
-measure 的 startPhase 设回 0（小节从头开始）。
-
-### 3.4 输出版面规则
-
-| 规则 | 实现 |
+| 规则 | 当前行为 |
 |---|---|
-| 每个 measure 一行，前缀 `{N}` 由渲染器从 moment 位置反推 | `renderMeasureLine` `:1061-1066` |
-| 同一 moment 内多 token 用 `/` 串（合击） | `buildMomentText` `:729-747` |
-| 同一 moment 内多 group 用 `` ` `` 串（连击） | 同上 |
-| measure line 内 beat 边界用空格分隔 | approximate: `:910-912`；exact: `:1048-1050` |
-| 每 emit 4 个 measure line 追加一个空行 | `:1483-1485` `(emittedMeasureLines % 4) == 0` |
-| 末尾连续空行剪掉 | `:1487-1489` |
-| `(BPM)` 与 `\|\| x/y` 相邻 boundary item 合并为单行 `(180) \|\| 4/4` | `appendBoundaryItems` `:785-826`；回归 `ChartBatchTransformSpec.cpp:1258-1268` |
-| `normalizeChartText`（全文路径）在末尾追加单独的 `E` | `:1490-1492`，由 `appendTerminalMarker=true` 触发 |
-| `normalizeChartSelectionText`（选区路径）**不**追加 `E` | 调用时传 `appendTerminalMarker=false`（`:1568-1574`） |
+| measure 输出 | 通常每个 `RenderMeasure` 输出一行；forced exact segment reset 可能让一个 measure 的渲染文本内部含换行。 |
+| 同一 moment 多 token | 用 `/` 连接。 |
+| 同一 moment 多 group | 用 `` ` `` 连接。 |
+| beat boundary | approximate / exact 都在 beat boundary 处插入空格。 |
+| `{N}` 前缀 | 每个 chunk/segment 第一次输出或 subdivision 变化时写 `{N}`；相邻 chunk 若 `{N}` 相同，可省略重复前缀。 |
+| `Bpm` + `TimeSignature` boundary | 相邻时合并成单行，例如 `(180) \|\| 3/4`。 |
+| 普通 `\|\| ...` 注释 | 拆成 standalone 行，不当作 time-signature control。 |
+| 4 小节分段 | `splitEveryFourMeasures=true` 时，每个真实 `Bpm` / `TimeSignature` section 内每 4 个 emitted measure line 后追加空行；末尾多余空行会被剪掉。 |
+| terminal `E` | `normalizeChartText()` 仅当输入本来有 terminal marker 时输出最终 `E`；选区 API 仅在选区文本本身包含 terminal marker 时保留它。 |
 
-### 3.5 Token 规范化
-
-`canonicalizeToken`（`:628-651`）依次尝试三种解析器；任意一个成功就用对应
-build 函数重组并返回；**三个都失败则原文（仅 trim）输出**。
-
-| Token 类 | 识别条件 | parse 接受的修饰符 | 重组顺序 | 备注 |
-|---|---|---|---|---|
-| Touch | 首字符 `C`（可带 `1`/`2`）或 `A`/`B`/`D`/`E` + lane 数字 | `b` `x` `h` `f` | prefix → `b` → `x` → `h` → `f` → bracketSuffix | bracket 与 `h` 互为充要：有 `[…]` 必须有 `h`，反之亦然。注意：tokenizer 虽接受 `x`，但 parser 已拒绝 touch 上的 `x`，含 `x` 的 touch 会先被 `normalizeChartText` 的校验关卡整体拒绝（`ChartBatchTransformSpec.cpp` 有回归），canonicalize 实际到不了 |
-| Note | 首字符 1-8 lane 数字、不含 slide operator、不是纯数字串 | **仅** `b` `x` `h`；其余字符（包括 `f`、`?`、`!`、`@` 等）落入 `extraModifiers` | lane → `sortedModifierText(extraModifiers)` → `b` → `x` → `h` → bracketSuffix | `extraModifiers` 按 unicode codepoint 升序排列；bracket 与 `h` 互为充要 |
-| Slide head | 首字符 1-8 lane 数字、含 slide operator `-^v<>Vpqszw` | head 区识别 `b` / `x` / `?` / `!` / `@`（直到第一个 shape 字符）；**`h` 在 head 出现 → 整 token reject** | lane → `sortedModifierText(headExtraModifiers)` → `b` → `x` → core 剩余（trackBreak `b` 插回第一个 `[` 之前） | `?` `!` `@` 同样按 unicode 升序：输出固定为 `!` < `?` < `@` |
-| 都不匹配 | —— | —— | —— | `canonicalizeToken` 返回 `trimmed` 原文（silent passthrough） |
-
-涉及典范顺序的两个细节，前一版 §3 没有讲清：
-
-1. **「b x h f」严格只成立于 touch**。Note token 不识别 `f` —— `f` 会被
-   当作 extra modifier 排到 `b` 之前；slide head 既不识别 `h` 也不识别
-   `f`。
-2. **「`?` `!` `@` 按 ASCII 排」是隐性规则**。研究文档 decision 7 第二行
-   明文规定，代码通过 `sortedModifierText` 实现，但前一版 §3 完全没写。
-
-### 3.6 `changedCount` / `measureLineCount` 语义
-
-`:1497`：
+`changedCount` 与 `measureLineCount` 的语义：
 
 ```cpp
-result.changedCount = result.text == input ? 0 : qMax(1, emittedMeasureLines);
 result.measureLineCount = emittedMeasureLines;
+result.changedCount = result.text == input ? 0 : qMax(1, emittedMeasureLines);
 ```
 
-- `changedCount` **不是**改动 token / atom 数，而是「未改动 → 0；改动 →
-  emit 出的 measure 行数（至少 1）」。当 UI 想区分「等价输入 → 提示
-  *Already normalized*」与「实际改动 → 提示 *N measure line(s)*」时（见
-  `MainWindow.DocumentTransforms.cpp:384-389, 432-437`），这个字段是布尔
-  开关 + 大致规模指示，**不应当作精确变更数**。
-- `measureLineCount` 是 emit 的 measure 行数本身（用于 status bar 显示）。
+- `changedCount` 不是 token/atom 级精确改动数，而是“未改动为 0；有改动则给出
+  至少 1 的 measure 级规模提示”。
+- `measureLineCount` 计数的是 emitted `RenderMeasure` 数，不一定等于最终文本的物理行数。
 
-### 3.7 错误 / 中止行为
+### 3.8 选区整理与 `{N}` carry
 
-`buildValidationReport.errorCount > 0` → 直接 return
-`{ ok=false, errorMessage }`，错误文本取自报告中第一条 issue 的本地化消息
-（`summarizeValidationError` `:1068-1075`）。`MainWindow.DocumentTransforms.cpp:369-381`
-把它转成 `QMessageBox::Warning` 弹给用户后保留原文档；**绝不会提交部分
-重写**。
+`normalizeChartSelectionText(fullText, selectionStart, selectionEnd, ...)` 先校验范围。
+范围非法时返回 `{ ok=false, errorMessage="Invalid selection range." }`。
 
-选区路径的额外早退：选区范围越界（`selectionStart < 0`、`selectionEnd <
-selectionStart`、`selectionEnd > fullText.size()`）→
-`{ ok=false, errorMessage="Invalid selection range." }`
-（`:1554-1559`）。
+选区路径有两个额外行为：
 
-### 3.8 偏好持久化
+1. **前置拍号注入。** `scanNormalizationSeed()` 发现选区前缀留下非零
+   `startPhaseWhole`，且 `startAtNewMeasure=true` 时，输出前注入当前 meter 的
+   `|| <meter>`，并把 fragment seed phase 归零。主窗口当前固定使用 true。
+2. **尾部 `{N}` carry。** 如果选区文本不包含 terminal marker，并且选区后方文本会在
+   遇到 `E`、新的 `{N}` 或普通 `||` 边界之前继续消费当前 subdivision，则在输出末尾
+   追加最终 active `{N}`，以免替换选区后改变选区外文本的解析。
 
-`chartNormalizationOptionsFromPreferences` /
-`saveChartNormalizationOptionsToPreferences`（`:1501-1526`）把
-`startAtNewMeasure` 与 `reduceTo384Grid` 写入编辑器 preview JSON。
-`onNormalizeWholeChart` 在用户切换 checkbox 时即时回写
-`savePortableState()`（`MainWindow.DocumentTransforms.cpp:341-349`） ——
-即便用户最终取消对话框，对 checkbox 的更改也已被保留。
+`followingTextNeedsBeatsCarry()` 的判定顺序是：跳过空白；先遇到 terminal `E/e`、
+`{` 或 `||` 返回 false；先遇到 `,` 或普通 token 内容返回 true；直到末尾都没有内容则 false。
 
-### 3.9 已有详细规格
+### 3.9 偏好持久化与测试覆盖
 
-规范化早期研究记录已转为本地私有资料；公开版以本节为准。
-最终决策、9 项架构发现、前置条件、输出规则、空行策略、modifier 顺序
-规范、5 阶段实现拆分。该文档写于实现之前，部分决策已在代码中变形 ——
-例如 decision 9 把 384-grid 描述为唯一基准 + fallback rounding，而当前
-代码通过 `reduceTo384Grid=false` 选项开放了 exact 渲染路径；以本节
-（§3）为准。
+底层偏好键：
+
+- `chart_normalize_start_at_new_measure`
+- `chart_normalize_reduce_to_384_grid`
+- `chart_normalize_split_every_four_measures`
+
+主窗口加载时用 `{true, false, true}` 作为应用默认，并强制
+`chartNormalizeStartAtNewMeasure_ = true`。保存时也写入 `startAtNewMeasure=true`，
+以及用户可见的 `reduceTo384Grid`、`splitEveryFourMeasures`。
+
+关键回归覆盖位于 `ChartBatchTransformSpec.cpp`：
+
+- terminal `E` 不凭空新增、选中 `E` 时可保留。
+- touch / note / slide 修饰符规范化。
+- no-`#` duration 的 384 snap、零时长 hold/slide 分支、`#` duration 保留。
+- `{7}`、`{28}` 等非 384 分音在 reduce=true 下的 `snapXOverY` 结果。
+- BPM + inline time-signature 合并、普通 `||` 注释 standalone 拆行、3/4 metadata 默认拍号。
+- `splitEveryFourMeasures=false` 时不插每 4 小节空行。
+- `reduce=false` 下 384-grid measure 回落 approximate、特殊 `{5}` / `{10}` segment 的
+  reset / exact 简化策略。
+- 选区起点注入 `|| 4/4` 与尾部 `{N}` carry。
 
 ---
 
