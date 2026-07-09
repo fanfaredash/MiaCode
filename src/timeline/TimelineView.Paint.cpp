@@ -107,11 +107,15 @@ void TimelineView::paintEvent(QPaintEvent* event)
     //   bar lines  = c.timelineGridMajor
     //   note lines = c.timelineGridMinor
     // Tune those two palette entries directly in UiTheme.cpp.
-    const QPen majorBeatPen(c.timelineGridMajor, kTimelineBeatLineWidth);
+    const QPen majorBeatPen(
+        miacode::timeline::adjustedTimelineMeasureLineColor(c.timelineGridMajor, measureLineBrightness_),
+        kTimelineBeatLineWidth);
     QColor laneDividerColor = c.timelineBorder;
     laneDividerColor.setAlpha(qMin(laneDividerColor.alpha(), 96));
     const QPen laneDividerPen(laneDividerColor, 1.0);
-    const QPen minorBeatPen(c.timelineGridMinor, 1.0);
+    const QPen minorBeatPen(
+        miacode::timeline::adjustedTimelineMeasureLineColor(c.timelineGridMinor, measureLineBrightness_),
+        1.0);
     // Tiered grid-line heights feature (see TimelineThemeConfig.h). The widget
     // timeline draws only the bar (小节) and per-comma (逗号) tiers — there are
     // no separate quarter-note (四分音符) subdivision lines in this path — so
@@ -978,8 +982,12 @@ void TimelineView::paintWaveformOnly(QPainter& painter, const QRect& dirtyRect)
 
     const double visibleStartSecond = xToSecond(left);
     const double visibleEndSecond = xToSecond(viewport()->width() - 8);
-    const QPen minorBeatPen(c.timelineGridMinor, 1.0);
-    const QPen majorBeatPen(c.timelineLimit, 1.5);
+    const QPen minorBeatPen(
+        miacode::timeline::adjustedTimelineMeasureLineColor(c.timelineGridMinor, measureLineBrightness_),
+        1.0);
+    const QPen majorBeatPen(
+        miacode::timeline::adjustedTimelineMeasureLineColor(c.timelineGridMajor, measureLineBrightness_),
+        1.5);
 
     painter.save();
     painter.setClipRect(cardRect.adjusted(1.0, 1.0, -1.0, -1.0));

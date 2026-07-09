@@ -359,6 +359,7 @@ void TimelineView::applyStateFromBridge()
     playheadIndicatorSuppressed_ = stateBridge_->playheadIndicatorSuppressed();
     contentScale_ = stateBridge_->contentScale();
     waveformBrightness_ = stateBridge_->waveformBrightness();
+    measureLineBrightness_ = stateBridge_->measureLineBrightness();
     waveformPhaseCompensationSeconds_ = stateBridge_->waveformPhaseCompensationSeconds();
     pixelsPerSecond_ = 120.0 * stateBridge_->zoomScale();
     const int nextZoomIndex = qMax(0, zoomPresets_.indexOf(stateBridge_->zoomScale()));
@@ -863,6 +864,26 @@ void TimelineView::setWaveformBrightness(double brightness)
         return;
     }
     waveformBrightness_ = clamped;
+    viewport()->update();
+    emit renderStateChanged();
+}
+
+double TimelineView::measureLineBrightness() const
+{
+    return measureLineBrightness_;
+}
+
+void TimelineView::setMeasureLineBrightness(double brightness)
+{
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setMeasureLineBrightness(brightness);
+        return;
+    }
+    const double clamped = miacode::timeline::normalizedTimelineMeasureLineBrightness(brightness);
+    if (qFuzzyCompare(measureLineBrightness_ + 1.0, clamped + 1.0)) {
+        return;
+    }
+    measureLineBrightness_ = clamped;
     viewport()->update();
     emit renderStateChanged();
 }

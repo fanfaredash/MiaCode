@@ -459,6 +459,12 @@ void MainWindow::EditorSection::loadPortableState()
                     miacode::timeline::kTimelineWaveformBrightnessDefault)
             );
         }
+        if (preview.value("timeline_measure_line_brightness").isDouble()) {
+            state_.timelineQuickStateBridge_->setMeasureLineBrightness(
+                preview.value("timeline_measure_line_brightness").toDouble(
+                    miacode::timeline::kTimelineMeasureLineBrightnessDefault)
+            );
+        }
         state_.timelineQuickStateBridge_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
         state_.timelineQuickStateBridge_->setViewportLockEnabled(state_.previewViewportLockEnabled_);
         state_.timelineQuickStateBridge_->setFollowProgressEnabled(state_.previewProgressFollowEnabled_);
@@ -894,6 +900,12 @@ void MainWindow::EditorSection::savePortableState() const
         state_.timelineQuickStateBridge_ != nullptr
             ? state_.timelineQuickStateBridge_->waveformBrightness()
             : miacode::timeline::kTimelineWaveformBrightnessDefault
+    );
+    preview.insert(
+        "timeline_measure_line_brightness",
+        state_.timelineQuickStateBridge_ != nullptr
+            ? state_.timelineQuickStateBridge_->measureLineBrightness()
+            : miacode::timeline::kTimelineMeasureLineBrightnessDefault
     );
     miacode::chart_transform::saveChartNormalizationOptionsToPreferences(
         &preview,

@@ -13,8 +13,6 @@ Item {
     onPaletteMapChanged: {
         if (timelineItem)
             timelineItem.refreshTheme()
-        if (brightnessControl)
-            brightnessControl.syncFromBridge()
     }
     onMetricsMapChanged: {
         if (timelineItem)
@@ -44,10 +42,10 @@ Item {
 
         anchors.fill: parent
         stateBridge: controller ? controller.timelineStateBridge : null
-        headerLeftLimit: brightnessControl.x + brightnessControl.width + 2
-        headerRightLimit: width - 8
+        headerLeftLimit: zoomButton.x + zoomButton.width + 2
+        headerRightLimit: Math.max(0, settingsButton.x - 2)
         headerMarkerLeftLimit: zoomButton.x + zoomButton.width + 2
-        headerMarkerRightLimit: width - 8
+        headerMarkerRightLimit: Math.max(0, settingsButton.x - 2)
 
         onHeaderNavigateRequested: function(second) {
             if (controller)
@@ -197,6 +195,9 @@ Item {
             anchors.bottom: parent.bottom
             width: zoomButton.bodyWidth
             cursorShape: Qt.PointingHandCursor
+            hoverEnabled: true
+            onEntered: timelineItem.setZoomControlHoveredPart(1)
+            onExited: timelineItem.setZoomControlHoveredPart(0)
             onPressed: timelineItem.setZoomControlPressedPart(1)
             onReleased: timelineItem.setZoomControlPressedPart(0)
             onCanceled: timelineItem.setZoomControlPressedPart(0)
@@ -217,26 +218,25 @@ Item {
             anchors.leftMargin: zoomButton.bodyWidth
             anchors.right: parent.right
             anchors.top: parent.top
-            height: Math.ceil(parent.height / 2)
-            cursorShape: Qt.PointingHandCursor
-            onPressed: timelineItem.setZoomControlPressedPart(2)
-            onReleased: timelineItem.setZoomControlPressedPart(0)
-            onCanceled: timelineItem.setZoomControlPressedPart(0)
-            onClicked: timelineItem.stepZoomPreset(1)
-        }
-
-        MouseArea {
-            z: 10
-            anchors.left: parent.left
-            anchors.leftMargin: zoomButton.bodyWidth
-            anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: Math.floor(parent.height / 2)
             cursorShape: Qt.PointingHandCursor
-            onPressed: timelineItem.setZoomControlPressedPart(-2)
+            hoverEnabled: true
+
+            function partForY(y) {
+                return y < height / 2 ? 2 : -2
+            }
+
+            onEntered: timelineItem.setZoomControlHoveredPart(partForY(mouseY))
+            onPositionChanged: timelineItem.setZoomControlHoveredPart(partForY(mouseY))
+            onExited: timelineItem.setZoomControlHoveredPart(0)
+            onPressed: function(mouse) {
+                timelineItem.setZoomControlPressedPart(partForY(mouse.y))
+            }
             onReleased: timelineItem.setZoomControlPressedPart(0)
             onCanceled: timelineItem.setZoomControlPressedPart(0)
-            onClicked: timelineItem.stepZoomPreset(-1)
+            onClicked: function(mouse) {
+                timelineItem.stepZoomPreset(partForY(mouse.y) > 0 ? 1 : -1)
+            }
         }
 
         onClicked: {
@@ -250,147 +250,27 @@ Item {
         }
     }
 
-    Item {
-        id: brightnessControl
+    ToolButton {
+        id: settingsButton
 
-        anchors.left: zoomButton.right
-        anchors.leftMargin: Math.round(6 * root.headerScale)
-        y: Math.max(0, (timelineItem.timelineTop - height) / 2)
-        width: Math.max(1, Math.round(128 * root.headerScale))
+        width: Math.max(1, Math.round(28 * root.headerScale))
         height: Math.max(1, Math.round(22 * root.headerScale))
-        visible: timelineItem.stateBridge !== null
-        property int sliderActiveHeight: Math.max(1, Math.round(12 * root.headerScale))
-        property int sliderHandleSize: Math.max(6, Math.round(8 * root.headerScale))
-        property int sliderTrackHeight: Math.max(2, Math.round(3 * root.headerScale))
+        x: Math.max(
+            zoomButton.x + zoomButton.width + Math.round(8 * root.headerScale),
+            parent.width - Math.round(8 * root.headerScale) - width)
+        y: Math.max(0, (timelineItem.timelineTop - height) / 2)
+        padding: 1
+        hoverEnabled: true
+        enabled: timelineItem.stateBridge !== null
+        opacity: 0
 
-        function isInvertedForTheme() {
-            return !(root.paletteMap && root.paletteMap["dark"] === true)
-        }
-
-        function sliderValueFromBrightness(brightness) {
-            const percent = brightness * 100
-            return isInvertedForTheme()
-                ? brightnessSlider.from + brightnessSlider.to - percent
-                : percent
-        }
-
-        function brightnessFromSliderValue(value) {
-            const percent = isInvertedForTheme()
-                ? brightnessSlider.from + brightnessSlider.to - value
-                : value
-            return percent / 100
-        }
-
-        function syncFromBridge() {
-            if (timelineItem.stateBridge && !brightnessSlider.pressed)
-                brightnessSlider.value = sliderValueFromBrightness(timelineItem.stateBridge.waveformBrightness)
-        }
-
-        Connections {
-            target: timelineItem
-
-            function onStateBridgeChanged() {
-                brightnessControl.syncFromBridge()
-            }
-        }
-
-        Connections {
-            target: timelineItem.stateBridge
-            ignoreUnknownSignals: true
-        }
-
-        Canvas {
-            id: brightnessGlyph
-
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            width: Math.max(1, Math.round(18 * root.headerScale))
-            height: Math.max(1, Math.round(18 * root.headerScale))
-
-            property color strokeColor: root.tone("timelineLabel", "#d4dce8")
-
-            onStrokeColorChanged: requestPaint()
-
-            onPaint: {
-                const ctx = getContext("2d")
-                ctx.reset()
-                const cx = width / 2
-                const cy = height / 2
-                const r = Math.max(2, Math.min(width, height) * 0.22)
-                const rayInner = r + 2
-                const rayOuter = Math.min(width, height) * 0.46
-                ctx.strokeStyle = strokeColor
-                ctx.fillStyle = strokeColor
-                ctx.lineWidth = Math.max(1, root.headerScale)
-                ctx.beginPath()
-                ctx.ellipse(cx - r, cy - r, r * 2, r * 2, 0, 0, Math.PI * 2)
-                ctx.fill()
-                for (let i = 0; i < 8; ++i) {
-                    const angle = i * Math.PI / 4
-                    ctx.beginPath()
-                    ctx.moveTo(cx + Math.cos(angle) * rayInner, cy + Math.sin(angle) * rayInner)
-                    ctx.lineTo(cx + Math.cos(angle) * rayOuter, cy + Math.sin(angle) * rayOuter)
-                    ctx.stroke()
-                }
-            }
-        }
-
-        Slider {
-            id: brightnessSlider
-
-            anchors.left: brightnessGlyph.right
-            anchors.leftMargin: Math.round(4 * root.headerScale)
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            height: brightnessControl.sliderActiveHeight
-            from: 20
-            to: 200
-            stepSize: 5
-            live: true
-            value: 100
-
-            onMoved: {
-                if (timelineItem.stateBridge)
-                    timelineItem.stateBridge.waveformBrightness = brightnessControl.brightnessFromSliderValue(value)
-            }
-
-            background: Item {
-                x: brightnessSlider.leftPadding
-                y: Math.round((brightnessSlider.height - height) / 2)
-                width: brightnessSlider.availableWidth
-                height: brightnessControl.sliderTrackHeight
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: height / 2
-                    color: root.tone("border", "#d5e0ec")
-                }
-
-                Rectangle {
-                    width: Math.max(height, brightnessSlider.visualPosition * parent.width)
-                    height: parent.height
-                    radius: height / 2
-                    color: root.tone("accent", "#2e77d0")
-                }
-            }
-
-            handle: Rectangle {
-                x: brightnessSlider.leftPadding
-                    + brightnessSlider.visualPosition * (brightnessSlider.availableWidth - width)
-                y: Math.round((brightnessSlider.height - height) / 2)
-                width: brightnessControl.sliderHandleSize
-                height: width
-                radius: width / 2
-                color: brightnessSlider.pressed
-                    ? root.tone("accentPressed", "#2668b9")
-                    : root.tone("cardBg", "#ffffff")
-                border.width: 1
-                border.color: brightnessSlider.hovered || brightnessSlider.pressed
-                    ? root.tone("accent", "#2e77d0")
-                    : root.tone("borderStrong", "#b8c7da")
-            }
-
-            Component.onCompleted: brightnessControl.syncFromBridge()
+        onHoveredChanged: timelineItem.setSettingsControlHovered(hovered)
+        onPressedChanged: timelineItem.setSettingsControlPressed(pressed)
+        onClicked: {
+            if (!controller)
+                return
+            const topRight = settingsButton.mapToGlobal(settingsButton.width, 0)
+            controller.openTimelineBrightnessMenu(Math.round(topRight.x), Math.round(topRight.y))
         }
     }
 

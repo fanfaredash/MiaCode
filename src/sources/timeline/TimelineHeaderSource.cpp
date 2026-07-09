@@ -161,9 +161,13 @@ void TimelineHeaderSource::contributeToSnapshot(
         // batch, which has been observed to silently abort the process
         // under x64 emulation on Apple-Silicon Windows VMs.
         QVector<miacode::timeline::TimelineSceneRect> bgRects;
-        bgRects.reserve(1 + state->zoomButtonOverlayRects.size());
+        bgRects.reserve(2 + state->zoomButtonOverlayRects.size() + state->settingsButtonGlyphRects.size());
         bgRects.append(shiftRect(state->zoomButtonBg));
         for (const auto& rect : state->zoomButtonOverlayRects) {
+            bgRects.append(shiftRect(rect));
+        }
+        bgRects.append(shiftRect(state->settingsButtonBg));
+        for (const auto& rect : state->settingsButtonGlyphRects) {
             bgRects.append(shiftRect(rect));
         }
         sb::pushTimelineRectBatch(snapshot, bgRects);
@@ -187,7 +191,14 @@ void TimelineHeaderSource::contributeToSnapshot(
                 QPointF(x0, y1), QPointF(x0, y0), c, 1.0});
         };
         pushFrame(state->zoomButtonBorder);
+        pushFrame(state->settingsButtonBorder);
         for (const auto& line : state->zoomButtonInteriorLines) {
+            miacode::timeline::TimelineSceneLine shiftedLine = line;
+            shiftedLine.start.rx() += scrollOffsetX;
+            shiftedLine.end.rx() += scrollOffsetX;
+            overlayLines.append(shiftedLine);
+        }
+        for (const auto& line : state->settingsButtonInteriorLines) {
             miacode::timeline::TimelineSceneLine shiftedLine = line;
             shiftedLine.start.rx() += scrollOffsetX;
             shiftedLine.end.rx() += scrollOffsetX;

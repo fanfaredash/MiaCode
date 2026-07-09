@@ -37,6 +37,8 @@ class TimelineQuickStateBridge : public QObject
                WRITE setTimelineSyncEnabled NOTIFY timelineSyncEnabledChanged)
     Q_PROPERTY(double waveformBrightness READ waveformBrightness
                WRITE setWaveformBrightness NOTIFY waveformBrightnessChanged)
+    Q_PROPERTY(double measureLineBrightness READ measureLineBrightness
+               WRITE setMeasureLineBrightness NOTIFY measureLineBrightnessChanged)
 
 public:
     explicit TimelineQuickStateBridge(QObject* parent = nullptr);
@@ -68,6 +70,8 @@ public:
     void setContentScale(double scale);
     double waveformBrightness() const;
     void setWaveformBrightness(double brightness);
+    double measureLineBrightness() const;
+    void setMeasureLineBrightness(double brightness);
     double waveformPhaseCompensationSeconds() const;
     void setWaveformPhaseCompensationSeconds(double seconds);
     void cycleZoomPreset(double anchorSecond);
@@ -118,6 +122,7 @@ signals:
     void followProgressEnabledChanged(bool enabled);
     void timelineSyncEnabledChanged(bool enabled);
     void waveformBrightnessChanged(double brightness);
+    void measureLineBrightnessChanged(double brightness);
 
 private:
     QSize effectiveViewportSize() const;
@@ -143,6 +148,7 @@ private:
     int horizontalScrollValue_ = 0;
     double contentScale_ = 1.0;
     double waveformBrightness_ = miacode::timeline::kTimelineWaveformBrightnessDefault;
+    double measureLineBrightness_ = miacode::timeline::kTimelineMeasureLineBrightnessDefault;
     double waveformPhaseCompensationSeconds_ = 0.0;
     double playbackEntrySeconds_ = 0.0;
     double playheadUpperLimitSeconds_ = -1.0;

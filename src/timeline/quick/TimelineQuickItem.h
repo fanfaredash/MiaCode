@@ -72,6 +72,9 @@ public:
     Q_INVOKABLE void stepZoomPreset(int deltaSteps);
     Q_INVOKABLE void setZoomScale(qreal scale);
     Q_INVOKABLE void setZoomControlPressedPart(int part);
+    Q_INVOKABLE void setZoomControlHoveredPart(int part);
+    Q_INVOKABLE void setSettingsControlHovered(bool hovered);
+    Q_INVOKABLE void setSettingsControlPressed(bool pressed);
     Q_INVOKABLE void refreshTheme();
 
 signals:
@@ -127,6 +130,9 @@ private:
     int headerMarkerLeftLimit_ = 0;
     int headerMarkerRightLimit_ = 0;
     int zoomControlPressedPart_ = 0;
+    int zoomControlHoveredPart_ = 0;
+    bool settingsControlHovered_ = false;
+    bool settingsControlPressed_ = false;
     qreal cachedZoomScale_ = 0.5;
     bool cachedFollowPreviewEnabled_ = false;
     bool cachedViewportLockEnabled_ = false;

@@ -337,6 +337,7 @@ void TimelineQuickStateBridge::refreshLayoutMetrics()
     request.zoomScale = zoomScale();
     request.contentScale = contentScale_;
     request.waveformBrightness = waveformBrightness_;
+    request.measureLineBrightness = measureLineBrightness_;
     request.waveformPhaseCompensationSeconds = waveformPhaseCompensationSeconds_;
     request.playbackEntrySeconds = playbackEntrySeconds_;
     request.playheadSeconds = playheadSeconds_;
@@ -443,6 +444,23 @@ void TimelineQuickStateBridge::setWaveformBrightness(double brightness)
     waveformBrightness_ = clamped;
     ++waveformRevision_;
     emit waveformBrightnessChanged(waveformBrightness_);
+    emit renderStateChanged();
+}
+
+double TimelineQuickStateBridge::measureLineBrightness() const
+{
+    return measureLineBrightness_;
+}
+
+void TimelineQuickStateBridge::setMeasureLineBrightness(double brightness)
+{
+    const double clamped = miacode::timeline::normalizedTimelineMeasureLineBrightness(brightness);
+    if (qFuzzyCompare(measureLineBrightness_ + 1.0, clamped + 1.0)) {
+        return;
+    }
+    measureLineBrightness_ = clamped;
+    ++gridRevision_;
+    emit measureLineBrightnessChanged(measureLineBrightness_);
     emit renderStateChanged();
 }
 

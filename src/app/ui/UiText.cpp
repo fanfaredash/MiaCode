@@ -1315,6 +1315,8 @@ const QHash<QString, QString>& enMap()
         {"preferences.the_field_next_to_lv", "The field next to Lv in the chart header: the &first offset or this difficulty's &des_N designer."},
 
         {"shell.follow_code", "Follow Code"},
+        {"shell.timeline_measure_line_brightness", "Grid Line Brightness"},
+        {"shell.timeline_waveform_brightness", "Waveform Brightness"},
         {"shell.timeline_sync", "Timeline Sync"},
         {"shell.view_lock", "View Lock"},
 
@@ -2270,6 +2272,8 @@ const QHash<QString, QString>& zhMap()
         {"preferences.the_field_next_to_lv", "谱面编辑页顶部 Lv 旁边显示的字段：偏移（&first）或当前难度的谱师（&des_N）。"},
 
         {"shell.follow_code", "代码跟随"},
+        {"shell.timeline_measure_line_brightness", "网格线亮度"},
+        {"shell.timeline_waveform_brightness", "波形图亮度"},
         {"shell.timeline_sync", "时轴同步"},
         {"shell.view_lock", "光标居中"},
 
@@ -3209,6 +3213,8 @@ const QHash<QString, QString>& jaMap()
         {"preferences.the_field_next_to_lv", "譜面編集ページ上部の Lv の横に表示するフィールド：オフセット（&first）または現在の難易度の作者（&des_N）。"},
 
         {"shell.follow_code", "コード追従"},
+        {"shell.timeline_measure_line_brightness", "グリッド線の明るさ"},
+        {"shell.timeline_waveform_brightness", "波形の明るさ"},
         {"shell.timeline_sync", "タイムライン同期"},
         {"shell.view_lock", "ビューロック"},
 

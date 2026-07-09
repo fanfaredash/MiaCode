@@ -758,6 +758,15 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             width,
         });
     };
+    const QColor measureLineColor = adjustedTimelineMeasureLineColor(
+        theme.gridMajor,
+        request.measureLineBrightness);
+    const QColor commaLineColor = adjustedTimelineMeasureLineColor(
+        theme.gridMinor,
+        request.measureLineBrightness);
+    const QColor beatLineColor = adjustedTimelineMeasureLineColor(
+        theme.gridSubdivision,
+        request.measureLineBrightness);
 
     TimelineVisibleLineRange beatRange;
     beatRange.begin = 0;
@@ -767,7 +776,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         const TimelineRenderLine& line = request.snapshot.lines.at(lineIndex);
         for (const TimelineRenderBeat& marker : line.beats) {
             if (shouldPaintTimelineBeatMarker(marker)) {
-                addGridLine(timelineRenderAbsoluteSecond(line, marker.secondOffset), theme.gridMinor, 1.0, true,
+                addGridLine(timelineRenderAbsoluteSecond(line, marker.secondOffset), commaLineColor, 1.0, true,
                             timelineGridLineHeightFraction(kTimelineGridHeightFractionComma));
             }
         }
@@ -807,13 +816,13 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             if (!(beatSecond < endSecond - 1e-6)) {
                 break;
             }
-            addGridLine(beatSecond, theme.gridSubdivision, kTimelineSubdivisionLineWidth, false,
+            addGridLine(beatSecond, beatLineColor, kTimelineSubdivisionLineWidth, false,
                         timelineGridLineHeightFraction(kTimelineGridHeightFractionSubdivision));
         }
     };
     for (int measureIndex = 0; measureIndex < request.snapshot.measureLineSeconds.size(); ++measureIndex) {
         const double measureSecond = request.snapshot.measureLineSeconds.at(measureIndex);
-        addGridLine(measureSecond, theme.gridMajor, kTimelineBeatLineWidth, false,
+        addGridLine(measureSecond, measureLineColor, kTimelineBeatLineWidth, false,
                     timelineGridLineHeightFraction(kTimelineGridHeightFractionMeasure));
 
         double nextMeasureSecond = std::numeric_limits<double>::infinity();
@@ -853,7 +862,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         const int trailingDenominator = qMax(1, request.snapshot.trailingMeasureLineMeterDenominator);
         for (; extensionSecond <= state.displayEndSeconds + 1.0 + 1e-6;
              extensionSecond += request.snapshot.trailingMeasureLineStepSeconds) {
-            addGridLine(extensionSecond, theme.gridMajor, kTimelineBeatLineWidth, false,
+            addGridLine(extensionSecond, measureLineColor, kTimelineBeatLineWidth, false,
                         timelineGridLineHeightFraction(kTimelineGridHeightFractionMeasure));
             emitSubdivisionsForSpan(
                 extensionSecond,
@@ -1441,9 +1450,16 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             ? QColor(31, 41, 55) : QColor(243, 244, 246);
         const QColor borderColor = theme.border;
         const QColor arrowColor = theme.label;
-        const QColor pressedOverlay = theme.window.lightnessF() < 0.5
-            ? QColor(96, 165, 250, 74)
-            : QColor(46, 119, 208, 38);
+        const QColor hoverBg = theme.window.lightnessF() < 0.5
+            ? QColor(44, 56, 70)
+            : QColor(238, 245, 255);
+        const QColor pressedBg = theme.window.lightnessF() < 0.5
+            ? QColor(62, 121, 208)
+            : QColor(38, 104, 185);
+        const QColor accentColor = theme.window.lightnessF() < 0.5
+            ? QColor(96, 165, 250)
+            : QColor(46, 119, 208);
+        const QColor pressedGlyphColor = QColor(255, 255, 255);
 
         // ---- Zoom button (left) ----
         const QString zoomText = QStringLiteral("%1%").arg(
@@ -1456,30 +1472,36 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         const bool bodyPressed = request.zoomControlPressedPart == 1;
         const bool upPressed = request.zoomControlPressedPart == 2;
         const bool downPressed = request.zoomControlPressedPart == -2;
+        const bool bodyHovered = request.zoomControlHoveredPart == 1;
+        const bool upHovered = request.zoomControlHoveredPart == 2;
+        const bool downHovered = request.zoomControlHoveredPart == -2;
         const qreal pressedOffset = qMax<qreal>(1.0, qRound(headerControlScale));
         state.zoomButtonBg = TimelineSceneRect{
             QRectF(zoomBtnX, btnY, zoomBtnW, btnHeight),
             cardBg,
         };
         const qreal separatorX = zoomBtnX + zoomBodyW;
-        if (bodyPressed) {
+        const auto appendZoomPartOverlay = [&](const QRectF& rect, bool hovered, bool pressed) {
+            if (!hovered && !pressed) {
+                return;
+            }
             state.zoomButtonOverlayRects.append(TimelineSceneRect{
-                QRectF(zoomBtnX + 1.0, btnY + 1.0, qMax<qreal>(1.0, zoomBodyW - 1.0), qMax<qreal>(1.0, btnHeight - 2.0)),
-                pressedOverlay,
+                rect,
+                pressed ? pressedBg : hoverBg,
             });
-        }
-        if (upPressed) {
-            state.zoomButtonOverlayRects.append(TimelineSceneRect{
-                QRectF(separatorX + 1.0, btnY + 1.0, qMax<qreal>(1.0, zoomStepperW - 2.0), qMax<qreal>(1.0, (btnHeight * 0.5) - 1.0)),
-                pressedOverlay,
-            });
-        }
-        if (downPressed) {
-            state.zoomButtonOverlayRects.append(TimelineSceneRect{
-                QRectF(separatorX + 1.0, btnY + (btnHeight * 0.5), qMax<qreal>(1.0, zoomStepperW - 2.0), qMax<qreal>(1.0, (btnHeight * 0.5) - 1.0)),
-                pressedOverlay,
-            });
-        }
+        };
+        appendZoomPartOverlay(
+            QRectF(zoomBtnX + 1.0, btnY + 1.0, qMax<qreal>(1.0, zoomBodyW - 1.0), qMax<qreal>(1.0, btnHeight - 2.0)),
+            bodyHovered,
+            bodyPressed);
+        appendZoomPartOverlay(
+            QRectF(separatorX + 1.0, btnY + 1.0, qMax<qreal>(1.0, zoomStepperW - 2.0), qMax<qreal>(1.0, (btnHeight * 0.5) - 1.0)),
+            upHovered,
+            upPressed);
+        appendZoomPartOverlay(
+            QRectF(separatorX + 1.0, btnY + (btnHeight * 0.5), qMax<qreal>(1.0, zoomStepperW - 2.0), qMax<qreal>(1.0, (btnHeight * 0.5) - 1.0)),
+            downHovered,
+            downPressed);
         state.zoomButtonBorder = TimelineSceneRect{
             // Drawn as a thin frame via 4 hairlines below; we keep one
             // descriptor for "the border colour" so the source can pick
@@ -1487,12 +1509,14 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             // a sentinel: we use the rect itself plus 1-px hairlines
             // emitted by the source.
             QRectF(zoomBtnX, btnY, zoomBtnW, btnHeight),
-            borderColor,
+            (bodyHovered || upHovered || downHovered || bodyPressed || upPressed || downPressed)
+                ? accentColor
+                : borderColor,
         };
         TimelineSceneTextLabel zoomLabel;
         zoomLabel.text = zoomText;
         zoomLabel.font = controlFont;
-        zoomLabel.color = theme.label;
+        zoomLabel.color = bodyPressed ? pressedGlyphColor : theme.label;
         zoomLabel.logicalSize = timelineTextLogicalSize(controlFont, zoomText);
         zoomLabel.topLeft = QPointF(
             zoomBtnX + ((zoomBodyW - zoomTextW) * 0.5) - kTimelineTextHorizontalPadding,
@@ -1504,7 +1528,9 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         state.zoomButtonInteriorLines.append(TimelineSceneLine{
             QPointF(separatorX, btnY),
             QPointF(separatorX, btnY + btnHeight),
-            borderColor,
+            (bodyHovered || upHovered || downHovered || bodyPressed || upPressed || downPressed)
+                ? accentColor
+                : borderColor,
             1.0,
         });
         const qreal arrowCx = separatorX + (zoomStepperW * 0.5);
@@ -1528,14 +1554,55 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             QPointF(arrowCx, upTipY),
             QPointF(arrowCx - arrowHalfWidth, upBaseY),
             QPointF(arrowCx + arrowHalfWidth, upBaseY),
-            arrowColor,
+            upPressed ? pressedGlyphColor : arrowColor,
         });
         state.zoomButtonGlyphTriangles.append(TimelineSceneTriangle{
             QPointF(arrowCx, downTipY),
             QPointF(arrowCx + arrowHalfWidth, downBaseY),
             QPointF(arrowCx - arrowHalfWidth, downBaseY),
-            arrowColor,
+            downPressed ? pressedGlyphColor : arrowColor,
         });
+
+        // ---- Brightness/settings button (right) ----
+        const int settingsBtnW = qMax(1, qRound(28.0 * headerControlScale));
+        const int settingsBtnX = qMax(
+            zoomBtnX + zoomBtnW + qRound(8.0 * headerControlScale),
+            request.viewportSize.width() - qRound(8.0 * headerControlScale) - settingsBtnW);
+        const qreal settingsPressedOffset = request.settingsControlPressed ? pressedOffset : 0.0;
+        const QColor settingsButtonBg = request.settingsControlPressed
+            ? pressedBg
+            : (request.settingsControlHovered ? hoverBg : cardBg);
+        const QColor settingsButtonStroke = (request.settingsControlHovered || request.settingsControlPressed)
+            ? accentColor
+            : borderColor;
+        const QColor settingsGlyphColor = request.settingsControlPressed ? pressedGlyphColor : arrowColor;
+        state.settingsButtonBg = TimelineSceneRect{
+            QRectF(settingsBtnX, btnY, settingsBtnW, btnHeight),
+            settingsButtonBg,
+        };
+        state.settingsButtonBorder = TimelineSceneRect{
+            QRectF(settingsBtnX, btnY, settingsBtnW, btnHeight),
+            settingsButtonStroke,
+        };
+        const qreal iconLeft = settingsBtnX + qRound(7.0 * headerControlScale);
+        const qreal iconRight = settingsBtnX + settingsBtnW - qRound(7.0 * headerControlScale);
+        const qreal knobSize = qMax<qreal>(2.0, qRound(3.0 * headerControlScale));
+        const auto appendSliderGlyphLine = [&](qreal y, qreal knobCenterX) {
+            const qreal shiftedY = y + settingsPressedOffset;
+            state.settingsButtonInteriorLines.append(TimelineSceneLine{
+                QPointF(iconLeft, shiftedY),
+                QPointF(iconRight, shiftedY),
+                settingsGlyphColor,
+                qMax<qreal>(1.0, headerControlScale),
+            });
+            state.settingsButtonGlyphRects.append(TimelineSceneRect{
+                QRectF(knobCenterX - knobSize * 0.5, shiftedY - knobSize * 0.5, knobSize, knobSize),
+                settingsGlyphColor,
+            });
+        };
+        appendSliderGlyphLine(btnY + qRound(6.0 * headerControlScale), settingsBtnX + qRound(12.0 * headerControlScale));
+        appendSliderGlyphLine(btnY + qRound(11.0 * headerControlScale), settingsBtnX + qRound(18.0 * headerControlScale));
+        appendSliderGlyphLine(btnY + qRound(16.0 * headerControlScale), settingsBtnX + qRound(14.0 * headerControlScale));
 
         // Follow controls are no longer drawn in the timeline header.
         // Code Follow lives in BottomTabsQuickHost.qml, while View Lock

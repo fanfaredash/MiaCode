@@ -158,6 +158,7 @@ public:
     // workspace / preview windows without the focus quirks of QtQuick
     // Popup.Window.
     Q_INVOKABLE void openTimelineFollowSettingsMenu(int gearGlobalRight, int gearGlobalTop);
+    Q_INVOKABLE void openTimelineBrightnessMenu(int gearGlobalRight, int gearGlobalTop);
     Q_INVOKABLE void openTimelineZoomMenu(int controlGlobalLeft, int controlGlobalTop, int controlWidth);
     Q_INVOKABLE bool stepPreviewBySeconds(double deltaSeconds, bool centerView = true);
     Q_INVOKABLE void beginPreviewHeldSeek(int direction, int key);

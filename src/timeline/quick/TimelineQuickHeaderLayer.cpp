@@ -205,8 +205,16 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
                         node->setTexture(handle.texture);
                         node->setRect(QRectF(label.topLeft, handle.logicalSize));
                         staticRoot->appendChildNode(node);
-                    };
+                };
                 pushLabel(state.zoomButtonLabel);
+            }
+            staticRoot->appendChildNode(buildTimelineRectNode(state.settingsButtonBg));
+            pushFrame(state.settingsButtonBorder);
+            for (const auto& line : state.settingsButtonInteriorLines) {
+                staticRoot->appendChildNode(buildTimelineLineNode(line));
+            }
+            for (const auto& rect : state.settingsButtonGlyphRects) {
+                staticRoot->appendChildNode(buildTimelineRectNode(rect));
             }
         }
         root->staticRevision = state.gridRevision;

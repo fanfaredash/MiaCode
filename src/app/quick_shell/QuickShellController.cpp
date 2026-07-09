@@ -16,6 +16,8 @@
 #include <QElapsedTimer>
 #include <QEnterEvent>
 #include <QFontMetrics>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPaintEvent>
@@ -23,7 +25,9 @@
 #include <QPainterPath>
 #include <QPoint>
 #include <QPointer>
+#include <QSlider>
 #include <QTimer>
+#include <QVBoxLayout>
 #include <QWidget>
 #include <QWidgetAction>
 #include <QWindow>
@@ -35,10 +39,33 @@ namespace {
 
 constexpr int kQuickShellActiveRefreshIntervalMs = 16;
 constexpr int kQuickShellIdleRefreshIntervalMs = 250;
+constexpr int kTimelineBrightnessPercentMin = 20;
+constexpr int kTimelineBrightnessPercentMax = 200;
+constexpr int kTimelineBrightnessPercentStep = 5;
 
 QString timelineZoomMenuLabel(double scale)
 {
     return QStringLiteral("%1%").arg(qRound(scale * 100.0));
+}
+
+int brightnessToPercent(double brightness, double fallback)
+{
+    const double normalized = qIsFinite(brightness) ? brightness : fallback;
+    const int percent = qRound(normalized * 100.0);
+    const int stepped = qRound(static_cast<double>(percent) / kTimelineBrightnessPercentStep)
+        * kTimelineBrightnessPercentStep;
+    return qBound(
+        kTimelineBrightnessPercentMin,
+        stepped,
+        kTimelineBrightnessPercentMax);
+}
+
+double brightnessFromPercent(int percent)
+{
+    return static_cast<double>(qBound(
+        kTimelineBrightnessPercentMin,
+        percent,
+        kTimelineBrightnessPercentMax)) / 100.0;
 }
 
 // Custom QMenu item widget for the timeline-follow settings menu.
@@ -162,6 +189,84 @@ private:
     bool checked_ = false;
     bool hovered_ = false;
     std::function<void(bool)> onToggled_;
+};
+
+class TimelineBrightnessSliderItem : public QWidget
+{
+public:
+    TimelineBrightnessSliderItem(
+        const QString& labelText,
+        int initialPercent,
+        std::function<void(int)> onValueChanged,
+        QWidget* parent = nullptr)
+        : QWidget(parent)
+        , onValueChanged_(std::move(onValueChanged))
+    {
+        const UiTheme::Colors& c = UiTheme::colors();
+        auto* root = new QVBoxLayout(this);
+        root->setContentsMargins(12, 8, 12, 8);
+        root->setSpacing(6);
+
+        auto* labelRow = new QHBoxLayout();
+        labelRow->setContentsMargins(0, 0, 0, 0);
+        labelRow->setSpacing(10);
+        auto* titleLabel = new QLabel(labelText, this);
+        QFont titleFont = titleLabel->font();
+        titleFont.setWeight(QFont::DemiBold);
+        titleLabel->setFont(titleFont);
+        titleLabel->setStyleSheet(QStringLiteral("color:%1;").arg(c.textPrimary.name()));
+        valueLabel_ = new QLabel(this);
+        valueLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        valueLabel_->setMinimumWidth(QFontMetrics(valueLabel_->font()).horizontalAdvance(QStringLiteral("200%")));
+        valueLabel_->setStyleSheet(QStringLiteral("color:%1;").arg(c.textSecondary.name()));
+        labelRow->addWidget(titleLabel, 1);
+        labelRow->addWidget(valueLabel_, 0);
+        root->addLayout(labelRow);
+
+        slider_ = new QSlider(Qt::Horizontal, this);
+        slider_->setRange(kTimelineBrightnessPercentMin, kTimelineBrightnessPercentMax);
+        slider_->setSingleStep(kTimelineBrightnessPercentStep);
+        slider_->setPageStep(kTimelineBrightnessPercentStep);
+        slider_->setTickInterval(kTimelineBrightnessPercentStep);
+        slider_->setStyleSheet(UiTheme::dialogSliderStyleSheet());
+        root->addWidget(slider_);
+
+        setMinimumWidth(250);
+        const int clamped = qBound(kTimelineBrightnessPercentMin, initialPercent, kTimelineBrightnessPercentMax);
+        updateValueLabel(clamped);
+        slider_->setValue(clamped);
+        connect(slider_, &QSlider::valueChanged, this, [this](int value) {
+            const int stepped = qBound(
+                kTimelineBrightnessPercentMin,
+                qRound(static_cast<double>(value) / kTimelineBrightnessPercentStep) * kTimelineBrightnessPercentStep,
+                kTimelineBrightnessPercentMax);
+            if (stepped != value) {
+                slider_->setValue(stepped);
+                return;
+            }
+            updateValueLabel(stepped);
+            if (onValueChanged_) {
+                onValueChanged_(stepped);
+            }
+        });
+    }
+
+    QSize sizeHint() const override
+    {
+        return QSize(270, QWidget::sizeHint().height());
+    }
+
+private:
+    void updateValueLabel(int percent)
+    {
+        if (valueLabel_ != nullptr) {
+            valueLabel_->setText(QStringLiteral("%1%").arg(percent));
+        }
+    }
+
+    QLabel* valueLabel_ = nullptr;
+    QSlider* slider_ = nullptr;
+    std::function<void(int)> onValueChanged_;
 };
 
 template <typename T>
@@ -793,6 +898,61 @@ void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, i
     // Layout once so sizeHint reflects all three rows + the rounded
     // stylesheet padding; only after that can we anchor the bottom-
     // right corner. menu->popup() handles the rest of the show path.
+    menu->adjustSize();
+    const QSize menuSize = menu->sizeHint();
+    const int x = gearGlobalRight - menuSize.width();
+    const int y = gearGlobalTop - menuSize.height() - 4;
+    menu->popup(QPoint(x, y));
+}
+
+void QuickShellController::openTimelineBrightnessMenu(int gearGlobalRight, int gearGlobalTop)
+{
+    if (stateSource_ == nullptr) {
+        return;
+    }
+    auto* bridge = qobject_cast<TimelineQuickStateBridge*>(
+        stateSource_->shellTimelineStateBridgeObject());
+    if (bridge == nullptr) {
+        return;
+    }
+
+    auto* menu = new QMenu();
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    UiTheme::styleRoundedMenu(*menu);
+
+    const QPointer<TimelineQuickStateBridge> bridgeGuard(bridge);
+    const auto addBrightnessSlider = [&](const QString& label, int initialPercent, std::function<void(TimelineQuickStateBridge*, double)> setter) {
+        auto* item = new TimelineBrightnessSliderItem(
+            label,
+            initialPercent,
+            [bridgeGuard, setter = std::move(setter)](int percent) {
+                if (bridgeGuard == nullptr) {
+                    return;
+                }
+                setter(bridgeGuard.data(), brightnessFromPercent(percent));
+            });
+        auto* widgetAction = new QWidgetAction(menu);
+        widgetAction->setDefaultWidget(item);
+        menu->addAction(widgetAction);
+    };
+
+    addBrightnessSlider(
+        UiText::text(QStringLiteral("shell.timeline_waveform_brightness")),
+        brightnessToPercent(
+            bridge->waveformBrightness(),
+            miacode::timeline::kTimelineWaveformBrightnessDefault),
+        [](TimelineQuickStateBridge* target, double brightness) {
+            target->setWaveformBrightness(brightness);
+        });
+    addBrightnessSlider(
+        UiText::text(QStringLiteral("shell.timeline_measure_line_brightness")),
+        brightnessToPercent(
+            bridge->measureLineBrightness(),
+            miacode::timeline::kTimelineMeasureLineBrightnessDefault),
+        [](TimelineQuickStateBridge* target, double brightness) {
+            target->setMeasureLineBrightness(brightness);
+        });
+
     menu->adjustSize();
     const QSize menuSize = menu->sizeHint();
     const int x = gearGlobalRight - menuSize.width();

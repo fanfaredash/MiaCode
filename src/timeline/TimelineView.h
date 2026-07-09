@@ -78,6 +78,8 @@ public:
     void setContentScale(double scale);
     double waveformBrightness() const;
     void setWaveformBrightness(double brightness);
+    double measureLineBrightness() const;
+    void setMeasureLineBrightness(double brightness);
     int horizontalScrollValue() const;
     void setHorizontalScrollValue(int value);
     void stepZoomPresetForQuickSurface(int deltaSteps, double anchorSecond);
@@ -240,6 +242,7 @@ private:
     int zoomPresetIndex_ = 0;
     double contentScale_ = 1.0;
     double waveformBrightness_ = miacode::timeline::kTimelineWaveformBrightnessDefault;
+    double measureLineBrightness_ = miacode::timeline::kTimelineMeasureLineBrightnessDefault;
     double waveformPhaseCompensationSeconds_ = 0.0;
     PresentationMode presentationMode_ = PresentationMode::Full;
     FocusTarget focusTarget_ = FocusTarget::Playhead;

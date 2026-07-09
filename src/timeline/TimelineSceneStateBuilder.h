@@ -43,6 +43,7 @@ struct TimelineSceneBuildRequest {
     double zoomScale = 0.5;
     double contentScale = 1.0;
     double waveformBrightness = kTimelineWaveformBrightnessDefault;
+    double measureLineBrightness = kTimelineMeasureLineBrightnessDefault;
     double waveformPhaseCompensationSeconds = 0.0;
     double playbackEntrySeconds = 0.0;
     double playheadSeconds = 0.0;
@@ -56,6 +57,9 @@ struct TimelineSceneBuildRequest {
     // DWM stacks the popup HWND above the QQuickWindow's surface and
     // QML siblings can't paint above it.
     int zoomControlPressedPart = 0;
+    int zoomControlHoveredPart = 0;
+    bool settingsControlHovered = false;
+    bool settingsControlPressed = false;
     bool followPreviewEnabled = false;
     bool followProgressEnabled = true;
     quint64 appearanceRevision = 0;

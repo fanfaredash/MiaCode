@@ -1133,6 +1133,37 @@ void TimelineQuickItem::setZoomControlPressedPart(int part)
     update();
 }
 
+void TimelineQuickItem::setZoomControlHoveredPart(int part)
+{
+    const int normalized = qBound(-2, part, 2);
+    if (zoomControlHoveredPart_ == normalized) {
+        return;
+    }
+    zoomControlHoveredPart_ = normalized;
+    ++appearanceRevision_;
+    update();
+}
+
+void TimelineQuickItem::setSettingsControlHovered(bool hovered)
+{
+    if (settingsControlHovered_ == hovered) {
+        return;
+    }
+    settingsControlHovered_ = hovered;
+    ++appearanceRevision_;
+    update();
+}
+
+void TimelineQuickItem::setSettingsControlPressed(bool pressed)
+{
+    if (settingsControlPressed_ == pressed) {
+        return;
+    }
+    settingsControlPressed_ = pressed;
+    ++appearanceRevision_;
+    update();
+}
+
 void TimelineQuickItem::refreshTheme()
 {
     cachedThemeSignature_ = 0;
@@ -1305,6 +1336,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.zoomScale = stateBridge_->zoomScale();
     request.contentScale = stateBridge_->contentScale();
     request.waveformBrightness = stateBridge_->waveformBrightness();
+    request.measureLineBrightness = stateBridge_->measureLineBrightness();
     request.waveformPhaseCompensationSeconds = stateBridge_->waveformPhaseCompensationSeconds();
     request.playbackEntrySeconds = stateBridge_->playbackEntrySeconds();
     request.playheadSeconds = stateBridge_->playheadSeconds();
@@ -1316,6 +1348,9 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     // Phase 9d-native — header-control state for native rendering of
     // the zoom button in the DComp pipeline.
     request.zoomControlPressedPart = zoomControlPressedPart_;
+    request.zoomControlHoveredPart = zoomControlHoveredPart_;
+    request.settingsControlHovered = settingsControlHovered_;
+    request.settingsControlPressed = settingsControlPressed_;
     request.followPreviewEnabled = stateBridge_->followPreviewEnabled();
     request.followProgressEnabled = stateBridge_->followProgressEnabled();
     request.appearanceRevision = appearanceRevision_;

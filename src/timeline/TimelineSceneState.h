@@ -185,6 +185,10 @@ struct TimelineSceneState {
     QVector<TimelineSceneLine> zoomButtonInteriorLines;
     TimelineSceneTextLabel zoomButtonLabel;
     QVector<TimelineSceneTriangle> zoomButtonGlyphTriangles;
+    TimelineSceneRect settingsButtonBg;
+    QVector<TimelineSceneRect> settingsButtonGlyphRects;
+    TimelineSceneRect settingsButtonBorder;
+    QVector<TimelineSceneLine> settingsButtonInteriorLines;
     TimelineSceneRect followCheckBg;           // Phase 9d-native — opaque
                                                // backdrop spanning indicator
                                                // + gap + text so line markers
