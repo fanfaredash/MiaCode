@@ -4,12 +4,15 @@
 #include <QAbstractItemView>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QEvent>
 #include <QGuiApplication>
 #include <QMenu>
 #include <QPainter>
+#include <QPen>
 #include <QPixmap>
 #include <QPolygonF>
 #include <QProxyStyle>
+#include <QStyleFactory>
 #include <QStyleOption>
 #include <QToolButton>
 #include <QStyleHints>
@@ -40,8 +43,17 @@ void repolish(QWidget* widget)
     widget->update();
 }
 
+// The popup proxy style must NOT be constructed with the default (null) base:
+// QProxyStyle then wraps the *desktop* style (QWindows11Style on Windows 11),
+// not the Fusion style the app runs with. QWindows11Style::polish makes the
+// QComboBoxPrivateContainer a translucent frameless window and paints its own
+// WinUI3 rounded panel (radius 4, system-scheme colors) underneath the QSS
+// radius-8 panel; the two disagree by 1px anchored at the top-left, leaving a
+// solid wedge outside the rounded curve at the bottom-right corner.
 class ComboBoxPopupLimitStyle final : public QProxyStyle {
 public:
+    using QProxyStyle::QProxyStyle;
+
     QRect subControlRect(
         ComplexControl control,
         const QStyleOptionComplex* option,
@@ -77,6 +89,43 @@ public:
         }
         return QProxyStyle::styleHint(hint, option, widget, returnData);
     }
+};
+
+// Paints the rounded popup panel (menu background + border) directly on the
+// translucent QComboBoxPrivateContainer window, beneath the item view and the
+// scrollbar. This must be the ONE painter of the panel shape: the QSS rule for
+// the view keeps background/border transparent (QStyleSheetStyle forces the
+// container frame to NoFrame whenever the view has a box rule, so a style
+// PE_Frame override would never run), and the scrollbar track stays transparent
+// so this panel shows through instead of leaving a see-through hole in the
+// layered window. Colors are read at paint time, so theme switches apply
+// without rewiring.
+class ComboBoxPopupPanelPainter final : public QObject {
+public:
+    explicit ComboBoxPopupPanelPainter(QWidget* container)
+        : QObject(container), container_(container)
+    {
+        container_->installEventFilter(this);
+    }
+
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (watched == container_ && event->type() == QEvent::Paint) {
+            const UiTheme::Colors& c = UiTheme::colors();
+            QPainter painter(container_);
+            painter.setRenderHint(QPainter::Antialiasing, true);
+            const QRectF frame = QRectF(container_->rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+            painter.setPen(QPen(c.menuBorder, 1.0));
+            painter.setBrush(c.menuBg);
+            // 7.5 inner radius ~= the QSS border-radius of 8 measured on the
+            // outer edge of the 1px border.
+            painter.drawRoundedRect(frame, 7.5, 7.5);
+        }
+        return false;
+    }
+
+private:
+    QWidget* container_;
 };
 
 const UiTheme::Colors& lightColors()
@@ -814,26 +863,37 @@ QString dialogSliderStyleSheet()
 QString dialogComboBoxStyleSheet()
 {
     const Colors& c = colors();
+    // The popup panel (rounded menu background + border) is painted by
+    // ComboBoxPopupPanelPainter on the translucent container window; the view
+    // and its scrollbar track stay transparent on purpose so the panel shows
+    // through. Giving the view an opaque background here would re-open the
+    // corner artifact: the scrollbar column is not covered by the view's
+    // QSS background and would turn into a see-through hole.
     return QStringLiteral(
         "QComboBox { background: %1; color: %2; border: 1px solid %3; border-radius: 8px; padding: 3px 24px 3px 10px; min-height: 24px; }"
         "QComboBox:hover { border-color: %4; }"
         "QComboBox:focus { border-color: %4; }"
         "QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: top right; width: 20px; border: none; background: transparent; }"
         "QComboBox::down-arrow { width: 10px; height: 10px; }"
-        "QComboBox QAbstractItemView { background: %5; color: %2; border: 1px solid %6; border-radius: 8px; padding: 6px; outline: 0; show-decoration-selected: 1; selection-background-color: transparent; selection-color: %8; }"
+        "QComboBox QAbstractItemView { background: transparent; color: %2; border: 1px solid transparent; border-radius: 8px; padding: 6px; outline: 0; show-decoration-selected: 1; selection-background-color: transparent; selection-color: %6; }"
         "QComboBox QAbstractItemView::item { min-height: 20px; padding: 3px 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; }"
-        "QComboBox QAbstractItemView::item:selected { background: %7; color: %8; border: 1px solid transparent; outline: 0; }"
+        "QComboBox QAbstractItemView::item:selected { background: %5; color: %6; border: 1px solid transparent; outline: 0; }"
         "QComboBox QAbstractItemView::item:focus { border: 1px solid transparent; outline: 0; }"
-        "QComboBox QAbstractItemView::item:hover { background: %7; border: 1px solid transparent; }"
+        "QComboBox QAbstractItemView::item:hover { background: %5; border: 1px solid transparent; }"
+        "QComboBox QAbstractItemView QScrollBar:vertical { background: transparent; width: 10px; margin: 8px 2px 8px 0; }"
+        "QComboBox QAbstractItemView QScrollBar::handle:vertical { background: %7; border-radius: 3px; min-height: 24px; }"
+        "QComboBox QAbstractItemView QScrollBar::handle:vertical:hover { background: %8; }"
+        "QComboBox QAbstractItemView QScrollBar::add-line:vertical, QComboBox QAbstractItemView QScrollBar::sub-line:vertical { height: 0; border: none; background: transparent; }"
+        "QComboBox QAbstractItemView QScrollBar::add-page:vertical, QComboBox QAbstractItemView QScrollBar::sub-page:vertical { background: transparent; }"
     )
         .arg(css(c.inputBg))
         .arg(css(c.textPrimary))
         .arg(css(c.border))
         .arg(css(c.accent))
-        .arg(css(c.menuBg))
-        .arg(css(c.menuBorder))
         .arg(css(c.menuHoverBg))
-        .arg(css(c.textPrimary));
+        .arg(css(c.textPrimary))
+        .arg(css(c.scrollHandle))
+        .arg(css(c.scrollHandleHover));
 }
 
 void styleDialogComboBox(QComboBox* combo, int maxVisibleItems)
@@ -1026,7 +1086,11 @@ void applyComboBoxPopupLimit(QComboBox* combo, int maxVisibleItems)
     const int visibleItems = maxVisibleItems > 0 ? maxVisibleItems : 1;
     combo->setMaxVisibleItems(visibleItems);
     if (!combo->property("miacode.combo_popup_limited").toBool()) {
-        auto* popupLimitStyle = new ComboBoxPopupLimitStyle;
+        // Explicit Fusion base: a default-constructed QProxyStyle would wrap
+        // the desktop style (QWindows11Style on Win11), whose popup painting
+        // fights the QSS panel — see the ComboBoxPopupLimitStyle comment.
+        auto* popupLimitStyle =
+            new ComboBoxPopupLimitStyle(QStyleFactory::create(QStringLiteral("Fusion")));
         popupLimitStyle->setParent(combo);
         combo->setStyle(popupLimitStyle);
         combo->setProperty("miacode.combo_popup_limited", true);
@@ -1035,6 +1099,26 @@ void applyComboBoxPopupLimit(QComboBox* combo, int maxVisibleItems)
     QAbstractItemView* popupView = combo->view();
     if (popupView == nullptr) {
         return;
+    }
+
+    // Make the popup container a translucent frameless window so the rounded
+    // panel painted by ComboBoxPopupPanelPainter is the only thing composited
+    // (this replicates what QWindows11Style::polish does, so the rounded
+    // corners no longer depend on which desktop style the machine has).
+    if (QWidget* container = popupView->window();
+        container != nullptr && container != combo->window()
+        && !container->property("miacode.combo_popup_panel").toBool()) {
+        const bool wasCreated = container->testAttribute(Qt::WA_WState_Created);
+        container->setAttribute(Qt::WA_OpaquePaintEvent, false);
+        container->setAttribute(Qt::WA_TranslucentBackground);
+        container->setWindowFlag(Qt::FramelessWindowHint);
+        container->setWindowFlag(Qt::NoDropShadowWindowHint);
+        container->setAttribute(Qt::WA_WState_Created, wasCreated);
+        QPalette containerPalette = container->palette();
+        containerPalette.setColor(container->backgroundRole(), Qt::transparent);
+        container->setPalette(containerPalette);
+        new ComboBoxPopupPanelPainter(container);
+        container->setProperty("miacode.combo_popup_panel", true);
     }
 
     popupView->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);

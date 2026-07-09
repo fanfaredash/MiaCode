@@ -124,6 +124,46 @@ btn->setFixedSize(30, 30);
 ```
 Seen in the in-flight ExportCoverDialog work (play/pause button), 2026-06.
 
+### W8. Rounded combo popup shows a solid wedge at the bottom-RIGHT corner only (下拉弹窗右下角纯色块)
+
+**Root cause (three stacked facts, diagnosed 2026-07-10 with a pixel-probe repro):**
+(a) a **default-constructed `QProxyStyle` wraps the DESKTOP style** (`QWindows11Style` on
+Win11), not the Fusion style set via `app.setStyle()` — `UiTheme`'s
+`ComboBoxPopupLimitStyle` accidentally smuggled windows11 back in;
+(b) `QWindows11Style::polish` makes `QComboBoxPrivateContainer` a translucent frameless
+window AND paints its own WinUI3 rounded panel (radius 4, system-scheme colors — dark
+`menuPanelFill` when Windows is in dark mode) via the container's `PE_Frame`;
+(c) that panel and the QSS radius-8 panel are both anchored at the top-left but differ by
+1px in size/radius → the curves coincide at the top-left and diverge maximally at the
+bottom-right → a solid wedge outside the QSS curve at BR only. Classic Win32
+`CS_DROPSHADOW` is NOT involved (windows11 already sets `NoDropShadowWindowHint`).
+
+**Also learned:** with the container translucent, the view's opaque QSS background does
+NOT extend under the vertical scrollbar column — a transparent scrollbar track there is a
+**see-through hole** in the layered window, not "shows the panel".
+And `QStyleSheetStyle` forces `SH_ComboBox_PopupFrameStyle` to `NoFrame` whenever the view
+has a box rule (qstylesheetstyle.cpp), so a proxy-style `PE_Frame` override for the
+container **never runs** — paint from a `QEvent::Paint` event filter instead.
+
+**Working fix** (UiTheme.cpp, verified pixel-exact with red/blue backdrop screenshots):
+1. `new ComboBoxPopupLimitStyle(QStyleFactory::create("Fusion"))` — never default-construct
+   popup proxy styles;
+2. replicate the windows11 translucency dance on the container in
+   `applyComboBoxPopupLimit` (preserve `WA_WState_Created`, set `WA_TranslucentBackground`,
+   `FramelessWindowHint`, `NoDropShadowWindowHint`, transparent background palette) so the
+   rounded-transparent corners are deterministic on every Windows/desktop-style combo;
+3. ONE panel painter: `ComboBoxPopupPanelPainter` event filter paints menuBg+menuBorder
+   rounded rect (inner radius 7.5 ≈ QSS outer radius 8) on the container; the QSS view rule
+   keeps `background/border: transparent`, popup scrollbar track transparent with margins so
+   the panel shows through everywhere.
+
+**Repro/probe technique that cracked it** (reusable): standalone Qt app with the exact
+QSS + proxy style, popup over a solid palette-colored backdrop (NOT stylesheet-colored —
+a naked `background:` QSS declaration cascades into the popup scrollbar and contaminates
+the experiment), `QScreen::grabWindow(0)` + per-pixel corner classification, PrintWindow
+`PW_RENDERFULLCONTENT` to read the layered window's own content, and window-stack
+enumeration at the artifact point to rule out shadow windows.
+
 ---
 
 ## Q — Qt Quick / QML scenes & rendered assets
