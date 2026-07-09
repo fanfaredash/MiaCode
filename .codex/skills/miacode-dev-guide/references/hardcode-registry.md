@@ -47,7 +47,8 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: static tap-on-slide threshold min/max/default plus shared Muri timing cutoffs such as tap-on-slide warning, the slide-head no-startup-tap warning cutoff (`50 ms`), the slide-head late-warning cutoff (`150 ms`), and the slide runtime available window (current default `24 h`)
   - Scope: static and runtime Muri collision interpretation across preview, timeline refresh, dump tooling, and export
 - `src/common/TimelineThemeConfig.h`
-  - Owns: timeline-scene theme colors shared by Quick and DComp render paths, including the red editor-cursor header marker color (`QColor(239, 68, 68, 230)`)
+  - Owns: timeline-scene theme colors shared by Quick, DComp, and QWidget render paths; the waveform brightness clamp/default (`0.2..2.0`, default `0.5`); the grid-line brightness clamp/default (`0.2..2.0`, default `1.0`); and the red editor-cursor header marker color (`QColor(239, 68, 68, 230)`)
+  - Current tuning note: waveform brightness scales fill alpha so the hue stays stable in both themes, while grid-line brightness fades/darkens/lightens the meter-driven bar-line color (`gridMajor`), within-measure beat/subdivision color (`gridSubdivision`), and comma/note-position tick color (`gridMinor`)
   - Scope: timeline renderer visual parity
 
 ## 2. Implementation-Local Hotspots
@@ -143,12 +144,16 @@ Use this file to track where important constants live, what they mean, and wheth
   - Rule: keep local while it only expresses main-window preview-vs-analysis priority; promote it if the same debounce becomes shared across dialogs, subprocess workers, or user-facing settings
 - `src/app/quick_shell/qml/TimelineTabSurface.qml`
   - Owns: QuickShell Timeline header-control layout constants
-  - Current tuning note: the waveform brightness control remains `128 * headerScale` wide inside a `22 * headerScale` header control box, but the active slider is reduced to `12 * headerScale` height with an `8 * headerScale` handle and `3 * headerScale` track so marker triangles can use the lower header lane beneath the slider while the track center stays in its previous position
+  - Current tuning note: the left header keeps only the zoom control, and the restored right header settings button uses a transparent `28 * headerScale` by `22 * headerScale` QML hit target normally `8 * headerScale` from the right edge, clamped past the zoom control on narrow widths. Header labels and line-start markers avoid that right-side button while zoom remains pinned left. The transparent QML hit zones forward hover/press state to the native Quick/DComp header renderer so colour feedback remains visible above the composition overlay.
   - Rule: keep local while this only shapes QuickShell Timeline header ergonomics; document changes that affect marker/control overlap
+- `src/app/quick_shell/QuickShellController.cpp`
+  - Owns: QuickShell Timeline native menu presentation constants for the brightness sliders
+  - Current tuning note: the menu sliders expose the shared timeline brightness clamps as `20%..200%` with `5%` single/page/tick steps, using `QMenu + QWidgetAction` so dragging a slider keeps the menu open and writes immediately to `TimelineQuickStateBridge`
+  - Rule: keep local while these values only format the QuickShell menu surface; promote if another UI needs the same percent-step presentation
 - `src/timeline/TimelineSceneStateBuilder.cpp`
-  - Owns: native Quick/DComp Timeline header zoom-stepper triangle geometry emitted for the invisible QML zoom-button hit zones
-  - Current tuning note: the zoom-stepper triangles are centered as a compact pair within the `22 * headerControlScale` control height, using a local inner gap of `max(2 px, 4 * headerControlScale)` while preserving the separately tuned triangle width and height
-  - Rule: keep local while this only shapes the native zoom-stepper visual; promote only if another control needs the same paired-triangle geometry
+  - Owns: native Quick/DComp Timeline header zoom-stepper triangle geometry and the right-side brightness/settings glyph emitted for invisible QML header hit zones
+  - Current tuning note: the zoom-stepper triangles are centered as a compact pair within the `22 * headerControlScale` control height, using a local inner gap of `max(2 px, 4 * headerControlScale)` while preserving the separately tuned triangle width and height. Zoom body/stepper and settings controls draw hover backgrounds, accent borders, pressed fills, and pressed glyph offsets natively. The right-side settings button mirrors the QML hit target (`28 * headerControlScale` wide, normally `8 * headerControlScale` from the right edge and clamped past zoom) and uses three local slider strokes plus knob rects so it remains visible under the native Quick/DComp overlay path.
+  - Rule: keep local while this only shapes native Timeline header-control visuals; promote only if another control needs the same paired-triangle or slider-glyph geometry
 - `src/common/DebugOptions.h`
   - Owns: preview diagnostic env parsing defaults such as `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG_SAMPLE_MS`
   - Current tuning note: waveform-alignment focused BASS status sampling defaults to `250 ms`, intentionally lower than the normal ~`1 s` `bass_status` cadence so short 1x offset reports can be captured without making high-frequency logging the default.
