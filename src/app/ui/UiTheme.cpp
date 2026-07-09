@@ -905,6 +905,9 @@ void styleDialogComboBox(QComboBox* combo, int maxVisibleItems)
         applyComboBoxPopupLimit(combo, maxVisibleItems);
     }
     combo->setStyleSheet(dialogComboBoxStyleSheet());
+    if (maxVisibleItems > 0) {
+        applyComboBoxPopupLimit(combo, maxVisibleItems);
+    }
 }
 
 QString dialogSpinBoxStyleSheet()
@@ -1083,7 +1086,10 @@ void applyComboBoxPopupLimit(QComboBox* combo, int maxVisibleItems)
         return;
     }
 
-    const int visibleItems = maxVisibleItems > 0 ? maxVisibleItems : 1;
+    const int requestedVisibleItems = maxVisibleItems > 0 ? maxVisibleItems : 1;
+    const int visibleItems = combo->count() > 0
+        ? qMin(requestedVisibleItems, combo->count())
+        : 1;
     combo->setMaxVisibleItems(visibleItems);
     if (!combo->property("miacode.combo_popup_limited").toBool()) {
         // Explicit Fusion base: a default-constructed QProxyStyle would wrap
