@@ -904,7 +904,7 @@ void MainWindow::PreferencesSection::onPreferences()
     bool selectedEditorImeInputDisabled = state_.editorImeInputDisabled_;
 
     // Row order (top to bottom): font size, line spacing, auto-completion,
-    // header display, Chinese input, and ignore muri issue prompts.
+    // header display, IME block, and ignore muri issue prompts.
     // out, so it trails the prioritised rows.
     auto* editorFontSizeLabel = new QLabel(UiText::text(QStringLiteral("dialog.preferences.editor_font_size")), editorGroup);
     auto* fontSizeRow = new QWidget(editorGroup);
@@ -1084,11 +1084,11 @@ void MainWindow::PreferencesSection::onPreferences()
         owner_.applyIgnoreMuriIssuePrompts(selectedIgnoreMuriIssuePrompts, true);
         owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
     });
-    // Chinese input combo merges the former "Lock half-width symbol input" checkbox
+    // IME block combo merges the former "Lock half-width symbol input" checkbox
     // and "Disable IME input" checkbox into three graduated levels:
-    //   index 0 enabled                 halfWidth=OFF imeDisabled=OFF (plain IME, no filtering)
-    //   index 1 filter full-width chars halfWidth=ON  imeDisabled=OFF (default: normalize commits)
-    //   index 2 disable IME input       halfWidth=ON  imeDisabled=ON  (block IME candidate window)
+    //   index 0 block off              halfWidth=OFF imeDisabled=OFF (plain IME, no filtering)
+    //   index 1 normalize full-width   halfWidth=ON  imeDisabled=OFF (default: normalize commits)
+    //   index 2 block on               halfWidth=ON  imeDisabled=ON  (block IME candidate window)
     auto* chineseInputLabel = new QLabel(
         UiText::text(QStringLiteral("preferences.chinese_input")),
         editorGroup
@@ -1098,11 +1098,11 @@ void MainWindow::PreferencesSection::onPreferences()
         state_.editorHalfWidthInputEnabled_ ? 1 : 0;
     int selectedChineseInputMode = initialChineseInputMode;
     auto* chineseInputCombo = new QComboBox(editorGroup);
-    chineseInputCombo->addItem(UiText::text(QStringLiteral("preferences.on")));
+    chineseInputCombo->addItem(UiText::text(QStringLiteral("preferences.off")));
     chineseInputCombo->addItem(
         UiText::text(QStringLiteral("preferences.filter_full_width_chars")));
     chineseInputCombo->addItem(
-        UiText::text(QStringLiteral("preferences.disable_ime")));
+        UiText::text(QStringLiteral("preferences.on")));
     chineseInputCombo->setCurrentIndex(selectedChineseInputMode);
     styleRegisteredDialogCombo(chineseInputCombo, 12);
     connect(chineseInputCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
@@ -1118,7 +1118,7 @@ void MainWindow::PreferencesSection::onPreferences()
     });
     editorLayout->addRow(chineseInputLabel, chineseInputCombo);
 
-    // Ignore muri issue prompts sits below Chinese input (last row) per the 2026-06-19 review.
+    // Ignore muri issue prompts sits below IME block (last row) per the 2026-06-19 review.
     editorLayout->addRow(QString(), ignoreMuriIssuePromptsCheckbox);
 
 

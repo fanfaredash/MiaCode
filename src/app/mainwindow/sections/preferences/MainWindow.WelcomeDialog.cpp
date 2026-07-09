@@ -225,12 +225,12 @@ void MainWindow::PreferencesSection::showWelcomeDialog()
         }
     });
 
-    // --- Chinese-input group ------------------------------------------------
-    // The same three graduated levels as Preferences' 中文输入 combo, surfaced on
-    // first run (default 关闭输入法). The two underlying editor preferences are:
-    //   关闭输入法   imeDisabled=ON  halfWidth=ON  (block the IME entirely)
-    //   开启输入法   imeDisabled=OFF halfWidth=OFF (plain IME, no filtering)
-    //   转换全角字符 imeDisabled=OFF halfWidth=ON  (IME on, normalize full-width)
+    // --- IME-block group ----------------------------------------------------
+    // The same three graduated levels as Preferences' IME block combo, surfaced
+    // on first run (default: block IME). The two underlying editor preferences are:
+    //   block IME              imeDisabled=ON  halfWidth=ON  (block the IME entirely)
+    //   allow IME              imeDisabled=OFF halfWidth=OFF (plain IME, no filtering)
+    //   normalize full-width   imeDisabled=OFF halfWidth=ON  (IME on, normalize full-width)
     // The "?" badge next to the group title explains the choice.
     auto* chineseInputHeaderRow = new QWidget(&dialog);
     auto* chineseInputHeaderLayout = new QHBoxLayout(chineseInputHeaderRow);
@@ -269,7 +269,7 @@ void MainWindow::PreferencesSection::showWelcomeDialog()
     imeGroup->addButton(imeDisableRadio);
     imeGroup->addButton(imeEnableRadio);
     imeGroup->addButton(imeFullWidthRadio);
-    // Reflect the current stored state (default imeDisabled=ON => 关闭输入法).
+    // Reflect the current stored state (default imeDisabled=ON => block IME).
     if (!state_.editorImeInputDisabled_ && state_.editorHalfWidthInputEnabled_) {
         imeFullWidthRadio->setChecked(true);
     } else if (!state_.editorImeInputDisabled_) {
@@ -335,7 +335,7 @@ void MainWindow::PreferencesSection::showWelcomeDialog()
     } else if (imeFullWidthRadio->isChecked()) {
         applyChineseInput(false, true);
     } else {
-        applyChineseInput(true, true);   // 关闭输入法 (default)
+        applyChineseInput(true, true);   // block IME (default)
     }
 }
 
