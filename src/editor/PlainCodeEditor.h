@@ -64,7 +64,8 @@ public:
     // affordance in the chart editor (controlled via the editor section of the
     // Preferences dialog; default on). When enabled:
     //   * typing { [ ( auto-inserts the matching close and parks the caret
-    //     between the pair (with type-over and empty-pair backspace to match);
+    //     between the pair, replacing any selected text with the empty pair
+    //     instead of surrounding it (with type-over and empty-pair backspace to match);
     //   * opening a bracket pops a simai-aware suggestion list (durations /
     //     subdivisions / BPMs) anchored under the caret, non-blocking;
     //   * typing the simai hold letter 'h' offers the full "[8:1]"-style
@@ -130,6 +131,9 @@ private:
     // Bracket-completion helpers. tryBracketInput() wraps the auto-close path so
     // the suggestion popup opens on the same (normalized) key/IME bracket input.
     bool tryBracketInput(const QString& text);
+    // Typing '[' immediately before an existing '[' steps into the existing
+    // duration slot instead of inserting a duplicate bracket pair.
+    bool tryOverwriteOpeningSquareBracket(const QString& text);
     // simai hold shortcut — typing 'h' inserts a bare 'h' and offers the
     // full-bracket hold-duration tokens ("[8:1]" …) as a completion popup. It
     // inserts no bracket itself, so a following '[' yields the normal "h[]"

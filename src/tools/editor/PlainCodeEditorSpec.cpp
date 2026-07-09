@@ -343,6 +343,61 @@ int main(int argc, char** argv)
         }
     }
     {
+        const auto expectBracketSelectionReplace = [&](Qt::Key key, const QString& text, const QString& expected, const QString& message) {
+            PlainCodeEditor bracketEditor;
+            bracketEditor.setPlainText(QStringLiteral("8,selected,8,"));
+            QTextCursor cursor = bracketEditor.textCursor();
+            const int selectedStart = QStringLiteral("8,").size();
+            cursor.setPosition(selectedStart);
+            cursor.setPosition(selectedStart + QStringLiteral("selected").size(), QTextCursor::KeepAnchor);
+            bracketEditor.setTextCursor(cursor);
+
+            QKeyEvent bracketKey(QEvent::KeyPress, key, Qt::NoModifier, text);
+            QApplication::sendEvent(&bracketEditor, &bracketKey);
+            expect(
+                bracketEditor.toPlainText() == expected
+                    && bracketEditor.textCursor().position() == selectedStart + 1
+                    && bracketKey.isAccepted(),
+                message,
+                out,
+                &failed);
+        };
+
+        expectBracketSelectionReplace(
+            Qt::Key_BracketLeft,
+            QStringLiteral("["),
+            QStringLiteral("8,[],8,"),
+            QStringLiteral("typing '[' replaces selected text with [] instead of surrounding it"));
+        expectBracketSelectionReplace(
+            Qt::Key_BraceLeft,
+            QStringLiteral("{"),
+            QStringLiteral("8,{},8,"),
+            QStringLiteral("typing '{' replaces selected text with {} instead of surrounding it"));
+        expectBracketSelectionReplace(
+            Qt::Key_ParenLeft,
+            QStringLiteral("("),
+            QStringLiteral("8,(),8,"),
+            QStringLiteral("typing '(' replaces selected text with () instead of surrounding it"));
+    }
+    {
+        PlainCodeEditor bracketEditor;
+        bracketEditor.setPlainText(QStringLiteral("8,h[8:1],"));
+        QTextCursor cursor = bracketEditor.textCursor();
+        const int bracketStart = QStringLiteral("8,h").size();
+        cursor.setPosition(bracketStart);
+        bracketEditor.setTextCursor(cursor);
+
+        QKeyEvent bracketKey(QEvent::KeyPress, Qt::Key_BracketLeft, Qt::NoModifier, QStringLiteral("["));
+        QApplication::sendEvent(&bracketEditor, &bracketKey);
+        expect(
+            bracketEditor.toPlainText() == QStringLiteral("8,h[8:1],")
+                && bracketEditor.textCursor().position() == bracketStart + 1
+                && bracketKey.isAccepted(),
+            QStringLiteral("typing '[' immediately before an existing '[' steps over it"),
+            out,
+            &failed);
+    }
+    {
         PlainCodeEditor holdEditor;
         holdEditor.resize(480, 240);
         holdEditor.show();

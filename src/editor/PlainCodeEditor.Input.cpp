@@ -617,12 +617,13 @@ void PlainCodeEditor::inputMethodEvent(QInputMethodEvent* event)
         && event->replacementLength() == 0
         && normalizedCommitString.size() == 1
         && miacode::editor::isBracketOpening(normalizedCommitString.at(0))) {
+        if (tryOverwriteOpeningSquareBracket(normalizedCommitString)) {
+            event->accept();
+            return;
+        }
         const QChar opening = normalizedCommitString.at(0);
-        const bool hadSelection = textCursor().hasSelection();
         if (tryAutoCloseBracket(normalizedCommitString)) {
-            if (!hadSelection) {
-                maybeOpenBracketCompletion(opening, /*closingPresent=*/true);
-            }
+            maybeOpenBracketCompletion(opening, /*closingPresent=*/true);
             event->accept();
             return;
         }
@@ -797,6 +798,7 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
     if (!halfWidthInputEnabled_
         || (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
         if (tryOverwriteClosingBracket(event->text())
+            || tryOverwriteOpeningSquareBracket(event->text())
             || tryBracketInput(event->text()) || tryHoldExpand(event->text())) {
             event->accept();
             return;
@@ -813,6 +815,7 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
 
     const QString normalizedText = miacode::editor::normalizedHalfWidthKeyText(event, inputText);
     if (tryOverwriteClosingBracket(normalizedText)
+        || tryOverwriteOpeningSquareBracket(normalizedText)
         || tryBracketInput(normalizedText) || tryHoldExpand(normalizedText)) {
         event->accept();
         return;

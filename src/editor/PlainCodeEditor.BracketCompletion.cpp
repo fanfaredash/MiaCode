@@ -59,11 +59,10 @@ bool PlainCodeEditor::tryAutoCloseBracket(const QString& text)
     QTextCursor cursor = textCursor();
     cursor.beginEditBlock();
     if (cursor.hasSelection()) {
-        // Wrap the selection: {<sel>}. The caret ends up at the closing
-        // bracket which mirrors the standard editor "surround with pair".
-        const QString selected = cursor.selectedText();
-        cursor.insertText(QString(opening) + selected + QString(closing));
+        cursor.insertText(QString(opening) + QString(closing));
+        cursor.movePosition(QTextCursor::PreviousCharacter);
         cursor.endEditBlock();
+        setTextCursor(cursor);
     } else {
         cursor.insertText(QString(opening) + QString(closing));
         cursor.movePosition(QTextCursor::PreviousCharacter);
@@ -85,20 +84,45 @@ bool PlainCodeEditor::tryBracketInput(const QString& text)
     if (!miacode::editor::isBracketOpening(opening)) {
         return false;
     }
-    const bool hadSelection = textCursor().hasSelection();
     if (tryAutoCloseBracket(text)) {
-        // The auto-close path inserts "[]" (caret parked between) for the no-
-        // selection case, or wraps the selection. Only the empty-pair case is a
-        // completion slot — wrapping already filled the brackets.
-        if (!hadSelection) {
-            maybeOpenBracketCompletion(opening, /*closingPresent=*/true);
-        }
+        // Completion can now use that empty slot even after selection replacement.
+        maybeOpenBracketCompletion(opening, /*closingPresent=*/true);
         return true;
     }
     // Auto-close declined (preference off, read-only, overwrite): leave the
     // bracket to the normal insert path. Completion follows the same single
     // preference as auto-close, so there is no completion-without-close case.
     return false;
+}
+
+// Type-over for existing duration slots: when the caret is immediately before
+// a '[' and the user types '[', move into that bracket instead of inserting a
+// duplicate pair. Kept square-only because '[' is the duration/hold slot users
+// commonly enter after typing a note or `h`.
+bool PlainCodeEditor::tryOverwriteOpeningSquareBracket(const QString& text)
+{
+    if (!autoCompletionEnabled_ || text != QLatin1String("[")) {
+        return false;
+    }
+    if (isReadOnly() || overwriteMode()) {
+        return false;
+    }
+    QTextCursor cursor = textCursor();
+    if (cursor.hasSelection()) {
+        return false;
+    }
+    QTextCursor rightProbe(document());
+    rightProbe.setPosition(cursor.position());
+    if (!rightProbe.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor)
+        || rightProbe.selectedText() != QLatin1String("[")) {
+        return false;
+    }
+    if (bracketCompletionActive()) {
+        closeBracketCompletion();
+    }
+    cursor.movePosition(QTextCursor::NextCharacter);
+    setTextCursor(cursor);
+    return true;
 }
 
 // simai "hold" shortcut: typing a lowercase `h` inserts/replaces with a bare `h` and offers
