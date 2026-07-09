@@ -4,6 +4,7 @@
 #include "tools/cover_export/CoverLayoutModel.h"
 #include "tools/cover_export/CoverStudioPanel.h"
 #include "UiText.h"
+#include "UiComponents.h"
 #include "UiTheme.h"
 
 #include <QAbstractItemView>
@@ -319,6 +320,7 @@ CoverLayerListPanel::CoverLayerListPanel(CoverStudioPanel* studio, QWidget* pare
         .arg(colors.cardBg.name(QColor::HexRgb),
              colors.textPrimary.name(QColor::HexRgb),
              colors.border.name(QColor::HexRgb)));
+    miacode::ui::applyScrollBarStyle(view_);
     view_->setContextMenuPolicy(Qt::CustomContextMenu);
     // Drag rows to change z-order (the model maps view rows → z, §12.12).
     view_->setDragEnabled(true);

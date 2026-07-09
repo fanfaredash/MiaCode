@@ -7,6 +7,7 @@
 #include "common/PreviewInteractionConfig.h"
 #include "UiNativeWindowTheme.h"
 #include "UiText.h"
+#include "UiComponents.h"
 #include "UiTheme.h"
 
 #include <QApplication>
@@ -259,6 +260,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     previewScroll->setStyleSheet(QStringLiteral(
         "QScrollArea { background: transparent; border: none; }"
         "QScrollArea > QWidget > QWidget { background: transparent; }"));
+    miacode::ui::applyScrollBarStyle(previewScroll);
     previewFrameLayout->addWidget(previewScrollArea_, 1);
 
     QWidget* container = composerView_->createContainer(previewScroll);
@@ -327,7 +329,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
         selectedIndex = sizeCombo_->count() - 1;
     }
     sizeCombo_->setCurrentIndex(selectedIndex);
-    UiTheme::styleDialogComboBox(sizeCombo_);
+    UiTheme::styleDialogComboBox(sizeCombo_, 12);
     form->addRow(UiText::text(QStringLiteral("cover.size_2")), sizeCombo_);
 
     // Background source.
@@ -338,7 +340,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
                               QStringLiteral("custom"));
     backgroundCombo_->addItem(UiText::text(QStringLiteral("cover.transparent")),
                               QStringLiteral("transparent"));
-    UiTheme::styleDialogComboBox(backgroundCombo_);
+    UiTheme::styleDialogComboBox(backgroundCombo_, 12);
     form->addRow(UiText::text(QStringLiteral("cover.background")), backgroundCombo_);
 
     // Custom background path + browse.
@@ -401,7 +403,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
         const int modeIdx = cardModeCombo_->findData(banner_.mode);
         if (modeIdx >= 0) cardModeCombo_->setCurrentIndex(modeIdx);
     }
-    UiTheme::styleDialogComboBox(cardModeCombo_);
+    UiTheme::styleDialogComboBox(cardModeCombo_, 12);
     cardForm->addRow(UiText::text(QStringLiteral("cover.chart_type")), cardModeCombo_);
 
     // Card drop shadow.
@@ -422,7 +424,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     textOverflowCombo_->addItem(
         UiText::text(QStringLiteral("cover.keep_size_ellipsis")),
         QStringLiteral("ellipsis"));
-    UiTheme::styleDialogComboBox(textOverflowCombo_);
+    UiTheme::styleDialogComboBox(textOverflowCombo_, 12);
     cardForm->addRow(UiText::text(QStringLiteral("cover.long_text")), textOverflowCombo_);
 
     controlsColumn->addWidget(cardGroup);

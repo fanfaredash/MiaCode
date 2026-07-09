@@ -152,6 +152,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/ui/ShortcutRegistry.cpp
     src/app/ui/UiTheme.h
     src/app/ui/UiTheme.cpp
+    src/app/ui/UiComponents.h
+    src/app/ui/UiComponents.cpp
     src/app/ui/UiNativeWindowTheme.h
     src/app/ui/UiNativeWindowTheme.cpp
     src/app/ui/WindowParityMetrics.h

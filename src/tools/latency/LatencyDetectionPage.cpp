@@ -7,6 +7,7 @@
 #include "mainwindow/MainWindowShared.h"
 #include "EditableValueLabel.h"
 #include "UiText.h"
+#include "UiComponents.h"
 #include "UiTheme.h"
 
 #include "common/ChartClockCount.h"
@@ -269,6 +270,7 @@ void LatencyDetectionPage::buildUi()
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    miacode::ui::applyScrollBarStyle(scroll);
     outer->addWidget(scroll, 1);
 
     auto* content = new QWidget(scroll);
@@ -277,21 +279,7 @@ void LatencyDetectionPage::buildUi()
     contentLayout->setSpacing(16);
     scroll->setWidget(content);
 
-    const QFont titleFont = miacode::mainwindow::shared::uiAccentFont(13, QFont::DemiBold);
     const QFont hintFont = miacode::mainwindow::shared::uiOutputFont();
-
-    auto makeCard = [&](const QString& titleText) -> QPair<QFrame*, QVBoxLayout*> {
-        auto* card = new QFrame(content);
-        card->setObjectName(QStringLiteral("LatencyCard"));
-        auto* layout = new QVBoxLayout(card);
-        layout->setContentsMargins(20, 16, 20, 16);
-        layout->setSpacing(10);
-        auto* title = new QLabel(titleText, card);
-        title->setProperty("role", "cardTitle");
-        title->setFont(titleFont);
-        layout->addWidget(title);
-        return {card, layout};
-    };
 
     // -------- Chart parameters card (BPM / Offset / clock_count) --------
     // One card, three symmetric rows laid out in a 4-column grid
@@ -300,20 +288,13 @@ void LatencyDetectionPage::buildUi()
     // single card keeps the new clock_count control on the same page without
     // scrolling; the media-tools launcher moved to the back bar so each row has
     // the identical shape.
-    auto paramPair = makeCard(UiText::text(QStringLiteral("latency.chart_parameters")));
-    auto* paramCard = paramPair.first;
-    auto* paramLayout = paramPair.second;
+    QVBoxLayout* paramLayout = nullptr;
+    auto* paramCard = miacode::ui::createCard(
+        UiText::text(QStringLiteral("latency.chart_parameters")), content, &paramLayout);
     auto* paramGrid = new QGridLayout();
     paramGrid->setHorizontalSpacing(10);
     paramGrid->setVerticalSpacing(10);
     paramGrid->setColumnStretch(3, 1);  // result column soaks up the slack
-
-    auto makeRowLabel = [&](const QString& text) -> QLabel* {
-        auto* label = new QLabel(text, paramCard);
-        label->setProperty("role", "cardHint");
-        label->setFont(hintFont);
-        return label;
-    };
 
     // Detection-result labels are secondary; render them a touch smaller so the
     // "检测结果: …" text fits the narrowed result column without clipping.
@@ -321,7 +302,8 @@ void LatencyDetectionPage::buildUi()
     resultFont.setPointSize(qMax(8, hintFont.pointSize() - 2));
 
     // Row 0: BPM
-    paramGrid->addWidget(makeRowLabel(QStringLiteral("BPM")), 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
+    paramGrid->addWidget(miacode::ui::createFormLabel(QStringLiteral("BPM"), paramCard),
+                         0, 0, Qt::AlignLeft | Qt::AlignVCenter);
     bpmEdit_ = new NoWheelDoubleSpinBox(paramCard);
     bpmEdit_->setRange(1.0, 999.0);
     bpmEdit_->setDecimals(kDecimalsBpm);
@@ -349,7 +331,7 @@ void LatencyDetectionPage::buildUi()
     // Row 1: Offset (&first). The auto-detect Offset entry point is shown here
     // again (it had been hidden); its wiring was always intact.
     paramGrid->addWidget(
-        makeRowLabel(UiText::text(QStringLiteral("latency.offset"))),
+        miacode::ui::createFormLabel(UiText::text(QStringLiteral("latency.offset")), paramCard),
         1, 0, Qt::AlignLeft | Qt::AlignVCenter);
     offsetEdit_ = new NoWheelDoubleSpinBox(paramCard);
     offsetEdit_->setRange(-999.0, 999.0);
@@ -377,7 +359,7 @@ void LatencyDetectionPage::buildUi()
 
     // Row 2: clock_count (export count-in beats; a plain manual field)
     paramGrid->addWidget(
-        makeRowLabel(QStringLiteral("clock_count")),
+        miacode::ui::createFormLabel(QStringLiteral("clock_count"), paramCard),
         2, 0, Qt::AlignLeft | Qt::AlignVCenter);
     clockCountEdit_ = new NoWheelSpinBox(paramCard);
     clockCountEdit_->setRange(1, 64);
@@ -399,16 +381,16 @@ void LatencyDetectionPage::buildUi()
     contentLayout->addWidget(paramCard);
 
     // -------- Audition (sandbox) card --------
-    auto auditionPair = makeCard(
-        UiText::text(QStringLiteral("latency.rhythm_calibration_audition")));
-    auto* auditionCard = auditionPair.first;
-    auto* auditionLayout = auditionPair.second;
+    QVBoxLayout* auditionLayout = nullptr;
+    auto* auditionCard = miacode::ui::createCard(
+        UiText::text(QStringLiteral("latency.rhythm_calibration_audition")),
+        content,
+        &auditionLayout);
 
     auto* subdivRow = new QHBoxLayout();
     subdivRow->setSpacing(16);
-    auto* subdivLabel = new QLabel(UiText::text(QStringLiteral("latency.subdivision")), auditionCard);
-    subdivLabel->setProperty("role", "cardHint");
-    subdivLabel->setFont(hintFont);
+    auto* subdivLabel = miacode::ui::createFormLabel(
+        UiText::text(QStringLiteral("latency.subdivision")), auditionCard);
     subdivRow->addWidget(subdivLabel);
     subdivision4Radio_ = new QRadioButton(QStringLiteral("4"), auditionCard);
     subdivision8Radio_ = new QRadioButton(QStringLiteral("8"), auditionCard);
@@ -440,9 +422,8 @@ void LatencyDetectionPage::buildUi()
 
     auto* volumeRow = new QHBoxLayout();
     volumeRow->setSpacing(10);
-    auto* volumeLabel = new QLabel(UiText::text(QStringLiteral("latency.sfx_volume")), auditionCard);
-    volumeLabel->setProperty("role", "cardHint");
-    volumeLabel->setFont(hintFont);
+    auto* volumeLabel = miacode::ui::createFormLabel(
+        UiText::text(QStringLiteral("latency.sfx_volume")), auditionCard);
     volumeRow->addWidget(volumeLabel);
     sfxVolumeSlider_ = new NoWheelSlider(Qt::Horizontal, auditionCard);
     sfxVolumeSlider_->setRange(0, 100);

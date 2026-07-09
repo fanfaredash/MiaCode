@@ -4,6 +4,7 @@
 #include "tools/cover_export/CoverStudioPanel.h"
 #include "EditableValueLabel.h"
 #include "UiText.h"
+#include "UiComponents.h"
 #include "UiTheme.h"
 
 #include <QApplication>
@@ -167,32 +168,6 @@ void emphasizeGroupTitle(QGroupBox* group)
     }
 }
 
-// A slider + click-to-type value readout (§10). The value mirrors the slider on
-// drag and commits a typed number back through the slider's setValue (which
-// re-fires the studio setter), so dragging and typing behave identically.
-QWidget* makeSliderValueRow(QSlider* slider, miacode::ui::EditableValueLabel** valueOut,
-                            const QString& suffix, QWidget* parent)
-{
-    slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
-    slider->ensurePolished();
-    slider->setFixedHeight(qMax(slider->sizeHint().height(), 20) + 2);
-    auto* row = new QWidget(parent);
-    auto* layout = new QHBoxLayout(row);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(8);
-    auto* value = new miacode::ui::EditableValueLabel(QStringLiteral("0") + suffix, row);
-    value->setMinimumWidth(46);
-    value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    value->bindSlider(slider);
-    layout->addWidget(slider, 1);
-    layout->addWidget(value, 0);
-    QObject::connect(slider, &QSlider::valueChanged, value, [value, suffix](int v) {
-        value->setText(QString::number(v) + suffix);
-    });
-    *valueOut = value;
-    return row;
-}
-
 }  // namespace
 
 CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* parent)
@@ -221,25 +196,25 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
     opacitySlider_->setRange(0, 100);
     opacitySlider_->setToolTip(UiText::text(QStringLiteral("cover.layer_opacity")));
     form->addRow(UiText::text(QStringLiteral("cover.opacity")),
-                 makeSliderValueRow(opacitySlider_, &opacityValue_, QStringLiteral("%"), this));
+                 miacode::ui::createSliderValueRow(opacitySlider_, &opacityValue_, QStringLiteral("%"), this));
 
     sizeSlider_ = new QSlider(Qt::Horizontal, this);
     sizeSlider_->setRange(5, 200);
     sizeSlider_->setToolTip(UiText::text(QStringLiteral("cover.layer_size")));
     form->addRow(UiText::text(QStringLiteral("cover.size")),
-                 makeSliderValueRow(sizeSlider_, &sizeValue_, QStringLiteral("%"), this));
+                 miacode::ui::createSliderValueRow(sizeSlider_, &sizeValue_, QStringLiteral("%"), this));
 
     xSlider_ = new QSlider(Qt::Horizontal, this);
     xSlider_->setRange(0, 100);
     xSlider_->setToolTip(UiText::text(QStringLiteral("cover.horizontal_position")));
     form->addRow(UiText::text(QStringLiteral("cover.x")),
-                 makeSliderValueRow(xSlider_, &xValue_, QString(), this));
+                 miacode::ui::createSliderValueRow(xSlider_, &xValue_, QString(), this));
 
     ySlider_ = new QSlider(Qt::Horizontal, this);
     ySlider_->setRange(0, 100);
     ySlider_->setToolTip(UiText::text(QStringLiteral("cover.vertical_position")));
     form->addRow(UiText::text(QStringLiteral("cover.y")),
-                 makeSliderValueRow(ySlider_, &yValue_, QString(), this));
+                 miacode::ui::createSliderValueRow(ySlider_, &yValue_, QString(), this));
 
     root->addWidget(layerGroup_);
 
@@ -257,22 +232,22 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
     frameBgModeCombo_->addItem(UiText::text(QStringLiteral("cover.transparent")),
                                QStringLiteral("transparent"));
     frameBgModeCombo_->setToolTip(UiText::text(QStringLiteral("cover.chart_frame_inner_background")));
-    UiTheme::styleDialogComboBox(frameBgModeCombo_);
+    UiTheme::styleDialogComboBox(frameBgModeCombo_, 12);
     frameForm->addRow(UiText::text(QStringLiteral("cover.inner_bg")), frameBgModeCombo_);
 
     frameBgBrightnessSlider_ = new QSlider(Qt::Horizontal, this);
     frameBgBrightnessSlider_->setRange(0, 100);
     frameBgBrightnessSlider_->setToolTip(UiText::text(QStringLiteral("cover.chart_frame_background_brightness")));
-    frameBgBrightnessRow_ = makeSliderValueRow(frameBgBrightnessSlider_, &frameBgBrightnessValue_,
-                                               QStringLiteral("%"), this);
+    frameBgBrightnessRow_ = miacode::ui::createSliderValueRow(
+        frameBgBrightnessSlider_, &frameBgBrightnessValue_, QStringLiteral("%"), this);
     frameForm->addRow(UiText::text(QStringLiteral("cover.brightness")),
                       frameBgBrightnessRow_);
 
     frameBgTransparencySlider_ = new QSlider(Qt::Horizontal, this);
     frameBgTransparencySlider_->setRange(0, 100);
     frameBgTransparencySlider_->setToolTip(UiText::text(QStringLiteral("cover.chart_frame_background_transparency")));
-    frameBgTransparencyRow_ = makeSliderValueRow(frameBgTransparencySlider_, &frameBgTransparencyValue_,
-                                                 QStringLiteral("%"), this);
+    frameBgTransparencyRow_ = miacode::ui::createSliderValueRow(
+        frameBgTransparencySlider_, &frameBgTransparencyValue_, QStringLiteral("%"), this);
     frameForm->addRow(UiText::text(QStringLiteral("cover.transparency")),
                       frameBgTransparencyRow_);
 

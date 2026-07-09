@@ -8,6 +8,7 @@
 #include "DialogLocalization.h"
 #include "UiNativeWindowTheme.h"
 #include "UiText.h"
+#include "UiComponents.h"
 #include "UiTheme.h"
 
 #include <QAbstractSpinBox>
@@ -50,13 +51,6 @@
 namespace miacode::cover_export {
 namespace {
 
-QPushButton* makeToolbarButton(const QString& text, QWidget* parent, bool primary = false)
-{
-    auto* button = new QPushButton(text, parent);
-    button->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(primary));
-    return button;
-}
-
 bool focusShouldKeepTransportKeys(QWidget* widget)
 {
     return qobject_cast<QLineEdit*>(widget) != nullptr
@@ -64,12 +58,6 @@ bool focusShouldKeepTransportKeys(QWidget* widget)
         || qobject_cast<QPlainTextEdit*>(widget) != nullptr
         || qobject_cast<QComboBox*>(widget) != nullptr
         || qobject_cast<QAbstractSpinBox*>(widget) != nullptr;
-}
-
-QString compactToolbarButtonStyle(bool primary = false)
-{
-    return UiTheme::dialogPushButtonStyleSheet(primary)
-        + QStringLiteral("QPushButton { min-width: 0px; min-height: 30px; padding: 0 12px; }");
 }
 
 QString zoomButtonStyle()
@@ -196,8 +184,9 @@ CoverStudioWindow::CoverStudioWindow(const VideoExportTask& task,
 
     // 布局 ▾ — the whole-composition file operations collapsed into one structured
     // menu (reset / save / import / recent), replacing the old three loose buttons.
-    auto* layoutButton = makeToolbarButton(UiText::text(QStringLiteral("cover.layout")), toolbar);
-    layoutButton->setStyleSheet(compactToolbarButtonStyle());
+    auto* layoutButton = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("cover.layout")), toolbar);
+    miacode::ui::applyCompactDialogButton(layoutButton);
     layoutButton->setToolTip(UiText::text(QStringLiteral("cover.reset_save_import_recent_layouts")));
     auto* layoutMenu = new QMenu(layoutButton);
     UiTheme::styleRoundedMenu(*layoutMenu);
@@ -231,17 +220,18 @@ CoverStudioWindow::CoverStudioWindow(const VideoExportTask& task,
     addAction(saveAction);
     addAction(importAction);
 
-    auto* zoomOutButton = makeToolbarButton(QStringLiteral("−"), toolbar);
+    auto* zoomOutButton = miacode::ui::createDialogPushButton(QStringLiteral("−"), toolbar);
     zoomOutButton->setStyleSheet(zoomButtonStyle());
     zoomOutButton->setFixedSize(28, 24);
     zoomOutButton->setToolTip(UiText::text(QStringLiteral("cover.zoom_canvas_out_ctrl")));
     zoomOutButton->setAccessibleName(UiText::text(QStringLiteral("cover.zoom_canvas_out")));
-    auto* zoomResetButton = makeToolbarButton(formatPreviewZoom(studio_->previewZoom()), toolbar);
+    auto* zoomResetButton = miacode::ui::createDialogPushButton(
+        formatPreviewZoom(studio_->previewZoom()), toolbar);
     zoomResetButton->setStyleSheet(zoomButtonStyle());
     zoomResetButton->setFixedSize(62, 24);
     zoomResetButton->setToolTip(UiText::text(QStringLiteral("cover.reset_canvas_zoom_ctrl_0")));
     zoomResetButton->setAccessibleName(UiText::text(QStringLiteral("cover.reset_canvas_zoom")));
-    auto* zoomInButton = makeToolbarButton(QStringLiteral("+"), toolbar);
+    auto* zoomInButton = miacode::ui::createDialogPushButton(QStringLiteral("+"), toolbar);
     zoomInButton->setStyleSheet(zoomButtonStyle());
     zoomInButton->setFixedSize(28, 24);
     auto* zoomOutAction = new QAction(this);
@@ -257,11 +247,13 @@ CoverStudioWindow::CoverStudioWindow(const VideoExportTask& task,
     zoomInButton->setToolTip(UiText::text(QStringLiteral("cover.zoom_canvas_in_ctrl")));
     zoomInButton->setAccessibleName(UiText::text(QStringLiteral("cover.zoom_canvas_in")));
 
-    auto* exportButton = makeToolbarButton(UiText::text(QStringLiteral("cover.export")), toolbar, true);
-    exportButton->setStyleSheet(compactToolbarButtonStyle(true));
+    auto* exportButton = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("cover.export")), toolbar, true);
+    miacode::ui::applyCompactDialogButton(exportButton, true);
     exportButton->setToolTip(UiText::text(QStringLiteral("cover.render_and_save_the_cover")));
-    auto* cancelButton = makeToolbarButton(UiText::text(QStringLiteral("media_tools.cancel")), toolbar);
-    cancelButton->setStyleSheet(compactToolbarButtonStyle());
+    auto* cancelButton = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("media_tools.cancel")), toolbar);
+    miacode::ui::applyCompactDialogButton(cancelButton);
     cancelButton->setToolTip(UiText::text(QStringLiteral("cover.close_without_exporting_esc")));
 
     toolbarLayout->addWidget(layoutButton);
@@ -302,6 +294,7 @@ CoverStudioWindow::CoverStudioWindow(const VideoExportTask& task,
     auto* rightScroll = new QScrollArea(middle);
     rightScroll->setWidgetResizable(true);
     rightScroll->setFrameShape(QFrame::NoFrame);
+    miacode::ui::applyScrollBarStyle(rightScroll);
     auto* rightPanel = new QWidget(rightScroll);
     auto* rightLayout = new QVBoxLayout(rightPanel);
     rightLayout->setContentsMargins(0, 0, 0, 0);

@@ -3,6 +3,7 @@
 #include "tools/cover_export/CoverLayoutModel.h"
 #include "tools/cover_export/CoverStudioPanel.h"
 #include "UiText.h"
+#include "UiComponents.h"
 #include "UiTheme.h"
 
 #include <QEvent>
@@ -85,16 +86,6 @@ QString frameTransportSliderStyleSheet()
                    handleBorder.name(QColor::HexRgb));
 }
 
-QPushButton* makeTransportButton(QWidget* parent)
-{
-    auto* button = new QPushButton(parent);
-    button->setStyleSheet(UiTheme::dialogPushButtonStyleSheet()
-        + QStringLiteral("QPushButton { min-width: 28px; max-width: 30px;"
-                         " min-height: 26px; max-height: 28px; padding: 0; border-radius: 6px; }"));
-    button->setFixedSize(30, 28);
-    return button;
-}
-
 }  // namespace
 
 CoverFramePickerPanel::CoverFramePickerPanel(CoverStudioPanel* studio, QWidget* parent)
@@ -108,7 +99,8 @@ CoverFramePickerPanel::CoverFramePickerPanel(CoverStudioPanel* studio, QWidget* 
     playIcon_ = makeTransportIcon(/*pause=*/false, UiTheme::colors().textPrimary);
     pauseIcon_ = makeTransportIcon(/*pause=*/true, UiTheme::colors().textPrimary);
 
-    playButton_ = makeTransportButton(this);
+    playButton_ = miacode::ui::createDialogPushButton(QString(), this);
+    miacode::ui::applySmallDialogButton(playButton_);
     playButton_->setIcon(playIcon_);
     playButton_->setIconSize(QSize(16, 16));
     playButton_->setToolTip(UiText::text(QStringLiteral("cover.play_pause_space")));
