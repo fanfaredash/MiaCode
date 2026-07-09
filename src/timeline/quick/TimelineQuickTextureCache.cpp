@@ -7,6 +7,16 @@
 
 #include "timeline/quick/TimelineQuickLayerUtils.h"
 
+namespace {
+
+QString normalizedSkinDirectory(const QString& skinDirectory)
+{
+    const QString trimmed = skinDirectory.trimmed();
+    return trimmed.isEmpty() ? QString() : QDir::cleanPath(trimmed);
+}
+
+}  // namespace
+
 TimelineQuickTextureCache::~TimelineQuickTextureCache()
 {
     clear();
@@ -50,10 +60,14 @@ void TimelineQuickTextureCache::invalidateDprDependent()
     holdPixmapParts_.clear();
 }
 
+bool TimelineQuickTextureCache::requiresReset(QQuickWindow* window, const QString& skinDirectory) const
+{
+    return window_ != window || skinDirectory_ != normalizedSkinDirectory(skinDirectory);
+}
+
 void TimelineQuickTextureCache::setSkinDirectory(const QString& skinDirectory)
 {
-    const QString trimmed = skinDirectory.trimmed();
-    const QString normalized = trimmed.isEmpty() ? QString() : QDir::cleanPath(trimmed);
+    const QString normalized = normalizedSkinDirectory(skinDirectory);
     if (skinDirectory_ == normalized) {
         return;
     }

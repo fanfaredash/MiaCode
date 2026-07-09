@@ -46,6 +46,7 @@ public:
     void invalidateAll();
     void invalidateThemeDependent();
     void invalidateDprDependent();
+    bool requiresReset(QQuickWindow* window, const QString& skinDirectory) const;
     void setSkinDirectory(const QString& skinDirectory);
     QSGTexture* textureForKey(const QString& key, const QImage& image);
     QSGTexture* textureForPixmapKey(const QString& key, const QPixmap& pixmap);

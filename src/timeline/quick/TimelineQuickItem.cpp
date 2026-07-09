@@ -1492,13 +1492,16 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
 
     QElapsedTimer paintNodeTimer;
     paintNodeTimer.start();
-    auto* root = ensureSlotRoot(oldNode);
     if (!canBecomeReady()) {
+        auto* root = ensureSlotRoot(oldNode);
         updateReadyState(false);
         return root;
     }
-    textures_->setWindow(window());
-    textures_->setSkinDirectory(stateBridge_ != nullptr ? stateBridge_->skinDirectory() : QString());
+
+    const QString targetSkinDirectory = stateBridge_ != nullptr ? stateBridge_->skinDirectory() : QString();
+    bool resetNodeTreeBeforeTextureInvalidation =
+        textures_ != nullptr && textures_->requiresReset(window(), targetSkinDirectory);
+
     const qreal currentDpr = window()->effectiveDevicePixelRatio();
     if (!qFuzzyCompare(cachedDevicePixelRatio_ + 1.0, currentDpr + 1.0)) {
         cachedDevicePixelRatio_ = currentDpr;
@@ -1507,6 +1510,29 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         }
         pendingDprInvalidation_ = true;
     }
+    if (pendingDprInvalidation_ || pendingThemeInvalidation_) {
+        resetNodeTreeBeforeTextureInvalidation = true;
+    }
+
+    miacode::timeline::TimelineSceneState state = currentSceneState();
+    const quint64 themeSignature = timelineThemeSignatureHash(state);
+    if (cachedThemeSignatureValid_ && cachedThemeSignature_ != themeSignature) {
+        ++appearanceRevision_;
+        pendingThemeInvalidation_ = true;
+        resetNodeTreeBeforeTextureInvalidation = true;
+        state = currentSceneState();
+    }
+    cachedThemeSignature_ = timelineThemeSignatureHash(state);
+    cachedThemeSignatureValid_ = true;
+
+    if (resetNodeTreeBeforeTextureInvalidation && oldNode != nullptr) {
+        delete oldNode;
+        oldNode = nullptr;
+    }
+    auto* root = ensureSlotRoot(oldNode);
+
+    textures_->setWindow(window());
+    textures_->setSkinDirectory(targetSkinDirectory);
     if (pendingDprInvalidation_) {
         textures_->invalidateDprDependent();
         pendingDprInvalidation_ = false;
@@ -1515,15 +1541,7 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         textures_->invalidateThemeDependent();
         pendingThemeInvalidation_ = false;
     }
-    miacode::timeline::TimelineSceneState state = currentSceneState();
-    const quint64 themeSignature = timelineThemeSignatureHash(state);
-    if (cachedThemeSignatureValid_ && cachedThemeSignature_ != themeSignature) {
-        ++appearanceRevision_;
-        textures_->invalidateThemeDependent();
-        state = currentSceneState();
-    }
-    cachedThemeSignature_ = timelineThemeSignatureHash(state);
-    cachedThemeSignatureValid_ = true;
+
     if (state.horizontalScrollValue != lastPaintedHorizontalScrollValue_
         && miacode::debug_options::timelineHotpathDiagnosticsEnabled()) {
         miacode::debug_log::appendLine(
