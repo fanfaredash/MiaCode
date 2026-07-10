@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import MiaCode.Timeline
+import "components" as Components
 
 Item {
     id: root
@@ -9,6 +10,12 @@ Item {
     property var controller: null
     property var paletteMap: ({})
     property var metricsMap: ({})
+
+    Components.Theme {
+        id: shellTheme
+        paletteMap: root.paletteMap
+        metricsMap: root.metricsMap
+    }
 
     onPaletteMapChanged: {
         if (timelineItem)
@@ -24,7 +31,7 @@ Item {
     }
 
     function tone(key, fallback) {
-        return paletteMap && paletteMap[key] !== undefined ? paletteMap[key] : fallback
+        return shellTheme.tone(key, fallback)
     }
 
     readonly property real headerScale: controller ? controller.bottomTabsHeaderScale : 1.0
@@ -89,7 +96,7 @@ Item {
         }
     }
 
-    ToolButton {
+    Components.ShellToolButton {
         id: zoomButton
 
         anchors.left: parent.left
@@ -99,30 +106,18 @@ Item {
         implicitHeight: Math.max(1, Math.round(22 * root.headerScale))
         property int bodyWidth: Math.max(42, Math.round(54 * root.headerScale))
         property int stepperWidth: Math.max(14, Math.round(18 * root.headerScale))
+        paletteMap: root.paletteMap
+        metricsMap: root.metricsMap
         padding: 1
         leftPadding: 2
         rightPadding: Math.round(8 * root.headerScale)
         spacing: Math.round(6 * root.headerScale)
-        hoverEnabled: true
         text: Math.round(timelineItem.zoomScale * 100) + "%"
         // Phase 9d-native — invisible to the eye (DComp pipeline
         // renders the button visually in the popup composition plane)
         // but still active for input. The DComp popup HWND is
         // WS_EX_TRANSPARENT so clicks pass through to this QQuickItem.
         opacity: 0
-
-        background: Rectangle {
-            radius: 6
-            color: zoomButton.down
-                ? root.tone("accentPressed", "#2563eb")
-                : (zoomButton.hovered
-                    ? root.tone("menuHoverBg", "#334155")
-                    : root.tone("cardBg", "#1f2937"))
-            border.width: 1
-            border.color: zoomButton.hovered && !zoomButton.down
-                ? root.tone("accent", "#60a5fa")
-                : root.tone("borderStrong", "#475569")
-        }
 
         contentItem: Item {
             implicitWidth: zoomRow.implicitWidth
@@ -250,17 +245,18 @@ Item {
         }
     }
 
-    ToolButton {
+    Components.ShellToolButton {
         id: settingsButton
 
         width: Math.max(1, Math.round(28 * root.headerScale))
         height: Math.max(1, Math.round(22 * root.headerScale))
+        paletteMap: root.paletteMap
+        metricsMap: root.metricsMap
         x: Math.max(
             zoomButton.x + zoomButton.width + Math.round(8 * root.headerScale),
             parent.width - Math.round(8 * root.headerScale) - width)
         y: Math.max(0, (timelineItem.timelineTop - height) / 2)
         padding: 1
-        hoverEnabled: true
         enabled: timelineItem.stateBridge !== null
         opacity: 0
 
@@ -278,7 +274,7 @@ Item {
     // Follow is exposed in BottomTabsQuickHost.qml; View Lock and
     // Progress Follow use fixed default behavior.
     /*
-    CheckBox {
+    // CheckBox {
         id: followPreviewCheck
 
         anchors.right: followProgressCheck.left
@@ -293,7 +289,7 @@ Item {
         // popup is WS_EX_TRANSPARENT so clicks pass through.
         opacity: 0
 
-        indicator: Rectangle {
+        // indicator: Rectangle {
             implicitWidth: 14
             implicitHeight: 14
             x: 0
@@ -341,7 +337,7 @@ Item {
         onClicked: timelineItem.followPreviewEnabled = checked
     }
 
-    CheckBox {
+    // CheckBox {
         id: followProgressCheck
 
         anchors.right: parent.right
@@ -353,7 +349,7 @@ Item {
         checked: timelineItem.followProgressEnabled
         opacity: 0
 
-        indicator: Rectangle {
+        // indicator: Rectangle {
             implicitWidth: 14
             implicitHeight: 14
             x: 0

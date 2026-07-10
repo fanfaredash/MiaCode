@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "components" as Components
 
 Rectangle {
     id: root
@@ -19,12 +20,19 @@ Rectangle {
     readonly property int transportTextPixelSize: 13
     readonly property int transportTextWeight: Font.Medium
 
+    Components.Theme {
+        id: shellTheme
+        paletteMap: root.paletteMap
+        metricsMap: root.metricsMap
+        fullscreenMode: root.fullscreenMode
+    }
+
     function metric(key, fallback) {
-        return metricsMap && metricsMap[key] !== undefined ? metricsMap[key] : fallback
+        return shellTheme.metric(key, fallback)
     }
 
     function tone(key, fallback) {
-        return paletteMap && paletteMap[key] !== undefined ? paletteMap[key] : fallback
+        return shellTheme.tone(key, fallback)
     }
 
     function formatDisplayTime(secondsValue) {
@@ -49,37 +57,35 @@ Rectangle {
     }
 
     function transportSurfaceColor() {
-        return fullscreenMode ? "#C8141B22" : tone("cardBg", "#ffffff")
+        return shellTheme.transportSurfaceColor()
     }
 
     function transportBorderColor() {
-        return fullscreenMode ? "#3AFFFFFF" : tone("border", "#d5e0ec")
+        return shellTheme.transportBorderColor()
     }
 
     function transportPrimaryTextColor() {
-        return fullscreenMode ? "#F2F7FF" : tone("textPrimary", "#203040")
+        return shellTheme.transportPrimaryTextColor()
     }
 
     function transportTrackColor() {
-        return fullscreenMode ? "#34404D" : tone("inputDisabledBg", "#e3e8ef")
+        return shellTheme.transportTrackColor()
     }
 
     function transportHandleFillColor() {
-        return fullscreenMode ? "#F7FBFF" : "white"
+        return shellTheme.transportHandleFillColor()
     }
 
     function transportHandleBorderColor() {
-        return fullscreenMode ? "#5D748E" : tone("borderSoft", "#ccd6e2")
+        return shellTheme.transportHandleBorderColor()
     }
 
     function transportButtonFillColor(down) {
-        if (!fullscreenMode)
-            return down ? tone("menuHoverBg", "#eef5ff") : "transparent"
-        return down ? "#2A3542" : "#1A222B"
+        return shellTheme.transportButtonFillColor(down)
     }
 
     function transportButtonBorderColor() {
-        return fullscreenMode ? "#40FFFFFF" : tone("border", "#d5e0ec")
+        return shellTheme.transportButtonBorderColor()
     }
 
     // Single source of truth for the on-screen handle centre (slider-local x).
@@ -227,7 +233,7 @@ Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: fullscreenMode ? 32 : 24
 
-            Slider {
+            Components.ShellSlider {
                 id: transportSlider
 
                 // Hit area hugs the track line instead of filling the whole row,
@@ -238,11 +244,15 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 height: root.scrubInteractiveHeight
+                paletteMap: root.paletteMap
+                metricsMap: root.metricsMap
+                fullscreenMode: root.fullscreenMode
+                displayedProgress: root.displayedProgress
+                handleDiameter: root.handleDiameter
                 from: root.lowerBoundSeconds
                 to: root.durationSeconds
                 live: true
                 enabled: !root.inputBlocked
-                focusPolicy: Qt.NoFocus
 
                 onPressedChanged: {
                     root.focusRequested()
@@ -272,38 +282,6 @@ Rectangle {
                     root.preciseHintVisible = true
                     if (controller)
                         controller.updatePreviewScrub(root.activeScrubSecond, true)
-                }
-
-                background: Item {
-                    x: transportSlider.leftPadding
-                    y: Math.round((parent.height - 6) / 2)
-                    width: transportSlider.availableWidth
-                    height: 6
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: height / 2
-                        color: root.transportTrackColor()
-                    }
-
-                    Rectangle {
-                        width: Math.max(6, root.displayedProgress * parent.width)
-                        height: parent.height
-                        radius: height / 2
-                        color: tone("accent", "#2e77d0")
-                    }
-                }
-
-                handle: Rectangle {
-                    x: transportSlider.leftPadding
-                        + root.displayedProgress * (transportSlider.availableWidth - width)
-                    y: Math.round((transportSlider.height - height) / 2)
-                    width: 18
-                    height: 18
-                    radius: 9
-                    color: root.transportHandleFillColor()
-                    border.color: root.transportHandleBorderColor()
-                    border.width: 1
                 }
             }
 
@@ -351,22 +329,18 @@ Rectangle {
                     Layout.alignment: Qt.AlignLeft
                     spacing: 8
 
-                    ToolButton {
+                    Components.ShellToolButton {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: root.controlButtonHeight
+                        paletteMap: root.paletteMap
+                        metricsMap: root.metricsMap
+                        fullscreenMode: root.fullscreenMode
                         enabled: !root.inputBlocked
-                        focusPolicy: Qt.NoFocus
-                        padding: 0
                         onPressed: root.focusRequested()
                         onClicked: {
                             root.focusRequested()
                             if (controller)
                                 controller.stopPreview()
-                        }
-                        background: Rectangle {
-                            color: root.transportButtonFillColor(parent.down)
-                            border.color: root.transportButtonBorderColor()
-                            radius: 6
                         }
                         contentItem: Item {
                             implicitWidth: 18
@@ -382,22 +356,18 @@ Rectangle {
                         }
                     }
 
-                    ToolButton {
+                    Components.ShellToolButton {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: root.controlButtonHeight
+                        paletteMap: root.paletteMap
+                        metricsMap: root.metricsMap
+                        fullscreenMode: root.fullscreenMode
                         enabled: !root.inputBlocked
-                        focusPolicy: Qt.NoFocus
-                        padding: 0
                         onPressed: root.focusRequested()
                         onClicked: {
                             root.focusRequested()
                             if (controller)
                                 controller.togglePreviewPlayback()
-                        }
-                        background: Rectangle {
-                            color: root.transportButtonFillColor(parent.down)
-                            border.color: root.transportButtonBorderColor()
-                            radius: 6
                         }
                         contentItem: Item {
                             implicitWidth: 18
@@ -466,12 +436,13 @@ Rectangle {
                     Layout.alignment: Qt.AlignLeft
                     spacing: 8
 
-                    ToolButton {
+                    Components.ShellToolButton {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: root.controlButtonHeight
+                        paletteMap: root.paletteMap
+                        metricsMap: root.metricsMap
+                        fullscreenMode: root.fullscreenMode
                         enabled: !root.inputBlocked
-                        focusPolicy: Qt.NoFocus
-                        padding: 0
                         // Stop-gap: entering fullscreen from the export page crashes
                         // the Intel iGPU D3D11 user-mode driver during hardware video
                         // decode. Keep the fullscreen entry hidden while the export page is active.
@@ -483,11 +454,6 @@ Rectangle {
                             if (controller)
                                 controller.previewFullscreen = !fullscreenMode
                         }
-                        background: Rectangle {
-                            color: root.transportButtonFillColor(parent.down)
-                            border.color: root.transportButtonBorderColor()
-                            radius: 6
-                        }
                         contentItem: Text {
                             text: "\u26f6"
                             color: root.transportPrimaryTextColor()
@@ -497,7 +463,7 @@ Rectangle {
                         }
                     }
 
-                    Button {
+                    Components.ShellToolButton {
                         text: controller ? controller.previewSpeedLabel : "1x"
                         Layout.preferredWidth: root.metric("previewSpeedButtonWidth", 72)
                         Layout.minimumWidth: root.metric("previewSpeedButtonWidth", 72)
@@ -505,16 +471,12 @@ Rectangle {
                         Layout.preferredHeight: root.controlButtonHeight
                         Layout.minimumHeight: root.controlButtonHeight
                         Layout.maximumHeight: root.controlButtonHeight
+                        paletteMap: root.paletteMap
+                        metricsMap: root.metricsMap
+                        fullscreenMode: root.fullscreenMode
                         enabled: !root.inputBlocked
-                        focusPolicy: Qt.NoFocus
-                        padding: 0
                         onPressed: root.focusRequested()
                         onClicked: root.openSpeedMenu()
-                        background: Rectangle {
-                            color: root.transportButtonFillColor(parent.down)
-                            border.color: root.transportButtonBorderColor()
-                            radius: 6
-                        }
                         contentItem: Text {
                             text: parent.text
                             anchors.fill: parent
@@ -553,7 +515,7 @@ Rectangle {
                     Layout.alignment: Qt.AlignRight
                     spacing: 8
 
-                    Button {
+                    Components.ShellToolButton {
                         text: controller ? controller.previewSpeedLabel : "1x"
                         Layout.preferredWidth: root.metric("previewSpeedButtonWidth", 72)
                         Layout.minimumWidth: root.metric("previewSpeedButtonWidth", 72)
@@ -561,16 +523,12 @@ Rectangle {
                         Layout.preferredHeight: root.controlButtonHeight
                         Layout.minimumHeight: root.controlButtonHeight
                         Layout.maximumHeight: root.controlButtonHeight
+                        paletteMap: root.paletteMap
+                        metricsMap: root.metricsMap
+                        fullscreenMode: root.fullscreenMode
                         enabled: !root.inputBlocked
-                        focusPolicy: Qt.NoFocus
-                        padding: 0
                         onPressed: root.focusRequested()
                         onClicked: root.openSpeedMenu()
-                        background: Rectangle {
-                            color: root.transportButtonFillColor(parent.down)
-                            border.color: root.transportButtonBorderColor()
-                            radius: 6
-                        }
                         contentItem: Text {
                             text: parent.text
                             anchors.fill: parent
@@ -585,12 +543,13 @@ Rectangle {
                         }
                     }
 
-                    ToolButton {
+                    Components.ShellToolButton {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: root.controlButtonHeight
+                        paletteMap: root.paletteMap
+                        metricsMap: root.metricsMap
+                        fullscreenMode: root.fullscreenMode
                         enabled: !root.inputBlocked
-                        focusPolicy: Qt.NoFocus
-                        padding: 0
                         // Stop-gap: entering fullscreen from the export page crashes
                         // the Intel iGPU D3D11 user-mode driver during hardware video
                         // decode. Keep the fullscreen entry hidden while the export page is active.
@@ -601,11 +560,6 @@ Rectangle {
                             root.focusRequested()
                             if (controller)
                                 controller.previewFullscreen = !fullscreenMode
-                        }
-                        background: Rectangle {
-                            color: root.transportButtonFillColor(parent.down)
-                            border.color: root.transportButtonBorderColor()
-                            radius: 6
                         }
                         contentItem: Text {
                             text: "\u26f6"
@@ -623,22 +577,18 @@ Rectangle {
                     Layout.alignment: Qt.AlignRight
                     spacing: 8
 
-                    ToolButton {
+                    Components.ShellToolButton {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: root.controlButtonHeight
+                        paletteMap: root.paletteMap
+                        metricsMap: root.metricsMap
+                        fullscreenMode: root.fullscreenMode
                         enabled: !root.inputBlocked
-                        focusPolicy: Qt.NoFocus
-                        padding: 0
                         onPressed: root.focusRequested()
                         onClicked: {
                             root.focusRequested()
                             if (controller)
                                 controller.stopPreview()
-                        }
-                        background: Rectangle {
-                            color: root.transportButtonFillColor(parent.down)
-                            border.color: root.transportButtonBorderColor()
-                            radius: 6
                         }
                         contentItem: Item {
                             implicitWidth: 18
@@ -654,22 +604,18 @@ Rectangle {
                         }
                     }
 
-                    ToolButton {
+                    Components.ShellToolButton {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: root.controlButtonHeight
+                        paletteMap: root.paletteMap
+                        metricsMap: root.metricsMap
+                        fullscreenMode: root.fullscreenMode
                         enabled: !root.inputBlocked
-                        focusPolicy: Qt.NoFocus
-                        padding: 0
                         onPressed: root.focusRequested()
                         onClicked: {
                             root.focusRequested()
                             if (controller)
                                 controller.togglePreviewPlayback()
-                        }
-                        background: Rectangle {
-                            color: root.transportButtonFillColor(parent.down)
-                            border.color: root.transportButtonBorderColor()
-                            radius: 6
                         }
                         contentItem: Item {
                             implicitWidth: 18
