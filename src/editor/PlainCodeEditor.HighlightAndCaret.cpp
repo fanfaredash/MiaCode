@@ -347,6 +347,19 @@ bool PlainCodeEditor::applyPreviewFollowCursor(const QTextCursor& cursor, bool c
 
 void PlainCodeEditor::paintEvent(QPaintEvent* event)
 {
+    {
+        QPainter backgroundPainter(viewport());
+        const QRect dirtyRect = event != nullptr ? event->rect() : viewport()->rect();
+        backgroundPainter.setClipRect(dirtyRect);
+        if (backgroundPainter_) {
+            backgroundPainter_(viewport(), backgroundPainter);
+        }
+        const UiTheme::Colors& c = UiTheme::colors();
+        QColor scrim = c.inputBg;
+        scrim.setAlpha(c.dark ? 222 : 232);
+        backgroundPainter.fillRect(dirtyRect, scrim);
+    }
+
     QTextEdit::paintEvent(event);
     QPainter painter(viewport());
     const QRect highlightRect = currentLineHighlightRect();

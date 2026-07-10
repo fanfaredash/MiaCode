@@ -18,7 +18,8 @@ void TimelineView::paintEvent(QPaintEvent* event)
     }
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter.setClipRect(dirtyRect);
-    painter.fillRect(dirtyRect, c.timelineWindow);
+    miacode::ui::paintAppBackgroundForWidget(viewport(), painter);
+    painter.fillRect(dirtyRect, timelineBackgroundSurfaceColor(c.timelineWindow, c.dark ? 166 : 178));
 
     const int left = timelineLeft();
     const int top = timelineTop();
@@ -98,9 +99,9 @@ void TimelineView::paintEvent(QPaintEvent* event)
         return startY + (endY - startY) * proportion;
     };
 
-    painter.fillRect(QRect(0, 0, viewport()->width(), top), c.timelineHeader);
-    painter.fillRect(QRect(0, top, left, h), c.timelineSidebar);
-    painter.fillRect(timelineRect, c.timelineBase);
+    painter.fillRect(QRect(0, 0, viewport()->width(), top), timelineBackgroundSurfaceColor(c.timelineHeader, c.dark ? 196 : 210));
+    painter.fillRect(QRect(0, top, left, h), timelineBackgroundSurfaceColor(c.timelineSidebar, c.dark ? 206 : 220));
+    painter.fillRect(timelineRect, timelineBackgroundSurfaceColor(c.timelineBase, c.dark ? 170 : 184));
     const QPen borderPen(c.timelineBorder, 1.0);
     const QPen axisPen(c.timelineAxis, 1.0);
     // Beta21-fix11 — wired through the dedicated palette entries:
@@ -140,7 +141,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
     painter.setFont(laneLabelFont);
     for (int lane = 0; lane < kLaneCount; ++lane) {
         const int y = top + lane * laneH;
-        const QColor rowColor = (lane % 2 == 0) ? c.timelineLaneEven : c.timelineLaneOdd;
+        const QColor rowColor = timelineBackgroundSurfaceColor((lane % 2 == 0) ? c.timelineLaneEven : c.timelineLaneOdd, c.dark ? 178 : 188);
         painter.fillRect(QRect(left, y, viewport()->width() - left, laneH), rowColor);
         painter.setPen(laneDividerPen);
         painter.drawLine(0, y + laneH, viewport()->width(), y + laneH);
@@ -914,7 +915,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
         }
     }
 
-    painter.fillRect(QRect(0, top - 1, left + 1, h + 2), c.timelineSidebar);
+    painter.fillRect(QRect(0, top - 1, left + 1, h + 2), timelineBackgroundSurfaceColor(c.timelineSidebar, c.dark ? 206 : 220));
     painter.setFont(laneLabelFont);
     for (int lane = 0; lane < kLaneCount; ++lane) {
         const int y = top + lane * laneH;

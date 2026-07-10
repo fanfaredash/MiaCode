@@ -4,6 +4,7 @@
 #include <QSet>
 #include <QPointF>
 #include <QTextEdit>
+#include <functional>
 
 class BracketCompletionPopup;
 class LineNumberArea;
@@ -14,6 +15,7 @@ class QInputMethodEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QMimeData;
+class QPainter;
 
 namespace miacode::editor {
 QChar normalizedHalfWidthChar(QChar ch);
@@ -32,6 +34,8 @@ class PlainCodeEditor : public QTextEdit
     friend class LineNumberArea;
 
 public:
+    using BackgroundPainter = std::function<void(QWidget*, QPainter&)>;
+
     explicit PlainCodeEditor(QWidget* parent = nullptr);
     int lineNumberAreaWidth() const;
     void lineNumberAreaPaintEvent(QPaintEvent* event);
@@ -77,6 +81,7 @@ public:
     // &wholebpm metadata line, so the owning window pushes it in on load /
     // difficulty switch (see MainWindow::DocumentSection::setEditorText).
     void setWholeBpmCandidate(const QString& bpm);
+    void setBackgroundPainter(BackgroundPainter painter);
 
 signals:
     void undoShortcutRequested();
@@ -193,5 +198,6 @@ private:
     int hoveredBookmarkDropLine_ = -1;
     int pressedBookmarkLine_ = -1;
     QPoint lineNumberPressPos_;
+    BackgroundPainter backgroundPainter_;
     LineNumberArea* lineNumberArea_;
 };

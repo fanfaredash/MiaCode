@@ -34,6 +34,7 @@
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "extensions/ExtensionManager.h"
+#include "app/ui/AppBackgroundSettings.h"
 
 class QAction;
 class QByteArray;
@@ -57,6 +58,7 @@ namespace miacode::export_page {
 class ExportLauncherPage;
 }
 namespace miacode::ui {
+class AppBackgroundLayer;
 class BusySpinner;
 }
 class QListWidget;
@@ -65,6 +67,7 @@ class QJsonObject;
 class QLineEdit;
 class QMenu;
 class QMoveEvent;
+class QPaintEvent;
 class QTabWidget;
 class QToolBar;
 class QPushButton;
@@ -278,6 +281,7 @@ protected:
     void showEvent(QShowEvent* event) override;
     void hideEvent(QHideEvent* event) override;
     void changeEvent(QEvent* event) override;
+    void paintEvent(QPaintEvent* event) override;
 
 private slots:
     void onNewFile();

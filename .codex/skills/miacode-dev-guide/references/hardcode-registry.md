@@ -123,6 +123,10 @@ Use this file to track where important constants live, what they mean, and wheth
     - bottom-tab invisible top-edge resize hot zone (`8 px`), content-scale clamp (`50%..100%`), derived header/list-font scale (`75%..100%`), and Timeline host height calculation from scaled header plus scaled lanes
     - fixed `30 Hz` Timeline UI cadence (`33 ms` timer interval / `1/30 s` seek-throttle threshold)
   - Rule: keep local while they only shape the main-window preview UX and do not need preview/export parity
+- `src/app/ui/UiTheme.cpp`
+  - Owns: app-wide workspace background scrim alpha values for `EditorShell`, metadata/welcome/export pages, preview panel, and bottom-tab panes, plus the stronger card/input backgrounds that preserve readability above a user-selected image
+  - Current tuning note: these alpha values are intentionally lower than ordinary opaque theme surfaces because the image is already composited by `AppBackgroundLayer` using the user's background opacity preference. Raising the scrims back near opaque can make a successfully loaded background appear absent.
+  - Rule: keep local while these values only shape Qt widget workspace readability; promote only if QuickShell or another frontend must share the exact same app-background scrim contract
 - `src/editor/BracketScopeHighlighter.cpp`
   - Owns: editor bracket-scope and comment colors for the chart/metadata text highlighter
   - Current tuning note: dark theme keeps the existing warm/square/comment colors; light theme uses `#A23B2A` for `()` and `{}`, `#1D4ED8` for `[]` duration scopes, and `#15803D` for `||` comments so duration brackets stand apart from normal `#203040` text

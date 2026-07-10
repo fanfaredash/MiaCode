@@ -10,6 +10,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "WindowParityMetrics.h"
+#include "app/ui/AppBackgroundLayer.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -173,6 +174,12 @@ bool shouldPaintTimelineBeatMarker(const TimelineRenderBeat& beat)
     return (beat.subdivisionIndex % stride) == 0;
 }
 
+QColor timelineBackgroundSurfaceColor(QColor color, int alpha)
+{
+    color.setAlpha(qBound(0, alpha, 255));
+    return color;
+}
+
 QFont scaledTimelineHeaderFont(const QFont& sourceFont, qreal scale)
 {
     QFont scaledFont(sourceFont);
@@ -232,12 +239,12 @@ TimelineView::TimelineView(QWidget* parent)
     setLineWidth(0);
     setMidLineWidth(0);
     setFocusPolicy(Qt::StrongFocus);
-    setAttribute(Qt::WA_OpaquePaintEvent, true);
+    setAttribute(Qt::WA_OpaquePaintEvent, false);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setMouseTracking(true);
     viewport()->setFocusPolicy(Qt::NoFocus);
-    viewport()->setAttribute(Qt::WA_OpaquePaintEvent, true);
+    viewport()->setAttribute(Qt::WA_OpaquePaintEvent, false);
     viewport()->setAutoFillBackground(false);
 
     zoomButton_ = new QToolButton(this);

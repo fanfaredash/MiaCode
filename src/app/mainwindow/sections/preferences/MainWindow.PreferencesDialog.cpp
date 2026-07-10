@@ -4,6 +4,7 @@
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
+#include "EditableValueLabel.h"
 #include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
@@ -679,6 +680,11 @@ void MainWindow::PreferencesSection::onPreferences()
     // call sites intact; addTab() does the same wrapping under the hood.
     auto* pageStack = new QTabWidget(&dialog);
     pageStack->setObjectName(QStringLiteral("PreferenceTabs"));
+    if (auto* tabBar = pageStack->tabBar()) {
+        tabBar->setUsesScrollButtons(true);
+        tabBar->setElideMode(Qt::ElideRight);
+        tabBar->setExpanding(false);
+    }
     rootLayout->addWidget(pageStack);
 
     // Each preference page wraps its controls in a QGroupBox whose
@@ -885,6 +891,266 @@ void MainWindow::PreferencesSection::onPreferences()
     appearancePageLayout->addWidget(interfaceGroup);
     appearancePageLayout->addStretch(1);
     pageStack->addTab(appearancePage, UiText::text(QStringLiteral("dialog.preferences.interface_group")));
+
+    auto* backgroundPage = new QWidget(pageStack);
+    backgroundPage->setProperty("miacodeSkipPreferenceWidthMeasure", true);
+    auto* backgroundPageLayout = new QVBoxLayout(backgroundPage);
+    backgroundPageLayout->setContentsMargins(0, 0, 0, 0);
+    backgroundPageLayout->setSpacing(10);
+    auto* backgroundGroup =
+        new QGroupBox(UiText::text(QStringLiteral("dialog.preferences.background_group")), backgroundPage);
+    auto* backgroundLayout = new QFormLayout(backgroundGroup);
+    backgroundLayout->setContentsMargins(12, 10, 12, 12);
+    backgroundLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    backgroundLayout->setHorizontalSpacing(12);
+    backgroundLayout->setVerticalSpacing(8);
+
+    miacode::ui::AppBackgroundSettings selectedBackgroundSettings = owner_.appBackgroundSettings_;
+
+    const auto backgroundSizeLabel = [](miacode::ui::AppBackgroundSizeMode mode) -> QString {
+        switch (mode) {
+        case miacode::ui::AppBackgroundSizeMode::Contain:
+            return UiText::text(QStringLiteral("dialog.preferences.background.size.contain"));
+        case miacode::ui::AppBackgroundSizeMode::Stretch:
+            return UiText::text(QStringLiteral("dialog.preferences.background.size.stretch"));
+        case miacode::ui::AppBackgroundSizeMode::Center:
+            return UiText::text(QStringLiteral("dialog.preferences.background.size.center"));
+        case miacode::ui::AppBackgroundSizeMode::Repeat:
+            return UiText::text(QStringLiteral("dialog.preferences.background.size.repeat"));
+        case miacode::ui::AppBackgroundSizeMode::Cover:
+        default:
+            return UiText::text(QStringLiteral("dialog.preferences.background.size.cover"));
+        }
+    };
+    const auto backgroundPositionLabel = [](miacode::ui::AppBackgroundPosition position) -> QString {
+        switch (position) {
+        case miacode::ui::AppBackgroundPosition::Left:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.left"));
+        case miacode::ui::AppBackgroundPosition::Right:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.right"));
+        case miacode::ui::AppBackgroundPosition::Top:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.top"));
+        case miacode::ui::AppBackgroundPosition::Bottom:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.bottom"));
+        case miacode::ui::AppBackgroundPosition::LeftTop:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.left_top"));
+        case miacode::ui::AppBackgroundPosition::RightTop:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.right_top"));
+        case miacode::ui::AppBackgroundPosition::LeftBottom:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.left_bottom"));
+        case miacode::ui::AppBackgroundPosition::RightBottom:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.right_bottom"));
+        case miacode::ui::AppBackgroundPosition::Center:
+        default:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.center"));
+        }
+    };
+
+    const auto applyBackgroundSettings = [&]() {
+        selectedBackgroundSettings = miacode::ui::normalizedAppBackgroundSettings(selectedBackgroundSettings);
+        owner_.applyAppBackgroundSettings(selectedBackgroundSettings, true);
+    };
+
+    auto* backgroundEnabledRow = new QWidget(backgroundGroup);
+    auto* backgroundEnabledLayout = new QHBoxLayout(backgroundEnabledRow);
+    backgroundEnabledLayout->setContentsMargins(0, 0, 0, 0);
+    backgroundEnabledLayout->setSpacing(8);
+    auto* backgroundEnabledCombo = new QComboBox(backgroundEnabledRow);
+    backgroundEnabledCombo->addItem(UiText::text(QStringLiteral("preferences.on")), true);
+    backgroundEnabledCombo->addItem(UiText::text(QStringLiteral("preferences.off")), false);
+    backgroundEnabledCombo->setCurrentIndex(selectedBackgroundSettings.enabled ? 0 : 1);
+    backgroundEnabledCombo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    styleRegisteredDialogCombo(backgroundEnabledCombo, 2);
+    backgroundEnabledLayout->addWidget(backgroundEnabledCombo, 0);
+    backgroundEnabledLayout->addStretch(1);
+    connect(backgroundEnabledCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dialog, [&, backgroundEnabledCombo](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedBackgroundSettings.enabled = backgroundEnabledCombo->itemData(index).toBool();
+        applyBackgroundSettings();
+    });
+    backgroundLayout->addRow(
+        UiText::text(QStringLiteral("dialog.preferences.background.enabled")),
+        backgroundEnabledRow);
+
+    auto* backgroundPathEdit = new QLineEdit(backgroundGroup);
+    backgroundPathEdit->setText(selectedBackgroundSettings.imagePath);
+    backgroundPathEdit->setClearButtonEnabled(true);
+    backgroundPathEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    backgroundPathEdit->setMinimumWidth(0);
+    backgroundLayout->addRow(
+        UiText::text(QStringLiteral("dialog.preferences.background.image")),
+        backgroundPathEdit);
+
+    auto* backgroundButtonsRow = new QWidget(backgroundGroup);
+    auto* backgroundButtonsLayout = new QHBoxLayout(backgroundButtonsRow);
+    backgroundButtonsLayout->setContentsMargins(0, 0, 0, 0);
+    backgroundButtonsLayout->setSpacing(8);
+    auto* chooseBackgroundButton =
+        new QPushButton(UiText::text(QStringLiteral("dialog.preferences.background.choose")), backgroundButtonsRow);
+    auto* clearBackgroundButton =
+        new QPushButton(UiText::text(QStringLiteral("dialog.preferences.background.clear")), backgroundButtonsRow);
+    chooseBackgroundButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    clearBackgroundButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    backgroundButtonsLayout->addWidget(chooseBackgroundButton);
+    backgroundButtonsLayout->addWidget(clearBackgroundButton);
+    backgroundButtonsLayout->addStretch(1);
+    backgroundLayout->addRow(QString(), backgroundButtonsRow);
+
+    connect(backgroundPathEdit, &QLineEdit::editingFinished, &dialog, [&]() {
+        const QString path = backgroundPathEdit->text().trimmed();
+        if (path == selectedBackgroundSettings.imagePath) {
+            return;
+        }
+        selectedBackgroundSettings.imagePath = path;
+        applyBackgroundSettings();
+        backgroundPathEdit->setText(selectedBackgroundSettings.imagePath);
+    });
+    connect(chooseBackgroundButton, &QPushButton::clicked, &dialog, [&]() {
+        const QString path = QFileDialog::getOpenFileName(
+            &dialog,
+            UiText::text(QStringLiteral("dialog.preferences.background.choose")),
+            selectedBackgroundSettings.imagePath,
+            UiText::text(QStringLiteral("dialog.preferences.background.images_filter")));
+        if (path.isEmpty()) {
+            return;
+        }
+        selectedBackgroundSettings.imagePath = path;
+        selectedBackgroundSettings.enabled = true;
+        backgroundEnabledCombo->setCurrentIndex(0);
+        applyBackgroundSettings();
+        backgroundPathEdit->setText(selectedBackgroundSettings.imagePath);
+    });
+    connect(clearBackgroundButton, &QPushButton::clicked, &dialog, [&]() {
+        selectedBackgroundSettings.imagePath.clear();
+        applyBackgroundSettings();
+        backgroundPathEdit->clear();
+    });
+
+    const auto makeBackgroundSliderRow = [&](int minValue, int maxValue, int value, const QString& suffix) {
+        auto* row = new QWidget(backgroundGroup);
+        auto* layout = new QHBoxLayout(row);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(8);
+        auto* slider = new QSlider(Qt::Horizontal, row);
+        slider->setRange(minValue, maxValue);
+        slider->setValue(value);
+        slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
+        slider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        slider->setMinimumWidth(0);
+        auto* valueLabel = new miacode::ui::EditableValueLabel(QString::number(value) + suffix, row);
+        valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        valueLabel->setMinimumWidth(valueLabel->fontMetrics().horizontalAdvance(QStringLiteral("100%")) + 4);
+        valueLabel->bindSlider(slider);
+        layout->addWidget(slider, 1);
+        layout->addWidget(valueLabel, 0);
+        connect(slider, &QSlider::valueChanged, &dialog, [valueLabel, suffix](int v) {
+            valueLabel->setText(QString::number(v) + suffix);
+        });
+        return std::pair<QSlider*, miacode::ui::EditableValueLabel*>{slider, valueLabel};
+    };
+
+    const int opacityPercent = qRound(selectedBackgroundSettings.opacity * 100.0);
+    auto [opacitySlider, opacityValueLabel] = makeBackgroundSliderRow(
+        qRound(miacode::ui::kAppBackgroundOpacityMin * 100.0),
+        qRound(miacode::ui::kAppBackgroundOpacityMax * 100.0),
+        opacityPercent,
+        QStringLiteral("%"));
+    connect(opacitySlider, &QSlider::valueChanged, &dialog, [&, opacityValueLabel](int value) {
+        opacityValueLabel->setText(QString::number(value) + QStringLiteral("%"));
+        selectedBackgroundSettings.opacity = static_cast<double>(value) / 100.0;
+        applyBackgroundSettings();
+    });
+    backgroundLayout->addRow(
+        UiText::text(QStringLiteral("dialog.preferences.background.opacity")),
+        opacitySlider->parentWidget());
+
+    auto [blurSlider, blurValueLabel] = makeBackgroundSliderRow(
+        miacode::ui::kAppBackgroundBlurMin,
+        miacode::ui::kAppBackgroundBlurMax,
+        selectedBackgroundSettings.blur,
+        QString());
+    connect(blurSlider, &QSlider::valueChanged, &dialog, [&, blurValueLabel](int value) {
+        blurValueLabel->setText(QString::number(value));
+        selectedBackgroundSettings.blur = value;
+        applyBackgroundSettings();
+    });
+    backgroundLayout->addRow(
+        UiText::text(QStringLiteral("dialog.preferences.background.blur")),
+        blurSlider->parentWidget());
+
+    auto* backgroundSizeCombo = new QComboBox(backgroundGroup);
+    backgroundSizeCombo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    const QList<miacode::ui::AppBackgroundSizeMode> backgroundSizeOptions{
+        miacode::ui::AppBackgroundSizeMode::Cover,
+        miacode::ui::AppBackgroundSizeMode::Contain,
+        miacode::ui::AppBackgroundSizeMode::Stretch,
+        miacode::ui::AppBackgroundSizeMode::Center,
+        miacode::ui::AppBackgroundSizeMode::Repeat,
+    };
+    for (miacode::ui::AppBackgroundSizeMode option : backgroundSizeOptions) {
+        backgroundSizeCombo->addItem(backgroundSizeLabel(option), static_cast<int>(option));
+        if (option == selectedBackgroundSettings.sizeMode) {
+            backgroundSizeCombo->setCurrentIndex(backgroundSizeCombo->count() - 1);
+        }
+    }
+    styleRegisteredDialogCombo(backgroundSizeCombo, backgroundSizeOptions.size());
+    connect(backgroundSizeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dialog, [&, backgroundSizeCombo](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedBackgroundSettings.sizeMode =
+            static_cast<miacode::ui::AppBackgroundSizeMode>(backgroundSizeCombo->itemData(index).toInt());
+        applyBackgroundSettings();
+    });
+    auto* backgroundPositionCombo = new QComboBox(backgroundGroup);
+    backgroundPositionCombo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    const QList<miacode::ui::AppBackgroundPosition> backgroundPositionOptions{
+        miacode::ui::AppBackgroundPosition::Center,
+        miacode::ui::AppBackgroundPosition::Left,
+        miacode::ui::AppBackgroundPosition::Right,
+        miacode::ui::AppBackgroundPosition::Top,
+        miacode::ui::AppBackgroundPosition::Bottom,
+        miacode::ui::AppBackgroundPosition::LeftTop,
+        miacode::ui::AppBackgroundPosition::RightTop,
+        miacode::ui::AppBackgroundPosition::LeftBottom,
+        miacode::ui::AppBackgroundPosition::RightBottom,
+    };
+    for (miacode::ui::AppBackgroundPosition option : backgroundPositionOptions) {
+        backgroundPositionCombo->addItem(backgroundPositionLabel(option), static_cast<int>(option));
+        if (option == selectedBackgroundSettings.position) {
+            backgroundPositionCombo->setCurrentIndex(backgroundPositionCombo->count() - 1);
+        }
+    }
+    styleRegisteredDialogCombo(backgroundPositionCombo, backgroundPositionOptions.size());
+    connect(backgroundPositionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dialog, [&, backgroundPositionCombo](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedBackgroundSettings.position =
+            static_cast<miacode::ui::AppBackgroundPosition>(backgroundPositionCombo->itemData(index).toInt());
+        applyBackgroundSettings();
+    });
+    auto* backgroundPlacementRow = new QWidget(backgroundGroup);
+    auto* backgroundPlacementLayout = new QHBoxLayout(backgroundPlacementRow);
+    backgroundPlacementLayout->setContentsMargins(0, 0, 0, 0);
+    backgroundPlacementLayout->setSpacing(8);
+    backgroundPlacementLayout->addWidget(backgroundSizeCombo, 0);
+    auto* backgroundPositionInlineLabel = new QLabel(
+        UiText::text(QStringLiteral("dialog.preferences.background.position")),
+        backgroundPlacementRow);
+    backgroundPlacementLayout->addWidget(backgroundPositionInlineLabel, 0);
+    backgroundPlacementLayout->addWidget(backgroundPositionCombo, 0);
+    backgroundPlacementLayout->addStretch(1);
+    backgroundLayout->addRow(
+        UiText::text(QStringLiteral("dialog.preferences.background.size_mode")),
+        backgroundPlacementRow);
+
+    flattenPageGroup(backgroundGroup);
+    backgroundPageLayout->addWidget(backgroundGroup);
+    backgroundPageLayout->addStretch(1);
+    pageStack->addTab(backgroundPage, UiText::text(QStringLiteral("dialog.preferences.background_group")));
 
     auto* editorPage = new QWidget(pageStack);
     auto* editorPageLayout = new QVBoxLayout(editorPage);
@@ -1350,6 +1616,7 @@ void MainWindow::PreferencesSection::onPreferences()
     pageStack->addTab(shortcutsPage, UiText::text(QStringLiteral("dialog.preferences.shortcuts_group")));
 
     auto* extensionsPage = new QWidget(pageStack);
+    extensionsPage->setProperty("miacodeSkipPreferenceWidthMeasure", true);
     auto* extensionsPageLayout = new QHBoxLayout(extensionsPage);
     extensionsPageLayout->setContentsMargins(0, 0, 0, 0);
     extensionsPageLayout->setSpacing(10);
@@ -1813,6 +2080,9 @@ void MainWindow::PreferencesSection::onPreferences()
         if (page == nullptr) {
             continue;
         }
+        if (page->property("miacodeSkipPreferenceWidthMeasure").toBool()) {
+            continue;
+        }
         if (page->layout() != nullptr) {
             page->layout()->activate();
         }
@@ -1838,7 +2108,7 @@ void MainWindow::PreferencesSection::onPreferences()
     // dead right-hand margin removed.
     int tabBarWidth = 0;
     if (auto* tabBar = pageStack->findChild<QTabBar*>()) {
-        tabBarWidth = tabBar->sizeHint().width();
+        tabBarWidth = tabBar->usesScrollButtons() ? 0 : tabBar->sizeHint().width();
     }
     const int pinnedWidth = qMax(maxPageWidth, tabBarWidth) + tabChrome;
     pageStack->setFixedWidth(pinnedWidth);

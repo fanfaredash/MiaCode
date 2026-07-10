@@ -48,6 +48,9 @@ constexpr qreal kEditorDocumentLeftInset = 14.0;
 PlainCodeEditor::PlainCodeEditor(QWidget* parent)
     : QTextEdit(parent), lineNumberArea_(new LineNumberArea(this))
 {
+    setAutoFillBackground(false);
+    viewport()->setAutoFillBackground(false);
+    lineNumberArea_->setAutoFillBackground(false);
     lineNumberArea_->setFont(font());
     connect(document(), &QTextDocument::blockCountChanged, this, &PlainCodeEditor::updateLineNumberAreaWidth);
     connect(this, &QTextEdit::textChanged, this, [this]() {
@@ -152,7 +155,14 @@ void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
 {
     QPainter painter(lineNumberArea_);
     const UiTheme::Colors& c = UiTheme::colors();
-    painter.fillRect(event->rect(), c.timelineSidebar);
+    const QRect dirtyRect = event != nullptr ? event->rect() : lineNumberArea_->rect();
+    painter.setClipRect(dirtyRect);
+    if (backgroundPainter_) {
+        backgroundPainter_(lineNumberArea_, painter);
+    }
+    QColor sidebar = c.timelineSidebar;
+    sidebar.setAlpha(c.dark ? 214 : 226);
+    painter.fillRect(dirtyRect, sidebar);
     painter.setPen(c.textSecondary);
     painter.setFont(lineNumberArea_->font());
 
@@ -163,8 +173,8 @@ void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
     }
     int blockNumber = block.isValid() ? block.blockNumber() : 0;
     const int yOffset = qMax(0, topOverlayInsetPixels_);
-    const int visibleTop = event->rect().top() - yOffset;
-    const int visibleBottom = event->rect().bottom() - yOffset;
+    const int visibleTop = dirtyRect.top() - yOffset;
+    const int visibleBottom = dirtyRect.bottom() - yOffset;
     const int lineHeight = QFontMetrics(lineNumberArea_->font()).height();
 
     while (block.isValid()) {

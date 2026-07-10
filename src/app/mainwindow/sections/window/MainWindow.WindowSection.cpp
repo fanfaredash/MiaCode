@@ -1,8 +1,11 @@
 #include "MainWindow.WindowSection.h"
 
+#include "app/ui/AppBackgroundLayer.h"
 #include "common/DebugOptions.h"
 
 #include <QApplication>
+#include <QPainter>
+#include <QPaintEvent>
 
 MainWindow::WindowSection::WindowSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state)
     : owner_(owner)
@@ -470,4 +473,14 @@ void MainWindow::changeEvent(QEvent* event)
         return;
     }
     windowSection_->changeEvent(event);
+}
+
+void MainWindow::paintEvent(QPaintEvent* event)
+{
+    QMainWindow::paintEvent(event);
+    QPainter painter(this);
+    if (event != nullptr) {
+        painter.setClipRect(event->rect());
+    }
+    miacode::ui::paintAppBackgroundForWidget(this, painter);
 }

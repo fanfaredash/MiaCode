@@ -147,6 +147,8 @@
         // (synchronous, ~hundreds-of-ms) export-page build runs.
         miacode::ui::BusySpinner* outlineBusySpinner_ = nullptr;
         QSplitter* workspaceSplitter_ = nullptr;
+        QWidget* appBackgroundHost_ = nullptr;
+        miacode::ui::AppBackgroundLayer* appBackgroundLayer_ = nullptr;
         QWidget* previewPanel_ = nullptr;
         QWidget* previewLeftColumn_ = nullptr;
         QWidget* workspaceContentWidget_ = nullptr;
@@ -545,6 +547,7 @@
         bool chartNormalizeReduceTo384Grid_ = false;
         bool chartNormalizeSplitEveryFourMeasures_ = true;
         bool workspacePanelsSwapped_ = false;
+        miacode::ui::AppBackgroundSettings appBackgroundSettings_;
         PreviewAudioSettings softwarePreviewAudioSettings_;
         PreviewAudioSettings previewAudioSettings_;
         PreviewTimingSettings softwarePreviewTimingSettings_;
@@ -947,6 +950,7 @@
     bool& chartNormalizeReduceTo384Grid_ = state_.chartNormalizeReduceTo384Grid_;
     bool& chartNormalizeSplitEveryFourMeasures_ = state_.chartNormalizeSplitEveryFourMeasures_;
     bool& workspacePanelsSwapped_ = state_.workspacePanelsSwapped_;
+    miacode::ui::AppBackgroundSettings& appBackgroundSettings_ = state_.appBackgroundSettings_;
     PreviewAudioSettings& softwarePreviewAudioSettings_ = state_.softwarePreviewAudioSettings_;
     PreviewAudioSettings& previewAudioSettings_ = state_.previewAudioSettings_;
     PreviewTimingSettings& softwarePreviewTimingSettings_ = state_.softwarePreviewTimingSettings_;
@@ -1015,6 +1019,8 @@
     QTabWidget*& bottomTabs_ = ui_.bottomTabs_;
     miacode::ui::BusySpinner*& outlineBusySpinner_ = ui_.outlineBusySpinner_;
     QSplitter*& workspaceSplitter_ = ui_.workspaceSplitter_;
+    QWidget*& appBackgroundHost_ = ui_.appBackgroundHost_;
+    miacode::ui::AppBackgroundLayer*& appBackgroundLayer_ = ui_.appBackgroundLayer_;
     QWidget*& previewPanel_ = ui_.previewPanel_;
     QWidget*& previewLeftColumn_ = ui_.previewLeftColumn_;
     QWidget*& workspaceContentWidget_ = ui_.workspaceContentWidget_;

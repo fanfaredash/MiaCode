@@ -5,6 +5,7 @@
 #include "ShortcutRegistry.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "PlainCodeEditor.Internal.h"
 
 #include <QAction>
 #include <QApplication>
@@ -31,6 +32,7 @@
 #include <QTextDocument>
 #include <QTextFrame>
 
+#include <utility>
 
 void PlainCodeEditor::setBatchTransformActions(const QList<QAction*>& actions)
 {
@@ -108,4 +110,13 @@ void PlainCodeEditor::setAutoCompletionEnabled(bool enabled)
 void PlainCodeEditor::setWholeBpmCandidate(const QString& bpm)
 {
     wholeBpmCandidate_ = bpm.trimmed();
+}
+
+void PlainCodeEditor::setBackgroundPainter(BackgroundPainter painter)
+{
+    backgroundPainter_ = std::move(painter);
+    if (lineNumberArea_ != nullptr) {
+        lineNumberArea_->update();
+    }
+    viewport()->update();
 }

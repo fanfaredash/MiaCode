@@ -22,6 +22,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "WindowParityMetrics.h"
+#include "app/ui/AppBackgroundLayer.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -220,9 +221,10 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             });
         }
     }
-    if (QMenuBar* topMenuBar = menuBar(); topMenuBar != nullptr) {
-        topMenuBar->setNativeMenuBar(false);
-    }
+    auto* topMenuBar = new miacode::ui::AppBackgroundSurfaceMenuBar(this);
+    topMenuBar->setNativeMenuBar(false);
+    setMenuBar(topMenuBar);
+    setStatusBar(new miacode::ui::AppBackgroundSurfaceStatusBar(this));
 
     // Beta20-fix — unified all top menus to the `Name(&L)` mnemonic
     // suffix style for both English and Chinese (was: English used the
@@ -248,7 +250,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     styleRoundedMenu(*previewMenu);
     styleRoundedMenu(*helpMenu);
 
-    auto* toolBar = addToolBar("Main");
+    auto* toolBar = new miacode::ui::AppBackgroundSurfaceToolBar(QStringLiteral("Main"), this);
+    addToolBar(toolBar);
     toolBar->setMovable(false);
     toolBar->setFloatable(false);
     // NB: do NOT shrink toolBar->iconSize() to font-match the gear — the gear is
@@ -1298,16 +1301,17 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         menu.exec(globalPos);
     });
     chartBracketHighlighter_ = new BracketScopeHighlighter(editor->document());
+    editor->setBackgroundPainter([](QWidget* widget, QPainter& painter) {
+        miacode::ui::paintAppBackgroundForWidget(widget, painter);
+    });
     editorWidget_ = editor;
     editorWidget_->setFont(codeFont);
-    editorWidget_->setStyleSheet(
-        "border: none;"
-        "background: #FFFFFF;"
-        "color: #1F1F1F;"
-        "selection-background-color: #B8CCE5;"
-        "selection-color: #1F1F1F;"
-    );
+    editorWidget_->setAttribute(Qt::WA_TranslucentBackground, true);
+    editorWidget_->setAutoFillBackground(false);
+    editorWidget_->setStyleSheet(UiTheme::editorTextEditStyleSheet());
     if (auto* scrollArea = qobject_cast<QAbstractScrollArea*>(editorWidget_)) {
+        scrollArea->viewport()->setAutoFillBackground(false);
+        scrollArea->viewport()->setAttribute(Qt::WA_TranslucentBackground, true);
         if (QScrollBar* vbar = scrollArea->verticalScrollBar()) {
             vbar->setStyleSheet(modernScrollBarStyle());
         }
@@ -1317,8 +1321,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     }
     logStartupStage("editor_widget_ready");
 
-    auto* central = new QWidget(this);
+    auto* central = new miacode::ui::AppBackgroundSurfaceWidget(this);
     central->setObjectName("EditorShell");
+    central->setAttribute(Qt::WA_TranslucentBackground, true);
     central->setAttribute(Qt::WA_StyledBackground, true);
     central->setStyleSheet(UiTheme::editorShellStyleSheet());
     central->setMinimumWidth(320);
@@ -1328,8 +1333,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     centralLayout->setContentsMargins(0, 0, 0, 0);
     centralLayout->setSpacing(0);
 
-    auto* editorHeader = new QFrame(central);
+    auto* editorHeader = new miacode::ui::AppBackgroundSurfaceFrame(central);
     editorHeader->setObjectName("EditorHeader");
+    editorHeader->setAttribute(Qt::WA_TranslucentBackground, true);
     editorHeader->setAttribute(Qt::WA_StyledBackground, true);
     editorHeaderWidget_ = editorHeader;
     auto* editorHeaderLayout = new QHBoxLayout(editorHeader);
@@ -1351,6 +1357,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 
     editorDifficultyControls_ = new QWidget(editorHeader);
     editorDifficultyControls_->setObjectName("EditorDifficultyControls");
+    editorDifficultyControls_->setAttribute(Qt::WA_TranslucentBackground, true);
     editorDifficultyControls_->setAttribute(Qt::WA_StyledBackground, true);
     auto* editorDifficultyLayout = new QHBoxLayout(editorDifficultyControls_);
     editorDifficultyLayout->setContentsMargins(0, 0, 0, 0);
@@ -1514,6 +1521,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     centralLayout->addWidget(editorHeader, 0);
 
     editorStack_ = new QStackedWidget(central);
+    editorStack_->setAttribute(Qt::WA_TranslucentBackground, true);
+    editorStack_->setAutoFillBackground(false);
     editorStack_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     editorStack_->setMinimumWidth(0);
     editorFindGeometryHost_ = editorStack_;
@@ -1615,11 +1624,12 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     findBar->hide();
     editorFindBar_ = findBar;
 
-    welcomePage_ = new QWidget(editorStack_);
+    welcomePage_ = new miacode::ui::AppBackgroundSurfaceWidget(editorStack_);
+    welcomePage_->setObjectName("WelcomePage");
+    welcomePage_->setAttribute(Qt::WA_TranslucentBackground, true);
+    welcomePage_->setAttribute(Qt::WA_StyledBackground, true);
     welcomePage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
-    welcomePage_->setStyleSheet(
-        "QWidget { background: #FFFFFF; color: #2A3440; }"
-    );
+    welcomePage_->setStyleSheet(UiTheme::metadataPageStyleSheet());
     auto* welcomeLayout = new QVBoxLayout(welcomePage_);
     welcomeLayout->setContentsMargins(12, 8, 12, 12);
     welcomeLayout->setSpacing(8);
@@ -1629,26 +1639,12 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     welcomeLayout->addWidget(welcomeEmptyHintLabel_, 0, Qt::AlignLeft | Qt::AlignTop);
     welcomeLayout->addStretch(1);
 
-    metadataPage_ = new QWidget(editorStack_);
+    metadataPage_ = new miacode::ui::AppBackgroundSurfaceWidget(editorStack_);
     metadataPage_->setObjectName("MetadataPage");
+    metadataPage_->setAttribute(Qt::WA_TranslucentBackground, true);
+    metadataPage_->setAttribute(Qt::WA_StyledBackground, true);
     metadataPage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
-    metadataPage_->setStyleSheet(
-        "QWidget { background: #FFFFFF; color: #2A3440; }"
-        "QWidget#MetadataPage { background: #F8FAFD; }"
-        "QFrame#MetadataCard { background: #FFFFFF; border: 1px solid #DEE4EC; border-radius: 8px; }"
-        "QLabel#SectionTitle { color: #1F2D3D; font-weight: 700; padding-left: 4px; }"
-        "QLabel#MetadataFieldLabel { color: #2A3440; background: transparent; padding-left: 8px; }"
-        "QLineEdit, QTextEdit, QPlainTextEdit {"
-        " background: #FFFFFF;"
-        " color: #1F1F1F;"
-        " border: 1px solid #CCD6E2;"
-        " border-radius: 6px;"
-        " padding: 6px 8px;"
-        " selection-background-color: #B8CCE5;"
-        " selection-color: #1F1F1F;"
-        "}"
-        "QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus { border-color: #3B82F6; }"
-    );
+    metadataPage_->setStyleSheet(UiTheme::metadataPageStyleSheet());
     auto* metadataLayout = new QVBoxLayout(metadataPage_);
     metadataLayout->setContentsMargins(12, 8, 12, 12);
     metadataLayout->setSpacing(8);
@@ -1881,11 +1877,17 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     auto* outlineDock = new QDockWidget("Fields", this);
     outlineDock->setObjectName("OutlineDock");
     outlineDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    outlineDock->setAttribute(Qt::WA_TranslucentBackground, true);
+    outlineDock->setStyleSheet(QStringLiteral("QDockWidget#OutlineDock { background: transparent; }"));
     outlineDock_ = outlineDock;
     auto* outlineTitle = new QWidget(outlineDock);
     outlineTitle->setFixedHeight(0);
     outlineDock->setTitleBarWidget(outlineTitle);
     outlineList_ = new QListWidget(outlineDock);
+    outlineList_->setAttribute(Qt::WA_TranslucentBackground, true);
+    outlineList_->setAutoFillBackground(false);
+    outlineList_->viewport()->setAttribute(Qt::WA_TranslucentBackground, true);
+    outlineList_->viewport()->setAutoFillBackground(false);
     outlineList_->setUniformItemSizes(false);
     outlineList_->setIconSize(QSize(14, 14));
     outlineList_->setSpacing(2);
@@ -1901,23 +1903,10 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // context menu → editItem); automatic edit triggers stay off so plain
     // clicks never open an editor.
     outlineList_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    outlineList_->setStyleSheet(
-        "QListWidget {"
-        " background: #FFFFFF;"
-        " color: #243447;"
-        " border: 1px solid #E1E7EF;"
-        " padding: 6px;"
-        " outline: none;"
-        "}"
-        "QListWidget::item {"
-        " min-height: 0px;"
-        " padding: 2px 8px;"
-        " border: 1px solid transparent;"
-        " border-radius: 6px;"
-        "}"
-        "QListWidget::item:selected { color: #243447; }"
-    );
-    auto* outlineDockShell = new QWidget(outlineDock);
+    outlineList_->setStyleSheet(UiTheme::outlineListStyleSheet());
+    auto* outlineDockShell = new miacode::ui::AppBackgroundSurfaceWidget(outlineDock);
+    outlineDockShell->setAttribute(Qt::WA_TranslucentBackground, true);
+    outlineDockShell->setAutoFillBackground(false);
     auto* outlineDockShellLayout = new QHBoxLayout(outlineDockShell);
     outlineDockShellLayout->setContentsMargins(0, 0, 0, 0);
     outlineDockShellLayout->setSpacing(0);
@@ -2274,43 +2263,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     windowSection_->setOutlineDockCollapsed(false);
     logStartupStage("outline_ready");
 
-    previewPanel_ = new QWidget(this);
+    previewPanel_ = new miacode::ui::AppBackgroundSurfaceWidget(this);
     previewPanel_->setObjectName("PreviewPanel");
-    previewPanel_->setStyleSheet(
-        "QWidget#PreviewPanel {"
-        " background: #F5F7FA;"
-        " border-left: 1px solid #DEE4EC;"
-        "}"
-        "QFrame#PreviewCanvasFrame {"
-        " background: #000000;"
-        " border: 1px solid #D8E0EA;"
-        "}"
-        "QFrame#PreviewStatsCard {"
-        " background: #EDF2F8;"
-        " border: 1px solid #D5E0EC;"
-        " border-radius: 10px;"
-        "}"
-        "QFrame#PreviewStats {"
-        " background: transparent;"
-        " border: none;"
-        "}"
-        "QLabel#PreviewStatChip {"
-        " color: #213246;"
-        " background: #F6F9FD;"
-        " border: 1px solid #D3DEEA;"
-        " border-radius: 9px;"
-        " padding: 2px 8px;"
-        " font-weight: 600;"
-        "}"
-        "QLabel#PreviewStatChipTotal {"
-        " color: #213246;"
-        " background: #F0F4FA;"
-        " border: 1px solid #CBD8E6;"
-        " border-radius: 9px;"
-        " padding: 2px 8px;"
-        " font-weight: 700;"
-        "}"
-    );
+    previewPanel_->setAttribute(Qt::WA_TranslucentBackground, true);
+    previewPanel_->setAttribute(Qt::WA_StyledBackground, true);
+    previewPanel_->setStyleSheet(UiTheme::previewPanelStyleSheet());
     previewPanel_->setMinimumWidth(kEmbeddedPreviewPanelMinWidth);
     previewPanel_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
@@ -2323,11 +2280,12 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         ensurePreviewStageMediaRouteInitialized();
     }
     logStartupStage("preview_skin_async_dispatched");
-    previewCanvasFrame_ = new QFrame(previewPanel_);
+    previewCanvasFrame_ = new miacode::ui::AppBackgroundSurfaceFrame(previewPanel_);
     previewCanvasFrame_->setObjectName("PreviewCanvasFrame");
     previewCanvasFrame_->setMinimumSize(QSize(1, 1));
     previewCanvasFrame_->setFocusPolicy(Qt::StrongFocus);
     previewCanvasContainer_ = new QWidget(previewCanvasFrame_);
+    previewCanvasContainer_->setAutoFillBackground(false);
     previewCanvasContainer_->setMinimumSize(QSize(1, 1));
     previewCanvasContainer_->setFocusPolicy(Qt::StrongFocus);
     previewPanel_->setFocusPolicy(Qt::StrongFocus);
@@ -2342,7 +2300,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     previewSpeedButton_ = nullptr;
     previewFullscreenButton_ = nullptr;
 
-    auto* previewStatsCard = new QFrame(previewPanel_);
+    auto* previewStatsCard = new miacode::ui::AppBackgroundSurfaceFrame(previewPanel_);
     previewStatsCard_ = previewStatsCard;
     previewStatsCard->setObjectName("PreviewStatsCard");
     previewStatsCard->setMinimumWidth(kPreviewControlStatsCardMinWidth);
@@ -2351,7 +2309,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     previewStatsCardLayout->setContentsMargins(8, 8, 8, 8);
     previewStatsCardLayout->setSpacing(0);
 
-    auto* previewStats = new QFrame(previewStatsCard);
+    auto* previewStats = new miacode::ui::AppBackgroundSurfaceFrame(previewStatsCard);
     previewStats->setObjectName("PreviewStats");
     auto* previewStatsLayout = new QGridLayout(previewStats);
     previewStatsGridLayout_ = previewStatsLayout;
@@ -2503,7 +2461,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     logStartupStage("preview_runtime_connections_ready");
     logStartupStage("preview_runtime_ready");
 
-    bottomTabs_ = new QTabWidget(central);
+    bottomTabs_ = new miacode::ui::AppBackgroundSurfaceTabWidget(central);
+    bottomTabs_->setAttribute(Qt::WA_TranslucentBackground, true);
+    bottomTabs_->setAutoFillBackground(false);
     bottomTabs_->installEventFilter(this);
     if (QTabBar* bottomTabBar = bottomTabs_->tabBar(); bottomTabBar != nullptr) {
         bottomTabBar->installEventFilter(this);
@@ -2531,6 +2491,10 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     });
     if (!timelineWidgetlessQuickRoute_) {
         timelineView_ = new TimelineView(bottomTabs_);
+        timelineView_->setAttribute(Qt::WA_TranslucentBackground, true);
+        timelineView_->setAutoFillBackground(false);
+        timelineView_->viewport()->setAutoFillBackground(false);
+        timelineView_->viewport()->setAttribute(Qt::WA_TranslucentBackground, true);
         timelineQuickStateBridge_->attachReferenceView(timelineView_);
         connect(timelineView_, &TimelineView::headerNavigateRequested, this, [this](double second) {
             timelineSection_->onTimelineHeaderNavigateRequested(second);
@@ -2746,7 +2710,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     windowSection_->updateBottomTabsDeviceHeight();
     logStartupStage("timeline_and_tabs_ready");
 
-    previewLeftColumn_ = new QWidget(this);
+    previewLeftColumn_ = new miacode::ui::AppBackgroundSurfaceWidget(this);
+    previewLeftColumn_->setAttribute(Qt::WA_TranslucentBackground, true);
+    previewLeftColumn_->setAutoFillBackground(false);
     // Content-column floor = export-page design-width budget (spec). Mirrors the
     // QuickShell content WindowContainer's Layout.minimumWidth.
     previewLeftColumn_->setMinimumWidth(miacode::window_parity::kWorkspaceContentMinWidth);
@@ -2759,6 +2725,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     leftColumnLayout->addWidget(bottomTabs_, 0);
 
     workspaceSplitter_ = new QSplitter(Qt::Horizontal, this);
+    workspaceSplitter_->setAttribute(Qt::WA_TranslucentBackground, true);
+    workspaceSplitter_->setAutoFillBackground(false);
+    workspaceSplitter_->setStyleSheet(QStringLiteral("QSplitter { background: transparent; }"));
     workspaceSplitter_->setChildrenCollapsible(false);
     workspaceSplitter_->setHandleWidth(0);
     workspaceSplitter_->addWidget(previewLeftColumn_);
@@ -2769,7 +2738,17 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         handle->setEnabled(false);
         handle->hide();
     }
-    setCentralWidget(workspaceSplitter_);
+    appBackgroundLayer_ = new miacode::ui::AppBackgroundLayer(this);
+    appBackgroundHost_ = appBackgroundLayer_;
+    appBackgroundHost_->setObjectName(QStringLiteral("AppBackgroundHost"));
+    appBackgroundHost_->setAutoFillBackground(false);
+    auto* appBackgroundLayout = new QGridLayout(appBackgroundHost_);
+    appBackgroundLayout->setContentsMargins(0, 0, 0, 0);
+    appBackgroundLayout->setSpacing(0);
+    workspaceSplitter_->setParent(appBackgroundHost_);
+    appBackgroundLayout->addWidget(workspaceSplitter_, 0, 0);
+    applyAppBackgroundSettings(appBackgroundSettings_, false);
+    setCentralWidget(appBackgroundHost_);
     syncEditorHeaderMinimumWidth();
     applyWorkspacePanelArrangement();
     updatePreviewWorkspaceLayout();
@@ -2781,4 +2760,27 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 miacode::latency::LatencySandboxController* MainWindow::latencySandboxController() const
 {
     return latencySandboxController_.get();
+}
+
+void MainWindow::applyAppBackgroundSettings(
+    const miacode::ui::AppBackgroundSettings& settings,
+    bool persistPreference)
+{
+    appBackgroundSettings_ = miacode::ui::normalizedAppBackgroundSettings(settings);
+    if (appBackgroundLayer_ != nullptr) {
+        appBackgroundLayer_->setSettings(appBackgroundSettings_);
+    }
+    update();
+    if (persistPreference) {
+        QJsonObject root = UiText::loadPreferencesObject();
+        QJsonObject ui = root.value(QStringLiteral("ui")).toObject();
+        ui.insert(
+            QStringLiteral("app_background"),
+            miacode::ui::appBackgroundSettingsToJson(appBackgroundSettings_));
+        root.insert(QStringLiteral("ui"), ui);
+        UiText::savePreferencesObject(root);
+        if (statusBar() != nullptr) {
+            statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")), 3000);
+        }
+    }
 }

@@ -33,6 +33,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Window frame, menus, toolbar, layout shell:
   - File: `src/app/mainwindow/sections/frame/MainWindow.BootstrapAndMenus.cpp`
   - Owns: actions, menu wiring, splitter/dock/card composition, preview canvas bootstrap
+- Application-wide workspace background:
+  - Files: `src/app/ui/AppBackgroundSettings.*`, `src/app/ui/AppBackgroundLayer.*`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp`, `src/app/mainwindow/sections/preferences/MainWindow.PreferencesDialog.cpp`, `src/app/ui/UiTheme.cpp`
+  - Owns: app-scoped local image background settings, the central workspace host that paints the image behind the main workspace splitter, Preferences > Appearance / Background controls, and the translucent main-workspace scrims that let the background remain visible without affecting chart PV, preview media, or video export output
 
 ## 3. Document Model, Fields, And File Flow
 

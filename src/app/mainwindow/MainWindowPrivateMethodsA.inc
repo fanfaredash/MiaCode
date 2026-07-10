@@ -62,6 +62,7 @@
         qint64 workerElapsedMs
     );
     void finishFrameBootstrap(QToolBar* toolBar, const std::function<void(const QString&)>& logStartupStage);
+    void applyAppBackgroundSettings(const miacode::ui::AppBackgroundSettings& settings, bool persistPreference);
     void setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* transformMenu, QMenu* previewMenu, QMenu* helpMenu);
     void setPreviewFixedTimerHighResolutionActive(bool active);
     void hidePreviewPlaybackRateToast();
