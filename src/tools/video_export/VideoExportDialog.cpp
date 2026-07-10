@@ -3,6 +3,7 @@
 #include "BusySpinner.h"
 #include "DialogLocalization.h"
 #include "EditableValueLabel.h"
+#include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/DebugLog.h"
@@ -111,21 +112,6 @@ constexpr int kFpsOptions[] = {60, 120};
 // tools/video_export/HudFontSettings.cpp on 2026-06-10, shared with the main
 // window's 视频设置 dialog.)
 
-QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
-{
-    switch (mode) {
-    case PreviewBackgroundScaleMode::FitContain:
-        return UiText::text(QStringLiteral("dialog.video_export.option.scale.fit"));
-    case PreviewBackgroundScaleMode::SquareFitContain:
-        return UiText::text(QStringLiteral("dialog.video_export.option.scale.square_fit"));
-    case PreviewBackgroundScaleMode::InnerCircleFitOuterFill:
-        return UiText::text(QStringLiteral("dialog.video_export.option.scale.inner_circle_fit_outer_fill"));
-    case PreviewBackgroundScaleMode::FillCrop:
-    default:
-        return UiText::text(QStringLiteral("dialog.video_export.option.scale.fill"));
-    }
-}
-
 double snappedFlowSpeed(double flowSpeed)
 {
     const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
@@ -149,70 +135,6 @@ QString flowSpeedValueLabel(double flowSpeed)
 int secondToSliderValue(double second)
 {
     return qMax(0, qRound(second * kPreviewSliderScale));
-}
-
-QToolButton* createDialogMenuButton(QWidget* parent, const QString& text, int minimumWidth = 0)
-{
-    auto* button = new QToolButton(parent);
-    button->setPopupMode(QToolButton::InstantPopup);
-    button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    button->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
-    button->setText(text);
-    if (minimumWidth > 0) {
-        button->setMinimumWidth(minimumWidth);
-    }
-    // The rounded bottom border gets clipped because QStyleSheetStyle
-    // under-reports the height by a px or two and the layout hands the button
-    // exactly that. A min-height floor is ignored here (vertical policy is
-    // Fixed, which pins height to sizeHint), so force the height explicitly:
-    // ensurePolished() first so sizeHint() reflects the styled metrics, then
-    // setFixedHeight() a few px taller so the full border renders.
-    button->ensurePolished();
-    button->setFixedHeight(qMax(button->sizeHint().height(), 30) + 4);
-    return button;
-}
-
-QWidgetAction* addDialogMenuChoice(
-    QMenu* menu,
-    const QString& text,
-    const std::function<void()>& onTriggered
-)
-{
-    auto* action = new QWidgetAction(menu);
-    auto* button = new QToolButton(menu);
-    button->setAutoRaise(true);
-    button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    button->setText(text);
-    button->setCursor(Qt::PointingHandCursor);
-    const auto& c = UiTheme::colors();
-    button->setStyleSheet(
-        QStringLiteral(
-            "QToolButton {"
-            " color: %1;"
-            " background: transparent;"
-            " border: none;"
-            " padding: 6px 20px 6px 12px;"
-            " text-align: left;"
-            "}"
-            "QToolButton:hover {"
-            " background: %2;"
-            " border-radius: 6px;"
-            "}"
-        )
-            .arg(c.textPrimary.name(QColor::HexRgb))
-            .arg(c.menuHoverBg.name(QColor::HexRgb))
-    );
-    QObject::connect(button, &QToolButton::clicked, menu, [action, menu, onTriggered]() {
-        if (onTriggered) {
-            onTriggered();
-        }
-        action->trigger();
-        menu->close();
-    });
-    action->setDefaultWidget(button);
-    menu->addAction(action);
-    return action;
 }
 
 QPoint desiredDialogTopLeft(QWidget* owner, const QSize& dialogSize)
@@ -765,44 +687,38 @@ VideoExportDialog::VideoExportDialog(
     }
     currentPresetIndex = currentPresetIndex >= 0 ? currentPresetIndex : 0;
     selectedResolution_ = QSize(kResolutionPresets[currentPresetIndex].width, kResolutionPresets[currentPresetIndex].height);
-    resolutionButton_ = createDialogMenuButton(
-        optionsGrid,
-        QString::fromLatin1(kResolutionPresets[currentPresetIndex].label)
-    );
-    resolutionMenu_ = new QMenu(resolutionButton_);
-    UiTheme::styleRoundedMenu(*resolutionMenu_);
+    resolutionCombo_ = miacode::ui::createDialogComboBox(optionsGrid, 12);
     for (const ResolutionPreset& preset : kResolutionPresets) {
-        const QSize size(preset.width, preset.height);
-        const QString label = QString::fromLatin1(preset.label);
-        addDialogMenuChoice(resolutionMenu_, label, [this, size, label]() {
-            selectedResolution_ = size;
-            if (resolutionButton_ != nullptr) {
-                resolutionButton_->setText(label);
-            }
-            applySelectedAspectRatioToPreview(true);
-            persistExportOnlySettings();
-        });
+        resolutionCombo_->addItem(QString::fromLatin1(preset.label), QSize(preset.width, preset.height));
     }
-    resolutionButton_->setMenu(resolutionMenu_);
-    addOptionField(0, 0, UiText::text(QStringLiteral("dialog.video_export.resolution")), resolutionButton_);
+    resolutionCombo_->setCurrentIndex(currentPresetIndex);
+    miacode::ui::applyDialogComboBoxStyle(resolutionCombo_, 12);
+    connect(resolutionCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedResolution_ = resolutionCombo_->itemData(index).toSize();
+        applySelectedAspectRatioToPreview(true);
+        persistExportOnlySettings();
+    });
+    addOptionField(0, 0, UiText::text(QStringLiteral("dialog.video_export.resolution")), resolutionCombo_);
 
     // FPS dropdown (row 0, col 1).
     selectedFps_ = baseTask_.fps >= 90 ? 120 : 60;
-    fpsButton_ = createDialogMenuButton(optionsGrid, QStringLiteral("%1 FPS").arg(selectedFps_));
-    fpsMenu_ = new QMenu(fpsButton_);
-    UiTheme::styleRoundedMenu(*fpsMenu_);
+    fpsCombo_ = miacode::ui::createDialogComboBox(optionsGrid, 12);
     for (int fps : kFpsOptions) {
-        const QString label = QStringLiteral("%1 FPS").arg(fps);
-        addDialogMenuChoice(fpsMenu_, label, [this, fps, label]() {
-            selectedFps_ = fps;
-            if (fpsButton_ != nullptr) {
-                fpsButton_->setText(label);
-            }
-            persistExportOnlySettings();
-        });
+        fpsCombo_->addItem(QStringLiteral("%1 FPS").arg(fps), fps);
     }
-    fpsButton_->setMenu(fpsMenu_);
-    addOptionField(0, 1, UiText::text(QStringLiteral("dialog.video_export.fps")), fpsButton_);
+    fpsCombo_->setCurrentIndex(qMax(0, fpsCombo_->findData(selectedFps_)));
+    miacode::ui::applyDialogComboBoxStyle(fpsCombo_, 12);
+    connect(fpsCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedFps_ = fpsCombo_->itemData(index).toInt();
+        persistExportOnlySettings();
+    });
+    addOptionField(0, 1, UiText::text(QStringLiteral("dialog.video_export.fps")), fpsCombo_);
 
     // Audio quality dropdown (row 1, col 0) — picks AAC bitrate forwarded
     // to ffmpeg as `-b:a <kbps>k`. Default 192 is a step above the previous
@@ -812,60 +728,51 @@ VideoExportDialog::VideoExportDialog(
     const auto formatAudioBitrateLabel = [](int kbps) -> QString {
         return QStringLiteral("%1 kbps").arg(kbps);
     };
-    audioBitrateButton_ = createDialogMenuButton(optionsGrid, formatAudioBitrateLabel(selectedAudioBitrateKbps_));
-    audioBitrateMenu_ = new QMenu(audioBitrateButton_);
-    UiTheme::styleRoundedMenu(*audioBitrateMenu_);
+    audioBitrateCombo_ = miacode::ui::createDialogComboBox(optionsGrid, 12);
     for (int kbps : kAudioBitrateOptionsKbps) {
-        const QString label = formatAudioBitrateLabel(kbps);
-        addDialogMenuChoice(audioBitrateMenu_, label, [this, kbps, label]() {
-            selectedAudioBitrateKbps_ = kbps;
-            if (audioBitrateButton_ != nullptr) {
-                audioBitrateButton_->setText(label);
-            }
-            persistExportOnlySettings();
-        });
+        audioBitrateCombo_->addItem(formatAudioBitrateLabel(kbps), kbps);
     }
-    audioBitrateButton_->setMenu(audioBitrateMenu_);
+    audioBitrateCombo_->setCurrentIndex(
+        qMax(0, audioBitrateCombo_->findData(selectedAudioBitrateKbps_)));
+    miacode::ui::applyDialogComboBoxStyle(audioBitrateCombo_, 12);
+    connect(audioBitrateCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedAudioBitrateKbps_ = audioBitrateCombo_->itemData(index).toInt();
+        persistExportOnlySettings();
+    });
     addOptionField(
         1,
         0,
         UiText::text(QStringLiteral("dialog.video_export.audio_bitrate")),
-        audioBitrateButton_
+        audioBitrateCombo_
     );
 
     // Export Settings dropdown (row 1, col 1).
     selectedPreset_ = baseTask_.preset;
-    presetButton_ = createDialogMenuButton(optionsGrid, exportDialogPresetLabel(selectedPreset_));
-    presetMenu_ = new QMenu(presetButton_);
-    UiTheme::styleRoundedMenu(*presetMenu_);
-    addDialogMenuChoice(
-        presetMenu_,
+    presetCombo_ = miacode::ui::createDialogComboBox(optionsGrid, 12);
+    presetCombo_->addItem(
         UiText::text(QStringLiteral("dialog.video_export.preset.fast")),
-        [this]() {
-            selectedPreset_ = VideoExportPreset::Fast;
-            if (presetButton_ != nullptr) {
-                presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
-            }
-            persistExportOnlySettings();
-        }
-    );
-    addDialogMenuChoice(
-        presetMenu_,
+        static_cast<int>(VideoExportPreset::Fast));
+    presetCombo_->addItem(
         UiText::text(QStringLiteral("dialog.video_export.preset.high_quality")),
-        [this]() {
-            selectedPreset_ = VideoExportPreset::HighQuality;
-            if (presetButton_ != nullptr) {
-                presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
-            }
-            persistExportOnlySettings();
+        static_cast<int>(VideoExportPreset::HighQuality));
+    presetCombo_->setCurrentIndex(
+        qMax(0, presetCombo_->findData(static_cast<int>(selectedPreset_))));
+    miacode::ui::applyDialogComboBoxStyle(presetCombo_, 12);
+    connect(presetCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0) {
+            return;
         }
-    );
-    presetButton_->setMenu(presetMenu_);
+        selectedPreset_ = static_cast<VideoExportPreset>(presetCombo_->itemData(index).toInt());
+        persistExportOnlySettings();
+    });
     addOptionField(
         1,
         1,
         UiText::text(QStringLiteral("dialog.video_export.preset")),
-        presetButton_
+        presetCombo_
     );
 
     outputPageLayout->addWidget(optionsGrid, 0);
@@ -1327,49 +1234,32 @@ VideoExportDialog::VideoExportDialog(
     const QString scaleSquareFitLabel = UiText::text(QStringLiteral("dialog.video_export.option.scale.square_fit"));
     const QString scaleInnerCircleFitOuterFillLabel = UiText::text(QStringLiteral("dialog.video_export.option.scale.inner_circle_fit_outer_fill"));
     selectedBackgroundScaleMode_ = baseTask_.backgroundScaleMode;
-    backgroundScaleModeButton_ = createDialogMenuButton(
-        optionsContent_,
-        exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_)
-    );
-    backgroundScaleModeMenu_ = new QMenu(backgroundScaleModeButton_);
-    UiTheme::styleRoundedMenu(*backgroundScaleModeMenu_);
-    addDialogMenuChoice(backgroundScaleModeMenu_, scaleFillLabel, [this]() {
-        selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
-        if (backgroundScaleModeButton_ != nullptr) {
-            backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
-        }
-        if (previewScaleModeCallback_) {
-            previewScaleModeCallback_(selectedBackgroundScaleMode_);
-        }
-    });
-    addDialogMenuChoice(backgroundScaleModeMenu_, scaleFitLabel, [this]() {
-        selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FitContain;
-        if (backgroundScaleModeButton_ != nullptr) {
-            backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
-        }
-        if (previewScaleModeCallback_) {
-            previewScaleModeCallback_(selectedBackgroundScaleMode_);
-        }
-    });
-    addDialogMenuChoice(backgroundScaleModeMenu_, scaleSquareFitLabel, [this]() {
-        selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::SquareFitContain;
-        if (backgroundScaleModeButton_ != nullptr) {
-            backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
-        }
-        if (previewScaleModeCallback_) {
-            previewScaleModeCallback_(selectedBackgroundScaleMode_);
-        }
-    });
-    addDialogMenuChoice(backgroundScaleModeMenu_, scaleInnerCircleFitOuterFillLabel, [this]() {
-        selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::InnerCircleFitOuterFill;
-        if (backgroundScaleModeButton_ != nullptr) {
-            backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
-        }
-        if (previewScaleModeCallback_) {
-            previewScaleModeCallback_(selectedBackgroundScaleMode_);
-        }
-    });
-    backgroundScaleModeButton_->setMenu(backgroundScaleModeMenu_);
+    backgroundScaleModeCombo_ = miacode::ui::createDialogComboBox(optionsContent_, 12);
+    backgroundScaleModeCombo_->addItem(
+        scaleFillLabel, static_cast<int>(PreviewBackgroundScaleMode::FillCrop));
+    backgroundScaleModeCombo_->addItem(
+        scaleFitLabel, static_cast<int>(PreviewBackgroundScaleMode::FitContain));
+    backgroundScaleModeCombo_->addItem(
+        scaleSquareFitLabel, static_cast<int>(PreviewBackgroundScaleMode::SquareFitContain));
+    backgroundScaleModeCombo_->addItem(
+        scaleInnerCircleFitOuterFillLabel,
+        static_cast<int>(PreviewBackgroundScaleMode::InnerCircleFitOuterFill));
+    backgroundScaleModeCombo_->setCurrentIndex(qMax(
+        0, backgroundScaleModeCombo_->findData(static_cast<int>(selectedBackgroundScaleMode_))));
+    miacode::ui::applyDialogComboBoxStyle(backgroundScaleModeCombo_, 12);
+    connect(backgroundScaleModeCombo_,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            this,
+            [this](int index) {
+                if (index < 0) {
+                    return;
+                }
+                selectedBackgroundScaleMode_ = static_cast<PreviewBackgroundScaleMode>(
+                    backgroundScaleModeCombo_->itemData(index).toInt());
+                if (previewScaleModeCallback_) {
+                    previewScaleModeCallback_(selectedBackgroundScaleMode_);
+                }
+            });
     auto* backgroundScaleModeRow = new QWidget(optionsContent_);
     auto* backgroundScaleModeLayout = new QHBoxLayout(backgroundScaleModeRow);
     backgroundScaleModeLayout->setContentsMargins(0, 0, 0, 0);
@@ -1379,7 +1269,7 @@ VideoExportDialog::VideoExportDialog(
         backgroundScaleModeRow
     );
     backgroundScaleModeLayout->addWidget(backgroundScaleModeLabel, 0);
-    backgroundScaleModeLayout->addWidget(backgroundScaleModeButton_, 1);
+    backgroundScaleModeLayout->addWidget(backgroundScaleModeCombo_, 1);
     optionsLayout->addWidget(backgroundScaleModeRow, 3, 0, 1, 2);
     visualsPageLayout->addWidget(optionsContent_, 0);
 
@@ -1466,12 +1356,13 @@ VideoExportDialog::VideoExportDialog(
     introBgForm->setSpacing(8);
     introBgForm->setLabelAlignment(Qt::AlignLeft);
     introBgForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-    introBackgroundCombo_ = new QComboBox(introBgGroup);
+    introBackgroundCombo_ =
+        miacode::ui::createDialogComboBox(introBgGroup, 12, Qt::AlignLeft | Qt::AlignVCenter);
     introBackgroundCombo_->addItem(
         UiText::text(QStringLiteral("cover.chart_jacket")), QStringLiteral("jacket"));
     introBackgroundCombo_->addItem(
         UiText::text(QStringLiteral("cover.custom_image")), QStringLiteral("custom"));
-    UiTheme::styleDialogComboBox(introBackgroundCombo_, 12);
+    miacode::ui::applyDialogComboBoxStyle(introBackgroundCombo_, 12);
     introBgForm->addRow(UiText::text(QStringLiteral("cover.background")), introBackgroundCombo_);
     auto* introBgPathRow = new QWidget(introBgGroup);
     auto* introBgPathLayout = new QHBoxLayout(introBgPathRow);
@@ -1506,10 +1397,11 @@ VideoExportDialog::VideoExportDialog(
     introCardForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     // DX / SD chart type. "Standard" is the QML-side mode value: the card shows
     // the スタンダード plate top-right and mirrors the tab shoulder under it.
-    introCardModeCombo_ = new QComboBox(introCardGroup);
+    introCardModeCombo_ =
+        miacode::ui::createDialogComboBox(introCardGroup, 12, Qt::AlignLeft | Qt::AlignVCenter);
     introCardModeCombo_->addItem(QStringLiteral("DX"), QStringLiteral("DX"));
     introCardModeCombo_->addItem(QStringLiteral("SD"), QStringLiteral("Standard"));
-    UiTheme::styleDialogComboBox(introCardModeCombo_, 12);
+    miacode::ui::applyDialogComboBoxStyle(introCardModeCombo_, 12);
     {
         const int modeIdx = introCardModeCombo_->findData(baseTask_.intro.mode);
         if (modeIdx >= 0) {
@@ -1758,8 +1650,11 @@ void VideoExportDialog::refreshSharedSettingsFromTask(const VideoExportTask& tas
     }
 
     selectedBackgroundScaleMode_ = task.backgroundScaleMode;
-    if (backgroundScaleModeButton_ != nullptr) {
-        backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
+    if (backgroundScaleModeCombo_ != nullptr) {
+        const QSignalBlocker blocker(backgroundScaleModeCombo_);
+        backgroundScaleModeCombo_->setCurrentIndex(qMax(
+            0,
+            backgroundScaleModeCombo_->findData(static_cast<int>(selectedBackgroundScaleMode_))));
     }
 
     selectedTapFlowSpeed_ = snappedFlowSpeed(task.tapFlowSpeed);

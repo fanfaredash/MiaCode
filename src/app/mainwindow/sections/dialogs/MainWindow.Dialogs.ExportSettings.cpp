@@ -6,6 +6,7 @@
 #include "QtPreviewSfxRuntime.h"
 #include "DialogLocalization.h"
 #include "EditableValueLabel.h"
+#include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/ChartAssetPaths.h"
@@ -47,60 +48,6 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     QWidget** gameplayOut,
     std::function<void()>* refreshOut)
 {
-    // Local clones of the menu-button / menu-choice helpers used by the
-    // standalone settings dialog. Kept independent so this builder doesn't
-    // depend on that function's internals (the two dialogs are wired
-    // separately, per design).
-    const auto createDialogMenuButton = [](QWidget* owner, const QString& text) {
-        auto* button = new QToolButton(owner);
-        button->setPopupMode(QToolButton::InstantPopup);
-        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        button->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
-        button->setText(text);
-        // Vertical policy is Fixed (pins height to sizeHint and ignores a
-        // min-height floor), so force the height a few px taller than the
-        // styled sizeHint — otherwise the rounded bottom border is clipped.
-        button->ensurePolished();
-        button->setFixedHeight(qMax(button->sizeHint().height(), 30) + 4);
-        return button;
-    };
-    const auto addDialogMenuChoice = [](QMenu* menu, const QString& text, const std::function<void()>& onTriggered) {
-        auto* action = new QWidgetAction(menu);
-        auto* button = new QToolButton(menu);
-        button->setAutoRaise(true);
-        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-        button->setText(text);
-        button->setCursor(Qt::PointingHandCursor);
-        const auto& c = UiTheme::colors();
-        button->setStyleSheet(
-            QStringLiteral(
-                "QToolButton {"
-                " color: %1;"
-                " background: transparent;"
-                " border: none;"
-                " padding: 6px 20px 6px 12px;"
-                " text-align: left;"
-                "}"
-                "QToolButton:hover {"
-                " background: %2;"
-                " border-radius: 6px;"
-                "}"
-            )
-                .arg(c.textPrimary.name(QColor::HexRgb))
-                .arg(c.menuHoverBg.name(QColor::HexRgb))
-        );
-        QObject::connect(button, &QToolButton::clicked, menu, [action, menu, onTriggered]() {
-            if (onTriggered) {
-                onTriggered();
-            }
-            action->trigger();
-            menu->close();
-        });
-        action->setDefaultWidget(button);
-        menu->addAction(action);
-    };
-
     // ---- Gameplay page: skin / judge line / judge effect / slide stack /
     //      center display. The VideoExportDialog owns the Tap/Touch flow-speed
     //      row above this injected MainWindow-wired grid. ----
@@ -118,7 +65,13 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
         fieldLayout->setSpacing(6);
         auto* label = new QLabel(labelText, field);
         fieldLayout->addWidget(label, 0);
-        control->setMinimumHeight(qMax(control->minimumHeight(), control->sizeHint().height() + 4));
+        // Skip the +4 bump for controls that already fix their height (combos /
+        // combo-like dropdown button); otherwise their taller QToolButton
+        // sizeHint+4 pushes minimumHeight above the fixed max and the button
+        // ends up taller than the sibling combo in the same row.
+        if (control->minimumHeight() != control->maximumHeight()) {
+            control->setMinimumHeight(qMax(control->minimumHeight(), control->sizeHint().height() + 4));
+        }
         fieldLayout->addWidget(control, 0);
         gameplayLayout->addWidget(field, row, column);
     };
@@ -143,11 +96,9 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
         }
         return parts.isEmpty() ? disabledLabel : parts.join(QStringLiteral(", "));
     };
-    auto* judgeEffectButton = createDialogMenuButton(gameplay, judgeEffectButtonLabel());
-    judgeEffectButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* judgeEffectMenu = new QMenu(judgeEffectButton);
-    UiTheme::styleRoundedMenu(*judgeEffectMenu);
-    UiTheme::bindDialogMenuButtonPopupState(judgeEffectButton, judgeEffectMenu);
+    QMenu* judgeEffectMenu = nullptr;
+    auto* judgeEffectButton = miacode::ui::createDialogDropdownButton(
+        gameplay, judgeEffectButtonLabel(), &judgeEffectMenu);
     const auto judgeEffectChoiceText = [](const QString& label, bool /*enabled*/) {
         return label;
     };
@@ -158,58 +109,61 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     };
     QVector<JudgeEffectRefreshEntry> judgeEffectRefreshEntries;
     const auto addJudgeEffectChoice = [&](const QString& label, bool MuriRenderOptions::*memberPtr) {
-        auto* action = new QWidgetAction(judgeEffectMenu);
         const bool initialChecked = owner_.muriRenderOptions_.*memberPtr;
-        auto* checkbox = new QCheckBox(judgeEffectChoiceText(label, initialChecked), judgeEffectMenu);
-        checkbox->setChecked(initialChecked);
-        judgeEffectRefreshEntries.push_back({checkbox, label, memberPtr});
-        checkbox->setCursor(Qt::PointingHandCursor);
-        checkbox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        checkbox->setStyleSheet(UiTheme::dialogMenuCheckBoxStyleSheet());
-        QObject::connect(checkbox, &QCheckBox::toggled, parent,
-            [this, judgeEffectButton, judgeEffectButtonLabel, judgeEffectChoiceText, checkbox, label, memberPtr](bool checked) {
+        auto* checkbox = miacode::ui::addDialogMenuCheckChoice(
+            judgeEffectMenu,
+            judgeEffectChoiceText(label, initialChecked),
+            initialChecked,
+            parent,
+            [this, judgeEffectButton, judgeEffectButtonLabel, judgeEffectChoiceText, label, memberPtr](
+                QCheckBox* checkbox,
+                bool checked) {
                 if (owner_.muriRenderOptions_.*memberPtr == checked) {
                     return;
                 }
                 owner_.muriRenderOptions_.*memberPtr = checked;
-                checkbox->setText(judgeEffectChoiceText(label, checked));
+                if (checkbox != nullptr) {
+                    checkbox->setText(judgeEffectChoiceText(label, checked));
+                }
                 judgeEffectButton->setText(judgeEffectButtonLabel());
                 owner_.applyMuriRenderOptions();
                 owner_.savePortableState();
-            });
-        action->setDefaultWidget(checkbox);
-        judgeEffectMenu->addAction(action);
+            }
+        );
+        if (checkbox != nullptr) {
+            judgeEffectRefreshEntries.push_back({checkbox, label, memberPtr});
+        }
     };
     addJudgeEffectChoice(slideJudgeChoiceLabel, &MuriRenderOptions::showChartReviewSlideJudgeOverlay);
     addJudgeEffectChoice(tapJudgeChoiceLabel, &MuriRenderOptions::showChartReviewTapJudgeOverlay);
     addJudgeEffectChoice(touchJudgeChoiceLabel, &MuriRenderOptions::showChartReviewTouchJudgeOverlay);
-    judgeEffectButton->setMenu(judgeEffectMenu);
 
     // Slide stack order.
     const QString slideStackOrderDxLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.slide_stack_order.dx_style"));
     const QString slideStackOrderFinaleLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.slide_stack_order.finale_style"));
-    const auto slideStackOrderLabelForValue = [=](bool earlierOnTop) {
-        return earlierOnTop ? slideStackOrderDxLabel : slideStackOrderFinaleLabel;
-    };
-    auto* slideStackOrderButton = createDialogMenuButton(gameplay, slideStackOrderLabelForValue(owner_.previewSlideEarlierSecondAndTextOnTop_));
-    slideStackOrderButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* slideStackOrderMenu = new QMenu(slideStackOrderButton);
-    UiTheme::styleRoundedMenu(*slideStackOrderMenu);
-    UiTheme::bindDialogMenuButtonPopupState(slideStackOrderButton, slideStackOrderMenu);
-    const auto setSlideStackOrder = [this, slideStackOrderButton, slideStackOrderLabelForValue](bool earlierOnTop) {
-        slideStackOrderButton->setText(slideStackOrderLabelForValue(earlierOnTop));
-        if (owner_.previewSlideEarlierSecondAndTextOnTop_ == earlierOnTop) {
-            return;
-        }
-        owner_.previewSlideEarlierSecondAndTextOnTop_ = earlierOnTop;
-        if (owner_.previewCanvas_ != nullptr) {
-            owner_.previewCanvas_->setSlideEarlierSecondAndTextOnTop(earlierOnTop);
-        }
-        owner_.savePortableState();
-    };
-    addDialogMenuChoice(slideStackOrderMenu, slideStackOrderDxLabel, [setSlideStackOrder]() { setSlideStackOrder(true); });
-    addDialogMenuChoice(slideStackOrderMenu, slideStackOrderFinaleLabel, [setSlideStackOrder]() { setSlideStackOrder(false); });
-    slideStackOrderButton->setMenu(slideStackOrderMenu);
+    auto* slideStackOrderCombo = miacode::ui::createDialogComboBox(gameplay, 12);
+    slideStackOrderCombo->addItem(slideStackOrderDxLabel, true);
+    slideStackOrderCombo->addItem(slideStackOrderFinaleLabel, false);
+    slideStackOrderCombo->setCurrentIndex(owner_.previewSlideEarlierSecondAndTextOnTop_ ? 0 : 1);
+    miacode::ui::applyDialogComboBoxStyle(slideStackOrderCombo, 12);
+    judgeEffectButton->setFixedHeight(slideStackOrderCombo->minimumHeight());
+    connect(slideStackOrderCombo,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            gameplay,
+            [this, slideStackOrderCombo](int index) {
+                if (index < 0) {
+                    return;
+                }
+                const bool earlierOnTop = slideStackOrderCombo->itemData(index).toBool();
+                if (owner_.previewSlideEarlierSecondAndTextOnTop_ == earlierOnTop) {
+                    return;
+                }
+                owner_.previewSlideEarlierSecondAndTextOnTop_ = earlierOnTop;
+                if (owner_.previewCanvas_ != nullptr) {
+                    owner_.previewCanvas_->setSlideEarlierSecondAndTextOnTop(earlierOnTop);
+                }
+                owner_.savePortableState();
+            });
 
     // Center display.
     const auto centerDisplayLabelForMode = [](miacode::preview_gameplay::CenterDisplayMode mode) -> QString {
@@ -233,23 +187,8 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
         }
         return UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display.off"));
     };
-    auto* centerDisplayButton = createDialogMenuButton(gameplay, centerDisplayLabelForMode(owner_.previewCenterDisplayMode_));
-    centerDisplayButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* centerDisplayMenu = new QMenu(centerDisplayButton);
-    UiTheme::styleRoundedMenu(*centerDisplayMenu);
-    UiTheme::bindDialogMenuButtonPopupState(centerDisplayButton, centerDisplayMenu);
-    const auto setCenterDisplay = [this, centerDisplayButton, centerDisplayLabelForMode](miacode::preview_gameplay::CenterDisplayMode mode) {
-        centerDisplayButton->setText(centerDisplayLabelForMode(mode));
-        if (owner_.previewCenterDisplayMode_ == mode) {
-            return;
-        }
-        owner_.previewCenterDisplayMode_ = mode;
-        if (owner_.previewCanvas_ != nullptr) {
-            owner_.previewCanvas_->setCenterDisplayMode(mode);
-        }
-        owner_.savePortableState();
-    };
     using miacode::preview_gameplay::CenterDisplayMode;
+    auto* centerDisplayCombo = miacode::ui::createDialogComboBox(gameplay, 12);
     for (const CenterDisplayMode mode : {
              CenterDisplayMode::Off,
              CenterDisplayMode::Combo,
@@ -260,13 +199,33 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
              CenterDisplayMode::DxScoreMinus,
              CenterDisplayMode::AchievementFinalePlus,
          }) {
-        addDialogMenuChoice(centerDisplayMenu, centerDisplayLabelForMode(mode), [setCenterDisplay, mode]() { setCenterDisplay(mode); });
+        centerDisplayCombo->addItem(centerDisplayLabelForMode(mode), static_cast<int>(mode));
     }
-    centerDisplayButton->setMenu(centerDisplayMenu);
+    centerDisplayCombo->setCurrentIndex(
+        qMax(0, centerDisplayCombo->findData(static_cast<int>(owner_.previewCenterDisplayMode_))));
+    miacode::ui::applyDialogComboBoxStyle(centerDisplayCombo, 12);
+    connect(centerDisplayCombo,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            gameplay,
+            [this, centerDisplayCombo](int index) {
+                if (index < 0) {
+                    return;
+                }
+                const auto mode =
+                    static_cast<CenterDisplayMode>(centerDisplayCombo->itemData(index).toInt());
+                if (owner_.previewCenterDisplayMode_ == mode) {
+                    return;
+                }
+                owner_.previewCenterDisplayMode_ = mode;
+                if (owner_.previewCanvas_ != nullptr) {
+                    owner_.previewCanvas_->setCenterDisplayMode(mode);
+                }
+                owner_.savePortableState();
+            });
 
     addGameplayField(0, 0, UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect")), judgeEffectButton);
-    addGameplayField(0, 1, UiText::text(QStringLiteral("dialog.render_settings.gameplay.slide_stack_order")), slideStackOrderButton);
-    addGameplayField(1, 0, UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display")), centerDisplayButton);
+    addGameplayField(0, 1, UiText::text(QStringLiteral("dialog.render_settings.gameplay.slide_stack_order")), slideStackOrderCombo);
+    addGameplayField(1, 0, UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display")), centerDisplayCombo);
 
     if (refreshOut != nullptr) {
         const QPointer<QWidget> gameplayGuard(gameplay);
@@ -277,10 +236,8 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
              judgeEffectButtonLabel,
              judgeEffectChoiceText,
              judgeEffectRefreshEntries,
-             slideStackOrderButton,
-             slideStackOrderLabelForValue,
-             centerDisplayButton,
-             centerDisplayLabelForMode]() {
+             slideStackOrderCombo,
+             centerDisplayCombo]() {
                 if (gameplayGuard.isNull()) {
                     return;
                 }
@@ -296,12 +253,17 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
                     entry.checkbox->setChecked(checked);
                     entry.checkbox->setText(judgeEffectChoiceText(entry.label, checked));
                 }
-                if (slideStackOrderButton != nullptr) {
-                    slideStackOrderButton->setText(
-                        slideStackOrderLabelForValue(owner_.previewSlideEarlierSecondAndTextOnTop_));
+                if (slideStackOrderCombo != nullptr) {
+                    const QSignalBlocker blocker(slideStackOrderCombo);
+                    slideStackOrderCombo->setCurrentIndex(
+                        owner_.previewSlideEarlierSecondAndTextOnTop_ ? 0 : 1);
                 }
-                if (centerDisplayButton != nullptr) {
-                    centerDisplayButton->setText(centerDisplayLabelForMode(owner_.previewCenterDisplayMode_));
+                if (centerDisplayCombo != nullptr) {
+                    const QSignalBlocker blocker(centerDisplayCombo);
+                    centerDisplayCombo->setCurrentIndex(qMax(
+                        0,
+                        centerDisplayCombo->findData(
+                            static_cast<int>(owner_.previewCenterDisplayMode_))));
                 }
             };
     }
@@ -317,36 +279,11 @@ void MainWindow::DialogsSection::buildSkinSettings(
     bool includeFolderButtons,
     std::function<void()>* refreshOut)
 {
-    const auto createDialogComboBox = [](QWidget* owner) {
-        auto* combo = new QComboBox(owner);
-        combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        UiTheme::styleDialogComboBox(combo, 12);
-        return combo;
-    };
-    const auto makePushButton = [](QWidget* owner, const QString& text) {
-        auto* button = new QPushButton(text, owner);
-        button->setObjectName(QStringLiteral("DialogAuxiliaryButton"));
-        button->setProperty("miacodeAuxiliaryButton", true);
-        button->setCursor(Qt::PointingHandCursor);
-        button->setStyleSheet(UiTheme::dialogAuxiliaryButtonStyleSheet());
-        return button;
-    };
-
     auto* root = new QWidget(parent);
     auto* rootLayout = new QVBoxLayout(root);
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(10);
 
-    const auto makeGroupForm = [root, rootLayout](const QString& title) -> QFormLayout* {
-        auto* group = new QGroupBox(title, root);
-        auto* form = new QFormLayout(group);
-        form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-        form->setHorizontalSpacing(10);
-        form->setVerticalSpacing(8);
-        form->setContentsMargins(10, 8, 10, 8);
-        rootLayout->addWidget(group);
-        return form;
-    };
     const auto comboActionRow = [root](QComboBox* combo, QPushButton* button) -> QWidget* {
         auto* row = new QWidget(root);
         row->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -355,8 +292,11 @@ void MainWindow::DialogsSection::buildSkinSettings(
         layout->setSpacing(8);
         combo->ensurePolished();
         button->ensurePolished();
-        const int rowHeight = qMax(combo->sizeHint().height(), button->sizeHint().height());
-        combo->setMinimumHeight(rowHeight);
+        // The combo carries the W1 fixed height from createDialogComboBox
+        // (minimumHeight == the fixed value); level the action button to it.
+        const int rowHeight = qMax(
+            combo->minimumHeight(),
+            qMax(combo->sizeHint().height(), button->sizeHint().height()));
         button->setFixedHeight(rowHeight);
         layout->addWidget(combo, 1);
         layout->addWidget(button, 0);
@@ -364,12 +304,14 @@ void MainWindow::DialogsSection::buildSkinSettings(
     };
 
     // ---- 谱面皮肤: skin + judge line (+ optional open-folder actions) ----
-    auto* skinForm = makeGroupForm(UiText::text(QStringLiteral("dialog.skin_settings.section.chart_skin")));
+    auto* skinForm = miacode::ui::createFormGroup(
+        UiText::text(QStringLiteral("dialog.skin_settings.section.chart_skin")), root, rootLayout);
 
-    auto* skinCombo = createDialogComboBox(root);
+    auto* skinCombo = miacode::ui::createDialogComboBox(root, 12, Qt::AlignLeft | Qt::AlignVCenter);
     QPushButton* openSkinDirectoryButton = nullptr;
     if (includeFolderButtons) {
-        openSkinDirectoryButton = makePushButton(root, UiText::text(QStringLiteral("dialog.skin_settings.open_directory")));
+        openSkinDirectoryButton = miacode::ui::createDialogAuxiliaryButton(
+            root, UiText::text(QStringLiteral("dialog.skin_settings.open_directory")));
         connect(openSkinDirectoryButton, &QPushButton::clicked, root, [this]() {
             const QString skinRoot = owner_.resolvePreviewSkinRootDir();
             if (!skinRoot.isEmpty()) {
@@ -402,7 +344,7 @@ void MainWindow::DialogsSection::buildSkinSettings(
             }
         }
         skinCombo->setCurrentIndex(skinCombo->count() > 0 ? selectedIndex : -1);
-        UiTheme::styleDialogComboBox(skinCombo, 12);
+        miacode::ui::applyDialogComboBoxStyle(skinCombo, 12);
     };
     refreshSkinCombo();
     connect(skinCombo, qOverload<int>(&QComboBox::currentIndexChanged), root, [this, skinCombo](int index) {
@@ -429,10 +371,11 @@ void MainWindow::DialogsSection::buildSkinSettings(
     const QString judgeLineLineLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.line"));
     const QString judgeLineAreaLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.area"));
     const QString judgeLineAreaLabeledLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.area_labeled"));
-    auto* judgeLineCombo = createDialogComboBox(root);
+    auto* judgeLineCombo = miacode::ui::createDialogComboBox(root, 12, Qt::AlignLeft | Qt::AlignVCenter);
     QPushButton* openJudgeLineDirectoryButton = nullptr;
     if (includeFolderButtons) {
-        openJudgeLineDirectoryButton = makePushButton(root, UiText::text(QStringLiteral("dialog.skin_settings.open_directory")));
+        openJudgeLineDirectoryButton = miacode::ui::createDialogAuxiliaryButton(
+            root, UiText::text(QStringLiteral("dialog.skin_settings.open_directory")));
         connect(openJudgeLineDirectoryButton, &QPushButton::clicked, root, [this]() {
             const QString outlineDir = owner_.resolvePreviewCustomOutlineDir();
             if (!outlineDir.isEmpty()) {
@@ -506,7 +449,7 @@ void MainWindow::DialogsSection::buildSkinSettings(
             }
         }
         judgeLineCombo->setCurrentIndex(selectedIndex);
-        UiTheme::styleDialogComboBox(judgeLineCombo, 12);
+        miacode::ui::applyDialogComboBoxStyle(judgeLineCombo, 12);
     };
     refreshJudgeLineCombo();
     connect(judgeLineCombo, qOverload<int>(&QComboBox::currentIndexChanged), root, [this, judgeLineCombo, kOutlineVariantKind](int index) {
@@ -574,17 +517,11 @@ void MainWindow::DialogsSection::onSkinSettings()
 
 void MainWindow::DialogsSection::openSkinSettingsDialog()
 {
-    QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
-    dialog.setWindowTitle(UiText::text(QStringLiteral("dialog.skin_settings.dialog_title")));
-    dialog.setModal(true);
-    dialog.setStyleSheet(UiTheme::settingsDialogStyleSheet());
-    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
-    UiDialogs::prepareDialogWindow(&dialog, &owner_);
-
-    auto* rootLayout = new QVBoxLayout(&dialog);
-    rootLayout->setContentsMargins(12, 12, 12, 12);
-    rootLayout->setSpacing(10);
-    rootLayout->setSizeConstraint(QLayout::SetFixedSize);
+    miacode::ui::TabbedSettingsDialog dialog(
+        &owner_,
+        UiText::text(QStringLiteral("dialog.skin_settings.dialog_title")),
+        miacode::ui::SettingsDialogChrome::Settings);
+    QVBoxLayout* rootLayout = dialog.contentLayout();
 
     QWidget* skinContent = nullptr;
     buildSkinSettings(&dialog, &skinContent, /*includeFolderButtons=*/true);
@@ -593,12 +530,7 @@ void MainWindow::DialogsSection::openSkinSettingsDialog()
         rootLayout->addWidget(skinContent, 0);
     }
 
-    auto* buttonBox = new QDialogButtonBox(&dialog);
-    if (QPushButton* closeButton = buttonBox->addButton(UiText::text(QStringLiteral("dialog.render_settings.button.close")), QDialogButtonBox::RejectRole)) {
-        closeButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    }
-    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::accept);
-    rootLayout->addWidget(buttonBox);
+    dialog.addCloseButton(UiText::text(QStringLiteral("dialog.render_settings.button.close")), true);
 
     dialog.adjustSize();
     dialog.exec();

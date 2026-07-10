@@ -4,12 +4,14 @@
 #include "SimaiNativeParser.h"
 #include "SimaiDocument.h"
 #include "EditableValueLabel.h"
+#include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "tools/video_export/VideoExportPreferences.h"
 
 #include <QAbstractItemView>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleValidator>
 #include <QDir>
@@ -108,16 +110,6 @@ QString batchExportOutputBrowseDirectoryKey()
     return QStringLiteral("last_output_directory");
 }
 
-QString exportDialogResolutionLabel(const QSize& size)
-{
-    for (const ResolutionPreset& preset : kResolutionPresets) {
-        if (preset.width == size.width() && preset.height == size.height()) {
-            return QString::fromLatin1(preset.label);
-        }
-    }
-    return QStringLiteral("%1x%2").arg(qMax(1, size.width())).arg(qMax(1, size.height()));
-}
-
 QString videoExportPresetToken(VideoExportPreset preset)
 {
     switch (preset) {
@@ -144,17 +136,6 @@ VideoExportPreset videoExportPresetFromStoredValue(const QJsonValue& value, Vide
         }
     }
     return fallback;
-}
-
-QString exportDialogPresetLabel(VideoExportPreset preset)
-{
-    switch (preset) {
-    case VideoExportPreset::HighQuality:
-        return UiText::text(QStringLiteral("dialog.video_export.preset.high_quality"));
-    case VideoExportPreset::Fast:
-    default:
-        return UiText::text(QStringLiteral("dialog.video_export.preset.fast"));
-    }
 }
 
 QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
@@ -262,58 +243,6 @@ bool validateBatchChartDirectory(const QString& directoryPath, QString* chartPat
         *chartPath = resolvedChartPath;
     }
     return true;
-}
-
-QToolButton* createDialogMenuButton(QWidget* parent, const QString& text)
-{
-    auto* button = new QToolButton(parent);
-    button->setPopupMode(QToolButton::InstantPopup);
-    button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    button->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
-    button->setText(text);
-    return button;
-}
-
-void addDialogMenuChoice(
-    QMenu* menu,
-    const QString& text,
-    const std::function<void()>& onTriggered
-)
-{
-    auto* action = new QWidgetAction(menu);
-    auto* button = new QToolButton(menu);
-    button->setAutoRaise(true);
-    button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    button->setText(text);
-    button->setCursor(Qt::PointingHandCursor);
-    const auto& c = UiTheme::colors();
-    button->setStyleSheet(
-        QStringLiteral(
-            "QToolButton {"
-            " color: %1;"
-            " background: transparent;"
-            " border: none;"
-            " padding: 6px 20px 6px 12px;"
-            " text-align: left;"
-            "}"
-            "QToolButton:hover {"
-            " background: %2;"
-            " border-radius: 6px;"
-            "}"
-        )
-            .arg(c.textPrimary.name(QColor::HexRgb))
-            .arg(c.menuHoverBg.name(QColor::HexRgb))
-    );
-    QObject::connect(button, &QToolButton::clicked, menu, [action, menu, onTriggered]() {
-        if (onTriggered) {
-            onTriggered();
-        }
-        action->trigger();
-        menu->close();
-    });
-    action->setDefaultWidget(button);
-    menu->addAction(action);
 }
 
 #ifdef Q_OS_WIN
@@ -540,40 +469,40 @@ BatchVideoExportDialog::BatchVideoExportDialog(
 
     auto* resolutionLabel = new QLabel(UiText::text(QStringLiteral("dialog.video_export.resolution")), this);
     resolutionLabel->setFixedWidth(kFormLabelWidth);
-    resolutionButton_ = createDialogMenuButton(this, exportDialogResolutionLabel(selectedResolution_));
-    resolutionMenu_ = new QMenu(resolutionButton_);
-    UiTheme::styleRoundedMenu(*resolutionMenu_);
-    resolutionButton_->setMenu(resolutionMenu_);
+    resolutionCombo_ = miacode::ui::createDialogComboBox(this, 12);
     for (const ResolutionPreset& preset : kResolutionPresets) {
-        addDialogMenuChoice(resolutionMenu_, QString::fromLatin1(preset.label), [this, preset]() {
-            selectedResolution_ = QSize(preset.width, preset.height);
-            if (resolutionButton_ != nullptr) {
-                resolutionButton_->setText(QString::fromLatin1(preset.label));
-            }
-            persistExportOnlySettings();
-        });
+        resolutionCombo_->addItem(QString::fromLatin1(preset.label), QSize(preset.width, preset.height));
     }
+    resolutionCombo_->setCurrentIndex(qMax(0, resolutionCombo_->findData(selectedResolution_)));
+    miacode::ui::applyDialogComboBoxStyle(resolutionCombo_, 12);
+    connect(resolutionCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedResolution_ = resolutionCombo_->itemData(index).toSize();
+        persistExportOnlySettings();
+    });
     topForm->addWidget(resolutionLabel, row, 0);
-    topForm->addWidget(resolutionButton_, row, 1, 1, 2);
+    topForm->addWidget(resolutionCombo_, row, 1, 1, 2);
     ++row;
 
     auto* fpsLabel = new QLabel(UiText::text(QStringLiteral("dialog.video_export.fps")), this);
     fpsLabel->setFixedWidth(kFormLabelWidth);
-    fpsButton_ = createDialogMenuButton(this, QStringLiteral("%1 FPS").arg(selectedFps_));
-    fpsMenu_ = new QMenu(fpsButton_);
-    UiTheme::styleRoundedMenu(*fpsMenu_);
-    fpsButton_->setMenu(fpsMenu_);
+    fpsCombo_ = miacode::ui::createDialogComboBox(this, 12);
     for (int fps : kFpsOptions) {
-        addDialogMenuChoice(fpsMenu_, QStringLiteral("%1 FPS").arg(fps), [this, fps]() {
-            selectedFps_ = fps;
-            if (fpsButton_ != nullptr) {
-                fpsButton_->setText(QStringLiteral("%1 FPS").arg(selectedFps_));
-            }
-            persistExportOnlySettings();
-        });
+        fpsCombo_->addItem(QStringLiteral("%1 FPS").arg(fps), fps);
     }
+    fpsCombo_->setCurrentIndex(qMax(0, fpsCombo_->findData(selectedFps_)));
+    miacode::ui::applyDialogComboBoxStyle(fpsCombo_, 12);
+    connect(fpsCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedFps_ = fpsCombo_->itemData(index).toInt();
+        persistExportOnlySettings();
+    });
     topForm->addWidget(fpsLabel, row, 0);
-    topForm->addWidget(fpsButton_, row, 1, 1, 2);
+    topForm->addWidget(fpsCombo_, row, 1, 1, 2);
     ++row;
 
     // Audio quality dropdown — drives ffmpeg `-b:a <kbps>k`. Mirrors
@@ -582,49 +511,45 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     selectedAudioBitrateKbps_ = normaliseAudioBitrateKbps(selectedAudioBitrateKbps_);
     auto* audioBitrateLabel = new QLabel(UiText::text(QStringLiteral("dialog.video_export.audio_bitrate")), this);
     audioBitrateLabel->setFixedWidth(kFormLabelWidth);
-    audioBitrateButton_ = createDialogMenuButton(this, QStringLiteral("%1 kbps").arg(selectedAudioBitrateKbps_));
-    audioBitrateMenu_ = new QMenu(audioBitrateButton_);
-    UiTheme::styleRoundedMenu(*audioBitrateMenu_);
-    audioBitrateButton_->setMenu(audioBitrateMenu_);
+    audioBitrateCombo_ = miacode::ui::createDialogComboBox(this, 12);
     for (int kbps : kAudioBitrateOptionsKbps) {
-        addDialogMenuChoice(audioBitrateMenu_, QStringLiteral("%1 kbps").arg(kbps), [this, kbps]() {
-            selectedAudioBitrateKbps_ = kbps;
-            if (audioBitrateButton_ != nullptr) {
-                audioBitrateButton_->setText(QStringLiteral("%1 kbps").arg(selectedAudioBitrateKbps_));
-            }
-            persistExportOnlySettings();
-        });
+        audioBitrateCombo_->addItem(QStringLiteral("%1 kbps").arg(kbps), kbps);
     }
+    audioBitrateCombo_->setCurrentIndex(
+        qMax(0, audioBitrateCombo_->findData(selectedAudioBitrateKbps_)));
+    miacode::ui::applyDialogComboBoxStyle(audioBitrateCombo_, 12);
+    connect(audioBitrateCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedAudioBitrateKbps_ = audioBitrateCombo_->itemData(index).toInt();
+        persistExportOnlySettings();
+    });
     topForm->addWidget(audioBitrateLabel, row, 0);
-    topForm->addWidget(audioBitrateButton_, row, 1, 1, 2);
+    topForm->addWidget(audioBitrateCombo_, row, 1, 1, 2);
     ++row;
 
     auto* presetLabel = new QLabel(UiText::text(QStringLiteral("dialog.video_export.preset")), this);
     presetLabel->setFixedWidth(kFormLabelWidth);
-    presetButton_ = createDialogMenuButton(this, exportDialogPresetLabel(selectedPreset_));
-    presetMenu_ = new QMenu(presetButton_);
-    UiTheme::styleRoundedMenu(*presetMenu_);
-    presetButton_->setMenu(presetMenu_);
-    addDialogMenuChoice(presetMenu_, UiText::text(QStringLiteral("dialog.video_export.preset.fast")), [this]() {
-        selectedPreset_ = VideoExportPreset::Fast;
-        if (presetButton_ != nullptr) {
-            presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
+    presetCombo_ = miacode::ui::createDialogComboBox(this, 12);
+    presetCombo_->addItem(
+        UiText::text(QStringLiteral("dialog.video_export.preset.fast")),
+        static_cast<int>(VideoExportPreset::Fast));
+    presetCombo_->addItem(
+        UiText::text(QStringLiteral("dialog.video_export.preset.high_quality")),
+        static_cast<int>(VideoExportPreset::HighQuality));
+    presetCombo_->setCurrentIndex(
+        qMax(0, presetCombo_->findData(static_cast<int>(selectedPreset_))));
+    miacode::ui::applyDialogComboBoxStyle(presetCombo_, 12);
+    connect(presetCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0) {
+            return;
         }
+        selectedPreset_ = static_cast<VideoExportPreset>(presetCombo_->itemData(index).toInt());
         persistExportOnlySettings();
     });
-    addDialogMenuChoice(
-        presetMenu_,
-        UiText::text(QStringLiteral("dialog.video_export.preset.high_quality")),
-        [this]() {
-            selectedPreset_ = VideoExportPreset::HighQuality;
-            if (presetButton_ != nullptr) {
-                presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
-            }
-            persistExportOnlySettings();
-        }
-    );
     topForm->addWidget(presetLabel, row, 0);
-    topForm->addWidget(presetButton_, row, 1, 1, 2);
+    topForm->addWidget(presetCombo_, row, 1, 1, 2);
     ++row;
 
     rootLayout->addLayout(topForm);
@@ -728,40 +653,32 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     ++optionRow;
 
     auto* scaleModeLabel = new QLabel(UiText::text(QStringLiteral("dialog.video_export.option.scale_mode")), optionsCard);
-    backgroundScaleModeButton_ = createDialogMenuButton(optionsCard, exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
-    backgroundScaleModeMenu_ = new QMenu(backgroundScaleModeButton_);
-    UiTheme::styleRoundedMenu(*backgroundScaleModeMenu_);
-    backgroundScaleModeButton_->setMenu(backgroundScaleModeMenu_);
-    addDialogMenuChoice(backgroundScaleModeMenu_, exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode::FillCrop), [this]() {
-        selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
-        if (backgroundScaleModeButton_ != nullptr) {
-            backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
-        }
-        notifySharedSettingsChanged();
-    });
-    addDialogMenuChoice(backgroundScaleModeMenu_, exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode::FitContain), [this]() {
-        selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FitContain;
-        if (backgroundScaleModeButton_ != nullptr) {
-            backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
-        }
-        notifySharedSettingsChanged();
-    });
-    addDialogMenuChoice(backgroundScaleModeMenu_, exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode::SquareFitContain), [this]() {
-        selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::SquareFitContain;
-        if (backgroundScaleModeButton_ != nullptr) {
-            backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
-        }
-        notifySharedSettingsChanged();
-    });
-    addDialogMenuChoice(backgroundScaleModeMenu_, exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode::InnerCircleFitOuterFill), [this]() {
-        selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::InnerCircleFitOuterFill;
-        if (backgroundScaleModeButton_ != nullptr) {
-            backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
-        }
-        notifySharedSettingsChanged();
-    });
+    backgroundScaleModeCombo_ = miacode::ui::createDialogComboBox(optionsCard, 12);
+    for (const PreviewBackgroundScaleMode mode : {
+             PreviewBackgroundScaleMode::FillCrop,
+             PreviewBackgroundScaleMode::FitContain,
+             PreviewBackgroundScaleMode::SquareFitContain,
+             PreviewBackgroundScaleMode::InnerCircleFitOuterFill,
+         }) {
+        backgroundScaleModeCombo_->addItem(
+            exportDialogBackgroundScaleModeLabel(mode), static_cast<int>(mode));
+    }
+    backgroundScaleModeCombo_->setCurrentIndex(qMax(
+        0, backgroundScaleModeCombo_->findData(static_cast<int>(selectedBackgroundScaleMode_))));
+    miacode::ui::applyDialogComboBoxStyle(backgroundScaleModeCombo_, 12);
+    connect(backgroundScaleModeCombo_,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            this,
+            [this](int index) {
+                if (index < 0) {
+                    return;
+                }
+                selectedBackgroundScaleMode_ = static_cast<PreviewBackgroundScaleMode>(
+                    backgroundScaleModeCombo_->itemData(index).toInt());
+                notifySharedSettingsChanged();
+            });
     optionsLayout->addWidget(scaleModeLabel, optionRow, 0);
-    optionsLayout->addWidget(backgroundScaleModeButton_, optionRow, 1, 1, 3);
+    optionsLayout->addWidget(backgroundScaleModeCombo_, optionRow, 1, 1, 3);
     ++optionRow;
 
     const auto createFlowSpeedEdit = [this, optionsCard](QLineEdit** editOut, double* selectedFlowSpeed) {
@@ -1144,30 +1061,39 @@ void BatchVideoExportDialog::loadPersistedSettings()
     const int savedHeight = settings.value(QStringLiteral("resolution_height")).toInt(selectedResolution_.height());
     if (savedWidth > 0 && savedHeight > 0) {
         selectedResolution_ = QSize(savedWidth, savedHeight);
-        if (resolutionButton_ != nullptr) {
-            resolutionButton_->setText(exportDialogResolutionLabel(selectedResolution_));
+        if (resolutionCombo_ != nullptr) {
+            const QSignalBlocker blocker(resolutionCombo_);
+            const int idx = resolutionCombo_->findData(selectedResolution_);
+            if (idx >= 0) {
+                resolutionCombo_->setCurrentIndex(idx);
+            }
         }
     }
 
     const int savedFps = settings.value(QStringLiteral("fps")).toInt(selectedFps_);
     selectedFps_ = savedFps >= 90 ? 120 : 60;
-    if (fpsButton_ != nullptr) {
-        fpsButton_->setText(QStringLiteral("%1 FPS").arg(selectedFps_));
+    if (fpsCombo_ != nullptr) {
+        const QSignalBlocker blocker(fpsCombo_);
+        fpsCombo_->setCurrentIndex(qMax(0, fpsCombo_->findData(selectedFps_)));
     }
 
     const int savedAudioBitrate = settings.value(QStringLiteral("audio_bitrate_kbps"))
                                          .toInt(selectedAudioBitrateKbps_);
     selectedAudioBitrateKbps_ = normaliseAudioBitrateKbps(savedAudioBitrate);
-    if (audioBitrateButton_ != nullptr) {
-        audioBitrateButton_->setText(QStringLiteral("%1 kbps").arg(selectedAudioBitrateKbps_));
+    if (audioBitrateCombo_ != nullptr) {
+        const QSignalBlocker blocker(audioBitrateCombo_);
+        audioBitrateCombo_->setCurrentIndex(
+            qMax(0, audioBitrateCombo_->findData(selectedAudioBitrateKbps_)));
     }
 
     selectedPreset_ = videoExportPresetFromStoredValue(
         settings.value(QStringLiteral("preset")),
         selectedPreset_
     );
-    if (presetButton_ != nullptr) {
-        presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
+    if (presetCombo_ != nullptr) {
+        const QSignalBlocker blocker(presetCombo_);
+        presetCombo_->setCurrentIndex(
+            qMax(0, presetCombo_->findData(static_cast<int>(selectedPreset_))));
     }
 }
 

@@ -130,7 +130,7 @@ These are adjustable, but if changed they should be documented here and in the r
 ## 5. Areas That Need Guardrails
 
 - Path resolution rules are still duplicated in a few places, especially for media and track files.
-- A large amount of visual tuning still lives in implementation-local constants across `src/preview/scene/*.cpp` and `src/tools/video_export/VideoExportController.cpp`.
+- A large amount of visual tuning still lives in implementation-local constants across `src/core/scene/*.cpp` and `src/tools/video_export/VideoExportController.cpp`.
 - Latency detection carries algorithm-specific constants that are meaningful but still mostly local to the tool.
 - Packaging and debug docs still need occasional sync when Qt Quick runtime requirements or export diagnostics change.
 

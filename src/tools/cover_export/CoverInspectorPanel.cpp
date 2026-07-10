@@ -227,6 +227,8 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
     frameForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
     frameBgModeCombo_ = new QComboBox(this);
+    frameBgModeCombo_->setProperty("miacode.combo_text_alignment",
+                                   static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter));
     frameBgModeCombo_->addItem(UiText::text(QStringLiteral("cover.jacket")),
                                QStringLiteral("image"));
     frameBgModeCombo_->addItem(UiText::text(QStringLiteral("cover.transparent")),

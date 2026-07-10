@@ -3,6 +3,7 @@
 #include "BusySpinner.h"
 #include "DialogLocalization.h"
 #include "EditableValueLabel.h"
+#include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/DebugLog.h"
@@ -372,12 +373,10 @@ void VideoExportDialog::applyThemeStyles()
     }
     setStyleSheet(sheet);
 
-    // Dropdown menu buttons (createDialogMenuButton).
-    for (QToolButton* button : {resolutionButton_, fpsButton_, audioBitrateButton_,
-                                presetButton_, backgroundScaleModeButton_}) {
-        if (button != nullptr) {
-            button->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
-        }
+    // Dialog dropdowns (miacode::ui::createDialogComboBox).
+    for (QComboBox* combo : {resolutionCombo_, fpsCombo_, audioBitrateCombo_,
+                             presetCombo_, backgroundScaleModeCombo_}) {
+        miacode::ui::applyDialogComboBoxStyle(combo, 12);
     }
 
     // Plain push buttons.
@@ -392,12 +391,8 @@ void VideoExportDialog::applyThemeStyles()
     if (introBackgroundPathEdit_ != nullptr) {
         introBackgroundPathEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet(UiTheme::colors().windowAltBg));
     }
-    if (introBackgroundCombo_ != nullptr) {
-        UiTheme::styleDialogComboBox(introBackgroundCombo_, 12);
-    }
-    if (introCardModeCombo_ != nullptr) {
-        UiTheme::styleDialogComboBox(introCardModeCombo_, 12);
-    }
+    miacode::ui::applyDialogComboBoxStyle(introBackgroundCombo_, 12);
+    miacode::ui::applyDialogComboBoxStyle(introCardModeCombo_, 12);
     if (exportButton_ != nullptr) {
         exportButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(true));
     }

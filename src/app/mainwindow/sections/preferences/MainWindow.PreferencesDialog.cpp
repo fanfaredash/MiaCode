@@ -1,4 +1,4 @@
-#include "MainWindow.PreferencesSection.h"
+﻿#include "MainWindow.PreferencesSection.h"
 #include "../../MainWindowShared.h"
 #include "../window/MainWindow.WindowSection.h"
 
@@ -9,6 +9,7 @@
 #include "SimaiNativeParser.h"
 #include "ShortcutRegistry.h"
 #include "TimelineView.h"
+#include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
@@ -659,17 +660,11 @@ void MainWindow::PreferencesSection::applyConfiguredShortcuts()
 void MainWindow::PreferencesSection::onPreferences()
 {
     MC_OP("MainWindow::PreferencesSection::onPreferences");
-    QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
-    dialog.setWindowTitle(UiText::text(QStringLiteral("dialog.preferences.title")));
-    dialog.setModal(true);
-    dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
-    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
-    UiDialogs::prepareDialogWindow(&dialog, &owner_);
-
-    auto* rootLayout = new QVBoxLayout(&dialog);
-    rootLayout->setContentsMargins(12, 12, 12, 12);
-    rootLayout->setSpacing(10);
-    rootLayout->setSizeConstraint(QLayout::SetFixedSize);
+    miacode::ui::TabbedSettingsDialog dialog(
+        &owner_,
+        UiText::text(QStringLiteral("dialog.preferences.title")),
+        miacode::ui::SettingsDialogChrome::Preferences);
+    QVBoxLayout* rootLayout = dialog.contentLayout();
 
     // Tab strip across the top matches the render-settings dialog so
     // the two preference-style surfaces share one visual pattern. The
@@ -677,26 +672,13 @@ void MainWindow::PreferencesSection::onPreferences()
     // appended to the preferences stylesheet. We still call the page
     // container `pageStack` to keep the downstream addWidget()/setCurrent
     // call sites intact; addTab() does the same wrapping under the hood.
-    auto* pageStack = new QTabWidget(&dialog);
-    pageStack->setObjectName(QStringLiteral("PreferenceTabs"));
-    rootLayout->addWidget(pageStack);
+    auto* pageStack = dialog.createTabs(QStringLiteral("PreferenceTabs"));
 
     // Each preference page wraps its controls in a QGroupBox whose
     // title duplicates the tab name (e.g. "Appearance" inside the "Appearance"
     // tab). The tab strip already labels the page, so strip the inner
     // title + frame chrome before the group enters the tab. Same
     // recipe as the render-settings dialog.
-    const auto flattenPageGroup = [](QGroupBox* group) {
-        if (group == nullptr) {
-            return;
-        }
-        group->setTitle(QString());
-        group->setFlat(true);
-        group->setStyleSheet(QStringLiteral(
-            "QGroupBox { border: none; margin-top: 0; padding-top: 0; }"
-        ));
-    };
-
     auto* appearancePage = new QWidget(pageStack);
     auto* appearancePageLayout = new QVBoxLayout(appearancePage);
     appearancePageLayout->setContentsMargins(0, 0, 0, 0);
@@ -704,7 +686,7 @@ void MainWindow::PreferencesSection::onPreferences()
     auto* interfaceGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.preferences.interface_group")), appearancePage);
     auto* interfaceLayout = new QFormLayout(interfaceGroup);
     // Explicit margins like the editor/performance pages. The flattened
-    // group box (border: none via flattenPageGroup) zeroes the default
+    // group box (border: none via flattenGroupForTabPage) zeroes the default
     // QSS layout margins, so without this the field column runs flush to
     // the pane edge and the menu buttons' right border gets clipped.
     interfaceLayout->setContentsMargins(12, 10, 12, 12);
@@ -720,7 +702,14 @@ void MainWindow::PreferencesSection::onPreferences()
         if (combo == nullptr) {
             return;
         }
-        UiTheme::styleDialogComboBox(combo, maxVisibleItems);
+        // All Preferences dropdowns read left-aligned. Combos built with raw
+        // `new QComboBox` (editor tab: line spacing / auto-completion / header /
+        // IME) reach styling only through here, so stamp the alignment property
+        // the styler consumes. Factory combos already carry it; re-stamp is
+        // idempotent.
+        combo->setProperty("miacode.combo_text_alignment",
+                           static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter));
+        miacode::ui::applyDialogComboBoxStyle(combo, maxVisibleItems);
         for (const QPointer<QComboBox>& registered : themedDialogCombos) {
             if (registered == combo) {
                 return;
@@ -731,18 +720,9 @@ void MainWindow::PreferencesSection::onPreferences()
     const auto refreshRegisteredDialogCombos = [&themedDialogCombos]() {
         for (const QPointer<QComboBox>& combo : themedDialogCombos) {
             if (!combo.isNull()) {
-                UiTheme::styleDialogComboBox(combo.data(), 12);
+                miacode::ui::applyDialogComboBoxStyle(combo.data(), 12);
             }
         }
-    };
-    const auto languageLabelForToken = [](const QString& token) -> QString {
-        const QString normalized = token.trimmed().toLower();
-        for (const auto& option : UiText::availableLanguageOptions()) {
-            if (option.id == normalized) {
-                return option.label;
-            }
-        }
-        return UiText::text(QStringLiteral("dialog.preferences.language.system"));
     };
     const auto themeLabel = [](UiText::ThemePreference preference) -> QString {
         switch (preference) {
@@ -760,25 +740,33 @@ void MainWindow::PreferencesSection::onPreferences()
     auto* languageRowLayout = new QHBoxLayout(languageRow);
     languageRowLayout->setContentsMargins(0, 0, 0, 0);
     languageRowLayout->setSpacing(12);
-    auto* languageButton = new QToolButton(languageRow);
-    languageButton->setObjectName("PreferenceMenuButton");
-    languageButton->setFont(uiAccentFont(10, QFont::DemiBold));
-    languageButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    languageButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
-    languageButton->setMinimumWidth(languageButton->fontMetrics().horizontalAdvance(QStringLiteral("Simplified Chinese")) + 28);
-    languageButton->setText(languageLabelForToken(selectedLanguageToken));
-    auto* languageMenu = new QMenu(languageButton);
-    languageMenu->setFont(uiAccentFont(10));
-    styleRoundedMenu(*languageMenu);
-    std::function<void()> rebuildLanguageMenu;
-    rebuildLanguageMenu = [&]() {
-        languageMenu->clear();
+    auto* languageCombo =
+        miacode::ui::createDialogComboBox(languageRow, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    languageCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    languageCombo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    // Extensions can add/remove language packs while the dialog is open, so
+    // repopulation is reusable (blocked: refilling must not fire the restart
+    // prompt below).
+    std::function<void()> rebuildLanguageCombo = [&, languageCombo]() {
+        const QSignalBlocker blocker(languageCombo);
+        languageCombo->clear();
         for (const auto& option : UiText::availableLanguageOptions()) {
-            QAction* action = languageMenu->addAction(option.label);
-            action->setData(option.id);
-            connect(action, &QAction::triggered, &dialog, [&, id = option.id, languageButton]() {
-                selectedLanguageToken = id;
-                languageButton->setText(languageLabelForToken(selectedLanguageToken));
+            languageCombo->addItem(option.label, option.id);
+        }
+        languageCombo->setCurrentIndex(
+            qMax(0, languageCombo->findData(selectedLanguageToken.trimmed().toLower())));
+        miacode::ui::applyDialogComboBoxStyle(languageCombo, 12);
+    };
+    rebuildLanguageCombo();
+    styleRegisteredDialogCombo(languageCombo);
+    connect(languageCombo,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            &dialog,
+            [&, languageCombo](int index) {
+                if (index < 0) {
+                    return;
+                }
+                selectedLanguageToken = languageCombo->itemData(index).toString();
                 UiText::setPreferredLanguageToken(selectedLanguageToken);
                 QMessageBox::information(
                     &dialog,
@@ -787,17 +775,7 @@ void MainWindow::PreferencesSection::onPreferences()
                     QMessageBox::Ok);
                 owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_saved")));
             });
-        }
-    };
-    rebuildLanguageMenu();
-    // No manual setFixedWidth here: the QSS PreferenceMenuButton rule
-    // (min-width + padding + border) already defines the styled size, and
-    // pinning a metrics-derived width below it is what clipped the button's
-    // right border. The performance tab's buttons size the same way.
-    connect(languageButton, &QToolButton::clicked, &dialog, [languageButton, languageMenu]() {
-        languageMenu->popup(languageButton->mapToGlobal(QPoint(0, languageButton->height())));
-    });
-    languageRowLayout->addWidget(languageButton, 0);
+    languageRowLayout->addWidget(languageCombo, 0);
     languageRowLayout->addStretch(1);
     interfaceLayout->addRow(languageLabelWidget, languageRow);
 
@@ -806,38 +784,38 @@ void MainWindow::PreferencesSection::onPreferences()
     auto* themeRowLayout = new QHBoxLayout(themeRow);
     themeRowLayout->setContentsMargins(0, 0, 0, 0);
     themeRowLayout->setSpacing(12);
-    auto* themeButton = new QToolButton(themeRow);
-    themeButton->setObjectName("PreferenceMenuButton");
-    themeButton->setFont(uiAccentFont(10, QFont::DemiBold));
-    themeButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    themeButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    themeButton->setText(themeLabel(selectedThemePreference));
-    auto* themeMenu = new QMenu(themeButton);
-    themeMenu->setFont(uiAccentFont(10));
-    styleRoundedMenu(*themeMenu);
+    auto* themeCombo =
+        miacode::ui::createDialogComboBox(themeRow, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    themeCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    themeCombo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     const QList<UiText::ThemePreference> themeOptions{
         UiText::ThemePreference::System,
         UiText::ThemePreference::Light,
         UiText::ThemePreference::Dark,
     };
     for (UiText::ThemePreference preference : themeOptions) {
-        QAction* action = themeMenu->addAction(themeLabel(preference));
-        action->setData(static_cast<int>(preference));
-        connect(action, &QAction::triggered, &dialog, [&, preference, themeButton]() {
-            selectedThemePreference = preference;
-            themeButton->setText(themeLabel(selectedThemePreference));
-            UiText::setPreferredTheme(selectedThemePreference);
-            owner_.windowSection_->applyUiTheme();
-            dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
-            refreshRegisteredDialogCombos();
-            owner_.windowSection_->applySystemWindowBackdrop(&dialog);
-            owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
-        });
+        themeCombo->addItem(themeLabel(preference), static_cast<int>(preference));
     }
-    connect(themeButton, &QToolButton::clicked, &dialog, [themeButton, themeMenu]() {
-        themeMenu->popup(themeButton->mapToGlobal(QPoint(0, themeButton->height())));
-    });
-    themeRowLayout->addWidget(themeButton, 0);
+    themeCombo->setCurrentIndex(
+        qMax(0, themeCombo->findData(static_cast<int>(selectedThemePreference))));
+    styleRegisteredDialogCombo(themeCombo);
+    connect(themeCombo,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            &dialog,
+            [&, themeCombo](int index) {
+                if (index < 0) {
+                    return;
+                }
+                selectedThemePreference =
+                    static_cast<UiText::ThemePreference>(themeCombo->itemData(index).toInt());
+                UiText::setPreferredTheme(selectedThemePreference);
+                owner_.windowSection_->applyUiTheme();
+                dialog.refreshStyleSheet();
+                refreshRegisteredDialogCombos();
+                owner_.windowSection_->applySystemWindowBackdrop(&dialog);
+                owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
+            });
+    themeRowLayout->addWidget(themeCombo, 0);
     themeRowLayout->addStretch(1);
     interfaceLayout->addRow(themeLabelWidget, themeRow);
 
@@ -855,33 +833,29 @@ void MainWindow::PreferencesSection::onPreferences()
     auto* previewSideRowLayout = new QHBoxLayout(previewSideRow);
     previewSideRowLayout->setContentsMargins(0, 0, 0, 0);
     previewSideRowLayout->setSpacing(12);
-    auto* previewSideButton = new QToolButton(previewSideRow);
-    previewSideButton->setObjectName("PreferenceMenuButton");
-    previewSideButton->setFont(uiAccentFont(10, QFont::DemiBold));
-    previewSideButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    previewSideButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    previewSideButton->setText(previewSideLabel(owner_.workspacePanelsSwapped_));
-    auto* previewSideMenu = new QMenu(previewSideButton);
-    previewSideMenu->setFont(uiAccentFont(10));
-    styleRoundedMenu(*previewSideMenu);
-    const QList<bool> previewSideOptions{false, true};
-    for (bool previewOnLeft : previewSideOptions) {
-        QAction* action = previewSideMenu->addAction(previewSideLabel(previewOnLeft));
-        action->setData(previewOnLeft);
-        connect(action, &QAction::triggered, &dialog, [&, previewOnLeft, previewSideButton]() {
-            previewSideButton->setText(previewSideLabel(previewOnLeft));
-            owner_.setWorkspacePanelsSwapped(previewOnLeft, true);
-            owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
-        });
-    }
-    connect(previewSideButton, &QToolButton::clicked, &dialog, [previewSideButton, previewSideMenu]() {
-        previewSideMenu->popup(previewSideButton->mapToGlobal(QPoint(0, previewSideButton->height())));
-    });
-    previewSideRowLayout->addWidget(previewSideButton, 0);
+    auto* previewSideCombo =
+        miacode::ui::createDialogComboBox(previewSideRow, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    previewSideCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    previewSideCombo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    previewSideCombo->addItem(previewSideLabel(false), false);
+    previewSideCombo->addItem(previewSideLabel(true), true);
+    previewSideCombo->setCurrentIndex(owner_.workspacePanelsSwapped_ ? 1 : 0);
+    styleRegisteredDialogCombo(previewSideCombo);
+    connect(previewSideCombo,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            &dialog,
+            [&, previewSideCombo](int index) {
+                if (index < 0) {
+                    return;
+                }
+                owner_.setWorkspacePanelsSwapped(previewSideCombo->itemData(index).toBool(), true);
+                owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
+            });
+    previewSideRowLayout->addWidget(previewSideCombo, 0);
     previewSideRowLayout->addStretch(1);
     interfaceLayout->addRow(previewSideLabelWidget, previewSideRow);
 
-    flattenPageGroup(interfaceGroup);
+    miacode::ui::flattenGroupForTabPage(interfaceGroup);
     appearancePageLayout->addWidget(interfaceGroup);
     appearancePageLayout->addStretch(1);
     pageStack->addTab(appearancePage, UiText::text(QStringLiteral("dialog.preferences.interface_group")));
@@ -914,10 +888,14 @@ void MainWindow::PreferencesSection::onPreferences()
     auto* fontSizeControl = new QWidget(fontSizeRow);
     fontSizeControl->setObjectName(QStringLiteral("DialogSpinBoxFrame"));
     fontSizeControl->setStyleSheet(UiTheme::dialogSpinBoxStyleSheet());
-    fontSizeControl->setFixedHeight(25);
+    // Match the dialog combo/menu-button height (W1 max(sizeHint,30)+4 ≈ 34) so
+    // 字号 sits level with the other editor rows; the frame's border-radius:8
+    // needs the full height or the bottom border clips (why this was narrowed
+    // to 25 before).
+    fontSizeControl->setFixedHeight(34);
     fontSizeControl->setFixedWidth(80);
     auto* fontSizeControlLayout = new QHBoxLayout(fontSizeControl);
-    fontSizeControlLayout->setContentsMargins(0, 0, 4, 0);
+    fontSizeControlLayout->setContentsMargins(0, 0, 0, 0);
     fontSizeControlLayout->setSpacing(0);
     auto* editorFontSizeSpin = new QSpinBox(fontSizeControl);
     editorFontSizeSpin->setObjectName(QStringLiteral("DialogSpinBoxEditor"));
@@ -926,11 +904,11 @@ void MainWindow::PreferencesSection::onPreferences()
     editorFontSizeSpin->setSuffix(" pt");
     editorFontSizeSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
     editorFontSizeSpin->setFrame(false);
-    editorFontSizeSpin->setFixedHeight(23);
+    editorFontSizeSpin->setFixedHeight(30);
     editorFontSizeSpin->setMinimumWidth(editorFontSizeSpin->fontMetrics().horizontalAdvance(QStringLiteral("28 pt")) + 28);
     const auto makeSpinArrowIcon = [](Qt::ArrowType arrowType) {
         const QColor arrowColor = UiTheme::colors().textSecondary;
-        QPixmap pixmap(9, 9);
+        QPixmap pixmap(9, 17);
         pixmap.fill(Qt::transparent);
         QPainter painter(&pixmap);
         painter.setRenderHint(QPainter::Antialiasing, false);
@@ -938,7 +916,7 @@ void MainWindow::PreferencesSection::onPreferences()
         painter.setBrush(arrowColor);
         QPolygon triangle;
         if (arrowType == Qt::UpArrow) {
-            triangle << QPoint(4, 2) << QPoint(7, 6) << QPoint(1, 6);
+            triangle << QPoint(4, 9) << QPoint(7, 13) << QPoint(1, 13);
         } else {
             triangle << QPoint(1, 3) << QPoint(7, 3) << QPoint(4, 7);
         }
@@ -946,10 +924,10 @@ void MainWindow::PreferencesSection::onPreferences()
         return QIcon(pixmap);
     };
     auto* stepButtons = new QWidget(fontSizeControl);
-    stepButtons->setFixedSize(16, 23);
+    stepButtons->setFixedSize(20, 34);
     auto* stepLayout = new QVBoxLayout(stepButtons);
-    stepLayout->setContentsMargins(0, 1, 0, 1);
-    stepLayout->setSpacing(1);
+    stepLayout->setContentsMargins(0, 0, 0, 0);
+    stepLayout->setSpacing(0);
     auto* increaseFontSizeButton = new QToolButton(stepButtons);
     auto* decreaseFontSizeButton = new QToolButton(stepButtons);
     for (QToolButton* button : {increaseFontSizeButton, decreaseFontSizeButton}) {
@@ -958,10 +936,12 @@ void MainWindow::PreferencesSection::onPreferences()
         button->setAutoRepeat(true);
         button->setAutoRepeatDelay(300);
         button->setAutoRepeatInterval(70);
-        button->setFixedSize(16, 10);
-        button->setIconSize(QSize(9, 9));
+        button->setFixedSize(20, 17);
+        button->setIconSize(QSize(9, 17));
         stepLayout->addWidget(button, 0);
     }
+    increaseFontSizeButton->setProperty("miacodeSpinStep", QStringLiteral("up"));
+    decreaseFontSizeButton->setProperty("miacodeSpinStep", QStringLiteral("down"));
     increaseFontSizeButton->setIcon(makeSpinArrowIcon(Qt::UpArrow));
     decreaseFontSizeButton->setIcon(makeSpinArrowIcon(Qt::DownArrow));
     connect(increaseFontSizeButton, &QToolButton::clicked, editorFontSizeSpin, &QSpinBox::stepUp);
@@ -1143,7 +1123,7 @@ void MainWindow::PreferencesSection::onPreferences()
     connect(dialogIncreaseShortcut, &QShortcut::activated, &dialog, [editorFontSizeSpin]() {
         editorFontSizeSpin->setValue(editorFontSizeSpin->value() + 1);
     });
-    flattenPageGroup(editorGroup);
+    miacode::ui::flattenGroupForTabPage(editorGroup);
     editorPageLayout->addWidget(editorGroup);
     editorPageLayout->addStretch(1);
     pageStack->addTab(editorPage, UiText::text(QStringLiteral("dialog.preferences.editor_group")));
@@ -1186,28 +1166,29 @@ void MainWindow::PreferencesSection::onPreferences()
             PreviewCanvasFrameRateMode selectedMode,
             const QList<FrameRateOption>& options,
             const std::function<void(PreviewCanvasFrameRateMode)>& applyMode) {
-            auto* button = new QToolButton(performanceGroup);
-            button->setObjectName("PreferenceMenuButton");
-            button->setFont(uiAccentFont(10, QFont::DemiBold));
-            button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-            button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-            button->setText(frameRateLabelForMode(selectedMode, options));
-            auto* menu = new QMenu(button);
-            menu->setFont(uiAccentFont(10));
-            styleRoundedMenu(*menu);
+            auto* combo = miacode::ui::createDialogComboBox(
+                performanceGroup, 12, Qt::AlignLeft | Qt::AlignVCenter);
+            combo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+            combo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
             for (const FrameRateOption& option : options) {
-                QAction* action = menu->addAction(option.label);
-                action->setData(static_cast<int>(option.mode));
-                connect(action, &QAction::triggered, &dialog, [&, option, button, applyMode]() {
-                    button->setText(option.label);
-                    applyMode(option.mode);
-                    owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
-                });
+                combo->addItem(option.label, static_cast<int>(option.mode));
             }
-            connect(button, &QToolButton::clicked, &dialog, [button, menu]() {
-                menu->popup(button->mapToGlobal(QPoint(0, button->height())));
-            });
-            performanceLayout->addRow(label, button);
+            combo->setCurrentIndex(
+                qMax(0, combo->findText(frameRateLabelForMode(selectedMode, options))));
+            styleRegisteredDialogCombo(combo);
+            connect(combo,
+                    qOverload<int>(&QComboBox::currentIndexChanged),
+                    &dialog,
+                    [&, combo, applyMode](int index) {
+                        if (index < 0) {
+                            return;
+                        }
+                        applyMode(static_cast<PreviewCanvasFrameRateMode>(
+                            combo->itemData(index).toInt()));
+                        owner_.statusBar()->showMessage(
+                            UiText::text(QStringLiteral("status.preferences_updated")));
+                    });
+            performanceLayout->addRow(label, combo);
         };
 
     QList<FrameRateOption> canvasFrameRateOptions;
@@ -1263,38 +1244,29 @@ void MainWindow::PreferencesSection::onPreferences()
             {false, UiText::text(QStringLiteral("dialog.preferences.performance.video_decode.hardware"))},
             {true, UiText::text(QStringLiteral("dialog.preferences.performance.video_decode.software"))},
         };
-        const auto videoDecodeLabel = [&](bool preferSoftware) -> QString {
-            for (const VideoDecodeOption& option : videoDecodeOptions) {
-                if (option.preferSoftware == preferSoftware) {
-                    return option.label;
-                }
-            }
-            return videoDecodeOptions.front().label;
-        };
-        auto* button = new QToolButton(performanceGroup);
-        button->setObjectName("PreferenceMenuButton");
-        button->setFont(uiAccentFont(10, QFont::DemiBold));
-        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-        button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-        button->setText(videoDecodeLabel(owner_.currentVideoDecodePrefersSoftware()));
-        auto* menu = new QMenu(button);
-        menu->setFont(uiAccentFont(10));
-        styleRoundedMenu(*menu);
+        auto* combo = miacode::ui::createDialogComboBox(
+            performanceGroup, 12, Qt::AlignLeft | Qt::AlignVCenter);
+        combo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+        combo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         for (const VideoDecodeOption& option : videoDecodeOptions) {
-            QAction* action = menu->addAction(option.label);
-            action->setData(option.preferSoftware);
-            connect(action, &QAction::triggered, &dialog, [&, option, button]() {
-                button->setText(option.label);
-                owner_.setVideoDecodePrefersSoftware(option.preferSoftware, true);
-                owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
-            });
+            combo->addItem(option.label, option.preferSoftware);
         }
-        connect(button, &QToolButton::clicked, &dialog, [button, menu]() {
-            menu->popup(button->mapToGlobal(QPoint(0, button->height())));
-        });
+        combo->setCurrentIndex(owner_.currentVideoDecodePrefersSoftware() ? 1 : 0);
+        styleRegisteredDialogCombo(combo);
+        connect(combo,
+                qOverload<int>(&QComboBox::currentIndexChanged),
+                &dialog,
+                [&, combo](int index) {
+                    if (index < 0) {
+                        return;
+                    }
+                    owner_.setVideoDecodePrefersSoftware(combo->itemData(index).toBool(), true);
+                    owner_.statusBar()->showMessage(
+                        UiText::text(QStringLiteral("status.preferences_updated")));
+                });
         performanceLayout->addRow(
             UiText::text(QStringLiteral("dialog.preferences.performance.video_decode")),
-            button);
+            combo);
     }
 
     addFrameRateRow(
@@ -1322,7 +1294,7 @@ void MainWindow::PreferencesSection::onPreferences()
         }
     );
 
-    flattenPageGroup(performanceGroup);
+    miacode::ui::flattenGroupForTabPage(performanceGroup);
     performancePageLayout->addWidget(performanceGroup);
     performancePageLayout->addStretch(1);
     pageStack->addTab(performancePage, UiText::text(QStringLiteral("dialog.preferences.performance_group")));
@@ -1344,7 +1316,7 @@ void MainWindow::PreferencesSection::onPreferences()
     // The Alt-hold pause-display behavior used to be a fixed hint label here;
     // it is now the editable preview.pause_display_hold entry in the table
     // (the capture edit accepts bare modifiers for hold-type shortcuts).
-    flattenPageGroup(shortcutsGroup);
+    miacode::ui::flattenGroupForTabPage(shortcutsGroup);
     shortcutsPageLayout->addWidget(shortcutsGroup);
     shortcutsPageLayout->addStretch(1);
     pageStack->addTab(shortcutsPage, UiText::text(QStringLiteral("dialog.preferences.shortcuts_group")));
@@ -1473,7 +1445,7 @@ void MainWindow::PreferencesSection::onPreferences()
                             return;
                         }
                         owner_.extensionManager_->setExtensionEnabled(id, enabled);
-                        rebuildLanguageMenu();
+                        rebuildLanguageCombo();
                         refreshExtensionRows();
                         owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
                     });
@@ -1497,7 +1469,7 @@ void MainWindow::PreferencesSection::onPreferences()
             UiText::reloadExtensionLanguagePacks();
             UiText::ensurePreferredLanguageAvailable();
         }
-        rebuildLanguageMenu();
+        rebuildLanguageCombo();
         refreshExtensionRows();
         owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
     });
@@ -1514,16 +1486,15 @@ void MainWindow::PreferencesSection::onPreferences()
     pageStack->addTab(extensionsPage, UiText::text(QStringLiteral("dialog.preferences.extensions_group")));
 
     const auto openShortcutEditDialog = [&]() {
-        QDialog shortcutsDialog(&dialog);
-        shortcutsDialog.setWindowTitle(UiText::text(QStringLiteral("dialog.preferences.shortcuts.title")));
-        shortcutsDialog.setModal(true);
+        miacode::ui::TabbedSettingsDialog shortcutsDialog(
+            &dialog,
+            UiText::text(QStringLiteral("dialog.preferences.shortcuts.title")),
+            miacode::ui::SettingsDialogChrome::Preferences);
         shortcutsDialog.resize(740, 500);
         shortcutsDialog.setMinimumSize(680, 440);
-        shortcutsDialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
-        owner_.windowSection_->applySystemWindowBackdrop(&shortcutsDialog);
-        UiDialogs::prepareDialogWindow(&shortcutsDialog, &dialog);
 
-        auto* shortcutRootLayout = new QVBoxLayout(&shortcutsDialog);
+        QVBoxLayout* shortcutRootLayout = shortcutsDialog.contentLayout();
+        shortcutRootLayout->setSizeConstraint(QLayout::SetDefaultConstraint);
         shortcutRootLayout->setContentsMargins(10, 10, 10, 10);
         shortcutRootLayout->setSpacing(6);
         auto* table = new ShortcutTableWidget(&shortcutsDialog);
@@ -1661,15 +1632,14 @@ void MainWindow::PreferencesSection::onPreferences()
             if (id.isEmpty()) {
                 return;
             }
-            QDialog captureDialog(&shortcutsDialog);
-            captureDialog.setWindowTitle(UiText::text(QStringLiteral("dialog.preferences.shortcuts.capture_title")));
-            captureDialog.setModal(true);
+            miacode::ui::TabbedSettingsDialog captureDialog(
+                &shortcutsDialog,
+                UiText::text(QStringLiteral("dialog.preferences.shortcuts.capture_title")),
+                miacode::ui::SettingsDialogChrome::Preferences);
             captureDialog.resize(600, 270);
             captureDialog.setMinimumSize(520, 240);
-            captureDialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
-            owner_.windowSection_->applySystemWindowBackdrop(&captureDialog);
-            UiDialogs::prepareDialogWindow(&captureDialog, &shortcutsDialog);
-            auto* captureLayout = new QVBoxLayout(&captureDialog);
+            QVBoxLayout* captureLayout = captureDialog.contentLayout();
+            captureLayout->setSizeConstraint(QLayout::SetDefaultConstraint);
             captureLayout->setContentsMargins(24, 22, 24, 18);
             captureLayout->setSpacing(12);
             // Hold-type shortcuts may bind a bare modifier (Alt alone), which
@@ -1698,14 +1668,15 @@ void MainWindow::PreferencesSection::onPreferences()
             conflictLabel->setMinimumHeight(24);
             conflictLabel->setWordWrap(true);
             conflictLabel->setStyleSheet(QStringLiteral("color: #D93232; font-weight: 600;"));
-            auto* captureButtons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Reset | QDialogButtonBox::Cancel, &captureDialog);
-            UiDialogs::localizeButtonBox(captureButtons);
             captureLayout->addWidget(prompt);
             captureLayout->addWidget(captureEdit);
             captureLayout->addWidget(previewLabel);
             captureLayout->addWidget(conflictLabel);
             captureLayout->addStretch(1);
-            captureLayout->addWidget(captureButtons);
+            auto* captureButtons = captureDialog.buttonBox();
+            captureButtons->setStandardButtons(
+                QDialogButtonBox::Ok | QDialogButtonBox::Reset | QDialogButtonBox::Cancel);
+            UiDialogs::localizeButtonBox(captureButtons);
             const auto updateConflictState = [captureEdit, previewLabel, conflictLabel, editableDefinitions, id]() {
                 previewLabel->setText(captureEdit->text());
                 const QString conflict = conflictingShortcutLabel(editableDefinitions(), id, captureEdit->sequence());
@@ -1761,10 +1732,9 @@ void MainWindow::PreferencesSection::onPreferences()
         });
         refreshRows();
 
-        auto* closeBox = new QDialogButtonBox(QDialogButtonBox::Close, &shortcutsDialog);
-        UiDialogs::localizeButtonBox(closeBox);
-        QObject::connect(closeBox, &QDialogButtonBox::rejected, &shortcutsDialog, &QDialog::reject);
-        shortcutRootLayout->addWidget(closeBox, 0, Qt::AlignRight);
+        auto* closeBox = shortcutsDialog.buttonBox();
+        shortcutsDialog.addCloseButton(UiDialogs::text("action.close", "Close"), false);
+        shortcutRootLayout->setAlignment(closeBox, Qt::AlignRight);
         shortcutsDialog.exec();
     };
 
@@ -1795,76 +1765,24 @@ void MainWindow::PreferencesSection::onPreferences()
 
     pageStack->setCurrentIndex(0);
 
-    // Width floor: widest page + the tab widget's TRUE horizontal chrome,
-    // measured from live geometry. Two facts force this shape (see the
-    // qt-ui-layout-pitfalls skill, W2/W3):
-    //   - the root layout's SetFixedSize constraint ignores dialog-level
-    //     setMinimumWidth but honors a child's minimum, so the floor lives
-    //     on the tab widget (same as the render-settings dialog, df0829d);
-    //   - the QSS pane padding (8px per side) is absent from
-    //     QTabWidget::sizeHint, so without compensation every page comes up
-    //     ~16px short and Fixed-width fields (menu buttons, the font
-    //     shortcut hint) clip at the right pane edge.
-    // Measuring instead of hardcoding keeps the dialog as narrow as the
-    // content allows while never re-clipping when rows change.
-    int maxPageWidth = 0;
-    for (int i = 0; i < pageStack->count(); ++i) {
-        QWidget* page = pageStack->widget(i);
-        if (page == nullptr) {
-            continue;
-        }
-        if (page->layout() != nullptr) {
-            page->layout()->activate();
-        }
-        maxPageWidth = qMax(maxPageWidth, page->sizeHint().width());
-    }
-    dialog.adjustSize();
-    QCoreApplication::sendPostedEvents(pageStack, QEvent::LayoutRequest);
-    auto* pageStackInner = pageStack->findChild<QStackedWidget*>();
-    // Fallback chrome if the inner stack is not measurable: 2*8px QSS pane
-    // padding + 2*1px pane border (must track the QSS in
-    // UiTheme::dialogTabStripStyleSheet()).
-    int tabChrome = 18;
-    if (pageStackInner != nullptr && pageStack->width() > pageStackInner->width()) {
-        tabChrome = pageStack->width() - pageStackInner->width();
-    }
-    // FIX (2026-06-19): a plain minimumWidth floor never narrowed the dialog.
-    // the SetFixedSize root layout sizes the dialog to the QTabWidget's sizeHint,
-    // which over-reports well past the widest page, so the floor sat below it and
-    // never bound (the "didn't get narrower" report). Pin the tab widget to the
-    // measured content width instead; SetFixedSize then collapses the dialog onto
-    // it. Clamp up to the tab strip's own width so pinning can never clip the
-    // tabs, and to maxPageWidth so every page still fits; no clipping, just the
-    // dead right-hand margin removed.
-    int tabBarWidth = 0;
-    if (auto* tabBar = pageStack->findChild<QTabBar*>()) {
-        tabBarWidth = tabBar->sizeHint().width();
-    }
-    const int pinnedWidth = qMax(maxPageWidth, tabBarWidth) + tabChrome;
-    pageStack->setFixedWidth(pinnedWidth);
-    // The adjustSize() above locked the dialog onto its (wide) natural sizeHint;
-    // SetFixedSize won't recompute from a child's fixedWidth until the layout
-    // re-activates, so force it now or the narrowing silently never lands (the
-    // 2026-06-19 "still not narrower" report).
-    rootLayout->activate();
-    dialog.adjustSize();
+    const miacode::ui::TabWidgetWidthMetrics tabWidthMetrics =
+        miacode::ui::pinTabWidgetToContentWidth(pageStack, &dialog, rootLayout);
     // --debug breadcrumb: if the dialog is still wide, this prints the real
     // per-page hint so the over-reporting page can be pinned without guessing.
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("preferences/width"),
         QStringLiteral("maxPage=%1 tabBar=%2 chrome=%3 pinned=%4 dialogW=%5")
-            .arg(maxPageWidth)
-            .arg(tabBarWidth)
-            .arg(tabChrome)
-            .arg(pinnedWidth)
+            .arg(tabWidthMetrics.maxPageWidth)
+            .arg(tabWidthMetrics.tabBarWidth)
+            .arg(tabWidthMetrics.tabChrome)
+            .arg(tabWidthMetrics.pinnedWidth)
             .arg(dialog.width()),
         true);
 
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
-    UiDialogs::localizeButtonBox(buttonBox);
-    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    rootLayout->addWidget(buttonBox, 0, Qt::AlignRight);
+    auto* buttonBox = dialog.buttonBox();
+    dialog.addCloseButton(UiDialogs::text("action.close", "Close"), false);
+    rootLayout->setAlignment(buttonBox, Qt::AlignRight);
 
     dialog.exec();
 }

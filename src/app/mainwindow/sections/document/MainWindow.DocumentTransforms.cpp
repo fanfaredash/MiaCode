@@ -4,6 +4,7 @@
 
 #include "DialogLocalization.h"
 #include "PlainCodeEditor.h"
+#include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/OperationLog.h"
@@ -73,10 +74,7 @@ NormalizeDialogResult showNormalizeSelectionDialog(
     rootLayout->addWidget(summaryRow);
 
     const auto createDialogComboBox = [&dialog]() {
-        auto* combo = new QComboBox(&dialog);
-        combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        UiTheme::styleDialogComboBox(combo, 2);
-        return combo;
+        return miacode::ui::createDialogComboBox(&dialog, 12);
     };
     const auto setComboToBool = [](QComboBox* combo, bool value) {
         const int index = combo->findData(value);

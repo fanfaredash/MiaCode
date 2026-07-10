@@ -315,6 +315,8 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
 
     // Size.
     sizeCombo_ = new QComboBox(this);
+    sizeCombo_->setProperty("miacode.combo_text_alignment",
+                            static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter));
     int selectedIndex = -1;
     for (const CoverResolutionPreset& preset : kCoverResolutionPresets) {
         const QSize size(preset.width, preset.height);
@@ -334,6 +336,8 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
 
     // Background source.
     backgroundCombo_ = new QComboBox(this);
+    backgroundCombo_->setProperty("miacode.combo_text_alignment",
+                                  static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter));
     backgroundCombo_->addItem(UiText::text(QStringLiteral("cover.chart_jacket")),
                               QStringLiteral("jacket"));
     backgroundCombo_->addItem(UiText::text(QStringLiteral("cover.custom_image")),
@@ -397,6 +401,8 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     // the スタンダード plate top-right and mirrors the tab shoulder); anything
     // else shows the でらっくす plate top-left.
     cardModeCombo_ = new QComboBox(this);
+    cardModeCombo_->setProperty("miacode.combo_text_alignment",
+                                static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter));
     cardModeCombo_->addItem(QStringLiteral("DX"), QStringLiteral("DX"));
     cardModeCombo_->addItem(QStringLiteral("SD"), QStringLiteral("Standard"));
     {
@@ -419,6 +425,8 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
 
     // Long-text overflow.
     textOverflowCombo_ = new QComboBox(this);
+    textOverflowCombo_->setProperty("miacode.combo_text_alignment",
+                                    static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter));
     textOverflowCombo_->addItem(
         UiText::text(QStringLiteral("cover.shrink_to_fit")), QStringLiteral("shrink"));
     textOverflowCombo_->addItem(

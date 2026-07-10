@@ -11,6 +11,7 @@ class QApplication;
 class QComboBox;
 class QMenu;
 class QToolButton;
+class QWidget;
 
 namespace UiTheme {
 
@@ -103,9 +104,18 @@ QString pausePreviewButtonStyleSheet(bool active);
 QString formSliderStyleSheet();
 QString dialogSliderStyleSheet();
 QString dialogComboBoxStyleSheet();
+QString dialogComboBoxStyleSheet(Qt::Alignment textAlignment);
 void styleDialogComboBox(QComboBox* combo, int maxVisibleItems = 0);
+void prepareDialogDropdownPopupWindow(QWidget* popupWindow);
+QString dialogDropdownItemButtonStyleSheet();
+QString dialogDropdownCheckBoxStyleSheet();
+QString dialogDropdownScrollBarStyleSheet(const QString& parentSelector = QString());
+void styleDialogDropdownMenu(QMenu& menu);
 QString dialogSpinBoxStyleSheet();
 QString dialogMenuButtonStyleSheet();
+// QToolButton styled to match a createDialogComboBox closed box (for
+// multi-select pseudo-dropdowns like 判定效果显示). Default centered.
+QString dialogComboLikeButtonStyleSheet(Qt::Alignment textAlignment = Qt::AlignCenter);
 QString dialogMenuCheckBoxStyleSheet();
 QString dialogMenuLineEditStyleSheet();
 QString dialogMenuLineEditStyleSheet(const QColor& backgroundColor);

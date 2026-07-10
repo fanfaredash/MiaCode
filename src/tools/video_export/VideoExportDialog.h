@@ -255,17 +255,13 @@ private:
     VideoExportTask requestedExportTask_;
 
     QLineEdit* outputPathEdit_ = nullptr;
-    QToolButton* resolutionButton_ = nullptr;
-    QMenu* resolutionMenu_ = nullptr;
+    QComboBox* resolutionCombo_ = nullptr;
     QSize selectedResolution_ = QSize();
-    QToolButton* fpsButton_ = nullptr;
-    QMenu* fpsMenu_ = nullptr;
+    QComboBox* fpsCombo_ = nullptr;
     int selectedFps_ = 60;
-    QToolButton* audioBitrateButton_ = nullptr;
-    QMenu* audioBitrateMenu_ = nullptr;
+    QComboBox* audioBitrateCombo_ = nullptr;
     int selectedAudioBitrateKbps_ = 192;
-    QToolButton* presetButton_ = nullptr;
-    QMenu* presetMenu_ = nullptr;
+    QComboBox* presetCombo_ = nullptr;
     VideoExportPreset selectedPreset_ = VideoExportPreset::HighQuality;
     QCheckBox* showTimestampCheck_ = nullptr;
     QCheckBox* showObjectStatsCheck_ = nullptr;
@@ -282,8 +278,7 @@ private:
     QCheckBox* introLevelTextCheck_ = nullptr;
     IntroPreviewWidget* introPreview_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
-    QToolButton* backgroundScaleModeButton_ = nullptr;
-    QMenu* backgroundScaleModeMenu_ = nullptr;
+    QComboBox* backgroundScaleModeCombo_ = nullptr;
     PreviewBackgroundScaleMode selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     QLineEdit* tapFlowSpeedEdit_ = nullptr;
     QLineEdit* touchFlowSpeedEdit_ = nullptr;

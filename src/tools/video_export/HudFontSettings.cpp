@@ -202,6 +202,8 @@ QWidget* createHudFontSettingsWidget(
 
     auto* fontCombo = new QComboBox(root);
     fontCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    fontCombo->setProperty("miacode.combo_text_alignment",
+                           static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter));
     UiTheme::styleDialogComboBox(fontCombo, 12);
     auto* sampleLabel = new QLabel(root);
     sampleLabel->setAlignment(Qt::AlignCenter);

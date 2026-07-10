@@ -53,7 +53,7 @@ Use this file to track where important constants live, what they mean, and wheth
 
 ## 2. Implementation-Local Hotspots
 
-- `src/preview/scene/*.cpp`
+- `src/core/scene/*.cpp`
   - Owns: large volume of render tuning constants
   - Examples:
     - lane angle base and step
@@ -62,9 +62,9 @@ Use this file to track where important constants live, what they mean, and wheth
     - judge-effect curve timing and geometry
     - firework visual tuning
     - descriptor sizing and animation curve parameters
-  - Current tuning note: `src/preview/scene/PreviewJudgeFireworkLayerState.cpp` keeps the firework color-ball hole ratios local, but they are intentionally pinned to the legacy pre-Qt Quick material bounds (`_InnerLB/_InnerUB/_OuterLB/_OuterUB`) so the center cutout and the 15 colored sector spokes both stay visually aligned with the old `PreviewCanvas` hole-mask fade. The color-ball scale/alpha curves are intentionally aligned to the true `v0.3.7-dev5` `PreviewCanvas.cpp` values rather than the later `0d6dd1d` zero-start quick-restore ramps, because that later ramp made the center ball read too small before the spokes came in.
+  - Current tuning note: `src/core/scene/PreviewJudgeFireworkLayerState.cpp` keeps the firework color-ball hole ratios local, but they are intentionally pinned to the legacy pre-Qt Quick material bounds (`_InnerLB/_InnerUB/_OuterLB/_OuterUB`) so the center cutout and the 15 colored sector spokes both stay visually aligned with the old `PreviewCanvas` hole-mask fade. The color-ball scale/alpha curves are intentionally aligned to the true `v0.3.7-dev5` `PreviewCanvas.cpp` values rather than the later `0d6dd1d` zero-start quick-restore ramps, because that later ramp made the center ball read too small before the spokes came in.
   - Rule: keep local only when the values are render-internal and not consumed elsewhere
-- `src/preview/scene/PreviewAnimatedSpriteHelpers.cpp`
+- `src/core/scene/PreviewAnimatedSpriteHelpers.cpp`
   - Owns: continuous animated-sprite wave timing (`kMaterialAnimationTimeScale`, `kMaterialAnimationPhaseScale`) plus helper-side overlay cache quantization/cap for EX-style CPU composites
   - Current tuning note: overlay cache quantization stays local at `4096.0`, and the helper-side overlay cache is currently capped at `128` entries because it is a Quick-preview reuse detail rather than shared product behavior
   - Rule: keep local while the preview/export pipelines only need shared animation timing and overlay reuse policy, but document changes if another subsystem must reason about the same wave scaling or cache budget
@@ -197,7 +197,7 @@ It is acceptable to keep a constant local when:
 
 ## 6. Current High-Attention Areas
 
-- Preview effect tuning in `src/preview/scene/*.cpp`
+- Preview effect tuning in `src/core/scene/*.cpp`
 - Latency detection scan parameters
 - Export encoder and bitrate heuristics
 - Parser geometry/timing assumptions
