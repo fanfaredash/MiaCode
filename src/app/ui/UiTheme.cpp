@@ -1204,7 +1204,7 @@ void bindDialogMenuButtonPopupState(QToolButton* button, QMenu* menu)
 QString dialogMenuLineEditStyleSheet()
 {
     const Colors& c = colors();
-    return dialogMenuLineEditStyleSheet(c.inputBg);
+    return dialogMenuLineEditStyleSheet(c.windowAltBg);
 }
 
 QString dialogMenuLineEditStyleSheet(const QColor& backgroundColor)
@@ -1562,7 +1562,10 @@ QString exportDialogStyleSheet()
     return QStringLiteral(
         "QDialog { background: %1; }"
         "QFrame#VideoExportPrimaryPanel, QFrame#VideoExportSectionPanel { background: %2; border: 1px solid %3; border-radius: 12px; }"
-        "QLineEdit, QDoubleSpinBox { background: %2; color: %4; border: 1px solid %3; border-radius: 8px; padding: 4px 8px; min-height: 24px; }"
+        "QLineEdit, QDoubleSpinBox { background: %1; color: %4; border: 1px solid %3; border-radius: 8px; padding: 2px 10px; min-height: 24px; font-weight: 500; }"
+        "QLineEdit:hover, QDoubleSpinBox:hover { border-color: %7; }"
+        "QLineEdit:focus, QDoubleSpinBox:focus { border-color: %7; background: %1; }"
+        "QLineEdit:disabled, QDoubleSpinBox:disabled { background: %8; border-color: %3; color: %9; }"
         "QLabel { color: %4; }"
         "QCheckBox { color: %4; spacing: 6px; }"
         // "添加片头" master switch sits in a neutral rounded box matching the
@@ -1575,6 +1578,9 @@ QString exportDialogStyleSheet()
         .arg(css(c.textPrimary))
         .arg(css(c.windowAltBg))
         .arg(css(c.border))
+        .arg(css(c.accent))
+        .arg(css(c.inputDisabledBg))
+        .arg(css(c.textMuted))
         + dialogTabStripStyleSheet(c.windowAltBg)
         // Export-dialog-only: widen the tab pane's inset (shared default is
         // 8px) so the dense Visuals page leaves a clear margin to the rounded

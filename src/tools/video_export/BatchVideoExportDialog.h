@@ -20,6 +20,10 @@ class QToolButton;
 class QWidget;
 class QCheckBox;
 
+namespace miacode::ui {
+class EditableValueLabel;
+}
+
 class BatchVideoExportDialog : public QDialog
 {
     Q_OBJECT
@@ -95,9 +99,9 @@ private:
     QSlider* brightnessOuterSlider_ = nullptr;
     QSlider* brightnessInnerSlider_ = nullptr;
     QSlider* layoutSquareScaleSlider_ = nullptr;
-    QLabel* brightnessOuterValueLabel_ = nullptr;
-    QLabel* brightnessInnerValueLabel_ = nullptr;
-    QLabel* layoutSquareScaleValueLabel_ = nullptr;
+    miacode::ui::EditableValueLabel* brightnessOuterValueLabel_ = nullptr;
+    miacode::ui::EditableValueLabel* brightnessInnerValueLabel_ = nullptr;
+    miacode::ui::EditableValueLabel* layoutSquareScaleValueLabel_ = nullptr;
     QList<QCheckBox*> difficultyChecks_;
     QList<int> difficultyIds_;
 };

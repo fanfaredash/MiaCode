@@ -35,6 +35,11 @@ enum class SettingsDialogChrome {
     Preferences,
 };
 
+enum class DialogSliderOptionLayout {
+    Inline,
+    Stacked,
+};
+
 struct TabWidgetWidthMetrics {
     int maxPageWidth = 0;
     int tabBarWidth = 0;
@@ -66,7 +71,16 @@ QWidget* createSliderValueRow(QSlider* slider,
                               EditableValueLabel** valueOut,
                               const QString& suffix,
                               QWidget* parent);
+void applyDialogSliderStyle(QSlider* slider);
+QWidget* createDialogSliderOption(const QString& title,
+                                  QSlider* slider,
+                                  EditableValueLabel** valueOut,
+                                  const QString& suffix,
+                                  QWidget* parent,
+                                  DialogSliderOptionLayout layout = DialogSliderOptionLayout::Inline);
 QPushButton* createDialogPushButton(const QString& text, QWidget* parent, bool primary = false);
+void applyDialogPushButtonStyle(QPushButton* button, bool primary = false);
+void applyDialogAuxiliaryButtonStyle(QPushButton* button);
 
 // The canonical dialog dropdown (the fixed 皮肤-popup combobox): rounded
 // translucent popup panel, item hover rows, popup row limit and themed

@@ -1,7 +1,7 @@
 #include "tools/video_export/HudFontSettings.h"
 
+#include "UiComponents.h"
 #include "UiText.h"
-#include "UiTheme.h"
 #include "core/scene/PreviewHudState.h"
 
 #include <QComboBox>
@@ -200,11 +200,8 @@ QWidget* createHudFontSettingsWidget(
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
-    auto* fontCombo = new QComboBox(root);
-    fontCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    fontCombo->setProperty("miacode.combo_text_alignment",
-                           static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter));
-    UiTheme::styleDialogComboBox(fontCombo, 12);
+    auto* fontCombo = miacode::ui::createDialogComboBox(
+        root, 12, Qt::AlignLeft | Qt::AlignVCenter);
     auto* sampleLabel = new QLabel(root);
     sampleLabel->setAlignment(Qt::AlignCenter);
     sampleLabel->setText(QStringLiteral("12:34:567  TAP  HOLD  SLIDE  101.0000%"));
@@ -219,7 +216,7 @@ QWidget* createHudFontSettingsWidget(
 
     const auto refreshFromPreferences = [fontCombo, applySampleFont]() {
         populateHudFontCombo(fontCombo, currentHudFontPath());
-        UiTheme::styleDialogComboBox(fontCombo, 12);
+        miacode::ui::applyDialogComboBoxStyle(fontCombo, 12);
         applySampleFont();
     };
 
@@ -232,21 +229,10 @@ QWidget* createHudFontSettingsWidget(
     auto* buttonLayout = new QHBoxLayout(buttonRow);
     buttonLayout->setContentsMargins(0, 0, 0, 0);
     buttonLayout->setSpacing(8);
-    auto* importButton = new QPushButton(
-        UiText::text(QStringLiteral("dialog.video_export.option.import_hud_font")),
-        buttonRow
-    );
-    auto* resetButton = new QPushButton(
-        UiText::text(QStringLiteral("dialog.video_export.option.reset_hud_font")),
-        buttonRow
-    );
-    for (QPushButton* button : {importButton, resetButton}) {
-        button->setObjectName(QStringLiteral("DialogAuxiliaryButton"));
-        button->setProperty("miacodeAuxiliaryButton", true);
-        button->setCursor(Qt::PointingHandCursor);
-    }
-    importButton->setStyleSheet(UiTheme::dialogAuxiliaryButtonStyleSheet());
-    resetButton->setStyleSheet(UiTheme::dialogAuxiliaryButtonStyleSheet());
+    auto* importButton = miacode::ui::createDialogAuxiliaryButton(
+        buttonRow, UiText::text(QStringLiteral("dialog.video_export.option.import_hud_font")));
+    auto* resetButton = miacode::ui::createDialogAuxiliaryButton(
+        buttonRow, UiText::text(QStringLiteral("dialog.video_export.option.reset_hud_font")));
     buttonLayout->addWidget(importButton, 0);
     buttonLayout->addWidget(resetButton, 0);
     buttonLayout->addStretch(1);
@@ -265,7 +251,7 @@ QWidget* createHudFontSettingsWidget(
         const QString importedPath = importHudFontFromUser(root, onFontChanged);
         if (!importedPath.isEmpty()) {
             populateHudFontCombo(fontCombo, importedPath);
-            UiTheme::styleDialogComboBox(fontCombo, 12);
+            miacode::ui::applyDialogComboBoxStyle(fontCombo, 12);
             applySampleFont();
         }
     });
@@ -273,7 +259,7 @@ QWidget* createHudFontSettingsWidget(
         miacode::preview::scene::setPreviewHudCustomFontPath(QString());
         notifyFontChanged(onFontChanged);
         populateHudFontCombo(fontCombo, QString());
-        UiTheme::styleDialogComboBox(fontCombo, 12);
+        miacode::ui::applyDialogComboBoxStyle(fontCombo, 12);
         applySampleFont();
     });
 

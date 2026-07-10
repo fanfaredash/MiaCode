@@ -51,7 +51,6 @@ namespace {
 constexpr int kDialogMinWidth = 620;
 constexpr int kFormLabelWidth = 72;
 constexpr int kDialogActionButtonMinWidth = 92;
-constexpr int kSliderValueLabelWidth = 44;
 
 struct ResolutionPreset {
     int width = 1024;
@@ -168,20 +167,6 @@ QString exportBaseDirectory(const VideoExportTask& task)
         return chartInfo.absoluteDir().absolutePath();
     }
     return QDir::currentPath();
-}
-
-QString batchExportLineEditStyleSheet()
-{
-    const auto& c = UiTheme::colors();
-    return QStringLiteral(
-        "QLineEdit { min-height: 24px; padding: 0px 10px; border: 1px solid %1; border-radius: 8px; background: %2; color: %3; font-weight: 500; }"
-        "QLineEdit:hover { border-color: %4; }"
-        "QLineEdit:focus { border-color: %4; background: %2; }"
-    )
-        .arg(c.border.name(QColor::HexRgb))
-        .arg(c.inputBg.name(QColor::HexRgb))
-        .arg(c.textPrimary.name(QColor::HexRgb))
-        .arg(c.accent.name(QColor::HexRgb));
 }
 
 QString batchDifficultyLabel(int difficultyId)
@@ -358,45 +343,6 @@ QStringList selectMultipleDirectories(QWidget* parent, const QString& startDirec
 #endif
 }
 
-QWidget* createSliderOption(
-    QWidget* parent,
-    const QString& title,
-    int valuePercent,
-    QSlider** sliderOut,
-    QLabel** valueLabelOut
-)
-{
-    auto* container = new QWidget(parent);
-    auto* layout = new QHBoxLayout(container);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(8);
-
-    auto* titleLabel = new QLabel(title, container);
-    auto* slider = new QSlider(Qt::Horizontal, container);
-    slider->setRange(0, 100);
-    slider->setSingleStep(1);
-    slider->setPageStep(1);
-    slider->setTickInterval(1);
-    slider->setValue(valuePercent);
-    slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
-    auto* valueLabel = new miacode::ui::EditableValueLabel(QStringLiteral("%1%").arg(valuePercent), container);
-    valueLabel->setMinimumWidth(kSliderValueLabelWidth);
-    valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    valueLabel->bindSlider(slider);
-
-    layout->addWidget(titleLabel, 0);
-    layout->addWidget(slider, 1);
-    layout->addWidget(valueLabel, 0);
-
-    if (sliderOut != nullptr) {
-        *sliderOut = slider;
-    }
-    if (valueLabelOut != nullptr) {
-        *valueLabelOut = valueLabel;
-    }
-    return container;
-}
-
 }
 
 BatchVideoExportDialog::BatchVideoExportDialog(
@@ -458,9 +404,9 @@ BatchVideoExportDialog::BatchVideoExportDialog(
         ? exportBaseDirectory(baseTask_)
         : rememberedOutputDirectory;
     outputDirectoryEdit_->setText(QDir::toNativeSeparators(initialOutputDirectory));
-    outputDirectoryEdit_->setStyleSheet(batchExportLineEditStyleSheet());
-    auto* outputBrowseButton = new QPushButton(UiText::text(QStringLiteral("action.browse")), this);
-    outputBrowseButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    outputDirectoryEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
+    auto* outputBrowseButton = miacode::ui::createDialogAuxiliaryButton(
+        this, UiText::text(QStringLiteral("action.browse")));
     connect(outputBrowseButton, &QPushButton::clicked, this, &BatchVideoExportDialog::browseOutputDirectory);
     topForm->addWidget(outputLabel, row, 0);
     topForm->addWidget(outputDirectoryEdit_, row, 1);
@@ -567,16 +513,16 @@ BatchVideoExportDialog::BatchVideoExportDialog(
 
     auto* chartButtonsLayout = new QVBoxLayout();
     chartButtonsLayout->setSpacing(6);
-    auto* addButton = new QPushButton(UiText::text(QStringLiteral("dialog.batch_export.add_folders")), this);
-    addButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    auto* addButton = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("dialog.batch_export.add_folders")), this);
     connect(addButton, &QPushButton::clicked, this, &BatchVideoExportDialog::browseChartDirectories);
     chartButtonsLayout->addWidget(addButton);
-    auto* removeButton = new QPushButton(UiText::text(QStringLiteral("dialog.batch_export.remove_selected")), this);
-    removeButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    auto* removeButton = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("dialog.batch_export.remove_selected")), this);
     connect(removeButton, &QPushButton::clicked, this, &BatchVideoExportDialog::removeSelectedChartDirectories);
     chartButtonsLayout->addWidget(removeButton);
-    auto* clearButton = new QPushButton(UiText::text(QStringLiteral("dialog.batch_export.clear")), this);
-    clearButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    auto* clearButton = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("dialog.batch_export.clear")), this);
     connect(clearButton, &QPushButton::clicked, this, &BatchVideoExportDialog::clearChartDirectories);
     chartButtonsLayout->addWidget(clearButton);
     chartButtonsLayout->addStretch(1);
@@ -619,36 +565,55 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     optionsLayout->addWidget(checkboxRow, optionRow, 0, 1, 4);
     ++optionRow;
 
-    QWidget* outerBrightnessOption = createSliderOption(
-        optionsCard,
+    brightnessOuterSlider_ = new QSlider(Qt::Horizontal, optionsCard);
+    brightnessOuterSlider_->setRange(0, 100);
+    brightnessOuterSlider_->setSingleStep(1);
+    brightnessOuterSlider_->setPageStep(1);
+    brightnessOuterSlider_->setTickInterval(1);
+    brightnessOuterSlider_->setValue(qRound(qBound(0.0, baseTask_.backgroundBrightnessOuter, 1.0) * 100.0));
+    QWidget* outerBrightnessOption = miacode::ui::createDialogSliderOption(
         UiText::text(QStringLiteral("dialog.video_export.option.brightness_outer")),
-        qRound(qBound(0.0, baseTask_.backgroundBrightnessOuter, 1.0) * 100.0),
-        &brightnessOuterSlider_,
-        &brightnessOuterValueLabel_
+        brightnessOuterSlider_,
+        &brightnessOuterValueLabel_,
+        QStringLiteral("%"),
+        optionsCard,
+        miacode::ui::DialogSliderOptionLayout::Inline
     );
     optionsLayout->addWidget(outerBrightnessOption, optionRow, 0, 1, 4);
     ++optionRow;
 
-    QWidget* innerBrightnessOption = createSliderOption(
-        optionsCard,
+    brightnessInnerSlider_ = new QSlider(Qt::Horizontal, optionsCard);
+    brightnessInnerSlider_->setRange(0, 100);
+    brightnessInnerSlider_->setSingleStep(1);
+    brightnessInnerSlider_->setPageStep(1);
+    brightnessInnerSlider_->setTickInterval(1);
+    brightnessInnerSlider_->setValue(qRound(qBound(0.0, baseTask_.backgroundBrightnessInner, 1.0) * 100.0));
+    QWidget* innerBrightnessOption = miacode::ui::createDialogSliderOption(
         UiText::text(QStringLiteral("dialog.video_export.option.brightness_inner")),
-        qRound(qBound(0.0, baseTask_.backgroundBrightnessInner, 1.0) * 100.0),
-        &brightnessInnerSlider_,
-        &brightnessInnerValueLabel_
+        brightnessInnerSlider_,
+        &brightnessInnerValueLabel_,
+        QStringLiteral("%"),
+        optionsCard,
+        miacode::ui::DialogSliderOptionLayout::Inline
     );
     optionsLayout->addWidget(innerBrightnessOption, optionRow, 0, 1, 4);
     ++optionRow;
 
-    QWidget* judgeLineOption = createSliderOption(
-        optionsCard,
-        UiText::text(QStringLiteral("dialog.video_export.option.layout_size")),
-        qRound(miacode::preview_video::normalizedLayoutSquareScale(baseTask_.layoutSquareScale) * 100.0),
-        &layoutSquareScaleSlider_,
-        &layoutSquareScaleValueLabel_
-    );
+    layoutSquareScaleSlider_ = new QSlider(Qt::Horizontal, optionsCard);
     layoutSquareScaleSlider_->setRange(50, 150);
     layoutSquareScaleSlider_->setSingleStep(1);
     layoutSquareScaleSlider_->setPageStep(1);
+    layoutSquareScaleSlider_->setTickInterval(1);
+    layoutSquareScaleSlider_->setValue(
+        qRound(miacode::preview_video::normalizedLayoutSquareScale(baseTask_.layoutSquareScale) * 100.0));
+    QWidget* judgeLineOption = miacode::ui::createDialogSliderOption(
+        UiText::text(QStringLiteral("dialog.video_export.option.layout_size")),
+        layoutSquareScaleSlider_,
+        &layoutSquareScaleValueLabel_,
+        QStringLiteral("%"),
+        optionsCard,
+        miacode::ui::DialogSliderOptionLayout::Inline
+    );
     optionsLayout->addWidget(judgeLineOption, optionRow, 0, 1, 4);
     ++optionRow;
 
@@ -685,7 +650,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
         auto* flowSpeedEdit = new QLineEdit(optionsCard);
         flowSpeedEdit->setAlignment(Qt::AlignCenter);
         flowSpeedEdit->setText(flowSpeedValueLabel(*selectedFlowSpeed));
-        flowSpeedEdit->setStyleSheet(batchExportLineEditStyleSheet());
+        flowSpeedEdit->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
         auto* flowValidator = new QDoubleValidator(
             miacode::preview_gameplay::kPreviewTimingFlowSpeedMin,
             miacode::preview_gameplay::kPreviewTimingFlowSpeedMax,
@@ -764,17 +729,16 @@ BatchVideoExportDialog::BatchVideoExportDialog(
 
     rootLayout->addWidget(optionsCard);
 
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
-    auto* exportButton = new QPushButton(UiText::text(QStringLiteral("dialog.video_export.button.export")), this);
+    auto* buttons = new QDialogButtonBox(this);
+    auto* exportButton = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("dialog.video_export.button.export")), this, true);
     exportButton->setMinimumWidth(kDialogActionButtonMinWidth);
-    exportButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(true));
     buttons->addButton(exportButton, QDialogButtonBox::AcceptRole);
-    if (QPushButton* cancelButton = buttons->button(QDialogButtonBox::Cancel); cancelButton != nullptr) {
-        cancelButton->setMinimumWidth(kDialogActionButtonMinWidth);
-        cancelButton->setText(systemL10n(QStringLiteral("Cancel"), QStringLiteral("取消")));
-        cancelButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-        connect(cancelButton, &QPushButton::clicked, this, &BatchVideoExportDialog::reject);
-    }
+    auto* cancelButton = miacode::ui::createDialogPushButton(
+        systemL10n(QStringLiteral("Cancel"), QStringLiteral("\u53d6\u6d88")), this);
+    cancelButton->setMinimumWidth(kDialogActionButtonMinWidth);
+    buttons->addButton(cancelButton, QDialogButtonBox::RejectRole);
+    connect(buttons, &QDialogButtonBox::rejected, this, &BatchVideoExportDialog::reject);
     connect(exportButton, &QPushButton::clicked, this, &BatchVideoExportDialog::startExport);
     rootLayout->addWidget(buttons);
 

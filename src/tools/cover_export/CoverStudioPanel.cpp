@@ -355,8 +355,9 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     backgroundPathEdit_ = new QLineEdit(pathRow);
     backgroundPathEdit_->setPlaceholderText(
         UiText::text(QStringLiteral("cover.custom_background_image_path")));
-    backgroundBrowse_ = new QPushButton(UiText::text(QStringLiteral("cover.browse")), pathRow);
-    backgroundBrowse_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    backgroundPathEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
+    backgroundBrowse_ = miacode::ui::createDialogAuxiliaryButton(
+        pathRow, UiText::text(QStringLiteral("cover.browse")));
     pathLayout->addWidget(backgroundPathEdit_, 1);
     pathLayout->addWidget(backgroundBrowse_, 0);
     form->addRow(QString(), pathRow);

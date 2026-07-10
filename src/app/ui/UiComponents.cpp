@@ -100,6 +100,21 @@ protected:
     }
 };
 
+EditableValueLabel* createDialogSliderValueLabel(QSlider* slider, const QString& suffix, QWidget* parent)
+{
+    const int value = slider != nullptr ? slider->value() : 0;
+    auto* label = new EditableValueLabel(QString::number(value) + suffix, parent);
+    label->setMinimumWidth(46);
+    label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    if (slider != nullptr) {
+        label->bindSlider(slider);
+        QObject::connect(slider, &QSlider::valueChanged, label, [label, suffix](int v) {
+            label->setText(QString::number(v) + suffix);
+        });
+    }
+    return label;
+}
+
 }  // namespace
 
 TabbedSettingsDialog::TabbedSettingsDialog(QWidget* parent,
@@ -192,26 +207,16 @@ QWidget* createSliderValueRow(QSlider* slider,
                               const QString& suffix,
                               QWidget* parent)
 {
-    if (slider != nullptr) {
-        slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
-        slider->ensurePolished();
-        slider->setFixedHeight(qMax(slider->sizeHint().height(), 20) + 2);
-    }
+    applyDialogSliderStyle(slider);
 
     auto* row = new QWidget(parent);
     auto* layout = new QHBoxLayout(row);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
-    auto* value = new EditableValueLabel(QStringLiteral("0") + suffix, row);
-    value->setMinimumWidth(46);
-    value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    auto* value = createDialogSliderValueLabel(slider, suffix, row);
     if (slider != nullptr) {
-        value->bindSlider(slider);
         layout->addWidget(slider, 1);
-        QObject::connect(slider, &QSlider::valueChanged, value, [value, suffix](int v) {
-            value->setText(QString::number(v) + suffix);
-        });
     }
     layout->addWidget(value, 0);
 
@@ -221,11 +226,85 @@ QWidget* createSliderValueRow(QSlider* slider,
     return row;
 }
 
+void applyDialogSliderStyle(QSlider* slider)
+{
+    if (slider == nullptr) {
+        return;
+    }
+    slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
+    slider->ensurePolished();
+    slider->setFixedHeight(qMax(slider->sizeHint().height(), 20) + 2);
+}
+
+QWidget* createDialogSliderOption(const QString& title,
+                                  QSlider* slider,
+                                  EditableValueLabel** valueOut,
+                                  const QString& suffix,
+                                  QWidget* parent,
+                                  DialogSliderOptionLayout optionLayout)
+{
+    applyDialogSliderStyle(slider);
+
+    auto* container = new QWidget(parent);
+    auto* value = createDialogSliderValueLabel(slider, suffix, container);
+    if (valueOut != nullptr) {
+        *valueOut = value;
+    }
+
+    if (optionLayout == DialogSliderOptionLayout::Stacked) {
+        auto* containerLayout = new QVBoxLayout(container);
+        containerLayout->setContentsMargins(0, 0, 0, 0);
+        containerLayout->setSpacing(3);
+
+        auto* header = new QWidget(container);
+        auto* headerLayout = new QHBoxLayout(header);
+        headerLayout->setContentsMargins(0, 0, 0, 0);
+        headerLayout->setSpacing(6);
+        headerLayout->addWidget(new QLabel(title, header), 1);
+        headerLayout->addWidget(value, 0);
+
+        containerLayout->addWidget(header, 0);
+        if (slider != nullptr) {
+            containerLayout->addWidget(slider, 0);
+        }
+        return container;
+    }
+
+    auto* layout = new QHBoxLayout(container);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
+    layout->addWidget(new QLabel(title, container), 0);
+    if (slider != nullptr) {
+        layout->addWidget(slider, 1);
+    }
+    layout->addWidget(value, 0);
+    return container;
+}
+
 QPushButton* createDialogPushButton(const QString& text, QWidget* parent, bool primary)
 {
     auto* button = new QPushButton(text, parent);
-    button->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(primary));
+    applyDialogPushButtonStyle(button, primary);
     return button;
+}
+
+void applyDialogPushButtonStyle(QPushButton* button, bool primary)
+{
+    if (button == nullptr) {
+        return;
+    }
+    button->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(primary));
+}
+
+void applyDialogAuxiliaryButtonStyle(QPushButton* button)
+{
+    if (button == nullptr) {
+        return;
+    }
+    button->setObjectName(QStringLiteral("DialogAuxiliaryButton"));
+    button->setProperty("miacodeAuxiliaryButton", true);
+    button->setCursor(Qt::PointingHandCursor);
+    button->setStyleSheet(UiTheme::dialogAuxiliaryButtonStyleSheet());
 }
 
 QComboBox* createDialogComboBox(QWidget* parent, int maxVisibleItems, Qt::Alignment textAlignment)
@@ -350,10 +429,7 @@ QCheckBox* addDialogMenuCheckChoice(QMenu* menu,
 QPushButton* createDialogAuxiliaryButton(QWidget* parent, const QString& text)
 {
     auto* button = new QPushButton(text, parent);
-    button->setObjectName(QStringLiteral("DialogAuxiliaryButton"));
-    button->setProperty("miacodeAuxiliaryButton", true);
-    button->setCursor(Qt::PointingHandCursor);
-    button->setStyleSheet(UiTheme::dialogAuxiliaryButtonStyleSheet());
+    applyDialogAuxiliaryButtonStyle(button);
     return button;
 }
 

@@ -604,11 +604,10 @@ VideoExportDialog::VideoExportDialog(
     outputControlLayout->setSpacing(kFormRowSpacing);
     outputPathEdit_ = new QLineEdit(outputControlRow);
     outputPathEdit_->setText(displayOutputPathForDialog(baseTask_.outputPath, exportBaseDirectory(baseTask_)));
-    auto* browseButton = new QPushButton(UiText::text(QStringLiteral("dialog.video_export.browse")), outputRow);
+    outputPathEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet(UiTheme::colors().windowAltBg));
+    auto* browseButton = miacode::ui::createDialogAuxiliaryButton(
+        outputRow, UiText::text(QStringLiteral("dialog.video_export.browse")));
     outputBrowseButton_ = browseButton;
-    browseButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    const int rightAlignedButtonWidth = qMax(browseButton->sizeHint().width(), kDialogActionButtonMinWidth);
-    browseButton->setFixedWidth(rightAlignedButtonWidth);
     connect(browseButton, &QPushButton::clicked, this, &VideoExportDialog::browseOutputPath);
     outputControlLayout->addWidget(outputPathEdit_, 1);
     outputControlLayout->addWidget(browseButton, 0);
@@ -853,12 +852,11 @@ VideoExportDialog::VideoExportDialog(
     auto* startLabel = new QLabel(UiText::text(QStringLiteral("dialog.video_export.range.start")), startRow);
     startLabel->setFixedWidth(kRangeLabelWidth);
     startLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    auto* setStartButton = new QPushButton(
-        UiText::text(QStringLiteral("dialog.video_export.range.set_current")), startRow);
+    auto* setStartButton = miacode::ui::createDialogAuxiliaryButton(
+        startRow, UiText::text(QStringLiteral("dialog.video_export.range.set_current")));
     setStartButton_ = setStartButton;
     setStartButton->setToolTip(
         UiText::text(QStringLiteral("dialog.video_export.range.set_current.tip")));
-    setStartButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     startRowLayout->addWidget(startLabel, 0);
     startRowLayout->addWidget(startSecondSpin_, 1);
     startRowLayout->addWidget(setStartButton, 0);
@@ -871,12 +869,11 @@ VideoExportDialog::VideoExportDialog(
     auto* endLabel = new QLabel(UiText::text(QStringLiteral("dialog.video_export.range.end")), endRow);
     endLabel->setFixedWidth(kRangeLabelWidth);
     endLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    auto* setEndButton = new QPushButton(
-        UiText::text(QStringLiteral("dialog.video_export.range.set_current")), endRow);
+    auto* setEndButton = miacode::ui::createDialogAuxiliaryButton(
+        endRow, UiText::text(QStringLiteral("dialog.video_export.range.set_current")));
     setEndButton_ = setEndButton;
     setEndButton->setToolTip(
         UiText::text(QStringLiteral("dialog.video_export.range.set_current.tip")));
-    setEndButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     endRowLayout->addWidget(endLabel, 0);
     endRowLayout->addWidget(endSecondSpin_, 1);
     endRowLayout->addWidget(setEndButton, 0);
@@ -1022,103 +1019,53 @@ VideoExportDialog::VideoExportDialog(
     );
     smoothBrightnessCheck_->setChecked(baseTask_.smoothBrightness);
     smoothBrightnessCheck_->setText(UiText::text(QStringLiteral("video_export.smooth_brightness")));
-    const auto addPercentSliderOption = [](
-        QWidget* parent,
-        const QString& title,
-        int minimum,
-        int maximum,
-        int step,
-        int valuePercent,
-        QSlider** sliderOut,
-        QLabel** valueOut
-    ) {
-        auto* container = new QWidget(parent);
-        auto* containerLayout = new QVBoxLayout(container);
-        containerLayout->setContentsMargins(0, 0, 0, 0);
-        containerLayout->setSpacing(3);
-        auto* header = new QWidget(container);
-        auto* headerLayout = new QHBoxLayout(header);
-        headerLayout->setContentsMargins(0, 0, 0, 0);
-        headerLayout->setSpacing(6);
-        auto* titleLabel = new QLabel(title, header);
-        auto* valueLabel = new miacode::ui::EditableValueLabel(QStringLiteral("%1%").arg(valuePercent), header);
-        valueLabel->setMinimumWidth(40);
-        valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        headerLayout->addWidget(titleLabel, 1);
-        headerLayout->addWidget(valueLabel, 0);
-        auto* slider = new QSlider(Qt::Horizontal, container);
-        slider->setRange(minimum, maximum);
-        slider->setSingleStep(step);
-        slider->setPageStep(step);
-        slider->setTickInterval(step);
-        slider->setValue(valuePercent);
-        slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
-        // Fit the styled handle (groove 6px + -4px margins = 14px) without
-        // clipping, kept compact so the page stays short.
-        slider->setFixedHeight(20);
-        valueLabel->bindSlider(slider);
-        containerLayout->addWidget(header, 0);
-        containerLayout->addWidget(slider, 0);
-        *sliderOut = slider;
-        *valueOut = valueLabel;
-        return container;
-    };
-    const auto setSliderOptionTitle = [](QWidget* option, const QString& title) {
-        if (option == nullptr) {
-            return;
-        }
-        auto* optionLayout = qobject_cast<QVBoxLayout*>(option->layout());
-        if (optionLayout == nullptr || optionLayout->count() <= 0) {
-            return;
-        }
-        QWidget* header = optionLayout->itemAt(0)->widget();
-        if (header == nullptr) {
-            return;
-        }
-        auto* headerLayout = qobject_cast<QHBoxLayout*>(header->layout());
-        if (headerLayout == nullptr || headerLayout->count() <= 0) {
-            return;
-        }
-        auto* titleLabel = qobject_cast<QLabel*>(headerLayout->itemAt(0)->widget());
-        if (titleLabel != nullptr) {
-            titleLabel->setText(title);
-        }
-    };
-    QWidget* outerBrightnessOption = addPercentSliderOption(
-        optionsContent_,
+    brightnessOuterSlider_ = new QSlider(Qt::Horizontal, optionsContent_);
+    brightnessOuterSlider_->setRange(0, 100);
+    brightnessOuterSlider_->setSingleStep(1);
+    brightnessOuterSlider_->setPageStep(1);
+    brightnessOuterSlider_->setTickInterval(1);
+    brightnessOuterSlider_->setValue(qRound(qBound(0.0, baseTask_.backgroundBrightnessOuter, 1.0) * 100.0));
+    QWidget* outerBrightnessOption = miacode::ui::createDialogSliderOption(
         UiText::text(QStringLiteral("dialog.video_export.option.brightness_outer")),
-        0,
-        100,
-        1,
-        qRound(qBound(0.0, baseTask_.backgroundBrightnessOuter, 1.0) * 100.0),
-        &brightnessOuterSlider_,
-        &brightnessOuterValueLabel_
-    );
-    QWidget* innerBrightnessOption = addPercentSliderOption(
+        brightnessOuterSlider_,
+        &brightnessOuterValueLabel_,
+        QStringLiteral("%"),
         optionsContent_,
-        UiText::text(QStringLiteral("dialog.video_export.option.brightness_inner")),
-        0,
-        100,
-        1,
-        qRound(qBound(0.0, baseTask_.backgroundBrightnessInner, 1.0) * 100.0),
-        &brightnessInnerSlider_,
-        &brightnessInnerValueLabel_
+        miacode::ui::DialogSliderOptionLayout::Stacked
     );
-    setSliderOptionTitle(outerBrightnessOption, UiText::text(QStringLiteral("dialog.video_export.option.brightness_outer")));
-    setSliderOptionTitle(innerBrightnessOption, UiText::text(QStringLiteral("dialog.video_export.option.brightness_inner")));
+    brightnessInnerSlider_ = new QSlider(Qt::Horizontal, optionsContent_);
+    brightnessInnerSlider_->setRange(0, 100);
+    brightnessInnerSlider_->setSingleStep(1);
+    brightnessInnerSlider_->setPageStep(1);
+    brightnessInnerSlider_->setTickInterval(1);
+    brightnessInnerSlider_->setValue(qRound(qBound(0.0, baseTask_.backgroundBrightnessInner, 1.0) * 100.0));
+    QWidget* innerBrightnessOption = miacode::ui::createDialogSliderOption(
+        UiText::text(QStringLiteral("dialog.video_export.option.brightness_inner")),
+        brightnessInnerSlider_,
+        &brightnessInnerValueLabel_,
+        QStringLiteral("%"),
+        optionsContent_,
+        miacode::ui::DialogSliderOptionLayout::Stacked
+    );
     optionsLayout->addWidget(outerBrightnessOption, 1, 0, 1, 1);
     optionsLayout->addWidget(innerBrightnessOption, 1, 1, 1, 1);
-    QWidget* layoutSquareScaleOption = addPercentSliderOption(
-        optionsContent_,
-        UiText::text(QStringLiteral("video_export.layout_size")),
+    layoutSquareScaleSlider_ = new QSlider(Qt::Horizontal, optionsContent_);
+    layoutSquareScaleSlider_->setRange(
         qRound(miacode::preview_video::kLayoutSquareScaleMin * 100.0),
-        qRound(miacode::preview_video::kLayoutSquareScaleMax * 100.0),
-        qRound(miacode::preview_video::kLayoutSquareScaleStep * 100.0),
-        qRound(miacode::preview_video::normalizedLayoutSquareScale(baseTask_.layoutSquareScale) * 100.0),
-        &layoutSquareScaleSlider_,
-        &layoutSquareScaleValueLabel_
+        qRound(miacode::preview_video::kLayoutSquareScaleMax * 100.0));
+    layoutSquareScaleSlider_->setSingleStep(qRound(miacode::preview_video::kLayoutSquareScaleStep * 100.0));
+    layoutSquareScaleSlider_->setPageStep(qRound(miacode::preview_video::kLayoutSquareScaleStep * 100.0));
+    layoutSquareScaleSlider_->setTickInterval(qRound(miacode::preview_video::kLayoutSquareScaleStep * 100.0));
+    layoutSquareScaleSlider_->setValue(
+        qRound(miacode::preview_video::normalizedLayoutSquareScale(baseTask_.layoutSquareScale) * 100.0));
+    QWidget* layoutSquareScaleOption = miacode::ui::createDialogSliderOption(
+        UiText::text(QStringLiteral("video_export.layout_size")),
+        layoutSquareScaleSlider_,
+        &layoutSquareScaleValueLabel_,
+        QStringLiteral("%"),
+        optionsContent_,
+        miacode::ui::DialogSliderOptionLayout::Stacked
     );
-    setSliderOptionTitle(layoutSquareScaleOption, UiText::text(QStringLiteral("video_export.layout_size")));
     optionsLayout->addWidget(layoutSquareScaleOption, 2, 0, 1, 2);
     const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
     const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
@@ -1372,12 +1319,8 @@ VideoExportDialog::VideoExportDialog(
     introBackgroundPathEdit_->setPlaceholderText(
         UiText::text(QStringLiteral("cover.custom_background_image_path")));
     introBackgroundPathEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet(UiTheme::colors().windowAltBg));
-    introBackgroundBrowse_ = new QPushButton(
-        UiText::text(QStringLiteral("cover.browse")), introBgPathRow);
-    introBackgroundBrowse_->setObjectName(QStringLiteral("DialogAuxiliaryButton"));
-    introBackgroundBrowse_->setProperty("miacodeAuxiliaryButton", true);
-    introBackgroundBrowse_->setCursor(Qt::PointingHandCursor);
-    introBackgroundBrowse_->setStyleSheet(UiTheme::dialogAuxiliaryButtonStyleSheet());
+    introBackgroundBrowse_ = miacode::ui::createDialogAuxiliaryButton(
+        introBgPathRow, UiText::text(QStringLiteral("cover.browse")));
     introBgPathLayout->addWidget(introBackgroundPathEdit_, 1);
     introBgPathLayout->addWidget(introBackgroundBrowse_, 0);
     introBgForm->addRow(QString(), introBgPathRow);
@@ -1478,17 +1421,16 @@ VideoExportDialog::VideoExportDialog(
         refreshSharedSettingsFromCallback();
     });
 
-    buttonBox_ = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
+    buttonBox_ = new QDialogButtonBox(this);
     QDialogButtonBox* buttonBox = buttonBox_;
-    exportButton_ = buttonBox->addButton(UiText::text(QStringLiteral("dialog.video_export.button.export")), QDialogButtonBox::AcceptRole);
-    exportButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(true));
+    exportButton_ = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("dialog.video_export.button.export")), this, true);
+    buttonBox->addButton(exportButton_, QDialogButtonBox::AcceptRole);
     exportButton_->setMinimumWidth(kDialogActionButtonMinWidth);
-    cancelButton_ = buttonBox->button(QDialogButtonBox::Cancel);
-    if (cancelButton_ != nullptr) {
-        cancelButton_->setText(UiText::text(QStringLiteral("dialog.video_export.button.cancel")));
-        cancelButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-        cancelButton_->setMinimumWidth(kDialogActionButtonMinWidth);
-    }
+    cancelButton_ = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("dialog.video_export.button.cancel")), this);
+    cancelButton_->setMinimumWidth(kDialogActionButtonMinWidth);
+    buttonBox->addButton(cancelButton_, QDialogButtonBox::RejectRole);
     connect(exportButton_, &QPushButton::clicked, this, &VideoExportDialog::onExportButtonClicked);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
     rootLayout->addWidget(buttonBox);

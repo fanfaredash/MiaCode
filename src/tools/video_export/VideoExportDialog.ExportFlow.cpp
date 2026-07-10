@@ -2,7 +2,6 @@
 
 #include "BusySpinner.h"
 #include "DialogLocalization.h"
-#include "EditableValueLabel.h"
 #include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -380,13 +379,18 @@ void VideoExportDialog::applyThemeStyles()
     }
 
     // Plain push buttons.
-    for (QPushButton* button : {outputBrowseButton_, setStartButton_, setEndButton_, cancelButton_}) {
+    for (QPushButton* button : {cancelButton_}) {
         if (button != nullptr) {
-            button->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+            miacode::ui::applyDialogPushButtonStyle(button);
         }
     }
-    if (introBackgroundBrowse_ != nullptr) {
-        introBackgroundBrowse_->setStyleSheet(UiTheme::dialogAuxiliaryButtonStyleSheet());
+    for (QPushButton* button : {outputBrowseButton_, introBackgroundBrowse_, setStartButton_, setEndButton_}) {
+        if (button != nullptr) {
+            miacode::ui::applyDialogAuxiliaryButtonStyle(button);
+        }
+    }
+    if (outputPathEdit_ != nullptr) {
+        outputPathEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet(UiTheme::colors().windowAltBg));
     }
     if (introBackgroundPathEdit_ != nullptr) {
         introBackgroundPathEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet(UiTheme::colors().windowAltBg));
@@ -394,7 +398,7 @@ void VideoExportDialog::applyThemeStyles()
     miacode::ui::applyDialogComboBoxStyle(introBackgroundCombo_, 12);
     miacode::ui::applyDialogComboBoxStyle(introCardModeCombo_, 12);
     if (exportButton_ != nullptr) {
-        exportButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(true));
+        miacode::ui::applyDialogPushButtonStyle(exportButton_, true);
     }
 
     if (rangeTrack_ != nullptr) {
@@ -412,7 +416,7 @@ void VideoExportDialog::applyThemeStyles()
     }
     for (QSlider* slider : {brightnessOuterSlider_, brightnessInnerSlider_, layoutSquareScaleSlider_}) {
         if (slider != nullptr) {
-            slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
+            miacode::ui::applyDialogSliderStyle(slider);
         }
     }
 
