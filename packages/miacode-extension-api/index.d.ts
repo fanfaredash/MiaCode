@@ -22,7 +22,36 @@ export interface Disposable {
   dispose(): void;
 }
 
+export type ApiRisk = "low" | "medium" | "high" | "extreme" | "blocked";
+export type ApiStatus = "implemented" | "partial" | "planned" | "blocked";
+
+export interface ApiDescriptor {
+  id: string;
+  method: string;
+  permission?: string;
+  risk: ApiRisk;
+  status: ApiStatus;
+  description: string;
+}
+
+export interface ApiRequest {
+  id: string;
+  reason?: string;
+  required?: boolean;
+  fallback?: string;
+  proposedSignature?: string;
+}
+
 export interface MiaCodeApi {
+  api: {
+    list(): ApiResult<ApiDescriptor[]>;
+    has(id: string): ApiResult<boolean>;
+    describe(id: string): ApiResult<ApiDescriptor>;
+    describeNamespace(namespaceId: string): ApiResult<ApiDescriptor[]>;
+    call<T = unknown>(id: string, params?: Record<string, unknown>): ApiResult<T>;
+    invoke<T = unknown>(method: string, params?: Record<string, unknown>): ApiResult<T>;
+    request(request: ApiRequest): ApiResult;
+  };
   app: {
     getInfo(): ApiResult<Record<string, unknown>>;
     openPreferences(): ApiResult;

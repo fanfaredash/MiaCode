@@ -31,6 +31,7 @@ public:
         Ui,
         Tasks,
         Logs,
+        Api,
         Context,
     };
 
@@ -694,6 +695,46 @@ public:
         return hostCall(QStringLiteral("logs/open"), QJsonObject{{QStringLiteral("channel"), channel}});
     }
 
+    Q_INVOKABLE QJSValue list()
+    {
+        return hostCall(QStringLiteral("api/list"));
+    }
+
+    Q_INVOKABLE QJSValue has(const QString& id)
+    {
+        return hostCall(QStringLiteral("api/has"), QJsonObject{{QStringLiteral("id"), id}});
+    }
+
+    Q_INVOKABLE QJSValue describe(const QString& id)
+    {
+        return hostCall(QStringLiteral("api/describe"), QJsonObject{{QStringLiteral("id"), id}});
+    }
+
+    Q_INVOKABLE QJSValue describeNamespace(const QString& namespaceId)
+    {
+        return hostCall(QStringLiteral("api/describeNamespace"), QJsonObject{{QStringLiteral("namespace"), namespaceId}});
+    }
+
+    Q_INVOKABLE QJSValue call(const QString& id, const QJSValue& params = {})
+    {
+        QJsonObject object = runtime_->scriptValueToJson(params);
+        object.insert(QStringLiteral("id"), id);
+        return hostCall(QStringLiteral("api/call"), object);
+    }
+
+    Q_INVOKABLE QJSValue invoke(const QString& method, const QJSValue& params = {})
+    {
+        QJsonObject object;
+        object.insert(QStringLiteral("method"), method);
+        object.insert(QStringLiteral("params"), runtime_->scriptValueToJson(params));
+        return hostCall(QStringLiteral("api/invoke"), object);
+    }
+
+    Q_INVOKABLE QJSValue request(const QJSValue& request)
+    {
+        return hostCall(QStringLiteral("api/request"), runtime_->scriptValueToJson(request));
+    }
+
     Q_INVOKABLE QJSValue log(const QString& message)
     {
         if (kind_ != Kind::Context || runtime_ == nullptr) {
@@ -767,6 +808,7 @@ EmbeddedExtensionRuntime::EmbeddedExtensionRuntime(QObject* parent)
     auto* ui = new BridgeObject(this, BridgeObject::Kind::Ui);
     auto* tasks = new BridgeObject(this, BridgeObject::Kind::Tasks);
     auto* logs = new BridgeObject(this, BridgeObject::Kind::Logs);
+    auto* registryApi = new BridgeObject(this, BridgeObject::Kind::Api);
 
     QJSValue api = engine_.newObject();
     api.setProperty(QStringLiteral("commands"), engine_.newQObject(commands));
@@ -789,6 +831,7 @@ EmbeddedExtensionRuntime::EmbeddedExtensionRuntime(QObject* parent)
     api.setProperty(QStringLiteral("ui"), engine_.newQObject(ui));
     api.setProperty(QStringLiteral("tasks"), engine_.newQObject(tasks));
     api.setProperty(QStringLiteral("logs"), engine_.newQObject(logs));
+    api.setProperty(QStringLiteral("api"), engine_.newQObject(registryApi));
     engine_.globalObject().setProperty(QStringLiteral("miacode"), api);
 }
 

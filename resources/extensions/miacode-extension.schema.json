@@ -3,29 +3,51 @@
   "$id": "https://miacode.local/schemas/miacode-extension.schema.json",
   "title": "MiaCode Extension Manifest",
   "type": "object",
-  "required": ["id", "name", "version", "publisher", "engines"],
+  "required": [
+    "id",
+    "name",
+    "version",
+    "publisher",
+    "engines"
+  ],
   "properties": {
     "id": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9._-]{1,95}$"
     },
-    "name": { "type": "string", "minLength": 1 },
-    "version": { "type": "string", "minLength": 1 },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
     "publisher": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9._-]{1,95}$"
     },
-    "main": { "type": "string", "minLength": 1 },
+    "main": {
+      "type": "string",
+      "minLength": 1
+    },
     "engines": {
       "type": "object",
-      "required": ["miacode"],
+      "required": [
+        "miacode"
+      ],
       "properties": {
-        "miacode": { "type": "string", "minLength": 1 }
+        "miacode": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "activationEvents": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "permissions": {
       "type": "array",
@@ -64,7 +86,24 @@
           "network.fetch",
           "settings.read",
           "settings.write",
-          "extensions.manage"
+          "extensions.manage",
+          "app.lifecycle",
+          "backup.read",
+          "backup.write",
+          "clipboard.read",
+          "clipboard.write",
+          "filesystem.unsafe",
+          "network.unsafe",
+          "process.manage",
+          "shell.execute",
+          "native.unsafe",
+          "internal.inspect",
+          "internal.call",
+          "internal.raw",
+          "renderer.raw",
+          "export.raw",
+          "security.override",
+          "updates.modify"
         ]
       },
       "uniqueItems": true
@@ -76,29 +115,44 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["command", "title"],
+            "required": [
+              "command",
+              "title"
+            ],
             "properties": {
               "command": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9._-]{1,95}$"
               },
-              "title": { "type": "string", "minLength": 1 },
-              "category": { "type": "string" }
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "category": {
+                "type": "string"
+              }
             }
           }
         },
         "menus": {
           "type": "object",
           "propertyNames": {
-            "enum": ["tools/menu", "menubar/beforeHelp"]
+            "enum": [
+              "tools/menu",
+              "menubar/beforeHelp"
+            ]
           },
           "additionalProperties": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["command"],
+              "required": [
+                "command"
+              ],
               "properties": {
-                "command": { "type": "string" }
+                "command": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -107,14 +161,24 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["id", "label", "translations"],
+            "required": [
+              "id",
+              "label",
+              "translations"
+            ],
             "properties": {
               "id": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9._-]{1,95}$"
               },
-              "label": { "type": "string", "minLength": 1 },
-              "translations": { "type": "string", "minLength": 1 }
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "translations": {
+                "type": "string",
+                "minLength": 1
+              }
             }
           }
         }

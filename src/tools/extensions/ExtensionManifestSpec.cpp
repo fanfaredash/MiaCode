@@ -94,8 +94,22 @@ int main(int argc, char** argv)
                      QStringLiteral(R"("activationEvents": ["onStartupFinished"], "permissions": ["shell.execute"],)"));
         writeText(QDir(dir.path()).filePath(QStringLiteral("miacode-extension.json")), json);
         const auto result = miacode::extensions::loadExtensionManifest(dir.path());
+        ok = expect(result.ok, QStringLiteral("expert permissions should parse: %1").arg(result.error)) && ok;
+        ok = expect(result.manifest.permissions.contains(QStringLiteral("shell.execute")),
+                    QStringLiteral("permission list contains shell.execute")) &&
+             ok;
+    }
+
+    {
+        QTemporaryDir dir;
+        writeText(QDir(dir.path()).filePath(QStringLiteral("extension.js")), QStringLiteral("module.exports = {};"));
+        QString json = validManifestJson();
+        json.replace(QStringLiteral(R"("activationEvents": ["onStartupFinished"],)"),
+                     QStringLiteral(R"("activationEvents": ["onStartupFinished"], "permissions": ["totally.unknown"],)"));
+        writeText(QDir(dir.path()).filePath(QStringLiteral("miacode-extension.json")), json);
+        const auto result = miacode::extensions::loadExtensionManifest(dir.path());
         ok = expect(!result.ok && result.error.contains(QStringLiteral("Unsupported permission")),
-                    QStringLiteral("unsupported permissions fail")) &&
+                    QStringLiteral("unknown permissions fail")) &&
              ok;
     }
 

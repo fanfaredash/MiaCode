@@ -110,6 +110,23 @@ bool isSupportedPermission(const QString& permission)
         QStringLiteral("settings.read"),
         QStringLiteral("settings.write"),
         QStringLiteral("extensions.manage"),
+        QStringLiteral("app.lifecycle"),
+        QStringLiteral("backup.read"),
+        QStringLiteral("backup.write"),
+        QStringLiteral("clipboard.read"),
+        QStringLiteral("clipboard.write"),
+        QStringLiteral("filesystem.unsafe"),
+        QStringLiteral("network.unsafe"),
+        QStringLiteral("process.manage"),
+        QStringLiteral("shell.execute"),
+        QStringLiteral("native.unsafe"),
+        QStringLiteral("internal.inspect"),
+        QStringLiteral("internal.call"),
+        QStringLiteral("internal.raw"),
+        QStringLiteral("renderer.raw"),
+        QStringLiteral("export.raw"),
+        QStringLiteral("security.override"),
+        QStringLiteral("updates.modify"),
     };
     return allowed.contains(permission);
 }

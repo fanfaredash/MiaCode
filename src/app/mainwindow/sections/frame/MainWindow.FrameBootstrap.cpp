@@ -363,6 +363,10 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             onPreferences();
             return QJsonObject{{QStringLiteral("ok"), true}};
         }
+        if (method == QStringLiteral("app/openAboutDialog")) {
+            onAbout();
+            return QJsonObject{{QStringLiteral("ok"), true}};
+        }
         if (method == QStringLiteral("window/showInputBox")) {
             bool ok = false;
             const QString title = params.value(QStringLiteral("title")).toString(UiText::text(QStringLiteral("extension.dialog.input_title")));
@@ -380,6 +384,26 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             const QString item = QInputDialog::getItem(this, title, params.value(QStringLiteral("placeHolder")).toString(), items, 0, false, &ok);
             return ok ? okValue(item) : errorObject(UiText::text(QStringLiteral("extension.dialog.canceled")));
         }
+        if (method == QStringLiteral("window/showOpenDialog") || method == QStringLiteral("nativeDialogs/openFile")) {
+            const QString title = params.value(QStringLiteral("title")).toString(UiText::text(QStringLiteral("action.open")));
+            const QString dir = params.value(QStringLiteral("defaultPath")).toString(QDir::homePath());
+            const QString filter = params.value(QStringLiteral("filter")).toString(QStringLiteral("All Files (*)"));
+            const QString path = QFileDialog::getOpenFileName(this, title, dir, filter);
+            return path.isEmpty() ? errorObject(UiText::text(QStringLiteral("extension.dialog.canceled"))) : okValue(path);
+        }
+        if (method == QStringLiteral("window/showSaveDialog") || method == QStringLiteral("nativeDialogs/saveFile")) {
+            const QString title = params.value(QStringLiteral("title")).toString(UiText::text(QStringLiteral("action.save_as")));
+            const QString dir = params.value(QStringLiteral("defaultPath")).toString(QDir::homePath());
+            const QString filter = params.value(QStringLiteral("filter")).toString(QStringLiteral("All Files (*)"));
+            const QString path = QFileDialog::getSaveFileName(this, title, dir, filter);
+            return path.isEmpty() ? errorObject(UiText::text(QStringLiteral("extension.dialog.canceled"))) : okValue(path);
+        }
+        if (method == QStringLiteral("window/showSelectFolderDialog") || method == QStringLiteral("nativeDialogs/selectFolder")) {
+            const QString title = params.value(QStringLiteral("title")).toString(UiText::text(QStringLiteral("dialog.batch_export.select_folder")));
+            const QString dir = params.value(QStringLiteral("defaultPath")).toString(QDir::homePath());
+            const QString path = QFileDialog::getExistingDirectory(this, title, dir);
+            return path.isEmpty() ? errorObject(UiText::text(QStringLiteral("extension.dialog.canceled"))) : okValue(path);
+        }
         if (method == QStringLiteral("window/createStatusBarItem")) {
             const QString text = params.value(QStringLiteral("text")).toString();
             if (statusBar() != nullptr && !text.isEmpty()) {
@@ -387,8 +411,49 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             }
             return QJsonObject{{QStringLiteral("ok"), true}};
         }
+        if (method == QStringLiteral("window/clearStatusBarMessage")) {
+            if (statusBar() != nullptr) {
+                statusBar()->clearMessage();
+            }
+            return QJsonObject{{QStringLiteral("ok"), true}};
+        }
+        if (method == QStringLiteral("window/openExternalUrl")) {
+            const QUrl url(params.value(QStringLiteral("url")).toString());
+            return QJsonObject{{QStringLiteral("ok"), url.isValid() && QDesktopServices::openUrl(url)}};
+        }
+        if (method == QStringLiteral("window/focusEditor")) {
+            if (editorWidget_ != nullptr) {
+                editorWidget_->setFocus();
+            }
+            return QJsonObject{{QStringLiteral("ok"), editorWidget_ != nullptr}};
+        }
+        if (method == QStringLiteral("window/focusMetadataPanel")) {
+            const bool ok = switchToMetadataField();
+            if (titleEdit_ != nullptr) {
+                titleEdit_->setFocus();
+            }
+            return QJsonObject{{QStringLiteral("ok"), ok}};
+        }
+        if (method == QStringLiteral("window/focusPreview")
+            || method == QStringLiteral("window/focusTimeline")
+            || method == QStringLiteral("window/focusValidationPanel")) {
+            if (bottomTabs_ != nullptr) {
+                bottomTabs_->setFocus();
+            }
+            return QJsonObject{{QStringLiteral("ok"), bottomTabs_ != nullptr}};
+        }
         if (method == QStringLiteral("workspace/getChartFolder")) {
             return okValue(currentFilePath_.isEmpty() ? QString() : QFileInfo(currentFilePath_).absolutePath());
+        }
+        if (method == QStringLiteral("workspace/getCurrentFilePath")) {
+            return okValue(currentFilePath_);
+        }
+        if (method == QStringLiteral("workspace/getDirtyState") || method == QStringLiteral("workspace/isDirty")) {
+            return okValue(QJsonObject{
+                {QStringLiteral("dirty"), documentDirty_ || currentFieldDirty_},
+                {QStringLiteral("documentDirty"), documentDirty_},
+                {QStringLiteral("currentFieldDirty"), currentFieldDirty_},
+            });
         }
         if (method == QStringLiteral("workspace/getMediaFiles")) {
             QJsonArray files;
@@ -1119,6 +1184,18 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             }
             return okValue(QJsonObject{{QStringLiteral("taskId"), params.value(QStringLiteral("taskId")).toString(QUuid::createUuid().toString(QUuid::WithoutBraces))}});
         }
+        if (method == QStringLiteral("clipboard/readText")) {
+            QClipboard* clipboard = QGuiApplication::clipboard();
+            return okValue(clipboard != nullptr ? clipboard->text() : QString());
+        }
+        if (method == QStringLiteral("clipboard/writeText")) {
+            QClipboard* clipboard = QGuiApplication::clipboard();
+            if (clipboard == nullptr) {
+                return errorObject(QStringLiteral("Clipboard is unavailable."));
+            }
+            clipboard->setText(params.value(QStringLiteral("text")).toString());
+            return QJsonObject{{QStringLiteral("ok"), true}};
+        }
         if (method == QStringLiteral("logs/append")) {
             miacode::debug_log::appendLine(
                 miacode::debug_log::Channel::Runtime,
@@ -1135,6 +1212,19 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             const QString root = extensionManager_ != nullptr ? extensionManager_->extensionLogDirectory() : QCoreApplication::applicationDirPath();
             QDesktopServices::openUrl(QUrl::fromLocalFile(root));
             return QJsonObject{{QStringLiteral("ok"), true}};
+        }
+        if (method == QStringLiteral("logs/readRecent")) {
+            const QString channel = params.value(QStringLiteral("channel")).toString(QStringLiteral("extensions"));
+            const QString root = extensionManager_ != nullptr ? extensionManager_->extensionLogDirectory() : QCoreApplication::applicationDirPath();
+            QFile file(QDir(root).filePath(channel + QStringLiteral(".log")));
+            if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                return errorObject(QStringLiteral("Cannot read log: %1").arg(file.errorString()));
+            }
+            const int maxBytes = qBound(1024, params.value(QStringLiteral("maxBytes")).toInt(65536), 1024 * 1024);
+            if (file.size() > maxBytes) {
+                file.seek(file.size() - maxBytes);
+            }
+            return okValue(QString::fromUtf8(file.readAll()));
         }
         return QJsonObject();
     };
@@ -1303,13 +1393,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     chartBracketHighlighter_ = new BracketScopeHighlighter(editor->document());
     editorWidget_ = editor;
     editorWidget_->setFont(codeFont);
-    editorWidget_->setStyleSheet(
-        "border: none;"
-        "background: #FFFFFF;"
-        "color: #1F1F1F;"
-        "selection-background-color: #B8CCE5;"
-        "selection-color: #1F1F1F;"
-    );
+    editorWidget_->setStyleSheet(UiTheme::editorTextEditStyleSheet());
     editorWidget_->setAutoFillBackground(false);
     editorWidget_->setAttribute(Qt::WA_TranslucentBackground, true);
     if (auto* scrollArea = qobject_cast<QAbstractScrollArea*>(editorWidget_)) {
@@ -1529,50 +1613,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 
     auto* findBar = new QFrame(editorStack_);
     findBar->setObjectName("EditorFindBar");
-    findBar->setStyleSheet(
-        "QFrame#EditorFindBar {"
-        " background: rgba(248, 250, 253, 248);"
-        " border: 1px solid #DEE4EC;"
-        " border-radius: 10px;"
-        "}"
-        "QFrame#EditorFindBar QLineEdit {"
-        " background: #FFFFFF;"
-        " border: 1px solid #CCD6E2;"
-        " border-radius: 6px;"
-        " min-height: 22px;"
-        " padding: 1px 6px;"
-        " selection-background-color: #B8CCE5;"
-        " selection-color: #1F1F1F;"
-        "}"
-        "QFrame#EditorFindBar QLineEdit:focus { border-color: #3B82F6; }"
-        "QFrame#EditorFindBar QToolButton, QFrame#EditorFindBar QPushButton {"
-        " color: #223042;"
-        " min-height: 22px;"
-        " padding: 0 6px;"
-        " border: 1px solid #D8E0EA;"
-        " border-radius: 6px;"
-        " background: #FFFFFF;"
-        " font-weight: 400;"
-        "}"
-        "QFrame#EditorFindBar QToolButton:hover, QFrame#EditorFindBar QPushButton:hover {"
-        " background: #F5F8FC;"
-        " border-color: #BCD0E5;"
-        "}"
-        "QFrame#EditorFindBar QToolButton:pressed, QFrame#EditorFindBar QPushButton:pressed {"
-        " background: #E8F1FB;"
-        "}"
-        "QFrame#EditorFindBar QToolButton#EditorFindPrevButton, QFrame#EditorFindBar QToolButton#EditorFindNextButton {"
-        " min-width: 24px;"
-        " padding: 0;"
-        " font-size: 12px;"
-        "}"
-        "QFrame#EditorFindBar QToolButton#EditorFindCloseButton {"
-        " min-width: 28px;"
-        " padding: 0;"
-        " font-size: 15px;"
-        " font-weight: 400;"
-        "}"
-    );
+    findBar->setStyleSheet(UiTheme::editorFindBarStyleSheet());
     auto* findBarLayout = new QVBoxLayout(findBar);
     findBarLayout->setContentsMargins(10, 6, 10, 6);
     findBarLayout->setSpacing(4);
@@ -1626,38 +1667,20 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 
     welcomePage_ = new QWidget(editorStack_);
     welcomePage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
-    welcomePage_->setStyleSheet(
-        "QWidget { background: #FFFFFF; color: #2A3440; }"
-    );
+    welcomePage_->setStyleSheet(UiTheme::metadataPageStyleSheet());
     auto* welcomeLayout = new QVBoxLayout(welcomePage_);
     welcomeLayout->setContentsMargins(12, 8, 12, 12);
     welcomeLayout->setSpacing(8);
     welcomeEmptyHintLabel_ = new QLabel(UiText::text(QStringLiteral("metadata.empty_hint")), welcomePage_);
     welcomeEmptyHintLabel_->setFont(uiAccentFont(11));
-    welcomeEmptyHintLabel_->setStyleSheet("color: #6A7890; background: transparent; padding-left: 6px;");
+    welcomeEmptyHintLabel_->setStyleSheet(UiTheme::metadataEmptyHintLabelStyleSheet());
     welcomeLayout->addWidget(welcomeEmptyHintLabel_, 0, Qt::AlignLeft | Qt::AlignTop);
     welcomeLayout->addStretch(1);
 
     metadataPage_ = new QWidget(editorStack_);
     metadataPage_->setObjectName("MetadataPage");
     metadataPage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
-    metadataPage_->setStyleSheet(
-        "QWidget { background: #FFFFFF; color: #2A3440; }"
-        "QWidget#MetadataPage { background: #F8FAFD; }"
-        "QFrame#MetadataCard { background: #FFFFFF; border: 1px solid #DEE4EC; border-radius: 8px; }"
-        "QLabel#SectionTitle { color: #1F2D3D; font-weight: 700; padding-left: 4px; }"
-        "QLabel#MetadataFieldLabel { color: #2A3440; background: transparent; padding-left: 8px; }"
-        "QLineEdit, QTextEdit, QPlainTextEdit {"
-        " background: #FFFFFF;"
-        " color: #1F1F1F;"
-        " border: 1px solid #CCD6E2;"
-        " border-radius: 6px;"
-        " padding: 6px 8px;"
-        " selection-background-color: #B8CCE5;"
-        " selection-color: #1F1F1F;"
-        "}"
-        "QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus { border-color: #3B82F6; }"
-    );
+    metadataPage_->setStyleSheet(UiTheme::metadataPageStyleSheet());
     auto* metadataLayout = new QVBoxLayout(metadataPage_);
     metadataLayout->setContentsMargins(12, 8, 12, 12);
     metadataLayout->setSpacing(8);
@@ -1910,22 +1933,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     // context menu → editItem); automatic edit triggers stay off so plain
     // clicks never open an editor.
     outlineList_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    outlineList_->setStyleSheet(
-        "QListWidget {"
-        " background: #FFFFFF;"
-        " color: #243447;"
-        " border: 1px solid #E1E7EF;"
-        " padding: 6px;"
-        " outline: none;"
-        "}"
-        "QListWidget::item {"
-        " min-height: 0px;"
-        " padding: 2px 8px;"
-        " border: 1px solid transparent;"
-        " border-radius: 6px;"
-        "}"
-        "QListWidget::item:selected { color: #243447; }"
-    );
+    outlineList_->setStyleSheet(UiTheme::outlineListStyleSheet());
     auto* outlineDockShell = new QWidget(outlineDock);
     auto* outlineDockShellLayout = new QHBoxLayout(outlineDockShell);
     outlineDockShellLayout->setContentsMargins(0, 0, 0, 0);
@@ -2285,41 +2293,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 
     previewPanel_ = new miacode::ui::AppBackgroundSurfaceWidget(this);
     previewPanel_->setObjectName("PreviewPanel");
-    previewPanel_->setStyleSheet(
-        "QWidget#PreviewPanel {"
-        " background: #F5F7FA;"
-        " border-left: 1px solid #DEE4EC;"
-        "}"
-        "QFrame#PreviewCanvasFrame {"
-        " background: #000000;"
-        " border: 1px solid #D8E0EA;"
-        "}"
-        "QFrame#PreviewStatsCard {"
-        " background: #EDF2F8;"
-        " border: 1px solid #D5E0EC;"
-        " border-radius: 10px;"
-        "}"
-        "QFrame#PreviewStats {"
-        " background: transparent;"
-        " border: none;"
-        "}"
-        "QLabel#PreviewStatChip {"
-        " color: #213246;"
-        " background: #F6F9FD;"
-        " border: 1px solid #D3DEEA;"
-        " border-radius: 9px;"
-        " padding: 2px 8px;"
-        " font-weight: 600;"
-        "}"
-        "QLabel#PreviewStatChipTotal {"
-        " color: #213246;"
-        " background: #F0F4FA;"
-        " border: 1px solid #CBD8E6;"
-        " border-radius: 9px;"
-        " padding: 2px 8px;"
-        " font-weight: 700;"
-        "}"
-    );
+    previewPanel_->setStyleSheet(UiTheme::previewPanelStyleSheet());
     previewPanel_->setMinimumWidth(kEmbeddedPreviewPanelMinWidth);
     previewPanel_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
