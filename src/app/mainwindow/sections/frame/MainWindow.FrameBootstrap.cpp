@@ -1337,7 +1337,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     centralLayout->setContentsMargins(0, 0, 0, 0);
     centralLayout->setSpacing(0);
 
-    auto* editorHeader = new miacode::ui::AppBackgroundSurfaceFrame(central);
+    auto* editorHeader = new QFrame(central);
     editorHeader->setObjectName("EditorHeader");
     editorHeader->setAttribute(Qt::WA_StyledBackground, true);
     editorHeaderWidget_ = editorHeader;

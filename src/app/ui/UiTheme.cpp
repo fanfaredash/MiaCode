@@ -44,6 +44,13 @@ QString cssSurface(const QColor& color, int alpha)
         : css(color);
 }
 
+QString cssWhenBackgroundDisabled(const QColor& color)
+{
+    return miacode::ui::appBackgroundIsActiveForTheme()
+        ? QStringLiteral("transparent")
+        : css(color);
+}
+
 void repolish(QWidget* widget)
 {
     if (widget == nullptr) {
@@ -502,11 +509,11 @@ QString editorShellStyleSheet()
         "QWidget#EditorDifficultyControls QLineEdit:focus { border-color: %10; }"
     )
         .arg(cssSurface(c.panelBg, c.dark ? 176 : 190))
-        .arg(cssSurface(c.cardBg, c.dark ? 184 : 196))
+        .arg(cssWhenBackgroundDisabled(c.cardBg))
         .arg(css(c.border))
         .arg(css(c.textPrimary))
         .arg(css(c.textSecondary))
-        .arg(cssSurface(c.inputBg, c.dark ? 196 : 204))
+        .arg(cssWhenBackgroundDisabled(c.inputBg))
         .arg(css(c.borderSoft))
         .arg(css(c.selection))
         .arg(css(c.selectionText))
