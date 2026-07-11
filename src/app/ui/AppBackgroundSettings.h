@@ -5,6 +5,21 @@
 
 namespace miacode::ui {
 
+struct AppBackgroundOverlaySettings {
+    int toolbarAlphaDark = 198;
+    int toolbarAlphaLight = 206;
+    int statusAlphaDark = 208;
+    int statusAlphaLight = 216;
+    int panelAlphaDark = 176;
+    int panelAlphaLight = 190;
+    int cardAlphaDark = 184;
+    int cardAlphaLight = 196;
+    int editorHeaderAlphaDark = 188;
+    int editorHeaderAlphaLight = 196;
+    int inputAlphaDark = 196;
+    int inputAlphaLight = 204;
+};
+
 enum class AppBackgroundSizeMode {
     Cover,
     Contain,
@@ -30,6 +45,7 @@ struct AppBackgroundSettings {
     QString imagePath;
     double opacity = 0.2;
     int blur = 0;
+    AppBackgroundOverlaySettings overlays;
     AppBackgroundSizeMode sizeMode = AppBackgroundSizeMode::Cover;
     AppBackgroundPosition position = AppBackgroundPosition::Center;
 };
@@ -40,6 +56,8 @@ constexpr double kAppBackgroundOpacityDefault = 0.2;
 constexpr int kAppBackgroundBlurMin = 0;
 constexpr int kAppBackgroundBlurMax = 0;
 constexpr int kAppBackgroundBlurDefault = 0;
+constexpr int kAppBackgroundOverlayAlphaMin = 0;
+constexpr int kAppBackgroundOverlayAlphaMax = 255;
 
 AppBackgroundSettings normalizedAppBackgroundSettings(const AppBackgroundSettings& settings);
 AppBackgroundSettings appBackgroundSettingsFromJson(const QJsonObject& object);

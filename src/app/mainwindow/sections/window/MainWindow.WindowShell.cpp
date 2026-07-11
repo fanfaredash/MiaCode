@@ -1063,11 +1063,13 @@ void MainWindow::WindowSection::applyUiTheme()
                 .arg(backgroundActiveSurfaceColor(
                     themeColors.toolbarBg,
                     themeColors.cardBg,
-                    themeColors.dark ? 188 : 196))
+                    UiTheme::appBackgroundOverlayAlpha(UiTheme::AppBackgroundOverlayRole::EditorHeader, themeColors.dark)))
                 .arg(themeColors.border.name(QColor::HexRgb))
                 .arg(themeColors.textPrimary.name(QColor::HexRgb))
                 .arg(themeColors.textSecondary.name(QColor::HexRgb))
-                .arg(backgroundSurfaceColor(themeColors.inputBg, 204))
+                .arg(backgroundSurfaceColor(
+                    themeColors.inputBg,
+                    UiTheme::appBackgroundOverlayAlpha(UiTheme::AppBackgroundOverlayRole::Input, themeColors.dark)))
                 .arg(themeColors.borderSoft.name(QColor::HexRgb))
                 .arg(themeColors.selection.name(QColor::HexRgb))
                 .arg(themeColors.selectionText.name(QColor::HexRgb))

@@ -27,6 +27,18 @@ constexpr auto kAppBackgroundImagePathProperty = "miacode.appBackgroundImagePath
 constexpr auto kAppBackgroundSourceUrlProperty = "miacode.appBackgroundSourceUrl";
 constexpr auto kAppBackgroundOpacityProperty = "miacode.appBackgroundOpacity";
 constexpr auto kAppBackgroundBlurProperty = "miacode.appBackgroundBlur";
+constexpr auto kAppBackgroundToolbarAlphaDarkProperty = "miacode.appBackgroundToolbarAlphaDark";
+constexpr auto kAppBackgroundToolbarAlphaLightProperty = "miacode.appBackgroundToolbarAlphaLight";
+constexpr auto kAppBackgroundStatusAlphaDarkProperty = "miacode.appBackgroundStatusAlphaDark";
+constexpr auto kAppBackgroundStatusAlphaLightProperty = "miacode.appBackgroundStatusAlphaLight";
+constexpr auto kAppBackgroundPanelAlphaDarkProperty = "miacode.appBackgroundPanelAlphaDark";
+constexpr auto kAppBackgroundPanelAlphaLightProperty = "miacode.appBackgroundPanelAlphaLight";
+constexpr auto kAppBackgroundCardAlphaDarkProperty = "miacode.appBackgroundCardAlphaDark";
+constexpr auto kAppBackgroundCardAlphaLightProperty = "miacode.appBackgroundCardAlphaLight";
+constexpr auto kAppBackgroundEditorHeaderAlphaDarkProperty = "miacode.appBackgroundEditorHeaderAlphaDark";
+constexpr auto kAppBackgroundEditorHeaderAlphaLightProperty = "miacode.appBackgroundEditorHeaderAlphaLight";
+constexpr auto kAppBackgroundInputAlphaDarkProperty = "miacode.appBackgroundInputAlphaDark";
+constexpr auto kAppBackgroundInputAlphaLightProperty = "miacode.appBackgroundInputAlphaLight";
 constexpr auto kAppBackgroundSizeModeProperty = "miacode.appBackgroundSizeMode";
 constexpr auto kAppBackgroundPositionProperty = "miacode.appBackgroundPosition";
 
@@ -101,6 +113,18 @@ void AppBackgroundPainter::setSettings(const AppBackgroundSettings& settings)
         && normalized.imagePath == settings_.imagePath
         && qFuzzyCompare(normalized.opacity + 1.0, settings_.opacity + 1.0)
         && normalized.blur == settings_.blur
+        && normalized.overlays.toolbarAlphaDark == settings_.overlays.toolbarAlphaDark
+        && normalized.overlays.toolbarAlphaLight == settings_.overlays.toolbarAlphaLight
+        && normalized.overlays.statusAlphaDark == settings_.overlays.statusAlphaDark
+        && normalized.overlays.statusAlphaLight == settings_.overlays.statusAlphaLight
+        && normalized.overlays.panelAlphaDark == settings_.overlays.panelAlphaDark
+        && normalized.overlays.panelAlphaLight == settings_.overlays.panelAlphaLight
+        && normalized.overlays.cardAlphaDark == settings_.overlays.cardAlphaDark
+        && normalized.overlays.cardAlphaLight == settings_.overlays.cardAlphaLight
+        && normalized.overlays.editorHeaderAlphaDark == settings_.overlays.editorHeaderAlphaDark
+        && normalized.overlays.editorHeaderAlphaLight == settings_.overlays.editorHeaderAlphaLight
+        && normalized.overlays.inputAlphaDark == settings_.overlays.inputAlphaDark
+        && normalized.overlays.inputAlphaLight == settings_.overlays.inputAlphaLight
         && normalized.sizeMode == settings_.sizeMode
         && normalized.position == settings_.position) {
         logBackgroundDiag(QStringLiteral(
@@ -393,6 +417,18 @@ QPixmap AppBackgroundPainter::renderedPixmap(const QSize& canvasSize)
         && cachedSettings_.imagePath == settings_.imagePath
         && qFuzzyCompare(cachedSettings_.opacity + 1.0, settings_.opacity + 1.0)
         && cachedSettings_.blur == settings_.blur
+        && cachedSettings_.overlays.toolbarAlphaDark == settings_.overlays.toolbarAlphaDark
+        && cachedSettings_.overlays.toolbarAlphaLight == settings_.overlays.toolbarAlphaLight
+        && cachedSettings_.overlays.statusAlphaDark == settings_.overlays.statusAlphaDark
+        && cachedSettings_.overlays.statusAlphaLight == settings_.overlays.statusAlphaLight
+        && cachedSettings_.overlays.panelAlphaDark == settings_.overlays.panelAlphaDark
+        && cachedSettings_.overlays.panelAlphaLight == settings_.overlays.panelAlphaLight
+        && cachedSettings_.overlays.cardAlphaDark == settings_.overlays.cardAlphaDark
+        && cachedSettings_.overlays.cardAlphaLight == settings_.overlays.cardAlphaLight
+        && cachedSettings_.overlays.editorHeaderAlphaDark == settings_.overlays.editorHeaderAlphaDark
+        && cachedSettings_.overlays.editorHeaderAlphaLight == settings_.overlays.editorHeaderAlphaLight
+        && cachedSettings_.overlays.inputAlphaDark == settings_.overlays.inputAlphaDark
+        && cachedSettings_.overlays.inputAlphaLight == settings_.overlays.inputAlphaLight
         && cachedSettings_.sizeMode == settings_.sizeMode
         && cachedSettings_.position == settings_.position) {
         return cachedPixmap_;
@@ -467,6 +503,18 @@ void AppBackgroundPainter::updateApplicationActiveFlag() const
         settings_.imagePath.isEmpty() ? QString() : QUrl::fromLocalFile(settings_.imagePath).toString());
     qApp->setProperty(kAppBackgroundOpacityProperty, settings_.opacity);
     qApp->setProperty(kAppBackgroundBlurProperty, settings_.blur);
+    qApp->setProperty(kAppBackgroundToolbarAlphaDarkProperty, settings_.overlays.toolbarAlphaDark);
+    qApp->setProperty(kAppBackgroundToolbarAlphaLightProperty, settings_.overlays.toolbarAlphaLight);
+    qApp->setProperty(kAppBackgroundStatusAlphaDarkProperty, settings_.overlays.statusAlphaDark);
+    qApp->setProperty(kAppBackgroundStatusAlphaLightProperty, settings_.overlays.statusAlphaLight);
+    qApp->setProperty(kAppBackgroundPanelAlphaDarkProperty, settings_.overlays.panelAlphaDark);
+    qApp->setProperty(kAppBackgroundPanelAlphaLightProperty, settings_.overlays.panelAlphaLight);
+    qApp->setProperty(kAppBackgroundCardAlphaDarkProperty, settings_.overlays.cardAlphaDark);
+    qApp->setProperty(kAppBackgroundCardAlphaLightProperty, settings_.overlays.cardAlphaLight);
+    qApp->setProperty(kAppBackgroundEditorHeaderAlphaDarkProperty, settings_.overlays.editorHeaderAlphaDark);
+    qApp->setProperty(kAppBackgroundEditorHeaderAlphaLightProperty, settings_.overlays.editorHeaderAlphaLight);
+    qApp->setProperty(kAppBackgroundInputAlphaDarkProperty, settings_.overlays.inputAlphaDark);
+    qApp->setProperty(kAppBackgroundInputAlphaLightProperty, settings_.overlays.inputAlphaLight);
     qApp->setProperty(kAppBackgroundSizeModeProperty, appBackgroundSizeModeToken(settings_.sizeMode));
     qApp->setProperty(kAppBackgroundPositionProperty, appBackgroundPositionToken(settings_.position));
 }
