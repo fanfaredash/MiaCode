@@ -19,6 +19,8 @@
 #include <QWidgetAction>
 #include <QStyleHints>
 
+#include "app/ui/AppBackgroundPainter.h"
+
 namespace {
 
 QString css(const QColor& color)
@@ -33,6 +35,13 @@ QString cssRgba(const QColor& color, int alpha)
         .arg(color.green())
         .arg(color.blue())
         .arg(alpha);
+}
+
+QString cssSurface(const QColor& color, int alpha)
+{
+    return miacode::ui::appBackgroundIsActiveForTheme()
+        ? cssRgba(color, alpha)
+        : css(color);
 }
 
 void repolish(QWidget* widget)
@@ -336,14 +345,14 @@ QString applicationStyleSheet()
         "QMainWindow::separator { background: %3; width: 1px; height: 1px; }"
         "QToolTip { background: %9; color: %2; border: 1px solid %10; }"
     )
-        .arg(css(c.toolbarBg))
+        .arg(cssSurface(c.toolbarBg, c.dark ? 188 : 196))
         .arg(css(c.textPrimary))
         .arg(css(c.border))
         .arg(css(c.menuHoverBg))
-        .arg(css(c.statusBg))
+        .arg(cssSurface(c.statusBg, c.dark ? 188 : 196))
         .arg(css(c.textSecondary))
-        .arg(css(c.cardBg))
-        .arg(css(c.panelBg))
+        .arg(cssSurface(c.cardBg, c.dark ? 184 : 196))
+        .arg(cssSurface(c.panelBg, c.dark ? 176 : 190))
         .arg(css(c.menuBg))
         .arg(css(c.menuBorder));
 }
@@ -426,7 +435,7 @@ QString timelineZoomButtonStyleSheet()
         "QToolButton:pressed { background: %6; color: %7; }"
     )
         .arg(css(c.textPrimary))
-        .arg(css(c.cardBg))
+        .arg(cssSurface(c.cardBg, c.dark ? 184 : 196))
         .arg(css(c.borderStrong))
         .arg(css(c.menuHoverBg))
         .arg(css(c.accent))
@@ -474,7 +483,7 @@ QString editorTextEditStyleSheet()
         "selection-background-color: %3;"
         "selection-color: %4;"
     )
-        .arg(css(c.inputBg))
+        .arg(cssSurface(c.inputBg, c.dark ? 196 : 204))
         .arg(css(c.textPrimary))
         .arg(css(c.selection))
         .arg(css(c.selectionText));
@@ -492,12 +501,12 @@ QString editorShellStyleSheet()
         "QWidget#EditorDifficultyControls QLineEdit { background: %6; color: %4; border: 1px solid %7; border-radius: 6px; padding: 4px 6px; selection-background-color: %8; selection-color: %9; }"
         "QWidget#EditorDifficultyControls QLineEdit:focus { border-color: %10; }"
     )
-        .arg(css(c.panelBg))
-        .arg(css(c.cardBg))
+        .arg(cssSurface(c.panelBg, c.dark ? 176 : 190))
+        .arg(cssSurface(c.cardBg, c.dark ? 184 : 196))
         .arg(css(c.border))
         .arg(css(c.textPrimary))
         .arg(css(c.textSecondary))
-        .arg(css(c.inputBg))
+        .arg(cssSurface(c.inputBg, c.dark ? 196 : 204))
         .arg(css(c.borderSoft))
         .arg(css(c.selection))
         .arg(css(c.selectionText))
@@ -549,7 +558,7 @@ QString metadataPageStyleSheet()
         "QToolButton, QPushButton { color: %2; border: 1px solid %3; border-radius: 6px; background: %4; padding: 4px 8px; }"
         "QToolButton:hover, QPushButton:hover { background: %9; border-color: %8; }"
     )
-        .arg(css(c.cardBg))
+        .arg(cssSurface(c.cardBg, c.dark ? 184 : 196))
         .arg(css(c.textPrimary))
         .arg(css(c.border))
         .arg(css(c.inputBg))
@@ -601,7 +610,7 @@ QString latencyDetectionPageStyleSheet()
         " color: %5;"
         "}"
     )
-        .arg(css(c.cardBg))
+        .arg(cssSurface(c.cardBg, c.dark ? 184 : 196))
         .arg(css(c.border))
         .arg(css(c.textPrimary))
         .arg(css(c.textMuted))
@@ -762,13 +771,13 @@ QString previewPanelStyleSheet()
         "QSlider::sub-page:horizontal { background: %10; border-radius: 3px; }"
         "QSlider::handle:horizontal { width: 12px; margin: -4px 0; border-radius: 6px; background: %7; border: 1px solid %8; }"
     )
-        .arg(css(c.panelBg))
+        .arg(cssSurface(c.panelBg, c.dark ? 176 : 190))
         .arg(css(c.border))
         .arg(css(c.canvasBg))
         .arg(css(c.borderSoft))
-        .arg(css(c.cardAltBg))
+        .arg(cssSurface(c.cardAltBg, c.dark ? 184 : 196))
         .arg(css(c.textPrimary))
-        .arg(css(c.cardBg))
+        .arg(cssSurface(c.cardBg, c.dark ? 184 : 196))
         .arg(css(c.borderSoft))
         .arg(css(c.menuHoverBg))
         .arg(css(c.accent))

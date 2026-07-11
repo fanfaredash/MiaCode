@@ -5,6 +5,7 @@
 #include "ShortcutRegistry.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "app/ui/AppBackgroundPainter.h"
 
 #include <QAction>
 #include <QApplication>
@@ -152,7 +153,14 @@ void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
 {
     QPainter painter(lineNumberArea_);
     const UiTheme::Colors& c = UiTheme::colors();
-    painter.fillRect(event->rect(), c.timelineSidebar);
+    const QRect dirtyRect = event != nullptr ? event->rect() : lineNumberArea_->rect();
+    if (miacode::ui::paintAppBackgroundForWidget(lineNumberArea_, painter)) {
+        QColor sidebarSurface = c.timelineSidebar;
+        sidebarSurface.setAlpha(c.dark ? 184 : 196);
+        painter.fillRect(dirtyRect, sidebarSurface);
+    } else {
+        painter.fillRect(dirtyRect, c.timelineSidebar);
+    }
     painter.setPen(c.textSecondary);
     painter.setFont(lineNumberArea_->font());
 

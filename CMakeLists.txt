@@ -148,6 +148,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/window/MainWindow.WindowShell.cpp
     src/app/ui/UiText.h
     src/app/ui/UiText.cpp
+    src/app/ui/AppBackgroundSettings.h
+    src/app/ui/AppBackgroundSettings.cpp
+    src/app/ui/AppBackgroundPainter.h
+    src/app/ui/AppBackgroundPainter.cpp
     src/app/ui/ShortcutRegistry.h
     src/app/ui/ShortcutRegistry.cpp
     src/app/ui/UiTheme.h

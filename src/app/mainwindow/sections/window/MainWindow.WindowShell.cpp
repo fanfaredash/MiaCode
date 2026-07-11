@@ -20,6 +20,7 @@
 #include "tools/export_page/ExportLauncherPage.h"
 #include "tools/latency/LatencyDetectionPage.h"
 #include "tools/video_export/VideoExportDialog.h"
+#include "app/ui/AppBackgroundPainter.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -1029,6 +1030,17 @@ void MainWindow::WindowSection::applyUiTheme()
         editorShell->setStyleSheet(UiTheme::editorShellStyleSheet());
     }
     const UiTheme::Colors& themeColors = UiTheme::colors();
+    const auto cssMaybeTranslucent = [](QColor color, int alpha) {
+        if (!miacode::ui::appBackgroundIsActiveForTheme()) {
+            return color.name(QColor::HexRgb);
+        }
+        color.setAlpha(alpha);
+        return QStringLiteral("rgba(%1, %2, %3, %4)")
+            .arg(color.red())
+            .arg(color.green())
+            .arg(color.blue())
+            .arg(color.alpha());
+    };
     if (owner_.editorHeaderWidget_ != nullptr) {
         owner_.editorHeaderWidget_->setAttribute(Qt::WA_StyledBackground, true);
         owner_.editorHeaderWidget_->setStyleSheet(
@@ -1041,11 +1053,11 @@ void MainWindow::WindowSection::applyUiTheme()
                 "QWidget#EditorDifficultyControls QLineEdit { background: %5; color: %3; border: 1px solid %6; border-radius: 6px; padding: 4px 6px; selection-background-color: %7; selection-color: %8; }"
                 "QWidget#EditorDifficultyControls QLineEdit:focus { border-color: %9; }"
             )
-                .arg(themeColors.cardBg.name(QColor::HexRgb))
+                .arg(cssMaybeTranslucent(themeColors.cardBg, themeColors.dark ? 184 : 196))
                 .arg(themeColors.border.name(QColor::HexRgb))
                 .arg(themeColors.textPrimary.name(QColor::HexRgb))
                 .arg(themeColors.textSecondary.name(QColor::HexRgb))
-                .arg(themeColors.inputBg.name(QColor::HexRgb))
+                .arg(cssMaybeTranslucent(themeColors.inputBg, themeColors.dark ? 196 : 204))
                 .arg(themeColors.borderSoft.name(QColor::HexRgb))
                 .arg(themeColors.selection.name(QColor::HexRgb))
                 .arg(themeColors.selectionText.name(QColor::HexRgb))

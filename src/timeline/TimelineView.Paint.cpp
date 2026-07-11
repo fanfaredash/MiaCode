@@ -18,7 +18,13 @@ void TimelineView::paintEvent(QPaintEvent* event)
     }
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter.setClipRect(dirtyRect);
-    painter.fillRect(dirtyRect, c.timelineWindow);
+    if (miacode::ui::paintAppBackgroundForWidget(viewport(), painter)) {
+        QColor timelineSurface = c.timelineWindow;
+        timelineSurface.setAlpha(c.dark ? 184 : 196);
+        painter.fillRect(dirtyRect, timelineSurface);
+    } else {
+        painter.fillRect(dirtyRect, c.timelineWindow);
+    }
 
     const int left = timelineLeft();
     const int top = timelineTop();
