@@ -9,6 +9,8 @@
 #include <QImageReader>
 #include <QPainter>
 #include <QPaintEvent>
+#include <QStyle>
+#include <QStyleOption>
 #include <QUrl>
 #include <QVariant>
 
@@ -565,6 +567,12 @@ AppBackgroundSurfaceMenuBar::AppBackgroundSurfaceMenuBar(QWidget* parent)
 void AppBackgroundSurfaceMenuBar::paintEvent(QPaintEvent* event)
 {
     paintSurfaceBackdrop(this);
+    if (appBackgroundIsActiveForTheme()) {
+        QStyleOption option;
+        option.initFrom(this);
+        QPainter painter(this);
+        style()->drawPrimitive(QStyle::PE_Widget, &option, &painter, this);
+    }
     QMenuBar::paintEvent(event);
 }
 
