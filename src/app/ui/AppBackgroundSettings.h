@@ -38,7 +38,7 @@ constexpr double kAppBackgroundOpacityMin = 0.0;
 constexpr double kAppBackgroundOpacityMax = 0.8;
 constexpr double kAppBackgroundOpacityDefault = 0.2;
 constexpr int kAppBackgroundBlurMin = 0;
-constexpr int kAppBackgroundBlurMax = 100;
+constexpr int kAppBackgroundBlurMax = 0;
 constexpr int kAppBackgroundBlurDefault = 0;
 
 AppBackgroundSettings normalizedAppBackgroundSettings(const AppBackgroundSettings& settings);

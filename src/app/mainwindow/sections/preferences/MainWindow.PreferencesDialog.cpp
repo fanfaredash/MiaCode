@@ -882,6 +882,34 @@ void MainWindow::PreferencesSection::onPreferences()
         selectedBackgroundSettings = miacode::ui::normalizedAppBackgroundSettings(selectedBackgroundSettings);
         owner_.applyAppBackgroundSettings(selectedBackgroundSettings, true);
     };
+    bool backgroundSliderPersistPending = false;
+    const auto persistBackgroundSettingsAfterSliderInput = [&](QSlider* slider) {
+        if (slider != nullptr && slider->isSliderDown()) {
+            backgroundSliderPersistPending = true;
+            return;
+        }
+        persistBackgroundSettings();
+    };
+    const auto flushBackgroundSliderSettings = [&]() {
+        if (!backgroundSliderPersistPending) {
+            return;
+        }
+        backgroundSliderPersistPending = false;
+        persistBackgroundSettings();
+    };
+    const auto createBackgroundComboRow = [](QComboBox* combo, QWidget* parent) -> QWidget* {
+        auto* row = new QWidget(parent);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setSpacing(0);
+        if (combo != nullptr) {
+            combo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+            combo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+            rowLayout->addWidget(combo, 0);
+        }
+        rowLayout->addStretch(1);
+        return row;
+    };
     const auto backgroundModeLabel = [](miacode::ui::AppBackgroundSizeMode mode) -> QString {
         switch (mode) {
         case miacode::ui::AppBackgroundSizeMode::Contain:
@@ -921,15 +949,24 @@ void MainWindow::PreferencesSection::onPreferences()
         }
     };
 
-    auto* backgroundEnabledCheckbox =
-        new QCheckBox(UiText::text(QStringLiteral("dialog.preferences.background.enabled")), backgroundGroup);
-    backgroundEnabledCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    backgroundEnabledCheckbox->setChecked(selectedBackgroundSettings.enabled);
-    connect(backgroundEnabledCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
-        selectedBackgroundSettings.enabled = checked;
+    auto* backgroundEnabledLabel =
+        new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.enabled")), backgroundGroup);
+    auto* backgroundEnabledCombo =
+        miacode::ui::createDialogComboBox(backgroundGroup, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    backgroundEnabledCombo->addItem(UiText::text(QStringLiteral("preferences.on")), true);
+    backgroundEnabledCombo->addItem(UiText::text(QStringLiteral("preferences.off")), false);
+    backgroundEnabledCombo->setCurrentIndex(selectedBackgroundSettings.enabled ? 0 : 1);
+    styleRegisteredDialogCombo(backgroundEnabledCombo, 12);
+    connect(backgroundEnabledCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
+            [&, backgroundEnabledCombo](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedBackgroundSettings.enabled = backgroundEnabledCombo->itemData(index).toBool();
         persistBackgroundSettings();
     });
-    backgroundLayout->addRow(QString(), backgroundEnabledCheckbox);
+    backgroundLayout->addRow(backgroundEnabledLabel,
+                             createBackgroundComboRow(backgroundEnabledCombo, backgroundGroup));
 
     auto* backgroundImageLabel =
         new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.image")), backgroundGroup);
@@ -986,26 +1023,10 @@ void MainWindow::PreferencesSection::onPreferences()
         miacode::ui::createSliderValueRow(backgroundOpacitySlider, nullptr, QStringLiteral("%"), backgroundGroup));
     connect(backgroundOpacitySlider, &QSlider::valueChanged, &dialog, [&](int value) {
         selectedBackgroundSettings.opacity = static_cast<double>(value) / 100.0;
-        persistBackgroundSettings();
+        persistBackgroundSettingsAfterSliderInput(backgroundOpacitySlider);
     });
+    connect(backgroundOpacitySlider, &QSlider::sliderReleased, &dialog, flushBackgroundSliderSettings);
 
-    auto* backgroundBlurLabel =
-        new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.blur")), backgroundGroup);
-    auto* backgroundBlurSlider = new QSlider(Qt::Horizontal, backgroundGroup);
-    backgroundBlurSlider->setRange(miacode::ui::kAppBackgroundBlurMin, miacode::ui::kAppBackgroundBlurMax);
-    backgroundBlurSlider->setValue(selectedBackgroundSettings.blur);
-    backgroundBlurSlider->setSingleStep(1);
-    backgroundBlurSlider->setPageStep(10);
-    backgroundLayout->addRow(
-        backgroundBlurLabel,
-        miacode::ui::createSliderValueRow(backgroundBlurSlider, nullptr, QString(), backgroundGroup));
-    connect(backgroundBlurSlider, &QSlider::valueChanged, &dialog, [&](int value) {
-        selectedBackgroundSettings.blur = value;
-        persistBackgroundSettings();
-    });
-
-    auto* backgroundScaleLabel =
-        new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.scale")), backgroundGroup);
     auto* backgroundScaleCombo =
         miacode::ui::createDialogComboBox(backgroundGroup, 12, Qt::AlignLeft | Qt::AlignVCenter);
     const QList<miacode::ui::AppBackgroundSizeMode> backgroundScaleOptions{
@@ -1030,10 +1051,6 @@ void MainWindow::PreferencesSection::onPreferences()
             static_cast<miacode::ui::AppBackgroundSizeMode>(backgroundScaleCombo->itemData(index).toInt());
         persistBackgroundSettings();
     });
-    backgroundLayout->addRow(backgroundScaleLabel, backgroundScaleCombo);
-
-    auto* backgroundPositionLabelWidget =
-        new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.position")), backgroundGroup);
     auto* backgroundPositionCombo =
         miacode::ui::createDialogComboBox(backgroundGroup, 12, Qt::AlignLeft | Qt::AlignVCenter);
     const QList<miacode::ui::AppBackgroundPosition> backgroundPositionOptions{
@@ -1062,7 +1079,35 @@ void MainWindow::PreferencesSection::onPreferences()
             static_cast<miacode::ui::AppBackgroundPosition>(backgroundPositionCombo->itemData(index).toInt());
         persistBackgroundSettings();
     });
-    backgroundLayout->addRow(backgroundPositionLabelWidget, backgroundPositionCombo);
+
+    const QList<QComboBox*> backgroundChoiceCombos{
+        backgroundEnabledCombo,
+        backgroundScaleCombo,
+        backgroundPositionCombo,
+    };
+    int backgroundChoiceComboWidth = 0;
+    for (QComboBox* combo : backgroundChoiceCombos) {
+        if (combo == nullptr) {
+            continue;
+        }
+        combo->ensurePolished();
+        backgroundChoiceComboWidth = qMax(backgroundChoiceComboWidth, combo->sizeHint().width());
+    }
+    for (QComboBox* combo : backgroundChoiceCombos) {
+        if (combo != nullptr && backgroundChoiceComboWidth > 0) {
+            combo->setFixedWidth(backgroundChoiceComboWidth);
+        }
+    }
+
+    auto* backgroundScaleLabel =
+        new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.scale")), backgroundGroup);
+    backgroundLayout->addRow(backgroundScaleLabel,
+                             createBackgroundComboRow(backgroundScaleCombo, backgroundGroup));
+
+    auto* backgroundPositionLabelWidget =
+        new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.position")), backgroundGroup);
+    backgroundLayout->addRow(backgroundPositionLabelWidget,
+                             createBackgroundComboRow(backgroundPositionCombo, backgroundGroup));
 
     miacode::ui::flattenGroupForTabPage(backgroundGroup);
     backgroundPageLayout->addWidget(backgroundGroup);
