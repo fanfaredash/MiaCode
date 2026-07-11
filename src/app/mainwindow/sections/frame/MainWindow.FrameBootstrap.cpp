@@ -1624,7 +1624,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     findBar->hide();
     editorFindBar_ = findBar;
 
-    welcomePage_ = new miacode::ui::AppBackgroundSurfaceWidget(editorStack_);
+    welcomePage_ = new QWidget(editorStack_);
     welcomePage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     welcomePage_->setStyleSheet(
         "QWidget { background: #FFFFFF; color: #2A3440; }"
@@ -1638,7 +1638,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     welcomeLayout->addWidget(welcomeEmptyHintLabel_, 0, Qt::AlignLeft | Qt::AlignTop);
     welcomeLayout->addStretch(1);
 
-    metadataPage_ = new miacode::ui::AppBackgroundSurfaceWidget(editorStack_);
+    metadataPage_ = new QWidget(editorStack_);
     metadataPage_->setObjectName("MetadataPage");
     metadataPage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     metadataPage_->setStyleSheet(
