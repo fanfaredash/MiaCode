@@ -7,6 +7,7 @@
 #include <QMenuBar>
 #include <QObject>
 #include <QPixmap>
+#include <QRect>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QToolBar>
@@ -24,6 +25,7 @@ public:
 
     AppBackgroundSettings settings() const;
     void setSettings(const AppBackgroundSettings& settings);
+    void setCanvasGeometryGlobal(const QRect& geometry);
     void invalidateCache();
     bool paintBackgroundForSurface(QWidget* surface, QPainter& painter);
 
@@ -41,6 +43,7 @@ private:
     void requestSurfaceUpdates() const;
 
     QWidget* window_ = nullptr;
+    QRect canvasGeometryGlobal_;
     AppBackgroundSettings settings_;
     QString loadedPath_;
     QImage sourceImage_;

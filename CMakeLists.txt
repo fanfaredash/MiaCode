@@ -1149,6 +1149,10 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/ui/UiText.cpp
             src/extensions/ExtensionManifest.h
             src/extensions/ExtensionManifest.cpp
+            src/app/ui/AppBackgroundSettings.h
+            src/app/ui/AppBackgroundSettings.cpp
+            src/app/ui/AppBackgroundPainter.h
+            src/app/ui/AppBackgroundPainter.cpp
             src/app/ui/UiTheme.h
             src/app/ui/UiTheme.cpp
             src/app/ui/ShortcutRegistry.h

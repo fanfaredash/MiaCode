@@ -17,6 +17,7 @@ class QuickShellStyleBridge : public QObject
 
     Q_PROPERTY(QVariantMap palette READ palette NOTIFY appearanceChanged)
     Q_PROPERTY(QVariantMap metrics READ metrics NOTIFY metricsChanged)
+    Q_PROPERTY(QVariantMap appBackground READ appBackground NOTIFY appearanceChanged)
 
 public:
     QuickShellStyleBridge(
@@ -27,6 +28,7 @@ public:
 
     QVariantMap palette() const;
     QVariantMap metrics() const;
+    QVariantMap appBackground() const;
 
     Q_INVOKABLE void syncWindowSize(int width, int height);
     Q_INVOKABLE void refreshNow();
@@ -45,6 +47,7 @@ private:
     QTimer* refreshTimer_ = nullptr;
     QVariantMap palette_;
     QVariantMap metrics_;
+    QVariantMap appBackground_;
     bool refreshScheduled_ = false;
     bool refreshInProgress_ = false;
 };

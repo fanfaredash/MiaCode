@@ -9,6 +9,7 @@
 #include <QImageReader>
 #include <QPainter>
 #include <QPaintEvent>
+#include <QUrl>
 #include <QVariant>
 
 #include "common/DebugLog.h"
@@ -19,6 +20,13 @@ namespace {
 
 constexpr auto kAppBackgroundPainterProperty = "miacode.appBackgroundPainter";
 constexpr auto kAppBackgroundActiveProperty = "miacode.appBackgroundActive";
+constexpr auto kAppBackgroundEnabledProperty = "miacode.appBackgroundEnabled";
+constexpr auto kAppBackgroundImagePathProperty = "miacode.appBackgroundImagePath";
+constexpr auto kAppBackgroundSourceUrlProperty = "miacode.appBackgroundSourceUrl";
+constexpr auto kAppBackgroundOpacityProperty = "miacode.appBackgroundOpacity";
+constexpr auto kAppBackgroundBlurProperty = "miacode.appBackgroundBlur";
+constexpr auto kAppBackgroundSizeModeProperty = "miacode.appBackgroundSizeMode";
+constexpr auto kAppBackgroundPositionProperty = "miacode.appBackgroundPosition";
 
 QString quotedDiag(QString value)
 {
@@ -113,6 +121,17 @@ void AppBackgroundPainter::setSettings(const AppBackgroundSettings& settings)
     requestSurfaceUpdates();
 }
 
+void AppBackgroundPainter::setCanvasGeometryGlobal(const QRect& geometry)
+{
+    const QRect normalized = geometry.isValid() ? geometry : QRect();
+    if (canvasGeometryGlobal_ == normalized) {
+        return;
+    }
+    canvasGeometryGlobal_ = normalized;
+    invalidateCache();
+    requestSurfaceUpdates();
+}
+
 void AppBackgroundPainter::invalidateCache()
 {
     cachedPixmap_ = QPixmap();
@@ -151,8 +170,10 @@ bool AppBackgroundPainter::paintBackgroundForSurface(QWidget* surface, QPainter&
         return false;
     }
 
-    const QPoint sourceTopLeft =
-        surface->mapToGlobal(QPoint(0, 0)) - window_->mapToGlobal(QPoint(0, 0));
+    const QPoint canvasTopLeft = canvasGeometryGlobal_.isValid()
+        ? canvasGeometryGlobal_.topLeft()
+        : window_->mapToGlobal(QPoint(0, 0));
+    const QPoint sourceTopLeft = surface->mapToGlobal(QPoint(0, 0)) - canvasTopLeft;
     const QRect sourceRect(sourceTopLeft, surface->size());
     const QRect clippedSource = sourceRect.intersected(pixmap.rect());
     if (clippedSource.isEmpty()) {
@@ -270,6 +291,9 @@ QImage AppBackgroundPainter::blurredImage(const QImage& image) const
 
 QSize AppBackgroundPainter::canvasSize() const
 {
+    if (canvasGeometryGlobal_.isValid()) {
+        return canvasGeometryGlobal_.size();
+    }
     return window_ != nullptr ? window_->size() : QSize();
 }
 
@@ -434,6 +458,15 @@ void AppBackgroundPainter::updateApplicationActiveFlag() const
     qApp->setProperty(
         kAppBackgroundActiveProperty,
         settings_.enabled && settings_.opacity > 0.0 && imageReadable);
+    qApp->setProperty(kAppBackgroundEnabledProperty, settings_.enabled);
+    qApp->setProperty(kAppBackgroundImagePathProperty, settings_.imagePath);
+    qApp->setProperty(
+        kAppBackgroundSourceUrlProperty,
+        settings_.imagePath.isEmpty() ? QString() : QUrl::fromLocalFile(settings_.imagePath).toString());
+    qApp->setProperty(kAppBackgroundOpacityProperty, settings_.opacity);
+    qApp->setProperty(kAppBackgroundBlurProperty, settings_.blur);
+    qApp->setProperty(kAppBackgroundSizeModeProperty, appBackgroundSizeModeToken(settings_.sizeMode));
+    qApp->setProperty(kAppBackgroundPositionProperty, appBackgroundPositionToken(settings_.position));
 }
 
 void AppBackgroundPainter::requestSurfaceUpdates() const
