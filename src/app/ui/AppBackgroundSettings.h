@@ -12,12 +12,14 @@ struct AppBackgroundOverlaySettings {
     int statusAlphaLight = 216;
     int panelAlphaDark = 176;
     int panelAlphaLight = 190;
-    int cardAlphaDark = 184;
-    int cardAlphaLight = 196;
+    int cardAlphaDark = 255;
+    int cardAlphaLight = 255;
     int editorHeaderAlphaDark = 188;
     int editorHeaderAlphaLight = 196;
     int inputAlphaDark = 196;
     int inputAlphaLight = 204;
+    int codeEditorAlphaDark = 196;
+    int codeEditorAlphaLight = 204;
 };
 
 enum class AppBackgroundSizeMode {

@@ -27,6 +27,7 @@ enum class AppBackgroundOverlayRole {
     Card,
     EditorHeader,
     Input,
+    CodeEditor,
 };
 
 struct Colors {

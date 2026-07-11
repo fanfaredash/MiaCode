@@ -1048,6 +1048,7 @@ void MainWindow::PreferencesSection::onPreferences()
         overlayFormLayout->setVerticalSpacing(8);
 
         struct OverlayRow {
+            QLabel* label = nullptr;
             QSlider* slider = nullptr;
             miacode::ui::EditableValueLabel* valueLabel = nullptr;
             std::function<void(int)> setter;
@@ -1063,10 +1064,11 @@ void MainWindow::PreferencesSection::onPreferences()
             slider->setSingleStep(1);
             slider->setPageStep(10);
             slider->setValue(value);
+            auto* label = new QLabel(labelText, overlayGroup);
             overlayFormLayout->addRow(
-                new QLabel(labelText, overlayGroup),
+                label,
                 miacode::ui::createSliderValueRow(slider, &valueLabel, QString(), overlayGroup));
-            return OverlayRow{slider, valueLabel, setter};
+            return OverlayRow{label, slider, valueLabel, setter};
         };
 
         QList<OverlayRow> overlayRows;
@@ -1107,45 +1109,50 @@ void MainWindow::PreferencesSection::onPreferences()
             [&](int value) { selectedBackgroundSettings.overlays.toolbarAlphaDark = value; },
             [&](int value) { selectedBackgroundSettings.overlays.toolbarAlphaLight = value; });
         appendThemeOverlayRow(
-            QStringLiteral("dialog.preferences.background.overlay.status"),
-            selectedBackgroundSettings.overlays.statusAlphaDark,
-            selectedBackgroundSettings.overlays.statusAlphaLight,
-            [&](int value) { selectedBackgroundSettings.overlays.statusAlphaDark = value; },
-            [&](int value) { selectedBackgroundSettings.overlays.statusAlphaLight = value; });
-        appendThemeOverlayRow(
-            QStringLiteral("dialog.preferences.background.overlay.panel"),
-            selectedBackgroundSettings.overlays.panelAlphaDark,
-            selectedBackgroundSettings.overlays.panelAlphaLight,
-            [&](int value) { selectedBackgroundSettings.overlays.panelAlphaDark = value; },
-            [&](int value) { selectedBackgroundSettings.overlays.panelAlphaLight = value; });
-        appendThemeOverlayRow(
-            QStringLiteral("dialog.preferences.background.overlay.card"),
-            selectedBackgroundSettings.overlays.cardAlphaDark,
-            selectedBackgroundSettings.overlays.cardAlphaLight,
-            [&](int value) { selectedBackgroundSettings.overlays.cardAlphaDark = value; },
-            [&](int value) { selectedBackgroundSettings.overlays.cardAlphaLight = value; });
-        appendThemeOverlayRow(
             QStringLiteral("dialog.preferences.background.overlay.editor_header"),
             selectedBackgroundSettings.overlays.editorHeaderAlphaDark,
             selectedBackgroundSettings.overlays.editorHeaderAlphaLight,
             [&](int value) { selectedBackgroundSettings.overlays.editorHeaderAlphaDark = value; },
             [&](int value) { selectedBackgroundSettings.overlays.editorHeaderAlphaLight = value; });
         appendThemeOverlayRow(
-            QStringLiteral("dialog.preferences.background.overlay.input"),
-            selectedBackgroundSettings.overlays.inputAlphaDark,
-            selectedBackgroundSettings.overlays.inputAlphaLight,
-            [&](int value) { selectedBackgroundSettings.overlays.inputAlphaDark = value; },
-            [&](int value) { selectedBackgroundSettings.overlays.inputAlphaLight = value; });
+            QStringLiteral("dialog.preferences.background.overlay.code_editor"),
+            selectedBackgroundSettings.overlays.codeEditorAlphaDark,
+            selectedBackgroundSettings.overlays.codeEditorAlphaLight,
+            [&](int value) { selectedBackgroundSettings.overlays.codeEditorAlphaDark = value; },
+            [&](int value) { selectedBackgroundSettings.overlays.codeEditorAlphaLight = value; });
+        appendThemeOverlayRow(
+            QStringLiteral("dialog.preferences.background.overlay.panel"),
+            selectedBackgroundSettings.overlays.panelAlphaDark,
+            selectedBackgroundSettings.overlays.panelAlphaLight,
+            [&](int value) { selectedBackgroundSettings.overlays.panelAlphaDark = value; },
+            [&](int value) { selectedBackgroundSettings.overlays.panelAlphaLight = value; });
+        if (!overlayRows.isEmpty()) {
+            OverlayRow& previewFrameRow = overlayRows.last();
+            if (previewFrameRow.label != nullptr) {
+                previewFrameRow.label->setEnabled(false);
+            }
+            if (previewFrameRow.slider != nullptr) {
+                previewFrameRow.slider->setEnabled(false);
+            }
+            if (previewFrameRow.valueLabel != nullptr) {
+                previewFrameRow.valueLabel->setEnabled(false);
+            }
+        }
+        appendThemeOverlayRow(
+            QStringLiteral("dialog.preferences.background.overlay.status"),
+            selectedBackgroundSettings.overlays.statusAlphaDark,
+            selectedBackgroundSettings.overlays.statusAlphaLight,
+            [&](int value) { selectedBackgroundSettings.overlays.statusAlphaDark = value; },
+            [&](int value) { selectedBackgroundSettings.overlays.statusAlphaLight = value; });
 
         const auto syncOverlayDialogControls = [&]() {
             const miacode::ui::AppBackgroundOverlaySettings overlays = selectedBackgroundSettings.overlays;
             const QList<int> values{
                 showDarkThemeRows ? overlays.toolbarAlphaDark : overlays.toolbarAlphaLight,
-                showDarkThemeRows ? overlays.statusAlphaDark : overlays.statusAlphaLight,
-                showDarkThemeRows ? overlays.panelAlphaDark : overlays.panelAlphaLight,
-                showDarkThemeRows ? overlays.cardAlphaDark : overlays.cardAlphaLight,
                 showDarkThemeRows ? overlays.editorHeaderAlphaDark : overlays.editorHeaderAlphaLight,
-                showDarkThemeRows ? overlays.inputAlphaDark : overlays.inputAlphaLight,
+                showDarkThemeRows ? overlays.codeEditorAlphaDark : overlays.codeEditorAlphaLight,
+                showDarkThemeRows ? overlays.panelAlphaDark : overlays.panelAlphaLight,
+                showDarkThemeRows ? overlays.statusAlphaDark : overlays.statusAlphaLight,
             };
             for (int index = 0; index < overlayRows.size() && index < values.size(); ++index) {
                 if (overlayRows[index].slider == nullptr) {
@@ -1162,6 +1169,9 @@ void MainWindow::PreferencesSection::onPreferences()
         overlayLayout->addWidget(overlayGroup);
 
         auto* buttonRow = new QDialogButtonBox(QDialogButtonBox::Close, &overlayDialog);
+        if (QPushButton* closeButton = buttonRow->button(QDialogButtonBox::Close); closeButton != nullptr) {
+            closeButton->setText(UiText::text(QStringLiteral("action.close")));
+        }
         if (QPushButton* resetButton = buttonRow->addButton(
                 UiText::text(QStringLiteral("dialog.preferences.background.overlay.reset_defaults")),
                 QDialogButtonBox::ResetRole);

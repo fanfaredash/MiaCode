@@ -16,8 +16,8 @@ AppBackgroundOverlaySettings normalizedAppBackgroundOverlaySettings(const AppBac
     normalized.statusAlphaLight = qBound(kAppBackgroundOverlayAlphaMin, normalized.statusAlphaLight, kAppBackgroundOverlayAlphaMax);
     normalized.panelAlphaDark = qBound(kAppBackgroundOverlayAlphaMin, normalized.panelAlphaDark, kAppBackgroundOverlayAlphaMax);
     normalized.panelAlphaLight = qBound(kAppBackgroundOverlayAlphaMin, normalized.panelAlphaLight, kAppBackgroundOverlayAlphaMax);
-    normalized.cardAlphaDark = qBound(kAppBackgroundOverlayAlphaMin, normalized.cardAlphaDark, kAppBackgroundOverlayAlphaMax);
-    normalized.cardAlphaLight = qBound(kAppBackgroundOverlayAlphaMin, normalized.cardAlphaLight, kAppBackgroundOverlayAlphaMax);
+    normalized.cardAlphaDark = kAppBackgroundOverlayAlphaMax;
+    normalized.cardAlphaLight = kAppBackgroundOverlayAlphaMax;
     normalized.editorHeaderAlphaDark = qBound(
         kAppBackgroundOverlayAlphaMin,
         normalized.editorHeaderAlphaDark,
@@ -28,6 +28,14 @@ AppBackgroundOverlaySettings normalizedAppBackgroundOverlaySettings(const AppBac
         kAppBackgroundOverlayAlphaMax);
     normalized.inputAlphaDark = qBound(kAppBackgroundOverlayAlphaMin, normalized.inputAlphaDark, kAppBackgroundOverlayAlphaMax);
     normalized.inputAlphaLight = qBound(kAppBackgroundOverlayAlphaMin, normalized.inputAlphaLight, kAppBackgroundOverlayAlphaMax);
+    normalized.codeEditorAlphaDark = qBound(
+        kAppBackgroundOverlayAlphaMin,
+        normalized.codeEditorAlphaDark,
+        kAppBackgroundOverlayAlphaMax);
+    normalized.codeEditorAlphaLight = qBound(
+        kAppBackgroundOverlayAlphaMin,
+        normalized.codeEditorAlphaLight,
+        kAppBackgroundOverlayAlphaMax);
     return normalized;
 }
 
@@ -48,6 +56,10 @@ AppBackgroundOverlaySettings appBackgroundOverlaySettingsFromJson(const QJsonObj
         object.value(QStringLiteral("editor_header_light")).toInt(settings.editorHeaderAlphaLight);
     settings.inputAlphaDark = object.value(QStringLiteral("input_dark")).toInt(settings.inputAlphaDark);
     settings.inputAlphaLight = object.value(QStringLiteral("input_light")).toInt(settings.inputAlphaLight);
+    settings.codeEditorAlphaDark =
+        object.value(QStringLiteral("code_editor_dark")).toInt(settings.codeEditorAlphaDark);
+    settings.codeEditorAlphaLight =
+        object.value(QStringLiteral("code_editor_light")).toInt(settings.codeEditorAlphaLight);
     return normalizedAppBackgroundOverlaySettings(settings);
 }
 
@@ -67,6 +79,8 @@ QJsonObject appBackgroundOverlaySettingsToJson(const AppBackgroundOverlaySetting
     object.insert(QStringLiteral("editor_header_light"), normalized.editorHeaderAlphaLight);
     object.insert(QStringLiteral("input_dark"), normalized.inputAlphaDark);
     object.insert(QStringLiteral("input_light"), normalized.inputAlphaLight);
+    object.insert(QStringLiteral("code_editor_dark"), normalized.codeEditorAlphaDark);
+    object.insert(QStringLiteral("code_editor_light"), normalized.codeEditorAlphaLight);
     return object;
 }
 

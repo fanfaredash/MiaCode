@@ -353,6 +353,10 @@ int appBackgroundOverlayAlpha(AppBackgroundOverlayRole role, bool darkTheme)
         return backgroundOverlayAlphaProperty(
             darkTheme ? "miacode.appBackgroundInputAlphaDark" : "miacode.appBackgroundInputAlphaLight",
             darkTheme ? 196 : 204);
+    case AppBackgroundOverlayRole::CodeEditor:
+        return backgroundOverlayAlphaProperty(
+            darkTheme ? "miacode.appBackgroundCodeEditorAlphaDark" : "miacode.appBackgroundCodeEditorAlphaLight",
+            darkTheme ? 196 : 204);
     }
     return darkTheme ? 196 : 204;
 }

@@ -39,6 +39,8 @@ constexpr auto kAppBackgroundEditorHeaderAlphaDarkProperty = "miacode.appBackgro
 constexpr auto kAppBackgroundEditorHeaderAlphaLightProperty = "miacode.appBackgroundEditorHeaderAlphaLight";
 constexpr auto kAppBackgroundInputAlphaDarkProperty = "miacode.appBackgroundInputAlphaDark";
 constexpr auto kAppBackgroundInputAlphaLightProperty = "miacode.appBackgroundInputAlphaLight";
+constexpr auto kAppBackgroundCodeEditorAlphaDarkProperty = "miacode.appBackgroundCodeEditorAlphaDark";
+constexpr auto kAppBackgroundCodeEditorAlphaLightProperty = "miacode.appBackgroundCodeEditorAlphaLight";
 constexpr auto kAppBackgroundSizeModeProperty = "miacode.appBackgroundSizeMode";
 constexpr auto kAppBackgroundPositionProperty = "miacode.appBackgroundPosition";
 
@@ -125,6 +127,8 @@ void AppBackgroundPainter::setSettings(const AppBackgroundSettings& settings)
         && normalized.overlays.editorHeaderAlphaLight == settings_.overlays.editorHeaderAlphaLight
         && normalized.overlays.inputAlphaDark == settings_.overlays.inputAlphaDark
         && normalized.overlays.inputAlphaLight == settings_.overlays.inputAlphaLight
+        && normalized.overlays.codeEditorAlphaDark == settings_.overlays.codeEditorAlphaDark
+        && normalized.overlays.codeEditorAlphaLight == settings_.overlays.codeEditorAlphaLight
         && normalized.sizeMode == settings_.sizeMode
         && normalized.position == settings_.position) {
         logBackgroundDiag(QStringLiteral(
@@ -429,6 +433,8 @@ QPixmap AppBackgroundPainter::renderedPixmap(const QSize& canvasSize)
         && cachedSettings_.overlays.editorHeaderAlphaLight == settings_.overlays.editorHeaderAlphaLight
         && cachedSettings_.overlays.inputAlphaDark == settings_.overlays.inputAlphaDark
         && cachedSettings_.overlays.inputAlphaLight == settings_.overlays.inputAlphaLight
+        && cachedSettings_.overlays.codeEditorAlphaDark == settings_.overlays.codeEditorAlphaDark
+        && cachedSettings_.overlays.codeEditorAlphaLight == settings_.overlays.codeEditorAlphaLight
         && cachedSettings_.sizeMode == settings_.sizeMode
         && cachedSettings_.position == settings_.position) {
         return cachedPixmap_;
@@ -515,6 +521,8 @@ void AppBackgroundPainter::updateApplicationActiveFlag() const
     qApp->setProperty(kAppBackgroundEditorHeaderAlphaLightProperty, settings_.overlays.editorHeaderAlphaLight);
     qApp->setProperty(kAppBackgroundInputAlphaDarkProperty, settings_.overlays.inputAlphaDark);
     qApp->setProperty(kAppBackgroundInputAlphaLightProperty, settings_.overlays.inputAlphaLight);
+    qApp->setProperty(kAppBackgroundCodeEditorAlphaDarkProperty, settings_.overlays.codeEditorAlphaDark);
+    qApp->setProperty(kAppBackgroundCodeEditorAlphaLightProperty, settings_.overlays.codeEditorAlphaLight);
     qApp->setProperty(kAppBackgroundSizeModeProperty, appBackgroundSizeModeToken(settings_.sizeMode));
     qApp->setProperty(kAppBackgroundPositionProperty, appBackgroundPositionToken(settings_.position));
 }

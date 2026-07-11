@@ -356,7 +356,8 @@ void PlainCodeEditor::paintEvent(QPaintEvent* event)
             if (miacode::ui::paintAppBackgroundForWidget(viewport(), backgroundPainter)) {
                 const UiTheme::Colors& c = UiTheme::colors();
                 QColor editorSurface = c.inputBg;
-                editorSurface.setAlpha(c.dark ? 196 : 204);
+                editorSurface.setAlpha(
+                    UiTheme::appBackgroundOverlayAlpha(UiTheme::AppBackgroundOverlayRole::CodeEditor, c.dark));
                 backgroundPainter.fillRect(dirtyRect, editorSurface);
             }
         }

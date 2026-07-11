@@ -156,7 +156,8 @@ void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
     const QRect dirtyRect = event != nullptr ? event->rect() : lineNumberArea_->rect();
     if (miacode::ui::paintAppBackgroundForWidget(lineNumberArea_, painter)) {
         QColor sidebarSurface = c.timelineSidebar;
-        sidebarSurface.setAlpha(c.dark ? 184 : 196);
+        sidebarSurface.setAlpha(
+            UiTheme::appBackgroundOverlayAlpha(UiTheme::AppBackgroundOverlayRole::CodeEditor, c.dark));
         painter.fillRect(dirtyRect, sidebarSurface);
     } else {
         painter.fillRect(dirtyRect, c.timelineSidebar);
