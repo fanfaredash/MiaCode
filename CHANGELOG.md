@@ -4,17 +4,27 @@
 
 ## 1.1.0-beta.5
 
-本版本继续打磨 1.1.0 beta 线，重点是收敛实时预览 Qt Quick/QSG 纹理的生命周期归属，进一步消除皮肤切换、窗口/DPR/主题变更以及全屏切换时的 QSG 纹理悬挂问题。
+本版本在继续打磨 1.1.0 beta 线的同时，完成了一轮较大的 UI 控件组件化重构，并收敛实时预览 Qt Quick/QSG 纹理的生命周期归属，进一步消除皮肤切换、窗口/DPR/主题变更以及全屏切换时的 QSG 纹理悬挂问题。
+
+### 重构
+
+- 抽取共享对话框 UI 组件：将音频设置、导出设置、偏好设置、批量导出与视频导出等对话框统一改为复用 `UiComponents` / `UiTheme` 的共享控件（路径输入框、辅助按钮、滑块选项行、导出区间控件等），大幅削减各对话框中的重复实现，统一交互与视觉。
+- QuickShell 控件组件化：新增共享的 QuickShell QML 主题、工具按钮、复选框、滑块组件，并将预览 transport、底部标签栏与时间轴外壳控件迁移到这些组件上。
+
+### 改进
+
+- 收敛实时预览 QSG 纹理的生命周期归属：纹理统一由 render 侧单一 root-node/window generation 拥有，缓存/皮肤失效只在 GUI 侧发出原子的“重置请求”，实际的节点、材质与纹理回收全部在 `updatePaintNode()` 内完成，且严格遵循“先删引用它的 child node / material，再清空纹理仓库”的顺序，避免旧材质继续持有已释放的 `QSGTexture` 裸指针。
+- transient / retained 纹理替换不再原地删除旧纹理，旧资源延迟到下一帧 render-thread frame 开始后再回收，确保上一帧所有材质已完成重新绑定。
+- QuickShell 嵌入预览与全屏预览的 inline surface 首次创建后常驻，F11 进出全屏只切换可见性与绑定状态，不再通过 `Loader.active=false` 从 GUI 侧销毁一个仍在使用的 QSG owner（同时缓解此前全屏播放偶发崩溃的风险）。
 
 ### 修复
 
-- 明确实时预览 QSG 纹理由 render 侧的单一 root-node/window generation 拥有：缓存/皮肤失效只在 GUI 侧发出原子的“重置请求”，实际的节点、材质与纹理回收全部在 `updatePaintNode()` 内完成，且严格遵循“先删引用它的 child node / material，再清空纹理仓库”的顺序，避免旧材质继续持有已释放的 `QSGTexture` 裸指针。
-- transient / retained 纹理替换不再原地删除旧纹理，旧资源延迟到下一帧 render-thread frame 开始后再回收，确保上一帧所有材质已完成重新绑定。
-- QuickShell 嵌入预览与全屏预览的 inline surface 首次创建后常驻，F11 进出全屏只切换可见性与绑定状态，不再通过 `Loader.active=false` 从 GUI 侧销毁一个仍在使用的 QSG owner。
-- 新增 `preview_texture_generation_policy_spec`，对纹理 generation 重置判定（条目数 / 字节数 / fast-key 上限、flush pending）做单元约束。
+- 修复组合框下拉弹窗右下角出现色块的问题：显式为 popup proxy style 使用 Fusion 基类，避免 Windows 11 桌面样式与 QSS popup 面板叠绘。
+- 修复下拉弹窗可见行数错位的问题。
 
 ### 其他
 
+- 新增 `preview_texture_generation_policy_spec`，对纹理 generation 重置判定（条目数 / 字节数 / fast-key 上限、flush pending）做单元约束。
 - 将应用版本推进到 `1.1.0-beta.5`。
 
 ## 1.1.0-beta.4
