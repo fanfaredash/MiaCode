@@ -346,7 +346,7 @@ QString applicationStyleSheet()
 {
     const Colors& c = colors();
     return QStringLiteral(
-        "QMenuBar { background: %1; color: %2; border-bottom: 1px solid %3; }"
+        "QMenuBar { background: %1; color: %2; border-bottom: none; }"
         "QMenuBar::item { background: transparent; color: %2; padding: 4px 8px; margin: 0 0 1px 0; }"
         "QMenuBar::item:selected { background: %4; }"
         "QToolBar { background: %1; border: none; border-bottom: 1px solid %3; spacing: 4px; }"
@@ -359,11 +359,11 @@ QString applicationStyleSheet()
         "QMainWindow::separator { background: %3; width: 1px; height: 1px; }"
         "QToolTip { background: %9; color: %2; border: 1px solid %10; }"
     )
-        .arg(cssSurface(c.toolbarBg, c.dark ? 188 : 196))
+        .arg(cssSurface(c.toolbarBg, c.dark ? 198 : 206))
         .arg(css(c.textPrimary))
         .arg(css(c.border))
         .arg(css(c.menuHoverBg))
-        .arg(cssSurface(c.statusBg, c.dark ? 188 : 196))
+        .arg(cssSurface(c.statusBg, c.dark ? 208 : 216))
         .arg(css(c.textSecondary))
         .arg(cssSurface(c.cardBg, c.dark ? 184 : 196))
         .arg(cssSurface(c.panelBg, c.dark ? 176 : 190))
