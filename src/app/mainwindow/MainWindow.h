@@ -34,6 +34,7 @@
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "extensions/ExtensionManager.h"
+#include "app/ui/AppBackgroundSettings.h"
 
 class QAction;
 class QByteArray;
@@ -57,6 +58,7 @@ namespace miacode::export_page {
 class ExportLauncherPage;
 }
 namespace miacode::ui {
+class AppBackgroundPainter;
 class BusySpinner;
 }
 class QListWidget;
@@ -418,6 +420,10 @@ private:
     QRect previewFullscreenControlCardRect(bool visible) const;
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
     double normalizedPreviewCanvasAspectRatio(double ratio) const;
+    void applyAppBackgroundSettings(
+        const miacode::ui::AppBackgroundSettings& settings,
+        bool persistPreference,
+        bool refreshTheme = true);
     void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     PreviewCanvasFrameRateMode previewFrameRateModeFromStorageValue(
         const QString& value,

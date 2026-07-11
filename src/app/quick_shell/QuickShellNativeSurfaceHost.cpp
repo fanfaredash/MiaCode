@@ -1,5 +1,6 @@
 #include "QuickShellNativeSurfaceHost.h"
 
+#include "app/ui/AppBackgroundPainter.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
@@ -448,7 +449,44 @@ QWidget* QuickShellNativeSurfaceHost::statusSurfaceWidget() const
 
 void QuickShellNativeSurfaceHost::refreshSurfaceStyles()
 {
-    Q_UNUSED(contentProvider_);
+    if (contentProvider_ == nullptr) {
+        return;
+    }
+    QWidget* shellWindow = contentProvider_->shellWindowWidget();
+    miacode::ui::AppBackgroundPainter* backgroundPainter =
+        miacode::ui::appBackgroundPainterForWidget(shellWindow);
+    if (backgroundPainter == nullptr) {
+        return;
+    }
+
+    QRect canvasGeometry = shellWindow != nullptr
+        ? shellWindow->property("miacode.quick_root_window_frame_geometry").toRect()
+        : QRect();
+    if (!canvasGeometry.isValid() && shellWindow != nullptr) {
+        canvasGeometry = QRect(shellWindow->mapToGlobal(QPoint(0, 0)), shellWindow->size());
+    }
+    backgroundPainter->setCanvasGeometryGlobal(canvasGeometry);
+
+    const QList<QWidget*> bridgeSurfaces{
+        topChromeSurfaceWidget_,
+        sidebarSurfaceWidget_,
+        workspaceSurfaceWidget_,
+        bottomTabsSurfaceWidget_,
+        statusSurfaceWidget_,
+    };
+    for (QWidget* surface : bridgeSurfaces) {
+        if (surface == nullptr) {
+            continue;
+        }
+        miacode::ui::installAppBackgroundPainter(surface, backgroundPainter);
+        surface->update();
+        const QList<QWidget*> children = surface->findChildren<QWidget*>();
+        for (QWidget* child : children) {
+            if (child != nullptr) {
+                child->update();
+            }
+        }
+    }
 }
 
 void QuickShellNativeSurfaceHost::syncTopChromeSurfaceSize(int width, int height)
@@ -543,6 +581,7 @@ void QuickShellNativeSurfaceHost::updateRootWindowFrameGeometry(const QRect& geo
     if (contentProvider_ != nullptr) {
         contentProvider_->shellSetRootWindowFrameGeometry(geometry);
     }
+    refreshSurfaceStyles();
 }
 
 void QuickShellNativeSurfaceHost::noteQuickShellUiReady()

@@ -22,6 +22,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "WindowParityMetrics.h"
+#include "app/ui/AppBackgroundPainter.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -220,9 +221,10 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             });
         }
     }
-    if (QMenuBar* topMenuBar = menuBar(); topMenuBar != nullptr) {
-        topMenuBar->setNativeMenuBar(false);
-    }
+    auto* topMenuBar = new miacode::ui::AppBackgroundSurfaceMenuBar(this);
+    topMenuBar->setNativeMenuBar(false);
+    setMenuBar(topMenuBar);
+    setStatusBar(new miacode::ui::AppBackgroundSurfaceStatusBar(this));
 
     // Beta20-fix — unified all top menus to the `Name(&L)` mnemonic
     // suffix style for both English and Chinese (was: English used the
@@ -248,7 +250,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     styleRoundedMenu(*previewMenu);
     styleRoundedMenu(*helpMenu);
 
-    auto* toolBar = addToolBar("Main");
+    auto* toolBar = new miacode::ui::AppBackgroundSurfaceToolBar(QStringLiteral("Main"), this);
+    addToolBar(toolBar);
     toolBar->setMovable(false);
     toolBar->setFloatable(false);
     // NB: do NOT shrink toolBar->iconSize() to font-match the gear — the gear is
@@ -1307,7 +1310,13 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         "selection-background-color: #B8CCE5;"
         "selection-color: #1F1F1F;"
     );
+    editorWidget_->setAutoFillBackground(false);
+    editorWidget_->setAttribute(Qt::WA_TranslucentBackground, true);
     if (auto* scrollArea = qobject_cast<QAbstractScrollArea*>(editorWidget_)) {
+        if (QWidget* editorViewport = scrollArea->viewport(); editorViewport != nullptr) {
+            editorViewport->setAutoFillBackground(false);
+            editorViewport->setAttribute(Qt::WA_TranslucentBackground, true);
+        }
         if (QScrollBar* vbar = scrollArea->verticalScrollBar()) {
             vbar->setStyleSheet(modernScrollBarStyle());
         }
@@ -1317,7 +1326,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     }
     logStartupStage("editor_widget_ready");
 
-    auto* central = new QWidget(this);
+    auto* central = new miacode::ui::AppBackgroundSurfaceWidget(this);
     central->setObjectName("EditorShell");
     central->setAttribute(Qt::WA_StyledBackground, true);
     central->setStyleSheet(UiTheme::editorShellStyleSheet());
@@ -2274,7 +2283,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     windowSection_->setOutlineDockCollapsed(false);
     logStartupStage("outline_ready");
 
-    previewPanel_ = new QWidget(this);
+    previewPanel_ = new miacode::ui::AppBackgroundSurfaceWidget(this);
     previewPanel_->setObjectName("PreviewPanel");
     previewPanel_->setStyleSheet(
         "QWidget#PreviewPanel {"
@@ -2342,7 +2351,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     previewSpeedButton_ = nullptr;
     previewFullscreenButton_ = nullptr;
 
-    auto* previewStatsCard = new QFrame(previewPanel_);
+    auto* previewStatsCard = new miacode::ui::AppBackgroundSurfaceFrame(previewPanel_);
     previewStatsCard_ = previewStatsCard;
     previewStatsCard->setObjectName("PreviewStatsCard");
     previewStatsCard->setMinimumWidth(kPreviewControlStatsCardMinWidth);
@@ -2503,7 +2512,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     logStartupStage("preview_runtime_connections_ready");
     logStartupStage("preview_runtime_ready");
 
-    bottomTabs_ = new QTabWidget(central);
+    bottomTabs_ = new miacode::ui::AppBackgroundSurfaceTabWidget(central);
     bottomTabs_->installEventFilter(this);
     if (QTabBar* bottomTabBar = bottomTabs_->tabBar(); bottomTabBar != nullptr) {
         bottomTabBar->installEventFilter(this);
@@ -2746,7 +2755,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     windowSection_->updateBottomTabsDeviceHeight();
     logStartupStage("timeline_and_tabs_ready");
 
-    previewLeftColumn_ = new QWidget(this);
+    previewLeftColumn_ = new miacode::ui::AppBackgroundSurfaceWidget(this);
     // Content-column floor = export-page design-width budget (spec). Mirrors the
     // QuickShell content WindowContainer's Layout.minimumWidth.
     previewLeftColumn_->setMinimumWidth(miacode::window_parity::kWorkspaceContentMinWidth);
@@ -2770,12 +2779,42 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         handle->hide();
     }
     setCentralWidget(workspaceSplitter_);
+    appBackgroundPainter_ = new miacode::ui::AppBackgroundPainter(this);
+    applyAppBackgroundSettings(appBackgroundSettings_, false);
     syncEditorHeaderMinimumWidth();
     applyWorkspacePanelArrangement();
     updatePreviewWorkspaceLayout();
     logStartupStage("workspace_and_central_widget_ready");
 
     finishFrameBootstrap(toolBar, logStartupStage);
+}
+
+void MainWindow::applyAppBackgroundSettings(
+    const miacode::ui::AppBackgroundSettings& settings,
+    bool persistPreference,
+    bool refreshTheme)
+{
+    appBackgroundSettings_ = miacode::ui::normalizedAppBackgroundSettings(settings);
+    if (appBackgroundPainter_ != nullptr) {
+        appBackgroundPainter_->setSettings(appBackgroundSettings_);
+    }
+    if (refreshTheme && windowSection_ != nullptr) {
+        windowSection_->applyUiTheme();
+    }
+    update();
+
+    if (persistPreference) {
+        QJsonObject root = UiText::loadPreferencesObject();
+        QJsonObject ui = root.value(QStringLiteral("ui")).toObject();
+        ui.insert(
+            QStringLiteral("app_background"),
+            miacode::ui::appBackgroundSettingsToJson(appBackgroundSettings_));
+        root.insert(QStringLiteral("ui"), ui);
+        UiText::savePreferencesObject(root);
+        if (statusBar() != nullptr) {
+            statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")), 3000);
+        }
+    }
 }
 
 miacode::latency::LatencySandboxController* MainWindow::latencySandboxController() const

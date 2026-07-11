@@ -1,5 +1,6 @@
 ﻿import QtQuick
 import QtQuick.Controls
+import QtQuick.Effects
 import QtQuick.Layouts
 import QtQuick.Window
 import MiaCode.Preview
@@ -7,8 +8,13 @@ import MiaCode.Preview
 ApplicationWindow {
     id: root
 
+    background: Rectangle {
+        color: root.tone("windowBg", "#f8fafd")
+    }
+
     property var paletteMap: ({})
     property var metricsMap: ({})
+    property var appBackgroundMap: ({})
     property var shellController: controller
     property bool fullscreenControlsVisible: controller.previewFullscreen
     property bool fullscreenHintVisible: false
@@ -73,6 +79,86 @@ ApplicationWindow {
             return
         paletteMap = styleBridge.palette
         metricsMap = styleBridge.metrics
+        appBackgroundMap = styleBridge.appBackground
+    }
+
+    function appBackgroundActive() {
+        return appBackgroundMap
+            && appBackgroundMap.active === true
+            && appBackgroundMap.sourceUrl !== undefined
+            && String(appBackgroundMap.sourceUrl).length > 0
+    }
+
+    function appBackgroundOpacity() {
+        const value = Number(appBackgroundMap && appBackgroundMap.opacity !== undefined ? appBackgroundMap.opacity : 0)
+        if (!isFinite(value))
+            return 0
+        return Math.max(0, Math.min(0.8, value))
+    }
+
+    function appBackgroundBlur() {
+        const value = Number(appBackgroundMap && appBackgroundMap.blur !== undefined ? appBackgroundMap.blur : 0)
+        if (!isFinite(value))
+            return 0
+        return Math.max(0, Math.min(100, value))
+    }
+
+    function appBackgroundFillMode() {
+        const mode = String(appBackgroundMap && appBackgroundMap.sizeMode !== undefined ? appBackgroundMap.sizeMode : "cover")
+        if (mode === "contain")
+            return Image.PreserveAspectFit
+        if (mode === "stretch")
+            return Image.Stretch
+        if (mode === "center")
+            return Image.Pad
+        if (mode === "repeat")
+            return Image.Tile
+        return Image.PreserveAspectCrop
+    }
+
+    function appBackgroundHorizontalAlignment() {
+        const position = String(appBackgroundMap && appBackgroundMap.position !== undefined ? appBackgroundMap.position : "center")
+        if (position.indexOf("left") >= 0)
+            return Image.AlignLeft
+        if (position.indexOf("right") >= 0)
+            return Image.AlignRight
+        return Image.AlignHCenter
+    }
+
+    function appBackgroundVerticalAlignment() {
+        const position = String(appBackgroundMap && appBackgroundMap.position !== undefined ? appBackgroundMap.position : "center")
+        if (position.indexOf("top") >= 0)
+            return Image.AlignTop
+        if (position.indexOf("bottom") >= 0)
+            return Image.AlignBottom
+        return Image.AlignVCenter
+    }
+
+    function surfaceTone(key, fallback, alpha) {
+        const value = tone(key, fallback)
+        if (!appBackgroundActive())
+            return value
+        const text = String(value)
+        if (text.length < 7 || text[0] !== "#")
+            return value
+        const red = parseInt(text.slice(1, 3), 16)
+        const green = parseInt(text.slice(3, 5), 16)
+        const blue = parseInt(text.slice(5, 7), 16)
+        if (!isFinite(red) || !isFinite(green) || !isFinite(blue))
+            return value
+        return Qt.rgba(red / 255, green / 255, blue / 255, alpha)
+    }
+
+    function itemSceneX(item) {
+        if (!item || !root.contentItem)
+            return 0
+        return item.mapToItem(root.contentItem, 0, 0).x
+    }
+
+    function itemSceneY(item) {
+        if (!item || !root.contentItem)
+            return 0
+        return item.mapToItem(root.contentItem, 0, 0).y
     }
 
     function formatTransportTime(secondsValue) {
@@ -697,6 +783,7 @@ ApplicationWindow {
 
         function onAppearanceChanged() {
             root.paletteMap = styleBridge.palette
+            root.appBackgroundMap = styleBridge.appBackground
             if (embeddedTransport)
                 embeddedTransport.paletteRefreshRequested()
             if (fullscreenTransport)
@@ -1329,10 +1416,44 @@ ApplicationWindow {
                     Layout.minimumWidth: previewPaneMinWidth()
                     Layout.maximumWidth: previewPaneMaxWidth(boundedWorkspaceWidth(workspaceRow.width), workspaceRow.height)
                     Layout.fillHeight: true
-                    color: tone("panelBg", "#f5f7fa")
+                    color: appBackgroundActive() ? "transparent" : tone("panelBg", "#f5f7fa")
                     border.color: tone("border", "#d5e0ec")
                     onWidthChanged: schedulePreviewPaneLayoutLog("preview_frame_width")
                     onHeightChanged: schedulePreviewPaneLayoutLog("preview_frame_height")
+
+                    Item {
+                        anchors.fill: parent
+                        clip: true
+                        visible: root.appBackgroundActive()
+
+                        Image {
+                            x: -root.itemSceneX(previewPaneFrame)
+                            y: -root.itemSceneY(previewPaneFrame)
+                            width: root.width
+                            height: root.height
+                            source: parent.visible ? String(root.appBackgroundMap.sourceUrl) : ""
+                            opacity: root.appBackgroundOpacity()
+                            fillMode: root.appBackgroundFillMode()
+                            horizontalAlignment: root.appBackgroundHorizontalAlignment()
+                            verticalAlignment: root.appBackgroundVerticalAlignment()
+                            smooth: true
+                            mipmap: true
+                            asynchronous: true
+                            cache: true
+                            layer.enabled: parent.visible && root.appBackgroundBlur() > 0
+                            layer.effect: MultiEffect {
+                                blurEnabled: true
+                                blurMax: 64
+                                blur: Math.min(1.0, root.appBackgroundBlur() / 100.0)
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: surfaceTone("panelBg", "#f5f7fa", tone("dark", false) ? 0.72 : 0.78)
+                        visible: root.appBackgroundActive()
+                    }
 
                     FocusScope {
                         id: embeddedPreviewInteractionRoot

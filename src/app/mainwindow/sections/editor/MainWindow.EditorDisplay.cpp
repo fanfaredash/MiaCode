@@ -359,6 +359,8 @@ void MainWindow::EditorSection::loadPortableState()
     const QJsonObject ui = root.value("ui").toObject();
     const QJsonObject app = root.value("app").toObject();
     const QJsonObject preview = app.value("preview").toObject();
+    state_.appBackgroundSettings_ =
+        miacode::ui::appBackgroundSettingsFromJson(ui.value(QStringLiteral("app_background")).toObject());
 
     if (ui.value("editor_text_font_size").isDouble()) {
         state_.editorTextFontPointSize_ = qBound(
@@ -803,6 +805,9 @@ void MainWindow::EditorSection::savePortableState() const
     ui.insert("outline_dock_collapsed", state_.outlineDockCollapsed_);
     ui.insert("outline_dock_expanded_width", state_.outlineDockExpandedWidth_);
     ui.insert("editor_ime_input_disabled", state_.editorImeInputDisabled_);
+    ui.insert(
+        "app_background",
+        miacode::ui::appBackgroundSettingsToJson(state_.appBackgroundSettings_));
     root.insert("ui", ui);
 
     app.insert("last_open_dir", state_.lastOpenDir_);

@@ -491,9 +491,17 @@ TabWidgetWidthMetrics pinTabWidgetToContentWidth(QTabWidget* tabs,
     }
 
     if (auto* tabBar = tabs->findChild<QTabBar*>()) {
+        if (tabs->objectName() == QLatin1String("PreferenceTabs")) {
+            tabBar->setUsesScrollButtons(true);
+            tabBar->setElideMode(Qt::ElideRight);
+            tabBar->setExpanding(false);
+        }
         metrics.tabBarWidth = tabBar->sizeHint().width();
     }
-    metrics.pinnedWidth = qMax(metrics.maxPageWidth, metrics.tabBarWidth) + metrics.tabChrome;
+    const bool compactScrollableTabs = tabs->objectName() == QLatin1String("PreferenceTabs");
+    metrics.pinnedWidth =
+        (compactScrollableTabs ? metrics.maxPageWidth : qMax(metrics.maxPageWidth, metrics.tabBarWidth))
+        + metrics.tabChrome;
     tabs->setFixedWidth(metrics.pinnedWidth);
     if (rootLayout != nullptr) {
         rootLayout->activate();

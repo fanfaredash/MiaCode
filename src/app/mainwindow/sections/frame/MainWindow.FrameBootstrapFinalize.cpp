@@ -533,6 +533,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     statusBar()->showMessage("PlainCodeEditor ready.");
 
     loadPortableState();
+    applyAppBackgroundSettings(appBackgroundSettings_, false);
     applyWorkspacePanelArrangement();
     windowSection_->setOutlineDockCollapsed(outlineDockCollapsed_);
     logStartupStage("portable_state_loaded");

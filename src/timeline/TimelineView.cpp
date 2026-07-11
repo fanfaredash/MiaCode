@@ -10,6 +10,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "WindowParityMetrics.h"
+#include "app/ui/AppBackgroundPainter.h"
 
 #include <QDir>
 #include <QFileInfo>
