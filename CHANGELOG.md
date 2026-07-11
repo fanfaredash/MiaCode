@@ -2,6 +2,21 @@
 
 本文根据仓库提交历史整理历史发布记录。早期版本与内部预发布版本中有不少本地验证用的 beta/dev 编号，因此相邻、面向同一条用户可见发布线的内部版本会合并记录。标记为 `test` 的内部验证版本不单列，相关内容合并到后续非 test 版本记录中。
 
+## 1.1.0-beta.5
+
+本版本继续打磨 1.1.0 beta 线，重点是收敛实时预览 Qt Quick/QSG 纹理的生命周期归属，进一步消除皮肤切换、窗口/DPR/主题变更以及全屏切换时的 QSG 纹理悬挂问题。
+
+### 修复
+
+- 明确实时预览 QSG 纹理由 render 侧的单一 root-node/window generation 拥有：缓存/皮肤失效只在 GUI 侧发出原子的“重置请求”，实际的节点、材质与纹理回收全部在 `updatePaintNode()` 内完成，且严格遵循“先删引用它的 child node / material，再清空纹理仓库”的顺序，避免旧材质继续持有已释放的 `QSGTexture` 裸指针。
+- transient / retained 纹理替换不再原地删除旧纹理，旧资源延迟到下一帧 render-thread frame 开始后再回收，确保上一帧所有材质已完成重新绑定。
+- QuickShell 嵌入预览与全屏预览的 inline surface 首次创建后常驻，F11 进出全屏只切换可见性与绑定状态，不再通过 `Loader.active=false` 从 GUI 侧销毁一个仍在使用的 QSG owner。
+- 新增 `preview_texture_generation_policy_spec`，对纹理 generation 重置判定（条目数 / 字节数 / fast-key 上限、flush pending）做单元约束。
+
+### 其他
+
+- 将应用版本推进到 `1.1.0-beta.5`。
+
 ## 1.1.0-beta.4
 
 本版本继续打磨 1.1.0 beta 线，重点修复皮肤切换时的时间轴渲染稳定性问题。

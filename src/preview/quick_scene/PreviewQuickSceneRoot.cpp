@@ -21,10 +21,86 @@
 #include <QSGNode>
 
 #include <memory>
+#include <utility>
 
 namespace {
 
 constexpr int kPreviewQuickSceneLayerSlotCount = 18;
+
+class PreviewQuickRootNode final : public QSGNode
+{
+public:
+    explicit PreviewQuickRootNode(QQuickWindow* window)
+        : window_(window)
+    {
+        textures_.setWindow(window_);
+        createLayerSlots();
+    }
+
+    ~PreviewQuickRootNode() override
+    {
+        // QSGNode's base destructor runs after members are destroyed. Delete every child
+        // material explicitly first so the repository can never release a texture while a
+        // child node still holds its raw QSGTexture pointer.
+        destroyAllChildren();
+        textures_.clear();
+    }
+
+    QQuickWindow* window() const { return window_; }
+    quint64 generation() const { return generation_; }
+    PreviewTextureRepository* textures() { return &textures_; }
+
+    void ensureLayerSlots()
+    {
+        if (childCount() == kPreviewQuickSceneLayerSlotCount) {
+            return;
+        }
+        destroyAllChildren();
+        createLayerSlots();
+    }
+
+    void clearLayerContentsFrom(int firstSlotIndex)
+    {
+        int slotIndex = 0;
+        for (QSGNode* slot = firstChild(); slot != nullptr; slot = slot->nextSibling(), ++slotIndex) {
+            if (slotIndex < firstSlotIndex) {
+                continue;
+            }
+            while (QSGNode* child = slot->firstChild()) {
+                slot->removeChildNode(child);
+                delete child;
+            }
+        }
+    }
+
+    void resetTextureGeneration()
+    {
+        clearLayerContentsFrom(0);
+        textures_.clear();
+        textures_.setWindow(window_);
+        ++generation_;
+    }
+
+private:
+    void createLayerSlots()
+    {
+        for (int index = 0; index < kPreviewQuickSceneLayerSlotCount; ++index) {
+            appendChildNode(new QSGNode());
+        }
+    }
+
+    void destroyAllChildren()
+    {
+        while (QSGNode* child = firstChild()) {
+            removeChildNode(child);
+            delete child;
+        }
+    }
+
+    QQuickWindow* window_ = nullptr;
+    quint64 generation_ = 1;
+    PreviewTextureRepository textures_;
+};
 
 quint64 nextPreviewQuickSceneRootInstanceId()
 {
@@ -157,26 +233,16 @@ void updateCenterDisplaySlot(
     cachedDpr = dpr;
 }
 
-QSGNode* ensureLayerSlotRoot(QSGNode* oldNode)
+PreviewQuickRootNode* ensureLayerSlotRoot(QSGNode* oldNode, QQuickWindow* window)
 {
-    auto childCountFor = [](QSGNode* node) {
-        int count = 0;
-        for (QSGNode* child = node != nullptr ? node->firstChild() : nullptr; child != nullptr; child = child->nextSibling()) {
-            ++count;
-        }
-        return count;
-    };
-
-    if (oldNode != nullptr && childCountFor(oldNode) == kPreviewQuickSceneLayerSlotCount) {
-        return oldNode;
+    auto* root = dynamic_cast<PreviewQuickRootNode*>(oldNode);
+    if (root != nullptr && root->window() == window) {
+        root->ensureLayerSlots();
+        return root;
     }
 
     delete oldNode;
-    auto* root = new QSGNode();
-    for (int index = 0; index < kPreviewQuickSceneLayerSlotCount; ++index) {
-        root->appendChildNode(new QSGNode());
-    }
-    return root;
+    return new PreviewQuickRootNode(window);
 }
 
 QSGNode* layerSlotAt(QSGNode* root, int index)
@@ -208,6 +274,19 @@ PreviewTextureLayerStats& ensureLayerProfileStat(
 
     layerStats->append(PreviewTextureLayerStats{name});
     return layerStats->last();
+}
+
+PreviewTextureStats mergedTextureStats(
+    const PreviewTextureRepository& textures,
+    const QVector<PreviewTextureLayerStats>& layerProfileStats)
+{
+    PreviewTextureStats stats = textures.stats();
+    for (const PreviewTextureLayerStats& buildStat : layerProfileStats) {
+        PreviewTextureLayerStats& merged =
+            ensureLayerProfileStat(&stats.layerStats, buildStat.name.toLatin1().constData());
+        merged.buildMs = buildStat.buildMs;
+    }
+    return stats;
 }
 
 template <typename UpdateFn>
@@ -324,6 +403,7 @@ void PreviewQuickSceneRoot::clearPendingTextureStatsForPresentation()
 {
     QMutexLocker locker(&latestTextureStatsMutex_);
     pendingTextureStats_.clear();
+    latestTextureStats_ = PreviewTextureStats();
 }
 
 void PreviewQuickSceneRoot::setRuntime(PreviewRuntime* runtime)
@@ -422,9 +502,9 @@ void PreviewQuickSceneRoot::setLayerFlags(miacode::preview::scene::PreviewRender
 
 void PreviewQuickSceneRoot::invalidateTextureCache()
 {
-    const PreviewTextureStats statsBeforeClear = textures_.stats();
+    const PreviewTextureStats statsBeforeClear = textureStats();
     appendQuickSceneLog(
-        QStringLiteral("invalidate_texture_cache"),
+        QStringLiteral("texture_generation_reset_requested"),
         QString(
             "cached_hits=%1 cached_creates=%2 transient_hits=%3 transient_creates=%4 sprite_count=%5 sprite_batches=%6"
         )
@@ -435,22 +515,20 @@ void PreviewQuickSceneRoot::invalidateTextureCache()
             .arg(statsBeforeClear.spriteCount)
             .arg(statsBeforeClear.spriteBatchCount)
     );
-    textures_.clear();
+    textureResetRequested_.store(true, std::memory_order_release);
+    update();
 }
 
 PreviewTextureStats PreviewQuickSceneRoot::textureStats() const
 {
-    PreviewTextureStats stats = textures_.stats();
-    for (const PreviewTextureLayerStats& buildStat : layerProfileStats_) {
-        PreviewTextureLayerStats& merged = ensureLayerProfileStat(&stats.layerStats, buildStat.name.toLatin1().constData());
-        merged.buildMs = buildStat.buildMs;
-    }
-    return stats;
+    QMutexLocker locker(&latestTextureStatsMutex_);
+    return latestTextureStats_;
 }
 
 void PreviewQuickSceneRoot::enqueueTextureStatsForPresentation(const PreviewTextureStats& stats)
 {
     QMutexLocker locker(&latestTextureStatsMutex_);
+    latestTextureStats_ = stats;
     pendingTextureStats_.enqueue(stats);
     while (pendingTextureStats_.size() > 8) {
         pendingTextureStats_.dequeue();
@@ -687,9 +765,31 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         renderPhaseUpdatePaintStartNs_ = renderPhaseTimer_.nsecsElapsed();
     }
 
-    auto* root = ensureLayerSlotRoot(oldNode);
-    textures_.setWindow(window());
-    textures_.beginFrame();
+    auto* root = ensureLayerSlotRoot(oldNode, window());
+    PreviewTextureRepository* textures = root->textures();
+    const bool explicitTextureReset =
+        textureResetRequested_.exchange(false, std::memory_order_acq_rel);
+    if (explicitTextureReset || textures->resetRequiredBeforeFrame()) {
+        const PreviewTextureStats statsBeforeReset = textures->stats();
+        const quint64 previousGeneration = root->generation();
+        root->resetTextureGeneration();
+        textures = root->textures();
+        cachedCenterDisplayMode_ = miacode::preview_gameplay::CenterDisplayMode::Off;
+        cachedCenterDisplayRenderSize_ = QSize();
+        appendQuickSceneLog(
+            QStringLiteral("texture_generation_reset"),
+            QString(
+                "previous_generation=%1 generation=%2 reason=%3 cached=%4 cached_bytes=%5 transient=%6 retained=%7"
+            )
+                .arg(previousGeneration)
+                .arg(root->generation())
+                .arg(explicitTextureReset ? QStringLiteral("explicit") : QStringLiteral("cache_limit"))
+                .arg(statsBeforeReset.cachedTextureCount)
+                .arg(statsBeforeReset.cachedTextureBytes)
+                .arg(statsBeforeReset.transientTextureCount)
+                .arg(statsBeforeReset.retainedTextureCount));
+    }
+    textures->beginFrame();
     layerProfileStats_.clear();
     const miacode::preview::scene::PreviewFrameState* state = nullptr;
     std::shared_ptr<const miacode::preview::scene::PreviewFrameState> runtimeStateSnapshot;
@@ -731,7 +831,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
 
     if (!hasState || !hasWindow) {
         if (miacode::debug_options::previewProfileOutputEnabled()) {
-            enqueueTextureStatsForPresentation(textureStats());
+            enqueueTextureStatsForPresentation(mergedTextureStats(*textures, layerProfileStats_));
         }
         return root;
     }
@@ -778,7 +878,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         "stage_background",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return stageBackgroundLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+            return stageBackgroundLayer_.updateNode(oldChild, *state, renderSize, window(), textures);
         });
     // Phase 4d-fix — when per-pixel alpha is on (exclusive auto-on),
     // stop here. The dim-layer slot above is the only QSG output the
@@ -786,14 +886,11 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
     // DComp. This preserves the user's Background brightness controls
     // while keeping DComp the exclusive chart renderer.
     if (keepDimOnly) {
-        // Trim any stale chart-sprite slots from a prior frame that
-        // ran without exclusive mode — otherwise they'd still be
-        // attached to root from before the toggle.
-        const int currentChildCount = root->childCount();
-        for (int i = currentChildCount - 1; i >= slotIndex; --i) {
-            QSGNode* extra = root->childAtIndex(i);
-            root->removeChildNode(extra);
-            delete extra;
+        // Clear stale chart-sprite contents from a prior frame without changing the fixed
+        // slot topology. Keeping the slot nodes stable avoids rebuilding the root generation.
+        root->clearLayerContentsFrom(slotIndex);
+        if (miacode::debug_options::previewProfileOutputEnabled()) {
+            enqueueTextureStatsForPresentation(mergedTextureStats(*textures, layerProfileStats_));
         }
         return root;
     }
@@ -818,7 +915,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         "backdrop",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return backdropLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+            return backdropLayer_.updateNode(oldChild, *state, renderSize, window(), textures);
         });
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
@@ -826,7 +923,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         "muri_pad",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return muriPadLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+            return muriPadLayer_.updateNode(oldChild, *state, renderSize, window(), textures);
         });
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
@@ -834,7 +931,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         "muri_action",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return muriActionLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+            return muriActionLayer_.updateNode(oldChild, *state, renderSize, window(), textures);
         });
     bool judgeFireworkNodeProduced = false;
     updateLayerSlotProfiled(
@@ -850,7 +947,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 &judgeFireworkCursor_,
                 renderSize,
                 window(),
-                &textures_);
+                textures);
             judgeFireworkNodeProduced = (node != nullptr);
             return node;
         });
@@ -878,7 +975,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 &guideCursor_,
                 renderSize,
                 window(),
-                &textures_);
+                textures);
         });
     applyWindowCounts("guide", preparedCache_.guideLayer().entries.size(), guideCursor_.activePreparedIndices.size());
     updateLayerSlotProfiled(
@@ -894,7 +991,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 &trackCursor_,
                 renderSize,
                 window(),
-                &textures_);
+                textures);
         });
     applyWindowCounts(
         "track",
@@ -914,7 +1011,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 &slideMotionCursor_,
                 renderSize,
                 window(),
-                &textures_);
+                textures);
         });
     applyWindowCounts(
         "slide_motion",
@@ -938,7 +1035,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 &chartReviewCursor_,
                 renderSize,
                 window(),
-                &textures_,
+                textures,
                 miacode::preview::scene::SlideJudgeRenderGroup::SlideShapeOnly);
         });
     updateLayerSlotProfiled(
@@ -954,7 +1051,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 &maimuriDxJudgeCursor_,
                 renderSize,
                 window(),
-                &textures_,
+                textures,
                 miacode::preview::scene::SlideJudgeRenderGroup::SlideShapeOnly);
         });
     updateLayerSlotProfiled(
@@ -970,7 +1067,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 &judgeEffectCursor_,
                 renderSize,
                 window(),
-                &textures_);
+                textures);
         });
     applyWindowCounts(
         "judge_effect",
@@ -990,7 +1087,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 &touchJudgeCursor_,
                 renderSize,
                 window(),
-                &textures_);
+                textures);
         });
     applyWindowCounts(
         "touch_judge",
@@ -1010,7 +1107,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 &headCursor_,
                 renderSize,
                 window(),
-                &textures_);
+                textures);
         });
     applyWindowCounts("head", preparedCache_.headLayer().entries.size(), headCursor_.activePreparedIndices.size());
     updateLayerSlotProfiled(
@@ -1026,7 +1123,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 &touchCursor_,
                 renderSize,
                 window(),
-                &textures_);
+                textures);
         });
     applyWindowCounts("touch", preparedCache_.touchLayer().entries.size(), touchCursor_.activePreparedIndices.size());
     updateLayerSlotProfiled(
@@ -1042,7 +1139,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 &touchHoldCursor_,
                 renderSize,
                 window(),
-                &textures_);
+                textures);
         });
     applyWindowCounts(
         "touch_hold",
@@ -1062,7 +1159,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 &chartReviewCursor_,
                 renderSize,
                 window(),
-                &textures_,
+                textures,
                 miacode::preview::scene::SlideJudgeRenderGroup::JudgeTextOnly);
         });
     applyWindowCounts(
@@ -1083,7 +1180,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 &maimuriDxJudgeCursor_,
                 renderSize,
                 window(),
-                &textures_,
+                textures,
                 miacode::preview::scene::SlideJudgeRenderGroup::JudgeTextOnly);
         });
     applyWindowCounts(
@@ -1092,7 +1189,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         maimuriDxJudgeCursor_.activePreparedIndices.size()
     );
     if (miacode::debug_options::previewProfileOutputEnabled()) {
-        enqueueTextureStatsForPresentation(textureStats());
+        enqueueTextureStatsForPresentation(mergedTextureStats(*textures, layerProfileStats_));
     }
     if (renderDiagEnabled) {
         renderPhaseUpdatePaintEndNs_ = renderPhaseTimer_.nsecsElapsed();

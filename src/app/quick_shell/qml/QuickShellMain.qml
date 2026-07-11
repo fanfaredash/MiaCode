@@ -45,6 +45,12 @@ ApplicationWindow {
     property bool embeddedSeparateSurfaceReady: true
     property bool embeddedInlineSurfaceActive: false
     property bool fullscreenInlineSurfaceActive: false
+    // Once created, inline preview surfaces stay alive for their QQuickWindow lifetime.
+    // Route changes only toggle visibility/attachment; destroying a Loader while Qt's batch
+    // renderer is retiring the previous frame used to race QSG texture ownership.
+    property bool embeddedInlineSurfaceCreated: false
+    property bool fullscreenInlineSurfaceCreated: false
+    property bool fullscreenPreviewHostCreated: false
     property bool fullscreenHoveringRevealZone: false
     property bool fullscreenHoveringControls: false
     property rect previewSeekHotRect: {
@@ -164,6 +170,8 @@ ApplicationWindow {
             + " fullscreen_window_visible=" + (fullscreenPreviewWindow.visible ? 1 : 0)
             + " embedded_inline_active=" + (embeddedInlineSurfaceActive ? 1 : 0)
             + " fullscreen_inline_active=" + (fullscreenInlineSurfaceActive ? 1 : 0)
+            + " embedded_inline_created=" + (embeddedInlineSurfaceCreated ? 1 : 0)
+            + " fullscreen_inline_created=" + (fullscreenInlineSurfaceCreated ? 1 : 0)
             + " separate_surface=" + (controller.previewUsesSeparateSurface ? 1 : 0)
         if (extra && extra.length > 0)
             payload += " " + extra
@@ -831,6 +839,7 @@ ApplicationWindow {
             )
             if (!canActivate)
                 return
+            root.embeddedInlineSurfaceCreated = true
             embeddedInlineSurfaceActive = true
             logPreviewSurfaceTransition("preview_surface_route_commit", "target=embedded")
         }
@@ -848,6 +857,8 @@ ApplicationWindow {
             )
             if (!canActivate)
                 return
+            root.fullscreenPreviewHostCreated = true
+            root.fullscreenInlineSurfaceCreated = true
             fullscreenInlineSurfaceActive = true
             fullscreenPreviewWindow.requestActivate()
             fullscreenInteractionRoot.forceActiveFocus()
@@ -1365,7 +1376,8 @@ ApplicationWindow {
                                         id: embeddedInlineSurfaceLoader
                                         anchors.fill: parent
                                         anchors.margins: 1
-                                        active: !controller.previewFullscreen
+                                        active: root.embeddedInlineSurfaceCreated
+                                        visible: !controller.previewFullscreen
                                             && embeddedInlineSurfaceActive
                                             && (!controller.previewUsesSeparateSurface
                                                 || !embeddedSeparateSurfaceReady)
@@ -1563,7 +1575,8 @@ ApplicationWindow {
 
             Loader {
                 anchors.fill: parent
-                active: controller.previewFullscreen
+                active: root.fullscreenPreviewHostCreated
+                visible: controller.previewFullscreen
 
                 sourceComponent: Item {
                     anchors.fill: parent
@@ -1571,7 +1584,8 @@ ApplicationWindow {
                     Loader {
                         id: fullscreenInlineSurfaceLoader
                         anchors.fill: parent
-                        active: controller.previewFullscreen
+                        active: root.fullscreenInlineSurfaceCreated
+                        visible: controller.previewFullscreen
                             && fullscreenInlineSurfaceActive
                             && !controller.previewUsesSeparateSurface
                         onStatusChanged: logPreviewSurfaceTransition(

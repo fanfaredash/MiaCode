@@ -9,7 +9,7 @@ set(MIACODE_VERSION_PATCH "0")
 # split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
 # they always drifted apart in practice (e.g. beta20 zip shipping with
 # beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "beta.4")
+set(MIACODE_VERSION_PRERELEASE "beta.5")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
@@ -374,6 +374,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/core/scene/PreviewMaimuriDxJudgeLayerState.cpp
     src/preview/quick_scene/PreviewTextureRepository.h
     src/preview/quick_scene/PreviewTextureRepository.cpp
+    src/preview/quick_scene/PreviewTextureGenerationPolicy.h
     src/preview/quick_scene/PreviewQuickStageBackgroundLayer.h
     src/preview/quick_scene/PreviewQuickStageBackgroundLayer.cpp
     src/preview/quick_scene/PreviewQuickBackdropLayer.h
@@ -1266,6 +1267,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/preview/quick_scene/PreviewQuickSpriteBatchPolicy.h
         LIBS Qt6::Core
         INCLUDES src src/common src/preview src/preview/quick_scene
+    )
+
+    miacode_add_dev_tool(preview_texture_generation_policy_spec TEST
+        SOURCES
+            src/tools/preview/PreviewTextureGenerationPolicySpec.cpp
+            src/preview/quick_scene/PreviewTextureGenerationPolicy.h
+        LIBS Qt6::Core
+        INCLUDES src src/preview src/preview/quick_scene
     )
 
     miacode_add_dev_tool(preview_sfx_timeline_spec TEST

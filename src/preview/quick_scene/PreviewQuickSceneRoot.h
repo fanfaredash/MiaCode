@@ -98,7 +98,7 @@ private:
     // Issue #4 fix — when set, render via legacy QSG even with DComp on.
     bool dcompFallbackActive_ = false;
     QVector<PreviewTextureLayerStats> layerProfileStats_;
-    PreviewTextureRepository textures_;
+    std::atomic<bool> textureResetRequested_{false};
     PreviewQuickStageBackgroundLayer stageBackgroundLayer_;
     PreviewQuickBackdropLayer backdropLayer_;
     PreviewQuickMuriPadLayer muriPadLayer_;
@@ -136,6 +136,7 @@ private:
     quint64 instanceId_ = 0;
     mutable QMutex latestTextureStatsMutex_;
     mutable QQueue<PreviewTextureStats> pendingTextureStats_;
+    PreviewTextureStats latestTextureStats_;
     bool lastLoggedHasWindow_ = false;
     bool lastLoggedHasState_ = false;
     QSize lastLoggedRenderSize_;

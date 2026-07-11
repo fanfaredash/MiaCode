@@ -63,7 +63,20 @@ QuickShell 的嵌入预览面板由 `QuickShellMain.qml`、`QuickShellPreviewSur
 | 导出页切换预览 aspect ratio，或回到普通编辑正方形预览 | `QuickShellController::refreshFromStateSource()` -> `shellStateChanged` -> `onShellStateChanged` aspect 检查 -> `boundedWorkspaceWidth(...)` -> `clampPreviewPaneWidth(...)` | 导出页按当前 aspect ratio 选取最大可容纳矩形；回到普通编辑时恢复或重新计算面板宽度，并让画布回到居中的最大正方形。 |
 | bottom tabs 显隐、切 tab、拖动 bottom-tabs 高度 | controller state / `setBottomTabsHostHeight(...)` -> `BottomTabsQuickHost` 高度变化 -> `workspaceRow.onHeightChanged` -> `syncPreviewPaneWidth(...)` | 预览可用高度改变后必须重新计算画布尺寸，不能沿用旧高度导致控制区或画布被截断。 |
 | inline / separate preview surface 绑定 | `QuickShellPreviewSurface.syncVideoOutputBinding()` / `PreviewDCompSurface::tryDiscoverTrackedItem()` / `PreviewDCompSurface::applyTrackedItemGeometry()` | surface 只在可见窗口和稳定几何下绑定；DComp tracked item 查找要允许延迟重试，过小 tracked item 几何要 defer，避免把 0/过小尺寸固化成预览位置。 |
-| 进入 / 退出全屏预览 | `onPreviewFullscreenChanged` / `fullscreenPreviewWindow.onVisibleChanged` -> surface route 切换 | 全屏窗口独立铺满屏幕；回到嵌入态后重新激活 embedded surface，并按嵌入面板规则确认 frame 几何。 |
+| 进入 / 退出全屏预览 | `onPreviewFullscreenChanged` / `fullscreenPreviewWindow.onVisibleChanged` -> surface route 切换 | 全屏窗口独立铺满屏幕；embedded/fullscreen inline surface 首次创建后常驻，切换时只改变可见性与绑定状态，不通过 `Loader.active=false` 销毁场景；回到嵌入态后重新确认 frame 几何。 |
+
+## QSG 纹理生命周期契约
+
+`PreviewQuickSceneRoot` 返回的 render-side root node 同时拥有当前 window generation 的
+`PreviewTextureRepository`。必须保持以下顺序和边界：
+
+- QSG child node / material 与它引用的 `QSGTexture` 属于同一个 render-side generation；GUI-side `QQuickItem` 不直接拥有或删除 live texture。
+- generation 重置必须在一次 `updatePaintNode()` 中先删除全部 child/material，再清空 texture repository，最后重建固定 layer slots；不得只刷新 texture cache 后让旧 material 继续持有裸指针。
+- transient 和 retained texture 的替换不得原地删除旧 texture。旧资源至少延迟到下一次 render-thread frame begin，确保上一帧所有 material 已完成重新绑定。
+- repository 不跨 `QQuickWindow` 复用。window scene graph invalidation 通过 root node 析构自然执行“节点/材质先、纹理后”的释放顺序。
+- GUI 侧的换肤/资源失效只设置原子 reset request 并请求 update；实际节点和纹理回收只能由 render thread 完成。
+
+该契约同时适用于实时预览、全屏预览和复用 `PreviewQuickSceneRoot` 的无头导出/封面渲染路径。
 
 ## 共享运行时模型
 
