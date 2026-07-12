@@ -90,6 +90,12 @@ QWidget, QML, or QObject access. It exposes:
 - `devtools.recentCalls`: a capped recent host API call ring buffer with compact
   parameter previews.
 
+The visual entry for the same diagnostic data is **Preferences > Extensions >
+DevTools Panel**. It is a read-only host snapshot window with API Registry,
+Open Bridge, Recent Calls, Extensions, UI Contributions, Diagnostics, and Raw
+JSON tabs plus a Refresh Snapshot action. The panel must stay diagnostic-only:
+it must not hand raw QWidget/QML/QObject/renderer pointers to extension JS.
+
 ## Controlled Pet Overlay
 
 `ui.registerPetOverlay` registers a declarative preview overlay for extension-owned pet/sprite UI. It supports static images, frame animation metadata, `position`/`anchor`, `width`/`height`/`size`, `opacity`, click command, drag, and drag-end command fields.

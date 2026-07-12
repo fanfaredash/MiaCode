@@ -199,6 +199,11 @@ contribution state, and the recent host-call ring buffer. It must remain an
 inspection surface only; it must not expose raw QWidget/QML/QObject/renderer
 pointers or bypass manifest permission checks.
 
+The same inspection data is exposed in the app through **Preferences >
+Extensions > DevTools Panel**. That window reads `ExtensionManager`'s host
+snapshot directly and shows API Registry, Open Bridge, Recent Calls,
+Extensions, UI Contributions, Diagnostics, and Raw JSON tabs.
+
 ## Conventions
 
 - `app/` is for app entry and window orchestration only.

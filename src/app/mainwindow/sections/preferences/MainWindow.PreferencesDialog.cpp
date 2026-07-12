@@ -558,6 +558,151 @@ QList<QPair<QString, QStringList>> shortcutCategoryGroups()
     };
 }
 
+QString compactJsonText(const QJsonValue& value)
+{
+    if (value.isString()) {
+        return value.toString();
+    }
+    if (value.isBool()) {
+        return value.toBool() ? QStringLiteral("true") : QStringLiteral("false");
+    }
+    if (value.isDouble()) {
+        return QString::number(value.toDouble(), 'f', 2).replace(QRegularExpression(QStringLiteral("\\.?0+$")), QString());
+    }
+    if (value.isArray()) {
+        return QString::fromUtf8(QJsonDocument(value.toArray()).toJson(QJsonDocument::Compact));
+    }
+    if (value.isObject()) {
+        return QString::fromUtf8(QJsonDocument(value.toObject()).toJson(QJsonDocument::Compact));
+    }
+    return QString();
+}
+
+QTableWidgetItem* readOnlyTableItem(const QString& text, const QString& tooltip = {})
+{
+    auto* item = new QTableWidgetItem(text);
+    item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+    item->setToolTip(tooltip.isEmpty() ? text : tooltip);
+    return item;
+}
+
+void configureDevToolsTable(QTableWidget* table, const QStringList& headers)
+{
+    if (table == nullptr) {
+        return;
+    }
+    table->setColumnCount(headers.size());
+    table->setHorizontalHeaderLabels(headers);
+    table->verticalHeader()->hide();
+    table->setShowGrid(false);
+    table->setAlternatingRowColors(true);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setTextElideMode(Qt::ElideRight);
+    table->horizontalHeader()->setStretchLastSection(true);
+    table->horizontalHeader()->setDefaultSectionSize(132);
+    table->verticalHeader()->setDefaultSectionSize(28);
+    table->setStyleSheet(QStringLiteral(
+        "QTableWidget { border: 1px solid rgba(128,128,128,72); border-radius: 6px; }"
+        "QTableWidget::item:selected { background: rgba(88, 145, 220, 58); }"
+        "QHeaderView::section { padding: 6px 9px; border: 0; border-bottom: 1px solid rgba(128,128,128,72); font-weight: 600; }"));
+}
+
+void populateApiRegistryTable(QTableWidget* table, const QJsonArray& api)
+{
+    table->setRowCount(api.size());
+    for (int row = 0; row < api.size(); ++row) {
+        const QJsonObject item = api.at(row).toObject();
+        table->setItem(row, 0, readOnlyTableItem(item.value(QStringLiteral("id")).toString()));
+        table->setItem(row, 1, readOnlyTableItem(item.value(QStringLiteral("method")).toString()));
+        table->setItem(row, 2, readOnlyTableItem(item.value(QStringLiteral("status")).toString()));
+        table->setItem(row, 3, readOnlyTableItem(item.value(QStringLiteral("permission")).toString()));
+        table->setItem(row, 4, readOnlyTableItem(item.value(QStringLiteral("risk")).toString()));
+        table->setItem(row, 5, readOnlyTableItem(item.value(QStringLiteral("description")).toString()));
+    }
+}
+
+void populateOpenBridgeTable(QTableWidget* table, const QJsonArray& objects)
+{
+    int rowCount = 0;
+    for (const QJsonValue& value : objects) {
+        const QJsonObject object = value.toObject();
+        const QJsonArray methods = object.value(QStringLiteral("methods")).toArray();
+        rowCount += qMax(1, methods.size());
+    }
+    table->setRowCount(rowCount);
+
+    int row = 0;
+    const auto setRow = [&](const QJsonObject& object, const QJsonObject& method) {
+        const QString route = method.value(QStringLiteral("hostMethod")).toString(
+            method.value(QStringLiteral("command")).toString());
+        table->setItem(row, 0, readOnlyTableItem(object.value(QStringLiteral("id")).toString()));
+        table->setItem(row, 1, readOnlyTableItem(method.value(QStringLiteral("name")).toString()));
+        table->setItem(row, 2, readOnlyTableItem(object.value(QStringLiteral("stability")).toString()));
+        table->setItem(row, 3, readOnlyTableItem(method.value(QStringLiteral("status")).toString()));
+        table->setItem(row, 4, readOnlyTableItem(method.value(QStringLiteral("permission")).toString(
+            object.value(QStringLiteral("permission")).toString())));
+        table->setItem(row, 5, readOnlyTableItem(route));
+        table->setItem(row, 6, readOnlyTableItem(object.value(QStringLiteral("experimentalRaw")).toBool(false) ? QStringLiteral("yes") : QStringLiteral("no")));
+        table->setItem(row, 7, readOnlyTableItem(method.value(QStringLiteral("description")).toString(
+            object.value(QStringLiteral("description")).toString())));
+        ++row;
+    };
+    for (const QJsonValue& value : objects) {
+        const QJsonObject object = value.toObject();
+        const QJsonArray methods = object.value(QStringLiteral("methods")).toArray();
+        if (methods.isEmpty()) {
+            setRow(object, QJsonObject{});
+            continue;
+        }
+        for (const QJsonValue& methodValue : methods) {
+            setRow(object, methodValue.toObject());
+        }
+    }
+}
+
+void populateRecentCallsTable(QTableWidget* table, const QJsonArray& calls)
+{
+    table->setRowCount(calls.size());
+    for (int row = 0; row < calls.size(); ++row) {
+        const QJsonObject item = calls.at(row).toObject();
+        table->setItem(row, 0, readOnlyTableItem(item.value(QStringLiteral("timestamp")).toString()));
+        table->setItem(row, 1, readOnlyTableItem(item.value(QStringLiteral("extensionId")).toString()));
+        table->setItem(row, 2, readOnlyTableItem(item.value(QStringLiteral("method")).toString()));
+        table->setItem(row, 3, readOnlyTableItem(item.value(QStringLiteral("permission")).toString()));
+        table->setItem(row, 4, readOnlyTableItem(item.value(QStringLiteral("ok")).toBool() ? QStringLiteral("ok") : QStringLiteral("error")));
+        table->setItem(row, 5, readOnlyTableItem(compactJsonText(item.value(QStringLiteral("elapsedMs")))));
+        table->setItem(row, 6, readOnlyTableItem(item.value(QStringLiteral("error")).toString()));
+        table->setItem(row, 7, readOnlyTableItem(item.value(QStringLiteral("paramsPreview")).toString()));
+    }
+}
+
+void populateExtensionsDevToolsTable(QTableWidget* table, const QJsonArray& extensions)
+{
+    table->setRowCount(extensions.size());
+    for (int row = 0; row < extensions.size(); ++row) {
+        const QJsonObject item = extensions.at(row).toObject();
+        table->setItem(row, 0, readOnlyTableItem(item.value(QStringLiteral("id")).toString()));
+        table->setItem(row, 1, readOnlyTableItem(item.value(QStringLiteral("name")).toString()));
+        table->setItem(row, 2, readOnlyTableItem(item.value(QStringLiteral("version")).toString()));
+        table->setItem(row, 3, readOnlyTableItem(item.value(QStringLiteral("enabled")).toBool() ? QStringLiteral("yes") : QStringLiteral("no")));
+        table->setItem(row, 4, readOnlyTableItem(item.value(QStringLiteral("valid")).toBool() ? QStringLiteral("yes") : QStringLiteral("no")));
+        table->setItem(row, 5, readOnlyTableItem(compactJsonText(item.value(QStringLiteral("permissions")))));
+        table->setItem(row, 6, readOnlyTableItem(item.value(QStringLiteral("diagnostic")).toString()));
+    }
+}
+
+void populateJsonArrayList(QListWidget* list, const QJsonArray& values)
+{
+    list->clear();
+    for (const QJsonValue& value : values) {
+        const QString text = compactJsonText(value);
+        auto* item = new QListWidgetItem(text.isEmpty() ? QStringLiteral("-") : text, list);
+        item->setToolTip(item->text());
+    }
+}
+
 }  // namespace
 
 using namespace miacode::mainwindow::shared;
@@ -657,6 +802,177 @@ void MainWindow::PreferencesSection::applyConfiguredShortcuts()
         QStringLiteral("editor.font_increase"),
         QKeySequence(QStringLiteral("Ctrl+Alt+=")),
         Qt::WindowShortcut);
+}
+
+void MainWindow::showExtensionDevToolsDialog()
+{
+    QDialog dialog(UiDialogs::effectiveParentWidget(this));
+    dialog.setWindowTitle(UiText::text(QStringLiteral("dialog.preferences.extensions.devtools")));
+    dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
+    dialog.resize(980, 680);
+    dialog.setMinimumSize(820, 560);
+
+    auto* rootLayout = new QVBoxLayout(&dialog);
+    rootLayout->setContentsMargins(12, 12, 12, 12);
+    rootLayout->setSpacing(10);
+
+    auto* summaryGroup = new QGroupBox(
+        UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.summary")),
+        &dialog);
+    auto* summaryLayout = new QGridLayout(summaryGroup);
+    summaryLayout->setContentsMargins(12, 10, 12, 12);
+    summaryLayout->setHorizontalSpacing(18);
+    summaryLayout->setVerticalSpacing(6);
+
+    auto* apiCountLabel = new QLabel(summaryGroup);
+    auto* extensionCountLabel = new QLabel(summaryGroup);
+    auto* rawCountLabel = new QLabel(summaryGroup);
+    auto* callbackCountLabel = new QLabel(summaryGroup);
+    auto* callCountLabel = new QLabel(summaryGroup);
+    auto* diagnosticCountLabel = new QLabel(summaryGroup);
+    const QList<QPair<QString, QLabel*>> summaryRows{
+        {UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.api_count")), apiCountLabel},
+        {UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.extension_count")), extensionCountLabel},
+        {UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.raw_count")), rawCountLabel},
+        {UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.callback_count")), callbackCountLabel},
+        {UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.call_count")), callCountLabel},
+        {UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.diagnostic_count")), diagnosticCountLabel},
+    };
+    for (int index = 0; index < summaryRows.size(); ++index) {
+        auto* name = new QLabel(summaryRows.at(index).first, summaryGroup);
+        name->setStyleSheet(QStringLiteral("font-weight: 600;"));
+        const int row = index / 3;
+        const int column = (index % 3) * 2;
+        summaryLayout->addWidget(name, row, column);
+        summaryLayout->addWidget(summaryRows.at(index).second, row, column + 1);
+    }
+    miacode::ui::flattenGroupForTabPage(summaryGroup);
+    rootLayout->addWidget(summaryGroup, 0);
+
+    auto* tabs = new QTabWidget(&dialog);
+    tabs->setObjectName(QStringLiteral("ExtensionDevToolsTabs"));
+    tabs->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    rootLayout->addWidget(tabs, 1);
+
+    auto* apiTable = new QTableWidget(tabs);
+    configureDevToolsTable(apiTable, {
+        QStringLiteral("ID"),
+        QStringLiteral("Method"),
+        QStringLiteral("Status"),
+        QStringLiteral("Permission"),
+        QStringLiteral("Risk"),
+        QStringLiteral("Description"),
+    });
+    tabs->addTab(apiTable, UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.api")));
+
+    auto* openBridgeTable = new QTableWidget(tabs);
+    configureDevToolsTable(openBridgeTable, {
+        QStringLiteral("Object"),
+        QStringLiteral("Method"),
+        QStringLiteral("Stability"),
+        QStringLiteral("Status"),
+        QStringLiteral("Permission"),
+        QStringLiteral("Route"),
+        QStringLiteral("Raw"),
+        QStringLiteral("Description"),
+    });
+    tabs->addTab(openBridgeTable, UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.open_bridge")));
+
+    auto* recentCallsTable = new QTableWidget(tabs);
+    configureDevToolsTable(recentCallsTable, {
+        QStringLiteral("Time"),
+        QStringLiteral("Extension"),
+        QStringLiteral("Method"),
+        QStringLiteral("Permission"),
+        QStringLiteral("OK"),
+        QStringLiteral("ms"),
+        QStringLiteral("Error"),
+        QStringLiteral("Params"),
+    });
+    tabs->addTab(recentCallsTable, UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.recent_calls")));
+
+    auto* extensionsTable = new QTableWidget(tabs);
+    configureDevToolsTable(extensionsTable, {
+        QStringLiteral("ID"),
+        QStringLiteral("Name"),
+        QStringLiteral("Version"),
+        QStringLiteral("Enabled"),
+        QStringLiteral("Valid"),
+        QStringLiteral("Permissions"),
+        QStringLiteral("Diagnostic"),
+    });
+    tabs->addTab(extensionsTable, UiText::text(QStringLiteral("dialog.preferences.extensions_group")));
+
+    auto* uiContributionsList = new QListWidget(tabs);
+    uiContributionsList->setAlternatingRowColors(true);
+    tabs->addTab(uiContributionsList, UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.ui")));
+
+    auto* diagnosticsList = new QListWidget(tabs);
+    diagnosticsList->setAlternatingRowColors(true);
+    tabs->addTab(diagnosticsList, UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.diagnostics")));
+
+    auto* rawJsonEdit = new QPlainTextEdit(tabs);
+    rawJsonEdit->setReadOnly(true);
+    rawJsonEdit->setLineWrapMode(QPlainTextEdit::NoWrap);
+    rawJsonEdit->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    tabs->addTab(rawJsonEdit, UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.raw_json")));
+
+    const auto refreshSnapshot = [&]() {
+        const QJsonObject snapshot = extensionManager_ != nullptr ? extensionManager_->devtoolsSnapshotForUi() : QJsonObject();
+        const QJsonArray api = snapshot.value(QStringLiteral("api")).toArray();
+        const QJsonArray openObjects = snapshot.value(QStringLiteral("openBridgeObjects")).toArray();
+        const QJsonArray rawTargets = snapshot.value(QStringLiteral("experimentalRawTargets")).toArray();
+        const QJsonArray extensions = snapshot.value(QStringLiteral("extensions")).toArray();
+        const QJsonArray recentCalls = snapshot.value(QStringLiteral("recentCalls")).toArray();
+        const QJsonArray diagnostics = snapshot.value(QStringLiteral("diagnostics")).toArray();
+        const int callbackCount = snapshot.value(QStringLiteral("eventCallbackCount")).toInt();
+        const QJsonArray uiContributions = snapshot.value(QStringLiteral("uiContributions")).toArray();
+        const QJsonArray uiViews = snapshot.value(QStringLiteral("uiViews")).toArray();
+
+        apiCountLabel->setText(QString::number(api.size()));
+        extensionCountLabel->setText(QString::number(extensions.size()));
+        rawCountLabel->setText(QString::number(rawTargets.size()));
+        callbackCountLabel->setText(QString::number(callbackCount));
+        callCountLabel->setText(QString::number(recentCalls.size()));
+        diagnosticCountLabel->setText(QString::number(diagnostics.size()));
+
+        populateApiRegistryTable(apiTable, api);
+        populateOpenBridgeTable(openBridgeTable, openObjects);
+        populateRecentCallsTable(recentCallsTable, recentCalls);
+        populateExtensionsDevToolsTable(extensionsTable, extensions);
+        populateJsonArrayList(diagnosticsList, diagnostics);
+
+        QJsonArray uiItems;
+        for (const QJsonValue& value : uiContributions) {
+            uiItems.append(QJsonObject{
+                {QStringLiteral("type"), QStringLiteral("contribution")},
+                {QStringLiteral("value"), value},
+            });
+        }
+        for (const QJsonValue& value : uiViews) {
+            uiItems.append(QJsonObject{
+                {QStringLiteral("type"), QStringLiteral("view")},
+                {QStringLiteral("value"), value},
+            });
+        }
+        populateJsonArrayList(uiContributionsList, uiItems);
+        rawJsonEdit->setPlainText(QString::fromUtf8(QJsonDocument(snapshot).toJson(QJsonDocument::Indented)));
+    };
+
+    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    auto* refreshButton = buttonBox->addButton(
+        UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.refresh")),
+        QDialogButtonBox::ActionRole);
+    if (QPushButton* closeButton = buttonBox->button(QDialogButtonBox::Close)) {
+        closeButton->setText(UiText::text(QStringLiteral("action.close")));
+    }
+    QObject::connect(refreshButton, &QPushButton::clicked, &dialog, refreshSnapshot);
+    QObject::connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::accept);
+    rootLayout->addWidget(buttonBox, 0);
+
+    refreshSnapshot();
+    centerDialogOnAnchor(&dialog, this);
+    dialog.exec();
 }
 
 void MainWindow::PreferencesSection::onPreferences()
@@ -1764,12 +2080,16 @@ void MainWindow::PreferencesSection::onPreferences()
         new QPushButton(UiText::text(QStringLiteral("dialog.preferences.extensions.refresh")), extensionsActions);
     auto* openExtensionLogsButton =
         new QPushButton(UiText::text(QStringLiteral("dialog.preferences.extensions.open_logs")), extensionsActions);
+    auto* openExtensionDevToolsButton =
+        new QPushButton(UiText::text(QStringLiteral("dialog.preferences.extensions.devtools")), extensionsActions);
     openExtensionsFolderButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
     refreshExtensionsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
     openExtensionLogsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    openExtensionDevToolsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
     extensionsActionsLayout->addWidget(openExtensionsFolderButton);
     extensionsActionsLayout->addWidget(refreshExtensionsButton);
     extensionsActionsLayout->addWidget(openExtensionLogsButton);
+    extensionsActionsLayout->addWidget(openExtensionDevToolsButton);
     extensionsActionsLayout->addStretch(1);
 
     auto* extensionsTable = new QTableWidget(extensionsPage);
@@ -1908,6 +2228,9 @@ void MainWindow::PreferencesSection::onPreferences()
             : QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("logs"));
         QDir().mkpath(dir);
         QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+    });
+    QObject::connect(openExtensionDevToolsButton, &QPushButton::clicked, &dialog, [&]() {
+        owner_.showExtensionDevToolsDialog();
     });
     refreshExtensionRows();
     extensionsPageLayout->addWidget(extensionsActions, 0);

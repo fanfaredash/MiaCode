@@ -165,6 +165,15 @@ const recentCalls = miacode.devtools.recentCalls().value;
 - `recentCalls()` returns the recent host API call ring buffer. It is capped and
   stores a compact parameter preview, not raw native pointers.
 
+The same snapshot is available visually from **Preferences > Extensions >
+DevTools Panel**. The panel shows API Registry, Open Bridge, Recent Calls,
+Extensions, UI Contributions, Diagnostics, and Raw JSON tabs, and the Refresh
+Snapshot button rereads the current host state without restarting MiaCode.
+
+同一份快照也可以在 **首选项 > 扩展 > DevTools 面板** 中查看。面板包含
+API 注册表、Open Bridge、最近调用、扩展、UI 贡献、诊断和原始 JSON 页签；
+“刷新快照”会重新读取当前宿主状态，不需要重启 MiaCode。
+
 - `snapshot()` 返回 API 描述、Open Bridge 描述、experimental raw 标记、扩展诊断、
   已注册事件 callback 数量、UI contribution 状态和最近 host 调用。
 - `diagnose(idOrMethod)` 解释路由、所需权限、当前扩展是否声明该权限，以及空的

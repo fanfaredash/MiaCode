@@ -63,6 +63,7 @@ public:
     QStringList diagnostics() const;
     QString userExtensionsDirectory() const;
     QString extensionLogDirectory() const;
+    QJsonObject devtoolsSnapshotForUi() const;
     void refreshExtensions();
     void setExtensionEnabled(const QString& qualifiedId, bool enabled);
     bool executeExtensionCommand(const QString& command, QString* error = nullptr);

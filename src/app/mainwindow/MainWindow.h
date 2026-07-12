@@ -330,6 +330,7 @@ private slots:
     // DocumentSection::openPerDifficultyDesignerDialog() in DocumentFlow.
     void onManagePerDifficultyDesigners();
     void onPreferences();
+    void showExtensionDevToolsDialog();
     void onAbout();
     void onToggleFindReplace();
     void onFindNext();

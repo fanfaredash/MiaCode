@@ -32,6 +32,12 @@
 namespace miacode::extensions {
 namespace {
 
+constexpr int kDevtoolsParamsPreviewMaxDepth = 4;
+constexpr int kDevtoolsParamsPreviewMaxObjectMembers = 24;
+constexpr int kDevtoolsParamsPreviewMaxArrayItems = 12;
+constexpr int kDevtoolsParamsPreviewMaxStringChars = 512;
+constexpr int kDevtoolsParamsPreviewMaxJsonChars = 2048;
+
 bool activationIncludesStartup(const ExtensionManifest& manifest)
 {
     return manifest.activationEvents.contains(QStringLiteral("onStartupFinished"))
@@ -50,6 +56,69 @@ QString localizedText(const QString& key, const QString& fallback)
 {
     const QString translated = UiText::text(key);
     return translated.isEmpty() ? fallback : translated;
+}
+
+QJsonValue devtoolsPreviewValue(const QJsonValue& value, int depth)
+{
+    if (value.isString()) {
+        const QString text = value.toString();
+        if (text.size() <= kDevtoolsParamsPreviewMaxStringChars) {
+            return text;
+        }
+        return QStringLiteral("%1...<truncated %2 chars>")
+            .arg(text.left(kDevtoolsParamsPreviewMaxStringChars))
+            .arg(text.size() - kDevtoolsParamsPreviewMaxStringChars);
+    }
+    if (depth <= 0) {
+        if (value.isArray()) {
+            return QStringLiteral("<array>");
+        }
+        if (value.isObject()) {
+            return QStringLiteral("<object>");
+        }
+        return value;
+    }
+    if (value.isArray()) {
+        const QJsonArray source = value.toArray();
+        QJsonArray preview;
+        const int count = qMin(source.size(), kDevtoolsParamsPreviewMaxArrayItems);
+        for (int index = 0; index < count; ++index) {
+            preview.append(devtoolsPreviewValue(source.at(index), depth - 1));
+        }
+        if (source.size() > count) {
+            preview.append(QJsonObject{
+                {QStringLiteral("_truncatedItems"), source.size() - count},
+            });
+        }
+        return preview;
+    }
+    if (value.isObject()) {
+        const QJsonObject source = value.toObject();
+        QJsonObject preview;
+        int count = 0;
+        for (auto it = source.constBegin(); it != source.constEnd(); ++it) {
+            if (count >= kDevtoolsParamsPreviewMaxObjectMembers) {
+                preview.insert(QStringLiteral("_truncatedKeys"), source.size() - count);
+                break;
+            }
+            preview.insert(it.key(), devtoolsPreviewValue(it.value(), depth - 1));
+            ++count;
+        }
+        return preview;
+    }
+    return value;
+}
+
+QString devtoolsParamsPreview(const QJsonObject& params)
+{
+    const QJsonObject preview = devtoolsPreviewValue(params, kDevtoolsParamsPreviewMaxDepth).toObject();
+    QString text = QString::fromUtf8(QJsonDocument(preview).toJson(QJsonDocument::Compact));
+    if (text.size() > kDevtoolsParamsPreviewMaxJsonChars) {
+        text = QStringLiteral("%1...<truncated %2 chars>")
+            .arg(text.left(kDevtoolsParamsPreviewMaxJsonChars))
+            .arg(text.size() - kDevtoolsParamsPreviewMaxJsonChars);
+    }
+    return text;
 }
 
 QJsonObject disabledExtensionsObject()
@@ -681,6 +750,11 @@ QString ExtensionManager::extensionLogDirectory() const
         return QDir::cleanPath(logRoot);
     }
     return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("logs"));
+}
+
+QJsonObject ExtensionManager::devtoolsSnapshotForUi() const
+{
+    return devtoolsSnapshot(QString());
 }
 
 void ExtensionManager::refreshExtensions()
@@ -1352,7 +1426,6 @@ void ExtensionManager::appendDevtoolsCall(const QString& method, const QJsonObje
     if (method == QStringLiteral("devtools/recentCalls")) {
         return;
     }
-    const QByteArray paramsJson = QJsonDocument(params).toJson(QJsonDocument::Compact);
     QJsonObject entry{
         {QStringLiteral("timestamp"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
         {QStringLiteral("method"), method},
@@ -1361,7 +1434,7 @@ void ExtensionManager::appendDevtoolsCall(const QString& method, const QJsonObje
         {QStringLiteral("ok"), result.value(QStringLiteral("ok")).toBool(!result.contains(QStringLiteral("error")))},
         {QStringLiteral("error"), result.value(QStringLiteral("error")).toString()},
         {QStringLiteral("elapsedMs"), static_cast<double>(elapsedMs)},
-        {QStringLiteral("paramsPreview"), QString::fromUtf8(paramsJson.left(2048))},
+        {QStringLiteral("paramsPreview"), devtoolsParamsPreview(params)},
     };
     recentHostCalls_.append(entry);
     while (recentHostCalls_.size() > 200) {

@@ -80,6 +80,10 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: QtMultimedia stage-video watchdog and recovery thresholds for realtime background video
   - Current tuning note: playback watchdog fires after `600 ms` without a fresh frame / with a stale frame / when not playing, then tries at most `2` soft recoveries before giving up for that playback stretch: first a pause + seek-flush + play, then a video-output rebind + seek-flush + play. Full backend rebuild remains reserved for explicit media errors, invalid media, and existing seek/prepare timeout recovery paths.
   - Rule: keep local while these thresholds only protect runtime video preview; promote if export preview, worker preview, or user-facing recovery preferences need the same policy
+- `src/extensions/ExtensionManager.cpp`
+  - Owns: extension DevTools `recentCalls.paramsPreview` truncation budgets.
+  - Current tuning note: params preview is capped before JSON serialization at depth `4`, object members `24`, array items `12`, string chars `512`, then final compact JSON chars `2048`, so high-volume or large-text extension API calls do not serialize full request payloads on the main process just for diagnostics.
+  - Rule: keep local while this only shapes extension DevTools diagnostics; promote only if another logging surface needs the same privacy/performance budget.
 - `src/tools/latency/LatencyDetectorDialog.cpp`
   - Owns: detection windows, hop sizes, BPM scan range, offset penalties, snap thresholds
   - Rule: keep local when the values are intrinsic to the latency tool, but document any user-visible range changes
