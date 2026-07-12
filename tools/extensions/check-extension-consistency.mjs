@@ -62,12 +62,6 @@ if (!registryBlock) {
   if (!statuses.includes("implemented")) {
     fail("registry has no implemented APIs");
   }
-  if (!statuses.includes("planned")) {
-    fail("registry has no planned APIs");
-  }
-  if (!statuses.includes("blocked")) {
-    fail("registry has no blocked APIs");
-  }
 }
 
 const blockedBlock = managerCpp.match(/bool isBlockedPermission[\s\S]*?static const QSet<QString> blocked\{([\s\S]*?)\};/);
@@ -75,15 +69,7 @@ if (!blockedBlock) {
   fail("cannot find blocked permission list");
 } else {
   const blockedPermissions = qStringLiterals(blockedBlock[1]);
-  const expectedBlockedPermissions = [
-    "shell.execute",
-    "native.unsafe",
-    "internal.raw",
-    "renderer.raw",
-    "export.raw",
-    "security.override",
-    "updates.modify",
-  ];
+  const expectedBlockedPermissions = [];
   if (blockedPermissions.length !== expectedBlockedPermissions.length) {
     fail(`blocked permission list has unexpected size: ${blockedPermissions.join(", ")}`);
   }
@@ -99,7 +85,7 @@ if (!blockedBlock) {
   }
 }
 
-const requiredBlockedApiIds = [
+const requiredExperimentalRawApiIds = [
   "shell.execute",
   "process.spawn",
   "native",
@@ -109,10 +95,10 @@ const requiredBlockedApiIds = [
   "security",
   "updates",
 ];
-for (const id of requiredBlockedApiIds) {
-  const blockedDescriptor = new RegExp(`apiDescriptor\\(QStringLiteral\\("${id.replace(".", "\\.")}"\\)[\\s\\S]*?QStringLiteral\\("blocked"\\)`);
-  if (!blockedDescriptor.test(managerCpp)) {
-    fail(`registry is missing blocked API descriptor: ${id}`);
+for (const id of requiredExperimentalRawApiIds) {
+  const descriptor = new RegExp(`apiDescriptor\\(QStringLiteral\\("${id.replace(".", "\\.")}"\\)[\\s\\S]*?QStringLiteral\\("implemented"\\)`);
+  if (!descriptor.test(managerCpp)) {
+    fail(`registry is missing experimental raw API descriptor: ${id}`);
   }
 }
 

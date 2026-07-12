@@ -30,6 +30,7 @@
 #include "common/DebugOptions.h"
 #include "common/PreviewInteractionConfig.h"
 #include "extensions/ExtensionManager.h"
+#include "extensions/ExtensionOpenBridge.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
@@ -152,6 +153,213 @@ QString firstContributionText(const QJsonObject& object, std::initializer_list<c
     }
     return QString();
 }
+
+double contributionNumber(const QJsonObject& object, const QString& key, double fallback)
+{
+    const QJsonValue value = object.value(key);
+    return value.isDouble() ? value.toDouble() : fallback;
+}
+
+QStringList resolvedPetOverlayFrames(const QJsonObject& overlay)
+{
+    QStringList frames;
+    for (const QJsonValue& value : overlay.value(QStringLiteral("resolvedFrames")).toArray()) {
+        const QString path = value.isObject()
+            ? value.toObject().value(QStringLiteral("resolvedPath")).toString()
+            : value.toString();
+        if (!path.trimmed().isEmpty()) {
+            frames.append(path);
+        }
+    }
+    const QString imagePath = overlay.value(QStringLiteral("resolvedImagePath")).toString();
+    if (frames.isEmpty() && !imagePath.trimmed().isEmpty()) {
+        frames.append(imagePath);
+    }
+    return frames;
+}
+
+QRect petOverlayGeometry(const QJsonObject& overlay, const QSize& hostSize, const QSize& pixmapSize)
+{
+    const QJsonObject position = overlay.value(QStringLiteral("position")).toObject();
+    const double requestedSize = contributionNumber(overlay, QStringLiteral("size"), 96.0);
+    const int fallbackWidth = qBound(24, static_cast<int>(requestedSize), qMax(24, hostSize.width()));
+    int width = qBound(16, static_cast<int>(contributionNumber(overlay, QStringLiteral("width"), fallbackWidth)), qMax(16, hostSize.width()));
+    int height = static_cast<int>(contributionNumber(overlay, QStringLiteral("height"), 0.0));
+    if (height <= 0) {
+        height = pixmapSize.isValid() && pixmapSize.width() > 0
+            ? qMax(16, qRound(static_cast<double>(width) * pixmapSize.height() / pixmapSize.width()))
+            : width;
+    }
+    height = qBound(16, height, qMax(16, hostSize.height()));
+
+    const QString anchor = overlay.value(QStringLiteral("anchor")).toString(
+        position.value(QStringLiteral("anchor")).toString(QStringLiteral("bottomRight")));
+    const int margin = qBound(0, static_cast<int>(contributionNumber(overlay, QStringLiteral("margin"), 16.0)), 120);
+    int x = hostSize.width() - width - margin;
+    int y = hostSize.height() - height - margin;
+    if (anchor == QStringLiteral("topLeft")) {
+        x = margin;
+        y = margin;
+    } else if (anchor == QStringLiteral("topRight")) {
+        x = hostSize.width() - width - margin;
+        y = margin;
+    } else if (anchor == QStringLiteral("bottomLeft")) {
+        x = margin;
+        y = hostSize.height() - height - margin;
+    } else if (anchor == QStringLiteral("center")) {
+        x = (hostSize.width() - width) / 2;
+        y = (hostSize.height() - height) / 2;
+    }
+
+    const QJsonValue xValue = position.contains(QStringLiteral("x")) ? position.value(QStringLiteral("x")) : overlay.value(QStringLiteral("x"));
+    const QJsonValue yValue = position.contains(QStringLiteral("y")) ? position.value(QStringLiteral("y")) : overlay.value(QStringLiteral("y"));
+    if (xValue.isDouble()) {
+        const double value = xValue.toDouble();
+        x = value >= 0.0 && value <= 1.0 ? qRound(value * qMax(0, hostSize.width() - width)) : qRound(value);
+    }
+    if (yValue.isDouble()) {
+        const double value = yValue.toDouble();
+        y = value >= 0.0 && value <= 1.0 ? qRound(value * qMax(0, hostSize.height() - height)) : qRound(value);
+    }
+
+    return QRect(
+        qBound(0, x, qMax(0, hostSize.width() - width)),
+        qBound(0, y, qMax(0, hostSize.height() - height)),
+        width,
+        height);
+}
+
+class ExtensionPetOverlayWidget final : public QLabel {
+public:
+    ExtensionPetOverlayWidget(
+        const QJsonObject& overlay,
+        QWidget* parent,
+        std::function<void(const QString&)> runCommand)
+        : QLabel(parent)
+        , overlay_(overlay)
+        , runCommand_(std::move(runCommand))
+    {
+        setObjectName(QStringLiteral("ExtensionPetOverlay"));
+        setProperty("miacode.extension.overlay.id", overlay.value(QStringLiteral("id")).toString());
+        setProperty("miacode.extension.overlay.ownerId", overlay.value(QStringLiteral("ownerId")).toString());
+        setProperty("miacode.extension.overlay.kind", overlay.value(QStringLiteral("kind")).toString());
+        setAlignment(Qt::AlignCenter);
+        setScaledContents(true);
+        setCursor(overlay.value(QStringLiteral("draggable")).toBool(false) ? Qt::OpenHandCursor : Qt::ArrowCursor);
+
+        frames_ = resolvedPetOverlayFrames(overlay);
+        if (frames_.isEmpty()) {
+            setText(firstContributionText(overlay, {"text", "title", "label", "message"}));
+        } else {
+            setFrameIndex(0);
+        }
+
+        const double opacity = qBound(0.0, contributionNumber(overlay, QStringLiteral("opacity"), 1.0), 1.0);
+        if (opacity < 1.0) {
+            auto* effect = new QGraphicsOpacityEffect(this);
+            effect->setOpacity(opacity);
+            setGraphicsEffect(effect);
+        }
+
+        const int intervalMs = frameIntervalMs(overlay);
+        if (frames_.size() > 1 && intervalMs > 0) {
+            frameTimer_.setInterval(intervalMs);
+            connect(&frameTimer_, &QTimer::timeout, this, [this]() {
+                setFrameIndex((frameIndex_ + 1) % frames_.size());
+            });
+            frameTimer_.start();
+        }
+    }
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        if (event->button() != Qt::LeftButton) {
+            QLabel::mousePressEvent(event);
+            return;
+        }
+        pressed_ = true;
+        dragged_ = false;
+        pressGlobalPos_ = event->globalPosition().toPoint();
+        dragStartTopLeft_ = geometry().topLeft();
+        if (overlay_.value(QStringLiteral("draggable")).toBool(false)) {
+            setCursor(Qt::ClosedHandCursor);
+        }
+        event->accept();
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) override
+    {
+        if (!pressed_ || !overlay_.value(QStringLiteral("draggable")).toBool(false) || parentWidget() == nullptr) {
+            QLabel::mouseMoveEvent(event);
+            return;
+        }
+        const QPoint delta = event->globalPosition().toPoint() - pressGlobalPos_;
+        if (delta.manhattanLength() > 3) {
+            dragged_ = true;
+        }
+        const QRect parentRect = parentWidget()->contentsRect();
+        const QPoint next(
+            qBound(parentRect.left(), dragStartTopLeft_.x() + delta.x(), qMax(parentRect.left(), parentRect.right() - width() + 1)),
+            qBound(parentRect.top(), dragStartTopLeft_.y() + delta.y(), qMax(parentRect.top(), parentRect.bottom() - height() + 1)));
+        move(next);
+        event->accept();
+    }
+
+    void mouseReleaseEvent(QMouseEvent* event) override
+    {
+        if (event->button() != Qt::LeftButton || !pressed_) {
+            QLabel::mouseReleaseEvent(event);
+            return;
+        }
+        pressed_ = false;
+        setCursor(overlay_.value(QStringLiteral("draggable")).toBool(false) ? Qt::OpenHandCursor : Qt::ArrowCursor);
+        const QString command = dragged_
+            ? overlay_.value(QStringLiteral("onDragEndCommand")).toString()
+            : overlay_.value(QStringLiteral("onClickCommand")).toString(
+                  overlay_.value(QStringLiteral("command")).toString());
+        if (!command.trimmed().isEmpty() && runCommand_) {
+            runCommand_(command);
+        }
+        event->accept();
+    }
+
+private:
+    static int frameIntervalMs(const QJsonObject& overlay)
+    {
+        const QJsonObject sprite = overlay.value(QStringLiteral("sprite")).toObject();
+        const double fps = contributionNumber(sprite, QStringLiteral("fps"), contributionNumber(overlay, QStringLiteral("fps"), 0.0));
+        if (fps > 0.0) {
+            return qBound(16, qRound(1000.0 / fps), 5000);
+        }
+        return qBound(16,
+                      static_cast<int>(contributionNumber(sprite, QStringLiteral("frameDurationMs"),
+                                                          contributionNumber(overlay, QStringLiteral("frameDurationMs"), 250.0))),
+                      5000);
+    }
+
+    void setFrameIndex(int index)
+    {
+        if (frames_.isEmpty()) {
+            return;
+        }
+        frameIndex_ = qBound(0, index, frames_.size() - 1);
+        const QPixmap pixmap(frames_.at(frameIndex_));
+        if (!pixmap.isNull()) {
+            setPixmap(pixmap);
+        }
+    }
+
+    QJsonObject overlay_;
+    QStringList frames_;
+    int frameIndex_ = 0;
+    QTimer frameTimer_;
+    bool pressed_ = false;
+    bool dragged_ = false;
+    QPoint pressGlobalPos_;
+    QPoint dragStartTopLeft_;
+    std::function<void(const QString&)> runCommand_;
+};
 
 QJsonArray firstContributionArray(const QJsonObject& object, std::initializer_list<const char*> keys)
 {
@@ -340,39 +548,55 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             }
             state_.extensionPreviewOverlayWidgets_.clear();
         };
-        const auto renderPreviewOverlays = [this, clearPreviewOverlayWidgets]() {
+        const auto renderPreviewOverlays = [this, clearPreviewOverlayWidgets, runExtensionCommand]() {
             clearPreviewOverlayWidgets();
             if (previewCanvasFrame_ == nullptr || state_.extensionPreviewOverlays_.isEmpty()) {
                 return;
             }
-            auto* host = new QWidget(previewCanvasFrame_);
-            host->setObjectName(QStringLiteral("ExtensionPreviewOverlayLayer"));
-            host->setAttribute(Qt::WA_TransparentForMouseEvents, true);
-            host->setGeometry(previewCanvasFrame_->contentsRect());
-            auto* layout = new QVBoxLayout(host);
-            layout->setContentsMargins(10, 10, 10, 10);
-            layout->setSpacing(6);
-            layout->setAlignment(Qt::AlignTop | Qt::AlignRight);
+            QWidget* textHost = nullptr;
+            QVBoxLayout* textLayout = nullptr;
             const QString overlayStyle = extensionOverlayStyleSheet();
             for (const QJsonValue& value : state_.extensionPreviewOverlays_) {
                 const QJsonObject overlay = value.toObject();
+                if (overlay.value(QStringLiteral("kind")).toString() == QStringLiteral("ui/petOverlay")) {
+                    const QStringList frames = resolvedPetOverlayFrames(overlay);
+                    const QSize pixmapSize = frames.isEmpty() ? QSize() : QPixmap(frames.first()).size();
+                    auto* pet = new ExtensionPetOverlayWidget(overlay, previewCanvasFrame_, runExtensionCommand);
+                    pet->setGeometry(petOverlayGeometry(overlay, previewCanvasFrame_->contentsRect().size(), pixmapSize));
+                    pet->show();
+                    pet->raise();
+                    state_.extensionPreviewOverlayWidgets_.append(pet);
+                    continue;
+                }
                 const QString text = firstContributionText(overlay, {"text", "title", "label", "message"});
                 if (text.isEmpty()) {
                     continue;
                 }
-                auto* label = new QLabel(text, host);
+                if (textHost == nullptr) {
+                    textHost = new QWidget(previewCanvasFrame_);
+                    textHost->setObjectName(QStringLiteral("ExtensionPreviewOverlayLayer"));
+                    textHost->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+                    textHost->setGeometry(previewCanvasFrame_->contentsRect());
+                    textLayout = new QVBoxLayout(textHost);
+                    textLayout->setContentsMargins(10, 10, 10, 10);
+                    textLayout->setSpacing(6);
+                    textLayout->setAlignment(Qt::AlignTop | Qt::AlignRight);
+                }
+                auto* label = new QLabel(text, textHost);
                 label->setObjectName(QStringLiteral("ExtensionPreviewOverlayLabel"));
                 label->setProperty("miacode.extension.overlay.id", overlay.value(QStringLiteral("id")).toString());
                 label->setProperty("miacode.extension.overlay.ownerId", overlay.value(QStringLiteral("ownerId")).toString());
                 label->setWordWrap(true);
                 label->setMaximumWidth(qMax(180, previewCanvasFrame_->width() / 2));
                 label->setStyleSheet(overlayStyle);
-                layout->addWidget(label, 0, Qt::AlignRight);
+                textLayout->addWidget(label, 0, Qt::AlignRight);
             }
-            layout->addStretch(1);
-            host->show();
-            host->raise();
-            state_.extensionPreviewOverlayWidgets_.append(host);
+            if (textHost != nullptr && textLayout != nullptr) {
+                textLayout->addStretch(1);
+                textHost->show();
+                textHost->raise();
+                state_.extensionPreviewOverlayWidgets_.append(textHost);
+            }
         };
         const auto renderUiContribution = [this, runExtensionCommand](const QJsonObject& contribution) {
             const QString kind = contribution.value(QStringLiteral("kind")).toString();
@@ -738,86 +962,38 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 exportSection_->onExportPreviewVideo(resolveToolsMenuExportDifficultyId());
             } else if (id == QStringLiteral("export.cover.start")) {
                 onExportCover();
+            } else if (id == QStringLiteral("extensions.all")) {
+                if (extensionManager_ == nullptr) {
+                    return errorObject(QStringLiteral("Extension manager is not available."));
+                }
+                QJsonArray array;
+                for (const miacode::extensions::ExtensionRecord& record : extensionManager_->records()) {
+                    array.append(QJsonObject{
+                        {QStringLiteral("id"), record.valid ? record.manifest.qualifiedId() : record.sourcePath},
+                        {QStringLiteral("name"), record.manifest.name},
+                        {QStringLiteral("version"), record.manifest.version},
+                        {QStringLiteral("enabled"), record.enabled},
+                        {QStringLiteral("valid"), record.valid},
+                        {QStringLiteral("permissions"), QJsonArray::fromStringList(record.manifest.permissions)},
+                        {QStringLiteral("diagnostic"), record.diagnostic},
+                    });
+                }
+                return okValue(array);
+            } else if (id == QStringLiteral("extensions.reload")) {
+                if (extensionManager_ == nullptr) {
+                    return errorObject(QStringLiteral("Extension manager is not available."));
+                }
+                extensionManager_->refreshExtensions();
             } else {
                 return errorObject(QStringLiteral("Unknown internal command: %1").arg(id));
             }
             return QJsonObject{{QStringLiteral("ok"), true}};
         };
         const auto objectDescription = [](const QString& objectId) {
-            QJsonArray methods;
-            const auto append = [&methods](const QString& name, const QString& command = QString()) {
-                QJsonObject method{{QStringLiteral("name"), name}};
-                if (!command.isEmpty()) {
-                    method.insert(QStringLiteral("command"), command);
-                }
-                methods.append(method);
-            };
-            if (objectId == QStringLiteral("app")) {
-                append(QStringLiteral("openPreferences"), QStringLiteral("app.openPreferences"));
-                append(QStringLiteral("openAboutDialog"), QStringLiteral("app.openAboutDialog"));
-            } else if (objectId == QStringLiteral("workspace")) {
-                append(QStringLiteral("save"), QStringLiteral("workspace.save"));
-                append(QStringLiteral("saveAs"), QStringLiteral("workspace.saveAs"));
-            } else if (objectId == QStringLiteral("document")) {
-                append(QStringLiteral("query"));
-                append(QStringLiteral("edit"));
-                append(QStringLiteral("setActiveDifficulty"), QStringLiteral("document.setActiveDifficulty"));
-                append(QStringLiteral("formatActiveDifficulty"), QStringLiteral("document.formatActiveDifficulty"));
-            } else if (objectId == QStringLiteral("editor")) {
-                append(QStringLiteral("undo"), QStringLiteral("editor.undo"));
-                append(QStringLiteral("redo"), QStringLiteral("editor.redo"));
-                append(QStringLiteral("cut"), QStringLiteral("editor.cut"));
-                append(QStringLiteral("copy"), QStringLiteral("editor.copy"));
-                append(QStringLiteral("paste"), QStringLiteral("editor.paste"));
-                append(QStringLiteral("selectAll"), QStringLiteral("editor.selectAll"));
-            } else if (objectId == QStringLiteral("timeline")) {
-                append(QStringLiteral("seek"), QStringLiteral("timeline.seek"));
-                append(QStringLiteral("getCurrentSecond"));
-                append(QStringLiteral("getSnapshot"));
-            } else if (objectId == QStringLiteral("preview")) {
-                append(QStringLiteral("play"), QStringLiteral("preview.play"));
-                append(QStringLiteral("pause"), QStringLiteral("preview.pause"));
-                append(QStringLiteral("stop"), QStringLiteral("preview.stop"));
-                append(QStringLiteral("seek"), QStringLiteral("preview.seek"));
-                append(QStringLiteral("setSpeed"), QStringLiteral("preview.setSpeed"));
-                append(QStringLiteral("getState"));
-            } else if (objectId == QStringLiteral("validation")) {
-                append(QStringLiteral("run"), QStringLiteral("validation.run"));
-                append(QStringLiteral("getLastResult"));
-            } else if (objectId == QStringLiteral("analysis")) {
-                append(QStringLiteral("runMuriAnalysis"), QStringLiteral("analysis.runMuriAnalysis"));
-                append(QStringLiteral("getLastMuriResult"));
-            } else if (objectId == QStringLiteral("export")) {
-                append(QStringLiteral("startVideoExport"), QStringLiteral("export.video.start"));
-                append(QStringLiteral("startCoverExport"), QStringLiteral("export.cover.start"));
-                append(QStringLiteral("getPresets"));
-            } else if (objectId == QStringLiteral("ui")) {
-                append(QStringLiteral("getViews"));
-                append(QStringLiteral("refreshViews"));
-            } else if (objectId == QStringLiteral("extensions")) {
-                append(QStringLiteral("all"));
-                append(QStringLiteral("reload"));
-            }
-            return QJsonObject{
-                {QStringLiteral("id"), objectId},
-                {QStringLiteral("methods"), methods},
-                {QStringLiteral("rawCppObjectsExposed"), false},
-            };
+            return miacode::extensions::extensionOpenBridgeDescribeObject(objectId);
         };
         const auto objectIds = []() {
-            return QJsonArray{
-                QStringLiteral("app"),
-                QStringLiteral("workspace"),
-                QStringLiteral("document"),
-                QStringLiteral("editor"),
-                QStringLiteral("timeline"),
-                QStringLiteral("preview"),
-                QStringLiteral("validation"),
-                QStringLiteral("analysis"),
-                QStringLiteral("export"),
-                QStringLiteral("ui"),
-                QStringLiteral("extensions"),
-            };
+            return miacode::extensions::extensionOpenBridgeObjectIds();
         };
         if (method == QStringLiteral("commands/executeInternal")) {
             const QJsonObject args = params.value(QStringLiteral("args")).toObject(params.value(QStringLiteral("params")).toObject());
@@ -864,24 +1040,25 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             const QString objectId = params.value(QStringLiteral("object")).toString(params.value(QStringLiteral("id")).toString());
             const QString member = params.value(QStringLiteral("member")).toString(params.value(QStringLiteral("method")).toString());
             const QJsonObject args = params.value(QStringLiteral("args")).toObject(params.value(QStringLiteral("params")).toObject());
-            if (objectId == QStringLiteral("document") && member == QStringLiteral("query")) {
-                return documentQuery(args);
+            const QJsonObject item = miacode::extensions::extensionOpenBridgeDescribeMethod(objectId, member);
+            if (item.isEmpty()) {
+                return errorObject(QStringLiteral("Unsupported object call: %1.%2").arg(objectId, member));
             }
-            if (objectId == QStringLiteral("document") && member == QStringLiteral("edit")) {
-                return documentEdit(args);
+            if (item.value(QStringLiteral("status")).toString() != QStringLiteral("implemented")) {
+                return errorObject(QStringLiteral("Open object method is %1: %2.%3")
+                                       .arg(item.value(QStringLiteral("status")).toString(), objectId, member));
             }
-            if (objectId == QStringLiteral("timeline") && member == QStringLiteral("getCurrentSecond")) {
-                return okValue(qtPreviewPauseSecond_);
-            }
-            if (objectId == QStringLiteral("preview") && member == QStringLiteral("getState")) {
-                return okValue(QJsonObject{{QStringLiteral("currentSecond"), qtPreviewPauseSecond_}, {QStringLiteral("rate"), previewPlaybackRate_}, {QStringLiteral("activeDifficultyId"), activeDifficultyId_}});
-            }
-            const QJsonObject description = objectDescription(objectId);
-            for (const QJsonValue& value : description.value(QStringLiteral("methods")).toArray()) {
-                const QJsonObject item = value.toObject();
-                if (item.value(QStringLiteral("name")).toString() == member && item.contains(QStringLiteral("command"))) {
-                    return executeInternalCommand(item.value(QStringLiteral("command")).toString(), args);
+            const QString hostMethod = item.value(QStringLiteral("hostMethod")).toString();
+            if (!hostMethod.isEmpty()) {
+                QJsonObject forwarded = args;
+                if (params.contains(QStringLiteral("extensionId"))) {
+                    forwarded.insert(QStringLiteral("extensionId"), params.value(QStringLiteral("extensionId")));
                 }
+                return handleExtensionHostRequest(hostMethod, forwarded);
+            }
+            const QString command = item.value(QStringLiteral("command")).toString();
+            if (!command.isEmpty()) {
+                return executeInternalCommand(command, args);
             }
             return errorObject(QStringLiteral("Unsupported object call: %1.%2").arg(objectId, member));
         }
@@ -1690,6 +1867,21 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 if (widget == nullptr) {
                     continue;
                 }
+                if (auto* directLabel = qobject_cast<QLabel*>(widget.data())) {
+                    const QPoint directPoint = directLabel->mapFromParent(point);
+                    if (directLabel->geometry().contains(point) || directLabel->rect().contains(directPoint)) {
+                        const QString id = directLabel->property("miacode.extension.overlay.id").toString();
+                        const QString ownerId = directLabel->property("miacode.extension.overlay.ownerId").toString();
+                        for (const QJsonValue& value : state_.extensionPreviewOverlays_) {
+                            const QJsonObject overlay = value.toObject();
+                            if (overlay.value(QStringLiteral("id")).toString() == id
+                                && overlay.value(QStringLiteral("ownerId")).toString() == ownerId) {
+                                hits.append(overlay);
+                            }
+                        }
+                    }
+                    continue;
+                }
                 const QPoint hostPoint = widget->mapFromParent(point);
                 const auto labels = widget->findChildren<QLabel*>(QStringLiteral("ExtensionPreviewOverlayLabel"));
                 for (QLabel* label : labels) {
@@ -1709,7 +1901,9 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             }
             return okValue(hits);
         }
-        if (method == QStringLiteral("resources/getMediaInfo")) {
+        if (method == QStringLiteral("media/getInfo")
+            || method == QStringLiteral("media/info")
+            || method == QStringLiteral("resources/getMediaInfo")) {
             const QString chartFolder = currentFilePath_.isEmpty() ? QString() : QFileInfo(currentFilePath_).absolutePath();
             const auto fileInfoObject = [](const QString& path) {
                 const QFileInfo info(path);
@@ -1727,7 +1921,35 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 {QStringLiteral("durationSeconds"), previewTrackDurationSeconds_},
             });
         }
-        if (method == QStringLiteral("resources/getAssetPath")) {
+        if (method == QStringLiteral("media/list")) {
+            QJsonArray files;
+            if (!currentFilePath_.isEmpty()) {
+                const QDir dir(QFileInfo(currentFilePath_).absolutePath());
+                const QStringList filters{
+                    QStringLiteral("*.mp3"),
+                    QStringLiteral("*.wav"),
+                    QStringLiteral("*.ogg"),
+                    QStringLiteral("*.flac"),
+                    QStringLiteral("*.jpg"),
+                    QStringLiteral("*.jpeg"),
+                    QStringLiteral("*.png"),
+                    QStringLiteral("*.webp"),
+                    QStringLiteral("*.mp4"),
+                    QStringLiteral("*.mov"),
+                    QStringLiteral("*.mkv"),
+                };
+                for (const QFileInfo& info : dir.entryInfoList(filters, QDir::Files, QDir::Name)) {
+                    files.append(QJsonObject{
+                        {QStringLiteral("name"), info.fileName()},
+                        {QStringLiteral("path"), info.absoluteFilePath()},
+                        {QStringLiteral("size"), static_cast<double>(info.size())},
+                        {QStringLiteral("suffix"), info.suffix()},
+                    });
+                }
+            }
+            return okValue(files);
+        }
+        if (method == QStringLiteral("media/getAssetPath") || method == QStringLiteral("resources/getAssetPath")) {
             const QString id = params.value(QStringLiteral("id")).toString();
             if (id == QStringLiteral("cover")) {
                 const QString chartFolder = currentFilePath_.isEmpty() ? QString() : QFileInfo(currentFilePath_).absolutePath();
@@ -1795,15 +2017,12 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
         }
         if (method == QStringLiteral("contributions/register")) {
             const QString kind = params.value(QStringLiteral("kind")).toString(QStringLiteral("contribution"));
-            if (!kind.startsWith(QStringLiteral("ui/"))) {
-                return errorObject(QStringLiteral("Contribution kind '%1' is planned but not implemented in the v1 extension host.").arg(kind));
-            }
-            if (kind == QStringLiteral("ui/sidebarView") || kind == QStringLiteral("ui/preferencesPage")) {
-                return errorObject(QStringLiteral("Contribution kind '%1' is planned; v1 supports bottom-tab views and toolbox buttons.").arg(kind));
-            }
             QJsonObject contribution = registeredContribution(params, kind);
             contribution.insert(QStringLiteral("ownerId"), params.value(QStringLiteral("extensionId")).toString(QStringLiteral("extension")));
             state_.extensionRegistrationsByKind_[kind].append(contribution);
+            if (kind.startsWith(QStringLiteral("export/"))) {
+                state_.extensionExportHooks_.append(contribution);
+            }
             if (kind.startsWith(QStringLiteral("ui/"))) {
                 state_.extensionUiContributions_.append(contribution);
                 renderUiContribution(contribution);
@@ -1811,7 +2030,10 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             return okValue(contribution);
         }
         if (method == QStringLiteral("events/register")) {
-            return errorObject(QStringLiteral("Extension events are planned but not dispatched in the v1 extension host."));
+            QJsonObject contribution = registeredContribution(params, params.value(QStringLiteral("kind")).toString(QStringLiteral("events/event")));
+            contribution.insert(QStringLiteral("ownerId"), params.value(QStringLiteral("extensionId")).toString(QStringLiteral("extension")));
+            state_.extensionRegistrationsByKind_[contribution.value(QStringLiteral("kind")).toString()].append(contribution);
+            return okValue(contribution);
         }
         if (method == QStringLiteral("ui/getContributions")) {
             return okValue(state_.extensionUiContributions_);
@@ -1829,15 +2051,20 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             rebuildRenderedExtensionUi();
             return okValue(QJsonObject{{QStringLiteral("count"), renderedViewsArray().size()}});
         }
+        if (method == QStringLiteral("ui/registerPetOverlay")) {
+            QJsonObject overlay = registeredContribution(params, QStringLiteral("ui/petOverlay"));
+            overlay.insert(QStringLiteral("kind"), QStringLiteral("ui/petOverlay"));
+            overlay.insert(QStringLiteral("ownerId"), params.value(QStringLiteral("ownerId")).toString(
+                params.value(QStringLiteral("extensionId")).toString(QStringLiteral("extension"))));
+            state_.extensionPreviewOverlays_.append(overlay);
+            renderPreviewOverlays();
+            return okValue(overlay);
+        }
         if (method == QStringLiteral("ui/renderDeclarativeView")
             || method == QStringLiteral("ui/renderSidebarView")
             || method == QStringLiteral("ui/renderBottomTabView")
             || method == QStringLiteral("ui/renderPreferencesPage")
             || method == QStringLiteral("ui/renderToolbarButton")) {
-            if (method == QStringLiteral("ui/renderSidebarView")
-                || method == QStringLiteral("ui/renderPreferencesPage")) {
-                return errorObject(QStringLiteral("%1 is planned; v1 supports bottom-tab views and toolbox buttons.").arg(method));
-            }
             QString kind = params.value(QStringLiteral("kind")).toString();
             if (kind.isEmpty()) {
                 if (method == QStringLiteral("ui/renderToolbarButton")) {

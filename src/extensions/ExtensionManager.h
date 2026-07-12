@@ -75,9 +75,15 @@ private:
     void scheduleRefresh();
     QJsonArray manifestsForRuntime() const;
     QJsonObject handleHostRequest(const QString& method, const QJsonObject& params);
+    QJsonObject handleHostRequestCore(const QString& method, const QJsonObject& params);
+    QJsonObject devtoolsSnapshot(const QString& extensionId) const;
+    QJsonObject devtoolsDiagnose(const QString& extensionId, const QJsonObject& params) const;
+    void appendDevtoolsCall(const QString& method, const QJsonObject& params, const QJsonObject& result, qint64 elapsedMs);
+    void dispatchRuntimeEventForHostResult(const QString& method, const QJsonObject& params, const QJsonObject& result);
     bool ensurePermission(const QString& extensionId, const QString& method, const QJsonObject& params, QJsonObject* errorResponse);
     bool manifestDeclaresPermission(const QString& extensionId, const QString& permission) const;
     QString permissionForMethod(const QString& method) const;
+    QString extensionRootPathForId(const QString& extensionId) const;
     void invokeCommand(const QString& command);
     ExtensionCommandContribution commandContribution(const QString& command) const;
 
@@ -92,6 +98,7 @@ private:
     QPointer<QMenu> helpMenu_;
     QPointer<QMenu> extensionsMenu_;
     QList<QPointer<QAction>> topLevelMenuActions_;
+    QJsonArray recentHostCalls_;
     QFileSystemWatcher* watcher_ = nullptr;
     QTimer refreshDebounce_;
     std::unique_ptr<EmbeddedExtensionRuntime> runtime_;

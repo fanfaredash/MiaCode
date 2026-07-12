@@ -34,12 +34,118 @@ export interface ApiDescriptor {
   description: string;
 }
 
+export interface DevtoolsDiagnosis {
+  id?: string;
+  method?: string;
+  descriptor?: ApiDescriptor;
+  implemented: boolean;
+  requiredPermission?: string;
+  extensionId?: string;
+  manifestDeclaresPermission: boolean;
+  blockedByMethodHook: boolean;
+  blockedByPermissionHook: boolean;
+}
+
+export interface DevtoolsRecentCall {
+  timestamp: string;
+  method: string;
+  extensionId?: string;
+  permission?: string;
+  ok: boolean;
+  error?: string;
+  elapsedMs: number;
+  paramsPreview: string;
+}
+
+export interface DevtoolsSnapshot {
+  extensionId?: string;
+  api: ApiDescriptor[];
+  openBridgeObjects: OpenBridgeObject[];
+  experimentalRawTargets: ExperimentalRawOpenTarget[];
+  extensions: Array<Record<string, unknown>>;
+  diagnostics: string[];
+  recentCalls: DevtoolsRecentCall[];
+  eventCallbackCount: number;
+  uiContributions?: Array<Record<string, unknown>>;
+  uiViews?: Array<Record<string, unknown>>;
+}
+
 export interface ApiRequest {
   id: string;
   reason?: string;
   required?: boolean;
   fallback?: string;
   proposedSignature?: string;
+}
+
+export interface OpenBridgeMethod {
+  name: string;
+  hostMethod?: string;
+  command?: string;
+  permission: string;
+  status: ApiStatus;
+  description: string;
+}
+
+export interface OpenBridgeObject {
+  id: string;
+  permission: string;
+  stability: "open" | "experimentalRaw" | string;
+  description: string;
+  methods: OpenBridgeMethod[];
+  experimentalRaw?: boolean;
+  rawAccess?: boolean;
+  rawCppObjectsExposed: boolean;
+}
+
+export interface ExperimentalRawOpenTarget extends OpenBridgeObject {
+  id: string;
+  stability: "experimentalRaw" | string;
+  category: string;
+  reason: string;
+  forbidden: false;
+  experimentalRaw: true;
+  rawAccess: true;
+  rawCppObjectsExposed: true;
+  legacyName?: "forbiddenTarget" | string;
+}
+
+export type ForbiddenOpenTarget = ExperimentalRawOpenTarget;
+
+export interface PetOverlayFrame {
+  src?: string;
+  image?: string;
+  resource?: string;
+  durationMs?: number;
+}
+
+export interface PetOverlayOptions {
+  id?: string;
+  image?: string;
+  src?: string;
+  resource?: string;
+  frames?: Array<string | PetOverlayFrame>;
+  sprite?: {
+    frames?: Array<string | PetOverlayFrame>;
+    fps?: number;
+    frameDurationMs?: number;
+  };
+  text?: string;
+  position?: {
+    x?: number;
+    y?: number;
+    anchor?: "topLeft" | "topRight" | "bottomLeft" | "bottomRight" | "center" | string;
+  };
+  anchor?: "topLeft" | "topRight" | "bottomLeft" | "bottomRight" | "center" | string;
+  width?: number;
+  height?: number;
+  size?: number;
+  margin?: number;
+  opacity?: number;
+  draggable?: boolean;
+  onClickCommand?: string;
+  onDragEndCommand?: string;
+  command?: string;
 }
 
 export interface MiaCodeApi {
@@ -52,9 +158,22 @@ export interface MiaCodeApi {
     invoke<T = unknown>(method: string, params?: Record<string, unknown>): ApiResult<T>;
     request(request: ApiRequest): ApiResult;
   };
+  devtools: {
+    snapshot(): ApiResult<DevtoolsSnapshot>;
+    diagnose(target: string | { id?: string; method?: string }): ApiResult<DevtoolsDiagnosis>;
+    recentCalls(): ApiResult<DevtoolsRecentCall[]>;
+  };
+  open: {
+    list(): ApiResult<OpenBridgeObject[]>;
+    describe(id: string): ApiResult<OpenBridgeObject | ExperimentalRawOpenTarget>;
+    call<T = unknown>(objectId: string, method: string, params?: Record<string, unknown>): ApiResult<T>;
+    forbiddenTargets(): ApiResult<ExperimentalRawOpenTarget[]>;
+    describeForbiddenTarget(id: string): ApiResult<ExperimentalRawOpenTarget>;
+  };
   app: {
     getInfo(): ApiResult<Record<string, unknown>>;
     openPreferences(): ApiResult;
+    openAboutDialog(): ApiResult;
     reloadExtensions(): ApiResult;
   };
   commands: {
@@ -81,6 +200,12 @@ export interface MiaCodeApi {
     save(): ApiResult;
     saveAs(path: string): ApiResult;
   };
+  events: {
+    onDidOpenDocument(callback: (event?: unknown) => void): Disposable;
+    onDidSaveDocument(callback: (event?: unknown) => void): Disposable;
+    onDidChangeText(callback: (event?: unknown) => void): Disposable;
+    onDidChangeSelection(callback: (event?: unknown) => void): Disposable;
+  };
   document: {
     getDifficulties(): ApiResult<Array<Record<string, unknown>>>;
     getActiveDifficulty(): ApiResult<Record<string, unknown>>;
@@ -97,6 +222,12 @@ export interface MiaCodeApi {
     renameDifficulty(id: number, label: string): ApiResult;
   };
   editor: {
+    undo(): ApiResult;
+    redo(): ApiResult;
+    cut(): ApiResult;
+    copy(): ApiResult;
+    paste(): ApiResult;
+    selectAll(): ApiResult;
     getSelection(): ApiResult<Record<string, number>>;
     getCursor(): ApiResult<Record<string, number>>;
     setSelection(range: { start: number; end: number }): ApiResult;
@@ -108,6 +239,9 @@ export interface MiaCodeApi {
     replaceRange(range: Record<string, unknown>, text: string): ApiResult;
     addDecoration(range: Record<string, unknown>, options?: Record<string, unknown>): ApiResult;
     clearDecorations(ownerId?: string): ApiResult;
+    registerHoverProvider(provider: Record<string, unknown>): Disposable;
+    registerCompletionProvider(provider: Record<string, unknown>): Disposable;
+    registerCodeActionProvider(provider: Record<string, unknown>): Disposable;
   };
   validation: {
     run(): ApiResult;
@@ -142,17 +276,60 @@ export interface MiaCodeApi {
     getOverlays(): ApiResult<Array<Record<string, unknown>>>;
     renderOverlayLayer(): ApiResult<{ count: number }>;
     hitTestOverlay(x: number, y: number): ApiResult<Array<Record<string, unknown>>>;
+    onFrame(callback: (event?: unknown) => void): Disposable;
+  };
+  media: {
+    getInfo(): ApiResult<Record<string, unknown>>;
+    list(): ApiResult<Array<Record<string, unknown>>>;
+    listMedia(): ApiResult<Array<Record<string, unknown>>>;
+    getAssetPath(id: string): ApiResult<string>;
+    getMediaAssetPath(id: string): ApiResult<string>;
+  };
+  theme: {
+    getCurrent(): ApiResult<string>;
+    listAvailable(): ApiResult<string[]>;
+    getColor(role?: string): ApiResult<string | Record<string, unknown>>;
+    setCurrent(theme: string): ApiResult;
+  };
+  backup: {
+    list(): ApiResult<Array<Record<string, unknown>>>;
+    listBackups(): ApiResult<Array<Record<string, unknown>>>;
+    createBackup(options?: Record<string, unknown>): ApiResult<Record<string, unknown>>;
+    readBackup(id: string): ApiResult<Record<string, unknown>>;
+    removeBackup(id: string): ApiResult;
+  };
+  shortcuts: {
+    list(): ApiResult<Record<string, unknown>>;
+    listShortcuts(): ApiResult<Record<string, unknown>>;
+    getKeybinding(command: string): ApiResult<string>;
+    registerShortcut(command: string, keybinding: string): ApiResult;
   };
   ui: {
+    registerSidebarView(view: Record<string, unknown>): Disposable;
     registerBottomTabView(view: Record<string, unknown>): Disposable;
+    registerPreferencesPage(page: Record<string, unknown>): Disposable;
     registerToolbarButton(button: Record<string, unknown>): Disposable;
+    registerPetOverlay(overlay: PetOverlayOptions): ApiResult<Record<string, unknown>>;
     getContributions(): ApiResult<Array<Record<string, unknown>>>;
     getViews(): ApiResult<Array<Record<string, unknown>>>;
     unregisterView(id: string, ownerId?: string): ApiResult<{ removed: number }>;
     refreshViews(): ApiResult<{ count: number }>;
     renderDeclarativeView(view: Record<string, unknown>): ApiResult;
+    renderSidebarView(view: Record<string, unknown>): ApiResult;
     renderBottomTabView(view: Record<string, unknown>): ApiResult;
+    renderPreferencesPage(page: Record<string, unknown>): ApiResult;
     renderToolbarButton(button: Record<string, unknown>): ApiResult;
+  };
+  export: {
+    getPresets(): ApiResult<Array<Record<string, unknown>>>;
+    registerPreset(preset: Record<string, unknown>): ApiResult<Record<string, unknown>>;
+    registerHook(hook: Record<string, unknown>): Disposable;
+    registerBeforeExportHook(hook: Record<string, unknown>): Disposable;
+    registerAfterExportHook(hook: Record<string, unknown>): Disposable;
+    registerCoverTemplate(templateSpec: Record<string, unknown>): Disposable;
+    registerBatchJobProvider(provider: Record<string, unknown>): Disposable;
+    startVideoExport(): ApiResult<Record<string, unknown>>;
+    startCoverExport(): ApiResult<Record<string, unknown>>;
   };
   logs: {
     append(channel: string, message: string): ApiResult;

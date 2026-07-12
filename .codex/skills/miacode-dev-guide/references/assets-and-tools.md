@@ -34,6 +34,8 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
   - `resources/extensions/miacode-extension.schema.json` documents the VSCode-like v1 manifest format
   - `resources/extensions/README.md` is copied into release packages so users can hand the extension format, contribution-point format, coding notes, and AI prompt template to an assistant when creating local extensions
   - `src/extensions/EmbeddedExtensionRuntime.*` runs command extensions inside MiaCode with Qt `QJSEngine`; user machines do not need Node.js for command extensions
+  - `src/extensions/ExtensionOpenBridge.*` owns the Open Bridge facade-object registry and the experimental raw target annotations for raw internal objects
+  - Controlled pet overlays registered through `miacode.ui.registerPetOverlay` load `image`, `src`, `resource`, `frames`, and `sprite.frames` only after the host canonicalizes them inside the calling extension directory
   - `templates/extensions/hello-world` is the local starter extension
   - `packages/miacode-extension-api` contains the local TypeScript declarations for `global.miacode`
   - `tools/extensions/validate-extension.mjs` validates local extension manifests against the shared permission enum from `resources/extensions/miacode-extension.schema.json` and checks language-pack translation files from Node

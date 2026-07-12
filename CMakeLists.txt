@@ -564,6 +564,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/quick/TimelineQuickOverlayLayer.cpp
     src/extensions/ExtensionManifest.h
     src/extensions/ExtensionManifest.cpp
+    src/extensions/ExtensionOpenBridge.h
+    src/extensions/ExtensionOpenBridge.cpp
     src/extensions/EmbeddedExtensionRuntime.h
     src/extensions/EmbeddedExtensionRuntime.cpp
     src/extensions/ExtensionManager.h
@@ -1052,6 +1054,24 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/extensions/ExtensionManifest.h
             src/extensions/ExtensionManifest.cpp
         LIBS Qt6::Core
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(extension_open_bridge_spec TEST
+        SOURCES
+            src/tools/extensions/ExtensionOpenBridgeSpec.cpp
+            src/extensions/ExtensionOpenBridge.h
+            src/extensions/ExtensionOpenBridge.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(extension_runtime_spec TEST
+        SOURCES
+            src/tools/extensions/ExtensionRuntimeSpec.cpp
+            src/extensions/EmbeddedExtensionRuntime.h
+            src/extensions/EmbeddedExtensionRuntime.cpp
+        LIBS Qt6::Core Qt6::Qml
         INCLUDES src
     )
 

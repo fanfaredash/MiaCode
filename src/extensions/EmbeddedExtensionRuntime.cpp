@@ -1,5 +1,6 @@
 #include "EmbeddedExtensionRuntime.h"
 
+#include <QDateTime>
 #include <QFile>
 #include <QJsonDocument>
 #include <QTextStream>
@@ -15,6 +16,7 @@ public:
         Window,
         Workspace,
         Diagnostics,
+        Events,
         App,
         Document,
         Editor,
@@ -25,15 +27,21 @@ public:
         Export,
         FileSystem,
         Resources,
+        Media,
         Network,
         Settings,
+        Theme,
+        Backup,
+        Shortcuts,
         Extensions,
         Ui,
         Tasks,
         Logs,
         Api,
         Objects,
+        Open,
         Experimental,
+        DevTools,
         Context,
     };
 
@@ -109,12 +117,20 @@ public:
 
     Q_INVOKABLE QJSValue getInfo()
     {
+        if (kind_ == Kind::Media) {
+            return hostCall(QStringLiteral("media/getInfo"));
+        }
         return hostCall(QStringLiteral("app/getInfo"));
     }
 
     Q_INVOKABLE QJSValue openPreferences()
     {
         return hostCall(QStringLiteral("app/openPreferences"));
+    }
+
+    Q_INVOKABLE QJSValue openAboutDialog()
+    {
+        return hostCall(QStringLiteral("app/openAboutDialog"));
     }
 
     Q_INVOKABLE QJSValue reloadExtensions()
@@ -360,6 +376,36 @@ public:
         return hostCall(QStringLiteral("editor/replaceRange"), params);
     }
 
+    Q_INVOKABLE QJSValue undo()
+    {
+        return callOpenBridge(QStringLiteral("editor"), QStringLiteral("undo"));
+    }
+
+    Q_INVOKABLE QJSValue redo()
+    {
+        return callOpenBridge(QStringLiteral("editor"), QStringLiteral("redo"));
+    }
+
+    Q_INVOKABLE QJSValue cut()
+    {
+        return callOpenBridge(QStringLiteral("editor"), QStringLiteral("cut"));
+    }
+
+    Q_INVOKABLE QJSValue copy()
+    {
+        return callOpenBridge(QStringLiteral("editor"), QStringLiteral("copy"));
+    }
+
+    Q_INVOKABLE QJSValue paste()
+    {
+        return callOpenBridge(QStringLiteral("editor"), QStringLiteral("paste"));
+    }
+
+    Q_INVOKABLE QJSValue selectAll()
+    {
+        return callOpenBridge(QStringLiteral("editor"), QStringLiteral("selectAll"));
+    }
+
     Q_INVOKABLE QJSValue showHover(const QJSValue& range, const QString& markdown)
     {
         QJsonObject params = runtime_->scriptValueToJson(range);
@@ -592,6 +638,11 @@ public:
         return registerContribution(QStringLiteral("export/afterHook"), hook);
     }
 
+    Q_INVOKABLE QJSValue registerHook(const QJSValue& hook)
+    {
+        return registerContribution(QStringLiteral("export/hook"), hook);
+    }
+
     Q_INVOKABLE QJSValue registerCoverTemplate(const QJSValue& templateSpec)
     {
         return registerContribution(QStringLiteral("export/coverTemplate"), templateSpec);
@@ -637,6 +688,16 @@ public:
         return hostCall(QStringLiteral("resources/setAssetPath"), QJsonObject{{QStringLiteral("id"), id}, {QStringLiteral("path"), path}});
     }
 
+    Q_INVOKABLE QJSValue listMedia()
+    {
+        return hostCall(QStringLiteral("media/list"));
+    }
+
+    Q_INVOKABLE QJSValue getMediaAssetPath(const QString& id)
+    {
+        return hostCall(QStringLiteral("media/getAssetPath"), QJsonObject{{QStringLiteral("id"), id}});
+    }
+
     Q_INVOKABLE QJSValue fetch(const QString& url, const QJSValue& options = {})
     {
         QJsonObject params = runtime_->scriptValueToJson(options);
@@ -660,6 +721,64 @@ public:
     Q_INVOKABLE QJSValue set(const QString& key, const QJSValue& value)
     {
         return hostCall(QStringLiteral("settings/set"), QJsonObject{{QStringLiteral("key"), key}, {QStringLiteral("value"), QJsonValue::fromVariant(value.toVariant())}});
+    }
+
+    Q_INVOKABLE QJSValue getCurrent()
+    {
+        return hostCall(QStringLiteral("theme/getCurrent"));
+    }
+
+    Q_INVOKABLE QJSValue listAvailable()
+    {
+        return hostCall(QStringLiteral("theme/listAvailable"));
+    }
+
+    Q_INVOKABLE QJSValue getColor(const QString& role = {})
+    {
+        return hostCall(QStringLiteral("theme/getColor"), QJsonObject{{QStringLiteral("role"), role}});
+    }
+
+    Q_INVOKABLE QJSValue setCurrent(const QString& theme)
+    {
+        return hostCall(QStringLiteral("theme/setCurrent"), QJsonObject{{QStringLiteral("theme"), theme}});
+    }
+
+    Q_INVOKABLE QJSValue listBackups()
+    {
+        return hostCall(QStringLiteral("backup/list"));
+    }
+
+    Q_INVOKABLE QJSValue createBackup(const QJSValue& options = {})
+    {
+        return hostCall(QStringLiteral("backup/create"), runtime_->scriptValueToJson(options));
+    }
+
+    Q_INVOKABLE QJSValue readBackup(const QString& id)
+    {
+        return hostCall(QStringLiteral("backup/read"), QJsonObject{{QStringLiteral("id"), id}});
+    }
+
+    Q_INVOKABLE QJSValue removeBackup(const QString& id)
+    {
+        return hostCall(QStringLiteral("backup/remove"), QJsonObject{{QStringLiteral("id"), id}});
+    }
+
+    Q_INVOKABLE QJSValue listShortcuts()
+    {
+        return hostCall(QStringLiteral("shortcuts/list"));
+    }
+
+    Q_INVOKABLE QJSValue getKeybinding(const QString& command)
+    {
+        return hostCall(QStringLiteral("shortcuts/getKeybinding"), QJsonObject{{QStringLiteral("command"), command}});
+    }
+
+    Q_INVOKABLE QJSValue registerShortcut(const QString& command, const QString& keybinding)
+    {
+        return hostCall(QStringLiteral("shortcuts/register"), QJsonObject{
+            {QStringLiteral("command"), command},
+            {QStringLiteral("keybinding"), keybinding},
+        });
     }
 
     Q_INVOKABLE QJSValue all()
@@ -710,6 +829,11 @@ public:
     Q_INVOKABLE QJSValue registerToolbarButton(const QJSValue& button)
     {
         return registerContribution(QStringLiteral("ui/toolbarButton"), button);
+    }
+
+    Q_INVOKABLE QJSValue registerPetOverlay(const QJSValue& overlay)
+    {
+        return hostCall(QStringLiteral("ui/registerPetOverlay"), runtime_->scriptValueToJson(overlay));
     }
 
     Q_INVOKABLE QJSValue getContributions()
@@ -797,6 +921,18 @@ public:
 
     Q_INVOKABLE QJSValue list()
     {
+        if (kind_ == Kind::Media) {
+            return hostCall(QStringLiteral("media/list"));
+        }
+        if (kind_ == Kind::Backup) {
+            return hostCall(QStringLiteral("backup/list"));
+        }
+        if (kind_ == Kind::Shortcuts) {
+            return hostCall(QStringLiteral("shortcuts/list"));
+        }
+        if (kind_ == Kind::Open) {
+            return hostCall(QStringLiteral("open/list"));
+        }
         if (kind_ == Kind::Objects) {
             return hostCall(QStringLiteral("objects/list"));
         }
@@ -810,6 +946,9 @@ public:
 
     Q_INVOKABLE QJSValue describe(const QString& id)
     {
+        if (kind_ == Kind::Open) {
+            return hostCall(QStringLiteral("open/describe"), QJsonObject{{QStringLiteral("id"), id}});
+        }
         if (kind_ == Kind::Objects) {
             return hostCall(QStringLiteral("objects/describe"), QJsonObject{{QStringLiteral("id"), id}});
         }
@@ -823,6 +962,12 @@ public:
 
     Q_INVOKABLE QJSValue call(const QString& id, const QJSValue& params = {}, const QJSValue& objectParams = {})
     {
+        if (kind_ == Kind::Open) {
+            QJsonObject object = runtime_->scriptValueToJson(objectParams);
+            object.insert(QStringLiteral("id"), id);
+            object.insert(QStringLiteral("method"), params.toString());
+            return hostCall(QStringLiteral("open/call"), object);
+        }
         if (kind_ == Kind::Objects) {
             QJsonObject object = runtime_->scriptValueToJson(objectParams);
             object.insert(QStringLiteral("id"), id);
@@ -861,6 +1006,53 @@ public:
         return hostCall(QStringLiteral("api/request"), runtime_->scriptValueToJson(request));
     }
 
+    Q_INVOKABLE QJSValue snapshot()
+    {
+        if (kind_ == Kind::DevTools) {
+            return hostCall(QStringLiteral("devtools/snapshot"));
+        }
+        return QJSValue();
+    }
+
+    Q_INVOKABLE QJSValue diagnose(const QJSValue& target)
+    {
+        if (kind_ != Kind::DevTools || runtime_ == nullptr) {
+            return QJSValue();
+        }
+        QJsonObject params;
+        if (target.isString()) {
+            const QString value = target.toString();
+            params.insert(value.contains(QLatin1Char('/')) ? QStringLiteral("method") : QStringLiteral("id"), value);
+        } else {
+            params = runtime_->scriptValueToJson(target);
+        }
+        return hostCall(QStringLiteral("devtools/diagnose"), params);
+    }
+
+    Q_INVOKABLE QJSValue recentCalls()
+    {
+        if (kind_ == Kind::DevTools) {
+            return hostCall(QStringLiteral("devtools/recentCalls"));
+        }
+        return QJSValue();
+    }
+
+    Q_INVOKABLE QJSValue forbiddenTargets()
+    {
+        if (kind_ == Kind::Open) {
+            return hostCall(QStringLiteral("open/forbiddenTargets"));
+        }
+        return QJSValue();
+    }
+
+    Q_INVOKABLE QJSValue describeForbiddenTarget(const QString& id)
+    {
+        if (kind_ == Kind::Open) {
+            return hostCall(QStringLiteral("open/describeForbiddenTarget"), QJsonObject{{QStringLiteral("id"), id}});
+        }
+        return QJSValue();
+    }
+
     Q_INVOKABLE QJSValue log(const QString& message)
     {
         if (kind_ != Kind::Context || runtime_ == nullptr) {
@@ -893,6 +1085,15 @@ private:
         return runtime_->jsonToScriptValue(runtime_->requestHost(method, params));
     }
 
+    QJSValue callOpenBridge(const QString& objectId, const QString& method, const QJsonObject& args = {})
+    {
+        return hostCall(QStringLiteral("open/call"), QJsonObject{
+            {QStringLiteral("object"), objectId},
+            {QStringLiteral("method"), method},
+            {QStringLiteral("args"), args},
+        });
+    }
+
     QJSValue registerContribution(const QString& kind, const QJSValue& contribution)
     {
         QJsonObject params = runtime_->scriptValueToJson(contribution);
@@ -902,7 +1103,9 @@ private:
 
     QJSValue registerCallbackContribution(const QString& kind, const QJSValue& callback)
     {
-        Q_UNUSED(callback);
+        if (runtime_ != nullptr) {
+            runtime_->registerEventCallback(kind, callback);
+        }
         return hostCall(QStringLiteral("events/register"), QJsonObject{{QStringLiteral("kind"), kind}});
     }
 
@@ -918,6 +1121,7 @@ EmbeddedExtensionRuntime::EmbeddedExtensionRuntime(QObject* parent)
     auto* window = new BridgeObject(this, BridgeObject::Kind::Window);
     auto* workspace = new BridgeObject(this, BridgeObject::Kind::Workspace);
     auto* diagnostics = new BridgeObject(this, BridgeObject::Kind::Diagnostics);
+    auto* events = new BridgeObject(this, BridgeObject::Kind::Events);
     auto* app = new BridgeObject(this, BridgeObject::Kind::App);
     auto* document = new BridgeObject(this, BridgeObject::Kind::Document);
     auto* editor = new BridgeObject(this, BridgeObject::Kind::Editor);
@@ -928,21 +1132,28 @@ EmbeddedExtensionRuntime::EmbeddedExtensionRuntime(QObject* parent)
     auto* exportApi = new BridgeObject(this, BridgeObject::Kind::Export);
     auto* fs = new BridgeObject(this, BridgeObject::Kind::FileSystem);
     auto* resources = new BridgeObject(this, BridgeObject::Kind::Resources);
+    auto* media = new BridgeObject(this, BridgeObject::Kind::Media);
     auto* net = new BridgeObject(this, BridgeObject::Kind::Network);
     auto* settings = new BridgeObject(this, BridgeObject::Kind::Settings);
+    auto* theme = new BridgeObject(this, BridgeObject::Kind::Theme);
+    auto* backup = new BridgeObject(this, BridgeObject::Kind::Backup);
+    auto* shortcuts = new BridgeObject(this, BridgeObject::Kind::Shortcuts);
     auto* extensions = new BridgeObject(this, BridgeObject::Kind::Extensions);
     auto* ui = new BridgeObject(this, BridgeObject::Kind::Ui);
     auto* tasks = new BridgeObject(this, BridgeObject::Kind::Tasks);
     auto* logs = new BridgeObject(this, BridgeObject::Kind::Logs);
     auto* registryApi = new BridgeObject(this, BridgeObject::Kind::Api);
     auto* objects = new BridgeObject(this, BridgeObject::Kind::Objects);
+    auto* open = new BridgeObject(this, BridgeObject::Kind::Open);
     auto* experimental = new BridgeObject(this, BridgeObject::Kind::Experimental);
+    auto* devtools = new BridgeObject(this, BridgeObject::Kind::DevTools);
 
     QJSValue api = engine_.newObject();
     api.setProperty(QStringLiteral("commands"), engine_.newQObject(commands));
     api.setProperty(QStringLiteral("window"), engine_.newQObject(window));
     api.setProperty(QStringLiteral("workspace"), engine_.newQObject(workspace));
     api.setProperty(QStringLiteral("diagnostics"), engine_.newQObject(diagnostics));
+    api.setProperty(QStringLiteral("events"), engine_.newQObject(events));
     api.setProperty(QStringLiteral("app"), engine_.newQObject(app));
     api.setProperty(QStringLiteral("document"), engine_.newQObject(document));
     api.setProperty(QStringLiteral("editor"), engine_.newQObject(editor));
@@ -953,15 +1164,21 @@ EmbeddedExtensionRuntime::EmbeddedExtensionRuntime(QObject* parent)
     api.setProperty(QStringLiteral("export"), engine_.newQObject(exportApi));
     api.setProperty(QStringLiteral("fs"), engine_.newQObject(fs));
     api.setProperty(QStringLiteral("resources"), engine_.newQObject(resources));
+    api.setProperty(QStringLiteral("media"), engine_.newQObject(media));
     api.setProperty(QStringLiteral("net"), engine_.newQObject(net));
     api.setProperty(QStringLiteral("settings"), engine_.newQObject(settings));
+    api.setProperty(QStringLiteral("theme"), engine_.newQObject(theme));
+    api.setProperty(QStringLiteral("backup"), engine_.newQObject(backup));
+    api.setProperty(QStringLiteral("shortcuts"), engine_.newQObject(shortcuts));
     api.setProperty(QStringLiteral("extensions"), engine_.newQObject(extensions));
     api.setProperty(QStringLiteral("ui"), engine_.newQObject(ui));
     api.setProperty(QStringLiteral("tasks"), engine_.newQObject(tasks));
     api.setProperty(QStringLiteral("logs"), engine_.newQObject(logs));
     api.setProperty(QStringLiteral("api"), engine_.newQObject(registryApi));
     api.setProperty(QStringLiteral("objects"), engine_.newQObject(objects));
+    api.setProperty(QStringLiteral("open"), engine_.newQObject(open));
     api.setProperty(QStringLiteral("experimental"), engine_.newQObject(experimental));
+    api.setProperty(QStringLiteral("devtools"), engine_.newQObject(devtools));
     engine_.globalObject().setProperty(QStringLiteral("miacode"), api);
 }
 
@@ -1014,6 +1231,7 @@ void EmbeddedExtensionRuntime::stop()
     }
     deactivateExtensions();
     commandCallbacks_.clear();
+    eventCallbacksByKind_.clear();
     extensionById_.clear();
     commandOwnerById_.clear();
     loadedExports_.clear();
@@ -1077,6 +1295,49 @@ bool EmbeddedExtensionRuntime::executeCommand(const QString& command, QString* e
     return true;
 }
 
+int EmbeddedExtensionRuntime::registeredEventCallbackCount(const QString& kind) const
+{
+    if (!kind.trimmed().isEmpty()) {
+        return eventCallbacksByKind_.value(kind).size();
+    }
+    int count = 0;
+    for (auto it = eventCallbacksByKind_.constBegin(); it != eventCallbacksByKind_.constEnd(); ++it) {
+        count += it.value().size();
+    }
+    return count;
+}
+
+void EmbeddedExtensionRuntime::dispatchEvent(const QString& kind, const QJsonObject& payload)
+{
+    if (!running_ || kind.trimmed().isEmpty()) {
+        return;
+    }
+    const QVector<EventCallback> callbacks = eventCallbacksByKind_.value(kind);
+    if (callbacks.isEmpty()) {
+        return;
+    }
+    QJsonObject event = payload;
+    event.insert(QStringLiteral("kind"), kind);
+    if (!event.contains(QStringLiteral("timestamp"))) {
+        event.insert(QStringLiteral("timestamp"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
+    }
+    const QJSValue eventValue = jsonToScriptValue(event);
+    const QString previousCallExtensionId = currentCallExtensionId_;
+    for (const EventCallback& record : callbacks) {
+        QJSValue callback = record.callback;
+        if (!callback.isCallable()) {
+            continue;
+        }
+        currentCallExtensionId_ = record.extensionId;
+        QJSValue result = callback.call(QJSValueList{eventValue});
+        if (result.isError()) {
+            emit runtimeErrorMessage(QStringLiteral("Event callback '%1' failed for %2: %3")
+                                         .arg(kind, record.extensionId, describeError(result)));
+        }
+    }
+    currentCallExtensionId_ = previousCallExtensionId;
+}
+
 QJsonObject EmbeddedExtensionRuntime::requestHost(const QString& method, const QJsonObject& params)
 {
     if (!hostRequestHandler_) {
@@ -1126,6 +1387,16 @@ void EmbeddedExtensionRuntime::registerCommand(const QString& command, const QJS
     emit extensionCommandRegistered(command);
 }
 
+void EmbeddedExtensionRuntime::registerEventCallback(const QString& kind, const QJSValue& callback)
+{
+    if (kind.trimmed().isEmpty() || !callback.isCallable()) {
+        emit runtimeErrorMessage(QStringLiteral("events.register requires an event kind and callback."));
+        return;
+    }
+    const QString owner = currentCallExtensionId_.isEmpty() ? currentExtensionId_ : currentCallExtensionId_;
+    eventCallbacksByKind_[kind].append(EventCallback{owner, callback});
+}
+
 bool EmbeddedExtensionRuntime::activateExtension(const QJsonObject& extension, QString* errorMessage)
 {
     const QString qualifiedId = extension.value(QStringLiteral("qualifiedId")).toString();
@@ -1152,7 +1423,9 @@ bool EmbeddedExtensionRuntime::activateExtension(const QJsonObject& extension, Q
         engine_.newQObject(new BridgeObject(this, BridgeObject::Kind::Context, qualifiedId)));
     context.setProperty(
         QStringLiteral("log"),
-        engine_.evaluate(QStringLiteral("(function(message){ return __miacode_context_bridge.log(String(message)); })")));
+        engine_.evaluate(QStringLiteral(
+            "(function(bridge){ return function(message){ return bridge.log(String(message)); }; })"
+            "(__miacode_context_bridge)")));
 
     engine_.globalObject().setProperty(QStringLiteral("__miacode_module"), module);
     engine_.globalObject().setProperty(QStringLiteral("__miacode_context"), context);
@@ -1170,9 +1443,9 @@ bool EmbeddedExtensionRuntime::activateExtension(const QJsonObject& extension, Q
     currentExtensionId_.clear();
     engine_.globalObject().deleteProperty(QStringLiteral("__miacode_module"));
     engine_.globalObject().deleteProperty(QStringLiteral("__miacode_context"));
-    engine_.globalObject().deleteProperty(QStringLiteral("__miacode_context_bridge"));
 
     if (exports.isError()) {
+        engine_.globalObject().deleteProperty(QStringLiteral("__miacode_context_bridge"));
         if (errorMessage != nullptr) {
             *errorMessage = QStringLiteral("Activation load failed for %1: %2").arg(qualifiedId, describeError(exports));
         }
@@ -1187,12 +1460,14 @@ bool EmbeddedExtensionRuntime::activateExtension(const QJsonObject& extension, Q
         QJSValue result = activate.callWithInstance(exports, QJSValueList{context});
         currentExtensionId_.clear();
         if (result.isError()) {
+            engine_.globalObject().deleteProperty(QStringLiteral("__miacode_context_bridge"));
             if (errorMessage != nullptr) {
                 *errorMessage = QStringLiteral("Activation failed for %1: %2").arg(qualifiedId, describeError(result));
             }
             return false;
         }
     }
+    engine_.globalObject().deleteProperty(QStringLiteral("__miacode_context_bridge"));
     requestHost(QStringLiteral("log"), QJsonObject{{QStringLiteral("message"), QStringLiteral("Activated %1").arg(qualifiedId)}});
     return true;
 }
@@ -1215,7 +1490,14 @@ void EmbeddedExtensionRuntime::deactivateExtensions()
 
 QString EmbeddedExtensionRuntime::describeError(const QJSValue& value) const
 {
+    const QString message = value.property(QStringLiteral("message")).toString();
     const QString stack = value.property(QStringLiteral("stack")).toString();
+    if (!message.isEmpty() && !stack.isEmpty()) {
+        return QStringLiteral("%1\n%2").arg(message, stack);
+    }
+    if (!message.isEmpty()) {
+        return message;
+    }
     if (!stack.isEmpty()) {
         return stack;
     }
