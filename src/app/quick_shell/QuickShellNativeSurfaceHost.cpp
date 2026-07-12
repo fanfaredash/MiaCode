@@ -198,17 +198,15 @@ void applyBridgeSurfaceBaseStyle(QWidget* surface)
         return;
     }
     const UiTheme::Colors& colors = UiTheme::colors();
+    const QColor background = colors.windowBg;
     QPalette palette = surface->palette();
-    palette.setColor(QPalette::Window, colors.windowBg);
-    surface->setPalette(palette);
-    surface->setAutoFillBackground(true);
-    surface->setStyleSheet(QStringLiteral(
-        "QWidget#%1 {"
-        " background: %2;"
-        " border: none;"
-        "}"
-    )
-        .arg(surface->objectName(), colors.windowBg.name(QColor::HexRgb)));
+    if (palette.color(QPalette::Window) != background) {
+        palette.setColor(QPalette::Window, background);
+        surface->setPalette(palette);
+    }
+    if (!surface->autoFillBackground()) {
+        surface->setAutoFillBackground(true);
+    }
 }
 
 }  // namespace

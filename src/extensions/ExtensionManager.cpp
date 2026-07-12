@@ -109,12 +109,6 @@ void ExtensionManager::initialize(QMenuBar* menuBar, QMenu* toolsMenu, QMenu* he
         scheduleRefresh();
     });
     QDir().mkpath(userExtensionsDirectory());
-    discoverExtensions();
-    rebuildMenuContributions();
-    UiText::reloadExtensionLanguagePacks();
-    UiText::ensurePreferredLanguageAvailable();
-    restartRuntime();
-    rebuildFilesystemWatchers();
 }
 
 void ExtensionManager::restartRuntime()
