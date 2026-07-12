@@ -116,6 +116,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/export/MainWindow.ExportWorker.cpp
     src/app/mainwindow/sections/export/MainWindow.PackZip.cpp
     src/app/mainwindow/sections/frame/MainWindow.BootstrapAndMenus.cpp
+    src/app/mainwindow/sections/frame/MainWindow.ExtensionHostRequests.cpp
     src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp
     src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp
     src/app/mainwindow/sections/preferences/MainWindow.PreferencesDialog.cpp

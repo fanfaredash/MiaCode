@@ -545,6 +545,7 @@ private:
     QString currentValidationIgnoreScopeKey() const;
     bool isIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey) const;
     void setIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey, bool ignored);
+    QJsonObject handleExtensionHostRequest(const QString& method, const QJsonObject& params);
     void loadProjectValidationPreferences();
     void saveProjectValidationPreferences(const QString& chartFilePath = QString()) const;
     void applyIgnoreMuriIssuePrompts(bool enabled, bool persistPreference);

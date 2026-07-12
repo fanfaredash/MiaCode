@@ -9,6 +9,7 @@ Rectangle {
     property var controller: null
     property var paletteMap: ({})
     property var metricsMap: ({})
+    property bool startupContentReady: true
 
     Components.Theme {
         id: shellTheme
@@ -31,7 +32,7 @@ Rectangle {
     }
 
     function syncNativeBottomTabsSurface() {
-        if (!controller || !usesNativeBottomTabsSurface())
+        if (!controller || !startupContentReady || !usesNativeBottomTabsSurface())
             return
         controller.syncBottomTabsSurfaceSize(contentHost.width, contentHost.height)
     }
@@ -307,7 +308,7 @@ Rectangle {
 
             WindowContainer {
                 anchors.fill: parent
-                visible: root.usesNativeBottomTabsSurface()
+                visible: root.startupContentReady && root.usesNativeBottomTabsSurface()
                 window: controller ? controller.bottomTabsWindow : null
                 onVisibleChanged: {
                     if (visible)

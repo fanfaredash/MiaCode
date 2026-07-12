@@ -36,7 +36,8 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
   - `src/extensions/EmbeddedExtensionRuntime.*` runs command extensions inside MiaCode with Qt `QJSEngine`; user machines do not need Node.js for command extensions
   - `templates/extensions/hello-world` is the local starter extension
   - `packages/miacode-extension-api` contains the local TypeScript declarations for `global.miacode`
-  - `tools/extensions/validate-extension.mjs` validates local extension manifests and language-pack translation files from Node
+  - `tools/extensions/validate-extension.mjs` validates local extension manifests against the shared permission enum from `resources/extensions/miacode-extension.schema.json` and checks language-pack translation files from Node
+  - `tools/extensions/check-extension-consistency.mjs` verifies that the extension schema, C++ loader permission list, public registry statuses, blocked API set, README, spec, and TypeScript declarations stay aligned
 
 ## 2. Runtime File Conventions Near A Chart
 

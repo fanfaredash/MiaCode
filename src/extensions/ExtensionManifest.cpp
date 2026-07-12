@@ -122,6 +122,7 @@ bool isSupportedPermission(const QString& permission)
         QStringLiteral("native.unsafe"),
         QStringLiteral("internal.inspect"),
         QStringLiteral("internal.call"),
+        QStringLiteral("experimental.invoke"),
         QStringLiteral("internal.raw"),
         QStringLiteral("renderer.raw"),
         QStringLiteral("export.raw"),

@@ -32,6 +32,8 @@ public:
         Tasks,
         Logs,
         Api,
+        Objects,
+        Experimental,
         Context,
     };
 
@@ -57,6 +59,14 @@ public:
         return hostCall(QStringLiteral("commands/execute"), QJsonObject{
             {QStringLiteral("command"), command},
             {QStringLiteral("args"), QJsonValue::fromVariant(args.toVariant())},
+        });
+    }
+
+    Q_INVOKABLE QJSValue executeInternal(const QString& command, const QJSValue& args = {})
+    {
+        return hostCall(QStringLiteral("commands/executeInternal"), QJsonObject{
+            {QStringLiteral("command"), command},
+            {QStringLiteral("args"), runtime_->scriptValueToJson(args)},
         });
     }
 
@@ -238,6 +248,20 @@ public:
     Q_INVOKABLE QJSValue replaceActiveDifficultyText(const QString& text)
     {
         return hostCall(QStringLiteral("document/replaceActiveDifficultyText"), QJsonObject{{QStringLiteral("text"), text}});
+    }
+
+    Q_INVOKABLE QJSValue query(const QJSValue& selector = {})
+    {
+        return hostCall(QStringLiteral("document/query"), runtime_->scriptValueToJson(selector));
+    }
+
+    Q_INVOKABLE QJSValue edit(const QJSValue& operations)
+    {
+        QJsonObject params = runtime_->scriptValueToJson(operations);
+        if (params.isEmpty() && operations.isArray()) {
+            params.insert(QStringLiteral("ops"), QJsonArray::fromVariantList(operations.toVariant().toList()));
+        }
+        return hostCall(QStringLiteral("document/edit"), params);
     }
 
     Q_INVOKABLE QJSValue getParsedNoteMarkers()
@@ -495,9 +519,42 @@ public:
         return hostCall(QStringLiteral("preview/addOverlay"), runtime_->scriptValueToJson(overlay));
     }
 
+    Q_INVOKABLE QJSValue updateOverlay(const QString& id, const QJSValue& patch)
+    {
+        QJsonObject params = runtime_->scriptValueToJson(patch);
+        params.insert(QStringLiteral("id"), id);
+        return hostCall(QStringLiteral("preview/updateOverlay"), params);
+    }
+
+    Q_INVOKABLE QJSValue removeOverlay(const QString& id = {}, const QString& ownerId = {})
+    {
+        return hostCall(QStringLiteral("preview/removeOverlay"), QJsonObject{
+            {QStringLiteral("id"), id},
+            {QStringLiteral("ownerId"), ownerId},
+        });
+    }
+
     Q_INVOKABLE QJSValue clearOverlays(const QString& ownerId = {})
     {
         return hostCall(QStringLiteral("preview/clearOverlays"), QJsonObject{{QStringLiteral("ownerId"), ownerId}});
+    }
+
+    Q_INVOKABLE QJSValue getOverlays()
+    {
+        return hostCall(QStringLiteral("preview/getOverlays"));
+    }
+
+    Q_INVOKABLE QJSValue renderOverlayLayer()
+    {
+        return hostCall(QStringLiteral("preview/renderOverlayLayer"));
+    }
+
+    Q_INVOKABLE QJSValue hitTestOverlay(double x, double y)
+    {
+        return hostCall(QStringLiteral("preview/hitTestOverlay"), QJsonObject{
+            {QStringLiteral("x"), x},
+            {QStringLiteral("y"), y},
+        });
     }
 
     Q_INVOKABLE QJSValue onFrame(const QJSValue& callback)
@@ -660,6 +717,49 @@ public:
         return hostCall(QStringLiteral("ui/getContributions"));
     }
 
+    Q_INVOKABLE QJSValue getViews()
+    {
+        return hostCall(QStringLiteral("ui/getViews"));
+    }
+
+    Q_INVOKABLE QJSValue unregisterView(const QString& id, const QString& ownerId = {})
+    {
+        return hostCall(QStringLiteral("ui/unregisterView"), QJsonObject{
+            {QStringLiteral("id"), id},
+            {QStringLiteral("ownerId"), ownerId},
+        });
+    }
+
+    Q_INVOKABLE QJSValue refreshViews()
+    {
+        return hostCall(QStringLiteral("ui/refreshViews"));
+    }
+
+    Q_INVOKABLE QJSValue renderDeclarativeView(const QJSValue& view)
+    {
+        return hostCall(QStringLiteral("ui/renderDeclarativeView"), runtime_->scriptValueToJson(view));
+    }
+
+    Q_INVOKABLE QJSValue renderSidebarView(const QJSValue& view)
+    {
+        return hostCall(QStringLiteral("ui/renderSidebarView"), runtime_->scriptValueToJson(view));
+    }
+
+    Q_INVOKABLE QJSValue renderBottomTabView(const QJSValue& view)
+    {
+        return hostCall(QStringLiteral("ui/renderBottomTabView"), runtime_->scriptValueToJson(view));
+    }
+
+    Q_INVOKABLE QJSValue renderPreferencesPage(const QJSValue& page)
+    {
+        return hostCall(QStringLiteral("ui/renderPreferencesPage"), runtime_->scriptValueToJson(page));
+    }
+
+    Q_INVOKABLE QJSValue renderToolbarButton(const QJSValue& button)
+    {
+        return hostCall(QStringLiteral("ui/renderToolbarButton"), runtime_->scriptValueToJson(button));
+    }
+
     Q_INVOKABLE QJSValue withProgress(const QJSValue& options, const QJSValue& callback)
     {
         Q_UNUSED(callback);
@@ -697,6 +797,9 @@ public:
 
     Q_INVOKABLE QJSValue list()
     {
+        if (kind_ == Kind::Objects) {
+            return hostCall(QStringLiteral("objects/list"));
+        }
         return hostCall(QStringLiteral("api/list"));
     }
 
@@ -707,6 +810,9 @@ public:
 
     Q_INVOKABLE QJSValue describe(const QString& id)
     {
+        if (kind_ == Kind::Objects) {
+            return hostCall(QStringLiteral("objects/describe"), QJsonObject{{QStringLiteral("id"), id}});
+        }
         return hostCall(QStringLiteral("api/describe"), QJsonObject{{QStringLiteral("id"), id}});
     }
 
@@ -715,8 +821,14 @@ public:
         return hostCall(QStringLiteral("api/describeNamespace"), QJsonObject{{QStringLiteral("namespace"), namespaceId}});
     }
 
-    Q_INVOKABLE QJSValue call(const QString& id, const QJSValue& params = {})
+    Q_INVOKABLE QJSValue call(const QString& id, const QJSValue& params = {}, const QJSValue& objectParams = {})
     {
+        if (kind_ == Kind::Objects) {
+            QJsonObject object = runtime_->scriptValueToJson(objectParams);
+            object.insert(QStringLiteral("id"), id);
+            object.insert(QStringLiteral("method"), params.toString());
+            return hostCall(QStringLiteral("objects/call"), object);
+        }
         QJsonObject object = runtime_->scriptValueToJson(params);
         object.insert(QStringLiteral("id"), id);
         return hostCall(QStringLiteral("api/call"), object);
@@ -724,10 +836,24 @@ public:
 
     Q_INVOKABLE QJSValue invoke(const QString& method, const QJSValue& params = {})
     {
+        if (kind_ == Kind::Experimental) {
+            QJsonObject object;
+            object.insert(QStringLiteral("id"), method);
+            object.insert(QStringLiteral("params"), runtime_->scriptValueToJson(params));
+            return hostCall(QStringLiteral("experimental/invoke"), object);
+        }
         QJsonObject object;
         object.insert(QStringLiteral("method"), method);
         object.insert(QStringLiteral("params"), runtime_->scriptValueToJson(params));
         return hostCall(QStringLiteral("api/invoke"), object);
+    }
+
+    Q_INVOKABLE QJSValue inspect(const QString& id)
+    {
+        if (kind_ == Kind::Objects) {
+            return hostCall(QStringLiteral("objects/inspect"), QJsonObject{{QStringLiteral("id"), id}});
+        }
+        return QJSValue();
     }
 
     Q_INVOKABLE QJSValue request(const QJSValue& request)
@@ -809,6 +935,8 @@ EmbeddedExtensionRuntime::EmbeddedExtensionRuntime(QObject* parent)
     auto* tasks = new BridgeObject(this, BridgeObject::Kind::Tasks);
     auto* logs = new BridgeObject(this, BridgeObject::Kind::Logs);
     auto* registryApi = new BridgeObject(this, BridgeObject::Kind::Api);
+    auto* objects = new BridgeObject(this, BridgeObject::Kind::Objects);
+    auto* experimental = new BridgeObject(this, BridgeObject::Kind::Experimental);
 
     QJSValue api = engine_.newObject();
     api.setProperty(QStringLiteral("commands"), engine_.newQObject(commands));
@@ -832,6 +960,8 @@ EmbeddedExtensionRuntime::EmbeddedExtensionRuntime(QObject* parent)
     api.setProperty(QStringLiteral("tasks"), engine_.newQObject(tasks));
     api.setProperty(QStringLiteral("logs"), engine_.newQObject(logs));
     api.setProperty(QStringLiteral("api"), engine_.newQObject(registryApi));
+    api.setProperty(QStringLiteral("objects"), engine_.newQObject(objects));
+    api.setProperty(QStringLiteral("experimental"), engine_.newQObject(experimental));
     engine_.globalObject().setProperty(QStringLiteral("miacode"), api);
 }
 
@@ -1053,7 +1183,9 @@ bool EmbeddedExtensionRuntime::activateExtension(const QJsonObject& extension, Q
 
     QJSValue activate = exports.property(QStringLiteral("activate"));
     if (activate.isCallable()) {
+        currentExtensionId_ = qualifiedId;
         QJSValue result = activate.callWithInstance(exports, QJSValueList{context});
+        currentExtensionId_.clear();
         if (result.isError()) {
             if (errorMessage != nullptr) {
                 *errorMessage = QStringLiteral("Activation failed for %1: %2").arg(qualifiedId, describeError(result));

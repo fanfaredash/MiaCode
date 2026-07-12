@@ -48,8 +48,8 @@ private:
     QWindow* createForeignWindowForSurface(QWidget* surface) const;
     void attachNativeWidgets();
     void ensureSurfaceLayouts();
-    void showAllSurfaces();
     void updateBottomTabsSpeedToastGeometry();
+    bool canShowBridgeSurfaces() const;
 
     QuickShellNativeContentProvider* contentProvider_ = nullptr;
     QuickShellStateSource* stateSource_ = nullptr;
@@ -65,5 +65,6 @@ private:
     QPropertyAnimation* bottomTabsSpeedToastOpacityAnimation_ = nullptr;
     QRect bottomTabsToastAnchorRect_;
     bool bottomTabsToastAnchorVisible_ = false;
+    bool quickShellUiReady_ = false;
     QuickShellNativeSurfaceBundle surfaceBundle_;
 };

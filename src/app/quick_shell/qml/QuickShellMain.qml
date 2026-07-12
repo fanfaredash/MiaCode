@@ -12,9 +12,9 @@ ApplicationWindow {
         color: root.tone("windowBg", "#f8fafd")
     }
 
-    property var paletteMap: ({})
-    property var metricsMap: ({})
-    property var appBackgroundMap: ({})
+    property var paletteMap: styleBridge ? styleBridge.palette : ({})
+    property var metricsMap: styleBridge ? styleBridge.metrics : ({})
+    property var appBackgroundMap: styleBridge ? styleBridge.appBackground : ({})
     property var shellController: controller
     property bool fullscreenControlsVisible: controller.previewFullscreen
     property bool fullscreenHintVisible: false
@@ -1236,10 +1236,21 @@ ApplicationWindow {
 
             WindowContainer {
                 anchors.fill: parent
+                visible: startupContentReady
                 window: controller.topChromeWindow
                 Component.onCompleted: controller.syncTopChromeSurfaceSize(width, height)
-                onWidthChanged: controller.syncTopChromeSurfaceSize(width, height)
-                onHeightChanged: controller.syncTopChromeSurfaceSize(width, height)
+                onVisibleChanged: {
+                    if (visible)
+                        controller.syncTopChromeSurfaceSize(width, height)
+                }
+                onWidthChanged: {
+                    if (visible)
+                        controller.syncTopChromeSurfaceSize(width, height)
+                }
+                onHeightChanged: {
+                    if (visible)
+                        controller.syncTopChromeSurfaceSize(width, height)
+                }
             }
         }
 
@@ -1258,10 +1269,21 @@ ApplicationWindow {
                 Layout.minimumWidth: sidebarPaneWidth()
                 Layout.maximumWidth: sidebarPaneWidth()
                 Layout.fillHeight: true
+                visible: startupContentReady
                 window: controller.sidebarWindow
                 Component.onCompleted: controller.syncSidebarSurfaceSize(width, height)
-                onWidthChanged: controller.syncSidebarSurfaceSize(width, height)
-                onHeightChanged: controller.syncSidebarSurfaceSize(width, height)
+                onVisibleChanged: {
+                    if (visible)
+                        controller.syncSidebarSurfaceSize(width, height)
+                }
+                onWidthChanged: {
+                    if (visible)
+                        controller.syncSidebarSurfaceSize(width, height)
+                }
+                onHeightChanged: {
+                    if (visible)
+                        controller.syncSidebarSurfaceSize(width, height)
+                }
             }
 
             RowLayout {
@@ -1286,10 +1308,21 @@ ApplicationWindow {
                     WindowContainer {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+                        visible: startupContentReady
                         window: controller.workspaceWindow
                         Component.onCompleted: controller.syncWorkspaceSurfaceSize(width, height)
-                        onWidthChanged: controller.syncWorkspaceSurfaceSize(width, height)
-                        onHeightChanged: controller.syncWorkspaceSurfaceSize(width, height)
+                        onVisibleChanged: {
+                            if (visible)
+                                controller.syncWorkspaceSurfaceSize(width, height)
+                        }
+                        onWidthChanged: {
+                            if (visible)
+                                controller.syncWorkspaceSurfaceSize(width, height)
+                        }
+                        onHeightChanged: {
+                            if (visible)
+                                controller.syncWorkspaceSurfaceSize(width, height)
+                        }
                     }
 
                     BottomTabsQuickHost {
@@ -1311,6 +1344,7 @@ ApplicationWindow {
                         controller: root.shellController
                         paletteMap: root.paletteMap
                         metricsMap: root.metricsMap
+                        startupContentReady: root.startupContentReady
                     }
                 }
 
@@ -1605,10 +1639,21 @@ ApplicationWindow {
 
             WindowContainer {
                 anchors.fill: parent
+                visible: startupContentReady
                 window: controller.statusWindow
                 Component.onCompleted: controller.syncStatusSurfaceSize(width, height)
-                onWidthChanged: controller.syncStatusSurfaceSize(width, height)
-                onHeightChanged: controller.syncStatusSurfaceSize(width, height)
+                onVisibleChanged: {
+                    if (visible)
+                        controller.syncStatusSurfaceSize(width, height)
+                }
+                onWidthChanged: {
+                    if (visible)
+                        controller.syncStatusSurfaceSize(width, height)
+                }
+                onHeightChanged: {
+                    if (visible)
+                        controller.syncStatusSurfaceSize(width, height)
+                }
             }
         }
     }

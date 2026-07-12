@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const root = path.resolve(process.argv[2] || ".");
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const schemaPath = path.resolve(scriptDir, "../../resources/extensions/miacode-extension.schema.json");
+const schema = JSON.parse(fs.readFileSync(schemaPath, "utf8"));
+const supportedPermissions = new Set(schema.properties.permissions.items.enum);
 const manifestPath = ["miacode-extension.json", "package.json"]
   .map((name) => path.join(root, name))
   .find((candidate) => fs.existsSync(candidate));
@@ -37,6 +42,23 @@ if (!manifest.engines || typeof manifest.engines.miacode !== "string") {
 }
 if (manifest.main && !fs.existsSync(path.resolve(root, manifest.main))) {
   fail(`main entry does not exist: ${manifest.main}`);
+}
+const permissions = manifest.permissions || [];
+if (!Array.isArray(permissions)) {
+  fail("permissions must be an array");
+}
+const seenPermissions = new Set();
+for (const permission of permissions) {
+  if (typeof permission !== "string" || !permission.trim()) {
+    fail("permissions must contain only non-empty strings");
+  }
+  if (!supportedPermissions.has(permission)) {
+    fail(`unsupported permission '${permission}'`);
+  }
+  if (seenPermissions.has(permission)) {
+    fail(`duplicate permission '${permission}'`);
+  }
+  seenPermissions.add(permission);
 }
 
 const commands = manifest.contributes?.commands || [];

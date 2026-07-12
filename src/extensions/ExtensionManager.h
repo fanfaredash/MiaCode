@@ -36,7 +36,6 @@ struct ExtensionHostCallbacks {
     std::function<bool(const QString& text, QString* error)> replaceActiveDocumentText;
     std::function<bool()> validateActiveDocument;
     std::function<QJsonObject(const QString& method, const QJsonObject& params)> mainWindowRequest;
-    std::function<bool(const QString& extensionId, const QString& permission, const QString& detail)> confirmHighRisk;
     std::function<void(const QString& severity, const QString& message)> showMessage;
     std::function<void(const QString& message)> logMessage;
 };
@@ -64,10 +63,9 @@ public:
     QStringList diagnostics() const;
     QString userExtensionsDirectory() const;
     QString extensionLogDirectory() const;
-    QString permissionSummary(const ExtensionRecord& record) const;
-    void revokeExtensionPermissionGrants(const QString& qualifiedId);
     void refreshExtensions();
     void setExtensionEnabled(const QString& qualifiedId, bool enabled);
+    bool executeExtensionCommand(const QString& command, QString* error = nullptr);
 
 private:
     void discoverExtensions();
@@ -79,10 +77,7 @@ private:
     QJsonObject handleHostRequest(const QString& method, const QJsonObject& params);
     bool ensurePermission(const QString& extensionId, const QString& method, const QJsonObject& params, QJsonObject* errorResponse);
     bool manifestDeclaresPermission(const QString& extensionId, const QString& permission) const;
-    bool isPermissionGranted(const QString& extensionId, const QString& permission) const;
-    void savePermissionGrant(const QString& extensionId, const QString& permission, bool granted);
     QString permissionForMethod(const QString& method) const;
-    QString permissionRisk(const QString& permission) const;
     void invokeCommand(const QString& command);
     ExtensionCommandContribution commandContribution(const QString& command) const;
 

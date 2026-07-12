@@ -99,6 +99,7 @@
           "native.unsafe",
           "internal.inspect",
           "internal.call",
+          "experimental.invoke",
           "internal.raw",
           "renderer.raw",
           "export.raw",
