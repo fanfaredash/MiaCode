@@ -1307,6 +1307,25 @@ int EmbeddedExtensionRuntime::registeredEventCallbackCount(const QString& kind) 
     return count;
 }
 
+QJsonArray EmbeddedExtensionRuntime::registeredEventCallbacksForDevtools() const
+{
+    QJsonArray callbacks;
+    for (auto it = eventCallbacksByKind_.constBegin(); it != eventCallbacksByKind_.constEnd(); ++it) {
+        QHash<QString, int> countsByExtension;
+        for (const EventCallback& callback : it.value()) {
+            countsByExtension[callback.extensionId] += 1;
+        }
+        for (auto countIt = countsByExtension.constBegin(); countIt != countsByExtension.constEnd(); ++countIt) {
+            callbacks.append(QJsonObject{
+                {QStringLiteral("kind"), it.key()},
+                {QStringLiteral("extensionId"), countIt.key()},
+                {QStringLiteral("count"), countIt.value()},
+            });
+        }
+    }
+    return callbacks;
+}
+
 void EmbeddedExtensionRuntime::dispatchEvent(const QString& kind, const QJsonObject& payload)
 {
     if (!running_ || kind.trimmed().isEmpty()) {

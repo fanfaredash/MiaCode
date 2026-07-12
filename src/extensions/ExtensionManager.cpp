@@ -23,6 +23,7 @@
 #include <QProcessEnvironment>
 #include <QStandardPaths>
 #include <QSysInfo>
+#include <QTextStream>
 #include <QTimer>
 #include <QUrl>
 
@@ -119,6 +120,59 @@ QString devtoolsParamsPreview(const QJsonObject& params)
             .arg(text.size() - kDevtoolsParamsPreviewMaxJsonChars);
     }
     return text;
+}
+
+QString compactJsonObject(const QJsonObject& object)
+{
+    return QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact));
+}
+
+bool jsonObjectBelongsToExtension(const QJsonObject& object, const QString& extensionId)
+{
+    if (extensionId.trimmed().isEmpty()) {
+        return false;
+    }
+    return object.value(QStringLiteral("extensionId")).toString() == extensionId
+        || object.value(QStringLiteral("ownerId")).toString() == extensionId;
+}
+
+bool isRawOrExperimentalCall(const QJsonObject& call)
+{
+    const QString method = call.value(QStringLiteral("method")).toString();
+    const QString permission = call.value(QStringLiteral("permission")).toString();
+    return method.startsWith(QStringLiteral("experimental/"))
+        || method.startsWith(QStringLiteral("renderer/raw"))
+        || method.startsWith(QStringLiteral("internal/raw"))
+        || method.startsWith(QStringLiteral("export/raw"))
+        || method.startsWith(QStringLiteral("native/"))
+        || method.startsWith(QStringLiteral("security/"))
+        || method.startsWith(QStringLiteral("updates/"))
+        || permission.contains(QStringLiteral("raw"), Qt::CaseInsensitive)
+        || permission.contains(QStringLiteral("experimental"), Qt::CaseInsensitive);
+}
+
+QJsonArray filterObjectsByExtension(const QJsonArray& values, const QString& extensionId)
+{
+    QJsonArray filtered;
+    for (const QJsonValue& value : values) {
+        const QJsonObject object = value.toObject();
+        if (jsonObjectBelongsToExtension(object, extensionId)) {
+            filtered.append(object);
+        }
+    }
+    return filtered;
+}
+
+QJsonArray filterContributionsByKindPrefix(const QJsonArray& values, const QString& prefix)
+{
+    QJsonArray filtered;
+    for (const QJsonValue& value : values) {
+        const QJsonObject object = value.toObject();
+        if (object.value(QStringLiteral("kind")).toString().startsWith(prefix)) {
+            filtered.append(object);
+        }
+    }
+    return filtered;
 }
 
 QJsonObject disabledExtensionsObject()
@@ -328,19 +382,31 @@ void ExtensionManager::restartRuntime()
     shutdown();
     const QJsonArray runtimeManifests = manifestsForRuntime();
     if (runtimeManifests.isEmpty()) {
+        appendExtensionLog(QStringLiteral("info"), QStringLiteral("extension runtime skipped"), QJsonObject{
+            {QStringLiteral("reason"), QStringLiteral("no JavaScript extensions")},
+        });
         return;
     }
+    appendExtensionLog(QStringLiteral("info"), QStringLiteral("extension runtime starting"), QJsonObject{
+        {QStringLiteral("extensionCount"), runtimeManifests.size()},
+    });
     runtime_ = std::make_unique<EmbeddedExtensionRuntime>(this);
     runtime_->setHostRequestHandler([this](const QString& method, const QJsonObject& params) {
         return handleHostRequest(method, params);
     });
     connect(runtime_.get(), &EmbeddedExtensionRuntime::runtimeLogMessage, this, [this](const QString& message) {
+        appendExtensionLog(QStringLiteral("info"), QStringLiteral("runtime log"), QJsonObject{
+            {QStringLiteral("message"), message},
+        });
         if (callbacks_.logMessage) {
             callbacks_.logMessage(QStringLiteral("extensions: %1").arg(message));
         }
     });
     connect(runtime_.get(), &EmbeddedExtensionRuntime::runtimeErrorMessage, this, [this](const QString& message) {
         diagnostics_.append(message);
+        appendExtensionLog(QStringLiteral("error"), QStringLiteral("runtime error"), QJsonObject{
+            {QStringLiteral("message"), message},
+        });
         if (callbacks_.logMessage) {
             callbacks_.logMessage(QStringLiteral("extensions: %1").arg(message));
         }
@@ -349,9 +415,16 @@ void ExtensionManager::restartRuntime()
     QString error;
     if (!runtime_->start(runtimeManifests, &error)) {
         diagnostics_.append(error);
+        appendExtensionLog(QStringLiteral("error"), QStringLiteral("runtime start failed"), QJsonObject{
+            {QStringLiteral("error"), error},
+        });
         if (callbacks_.logMessage) {
             callbacks_.logMessage(QStringLiteral("extensions: %1").arg(error));
         }
+    } else {
+        appendExtensionLog(QStringLiteral("info"), QStringLiteral("extension runtime started"), QJsonObject{
+            {QStringLiteral("extensionCount"), runtimeManifests.size()},
+        });
     }
 }
 
@@ -752,6 +825,26 @@ QString ExtensionManager::extensionLogDirectory() const
     return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("logs"));
 }
 
+void ExtensionManager::appendExtensionLog(const QString& severity, const QString& message, const QJsonObject& details) const
+{
+    const QString logRoot = extensionLogDirectory();
+    QDir().mkpath(logRoot);
+
+    QFile file(QDir(logRoot).filePath(QStringLiteral("extensions.log")));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+        return;
+    }
+
+    QTextStream stream(&file);
+    stream << QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)
+           << " [" << severity.trimmed().toUpper() << "] "
+           << message;
+    if (!details.isEmpty()) {
+        stream << " " << compactJsonObject(details);
+    }
+    stream << '\n';
+}
+
 QJsonObject ExtensionManager::devtoolsSnapshotForUi() const
 {
     return devtoolsSnapshot(QString());
@@ -770,6 +863,11 @@ void ExtensionManager::refreshExtensions()
                                   .arg(manifests_.size())
                                   .arg(diagnostics_.size()));
     }
+    appendExtensionLog(QStringLiteral("info"), QStringLiteral("extensions refreshed"), QJsonObject{
+        {QStringLiteral("enabledExtensions"), manifests_.size()},
+        {QStringLiteral("records"), records_.size()},
+        {QStringLiteral("diagnostics"), QJsonArray::fromStringList(diagnostics_)},
+    });
     if (resetLanguage && callbacks_.showMessage) {
         callbacks_.showMessage(
             QStringLiteral("warning"),
@@ -796,7 +894,12 @@ void ExtensionManager::discoverExtensions()
     const auto tryAppendManifest = [this](const QFileInfo& entry) {
         const ExtensionManifestParseResult parsed = loadExtensionManifest(entry.absoluteFilePath());
         if (!parsed.ok) {
-            diagnostics_.append(QStringLiteral("%1: %2").arg(entry.fileName(), parsed.error));
+            const QString diagnostic = QStringLiteral("%1: %2").arg(entry.fileName(), parsed.error);
+            diagnostics_.append(diagnostic);
+            appendExtensionLog(QStringLiteral("error"), QStringLiteral("manifest parse failed"), QJsonObject{
+                {QStringLiteral("sourcePath"), entry.absoluteFilePath()},
+                {QStringLiteral("diagnostic"), diagnostic},
+            });
             ExtensionRecord record;
             record.valid = false;
             record.enabled = false;
@@ -816,7 +919,13 @@ void ExtensionManager::discoverExtensions()
                 record.valid = false;
                 record.enabled = false;
                 record.diagnostic = QStringLiteral("Duplicate extension id '%1'.").arg(parsed.manifest.qualifiedId());
-                diagnostics_.append(QStringLiteral("%1: %2").arg(entry.fileName(), record.diagnostic));
+                const QString diagnostic = QStringLiteral("%1: %2").arg(entry.fileName(), record.diagnostic);
+                diagnostics_.append(diagnostic);
+                appendExtensionLog(QStringLiteral("error"), QStringLiteral("duplicate extension id"), QJsonObject{
+                    {QStringLiteral("extensionId"), parsed.manifest.qualifiedId()},
+                    {QStringLiteral("sourcePath"), entry.absoluteFilePath()},
+                    {QStringLiteral("diagnostic"), diagnostic},
+                });
                 duplicate = true;
                 break;
             }
@@ -835,7 +944,14 @@ void ExtensionManager::discoverExtensions()
                 record.enabled = false;
                 record.diagnostic = QStringLiteral("Command '%1' is already contributed by %2.")
                                         .arg(command.id, commandOwnerById_.value(command.id));
-                diagnostics_.append(QStringLiteral("%1: %2").arg(entry.fileName(), record.diagnostic));
+                const QString diagnostic = QStringLiteral("%1: %2").arg(entry.fileName(), record.diagnostic);
+                diagnostics_.append(diagnostic);
+                appendExtensionLog(QStringLiteral("error"), QStringLiteral("duplicate command contribution"), QJsonObject{
+                    {QStringLiteral("extensionId"), parsed.manifest.qualifiedId()},
+                    {QStringLiteral("command"), command.id},
+                    {QStringLiteral("sourcePath"), entry.absoluteFilePath()},
+                    {QStringLiteral("diagnostic"), diagnostic},
+                });
                 duplicate = true;
                 break;
             }
@@ -847,7 +963,14 @@ void ExtensionManager::discoverExtensions()
                 record.enabled = false;
                 record.diagnostic = QStringLiteral("Language '%1' is already contributed by %2.")
                                         .arg(language.id, languageOwnerById_.value(language.id));
-                diagnostics_.append(QStringLiteral("%1: %2").arg(entry.fileName(), record.diagnostic));
+                const QString diagnostic = QStringLiteral("%1: %2").arg(entry.fileName(), record.diagnostic);
+                diagnostics_.append(diagnostic);
+                appendExtensionLog(QStringLiteral("error"), QStringLiteral("duplicate language contribution"), QJsonObject{
+                    {QStringLiteral("extensionId"), parsed.manifest.qualifiedId()},
+                    {QStringLiteral("language"), language.id},
+                    {QStringLiteral("sourcePath"), entry.absoluteFilePath()},
+                    {QStringLiteral("diagnostic"), diagnostic},
+                });
                 duplicate = true;
                 break;
             }
@@ -1313,6 +1436,13 @@ bool ExtensionManager::ensurePermission(const QString& extensionId, const QStrin
         const QString error = QStringLiteral("%1 denied: API is blocked in the ordinary v1 extension host.")
                                   .arg(method);
         diagnostics_.append(error);
+        appendExtensionLog(QStringLiteral("warning"), QStringLiteral("API method blocked"), QJsonObject{
+            {QStringLiteral("method"), method},
+            {QStringLiteral("extensionId"), extensionId},
+            {QStringLiteral("permission"), permission},
+            {QStringLiteral("paramsPreview"), devtoolsParamsPreview(params)},
+            {QStringLiteral("error"), error},
+        });
         if (errorResponse != nullptr) {
             *errorResponse = errorObject(error);
         }
@@ -1322,14 +1452,28 @@ bool ExtensionManager::ensurePermission(const QString& extensionId, const QStrin
         const QString error = QStringLiteral("%1 denied: permission '%2' is blocked in the ordinary v1 extension host.")
                                   .arg(method, permission);
         diagnostics_.append(error);
+        appendExtensionLog(QStringLiteral("warning"), QStringLiteral("permission blocked"), QJsonObject{
+            {QStringLiteral("method"), method},
+            {QStringLiteral("extensionId"), extensionId},
+            {QStringLiteral("permission"), permission},
+            {QStringLiteral("paramsPreview"), devtoolsParamsPreview(params)},
+            {QStringLiteral("error"), error},
+        });
         if (errorResponse != nullptr) {
             *errorResponse = errorObject(error);
         }
         return false;
     }
     if (extensionId.isEmpty()) {
+        const QString error = QStringLiteral("Privileged API '%1' requires an extension context.").arg(method);
+        appendExtensionLog(QStringLiteral("warning"), QStringLiteral("permission missing extension context"), QJsonObject{
+            {QStringLiteral("method"), method},
+            {QStringLiteral("permission"), permission},
+            {QStringLiteral("paramsPreview"), devtoolsParamsPreview(params)},
+            {QStringLiteral("error"), error},
+        });
         if (errorResponse != nullptr) {
-            *errorResponse = errorObject(QStringLiteral("Privileged API '%1' requires an extension context.").arg(method));
+            *errorResponse = errorObject(error);
         }
         return false;
     }
@@ -1337,6 +1481,13 @@ bool ExtensionManager::ensurePermission(const QString& extensionId, const QStrin
         const QString error = QStringLiteral("%1 denied: extension '%2' did not declare permission '%3'.")
                                   .arg(method, extensionId, permission);
         diagnostics_.append(error);
+        appendExtensionLog(QStringLiteral("warning"), QStringLiteral("permission denied"), QJsonObject{
+            {QStringLiteral("method"), method},
+            {QStringLiteral("extensionId"), extensionId},
+            {QStringLiteral("permission"), permission},
+            {QStringLiteral("paramsPreview"), devtoolsParamsPreview(params)},
+            {QStringLiteral("error"), error},
+        });
         if (errorResponse != nullptr) {
             *errorResponse = errorObject(error);
         }
@@ -1351,6 +1502,25 @@ QJsonObject ExtensionManager::devtoolsSnapshot(const QString& extensionId) const
     for (const QJsonObject& descriptor : extensionApiRegistry()) {
         api.append(descriptor);
     }
+    QJsonArray uiContributions;
+    QJsonArray uiViews;
+    QJsonArray runtimeRegistrations;
+    if (callbacks_.mainWindowRequest) {
+        const QJsonObject contributions = callbacks_.mainWindowRequest(QStringLiteral("ui/getContributions"), QJsonObject{});
+        if (!contributions.isEmpty()) {
+            uiContributions = contributions.value(QStringLiteral("value")).toArray();
+        }
+        const QJsonObject registrations = callbacks_.mainWindowRequest(QStringLiteral("extensions/getRuntimeRegistrations"), QJsonObject{});
+        if (!registrations.isEmpty()) {
+            runtimeRegistrations = registrations.value(QStringLiteral("value")).toArray();
+        }
+        const QJsonObject views = callbacks_.mainWindowRequest(QStringLiteral("ui/getViews"), QJsonObject{});
+        if (!views.isEmpty()) {
+            uiViews = views.value(QStringLiteral("value")).toArray();
+        }
+    }
+
+    const QJsonArray eventCallbacks = runtime_ ? runtime_->registeredEventCallbacksForDevtools() : QJsonArray();
     QJsonObject value{
         {QStringLiteral("extensionId"), extensionId},
         {QStringLiteral("api"), api},
@@ -1359,30 +1529,80 @@ QJsonObject ExtensionManager::devtoolsSnapshot(const QString& extensionId) const
         {QStringLiteral("diagnostics"), QJsonArray::fromStringList(diagnostics_)},
         {QStringLiteral("recentCalls"), recentHostCalls_},
         {QStringLiteral("eventCallbackCount"), runtime_ ? runtime_->registeredEventCallbackCount() : 0},
+        {QStringLiteral("eventCallbacks"), eventCallbacks},
+        {QStringLiteral("uiContributions"), uiContributions},
+        {QStringLiteral("uiViews"), uiViews},
+        {QStringLiteral("runtimeRegistrations"), runtimeRegistrations},
+        {QStringLiteral("logPath"), QDir(extensionLogDirectory()).filePath(QStringLiteral("extensions.log"))},
     };
     QJsonArray extensions;
+    QJsonArray extensionDetails;
     for (const ExtensionRecord& record : records_) {
+        const QString recordId = record.valid ? record.manifest.qualifiedId() : record.sourcePath;
         extensions.append(QJsonObject{
-            {QStringLiteral("id"), record.valid ? record.manifest.qualifiedId() : record.sourcePath},
+            {QStringLiteral("id"), recordId},
             {QStringLiteral("name"), record.manifest.name},
             {QStringLiteral("version"), record.manifest.version},
             {QStringLiteral("enabled"), record.enabled},
             {QStringLiteral("valid"), record.valid},
+            {QStringLiteral("sourcePath"), record.sourcePath},
             {QStringLiteral("permissions"), QJsonArray::fromStringList(record.manifest.permissions)},
             {QStringLiteral("diagnostic"), record.diagnostic},
         });
+
+        QJsonArray calls;
+        QJsonArray errors;
+        QJsonArray rawCalls;
+        for (const QJsonValue& callValue : recentHostCalls_) {
+            const QJsonObject call = callValue.toObject();
+            if (call.value(QStringLiteral("extensionId")).toString() != recordId) {
+                continue;
+            }
+            calls.append(call);
+            if (!call.value(QStringLiteral("ok")).toBool(true)) {
+                errors.append(call);
+            }
+            if (isRawOrExperimentalCall(call)) {
+                rawCalls.append(call);
+            }
+        }
+
+        QJsonArray detailDiagnostics;
+        if (!record.diagnostic.trimmed().isEmpty()) {
+            detailDiagnostics.append(record.diagnostic);
+        }
+        for (const QString& diagnostic : diagnostics_) {
+            if (diagnostic.contains(recordId) || diagnostic.contains(record.sourcePath)) {
+                detailDiagnostics.append(diagnostic);
+            }
+        }
+
+        const QJsonArray contributions = filterObjectsByExtension(uiContributions, recordId);
+        const QJsonArray registrations = filterObjectsByExtension(runtimeRegistrations, recordId);
+        const QJsonArray views = filterObjectsByExtension(uiViews, recordId);
+        const QJsonArray callbacks = filterObjectsByExtension(eventCallbacks, recordId);
+        extensionDetails.append(QJsonObject{
+            {QStringLiteral("id"), recordId},
+            {QStringLiteral("name"), record.manifest.name},
+            {QStringLiteral("version"), record.manifest.version},
+            {QStringLiteral("enabled"), record.enabled},
+            {QStringLiteral("valid"), record.valid},
+            {QStringLiteral("sourcePath"), record.sourcePath},
+            {QStringLiteral("permissions"), QJsonArray::fromStringList(record.manifest.permissions)},
+            {QStringLiteral("diagnostics"), detailDiagnostics},
+            {QStringLiteral("recentCalls"), calls},
+            {QStringLiteral("recentErrors"), errors},
+            {QStringLiteral("experimentalRawCalls"), rawCalls},
+            {QStringLiteral("uiContributions"), contributions},
+            {QStringLiteral("runtimeRegistrations"), registrations},
+            {QStringLiteral("uiViews"), views},
+            {QStringLiteral("eventCallbacks"), callbacks},
+            {QStringLiteral("providers"), filterContributionsByKindPrefix(registrations, QStringLiteral("providers/"))},
+            {QStringLiteral("exportHooks"), filterContributionsByKindPrefix(registrations, QStringLiteral("export/"))},
+        });
     }
     value.insert(QStringLiteral("extensions"), extensions);
-    if (callbacks_.mainWindowRequest) {
-        const QJsonObject contributions = callbacks_.mainWindowRequest(QStringLiteral("ui/getContributions"), QJsonObject{});
-        if (!contributions.isEmpty()) {
-            value.insert(QStringLiteral("uiContributions"), contributions.value(QStringLiteral("value")));
-        }
-        const QJsonObject views = callbacks_.mainWindowRequest(QStringLiteral("ui/getViews"), QJsonObject{});
-        if (!views.isEmpty()) {
-            value.insert(QStringLiteral("uiViews"), views.value(QStringLiteral("value")));
-        }
-    }
+    value.insert(QStringLiteral("extensionDetails"), extensionDetails);
     return value;
 }
 
@@ -1439,6 +1659,9 @@ void ExtensionManager::appendDevtoolsCall(const QString& method, const QJsonObje
     recentHostCalls_.append(entry);
     while (recentHostCalls_.size() > 200) {
         recentHostCalls_.removeAt(0);
+    }
+    if (!entry.value(QStringLiteral("ok")).toBool(true)) {
+        appendExtensionLog(QStringLiteral("warning"), QStringLiteral("host API call failed"), entry);
     }
 }
 
@@ -1523,6 +1746,10 @@ QJsonObject ExtensionManager::handleHostRequestCore(const QString& method, const
         return permissionError;
     }
     if (method == QStringLiteral("log")) {
+        appendExtensionLog(QStringLiteral("info"), QStringLiteral("extension log"), QJsonObject{
+            {QStringLiteral("extensionId"), extensionId},
+            {QStringLiteral("message"), params.value(QStringLiteral("message")).toString()},
+        });
         if (callbacks_.logMessage) {
             callbacks_.logMessage(params.value(QStringLiteral("message")).toString());
         }
@@ -2452,6 +2679,10 @@ void ExtensionManager::invokeCommand(const QString& command)
     const ExtensionCommandContribution contribution = commandContribution(command);
     const QString commandLabel = contribution.title.isEmpty() ? command : displayLabelForCommand(contribution);
     if (!commandOwnerById_.contains(command)) {
+        appendExtensionLog(QStringLiteral("warning"), QStringLiteral("extension command unavailable"), QJsonObject{
+            {QStringLiteral("command"), command},
+            {QStringLiteral("label"), commandLabel},
+        });
         if (callbacks_.showMessage) {
             callbacks_.showMessage(
                 QStringLiteral("warning"),
@@ -2463,6 +2694,11 @@ void ExtensionManager::invokeCommand(const QString& command)
         return;
     }
     if (runtime_ == nullptr || !runtime_->isRunning()) {
+        appendExtensionLog(QStringLiteral("warning"), QStringLiteral("extension command runtime not running"), QJsonObject{
+            {QStringLiteral("command"), command},
+            {QStringLiteral("label"), commandLabel},
+            {QStringLiteral("ownerId"), commandOwnerById_.value(command)},
+        });
         if (callbacks_.showMessage) {
             callbacks_.showMessage(
                 QStringLiteral("warning"),
@@ -2475,6 +2711,12 @@ void ExtensionManager::invokeCommand(const QString& command)
     }
     QString error;
     if (!runtime_->executeCommand(command, &error)) {
+        appendExtensionLog(QStringLiteral("error"), QStringLiteral("extension command failed"), QJsonObject{
+            {QStringLiteral("command"), command},
+            {QStringLiteral("label"), commandLabel},
+            {QStringLiteral("ownerId"), commandOwnerById_.value(command)},
+            {QStringLiteral("error"), error},
+        });
         if (callbacks_.showMessage) {
             callbacks_.showMessage(
                 QStringLiteral("warning"),
@@ -2500,12 +2742,19 @@ void ExtensionManager::invokeCommand(const QString& command)
 bool ExtensionManager::executeExtensionCommand(const QString& command, QString* error)
 {
     if (!commandOwnerById_.contains(command)) {
+        appendExtensionLog(QStringLiteral("warning"), QStringLiteral("extension command unavailable"), QJsonObject{
+            {QStringLiteral("command"), command},
+        });
         if (error != nullptr) {
             *error = QStringLiteral("Unknown or unavailable command: %1").arg(command);
         }
         return false;
     }
     if (runtime_ == nullptr || !runtime_->isRunning()) {
+        appendExtensionLog(QStringLiteral("warning"), QStringLiteral("extension command runtime not running"), QJsonObject{
+            {QStringLiteral("command"), command},
+            {QStringLiteral("ownerId"), commandOwnerById_.value(command)},
+        });
         if (error != nullptr) {
             *error = QStringLiteral("Extension runtime is not running.");
         }
@@ -2513,6 +2762,11 @@ bool ExtensionManager::executeExtensionCommand(const QString& command, QString* 
     }
     QString localError;
     if (!runtime_->executeCommand(command, &localError)) {
+        appendExtensionLog(QStringLiteral("error"), QStringLiteral("extension command failed"), QJsonObject{
+            {QStringLiteral("command"), command},
+            {QStringLiteral("ownerId"), commandOwnerById_.value(command)},
+            {QStringLiteral("error"), localError},
+        });
         if (error != nullptr) {
             *error = localError;
         }

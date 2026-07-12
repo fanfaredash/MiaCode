@@ -693,6 +693,41 @@ void populateExtensionsDevToolsTable(QTableWidget* table, const QJsonArray& exte
     }
 }
 
+QString jsonArrayCountText(const QJsonObject& object, const QString& key)
+{
+    return QString::number(object.value(key).toArray().size());
+}
+
+QString firstDiagnosticText(const QJsonObject& object)
+{
+    const QJsonArray diagnostics = object.value(QStringLiteral("diagnostics")).toArray();
+    if (diagnostics.isEmpty()) {
+        return QString();
+    }
+    return compactJsonText(diagnostics.at(0));
+}
+
+void populateExtensionDetailsTable(QTableWidget* table, const QJsonArray& details)
+{
+    table->setRowCount(details.size());
+    for (int row = 0; row < details.size(); ++row) {
+        const QJsonObject item = details.at(row).toObject();
+        const QString tooltip = compactJsonText(item);
+        table->setItem(row, 0, readOnlyTableItem(item.value(QStringLiteral("id")).toString(), tooltip));
+        table->setItem(row, 1, readOnlyTableItem(item.value(QStringLiteral("enabled")).toBool() ? QStringLiteral("yes") : QStringLiteral("no"), tooltip));
+        table->setItem(row, 2, readOnlyTableItem(item.value(QStringLiteral("valid")).toBool() ? QStringLiteral("yes") : QStringLiteral("no"), tooltip));
+        table->setItem(row, 3, readOnlyTableItem(compactJsonText(item.value(QStringLiteral("permissions"))), tooltip));
+        table->setItem(row, 4, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("uiContributions")), tooltip));
+        table->setItem(row, 5, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("uiViews")), tooltip));
+        table->setItem(row, 6, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("eventCallbacks")), tooltip));
+        table->setItem(row, 7, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("providers")), tooltip));
+        table->setItem(row, 8, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("exportHooks")), tooltip));
+        table->setItem(row, 9, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("experimentalRawCalls")), tooltip));
+        table->setItem(row, 10, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("recentErrors")), tooltip));
+        table->setItem(row, 11, readOnlyTableItem(firstDiagnosticText(item), tooltip));
+    }
+}
+
 void populateJsonArrayList(QListWidget* list, const QJsonArray& values)
 {
     list->clear();
@@ -903,6 +938,25 @@ void MainWindow::showExtensionDevToolsDialog()
     });
     tabs->addTab(extensionsTable, UiText::text(QStringLiteral("dialog.preferences.extensions_group")));
 
+    auto* extensionDetailsTable = new QTableWidget(tabs);
+    configureDevToolsTable(extensionDetailsTable, {
+        QStringLiteral("Extension"),
+        QStringLiteral("Enabled"),
+        QStringLiteral("Valid"),
+        QStringLiteral("Permissions"),
+        QStringLiteral("UI"),
+        QStringLiteral("Views"),
+        QStringLiteral("Events"),
+        QStringLiteral("Providers"),
+        QStringLiteral("Hooks"),
+        QStringLiteral("Raw"),
+        QStringLiteral("Errors"),
+        QStringLiteral("Diagnostic"),
+    });
+    tabs->addTab(
+        extensionDetailsTable,
+        UiText::isChineseUi() ? QStringLiteral("扩展详情") : QStringLiteral("Extension Details"));
+
     auto* uiContributionsList = new QListWidget(tabs);
     uiContributionsList->setAlternatingRowColors(true);
     tabs->addTab(uiContributionsList, UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.ui")));
@@ -923,6 +977,7 @@ void MainWindow::showExtensionDevToolsDialog()
         const QJsonArray openObjects = snapshot.value(QStringLiteral("openBridgeObjects")).toArray();
         const QJsonArray rawTargets = snapshot.value(QStringLiteral("experimentalRawTargets")).toArray();
         const QJsonArray extensions = snapshot.value(QStringLiteral("extensions")).toArray();
+        const QJsonArray extensionDetails = snapshot.value(QStringLiteral("extensionDetails")).toArray();
         const QJsonArray recentCalls = snapshot.value(QStringLiteral("recentCalls")).toArray();
         const QJsonArray diagnostics = snapshot.value(QStringLiteral("diagnostics")).toArray();
         const int callbackCount = snapshot.value(QStringLiteral("eventCallbackCount")).toInt();
@@ -940,6 +995,7 @@ void MainWindow::showExtensionDevToolsDialog()
         populateOpenBridgeTable(openBridgeTable, openObjects);
         populateRecentCallsTable(recentCallsTable, recentCalls);
         populateExtensionsDevToolsTable(extensionsTable, extensions);
+        populateExtensionDetailsTable(extensionDetailsTable, extensionDetails);
         populateJsonArrayList(diagnosticsList, diagnostics);
 
         QJsonArray uiItems;

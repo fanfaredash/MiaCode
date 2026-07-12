@@ -79,6 +79,7 @@ private:
     QJsonObject handleHostRequestCore(const QString& method, const QJsonObject& params);
     QJsonObject devtoolsSnapshot(const QString& extensionId) const;
     QJsonObject devtoolsDiagnose(const QString& extensionId, const QJsonObject& params) const;
+    void appendExtensionLog(const QString& severity, const QString& message, const QJsonObject& details = {}) const;
     void appendDevtoolsCall(const QString& method, const QJsonObject& params, const QJsonObject& result, qint64 elapsedMs);
     void dispatchRuntimeEventForHostResult(const QString& method, const QJsonObject& params, const QJsonObject& result);
     bool ensurePermission(const QString& extensionId, const QString& method, const QJsonObject& params, QJsonObject* errorResponse);

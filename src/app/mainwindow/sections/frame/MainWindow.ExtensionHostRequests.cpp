@@ -612,6 +612,8 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 action->setProperty("miacode.extension.kind", kind);
                 action->setProperty("miacode.extension.id", id);
                 action->setProperty("miacode.extension.ownerId", ownerId);
+                action->setProperty("miacode.extension.title", title);
+                action->setProperty("miacode.extension.command", command);
                 action->setEnabled(!command.isEmpty());
                 QObject::connect(action, &QAction::triggered, toolboxMenu_, [runExtensionCommand, command]() {
                     if (!command.isEmpty()) {
@@ -628,6 +630,7 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             view->setProperty("miacode.extension.kind", kind);
             view->setProperty("miacode.extension.id", id);
             view->setProperty("miacode.extension.ownerId", ownerId);
+            view->setProperty("miacode.extension.title", title);
             const int index = bottomTabs_->addTab(view, title);
             bottomTabs_->setTabToolTip(index, QStringLiteral("%1\n%2").arg(title, ownerId));
             state_.extensionRenderedUiWidgets_.append(view);
@@ -649,6 +652,7 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                     {QStringLiteral("id"), widget->property("miacode.extension.id").toString()},
                     {QStringLiteral("ownerId"), widget->property("miacode.extension.ownerId").toString()},
                     {QStringLiteral("kind"), widget->property("miacode.extension.kind").toString()},
+                    {QStringLiteral("title"), widget->property("miacode.extension.title").toString()},
                     {QStringLiteral("visible"), widget->isVisible()},
                 });
             }
@@ -660,6 +664,8 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                     {QStringLiteral("id"), action->property("miacode.extension.id").toString()},
                     {QStringLiteral("ownerId"), action->property("miacode.extension.ownerId").toString()},
                     {QStringLiteral("kind"), action->property("miacode.extension.kind").toString()},
+                    {QStringLiteral("title"), action->property("miacode.extension.title").toString()},
+                    {QStringLiteral("command"), action->property("miacode.extension.command").toString()},
                     {QStringLiteral("visible"), action->isVisible()},
                 });
             }
@@ -2037,6 +2043,17 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
         }
         if (method == QStringLiteral("ui/getContributions")) {
             return okValue(state_.extensionUiContributions_);
+        }
+        if (method == QStringLiteral("extensions/getRuntimeRegistrations")) {
+            QJsonArray registrations;
+            for (auto it = state_.extensionRegistrationsByKind_.constBegin();
+                 it != state_.extensionRegistrationsByKind_.constEnd();
+                 ++it) {
+                for (const QJsonValue& value : it.value()) {
+                    registrations.append(value);
+                }
+            }
+            return okValue(registrations);
         }
         if (method == QStringLiteral("ui/getViews")) {
             return okValue(renderedViewsArray());

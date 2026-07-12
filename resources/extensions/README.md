@@ -4,7 +4,7 @@ MiaCode extensions are local folders that add commands, UI contributions, docume
 
 MiaCode 扩展是放在本地文件夹中的插件，可以为 MiaCode 增加命令、界面入口、谱面工具、预览辅助、诊断能力，以及可选的实验性宿主访问能力。
 
-**Summary / 总结:** Put one extension in one folder, declare what it needs in the manifest, then use `miacode.*` APIs from JavaScript.
+**Summary / 总结:** Put one extension in one folder, declare what it needs in the manifest, then use `miacode.*` APIs from JavaScript. / 一个扩展一个文件夹，在 manifest 中声明需要的能力，然后在 JavaScript 中使用 `miacode.*` API。
 
 ---
 
@@ -22,7 +22,7 @@ Then open **Preferences > Extensions** and click **Refresh Extensions**. You can
 
 然后打开 **首选项 > 扩展**，点击 **刷新扩展**。你可以在同一页面启用或禁用扩展，也可以通过 **打开日志位置** 查看日志。
 
-**Summary / 总结:** Install by copying a folder; manage it from **Preferences > Extensions**.
+**Summary / 总结:** Install by copying a folder; manage it from **Preferences > Extensions**. / 复制文件夹即可安装；在 **首选项 > 扩展** 中管理。
 
 ---
 
@@ -45,7 +45,7 @@ Use `miacode-extension.json` for MiaCode-only extensions. You may also use `pack
 
 推荐使用 `miacode-extension.json`。如果你更喜欢 npm 风格目录，也可以使用 `package.json` 并在其中放 `miacodeExtension` 对象，但 MiaCode 不会运行 Node.js。
 
-**Summary / 总结:** The manifest describes the extension; `extension.js` is optional unless you need JavaScript.
+**Summary / 总结:** The manifest describes the extension; `extension.js` is optional unless you need JavaScript. / manifest 用来描述扩展；只有需要运行 JavaScript 时才需要 `extension.js`。
 
 ---
 
@@ -109,7 +109,7 @@ Data-only language pack:
 }
 ```
 
-**Summary / 总结:** The manifest is the contract: identity, entry file, contributions, and permissions.
+**Summary / 总结:** The manifest is the contract: identity, entry file, contributions, and permissions. / manifest 是扩展契约，包含身份、入口文件、贡献内容和权限声明。
 
 ---
 
@@ -140,7 +140,7 @@ Register disposables in `context.subscriptions` when an API returns one, especia
 
 当 API 返回 disposable 时，尤其是事件监听器，请放进 `context.subscriptions`，方便扩展停用时自动清理。
 
-**Summary / 总结:** Write browser-like JavaScript against `miacode.*`; do not expect Node.js APIs.
+**Summary / 总结:** Write browser-like JavaScript against `miacode.*`; do not expect Node.js APIs. / 按浏览器式 JavaScript 编写扩展，并使用 `miacode.*`；不要依赖 Node.js API。
 
 ---
 
@@ -168,7 +168,7 @@ For the full live list, call `miacode.api.list()` or open **Preferences > Extens
 
 完整实时列表可以通过 `miacode.api.list()` 查看，也可以打开 **首选项 > 扩展 > DevTools 面板**。
 
-**Summary / 总结:** Use stable `miacode.*` APIs first; use DevTools when you need the full current surface.
+**Summary / 总结:** Use stable `miacode.*` APIs first; use DevTools when you need the full current surface. / 优先使用稳定的 `miacode.*` API；需要查看完整当前能力面时再用 DevTools。
 
 ---
 
@@ -199,7 +199,7 @@ Experimental raw APIs require explicit raw or experimental permissions, such as 
 
 实验性 raw API 需要显式 raw 或 experimental 权限，例如 `open.call`、`experimental.invoke`、`renderer.raw`、`internal.raw`、`shell.execute` 或 `process.manage`。
 
-**Summary / 总结:** Permissions are declared up front in the manifest; installing an extension is the trust decision.
+**Summary / 总结:** Permissions are declared up front in the manifest; installing an extension is the trust decision. / 权限需要提前写在 manifest 中；安装扩展本身就是信任决策。
 
 ---
 
@@ -229,7 +229,7 @@ Callbacks run as the extension that registered them. Any API call inside the cal
 
 callback 会以注册它的扩展身份运行。callback 内再次调用 API 时，仍然按该扩展 manifest 中的权限声明校验。
 
-**Summary / 总结:** Events are interactive and permission-checked; remember to dispose them through `context.subscriptions`.
+**Summary / 总结:** Events are interactive and permission-checked; remember to dispose them through `context.subscriptions`. / 事件是真实交互并会校验权限；记得通过 `context.subscriptions` 管理清理。
 
 ---
 
@@ -264,7 +264,7 @@ Image and sprite paths must resolve inside the extension folder. MiaCode rejects
 
 图片和 sprite 路径必须位于扩展目录内。MiaCode 会拒绝不存在的文件、目录路径和路径穿越。
 
-**Summary / 总结:** Use declarative UI data; MiaCode owns the actual rendering and resource safety checks.
+**Summary / 总结:** Use declarative UI data; MiaCode owns the actual rendering and resource safety checks. / 使用声明式 UI 数据；实际渲染和资源安全检查由 MiaCode 负责。
 
 ---
 
@@ -288,7 +288,7 @@ Use `miacode.open.describe(objectId)` before calling. A method must report `stat
 
 调用前先用 `miacode.open.describe(objectId)` 查看描述。只有 `status: "implemented"` 的方法可以调用。发现对象需要 `open.inspect`；调用方法需要 `open.call`，并可能需要对象或方法自身的权限。
 
-**Summary / 总结:** Open Bridge is dynamic and discoverable, but still permission-checked and host-owned.
+**Summary / 总结:** Open Bridge is dynamic and discoverable, but still permission-checked and host-owned. / Open Bridge 支持动态发现和调用，但仍会校验权限，并由宿主拥有真实对象。
 
 ---
 
@@ -328,7 +328,7 @@ An experimental marker is a warning, not automatically a block. Calls still requ
 
 实验性标记是风险提示，不等于自动拒绝。调用仍然需要声明权限，并且可能返回“已接收”的诊断结果，而不是稳定的 native 绑定。
 
-**Summary / 总结:** Raw access is open for trusted experiments, but unstable; prefer stable APIs for distributable extensions.
+**Summary / 总结:** Raw access is open for trusted experiments, but unstable; prefer stable APIs for distributable extensions. / Raw 访问面向可信实验开放，但不稳定；可分发扩展应优先使用稳定 API。
 
 ---
 
@@ -348,15 +348,23 @@ const diagnosis = miacode.devtools.diagnose("preview.seek").value;
 const recentCalls = miacode.devtools.recentCalls().value;
 ```
 
-In the app, open **Preferences > Extensions > DevTools Panel**. The panel shows API Registry, Open Bridge, Recent Calls, Extensions, UI Contributions, Diagnostics, and Raw JSON.
+In the app, open **Preferences > Extensions > DevTools Panel**. The panel shows API Registry, Open Bridge, Recent Calls, Extensions, Extension Details, UI Contributions, Diagnostics, and Raw JSON.
 
-在应用内，打开 **首选项 > 扩展 > DevTools 面板**。面板会展示 API 注册表、Open Bridge、最近调用、扩展、UI 贡献、诊断和原始 JSON。
+在应用内，打开 **首选项 > 扩展 > DevTools 面板**。面板会展示 API 注册表、Open Bridge、最近调用、扩展、扩展详情、UI 贡献、诊断和原始 JSON。
+
+Use **Extension Details** when you need to inspect one extension at a time. It groups permissions, UI contributions, rendered views, event callbacks, providers, export hooks, experimental raw calls, recent errors, and diagnostics by extension id.
+
+需要逐个扩展排查时，请看 **Extension Details**。它会按扩展 id 聚合权限、UI 贡献、已渲染视图、事件回调、provider、导出 hook、实验性 raw 调用、最近错误和诊断信息。
 
 `recentCalls` keeps a compact parameter preview only. It does not store raw native pointers or full large payloads.
 
 `recentCalls` 只保存压缩后的参数预览，不保存 raw native pointer，也不会保存完整的大型 payload。
 
-**Summary / 总结:** DevTools is read-only inspection; use it to see what exists, what was called, and why a call failed.
+For support reports, include the extension folder, manifest, the failing action, the DevTools Raw JSON snapshot, and `extensions.log` from **Open Logs Folder**. The log records manifest errors, runtime errors, permission denials, failed host API calls, command failures, and extension `context.log()` messages with timestamps.
+
+反馈问题时，请提供扩展文件夹、manifest、触发失败的操作、DevTools 的 Raw JSON 快照，以及 **打开日志位置** 里的 `extensions.log`。该日志会记录 manifest 错误、runtime 错误、权限拒绝、失败的宿主 API 调用、命令失败，以及扩展 `context.log()` 输出，并带有时间戳。
+
+**Summary / 总结:** DevTools is read-only inspection; use Extension Details and `extensions.log` to see what exists, what was called, and why a call failed. / DevTools 是只读检查工具；用扩展详情和 `extensions.log` 查看有哪些能力、发生过哪些调用，以及调用失败原因。
 
 ---
 
@@ -392,4 +400,4 @@ Refreshing extensions should not change the current chart text, dirty state, fil
 
 刷新扩展不应该改变当前谱面文本、dirty 状态、文件路径或当前难度，除非扩展明确调用了编辑 API。
 
-**Summary / 总结:** Validate the manifest, refresh in MiaCode, test enable/disable, then inspect logs and DevTools.
+**Summary / 总结:** Validate the manifest, refresh in MiaCode, test enable/disable, then inspect logs and DevTools. / 先校验 manifest，再在 MiaCode 中刷新并测试启用/禁用，最后用日志和 DevTools 排查问题。

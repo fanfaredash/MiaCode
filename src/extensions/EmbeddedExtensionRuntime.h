@@ -28,6 +28,7 @@ public:
     bool isRunning() const;
     bool executeCommand(const QString& command, QString* errorMessage = nullptr);
     int registeredEventCallbackCount(const QString& kind = {}) const;
+    QJsonArray registeredEventCallbacksForDevtools() const;
     void dispatchEvent(const QString& kind, const QJsonObject& payload);
 
 signals:
