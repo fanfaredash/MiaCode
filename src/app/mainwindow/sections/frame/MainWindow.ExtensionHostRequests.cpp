@@ -17,6 +17,7 @@
 #include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
+#include "ShortcutRegistry.h"
 #include "TimelineView.h"
 #include "BusySpinner.h"
 #include "UiText.h"
@@ -152,6 +153,111 @@ QString firstContributionText(const QJsonObject& object, std::initializer_list<c
         }
     }
     return QString();
+}
+
+QString extensionShortcutIdForCommand(const QString& command)
+{
+    QString normalized = command.trimmed();
+    normalized.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9_.:-]+")), QStringLiteral("_"));
+    if (normalized.isEmpty()) {
+        normalized = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    }
+    return normalized.startsWith(QStringLiteral("extension."))
+        ? normalized
+        : QStringLiteral("extension.%1").arg(normalized);
+}
+
+QString shortcutDefinitionDisplayName(const ShortcutRegistry::ShortcutDefinition& definition)
+{
+    if (UiText::isChineseUi() && !definition.labelZh.trimmed().isEmpty()) {
+        return definition.labelZh;
+    }
+    if (!UiText::isChineseUi() && !definition.labelEn.trimmed().isEmpty()) {
+        return definition.labelEn;
+    }
+    return definition.id;
+}
+
+bool gestureModifiersMatch(const QJsonArray& expected, Qt::KeyboardModifiers actual)
+{
+    if (expected.isEmpty()) {
+        return true;
+    }
+    for (const QJsonValue& value : expected) {
+        const QString modifier = value.toString().trimmed().toLower();
+        if ((modifier == QStringLiteral("ctrl") || modifier == QStringLiteral("control"))
+            && !actual.testFlag(Qt::ControlModifier)) {
+            return false;
+        }
+        if (modifier == QStringLiteral("alt") && !actual.testFlag(Qt::AltModifier)) {
+            return false;
+        }
+        if (modifier == QStringLiteral("shift") && !actual.testFlag(Qt::ShiftModifier)) {
+            return false;
+        }
+        if ((modifier == QStringLiteral("meta") || modifier == QStringLiteral("cmd"))
+            && !actual.testFlag(Qt::MetaModifier)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool gestureTargetMatches(const QString& expected, const QString& actual)
+{
+    const QString normalized = expected.trimmed().toLower();
+    return normalized.isEmpty()
+        || normalized == QStringLiteral("any")
+        || normalized == actual.trimmed().toLower();
+}
+
+bool gesturePhaseMatches(const QString& expected, const QString& actual)
+{
+    const QString normalized = expected.trimmed().toLower();
+    return normalized.isEmpty()
+        || normalized == QStringLiteral("any")
+        || normalized == actual.trimmed().toLower();
+}
+
+bool gestureStringMatches(const QJsonObject& gesture, const QString& key, const QString& actual)
+{
+    const QString expected = gesture.value(key).toString().trimmed();
+    return expected.isEmpty()
+        || expected.compare(QStringLiteral("any"), Qt::CaseInsensitive) == 0
+        || expected.compare(actual, Qt::CaseInsensitive) == 0;
+}
+
+QString providerDisplayText(const QJsonObject& provider)
+{
+    return firstContributionText(provider, {"markdown", "contents", "content", "message", "detail", "title", "label"});
+}
+
+bool providerMatchesContext(const QJsonObject& provider, const QJsonObject& context)
+{
+    const QString token = context.value(QStringLiteral("token")).toString(
+        context.value(QStringLiteral("text")).toString()).trimmed();
+    const QString pattern = provider.value(QStringLiteral("pattern")).toString(
+        provider.value(QStringLiteral("match")).toString()).trimmed();
+    if (!pattern.isEmpty() && !token.contains(pattern, Qt::CaseInsensitive)) {
+        return false;
+    }
+
+    const QString trigger = context.value(QStringLiteral("trigger")).toString(
+        context.value(QStringLiteral("triggerCharacter")).toString()).trimmed();
+    const QJsonArray triggers = provider.value(QStringLiteral("triggerCharacters")).toArray();
+    if (!triggers.isEmpty() && !trigger.isEmpty()) {
+        bool matched = false;
+        for (const QJsonValue& value : triggers) {
+            if (value.toString() == trigger) {
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            return false;
+        }
+    }
+    return true;
 }
 
 double contributionNumber(const QJsonObject& object, const QString& key, double fallback)
@@ -403,6 +509,84 @@ QLabel* makeExtensionTextLabel(const QString& text, QWidget* parent, bool headin
     return label;
 }
 
+class ExtensionCanvasWidget final : public QWidget {
+public:
+    ExtensionCanvasWidget(
+        QJsonObject spec,
+        QWidget* parent,
+        std::function<void(const QString&)> runCommand)
+        : QWidget(parent)
+        , spec_(std::move(spec))
+        , runCommand_(std::move(runCommand))
+    {
+        setAttribute(Qt::WA_TranslucentBackground, true);
+        setMouseTracking(true);
+        setMinimumSize(
+            qBound(120, spec_.value(QStringLiteral("width")).toInt(320), 1600),
+            qBound(90, spec_.value(QStringLiteral("height")).toInt(220), 1200));
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        const QColor background = colorFromJsonValue(spec_.value(QStringLiteral("background")), Qt::transparent);
+        if (background.isValid() && background.alpha() > 0) {
+            painter.fillRect(rect(), background);
+        }
+        const QJsonArray nodes = spec_.value(QStringLiteral("nodes")).toArray(
+            spec_.value(QStringLiteral("shapes")).toArray(spec_.value(QStringLiteral("items")).toArray()));
+        for (const QJsonValue& value : nodes) {
+            const QJsonObject node = value.toObject();
+            const QString type = node.value(QStringLiteral("type")).toString(QStringLiteral("rect")).trimmed().toLower();
+            const QRectF r(
+                contributionNumber(node, QStringLiteral("x"), 0.0),
+                contributionNumber(node, QStringLiteral("y"), 0.0),
+                contributionNumber(node, QStringLiteral("width"), contributionNumber(node, QStringLiteral("w"), 80.0)),
+                contributionNumber(node, QStringLiteral("height"), contributionNumber(node, QStringLiteral("h"), 40.0)));
+            const QColor fill = colorFromJsonValue(node.value(QStringLiteral("fill")), QColor(66, 153, 225, 96));
+            const QColor stroke = colorFromJsonValue(node.value(QStringLiteral("stroke")), QColor(66, 153, 225, 220));
+            painter.setPen(QPen(stroke, qMax(0.0, contributionNumber(node, QStringLiteral("strokeWidth"), 1.0))));
+            painter.setBrush(fill);
+            if (type == QStringLiteral("ellipse") || type == QStringLiteral("circle")) {
+                painter.drawEllipse(r);
+            } else if (type == QStringLiteral("line")) {
+                painter.drawLine(
+                    QPointF(contributionNumber(node, QStringLiteral("x1"), r.left()), contributionNumber(node, QStringLiteral("y1"), r.top())),
+                    QPointF(contributionNumber(node, QStringLiteral("x2"), r.right()), contributionNumber(node, QStringLiteral("y2"), r.bottom())));
+            } else if (type == QStringLiteral("text")) {
+                painter.setPen(stroke);
+                painter.drawText(r, Qt::AlignLeft | Qt::AlignVCenter | Qt::TextWordWrap, firstContributionText(node, {"text", "label", "title"}));
+            } else if (type == QStringLiteral("image")) {
+                const QString path = node.value(QStringLiteral("resolvedPath")).toString(node.value(QStringLiteral("src")).toString());
+                const QPixmap pixmap(path);
+                if (!pixmap.isNull()) {
+                    painter.drawPixmap(r.toRect(), pixmap);
+                }
+            } else {
+                painter.drawRoundedRect(r, contributionNumber(node, QStringLiteral("radius"), 4.0), contributionNumber(node, QStringLiteral("radius"), 4.0));
+            }
+        }
+    }
+
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        const QString command = spec_.value(QStringLiteral("command")).toString(
+            spec_.value(QStringLiteral("onClickCommand")).toString()).trimmed();
+        if (!command.isEmpty() && runCommand_) {
+            runCommand_(command);
+            event->accept();
+            return;
+        }
+        QWidget::mousePressEvent(event);
+    }
+
+private:
+    QJsonObject spec_;
+    std::function<void(const QString&)> runCommand_;
+};
+
 QWidget* buildExtensionDeclarativeWidget(
     const QJsonObject& contribution,
     QWidget* parent,
@@ -414,6 +598,23 @@ QWidget* buildExtensionDeclarativeWidget(
     }
     if (spec.isEmpty()) {
         spec = contribution;
+    }
+
+    const QString type = spec.value(QStringLiteral("type")).toString(
+        contribution.value(QStringLiteral("type")).toString()).trimmed().toLower();
+    const QString html = spec.value(QStringLiteral("html")).toString(
+        contribution.value(QStringLiteral("html")).toString()).trimmed();
+    if (!html.isEmpty() || type == QStringLiteral("webview") || type == QStringLiteral("html")) {
+        auto* browser = new QTextBrowser(parent);
+        browser->setOpenExternalLinks(false);
+        browser->setHtml(html.isEmpty() ? firstContributionText(spec, {"text", "body", "markdown"}).toHtmlEscaped() : html);
+        browser->setMinimumSize(
+            qBound(220, spec.value(QStringLiteral("width")).toInt(420), 1200),
+            qBound(160, spec.value(QStringLiteral("height")).toInt(320), 900));
+        return browser;
+    }
+    if (type == QStringLiteral("canvas") || type == QStringLiteral("scene")) {
+        return new ExtensionCanvasWidget(spec, parent, runCommand);
     }
 
     auto* scroll = new QScrollArea(parent);
@@ -509,6 +710,40 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 statusBar()->showMessage(error, 5000);
             }
         };
+        const auto clearExtensionShortcuts = [this]() {
+            for (const QPointer<QShortcut>& shortcut : std::as_const(state_.extensionShortcutObjects_)) {
+                if (shortcut != nullptr) {
+                    shortcut->deleteLater();
+                }
+            }
+            state_.extensionShortcutObjects_.clear();
+        };
+        const auto rebuildExtensionShortcuts = [this, runExtensionCommand, clearExtensionShortcuts]() {
+            clearExtensionShortcuts();
+            for (auto it = state_.extensionShortcutContributions_.constBegin();
+                 it != state_.extensionShortcutContributions_.constEnd();
+                 ++it) {
+                const QJsonObject contribution = it.value().toObject();
+                const QString shortcutId = contribution.value(QStringLiteral("shortcutId")).toString(it.key());
+                const QString command = contribution.value(QStringLiteral("command")).toString();
+                const QList<QKeySequence> defaults{
+                    QKeySequence(contribution.value(QStringLiteral("keybinding")).toString(
+                        contribution.value(QStringLiteral("keys")).toString()))
+                };
+                const QString label = contribution.value(QStringLiteral("label")).toString(command);
+                ShortcutRegistry::instance().registerExtensionShortcut(shortcutId, label, defaults);
+                const QKeySequence sequence = ShortcutRegistry::instance().sequence(shortcutId, defaults.value(0));
+                if (command.trimmed().isEmpty() || sequence.isEmpty()) {
+                    continue;
+                }
+                auto* shortcut = new QShortcut(sequence, this);
+                shortcut->setContext(Qt::ApplicationShortcut);
+                QObject::connect(shortcut, &QShortcut::activated, this, [runExtensionCommand, command]() {
+                    runExtensionCommand(command);
+                });
+                state_.extensionShortcutObjects_.append(shortcut);
+            }
+        };
         const auto clearRenderedExtensionUi = [this]() {
             for (const QPointer<QWidget>& widget : std::as_const(state_.extensionRenderedUiWidgets_)) {
                 if (widget == nullptr) {
@@ -568,6 +803,24 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                     state_.extensionPreviewOverlayWidgets_.append(pet);
                     continue;
                 }
+                if (overlay.value(QStringLiteral("kind")).toString() == QStringLiteral("ui/sceneOverlay")
+                    || overlay.value(QStringLiteral("kind")).toString() == QStringLiteral("ui/canvasOverlay")) {
+                    QJsonObject spec = overlay.value(QStringLiteral("view")).toObject(overlay);
+                    if (!spec.contains(QStringLiteral("type"))) {
+                        spec.insert(QStringLiteral("type"), QStringLiteral("scene"));
+                    }
+                    auto* scene = new ExtensionCanvasWidget(spec, previewCanvasFrame_, runExtensionCommand);
+                    const QSize hostSize = previewCanvasFrame_->contentsRect().size();
+                    const int width = qBound(80, overlay.value(QStringLiteral("width")).toInt(hostSize.width()), qMax(80, hostSize.width()));
+                    const int height = qBound(60, overlay.value(QStringLiteral("height")).toInt(hostSize.height()), qMax(60, hostSize.height()));
+                    const int x = qBound(0, overlay.value(QStringLiteral("x")).toInt(0), qMax(0, hostSize.width() - width));
+                    const int y = qBound(0, overlay.value(QStringLiteral("y")).toInt(0), qMax(0, hostSize.height() - height));
+                    scene->setGeometry(x, y, width, height);
+                    scene->show();
+                    scene->raise();
+                    state_.extensionPreviewOverlayWidgets_.append(scene);
+                    continue;
+                }
                 const QString text = firstContributionText(overlay, {"text", "title", "label", "message"});
                 if (text.isEmpty()) {
                     continue;
@@ -623,6 +876,63 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 state_.extensionToolbarActions_.append(action);
                 return true;
             }
+            if (kind == QStringLiteral("ui/sidebarView")) {
+                auto* dock = new QDockWidget(title, this);
+                dock->setObjectName(QStringLiteral("ExtensionSidebar_%1").arg(id));
+                dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+                dock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+                QWidget* body = buildExtensionDeclarativeWidget(contribution, dock, runExtensionCommand);
+                dock->setWidget(body);
+                dock->setProperty("miacode.extension.kind", kind);
+                dock->setProperty("miacode.extension.id", id);
+                dock->setProperty("miacode.extension.ownerId", ownerId);
+                dock->setProperty("miacode.extension.title", title);
+                addDockWidget(Qt::RightDockWidgetArea, dock);
+                dock->show();
+                state_.extensionRenderedUiWidgets_.append(dock);
+                return true;
+            }
+            if (kind == QStringLiteral("ui/preferencesPage")) {
+                auto* dialog = new QDialog(this);
+                dialog->setAttribute(Qt::WA_DeleteOnClose, false);
+                dialog->setWindowTitle(QStringLiteral("%1 - %2").arg(UiText::text(QStringLiteral("action.preferences")), title));
+                dialog->setProperty("miacode.extension.kind", kind);
+                dialog->setProperty("miacode.extension.id", id);
+                dialog->setProperty("miacode.extension.ownerId", ownerId);
+                dialog->setProperty("miacode.extension.title", title);
+                auto* layout = new QVBoxLayout(dialog);
+                layout->setContentsMargins(12, 12, 12, 12);
+                layout->setSpacing(8);
+                layout->addWidget(buildExtensionDeclarativeWidget(contribution, dialog, runExtensionCommand));
+                dialog->resize(
+                    qBound(320, contribution.value(QStringLiteral("width")).toInt(520), 1000),
+                    qBound(240, contribution.value(QStringLiteral("height")).toInt(420), 800));
+                dialog->show();
+                dialog->raise();
+                state_.extensionRenderedUiWidgets_.append(dialog);
+                return true;
+            }
+            if (kind == QStringLiteral("ui/floatingPanel")) {
+                auto* dialog = new QDialog(this);
+                dialog->setAttribute(Qt::WA_DeleteOnClose, false);
+                dialog->setWindowTitle(title);
+                dialog->setProperty("miacode.extension.kind", kind);
+                dialog->setProperty("miacode.extension.id", id);
+                dialog->setProperty("miacode.extension.ownerId", ownerId);
+                dialog->setProperty("miacode.extension.title", title);
+                auto* layout = new QVBoxLayout(dialog);
+                layout->setContentsMargins(12, 12, 12, 12);
+                layout->setSpacing(8);
+                QWidget* body = buildExtensionDeclarativeWidget(contribution, dialog, runExtensionCommand);
+                layout->addWidget(body);
+                dialog->resize(
+                    qBound(260, contribution.value(QStringLiteral("width")).toInt(420), 900),
+                    qBound(180, contribution.value(QStringLiteral("height")).toInt(320), 700));
+                dialog->show();
+                dialog->raise();
+                state_.extensionRenderedUiWidgets_.append(dialog);
+                return true;
+            }
             if (!kind.startsWith(QStringLiteral("ui/")) || bottomTabs_ == nullptr) {
                 return false;
             }
@@ -652,6 +962,7 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                     {QStringLiteral("id"), widget->property("miacode.extension.id").toString()},
                     {QStringLiteral("ownerId"), widget->property("miacode.extension.ownerId").toString()},
                     {QStringLiteral("kind"), widget->property("miacode.extension.kind").toString()},
+                    {QStringLiteral("hostSlot"), widget->property("miacode.extension.kind").toString().section(QLatin1Char('/'), 1, 1)},
                     {QStringLiteral("title"), widget->property("miacode.extension.title").toString()},
                     {QStringLiteral("visible"), widget->isVisible()},
                 });
@@ -664,6 +975,7 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                     {QStringLiteral("id"), action->property("miacode.extension.id").toString()},
                     {QStringLiteral("ownerId"), action->property("miacode.extension.ownerId").toString()},
                     {QStringLiteral("kind"), action->property("miacode.extension.kind").toString()},
+                    {QStringLiteral("hostSlot"), action->property("miacode.extension.kind").toString().section(QLatin1Char('/'), 1, 1)},
                     {QStringLiteral("title"), action->property("miacode.extension.title").toString()},
                     {QStringLiteral("command"), action->property("miacode.extension.command").toString()},
                     {QStringLiteral("visible"), action->isVisible()},
@@ -690,6 +1002,47 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 renderUiContribution(value.toObject());
             }
             return removed;
+        };
+        const auto collectProviders = [this](const QString& kind, QJsonObject context) {
+            if (!context.contains(QStringLiteral("token")) && !context.contains(QStringLiteral("text"))) {
+                auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
+                if (editor != nullptr) {
+                    const QTextCursor cursor = editor->textCursor();
+                    const QString lineText = cursor.block().text();
+                    int start = qBound(0, cursor.positionInBlock(), lineText.size());
+                    int end = start;
+                    const auto isTokenChar = [](QChar ch) {
+                        return ch.isLetterOrNumber() || ch == QLatin1Char('_') || ch == QLatin1Char('#') || ch == QLatin1Char('&');
+                    };
+                    while (start > 0 && isTokenChar(lineText.at(start - 1))) {
+                        --start;
+                    }
+                    while (end < lineText.size() && isTokenChar(lineText.at(end))) {
+                        ++end;
+                    }
+                    context.insert(QStringLiteral("token"), lineText.mid(start, end - start));
+                    context.insert(QStringLiteral("line"), cursor.blockNumber() + 1);
+                    context.insert(QStringLiteral("startCol"), start + 1);
+                    context.insert(QStringLiteral("endCol"), end + 1);
+                }
+            }
+
+            QJsonArray items;
+            const QJsonArray providers = state_.extensionRegistrationsByKind_.value(kind);
+            for (const QJsonValue& value : providers) {
+                QJsonObject provider = value.toObject();
+                if (!providerMatchesContext(provider, context)) {
+                    continue;
+                }
+                provider.insert(QStringLiteral("providerKind"), kind);
+                provider.insert(QStringLiteral("displayText"), providerDisplayText(provider));
+                items.append(provider);
+            }
+            return QJsonObject{
+                {QStringLiteral("kind"), kind},
+                {QStringLiteral("context"), context},
+                {QStringLiteral("items"), items},
+            };
         };
         const auto addExtensionDiagnosticToPanel = [this](const ExtensionDiagnosticEntry& diagnostic) {
             const QString normalizedSeverity = diagnostic.severity.trimmed().toLower();
@@ -764,6 +1117,50 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 markers.append(timelineNoteMarkerToJson(marker));
             }
             return markers;
+        };
+        const auto internalCommandsJson = []() {
+            const auto item = [](const QString& id, const QString& title, const QString& permission, const QString& risk = QStringLiteral("medium")) {
+                return QJsonObject{
+                    {QStringLiteral("id"), id},
+                    {QStringLiteral("title"), title},
+                    {QStringLiteral("permission"), permission},
+                    {QStringLiteral("risk"), risk},
+                    {QStringLiteral("implemented"), true},
+                };
+            };
+            return QJsonArray{
+                item(QStringLiteral("app.openPreferences"), QStringLiteral("Open Preferences"), QStringLiteral("ui.prompt"), QStringLiteral("low")),
+                item(QStringLiteral("app.openAboutDialog"), QStringLiteral("Open About Dialog"), QStringLiteral("ui.prompt"), QStringLiteral("low")),
+                item(QStringLiteral("workspace.save"), QStringLiteral("Save current chart"), QStringLiteral("workspace.write"), QStringLiteral("high")),
+                item(QStringLiteral("workspace.saveAs"), QStringLiteral("Save current chart as path"), QStringLiteral("workspace.write"), QStringLiteral("high")),
+                item(QStringLiteral("document.setActiveDifficulty"), QStringLiteral("Set active difficulty"), QStringLiteral("document.edit")),
+                item(QStringLiteral("document.edit"), QStringLiteral("Apply document edit operations"), QStringLiteral("document.edit")),
+                item(QStringLiteral("document.formatActiveDifficulty"), QStringLiteral("Format active difficulty"), QStringLiteral("document.edit")),
+                item(QStringLiteral("editor.undo"), QStringLiteral("Editor undo"), QStringLiteral("editor.edit")),
+                item(QStringLiteral("editor.redo"), QStringLiteral("Editor redo"), QStringLiteral("editor.edit")),
+                item(QStringLiteral("editor.cut"), QStringLiteral("Editor cut"), QStringLiteral("editor.edit")),
+                item(QStringLiteral("editor.copy"), QStringLiteral("Editor copy"), QStringLiteral("editor.read"), QStringLiteral("low")),
+                item(QStringLiteral("editor.paste"), QStringLiteral("Editor paste"), QStringLiteral("editor.edit")),
+                item(QStringLiteral("editor.selectAll"), QStringLiteral("Editor select all"), QStringLiteral("editor.edit"), QStringLiteral("low")),
+                item(QStringLiteral("preview.play"), QStringLiteral("Play preview"), QStringLiteral("preview.control")),
+                item(QStringLiteral("preview.pause"), QStringLiteral("Pause preview"), QStringLiteral("preview.control")),
+                item(QStringLiteral("preview.stop"), QStringLiteral("Stop preview"), QStringLiteral("preview.control")),
+                item(QStringLiteral("preview.seek"), QStringLiteral("Seek preview"), QStringLiteral("preview.control")),
+                item(QStringLiteral("preview.setSpeed"), QStringLiteral("Set preview speed"), QStringLiteral("preview.control")),
+                item(QStringLiteral("timeline.seek"), QStringLiteral("Seek timeline"), QStringLiteral("timeline.control")),
+                item(QStringLiteral("timeline.zoomIn"), QStringLiteral("Zoom timeline in"), QStringLiteral("timeline.control")),
+                item(QStringLiteral("timeline.zoomOut"), QStringLiteral("Zoom timeline out"), QStringLiteral("timeline.control")),
+                item(QStringLiteral("timeline.stepZoomPreset"), QStringLiteral("Step timeline zoom preset"), QStringLiteral("timeline.control")),
+                item(QStringLiteral("timeline.setZoomScale"), QStringLiteral("Set timeline zoom scale"), QStringLiteral("timeline.control")),
+                item(QStringLiteral("timeline.setFollowPreview"), QStringLiteral("Set timeline follow-preview"), QStringLiteral("timeline.control")),
+                item(QStringLiteral("timeline.setFollowProgress"), QStringLiteral("Set timeline follow-progress"), QStringLiteral("timeline.control")),
+                item(QStringLiteral("validation.run"), QStringLiteral("Run validation"), QStringLiteral("diagnostics.run")),
+                item(QStringLiteral("analysis.runMuriAnalysis"), QStringLiteral("Run Muri analysis"), QStringLiteral("analysis.run")),
+                item(QStringLiteral("export.video.start"), QStringLiteral("Start video export"), QStringLiteral("export.write"), QStringLiteral("high")),
+                item(QStringLiteral("export.cover.start"), QStringLiteral("Start cover export"), QStringLiteral("export.write"), QStringLiteral("high")),
+                item(QStringLiteral("extensions.all"), QStringLiteral("List extensions"), QStringLiteral("extensions.manage"), QStringLiteral("high")),
+                item(QStringLiteral("extensions.reload"), QStringLiteral("Reload extensions"), QStringLiteral("extensions.manage"), QStringLiteral("high")),
+            };
         };
         const auto documentQuery = [this, okValue, metadataJson, activeDifficultyJson, difficultiesJson, parsedMarkersJson](const QJsonObject& query) {
             QSet<QString> select;
@@ -946,6 +1343,18 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 seekPreviewToSecond(args.value(QStringLiteral("second")).toDouble(qtPreviewPauseSecond_), true);
             } else if (id == QStringLiteral("preview.setSpeed")) {
                 setShellPreviewRate(args.value(QStringLiteral("value")).toDouble(previewPlaybackRate_));
+            } else if (id == QStringLiteral("timeline.zoomIn")) {
+                return handleExtensionHostRequest(QStringLiteral("timeline/zoomIn"), args);
+            } else if (id == QStringLiteral("timeline.zoomOut")) {
+                return handleExtensionHostRequest(QStringLiteral("timeline/zoomOut"), args);
+            } else if (id == QStringLiteral("timeline.stepZoomPreset")) {
+                return handleExtensionHostRequest(QStringLiteral("timeline/stepZoomPreset"), args);
+            } else if (id == QStringLiteral("timeline.setZoomScale")) {
+                return handleExtensionHostRequest(QStringLiteral("timeline/setZoomScale"), args);
+            } else if (id == QStringLiteral("timeline.setFollowPreview")) {
+                return handleExtensionHostRequest(QStringLiteral("timeline/setFollowPreview"), args);
+            } else if (id == QStringLiteral("timeline.setFollowProgress")) {
+                return handleExtensionHostRequest(QStringLiteral("timeline/setFollowProgress"), args);
             } else if (id == QStringLiteral("validation.run")) {
                 return QJsonObject{{QStringLiteral("ok"), runValidateSimaiSilently(false)}};
             } else if (id == QStringLiteral("analysis.runMuriAnalysis")) {
@@ -1005,6 +1414,9 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             const QJsonObject args = params.value(QStringLiteral("args")).toObject(params.value(QStringLiteral("params")).toObject());
             const QString command = params.value(QStringLiteral("command")).toString(params.value(QStringLiteral("id")).toString());
             return executeInternalCommand(command, args);
+        }
+        if (method == QStringLiteral("commands/getInternalCommands")) {
+            return okValue(internalCommandsJson());
         }
         if (method == QStringLiteral("document/query")) {
             return documentQuery(params);
@@ -1100,11 +1512,106 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
         if (method == QStringLiteral("extensions/clearRuntimeContributions")) {
             clearRenderedExtensionUi();
             clearPreviewOverlayWidgets();
+            clearExtensionShortcuts();
             state_.extensionUiContributions_ = QJsonArray();
             state_.extensionPreviewOverlays_ = QJsonArray();
             state_.extensionExportHooks_ = QJsonArray();
+            state_.extensionInputGestures_ = QJsonArray();
+            state_.extensionShortcutContributions_ = QJsonObject();
             state_.extensionRegistrationsByKind_.clear();
             return QJsonObject{{QStringLiteral("ok"), true}};
+        }
+        if (method == QStringLiteral("input/registerWheelGesture")) {
+            QJsonObject gesture = registeredContribution(params, QStringLiteral("input/wheelGesture"));
+            gesture.insert(QStringLiteral("kind"), QStringLiteral("input/wheelGesture"));
+            gesture.insert(QStringLiteral("ownerId"), params.value(QStringLiteral("extensionId")).toString(QStringLiteral("extension")));
+            if (gesture.value(QStringLiteral("command")).toString().trimmed().isEmpty()) {
+                return errorObject(QStringLiteral("input.registerWheelGesture requires a command."));
+            }
+            state_.extensionInputGestures_.append(gesture);
+            state_.extensionRegistrationsByKind_[QStringLiteral("input/wheelGesture")].append(gesture);
+            return okValue(gesture);
+        }
+        if (method == QStringLiteral("input/registerKeyGesture")
+            || method == QStringLiteral("input/registerMouseGesture")) {
+            const QString kind = method == QStringLiteral("input/registerKeyGesture")
+                ? QStringLiteral("input/keyGesture")
+                : QStringLiteral("input/mouseGesture");
+            QJsonObject gesture = registeredContribution(params, kind);
+            gesture.insert(QStringLiteral("kind"), kind);
+            gesture.insert(QStringLiteral("ownerId"), params.value(QStringLiteral("extensionId")).toString(QStringLiteral("extension")));
+            if (gesture.value(QStringLiteral("command")).toString().trimmed().isEmpty()) {
+                return errorObject(QStringLiteral("%1 requires a command.").arg(method));
+            }
+            state_.extensionInputGestures_.append(gesture);
+            state_.extensionRegistrationsByKind_[kind].append(gesture);
+            return okValue(gesture);
+        }
+        if (method == QStringLiteral("input/getGestures")) {
+            return okValue(state_.extensionInputGestures_);
+        }
+        if (method == QStringLiteral("input/dispatch")) {
+            const QString target = params.value(QStringLiteral("target")).toString(QStringLiteral("any"));
+            const QString type = params.value(QStringLiteral("type")).toString();
+            const QString phase = params.value(QStringLiteral("phase")).toString();
+            const Qt::KeyboardModifiers modifiers = Qt::KeyboardModifiers(params.value(QStringLiteral("modifiers")).toInt());
+            for (const QJsonValue& value : state_.extensionInputGestures_) {
+                const QJsonObject gesture = value.toObject();
+                const QString kind = gesture.value(QStringLiteral("kind")).toString();
+                if ((type == QStringLiteral("key") && kind != QStringLiteral("input/keyGesture"))
+                    || (type == QStringLiteral("mouse") && kind != QStringLiteral("input/mouseGesture"))) {
+                    continue;
+                }
+                if (!gestureTargetMatches(gesture.value(QStringLiteral("target")).toString(QStringLiteral("any")), target)
+                    || !gestureModifiersMatch(gesture.value(QStringLiteral("modifiers")).toArray(), modifiers)
+                    || !gesturePhaseMatches(gesture.value(QStringLiteral("phase")).toString(QStringLiteral("any")), phase)) {
+                    continue;
+                }
+                if (type == QStringLiteral("key")
+                    && !gestureStringMatches(gesture, QStringLiteral("key"), params.value(QStringLiteral("key")).toString())) {
+                    continue;
+                }
+                if (type == QStringLiteral("mouse")
+                    && !gestureStringMatches(gesture, QStringLiteral("button"), params.value(QStringLiteral("button")).toString())) {
+                    continue;
+                }
+                runExtensionCommand(gesture.value(QStringLiteral("command")).toString());
+                return okValue(QJsonObject{
+                    {QStringLiteral("handled"), true},
+                    {QStringLiteral("gestureId"), gesture.value(QStringLiteral("id")).toString()},
+                    {QStringLiteral("command"), gesture.value(QStringLiteral("command")).toString()},
+                });
+            }
+            return okValue(QJsonObject{{QStringLiteral("handled"), false}});
+        }
+        if (method == QStringLiteral("input/dispatchWheel")) {
+            const QString target = params.value(QStringLiteral("target")).toString(QStringLiteral("any"));
+            const int delta = params.value(QStringLiteral("delta")).toInt();
+            const Qt::KeyboardModifiers modifiers = Qt::KeyboardModifiers(params.value(QStringLiteral("modifiers")).toInt());
+            for (const QJsonValue& value : state_.extensionInputGestures_) {
+                const QJsonObject gesture = value.toObject();
+                if (gesture.value(QStringLiteral("kind")).toString() != QStringLiteral("input/wheelGesture")) {
+                    continue;
+                }
+                if (!gestureTargetMatches(gesture.value(QStringLiteral("target")).toString(QStringLiteral("any")), target)) {
+                    continue;
+                }
+                if (!gestureModifiersMatch(gesture.value(QStringLiteral("modifiers")).toArray(), modifiers)) {
+                    continue;
+                }
+                const QString direction = gesture.value(QStringLiteral("direction")).toString(QStringLiteral("any")).trimmed().toLower();
+                if ((direction == QStringLiteral("up") && delta <= 0)
+                    || (direction == QStringLiteral("down") && delta >= 0)) {
+                    continue;
+                }
+                runExtensionCommand(gesture.value(QStringLiteral("command")).toString());
+                return okValue(QJsonObject{
+                    {QStringLiteral("handled"), true},
+                    {QStringLiteral("gestureId"), gesture.value(QStringLiteral("id")).toString()},
+                    {QStringLiteral("command"), gesture.value(QStringLiteral("command")).toString()},
+                });
+            }
+            return okValue(QJsonObject{{QStringLiteral("handled"), false}});
         }
         if (method == QStringLiteral("app/openPreferences")) {
             onPreferences();
@@ -1429,6 +1936,67 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 {QStringLiteral("column"), cursor.positionInBlock()},
             });
         }
+        if (method == QStringLiteral("editor/getText")) {
+            return okValue(hasActiveDifficulty() ? editorText() : QString());
+        }
+        if (method == QStringLiteral("editor/getVisibleRange")) {
+            auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
+            if (editor == nullptr) {
+                return errorObject(QStringLiteral("No active editor."));
+            }
+            const QTextCursor first = editor->cursorForPosition(QPoint(0, 0));
+            const QTextCursor last = editor->cursorForPosition(QPoint(qMax(0, editor->viewport()->width() - 1), qMax(0, editor->viewport()->height() - 1)));
+            return okValue(QJsonObject{
+                {QStringLiteral("start"), first.position()},
+                {QStringLiteral("end"), last.position()},
+                {QStringLiteral("startLine"), first.blockNumber() + 1},
+                {QStringLiteral("endLine"), last.blockNumber() + 1},
+                {QStringLiteral("viewportWidth"), editor->viewport()->width()},
+                {QStringLiteral("viewportHeight"), editor->viewport()->height()},
+            });
+        }
+        if (method == QStringLiteral("editor/revealRange")) {
+            auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
+            if (editor == nullptr) {
+                return errorObject(QStringLiteral("No active editor."));
+            }
+            QTextCursor cursor = editor->textCursor();
+            const int start = params.value(QStringLiteral("start")).toInt(-1);
+            const int end = params.value(QStringLiteral("end")).toInt(start);
+            if (start >= 0) {
+                cursor.setPosition(start);
+                if (end >= start) {
+                    cursor.setPosition(end, QTextCursor::KeepAnchor);
+                }
+            } else if (!miacode::mainwindow::editor_selection::buildSelectionCursor(
+                           editor,
+                           qMax(1, params.value(QStringLiteral("line")).toInt(1)),
+                           qMax(1, params.value(QStringLiteral("col")).toInt(1)),
+                           qMax(1, params.value(QStringLiteral("endLine")).toInt(params.value(QStringLiteral("line")).toInt(1))),
+                           qMax(1, params.value(QStringLiteral("endCol")).toInt(params.value(QStringLiteral("col")).toInt(1))),
+                           &cursor)) {
+                return errorObject(QStringLiteral("Invalid range."));
+            }
+            editor->setTextCursor(cursor);
+            editor->ensureCursorVisible();
+            return QJsonObject{{QStringLiteral("ok"), true}};
+        }
+        if (method == QStringLiteral("editor/getParsedSnapshot")) {
+            auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
+            const QTextCursor cursor = editor != nullptr ? editor->textCursor() : QTextCursor();
+            return okValue(QJsonObject{
+                {QStringLiteral("activeDifficultyId"), activeDifficultyId_},
+                {QStringLiteral("textLength"), hasActiveDifficulty() ? editorText().size() : 0},
+                {QStringLiteral("lineCount"), editor != nullptr && editor->document() != nullptr ? editor->document()->blockCount() : 0},
+                {QStringLiteral("cursor"), QJsonObject{
+                     {QStringLiteral("position"), cursor.position()},
+                     {QStringLiteral("line"), cursor.blockNumber() + 1},
+                     {QStringLiteral("column"), cursor.positionInBlock() + 1},
+                 }},
+                {QStringLiteral("noteMarkerCount"), state_.latestTimelineNoteMarkers_.size()},
+                {QStringLiteral("noteMarkerSignature"), QString::fromLatin1(state_.latestTimelineNoteMarkerSignature_.toHex())},
+            });
+        }
         if (method == QStringLiteral("editor/insertText") || method == QStringLiteral("editor/replaceSelection")) {
             auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
             if (editor == nullptr || !hasActiveDifficulty()) {
@@ -1585,11 +2153,116 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             return QJsonObject{{QStringLiteral("ok"), true}};
         }
         if (method == QStringLiteral("editor/showHover")) {
-            const QString markdown = params.value(QStringLiteral("markdown")).toString();
+            QString markdown = params.value(QStringLiteral("markdown")).toString();
+            if (markdown.trimmed().isEmpty()) {
+                const QJsonObject collected = collectProviders(QStringLiteral("providers/hover"), params);
+                const QJsonArray items = collected.value(QStringLiteral("items")).toArray();
+                if (!items.isEmpty()) {
+                    markdown = items.first().toObject().value(QStringLiteral("displayText")).toString();
+                }
+            }
             if (statusBar() != nullptr && !markdown.trimmed().isEmpty()) {
                 statusBar()->showMessage(markdown.trimmed(), 5000);
             }
             return QJsonObject{{QStringLiteral("ok"), true}};
+        }
+        if (method == QStringLiteral("editor/showCompletions")) {
+            return handleExtensionHostRequest(QStringLiteral("providers/showCompletions"), params);
+        }
+        if (method == QStringLiteral("editor/showCodeActions")) {
+            return handleExtensionHostRequest(QStringLiteral("providers/showCodeActions"), params);
+        }
+        if (method == QStringLiteral("providers/getRegistered")) {
+            const QString requestedKind = params.value(QStringLiteral("kind")).toString();
+            QJsonArray registrations;
+            for (auto it = state_.extensionRegistrationsByKind_.constBegin();
+                 it != state_.extensionRegistrationsByKind_.constEnd();
+                 ++it) {
+                if (!requestedKind.isEmpty() && it.key() != requestedKind) {
+                    continue;
+                }
+                if (!it.key().startsWith(QStringLiteral("providers/"))) {
+                    continue;
+                }
+                for (const QJsonValue& value : it.value()) {
+                    registrations.append(value);
+                }
+            }
+            return okValue(registrations);
+        }
+        if (method == QStringLiteral("providers/collectHover")
+            || method == QStringLiteral("providers/collectCompletions")
+            || method == QStringLiteral("providers/collectCodeActions")) {
+            const QString kind = method == QStringLiteral("providers/collectHover")
+                ? QStringLiteral("providers/hover")
+                : (method == QStringLiteral("providers/collectCompletions")
+                       ? QStringLiteral("providers/completion")
+                       : QStringLiteral("providers/codeAction"));
+            QJsonObject collected = collectProviders(kind, params);
+            if (method == QStringLiteral("providers/collectHover")
+                && params.value(QStringLiteral("show")).toBool(false)
+                && statusBar() != nullptr) {
+                const QJsonArray items = collected.value(QStringLiteral("items")).toArray();
+                if (!items.isEmpty()) {
+                    statusBar()->showMessage(items.first().toObject().value(QStringLiteral("displayText")).toString(), 5000);
+                }
+            }
+            return okValue(collected);
+        }
+        if (method == QStringLiteral("providers/showHover")) {
+            QJsonObject collected = collectProviders(QStringLiteral("providers/hover"), params);
+            const QJsonArray items = collected.value(QStringLiteral("items")).toArray();
+            if (items.isEmpty()) {
+                return okValue(QJsonObject{{QStringLiteral("shown"), false}});
+            }
+            const QString text = items.first().toObject().value(QStringLiteral("displayText")).toString();
+            if (!text.trimmed().isEmpty()) {
+                const QPoint globalPos(
+                    params.value(QStringLiteral("globalX")).toInt(QCursor::pos().x()),
+                    params.value(QStringLiteral("globalY")).toInt(QCursor::pos().y()));
+                QToolTip::showText(globalPos, text.toHtmlEscaped().replace(QLatin1Char('\n'), QStringLiteral("<br>")), editorWidget_);
+            }
+            return okValue(QJsonObject{{QStringLiteral("shown"), true}, {QStringLiteral("item"), items.first()}});
+        }
+        if (method == QStringLiteral("providers/showCompletions")
+            || method == QStringLiteral("providers/showCodeActions")) {
+            const bool completions = method == QStringLiteral("providers/showCompletions");
+            QJsonObject collected = collectProviders(
+                completions ? QStringLiteral("providers/completion") : QStringLiteral("providers/codeAction"),
+                params);
+            const QJsonArray items = collected.value(QStringLiteral("items")).toArray();
+            if (items.isEmpty()) {
+                return okValue(QJsonObject{{QStringLiteral("shown"), false}});
+            }
+            QMenu menu(this);
+            menu.setTitle(completions ? QStringLiteral("Completions") : QStringLiteral("Code Actions"));
+            QHash<QAction*, QJsonObject> actionItems;
+            for (const QJsonValue& value : items) {
+                const QJsonObject item = value.toObject();
+                const QString label = contributionTitle(item, item.value(QStringLiteral("displayText")).toString(QStringLiteral("Item")));
+                QAction* action = menu.addAction(label);
+                action->setToolTip(providerDisplayText(item));
+                actionItems.insert(action, item);
+            }
+            const QPoint globalPos(
+                params.value(QStringLiteral("globalX")).toInt(QCursor::pos().x()),
+                params.value(QStringLiteral("globalY")).toInt(QCursor::pos().y()));
+            QAction* selected = menu.exec(globalPos);
+            if (selected == nullptr || !actionItems.contains(selected)) {
+                return okValue(QJsonObject{{QStringLiteral("shown"), true}, {QStringLiteral("accepted"), false}});
+            }
+            const QJsonObject item = actionItems.value(selected);
+            const QString command = item.value(QStringLiteral("command")).toString(
+                item.value(QStringLiteral("onSelectCommand")).toString()).trimmed();
+            const QString insertText = item.value(QStringLiteral("insertText")).toString(
+                item.value(QStringLiteral("textEdit")).toObject().value(QStringLiteral("text")).toString()).trimmed();
+            if (!insertText.isEmpty()) {
+                handleExtensionHostRequest(QStringLiteral("editor/insertText"), QJsonObject{{QStringLiteral("text"), insertText}});
+            }
+            if (!command.isEmpty()) {
+                runExtensionCommand(command);
+            }
+            return okValue(QJsonObject{{QStringLiteral("shown"), true}, {QStringLiteral("accepted"), true}, {QStringLiteral("item"), item}});
         }
         if (method == QStringLiteral("editor/addGutterIcon")
             || method == QStringLiteral("editor/clearGutterIcons")
@@ -1705,14 +2378,147 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             return okValue(QJsonObject{
                 {QStringLiteral("activeDifficultyId"), activeDifficultyId_},
                 {QStringLiteral("currentSecond"), qtPreviewPauseSecond_},
+                {QStringLiteral("zoomScale"), timelineQuickStateBridge_ != nullptr
+                     ? timelineQuickStateBridge_->zoomScale()
+                     : (timelineView_ != nullptr ? timelineView_->zoomScale() : 0.0)},
+                {QStringLiteral("horizontalScrollValue"), timelineQuickStateBridge_ != nullptr
+                     ? timelineQuickStateBridge_->horizontalScrollValue()
+                     : (timelineView_ != nullptr ? timelineView_->horizontalScrollValue() : 0)},
+                {QStringLiteral("viewportCenterSecond"), timelineQuickStateBridge_ != nullptr
+                     ? timelineQuickStateBridge_->viewportCenterSecond()
+                     : qtPreviewPauseSecond_},
+                {QStringLiteral("followPreview"), timelineQuickStateBridge_ != nullptr
+                     ? timelineQuickStateBridge_->followPreviewEnabled()
+                     : (timelineView_ != nullptr && timelineView_->followPreviewEnabled())},
+                {QStringLiteral("followProgress"), timelineQuickStateBridge_ == nullptr
+                     ? (timelineView_ == nullptr || timelineView_->followProgressEnabled())
+                     : timelineQuickStateBridge_->followProgressEnabled()},
                 {QStringLiteral("textLength"), editorText().size()},
                 {QStringLiteral("noteMarkerCount"), state_.latestTimelineNoteMarkers_.size()},
                 {QStringLiteral("extensionMarkers"), extensionMarkers},
                 {QStringLiteral("extensionVisuals"), state_.extensionTimelineVisuals_},
             });
         }
+        if (method == QStringLiteral("timeline/getZoomState")) {
+            return okValue(QJsonObject{
+                {QStringLiteral("zoomScale"), timelineQuickStateBridge_ != nullptr
+                     ? timelineQuickStateBridge_->zoomScale()
+                     : (timelineView_ != nullptr ? timelineView_->zoomScale() : 0.0)},
+                {QStringLiteral("presets"), [&]() {
+                     QJsonArray presets;
+                     if (timelineQuickStateBridge_ != nullptr) {
+                         for (double preset : timelineQuickStateBridge_->zoomPresets()) {
+                             presets.append(preset);
+                         }
+                     }
+                     return presets;
+                 }()},
+            });
+        }
+        if (method == QStringLiteral("timeline/getVisibleRange")) {
+            const double zoomScale = timelineQuickStateBridge_ != nullptr
+                ? timelineQuickStateBridge_->zoomScale()
+                : (timelineView_ != nullptr ? timelineView_->zoomScale() : 0.5);
+            const double centerSecond = timelineQuickStateBridge_ != nullptr
+                ? timelineQuickStateBridge_->viewportCenterSecond()
+                : qtPreviewPauseSecond_;
+            const int viewportWidth = timelineView_ != nullptr && timelineView_->viewport() != nullptr
+                ? timelineView_->viewport()->width()
+                : 0;
+            const double pixelsPerSecond = qMax(1.0, 120.0 * zoomScale);
+            const double halfSpan = viewportWidth > 0 ? (static_cast<double>(viewportWidth) / pixelsPerSecond) * 0.5 : 0.0;
+            return okValue(QJsonObject{
+                {QStringLiteral("startSecond"), qMax(0.0, centerSecond - halfSpan)},
+                {QStringLiteral("endSecond"), centerSecond + halfSpan},
+                {QStringLiteral("centerSecond"), centerSecond},
+                {QStringLiteral("zoomScale"), zoomScale},
+                {QStringLiteral("horizontalScrollValue"), timelineQuickStateBridge_ != nullptr
+                     ? timelineQuickStateBridge_->horizontalScrollValue()
+                     : (timelineView_ != nullptr ? timelineView_->horizontalScrollValue() : 0)},
+                {QStringLiteral("viewportWidth"), viewportWidth},
+            });
+        }
+        if (method == QStringLiteral("timeline/getMarkersAtSecond")) {
+            const double second = params.value(QStringLiteral("second")).toDouble(qtPreviewPauseSecond_);
+            const double tolerance = qMax(0.0, params.value(QStringLiteral("tolerance")).toDouble(0.02));
+            QJsonArray markers;
+            for (const TimelineNoteMarker& marker : std::as_const(state_.latestTimelineNoteMarkers_)) {
+                const QJsonObject object = timelineNoteMarkerToJson(marker);
+                const double markerSecond = object.value(QStringLiteral("second")).toDouble(object.value(QStringLiteral("time")).toDouble(-1.0));
+                if (markerSecond >= 0.0 && qAbs(markerSecond - second) <= tolerance) {
+                    markers.append(object);
+                }
+            }
+            return okValue(markers);
+        }
         if (method == QStringLiteral("timeline/seek") || method == QStringLiteral("preview/seek")) {
             seekPreviewToSecond(params.value(QStringLiteral("second")).toDouble(), true);
+            return QJsonObject{{QStringLiteral("ok"), true}};
+        }
+        if (method == QStringLiteral("timeline/stepZoomPreset")
+            || method == QStringLiteral("timeline/zoomIn")
+            || method == QStringLiteral("timeline/zoomOut")) {
+            int delta = params.value(QStringLiteral("delta")).toInt(0);
+            if (method == QStringLiteral("timeline/zoomIn")) {
+                delta = 1;
+            } else if (method == QStringLiteral("timeline/zoomOut")) {
+                delta = -1;
+            }
+            if (delta == 0) {
+                return errorObject(QStringLiteral("timeline zoom delta must not be 0."));
+            }
+            const double anchorSecond = params.value(QStringLiteral("anchorSecond")).toDouble(
+                timelineQuickStateBridge_ != nullptr
+                    ? timelineQuickStateBridge_->viewportCenterSecond()
+                    : qtPreviewPauseSecond_);
+            if (timelineQuickStateBridge_ != nullptr) {
+                timelineQuickStateBridge_->stepZoomPreset(delta, anchorSecond);
+            } else if (timelineView_ != nullptr) {
+                timelineView_->stepZoomPresetForQuickSurface(delta, anchorSecond);
+            } else {
+                return errorObject(QStringLiteral("Timeline host is not available."));
+            }
+            return QJsonObject{{QStringLiteral("ok"), true}};
+        }
+        if (method == QStringLiteral("timeline/setZoomScale")) {
+            const double scale = params.value(QStringLiteral("scale")).toDouble(params.value(QStringLiteral("value")).toDouble(0.5));
+            const double anchorSecond = params.value(QStringLiteral("anchorSecond")).toDouble(
+                timelineQuickStateBridge_ != nullptr
+                    ? timelineQuickStateBridge_->viewportCenterSecond()
+                    : qtPreviewPauseSecond_);
+            if (timelineQuickStateBridge_ != nullptr) {
+                timelineQuickStateBridge_->setZoomScaleAnchored(scale, anchorSecond);
+            } else if (timelineView_ != nullptr) {
+                timelineView_->stepZoomPresetForQuickSurface(scale > timelineView_->zoomScale() ? 1 : -1, anchorSecond);
+            } else {
+                return errorObject(QStringLiteral("Timeline host is not available."));
+            }
+            return QJsonObject{{QStringLiteral("ok"), true}};
+        }
+        if (method == QStringLiteral("timeline/scrollToSecond")) {
+            const double second = params.value(QStringLiteral("second")).toDouble(qtPreviewPauseSecond_);
+            seekPreviewToSecond(second, true);
+            return QJsonObject{{QStringLiteral("ok"), true}};
+        }
+        if (method == QStringLiteral("timeline/setFollowPreview")) {
+            const bool enabled = params.value(QStringLiteral("enabled")).toBool(params.value(QStringLiteral("value")).toBool(false));
+            state_.previewFollowEnabled_ = enabled;
+            if (timelineQuickStateBridge_ != nullptr) {
+                timelineQuickStateBridge_->setFollowPreviewEnabled(enabled);
+            }
+            if (timelineView_ != nullptr) {
+                timelineView_->setFollowPreviewEnabled(enabled);
+            }
+            return QJsonObject{{QStringLiteral("ok"), true}};
+        }
+        if (method == QStringLiteral("timeline/setFollowProgress")) {
+            const bool enabled = params.value(QStringLiteral("enabled")).toBool(params.value(QStringLiteral("value")).toBool(true));
+            if (timelineQuickStateBridge_ != nullptr) {
+                timelineQuickStateBridge_->setFollowProgressEnabled(enabled);
+            }
+            if (timelineView_ != nullptr) {
+                timelineView_->setFollowProgressEnabled(enabled);
+            }
             return QJsonObject{{QStringLiteral("ok"), true}};
         }
         if (method == QStringLiteral("timeline/addMarker")) {
@@ -1785,6 +2591,29 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 {QStringLiteral("rate"), previewPlaybackRate_},
                 {QStringLiteral("activeDifficultyId"), activeDifficultyId_},
                 {QStringLiteral("overlays"), state_.extensionPreviewOverlays_},
+            });
+        }
+        if (method == QStringLiteral("preview/getRenderState")) {
+            const QSize canvasSize = previewCanvasFrame_ != nullptr
+                ? previewCanvasFrame_->contentsRect().size()
+                : QSize();
+            return okValue(QJsonObject{
+                {QStringLiteral("currentSecond"), qtPreviewPauseSecond_},
+                {QStringLiteral("playing"), qtPreviewPlaying_},
+                {QStringLiteral("rate"), previewPlaybackRate_},
+                {QStringLiteral("durationSeconds"), previewDurationSeconds()},
+                {QStringLiteral("canvasWidth"), canvasSize.width()},
+                {QStringLiteral("canvasHeight"), canvasSize.height()},
+                {QStringLiteral("layoutSquareScale"), previewLayoutSquareScale_},
+                {QStringLiteral("skinVariant"), static_cast<int>(previewSkinVariant_)},
+                {QStringLiteral("outlineVariant"), static_cast<int>(previewOutlineVariant_)},
+                {QStringLiteral("backgroundScaleMode"), static_cast<int>(previewBackgroundScaleMode_)},
+                {QStringLiteral("tapFlowSpeed"), previewTapFlowSpeed_},
+                {QStringLiteral("touchFlowSpeed"), previewTouchFlowSpeed_},
+                {QStringLiteral("canvasFrameRateMode"), static_cast<int>(previewCanvasFrameRateMode_)},
+                {QStringLiteral("stageMediaFrameRateMode"), static_cast<int>(state_.previewStageMediaFrameRateMode_)},
+                {QStringLiteral("noteMarkerCount"), state_.latestTimelineNoteMarkers_.size()},
+                {QStringLiteral("overlayCount"), state_.extensionPreviewOverlays_.size()},
             });
         }
         if (method == QStringLiteral("preview/getOverlays")) {
@@ -2037,6 +2866,11 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             if (kind.startsWith(QStringLiteral("export/"))) {
                 state_.extensionExportHooks_.append(contribution);
             }
+            if (kind == QStringLiteral("ui/sceneOverlay") || kind == QStringLiteral("ui/canvasOverlay")) {
+                state_.extensionPreviewOverlays_.append(contribution);
+                renderPreviewOverlays();
+                return okValue(contribution);
+            }
             if (kind.startsWith(QStringLiteral("ui/"))) {
                 state_.extensionUiContributions_.append(contribution);
                 renderUiContribution(contribution);
@@ -2085,15 +2919,34 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             renderPreviewOverlays();
             return okValue(overlay);
         }
+        if (method == QStringLiteral("ui/registerSceneOverlay")
+            || method == QStringLiteral("ui/renderSceneOverlay")) {
+            QJsonObject overlay = registeredContribution(params, QStringLiteral("ui/sceneOverlay"));
+            overlay.insert(QStringLiteral("kind"), params.value(QStringLiteral("kind")).toString(QStringLiteral("ui/sceneOverlay")));
+            overlay.insert(QStringLiteral("ownerId"), params.value(QStringLiteral("ownerId")).toString(
+                params.value(QStringLiteral("extensionId")).toString(QStringLiteral("extension"))));
+            state_.extensionPreviewOverlays_.append(overlay);
+            renderPreviewOverlays();
+            return okValue(overlay);
+        }
         if (method == QStringLiteral("ui/renderDeclarativeView")
             || method == QStringLiteral("ui/renderSidebarView")
             || method == QStringLiteral("ui/renderBottomTabView")
             || method == QStringLiteral("ui/renderPreferencesPage")
+            || method == QStringLiteral("ui/renderFloatingPanel")
+            || method == QStringLiteral("ui/renderWebView")
+            || method == QStringLiteral("ui/renderCanvasView")
             || method == QStringLiteral("ui/renderToolbarButton")) {
             QString kind = params.value(QStringLiteral("kind")).toString();
             if (kind.isEmpty()) {
                 if (method == QStringLiteral("ui/renderToolbarButton")) {
                     kind = QStringLiteral("ui/toolbarButton");
+                } else if (method == QStringLiteral("ui/renderFloatingPanel")) {
+                    kind = QStringLiteral("ui/floatingPanel");
+                } else if (method == QStringLiteral("ui/renderWebView")) {
+                    kind = QStringLiteral("ui/webView");
+                } else if (method == QStringLiteral("ui/renderCanvasView")) {
+                    kind = QStringLiteral("ui/canvasView");
                 } else if (method == QStringLiteral("ui/renderSidebarView")) {
                     kind = QStringLiteral("ui/sidebarView");
                 } else if (method == QStringLiteral("ui/renderPreferencesPage")) {
@@ -2105,11 +2958,82 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             QJsonObject contribution = registeredContribution(params, kind);
             contribution.insert(QStringLiteral("kind"), kind);
             contribution.insert(QStringLiteral("ownerId"), params.value(QStringLiteral("extensionId")).toString(QStringLiteral("extension")));
+            if ((kind == QStringLiteral("ui/webView") || kind == QStringLiteral("ui/canvasView"))
+                && !contribution.contains(QStringLiteral("type"))) {
+                contribution.insert(QStringLiteral("type"), kind == QStringLiteral("ui/webView") ? QStringLiteral("webview") : QStringLiteral("canvas"));
+            }
             if (!renderUiContribution(contribution)) {
                 return errorObject(QStringLiteral("UI host is not available for %1.").arg(kind));
             }
             state_.extensionUiContributions_.append(contribution);
             return okValue(contribution);
+        }
+        if (method == QStringLiteral("shortcuts/list")) {
+            QJsonObject values;
+            for (auto it = state_.extensionShortcutContributions_.constBegin();
+                 it != state_.extensionShortcutContributions_.constEnd();
+                 ++it) {
+                const QJsonObject contribution = it.value().toObject();
+                const QString shortcutId = contribution.value(QStringLiteral("shortcutId")).toString(it.key());
+                values.insert(
+                    contribution.value(QStringLiteral("command")).toString(shortcutId),
+                    ShortcutRegistry::instance().sequence(shortcutId).toString(QKeySequence::PortableText));
+            }
+            return okValue(values);
+        }
+        if (method == QStringLiteral("shortcuts/getEditable")) {
+            QJsonArray shortcuts;
+            for (const ShortcutRegistry::ShortcutDefinition& definition : ShortcutRegistry::instance().editableShortcuts()) {
+                QJsonArray sequences;
+                for (const QKeySequence& sequence : ShortcutRegistry::instance().sequences(definition.id, definition.defaultSequences)) {
+                    if (!sequence.isEmpty()) {
+                        sequences.append(sequence.toString(QKeySequence::PortableText));
+                    }
+                }
+                shortcuts.append(QJsonObject{
+                    {QStringLiteral("id"), definition.id},
+                    {QStringLiteral("label"), shortcutDefinitionDisplayName(definition)},
+                    {QStringLiteral("keybindings"), sequences},
+                });
+            }
+            return okValue(shortcuts);
+        }
+        if (method == QStringLiteral("shortcuts/getKeybinding")) {
+            const QString command = params.value(QStringLiteral("command")).toString(params.value(QStringLiteral("id")).toString());
+            const QString shortcutId = params.value(QStringLiteral("shortcutId")).toString(extensionShortcutIdForCommand(command));
+            return okValue(ShortcutRegistry::instance().sequence(shortcutId).toString(QKeySequence::PortableText));
+        }
+        if (method == QStringLiteral("shortcuts/register")) {
+            const QString command = params.value(QStringLiteral("command")).toString(params.value(QStringLiteral("id")).toString()).trimmed();
+            if (command.isEmpty()) {
+                return errorObject(QStringLiteral("shortcuts.register requires a command."));
+            }
+            const QString shortcutId = params.value(QStringLiteral("shortcutId")).toString(extensionShortcutIdForCommand(command));
+            const QString label = params.value(QStringLiteral("label")).toString(params.value(QStringLiteral("title")).toString(command));
+            const QString keybinding = params.value(QStringLiteral("keybinding")).toString(params.value(QStringLiteral("keys")).toString());
+            const QList<QKeySequence> defaults = keybinding.trimmed().isEmpty()
+                ? QList<QKeySequence>{}
+                : QList<QKeySequence>{QKeySequence(keybinding)};
+            ShortcutRegistry::instance().registerExtensionShortcut(shortcutId, label, defaults);
+
+            QJsonObject contribution = params;
+            contribution.insert(QStringLiteral("kind"), QStringLiteral("shortcuts/command"));
+            contribution.insert(QStringLiteral("command"), command);
+            contribution.insert(QStringLiteral("shortcutId"), shortcutId);
+            contribution.insert(QStringLiteral("label"), label);
+            contribution.insert(QStringLiteral("keybinding"), keybinding);
+            contribution.insert(QStringLiteral("ownerId"), params.value(QStringLiteral("extensionId")).toString(QStringLiteral("extension")));
+            state_.extensionShortcutContributions_.insert(shortcutId, contribution);
+            rebuildExtensionShortcuts();
+            return okValue(QJsonObject{
+                {QStringLiteral("shortcutId"), shortcutId},
+                {QStringLiteral("command"), command},
+                {QStringLiteral("keybinding"), ShortcutRegistry::instance().sequence(shortcutId).toString(QKeySequence::PortableText)},
+            });
+        }
+        if (method == QStringLiteral("shortcuts/reloadRegistered")) {
+            rebuildExtensionShortcuts();
+            return okValue(QJsonObject{{QStringLiteral("count"), state_.extensionShortcutObjects_.size()}});
         }
         if (method == QStringLiteral("tasks/withProgress") || method == QStringLiteral("tasks/reportProgress")) {
             const QString message = params.value(QStringLiteral("message")).toString(params.value(QStringLiteral("title")).toString());

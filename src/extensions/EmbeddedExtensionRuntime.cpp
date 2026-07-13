@@ -22,6 +22,7 @@ public:
         Editor,
         Validation,
         Analysis,
+        Providers,
         Timeline,
         Preview,
         Export,
@@ -33,6 +34,7 @@ public:
         Theme,
         Backup,
         Shortcuts,
+        Input,
         Extensions,
         Ui,
         Tasks,
@@ -81,6 +83,11 @@ public:
     Q_INVOKABLE QJSValue getCommands()
     {
         return hostCall(QStringLiteral("commands/getCommands"));
+    }
+
+    Q_INVOKABLE QJSValue getInternalCommands()
+    {
+        return hostCall(QStringLiteral("commands/getInternalCommands"));
     }
 
     Q_INVOKABLE QJSValue showInformationMessage(const QString& message)
@@ -322,6 +329,29 @@ public:
         return hostCall(QStringLiteral("editor/getSelection"));
     }
 
+    Q_INVOKABLE QJSValue getText()
+    {
+        return hostCall(QStringLiteral("editor/getText"));
+    }
+
+    Q_INVOKABLE QJSValue getVisibleRange()
+    {
+        if (kind_ == Kind::Timeline) {
+            return hostCall(QStringLiteral("timeline/getVisibleRange"));
+        }
+        return hostCall(QStringLiteral("editor/getVisibleRange"));
+    }
+
+    Q_INVOKABLE QJSValue revealRange(const QJSValue& range)
+    {
+        return hostCall(QStringLiteral("editor/revealRange"), runtime_->scriptValueToJson(range));
+    }
+
+    Q_INVOKABLE QJSValue getParsedSnapshot()
+    {
+        return hostCall(QStringLiteral("editor/getParsedSnapshot"));
+    }
+
     Q_INVOKABLE QJSValue getCursor()
     {
         return hostCall(QStringLiteral("editor/getCursor"));
@@ -406,11 +436,24 @@ public:
         return callOpenBridge(QStringLiteral("editor"), QStringLiteral("selectAll"));
     }
 
-    Q_INVOKABLE QJSValue showHover(const QJSValue& range, const QString& markdown)
+    Q_INVOKABLE QJSValue showHover(const QJSValue& range = {}, const QString& markdown = {})
     {
         QJsonObject params = runtime_->scriptValueToJson(range);
+        if (kind_ == Kind::Providers) {
+            return hostCall(QStringLiteral("providers/showHover"), params);
+        }
         params.insert(QStringLiteral("markdown"), markdown);
         return hostCall(QStringLiteral("editor/showHover"), params);
+    }
+
+    Q_INVOKABLE QJSValue showCompletions(const QJSValue& context = {})
+    {
+        return hostCall(QStringLiteral("editor/showCompletions"), runtime_->scriptValueToJson(context));
+    }
+
+    Q_INVOKABLE QJSValue showCodeActions(const QJSValue& context = {})
+    {
+        return hostCall(QStringLiteral("editor/showCodeActions"), runtime_->scriptValueToJson(context));
     }
 
     Q_INVOKABLE QJSValue addGutterIcon(const QJSValue& options)
@@ -446,6 +489,30 @@ public:
     Q_INVOKABLE QJSValue registerCodeActionProvider(const QJSValue& provider)
     {
         return registerContribution(QStringLiteral("providers/codeAction"), provider);
+    }
+
+    Q_INVOKABLE QJSValue getRegisteredProviders(const QString& kind = {})
+    {
+        QJsonObject params;
+        if (!kind.trimmed().isEmpty()) {
+            params.insert(QStringLiteral("kind"), kind);
+        }
+        return hostCall(QStringLiteral("providers/getRegistered"), params);
+    }
+
+    Q_INVOKABLE QJSValue collectHover(const QJSValue& context = {})
+    {
+        return hostCall(QStringLiteral("providers/collectHover"), runtime_->scriptValueToJson(context));
+    }
+
+    Q_INVOKABLE QJSValue collectCompletions(const QJSValue& context = {})
+    {
+        return hostCall(QStringLiteral("providers/collectCompletions"), runtime_->scriptValueToJson(context));
+    }
+
+    Q_INVOKABLE QJSValue collectCodeActions(const QJSValue& context = {})
+    {
+        return hostCall(QStringLiteral("providers/collectCodeActions"), runtime_->scriptValueToJson(context));
     }
 
     Q_INVOKABLE QJSValue validateDocument()
@@ -499,10 +566,61 @@ public:
         return hostCall(QStringLiteral("timeline/getCurrentSecond"));
     }
 
+    Q_INVOKABLE QJSValue getZoomState()
+    {
+        return hostCall(QStringLiteral("timeline/getZoomState"));
+    }
+
+    Q_INVOKABLE QJSValue getMarkersAtSecond(double second, const QJSValue& options = {})
+    {
+        QJsonObject params = runtime_->scriptValueToJson(options);
+        params.insert(QStringLiteral("second"), second);
+        return hostCall(QStringLiteral("timeline/getMarkersAtSecond"), params);
+    }
+
     Q_INVOKABLE QJSValue seek(double second)
     {
         return hostCall(kind_ == Kind::Preview ? QStringLiteral("preview/seek") : QStringLiteral("timeline/seek"),
                         QJsonObject{{QStringLiteral("second"), second}});
+    }
+
+    Q_INVOKABLE QJSValue zoomIn(const QJSValue& options = {})
+    {
+        return hostCall(QStringLiteral("timeline/zoomIn"), runtime_->scriptValueToJson(options));
+    }
+
+    Q_INVOKABLE QJSValue zoomOut(const QJSValue& options = {})
+    {
+        return hostCall(QStringLiteral("timeline/zoomOut"), runtime_->scriptValueToJson(options));
+    }
+
+    Q_INVOKABLE QJSValue stepZoomPreset(int delta, const QJSValue& options = {})
+    {
+        QJsonObject params = runtime_->scriptValueToJson(options);
+        params.insert(QStringLiteral("delta"), delta);
+        return hostCall(QStringLiteral("timeline/stepZoomPreset"), params);
+    }
+
+    Q_INVOKABLE QJSValue setZoomScale(double scale, const QJSValue& options = {})
+    {
+        QJsonObject params = runtime_->scriptValueToJson(options);
+        params.insert(QStringLiteral("scale"), scale);
+        return hostCall(QStringLiteral("timeline/setZoomScale"), params);
+    }
+
+    Q_INVOKABLE QJSValue scrollToSecond(double second)
+    {
+        return hostCall(QStringLiteral("timeline/scrollToSecond"), QJsonObject{{QStringLiteral("second"), second}});
+    }
+
+    Q_INVOKABLE QJSValue setFollowPreview(bool enabled)
+    {
+        return hostCall(QStringLiteral("timeline/setFollowPreview"), QJsonObject{{QStringLiteral("enabled"), enabled}});
+    }
+
+    Q_INVOKABLE QJSValue setFollowProgress(bool enabled)
+    {
+        return hostCall(QStringLiteral("timeline/setFollowProgress"), QJsonObject{{QStringLiteral("enabled"), enabled}});
     }
 
     Q_INVOKABLE QJSValue addMarker(const QJSValue& marker)
@@ -553,6 +671,11 @@ public:
     Q_INVOKABLE QJSValue getState()
     {
         return hostCall(QStringLiteral("preview/getState"));
+    }
+
+    Q_INVOKABLE QJSValue getRenderState()
+    {
+        return hostCall(QStringLiteral("preview/getRenderState"));
     }
 
     Q_INVOKABLE QJSValue setSpeed(double value)
@@ -768,6 +891,11 @@ public:
         return hostCall(QStringLiteral("shortcuts/list"));
     }
 
+    Q_INVOKABLE QJSValue getEditableShortcuts()
+    {
+        return hostCall(QStringLiteral("shortcuts/getEditable"));
+    }
+
     Q_INVOKABLE QJSValue getKeybinding(const QString& command)
     {
         return hostCall(QStringLiteral("shortcuts/getKeybinding"), QJsonObject{{QStringLiteral("command"), command}});
@@ -779,6 +907,31 @@ public:
             {QStringLiteral("command"), command},
             {QStringLiteral("keybinding"), keybinding},
         });
+    }
+
+    Q_INVOKABLE QJSValue registerCommandShortcut(const QJSValue& shortcut)
+    {
+        return hostCall(QStringLiteral("shortcuts/register"), runtime_->scriptValueToJson(shortcut));
+    }
+
+    Q_INVOKABLE QJSValue registerWheelGesture(const QJSValue& gesture)
+    {
+        return hostCall(QStringLiteral("input/registerWheelGesture"), runtime_->scriptValueToJson(gesture));
+    }
+
+    Q_INVOKABLE QJSValue registerKeyGesture(const QJSValue& gesture)
+    {
+        return hostCall(QStringLiteral("input/registerKeyGesture"), runtime_->scriptValueToJson(gesture));
+    }
+
+    Q_INVOKABLE QJSValue registerMouseGesture(const QJSValue& gesture)
+    {
+        return hostCall(QStringLiteral("input/registerMouseGesture"), runtime_->scriptValueToJson(gesture));
+    }
+
+    Q_INVOKABLE QJSValue getGestures()
+    {
+        return hostCall(QStringLiteral("input/getGestures"));
     }
 
     Q_INVOKABLE QJSValue all()
@@ -826,6 +979,11 @@ public:
         return registerContribution(QStringLiteral("ui/preferencesPage"), page);
     }
 
+    Q_INVOKABLE QJSValue registerFloatingPanel(const QJSValue& panel)
+    {
+        return registerContribution(QStringLiteral("ui/floatingPanel"), panel);
+    }
+
     Q_INVOKABLE QJSValue registerToolbarButton(const QJSValue& button)
     {
         return registerContribution(QStringLiteral("ui/toolbarButton"), button);
@@ -834,6 +992,11 @@ public:
     Q_INVOKABLE QJSValue registerPetOverlay(const QJSValue& overlay)
     {
         return hostCall(QStringLiteral("ui/registerPetOverlay"), runtime_->scriptValueToJson(overlay));
+    }
+
+    Q_INVOKABLE QJSValue registerSceneOverlay(const QJSValue& overlay)
+    {
+        return hostCall(QStringLiteral("ui/registerSceneOverlay"), runtime_->scriptValueToJson(overlay));
     }
 
     Q_INVOKABLE QJSValue getContributions()
@@ -879,9 +1042,29 @@ public:
         return hostCall(QStringLiteral("ui/renderPreferencesPage"), runtime_->scriptValueToJson(page));
     }
 
+    Q_INVOKABLE QJSValue renderFloatingPanel(const QJSValue& panel)
+    {
+        return hostCall(QStringLiteral("ui/renderFloatingPanel"), runtime_->scriptValueToJson(panel));
+    }
+
     Q_INVOKABLE QJSValue renderToolbarButton(const QJSValue& button)
     {
         return hostCall(QStringLiteral("ui/renderToolbarButton"), runtime_->scriptValueToJson(button));
+    }
+
+    Q_INVOKABLE QJSValue renderSceneOverlay(const QJSValue& overlay)
+    {
+        return hostCall(QStringLiteral("ui/renderSceneOverlay"), runtime_->scriptValueToJson(overlay));
+    }
+
+    Q_INVOKABLE QJSValue renderWebView(const QJSValue& view)
+    {
+        return hostCall(QStringLiteral("ui/renderWebView"), runtime_->scriptValueToJson(view));
+    }
+
+    Q_INVOKABLE QJSValue renderCanvasView(const QJSValue& view)
+    {
+        return hostCall(QStringLiteral("ui/renderCanvasView"), runtime_->scriptValueToJson(view));
     }
 
     Q_INVOKABLE QJSValue withProgress(const QJSValue& options, const QJSValue& callback)
@@ -1127,6 +1310,7 @@ EmbeddedExtensionRuntime::EmbeddedExtensionRuntime(QObject* parent)
     auto* editor = new BridgeObject(this, BridgeObject::Kind::Editor);
     auto* validation = new BridgeObject(this, BridgeObject::Kind::Validation);
     auto* analysis = new BridgeObject(this, BridgeObject::Kind::Analysis);
+    auto* providers = new BridgeObject(this, BridgeObject::Kind::Providers);
     auto* timeline = new BridgeObject(this, BridgeObject::Kind::Timeline);
     auto* preview = new BridgeObject(this, BridgeObject::Kind::Preview);
     auto* exportApi = new BridgeObject(this, BridgeObject::Kind::Export);
@@ -1138,6 +1322,7 @@ EmbeddedExtensionRuntime::EmbeddedExtensionRuntime(QObject* parent)
     auto* theme = new BridgeObject(this, BridgeObject::Kind::Theme);
     auto* backup = new BridgeObject(this, BridgeObject::Kind::Backup);
     auto* shortcuts = new BridgeObject(this, BridgeObject::Kind::Shortcuts);
+    auto* input = new BridgeObject(this, BridgeObject::Kind::Input);
     auto* extensions = new BridgeObject(this, BridgeObject::Kind::Extensions);
     auto* ui = new BridgeObject(this, BridgeObject::Kind::Ui);
     auto* tasks = new BridgeObject(this, BridgeObject::Kind::Tasks);
@@ -1159,6 +1344,7 @@ EmbeddedExtensionRuntime::EmbeddedExtensionRuntime(QObject* parent)
     api.setProperty(QStringLiteral("editor"), engine_.newQObject(editor));
     api.setProperty(QStringLiteral("validation"), engine_.newQObject(validation));
     api.setProperty(QStringLiteral("analysis"), engine_.newQObject(analysis));
+    api.setProperty(QStringLiteral("providers"), engine_.newQObject(providers));
     api.setProperty(QStringLiteral("timeline"), engine_.newQObject(timeline));
     api.setProperty(QStringLiteral("preview"), engine_.newQObject(preview));
     api.setProperty(QStringLiteral("export"), engine_.newQObject(exportApi));
@@ -1170,6 +1356,7 @@ EmbeddedExtensionRuntime::EmbeddedExtensionRuntime(QObject* parent)
     api.setProperty(QStringLiteral("theme"), engine_.newQObject(theme));
     api.setProperty(QStringLiteral("backup"), engine_.newQObject(backup));
     api.setProperty(QStringLiteral("shortcuts"), engine_.newQObject(shortcuts));
+    api.setProperty(QStringLiteral("input"), engine_.newQObject(input));
     api.setProperty(QStringLiteral("extensions"), engine_.newQObject(extensions));
     api.setProperty(QStringLiteral("ui"), engine_.newQObject(ui));
     api.setProperty(QStringLiteral("tasks"), engine_.newQObject(tasks));

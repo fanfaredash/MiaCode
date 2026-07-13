@@ -2,6 +2,7 @@
 #include "common/AssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/InputShortcutGesture.h"
 #include "common/PreviewSkinConfig.h"
 #include "common/TimelineThemeConfig.h"
 #include "common/WaveformCache.h"

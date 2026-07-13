@@ -53,7 +53,7 @@ Implemented v1 Open Bridge entry points:
 - `open.forbiddenTargets`: legacy discovery name for experimental raw targets.
 - `open.describeForbiddenTarget`: legacy describe name for one experimental raw target.
 
-The stable registered facade objects are `app`, `workspace`, `document`, `editor`, `timeline`, `preview`, `validation`, `analysis`, `export`, `ui`, and `extensions`. Experimental raw targets such as `MainWindow`, `QWidget`, `QQuickItem`, `QSGNode`, `QPainter`, `QRhi`, D3D/DirectComposition, `PreviewRuntime`, preview scene/layer internals, `TimelineQuickItem`, `SimaiDocument`, `PlainCodeEditor`, arbitrary `QObject`, `QProcess`, `shell.execute`, `renderer.raw`, `internal.raw`, security internals, and update internals are appended to the same Open Bridge list with `stability: "experimentalRaw"`.
+The stable registered facade objects are `app`, `workspace`, `document`, `editor`, `timeline`, `preview`, `validation`, `analysis`, `export`, `ui`, `input`, `providers`, `shortcuts`, and `extensions`. Experimental raw targets such as `MainWindow`, `QWidget`, `QQuickItem`, `QSGNode`, `QPainter`, `QRhi`, D3D/DirectComposition, `PreviewRuntime`, preview scene/layer internals, `TimelineQuickItem`, `SimaiDocument`, `PlainCodeEditor`, arbitrary `QObject`, `QProcess`, `shell.execute`, `renderer.raw`, `internal.raw`, security internals, and update internals are appended to the same Open Bridge list with `stability: "experimentalRaw"`.
 
 A method may be described as `implemented` only when it has either a `hostMethod` or `command` route that is callable. Planned methods must be marked `planned`, not silently left to fail at `open.call`. Each experimental raw target exposes `inspect` and `callUnsafe`; these are intentionally unstable descriptors for trusted/local development.
 
@@ -61,7 +61,7 @@ A method may be described as `implemented` only when it has either a `hostMethod
 
 ## SDK Convenience Layer
 
-Stable SDK methods such as `miacode.preview.getState()`, `miacode.timeline.seek(...)`, `miacode.document.edit(...)`, editor commands, and `miacode.ui.registerPetOverlay(...)` are convenience wrappers over the same controlled host/Open Bridge surface. They must not duplicate policy. If a convenience method wraps an Open Bridge facade method, the facade descriptor remains the source of truth for method status, route, and permission.
+Stable SDK methods such as `miacode.preview.getState()`, `miacode.preview.getRenderState()`, `miacode.timeline.seek(...)`, timeline zoom/follow/visible-range controls, `miacode.input.registerWheelGesture(...)`, `miacode.input.registerKeyGesture(...)`, `miacode.input.registerMouseGesture(...)`, `miacode.shortcuts.registerCommandShortcut(...)`, `miacode.document.edit(...)`, editor deep read/reveal helpers, provider broker/show methods, internal command registry reads, and `miacode.ui.registerPetOverlay(...)` are convenience wrappers over the same controlled host/Open Bridge surface. They must not duplicate policy. If a convenience method wraps an Open Bridge facade method, the facade descriptor remains the source of truth for method status, route, and permission.
 
 ## Real Events and DevTools
 
@@ -102,6 +102,25 @@ it must not hand raw QWidget/QML/QObject/renderer pointers to extension JS.
 
 Pet overlay resource paths (`image`, `src`, `resource`, `frames`, and `sprite.frames`) are resolved by the host and must canonicalize inside the calling extension's root directory. The API must reject missing files, directories, path traversal, and raw renderer/QML/widget object access. Rendering stays host-owned; extensions only provide data.
 
+## Controlled UI Hosts
+
+Extension UI is facade-based. Extensions submit declarative data and the host
+owns widget creation, parenting, lifetime, resource checks, and command
+dispatch. Implemented controlled hosts include toolbox buttons, bottom-tab
+views, real sidebar dock views, modeless preferences pages, modeless floating
+panels, text preview overlays, pet overlays, HTML-lite views, declarative
+canvas views, and preview scene overlays. `ui.getViews` reports the rendered
+view state, including the `hostSlot` used by DevTools.
+
+HTML-lite views are rendered by host-owned widgets and do not expose raw
+WebEngine, JavaScript DOM execution, raw renderer, raw `QWidget`, or raw
+`QQuickItem`. Canvas and scene overlays are declarative paint trees that
+support shapes, text, images, opacity, and command hit targets; the host
+remains responsible for painting and lifetime.
+
+Raw `QWidget`, `QQuickItem`, QML object, scene graph node, or renderer access
+must remain experimental raw and must not be required for ordinary extension UI.
+
 ## Permission Model
 
 Runtime allow/deny is permission-declaration based: callable APIs require the manifest to declare the required permission. Raw/internal namespaces are not hard-blocked, but they are marked `experimentalRaw` or high-risk in descriptors and require explicit raw/experimental permissions.
@@ -137,6 +156,7 @@ Core:
 - DevTools diagnostics: `devtools.snapshot`, `devtools.diagnose`, `devtools.recentCalls`
 - Open Bridge discovery/calls: `open.list`, `open.describe`, `open.call`, `open.forbiddenTargets`, `open.describeForbiddenTarget`
 - SDK convenience wrappers over Open Bridge/host methods: `app.openAboutDialog`, `editor.undo`, `editor.redo`, `editor.cut`, `editor.copy`, `editor.paste`, `editor.selectAll`, `ui.registerPetOverlay`
+- internal command discovery with `commands.getInternalCommands` and allowlisted `commands.executeInternal`
 
 Document/editor:
 
@@ -154,21 +174,31 @@ Document/editor:
 - parsed note markers and timing metadata
 - text edits and formatting
 - editor selection/cursor/line/token helpers
+- editor text, visible-range, reveal-range, parsed-snapshot, host completion UI, and host code-action UI helpers
 - editor insert/replace/decorations
 
 Validation/timeline/preview/UI:
 
 - validation run/result/extension diagnostics
 - timeline snapshot/current second/seek
+- timeline visible-range and marker-near-second queries
+- timeline zoom read/control: `getZoomState`, `zoomIn`, `zoomOut`, `stepZoomPreset`, `setZoomScale`, `scrollToSecond`
+- timeline follow mode controls: `setFollowPreview`, `setFollowProgress`
 - timeline markers, bands, vertical lines, and clear
 - preview playback controls and speed
+- preview render-state query
 - preview text overlays: add/update/remove/clear/list/render/hit-test
 - controlled pet overlays with extension-local resources
 - bottom-tab extension views
-- sidebar-style and preferences-page extension views
+- real sidebar dock views and modeless preferences-page extension views
+- modeless floating extension panels
+- HTML-lite views, declarative canvas views, and preview scene overlays
 - toolbox buttons
 - basic declarative view rendering
-- event/provider/export hook registration descriptors
+- input wheel/key/mouse gesture registration and dispatch to extension commands
+- editable extension shortcuts integrated with Preferences > Shortcuts
+- event callbacks and provider broker registration/collection plus host hover/completion/code-action UI display
+- export hook registration descriptors
 - media, theme, backup, and shortcut facades
 - logs append/path/open
 - extension list/get/enable/disable/install/remove/reload

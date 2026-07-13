@@ -248,9 +248,20 @@ void TimelineView::stepZoomPreset(int deltaSteps, double anchorSecond)
     applyZoomPresetIndex(zoomPresetIndex_ + deltaSteps, anchorSecond);
 }
 
-bool TimelineView::handleAltZoomWheel(QWheelEvent* event)
+bool TimelineView::handleZoomWheel(QWheelEvent* event)
 {
-    if (event == nullptr || !event->modifiers().testFlag(Qt::AltModifier)) {
+    if (event == nullptr) {
+        return false;
+    }
+    const QStringList zoomInShortcuts = stateBridge_ != nullptr
+        ? stateBridge_->zoomInWheelShortcuts()
+        : QStringList{QStringLiteral("Ctrl+WheelUp")};
+    const QStringList zoomOutShortcuts = stateBridge_ != nullptr
+        ? stateBridge_->zoomOutWheelShortcuts()
+        : QStringList{QStringLiteral("Ctrl+WheelDown")};
+    const bool zoomInWheel = miacode::input_shortcut::wheelEventMatchesAnyGesture(event, zoomInShortcuts);
+    const bool zoomOutWheel = miacode::input_shortcut::wheelEventMatchesAnyGesture(event, zoomOutShortcuts);
+    if (!zoomInWheel && !zoomOutWheel) {
         return false;
     }
     int delta = event->angleDelta().y();
@@ -267,8 +278,8 @@ bool TimelineView::handleAltZoomWheel(QWheelEvent* event)
         return false;
     }
 
-    const int steps = delta > 0 ? qMax(1, qRound(static_cast<double>(delta) / 120.0))
-                                : qMin(-1, qRound(static_cast<double>(delta) / 120.0));
+    const int steps = qMax(1, qAbs(qRound(static_cast<double>(delta) / 120.0)))
+        * (zoomInWheel ? 1 : -1);
     stepZoomPreset(steps, viewportCenterSecond());
     event->accept();
     return true;

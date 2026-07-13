@@ -174,7 +174,7 @@ private:
     void cycleZoomPreset();
     void applyZoomPresetIndex(int nextIndex, double anchorSecond);
     void stepZoomPreset(int deltaSteps, double anchorSecond);
-    bool handleAltZoomWheel(QWheelEvent* event);
+    bool handleZoomWheel(QWheelEvent* event);
     void updateZoomButtonAppearance();
     void layoutHeaderButtons();
     QVector<HeaderLineLabel> visibleHeaderLineLabels(

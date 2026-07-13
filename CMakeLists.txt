@@ -188,6 +188,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/Mmcss.h
     src/common/Mmcss.cpp
     src/common/DebugImageCompare.h
+    src/common/InputShortcutGesture.h
+    src/common/InputShortcutGesture.cpp
     src/common/ChartAssetPaths.h
     src/common/Id3TagReader.h
     src/common/Id3TagReader.cpp

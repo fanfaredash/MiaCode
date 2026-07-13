@@ -9,6 +9,7 @@
 #include "SimaiNativeParser.h"
 #include "ShortcutRegistry.h"
 #include "TimelineView.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 #include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -19,6 +20,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/InputShortcutGesture.h"
 #include "common/OperationLog.h"
 #include "extensions/ExtensionManager.h"
 #include "extensions/ExtensionManifest.h"
@@ -50,6 +52,18 @@ QString shortcutSequenceText(const QList<QKeySequence>& sequences)
     return parts.join(QStringLiteral(", "));
 }
 
+QString shortcutTextListDisplay(const QStringList& shortcuts)
+{
+    QStringList parts;
+    for (const QString& shortcut : shortcuts) {
+        const QString text = miacode::input_shortcut::gestureDisplayText(shortcut);
+        if (!text.isEmpty()) {
+            parts.append(text);
+        }
+    }
+    return parts.join(QStringLiteral(", "));
+}
+
 QString shortcutSequenceText(const QKeySequence& sequence)
 {
     if (sequence.toString(QKeySequence::PortableText) == QStringLiteral("Ctrl+Shift++")) {
@@ -63,15 +77,9 @@ QString shortcutSequenceText(const QKeySequence& sequence)
         : sequence.toString(QKeySequence::NativeText);
 }
 
-QString shortcutSequenceKey(const QKeySequence& sequence)
+QString shortcutGestureKey(const QString& shortcut)
 {
-    if (sequence.toString(QKeySequence::PortableText) == QStringLiteral("Ctrl+Shift++")) {
-        return QStringLiteral("Ctrl+Shift+=");
-    }
-    if (sequence.toString(QKeySequence::PortableText) == QStringLiteral("Ctrl+Shift+_")) {
-        return QStringLiteral("Ctrl+Shift+-");
-    }
-    return sequence.toString(QKeySequence::PortableText);
+    return miacode::input_shortcut::normalizeGestureText(shortcut);
 }
 
 QString shortcutDefinitionLabel(const ShortcutRegistry::ShortcutDefinition& definition)
@@ -88,19 +96,20 @@ QString shortcutDefinitionLabel(const ShortcutRegistry::ShortcutDefinition& defi
 QString conflictingShortcutLabel(
     const QList<ShortcutRegistry::ShortcutDefinition>& definitions,
     const QString& currentId,
-    const QKeySequence& sequence)
+    const QString& shortcut)
 {
-    if (sequence.isEmpty()) {
+    const QString normalizedShortcut = shortcutGestureKey(shortcut);
+    if (normalizedShortcut.isEmpty()) {
         return QString();
     }
     for (const auto& definition : definitions) {
         if (definition.id == currentId) {
             continue;
         }
-        const QList<QKeySequence> sequences =
-            ShortcutRegistry::instance().sequences(definition.id, definition.defaultSequences);
-        for (const QKeySequence& existing : sequences) {
-            if (!existing.isEmpty() && existing == sequence) {
+        const QStringList shortcuts =
+            ShortcutRegistry::instance().shortcutTexts(definition.id, definition.defaultShortcutTexts);
+        for (const QString& existing : shortcuts) {
+            if (shortcutGestureKey(existing) == normalizedShortcut) {
                 const QString label = shortcutDefinitionLabel(definition);
                 return label.isEmpty() ? definition.id : label;
             }
@@ -120,6 +129,7 @@ public:
     }
 
     QKeySequence sequence() const { return sequence_; }
+    QString shortcutText() const { return shortcutText_; }
 
 protected:
     bool event(QEvent* event) override
@@ -157,6 +167,7 @@ protected:
         }
         if (event->key() == Qt::Key_Backspace || event->key() == Qt::Key_Delete) {
             sequence_ = QKeySequence();
+            shortcutText_.clear();
             clear();
             event->accept();
             return;
@@ -196,7 +207,8 @@ protected:
                 sequence_ = allowBareModifier_ || modifiers != Qt::NoModifier
                     ? QKeySequence(static_cast<int>(modifiers))
                     : QKeySequence();
-                setText(shortcutSequenceText(sequence_));
+                shortcutText_ = sequence_.toString(QKeySequence::PortableText);
+                setText(shortcutTextListDisplay({shortcutText_}));
             }
             event->accept();
             return;
@@ -213,12 +225,30 @@ protected:
         } else {
             sequence_ = QKeySequence(modifiers | key);
         }
-        setText(shortcutSequenceText(sequence_));
+        shortcutText_ = sequence_.toString(QKeySequence::PortableText);
+        setText(shortcutTextListDisplay({shortcutText_}));
+        event->accept();
+    }
+
+    void wheelEvent(QWheelEvent* event) override
+    {
+        if (event == nullptr) {
+            return;
+        }
+        const auto direction = miacode::input_shortcut::wheelDirectionFromEvent(event);
+        if (direction == miacode::input_shortcut::WheelDirection::None) {
+            event->accept();
+            return;
+        }
+        sequence_ = QKeySequence();
+        shortcutText_ = miacode::input_shortcut::wheelGestureText(event->modifiers(), direction);
+        setText(shortcutTextListDisplay({shortcutText_}));
         event->accept();
     }
 
 private:
     QKeySequence sequence_;
+    QString shortcutText_;
     bool allowBareModifier_ = false;
 };
 
@@ -258,6 +288,26 @@ protected:
             return true;
         }
         if (event->type() == QEvent::KeyRelease) {
+            event->accept();
+            return true;
+        }
+        if (event->type() == QEvent::Wheel) {
+            if (QApplication::focusWidget() == edit_) {
+                return false;
+            }
+            auto* wheelEvent = static_cast<QWheelEvent*>(event);
+            QWheelEvent forwarded(
+                QPointF(edit_->mapFromGlobal(wheelEvent->globalPosition().toPoint())),
+                wheelEvent->globalPosition(),
+                wheelEvent->pixelDelta(),
+                wheelEvent->angleDelta(),
+                wheelEvent->buttons(),
+                wheelEvent->modifiers(),
+                wheelEvent->phase(),
+                wheelEvent->inverted(),
+                wheelEvent->source(),
+                wheelEvent->pointingDevice());
+            QApplication::sendEvent(edit_, &forwarded);
             event->accept();
             return true;
         }
@@ -517,7 +567,7 @@ QString fontShortcutHintText()
 
 QList<QPair<QString, QStringList>> shortcutCategoryGroups()
 {
-    return {
+    QList<QPair<QString, QStringList>> groups{
         {
             QStringLiteral("谱面变换"),
             {
@@ -545,6 +595,8 @@ QList<QPair<QString, QStringList>> shortcutCategoryGroups()
                 QStringLiteral("preview.speed_down"),
                 QStringLiteral("preview.speed_up"),
                 QStringLiteral("preview.pause_display_hold"),
+                QStringLiteral("timeline.zoom_in"),
+                QStringLiteral("timeline.zoom_out"),
             },
         },
         {
@@ -556,6 +608,20 @@ QList<QPair<QString, QStringList>> shortcutCategoryGroups()
             },
         },
     };
+    QStringList extensionIds;
+    for (const ShortcutRegistry::ShortcutDefinition& definition : ShortcutRegistry::instance().editableShortcuts()) {
+        if (definition.id.startsWith(QStringLiteral("extension."))) {
+            extensionIds.append(definition.id);
+        }
+    }
+    if (!extensionIds.isEmpty()) {
+        extensionIds.sort(Qt::CaseInsensitive);
+        groups.append({
+            UiText::isChineseUi() ? QStringLiteral("扩展") : QStringLiteral("Extensions"),
+            extensionIds,
+        });
+    }
+    return groups;
 }
 
 QString compactJsonText(const QJsonValue& value)
@@ -827,6 +893,15 @@ void MainWindow::PreferencesSection::applyConfiguredShortcuts()
         owner_.previewFasterAction_,
         QStringLiteral("preview.speed_up"),
         QKeySequence(QStringLiteral("Ctrl+P")));
+    if (owner_.timelineQuickStateBridge_ != nullptr) {
+        owner_.timelineQuickStateBridge_->setZoomWheelShortcuts(
+            ShortcutRegistry::instance().shortcutTexts(
+                QStringLiteral("timeline.zoom_in"),
+                {QStringLiteral("Ctrl+WheelUp")}),
+            ShortcutRegistry::instance().shortcutTexts(
+                QStringLiteral("timeline.zoom_out"),
+                {QStringLiteral("Ctrl+WheelDown")}));
+    }
     applyConfiguredShortcut(
         owner_.fontDecreaseAction_,
         QStringLiteral("editor.font_decrease"),
@@ -2394,11 +2469,12 @@ void MainWindow::PreferencesSection::onPreferences()
             }
             QHash<QString, int> shortcutUseCounts;
             for (const auto& definition : definitions) {
-                const QList<QKeySequence> sequences =
-                    ShortcutRegistry::instance().sequences(definition.id, definition.defaultSequences);
-                for (const QKeySequence& sequence : sequences) {
-                    if (!sequence.isEmpty()) {
-                        ++shortcutUseCounts[shortcutSequenceKey(sequence)];
+                const QStringList shortcuts =
+                    ShortcutRegistry::instance().shortcutTexts(definition.id, definition.defaultShortcutTexts);
+                for (const QString& shortcut : shortcuts) {
+                    const QString key = shortcutGestureKey(shortcut);
+                    if (!key.isEmpty()) {
+                        ++shortcutUseCounts[key];
                     }
                 }
             }
@@ -2445,15 +2521,16 @@ void MainWindow::PreferencesSection::onPreferences()
                     commandItem->setData(Qt::UserRole, definition.id);
                     commandItem->setToolTip(definition.id);
                     table->setItem(row, 0, commandItem);
-                    const QList<QKeySequence> sequences =
-                        ShortcutRegistry::instance().sequences(definition.id, definition.defaultSequences);
-                    auto* keybindingItem = new QTableWidgetItem(shortcutSequenceText(sequences));
+                    const QStringList shortcuts =
+                        ShortcutRegistry::instance().shortcutTexts(definition.id, definition.defaultShortcutTexts);
+                    auto* keybindingItem = new QTableWidgetItem(shortcutTextListDisplay(shortcuts));
                     keybindingItem->setData(Qt::UserRole, definition.id);
                     keybindingItem->setTextAlignment(Qt::AlignVCenter | Qt::AlignLeft);
                     keybindingItem->setToolTip(UiText::text(QStringLiteral("dialog.preferences.shortcuts.change")));
                     bool duplicate = false;
-                    for (const QKeySequence& sequence : sequences) {
-                        if (!sequence.isEmpty() && shortcutUseCounts.value(shortcutSequenceKey(sequence)) > 1) {
+                    for (const QString& shortcut : shortcuts) {
+                        const QString key = shortcutGestureKey(shortcut);
+                        if (!key.isEmpty() && shortcutUseCounts.value(key) > 1) {
                             duplicate = true;
                             break;
                         }
@@ -2524,7 +2601,7 @@ void MainWindow::PreferencesSection::onPreferences()
             UiDialogs::localizeButtonBox(captureButtons);
             const auto updateConflictState = [captureEdit, previewLabel, conflictLabel, editableDefinitions, id]() {
                 previewLabel->setText(captureEdit->text());
-                const QString conflict = conflictingShortcutLabel(editableDefinitions(), id, captureEdit->sequence());
+                const QString conflict = conflictingShortcutLabel(editableDefinitions(), id, captureEdit->shortcutText());
                 if (conflict.isEmpty()) {
                     previewLabel->setStyleSheet(QStringLiteral("font-weight: 600;"));
                     conflictLabel->clear();
@@ -2536,11 +2613,12 @@ void MainWindow::PreferencesSection::onPreferences()
             };
             QObject::connect(captureEdit, &QLineEdit::textChanged, &captureDialog, updateConflictState);
             QObject::connect(captureButtons, &QDialogButtonBox::accepted, &captureDialog, [&]() {
-                if (captureEdit->sequence().isEmpty()) {
+                if (captureEdit->shortcutText().isEmpty()) {
                     return;
                 }
-                if (ShortcutRegistry::instance().setUserShortcut(id, captureEdit->sequence())) {
+                if (ShortcutRegistry::instance().setUserShortcutText(id, captureEdit->shortcutText())) {
                     applyConfiguredShortcuts();
+                    owner_.handleExtensionHostRequest(QStringLiteral("shortcuts/reloadRegistered"), QJsonObject{});
                     shortcutHint->setText(fontShortcutHintText());
                     refreshRows();
                     owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
@@ -2552,6 +2630,7 @@ void MainWindow::PreferencesSection::onPreferences()
                 QObject::connect(resetButton, &QPushButton::clicked, &captureDialog, [&]() {
                     if (ShortcutRegistry::instance().resetUserShortcut(id)) {
                         applyConfiguredShortcuts();
+                        owner_.handleExtensionHostRequest(QStringLiteral("shortcuts/reloadRegistered"), QJsonObject{});
                         shortcutHint->setText(fontShortcutHintText());
                         refreshRows();
                         owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
@@ -2597,6 +2676,7 @@ void MainWindow::PreferencesSection::onPreferences()
         }
         if (ShortcutRegistry::instance().resetEditableShortcuts()) {
             applyConfiguredShortcuts();
+            owner_.handleExtensionHostRequest(QStringLiteral("shortcuts/reloadRegistered"), QJsonObject{});
             shortcutHint->setText(fontShortcutHintText());
             // beta51+ overwriteModeShortcutHint label was bound to the
             // former overwrite-mode preference row, which was removed in

@@ -165,6 +165,20 @@
       "context": "application",
       "owner": "MainWindow.WindowInteraction"
     },
+    "timeline.zoom_in": {
+      "label_key": "shortcut.timeline.zoom_in",
+      "label_en": "Timeline Zoom In",
+      "default": "Ctrl+WheelUp",
+      "context": "timeline",
+      "owner": "TimelineView / TimelineQuickItem"
+    },
+    "timeline.zoom_out": {
+      "label_key": "shortcut.timeline.zoom_out",
+      "label_en": "Timeline Zoom Out",
+      "default": "Ctrl+WheelDown",
+      "context": "timeline",
+      "owner": "TimelineView / TimelineQuickItem"
+    },
     "editor.font_decrease": {
       "label_key": "shortcut.editor.font_decrease",
       "label_zh": "编辑器字号减小",

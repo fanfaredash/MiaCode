@@ -24,6 +24,7 @@
 #include "common/DebugLog.h"
 #include "common/ProcessDiagnostics.h"
 #include "common/DebugOptions.h"
+#include "common/InputShortcutGesture.h"
 #include "common/PreviewInteractionConfig.h"
 #include "common/TimelineThemeConfig.h"
 #include "common/WaveformCache.h"
@@ -1838,9 +1839,15 @@ void TimelineQuickItem::wheelEvent(QWheelEvent* event)
             .arg(delta)
             .arg(static_cast<int>(event->modifiers()))
             .arg(stateBridge_->horizontalScrollValue()));
-    if (event->modifiers().testFlag(Qt::AltModifier)) {
-        const int steps = delta > 0 ? qMax(1, qRound(static_cast<double>(delta) / 120.0))
-                                    : qMin(-1, qRound(static_cast<double>(delta) / 120.0));
+    const bool zoomInWheel = miacode::input_shortcut::wheelEventMatchesAnyGesture(
+        event,
+        stateBridge_->zoomInWheelShortcuts());
+    const bool zoomOutWheel = miacode::input_shortcut::wheelEventMatchesAnyGesture(
+        event,
+        stateBridge_->zoomOutWheelShortcuts());
+    if (zoomInWheel || zoomOutWheel) {
+        const int steps = qMax(1, qAbs(qRound(static_cast<double>(delta) / 120.0)))
+            * (zoomInWheel ? 1 : -1);
         stateBridge_->stepZoomPreset(
             steps,
             miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, width() / 2.0));

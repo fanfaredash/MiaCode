@@ -84,7 +84,7 @@ private:
     void dispatchRuntimeEventForHostResult(const QString& method, const QJsonObject& params, const QJsonObject& result);
     bool ensurePermission(const QString& extensionId, const QString& method, const QJsonObject& params, QJsonObject* errorResponse);
     bool manifestDeclaresPermission(const QString& extensionId, const QString& permission) const;
-    QString permissionForMethod(const QString& method) const;
+    QString permissionForMethod(const QString& method, const QJsonObject& params = {}) const;
     QString extensionRootPathForId(const QString& extensionId) const;
     void invokeCommand(const QString& command);
     ExtensionCommandContribution commandContribution(const QString& command) const;

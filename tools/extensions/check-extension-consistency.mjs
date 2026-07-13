@@ -41,7 +41,7 @@ if (!supportedBlock) {
 }
 
 const managerCpp = read("src/extensions/ExtensionManager.cpp");
-const registryBlock = managerCpp.match(/QVector<QJsonObject> extensionApiRegistry\(\)[\s\S]*?return registry;\n}/);
+const registryBlock = managerCpp.match(/QVector<QJsonObject> extensionApiRegistry\(\)[\s\S]*?return registry;\r?\n}/);
 if (!registryBlock) {
   fail("cannot find extension API registry");
 } else {

@@ -7,6 +7,7 @@
 #include <QFont>
 #include <QSize>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 #include <memory>
@@ -64,6 +65,9 @@ public:
     double zoomScale() const;
     void setZoomScale(double scale);
     QVector<double> zoomPresets() const;
+    QStringList zoomInWheelShortcuts() const;
+    QStringList zoomOutWheelShortcuts() const;
+    void setZoomWheelShortcuts(const QStringList& zoomInShortcuts, const QStringList& zoomOutShortcuts);
     double viewportCenterSecond();
     void setZoomScaleAnchored(double scale, double anchorSecond);
     double contentScale() const;
@@ -144,6 +148,8 @@ private:
     QString skinDirectory_;
     QSize quickViewportSize_;
     QVector<double> zoomPresets_;
+    QStringList zoomInWheelShortcuts_{QStringLiteral("Ctrl+WheelUp")};
+    QStringList zoomOutWheelShortcuts_{QStringLiteral("Ctrl+WheelDown")};
     int zoomPresetIndex_ = 1;
     int horizontalScrollValue_ = 0;
     double contentScale_ = 1.0;

@@ -653,6 +653,7 @@ QVector<QJsonObject> extensionApiRegistry()
         apiDescriptor(QStringLiteral("commands.register"), QStringLiteral("commands/register"), QString(), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Register a command callback from the owning extension.")),
         apiDescriptor(QStringLiteral("commands.execute"), QStringLiteral("commands/execute"), QStringLiteral("commands.execute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Execute an extension command.")),
         apiDescriptor(QStringLiteral("commands.executeInternal"), QStringLiteral("commands/executeInternal"), QStringLiteral("commands.execute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Execute an allowlisted MiaCode internal command.")),
+        apiDescriptor(QStringLiteral("commands.getInternalCommands"), QStringLiteral("commands/getInternalCommands"), QStringLiteral("commands.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("List allowlisted MiaCode internal commands.")),
 
         apiDescriptor(QStringLiteral("window.showInformationMessage"), QStringLiteral("window/showMessage"), QStringLiteral("ui.message"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Show an information message.")),
         apiDescriptor(QStringLiteral("window.showWarningMessage"), QStringLiteral("window/showMessage"), QStringLiteral("ui.message"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Show a warning message.")),
@@ -690,6 +691,10 @@ QVector<QJsonObject> extensionApiRegistry()
 
         apiDescriptor(QStringLiteral("editor.getSelection"), QStringLiteral("editor/getSelection"), QStringLiteral("editor.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get editor selection.")),
         apiDescriptor(QStringLiteral("editor.getCursor"), QStringLiteral("editor/getCursor"), QStringLiteral("editor.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get editor cursor.")),
+        apiDescriptor(QStringLiteral("editor.getText"), QStringLiteral("editor/getText"), QStringLiteral("editor.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get active editor text.")),
+        apiDescriptor(QStringLiteral("editor.getVisibleRange"), QStringLiteral("editor/getVisibleRange"), QStringLiteral("editor.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get visible editor text range.")),
+        apiDescriptor(QStringLiteral("editor.revealRange"), QStringLiteral("editor/revealRange"), QStringLiteral("editor.edit"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Reveal an editor range.")),
+        apiDescriptor(QStringLiteral("editor.getParsedSnapshot"), QStringLiteral("editor/getParsedSnapshot"), QStringLiteral("editor.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get editor text and parsed-marker summary.")),
         apiDescriptor(QStringLiteral("editor.setSelection"), QStringLiteral("editor/setSelection"), QStringLiteral("editor.edit"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Set editor selection.")),
         apiDescriptor(QStringLiteral("editor.getLine"), QStringLiteral("editor/getLine"), QStringLiteral("editor.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get a line of text.")),
         apiDescriptor(QStringLiteral("editor.getCurrentLine"), QStringLiteral("editor/getCurrentLine"), QStringLiteral("editor.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get current line.")),
@@ -699,6 +704,8 @@ QVector<QJsonObject> extensionApiRegistry()
         apiDescriptor(QStringLiteral("editor.replaceRange"), QStringLiteral("editor/replaceRange"), QStringLiteral("editor.edit"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Replace a text range.")),
         apiDescriptor(QStringLiteral("editor.addDecoration"), QStringLiteral("editor/addDecoration"), QStringLiteral("editor.edit"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Add editor decoration.")),
         apiDescriptor(QStringLiteral("editor.clearDecorations"), QStringLiteral("editor/clearDecorations"), QStringLiteral("editor.edit"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Clear editor decorations.")),
+        apiDescriptor(QStringLiteral("editor.showCompletions"), QStringLiteral("editor/showCompletions"), QStringLiteral("providers.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Show registered completion providers in host UI.")),
+        apiDescriptor(QStringLiteral("editor.showCodeActions"), QStringLiteral("editor/showCodeActions"), QStringLiteral("providers.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Show registered code actions in host UI.")),
 
         apiDescriptor(QStringLiteral("validation.run"), QStringLiteral("validation/run"), QStringLiteral("diagnostics.run"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Run chart validation.")),
         apiDescriptor(QStringLiteral("validation.getLastResult"), QStringLiteral("validation/getLastResult"), QStringLiteral("diagnostics.run"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Get last validation result.")),
@@ -708,7 +715,17 @@ QVector<QJsonObject> extensionApiRegistry()
 
         apiDescriptor(QStringLiteral("timeline.getSnapshot"), QStringLiteral("timeline/getSnapshot"), QStringLiteral("timeline.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get timeline snapshot.")),
         apiDescriptor(QStringLiteral("timeline.getCurrentSecond"), QStringLiteral("timeline/getCurrentSecond"), QStringLiteral("timeline.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get current preview/timeline second.")),
+        apiDescriptor(QStringLiteral("timeline.getZoomState"), QStringLiteral("timeline/getZoomState"), QStringLiteral("timeline.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get timeline zoom state.")),
+        apiDescriptor(QStringLiteral("timeline.getVisibleRange"), QStringLiteral("timeline/getVisibleRange"), QStringLiteral("timeline.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get approximate visible timeline seconds.")),
+        apiDescriptor(QStringLiteral("timeline.getMarkersAtSecond"), QStringLiteral("timeline/getMarkersAtSecond"), QStringLiteral("timeline.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get parsed note markers near a second.")),
         apiDescriptor(QStringLiteral("timeline.seek"), QStringLiteral("timeline/seek"), QStringLiteral("timeline.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Seek timeline.")),
+        apiDescriptor(QStringLiteral("timeline.zoomIn"), QStringLiteral("timeline/zoomIn"), QStringLiteral("timeline.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Increase timeline zoom by one preset.")),
+        apiDescriptor(QStringLiteral("timeline.zoomOut"), QStringLiteral("timeline/zoomOut"), QStringLiteral("timeline.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Decrease timeline zoom by one preset.")),
+        apiDescriptor(QStringLiteral("timeline.stepZoomPreset"), QStringLiteral("timeline/stepZoomPreset"), QStringLiteral("timeline.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Move timeline zoom by a preset delta.")),
+        apiDescriptor(QStringLiteral("timeline.setZoomScale"), QStringLiteral("timeline/setZoomScale"), QStringLiteral("timeline.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Set timeline zoom scale when the active host supports anchored scaling.")),
+        apiDescriptor(QStringLiteral("timeline.scrollToSecond"), QStringLiteral("timeline/scrollToSecond"), QStringLiteral("timeline.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Scroll or seek the timeline to a second.")),
+        apiDescriptor(QStringLiteral("timeline.setFollowPreview"), QStringLiteral("timeline/setFollowPreview"), QStringLiteral("timeline.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Enable or disable timeline follow-preview mode.")),
+        apiDescriptor(QStringLiteral("timeline.setFollowProgress"), QStringLiteral("timeline/setFollowProgress"), QStringLiteral("timeline.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Enable or disable timeline follow-progress mode.")),
         apiDescriptor(QStringLiteral("timeline.addMarker"), QStringLiteral("timeline/addMarker"), QStringLiteral("timeline.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Add extension timeline marker.")),
         apiDescriptor(QStringLiteral("timeline.clearMarkers"), QStringLiteral("timeline/clearMarkers"), QStringLiteral("timeline.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Clear extension timeline markers.")),
         apiDescriptor(QStringLiteral("timeline.addBand"), QStringLiteral("timeline/addBand"), QStringLiteral("timeline.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Add extension timeline band.")),
@@ -716,6 +733,7 @@ QVector<QJsonObject> extensionApiRegistry()
         apiDescriptor(QStringLiteral("timeline.clearVisuals"), QStringLiteral("timeline/clearVisuals"), QStringLiteral("timeline.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Clear extension timeline visuals.")),
 
         apiDescriptor(QStringLiteral("preview.getState"), QStringLiteral("preview/getState"), QStringLiteral("preview.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get preview state.")),
+        apiDescriptor(QStringLiteral("preview.getRenderState"), QStringLiteral("preview/getRenderState"), QStringLiteral("preview.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get preview canvas and render option state.")),
         apiDescriptor(QStringLiteral("preview.play"), QStringLiteral("preview/play"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Play preview.")),
         apiDescriptor(QStringLiteral("preview.pause"), QStringLiteral("preview/pause"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Pause preview.")),
         apiDescriptor(QStringLiteral("preview.stop"), QStringLiteral("preview/stop"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Stop preview.")),
@@ -731,24 +749,41 @@ QVector<QJsonObject> extensionApiRegistry()
 
         apiDescriptor(QStringLiteral("ui.registerBottomTabView"), QStringLiteral("contributions/register"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register and render a bottom-tab extension view.")),
         apiDescriptor(QStringLiteral("ui.registerToolbarButton"), QStringLiteral("contributions/register"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register and render an extension toolbox button.")),
+        apiDescriptor(QStringLiteral("ui.registerFloatingPanel"), QStringLiteral("contributions/register"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register and render a modeless floating extension panel.")),
         apiDescriptor(QStringLiteral("ui.registerPetOverlay"), QStringLiteral("ui/registerPetOverlay"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register a controlled preview pet overlay using extension-local resources.")),
+        apiDescriptor(QStringLiteral("ui.registerSceneOverlay"), QStringLiteral("ui/registerSceneOverlay"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register a controlled preview scene/canvas overlay.")),
         apiDescriptor(QStringLiteral("ui.getContributions"), QStringLiteral("ui/getContributions"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Get registered UI contributions.")),
         apiDescriptor(QStringLiteral("ui.getViews"), QStringLiteral("ui/getViews"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("List rendered extension views.")),
         apiDescriptor(QStringLiteral("ui.unregisterView"), QStringLiteral("ui/unregisterView"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Unregister rendered extension views.")),
         apiDescriptor(QStringLiteral("ui.refreshViews"), QStringLiteral("ui/refreshViews"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Refresh extension view hosts.")),
         apiDescriptor(QStringLiteral("ui.renderDeclarativeView"), QStringLiteral("ui/renderDeclarativeView"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Render a declarative extension view.")),
         apiDescriptor(QStringLiteral("ui.renderBottomTabView"), QStringLiteral("ui/renderBottomTabView"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Render a bottom-tab extension view.")),
+        apiDescriptor(QStringLiteral("ui.renderFloatingPanel"), QStringLiteral("ui/renderFloatingPanel"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Render a modeless floating extension panel.")),
         apiDescriptor(QStringLiteral("ui.renderToolbarButton"), QStringLiteral("ui/renderToolbarButton"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Render an extension toolbox button.")),
+        apiDescriptor(QStringLiteral("ui.renderSceneOverlay"), QStringLiteral("ui/renderSceneOverlay"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Render a controlled scene overlay above the preview.")),
+        apiDescriptor(QStringLiteral("ui.renderWebView"), QStringLiteral("ui/renderWebView"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Render an HTML-lite view in a controlled host.")),
+        apiDescriptor(QStringLiteral("ui.renderCanvasView"), QStringLiteral("ui/renderCanvasView"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Render a declarative canvas/scene view.")),
 
         apiDescriptor(QStringLiteral("logs.writeExtensionLog"), QStringLiteral("logs/append"), QStringLiteral("logs.write"), QStringLiteral("high"), QStringLiteral("implemented"), QStringLiteral("Append to an extension log.")),
         apiDescriptor(QStringLiteral("logs.openFolder"), QStringLiteral("logs/open"), QStringLiteral("logs.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Open extension logs.")),
         apiDescriptor(QStringLiteral("logs.getPath"), QStringLiteral("logs/getPath"), QStringLiteral("logs.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get extension log path.")),
         apiDescriptor(QStringLiteral("logs.readRecent"), QStringLiteral("logs/readRecent"), QStringLiteral("logs.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Read recent extension log lines.")),
 
+        apiDescriptor(QStringLiteral("input.registerWheelGesture"), QStringLiteral("input/registerWheelGesture"), QStringLiteral("input.listen"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register a controlled wheel gesture that invokes an extension command.")),
+        apiDescriptor(QStringLiteral("input.registerKeyGesture"), QStringLiteral("input/registerKeyGesture"), QStringLiteral("input.listen"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register a controlled key gesture that invokes an extension command.")),
+        apiDescriptor(QStringLiteral("input.registerMouseGesture"), QStringLiteral("input/registerMouseGesture"), QStringLiteral("input.listen"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register a controlled mouse gesture that invokes an extension command.")),
+        apiDescriptor(QStringLiteral("input.getGestures"), QStringLiteral("input/getGestures"), QStringLiteral("input.listen"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("List registered extension input gestures.")),
         apiDescriptor(QStringLiteral("events.register"), QStringLiteral("events/register"), QStringLiteral("events.subscribe"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Register an extension event subscription descriptor.")),
         apiDescriptor(QStringLiteral("providers.registerHoverProvider"), QStringLiteral("contributions/register"), QStringLiteral("providers.register"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register an editor hover provider descriptor.")),
         apiDescriptor(QStringLiteral("providers.registerCompletionProvider"), QStringLiteral("contributions/register"), QStringLiteral("providers.register"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register an editor completion provider descriptor.")),
         apiDescriptor(QStringLiteral("providers.registerCodeActionProvider"), QStringLiteral("contributions/register"), QStringLiteral("providers.register"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register an editor code-action provider descriptor.")),
+        apiDescriptor(QStringLiteral("providers.getRegistered"), QStringLiteral("providers/getRegistered"), QStringLiteral("providers.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("List registered provider descriptors.")),
+        apiDescriptor(QStringLiteral("providers.collectHover"), QStringLiteral("providers/collectHover"), QStringLiteral("providers.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Collect hover providers for the current editor context.")),
+        apiDescriptor(QStringLiteral("providers.collectCompletions"), QStringLiteral("providers/collectCompletions"), QStringLiteral("providers.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Collect completion providers for a context.")),
+        apiDescriptor(QStringLiteral("providers.collectCodeActions"), QStringLiteral("providers/collectCodeActions"), QStringLiteral("providers.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Collect code-action providers for a context.")),
+        apiDescriptor(QStringLiteral("providers.showHover"), QStringLiteral("providers/showHover"), QStringLiteral("providers.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Show hover provider output in host UI.")),
+        apiDescriptor(QStringLiteral("providers.showCompletions"), QStringLiteral("providers/showCompletions"), QStringLiteral("providers.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Show completion provider output in host UI.")),
+        apiDescriptor(QStringLiteral("providers.showCodeActions"), QStringLiteral("providers/showCodeActions"), QStringLiteral("providers.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Show code-action provider output in host UI.")),
         apiDescriptor(QStringLiteral("ui.registerSidebarView"), QStringLiteral("ui/renderSidebarView"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register and render a sidebar-style extension view.")),
         apiDescriptor(QStringLiteral("ui.registerPreferencesPage"), QStringLiteral("ui/renderPreferencesPage"), QStringLiteral("ui.contribute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register and render an extension preferences page.")),
         apiDescriptor(QStringLiteral("export.hooks"), QStringLiteral("contributions/register"), QStringLiteral("export.write"), QStringLiteral("high"), QStringLiteral("implemented"), QStringLiteral("Register export hook/template/provider descriptors.")),
@@ -756,6 +791,10 @@ QVector<QJsonObject> extensionApiRegistry()
         apiDescriptor(QStringLiteral("theme"), QStringLiteral("theme/*"), QStringLiteral("settings.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Read theme state and theme colors.")),
         apiDescriptor(QStringLiteral("backup"), QStringLiteral("backup/*"), QStringLiteral("backup.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Read and write extension backup snapshots.")),
         apiDescriptor(QStringLiteral("shortcuts"), QStringLiteral("shortcuts/*"), QStringLiteral("settings.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Read and register extension shortcut descriptors.")),
+        apiDescriptor(QStringLiteral("shortcuts.list"), QStringLiteral("shortcuts/list"), QStringLiteral("settings.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("List extension shortcut bindings.")),
+        apiDescriptor(QStringLiteral("shortcuts.getEditable"), QStringLiteral("shortcuts/getEditable"), QStringLiteral("settings.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("List shortcuts visible in Preferences > Shortcuts.")),
+        apiDescriptor(QStringLiteral("shortcuts.getKeybinding"), QStringLiteral("shortcuts/getKeybinding"), QStringLiteral("settings.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Read one extension shortcut binding.")),
+        apiDescriptor(QStringLiteral("shortcuts.register"), QStringLiteral("shortcuts/register"), QStringLiteral("settings.write"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register an extension command shortcut that can be edited in Preferences > Shortcuts.")),
 
         apiDescriptor(QStringLiteral("shell.execute"), QStringLiteral("shell/execute"), QStringLiteral("shell.execute"), QStringLiteral("high"), QStringLiteral("implemented"), QStringLiteral("Experimental raw shell execution API; starts a detached shell command.")),
         apiDescriptor(QStringLiteral("process.spawn"), QStringLiteral("process/spawn"), QStringLiteral("process.manage"), QStringLiteral("high"), QStringLiteral("implemented"), QStringLiteral("Experimental raw process API; starts a detached process.")),
@@ -1122,7 +1161,7 @@ void ExtensionManager::scheduleRefresh()
     refreshDebounce_.start();
 }
 
-QString ExtensionManager::permissionForMethod(const QString& method) const
+QString ExtensionManager::permissionForMethod(const QString& method, const QJsonObject& params) const
 {
     if (method == QStringLiteral("api/list")
         || method == QStringLiteral("api/has")
@@ -1185,6 +1224,16 @@ QString ExtensionManager::permissionForMethod(const QString& method) const
         return method.startsWith(QStringLiteral("app/open")) ? QStringLiteral("ui.prompt") : QStringLiteral("app.read");
     }
     if (method == QStringLiteral("contributions/register")) {
+        const QString kind = params.value(QStringLiteral("kind")).toString();
+        if (kind.startsWith(QStringLiteral("providers/"))) {
+            return QStringLiteral("providers.register");
+        }
+        if (kind.startsWith(QStringLiteral("export/"))) {
+            return QStringLiteral("export.write");
+        }
+        if (kind.startsWith(QStringLiteral("events/"))) {
+            return QStringLiteral("events.subscribe");
+        }
         return QStringLiteral("ui.contribute");
     }
     if (method == QStringLiteral("events/register")) {
@@ -1192,6 +1241,9 @@ QString ExtensionManager::permissionForMethod(const QString& method) const
     }
     if (method.startsWith(QStringLiteral("events/"))) {
         return QStringLiteral("events.subscribe");
+    }
+    if (method.startsWith(QStringLiteral("input/"))) {
+        return QStringLiteral("input.listen");
     }
     if (method.startsWith(QStringLiteral("workspace/get")) || method == QStringLiteral("workspace/getActiveDocument")) {
         return QStringLiteral("workspace.read");
@@ -1232,6 +1284,16 @@ QString ExtensionManager::permissionForMethod(const QString& method) const
     }
     if (method.startsWith(QStringLiteral("editor/get"))) {
         return QStringLiteral("editor.read");
+    }
+    if (method.startsWith(QStringLiteral("providers/"))) {
+        return method.startsWith(QStringLiteral("providers/collect"))
+            || method.startsWith(QStringLiteral("providers/show"))
+            || method == QStringLiteral("providers/getRegistered")
+            ? QStringLiteral("providers.read")
+            : QStringLiteral("providers.register");
+    }
+    if (method == QStringLiteral("editor/showCompletions") || method == QStringLiteral("editor/showCodeActions")) {
+        return QStringLiteral("providers.read");
     }
     if (method.startsWith(QStringLiteral("editor/"))) {
         return QStringLiteral("editor.edit");
@@ -1326,7 +1388,7 @@ QString ExtensionManager::permissionForMethod(const QString& method) const
     if (method == QStringLiteral("commands/execute") || method == QStringLiteral("commands/executeInternal")) {
         return QStringLiteral("commands.execute");
     }
-    if (method == QStringLiteral("commands/getCommands")) {
+    if (method == QStringLiteral("commands/getCommands") || method == QStringLiteral("commands/getInternalCommands")) {
         return QStringLiteral("commands.read");
     }
     if (method.startsWith(QStringLiteral("extensions/"))) {
@@ -1341,6 +1403,7 @@ QString ExtensionManager::permissionForMethod(const QString& method) const
     }
     if (method.startsWith(QStringLiteral("shortcuts/"))) {
         return method == QStringLiteral("shortcuts/list") || method == QStringLiteral("shortcuts/getKeybinding")
+            || method == QStringLiteral("shortcuts/getEditable")
             ? QStringLiteral("settings.read")
             : QStringLiteral("settings.write");
     }
@@ -1416,7 +1479,7 @@ QString ExtensionManager::extensionRootPathForId(const QString& extensionId) con
 
 bool ExtensionManager::ensurePermission(const QString& extensionId, const QString& method, const QJsonObject& params, QJsonObject* errorResponse)
 {
-    QString permission = permissionForMethod(method);
+    QString permission = permissionForMethod(method, params);
     if (method == QStringLiteral("contributions/register")) {
         const QString kind = params.value(QStringLiteral("kind")).toString();
         if (kind.startsWith(QStringLiteral("providers/"))) {
@@ -1937,6 +2000,8 @@ QJsonObject ExtensionManager::handleHostRequestCore(const QString& method, const
             forwarded.insert(QStringLiteral("kind"), QStringLiteral("ui/bottomTabView"));
         } else if (apiId == QStringLiteral("ui.registerPreferencesPage")) {
             forwarded.insert(QStringLiteral("kind"), QStringLiteral("ui/preferencesPage"));
+        } else if (apiId == QStringLiteral("ui.registerFloatingPanel")) {
+            forwarded.insert(QStringLiteral("kind"), QStringLiteral("ui/floatingPanel"));
         } else if (apiId == QStringLiteral("ui.registerToolbarButton")) {
             forwarded.insert(QStringLiteral("kind"), QStringLiteral("ui/toolbarButton"));
         } else if (apiId == QStringLiteral("providers.registerHoverProvider")) {
@@ -2119,6 +2184,15 @@ QJsonObject ExtensionManager::handleHostRequestCore(const QString& method, const
             }
         }
         return okValue(commands);
+    }
+    if (method == QStringLiteral("commands/getInternalCommands")) {
+        if (!callbacks_.mainWindowRequest) {
+            return errorObject(QStringLiteral("MainWindow command registry is not available."));
+        }
+        const QJsonObject response = callbacks_.mainWindowRequest(method, params);
+        return response.isEmpty()
+            ? errorObject(QStringLiteral("MainWindow command registry returned no response."))
+            : response;
     }
     if (method == QStringLiteral("commands/describe")) {
         const QString commandId = params.value(QStringLiteral("command")).toString(params.value(QStringLiteral("id")).toString());
@@ -2490,16 +2564,52 @@ QJsonObject ExtensionManager::handleHostRequestCore(const QString& method, const
         const QString path = QDir(QDir(extensionLogDirectory()).filePath(QStringLiteral("backups"))).filePath(id + QStringLiteral(".json"));
         return QJsonObject{{QStringLiteral("ok"), QFile::remove(path)}};
     }
+    if (method.startsWith(QStringLiteral("providers/"))) {
+        if (callbacks_.mainWindowRequest) {
+            const QJsonObject response = callbacks_.mainWindowRequest(method, params);
+            if (!response.isEmpty()) {
+                return response;
+            }
+        }
+        return errorObject(QStringLiteral("Provider host is not available."));
+    }
+    if (method == QStringLiteral("shortcuts/getEditable") || method == QStringLiteral("shortcuts/reloadRegistered")) {
+        if (callbacks_.mainWindowRequest) {
+            const QJsonObject response = callbacks_.mainWindowRequest(method, params);
+            if (!response.isEmpty()) {
+                return response;
+            }
+        }
+        return errorObject(QStringLiteral("Shortcut host is not available."));
+    }
     if (method == QStringLiteral("shortcuts/list")) {
+        if (callbacks_.mainWindowRequest) {
+            const QJsonObject response = callbacks_.mainWindowRequest(method, params);
+            if (!response.isEmpty()) {
+                return response;
+            }
+        }
         return okValue(UiText::loadPreferencesObject().value(QStringLiteral("extensionShortcuts")).toObject());
     }
     if (method == QStringLiteral("shortcuts/getKeybinding")) {
+        if (callbacks_.mainWindowRequest) {
+            const QJsonObject response = callbacks_.mainWindowRequest(method, params);
+            if (!response.isEmpty()) {
+                return response;
+            }
+        }
         const QString command = params.value(QStringLiteral("command")).toString(params.value(QStringLiteral("id")).toString());
         return okValue(UiText::loadPreferencesObject()
                            .value(QStringLiteral("extensionShortcuts")).toObject()
                            .value(command));
     }
     if (method == QStringLiteral("shortcuts/register")) {
+        if (callbacks_.mainWindowRequest) {
+            const QJsonObject response = callbacks_.mainWindowRequest(method, params);
+            if (!response.isEmpty()) {
+                return response;
+            }
+        }
         const QString command = params.value(QStringLiteral("command")).toString(params.value(QStringLiteral("id")).toString()).trimmed();
         if (command.isEmpty()) {
             return errorObject(QStringLiteral("shortcuts.register requires a command."));

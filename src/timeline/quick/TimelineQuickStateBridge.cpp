@@ -7,6 +7,7 @@
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/InputShortcutGesture.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"
 #include "common/TimelineThemeConfig.h"
@@ -392,6 +393,30 @@ double TimelineQuickStateBridge::zoomScale() const
 QVector<double> TimelineQuickStateBridge::zoomPresets() const
 {
     return zoomPresets_;
+}
+
+QStringList TimelineQuickStateBridge::zoomInWheelShortcuts() const
+{
+    return zoomInWheelShortcuts_;
+}
+
+QStringList TimelineQuickStateBridge::zoomOutWheelShortcuts() const
+{
+    return zoomOutWheelShortcuts_;
+}
+
+void TimelineQuickStateBridge::setZoomWheelShortcuts(
+    const QStringList& zoomInShortcuts,
+    const QStringList& zoomOutShortcuts)
+{
+    const QStringList normalizedZoomIn = miacode::input_shortcut::normalizeGestureTexts(zoomInShortcuts);
+    const QStringList normalizedZoomOut = miacode::input_shortcut::normalizeGestureTexts(zoomOutShortcuts);
+    zoomInWheelShortcuts_ = normalizedZoomIn.isEmpty()
+        ? QStringList{QStringLiteral("Ctrl+WheelUp")}
+        : normalizedZoomIn;
+    zoomOutWheelShortcuts_ = normalizedZoomOut.isEmpty()
+        ? QStringList{QStringLiteral("Ctrl+WheelDown")}
+        : normalizedZoomOut;
 }
 
 double TimelineQuickStateBridge::viewportCenterSecond()

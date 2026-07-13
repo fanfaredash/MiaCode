@@ -181,6 +181,7 @@ export interface MiaCodeApi {
     executeCommand(command: string, args?: unknown): ApiResult;
     executeInternal(command: string, args?: Record<string, unknown>): ApiResult;
     getCommands(): ApiResult<Array<Record<string, unknown>>>;
+    getInternalCommands(): ApiResult<Array<Record<string, unknown>>>;
   };
   window: {
     showInformationMessage(message: string): ApiResult;
@@ -230,6 +231,10 @@ export interface MiaCodeApi {
     selectAll(): ApiResult;
     getSelection(): ApiResult<Record<string, number>>;
     getCursor(): ApiResult<Record<string, number>>;
+    getText(): ApiResult<string>;
+    getVisibleRange(): ApiResult<Record<string, number>>;
+    revealRange(range: Record<string, unknown>): ApiResult;
+    getParsedSnapshot(): ApiResult<Record<string, unknown>>;
     setSelection(range: { start: number; end: number }): ApiResult;
     getLine(line: number): ApiResult<Record<string, unknown>>;
     getCurrentLine(): ApiResult<Record<string, unknown>>;
@@ -242,6 +247,25 @@ export interface MiaCodeApi {
     registerHoverProvider(provider: Record<string, unknown>): Disposable;
     registerCompletionProvider(provider: Record<string, unknown>): Disposable;
     registerCodeActionProvider(provider: Record<string, unknown>): Disposable;
+    getRegisteredProviders(kind?: string): ApiResult<Array<Record<string, unknown>>>;
+    collectHover(context?: Record<string, unknown>): ApiResult<Record<string, unknown>>;
+    collectCompletions(context?: Record<string, unknown>): ApiResult<Record<string, unknown>>;
+    collectCodeActions(context?: Record<string, unknown>): ApiResult<Record<string, unknown>>;
+    showHover(context?: Record<string, unknown>, markdown?: string): ApiResult<Record<string, unknown>>;
+    showCompletions(context?: Record<string, unknown>): ApiResult<Record<string, unknown>>;
+    showCodeActions(context?: Record<string, unknown>): ApiResult<Record<string, unknown>>;
+  };
+  providers: {
+    registerHoverProvider(provider: Record<string, unknown>): Disposable;
+    registerCompletionProvider(provider: Record<string, unknown>): Disposable;
+    registerCodeActionProvider(provider: Record<string, unknown>): Disposable;
+    getRegisteredProviders(kind?: string): ApiResult<Array<Record<string, unknown>>>;
+    collectHover(context?: Record<string, unknown>): ApiResult<Record<string, unknown>>;
+    collectCompletions(context?: Record<string, unknown>): ApiResult<Record<string, unknown>>;
+    collectCodeActions(context?: Record<string, unknown>): ApiResult<Record<string, unknown>>;
+    showHover(context?: Record<string, unknown>): ApiResult<Record<string, unknown>>;
+    showCompletions(context?: Record<string, unknown>): ApiResult<Record<string, unknown>>;
+    showCodeActions(context?: Record<string, unknown>): ApiResult<Record<string, unknown>>;
   };
   validation: {
     run(): ApiResult;
@@ -255,7 +279,17 @@ export interface MiaCodeApi {
   timeline: {
     getSnapshot(): ApiResult<Record<string, unknown>>;
     getCurrentSecond(): ApiResult<number>;
+    getZoomState(): ApiResult<Record<string, unknown>>;
+    getVisibleRange(): ApiResult<Record<string, unknown>>;
+    getMarkersAtSecond(second: number, options?: Record<string, unknown>): ApiResult<Array<Record<string, unknown>>>;
     seek(second: number): ApiResult;
+    zoomIn(options?: Record<string, unknown>): ApiResult;
+    zoomOut(options?: Record<string, unknown>): ApiResult;
+    stepZoomPreset(delta: number, options?: Record<string, unknown>): ApiResult;
+    setZoomScale(scale: number, options?: Record<string, unknown>): ApiResult;
+    scrollToSecond(second: number): ApiResult;
+    setFollowPreview(enabled: boolean): ApiResult;
+    setFollowProgress(enabled: boolean): ApiResult;
     addMarker(marker: Record<string, unknown>): ApiResult;
     clearMarkers(ownerId?: string): ApiResult;
     addBand(band: Record<string, unknown>): ApiResult;
@@ -268,6 +302,7 @@ export interface MiaCodeApi {
     stop(): ApiResult;
     seek(second: number): ApiResult;
     getState(): ApiResult<Record<string, unknown>>;
+    getRenderState(): ApiResult<Record<string, unknown>>;
     setSpeed(value: number): ApiResult;
     addOverlay(overlay: Record<string, unknown>): ApiResult;
     updateOverlay(id: string, patch: Record<string, unknown>): ApiResult;
@@ -301,15 +336,45 @@ export interface MiaCodeApi {
   shortcuts: {
     list(): ApiResult<Record<string, unknown>>;
     listShortcuts(): ApiResult<Record<string, unknown>>;
+    getEditableShortcuts(): ApiResult<Array<Record<string, unknown>>>;
     getKeybinding(command: string): ApiResult<string>;
     registerShortcut(command: string, keybinding: string): ApiResult;
+    registerCommandShortcut(shortcut: Record<string, unknown>): ApiResult;
+  };
+  input: {
+    registerWheelGesture(gesture: {
+      id?: string;
+      target?: "any" | "timeline" | "preview" | "editor" | string;
+      modifiers?: string[];
+      direction?: "any" | "up" | "down" | string;
+      command: string;
+    }): ApiResult<Record<string, unknown>>;
+    registerKeyGesture(gesture: {
+      id?: string;
+      target?: "any" | "timeline" | "preview" | "editor" | string;
+      modifiers?: string[];
+      phase?: "any" | "press" | "release" | string;
+      key?: string;
+      command: string;
+    }): ApiResult<Record<string, unknown>>;
+    registerMouseGesture(gesture: {
+      id?: string;
+      target?: "any" | "timeline" | "preview" | "editor" | string;
+      modifiers?: string[];
+      phase?: "any" | "press" | "release" | "doubleClick" | string;
+      button?: "any" | "left" | "right" | "middle" | string;
+      command: string;
+    }): ApiResult<Record<string, unknown>>;
+    getGestures(): ApiResult<Array<Record<string, unknown>>>;
   };
   ui: {
     registerSidebarView(view: Record<string, unknown>): Disposable;
     registerBottomTabView(view: Record<string, unknown>): Disposable;
     registerPreferencesPage(page: Record<string, unknown>): Disposable;
+    registerFloatingPanel(panel: Record<string, unknown>): Disposable;
     registerToolbarButton(button: Record<string, unknown>): Disposable;
     registerPetOverlay(overlay: PetOverlayOptions): ApiResult<Record<string, unknown>>;
+    registerSceneOverlay(overlay: Record<string, unknown>): ApiResult<Record<string, unknown>>;
     getContributions(): ApiResult<Array<Record<string, unknown>>>;
     getViews(): ApiResult<Array<Record<string, unknown>>>;
     unregisterView(id: string, ownerId?: string): ApiResult<{ removed: number }>;
@@ -318,7 +383,11 @@ export interface MiaCodeApi {
     renderSidebarView(view: Record<string, unknown>): ApiResult;
     renderBottomTabView(view: Record<string, unknown>): ApiResult;
     renderPreferencesPage(page: Record<string, unknown>): ApiResult;
+    renderFloatingPanel(panel: Record<string, unknown>): ApiResult;
     renderToolbarButton(button: Record<string, unknown>): ApiResult;
+    renderSceneOverlay(overlay: Record<string, unknown>): ApiResult;
+    renderWebView(view: Record<string, unknown>): ApiResult;
+    renderCanvasView(view: Record<string, unknown>): ApiResult;
   };
   export: {
     getPresets(): ApiResult<Array<Record<string, unknown>>>;

@@ -17,6 +17,7 @@
 #include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
+#include "ShortcutRegistry.h"
 #include "TimelineView.h"
 #include "BusySpinner.h"
 #include "UiText.h"
@@ -1528,6 +1529,13 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     timelineQuickStateBridge_->setViewportLockEnabled(previewViewportLockEnabled_);
     timelineQuickStateBridge_->setFollowProgressEnabled(previewProgressFollowEnabled_);
     timelineQuickStateBridge_->setTimelineSyncEnabled(timelineSyncEnabled_);
+    timelineQuickStateBridge_->setZoomWheelShortcuts(
+        ShortcutRegistry::instance().shortcutTexts(
+            QStringLiteral("timeline.zoom_in"),
+            {QStringLiteral("Ctrl+WheelUp")}),
+        ShortcutRegistry::instance().shortcutTexts(
+            QStringLiteral("timeline.zoom_out"),
+            {QStringLiteral("Ctrl+WheelDown")}));
     timelineSection_->refreshTimelineWaveformPhaseCompensation();
     connect(timelineQuickStateBridge_, &TimelineQuickStateBridge::zoomScaleChanged, this, [this](double) {
         savePortableState();

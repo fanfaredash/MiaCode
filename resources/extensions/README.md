@@ -1,36 +1,32 @@
 # MiaCode Extensions / MiaCode 扩展
 
-MiaCode extensions are local folders that add commands, UI contributions, document tools, preview helpers, diagnostics, and optional experimental host access to MiaCode.
+MiaCode extensions are local folders that add commands, editor tools, UI panels, preview helpers, diagnostics, timeline controls, and optional experimental host access.
 
-MiaCode 扩展是放在本地文件夹中的插件，可以为 MiaCode 增加命令、界面入口、谱面工具、预览辅助、诊断能力，以及可选的实验性宿主访问能力。
+MiaCode 扩展是放在本地的功能文件夹，可以为 MiaCode 增加命令、编辑器工具、界面面板、预览辅助、诊断、时间轴控制，以及可选的实验性宿主访问能力。
 
-**Summary / 总结:** Put one extension in one folder, declare what it needs in the manifest, then use `miacode.*` APIs from JavaScript. / 一个扩展一个文件夹，在 manifest 中声明需要的能力，然后在 JavaScript 中使用 `miacode.*` API。
+**Summary / 总结:** One extension is one folder; declare permissions in the manifest and call `miacode.*` from JavaScript. / 一个扩展就是一个文件夹；在 manifest 里声明权限，然后从 JavaScript 调用 `miacode.*`。
 
 ---
 
-## 1. Install And Manage / 安装与管理
+## 1. Install / 安装
 
-Copy each extension folder into:
+Copy the extension folder into:
 
-将每个扩展文件夹复制到：
+将扩展文件夹复制到：
 
 ```text
 <MiaCode install root>\extensions
 ```
 
-Then open **Preferences > Extensions** and click **Refresh Extensions**. You can enable or disable each extension from the same page. Logs are available from **Open Logs Folder**.
+Open **Preferences > Extensions**, then click **Refresh Extensions**. You can enable, disable, inspect, or open logs from the same page.
 
-然后打开 **首选项 > 扩展**，点击 **刷新扩展**。你可以在同一页面启用或禁用扩展，也可以通过 **打开日志位置** 查看日志。
+打开 **首选项 > 扩展**，点击 **刷新扩展**。你可以在同一页启用、禁用、检查扩展，或打开日志目录。
 
-**Summary / 总结:** Install by copying a folder; manage it from **Preferences > Extensions**. / 复制文件夹即可安装；在 **首选项 > 扩展** 中管理。
+**Summary / 总结:** Users only need the MiaCode app and an extension folder placed under `extensions`. / 普通用户只需要 MiaCode 程序和放进 `extensions` 的扩展文件夹。
 
 ---
 
-## 2. Extension Folder / 扩展文件夹
-
-A typical extension looks like this:
-
-一个典型扩展目录如下：
+## 2. Folder Layout / 目录结构
 
 ```text
 hello-tools/
@@ -41,19 +37,15 @@ hello-tools/
     pet-2.png
 ```
 
-Use `miacode-extension.json` for MiaCode-only extensions. You may also use `package.json` with a `miacodeExtension` object if you prefer an npm-style folder, but MiaCode does not run Node.js.
+Use `miacode-extension.json` for MiaCode-only extensions. `extension.js` is required only when the extension runs JavaScript. Assets loaded by UI APIs must stay inside the extension folder.
 
-推荐使用 `miacode-extension.json`。如果你更喜欢 npm 风格目录，也可以使用 `package.json` 并在其中放 `miacodeExtension` 对象，但 MiaCode 不会运行 Node.js。
+推荐使用 `miacode-extension.json`。只有需要运行 JavaScript 时才需要 `extension.js`。UI API 加载的资源必须位于扩展目录内。
 
-**Summary / 总结:** The manifest describes the extension; `extension.js` is optional unless you need JavaScript. / manifest 用来描述扩展；只有需要运行 JavaScript 时才需要 `extension.js`。
+**Summary / 总结:** Keep code, manifest, and assets together; MiaCode does not load files outside the extension folder for controlled UI resources. / 代码、manifest 和资源放在一起；受控 UI 资源不会加载扩展目录外的文件。
 
 ---
 
 ## 3. Manifest / 清单文件
-
-Minimum JavaScript extension:
-
-最小 JavaScript 扩展：
 
 ```json
 {
@@ -74,46 +66,21 @@ Minimum JavaScript extension:
       }
     ],
     "menus": {
-      "tools/menu": [
-        { "command": "hello-tools.say" }
-      ]
+      "tools/menu": [{ "command": "hello-tools.say" }]
     }
   }
 }
 ```
 
-Required fields are `id`, `name`, `version`, `publisher`, and `engines.miacode`. Add `main` only when the extension runs JavaScript. Add `permissions` for every capability your code calls.
+Required fields are `id`, `name`, `version`, `publisher`, and `engines.miacode`. Add `main` only when JavaScript should run. Add every permission your code calls.
 
-必填字段是 `id`、`name`、`version`、`publisher` 和 `engines.miacode`。只有需要运行 JavaScript 时才需要 `main`。代码调用什么能力，就在 `permissions` 中声明对应权限。
+必填字段是 `id`、`name`、`version`、`publisher` 和 `engines.miacode`。只有需要运行 JavaScript 时才添加 `main`。代码调用什么能力，就声明对应权限。
 
-Data-only language pack:
-
-纯数据语言包：
-
-```json
-{
-  "id": "sample-language",
-  "name": "Sample Language",
-  "version": "0.0.1",
-  "publisher": "local",
-  "engines": { "miacode": ">=1.0.0" },
-  "contributes": {
-    "languages": [
-      {
-        "id": "sample",
-        "label": "Sample",
-        "translations": "./i18n/sample.json"
-      }
-    ]
-  }
-}
-```
-
-**Summary / 总结:** The manifest is the contract: identity, entry file, contributions, and permissions. / manifest 是扩展契约，包含身份、入口文件、贡献内容和权限声明。
+**Summary / 总结:** The manifest is the contract for identity, entry file, commands, menus, and permissions. / manifest 是身份、入口文件、命令、菜单和权限的契约。
 
 ---
 
-## 4. JavaScript Runtime / JavaScript 运行环境
+## 4. Runtime / 运行时
 
 MiaCode uses Qt `QJSEngine`, not Node.js. There is no `require`, npm package loading, `fs`, `path`, `process`, `Buffer`, or `child_process`. Use `miacode.*` APIs instead.
 
@@ -136,268 +103,249 @@ function deactivate() {}
 module.exports = { activate, deactivate };
 ```
 
-Register disposables in `context.subscriptions` when an API returns one, especially event listeners.
-
-当 API 返回 disposable 时，尤其是事件监听器，请放进 `context.subscriptions`，方便扩展停用时自动清理。
-
-**Summary / 总结:** Write browser-like JavaScript against `miacode.*`; do not expect Node.js APIs. / 按浏览器式 JavaScript 编写扩展，并使用 `miacode.*`；不要依赖 Node.js API。
+**Summary / 总结:** Write browser-like JavaScript against the MiaCode facade; do not depend on Node APIs. / 按浏览器式 JavaScript 编写扩展，依赖 MiaCode facade，不依赖 Node API。
 
 ---
 
 ## 5. Common APIs / 常用 API
 
-Most extensions should use the stable facade methods below. These are safer and easier than raw access.
-
-大多数扩展应该优先使用下面这些稳定 facade 方法。它们比 raw 访问更安全，也更容易维护。
-
-| Area / 范围 | Common APIs / 常用 API |
+| Area / 范围 | APIs / API |
 | --- | --- |
-| Commands / 命令 | `miacode.commands.registerCommand`, `executeCommand`, `getCommands` |
-| Window / 窗口 | `miacode.window.showInformationMessage`, `showWarningMessage`, `showErrorMessage`, `showInputBox`, `showQuickPick`, `createStatusBarItem` |
-| Workspace / 工作区 | `miacode.workspace.getActiveDocument`, `applyDocumentEdit`, `getChartMetadata`, `updateChartMetadata`, `save`, `saveAs` |
-| Document / 文档 | `miacode.document.query`, `edit`, `getDifficulties`, `getActiveDifficulty`, `replaceActiveDifficultyText`, `getParsedNoteMarkers`, `format` |
-| Editor / 编辑器 | `miacode.editor.getSelection`, `insertText`, `replaceSelection`, `replaceRange`, `undo`, `redo`, `copy`, `paste` |
-| Timeline / 时间线 | `miacode.timeline.getSnapshot`, `getCurrentSecond`, `seek`, `addMarker`, `clearMarkers`, `addBand`, `clearVisuals` |
-| Preview / 预览 | `miacode.preview.getState`, `play`, `pause`, `stop`, `seek`, `setSpeed`, `addOverlay`, `clearOverlays` |
-| UI / 界面 | `miacode.ui.registerPetOverlay`, `registerToolbarButton`, `registerSidebarView`, `registerPreferencesPage`, `getContributions` |
-| Diagnostics / 诊断 | `miacode.validation.run`, `miacode.validation.addDiagnostics`, `miacode.diagnostics.validateDocument` |
+| Commands / 命令 | `miacode.commands.registerCommand`, `executeCommand`, `getCommands`, `getInternalCommands`, `executeInternal` |
+| Window / 窗口 | `showInformationMessage`, `showWarningMessage`, `showErrorMessage`, `showInputBox`, `showQuickPick`, `createStatusBarItem` |
+| Workspace / 工作区 | `getActiveDocument`, `applyDocumentEdit`, `getChartMetadata`, `updateChartMetadata`, `save`, `saveAs` |
+| Document / 文档 | `query`, `edit`, `getDifficulties`, `getActiveDifficulty`, `replaceActiveDifficultyText`, `format` |
+| Editor / 编辑器 | `getText`, `getSelection`, `getVisibleRange`, `revealRange`, `getParsedSnapshot`, `getCurrentToken`, `insertText`, `replaceSelection`, `replaceRange`, `undo`, `redo`, `showHover`, `showCompletions`, `showCodeActions` |
+| Providers / 提供器 | `miacode.providers.registerHoverProvider`, `registerCompletionProvider`, `registerCodeActionProvider`, `collectHover`, `collectCompletions`, `collectCodeActions`, `showHover`, `showCompletions`, `showCodeActions` |
+| Timeline / 时间轴 | `getSnapshot`, `getZoomState`, `getVisibleRange`, `getMarkersAtSecond`, `seek`, `zoomIn`, `zoomOut`, `stepZoomPreset`, `setZoomScale`, `scrollToSecond`, `setFollowPreview`, `setFollowProgress` |
+| Preview / 预览 | `getState`, `getRenderState`, `play`, `pause`, `stop`, `seek`, `setSpeed`, `addOverlay`, `clearOverlays` |
+| Input / 输入 | `miacode.input.registerWheelGesture`, `registerKeyGesture`, `registerMouseGesture`, `getGestures` |
+| Shortcuts / 快捷键 | `getEditableShortcuts`, `getKeybinding`, `registerShortcut`, `registerCommandShortcut` |
+| UI / 界面 | `registerToolbarButton`, `registerBottomTabView`, `registerSidebarView`, `registerPreferencesPage`, `registerFloatingPanel`, `registerPetOverlay`, `registerSceneOverlay`, `renderWebView`, `renderCanvasView`, `getViews` |
+| Diagnostics / 诊断 | `miacode.validation.run`, `addDiagnostics`, `clearDiagnostics`, `miacode.diagnostics.validateDocument` |
 | Logs / 日志 | `miacode.logs.append`, `getPath`, `open` |
-| Management / 管理 | `miacode.extensions.all`, `get`, `enable`, `disable`, `installFromFolder`, `remove` |
+| Open Bridge / 开放桥 | `miacode.open.list`, `describe`, `call` |
 
 For the full live list, call `miacode.api.list()` or open **Preferences > Extensions > DevTools Panel**.
 
-完整实时列表可以通过 `miacode.api.list()` 查看，也可以打开 **首选项 > 扩展 > DevTools 面板**。
+完整实时列表可以调用 `miacode.api.list()`，或打开 **首选项 > 扩展 > DevTools 面板**。
 
-**Summary / 总结:** Use stable `miacode.*` APIs first; use DevTools when you need the full current surface. / 优先使用稳定的 `miacode.*` API；需要查看完整当前能力面时再用 DevTools。
+**Summary / 总结:** Prefer stable `miacode.*` facade APIs; use DevTools to inspect the exact current capability surface. / 优先使用稳定的 `miacode.*` facade；用 DevTools 查看当前真实能力面。
 
 ---
 
 ## 6. Permissions / 权限
 
-If an API requires a permission, the manifest must declare it. Missing permissions cause the call to fail. Risk labels such as `low`, `medium`, and `high` are explanations, not separate allow/deny switches.
+If an API requires a permission, the extension manifest must declare it. Missing permission means the call fails. Risk labels such as `low`, `medium`, and `high` are descriptions, not extra switches.
 
-如果 API 需要权限，manifest 必须声明。缺少权限时调用会失败。`low`、`medium`、`high` 这类风险标签只是说明影响范围，不是额外的允许/拒绝开关。
+如果 API 需要权限，扩展 manifest 必须声明。缺少权限时调用会失败。`low`、`medium`、`high` 是风险说明，不是额外开关。
 
-Common examples:
+Common permissions include:
 
-常见示例：
+常用权限包括：
 
 ```json
 {
   "permissions": [
     "ui.message",
+    "ui.contribute",
+    "input.listen",
+    "providers.read",
+    "providers.register",
     "workspace.read",
     "document.edit",
+    "editor.read",
+    "editor.edit",
+    "timeline.read",
+    "timeline.control",
     "preview.control",
-    "ui.contribute",
-    "open.inspect"
+    "settings.read",
+    "settings.write",
+    "open.inspect",
+    "open.call"
   ]
 }
 ```
 
-Experimental raw APIs require explicit raw or experimental permissions, such as `open.call`, `experimental.invoke`, `renderer.raw`, `internal.raw`, `shell.execute`, or `process.manage`.
+Experimental raw APIs require explicit raw or experimental permissions, such as `experimental.invoke`, `renderer.raw`, `internal.raw`, `shell.execute`, or `process.manage`.
 
-实验性 raw API 需要显式 raw 或 experimental 权限，例如 `open.call`、`experimental.invoke`、`renderer.raw`、`internal.raw`、`shell.execute` 或 `process.manage`。
+实验性 raw API 需要显式声明 raw 或 experimental 权限，例如 `experimental.invoke`、`renderer.raw`、`internal.raw`、`shell.execute` 或 `process.manage`。
 
-**Summary / 总结:** Permissions are declared up front in the manifest; installing an extension is the trust decision. / 权限需要提前写在 manifest 中；安装扩展本身就是信任决策。
+**Summary / 总结:** Permissions are declared up front; installing an extension is the trust decision. / 权限提前声明；安装扩展本身就是信任决策。
 
 ---
 
-## 7. Events / 事件
+## 7. Real Interaction / 真实交互
 
-Events are real callbacks stored in the extension runtime. They are not placeholder descriptors.
+Events and providers are not only descriptors. Event callbacks are stored in the runtime and triggered by host actions such as text edits, timeline seek, and preview state changes. Provider descriptors can be collected by the host through provider broker APIs.
 
-事件是真实保存在扩展运行时中的 callback，不是只写在文档里的占位描述。
+事件和 provider 不只是描述符。事件 callback 会保存在运行时，并由文本编辑、时间轴跳转、预览状态变化等宿主动作触发。provider 描述符可以通过 provider broker API 被宿主收集和消费。
 
 ```js
 function activate(context) {
   context.subscriptions.push(
     miacode.events.onDidChangeText((event) => {
-      context.log(`changed by ${event.sourceMethod}: ${event.textLength}`);
-    }),
-    miacode.timeline.onDidSeek((event) => {
-      context.log(`seeked to ${event.second}`);
-    }),
-    miacode.preview.onDidChangeState((event) => {
-      context.log(`preview changed by ${event.sourceMethod}`);
+      context.log(`changed by ${event.sourceMethod}`);
     })
   );
+
+  miacode.editor.registerHoverProvider({
+    id: "hello-hover",
+    pattern: "tap",
+    markdown: "Tap note helper"
+  });
+
+  miacode.providers.showHover({});
 }
 ```
 
-Callbacks run as the extension that registered them. Any API call inside the callback still uses that extension's manifest permissions.
+Completion and code-action providers can be collected programmatically or shown through host UI with `miacode.providers.showCompletions()` and `miacode.providers.showCodeActions()`. In the editor, Ctrl+Space opens registered completions and Ctrl+. or Alt+Enter opens registered code actions.
 
-callback 会以注册它的扩展身份运行。callback 内再次调用 API 时，仍然按该扩展 manifest 中的权限声明校验。
+Completion 和 code action 既可以通过 `collectCompletions`、`collectCodeActions` 程序化收集，也可以通过 `miacode.providers.showCompletions()`、`miacode.providers.showCodeActions()` 交给宿主 UI 展示。在编辑器里，Ctrl+Space 会打开已注册补全，Ctrl+. 或 Alt+Enter 会打开已注册 code action。
 
-**Summary / 总结:** Events are interactive and permission-checked; remember to dispose them through `context.subscriptions`. / 事件是真实交互并会校验权限；记得通过 `context.subscriptions` 管理清理。
+**Summary / 总结:** Registration creates runtime state that the host can trigger or collect; it is no longer only a planned placeholder. / 注册会产生宿主可触发、可收集的运行时状态，不再只是 planned 占位。
 
 ---
 
-## 8. Controlled UI / 受控 UI
+## 8. Input And Shortcuts / 输入与快捷键
 
-Use controlled UI APIs when you need visual features. Do not ask for raw renderer, raw QWidget, or raw QML objects for normal extensions.
+Use controlled input gestures when an extension needs host-level input such as Ctrl+wheel. A gesture invokes an extension command.
 
-需要可视化能力时，请使用受控 UI API。普通扩展不应该依赖 raw renderer、raw QWidget 或 raw QML 对象。
-
-Example pet overlay:
-
-Pet 浮层示例：
+当扩展需要 Ctrl+滚轮这类宿主输入时，使用受控 input gesture。gesture 会触发一个扩展命令。
 
 ```js
+function activate(context) {
+  miacode.commands.registerCommand("hello-tools.zoomIn", () => {
+    miacode.timeline.zoomIn();
+  });
+
+  miacode.input.registerWheelGesture({
+    id: "hello-tools.ctrlWheelUp",
+    target: "timeline",
+    modifiers: ["ctrl"],
+    direction: "up",
+    command: "hello-tools.zoomIn"
+  });
+
+  miacode.input.registerKeyGesture({
+    id: "hello-tools.ctrlSpace",
+    target: "editor",
+    modifiers: ["ctrl"],
+    key: "Space",
+    phase: "press",
+    command: "hello-tools.zoomIn"
+  });
+
+  miacode.input.registerMouseGesture({
+    id: "hello-tools.previewClick",
+    target: "preview",
+    button: "left",
+    phase: "press",
+    command: "hello-tools.zoomIn"
+  });
+
+  miacode.shortcuts.registerCommandShortcut({
+    command: "hello-tools.zoomIn",
+    label: "Timeline Zoom In",
+    keybinding: "Ctrl+="
+  });
+}
+```
+
+Shortcuts registered this way appear in **Preferences > Shortcuts** under the extension category and can be edited by the user.
+
+这样注册的快捷键会出现在 **首选项 > 快捷键** 的扩展分类中，用户可以修改。
+
+**Summary / 总结:** Use `input.registerWheelGesture`, `registerKeyGesture`, and `registerMouseGesture` for host gestures; use `shortcuts.registerCommandShortcut` for editable user shortcuts. / 用 `input.registerWheelGesture`、`registerKeyGesture`、`registerMouseGesture` 接宿主手势，用 `shortcuts.registerCommandShortcut` 注册可编辑快捷键。
+
+---
+
+## 9. Controlled UI / 受控 UI
+
+Extensions submit declarative UI data. MiaCode owns rendering, lifetime, resource checks, and event dispatch. This avoids exposing raw renderer, raw `QWidget`, or raw `QQuickItem` objects to extension code.
+
+扩展提交声明式 UI 数据。MiaCode 负责渲染、生命周期、资源检查和事件分发。这样无需把 raw renderer、raw `QWidget` 或 raw `QQuickItem` 暴露给扩展代码。
+
+```js
+miacode.ui.registerFloatingPanel({
+  id: "hello-tools.panel",
+  title: "Hello Tools",
+  width: 360,
+  height: 240,
+  body: [
+    { type: "text", text: "Hello from an extension panel." },
+    { type: "button", text: "Run", command: "hello-tools.say" }
+  ]
+});
+
 miacode.ui.registerPetOverlay({
-  id: "sample-pet",
+  id: "hello-tools.pet",
   frames: ["assets/pet-1.png", "assets/pet-2.png"],
-  sprite: { fps: 6 },
-  anchor: "bottomRight",
-  size: 96,
-  opacity: 0.92,
+  position: { anchor: "bottomRight", x: 16, y: 16 },
   draggable: true,
-  onClickCommand: "sample.petClicked"
+  opacity: 0.92,
+  onClickCommand: "hello-tools.say"
+});
+
+miacode.ui.renderWebView({
+  id: "hello-tools.web",
+  title: "HTML Lite",
+  html: "<h3>Hello Tools</h3><p>Static extension HTML.</p>"
+});
+
+miacode.ui.renderCanvasView({
+  id: "hello-tools.canvas",
+  title: "Canvas",
+  type: "canvas",
+  nodes: [
+    { type: "rect", x: 12, y: 12, width: 120, height: 56, color: "#2f80ed" },
+    { type: "text", x: 24, y: 46, text: "Canvas view", color: "#ffffff" }
+  ]
+});
+
+miacode.ui.registerSceneOverlay({
+  id: "hello-tools.scene",
+  width: 220,
+  height: 120,
+  nodes: [{ type: "text", x: 16, y: 48, text: "Preview scene overlay" }]
 });
 ```
 
-Supported fields include `image`/`src`, `frames`, `sprite.fps`, `sprite.frameDurationMs`, `position`, `anchor`, `width`, `height`, `size`, `margin`, `opacity`, `draggable`, `onClickCommand`, and `onDragEndCommand`.
+Supported controlled hosts include toolbar buttons, bottom tab views, real sidebar dock views, modeless preferences pages, floating panels, preview overlays, pet overlays, HTML-lite views, declarative canvas views, and preview scene overlays. HTML-lite is rendered by the host without exposing raw WebEngine, raw renderer, raw `QWidget`, or raw `QQuickItem`.
 
-支持字段包括 `image`/`src`、`frames`、`sprite.fps`、`sprite.frameDurationMs`、`position`、`anchor`、`width`、`height`、`size`、`margin`、`opacity`、`draggable`、`onClickCommand` 和 `onDragEndCommand`。
+受控宿主包括工具栏按钮、底部标签页、真正的侧边栏 dock 视图、独立首选项页、浮动面板、预览浮层、pet overlay、HTML-lite 视图、声明式 canvas 视图和预览 scene overlay。HTML-lite 由宿主渲染，不会向扩展暴露 raw WebEngine、raw renderer、raw `QWidget` 或 raw `QQuickItem`。
 
-Image and sprite paths must resolve inside the extension folder. MiaCode rejects missing files, directories, and path traversal.
-
-图片和 sprite 路径必须位于扩展目录内。MiaCode 会拒绝不存在的文件、目录路径和路径穿越。
-
-**Summary / 总结:** Use declarative UI data; MiaCode owns the actual rendering and resource safety checks. / 使用声明式 UI 数据；实际渲染和资源安全检查由 MiaCode 负责。
+**Summary / 总结:** UI is open through a facade, not by handing internal renderer objects to JavaScript. / UI 通过 facade 开放，而不是把内部 renderer 对象交给 JavaScript。
 
 ---
 
-## 9. Open Bridge / 开放桥
+## 10. Open Bridge And Experimental Raw / Open Bridge 与实验 raw
 
-`miacode.open` exposes controlled internal facade objects. It is more flexible than stable wrapper methods, but it still does not pass raw C++ or Qt objects into JavaScript.
+Open Bridge exposes registered facade objects through `miacode.open`. These objects are MiaCode-controlled bridge objects, not real internal C++ instances.
 
-`miacode.open` 暴露的是受控的内部 facade 对象。它比稳定包装 API 更灵活，但仍然不会把真实 C++ 或 Qt 对象直接交给 JavaScript。
+Open Bridge 通过 `miacode.open` 暴露已注册的 facade 对象。这些对象是 MiaCode 控制的桥对象，不是真实内部 C++ 实例。
 
 ```js
-const objects = miacode.open.list().value;
-const preview = miacode.open.describe("preview").value;
-const state = miacode.open.call("preview", "getState").value;
-
-miacode.open.call("document", "edit", {
-  ops: [{ path: "/metadata/title", value: "New Title" }]
-});
+const timeline = miacode.open.describe("timeline");
+const zoom = miacode.open.call("timeline", "getZoomState");
 ```
 
-Use `miacode.open.describe(objectId)` before calling. A method must report `status: "implemented"` to be callable. Discovery uses `open.inspect`; calling methods uses `open.call` plus any object or method permission.
+Experimental raw targets are marked as `experimentalRaw: true`. The marker is a warning, not an automatic block. Calls still require explicit permissions and may return an accepted diagnostic result instead of a stable native binding.
 
-调用前先用 `miacode.open.describe(objectId)` 查看描述。只有 `status: "implemented"` 的方法可以调用。发现对象需要 `open.inspect`；调用方法需要 `open.call`，并可能需要对象或方法自身的权限。
+实验 raw 目标会标记 `experimentalRaw: true`。这个标记是风险提示，不是自动 block。调用仍需要显式权限，并且可能返回 accepted diagnostic，而不是稳定原生绑定。
 
-**Summary / 总结:** Open Bridge is dynamic and discoverable, but still permission-checked and host-owned. / Open Bridge 支持动态发现和调用，但仍会校验权限，并由宿主拥有真实对象。
+**Summary / 总结:** Open Bridge is for controlled internal-facing facades; raw access is explicit, unstable, and diagnostic-friendly. / Open Bridge 面向受控内部 facade；raw 访问是显式、非稳定、便于诊断的能力。
 
 ---
 
-## 10. Experimental Raw / 实验性 Raw
+## 11. Logs And DevTools / 日志与 DevTools
 
-Experimental raw targets are visible for local and trusted development. They are marked as unstable and may change without compatibility guarantees.
+Extension errors, permission failures, runtime exceptions, API call history, UI contributions, provider registrations, event callbacks, experimental raw calls, and diagnostics can be inspected from **Preferences > Extensions**.
 
-实验性 raw 目标用于本地和可信开发。它们会被明确标记为不稳定，并且不保证兼容性。
+扩展错误、权限失败、运行时异常、API 调用历史、UI 贡献、provider 注册、事件 callback、实验 raw 调用和诊断信息，都可以在 **首选项 > 扩展** 查看。
 
-Common raw namespaces:
+Use **Open Logs Folder** when reporting a bug. Use **DevTools Panel** when checking whether an API exists, which permission it needs, and whether recent calls succeeded.
 
-常见 raw 命名空间：
+反馈问题时使用 **打开日志目录**。检查 API 是否存在、需要什么权限、最近调用是否成功时，使用 **DevTools 面板**。
 
-```text
-shell.execute
-process.spawn
-native.*
-internal.raw
-renderer.raw
-export.raw
-security.*
-updates.*
-```
-
-Discover them through Open Bridge:
-
-通过 Open Bridge 发现它们：
-
-```js
-const rawTargets = miacode.open.list().value.filter((item) => item.experimentalRaw);
-for (const target of rawTargets) {
-  context.log(`${target.id}: ${target.stability}`);
-}
-```
-
-An experimental marker is a warning, not automatically a block. Calls still require the declared permissions and may return an accepted diagnostic result instead of a stable native binding.
-
-实验性标记是风险提示，不等于自动拒绝。调用仍然需要声明权限，并且可能返回“已接收”的诊断结果，而不是稳定的 native 绑定。
-
-**Summary / 总结:** Raw access is open for trusted experiments, but unstable; prefer stable APIs for distributable extensions. / Raw 访问面向可信实验开放，但不稳定；可分发扩展应优先使用稳定 API。
-
----
-
-## 11. DevTools / 诊断工具
-
-Use DevTools when an extension does not behave as expected.
-
-扩展行为不符合预期时，请使用 DevTools 诊断。
-
-In JavaScript:
-
-在 JavaScript 中：
-
-```js
-const snapshot = miacode.devtools.snapshot().value;
-const diagnosis = miacode.devtools.diagnose("preview.seek").value;
-const recentCalls = miacode.devtools.recentCalls().value;
-```
-
-In the app, open **Preferences > Extensions > DevTools Panel**. The panel shows API Registry, Open Bridge, Recent Calls, Extensions, Extension Details, UI Contributions, Diagnostics, and Raw JSON.
-
-在应用内，打开 **首选项 > 扩展 > DevTools 面板**。面板会展示 API 注册表、Open Bridge、最近调用、扩展、扩展详情、UI 贡献、诊断和原始 JSON。
-
-Use **Extension Details** when you need to inspect one extension at a time. It groups permissions, UI contributions, rendered views, event callbacks, providers, export hooks, experimental raw calls, recent errors, and diagnostics by extension id.
-
-需要逐个扩展排查时，请看 **Extension Details**。它会按扩展 id 聚合权限、UI 贡献、已渲染视图、事件回调、provider、导出 hook、实验性 raw 调用、最近错误和诊断信息。
-
-`recentCalls` keeps a compact parameter preview only. It does not store raw native pointers or full large payloads.
-
-`recentCalls` 只保存压缩后的参数预览，不保存 raw native pointer，也不会保存完整的大型 payload。
-
-For support reports, include the extension folder, manifest, the failing action, the DevTools Raw JSON snapshot, and `extensions.log` from **Open Logs Folder**. The log records manifest errors, runtime errors, permission denials, failed host API calls, command failures, and extension `context.log()` messages with timestamps.
-
-反馈问题时，请提供扩展文件夹、manifest、触发失败的操作、DevTools 的 Raw JSON 快照，以及 **打开日志位置** 里的 `extensions.log`。该日志会记录 manifest 错误、runtime 错误、权限拒绝、失败的宿主 API 调用、命令失败，以及扩展 `context.log()` 输出，并带有时间戳。
-
-**Summary / 总结:** DevTools is read-only inspection; use Extension Details and `extensions.log` to see what exists, what was called, and why a call failed. / DevTools 是只读检查工具；用扩展详情和 `extensions.log` 查看有哪些能力、发生过哪些调用，以及调用失败原因。
-
----
-
-## 12. Validate Before Shipping / 发布前校验
-
-Run the validator before installing or sharing an extension:
-
-安装或分享扩展前，请运行校验器：
-
-```powershell
-node tools/extensions/validate-extension.mjs path\to\extension
-```
-
-Then test these flows:
-
-然后测试这些流程：
-
-1. Copy the extension folder into `<MiaCode install root>\extensions`.
-2. Refresh **Preferences > Extensions**.
-3. Enable and disable the extension.
-4. Run its commands.
-5. Open logs and DevTools if anything fails.
-
-中文流程：
-
-1. 将扩展文件夹复制到 `<MiaCode install root>\extensions`。
-2. 在 **首选项 > 扩展** 中刷新。
-3. 启用和禁用扩展。
-4. 执行扩展命令。
-5. 如果失败，查看日志和 DevTools。
-
-Refreshing extensions should not change the current chart text, dirty state, file path, or active difficulty unless the extension explicitly calls an editing API.
-
-刷新扩展不应该改变当前谱面文本、dirty 状态、文件路径或当前难度，除非扩展明确调用了编辑 API。
-
-**Summary / 总结:** Validate the manifest, refresh in MiaCode, test enable/disable, then inspect logs and DevTools. / 先校验 manifest，再在 MiaCode 中刷新并测试启用/禁用，最后用日志和 DevTools 排查问题。
+**Summary / 总结:** Logs are for bug reports; DevTools is for capability and runtime inspection. / 日志用于报错反馈；DevTools 用于检查能力面和运行时状态。

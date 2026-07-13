@@ -598,9 +598,12 @@
         QJsonArray extensionPreviewOverlays_;
         QJsonArray extensionUiContributions_;
         QJsonArray extensionExportHooks_;
+        QJsonArray extensionInputGestures_;
+        QJsonObject extensionShortcutContributions_;
         QVector<QPointer<QWidget>> extensionRenderedUiWidgets_;
         QVector<QPointer<QWidget>> extensionPreviewOverlayWidgets_;
         QVector<QPointer<QAction>> extensionToolbarActions_;
+        QVector<QPointer<QShortcut>> extensionShortcutObjects_;
         QJsonObject extensionProjectData_;
         DeletedDifficultyUndoState deletedDifficultyUndoState_;
         bool previewFollowDecorationActive_ = false;
