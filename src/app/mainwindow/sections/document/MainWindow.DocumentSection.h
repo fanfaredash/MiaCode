@@ -68,6 +68,7 @@ public:
     bool undoDeletedDifficultyField();
     void clearChartSelectionTransformUndoEntries();
     void syncChartSelectionTransformUndoState();
+    void recordChartSelectionUndoRestoreAfterNextEdit(int originalAnchor, int originalPosition);
     bool undoChartEditorWithSelectionRestore();
     bool redoChartEditorWithSelectionRestore();
     QString resolveInitialOpenDirectory() const;

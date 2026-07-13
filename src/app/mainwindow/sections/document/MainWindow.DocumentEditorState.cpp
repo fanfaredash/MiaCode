@@ -168,6 +168,39 @@ void MainWindow::DocumentSection::recordChartSelectionTransformUndoEntry(
     updateLastObservedChartEditorUndoRedoSteps();
 }
 
+void MainWindow::DocumentSection::recordChartSelectionUndoRestoreAfterNextEdit(
+    int originalAnchor,
+    int originalPosition)
+{
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr || editor->document() == nullptr) {
+        return;
+    }
+    if (originalAnchor == originalPosition || state_.editorSelectionUndoRedoRestoreInProgress_) {
+        return;
+    }
+
+    const int undoStepsBefore = editor->document()->availableUndoSteps();
+    const QPointer<PlainCodeEditor> guard(editor);
+    QTimer::singleShot(0, editor, [this, guard, originalAnchor, originalPosition, undoStepsBefore]() {
+        if (guard.isNull() || guard->document() == nullptr) {
+            return;
+        }
+        if (guard->document()->availableUndoSteps() <= undoStepsBefore) {
+            logSelectionRestore(
+                QStringLiteral("record_deferred_skip"),
+                QStringLiteral("reason=no_new_undo_step before=%1 after=%2 original_anchor=%3 original_pos=%4")
+                    .arg(undoStepsBefore)
+                    .arg(guard->document()->availableUndoSteps())
+                    .arg(originalAnchor)
+                    .arg(originalPosition)
+            );
+            return;
+        }
+        recordChartSelectionTransformUndoEntry(originalAnchor, originalPosition, guard->textCursor());
+    });
+}
+
 const MainWindow::SelectionTransformUndoEntry* MainWindow::DocumentSection::findChartSelectionTransformUndoEntry(
     int undoStepAfterApply) const
 {

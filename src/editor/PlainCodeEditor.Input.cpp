@@ -378,6 +378,30 @@ bool matchesShortcutId(const QKeyEvent* event, const QString& id, const QList<QK
     return false;
 }
 
+bool shouldRecordSelectionReplacementUndo(const QKeyEvent* event)
+{
+    if (event == nullptr) {
+        return false;
+    }
+    if (event->matches(QKeySequence::Undo)
+        || event->matches(QKeySequence::Redo)
+        || event->matches(QKeySequence::Copy)
+        || event->matches(QKeySequence::SelectAll)) {
+        return false;
+    }
+    if (event->matches(QKeySequence::Cut)) {
+        return true;
+    }
+    if (event->key() == Qt::Key_Backspace || event->key() == Qt::Key_Delete) {
+        return !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier));
+    }
+    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+        return !(event->modifiers() & (Qt::AltModifier | Qt::MetaModifier));
+    }
+    return !event->text().isEmpty()
+        && !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier));
+}
+
 void insertLineBreakAtCursor(QTextEdit* editor)
 {
     if (editor == nullptr || editor->isReadOnly()) {
@@ -524,7 +548,13 @@ void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
         QKeySequence::Cut);
     cutAction->setShortcutVisibleInContextMenu(true);
     cutAction->setEnabled(textCursor().hasSelection());
-    connect(cutAction, &QAction::triggered, this, &QTextEdit::cut);
+    connect(cutAction, &QAction::triggered, this, [this]() {
+        const QTextCursor cursor = textCursor();
+        if (cursor.hasSelection()) {
+            emit selectionReplacementAboutToEdit(cursor.anchor(), cursor.position());
+        }
+        cut();
+    });
 
     auto* copyAction = menu->addAction(translated(QStringLiteral("action.copy"), QStringLiteral("Copy")));
     ShortcutRegistry::instance().applyShortcut(
@@ -668,6 +698,9 @@ void PlainCodeEditor::insertFromMimeData(const QMimeData* source)
     }
 
     QTextCursor cursor = textCursor();
+    if (cursor.hasSelection()) {
+        emit selectionReplacementAboutToEdit(cursor.anchor(), cursor.position());
+    }
     const int selectionStart = cursor.selectionStart();
     cursor.beginEditBlock();
     cursor.insertText(text);
@@ -697,6 +730,16 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
     if (bracketCompletionActive() && handleCompletionPopupKey(event)) {
         return;
     }
+
+    const QTextCursor selectionBeforeEdit = textCursor();
+    const bool recordSelectionReplacement =
+        selectionBeforeEdit.hasSelection() && shouldRecordSelectionReplacementUndo(event);
+    const auto emitSelectionReplacementIfNeeded = [this, recordSelectionReplacement, selectionBeforeEdit]() {
+        if (recordSelectionReplacement) {
+            emit selectionReplacementAboutToEdit(selectionBeforeEdit.anchor(), selectionBeforeEdit.position());
+        }
+    };
+    emitSelectionReplacementIfNeeded();
 
     // Backspace between an empty matching pair removes both glyphs at once.
     if (tryDeleteBracketPair(event)) {

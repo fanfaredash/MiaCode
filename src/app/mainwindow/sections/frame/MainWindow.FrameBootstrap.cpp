@@ -323,6 +323,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             redoAction_->trigger();
         }
     });
+    connect(editor, &PlainCodeEditor::selectionReplacementAboutToEdit, this, [this](int anchor, int position) {
+        if (documentSection_ != nullptr) {
+            documentSection_->recordChartSelectionUndoRestoreAfterNextEdit(anchor, position);
+        }
+    });
     connect(editor, &PlainCodeEditor::clearCompleteElementsShortcutRequested, this, [this]() {
         if (transformClearCompleteElementsAction_ != nullptr) {
             transformClearCompleteElementsAction_->trigger();

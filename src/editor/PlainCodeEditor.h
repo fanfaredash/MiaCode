@@ -81,6 +81,7 @@ public:
 signals:
     void undoShortcutRequested();
     void redoShortcutRequested();
+    void selectionReplacementAboutToEdit(int anchor, int position);
     void clearCompleteElementsShortcutRequested();
     void raiseSubdivisionHalfStepShortcutRequested();
     void lowerSubdivisionHalfStepShortcutRequested();
