@@ -1266,6 +1266,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/scene/PreviewMarkerDrawOrder.cpp
             src/core/scene/PreviewSlideMotionLayerState.h
             src/core/scene/PreviewSlideMotionLayerState.cpp
+            src/core/scene/PreviewTouchJudgeLayerState.h
+            src/core/scene/PreviewTouchJudgeLayerState.cpp
             src/core/scene/PreviewTrackLayerState.h
             src/core/scene/PreviewTrackLayerState.cpp
             src/core/scene/PreviewTrackShared.h

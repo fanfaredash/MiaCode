@@ -14,6 +14,7 @@ namespace {
 
 constexpr qreal kJudgeEffectTouchFallbackPixels = 96.0;
 constexpr qreal kJudgeEffectTouchMinUnitPixels = 6.0;
+constexpr qreal kJudgeEffectTouchCircleContentRadiusRatio = 118.0 / 512.0;
 constexpr qreal kJudgeEffectTouchTextureOuterDiagonalAngleDegrees = -45.0;
 constexpr qreal kJudgeEffectTouchSparkleOuterRadiusScale = 0.5;
 constexpr qreal kJudgeEffectTouchSparkleInnerRadiusScale = 0.42;
@@ -31,31 +32,26 @@ constexpr qreal kJudgeEffectTouchDurationSeconds =
 // their m_Color.a 1->0 over [0, this] and the clip ends here. (Was a 0.25 s hard destroy
 // that popped the still-opaque sparkles off-screen; they now fade out like the reference.)
 constexpr qreal kJudgeEffectTouchFadeEndSeconds = 0.31666666;
+constexpr qreal kJudgeEffectTouchCircleFadeEndSeconds = kJudgeEffectTouchFadeEndSeconds * 0.5;
 constexpr qreal kJudgeEffectTouchUnitRelativeToTouch = 3.125;
-constexpr qreal kJudgeEffectTouchInnerScaleBase = 0.1725238;
-constexpr qreal kJudgeEffectTouchOuterScaleBase = 0.3146144;
-constexpr qreal kJudgeEffectTouchCircleSpriteWidthUnits = 512.0 / 100.0;
+constexpr qreal kJudgeEffectTouchOuterScaleBase = 0.282;
+constexpr qreal kJudgeEffectTouchInnerToOuterSpriteScale = 0.5;
+constexpr qreal kJudgeEffectTouchSolidSpriteScale = 1.16;
+constexpr qreal kJudgeEffectTouchOuterSpriteGrowScale = 1.02;
 constexpr qreal kJudgeEffectTouchPartSpriteWidthUnits = 103.948685 / 100.0;
-const QColor kJudgeEffectTouchCircleTint = QColor::fromRgbF(1.0, 0.9943893, 0.4669811, 1.0);
-const QColor kJudgeEffectTouchPartTint = QColor::fromRgbF(1.0, 0.9000474, 0.4666667, 1.0);
-const std::array<QPointF, 4> kJudgeEffectTouchInnerOffsets = {
-    QPointF(0.0, -0.246),
-    QPointF(0.0, 0.246),
-    QPointF(0.246, 0.0),
-    QPointF(-0.246, 0.0),
-};
-const std::array<QPointF, 4> kJudgeEffectTouchOuterDiagonalOffsets = {
-    QPointF(0.254, 0.256),
-    QPointF(0.254, -0.256),
-    QPointF(-0.254, -0.256),
-    QPointF(-0.254, 0.256),
-};
-const std::array<QPointF, 4> kJudgeEffectTouchOuterCardinalOffsets = {
-    QPointF(0.0, 0.359),
-    QPointF(0.0, -0.359),
-    QPointF(-0.359, 0.0),
-    QPointF(0.359, 0.0),
-};
+constexpr qreal kJudgeEffectTouchInnerRingRadiusUnits = 0.24;
+constexpr qreal kJudgeEffectTouchOuterRingRadiusUnits = 0.5;
+constexpr qreal kJudgeEffectTouchTriggerSecondQuantize = 1000000.0;
+constexpr quint64 kJudgeEffectTouchRotationHashMultiplier = 0x9e3779b97f4a7c15ULL;
+const QColor kJudgeEffectTouchCircleTint = QColor::fromRgbF(1.0, 0.995, 0.35, 1.0);
+const QColor kJudgeEffectTouchPartTint = QColor::fromRgb(0xF6, 0xC9, 0x04);
+const std::array<qreal, 5> kJudgeEffectTouchLayoutRotationDegrees = {{
+    -45.0,
+    -22.5,
+    0.0,
+    22.5,
+    45.0,
+}};
 
 struct ScalarCurveKey {
     qreal time = 0.0;
@@ -63,20 +59,24 @@ struct ScalarCurveKey {
 };
 
 const std::array<ScalarCurveKey, 3> kJudgeEffectTouchCircleScaleKeys = {{
-    {0.0, 0.1},
-    {0.16666667, 0.3},
-    {0.31666666, 0.35},
+    {0.0, 0.18},
+    {0.08333333, 0.21},
+    {0.15833333, 0.24},
 }};
 
 const std::array<ScalarCurveKey, 2> kJudgeEffectTouchInnerParentScaleKeys = {{
-    {0.0, 1.0},
-    {0.31666666, 1.5},
+    {0.0, 0.9},
+    {0.31666666, 1.15},
 }};
 
-// touchPerfect.anim OuterStar1 scale grows 0 -> 1.2 over the clip (was inverted 2.0 -> 0.2).
-const std::array<ScalarCurveKey, 2> kJudgeEffectTouchOuterParentScaleKeys = {{
-    {0.0, 0.0},
-    {0.31666666, 1.2},
+const std::array<ScalarCurveKey, 2> kJudgeEffectTouchOuterRadiusScaleKeys = {{
+    {0.0, 0.82},
+    {0.31666666, 1.22},
+}};
+
+const std::array<ScalarCurveKey, 2> kJudgeEffectTouchOuterSpriteScaleKeys = {{
+    {0.0, 1.0},
+    {0.31666666, kJudgeEffectTouchOuterSpriteGrowScale},
 }};
 
 template <std::size_t N>
@@ -204,6 +204,33 @@ const QImage& fallbackTouchJudgePart02Image()
     return image;
 }
 
+qreal touchJudgeLayoutRotationDegrees(qreal triggerSecond)
+{
+    const qint64 quantizedSecond = qRound64(triggerSecond * kJudgeEffectTouchTriggerSecondQuantize);
+    quint64 hash = static_cast<quint64>(quantizedSecond) + kJudgeEffectTouchRotationHashMultiplier;
+    hash = (hash ^ (hash >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    hash = (hash ^ (hash >> 27)) * 0x94d049bb133111ebULL;
+    hash ^= hash >> 31;
+    const qsizetype rotationIndex =
+        static_cast<qsizetype>(hash % static_cast<quint64>(kJudgeEffectTouchLayoutRotationDegrees.size()));
+    return kJudgeEffectTouchLayoutRotationDegrees.at(rotationIndex);
+}
+
+QPointF sparkleRingOffset(qreal radiusUnits, int pointIndex, qreal layoutRotationDegrees)
+{
+    const qreal angleDegrees =
+        layoutRotationDegrees + static_cast<qreal>(pointIndex) * kJudgeEffectTouchSparklePointAngleStepDegrees;
+    const qreal radians = qDegreesToRadians(angleDegrees);
+    return QPointF(qCos(radians) * radiusUnits, qSin(radians) * radiusUnits);
+}
+
+qreal sparkleRingSpriteRotationDegrees(int pointIndex, qreal layoutRotationDegrees)
+{
+    const bool diagonalLocalPoint = (pointIndex % 2) != 0;
+    return layoutRotationDegrees
+        + (diagonalLocalPoint ? kJudgeEffectTouchTextureOuterDiagonalAngleDegrees : 0.0);
+}
+
 }  // namespace
 
 namespace miacode::preview::scene {
@@ -248,7 +275,7 @@ PreviewTouchJudgeLayerState buildPreviewTouchJudgeLayerState(
         return layerState;
     }
 
-    layerState.sprites.reserve(positionTriggers.size() * 9);
+    layerState.sprites.reserve(positionTriggers.size() * 17);
     const qreal canvasScale = qMin(playfieldRect.width(), playfieldRect.height()) / kLogicalCanvasSize;
     const qreal fallbackTouchPixels = kJudgeEffectTouchFallbackPixels * kTouchAssetScale * canvasScale;
     const qreal touchBasePixels = (!state.skin.touchPointImage.isNull())
@@ -303,55 +330,56 @@ PreviewTouchJudgeLayerState buildPreviewTouchJudgeLayerState(
             continue;
         }
 
-        const qreal circleScale = sampleScalarCurve(kJudgeEffectTouchCircleScaleKeys, clipTime);
-        const qreal innerParentScale = sampleScalarCurve(kJudgeEffectTouchInnerParentScaleKeys, clipTime);
-        const qreal outerParentScale = sampleScalarCurve(kJudgeEffectTouchOuterParentScaleKeys, clipTime);
+        const qreal circleRadiusUnits = sampleScalarCurve(kJudgeEffectTouchCircleScaleKeys, clipTime);
+        const qreal innerRadiusScale = sampleScalarCurve(kJudgeEffectTouchInnerParentScaleKeys, clipTime);
+        const qreal outerRadiusScale = sampleScalarCurve(kJudgeEffectTouchOuterRadiusScaleKeys, clipTime);
+        const qreal outerSpriteScale = sampleScalarCurve(kJudgeEffectTouchOuterSpriteScaleKeys, clipTime);
         // Reference: TouchCircle and every star part share the same m_Color.a fade (1 -> 0
         // over the clip), so one value drives the circle and all sparkles.
         const qreal clipFade = qBound<qreal>(0.0, 1.0 - clipTime / kJudgeEffectTouchFadeEndSeconds, 1.0);
-        const qreal circleAlpha = clipFade;
+        const qreal circleAlpha = qBound<qreal>(0.0, 1.0 - clipTime / kJudgeEffectTouchCircleFadeEndSeconds, 1.0);
         const QPointF center = mapLogicalPointToRect(marker.touchPoint, playfieldRect);
+        const qreal layoutRotationDegrees = touchJudgeLayoutRotationDegrees(trigger.second);
 
         appendSprite(
             circleImage,
             center,
-            kJudgeEffectTouchCircleSpriteWidthUnits * circleScale * prefabUnitPixels,
+            circleRadiusUnits / kJudgeEffectTouchCircleContentRadiusRatio * prefabUnitPixels,
             0.0,
             circleAlpha
         );
 
-        const qreal innerPieceWidthPixels =
-            kJudgeEffectTouchPartSpriteWidthUnits * kJudgeEffectTouchInnerScaleBase * innerParentScale * prefabUnitPixels;
-        for (const QPointF& offset : kJudgeEffectTouchInnerOffsets) {
-            appendSprite(
-                part02Image,
-                center + offset * (prefabUnitPixels * innerParentScale),
-                innerPieceWidthPixels,
-                0.0,
-                clipFade
-            );
-        }
+        const auto appendSparkleRing = [&](qreal radiusUnits,
+                                           qreal radiusScale,
+                                           qreal pieceWidthPixels) {
+            for (int pointIndex = 0; pointIndex < kJudgeEffectTouchSparklePointCount; ++pointIndex) {
+                const bool solidStar = (pointIndex % 2) == 0;
+                const QPointF offset =
+                    sparkleRingOffset(radiusUnits, pointIndex, layoutRotationDegrees) * (prefabUnitPixels * radiusScale);
+                appendSprite(
+                    solidStar ? part02Image : part01Image,
+                    center + offset,
+                    pieceWidthPixels * (solidStar ? kJudgeEffectTouchSolidSpriteScale : 1.0),
+                    sparkleRingSpriteRotationDegrees(pointIndex, layoutRotationDegrees),
+                    clipFade
+                );
+            }
+        };
 
         const qreal outerPieceWidthPixels =
-            kJudgeEffectTouchPartSpriteWidthUnits * kJudgeEffectTouchOuterScaleBase * outerParentScale * prefabUnitPixels;
-        for (const QPointF& offset : kJudgeEffectTouchOuterDiagonalOffsets) {
-            appendSprite(
-                part02Image,
-                center + offset * (prefabUnitPixels * outerParentScale),
-                outerPieceWidthPixels,
-                kJudgeEffectTouchTextureOuterDiagonalAngleDegrees,
-                clipFade
-            );
-        }
-        for (const QPointF& offset : kJudgeEffectTouchOuterCardinalOffsets) {
-            appendSprite(
-                part01Image,
-                center + offset * (prefabUnitPixels * outerParentScale),
-                outerPieceWidthPixels,
-                0.0,
-                clipFade
-            );
-        }
+            kJudgeEffectTouchPartSpriteWidthUnits * kJudgeEffectTouchOuterScaleBase * outerSpriteScale * prefabUnitPixels;
+        const qreal innerPieceWidthPixels = outerPieceWidthPixels * kJudgeEffectTouchInnerToOuterSpriteScale;
+        appendSparkleRing(
+            kJudgeEffectTouchInnerRingRadiusUnits,
+            innerRadiusScale,
+            innerPieceWidthPixels
+        );
+
+        appendSparkleRing(
+            kJudgeEffectTouchOuterRingRadiusUnits,
+            outerRadiusScale,
+            outerPieceWidthPixels
+        );
     }
 
     return layerState;

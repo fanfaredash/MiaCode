@@ -203,6 +203,7 @@ It is acceptable to keep a constant local when:
 ## 6. Current High-Attention Areas
 
 - Preview effect tuning in `src/core/scene/*.cpp`
+  - Current tuning note: `PreviewTouchJudgeLayerState.cpp` renders each Touch judge effect as a short-lived inner-radius glow plus two 8-point sparkle rings. Each ring alternates solid and hollow yellow stars; the inner ring uses half-size stars, both rings animate outward, and both rings share a deterministic `-45 deg` / `-22.5 deg` / `0 deg` / `22.5 deg` / `45 deg` layout from the quantized trigger time so same-second double touches use one angle while preview/export stay stable.
 - Latency detection scan parameters
 - Export encoder and bitrate heuristics
 - Parser geometry/timing assumptions
