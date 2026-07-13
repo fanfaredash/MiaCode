@@ -30,11 +30,29 @@ struct PreviewHudStats {
     int deluxeBreakTotal = 0;
 };
 
+enum class PreviewHudFontArea {
+    ChartInfo,
+    Timestamp,
+    ObjectStats,
+    DebugInfo,
+};
+
 PreviewHudStats computePreviewHudStats(const QVector<TimelineNoteMarker>& noteMarkers, double second);
 QString formatPreviewHudTimeLabel(double seconds);
 QFont previewHudTimestampFont(int pointSize, QFont::Weight weight = QFont::Medium);
 QFont previewHudMonoFont(int pointSize, QFont::Weight weight = QFont::Medium);
 QString previewHudFontDisplayName();
 void setPreviewHudCustomFontPath(const QString& fontPath);
+QString previewHudCustomFontPath(PreviewHudFontArea area);
+QFont previewHudTimestampFontForArea(
+    PreviewHudFontArea area,
+    int pointSize,
+    QFont::Weight weight = QFont::Medium);
+QFont previewHudMonoFontForArea(
+    PreviewHudFontArea area,
+    int pointSize,
+    QFont::Weight weight = QFont::Medium);
+QString previewHudFontDisplayName(PreviewHudFontArea area);
+void setPreviewHudCustomFontPath(PreviewHudFontArea area, const QString& fontPath);
 
 }  // namespace miacode::preview::scene

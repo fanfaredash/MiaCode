@@ -578,13 +578,23 @@ void paintPreviewHudOverlay(
         qRound(static_cast<qreal>(kHudReferenceStatsFontPointSize) * kHudTimestampToStatsFontScale * hudScale)
     );
     const int debugFontPointSize = qMax(1, qRound(static_cast<qreal>(kHudReferenceDebugFontPointSize) * hudScale));
-    QFont timeFont = miacode::preview::scene::previewHudTimestampFont(timeFontPointSize, QFont::DemiBold);
+    QFont timestampFont = miacode::preview::scene::previewHudTimestampFontForArea(
+        miacode::preview::scene::PreviewHudFontArea::Timestamp,
+        timeFontPointSize,
+        QFont::DemiBold);
+    QFont chartInfoFont = miacode::preview::scene::previewHudTimestampFontForArea(
+        miacode::preview::scene::PreviewHudFontArea::ChartInfo,
+        timeFontPointSize,
+        QFont::DemiBold);
 
     if (state->render.showDebugInfo) {
         appendHudPaintDiagLine(
             QStringLiteral("branch_enter"),
             QStringLiteral("branch=debug state=%1").arg(pointerHex(state)));
-        QFont fpsFont = miacode::preview::scene::previewHudMonoFont(debugFontPointSize, QFont::Medium);
+        QFont fpsFont = miacode::preview::scene::previewHudMonoFontForArea(
+            miacode::preview::scene::PreviewHudFontArea::DebugInfo,
+            debugFontPointSize,
+            QFont::Medium);
         const QFontMetrics metrics(fpsFont);
         const qreal leftX = stageRect.left() + hudPadding;
         const qreal baseline0 = stageRect.top() + hudPadding + metrics.ascent();
@@ -725,7 +735,7 @@ void paintPreviewHudOverlay(
             QStringLiteral("branch_enter"),
             QStringLiteral("branch=timestamp state=%1").arg(pointerHex(state)));
         const QString timeLabel = miacode::preview::scene::formatPreviewHudTimeLabel(hudPlayheadSeconds);
-        const QFontMetrics timeMetrics(timeFont);
+        const QFontMetrics timeMetrics(timestampFont);
         const bool insetTimestampForAspect =
             aspectRatioNear(stageAspectRatio, 16.0 / 9.0) || aspectRatioNear(stageAspectRatio, 4.0 / 3.0);
         const qreal positiveTimeExtraInset =
@@ -742,7 +752,7 @@ void paintPreviewHudOverlay(
                 stageRect.bottom() - hudPadding - timestampBottomExtraInset
             ),
             timeLabel,
-            timeFont,
+            timestampFont,
             qMax<qreal>(1.0, 2.0 * hudScale)
         );
     }
@@ -788,9 +798,9 @@ void paintPreviewHudOverlay(
         const qreal chartInfoDesignerMaxWidth = chartInfoDesignerRightLimit - chartInfoLeft;
         const qreal chartInfoMaxHeight = stageRect.height() / 2.0 - hudPadding;
         if (chartInfoMaxHeight > 0.0) {
-            // Mirror the timestamp HUD: same point size, DemiBold,
-            // previewHudTimestampFont() font family.
-            const QFontMetrics chartInfoMetrics(timeFont);
+            // Mirror the timestamp HUD sizing while using the chart-info
+            // area font family.
+            const QFontMetrics chartInfoMetrics(chartInfoFont);
             const qreal lineHeight = static_cast<qreal>(chartInfoMetrics.lineSpacing());
             const int maxLines = qMax(0, static_cast<int>(chartInfoMaxHeight / qMax<qreal>(1.0, lineHeight)));
             if (maxLines > 0) {
@@ -835,7 +845,7 @@ void paintPreviewHudOverlay(
                             QStringLiteral("chart_info.line%1").arg(i),
                             QPointF(chartInfoLeft, chartInfoBaseline),
                             line,
-                            timeFont,
+                            chartInfoFont,
                             chartInfoShadow
                         );
                         chartInfoBaseline += lineHeight;
@@ -891,9 +901,18 @@ void paintPreviewHudOverlay(
     std::array<QString, 7> statLines;
 
     while (baseFontPointSize >= kHudMinimumReadableStatsFontPointSize) {
-        titleFont = miacode::preview::scene::previewHudTimestampFont(baseFontPointSize, QFont::DemiBold);
-        rateFont = miacode::preview::scene::previewHudTimestampFont(baseFontPointSize + 1, QFont::DemiBold);
-        statFont = miacode::preview::scene::previewHudTimestampFont(baseFontPointSize, QFont::DemiBold);
+        titleFont = miacode::preview::scene::previewHudTimestampFontForArea(
+            miacode::preview::scene::PreviewHudFontArea::ObjectStats,
+            baseFontPointSize,
+            QFont::DemiBold);
+        rateFont = miacode::preview::scene::previewHudTimestampFontForArea(
+            miacode::preview::scene::PreviewHudFontArea::ObjectStats,
+            baseFontPointSize + 1,
+            QFont::DemiBold);
+        statFont = miacode::preview::scene::previewHudTimestampFontForArea(
+            miacode::preview::scene::PreviewHudFontArea::ObjectStats,
+            baseFontPointSize,
+            QFont::DemiBold);
         titleMetrics = QFontMetrics(titleFont);
         rateMetrics = QFontMetrics(rateFont);
         statMetrics = QFontMetrics(statFont);
