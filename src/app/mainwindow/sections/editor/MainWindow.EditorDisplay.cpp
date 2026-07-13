@@ -511,6 +511,7 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.previewTapFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     state_.previewTouchFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     state_.previewSlideEarlierSecondAndTextOnTop_ = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
+    state_.previewTapJudgeTextDistance_ = PreviewTapJudgeTextDistance::Inner;
     state_.previewSkinVariant_ = PreviewSkinVariant::Standard;
     state_.previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
     state_.previewStageMediaFrameRateMode_ = PreviewCanvasFrameRateMode::Fps30;
@@ -667,6 +668,9 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
             preview.value("slide_earlier_second_and_text_on_top")
                 .toBool(state_.previewSlideEarlierSecondAndTextOnTop_);
     }
+    state_.previewTapJudgeTextDistance_ = tapJudgeTextDistanceFromToken(
+        preview.value(QStringLiteral("tap_judge_text_distance")).toString(
+            QString::fromLatin1(tapJudgeTextDistanceToken(state_.previewTapJudgeTextDistance_))));
     if (preview.value("skin_variant").isString()) {
         const QString skinValue = preview.value("skin_variant").toString().trimmed();
         const QString normalizedSkinValue = skinValue.toLower();
@@ -873,6 +877,10 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("tap_flow_speed", state_.previewTapFlowSpeed_);
     preview.insert("touch_flow_speed", state_.previewTouchFlowSpeed_);
     preview.insert("slide_earlier_second_and_text_on_top", state_.previewSlideEarlierSecondAndTextOnTop_);
+    preview.insert(
+        "tap_judge_text_distance",
+        QString::fromLatin1(tapJudgeTextDistanceToken(state_.previewTapJudgeTextDistance_))
+    );
     preview.insert("skin_variant", owner_.previewSkinVariantStorageValue());
     if (state_.previewIntroSoundFileName_.trimmed().isEmpty()) {
         preview.remove("intro_sound_file");

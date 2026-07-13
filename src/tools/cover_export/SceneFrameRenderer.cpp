@@ -87,6 +87,7 @@ bool SceneFrameRenderer::bootstrap(const VideoExportTask& task, QString* errorMe
     frameState_.render.touchFlowSpeed =
         miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(task.touchFlowSpeed);
     frameState_.render.slideEarlierSecondAndTextOnTop = task.slideEarlierSecondAndTextOnTop;
+    frameState_.render.tapJudgeTextDistance = task.tapJudgeTextDistance;
     frameState_.render.showDebugInfo = false;
     frameState_.render.showTimestamp = false;
     frameState_.render.showObjectStatsHud = false;

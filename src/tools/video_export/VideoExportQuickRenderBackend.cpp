@@ -68,6 +68,7 @@ bool VideoExportQuickRenderBackend::bootstrap(
     frameState_.render.tapFlowSpeed = normalizedFlowSpeed(task.tapFlowSpeed);
     frameState_.render.touchFlowSpeed = normalizedFlowSpeed(task.touchFlowSpeed);
     frameState_.render.slideEarlierSecondAndTextOnTop = task.slideEarlierSecondAndTextOnTop;
+    frameState_.render.tapJudgeTextDistance = task.tapJudgeTextDistance;
     frameState_.render.showDebugInfo = false;
     frameState_.render.showTimestamp = task.showTimestamp;
     frameState_.render.showObjectStatsHud = task.showObjectStatsHud;
@@ -176,6 +177,12 @@ void VideoExportQuickRenderBackend::setNoteFlowSpeed(double flowSpeed)
     const double normalizedSpeed = normalizedFlowSpeed(flowSpeed);
     frameState_.render.tapFlowSpeed = normalizedSpeed;
     frameState_.render.touchFlowSpeed = normalizedSpeed;
+    syncSessionStateIfInitialized();
+}
+
+void VideoExportQuickRenderBackend::setTapJudgeTextDistance(PreviewTapJudgeTextDistance distance)
+{
+    frameState_.render.tapJudgeTextDistance = distance;
     syncSessionStateIfInitialized();
 }
 

@@ -47,6 +47,7 @@ public:
     void setTapFlowSpeed(double flowSpeed);
     void setTouchFlowSpeed(double flowSpeed);
     void setNoteFlowSpeed(double flowSpeed);
+    void setTapJudgeTextDistance(PreviewTapJudgeTextDistance distance);
     void setShowDebugInfo(bool show);
     void setShowTimestamp(bool show);
     void setShowObjectStatsHud(bool show);

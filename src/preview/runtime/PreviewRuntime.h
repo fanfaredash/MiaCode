@@ -171,6 +171,7 @@ public:
     void setTouchFlowSpeed(double flowSpeed);
     void setNoteFlowSpeed(double flowSpeed);
     void setSlideEarlierSecondAndTextOnTop(bool enabled);
+    void setTapJudgeTextDistance(PreviewTapJudgeTextDistance distance);
     void setShowDebugInfo(bool show);
     void setSuppressDebugInfo(bool suppress);
     void setShowTimestamp(bool show);

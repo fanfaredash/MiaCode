@@ -79,7 +79,7 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
 
         switch (event.kind) {
         case MuriJudgeSpriteKind::Simple: {
-            if (!buildJudgeOverlaySimplePlacement(event.pad, &placement)) {
+            if (!buildJudgeOverlaySimplePlacement(event.pad, PreviewTapJudgeTextDistance::Outer, &placement)) {
                 continue;
             }
             if (event.simpleEffect == MuriSimpleJudgeEffect::Perfect) {

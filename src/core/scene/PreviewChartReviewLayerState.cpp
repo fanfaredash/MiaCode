@@ -27,7 +27,8 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
     bool showSlideJudgeOverlay,
     bool showTapJudgeOverlay,
     bool showBreakJudgeOverlay,
-    bool showTouchJudgeOverlay
+    bool showTouchJudgeOverlay,
+    PreviewTapJudgeTextDistance tapJudgeTextDistance
 )
 {
     PreviewChartReviewPreparedEvents events;
@@ -52,7 +53,7 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
                 ? PreviewChartReviewPreparedKind::SimpleBreak
                 : PreviewChartReviewPreparedKind::SimpleNormal;
             event.second = static_cast<qreal>(marker.second);
-            if (buildJudgeOverlaySimplePlacement(lanePadToken(marker.lane), &event.placement)) {
+            if (buildJudgeOverlaySimplePlacement(lanePadToken(marker.lane), tapJudgeTextDistance, &event.placement)) {
                 events.append(event);
             }
             continue;
@@ -70,6 +71,7 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
             event.second = static_cast<qreal>(marker.endSecond);
             if (buildJudgeOverlaySimplePlacement(
                     lanePadToken((marker.endLane >= 1 && marker.endLane <= 8) ? marker.endLane : marker.lane),
+                    tapJudgeTextDistance,
                     &event.placement)) {
                 events.append(event);
             }
@@ -86,7 +88,7 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
                 ? PreviewChartReviewPreparedKind::SimpleBreak
                 : PreviewChartReviewPreparedKind::SimpleNormal;
             event.second = static_cast<qreal>(marker.second);
-            if (buildJudgeOverlaySimplePlacement(marker.touchPad, &event.placement)) {
+            if (buildJudgeOverlaySimplePlacement(marker.touchPad, tapJudgeTextDistance, &event.placement)) {
                 events.append(event);
             }
             continue;
@@ -103,7 +105,7 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
                 ? PreviewChartReviewPreparedKind::SimpleBreak
                 : PreviewChartReviewPreparedKind::SimpleNormal;
             event.second = static_cast<qreal>(marker.endSecond);
-            if (buildJudgeOverlaySimplePlacement(marker.touchPad, &event.placement)) {
+            if (buildJudgeOverlaySimplePlacement(marker.touchPad, tapJudgeTextDistance, &event.placement)) {
                 events.append(event);
             }
             continue;
@@ -122,7 +124,7 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
                     ? PreviewChartReviewPreparedKind::SimpleBreak
                     : PreviewChartReviewPreparedKind::SimpleNormal;
                 headEvent.second = static_cast<qreal>(marker.second);
-                if (buildJudgeOverlaySimplePlacement(lanePadToken(marker.lane), &headEvent.placement)) {
+                if (buildJudgeOverlaySimplePlacement(lanePadToken(marker.lane), tapJudgeTextDistance, &headEvent.placement)) {
                     events.append(headEvent);
                 }
             }
@@ -196,7 +198,8 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
               showSlideJudgeOverlay,
               showTapJudgeOverlay,
               showBreakJudgeOverlay,
-              showTouchJudgeOverlay);
+              showTouchJudgeOverlay,
+              state.render.tapJudgeTextDistance);
     const PreviewChartReviewPreparedEvents& events =
         preparedEvents != nullptr ? *preparedEvents : ownedPreparedEvents;
 

@@ -414,6 +414,17 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     const QString scaleInnerCircleFitOuterFillLabel = UiText::text(QStringLiteral("dialog.render_settings.video.scale.inner_circle_fit_outer_fill"));
     const QString slideStackOrderDxLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.slide_stack_order.dx_style"));
     const QString slideStackOrderFinaleLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.slide_stack_order.finale_style"));
+    const auto tapJudgeTextDistanceLabelForValue = [](PreviewTapJudgeTextDistance distance) -> QString {
+        switch (distance) {
+        case PreviewTapJudgeTextDistance::Inner:
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.tap_judge_text_distance.inner"));
+        case PreviewTapJudgeTextDistance::Middle:
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.tap_judge_text_distance.middle"));
+        case PreviewTapJudgeTextDistance::Outer:
+        default:
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.tap_judge_text_distance.outer"));
+        }
+    };
     // 皮肤 / 判定线 moved to the shared 皮肤 popup (buildSkinSettings).
     const QString disabledLabel = UiText::text(QStringLiteral("dialog.render_settings.option.disabled"));
     const QString slideJudgeChoiceLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect.slide"));
@@ -509,6 +520,35 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
                 owner_.previewSlideEarlierSecondAndTextOnTop_ = earlierOnTop;
                 if (owner_.previewCanvas_ != nullptr) {
                     owner_.previewCanvas_->setSlideEarlierSecondAndTextOnTop(earlierOnTop);
+                }
+                owner_.savePortableState();
+            });
+    auto* tapJudgeTextDistanceCombo = miacode::ui::createDialogComboBox(gameplayGroup, 12);
+    for (const PreviewTapJudgeTextDistance distance : {
+             PreviewTapJudgeTextDistance::Inner,
+             PreviewTapJudgeTextDistance::Middle,
+             PreviewTapJudgeTextDistance::Outer,
+         }) {
+        tapJudgeTextDistanceCombo->addItem(tapJudgeTextDistanceLabelForValue(distance), static_cast<int>(distance));
+    }
+    tapJudgeTextDistanceCombo->setCurrentIndex(
+        qMax(0, tapJudgeTextDistanceCombo->findData(static_cast<int>(owner_.previewTapJudgeTextDistance_))));
+    miacode::ui::applyDialogComboBoxStyle(tapJudgeTextDistanceCombo, 12);
+    connect(tapJudgeTextDistanceCombo,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            &dialog,
+            [this, tapJudgeTextDistanceCombo](int index) {
+                if (index < 0) {
+                    return;
+                }
+                const auto distance =
+                    static_cast<PreviewTapJudgeTextDistance>(tapJudgeTextDistanceCombo->itemData(index).toInt());
+                if (owner_.previewTapJudgeTextDistance_ == distance) {
+                    return;
+                }
+                owner_.previewTapJudgeTextDistance_ = distance;
+                if (owner_.previewCanvas_ != nullptr) {
+                    owner_.previewCanvas_->setTapJudgeTextDistance(distance);
                 }
                 owner_.savePortableState();
             });
@@ -694,6 +734,12 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         0,
         UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display")),
         centerDisplayCombo
+    );
+    addGameplayField(
+        2,
+        1,
+        UiText::text(QStringLiteral("dialog.render_settings.gameplay.tap_judge_text_distance")),
+        tapJudgeTextDistanceCombo
     );
     // Intro sound is no longer hosted by this preview-settings dialog; the
     // shared skin panel stays focused on skin / judge line / HUD font.

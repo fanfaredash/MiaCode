@@ -30,7 +30,8 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
     bool showSlideJudgeOverlay,
     bool showTapJudgeOverlay,
     bool showBreakJudgeOverlay,
-    bool showTouchJudgeOverlay
+    bool showTouchJudgeOverlay,
+    PreviewTapJudgeTextDistance tapJudgeTextDistance = PreviewTapJudgeTextDistance::Inner
 );
 
 PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(

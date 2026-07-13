@@ -2,6 +2,7 @@
 
 #include "common/MuriConfig.h"
 #include "common/MuriTypes.h"
+#include "core/video/PreviewRenderSettings.h"
 #include "core/scene/PreviewSceneConstants.h"
 #include "core/scene/PreviewSpriteDescriptor.h"
 
@@ -55,6 +56,8 @@ inline constexpr qreal kMaimuriDxJudgeStraightWidthLogical = 214.0;
 inline constexpr qreal kMaimuriDxJudgeCircleWidthLogical = 205.0;
 inline constexpr qreal kMaimuriDxJudgeWifiWidthLogical = 334.0;
 inline constexpr qreal kMaimuriDxJudgeSimpleOffsetLogical = kLogicalCanvasSize * 80.0 / 1080.0;
+inline constexpr qreal kMaimuriDxJudgeSimpleInnerOffsetLogical = kMaimuriDxJudgeSimpleOffsetLogical * 0.45;
+inline constexpr qreal kMaimuriDxJudgeSimpleMiddleOffsetLogical = kMaimuriDxJudgeSimpleOffsetLogical * 0.72;
 inline constexpr qreal kMaimuriDxJudgeStraightOffsetLogical = kLogicalCanvasSize * 220.0 / 1080.0;
 inline constexpr qreal kMaimuriDxJudgeCircleDistanceLogical = kLogicalCanvasSize * 463.0 / 1080.0;
 inline constexpr qreal kMaimuriDxJudgeWifiDistanceLogical = kLogicalCanvasSize * 406.0 / 1080.0;
@@ -73,8 +76,13 @@ bool slideKeyUsesCcwJudgeSprite(const QString& key);
 bool slideKeyUsesCwJudgeSprite(const QString& key);
 QPointF slideEndTangentLogical(const TimelineNoteMarker& marker);
 QPointF padUnitVectorForToken(const QString& pad);
+qreal judgeSimpleOffsetLogicalForDistance(PreviewTapJudgeTextDistance distance);
 qreal judgeSimpleAngleDegrees(const QString& pad);
-bool buildJudgeOverlaySimplePlacement(const QString& pad, PreviewJudgeOverlayPlacement* placement);
+bool buildJudgeOverlaySimplePlacement(
+    const QString& pad,
+    PreviewTapJudgeTextDistance distance,
+    PreviewJudgeOverlayPlacement* placement
+);
 bool buildJudgeOverlayStraightPlacement(
     const TimelineNoteMarker& marker,
     bool includeNegativeBoundary,

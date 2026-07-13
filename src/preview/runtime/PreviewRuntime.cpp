@@ -703,6 +703,12 @@ void PreviewRuntime::setSlideEarlierSecondAndTextOnTop(bool enabled)
     update();
 }
 
+void PreviewRuntime::setTapJudgeTextDistance(PreviewTapJudgeTextDistance distance)
+{
+    frameState_.render.tapJudgeTextDistance = distance;
+    update();
+}
+
 void PreviewRuntime::setShowDebugInfo(bool show)
 {
     requestedShowDebugInfo_ = show;

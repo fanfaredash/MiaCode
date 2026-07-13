@@ -206,6 +206,7 @@ QJsonObject VideoExportSnapshot::toJson() const
     render.insert(QStringLiteral("tap_flow_speed"), tapFlowSpeed);
     render.insert(QStringLiteral("touch_flow_speed"), touchFlowSpeed);
     render.insert(QStringLiteral("slide_earlier_second_and_text_on_top"), slideEarlierSecondAndTextOnTop);
+    render.insert(QStringLiteral("tap_judge_text_distance"), QString::fromLatin1(tapJudgeTextDistanceToken(tapJudgeTextDistance)));
     render.insert(QStringLiteral("render_mode"), renderModeToken(muriRenderOptions.renderMode));
     render.insert(QStringLiteral("show_slide_tracks"), muriRenderOptions.showSlideTracks);
     render.insert(QStringLiteral("show_judge_markers"), muriRenderOptions.showJudgeMarkers);
@@ -338,6 +339,9 @@ bool VideoExportSnapshot::fromJson(
     parsed.slideEarlierSecondAndTextOnTop =
         render.value(QStringLiteral("slide_earlier_second_and_text_on_top"))
             .toBool(parsed.slideEarlierSecondAndTextOnTop);
+    parsed.tapJudgeTextDistance = tapJudgeTextDistanceFromToken(
+        render.value(QStringLiteral("tap_judge_text_distance")).toString(
+            QString::fromLatin1(tapJudgeTextDistanceToken(parsed.tapJudgeTextDistance))));
     parsed.muriRenderOptions.renderMode =
         renderModeFromToken(render.value(QStringLiteral("render_mode")).toString());
     parsed.muriRenderOptions.showSlideTracks =
@@ -489,6 +493,7 @@ bool buildVideoExportTaskFromSnapshot(
     built.tapFlowSpeed = snapshot.tapFlowSpeed;
     built.touchFlowSpeed = snapshot.touchFlowSpeed;
     built.slideEarlierSecondAndTextOnTop = snapshot.slideEarlierSecondAndTextOnTop;
+    built.tapJudgeTextDistance = snapshot.tapJudgeTextDistance;
     built.muriRenderOptions = snapshot.muriRenderOptions;
     built.staticTapOnSlideThresholdSeconds = snapshot.staticTapOnSlideThresholdSeconds;
     built.exportStartSeconds = qMax(0.0, snapshot.exportStartSeconds);

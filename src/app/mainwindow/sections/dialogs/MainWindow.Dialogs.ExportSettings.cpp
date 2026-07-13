@@ -153,6 +153,17 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     // Slide stack order.
     const QString slideStackOrderDxLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.slide_stack_order.dx_style"));
     const QString slideStackOrderFinaleLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.slide_stack_order.finale_style"));
+    const auto tapJudgeTextDistanceLabelForValue = [](PreviewTapJudgeTextDistance distance) -> QString {
+        switch (distance) {
+        case PreviewTapJudgeTextDistance::Inner:
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.tap_judge_text_distance.inner"));
+        case PreviewTapJudgeTextDistance::Middle:
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.tap_judge_text_distance.middle"));
+        case PreviewTapJudgeTextDistance::Outer:
+        default:
+            return UiText::text(QStringLiteral("dialog.render_settings.gameplay.tap_judge_text_distance.outer"));
+        }
+    };
     auto* slideStackOrderCombo = miacode::ui::createDialogComboBox(gameplay, 12);
     slideStackOrderCombo->addItem(slideStackOrderDxLabel, true);
     slideStackOrderCombo->addItem(slideStackOrderFinaleLabel, false);
@@ -173,6 +184,35 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
                 owner_.previewSlideEarlierSecondAndTextOnTop_ = earlierOnTop;
                 if (owner_.previewCanvas_ != nullptr) {
                     owner_.previewCanvas_->setSlideEarlierSecondAndTextOnTop(earlierOnTop);
+                }
+                owner_.savePortableState();
+            });
+    auto* tapJudgeTextDistanceCombo = miacode::ui::createDialogComboBox(gameplay, 12);
+    for (const PreviewTapJudgeTextDistance distance : {
+             PreviewTapJudgeTextDistance::Inner,
+             PreviewTapJudgeTextDistance::Middle,
+             PreviewTapJudgeTextDistance::Outer,
+         }) {
+        tapJudgeTextDistanceCombo->addItem(tapJudgeTextDistanceLabelForValue(distance), static_cast<int>(distance));
+    }
+    tapJudgeTextDistanceCombo->setCurrentIndex(
+        qMax(0, tapJudgeTextDistanceCombo->findData(static_cast<int>(owner_.previewTapJudgeTextDistance_))));
+    miacode::ui::applyDialogComboBoxStyle(tapJudgeTextDistanceCombo, 12);
+    connect(tapJudgeTextDistanceCombo,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            gameplay,
+            [this, tapJudgeTextDistanceCombo](int index) {
+                if (index < 0) {
+                    return;
+                }
+                const auto distance =
+                    static_cast<PreviewTapJudgeTextDistance>(tapJudgeTextDistanceCombo->itemData(index).toInt());
+                if (owner_.previewTapJudgeTextDistance_ == distance) {
+                    return;
+                }
+                owner_.previewTapJudgeTextDistance_ = distance;
+                if (owner_.previewCanvas_ != nullptr) {
+                    owner_.previewCanvas_->setTapJudgeTextDistance(distance);
                 }
                 owner_.savePortableState();
             });
@@ -238,6 +278,7 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     addGameplayField(0, 0, UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect")), judgeEffectButton);
     addGameplayField(0, 1, UiText::text(QStringLiteral("dialog.render_settings.gameplay.slide_stack_order")), slideStackOrderCombo);
     addGameplayField(1, 0, UiText::text(QStringLiteral("dialog.render_settings.gameplay.center_display")), centerDisplayCombo);
+    addGameplayField(1, 1, UiText::text(QStringLiteral("dialog.render_settings.gameplay.tap_judge_text_distance")), tapJudgeTextDistanceCombo);
 
     if (refreshOut != nullptr) {
         const QPointer<QWidget> gameplayGuard(gameplay);
@@ -249,7 +290,8 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
              judgeEffectChoiceText,
              judgeEffectRefreshEntries,
              slideStackOrderCombo,
-             centerDisplayCombo]() {
+             centerDisplayCombo,
+             tapJudgeTextDistanceCombo]() {
                 if (gameplayGuard.isNull()) {
                     return;
                 }
@@ -276,6 +318,13 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
                         0,
                         centerDisplayCombo->findData(
                             static_cast<int>(owner_.previewCenterDisplayMode_))));
+                }
+                if (tapJudgeTextDistanceCombo != nullptr) {
+                    const QSignalBlocker blocker(tapJudgeTextDistanceCombo);
+                    tapJudgeTextDistanceCombo->setCurrentIndex(qMax(
+                        0,
+                        tapJudgeTextDistanceCombo->findData(
+                            static_cast<int>(owner_.previewTapJudgeTextDistance_))));
                 }
             };
     }
