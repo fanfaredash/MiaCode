@@ -1077,6 +1077,8 @@ void MainWindow::PreferencesSection::onPreferences()
     const UiText::ThemePreference currentThemePreference = UiText::preferredTheme();
     UiText::ThemePreference selectedThemePreference = currentThemePreference;
     QList<QPointer<QComboBox>> themedDialogCombos;
+    QList<QPointer<QSlider>> themedDialogSliders;
+    QList<QPair<QPointer<QPushButton>, bool>> themedDialogButtons;
     const auto styleRegisteredDialogCombo = [&themedDialogCombos](QComboBox* combo, int maxVisibleItems = 12) {
         if (combo == nullptr) {
             return;
@@ -1096,13 +1098,56 @@ void MainWindow::PreferencesSection::onPreferences()
         }
         themedDialogCombos.append(combo);
     };
-    const auto refreshRegisteredDialogCombos = [&themedDialogCombos]() {
+    const auto styleRegisteredDialogSlider = [&themedDialogSliders](QSlider* slider) {
+        if (slider == nullptr) {
+            return;
+        }
+        miacode::ui::applyDialogSliderStyle(slider);
+        for (const QPointer<QSlider>& registered : themedDialogSliders) {
+            if (registered == slider) {
+                return;
+            }
+        }
+        themedDialogSliders.append(slider);
+    };
+    const auto styleRegisteredDialogButton = [&themedDialogButtons](QPushButton* button, bool primary = false) {
+        if (button == nullptr) {
+            return;
+        }
+        miacode::ui::applyDialogPushButtonStyle(button, primary);
+        for (const auto& registered : themedDialogButtons) {
+            if (registered.first == button) {
+                return;
+            }
+        }
+        themedDialogButtons.append({button, primary});
+    };
+    const auto refreshRegisteredDialogControls = [&themedDialogCombos, &themedDialogSliders, &themedDialogButtons]() {
         for (const QPointer<QComboBox>& combo : themedDialogCombos) {
             if (!combo.isNull()) {
                 miacode::ui::applyDialogComboBoxStyle(combo.data(), 12);
             }
         }
+        for (const QPointer<QSlider>& slider : themedDialogSliders) {
+            if (!slider.isNull()) {
+                miacode::ui::applyDialogSliderStyle(slider.data());
+            }
+        }
+        for (const auto& registered : themedDialogButtons) {
+            if (!registered.first.isNull()) {
+                miacode::ui::applyDialogPushButtonStyle(registered.first.data(), registered.second);
+            }
+        }
     };
+    if (QGuiApplication* guiApp = qobject_cast<QGuiApplication*>(QCoreApplication::instance()); guiApp != nullptr) {
+        if (QStyleHints* styleHints = guiApp->styleHints(); styleHints != nullptr) {
+            connect(styleHints, &QStyleHints::colorSchemeChanged, &dialog, [&]() {
+                dialog.refreshStyleSheet();
+                refreshRegisteredDialogControls();
+                owner_.windowSection_->applySystemWindowBackdrop(&dialog);
+            });
+        }
+    }
     const auto themeLabel = [](UiText::ThemePreference preference) -> QString {
         switch (preference) {
         case UiText::ThemePreference::Light:
@@ -1190,7 +1235,7 @@ void MainWindow::PreferencesSection::onPreferences()
                 UiText::setPreferredTheme(selectedThemePreference);
                 owner_.windowSection_->applyUiTheme();
                 dialog.refreshStyleSheet();
-                refreshRegisteredDialogCombos();
+                refreshRegisteredDialogControls();
                 owner_.windowSection_->applySystemWindowBackdrop(&dialog);
                 owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
             });
@@ -1358,6 +1403,8 @@ void MainWindow::PreferencesSection::onPreferences()
     auto* clearBackgroundButton = miacode::ui::createDialogPushButton(
         UiText::text(QStringLiteral("dialog.preferences.background.clear")),
         backgroundImageRow);
+    styleRegisteredDialogButton(chooseBackgroundButton);
+    styleRegisteredDialogButton(clearBackgroundButton);
     backgroundImageRowLayout->addWidget(backgroundImageEdit, 1);
     backgroundImageRowLayout->addWidget(chooseBackgroundButton, 0);
     backgroundImageRowLayout->addWidget(clearBackgroundButton, 0);
@@ -1391,6 +1438,7 @@ void MainWindow::PreferencesSection::onPreferences()
     backgroundOpacitySlider->setValue(qRound(selectedBackgroundSettings.opacity * 100.0));
     backgroundOpacitySlider->setSingleStep(1);
     backgroundOpacitySlider->setPageStep(5);
+    styleRegisteredDialogSlider(backgroundOpacitySlider);
     backgroundLayout->addRow(
         backgroundOpacityLabel,
         miacode::ui::createSliderValueRow(backgroundOpacitySlider, nullptr, QStringLiteral("%"), backgroundGroup));
@@ -1557,6 +1605,7 @@ void MainWindow::PreferencesSection::onPreferences()
     auto* backgroundOverlayButton = miacode::ui::createDialogPushButton(
         UiText::text(QStringLiteral("dialog.preferences.background.overlay_button")),
         backgroundOverlayRow);
+    styleRegisteredDialogButton(backgroundOverlayButton);
     backgroundOverlayRowLayout->addWidget(backgroundOverlayButton, 0);
     backgroundOverlayRowLayout->addStretch(1);
     connect(backgroundOverlayButton, &QPushButton::clicked, &dialog, openBackgroundOverlayDialog);
@@ -2577,7 +2626,7 @@ void MainWindow::PreferencesSection::onPreferences()
         true);
 
     auto* buttonBox = dialog.buttonBox();
-    dialog.addCloseButton(UiDialogs::text("action.close", "Close"), false);
+    styleRegisteredDialogButton(dialog.addCloseButton(UiDialogs::text("action.close", "Close"), false));
     rootLayout->setAlignment(buttonBox, Qt::AlignRight);
 
     dialog.exec();

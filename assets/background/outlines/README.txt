@@ -27,7 +27,7 @@ File names and formats:
 
 Notes:
 - The import button only opens this folder; it does not copy or convert files.
-- Custom judge lines are the normal visual overlay. When "show judge area while paused" is enabled, the paused helper view composites the custom judge line + outline_area.png + region_labels_overlay_transparent_v3.png.
+- Custom judge lines are the normal visual overlay. When "show judge area while paused" is enabled, the paused helper view composites the custom judge line + the judge-area region/label overlay; the built-in default outline ring is removed from that overlay so it does not stack on top of the custom judge line.
 - If the list does not refresh after editing files, reopen Preview Settings.
 
 [日本語]

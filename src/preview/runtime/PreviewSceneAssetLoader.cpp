@@ -64,8 +64,9 @@ QImage buildPausedJudgeAreaComposite(const QString& customOutlinePath)
 {
     const QImage customOutline = loadImageIfExists(customOutlinePath);
     const QImage judgeArea = loadImageIfExists(miacode::assets::outlineJudgeAreaPath());
+    const QImage defaultOutline = loadImageIfExists(miacode::assets::outlineLinePath());
     const QImage labelsOverlay = loadImageIfExists(miacode::assets::outlineRegionLabelsOverlayPath());
-    if (customOutline.isNull() || judgeArea.isNull() || labelsOverlay.isNull()) {
+    if (customOutline.isNull() || judgeArea.isNull() || defaultOutline.isNull() || labelsOverlay.isNull()) {
         return QImage();
     }
 
@@ -75,7 +76,17 @@ QImage buildPausedJudgeAreaComposite(const QString& customOutlinePath)
     const QRect targetRect(QPoint(0, 0), judgeArea.size());
     QPainter painter(&composite);
     painter.drawImage(targetRect, customOutline);
-    painter.drawImage(targetRect, judgeArea);
+
+    QImage judgeAreaWithoutDefaultOutline(judgeArea.size(), QImage::Format_ARGB32_Premultiplied);
+    judgeAreaWithoutDefaultOutline.fill(Qt::transparent);
+    {
+        QPainter areaPainter(&judgeAreaWithoutDefaultOutline);
+        areaPainter.drawImage(targetRect, judgeArea);
+        areaPainter.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+        areaPainter.drawImage(targetRect, defaultOutline);
+    }
+
+    painter.drawImage(targetRect, judgeAreaWithoutDefaultOutline);
     painter.drawImage(targetRect, brightnessAdjustedImage(labelsOverlay, kPausedJudgeAreaLabelBrightness));
     painter.end();
     return composite;

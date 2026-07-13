@@ -149,7 +149,7 @@ Item {
             },
             colors: {
                 titleOnDark: "#FFFFFF", artistOnDark: "#E8E4F5",
-                designerOnWhite: "#1A1A1A", bpmOnWhite: "#0E2A60",
+                designerOnWhite: "#8091AE", bpmOnWhite: "#4F4F4F",
                 labelOnWhite: "#0E2A60",
                 lvNumber: "#FFFFFF", lvNumberShadow: "#3A1060",
                 placeholderFill: "#DDD9D2", placeholderEdge: "#DDD9D2"

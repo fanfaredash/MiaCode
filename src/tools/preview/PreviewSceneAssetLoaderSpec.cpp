@@ -308,8 +308,12 @@ bool verifyDirectCustomOutlineMode(QTextStream& err)
 bool verifyPausedCustomOutlineComposite(QTextStream& err)
 {
     const QImage judgeArea(miacode::assets::outlineJudgeAreaPath());
+    const QImage defaultOutline(miacode::assets::outlineLinePath());
     const QImage labelsOverlay(miacode::assets::outlineRegionLabelsOverlayPath());
     if (!require(!judgeArea.isNull(), QStringLiteral("outline_area.png did not load"), err)) {
+        return false;
+    }
+    if (!require(!defaultOutline.isNull(), QStringLiteral("outline_line.png did not load"), err)) {
         return false;
     }
     if (!require(!labelsOverlay.isNull(), QStringLiteral("region label overlay did not load"), err)) {
@@ -317,6 +321,7 @@ bool verifyPausedCustomOutlineComposite(QTextStream& err)
     }
 
     const QImage areaSearch = imageForAlphaSearch(judgeArea, judgeArea.size());
+    const QImage defaultOutlineSearch = imageForAlphaSearch(defaultOutline, judgeArea.size());
     const QImage labelsSearch = imageForAlphaSearch(labelsOverlay, judgeArea.size());
     const QPoint customPoint = findPixel(judgeArea.size(), [&areaSearch, &labelsSearch](int x, int y) {
         return qAlpha(areaSearch.pixel(x, y)) == 0 && qAlpha(labelsSearch.pixel(x, y)) == 0;
@@ -324,10 +329,22 @@ bool verifyPausedCustomOutlineComposite(QTextStream& err)
     if (!require(customPoint.x() >= 0, QStringLiteral("could not find a transparent custom-outline test pixel"), err)) {
         return false;
     }
-    const QPoint areaPoint = findPixel(judgeArea.size(), [&areaSearch, &labelsSearch](int x, int y) {
-        return qAlpha(areaSearch.pixel(x, y)) > 0 && qAlpha(labelsSearch.pixel(x, y)) == 0;
+    const QPoint areaPoint = findPixel(judgeArea.size(), [&areaSearch, &defaultOutlineSearch, &labelsSearch](int x, int y) {
+        return qAlpha(areaSearch.pixel(x, y)) > 0
+            && qAlpha(defaultOutlineSearch.pixel(x, y)) == 0
+            && qAlpha(labelsSearch.pixel(x, y)) == 0;
     });
     if (!require(areaPoint.x() >= 0, QStringLiteral("could not find an area-only test pixel"), err)) {
+        return false;
+    }
+    const QPoint defaultOutlinePoint = findPixel(
+        judgeArea.size(),
+        [&areaSearch, &defaultOutlineSearch, &labelsSearch](int x, int y) {
+            return qAlpha(areaSearch.pixel(x, y)) > 0
+                && qAlpha(defaultOutlineSearch.pixel(x, y)) > 0
+                && qAlpha(labelsSearch.pixel(x, y)) == 0;
+        });
+    if (!require(defaultOutlinePoint.x() >= 0, QStringLiteral("could not find a default-outline test pixel"), err)) {
         return false;
     }
 
@@ -336,7 +353,7 @@ bool verifyPausedCustomOutlineComposite(QTextStream& err)
         return false;
     }
     const QString customPath = QDir(tempDir.path()).filePath(QStringLiteral("custom_outline.png"));
-    if (!saveSinglePixelPng(customPath, judgeArea.size(), customPoint, qRgba(255, 0, 0, 255), err)) {
+    if (!saveDummyPng(customPath, judgeArea.size(), err)) {
         return false;
     }
 
@@ -359,9 +376,19 @@ bool verifyPausedCustomOutlineComposite(QTextStream& err)
             err)) {
         return false;
     }
+    const QRgb defaultOutlinePixel = composite.pixel(defaultOutlinePoint);
     if (!require(
-            qAlpha(composite.pixel(areaPoint)) > 0,
-            QStringLiteral("paused custom outline composite did not include outline_area.png"),
+            qRed(defaultOutlinePixel) > 200
+                && qGreen(defaultOutlinePixel) < 20
+                && qBlue(defaultOutlinePixel) < 20
+                && qAlpha(defaultOutlinePixel) == 255,
+            QStringLiteral("paused custom outline composite included the default outline ring"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            composite.pixel(areaPoint) != qRgba(255, 0, 0, 255),
+            QStringLiteral("paused custom outline composite did not include the judge-area region overlay"),
             err)) {
         return false;
     }
@@ -371,6 +398,8 @@ bool verifyPausedCustomOutlineComposite(QTextStream& err)
     {
         QPainter painter(&areaOnly);
         painter.drawImage(QRect(QPoint(0, 0), judgeArea.size()), judgeArea);
+        painter.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+        painter.drawImage(QRect(QPoint(0, 0), judgeArea.size()), defaultOutline);
     }
     const QImage areaOnlyRgba = areaOnly.convertToFormat(QImage::Format_ARGB32);
     const QPoint labelPoint = findPixel(judgeArea.size(), [&labelsSearch, &composite, &areaOnlyRgba](int x, int y) {
