@@ -752,6 +752,7 @@ int main(int argc, char** argv)
         bool sawLine2 = false;
         bool sawLine3 = false;
         bool sawLine4Or5 = false;
+        bool sawPerfectToleranceDetail = false;
         for (const MuriDiagnostic& diagnostic : analyzed.report.diagnostics) {
             if (diagnostic.kind != MuriKind::SlideTooFast) {
                 continue;
@@ -759,10 +760,16 @@ int main(int argc, char** argv)
             sawLine2 = sawLine2 || diagnostic.line == 2;
             sawLine3 = sawLine3 || diagnostic.line == 3;
             sawLine4Or5 = sawLine4Or5 || diagnostic.line == 4 || diagnostic.line == 5;
+            sawPerfectToleranceDetail = sawPerfectToleranceDetail
+                || (diagnostic.detail.contains(QStringLiteral("before standard timing"))
+                    && diagnostic.detail.contains(QStringLiteral("Perfect tolerance"))
+                    && !diagnostic.detailArgs.perfectWindowText.isEmpty());
         }
         expect(sawLine2, QStringLiteral("chained-vs-direct slide-too-fast sample reports 1^2^3^4"));
         expect(sawLine3, QStringLiteral("chained-vs-direct slide-too-fast sample reports 1>4"));
         expect(!sawLine4Or5, QStringLiteral("chained-vs-direct slide-too-fast sample does not report 1^2^3 or 1>3"));
+        expect(sawPerfectToleranceDetail,
+            QStringLiteral("chained-vs-direct slide-too-fast sample explains early timing and Perfect tolerance"));
     }
 
     {

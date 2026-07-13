@@ -92,6 +92,7 @@ struct MuriDetailArgs {
     QString left;
     QString right;
     QString gapText;
+    QString perfectWindowText;
     QString deltaText;
     QString handCount;
     QString actions;

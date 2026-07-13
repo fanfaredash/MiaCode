@@ -280,6 +280,26 @@ QString noGapResolvedOutsideWindowTemplate(SimaiNativeValidationLocale locale)
     return QString::fromUtf8(kTemplates[localeTemplateIndex(locale)]);
 }
 
+QString earlyJudgedByPerfectWindowTemplate(SimaiNativeValidationLocale locale)
+{
+    static const char* kTemplates[3] = {
+        "%1 was early-judged by %2 %3 before standard timing, outside the Perfect tolerance (%4 for this trace).",
+        "%1 被 %2 提前判定，比标准判定早 %3；已超出 Perfect 容差（本条 %4）。",
+        "%1 は %2 によって標準判定より %3 早く判定され、Perfect 許容幅（この軌道は %4）を超えています。",
+    };
+    return QString::fromUtf8(kTemplates[localeTemplateIndex(locale)]);
+}
+
+QString resolvedOutsidePerfectWindowTemplate(SimaiNativeValidationLocale locale)
+{
+    static const char* kTemplates[3] = {
+        "%1 resolved %2 before standard timing, outside the Perfect tolerance (%3 for this trace).",
+        "%1 的实际判定比标准判定早 %2，已超出 Perfect 容差（本条 %3）。",
+        "%1 は標準判定より %2 早く判定され、Perfect 許容幅（この軌道は %3）を超えています。",
+    };
+    return QString::fromUtf8(kTemplates[localeTemplateIndex(locale)]);
+}
+
 QString staticReferenceNoDeltaTemplate(SimaiNativeValidationLocale locale)
 {
     static const char* kTemplates[3] = {
@@ -415,6 +435,14 @@ QString renderMuriDetail(
 
     if (kind == MuriDetailKind::ResolvedOutsideWindow && args.gapText.trimmed().isEmpty()) {
         return noGapResolvedOutsideWindowTemplate(locale).arg(localizedLeft(args, locale));
+    }
+    if (kind == MuriDetailKind::ResolvedOutsideWindow && !args.perfectWindowText.trimmed().isEmpty()) {
+        return resolvedOutsidePerfectWindowTemplate(locale)
+            .arg(localizedLeft(args, locale), args.gapText, args.perfectWindowText);
+    }
+    if (kind == MuriDetailKind::EarlyJudgedBy && !args.perfectWindowText.trimmed().isEmpty()) {
+        return earlyJudgedByPerfectWindowTemplate(locale)
+            .arg(localizedLeft(args, locale), localizedRight(args, locale), args.gapText, args.perfectWindowText);
     }
     if (kind == MuriDetailKind::StaticReference && args.deltaText.trimmed().isEmpty()) {
         return staticReferenceNoDeltaTemplate(locale).arg(localizedLeft(args, locale));

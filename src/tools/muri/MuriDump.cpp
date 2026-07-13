@@ -462,6 +462,9 @@ QJsonObject jsonFromMuriDetailArgs(const MuriDetailArgs& args)
     if (!args.gapText.isEmpty()) {
         item.insert(QStringLiteral("gap_text"), args.gapText);
     }
+    if (!args.perfectWindowText.isEmpty()) {
+        item.insert(QStringLiteral("perfect_window_text"), args.perfectWindowText);
+    }
     if (!args.deltaText.isEmpty()) {
         item.insert(QStringLiteral("delta_text"), args.deltaText);
     }

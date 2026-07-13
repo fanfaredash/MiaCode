@@ -936,6 +936,24 @@ EarlyJudgeCauseInfo latestEarlyJudgeCauseForState(const MarkerMuriState& state)
     return latestCause;
 }
 
+double perfectToleranceSecondsForSlideJudge(const TimelineNoteMarker& marker)
+{
+    double lastAreaDurationSecond = 0.0;
+    if (marker.type == QLatin1String("wifi")) {
+        const double durationSecond = qMax(0.0, marker.endSecond - marker.slideTraceSecond);
+        lastAreaDurationSecond = (1.0 - marker.wifiCriticalProportion) * durationSecond;
+    } else {
+        const int lastSegmentIndex =
+            qMin(marker.slideSegmentDurations.size(), marker.slideSegmentCriticalProportions.size()) - 1;
+        if (lastSegmentIndex >= 0) {
+            const double lastDurationSecond = qMax(0.0, marker.slideSegmentDurations.at(lastSegmentIndex));
+            const double criticalProportion = marker.slideSegmentCriticalProportions.at(lastSegmentIndex);
+            lastAreaDurationSecond = (1.0 - criticalProportion) * lastDurationSecond;
+        }
+    }
+    return slideCriticalDeltaSecond(qMax(0.0, lastAreaDurationSecond));
+}
+
 DiagnosticAnchor diagnosticAnchorForSlideJudge(
     const TimelineNoteMarker& marker,
     const MarkerMuriState& state,
@@ -975,6 +993,8 @@ MuriDetailArgs slideTooFastDetailArgs(
     MuriDetailArgs args;
     args.left = targetLabel;
     args.gapText = QStringLiteral("%1 ms").arg(QString::number(gapMs, 'f', 1));
+    args.perfectWindowText = QStringLiteral("%1 ms").arg(
+        QString::number(perfectToleranceSecondsForSlideJudge(marker) * 1000.0, 'f', 1));
     args.alert = MuriAlertLevel::Muri;
     if (latestCause.valid) {
         const QString causeLabel = markerConfigLabelForSource(
