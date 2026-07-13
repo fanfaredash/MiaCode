@@ -2,6 +2,7 @@
 
 #include <QPointF>
 #include <QRectF>
+#include <QString>
 
 #include "timeline/TimelineData.h"
 
@@ -12,6 +13,9 @@ QPointF mapLogicalPointToRect(const QPointF& logicalPoint, const QRectF& targetR
 qreal mapLogicalLengthToRect(qreal logicalLength, const QRectF& targetRect);
 int wrappedLane(int lane);
 QString padTokenForRing(QChar ring, int lane);
+QPointF touchPadLogicalPoint(QChar ring, int lane);
+QPointF touchPadLogicalPoint(const QString& padToken);
+QString touchPadTokenAtLogicalPoint(const QPointF& logicalPoint);
 qreal laneRotationDegrees(int lane);
 qreal laneRotationDegreesForIndex(qreal laneIndex);
 quint64 touchPointKey(const QPointF& point);

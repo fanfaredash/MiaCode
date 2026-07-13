@@ -520,6 +520,7 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.previewCanvasAspectRatio_ = 1.0;
     state_.previewAutoRestoreSquareAfterExport_ = false;
     state_.previewForceLabeledJudgeLineWhenPaused_ = true;
+    state_.previewTouchPadAuthoringShortcutEnabled_ = true;
     state_.previewShowDebugInfo_ = false;
     state_.previewShowTimestamp_ = true;
     state_.previewShowObjectStatsHud_ = false;
@@ -723,6 +724,11 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
             preview.value("hide_stage_media_when_paused")
                 .toBool(state_.previewForceLabeledJudgeLineWhenPaused_);
     }
+    if (preview.value("touch_pad_authoring_shortcut_enabled").isBool()) {
+        state_.previewTouchPadAuthoringShortcutEnabled_ =
+            preview.value("touch_pad_authoring_shortcut_enabled")
+                .toBool(state_.previewTouchPadAuthoringShortcutEnabled_);
+    }
     if (preview.value("show_debug_info").isBool()) {
         state_.previewShowDebugInfo_ = preview.value("show_debug_info").toBool(false);
     }
@@ -894,6 +900,10 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert(
         "force_labeled_judge_line_when_paused",
         state_.previewForceLabeledJudgeLineWhenPaused_
+    );
+    preview.insert(
+        "touch_pad_authoring_shortcut_enabled",
+        state_.previewTouchPadAuthoringShortcutEnabled_
     );
     preview.insert("show_debug_info", state_.previewShowDebugInfo_);
     preview.insert("show_timestamp", state_.previewShowTimestamp_);

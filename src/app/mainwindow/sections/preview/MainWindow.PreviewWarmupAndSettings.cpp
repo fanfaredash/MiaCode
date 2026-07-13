@@ -442,6 +442,8 @@ void MainWindow::PreviewSection::applyEffectivePreviewOutlineVariantToCanvas()
             effectivePreviewOutlineVariant(),
             customOutlinePath,
             outlineImageMode);
+        state_.previewCanvas_->setTouchPadAuthoringEnabled(
+            pausedJudgeAreaView && state_.previewTouchPadAuthoringShortcutEnabled_);
     }
 }
 

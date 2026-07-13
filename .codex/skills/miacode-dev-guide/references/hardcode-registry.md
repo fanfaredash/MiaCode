@@ -57,6 +57,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: large volume of render tuning constants
   - Examples:
     - lane angle base and step
+    - shared Touch pad logical distances and hover/click hit radii in `PreviewSceneConstants.h`
     - sprite scaling ratios
     - touch/touchhold close curve parameters
     - judge-effect curve timing and geometry

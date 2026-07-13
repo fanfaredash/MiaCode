@@ -2,6 +2,11 @@
 
 #include "../../MainWindow.h"
 
+class QMouseEvent;
+class QPoint;
+class QPointF;
+class QString;
+
 class MainWindow::WindowSection {
 public:
     WindowSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state);
@@ -122,6 +127,11 @@ private:
     bool quickShellFocusBridgeActive() const;
     QWindow* previewVisibleHostWindow() const;
     void focusPreviewInteractionTarget(QObject* watched, Qt::FocusReason reason);
+    bool previewLogicalPointFromGlobal(const QPoint& globalPoint, QPointF* logicalPoint) const;
+    QString touchPadAtPreviewGlobalPoint(const QPoint& globalPoint) const;
+    bool touchPadInsertHoverEnabled() const;
+    void setHoveredTouchPad(const QString& pad);
+    void updateTouchPadHoverFromGlobalPoint(const QPoint& globalPoint);
     void handleApplicationFocusChanged(QWidget* old, QWidget* now);
     void handleApplicationStateChanged(Qt::ApplicationState state);
     void recoverPreviewBackendsAfterApplicationResume();
@@ -130,6 +140,7 @@ private:
     void restoreFocusedTextEditState();
     void restoreFocusedTextEditStateAttempt(QPointer<QTextEdit> target, int savedAnchor, int savedPosition, int attempt);
     void clearFocusedTextEditState();
+    bool handleTouchPadInsertClick(QObject* watched, QMouseEvent* event);
 
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;

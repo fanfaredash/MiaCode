@@ -522,6 +522,7 @@
         double previewCanvasAspectRatio_ = 1.0;
         bool previewAutoRestoreSquareAfterExport_ = false;
         bool previewForceLabeledJudgeLineWhenPaused_ = true;
+        bool previewTouchPadAuthoringShortcutEnabled_ = true;
         // Transient (not persisted): true only while the export-preview dialog
         // drives the on-screen preview. When set, the pause-hide option
         // ("暂停时显示判定区") is ignored so PV/BG renders exactly as it will in the
@@ -940,6 +941,7 @@
     double& previewCanvasAspectRatio_ = state_.previewCanvasAspectRatio_;
     bool& previewAutoRestoreSquareAfterExport_ = state_.previewAutoRestoreSquareAfterExport_;
     bool& previewForceLabeledJudgeLineWhenPaused_ = state_.previewForceLabeledJudgeLineWhenPaused_;
+    bool& previewTouchPadAuthoringShortcutEnabled_ = state_.previewTouchPadAuthoringShortcutEnabled_;
     bool& exportPreviewActive_ = state_.exportPreviewActive_;
     bool& previewShowDebugInfo_ = state_.previewShowDebugInfo_;
     bool& previewShowTimestamp_ = state_.previewShowTimestamp_;

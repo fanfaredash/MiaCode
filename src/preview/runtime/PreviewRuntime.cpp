@@ -709,6 +709,40 @@ void PreviewRuntime::setTapJudgeTextDistance(PreviewTapJudgeTextDistance distanc
     update();
 }
 
+void PreviewRuntime::setHoveredTouchPad(const QString& pad)
+{
+    const QString normalizedPad = pad.trimmed().toUpper();
+    if (frameState_.hoveredTouchPad == normalizedPad) {
+        return;
+    }
+    frameState_.hoveredTouchPad = normalizedPad;
+    update();
+}
+
+void PreviewRuntime::setTouchPadAuthoringEnabled(bool enabled)
+{
+    if (frameState_.touchPadAuthoringEnabled == enabled) {
+        if (!enabled && !frameState_.hoveredTouchPad.isEmpty()) {
+            setHoveredTouchPad(QString());
+        }
+        return;
+    }
+    frameState_.touchPadAuthoringEnabled = enabled;
+    if (!enabled) {
+        frameState_.hoveredTouchPad.clear();
+    }
+    update();
+}
+
+void PreviewRuntime::notifyTouchPadAuthoringClick(const QString& pad)
+{
+    const QString normalizedPad = pad.trimmed().toUpper();
+    if (normalizedPad.isEmpty()) {
+        return;
+    }
+    emit touchPadAuthoringClicked(normalizedPad);
+}
+
 void PreviewRuntime::setShowDebugInfo(bool show)
 {
     requestedShowDebugInfo_ = show;

@@ -394,6 +394,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/quick_scene/PreviewQuickSectorNodes.cpp
     src/preview/quick_scene/PreviewQuickGuideLayer.h
     src/preview/quick_scene/PreviewQuickGuideLayer.cpp
+    src/preview/quick_scene/PreviewQuickTouchHoverLayer.h
+    src/preview/quick_scene/PreviewQuickTouchHoverLayer.cpp
     src/preview/quick_scene/PreviewQuickTrackLayer.h
     src/preview/quick_scene/PreviewQuickTrackLayer.cpp
     src/preview/quick_scene/PreviewQuickSlideMotionLayer.h

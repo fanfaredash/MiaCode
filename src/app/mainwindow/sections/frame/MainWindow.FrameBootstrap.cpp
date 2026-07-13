@@ -1314,6 +1314,16 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     previewPanel_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
     previewCanvas_ = new PreviewRuntime(this);
+    connect(previewCanvas_, &PreviewRuntime::touchPadAuthoringClicked, this, [this](const QString& pad) {
+        auto* editor = qobject_cast<QTextEdit*>(editorWidget_);
+        if (editor == nullptr || editor->document() == nullptr || pad.trimmed().isEmpty()) {
+            return;
+        }
+        QTextCursor cursor = editor->textCursor();
+        cursor.insertText(pad.trimmed().toUpper());
+        editor->setTextCursor(cursor);
+        editor->setFocus(Qt::OtherFocusReason);
+    });
     logStartupStage("preview_canvas_created");
     applyEffectivePreviewOutlineVariantToCanvas();
     applyPreviewSkinDirectoryToSurfaces();

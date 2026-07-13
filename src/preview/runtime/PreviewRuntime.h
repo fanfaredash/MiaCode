@@ -172,6 +172,9 @@ public:
     void setNoteFlowSpeed(double flowSpeed);
     void setSlideEarlierSecondAndTextOnTop(bool enabled);
     void setTapJudgeTextDistance(PreviewTapJudgeTextDistance distance);
+    void setHoveredTouchPad(const QString& pad);
+    void setTouchPadAuthoringEnabled(bool enabled);
+    void notifyTouchPadAuthoringClick(const QString& pad);
     void setShowDebugInfo(bool show);
     void setSuppressDebugInfo(bool suppress);
     void setShowTimestamp(bool show);
@@ -237,6 +240,7 @@ signals:
     void framePresented();
     void introOverlayDataChanged();
     void introOverlayStateChanged();
+    void touchPadAuthoringClicked(const QString& pad);
 
 private:
     void publishFrameStateSnapshot();

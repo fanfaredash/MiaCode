@@ -592,6 +592,11 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         videoGroup
     );
     timestampCheck->setChecked(owner_.previewShowTimestamp_);
+    auto* touchPadAuthoringShortcutCheck = new QCheckBox(
+        UiText::text(QStringLiteral("dialog.render_settings.video.touch_pad_authoring_shortcut")),
+        videoGroup
+    );
+    touchPadAuthoringShortcutCheck->setChecked(owner_.previewTouchPadAuthoringShortcutEnabled_);
     auto* debugCheck = new QCheckBox(
         UiText::text(QStringLiteral("dialog.render_settings.preview.debug")),
         videoGroup
@@ -615,8 +620,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     videoCheckLayout->setColumnStretch(1, 1);
     videoCheckLayout->addWidget(smoothBrightnessCheck, 0, 0, Qt::AlignLeft);
     videoCheckLayout->addWidget(timestampCheck, 0, 1, Qt::AlignLeft);
-    videoCheckLayout->addWidget(debugCheck, 1, 0, Qt::AlignLeft);
-    videoCheckLayout->addWidget(forceLabeledJudgeLineWhenPausedCheck, 1, 1, Qt::AlignLeft);
+    videoCheckLayout->addWidget(touchPadAuthoringShortcutCheck, 1, 0, Qt::AlignLeft);
+    videoCheckLayout->addWidget(debugCheck, 1, 1, Qt::AlignLeft);
+    videoCheckLayout->addWidget(forceLabeledJudgeLineWhenPausedCheck, 2, 0, Qt::AlignLeft);
     videoFormLayout->addRow(QString(), videoCheckRow);
 
     const auto addSettingsField = [](QWidget* parent, QGridLayout* layout, int row, int column, const QString& labelText, QWidget* control) {
@@ -1246,6 +1252,12 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         owner_.previewForceLabeledJudgeLineWhenPaused_ = checked;
         owner_.applyEffectivePreviewOutlineVariantToCanvas();
         owner_.applyPreviewStageMediaRouteVisualSettings();
+        owner_.savePortableState();
+    });
+
+    connect(touchPadAuthoringShortcutCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
+        owner_.previewTouchPadAuthoringShortcutEnabled_ = checked;
+        owner_.applyEffectivePreviewOutlineVariantToCanvas();
         owner_.savePortableState();
     });
 

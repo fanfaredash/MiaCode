@@ -9,11 +9,17 @@
 #include "core/scene/PreviewHudState.h"
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "core/scene/PreviewPreparedSceneCache.h"
+#include "core/scene/PreviewSceneConstants.h"
+#include "core/scene/PreviewSceneGeometry.h"
+#include "core/scene/PreviewSceneMath.h"
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QAtomicInteger>
+#include <QGuiApplication>
+#include <QHoverEvent>
 #include <QMetaObject>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QMutexLocker>
 #include <QQuickWindow>
@@ -336,6 +342,8 @@ PreviewQuickSceneRoot::PreviewQuickSceneRoot(QQuickItem* parent)
     , instanceId_(nextPreviewQuickSceneRootInstanceId())
 {
     setFlag(ItemHasContents, true);
+    setAcceptHoverEvents(true);
+    setAcceptedMouseButtons(Qt::LeftButton);
     // Phase 4a — let PreviewDCompSurface auto-discover this item via
     // QObject::findChild on the QQuickWindow. Decoupled from the
     // dcomp/ side: surface looks up by objectName instead of taking a
@@ -443,6 +451,71 @@ void PreviewQuickSceneRoot::setRuntime(PreviewRuntime* runtime)
 QObject* PreviewQuickSceneRoot::runtimeObject() const
 {
     return runtime_;
+}
+
+QString PreviewQuickSceneRoot::touchPadAtItemPoint(const QPointF& itemPoint) const
+{
+    if (runtime_ == nullptr) {
+        return QString();
+    }
+    const auto stateSnapshot = runtime_->frameStateSnapshot();
+    if (stateSnapshot == nullptr || !stateSnapshot->touchPadAuthoringEnabled) {
+        return QString();
+    }
+    const QRectF playfieldRect = miacode::preview::scene::playfieldRectForStage(
+        miacode::preview::scene::stageRectForSize(boundingRect().size().toSize()),
+        stateSnapshot->render.layoutSquareScale
+    );
+    if (!playfieldRect.contains(itemPoint) || playfieldRect.width() <= 0.0) {
+        return QString();
+    }
+
+    const qreal logicalScale = miacode::preview::scene::kLogicalCanvasSize / playfieldRect.width();
+    const QPointF logicalPoint(
+        (itemPoint.x() - playfieldRect.left()) * logicalScale,
+        (itemPoint.y() - playfieldRect.top()) * logicalScale
+    );
+    return miacode::preview::scene::touchPadTokenAtLogicalPoint(logicalPoint);
+}
+
+void PreviewQuickSceneRoot::updateHoveredTouchPadAtItemPoint(const QPointF& itemPoint)
+{
+    if (runtime_ == nullptr) {
+        return;
+    }
+    runtime_->setHoveredTouchPad(touchPadAtItemPoint(itemPoint));
+}
+
+void PreviewQuickSceneRoot::hoverMoveEvent(QHoverEvent* event)
+{
+    if (event != nullptr) {
+        updateHoveredTouchPadAtItemPoint(event->position());
+    }
+    QQuickItem::hoverMoveEvent(event);
+}
+
+void PreviewQuickSceneRoot::hoverLeaveEvent(QHoverEvent* event)
+{
+    if (runtime_ != nullptr) {
+        runtime_->setHoveredTouchPad(QString());
+    }
+    QQuickItem::hoverLeaveEvent(event);
+}
+
+void PreviewQuickSceneRoot::mousePressEvent(QMouseEvent* event)
+{
+    if (event == nullptr || event->button() != Qt::LeftButton || runtime_ == nullptr) {
+        QQuickItem::mousePressEvent(event);
+        return;
+    }
+    const QString pad = touchPadAtItemPoint(event->position());
+    if (pad.isEmpty()) {
+        QQuickItem::mousePressEvent(event);
+        return;
+    }
+    runtime_->setHoveredTouchPad(pad);
+    runtime_->notifyTouchPadAuthoringClick(pad);
+    event->accept();
 }
 
 void PreviewQuickSceneRoot::setRuntimeObject(QObject* runtimeObject)
@@ -978,6 +1051,19 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
                 textures);
         });
     applyWindowCounts("guide", preparedCache_.guideLayer().entries.size(), guideCursor_.activePreparedIndices.size());
+    updateLayerSlotProfiled(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::GuideLayer),
+        "touch_hover",
+        &layerProfileStats_,
+        [&](QSGNode* oldChild) {
+            return touchHoverLayer_.updateNode(
+                oldChild,
+                *state,
+                renderSize,
+                window(),
+                textures);
+        });
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::TrackLayer),
