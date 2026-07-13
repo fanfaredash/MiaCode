@@ -59,6 +59,12 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
         Q_UNUSED(value);
         updateLineNumberArea();
     });
+    if (QScrollBar* vbar = verticalScrollBar(); vbar != nullptr) {
+        vbar->setContextMenuPolicy(Qt::NoContextMenu);
+    }
+    if (QScrollBar* hbar = horizontalScrollBar(); hbar != nullptr) {
+        hbar->setContextMenuPolicy(Qt::NoContextMenu);
+    }
     connect(this, &QTextEdit::cursorPositionChanged, this, [this]() {
         syncCursorVisualState();
         // While the bracket-completion popup is open, a caret move means the

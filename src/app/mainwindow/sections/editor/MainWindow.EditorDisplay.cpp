@@ -572,6 +572,11 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
             preview.value("show_chart_review_tap_judge_overlay")
                 .toBool(state_.muriRenderOptions_.showChartReviewTapJudgeOverlay);
     }
+    if (preview.value("show_chart_review_break_judge_overlay").isBool()) {
+        state_.muriRenderOptions_.showChartReviewBreakJudgeOverlay =
+            preview.value("show_chart_review_break_judge_overlay")
+                .toBool(state_.muriRenderOptions_.showChartReviewBreakJudgeOverlay);
+    }
     if (preview.value("show_chart_review_touch_judge_overlay").isBool()) {
         state_.muriRenderOptions_.showChartReviewTouchJudgeOverlay =
             preview.value("show_chart_review_touch_judge_overlay")
@@ -836,6 +841,7 @@ void MainWindow::EditorSection::savePortableState() const
     );
     preview.insert("show_chart_review_slide_judge_overlay", state_.muriRenderOptions_.showChartReviewSlideJudgeOverlay);
     preview.insert("show_chart_review_tap_judge_overlay", state_.muriRenderOptions_.showChartReviewTapJudgeOverlay);
+    preview.insert("show_chart_review_break_judge_overlay", state_.muriRenderOptions_.showChartReviewBreakJudgeOverlay);
     preview.insert("show_chart_review_touch_judge_overlay", state_.muriRenderOptions_.showChartReviewTouchJudgeOverlay);
     preview.insert("wifi_need_c", state_.muriRenderOptions_.wifiNeedC);
     preview.insert("background_brightness", state_.previewBackgroundBrightnessOuter_);

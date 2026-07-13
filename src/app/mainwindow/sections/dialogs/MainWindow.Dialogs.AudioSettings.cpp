@@ -418,11 +418,13 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     const QString disabledLabel = UiText::text(QStringLiteral("dialog.render_settings.option.disabled"));
     const QString slideJudgeChoiceLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect.slide"));
     const QString tapJudgeChoiceLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect.tap"));
+    const QString breakJudgeChoiceLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect.break"));
     const QString touchJudgeChoiceLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect.touch"));
     const auto judgeEffectButtonLabel = [
         this,
         slideJudgeChoiceLabel,
         tapJudgeChoiceLabel,
+        breakJudgeChoiceLabel,
         touchJudgeChoiceLabel,
         disabledLabel
     ]() {
@@ -432,6 +434,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         }
         if (owner_.muriRenderOptions_.showChartReviewTapJudgeOverlay) {
             parts.append(tapJudgeChoiceLabel);
+        }
+        if (owner_.muriRenderOptions_.showChartReviewBreakJudgeOverlay) {
+            parts.append(breakJudgeChoiceLabel);
         }
         if (owner_.muriRenderOptions_.showChartReviewTouchJudgeOverlay) {
             parts.append(touchJudgeChoiceLabel);
@@ -475,6 +480,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     };
     addJudgeEffectChoice(slideJudgeChoiceLabel, &MuriRenderOptions::showChartReviewSlideJudgeOverlay);
     addJudgeEffectChoice(tapJudgeChoiceLabel, &MuriRenderOptions::showChartReviewTapJudgeOverlay);
+    addJudgeEffectChoice(breakJudgeChoiceLabel, &MuriRenderOptions::showChartReviewBreakJudgeOverlay);
     addJudgeEffectChoice(touchJudgeChoiceLabel, &MuriRenderOptions::showChartReviewTouchJudgeOverlay);
     // 判定线 (outline variant) moved to the shared 皮肤 popup (buildSkinSettings).
     // The "暂停时显示判定区" toggle stays here — it is a video-side option.

@@ -223,9 +223,8 @@ touch pad key 转大写、marker type 转小写）不计入风险。
   不会被当作地雷兼容解析：
   - tap / hold：`1m`、`1bm`（break+雷）、`1xm`（ex+雷）、`1hm[4:1]`（hold 雷）。
   - touch / touch-hold：`A1m`、`C2hm[4:1]`。
-  - slide：`1-3[2:1]m`（`m` 在末尾）。`m` 置位 `trackMine`**和** `headMine`
-    —— 头星与轨道都渲染成地雷（对标 MajdataPlay 的 `IsMine` 头星 + `IsMineSlide`
-    轨道）。`m` 字符在构建 slide shape lookup key 时被剥离（同 `b`）。
+  - slide：`1-3[2:1]m`（`m` 在末尾）。`m` 只置位 `trackMine`，星星头保留原本材质；
+    `m` 字符在构建 slide shape lookup key 时被剥离（同 `b`）。
   - 拒绝示例：`1M`、`1HM[4:1]`、`A1M`、`C2hM[4:1]`、
     `1-3[2:1]M`、`1M-3[2:1]` 均为无效 token。
   - **slide 上 `m` 的位置不限**：`1w5[8:1]m`（末尾）与 `1w5m[8:1]`（shape 后、
@@ -235,7 +234,7 @@ touch pad key 转大写、marker type 转小写）不计入风险。
     `noteCore` 任意位置的 `m`（`SimaiNativeParser.Slide.cpp` 的 trackMine 扫描
     循环,无 strict 位置检查）。
 - **数据模型**：`TimelineNoteMarker.isMine`（tap/hold/touch/touch_hold）、
-  `trackMine` + `headMine`（slide/wifi）；timeline 镜像 = `TimelineRenderFlagIsMine` /
+  `trackMine`（slide/wifi 轨道，星星头不置位 `headMine`）；timeline 镜像 = `TimelineRenderFlagIsMine` /
   `TimelineRenderFlagTrackMine`（`TimelineRenderData.h`）。
 - **EX 抑制**：地雷头覆盖 break/each/ex —— 用专用 mine 贴图，**不叠 EX overlay**
   （对标 MajdataPlay `if (isEX && !isMine)`）。

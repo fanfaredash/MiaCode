@@ -78,18 +78,29 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
 
     // Skin + judge line moved to the shared 皮肤 tab (buildSkinSettings).
 
-    // Judge effect (multi-select tap/touch/slide overlays).
+    // Judge effect (multi-select tap/break/touch/slide overlays).
     const QString slideJudgeChoiceLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect.slide"));
     const QString tapJudgeChoiceLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect.tap"));
+    const QString breakJudgeChoiceLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect.break"));
     const QString touchJudgeChoiceLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_effect.touch"));
     const QString disabledLabel = UiText::text(QStringLiteral("dialog.render_settings.option.disabled"));
-    const auto judgeEffectButtonLabel = [this, slideJudgeChoiceLabel, tapJudgeChoiceLabel, touchJudgeChoiceLabel, disabledLabel]() {
+    const auto judgeEffectButtonLabel = [
+        this,
+        slideJudgeChoiceLabel,
+        tapJudgeChoiceLabel,
+        breakJudgeChoiceLabel,
+        touchJudgeChoiceLabel,
+        disabledLabel
+    ]() {
         QStringList parts;
         if (owner_.muriRenderOptions_.showChartReviewSlideJudgeOverlay) {
             parts.append(slideJudgeChoiceLabel);
         }
         if (owner_.muriRenderOptions_.showChartReviewTapJudgeOverlay) {
             parts.append(tapJudgeChoiceLabel);
+        }
+        if (owner_.muriRenderOptions_.showChartReviewBreakJudgeOverlay) {
+            parts.append(breakJudgeChoiceLabel);
         }
         if (owner_.muriRenderOptions_.showChartReviewTouchJudgeOverlay) {
             parts.append(touchJudgeChoiceLabel);
@@ -136,6 +147,7 @@ void MainWindow::DialogsSection::buildExportInjectedSettings(
     };
     addJudgeEffectChoice(slideJudgeChoiceLabel, &MuriRenderOptions::showChartReviewSlideJudgeOverlay);
     addJudgeEffectChoice(tapJudgeChoiceLabel, &MuriRenderOptions::showChartReviewTapJudgeOverlay);
+    addJudgeEffectChoice(breakJudgeChoiceLabel, &MuriRenderOptions::showChartReviewBreakJudgeOverlay);
     addJudgeEffectChoice(touchJudgeChoiceLabel, &MuriRenderOptions::showChartReviewTouchJudgeOverlay);
 
     // Slide stack order.

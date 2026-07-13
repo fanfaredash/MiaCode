@@ -20,6 +20,7 @@ struct PreviewPreparedSceneCacheKey {
     bool slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     bool showChartReviewSlideJudgeOverlay = false;
     bool showChartReviewTapJudgeOverlay = false;
+    bool showChartReviewBreakJudgeOverlay = false;
     bool showChartReviewTouchJudgeOverlay = false;
 
     bool operator==(const PreviewPreparedSceneCacheKey& other) const
@@ -32,6 +33,7 @@ struct PreviewPreparedSceneCacheKey {
             && slideEarlierSecondAndTextOnTop == other.slideEarlierSecondAndTextOnTop
             && showChartReviewSlideJudgeOverlay == other.showChartReviewSlideJudgeOverlay
             && showChartReviewTapJudgeOverlay == other.showChartReviewTapJudgeOverlay
+            && showChartReviewBreakJudgeOverlay == other.showChartReviewBreakJudgeOverlay
             && showChartReviewTouchJudgeOverlay == other.showChartReviewTouchJudgeOverlay;
     }
 };

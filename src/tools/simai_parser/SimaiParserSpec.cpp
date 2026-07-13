@@ -1055,7 +1055,7 @@ int main(int argc, char** argv)
 
     {
         // Mine notes (simai `m`). The `m` is accepted on tap / hold / touch /
-        // touch-hold / slide; slides set trackMine + headMine. Mines must NOT
+        // touch-hold / slide; slides set trackMine while keeping the head star normal. Mines must NOT
         // turn the chart unparseable (the historical motivation for this work).
         const SimaiNativeParseResult tap = SimaiNativeParser::parseForTimeline(QStringLiteral("1m,2bm,3xm,\nE"));
         expect(tap.ok, QStringLiteral("mine taps `1m` / `2bm` / `3xm` parse ok"));
@@ -1088,7 +1088,7 @@ int main(int argc, char** argv)
         expect(slideMarker != nullptr, QStringLiteral("mine slide emits a slide marker"));
         if (slideMarker != nullptr) {
             expect(slideMarker->trackMine, QStringLiteral("`1-3[2:1]m` sets trackMine on the slide"));
-            expect(slideMarker->headMine, QStringLiteral("`1-3[2:1]m` sets headMine on the slide head star"));
+            expect(!slideMarker->headMine, QStringLiteral("`1-3[2:1]m` keeps the slide head star non-mine"));
             expect(!slideMarker->slideDisplayKey.contains(QLatin1Char('m')),
                    QStringLiteral("mine `m` is stripped from the slide shape lookup key"));
         }

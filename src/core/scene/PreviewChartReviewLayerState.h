@@ -29,6 +29,7 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
     const QVector<TimelineNoteMarker>& noteMarkers,
     bool showSlideJudgeOverlay,
     bool showTapJudgeOverlay,
+    bool showBreakJudgeOverlay,
     bool showTouchJudgeOverlay
 );
 

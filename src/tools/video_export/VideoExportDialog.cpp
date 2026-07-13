@@ -199,12 +199,16 @@ public:
         setButtonSymbols(QAbstractSpinBox::NoButtons);
         setAlignment(Qt::AlignCenter);
         setKeyboardTracking(false);
+        setInputMethodHints(Qt::ImhFormattedNumbersOnly | Qt::ImhNoPredictiveText);
         // Fluid width: the redesigned range editor lays the spin boxes out in
         // full-width rows, so they grow/shrink with the content column instead
         // of pinning a fixed 92px (which overflowed the 440px budget).
         setMinimumWidth(96);
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         setMinimumHeight(28);
+        if (QLineEdit* edit = lineEdit(); edit != nullptr) {
+            edit->setInputMethodHints(Qt::ImhFormattedNumbersOnly | Qt::ImhNoPredictiveText);
+        }
     }
 
 protected:
@@ -222,35 +226,86 @@ protected:
 
     double valueFromText(const QString& text) const override
     {
-        static const QRegularExpression re(QStringLiteral("^\\s*(\\d{1,3}):(\\d{2}):(\\d{3})\\s*$"));
-        const QRegularExpressionMatch match = re.match(text);
-        if (!match.hasMatch()) {
-            return 0.0;
+        double parsed = 0.0;
+        return parseTimestampText(text, &parsed) ? parsed : 0.0;
+    }
+
+    void fixup(QString& input) const override
+    {
+        double parsed = 0.0;
+        if (parseTimestampText(input, &parsed)) {
+            input = textFromValue(parsed);
+            return;
         }
-        bool minOk = false;
-        bool secOk = false;
-        bool msOk = false;
-        const int minutes = match.captured(1).toInt(&minOk);
-        const int sec = match.captured(2).toInt(&secOk);
-        const int ms = match.captured(3).toInt(&msOk);
-        if (!minOk || !secOk || !msOk || sec < 0 || sec > 59 || ms < 0 || ms > 999) {
-            return 0.0;
-        }
-        return static_cast<double>(minutes) * 60.0 + static_cast<double>(sec) + static_cast<double>(ms) / 1000.0;
+        input = sanitizeTimestampText(input);
     }
 
     QValidator::State validate(QString& text, int& pos) const override
     {
         Q_UNUSED(pos);
-        static const QRegularExpression partial(QStringLiteral("^\\s*\\d{0,3}(:\\d{0,2}(:\\d{0,3})?)?\\s*$"));
-        static const QRegularExpression full(QStringLiteral("^\\s*\\d{1,3}:\\d{2}:\\d{3}\\s*$"));
-        if (full.match(text).hasMatch()) {
+        const QString sanitized = sanitizeTimestampText(text);
+        double parsed = 0.0;
+        if (parseTimestampText(sanitized, &parsed)) {
             return QValidator::Acceptable;
         }
+        static const QRegularExpression partial(QStringLiteral("^\\s*\\d*(:\\d{0,2}(:\\d{0,3})?)?\\s*$"));
         if (partial.match(text).hasMatch()) {
             return QValidator::Intermediate;
         }
+        if (partial.match(sanitized).hasMatch()) {
+            text = sanitized;
+            pos = qBound(0, pos, text.size());
+            return QValidator::Intermediate;
+        }
         return QValidator::Invalid;
+    }
+
+private:
+    static QString sanitizeTimestampText(QString text)
+    {
+        text.replace(QChar(0xff1a), QLatin1Char(':'));
+        return text.trimmed();
+    }
+
+    static bool parseTimestampText(const QString& text, double* seconds)
+    {
+        const QString sanitized = sanitizeTimestampText(text);
+        static const QRegularExpression re(QStringLiteral("^(\\d+)(?::(\\d{1,2}))?(?::(\\d{1,3}))?$"));
+        const QRegularExpressionMatch match = re.match(sanitized);
+        if (!match.hasMatch()) {
+            return false;
+        }
+
+        bool minOk = false;
+        const int minutes = match.captured(1).toInt(&minOk);
+        if (!minOk || minutes < 0) {
+            return false;
+        }
+
+        int sec = 0;
+        if (match.captured(2).length() > 0) {
+            bool secOk = false;
+            sec = match.captured(2).toInt(&secOk);
+            if (!secOk || sec < 0 || sec > 59) {
+                return false;
+            }
+        }
+
+        int ms = 0;
+        if (match.captured(3).length() > 0) {
+            bool msOk = false;
+            ms = match.captured(3).toInt(&msOk);
+            if (!msOk || ms < 0 || ms > 999) {
+                return false;
+            }
+        }
+
+        if (seconds != nullptr) {
+            *seconds = static_cast<double>(minutes) * 60.0
+                + static_cast<double>(sec)
+                + static_cast<double>(ms) / 1000.0;
+        }
+        return true;
     }
 };
 

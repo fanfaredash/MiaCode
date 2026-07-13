@@ -246,7 +246,7 @@ Shared render settings include:
 - smooth brightness
 - background scale mode (`fill`, `fit`, `square_fit`, and `inner_circle_fit_outer_fill`; `square_fit` means center the largest 1:1 square in the render canvas, keep the outside black, and fit-contain the full PV/BG inside that square; `inner_circle_fit_outer_fill` draws a fill-cropped outer PV/BG plus a fit-contained inner copy clipped to the layout-size circle)
 - tap/touch flow speed (persisted as separate values with legacy single-speed fallback)
-- chart-review judge overlay toggles for slide/wifi-family and tap/hold-family effects
+- chart-review judge overlay toggles for slide/wifi-family, tap/hold-family, ordinary break, and touch/touch-hold-family effects
 - timestamp/object-stats HUD flags
 - Muri render options
 

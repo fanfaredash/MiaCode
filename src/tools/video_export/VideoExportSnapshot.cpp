@@ -219,6 +219,10 @@ QJsonObject VideoExportSnapshot::toJson() const
         muriRenderOptions.showChartReviewTapJudgeOverlay
     );
     render.insert(
+        QStringLiteral("show_chart_review_break_judge_overlay"),
+        muriRenderOptions.showChartReviewBreakJudgeOverlay
+    );
+    render.insert(
         QStringLiteral("show_chart_review_touch_judge_overlay"),
         muriRenderOptions.showChartReviewTouchJudgeOverlay
     );
@@ -348,6 +352,9 @@ bool VideoExportSnapshot::fromJson(
     parsed.muriRenderOptions.showChartReviewTapJudgeOverlay =
         render.value(QStringLiteral("show_chart_review_tap_judge_overlay"))
             .toBool(parsed.muriRenderOptions.showChartReviewTapJudgeOverlay);
+    parsed.muriRenderOptions.showChartReviewBreakJudgeOverlay =
+        render.value(QStringLiteral("show_chart_review_break_judge_overlay"))
+            .toBool(parsed.muriRenderOptions.showChartReviewBreakJudgeOverlay);
     parsed.muriRenderOptions.showChartReviewTouchJudgeOverlay =
         render.value(QStringLiteral("show_chart_review_touch_judge_overlay"))
             .toBool(parsed.muriRenderOptions.showChartReviewTouchJudgeOverlay);

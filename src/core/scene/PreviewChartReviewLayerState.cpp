@@ -26,11 +26,13 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
     const QVector<TimelineNoteMarker>& noteMarkers,
     bool showSlideJudgeOverlay,
     bool showTapJudgeOverlay,
+    bool showBreakJudgeOverlay,
     bool showTouchJudgeOverlay
 )
 {
     PreviewChartReviewPreparedEvents events;
-    if ((!showSlideJudgeOverlay && !showTapJudgeOverlay && !showTouchJudgeOverlay) || noteMarkers.isEmpty()) {
+    if ((!showSlideJudgeOverlay && !showTapJudgeOverlay && !showBreakJudgeOverlay && !showTouchJudgeOverlay)
+        || noteMarkers.isEmpty()) {
         return events;
     }
 
@@ -41,7 +43,8 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
 
     for (const TimelineNoteMarker& marker : noteMarkers) {
         if (marker.type == QLatin1String("tap")) {
-            if (!showTapJudgeOverlay) {
+            if ((marker.isBreak && !showBreakJudgeOverlay)
+                || (!marker.isBreak && !showTapJudgeOverlay)) {
                 continue;
             }
             PreviewChartReviewPreparedEvent event;
@@ -55,7 +58,9 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
             continue;
         }
         if (marker.type == QLatin1String("hold")) {
-            if (!showTapJudgeOverlay || marker.endSecond < 0.0) {
+            if (marker.endSecond < 0.0
+                || (marker.isBreak && !showBreakJudgeOverlay)
+                || (!marker.isBreak && !showTapJudgeOverlay)) {
                 continue;
             }
             PreviewChartReviewPreparedEvent event;
@@ -71,7 +76,9 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
             continue;
         }
         if (marker.type == QLatin1String("touch")) {
-            if (!showTouchJudgeOverlay || marker.touchPad.isEmpty()) {
+            if (marker.touchPad.isEmpty()
+                || (marker.isBreak && !showBreakJudgeOverlay)
+                || (!marker.isBreak && !showTouchJudgeOverlay)) {
                 continue;
             }
             PreviewChartReviewPreparedEvent event;
@@ -85,7 +92,10 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
             continue;
         }
         if (marker.type == QLatin1String("touch_hold")) {
-            if (!showTouchJudgeOverlay || marker.endSecond < 0.0 || marker.touchPad.isEmpty()) {
+            if (marker.endSecond < 0.0
+                || marker.touchPad.isEmpty()
+                || (marker.isBreak && !showBreakJudgeOverlay)
+                || (!marker.isBreak && !showTouchJudgeOverlay)) {
                 continue;
             }
             PreviewChartReviewPreparedEvent event;
@@ -102,9 +112,10 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
             continue;
         }
 
-        if (showTapJudgeOverlay && marker.hasHeadStar) {
+        if (marker.hasHeadStar) {
+            const bool showHeadJudgeOverlay = marker.headBreak ? showBreakJudgeOverlay : showTapJudgeOverlay;
             const QString helperKey = slideHeadEventKey(marker);
-            if (!emittedHeadEvents.contains(helperKey)) {
+            if (showHeadJudgeOverlay && !emittedHeadEvents.contains(helperKey)) {
                 emittedHeadEvents.insert(helperKey);
                 PreviewChartReviewPreparedEvent headEvent;
                 headEvent.kind = marker.headBreak
@@ -169,9 +180,10 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
     PreviewSpriteDescriptors sprites;
     const bool showSlideJudgeOverlay = state.muriRenderOptions.showChartReviewSlideJudgeOverlay;
     const bool showTapJudgeOverlay = state.muriRenderOptions.showChartReviewTapJudgeOverlay;
+    const bool showBreakJudgeOverlay = state.muriRenderOptions.showChartReviewBreakJudgeOverlay;
     const bool showTouchJudgeOverlay = state.muriRenderOptions.showChartReviewTouchJudgeOverlay;
     if (state.muriRenderOptions.renderMode != RenderMode::Native
-        || (!showSlideJudgeOverlay && !showTapJudgeOverlay && !showTouchJudgeOverlay)
+        || (!showSlideJudgeOverlay && !showTapJudgeOverlay && !showBreakJudgeOverlay && !showTouchJudgeOverlay)
         || !hasAnyChartReviewJudgeAssets(state.judgeOverlay)) {
         return sprites;
     }
@@ -179,7 +191,12 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
     const PreviewChartReviewPreparedEvents ownedPreparedEvents =
         preparedEvents != nullptr
         ? PreviewChartReviewPreparedEvents()
-        : buildPreviewChartReviewPreparedEvents(state.noteMarkers, showSlideJudgeOverlay, showTapJudgeOverlay, showTouchJudgeOverlay);
+        : buildPreviewChartReviewPreparedEvents(
+              state.noteMarkers,
+              showSlideJudgeOverlay,
+              showTapJudgeOverlay,
+              showBreakJudgeOverlay,
+              showTouchJudgeOverlay);
     const PreviewChartReviewPreparedEvents& events =
         preparedEvents != nullptr ? *preparedEvents : ownedPreparedEvents;
 
