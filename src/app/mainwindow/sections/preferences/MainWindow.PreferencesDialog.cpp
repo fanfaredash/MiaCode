@@ -1498,18 +1498,6 @@ void MainWindow::PreferencesSection::onPreferences()
             selectedBackgroundSettings.overlays.panelAlphaLight,
             [&](int value) { selectedBackgroundSettings.overlays.panelAlphaDark = value; },
             [&](int value) { selectedBackgroundSettings.overlays.panelAlphaLight = value; });
-        if (!overlayRows.isEmpty()) {
-            OverlayRow& previewFrameRow = overlayRows.last();
-            if (previewFrameRow.label != nullptr) {
-                previewFrameRow.label->setEnabled(false);
-            }
-            if (previewFrameRow.slider != nullptr) {
-                previewFrameRow.slider->setEnabled(false);
-            }
-            if (previewFrameRow.valueLabel != nullptr) {
-                previewFrameRow.valueLabel->setEnabled(false);
-            }
-        }
         appendThemeOverlayRow(
             QStringLiteral("dialog.preferences.background.overlay.status"),
             selectedBackgroundSettings.overlays.statusAlphaDark,

@@ -6,20 +6,20 @@
 namespace miacode::ui {
 
 struct AppBackgroundOverlaySettings {
-    int toolbarAlphaDark = 198;
-    int toolbarAlphaLight = 206;
-    int statusAlphaDark = 208;
-    int statusAlphaLight = 216;
-    int panelAlphaDark = 176;
-    int panelAlphaLight = 190;
+    int toolbarAlphaDark = 200;
+    int toolbarAlphaLight = 210;
+    int statusAlphaDark = 210;
+    int statusAlphaLight = 220;
+    int panelAlphaDark = 200;
+    int panelAlphaLight = 200;
     int cardAlphaDark = 255;
     int cardAlphaLight = 255;
-    int editorHeaderAlphaDark = 188;
-    int editorHeaderAlphaLight = 196;
-    int inputAlphaDark = 196;
-    int inputAlphaLight = 204;
-    int codeEditorAlphaDark = 196;
-    int codeEditorAlphaLight = 204;
+    int editorHeaderAlphaDark = 190;
+    int editorHeaderAlphaLight = 200;
+    int inputAlphaDark = 200;
+    int inputAlphaLight = 200;
+    int codeEditorAlphaDark = 200;
+    int codeEditorAlphaLight = 200;
 };
 
 enum class AppBackgroundSizeMode {

@@ -8,8 +8,31 @@ import MiaCode.Preview
 ApplicationWindow {
     id: root
 
-    background: Rectangle {
-        color: root.tone("windowBg", "#f8fafd")
+    background: Item {
+        Rectangle {
+            anchors.fill: parent
+            color: root.tone("windowBg", "#f8fafd")
+        }
+
+        Image {
+            anchors.fill: parent
+            visible: root.appBackgroundActive()
+            source: visible ? String(root.appBackgroundMap.sourceUrl) : ""
+            opacity: root.appBackgroundOpacity()
+            fillMode: root.appBackgroundFillMode()
+            horizontalAlignment: root.appBackgroundHorizontalAlignment()
+            verticalAlignment: root.appBackgroundVerticalAlignment()
+            smooth: true
+            mipmap: true
+            asynchronous: true
+            cache: true
+            layer.enabled: visible && root.appBackgroundBlur() > 0
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blurMax: 64
+                blur: Math.min(1.0, root.appBackgroundBlur() / 100.0)
+            }
+        }
     }
 
     property var paletteMap: styleBridge ? styleBridge.palette : ({})
@@ -134,6 +157,14 @@ ApplicationWindow {
         return Image.AlignVCenter
     }
 
+    function appBackgroundPanelOverlayOpacity() {
+        const key = tone("dark", false) ? "panelAlphaDark" : "panelAlphaLight"
+        const value = Number(appBackgroundMap && appBackgroundMap[key] !== undefined ? appBackgroundMap[key] : 200)
+        if (!isFinite(value))
+            return 200 / 255
+        return Math.max(0, Math.min(255, value)) / 255
+    }
+
     function surfaceTone(key, fallback, alpha) {
         const value = tone(key, fallback)
         if (!appBackgroundActive())
@@ -147,18 +178,6 @@ ApplicationWindow {
         if (!isFinite(red) || !isFinite(green) || !isFinite(blue))
             return value
         return Qt.rgba(red / 255, green / 255, blue / 255, alpha)
-    }
-
-    function itemSceneX(item) {
-        if (!item || !root.contentItem)
-            return 0
-        return item.mapToItem(root.contentItem, 0, 0).x
-    }
-
-    function itemSceneY(item) {
-        if (!item || !root.contentItem)
-            return 0
-        return item.mapToItem(root.contentItem, 0, 0).y
     }
 
     function formatTransportTime(secondsValue) {
@@ -1455,37 +1474,9 @@ ApplicationWindow {
                     onWidthChanged: schedulePreviewPaneLayoutLog("preview_frame_width")
                     onHeightChanged: schedulePreviewPaneLayoutLog("preview_frame_height")
 
-                    Item {
-                        anchors.fill: parent
-                        clip: true
-                        visible: root.appBackgroundActive()
-
-                        Image {
-                            x: -root.itemSceneX(previewPaneFrame)
-                            y: -root.itemSceneY(previewPaneFrame)
-                            width: root.width
-                            height: root.height
-                            source: parent.visible ? String(root.appBackgroundMap.sourceUrl) : ""
-                            opacity: root.appBackgroundOpacity()
-                            fillMode: root.appBackgroundFillMode()
-                            horizontalAlignment: root.appBackgroundHorizontalAlignment()
-                            verticalAlignment: root.appBackgroundVerticalAlignment()
-                            smooth: true
-                            mipmap: true
-                            asynchronous: true
-                            cache: true
-                            layer.enabled: parent.visible && root.appBackgroundBlur() > 0
-                            layer.effect: MultiEffect {
-                                blurEnabled: true
-                                blurMax: 64
-                                blur: Math.min(1.0, root.appBackgroundBlur() / 100.0)
-                            }
-                        }
-                    }
-
                     Rectangle {
                         anchors.fill: parent
-                        color: surfaceTone("panelBg", "#f5f7fa", tone("dark", false) ? 0.72 : 0.78)
+                        color: surfaceTone("panelBg", "#f5f7fa", root.appBackgroundPanelOverlayOpacity())
                         visible: root.appBackgroundActive()
                     }
 
