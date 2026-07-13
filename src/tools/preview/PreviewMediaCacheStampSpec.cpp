@@ -11,6 +11,8 @@
 //      (reload unless BOTH the resolved path AND its content stamp are
 //      unchanged) makes the correct reload/skip decision as we simulate the
 //      in-app audio/video tools rewriting track.mp3 / bg.png in place.
+//   4. Track resolution recognizes the supported `track.*` audio candidates
+//      used by the timeline waveform and preview/export audio paths.
 //
 // This is the regression net for the 2026-06-03 fix that removed the path-only
 // resolved-path cache and switched the skip decision to a content stamp.
@@ -136,6 +138,48 @@ void testLiveResolution(const QString& dir)
           "sibling bg present -> resolved live");
 }
 
+void testSupportedTrackAudioCandidates(const QString& dir)
+{
+    const QString chart = QDir(dir).filePath(QStringLiteral("maidata.txt"));
+    check(writeFile(chart, QByteArray("&title=z\n")), "write candidate maidata.txt");
+
+    const QStringList candidates = miacode::chart_assets::trackCandidateFileNames();
+    check(candidates.contains(QStringLiteral("track.mp3")), "track candidates include mp3");
+    check(candidates.contains(QStringLiteral("track.wav")), "track candidates include wav");
+    check(candidates.contains(QStringLiteral("track.flac")), "track candidates include flac");
+    check(candidates.contains(QStringLiteral("track.ogg")), "track candidates include ogg");
+
+    for (const QString& name : candidates) {
+        QFile::remove(QDir(dir).filePath(name));
+    }
+
+    const QString wav = QDir(dir).filePath(QStringLiteral("track.wav"));
+    check(writeFile(wav, QByteArray("WAV-fake")), "add track.wav");
+    check(miacode::chart_assets::resolveTrackPath(chart) == QDir::cleanPath(wav),
+          "track.wav resolves when no track.mp3 exists");
+
+    const QString flac = QDir(dir).filePath(QStringLiteral("track.flac"));
+    QFile::remove(wav);
+    check(writeFile(flac, QByteArray("FLAC-fake")), "add track.flac");
+    check(miacode::chart_assets::resolveTrackPath(chart) == QDir::cleanPath(flac),
+          "track.flac resolves when earlier candidates are absent");
+
+    const QString ogg = QDir(dir).filePath(QStringLiteral("track.ogg"));
+    QFile::remove(flac);
+    check(writeFile(ogg, QByteArray("OGG-fake")), "add track.ogg");
+    check(miacode::chart_assets::resolveTrackPath(chart) == QDir::cleanPath(ogg),
+          "track.ogg resolves when earlier candidates are absent");
+
+    const QString mp3 = QDir(dir).filePath(QStringLiteral("track.mp3"));
+    check(writeFile(mp3, QByteArray("MP3-fake")), "add track.mp3");
+    check(miacode::chart_assets::resolveTrackPath(chart) == QDir::cleanPath(mp3),
+          "track.mp3 keeps priority when multiple track files exist");
+
+    for (const QString& name : candidates) {
+        QFile::remove(QDir(dir).filePath(name));
+    }
+}
+
 // Simulate the audio/video processing tools rewriting track.mp3 in place and
 // confirm the reload gate flips correctly across the whole lifecycle.
 void testInPlaceRewriteDecision(const QString& dir)
@@ -194,6 +238,7 @@ int main(int argc, char** argv)
 
     testStampSemantics(tmp.path());
     testLiveResolution(tmp.path());
+    testSupportedTrackAudioCandidates(tmp.path());
     testInPlaceRewriteDecision(tmp.path());
 
     QTextStream(stdout) << (g_failures == 0 ? "ALL PASS\n"

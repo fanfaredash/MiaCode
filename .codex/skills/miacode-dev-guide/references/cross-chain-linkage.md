@@ -174,7 +174,8 @@ Current lookup owners:
 
 Current convention:
 
-- chart-directory sibling `track.mp3`
+- chart-directory sibling track candidates from `miacode::chart_assets::trackCandidateFileNames()`:
+  `track.mp3`, `track.wav`, `track.flac`, `track.ogg`
 - optional environment override for some paths via `MIACODE_TRACK_PATH` on main-window export path
 
 If you support new track filenames or lookup rules, update all relevant owners and `assets-and-tools.md`.

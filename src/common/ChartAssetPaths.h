@@ -12,15 +12,37 @@ inline QString trackFileName()
     return QStringLiteral("track.mp3");
 }
 
+inline QStringList supportedTrackFileExtensions()
+{
+    return {
+        QStringLiteral("mp3"),
+        QStringLiteral("wav"),
+        QStringLiteral("flac"),
+        QStringLiteral("ogg"),
+    };
+}
+
+inline QStringList trackCandidateFileNames()
+{
+    QStringList candidates;
+    for (const QString& extension : supportedTrackFileExtensions()) {
+        candidates << QStringLiteral("track.%1").arg(extension);
+    }
+    return candidates;
+}
+
 inline QString resolveTrackPathForDirectory(const QString& directoryPath)
 {
     if (directoryPath.isEmpty()) {
         return QString();
     }
 
-    const QString path = QDir(directoryPath).filePath(trackFileName());
-    if (QFileInfo::exists(path)) {
-        return QDir::cleanPath(path);
+    const QDir directory(directoryPath);
+    for (const QString& name : trackCandidateFileNames()) {
+        const QString path = directory.filePath(name);
+        if (QFileInfo::exists(path)) {
+            return QDir::cleanPath(path);
+        }
     }
     return QString();
 }

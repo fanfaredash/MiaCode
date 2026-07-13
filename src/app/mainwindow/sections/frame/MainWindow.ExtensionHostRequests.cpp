@@ -1206,7 +1206,9 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             QJsonArray files;
             if (!currentFilePath_.isEmpty()) {
                 const QDir dir(QFileInfo(currentFilePath_).absolutePath());
-                for (const QString& name : {QStringLiteral("track.mp3"), QStringLiteral("track.wav"), QStringLiteral("bg.mp4"), QStringLiteral("pv.mp4"), QStringLiteral("bg.jpg"), QStringLiteral("bg.png")}) {
+                QStringList names = miacode::chart_assets::trackCandidateFileNames();
+                names << miacode::chart_assets::backgroundMediaCandidateFileNames(/*includeVideoCandidates=*/true);
+                for (const QString& name : names) {
                     const QString path = dir.filePath(name);
                     if (QFileInfo::exists(path)) {
                         files.append(path);
@@ -1919,9 +1921,12 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                     {QStringLiteral("size"), static_cast<double>(info.exists() ? info.size() : 0)},
                 };
             };
+            const QString resolvedTrackPath = miacode::chart_assets::resolveTrackPathForDirectory(chartFolder);
             return okValue(QJsonObject{
                 {QStringLiteral("chartFolder"), chartFolder},
-                {QStringLiteral("track"), fileInfoObject(chartFolder.isEmpty() ? QString() : QDir(chartFolder).filePath(QStringLiteral("track.mp3")))},
+                {QStringLiteral("track"), fileInfoObject(resolvedTrackPath.isEmpty() && !chartFolder.isEmpty()
+                    ? QDir(chartFolder).filePath(miacode::chart_assets::trackFileName())
+                    : resolvedTrackPath)},
                 {QStringLiteral("cover"), fileInfoObject(chartFolder.isEmpty() ? QString() : QDir(chartFolder).filePath(QStringLiteral("bg.jpg")))},
                 {QStringLiteral("background"), fileInfoObject(chartFolder.isEmpty() ? QString() : QDir(chartFolder).filePath(QStringLiteral("bg.jpg")))},
                 {QStringLiteral("durationSeconds"), previewTrackDurationSeconds_},
@@ -1963,7 +1968,10 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
             }
             const QString chartFolder = currentFilePath_.isEmpty() ? QString() : QFileInfo(currentFilePath_).absolutePath();
             if (id == QStringLiteral("track")) {
-                return okValue(chartFolder.isEmpty() ? QString() : QDir(chartFolder).filePath(QStringLiteral("track.mp3")));
+                const QString resolvedTrackPath = miacode::chart_assets::resolveTrackPathForDirectory(chartFolder);
+                return okValue(resolvedTrackPath.isEmpty() && !chartFolder.isEmpty()
+                    ? QDir(chartFolder).filePath(miacode::chart_assets::trackFileName())
+                    : resolvedTrackPath);
             }
             if (id == QStringLiteral("background")) {
                 return okValue(chartFolder.isEmpty() ? QString() : QDir(chartFolder).filePath(QStringLiteral("bg.jpg")));

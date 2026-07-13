@@ -46,7 +46,11 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
 Current chart-directory conventions:
 
 - chart text file: `maidata.txt`
-- music track: `track.mp3`
+- music track candidates, in lookup priority:
+  - `track.mp3`
+  - `track.wav`
+  - `track.flac`
+  - `track.ogg`
 - toolbox media backup: `track_bak.mp3`
 - background media candidates:
   - `bg.mp4`
@@ -64,7 +68,7 @@ Current chart-directory conventions:
   - `.miacode/waveform/`
   - stores hashed per-track waveform cache blobs used by widget and Quick timeline waveform rendering
   - cache validity is tied to normalized track path plus file size and last-modified timestamp
-  - Windows cache generation decodes through repo-local BASS so MP3 delay/padding matches the Windows preview BGM playback backend; non-Windows falls back to miniaudio
+  - Windows cache generation decodes through repo-local BASS so supported track containers share the Windows preview BGM playback backend; non-Windows falls back to miniaudio
 - autosave container root:
   - `.miacode/.autosave/<chart file>/`
   - contains `<chart file>.bak`, `history/*.bak`, and `autosave.json`
