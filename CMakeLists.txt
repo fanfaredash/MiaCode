@@ -1182,6 +1182,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/ui/UiTheme.cpp
             src/app/ui/ShortcutRegistry.h
             src/app/ui/ShortcutRegistry.cpp
+            src/common/InputShortcutGesture.h
+            src/common/InputShortcutGesture.cpp
             ${_miacode_log_core}
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
         INCLUDES src src/app/ui src/common src/extensions

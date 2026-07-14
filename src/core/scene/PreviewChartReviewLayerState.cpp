@@ -245,7 +245,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,
                 kMaimuriDxSimpleJudgeFadeInSeconds,
-                kMaimuriDxJudgeFadeOutStartSeconds,
+                isBreak ? kMaimuriDxBreakJudgeFadeOutStartSeconds : kMaimuriDxJudgeFadeOutStartSeconds,
                 kMaimuriDxSimpleJudgeFadeOutEndSeconds
             );
             simpleScale = maimuriDxSimpleJudgeScale(

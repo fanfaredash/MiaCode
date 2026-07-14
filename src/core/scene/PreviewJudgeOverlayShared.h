@@ -24,9 +24,12 @@ enum class SlideJudgeRenderGroup {
     SlideShapeOnly, // only the slide-shape "just" ring sprites
 };
 
-// Judge text alpha curve matches MajdataPlay JudgePerfect.anim m_Color.a on JudgeCPNormal (60 fps keys: hold 0..10, fade-out 10..16, lifetime gate 21). Scale-pop entrance and break flash are modelled below (see kMaimuriDxSimpleJudgeScalePop*/BreakFlash*).
+// Judge text alpha curve matches MajdataPlay JudgePerfect.anim m_Color.a on JudgeCPNormal
+// (60 fps keys: hold 0..10, fade-out 10..16, lifetime gate 21). Scale-pop entrance and break flash are modelled below.
 inline constexpr qreal kMaimuriDxJudgeLifetimeSeconds = static_cast<qreal>(63.0 / miacode::muri::kJudgeTps);
 inline constexpr qreal kMaimuriDxJudgeFadeOutStartSeconds = static_cast<qreal>(30.0 / miacode::muri::kJudgeTps);
+// Break/Critical Perfect text keeps the same total lifetime but holds full base alpha slightly longer.
+inline constexpr qreal kMaimuriDxBreakJudgeFadeOutStartSeconds = static_cast<qreal>(36.0 / miacode::muri::kJudgeTps);
 inline constexpr qreal kMaimuriDxSimpleJudgeFadeInSeconds = 0.0;
 inline constexpr qreal kMaimuriDxSimpleJudgeFadeOutEndSeconds = static_cast<qreal>(48.0 / miacode::muri::kJudgeTps);
 // Scale-pop entrance ports MajdataPlay JudgePerfect.anim m_LocalScale on JudgeObject
@@ -34,11 +37,11 @@ inline constexpr qreal kMaimuriDxSimpleJudgeFadeOutEndSeconds = static_cast<qrea
 inline constexpr qreal kMaimuriDxSimpleJudgeScalePopStartScale = 1.2;
 inline constexpr qreal kMaimuriDxSimpleJudgeScalePopEndScale = 1.0;
 inline constexpr qreal kMaimuriDxSimpleJudgeScalePopEndSeconds = static_cast<qreal>(12.0 / miacode::muri::kJudgeTps);
-// Break flash ports MajdataPlay JudgeBreak.anim m_Color.a on JudgeCPBreak: a 0<->1 triangle,
-// period 4 @60fps (= 12 @180tps), running until the word's fade-out end (16 @60fps = 48 @180tps).
+// Break flash is a slowed, plateaued pulse based on MajdataPlay JudgeBreak.anim m_Color.a on JudgeCPBreak,
+// running until the word's fade-out end (16 @60fps = 48 @180tps).
 // MiaCode has a single break word sprite (no separate outline overlay), so the flash modulates the
 // word's own alpha between a readable floor and 1.0 rather than compositing an additive overlay.
-inline constexpr qreal kMaimuriDxSimpleJudgeBreakFlashPeriodSeconds = static_cast<qreal>(12.0 / miacode::muri::kJudgeTps);
+inline constexpr qreal kMaimuriDxSimpleJudgeBreakFlashPeriodSeconds = static_cast<qreal>(24.0 / miacode::muri::kJudgeTps);
 inline constexpr qreal kMaimuriDxSimpleJudgeBreakFlashEndSeconds = static_cast<qreal>(48.0 / miacode::muri::kJudgeTps);
 inline constexpr qreal kMaimuriDxSimpleJudgeBreakFlashFloor = 0.45;
 // Slide-OK timing matches MajdataPlay StarOver.anim modern variant (60 fps keyframes: fade-in 0..2, hold 2..17, fade-out 17..25, lifetime gate 30).
