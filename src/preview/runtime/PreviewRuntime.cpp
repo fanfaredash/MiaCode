@@ -709,6 +709,12 @@ void PreviewRuntime::setTapJudgeTextDistance(PreviewTapJudgeTextDistance distanc
     update();
 }
 
+void PreviewRuntime::setJudgeEffectStyle(PreviewJudgeEffectStyle style)
+{
+    frameState_.render.judgeEffectStyle = style;
+    update();
+}
+
 void PreviewRuntime::setHoveredTouchPad(const QString& pad)
 {
     const QString normalizedPad = pad.trimmed().toUpper();

@@ -545,15 +545,29 @@ void populateJudgeEffectAssets(miacode::preview::scene::PreviewJudgeEffectAssets
         effect->tapBreakImage = buildJudgeEffectTapBreakFallbackImage();
     }
     effect->tapBreakSourceRect = nonTransparentBounds(effect->tapBreakImage);
+    effect->tapBreakDxImage = loadImageIfExists(judgeEffectResourcePath("judge_effect_tap_break_DX.png"));
+    if (effect->tapBreakDxImage.isNull()) {
+        effect->tapBreakDxImage = effect->tapBreakImage;
+    }
+    effect->tapBreakDxSourceRect = nonTransparentBounds(effect->tapBreakDxImage);
 
     QImage sustain = loadImageIfExists(judgeEffectResourcePath("judge_effect_hold_sustain_circle.png"));
     effect->holdSustainCircleImage = alphaTightenedSpriteImage(sustain, kJudgeEffectHoldSustainAlphaTightenGamma);
+    QImage sustainDx = loadImageIfExists(judgeEffectResourcePath("judge_effect_hold_sustain_circle_DX.png"));
+    effect->holdSustainCircleDxImage = alphaTightenedSpriteImage(sustainDx, kJudgeEffectHoldSustainAlphaTightenGamma);
+    if (effect->holdSustainCircleDxImage.isNull()) {
+        effect->holdSustainCircleDxImage = effect->holdSustainCircleImage;
+    }
     const QImage touchCircle = loadImageIfExists(judgeEffectResourcePath("judge_effect_touch_circle.png"));
     const QImage touchPart01 = loadImageIfExists(judgeEffectResourcePath("judge_effect_touch_part_01.png"));
     const QImage touchPart02 = loadImageIfExists(judgeEffectResourcePath("judge_effect_touch_part_02.png"));
+    const QImage touchPart02Dx = loadImageIfExists(judgeEffectResourcePath("judge_effect_touch_part_02_DX.png"));
     effect->touchCircleImage = touchCircle.isNull() ? QImage() : tintedSpriteImage(touchCircle, kJudgeEffectTouchCircleTint);
     effect->touchPart01Image = touchPart01.isNull() ? QImage() : tintedSpriteImage(touchPart01, kJudgeEffectTouchPartTint);
     effect->touchPart02Image = touchPart02.isNull() ? QImage() : tintedSpriteImage(touchPart02, kJudgeEffectTouchPartTint);
+    effect->touchPart02DxImage = touchPart02Dx.isNull()
+        ? effect->touchPart02Image
+        : touchPart02Dx.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     effect->fireworkColorBallImage = loadImageIfExists(judgeEffectResourcePath("judge_effect_firework_color_ball.png"));
     if (effect->fireworkColorBallImage.isNull()) {
         effect->fireworkColorBallImage = buildJudgeEffectFireworkColorBallFallbackImage();

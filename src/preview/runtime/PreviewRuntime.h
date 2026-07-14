@@ -172,6 +172,7 @@ public:
     void setNoteFlowSpeed(double flowSpeed);
     void setSlideEarlierSecondAndTextOnTop(bool enabled);
     void setTapJudgeTextDistance(PreviewTapJudgeTextDistance distance);
+    void setJudgeEffectStyle(PreviewJudgeEffectStyle style);
     void setHoveredTouchPad(const QString& pad);
     void setTouchPadAuthoringEnabled(bool enabled);
     void notifyTouchPadAuthoringClick(const QString& pad);

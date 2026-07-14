@@ -22,6 +22,11 @@ enum class PreviewTapJudgeTextDistance {
     Outer = 2,
 };
 
+enum class PreviewJudgeEffectStyle {
+    Standard = 0,
+    Starry = 1,
+};
+
 inline const char* tapJudgeTextDistanceToken(PreviewTapJudgeTextDistance distance)
 {
     switch (distance) {
@@ -45,4 +50,24 @@ inline PreviewTapJudgeTextDistance tapJudgeTextDistanceFromToken(const QString& 
         return PreviewTapJudgeTextDistance::Outer;
     }
     return PreviewTapJudgeTextDistance::Inner;
+}
+
+inline const char* judgeEffectStyleToken(PreviewJudgeEffectStyle style)
+{
+    switch (style) {
+    case PreviewJudgeEffectStyle::Starry:
+        return "starry";
+    case PreviewJudgeEffectStyle::Standard:
+    default:
+        return "standard";
+    }
+}
+
+inline PreviewJudgeEffectStyle judgeEffectStyleFromToken(const QString& token)
+{
+    const QString normalized = token.trimmed().toLower();
+    if (normalized == QLatin1String("starry") || normalized == QLatin1String("new") || normalized == QLatin1String("alt")) {
+        return PreviewJudgeEffectStyle::Starry;
+    }
+    return PreviewJudgeEffectStyle::Standard;
 }

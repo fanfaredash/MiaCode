@@ -428,6 +428,39 @@ void MainWindow::DialogsSection::buildSkinSettings(
         UiText::text(QStringLiteral("dialog.render_settings.video.skin")),
         openSkinDirectoryButton != nullptr ? comboActionRow(skinCombo, openSkinDirectoryButton) : skinCombo);
 
+    const auto judgeEffectStyleLabelForValue = [](PreviewJudgeEffectStyle style) -> QString {
+        switch (style) {
+        case PreviewJudgeEffectStyle::Starry:
+            return UiText::text(QStringLiteral("dialog.skin_settings.chart_effect.starry"));
+        case PreviewJudgeEffectStyle::Standard:
+        default:
+            return UiText::text(QStringLiteral("dialog.skin_settings.chart_effect.standard"));
+        }
+    };
+    auto* chartEffectCombo = miacode::ui::createDialogComboBox(root, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    for (const PreviewJudgeEffectStyle style : {
+             PreviewJudgeEffectStyle::Standard,
+             PreviewJudgeEffectStyle::Starry,
+         }) {
+        chartEffectCombo->addItem(judgeEffectStyleLabelForValue(style), static_cast<int>(style));
+    }
+    chartEffectCombo->setCurrentIndex(
+        qMax(0, chartEffectCombo->findData(static_cast<int>(owner_.previewJudgeEffectStyle_))));
+    miacode::ui::applyDialogComboBoxStyle(chartEffectCombo, 12);
+    connect(chartEffectCombo, qOverload<int>(&QComboBox::currentIndexChanged), root, [this, chartEffectCombo](int index) {
+        if (index < 0) {
+            return;
+        }
+        const auto style = static_cast<PreviewJudgeEffectStyle>(chartEffectCombo->itemData(index).toInt());
+        if (owner_.previewJudgeEffectStyle_ == style) {
+            return;
+        }
+        owner_.previewJudgeEffectStyle_ = style;
+        if (owner_.previewCanvas_ != nullptr) {
+            owner_.previewCanvas_->setJudgeEffectStyle(style);
+        }
+        owner_.savePortableState();
+    });
     const QString judgeLinePointLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.point"));
     const QString judgeLineLineLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.line"));
     const QString judgeLineAreaLabel = UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line.area"));
@@ -536,6 +569,9 @@ void MainWindow::DialogsSection::buildSkinSettings(
     skinForm->addRow(
         UiText::text(QStringLiteral("dialog.render_settings.gameplay.judge_line")),
         openJudgeLineDirectoryButton != nullptr ? comboActionRow(judgeLineCombo, openJudgeLineDirectoryButton) : judgeLineCombo);
+    skinForm->addRow(
+        UiText::text(QStringLiteral("dialog.skin_settings.chart_effect")),
+        chartEffectCombo);
 
     // ---- 字体: embedded HUD-font picker (combo + import/reset + live sample),
     //      the same controls the old "字体设置" sub-dialog hosted, inlined. ----
@@ -553,11 +589,17 @@ void MainWindow::DialogsSection::buildSkinSettings(
     if (refreshOut != nullptr) {
         const QPointer<QWidget> rootGuard(root);
         *refreshOut =
-            [rootGuard, refreshSkinCombo, refreshJudgeLineCombo, refreshHudFontSettings]() {
+            [this, rootGuard, refreshSkinCombo, refreshJudgeLineCombo, refreshHudFontSettings, chartEffectCombo]() {
                 if (rootGuard.isNull()) {
                     return;
                 }
                 refreshSkinCombo();
+                if (chartEffectCombo != nullptr) {
+                    const QSignalBlocker blocker(chartEffectCombo);
+                    chartEffectCombo->setCurrentIndex(qMax(
+                        0,
+                        chartEffectCombo->findData(static_cast<int>(owner_.previewJudgeEffectStyle_))));
+                }
                 refreshJudgeLineCombo();
                 if (refreshHudFontSettings) {
                     refreshHudFontSettings();

@@ -44,7 +44,7 @@ constexpr qreal kJudgeEffectTouchOuterRingRadiusUnits = 0.5;
 constexpr qreal kJudgeEffectTouchTriggerSecondQuantize = 1000000.0;
 constexpr quint64 kJudgeEffectTouchRotationHashMultiplier = 0x9e3779b97f4a7c15ULL;
 const QColor kJudgeEffectTouchCircleTint = QColor::fromRgbF(1.0, 0.995, 0.35, 1.0);
-const QColor kJudgeEffectTouchPartTint = QColor::fromRgb(0xF6, 0xC9, 0x04);
+const QColor kJudgeEffectTouchPartTint = QColor::fromRgb(0xF7, 0xEA, 0x63);
 const std::array<qreal, 5> kJudgeEffectTouchLayoutRotationDegrees = {{
     -45.0,
     -22.5,
@@ -183,6 +183,48 @@ QImage buildTouchJudgePartFallbackImage(qreal axisScaleX, qreal axisScaleY)
     return image;
 }
 
+QImage buildTouchJudgeFivePointStarImage()
+{
+    constexpr int kSize = 192;
+    QImage image(kSize, kSize, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+
+    const QPointF center(kSize / 2.0, kSize / 2.0);
+    const qreal outer = 48.0;
+    const qreal inner = outer * 0.44;
+    QPainterPath star;
+    for (int pointIndex = 0; pointIndex < 10; ++pointIndex) {
+        const qreal radius = (pointIndex % 2 == 0) ? outer : inner;
+        const qreal radians = qDegreesToRadians(-90.0 + static_cast<qreal>(pointIndex) * 36.0);
+        const QPointF point(
+            center.x() + qCos(radians) * radius,
+            center.y() + qSin(radians) * radius
+        );
+        if (pointIndex == 0) {
+            star.moveTo(point);
+        } else {
+            star.lineTo(point);
+        }
+    }
+    star.closeSubpath();
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    QColor glow = kJudgeEffectTouchPartTint;
+    glow.setAlphaF(kJudgeEffectTouchSparkleGlowAlphaScale);
+    QTransform grow;
+    grow.translate(center.x(), center.y());
+    grow.scale(kJudgeEffectTouchSparkleGlowScale, kJudgeEffectTouchSparkleGlowScale);
+    grow.translate(-center.x(), -center.y());
+    painter.setBrush(glow);
+    painter.drawPath(grow.map(star));
+    painter.setBrush(kJudgeEffectTouchPartTint);
+    painter.drawPath(star);
+    painter.end();
+    return image;
+}
+
 const QImage& fallbackTouchJudgeCircleImage()
 {
     static const QImage image = buildTouchJudgeCircleFallbackImage();
@@ -201,6 +243,12 @@ const QImage& fallbackTouchJudgePart01Image()
 const QImage& fallbackTouchJudgePart02Image()
 {
     static const QImage image = buildTouchJudgePartFallbackImage(1.0, 1.0);
+    return image;
+}
+
+const QImage& touchJudgeFivePointStarImage()
+{
+    static const QImage image = buildTouchJudgeFivePointStarImage();
     return image;
 }
 

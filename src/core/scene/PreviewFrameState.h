@@ -147,10 +147,14 @@ struct PreviewJudgeEffectAssets {
     QRectF tapSourceRect;
     QImage tapBreakImage;
     QRectF tapBreakSourceRect;
+    QImage tapBreakDxImage;
+    QRectF tapBreakDxSourceRect;
     QImage holdSustainCircleImage;
+    QImage holdSustainCircleDxImage;
     QImage touchCircleImage;
     QImage touchPart01Image;
     QImage touchPart02Image;
+    QImage touchPart02DxImage;
     QImage fireworkColorBallImage;
     QRectF fireworkColorBallSourceRect;
 };
@@ -206,6 +210,7 @@ struct PreviewRenderState {
     double touchFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     bool slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     PreviewTapJudgeTextDistance tapJudgeTextDistance = PreviewTapJudgeTextDistance::Inner;
+    PreviewJudgeEffectStyle judgeEffectStyle = PreviewJudgeEffectStyle::Standard;
     bool showDebugInfo = false;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;

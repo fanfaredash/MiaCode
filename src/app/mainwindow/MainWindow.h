@@ -184,6 +184,7 @@ public:
         double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
         double touchFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
         PreviewTapJudgeTextDistance tapJudgeTextDistance = PreviewTapJudgeTextDistance::Inner;
+        PreviewJudgeEffectStyle judgeEffectStyle = PreviewJudgeEffectStyle::Standard;
         int skinLoadWaitMs = 2000;
     };
 

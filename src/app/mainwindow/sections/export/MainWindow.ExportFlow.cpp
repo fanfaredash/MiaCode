@@ -352,6 +352,7 @@ void MainWindow::ExportSection::applySharedExportTaskSettings(const VideoExportT
     owner_.previewTouchFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(task.touchFlowSpeed);
     owner_.previewSlideEarlierSecondAndTextOnTop_ = task.slideEarlierSecondAndTextOnTop;
     owner_.previewTapJudgeTextDistance_ = task.tapJudgeTextDistance;
+    owner_.previewJudgeEffectStyle_ = task.judgeEffectStyle;
 
     owner_.applyPreviewStageMediaRouteVisualSettings();
     if (owner_.previewCanvas_ != nullptr) {
@@ -372,6 +373,7 @@ void MainWindow::ExportSection::applySharedExportTaskSettings(const VideoExportT
         owner_.previewCanvas_->setTouchFlowSpeed(owner_.previewTouchFlowSpeed_);
         owner_.previewCanvas_->setSlideEarlierSecondAndTextOnTop(owner_.previewSlideEarlierSecondAndTextOnTop_);
         owner_.previewCanvas_->setTapJudgeTextDistance(owner_.previewTapJudgeTextDistance_);
+        owner_.previewCanvas_->setJudgeEffectStyle(owner_.previewJudgeEffectStyle_);
     }
 
     owner_.savePortableState();
@@ -449,6 +451,7 @@ VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTask(int difficul
     task.touchFlowSpeed = owner_.previewTouchFlowSpeed_;
     task.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
     task.tapJudgeTextDistance = owner_.previewTapJudgeTextDistance_;
+    task.judgeEffectStyle = owner_.previewJudgeEffectStyle_;
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = unifiedExportEndSecond;
     task.fullRangeExport = true;
@@ -583,6 +586,7 @@ void MainWindow::ExportSection::onExportPreviewVideo(int difficultyId)
         requestedTask.outlineVariant = owner_.previewOutlineVariant_;
         requestedTask.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
         requestedTask.tapJudgeTextDistance = owner_.previewTapJudgeTextDistance_;
+        requestedTask.judgeEffectStyle = owner_.previewJudgeEffectStyle_;
         requestedTask.centerDisplayMode = owner_.previewCenterDisplayMode_;
         requestedTask.muriRenderOptions = owner_.muriRenderOptions_;
         this->applySharedExportTaskSettings(requestedTask);
@@ -726,6 +730,7 @@ VideoExportDialog* MainWindow::ExportSection::buildConfiguredVideoExportDialog(
             shared.tapFlowSpeed = owner_.previewTapFlowSpeed_;
             shared.touchFlowSpeed = owner_.previewTouchFlowSpeed_;
             shared.tapJudgeTextDistance = owner_.previewTapJudgeTextDistance_;
+            shared.judgeEffectStyle = owner_.previewJudgeEffectStyle_;
             return shared;
         },
         parent
@@ -976,6 +981,7 @@ void MainWindow::ExportSection::handleEmbeddedExportConfirmed()
     requestedTask.outlineVariant = owner_.previewOutlineVariant_;
     requestedTask.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
     requestedTask.tapJudgeTextDistance = owner_.previewTapJudgeTextDistance_;
+    requestedTask.judgeEffectStyle = owner_.previewJudgeEffectStyle_;
     requestedTask.centerDisplayMode = owner_.previewCenterDisplayMode_;
     requestedTask.muriRenderOptions = owner_.muriRenderOptions_;
     this->applySharedExportTaskSettings(requestedTask);
@@ -1105,6 +1111,7 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
     task.touchFlowSpeed = owner_.previewTouchFlowSpeed_;
     task.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
     task.tapJudgeTextDistance = owner_.previewTapJudgeTextDistance_;
+    task.judgeEffectStyle = owner_.previewJudgeEffectStyle_;
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = 0.0;
     task.fullRangeExport = true;

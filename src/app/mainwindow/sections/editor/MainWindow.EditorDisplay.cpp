@@ -672,6 +672,9 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     state_.previewTapJudgeTextDistance_ = tapJudgeTextDistanceFromToken(
         preview.value(QStringLiteral("tap_judge_text_distance")).toString(
             QString::fromLatin1(tapJudgeTextDistanceToken(state_.previewTapJudgeTextDistance_))));
+    state_.previewJudgeEffectStyle_ = judgeEffectStyleFromToken(
+        preview.value(QStringLiteral("judge_effect_style")).toString(
+            QString::fromLatin1(judgeEffectStyleToken(state_.previewJudgeEffectStyle_))));
     if (preview.value("skin_variant").isString()) {
         const QString skinValue = preview.value("skin_variant").toString().trimmed();
         const QString normalizedSkinValue = skinValue.toLower();
@@ -886,6 +889,10 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert(
         "tap_judge_text_distance",
         QString::fromLatin1(tapJudgeTextDistanceToken(state_.previewTapJudgeTextDistance_))
+    );
+    preview.insert(
+        "judge_effect_style",
+        QString::fromLatin1(judgeEffectStyleToken(state_.previewJudgeEffectStyle_))
     );
     preview.insert("skin_variant", owner_.previewSkinVariantStorageValue());
     if (state_.previewIntroSoundFileName_.trimmed().isEmpty()) {

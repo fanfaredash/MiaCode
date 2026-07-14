@@ -510,6 +510,7 @@
         double previewTouchFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
         bool previewSlideEarlierSecondAndTextOnTop_ = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
         PreviewTapJudgeTextDistance previewTapJudgeTextDistance_ = PreviewTapJudgeTextDistance::Inner;
+        PreviewJudgeEffectStyle previewJudgeEffectStyle_ = PreviewJudgeEffectStyle::Standard;
         PreviewSkinVariant previewSkinVariant_ = PreviewSkinVariant::Standard;
         QString previewSkinDirectoryName_ = QStringLiteral("skinSD");
         QString previewIntroSoundFileName_;
@@ -937,6 +938,7 @@
     double& previewTouchFlowSpeed_ = state_.previewTouchFlowSpeed_;
     bool& previewSlideEarlierSecondAndTextOnTop_ = state_.previewSlideEarlierSecondAndTextOnTop_;
     PreviewTapJudgeTextDistance& previewTapJudgeTextDistance_ = state_.previewTapJudgeTextDistance_;
+    PreviewJudgeEffectStyle& previewJudgeEffectStyle_ = state_.previewJudgeEffectStyle_;
     PreviewSkinVariant& previewSkinVariant_ = state_.previewSkinVariant_;
     QString& previewSkinDirectoryName_ = state_.previewSkinDirectoryName_;
     QString& previewIntroSoundFileName_ = state_.previewIntroSoundFileName_;

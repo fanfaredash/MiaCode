@@ -35,6 +35,7 @@ struct VideoExportSnapshot {
     double touchFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     bool slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     PreviewTapJudgeTextDistance tapJudgeTextDistance = PreviewTapJudgeTextDistance::Inner;
+    PreviewJudgeEffectStyle judgeEffectStyle = PreviewJudgeEffectStyle::Standard;
     MuriRenderOptions muriRenderOptions;
     double staticTapOnSlideThresholdSeconds =
         static_cast<double>(miacode::muri::kStaticTapOnSlideThresholdDefaultMs) / 1000.0;

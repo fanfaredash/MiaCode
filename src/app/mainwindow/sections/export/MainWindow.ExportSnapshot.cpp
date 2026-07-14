@@ -621,6 +621,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.touchFlowSpeed = requestedTask.touchFlowSpeed;
     built.slideEarlierSecondAndTextOnTop = requestedTask.slideEarlierSecondAndTextOnTop;
     built.tapJudgeTextDistance = requestedTask.tapJudgeTextDistance;
+    built.judgeEffectStyle = requestedTask.judgeEffectStyle;
     built.muriRenderOptions = requestedTask.muriRenderOptions;
     built.staticTapOnSlideThresholdSeconds = requestedTask.staticTapOnSlideThresholdSeconds;
     built.exportStartSeconds = requestedTask.exportStartSeconds;
@@ -831,6 +832,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
     built.touchFlowSpeed = requestedTask.touchFlowSpeed;
     built.slideEarlierSecondAndTextOnTop = requestedTask.slideEarlierSecondAndTextOnTop;
     built.tapJudgeTextDistance = requestedTask.tapJudgeTextDistance;
+    built.judgeEffectStyle = requestedTask.judgeEffectStyle;
     built.muriRenderOptions = requestedTask.muriRenderOptions;
     built.staticTapOnSlideThresholdSeconds = requestedTask.staticTapOnSlideThresholdSeconds;
     built.exportStartSeconds = 0.0;
@@ -1048,6 +1050,7 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     task.touchFlowSpeed = request.touchFlowSpeed;
     task.slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     task.tapJudgeTextDistance = request.tapJudgeTextDistance;
+    task.judgeEffectStyle = request.judgeEffectStyle;
     task.exportStartSeconds = exportStartSeconds;
     task.contentDurationSeconds = contentDurationSeconds;
     task.fullRangeExport = fullRangeExport;

@@ -69,6 +69,7 @@ bool VideoExportQuickRenderBackend::bootstrap(
     frameState_.render.touchFlowSpeed = normalizedFlowSpeed(task.touchFlowSpeed);
     frameState_.render.slideEarlierSecondAndTextOnTop = task.slideEarlierSecondAndTextOnTop;
     frameState_.render.tapJudgeTextDistance = task.tapJudgeTextDistance;
+    frameState_.render.judgeEffectStyle = task.judgeEffectStyle;
     frameState_.render.showDebugInfo = false;
     frameState_.render.showTimestamp = task.showTimestamp;
     frameState_.render.showObjectStatsHud = task.showObjectStatsHud;
