@@ -63,12 +63,11 @@ qreal slideHeadRotateSpeedDegreesPerSecond(const TimelineNoteMarker& marker)
         return 0.0;
     }
 
-    const qreal totalLen = static_cast<qreal>(marker.slideNativeTrackLength);
     const qreal totalDuration = totalSlideTraceDurationSeconds(marker);
-    if (totalLen <= 0.0 || totalDuration <= 0.0) {
-        return 0.0;
-    }
-    return qMax<qreal>(-4.500 * totalLen / totalDuration, -1080.0);
+    return -static_cast<qreal>(
+        miacode::preview_gameplay::previewSlideHeadRotationSpeedDegreesPerSecond(
+            marker.slideNativeTrackLength,
+            totalDuration));
 }
 
 QHash<QString, SlideHeadRepresentative> buildSlideHeadRepresentatives(

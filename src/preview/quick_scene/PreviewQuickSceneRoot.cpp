@@ -1142,26 +1142,6 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         });
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
-        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::JudgeLayer),
-        "judge_effect",
-        &layerProfileStats_,
-        [&](QSGNode* oldChild) {
-            return judgeEffectLayer_.updateNode(
-                oldChild,
-                *state,
-                &preparedCache_,
-                &judgeEffectCursor_,
-                renderSize,
-                window(),
-                textures);
-        });
-    applyWindowCounts(
-        "judge_effect",
-        preparedCache_.judgeEffectLayer().entries.size(),
-        judgeEffectCursor_.activePreparedIndices.size()
-    );
-    updateLayerSlotProfiled(
-        layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::JudgeTouchLayer),
         "touch_judge",
         &layerProfileStats_,
@@ -1231,6 +1211,26 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         "touch_hold",
         preparedCache_.touchHoldLayer().entries.size(),
         touchHoldCursor_.activePreparedIndices.size()
+    );
+    updateLayerSlotProfiled(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::JudgeLayer),
+        "judge_effect",
+        &layerProfileStats_,
+        [&](QSGNode* oldChild) {
+            return judgeEffectLayer_.updateNode(
+                oldChild,
+                *state,
+                &preparedCache_,
+                &judgeEffectCursor_,
+                renderSize,
+                window(),
+                textures);
+        });
+    applyWindowCounts(
+        "judge_effect",
+        preparedCache_.judgeEffectLayer().entries.size(),
+        judgeEffectCursor_.activePreparedIndices.size()
     );
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),

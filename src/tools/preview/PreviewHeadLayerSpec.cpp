@@ -3,6 +3,7 @@
 #include <QRectF>
 #include <QTextStream>
 
+#include "common/PreviewGameplayConfig.h"
 #include "core/scene/PreviewActiveMarkerView.h"
 #include "core/scene/PreviewHeadLayerState.h"
 #include "core/scene/PreviewOpacityCurves.h"
@@ -61,12 +62,11 @@ qreal totalSlideTraceDurationSeconds(const TimelineNoteMarker& marker)
 
 qreal slideHeadRotateSpeedDegreesPerSecond(const TimelineNoteMarker& marker)
 {
-    const qreal totalLen = static_cast<qreal>(marker.slideNativeTrackLength);
     const qreal totalDuration = totalSlideTraceDurationSeconds(marker);
-    if (totalLen <= 0.0 || totalDuration <= 0.0) {
-        return 0.0;
-    }
-    return qMax<qreal>(-4.500 * totalLen / totalDuration, -1080.0);
+    return -static_cast<qreal>(
+        miacode::preview_gameplay::previewSlideHeadRotationSpeedDegreesPerSecond(
+            marker.slideNativeTrackLength,
+            totalDuration));
 }
 
 qreal slideHeadFallRotationDegrees(
@@ -218,6 +218,70 @@ bool verifySameHeadBranchesCollapseToFastestRotation(QTextStream& err)
         return false;
     }
 
+    return true;
+}
+
+bool verifyCalibratedSlideHeadRotation(QTextStream& err)
+{
+    struct RotationCase {
+        int slideImageCount;
+        int expectedRoundedFrames;
+    };
+    const RotationCase cases[] = {
+        {18, 16},
+        {23, 14},
+        {30, 12},
+        {39, 10},
+    };
+
+    for (const RotationCase& testCase : cases) {
+        const double nativeTrackLength = static_cast<double>(testCase.slideImageCount + 1);
+        const double speed =
+            miacode::preview_gameplay::previewSlideHeadRotationSpeedDegreesPerSecond(
+                nativeTrackLength,
+                0.5);
+        const int roundedFrames = qRound(
+            miacode::preview_gameplay::kSlideHeadRotationReferenceDegrees
+            * miacode::preview_gameplay::kPreviewTimingFramesPerSecond
+            / speed);
+        if (!require(
+                roundedFrames == testCase.expectedRoundedFrames,
+                QStringLiteral("%1 slide images rotate 72 degrees in %2 rounded frames, got %3")
+                    .arg(testCase.slideImageCount)
+                    .arg(testCase.expectedRoundedFrames)
+                    .arg(roundedFrames),
+                err)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool verifyCalibratedTapTiming(QTextStream& err)
+{
+    struct TimingCase {
+        qreal flowSpeed;
+        qreal expectedLifecycleFrames;
+    };
+    const TimingCase cases[] = {
+        {7.5, 66.0},
+        {8.0, 62.0},
+    };
+
+    for (const TimingCase& testCase : cases) {
+        const PreviewTapTiming timing =
+            miacode::preview::scene::previewTapTimingForFlowSpeed(testCase.flowSpeed);
+        const qreal lifecycleFrames =
+            timing.lifecycleDurationSeconds
+            * miacode::preview_gameplay::kPreviewTimingFramesPerSecond;
+        if (!requireNear(
+                lifecycleFrames,
+                testCase.expectedLifecycleFrames,
+                QStringLiteral("tap speed %1 lifecycle frames").arg(testCase.flowSpeed),
+                err)) {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -616,6 +680,12 @@ int main(int argc, char* argv[])
     QTextStream out(stdout);
 
     if (!verifySameHeadBranchesCollapseToFastestRotation(err)) {
+        return 1;
+    }
+    if (!verifyCalibratedSlideHeadRotation(err)) {
+        return 1;
+    }
+    if (!verifyCalibratedTapTiming(err)) {
         return 1;
     }
     if (!verifyHeadRenderAssetCacheReuseAndInvalidation(err)) {
