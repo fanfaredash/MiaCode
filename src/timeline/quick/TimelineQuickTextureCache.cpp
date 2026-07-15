@@ -1,10 +1,21 @@
 #include "timeline/quick/TimelineQuickTextureCache.h"
 
+#include <QDir>
 #include <QQuickWindow>
 #include <QSGTexture>
 #include <QStringList>
 
 #include "timeline/quick/TimelineQuickLayerUtils.h"
+
+namespace {
+
+QString normalizedSkinDirectory(const QString& skinDirectory)
+{
+    const QString trimmed = skinDirectory.trimmed();
+    return trimmed.isEmpty() ? QString() : QDir::cleanPath(trimmed);
+}
+
+}  // namespace
 
 TimelineQuickTextureCache::~TimelineQuickTextureCache()
 {
@@ -18,7 +29,7 @@ void TimelineQuickTextureCache::setWindow(QQuickWindow* window)
     }
     clear();
     window_ = window;
-    noteAssets_ = miacode::timeline::loadTimelineNoteAssets();
+    noteAssets_ = miacode::timeline::loadTimelineNoteAssets(skinDirectory_);
 }
 
 void TimelineQuickTextureCache::clear()
@@ -47,6 +58,22 @@ void TimelineQuickTextureCache::invalidateDprDependent()
     textures_.clear();
     transformedPixmaps_.clear();
     holdPixmapParts_.clear();
+}
+
+bool TimelineQuickTextureCache::requiresReset(QQuickWindow* window, const QString& skinDirectory) const
+{
+    return window_ != window || skinDirectory_ != normalizedSkinDirectory(skinDirectory);
+}
+
+void TimelineQuickTextureCache::setSkinDirectory(const QString& skinDirectory)
+{
+    const QString normalized = normalizedSkinDirectory(skinDirectory);
+    if (skinDirectory_ == normalized) {
+        return;
+    }
+    clear();
+    skinDirectory_ = normalized;
+    noteAssets_ = miacode::timeline::loadTimelineNoteAssets(skinDirectory_);
 }
 
 QSGTexture* TimelineQuickTextureCache::textureForKey(const QString& key, const QImage& image)

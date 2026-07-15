@@ -25,6 +25,10 @@ constexpr qreal kJudgeEffectFireworkColorBallBaseWidthUnits = 5.12;
 // old +20% brightness gain is dropped so every alpha tracks the reference 1:1.
 constexpr qreal kJudgeEffectFireworkStripeAlphaPeak = 0.589;
 constexpr qreal kJudgeEffectFireworkStripeAlphaHoldSeconds = 0.5;
+constexpr qreal kJudgeEffectFireworkColorBallBigAlphaEndSeconds =
+    kJudgeEffectFireworkDurationSeconds * 0.75;
+constexpr qreal kJudgeEffectFireworkColorBallAlphaEndSeconds =
+    kJudgeEffectFireworkColorBallBigAlphaEndSeconds * 0.5;
 constexpr int kJudgeEffectFireworkStepRotationSegmentCount = 3;
 constexpr qreal kJudgeEffectFireworkStepRotationDegrees = 24.0;
 constexpr qreal kFireworkInnerLB = 0.018;
@@ -69,22 +73,24 @@ const std::array<ScalarCurveKey, 3> kJudgeEffectFireworkColorBallBigScaleKeys = 
     {1.3333334, 1.15},
 }};
 
-// fire.anim ColorBall (small) m_Color.a: holds 0.9 until 0.1 s, then 0.1@0.2 -> 0@0.3.
+// fire.anim ColorBall (small) m_Color.a, time-stretched to half of ColorBallBig's alpha lifetime:
+// keeps the source ratios (hold at 1/3, near-gone at 2/3, gone at end).
 const std::array<ScalarCurveKey, 5> kJudgeEffectFireworkColorBallAlphaKeys = {{
     {0.0, 0.9},
-    {0.1, 0.9},
-    {0.2, 0.1},
-    {0.3, 0.0},
-    {1.3333334, 0.0},
+    {kJudgeEffectFireworkColorBallAlphaEndSeconds / 3.0, 0.9},
+    {kJudgeEffectFireworkColorBallAlphaEndSeconds * 2.0 / 3.0, 0.1},
+    {kJudgeEffectFireworkColorBallAlphaEndSeconds, 0.0},
+    {kJudgeEffectFireworkDurationSeconds, 0.0},
 }};
 
-// fire.anim ColorBallBig m_Color.a: holds 0.5 until 0.0667 s, then 0.1@0.16667 -> 0@0.8833.
+// ColorBallBig m_Color.a, time-stretched to 75% of the firework stripe lifetime:
+// keeps the source ratios (0.0667/0.8833 hold and 0.1667/0.8833 near-gone).
 const std::array<ScalarCurveKey, 5> kJudgeEffectFireworkColorBallBigAlphaKeys = {{
-    {0.0, 0.5},
-    {0.06666667, 0.5},
-    {0.16666667, 0.1},
-    {0.8833333, 0.0},
-    {1.3333334, 0.0},
+    {0.0, 0.9},
+    {kJudgeEffectFireworkColorBallBigAlphaEndSeconds * 0.1, 0.9},
+    {0.2, 0.3},
+    {0.5, 0.0},
+    {kJudgeEffectFireworkDurationSeconds, 0.0},
 }};
 
 template <std::size_t N>

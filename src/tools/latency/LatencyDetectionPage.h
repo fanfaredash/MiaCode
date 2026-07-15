@@ -77,7 +77,6 @@ private:
     void ensureAudioEnvelopeReady();
     void clearAudioEnvelopeCache();
     QString formatPosition(double seconds) const;
-    QString localizedText(const QString& zh, const QString& en) const;
     QString currentTrackPath() const;
     double documentOffsetSeconds() const;
     double documentWholeBpm() const;

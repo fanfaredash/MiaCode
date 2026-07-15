@@ -218,6 +218,10 @@ int main(int argc, char** argv)
                 QStringLiteral("runtime anchor repro detail names the affected tap lane"));
             expect(diagnostic->detail.contains(QStringLiteral("will early-judge")),
                 QStringLiteral("runtime anchor repro uses definite slide-head-tap wording for muri"));
+            expect(diagnostic->detailKind == MuriDetailKind::SlideHeadJumpStartEarlyJudge,
+                QStringLiteral("runtime anchor repro stores structured slide-head detail kind"));
+            expect(diagnostic->detailArgs.right == QStringLiteral("tap 8"),
+                QStringLiteral("runtime anchor repro stores affected tap as structured detail arg"));
         }
 
         if (const MuriStaticReference* reference =
@@ -509,6 +513,10 @@ int main(int argc, char** argv)
                 QStringLiteral("head-star tap-on-slide repro visible detail names the affected star lane"));
             expect(entry->rawDetail.contains(QStringLiteral("trajectory may collide with")),
                 QStringLiteral("head-star tap-on-slide repro visible detail uses warning wording when severity is warning"));
+            expect(entry->detailKind == MuriDetailKind::TapOnSlideCollide,
+                QStringLiteral("head-star tap-on-slide repro visible entry stores structured collision kind"));
+            expect(entry->detailArgs.alert == MuriAlertLevel::Warning,
+                QStringLiteral("head-star tap-on-slide repro visible entry keeps warning in structured args"));
             expect(entry->line == 2 && entry->col == 7,
                 QStringLiteral("head-star tap-on-slide repro visible entry anchors to the affected helper star"));
         }
@@ -724,6 +732,44 @@ int main(int argc, char** argv)
                 }
             }
         }
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(180)\n"
+                           "{16} 1^2^3^4[8:1],3,4,, ,,,, ,,,, ,,,, \n"
+                           "{16} 1>4[8:1],3,4,, ,,,, ,,,, ,,,, \n"
+                           "{16} 1^2^3[8:1],3,,, ,,,, ,,,, ,,,,  \n"
+                           "{16} 1>3[8:1],3,,, ,,,, ,,,, ,,,,\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("chained-vs-direct slide-too-fast sample parses"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::SlideTooFast) == 2,
+            QStringLiteral("chained-vs-direct slide-too-fast sample matches MaiMuriDX dynamic count"));
+        expect(countStaticReferences(analyzed.staticReferences, MuriKind::SlideTooFast) == 0,
+            QStringLiteral("chained-vs-direct slide-too-fast sample has no static slide-too-fast references"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::SlideTooFast) == 2,
+            QStringLiteral("chained-vs-direct slide-too-fast sample keeps two visible entries"));
+
+        bool sawLine2 = false;
+        bool sawLine3 = false;
+        bool sawLine4Or5 = false;
+        bool sawPerfectToleranceDetail = false;
+        for (const MuriDiagnostic& diagnostic : analyzed.report.diagnostics) {
+            if (diagnostic.kind != MuriKind::SlideTooFast) {
+                continue;
+            }
+            sawLine2 = sawLine2 || diagnostic.line == 2;
+            sawLine3 = sawLine3 || diagnostic.line == 3;
+            sawLine4Or5 = sawLine4Or5 || diagnostic.line == 4 || diagnostic.line == 5;
+            sawPerfectToleranceDetail = sawPerfectToleranceDetail
+                || (diagnostic.detail.contains(QStringLiteral("before standard timing"))
+                    && diagnostic.detail.contains(QStringLiteral("Perfect tolerance"))
+                    && !diagnostic.detailArgs.perfectWindowText.isEmpty());
+        }
+        expect(sawLine2, QStringLiteral("chained-vs-direct slide-too-fast sample reports 1^2^3^4"));
+        expect(sawLine3, QStringLiteral("chained-vs-direct slide-too-fast sample reports 1>4"));
+        expect(!sawLine4Or5, QStringLiteral("chained-vs-direct slide-too-fast sample does not report 1^2^3 or 1>3"));
+        expect(sawPerfectToleranceDetail,
+            QStringLiteral("chained-vs-direct slide-too-fast sample explains early timing and Perfect tolerance"));
     }
 
     {

@@ -46,6 +46,8 @@ public:
     void invalidateAll();
     void invalidateThemeDependent();
     void invalidateDprDependent();
+    bool requiresReset(QQuickWindow* window, const QString& skinDirectory) const;
+    void setSkinDirectory(const QString& skinDirectory);
     QSGTexture* textureForKey(const QString& key, const QImage& image);
     QSGTexture* textureForPixmapKey(const QString& key, const QPixmap& pixmap);
     TimelineQuickTextureHandle textTexture(const miacode::timeline::TimelineSceneTextLabel& label);
@@ -93,6 +95,7 @@ private:
 
     QQuickWindow* window_ = nullptr;
     miacode::timeline::TimelineNoteAssetSet noteAssets_;
+    QString skinDirectory_;
     QHash<QString, QSGTexture*> textures_;
     QHash<QString, QPixmap> transformedPixmaps_;
     QHash<QString, HoldPixmapPartsCacheEntry> holdPixmapParts_;

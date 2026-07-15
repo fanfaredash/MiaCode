@@ -12,12 +12,17 @@
 class QCheckBox;
 class QLineEdit;
 class QListWidget;
+class QComboBox;
 class QMenu;
 class QSlider;
 class QLabel;
 class QToolButton;
 class QWidget;
 class QCheckBox;
+
+namespace miacode::ui {
+class EditableValueLabel;
+}
 
 class BatchVideoExportDialog : public QDialog
 {
@@ -72,25 +77,20 @@ private:
 
     QListWidget* chartDirectoryList_ = nullptr;
     QLineEdit* outputDirectoryEdit_ = nullptr;
-    QToolButton* resolutionButton_ = nullptr;
-    QMenu* resolutionMenu_ = nullptr;
+    QComboBox* resolutionCombo_ = nullptr;
     QSize selectedResolution_ = QSize();
-    QToolButton* fpsButton_ = nullptr;
-    QMenu* fpsMenu_ = nullptr;
+    QComboBox* fpsCombo_ = nullptr;
     int selectedFps_ = 60;
-    QToolButton* audioBitrateButton_ = nullptr;
-    QMenu* audioBitrateMenu_ = nullptr;
+    QComboBox* audioBitrateCombo_ = nullptr;
     int selectedAudioBitrateKbps_ = 192;
-    QToolButton* presetButton_ = nullptr;
-    QMenu* presetMenu_ = nullptr;
+    QComboBox* presetCombo_ = nullptr;
     VideoExportPreset selectedPreset_ = VideoExportPreset::HighQuality;
     QCheckBox* showTimestampCheck_ = nullptr;
     QCheckBox* showObjectStatsCheck_ = nullptr;
     QCheckBox* showChartInfoCheck_ = nullptr;
     QCheckBox* addIntroCheck_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
-    QToolButton* backgroundScaleModeButton_ = nullptr;
-    QMenu* backgroundScaleModeMenu_ = nullptr;
+    QComboBox* backgroundScaleModeCombo_ = nullptr;
     PreviewBackgroundScaleMode selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     QLineEdit* tapFlowSpeedEdit_ = nullptr;
     QLineEdit* touchFlowSpeedEdit_ = nullptr;
@@ -99,9 +99,9 @@ private:
     QSlider* brightnessOuterSlider_ = nullptr;
     QSlider* brightnessInnerSlider_ = nullptr;
     QSlider* layoutSquareScaleSlider_ = nullptr;
-    QLabel* brightnessOuterValueLabel_ = nullptr;
-    QLabel* brightnessInnerValueLabel_ = nullptr;
-    QLabel* layoutSquareScaleValueLabel_ = nullptr;
+    miacode::ui::EditableValueLabel* brightnessOuterValueLabel_ = nullptr;
+    miacode::ui::EditableValueLabel* brightnessInnerValueLabel_ = nullptr;
+    miacode::ui::EditableValueLabel* layoutSquareScaleValueLabel_ = nullptr;
     QList<QCheckBox*> difficultyChecks_;
     QList<int> difficultyIds_;
 };

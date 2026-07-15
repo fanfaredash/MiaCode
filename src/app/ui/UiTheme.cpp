@@ -1,13 +1,25 @@
 ﻿#include "UiTheme.h"
 
 #include <QApplication>
+#include <QAbstractItemView>
+#include <QComboBox>
 #include <QCoreApplication>
+#include <QEvent>
 #include <QGuiApplication>
 #include <QMenu>
 #include <QPainter>
+#include <QPen>
 #include <QPixmap>
 #include <QPolygonF>
+#include <QAbstractItemModel>
+#include <QProxyStyle>
+#include <QStyleFactory>
+#include <QStyleOption>
+#include <QToolButton>
+#include <QWidgetAction>
 #include <QStyleHints>
+
+#include "app/ui/AppBackgroundPainter.h"
 
 namespace {
 
@@ -24,6 +36,128 @@ QString cssRgba(const QColor& color, int alpha)
         .arg(color.blue())
         .arg(alpha);
 }
+
+QString cssSurface(const QColor& color, int alpha)
+{
+    return miacode::ui::appBackgroundIsActiveForTheme()
+        ? cssRgba(color, alpha)
+        : css(color);
+}
+
+QString cssSurfaceWhenBackgroundActive(const QColor& activeColor, const QColor& inactiveColor, int alpha)
+{
+    return miacode::ui::appBackgroundIsActiveForTheme()
+        ? cssRgba(activeColor, alpha)
+        : css(inactiveColor);
+}
+
+QString cssWhenBackgroundDisabled(const QColor& color)
+{
+    return miacode::ui::appBackgroundIsActiveForTheme()
+        ? QStringLiteral("transparent")
+        : css(color);
+}
+
+int backgroundOverlayAlphaProperty(const char* propertyName, int fallback)
+{
+    if (qApp == nullptr) {
+        return fallback;
+    }
+    return qBound(0, qApp->property(propertyName).toInt(), 255);
+}
+
+void repolish(QWidget* widget)
+{
+    if (widget == nullptr) {
+        return;
+    }
+    widget->style()->unpolish(widget);
+    widget->style()->polish(widget);
+    widget->update();
+}
+
+// The popup proxy style must NOT be constructed with the default (null) base:
+// QProxyStyle then wraps the *desktop* style (QWindows11Style on Windows 11),
+// not the Fusion style the app runs with. QWindows11Style::polish makes the
+// QComboBoxPrivateContainer a translucent frameless window and paints its own
+// WinUI3 rounded panel (radius 4, system-scheme colors) underneath the QSS
+// radius-8 panel; the two disagree by 1px anchored at the top-left, leaving a
+// solid wedge outside the rounded curve at the bottom-right corner.
+class ComboBoxPopupLimitStyle final : public QProxyStyle {
+public:
+    using QProxyStyle::QProxyStyle;
+
+    QRect subControlRect(
+        ComplexControl control,
+        const QStyleOptionComplex* option,
+        SubControl subControl,
+        const QWidget* widget = nullptr) const override
+    {
+        QRect rect = QProxyStyle::subControlRect(control, option, subControl, widget);
+        if (control == QStyle::CC_ComboBox
+            && subControl == QStyle::SC_ComboBoxEditField
+            && qobject_cast<const QComboBox*>(widget) != nullptr) {
+            rect.adjust(10, 0, -2, 0);
+        }
+        return rect;
+    }
+
+    QRect subElementRect(SubElement element, const QStyleOption* option, const QWidget* widget) const override
+    {
+        QRect rect = QProxyStyle::subElementRect(element, option, widget);
+        if (element == QStyle::SE_ComboBoxLayoutItem && qobject_cast<const QComboBox*>(widget) != nullptr) {
+            rect.adjust(10, 0, -2, 0);
+        }
+        return rect;
+    }
+
+    int styleHint(
+        StyleHint hint,
+        const QStyleOption* option = nullptr,
+        const QWidget* widget = nullptr,
+        QStyleHintReturn* returnData = nullptr) const override
+    {
+        if (hint == QStyle::SH_ComboBox_Popup) {
+            return 0;
+        }
+        return QProxyStyle::styleHint(hint, option, widget, returnData);
+    }
+};
+
+// Paints the rounded dropdown panel (menu background + border) directly on a
+// translucent popup window, beneath the item view/content and scrollbar. This
+// must be the ONE painter of the panel shape: the popup contents keep their
+// background/border transparent, and the scrollbar track stays transparent so
+// this panel shows through instead of leaving a see-through hole in the layered
+// window. Colors are read at paint time, so theme switches apply without
+// rewiring.
+class DialogDropdownPopupPanelPainter final : public QObject {
+public:
+    explicit DialogDropdownPopupPanelPainter(QWidget* container)
+        : QObject(container), container_(container)
+    {
+        container_->installEventFilter(this);
+    }
+
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (watched == container_ && event->type() == QEvent::Paint) {
+            const UiTheme::Colors& c = UiTheme::colors();
+            QPainter painter(container_);
+            painter.setRenderHint(QPainter::Antialiasing, true);
+            const QRectF frame = QRectF(container_->rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+            painter.setPen(QPen(c.menuBorder, 1.0));
+            painter.setBrush(c.menuBg);
+            // 7.5 inner radius ~= the QSS border-radius of 8 measured on the
+            // outer edge of the 1px border.
+            painter.drawRoundedRect(frame, 7.5, 7.5);
+        }
+        return false;
+    }
+
+private:
+    QWidget* container_;
+};
 
 const UiTheme::Colors& lightColors()
 {
@@ -192,6 +326,41 @@ const Colors& colors()
     return isDarkTheme() ? darkColors() : lightColors();
 }
 
+int appBackgroundOverlayAlpha(AppBackgroundOverlayRole role, bool darkTheme)
+{
+    switch (role) {
+    case AppBackgroundOverlayRole::Toolbar:
+        return backgroundOverlayAlphaProperty(
+            darkTheme ? "miacode.appBackgroundToolbarAlphaDark" : "miacode.appBackgroundToolbarAlphaLight",
+            darkTheme ? 198 : 206);
+    case AppBackgroundOverlayRole::StatusBar:
+        return backgroundOverlayAlphaProperty(
+            darkTheme ? "miacode.appBackgroundStatusAlphaDark" : "miacode.appBackgroundStatusAlphaLight",
+            darkTheme ? 208 : 216);
+    case AppBackgroundOverlayRole::Panel:
+        return backgroundOverlayAlphaProperty(
+            darkTheme ? "miacode.appBackgroundPanelAlphaDark" : "miacode.appBackgroundPanelAlphaLight",
+            darkTheme ? 176 : 190);
+    case AppBackgroundOverlayRole::Card:
+        return backgroundOverlayAlphaProperty(
+            darkTheme ? "miacode.appBackgroundCardAlphaDark" : "miacode.appBackgroundCardAlphaLight",
+            darkTheme ? 184 : 196);
+    case AppBackgroundOverlayRole::EditorHeader:
+        return backgroundOverlayAlphaProperty(
+            darkTheme ? "miacode.appBackgroundEditorHeaderAlphaDark" : "miacode.appBackgroundEditorHeaderAlphaLight",
+            darkTheme ? 188 : 196);
+    case AppBackgroundOverlayRole::Input:
+        return backgroundOverlayAlphaProperty(
+            darkTheme ? "miacode.appBackgroundInputAlphaDark" : "miacode.appBackgroundInputAlphaLight",
+            darkTheme ? 196 : 204);
+    case AppBackgroundOverlayRole::CodeEditor:
+        return backgroundOverlayAlphaProperty(
+            darkTheme ? "miacode.appBackgroundCodeEditorAlphaDark" : "miacode.appBackgroundCodeEditorAlphaLight",
+            darkTheme ? 196 : 204);
+    }
+    return darkTheme ? 196 : 204;
+}
+
 QPalette applicationPalette()
 {
     const Colors& c = colors();
@@ -220,7 +389,7 @@ QString applicationStyleSheet()
 {
     const Colors& c = colors();
     return QStringLiteral(
-        "QMenuBar { background: %1; color: %2; border-bottom: 1px solid %3; }"
+        "QMenuBar { background: %1; color: %2; border-bottom: none; }"
         "QMenuBar::item { background: transparent; color: %2; padding: 4px 8px; margin: 0 0 1px 0; }"
         "QMenuBar::item:selected { background: %4; }"
         "QToolBar { background: %1; border: none; border-bottom: 1px solid %3; spacing: 4px; }"
@@ -233,14 +402,14 @@ QString applicationStyleSheet()
         "QMainWindow::separator { background: %3; width: 1px; height: 1px; }"
         "QToolTip { background: %9; color: %2; border: 1px solid %10; }"
     )
-        .arg(css(c.toolbarBg))
+        .arg(cssSurface(c.toolbarBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Toolbar, c.dark)))
         .arg(css(c.textPrimary))
         .arg(css(c.border))
         .arg(css(c.menuHoverBg))
-        .arg(css(c.statusBg))
+        .arg(cssSurface(c.statusBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::StatusBar, c.dark)))
         .arg(css(c.textSecondary))
-        .arg(css(c.cardBg))
-        .arg(css(c.panelBg))
+        .arg(cssSurface(c.cardBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Card, c.dark)))
+        .arg(cssSurface(c.panelBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Panel, c.dark)))
         .arg(css(c.menuBg))
         .arg(css(c.menuBorder));
 }
@@ -323,7 +492,7 @@ QString timelineZoomButtonStyleSheet()
         "QToolButton:pressed { background: %6; color: %7; }"
     )
         .arg(css(c.textPrimary))
-        .arg(css(c.cardBg))
+        .arg(cssSurface(c.cardBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Card, c.dark)))
         .arg(css(c.borderStrong))
         .arg(css(c.menuHoverBg))
         .arg(css(c.accent))
@@ -371,7 +540,7 @@ QString editorTextEditStyleSheet()
         "selection-background-color: %3;"
         "selection-color: %4;"
     )
-        .arg(css(c.inputBg))
+        .arg(cssSurface(c.inputBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Input, c.dark)))
         .arg(css(c.textPrimary))
         .arg(css(c.selection))
         .arg(css(c.selectionText));
@@ -389,12 +558,15 @@ QString editorShellStyleSheet()
         "QWidget#EditorDifficultyControls QLineEdit { background: %6; color: %4; border: 1px solid %7; border-radius: 6px; padding: 4px 6px; selection-background-color: %8; selection-color: %9; }"
         "QWidget#EditorDifficultyControls QLineEdit:focus { border-color: %10; }"
     )
-        .arg(css(c.panelBg))
-        .arg(css(c.cardBg))
+        .arg(cssSurface(c.panelBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Panel, c.dark)))
+        .arg(cssSurfaceWhenBackgroundActive(
+            c.toolbarBg,
+            c.cardBg,
+            appBackgroundOverlayAlpha(AppBackgroundOverlayRole::EditorHeader, c.dark)))
         .arg(css(c.border))
         .arg(css(c.textPrimary))
         .arg(css(c.textSecondary))
-        .arg(css(c.inputBg))
+        .arg(cssSurface(c.inputBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Input, c.dark)))
         .arg(css(c.borderSoft))
         .arg(css(c.selection))
         .arg(css(c.selectionText))
@@ -446,7 +618,7 @@ QString metadataPageStyleSheet()
         "QToolButton, QPushButton { color: %2; border: 1px solid %3; border-radius: 6px; background: %4; padding: 4px 8px; }"
         "QToolButton:hover, QPushButton:hover { background: %9; border-color: %8; }"
     )
-        .arg(css(c.cardBg))
+        .arg(cssSurface(c.cardBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Card, c.dark)))
         .arg(css(c.textPrimary))
         .arg(css(c.border))
         .arg(css(c.inputBg))
@@ -498,7 +670,7 @@ QString latencyDetectionPageStyleSheet()
         " color: %5;"
         "}"
     )
-        .arg(css(c.cardBg))
+        .arg(cssSurface(c.cardBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Card, c.dark)))
         .arg(css(c.border))
         .arg(css(c.textPrimary))
         .arg(css(c.textMuted))
@@ -642,14 +814,6 @@ QString outlineListStyleSheet()
         .arg(css(c.menuHoverBg));
 }
 
-QString deleteDifficultyButtonStyleSheet()
-{
-    return QStringLiteral(
-        "QToolButton { border: none; border-radius: 5px; background: transparent; }"
-        "QToolButton:hover { background: %1; }"
-    ).arg(css(colors().menuHoverBg));
-}
-
 QString previewPanelStyleSheet()
 {
     const Colors& c = colors();
@@ -667,13 +831,13 @@ QString previewPanelStyleSheet()
         "QSlider::sub-page:horizontal { background: %10; border-radius: 3px; }"
         "QSlider::handle:horizontal { width: 12px; margin: -4px 0; border-radius: 6px; background: %7; border: 1px solid %8; }"
     )
-        .arg(css(c.panelBg))
+        .arg(cssSurface(c.panelBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Panel, c.dark)))
         .arg(css(c.border))
         .arg(css(c.canvasBg))
         .arg(css(c.borderSoft))
-        .arg(css(c.cardAltBg))
+        .arg(cssSurface(c.cardAltBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Card, c.dark)))
         .arg(css(c.textPrimary))
-        .arg(css(c.cardBg))
+        .arg(cssSurface(c.cardBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Card, c.dark)))
         .arg(css(c.borderSoft))
         .arg(css(c.menuHoverBg))
         .arg(css(c.accent))
@@ -765,29 +929,250 @@ QString dialogSliderStyleSheet()
         .arg(css(handlePressedBorder));
 }
 
-QString dialogComboBoxStyleSheet()
+void prepareDialogDropdownPopupWindow(QWidget* popupWindow)
+{
+    if (popupWindow == nullptr) {
+        return;
+    }
+    if (popupWindow->property("miacode.dialog_dropdown_popup_panel").toBool()) {
+        return;
+    }
+
+    const bool wasCreated = popupWindow->testAttribute(Qt::WA_WState_Created);
+    popupWindow->setAttribute(Qt::WA_OpaquePaintEvent, false);
+    popupWindow->setAttribute(Qt::WA_TranslucentBackground);
+    popupWindow->setWindowFlag(Qt::FramelessWindowHint);
+    popupWindow->setWindowFlag(Qt::NoDropShadowWindowHint);
+    popupWindow->setAttribute(Qt::WA_WState_Created, wasCreated);
+    QPalette popupPalette = popupWindow->palette();
+    popupPalette.setColor(popupWindow->backgroundRole(), Qt::transparent);
+    popupWindow->setPalette(popupPalette);
+    new DialogDropdownPopupPanelPainter(popupWindow);
+    popupWindow->setProperty("miacode.dialog_dropdown_popup_panel", true);
+}
+
+QString dialogDropdownItemButtonStyleSheet()
 {
     const Colors& c = colors();
     return QStringLiteral(
-        "QComboBox { background: %1; color: %2; border: 1px solid %3; border-radius: 8px; padding: 3px 24px 3px 10px; min-height: 24px; }"
+        "QToolButton {"
+        " color: %1;"
+        " background: transparent;"
+        " border: 1px solid transparent;"
+        " border-radius: 6px;"
+        " min-height: 20px;"
+        " padding: 3px 10px;"
+        " text-align: left;"
+        "}"
+        "QToolButton:hover, QToolButton:pressed {"
+        " background: %2;"
+        " border: 1px solid transparent;"
+        "}"
+    )
+        .arg(css(c.textPrimary))
+        .arg(css(c.menuHoverBg));
+}
+
+QString dialogDropdownCheckBoxStyleSheet()
+{
+    const Colors& c = colors();
+    const QColor indicatorBg = c.dark ? c.windowAltBg : QColor("#FFFFFF");
+    return QStringLiteral(
+        "QCheckBox {"
+        " color: %1;"
+        " background: transparent;"
+        " border: 1px solid transparent;"
+        " border-radius: 6px;"
+        " min-height: 20px;"
+        " padding: 3px 10px;"
+        " spacing: 8px;"
+        "}"
+        "QCheckBox:hover {"
+        " background: %2;"
+        " border: 1px solid transparent;"
+        "}"
+        "QCheckBox::indicator {"
+        " width: 14px;"
+        " height: 14px;"
+        " border: 1px solid %3;"
+        " border-radius: 3px;"
+        " background: %4;"
+        "}"
+        "QCheckBox::indicator:hover { border-color: %5; }"
+        "QCheckBox::indicator:checked {"
+        " background: %5;"
+        " border-color: %5;"
+        " image: url(\":/icons/checkmark.svg\");"
+        "}"
+        "QCheckBox::indicator:checked:hover {"
+        " background: %6;"
+        " border-color: %6;"
+        "}"
+    )
+        .arg(css(c.textPrimary))
+        .arg(css(c.menuHoverBg))
+        .arg(css(c.borderStrong))
+        .arg(css(indicatorBg))
+        .arg(css(c.accent))
+        .arg(css(c.accentHover));
+}
+
+QString dialogDropdownScrollBarStyleSheet(const QString& parentSelector)
+{
+    const Colors& c = colors();
+    const QString prefix = parentSelector.trimmed().isEmpty()
+        ? QStringLiteral("QScrollBar")
+        : parentSelector.trimmed() + QStringLiteral(" QScrollBar");
+    return QStringLiteral(
+        "%1:vertical { background: transparent; width: 10px; margin: 8px 2px 8px 0; }"
+        "%1::handle:vertical { background: %2; border-radius: 3px; min-height: 24px; }"
+        "%1::handle:vertical:hover { background: %3; }"
+        "%1::add-line:vertical, %1::sub-line:vertical { height: 0; border: none; background: transparent; }"
+        "%1::add-page:vertical, %1::sub-page:vertical { background: transparent; }"
+    )
+        .arg(prefix)
+        .arg(css(c.scrollHandle))
+        .arg(css(c.scrollHandleHover));
+}
+
+void styleDialogDropdownMenu(QMenu& menu)
+{
+    if (!menu.property("miacode.refresh_dialog_dropdown_theme_on_show").toBool()) {
+        menu.setProperty("miacode.refresh_dialog_dropdown_theme_on_show", true);
+        QObject::connect(&menu, &QMenu::aboutToShow, &menu, [&menu]() {
+            UiTheme::styleDialogDropdownMenu(menu);
+        });
+    }
+    menu.setPalette(applicationPalette());
+    prepareDialogDropdownPopupWindow(&menu);
+    const Colors& c = colors();
+    menu.setStyleSheet(
+        QStringLiteral(
+            "QMenu { background: transparent; border: none; padding: 6px; }"
+            "QMenu::item { min-height: 20px; padding: 3px 10px; margin: 1px 0; border: 1px solid transparent; border-radius: 6px; color: %1; background: transparent; }"
+            "QMenu::item:selected { background: %2; color: %1; border: 1px solid transparent; outline: 0; }"
+            "QMenu::item:disabled { color: %3; background: transparent; }"
+            "QMenu::separator { height: 1px; margin: 7px 6px; background: %4; }"
+        )
+            .arg(css(c.textPrimary))
+            .arg(css(c.menuHoverBg))
+            .arg(css(c.menuDisabledText))
+            .arg(css(c.dark ? c.borderStrong : c.border))
+    );
+}
+
+QString dialogComboBoxStyleSheet()
+{
+    return dialogComboBoxStyleSheet(Qt::AlignCenter);
+}
+
+QString dialogComboBoxStyleSheet(Qt::Alignment textAlignment)
+{
+    const Colors& c = colors();
+    // The drop-down subcontrol reserves 20px on the right (the arrow itself is
+    // suppressed by the ::down-arrow size rule — a deliberate flat look).
+    // Centred combos therefore look left-shifted unless the LEFT inset matches
+    // the right side's total (border + drop-down + right padding). Balancing
+    // padding-left = drop-down(20) + padding-right(10) = 30 centres the text in
+    // the FULL box (verified pixel-exact). Left-aligned combos keep a small
+    // 10px left inset. The right padding stays 10 in both so the text never
+    // collides with the reserved drop-down column.
+    const bool centered = (textAlignment & Qt::AlignHCenter) != 0;
+    const QString comboPadding = centered
+        ? QStringLiteral("padding: 2px 10px 2px 30px;")
+        : QStringLiteral("padding: 2px 24px 2px 10px;");
+    // The popup panel (rounded menu background + border) is painted by the
+    // shared DialogDropdownPopupPanelPainter on the translucent container; the view
+    // and its scrollbar track stay transparent on purpose so the panel shows
+    // through. Giving the view an opaque background here would re-open the
+    // corner artifact: the scrollbar column is not covered by the view's
+    // QSS background and would turn into a see-through hole.
+    return QStringLiteral(
+        // 2px vertical padding (not 3) keeps the styled sizeHint equal to the
+        // dialog menu buttons' so grid rows pairing the two stay level.
+        "QComboBox { background: %1; color: %2; border: 1px solid %3; border-radius: 8px; %8 min-height: 24px; }"
         "QComboBox:hover { border-color: %4; }"
         "QComboBox:focus { border-color: %4; }"
         "QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: top right; width: 20px; border: none; background: transparent; }"
         "QComboBox::down-arrow { width: 10px; height: 10px; }"
-        "QComboBox QAbstractItemView { background: %5; color: %2; border: 1px solid %6; border-radius: 8px; padding: 6px; outline: 0; show-decoration-selected: 1; selection-background-color: transparent; selection-color: %8; }"
+        "QComboBox QAbstractItemView { background: transparent; color: %2; border: 1px solid transparent; border-radius: 8px; padding: 6px; outline: 0; show-decoration-selected: 1; selection-background-color: transparent; selection-color: %6; }"
         "QComboBox QAbstractItemView::item { min-height: 20px; padding: 3px 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; }"
-        "QComboBox QAbstractItemView::item:selected { background: %7; color: %8; border: 1px solid transparent; outline: 0; }"
+        "QComboBox QAbstractItemView::item:selected { background: %5; color: %6; border: 1px solid transparent; outline: 0; }"
         "QComboBox QAbstractItemView::item:focus { border: 1px solid transparent; outline: 0; }"
-        "QComboBox QAbstractItemView::item:hover { background: %7; border: 1px solid transparent; }"
+        "QComboBox QAbstractItemView::item:hover { background: %5; border: 1px solid transparent; }"
+        "%7"
     )
         .arg(css(c.inputBg))
         .arg(css(c.textPrimary))
         .arg(css(c.border))
         .arg(css(c.accent))
-        .arg(css(c.menuBg))
-        .arg(css(c.menuBorder))
         .arg(css(c.menuHoverBg))
-        .arg(css(c.textPrimary));
+        .arg(css(c.textPrimary))
+        .arg(dialogDropdownScrollBarStyleSheet(QStringLiteral("QComboBox QAbstractItemView")))
+        .arg(comboPadding);
+}
+
+void styleDialogComboBox(QComboBox* combo, int maxVisibleItems)
+{
+    if (combo == nullptr) {
+        return;
+    }
+    // Alignment is stamped on the combo as a property by
+    // miacode::ui::createDialogComboBox; direct callers (cover / HUD-font
+    // pickers) set it too. Absent → centred (the settings/export default).
+    const QVariant alignmentProperty = combo->property("miacode.combo_text_alignment");
+    const Qt::Alignment textAlignment = alignmentProperty.isValid()
+        ? static_cast<Qt::Alignment>(alignmentProperty.toInt())
+        : Qt::Alignment(Qt::AlignCenter);
+
+    if (maxVisibleItems > 0) {
+        applyComboBoxPopupLimit(combo, maxVisibleItems);
+    }
+    combo->setStyleSheet(dialogComboBoxStyleSheet(textAlignment));
+    if (maxVisibleItems > 0) {
+        applyComboBoxPopupLimit(combo, maxVisibleItems);
+    }
+
+    // QComboBox::initStyleOption reads Qt::TextAlignmentRole off the current
+    // item for the closed label; the popup delegate honors it per row. Stamp
+    // every item so the alignment survives repopulation (callers re-run this
+    // after clear()/addItem()).
+    for (int i = 0; i < combo->count(); ++i) {
+        combo->setItemData(i, static_cast<int>(textAlignment), Qt::TextAlignmentRole);
+    }
+
+    // Fix the height from the FINAL populated sizeHint (same W1 formula as the
+    // dialog menu buttons). Doing it here — not once at empty-combo creation —
+    // avoids a min>max clip: addSettingsField later floors minimumHeight to
+    // sizeHint()+4, which can exceed a height fixed while the combo was still
+    // empty (fewer items / pre-parent font) and clip the bottom border.
+    combo->ensurePolished();
+    combo->setFixedHeight(qMax(combo->sizeHint().height(), 30) + 4);
+}
+
+QString dialogSpinBoxStyleSheet()
+{
+    const Colors& c = colors();
+    return QStringLiteral(
+        "QWidget#DialogSpinBoxFrame { background: %1; border: 1px solid %3; border-radius: 8px; }"
+        "QSpinBox#DialogSpinBoxEditor { background: transparent; color: %2; border: none;"
+        " padding: 0 0 0 10px; min-height: 23px; font-weight: 500; }"
+        "QToolButton#DialogSpinBoxStepButton { border: none; border-radius: 0; background: transparent; padding: 0;"
+        " min-width: 20px; max-width: 20px; min-height: 17px; max-height: 17px; }"
+        "QToolButton#DialogSpinBoxStepButton[miacodeSpinStep=\"up\"] { border-top-right-radius: 7px; }"
+        "QToolButton#DialogSpinBoxStepButton[miacodeSpinStep=\"down\"] { border-bottom-right-radius: 7px; }"
+        "QToolButton#DialogSpinBoxStepButton:hover { background: %4; }"
+        "QToolButton#DialogSpinBoxStepButton:pressed { background: %5; }"
+        "QWidget#DialogSpinBoxFrame:disabled { background: %6; border-color: %3; }"
+        "QSpinBox#DialogSpinBoxEditor:disabled { color: %7; }"
+    )
+        .arg(css(c.inputBg))
+        .arg(css(c.textPrimary))
+        .arg(css(c.border))
+        .arg(css(c.menuHoverBg))
+        .arg(css(c.cardAltBg))
+        .arg(css(c.inputDisabledBg))
+        .arg(css(c.textMuted));
 }
 
 QString dialogMenuButtonStyleSheet()
@@ -797,6 +1182,7 @@ QString dialogMenuButtonStyleSheet()
         "QToolButton { min-height: 24px; padding: 2px 10px; border: 1px solid %1; border-radius: 8px; background: %2; color: %3; font-weight: 500; text-align: left; }"
         "QToolButton:hover { background: %4; border-color: %5; }"
         "QToolButton:pressed, QToolButton:checked { background: %6; border-color: %5; color: %7; }"
+        "QToolButton[miacodePopupOpen=\"true\"], QToolButton[miacodePopupOpen=\"true\"]:hover, QToolButton[miacodePopupOpen=\"true\"]:pressed, QToolButton[miacodePopupOpen=\"true\"]:checked { background: %2; border-color: %1; color: %3; }"
         "QToolButton::menu-indicator { image: none; width: 0px; }"
     )
         .arg(css(c.border))
@@ -808,18 +1194,106 @@ QString dialogMenuButtonStyleSheet()
         .arg(css(c.accentText));
 }
 
+QString dialogComboLikeButtonStyleSheet(Qt::Alignment textAlignment)
+{
+    const Colors& c = colors();
+    // Makes a QToolButton+QMenu pseudo-dropdown (used where a real QComboBox
+    // can't express the choice, e.g. the multi-select 判定效果显示) read as a
+    // createDialogComboBox: same input background, border, radius, height and
+    // resting look on hover/press/popup-open (only the border tints, never a
+    // fill). No drop-down subcontrol here, so centred text uses symmetric
+    // padding (unlike the combo, which offsets padding to counter its reserved
+    // arrow column).
+    const bool centered = (textAlignment & Qt::AlignHCenter) != 0;
+    const QString padding = centered
+        ? QStringLiteral("padding: 2px 12px;")
+        : QStringLiteral("padding: 2px 12px 2px 10px;");
+    const QString align = centered ? QStringLiteral("center") : QStringLiteral("left");
+    return QStringLiteral(
+        "QToolButton { background: %1; color: %2; border: 1px solid %3; border-radius: 8px; %5 min-height: 24px; text-align: %6; font-weight: 400; }"
+        "QToolButton:hover { border-color: %4; }"
+        "QToolButton:pressed, QToolButton:checked { border-color: %4; }"
+        "QToolButton[miacodePopupOpen=\"true\"], QToolButton[miacodePopupOpen=\"true\"]:hover, QToolButton[miacodePopupOpen=\"true\"]:pressed, QToolButton[miacodePopupOpen=\"true\"]:checked { background: %1; border-color: %4; color: %2; }"
+        "QToolButton::menu-indicator { image: none; width: 0px; }"
+    )
+        .arg(css(c.inputBg))
+        .arg(css(c.textPrimary))
+        .arg(css(c.border))
+        .arg(css(c.accent))
+        .arg(padding)
+        .arg(align);
+}
+
+QString dialogMenuCheckBoxStyleSheet()
+{
+    return dialogDropdownCheckBoxStyleSheet();
+}
+
+void bindDialogMenuButtonPopupState(QToolButton* button, QMenu* menu)
+{
+    if (button == nullptr || menu == nullptr) {
+        return;
+    }
+
+    QObject::connect(menu, &QMenu::aboutToShow, button, [button, menu]() {
+        const int menuWidth = qMax(menu->minimumWidth(), button->width());
+        menu->setMinimumWidth(menuWidth);
+        // Stretch each row widget (checkbox / item button) to the full menu
+        // content width so its :hover highlight covers the whole row — a
+        // QWidgetAction widget otherwise only spans its own content, leaving the
+        // right part of the row un-highlighted on hover (unlike a real combo
+        // popup). Menu QSS pads 6px each side.
+        const int rowWidth = qMax(0, menuWidth - 12);
+        for (QAction* action : menu->actions()) {
+            if (auto* widgetAction = qobject_cast<QWidgetAction*>(action)) {
+                if (QWidget* rowWidget = widgetAction->defaultWidget()) {
+                    rowWidget->setProperty("miacode.dialog_menu_row_width", rowWidth);
+                    rowWidget->setMinimumWidth(rowWidth);
+                    rowWidget->updateGeometry();
+                    rowWidget->adjustSize();
+                    rowWidget->update();
+                }
+            }
+        }
+        menu->updateGeometry();
+        menu->adjustSize();
+        button->setProperty("miacodePopupOpen", true);
+        button->setDown(false);
+        button->clearFocus();
+        repolish(button);
+    });
+    QObject::connect(menu, &QMenu::aboutToHide, button, [button]() {
+        button->setProperty("miacodePopupOpen", false);
+        button->setDown(false);
+        button->clearFocus();
+        repolish(button);
+    });
+}
+
 QString dialogMenuLineEditStyleSheet()
 {
     const Colors& c = colors();
+    return dialogMenuLineEditStyleSheet(c.windowAltBg);
+}
+
+QString dialogMenuLineEditStyleSheet(const QColor& backgroundColor)
+{
+    const Colors& c = colors();
+    const bool customBackground = backgroundColor.isValid() && backgroundColor != c.inputBg;
+    const QColor baseBackground = backgroundColor.isValid() ? backgroundColor : c.inputBg;
+    const QColor disabledBackground = customBackground ? baseBackground : c.inputDisabledBg;
     return QStringLiteral(
         "QLineEdit { min-height: 24px; padding: 2px 10px; border: 1px solid %1; border-radius: 8px; background: %2; color: %3; font-weight: 500; }"
         "QLineEdit:hover { border-color: %4; }"
         "QLineEdit:focus { border-color: %4; background: %2; }"
+        "QLineEdit:disabled { background: %5; border-color: %1; color: %6; }"
     )
         .arg(css(c.border))
-        .arg(css(c.inputBg))
+        .arg(css(baseBackground))
         .arg(css(c.textPrimary))
-        .arg(css(c.accent));
+        .arg(css(c.accent))
+        .arg(css(disabledBackground))
+        .arg(css(c.textMuted));
 }
 
 QString dialogPushButtonStyleSheet(bool emphasized)
@@ -846,6 +1320,128 @@ QString dialogPushButtonStyleSheet(bool emphasized)
         .arg(css(c.accentText))
         .arg(css(c.inputDisabledBg))
         .arg(css(c.textMuted));
+}
+
+QString dialogAuxiliaryButtonStyleSheet()
+{
+    const Colors& c = colors();
+    const QColor baseBackground = c.inputBg;
+    const QColor hoverBackground = c.menuHoverBg;
+    const QColor pressedBackground = c.dark ? c.cardAltBg : c.windowAltBg;
+    return QStringLiteral(
+        "QPushButton, QPushButton#DialogAuxiliaryButton, QPushButton[miacodeAuxiliaryButton=\"true\"] {"
+        " min-width: 72px; min-height: 24px; padding: 3px 12px;"
+        " border: 1px solid %1; border-radius: 8px; background: %2;"
+        " color: %3; font-weight: 500;"
+        "}"
+        "QPushButton:hover, QPushButton#DialogAuxiliaryButton:hover, QPushButton[miacodeAuxiliaryButton=\"true\"]:hover {"
+        " background: %4; border-color: %5; color: %3;"
+        "}"
+        "QPushButton:pressed, QPushButton:checked,"
+        "QPushButton#DialogAuxiliaryButton:pressed, QPushButton#DialogAuxiliaryButton:checked,"
+        "QPushButton[miacodeAuxiliaryButton=\"true\"]:pressed, QPushButton[miacodeAuxiliaryButton=\"true\"]:checked {"
+        " background: %6; border-color: %7; color: %3;"
+        "}"
+        "QPushButton:disabled, QPushButton#DialogAuxiliaryButton:disabled, QPushButton[miacodeAuxiliaryButton=\"true\"]:disabled {"
+        " background: %8; border-color: %1; color: %9;"
+        "}"
+    )
+        .arg(css(c.border))
+        .arg(css(baseBackground))
+        .arg(css(c.textPrimary))
+        .arg(css(hoverBackground))
+        .arg(css(c.borderStrong))
+        .arg(css(pressedBackground))
+        .arg(css(c.accent))
+        .arg(css(c.inputDisabledBg))
+        .arg(css(c.textMuted));
+}
+
+namespace {
+
+// Sizes the combo's popup view to show up to `maxVisibleItems` of the CURRENT
+// items. Must run against the populated combo — see applyComboBoxPopupLimit for
+// why it is also wired to re-run on row insertion.
+void sizeComboPopupHeight(QComboBox* combo)
+{
+    if (combo == nullptr) {
+        return;
+    }
+    QAbstractItemView* popupView = combo->view();
+    if (popupView == nullptr) {
+        return;
+    }
+    const int requested = qMax(1, combo->property("miacode.combo_max_visible").toInt());
+    const int visibleItems = combo->count() > 0 ? qMin(requested, combo->count()) : 1;
+    combo->setMaxVisibleItems(visibleItems);
+
+    popupView->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    popupView->setMinimumHeight(0);
+
+    int rowHeight = -1;
+    const int sampleRows = qMin(combo->count(), visibleItems);
+    for (int row = 0; row < sampleRows; ++row) {
+        rowHeight = qMax(rowHeight, popupView->sizeHintForRow(row));
+    }
+    if (rowHeight <= 0) {
+        rowHeight = combo->fontMetrics().height() + 8;
+    }
+
+    // + the view's QSS padding (6px top + 6px bottom, from
+    // "QComboBox QAbstractItemView { padding: 6px }") so the last requested row
+    // isn't clipped by the panel padding — a small (e.g. 2-item) popup
+    // otherwise showed only one row and forced a scrollbar.
+    constexpr int kViewPadding = 6 * 2;
+    popupView->setMaximumHeight(
+        rowHeight * visibleItems + popupView->frameWidth() * 2 + kViewPadding + 4);
+}
+
+}  // namespace
+
+void applyComboBoxPopupLimit(QComboBox* combo, int maxVisibleItems)
+{
+    if (combo == nullptr) {
+        return;
+    }
+
+    combo->setProperty("miacode.combo_max_visible", maxVisibleItems > 0 ? maxVisibleItems : 1);
+    if (!combo->property("miacode.combo_popup_limited").toBool()) {
+        // Explicit Fusion base: a default-constructed QProxyStyle would wrap
+        // the desktop style (QWindows11Style on Win11), whose popup painting
+        // fights the QSS panel — see the ComboBoxPopupLimitStyle comment.
+        auto* popupLimitStyle =
+            new ComboBoxPopupLimitStyle(QStyleFactory::create(QStringLiteral("Fusion")));
+        popupLimitStyle->setParent(combo);
+        combo->setStyle(popupLimitStyle);
+        combo->setProperty("miacode.combo_popup_limited", true);
+
+        // Combos are frequently styled while STILL EMPTY (the shared factory
+        // runs before addItem), so a one-shot height would lock the popup to a
+        // single row. Recompute whenever rows are inserted/removed so the popup
+        // grows with the final item list, no matter when the caller styles it.
+        if (QAbstractItemModel* model = combo->model()) {
+            QObject::connect(model, &QAbstractItemModel::rowsInserted, combo,
+                             [combo]() { sizeComboPopupHeight(combo); });
+            QObject::connect(model, &QAbstractItemModel::rowsRemoved, combo,
+                             [combo]() { sizeComboPopupHeight(combo); });
+            QObject::connect(model, &QAbstractItemModel::modelReset, combo,
+                             [combo]() { sizeComboPopupHeight(combo); });
+        }
+    }
+
+    QAbstractItemView* popupView = combo->view();
+    if (popupView == nullptr) {
+        return;
+    }
+
+    // Make the popup container a translucent frameless window so the shared
+    // dialog-dropdown panel painter is the only thing composited.
+    if (QWidget* container = popupView->window();
+        container != nullptr && container != combo->window()) {
+        prepareDialogDropdownPopupWindow(container);
+    }
+
+    sizeComboPopupHeight(combo);
 }
 
 QString dialogIconToolButtonStyleSheet(bool active)
@@ -1035,20 +1631,25 @@ QString exportDialogStyleSheet()
     return QStringLiteral(
         "QDialog { background: %1; }"
         "QFrame#VideoExportPrimaryPanel, QFrame#VideoExportSectionPanel { background: %2; border: 1px solid %3; border-radius: 12px; }"
-        "QLineEdit, QDoubleSpinBox { background: %2; color: %4; border: 1px solid %3; border-radius: 8px; padding: 4px 8px; min-height: 24px; }"
+        "QLineEdit, QDoubleSpinBox { background: %1; color: %4; border: 1px solid %3; border-radius: 8px; padding: 2px 10px; min-height: 24px; font-weight: 500; }"
+        "QLineEdit:hover, QDoubleSpinBox:hover { border-color: %7; }"
+        "QLineEdit:focus, QDoubleSpinBox:focus { border-color: %7; background: %1; }"
+        "QLineEdit:disabled, QDoubleSpinBox:disabled { background: %8; border-color: %3; color: %9; }"
         "QLabel { color: %4; }"
         "QCheckBox { color: %4; spacing: 6px; }"
         // "添加片头" master switch sits in a neutral rounded box matching the
-        // 游戏 tab's dropdown chrome (皮肤 etc.) — distinct enough to read as the
-        // tab's switch without the loud accent fill it used to carry.
+        // intro option groups, distinct from the louder export action buttons.
         "QFrame#AddIntroCapsule { background: %5; border: 1px solid %6; border-radius: 8px; }"
     )
         .arg(css(c.windowAltBg))
         .arg(css(c.cardBg))
         .arg(css(c.border))
         .arg(css(c.textPrimary))
-        .arg(css(c.inputBg))
+        .arg(css(c.windowAltBg))
         .arg(css(c.border))
+        .arg(css(c.accent))
+        .arg(css(c.inputDisabledBg))
+        .arg(css(c.textMuted))
         + dialogTabStripStyleSheet(c.windowAltBg)
         // Export-dialog-only: widen the tab pane's inset (shared default is
         // 8px) so the dense Visuals page leaves a clear margin to the rounded

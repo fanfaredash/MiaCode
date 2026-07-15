@@ -39,6 +39,9 @@ experimental/
 Testing/
 build_artifacts/
 
+# Local CI workflow changes (not in dev branch)
+.github/workflows/build-win.yml
+
 # Keep the public docs tree explicit and leave local/private notes untracked.
 docs/*
 !docs/README.md
@@ -125,7 +128,9 @@ scripts/ffmpeg/trim/*
 !scripts/assets/
 scripts/assets/*
 !scripts/assets/README_font_subset.md
+!scripts/assets/build_skin_tool_exes.ps1
 !scripts/assets/gen_same_lane_v_slides.py
+!scripts/assets/match_outline_canvas_ratio.py
 !scripts/assets/subset_hud_font.py
 !scripts/assets/tongyong_guifan.txt
 # FFmpeg decode-only trim toolchain (build scripts + allowlist config + docs).

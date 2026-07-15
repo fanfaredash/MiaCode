@@ -45,13 +45,26 @@ const QSet<QString> kRetiredFlags = {
 // not real env reads, so its own source file is skipped during the code scan.
 const QString kSelfFileName = QStringLiteral("DebugFlagIndexSpec.cpp");
 
+// MIACODE_* tokens that are CMake compile definitions (injected via
+// target_compile_definitions), not runtime env flags read with qgetenv. These
+// legitimately do not belong in docs/ops/DEBUG_INDEX.md. Any spec that consumes
+// the source-root compile define (this one, ui_text_locale_spec, …) references
+// the token in source, so filter it out globally rather than per-file.
+const QSet<QString> kCompileDefinitions = {
+    QStringLiteral("MIACODE_SOURCE_ROOT"),
+};
+
 QSet<QString> collectFlags(const QString& text)
 {
     static const QRegularExpression re(QStringLiteral("MIACODE_[A-Z0-9_]+"));
     QSet<QString> flags;
     QRegularExpressionMatchIterator it = re.globalMatch(text);
     while (it.hasNext()) {
-        flags.insert(it.next().captured(0));
+        const QString flag = it.next().captured(0);
+        if (kCompileDefinitions.contains(flag)) {
+            continue;
+        }
+        flags.insert(flag);
     }
     return flags;
 }

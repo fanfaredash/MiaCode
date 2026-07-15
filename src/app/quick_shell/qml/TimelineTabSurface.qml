@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import MiaCode.Timeline
+import "components" as Components
 
 Item {
     id: root
@@ -10,11 +11,15 @@ Item {
     property var paletteMap: ({})
     property var metricsMap: ({})
 
+    Components.Theme {
+        id: shellTheme
+        paletteMap: root.paletteMap
+        metricsMap: root.metricsMap
+    }
+
     onPaletteMapChanged: {
         if (timelineItem)
             timelineItem.refreshTheme()
-        if (brightnessControl)
-            brightnessControl.syncFromBridge()
     }
     onMetricsMapChanged: {
         if (timelineItem)
@@ -25,12 +30,8 @@ Item {
         return scale >= 1.999
     }
 
-    function isChineseUi() {
-        return paletteMap && paletteMap["isChineseUi"] === true
-    }
-
     function tone(key, fallback) {
-        return paletteMap && paletteMap[key] !== undefined ? paletteMap[key] : fallback
+        return shellTheme.tone(key, fallback)
     }
 
     readonly property real headerScale: controller ? controller.bottomTabsHeaderScale : 1.0
@@ -48,13 +49,10 @@ Item {
 
         anchors.fill: parent
         stateBridge: controller ? controller.timelineStateBridge : null
-        headerLeftLimit: brightnessControl.x + brightnessControl.width + 2
-        // The follow checkboxes used to live here too and bounded the
-        // header band on the right; they moved to BottomTabsQuickHost
-        // tab strip. Without them, the band can use the full viewport
-        // width minus a small right pad for the scrollbar / scroll
-        // gutter.
-        headerRightLimit: width - 8
+        headerLeftLimit: zoomButton.x + zoomButton.width + 2
+        headerRightLimit: Math.max(0, settingsButton.x - 2)
+        headerMarkerLeftLimit: zoomButton.x + zoomButton.width + 2
+        headerMarkerRightLimit: Math.max(0, settingsButton.x - 2)
 
         onHeaderNavigateRequested: function(second) {
             if (controller)
@@ -98,37 +96,28 @@ Item {
         }
     }
 
-    ToolButton {
+    Components.ShellToolButton {
         id: zoomButton
 
         anchors.left: parent.left
         anchors.leftMargin: Math.round(4 * root.headerScale)
         y: Math.max(0, (timelineItem.timelineTop - height) / 2)
+        width: bodyWidth + stepperWidth
         implicitHeight: Math.max(1, Math.round(22 * root.headerScale))
+        property int bodyWidth: Math.max(42, Math.round(54 * root.headerScale))
+        property int stepperWidth: Math.max(14, Math.round(18 * root.headerScale))
+        paletteMap: root.paletteMap
+        metricsMap: root.metricsMap
         padding: 1
         leftPadding: 2
         rightPadding: Math.round(8 * root.headerScale)
         spacing: Math.round(6 * root.headerScale)
-        hoverEnabled: true
         text: Math.round(timelineItem.zoomScale * 100) + "%"
         // Phase 9d-native — invisible to the eye (DComp pipeline
         // renders the button visually in the popup composition plane)
         // but still active for input. The DComp popup HWND is
         // WS_EX_TRANSPARENT so clicks pass through to this QQuickItem.
         opacity: 0
-
-        background: Rectangle {
-            radius: 6
-            color: zoomButton.down
-                ? root.tone("accentPressed", "#2563eb")
-                : (zoomButton.hovered
-                    ? root.tone("menuHoverBg", "#334155")
-                    : root.tone("cardBg", "#1f2937"))
-            border.width: 1
-            border.color: zoomButton.hovered && !zoomButton.down
-                ? root.tone("accent", "#60a5fa")
-                : root.tone("borderStrong", "#475569")
-        }
 
         contentItem: Item {
             implicitWidth: zoomRow.implicitWidth
@@ -194,245 +183,98 @@ Item {
             }
         }
 
-        onClicked: timelineItem.cycleZoomPreset()
-    }
-
-    Item {
-        id: brightnessControl
-
-       anchors.left: zoomButton.right
-       anchors.leftMargin: Math.round(6 * root.headerScale)
-       y: Math.max(0, (timelineItem.timelineTop - height) / 2)
-        width: Math.max(1, Math.round(128 * root.headerScale))
-        height: Math.max(1, Math.round(22 * root.headerScale))
-        visible: timelineItem.stateBridge !== null
-
-        function isInvertedForTheme() {
-            return !(root.paletteMap && root.paletteMap["dark"] === true)
-        }
-
-        function sliderValueFromBrightness(brightness) {
-            const percent = brightness * 100
-            return isInvertedForTheme()
-                ? brightnessSlider.from + brightnessSlider.to - percent
-                : percent
-        }
-
-        function brightnessFromSliderValue(value) {
-            const percent = isInvertedForTheme()
-                ? brightnessSlider.from + brightnessSlider.to - value
-                : value
-            return percent / 100
-        }
-
-        function syncFromBridge() {
-            if (timelineItem.stateBridge && !brightnessSlider.pressed)
-                brightnessSlider.value = sliderValueFromBrightness(timelineItem.stateBridge.waveformBrightness)
-        }
-
-        Connections {
-            target: timelineItem
-
-            function onStateBridgeChanged() {
-                brightnessControl.syncFromBridge()
-            }
-        }
-
-        Connections {
-            target: timelineItem.stateBridge
-            ignoreUnknownSignals: true
-        }
-
-        Canvas {
-            id: brightnessGlyph
-
+        MouseArea {
+            z: 10
             anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            width: Math.max(1, Math.round(18 * root.headerScale))
-            height: Math.max(1, Math.round(18 * root.headerScale))
-
-            property color strokeColor: root.tone("timelineLabel", "#d4dce8")
-
-            onStrokeColorChanged: requestPaint()
-
-            onPaint: {
-                const ctx = getContext("2d")
-                ctx.reset()
-                const cx = width / 2
-                const cy = height / 2
-                const r = Math.max(2, Math.min(width, height) * 0.22)
-                const rayInner = r + 2
-                const rayOuter = Math.min(width, height) * 0.46
-                ctx.strokeStyle = strokeColor
-                ctx.fillStyle = strokeColor
-                ctx.lineWidth = Math.max(1, root.headerScale)
-                ctx.beginPath()
-                ctx.ellipse(cx - r, cy - r, r * 2, r * 2, 0, 0, Math.PI * 2)
-                ctx.fill()
-                for (let i = 0; i < 8; ++i) {
-                    const angle = i * Math.PI / 4
-                    ctx.beginPath()
-                    ctx.moveTo(cx + Math.cos(angle) * rayInner, cy + Math.sin(angle) * rayInner)
-                    ctx.lineTo(cx + Math.cos(angle) * rayOuter, cy + Math.sin(angle) * rayOuter)
-                    ctx.stroke()
-                }
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: zoomButton.bodyWidth
+            cursorShape: Qt.PointingHandCursor
+            hoverEnabled: true
+            onEntered: timelineItem.setZoomControlHoveredPart(1)
+            onExited: timelineItem.setZoomControlHoveredPart(0)
+            onPressed: timelineItem.setZoomControlPressedPart(1)
+            onReleased: timelineItem.setZoomControlPressedPart(0)
+            onCanceled: timelineItem.setZoomControlPressedPart(0)
+            onClicked: {
+                if (!controller)
+                    return
+                const point = zoomButton.mapToGlobal(0, 0)
+                controller.openTimelineZoomMenu(
+                    Math.round(point.x),
+                    Math.round(point.y),
+                    Math.round(zoomButton.width))
             }
         }
 
-        Slider {
-            id: brightnessSlider
-
-            anchors.left: brightnessGlyph.right
-            anchors.leftMargin: Math.round(4 * root.headerScale)
+        MouseArea {
+            z: 10
+            anchors.left: parent.left
+            anchors.leftMargin: zoomButton.bodyWidth
             anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            height: parent.height
-            from: 20
-            to: 200
-            stepSize: 5
-            live: true
-            value: 100
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            cursorShape: Qt.PointingHandCursor
+            hoverEnabled: true
 
-            onMoved: {
-                if (timelineItem.stateBridge)
-                    timelineItem.stateBridge.waveformBrightness = brightnessControl.brightnessFromSliderValue(value)
+            function partForY(y) {
+                return y < height / 2 ? 2 : -2
             }
 
-            background: Item {
-                x: brightnessSlider.leftPadding
-                y: Math.round((brightnessSlider.height - height) / 2)
-                width: brightnessSlider.availableWidth
-                height: Math.max(3, Math.round(4 * root.headerScale))
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: height / 2
-                    color: root.tone("border", "#d5e0ec")
-                }
-
-                Rectangle {
-                    width: Math.max(height, brightnessSlider.visualPosition * parent.width)
-                    height: parent.height
-                    radius: height / 2
-                    color: root.tone("accent", "#2e77d0")
-                }
+            onEntered: timelineItem.setZoomControlHoveredPart(partForY(mouseY))
+            onPositionChanged: timelineItem.setZoomControlHoveredPart(partForY(mouseY))
+            onExited: timelineItem.setZoomControlHoveredPart(0)
+            onPressed: function(mouse) {
+                timelineItem.setZoomControlPressedPart(partForY(mouse.y))
             }
-
-            handle: Rectangle {
-                x: brightnessSlider.leftPadding
-                    + brightnessSlider.visualPosition * (brightnessSlider.availableWidth - width)
-                y: Math.round((brightnessSlider.height - height) / 2)
-                width: Math.max(8, Math.round(10 * root.headerScale))
-                height: width
-                radius: width / 2
-                color: brightnessSlider.pressed
-                    ? root.tone("accentPressed", "#2668b9")
-                    : root.tone("cardBg", "#ffffff")
-                border.width: 1
-                border.color: brightnessSlider.hovered || brightnessSlider.pressed
-                    ? root.tone("accent", "#2e77d0")
-                    : root.tone("borderStrong", "#b8c7da")
-            }
-
-            Component.onCompleted: brightnessControl.syncFromBridge()
-        }
-    }
-
-    // Settings gear at the top-right of the timeline header band,
-    // mirroring the zoom button on the left. Click triggers the
-    // controller's openTimelineFollowSettingsMenu, which spawns a
-    // Qt Widgets QMenu (View Lock / Follow Progress / Follow Code).
-    // The bottom-most menu item is Follow Code so its Y aligns
-    // with the inline Follow Code chip in the tab strip above.
-    // QMenu rides the OS popup path used by every other native menu
-    // in MiaCode, so it draws above the workspace and preview
-    // WindowContainers without the focus quirks the prior QtQuick
-    // Popup.Window draft had.
-    ToolButton {
-        id: settingsGearButton
-
-        anchors.right: parent.right
-        anchors.rightMargin: Math.round(8 * root.headerScale)
-        y: Math.max(0, (timelineItem.timelineTop - height) / 2)
-        implicitWidth: Math.max(1, Math.round(28 * root.headerScale))
-        implicitHeight: Math.max(1, Math.round(22 * root.headerScale))
-        padding: 1
-        hoverEnabled: true
-
-        background: Rectangle {
-            radius: 6
-            color: settingsGearButton.down
-                ? root.tone("accentPressed", "#2563eb")
-                : (settingsGearButton.hovered
-                    ? root.tone("menuHoverBg", "#334155")
-                    : root.tone("cardBg", "#1f2937"))
-            border.width: 1
-            border.color: settingsGearButton.hovered && !settingsGearButton.down
-                ? root.tone("accent", "#60a5fa")
-                : root.tone("borderStrong", "#475569")
-        }
-
-        contentItem: Canvas {
-            id: gearGlyph
-
-            property color strokeColor: settingsGearButton.down
-                ? root.tone("accentText", "#ffffff")
-                : root.tone("timelineLabel", "#d4dce8")
-
-            onStrokeColorChanged: requestPaint()
-
-            onPaint: {
-                const ctx = getContext("2d")
-                ctx.reset()
-                const cx = width / 2
-                const cy = height / 2
-                const minDim = Math.min(width, height)
-                const outerR = minDim * 0.40
-                const innerR = outerR * 0.62
-                const hubR = innerR * 0.55
-                const toothCount = 6
-                ctx.fillStyle = strokeColor
-                ctx.beginPath()
-                for (let i = 0; i < toothCount * 2; ++i) {
-                    const angle = (i * Math.PI / toothCount) - Math.PI / 2
-                    const r = (i % 2 === 0) ? outerR : innerR
-                    const px = cx + Math.cos(angle) * r
-                    const py = cy + Math.sin(angle) * r
-                    if (i === 0)
-                        ctx.moveTo(px, py)
-                    else
-                        ctx.lineTo(px, py)
-                }
-                ctx.closePath()
-                ctx.fill()
-                // Punch the central hub.
-                ctx.globalCompositeOperation = "destination-out"
-                ctx.beginPath()
-                ctx.ellipse(cx - hubR, cy - hubR, hubR * 2, hubR * 2, 0, 0, Math.PI * 2)
-                ctx.fill()
-                ctx.globalCompositeOperation = "source-over"
+            onReleased: timelineItem.setZoomControlPressedPart(0)
+            onCanceled: timelineItem.setZoomControlPressedPart(0)
+            onClicked: function(mouse) {
+                timelineItem.stepZoomPreset(partForY(mouse.y) > 0 ? 1 : -1)
             }
         }
 
         onClicked: {
             if (!controller)
                 return
-            // mapToGlobal returns the gear button's top-right corner
-            // in screen coords; the C++ side aligns the QMenu's
-            // bottom-right to (x, y - menuHeight - 4) so the menu
-            // expands upward over the tab-strip Progress Follow chip.
-            const topRight = settingsGearButton.mapToGlobal(settingsGearButton.width, 0)
-            controller.openTimelineFollowSettingsMenu(topRight.x, topRight.y)
+            const point = zoomButton.mapToGlobal(0, 0)
+            controller.openTimelineZoomMenu(
+                Math.round(point.x),
+                Math.round(point.y),
+                Math.round(zoomButton.width))
         }
     }
 
-    // View Lock / Code Follow / Progress Follow checkboxes moved to
-    // BottomTabsQuickHost.qml's tab strip \u2014 see the long comment in
-    // TimelineSceneStateBuilder.cpp where the matching scene-state
-    // emit was retired. The deletion below removes the QML controls
-    // that were anchored to this surface's right edge.
+    Components.ShellToolButton {
+        id: settingsButton
+
+        width: Math.max(1, Math.round(28 * root.headerScale))
+        height: Math.max(1, Math.round(22 * root.headerScale))
+        paletteMap: root.paletteMap
+        metricsMap: root.metricsMap
+        x: Math.max(
+            zoomButton.x + zoomButton.width + Math.round(8 * root.headerScale),
+            parent.width - Math.round(8 * root.headerScale) - width)
+        y: Math.max(0, (timelineItem.timelineTop - height) / 2)
+        padding: 1
+        enabled: timelineItem.stateBridge !== null
+        opacity: 0
+
+        onHoveredChanged: timelineItem.setSettingsControlHovered(hovered)
+        onPressedChanged: timelineItem.setSettingsControlPressed(pressed)
+        onClicked: {
+            if (!controller)
+                return
+            const topRight = settingsButton.mapToGlobal(settingsButton.width, 0)
+            controller.openTimelineBrightnessMenu(Math.round(topRight.x), Math.round(topRight.y))
+        }
+    }
+
+    // Follow controls no longer live in this header surface. Code
+    // Follow is exposed in BottomTabsQuickHost.qml; View Lock and
+    // Progress Follow use fixed default behavior.
     /*
-    CheckBox {
+    // CheckBox {
         id: followPreviewCheck
 
         anchors.right: followProgressCheck.left
@@ -440,14 +282,14 @@ Item {
         y: Math.max(0, (timelineItem.timelineTop - height) / 2)
         hoverEnabled: true
         spacing: 4
-        text: root.isChineseUi() ? "\u4ee3\u7801\u8ddf\u968f" : "Cursor Follow"
+        text: "Cursor Follow"
         checked: timelineItem.followPreviewEnabled
         // Phase 9d-native — invisible (DComp renders natively in the
         // popup composition plane) but still receives input. DComp
         // popup is WS_EX_TRANSPARENT so clicks pass through.
         opacity: 0
 
-        indicator: Rectangle {
+        // indicator: Rectangle {
             implicitWidth: 14
             implicitHeight: 14
             x: 0
@@ -495,7 +337,7 @@ Item {
         onClicked: timelineItem.followPreviewEnabled = checked
     }
 
-    CheckBox {
+    // CheckBox {
         id: followProgressCheck
 
         anchors.right: parent.right
@@ -503,11 +345,11 @@ Item {
         y: Math.max(0, (timelineItem.timelineTop - height) / 2)
         hoverEnabled: true
         spacing: 4
-        text: root.isChineseUi() ? "\u8fdb\u5ea6\u8ddf\u968f" : "Progress Follow"
+        text: "Progress Follow"
         checked: timelineItem.followProgressEnabled
         opacity: 0
 
-        indicator: Rectangle {
+        // indicator: Rectangle {
             implicitWidth: 14
             implicitHeight: 14
             x: 0

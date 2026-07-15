@@ -9,14 +9,21 @@
 #include "SimaiNativeParser.h"
 #include "ShortcutRegistry.h"
 #include "TimelineView.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
+#include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
+#include "app/ui/AppBackgroundSettings.h"
+#include "app/ui/EditableValueLabel.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/InputShortcutGesture.h"
 #include "common/OperationLog.h"
+#include "extensions/ExtensionManager.h"
+#include "extensions/ExtensionManifest.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
@@ -45,6 +52,18 @@ QString shortcutSequenceText(const QList<QKeySequence>& sequences)
     return parts.join(QStringLiteral(", "));
 }
 
+QString shortcutTextListDisplay(const QStringList& shortcuts)
+{
+    QStringList parts;
+    for (const QString& shortcut : shortcuts) {
+        const QString text = miacode::input_shortcut::gestureDisplayText(shortcut);
+        if (!text.isEmpty()) {
+            parts.append(text);
+        }
+    }
+    return parts.join(QStringLiteral(", "));
+}
+
 QString shortcutSequenceText(const QKeySequence& sequence)
 {
     if (sequence.toString(QKeySequence::PortableText) == QStringLiteral("Ctrl+Shift++")) {
@@ -58,40 +77,39 @@ QString shortcutSequenceText(const QKeySequence& sequence)
         : sequence.toString(QKeySequence::NativeText);
 }
 
-QString shortcutSequenceKey(const QKeySequence& sequence)
+QString shortcutGestureKey(const QString& shortcut)
 {
-    if (sequence.toString(QKeySequence::PortableText) == QStringLiteral("Ctrl+Shift++")) {
-        return QStringLiteral("Ctrl+Shift+=");
-    }
-    if (sequence.toString(QKeySequence::PortableText) == QStringLiteral("Ctrl+Shift+_")) {
-        return QStringLiteral("Ctrl+Shift+-");
-    }
-    return sequence.toString(QKeySequence::PortableText);
+    return miacode::input_shortcut::normalizeGestureText(shortcut);
 }
 
 QString shortcutDefinitionLabel(const ShortcutRegistry::ShortcutDefinition& definition)
 {
-    return UiText::isChineseUi() && !definition.labelZh.isEmpty()
-        ? definition.labelZh
-        : definition.labelEn;
+    if (!definition.labelKey.isEmpty()) {
+        const QString label = UiText::text(definition.labelKey);
+        if (label != definition.labelKey) {
+            return label;
+        }
+    }
+    return definition.labelEn.isEmpty() ? definition.id : definition.labelEn;
 }
 
 QString conflictingShortcutLabel(
     const QList<ShortcutRegistry::ShortcutDefinition>& definitions,
     const QString& currentId,
-    const QKeySequence& sequence)
+    const QString& shortcut)
 {
-    if (sequence.isEmpty()) {
+    const QString normalizedShortcut = shortcutGestureKey(shortcut);
+    if (normalizedShortcut.isEmpty()) {
         return QString();
     }
     for (const auto& definition : definitions) {
         if (definition.id == currentId) {
             continue;
         }
-        const QList<QKeySequence> sequences =
-            ShortcutRegistry::instance().sequences(definition.id, definition.defaultSequences);
-        for (const QKeySequence& existing : sequences) {
-            if (!existing.isEmpty() && existing == sequence) {
+        const QStringList shortcuts =
+            ShortcutRegistry::instance().shortcutTexts(definition.id, definition.defaultShortcutTexts);
+        for (const QString& existing : shortcuts) {
+            if (shortcutGestureKey(existing) == normalizedShortcut) {
                 const QString label = shortcutDefinitionLabel(definition);
                 return label.isEmpty() ? definition.id : label;
             }
@@ -111,6 +129,7 @@ public:
     }
 
     QKeySequence sequence() const { return sequence_; }
+    QString shortcutText() const { return shortcutText_; }
 
 protected:
     bool event(QEvent* event) override
@@ -133,7 +152,7 @@ protected:
         // Esc closes the capture dialog without storing a new binding.
         // The line edit otherwise consumes every key, so without this
         // shortcut Esc would simply be captured as the user's chosen
-        // sequence ("Esc") — which is never what the user means by
+        // sequence ("Esc"), which is never what the user means by
         // pressing Esc on a popup.
         if (event->key() == Qt::Key_Escape && event->modifiers() == Qt::NoModifier) {
             if (auto* dialog = qobject_cast<QDialog*>(window()); dialog != nullptr) {
@@ -148,6 +167,7 @@ protected:
         }
         if (event->key() == Qt::Key_Backspace || event->key() == Qt::Key_Delete) {
             sequence_ = QKeySequence();
+            shortcutText_.clear();
             clear();
             event->accept();
             return;
@@ -187,7 +207,8 @@ protected:
                 sequence_ = allowBareModifier_ || modifiers != Qt::NoModifier
                     ? QKeySequence(static_cast<int>(modifiers))
                     : QKeySequence();
-                setText(shortcutSequenceText(sequence_));
+                shortcutText_ = sequence_.toString(QKeySequence::PortableText);
+                setText(shortcutTextListDisplay({shortcutText_}));
             }
             event->accept();
             return;
@@ -204,12 +225,30 @@ protected:
         } else {
             sequence_ = QKeySequence(modifiers | key);
         }
-        setText(shortcutSequenceText(sequence_));
+        shortcutText_ = sequence_.toString(QKeySequence::PortableText);
+        setText(shortcutTextListDisplay({shortcutText_}));
+        event->accept();
+    }
+
+    void wheelEvent(QWheelEvent* event) override
+    {
+        if (event == nullptr) {
+            return;
+        }
+        const auto direction = miacode::input_shortcut::wheelDirectionFromEvent(event);
+        if (direction == miacode::input_shortcut::WheelDirection::None) {
+            event->accept();
+            return;
+        }
+        sequence_ = QKeySequence();
+        shortcutText_ = miacode::input_shortcut::wheelGestureText(event->modifiers(), direction);
+        setText(shortcutTextListDisplay({shortcutText_}));
         event->accept();
     }
 
 private:
     QKeySequence sequence_;
+    QString shortcutText_;
     bool allowBareModifier_ = false;
 };
 
@@ -252,6 +291,26 @@ protected:
             event->accept();
             return true;
         }
+        if (event->type() == QEvent::Wheel) {
+            if (QApplication::focusWidget() == edit_) {
+                return false;
+            }
+            auto* wheelEvent = static_cast<QWheelEvent*>(event);
+            QWheelEvent forwarded(
+                QPointF(edit_->mapFromGlobal(wheelEvent->globalPosition().toPoint())),
+                wheelEvent->globalPosition(),
+                wheelEvent->pixelDelta(),
+                wheelEvent->angleDelta(),
+                wheelEvent->buttons(),
+                wheelEvent->modifiers(),
+                wheelEvent->phase(),
+                wheelEvent->inverted(),
+                wheelEvent->source(),
+                wheelEvent->pointingDevice());
+            QApplication::sendEvent(edit_, &forwarded);
+            event->accept();
+            return true;
+        }
         return false;
     }
 
@@ -276,10 +335,114 @@ protected:
     }
 };
 
+class DelayedTableToolTipFilter final : public QObject {
+public:
+    explicit DelayedTableToolTipFilter(QTableWidget* table, int delayMs, QObject* parent = nullptr)
+        : QObject(parent)
+        , table_(table)
+    {
+        timer_.setSingleShot(true);
+        timer_.setInterval(delayMs);
+        connect(&timer_, &QTimer::timeout, this, [this]() {
+            showPendingToolTip();
+        });
+    }
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (table_ == nullptr || watched != table_->viewport()) {
+            return QObject::eventFilter(watched, event);
+        }
+        switch (event->type()) {
+        case QEvent::MouseMove: {
+            auto* mouseEvent = static_cast<QMouseEvent*>(event);
+            const QModelIndex index = table_->indexAt(mouseEvent->pos());
+            if (!index.isValid()) {
+                clearPendingToolTip();
+                break;
+            }
+            if (index.row() == pendingRow_ && index.column() == pendingColumn_) {
+                pendingViewportPos_ = mouseEvent->pos();
+                break;
+            }
+            pendingRow_ = index.row();
+            pendingColumn_ = index.column();
+            pendingViewportPos_ = mouseEvent->pos();
+            timer_.start();
+            QToolTip::hideText();
+            break;
+        }
+        case QEvent::Leave:
+        case QEvent::MouseButtonPress:
+        case QEvent::Wheel:
+            clearPendingToolTip();
+            break;
+        default:
+            break;
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    QString toolTipTextForCell(int row, int column) const
+    {
+        if (table_ == nullptr || row < 0 || column < 0) {
+            return QString();
+        }
+        if (QTableWidgetItem* item = table_->item(row, column); item != nullptr) {
+            const QString tip = item->toolTip().trimmed();
+            return tip.isEmpty() ? item->text().trimmed() : tip;
+        }
+        if (QWidget* widget = table_->cellWidget(row, column); widget != nullptr) {
+            const QString tip = widget->toolTip().trimmed();
+            return tip.isEmpty() ? widget->accessibleDescription().trimmed() : tip;
+        }
+        return QString();
+    }
+
+    void clearPendingToolTip()
+    {
+        timer_.stop();
+        pendingRow_ = -1;
+        pendingColumn_ = -1;
+        pendingViewportPos_ = QPoint();
+        QToolTip::hideText();
+    }
+
+    void showPendingToolTip()
+    {
+        if (table_ == nullptr || pendingRow_ < 0 || pendingColumn_ < 0) {
+            return;
+        }
+        const QModelIndex currentIndex = table_->indexAt(pendingViewportPos_);
+        if (!currentIndex.isValid()
+            || currentIndex.row() != pendingRow_
+            || currentIndex.column() != pendingColumn_) {
+            return;
+        }
+        const QString text = toolTipTextForCell(pendingRow_, pendingColumn_);
+        if (text.isEmpty() || text == QStringLiteral("-")) {
+            return;
+        }
+        QToolTip::showText(
+            table_->viewport()->mapToGlobal(pendingViewportPos_),
+            text,
+            table_->viewport(),
+            table_->visualRect(currentIndex));
+    }
+
+    QPointer<QTableWidget> table_;
+    QTimer timer_;
+    int pendingRow_ = -1;
+    int pendingColumn_ = -1;
+    QPoint pendingViewportPos_;
+};
+
 // Item delegate that gives every row a consistent text inset. Two passes:
 //   1) Paint the panel (selection bg, hover, item bg) at the FULL cell rect
 //      so a row-selected item gets one continuous blue band across both
-//      columns — adjusting `opt.rect` in a single-pass paint would shrink
+//      columns; adjusting `opt.rect` in a single-pass paint would shrink
 //      the selection visual on every cell, leaving a darker stripe at the
 //      column-1 left edge where the inset selection bg stops short.
 //   2) Draw the cell text manually at the inset rect. The inset differs
@@ -404,7 +567,7 @@ QString fontShortcutHintText()
 
 QList<QPair<QString, QStringList>> shortcutCategoryGroups()
 {
-    return {
+    QList<QPair<QString, QStringList>> groups{
         {
             QStringLiteral("谱面变换"),
             {
@@ -432,10 +595,12 @@ QList<QPair<QString, QStringList>> shortcutCategoryGroups()
                 QStringLiteral("preview.speed_down"),
                 QStringLiteral("preview.speed_up"),
                 QStringLiteral("preview.pause_display_hold"),
+                QStringLiteral("timeline.zoom_in"),
+                QStringLiteral("timeline.zoom_out"),
             },
         },
         {
-            QStringLiteral("编辑器"),
+            UiText::isChineseUi() ? QStringLiteral("编辑器") : QStringLiteral("Editor"),
             {
                 QStringLiteral("editor.font_decrease"),
                 QStringLiteral("editor.font_increase"),
@@ -443,6 +608,200 @@ QList<QPair<QString, QStringList>> shortcutCategoryGroups()
             },
         },
     };
+    QStringList extensionIds;
+    for (const ShortcutRegistry::ShortcutDefinition& definition : ShortcutRegistry::instance().editableShortcuts()) {
+        if (definition.id.startsWith(QStringLiteral("extension."))) {
+            extensionIds.append(definition.id);
+        }
+    }
+    if (!extensionIds.isEmpty()) {
+        extensionIds.sort(Qt::CaseInsensitive);
+        groups.append({
+            UiText::isChineseUi() ? QStringLiteral("扩展") : QStringLiteral("Extensions"),
+            extensionIds,
+        });
+    }
+    return groups;
+}
+
+QString compactJsonText(const QJsonValue& value)
+{
+    if (value.isString()) {
+        return value.toString();
+    }
+    if (value.isBool()) {
+        return value.toBool() ? QStringLiteral("true") : QStringLiteral("false");
+    }
+    if (value.isDouble()) {
+        return QString::number(value.toDouble(), 'f', 2).replace(QRegularExpression(QStringLiteral("\\.?0+$")), QString());
+    }
+    if (value.isArray()) {
+        return QString::fromUtf8(QJsonDocument(value.toArray()).toJson(QJsonDocument::Compact));
+    }
+    if (value.isObject()) {
+        return QString::fromUtf8(QJsonDocument(value.toObject()).toJson(QJsonDocument::Compact));
+    }
+    return QString();
+}
+
+QTableWidgetItem* readOnlyTableItem(const QString& text, const QString& tooltip = {})
+{
+    auto* item = new QTableWidgetItem(text);
+    item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+    item->setToolTip(tooltip.isEmpty() ? text : tooltip);
+    return item;
+}
+
+void configureDevToolsTable(QTableWidget* table, const QStringList& headers)
+{
+    if (table == nullptr) {
+        return;
+    }
+    table->setColumnCount(headers.size());
+    table->setHorizontalHeaderLabels(headers);
+    table->verticalHeader()->hide();
+    table->setShowGrid(false);
+    table->setAlternatingRowColors(true);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setTextElideMode(Qt::ElideRight);
+    table->horizontalHeader()->setStretchLastSection(true);
+    table->horizontalHeader()->setDefaultSectionSize(132);
+    table->verticalHeader()->setDefaultSectionSize(28);
+    table->setStyleSheet(QStringLiteral(
+        "QTableWidget { border: 1px solid rgba(128,128,128,72); border-radius: 6px; }"
+        "QTableWidget::item:selected { background: rgba(88, 145, 220, 58); }"
+        "QHeaderView::section { padding: 6px 9px; border: 0; border-bottom: 1px solid rgba(128,128,128,72); font-weight: 600; }"));
+}
+
+void populateApiRegistryTable(QTableWidget* table, const QJsonArray& api)
+{
+    table->setRowCount(api.size());
+    for (int row = 0; row < api.size(); ++row) {
+        const QJsonObject item = api.at(row).toObject();
+        table->setItem(row, 0, readOnlyTableItem(item.value(QStringLiteral("id")).toString()));
+        table->setItem(row, 1, readOnlyTableItem(item.value(QStringLiteral("method")).toString()));
+        table->setItem(row, 2, readOnlyTableItem(item.value(QStringLiteral("status")).toString()));
+        table->setItem(row, 3, readOnlyTableItem(item.value(QStringLiteral("permission")).toString()));
+        table->setItem(row, 4, readOnlyTableItem(item.value(QStringLiteral("risk")).toString()));
+        table->setItem(row, 5, readOnlyTableItem(item.value(QStringLiteral("description")).toString()));
+    }
+}
+
+void populateOpenBridgeTable(QTableWidget* table, const QJsonArray& objects)
+{
+    int rowCount = 0;
+    for (const QJsonValue& value : objects) {
+        const QJsonObject object = value.toObject();
+        const QJsonArray methods = object.value(QStringLiteral("methods")).toArray();
+        rowCount += qMax(1, methods.size());
+    }
+    table->setRowCount(rowCount);
+
+    int row = 0;
+    const auto setRow = [&](const QJsonObject& object, const QJsonObject& method) {
+        const QString route = method.value(QStringLiteral("hostMethod")).toString(
+            method.value(QStringLiteral("command")).toString());
+        table->setItem(row, 0, readOnlyTableItem(object.value(QStringLiteral("id")).toString()));
+        table->setItem(row, 1, readOnlyTableItem(method.value(QStringLiteral("name")).toString()));
+        table->setItem(row, 2, readOnlyTableItem(object.value(QStringLiteral("stability")).toString()));
+        table->setItem(row, 3, readOnlyTableItem(method.value(QStringLiteral("status")).toString()));
+        table->setItem(row, 4, readOnlyTableItem(method.value(QStringLiteral("permission")).toString(
+            object.value(QStringLiteral("permission")).toString())));
+        table->setItem(row, 5, readOnlyTableItem(route));
+        table->setItem(row, 6, readOnlyTableItem(object.value(QStringLiteral("experimentalRaw")).toBool(false) ? QStringLiteral("yes") : QStringLiteral("no")));
+        table->setItem(row, 7, readOnlyTableItem(method.value(QStringLiteral("description")).toString(
+            object.value(QStringLiteral("description")).toString())));
+        ++row;
+    };
+    for (const QJsonValue& value : objects) {
+        const QJsonObject object = value.toObject();
+        const QJsonArray methods = object.value(QStringLiteral("methods")).toArray();
+        if (methods.isEmpty()) {
+            setRow(object, QJsonObject{});
+            continue;
+        }
+        for (const QJsonValue& methodValue : methods) {
+            setRow(object, methodValue.toObject());
+        }
+    }
+}
+
+void populateRecentCallsTable(QTableWidget* table, const QJsonArray& calls)
+{
+    table->setRowCount(calls.size());
+    for (int row = 0; row < calls.size(); ++row) {
+        const QJsonObject item = calls.at(row).toObject();
+        table->setItem(row, 0, readOnlyTableItem(item.value(QStringLiteral("timestamp")).toString()));
+        table->setItem(row, 1, readOnlyTableItem(item.value(QStringLiteral("extensionId")).toString()));
+        table->setItem(row, 2, readOnlyTableItem(item.value(QStringLiteral("method")).toString()));
+        table->setItem(row, 3, readOnlyTableItem(item.value(QStringLiteral("permission")).toString()));
+        table->setItem(row, 4, readOnlyTableItem(item.value(QStringLiteral("ok")).toBool() ? QStringLiteral("ok") : QStringLiteral("error")));
+        table->setItem(row, 5, readOnlyTableItem(compactJsonText(item.value(QStringLiteral("elapsedMs")))));
+        table->setItem(row, 6, readOnlyTableItem(item.value(QStringLiteral("error")).toString()));
+        table->setItem(row, 7, readOnlyTableItem(item.value(QStringLiteral("paramsPreview")).toString()));
+    }
+}
+
+void populateExtensionsDevToolsTable(QTableWidget* table, const QJsonArray& extensions)
+{
+    table->setRowCount(extensions.size());
+    for (int row = 0; row < extensions.size(); ++row) {
+        const QJsonObject item = extensions.at(row).toObject();
+        table->setItem(row, 0, readOnlyTableItem(item.value(QStringLiteral("id")).toString()));
+        table->setItem(row, 1, readOnlyTableItem(item.value(QStringLiteral("name")).toString()));
+        table->setItem(row, 2, readOnlyTableItem(item.value(QStringLiteral("version")).toString()));
+        table->setItem(row, 3, readOnlyTableItem(item.value(QStringLiteral("enabled")).toBool() ? QStringLiteral("yes") : QStringLiteral("no")));
+        table->setItem(row, 4, readOnlyTableItem(item.value(QStringLiteral("valid")).toBool() ? QStringLiteral("yes") : QStringLiteral("no")));
+        table->setItem(row, 5, readOnlyTableItem(compactJsonText(item.value(QStringLiteral("permissions")))));
+        table->setItem(row, 6, readOnlyTableItem(item.value(QStringLiteral("diagnostic")).toString()));
+    }
+}
+
+QString jsonArrayCountText(const QJsonObject& object, const QString& key)
+{
+    return QString::number(object.value(key).toArray().size());
+}
+
+QString firstDiagnosticText(const QJsonObject& object)
+{
+    const QJsonArray diagnostics = object.value(QStringLiteral("diagnostics")).toArray();
+    if (diagnostics.isEmpty()) {
+        return QString();
+    }
+    return compactJsonText(diagnostics.at(0));
+}
+
+void populateExtensionDetailsTable(QTableWidget* table, const QJsonArray& details)
+{
+    table->setRowCount(details.size());
+    for (int row = 0; row < details.size(); ++row) {
+        const QJsonObject item = details.at(row).toObject();
+        const QString tooltip = compactJsonText(item);
+        table->setItem(row, 0, readOnlyTableItem(item.value(QStringLiteral("id")).toString(), tooltip));
+        table->setItem(row, 1, readOnlyTableItem(item.value(QStringLiteral("enabled")).toBool() ? QStringLiteral("yes") : QStringLiteral("no"), tooltip));
+        table->setItem(row, 2, readOnlyTableItem(item.value(QStringLiteral("valid")).toBool() ? QStringLiteral("yes") : QStringLiteral("no"), tooltip));
+        table->setItem(row, 3, readOnlyTableItem(compactJsonText(item.value(QStringLiteral("permissions"))), tooltip));
+        table->setItem(row, 4, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("uiContributions")), tooltip));
+        table->setItem(row, 5, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("uiViews")), tooltip));
+        table->setItem(row, 6, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("eventCallbacks")), tooltip));
+        table->setItem(row, 7, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("providers")), tooltip));
+        table->setItem(row, 8, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("exportHooks")), tooltip));
+        table->setItem(row, 9, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("experimentalRawCalls")), tooltip));
+        table->setItem(row, 10, readOnlyTableItem(jsonArrayCountText(item, QStringLiteral("recentErrors")), tooltip));
+        table->setItem(row, 11, readOnlyTableItem(firstDiagnosticText(item), tooltip));
+    }
+}
+
+void populateJsonArrayList(QListWidget* list, const QJsonArray& values)
+{
+    list->clear();
+    for (const QJsonValue& value : values) {
+        const QString text = compactJsonText(value);
+        auto* item = new QListWidgetItem(text.isEmpty() ? QStringLiteral("-") : text, list);
+        item->setToolTip(item->text());
+    }
 }
 
 }  // namespace
@@ -534,6 +893,15 @@ void MainWindow::PreferencesSection::applyConfiguredShortcuts()
         owner_.previewFasterAction_,
         QStringLiteral("preview.speed_up"),
         QKeySequence(QStringLiteral("Ctrl+P")));
+    if (owner_.timelineQuickStateBridge_ != nullptr) {
+        owner_.timelineQuickStateBridge_->setZoomWheelShortcuts(
+            ShortcutRegistry::instance().shortcutTexts(
+                QStringLiteral("timeline.zoom_in"),
+                {QStringLiteral("Ctrl+WheelUp")}),
+            ShortcutRegistry::instance().shortcutTexts(
+                QStringLiteral("timeline.zoom_out"),
+                {QStringLiteral("Ctrl+WheelDown")}));
+    }
     applyConfiguredShortcut(
         owner_.fontDecreaseAction_,
         QStringLiteral("editor.font_decrease"),
@@ -546,55 +914,233 @@ void MainWindow::PreferencesSection::applyConfiguredShortcuts()
         Qt::WindowShortcut);
 }
 
-void MainWindow::PreferencesSection::onPreferences()
+void MainWindow::showExtensionDevToolsDialog()
 {
-    MC_OP("MainWindow::PreferencesSection::onPreferences");
-    QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
-    dialog.setWindowTitle(uiText("dialog.preferences.title", "Preferences"));
-    dialog.setModal(true);
+    QDialog dialog(UiDialogs::effectiveParentWidget(this));
+    dialog.setWindowTitle(UiText::text(QStringLiteral("dialog.preferences.extensions.devtools")));
     dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
-    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
-    UiDialogs::prepareDialogWindow(&dialog, &owner_);
+    dialog.resize(980, 680);
+    dialog.setMinimumSize(820, 560);
 
     auto* rootLayout = new QVBoxLayout(&dialog);
     rootLayout->setContentsMargins(12, 12, 12, 12);
     rootLayout->setSpacing(10);
-    rootLayout->setSizeConstraint(QLayout::SetFixedSize);
 
-    // Tab strip across the top — matches the render-settings dialog so
+    auto* summaryGroup = new QGroupBox(
+        UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.summary")),
+        &dialog);
+    auto* summaryLayout = new QGridLayout(summaryGroup);
+    summaryLayout->setContentsMargins(12, 10, 12, 12);
+    summaryLayout->setHorizontalSpacing(18);
+    summaryLayout->setVerticalSpacing(6);
+
+    auto* apiCountLabel = new QLabel(summaryGroup);
+    auto* extensionCountLabel = new QLabel(summaryGroup);
+    auto* rawCountLabel = new QLabel(summaryGroup);
+    auto* callbackCountLabel = new QLabel(summaryGroup);
+    auto* callCountLabel = new QLabel(summaryGroup);
+    auto* diagnosticCountLabel = new QLabel(summaryGroup);
+    const QList<QPair<QString, QLabel*>> summaryRows{
+        {UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.api_count")), apiCountLabel},
+        {UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.extension_count")), extensionCountLabel},
+        {UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.raw_count")), rawCountLabel},
+        {UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.callback_count")), callbackCountLabel},
+        {UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.call_count")), callCountLabel},
+        {UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.diagnostic_count")), diagnosticCountLabel},
+    };
+    for (int index = 0; index < summaryRows.size(); ++index) {
+        auto* name = new QLabel(summaryRows.at(index).first, summaryGroup);
+        name->setStyleSheet(QStringLiteral("font-weight: 600;"));
+        const int row = index / 3;
+        const int column = (index % 3) * 2;
+        summaryLayout->addWidget(name, row, column);
+        summaryLayout->addWidget(summaryRows.at(index).second, row, column + 1);
+    }
+    miacode::ui::flattenGroupForTabPage(summaryGroup);
+    rootLayout->addWidget(summaryGroup, 0);
+
+    auto* tabs = new QTabWidget(&dialog);
+    tabs->setObjectName(QStringLiteral("ExtensionDevToolsTabs"));
+    tabs->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    rootLayout->addWidget(tabs, 1);
+
+    auto* apiTable = new QTableWidget(tabs);
+    configureDevToolsTable(apiTable, {
+        QStringLiteral("ID"),
+        QStringLiteral("Method"),
+        QStringLiteral("Status"),
+        QStringLiteral("Permission"),
+        QStringLiteral("Risk"),
+        QStringLiteral("Description"),
+    });
+    tabs->addTab(apiTable, UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.api")));
+
+    auto* openBridgeTable = new QTableWidget(tabs);
+    configureDevToolsTable(openBridgeTable, {
+        QStringLiteral("Object"),
+        QStringLiteral("Method"),
+        QStringLiteral("Stability"),
+        QStringLiteral("Status"),
+        QStringLiteral("Permission"),
+        QStringLiteral("Route"),
+        QStringLiteral("Raw"),
+        QStringLiteral("Description"),
+    });
+    tabs->addTab(openBridgeTable, UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.open_bridge")));
+
+    auto* recentCallsTable = new QTableWidget(tabs);
+    configureDevToolsTable(recentCallsTable, {
+        QStringLiteral("Time"),
+        QStringLiteral("Extension"),
+        QStringLiteral("Method"),
+        QStringLiteral("Permission"),
+        QStringLiteral("OK"),
+        QStringLiteral("ms"),
+        QStringLiteral("Error"),
+        QStringLiteral("Params"),
+    });
+    tabs->addTab(recentCallsTable, UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.recent_calls")));
+
+    auto* extensionsTable = new QTableWidget(tabs);
+    configureDevToolsTable(extensionsTable, {
+        QStringLiteral("ID"),
+        QStringLiteral("Name"),
+        QStringLiteral("Version"),
+        QStringLiteral("Enabled"),
+        QStringLiteral("Valid"),
+        QStringLiteral("Permissions"),
+        QStringLiteral("Diagnostic"),
+    });
+    tabs->addTab(extensionsTable, UiText::text(QStringLiteral("dialog.preferences.extensions_group")));
+
+    auto* extensionDetailsTable = new QTableWidget(tabs);
+    configureDevToolsTable(extensionDetailsTable, {
+        QStringLiteral("Extension"),
+        QStringLiteral("Enabled"),
+        QStringLiteral("Valid"),
+        QStringLiteral("Permissions"),
+        QStringLiteral("UI"),
+        QStringLiteral("Views"),
+        QStringLiteral("Events"),
+        QStringLiteral("Providers"),
+        QStringLiteral("Hooks"),
+        QStringLiteral("Raw"),
+        QStringLiteral("Errors"),
+        QStringLiteral("Diagnostic"),
+    });
+    tabs->addTab(
+        extensionDetailsTable,
+        UiText::isChineseUi() ? QStringLiteral("扩展详情") : QStringLiteral("Extension Details"));
+
+    auto* uiContributionsList = new QListWidget(tabs);
+    uiContributionsList->setAlternatingRowColors(true);
+    tabs->addTab(uiContributionsList, UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.ui")));
+
+    auto* diagnosticsList = new QListWidget(tabs);
+    diagnosticsList->setAlternatingRowColors(true);
+    tabs->addTab(diagnosticsList, UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.diagnostics")));
+
+    auto* rawJsonEdit = new QPlainTextEdit(tabs);
+    rawJsonEdit->setReadOnly(true);
+    rawJsonEdit->setLineWrapMode(QPlainTextEdit::NoWrap);
+    rawJsonEdit->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    tabs->addTab(rawJsonEdit, UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.raw_json")));
+
+    const auto refreshSnapshot = [&]() {
+        const QJsonObject snapshot = extensionManager_ != nullptr ? extensionManager_->devtoolsSnapshotForUi() : QJsonObject();
+        const QJsonArray api = snapshot.value(QStringLiteral("api")).toArray();
+        const QJsonArray openObjects = snapshot.value(QStringLiteral("openBridgeObjects")).toArray();
+        const QJsonArray rawTargets = snapshot.value(QStringLiteral("experimentalRawTargets")).toArray();
+        const QJsonArray extensions = snapshot.value(QStringLiteral("extensions")).toArray();
+        const QJsonArray extensionDetails = snapshot.value(QStringLiteral("extensionDetails")).toArray();
+        const QJsonArray recentCalls = snapshot.value(QStringLiteral("recentCalls")).toArray();
+        const QJsonArray diagnostics = snapshot.value(QStringLiteral("diagnostics")).toArray();
+        const int callbackCount = snapshot.value(QStringLiteral("eventCallbackCount")).toInt();
+        const QJsonArray uiContributions = snapshot.value(QStringLiteral("uiContributions")).toArray();
+        const QJsonArray uiViews = snapshot.value(QStringLiteral("uiViews")).toArray();
+
+        apiCountLabel->setText(QString::number(api.size()));
+        extensionCountLabel->setText(QString::number(extensions.size()));
+        rawCountLabel->setText(QString::number(rawTargets.size()));
+        callbackCountLabel->setText(QString::number(callbackCount));
+        callCountLabel->setText(QString::number(recentCalls.size()));
+        diagnosticCountLabel->setText(QString::number(diagnostics.size()));
+
+        populateApiRegistryTable(apiTable, api);
+        populateOpenBridgeTable(openBridgeTable, openObjects);
+        populateRecentCallsTable(recentCallsTable, recentCalls);
+        populateExtensionsDevToolsTable(extensionsTable, extensions);
+        populateExtensionDetailsTable(extensionDetailsTable, extensionDetails);
+        populateJsonArrayList(diagnosticsList, diagnostics);
+
+        QJsonArray uiItems;
+        for (const QJsonValue& value : uiContributions) {
+            uiItems.append(QJsonObject{
+                {QStringLiteral("type"), QStringLiteral("contribution")},
+                {QStringLiteral("value"), value},
+            });
+        }
+        for (const QJsonValue& value : uiViews) {
+            uiItems.append(QJsonObject{
+                {QStringLiteral("type"), QStringLiteral("view")},
+                {QStringLiteral("value"), value},
+            });
+        }
+        populateJsonArrayList(uiContributionsList, uiItems);
+        rawJsonEdit->setPlainText(QString::fromUtf8(QJsonDocument(snapshot).toJson(QJsonDocument::Indented)));
+    };
+
+    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    auto* refreshButton = buttonBox->addButton(
+        UiText::text(QStringLiteral("dialog.preferences.extensions.devtools.refresh")),
+        QDialogButtonBox::ActionRole);
+    if (QPushButton* closeButton = buttonBox->button(QDialogButtonBox::Close)) {
+        closeButton->setText(UiText::text(QStringLiteral("action.close")));
+    }
+    QObject::connect(refreshButton, &QPushButton::clicked, &dialog, refreshSnapshot);
+    QObject::connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::accept);
+    rootLayout->addWidget(buttonBox, 0);
+
+    refreshSnapshot();
+    centerDialogOnAnchor(&dialog, this);
+    dialog.exec();
+}
+
+void MainWindow::PreferencesSection::onPreferences()
+{
+    MC_OP("MainWindow::PreferencesSection::onPreferences");
+    miacode::ui::TabbedSettingsDialog dialog(
+        &owner_,
+        UiText::text(QStringLiteral("dialog.preferences.title")),
+        miacode::ui::SettingsDialogChrome::Preferences);
+    QVBoxLayout* rootLayout = dialog.contentLayout();
+
+    // Tab strip across the top matches the render-settings dialog so
     // the two preference-style surfaces share one visual pattern. The
     // shared CSS lives in UiTheme::dialogTabStripStyleSheet(), already
     // appended to the preferences stylesheet. We still call the page
     // container `pageStack` to keep the downstream addWidget()/setCurrent
     // call sites intact; addTab() does the same wrapping under the hood.
-    auto* pageStack = new QTabWidget(&dialog);
-    pageStack->setObjectName(QStringLiteral("PreferenceTabs"));
-    rootLayout->addWidget(pageStack);
+    auto* pageStack = dialog.createTabs(QStringLiteral("PreferenceTabs"));
+    if (QTabBar* preferenceTabBar = pageStack->tabBar(); preferenceTabBar != nullptr) {
+        preferenceTabBar->setUsesScrollButtons(true);
+        preferenceTabBar->setElideMode(Qt::ElideRight);
+        preferenceTabBar->setExpanding(false);
+    }
 
     // Each preference page wraps its controls in a QGroupBox whose
-    // title duplicates the tab name (e.g. "外观" inside the "外观"
+    // title duplicates the tab name (e.g. "Appearance" inside the "Appearance"
     // tab). The tab strip already labels the page, so strip the inner
     // title + frame chrome before the group enters the tab. Same
     // recipe as the render-settings dialog.
-    const auto flattenPageGroup = [](QGroupBox* group) {
-        if (group == nullptr) {
-            return;
-        }
-        group->setTitle(QString());
-        group->setFlat(true);
-        group->setStyleSheet(QStringLiteral(
-            "QGroupBox { border: none; margin-top: 0; padding-top: 0; }"
-        ));
-    };
-
     auto* appearancePage = new QWidget(pageStack);
     auto* appearancePageLayout = new QVBoxLayout(appearancePage);
     appearancePageLayout->setContentsMargins(0, 0, 0, 0);
     appearancePageLayout->setSpacing(10);
-    auto* interfaceGroup = new QGroupBox(uiText("dialog.preferences.interface_group", "Appearance"), appearancePage);
+    auto* interfaceGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.preferences.interface_group")), appearancePage);
     auto* interfaceLayout = new QFormLayout(interfaceGroup);
     // Explicit margins like the editor/performance pages. The flattened
-    // group box (border: none via flattenPageGroup) zeroes the default
+    // group box (border: none via flattenGroupForTabPage) zeroes the default
     // QSS layout margins, so without this the field column runs flush to
     // the pane edge and the menu buttons' right border gets clipped.
     interfaceLayout->setContentsMargins(12, 10, 12, 12);
@@ -602,161 +1148,636 @@ void MainWindow::PreferencesSection::onPreferences()
     interfaceLayout->setHorizontalSpacing(12);
     interfaceLayout->setVerticalSpacing(8);
 
-    const UiText::LanguagePreference currentPreference = UiText::preferredLanguage();
-    UiText::LanguagePreference selectedPreference = currentPreference;
+    QString selectedLanguageToken = UiText::preferredLanguageToken();
     const UiText::ThemePreference currentThemePreference = UiText::preferredTheme();
     UiText::ThemePreference selectedThemePreference = currentThemePreference;
-    const auto languageLabel = [](UiText::LanguagePreference preference) -> QString {
-        switch (preference) {
-        case UiText::LanguagePreference::English:
-            return uiText("dialog.preferences.language.english", "English");
-        case UiText::LanguagePreference::Chinese:
-            return uiText("dialog.preferences.language.chinese", "Simplified Chinese");
-        case UiText::LanguagePreference::System:
-        default:
-            return uiText("dialog.preferences.language.system", "Follow System");
+    QList<QPointer<QComboBox>> themedDialogCombos;
+    QList<QPointer<QSlider>> themedDialogSliders;
+    QList<QPair<QPointer<QPushButton>, bool>> themedDialogButtons;
+    const auto styleRegisteredDialogCombo = [&themedDialogCombos](QComboBox* combo, int maxVisibleItems = 12) {
+        if (combo == nullptr) {
+            return;
+        }
+        // All Preferences dropdowns read left-aligned. Combos built with raw
+        // `new QComboBox` (editor tab: line spacing / auto-completion / header /
+        // IME) reach styling only through here, so stamp the alignment property
+        // the styler consumes. Factory combos already carry it; re-stamp is
+        // idempotent.
+        combo->setProperty("miacode.combo_text_alignment",
+                           static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter));
+        miacode::ui::applyDialogComboBoxStyle(combo, maxVisibleItems);
+        for (const QPointer<QComboBox>& registered : themedDialogCombos) {
+            if (registered == combo) {
+                return;
+            }
+        }
+        themedDialogCombos.append(combo);
+    };
+    const auto styleRegisteredDialogSlider = [&themedDialogSliders](QSlider* slider) {
+        if (slider == nullptr) {
+            return;
+        }
+        miacode::ui::applyDialogSliderStyle(slider);
+        for (const QPointer<QSlider>& registered : themedDialogSliders) {
+            if (registered == slider) {
+                return;
+            }
+        }
+        themedDialogSliders.append(slider);
+    };
+    const auto styleRegisteredDialogButton = [&themedDialogButtons](QPushButton* button, bool primary = false) {
+        if (button == nullptr) {
+            return;
+        }
+        miacode::ui::applyDialogPushButtonStyle(button, primary);
+        for (const auto& registered : themedDialogButtons) {
+            if (registered.first == button) {
+                return;
+            }
+        }
+        themedDialogButtons.append({button, primary});
+    };
+    const auto refreshRegisteredDialogControls = [&themedDialogCombos, &themedDialogSliders, &themedDialogButtons]() {
+        for (const QPointer<QComboBox>& combo : themedDialogCombos) {
+            if (!combo.isNull()) {
+                miacode::ui::applyDialogComboBoxStyle(combo.data(), 12);
+            }
+        }
+        for (const QPointer<QSlider>& slider : themedDialogSliders) {
+            if (!slider.isNull()) {
+                miacode::ui::applyDialogSliderStyle(slider.data());
+            }
+        }
+        for (const auto& registered : themedDialogButtons) {
+            if (!registered.first.isNull()) {
+                miacode::ui::applyDialogPushButtonStyle(registered.first.data(), registered.second);
+            }
         }
     };
+    if (QGuiApplication* guiApp = qobject_cast<QGuiApplication*>(QCoreApplication::instance()); guiApp != nullptr) {
+        if (QStyleHints* styleHints = guiApp->styleHints(); styleHints != nullptr) {
+            connect(styleHints, &QStyleHints::colorSchemeChanged, &dialog, [&]() {
+                dialog.refreshStyleSheet();
+                refreshRegisteredDialogControls();
+                owner_.windowSection_->applySystemWindowBackdrop(&dialog);
+            });
+        }
+    }
     const auto themeLabel = [](UiText::ThemePreference preference) -> QString {
         switch (preference) {
         case UiText::ThemePreference::Light:
-            return uiText("dialog.preferences.theme.light", "Light");
+            return UiText::text(QStringLiteral("dialog.preferences.theme.light"));
         case UiText::ThemePreference::Dark:
-            return uiText("dialog.preferences.theme.dark", "Dark");
+            return UiText::text(QStringLiteral("dialog.preferences.theme.dark"));
         case UiText::ThemePreference::System:
         default:
-            return uiText("dialog.preferences.theme.system", "Follow System");
+            return UiText::text(QStringLiteral("dialog.preferences.theme.system"));
         }
     };
-    auto* languageLabelWidget = new QLabel(uiText("dialog.preferences.language", "Language"), interfaceGroup);
+    auto* languageLabelWidget = new QLabel(UiText::text(QStringLiteral("dialog.preferences.language")), interfaceGroup);
     auto* languageRow = new QWidget(interfaceGroup);
     auto* languageRowLayout = new QHBoxLayout(languageRow);
     languageRowLayout->setContentsMargins(0, 0, 0, 0);
     languageRowLayout->setSpacing(12);
-    auto* languageButton = new QToolButton(languageRow);
-    languageButton->setObjectName("PreferenceMenuButton");
-    languageButton->setFont(uiAccentFont(10, QFont::DemiBold));
-    languageButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    languageButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    languageButton->setText(languageLabel(selectedPreference));
-    auto* languageMenu = new QMenu(languageButton);
-    languageMenu->setFont(uiAccentFont(10));
-    styleRoundedMenu(*languageMenu);
-    const QList<UiText::LanguagePreference> languageOptions{
-        UiText::LanguagePreference::System,
-        UiText::LanguagePreference::English,
-        UiText::LanguagePreference::Chinese,
+    auto* languageCombo =
+        miacode::ui::createDialogComboBox(languageRow, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    languageCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    languageCombo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    // Extensions can add/remove language packs while the dialog is open, so
+    // repopulation is reusable (blocked: refilling must not fire the restart
+    // prompt below).
+    std::function<void()> rebuildLanguageCombo = [&, languageCombo]() {
+        const QSignalBlocker blocker(languageCombo);
+        languageCombo->clear();
+        for (const auto& option : UiText::availableLanguageOptions()) {
+            languageCombo->addItem(option.label, option.id);
+        }
+        languageCombo->setCurrentIndex(
+            qMax(0, languageCombo->findData(selectedLanguageToken.trimmed().toLower())));
+        miacode::ui::applyDialogComboBoxStyle(languageCombo, 12);
     };
-    for (UiText::LanguagePreference preference : languageOptions) {
-        QAction* action = languageMenu->addAction(languageLabel(preference));
-        action->setData(static_cast<int>(preference));
-        connect(action, &QAction::triggered, &dialog, [&, preference, languageButton]() {
-            selectedPreference = preference;
-            languageButton->setText(languageLabel(selectedPreference));
-            UiText::setPreferredLanguage(selectedPreference);
-            owner_.statusBar()->showMessage(uiText("status.preferences_saved", "Preferences saved. Restart to apply."));
-        });
-    }
-    // No manual setFixedWidth here: the QSS PreferenceMenuButton rule
-    // (min-width + padding + border) already defines the styled size, and
-    // pinning a metrics-derived width below it is what clipped the button's
-    // right border. The performance tab's buttons size the same way.
-    connect(languageButton, &QToolButton::clicked, &dialog, [languageButton, languageMenu]() {
-        languageMenu->popup(languageButton->mapToGlobal(QPoint(0, languageButton->height())));
-    });
-    languageRowLayout->addWidget(languageButton, 0);
+    rebuildLanguageCombo();
+    styleRegisteredDialogCombo(languageCombo);
+    connect(languageCombo,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            &dialog,
+            [&, languageCombo](int index) {
+                if (index < 0) {
+                    return;
+                }
+                selectedLanguageToken = languageCombo->itemData(index).toString();
+                UiText::setPreferredLanguageToken(selectedLanguageToken);
+                QMessageBox::information(
+                    &dialog,
+                    UiText::text(QStringLiteral("dialog.preferences.restart_title")),
+                    UiText::text(QStringLiteral("dialog.preferences.restart_message")),
+                    QMessageBox::Ok);
+                owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_saved")));
+            });
+    languageRowLayout->addWidget(languageCombo, 0);
     languageRowLayout->addStretch(1);
     interfaceLayout->addRow(languageLabelWidget, languageRow);
 
-    auto* themeLabelWidget = new QLabel(uiText("dialog.preferences.theme", "Theme"), interfaceGroup);
+    auto* themeLabelWidget = new QLabel(UiText::text(QStringLiteral("dialog.preferences.theme")), interfaceGroup);
     auto* themeRow = new QWidget(interfaceGroup);
     auto* themeRowLayout = new QHBoxLayout(themeRow);
     themeRowLayout->setContentsMargins(0, 0, 0, 0);
     themeRowLayout->setSpacing(12);
-    auto* themeButton = new QToolButton(themeRow);
-    themeButton->setObjectName("PreferenceMenuButton");
-    themeButton->setFont(uiAccentFont(10, QFont::DemiBold));
-    themeButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    themeButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    themeButton->setText(themeLabel(selectedThemePreference));
-    auto* themeMenu = new QMenu(themeButton);
-    themeMenu->setFont(uiAccentFont(10));
-    styleRoundedMenu(*themeMenu);
+    auto* themeCombo =
+        miacode::ui::createDialogComboBox(themeRow, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    themeCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    themeCombo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     const QList<UiText::ThemePreference> themeOptions{
         UiText::ThemePreference::System,
         UiText::ThemePreference::Light,
         UiText::ThemePreference::Dark,
     };
     for (UiText::ThemePreference preference : themeOptions) {
-        QAction* action = themeMenu->addAction(themeLabel(preference));
-        action->setData(static_cast<int>(preference));
-        connect(action, &QAction::triggered, &dialog, [&, preference, themeButton]() {
-            selectedThemePreference = preference;
-            themeButton->setText(themeLabel(selectedThemePreference));
-            UiText::setPreferredTheme(selectedThemePreference);
-            owner_.windowSection_->applyUiTheme();
-            dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
-            owner_.windowSection_->applySystemWindowBackdrop(&dialog);
-            owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
-        });
+        themeCombo->addItem(themeLabel(preference), static_cast<int>(preference));
     }
-    connect(themeButton, &QToolButton::clicked, &dialog, [themeButton, themeMenu]() {
-        themeMenu->popup(themeButton->mapToGlobal(QPoint(0, themeButton->height())));
-    });
-    themeRowLayout->addWidget(themeButton, 0);
+    themeCombo->setCurrentIndex(
+        qMax(0, themeCombo->findData(static_cast<int>(selectedThemePreference))));
+    styleRegisteredDialogCombo(themeCombo);
+    connect(themeCombo,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            &dialog,
+            [&, themeCombo](int index) {
+                if (index < 0) {
+                    return;
+                }
+                selectedThemePreference =
+                    static_cast<UiText::ThemePreference>(themeCombo->itemData(index).toInt());
+                UiText::setPreferredTheme(selectedThemePreference);
+                owner_.windowSection_->applyUiTheme();
+                dialog.refreshStyleSheet();
+                refreshRegisteredDialogControls();
+                owner_.windowSection_->applySystemWindowBackdrop(&dialog);
+                owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
+            });
+    themeRowLayout->addWidget(themeCombo, 0);
     themeRowLayout->addStretch(1);
     interfaceLayout->addRow(themeLabelWidget, themeRow);
 
     // Chart-preview position (the same workspace left/right swap exposed by
-    // the Preview menu's "左右面板互换"). false = preview on the right
+    // the Preview menu's left/right panel swap. false = preview on the right
     // (default), true = preview on the left.
     const auto previewSideLabel = [](bool previewOnLeft) -> QString {
         return previewOnLeft
-            ? uiText("dialog.preferences.preview_side.left", "Left")
-            : uiText("dialog.preferences.preview_side.right", "Right");
+            ? UiText::text(QStringLiteral("dialog.preferences.preview_side.left"))
+            : UiText::text(QStringLiteral("dialog.preferences.preview_side.right"));
     };
     auto* previewSideLabelWidget =
-        new QLabel(uiText("dialog.preferences.preview_side", "Preview Position"), interfaceGroup);
+        new QLabel(UiText::text(QStringLiteral("dialog.preferences.preview_side")), interfaceGroup);
     auto* previewSideRow = new QWidget(interfaceGroup);
     auto* previewSideRowLayout = new QHBoxLayout(previewSideRow);
     previewSideRowLayout->setContentsMargins(0, 0, 0, 0);
     previewSideRowLayout->setSpacing(12);
-    auto* previewSideButton = new QToolButton(previewSideRow);
-    previewSideButton->setObjectName("PreferenceMenuButton");
-    previewSideButton->setFont(uiAccentFont(10, QFont::DemiBold));
-    previewSideButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    previewSideButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    previewSideButton->setText(previewSideLabel(owner_.workspacePanelsSwapped_));
-    auto* previewSideMenu = new QMenu(previewSideButton);
-    previewSideMenu->setFont(uiAccentFont(10));
-    styleRoundedMenu(*previewSideMenu);
-    const QList<bool> previewSideOptions{false, true};
-    for (bool previewOnLeft : previewSideOptions) {
-        QAction* action = previewSideMenu->addAction(previewSideLabel(previewOnLeft));
-        action->setData(previewOnLeft);
-        connect(action, &QAction::triggered, &dialog, [&, previewOnLeft, previewSideButton]() {
-            previewSideButton->setText(previewSideLabel(previewOnLeft));
-            owner_.setWorkspacePanelsSwapped(previewOnLeft, true);
-            owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
-        });
-    }
-    connect(previewSideButton, &QToolButton::clicked, &dialog, [previewSideButton, previewSideMenu]() {
-        previewSideMenu->popup(previewSideButton->mapToGlobal(QPoint(0, previewSideButton->height())));
-    });
-    previewSideRowLayout->addWidget(previewSideButton, 0);
+    auto* previewSideCombo =
+        miacode::ui::createDialogComboBox(previewSideRow, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    previewSideCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    previewSideCombo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    previewSideCombo->addItem(previewSideLabel(false), false);
+    previewSideCombo->addItem(previewSideLabel(true), true);
+    previewSideCombo->setCurrentIndex(owner_.workspacePanelsSwapped_ ? 1 : 0);
+    styleRegisteredDialogCombo(previewSideCombo);
+    connect(previewSideCombo,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            &dialog,
+            [&, previewSideCombo](int index) {
+                if (index < 0) {
+                    return;
+                }
+                owner_.setWorkspacePanelsSwapped(previewSideCombo->itemData(index).toBool(), true);
+                owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
+            });
+    previewSideRowLayout->addWidget(previewSideCombo, 0);
     previewSideRowLayout->addStretch(1);
     interfaceLayout->addRow(previewSideLabelWidget, previewSideRow);
 
-    flattenPageGroup(interfaceGroup);
+    miacode::ui::flattenGroupForTabPage(interfaceGroup);
     appearancePageLayout->addWidget(interfaceGroup);
     appearancePageLayout->addStretch(1);
-    pageStack->addTab(appearancePage, uiText("dialog.preferences.interface_group", "Appearance"));
+    pageStack->addTab(appearancePage, UiText::text(QStringLiteral("dialog.preferences.interface_group")));
+
+    auto* backgroundPage = new QWidget(pageStack);
+    auto* backgroundPageLayout = new QVBoxLayout(backgroundPage);
+    backgroundPageLayout->setContentsMargins(0, 0, 0, 0);
+    backgroundPageLayout->setSpacing(10);
+    auto* backgroundGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.preferences.background_group")), backgroundPage);
+    auto* backgroundLayout = new QFormLayout(backgroundGroup);
+    backgroundLayout->setContentsMargins(12, 10, 12, 12);
+    backgroundLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    backgroundLayout->setHorizontalSpacing(12);
+    backgroundLayout->setVerticalSpacing(8);
+
+    miacode::ui::AppBackgroundSettings selectedBackgroundSettings = state_.appBackgroundSettings_;
+    const auto persistBackgroundSettings = [&]() {
+        selectedBackgroundSettings = miacode::ui::normalizedAppBackgroundSettings(selectedBackgroundSettings);
+        owner_.applyAppBackgroundSettings(selectedBackgroundSettings, true);
+    };
+    bool backgroundSliderPersistPending = false;
+    const auto persistBackgroundSettingsAfterSliderInput = [&](QSlider* slider) {
+        if (slider != nullptr && slider->isSliderDown()) {
+            backgroundSliderPersistPending = true;
+            return;
+        }
+        persistBackgroundSettings();
+    };
+    const auto flushBackgroundSliderSettings = [&]() {
+        if (!backgroundSliderPersistPending) {
+            return;
+        }
+        backgroundSliderPersistPending = false;
+        persistBackgroundSettings();
+    };
+    const auto createBackgroundComboRow = [](QComboBox* combo, QWidget* parent) -> QWidget* {
+        auto* row = new QWidget(parent);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setSpacing(0);
+        if (combo != nullptr) {
+            combo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+            combo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+            rowLayout->addWidget(combo, 0);
+        }
+        rowLayout->addStretch(1);
+        return row;
+    };
+    const auto backgroundModeLabel = [](miacode::ui::AppBackgroundSizeMode mode) -> QString {
+        switch (mode) {
+        case miacode::ui::AppBackgroundSizeMode::Contain:
+            return UiText::text(QStringLiteral("dialog.preferences.background.scale.contain"));
+        case miacode::ui::AppBackgroundSizeMode::Stretch:
+            return UiText::text(QStringLiteral("dialog.preferences.background.scale.stretch"));
+        case miacode::ui::AppBackgroundSizeMode::Center:
+            return UiText::text(QStringLiteral("dialog.preferences.background.scale.center"));
+        case miacode::ui::AppBackgroundSizeMode::Repeat:
+            return UiText::text(QStringLiteral("dialog.preferences.background.scale.repeat"));
+        case miacode::ui::AppBackgroundSizeMode::Cover:
+        default:
+            return UiText::text(QStringLiteral("dialog.preferences.background.scale.cover"));
+        }
+    };
+    const auto backgroundPositionLabel = [](miacode::ui::AppBackgroundPosition position) -> QString {
+        switch (position) {
+        case miacode::ui::AppBackgroundPosition::Left:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.left"));
+        case miacode::ui::AppBackgroundPosition::Right:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.right"));
+        case miacode::ui::AppBackgroundPosition::Top:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.top"));
+        case miacode::ui::AppBackgroundPosition::Bottom:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.bottom"));
+        case miacode::ui::AppBackgroundPosition::LeftTop:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.left_top"));
+        case miacode::ui::AppBackgroundPosition::RightTop:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.right_top"));
+        case miacode::ui::AppBackgroundPosition::LeftBottom:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.left_bottom"));
+        case miacode::ui::AppBackgroundPosition::RightBottom:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.right_bottom"));
+        case miacode::ui::AppBackgroundPosition::Center:
+        default:
+            return UiText::text(QStringLiteral("dialog.preferences.background.position.center"));
+        }
+    };
+
+    auto* backgroundEnabledLabel =
+        new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.enabled")), backgroundGroup);
+    auto* backgroundEnabledCombo =
+        miacode::ui::createDialogComboBox(backgroundGroup, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    backgroundEnabledCombo->addItem(UiText::text(QStringLiteral("preferences.on")), true);
+    backgroundEnabledCombo->addItem(UiText::text(QStringLiteral("preferences.off")), false);
+    backgroundEnabledCombo->setCurrentIndex(selectedBackgroundSettings.enabled ? 0 : 1);
+    styleRegisteredDialogCombo(backgroundEnabledCombo, 12);
+    connect(backgroundEnabledCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
+            [&, backgroundEnabledCombo](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedBackgroundSettings.enabled = backgroundEnabledCombo->itemData(index).toBool();
+        persistBackgroundSettings();
+    });
+    backgroundLayout->addRow(backgroundEnabledLabel,
+                             createBackgroundComboRow(backgroundEnabledCombo, backgroundGroup));
+
+    auto* backgroundImageLabel =
+        new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.image")), backgroundGroup);
+    auto* backgroundImageRow = new QWidget(backgroundGroup);
+    auto* backgroundImageRowLayout = new QHBoxLayout(backgroundImageRow);
+    backgroundImageRowLayout->setContentsMargins(0, 0, 0, 0);
+    backgroundImageRowLayout->setSpacing(8);
+    auto* backgroundImageEdit = new QLineEdit(backgroundImageRow);
+    backgroundImageEdit->setReadOnly(true);
+    backgroundImageEdit->setText(selectedBackgroundSettings.imagePath);
+    backgroundImageEdit->setMinimumWidth(0);
+    backgroundImageEdit->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    auto* chooseBackgroundButton = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("dialog.preferences.background.choose")),
+        backgroundImageRow);
+    auto* clearBackgroundButton = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("dialog.preferences.background.clear")),
+        backgroundImageRow);
+    styleRegisteredDialogButton(chooseBackgroundButton);
+    styleRegisteredDialogButton(clearBackgroundButton);
+    backgroundImageRowLayout->addWidget(backgroundImageEdit, 1);
+    backgroundImageRowLayout->addWidget(chooseBackgroundButton, 0);
+    backgroundImageRowLayout->addWidget(clearBackgroundButton, 0);
+    connect(chooseBackgroundButton, &QPushButton::clicked, &dialog, [&]() {
+        const QString initialDir = selectedBackgroundSettings.imagePath.isEmpty()
+            ? QString()
+            : QFileInfo(selectedBackgroundSettings.imagePath).absolutePath();
+        const QString filePath = QFileDialog::getOpenFileName(
+            &dialog,
+            UiText::text(QStringLiteral("dialog.preferences.background.choose")),
+            initialDir,
+            UiText::text(QStringLiteral("dialog.preferences.background.image_filter")));
+        if (filePath.isEmpty()) {
+            return;
+        }
+        selectedBackgroundSettings.imagePath = QDir::cleanPath(filePath);
+        backgroundImageEdit->setText(selectedBackgroundSettings.imagePath);
+        persistBackgroundSettings();
+    });
+    connect(clearBackgroundButton, &QPushButton::clicked, &dialog, [&]() {
+        selectedBackgroundSettings.imagePath.clear();
+        backgroundImageEdit->clear();
+        persistBackgroundSettings();
+    });
+    backgroundLayout->addRow(backgroundImageLabel, backgroundImageRow);
+
+    auto* backgroundOpacityLabel =
+        new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.opacity")), backgroundGroup);
+    auto* backgroundOpacitySlider = new QSlider(Qt::Horizontal, backgroundGroup);
+    backgroundOpacitySlider->setRange(0, 80);
+    backgroundOpacitySlider->setValue(qRound(selectedBackgroundSettings.opacity * 100.0));
+    backgroundOpacitySlider->setSingleStep(1);
+    backgroundOpacitySlider->setPageStep(5);
+    styleRegisteredDialogSlider(backgroundOpacitySlider);
+    backgroundLayout->addRow(
+        backgroundOpacityLabel,
+        miacode::ui::createSliderValueRow(backgroundOpacitySlider, nullptr, QStringLiteral("%"), backgroundGroup));
+    connect(backgroundOpacitySlider, &QSlider::valueChanged, &dialog, [&](int value) {
+        selectedBackgroundSettings.opacity = static_cast<double>(value) / 100.0;
+        persistBackgroundSettingsAfterSliderInput(backgroundOpacitySlider);
+    });
+    connect(backgroundOpacitySlider, &QSlider::sliderReleased, &dialog, flushBackgroundSliderSettings);
+
+    const auto openBackgroundOverlayDialog = [&]() {
+        QDialog overlayDialog(&dialog);
+        overlayDialog.setWindowTitle(UiText::text(QStringLiteral("dialog.preferences.background.overlay_dialog_title")));
+        overlayDialog.setModal(true);
+        overlayDialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
+
+        auto* overlayLayout = new QVBoxLayout(&overlayDialog);
+        overlayLayout->setContentsMargins(12, 12, 12, 12);
+        overlayLayout->setSpacing(10);
+
+        auto* overlayGroup = new QGroupBox(
+            UiText::text(QStringLiteral("dialog.preferences.background.overlay")),
+            &overlayDialog);
+        auto* overlayFormLayout = new QFormLayout(overlayGroup);
+        overlayFormLayout->setContentsMargins(12, 10, 12, 12);
+        overlayFormLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+        overlayFormLayout->setHorizontalSpacing(12);
+        overlayFormLayout->setVerticalSpacing(8);
+
+        struct OverlayRow {
+            QLabel* label = nullptr;
+            QSlider* slider = nullptr;
+            miacode::ui::EditableValueLabel* valueLabel = nullptr;
+            std::function<void(int)> setter;
+        };
+
+        const auto addOverlaySliderRow = [&](
+            const QString& labelText,
+            int value,
+            const std::function<void(int)>& setter) -> OverlayRow {
+            auto* slider = new QSlider(Qt::Horizontal, overlayGroup);
+            miacode::ui::EditableValueLabel* valueLabel = nullptr;
+            slider->setRange(miacode::ui::kAppBackgroundOverlayAlphaMin, miacode::ui::kAppBackgroundOverlayAlphaMax);
+            slider->setSingleStep(1);
+            slider->setPageStep(10);
+            slider->setValue(value);
+            auto* label = new QLabel(labelText, overlayGroup);
+            overlayFormLayout->addRow(
+                label,
+                miacode::ui::createSliderValueRow(slider, &valueLabel, QString(), overlayGroup));
+            return OverlayRow{label, slider, valueLabel, setter};
+        };
+
+        QList<OverlayRow> overlayRows;
+        auto appendOverlayRow = [&](const QString& labelText, int value, const std::function<void(int)>& setter) {
+            OverlayRow row = addOverlaySliderRow(labelText, value, setter);
+            QSlider* rowSlider = row.slider;
+            connect(row.slider, &QSlider::valueChanged, &overlayDialog, [&, setter, rowSlider](int sliderValue) {
+                setter(sliderValue);
+                persistBackgroundSettingsAfterSliderInput(rowSlider);
+            });
+            connect(row.slider, &QSlider::sliderReleased, &overlayDialog, flushBackgroundSliderSettings);
+            overlayRows.append(row);
+        };
+
+        const bool showDarkThemeRows = UiTheme::isDarkTheme();
+        const auto overlayRowLabel = [&](const QString& baseKey) {
+            return UiText::text(
+                showDarkThemeRows
+                    ? QStringLiteral("dialog.preferences.background.overlay.dark")
+                    : QStringLiteral("dialog.preferences.background.overlay.light"))
+                .arg(UiText::text(baseKey));
+        };
+        const auto appendThemeOverlayRow = [&](const QString& baseKey,
+                                               int darkValue,
+                                               int lightValue,
+                                               const std::function<void(int)>& darkSetter,
+                                               const std::function<void(int)>& lightSetter) {
+            appendOverlayRow(
+                overlayRowLabel(baseKey),
+                showDarkThemeRows ? darkValue : lightValue,
+                showDarkThemeRows ? darkSetter : lightSetter);
+        };
+
+        appendThemeOverlayRow(
+            QStringLiteral("dialog.preferences.background.overlay.toolbar"),
+            selectedBackgroundSettings.overlays.toolbarAlphaDark,
+            selectedBackgroundSettings.overlays.toolbarAlphaLight,
+            [&](int value) { selectedBackgroundSettings.overlays.toolbarAlphaDark = value; },
+            [&](int value) { selectedBackgroundSettings.overlays.toolbarAlphaLight = value; });
+        appendThemeOverlayRow(
+            QStringLiteral("dialog.preferences.background.overlay.editor_header"),
+            selectedBackgroundSettings.overlays.editorHeaderAlphaDark,
+            selectedBackgroundSettings.overlays.editorHeaderAlphaLight,
+            [&](int value) { selectedBackgroundSettings.overlays.editorHeaderAlphaDark = value; },
+            [&](int value) { selectedBackgroundSettings.overlays.editorHeaderAlphaLight = value; });
+        appendThemeOverlayRow(
+            QStringLiteral("dialog.preferences.background.overlay.code_editor"),
+            selectedBackgroundSettings.overlays.codeEditorAlphaDark,
+            selectedBackgroundSettings.overlays.codeEditorAlphaLight,
+            [&](int value) { selectedBackgroundSettings.overlays.codeEditorAlphaDark = value; },
+            [&](int value) { selectedBackgroundSettings.overlays.codeEditorAlphaLight = value; });
+        appendThemeOverlayRow(
+            QStringLiteral("dialog.preferences.background.overlay.panel"),
+            selectedBackgroundSettings.overlays.panelAlphaDark,
+            selectedBackgroundSettings.overlays.panelAlphaLight,
+            [&](int value) { selectedBackgroundSettings.overlays.panelAlphaDark = value; },
+            [&](int value) { selectedBackgroundSettings.overlays.panelAlphaLight = value; });
+        appendThemeOverlayRow(
+            QStringLiteral("dialog.preferences.background.overlay.status"),
+            selectedBackgroundSettings.overlays.statusAlphaDark,
+            selectedBackgroundSettings.overlays.statusAlphaLight,
+            [&](int value) { selectedBackgroundSettings.overlays.statusAlphaDark = value; },
+            [&](int value) { selectedBackgroundSettings.overlays.statusAlphaLight = value; });
+
+        const auto syncOverlayDialogControls = [&]() {
+            const miacode::ui::AppBackgroundOverlaySettings overlays = selectedBackgroundSettings.overlays;
+            const QList<int> values{
+                showDarkThemeRows ? overlays.toolbarAlphaDark : overlays.toolbarAlphaLight,
+                showDarkThemeRows ? overlays.editorHeaderAlphaDark : overlays.editorHeaderAlphaLight,
+                showDarkThemeRows ? overlays.codeEditorAlphaDark : overlays.codeEditorAlphaLight,
+                showDarkThemeRows ? overlays.panelAlphaDark : overlays.panelAlphaLight,
+                showDarkThemeRows ? overlays.statusAlphaDark : overlays.statusAlphaLight,
+            };
+            for (int index = 0; index < overlayRows.size() && index < values.size(); ++index) {
+                if (overlayRows[index].slider == nullptr) {
+                    continue;
+                }
+                QSignalBlocker blocker(overlayRows[index].slider);
+                overlayRows[index].slider->setValue(values[index]);
+                if (overlayRows[index].valueLabel != nullptr) {
+                    overlayRows[index].valueLabel->setText(QString::number(values[index]));
+                }
+            }
+        };
+
+        overlayLayout->addWidget(overlayGroup);
+
+        auto* buttonRow = new QDialogButtonBox(QDialogButtonBox::Close, &overlayDialog);
+        if (QPushButton* closeButton = buttonRow->button(QDialogButtonBox::Close); closeButton != nullptr) {
+            closeButton->setText(UiText::text(QStringLiteral("action.close")));
+        }
+        if (QPushButton* resetButton = buttonRow->addButton(
+                UiText::text(QStringLiteral("dialog.preferences.background.overlay.reset_defaults")),
+                QDialogButtonBox::ResetRole);
+            resetButton != nullptr) {
+            connect(resetButton, &QPushButton::clicked, &overlayDialog, [&]() {
+                selectedBackgroundSettings.overlays = miacode::ui::AppBackgroundOverlaySettings{};
+                syncOverlayDialogControls();
+                persistBackgroundSettings();
+            });
+        }
+        connect(buttonRow, &QDialogButtonBox::rejected, &overlayDialog, &QDialog::accept);
+        overlayLayout->addWidget(buttonRow);
+        overlayDialog.resize(560, 0);
+        overlayDialog.exec();
+    };
+
+    auto* backgroundOverlayLabel =
+        new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.overlay")), backgroundGroup);
+    auto* backgroundOverlayRow = new QWidget(backgroundGroup);
+    auto* backgroundOverlayRowLayout = new QHBoxLayout(backgroundOverlayRow);
+    backgroundOverlayRowLayout->setContentsMargins(0, 0, 0, 0);
+    backgroundOverlayRowLayout->setSpacing(8);
+    auto* backgroundOverlayButton = miacode::ui::createDialogPushButton(
+        UiText::text(QStringLiteral("dialog.preferences.background.overlay_button")),
+        backgroundOverlayRow);
+    styleRegisteredDialogButton(backgroundOverlayButton);
+    backgroundOverlayRowLayout->addWidget(backgroundOverlayButton, 0);
+    backgroundOverlayRowLayout->addStretch(1);
+    connect(backgroundOverlayButton, &QPushButton::clicked, &dialog, openBackgroundOverlayDialog);
+    backgroundLayout->addRow(backgroundOverlayLabel, backgroundOverlayRow);
+
+    auto* backgroundScaleCombo =
+        miacode::ui::createDialogComboBox(backgroundGroup, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    const QList<miacode::ui::AppBackgroundSizeMode> backgroundScaleOptions{
+        miacode::ui::AppBackgroundSizeMode::Cover,
+        miacode::ui::AppBackgroundSizeMode::Contain,
+        miacode::ui::AppBackgroundSizeMode::Stretch,
+        miacode::ui::AppBackgroundSizeMode::Center,
+        miacode::ui::AppBackgroundSizeMode::Repeat,
+    };
+    for (miacode::ui::AppBackgroundSizeMode mode : backgroundScaleOptions) {
+        backgroundScaleCombo->addItem(backgroundModeLabel(mode), static_cast<int>(mode));
+    }
+    backgroundScaleCombo->setCurrentIndex(
+        qMax(0, backgroundScaleCombo->findData(static_cast<int>(selectedBackgroundSettings.sizeMode))));
+    styleRegisteredDialogCombo(backgroundScaleCombo, 12);
+    connect(backgroundScaleCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
+            [&, backgroundScaleCombo](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedBackgroundSettings.sizeMode =
+            static_cast<miacode::ui::AppBackgroundSizeMode>(backgroundScaleCombo->itemData(index).toInt());
+        persistBackgroundSettings();
+    });
+    auto* backgroundPositionCombo =
+        miacode::ui::createDialogComboBox(backgroundGroup, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    const QList<miacode::ui::AppBackgroundPosition> backgroundPositionOptions{
+        miacode::ui::AppBackgroundPosition::Center,
+        miacode::ui::AppBackgroundPosition::Left,
+        miacode::ui::AppBackgroundPosition::Right,
+        miacode::ui::AppBackgroundPosition::Top,
+        miacode::ui::AppBackgroundPosition::Bottom,
+        miacode::ui::AppBackgroundPosition::LeftTop,
+        miacode::ui::AppBackgroundPosition::RightTop,
+        miacode::ui::AppBackgroundPosition::LeftBottom,
+        miacode::ui::AppBackgroundPosition::RightBottom,
+    };
+    for (miacode::ui::AppBackgroundPosition position : backgroundPositionOptions) {
+        backgroundPositionCombo->addItem(backgroundPositionLabel(position), static_cast<int>(position));
+    }
+    backgroundPositionCombo->setCurrentIndex(
+        qMax(0, backgroundPositionCombo->findData(static_cast<int>(selectedBackgroundSettings.position))));
+    styleRegisteredDialogCombo(backgroundPositionCombo, 12);
+    connect(backgroundPositionCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
+            [&, backgroundPositionCombo](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedBackgroundSettings.position =
+            static_cast<miacode::ui::AppBackgroundPosition>(backgroundPositionCombo->itemData(index).toInt());
+        persistBackgroundSettings();
+    });
+
+    const QList<QComboBox*> backgroundChoiceCombos{
+        backgroundEnabledCombo,
+        backgroundScaleCombo,
+        backgroundPositionCombo,
+    };
+    int backgroundChoiceComboWidth = 0;
+    for (QComboBox* combo : backgroundChoiceCombos) {
+        if (combo == nullptr) {
+            continue;
+        }
+        combo->ensurePolished();
+        backgroundChoiceComboWidth = qMax(backgroundChoiceComboWidth, combo->sizeHint().width());
+    }
+    for (QComboBox* combo : backgroundChoiceCombos) {
+        if (combo != nullptr && backgroundChoiceComboWidth > 0) {
+            combo->setFixedWidth(backgroundChoiceComboWidth);
+        }
+    }
+
+    auto* backgroundScaleLabel =
+        new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.scale")), backgroundGroup);
+    backgroundLayout->addRow(backgroundScaleLabel,
+                             createBackgroundComboRow(backgroundScaleCombo, backgroundGroup));
+
+    auto* backgroundPositionLabelWidget =
+        new QLabel(UiText::text(QStringLiteral("dialog.preferences.background.position")), backgroundGroup);
+    backgroundLayout->addRow(backgroundPositionLabelWidget,
+                             createBackgroundComboRow(backgroundPositionCombo, backgroundGroup));
+
+    miacode::ui::flattenGroupForTabPage(backgroundGroup);
+    backgroundPageLayout->addWidget(backgroundGroup);
+    backgroundPageLayout->addStretch(1);
+    pageStack->addTab(backgroundPage, UiText::text(QStringLiteral("dialog.preferences.background_group")));
 
     auto* editorPage = new QWidget(pageStack);
     auto* editorPageLayout = new QVBoxLayout(editorPage);
     editorPageLayout->setContentsMargins(0, 0, 0, 0);
     editorPageLayout->setSpacing(10);
-    auto* editorGroup = new QGroupBox(uiText("dialog.preferences.editor_group", "Editor"), editorPage);
+    auto* editorGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.preferences.editor_group")), editorPage);
     auto* editorLayout = new QFormLayout(editorGroup);
     editorLayout->setContentsMargins(12, 10, 12, 12);
     editorLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
@@ -769,31 +1790,91 @@ void MainWindow::PreferencesSection::onPreferences()
     bool selectedIgnoreMuriIssuePrompts = state_.ignoreMuriIssuePrompts_;
     bool selectedEditorImeInputDisabled = state_.editorImeInputDisabled_;
 
-    // Row order (top→bottom): 字号 · 行距 · 自动补全 · 顶部显示 · 忽略无理报错 ·
-    // 中文输入. 中文输入 is the advanced input-mode picker the user did not call
+    // Row order (top to bottom): font size, line spacing, auto-completion,
+    // header display, IME block, and ignore muri issue prompts.
     // out, so it trails the prioritised rows.
-    auto* editorFontSizeLabel = new QLabel(uiText("dialog.preferences.editor_font_size", "Text Font Size"), editorGroup);
+    auto* editorFontSizeLabel = new QLabel(UiText::text(QStringLiteral("dialog.preferences.editor_font_size")), editorGroup);
     auto* fontSizeRow = new QWidget(editorGroup);
     auto* fontSizeRowLayout = new QHBoxLayout(fontSizeRow);
     fontSizeRowLayout->setContentsMargins(0, 0, 0, 0);
     fontSizeRowLayout->setSpacing(8);
-    auto* editorFontSizeSpin = new QSpinBox(fontSizeRow);
+    auto* fontSizeControl = new QWidget(fontSizeRow);
+    fontSizeControl->setObjectName(QStringLiteral("DialogSpinBoxFrame"));
+    fontSizeControl->setStyleSheet(UiTheme::dialogSpinBoxStyleSheet());
+    // Match the dialog combo/menu-button height (W1 max(sizeHint,30)+4 ≈ 34) so
+    // 字号 sits level with the other editor rows; the frame's border-radius:8
+    // needs the full height or the bottom border clips (why this was narrowed
+    // to 25 before).
+    fontSizeControl->setFixedHeight(34);
+    fontSizeControl->setFixedWidth(80);
+    auto* fontSizeControlLayout = new QHBoxLayout(fontSizeControl);
+    fontSizeControlLayout->setContentsMargins(0, 0, 0, 0);
+    fontSizeControlLayout->setSpacing(0);
+    auto* editorFontSizeSpin = new QSpinBox(fontSizeControl);
+    editorFontSizeSpin->setObjectName(QStringLiteral("DialogSpinBoxEditor"));
     editorFontSizeSpin->setRange(kEditorTextFontSizeMin, kEditorTextFontSizeMax);
     editorFontSizeSpin->setValue(selectedEditorFontSize);
     editorFontSizeSpin->setSuffix(" pt");
+    editorFontSizeSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    editorFontSizeSpin->setFrame(false);
+    editorFontSizeSpin->setFixedHeight(30);
+    editorFontSizeSpin->setMinimumWidth(editorFontSizeSpin->fontMetrics().horizontalAdvance(QStringLiteral("28 pt")) + 28);
+    const auto makeSpinArrowIcon = [](Qt::ArrowType arrowType) {
+        const QColor arrowColor = UiTheme::colors().textSecondary;
+        QPixmap pixmap(9, 17);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(arrowColor);
+        QPolygon triangle;
+        if (arrowType == Qt::UpArrow) {
+            triangle << QPoint(4, 9) << QPoint(7, 13) << QPoint(1, 13);
+        } else {
+            triangle << QPoint(1, 3) << QPoint(7, 3) << QPoint(4, 7);
+        }
+        painter.drawPolygon(triangle);
+        return QIcon(pixmap);
+    };
+    auto* stepButtons = new QWidget(fontSizeControl);
+    stepButtons->setFixedSize(20, 34);
+    auto* stepLayout = new QVBoxLayout(stepButtons);
+    stepLayout->setContentsMargins(0, 0, 0, 0);
+    stepLayout->setSpacing(0);
+    auto* increaseFontSizeButton = new QToolButton(stepButtons);
+    auto* decreaseFontSizeButton = new QToolButton(stepButtons);
+    for (QToolButton* button : {increaseFontSizeButton, decreaseFontSizeButton}) {
+        button->setObjectName(QStringLiteral("DialogSpinBoxStepButton"));
+        button->setCursor(Qt::PointingHandCursor);
+        button->setAutoRepeat(true);
+        button->setAutoRepeatDelay(300);
+        button->setAutoRepeatInterval(70);
+        button->setFixedSize(20, 17);
+        button->setIconSize(QSize(9, 17));
+        stepLayout->addWidget(button, 0);
+    }
+    increaseFontSizeButton->setProperty("miacodeSpinStep", QStringLiteral("up"));
+    decreaseFontSizeButton->setProperty("miacodeSpinStep", QStringLiteral("down"));
+    increaseFontSizeButton->setIcon(makeSpinArrowIcon(Qt::UpArrow));
+    decreaseFontSizeButton->setIcon(makeSpinArrowIcon(Qt::DownArrow));
+    connect(increaseFontSizeButton, &QToolButton::clicked, editorFontSizeSpin, &QSpinBox::stepUp);
+    connect(decreaseFontSizeButton, &QToolButton::clicked, editorFontSizeSpin, &QSpinBox::stepDown);
+    fontSizeControlLayout->addWidget(editorFontSizeSpin, 1);
+    fontSizeControlLayout->addWidget(stepButtons, 0);
+    fontSizeControl->setFocusProxy(editorFontSizeSpin);
     auto* shortcutHint = new QLabel(fontShortcutHintText(), fontSizeRow);
     shortcutHint->setStyleSheet(QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
     connect(editorFontSizeSpin, qOverload<int>(&QSpinBox::valueChanged), &dialog, [&](int value) {
         selectedEditorFontSize = value;
         owner_.applyEditorTextFontSize(selectedEditorFontSize, true);
-        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.editor_text_display_updated")));
     });
-    fontSizeRowLayout->addWidget(editorFontSizeSpin, 0);
+    fontSizeRowLayout->addWidget(fontSizeControl, 0);
     fontSizeRowLayout->addWidget(shortcutHint, 0);
     fontSizeRowLayout->addStretch(1);
     editorLayout->addRow(editorFontSizeLabel, fontSizeRow);
 
-    auto* lineSpacingLabel = new QLabel(uiText("dialog.preferences.editor_line_spacing", "Line Spacing"), editorGroup);
+    auto* lineSpacingLabel = new QLabel(UiText::text(QStringLiteral("dialog.preferences.editor_line_spacing")), editorGroup);
     auto* lineSpacingCombo = new QComboBox(editorGroup);
     for (double factor : kEditorLineSpacingFactorOptions) {
         lineSpacingCombo->addItem(editorLineSpacingFactorLabel(factor), factor);
@@ -806,33 +1887,33 @@ void MainWindow::PreferencesSection::onPreferences()
         lineSpacingIndex = 0;
     }
     lineSpacingCombo->setCurrentIndex(lineSpacingIndex);
+    styleRegisteredDialogCombo(lineSpacingCombo, 12);
     connect(lineSpacingCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
         if (index < 0) {
             return;
         }
         selectedEditorLineSpacingFactor = lineSpacingCombo->itemData(index).toDouble();
         owner_.applyEditorLineSpacingFactor(selectedEditorLineSpacingFactor, true);
-        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.editor_text_display_updated")));
     });
     editorLayout->addRow(lineSpacingLabel, lineSpacingCombo);
 
-    // 自动补全 — one unified preference replacing the former three (auto-close
+    // Auto-completion is one unified preference replacing the former three (auto-close
     // brackets / hold duration / bracket suggestions). It drives bracket
     // auto-close + type-over + empty-pair backspace, the bracket suggestion
     // popup, and the 'h' hold-duration suggestions together. Presented as a
-    // 开启/关闭 menu (same idiom as the other editor rows) rather than a checkbox.
+    // On/Off menu (same idiom as the other editor rows) rather than a checkbox.
     auto* autoCompletionLabel = new QLabel(
-        UiText::isChineseUi() ? QStringLiteral("自动补全") : QStringLiteral("Auto-completion"),
+        UiText::text(QStringLiteral("preferences.auto_completion")),
         editorGroup
     );
     auto* autoCompletionCombo = new QComboBox(editorGroup);
-    autoCompletionCombo->addItem(UiText::isChineseUi() ? QStringLiteral("开启") : QStringLiteral("On"));
-    autoCompletionCombo->addItem(UiText::isChineseUi() ? QStringLiteral("关闭") : QStringLiteral("Off"));
+    autoCompletionCombo->addItem(UiText::text(QStringLiteral("preferences.on")));
+    autoCompletionCombo->addItem(UiText::text(QStringLiteral("preferences.off")));
     autoCompletionCombo->setCurrentIndex(selectedAutoCompletionEnabled ? 0 : 1);
+    styleRegisteredDialogCombo(autoCompletionCombo, 12);
     autoCompletionCombo->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("自动补全括号、给出括号/时值建议，并在输入 h 时提示 [8:1] 等 hold 时值。")
-            : QStringLiteral("Auto-closes brackets, suggests durations/BPMs inside them, and offers [8:1]-style hold tokens after typing 'h'.")
+        UiText::text(QStringLiteral("preferences.auto_closes_brackets_suggests_durations"))
     );
     connect(autoCompletionCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
         if (index < 0) {
@@ -840,19 +1921,19 @@ void MainWindow::PreferencesSection::onPreferences()
         }
         selectedAutoCompletionEnabled = (index == 0);
         owner_.applyEditorAutoCompletionEnabled(selectedAutoCompletionEnabled, true);
-        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.editor_text_display_updated")));
     });
     editorLayout->addRow(autoCompletionLabel, autoCompletionCombo);
 
-    // 顶部显示 — what the difficulty-page header edits next to Lv: the
-    // chart-wide offset (偏移, default) or the per-difficulty designer (谱师).
+    // Header display controls what the difficulty-page header edits next to Lv:
+    // the chart-wide offset (default) or the per-difficulty designer.
     const auto headerTopDisplayLabel = [](EditorHeaderTopDisplay mode) -> QString {
         return mode == EditorHeaderTopDisplay::Designer
-            ? uiText("dialog.preferences.editor_top_display.designer", "Designer")
-            : uiText("dialog.preferences.editor_top_display.latency", "Offset");
+            ? UiText::text(QStringLiteral("dialog.preferences.editor_top_display.designer"))
+            : UiText::text(QStringLiteral("dialog.preferences.editor_top_display.latency"));
     };
     auto* headerTopDisplayLabelWidget =
-        new QLabel(uiText("dialog.preferences.editor_top_display", "Header Field"), editorGroup);
+        new QLabel(UiText::text(QStringLiteral("dialog.preferences.editor_top_display")), editorGroup);
     // Plain combo box, same idiom as the 行距 row above — the two-option
     // pick doesn't warrant the styled PreferenceMenuButton treatment.
     auto* headerTopDisplayCombo = new QComboBox(editorGroup);
@@ -866,10 +1947,9 @@ void MainWindow::PreferencesSection::onPreferences()
     const int headerTopDisplayIndex =
         headerTopDisplayCombo->findData(static_cast<int>(state_.editorHeaderTopDisplay_));
     headerTopDisplayCombo->setCurrentIndex(qMax(0, headerTopDisplayIndex));
+    styleRegisteredDialogCombo(headerTopDisplayCombo, 12);
     headerTopDisplayCombo->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("谱面编辑页顶部 Lv 旁边显示的字段：偏移（&first）或当前难度的谱师（&des_N）。")
-            : QStringLiteral("The field next to Lv in the chart header: the &first offset or this difficulty's &des_N designer.")
+        UiText::text(QStringLiteral("preferences.the_field_next_to_lv"))
     );
     connect(headerTopDisplayCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog,
             [&, headerTopDisplayCombo](int index) {
@@ -879,35 +1959,31 @@ void MainWindow::PreferencesSection::onPreferences()
         const auto mode =
             static_cast<EditorHeaderTopDisplay>(headerTopDisplayCombo->itemData(index).toInt());
         owner_.applyEditorHeaderTopDisplay(mode, true);
-        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
     });
     editorLayout->addRow(headerTopDisplayLabelWidget, headerTopDisplayCombo);
 
     auto* ignoreMuriIssuePromptsCheckbox = new QCheckBox(
-        UiText::isChineseUi()
-            ? QStringLiteral("忽略无理报错提示")
-            : QStringLiteral("Ignore muri issue prompts"),
+        UiText::text(QStringLiteral("preferences.ignore_muri_issue_prompts")),
         editorGroup
     );
     ignoreMuriIssuePromptsCheckbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     ignoreMuriIssuePromptsCheckbox->setChecked(selectedIgnoreMuriIssuePrompts);
     ignoreMuriIssuePromptsCheckbox->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("开启后不在编辑器标题栏和时间轴小点中提示无理。设置保存到当前谱面文件夹的 .miacode。")
-            : QStringLiteral("Hides muri from the editor header and timeline dots. Saved in the current chart folder's .miacode data.")
+        UiText::text(QStringLiteral("preferences.hides_muri_from_the_editor"))
     );
     connect(ignoreMuriIssuePromptsCheckbox, &QCheckBox::toggled, &dialog, [&](bool checked) {
         selectedIgnoreMuriIssuePrompts = checked;
         owner_.applyIgnoreMuriIssuePrompts(selectedIgnoreMuriIssuePrompts, true);
-        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
     });
-    // 中文输入 combo — merges the former "Lock half-width symbol input" checkbox
+    // IME block combo merges the former "Lock half-width symbol input" checkbox
     // and "Disable IME input" checkbox into three graduated levels:
-    //   index 0 开启           halfWidth=OFF imeDisabled=OFF (plain IME, no filtering)
-    //   index 1 仅过滤全角字符  halfWidth=ON  imeDisabled=OFF (default: normalize commits)
-    //   index 2 禁止中文输入法  halfWidth=ON  imeDisabled=ON  (block IME candidate window)
+    //   index 0 block off              halfWidth=OFF imeDisabled=OFF (plain IME, no filtering)
+    //   index 1 normalize full-width   halfWidth=ON  imeDisabled=OFF (default: normalize commits)
+    //   index 2 block on               halfWidth=ON  imeDisabled=ON  (block IME candidate window)
     auto* chineseInputLabel = new QLabel(
-        UiText::isChineseUi() ? QStringLiteral("中文输入") : QStringLiteral("Chinese input"),
+        UiText::text(QStringLiteral("preferences.chinese_input")),
         editorGroup
     );
     const int initialChineseInputMode =
@@ -915,16 +1991,13 @@ void MainWindow::PreferencesSection::onPreferences()
         state_.editorHalfWidthInputEnabled_ ? 1 : 0;
     int selectedChineseInputMode = initialChineseInputMode;
     auto* chineseInputCombo = new QComboBox(editorGroup);
-    if (UiText::isChineseUi()) {
-        chineseInputCombo->addItem(QStringLiteral("开启"));
-        chineseInputCombo->addItem(QStringLiteral("仅过滤全角字符"));
-        chineseInputCombo->addItem(QStringLiteral("禁止中文输入法"));
-    } else {
-        chineseInputCombo->addItem(QStringLiteral("On"));
-        chineseInputCombo->addItem(QStringLiteral("Filter full-width chars"));
-        chineseInputCombo->addItem(QStringLiteral("Disable IME"));
-    }
+    chineseInputCombo->addItem(UiText::text(QStringLiteral("preferences.off")));
+    chineseInputCombo->addItem(
+        UiText::text(QStringLiteral("preferences.filter_full_width_chars")));
+    chineseInputCombo->addItem(
+        UiText::text(QStringLiteral("preferences.on")));
     chineseInputCombo->setCurrentIndex(selectedChineseInputMode);
+    styleRegisteredDialogCombo(chineseInputCombo, 12);
     connect(chineseInputCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [&](int index) {
         if (index < 0) {
             return;
@@ -934,16 +2007,16 @@ void MainWindow::PreferencesSection::onPreferences()
         selectedEditorImeInputDisabled = (index >= 2);
         owner_.applyEditorHalfWidthInputEnabled(selectedEditorHalfWidthInputEnabled, false);
         owner_.applyEditorImeInputDisabled(selectedEditorImeInputDisabled, true);
-        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
     });
     editorLayout->addRow(chineseInputLabel, chineseInputCombo);
 
-    // 忽略无理报错提示 sits below 中文输入 (last row) per the 2026-06-19 review.
+    // Ignore muri issue prompts sits below IME block (last row) per the 2026-06-19 review.
     editorLayout->addRow(QString(), ignoreMuriIssuePromptsCheckbox);
 
 
     // The preferences dialog font spin-box reuses the editor.font_* shortcut
-    // IDs so a single binding controls both the editor and the dialog —
+    // IDs so a single binding controls both the editor and the dialog.
     // there is no longer a separate preferences.font_* registry entry.
     auto* dialogDecreaseShortcut = new QShortcut(&dialog);
     ShortcutRegistry::instance().applyShortcut(
@@ -963,16 +2036,16 @@ void MainWindow::PreferencesSection::onPreferences()
     connect(dialogIncreaseShortcut, &QShortcut::activated, &dialog, [editorFontSizeSpin]() {
         editorFontSizeSpin->setValue(editorFontSizeSpin->value() + 1);
     });
-    flattenPageGroup(editorGroup);
+    miacode::ui::flattenGroupForTabPage(editorGroup);
     editorPageLayout->addWidget(editorGroup);
     editorPageLayout->addStretch(1);
-    pageStack->addTab(editorPage, uiText("dialog.preferences.editor_group", "Editor"));
+    pageStack->addTab(editorPage, UiText::text(QStringLiteral("dialog.preferences.editor_group")));
 
     auto* performancePage = new QWidget(pageStack);
     auto* performancePageLayout = new QVBoxLayout(performancePage);
     performancePageLayout->setContentsMargins(0, 0, 0, 0);
     performancePageLayout->setSpacing(10);
-    auto* performanceGroup = new QGroupBox(uiText("dialog.preferences.performance_group", "Performance"), performancePage);
+    auto* performanceGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.preferences.performance_group")), performancePage);
     auto* performanceLayout = new QFormLayout(performanceGroup);
     performanceLayout->setContentsMargins(12, 10, 12, 12);
     performanceLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
@@ -985,10 +2058,7 @@ void MainWindow::PreferencesSection::onPreferences()
     };
     const double detectedRefreshRate = owner_.currentPreviewCanvasRefreshRate();
     const QString displayRefreshLabel = QStringLiteral("%1 (%2 Hz)")
-        .arg(uiText(
-            "dialog.render_settings.preview.canvas_frame_rate.display",
-            "Display Refresh Rate"
-        ))
+        .arg(UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.display")))
         .arg(QString::number(detectedRefreshRate, 'f', detectedRefreshRate >= 100.0 ? 0 : 1));
     const auto frameRateLabelForMode =
         [](PreviewCanvasFrameRateMode mode, const QList<FrameRateOption>& options) -> QString {
@@ -1009,39 +2079,40 @@ void MainWindow::PreferencesSection::onPreferences()
             PreviewCanvasFrameRateMode selectedMode,
             const QList<FrameRateOption>& options,
             const std::function<void(PreviewCanvasFrameRateMode)>& applyMode) {
-            auto* button = new QToolButton(performanceGroup);
-            button->setObjectName("PreferenceMenuButton");
-            button->setFont(uiAccentFont(10, QFont::DemiBold));
-            button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-            button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-            button->setText(frameRateLabelForMode(selectedMode, options));
-            auto* menu = new QMenu(button);
-            menu->setFont(uiAccentFont(10));
-            styleRoundedMenu(*menu);
+            auto* combo = miacode::ui::createDialogComboBox(
+                performanceGroup, 12, Qt::AlignLeft | Qt::AlignVCenter);
+            combo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+            combo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
             for (const FrameRateOption& option : options) {
-                QAction* action = menu->addAction(option.label);
-                action->setData(static_cast<int>(option.mode));
-                connect(action, &QAction::triggered, &dialog, [&, option, button, applyMode]() {
-                    button->setText(option.label);
-                    applyMode(option.mode);
-                    owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
-                });
+                combo->addItem(option.label, static_cast<int>(option.mode));
             }
-            connect(button, &QToolButton::clicked, &dialog, [button, menu]() {
-                menu->popup(button->mapToGlobal(QPoint(0, button->height())));
-            });
-            performanceLayout->addRow(label, button);
+            combo->setCurrentIndex(
+                qMax(0, combo->findText(frameRateLabelForMode(selectedMode, options))));
+            styleRegisteredDialogCombo(combo);
+            connect(combo,
+                    qOverload<int>(&QComboBox::currentIndexChanged),
+                    &dialog,
+                    [&, combo, applyMode](int index) {
+                        if (index < 0) {
+                            return;
+                        }
+                        applyMode(static_cast<PreviewCanvasFrameRateMode>(
+                            combo->itemData(index).toInt()));
+                        owner_.statusBar()->showMessage(
+                            UiText::text(QStringLiteral("status.preferences_updated")));
+                    });
+            performanceLayout->addRow(label, combo);
         };
 
     QList<FrameRateOption> canvasFrameRateOptions;
     canvasFrameRateOptions.append({
         PreviewCanvasFrameRateMode::Fps60,
-        uiText("dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS"),
+        UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.60")),
     });
     if (detectedRefreshRate >= 119.5) {
         canvasFrameRateOptions.append({
             PreviewCanvasFrameRateMode::Fps120,
-            uiText("dialog.render_settings.preview.canvas_frame_rate.120", "120 FPS"),
+            UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.120")),
         });
     }
     canvasFrameRateOptions.append({
@@ -1053,19 +2124,19 @@ void MainWindow::PreferencesSection::onPreferences()
     if (detectedRefreshRate >= 29.5) {
         appFrameRateOptions.append({
             PreviewCanvasFrameRateMode::Fps30,
-            uiText("dialog.render_settings.preview.canvas_frame_rate.30", "30 FPS"),
+            UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.30")),
         });
     }
     if (detectedRefreshRate >= 59.5) {
         appFrameRateOptions.append({
             PreviewCanvasFrameRateMode::Fps60,
-            uiText("dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS"),
+            UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.60")),
         });
     }
     if (detectedRefreshRate >= 119.5) {
         appFrameRateOptions.append({
             PreviewCanvasFrameRateMode::Fps120,
-            uiText("dialog.render_settings.preview.canvas_frame_rate.120", "120 FPS"),
+            UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate.120")),
         });
     }
     appFrameRateOptions.append({
@@ -1073,7 +2144,7 @@ void MainWindow::PreferencesSection::onPreferences()
         displayRefreshLabel,
     });
 
-    // PV渲染 (preview video decode): 硬件渲染 (hardware, default) vs 软件渲染
+    // Preview video decode: hardware (default) vs software.
     // (software). Placed first on the page per the user request. Two fixed
     // options, same QToolButton+QMenu visual pattern as the frame-rate rows
     // below. preferSoftware == false selects hardware.
@@ -1083,45 +2154,36 @@ void MainWindow::PreferencesSection::onPreferences()
             QString label;
         };
         const QList<VideoDecodeOption> videoDecodeOptions = {
-            {false, uiText("dialog.preferences.performance.video_decode.hardware", "Hardware")},
-            {true, uiText("dialog.preferences.performance.video_decode.software", "Software")},
+            {false, UiText::text(QStringLiteral("dialog.preferences.performance.video_decode.hardware"))},
+            {true, UiText::text(QStringLiteral("dialog.preferences.performance.video_decode.software"))},
         };
-        const auto videoDecodeLabel = [&](bool preferSoftware) -> QString {
-            for (const VideoDecodeOption& option : videoDecodeOptions) {
-                if (option.preferSoftware == preferSoftware) {
-                    return option.label;
-                }
-            }
-            return videoDecodeOptions.front().label;
-        };
-        auto* button = new QToolButton(performanceGroup);
-        button->setObjectName("PreferenceMenuButton");
-        button->setFont(uiAccentFont(10, QFont::DemiBold));
-        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-        button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-        button->setText(videoDecodeLabel(owner_.currentVideoDecodePrefersSoftware()));
-        auto* menu = new QMenu(button);
-        menu->setFont(uiAccentFont(10));
-        styleRoundedMenu(*menu);
+        auto* combo = miacode::ui::createDialogComboBox(
+            performanceGroup, 12, Qt::AlignLeft | Qt::AlignVCenter);
+        combo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+        combo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         for (const VideoDecodeOption& option : videoDecodeOptions) {
-            QAction* action = menu->addAction(option.label);
-            action->setData(option.preferSoftware);
-            connect(action, &QAction::triggered, &dialog, [&, option, button]() {
-                button->setText(option.label);
-                owner_.setVideoDecodePrefersSoftware(option.preferSoftware, true);
-                owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
-            });
+            combo->addItem(option.label, option.preferSoftware);
         }
-        connect(button, &QToolButton::clicked, &dialog, [button, menu]() {
-            menu->popup(button->mapToGlobal(QPoint(0, button->height())));
-        });
+        combo->setCurrentIndex(owner_.currentVideoDecodePrefersSoftware() ? 1 : 0);
+        styleRegisteredDialogCombo(combo);
+        connect(combo,
+                qOverload<int>(&QComboBox::currentIndexChanged),
+                &dialog,
+                [&, combo](int index) {
+                    if (index < 0) {
+                        return;
+                    }
+                    owner_.setVideoDecodePrefersSoftware(combo->itemData(index).toBool(), true);
+                    owner_.statusBar()->showMessage(
+                        UiText::text(QStringLiteral("status.preferences_updated")));
+                });
         performanceLayout->addRow(
-            uiText("dialog.preferences.performance.video_decode", "PV Render"),
-            button);
+            UiText::text(QStringLiteral("dialog.preferences.performance.video_decode")),
+            combo);
     }
 
     addFrameRateRow(
-        uiText("dialog.render_settings.preview.canvas_frame_rate", "Preview Refresh Rate"),
+        UiText::text(QStringLiteral("dialog.render_settings.preview.canvas_frame_rate")),
         owner_.currentPreviewCanvasFrameRateMode(),
         canvasFrameRateOptions,
         [&](PreviewCanvasFrameRateMode mode) {
@@ -1129,7 +2191,7 @@ void MainWindow::PreferencesSection::onPreferences()
         }
     );
     addFrameRateRow(
-        uiText("dialog.preferences.performance.pv_frame_rate", "PV Refresh Rate"),
+        UiText::text(QStringLiteral("dialog.preferences.performance.pv_frame_rate")),
         owner_.currentPreviewStageMediaFrameRateMode(),
         appFrameRateOptions,
         [&](PreviewCanvasFrameRateMode mode) {
@@ -1137,7 +2199,7 @@ void MainWindow::PreferencesSection::onPreferences()
         }
     );
     addFrameRateRow(
-        uiText("dialog.preferences.performance.timeline_frame_rate", "Timeline Refresh Rate"),
+        UiText::text(QStringLiteral("dialog.preferences.performance.timeline_frame_rate")),
         owner_.currentTimelineFrameRateMode(),
         appFrameRateOptions,
         [&](PreviewCanvasFrameRateMode mode) {
@@ -1145,21 +2207,21 @@ void MainWindow::PreferencesSection::onPreferences()
         }
     );
 
-    flattenPageGroup(performanceGroup);
+    miacode::ui::flattenGroupForTabPage(performanceGroup);
     performancePageLayout->addWidget(performanceGroup);
     performancePageLayout->addStretch(1);
-    pageStack->addTab(performancePage, uiText("dialog.preferences.performance_group", "Performance"));
+    pageStack->addTab(performancePage, UiText::text(QStringLiteral("dialog.preferences.performance_group")));
 
     auto* shortcutsPage = new QWidget(pageStack);
     auto* shortcutsPageLayout = new QVBoxLayout(shortcutsPage);
     shortcutsPageLayout->setContentsMargins(0, 0, 0, 0);
     shortcutsPageLayout->setSpacing(10);
-    auto* shortcutsGroup = new QGroupBox(uiText("dialog.preferences.shortcuts_group", "Shortcuts"), shortcutsPage);
+    auto* shortcutsGroup = new QGroupBox(UiText::text(QStringLiteral("dialog.preferences.shortcuts_group")), shortcutsPage);
     auto* shortcutsLayout = new QVBoxLayout(shortcutsGroup);
     shortcutsLayout->setContentsMargins(12, 10, 12, 12);
     shortcutsLayout->setSpacing(8);
-    auto* editShortcutsButton = new QPushButton(uiText("dialog.preferences.shortcuts.edit", "Edit Shortcuts"), shortcutsGroup);
-    auto* resetShortcutsButton = new QPushButton(uiText("dialog.preferences.shortcuts.reset", "Restore Shortcuts"), shortcutsGroup);
+    auto* editShortcutsButton = new QPushButton(UiText::text(QStringLiteral("dialog.preferences.shortcuts.edit")), shortcutsGroup);
+    auto* resetShortcutsButton = new QPushButton(UiText::text(QStringLiteral("dialog.preferences.shortcuts.reset")), shortcutsGroup);
     editShortcutsButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     resetShortcutsButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     shortcutsLayout->addWidget(editShortcutsButton, 0, Qt::AlignLeft);
@@ -1167,34 +2229,204 @@ void MainWindow::PreferencesSection::onPreferences()
     // The Alt-hold pause-display behavior used to be a fixed hint label here;
     // it is now the editable preview.pause_display_hold entry in the table
     // (the capture edit accepts bare modifiers for hold-type shortcuts).
-    flattenPageGroup(shortcutsGroup);
+    miacode::ui::flattenGroupForTabPage(shortcutsGroup);
     shortcutsPageLayout->addWidget(shortcutsGroup);
     shortcutsPageLayout->addStretch(1);
-    pageStack->addTab(shortcutsPage, uiText("dialog.preferences.shortcuts_group", "Shortcuts"));
+    pageStack->addTab(shortcutsPage, UiText::text(QStringLiteral("dialog.preferences.shortcuts_group")));
+
+    auto* extensionsPage = new QWidget(pageStack);
+    auto* extensionsPageLayout = new QHBoxLayout(extensionsPage);
+    extensionsPageLayout->setContentsMargins(0, 0, 0, 0);
+    extensionsPageLayout->setSpacing(10);
+    auto* extensionsActions = new QWidget(extensionsPage);
+    auto* extensionsActionsLayout = new QVBoxLayout(extensionsActions);
+    extensionsActionsLayout->setContentsMargins(12, 10, 8, 12);
+    extensionsActionsLayout->setSpacing(8);
+    auto* openExtensionsFolderButton =
+        new QPushButton(UiText::text(QStringLiteral("dialog.preferences.extensions.open_folder")), extensionsActions);
+    auto* refreshExtensionsButton =
+        new QPushButton(UiText::text(QStringLiteral("dialog.preferences.extensions.refresh")), extensionsActions);
+    auto* openExtensionLogsButton =
+        new QPushButton(UiText::text(QStringLiteral("dialog.preferences.extensions.open_logs")), extensionsActions);
+    auto* openExtensionDevToolsButton =
+        new QPushButton(UiText::text(QStringLiteral("dialog.preferences.extensions.devtools")), extensionsActions);
+    openExtensionsFolderButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    refreshExtensionsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    openExtensionLogsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    openExtensionDevToolsButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    extensionsActionsLayout->addWidget(openExtensionsFolderButton);
+    extensionsActionsLayout->addWidget(refreshExtensionsButton);
+    extensionsActionsLayout->addWidget(openExtensionLogsButton);
+    extensionsActionsLayout->addWidget(openExtensionDevToolsButton);
+    extensionsActionsLayout->addStretch(1);
+
+    auto* extensionsTable = new QTableWidget(extensionsPage);
+    extensionsTable->setColumnCount(4);
+    extensionsTable->setHorizontalHeaderLabels({
+        UiText::text(QStringLiteral("dialog.preferences.extensions.enabled")),
+        UiText::text(QStringLiteral("dialog.preferences.extensions.name")),
+        UiText::text(QStringLiteral("dialog.preferences.extensions.version")),
+        UiText::text(QStringLiteral("dialog.preferences.extensions.status")),
+    });
+    extensionsTable->verticalHeader()->hide();
+    extensionsTable->setShowGrid(false);
+    extensionsTable->setAlternatingRowColors(true);
+    extensionsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    extensionsTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    extensionsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    extensionsTable->setTextElideMode(Qt::ElideRight);
+    extensionsTable->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
+    extensionsTable->horizontalHeader()->setMinimumSectionSize(24);
+    extensionsTable->horizontalHeader()->setDefaultSectionSize(96);
+    extensionsTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    extensionsTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    extensionsTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Interactive);
+    extensionsTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Interactive);
+    extensionsTable->setColumnWidth(2, 112);
+    extensionsTable->setColumnWidth(3, 136);
+    extensionsTable->setSizeAdjustPolicy(QAbstractScrollArea::AdjustIgnored);
+    extensionsTable->setMinimumSize(0, 280);
+    extensionsTable->setStyleSheet(QStringLiteral(
+        "QTableWidget { border: 1px solid rgba(128,128,128,72); border-radius: 6px; }"
+        "QTableWidget::item:selected { background: rgba(88, 145, 220, 58); }"
+        "QHeaderView::section { padding: 6px 9px; border: 0; border-bottom: 1px solid rgba(128,128,128,72); font-weight: 600; }"
+    ));
+    extensionsTable->setMouseTracking(true);
+    extensionsTable->viewport()->setMouseTracking(true);
+    auto* extensionsToolTipFilter = new DelayedTableToolTipFilter(extensionsTable, 1000, extensionsTable);
+    extensionsTable->viewport()->installEventFilter(extensionsToolTipFilter);
+
+    std::function<void()> refreshExtensionRows;
+    refreshExtensionRows = [&]() {
+        extensionsTable->setRowCount(0);
+        if (owner_.extensionManager_ == nullptr) {
+            return;
+        }
+        const auto records = owner_.extensionManager_->records();
+        extensionsTable->setRowCount(records.size());
+        int row = 0;
+        for (const auto& record : records) {
+            const QString enabledToolTip = record.valid
+                ? (record.enabled
+                    ? (UiText::isChineseUi()
+                        ? QStringLiteral("当前扩展已启用。取消勾选后，该扩展贡献的命令、菜单、语言、诊断等内容都会消失。")
+                        : QStringLiteral("This extension is enabled. Uncheck it to remove its commands, menus, languages, diagnostics, and other contributions."))
+                    : (UiText::isChineseUi()
+                        ? QStringLiteral("当前扩展已禁用。勾选后，该扩展贡献的命令、菜单、语言、诊断等内容会重新加载。")
+                        : QStringLiteral("This extension is disabled. Check it to reload its commands, menus, languages, diagnostics, and other contributions.")))
+                : (UiText::isChineseUi()
+                    ? QStringLiteral("此扩展 manifest 无效，修复错误后才能启用。")
+                    : QStringLiteral("This extension manifest is invalid. Fix the error before enabling it."));
+            auto* enabledBox = new QCheckBox(extensionsTable);
+            enabledBox->setChecked(record.valid && record.enabled);
+            enabledBox->setEnabled(record.valid);
+            enabledBox->setToolTip(enabledToolTip);
+            auto* enabledCell = new QWidget(extensionsTable);
+            enabledCell->setToolTip(enabledToolTip);
+            auto* enabledCellLayout = new QHBoxLayout(enabledCell);
+            enabledCellLayout->setContentsMargins(8, 0, 8, 0);
+            enabledCellLayout->setAlignment(Qt::AlignCenter);
+            enabledCellLayout->addWidget(enabledBox);
+            extensionsTable->setCellWidget(row, 0, enabledCell);
+
+            const QString title = record.valid
+                ? QStringLiteral("%1\n%2").arg(record.manifest.name, record.manifest.qualifiedId())
+                : QFileInfo(record.sourcePath).fileName();
+            auto* nameItem = new QTableWidgetItem(title);
+            nameItem->setToolTip(QStringLiteral("%1\n%2").arg(title, record.sourcePath));
+            extensionsTable->setItem(row, 1, nameItem);
+            auto* versionItem = new QTableWidgetItem(record.valid ? record.manifest.version : QStringLiteral("-"));
+            versionItem->setToolTip(versionItem->text());
+            extensionsTable->setItem(row, 2, versionItem);
+            const QString status = !record.valid
+                ? (UiText::isChineseUi()
+                    ? QStringLiteral("无效：%1").arg(record.diagnostic)
+                    : QStringLiteral("Invalid: %1").arg(record.diagnostic))
+                : (record.enabled
+                    ? (UiText::isChineseUi() ? QStringLiteral("已启用") : QStringLiteral("Enabled"))
+                    : (UiText::isChineseUi() ? QStringLiteral("已禁用") : QStringLiteral("Disabled")));
+            auto* statusItem = new QTableWidgetItem(status);
+            statusItem->setToolTip(record.diagnostic.trimmed().isEmpty() ? status : record.diagnostic);
+            extensionsTable->setItem(row, 3, statusItem);
+            if (record.valid) {
+                QObject::connect(enabledBox, &QCheckBox::clicked, &dialog, [&, box = QPointer<QCheckBox>(enabledBox), id = record.manifest.qualifiedId()](bool enabled) {
+                    if (owner_.extensionManager_ == nullptr) {
+                        return;
+                    }
+                    QToolTip::hideText();
+                    if (box != nullptr) {
+                        box->setEnabled(false);
+                    }
+                    QTimer::singleShot(0, &dialog, [&, id, enabled]() {
+                        if (owner_.extensionManager_ == nullptr) {
+                            return;
+                        }
+                        owner_.extensionManager_->setExtensionEnabled(id, enabled);
+                        rebuildLanguageCombo();
+                        refreshExtensionRows();
+                        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
+                    });
+                });
+            }
+            ++row;
+        }
+    };
+
+    QObject::connect(openExtensionsFolderButton, &QPushButton::clicked, &dialog, [&]() {
+        const QString dir = owner_.extensionManager_ != nullptr
+            ? owner_.extensionManager_->userExtensionsDirectory()
+            : miacode::extensions::userExtensionDirectoryPath();
+        QDir().mkpath(dir);
+        QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+    });
+    QObject::connect(refreshExtensionsButton, &QPushButton::clicked, &dialog, [&]() {
+        if (owner_.extensionManager_ != nullptr) {
+            owner_.extensionManager_->refreshExtensions();
+        } else {
+            UiText::reloadExtensionLanguagePacks();
+            UiText::ensurePreferredLanguageAvailable();
+        }
+        rebuildLanguageCombo();
+        refreshExtensionRows();
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
+    });
+    QObject::connect(openExtensionLogsButton, &QPushButton::clicked, &dialog, [&]() {
+        const QString dir = owner_.extensionManager_ != nullptr
+            ? owner_.extensionManager_->extensionLogDirectory()
+            : QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("logs"));
+        QDir().mkpath(dir);
+        QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+    });
+    QObject::connect(openExtensionDevToolsButton, &QPushButton::clicked, &dialog, [&]() {
+        owner_.showExtensionDevToolsDialog();
+    });
+    refreshExtensionRows();
+    extensionsPageLayout->addWidget(extensionsActions, 0);
+    extensionsPageLayout->addWidget(extensionsTable, 1);
+    pageStack->addTab(extensionsPage, UiText::text(QStringLiteral("dialog.preferences.extensions_group")));
 
     const auto openShortcutEditDialog = [&]() {
-        QDialog shortcutsDialog(&dialog);
-        shortcutsDialog.setWindowTitle(uiText("dialog.preferences.shortcuts.title", "Keyboard Shortcuts"));
-        shortcutsDialog.setModal(true);
+        miacode::ui::TabbedSettingsDialog shortcutsDialog(
+            &dialog,
+            UiText::text(QStringLiteral("dialog.preferences.shortcuts.title")),
+            miacode::ui::SettingsDialogChrome::Preferences);
         shortcutsDialog.resize(740, 500);
         shortcutsDialog.setMinimumSize(680, 440);
-        shortcutsDialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
-        owner_.windowSection_->applySystemWindowBackdrop(&shortcutsDialog);
-        UiDialogs::prepareDialogWindow(&shortcutsDialog, &dialog);
 
-        auto* shortcutRootLayout = new QVBoxLayout(&shortcutsDialog);
+        QVBoxLayout* shortcutRootLayout = shortcutsDialog.contentLayout();
+        shortcutRootLayout->setSizeConstraint(QLayout::SetDefaultConstraint);
         shortcutRootLayout->setContentsMargins(10, 10, 10, 10);
         shortcutRootLayout->setSpacing(6);
         auto* table = new ShortcutTableWidget(&shortcutsDialog);
         table->setColumnCount(2);
         table->setHorizontalHeaderLabels({
-            uiText("dialog.preferences.shortcuts.command", "Command"),
-            uiText("dialog.preferences.shortcuts.keybinding", "Keybinding"),
+            UiText::text(QStringLiteral("dialog.preferences.shortcuts.command")),
+            UiText::text(QStringLiteral("dialog.preferences.shortcuts.keybinding")),
         });
         table->verticalHeader()->hide();
         table->setShowGrid(false);
         table->setAlternatingRowColors(true);
-        // Highlight the whole row when a shortcut is clicked — the previous
+        // Highlight the whole row when a shortcut is clicked; the previous
         // per-cell selection left an uneven look where only the command
         // cell got the blue tint and the keybinding cell kept its row
         // background. A click on either column of a content row opens the
@@ -1212,14 +2444,14 @@ void MainWindow::PreferencesSection::onPreferences()
         // Horizontal padding is applied via ShortcutItemDelegate (installed
         // below) instead of QSS so it renders identically in selected and
         // unselected states. The QSS rule for `::item:selected` only sets
-        // the selection background — the inset comes from the delegate.
+        // the selection background; the inset comes from the delegate.
         table->setStyleSheet(QStringLiteral(
             "QTableWidget { border: 1px solid rgba(128,128,128,72); border-radius: 6px; }"
             "QTableWidget::item:selected { background: rgba(88, 145, 220, 58); }"
             "QHeaderView::section { padding: 6px 9px; border: 0; border-bottom: 1px solid rgba(128,128,128,72); font-weight: 600; }"
         ));
-        // Content rows get a generous ±28 px inset; category section
-        // headers use the smaller ±14 px so the section title sits closer
+        // Content rows get a generous +/-28 px inset; category section
+        // headers use the smaller +/-14 px so the section title sits closer
         // to the cell edge than the commands listed beneath it.
         table->setItemDelegate(new ShortcutItemDelegate(28, 14, table));
         shortcutRootLayout->addWidget(table, 1);
@@ -1237,18 +2469,19 @@ void MainWindow::PreferencesSection::onPreferences()
             }
             QHash<QString, int> shortcutUseCounts;
             for (const auto& definition : definitions) {
-                const QList<QKeySequence> sequences =
-                    ShortcutRegistry::instance().sequences(definition.id, definition.defaultSequences);
-                for (const QKeySequence& sequence : sequences) {
-                    if (!sequence.isEmpty()) {
-                        ++shortcutUseCounts[shortcutSequenceKey(sequence)];
+                const QStringList shortcuts =
+                    ShortcutRegistry::instance().shortcutTexts(definition.id, definition.defaultShortcutTexts);
+                for (const QString& shortcut : shortcuts) {
+                    const QString key = shortcutGestureKey(shortcut);
+                    if (!key.isEmpty()) {
+                        ++shortcutUseCounts[key];
                     }
                 }
             }
             int row = 0;
             table->setRowCount(0);
             // Theme-aware category-row colors. The background is fully
-            // opaque so it overrides QTableWidget's alternating-row brush —
+            // opaque so it overrides QTableWidget's alternating-row brush.
             // otherwise the first category row (which falls on the base
             // brush) looks visibly dimmer than the subsequent ones (which
             // fall on the alternate brush). The foreground uses an accent
@@ -1288,15 +2521,16 @@ void MainWindow::PreferencesSection::onPreferences()
                     commandItem->setData(Qt::UserRole, definition.id);
                     commandItem->setToolTip(definition.id);
                     table->setItem(row, 0, commandItem);
-                    const QList<QKeySequence> sequences =
-                        ShortcutRegistry::instance().sequences(definition.id, definition.defaultSequences);
-                    auto* keybindingItem = new QTableWidgetItem(shortcutSequenceText(sequences));
+                    const QStringList shortcuts =
+                        ShortcutRegistry::instance().shortcutTexts(definition.id, definition.defaultShortcutTexts);
+                    auto* keybindingItem = new QTableWidgetItem(shortcutTextListDisplay(shortcuts));
                     keybindingItem->setData(Qt::UserRole, definition.id);
                     keybindingItem->setTextAlignment(Qt::AlignVCenter | Qt::AlignLeft);
-                    keybindingItem->setToolTip(uiText("dialog.preferences.shortcuts.change", "Change Keybinding"));
+                    keybindingItem->setToolTip(UiText::text(QStringLiteral("dialog.preferences.shortcuts.change")));
                     bool duplicate = false;
-                    for (const QKeySequence& sequence : sequences) {
-                        if (!sequence.isEmpty() && shortcutUseCounts.value(shortcutSequenceKey(sequence)) > 1) {
+                    for (const QString& shortcut : shortcuts) {
+                        const QString key = shortcutGestureKey(shortcut);
+                        if (!key.isEmpty() && shortcutUseCounts.value(key) > 1) {
                             duplicate = true;
                             break;
                         }
@@ -1320,15 +2554,14 @@ void MainWindow::PreferencesSection::onPreferences()
             if (id.isEmpty()) {
                 return;
             }
-            QDialog captureDialog(&shortcutsDialog);
-            captureDialog.setWindowTitle(uiText("dialog.preferences.shortcuts.capture_title", "Change Keybinding"));
-            captureDialog.setModal(true);
+            miacode::ui::TabbedSettingsDialog captureDialog(
+                &shortcutsDialog,
+                UiText::text(QStringLiteral("dialog.preferences.shortcuts.capture_title")),
+                miacode::ui::SettingsDialogChrome::Preferences);
             captureDialog.resize(600, 270);
             captureDialog.setMinimumSize(520, 240);
-            captureDialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
-            owner_.windowSection_->applySystemWindowBackdrop(&captureDialog);
-            UiDialogs::prepareDialogWindow(&captureDialog, &shortcutsDialog);
-            auto* captureLayout = new QVBoxLayout(&captureDialog);
+            QVBoxLayout* captureLayout = captureDialog.contentLayout();
+            captureLayout->setSizeConstraint(QLayout::SetDefaultConstraint);
             captureLayout->setContentsMargins(24, 22, 24, 18);
             captureLayout->setSpacing(12);
             // Hold-type shortcuts may bind a bare modifier (Alt alone), which
@@ -1336,12 +2569,8 @@ void MainWindow::PreferencesSection::onPreferences()
             const bool allowBareModifier = (id == QStringLiteral("preview.pause_display_hold"));
             auto* prompt = new QLabel(
                 allowBareModifier
-                    ? uiText(
-                          "dialog.preferences.shortcuts.capture_prompt_hold",
-                          "Press the key to hold (a bare modifier like Alt works), then press Enter.")
-                    : uiText(
-                          "dialog.preferences.shortcuts.capture_prompt",
-                          "Press the desired key combination, then press Enter."),
+                    ? UiText::text(QStringLiteral("dialog.preferences.shortcuts.capture_prompt_hold"))
+                    : UiText::text(QStringLiteral("dialog.preferences.shortcuts.capture_prompt")),
                 &captureDialog);
             prompt->setAlignment(Qt::AlignCenter);
             auto* captureEdit = new ShortcutCaptureEdit(&captureDialog, allowBareModifier);
@@ -1361,17 +2590,18 @@ void MainWindow::PreferencesSection::onPreferences()
             conflictLabel->setMinimumHeight(24);
             conflictLabel->setWordWrap(true);
             conflictLabel->setStyleSheet(QStringLiteral("color: #D93232; font-weight: 600;"));
-            auto* captureButtons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Reset | QDialogButtonBox::Cancel, &captureDialog);
-            UiDialogs::localizeButtonBox(captureButtons);
             captureLayout->addWidget(prompt);
             captureLayout->addWidget(captureEdit);
             captureLayout->addWidget(previewLabel);
             captureLayout->addWidget(conflictLabel);
             captureLayout->addStretch(1);
-            captureLayout->addWidget(captureButtons);
+            auto* captureButtons = captureDialog.buttonBox();
+            captureButtons->setStandardButtons(
+                QDialogButtonBox::Ok | QDialogButtonBox::Reset | QDialogButtonBox::Cancel);
+            UiDialogs::localizeButtonBox(captureButtons);
             const auto updateConflictState = [captureEdit, previewLabel, conflictLabel, editableDefinitions, id]() {
                 previewLabel->setText(captureEdit->text());
-                const QString conflict = conflictingShortcutLabel(editableDefinitions(), id, captureEdit->sequence());
+                const QString conflict = conflictingShortcutLabel(editableDefinitions(), id, captureEdit->shortcutText());
                 if (conflict.isEmpty()) {
                     previewLabel->setStyleSheet(QStringLiteral("font-weight: 600;"));
                     conflictLabel->clear();
@@ -1379,20 +2609,19 @@ void MainWindow::PreferencesSection::onPreferences()
                 }
                 previewLabel->setStyleSheet(QStringLiteral("font-weight: 600; color: #D93232;"));
                 conflictLabel->setText(
-                    UiText::isChineseUi()
-                        ? QStringLiteral("与「%1」重复").arg(conflict)
-                        : QStringLiteral("Conflicts with \"%1\"").arg(conflict));
+                    UiText::text(QStringLiteral("preferences.conflicts_with_1")).arg(conflict));
             };
             QObject::connect(captureEdit, &QLineEdit::textChanged, &captureDialog, updateConflictState);
             QObject::connect(captureButtons, &QDialogButtonBox::accepted, &captureDialog, [&]() {
-                if (captureEdit->sequence().isEmpty()) {
+                if (captureEdit->shortcutText().isEmpty()) {
                     return;
                 }
-                if (ShortcutRegistry::instance().setUserShortcut(id, captureEdit->sequence())) {
+                if (ShortcutRegistry::instance().setUserShortcutText(id, captureEdit->shortcutText())) {
                     applyConfiguredShortcuts();
+                    owner_.handleExtensionHostRequest(QStringLiteral("shortcuts/reloadRegistered"), QJsonObject{});
                     shortcutHint->setText(fontShortcutHintText());
                     refreshRows();
-                    owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+                    owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
                 }
                 captureDialog.accept();
             });
@@ -1401,9 +2630,10 @@ void MainWindow::PreferencesSection::onPreferences()
                 QObject::connect(resetButton, &QPushButton::clicked, &captureDialog, [&]() {
                     if (ShortcutRegistry::instance().resetUserShortcut(id)) {
                         applyConfiguredShortcuts();
+                        owner_.handleExtensionHostRequest(QStringLiteral("shortcuts/reloadRegistered"), QJsonObject{});
                         shortcutHint->setText(fontShortcutHintText());
                         refreshRows();
-                        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+                        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
                     }
                     captureDialog.accept();
                 });
@@ -1413,7 +2643,7 @@ void MainWindow::PreferencesSection::onPreferences()
         };
 
         QObject::connect(table, &QTableWidget::cellClicked, &shortcutsDialog, [&](int row, int column) {
-            // Category header rows span both columns and aren't editable —
+            // Category header rows span both columns and aren't editable.
             // clicking them just clears the stray selection. Every other
             // row opens the capture dialog from either column so users can
             // hit either the command name or its key binding to rebind.
@@ -1426,10 +2656,9 @@ void MainWindow::PreferencesSection::onPreferences()
         });
         refreshRows();
 
-        auto* closeBox = new QDialogButtonBox(QDialogButtonBox::Close, &shortcutsDialog);
-        UiDialogs::localizeButtonBox(closeBox);
-        QObject::connect(closeBox, &QDialogButtonBox::rejected, &shortcutsDialog, &QDialog::reject);
-        shortcutRootLayout->addWidget(closeBox, 0, Qt::AlignRight);
+        auto* closeBox = shortcutsDialog.buttonBox();
+        shortcutsDialog.addCloseButton(UiDialogs::text("action.close", "Close"), false);
+        shortcutRootLayout->setAlignment(closeBox, Qt::AlignRight);
         shortcutsDialog.exec();
     };
 
@@ -1437,8 +2666,8 @@ void MainWindow::PreferencesSection::onPreferences()
     connect(resetShortcutsButton, &QPushButton::clicked, &dialog, [&]() {
         const int choice = QMessageBox::question(
             &dialog,
-            uiText("dialog.preferences.shortcuts.reset_confirm_title", "Restore Shortcuts"),
-            uiText("dialog.preferences.shortcuts.reset_confirm_message", "Restore all editable shortcuts to their defaults?"),
+            UiText::text(QStringLiteral("dialog.preferences.shortcuts.reset_confirm_title")),
+            UiText::text(QStringLiteral("dialog.preferences.shortcuts.reset_confirm_message")),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No
         );
@@ -1447,89 +2676,38 @@ void MainWindow::PreferencesSection::onPreferences()
         }
         if (ShortcutRegistry::instance().resetEditableShortcuts()) {
             applyConfiguredShortcuts();
+            owner_.handleExtensionHostRequest(QStringLiteral("shortcuts/reloadRegistered"), QJsonObject{});
             shortcutHint->setText(fontShortcutHintText());
-            // beta51+ — overwriteModeShortcutHint label was bound to the
+            // beta51+ overwriteModeShortcutHint label was bound to the
             // former overwrite-mode preference row, which was removed in
-            // favour of the "禁止中文輸入法輸入" toggle. The Insert key
+            // favour of the "Disable IME input" toggle. The Insert key
             // binding still lives in the shortcuts registry under
             // `editor.overwrite_mode`; reset still affects it, just no
             // dialog label needs refreshing now.
-            owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+            owner_.statusBar()->showMessage(UiText::text(QStringLiteral("status.preferences_updated")));
         }
     });
 
     pageStack->setCurrentIndex(0);
 
-    // Width floor: widest page + the tab widget's TRUE horizontal chrome,
-    // measured from live geometry. Two facts force this shape (see the
-    // qt-ui-layout-pitfalls skill, W2/W3):
-    //   - the root layout's SetFixedSize constraint ignores dialog-level
-    //     setMinimumWidth but honors a child's minimum, so the floor lives
-    //     on the tab widget (same as the render-settings dialog, df0829d);
-    //   - the QSS pane padding (8px per side) is absent from
-    //     QTabWidget::sizeHint, so without compensation every page comes up
-    //     ~16px short and Fixed-width fields (menu buttons, the font
-    //     shortcut hint) clip at the right pane edge.
-    // Measuring instead of hardcoding keeps the dialog as narrow as the
-    // content allows while never re-clipping when rows change.
-    int maxPageWidth = 0;
-    for (int i = 0; i < pageStack->count(); ++i) {
-        QWidget* page = pageStack->widget(i);
-        if (page == nullptr) {
-            continue;
-        }
-        if (page->layout() != nullptr) {
-            page->layout()->activate();
-        }
-        maxPageWidth = qMax(maxPageWidth, page->sizeHint().width());
-    }
-    dialog.adjustSize();
-    QCoreApplication::sendPostedEvents(pageStack, QEvent::LayoutRequest);
-    auto* pageStackInner = pageStack->findChild<QStackedWidget*>();
-    // Fallback chrome if the inner stack is not measurable: 2*8px QSS pane
-    // padding + 2*1px pane border (must track the QSS in
-    // UiTheme::dialogTabStripStyleSheet()).
-    int tabChrome = 18;
-    if (pageStackInner != nullptr && pageStack->width() > pageStackInner->width()) {
-        tabChrome = pageStack->width() - pageStackInner->width();
-    }
-    // FIX (2026-06-19): a plain minimumWidth floor never narrowed the dialog —
-    // the SetFixedSize root layout sizes the dialog to the QTabWidget's sizeHint,
-    // which over-reports well past the widest page, so the floor sat below it and
-    // never bound (the "didn't get narrower" report). Pin the tab widget to the
-    // measured content width instead; SetFixedSize then collapses the dialog onto
-    // it. Clamp up to the tab strip's own width so pinning can never clip the
-    // tabs, and to maxPageWidth so every page still fits — no clipping, just the
-    // dead right-hand margin removed.
-    int tabBarWidth = 0;
-    if (auto* tabBar = pageStack->findChild<QTabBar*>()) {
-        tabBarWidth = tabBar->sizeHint().width();
-    }
-    const int pinnedWidth = qMax(maxPageWidth, tabBarWidth) + tabChrome;
-    pageStack->setFixedWidth(pinnedWidth);
-    // The adjustSize() above locked the dialog onto its (wide) natural sizeHint;
-    // SetFixedSize won't recompute from a child's fixedWidth until the layout
-    // re-activates, so force it now or the narrowing silently never lands (the
-    // 2026-06-19 "still not narrower" report).
-    rootLayout->activate();
-    dialog.adjustSize();
+    const miacode::ui::TabWidgetWidthMetrics tabWidthMetrics =
+        miacode::ui::pinTabWidgetToContentWidth(pageStack, &dialog, rootLayout);
     // --debug breadcrumb: if the dialog is still wide, this prints the real
     // per-page hint so the over-reporting page can be pinned without guessing.
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("preferences/width"),
         QStringLiteral("maxPage=%1 tabBar=%2 chrome=%3 pinned=%4 dialogW=%5")
-            .arg(maxPageWidth)
-            .arg(tabBarWidth)
-            .arg(tabChrome)
-            .arg(pinnedWidth)
+            .arg(tabWidthMetrics.maxPageWidth)
+            .arg(tabWidthMetrics.tabBarWidth)
+            .arg(tabWidthMetrics.tabChrome)
+            .arg(tabWidthMetrics.pinnedWidth)
             .arg(dialog.width()),
         true);
 
-    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
-    UiDialogs::localizeButtonBox(buttonBox);
-    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    rootLayout->addWidget(buttonBox, 0, Qt::AlignRight);
+    auto* buttonBox = dialog.buttonBox();
+    styleRegisteredDialogButton(dialog.addCloseButton(UiDialogs::text("action.close", "Close"), false));
+    rootLayout->setAlignment(buttonBox, Qt::AlignRight);
 
     dialog.exec();
 }

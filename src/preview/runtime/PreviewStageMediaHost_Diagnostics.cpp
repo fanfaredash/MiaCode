@@ -457,6 +457,9 @@ void PreviewStageMediaHost::handleDecodedVideoFrame(const QVideoFrame& frame,
     if (videoSink_ != nullptr) {
         videoSink_->setVideoFrame(frame);
     }
+    if (innerVideoSink_ != nullptr && innerVideoSink_ != videoSink_) {
+        innerVideoSink_->setVideoFrame(frame);
+    }
 
     // CPU fallback for the DComp per-pixel-alpha-OFF path: mirror to a QImage
     // (throttled to videoFrameToImageMaxFps_). Skipped under per-pixel alpha

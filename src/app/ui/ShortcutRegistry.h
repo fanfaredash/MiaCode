@@ -4,6 +4,7 @@
 #include <QKeySequence>
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 class QAction;
 class QShortcut;
@@ -13,22 +14,31 @@ class ShortcutRegistry
 public:
     struct ShortcutDefinition {
         QString id;
+        QString labelKey;
         QString labelZh;
         QString labelEn;
         QList<QKeySequence> defaultSequences;
+        QStringList defaultShortcutTexts;
     };
 
     static ShortcutRegistry& instance();
 
     QKeySequence sequence(const QString& id, const QKeySequence& fallback = QKeySequence()) const;
     QList<QKeySequence> sequences(const QString& id, const QList<QKeySequence>& fallback = {}) const;
+    QStringList shortcutTexts(const QString& id, const QStringList& fallback = {}) const;
     QList<ShortcutDefinition> editableShortcuts() const;
     QList<QKeySequence> defaultSequences(const QString& id) const;
+    QStringList defaultShortcutTexts(const QString& id) const;
 
+    bool registerExtensionShortcut(
+        const QString& id,
+        const QString& label,
+        const QList<QKeySequence>& defaultSequences);
     void applyShortcut(QAction* action, const QString& id, const QKeySequence& fallback = QKeySequence()) const;
     void applyShortcuts(QAction* action, const QString& id, const QList<QKeySequence>& fallback = {}) const;
     void applyShortcut(QShortcut* shortcut, const QString& id, const QKeySequence& fallback = QKeySequence()) const;
     bool setUserShortcut(const QString& id, const QKeySequence& sequence);
+    bool setUserShortcutText(const QString& id, const QString& shortcutText);
     bool resetUserShortcut(const QString& id);
     bool resetEditableShortcuts();
     void reload();
@@ -44,5 +54,7 @@ private:
     QHash<QString, ShortcutDefinition> definitions_;
     QHash<QString, QList<QKeySequence>> defaultShortcuts_;
     QHash<QString, QList<QKeySequence>> shortcuts_;
-    QHash<QString, QList<QKeySequence>> userOverrides_;
+    QHash<QString, QStringList> defaultShortcutTexts_;
+    QHash<QString, QStringList> shortcutTexts_;
+    QHash<QString, QStringList> userOverrides_;
 };

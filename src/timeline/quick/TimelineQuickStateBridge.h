@@ -6,6 +6,8 @@
 #include <QPointer>
 #include <QFont>
 #include <QSize>
+#include <QString>
+#include <QStringList>
 #include <QVector>
 
 #include <memory>
@@ -36,6 +38,8 @@ class TimelineQuickStateBridge : public QObject
                WRITE setTimelineSyncEnabled NOTIFY timelineSyncEnabledChanged)
     Q_PROPERTY(double waveformBrightness READ waveformBrightness
                WRITE setWaveformBrightness NOTIFY waveformBrightnessChanged)
+    Q_PROPERTY(double measureLineBrightness READ measureLineBrightness
+               WRITE setMeasureLineBrightness NOTIFY measureLineBrightnessChanged)
 
 public:
     explicit TimelineQuickStateBridge(QObject* parent = nullptr);
@@ -54,14 +58,24 @@ public:
     QHash<quint64, QString> muriMarkerTooltips() const;
     void setHeaderLineNumberFont(const QFont& font);
     QFont headerLineNumberFont() const;
+    QString skinDirectory() const;
+    void setSkinDirectory(const QString& skinDirectory);
     int horizontalScrollValue() const;
     void setHorizontalScrollValue(int value);
     double zoomScale() const;
     void setZoomScale(double scale);
+    QVector<double> zoomPresets() const;
+    QStringList zoomInWheelShortcuts() const;
+    QStringList zoomOutWheelShortcuts() const;
+    void setZoomWheelShortcuts(const QStringList& zoomInShortcuts, const QStringList& zoomOutShortcuts);
+    double viewportCenterSecond();
+    void setZoomScaleAnchored(double scale, double anchorSecond);
     double contentScale() const;
     void setContentScale(double scale);
     double waveformBrightness() const;
     void setWaveformBrightness(double brightness);
+    double measureLineBrightness() const;
+    void setMeasureLineBrightness(double brightness);
     double waveformPhaseCompensationSeconds() const;
     void setWaveformPhaseCompensationSeconds(double seconds);
     void cycleZoomPreset(double anchorSecond);
@@ -112,6 +126,7 @@ signals:
     void followProgressEnabledChanged(bool enabled);
     void timelineSyncEnabledChanged(bool enabled);
     void waveformBrightnessChanged(double brightness);
+    void measureLineBrightnessChanged(double brightness);
 
 private:
     QSize effectiveViewportSize() const;
@@ -130,12 +145,16 @@ private:
     QHash<quint64, QVector<miacode::timeline::TimelineMuriMarkerPlacement>> muriMarkersByLocation_;
     QHash<quint64, QString> muriMarkerTooltips_;
     QFont headerLineNumberFont_;
+    QString skinDirectory_;
     QSize quickViewportSize_;
     QVector<double> zoomPresets_;
+    QStringList zoomInWheelShortcuts_{QStringLiteral("Ctrl+WheelUp")};
+    QStringList zoomOutWheelShortcuts_{QStringLiteral("Ctrl+WheelDown")};
     int zoomPresetIndex_ = 1;
     int horizontalScrollValue_ = 0;
     double contentScale_ = 1.0;
     double waveformBrightness_ = miacode::timeline::kTimelineWaveformBrightnessDefault;
+    double measureLineBrightness_ = miacode::timeline::kTimelineMeasureLineBrightnessDefault;
     double waveformPhaseCompensationSeconds_ = 0.0;
     double playbackEntrySeconds_ = 0.0;
     double playheadUpperLimitSeconds_ = -1.0;

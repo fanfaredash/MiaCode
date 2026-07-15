@@ -18,12 +18,22 @@ public:
     void applyEditorAutoCompletionEnabled(bool enabled, bool persistPreference);
     void applyEditorImeInputDisabled(bool disabled, bool persistPreference);
     void applyEditorHeaderTopDisplay(EditorHeaderTopDisplay mode, bool persistPreference);
-    void showCreateBookmarkDialog();
-    void showBookmarkManager();
-    void openBookmarkAtLine(int line);
-    void addBookmark(int line, const QString& title, const QString& text);
+    // Jump to the bookmark's line without leaving a persistent sidebar marker.
+    void activateBookmarkAtLine(int line);
+    void deleteBookmarkAtLineWithConfirmation(int line);
+    // Creates a bookmark by inserting a visible `|| [label]` comment on `line`.
+    // No-op when the line already has a bookmark (it is revealed instead).
+    // When beginRenameInSidebar is set, the sidebar starts inline rename.
+    void createBookmarkAtLine(int line, bool beginRenameInSidebar);
+    // Explicit user rename: rewrites the line's `|| [label]` prefix in the
+    // editor text. An empty name removes an existing explicit label and falls
+    // back to automatic naming.
+    bool renameBookmark(int difficultyId, int line, const QString& name);
     void replaceBookmarkLine(int fromLine, int toLine);
     void refreshEditorBookmarkLines();
+    void syncBookmarksFromEditorText(int changePosition = -1, int charsRemoved = 0, int charsAdded = 0);
+    // Rebuilds the derived sidebar index after a document is assigned.
+    void adoptBookmarksForLoadedDocument();
     void setFullCopyAreaVisible(bool visible);
     void syncCopyAreaEditorAppearance();
     void syncCopyAreaLineCount();

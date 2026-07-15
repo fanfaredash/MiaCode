@@ -25,6 +25,7 @@
 #include "preview/quick_scene/PreviewQuickTrackLayer.h"
 #include "preview/quick_scene/PreviewQuickTouchJudgeLayer.h"
 #include "preview/quick_scene/PreviewQuickTouchHoldLayer.h"
+#include "preview/quick_scene/PreviewQuickTouchHoverLayer.h"
 #include "preview/quick_scene/PreviewQuickTouchLayer.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
 #include "core/scene/PreviewPreparedSceneCache.h"
@@ -70,9 +71,14 @@ signals:
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* updatePaintNodeData) override;
     void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
+    void hoverMoveEvent(QHoverEvent* event) override;
+    void hoverLeaveEvent(QHoverEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
 
 private:
     QString instanceTag() const;
+    QString touchPadAtItemPoint(const QPointF& itemPoint) const;
+    void updateHoveredTouchPadAtItemPoint(const QPointF& itemPoint);
     void clearPendingTextureStatsForPresentation();
     void enqueueTextureStatsForPresentation(const PreviewTextureStats& stats);
     PreviewTextureStats takePendingTextureStatsForPresentation() const;
@@ -98,13 +104,14 @@ private:
     // Issue #4 fix — when set, render via legacy QSG even with DComp on.
     bool dcompFallbackActive_ = false;
     QVector<PreviewTextureLayerStats> layerProfileStats_;
-    PreviewTextureRepository textures_;
+    std::atomic<bool> textureResetRequested_{false};
     PreviewQuickStageBackgroundLayer stageBackgroundLayer_;
     PreviewQuickBackdropLayer backdropLayer_;
     PreviewQuickMuriPadLayer muriPadLayer_;
     PreviewQuickMuriActionLayer muriActionLayer_;
     PreviewQuickJudgeFireworkLayer judgeFireworkLayer_;
     PreviewQuickGuideLayer guideLayer_;
+    PreviewQuickTouchHoverLayer touchHoverLayer_;
     PreviewQuickTrackLayer trackLayer_;
     PreviewQuickSlideMotionLayer slideMotionLayer_;
     PreviewQuickJudgeEffectLayer judgeEffectLayer_;
@@ -136,6 +143,7 @@ private:
     quint64 instanceId_ = 0;
     mutable QMutex latestTextureStatsMutex_;
     mutable QQueue<PreviewTextureStats> pendingTextureStats_;
+    PreviewTextureStats latestTextureStats_;
     bool lastLoggedHasWindow_ = false;
     bool lastLoggedHasState_ = false;
     QSize lastLoggedRenderSize_;

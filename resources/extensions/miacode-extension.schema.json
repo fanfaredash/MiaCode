@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://miacode.local/schemas/miacode-extension.schema.json",
+  "title": "MiaCode Extension Manifest",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "version",
+    "publisher",
+    "engines"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,95}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "publisher": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,95}$"
+    },
+    "main": {
+      "type": "string",
+      "minLength": 1
+    },
+    "engines": {
+      "type": "object",
+      "required": [
+        "miacode"
+      ],
+      "properties": {
+        "miacode": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "activationEvents": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "app.read",
+          "ui.message",
+          "ui.prompt",
+          "ui.status",
+          "ui.contribute",
+          "input.listen",
+          "events.subscribe",
+          "providers.read",
+          "providers.register",
+          "workspace.read",
+          "workspace.write",
+          "document.edit",
+          "editor.read",
+          "editor.edit",
+          "commands.read",
+          "commands.execute",
+          "diagnostics.run",
+          "analysis.run",
+          "timeline.read",
+          "timeline.control",
+          "preview.read",
+          "preview.control",
+          "resources.read",
+          "resources.write",
+          "export.read",
+          "export.write",
+          "tasks.run",
+          "logs.read",
+          "logs.write",
+          "filesystem.read",
+          "filesystem.write",
+          "network.fetch",
+          "settings.read",
+          "settings.write",
+          "extensions.manage",
+          "app.lifecycle",
+          "backup.read",
+          "backup.write",
+          "clipboard.read",
+          "clipboard.write",
+          "filesystem.unsafe",
+          "network.unsafe",
+          "process.manage",
+          "shell.execute",
+          "native.unsafe",
+          "open.inspect",
+          "open.call",
+          "open.app",
+          "open.workspace",
+          "open.document",
+          "open.editor",
+          "open.timeline",
+          "open.preview",
+          "open.validation",
+          "open.analysis",
+          "open.export",
+          "open.ui",
+          "open.extensions",
+          "internal.inspect",
+          "internal.call",
+          "experimental.invoke",
+          "internal.raw",
+          "renderer.raw",
+          "export.raw",
+          "security.override",
+          "updates.modify"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "contributes": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "command",
+              "title"
+            ],
+            "properties": {
+              "command": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]{1,95}$"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "category": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "menus": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "tools/menu",
+              "menubar/beforeHelp"
+            ]
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "command"
+              ],
+              "properties": {
+                "command": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label",
+              "translations"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]{1,95}$"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "translations": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

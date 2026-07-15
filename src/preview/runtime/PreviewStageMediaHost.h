@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/PreviewVideoGeometryConfig.h"
 #include "core/video/PreviewRenderSettings.h"
 
 #include <QElapsedTimer>
@@ -33,6 +34,7 @@ class PreviewStageMediaHost : public QObject
     Q_PROPERTY(bool mediaVisible READ mediaVisible WRITE setMediaVisible NOTIFY mediaVisibilityChanged)
     Q_PROPERTY(QUrl imageSource READ imageSource NOTIFY imageSourceChanged)
     Q_PROPERTY(int backgroundScaleMode READ backgroundScaleMode WRITE setBackgroundScaleModeValue NOTIFY backgroundScaleModeChanged)
+    Q_PROPERTY(double layoutSquareScale READ layoutSquareScale WRITE setLayoutSquareScale NOTIFY layoutSquareScaleChanged)
     Q_PROPERTY(bool videoPlaybackActive READ videoPlaybackActive NOTIFY diagnosticsChanged)
     Q_PROPERTY(bool hasVideoFrame READ hasVideoFrame NOTIFY diagnosticsChanged)
     Q_PROPERTY(double currentPlaybackSecond READ currentPlaybackSecond NOTIFY diagnosticsChanged)
@@ -53,7 +55,9 @@ public:
     void initializeBackendObjects();
     void setWarmupResolvedMediaPath(const QString& chartPath, const QString& mediaPath);
     Q_INVOKABLE void attachVideoOutputObject(QObject* videoOutputObject);
+    Q_INVOKABLE void attachVideoOutputObjects(QObject* videoOutputObject, QObject* innerVideoOutputObject);
     Q_INVOKABLE void detachVideoOutputObject(QObject* videoOutputObject);
+    Q_INVOKABLE void detachVideoOutputObjects(QObject* videoOutputObject, QObject* innerVideoOutputObject);
 
     bool hasResolvedMedia() const;
     bool hasVideoMedia() const;
@@ -68,6 +72,8 @@ public:
     int backgroundScaleMode() const;
     void setBackgroundScaleModeValue(int mode);
     void setBackgroundScaleMode(PreviewBackgroundScaleMode mode);
+    double layoutSquareScale() const;
+    void setLayoutSquareScale(double scale);
 
     // Phase 4c — `chartVideoOverridePath` is the raw `&video=` value
     // from `SimaiDocument::videoPath`. When non-empty, it overrides
@@ -128,6 +134,7 @@ signals:
     void mediaVisibilityChanged();
     void imageSourceChanged();
     void backgroundScaleModeChanged();
+    void layoutSquareScaleChanged();
     void playbackPositionChanged(double seconds);
     void playbackStartPrepared(double seconds, quint64 transactionId);
     void pausedSeekCompleted(double seconds, quint64 generation);
@@ -210,6 +217,7 @@ private:
     double videoFrameToImageMaxFps_ = 30.0;
     bool mediaVisible_ = true;
     PreviewBackgroundScaleMode backgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
+    double layoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
 #ifdef MIACODE_USE_QTAVPLAYER
     // FFmpeg decode backend. setSpeed() runs inside QtAVPlayer's own decode
     // loop (no Qt converter rebuild) so rate changes never race the QSG/DComp
@@ -233,7 +241,9 @@ private:
     QMetaObject::Connection videoSinkFrameConnection_;
 #endif
     QPointer<QObject> videoOutputObject_;
+    QPointer<QObject> innerVideoOutputObject_;
     QPointer<QVideoSink> videoSink_;
+    QPointer<QVideoSink> innerVideoSink_;
     quint64 videoSourceGeneration_ = 0;
     double timelineOffsetSeconds_ = 0.0;
     double playbackRate_ = 1.0;

@@ -143,8 +143,8 @@ bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
     dialogTimer.start();
     const UnsavedChangesChoice choice = showUnsavedChangesDialog(
         &owner_,
-        uiText("dialog.unsaved_changes.title", "Unsaved Changes"),
-        uiText("dialog.unsaved_changes.message", "Current document has unsaved changes. Save before continue?")
+        UiText::text(QStringLiteral("dialog.unsaved_changes.title")),
+        UiText::text(QStringLiteral("dialog.unsaved_changes.message"))
     );
     miacode::debug_log::appendTimingLine(
         miacode::debug_log::Channel::Runtime,
@@ -201,7 +201,7 @@ void MainWindow::DocumentSection::onNewFile()
 
     const QString targetDirectory = QFileDialog::getExistingDirectory(
         &owner_,
-        UiText::isChineseUi() ? QStringLiteral("选择谱面文件夹") : QStringLiteral("Select Chart Folder"),
+        UiText::text(QStringLiteral("document.select_chart_folder")),
         owner_.resolveInitialOpenDirectory(),
         QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
     );
@@ -215,10 +215,8 @@ void MainWindow::DocumentSection::onNewFile()
         const QMessageBox::StandardButton choice = UiDialogs::showMessageBox(
             QMessageBox::Warning,
             &owner_,
-            UiText::isChineseUi() ? QStringLiteral("文件已存在") : QStringLiteral("File Already Exists"),
-            UiText::isChineseUi()
-                ? QStringLiteral("所选文件夹下已存在 maidata.txt，是否覆盖？")
-                : QStringLiteral("maidata.txt already exists in the selected folder. Overwrite it?"),
+            UiText::text(QStringLiteral("document.file_already_exists")),
+            UiText::text(QStringLiteral("document.maidata_txt_already_exists_in")),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No
         );

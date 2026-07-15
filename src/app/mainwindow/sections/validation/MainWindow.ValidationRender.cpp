@@ -42,6 +42,8 @@ MuriAnalysisReport muriPromptReportForTimelineDots(
         diagnostic.line = entry.line;
         diagnostic.col = entry.col;
         diagnostic.detail = entry.rawDetail;
+        diagnostic.detailKind = entry.detailKind;
+        diagnostic.detailArgs = entry.detailArgs;
         promptReport.diagnostics.append(diagnostic);
     }
     promptReport.sourceSignature = alignedReport.sourceSignature;
@@ -96,8 +98,8 @@ void MainWindow::ValidationSection::onToggleJudgeMarkers(bool checked)
     owner_.savePortableState();
     owner_.statusBar()->showMessage(
         state_.showJudgeMarkers_
-            ? uiText("status.judge_marker_enabled", "Judge markers enabled.")
-            : uiText("status.judge_marker_disabled", "Judge markers hidden.")
+            ? UiText::text(QStringLiteral("status.judge_marker_enabled"))
+            : UiText::text(QStringLiteral("status.judge_marker_disabled"))
     );
 }
 
@@ -108,15 +110,15 @@ void MainWindow::ValidationSection::onToggleTouchTrail(bool checked)
     owner_.savePortableState();
     owner_.statusBar()->showMessage(
         state_.showTouchTrail_
-            ? uiText("status.touch_trail_enabled", "Touch trail enabled.")
-            : uiText("status.touch_trail_disabled", "Touch trail hidden.")
+            ? UiText::text(QStringLiteral("status.touch_trail_enabled"))
+            : UiText::text(QStringLiteral("status.touch_trail_disabled"))
     );
 }
 
 void MainWindow::ValidationSection::onEditStaticTapOnSlideThreshold()
 {
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
-    dialog.setWindowTitle(UiText::isChineseUi() ? QStringLiteral("撞尾阈值") : QStringLiteral("Tap-On-Slide Threshold"));
+    dialog.setWindowTitle(UiText::text(QStringLiteral("validation.tap_on_slide_threshold")));
     dialog.setModal(true);
     dialog.setMinimumWidth(360);
     dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
@@ -128,9 +130,7 @@ void MainWindow::ValidationSection::onEditStaticTapOnSlideThreshold()
     rootLayout->setSpacing(10);
 
     auto* hintLabel = new QLabel(
-        UiText::isChineseUi()
-            ? QStringLiteral("调整静态“撞尾无理”参考检查阈值。")
-            : QStringLiteral("Adjust the static Tap-On-Slide reference threshold."),
+        UiText::text(QStringLiteral("validation.adjust_the_static_tap_on")),
         &dialog);
     hintLabel->setWordWrap(true);
     rootLayout->addWidget(hintLabel);
@@ -185,9 +185,7 @@ void MainWindow::ValidationSection::onEditStaticTapOnSlideThreshold()
         refreshMuriDiagnosticsPanel();
     }
     owner_.statusBar()->showMessage(
-        UiText::isChineseUi()
-            ? QStringLiteral("撞尾阈值已更新为 %1 ms。").arg(state_.staticTapOnSlideThresholdMs_)
-            : QStringLiteral("Tap-On-Slide threshold set to %1 ms.").arg(state_.staticTapOnSlideThresholdMs_));
+        UiText::text(QStringLiteral("validation.tap_on_slide_threshold_set")).arg(state_.staticTapOnSlideThresholdMs_));
 }
 
 void MainWindow::ValidationSection::applyMuriRenderOptions()
@@ -235,8 +233,8 @@ void MainWindow::ValidationSection::setMuriRenderMode(RenderMode mode, bool pers
     }
     owner_.statusBar()->showMessage(
         mode == RenderMode::MaimuriDxStyle
-            ? uiText("status.muri_render_mode_dx", "Preview mode: muri check.")
-            : uiText("status.muri_render_mode_native", "Preview mode: chart review.")
+            ? UiText::text(QStringLiteral("status.muri_render_mode_dx"))
+            : UiText::text(QStringLiteral("status.muri_render_mode_native"))
     );
 }
 

@@ -131,7 +131,6 @@
     void clearExportAuditionClockSchedule();
     void updateMetadataPageMode();
     bool deleteDifficultyField(int difficultyId);
-    void updateDifficultyDeleteButton(bool visible);
     void populateMetadataPage();
     void populateDifficultyPage(int difficultyId);
     bool switchToMetadataField();

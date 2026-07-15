@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QSet>
 
+#include "SimaiNativeParser.h"
 #include "timeline/TimelineData.h"
 #include "common/MuriConfig.h"
 #include "common/MuriTypes.h"  // makeMarkerAnalysisKey + Muri* state types
@@ -32,6 +33,7 @@ struct RuntimeSlideNoteState {
     double criticalDeltaSecond = 0.0;
     QVector<QStringList> judgeSequence;
     QVector<bool> partition;
+    QVector<int> segmentStartAreaIndices;
     QVector<int> segmentEndAreaIndices;
     QVector<RuntimeJudgeHit> areaHits;
     int totalAreaNum = 0;
@@ -136,11 +138,15 @@ bool buildRuntimeSlideJudgeSequence(
     const TimelineNoteMarker& marker,
     QVector<QStringList>* judgeSequence,
     QVector<bool>* partition,
+    QVector<int>* segmentStartAreaIndices,
     QVector<int>* segmentEndAreaIndices,
     bool* isL,
     bool* isSpecialL)
 {
-    if (judgeSequence == nullptr || partition == nullptr || segmentEndAreaIndices == nullptr) {
+    if (judgeSequence == nullptr
+        || partition == nullptr
+        || segmentStartAreaIndices == nullptr
+        || segmentEndAreaIndices == nullptr) {
         return false;
     }
 
@@ -151,6 +157,7 @@ bool buildRuntimeSlideJudgeSequence(
 
     judgeSequence->clear();
     partition->clear();
+    segmentStartAreaIndices->clear();
     segmentEndAreaIndices->clear();
     if (isL != nullptr) {
         *isL = false;
@@ -172,6 +179,7 @@ bool buildRuntimeSlideJudgeSequence(
             return false;
         }
 
+        int segmentStartAreaIndex = 0;
         if (segmentIndex == 0) {
             *judgeSequence = segmentSequence;
             *partition = QVector<bool>(segmentSequence.size(), false);
@@ -179,18 +187,20 @@ bool buildRuntimeSlideJudgeSequence(
             const bool sharedHead =
                 !judgeSequence->isEmpty() && !segmentSequence.isEmpty() && judgeSequence->constLast() == segmentSequence.constFirst();
             if (sharedHead && !partition->isEmpty()) {
-                (*partition)[partition->size() - 1] = true;
+                segmentStartAreaIndex = judgeSequence->size() - 1;
+                (*partition)[segmentStartAreaIndex] = true;
+            } else {
+                segmentStartAreaIndex = judgeSequence->size();
             }
 
-            // Preserve the shared A-head at chained-segment boundaries.
-            // MaiMuriDX treats entering the previous segment's terminal A area
-            // as also judging the next segment's opening head.
-            for (int areaIndex = 0; areaIndex < segmentSequence.size(); ++areaIndex) {
+            const int appendStart = sharedHead ? 1 : 0;
+            for (int areaIndex = appendStart; areaIndex < segmentSequence.size(); ++areaIndex) {
                 judgeSequence->append(segmentSequence.at(areaIndex));
                 partition->append(false);
             }
         }
 
+        segmentStartAreaIndices->append(segmentStartAreaIndex);
         segmentEndAreaIndices->append(judgeSequence->size() - 1);
         if (segmentIndex == 0 && marker.slideSegmentKeys.size() == 1) {
             if (isL != nullptr) {
@@ -253,6 +263,7 @@ bool buildRuntimeSlideNoteState(const TimelineNoteMarker& marker, RuntimeSlideNo
 
     QVector<QStringList> judgeSequence;
     QVector<bool> partition;
+    QVector<int> segmentStartAreaIndices;
     QVector<int> segmentEndAreaIndices;
     bool isL = false;
     bool isSpecialL = false;
@@ -260,6 +271,7 @@ bool buildRuntimeSlideNoteState(const TimelineNoteMarker& marker, RuntimeSlideNo
             marker,
             &judgeSequence,
             &partition,
+            &segmentStartAreaIndices,
             &segmentEndAreaIndices,
             &isL,
             &isSpecialL)) {
@@ -275,6 +287,7 @@ bool buildRuntimeSlideNoteState(const TimelineNoteMarker& marker, RuntimeSlideNo
     note->endSecond = marker.endSecond;
     note->judgeSequence = judgeSequence;
     note->partition = partition;
+    note->segmentStartAreaIndices = segmentStartAreaIndices;
     note->segmentEndAreaIndices = segmentEndAreaIndices;
     note->areaHits = QVector<RuntimeJudgeHit>(judgeSequence.size());
     note->totalAreaNum = judgeSequence.size();
@@ -750,6 +763,7 @@ QHash<QString, RuntimeSlideJudgeResult> simulateRuntimeSlideAndWifiJudgments(
         result.segmentCompletedSeconds.reserve(note.segmentEndAreaIndices.size());
         result.areaHits = note.areaHits;
         result.judgeSequence = note.judgeSequence;
+        result.segmentStartAreaIndices = note.segmentStartAreaIndices;
         result.segmentEndAreaIndices = note.segmentEndAreaIndices;
         for (int segmentIndex = 0; segmentIndex < note.segmentEndAreaIndices.size(); ++segmentIndex) {
             const int areaIndex = note.segmentEndAreaIndices.at(segmentIndex);
@@ -831,21 +845,24 @@ void applyRuntimeJudgeResultToState(const RuntimeSlideJudgeResult& result, Marke
         }
         state->wifiPadCSecond = result.wifiPadCSecond;
     } else {
-        int areaCursor = 0;
+        int fallbackStartAreaIndex = 0;
         for (int index = 0; index < result.segmentCompletedSeconds.size() && index < state->slideSegments.size(); ++index) {
             if (result.segmentCompletedSeconds.at(index) >= 0.0) {
                 state->slideSegments[index].completedSecond = result.segmentCompletedSeconds.at(index);
             }
 
             QVector<QVector<MuriCheckpointState>> runtimeAreas;
-            const int segmentEndAreaIndex = result.segmentEndAreaIndices.value(index, areaCursor - 1);
-            while (areaCursor <= segmentEndAreaIndex && areaCursor < result.areaHits.size()) {
+            const int segmentStartAreaIndex = result.segmentStartAreaIndices.value(index, fallbackStartAreaIndex);
+            const int segmentEndAreaIndex = result.segmentEndAreaIndices.value(index, segmentStartAreaIndex - 1);
+            for (int areaIndex = segmentStartAreaIndex;
+                 areaIndex <= segmentEndAreaIndex && areaIndex < result.areaHits.size();
+                 ++areaIndex) {
                 QVector<MuriCheckpointState> checkpoints;
-                const RuntimeJudgeHit& hit = result.areaHits.at(areaCursor);
+                const RuntimeJudgeHit& hit = result.areaHits.at(areaIndex);
                 if (hit.judged) {
                     MuriCheckpointState checkpoint;
                     checkpoint.second = hit.second;
-                    checkpoint.pads = result.judgeSequence.value(areaCursor);
+                    checkpoint.pads = result.judgeSequence.value(areaIndex);
                     checkpoint.skipped = hit.skipped;
                     checkpoint.causeMarkerKey = hit.cause.sourceMarkerKey;
                     checkpoint.causeType = hit.skipped
@@ -861,8 +878,8 @@ void applyRuntimeJudgeResultToState(const RuntimeSlideJudgeResult& result, Marke
                     checkpoints.append(checkpoint);
                 }
                 runtimeAreas.append(checkpoints);
-                ++areaCursor;
             }
+            fallbackStartAreaIndex = segmentEndAreaIndex + 1;
             if (!runtimeAreas.isEmpty()) {
                 state->slideSegments[index].areaCheckpoints = runtimeAreas;
             }
@@ -919,6 +936,24 @@ EarlyJudgeCauseInfo latestEarlyJudgeCauseForState(const MarkerMuriState& state)
     return latestCause;
 }
 
+double perfectToleranceSecondsForSlideJudge(const TimelineNoteMarker& marker)
+{
+    double lastAreaDurationSecond = 0.0;
+    if (marker.type == QLatin1String("wifi")) {
+        const double durationSecond = qMax(0.0, marker.endSecond - marker.slideTraceSecond);
+        lastAreaDurationSecond = (1.0 - marker.wifiCriticalProportion) * durationSecond;
+    } else {
+        const int lastSegmentIndex =
+            qMin(marker.slideSegmentDurations.size(), marker.slideSegmentCriticalProportions.size()) - 1;
+        if (lastSegmentIndex >= 0) {
+            const double lastDurationSecond = qMax(0.0, marker.slideSegmentDurations.at(lastSegmentIndex));
+            const double criticalProportion = marker.slideSegmentCriticalProportions.at(lastSegmentIndex);
+            lastAreaDurationSecond = (1.0 - criticalProportion) * lastDurationSecond;
+        }
+    }
+    return slideCriticalDeltaSecond(qMax(0.0, lastAreaDurationSecond));
+}
+
 DiagnosticAnchor diagnosticAnchorForSlideJudge(
     const TimelineNoteMarker& marker,
     const MarkerMuriState& state,
@@ -938,11 +973,12 @@ DiagnosticAnchor diagnosticAnchorForSlideJudge(
     return diagnosticAnchorFromMarker(marker);
 }
 
-QString formatSlideTooFastDetail(
+MuriDetailArgs slideTooFastDetailArgs(
     const TimelineNoteMarker& marker,
     const MarkerMuriState& state,
     const QHash<QString, QString>& markerConfigLabels,
-    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys)
+    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys,
+    MuriDetailKind* detailKind)
 {
     const EarlyJudgeCauseInfo latestCause = latestEarlyJudgeCauseForState(state);
     const double expectedSecond = marker.type == QLatin1String("wifi")
@@ -954,17 +990,44 @@ QString formatSlideTooFastDetail(
     const double normalJudgeSecond = marker.endSecond >= 0.0 ? marker.endSecond : expectedSecond;
     const double gapMs = qMax(0.0, normalJudgeSecond - resolvedSecond) * 1000.0;
     const QString targetLabel = formatMarkerConfigLabel(marker);
+    MuriDetailArgs args;
+    args.left = targetLabel;
+    args.gapText = QStringLiteral("%1 ms").arg(QString::number(gapMs, 'f', 1));
+    args.perfectWindowText = QStringLiteral("%1 ms").arg(
+        QString::number(perfectToleranceSecondsForSlideJudge(marker) * 1000.0, 'f', 1));
+    args.alert = MuriAlertLevel::Muri;
     if (latestCause.valid) {
         const QString causeLabel = markerConfigLabelForSource(
             markerConfigLabels,
             syntheticSlideHeadOwnerKeys,
             latestCause.markerKey,
             latestCause.causeType);
-        return QStringLiteral("%1 was early-judged by %2, gap %3 ms.")
-            .arg(targetLabel, causeLabel, QString::number(gapMs, 'f', 1));
+        args.right = causeLabel;
+        if (detailKind != nullptr) {
+            *detailKind = MuriDetailKind::EarlyJudgedBy;
+        }
+        return args;
     }
-    return QStringLiteral("%1 resolved outside its critical window, gap %2 ms.")
-        .arg(targetLabel, QString::number(gapMs, 'f', 1));
+    if (detailKind != nullptr) {
+        *detailKind = MuriDetailKind::ResolvedOutsideWindow;
+    }
+    return args;
+}
+
+QString formatSlideTooFastDetail(
+    const TimelineNoteMarker& marker,
+    const MarkerMuriState& state,
+    const QHash<QString, QString>& markerConfigLabels,
+    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys)
+{
+    MuriDetailKind detailKind = MuriDetailKind::None;
+    const MuriDetailArgs args = slideTooFastDetailArgs(
+        marker,
+        state,
+        markerConfigLabels,
+        syntheticSlideHeadOwnerKeys,
+        &detailKind);
+    return renderMuriDetail(detailKind, args, SimaiNativeValidationLocale::English);
 }
 
 }  // namespace miacode::muri::detail

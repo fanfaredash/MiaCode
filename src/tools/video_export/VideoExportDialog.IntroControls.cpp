@@ -111,25 +111,9 @@ void VideoExportDialog::restoreLivePreviewState()
     }
 }
 
-void VideoExportDialog::openHudFontSettingsDialog()
-{
-    // Shared dialog (tools/video_export/HudFontSettings.cpp). The callback
-    // re-renders this dialog's paused preview frame so the new HUD font shows
-    // immediately.
-    miacode::video_export::openHudFontSettingsDialog(this, [this]() {
-        refreshLivePreviewHudFont();
-    });
-}
-
-void VideoExportDialog::refreshLivePreviewHudFont()
-{
-    const double second = currentPreviewSecond();
-    if (qIsFinite(second)) {
-        seekPreview(second);
-    } else {
-        seekPreview(previewCursorSecond_);
-    }
-}
+// HUD font is edited from the shared 皮肤 tab (buildSkinSettings) now; the
+// dialog no longer owns a font button. The global font applies process-wide and
+// the on-screen preview re-reads it on its next repaint.
 
 void VideoExportDialog::refreshAddIntroEnabledState()
 {
@@ -180,10 +164,9 @@ void VideoExportDialog::browseIntroBackground()
 {
     const QString file = QFileDialog::getOpenFileName(
         this,
-        l10n(QStringLiteral("Choose background image"), QStringLiteral("选择背景图片")),
+        UiText::text(QStringLiteral("cover.choose_background_image")),
         QString(),
-        l10n(QStringLiteral("Images (*.png *.jpg *.jpeg *.bmp *.webp)"),
-             QStringLiteral("图片 (*.png *.jpg *.jpeg *.bmp *.webp)")));
+        UiText::text(QStringLiteral("cover.images_png_jpg_jpeg_bmp")));
     if (file.isEmpty()) {
         return;
     }

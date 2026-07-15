@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 set(MIACODE_VERSION_MAJOR "1")
-set(MIACODE_VERSION_MINOR "0")
+set(MIACODE_VERSION_MINOR "1")
 set(MIACODE_VERSION_PATCH "0")
 # Single source of truth for the prerelease tag. Both the package
 # filename (MiaCode-v<version>-win64.zip via package-win.ps1) and the
@@ -9,7 +9,7 @@ set(MIACODE_VERSION_PATCH "0")
 # split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
 # they always drifted apart in practice (e.g. beta20 zip shipping with
 # beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "")
+set(MIACODE_VERSION_PRERELEASE "beta.5")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
@@ -82,6 +82,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
     src/app/startup_diagnostics_win32.cpp
     src/app/graphics_backend.cpp
+    src/app/process_identity.cpp
+    src/app/gpu_adapter_probe.cpp
+    src/app/gpu_device_provider.cpp
+    src/app/gpu_high_performance_hint.cpp
     src/app/cli_shared.cpp
     src/app/cli_video_export.cpp
     src/app/cli_video_export_worker.cpp
@@ -123,6 +127,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/export/MainWindow.ExportWorker.cpp
     src/app/mainwindow/sections/export/MainWindow.PackZip.cpp
     src/app/mainwindow/sections/frame/MainWindow.BootstrapAndMenus.cpp
+    src/app/mainwindow/sections/frame/MainWindow.ExtensionHostRequests.cpp
     src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp
     src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp
     src/app/mainwindow/sections/preferences/MainWindow.PreferencesDialog.cpp
@@ -155,10 +160,16 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/window/MainWindow.WindowShell.cpp
     src/app/ui/UiText.h
     src/app/ui/UiText.cpp
+    src/app/ui/AppBackgroundSettings.h
+    src/app/ui/AppBackgroundSettings.cpp
+    src/app/ui/AppBackgroundPainter.h
+    src/app/ui/AppBackgroundPainter.cpp
     src/app/ui/ShortcutRegistry.h
     src/app/ui/ShortcutRegistry.cpp
     src/app/ui/UiTheme.h
     src/app/ui/UiTheme.cpp
+    src/app/ui/UiComponents.h
+    src/app/ui/UiComponents.cpp
     src/app/ui/UiNativeWindowTheme.h
     src/app/ui/UiNativeWindowTheme.cpp
     src/app/ui/WindowParityMetrics.h
@@ -175,8 +186,12 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/MuriConfig.h
     src/common/DebugLog.h
     src/common/DebugLog.cpp
+    src/common/UiHangWatchdog.h
+    src/common/UiHangWatchdog.cpp
     src/common/ProcessDiagnostics.h
     src/common/ProcessDiagnostics.cpp
+    src/common/GpuDevicePolicy.h
+    src/common/GpuDevicePolicy.cpp
     src/common/OperationLog.h
     src/common/OperationLog.cpp
     src/common/CrashRecovery.h
@@ -184,6 +199,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/Mmcss.h
     src/common/Mmcss.cpp
     src/common/DebugImageCompare.h
+    src/common/InputShortcutGesture.h
+    src/common/InputShortcutGesture.cpp
     src/common/ChartAssetPaths.h
     src/common/Id3TagReader.h
     src/common/Id3TagReader.cpp
@@ -301,6 +318,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/cover_export/ExportCoverDialog.cpp
     src/preview/runtime/PreviewQuickExportSession.h
     src/preview/runtime/PreviewQuickExportSession.cpp
+    src/preview/runtime/PreviewQuickD3D11ExportSession.h
+    src/preview/runtime/PreviewQuickD3D11ExportSession.cpp
     src/preview/runtime/PreviewSceneAssetLoader.h
     src/preview/runtime/PreviewSceneAssetLoader.cpp
     src/preview/runtime/PreviewSceneAssetRepository.h
@@ -373,6 +392,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/core/scene/PreviewMaimuriDxJudgeLayerState.cpp
     src/preview/quick_scene/PreviewTextureRepository.h
     src/preview/quick_scene/PreviewTextureRepository.cpp
+    src/preview/quick_scene/PreviewTextureGenerationPolicy.h
     src/preview/quick_scene/PreviewQuickStageBackgroundLayer.h
     src/preview/quick_scene/PreviewQuickStageBackgroundLayer.cpp
     src/preview/quick_scene/PreviewQuickBackdropLayer.h
@@ -387,6 +407,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/quick_scene/PreviewQuickSectorNodes.cpp
     src/preview/quick_scene/PreviewQuickGuideLayer.h
     src/preview/quick_scene/PreviewQuickGuideLayer.cpp
+    src/preview/quick_scene/PreviewQuickTouchHoverLayer.h
+    src/preview/quick_scene/PreviewQuickTouchHoverLayer.cpp
     src/preview/quick_scene/PreviewQuickTrackLayer.h
     src/preview/quick_scene/PreviewQuickTrackLayer.cpp
     src/preview/quick_scene/PreviewQuickSlideMotionLayer.h
@@ -484,6 +506,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/core/chart/transform/ChartBatchTransform.Transform.cpp
     src/core/chart/transform/ChartNormalization.h
     src/core/chart/transform/ChartNormalization.cpp
+    src/core/chart/transform/ChartNormalizationSegmentPolicy.h
+    src/core/chart/transform/ChartNormalizationSegmentPolicy.cpp
     src/core/chart/transform/Non384SnapTable.h
     src/core/chart/transform/Non384SnapTable.cpp
     src/core/chart/document/SimaiDocument.h
@@ -529,9 +553,18 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/quick/TimelineQuickNotesLayer.cpp
     src/timeline/quick/TimelineQuickOverlayLayer.h
     src/timeline/quick/TimelineQuickOverlayLayer.cpp
+    src/extensions/ExtensionManifest.h
+    src/extensions/ExtensionManifest.cpp
+    src/extensions/ExtensionOpenBridge.h
+    src/extensions/ExtensionOpenBridge.cpp
+    src/extensions/EmbeddedExtensionRuntime.h
+    src/extensions/EmbeddedExtensionRuntime.cpp
+    src/extensions/ExtensionManager.h
+    src/extensions/ExtensionManager.cpp
     resources/app_icons.qrc
     resources/fonts.qrc
     resources/slide_data.qrc
+    resources/preview_judge_effects.qrc
     resources/preview_runtime_qml.qrc
     resources/quick_shell_qml.qrc
     resources/intro.qrc
@@ -812,6 +845,10 @@ endif()
 if (WIN32)
     add_executable(MiaCodeLauncher WIN32
         src/wrapper/MiaCodeLauncher.cpp
+        # P2 — export the same NVIDIA Optimus / AMD PowerXpress high-performance
+        # GPU hint symbols from the launcher's export table as well as the real
+        # app, so the preference is declared whichever binary the OS inspects.
+        src/app/gpu_high_performance_hint.cpp
     )
     set_target_properties(MiaCodeLauncher PROPERTIES
         OUTPUT_NAME "MiaCodeLauncher"
@@ -946,13 +983,6 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/probe/SoundtouchProbe.cpp
             src/audio/PreviewAudioSettings.h
             src/audio/PreviewAudioSettings.cpp
-            src/audio/BassPreviewAudioBackend.h
-            src/audio/BassPreviewAudioBackend.cpp
-            src/audio/BassPreviewAudioBackend_EngineInit.cpp
-            src/audio/BassPreviewAudioBackend_Assets.cpp
-            src/audio/BassPreviewAudioBackend_Transport.cpp
-            src/audio/BassPreviewAudioBackend_PlaybackClock.cpp
-            src/audio/BassPreviewAudioBackend_EventDrain.cpp
             src/audio/MiniaudioPreviewAudioBackend.h
             src/audio/MiniaudioPreviewAudioBackend.cpp
             src/audio/QtPreviewSfxRuntime.h
@@ -960,10 +990,20 @@ if (MIACODE_BUILD_DEV_TOOLS)
             ${_miacode_log_core}
         LIBS Qt6::Concurrent Qt6::Core Qt6::Gui Qt6::Widgets soundtouch
         INCLUDES
-            third_party/bass/include src src/preview src/audio
+            src src/preview src/audio
             src/core/video src/timeline src/tools
     )
     if (WIN32)
+        target_sources(soundtouch_probe PRIVATE
+            src/audio/BassPreviewAudioBackend.h
+            src/audio/BassPreviewAudioBackend.cpp
+            src/audio/BassPreviewAudioBackend_EngineInit.cpp
+            src/audio/BassPreviewAudioBackend_Assets.cpp
+            src/audio/BassPreviewAudioBackend_Transport.cpp
+            src/audio/BassPreviewAudioBackend_PlaybackClock.cpp
+            src/audio/BassPreviewAudioBackend_EventDrain.cpp
+        )
+        target_include_directories(soundtouch_probe PRIVATE third_party/bass/include)
         target_link_libraries(soundtouch_probe PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
@@ -1025,6 +1065,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/chart/transform/ChartBatchTransform.Transform.cpp
             src/core/chart/transform/ChartNormalization.h
             src/core/chart/transform/ChartNormalization.cpp
+            src/core/chart/transform/ChartNormalizationSegmentPolicy.h
+            src/core/chart/transform/ChartNormalizationSegmentPolicy.cpp
             src/core/chart/transform/Non384SnapTable.h
             src/core/chart/transform/Non384SnapTable.cpp
             ${_miacode_chart_core}
@@ -1035,6 +1077,33 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES
             src src/app/ui src/common src/core/chart
             src/core/chart/document src/core/chart/parser src/core/chart/transform src/timeline
+    )
+
+    miacode_add_dev_tool(extension_manifest_spec TEST
+        SOURCES
+            src/tools/extensions/ExtensionManifestSpec.cpp
+            src/extensions/ExtensionManifest.h
+            src/extensions/ExtensionManifest.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(extension_open_bridge_spec TEST
+        SOURCES
+            src/tools/extensions/ExtensionOpenBridgeSpec.cpp
+            src/extensions/ExtensionOpenBridge.h
+            src/extensions/ExtensionOpenBridge.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(extension_runtime_spec TEST
+        SOURCES
+            src/tools/extensions/ExtensionRuntimeSpec.cpp
+            src/extensions/EmbeddedExtensionRuntime.h
+            src/extensions/EmbeddedExtensionRuntime.cpp
+        LIBS Qt6::Core Qt6::Qml
+        INCLUDES src
     )
 
     miacode_add_dev_tool(simai_document_spec TEST
@@ -1055,8 +1124,10 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/cover_export/CoverCompositionState.cpp
             src/app/ui/UiText.h
             src/app/ui/UiText.cpp
+            src/extensions/ExtensionManifest.h
+            src/extensions/ExtensionManifest.cpp
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES src src/app/ui
+        INCLUDES src src/app/ui src/extensions
     )
 
     miacode_add_dev_tool(muri_spec TEST
@@ -1128,13 +1199,21 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/editor/SimaiCompletionCatalog.cpp
             src/app/ui/UiText.h
             src/app/ui/UiText.cpp
+            src/extensions/ExtensionManifest.h
+            src/extensions/ExtensionManifest.cpp
+            src/app/ui/AppBackgroundSettings.h
+            src/app/ui/AppBackgroundSettings.cpp
+            src/app/ui/AppBackgroundPainter.h
+            src/app/ui/AppBackgroundPainter.cpp
             src/app/ui/UiTheme.h
             src/app/ui/UiTheme.cpp
             src/app/ui/ShortcutRegistry.h
             src/app/ui/ShortcutRegistry.cpp
+            src/common/InputShortcutGesture.h
+            src/common/InputShortcutGesture.cpp
             ${_miacode_log_core}
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
-        INCLUDES src src/app/ui src/common
+        INCLUDES src src/app/ui src/common src/extensions
     )
 
     miacode_add_dev_tool(simai_completion_catalog_spec TEST
@@ -1153,6 +1232,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/preview/runtime/PreviewSceneAssetLoader.cpp
             src/core/scene/PreviewFrameState.h
             ${_miacode_log_core}
+            resources/preview_judge_effects.qrc
         LIBS Qt6::Core Qt6::Gui
         INCLUDES src src/common src/preview src/preview/runtime src/core/scene src/core/video src/timeline
     )
@@ -1219,6 +1299,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/scene/PreviewMarkerDrawOrder.cpp
             src/core/scene/PreviewSlideMotionLayerState.h
             src/core/scene/PreviewSlideMotionLayerState.cpp
+            src/core/scene/PreviewTouchJudgeLayerState.h
+            src/core/scene/PreviewTouchJudgeLayerState.cpp
             src/core/scene/PreviewTrackLayerState.h
             src/core/scene/PreviewTrackLayerState.cpp
             src/core/scene/PreviewTrackShared.h
@@ -1249,6 +1331,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/preview/quick_scene/PreviewQuickSpriteBatchPolicy.h
         LIBS Qt6::Core
         INCLUDES src src/common src/preview src/preview/quick_scene
+    )
+
+    miacode_add_dev_tool(preview_texture_generation_policy_spec TEST
+        SOURCES
+            src/tools/preview/PreviewTextureGenerationPolicySpec.cpp
+            src/preview/quick_scene/PreviewTextureGenerationPolicy.h
+        LIBS Qt6::Core
+        INCLUDES src src/preview src/preview/quick_scene
     )
 
     miacode_add_dev_tool(preview_sfx_timeline_spec TEST
@@ -1375,8 +1465,24 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_compile_definitions(debug_flag_index_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
+    # Drift guard for the UiText localization tables: built-in en/zh/ja key parity plus
+    # source/resource literal key checks. Reads the tree from disk; repo root
+    # injected as a compile definition.
+    miacode_add_dev_tool(ui_text_locale_spec TEST
+        SOURCES
+            src/tools/ui_text/UiTextLocaleSpec.cpp
+            src/app/ui/UiText.h
+            src/app/ui/UiText.cpp
+            src/extensions/ExtensionManifest.h
+            src/extensions/ExtensionManifest.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/app/ui src/extensions
+    )
+    target_compile_definitions(ui_text_locale_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
     # Behavior spec locking DebugOptions.h accessor semantics (defaults, clamps,
-    # debug-category gating, DComp cascade) — the safety net for any future
+    # debug-category gating, DComp cascade), the safety net for any future
     # table-driven registry refactor.
     miacode_add_dev_tool(debug_options_spec TEST
         SOURCES

@@ -81,6 +81,7 @@ public:
         int fallbackPixelSize = 14);
 
     void clear();
+    void setSkinDirectory(const QString& skinDirectory);
     int size() const { return cache_.size() + holdCache_.size(); }
 
 private:
@@ -88,6 +89,7 @@ private:
 
     miacode::timeline::TimelineNoteAssetSet assets_;
     bool assetsLoaded_ = false;
+    QString skinDirectory_;
 
     QHash<QString, QSharedPointer<QImage>> cache_;
     QHash<QString, HoldParts> holdCache_;

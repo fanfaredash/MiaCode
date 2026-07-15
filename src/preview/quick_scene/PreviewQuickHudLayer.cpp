@@ -1,5 +1,6 @@
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 
+#include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "core/scene/PreviewFrameState.h"
@@ -9,11 +10,14 @@
 
 #include <QFontMetrics>
 #include <QPainter>
+#include <QPaintDevice>
 #include <QPainterPath>
 #include <QQuickWindow>
 #include <QTimer>
 
+#include <array>
 #include <cmath>
+#include <memory>
 
 namespace {
 
@@ -22,8 +26,79 @@ bool aspectRatioNear(qreal actual, qreal expected)
     return qAbs(actual - expected) < 0.02;
 }
 
-void drawHudText(QPainter& painter, const QPointF& baseline, const QString& text, const QFont& font, qreal shadowOffset)
+QString pointerHex(const void* pointer)
 {
+    return QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(pointer), 0, 16);
+}
+
+QString logTextPreview(QString text)
+{
+    text.replace(QLatin1Char('\r'), QLatin1Char(' '));
+    text.replace(QLatin1Char('\n'), QLatin1Char(' '));
+    text.replace(QLatin1Char('\t'), QLatin1Char(' '));
+    text.replace(QLatin1Char('"'), QLatin1Char('\''));
+    constexpr int kMaxPreviewChars = 96;
+    if (text.size() > kMaxPreviewChars) {
+        text = text.left(kMaxPreviewChars) + QStringLiteral("...");
+    }
+    return text;
+}
+
+QString painterDiagPayload(QPainter& painter)
+{
+    const QPaintDevice* device = painter.device();
+    return QStringLiteral("painter=%1 active=%2 device=%3 device_size=%4x%5 device_dpr=%6")
+        .arg(pointerHex(&painter))
+        .arg(painter.isActive() ? 1 : 0)
+        .arg(pointerHex(device))
+        .arg(device != nullptr ? device->width() : -1)
+        .arg(device != nullptr ? device->height() : -1)
+        .arg(device != nullptr ? device->devicePixelRatioF() : 0.0, 0, 'f', 3);
+}
+
+void appendHudPaintDiagLine(const QString& action, const QString& detail = QString(), bool durable = false)
+{
+    if (!miacode::debug_options::previewHudPaintDiagnosticsEnabled()) {
+        return;
+    }
+    QString payload = QStringLiteral("action=%1").arg(action);
+    if (!detail.trimmed().isEmpty()) {
+        payload += QStringLiteral(" ") + detail.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/hud_paint"),
+        payload,
+        /*force=*/true);
+    if (durable) {
+        miacode::debug_log::flushAsyncLogWriter(100);
+    }
+}
+
+void drawHudText(
+    QPainter& painter,
+    const QString& tag,
+    const QPointF& baseline,
+    const QString& text,
+    const QFont& font,
+    qreal shadowOffset)
+{
+    appendHudPaintDiagLine(
+        QStringLiteral("draw_text_before"),
+        QStringLiteral(
+            "tag=%1 baseline=%2,%3 text_len=%4 text_preview=\"%5\" font_family=\"%6\" font_point=%7 font_pixel=%8 font_weight=%9 shadow_offset=%10 %11")
+            .arg(tag)
+            .arg(baseline.x(), 0, 'f', 2)
+            .arg(baseline.y(), 0, 'f', 2)
+            .arg(text.size())
+            .arg(logTextPreview(text))
+            .arg(font.family())
+            .arg(font.pointSize())
+            .arg(font.pixelSize())
+            .arg(font.weight())
+            .arg(shadowOffset, 0, 'f', 2)
+            .arg(painterDiagPayload(painter)),
+        /*durable=*/true);
     painter.save();
     painter.setFont(font);
     painter.setPen(QColor(0, 0, 0, 190));
@@ -31,6 +106,12 @@ void drawHudText(QPainter& painter, const QPointF& baseline, const QString& text
     painter.setPen(QColor(QStringLiteral("#FFFFFF")));
     painter.drawText(baseline, text);
     painter.restore();
+    appendHudPaintDiagLine(
+        QStringLiteral("draw_text_after"),
+        QStringLiteral("tag=%1 text_len=%2 %3")
+            .arg(tag)
+            .arg(text.size())
+            .arg(painterDiagPayload(painter)));
 }
 
 QStringList wrapTextByPixelWidth(const QString& text, qreal maxWidth, const QFontMetrics& fm)
@@ -338,8 +419,29 @@ void PreviewQuickHudLayer::setLayerFlags(miacode::preview::scene::PreviewRenderL
 void PreviewQuickHudLayer::paint(QPainter* painter)
 {
     if (painter == nullptr) {
+        appendHudPaintDiagLine(
+            QStringLiteral("paint_skip"),
+            QStringLiteral("reason=null_painter item=%1 runtime=%2 frame_state_member=%3")
+                .arg(pointerHex(this))
+                .arg(pointerHex(runtime_.data()))
+                .arg(pointerHex(frameState_)));
         return;
     }
+    const QSize canvasSize = boundingRect().size().toSize();
+    const bool dcompExclusive = miacode::debug_options::previewDCompExclusiveEnabled();
+    appendHudPaintDiagLine(
+        QStringLiteral("paint_enter"),
+        QStringLiteral(
+            "item=%1 runtime=%2 frame_state_member=%3 canvas=%4x%5 layer_flags=0x%6 dcomp_fallback=%7 dcomp_exclusive=%8 %9")
+            .arg(pointerHex(this))
+            .arg(pointerHex(runtime_.data()))
+            .arg(pointerHex(frameState_))
+            .arg(canvasSize.width())
+            .arg(canvasSize.height())
+            .arg(layerFlags_, 0, 16)
+            .arg(dcompFallbackActive_ ? 1 : 0)
+            .arg(dcompExclusive ? 1 : 0)
+            .arg(painterDiagPayload(*painter)));
     // Phase 4b — when DComp-exclusive mode is on, the HUD is rendered
     // by PreviewDCompSurface via the same paintPreviewHudOverlay
     // helper into an offscreen QImage and uploaded as a DComp sprite.
@@ -352,21 +454,65 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
     // can't render (see PreviewQuickSceneRoot's parallel comment), so
     // QML sets fallback=true to let this QQuickPaintedItem paint as
     // usual.
-    if (!dcompFallbackActive_
-        && miacode::debug_options::previewDCompExclusiveEnabled()) {
+    if (!dcompFallbackActive_ && dcompExclusive) {
+        appendHudPaintDiagLine(
+            QStringLiteral("paint_skip"),
+            QStringLiteral("reason=dcomp_exclusive item=%1 runtime=%2 canvas=%3x%4")
+                .arg(pointerHex(this))
+                .arg(pointerHex(runtime_.data()))
+                .arg(canvasSize.width())
+                .arg(canvasSize.height()));
         return;
     }
     const miacode::preview::scene::PreviewFrameState* state = nullptr;
+    QString stateSource = QStringLiteral("member");
+    std::shared_ptr<const miacode::preview::scene::PreviewFrameState> runtimeStateSnapshot;
     if (runtime_ != nullptr) {
-        state = &runtime_->frameState();
+        runtimeStateSnapshot = runtime_->frameStateSnapshot();
+        state = runtimeStateSnapshot.get();
+        stateSource = QStringLiteral("runtime_snapshot");
     } else {
         state = frameState_;
     }
     if (state == nullptr) {
+        appendHudPaintDiagLine(
+            QStringLiteral("paint_skip"),
+            QStringLiteral("reason=null_state item=%1 runtime=%2 frame_state_member=%3")
+                .arg(pointerHex(this))
+                .arg(pointerHex(runtime_.data()))
+                .arg(pointerHex(frameState_)));
         return;
     }
+    appendHudPaintDiagLine(
+        QStringLiteral("paint_overlay_call"),
+        QStringLiteral(
+            "item=%1 state=%2 state_source=%3 canvas=%4x%5 show_timestamp=%6 show_debug=%7 show_object_stats=%8 show_chart_info=%9 chart_title_len=%10 chart_artist_len=%11 chart_diff_len=%12 chart_designer_len=%13 progress_stats=%14 playhead=%15 hud_playhead_override=%16")
+            .arg(pointerHex(this))
+            .arg(pointerHex(state))
+            .arg(stateSource)
+            .arg(canvasSize.width())
+            .arg(canvasSize.height())
+            .arg(state->render.showTimestamp ? 1 : 0)
+            .arg(state->render.showDebugInfo ? 1 : 0)
+            .arg(state->render.showObjectStatsHud ? 1 : 0)
+            .arg(state->render.showChartInfoHud ? 1 : 0)
+            .arg(state->chartTitle.size())
+            .arg(state->chartArtist.size())
+            .arg(state->chartDifficultyLabel.size())
+            .arg(state->chartDesigner.size())
+            .arg(pointerHex(state->progressStatsCache.get()))
+            .arg(state->playheadSeconds, 0, 'f', 3)
+            .arg(state->hudPlayheadSecondsOverride, 0, 'f', 3),
+        /*durable=*/true);
     miacode::preview::hud::paintPreviewHudOverlay(
-        *painter, *state, boundingRect().size().toSize(), layerFlags_);
+        *painter, *state, canvasSize, layerFlags_);
+    appendHudPaintDiagLine(
+        QStringLiteral("paint_exit"),
+        QStringLiteral("item=%1 state=%2 canvas=%3x%4")
+            .arg(pointerHex(this))
+            .arg(pointerHex(state))
+            .arg(canvasSize.width())
+            .arg(canvasSize.height()));
 }
 
 namespace miacode::preview::hud {
@@ -378,14 +524,41 @@ void paintPreviewHudOverlay(
     miacode::preview::scene::PreviewRenderLayerFlags layerFlags)
 {
     const auto* state = &stateRef;
+    appendHudPaintDiagLine(
+        QStringLiteral("overlay_enter"),
+        QStringLiteral(
+            "state=%1 canvas=%2x%3 layer_flags=0x%4 show_timestamp=%5 show_debug=%6 show_object_stats=%7 show_chart_info=%8 center_mode=%9 chart_title_len=%10 chart_artist_len=%11 chart_diff_len=%12 chart_designer_len=%13 progress_stats=%14 %15")
+            .arg(pointerHex(state))
+            .arg(canvasSize.width())
+            .arg(canvasSize.height())
+            .arg(layerFlags, 0, 16)
+            .arg(state->render.showTimestamp ? 1 : 0)
+            .arg(state->render.showDebugInfo ? 1 : 0)
+            .arg(state->render.showObjectStatsHud ? 1 : 0)
+            .arg(state->render.showChartInfoHud ? 1 : 0)
+            .arg(static_cast<int>(state->render.centerDisplayMode))
+            .arg(state->chartTitle.size())
+            .arg(state->chartArtist.size())
+            .arg(state->chartDifficultyLabel.size())
+            .arg(state->chartDesigner.size())
+            .arg(pointerHex(state->progressStatsCache.get()))
+            .arg(painterDiagPayload(painter)));
     if (!miacode::preview::scene::previewRenderLayerEnabled(
             layerFlags, miacode::preview::scene::HudLayer)) {
+        appendHudPaintDiagLine(
+            QStringLiteral("overlay_skip"),
+            QStringLiteral("reason=hud_layer_disabled state=%1 layer_flags=0x%2")
+                .arg(pointerHex(state))
+                .arg(layerFlags, 0, 16));
         return;
     }
     if (!state->render.showTimestamp
         && !state->render.showDebugInfo
         && !state->render.showObjectStatsHud
         && !state->render.showChartInfoHud) {
+        appendHudPaintDiagLine(
+            QStringLiteral("overlay_skip"),
+            QStringLiteral("reason=all_hud_disabled state=%1").arg(pointerHex(state)));
         return;
     }
 
@@ -394,6 +567,7 @@ void paintPreviewHudOverlay(
     constexpr qreal kHudReferencePadding = 18.0;
     constexpr int kHudReferenceDebugFontPointSize = 13;
     constexpr int kHudReferenceStatsFontPointSize = 22;
+    constexpr int kHudMinimumReadableStatsFontPointSize = 6;
     constexpr qreal kHudTimestampToStatsFontScale = 1.2;
 
     const qreal shortSide = qMin(stageRect.width(), stageRect.height());
@@ -404,10 +578,23 @@ void paintPreviewHudOverlay(
         qRound(static_cast<qreal>(kHudReferenceStatsFontPointSize) * kHudTimestampToStatsFontScale * hudScale)
     );
     const int debugFontPointSize = qMax(1, qRound(static_cast<qreal>(kHudReferenceDebugFontPointSize) * hudScale));
-    QFont timeFont = miacode::preview::scene::previewHudTimestampFont(timeFontPointSize, QFont::DemiBold);
+    QFont timestampFont = miacode::preview::scene::previewHudTimestampFontForArea(
+        miacode::preview::scene::PreviewHudFontArea::Timestamp,
+        timeFontPointSize,
+        QFont::DemiBold);
+    QFont chartInfoFont = miacode::preview::scene::previewHudTimestampFontForArea(
+        miacode::preview::scene::PreviewHudFontArea::ChartInfo,
+        timeFontPointSize,
+        QFont::DemiBold);
 
     if (state->render.showDebugInfo) {
-        QFont fpsFont = miacode::preview::scene::previewHudMonoFont(debugFontPointSize, QFont::Medium);
+        appendHudPaintDiagLine(
+            QStringLiteral("branch_enter"),
+            QStringLiteral("branch=debug state=%1").arg(pointerHex(state)));
+        QFont fpsFont = miacode::preview::scene::previewHudMonoFontForArea(
+            miacode::preview::scene::PreviewHudFontArea::DebugInfo,
+            debugFontPointSize,
+            QFont::Medium);
         const QFontMetrics metrics(fpsFont);
         const qreal leftX = stageRect.left() + hudPadding;
         const qreal baseline0 = stageRect.top() + hudPadding + metrics.ascent();
@@ -417,8 +604,10 @@ void paintPreviewHudOverlay(
         };
         int lineIndex = 0;
         const auto drawDebugLine = [&](const QString& text) {
+            const QString tag = QStringLiteral("debug.%1").arg(lineIndex);
             drawHudText(
                 painter,
+                tag,
                 QPointF(leftX, baseline0 + metrics.height() * lineIndex),
                 text,
                 fpsFont,
@@ -483,6 +672,7 @@ void paintPreviewHudOverlay(
             }
             drawHudText(
                 painter,
+                QStringLiteral("debug.external_media"),
                 QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
                 QStringLiteral("Media: external/%1").arg(mediaType),
                 fpsFont,
@@ -490,6 +680,7 @@ void paintPreviewHudOverlay(
             );
             drawHudText(
                 painter,
+                QStringLiteral("debug.external_video"),
                 QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
                 QStringLiteral("Video: %1  Delta: %2 s")
                     .arg(
@@ -506,6 +697,7 @@ void paintPreviewHudOverlay(
                 : QStringLiteral("na");
             drawHudText(
                 painter,
+                QStringLiteral("debug.external_age"),
                 QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
                 QStringLiteral("Age: %1 ms  AvgInt: %2  MaxInt: %3")
                     .arg(frameAgeText)
@@ -516,6 +708,7 @@ void paintPreviewHudOverlay(
             );
             drawHudText(
                 painter,
+                QStringLiteral("debug.external_stall"),
                 QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
                 QStringLiteral("Stall: %1  Count: %2  MediaT: %3 s")
                     .arg(state->media.externalVideoFrameStalled ? QStringLiteral("yes") : QStringLiteral("no"))
@@ -534,13 +727,15 @@ void paintPreviewHudOverlay(
     // video export sets it during the lead-in; the scene itself now plays
     // the real lead-in chart time (it is no longer clamped at chart 0), so
     // this currently matches the scene playhead.
-    const double hudPlayheadSeconds = qIsFinite(state->hudPlayheadSecondsOverride)
-        ? state->hudPlayheadSecondsOverride
-        : state->playheadSeconds;
+    const double hudPlayheadSeconds =
+        miacode::preview::scene::previewFrameStateHudPlayheadSeconds(*state);
 
     if (state->render.showTimestamp) {
+        appendHudPaintDiagLine(
+            QStringLiteral("branch_enter"),
+            QStringLiteral("branch=timestamp state=%1").arg(pointerHex(state)));
         const QString timeLabel = miacode::preview::scene::formatPreviewHudTimeLabel(hudPlayheadSeconds);
-        const QFontMetrics timeMetrics(timeFont);
+        const QFontMetrics timeMetrics(timestampFont);
         const bool insetTimestampForAspect =
             aspectRatioNear(stageAspectRatio, 16.0 / 9.0) || aspectRatioNear(stageAspectRatio, 4.0 / 3.0);
         const qreal positiveTimeExtraInset =
@@ -551,12 +746,13 @@ void paintPreviewHudOverlay(
             insetTimestampForAspect ? (static_cast<qreal>(timeMetrics.lineSpacing()) * 0.5) : 0.0;
         drawHudText(
             painter,
+            QStringLiteral("timestamp"),
             QPointF(
                 stageRect.left() + hudPadding + positiveTimeExtraInset,
                 stageRect.bottom() - hudPadding - timestampBottomExtraInset
             ),
             timeLabel,
-            timeFont,
+            timestampFont,
             qMax<qreal>(1.0, 2.0 * hudScale)
         );
     }
@@ -574,9 +770,27 @@ void paintPreviewHudOverlay(
     // Total stack is capped at half the stage height ? if the wrapped
     // designer lines would overflow that budget, the final visible row
     // is replaced with "..." to signal the cut.
-    if (state->render.showChartInfoHud
-        && !aspectRatioNear(stageAspectRatio, 1.0)
-        && !aspectRatioNear(stageAspectRatio, 4.0 / 3.0)) {
+    const bool chartInfoAspectSupported =
+        !aspectRatioNear(stageAspectRatio, 1.0)
+        && !aspectRatioNear(stageAspectRatio, 4.0 / 3.0);
+    if (state->render.showChartInfoHud && !chartInfoAspectSupported) {
+        appendHudPaintDiagLine(
+            QStringLiteral("branch_skip"),
+            QStringLiteral("branch=chart_info reason=aspect_ratio state=%1 aspect=%2")
+                .arg(pointerHex(state))
+                .arg(stageAspectRatio, 0, 'f', 4));
+    }
+    if (state->render.showChartInfoHud && chartInfoAspectSupported) {
+        appendHudPaintDiagLine(
+            QStringLiteral("branch_enter"),
+            QStringLiteral(
+                "branch=chart_info state=%1 aspect=%2 title_len=%3 artist_len=%4 diff_len=%5 designer_len=%6")
+                .arg(pointerHex(state))
+                .arg(stageAspectRatio, 0, 'f', 4)
+                .arg(state->chartTitle.size())
+                .arg(state->chartArtist.size())
+                .arg(state->chartDifficultyLabel.size())
+                .arg(state->chartDesigner.size()));
         const QRectF chartInfoPlayfield =
             miacode::preview::scene::playfieldRectForStage(stageRect, state->render.layoutSquareScale);
         const qreal chartInfoLeft = stageRect.left() + hudPadding;
@@ -584,9 +798,9 @@ void paintPreviewHudOverlay(
         const qreal chartInfoDesignerMaxWidth = chartInfoDesignerRightLimit - chartInfoLeft;
         const qreal chartInfoMaxHeight = stageRect.height() / 2.0 - hudPadding;
         if (chartInfoMaxHeight > 0.0) {
-            // Mirror the timestamp HUD: same point size, DemiBold,
-            // previewHudTimestampFont() font family.
-            const QFontMetrics chartInfoMetrics(timeFont);
+            // Mirror the timestamp HUD sizing while using the chart-info
+            // area font family.
+            const QFontMetrics chartInfoMetrics(chartInfoFont);
             const qreal lineHeight = static_cast<qreal>(chartInfoMetrics.lineSpacing());
             const int maxLines = qMax(0, static_cast<int>(chartInfoMaxHeight / qMax<qreal>(1.0, lineHeight)));
             if (maxLines > 0) {
@@ -624,12 +838,14 @@ void paintPreviewHudOverlay(
                 if (!physicalLines.isEmpty()) {
                     const qreal chartInfoShadow = qMax<qreal>(1.0, 2.0 * hudScale);
                     qreal chartInfoBaseline = stageRect.top() + hudPadding + chartInfoMetrics.ascent();
-                    for (const QString& line : physicalLines) {
+                    for (int i = 0; i < physicalLines.size(); ++i) {
+                        const QString& line = physicalLines.at(i);
                         drawHudText(
                             painter,
+                            QStringLiteral("chart_info.line%1").arg(i),
                             QPointF(chartInfoLeft, chartInfoBaseline),
                             line,
-                            timeFont,
+                            chartInfoFont,
                             chartInfoShadow
                         );
                         chartInfoBaseline += lineHeight;
@@ -639,18 +855,28 @@ void paintPreviewHudOverlay(
         }
     }
 
-    const miacode::preview::scene::PreviewHudStats stats =
-        state->progressStatsCache != nullptr
-        ? state->progressStatsCache->hudStatsAt(hudPlayheadSeconds)
-        : miacode::preview::scene::PreviewHudStats();
+    const miacode::preview::scene::PreviewHudStats stats = state->hudStatsSnapshot;
 
     if (!state->render.showObjectStatsHud) {
+        appendHudPaintDiagLine(
+            QStringLiteral("branch_skip"),
+            QStringLiteral("branch=object_stats reason=disabled state=%1").arg(pointerHex(state)));
         return;
     }
 
     if (aspectRatioNear(stageAspectRatio, 1.0) || aspectRatioNear(stageAspectRatio, 4.0 / 3.0)) {
+        appendHudPaintDiagLine(
+            QStringLiteral("branch_skip"),
+            QStringLiteral("branch=object_stats reason=aspect_ratio state=%1 aspect=%2")
+                .arg(pointerHex(state))
+                .arg(stageAspectRatio, 0, 'f', 4));
         return;
     }
+    appendHudPaintDiagLine(
+        QStringLiteral("branch_enter"),
+        QStringLiteral("branch=object_stats state=%1 progress_stats=%2")
+            .arg(pointerHex(state))
+            .arg(pointerHex(state->progressStatsCache.get())));
 
     const QRectF playfieldRect = miacode::preview::scene::playfieldRectForStage(stageRect, state->render.layoutSquareScale);
     const qreal statsLeftLimit = playfieldRect.right() + hudPadding;
@@ -672,12 +898,21 @@ void paintPreviewHudOverlay(
     qreal sectionGap = 0.0;
     qreal statGap = 0.0;
     QString rateLine;
-    QStringList statLines;
+    std::array<QString, 7> statLines;
 
-    while (baseFontPointSize >= 5) {
-        titleFont = miacode::preview::scene::previewHudTimestampFont(baseFontPointSize, QFont::DemiBold);
-        rateFont = miacode::preview::scene::previewHudTimestampFont(baseFontPointSize + 1, QFont::DemiBold);
-        statFont = miacode::preview::scene::previewHudTimestampFont(baseFontPointSize, QFont::DemiBold);
+    while (baseFontPointSize >= kHudMinimumReadableStatsFontPointSize) {
+        titleFont = miacode::preview::scene::previewHudTimestampFontForArea(
+            miacode::preview::scene::PreviewHudFontArea::ObjectStats,
+            baseFontPointSize,
+            QFont::DemiBold);
+        rateFont = miacode::preview::scene::previewHudTimestampFontForArea(
+            miacode::preview::scene::PreviewHudFontArea::ObjectStats,
+            baseFontPointSize + 1,
+            QFont::DemiBold);
+        statFont = miacode::preview::scene::previewHudTimestampFontForArea(
+            miacode::preview::scene::PreviewHudFontArea::ObjectStats,
+            baseFontPointSize,
+            QFont::DemiBold);
         titleMetrics = QFontMetrics(titleFont);
         rateMetrics = QFontMetrics(rateFont);
         statMetrics = QFontMetrics(statFont);
@@ -686,7 +921,7 @@ void paintPreviewHudOverlay(
             .arg(QString::number(stats.finaleRate, 'f', 2).rightJustified(6, QChar('0')));
         rateLine = QStringLiteral("%1 %")
             .arg(QString::number(stats.deluxeRate, 'f', 4).rightJustified(8, QChar('0')));
-        statLines = QStringList{
+        statLines = {
             finaleLine,
             QStringLiteral("TAP: %1/%2").arg(stats.tapPlayed).arg(stats.tapTotal),
             QStringLiteral("HLD: %1/%2").arg(stats.holdPlayed).arg(stats.holdTotal),
@@ -720,7 +955,7 @@ void paintPreviewHudOverlay(
             + static_cast<qreal>(rateMetrics.height()) * 2.0
             + sectionGap * 2.0
             + static_cast<qreal>(statMetrics.height()) * static_cast<qreal>(statLines.size() - 1)
-            + statGap * static_cast<qreal>(qMax(0, statLines.size() - 2));
+            + statGap * static_cast<qreal>(qMax(0, static_cast<int>(statLines.size()) - 2));
 
         if (blockWidth <= availableStatsWidth && blockHeight <= (stageRect.height() - hudPadding * 2.0)) {
             break;
@@ -728,7 +963,9 @@ void paintPreviewHudOverlay(
         --baseFontPointSize;
     }
 
-    if (blockWidth > availableStatsWidth || blockHeight > (stageRect.height() - hudPadding * 2.0)) {
+    if (baseFontPointSize < kHudMinimumReadableStatsFontPointSize
+        || blockWidth > availableStatsWidth
+        || blockHeight > (stageRect.height() - hudPadding * 2.0)) {
         return;
     }
 
@@ -745,19 +982,49 @@ void paintPreviewHudOverlay(
 
     const qreal shadowOffset = qMax<qreal>(1.0, 2.0 * hudScale);
     qreal baseline = blockTop + titleMetrics.ascent();
-    drawHudText(painter, QPointF(blockLeft, baseline), QStringLiteral("FiNALE Rate:"), titleFont, shadowOffset);
+    drawHudText(
+        painter,
+        QStringLiteral("object_stats.finale_title"),
+        QPointF(blockLeft, baseline),
+        QStringLiteral("FiNALE Rate:"),
+        titleFont,
+        shadowOffset);
     baseline += titleMetrics.descent() + headerGap + rateMetrics.ascent();
-    drawHudText(painter, QPointF(blockLeft, baseline), statLines.at(0), rateFont, shadowOffset);
+    drawHudText(
+        painter,
+        QStringLiteral("object_stats.finale_rate"),
+        QPointF(blockLeft, baseline),
+        statLines[0],
+        rateFont,
+        shadowOffset);
     baseline += rateMetrics.descent() + sectionGap + titleMetrics.ascent();
-    drawHudText(painter, QPointF(blockLeft, baseline), QStringLiteral("DELUXE Rate:"), titleFont, shadowOffset);
+    drawHudText(
+        painter,
+        QStringLiteral("object_stats.deluxe_title"),
+        QPointF(blockLeft, baseline),
+        QStringLiteral("DELUXE Rate:"),
+        titleFont,
+        shadowOffset);
     baseline += titleMetrics.descent() + headerGap + rateMetrics.ascent();
-    drawHudText(painter, QPointF(blockLeft, baseline), rateLine, rateFont, shadowOffset);
+    drawHudText(
+        painter,
+        QStringLiteral("object_stats.deluxe_rate"),
+        QPointF(blockLeft, baseline),
+        rateLine,
+        rateFont,
+        shadowOffset);
     baseline += rateMetrics.descent() + sectionGap + statMetrics.ascent();
-    for (int i = 1; i < statLines.size(); ++i) {
+    for (int i = 1; i < static_cast<int>(statLines.size()); ++i) {
         if (i > 1) {
             baseline += statGap + statMetrics.leading();
         }
-        drawHudText(painter, QPointF(blockLeft, baseline), statLines.at(i), statFont, shadowOffset);
+        drawHudText(
+            painter,
+            QStringLiteral("object_stats.line%1").arg(i),
+            QPointF(blockLeft, baseline),
+            statLines[static_cast<size_t>(i)],
+            statFont,
+            shadowOffset);
         baseline += statMetrics.height();
     }
 }
@@ -777,13 +1044,7 @@ void paintCenterDisplay(
     const QRectF playRect =
         miacode::preview::scene::playfieldRectForStage(stageRect, state.render.layoutSquareScale);
     const qreal playShort = qMax<qreal>(1.0, qMin(playRect.width(), playRect.height()));
-    const double hudPlayheadSeconds = qIsFinite(state.hudPlayheadSecondsOverride)
-        ? state.hudPlayheadSecondsOverride
-        : state.playheadSeconds;
-    const miacode::preview::scene::PreviewHudStats stats =
-        state.progressStatsCache != nullptr
-        ? state.progressStatsCache->hudStatsAt(hudPlayheadSeconds)
-        : miacode::preview::scene::PreviewHudStats();
+    const miacode::preview::scene::PreviewHudStats stats = state.hudStatsSnapshot;
     const QString title = centerDisplayTitle(state.render.centerDisplayMode);
     const QString value = centerDisplayValue(state.render.centerDisplayMode, stats);
     if (title.isEmpty() || value.isEmpty()) {

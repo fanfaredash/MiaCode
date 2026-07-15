@@ -15,6 +15,7 @@
 
 #include <QApplication>
 #include <QByteArray>
+#include <QContextMenuEvent>
 #include <QDrag>
 #include <QDragEnterEvent>
 #include <QDragLeaveEvent>
@@ -74,11 +75,28 @@ protected:
     {
         const int line = editor_->lineNumberAtAreaPosition(event->pos());
         if (line > 0) {
-            emit editor_->lineNumberBookmarkActivated(line);
+            if (editor_->bookmarkedLines_.contains(line)) {
+                emit editor_->lineNumberBookmarkActivated(line);
+            } else {
+                emit editor_->lineNumberBookmarkCreateRequested(line);
+            }
             event->accept();
             return;
         }
         QWidget::mouseDoubleClickEvent(event);
+    }
+
+    // Gutter right-click: bookmark actions for the clicked row. The menu
+    // itself is assembled by MainWindow (the editor layer stays UI-policy-free).
+    void contextMenuEvent(QContextMenuEvent* event) override
+    {
+        const int line = editor_->lineNumberAtAreaPosition(event->pos());
+        if (line > 0) {
+            emit editor_->lineNumberBookmarkContextMenuRequested(line, event->globalPos());
+            event->accept();
+            return;
+        }
+        QWidget::contextMenuEvent(event);
     }
 
     void mousePressEvent(QMouseEvent* event) override

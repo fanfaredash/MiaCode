@@ -29,6 +29,10 @@ class QWidget;
 
 class IntroPreviewWidget;
 
+namespace miacode::ui {
+class EditableValueLabel;
+}
+
 class VideoExportDialog : public QDialog
 {
     Q_OBJECT
@@ -49,6 +53,8 @@ public:
     using PreviewScaleModeCallback = std::function<void(PreviewBackgroundScaleMode mode)>;
     using PreviewTapFlowSpeedCallback = std::function<void(double flowSpeed)>;
     using PreviewTouchFlowSpeedCallback = std::function<void(double flowSpeed)>;
+    using SharedSettingsSnapshotCallback = std::function<VideoExportTask()>;
+    using OwnerWiredSettingsRefreshCallback = std::function<void()>;
 
     VideoExportDialog(
         const VideoExportTask& baseTask,
@@ -67,6 +73,7 @@ public:
         PreviewScaleModeCallback previewScaleModeCallback = {},
         PreviewTapFlowSpeedCallback previewTapFlowSpeedCallback = {},
         PreviewTouchFlowSpeedCallback previewTouchFlowSpeedCallback = {},
+        SharedSettingsSnapshotCallback sharedSettingsSnapshotCallback = {},
         QWidget* parent = nullptr
     );
     bool exportSucceeded() const { return exportSucceeded_; }
@@ -81,9 +88,14 @@ public:
 
     // Injects MainWindow-built, owner-wired settings widgets: videoExtras is
     // appended to the bottom of the Video tab; gameplayWidget to the Gameplay
-    // tab (below the dialog's own flow-speed rows). Call once after
-    // construction, before exec().
-    void injectOwnerWiredSettings(QWidget* videoExtras, QWidget* gameplayWidget);
+    // tab (below the dialog's own flow-speed rows); skinWidget to the 皮肤 tab
+    // (skin / judge line / HUD font). Call once after construction, before
+    // exec().
+    void injectOwnerWiredSettings(
+        QWidget* videoExtras,
+        QWidget* gameplayWidget,
+        QWidget* skinWidget = nullptr,
+        OwnerWiredSettingsRefreshCallback refreshCallback = {});
 
     // ---- Embedded panel mode (E-C, export-page phase 2) ----
     // The same dialog doubles as the Export hub page's in-page video panel:
@@ -139,8 +151,8 @@ private:
     void syncLivePreviewObjectStatsVisibility();
     void syncLivePreviewChartInfoVisibility();
     void restoreLivePreviewState();
-    void openHudFontSettingsDialog();
-    void refreshLivePreviewHudFont();
+    void refreshSharedSettingsFromCallback();
+    void refreshSharedSettingsFromTask(const VideoExportTask& task);
     void loadPersistedSettings();
     void savePersistedSettings(const VideoExportTask& task) const;
     void persistExportOnlySettings() const;
@@ -218,6 +230,8 @@ private:
     PreviewScaleModeCallback previewScaleModeCallback_;
     PreviewTapFlowSpeedCallback previewTapFlowSpeedCallback_;
     PreviewTouchFlowSpeedCallback previewTouchFlowSpeedCallback_;
+    SharedSettingsSnapshotCallback sharedSettingsSnapshotCallback_;
+    OwnerWiredSettingsRefreshCallback ownerWiredSettingsRefreshCallback_;
 
     double totalDurationSeconds_ = 0.0;
     double previewCursorSecond_ = 0.0;
@@ -245,17 +259,13 @@ private:
     VideoExportTask requestedExportTask_;
 
     QLineEdit* outputPathEdit_ = nullptr;
-    QToolButton* resolutionButton_ = nullptr;
-    QMenu* resolutionMenu_ = nullptr;
+    QComboBox* resolutionCombo_ = nullptr;
     QSize selectedResolution_ = QSize();
-    QToolButton* fpsButton_ = nullptr;
-    QMenu* fpsMenu_ = nullptr;
+    QComboBox* fpsCombo_ = nullptr;
     int selectedFps_ = 60;
-    QToolButton* audioBitrateButton_ = nullptr;
-    QMenu* audioBitrateMenu_ = nullptr;
+    QComboBox* audioBitrateCombo_ = nullptr;
     int selectedAudioBitrateKbps_ = 192;
-    QToolButton* presetButton_ = nullptr;
-    QMenu* presetMenu_ = nullptr;
+    QComboBox* presetCombo_ = nullptr;
     VideoExportPreset selectedPreset_ = VideoExportPreset::HighQuality;
     QCheckBox* showTimestampCheck_ = nullptr;
     QCheckBox* showObjectStatsCheck_ = nullptr;
@@ -272,9 +282,7 @@ private:
     QCheckBox* introLevelTextCheck_ = nullptr;
     IntroPreviewWidget* introPreview_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
-    QPushButton* hudFontSettingsButton_ = nullptr;
-    QToolButton* backgroundScaleModeButton_ = nullptr;
-    QMenu* backgroundScaleModeMenu_ = nullptr;
+    QComboBox* backgroundScaleModeCombo_ = nullptr;
     PreviewBackgroundScaleMode selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     QLineEdit* tapFlowSpeedEdit_ = nullptr;
     QLineEdit* touchFlowSpeedEdit_ = nullptr;
@@ -283,9 +291,9 @@ private:
     QSlider* brightnessOuterSlider_ = nullptr;
     QSlider* brightnessInnerSlider_ = nullptr;
     QSlider* layoutSquareScaleSlider_ = nullptr;
-    QLabel* brightnessOuterValueLabel_ = nullptr;
-    QLabel* brightnessInnerValueLabel_ = nullptr;
-    QLabel* layoutSquareScaleValueLabel_ = nullptr;
+    miacode::ui::EditableValueLabel* brightnessOuterValueLabel_ = nullptr;
+    miacode::ui::EditableValueLabel* brightnessInnerValueLabel_ = nullptr;
+    miacode::ui::EditableValueLabel* layoutSquareScaleValueLabel_ = nullptr;
     QDoubleSpinBox* startSecondSpin_ = nullptr;
     QDoubleSpinBox* endSecondSpin_ = nullptr;
     // Held so applyThemeStyles() can re-apply their baked button stylesheets on
@@ -303,8 +311,10 @@ private:
     QWidget* optionsContent_ = nullptr;
     QWidget* rangeContent_ = nullptr;
     QWidget* gameplayPage_ = nullptr;
+    QWidget* skinPage_ = nullptr;
     QVBoxLayout* visualsPageLayout_ = nullptr;
     QVBoxLayout* gameplayPageLayout_ = nullptr;
+    QVBoxLayout* skinPageLayout_ = nullptr;
     QTabWidget* settingsTabs_ = nullptr;
     QFrame* previewStrip_ = nullptr;
     QDialogButtonBox* buttonBox_ = nullptr;

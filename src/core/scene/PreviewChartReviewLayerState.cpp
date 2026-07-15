@@ -26,11 +26,14 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
     const QVector<TimelineNoteMarker>& noteMarkers,
     bool showSlideJudgeOverlay,
     bool showTapJudgeOverlay,
-    bool showTouchJudgeOverlay
+    bool showBreakJudgeOverlay,
+    bool showTouchJudgeOverlay,
+    PreviewTapJudgeTextDistance tapJudgeTextDistance
 )
 {
     PreviewChartReviewPreparedEvents events;
-    if ((!showSlideJudgeOverlay && !showTapJudgeOverlay && !showTouchJudgeOverlay) || noteMarkers.isEmpty()) {
+    if ((!showSlideJudgeOverlay && !showTapJudgeOverlay && !showBreakJudgeOverlay && !showTouchJudgeOverlay)
+        || noteMarkers.isEmpty()) {
         return events;
     }
 
@@ -41,7 +44,8 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
 
     for (const TimelineNoteMarker& marker : noteMarkers) {
         if (marker.type == QLatin1String("tap")) {
-            if (!showTapJudgeOverlay) {
+            if ((marker.isBreak && !showBreakJudgeOverlay)
+                || (!marker.isBreak && !showTapJudgeOverlay)) {
                 continue;
             }
             PreviewChartReviewPreparedEvent event;
@@ -49,13 +53,15 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
                 ? PreviewChartReviewPreparedKind::SimpleBreak
                 : PreviewChartReviewPreparedKind::SimpleNormal;
             event.second = static_cast<qreal>(marker.second);
-            if (buildJudgeOverlaySimplePlacement(lanePadToken(marker.lane), &event.placement)) {
+            if (buildJudgeOverlaySimplePlacement(lanePadToken(marker.lane), tapJudgeTextDistance, &event.placement)) {
                 events.append(event);
             }
             continue;
         }
         if (marker.type == QLatin1String("hold")) {
-            if (!showTapJudgeOverlay || marker.endSecond < 0.0) {
+            if (marker.endSecond < 0.0
+                || (marker.isBreak && !showBreakJudgeOverlay)
+                || (!marker.isBreak && !showTapJudgeOverlay)) {
                 continue;
             }
             PreviewChartReviewPreparedEvent event;
@@ -65,13 +71,16 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
             event.second = static_cast<qreal>(marker.endSecond);
             if (buildJudgeOverlaySimplePlacement(
                     lanePadToken((marker.endLane >= 1 && marker.endLane <= 8) ? marker.endLane : marker.lane),
+                    tapJudgeTextDistance,
                     &event.placement)) {
                 events.append(event);
             }
             continue;
         }
         if (marker.type == QLatin1String("touch")) {
-            if (!showTouchJudgeOverlay || marker.touchPad.isEmpty()) {
+            if (marker.touchPad.isEmpty()
+                || (marker.isBreak && !showBreakJudgeOverlay)
+                || (!marker.isBreak && !showTouchJudgeOverlay)) {
                 continue;
             }
             PreviewChartReviewPreparedEvent event;
@@ -79,13 +88,16 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
                 ? PreviewChartReviewPreparedKind::SimpleBreak
                 : PreviewChartReviewPreparedKind::SimpleNormal;
             event.second = static_cast<qreal>(marker.second);
-            if (buildJudgeOverlaySimplePlacement(marker.touchPad, &event.placement)) {
+            if (buildJudgeOverlaySimplePlacement(marker.touchPad, tapJudgeTextDistance, &event.placement)) {
                 events.append(event);
             }
             continue;
         }
         if (marker.type == QLatin1String("touch_hold")) {
-            if (!showTouchJudgeOverlay || marker.endSecond < 0.0 || marker.touchPad.isEmpty()) {
+            if (marker.endSecond < 0.0
+                || marker.touchPad.isEmpty()
+                || (marker.isBreak && !showBreakJudgeOverlay)
+                || (!marker.isBreak && !showTouchJudgeOverlay)) {
                 continue;
             }
             PreviewChartReviewPreparedEvent event;
@@ -93,7 +105,7 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
                 ? PreviewChartReviewPreparedKind::SimpleBreak
                 : PreviewChartReviewPreparedKind::SimpleNormal;
             event.second = static_cast<qreal>(marker.endSecond);
-            if (buildJudgeOverlaySimplePlacement(marker.touchPad, &event.placement)) {
+            if (buildJudgeOverlaySimplePlacement(marker.touchPad, tapJudgeTextDistance, &event.placement)) {
                 events.append(event);
             }
             continue;
@@ -102,16 +114,17 @@ PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
             continue;
         }
 
-        if (showTapJudgeOverlay && marker.hasHeadStar) {
+        if (marker.hasHeadStar) {
+            const bool showHeadJudgeOverlay = marker.headBreak ? showBreakJudgeOverlay : showTapJudgeOverlay;
             const QString helperKey = slideHeadEventKey(marker);
-            if (!emittedHeadEvents.contains(helperKey)) {
+            if (showHeadJudgeOverlay && !emittedHeadEvents.contains(helperKey)) {
                 emittedHeadEvents.insert(helperKey);
                 PreviewChartReviewPreparedEvent headEvent;
                 headEvent.kind = marker.headBreak
                     ? PreviewChartReviewPreparedKind::SimpleBreak
                     : PreviewChartReviewPreparedKind::SimpleNormal;
                 headEvent.second = static_cast<qreal>(marker.second);
-                if (buildJudgeOverlaySimplePlacement(lanePadToken(marker.lane), &headEvent.placement)) {
+                if (buildJudgeOverlaySimplePlacement(lanePadToken(marker.lane), tapJudgeTextDistance, &headEvent.placement)) {
                     events.append(headEvent);
                 }
             }
@@ -169,9 +182,10 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
     PreviewSpriteDescriptors sprites;
     const bool showSlideJudgeOverlay = state.muriRenderOptions.showChartReviewSlideJudgeOverlay;
     const bool showTapJudgeOverlay = state.muriRenderOptions.showChartReviewTapJudgeOverlay;
+    const bool showBreakJudgeOverlay = state.muriRenderOptions.showChartReviewBreakJudgeOverlay;
     const bool showTouchJudgeOverlay = state.muriRenderOptions.showChartReviewTouchJudgeOverlay;
     if (state.muriRenderOptions.renderMode != RenderMode::Native
-        || (!showSlideJudgeOverlay && !showTapJudgeOverlay && !showTouchJudgeOverlay)
+        || (!showSlideJudgeOverlay && !showTapJudgeOverlay && !showBreakJudgeOverlay && !showTouchJudgeOverlay)
         || !hasAnyChartReviewJudgeAssets(state.judgeOverlay)) {
         return sprites;
     }
@@ -179,7 +193,13 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
     const PreviewChartReviewPreparedEvents ownedPreparedEvents =
         preparedEvents != nullptr
         ? PreviewChartReviewPreparedEvents()
-        : buildPreviewChartReviewPreparedEvents(state.noteMarkers, showSlideJudgeOverlay, showTapJudgeOverlay, showTouchJudgeOverlay);
+        : buildPreviewChartReviewPreparedEvents(
+              state.noteMarkers,
+              showSlideJudgeOverlay,
+              showTapJudgeOverlay,
+              showBreakJudgeOverlay,
+              showTouchJudgeOverlay,
+              state.render.tapJudgeTextDistance);
     const PreviewChartReviewPreparedEvents& events =
         preparedEvents != nullptr ? *preparedEvents : ownedPreparedEvents;
 
@@ -225,7 +245,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,
                 kMaimuriDxSimpleJudgeFadeInSeconds,
-                kMaimuriDxJudgeFadeOutStartSeconds,
+                isBreak ? kMaimuriDxBreakJudgeFadeOutStartSeconds : kMaimuriDxJudgeFadeOutStartSeconds,
                 kMaimuriDxSimpleJudgeFadeOutEndSeconds
             );
             simpleScale = maimuriDxSimpleJudgeScale(

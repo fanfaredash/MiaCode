@@ -54,8 +54,7 @@ SceneFrameRenderer::~SceneFrameRenderer()
 
 bool SceneFrameRenderer::bootstrap(const VideoExportTask& task, QString* errorMessage)
 {
-    assets_.setOutlineVariant(task.outlineVariant);
-    assets_.setOutlineImagePath(task.outlineImagePath);
+    assets_.setOutlineSelection(task.outlineVariant, task.outlineImagePath);
     assets_.setStageMediaAvailable(false);   // the cover frame never shows the song bg
     if (!assets_.loadSkinDirectorySync(task.skinDirectory)) {
         if (errorMessage != nullptr) {
@@ -88,6 +87,8 @@ bool SceneFrameRenderer::bootstrap(const VideoExportTask& task, QString* errorMe
     frameState_.render.touchFlowSpeed =
         miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(task.touchFlowSpeed);
     frameState_.render.slideEarlierSecondAndTextOnTop = task.slideEarlierSecondAndTextOnTop;
+    frameState_.render.tapJudgeTextDistance = task.tapJudgeTextDistance;
+    frameState_.render.judgeEffectStyle = task.judgeEffectStyle;
     frameState_.render.showDebugInfo = false;
     frameState_.render.showTimestamp = false;
     frameState_.render.showObjectStatsHud = false;
@@ -98,6 +99,7 @@ bool SceneFrameRenderer::bootstrap(const VideoExportTask& task, QString* errorMe
     frameState_.judgeOverlay = assets_.judgeOverlayAssets();
     frameState_.judgeEffect = assets_.judgeEffectAssets();
     frameState_.playheadSeconds = 0.0;
+    miacode::preview::scene::refreshPreviewFrameStateHudStatsSnapshot(frameState_);
 
     contentDurationSeconds_ = qMax(0.0, task.contentDurationSeconds);
 
@@ -166,6 +168,7 @@ QImage SceneFrameRenderer::renderAt(double seconds, int sidePx, QString* errorMe
     sceneRoot_->setSize(QSizeF(side, side));
 
     frameState_.playheadSeconds = seconds;
+    miacode::preview::scene::refreshPreviewFrameStateHudStatsSnapshot(frameState_);
     // Re-point the (unchanged) state pointer so the scene root marks itself dirty
     // and re-runs updatePaintNode against the new playhead on the next render.
     sceneRoot_->setFrameState(&frameState_);

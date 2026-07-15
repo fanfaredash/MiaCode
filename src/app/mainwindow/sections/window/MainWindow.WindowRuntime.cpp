@@ -19,6 +19,8 @@
 #include "common/CrashRecovery.h"
 #include "common/DebugOptions.h"
 #include "common/DebugLog.h"
+#include "common/OperationLog.h"
+#include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/latency/LatencySandboxController.h"
 
@@ -38,6 +40,45 @@ namespace {
 QString pointerHex(const void* pointer)
 {
     return QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(pointer), 0, 16);
+}
+
+constexpr qint64 kRehostLayoutStepSlowMs = 50;
+constexpr qint64 kRehostLayoutTotalSlowMs = 80;
+
+QString rehostWidgetSummary(QWidget* widget)
+{
+    if (widget == nullptr) {
+        return QStringLiteral("(null)");
+    }
+    return QStringLiteral("class=%1 name=%2 ptr=%3 size=%4x%5 visible=%6 parent=%7")
+        .arg(QString::fromUtf8(widget->metaObject()->className()))
+        .arg(widget->objectName().isEmpty() ? QStringLiteral("(empty)") : widget->objectName())
+        .arg(pointerHex(widget))
+        .arg(widget->width())
+        .arg(widget->height())
+        .arg(widget->isVisible() ? 1 : 0)
+        .arg(pointerHex(widget->parentWidget()));
+}
+
+void appendRehostLayoutDiag(
+    const QString& action,
+    const QString& step,
+    QWidget* widget,
+    qint64 elapsedMs,
+    miacode::debug_log::Level level = miacode::debug_log::Level::Info)
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("layout/rehosted_widget"),
+        QStringLiteral("action=%1 step=%2 elapsed_ms=%3 widget=\"%4\"")
+            .arg(action, step)
+            .arg(elapsedMs)
+            .arg(rehostWidgetSummary(widget)),
+        /*force=*/false,
+        level);
 }
 
 // Cascade-close every visible top-level popup besides the main window.
@@ -832,25 +873,68 @@ QList<QAction*> MainWindow::WindowSection::quickShellShortcutActions() const
 
 void MainWindow::WindowSection::refreshQuickShellRehostedWidgetParent(QWidget* widget)
 {
+    MC_OP("MainWindow::WindowSection::refreshQuickShellRehostedWidgetParent");
     if (widget == nullptr) {
         return;
     }
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    MIACODE_HANG_PHASE(
+        "WindowSection::refreshQuickShellRehostedWidgetParent",
+        rehostWidgetSummary(widget));
     if (auto* dock = qobject_cast<QDockWidget*>(widget); dock != nullptr) {
         if (QWidget* dockWidget = dock->widget(); dockWidget != nullptr) {
             dockWidget->updateGeometry();
         }
     }
     if (QLayout* layout = widget->layout(); layout != nullptr) {
+        QElapsedTimer stepTimer;
+        stepTimer.start();
+        MIACODE_HANG_PHASE(
+            "WindowSection::refreshQuickShellRehostedWidgetParent.widgetLayout",
+            rehostWidgetSummary(widget));
         layout->activate();
+        const qint64 elapsedMs = stepTimer.elapsed();
+        if (elapsedMs >= kRehostLayoutStepSlowMs) {
+            appendRehostLayoutDiag(
+                QStringLiteral("rehost_refresh_step_slow"),
+                QStringLiteral("widget_layout_activate"),
+                widget,
+                elapsedMs,
+                miacode::debug_log::Level::Warn);
+        }
     }
     widget->updateGeometry();
     widget->update();
     if (QWidget* parentWidget = widget->parentWidget(); parentWidget != nullptr) {
         if (QLayout* parentLayout = parentWidget->layout(); parentLayout != nullptr) {
+            QElapsedTimer stepTimer;
+            stepTimer.start();
+            MIACODE_HANG_PHASE(
+                "WindowSection::refreshQuickShellRehostedWidgetParent.parentLayout",
+                rehostWidgetSummary(parentWidget));
             parentLayout->activate();
+            const qint64 elapsedMs = stepTimer.elapsed();
+            if (elapsedMs >= kRehostLayoutStepSlowMs) {
+                appendRehostLayoutDiag(
+                    QStringLiteral("rehost_refresh_step_slow"),
+                    QStringLiteral("parent_layout_activate"),
+                    parentWidget,
+                    elapsedMs,
+                    miacode::debug_log::Level::Warn);
+            }
         }
         parentWidget->updateGeometry();
         parentWidget->update();
+    }
+    const qint64 totalMs = totalTimer.elapsed();
+    if (totalMs >= kRehostLayoutTotalSlowMs) {
+        appendRehostLayoutDiag(
+            QStringLiteral("rehost_refresh_total_slow"),
+            QStringLiteral("total"),
+            widget,
+            totalMs,
+            miacode::debug_log::Level::Warn);
     }
 }
 

@@ -40,10 +40,12 @@ const QPixmap& iconForType(const miacode::timeline::TimelineNoteAssetSet& assets
 
 namespace miacode::timeline {
 
-TimelineNoteAssetSet loadTimelineNoteAssets()
+TimelineNoteAssetSet loadTimelineNoteAssets(const QString& skinDirectory)
 {
     TimelineNoteAssetSet assets;
-    const QString notesDir = miacode::assets::assetPath("skin/skinSTD");
+    const QString notesDir = skinDirectory.trimmed().isEmpty()
+        ? miacode::assets::assetPath(QStringLiteral("skin/skinSD"))
+        : QDir::cleanPath(skinDirectory);
     if (!QFileInfo::exists(QDir(notesDir).filePath("tap.png"))) {
         return assets;
     }
@@ -276,16 +278,16 @@ TimelineNoteAssetSet loadTimelineNoteAssets()
         putIcon("touch_hold_each", touchHoldComposite, kNoteSize + 3);
     }
     const QPixmap touchHoldBreakComposite = buildTouchHoldCompositeIcon(
-        loadRawIcon({"touchhold_border.png", "touch_break.png", "touch_border_2.png", "touch.png", "tap.png"}),
-        loadRawIcon({"touchhold_1.png", "tap.png"}),
-        loadRawIcon({"touch_break_point.png", "touch_point.png", "tap.png"}));
+        loadRawIcon({"touchhold_break_border.png", "touchhold_border_break.png", "touchhold_border.png", "touch_break.png", "touch_border_2.png", "touch.png", "tap.png"}),
+        loadRawIcon({"touchhold_break_1.png", "touchhold_1_break.png", "touchhold_1.png", "tap.png"}),
+        loadRawIcon({"touch_break_point.png", "touch_point_break.png", "touch_point.png", "tap.png"}));
     if (!touchHoldBreakComposite.isNull()) {
         putIcon("touch_hold_break", touchHoldBreakComposite, kNoteSize + 3);
     } else if (!touchHoldComposite.isNull()) {
         putIcon("touch_hold_break", touchHoldComposite, kNoteSize + 3);
     }
     const QPixmap touchHoldBreakBorderOnly =
-        loadRawIcon({"touchhold_border.png", "touch_break.png", "touch_border_2.png", "touch.png", "tap.png"});
+        loadRawIcon({"touchhold_break_border.png", "touchhold_border_break.png", "touchhold_border.png", "touch_break.png", "touch_border_2.png", "touch.png", "tap.png"});
     if (!touchHoldBreakBorderOnly.isNull()) {
         putIcon("touch_hold_border_only_break", touchHoldBreakBorderOnly, kNoteSize + 3);
     } else if (!touchHoldBorderOnly.isNull()) {

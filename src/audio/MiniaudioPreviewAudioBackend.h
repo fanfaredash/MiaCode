@@ -180,5 +180,6 @@ private:
     SfxBank exSfx_;
     SfxBank touchSfx_;
     SfxBank fireworkSfx_;
+    SfxBank trackStartSfx_;
     EngineState* engineState_ = nullptr;
 };

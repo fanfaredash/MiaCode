@@ -5,6 +5,7 @@
 #include "ShortcutRegistry.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "app/ui/AppBackgroundPainter.h"
 
 #include <QAction>
 #include <QApplication>
@@ -347,6 +348,20 @@ bool PlainCodeEditor::applyPreviewFollowCursor(const QTextCursor& cursor, bool c
 
 void PlainCodeEditor::paintEvent(QPaintEvent* event)
 {
+    {
+        QPainter backgroundPainter(viewport());
+        if (backgroundPainter.isActive()) {
+            const QRect dirtyRect = event != nullptr ? event->rect() : viewport()->rect();
+            backgroundPainter.setClipRect(dirtyRect);
+            if (miacode::ui::paintAppBackgroundForWidget(viewport(), backgroundPainter)) {
+                const UiTheme::Colors& c = UiTheme::colors();
+                QColor editorSurface = c.inputBg;
+                editorSurface.setAlpha(
+                    UiTheme::appBackgroundOverlayAlpha(UiTheme::AppBackgroundOverlayRole::CodeEditor, c.dark));
+                backgroundPainter.fillRect(dirtyRect, editorSurface);
+            }
+        }
+    }
     QTextEdit::paintEvent(event);
     QPainter painter(viewport());
     const QRect highlightRect = currentLineHighlightRect();

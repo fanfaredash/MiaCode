@@ -184,6 +184,7 @@ void TimelineRenderView::setSceneState(
     // (verification screenshot: Present=11.9 FPS during play).
     sceneState_ = state;
     sceneStateValid_ = true;
+    spriteAssetCache_.setSkinDirectory(sceneState_.skinDirectory);
 }
 
 void TimelineRenderView::setTrackedQuickItem(QQuickItem* item)

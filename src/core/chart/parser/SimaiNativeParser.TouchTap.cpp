@@ -103,10 +103,7 @@ void parseTapOrHoldToken(ParseState* state, const QString& token, int lineNumber
         return;
     }
 
-    if (token.contains('[') && (token.contains('-') || token.contains('^') || token.contains('v')
-            || token.contains('<') || token.contains('>') || token.contains('V')
-            || token.contains('p') || token.contains('q') || token.contains('s')
-            || token.contains('z') || token.contains('w'))) {
+    if (tokenContainsSlideShape(token)) {
         parseSlideToken(state, token, lineNumber, column, groupIndices);
         return;
     }

@@ -61,6 +61,11 @@ inline QString outlineJudgeAreaLabeledPath()
     return assetPath(QStringLiteral("background/outline_area_labeled.png"));
 }
 
+inline QString outlineRegionLabelsOverlayPath()
+{
+    return assetPath(QStringLiteral("background/region_labels_overlay_transparent_v3.png"));
+}
+
 inline QString customOutlineRootPath()
 {
     return assetPath(QStringLiteral("background/outlines"));

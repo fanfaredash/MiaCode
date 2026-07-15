@@ -1,5 +1,6 @@
 #include "MainWindow.EditorSection.h"
 #include "../../MainWindowShared.h"
+#include "../document/MainWindow.DocumentSection.h"
 
 #include <QtCore>
 
@@ -28,7 +29,6 @@ QString MainWindow::EditorSection::resolveProjectRenderStateFilePath() const
 void MainWindow::EditorSection::loadProjectRenderState()
 {
     state_.projectLastOpenedDifficultyId_ = 0;
-    state_.editorBookmarks_.clear();
 
     const QString path = resolveProjectRenderStateFilePath();
     const QString legacyPath = legacyProjectRenderStateFilePath(state_.currentFilePath_);
@@ -44,26 +44,15 @@ void MainWindow::EditorSection::loadProjectRenderState()
                 if (SimaiDocument::isDifficultyId(savedDifficultyId)) {
                     state_.projectLastOpenedDifficultyId_ = savedDifficultyId;
                 }
-                const QJsonArray bookmarks = root.value("editor_bookmarks").toArray();
-                for (const QJsonValue& value : bookmarks) {
-                    const QJsonObject bookmarkObject = value.toObject();
-                    const int line = qMax(1, bookmarkObject.value("line").toInt(1));
-                    state_.editorBookmarks_.append(MainWindow::EditorBookmark{
-                        bookmarkObject.value("title").toString(),
-                        bookmarkObject.value("text").toString(),
-                        line,
-                    });
-                }
-                std::sort(state_.editorBookmarks_.begin(), state_.editorBookmarks_.end(), [](const MainWindow::EditorBookmark& left, const MainWindow::EditorBookmark& right) {
-                    if (left.line != right.line) {
-                        return left.line < right.line;
-                    }
-                    return left.title.localeAwareCompare(right.title) < 0;
-                });
             }
         }
     }
-    refreshEditorBookmarkLines();
+}
+
+void MainWindow::EditorSection::adoptBookmarksForLoadedDocument()
+{
+    state_.editorBookmarks_.clear();
+    syncBookmarksFromEditorText();
 }
 
 void MainWindow::EditorSection::saveProjectRenderState() const
@@ -85,15 +74,6 @@ void MainWindow::EditorSection::saveProjectRenderState() const
 
     QJsonObject root;
     root.insert("last_opened_difficulty", state_.projectLastOpenedDifficultyId_);
-    QJsonArray bookmarks;
-    for (const MainWindow::EditorBookmark& bookmark : state_.editorBookmarks_) {
-        QJsonObject bookmarkObject;
-        bookmarkObject.insert("line", qMax(1, bookmark.line));
-        bookmarkObject.insert("title", bookmark.title);
-        bookmarkObject.insert("text", bookmark.text);
-        bookmarks.append(bookmarkObject);
-    }
-    root.insert("editor_bookmarks", bookmarks);
     root.insert("schema", "miacode_settings_v1");
     const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Indented);
     if (file.write(payload) != payload.size()) {

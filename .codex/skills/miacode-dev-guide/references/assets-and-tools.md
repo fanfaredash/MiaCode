@@ -9,27 +9,48 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
   - Functions: `findAssetRoot`, `assetPath`
 - Main repo asset areas:
   - `assets/skin`
-  - Built-in skins live under `assets/skin/skinSTD` and `assets/skin/skinDX`; user-imported skins are additional valid child folders under `assets/skin`
+  - Built-in skins live under `assets/skin/skinSD` and `assets/skin/skinDX`; user-imported skins are additional valid child folders under `assets/skin`
   - `assets/SFX`
+  - `assets/music`
+  - `assets/music/README.txt` documents the `track_start.wav` replacement contract in Simplified Chinese, English, and Japanese
   - `assets/background`
   - Custom judge-line PNGs live under `assets/background/outlines`; the render settings import action only opens this folder
+  - `assets/background/outlines/README.txt` documents custom judge-line file format and notes in Simplified Chinese, English, and Japanese
   - `assets/noteguide`
+  - Noteguide assets include tap/slide approach rings (`Normal.png`, `Break.png`, `Each.png`, `Mine.png`, `Slide.png`), each-line connectors, and hold-tail guides (`Hold_End.png`, `Hold_Each_End.png`, `Hold_Break_End.png`, `Hold_Mine_End.png`)
   - `assets/reference`
   - `assets/fonts`
+  - `assets/skin/README.txt` documents skin folder layout and required core filenames in Simplified Chinese, English, and Japanese
 - Qt resources:
   - `resources/app_icons.qrc`
   - `resources/fonts.qrc`
   - `resources/slide_data.qrc`
+  - `resources/preview_judge_effects.qrc`
   - `resources/preview_runtime_qml.qrc`
+  - `resources/quick_shell_qml.qrc`
   - `resources/icons/*`
   - `resources/community/*` for README/community-facing repository images
+- Extension system support files:
+  - `resources/extensions/miacode-extension.schema.json` documents the VSCode-like v1 manifest format
+  - `resources/extensions/README.md` is copied into release packages so users can hand the extension format, contribution-point format, coding notes, and AI prompt template to an assistant when creating local extensions
+  - `src/extensions/EmbeddedExtensionRuntime.*` runs command extensions inside MiaCode with Qt `QJSEngine`; user machines do not need Node.js for command extensions
+  - `src/extensions/ExtensionOpenBridge.*` owns the Open Bridge facade-object registry and the experimental raw target annotations for raw internal objects
+  - Controlled pet overlays registered through `miacode.ui.registerPetOverlay` load `image`, `src`, `resource`, `frames`, and `sprite.frames` only after the host canonicalizes them inside the calling extension directory
+  - `templates/extensions/hello-world` is the local starter extension
+  - `packages/miacode-extension-api` contains the local TypeScript declarations for `global.miacode`
+  - `tools/extensions/validate-extension.mjs` validates local extension manifests against the shared permission enum from `resources/extensions/miacode-extension.schema.json` and checks language-pack translation files from Node
+  - `tools/extensions/check-extension-consistency.mjs` verifies that the extension schema, C++ loader permission list, public registry statuses, blocked API set, README, spec, and TypeScript declarations stay aligned
 
 ## 2. Runtime File Conventions Near A Chart
 
 Current chart-directory conventions:
 
 - chart text file: `maidata.txt`
-- music track: `track.mp3`
+- music track candidates, in lookup priority:
+  - `track.mp3`
+  - `track.wav`
+  - `track.flac`
+  - `track.ogg`
 - toolbox media backup: `track_bak.mp3`
 - background media candidates:
   - `bg.mp4`
@@ -47,7 +68,7 @@ Current chart-directory conventions:
   - `.miacode/waveform/`
   - stores hashed per-track waveform cache blobs used by widget and Quick timeline waveform rendering
   - cache validity is tied to normalized track path plus file size and last-modified timestamp
-  - Windows cache generation decodes through repo-local BASS so MP3 delay/padding matches the Windows preview BGM playback backend; non-Windows falls back to miniaudio
+  - Windows cache generation decodes through repo-local BASS so supported track containers share the Windows preview BGM playback backend; non-Windows falls back to miniaudio
 - autosave container root:
   - `.miacode/.autosave/<chart file>/`
   - contains `<chart file>.bak`, `history/*.bak`, and `autosave.json`
@@ -62,8 +83,29 @@ The toolbox blank-media submenu operates on the current chart directory only. It
 
 - Skin textures:
   - Consumers: `PreviewRuntime`, `PreviewQuickExportSession`, `VideoExportQuickRenderBackend`
-  - Entry: `MainWindow::resolvePreviewSkinDir`, `PreviewRuntime::setSkinDirectory`, `PreviewSceneAssetRepository::setSkinDirectory`, `PreviewSceneAssetLoader::load`
+  - Entry: `MainWindow::resolvePreviewSkinDir`, `MainWindow::applyPreviewSkinDirectoryToSurfaces`, `PreviewRuntime::setSkinDirectory`, `PreviewSceneAssetRepository::setSkinDirectory`, `PreviewSceneAssetLoader::load`
   - Skin selection enumerates child directories of `assets/skin`; a directory is shown only when core files such as `tap.png`, `hold.png`, and `star.png` exist
+  - Timeline note art follows the same selected skin directory through `TimelineQuickStateBridge::setSkinDirectory`; `TimelineNoteAssets` falls back to built-in `skinSD` only when no skin directory is supplied or the selected skin cannot provide usable timeline icons. Widget timeline, Quick/QSG timeline, and DComp timeline sprite caches must be invalidated together on skin changes.
+  - Touch break assets use the external-skin naming convention first:
+    - `touch_break_border_2.png`
+    - `touch_break_border_3.png`
+    - `touch_break_point.png`
+    - `touchhold_break_0.png`
+    - `touchhold_break_1.png`
+    - `touchhold_break_2.png`
+    - `touchhold_break_3.png`
+    - `touchhold_break_border.png`
+  - The older MiaCode names remain a compatibility fallback for user skins:
+    - `touch_border_2_break.png`
+    - `touch_border_3_break.png`
+    - `touch_point_break.png`
+    - `touchhold_0_break.png`
+    - `touchhold_1_break.png`
+    - `touchhold_2_break.png`
+    - `touchhold_3_break.png`
+    - `touchhold_border_break.png`
+  - `touchhold_border_miss.png` / `touchhold_off.png` are not runtime assets and should not be shipped.
+  - Judge-effect textures are built into the program through `resources/preview_judge_effects.qrc`; they are not loaded from the selected skin directory and should not be shipped under `assets/skin/*`
   - Quick scene textures are uploaded through `PreviewTextureRepository` per Quick item/window, with cacheable reuse keyed by `QImage::cacheKey()`, per-frame transient cleanup, and debug/profile counters for cache hits, cache creates, sprite count, and sprite-batch count
   - `PreviewAnimatedSpriteHelpers` now only caches CPU overlay composites by source-image keys plus tint parameters; Quick runtime `BreakAnimate` / `HoldShine` effects no longer rebuild per-frame `QImage`s and instead run through `PreviewQuickSpriteNodes.cpp` plus `src/preview/quick_scene/shaders/PreviewSpriteMaterial.{vert,frag}`
   - Quick sprite rendering now expands sprites into layer-local contiguous batch geometry keyed by `(texture, effect)` without reordering; shared base images and `sourceRect` slicing are the intended path for atlas-like reuse this round
@@ -88,6 +130,7 @@ The toolbox blank-media submenu operates on the current chart directory only. It
 - SFX clips:
   - Consumer: `QtPreviewSfxRuntime`, `VideoExportAudioRenderPlan`, export audio backends
   - Entry: `miacode::preview_sfx::resolveSfxDirectory`
+  - `track_start` is the intro opening SFX kind. Runtime audition/playback and exported intro audio first check the selected `assets/music/<file>` entry, then legacy `assets/music/track_start.wav`, then the resolved SFX folder's `track_start.wav`, then the bundled `:/intro/audio/track_start.wav` for export-only extraction.
 - Windows BASS runtime assets:
   - Repo-local files:
     - `third_party/bass/include/bass.h`
@@ -111,7 +154,7 @@ The toolbox blank-media submenu operates on the current chart directory only. It
     - `background/outline_area.png`
     - `background/outline_area_labeled.png`
   - Optional custom judge-line PNGs are selected by file name from `background/outlines/*.png`; if the selected file is missing, preview/export fall back to the saved built-in `PreviewOutlineVariant`
-  - Source helper art for rebuilding the labeled-area variant currently lives at `background/region_labels_overlay_transparent_v3.png`; rebuilding the final labeled outline is a maintainer-local asset task unless the helper becomes part of a repeatable public workflow
+  - Source helper art for the labeled-area view lives at `background/region_labels_overlay_transparent_v3.png`; `outline_area_labeled.png` is still the built-in labeled asset, while the paused helper view with a custom outline composites custom outline + `outline_area.png` + this label overlay at runtime
   - The active outline assets are currently `1080x1080` canvases with built-in transparent border; preview/export map them across the full playfield square, and the selected variant is a shared render setting rather than an asset-size inference
 - Generated slide data:
   - Stored under `assets/reference`
@@ -156,6 +199,7 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 - Windows release packages now also include:
     - root-level `Start_MiaCode_Debug.bat`
     - root-level `logs/` helper folder only for explicit debug-launch scripts; normal project-bound runtime logs default to `.miacode/logs/`
+    - root-level `extensions/README.md` for user extension authoring
     - root-level `LICENSE`, `LICENSE_SCOPE.md`, `THIRD_PARTY_NOTICES.md`, and `licenses/`; repository README files are developer-facing docs and are not shipped
   - optional Windows dev-tool packaging currently includes only `simai_native_dump.exe`; `soundtouch_probe.exe` is no longer copied by `scripts/build/package-win.ps1`
 - macOS build/package:
@@ -168,6 +212,12 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 - Script docs:
   - `scripts/README.md`
   - `scripts/README_EN.md`
+- Asset helper scripts:
+  - `scripts/assets/match_outline_canvas_ratio.py` expands transparent outline PNG canvases by the fixed 980:1080 ratio without scaling the visible pixels.
+  - `scripts/gen_skin_mine_sprites.py` generates `<base>_mine.png` skin sprites by applying the MajMine luminance grayscale transform while preserving alpha.
+  - `scripts/assets/build_skin_tool_exes.ps1` packages those two helpers as standalone Windows executables under `dist/skin-tools-win64`:
+    - `miacode-outline-canvas-tool.exe`
+    - `miacode-skin-mine-tool.exe`
 
 ## 6. Analysis And Debug Scripts
 

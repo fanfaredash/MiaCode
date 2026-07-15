@@ -85,7 +85,9 @@ void MuriDiagnosticCollector::addDiagnostic(
     const TimelineNoteMarker& marker,
     const QString& markerKey,
     const QString& detail,
-    const DiagnosticAnchor& anchor)
+    const DiagnosticAnchor& anchor,
+    MuriDetailKind detailKind,
+    const MuriDetailArgs& detailArgs)
 {
     MuriDiagnostic diagnostic;
     diagnostic.kind = kind;
@@ -97,6 +99,8 @@ void MuriDiagnosticCollector::addDiagnostic(
     diagnostic.markerKey = markerKey;
     diagnostic.title = muriKindDisplayName(kind, true);
     diagnostic.detail = detail;
+    diagnostic.detailKind = detailKind;
+    diagnostic.detailArgs = detailArgs;
     diagnostics.append(diagnostic);
 }
 
@@ -106,7 +110,9 @@ void MuriDiagnosticCollector::addSimpleNoteDiagnostic(
     double second,
     const JudgeableSimpleNote& note,
     const QString& detail,
-    const DiagnosticAnchor& anchor)
+    const DiagnosticAnchor& anchor,
+    MuriDetailKind detailKind,
+    const MuriDetailArgs& detailArgs)
 {
     MuriDiagnostic diagnostic;
     diagnostic.kind = kind;
@@ -118,6 +124,8 @@ void MuriDiagnosticCollector::addSimpleNoteDiagnostic(
     diagnostic.markerKey = note.markerKey;
     diagnostic.title = muriKindDisplayName(kind, true);
     diagnostic.detail = detail;
+    diagnostic.detailKind = detailKind;
+    diagnostic.detailArgs = detailArgs;
     diagnostics.append(diagnostic);
 }
 

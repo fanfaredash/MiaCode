@@ -194,6 +194,12 @@ const QString& kMissingBeatSeparator()
     return value;
 }
 
+const QString& kLineEndNoteMissingComma()
+{
+    static const QString value = QStringLiteral("Line-end note is missing trailing ','");
+    return value;
+}
+
 const QString& kMissingCommaBeforeDirectivePrefix()
 {
     static const QString value = QStringLiteral("Missing ',' between note and directive: ");
@@ -203,6 +209,12 @@ const QString& kMissingCommaBeforeDirectivePrefix()
 const QString& kInvalidSlideStarBranchPrefix()
 {
     static const QString value = QStringLiteral("Invalid '*' slide branch (must omit the slide head): ");
+    return value;
+}
+
+const QString& kEmptySlideStarBranchPrefix()
+{
+    static const QString value = QStringLiteral("Invalid empty '*' slide branch: ");
     return value;
 }
 
@@ -303,6 +315,7 @@ const QHash<QString, QString>& zhPrefixMap()
         {kInvalidSlideChainPrefix(), QStringLiteral("Slide 段链语法无效：")},
         {kMissingCommaBeforeDirectivePrefix(), QStringLiteral("音符与指令（{} () <HS*>）之间缺少分隔符 ','：")},
         {kInvalidSlideStarBranchPrefix(), QStringLiteral("'*' 同头 Slide 分支语法无效（* 后必须省略 slide 头部，如 5q2[4:1]*p8[4:1]）：")},
+        {kEmptySlideStarBranchPrefix(), QStringLiteral("'*' 同头 Slide 分支不能为空：")},
         {kFullwidthDigitPrefix(), QStringLiteral("检测到全角数字，请改用半角数字：")},
         {kFullwidthTouchRegionPrefix(), QStringLiteral("检测到全角触摸区域字母，请改用半角区域字母：")},
         {kFullwidthModifierPrefix(), QStringLiteral("检测到全角修饰符，请改用半角修饰符：")},
@@ -316,6 +329,61 @@ const QHash<QString, QString>& zhPrefixMap()
         {kBeatValueAbove384Prefix(), QStringLiteral("分拍数值大于 384，可能导致转谱错误：")},
         {kUnmatchedClosingBracketPrefix(), QStringLiteral("未匹配的右括号 '")},
         {kUnclosedBracketPrefix(), QStringLiteral("未闭合的左括号 '")},
+    };
+    return map;
+}
+
+const QHash<QString, QString>& jaExactMap()
+{
+    static const QHash<QString, QString> map{
+        {kInvalidBpmValue(), QStringLiteral("BPM の値が無効です")},
+        {kInvalidBeatValue(), QStringLiteral("分音数の値が無効です")},
+        {kUnterminatedBpmBlock(), QStringLiteral("BPM 括弧が閉じられていません")},
+        {kUnterminatedBeatBlock(), QStringLiteral("分音括弧が閉じられていません")},
+        {kUnterminatedHsBracket(), QStringLiteral("<HS*> 括弧が閉じられていません")},
+        {kInvalidHsValue(), QStringLiteral("<HS*N> の値が無効です")},
+        {kMissingBeatSeparator(), QStringLiteral("拍区切りの ',' がありません")},
+        {kRepeatedSlashSeparator(), QStringLiteral("連続する区切り記号 '//' は使えません")},
+        {kRepeatedBacktickSeparator(), QStringLiteral("連続する区切り記号 '``' は使えません")},
+        {kSeparatorMissingOperand(), QStringLiteral("区切り記号 '/' または '`' の隣にノーツがありません")},
+        {kChartEmpty(), QStringLiteral("譜面が空です。")},
+    };
+    return map;
+}
+
+const QHash<QString, QString>& jaPrefixMap()
+{
+    static const QHash<QString, QString> map{
+        {kInvalidBreakSlideModifierPositionPrefix(), QStringLiteral("Break Slide の修飾子 b の位置により譜面変換でエラーになる可能性があります：")},
+        {kInvalidSlideDurationPlacementPrefix(), QStringLiteral("Slide の音価ブロックの位置により譜面変換でエラーになる可能性があります：")},
+        {kInvalidSlideDurationPrefix(), QStringLiteral("Slide の音価が無効です：")},
+        {kInvalidHoldDurationPrefix(), QStringLiteral("Hold の音価が無効です：")},
+        {kInvalidHoldModifierSequencePrefix(), QStringLiteral("Hold の修飾子の順序が無効です：")},
+        {kNonCanonicalHoldModifierPlacementPrefix(), QStringLiteral("Hold の修飾子の位置により実機変換でエラーになる可能性があります：")},
+        {kInvalidTouchHoldDurationPrefix(), QStringLiteral("TouchHold の音価が無効です：")},
+        {kTouchDurationRequiresHPrefix(), QStringLiteral("Touch の音価には 'h' 修飾子が必要です：")},
+        {kInvalidTouchTokenPrefix(), QStringLiteral("Touch ノーツが無効です：")},
+        {kNonCanonicalCenterTouchPrefix(), QStringLiteral("中央 Touch の非標準表記です（C を使ってください）：")},
+        {kInvalidTouchModifierPrefix(), QStringLiteral("Touch の修飾子が無効です：")},
+        {kMisplacedSlideHeadModifierPrefix(), QStringLiteral("Slide head 修飾子（?、!、@）は slide head と shape の間にのみ置けます：")},
+        {kMisplacedTapStarModifierPrefix(), QStringLiteral("Tap-star 修飾子（$）は tap にのみ置けます：")},
+        {kInvalidSlideChainPrefix(), QStringLiteral("Slide チェーンの構文が無効です：")},
+        {kMissingCommaBeforeDirectivePrefix(), QStringLiteral("ノーツと指令（{} () <HS*>）の間に区切りの ',' がありません：")},
+        {kInvalidSlideStarBranchPrefix(), QStringLiteral("'*' による同一始点 Slide 分岐の構文が無効です（* の後は slide 頭部を省略します。例：5q2[4:1]*p8[4:1]）：")},
+        {kEmptySlideStarBranchPrefix(), QStringLiteral("'*' による同一始点 Slide 分岐を空にはできません：")},
+        {kFullwidthDigitPrefix(), QStringLiteral("全角数字が見つかりました。半角数字を使ってください：")},
+        {kFullwidthTouchRegionPrefix(), QStringLiteral("全角のタッチ領域文字が見つかりました。半角文字を使ってください：")},
+        {kFullwidthModifierPrefix(), QStringLiteral("全角の修飾子が見つかりました。半角を使ってください：")},
+        {kFullwidthBracketPrefix(), QStringLiteral("全角括弧が見つかりました。半角括弧を使ってください：")},
+        {kFullwidthSeparatorPrefix(), QStringLiteral("全角の区切り記号が見つかりました。半角を使ってください：")},
+        {kFullwidthSlideSymbolPrefix(), QStringLiteral("全角の Slide 記号が見つかりました。半角を使ってください：")},
+        {kFullwidthLatinLetterPrefix(), QStringLiteral("全角の英字が見つかりました。半角を使ってください：")},
+        {kInvalidTerminalMarkerPrefix(), QStringLiteral("終端マーカー E の位置が無効です：")},
+        {kInvalidNotePrefix(), QStringLiteral("ノーツが無効です：")},
+        {kInvalidBeatValueStrictPrefix(), QStringLiteral("分音数の値により譜面変換でエラーになる可能性があります：")},
+        {kBeatValueAbove384Prefix(), QStringLiteral("分音数が 384 を超えています。譜面変換でエラーになる可能性があります：")},
+        {kUnmatchedClosingBracketPrefix(), QStringLiteral("対応していない閉じ括弧 '")},
+        {kUnclosedBracketPrefix(), QStringLiteral("閉じられていない開き括弧 '")},
     };
     return map;
 }
@@ -341,6 +409,7 @@ const QVector<QString>& zhPrefixOrder()
         kInvalidSlideChainPrefix(),
         kMissingCommaBeforeDirectivePrefix(),
         kInvalidSlideStarBranchPrefix(),
+        kEmptySlideStarBranchPrefix(),
         kFullwidthDigitPrefix(),
         kFullwidthTouchRegionPrefix(),
         kFullwidthModifierPrefix(),
@@ -357,26 +426,6 @@ const QVector<QString>& zhPrefixOrder()
 }
 
 }  // namespace ValidationMessage
-
-bool isSlideShapeChar(QChar ch)
-{
-    static const QString kSlideShapeChars = QStringLiteral("-^v<>VpqszwW");
-    return kSlideShapeChars.contains(ch);
-}
-
-bool tokenContainsSlideShape(const QString& token)
-{
-    // Match the dispatch heuristic in TouchTap.cpp::parseTapOrHoldToken — any
-    // shape character anywhere in the token (after the lane digit) marks the
-    // token as slide-bound. Position 0 is always the lane digit so we start
-    // at 1.
-    for (int i = 1; i < token.size(); ++i) {
-        if (isSlideShapeChar(token.at(i))) {
-            return true;
-        }
-    }
-    return false;
-}
 
 // Strict-only check. Returns the validation message to emit, or empty
 // string if the token has no `?`, `!`, `@` (or all of them are validly
@@ -631,29 +680,47 @@ SimaiNativeParseResult parseInternal(
     // since the last ','; deliberately survives whitespace and line breaks
     // because neither is a beat separator.
     bool noteSinceComma = false;
+    int pendingLineEndNoteCol = -1;
+    int pendingLineEndNoteEndCol = -1;
+    bool lineSawComma = false;
+
+    const auto clearPendingLineEndNote = [&]() {
+        pendingLineEndNoteCol = -1;
+        pendingLineEndNoteEndCol = -1;
+    };
 
     const auto flushToken = [&](int lineNumber) {
         if (token.isEmpty()) {
             return;
         }
+        const int parsedTokenColumn = tokenColumn;
+        const int parsedTokenEndCol = tokenColumn + token.size() - 1;
+        const int noteCountBefore = state.result.noteMarkers.size();
         parseToken(&state, token, lineNumber, tokenColumn, &currentGroup);
+        if (state.result.noteMarkers.size() > noteCountBefore) {
+            pendingLineEndNoteCol = parsedTokenColumn;
+            pendingLineEndNoteEndCol = parsedTokenEndCol;
+        }
         token.clear();
     };
     const auto warnDirectiveAfterNote = [&](int lineNumber, const QString& line, int openIndex, int closeIndex) {
         if (!strictMode || !noteSinceComma) {
             return;
         }
+        const int warningCol = pendingLineEndNoteCol >= 0 ? pendingLineEndNoteCol : openIndex + 1;
+        const int warningEndCol = pendingLineEndNoteEndCol >= 0 ? pendingLineEndNoteEndCol : closeIndex + 1;
         appendTokenWarning(
             &state,
             lineNumber,
-            openIndex + 1,
+            warningCol,
             ValidationMessage::kMissingCommaBeforeDirectivePrefix()
                 + line.mid(openIndex, closeIndex - openIndex + 1),
-            closeIndex + 1
+            warningEndCol
         );
         // One warning per forgotten ',' — a directive run like "1{16}(120)"
         // is a single missing separator, not two.
         noteSinceComma = false;
+        clearPendingLineEndNote();
     };
     const auto advanceMeasureLinesTo = [&](double targetSecond) {
         const double measureDuration = measureDurationSeconds(
@@ -667,6 +734,52 @@ SimaiNativeParseResult parseInternal(
     };
 
     const QStringList lines = text.split('\n');
+    const auto nextSignificantLineDirectiveText = [&](int nextLineIndex) {
+        for (int i = nextLineIndex; i < lines.size(); ++i) {
+            QString nextLine = lines.at(i);
+            if (nextLine.endsWith('\r')) {
+                nextLine.chop(1);
+            }
+            const QString trimmed = nextLine.trimmed();
+            if (trimmed.isEmpty() || trimmed.startsWith(QStringLiteral("||"))) {
+                continue;
+            }
+            if (trimmed.startsWith(QChar('('))) {
+                const int close = trimmed.indexOf(QChar(')'), 1);
+                return close >= 0 ? trimmed.left(close + 1) : QString();
+            }
+            if (trimmed.startsWith(QChar('{'))) {
+                const int close = trimmed.indexOf(QChar('}'), 1);
+                return close >= 0 ? trimmed.left(close + 1) : QString();
+            }
+            if (trimmed.startsWith(QStringLiteral("<HS*"))) {
+                const int close = trimmed.indexOf(QChar('>'), 4);
+                return close >= 0 ? trimmed.left(close + 1) : QString();
+            }
+            return QString();
+        }
+        return QString();
+    };
+    const auto warnLineEndNoteMissingComma = [&](int lineNumber, int nextLineIndex) {
+        if (!strictMode
+            || !lineSawComma
+            || pendingLineEndNoteCol < 0) {
+            return;
+        }
+        const QString nextDirective = nextSignificantLineDirectiveText(nextLineIndex);
+        const QString message = nextDirective.isEmpty()
+            ? ValidationMessage::kLineEndNoteMissingComma()
+            : ValidationMessage::kMissingCommaBeforeDirectivePrefix() + nextDirective;
+        appendTokenWarning(
+            &state,
+            lineNumber,
+            pendingLineEndNoteCol,
+            message,
+            pendingLineEndNoteEndCol
+        );
+        noteSinceComma = false;
+        clearPendingLineEndNote();
+    };
     for (int lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
         QString line = lines.at(lineIndex);
         if (line.endsWith('\r')) {
@@ -677,6 +790,8 @@ SimaiNativeParseResult parseInternal(
         // scoped to the current line.
         eachOperandPending = false;
         pendingSeparatorCol = -1;
+        clearPendingLineEndNote();
+        lineSawComma = false;
         if (isTerminalMarkerText(line)) {
             continue;
         }
@@ -808,6 +923,7 @@ SimaiNativeParseResult parseInternal(
             if (ch == QChar('/')) {
                 if (strictMode && i + 1 < line.size() && line.at(i + 1) == QChar('/')) {
                     flushToken(lineNumber);
+                    clearPendingLineEndNote();
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kRepeatedSlashSeparator(), i + 2);
                     eachOperandPending = false;
                     pendingSeparatorCol = -1;
@@ -817,11 +933,13 @@ SimaiNativeParseResult parseInternal(
                 if (strictMode && !eachOperandPending) {
                     // e.g. ",/7" or a leading '/': nothing to the left.
                     flushToken(lineNumber);
+                    clearPendingLineEndNote();
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kSeparatorMissingOperand());
                     pendingSeparatorCol = -1;
                     continue;
                 }
                 flushToken(lineNumber);
+                clearPendingLineEndNote();
                 if (strictMode) {
                     pendingSeparatorCol = i + 1;
                     eachOperandPending = false;
@@ -832,6 +950,7 @@ SimaiNativeParseResult parseInternal(
             if (ch == QChar('`')) {
                 if (strictMode && i + 1 < line.size() && line.at(i + 1) == QChar('`')) {
                     flushToken(lineNumber);
+                    clearPendingLineEndNote();
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kRepeatedBacktickSeparator(), i + 2);
                     finalizeEachGroup(&state, currentGroup);
                     currentGroup.clear();
@@ -843,6 +962,7 @@ SimaiNativeParseResult parseInternal(
                 if (strictMode && !eachOperandPending) {
                     // e.g. ",`7" or a leading '`': nothing to the left.
                     flushToken(lineNumber);
+                    clearPendingLineEndNote();
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kSeparatorMissingOperand());
                     finalizeEachGroup(&state, currentGroup);
                     currentGroup.clear();
@@ -850,6 +970,7 @@ SimaiNativeParseResult parseInternal(
                     continue;
                 }
                 flushToken(lineNumber);
+                clearPendingLineEndNote();
                 finalizeEachGroup(&state, currentGroup);
                 currentGroup.clear();
                 if (strictMode) {
@@ -868,6 +989,8 @@ SimaiNativeParseResult parseInternal(
                 pendingSeparatorCol = -1;
                 noteSinceComma = false;
                 flushToken(lineNumber);
+                clearPendingLineEndNote();
+                lineSawComma = true;
                 finalizeEachGroup(&state, currentGroup);
                 currentGroup.clear();
                 TimelineBeatMarker marker;
@@ -911,6 +1034,7 @@ SimaiNativeParseResult parseInternal(
         eachOperandPending = false;
 
         flushToken(lineNumber);
+        warnLineEndNoteMissingComma(lineNumber, lineIndex + 1);
         finalizeEachGroup(&state, currentGroup);
         currentGroup.clear();
     }
@@ -1177,13 +1301,23 @@ QString localizeValidationDetail(QString detail, SimaiNativeValidationLocale loc
     if (locale == SimaiNativeValidationLocale::English) {
         return detail;
     }
+    const bool japanese = locale == SimaiNativeValidationLocale::Japanese;
 
-    const auto exactIt = ValidationMessage::zhExactMap().constFind(detail);
-    if (exactIt != ValidationMessage::zhExactMap().constEnd()) {
+    if (detail == ValidationMessage::kLineEndNoteMissingComma()) {
+        return japanese
+            ? QStringLiteral("行末のノーツに終わりの ',' がありません")
+            : QStringLiteral("行尾音符缺少结尾 ','");
+    }
+
+    const QHash<QString, QString>& exactMap =
+        japanese ? ValidationMessage::jaExactMap() : ValidationMessage::zhExactMap();
+    const auto exactIt = exactMap.constFind(detail);
+    if (exactIt != exactMap.constEnd()) {
         return exactIt.value();
     }
 
-    const QHash<QString, QString>& prefixMap = ValidationMessage::zhPrefixMap();
+    const QHash<QString, QString>& prefixMap =
+        japanese ? ValidationMessage::jaPrefixMap() : ValidationMessage::zhPrefixMap();
     for (const QString& prefix : ValidationMessage::zhPrefixOrder()) {
         if (!detail.startsWith(prefix)) {
             continue;
@@ -1192,7 +1326,9 @@ QString localizeValidationDetail(QString detail, SimaiNativeValidationLocale loc
         if (prefix == ValidationMessage::kInvalidBeatValueStrictPrefix()) {
             localized.replace(
                 ValidationMessage::kStrictDivisorSuffix(),
-                QStringLiteral("（必须是 384 的正整数约数）")
+                japanese
+                    ? QStringLiteral("（384 の正の約数である必要があります）")
+                    : QStringLiteral("（必须是 384 的正整数约数）")
             );
         }
         return localized;
@@ -1206,6 +1342,11 @@ QString validationSeverityPrefix(SimaiNativeValidationSeverity severity, SimaiNa
     if (locale == SimaiNativeValidationLocale::Chinese) {
         return severity == SimaiNativeValidationSeverity::Error
             ? QStringLiteral("[错误]")
+            : QStringLiteral("[警告]");
+    }
+    if (locale == SimaiNativeValidationLocale::Japanese) {
+        return severity == SimaiNativeValidationSeverity::Error
+            ? QStringLiteral("[エラー]")
             : QStringLiteral("[警告]");
     }
     return severity == SimaiNativeValidationSeverity::Error

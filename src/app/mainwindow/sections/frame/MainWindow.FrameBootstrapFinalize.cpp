@@ -82,7 +82,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     // button to a 64-px floor with 12-px synthetic side padding. That
     // floor was wider than the natural width of Qt's own
     // addAction()-managed buttons next to it (Open / Save), so after
-    // the recent label shortening (Audio Settings → Audio, etc.) the
+    // settings labels changed width over time, so the
     // pair sat in a visibly oversized cell with empty air on each side
     // of the text. We now let `sizeHint()` produce the natural width
     // exactly the way `addAction()` would, and only sync Audio/Video
@@ -101,12 +101,20 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
 
     previewAudioSettingsButton_ = makeCompactToolbarButton(previewAudioSettingsAction_);
     previewVideoSettingsButton_ = makeCompactToolbarButton(previewVideoSettingsAction_);
+    // 皮肤 sits between 预览设置 and 导出 but matches the 导出 button width (computed
+    // below), NOT the wider 音频设置/预览设置 equal-width pair.
+    skinSettingsButton_ = makeCompactToolbarButton(skinSettingsAction_);
     int settingsButtonWidth = 1;
     if (previewAudioSettingsButton_ != nullptr) {
         settingsButtonWidth = qMax(settingsButtonWidth, previewAudioSettingsButton_->sizeHint().width());
     }
     if (previewVideoSettingsButton_ != nullptr) {
         settingsButtonWidth = qMax(settingsButtonWidth, previewVideoSettingsButton_->sizeHint().width());
+    }
+    // Shared by the 皮肤 + 导出 buttons = the Open toolbar button's width.
+    int actionButtonWidth = kToolbarActionButtonWidth;
+    if (QWidget* openWidget = toolBar->widgetForAction(openAction_); openWidget != nullptr) {
+        actionButtonWidth = qMax(1, openWidget->sizeHint().width());
     }
     if (previewAudioSettingsButton_ != nullptr) {
         previewAudioSettingsButton_->setFixedWidth(settingsButtonWidth);
@@ -116,11 +124,15 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         previewVideoSettingsButton_->setFixedWidth(settingsButtonWidth);
         toolBar->addWidget(previewVideoSettingsButton_);
     }
+    if (skinSettingsButton_ != nullptr) {
+        skinSettingsButton_->setFixedWidth(actionButtonWidth);
+        toolBar->addWidget(skinSettingsButton_);
+    }
     settingsPlaceholderAction_ = toolBar->addAction(
         makeSettingsGearIcon(QColor("#5D6E83")),
-        uiText("action.preferences", "Preferences...")
+        UiText::text(QStringLiteral("action.preferences"))
     );
-    settingsPlaceholderAction_->setToolTip(uiText("action.preferences", "Preferences..."));
+    settingsPlaceholderAction_->setToolTip(UiText::text(QStringLiteral("action.preferences")));
     connect(settingsPlaceholderAction_, &QAction::triggered, this, &MainWindow::onPreferences);
     // The toolbar Export button jumps straight to the Export hub page (the
     // sidebar "export" item equivalent) — the old dropdown menu + 250ms
@@ -129,15 +141,9 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     // page is reachable without an active difficulty and greys its own cards.
     exportVideoButton_ = makeCompactToolbarButton(nullptr);
     if (exportVideoButton_ != nullptr) {
-        exportVideoButton_->setText(uiText("toolbar.export", "Export"));
-        exportVideoButton_->setToolTip(UiText::isChineseUi()
-            ? QStringLiteral("打开导出页：导出视频 / 导出封面 / 批量导出 / 打包ZIP")
-            : QStringLiteral("Open the Export page: video / cover / batch / ZIP"));
-        int openButtonWidth = kToolbarActionButtonWidth;
-        if (QWidget* openWidget = toolBar->widgetForAction(openAction_); openWidget != nullptr) {
-            openButtonWidth = qMax(1, openWidget->sizeHint().width());
-        }
-        exportVideoButton_->setFixedWidth(openButtonWidth);
+        exportVideoButton_->setText(UiText::text(QStringLiteral("toolbar.export")));
+        exportVideoButton_->setToolTip(UiText::text(QStringLiteral("document.open_the_export_page_video")));
+        exportVideoButton_->setFixedWidth(actionButtonWidth);
         toolBar->insertWidget(settingsPlaceholderAction_, exportVideoButton_);
         connect(exportVideoButton_, &QToolButton::clicked, this, [this]() {
             switchToExportField();
@@ -502,7 +508,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     windowSection_->applyFindOverlayInset();
     const auto applyEditorFontDelta = [this](int delta) {
         applyEditorTextFontSize(editorTextFontPointSize_ + delta, true);
-        statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+        statusBar()->showMessage(UiText::text(QStringLiteral("status.editor_text_display_updated")));
     };
     fontDecreaseAction_ = new QAction(QStringLiteral("Decrease Editor Font"), this);
     ShortcutRegistry::instance().applyShortcut(
@@ -527,6 +533,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     statusBar()->showMessage("PlainCodeEditor ready.");
 
     loadPortableState();
+    applyAppBackgroundSettings(appBackgroundSettings_, false);
     applyWorkspacePanelArrangement();
     windowSection_->setOutlineDockCollapsed(outlineDockCollapsed_);
     logStartupStage("portable_state_loaded");
@@ -549,7 +556,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     }
     if (previewCanvas_ != nullptr) {
         applyEffectivePreviewOutlineVariantToCanvas();
-        previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
+        applyPreviewSkinDirectoryToSurfaces();
         previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
         previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
         previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
@@ -558,6 +565,8 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         previewCanvas_->setTapFlowSpeed(previewTapFlowSpeed_);
         previewCanvas_->setTouchFlowSpeed(previewTouchFlowSpeed_);
         previewCanvas_->setSlideEarlierSecondAndTextOnTop(previewSlideEarlierSecondAndTextOnTop_);
+        previewCanvas_->setTapJudgeTextDistance(previewTapJudgeTextDistance_);
+        previewCanvas_->setJudgeEffectStyle(previewJudgeEffectStyle_);
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
         previewCanvas_->setShowTimestamp(previewShowTimestamp_);
         previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);

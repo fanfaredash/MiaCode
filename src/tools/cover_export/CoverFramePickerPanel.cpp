@@ -3,6 +3,7 @@
 #include "tools/cover_export/CoverLayoutModel.h"
 #include "tools/cover_export/CoverStudioPanel.h"
 #include "UiText.h"
+#include "UiComponents.h"
 #include "UiTheme.h"
 
 #include <QEvent>
@@ -22,11 +23,6 @@ namespace {
 
 constexpr double kStepSeconds = 1.0 / 120.0;
 constexpr int kFrameTransportSliderHeight = 24;
-
-QString l10n(const QString& en, const QString& zh)
-{
-    return UiText::isChineseUi() ? zh : en;
-}
 
 QString formatSeconds(double seconds)
 {
@@ -90,16 +86,6 @@ QString frameTransportSliderStyleSheet()
                    handleBorder.name(QColor::HexRgb));
 }
 
-QPushButton* makeTransportButton(QWidget* parent)
-{
-    auto* button = new QPushButton(parent);
-    button->setStyleSheet(UiTheme::dialogPushButtonStyleSheet()
-        + QStringLiteral("QPushButton { min-width: 28px; max-width: 30px;"
-                         " min-height: 26px; max-height: 28px; padding: 0; border-radius: 6px; }"));
-    button->setFixedSize(30, 28);
-    return button;
-}
-
 }  // namespace
 
 CoverFramePickerPanel::CoverFramePickerPanel(CoverStudioPanel* studio, QWidget* parent)
@@ -113,11 +99,11 @@ CoverFramePickerPanel::CoverFramePickerPanel(CoverStudioPanel* studio, QWidget* 
     playIcon_ = makeTransportIcon(/*pause=*/false, UiTheme::colors().textPrimary);
     pauseIcon_ = makeTransportIcon(/*pause=*/true, UiTheme::colors().textPrimary);
 
-    playButton_ = makeTransportButton(this);
+    playButton_ = miacode::ui::createDialogPushButton(QString(), this);
+    miacode::ui::applySmallDialogButton(playButton_);
     playButton_->setIcon(playIcon_);
     playButton_->setIconSize(QSize(16, 16));
-    playButton_->setToolTip(l10n(QStringLiteral("Play / pause (Space)"),
-                                 QStringLiteral("播放 / 暂停（空格）")));
+    playButton_->setToolTip(UiText::text(QStringLiteral("cover.play_pause_space")));
     backButton_ = new QPushButton(QStringLiteral("‹"), this);
     forwardButton_ = new QPushButton(QStringLiteral("›"), this);
     backButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet()
@@ -127,17 +113,16 @@ CoverFramePickerPanel::CoverFramePickerPanel(CoverStudioPanel* studio, QWidget* 
     label_ = new QLabel(formatSeconds(0.0) + QStringLiteral(" / ") + formatSeconds(0.0), this);
     label_->setMinimumWidth(112);
     label_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    auto* title = new QLabel(l10n(QStringLiteral("Frame"), QStringLiteral("帧")), this);
+    auto* title = new QLabel(UiText::text(QStringLiteral("cover.frame")), this);
     title->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
 
     // Keep the preview scrubber track, but make the frame playhead easier to see.
     slider_->setStyleSheet(frameTransportSliderStyleSheet());
     slider_->ensurePolished();
     slider_->setFixedHeight(qMax(slider_->sizeHint().height(), kFrameTransportSliderHeight));
-    backButton_->setToolTip(l10n(QStringLiteral("Step back (←)"), QStringLiteral("后退一步（←）")));
-    forwardButton_->setToolTip(l10n(QStringLiteral("Step forward (→)"), QStringLiteral("前进一步（→）")));
-    slider_->setToolTip(l10n(QStringLiteral("Frame time for the selected chart frame"),
-                             QStringLiteral("当前谱面帧的时间")));
+    backButton_->setToolTip(UiText::text(QStringLiteral("cover.step_back")));
+    forwardButton_->setToolTip(UiText::text(QStringLiteral("cover.step_forward")));
+    slider_->setToolTip(UiText::text(QStringLiteral("cover.frame_time_for_the_selected")));
     playButton_->setAccessibleName(playButton_->toolTip());
     backButton_->setAccessibleName(backButton_->toolTip());
     forwardButton_->setAccessibleName(forwardButton_->toolTip());
@@ -195,9 +180,8 @@ void CoverFramePickerPanel::refresh()
     forwardButton_->setEnabled(enabled);
     slider_->setEnabled(enabled);
     playButton_->setToolTip(enabled
-        ? l10n(QStringLiteral("Play / pause (Space)"), QStringLiteral("播放 / 暂停（空格）"))
-        : l10n(QStringLiteral("Select a chart-frame layer to edit its time"),
-               QStringLiteral("选择谱面帧图层以编辑帧时间")));
+        ? UiText::text(QStringLiteral("cover.play_pause_space"))
+        : UiText::text(QStringLiteral("cover.select_a_chart_frame_layer")));
 }
 
 void CoverFramePickerPanel::setPositionSeconds(double seconds)

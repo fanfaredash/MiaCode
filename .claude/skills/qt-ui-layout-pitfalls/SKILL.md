@@ -47,6 +47,7 @@ pixels, and several Qt defaults lie** (`sizeHint()` under QSS, `SetFixedSize`,
 | 深色模式看不清/不更新 (dark mode unreadable / frozen) | Hardcoded colors; styles applied once, never on theme switch | W5 |
 | 对话框底部超出屏幕被截 (dialog clamped by screen) | Over-tall fixed dialog; middle stretch pushes content to clipped bottom | W6 |
 | 设置宽度被 QSS 覆盖 (`setFixedWidth` ineffective) | QSS `min-width` beats `setFixedWidth` | W7 |
+| 下拉弹窗右下角纯色块 (combo popup solid wedge at BR corner ONLY) | default-ctor `QProxyStyle` wraps DESKTOP style (windows11); its popup panel fights the QSS panel at 1px offset anchored top-left | W8 |
 | 1px 缝隙/曲绘露边 (1px sliver past a frame) | Per-edge rounding drifts under fractional scale; DPR not folded in | Q1 |
 | 接缝黑线/白边 (seam dark bleed / bright rim) | AA'd alpha over-composite at shared cut; LANCZOS ringing | Q2 |
 | 边框模糊/粗细不均 (blurry/uneven stroke under scale) | Stroke scales with card; fractional coords | Q3 |
@@ -79,6 +80,10 @@ The W-patterns are also condensed in user memory `reference-widget-dialog-clippi
   spacing; do NOT re-level controls when the WM clamps the window.
 - **W7**: inline QSS override `"QPushButton { min-width:Npx; max-width:Npx; padding:0; }"`
   alongside `setFixedSize`.
+- **W8**: popup proxy styles get an explicit base (`QStyleFactory::create("Fusion")`);
+  container made translucent by hand (WState_Created dance) + ONE panel painter via a
+  Paint-event filter; QSS view AND popup-scrollbar backgrounds transparent (an opaque view
+  bg leaves a see-through hole under the scrollbar column on a layered window).
 - **Q1**: ONE shared snap helper in absolute device space —
   `snap(n) = (Math.round((origin + n*s) * dpr) / dpr - origin) / s` — and make the clip
   rect AND the stroke read the same snapped rect.

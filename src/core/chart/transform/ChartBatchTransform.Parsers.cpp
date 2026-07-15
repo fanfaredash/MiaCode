@@ -84,6 +84,9 @@ bool parseTouchTokenParts(const QString& token, TouchTokenParts* parts)
     const QString modifierPart = openBracket >= 0 ? suffix.left(openBracket) : suffix;
     for (QChar ch : modifierPart) {
         const QChar lower = ch.toLower();
+        if (ch == QChar('B') || ch == QChar('X')) {
+            return false;
+        }
         if (lower == QChar('b')) {
             parts->hasBreak = true;
         } else if (lower == QChar('x')) {
@@ -136,6 +139,9 @@ bool parseNoteTokenParts(const QString& token, NoteTokenParts* parts)
     for (int i = 1; i < core.size();) {
         const QChar ch = core.at(i);
         const QChar lower = ch.toLower();
+        if (ch == QChar('B') || ch == QChar('X') || ch == QChar('M')) {
+            return false;
+        }
         if (lower == QChar('b')) {
             parts->hasBreak = true;
             ++i;
@@ -145,7 +151,7 @@ bool parseNoteTokenParts(const QString& token, NoteTokenParts* parts)
         } else if (lower == QChar('h')) {
             parts->hasHold = true;
             ++i;
-        } else if (lower == QChar('m')) {
+        } else if (ch == QChar('m')) {
             parts->hasMine = true;
             ++i;
         } else if (ch == QChar('$')) {
@@ -182,10 +188,15 @@ bool parseSlideTokenParts(const QString& token, SlideTokenParts* parts)
         return false;
     }
 
+    parts->lane = token.at(0);
+
     int prefixLength = 0;
     while ((1 + prefixLength) < token.size()) {
         const QChar ch = token.at(1 + prefixLength);
         const QChar lower = ch.toLower();
+        if (ch == QChar('B') || ch == QChar('X')) {
+            return false;
+        }
         if (lower != QChar('b')
             && lower != QChar('x')
             && ch != QChar('@')
@@ -206,23 +217,39 @@ bool parseSlideTokenParts(const QString& token, SlideTokenParts* parts)
     }
 
     const QString prefixModifiers = token.mid(1, prefixLength);
+    parts->headBreak = prefixModifiers.contains(QChar('b'));
+    parts->headEx = prefixModifiers.contains(QChar('x'));
+
     const QString remainder = token.mid(1 + prefixLength);
     if (remainder.isEmpty()) {
         return false;
     }
 
-    QString core = QString(token.at(0)) + remainder;
-    parts->headBreak = prefixModifiers.contains(QChar('b'), Qt::CaseInsensitive);
-    parts->headEx = prefixModifiers.contains(QChar('x'), Qt::CaseInsensitive);
-    parts->trackBreak = core.mid(1).contains(QChar('b'), Qt::CaseInsensitive);
-    parts->coreWithoutTrackBreak.reserve(core.size());
-    parts->coreWithoutTrackBreak.append(core.at(0));
-    for (int i = 1; i < core.size(); ++i) {
-        if (core.at(i).toLower() == QChar('b')) {
-            continue;
+    // Split by `*` so each `*`-branch can keep its own break flag. Collapsing
+    // every `b` in the body into a single flag (the previous behavior) loses
+    // per-branch info — `1-5[8:1]*-4b[8:1]` then rebuilds as
+    // `1-5b[8:1]*-4[8:1]`, moving the break to the wrong branch.
+    const QStringList rawSegments = remainder.split(QLatin1Char('*'));
+    parts->segments.reserve(rawSegments.size());
+    for (const QString& raw : rawSegments) {
+        SlideSegmentParts seg;
+        seg.text.reserve(raw.size());
+        for (QChar ch : raw) {
+            if (ch == QLatin1Char('M')) {
+                return false;
+            }
+            if (ch == QLatin1Char('b')) {
+                seg.segmentBreak = true;
+                continue;
+            }
+            seg.text.append(ch);
         }
-        parts->coreWithoutTrackBreak.append(core.at(i));
+        parts->segments.append(seg);
     }
+    if (parts->segments.isEmpty()) {
+        return false;
+    }
+
     parts->valid = true;
     return true;
 }
@@ -279,20 +306,21 @@ QString buildNoteToken(const NoteTokenParts& parts, bool hasBreak, bool hasEx)
     return token;
 }
 
-QString buildSlideToken(
-    const SlideTokenParts& parts,
-    bool headBreak,
-    bool headEx,
-    bool trackBreak,
-    const QString& coreWithoutTrackBreak)
+QString buildSlideToken(const SlideTokenParts& parts)
 {
     QString token;
-    token.reserve(coreWithoutTrackBreak.size() + 5);
-    token.append(coreWithoutTrackBreak.at(0));
-    if (headBreak) {
+    // Estimate size: head lane + modifiers + all segments + separators
+    int estimatedSize = 5;
+    for (const auto& seg : parts.segments) {
+        estimatedSize += seg.text.size() + 2;
+    }
+    token.reserve(estimatedSize);
+
+    token.append(parts.lane);
+    if (parts.headBreak) {
         token.append(QChar('b'));
     }
-    if (headEx) {
+    if (parts.headEx) {
         token.append(QChar('x'));
     }
     if (parts.headUsesTapMaterial) {
@@ -301,16 +329,23 @@ QString buildSlideToken(
     if (!parts.headlessModifier.isNull()) {
         token.append(parts.headlessModifier);
     }
-    QString remainder = coreWithoutTrackBreak.mid(1);
-    if (trackBreak) {
-        const int firstBracket = remainder.indexOf(QChar('['));
-        if (firstBracket >= 0) {
-            remainder.insert(firstBracket, QChar('b'));
-        } else {
-            remainder.append(QChar('b'));
+
+    for (int i = 0; i < parts.segments.size(); ++i) {
+        if (i > 0) {
+            token.append(QLatin1Char('*'));
         }
+        const SlideSegmentParts& seg = parts.segments.at(i);
+        QString segText = seg.text;
+        if (seg.segmentBreak) {
+            const int firstBracket = segText.indexOf(QLatin1Char('['));
+            if (firstBracket >= 0) {
+                segText.insert(firstBracket, QLatin1Char('b'));
+            } else {
+                segText.append(QLatin1Char('b'));
+            }
+        }
+        token.append(segText);
     }
-    token.append(remainder);
     return token;
 }
 
@@ -323,9 +358,9 @@ QChar rotateLaneChar(QChar lane, int steps)
     return QChar('0' + (((lane.digitValue() - 1 + normalized) % 8) + 1));
 }
 
-QString rotateSlideCoreOutsideBrackets(const QString& coreWithoutTrackBreak, int steps)
+QString rotateSlideCoreOutsideBrackets(const QString& text, int steps)
 {
-    QString rotated = coreWithoutTrackBreak;
+    QString rotated = text;
     int bracketDepth = 0;
     for (int i = 0; i < rotated.size(); ++i) {
         const QChar ch = rotated.at(i);

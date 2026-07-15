@@ -6,7 +6,9 @@
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 #include "common/PreviewInteractionConfig.h"
+#include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 
@@ -14,13 +16,18 @@
 #include <QElapsedTimer>
 #include <QEnterEvent>
 #include <QFontMetrics>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPoint>
+#include <QPointer>
+#include <QSlider>
 #include <QTimer>
+#include <QVBoxLayout>
 #include <QWidget>
 #include <QWidgetAction>
 #include <QWindow>
@@ -32,6 +39,34 @@ namespace {
 
 constexpr int kQuickShellActiveRefreshIntervalMs = 16;
 constexpr int kQuickShellIdleRefreshIntervalMs = 250;
+constexpr int kTimelineBrightnessPercentMin = 20;
+constexpr int kTimelineBrightnessPercentMax = 200;
+constexpr int kTimelineBrightnessPercentStep = 5;
+
+QString timelineZoomMenuLabel(double scale)
+{
+    return QStringLiteral("%1%").arg(qRound(scale * 100.0));
+}
+
+int brightnessToPercent(double brightness, double fallback)
+{
+    const double normalized = qIsFinite(brightness) ? brightness : fallback;
+    const int percent = qRound(normalized * 100.0);
+    const int stepped = qRound(static_cast<double>(percent) / kTimelineBrightnessPercentStep)
+        * kTimelineBrightnessPercentStep;
+    return qBound(
+        kTimelineBrightnessPercentMin,
+        stepped,
+        kTimelineBrightnessPercentMax);
+}
+
+double brightnessFromPercent(int percent)
+{
+    return static_cast<double>(qBound(
+        kTimelineBrightnessPercentMin,
+        percent,
+        kTimelineBrightnessPercentMax)) / 100.0;
+}
 
 // Custom QMenu item widget for the timeline-follow settings menu.
 // Paints a 14×14 rounded-square indicator + checkmark + label that
@@ -156,6 +191,84 @@ private:
     std::function<void(bool)> onToggled_;
 };
 
+class TimelineBrightnessSliderItem : public QWidget
+{
+public:
+    TimelineBrightnessSliderItem(
+        const QString& labelText,
+        int initialPercent,
+        std::function<void(int)> onValueChanged,
+        QWidget* parent = nullptr)
+        : QWidget(parent)
+        , onValueChanged_(std::move(onValueChanged))
+    {
+        const UiTheme::Colors& c = UiTheme::colors();
+        auto* root = new QVBoxLayout(this);
+        root->setContentsMargins(12, 8, 12, 8);
+        root->setSpacing(6);
+
+        auto* labelRow = new QHBoxLayout();
+        labelRow->setContentsMargins(0, 0, 0, 0);
+        labelRow->setSpacing(10);
+        auto* titleLabel = new QLabel(labelText, this);
+        QFont titleFont = titleLabel->font();
+        titleFont.setWeight(QFont::DemiBold);
+        titleLabel->setFont(titleFont);
+        titleLabel->setStyleSheet(QStringLiteral("color:%1;").arg(c.textPrimary.name()));
+        valueLabel_ = new QLabel(this);
+        valueLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        valueLabel_->setMinimumWidth(QFontMetrics(valueLabel_->font()).horizontalAdvance(QStringLiteral("200%")));
+        valueLabel_->setStyleSheet(QStringLiteral("color:%1;").arg(c.textSecondary.name()));
+        labelRow->addWidget(titleLabel, 1);
+        labelRow->addWidget(valueLabel_, 0);
+        root->addLayout(labelRow);
+
+        slider_ = new QSlider(Qt::Horizontal, this);
+        slider_->setRange(kTimelineBrightnessPercentMin, kTimelineBrightnessPercentMax);
+        slider_->setSingleStep(kTimelineBrightnessPercentStep);
+        slider_->setPageStep(kTimelineBrightnessPercentStep);
+        slider_->setTickInterval(kTimelineBrightnessPercentStep);
+        slider_->setStyleSheet(UiTheme::dialogSliderStyleSheet());
+        root->addWidget(slider_);
+
+        setMinimumWidth(250);
+        const int clamped = qBound(kTimelineBrightnessPercentMin, initialPercent, kTimelineBrightnessPercentMax);
+        updateValueLabel(clamped);
+        slider_->setValue(clamped);
+        connect(slider_, &QSlider::valueChanged, this, [this](int value) {
+            const int stepped = qBound(
+                kTimelineBrightnessPercentMin,
+                qRound(static_cast<double>(value) / kTimelineBrightnessPercentStep) * kTimelineBrightnessPercentStep,
+                kTimelineBrightnessPercentMax);
+            if (stepped != value) {
+                slider_->setValue(stepped);
+                return;
+            }
+            updateValueLabel(stepped);
+            if (onValueChanged_) {
+                onValueChanged_(stepped);
+            }
+        });
+    }
+
+    QSize sizeHint() const override
+    {
+        return QSize(270, QWidget::sizeHint().height());
+    }
+
+private:
+    void updateValueLabel(int percent)
+    {
+        if (valueLabel_ != nullptr) {
+            valueLabel_->setText(QStringLiteral("%1%").arg(percent));
+        }
+    }
+
+    QLabel* valueLabel_ = nullptr;
+    QSlider* slider_ = nullptr;
+    std::function<void(int)> onValueChanged_;
+};
+
 template <typename T>
 bool assignIfChanged(T& target, const T& value)
 {
@@ -166,7 +279,10 @@ bool assignIfChanged(T& target, const T& value)
     return true;
 }
 
-void appendQuickShellControllerLog(const QString& action, const QString& payload = QString())
+void appendQuickShellControllerLog(
+    const QString& action,
+    const QString& payload = QString(),
+    miacode::debug_log::Level level = miacode::debug_log::Level::Info)
 {
     QString text = QStringLiteral("action=%1").arg(action);
     if (!payload.trimmed().isEmpty()) {
@@ -175,7 +291,9 @@ void appendQuickShellControllerLog(const QString& action, const QString& payload
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("quick_shell/controller"),
-        text
+        text,
+        /*force=*/false,
+        level
     );
 }
 
@@ -368,19 +486,33 @@ QString QuickShellController::timelineTabLabel() const
 {
     // Mirrors MainWindow::bottomTabsFallbackLabel for the legacy QSG
     // path — keeps the QuickShell bottom-tab labels identical to the
-    // ones the legacy QTabBar code uses, with the same Chinese /
-    // English split.
-    return UiText::isChineseUi() ? QStringLiteral("时间轴") : QStringLiteral("Timeline");
+    // ones the legacy QTabBar code uses.
+    return UiText::text(QStringLiteral("window.timeline"));
 }
 
 QString QuickShellController::validationTabLabel() const
 {
-    return UiText::isChineseUi() ? QStringLiteral("语法") : QStringLiteral("Syntax");
+    return UiText::text(QStringLiteral("window.syntax"));
 }
 
 QString QuickShellController::muriTabLabel() const
 {
-    return UiText::isChineseUi() ? QStringLiteral("无理") : QStringLiteral("Muri");
+    return UiText::text(QStringLiteral("window.muri"));
+}
+
+QString QuickShellController::timelineViewLockLabel() const
+{
+    return UiText::text(QStringLiteral("shell.view_lock"));
+}
+
+QString QuickShellController::timelineSyncLabel() const
+{
+    return UiText::text(QStringLiteral("shell.timeline_sync"));
+}
+
+QString QuickShellController::timelineFollowCodeLabel() const
+{
+    return UiText::text(QStringLiteral("shell.follow_code"));
 }
 
 QWindow* QuickShellController::topChromeWindow() const
@@ -410,11 +542,6 @@ QWindow* QuickShellController::statusWindow() const
 
 void QuickShellController::setPreviewFullscreen(bool fullscreen)
 {
-    if (fullscreen) {
-        // Disabled until the preview fullscreen path is reworked upstream.
-        // commandSink_->setShellPreviewFullscreen(fullscreen);
-        return;
-    }
     if (commandSink_ == nullptr || stateSource_ == nullptr) {
         return;
     }
@@ -736,8 +863,6 @@ void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, i
     menu->setAttribute(Qt::WA_DeleteOnClose);
     UiTheme::styleRoundedMenu(*menu);
 
-    const bool chinese = UiText::isChineseUi();
-
     // Each item is a custom QWidget that paints the QML-CheckBox look
     // (rounded square indicator + accent fill + white checkmark + hover
     // background) and toggles via its own mouseReleaseEvent. The widget
@@ -755,18 +880,18 @@ void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, i
     };
 
     addToggleWidget(
-        chinese ? QStringLiteral("光标居中") : QStringLiteral("View Lock"),
+        UiText::text(QStringLiteral("shell.view_lock")),
         bridge->viewportLockEnabled(),
         &QuickShellController::timelineViewportLockToggled);
     // Timeline Sync sits above Follow Code so the bottom-most menu
     // item matches the inline tab-strip chip (which now shows Follow
     // Code) — visually the two anchors are at the same Y on screen.
     addToggleWidget(
-        chinese ? QStringLiteral("时轴同步") : QStringLiteral("Timeline Sync"),
+        UiText::text(QStringLiteral("shell.timeline_sync")),
         bridge->timelineSyncEnabled(),
         &QuickShellController::timelineSyncToggled);
     addToggleWidget(
-        chinese ? QStringLiteral("代码跟随") : QStringLiteral("Follow Code"),
+        UiText::text(QStringLiteral("shell.follow_code")),
         bridge->followPreviewEnabled(),
         &QuickShellController::timelineFollowPreviewToggled);
 
@@ -777,6 +902,103 @@ void QuickShellController::openTimelineFollowSettingsMenu(int gearGlobalRight, i
     const QSize menuSize = menu->sizeHint();
     const int x = gearGlobalRight - menuSize.width();
     const int y = gearGlobalTop - menuSize.height() - 4;
+    menu->popup(QPoint(x, y));
+}
+
+void QuickShellController::openTimelineBrightnessMenu(int gearGlobalRight, int gearGlobalTop)
+{
+    if (stateSource_ == nullptr) {
+        return;
+    }
+    auto* bridge = qobject_cast<TimelineQuickStateBridge*>(
+        stateSource_->shellTimelineStateBridgeObject());
+    if (bridge == nullptr) {
+        return;
+    }
+
+    auto* menu = new QMenu();
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    UiTheme::styleRoundedMenu(*menu);
+
+    const QPointer<TimelineQuickStateBridge> bridgeGuard(bridge);
+    const auto addBrightnessSlider = [&](const QString& label, int initialPercent, std::function<void(TimelineQuickStateBridge*, double)> setter) {
+        auto* item = new TimelineBrightnessSliderItem(
+            label,
+            initialPercent,
+            [bridgeGuard, setter = std::move(setter)](int percent) {
+                if (bridgeGuard == nullptr) {
+                    return;
+                }
+                setter(bridgeGuard.data(), brightnessFromPercent(percent));
+            });
+        auto* widgetAction = new QWidgetAction(menu);
+        widgetAction->setDefaultWidget(item);
+        menu->addAction(widgetAction);
+    };
+
+    addBrightnessSlider(
+        UiText::text(QStringLiteral("shell.timeline_waveform_brightness")),
+        brightnessToPercent(
+            bridge->waveformBrightness(),
+            miacode::timeline::kTimelineWaveformBrightnessDefault),
+        [](TimelineQuickStateBridge* target, double brightness) {
+            target->setWaveformBrightness(brightness);
+        });
+    addBrightnessSlider(
+        UiText::text(QStringLiteral("shell.timeline_measure_line_brightness")),
+        brightnessToPercent(
+            bridge->measureLineBrightness(),
+            miacode::timeline::kTimelineMeasureLineBrightnessDefault),
+        [](TimelineQuickStateBridge* target, double brightness) {
+            target->setMeasureLineBrightness(brightness);
+        });
+
+    menu->adjustSize();
+    const QSize menuSize = menu->sizeHint();
+    const int x = gearGlobalRight - menuSize.width();
+    const int y = gearGlobalTop - menuSize.height() - 4;
+    menu->popup(QPoint(x, y));
+}
+
+void QuickShellController::openTimelineZoomMenu(int controlGlobalLeft, int controlGlobalTop, int controlWidth)
+{
+    if (stateSource_ == nullptr) {
+        return;
+    }
+    auto* bridge = qobject_cast<TimelineQuickStateBridge*>(
+        stateSource_->shellTimelineStateBridgeObject());
+    if (bridge == nullptr) {
+        return;
+    }
+
+    const QVector<double> presets = bridge->zoomPresets();
+    if (presets.isEmpty()) {
+        return;
+    }
+
+    auto* menu = new QMenu();
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    UiTheme::styleRoundedMenu(*menu);
+    menu->setMinimumWidth(qMax(1, controlWidth));
+
+    const QPointer<TimelineQuickStateBridge> bridgeGuard(bridge);
+    const double currentScale = bridge->zoomScale();
+    for (double preset : presets) {
+        QAction* action = menu->addAction(timelineZoomMenuLabel(preset));
+        action->setCheckable(true);
+        action->setChecked(qAbs(preset - currentScale) <= 1e-6);
+        QObject::connect(action, &QAction::triggered, menu, [bridgeGuard, preset]() {
+            if (bridgeGuard == nullptr) {
+                return;
+            }
+            bridgeGuard->setZoomScaleAnchored(preset, bridgeGuard->viewportCenterSecond());
+        });
+    }
+
+    menu->adjustSize();
+    const QSize menuSize = menu->sizeHint();
+    const int x = controlGlobalLeft;
+    const int y = controlGlobalTop - menuSize.height() - 4;
     menu->popup(QPoint(x, y));
 }
 
@@ -899,17 +1121,30 @@ void QuickShellController::syncSidebarSurfaceSize(int width, int height)
 
 void QuickShellController::syncWorkspaceSurfaceSize(int width, int height)
 {
+    MC_OP("QuickShellController::syncWorkspaceSurfaceSize");
+    QElapsedTimer elapsed;
+    elapsed.start();
+    MIACODE_HANG_PHASE(
+        "QuickShellController::syncWorkspaceSurfaceSize",
+        QStringLiteral("requested=%1x%2").arg(width).arg(height));
     if (surfaceHost_ == nullptr) {
         return;
     }
     surfaceHost_->syncWorkspaceSurfaceSize(width, height);
     if (QWidget* surface = surfaceHost_->workspaceSurfaceWidget(); surface != nullptr) {
+        const qint64 elapsedMs = elapsed.elapsed();
         appendQuickShellControllerLog(
             QStringLiteral("sync_workspace"),
-            QString("size=%1x%2 handle=0x%3")
+            QString("size=%1x%2 requested=%3x%4 elapsed_ms=%5 handle=0x%6")
                 .arg(surface->width())
                 .arg(surface->height())
-                .arg(static_cast<quintptr>(surface->winId()), 0, 16)
+                .arg(width)
+                .arg(height)
+                .arg(elapsedMs)
+                .arg(static_cast<quintptr>(surface->winId()), 0, 16),
+            elapsedMs >= 50
+                ? miacode::debug_log::Level::Warn
+                : miacode::debug_log::Level::Info
         );
     }
 }

@@ -28,14 +28,16 @@ Implication:
 - `TimelineQuickModel` is now the owner of comma-only `C` anchor lookup for editor cursor sync, header/timeline `R -> C` jumps, and playback follow.
 - Timeline beat-grid semantics are mirrored between `SimaiNativeParser` and `TimelineQuickModel`: every comma remains a beat line, while measure lines are generated on an independent meter timeline. The current meter now comes from shared `SimaiTimingMetadata` (`&whole_time_signature=`), inline `|| x/y` comments restart that meter timeline at the exact comment position, `{beats}` only changes comma spacing, and `(BPM)` changes restart the independent measure-line timeline at the BPM-change position.
 - Guide-layer state should group each-guide connectors by parser-derived `eachGroupId` when available; do not merge backtick-separated groups just because their `marker.second` matches.
-- Timeline note sprite stacking is intentionally preview-mirrored for overlapping markers: `TimelineView::paintEvent` keeps slide/wifi tracks behind note heads, uses the preview-style descending-`second` stack for tap/hold/slide/wifi heads, and then draws touch above that stack with touch-hold above touch. If preview object-layer order changes, review `src/timeline/TimelineView.Paint.cpp`, `src/preview/scene/PreviewLayerOrder.h`, and `src/preview/quick_scene/*` together.
-- Same-second slide/head/track/motion stacking is now shared by `src/preview/scene/PreviewMarkerDrawOrder.*` plus the prepared `drawOrder` in `PreviewPreparedSceneCache`. If you change who sits “on top” for overlapping slides, update the helper and review `PreviewHeadLayerState.cpp`, `PreviewTrackLayerState.cpp`, `PreviewSlideMotionLayerState.cpp`, and the related preview specs together instead of patching one layer locally.
+- Timeline note sprite stacking is intentionally preview-mirrored for overlapping markers: `TimelineView::paintEvent` keeps slide/wifi tracks behind note heads, uses the preview-style descending-`second` stack for tap/hold/slide/wifi heads, and then draws touch above that stack with touch-hold above touch. If preview object-layer order changes, review `src/timeline/TimelineView.Paint.cpp`, `src/core/scene/PreviewLayerOrder.h`, and `src/preview/quick_scene/*` together.
+- Same-second slide/head/track/motion stacking is now shared by `src/core/scene/PreviewMarkerDrawOrder.*` plus the prepared `drawOrder` in `PreviewPreparedSceneCache`. If you change who sits “on top” for overlapping slides, update the helper and review `PreviewHeadLayerState.cpp`, `PreviewTrackLayerState.cpp`, `PreviewSlideMotionLayerState.cpp`, and the related preview specs together instead of patching one layer locally.
 - The slide stacking direction is now runtime state, not a hardwired preview-only branch: `PreviewFrameState::render.slideEarlierSecondAndTextOnTop` is seeded from the common default constant, persisted by main-window render settings, and serialized through `VideoExportTask` / `VideoExportSnapshot` so the export worker sees the same DX-vs-FiNALE choice as the live preview.
 - On-screen preview and export now flow through `PreviewRuntime` / `PreviewQuickExportSession` plus the active layers in `src/preview/quick_scene/*`. Shared assets now come from `PreviewSceneAssetLoader` and `PreviewSceneAssetRepository`. If you change preview setters, frame pacing hooks, layer data contracts, or export-session ownership, review both `src/preview/runtime/*` and `src/preview/quick_scene/*` in the same patch.
+- Realtime QSG/HUD/DComp render paths must consume `PreviewRuntime::frameStateSnapshot()` instead of `PreviewRuntime::frameState()`. `frameState_` is GUI-side mutable builder state; render-side code should take one shared immutable snapshot pointer per paint/snapshot build and keep that pointer alive while reading `QString`, `QVector`, media, asset, and marker fields. HUD and center-display object stats must read the value-only `PreviewFrameState::hudStatsSnapshot` prepared before publication/export ticks, not call `PreviewProgressStatsCache::hudStatsAt()` on the render thread. `PreviewQuickExportSession`, `PreviewQuickD3D11ExportSession`, and cover-render helpers may still bind their own local frame-state objects because those are not shared live `PreviewRuntime` state, but they must refresh the HUD stats snapshot before rendering a frame.
 - Preview-time background media is still selected once from `MainWindow::FrontendHostMode`: widget shell keeps the internal-layer `PreviewMediaController` path for both images and videos, while `--quickshell-beta` keeps `PreviewStageMediaHost` as the background-media owner for both images and videos. Quickshell presentation now splits after that host choice: images stay on the inline `QuickShellPreviewSurface.qml` item, while videos move into `QuickShellPreviewCompositeSurface` so the external `VideoOutput` stack presents from its own `QQuickView`. Do not reintroduce media-type-based switching between the widget-shell and quickshell host owners.
-- The realtime and export Quick scene roots now also share `PreviewPreparedSceneCache`-driven note windows. If you change note-driven layer inputs, visible-window timing, or scene-content revision invalidation, review `src/preview/scene/PreviewPreparedSceneCache.*`, `src/preview/quick_scene/PreviewQuickSceneRoot.*`, and the affected `PreviewQuick*Layer` wrappers together.
-- Runtime and export layer order are both owned by `PreviewQuickSceneRoot` plus `PreviewLayerOrder.h`. If you change layer ordering or add a new visible layer, review `src/preview/scene/PreviewLayerOrder.h`, `src/preview/quick_scene/*`, and `src/tools/video_export/VideoExportQuickRenderBackend.*` together.
-- Firework overlay visuals now depend on the custom `PreviewQuickJudgeFireworkLayer` material path rather than pie-sector geometry plus sprite overlays. If you change firework timing curves, additive blending, source texture use, hole-mask math, or stage clipping, review `src/preview/scene/PreviewJudgeFireworkLayerState.*`, `src/preview/quick_scene/PreviewQuickJudgeFireworkLayer.*`, `src/preview/quick_scene/shaders/PreviewFireworkMaterial.*`, and the historical `PreviewCanvas` reference behavior together. The legacy contract is a playfield-centered judgment-ring clip, not a second local clip around the trigger point.
+- The realtime and export Quick scene roots now also share `PreviewPreparedSceneCache`-driven note windows. If you change note-driven layer inputs, visible-window timing, or scene-content revision invalidation, review `src/core/scene/PreviewPreparedSceneCache.*`, `src/preview/quick_scene/PreviewQuickSceneRoot.*`, and the affected `PreviewQuick*Layer` wrappers together.
+- Runtime and export layer order are both owned by `PreviewQuickSceneRoot` plus `PreviewLayerOrder.h`. If you change layer ordering or add a new visible layer, review `src/core/scene/PreviewLayerOrder.h`, `src/preview/quick_scene/*`, and `src/tools/video_export/VideoExportQuickRenderBackend.*` together.
+- QSG textures belong to the render-side `PreviewQuickRootNode` generation for one `QQuickWindow`. Cache/skin invalidation from GUI code may only request a generation reset; `updatePaintNode()` must delete child nodes/materials before clearing textures. Transient/retained replacements retire for a later render frame instead of deleting in place. QuickShell embedded/fullscreen inline surfaces stay allocated after first creation and route by visibility/binding, so F11 does not destroy a live QSG owner from the GUI side. Review `PreviewQuickSceneRoot.*`, `PreviewTextureRepository.*`, and `QuickShellMain.qml` together when changing these lifetimes.
+- Firework overlay visuals now depend on the custom `PreviewQuickJudgeFireworkLayer` material path rather than pie-sector geometry plus sprite overlays. If you change firework timing curves, additive blending, source texture use, hole-mask math, or stage clipping, review `src/core/scene/PreviewJudgeFireworkLayerState.*`, `src/preview/quick_scene/PreviewQuickJudgeFireworkLayer.*`, `src/preview/quick_scene/shaders/PreviewFireworkMaterial.*`, and the historical `PreviewCanvas` reference behavior together. The legacy contract is a playfield-centered judgment-ring clip, not a second local clip around the trigger point.
 - While preview playback is running, slow-refresh note-marker updates still feed the latest validation and Muri worker inputs, but preview audio/canvas/object stats stay on the frozen play-start snapshot until playback stops; validation and Muri panel/decorations may defer their visible UI apply until playback returns to a paused state.
 - When preview is paused or idle, Muri analysis should still publish fresh overlay state into preview/timeline as soon as the aligned report lands, but the full bottom-tab Muri list may stay lazily materialized until the `Muri` tab is actually visible. Keep summary chips and overlay alignment up to date even when the hidden tab content is stale on purpose.
 - Preview object stats now share one `PreviewProgressStatsCache` across realtime HUD, the main-window side stats card, and export HUD rendering. Hold-family played counts and score-style progress must use judge/end timing in every consumer; if you touch the cache, keep that timing aligned with the HUD's finale/deluxe progression.
@@ -82,7 +84,7 @@ Current contract:
 - `MainWindow::currentTimingMetadata` reads live metadata text from the metadata editor when available, so unsaved `&whole_time_signature=` edits still affect validation and timeline refresh.
 - `parsedLatencyMeterId` now reads the effective chart default meter from timing metadata for latency-detector defaults; latency detection still writes `&first` and `&wholebpm`, but it no longer writes meter metadata back into the chart.
 - Any caller that uses `SimaiNativeParser::parseForTimeline` or `buildValidationReport` should pass timing metadata when document metadata is available, or fast/slow preview, export, and tooling timelines will drift.
-- Quick-timeline token parsing should stay aligned with parser note legality for timeline-visible syntax, including bare zero-duration `h` holds; if parser and quick-model note acceptance diverge, the editor timeline can silently drop notes that preview/export still keep.
+- Quick-timeline token parsing should stay aligned with parser note legality for timeline-visible syntax, including bare zero-duration `h` holds and zero-duration touch-holds such as `Ch`, `A1h`, and `Ch[]`; if parser and quick-model note acceptance diverge, the editor timeline can silently drop notes that preview/export still keep.
 
 If you change timing-metadata semantics, review all of:
 
@@ -172,7 +174,8 @@ Current lookup owners:
 
 Current convention:
 
-- chart-directory sibling `track.mp3`
+- chart-directory sibling track candidates from `miacode::chart_assets::trackCandidateFileNames()`:
+  `track.mp3`, `track.wav`, `track.flac`, `track.ogg`
 - optional environment override for some paths via `MIACODE_TRACK_PATH` on main-window export path
 
 If you support new track filenames or lookup rules, update all relevant owners and `assets-and-tools.md`.
@@ -184,6 +187,7 @@ Asset root:
 - `miacode::assets::findAssetRoot`
 - `miacode::assets::assetPath`
 - Skin import opens `assets/skin`; built-in and user skins are sibling child directories and only complete core skins are listed
+- Timeline note art follows the current preview skin directory via `MainWindow::applyPreviewSkinDirectoryToSurfaces` -> `TimelineQuickStateBridge::setSkinDirectory`; keep `TimelineView`, `TimelineQuickTextureCache`, `TimelineSceneStateBuilder`, and DComp `TimelineSpriteAssetCache` cache invalidation aligned when changing skin lookup
 - Judge-line import opens `assets/background/outlines`; custom PNG selections must flow through realtime preview and export task/snapshot state together with the built-in `PreviewOutlineVariant` fallback
 
 Preview-time consumers:
@@ -240,9 +244,10 @@ Shared render settings include:
 - fixed outline playfield diameter ratio from `src/common/LayoutRingConfig.h`; preview and export should not diverge by re-detecting ring size from texture pixels
 - outline variant / judge-line background overlay selection
 - smooth brightness
-- background scale mode (`fill`, `fit`, and `square_fit`; `square_fit` means center the largest 1:1 square in the render canvas, keep the outside black, and fit-contain the full PV/BG inside that square)
+- background scale mode (`fill`, `fit`, `square_fit`, and `inner_circle_fit_outer_fill`; `square_fit` means center the largest 1:1 square in the render canvas, keep the outside black, and fit-contain the full PV/BG inside that square; `inner_circle_fit_outer_fill` draws a fill-cropped outer PV/BG plus a fit-contained inner copy clipped to the layout-size circle)
 - tap/touch flow speed (persisted as separate values with legacy single-speed fallback)
-- chart-review judge overlay toggles for slide/wifi-family and tap/hold-family effects
+- tap-family chart-review judge text distance (`inner` / `middle` / `outer`; `outer` preserves the legacy simple judge-text offset, default is `inner`)
+- chart-review judge overlay toggles for slide/wifi-family, tap/hold-family, ordinary break, and touch/touch-hold-family effects
 - timestamp/object-stats HUD flags
 - Muri render options
 
@@ -294,7 +299,7 @@ Implication:
   - Check packaging or ffmpeg assumptions if format support changes
 - Change preview timing constants:
   - Check `PreviewGameplayConfig.h`
-  - Check `src/preview/scene/PreviewOpacityCurves.cpp`
+  - Check `src/core/scene/PreviewOpacityCurves.cpp`
   - Check `VideoExportController.cpp` diagnostics and timeline assumptions
 - Change Muri static thresholds:
   - Check `MuriConfig.h`

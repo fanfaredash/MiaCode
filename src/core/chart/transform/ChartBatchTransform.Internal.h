@@ -32,13 +32,18 @@ struct NoteTokenParts {
     bool valid = false;
 };
 
+struct SlideSegmentParts {
+    QString text;          // segment text with all 'b' chars stripped
+    bool segmentBreak = false;  // there was a 'b' anywhere in this segment
+};
+
 struct SlideTokenParts {
-    QString coreWithoutTrackBreak;
+    QChar lane;
     bool headBreak = false;
     bool headEx = false;
     bool headUsesTapMaterial = false;
     QChar headlessModifier;
-    bool trackBreak = false;
+    QVector<SlideSegmentParts> segments;
     bool valid = false;
 };
 
@@ -62,14 +67,9 @@ bool parseNoteTokenParts(const QString& token, NoteTokenParts* parts);
 bool parseSlideTokenParts(const QString& token, SlideTokenParts* parts);
 QString buildTouchToken(const TouchTokenParts& parts, bool hasBreak, bool hasEx, bool hasFirework);
 QString buildNoteToken(const NoteTokenParts& parts, bool hasBreak, bool hasEx);
-QString buildSlideToken(
-    const SlideTokenParts& parts,
-    bool headBreak,
-    bool headEx,
-    bool trackBreak,
-    const QString& coreWithoutTrackBreak);
+QString buildSlideToken(const SlideTokenParts& parts);
 QChar rotateLaneChar(QChar lane, int steps);
-QString rotateSlideCoreOutsideBrackets(const QString& coreWithoutTrackBreak, int steps);
+QString rotateSlideCoreOutsideBrackets(const QString& text, int steps);
 
 // Subdivision TU
 SelectionEdgeSplit splitSelectionEdges(const QString& input);

@@ -17,8 +17,10 @@ namespace {
 
 constexpr qreal kSkinAssetScale = static_cast<qreal>(miacode::preview_skin::kTapHeadScale);
 constexpr qreal kJudgeEffectHoldSustainAlphaTightenGamma = 1.0;
+constexpr qreal kPausedJudgeAreaLabelBrightness = 0.25;
 const QColor kJudgeEffectTouchCircleTint = QColor::fromRgbF(1.0, 0.9943893, 0.4669811, 1.0);
 const QColor kJudgeEffectTouchPartTint = QColor::fromRgbF(1.0, 0.9000474, 0.4666667, 1.0);
+constexpr const char* kJudgeEffectResourceRoot = ":/preview/judge_effects";
 
 QImage loadImageIfExists(const QString& path)
 {
@@ -34,6 +36,60 @@ QImage loadFirstImageIfExists(const QStringList& paths)
         }
     }
     return QImage();
+}
+
+QImage brightnessAdjustedImage(const QImage& source, qreal brightness)
+{
+    if (source.isNull()) {
+        return QImage();
+    }
+    QImage image = source.convertToFormat(QImage::Format_ARGB32);
+    const qreal clampedBrightness = qBound<qreal>(0.0, brightness, 1.0);
+    for (int y = 0; y < image.height(); ++y) {
+        auto* line = reinterpret_cast<QRgb*>(image.scanLine(y));
+        for (int x = 0; x < image.width(); ++x) {
+            const QRgb pixel = line[x];
+            line[x] = qRgba(
+                qBound(0, qRound(qRed(pixel) * clampedBrightness), 255),
+                qBound(0, qRound(qGreen(pixel) * clampedBrightness), 255),
+                qBound(0, qRound(qBlue(pixel) * clampedBrightness), 255),
+                qAlpha(pixel)
+            );
+        }
+    }
+    return image;
+}
+
+QImage buildPausedJudgeAreaComposite(const QString& customOutlinePath)
+{
+    const QImage customOutline = loadImageIfExists(customOutlinePath);
+    const QImage judgeArea = loadImageIfExists(miacode::assets::outlineJudgeAreaPath());
+    const QImage defaultOutline = loadImageIfExists(miacode::assets::outlineLinePath());
+    const QImage labelsOverlay = loadImageIfExists(miacode::assets::outlineRegionLabelsOverlayPath());
+    if (customOutline.isNull() || judgeArea.isNull() || defaultOutline.isNull() || labelsOverlay.isNull()) {
+        return QImage();
+    }
+
+    QImage composite(judgeArea.size(), QImage::Format_ARGB32_Premultiplied);
+    composite.fill(Qt::transparent);
+
+    const QRect targetRect(QPoint(0, 0), judgeArea.size());
+    QPainter painter(&composite);
+    painter.drawImage(targetRect, customOutline);
+
+    QImage judgeAreaWithoutDefaultOutline(judgeArea.size(), QImage::Format_ARGB32_Premultiplied);
+    judgeAreaWithoutDefaultOutline.fill(Qt::transparent);
+    {
+        QPainter areaPainter(&judgeAreaWithoutDefaultOutline);
+        areaPainter.drawImage(targetRect, judgeArea);
+        areaPainter.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+        areaPainter.drawImage(targetRect, defaultOutline);
+    }
+
+    painter.drawImage(targetRect, judgeAreaWithoutDefaultOutline);
+    painter.drawImage(targetRect, brightnessAdjustedImage(labelsOverlay, kPausedJudgeAreaLabelBrightness));
+    painter.end();
+    return composite;
 }
 
 QRectF nonTransparentBounds(const QImage& image);
@@ -60,6 +116,19 @@ QStringList rootThenLegacySlideJudgePaths(const QDir& dir, const QString& fileNa
         dir.filePath(fileName),
         dir.filePath(QStringLiteral("SlideOKSkins/%1").arg(fileName)),
     };
+}
+
+QStringList rootThenLegacyFileNames(const QDir& dir, const QString& primaryFile, const QString& legacyFile)
+{
+    return QStringList{
+        dir.filePath(primaryFile),
+        dir.filePath(legacyFile),
+    };
+}
+
+QString judgeEffectResourcePath(const QString& fileName)
+{
+    return QStringLiteral("%1/%2").arg(QLatin1String(kJudgeEffectResourceRoot), fileName);
 }
 
 void loadDirectionalSpriteSet(
@@ -281,27 +350,34 @@ void populateSkinAssets(const QString& skinDirectory, miacode::preview::scene::P
     skin->touchCornerBreakImage = loadImageIfExists(dir.filePath("touch_break.png"));
     skin->touchBorder2Image = loadImageIfExists(dir.filePath("touch_border_2.png"));
     skin->touchBorder2EachImage = loadImageIfExists(dir.filePath("touch_border_2_each.png"));
-    skin->touchBorder2BreakImage = loadImageIfExists(dir.filePath("touch_break_border_2.png"));
+    skin->touchBorder2BreakImage = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touch_break_border_2.png", "touch_border_2_break.png"));
     skin->touchBorder3Image = loadImageIfExists(dir.filePath("touch_border_3.png"));
     skin->touchBorder3EachImage = loadImageIfExists(dir.filePath("touch_border_3_each.png"));
-    skin->touchBorder3BreakImage = loadImageIfExists(dir.filePath("touch_break_border_3.png"));
+    skin->touchBorder3BreakImage = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touch_break_border_3.png", "touch_border_3_break.png"));
     skin->touchPointImage = loadImageIfExists(dir.filePath("touch_point.png"));
     skin->touchPointEachImage = loadImageIfExists(dir.filePath("touch_point_each.png"));
-    skin->touchPointBreakImage = loadImageIfExists(dir.filePath("touch_break_point.png"));
+    skin->touchPointBreakImage = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touch_break_point.png", "touch_point_break.png"));
     skin->touchHold0Image = loadImageIfExists(dir.filePath("touchhold_0.png"));
     skin->touchHold1Image = loadImageIfExists(dir.filePath("touchhold_1.png"));
     skin->touchHold2Image = loadImageIfExists(dir.filePath("touchhold_2.png"));
     skin->touchHold3Image = loadImageIfExists(dir.filePath("touchhold_3.png"));
     skin->touchHoldBorderImage = loadImageIfExists(dir.filePath("touchhold_border.png"));
-    skin->touchHoldBreak0Image = loadImageIfExists(dir.filePath("touchhold_break_0.png"));
-    skin->touchHoldBreak1Image = loadImageIfExists(dir.filePath("touchhold_break_1.png"));
-    skin->touchHoldBreak2Image = loadImageIfExists(dir.filePath("touchhold_break_2.png"));
-    skin->touchHoldBreak3Image = loadImageIfExists(dir.filePath("touchhold_break_3.png"));
-    skin->touchHoldBreakBorderImage = loadImageIfExists(dir.filePath("touchhold_break_border.png"));
-    skin->touchHoldOffImage = loadImageIfExists(dir.filePath("touchhold_off.png"));
+    skin->touchHoldBreak0Image = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touchhold_break_0.png", "touchhold_0_break.png"));
+    skin->touchHoldBreak1Image = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touchhold_break_1.png", "touchhold_1_break.png"));
+    skin->touchHoldBreak2Image = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touchhold_break_2.png", "touchhold_2_break.png"));
+    skin->touchHoldBreak3Image = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touchhold_break_3.png", "touchhold_3_break.png"));
+    skin->touchHoldBreakBorderImage = loadFirstImageIfExists(
+        rootThenLegacyFileNames(dir, "touchhold_break_border.png", "touchhold_border_break.png"));
 
     // Mine-note sprites (simai `m`). Convention: <base>_mine.png. Both built-in
-    // skins (skinSTD, skinDX) ship these; user skins may omit them, in which case
+    // skins (skinSD, skinDX) ship these; user skins may omit them, in which case
     // the images stay null and the selectors fall back to the normal sprite.
     skin->tapMineImage = loadImageIfExists(dir.filePath("tap_mine.png"));
     skin->holdMineImage = loadImageIfExists(dir.filePath("hold_mine.png"));
@@ -346,6 +422,10 @@ void populateSkinAssets(const QString& skinDirectory, miacode::preview::scene::P
     skin->noteGuideHoldBreakEndImage = loadGuideImageScaled(noteGuideDir, "Hold_Break_End.png");
     if (skin->noteGuideHoldBreakEndImage.isNull()) {
         skin->noteGuideHoldBreakEndImage = skin->noteGuideHoldEndImage;
+    }
+    skin->noteGuideHoldMineEndImage = loadGuideImageScaled(noteGuideDir, "Hold_Mine_End.png");
+    if (skin->noteGuideHoldMineEndImage.isNull()) {
+        skin->noteGuideHoldMineEndImage = skin->noteGuideHoldEndImage;
     }
     skin->noteGuideSlideImage = loadGuideImageScaled(noteGuideDir, "Slide.png");
     if (skin->noteGuideSlideImage.isNull()) {
@@ -450,38 +530,45 @@ void populateJudgeOverlayAssets(const QString& skinDirectory, miacode::preview::
     );
 }
 
-void populateJudgeEffectAssets(const QString& skinDirectory, miacode::preview::scene::PreviewJudgeEffectAssets* effect)
+void populateJudgeEffectAssets(miacode::preview::scene::PreviewJudgeEffectAssets* effect)
 {
     if (effect == nullptr) {
         return;
     }
-    const QDir dir(skinDirectory);
-    effect->tapImage = skinDirectory.isEmpty() ? QImage() : loadImageIfExists(dir.filePath("judge_effect_tap.png"));
+    effect->tapImage = loadImageIfExists(judgeEffectResourcePath("judge_effect_tap.png"));
     if (effect->tapImage.isNull()) {
         effect->tapImage = buildJudgeEffectTapFallbackImage();
     }
     effect->tapSourceRect = nonTransparentBounds(effect->tapImage);
-    effect->tapBreakImage = skinDirectory.isEmpty() ? QImage() : loadImageIfExists(dir.filePath("judge_effect_tap_break.png"));
+    effect->tapBreakImage = loadImageIfExists(judgeEffectResourcePath("judge_effect_tap_break.png"));
     if (effect->tapBreakImage.isNull()) {
         effect->tapBreakImage = buildJudgeEffectTapBreakFallbackImage();
     }
     effect->tapBreakSourceRect = nonTransparentBounds(effect->tapBreakImage);
-
-    QImage sustain = skinDirectory.isEmpty() ? QImage() : loadImageIfExists(dir.filePath("judge_effect_hold_sustain_circle.png"));
-    if (sustain.isNull() && !skinDirectory.isEmpty()) {
-        sustain = loadImageIfExists(dir.filePath("circle.png"));
+    effect->tapBreakDxImage = loadImageIfExists(judgeEffectResourcePath("judge_effect_tap_break_DX.png"));
+    if (effect->tapBreakDxImage.isNull()) {
+        effect->tapBreakDxImage = effect->tapBreakImage;
     }
+    effect->tapBreakDxSourceRect = nonTransparentBounds(effect->tapBreakDxImage);
+
+    QImage sustain = loadImageIfExists(judgeEffectResourcePath("judge_effect_hold_sustain_circle.png"));
     effect->holdSustainCircleImage = alphaTightenedSpriteImage(sustain, kJudgeEffectHoldSustainAlphaTightenGamma);
-    const QImage touchCircle = skinDirectory.isEmpty() ? QImage() : loadImageIfExists(dir.filePath("judge_effect_touch_circle.png"));
-    const QImage touchPart01 = skinDirectory.isEmpty() ? QImage() : loadImageIfExists(dir.filePath("judge_effect_touch_part_01.png"));
-    const QImage touchPart02 = skinDirectory.isEmpty() ? QImage() : loadImageIfExists(dir.filePath("judge_effect_touch_part_02.png"));
+    QImage sustainDx = loadImageIfExists(judgeEffectResourcePath("judge_effect_hold_sustain_circle_DX.png"));
+    effect->holdSustainCircleDxImage = alphaTightenedSpriteImage(sustainDx, kJudgeEffectHoldSustainAlphaTightenGamma);
+    if (effect->holdSustainCircleDxImage.isNull()) {
+        effect->holdSustainCircleDxImage = effect->holdSustainCircleImage;
+    }
+    const QImage touchCircle = loadImageIfExists(judgeEffectResourcePath("judge_effect_touch_circle.png"));
+    const QImage touchPart01 = loadImageIfExists(judgeEffectResourcePath("judge_effect_touch_part_01.png"));
+    const QImage touchPart02 = loadImageIfExists(judgeEffectResourcePath("judge_effect_touch_part_02.png"));
+    const QImage touchPart02Dx = loadImageIfExists(judgeEffectResourcePath("judge_effect_touch_part_02_DX.png"));
     effect->touchCircleImage = touchCircle.isNull() ? QImage() : tintedSpriteImage(touchCircle, kJudgeEffectTouchCircleTint);
     effect->touchPart01Image = touchPart01.isNull() ? QImage() : tintedSpriteImage(touchPart01, kJudgeEffectTouchPartTint);
     effect->touchPart02Image = touchPart02.isNull() ? QImage() : tintedSpriteImage(touchPart02, kJudgeEffectTouchPartTint);
-    effect->fireworkColorBallImage = skinDirectory.isEmpty() ? QImage() : loadImageIfExists(dir.filePath("judge_effect_firework_color_ball.png"));
-    if (effect->fireworkColorBallImage.isNull() && !skinDirectory.isEmpty()) {
-        effect->fireworkColorBallImage = loadImageIfExists(dir.filePath("ColorBall.png"));
-    }
+    effect->touchPart02DxImage = touchPart02Dx.isNull()
+        ? effect->touchPart02Image
+        : touchPart02Dx.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    effect->fireworkColorBallImage = loadImageIfExists(judgeEffectResourcePath("judge_effect_firework_color_ball.png"));
     if (effect->fireworkColorBallImage.isNull()) {
         effect->fireworkColorBallImage = buildJudgeEffectFireworkColorBallFallbackImage();
     }
@@ -494,7 +581,8 @@ PreviewSceneAssetLoadResult PreviewSceneAssetLoader::load(
     const QString& skinDirectory,
     PreviewOutlineVariant outlineVariant,
     quint64 generation,
-    const QString& outlineImagePath)
+    const QString& outlineImagePath,
+    PreviewOutlineImageMode outlineImageMode)
 {
     MC_OP("PreviewSceneAssetLoader::load");
     _mc_op_.note(QStringLiteral("skin=%1 generation=%2")
@@ -503,20 +591,29 @@ PreviewSceneAssetLoadResult PreviewSceneAssetLoader::load(
     PreviewSceneAssetLoadResult result;
     result.generation = generation;
     result.skinDirectory = skinDirectory;
-    result.assetState = loadAssetState(outlineVariant, outlineImagePath);
+    result.assetState = loadAssetState(outlineVariant, outlineImagePath, outlineImageMode);
     populateSkinAssets(skinDirectory, &result.skinAssets);
     populateJudgeOverlayAssets(skinDirectory, &result.judgeOverlayAssets);
-    populateJudgeEffectAssets(skinDirectory, &result.judgeEffectAssets);
+    populateJudgeEffectAssets(&result.judgeEffectAssets);
     return result;
 }
 
 miacode::preview::scene::PreviewAssetState PreviewSceneAssetLoader::loadAssetState(
     PreviewOutlineVariant outlineVariant,
-    const QString& outlineImagePath)
+    const QString& outlineImagePath,
+    PreviewOutlineImageMode outlineImageMode)
 {
     miacode::preview::scene::PreviewAssetState assets;
-    const QString outlinePath = miacode::assets::outlinePathForVariantOrCustom(outlineVariant, outlineImagePath);
-    assets.outlineImage = outlinePath.isEmpty() ? QImage() : QImage(outlinePath);
+    if (outlineImageMode == PreviewOutlineImageMode::PausedJudgeAreaComposite) {
+        assets.outlineImage = buildPausedJudgeAreaComposite(outlineImagePath);
+        if (assets.outlineImage.isNull()) {
+            const QString fallbackPath = miacode::assets::outlinePathForVariant(PreviewOutlineVariant::JudgeAreaLabeled);
+            assets.outlineImage = fallbackPath.isEmpty() ? QImage() : QImage(fallbackPath);
+        }
+    } else {
+        const QString outlinePath = miacode::assets::outlinePathForVariantOrCustom(outlineVariant, outlineImagePath);
+        assets.outlineImage = outlinePath.isEmpty() ? QImage() : QImage(outlinePath);
+    }
     assets.layoutRingDiameterRatio = miacode::layout_ring::kOutlinePlayfieldDiameterRatio;
     return assets;
 }

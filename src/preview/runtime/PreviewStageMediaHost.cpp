@@ -100,14 +100,25 @@ void PreviewStageMediaHost::setWarmupResolvedMediaPath(const QString& chartPath,
 
 void PreviewStageMediaHost::attachVideoOutputObject(QObject* videoOutputObject)
 {
-    if (videoOutputObject_ == videoOutputObject) {
+    attachVideoOutputObjects(videoOutputObject, nullptr);
+}
+
+void PreviewStageMediaHost::attachVideoOutputObjects(QObject* videoOutputObject, QObject* innerVideoOutputObject)
+{
+    if (videoOutputObject_ == videoOutputObject && innerVideoOutputObject_ == innerVideoOutputObject) {
         return;
     }
     videoOutputObject_ = videoOutputObject;
+    innerVideoOutputObject_ = innerVideoOutputObject;
     bindVideoOutput();
 }
 
 void PreviewStageMediaHost::detachVideoOutputObject(QObject* videoOutputObject)
+{
+    detachVideoOutputObjects(videoOutputObject, nullptr);
+}
+
+void PreviewStageMediaHost::detachVideoOutputObjects(QObject* videoOutputObject, QObject* innerVideoOutputObject)
 {
     if (videoOutputObject_ == nullptr || videoOutputObject == nullptr) {
         return;
@@ -115,7 +126,11 @@ void PreviewStageMediaHost::detachVideoOutputObject(QObject* videoOutputObject)
     if (videoOutputObject_ != videoOutputObject) {
         return;
     }
+    if (innerVideoOutputObject != nullptr && innerVideoOutputObject_ != innerVideoOutputObject) {
+        return;
+    }
     videoOutputObject_.clear();
+    innerVideoOutputObject_.clear();
     bindVideoOutput();
 }
 

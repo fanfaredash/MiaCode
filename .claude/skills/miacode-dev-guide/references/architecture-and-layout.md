@@ -100,6 +100,26 @@ code. Mainline features go in the QSG path.
 - Realtime preview BGM timing is backend-owned: Windows uses BASS/BASS_FX for all rates;
   non-Windows uses the stretched SoundTouch path with an engine-time anchor clock.
 - Asset lookup is file-based and convention-driven, not database-driven.
+- **UI localization has ONE inline entry point: `UiText::localized(en, zh, ja = {})`**
+  (`src/app/ui/UiText.h`). Simplified Chinese is the reference language. Do NOT reintroduce the
+  scattered patterns the 2026-07-07 audit removed (`isChineseUi() ? zh : en` ternaries, per-file
+  `l10n`/`trText`/`localizedText` helpers) — those only ever did zh/en and silently fell back to
+  English for every other language. Rules:
+  - Key-value strings (menus, common dialogs): `UiText::text(key)` with matching entries in BOTH
+    `zhMap` and `jaMap` (`UiText.cpp`). The key sets must stay identical.
+  - Inline strings in feature code: `UiText::localized(en, zh)`. Japanese is filled from the
+    central zh-keyed dictionary `src/app/ui/UiTextJaDictionary.cpp` (translate from the Chinese).
+    Pass an explicit third `ja` arg only for a one-off that shouldn't live in the dictionary.
+  - Parser validation messages: `SimaiNativeValidationLocale` (English/Chinese/Japanese); derive
+    it from `UiText::resolvedLanguage()` via `miacode::mainwindow::shared::uiValidationLocale()`.
+    The zh/ja maps live in `SimaiNativeParser.Driver.cpp`.
+  - QML: the palette bridge exports `uiLanguage` ("en"/"zh"/"ja"); QML uses a local
+    `localized(en, zh, ja)` helper (see `BottomTabsQuickHost.qml`). No `qsTr` (no `.ts` shipped).
+  - CJK UI font candidates per language live in `MainWindowShared.cpp` (`uiFont`/`uiAccentFont`)
+    and `main.cpp`; add families when adding a language.
+  - `ui_text_locale_spec` (CTest) enforces zhMap/jaMap key parity AND that every inline
+    `localized(en, zh)` zh string has a dictionary entry. Full rationale:
+    `docs/audit/I18N_AND_UI_COMPONENT_AUDIT_ZH.md`.
 
 ## 5. God-file / structure watch-list
 

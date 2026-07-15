@@ -137,14 +137,31 @@ qreal judgeSimpleAngleDegrees(const QString& pad)
     return 0.0;
 }
 
-bool buildJudgeOverlaySimplePlacement(const QString& pad, PreviewJudgeOverlayPlacement* placement)
+qreal judgeSimpleOffsetLogicalForDistance(PreviewTapJudgeTextDistance distance)
+{
+    switch (distance) {
+    case PreviewTapJudgeTextDistance::Inner:
+        return kMaimuriDxJudgeSimpleInnerOffsetLogical;
+    case PreviewTapJudgeTextDistance::Middle:
+        return kMaimuriDxJudgeSimpleMiddleOffsetLogical;
+    case PreviewTapJudgeTextDistance::Outer:
+    default:
+        return kMaimuriDxJudgeSimpleOffsetLogical;
+    }
+}
+
+bool buildJudgeOverlaySimplePlacement(
+    const QString& pad,
+    PreviewTapJudgeTextDistance distance,
+    PreviewJudgeOverlayPlacement* placement
+)
 {
     if (placement == nullptr || (!miacode::muri::padTokenIsValid(pad) && pad != QLatin1String("C"))) {
         return false;
     }
     const QPointF base = miacode::muri::padCenter(pad);
     const QPointF unit = padUnitVectorForToken(pad);
-    placement->logicalCenter = base - unit * kMaimuriDxJudgeSimpleOffsetLogical;
+    placement->logicalCenter = base - unit * judgeSimpleOffsetLogicalForDistance(distance);
     placement->logicalWidth = kMaimuriDxJudgeSimpleWidthLogical;
     placement->angleDegrees = judgeSimpleAngleDegrees(pad);
     return true;

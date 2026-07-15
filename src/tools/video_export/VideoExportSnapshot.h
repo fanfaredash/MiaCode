@@ -34,6 +34,8 @@ struct VideoExportSnapshot {
     double tapFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     double touchFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     bool slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
+    PreviewTapJudgeTextDistance tapJudgeTextDistance = PreviewTapJudgeTextDistance::Inner;
+    PreviewJudgeEffectStyle judgeEffectStyle = PreviewJudgeEffectStyle::Standard;
     MuriRenderOptions muriRenderOptions;
     double staticTapOnSlideThresholdSeconds =
         static_cast<double>(miacode::muri::kStaticTapOnSlideThresholdDefaultMs) / 1000.0;
@@ -56,6 +58,7 @@ struct VideoExportSnapshot {
         miacode::preview_gameplay::kDefaultCenterDisplayMode;
     int skinLoadWaitMs = 2000;
     IntroBannerSpec intro;
+    QString introSoundFileName;
 
     QJsonObject toJson() const;
     static bool fromJson(const QJsonObject& object, VideoExportSnapshot* snapshot, QString* errorMessage = nullptr);

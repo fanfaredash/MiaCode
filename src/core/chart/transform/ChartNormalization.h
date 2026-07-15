@@ -10,6 +10,7 @@ namespace miacode::chart_transform {
 struct ChartNormalizationOptions {
     bool startAtNewMeasure = true;
     bool reduceTo384Grid = true;
+    bool splitEveryFourMeasures = true;
 };
 
 struct ChartNormalizationResult {
@@ -24,6 +25,8 @@ inline constexpr auto kChartNormalizeStartAtNewMeasurePreferenceKey =
     "chart_normalize_start_at_new_measure";
 inline constexpr auto kChartNormalizeReduceTo384GridPreferenceKey =
     "chart_normalize_reduce_to_384_grid";
+inline constexpr auto kChartNormalizeSplitEveryFourMeasuresPreferenceKey =
+    "chart_normalize_split_every_four_measures";
 
 ChartNormalizationOptions chartNormalizationOptionsFromPreferences(
     const QJsonObject& preview,

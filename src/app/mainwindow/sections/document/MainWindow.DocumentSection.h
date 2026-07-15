@@ -52,6 +52,7 @@ public:
     bool saveToPath(const QString& path);
     bool applyBatchTransform(const QString& opName, const BatchTransform& transform);
     bool applySelectionBatchTransform(const QString& opName, const BatchTransform& transform);
+    bool applySelectionBatchTransform(const QString& opName, const SelectionContextBatchTransform& transform);
     std::pair<int, int> currentCursorLineCol() const;
     std::pair<int, int> currentSelectionOrCursorLineCol() const;
     bool currentSelectionRange(int* startPos, int* endPos) const;
@@ -67,6 +68,7 @@ public:
     bool undoDeletedDifficultyField();
     void clearChartSelectionTransformUndoEntries();
     void syncChartSelectionTransformUndoState();
+    void recordChartSelectionUndoRestoreAfterNextEdit(int originalAnchor, int originalPosition);
     bool undoChartEditorWithSelectionRestore();
     bool redoChartEditorWithSelectionRestore();
     QString resolveInitialOpenDirectory() const;
@@ -95,8 +97,18 @@ public:
     void updateEditorEmptyState();
     void updateMetadataPageMode();
     bool deleteDifficultyField(int difficultyId);
-    void updateDifficultyDeleteButton(bool visible);
     void rebuildFieldSidebar();
+    // Sidebar bookmark-group fold state. Only explicit toggles are recorded;
+    // an untouched difficulty defaults to expanded when active, collapsed
+    // otherwise (see the bookmark redesign spec).
+    bool isBookmarkGroupExpanded(int difficultyId) const;
+    void setBookmarkGroupExpanded(int difficultyId, bool expanded);
+    // Expands the difficulty's bookmark group, rebuilds the sidebar, selects
+    // and centers the bookmark row; beginRename additionally starts the
+    // inline name editor. Safe no-op when the bookmark does not exist.
+    void revealBookmarkInSidebar(int difficultyId, int line, bool beginRename);
+    // The bookmark list item for (difficultyId, line), or nullptr.
+    QListWidgetItem* findBookmarkSidebarItem(int difficultyId, int line) const;
     void populateMetadataPage();
     void populateDifficultyPage(int difficultyId);
     void syncHeaderDesignerEditFromModel();
@@ -107,6 +119,9 @@ public:
     bool switchToExportField();
     // Floats the busy spinner over the "Export" sidebar row / hides it. Shown
     // while the (slow) export-page build runs after switchToExportField().
+    // Positioning is separate so sidebar rebuilds can re-anchor an active
+    // spinner after rows move.
+    bool positionOutlineExportBusySpinner();
     void showOutlineExportBusySpinner();
     void hideOutlineExportBusySpinner();
     void activateInitialField();

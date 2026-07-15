@@ -47,23 +47,26 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: static tap-on-slide threshold min/max/default plus shared Muri timing cutoffs such as tap-on-slide warning, the slide-head no-startup-tap warning cutoff (`50 ms`), the slide-head late-warning cutoff (`150 ms`), and the slide runtime available window (current default `24 h`)
   - Scope: static and runtime Muri collision interpretation across preview, timeline refresh, dump tooling, and export
 - `src/common/TimelineThemeConfig.h`
-  - Owns: timeline-scene theme colors shared by Quick and DComp render paths, including the red editor-cursor header marker color (`QColor(239, 68, 68, 230)`)
+  - Owns: timeline-scene theme colors shared by Quick, DComp, and QWidget render paths; the waveform brightness clamp/default (`0.2..2.0`, default `0.5`); the grid-line brightness clamp/default (`0.2..2.0`, default `1.0`); and the red editor-cursor header marker color (`QColor(239, 68, 68, 230)`)
+  - Current tuning note: waveform brightness scales fill alpha so the hue stays stable in both themes, while grid-line brightness fades/darkens/lightens the meter-driven bar-line color (`gridMajor`), within-measure beat/subdivision color (`gridSubdivision`), and comma/note-position tick color (`gridMinor`)
   - Scope: timeline renderer visual parity
 
 ## 2. Implementation-Local Hotspots
 
-- `src/preview/scene/*.cpp`
+- `src/core/scene/*.cpp`
   - Owns: large volume of render tuning constants
   - Examples:
     - lane angle base and step
+    - shared Touch pad logical distances and hover/click hit radii in `PreviewSceneConstants.h`
     - sprite scaling ratios
     - touch/touchhold close curve parameters
     - judge-effect curve timing and geometry
     - firework visual tuning
     - descriptor sizing and animation curve parameters
-  - Current tuning note: `src/preview/scene/PreviewJudgeFireworkLayerState.cpp` keeps the firework color-ball hole ratios local, but they are intentionally pinned to the legacy pre-Qt Quick material bounds (`_InnerLB/_InnerUB/_OuterLB/_OuterUB`) so the center cutout and the 15 colored sector spokes both stay visually aligned with the old `PreviewCanvas` hole-mask fade. The color-ball scale/alpha curves are intentionally aligned to the true `v0.3.7-dev5` `PreviewCanvas.cpp` values rather than the later `0d6dd1d` zero-start quick-restore ramps, because that later ramp made the center ball read too small before the spokes came in.
+  - Current tuning note: `src/core/scene/PreviewJudgeFireworkLayerState.cpp` keeps the firework color-ball hole ratios local, but they are intentionally pinned to the legacy pre-Qt Quick material bounds (`_InnerLB/_InnerUB/_OuterLB/_OuterUB`) so the center cutout and the 15 colored sector spokes both stay visually aligned with the old `PreviewCanvas` hole-mask fade. The color-ball scale/alpha curves are intentionally aligned to the true `v0.3.7-dev5` `PreviewCanvas.cpp` values rather than the later `0d6dd1d` zero-start quick-restore ramps, because that later ramp made the center ball read too small before the spokes came in.
+  - Current tuning note: chart-review simple judge text placement uses `kMaimuriDxJudgeSimpleOffsetLogical` as the legacy `outer` distance, with `inner = 0.45x` and `middle = 0.72x` in `PreviewJudgeOverlayShared.h`; this is a shared preview/export visual setting (`tap_judge_text_distance`) for tap/hold/touch simple judge text in Native chart-review overlays, while MaimuriDx-style Muri judge text keeps the legacy outer offset.
   - Rule: keep local only when the values are render-internal and not consumed elsewhere
-- `src/preview/scene/PreviewAnimatedSpriteHelpers.cpp`
+- `src/core/scene/PreviewAnimatedSpriteHelpers.cpp`
   - Owns: continuous animated-sprite wave timing (`kMaterialAnimationTimeScale`, `kMaterialAnimationPhaseScale`) plus helper-side overlay cache quantization/cap for EX-style CPU composites
   - Current tuning note: overlay cache quantization stays local at `4096.0`, and the helper-side overlay cache is currently capped at `128` entries because it is a Quick-preview reuse detail rather than shared product behavior
   - Rule: keep local while the preview/export pipelines only need shared animation timing and overlay reuse policy, but document changes if another subsystem must reason about the same wave scaling or cache budget
@@ -71,10 +74,18 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: shader-side `BreakAnimate` / `HoldShine` brightness and contrast coefficients, custom sprite-material uniform layout, and the layer-local contiguous batch policy keyed by texture only while per-sprite effect selection stays in vertex data
   - Current tuning note: this file is now the owner for runtime sprite effect math and for the “merge only adjacent compatible sprites, never reorder” rule; changes here affect both runtime preview and export preview because both share the Quick scene graph path
   - Rule: keep local while the values are renderer-internal, but document any changes that alter visual parity or layer-order guarantees
+- `src/preview/runtime/PreviewSceneAssetLoader.cpp`
+  - Owns: preview asset-loader image preprocessing for custom paused judge-area composites
+  - Current tuning note: `kPausedJudgeAreaLabelBrightness` is `0.25`, matching `scripts/build_outline_area_labeled.py`, so labels in the runtime `custom outline + outline_area.png + region_labels_overlay_transparent_v3.png` composite match the maintained built-in labeled outline style
+  - Rule: keep local while only the asset loader and the maintainer script use this label-overlay treatment; promote if another runtime/export path needs to tune the same value directly
 - `src/preview/runtime/PreviewStageMediaHost.cpp`
   - Owns: QtMultimedia stage-video watchdog and recovery thresholds for realtime background video
   - Current tuning note: playback watchdog fires after `600 ms` without a fresh frame / with a stale frame / when not playing, then tries at most `2` soft recoveries before giving up for that playback stretch: first a pause + seek-flush + play, then a video-output rebind + seek-flush + play. Full backend rebuild remains reserved for explicit media errors, invalid media, and existing seek/prepare timeout recovery paths.
   - Rule: keep local while these thresholds only protect runtime video preview; promote if export preview, worker preview, or user-facing recovery preferences need the same policy
+- `src/extensions/ExtensionManager.cpp`
+  - Owns: extension DevTools `recentCalls.paramsPreview` truncation budgets.
+  - Current tuning note: params preview is capped before JSON serialization at depth `4`, object members `24`, array items `12`, string chars `512`, then final compact JSON chars `2048`, so high-volume or large-text extension API calls do not serialize full request payloads on the main process just for diagnostics.
+  - Rule: keep local while this only shapes extension DevTools diagnostics; promote only if another logging surface needs the same privacy/performance budget.
 - `src/tools/latency/LatencyDetectorDialog.cpp`
   - Owns: detection windows, hop sizes, BPM scan range, offset penalties, snap thresholds
   - Rule: keep local when the values are intrinsic to the latency tool, but document any user-visible range changes
@@ -82,16 +93,16 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: Windows preview BGM BASS/BASS_FX rate-mode defaults and BASS_FX tempo-window presets for pitch-preserving A/B tests
   - Current tuning note: Windows BGM defaults to pitch-preserving tempo mode with the `compact40` (`40/15/8`) window preset. `MIACODE_BASS_BGM_RATE_MODE=rate_transpose` switches to source-time-priority `BASS_ATTRIB_FREQ` mode. `MIACODE_BASS_BGM_TEMPO_PRESET` is active only in tempo mode; presets are unset/`compact40` (`40/15/8`), `stock` (plugin default), `auto` (`0/0/8`), `tight20` (`20/8/4`), `balanced30` (`30/10/6`), `smooth60` (`60/20/8`), and `wide82` (`82/28/8`). `MIACODE_BASS_BGM_TEMPO_PARAMS` overrides those presets with custom `sequence_ms,seek_ms,overlap_ms`.
   - Rule: keep local while this is a Windows preview-only diagnostic path and export does not share live BASS_FX tempo playback
-- `src/simai/transform/ChartNormalization.cpp`
-  - Owns: whole-chart formatting snap constants for note-grid minimization and duration-signature rewriting
-  - Current tuning note: `384`-snap formatting keeps rendered `{beats}` selection independent from hold/slide duration syntax, still rewrites no-`#` duration signatures against a fixed `384` grid, and keeps rendered duration denominators at or above a `16th-note` floor
+- `src/core/chart/transform/ChartNormalization.cpp`, `src/core/chart/transform/ChartNormalizationSegmentPolicy.cpp`
+  - Owns: whole-chart formatting snap constants for note-grid minimization, segment-length preservation, selection carry restoration, and duration-signature rewriting
+  - Current tuning note: `384`-snap formatting keeps rendered `{beats}` selection independent from hold/slide duration syntax, still rewrites no-`#` duration signatures against a fixed `384` grid, keeps rendered duration denominators at or above a `16th-note` floor, requires reduce=true segment output to exactly express each snapped 384-grid segment length, and owns the optional blank-line sectioning after every 4 emitted measure lines
   - Rule: keep local while only the chart formatter consumes these thresholds, but document any user-visible formatting changes immediately
 - `src/simai/parser/SimaiNativeParser.cpp`
   - Owns: parser-default geometry and timing assumptions used to derive marker behavior
   - Rule: parser-level constants can have repo-wide consequences; treat changes as cross-chain changes
 - `src/tools/video_export/VideoExportController.cpp`
   - Owns: encoder probe timeouts, bitrate heuristics, frame diagnostics thresholds, ffmpeg fallback behavior
-  - Current tuning note: export preset mapping stays local here. `Fast` keeps the historical baseline, while `High Quality` and `High Compression` retune x264 CRF/preset/B-frames plus per-encoder bitrate or quality flags for NVENC/QSV/AMF/MF/libopenh264/mpeg4 without changing the codec-facing UI surface.
+  - Current tuning note: export preset mapping stays local here. `Fast` keeps the historical baseline, while `High Quality` and `High Compression` retune x264 CRF/preset/B-frames plus per-encoder bitrate or quality flags for NVENC/QSV/AMF/MF/libopenh264/mpeg4 without changing the codec-facing UI surface. The Quality preset does not affect the D3D11 export backend path: D3D11 uses synchronous staging-map readback regardless of preset, while the OpenGL rollback backend remains the only path where the old PBO-oriented Fast behavior can matter.
   - Rule: export heuristics may stay local, but document behavior changes that affect output compatibility or packaging assumptions
 - `src/tools/video_export/RawVideoPipeTransport.cpp`
   - Owns: raw-video pipe queue depth, pipe buffer sizing, connect timeout, writer chunk size, and bounded producer blocking behavior
@@ -118,6 +129,10 @@ Use this file to track where important constants live, what they mean, and wheth
     - bottom-tab invisible top-edge resize hot zone (`8 px`), content-scale clamp (`50%..100%`), derived header/list-font scale (`75%..100%`), and Timeline host height calculation from scaled header plus scaled lanes
     - fixed `30 Hz` Timeline UI cadence (`33 ms` timer interval / `1/30 s` seek-throttle threshold)
   - Rule: keep local while they only shape the main-window preview UX and do not need preview/export parity
+- `src/editor/BracketScopeHighlighter.cpp`
+  - Owns: editor bracket-scope and comment colors for the chart/metadata text highlighter
+  - Current tuning note: dark theme keeps the existing warm/square/comment colors; light theme uses `#A23B2A` for `()` and `{}`, `#1D4ED8` for `[]` duration scopes, and `#15803D` for `||` comments so duration brackets stand apart from normal `#203040` text
+  - Rule: keep local while this is only editor syntax color polish; promote if another syntax renderer needs the same palette
 - `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.cpp`
   - Owns: toolbox media-prepend ffmpeg defaults and local file conventions
   - Current tuning note: prepended background-video black frames are encoded as `1920x1080` at `30 FPS`, the original video is letterboxed into that canvas, output uses x264 `CRF 18` / `veryfast`, and the generated background video is video-only. Prepended `track.mp3` silence uses stereo `44100 Hz` anullsrc and libmp3lame `-q:a 2`. Backups are fixed at `track_bak.mp3` for audio and `<video-stem>_bak.mp4` for video. Blank duration defaults detect beat count from `&clock_count=` / `&clockcount=` before falling back to `4`, and BPM from `&wholebpm=` before the first half-width chart BPM token before falling back to `120`.
@@ -133,6 +148,18 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: analysis idle scheduling debounce for low-priority validation/Muri work
   - Current tuning note: `kTimelineAnalysisIdleDelayMs` is `180 ms`, used to coalesce rapid edits before dispatching the combined validation+Muri analysis worker once preview snapshot publication has already completed. Waveform alignment diagnostics additionally log per-waveform onset probes at amplitudes `0.02`, `0.05`, and `0.10` from `src/common/WaveformCache.cpp`; those thresholds are diagnostic-only and exist to compare quiet intro, medium onset, and loud transient timing in user logs.
   - Rule: keep local while it only expresses main-window preview-vs-analysis priority; promote it if the same debounce becomes shared across dialogs, subprocess workers, or user-facing settings
+- `src/app/quick_shell/qml/TimelineTabSurface.qml`
+  - Owns: QuickShell Timeline header-control layout constants
+  - Current tuning note: the left header keeps only the zoom control, and the restored right header settings button uses a transparent `28 * headerScale` by `22 * headerScale` QML hit target normally `8 * headerScale` from the right edge, clamped past the zoom control on narrow widths. Header labels and line-start markers avoid that right-side button while zoom remains pinned left. The transparent QML hit zones forward hover/press state to the native Quick/DComp header renderer so colour feedback remains visible above the composition overlay.
+  - Rule: keep local while this only shapes QuickShell Timeline header ergonomics; document changes that affect marker/control overlap
+- `src/app/quick_shell/QuickShellController.cpp`
+  - Owns: QuickShell Timeline native menu presentation constants for the brightness sliders
+  - Current tuning note: the menu sliders expose the shared timeline brightness clamps as `20%..200%` with `5%` single/page/tick steps, using `QMenu + QWidgetAction` so dragging a slider keeps the menu open and writes immediately to `TimelineQuickStateBridge`
+  - Rule: keep local while these values only format the QuickShell menu surface; promote if another UI needs the same percent-step presentation
+- `src/timeline/TimelineSceneStateBuilder.cpp`
+  - Owns: native Quick/DComp Timeline header zoom-stepper triangle geometry and the right-side brightness/settings glyph emitted for invisible QML header hit zones
+  - Current tuning note: the zoom-stepper triangles are centered as a compact pair within the `22 * headerControlScale` control height, using a local inner gap of `max(2 px, 4 * headerControlScale)` while preserving the separately tuned triangle width and height. Zoom body/stepper and settings controls draw hover backgrounds, accent borders, pressed fills, and pressed glyph offsets natively. The right-side settings button mirrors the QML hit target (`28 * headerControlScale` wide, normally `8 * headerControlScale` from the right edge and clamped past zoom) and uses three local slider strokes plus knob rects so it remains visible under the native Quick/DComp overlay path.
+  - Rule: keep local while this only shapes native Timeline header-control visuals; promote only if another control needs the same paired-triangle or slider-glyph geometry
 - `src/common/DebugOptions.h`
   - Owns: preview diagnostic env parsing defaults such as `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG_SAMPLE_MS`
   - Current tuning note: waveform-alignment focused BASS status sampling defaults to `250 ms`, intentionally lower than the normal ~`1 s` `bass_status` cadence so short 1x offset reports can be captured without making high-frequency logging the default.
@@ -143,7 +170,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Rule: keep shared here because the main preview and export-dialog preview must feel identical
 - `src/timeline/TimelineView.cpp`
   - Owns: timeline zoom preset bounds, coarse button stops, and the initial `pixelsPerSecond_` scale derived from the fallback default zoom when no stored app preference exists
-  - Current tuning note: the fixed zoom presets are now `25/50/75/100/150/200`; keyboard `Left` / `Right` keep viewport-scroll semantics and the existing single-step behavior, while held-scroll speed caps at `2 * zoomScale()` (for example `25% -> 0.5x`, `50% -> 1.0x`, `100% -> 2.0x`); Timeline header line numbers now anchor to per-line `startSecond` values and keep a local minimum spacing of `22 px`, with same-anchor collisions favoring the later source line; header labels size by digit count instead of visible-neighbor width, using a local `0.9x` scale for 1-digit labels, a `0.8x` base for 2+ digits, and additional per-digit-count width fitting against the same `22 px` spacing budget with a `2 px` side gap while keeping bottoms aligned; each displayed line-start anchor also draws a local inverted triangle marker whose tip offset and side angle reuse the playback-entry triangle, while the marker height keeps the earlier header-local `0.85 * digitWidth * 0.7` cap; Timeline minor beat lines currently use `1.4 px`; dense comma grids now render at most `32` subdivisions by collapsing to the largest divisor of the source `{beats}` value that does not exceed that cap; the classic QWidget path mirrors the Quick/DComp red editor-cursor header marker color locally; waveform rendering applies a one-preview-frame phase compensation based on the preview canvas frame interval because logs from 60 Hz and 120 Hz devices show the authoritative audio clock leading the timeline-rendered playhead by about one frame while the root cause remains unknown
+  - Current tuning note: the fixed zoom presets are now `25/50/75/100/150/200`; keyboard `Left` / `Right` keep viewport-scroll semantics and the existing single-step behavior, while held-scroll speed caps at `2 * zoomScale()` (for example `25% -> 0.5x`, `50% -> 1.0x`, `100% -> 2.0x`); Timeline header line numbers now anchor to per-line `startSecond` values and keep a local minimum spacing of `22 px`, with same-anchor collisions favoring the later source line; header labels size by digit count instead of visible-neighbor width, using a local `0.9x` scale for 1-digit labels, a `0.8x` base for 2+ digits, and additional per-digit-count width fitting against the same `22 px` spacing budget with a `2 px` side gap while keeping bottoms aligned; each displayed line-start anchor also draws a local inverted triangle marker whose tip offset and side angle reuse the playback-entry triangle, while the marker height keeps the earlier header-local `0.85 * digitWidth * 0.7` cap; Quick/DComp header labels and line-start markers are emitted with one viewport of horizontal prefetch and rebuild only on scroll-bucket boundaries; Timeline minor beat lines currently use `1.4 px`; dense comma grids now render at most `32` subdivisions by collapsing to the largest divisor of the source `{beats}` value that does not exceed that cap; the classic QWidget path mirrors the Quick/DComp red editor-cursor header marker color locally; waveform rendering applies a one-preview-frame phase compensation based on the preview canvas frame interval because logs from 60 Hz and 120 Hz devices show the authoritative audio clock leading the timeline-rendered playhead by about one frame while the root cause remains unknown
   - Rule: keep local while these values only shape timeline widget UX and do not need cross-subsystem parity
 - `src/tools/video_export/VideoExportRuntimePolicy.h`
   - Owns: export PBO env precedence and worker crash-retry policy shared by the controller, main-window worker launcher, and runtime policy spec
@@ -176,7 +203,8 @@ It is acceptable to keep a constant local when:
 
 ## 6. Current High-Attention Areas
 
-- Preview effect tuning in `src/preview/scene/*.cpp`
+- Preview effect tuning in `src/core/scene/*.cpp`
+  - Current tuning note: `PreviewTouchJudgeLayerState.cpp` renders each Touch judge effect as a short-lived inner-radius glow plus two 8-point sparkle rings. Each ring alternates solid and hollow yellow stars; the inner ring uses half-size stars, both rings animate outward, and both rings share a deterministic `-45 deg` / `-22.5 deg` / `0 deg` / `22.5 deg` / `45 deg` layout from the quantized trigger time so same-second double touches use one angle while preview/export stay stable.
 - Latency detection scan parameters
 - Export encoder and bitrate heuristics
 - Parser geometry/timing assumptions

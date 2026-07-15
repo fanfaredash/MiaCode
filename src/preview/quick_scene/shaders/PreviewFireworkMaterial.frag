@@ -17,7 +17,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 sourceRect;
 };
 
-const float kSectorAlphaScale = 0.88;
+const float kSectorAlphaScale = 0.9;
 const float kSectorSpanDegrees = 12.0;
 const float kSectorStepDegrees = 24.0;
 const float kSectorPhaseDegrees = -102.0;
@@ -32,22 +32,22 @@ vec3 sectorBaseColor(int index)
     vec3 color;
     switch (index % 5) {
     case 0:
-        color = vec3(214.0, 106.0, 59.0) / 255.0;
+        color = vec3(255.0, 82.0, 20.0) / 255.0;
         break;
     case 1:
-        color = vec3(188.0, 86.0, 165.0) / 255.0;
+        color = vec3(255.0, 28.0, 176.0) / 255.0;
         break;
     case 2:
-        color = vec3(88.0, 157.0, 212.0) / 255.0;
+        color = vec3(0.0, 188.0, 255.0) / 255.0;
         break;
     case 3:
-        color = vec3(156.0, 186.0, 71.0) / 255.0;
+        color = vec3(186.0, 242.0, 0.0) / 255.0;
         break;
     default:
-        color = vec3(202.0, 178.0, 70.0) / 255.0;
+        color = vec3(255.0, 216.0, 0.0) / 255.0;
         break;
     }
-    return min(color * 1.2, vec3(1.0));
+    return color;
 }
 
 float wrapAngleDegrees(float angle)

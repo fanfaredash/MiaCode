@@ -35,6 +35,7 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QPainter>
+#include <QPainterPath>
 #include <QProcess>
 #include <QProgressDialog>
 #include <QRect>
@@ -399,6 +400,37 @@ QImage buildCircularDimMaskImage(
     return mask;
 }
 
+QImage buildCircularMediaMaskImage(
+    int frameWidth,
+    int frameHeight,
+    double layoutSquareScale
+)
+{
+    const int width = qMax(1, frameWidth);
+    const int height = qMax(1, frameHeight);
+    QImage mask(width, height, QImage::Format_Grayscale8);
+    mask.fill(0);
+
+    const double layoutSide = miacode::preview_video::layoutSquareSideForCanvasHeight(
+        static_cast<double>(height),
+        layoutSquareScale
+    );
+    const double radius = qMax(1.0, layoutSide * 0.5);
+    const double centerX = (static_cast<double>(width) - 1.0) * 0.5;
+    const double centerY = (static_cast<double>(height) - 1.0) * 0.5;
+
+    for (int y = 0; y < height; ++y) {
+        uchar* row = mask.scanLine(y);
+        const double dy = static_cast<double>(y) - centerY;
+        for (int x = 0; x < width; ++x) {
+            const double dx = static_cast<double>(x) - centerX;
+            const double distance = std::sqrt(dx * dx + dy * dy);
+            row[x] = distance <= radius ? 255 : 0;
+        }
+    }
+    return mask;
+}
+
 QRectF staticMediaTargetRect(
     const QSize& mediaSize,
     const QSize& outputSize,
@@ -415,6 +447,7 @@ bool stageStaticBackgroundImageForExport(
     const QString& sourcePath,
     const QSize& outputSize,
     PreviewBackgroundScaleMode scaleMode,
+    double layoutSquareScale,
     const QString& stagedPath,
     QString* detail)
 {
@@ -443,12 +476,38 @@ bool stageStaticBackgroundImageForExport(
     stagedImage.fill(Qt::black);
 
     QPainter painter(&stagedImage);
+    painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-    painter.drawImage(
-        staticMediaTargetRect(sourceImage.size(), outputSize, scaleMode),
-        sourceImage,
-        miacode::preview::scene::mediaSourceRect(sourceImage.size(), scaleMode)
-    );
+    if (scaleMode == PreviewBackgroundScaleMode::InnerCircleFitOuterFill) {
+        const QRectF stageRect(0.0, 0.0, outputSize.width(), outputSize.height());
+        const QRectF innerCircleRect = miacode::preview_video::centeredLayoutRectForStage(
+            stageRect,
+            layoutSquareScale
+        );
+        painter.drawImage(
+            staticMediaTargetRect(sourceImage.size(), outputSize, PreviewBackgroundScaleMode::FillCrop),
+            sourceImage,
+            miacode::preview::scene::mediaSourceRect(sourceImage.size(), PreviewBackgroundScaleMode::FillCrop)
+        );
+        QPainterPath innerCircleClip;
+        innerCircleClip.addEllipse(innerCircleRect);
+        painter.setClipPath(innerCircleClip);
+        painter.drawImage(
+            miacode::preview::scene::mediaTargetRect(
+                sourceImage.size(),
+                innerCircleRect,
+                PreviewBackgroundScaleMode::FitContain
+            ),
+            sourceImage,
+            miacode::preview::scene::mediaSourceRect(sourceImage.size(), PreviewBackgroundScaleMode::FitContain)
+        );
+    } else {
+        painter.drawImage(
+            staticMediaTargetRect(sourceImage.size(), outputSize, scaleMode),
+            sourceImage,
+            miacode::preview::scene::mediaSourceRect(sourceImage.size(), scaleMode)
+        );
+    }
     painter.end();
 
     if (!stagedImage.save(stagedPath)) {
@@ -468,7 +527,9 @@ bool stageStaticBackgroundImageForExport(
                     ? QStringLiteral("fit")
                     : (scaleMode == PreviewBackgroundScaleMode::SquareFitContain
                            ? QStringLiteral("square_fit")
-                           : QStringLiteral("fill")))
+                           : (scaleMode == PreviewBackgroundScaleMode::InnerCircleFitOuterFill
+                                  ? QStringLiteral("inner_circle_fit_outer_fill")
+                                  : QStringLiteral("fill"))))
             .arg(stagedPath);
     }
     return true;

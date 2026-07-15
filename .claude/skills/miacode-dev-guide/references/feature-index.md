@@ -229,6 +229,54 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   path) + batch `MainWindow.ExportFlow.cpp`, and the snapshot rebuild in `VideoExportSnapshot.cpp`
   (`buildVideoExportTaskFromSnapshot`).
 
+## 3b. Editor bookmarks (2026-07-06 redesign)
+
+- Spec: `docs/specs/editor/BOOKMARK_REDESIGN_SPEC.md` (includes the implemented detailed design).
+- **Storage — simai file is authoritative:** one managed single-line field
+  `&miacode_bookmarks={"schema":"miacode_bookmarks_v2","items":[{"d","l","n","s","src","fp","cb","ca","locked"}]}`.
+  Model: `SimaiBookmarkData` + `SimaiDocument::bookmarks` / `bookmarksParseError`
+  (`src/core/chart/document/SimaiDocument.{h,cpp}`). `fromText` routes the key into `bookmarks`
+  (never `extraFields`; bad JSON → ignored + flag, never blocks loading); `toText` emits it after
+  extra fields, before the difficulty triples, and omits it when empty; `parseUnmanagedFields`
+  treats it as reserved so it never shows in the metadata "Other &xx Fields" editor. Spec cases in
+  `simai_document_spec`.
+- **Legacy fallback / migration:** `.miacode/miacode_settings.json` `editor_bookmarks` is read into
+  `state_.legacyJsonEditorBookmarks_` by `EditorSection::loadProjectRenderState` and consumed by
+  `adoptBookmarksForLoadedDocument()` (called from `DocumentSection::loadDocument`) only when the
+  simai payload is absent. `state_.editorBookmarksInSimai_` gates the legacy JSON mirror in
+  `saveProjectRenderState` (kept for crash safety until the first simai save, dropped after).
+  `saveToPath` pushes `editorBookmarks_` into the document via `syncBookmarksIntoDocument` before
+  `toText()` and flips the flag.
+- **In-memory model:** `MainWindow::EditorBookmark` (user-visible face = `title` + `line`;
+  `nameLocked` set on explicit rename; `text` is a legacy import-only field). User-initiated
+  mutations call `EditorSection::markBookmarksMutatedByUser()` (marks the document dirty so the
+  change reaches the file on save); the comment auto-sync (`syncBookmarksFromEditorText`) never
+  dirties and NEVER renames — default names are generated exactly once at creation
+  (`defaultBookmarkNameFromComment`: first token of the `||` comment, else `fallbackBookmarkNameForLine`
+  "第 N 行"/"LN").
+- **Sidebar (IDE-style tree, `outlineList_`):** built by `DocumentSection::rebuildFieldSidebar`
+  (`MainWindow.DocumentUi.cpp`); painted by `OutlineItemDelegate` in `MainWindowShared.h` from the
+  shared `kOutlineItem*Role` constants. Difficulty rows carry the fold chevron at the ROW START
+  (path chevron, `kDifficultyFoldHitZone` click zone in FrameBootstrap; per-difficulty state in
+  `outlineBookmarkGroupExpanded_`, untouched groups default expanded only for the active
+  difficulty); `bookmark` rows (item text = bare name) draw a 1px indent guide + a fixed-width
+  neutral line badge (`kOutlineItemMaxLineRole` sizes it group-wide; solid accent = last-activated).
+  `kOutlineItemActiveRole` on metadata/export/difficulty rows is the persistent "you are here"
+  marker (borderless fill + 3px left accent bar), driven by `activeOutlineKey_`/`activeDifficultyId_`
+  — NOT the list selection, so it survives bookmark clicks. Non-interactive `spacer` kind rows
+  separate the sidebar sections. Rebuild preserves fold state, bookmark selection and scroll
+  position. Single click = jump to
+  line (+ accent marker `activeBookmark*`), double click = inline rename (`editItem`; commit via
+  `itemChanged` → `EditorSection::renameBookmark`, empty name reverts), right click = 重命名 /
+  删除 / 跳到时间轴位置 (difficulty & group rows add 插入书签). Reveal/rename entry:
+  `DocumentSection::revealBookmarkInSidebar`.
+- **Editor entry points (`PlainCodeEditor`):** gutter double-click activates/creates; gutter drag
+  moves; body & gutter right-click add 插入/重命名/删除/在侧边栏显示 via intent signals only
+  (`lineNumberBookmarkCreateRequested/RenameRequested/DeleteRequested/Activated/ContextMenuRequested`)
+  — MainWindow (`FrameBootstrap`) owns the actions. Dialog-free: the old create/detail/manager
+  dialogs and the toolbox 创建书签/书签管理 entries were REMOVED (toolbox keeps JSON
+  import/export as compatibility tools; import marks the document dirty).
+
 ## 4. Parser, validation, markers
 
 - API: `src/core/chart/parser/SimaiNativeParser.h` + `SimaiNativeParser.Driver.cpp`
@@ -790,12 +838,26 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `buildIntroBannerSpec` in `MainWindow.ExportSnapshot.cpp`) drives the card, and
   `task.noteMarkers`/`skinDirectory`/`outlineImagePath`/render-settings/`contentDurationSeconds`
   feed the chart-frame `SceneFrameRenderer`. Output dir = the chart directory. (The former
-  `VideoExportDialog::openExportCoverDialog` + its Font-tab button are REMOVED; the export
-  dialog's Font tab is back to HUD-font-only. The HUD-font settings dialog itself moved to
-  `tools/video_export/HudFontSettings.{h,cpp}` —
-  `miacode::video_export::openHudFontSettingsDialog(parent, onFontChanged)` — shared by the
-  export dialog's Font tab and a new **"字体" tab in the 视频设置 dialog**
-  (`MainWindow.Dialogs.cpp::onPreviewVideoSettings`).) The **default** (no custom font) HUD
+  `VideoExportDialog::openExportCoverDialog` + its Font-tab button are REMOVED.
+  **皮肤 panel reorg (2026-07-04/05):** skin / judge line / 字体 (embedded HUD-font picker) are
+  now ONE shared owner-wired panel — `DialogsSection::buildSkinSettings(parent, skinOut,
+  includeFolderButtons)` (`MainWindow.Dialogs.ExportSettings.cpp`, alongside
+  `buildExportInjectedSettings`) — reused by BOTH a main-window **皮肤设置 popup** (`onSkinSettings`
+  → `openSkinSettingsDialog`; toolbar button `skinSettingsButton_`/`skinSettingsAction_` sits
+  between 预览设置 and 导出 at the SAME width as the 导出 button, wired in
+  `MainWindow.FrameBootstrapFinalize.cpp`) AND the export dialog's **皮肤 tab** (injected via
+  `VideoExportDialog::injectOwnerWiredSettings(videoExtras, gameplayWidget, skinWidget)`). Intro
+  sound + a 当前谱面资源 readout were part of an earlier draft but were DROPPED (2026-07-05) — the
+  panel is skin / judge line / font only. The HUD-font controls are an EMBEDDABLE widget
+  `miacode::video_export::createHudFontSettingsWidget(parent, onFontChanged)`
+  (`tools/video_export/HudFontSettings.{h,cpp}` — the former modal `openHudFontSettingsDialog` +
+  the export dialog's `hudFontSettingsButton_`/`openHudFontSettingsDialog()`/`refreshLivePreviewHudFont()`
+  are REMOVED). The export dialog's standalone **字体 tab is GONE**; the 视频设置 dialog
+  (`onPreviewVideoSettings` → `openPreviewSettingsDialog`) dropped its skin/judge-line rows + the
+  音乐 + 字体 tabs and now reads **视频 / 游戏 / 性能** (性能 = 预览刷新率). `buildExportInjectedSettings`
+  keeps only 判定效果 / slide 层叠 / 中心显示. ⚠ **W1 note:** the preview-settings
+  `createDialogMenuButton` must keep the `ensurePolished()`+`setFixedHeight(qMax(sizeHint,30)+4)`
+  or its dropdowns clip their bottom border (`qt-ui-layout-pitfalls` W1).) The **default** (no custom font) HUD
   family is **"Xiaolai Mono"** — embedded resource `:/fonts/xiaolai_mono.ttf`
   (`resources/fonts.qrc` → `assets/fonts/XiaolaiMono-Regular.subset.ttf`), loaded in
   `PreviewHudState.cpp::previewHudTimestampFont` (replaced the old JetBrains Mono, 2026-06-19).
@@ -805,7 +867,7 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   editing it (or `MaimaiBannerCard.qml`) DOES need the AUTORCC repack — delete `build/**/qrc_intro.cpp*`
   / touch `resources/intro.qrc` to force RCC (cf. the over-long-text mirror note above).
 - **Export dialog "片头" tab (2026-06-11):** the 添加片头 checkbox moved from the 视频 tab to a
-  dedicated **片头 tab** (between 游戏 and 字体) carrying the cover-dialog-style controls —
+  dedicated **片头 tab** (tab order: 输出 / 视频 / 游戏 / 皮肤 / 片头 / 导出区间) carrying the cover-dialog-style controls —
   添加片头 as the bold master switch wrapped in a neutral rounded box (`QFrame#AddIntroCapsule` —
   inputBg + border + 8px radius, matching the 游戏 tab dropdown chrome; styled by
   `UiTheme::exportDialogStyleSheet` so it re-themes; 2026-06-19. The old "?" dev-status badge +

@@ -237,10 +237,16 @@ double steppedPreviewPlaybackRate(double rate, int direction)
     return kPreviewPlaybackRateOptions[targetIndex];
 }
 
-QString uiText(const QString& key, const QString& fallback)
+SimaiNativeValidationLocale uiValidationLocale()
 {
-    const QString localized = UiText::text(key);
-    return localized.isEmpty() ? fallback : localized;
+    const QString token = UiText::resolvedLanguageToken();
+    if (token.startsWith(QStringLiteral("zh"))) {
+        return SimaiNativeValidationLocale::Chinese;
+    }
+    if (token.startsWith(QStringLiteral("ja"))) {
+        return SimaiNativeValidationLocale::Japanese;
+    }
+    return SimaiNativeValidationLocale::English;
 }
 
 QByteArray autosaveContentSignature(const QString& text)
@@ -495,12 +501,17 @@ QFont uiOutputFont()
     return font;
 #else
     QFont font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
-    if (UiText::isChineseUi()) {
-        for (const QString& family : QStringList{"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC"}) {
-            font.setFamily(family);
-            if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0) {
-                break;
-            }
+    QStringList cjkFamilies;
+    const QString uiLanguageToken = UiText::resolvedLanguageToken();
+    if (uiLanguageToken.startsWith(QStringLiteral("zh"))) {
+        cjkFamilies = QStringList{"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC"};
+    } else if (uiLanguageToken.startsWith(QStringLiteral("ja"))) {
+        cjkFamilies = QStringList{"Yu Gothic UI", "Meiryo UI", "Meiryo", "Noto Sans CJK JP"};
+    }
+    for (const QString& family : cjkFamilies) {
+        font.setFamily(family);
+        if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0) {
+            break;
         }
     }
     font.setStyleStrategy(QFont::PreferAntialias);
@@ -514,12 +525,17 @@ QFont uiAccentFont(int pointSize, QFont::Weight weight)
 {
 #ifdef Q_OS_MACOS
     QFont font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
-    if (UiText::isChineseUi()) {
-        for (const QString& family : QStringList{"PingFang SC", "Hiragino Sans GB"}) {
-            font.setFamily(family);
-            if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0) {
-                break;
-            }
+    QStringList macCjkFamilies;
+    const QString uiLanguageToken = UiText::resolvedLanguageToken();
+    if (uiLanguageToken.startsWith(QStringLiteral("zh"))) {
+        macCjkFamilies = QStringList{"PingFang SC", "Hiragino Sans GB"};
+    } else if (uiLanguageToken.startsWith(QStringLiteral("ja"))) {
+        macCjkFamilies = QStringList{"Hiragino Sans", "Hiragino Kaku Gothic ProN"};
+    }
+    for (const QString& family : macCjkFamilies) {
+        font.setFamily(family);
+        if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0) {
+            break;
         }
     }
     font.setPointSize(pointSize + ((pointSize <= 11) ? 1 : 0));
@@ -530,8 +546,11 @@ QFont uiAccentFont(int pointSize, QFont::Weight weight)
 #else
     QFont font;
     QStringList familyCandidates;
-    if (UiText::isChineseUi()) {
+    const QString uiLanguageToken = UiText::resolvedLanguageToken();
+    if (uiLanguageToken.startsWith(QStringLiteral("zh"))) {
         familyCandidates << "Microsoft YaHei UI" << "Microsoft YaHei" << "PingFang SC" << "Noto Sans CJK SC";
+    } else if (uiLanguageToken.startsWith(QStringLiteral("ja"))) {
+        familyCandidates << "Yu Gothic UI" << "Meiryo UI" << "Meiryo" << "Noto Sans CJK JP";
     }
     familyCandidates << "Segoe UI Variable Text" << "Segoe UI";
     for (const QString& family : familyCandidates) {

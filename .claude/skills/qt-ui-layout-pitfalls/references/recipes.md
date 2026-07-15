@@ -48,6 +48,26 @@ failed first attempt.
 Commits: 81d755d (introduced tabs, incomplete) → 97aca5f (fix attempt) → 5a96a85
 (live-geometry fix that stuck). **3 iterations.**
 
+**Reusable helper (2026-07-11):** `miacode::ui::pinTabWidgetToContentHeight(tabs, dialog,
+rootLayout)` packages the live-geometry recipe as the height twin of the existing
+`pinTabWidgetToContentWidth`: max page `sizeHint().height()` + live chrome
+(`tabs->height() - innerStack->height()`, floored to `tabBar sizeHint + 18`), pushed via
+`tabs->setMinimumHeight()` so a `SetFixedSize` dialog honors it. Call after all `addTab()`s.
+The render-settings dialog (`openPreviewSettingsDialog`) already pinned WIDTH via
+`setMinimumWidth(420)` but not height, so the tallest tab (游戏: flow / judge / slide /
+中心显示 rows) clipped its bottom combo — the empty-combo `setFixedHeight` and per-control
+`+4` were red herrings; the deficit was the un-folded `::pane { padding: 8px }`. Verified
+with an isolated repro (bottom control overflowed the pane content box by +59px → -11px
+after the pin).
+
+⚠ **Compute the chrome DETERMINISTICALLY when the helper runs at construction time (before
+show).** The first cut used a live `tabs->height() - innerStack->height()`; before the
+dialog is shown the inner `QStackedWidget` reports ~0 height, so the "chrome" came back as
+the whole tab height and the pin DOUBLED — stretching the grid rows far apart (looked like
+an over-tall tab). Use `tabBar->sizeHint().height() + panePadding+border` from a constant
+that mirrors `dialogTabStripStyleSheet` (`8+8+1+1`) instead. The live-geometry form in
+`VideoExportDialog::refreshDialogGeometry()` is only safe there because it runs AFTER show.
+
 ### W3. Dialog won't widen / right-column CJK labels clipped
 
 **Root cause:** root layout `QLayout::SetFixedSize` locks the dialog to content
@@ -123,6 +143,46 @@ btn->setStyleSheet(base + " QPushButton { min-width:30px; max-width:30px; paddin
 btn->setFixedSize(30, 30);
 ```
 Seen in the in-flight ExportCoverDialog work (play/pause button), 2026-06.
+
+### W8. Rounded combo popup shows a solid wedge at the bottom-RIGHT corner only (下拉弹窗右下角纯色块)
+
+**Root cause (three stacked facts, diagnosed 2026-07-10 with a pixel-probe repro):**
+(a) a **default-constructed `QProxyStyle` wraps the DESKTOP style** (`QWindows11Style` on
+Win11), not the Fusion style set via `app.setStyle()` — `UiTheme`'s
+`ComboBoxPopupLimitStyle` accidentally smuggled windows11 back in;
+(b) `QWindows11Style::polish` makes `QComboBoxPrivateContainer` a translucent frameless
+window AND paints its own WinUI3 rounded panel (radius 4, system-scheme colors — dark
+`menuPanelFill` when Windows is in dark mode) via the container's `PE_Frame`;
+(c) that panel and the QSS radius-8 panel are both anchored at the top-left but differ by
+1px in size/radius → the curves coincide at the top-left and diverge maximally at the
+bottom-right → a solid wedge outside the QSS curve at BR only. Classic Win32
+`CS_DROPSHADOW` is NOT involved (windows11 already sets `NoDropShadowWindowHint`).
+
+**Also learned:** with the container translucent, the view's opaque QSS background does
+NOT extend under the vertical scrollbar column — a transparent scrollbar track there is a
+**see-through hole** in the layered window, not "shows the panel".
+And `QStyleSheetStyle` forces `SH_ComboBox_PopupFrameStyle` to `NoFrame` whenever the view
+has a box rule (qstylesheetstyle.cpp), so a proxy-style `PE_Frame` override for the
+container **never runs** — paint from a `QEvent::Paint` event filter instead.
+
+**Working fix** (UiTheme.cpp, verified pixel-exact with red/blue backdrop screenshots):
+1. `new ComboBoxPopupLimitStyle(QStyleFactory::create("Fusion"))` — never default-construct
+   popup proxy styles;
+2. replicate the windows11 translucency dance on the container in
+   `applyComboBoxPopupLimit` (preserve `WA_WState_Created`, set `WA_TranslucentBackground`,
+   `FramelessWindowHint`, `NoDropShadowWindowHint`, transparent background palette) so the
+   rounded-transparent corners are deterministic on every Windows/desktop-style combo;
+3. ONE panel painter: `ComboBoxPopupPanelPainter` event filter paints menuBg+menuBorder
+   rounded rect (inner radius 7.5 ≈ QSS outer radius 8) on the container; the QSS view rule
+   keeps `background/border: transparent`, popup scrollbar track transparent with margins so
+   the panel shows through everywhere.
+
+**Repro/probe technique that cracked it** (reusable): standalone Qt app with the exact
+QSS + proxy style, popup over a solid palette-colored backdrop (NOT stylesheet-colored —
+a naked `background:` QSS declaration cascades into the popup scrollbar and contaminates
+the experiment), `QScreen::grabWindow(0)` + per-pixel corner classification, PrintWindow
+`PW_RENDERFULLCONTENT` to read the layered window's own content, and window-stack
+enumeration at the artifact point to rule out shadow windows.
 
 ---
 

@@ -72,6 +72,7 @@ struct RuntimeSlideJudgeResult {
     QVector<double> segmentCompletedSeconds;
     QVector<RuntimeJudgeHit> areaHits;
     QVector<QStringList> judgeSequence;
+    QVector<int> segmentStartAreaIndices;
     QVector<int> segmentEndAreaIndices;
     QVector<QVector<RuntimeJudgeHit>> wifiLaneAreaHits;
     QVector<QVector<QStringList>> wifiLaneJudgeSequence;

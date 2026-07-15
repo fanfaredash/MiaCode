@@ -27,9 +27,19 @@ namespace {
 QVariantMap buildPaletteMap()
 {
     const UiTheme::Colors& c = UiTheme::colors();
+    const QString languageToken = []() -> QString {
+        const QString token = UiText::resolvedLanguageToken();
+        if (token.startsWith(QStringLiteral("zh"))) {
+            return QStringLiteral("zh");
+        }
+        if (token.startsWith(QStringLiteral("ja"))) {
+            return QStringLiteral("ja");
+        }
+        return QStringLiteral("en");
+    }();
     return QVariantMap{
         {QStringLiteral("dark"), c.dark},
-        {QStringLiteral("isChineseUi"), UiText::isChineseUi()},
+        {QStringLiteral("uiLanguage"), languageToken},
         {QStringLiteral("windowBg"), c.windowBg},
         {QStringLiteral("windowAltBg"), c.windowAltBg},
         {QStringLiteral("toolbarBg"), c.toolbarBg},
@@ -58,6 +68,25 @@ QVariantMap buildPaletteMap()
         {QStringLiteral("timelineBorder"), c.timelineBorder},
         {QStringLiteral("timelineLabel"), c.timelineLabel},
         {QStringLiteral("timelineAxis"), c.timelineAxis},
+    };
+}
+
+QVariantMap buildAppBackgroundMap()
+{
+    if (qApp == nullptr) {
+        return QVariantMap{};
+    }
+    return QVariantMap{
+        {QStringLiteral("active"), qApp->property("miacode.appBackgroundActive").toBool()},
+        {QStringLiteral("enabled"), qApp->property("miacode.appBackgroundEnabled").toBool()},
+        {QStringLiteral("imagePath"), qApp->property("miacode.appBackgroundImagePath").toString()},
+        {QStringLiteral("sourceUrl"), qApp->property("miacode.appBackgroundSourceUrl").toString()},
+        {QStringLiteral("opacity"), qApp->property("miacode.appBackgroundOpacity").toDouble()},
+        {QStringLiteral("blur"), qApp->property("miacode.appBackgroundBlur").toInt()},
+        {QStringLiteral("panelAlphaDark"), qApp->property("miacode.appBackgroundPanelAlphaDark").toInt()},
+        {QStringLiteral("panelAlphaLight"), qApp->property("miacode.appBackgroundPanelAlphaLight").toInt()},
+        {QStringLiteral("sizeMode"), qApp->property("miacode.appBackgroundSizeMode").toString()},
+        {QStringLiteral("position"), qApp->property("miacode.appBackgroundPosition").toString()},
     };
 }
 
@@ -117,6 +146,11 @@ QVariantMap QuickShellStyleBridge::metrics() const
     return metrics_;
 }
 
+QVariantMap QuickShellStyleBridge::appBackground() const
+{
+    return appBackground_;
+}
+
 void QuickShellStyleBridge::syncWindowSize(int width, int height)
 {
     if (contentProvider_ == nullptr) {
@@ -168,6 +202,7 @@ bool QuickShellStyleBridge::eventFilter(QObject* watched, QEvent* event)
     case QEvent::FontChange:
     case QEvent::ActivationChange:
     case QEvent::WindowStateChange:
+    case QEvent::DynamicPropertyChange:
         scheduleRefresh();
         break;
     default:
@@ -189,8 +224,10 @@ void QuickShellStyleBridge::refreshFromBackend()
     }
 
     const QVariantMap nextPalette = buildPaletteMap();
-    if (nextPalette != palette_) {
+    const QVariantMap nextAppBackground = buildAppBackgroundMap();
+    if (nextPalette != palette_ || nextAppBackground != appBackground_) {
         palette_ = nextPalette;
+        appBackground_ = nextAppBackground;
         emit appearanceChanged();
     }
 

@@ -1,8 +1,12 @@
 #include "preview/quick_scene/PreviewTextureRepository.h"
 
+#include "preview/quick_scene/PreviewTextureGenerationPolicy.h"
+
 #include <QHashFunctions>
 #include <QQuickWindow>
 #include <QSGTexture>
+
+#include <utility>
 
 namespace {
 
@@ -71,19 +75,37 @@ void PreviewTextureRepository::setWindow(QQuickWindow* window)
     if (window_ == window) {
         return;
     }
-    clear();
+    // A repository belongs to exactly one render-side QSG root/window generation. Crossing
+    // windows requires deleting that root (nodes first, textures second) and creating a new
+    // repository; clearing in-place here would invalidate live material texture pointers.
+    Q_ASSERT(window_ == nullptr);
     window_ = window;
+}
+
+bool PreviewTextureRepository::resetRequiredBeforeFrame() const
+{
+    return miacode::preview::quick_scene::previewTextureGenerationResetRequired(
+        cachedTextureFlushPending_,
+        cachedTextures_.size(),
+        cachedTextureBytes_,
+        cachedKeyToFingerprint_.size(),
+        kPreviewCachedTextureEntryLimit,
+        kPreviewCachedTextureByteLimit,
+        kPreviewCachedFastKeyEntryLimit);
 }
 
 void PreviewTextureRepository::beginFrame()
 {
-    if (cachedTextureFlushPending_
-        || cachedTextures_.size() > kPreviewCachedTextureEntryLimit
-        || cachedTextureBytes_ > kPreviewCachedTextureByteLimit
-        || cachedKeyToFingerprint_.size() > kPreviewCachedFastKeyEntryLimit) {
-        clearCachedTextures();
+    // Entries retired while building the previous frame can now be released: every live
+    // material was rebound during that frame, and this method runs on the same render thread
+    // before the next updatePaintNode pass. Current transient textures are only moved into
+    // retirement here; nodes may still reference them until this frame finishes rebuilding.
+    qDeleteAll(retiredTextures_);
+    retiredTextures_.clear();
+    retiredTextures_.reserve(transientTextures_.size());
+    for (QSGTexture* texture : std::as_const(transientTextures_)) {
+        retireTexture(texture);
     }
-    qDeleteAll(transientTextures_);
     transientTextures_.clear();
     stats_ = PreviewTextureStats();
 }
@@ -126,6 +148,9 @@ QSGTexture* PreviewTextureRepository::textureForImage(const QImage& image, bool 
         // crashed igd10um64xe.DLL on the DComp side. Pre-generated
         // asset mips are the planned follow-up.
         QSGTexture* texture = window_->createTextureFromImage(image);
+        if (texture == nullptr) {
+            return nullptr;
+        }
         cachedTextures_.insert(fingerprint, texture);
         cachedKeyToFingerprint_.insert(fastKey, fingerprint);
         const qint64 imageBytes = qMax<qint64>(1, image.sizeInBytes());
@@ -143,6 +168,9 @@ QSGTexture* PreviewTextureRepository::textureForImage(const QImage& image, bool 
         return existing;
     }
     QSGTexture* texture = createOwnedTexture(image);
+    if (texture == nullptr) {
+        return nullptr;
+    }
     transientTextures_.insert(fastKey, texture);
     stats_.transientCreateCount += 1;
     return texture;
@@ -169,8 +197,12 @@ QSGTexture* PreviewTextureRepository::retainedTextureForImage(const QString& slo
         return entry.texture;
     }
 
-    delete entry.texture;
-    entry.texture = createOwnedTexture(image);
+    QSGTexture* replacement = createOwnedTexture(image);
+    if (replacement == nullptr) {
+        return entry.texture;
+    }
+    retireTexture(entry.texture);
+    entry.texture = replacement;
     entry.key = key;
     return entry.texture;
 }
@@ -182,8 +214,15 @@ void PreviewTextureRepository::releaseRetainedTexture(const QString& slotName)
         return;
     }
 
-    delete it->texture;
+    retireTexture(it->texture);
     retainedTextures_.erase(it);
+}
+
+void PreviewTextureRepository::retireTexture(QSGTexture* texture)
+{
+    if (texture != nullptr) {
+        retiredTextures_.append(texture);
+    }
 }
 
 QSGTexture* PreviewTextureRepository::createOwnedTexture(const QImage& image) const
@@ -250,5 +289,8 @@ void PreviewTextureRepository::clear()
         delete it->texture;
     }
     retainedTextures_.clear();
+    qDeleteAll(retiredTextures_);
+    retiredTextures_.clear();
     stats_ = PreviewTextureStats();
+    window_ = nullptr;
 }

@@ -42,6 +42,7 @@ public:
     void setMoreBatchTransformActions(const QList<QAction*>& actions);
     void setPreviewFollowVisualCaret(bool active, int line = 1, int col = 1);
     void setBookmarkedLines(const QSet<int>& lines);
+    const QSet<int>& bookmarkedLines() const { return bookmarkedLines_; }
     int lineNumberAtGlobalPosition(const QPoint& globalPos) const;
     void setBookmarkDropPreviewLine(int line);
     bool applyPreviewFollowCursor(const QTextCursor& cursor, bool centerView, bool suppressSignals = true);
@@ -63,7 +64,8 @@ public:
     // affordance in the chart editor (controlled via the editor section of the
     // Preferences dialog; default on). When enabled:
     //   * typing { [ ( auto-inserts the matching close and parks the caret
-    //     between the pair (with type-over and empty-pair backspace to match);
+    //     between the pair, replacing any selected text with the empty pair
+    //     instead of surrounding it (with type-over and empty-pair backspace to match);
     //   * opening a bracket pops a simai-aware suggestion list (durations /
     //     subdivisions / BPMs) anchored under the caret, non-blocking;
     //   * typing the simai hold letter 'h' offers the full "[8:1]"-style
@@ -79,12 +81,20 @@ public:
 signals:
     void undoShortcutRequested();
     void redoShortcutRequested();
+    void selectionReplacementAboutToEdit(int anchor, int position);
     void clearCompleteElementsShortcutRequested();
     void raiseSubdivisionHalfStepShortcutRequested();
     void lowerSubdivisionHalfStepShortcutRequested();
     void editorOverwriteModeChanged(bool enabled);
     void lineNumberBookmarkMoveRequested(int fromLine, int toLine);
     void lineNumberBookmarkActivated(int line);
+    void lineNumberBookmarkCreateRequested(int line);
+    // Bookmark redesign — the editor only announces intent; MainWindow owns
+    // the actual actions (sidebar inline rename, delete confirmation, and the
+    // line-number-gutter context menu).
+    void lineNumberBookmarkRenameRequested(int line);
+    void lineNumberBookmarkDeleteRequested(int line);
+    void lineNumberBookmarkContextMenuRequested(int line, const QPoint& globalPos);
 
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override;
@@ -122,6 +132,9 @@ private:
     // Bracket-completion helpers. tryBracketInput() wraps the auto-close path so
     // the suggestion popup opens on the same (normalized) key/IME bracket input.
     bool tryBracketInput(const QString& text);
+    // Typing '[' immediately before an existing '[' steps into the existing
+    // duration slot instead of inserting a duplicate bracket pair.
+    bool tryOverwriteOpeningSquareBracket(const QString& text);
     // simai hold shortcut — typing 'h' inserts a bare 'h' and offers the
     // full-bracket hold-duration tokens ("[8:1]" …) as a completion popup. It
     // inserts no bracket itself, so a following '[' yields the normal "h[]"

@@ -156,6 +156,32 @@ int main(int argc, char** argv)
     }
 
     {
+        const QString chart = QStringLiteral("1>3,\nE");
+        const SimaiNativeParseResult lenientMissingDuration = SimaiNativeParser::parseForTimeline(chart);
+        const SimaiNativeParseResult strictMissingDuration = SimaiNativeParser::validateSyntax(chart);
+        expect(!lenientMissingDuration.ok, QStringLiteral("timeline parse rejects missing slide duration as slide"));
+        expect(
+            !lenientMissingDuration.errors.isEmpty()
+                && lenientMissingDuration.errors.constFirst().message.startsWith(QStringLiteral("Invalid slide duration")),
+            QStringLiteral("timeline parse reports missing slide duration, not hold modifier sequence"));
+        expect(!strictMissingDuration.ok, QStringLiteral("validate rejects missing slide duration as slide"));
+        expect(
+            !strictMissingDuration.errors.isEmpty()
+                && strictMissingDuration.errors.constFirst().message.startsWith(QStringLiteral("Invalid slide duration")),
+            QStringLiteral("validate reports missing slide duration, not hold modifier sequence"));
+
+        const SimaiNativeValidationReport zhReport = SimaiNativeParser::buildValidationReport(
+            chart,
+            SimaiNativeValidationLocale::Chinese);
+        expect(
+            !zhReport.ok
+                && zhReport.issues.size() == 1
+                && zhReport.issues.constFirst().displayMessage.contains(QStringLiteral("Slide 时值无效"))
+                && !zhReport.issues.constFirst().displayMessage.contains(QStringLiteral("Hold 修饰符")),
+            QStringLiteral("zh report localizes missing slide duration without hold wording"));
+    }
+
+    {
         // Same-lane v slides (XvX = out to center, back to the same lane) are
         // a supported extension shape spliced into slide_data.json. The
         // opposite-lane form Xv(X+4) stays unsupported on purpose — it is
@@ -254,10 +280,14 @@ int main(int argc, char** argv)
 
     {
         const SimaiNativeParseResult strictFestival = SimaiNativeParser::validateSyntax(QStringLiteral("1-5[8:1]-1[8:2],\nE"));
-        // Per-segment ("分段") timing is still flagged as a syntax error in
-        // strict mode, but the note is no longer dropped — it folds into the
-        // equivalent total-duration slide so the chart still parses.
-        expect(!strictFestival.ok, QStringLiteral("validate flags per-segment duration for festival slide"));
+        // Per-segment ("分段") timing is non-canonical but warning-only:
+        // the note folds into the equivalent total-duration slide.
+        expect(strictFestival.ok && strictFestival.errors.isEmpty(),
+            QStringLiteral("validate keeps per-segment duration warning-only for festival slide"));
+        expect(
+            strictFestival.warnings.size() == 1
+                && strictFestival.warnings.constFirst().message.startsWith(QStringLiteral("Invalid slide duration placement")),
+            QStringLiteral("per-segment duration emits a slide-duration-placement warning"));
 
         const SimaiNativeParseResult lenientFestival = SimaiNativeParser::parseForTimeline(QStringLiteral("1-5[8:1]-1[8:2],\nE"));
         const SimaiNativeParseResult totalDuration = SimaiNativeParser::parseForTimeline(QStringLiteral("1-5-1[8:3],\nE"));
@@ -290,6 +320,22 @@ int main(int argc, char** argv)
                 }
             }
             expect(allSegmentMatch, QStringLiteral("festival per-segment syntax normalizes to uniform chain speed"));
+        }
+
+        const QVector<QString> invalidDurationPlacementCharts = {
+            QStringLiteral("1-5[8:1]-1,\nE"),
+            QStringLiteral("1>5[8:1]<5,\nE"),
+            QStringLiteral("1>5[8:1]V35,\nE"),
+            QStringLiteral("1w5[8:1]<5,\nE"),
+        };
+        for (const QString& chart : invalidDurationPlacementCharts) {
+            const SimaiNativeParseResult invalid = SimaiNativeParser::validateSyntax(chart);
+            expect(!invalid.ok, QStringLiteral("validate rejects invalid slide duration placement: %1").arg(chart.trimmed()));
+            expect(
+                !invalid.errors.isEmpty()
+                    && invalid.errors.constFirst().message.startsWith(QStringLiteral("Invalid slide duration placement"))
+                    && invalid.errors.constFirst().endCol > invalid.errors.constFirst().col,
+                QStringLiteral("invalid slide duration placement covers the whole token: %1").arg(chart.trimmed()));
         }
     }
 
@@ -549,6 +595,75 @@ int main(int argc, char** argv)
     }
 
     {
+        const QString trailingCommaMessage = QStringLiteral("Line-end note is missing trailing ','");
+        const SimaiNativeParseResult lenientTrailingNote = SimaiNativeParser::parseForTimeline(QStringLiteral("1,2\nE"));
+        const SimaiNativeParseResult strictTrailingNote = SimaiNativeParser::validateSyntax(QStringLiteral("1,2\nE"));
+        const SimaiNativeParseResult strictTrailingNoteOk = SimaiNativeParser::validateSyntax(QStringLiteral("1,2,\nE"));
+        const SimaiNativeParseResult strictDirectiveAfterLineEndNote = SimaiNativeParser::validateSyntax(
+            QStringLiteral("{16}1,1,1,1,1\n{16},,,\nE"));
+        const SimaiNativeParseResult strictUserReproDirective = SimaiNativeParser::validateSyntax(
+            QStringLiteral("(121){1},A1 \n{1},\nE"));
+        const SimaiNativeParseResult strictUserReproComma = SimaiNativeParser::validateSyntax(
+            QStringLiteral("(121){1},A1\n,\nE"));
+
+        expect(lenientTrailingNote.ok && lenientTrailingNote.warnings.isEmpty(),
+            QStringLiteral("lenient parse stays quiet for line-end note without trailing comma"));
+        expect(strictTrailingNote.ok && strictTrailingNote.errors.isEmpty(),
+            QStringLiteral("validate keeps line-end note without trailing comma warning-only"));
+        expect(
+            strictTrailingNote.warnings.size() == 1
+                && strictTrailingNote.warnings.constFirst().message == trailingCommaMessage,
+            QStringLiteral("validate warns when a line-end note is missing trailing comma"));
+        if (strictTrailingNote.warnings.size() == 1) {
+            expect(
+                strictTrailingNote.warnings.constFirst().line == 1
+                    && strictTrailingNote.warnings.constFirst().col == 3,
+                QStringLiteral("line-end trailing comma warning points at the note"));
+        }
+        expect(strictTrailingNoteOk.ok && strictTrailingNoteOk.warnings.isEmpty(),
+            QStringLiteral("validate stays quiet when line-end note has trailing comma"));
+        expect(
+            strictDirectiveAfterLineEndNote.warnings.size() == 1
+                && strictDirectiveAfterLineEndNote.warnings.constFirst().message
+                    == QStringLiteral("Missing ',' between note and directive: {16}"),
+            QStringLiteral("next-line directive keeps the directive-specific missing-comma warning"));
+        if (strictDirectiveAfterLineEndNote.warnings.size() == 1) {
+            expect(
+                strictDirectiveAfterLineEndNote.warnings.constFirst().line == 1
+                    && strictDirectiveAfterLineEndNote.warnings.constFirst().col == 13,
+                QStringLiteral("next-line directive missing-comma warning points at the previous note"));
+        }
+        expect(
+            strictUserReproDirective.warnings.size() == 1
+                && strictUserReproDirective.warnings.constFirst().message
+                    == QStringLiteral("Missing ',' between note and directive: {1}"),
+            QStringLiteral("user repro next-line beat directive keeps directive-specific warning"));
+        if (strictUserReproDirective.warnings.size() == 1) {
+            expect(
+                strictUserReproDirective.warnings.constFirst().line == 1
+                    && strictUserReproDirective.warnings.constFirst().col == 10,
+                QStringLiteral("user repro next-line directive warning points at A1"));
+        }
+        expect(
+            strictUserReproComma.warnings.size() == 1
+                && strictUserReproComma.warnings.constFirst().message == trailingCommaMessage,
+            QStringLiteral("user repro next-line comma uses the line-end trailing-comma warning"));
+        if (strictUserReproComma.warnings.size() == 1) {
+            expect(
+                strictUserReproComma.warnings.constFirst().line == 1
+                    && strictUserReproComma.warnings.constFirst().col == 10,
+                QStringLiteral("user repro next-line comma warning points at A1"));
+        }
+
+        const SimaiNativeValidationReport trailingNoteReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("1,2\nE"),
+            SimaiNativeValidationLocale::English
+        );
+        expect(trailingNoteReport.ok && trailingNoteReport.warningCount == 1,
+            QStringLiteral("validation report treats line-end note without trailing comma as warning-only"));
+    }
+
+    {
         const SimaiNativeParseResult lenientDoubleSlash = SimaiNativeParser::parseForTimeline(QStringLiteral("1//2,\nE"));
         const SimaiNativeParseResult strictDoubleSlash = SimaiNativeParser::validateSyntax(QStringLiteral("1//2,\nE"));
         const SimaiNativeParseResult lenientDoubleBacktick = SimaiNativeParser::parseForTimeline(QStringLiteral("1``2,\nE"));
@@ -633,9 +748,9 @@ int main(int argc, char** argv)
             QStringLiteral("note directly before {beats} directive emits one missing-comma warning"));
         if (strictBeatDirective.warnings.size() == 1) {
             expect(
-                strictBeatDirective.warnings.constFirst().line == 2
-                    && strictBeatDirective.warnings.constFirst().col == 1,
-                QStringLiteral("missing-comma warning points at the directive position"));
+                strictBeatDirective.warnings.constFirst().line == 1
+                    && strictBeatDirective.warnings.constFirst().col == 13,
+                QStringLiteral("missing-comma warning points at the note before the directive"));
         }
 
         const SimaiNativeParseResult strictBeatDirectiveOk = SimaiNativeParser::validateSyntax(
@@ -647,21 +762,28 @@ int main(int argc, char** argv)
             QStringLiteral("1(120)2,\nE"));
         expect(
             strictBpmDirective.warnings.size() == 1
-                && strictBpmDirective.warnings.constFirst().message == missingCommaPrefix + QStringLiteral("(120)"),
+                && strictBpmDirective.warnings.constFirst().message == missingCommaPrefix + QStringLiteral("(120)")
+                && strictBpmDirective.warnings.constFirst().line == 1
+                && strictBpmDirective.warnings.constFirst().col == 1,
             QStringLiteral("note directly before (bpm) directive emits missing-comma warning"));
 
         const SimaiNativeParseResult strictHsDirective = SimaiNativeParser::validateSyntax(
             QStringLiteral("1<HS*2>2,\nE"));
         expect(
             strictHsDirective.warnings.size() == 1
-                && strictHsDirective.warnings.constFirst().message == missingCommaPrefix + QStringLiteral("<HS*2>"),
+                && strictHsDirective.warnings.constFirst().message == missingCommaPrefix + QStringLiteral("<HS*2>")
+                && strictHsDirective.warnings.constFirst().line == 1
+                && strictHsDirective.warnings.constFirst().col == 1,
             QStringLiteral("note directly before <HS*N> directive emits missing-comma warning"));
 
         // A directive run after one note is a single forgotten ',', not two.
         const SimaiNativeParseResult strictDirectiveRun = SimaiNativeParser::validateSyntax(
             QStringLiteral("1{16}(120)2,\nE"));
-        expect(strictDirectiveRun.warnings.size() == 1,
-            QStringLiteral("directive run after a note emits one missing-comma warning"));
+        expect(
+            strictDirectiveRun.warnings.size() == 1
+                && strictDirectiveRun.warnings.constFirst().line == 1
+                && strictDirectiveRun.warnings.constFirst().col == 1,
+            QStringLiteral("directive run after a note emits one missing-comma warning at the note"));
 
         // Lenient (timeline) parsing stays quiet.
         const SimaiNativeParseResult lenientBeatDirective = SimaiNativeParser::parseForTimeline(
@@ -685,6 +807,7 @@ int main(int argc, char** argv)
         // after '*' is not a new head — lenient parsing substitutes the shared
         // head lane, so `*4p8[4:1]` silently becomes 5p8[4:1]).
         const QString starBranchPrefix = QStringLiteral("Invalid '*' slide branch (must omit the slide head): ");
+        const QString emptyStarBranchPrefix = QStringLiteral("Invalid empty '*' slide branch: ");
         const SimaiNativeParseResult strictHeadless = SimaiNativeParser::validateSyntax(
             QStringLiteral("5q2[4:1]*p8[4:1],\nE"));
         expect(strictHeadless.ok && strictHeadless.errors.isEmpty(),
@@ -701,6 +824,23 @@ int main(int argc, char** argv)
         const SimaiNativeParseResult strictOtherHead = SimaiNativeParser::validateSyntax(
             QStringLiteral("5q2[4:1]*4p8[4:1],\nE"));
         expect(!strictOtherHead.ok, QStringLiteral("validate rejects '*' branch with a different head digit"));
+
+        const SimaiNativeParseResult strictTrailingEmpty = SimaiNativeParser::validateSyntax(
+            QStringLiteral("1-5[8:1]*,\nE"));
+        expect(!strictTrailingEmpty.ok, QStringLiteral("validate rejects trailing empty '*' branch"));
+        expect(
+            strictTrailingEmpty.errors.size() == 1
+                && strictTrailingEmpty.errors.constFirst().message.startsWith(emptyStarBranchPrefix)
+                && strictTrailingEmpty.errors.constFirst().endCol > strictTrailingEmpty.errors.constFirst().col,
+            QStringLiteral("trailing empty '*' branch emits one whole-token error"));
+
+        const SimaiNativeParseResult strictMiddleEmpty = SimaiNativeParser::validateSyntax(
+            QStringLiteral("1-5[8:1]**-6[8:1],\nE"));
+        expect(!strictMiddleEmpty.ok, QStringLiteral("validate rejects middle empty '*' branch"));
+        expect(
+            strictMiddleEmpty.errors.size() == 1
+                && strictMiddleEmpty.errors.constFirst().message.startsWith(emptyStarBranchPrefix),
+            QStringLiteral("middle empty '*' branch emits one empty-branch error"));
 
         // Lenient keeps the historical substitution so the chart still previews.
         const SimaiNativeParseResult lenientSameHead = SimaiNativeParser::parseForTimeline(
@@ -915,7 +1055,7 @@ int main(int argc, char** argv)
 
     {
         // Mine notes (simai `m`). The `m` is accepted on tap / hold / touch /
-        // touch-hold / slide; slides set trackMine + headMine. Mines must NOT
+        // touch-hold / slide; slides set trackMine while keeping the head star normal. Mines must NOT
         // turn the chart unparseable (the historical motivation for this work).
         const SimaiNativeParseResult tap = SimaiNativeParser::parseForTimeline(QStringLiteral("1m,2bm,3xm,\nE"));
         expect(tap.ok, QStringLiteral("mine taps `1m` / `2bm` / `3xm` parse ok"));
@@ -948,9 +1088,24 @@ int main(int argc, char** argv)
         expect(slideMarker != nullptr, QStringLiteral("mine slide emits a slide marker"));
         if (slideMarker != nullptr) {
             expect(slideMarker->trackMine, QStringLiteral("`1-3[2:1]m` sets trackMine on the slide"));
-            expect(slideMarker->headMine, QStringLiteral("`1-3[2:1]m` sets headMine on the slide head star"));
+            expect(!slideMarker->headMine, QStringLiteral("`1-3[2:1]m` keeps the slide head star non-mine"));
             expect(!slideMarker->slideDisplayKey.contains(QLatin1Char('m')),
                    QStringLiteral("mine `m` is stripped from the slide shape lookup key"));
+        }
+
+        const QVector<QString> uppercaseMineCharts = {
+            QStringLiteral("1M,\nE"),
+            QStringLiteral("1HM[4:1],\nE"),
+            QStringLiteral("A1M,\nE"),
+            QStringLiteral("C2hM[4:1],\nE"),
+            QStringLiteral("1-3[2:1]M,\nE"),
+            QStringLiteral("1M-3[2:1],\nE"),
+        };
+        for (const QString& chart : uppercaseMineCharts) {
+            const SimaiNativeParseResult lenient = SimaiNativeParser::parseForTimeline(chart);
+            const SimaiNativeParseResult strict = SimaiNativeParser::validateSyntax(chart);
+            expect(!lenient.ok, QStringLiteral("timeline parse rejects uppercase mine modifier: %1").arg(chart.trimmed()));
+            expect(!strict.ok, QStringLiteral("validate rejects uppercase mine modifier: %1").arg(chart.trimmed()));
         }
     }
 

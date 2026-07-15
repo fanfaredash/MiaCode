@@ -9,6 +9,7 @@
 #include <QStringList>
 #include <QVector>
 
+#include "SimaiNativeParser.h"
 #include "timeline/TimelineData.h"
 #include "common/MuriConfig.h"
 #include "common/MuriTypes.h"
@@ -456,8 +457,13 @@ void collectSimpleNoteMultiTouchDiagnostics(
                 diagnostic.alertLevel = (involvesTouch && nonTouchHandCount <= 2)
                     ? MuriAlertLevel::Warning
                     : MuriAlertLevel::Muri;
-                diagnostic.detail =
-                    QStringLiteral("Multi-touch formed by %1.").arg(detailParts.join(QStringLiteral(", ")));
+                diagnostic.detailKind = MuriDetailKind::MultiTouchFormedBy;
+                diagnostic.detailArgs.actions = detailParts.join(QStringLiteral(", "));
+                diagnostic.detailArgs.alert = diagnostic.alertLevel;
+                diagnostic.detail = renderMuriDetail(
+                    diagnostic.detailKind,
+                    diagnostic.detailArgs,
+                    SimaiNativeValidationLocale::English);
                 diagnostics->append(diagnostic);
             }
         }
@@ -590,17 +596,24 @@ void collectSimpleNoteRuntimeDiagnostics(
             const MuriAlertLevel alertLevel =
                 downgradeProtectedSimpleNoteAlertLevel(baseAlertLevel, note.hasProtection);
             const QString affectedTarget = simpleNoteTargetLabel(note);
-            const QString detail = slideHeadTap
-                ? slideHeadTapDetailText(
-                      hasTapOnSlideHead, alertLevel, causeConfig, affectedTarget, gapMs)
-                : tapOnSlideDetailText(alertLevel, causeConfig, affectedTarget, gapMs);
+            const MuriDetailKind detailKind = slideHeadTap
+                ? slideHeadTapDetailKind(hasTapOnSlideHead)
+                : MuriDetailKind::TapOnSlideCollide;
+            const MuriDetailArgs detailArgs =
+                simpleGapDetailArgs(alertLevel, causeConfig, affectedTarget, gapMs);
+            const QString detail = renderMuriDetail(
+                detailKind,
+                detailArgs,
+                SimaiNativeValidationLocale::English);
             collector.addSimpleNoteDiagnostic(
                 slideHeadTap ? MuriKind::SlideHeadTap : MuriKind::TapOnSlide,
                 alertLevel,
                 note.judgeSecond,
                 note,
                 detail,
-                diagnosticAnchorFromNote(note));
+                diagnosticAnchorFromNote(note),
+                detailKind,
+                detailArgs);
             forceRenderJudgeSpriteKeys.insert(note.markerKey);
             if (alertLevel == MuriAlertLevel::Warning) {
                 simpleJudgeEffects.insert(note.markerKey, MuriSimpleJudgeEffect::Perfect);
@@ -615,7 +628,10 @@ void collectSimpleNoteRuntimeDiagnostics(
         }
 
         const QString affectedConfig = markerConfigLabelForKey(markerConfigLabels, note.markerKey, note.type);
-        QString overlapDetail = QStringLiteral("%1 formed overlap at the same position.").arg(affectedConfig);
+        MuriDetailKind overlapDetailKind = MuriDetailKind::FormedOverlapAtSamePosition;
+        MuriDetailArgs overlapDetailArgs;
+        overlapDetailArgs.left = affectedConfig;
+        overlapDetailArgs.alert = MuriAlertLevel::Muri;
         if (!note.cause.sourceMarkerKey.isEmpty()) {
             const QString causeConfig = markerConfigLabelForSource(
                 markerConfigLabels,
@@ -623,10 +639,14 @@ void collectSimpleNoteRuntimeDiagnostics(
                 note.cause.sourceMarkerKey,
                 note.cause.sourceType);
             if (!causeConfig.isEmpty() && causeConfig != affectedConfig) {
-                overlapDetail =
-                    QStringLiteral("%1 and same-position %2 formed overlap.").arg(affectedConfig, causeConfig);
+                overlapDetailKind = MuriDetailKind::FormedOverlapSamePosition;
+                overlapDetailArgs.right = causeConfig;
             }
         }
+        const QString overlapDetail = renderMuriDetail(
+            overlapDetailKind,
+            overlapDetailArgs,
+            SimaiNativeValidationLocale::English);
         const DiagnosticAnchor anchor = earlierDiagnosticAnchor(
             diagnosticAnchorFromNote(note),
             diagnosticAnchorForCause(note.cause, markerRefs, syntheticSlideHeadOwnerKeys));
@@ -636,7 +656,9 @@ void collectSimpleNoteRuntimeDiagnostics(
             note.judgeSecond,
             note,
             overlapDetail,
-            anchor);
+            anchor,
+            overlapDetailKind,
+            overlapDetailArgs);
         forceRenderJudgeSpriteKeys.insert(note.markerKey);
     }
 

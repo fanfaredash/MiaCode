@@ -7,6 +7,7 @@
 #include <QChronoTimer>
 #include <QElapsedTimer>
 #include <QHash>
+#include <QJsonObject>
 #include <QMainWindow>
 #include <QPointer>
 #include <QPoint>
@@ -32,6 +33,8 @@
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
+#include "extensions/ExtensionManager.h"
+#include "app/ui/AppBackgroundSettings.h"
 
 class QAction;
 class QByteArray;
@@ -55,6 +58,7 @@ namespace miacode::export_page {
 class ExportLauncherPage;
 }
 namespace miacode::ui {
+class AppBackgroundPainter;
 class BusySpinner;
 }
 class QListWidget;
@@ -179,6 +183,8 @@ public:
         PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
         double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
         double touchFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+        PreviewTapJudgeTextDistance tapJudgeTextDistance = PreviewTapJudgeTextDistance::Inner;
+        PreviewJudgeEffectStyle judgeEffectStyle = PreviewJudgeEffectStyle::Standard;
         int skinLoadWaitMs = 2000;
     };
 
@@ -312,6 +318,7 @@ private slots:
     void onNetBatchDownload();
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
+    void onSkinSettings();
     void onMediaProcessingTools();
     void onPrependTrackSilence();
     void onPrependPvBlack();
@@ -325,6 +332,7 @@ private slots:
     // DocumentSection::openPerDifficultyDesignerDialog() in DocumentFlow.
     void onManagePerDifficultyDesigners();
     void onPreferences();
+    void showExtensionDevToolsDialog();
     void onAbout();
     void onToggleFindReplace();
     void onFindNext();
@@ -347,6 +355,7 @@ public:
     };
 private:
     using BatchTransform = std::function<QString(const QString&, int*)>;
+    using SelectionContextBatchTransform = std::function<QString(const QString&, const QString&, int*)>;
     enum class ChartTransformOp {
         MirrorLeftRight,
         MirrorUpDown,
@@ -414,6 +423,10 @@ private:
     QRect previewFullscreenControlCardRect(bool visible) const;
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
     double normalizedPreviewCanvasAspectRatio(double ratio) const;
+    void applyAppBackgroundSettings(
+        const miacode::ui::AppBackgroundSettings& settings,
+        bool persistPreference,
+        bool refreshTheme = true);
     void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     PreviewCanvasFrameRateMode previewFrameRateModeFromStorageValue(
         const QString& value,
@@ -465,6 +478,7 @@ private:
     QString resolveDefaultTrackPath() const;
     QString resolvePreviewSkinDir() const;
     QString resolvePreviewSkinRootDir() const;
+    void applyPreviewSkinDirectoryToSurfaces();
     QString resolveProjectRenderStateFilePath() const;
     QString resolveInitialOpenDirectory() const;
     void resetPortablePreviewSettingsToDefaults();
@@ -481,9 +495,7 @@ private:
     // Transient Alt-hold override: while the preview is paused, holding Alt
     // flips the "暂停时显示判定区" pause display (judge area ⇄ PV/BG) until released.
     void setPauseDisplayAltHoldActive(bool active);
-    void showCreateBookmarkDialog();
-    void showBookmarkManager();
-    void openBookmarkAtLine(int line);
+    void activateBookmarkAtLine(int line);
     void setFullCopyAreaVisible(bool visible);
     void syncCopyAreaEditorAppearance();
     void syncCopyAreaLineCount();
@@ -536,6 +548,7 @@ private:
     QString currentValidationIgnoreScopeKey() const;
     bool isIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey) const;
     void setIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey, bool ignored);
+    QJsonObject handleExtensionHostRequest(const QString& method, const QJsonObject& params);
     void loadProjectValidationPreferences();
     void saveProjectValidationPreferences(const QString& chartFilePath = QString()) const;
     void applyIgnoreMuriIssuePrompts(bool enabled, bool persistPreference);
@@ -574,7 +587,7 @@ private:
 
     struct ValidationCacheEntry {
         QString chartText;
-        bool chineseUi = false;
+        SimaiNativeValidationLocale validationLocale = SimaiNativeValidationLocale::English;
         miacode::simai::SimaiTimingMetadata timingMetadata;
         bool ok = true;
         int errorCount = 0;
@@ -584,6 +597,25 @@ private:
         int strictNoteCount = 0;
         int strictErrorCount = 0;
         QVector<ValidationCachedIssue> issues;
+    };
+
+    struct ExtensionDiagnosticEntry {
+        QString ownerId;
+        int line = 1;
+        int col = 1;
+        int endCol = 1;
+        QString message;
+        QString severity;
+        QString source;
+    };
+
+    struct ExtensionTimelineMarkerEntry {
+        QString ownerId;
+        QString id;
+        double second = 0.0;
+        double endSecond = -1.0;
+        QString label;
+        QString color;
     };
 
     struct DeletedDifficultyUndoState {
@@ -601,12 +633,24 @@ private:
         int transformedPosition = -1;
     };
 
+public:
+    // Derived sidebar bookmark for a non-control `||` chart comment. This is a
+    // transient view cache rebuilt from chart text, never a persisted object.
     struct EditorBookmark {
         QString title;
         QString text;
         int line = 1;
+        QString source;
+        QString commentText;
+        QString commentFingerprint;
+        QString contextBefore;
+        QString contextAfter;
+        int difficultyId = 0;
+        // True when the name comes from an explicit `[label]` comment prefix.
+        bool nameLocked = false;
     };
 
+private:
     class EditorSection;
     class PreferencesSection;
     class PreviewSection;

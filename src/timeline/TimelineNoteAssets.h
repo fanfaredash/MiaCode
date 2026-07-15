@@ -19,7 +19,7 @@ struct TimelineHoldPixmapParts {
     QImage bodySlice;
 };
 
-TimelineNoteAssetSet loadTimelineNoteAssets();
+TimelineNoteAssetSet loadTimelineNoteAssets(const QString& skinDirectory = QString());
 int transformedPixmapScalePermille(qreal scale);
 int transformedPixmapRotationTenths(qreal rotationDegrees);
 QString transformedPixmapCacheKey(const QString& type, qreal scale, qreal rotationDegrees, bool mirrorX);

@@ -96,6 +96,25 @@ struct SlideHeadModifierState {
     SlideHeadlessMode headlessMode = SlideHeadlessMode::None;
 };
 
+bool isSlideShapeChar(QChar ch)
+{
+    static const QString kSlideShapeChars = QStringLiteral("-^v<>VpqszwW");
+    return kSlideShapeChars.contains(ch);
+}
+
+bool tokenContainsSlideShape(const QString& token)
+{
+    // Position 0 is the lane digit for note tokens; shape characters after it
+    // make the token slide-bound even when the duration block is malformed or
+    // missing, so slide diagnostics own those errors.
+    for (int i = 1; i < token.size(); ++i) {
+        if (isSlideShapeChar(token.at(i))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool g_invalidStarPreviewEnabled = false;
 
 // Negative HS (`<HS*-N>`, a Majdata reverse-flow gimmick). DEFAULT ON: the
@@ -154,7 +173,7 @@ bool parseTapModifierSequence(
                 ++i;
                 continue;
             }
-            if (lower == QChar('m')) {
+            if (ch == QChar('m')) {
                 if (state->hasMine) {
                     return false;
                 }
@@ -430,7 +449,7 @@ bool parseTouchSuffix(
                 *hasFirework = true;
             } else if (ch == QChar('b')) {
                 *hasBreak = true;
-            } else if (ch == QChar('m') || ch == QChar('M')) {
+            } else if (ch == QChar('m')) {
                 *hasMine = true;
             } else if (!ch.isSpace()) {
                 *errorMessage = QString("Invalid touch modifier: %1").arg(token);
@@ -1283,6 +1302,110 @@ bool parseStandardSlideChain(
     }
 
     return false;
+}
+
+enum class SlideDurationPlacementStrict {
+    Valid,
+    EverySegmentTimed,
+    Invalid,
+};
+
+bool consumeStrictSlideShape(const QString& slideCore, int* index)
+{
+    if (index == nullptr || *index < 0 || *index >= slideCore.size()) {
+        return false;
+    }
+    const int i = *index;
+    const QChar ch = slideCore.at(i);
+    if (ch == QChar('V')) {
+        if (i + 2 >= slideCore.size()
+            || !isDigitLane(slideCore.at(i + 1))
+            || !isDigitLane(slideCore.at(i + 2))) {
+            return false;
+        }
+        *index = i + 3;
+        return true;
+    }
+    if (ch == QChar('p') || ch == QChar('q')) {
+        if (i + 1 >= slideCore.size()) {
+            return false;
+        }
+        const QChar next = slideCore.at(i + 1);
+        if (next == ch) {
+            if (i + 2 >= slideCore.size() || !isDigitLane(slideCore.at(i + 2))) {
+                return false;
+            }
+            *index = i + 3;
+            return true;
+        }
+        if (!isDigitLane(next)) {
+            return false;
+        }
+        *index = i + 2;
+        return true;
+    }
+    if (QStringLiteral("-^v<>szw").contains(ch)) {
+        if (i + 1 >= slideCore.size() || !isDigitLane(slideCore.at(i + 1))) {
+            return false;
+        }
+        *index = i + 2;
+        return true;
+    }
+    return false;
+}
+
+SlideDurationPlacementStrict classifySlideDurationPlacementStrict(const QString& slideCore)
+{
+    if (slideCore.isEmpty() || !isDigitLane(slideCore.at(0))) {
+        return SlideDurationPlacementStrict::Valid;
+    }
+
+    QVector<bool> segmentHasDuration;
+    int i = 1;
+    while (i < slideCore.size()) {
+        if (slideCore.at(i) == QChar('[')) {
+            if (segmentHasDuration.isEmpty() || segmentHasDuration.last()) {
+                return SlideDurationPlacementStrict::Invalid;
+            }
+            const int close = slideCore.indexOf(QChar(']'), i + 1);
+            if (close < 0) {
+                return SlideDurationPlacementStrict::Valid;
+            }
+            segmentHasDuration.last() = true;
+            i = close + 1;
+            continue;
+        }
+
+        const int beforeShape = i;
+        if (!consumeStrictSlideShape(slideCore, &i)) {
+            return SlideDurationPlacementStrict::Valid;
+        }
+        if (i <= beforeShape) {
+            return SlideDurationPlacementStrict::Valid;
+        }
+        segmentHasDuration.append(false);
+    }
+
+    if (segmentHasDuration.size() <= 1) {
+        return SlideDurationPlacementStrict::Valid;
+    }
+
+    int timedCount = 0;
+    for (bool hasDuration : segmentHasDuration) {
+        if (hasDuration) {
+            ++timedCount;
+        }
+    }
+    if (timedCount == 0) {
+        return SlideDurationPlacementStrict::Valid;
+    }
+    if (timedCount == 1 && segmentHasDuration.constLast()) {
+        return SlideDurationPlacementStrict::Valid;
+    }
+    if (timedCount == segmentHasDuration.size()) {
+        return SlideDurationPlacementStrict::EverySegmentTimed;
+    }
+    return SlideDurationPlacementStrict::Invalid;
 }
 
 // Strict-only syntactic validator for slide chains. Walks the slide core

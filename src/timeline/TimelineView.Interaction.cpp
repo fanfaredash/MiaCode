@@ -162,7 +162,7 @@ void TimelineView::mouseReleaseEvent(QMouseEvent* event)
 
 void TimelineView::wheelEvent(QWheelEvent* event)
 {
-    if (handleAltZoomWheel(event)) {
+    if (handleZoomWheel(event)) {
         setFocus(Qt::MouseFocusReason);
         return;
     }

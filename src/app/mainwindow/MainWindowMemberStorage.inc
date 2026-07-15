@@ -52,9 +52,8 @@
         QAction* editStaticTapOnSlideThresholdAction_ = nullptr;
         QAction* previewAudioSettingsAction_ = nullptr;
         QAction* previewVideoSettingsAction_ = nullptr;
+        QAction* skinSettingsAction_ = nullptr;
         QAction* swapWorkspaceSidesAction_ = nullptr;
-        QAction* createBookmarkAction_ = nullptr;
-        QAction* bookmarkManagerAction_ = nullptr;
         QAction* fullCopyAreaAction_ = nullptr;
         QAction* aboutAction_ = nullptr;
         QAction* fontDecreaseAction_ = nullptr;
@@ -144,10 +143,10 @@
         QLabel* editorEmptyStateLabel_ = nullptr;
         QTabWidget* bottomTabs_ = nullptr;
         QTabWidget* quickShellBottomTabsProxy_ = nullptr;
-        QToolButton* deleteDifficultyButton_ = nullptr;
         // Indeterminate spinner floated over the "Export" sidebar row while the
         // (synchronous, ~hundreds-of-ms) export-page build runs.
         miacode::ui::BusySpinner* outlineBusySpinner_ = nullptr;
+        miacode::ui::AppBackgroundPainter* appBackgroundPainter_ = nullptr;
         QSplitter* workspaceSplitter_ = nullptr;
         QWidget* previewPanel_ = nullptr;
         QWidget* previewLeftColumn_ = nullptr;
@@ -163,6 +162,7 @@
         QMenu* toolboxMenu_ = nullptr;
         QToolButton* previewAudioSettingsButton_ = nullptr;
         QToolButton* previewVideoSettingsButton_ = nullptr;
+        QToolButton* skinSettingsButton_ = nullptr;
         QSlider* previewSlider_ = nullptr;
         QToolButton* previewSpeedButton_ = nullptr;
         QToolButton* previewFullscreenButton_ = nullptr;
@@ -259,6 +259,10 @@
         int metadataExtraUndoSaveAnchor_ = 0;
         QVector<SelectionTransformUndoEntry> chartSelectionTransformUndoEntries_;
         QVector<EditorBookmark> editorBookmarks_;
+        // Sidebar bookmark-group fold state per difficulty id. Only explicit
+        // user toggles are recorded; an absent difficulty defaults to expanded
+        // when it is the active difficulty and collapsed otherwise.
+        QHash<int, bool> outlineBookmarkGroupExpanded_;
         int lastObservedEditorUndoSteps_ = 0;
         int lastObservedEditorRedoSteps_ = 0;
         bool editorSelectionUndoRedoRestoreInProgress_ = false;
@@ -320,15 +324,9 @@
         bool videoExportWorkerSuccess_ = false;
         bool videoExportWorkerCompletionReceived_ = false;
         bool videoExportWorkerCancelRequested_ = false;
-        // E-C inline export progress (A3 as amended 2026-06-11): an export
-        // launched from the embedded panel skips the QProgressDialog and
-        // rides the preview-area PLAYBACK transport instead — the slider
-        // advances through CHART TIME (exportStart + percent × duration)
-        // like a playback, range untouched; stage/ETA text goes to the
-        // status bar only. useInlineProgress_ marks the launch mode
-        // (survives the safe-mode retry; cleared by
-        // clearVideoExportWorkerState); second < 0 = no inline progress
-        // showing.
+        // Legacy inline-progress state. The embedded export panel now uses the
+        // normal QProgressDialog path; this state is still cleared defensively
+        // so any stale inline session cannot keep the panel button in cancel mode.
         bool videoExportUseInlineProgress_ = false;
         double videoExportInlineProgressSecond_ = -1.0;
         // Difficulty the embedded video panel was seeded with (0 = none).
@@ -511,8 +509,11 @@
         double previewTapFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
         double previewTouchFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
         bool previewSlideEarlierSecondAndTextOnTop_ = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
+        PreviewTapJudgeTextDistance previewTapJudgeTextDistance_ = PreviewTapJudgeTextDistance::Inner;
+        PreviewJudgeEffectStyle previewJudgeEffectStyle_ = PreviewJudgeEffectStyle::Standard;
         PreviewSkinVariant previewSkinVariant_ = PreviewSkinVariant::Standard;
-        QString previewSkinDirectoryName_ = QStringLiteral("skinSTD");
+        QString previewSkinDirectoryName_ = QStringLiteral("skinSD");
+        QString previewIntroSoundFileName_;
         PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
         PreviewCanvasFrameRateMode previewStageMediaFrameRateMode_ = PreviewCanvasFrameRateMode::Fps30;
         // Preview video decode mode preference: false = hardware (default), true =
@@ -522,6 +523,7 @@
         double previewCanvasAspectRatio_ = 1.0;
         bool previewAutoRestoreSquareAfterExport_ = false;
         bool previewForceLabeledJudgeLineWhenPaused_ = true;
+        bool previewTouchPadAuthoringShortcutEnabled_ = true;
         // Transient (not persisted): true only while the export-preview dialog
         // drives the on-screen preview. When set, the pause-hide option
         // ("暂停时显示判定区") is ignored so PV/BG renders exactly as it will in the
@@ -542,9 +544,11 @@
         miacode::preview_gameplay::CenterDisplayMode previewCenterDisplayMode_ =
             miacode::preview_gameplay::kDefaultCenterDisplayMode;
         bool previewShowValidationSummary_ = true;
+        miacode::ui::AppBackgroundSettings appBackgroundSettings_;
         bool ignoreMuriIssuePrompts_ = false;
         bool chartNormalizeStartAtNewMeasure_ = true;
         bool chartNormalizeReduceTo384Grid_ = false;
+        bool chartNormalizeSplitEveryFourMeasures_ = true;
         bool workspacePanelsSwapped_ = false;
         PreviewAudioSettings softwarePreviewAudioSettings_;
         PreviewAudioSettings previewAudioSettings_;
@@ -586,6 +590,22 @@
         QHash<int, ValidationCacheEntry> validationCacheByDifficulty_;
         QHash<QString, QSet<QString>> ignoredHeaderIssueTypesByFile_;
         QVector<ValidationDecoration> validationDecorations_;
+        QHash<QString, QVector<QTextEdit::ExtraSelection>> extensionEditorExtraSelections_;
+        QHash<QString, QVector<ExtensionDiagnosticEntry>> extensionDiagnosticsByOwner_;
+        QHash<QString, QVector<ExtensionTimelineMarkerEntry>> extensionTimelineMarkersByOwner_;
+        QVector<QJsonObject> extensionExportPresets_;
+        QHash<QString, QJsonArray> extensionRegistrationsByKind_;
+        QJsonArray extensionTimelineVisuals_;
+        QJsonArray extensionPreviewOverlays_;
+        QJsonArray extensionUiContributions_;
+        QJsonArray extensionExportHooks_;
+        QJsonArray extensionInputGestures_;
+        QJsonObject extensionShortcutContributions_;
+        QVector<QPointer<QWidget>> extensionRenderedUiWidgets_;
+        QVector<QPointer<QWidget>> extensionPreviewOverlayWidgets_;
+        QVector<QPointer<QAction>> extensionToolbarActions_;
+        QVector<QPointer<QShortcut>> extensionShortcutObjects_;
+        QJsonObject extensionProjectData_;
         DeletedDifficultyUndoState deletedDifficultyUndoState_;
         bool previewFollowDecorationActive_ = false;
         int previewFollowDecorationStartLine_ = 1;
@@ -605,6 +625,7 @@
     MainWindowUiRefs ui_;
     MainWindowState state_;
     std::unique_ptr<miacode::latency::LatencySandboxController> latencySandboxController_;
+    std::unique_ptr<miacode::extensions::ExtensionManager> extensionManager_;
     QWidget*& editorWidget_ = ui_.editorWidget_;
     PreviewRuntime*& previewCanvas_ = state_.previewCanvas_;
     PreviewStageMediaHost*& previewStageMediaHost_ = state_.previewStageMediaHost_;
@@ -682,9 +703,8 @@
     QAction*& editStaticTapOnSlideThresholdAction_ = ui_.editStaticTapOnSlideThresholdAction_;
     QAction*& previewAudioSettingsAction_ = ui_.previewAudioSettingsAction_;
     QAction*& previewVideoSettingsAction_ = ui_.previewVideoSettingsAction_;
+    QAction*& skinSettingsAction_ = ui_.skinSettingsAction_;
     QAction*& swapWorkspaceSidesAction_ = ui_.swapWorkspaceSidesAction_;
-    QAction*& createBookmarkAction_ = ui_.createBookmarkAction_;
-    QAction*& bookmarkManagerAction_ = ui_.bookmarkManagerAction_;
     QAction*& fullCopyAreaAction_ = ui_.fullCopyAreaAction_;
     QAction*& aboutAction_ = ui_.aboutAction_;
     QAction*& fontDecreaseAction_ = ui_.fontDecreaseAction_;
@@ -736,6 +756,7 @@
     int& metadataExtraUndoSaveAnchor_ = state_.metadataExtraUndoSaveAnchor_;
     QVector<SelectionTransformUndoEntry>& chartSelectionTransformUndoEntries_ = state_.chartSelectionTransformUndoEntries_;
     QVector<EditorBookmark>& editorBookmarks_ = state_.editorBookmarks_;
+    QHash<int, bool>& outlineBookmarkGroupExpanded_ = state_.outlineBookmarkGroupExpanded_;
     int& lastObservedEditorUndoSteps_ = state_.lastObservedEditorUndoSteps_;
     int& lastObservedEditorRedoSteps_ = state_.lastObservedEditorRedoSteps_;
     bool& editorSelectionUndoRedoRestoreInProgress_ = state_.editorSelectionUndoRedoRestoreInProgress_;
@@ -916,12 +937,16 @@
     double& previewTapFlowSpeed_ = state_.previewTapFlowSpeed_;
     double& previewTouchFlowSpeed_ = state_.previewTouchFlowSpeed_;
     bool& previewSlideEarlierSecondAndTextOnTop_ = state_.previewSlideEarlierSecondAndTextOnTop_;
+    PreviewTapJudgeTextDistance& previewTapJudgeTextDistance_ = state_.previewTapJudgeTextDistance_;
+    PreviewJudgeEffectStyle& previewJudgeEffectStyle_ = state_.previewJudgeEffectStyle_;
     PreviewSkinVariant& previewSkinVariant_ = state_.previewSkinVariant_;
     QString& previewSkinDirectoryName_ = state_.previewSkinDirectoryName_;
+    QString& previewIntroSoundFileName_ = state_.previewIntroSoundFileName_;
     PreviewCanvasFrameRateMode& previewCanvasFrameRateMode_ = state_.previewCanvasFrameRateMode_;
     double& previewCanvasAspectRatio_ = state_.previewCanvasAspectRatio_;
     bool& previewAutoRestoreSquareAfterExport_ = state_.previewAutoRestoreSquareAfterExport_;
     bool& previewForceLabeledJudgeLineWhenPaused_ = state_.previewForceLabeledJudgeLineWhenPaused_;
+    bool& previewTouchPadAuthoringShortcutEnabled_ = state_.previewTouchPadAuthoringShortcutEnabled_;
     bool& exportPreviewActive_ = state_.exportPreviewActive_;
     bool& previewShowDebugInfo_ = state_.previewShowDebugInfo_;
     bool& previewShowTimestamp_ = state_.previewShowTimestamp_;
@@ -931,9 +956,11 @@
     bool& exportShowChartInfoHud_ = state_.exportShowChartInfoHud_;
     miacode::preview_gameplay::CenterDisplayMode& previewCenterDisplayMode_ = state_.previewCenterDisplayMode_;
     bool& previewShowValidationSummary_ = state_.previewShowValidationSummary_;
+    miacode::ui::AppBackgroundSettings& appBackgroundSettings_ = state_.appBackgroundSettings_;
     bool& ignoreMuriIssuePrompts_ = state_.ignoreMuriIssuePrompts_;
     bool& chartNormalizeStartAtNewMeasure_ = state_.chartNormalizeStartAtNewMeasure_;
     bool& chartNormalizeReduceTo384Grid_ = state_.chartNormalizeReduceTo384Grid_;
+    bool& chartNormalizeSplitEveryFourMeasures_ = state_.chartNormalizeSplitEveryFourMeasures_;
     bool& workspacePanelsSwapped_ = state_.workspacePanelsSwapped_;
     PreviewAudioSettings& softwarePreviewAudioSettings_ = state_.softwarePreviewAudioSettings_;
     PreviewAudioSettings& previewAudioSettings_ = state_.previewAudioSettings_;
@@ -1001,8 +1028,8 @@
     QPushButton*& editorReplaceAllButton_ = ui_.editorReplaceAllButton_;
     QLabel*& editorEmptyStateLabel_ = ui_.editorEmptyStateLabel_;
     QTabWidget*& bottomTabs_ = ui_.bottomTabs_;
-    QToolButton*& deleteDifficultyButton_ = ui_.deleteDifficultyButton_;
     miacode::ui::BusySpinner*& outlineBusySpinner_ = ui_.outlineBusySpinner_;
+    miacode::ui::AppBackgroundPainter*& appBackgroundPainter_ = ui_.appBackgroundPainter_;
     QSplitter*& workspaceSplitter_ = ui_.workspaceSplitter_;
     QWidget*& previewPanel_ = ui_.previewPanel_;
     QWidget*& previewLeftColumn_ = ui_.previewLeftColumn_;
@@ -1018,6 +1045,7 @@
     QMenu*& toolboxMenu_ = ui_.toolboxMenu_;
     QToolButton*& previewAudioSettingsButton_ = ui_.previewAudioSettingsButton_;
     QToolButton*& previewVideoSettingsButton_ = ui_.previewVideoSettingsButton_;
+    QToolButton*& skinSettingsButton_ = ui_.skinSettingsButton_;
     QSlider*& previewSlider_ = ui_.previewSlider_;
     QToolButton*& previewSpeedButton_ = ui_.previewSpeedButton_;
     QToolButton*& previewFullscreenButton_ = ui_.previewFullscreenButton_;

@@ -6,16 +6,18 @@ class QWidget;
 
 namespace miacode::video_export {
 
-// Modal HUD-font settings dialog (current-font readout + font-library combo +
-// import / reset), shared by the video-export dialog's "Font" tab and the main
-// window's 视频设置 dialog. The font library lives next to the portable
-// preferences file (<preferences dir>/fonts); the selection applies
-// process-wide via miacode::preview::scene::setPreviewHudCustomFontPath and is
+// Builds the HUD-font picker as an EMBEDDABLE widget (current-font readout +
+// font-library combo + live sample + import / reset), for hosting inline in the
+// 皮肤 popup / export 皮肤 tab. The font library lives next to the portable
+// preferences file (<preferences dir>/fonts); selections apply to individual
+// HUD areas via miacode::preview::scene::setPreviewHudCustomFontPath and are
 // persisted by that setter. `onFontChanged` (optional) fires after EVERY font
 // change (pick / import / reset) so the host can refresh a live preview that
 // is currently showing the HUD — pass {} when the next natural repaint is
-// soon enough.
-void openHudFontSettingsDialog(QWidget* parent,
-                               const std::function<void()>& onFontChanged = {});
+// soon enough. `refreshOut` can receive a callback that re-reads the active
+// persisted area font into this widget. The returned widget is parented to `parent`.
+QWidget* createHudFontSettingsWidget(QWidget* parent,
+                                     const std::function<void()>& onFontChanged = {},
+                                     std::function<void()>* refreshOut = nullptr);
 
 }  // namespace miacode::video_export

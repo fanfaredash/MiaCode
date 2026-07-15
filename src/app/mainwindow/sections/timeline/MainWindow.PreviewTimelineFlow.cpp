@@ -11,11 +11,13 @@
 #include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "MainEntrypoints.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
 #include "common/ChartClockCount.h"
 #include "common/CrashRecovery.h"
+#include "common/OperationLog.h"
 #include "common/DebugLog.h"
 #include "common/ProcessDiagnostics.h"
 #include "common/DebugOptions.h"
@@ -658,6 +660,19 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
             ? QString()
             : QDir(projectDataDirectoryPath).filePath(QStringLiteral("logs"))
     );
+    // Relocate the startup beacon and op-chain shadow so they co-locate
+    // with the runtime/export logs under this chart's .miacode/logs/.
+    if (!projectDataDirectoryPath.isEmpty()) {
+        miacode::oplog::relocateLogs(
+            QDir(projectDataDirectoryPath).filePath(QStringLiteral("logs")));
+    }
+    // The runtime log directory just rebound to this chart's .miacode/logs/;
+    // re-emit the P0/P2/P3 startup diagnostics (process identity / GPU hint /
+    // resolved GPU policy) so the per-chart log a user collects is self-contained
+    // rather than only holding them in the app-local boot log.
+    if (!projectDataDirectoryPath.isEmpty()) {
+        miacode::app::entry::logProcessStartupDiagnostics(QStringLiteral("log_dir_rebound"));
+    }
     if (!state_.currentFilePath_.isEmpty()) {
         owner_.setLastOpenDirectory(state_.currentFilePath_);
 
@@ -735,11 +750,14 @@ QString MainWindow::TimelineSection::editorText() const
 
 void MainWindow::TimelineSection::scheduleTimelineRefresh()
 {
-    if (!hasActiveDifficulty() || state_.timelineQuickStateBridge_ == nullptr) {
+    if (!hasActiveDifficulty()) {
         return;
     }
     ++state_.timelineRevision_;
-    refreshTimelineQuickModelFromCurrentText();
+
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        refreshTimelineQuickModelFromCurrentText();
+    }
     requestTimelineSlowRefresh();
 }
 
@@ -955,7 +973,7 @@ void MainWindow::TimelineSection::requestTimelineSlowRefresh()
     state_.pendingTimelineSlowRefresh_.chartText = activeChartText();
     state_.pendingTimelineSlowRefresh_.firstSeconds = parsedFirstSeconds();
     state_.pendingTimelineSlowRefresh_.timingMetadata = currentTimingMetadata();
-    state_.pendingTimelineSlowRefresh_.chineseUi = UiText::isChineseUi();
+    state_.pendingTimelineSlowRefresh_.validationLocale = uiValidationLocale();
     state_.timelineSlowRequestedRevision_ = state_.pendingTimelineSlowRefresh_.revision;
     if (state_.pendingPreviewPlaybackStart_) {
         state_.pendingPreviewPlaybackRevision_ = state_.timelineRevision_;
@@ -1383,7 +1401,12 @@ void MainWindow::flushDeferredEditorUiUpdate()
             ensurePreviewFollowVisible);
     }
 
-    if (syncTimelineCursor && !previewFollowHandled) {
+    const bool previewFollowOwnsPlaybackCursor =
+        previewFollowHandled
+        && (state_.qtPreviewPlaying_
+            || state_.previewStartupSyncPending_
+            || state_.previewLateVideoStartPending_);
+    if (syncTimelineCursor && !previewFollowOwnsPlaybackCursor) {
         syncTimelineToEditorCursor(centerView);
     }
 }

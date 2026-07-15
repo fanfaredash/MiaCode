@@ -19,6 +19,8 @@ QString backgroundScaleModeToken(PreviewBackgroundScaleMode mode)
         return QStringLiteral("fit");
     case PreviewBackgroundScaleMode::SquareFitContain:
         return QStringLiteral("square_fit");
+    case PreviewBackgroundScaleMode::InnerCircleFitOuterFill:
+        return QStringLiteral("inner_circle_fit_outer_fill");
     case PreviewBackgroundScaleMode::FillCrop:
     default:
         return QStringLiteral("fill");
@@ -100,6 +102,16 @@ PreviewBackgroundScaleMode backgroundScaleModeFromToken(const QString& token)
         || normalized == QLatin1String("square-fill")
         || normalized == QLatin1String("square")) {
         return PreviewBackgroundScaleMode::SquareFitContain;
+    }
+    if (normalized == QLatin1String("inner_circle_fit_outer_fill")
+        || normalized == QLatin1String("inner-circle-fit-outer-fill")
+        || normalized == QLatin1String("inner_fit_outer_fill")
+        || normalized == QLatin1String("inner-fit-outer-fill")
+        || normalized == QLatin1String("circle_fit_outer_fill")
+        || normalized == QLatin1String("circle-fit-outer-fill")
+        || normalized == QLatin1String("inner_circle_fit")
+        || normalized == QLatin1String("inner-circle-fit")) {
+        return PreviewBackgroundScaleMode::InnerCircleFitOuterFill;
     }
     return PreviewBackgroundScaleMode::FillCrop;
 }
@@ -194,6 +206,8 @@ QJsonObject VideoExportSnapshot::toJson() const
     render.insert(QStringLiteral("tap_flow_speed"), tapFlowSpeed);
     render.insert(QStringLiteral("touch_flow_speed"), touchFlowSpeed);
     render.insert(QStringLiteral("slide_earlier_second_and_text_on_top"), slideEarlierSecondAndTextOnTop);
+    render.insert(QStringLiteral("tap_judge_text_distance"), QString::fromLatin1(tapJudgeTextDistanceToken(tapJudgeTextDistance)));
+    render.insert(QStringLiteral("judge_effect_style"), QString::fromLatin1(judgeEffectStyleToken(judgeEffectStyle)));
     render.insert(QStringLiteral("render_mode"), renderModeToken(muriRenderOptions.renderMode));
     render.insert(QStringLiteral("show_slide_tracks"), muriRenderOptions.showSlideTracks);
     render.insert(QStringLiteral("show_judge_markers"), muriRenderOptions.showJudgeMarkers);
@@ -205,6 +219,10 @@ QJsonObject VideoExportSnapshot::toJson() const
     render.insert(
         QStringLiteral("show_chart_review_tap_judge_overlay"),
         muriRenderOptions.showChartReviewTapJudgeOverlay
+    );
+    render.insert(
+        QStringLiteral("show_chart_review_break_judge_overlay"),
+        muriRenderOptions.showChartReviewBreakJudgeOverlay
     );
     render.insert(
         QStringLiteral("show_chart_review_touch_judge_overlay"),
@@ -252,6 +270,9 @@ QJsonObject VideoExportSnapshot::toJson() const
     introObject.insert(QStringLiteral("background_custom_path"), intro.customBackgroundPath);
     introObject.insert(QStringLiteral("background_blur"), intro.blurBackground);
     introObject.insert(QStringLiteral("card_shadow"), intro.cardShadow);
+    if (!introSoundFileName.trimmed().isEmpty()) {
+        introObject.insert(QStringLiteral("sound_file"), QFileInfo(introSoundFileName).fileName());
+    }
     root.insert(QStringLiteral("intro"), introObject);
     return root;
 }
@@ -319,6 +340,12 @@ bool VideoExportSnapshot::fromJson(
     parsed.slideEarlierSecondAndTextOnTop =
         render.value(QStringLiteral("slide_earlier_second_and_text_on_top"))
             .toBool(parsed.slideEarlierSecondAndTextOnTop);
+    parsed.tapJudgeTextDistance = tapJudgeTextDistanceFromToken(
+        render.value(QStringLiteral("tap_judge_text_distance")).toString(
+            QString::fromLatin1(tapJudgeTextDistanceToken(parsed.tapJudgeTextDistance))));
+    parsed.judgeEffectStyle = judgeEffectStyleFromToken(
+        render.value(QStringLiteral("judge_effect_style")).toString(
+            QString::fromLatin1(judgeEffectStyleToken(parsed.judgeEffectStyle))));
     parsed.muriRenderOptions.renderMode =
         renderModeFromToken(render.value(QStringLiteral("render_mode")).toString());
     parsed.muriRenderOptions.showSlideTracks =
@@ -333,6 +360,9 @@ bool VideoExportSnapshot::fromJson(
     parsed.muriRenderOptions.showChartReviewTapJudgeOverlay =
         render.value(QStringLiteral("show_chart_review_tap_judge_overlay"))
             .toBool(parsed.muriRenderOptions.showChartReviewTapJudgeOverlay);
+    parsed.muriRenderOptions.showChartReviewBreakJudgeOverlay =
+        render.value(QStringLiteral("show_chart_review_break_judge_overlay"))
+            .toBool(parsed.muriRenderOptions.showChartReviewBreakJudgeOverlay);
     parsed.muriRenderOptions.showChartReviewTouchJudgeOverlay =
         render.value(QStringLiteral("show_chart_review_touch_judge_overlay"))
             .toBool(parsed.muriRenderOptions.showChartReviewTouchJudgeOverlay);
@@ -390,6 +420,7 @@ bool VideoExportSnapshot::fromJson(
         introObject.value(QStringLiteral("background_blur")).toBool(parsed.intro.blurBackground);
     parsed.intro.cardShadow =
         introObject.value(QStringLiteral("card_shadow")).toBool(parsed.intro.cardShadow);
+    parsed.introSoundFileName = QFileInfo(introObject.value(QStringLiteral("sound_file")).toString()).fileName();
 
     if (parsed.chartTextUtf8.isEmpty()) {
         if (errorMessage != nullptr) {
@@ -466,6 +497,8 @@ bool buildVideoExportTaskFromSnapshot(
     built.tapFlowSpeed = snapshot.tapFlowSpeed;
     built.touchFlowSpeed = snapshot.touchFlowSpeed;
     built.slideEarlierSecondAndTextOnTop = snapshot.slideEarlierSecondAndTextOnTop;
+    built.tapJudgeTextDistance = snapshot.tapJudgeTextDistance;
+    built.judgeEffectStyle = snapshot.judgeEffectStyle;
     built.muriRenderOptions = snapshot.muriRenderOptions;
     built.staticTapOnSlideThresholdSeconds = snapshot.staticTapOnSlideThresholdSeconds;
     built.exportStartSeconds = qMax(0.0, snapshot.exportStartSeconds);
@@ -496,6 +529,7 @@ bool buildVideoExportTaskFromSnapshot(
             .trimmed();
     }
     built.intro = snapshot.intro;
+    built.introSoundFileName = snapshot.introSoundFileName;
     built.centerDisplayMode = snapshot.centerDisplayMode;
     built.skinLoadWaitMs = qBound(0, snapshot.skinLoadWaitMs, 20000);
     // The clock_count VALUE is always derived from the chart; the count-in on/off

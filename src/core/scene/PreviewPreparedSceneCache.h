@@ -18,8 +18,10 @@ struct PreviewPreparedSceneCacheKey {
     RenderMode renderMode = RenderMode::Native;
     bool showSlideTracks = true;
     bool slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
+    PreviewTapJudgeTextDistance tapJudgeTextDistance = PreviewTapJudgeTextDistance::Inner;
     bool showChartReviewSlideJudgeOverlay = false;
     bool showChartReviewTapJudgeOverlay = false;
+    bool showChartReviewBreakJudgeOverlay = false;
     bool showChartReviewTouchJudgeOverlay = false;
 
     bool operator==(const PreviewPreparedSceneCacheKey& other) const
@@ -30,8 +32,10 @@ struct PreviewPreparedSceneCacheKey {
             && renderMode == other.renderMode
             && showSlideTracks == other.showSlideTracks
             && slideEarlierSecondAndTextOnTop == other.slideEarlierSecondAndTextOnTop
+            && tapJudgeTextDistance == other.tapJudgeTextDistance
             && showChartReviewSlideJudgeOverlay == other.showChartReviewSlideJudgeOverlay
             && showChartReviewTapJudgeOverlay == other.showChartReviewTapJudgeOverlay
+            && showChartReviewBreakJudgeOverlay == other.showChartReviewBreakJudgeOverlay
             && showChartReviewTouchJudgeOverlay == other.showChartReviewTouchJudgeOverlay;
     }
 };

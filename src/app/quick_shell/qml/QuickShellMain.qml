@@ -1,5 +1,6 @@
 ﻿import QtQuick
 import QtQuick.Controls
+import QtQuick.Effects
 import QtQuick.Layouts
 import QtQuick.Window
 import MiaCode.Preview
@@ -7,8 +8,36 @@ import MiaCode.Preview
 ApplicationWindow {
     id: root
 
-    property var paletteMap: ({})
-    property var metricsMap: ({})
+    background: Item {
+        Rectangle {
+            anchors.fill: parent
+            color: root.tone("windowBg", "#f8fafd")
+        }
+
+        Image {
+            anchors.fill: parent
+            visible: root.appBackgroundActive()
+            source: visible ? String(root.appBackgroundMap.sourceUrl) : ""
+            opacity: root.appBackgroundOpacity()
+            fillMode: root.appBackgroundFillMode()
+            horizontalAlignment: root.appBackgroundHorizontalAlignment()
+            verticalAlignment: root.appBackgroundVerticalAlignment()
+            smooth: true
+            mipmap: true
+            asynchronous: true
+            cache: true
+            layer.enabled: visible && root.appBackgroundBlur() > 0
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blurMax: 64
+                blur: Math.min(1.0, root.appBackgroundBlur() / 100.0)
+            }
+        }
+    }
+
+    property var paletteMap: styleBridge ? styleBridge.palette : ({})
+    property var metricsMap: styleBridge ? styleBridge.metrics : ({})
+    property var appBackgroundMap: styleBridge ? styleBridge.appBackground : ({})
     property var shellController: controller
     property bool fullscreenControlsVisible: controller.previewFullscreen
     property bool fullscreenHintVisible: false
@@ -45,6 +74,12 @@ ApplicationWindow {
     property bool embeddedSeparateSurfaceReady: true
     property bool embeddedInlineSurfaceActive: false
     property bool fullscreenInlineSurfaceActive: false
+    // Once created, inline preview surfaces stay alive for their QQuickWindow lifetime.
+    // Route changes only toggle visibility/attachment; destroying a Loader while Qt's batch
+    // renderer is retiring the previous frame used to race QSG texture ownership.
+    property bool embeddedInlineSurfaceCreated: false
+    property bool fullscreenInlineSurfaceCreated: false
+    property bool fullscreenPreviewHostCreated: false
     property bool fullscreenHoveringRevealZone: false
     property bool fullscreenHoveringControls: false
     property rect previewSeekHotRect: {
@@ -67,6 +102,82 @@ ApplicationWindow {
             return
         paletteMap = styleBridge.palette
         metricsMap = styleBridge.metrics
+        appBackgroundMap = styleBridge.appBackground
+    }
+
+    function appBackgroundActive() {
+        return appBackgroundMap
+            && appBackgroundMap.active === true
+            && appBackgroundMap.sourceUrl !== undefined
+            && String(appBackgroundMap.sourceUrl).length > 0
+    }
+
+    function appBackgroundOpacity() {
+        const value = Number(appBackgroundMap && appBackgroundMap.opacity !== undefined ? appBackgroundMap.opacity : 0)
+        if (!isFinite(value))
+            return 0
+        return Math.max(0, Math.min(0.8, value))
+    }
+
+    function appBackgroundBlur() {
+        const value = Number(appBackgroundMap && appBackgroundMap.blur !== undefined ? appBackgroundMap.blur : 0)
+        if (!isFinite(value))
+            return 0
+        return Math.max(0, Math.min(100, value))
+    }
+
+    function appBackgroundFillMode() {
+        const mode = String(appBackgroundMap && appBackgroundMap.sizeMode !== undefined ? appBackgroundMap.sizeMode : "cover")
+        if (mode === "contain")
+            return Image.PreserveAspectFit
+        if (mode === "stretch")
+            return Image.Stretch
+        if (mode === "center")
+            return Image.Pad
+        if (mode === "repeat")
+            return Image.Tile
+        return Image.PreserveAspectCrop
+    }
+
+    function appBackgroundHorizontalAlignment() {
+        const position = String(appBackgroundMap && appBackgroundMap.position !== undefined ? appBackgroundMap.position : "center")
+        if (position.indexOf("left") >= 0)
+            return Image.AlignLeft
+        if (position.indexOf("right") >= 0)
+            return Image.AlignRight
+        return Image.AlignHCenter
+    }
+
+    function appBackgroundVerticalAlignment() {
+        const position = String(appBackgroundMap && appBackgroundMap.position !== undefined ? appBackgroundMap.position : "center")
+        if (position.indexOf("top") >= 0)
+            return Image.AlignTop
+        if (position.indexOf("bottom") >= 0)
+            return Image.AlignBottom
+        return Image.AlignVCenter
+    }
+
+    function appBackgroundPanelOverlayOpacity() {
+        const key = tone("dark", false) ? "panelAlphaDark" : "panelAlphaLight"
+        const value = Number(appBackgroundMap && appBackgroundMap[key] !== undefined ? appBackgroundMap[key] : 200)
+        if (!isFinite(value))
+            return 200 / 255
+        return Math.max(0, Math.min(255, value)) / 255
+    }
+
+    function surfaceTone(key, fallback, alpha) {
+        const value = tone(key, fallback)
+        if (!appBackgroundActive())
+            return value
+        const text = String(value)
+        if (text.length < 7 || text[0] !== "#")
+            return value
+        const red = parseInt(text.slice(1, 3), 16)
+        const green = parseInt(text.slice(3, 5), 16)
+        const blue = parseInt(text.slice(5, 7), 16)
+        if (!isFinite(red) || !isFinite(green) || !isFinite(blue))
+            return value
+        return Qt.rgba(red / 255, green / 255, blue / 255, alpha)
     }
 
     function formatTransportTime(secondsValue) {
@@ -93,11 +204,11 @@ ApplicationWindow {
     function handlePreviewSeekPress(event) {
         if (!event || event.modifiers !== Qt.NoModifier)
             return
-        // if (!event.isAutoRepeat && event.key === Qt.Key_F11) {
-        //     controller.previewFullscreen = !controller.previewFullscreen
-        //     event.accepted = true
-        //     return
-        // }
+        if (!event.isAutoRepeat && event.key === Qt.Key_F11) {
+            controller.previewFullscreen = !controller.previewFullscreen
+            event.accepted = true
+            return
+        }
         if (!event.isAutoRepeat && event.key === Qt.Key_Space) {
             controller.togglePreviewPlayback()
             event.accepted = true
@@ -164,6 +275,8 @@ ApplicationWindow {
             + " fullscreen_window_visible=" + (fullscreenPreviewWindow.visible ? 1 : 0)
             + " embedded_inline_active=" + (embeddedInlineSurfaceActive ? 1 : 0)
             + " fullscreen_inline_active=" + (fullscreenInlineSurfaceActive ? 1 : 0)
+            + " embedded_inline_created=" + (embeddedInlineSurfaceCreated ? 1 : 0)
+            + " fullscreen_inline_created=" + (fullscreenInlineSurfaceCreated ? 1 : 0)
             + " separate_surface=" + (controller.previewUsesSeparateSurface ? 1 : 0)
         if (extra && extra.length > 0)
             payload += " " + extra
@@ -689,6 +802,7 @@ ApplicationWindow {
 
         function onAppearanceChanged() {
             root.paletteMap = styleBridge.palette
+            root.appBackgroundMap = styleBridge.appBackground
             if (embeddedTransport)
                 embeddedTransport.paletteRefreshRequested()
             if (fullscreenTransport)
@@ -831,6 +945,7 @@ ApplicationWindow {
             )
             if (!canActivate)
                 return
+            root.embeddedInlineSurfaceCreated = true
             embeddedInlineSurfaceActive = true
             logPreviewSurfaceTransition("preview_surface_route_commit", "target=embedded")
         }
@@ -848,6 +963,8 @@ ApplicationWindow {
             )
             if (!canActivate)
                 return
+            root.fullscreenPreviewHostCreated = true
+            root.fullscreenInlineSurfaceCreated = true
             fullscreenInlineSurfaceActive = true
             fullscreenPreviewWindow.requestActivate()
             fullscreenInteractionRoot.forceActiveFocus()
@@ -862,11 +979,11 @@ ApplicationWindow {
         onActivated: controller.previewFullscreen = false
     }
 
-    // Shortcut {
-    //     sequence: "F11"
-    //     context: Qt.ApplicationShortcut
-    //     onActivated: controller.previewFullscreen = !controller.previewFullscreen
-    // }
+    Shortcut {
+        sequence: "F11"
+        context: Qt.ApplicationShortcut
+        onActivated: controller.previewFullscreen = !controller.previewFullscreen
+    }
 
     Shortcut {
         sequence: "Space"
@@ -1138,10 +1255,21 @@ ApplicationWindow {
 
             WindowContainer {
                 anchors.fill: parent
+                visible: startupContentReady
                 window: controller.topChromeWindow
                 Component.onCompleted: controller.syncTopChromeSurfaceSize(width, height)
-                onWidthChanged: controller.syncTopChromeSurfaceSize(width, height)
-                onHeightChanged: controller.syncTopChromeSurfaceSize(width, height)
+                onVisibleChanged: {
+                    if (visible)
+                        controller.syncTopChromeSurfaceSize(width, height)
+                }
+                onWidthChanged: {
+                    if (visible)
+                        controller.syncTopChromeSurfaceSize(width, height)
+                }
+                onHeightChanged: {
+                    if (visible)
+                        controller.syncTopChromeSurfaceSize(width, height)
+                }
             }
         }
 
@@ -1160,10 +1288,21 @@ ApplicationWindow {
                 Layout.minimumWidth: sidebarPaneWidth()
                 Layout.maximumWidth: sidebarPaneWidth()
                 Layout.fillHeight: true
+                visible: startupContentReady
                 window: controller.sidebarWindow
                 Component.onCompleted: controller.syncSidebarSurfaceSize(width, height)
-                onWidthChanged: controller.syncSidebarSurfaceSize(width, height)
-                onHeightChanged: controller.syncSidebarSurfaceSize(width, height)
+                onVisibleChanged: {
+                    if (visible)
+                        controller.syncSidebarSurfaceSize(width, height)
+                }
+                onWidthChanged: {
+                    if (visible)
+                        controller.syncSidebarSurfaceSize(width, height)
+                }
+                onHeightChanged: {
+                    if (visible)
+                        controller.syncSidebarSurfaceSize(width, height)
+                }
             }
 
             RowLayout {
@@ -1188,10 +1327,21 @@ ApplicationWindow {
                     WindowContainer {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+                        visible: startupContentReady
                         window: controller.workspaceWindow
                         Component.onCompleted: controller.syncWorkspaceSurfaceSize(width, height)
-                        onWidthChanged: controller.syncWorkspaceSurfaceSize(width, height)
-                        onHeightChanged: controller.syncWorkspaceSurfaceSize(width, height)
+                        onVisibleChanged: {
+                            if (visible)
+                                controller.syncWorkspaceSurfaceSize(width, height)
+                        }
+                        onWidthChanged: {
+                            if (visible)
+                                controller.syncWorkspaceSurfaceSize(width, height)
+                        }
+                        onHeightChanged: {
+                            if (visible)
+                                controller.syncWorkspaceSurfaceSize(width, height)
+                        }
                     }
 
                     BottomTabsQuickHost {
@@ -1213,6 +1363,7 @@ ApplicationWindow {
                         controller: root.shellController
                         paletteMap: root.paletteMap
                         metricsMap: root.metricsMap
+                        startupContentReady: root.startupContentReady
                     }
                 }
 
@@ -1246,10 +1397,18 @@ ApplicationWindow {
 
                         property real dragStartSceneX: 0
                         property real dragStartWidth: 0
+                        property int dragMoveCount: 0
 
                         onPressed: function(mouse) {
                             dragStartSceneX = previewResizeHandle.mapToItem(root.contentItem, mouse.x, mouse.y).x
                             dragStartWidth = previewPaneWidth
+                            dragMoveCount = 0
+                            controller.logPreviewInteraction(
+                                "preview_resize_drag_begin",
+                                "start_width=" + dragStartWidth
+                                    + " workspace_row=" + workspaceRow.width + "x" + workspaceRow.height
+                                    + " preview_canvas=" + embeddedPreviewFrame.width + "x" + embeddedPreviewFrame.height
+                            )
                         }
 
                         onPositionChanged: function(mouse) {
@@ -1265,10 +1424,42 @@ ApplicationWindow {
                                 workspaceRow.height
                             )
                             previewPaneUserResized = true
+                            dragMoveCount += 1
+                            if (dragMoveCount === 1 || dragMoveCount % 15 === 0) {
+                                controller.logPreviewInteraction(
+                                    "preview_resize_drag_move_sample",
+                                    "move_count=" + dragMoveCount
+                                        + " scene_x=" + sceneX
+                                        + " delta=" + signedDelta
+                                        + " width=" + previewPaneWidth
+                                        + " bounded_width=" + boundedWidth
+                                        + " workspace_row=" + workspaceRow.width + "x" + workspaceRow.height
+                                )
+                            }
                         }
 
-                        onReleased: persistPreviewPaneWidthRatio()
-                        onCanceled: persistPreviewPaneWidthRatio()
+                        onReleased: {
+                            controller.logPreviewInteraction(
+                                "preview_resize_drag_end",
+                                "move_count=" + dragMoveCount
+                                    + " start_width=" + dragStartWidth
+                                    + " end_width=" + previewPaneWidth
+                                    + " workspace_row=" + workspaceRow.width + "x" + workspaceRow.height
+                                    + " preview_canvas=" + embeddedPreviewFrame.width + "x" + embeddedPreviewFrame.height
+                            )
+                            persistPreviewPaneWidthRatio()
+                        }
+                        onCanceled: {
+                            controller.logPreviewInteraction(
+                                "preview_resize_drag_cancel",
+                                "move_count=" + dragMoveCount
+                                    + " start_width=" + dragStartWidth
+                                    + " end_width=" + previewPaneWidth
+                                    + " workspace_row=" + workspaceRow.width + "x" + workspaceRow.height
+                                    + " preview_canvas=" + embeddedPreviewFrame.width + "x" + embeddedPreviewFrame.height
+                            )
+                            persistPreviewPaneWidthRatio()
+                        }
                     }
                 }
 
@@ -1278,10 +1469,16 @@ ApplicationWindow {
                     Layout.minimumWidth: previewPaneMinWidth()
                     Layout.maximumWidth: previewPaneMaxWidth(boundedWorkspaceWidth(workspaceRow.width), workspaceRow.height)
                     Layout.fillHeight: true
-                    color: tone("panelBg", "#f5f7fa")
+                    color: appBackgroundActive() ? "transparent" : tone("panelBg", "#f5f7fa")
                     border.color: tone("border", "#d5e0ec")
                     onWidthChanged: schedulePreviewPaneLayoutLog("preview_frame_width")
                     onHeightChanged: schedulePreviewPaneLayoutLog("preview_frame_height")
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: surfaceTone("panelBg", "#f5f7fa", root.appBackgroundPanelOverlayOpacity())
+                        visible: root.appBackgroundActive()
+                    }
 
                     FocusScope {
                         id: embeddedPreviewInteractionRoot
@@ -1325,7 +1522,8 @@ ApplicationWindow {
                                         id: embeddedInlineSurfaceLoader
                                         anchors.fill: parent
                                         anchors.margins: 1
-                                        active: !controller.previewFullscreen
+                                        active: root.embeddedInlineSurfaceCreated
+                                        visible: !controller.previewFullscreen
                                             && embeddedInlineSurfaceActive
                                             && (!controller.previewUsesSeparateSurface
                                                 || !embeddedSeparateSurfaceReady)
@@ -1432,10 +1630,21 @@ ApplicationWindow {
 
             WindowContainer {
                 anchors.fill: parent
+                visible: startupContentReady
                 window: controller.statusWindow
                 Component.onCompleted: controller.syncStatusSurfaceSize(width, height)
-                onWidthChanged: controller.syncStatusSurfaceSize(width, height)
-                onHeightChanged: controller.syncStatusSurfaceSize(width, height)
+                onVisibleChanged: {
+                    if (visible)
+                        controller.syncStatusSurfaceSize(width, height)
+                }
+                onWidthChanged: {
+                    if (visible)
+                        controller.syncStatusSurfaceSize(width, height)
+                }
+                onHeightChanged: {
+                    if (visible)
+                        controller.syncStatusSurfaceSize(width, height)
+                }
             }
         }
     }
@@ -1523,7 +1732,8 @@ ApplicationWindow {
 
             Loader {
                 anchors.fill: parent
-                active: controller.previewFullscreen
+                active: root.fullscreenPreviewHostCreated
+                visible: controller.previewFullscreen
 
                 sourceComponent: Item {
                     anchors.fill: parent
@@ -1531,7 +1741,8 @@ ApplicationWindow {
                     Loader {
                         id: fullscreenInlineSurfaceLoader
                         anchors.fill: parent
-                        active: controller.previewFullscreen
+                        active: root.fullscreenInlineSurfaceCreated
+                        visible: controller.previewFullscreen
                             && fullscreenInlineSurfaceActive
                             && !controller.previewUsesSeparateSurface
                         onStatusChanged: logPreviewSurfaceTransition(

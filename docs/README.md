@@ -7,6 +7,7 @@
 | 目录                               | 用途                          |
 | -------------------------------- | --------------------------- |
 | [specs/chart](specs/chart)       | 谱面诊断、规范化、slide / 头材质等谱面行为规格 |
+| [specs/editor](specs/editor)     | 编辑器交互、侧边栏与书签行为规格 |
 | [specs/muri](specs/muri)         | 无理检测规则与行为规格                 |
 | [specs/preview](specs/preview)   | 预览与导出架构规格                   |
 | [specs/timeline](specs/timeline) | Timeline 坐标、聚焦、图层顺序等规格      |
@@ -21,6 +22,7 @@
 - 发布准备：[ops/OPEN_SOURCE_CHECKLIST.md](ops/OPEN_SOURCE_CHECKLIST.md)、[ops/RELEASE_CHECKLIST.md](ops/RELEASE_CHECKLIST.md)
 - 预览/导出架构：[specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md](specs/preview/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md)
 - 谱面诊断：[specs/chart/CHART_DIAGNOSTICS_AND_NORMALIZATION_SPEC.md](specs/chart/CHART_DIAGNOSTICS_AND_NORMALIZATION_SPEC.md)
+- 编辑器/书签：[specs/editor/BOOKMARK_REDESIGN_SPEC.md](specs/editor/BOOKMARK_REDESIGN_SPEC.md)
 - 无理检测：[specs/muri/MURI_DETECTION_SPEC.md](specs/muri/MURI_DETECTION_SPEC.md)
 - Timeline 行为：[specs/timeline/TIMELINE_COORDINATE_FOCUS_SPEC.md](specs/timeline/TIMELINE_COORDINATE_FOCUS_SPEC.md)
 

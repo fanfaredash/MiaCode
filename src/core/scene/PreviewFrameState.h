@@ -13,6 +13,7 @@
 #include "common/PreviewVideoGeometryConfig.h"
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
+#include "core/scene/PreviewProgressStatsCache.h"
 #include "core/video/PreviewRenderSettings.h"
 #include "timeline/TimelineData.h"
 
@@ -21,8 +22,6 @@
 #endif
 
 namespace miacode::preview::scene {
-
-class PreviewProgressStatsCache;
 
 struct PreviewSkinAssets {
     QImage tapImage;
@@ -62,6 +61,7 @@ struct PreviewSkinAssets {
     QImage noteGuideHoldEndImage;
     QImage noteGuideHoldEachEndImage;
     QImage noteGuideHoldBreakEndImage;
+    QImage noteGuideHoldMineEndImage;
     QImage noteGuideSlideImage;
     QImage touchCornerImage;
     QImage touchCornerEachImage;
@@ -85,7 +85,6 @@ struct PreviewSkinAssets {
     QImage touchHoldBreak2Image;
     QImage touchHoldBreak3Image;
     QImage touchHoldBreakBorderImage;
-    QImage touchHoldOffImage;
     // Mine-note sprites (simai `m`). A mine overrides break/each, so there is
     // a single sprite per note type (no break/each variants). Sourced from the
     // MajMine skin (same sd layout/sizes). Empty = skin has no mine art; the
@@ -148,10 +147,14 @@ struct PreviewJudgeEffectAssets {
     QRectF tapSourceRect;
     QImage tapBreakImage;
     QRectF tapBreakSourceRect;
+    QImage tapBreakDxImage;
+    QRectF tapBreakDxSourceRect;
     QImage holdSustainCircleImage;
+    QImage holdSustainCircleDxImage;
     QImage touchCircleImage;
     QImage touchPart01Image;
     QImage touchPart02Image;
+    QImage touchPart02DxImage;
     QImage fireworkColorBallImage;
     QRectF fireworkColorBallSourceRect;
 };
@@ -206,6 +209,8 @@ struct PreviewRenderState {
     double tapFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     double touchFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     bool slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
+    PreviewTapJudgeTextDistance tapJudgeTextDistance = PreviewTapJudgeTextDistance::Inner;
+    PreviewJudgeEffectStyle judgeEffectStyle = PreviewJudgeEffectStyle::Standard;
     bool showDebugInfo = false;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;
@@ -235,6 +240,8 @@ struct PreviewFrameState {
     QString chartArtist;
     QString chartDifficultyLabel;
     QString chartDesigner;
+    QString hoveredTouchPad;
+    bool touchPadAuthoringEnabled = false;
     double playheadSeconds = 0.0;
     // Optional HUD-only override. When finite, the HUD timestamp/stats use
     // this value instead of `playheadSeconds`; the scene graph and note
@@ -270,6 +277,26 @@ struct PreviewFrameState {
     bool framePacingUsesDisplayRefresh = false;
     int cpuFallbackCount = 0;
     bool usedGpuRendererThisFrame = false;
+    PreviewHudStats hudStatsSnapshot;
+    double hudStatsSnapshotSecond = std::numeric_limits<double>::quiet_NaN();
+    bool hudStatsSnapshotValid = false;
 };
+
+inline double previewFrameStateHudPlayheadSeconds(const PreviewFrameState& state)
+{
+    return qIsFinite(state.hudPlayheadSecondsOverride)
+        ? state.hudPlayheadSecondsOverride
+        : state.playheadSeconds;
+}
+
+inline void refreshPreviewFrameStateHudStatsSnapshot(PreviewFrameState& state)
+{
+    const double hudSecond = previewFrameStateHudPlayheadSeconds(state);
+    state.hudStatsSnapshotSecond = hudSecond;
+    state.hudStatsSnapshot = state.progressStatsCache != nullptr
+        ? state.progressStatsCache->hudStatsAt(hudSecond)
+        : PreviewHudStats();
+    state.hudStatsSnapshotValid = true;
+}
 
 }  // namespace miacode::preview::scene

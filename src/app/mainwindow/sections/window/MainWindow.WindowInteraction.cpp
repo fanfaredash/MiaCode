@@ -9,6 +9,9 @@
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
 #include "common/PreviewInteractionConfig.h"
+#include "core/scene/PreviewSceneConstants.h"
+#include "core/scene/PreviewSceneGeometry.h"
+#include "core/scene/PreviewSceneMath.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 
@@ -49,6 +52,35 @@ bool bottomTabsResizeHotzoneContains(QWidget* bottomTabs, QWidget* watchedWidget
     const QPoint bottomTabsPos =
         watchedWidget == bottomTabs ? localPos : watchedWidget->mapTo(bottomTabs, localPos);
     return bottomTabsPos.y() >= 0 && bottomTabsPos.y() <= kBottomTabsResizeHotzonePx;
+}
+
+QString extensionGestureKeyName(const QKeyEvent* event)
+{
+    if (event == nullptr) {
+        return QString();
+    }
+    QString key = QKeySequence(event->key()).toString(QKeySequence::PortableText);
+    if (key.isEmpty()) {
+        key = event->text();
+    }
+    return key;
+}
+
+QString extensionGestureMouseButtonName(Qt::MouseButton button)
+{
+    switch (button) {
+    case Qt::LeftButton: return QStringLiteral("left");
+    case Qt::RightButton: return QStringLiteral("right");
+    case Qt::MiddleButton: return QStringLiteral("middle");
+    case Qt::BackButton: return QStringLiteral("back");
+    case Qt::ForwardButton: return QStringLiteral("forward");
+    default: return QString::number(static_cast<int>(button));
+    }
+}
+
+bool extensionProviderResponseShown(const QJsonObject& response)
+{
+    return response.value(QStringLiteral("value")).toObject().value(QStringLiteral("shown")).toBool(false);
 }
 
 // The pause-display hold key (default Alt, id preview.pause_display_hold,
@@ -195,6 +227,146 @@ void MainWindow::WindowSection::focusPreviewInteractionTarget(QObject* watched, 
     if (owner_.previewCanvas_ != nullptr) {
         owner_.previewCanvas_->requestActivate();
     }
+}
+
+bool MainWindow::WindowSection::previewLogicalPointFromGlobal(const QPoint& globalPoint, QPointF* logicalPoint) const
+{
+    if (logicalPoint == nullptr) {
+        return false;
+    }
+    QPointF previewPoint;
+    QSize previewSize;
+    bool hasPreviewPoint = false;
+
+    QWindow* previewWindow = this->previewVisibleHostWindow();
+    if (previewWindow != nullptr && previewWindow->isVisible()) {
+        const QPoint local = previewWindow->mapFromGlobal(globalPoint);
+        const QSize windowSize = previewWindow->size();
+        if (QRect(QPoint(0, 0), windowSize).contains(local)) {
+            previewPoint = QPointF(local);
+            previewSize = windowSize;
+            hasPreviewPoint = true;
+        }
+    }
+
+    if (!hasPreviewPoint && owner_.previewCanvasContainer_ != nullptr && owner_.previewCanvasContainer_->isVisible()) {
+        const QPoint local = owner_.previewCanvasContainer_->mapFromGlobal(globalPoint);
+        const QSize widgetSize = owner_.previewCanvasContainer_->size();
+        if (QRect(QPoint(0, 0), widgetSize).contains(local)) {
+            previewPoint = QPointF(local);
+            previewSize = widgetSize;
+            hasPreviewPoint = true;
+        }
+    }
+
+    if (!hasPreviewPoint && owner_.previewCanvasFrame_ != nullptr && owner_.previewCanvasFrame_->isVisible()) {
+        const QPoint local = owner_.previewCanvasFrame_->mapFromGlobal(globalPoint);
+        const QRect contentsRect = owner_.previewCanvasFrame_->contentsRect();
+        if (contentsRect.contains(local)) {
+            previewPoint = QPointF(local - contentsRect.topLeft());
+            previewSize = contentsRect.size();
+            hasPreviewPoint = true;
+        }
+    }
+
+    if (!hasPreviewPoint) {
+        return false;
+    }
+
+    const QRectF playfieldRect = miacode::preview::scene::playfieldRectForStage(
+        miacode::preview::scene::stageRectForSize(previewSize),
+        owner_.previewLayoutSquareScale_
+    );
+    if (!playfieldRect.contains(previewPoint) || playfieldRect.width() <= 0.0) {
+        return false;
+    }
+
+    const qreal logicalScale = miacode::preview::scene::kLogicalCanvasSize / playfieldRect.width();
+    const QPointF mappedLogicalPoint(
+        (previewPoint.x() - playfieldRect.left()) * logicalScale,
+        (previewPoint.y() - playfieldRect.top()) * logicalScale
+    );
+    *logicalPoint = mappedLogicalPoint;
+    return true;
+}
+
+QString MainWindow::WindowSection::touchPadAtPreviewGlobalPoint(const QPoint& globalPoint) const
+{
+    QPointF logicalPoint;
+    if (!this->previewLogicalPointFromGlobal(globalPoint, &logicalPoint)) {
+        return QString();
+    }
+    return miacode::preview::scene::touchPadTokenAtLogicalPoint(logicalPoint);
+}
+
+bool MainWindow::WindowSection::touchPadInsertHoverEnabled() const
+{
+    if (!state_.pauseDisplayAltHoldActive_
+        || !state_.previewTouchPadAuthoringShortcutEnabled_
+        || QApplication::activeModalWidget() != nullptr
+        || QApplication::activePopupWidget() != nullptr) {
+        return false;
+    }
+    const PreviewOutlineVariant effectiveOutline = owner_.effectivePreviewOutlineVariant();
+    return effectiveOutline == PreviewOutlineVariant::JudgeArea
+        || effectiveOutline == PreviewOutlineVariant::JudgeAreaLabeled;
+}
+
+void MainWindow::WindowSection::setHoveredTouchPad(const QString& pad)
+{
+    if (owner_.previewCanvas_ == nullptr) {
+        return;
+    }
+    owner_.previewCanvas_->setHoveredTouchPad(pad);
+}
+
+void MainWindow::WindowSection::updateTouchPadHoverFromGlobalPoint(const QPoint& globalPoint)
+{
+    if (!this->touchPadInsertHoverEnabled()) {
+        this->setHoveredTouchPad(QString());
+        return;
+    }
+    this->setHoveredTouchPad(this->touchPadAtPreviewGlobalPoint(globalPoint));
+}
+
+bool MainWindow::WindowSection::handleTouchPadInsertClick(QObject* watched, QMouseEvent* event)
+{
+    Q_UNUSED(watched);
+
+    if (event == nullptr
+        || event->button() != Qt::LeftButton
+        || !this->touchPadInsertHoverEnabled()) {
+        return false;
+    }
+
+    auto* editor = qobject_cast<QTextEdit*>(owner_.editorWidget_);
+    if (editor == nullptr || editor->document() == nullptr) {
+        return false;
+    }
+
+    QPointF logicalPoint;
+    if (!this->previewLogicalPointFromGlobal(event->globalPosition().toPoint(), &logicalPoint)) {
+        return false;
+    }
+    const QString pad = miacode::preview::scene::touchPadTokenAtLogicalPoint(logicalPoint);
+    if (pad.isEmpty()) {
+        this->setHoveredTouchPad(QString());
+        return false;
+    }
+    this->setHoveredTouchPad(pad);
+
+    QTextCursor cursor = editor->textCursor();
+    cursor.insertText(pad);
+    editor->setTextCursor(cursor);
+    editor->setFocus(Qt::OtherFocusReason);
+    appendPreviewInteractionLog(
+        QStringLiteral("touch_pad_insert"),
+        QStringLiteral("pad=%1 logical_x=%2 logical_y=%3")
+            .arg(pad)
+            .arg(logicalPoint.x(), 0, 'f', 1)
+            .arg(logicalPoint.y(), 0, 'f', 1)
+    );
+    return true;
 }
 
 void MainWindow::WindowSection::handleApplicationFocusChanged(QWidget* old, QWidget* now)
@@ -446,6 +618,128 @@ void MainWindow::WindowSection::restoreFocusedTextEditStateAttempt(
 bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
 {
     auto* watchedWidget = qobject_cast<QWidget*>(watched);
+    const auto extensionGestureTargetForWatched = [this](QObject* watchedObject) {
+        auto* editorScrollArea = qobject_cast<QAbstractScrollArea*>(owner_.editorWidget_);
+        if (watchedObject == owner_.timelineView_
+            || (owner_.timelineView_ != nullptr && watchedObject == owner_.timelineView_->viewport())) {
+            return QStringLiteral("timeline");
+        }
+        if (watchedObject == owner_.previewSlider_
+            || watchedObject == owner_.previewCanvas_
+            || watchedObject == owner_.previewCanvasContainer_
+            || watchedObject == owner_.previewCanvasFrame_
+            || watchedObject == owner_.previewPanel_
+            || watchedObject == owner_.previewFullscreenWindow_
+            || watchedObject == owner_.previewFullscreenHost_) {
+            return QStringLiteral("preview");
+        }
+        if (watchedObject == owner_.editorWidget_
+            || watchedObject == owner_.editorViewport_
+            || (editorScrollArea != nullptr && watchedObject == editorScrollArea->viewport())) {
+            return QStringLiteral("editor");
+        }
+        return QStringLiteral("any");
+    };
+    const auto hasExtensionGestureKind = [this](const QString& kind) {
+        for (const QJsonValue& value : state_.extensionInputGestures_) {
+            if (value.toObject().value(QStringLiteral("kind")).toString() == kind) {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (event != nullptr
+        && event->type() == QEvent::ToolTip
+        && watched == owner_.editorViewport_
+        && state_.extensionRegistrationsByKind_.contains(QStringLiteral("providers/hover"))) {
+        auto* helpEvent = static_cast<QHelpEvent*>(event);
+        const QJsonObject response = owner_.handleExtensionHostRequest(QStringLiteral("providers/showHover"), QJsonObject{
+            {QStringLiteral("globalX"), helpEvent->globalPos().x()},
+            {QStringLiteral("globalY"), helpEvent->globalPos().y()},
+        });
+        if (extensionProviderResponseShown(response)) {
+            event->accept();
+            return true;
+        }
+    }
+    if (event != nullptr
+        && event->type() == QEvent::KeyPress
+        && (watched == owner_.editorWidget_ || watched == owner_.editorViewport_)
+        && (state_.extensionRegistrationsByKind_.contains(QStringLiteral("providers/completion"))
+            || state_.extensionRegistrationsByKind_.contains(QStringLiteral("providers/codeAction")))) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (!keyEvent->isAutoRepeat()) {
+            const bool completionShortcut =
+                keyEvent->key() == Qt::Key_Space
+                && (keyEvent->modifiers() & Qt::ControlModifier)
+                && !(keyEvent->modifiers() & (Qt::AltModifier | Qt::MetaModifier));
+            const bool codeActionShortcut =
+                ((keyEvent->key() == Qt::Key_Period
+                  && (keyEvent->modifiers() & Qt::ControlModifier)
+                  && !(keyEvent->modifiers() & (Qt::AltModifier | Qt::MetaModifier)))
+                 || (keyEvent->key() == Qt::Key_Return
+                     && (keyEvent->modifiers() & Qt::AltModifier)
+                     && !(keyEvent->modifiers() & (Qt::ControlModifier | Qt::MetaModifier))));
+            if (completionShortcut || codeActionShortcut) {
+                const QPoint globalPos = watchedWidget != nullptr
+                    ? watchedWidget->mapToGlobal(watchedWidget->rect().center())
+                    : QCursor::pos();
+                const QJsonObject response = owner_.handleExtensionHostRequest(
+                    completionShortcut ? QStringLiteral("providers/showCompletions") : QStringLiteral("providers/showCodeActions"),
+                    QJsonObject{
+                        {QStringLiteral("globalX"), globalPos.x()},
+                        {QStringLiteral("globalY"), globalPos.y()},
+                    });
+                if (extensionProviderResponseShown(response)) {
+                    event->accept();
+                    return true;
+                }
+            }
+        }
+    }
+    if (event != nullptr
+        && (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease)) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent != nullptr
+            && !keyEvent->isAutoRepeat()
+            && hasExtensionGestureKind(QStringLiteral("input/keyGesture"))) {
+            const QJsonObject dispatch = owner_.handleExtensionHostRequest(QStringLiteral("input/dispatch"), QJsonObject{
+                {QStringLiteral("type"), QStringLiteral("key")},
+                {QStringLiteral("target"), extensionGestureTargetForWatched(watched)},
+                {QStringLiteral("phase"), event->type() == QEvent::KeyPress ? QStringLiteral("press") : QStringLiteral("release")},
+                {QStringLiteral("key"), extensionGestureKeyName(keyEvent)},
+                {QStringLiteral("modifiers"), static_cast<int>(keyEvent->modifiers())},
+            });
+            if (dispatch.value(QStringLiteral("value")).toObject().value(QStringLiteral("handled")).toBool(false)) {
+                event->accept();
+                return true;
+            }
+        }
+    }
+    if (event != nullptr
+        && (event->type() == QEvent::MouseButtonPress
+            || event->type() == QEvent::MouseButtonRelease
+            || event->type() == QEvent::MouseButtonDblClick)) {
+        auto* mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent != nullptr && hasExtensionGestureKind(QStringLiteral("input/mouseGesture"))) {
+            const QString phase = event->type() == QEvent::MouseButtonPress
+                ? QStringLiteral("press")
+                : (event->type() == QEvent::MouseButtonRelease ? QStringLiteral("release") : QStringLiteral("doubleClick"));
+            const QJsonObject dispatch = owner_.handleExtensionHostRequest(QStringLiteral("input/dispatch"), QJsonObject{
+                {QStringLiteral("type"), QStringLiteral("mouse")},
+                {QStringLiteral("target"), extensionGestureTargetForWatched(watched)},
+                {QStringLiteral("phase"), phase},
+                {QStringLiteral("button"), extensionGestureMouseButtonName(mouseEvent->button())},
+                {QStringLiteral("globalX"), mouseEvent->globalPosition().toPoint().x()},
+                {QStringLiteral("globalY"), mouseEvent->globalPosition().toPoint().y()},
+                {QStringLiteral("modifiers"), static_cast<int>(mouseEvent->modifiers())},
+            });
+            if (dispatch.value(QStringLiteral("value")).toObject().value(QStringLiteral("handled")).toBool(false)) {
+                event->accept();
+                return true;
+            }
+        }
+    }
     // Post-page-switch workspace-surface settle (armWorkspaceSurfaceSettleRelayout).
     // A switch that changes the preview aspect (export page) or the bottom-tabs
     // height drives the rehosted workspace surface to a new size ASYNCHRONOUSLY
@@ -459,6 +753,21 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         && event->type() == QEvent::Resize
         && watched == owner_.workspaceContentWidget_
         && owner_.workspaceSurfaceSettleRelayoutArmed_) {
+        if (owner_.runtimeDebugOutputEnabled_) {
+            const QSize size = watchedWidget != nullptr ? watchedWidget->size() : QSize();
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("layout/export_page"),
+                QStringLiteral("action=workspace_surface_settle_relayout_queued size=%1x%2 armed=1 watched_class=%3 watched_name=%4")
+                    .arg(size.width())
+                    .arg(size.height())
+                    .arg(watchedWidget != nullptr
+                        ? QString::fromUtf8(watchedWidget->metaObject()->className())
+                        : QStringLiteral("(null)"))
+                    .arg(watchedWidget != nullptr && !watchedWidget->objectName().isEmpty()
+                        ? watchedWidget->objectName()
+                        : QStringLiteral("(empty)")));
+        }
         QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
     }
     // Top header validation/muri summary icons + counts route a left-button
@@ -560,10 +869,12 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
                 owner_.setPauseDisplayAltHoldActive(true);
             } else if (event->type() == QEvent::KeyRelease && !holdKeyEvent->isAutoRepeat()) {
                 owner_.setPauseDisplayAltHoldActive(false);
+                this->setHoveredTouchPad(QString());
             }
         }
     } else if (event != nullptr && event->type() == QEvent::ApplicationDeactivate) {
         owner_.setPauseDisplayAltHoldActive(false);
+        this->setHoveredTouchPad(QString());
     }
     if (event != nullptr
         && (event->type() == QEvent::ShortcutOverride
@@ -722,21 +1033,6 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
             }
         }
     }
-    if (owner_.outlineList_ != nullptr && watched == owner_.outlineList_->viewport()) {
-        if (event->type() == QEvent::MouseMove) {
-            auto* mouseEvent = static_cast<QMouseEvent*>(event);
-            QListWidgetItem* hoveredItem = owner_.outlineList_->itemAt(mouseEvent->pos());
-            const bool showButton =
-                hoveredItem != nullptr
-                && hoveredItem == owner_.outlineList_->currentItem()
-                && SimaiDocument::isDifficultyId(hoveredItem->data(Qt::UserRole + 1).toInt());
-            owner_.updateDifficultyDeleteButton(showButton);
-        } else if (event->type() == QEvent::Leave || event->type() == QEvent::Wheel) {
-            owner_.updateDifficultyDeleteButton(false);
-        } else if (event->type() == QEvent::Resize && owner_.deleteDifficultyButton_ != nullptr && owner_.deleteDifficultyButton_->isVisible()) {
-            owner_.updateDifficultyDeleteButton(true);
-        }
-    }
     if ((owner_.errorList_ != nullptr && watched == owner_.errorList_->viewport())
         || (owner_.muriList_ != nullptr && watched == owner_.muriList_->viewport())) {
         if (event->type() == QEvent::Resize
@@ -764,7 +1060,12 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
             return owner_.QMainWindow::eventFilter(watched, event);
         }
     }
-    const QWindow* previewVisibleWindow = this->previewVisibleHostWindow();
+    QWindow* previewVisibleWindow = this->previewVisibleHostWindow();
+    if (previewVisibleWindow != nullptr
+        && !previewVisibleWindow->property("miacodeWindowSectionEventFilterInstalled").toBool()) {
+        previewVisibleWindow->installEventFilter(&owner_);
+        previewVisibleWindow->setProperty("miacodeWindowSectionEventFilterInstalled", true);
+    }
     const bool previewKeyScope =
         watched == owner_.previewSlider_
         || watched == owner_.previewCanvasContainer_
@@ -796,6 +1097,19 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         || watched == owner_.previewSpeedButton_
         || watched == owner_.previewFullscreenButton_
         || watched == previewVisibleWindow;
+    if (previewMouseFocusScope && event->type() == QEvent::MouseButtonPress) {
+        if (this->handleTouchPadInsertClick(watched, static_cast<QMouseEvent*>(event))) {
+            event->accept();
+            return true;
+        }
+    }
+    if (previewMouseFocusScope
+        && (event->type() == QEvent::MouseMove || event->type() == QEvent::HoverMove)) {
+        this->updateTouchPadHoverFromGlobalPoint(QCursor::pos());
+    } else if (previewMouseFocusScope
+               && (event->type() == QEvent::Leave || event->type() == QEvent::HoverLeave)) {
+        this->setHoveredTouchPad(QString());
+    }
     if (previewMouseFocusScope
         && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::Wheel)) {
         this->focusPreviewInteractionTarget(watched, Qt::MouseFocusReason);
@@ -839,6 +1153,43 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
                 || event->type() == QEvent::Show
                 || event->type() == QEvent::WindowStateChange)) {
             owner_.updatePreviewFullscreenOverlayGeometry();
+        }
+    }
+    if (event->type() == QEvent::Wheel && hasExtensionGestureKind(QStringLiteral("input/wheelGesture"))) {
+        auto* wheelEvent = static_cast<QWheelEvent*>(event);
+        QString target = QStringLiteral("any");
+        auto* editorScrollArea = qobject_cast<QAbstractScrollArea*>(owner_.editorWidget_);
+        if (watched == owner_.timelineView_
+            || (owner_.timelineView_ != nullptr && watched == owner_.timelineView_->viewport())) {
+            target = QStringLiteral("timeline");
+        } else if (watched == owner_.previewSlider_
+                   || watched == owner_.previewCanvas_
+                   || watched == owner_.previewCanvasFrame_) {
+            target = QStringLiteral("preview");
+        } else if (watched == owner_.editorWidget_
+                   || (editorScrollArea != nullptr && watched == editorScrollArea->viewport())) {
+            target = QStringLiteral("editor");
+        }
+        int delta = wheelEvent->angleDelta().y();
+        if (delta == 0) {
+            delta = wheelEvent->angleDelta().x();
+        }
+        if (delta == 0) {
+            delta = wheelEvent->pixelDelta().y();
+        }
+        if (delta == 0) {
+            delta = wheelEvent->pixelDelta().x();
+        }
+        if (delta != 0) {
+            const QJsonObject dispatch = owner_.handleExtensionHostRequest(QStringLiteral("input/dispatchWheel"), QJsonObject{
+                {QStringLiteral("target"), target},
+                {QStringLiteral("delta"), delta},
+                {QStringLiteral("modifiers"), static_cast<int>(wheelEvent->modifiers())},
+            });
+            if (dispatch.value(QStringLiteral("value")).toObject().value(QStringLiteral("handled")).toBool(false)) {
+                wheelEvent->accept();
+                return true;
+            }
         }
     }
     if (owner_.previewSlider_ != nullptr && watched == owner_.previewSlider_) {
@@ -1328,9 +1679,7 @@ void MainWindow::WindowSection::onReplaceAll()
     }
     editCursor.endEditBlock();
     owner_.statusBar()->showMessage(
-        UiText::isChineseUi()
-            ? QStringLiteral("已替换 %1 处。").arg(replacedCount)
-            : QStringLiteral("Replaced %1 occurrence(s).").arg(replacedCount)
+        UiText::text(QStringLiteral("window.replaced_1_occurrence_s")).arg(replacedCount)
     );
 }
 

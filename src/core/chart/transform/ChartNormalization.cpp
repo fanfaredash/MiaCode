@@ -8,6 +8,7 @@
 
 #include "common/OperationLog.h"
 #include "core/chart/parser/SimaiNativeParser.h"
+#include "core/chart/transform/ChartNormalizationSegmentPolicy.h"
 #include "core/chart/transform/Non384SnapTable.h"
 
 namespace miacode::chart_transform {
@@ -102,6 +103,11 @@ double toDouble(const Rational& value)
     return static_cast<double>(value.numerator) / static_cast<double>(value.denominator);
 }
 
+segment_policy::RationalValue toPolicyRational(const Rational& value)
+{
+    return segment_policy::RationalValue{value.numerator, value.denominator};
+}
+
 qint64 safeLcm(qint64 left, qint64 right)
 {
     if (left <= 0) {
@@ -177,6 +183,22 @@ struct MeasureMoment {
     MomentGroups groups;
 };
 
+struct ExplicitSubdivisionSegment {
+    int beats = 1;
+    Rational startWhole;
+    Rational endWhole;
+    bool consumedComma = false;
+    bool endedByControlBoundary = false;
+    QVector<Rational> relativeMomentPositions;
+};
+
+struct ActiveSubdivisionSegment {
+    int beats = 1;
+    Rational startWhole;
+    bool consumedComma = false;
+    bool active = false;
+};
+
 struct MeasureBuilder {
     int meterNumerator = miacode::simai::kDefaultWholeTimeSignatureNumerator;
     int meterDenominator = miacode::simai::kDefaultWholeTimeSignatureDenominator;
@@ -184,6 +206,7 @@ struct MeasureBuilder {
     QVector<BoundaryItem> leadingItems;
     QVector<BoundaryItem> trailingItems;
     QVector<MeasureMoment> moments;
+    QVector<ExplicitSubdivisionSegment> explicitSegments;
 };
 
 struct RenderMeasure {
@@ -194,6 +217,7 @@ struct RenderMeasure {
     QVector<BoundaryItem> leadingItems;
     QVector<BoundaryItem> trailingItems;
     QVector<MeasureMoment> moments;
+    QVector<ExplicitSubdivisionSegment> explicitSegments;
 };
 
 struct NormalizationSeed {
@@ -778,20 +802,19 @@ bool lineTailIsTerminalMarker(const QString& line, int startIndex)
     return isTerminalMarkerText(tail);
 }
 
-// In selection mode the fragment renderer appends a trailing {N} so the text
-// AFTER the selection keeps the beats value the selection ended on. That marker
-// is redundant — and shows up as noise like "{32} {4}" — when the very next
-// beats-relevant token after the selection is already its own {N}: i.e. a '{'
-// is reached before the first ',' that would consume the inherited beats. In
-// that case the following {N} overrides ours immediately, so we suppress it.
-bool followingTextRedefinesBeatsBeforeUse(const QString& remainder)
+bool textHasTerminalMarker(const QString& text)
 {
-    for (const QChar ch : remainder) {
-        if (ch == QLatin1Char('{')) {
-            return true;
+    const QStringList lines = text.split(QLatin1Char('\n'), Qt::KeepEmptyParts);
+    for (QString line : lines) {
+        if (line.endsWith(QLatin1Char('\r'))) {
+            line.chop(1);
         }
-        if (ch == QLatin1Char(',')) {
-            return false;
+        for (int index = 0; index < line.size(); ++index) {
+            const QChar ch = line.at(index);
+            if ((ch == QLatin1Char('E') || ch == QLatin1Char('e'))
+                && lineTailIsTerminalMarker(line, index)) {
+                return true;
+            }
         }
     }
     return false;
@@ -933,7 +956,9 @@ QString renderMeasureLineApproximate(const RenderMeasure& measure)
                 segmentQ = 1;
             }
             // Bump pure power-of-two subdivisions <= 16 up to 16 so an empty
-            // beat in a 4/4 chart still emits {16}, not {1}.
+            // beat in a 4/4 chart still emits {16}, not {1}. The policy layer
+            // raises this per segment when the segment length needs a finer
+            // exact 384-grid expression.
             if (segmentQ <= 16 && (16 % segmentQ) == 0) {
                 segmentQ = 16;
             }
@@ -948,10 +973,19 @@ QString renderMeasureLineApproximate(const RenderMeasure& measure)
                     segmentQ = kSnap384Modulus;
                 }
             }
+            segmentQ = segment_policy::approximateSegmentSubdivision(
+                static_cast<int>(segmentQ),
+                toPolicyRational(Rational(segmentLengthGrid, 384)),
+                kMaximumSnapSubdivisionBeats);
             beats = static_cast<int>(segmentQ);
         }
 
-        const int slotCount = qMax(1, qRound(toDouble(Rational(segmentLengthGrid, 384)) * beats));
+        qint64 slotCount64 = 0;
+        if (!scaleRationalExact(Rational(segmentLengthGrid, 384), beats, &slotCount64) || slotCount64 <= 0) {
+            beats = kMaximumSnapSubdivisionBeats;
+            scaleRationalExact(Rational(segmentLengthGrid, 384), beats, &slotCount64);
+        }
+        const int slotCount = qMax(1, static_cast<int>(qMin<qint64>(slotCount64, std::numeric_limits<int>::max())));
         QVector<MomentGroups> slotGroups(slotCount);
         for (int localIndex = 0; localIndex < segmentMomentIndices.size(); ++localIndex) {
             const int momentIndex = segmentMomentIndices.at(localIndex);
@@ -1054,8 +1088,92 @@ QString renderExactChunk(
     return text;
 }
 
+segment_policy::SpecialSegmentInput policyInputForSegment(
+    const RenderMeasure& measure,
+    const ExplicitSubdivisionSegment& segment)
+{
+    return segment_policy::SpecialSegmentInput{
+        segment.beats,
+        toPolicyRational(measure.startPhaseWhole + segment.startWhole),
+        toPolicyRational(measure.startPhaseWhole + segment.endWhole),
+        segment.consumedComma};
+}
+
+bool specialSegmentForcesReset(
+    const RenderMeasure& measure,
+    const ExplicitSubdivisionSegment& segment)
+{
+    return segment_policy::specialSegmentForcesReset(
+        policyInputForSegment(measure, segment),
+        measure.meterDenominator);
+}
+
+QString renderExactRangeAsSingleChunk(
+    const RenderMeasure& measure,
+    const Rational& start,
+    const Rational& end)
+{
+    if (end <= start) {
+        return QString();
+    }
+    const int beats = chooseExactBeatsForRange(measure, start, end);
+    if (beats <= 0) {
+        return QString();
+    }
+    return renderExactChunk(measure, start, end, beats);
+}
+
+QString renderMeasureLineExactWithForcedSegments(const RenderMeasure& measure)
+{
+    QVector<ExplicitSubdivisionSegment> forcedSegments;
+    for (const ExplicitSubdivisionSegment& segment : measure.explicitSegments) {
+        if (segment.consumedComma && specialSegmentForcesReset(measure, segment)) {
+            forcedSegments.append(segment);
+        }
+    }
+    std::sort(
+        forcedSegments.begin(),
+        forcedSegments.end(),
+        [](const ExplicitSubdivisionSegment& left, const ExplicitSubdivisionSegment& right) {
+            return left.startWhole < right.startWhole;
+        });
+
+    QStringList lines;
+    Rational cursor(0, 1);
+    const auto appendLine = [&](const QString& text) {
+        if (!text.trimmed().isEmpty()) {
+            lines.append(text.trimmed());
+        }
+    };
+
+    for (const ExplicitSubdivisionSegment& segment : forcedSegments) {
+        if (segment.endWhole <= cursor || segment.startWhole >= measure.lengthWhole) {
+            continue;
+        }
+        const Rational segmentStart = qMax(cursor, segment.startWhole);
+        const Rational segmentEnd = qMin(measure.lengthWhole, segment.endWhole);
+        appendLine(renderExactRangeAsSingleChunk(measure, cursor, segmentStart));
+
+        QString segmentText = renderExactChunk(measure, segmentStart, segmentEnd, qMax(1, segment.beats));
+        if (segmentText.isEmpty()) {
+            segmentText = renderExactRangeAsSingleChunk(measure, segmentStart, segmentEnd);
+        }
+        appendLine(segmentText);
+        cursor = segmentEnd;
+    }
+    appendLine(renderExactRangeAsSingleChunk(measure, cursor, measure.lengthWhole));
+
+    return lines.join(QLatin1Char('\n')).trimmed();
+}
+
 QString renderMeasureLineExact(const RenderMeasure& measure)
 {
+    for (const ExplicitSubdivisionSegment& segment : measure.explicitSegments) {
+        if (segment.consumedComma && specialSegmentForcesReset(measure, segment)) {
+            return renderMeasureLineExactWithForcedSegments(measure);
+        }
+    }
+
     QString line;
     int lastBeats = 0;
     Rational cursor(0, 1);
@@ -1119,20 +1237,40 @@ QString renderMeasureLineExact(const RenderMeasure& measure)
     return line.trimmed();
 }
 
+bool measureRequiresExactRendering(const RenderMeasure& measure)
+{
+    if (!segment_policy::rationalFits384Grid(toPolicyRational(measure.startPhaseWhole))
+        || !segment_policy::rationalFits384Grid(toPolicyRational(measure.lengthWhole))) {
+        return true;
+    }
+
+    for (const ExplicitSubdivisionSegment& segment : measure.explicitSegments) {
+        if (segment.consumedComma && !segment_policy::subdivisionFits384Grid(segment.beats)) {
+            return true;
+        }
+    }
+
+    for (const Rational& boundary : beatBoundaryPositions(measure)) {
+        if (!segment_policy::rationalFits384Grid(toPolicyRational(boundary))) {
+            return true;
+        }
+    }
+
+    for (const MeasureMoment& moment : measure.moments) {
+        if (!segment_policy::rationalFits384Grid(toPolicyRational(moment.positionWhole))) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 QString renderMeasureLine(const RenderMeasure& measure, const ChartNormalizationOptions& options)
 {
-    // reduce=false escapes into the exact (cursor-walking + LCM) renderer
-    // only when the measure actually contains a moment whose position is not
-    // a divisor of 384. Charts that stay on the 384 grid render identically
-    // in both modes — users only see the "preserve precision" effect on
-    // measures that actually need it (e.g. {7}, {9}, {15} subdivisions).
-    if (!options.reduceTo384Grid) {
-        for (const MeasureMoment& moment : measure.moments) {
-            const qint64 denom = moment.positionWhole.denominator;
-            if (denom > 0 && (kMaximumSnapSubdivisionBeats % denom) != 0) {
-                return renderMeasureLineExact(measure);
-            }
-        }
+    // reduce=false uses exact rendering only when a measure carries timing
+    // information that cannot be represented by the normal 384-grid path.
+    if (!options.reduceTo384Grid && measureRequiresExactRendering(measure)) {
+        return renderMeasureLineExact(measure);
     }
     return renderMeasureLineApproximate(measure);
 }
@@ -1299,6 +1437,7 @@ ChartNormalizationResult normalizeChartFragment(
 
     Rational currentPositionWhole;
     int currentBeats = qMax(1, seed.currentBeats);
+    ActiveSubdivisionSegment activeSegment;
     double currentBpm = seed.currentBpm;
     QString token;
     QStringList currentGroupTokens;
@@ -1332,6 +1471,34 @@ ChartNormalizationResult normalizeChartFragment(
         }
         currentGroups.clear();
     };
+    const auto recordActiveSegmentFragment = [&](const Rational& endWhole, bool endedByControlBoundary) {
+        if (!activeSegment.active || endWhole <= activeSegment.startWhole) {
+            return;
+        }
+        ExplicitSubdivisionSegment segment;
+        segment.beats = qMax(1, activeSegment.beats);
+        segment.startWhole = activeSegment.startWhole;
+        segment.endWhole = endWhole;
+        segment.consumedComma = activeSegment.consumedComma;
+        segment.endedByControlBoundary = endedByControlBoundary;
+        for (const MeasureMoment& moment : currentMeasure.moments) {
+            if (moment.positionWhole >= segment.startWhole && moment.positionWhole < segment.endWhole) {
+                segment.relativeMomentPositions.append(moment.positionWhole - segment.startWhole);
+            }
+        }
+        currentMeasure.explicitSegments.append(segment);
+    };
+    const auto closeActiveSegmentAt = [&](const Rational& endWhole, bool endedByControlBoundary) {
+        recordActiveSegmentFragment(endWhole, endedByControlBoundary);
+        activeSegment = ActiveSubdivisionSegment();
+    };
+    const auto startExplicitSegment = [&](int beats) {
+        closeActiveSegmentAt(currentPositionWhole, true);
+        activeSegment.beats = qMax(1, beats);
+        activeSegment.startWhole = currentPositionWhole;
+        activeSegment.consumedComma = false;
+        activeSegment.active = true;
+    };
     const auto appendRenderedMeasure = [&](const Rational& lengthWhole) {
         if (lengthWhole.isZero()
             && currentMeasure.leadingItems.isEmpty()
@@ -1347,6 +1514,7 @@ ChartNormalizationResult normalizeChartFragment(
         stored.leadingItems = currentMeasure.leadingItems;
         stored.trailingItems = currentMeasure.trailingItems;
         stored.moments = currentMeasure.moments;
+        stored.explicitSegments = currentMeasure.explicitSegments;
         renderedMeasures.append(stored);
     };
     const auto beginFreshMeasure = [&](int meterNumerator, int meterDenominator, const Rational& startPhaseWhole = Rational()) {
@@ -1365,6 +1533,7 @@ ChartNormalizationResult normalizeChartFragment(
     };
     const auto appendBoundaryItem = [&](const BoundaryItem& item) {
         flushMoment();
+        closeActiveSegmentAt(currentPositionWhole, true);
         if (!currentMeasure.moments.isEmpty() || !currentPositionWhole.isZero()) {
             currentMeasure.trailingItems.append(item);
             return;
@@ -1373,6 +1542,7 @@ ChartNormalizationResult normalizeChartFragment(
     };
     const auto restartMeasureAtCurrentPosition = [&](const BoundaryItem& item, int nextMeterNumerator, int nextMeterDenominator) {
         flushMoment();
+        closeActiveSegmentAt(currentPositionWhole, true);
         if (!currentMeasure.moments.isEmpty() || !currentPositionWhole.isZero()) {
             appendRenderedMeasure(currentPositionWhole);
             beginFreshMeasure(nextMeterNumerator, nextMeterDenominator);
@@ -1385,6 +1555,7 @@ ChartNormalizationResult normalizeChartFragment(
     };
     const auto splitMeasureAtCurrentPosition = [&](const BoundaryItem& item) {
         flushMoment();
+        closeActiveSegmentAt(currentPositionWhole, true);
         if (!currentMeasure.moments.isEmpty() || !currentPositionWhole.isZero()) {
             const int carryMeterNumerator = currentMeasure.meterNumerator;
             const int carryMeterDenominator = currentMeasure.meterDenominator;
@@ -1396,15 +1567,23 @@ ChartNormalizationResult normalizeChartFragment(
     };
     const auto advanceByComma = [&]() {
         flushMoment();
+        if (activeSegment.active) {
+            activeSegment.consumedComma = true;
+        }
         currentPositionWhole = currentPositionWhole + Rational(1, qMax(1, currentBeats));
         while (currentPositionWhole >= currentRemainingMeasureLength()) {
             const int carryMeterNumerator = currentMeasure.meterNumerator;
             const int carryMeterDenominator = currentMeasure.meterDenominator;
             const Rational completedLength = currentRemainingMeasureLength();
             const Rational overflow = currentPositionWhole - completedLength;
+            recordActiveSegmentFragment(completedLength, false);
             appendRenderedMeasure(completedLength);
             beginFreshMeasure(carryMeterNumerator, carryMeterDenominator);
             currentPositionWhole = overflow;
+            if (activeSegment.active) {
+                activeSegment.startWhole = Rational();
+                activeSegment.consumedComma = !overflow.isZero();
+            }
         }
     };
 
@@ -1415,6 +1594,7 @@ ChartNormalizationResult normalizeChartFragment(
         }
         if (isTerminalMarkerText(line)) {
             finalizeGroup();
+            closeActiveSegmentAt(currentPositionWhole, true);
             continue;
         }
 
@@ -1486,6 +1666,7 @@ ChartNormalizationResult normalizeChartFragment(
                 const int parsedBeats = line.mid(index + 1, close - index - 1).trimmed().toInt(&beatsOk);
                 if (beatsOk && parsedBeats > 0) {
                     currentBeats = parsedBeats;
+                    startExplicitSegment(parsedBeats);
                 }
                 index = close;
                 continue;
@@ -1526,6 +1707,7 @@ ChartNormalizationResult normalizeChartFragment(
                 && lineTailIsTerminalMarker(line, index)) {
                 flushToken();
                 finalizeGroup();
+                closeActiveSegmentAt(currentPositionWhole, true);
                 break;
             }
 
@@ -1539,6 +1721,7 @@ ChartNormalizationResult normalizeChartFragment(
     }
 
     flushMoment();
+    closeActiveSegmentAt(currentPositionWhole, true);
     if (!currentMeasure.moments.isEmpty()
         || !currentPositionWhole.isZero()
         || !currentMeasure.leadingItems.isEmpty()
@@ -1572,7 +1755,9 @@ ChartNormalizationResult normalizeChartFragment(
             ++sectionMeasureIndex;
         }
         appendBoundaryItems(&outputLines, measure.trailingItems);
-        if (sectionMeasureIndex > 0 && (sectionMeasureIndex % 4) == 0) {
+        if (options.splitEveryFourMeasures
+            && sectionMeasureIndex > 0
+            && (sectionMeasureIndex % 4) == 0) {
             outputLines.append(QString());
         }
     }
@@ -1580,17 +1765,8 @@ ChartNormalizationResult normalizeChartFragment(
         outputLines.removeLast();
     }
     if (!appendTerminalMarker && appendTrailingBeatsMarker) {
-        // Selection mode: emit a trailing {N} so post-selection content
-        // keeps the same `currentBeats` the original selection ended on.
-        // Input `{N}` markers are consumed (used to compute moment positions)
-        // but never re-emitted as such — the per-segment {N}s normalize
-        // does emit would otherwise leak into post-selection parsing and
-        // shift downstream note timings.
-        // Skip when the last `{N}` already in the output matches; when we
-        // do append, glue to the last line instead of taking a new line.
-        // (The caller also suppresses this entirely when the text right after
-        // the selection already opens with its own {N} — see
-        // followingTextRedefinesBeatsBeforeUse.)
+        // Selection mode: when following text will consume the current
+        // subdivision, restore the final active {N}.
         const int targetBeats = qMax(1, currentBeats);
         int lastEmittedBeats = -1;
         for (int i = outputLines.size() - 1; i >= 0; --i) {
@@ -1634,6 +1810,10 @@ ChartNormalizationOptions chartNormalizationOptionsFromPreferences(
         options.reduceTo384Grid =
             preview.value(kChartNormalizeReduceTo384GridPreferenceKey).toBool(options.reduceTo384Grid);
     }
+    if (preview.value(kChartNormalizeSplitEveryFourMeasuresPreferenceKey).isBool()) {
+        options.splitEveryFourMeasures =
+            preview.value(kChartNormalizeSplitEveryFourMeasuresPreferenceKey).toBool(options.splitEveryFourMeasures);
+    }
     return options;
 }
 
@@ -1646,6 +1826,7 @@ void saveChartNormalizationOptionsToPreferences(
     }
     preview->insert(kChartNormalizeStartAtNewMeasurePreferenceKey, options.startAtNewMeasure);
     preview->insert(kChartNormalizeReduceTo384GridPreferenceKey, options.reduceTo384Grid);
+    preview->insert(kChartNormalizeSplitEveryFourMeasuresPreferenceKey, options.splitEveryFourMeasures);
 }
 
 ChartNormalizationResult normalizeChartText(
@@ -1660,7 +1841,8 @@ ChartNormalizationResult normalizeChartText(
         timingMetadata,
         seedFromTimingMetadata(timingMetadata),
         options,
-        true,
+        textHasTerminalMarker(input),
+        false,
         false);
 }
 
@@ -1688,18 +1870,20 @@ ChartNormalizationResult normalizeChartSelectionText(
         seed.startPhaseWhole = Rational();
     }
 
-    // Suppress the trailing {N} carry-over marker when the text right after the
-    // selection already redefines the subdivision before using it — otherwise
-    // we emit redundant "{32} {4}" noise.
+    // Append carry only when following text will consume the current
+    // subdivision before reaching E, another {N}, or an ordinary || boundary.
+    const bool selectedTextHasTerminalMarker = textHasTerminalMarker(
+        fullText.mid(selectionStart, selectionEnd - selectionStart));
     const bool appendTrailingBeatsMarker =
-        !followingTextRedefinesBeatsBeforeUse(fullText.mid(selectionEnd));
+        !selectedTextHasTerminalMarker
+        && segment_policy::followingTextNeedsBeatsCarry(fullText.mid(selectionEnd));
 
     return normalizeChartFragment(
         fullText.mid(selectionStart, selectionEnd - selectionStart),
         timingMetadata,
         seed,
         options,
-        false,
+        selectedTextHasTerminalMarker,
         shouldInjectLeadingTimeSignature,
         appendTrailingBeatsMarker);
 }

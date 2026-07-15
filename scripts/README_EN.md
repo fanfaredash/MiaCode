@@ -48,3 +48,6 @@ Artifacts are written to `dist/`.
 - `ffmpeg/trim/`: builds a trimmed Windows decode-only FFmpeg dev SDK.
 - `assets/subset_hud_font.py`: generates the HUD font subset; see `assets/README_font_subset.md`.
 - `assets/gen_same_lane_v_slides.py`: generates same-lane V-slide reference data.
+- `assets/match_outline_canvas_ratio.py`: expands transparent outline PNG canvases by the fixed 980:1080 ratio without scaling the visible pixels.
+- `gen_skin_mine_sprites.py`: generates `_mine.png` sprites from normal skin sprites using the MajMine luminance grayscale transform.
+- `assets/build_skin_tool_exes.ps1`: packages the outline and mine sprite helpers as standalone Windows executables under `dist/skin-tools-win64`.

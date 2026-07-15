@@ -24,6 +24,7 @@
 #include "common/DebugLog.h"
 #include "common/ProcessDiagnostics.h"
 #include "common/DebugOptions.h"
+#include "common/InputShortcutGesture.h"
 #include "common/PreviewInteractionConfig.h"
 #include "common/TimelineThemeConfig.h"
 #include "common/WaveformCache.h"
@@ -281,7 +282,7 @@ void applyDynamicSceneState(
         miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(*state, state->viewportSize.width());
 
     // Phase 7 — bucket-bump revisions. The QSG layers
-    // (TimelineQuickWaveformLayer / Header (grid) / Notes) only
+    // (TimelineQuickWaveformLayer / Header / Notes) only
     // rebuild their child node tree when the corresponding revision
     // counter changes. With Phase 7 build-time culling, the cached
     // primitive set is bucket-specific, but the bridge's revisions
@@ -291,15 +292,19 @@ void applyDynamicSceneState(
     // that flips when the user scrolls into a new bucket. Combined
     // with the matching cache invalidation in
     // TimelineQuickItem::currentSceneState, the layer rebuilds its
-    // children to match the freshly emitted primitives. Within a
-    // bucket the bumped revision is constant, so layers happily
-    // skip rebuilds and the per-frame cost stays at "set transform".
+    // children to match the freshly emitted primitives. Header line
+    // numbers and line-start triangles use the same low-frequency
+    // bucket boundary so paging within a bucket stays transform-only.
+    // Within a bucket the bumped revision is constant, so layers
+    // happily skip rebuilds and the per-frame cost stays at "set
+    // transform".
     if (state->viewportSize.width() > 0) {
         const int bucketSize = state->viewportSize.width();
         const quint64 bucket =
             static_cast<quint64>(state->horizontalScrollValue / bucketSize);
         state->waveformRevision += bucket;
         state->gridRevision += bucket;
+        state->headerRevision += bucket;
         state->notesRevision += bucket;
     }
 
@@ -947,6 +952,7 @@ void TimelineQuickItem::setHeaderLeftLimit(int value)
         return;
     }
     headerLeftLimit_ = normalized;
+    ++appearanceRevision_;
     update();
     emit headerInsetsChanged();
 }
@@ -963,6 +969,41 @@ void TimelineQuickItem::setHeaderRightLimit(int value)
         return;
     }
     headerRightLimit_ = normalized;
+    ++appearanceRevision_;
+    update();
+    emit headerInsetsChanged();
+}
+
+int TimelineQuickItem::headerMarkerLeftLimit() const
+{
+    return headerMarkerLeftLimit_;
+}
+
+void TimelineQuickItem::setHeaderMarkerLeftLimit(int value)
+{
+    const int normalized = qMax(0, value);
+    if (headerMarkerLeftLimit_ == normalized) {
+        return;
+    }
+    headerMarkerLeftLimit_ = normalized;
+    ++appearanceRevision_;
+    update();
+    emit headerInsetsChanged();
+}
+
+int TimelineQuickItem::headerMarkerRightLimit() const
+{
+    return headerMarkerRightLimit_;
+}
+
+void TimelineQuickItem::setHeaderMarkerRightLimit(int value)
+{
+    const int normalized = qMax(0, value);
+    if (headerMarkerRightLimit_ == normalized) {
+        return;
+    }
+    headerMarkerRightLimit_ = normalized;
+    ++appearanceRevision_;
     update();
     emit headerInsetsChanged();
 }
@@ -1064,6 +1105,70 @@ void TimelineQuickItem::cycleZoomPreset()
     const miacode::timeline::TimelineSceneState state = currentSceneState();
     stateBridge_->cycleZoomPreset(
         miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, width() / 2.0));
+}
+
+void TimelineQuickItem::stepZoomPreset(int deltaSteps)
+{
+    if (stateBridge_ == nullptr || deltaSteps == 0) {
+        return;
+    }
+    const miacode::timeline::TimelineSceneState state = currentSceneState();
+    stateBridge_->stepZoomPreset(
+        deltaSteps,
+        miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, width() / 2.0));
+}
+
+void TimelineQuickItem::setZoomScale(qreal scale)
+{
+    if (stateBridge_ == nullptr) {
+        return;
+    }
+    const miacode::timeline::TimelineSceneState state = currentSceneState();
+    stateBridge_->setZoomScaleAnchored(
+        static_cast<double>(scale),
+        miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, width() / 2.0));
+}
+
+void TimelineQuickItem::setZoomControlPressedPart(int part)
+{
+    const int normalized = qBound(-2, part, 2);
+    if (zoomControlPressedPart_ == normalized) {
+        return;
+    }
+    zoomControlPressedPart_ = normalized;
+    ++appearanceRevision_;
+    update();
+}
+
+void TimelineQuickItem::setZoomControlHoveredPart(int part)
+{
+    const int normalized = qBound(-2, part, 2);
+    if (zoomControlHoveredPart_ == normalized) {
+        return;
+    }
+    zoomControlHoveredPart_ = normalized;
+    ++appearanceRevision_;
+    update();
+}
+
+void TimelineQuickItem::setSettingsControlHovered(bool hovered)
+{
+    if (settingsControlHovered_ == hovered) {
+        return;
+    }
+    settingsControlHovered_ = hovered;
+    ++appearanceRevision_;
+    update();
+}
+
+void TimelineQuickItem::setSettingsControlPressed(bool pressed)
+{
+    if (settingsControlPressed_ == pressed) {
+        return;
+    }
+    settingsControlPressed_ = pressed;
+    ++appearanceRevision_;
+    update();
 }
 
 void TimelineQuickItem::refreshTheme()
@@ -1188,6 +1293,8 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         || cachedScrollBucket_ != currentScrollBucket
         || cachedSceneBuildHeaderLeftLimit_ != headerLeftLimit_
         || cachedSceneBuildHeaderRightLimit_ != headerRightLimit_
+        || cachedSceneBuildHeaderMarkerLeftLimit_ != headerMarkerLeftLimit_
+        || cachedSceneBuildHeaderMarkerRightLimit_ != headerMarkerRightLimit_
         || cachedSceneBuildAppearanceRevision_ != appearanceRevision_
         || cachedSceneBuildGridRevision_ != stateBridge_->gridRevision()
         || cachedSceneBuildWaveformRevision_ != stateBridge_->waveformRevision()
@@ -1222,6 +1329,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.muriMarkerTooltips = stateBridge_->muriMarkerTooltips();
     request.viewportSize = viewportSize;
     request.headerLineNumberFont = stateBridge_->headerLineNumberFont();
+    request.skinDirectory = stateBridge_->skinDirectory();
     request.horizontalScrollValue = stateBridge_->horizontalScrollValue();
     // Phase 7 — opt into scroll-bucket culling. Builder emits
     // primitives for visible viewport ± bucketSize px (so 3 total
@@ -1231,9 +1339,13 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.horizontalCullPaddingPx = bucketSize;
     request.headerLeftLimit = headerLeftLimit_;
     request.headerRightLimit = headerRightLimit_ > 0 ? headerRightLimit_ : request.viewportSize.width();
+    request.headerMarkerLeftLimit = headerMarkerLeftLimit_;
+    request.headerMarkerRightLimit =
+        headerMarkerRightLimit_ > 0 ? headerMarkerRightLimit_ : request.viewportSize.width();
     request.zoomScale = stateBridge_->zoomScale();
     request.contentScale = stateBridge_->contentScale();
     request.waveformBrightness = stateBridge_->waveformBrightness();
+    request.measureLineBrightness = stateBridge_->measureLineBrightness();
     request.waveformPhaseCompensationSeconds = stateBridge_->waveformPhaseCompensationSeconds();
     request.playbackEntrySeconds = stateBridge_->playbackEntrySeconds();
     request.playheadSeconds = stateBridge_->playheadSeconds();
@@ -1243,14 +1355,13 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.playheadIndicatorSuppressed = stateBridge_->playheadIndicatorSuppressed();
     request.dragActive = dragActive_;
     // Phase 9d-native — header-control state for native rendering of
-    // the zoom button + follow checkbox in the DComp pipeline.
+    // the zoom button in the DComp pipeline.
+    request.zoomControlPressedPart = zoomControlPressedPart_;
+    request.zoomControlHoveredPart = zoomControlHoveredPart_;
+    request.settingsControlHovered = settingsControlHovered_;
+    request.settingsControlPressed = settingsControlPressed_;
     request.followPreviewEnabled = stateBridge_->followPreviewEnabled();
     request.followProgressEnabled = stateBridge_->followProgressEnabled();
-    // Use the app's UI language selector (UiText::isChineseUi()) — not
-    // the OS locale. A user with a Chinese OS who selected English in
-    // the preferences would otherwise still see Chinese labels instead of
-    // English labels on the timeline header.
-    request.isChineseUi = UiText::isChineseUi();
     request.appearanceRevision = appearanceRevision_;
     request.gridRevision = stateBridge_->gridRevision();
     request.waveformRevision = stateBridge_->waveformRevision();
@@ -1265,6 +1376,8 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         cachedScrollBucket_ = currentScrollBucket;
         cachedSceneBuildHeaderLeftLimit_ = headerLeftLimit_;
         cachedSceneBuildHeaderRightLimit_ = headerRightLimit_;
+        cachedSceneBuildHeaderMarkerLeftLimit_ = headerMarkerLeftLimit_;
+        cachedSceneBuildHeaderMarkerRightLimit_ = headerMarkerRightLimit_;
         cachedSceneBuildAppearanceRevision_ = appearanceRevision_;
         cachedSceneBuildGridRevision_ = stateBridge_->gridRevision();
         cachedSceneBuildWaveformRevision_ = stateBridge_->waveformRevision();
@@ -1390,12 +1503,16 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
 
     QElapsedTimer paintNodeTimer;
     paintNodeTimer.start();
-    auto* root = ensureSlotRoot(oldNode);
     if (!canBecomeReady()) {
+        auto* root = ensureSlotRoot(oldNode);
         updateReadyState(false);
         return root;
     }
-    textures_->setWindow(window());
+
+    const QString targetSkinDirectory = stateBridge_ != nullptr ? stateBridge_->skinDirectory() : QString();
+    bool resetNodeTreeBeforeTextureInvalidation =
+        textures_ != nullptr && textures_->requiresReset(window(), targetSkinDirectory);
+
     const qreal currentDpr = window()->effectiveDevicePixelRatio();
     if (!qFuzzyCompare(cachedDevicePixelRatio_ + 1.0, currentDpr + 1.0)) {
         cachedDevicePixelRatio_ = currentDpr;
@@ -1404,6 +1521,29 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         }
         pendingDprInvalidation_ = true;
     }
+    if (pendingDprInvalidation_ || pendingThemeInvalidation_) {
+        resetNodeTreeBeforeTextureInvalidation = true;
+    }
+
+    miacode::timeline::TimelineSceneState state = currentSceneState();
+    const quint64 themeSignature = timelineThemeSignatureHash(state);
+    if (cachedThemeSignatureValid_ && cachedThemeSignature_ != themeSignature) {
+        ++appearanceRevision_;
+        pendingThemeInvalidation_ = true;
+        resetNodeTreeBeforeTextureInvalidation = true;
+        state = currentSceneState();
+    }
+    cachedThemeSignature_ = timelineThemeSignatureHash(state);
+    cachedThemeSignatureValid_ = true;
+
+    if (resetNodeTreeBeforeTextureInvalidation && oldNode != nullptr) {
+        delete oldNode;
+        oldNode = nullptr;
+    }
+    auto* root = ensureSlotRoot(oldNode);
+
+    textures_->setWindow(window());
+    textures_->setSkinDirectory(targetSkinDirectory);
     if (pendingDprInvalidation_) {
         textures_->invalidateDprDependent();
         pendingDprInvalidation_ = false;
@@ -1412,15 +1552,7 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         textures_->invalidateThemeDependent();
         pendingThemeInvalidation_ = false;
     }
-    miacode::timeline::TimelineSceneState state = currentSceneState();
-    const quint64 themeSignature = timelineThemeSignatureHash(state);
-    if (cachedThemeSignatureValid_ && cachedThemeSignature_ != themeSignature) {
-        ++appearanceRevision_;
-        textures_->invalidateThemeDependent();
-        state = currentSceneState();
-    }
-    cachedThemeSignature_ = timelineThemeSignatureHash(state);
-    cachedThemeSignatureValid_ = true;
+
     if (state.horizontalScrollValue != lastPaintedHorizontalScrollValue_
         && miacode::debug_options::timelineHotpathDiagnosticsEnabled()) {
         miacode::debug_log::appendLine(
@@ -1717,9 +1849,15 @@ void TimelineQuickItem::wheelEvent(QWheelEvent* event)
             .arg(delta)
             .arg(static_cast<int>(event->modifiers()))
             .arg(stateBridge_->horizontalScrollValue()));
-    if (event->modifiers().testFlag(Qt::AltModifier)) {
-        const int steps = delta > 0 ? qMax(1, qRound(static_cast<double>(delta) / 120.0))
-                                    : qMin(-1, qRound(static_cast<double>(delta) / 120.0));
+    const bool zoomInWheel = miacode::input_shortcut::wheelEventMatchesAnyGesture(
+        event,
+        stateBridge_->zoomInWheelShortcuts());
+    const bool zoomOutWheel = miacode::input_shortcut::wheelEventMatchesAnyGesture(
+        event,
+        stateBridge_->zoomOutWheelShortcuts());
+    if (zoomInWheel || zoomOutWheel) {
+        const int steps = qMax(1, qAbs(qRound(static_cast<double>(delta) / 120.0)))
+            * (zoomInWheel ? 1 : -1);
         stateBridge_->stepZoomPreset(
             steps,
             miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(state, width() / 2.0));

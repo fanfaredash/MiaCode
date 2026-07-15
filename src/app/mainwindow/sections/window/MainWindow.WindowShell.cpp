@@ -20,6 +20,7 @@
 #include "tools/export_page/ExportLauncherPage.h"
 #include "tools/latency/LatencyDetectionPage.h"
 #include "tools/video_export/VideoExportDialog.h"
+#include "app/ui/AppBackgroundPainter.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -1009,10 +1010,11 @@ void MainWindow::WindowSection::applyUiTheme()
     }
     if (owner_.outlineList_ != nullptr) {
         owner_.outlineList_->setStyleSheet(UiTheme::outlineListStyleSheet());
-    }
-    if (owner_.deleteDifficultyButton_ != nullptr) {
-        owner_.deleteDifficultyButton_->setStyleSheet(UiTheme::deleteDifficultyButtonStyleSheet());
-        owner_.deleteDifficultyButton_->setIcon(makeOutlineCloseIcon(UiTheme::colors().iconSecondary));
+        // The scroll bar was styled once at construction — re-style it here or
+        // it keeps the previous theme's colors after a light/dark switch.
+        if (QScrollBar* vbar = owner_.outlineList_->verticalScrollBar()) {
+            vbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
+        }
     }
     if (owner_.timelineView_ != nullptr) {
         owner_.timelineView_->refreshTheme();
@@ -1028,6 +1030,24 @@ void MainWindow::WindowSection::applyUiTheme()
         editorShell->setStyleSheet(UiTheme::editorShellStyleSheet());
     }
     const UiTheme::Colors& themeColors = UiTheme::colors();
+    const bool appBackgroundActive = miacode::ui::appBackgroundIsActiveForTheme();
+    const auto backgroundSurfaceColor = [appBackgroundActive](const QColor& color, int alpha) {
+        return appBackgroundActive
+            ? QStringLiteral("rgba(%1, %2, %3, %4)")
+                .arg(color.red())
+                .arg(color.green())
+                .arg(color.blue())
+                .arg(alpha)
+            : color.name(QColor::HexRgb);
+    };
+    const auto backgroundActiveSurfaceColor = [
+        appBackgroundActive,
+        backgroundSurfaceColor
+    ](const QColor& activeColor, const QColor& inactiveColor, int alpha) {
+        return appBackgroundActive
+            ? backgroundSurfaceColor(activeColor, alpha)
+            : inactiveColor.name(QColor::HexRgb);
+    };
     if (owner_.editorHeaderWidget_ != nullptr) {
         owner_.editorHeaderWidget_->setAttribute(Qt::WA_StyledBackground, true);
         owner_.editorHeaderWidget_->setStyleSheet(
@@ -1040,11 +1060,16 @@ void MainWindow::WindowSection::applyUiTheme()
                 "QWidget#EditorDifficultyControls QLineEdit { background: %5; color: %3; border: 1px solid %6; border-radius: 6px; padding: 4px 6px; selection-background-color: %7; selection-color: %8; }"
                 "QWidget#EditorDifficultyControls QLineEdit:focus { border-color: %9; }"
             )
-                .arg(themeColors.cardBg.name(QColor::HexRgb))
+                .arg(backgroundActiveSurfaceColor(
+                    themeColors.toolbarBg,
+                    themeColors.cardBg,
+                    UiTheme::appBackgroundOverlayAlpha(UiTheme::AppBackgroundOverlayRole::EditorHeader, themeColors.dark)))
                 .arg(themeColors.border.name(QColor::HexRgb))
                 .arg(themeColors.textPrimary.name(QColor::HexRgb))
                 .arg(themeColors.textSecondary.name(QColor::HexRgb))
-                .arg(themeColors.inputBg.name(QColor::HexRgb))
+                .arg(backgroundSurfaceColor(
+                    themeColors.inputBg,
+                    UiTheme::appBackgroundOverlayAlpha(UiTheme::AppBackgroundOverlayRole::Input, themeColors.dark)))
                 .arg(themeColors.borderSoft.name(QColor::HexRgb))
                 .arg(themeColors.selection.name(QColor::HexRgb))
                 .arg(themeColors.selectionText.name(QColor::HexRgb))
@@ -1118,8 +1143,8 @@ void MainWindow::WindowSection::updateOutlineDockCollapseButton()
     owner_.outlineCollapseButton_->setText(owner_.outlineDockCollapsed_ ? QStringLiteral("▶") : QStringLiteral("◀"));
     owner_.outlineCollapseButton_->setToolTip(
         owner_.outlineDockCollapsed_
-            ? (UiText::isChineseUi() ? QStringLiteral("展开左侧字段栏") : QStringLiteral("Expand left sidebar"))
-            : (UiText::isChineseUi() ? QStringLiteral("折叠左侧字段栏") : QStringLiteral("Collapse left sidebar"))
+            ? UiText::text(QStringLiteral("window.expand_left_sidebar"))
+            : UiText::text(QStringLiteral("window.collapse_left_sidebar"))
     );
 }
 
@@ -1140,9 +1165,6 @@ void MainWindow::WindowSection::setOutlineDockCollapsed(bool collapsed)
 
     owner_.outlineDockCollapsed_ = collapsed;
     owner_.outlineList_->setVisible(!collapsed);
-    if (collapsed) {
-        owner_.updateDifficultyDeleteButton(false);
-    }
 
     const int targetWidth = collapsed ? kCollapsedWidth : qMax(kExpandedMinWidth, owner_.outlineDockExpandedWidth_);
     owner_.outlineDock_->setMinimumWidth(targetWidth);

@@ -15,6 +15,7 @@
 #include "common/LayoutRingConfig.h"
 #include "common/PreviewAudioMixConfig.h"
 #include "common/PreviewGameplayConfig.h"
+#include "common/PreviewSfxAssets.h"
 #include "core/scene/PreviewSceneGeometry.h"
 #include "common/PreviewSfxTimeline.h"
 #include "preview/runtime/PreviewSceneAssetLoader.h"
@@ -40,6 +41,8 @@
 #include <QRect>
 #include <QRegularExpression>
 #include <QSet>
+#include <QQuickWindow>
+#include <QSGRendererInterface>
 #include <QStandardPaths>
 #include <QSurfaceFormat>
 #include <QTemporaryDir>
@@ -374,6 +377,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
                 mediaPath,
                 frameSize,
                 task.backgroundScaleMode,
+                task.layoutSquareScale,
                 stagedImagePath,
                 &stagedImageDetail)) {
             ffmpegMediaPath = stagedImagePath;
@@ -453,18 +457,37 @@ VideoExportResult VideoExportController::exportPreparedTask(
     );
 
     // Opening SFX: when the intro front-pad is present, extract the bundled
-    // WAV from qrc to the temp dir so ffmpeg can read it (ffmpeg can't open
-    // qrc). It is mixed at output t=0 (== intro start) over the silent pad.
+    // WAV to the temp dir so ffmpeg can read it. Prefer assets/music, then the
+    // resolved SFX folder, so users can replace track_start.wav without touching
+    // qrc; fall back to the bundled qrc copy when the custom file is absent.
     const bool introAudioEnabled = audioRenderPlan.introLeadSeconds > 0.0;
     QString introSfxTempPath;
     if (introAudioEnabled) {
-        introSfxTempPath = QDir(tempDir.path()).filePath(QStringLiteral("intro_sfx.wav"));
+        const QString resolvedIntroSfxPath =
+            miacode::preview_sfx::assetFilePathForKind(
+                audioRenderPlan.sfxDirectory,
+                QStringLiteral("track_start"),
+                task.introSoundFileName);
+        const QString introSfxReadablePath =
+            (!resolvedIntroSfxPath.isEmpty() && QFileInfo::exists(resolvedIntroSfxPath))
+                ? resolvedIntroSfxPath
+                : QString::fromLatin1(miacode::intro::kOpeningSfxResource);
+        const QString introSfxSuffix = QFileInfo(introSfxReadablePath).suffix().trimmed().isEmpty()
+            ? QStringLiteral("wav")
+            : QFileInfo(introSfxReadablePath).suffix().trimmed();
+        introSfxTempPath = QDir(tempDir.path()).filePath(QStringLiteral("intro_sfx.%1").arg(introSfxSuffix));
         if (QFile::exists(introSfxTempPath)) {
             QFile::remove(introSfxTempPath);
         }
-        if (!QFile::copy(QString::fromLatin1(miacode::intro::kOpeningSfxResource), introSfxTempPath)) {
-            appendVideoExportLog(QStringLiteral("intro_sfx_extract_failed"), introSfxTempPath);
+        if (!QFile::copy(introSfxReadablePath, introSfxTempPath)) {
+            appendVideoExportLog(
+                QStringLiteral("intro_sfx_extract_failed"),
+                QStringLiteral("source=%1 temp=%2").arg(introSfxReadablePath, introSfxTempPath));
             introSfxTempPath.clear();  // fall back to a silent front-pad
+        } else {
+            appendVideoExportLog(
+                QStringLiteral("intro_sfx"),
+                QStringLiteral("source=%1 temp=%2").arg(introSfxReadablePath, introSfxTempPath));
         }
     }
 
@@ -489,9 +512,14 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const bool hasDimMask = outerDimAlpha > 1e-6 || innerDimAlpha > 1e-6;
 
     int mediaInputIndex = -1;
+    int innerMediaMaskInputIndex = -1;
     int dimMaskInputIndex = -1;
     int audioInputIndex = -1;
     int currentInputIndex = 1;
+    const bool innerCircleFitOuterFill =
+        hasMedia
+        && task.backgroundScaleMode == PreviewBackgroundScaleMode::InnerCircleFitOuterFill
+        && !(mediaIsImage && mediaUsesPreprocessedImage);
     if (hasMedia) {
         mediaInputIndex = currentInputIndex++;
         if (mediaIsImage) {
@@ -501,6 +529,39 @@ VideoExportResult VideoExportController::exportPreparedTask(
                  << QString::number(task.fps);
         }
         args << QStringLiteral("-i") << ffmpegMediaPath;
+    }
+    if (innerCircleFitOuterFill) {
+        const QString innerMediaMaskPath = QDir(tempDir.path()).filePath(QStringLiteral("inner_circle_media_mask.png"));
+        const QImage innerMediaMask = buildCircularMediaMaskImage(
+            frameWidth,
+            frameHeight,
+            task.layoutSquareScale
+        );
+        if (innerMediaMask.isNull() || !innerMediaMask.save(innerMediaMaskPath)) {
+            result.message = QStringLiteral("Unable to create inner media mask image.");
+            result.details = withExportLogPath(innerMediaMaskPath);
+            appendVideoExportLog(
+                QStringLiteral("fail_inner_media_mask"),
+                QStringLiteral("path=%1 layoutScale=%2")
+                    .arg(innerMediaMaskPath)
+                    .arg(task.layoutSquareScale, 0, 'f', 6)
+            );
+            return result;
+        }
+        innerMediaMaskInputIndex = currentInputIndex++;
+        args << QStringLiteral("-loop")
+             << QStringLiteral("1")
+             << QStringLiteral("-framerate")
+             << QString::number(task.fps)
+             << QStringLiteral("-i")
+             << innerMediaMaskPath;
+        appendVideoExportLog(
+            QStringLiteral("inner_media_mask"),
+            QStringLiteral("path=%1 inputIndex=%2 layoutScale=%3")
+                .arg(innerMediaMaskPath)
+                .arg(innerMediaMaskInputIndex)
+                .arg(task.layoutSquareScale, 0, 'f', 6)
+        );
     }
     if (hasDimMask) {
         const QString dimMaskPath = QDir(tempDir.path()).filePath(QStringLiteral("dim_mask.png"));
@@ -566,57 +627,107 @@ VideoExportResult VideoExportController::exportPreparedTask(
                        .arg(task.fps)
                        .arg(totalSecondsText);
     if (hasMedia) {
-        QString mediaChain = QStringLiteral("[%1:v]").arg(mediaInputIndex);
-        QStringList mediaFilters;
         const int squareSide = qMax(1, qMin(frameWidth, frameHeight));
         const int squareOffsetX = (frameWidth - squareSide) / 2;
         const int squareOffsetY = (frameHeight - squareSide) / 2;
-        if (!(mediaIsImage && mediaUsesPreprocessedImage)) {
-            if (task.backgroundScaleMode == PreviewBackgroundScaleMode::FitContain) {
-                mediaFilters << QStringLiteral(
-                    "scale=%1:%2:force_original_aspect_ratio=decrease,pad=%1:%2:(ow-iw)/2:(oh-ih)/2:color=black")
-                                    .arg(frameWidth)
-                                    .arg(frameHeight);
-            } else if (task.backgroundScaleMode == PreviewBackgroundScaleMode::SquareFitContain) {
-                mediaFilters << QStringLiteral(
-                    "scale=%1:%1:force_original_aspect_ratio=decrease,pad=%1:%1:(ow-iw)/2:(oh-ih)/2:color=black")
-                                    .arg(squareSide);
-            } else {
-                mediaFilters << QStringLiteral(
-                    "scale=%1:%2:force_original_aspect_ratio=increase,crop=%1:%2")
-                                    .arg(frameWidth)
-                                    .arg(frameHeight);
+        const auto appendMediaTimingFilters = [&](QStringList& mediaFilters) {
+            if (!mediaIsImage) {
+                if (timelineOriginSecond > kTimelineEpsilonSeconds) {
+                    mediaFilters << QStringLiteral("trim=start=%1:end=%2")
+                                        .arg(timelineOriginText)
+                                        .arg(QString::number(timelineOriginSecond + alignedTotalSeconds, 'f', 6))
+                                 << QStringLiteral("setpts=PTS-STARTPTS");
+                } else if (timelineOriginSecond < -kTimelineEpsilonSeconds) {
+                    mediaFilters << QStringLiteral("trim=start=0:end=%1")
+                                        .arg(QString::number(alignedTotalSeconds + timelineOriginSecond, 'f', 6))
+                                 << QStringLiteral("setpts=PTS-STARTPTS+%1/TB")
+                                        .arg(QString::number(-timelineOriginSecond, 'f', 6));
+                }
+                mediaFilters << QStringLiteral("tpad=stop_mode=clone:stop_duration=%1").arg(totalSecondsText);
             }
-        }
-        mediaFilters << QStringLiteral("setsar=1")
-                     << QStringLiteral("fps=%1").arg(task.fps)
-                     << QStringLiteral("format=rgba");
-        if (!mediaIsImage) {
-            if (timelineOriginSecond > kTimelineEpsilonSeconds) {
-                mediaFilters << QStringLiteral("trim=start=%1:end=%2")
-                                    .arg(timelineOriginText)
-                                    .arg(QString::number(timelineOriginSecond + alignedTotalSeconds, 'f', 6))
-                             << QStringLiteral("setpts=PTS-STARTPTS");
-            } else if (timelineOriginSecond < -kTimelineEpsilonSeconds) {
-                mediaFilters << QStringLiteral("trim=start=0:end=%1")
-                                    .arg(QString::number(alignedTotalSeconds + timelineOriginSecond, 'f', 6))
-                             << QStringLiteral("setpts=PTS-STARTPTS+%1/TB")
-                                    .arg(QString::number(-timelineOriginSecond, 'f', 6));
+        };
+
+        if (innerCircleFitOuterFill) {
+            const int innerSide = qMax(
+                1,
+                qRound(miacode::preview_video::layoutSquareSideForCanvasHeight(
+                    static_cast<double>(frameHeight),
+                    task.layoutSquareScale
+                ))
+            );
+            const int innerOffsetX = (frameWidth - innerSide) / 2;
+            const int innerOffsetY = (frameHeight - innerSide) / 2;
+            filterParts << QStringLiteral("[%1:v]split=2[media_outer_in][media_inner_in]").arg(mediaInputIndex);
+
+            QStringList outerFilters;
+            outerFilters << QStringLiteral("scale=%1:%2:force_original_aspect_ratio=increase,crop=%1:%2")
+                                .arg(frameWidth)
+                                .arg(frameHeight)
+                         << QStringLiteral("setsar=1")
+                         << QStringLiteral("fps=%1").arg(task.fps)
+                         << QStringLiteral("format=rgba");
+            appendMediaTimingFilters(outerFilters);
+            filterParts << QStringLiteral("[media_outer_in]%1[media_outer]")
+                               .arg(outerFilters.join(QLatin1Char(',')));
+
+            QStringList innerFilters;
+            innerFilters << QStringLiteral(
+                                "scale=%1:%1:force_original_aspect_ratio=decrease,pad=%1:%1:(ow-iw)/2:(oh-ih)/2:color=black")
+                                .arg(innerSide)
+                         << QStringLiteral("setsar=1")
+                         << QStringLiteral("fps=%1").arg(task.fps)
+                         << QStringLiteral("format=rgba")
+                         << QStringLiteral("pad=%1:%2:%3:%4:color=black@0")
+                                .arg(frameWidth)
+                                .arg(frameHeight)
+                                .arg(innerOffsetX)
+                                .arg(innerOffsetY);
+            appendMediaTimingFilters(innerFilters);
+            filterParts << QStringLiteral("[media_inner_in]%1[media_inner_full]")
+                               .arg(innerFilters.join(QLatin1Char(',')));
+            filterParts << QStringLiteral("[%1:v]fps=%2,format=gray[media_inner_mask]")
+                               .arg(innerMediaMaskInputIndex)
+                               .arg(task.fps);
+            filterParts << QStringLiteral("[media_inner_full][media_inner_mask]alphamerge[media_inner_masked]");
+            filterParts << QStringLiteral("[base_fill][media_outer]overlay=0:0:format=rgb:alpha=straight[base_media_outer]");
+            filterParts << QStringLiteral("[base_media_outer][media_inner_masked]overlay=0:0:format=rgb:alpha=straight[base_media]");
+        } else {
+            QString mediaChain = QStringLiteral("[%1:v]").arg(mediaInputIndex);
+            QStringList mediaFilters;
+            if (!(mediaIsImage && mediaUsesPreprocessedImage)) {
+                if (task.backgroundScaleMode == PreviewBackgroundScaleMode::FitContain) {
+                    mediaFilters << QStringLiteral(
+                        "scale=%1:%2:force_original_aspect_ratio=decrease,pad=%1:%2:(ow-iw)/2:(oh-ih)/2:color=black")
+                                        .arg(frameWidth)
+                                        .arg(frameHeight);
+                } else if (task.backgroundScaleMode == PreviewBackgroundScaleMode::SquareFitContain) {
+                    mediaFilters << QStringLiteral(
+                        "scale=%1:%1:force_original_aspect_ratio=decrease,pad=%1:%1:(ow-iw)/2:(oh-ih)/2:color=black")
+                                        .arg(squareSide);
+                } else {
+                    mediaFilters << QStringLiteral(
+                        "scale=%1:%2:force_original_aspect_ratio=increase,crop=%1:%2")
+                                        .arg(frameWidth)
+                                        .arg(frameHeight);
+                }
             }
-            mediaFilters << QStringLiteral("tpad=stop_mode=clone:stop_duration=%1").arg(totalSecondsText);
+            mediaFilters << QStringLiteral("setsar=1")
+                         << QStringLiteral("fps=%1").arg(task.fps)
+                         << QStringLiteral("format=rgba");
+            appendMediaTimingFilters(mediaFilters);
+            mediaChain += mediaFilters.join(QLatin1Char(','));
+            mediaChain += QStringLiteral("[media_src]");
+            filterParts << mediaChain;
+            filterParts << QStringLiteral("[base_fill][media_src]overlay=%1:%2:format=rgb:alpha=straight[base_media]")
+                               .arg((task.backgroundScaleMode == PreviewBackgroundScaleMode::SquareFitContain
+                                        && !(mediaIsImage && mediaUsesPreprocessedImage))
+                                        ? squareOffsetX
+                                        : 0)
+                               .arg((task.backgroundScaleMode == PreviewBackgroundScaleMode::SquareFitContain
+                                        && !(mediaIsImage && mediaUsesPreprocessedImage))
+                                        ? squareOffsetY
+                                        : 0);
         }
-        mediaChain += mediaFilters.join(QLatin1Char(','));
-        mediaChain += QStringLiteral("[media_src]");
-        filterParts << mediaChain;
-        filterParts << QStringLiteral("[base_fill][media_src]overlay=%1:%2:format=rgb:alpha=straight[base_media]")
-                           .arg((task.backgroundScaleMode == PreviewBackgroundScaleMode::SquareFitContain
-                                    && !(mediaIsImage && mediaUsesPreprocessedImage))
-                                    ? squareOffsetX
-                                    : 0)
-                           .arg((task.backgroundScaleMode == PreviewBackgroundScaleMode::SquareFitContain
-                                    && !(mediaIsImage && mediaUsesPreprocessedImage))
-                                    ? squareOffsetY
-                                    : 0);
     } else {
         filterParts << QStringLiteral("[base_fill]null[base_media]");
     }
@@ -756,11 +867,64 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const QSurfaceFormat requestedFormat = QSurfaceFormat::defaultFormat();
     QOpenGLContext* shareContext = nullptr;
     QString offscreenInitError;
-    bool useOffscreenGpu = exportCanvas.initializeOffscreenRenderer(
-        requestedFormat,
-        shareContext,
-        &offscreenInitError
-    );
+
+    // P5.3 — offscreen render-session backend selection. Hidden env switch
+    // (MIACODE_EXPORT_RENDER_BACKEND, default d3d11_qrhi); main.cpp already
+    // put the default export process on the Direct3D11 graphics API. A failed
+    // D3D11 init falls back to OpenGL in process: tear the D3D11 attempt down,
+    // flip the process graphics API back (no scene graph exists yet on the
+    // failed window), re-init.
+    const miacode::debug_options::ExportRenderBackendRequest exportBackendRequest =
+        miacode::debug_options::exportRenderBackendRequest();
+    bool d3d11Eligible =
+        exportBackendRequest != miacode::debug_options::ExportRenderBackendRequest::OpenGl;
+    QString d3d11IneligibleReason;
+#if defined(Q_OS_WIN)
+    if (d3d11Eligible && QQuickWindow::graphicsApi() != QSGRendererInterface::Direct3D11) {
+        d3d11Eligible = false;
+        d3d11IneligibleReason = QStringLiteral("process_graphics_api_not_d3d11");
+    }
+#else
+    if (d3d11Eligible) {
+        d3d11Eligible = false;
+        d3d11IneligibleReason = QStringLiteral("non_windows");
+    }
+#endif
+    if (!d3d11IneligibleReason.isEmpty()) {
+        appendVideoExportLog(
+            QStringLiteral("render_backend_fallback"),
+            QStringLiteral("fallback_from=d3d11_qrhi fallback_to=opengl reason=%1")
+                .arg(d3d11IneligibleReason));
+    }
+    bool useOffscreenGpu = false;
+    if (d3d11Eligible) {
+        exportCanvas.setRenderSessionBackend(ExportQuickRenderSessionBackend::D3D11Qrhi);
+        useOffscreenGpu = exportCanvas.initializeOffscreenRenderer(
+            requestedFormat,
+            shareContext,
+            &offscreenInitError
+        );
+        if (!useOffscreenGpu) {
+            appendVideoExportLog(
+                QStringLiteral("render_backend_fallback"),
+                QStringLiteral("fallback_from=d3d11_qrhi fallback_to=opengl reason=%1")
+                    .arg(offscreenInitError.isEmpty() ? QStringLiteral("init_failed")
+                                                      : offscreenInitError));
+            exportCanvas.shutdownOffscreenRenderer();
+            exportCanvas.setRenderSessionBackend(ExportQuickRenderSessionBackend::OpenGl);
+            QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+            offscreenInitError.clear();
+        }
+    }
+    if (!useOffscreenGpu) {
+        useOffscreenGpu = exportCanvas.initializeOffscreenRenderer(
+            requestedFormat,
+            shareContext,
+            &offscreenInitError
+        );
+    }
+    const bool d3d11SessionActive =
+        exportCanvas.renderSessionBackend() == ExportQuickRenderSessionBackend::D3D11Qrhi;
     if (!useOffscreenGpu) {
         result.message = QStringLiteral("Failed to initialize Quick export renderer.");
         result.details = withExportLogPath(
@@ -819,6 +983,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         qEnvironmentVariableIntValue("MIACODE_EXPORT_DISABLE_PBO_READBACK") == 1;
     const bool requestOffscreenPboReadback =
         useOffscreenGpu
+        && !d3d11SessionActive
         && exportConfig.renderBackend.requestOffscreenPboReadback
         && !disablePboReadbackViaEnv
         && !highQualityForcesSyncReadback;
@@ -826,6 +991,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
     bool useOffscreenPboReadback = false;
     if (requestOffscreenPboReadback) {
         useOffscreenPboReadback = exportCanvas.supportsOffscreenPboReadback(&offscreenPboError);
+    }
+    if (d3d11SessionActive) {
+        appendVideoExportLog(
+            QStringLiteral("pbo_readback_disabled_by_backend"),
+            QStringLiteral("render_backend=d3d11_qrhi readback=synchronous_staging_map"));
     }
     if (disablePboReadbackViaEnv) {
         appendVideoExportLog(
@@ -837,9 +1007,21 @@ VideoExportResult VideoExportController::exportPreparedTask(
             QStringLiteral("pbo_readback_disabled_by_quality"),
             QStringLiteral("exportQuality=high_quality readback=synchronous"));
     }
+    // P1/P5.3 — spell out which offscreen session the export uses (OpenGL
+    // QQuickRenderControl by default; d3d11_qrhi via the hidden switch), the
+    // readback mode, and the actual GPU (GL renderer string / DXGI adapter +
+    // LUID) so a support log can compare the export GPU against the GUI's
+    // `quick_shell/device` line at a glance.
+    const QString exportReadbackMode = useOffscreenPboReadback
+        ? QStringLiteral("offscreen_pbo")
+        : (useOffscreenGpu
+               ? (d3d11SessionActive ? QStringLiteral("d3d11_staging_map_sync")
+                                     : QStringLiteral("offscreen_gpu_direct"))
+               : QStringLiteral("cpu_fallback"));
+    const QString exportAdapterOrRenderer = exportCanvas.adapterOrRendererForDebug();
     appendVideoExportLog(
         QStringLiteral("render_backend"),
-        QStringLiteral("quickRequired=1 envGpuRequested=%1 sourceCtx=%2 offscreenInit=%3 exportGpuReady=%4 pboRequested=%5 pboEnabled=%6 initError=%7 pboError=%8")
+        QStringLiteral("quickRequired=1 render_backend=%11 rhi_api=%12 adapter_or_renderer=\"%9\" adapter_luid=%13 rt_format=%14 readback_mode=%10 envGpuRequested=%1 sourceCtx=%2 offscreenInit=%3 exportGpuReady=%4 pboRequested=%5 pboEnabled=%6 initError=%7 pboError=%8")
             .arg(exportConfig.renderBackend.requestGpuRender ? 1 : 0)
             .arg(shareContext != nullptr ? 1 : 0)
             .arg(useOffscreenGpu ? 1 : 0)
@@ -848,6 +1030,19 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(useOffscreenPboReadback ? 1 : 0)
             .arg(offscreenInitError.isEmpty() ? QStringLiteral("ok") : offscreenInitError)
             .arg(offscreenPboError.isEmpty() ? QStringLiteral("ok") : offscreenPboError)
+            .arg(exportAdapterOrRenderer.isEmpty() ? QStringLiteral("(unknown)")
+                                                   : exportAdapterOrRenderer)
+            .arg(exportReadbackMode)
+            .arg(d3d11SessionActive ? QStringLiteral("d3d11_qrhi_rendercontrol")
+                                    : QStringLiteral("opengl_qquick_rendercontrol"))
+            .arg(d3d11SessionActive ? QStringLiteral("Direct3D11") : QStringLiteral("OpenGL"))
+            .arg(d3d11SessionActive
+                     ? (exportCanvas.d3d11AdapterLuidForDebug().isEmpty()
+                            ? QStringLiteral("(unknown)")
+                            : exportCanvas.d3d11AdapterLuidForDebug())
+                     : QStringLiteral("(gl)"))
+            .arg(d3d11SessionActive ? exportCanvas.d3d11RenderTargetFormatForDebug()
+                                    : QStringLiteral("GL_RGBA8"))
     );
 
     // Raw RGBA frames are packed after conversion to non-premultiplied RGBA8888.
@@ -1063,6 +1258,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         diagReferenceCanvas.setBackgroundScaleMode(task.backgroundScaleMode);
         diagReferenceCanvas.setTapFlowSpeed(task.tapFlowSpeed);
         diagReferenceCanvas.setTouchFlowSpeed(task.touchFlowSpeed);
+        diagReferenceCanvas.setTapJudgeTextDistance(task.tapJudgeTextDistance);
         diagReferenceCanvas.setShowDebugInfo(false);
         diagReferenceCanvas.setNoteMarkers({});
         QString diagInitError;

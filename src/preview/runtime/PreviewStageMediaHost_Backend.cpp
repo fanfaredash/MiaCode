@@ -223,9 +223,13 @@ void PreviewStageMediaHost::initializeBackendObjects()
     const char *prefName = decodePref == DecodePref::ForceSoftware ? "force_sw"
                          : decodePref == DecodePref::ForceHardware ? "force_hw"
                                                                    : "auto";
+    // NOTE (P0): `probe_adapter` is a HEURISTIC — the DXGI adapter-0 desc read
+    // by detectIntegratedRenderAdapter() to guess iGPU vs dGPU for the decode
+    // path. It is NOT the adapter Qt Quick's RHI actually bound; for that, see
+    // the `quick_shell/device` runtime log (QSGRendererInterface DeviceResource).
     appendPreviewStageMediaLog(
         QStringLiteral("media_backend"),
-        QString("backend=qtavplayer ffmpeg=1 qt_runtime_version=%1 force_software=%2 pref=%3 igpu=%4 adapter=\"%5\" single_device=%6")
+        QString("backend=qtavplayer ffmpeg=1 qt_runtime_version=%1 force_software=%2 pref=%3 igpu=%4 probe_adapter=\"%5\" probe_adapter_source=dxgi_enum0_heuristic single_device=%6")
             .arg(QString::fromLatin1(qVersion()))
             .arg(useSoftware ? 1 : 0)
             .arg(QString::fromLatin1(prefName))

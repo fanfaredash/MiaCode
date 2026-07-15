@@ -55,6 +55,7 @@ void MainWindow::PreviewSection::applyPreviewStageMediaRouteVisualSettings()
         || state_.exportPreviewActive_;
     if (state_.previewStageMediaHost_ != nullptr) {
         state_.previewStageMediaHost_->setBackgroundScaleMode(state_.previewBackgroundScaleMode_);
+        state_.previewStageMediaHost_->setLayoutSquareScale(state_.previewLayoutSquareScale_);
         state_.previewStageMediaHost_->setMediaVisible(mediaVisible);
     }
     if (state_.previewCanvas_ != nullptr) {
@@ -359,6 +360,7 @@ void MainWindow::PreviewSection::ensurePreviewStageMediaHostInitialized()
 
     state_.previewStageMediaHost_ = new PreviewStageMediaHost(&owner_);
     state_.previewStageMediaHost_->setBackgroundScaleMode(state_.previewBackgroundScaleMode_);
+    state_.previewStageMediaHost_->setLayoutSquareScale(state_.previewLayoutSquareScale_);
     owner_.setPreviewStageMediaFrameRateMode(state_.previewStageMediaFrameRateMode_, false);
     // Push the persisted video decode-mode preference (硬件渲染 / 软件渲染) once,
     // before any PV is resolved, so the user's choice applies on the first load.

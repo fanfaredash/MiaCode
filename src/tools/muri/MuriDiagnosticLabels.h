@@ -84,6 +84,12 @@ double slideStartSecondForSource(
 MuriAlertLevel slideHeadTapAlertLevel(bool hasTapOnSlideHead, double gapSecond);
 MuriAlertLevel tapOnSlideAlertLevel(double gapSecond, double thresholdSecond);
 MuriAlertLevel downgradeProtectedSimpleNoteAlertLevel(MuriAlertLevel alertLevel, bool hasProtection);
+MuriDetailKind slideHeadTapDetailKind(bool hasTapOnSlideHead);
+MuriDetailArgs simpleGapDetailArgs(
+    MuriAlertLevel alertLevel,
+    const QString& left,
+    const QString& right,
+    double gapMs);
 QString slideHeadTapDetailText(
     bool hasTapOnSlideHead,
     MuriAlertLevel alertLevel,

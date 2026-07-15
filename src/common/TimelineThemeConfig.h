@@ -16,10 +16,18 @@ constexpr double kTimelineWaveformBrightnessMax = 2.0;
 // dominating the grid — adopted as the shipped default. The slider still
 // spans kTimelineWaveformBrightnessMin..Max so users can dial it up/down.
 constexpr double kTimelineWaveformBrightnessDefault = 0.5;
+constexpr double kTimelineMeasureLineBrightnessMin = 0.2;
+constexpr double kTimelineMeasureLineBrightnessMax = 2.0;
+constexpr double kTimelineMeasureLineBrightnessDefault = 1.0;
 
 inline double normalizedTimelineWaveformBrightness(double brightness)
 {
     return qBound(kTimelineWaveformBrightnessMin, brightness, kTimelineWaveformBrightnessMax);
+}
+
+inline double normalizedTimelineMeasureLineBrightness(double brightness)
+{
+    return qBound(kTimelineMeasureLineBrightnessMin, brightness, kTimelineMeasureLineBrightnessMax);
 }
 
 // Tiered grid-line heights feature. The timeline draws three tiers of vertical
@@ -71,6 +79,23 @@ inline QColor adjustedTimelineWaveformColor(QColor color, double brightness)
         alpha = baseAlpha + (255.0 - baseAlpha) * t;
     }
     color.setAlpha(qBound(0, qRound(alpha), 255));
+    return color;
+}
+
+inline QColor adjustedTimelineMeasureLineColor(QColor color, double brightness)
+{
+    const double clamped = normalizedTimelineMeasureLineBrightness(brightness);
+    const int baseAlpha = color.alpha();
+    if (clamped < 1.0) {
+        color.setAlpha(qBound(0, qRound(static_cast<double>(baseAlpha) * clamped), 255));
+        return color;
+    }
+    if (clamped > 1.0) {
+        const double t = (clamped - 1.0) / (kTimelineMeasureLineBrightnessMax - 1.0);
+        const int factor = qRound(100.0 + (UiTheme::isDarkTheme() ? 80.0 : 45.0) * t);
+        color = UiTheme::isDarkTheme() ? color.lighter(factor) : color.darker(factor);
+        color.setAlpha(baseAlpha);
+    }
     return color;
 }
 

@@ -70,8 +70,7 @@ void TimelineHeaderSource::contributeToSnapshot(
         }
     }
 
-    // Triangles → real GPU pipeline (Phase 3d-1).
-    sb::pushTimelineTriangleBatch(snapshot, state->headerMarkers);
+    // Header triangles are emitted by TimelineOverlaySource so they stay above waveform and notes.
 
     // Text labels → CPU-rasterise to QImage via the cache, emit as
     // chart-style sprites. Phase 3 / Phase 5 polish may move this to
@@ -135,7 +134,7 @@ void TimelineHeaderSource::contributeToSnapshot(
     rasteriseLabels(state->laneLabels, /*applyScrollOffsetX=*/0.0);
     rasteriseLabels(state->headerLabels, scrollOffsetX);
 
-    // Phase 9d-native — zoom button + follow checkbox visuals.
+    // Phase 9d-native — zoom button visual.
     // Pinned to the viewport (don't scroll). The TimelineRects /
     // TimelineLines pipelines apply Phase-8's -scroll uniformly, so
     // we pre-bake +scroll into the BG and border X coords so the
@@ -162,8 +161,15 @@ void TimelineHeaderSource::contributeToSnapshot(
         // batch, which has been observed to silently abort the process
         // under x64 emulation on Apple-Silicon Windows VMs.
         QVector<miacode::timeline::TimelineSceneRect> bgRects;
-        bgRects.reserve(1);
+        bgRects.reserve(2 + state->zoomButtonOverlayRects.size() + state->settingsButtonGlyphRects.size());
         bgRects.append(shiftRect(state->zoomButtonBg));
+        for (const auto& rect : state->zoomButtonOverlayRects) {
+            bgRects.append(shiftRect(rect));
+        }
+        bgRects.append(shiftRect(state->settingsButtonBg));
+        for (const auto& rect : state->settingsButtonGlyphRects) {
+            bgRects.append(shiftRect(rect));
+        }
         sb::pushTimelineRectBatch(snapshot, bgRects);
 
         // 4-line frame around the zoom button.
@@ -185,11 +191,38 @@ void TimelineHeaderSource::contributeToSnapshot(
                 QPointF(x0, y1), QPointF(x0, y0), c, 1.0});
         };
         pushFrame(state->zoomButtonBorder);
+        pushFrame(state->settingsButtonBorder);
+        for (const auto& line : state->zoomButtonInteriorLines) {
+            miacode::timeline::TimelineSceneLine shiftedLine = line;
+            shiftedLine.start.rx() += scrollOffsetX;
+            shiftedLine.end.rx() += scrollOffsetX;
+            overlayLines.append(shiftedLine);
+        }
+        for (const auto& line : state->settingsButtonInteriorLines) {
+            miacode::timeline::TimelineSceneLine shiftedLine = line;
+            shiftedLine.start.rx() += scrollOffsetX;
+            shiftedLine.end.rx() += scrollOffsetX;
+            overlayLines.append(shiftedLine);
+        }
         sb::pushTimelineLineBatch(snapshot, overlayLines);
+
+        if (!state->zoomButtonGlyphTriangles.isEmpty()) {
+            QVector<miacode::timeline::TimelineSceneTriangle> glyphTriangles;
+            glyphTriangles.reserve(state->zoomButtonGlyphTriangles.size());
+            for (const auto& triangle : state->zoomButtonGlyphTriangles) {
+                miacode::timeline::TimelineSceneTriangle shiftedTriangle = triangle;
+                shiftedTriangle.a.rx() += scrollOffsetX;
+                shiftedTriangle.b.rx() += scrollOffsetX;
+                shiftedTriangle.c.rx() += scrollOffsetX;
+                glyphTriangles.append(shiftedTriangle);
+            }
+            sb::pushTimelineTriangleBatch(snapshot, glyphTriangles);
+        }
 
         // Labels (text) — chart-preview Sprites batch, no scroll
         // translate applied by pipeline, so applyScrollOffsetX=0.
         QVector<miacode::timeline::TimelineSceneTextLabel> controlLabels;
+        controlLabels.reserve(1);
         controlLabels.append(state->zoomButtonLabel);
         rasteriseLabels(controlLabels, /*applyScrollOffsetX=*/0.0);
     }

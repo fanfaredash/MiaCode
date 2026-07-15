@@ -12,8 +12,8 @@ class TimelineLabelCache;
 //
 // Phase 3d-2: text labels (laneLabels + headerLabels) are CPU-rasterised
 // to QImages via a TimelineLabelCache and emitted as chart-style
-// sprites — no font atlas or glyph SDF needed yet. Triangles still
-// emit as TimelineTriangles (Phase 3d-1 GPU pipeline).
+// sprites; no font atlas or glyph SDF needed yet.
+// Header triangles now emit from TimelineOverlaySource so they stay on top.
 class TimelineHeaderSource final : public render::IPreviewSource
 {
 public:

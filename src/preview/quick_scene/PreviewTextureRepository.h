@@ -71,6 +71,7 @@ public:
     ~PreviewTextureRepository();
 
     void setWindow(QQuickWindow* window);
+    bool resetRequiredBeforeFrame() const;
     void beginFrame();
     QSGTexture* textureForImage(const QImage& image, bool cacheable = true);
     QSGTexture* retainedTexture(const QString& slotName) const;
@@ -84,6 +85,7 @@ public:
 
 private:
     void clearCachedTextures();
+    void retireTexture(QSGTexture* texture);
 
     QQuickWindow* window_ = nullptr;
     // L1 cache: keyed by image.cacheKey() (fast path for re-using the same QImage instance).
@@ -95,6 +97,10 @@ private:
     QHash<quint64, qint64> cachedTextureBytesByKey_;
     QHash<quint64, QSGTexture*> transientTextures_;
     QHash<QString, PreviewRetainedTextureEntry> retainedTextures_;
+    // Textures removed from a material during the current frame stay alive until the next
+    // frame starts. QSG material comparison happens after updatePaintNode(), so deleting a
+    // replaced texture inline can leave the batch renderer with a dangling raw pointer.
+    QVector<QSGTexture*> retiredTextures_;
     PreviewTextureStats stats_;
     qint64 cachedTextureBytes_ = 0;
     bool cachedTextureFlushPending_ = false;

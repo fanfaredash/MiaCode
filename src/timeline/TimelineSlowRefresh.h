@@ -16,7 +16,7 @@ struct TimelineSlowRefreshRequest {
     QString chartText;
     double firstSeconds = 0.0;
     miacode::simai::SimaiTimingMetadata timingMetadata;
-    bool chineseUi = false;
+    SimaiNativeValidationLocale validationLocale = SimaiNativeValidationLocale::English;
 };
 
 struct TimelinePreviewRefreshResult {
@@ -40,7 +40,7 @@ struct TimelineAnalysisRefreshRequest {
     quint64 revision = 0;
     int difficultyId = 0;
     QString chartText;
-    bool chineseUi = false;
+    SimaiNativeValidationLocale validationLocale = SimaiNativeValidationLocale::English;
     miacode::simai::SimaiTimingMetadata timingMetadata;
     SimaiNativeParseResult parseResult;
     QByteArray noteMarkerSignature;
@@ -53,7 +53,7 @@ struct TimelineAnalysisRefreshResult {
     quint64 revision = 0;
     int difficultyId = 0;
     QString chartText;
-    bool chineseUi = false;
+    SimaiNativeValidationLocale validationLocale = SimaiNativeValidationLocale::English;
     miacode::simai::SimaiTimingMetadata timingMetadata;
     QByteArray noteMarkerSignature;
     SimaiNativeValidationReport validationReport;

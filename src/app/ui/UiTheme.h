@@ -8,13 +8,26 @@
 #include <QString>
 
 class QApplication;
+class QComboBox;
 class QMenu;
+class QToolButton;
+class QWidget;
 
 namespace UiTheme {
 
 enum class ResolvedTheme {
     Light,
     Dark,
+};
+
+enum class AppBackgroundOverlayRole {
+    Toolbar,
+    StatusBar,
+    Panel,
+    Card,
+    EditorHeader,
+    Input,
+    CodeEditor,
 };
 
 struct Colors {
@@ -72,6 +85,7 @@ struct Colors {
 ResolvedTheme resolvedTheme();
 bool isDarkTheme();
 const Colors& colors();
+int appBackgroundOverlayAlpha(AppBackgroundOverlayRole role, bool darkTheme);
 QPalette applicationPalette();
 void applyApplicationTheme(QApplication& app);
 
@@ -95,16 +109,31 @@ QString exportLauncherPageStyleSheet();
 QString embeddedExportTabStyleSheet();
 QString metadataEmptyHintLabelStyleSheet();
 QString outlineListStyleSheet();
-QString deleteDifficultyButtonStyleSheet();
 QString previewPanelStyleSheet();
 QString compactToolbarButtonStyleSheet();
 QString pausePreviewButtonStyleSheet(bool active);
 QString formSliderStyleSheet();
 QString dialogSliderStyleSheet();
 QString dialogComboBoxStyleSheet();
+QString dialogComboBoxStyleSheet(Qt::Alignment textAlignment);
+void styleDialogComboBox(QComboBox* combo, int maxVisibleItems = 0);
+void prepareDialogDropdownPopupWindow(QWidget* popupWindow);
+QString dialogDropdownItemButtonStyleSheet();
+QString dialogDropdownCheckBoxStyleSheet();
+QString dialogDropdownScrollBarStyleSheet(const QString& parentSelector = QString());
+void styleDialogDropdownMenu(QMenu& menu);
+QString dialogSpinBoxStyleSheet();
 QString dialogMenuButtonStyleSheet();
+// QToolButton styled to match a createDialogComboBox closed box (for
+// multi-select pseudo-dropdowns like 判定效果显示). Default centered.
+QString dialogComboLikeButtonStyleSheet(Qt::Alignment textAlignment = Qt::AlignCenter);
+QString dialogMenuCheckBoxStyleSheet();
 QString dialogMenuLineEditStyleSheet();
+QString dialogMenuLineEditStyleSheet(const QColor& backgroundColor);
 QString dialogPushButtonStyleSheet(bool emphasized = false);
+QString dialogAuxiliaryButtonStyleSheet();
+void bindDialogMenuButtonPopupState(QToolButton* button, QMenu* menu);
+void applyComboBoxPopupLimit(QComboBox* combo, int maxVisibleItems = 12);
 QString dialogIconToolButtonStyleSheet(bool active = false);
 QIcon dialogTransportPlayIcon(const QColor& color);
 QIcon dialogTransportPauseIcon(const QColor& color);

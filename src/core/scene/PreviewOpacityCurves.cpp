@@ -254,10 +254,14 @@ qreal maimuriDxSimpleJudgeBreakFlash(qreal elapsedSeconds, qreal periodSeconds, 
     }
     // Triangle 0->1->0 each period, starting at 0 (off) and peaking at period/2 — matches the
     // MajdataPlay JudgeCPBreak alpha keyframes (off at frame 0, on at the half-period).
+    // MiaCode softens that source shape into a slower pulse with a full-bright plateau.
     const qreal phase = std::fmod(elapsedSeconds, periodSeconds) / periodSeconds;
-    const qreal triangle = phase < 0.5 ? (phase * 2.0) : (2.0 - phase * 2.0);
+    const qreal pulse =
+        phase < (1.0 / 12.0) ? (phase * 12.0)
+        : phase < (11.0 / 12.0) ? 1.0
+        : (1.0 - phase) * 12.0;
     const qreal clampedFloor = qBound<qreal>(0.0, floorValue, 1.0);
-    return clampedFloor + (1.0 - clampedFloor) * triangle;
+    return clampedFloor + (1.0 - clampedFloor) * qBound<qreal>(0.0, pulse, 1.0);
 }
 
 qreal maimuriDxSlideJudgeAlpha(qreal elapsedSeconds, qreal lifetimeSeconds, qreal fadeInEndSeconds, qreal fadeOutStartSeconds, qreal fadeOutEndSeconds)

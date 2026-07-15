@@ -2,7 +2,7 @@
 
 This document is the current user-facing index for MiaCode debug mode, log files, and preview/export diagnostics after the Qt Quick migration.
 
-> Reconciled against the code on 2026-05-29: 79 live `MIACODE_*` environment flags across ~27 files. When you add/remove a flag, update this index (and `.claude/skills/miacode-dev-guide/references/debug-and-logging.md`).
+> Reconciled against the code on 2026-05-29 (83 live `MIACODE_*` environment flags across ~28 files after the P3/P4 GPU additions `MIACODE_GPU_POLICY` / `MIACODE_GPU_ADAPTER_LUID` / `MIACODE_GPU_BIND_HIGH_PERFORMANCE` and the P5 export addition `MIACODE_EXPORT_RENDER_BACKEND`). When you add/remove a flag, update this index (and `.codex/skills/miacode-dev-guide/references/debug-flags.md`).
 
 ## Debug Entry Points
 
@@ -41,6 +41,13 @@ Default filenames:
 - fatal: `miacode_fatal.log`
 - preview profile: `miacode_preview_profile_summary.txt`
 
+Crash breadcrumb path note:
+
+- `miacode_startup_beacon_<pid>.txt` and `miacode_op_chain_<pid>.log` are resolved at process startup from `MIACODE_OPLOG_SHADOW_PATH`, then `MIACODE_LOG_DIR`, then `%TEMP%`.
+- Binding a chart-local `.miacode/logs/` directory later does not rebind those already-captured crash breadcrumb paths yet.
+- When a project log dir is bound while runtime debug output or `MIACODE_PREVIEW_HUD_PAINT_DIAG=1` is active, the runtime log writes `logging/crash_breadcrumb_hint` with the current PID plus `startup_beacon_hint` and `op_chain_hint`.
+- Longer-term work should rebind or mirror the crash shadow safely; the current line is a path signpost so investigations do not only check the chart log directory.
+
 Path overrides:
 
 - `MIACODE_RUNTIME_LOG_PATH`
@@ -55,6 +62,12 @@ Path overrides:
 Other logging knobs:
 
 - `MIACODE_SKIP_ASYNCLOG_FLUSH` — skip the async-log flush on shutdown (diagnostics only).
+
+C++ hang-watchdog instrumentation macros, not environment variables:
+
+- `MIACODE_HANG_PHASE`
+- `MIACODE_HANG_JOIN`
+- `MIACODE_HANG_JOIN_IMPL`
 
 ## Category Gates
 
@@ -76,7 +89,11 @@ something goes wrong. The per-category gates above are snapshot into atomics at
 ## Current Preview / Export Backend Notes
 
 - Realtime preview and export both use Qt Quick scene graph.
-- The desktop app currently forces Qt Quick to the OpenGL backend.
+- **GUI RHI backend:** the desktop GUI no longer forces OpenGL. It uses `--rhi=<name>`, the persisted choice, or Qt's platform default (Direct3D11 on Windows / Qt 6). See the `startup/graphics_backend` and `quick_shell/device` runtime logs for the applied backend + the actual bound adapter.
+- **CLI export / export worker:** `--export-video` and `--export-video-worker` default Qt Quick to Direct3D11 and drive the D3D11/QRhi render-control session. `MIACODE_EXPORT_RENDER_BACKEND=opengl` keeps the stable offscreen `QQuickRenderControl` + FBO/PBO path as an explicit rollback. The export log's `render_backend` line reports `render_backend=d3d11_qrhi_rendercontrol` or `render_backend=opengl_qquick_rendercontrol`, the active RHI, adapter/renderer, and readback mode.
+- **Windows dist package:** the clickable `MiaCode.exe` at the package root is only the launcher; the real GUI/export worker is `app\MiaCode.exe`. Windows Graphics Settings and the NVIDIA/AMD control panels must target `app\MiaCode.exe`, not the root launcher. The `startup/process_identity` runtime log spells out the real exe path, whether it is running from the packaged `app\` dir, and the launcher parent process.
+- **High-performance GPU hint (P2):** `MiaCode.exe` and `MiaCodeLauncher.exe` export the `NvOptimusEnablement` / `AmdPowerXpressRequestHighPerformance` symbols so hybrid-graphics laptops prefer the discrete GPU. This is a process-level *preference*, not a precise adapter binding — Windows Graphics Settings / vendor control panels can still override it. Confirmed by the `startup/gpu_hint` runtime log.
+- **Root Quick GPU binding:** root-window `fromAdapter` binding is now default ON. Set `MIACODE_GPU_BIND_HIGH_PERFORMANCE=0` / `off` / `false` to keep Qt's platform-default adapter as a rollback. The preview composite remains never `fromAdapter`-bound.
 - Export PBO diagnostics now describe the headless Quick export session, not a removed legacy renderer.
 - Background **PV/BG video decoding** in realtime preview (and therefore the export preview dialog) uses **QtAVPlayer (FFmpeg)** on Windows instead of Qt Multimedia's `QMediaPlayer`. This is selected at **build time** by the `MIACODE_USE_QTAVPLAYER` compile macro — a CMake build-time macro, **not** an environment flag, so it cannot be toggled at runtime (CMake defines it on Windows when the FFmpeg dev SDK is present; other platforms keep the `QMediaPlayer` path). The FFmpeg dev SDK path is a separate CMake cache variable, provisioned by `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1`. The export *encoder output* is unaffected (still the standalone `ffmpeg.exe` filtergraph). On `InvalidMedia` the preview backend retries once forcing FFmpeg software decode (`preview/stage_media action=video_software_fallback`)..
 - `MIACODE_BUILD_DEV_TOOLS` is the **CMake configure option** (not an environment flag) that builds the developer spec/eval executables and registers them with CTest (`cmake -D MIACODE_BUILD_DEV_TOOLS=ON`; `scripts/build/build-win.ps1` turns it on for Debug configs). Some dev tools mention it in comments (e.g. `src/tools/latency/LatencyBatchTest.cpp`), which is why it appears in this index — it has no runtime effect in a shipped build.
@@ -87,7 +104,7 @@ Relevant export backend toggles:
 - `MIACODE_EXPORT_ENABLE_GPU_RENDER`
 - `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO`
 - `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO`
-- Default export path keeps GPU offscreen render enabled and requests PBO readback unless `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1`.
+- Default export path keeps GPU offscreen render enabled and now uses D3D11 QRhi synchronous staging-map readback; the OpenGL rollback path still requests PBO readback unless `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1`.
 - `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1` is the primary stability fallback switch.
 - `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO=1` now only makes the default explicit and remains useful for cleaning inherited `ENABLE=0` env state.
 
@@ -102,7 +119,7 @@ Relevant export diagnostics:
 - `MIACODE_EXPORT_DIAG_OBJECT_TRACE_MAX_LINES`
 - `pbo_capability_probe` export-log entries record version / extension checks, smoke-probe result, and the final enable/disable reason.
 - `pbo_cleanup_deferred` and `export_context_not_current_on_teardown` mark teardown paths that skipped explicit GL cleanup because the export context was not current.
-- `render_backend` export-log entries now report `pboRequested=1` by default and only leave `pboEnabled=0` when capability probing or runtime fallback disables it.
+- `render_backend` export-log entries report the active backend and readback mode; D3D11 QRhi logs `pboRequested=0 pboEnabled=0` because it has no PBO path, while the OpenGL rollback path reports PBO capability state.
 - `audio_backend_select`, `audio_mix_ok`, and `audio_backend_render_complete` export-log entries describe StageB mixed-audio backend routing and offline WAV generation.
 - `fail_audio_plan`, `fail_audio_backend_select`, and `fail_audio_mix` are the primary StageB breadcrumbs when export audio generation fails before ffmpeg starts.
 - `miacode_video_export.log` now uses two tiers: concise major-stage/failure summaries always, detailed ffmpeg/render diagnostics only under `--debug`.
@@ -132,16 +149,32 @@ FFmpeg binary + extra readback toggle:
 - `MIACODE_FFMPEG` / `MIACODE_FFMPEG_PATH` — override the ffmpeg executable path used by export (and the dialog's ffmpeg probe).
 - `MIACODE_EXPORT_DISABLE_PBO_READBACK=1` — extra PBO-readback opt-out, narrower than `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO`.
 
+Render-session backend (P5 — hidden, diagnostic):
+
+- `MIACODE_EXPORT_RENDER_BACKEND` — `d3d11_qrhi` (default) | `opengl` | `auto`. Selects the offscreen chart-render session for CLI export and the export worker. The default `d3d11_qrhi` path puts the export process on the Direct3D11 Qt Quick graphics API and drives `PreviewQuickD3D11ExportSession` (device created on the P3-policy adapter via `QQuickGraphicsDevice::fromDeviceAndContext`, `QQuickRenderTarget::fromD3D11Texture` R8G8B8A8 target, synchronous CopyResource+Map readback — no PBO pipeline). Init failure auto-falls back to the OpenGL session (`render_backend_fallback` export-log line: `fallback_from=d3d11_qrhi fallback_to=opengl reason=…`). `opengl` is the explicit rollback path. `auto` is currently identical to `d3d11_qrhi`. Windows-only; unknown values keep OpenGL. Selected backend, adapter LUID and readback mode appear in the `render_backend` export-log summary line.
+
+## GPU Device Policy (P3/P4 — hidden, diagnostic)
+
+Internal high-performance GPU device-policy skeleton (`src/common/GpuDevicePolicy.*`, namespace `miacode::gpu`; provider `src/app/gpu_device_provider.cpp`). These are **hidden developer/support overrides**, not surfaced in the settings UI. **P3** **resolves + logs** the preferred adapter (`startup/gpu_policy` runtime log, gated on `--debug`); adapter enumeration is read-only DXGI (`IDXGIFactory6::EnumAdapterByGpuPreference` high-performance ordering, software adapters skipped) — no device creation. The GUI forwards the raw request to the export worker via env so both processes log a matching policy. **P4** can then actually **bind** the root Quick window to the resolved adapter via `QQuickGraphicsDevice::fromAdapter` (Qt owns the device) — logged at `startup/gpu_provider`, verified by the `quick_shell/device` actual-adapter probe.
+
+- `MIACODE_GPU_POLICY` — `auto_high_performance` (default) | `platform_default` | `software`. Selects the internal device policy. The `--gpu-policy=<value>` CLI flag takes precedence over this env var. `auto_high_performance` resolves to the first DXGI high-performance hardware adapter's LUID; on failure it falls back to `platform_default` and logs the reason.
+- `MIACODE_GPU_ADAPTER_LUID` — `<high>:<low>` (each hex `0x…` or decimal). Forces the policy to `adapter_luid` and A/B-selects a specific DXGI adapter by LUID. The `--gpu-adapter-luid=<high>:<low>` CLI flag takes precedence. An unknown / illegal LUID never blocks startup — the policy falls back to `platform_default` and logs `fallback_reason=adapter_luid_not_found_among_hw_adapters`.
+- `MIACODE_GPU_BIND_HIGH_PERFORMANCE` — **P4 master gate, default ON.** Binds the **root** Quick window to the resolved high-performance adapter (`fromAdapter`) when the RHI is D3D11, the policy yields a hardware LUID, and it **differs** from the default adapter (else redundant → skipped). Set `MIACODE_GPU_BIND_HIGH_PERFORMANCE=0` / `off` / `false` to keep Qt's default adapter. The **preview composite** (video surface) is never `fromAdapter`-bound — it keeps Qt's default adapter (or the H2 `MIACODE_PREVIEW_SINGLE_D3D11_DEVICE` path) to preserve the QtAVPlayer D3D11VA same-adapter video bridge.
+
+Related CLI flags (same resolver, no env literal): `--gpu-policy=<value>`, `--gpu-adapter-luid=<high>:<low>`.
+
 ## Preview-Side Notes
 
 Still active:
 
 - `MIACODE_PREVIEW_SFX_DIR`
 - `MIACODE_TRACK_PATH`
+- `MIACODE_EXTENSION_DEV_PATHS` (extension system only; platform path-list separated development extension paths scanned in addition to the user extension directory; each entry may point directly at an extension root or at a parent directory containing extension roots)
 - `MIACODE_BASS_BGM_RATE_MODE` (Windows BASS preview BGM only; unset defaults to pitch-preserving BASS_FX `tempo`, while `rate_transpose` / `transpose` / `source_time` / `accurate` switches to source-time-priority rate transpose for A/B listening)
 - `MIACODE_BASS_BGM_TEMPO_PRESET` (Windows BASS preview BGM only, only when tempo mode is active; BASS_FX window presets: unset = `compact40`, `stock` = plugin default, `auto` = `0/0/8`, `tight20` = `20/8/4`, `balanced30` = `30/10/6`, `compact40` = `40/15/8`, `smooth60` = `60/20/8`, `wide82` = `82/28/8`)
 - `MIACODE_BASS_BGM_TEMPO_PARAMS` (Windows BASS preview BGM only, only when tempo mode is active; overrides preset with custom `sequence_ms,seek_ms,overlap_ms`, accepting comma, slash, semicolon, pipe, `x`, or spaces as separators)
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG`
+- `MIACODE_PREVIEW_HUD_PAINT_DIAG` (`1` enables focused `PreviewQuickHudLayer` / HUD painter crash breadcrumbs in the runtime log. It force-writes `preview/hud_state` GUI-thread HUD mutations and `preview/hud_paint` render-thread paint stages, including a flushed `draw_text_before` line before each HUD `QPainter::drawText` call. It also allows the project-log binding `logging/crash_breadcrumb_hint` signpost to be written without global `--debug`.)
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS`
 - `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG` (requires `--debug`; adds focused waveform/BGM alignment evidence in the audio log, raises BASS `bass_status` cadence for short-lived 1x offset repros, and emits runtime `timeline/render_map` rows from the final Quick timeline scene state)
 - `MIACODE_PREVIEW_WAVEFORM_ALIGNMENT_DIAG_SAMPLE_MS` (default `250`; BASS `bass_status` interval while waveform-alignment diagnostics are enabled)
@@ -211,6 +244,8 @@ Preview diagnostics now split these timing sources instead of reporting a single
   - BASS `bass_status` sampling is now reduced to about once per second in debug mode, and includes `bgm_delta_ms` (`auth - bgm_chart`) so waveform/playhead complaints can be separated from generic fallback-clock drift; waveform-alignment diagnostics can temporarily lower that interval
   - BASS BGM rate-mode decisions log as low-frequency `bgm_speed_mode` / `bgm_rate_mode` rows, not per tick; BASS_FX tempo-window experiments additionally log `bgm_tempo_window` with requested and read-back `sequence_ms`, `seek_ms`, and `overlap_ms`
   - `preview/interaction` correlates user-facing preview actions such as `play`, `pause`, `stop`, and `ctrl+click` seek
+  - `ui/hang_watchdog` is installed only when runtime debug output is active; if a marked GUI phase remains active for about `2s`, it writes a fatal-grade runtime line, flushes the op-chain shadow, and includes async-log writer stats
+  - `layout/export_page`, `layout/rehosted_widget`, `export_page/embedded_video_panel`, `video_export/embedded_layout`, and `quick_shell/layout` are runtime-debug-only slow-path layout diagnostics for QuickShell/native-surface and embedded export-panel relayout work
   - `timeline/interaction` records quick timeline drag, wheel-scroll, and held-key horizontal scroll inputs
   - `timeline/bridge` records quick timeline hot-path state pushes such as `action=set_horizontal_scroll_value` only when `MIACODE_TIMELINE_HOTPATH_DIAG=1`
   - `timeline/quick_scene` records full `scene_state_rebuild_*` boundaries in debug mode; scroll-only `action=content_transform_update` paints require `MIACODE_TIMELINE_HOTPATH_DIAG=1`

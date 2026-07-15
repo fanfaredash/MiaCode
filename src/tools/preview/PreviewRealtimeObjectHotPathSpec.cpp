@@ -2,6 +2,7 @@
 #include <QImage>
 #include <QRectF>
 #include <QTextStream>
+#include <QtMath>
 
 #include "core/scene/PreviewActiveMarkerView.h"
 #include "core/scene/PreviewMarkerDrawOrder.h"
@@ -10,6 +11,7 @@
 #include "core/scene/PreviewSceneConstants.h"
 #include "core/scene/PreviewSceneMath.h"
 #include "core/scene/PreviewSlideMotionLayerState.h"
+#include "core/scene/PreviewTouchJudgeLayerState.h"
 #include "core/scene/PreviewTrackLayerState.h"
 
 namespace {
@@ -24,6 +26,7 @@ using miacode::preview::scene::PreviewPreparedMarkerEntry;
 using miacode::preview::scene::PreviewPreparedSceneCache;
 using miacode::preview::scene::PreviewSlideMotionLayerState;
 using miacode::preview::scene::PreviewSpriteDescriptor;
+using miacode::preview::scene::PreviewTouchJudgeLayerState;
 using miacode::preview::scene::PreviewTrackLayerState;
 
 constexpr qreal kEpsilon = 1e-3;
@@ -862,6 +865,227 @@ bool verifyDxMuriActionSweepLineHandlesEdgeCases(QTextStream& err)
     return true;
 }
 
+TimelineNoteMarker makeTouchMarker(double second, const QPointF& touchPoint)
+{
+    TimelineNoteMarker marker;
+    marker.type = QStringLiteral("touch");
+    marker.second = second;
+    marker.touchPoint = touchPoint;
+    marker.touchPad = QStringLiteral("A1");
+    return marker;
+}
+
+bool verifyTouchJudgeUsesTwoEightSparkleRings(QTextStream& err)
+{
+    const QRectF playfieldRect(0.0, 0.0, 540.0, 540.0);
+    PreviewFrameState state;
+    state.playheadSeconds = 1.05;
+    state.skin.touchPointImage = solidImage(96, 96);
+    state.judgeEffect.touchCircleImage = solidImage(64, 64);
+    state.judgeEffect.touchPart01Image = solidImage(32, 32);
+    state.judgeEffect.touchPart02Image = solidImage(48, 48);
+    state.noteMarkers = {
+        makeTouchMarker(1.0, QPointF(240.0, 270.0)),
+        makeTouchMarker(1.0, QPointF(300.0, 270.0)),
+    };
+
+    const PreviewTouchJudgeLayerState layerState = miacode::preview::scene::buildPreviewTouchJudgeLayerState(
+        state,
+        PreviewActiveMarkerView(state.noteMarkers),
+        playfieldRect
+    );
+
+    constexpr int kSpritesPerTouch = 17;
+    if (!require(
+            layerState.sprites.size() == state.noteMarkers.size() * kSpritesPerTouch,
+            QStringLiteral("touch judge emits circle plus two eight-sparkle rings per touch"),
+            err)) {
+        return false;
+    }
+
+    int hollowCount = 0;
+    int solidCount = 0;
+    int circleCount = 0;
+    for (const PreviewSpriteDescriptor& sprite : layerState.sprites) {
+        if (sprite.image == &state.judgeEffect.touchPart01Image) {
+            ++hollowCount;
+        } else if (sprite.image == &state.judgeEffect.touchPart02Image) {
+            ++solidCount;
+        } else if (sprite.image == &state.judgeEffect.touchCircleImage) {
+            ++circleCount;
+        }
+    }
+    if (!require(circleCount == 2, QStringLiteral("touch judge emits one circle per touch"), err)) {
+        return false;
+    }
+    if (!require(hollowCount == 16, QStringLiteral("touch judge emits eight hollow sparkles per touch"), err)) {
+        return false;
+    }
+    if (!require(solidCount == 16, QStringLiteral("touch judge emits eight solid sparkles per touch"), err)) {
+        return false;
+    }
+
+    const PreviewSpriteDescriptor& firstTouchCircle = layerState.sprites.at(0);
+    const qreal innerSolidWidth = layerState.sprites.at(1).width;
+    const qreal outerSolidWidth = layerState.sprites.at(9).width;
+    if (!require(
+            qAbs((innerSolidWidth / outerSolidWidth) - 0.5) < 0.03,
+            QStringLiteral("touch judge inner sparkle width is half of outer sparkle width"),
+            err)) {
+        return false;
+    }
+
+    const QPointF innerFirstOffset = layerState.sprites.at(1).center - firstTouchCircle.center;
+    const QPointF outerFirstOffset = layerState.sprites.at(9).center - firstTouchCircle.center;
+    const qreal innerFirstDistance = qSqrt(QPointF::dotProduct(innerFirstOffset, innerFirstOffset));
+    const qreal outerFirstDistance = qSqrt(QPointF::dotProduct(outerFirstOffset, outerFirstOffset));
+    if (!require(
+            outerFirstDistance > innerFirstDistance * 1.6,
+            QStringLiteral("touch judge outer ring sits clearly outside inner ring"),
+            err)) {
+        return false;
+    }
+
+    for (int pointIndex = 0; pointIndex < 8; ++pointIndex) {
+        const PreviewSpriteDescriptor& innerSprite = layerState.sprites.at(1 + pointIndex);
+        const PreviewSpriteDescriptor& outerSprite = layerState.sprites.at(9 + pointIndex);
+        if (!requireNear(
+                innerSprite.rotationDegrees,
+                outerSprite.rotationDegrees,
+                QStringLiteral("touch judge inner and outer ring share layout rotation"),
+                err)) {
+            return false;
+        }
+        const QPointF innerOffset = innerSprite.center - firstTouchCircle.center;
+        const QPointF outerOffset = outerSprite.center - firstTouchCircle.center;
+        const qreal innerDistance = qSqrt(QPointF::dotProduct(innerOffset, innerOffset));
+        const qreal outerDistance = qSqrt(QPointF::dotProduct(outerOffset, outerOffset));
+        const qreal normalizedCross = (innerOffset.x() * outerOffset.y() - innerOffset.y() * outerOffset.x())
+            / qMax<qreal>(1.0, innerDistance * outerDistance);
+        if (!require(
+                qAbs(normalizedCross) < 0.001,
+                QStringLiteral("touch judge inner and outer ring points are collinear"),
+                err)) {
+            return false;
+        }
+        if (!require(
+                QPointF::dotProduct(innerOffset, outerOffset) > 0.0,
+                QStringLiteral("touch judge inner and outer ring points face the same direction"),
+                err)) {
+            return false;
+        }
+    }
+
+    for (int localIndex = 1; localIndex < kSpritesPerTouch; ++localIndex) {
+        if (!requireNear(
+                layerState.sprites.at(localIndex).rotationDegrees,
+                layerState.sprites.at(kSpritesPerTouch + localIndex).rotationDegrees,
+                QStringLiteral("same-second touch judge sparkle rotation"),
+                err)) {
+            return false;
+        }
+    }
+
+    PreviewFrameState lateState = state;
+    lateState.playheadSeconds = 1.2;
+    lateState.noteMarkers = {makeTouchMarker(1.0, QPointF(240.0, 270.0))};
+    const PreviewTouchJudgeLayerState lateLayerState = miacode::preview::scene::buildPreviewTouchJudgeLayerState(
+        lateState,
+        PreviewActiveMarkerView(lateState.noteMarkers),
+        playfieldRect
+    );
+    if (!require(
+            lateLayerState.sprites.size() == 16,
+            QStringLiteral("touch judge circle glow ends halfway while sparkles continue"),
+            err)) {
+        return false;
+    }
+
+    PreviewFrameState movingStartState = state;
+    movingStartState.playheadSeconds = 1.01;
+    movingStartState.noteMarkers = {makeTouchMarker(1.0, QPointF(240.0, 270.0))};
+    const PreviewTouchJudgeLayerState movingStartLayerState = miacode::preview::scene::buildPreviewTouchJudgeLayerState(
+        movingStartState,
+        PreviewActiveMarkerView(movingStartState.noteMarkers),
+        playfieldRect
+    );
+    PreviewFrameState movingEndState = state;
+    movingEndState.playheadSeconds = 1.3;
+    movingEndState.noteMarkers = {makeTouchMarker(1.0, QPointF(240.0, 270.0))};
+    const PreviewTouchJudgeLayerState movingEndLayerState = miacode::preview::scene::buildPreviewTouchJudgeLayerState(
+        movingEndState,
+        PreviewActiveMarkerView(movingEndState.noteMarkers),
+        playfieldRect
+    );
+    const QPointF movingCenter(240.0, 270.0);
+    const qreal earlyInnerDistance = qSqrt(QPointF::dotProduct(
+        movingStartLayerState.sprites.at(1).center - movingCenter,
+        movingStartLayerState.sprites.at(1).center - movingCenter
+    ));
+    const qreal lateInnerDistance = qSqrt(QPointF::dotProduct(
+        movingEndLayerState.sprites.at(0).center - movingCenter,
+        movingEndLayerState.sprites.at(0).center - movingCenter
+    ));
+    const qreal earlyOuterDistance = qSqrt(QPointF::dotProduct(
+        movingStartLayerState.sprites.at(9).center - movingCenter,
+        movingStartLayerState.sprites.at(9).center - movingCenter
+    ));
+    const qreal lateOuterDistance = qSqrt(QPointF::dotProduct(
+        movingEndLayerState.sprites.at(8).center - movingCenter,
+        movingEndLayerState.sprites.at(8).center - movingCenter
+    ));
+    if (!require(
+            lateInnerDistance > earlyInnerDistance,
+            QStringLiteral("touch judge inner ring moves outward"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            lateOuterDistance > earlyOuterDistance,
+            QStringLiteral("touch judge outer ring moves outward"),
+            err)) {
+        return false;
+    }
+
+    const auto verifyLayoutRotation = [&](double markerSecond, qreal expectedRotationDegrees, const QString& label) {
+        PreviewFrameState rotatedState = state;
+        rotatedState.playheadSeconds = markerSecond + 0.05;
+        rotatedState.noteMarkers = {makeTouchMarker(markerSecond, QPointF(240.0, 270.0))};
+        const PreviewTouchJudgeLayerState rotatedLayerState = miacode::preview::scene::buildPreviewTouchJudgeLayerState(
+            rotatedState,
+            PreviewActiveMarkerView(rotatedState.noteMarkers),
+            playfieldRect
+        );
+        return requireNear(
+                rotatedLayerState.sprites.at(1).rotationDegrees,
+                expectedRotationDegrees,
+                label,
+                err)
+            && requireNear(
+                rotatedLayerState.sprites.at(1).rotationDegrees,
+                rotatedLayerState.sprites.at(9).rotationDegrees,
+                label + QStringLiteral(" applies to both rings"),
+                err);
+    };
+    if (!verifyLayoutRotation(0.0, -45.0, QStringLiteral("touch judge supports left 45 degree layout"))) {
+        return false;
+    }
+    if (!verifyLayoutRotation(0.3, -22.5, QStringLiteral("touch judge supports left 22.5 degree layout"))) {
+        return false;
+    }
+    if (!verifyLayoutRotation(0.15, 0.0, QStringLiteral("touch judge supports zero degree layout"))) {
+        return false;
+    }
+    if (!verifyLayoutRotation(0.2, 22.5, QStringLiteral("touch judge supports right 22.5 degree layout"))) {
+        return false;
+    }
+    if (!verifyLayoutRotation(0.05, 45.0, QStringLiteral("touch judge supports right 45 degree layout"))) {
+        return false;
+    }
+
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -895,6 +1119,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyDxMuriActionSweepLineHandlesEdgeCases(err)) {
+        return 1;
+    }
+    if (!verifyTouchJudgeUsesTwoEightSparkleRings(err)) {
         return 1;
     }
 

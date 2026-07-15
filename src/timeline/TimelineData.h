@@ -63,7 +63,7 @@ struct TimelineNoteMarker {
     // autoplay simulator, so a mine is always perfectly dodged — it is
     // rendered with a distinct hollow sprite but emits NO SFX, NO judge
     // effect, and is skipped by Muri analysis. `isMine` covers
-    // tap/hold/touch/touch_hold; slides use trackMine/headMine below.
+    // tap/hold/touch/touch_hold; slides use trackMine below.
     bool isMine = false;
     bool onSlide = false;
     bool slideHead = false;
@@ -78,10 +78,9 @@ struct TimelineNoteMarker {
     bool slideHeadUsesTapMaterial = false;
     bool trackBreak = false;
     // Mine slide (simai `m` suffix on a slide token, = MajdataPlay
-    // IsMineSlide). `trackMine` flags the whole slide track; `headMine`
-    // flags the slide head star. Both are set together from the slide `m`
-    // (the head star and the track both render as mines, matching
-    // MajdataPlay), so a separate head-only mine is not exposed.
+    // IsMineSlide). `trackMine` flags the slide track while the head star
+    // keeps the ordinary star material; `headMine` is reserved for a future
+    // head-only mine route and is not set by slide `m`.
     bool trackMine = false;
     bool headMine = false;
     bool hasHeadStar = true;

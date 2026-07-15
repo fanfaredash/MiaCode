@@ -1,5 +1,6 @@
 #include "MainWindow.DocumentSection.h"
 #include "../../MainWindowShared.h"
+#include "../editor/MainWindow.EditorSection.h"
 
 #include "BracketScopeHighlighter.h"
 #include "BusySpinner.h"
@@ -31,6 +32,8 @@
 #include <QtGui>
 #include <QtWidgets>
 
+#include <initializer_list>
+
 using namespace miacode::mainwindow::shared;
 
 void MainWindow::DocumentSection::updateEditorHeader()
@@ -41,18 +44,16 @@ void MainWindow::DocumentSection::updateEditorHeader()
     }
     if (!owner_.hasActiveDifficulty()) {
         if (state_.activeOutlineKey_ == QLatin1String("latency")) {
-            ui_.editorContextLabel_->setText(UiText::isChineseUi()
-                ? QStringLiteral("延迟设置")
-                : QStringLiteral("Latency Settings"));
+            ui_.editorContextLabel_->setText(UiText::text(QStringLiteral("document.latency_settings")));
             ui_.editorContextLabel_->setFont(uiAccentFont(12, QFont::DemiBold));
         } else if (state_.activeOutlineKey_ == QLatin1String("export")) {
-            ui_.editorContextLabel_->setText(uiText("editor.export", "Export"));
+            ui_.editorContextLabel_->setText(UiText::text(QStringLiteral("editor.export")));
             ui_.editorContextLabel_->setFont(uiAccentFont(12, QFont::DemiBold));
         } else if (state_.document_.difficultyIds().isEmpty() && state_.activeOutlineKey_ == QLatin1String("welcome")) {
-            ui_.editorContextLabel_->setText(uiText("editor.welcome", "Welcome to MiaCode!"));
+            ui_.editorContextLabel_->setText(UiText::text(QStringLiteral("editor.welcome")));
             ui_.editorContextLabel_->setFont(uiAccentFont(15, QFont::DemiBold));
         } else {
-            ui_.editorContextLabel_->setText(uiText("editor.metadata", "Metadata"));
+            ui_.editorContextLabel_->setText(UiText::text(QStringLiteral("editor.metadata")));
             ui_.editorContextLabel_->setFont(uiAccentFont(12, QFont::DemiBold));
         }
         ui_.editorContextLabel_->setStyleSheet(QString());
@@ -62,7 +63,6 @@ void MainWindow::DocumentSection::updateEditorHeader()
         if (ui_.editorBatchTransformControls_ != nullptr) {
             ui_.editorBatchTransformControls_->hide();
         }
-        updateDifficultyDeleteButton(false);
         ui_.editorContextLabel_->setMinimumWidth(0);
         updateEditorHeaderLayoutMode();
         owner_.updateEditorValidationSummary();
@@ -78,7 +78,6 @@ void MainWindow::DocumentSection::updateEditorHeader()
     if (ui_.editorBatchTransformControls_ != nullptr) {
         ui_.editorBatchTransformControls_->show();
     }
-    updateDifficultyDeleteButton(false);
     updateEditorHeaderLayoutMode();
     owner_.updateEditorValidationSummary();
 }
@@ -249,18 +248,12 @@ void MainWindow::DocumentSection::updateEditorHeaderLayoutMode()
     }
 
     const auto [line, col] = currentCursorLineCol();
-    const QString cursorText = UiText::isChineseUi()
-        ? QStringLiteral("%1行 %2列").arg(line).arg(col)
-        : QStringLiteral("Ln %1, Col %2").arg(line).arg(col);
+    const QString cursorText = UiText::text(QStringLiteral("document.ln_1_col_2")).arg(line).arg(col);
     ui_.editorCursorLabel_->setText(cursorText);
     ui_.editorCursorLabel_->setFixedWidth(QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(cursorText) + 10);
     ui_.editorCursorLabel_->setVisible(true);
-    const QString correctedCursorText = UiText::isChineseUi()
-        ? QStringLiteral("%1行 %2列").arg(line).arg(col)
-        : QStringLiteral("Ln %1, Col %2").arg(line).arg(col);
-    const QString correctedCursorWidthTemplate = UiText::isChineseUi()
-        ? QStringLiteral("9999行 9999列")
-        : QStringLiteral("Ln 9999, Col 9999");
+    const QString correctedCursorText = UiText::text(QStringLiteral("document.ln_1_col_2")).arg(line).arg(col);
+    const QString correctedCursorWidthTemplate = UiText::text(QStringLiteral("document.ln_9999_col_9999"));
     ui_.editorCursorLabel_->setText(correctedCursorText);
     ui_.editorCursorLabel_->setFixedWidth(
         QFontMetrics(ui_.editorCursorLabel_->font()).horizontalAdvance(correctedCursorWidthTemplate) + 10);
@@ -280,30 +273,59 @@ void MainWindow::DocumentSection::syncEditorHeaderMinimumWidth()
     int headerMinimumWidth = 0;
     if (QLayout* headerLayout = ui_.editorHeaderWidget_->layout(); headerLayout != nullptr) {
         headerLayout->activate();
-        const auto widgetMinimumWidth = [](const QWidget* widget) {
-            if (widget == nullptr || widget->isHidden()) {
+        const auto widgetMinimumWidth = [](const QWidget* widget, bool includeHidden = false) {
+            if (widget == nullptr || (!includeHidden && widget->isHidden())) {
                 return 0;
             }
-            return qMax(widget->minimumSizeHint().width(), widget->sizeHint().width());
+            return qMax(widget->minimumWidth(), qMax(widget->minimumSizeHint().width(), widget->sizeHint().width()));
         };
         const QMargins margins = headerLayout->contentsMargins();
-        headerMinimumWidth = margins.left() + margins.right();
-        int visibleSectionCount = 0;
-        const auto addSectionWidth = [&](int width) {
-            if (width <= 0) {
-                return;
+        const auto composedHeaderMinimumWidth = [&](std::initializer_list<int> sectionWidths) {
+            int width = margins.left() + margins.right();
+            int visibleSectionCount = 0;
+            for (int sectionWidth : sectionWidths) {
+                if (sectionWidth <= 0) {
+                    continue;
+                }
+                if (visibleSectionCount > 0) {
+                    width += qMax(0, headerLayout->spacing());
+                }
+                width += sectionWidth;
+                ++visibleSectionCount;
             }
-            if (visibleSectionCount > 0) {
-                headerMinimumWidth += qMax(0, headerLayout->spacing());
-            }
-            headerMinimumWidth += width;
-            ++visibleSectionCount;
+            return qMax(width, margins.left() + margins.right());
         };
-        addSectionWidth(widgetMinimumWidth(ui_.editorContextLabel_));
-        addSectionWidth(widgetMinimumWidth(ui_.editorDifficultyControls_));
-        addSectionWidth(widgetMinimumWidth(ui_.editorValidationSummaryWidget_));
-        addSectionWidth(widgetMinimumWidth(ui_.editorCursorLabel_ != nullptr ? ui_.editorCursorLabel_->parentWidget() : nullptr));
-        headerMinimumWidth = qMax(headerMinimumWidth, margins.left() + margins.right());
+        const auto difficultyContextMinimumWidth = [&]() {
+            if (ui_.editorContextLabel_ == nullptr) {
+                return 0;
+            }
+            int difficultyId = state_.activeDifficultyId_;
+            if (!SimaiDocument::isDifficultyId(difficultyId) && ui_.exportPage_ != nullptr) {
+                difficultyId = ui_.exportPage_->selectedDifficultyId();
+            }
+            const QString labelText = SimaiDocument::isDifficultyId(difficultyId)
+                ? SimaiDocument::difficultyShortName(difficultyId)
+                : ui_.editorContextLabel_->text();
+            return QFontMetrics(ui_.editorContextLabel_->font()).horizontalAdvance(labelText) + 8;
+        };
+        const auto cursorMinimumWidth = [&]() {
+            return widgetMinimumWidth(ui_.editorCursorLabel_, true);
+        };
+        headerMinimumWidth = composedHeaderMinimumWidth({
+            widgetMinimumWidth(ui_.editorContextLabel_),
+            widgetMinimumWidth(ui_.editorDifficultyControls_),
+            widgetMinimumWidth(ui_.editorValidationSummaryWidget_),
+            widgetMinimumWidth(ui_.editorCursorLabel_ != nullptr ? ui_.editorCursorLabel_->parentWidget() : nullptr),
+        });
+        if (state_.activeOutlineKey_ == QLatin1String("export")) {
+            const int difficultyHeaderMinimumWidth = composedHeaderMinimumWidth({
+                difficultyContextMinimumWidth(),
+                widgetMinimumWidth(ui_.editorDifficultyControls_, true),
+                widgetMinimumWidth(ui_.editorValidationSummaryWidget_, true),
+                cursorMinimumWidth(),
+            });
+            headerMinimumWidth = qMax(headerMinimumWidth, difficultyHeaderMinimumWidth);
+        }
         ui_.editorHeaderWidget_->setMinimumWidth(headerMinimumWidth);
     }
     ui_.editorHeaderWidget_->updateGeometry();
@@ -396,8 +418,8 @@ bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId)
         const QMessageBox::StandardButton choice = UiDialogs::showMessageBox(
             QMessageBox::Question,
             &owner_,
-            "Delete Difficulty",
-            QString("Delete %1?").arg(difficultyName),
+            UiText::text(QStringLiteral("document.delete_difficulty")),
+            UiText::text(QStringLiteral("document.delete_1")).arg(difficultyName),
             QMessageBox::Yes | QMessageBox::No,
             QMessageBox::No
         );
@@ -459,45 +481,67 @@ bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId)
     updateEditorStatus();
     updateDirtyState();
     if (state_.currentFilePath_.isEmpty()) {
-        owner_.statusBar()->showMessage(QString("Deleted %1.").arg(difficultyName));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("document.deleted_1")).arg(difficultyName));
         return true;
     }
     if (!saveToPath(state_.currentFilePath_)) {
-        owner_.statusBar()->showMessage(QString("Deleted %1. Changes are still unsaved.").arg(difficultyName));
+        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("document.deleted_1_changes_are_still")).arg(difficultyName));
     }
     return true;
 }
 
-void MainWindow::DocumentSection::updateDifficultyDeleteButton(bool visible)
+bool MainWindow::DocumentSection::isBookmarkGroupExpanded(int difficultyId) const
 {
-    if (ui_.deleteDifficultyButton_ == nullptr) {
+    const auto it = state_.outlineBookmarkGroupExpanded_.constFind(difficultyId);
+    if (it != state_.outlineBookmarkGroupExpanded_.cend()) {
+        return it.value();
+    }
+    // Untouched groups: the active difficulty starts expanded, others folded.
+    return difficultyId == state_.activeDifficultyId_;
+}
+
+void MainWindow::DocumentSection::setBookmarkGroupExpanded(int difficultyId, bool expanded)
+{
+    state_.outlineBookmarkGroupExpanded_.insert(difficultyId, expanded);
+    rebuildFieldSidebar();
+}
+
+QListWidgetItem* MainWindow::DocumentSection::findBookmarkSidebarItem(int difficultyId, int line) const
+{
+    if (ui_.outlineList_ == nullptr) {
+        return nullptr;
+    }
+    for (int i = 0; i < ui_.outlineList_->count(); ++i) {
+        QListWidgetItem* item = ui_.outlineList_->item(i);
+        if (item != nullptr
+            && item->data(kOutlineItemKindRole).toString() == QLatin1String("bookmark")
+            && item->data(kOutlineItemDifficultyRole).toInt() == difficultyId
+            && item->data(kOutlineItemLineRole).toInt() == line) {
+            return item;
+        }
+    }
+    return nullptr;
+}
+
+void MainWindow::DocumentSection::revealBookmarkInSidebar(int difficultyId, int line, bool beginRename)
+{
+    if (ui_.outlineList_ == nullptr) {
         return;
     }
-    constexpr int kOutlineIconOnlyThreshold = 120;
-    const int outlineListWidth =
-        ui_.outlineList_ != nullptr && ui_.outlineList_->viewport() != nullptr ? ui_.outlineList_->viewport()->width() : 0;
-    if (!visible
-        || !owner_.hasActiveDifficulty()
-        || ui_.outlineList_ == nullptr
-        || (outlineListWidth > 0 && outlineListWidth < kOutlineIconOnlyThreshold)) {
-        ui_.deleteDifficultyButton_->hide();
+    state_.outlineBookmarkGroupExpanded_.insert(difficultyId, true);
+    rebuildFieldSidebar();
+    QListWidgetItem* item = findBookmarkSidebarItem(difficultyId, line);
+    if (item == nullptr) {
         return;
     }
-    QListWidgetItem* currentItem = ui_.outlineList_->currentItem();
-    if (currentItem == nullptr || !SimaiDocument::isDifficultyId(currentItem->data(Qt::UserRole + 1).toInt())) {
-        ui_.deleteDifficultyButton_->hide();
-        return;
+    {
+        QSignalBlocker blocker(ui_.outlineList_);
+        ui_.outlineList_->setCurrentItem(item);
     }
-    const QRect rowRect = ui_.outlineList_->visualItemRect(currentItem);
-    if (!rowRect.isValid() || rowRect.isEmpty()) {
-        ui_.deleteDifficultyButton_->hide();
-        return;
+    ui_.outlineList_->scrollToItem(item, QAbstractItemView::PositionAtCenter);
+    if (beginRename) {
+        ui_.outlineList_->editItem(item);
     }
-    const int x = rowRect.right() - ui_.deleteDifficultyButton_->width() - 8;
-    const int y = rowRect.top() + (rowRect.height() - ui_.deleteDifficultyButton_->height()) / 2;
-    ui_.deleteDifficultyButton_->move(x, y);
-    ui_.deleteDifficultyButton_->raise();
-    ui_.deleteDifficultyButton_->show();
 }
 
 void MainWindow::DocumentSection::rebuildFieldSidebar()
@@ -505,10 +549,23 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     if (ui_.outlineList_ == nullptr) {
         return;
     }
-    updateDifficultyDeleteButton(false);
     QSignalBlocker blocker(ui_.outlineList_);
+    // Keep the viewport where the user left it across rebuilds (the list is
+    // torn down and rebuilt on most document/sidebar state changes).
+    const int restoreScrollValue = ui_.outlineList_->verticalScrollBar() != nullptr
+        ? ui_.outlineList_->verticalScrollBar()->value()
+        : 0;
+    // Preserve a selected bookmark row across the rebuild (difficulty rows are
+    // re-selected via activeDifficultyId_ / activeOutlineKey_ as before).
+    int restoreBookmarkDifficultyId = 0;
+    int restoreBookmarkLine = -1;
+    if (QListWidgetItem* currentItem = ui_.outlineList_->currentItem();
+        currentItem != nullptr && currentItem->data(kOutlineItemKindRole).toString() == QLatin1String("bookmark")) {
+        restoreBookmarkDifficultyId = currentItem->data(kOutlineItemDifficultyRole).toInt();
+        restoreBookmarkLine = currentItem->data(kOutlineItemLineRole).toInt();
+    }
     ui_.outlineList_->clear();
-    const QString metadataLabel = uiText("sidebar.metadata", "Metadata");
+    const QString metadataLabel = UiText::text(QStringLiteral("sidebar.metadata"));
     auto* metadataItem = new QListWidgetItem(
         owner_.style()->standardIcon(QStyle::SP_FileDialogDetailedView),
         metadataLabel,
@@ -516,6 +573,11 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     );
     metadataItem->setData(Qt::UserRole, "metadata");
     metadataItem->setToolTip(metadataLabel);
+    // The latency page is informationally a sub-page of the metadata page —
+    // keep the metadata row marked "you are here" while it is showing.
+    metadataItem->setData(kOutlineItemActiveRole,
+                          state_.activeOutlineKey_ == QLatin1String("metadata")
+                              || state_.activeOutlineKey_ == QLatin1String("latency"));
 
     // The latency-settings sidebar item is gone (L-A migration): the page is
     // now reached from the metadata page's "延迟与偏移校准" entry card (and
@@ -524,17 +586,6 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
     QListWidgetItem* selectedItem = nullptr;
     bool hasMissingDifficulty = false;
     const QVector<int> ids = state_.document_.difficultyIds();
-    for (int id : ids) {
-        const QString difficultyLabel = SimaiDocument::difficultyName(id);
-        auto* difficultyItem = new QListWidgetItem(difficultyLabel, ui_.outlineList_);
-        difficultyItem->setIcon(makeDifficultyBadgeIcon(id));
-        difficultyItem->setData(Qt::UserRole, "difficulty_chart");
-        difficultyItem->setData(Qt::UserRole + 1, id);
-        difficultyItem->setToolTip(difficultyLabel);
-        if (id == state_.activeDifficultyId_) {
-            selectedItem = difficultyItem;
-        }
-    }
     for (int id = 1; id <= 7; ++id) {
         if (state_.document_.difficulty(id) == nullptr) {
             hasMissingDifficulty = true;
@@ -545,7 +596,7 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
         // Abbreviated to "+ Add Diff." in English so the label fits the
         // narrow sidebar list-item column without truncation. Chinese
         // version "添加难度" already fits.
-        const QString addDifficultyLabel = uiText("sidebar.add_difficulty", "+ Add Diff.");
+        const QString addDifficultyLabel = UiText::text(QStringLiteral("sidebar.add_difficulty"));
         auto* addItem = new QListWidgetItem(
             owner_.style()->standardIcon(QStyle::SP_FileDialogNewFolder),
             addDifficultyLabel,
@@ -554,28 +605,112 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
         addItem->setData(Qt::UserRole, "add");
         addItem->setToolTip(addDifficultyLabel);
     }
-    const QString exportLabel = uiText("sidebar.export", "Export");
+    auto bookmarksForDifficulty = [this](int difficultyId) {
+        QVector<MainWindow::EditorBookmark> bookmarks;
+        for (const MainWindow::EditorBookmark& bookmark : std::as_const(state_.editorBookmarks_)) {
+            if (bookmark.difficultyId == difficultyId) {
+                bookmarks.append(bookmark);
+            }
+        }
+        std::sort(bookmarks.begin(), bookmarks.end(), [](const MainWindow::EditorBookmark& left, const MainWindow::EditorBookmark& right) {
+            if (left.line != right.line) {
+                return left.line < right.line;
+            }
+            return left.title.localeAwareCompare(right.title) < 0;
+        });
+        return bookmarks;
+    };
+
+    // Non-interactive 4px spacer rows (plus the list's 2px item spacing on
+    // both sides) separate the sidebar's sections. When "+ Add Diff." is
+    // visible, it stays attached to the first difficulty row so that whole
+    // authoring block reads as one tight group.
+    auto addSectionSpacer = [this]() {
+        auto* spacer = new QListWidgetItem(ui_.outlineList_);
+        spacer->setFlags(Qt::NoItemFlags);
+        spacer->setData(kOutlineItemKindRole, "spacer");
+        spacer->setSizeHint(QSize(1, 4));
+    };
+
+    if (!ids.isEmpty() && !hasMissingDifficulty) {
+        addSectionSpacer();
+    }
+    for (int id : ids) {
+        const QVector<MainWindow::EditorBookmark> bookmarks = bookmarksForDifficulty(id);
+        const QString difficultyLabel = SimaiDocument::difficultyName(id);
+        auto* difficultyItem = new QListWidgetItem(difficultyLabel, ui_.outlineList_);
+        difficultyItem->setIcon(makeDifficultyBadgeIcon(id));
+        difficultyItem->setData(kOutlineItemKindRole, "difficulty_chart");
+        difficultyItem->setData(kOutlineItemDifficultyRole, id);
+        difficultyItem->setData(kOutlineItemBookmarkCountRole, bookmarks.size());
+        difficultyItem->setData(kOutlineItemExpandedRole, isBookmarkGroupExpanded(id));
+        // Persistent "you are here" marker — held by the difficulty row even
+        // while the list selection sits on one of its bookmark rows.
+        difficultyItem->setData(kOutlineItemActiveRole,
+                                id == state_.activeDifficultyId_
+                                    && state_.activeOutlineKey_ == QLatin1String("chart"));
+        difficultyItem->setSizeHint(QSize(1, 30));
+        difficultyItem->setToolTip(bookmarks.isEmpty()
+            ? difficultyLabel
+            : UiText::text(QStringLiteral("document.1_comment_bookmarks")).arg(difficultyLabel));
+        if (id == state_.activeDifficultyId_) {
+            selectedItem = difficultyItem;
+        }
+
+        if (bookmarks.isEmpty()) {
+            continue;
+        }
+        const bool expanded = isBookmarkGroupExpanded(id);
+        if (!expanded) {
+            continue;
+        }
+
+        for (const MainWindow::EditorBookmark& bookmark : bookmarks) {
+            const QString title = bookmark.title.trimmed().isEmpty()
+                ? UiText::text(QStringLiteral("document.untitled_bookmark"))
+                : bookmark.title.trimmed();
+            const QString tooltip = UiText::text(QStringLiteral("document.1_line_2_double_click")).arg(title).arg(bookmark.line);
+            // Item text = the bare name (QListWidgetItem aliases EditRole to
+            // DisplayRole, so the inline editor edits exactly the name); the
+            // delegate paints the indent + line badge from the data roles.
+            auto* bookmarkItem = new QListWidgetItem(title, ui_.outlineList_);
+            bookmarkItem->setFlags(bookmarkItem->flags() | Qt::ItemIsEditable);
+            bookmarkItem->setData(kOutlineItemKindRole, "bookmark");
+            bookmarkItem->setData(kOutlineItemDifficultyRole, id);
+            bookmarkItem->setData(kOutlineItemLineRole, bookmark.line);
+            bookmarkItem->setData(kOutlineItemActiveRole, false);
+            // Group-wide max line (list is sorted ascending) — fixed badge
+            // width so the name column aligns vertically.
+            bookmarkItem->setData(kOutlineItemMaxLineRole, bookmarks.last().line);
+            bookmarkItem->setSizeHint(QSize(1, 24));
+            bookmarkItem->setToolTip(tooltip);
+            if (id == restoreBookmarkDifficultyId && bookmark.line == restoreBookmarkLine) {
+                selectedItem = bookmarkItem;
+            }
+        }
+    }
+    if (!ids.isEmpty()) {
+        addSectionSpacer();
+    }
+    const QString exportLabel = UiText::text(QStringLiteral("sidebar.export"));
     auto* exportItem = new QListWidgetItem(
         makeExportAccessIcon(UiTheme::colors().iconPrimary),
         exportLabel,
         ui_.outlineList_
     );
     exportItem->setData(Qt::UserRole, "export");
+    exportItem->setData(kOutlineItemActiveRole, state_.activeOutlineKey_ == QLatin1String("export"));
     exportItem->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("打开导出页：导出视频 / 导出封面 / 批量导出 / 打包ZIP")
-            : QStringLiteral("Open the Export page: video / cover / batch / ZIP")
+        UiText::text(QStringLiteral("document.open_the_export_page_video"))
     );
     auto* toolboxItem = new QListWidgetItem(
         makeToolboxAccessIcon(UiTheme::colors().iconPrimary, QColor(QStringLiteral("#E6B84A"))),
-        UiText::isChineseUi() ? QStringLiteral("工具箱") : QStringLiteral("Toolbox"),
+        UiText::text(QStringLiteral("document.toolbox")),
         ui_.outlineList_
     );
     toolboxItem->setData(Qt::UserRole, "toolbox");
     toolboxItem->setToolTip(
-        UiText::isChineseUi()
-            ? QStringLiteral("打开工具箱：无理检测 / 谱面整理 / 官谱镜像站")
-            : QStringLiteral("Open toolbox: Muri Check / Format Chart / Official Chart Mirror")
+        UiText::text(QStringLiteral("document.open_toolbox_muri_check_format"))
     );
     if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
         selectedItem = metadataItem;
@@ -596,6 +731,15 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
             ui_.outlineList_->selectionModel()->clearCurrentIndex();
             ui_.outlineList_->selectionModel()->clearSelection();
         }
+    }
+    if (ui_.outlineList_->verticalScrollBar() != nullptr) {
+        ui_.outlineList_->verticalScrollBar()->setValue(restoreScrollValue);
+    }
+    // The rebuild can move the Export row (e.g. the previously active
+    // difficulty's auto-expanded bookmark group collapses when the export
+    // page takes over) — re-anchor the busy spinner to the row's new rect.
+    if (ui_.outlineBusySpinner_ != nullptr && ui_.outlineBusySpinner_->isActive()) {
+        positionOutlineExportBusySpinner();
     }
     // The export page derives its difficulty badges + card availability from
     // the same document state this sidebar reflects — refresh it on the same
@@ -640,9 +784,7 @@ void MainWindow::DocumentSection::populateMetadataPage()
         }
         const QString offsetRaw = state_.document_.first.trimmed();
         const QString offsetText = offsetRaw.isEmpty() ? QStringLiteral("0") : offsetRaw;
-        ui_.latencyEntrySummaryLabel_->setText(UiText::isChineseUi()
-            ? QStringLiteral("BPM %1　·　偏移 %2 s").arg(bpmText, offsetText)
-            : QStringLiteral("BPM %1  ·  Offset %2 s").arg(bpmText, offsetText));
+        ui_.latencyEntrySummaryLabel_->setText(UiText::text(QStringLiteral("document.bpm_1_offset_2_s")).arg(bpmText, offsetText));
     }
     updateMetadataPageMode();
     updateEditorHeader();
@@ -819,10 +961,10 @@ bool MainWindow::DocumentSection::switchToExportField()
     return true;
 }
 
-void MainWindow::DocumentSection::showOutlineExportBusySpinner()
+bool MainWindow::DocumentSection::positionOutlineExportBusySpinner()
 {
     if (ui_.outlineBusySpinner_ == nullptr || ui_.outlineList_ == nullptr) {
-        return;
+        return false;
     }
     QListWidgetItem* exportItem = nullptr;
     for (int i = 0; i < ui_.outlineList_->count(); ++i) {
@@ -833,16 +975,25 @@ void MainWindow::DocumentSection::showOutlineExportBusySpinner()
         }
     }
     if (exportItem == nullptr) {
-        return;
+        return false;
     }
     const QRect rowRect = ui_.outlineList_->visualItemRect(exportItem);
     if (!rowRect.isValid() || rowRect.isEmpty()) {
-        return;
+        return false;
     }
     auto* spinner = ui_.outlineBusySpinner_;
     const int x = rowRect.right() - spinner->width() - 8;
     const int y = rowRect.top() + (rowRect.height() - spinner->height()) / 2;
     spinner->move(x, y);
+    return true;
+}
+
+void MainWindow::DocumentSection::showOutlineExportBusySpinner()
+{
+    if (!positionOutlineExportBusySpinner()) {
+        return;
+    }
+    auto* spinner = ui_.outlineBusySpinner_;
     spinner->setColor(UiTheme::colors().iconPrimary);
     spinner->start();
     // Paint the first frame synchronously so the spinner is on screen before the
@@ -1087,6 +1238,9 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
         state_.activeOutlineKey_ = "chart";
     }
     populateDifficultyPage(difficultyId);
+    if (owner_.editorSection_ != nullptr) {
+        owner_.editorSection_->syncBookmarksFromEditorText();
+    }
     if (restoreSwitchView) {
         applyDifficultySwitchEditorScrollRestore(restoreVerticalScrollValue, restoreHorizontalScrollValue);
         QTimer::singleShot(0, &owner_, [this, difficultyId, restoreVerticalScrollValue, restoreHorizontalScrollValue]() {
@@ -1197,6 +1351,11 @@ void MainWindow::DocumentSection::loadDocument(const SimaiDocument& document)
 {
     clearDeletedDifficultyUndoState();
     state_.document_ = document;
+    // Build the comment-derived bookmark cache before activateInitialField();
+    // the difficulty switch below refreshes it again for the live editor text.
+    if (owner_.editorSection_ != nullptr) {
+        owner_.editorSection_->adoptBookmarksForLoadedDocument();
+    }
     resetAutosaveState(state_.document_.toText());
     state_.documentDirty_ = false;
     state_.currentFieldDirty_ = false;

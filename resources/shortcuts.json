@@ -6,6 +6,7 @@
   ],
   "actions": {
     "file.quit": {
+      "label_key": "shortcut.file.quit",
       "label_zh": "退出",
       "label_en": "Quit",
       "default": "Ctrl+Esc",
@@ -13,6 +14,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "transform.mirror_lr": {
+      "label_key": "action.transform.mirror_lr",
       "label_zh": "左右镜像",
       "label_en": "Mirror Left/Right",
       "default": "Ctrl+J",
@@ -20,6 +22,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "transform.mirror_ud": {
+      "label_key": "action.transform.mirror_ud",
       "label_zh": "上下镜像",
       "label_en": "Mirror Up/Down",
       "default": "Ctrl+K",
@@ -27,6 +30,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "transform.rotate_180": {
+      "label_key": "action.transform.rotate_180",
       "label_zh": "旋转 180°",
       "label_en": "Rotate 180",
       "default": "Ctrl+L",
@@ -34,6 +38,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "transform.rotate_ccw_45": {
+      "label_key": "action.transform.rotate_ccw_45",
       "label_zh": "逆时针旋转 45°",
       "label_en": "Rotate -45",
       "default": "Ctrl+;",
@@ -41,6 +46,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "transform.rotate_cw_45": {
+      "label_key": "action.transform.rotate_cw_45",
       "label_zh": "顺时针旋转 45°",
       "label_en": "Rotate +45",
       "default": "Ctrl+'",
@@ -48,6 +54,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "transform.subdivision_up": {
+      "label_key": "document.subdivision_plus_1",
       "label_zh": "分音提升一档",
       "label_en": "Subdivision +1",
       "default": "Ctrl+=",
@@ -55,6 +62,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "transform.subdivision_down": {
+      "label_key": "document.subdivision_minus_1",
       "label_zh": "分音降低一档",
       "label_en": "Subdivision -1",
       "default": "Ctrl+-",
@@ -62,6 +70,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "transform.subdivision_half_up": {
+      "label_key": "document.subdivision_plus_half",
       "label_zh": "分音提升半档",
       "label_en": "Subdivision +1/2",
       "default": ["Ctrl+Shift+=", "Ctrl++"],
@@ -69,6 +78,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "transform.subdivision_half_down": {
+      "label_key": "document.subdivision_minus_half",
       "label_zh": "分音降低半档",
       "label_en": "Subdivision -1/2",
       "default": "Ctrl+Shift+-",
@@ -76,6 +86,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "transform.toggle_break": {
+      "label_key": "action.transform.toggle_break",
       "label_zh": "一键全 Break",
       "label_en": "Toggle Break",
       "default": "Ctrl+B",
@@ -83,6 +94,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "transform.toggle_ex": {
+      "label_key": "action.transform.toggle_ex",
       "label_zh": "一键全 Ex",
       "label_en": "Toggle EX",
       "default": "Ctrl+N",
@@ -90,6 +102,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "transform.toggle_firework": {
+      "label_key": "action.transform.toggle_firework",
       "label_zh": "一键全 Firework",
       "label_en": "Toggle Firework",
       "default": "Ctrl+M",
@@ -97,6 +110,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "transform.random_rotate": {
+      "label_key": "action.transform.random_rotate",
       "label_zh": "一键全随机",
       "label_en": "Random Rotate",
       "default": "Ctrl+,",
@@ -104,6 +118,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "transform.clear_complete_elements": {
+      "label_key": "shortcut.transform.clear_complete_elements",
       "label_zh": "一键清空要素",
       "label_en": "Clear Complete Elements",
       "default": "Ctrl+Q",
@@ -111,6 +126,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "preview.stop_or_play": {
+      "label_key": "shortcut.preview.stop_or_play",
       "label_zh": "停止或播放预览",
       "label_en": "Stop or Play Preview",
       "default": "Ctrl+Shift+C",
@@ -118,6 +134,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "preview.play_pause_global": {
+      "label_key": "shortcut.preview.play_pause_global",
       "label_zh": "播放/暂停预览",
       "label_en": "Play/Pause Preview",
       "default": "Ctrl+Shift+X",
@@ -125,6 +142,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "preview.speed_down": {
+      "label_key": "shortcut.preview.speed_down",
       "label_zh": "播放速度降低",
       "label_en": "Playback Speed -",
       "default": "Ctrl+O",
@@ -132,6 +150,7 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "preview.speed_up": {
+      "label_key": "shortcut.preview.speed_up",
       "label_zh": "播放速度提高",
       "label_en": "Playback Speed +",
       "default": "Ctrl+P",
@@ -139,13 +158,29 @@
       "owner": "MainWindow.BootstrapAndMenus"
     },
     "preview.pause_display_hold": {
+      "label_key": "shortcut.preview.pause_display_hold",
       "label_zh": "暂停时切换 判定区 / PV（按住）",
       "label_en": "Flip Judge Area / PV While Paused (Hold)",
       "default": "Alt",
       "context": "application",
       "owner": "MainWindow.WindowInteraction"
     },
+    "timeline.zoom_in": {
+      "label_key": "shortcut.timeline.zoom_in",
+      "label_en": "Timeline Zoom In",
+      "default": "Ctrl+WheelUp",
+      "context": "timeline",
+      "owner": "TimelineView / TimelineQuickItem"
+    },
+    "timeline.zoom_out": {
+      "label_key": "shortcut.timeline.zoom_out",
+      "label_en": "Timeline Zoom Out",
+      "default": "Ctrl+WheelDown",
+      "context": "timeline",
+      "owner": "TimelineView / TimelineQuickItem"
+    },
     "editor.font_decrease": {
+      "label_key": "shortcut.editor.font_decrease",
       "label_zh": "编辑器字号减小",
       "label_en": "Decrease Editor Font",
       "default": "Ctrl+Alt+-",
@@ -153,6 +188,7 @@
       "owner": "MainWindow.FrameBootstrapFinalize"
     },
     "editor.font_increase": {
+      "label_key": "shortcut.editor.font_increase",
       "label_zh": "编辑器字号增大",
       "label_en": "Increase Editor Font",
       "default": "Ctrl+Alt+=",
@@ -160,6 +196,7 @@
       "owner": "MainWindow.FrameBootstrapFinalize"
     },
     "editor.overwrite_mode": {
+      "label_key": "shortcut.editor.overwrite_mode",
       "label_zh": "覆写模式",
       "label_en": "Overwrite Mode",
       "default": "Insert",

@@ -69,36 +69,6 @@ using namespace miacode::video_export::dialog_detail;
 
 namespace {
 
-struct ResolutionPreset {
-    int width = 1080;
-    int height = 1080;
-    const char* label = "1080x1080 (1:1)";
-    double aspectRatio = 1.0;
-};
-
-constexpr ResolutionPreset kResolutionPresets[] = {
-    {720, 720, "720x720 (1:1)", 1.0},
-    {1024, 1024, "1024x1024 (1:1)", 1.0},
-    {960, 720, "960x720 (4:3)", 4.0 / 3.0},
-    {1280, 720, "1280x720 (16:9)", 16.0 / 9.0},
-    {1080, 1080, "1080x1080 (1:1)", 1.0},
-    {1440, 1080, "1440x1080 (4:3)", 4.0 / 3.0},
-    {1920, 1080, "1920x1080 (16:9)", 16.0 / 9.0},
-    {1440, 1440, "1440x1440 (1:1)", 1.0},
-    {1920, 1440, "1920x1440 (4:3)", 4.0 / 3.0},
-    {2560, 1440, "2560x1440 (16:9)", 16.0 / 9.0},
-};
-
-QString exportDialogResolutionLabel(const QSize& size)
-{
-    for (const ResolutionPreset& preset : kResolutionPresets) {
-        if (preset.width == size.width() && preset.height == size.height()) {
-            return QString::fromLatin1(preset.label);
-        }
-    }
-    return QStringLiteral("%1x%2").arg(qMax(1, size.width())).arg(qMax(1, size.height()));
-}
-
 QString videoExportPresetToken(VideoExportPreset preset)
 {
     switch (preset) {
@@ -137,31 +107,40 @@ void VideoExportDialog::loadPersistedSettings()
     const int savedHeight = settings.value(QStringLiteral("resolution_height")).toInt(selectedResolution_.height());
     if (savedWidth > 0 && savedHeight > 0) {
         selectedResolution_ = QSize(savedWidth, savedHeight);
-        if (resolutionButton_ != nullptr) {
-            resolutionButton_->setText(exportDialogResolutionLabel(selectedResolution_));
+        if (resolutionCombo_ != nullptr) {
+            const QSignalBlocker blocker(resolutionCombo_);
+            const int idx = resolutionCombo_->findData(selectedResolution_);
+            if (idx >= 0) {
+                resolutionCombo_->setCurrentIndex(idx);
+            }
         }
         applySelectedAspectRatioToPreview(false);
     }
 
     const int savedFps = settings.value(QStringLiteral("fps")).toInt(selectedFps_);
     selectedFps_ = savedFps >= 90 ? 120 : 60;
-    if (fpsButton_ != nullptr) {
-        fpsButton_->setText(QStringLiteral("%1 FPS").arg(selectedFps_));
+    if (fpsCombo_ != nullptr) {
+        const QSignalBlocker blocker(fpsCombo_);
+        fpsCombo_->setCurrentIndex(qMax(0, fpsCombo_->findData(selectedFps_)));
     }
 
     const int savedAudioBitrate = settings.value(QStringLiteral("audio_bitrate_kbps"))
                                          .toInt(selectedAudioBitrateKbps_);
     selectedAudioBitrateKbps_ = normaliseAudioBitrateKbps(savedAudioBitrate);
-    if (audioBitrateButton_ != nullptr) {
-        audioBitrateButton_->setText(QStringLiteral("%1 kbps").arg(selectedAudioBitrateKbps_));
+    if (audioBitrateCombo_ != nullptr) {
+        const QSignalBlocker blocker(audioBitrateCombo_);
+        audioBitrateCombo_->setCurrentIndex(
+            qMax(0, audioBitrateCombo_->findData(selectedAudioBitrateKbps_)));
     }
 
     selectedPreset_ = videoExportPresetFromStoredValue(
         settings.value(QStringLiteral("preset")),
         selectedPreset_
     );
-    if (presetButton_ != nullptr) {
-        presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
+    if (presetCombo_ != nullptr) {
+        const QSignalBlocker blocker(presetCombo_);
+        presetCombo_->setCurrentIndex(
+            qMax(0, presetCombo_->findData(static_cast<int>(selectedPreset_))));
     }
 
     // App-level "add intro" preference (persists across sessions).

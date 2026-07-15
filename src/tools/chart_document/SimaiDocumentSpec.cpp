@@ -238,6 +238,50 @@ void runSpecs(QTextStream& out, int* failed)
         expectTrue(hasLine(out3, "&wholebpm=180"), "populated &wholebpm is preserved", failed, out);
         expectTrue(hasLine(out3, "&pvstart=3.5"), "populated &pvstart is preserved", failed, out);
     }
+
+    // --- Obsolete &miacode_bookmarks= field: reserved, ignored, not persisted. ---
+    {
+        const QString src =
+            "&title=Song\n&first=0\n"
+            "&miacode_bookmarks={\"schema\":\"miacode_bookmarks_v2\",\"items\":["
+            "{\"d\":5,\"l\":8,\"n\":\"Intro 引入\",\"s\":8.796,\"src\":\"comment\",\"fp\":\"9e6a1d\"},"
+            "{\"d\":5,\"l\":24,\"n\":\"Chorus\",\"locked\":true},"
+            "{\"d\":9,\"l\":1,\"n\":\"bad difficulty — dropped\"}]}\n"
+            "&lv_5=12\n&inote_5=(120){1}1,\n";
+        const SimaiDocument doc = SimaiDocument::fromText(src);
+        bool inExtraFields = false;
+        for (const SimaiRawField& field : doc.extraFields) {
+            inExtraFields = inExtraFields || field.key == QLatin1String("miacode_bookmarks");
+        }
+        expectTrue(!inExtraFields, "obsolete miacode_bookmarks never lands in extraFields", failed, out);
+
+        const QString round = doc.toText();
+        expectTrue(!hasKeyLine(round, "miacode_bookmarks"), "obsolete miacode_bookmarks is removed on save", failed, out);
+
+        // The obsolete key stays out of the "Other &xx Fields" editor.
+        const QVector<SimaiRawField> unmanaged = SimaiDocument::parseUnmanagedFields(src);
+        bool inUnmanaged = false;
+        for (const SimaiRawField& field : unmanaged) {
+            inUnmanaged = inUnmanaged || field.key == QLatin1String("miacode_bookmarks");
+        }
+        expectTrue(!inUnmanaged, "parseUnmanagedFields hides miacode_bookmarks", failed, out);
+    }
+
+    // --- Bad/empty obsolete bookmark payload never blocks parsing and is never emitted. ---
+    {
+        const QString src =
+            "&title=Song\n&first=0\n"
+            "&miacode_bookmarks={not json at all\n"
+            "&lv_5=12\n&inote_5=(120){1}1,\n";
+        const SimaiDocument doc = SimaiDocument::fromText(src);
+        expectEqual(doc.title, "Song", "bad bookmark JSON does not block other fields", failed, out);
+        expectTrue(doc.difficulty(5) != nullptr, "bad bookmark JSON keeps difficulty parsing", failed, out);
+        expectTrue(!hasKeyLine(doc.toText(), "miacode_bookmarks"), "obsolete bookmark field emits no field on save", failed, out);
+
+        // A bare `&miacode_bookmarks=` is ignored as an obsolete field.
+        const SimaiDocument bare = SimaiDocument::fromText("&title=T\n&first=0\n&miacode_bookmarks=\n&lv_5=1\n&inote_5=(120){1}1,\n");
+        expectTrue(!hasKeyLine(bare.toText(), "miacode_bookmarks"), "bare obsolete bookmark field is removed on save", failed, out);
+    }
 }
 
 }  // namespace

@@ -50,6 +50,7 @@ private:
     void ensureSurfaceLayouts();
     void showAllSurfaces();
     void updateBottomTabsSpeedToastGeometry();
+    bool canShowBridgeSurfaces() const;
 
     // macOS only (no-op elsewhere). Capture the Qt::Tool orphan NSPanel behind
     // each bridge surface at construction; then, once the QML WindowContainer has
@@ -78,6 +79,7 @@ private:
     QPropertyAnimation* bottomTabsSpeedToastOpacityAnimation_ = nullptr;
     QRect bottomTabsToastAnchorRect_;
     bool bottomTabsToastAnchorVisible_ = false;
+    bool quickShellUiReady_ = false;
     QuickShellNativeSurfaceBundle surfaceBundle_;
 
     // Opaque (NSWindow*) handles to the orphan Qt::Tool panels behind the five

@@ -122,7 +122,7 @@ void MainWindow::DialogsSection::onPreviewAudioSettings()
     openPreviewSettingsDialog(
         true,
         false,
-        uiText("dialog.audio_settings.title", "Audio Settings")
+        UiText::text(QStringLiteral("dialog.audio_settings.title"))
     );
 }
 
@@ -132,7 +132,7 @@ void MainWindow::DialogsSection::onPreviewVideoSettings()
     openPreviewSettingsDialog(
         false,
         true,
-        uiText("dialog.video_settings.title", "Preview Settings")
+        UiText::text(QStringLiteral("dialog.video_settings.title"))
     );
 }
 
@@ -149,7 +149,7 @@ void MainWindow::DialogsSection::onAbout()
         .arg(QSysInfo::buildAbi());
 
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
-    dialog.setWindowTitle(uiText("action.about", "About"));
+    dialog.setWindowTitle(UiText::text(QStringLiteral("action.about")));
     dialog.setModal(true);
     dialog.setMinimumWidth(500);
     dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
@@ -211,8 +211,8 @@ void MainWindow::DialogsSection::onAbout()
         infoGrid->addWidget(k, row, 0);
         infoGrid->addWidget(v, row, 1);
     };
-    addRow(0, uiText("about.platform", "Release Platform"), platform);
-    addRow(1, uiText("about.build_type", "Build Type"), buildType);
+    addRow(0, UiText::text(QStringLiteral("about.platform")), platform);
+    addRow(1, UiText::text(QStringLiteral("about.build_type")), buildType);
     cardLayout->addLayout(infoGrid);
     rootLayout->addWidget(card);
 
@@ -245,10 +245,10 @@ void MainWindow::DialogsSection::showMediaOperationCompleteDialog(
     );
     dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     QPushButton* openButton = dialog.addButton(
-        UiText::isChineseUi() ? QStringLiteral("打开文件夹") : QStringLiteral("Open Folder"),
+        UiText::text(QStringLiteral("dialogs.open_folder")),
         QMessageBox::AcceptRole
     );
-    dialog.addButton(uiText("action.close", "Close"), QMessageBox::RejectRole);
+    dialog.addButton(UiText::text(QStringLiteral("action.close")), QMessageBox::RejectRole);
     dialog.setDefaultButton(openButton);
     dialog.exec();
     if (dialog.clickedButton() == openButton) {

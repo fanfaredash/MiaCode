@@ -79,7 +79,7 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
 
         switch (event.kind) {
         case MuriJudgeSpriteKind::Simple: {
-            if (!buildJudgeOverlaySimplePlacement(event.pad, &placement)) {
+            if (!buildJudgeOverlaySimplePlacement(event.pad, PreviewTapJudgeTextDistance::Outer, &placement)) {
                 continue;
             }
             if (event.simpleEffect == MuriSimpleJudgeEffect::Perfect) {
@@ -98,11 +98,14 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
                     ? &state.judgeOverlay.simpleText.good.image
                     : &state.judgeOverlay.simpleText.normal.image;
             }
+            const bool usesBreakText =
+                event.simpleEffect == MuriSimpleJudgeEffect::Perfect
+                && simpleBreakByKey.value(event.markerKey, false);
             alpha = maimuriDxSimpleJudgeAlpha(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,
                 kMaimuriDxSimpleJudgeFadeInSeconds,
-                kMaimuriDxJudgeFadeOutStartSeconds,
+                usesBreakText ? kMaimuriDxBreakJudgeFadeOutStartSeconds : kMaimuriDxJudgeFadeOutStartSeconds,
                 kMaimuriDxSimpleJudgeFadeOutEndSeconds
             );
             simpleScale = maimuriDxSimpleJudgeScale(
@@ -111,8 +114,7 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
                 kMaimuriDxSimpleJudgeScalePopEndScale,
                 kMaimuriDxSimpleJudgeScalePopEndSeconds
             );
-            if (event.simpleEffect == MuriSimpleJudgeEffect::Perfect
-                && simpleBreakByKey.value(event.markerKey, false)) {
+            if (usesBreakText) {
                 alpha *= maimuriDxSimpleJudgeBreakFlash(
                     elapsedSeconds,
                     kMaimuriDxSimpleJudgeBreakFlashPeriodSeconds,

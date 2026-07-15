@@ -5,6 +5,7 @@
 #include "ShortcutRegistry.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "app/ui/AppBackgroundPainter.h"
 
 #include <QAction>
 #include <QApplication>
@@ -58,6 +59,12 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
         Q_UNUSED(value);
         updateLineNumberArea();
     });
+    if (QScrollBar* vbar = verticalScrollBar(); vbar != nullptr) {
+        vbar->setContextMenuPolicy(Qt::NoContextMenu);
+    }
+    if (QScrollBar* hbar = horizontalScrollBar(); hbar != nullptr) {
+        hbar->setContextMenuPolicy(Qt::NoContextMenu);
+    }
     connect(this, &QTextEdit::cursorPositionChanged, this, [this]() {
         syncCursorVisualState();
         // While the bracket-completion popup is open, a caret move means the
@@ -152,7 +159,15 @@ void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
 {
     QPainter painter(lineNumberArea_);
     const UiTheme::Colors& c = UiTheme::colors();
-    painter.fillRect(event->rect(), c.timelineSidebar);
+    const QRect dirtyRect = event != nullptr ? event->rect() : lineNumberArea_->rect();
+    if (miacode::ui::paintAppBackgroundForWidget(lineNumberArea_, painter)) {
+        QColor sidebarSurface = c.timelineSidebar;
+        sidebarSurface.setAlpha(
+            UiTheme::appBackgroundOverlayAlpha(UiTheme::AppBackgroundOverlayRole::CodeEditor, c.dark));
+        painter.fillRect(dirtyRect, sidebarSurface);
+    } else {
+        painter.fillRect(dirtyRect, c.timelineSidebar);
+    }
     painter.setPen(c.textSecondary);
     painter.setFont(lineNumberArea_->font());
 

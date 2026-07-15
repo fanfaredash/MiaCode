@@ -15,6 +15,8 @@ struct MuriPanelEntry {
     int line = 1;
     int col = 1;
     QString rawDetail;
+    MuriDetailKind detailKind = MuriDetailKind::None;
+    MuriDetailArgs detailArgs;
 };
 
 QVector<MuriPanelEntry> buildVisibleMuriPanelEntries(
