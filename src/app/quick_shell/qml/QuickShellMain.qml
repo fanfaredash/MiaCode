@@ -864,6 +864,20 @@ ApplicationWindow {
 
         function onPreviewFullscreenChanged() {
             logPreviewSurfaceTransition("preview_surface_fullscreen_changed")
+            // macOS gives every native fullscreen window its own Space. Hiding that
+            // window while it is still fullscreen leaves the Space behind as a black,
+            // unreachable desktop. Request the asynchronous native exit first;
+            // fullscreenPreviewWindow.onVisibilityChanged hides the window on the
+            // next event-loop turn after Qt receives NSWindowDidExitFullScreenNotification.
+            // Deferring the hide lets Cocoa finish the native state transition while
+            // keeping the QQuickWindow and its scene graph alive for the next entry.
+            if (Qt.platform.os === "osx") {
+                if (controller.previewFullscreen) {
+                    fullscreenPreviewWindow.showFullScreen()
+                } else if (fullscreenPreviewWindow.visible) {
+                    fullscreenPreviewWindow.showNormal()
+                }
+            }
             if (!controller.previewFullscreen) {
                 armEmbeddedInlineSurface("fullscreen_disabled")
                 fullscreenControlsVisible = false
@@ -875,8 +889,10 @@ ApplicationWindow {
                 embeddedSeparateSurfaceReady = true
                 styleBridge.refreshNow()
                 controller.refresh()
-                root.requestActivate()
-                embeddedPreviewInteractionRoot.forceActiveFocus()
+                if (Qt.platform.os !== "osx" || !fullscreenPreviewWindow.visible) {
+                    root.requestActivate()
+                    embeddedPreviewInteractionRoot.forceActiveFocus()
+                }
                 return
             }
             armFullscreenInlineSurface("fullscreen_enabled")
@@ -1652,10 +1668,17 @@ ApplicationWindow {
     Window {
         id: fullscreenPreviewWindow
 
-        visibility: controller.previewFullscreen ? Window.FullScreen : Window.Hidden
         color: "black"
         title: root.title
         flags: Qt.Window | Qt.FramelessWindowHint
+
+        Binding {
+            target: fullscreenPreviewWindow
+            property: "visibility"
+            value: controller.previewFullscreen ? Window.FullScreen : Window.Hidden
+            when: Qt.platform.os !== "osx"
+            restoreMode: Binding.RestoreNone
+        }
 
         Shortcut {
             sequence: "Esc"
@@ -1700,6 +1723,28 @@ ApplicationWindow {
                 "accepted=" + (close.accepted ? 1 : 0)
                     + " preview_fullscreen=" + (controller.previewFullscreen ? 1 : 0)
             )
+        }
+
+        onVisibilityChanged: {
+            controller.logShellLifecycle(
+                "fullscreen_visibility_changed",
+                "visibility=" + visibility
+                    + " visible=" + (visible ? 1 : 0)
+                    + " preview_fullscreen=" + (controller.previewFullscreen ? 1 : 0)
+            )
+            if (Qt.platform.os === "osx"
+                    && !controller.previewFullscreen
+                    && visibility === Window.Windowed) {
+                // This signal is emitted from Qt's native fullscreen-exit handling.
+                // Hiding synchronously re-enters Cocoa before that handling finishes,
+                // leaving the NSWindow unable to start another fullscreen transition.
+                Qt.callLater(function() {
+                    if (!controller.previewFullscreen
+                            && fullscreenPreviewWindow.visibility === Window.Windowed) {
+                        fullscreenPreviewWindow.hide()
+                    }
+                })
+            }
         }
 
         onVisibleChanged: {
