@@ -1,5 +1,6 @@
 #include "core/scene/PreviewHeadLayerState.h"
 
+#include "common/PreviewGameplayConfig.h"
 #include "core/scene/PreviewAnimatedSpriteHelpers.h"
 #include "core/scene/PreviewJudgeOverlayShared.h"
 #include "core/scene/PreviewMarkerDrawOrder.h"
@@ -59,12 +60,11 @@ qreal slideHeadRotateSpeedDegreesPerSecond(const TimelineNoteMarker& marker)
     if (marker.type != QLatin1String("slide") && marker.type != QLatin1String("wifi")) {
         return 0.0;
     }
-    const qreal totalLen = static_cast<qreal>(marker.slideNativeTrackLength);
     const qreal totalDuration = totalSlideTraceDurationSeconds(marker);
-    if (totalLen <= 0.0 || totalDuration <= 0.0) {
-        return 0.0;
-    }
-    return qMax<qreal>(-4.500 * totalLen / totalDuration, -1080.0);
+    return -static_cast<qreal>(
+        miacode::preview_gameplay::previewSlideHeadRotationSpeedDegreesPerSecond(
+            marker.slideNativeTrackLength,
+            totalDuration));
 }
 
 qreal slideHeadFallRotationDegrees(

@@ -203,6 +203,7 @@ struct HoldSustainTrigger {
 
 QImage buildFallbackHoldRingImage();
 QImage buildSmoothHoldRingImage();
+QImage buildDxHoldTailGlowImage();
 QImage buildTouchJudgeFivePointStarImage();
 
 qreal approximateLaneJudgeAlpha(qreal normalizedTime)
@@ -237,6 +238,12 @@ const QImage& fallbackHoldRingImage()
 const QImage& smoothHoldRingImage()
 {
     static const QImage image = buildSmoothHoldRingImage();
+    return image;
+}
+
+const QImage& dxHoldTailGlowImage()
+{
+    static const QImage image = buildDxHoldTailGlowImage();
     return image;
 }
 
@@ -294,6 +301,51 @@ QImage buildSmoothHoldRingImage()
     painter.setBrush(gradient);
     painter.setPen(Qt::NoPen);
     painter.drawEllipse(center, 112.0, 112.0);
+    painter.end();
+    return image;
+}
+
+QImage buildDxHoldTailGlowImage()
+{
+    constexpr int kSize = 256;
+    QImage image(kSize, kSize, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const QPointF center(kSize / 2.0, kSize / 2.0);
+
+    QRadialGradient outerGlow(center, 90.0);
+    outerGlow.setColorAt(0.00, QColor(255, 238, 0, 0));
+    outerGlow.setColorAt(0.5, QColor(255, 238, 0, 0));
+
+    outerGlow.setColorAt(0.70, QColor(255, 232, 0, 132));
+    outerGlow.setColorAt(1.00, QColor(255, 228, 0, 0));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(outerGlow);
+    painter.drawEllipse(center, 84.0, 84.0);
+
+    painter.setCompositionMode(QPainter::CompositionMode_Clear);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(Qt::transparent);
+    painter.drawEllipse(center, 45.0, 45.0);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+
+    QRectF arcRect(center.x() - 21.0, center.y() - 21.0, 42.0, 42.0);
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(QColor(255, 246, 0, 92), 11.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawArc(arcRect, 28 * 16, 260 * 16);
+    painter.setPen(QPen(QColor(255, 255, 225, 142), 5.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawArc(arcRect, 28 * 16, 260 * 16);
+    painter.setPen(QPen(QColor(255, 206, 238, 96), 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawArc(arcRect, 28 * 16, 260 * 16);
+
+    painter.setCompositionMode(QPainter::CompositionMode_Clear);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(Qt::transparent);
+    painter.drawEllipse(center, 27.0, 27.0);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+
     painter.end();
     return image;
 }
@@ -650,9 +702,7 @@ PreviewJudgeEffectLayerState buildPreviewJudgeEffectLayerState(
         ? &fallbackHoldRingImage()
         : &state.judgeEffect.holdSustainCircleImage;
     if (state.render.judgeEffectStyle == PreviewJudgeEffectStyle::Starry) {
-        holdTexture = state.judgeEffect.holdSustainCircleDxImage.isNull()
-            ? &smoothHoldRingImage()
-            : &state.judgeEffect.holdSustainCircleDxImage;
+        holdTexture = &dxHoldTailGlowImage();
     }
 
     const auto appendSprite = [&](const QImage* image,
@@ -832,11 +882,16 @@ PreviewJudgeEffectLayerState buildPreviewJudgeEffectLayerState(
                 * prefabUnitPixels
                 * kJudgeEffectStarryTapSpriteScale;
             const qreal innerPieceWidthPixels = outerPieceWidthPixels * kJudgeEffectTouchInnerToOuterSpriteScale;
-            const auto appendSparkleRing = [&](qreal radiusUnits, qreal radiusScale, qreal pieceWidthPixels) {
+            const auto appendSparkleRing = [&](qreal radiusUnits,
+                                               qreal radiusScale,
+                                               qreal pieceWidthPixels,
+                                               qreal ringAngleOffsetDegrees) {
                 for (int pointIndex = 0; pointIndex < kJudgeEffectTouchSparklePointCount; ++pointIndex) {
                     const bool solidStar = (pointIndex % 2) == 0;
                     const qreal angleDegrees =
-                        laneFacingAngle + static_cast<qreal>(pointIndex) * kJudgeEffectTouchSparklePointAngleStepDegrees;
+                        laneFacingAngle
+                        + ringAngleOffsetDegrees
+                        + static_cast<qreal>(pointIndex) * kJudgeEffectTouchSparklePointAngleStepDegrees;
                     const qreal radians = qDegreesToRadians(angleDegrees);
                     const QPointF offset(
                         qCos(radians) * radiusUnits * prefabUnitPixels * radiusScale * kJudgeEffectStarryTapRadiusScale,
@@ -858,8 +913,8 @@ PreviewJudgeEffectLayerState buildPreviewJudgeEffectLayerState(
                     );
                 }
             };
-            appendSparkleRing(kJudgeEffectTouchInnerRingRadiusUnits, innerRadiusScale, innerPieceWidthPixels);
-            appendSparkleRing(kJudgeEffectTouchOuterRingRadiusUnits, outerRadiusScale, outerPieceWidthPixels);
+            appendSparkleRing(kJudgeEffectTouchInnerRingRadiusUnits, innerRadiusScale, innerPieceWidthPixels, 45.0);
+            appendSparkleRing(kJudgeEffectTouchOuterRingRadiusUnits, outerRadiusScale, outerPieceWidthPixels, 0.0);
             return;
         }
 
