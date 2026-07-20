@@ -1061,6 +1061,7 @@ VideoExportDialog::VideoExportDialog(
     // host listens via clockCountEnabledChanged). Export baking is separate
     // (applyUiToTask sets task.clockCountEnabled).
     connect(clockCountCheck_, &QCheckBox::toggled, this, [this](bool checked) {
+        persistExportOnlySettings();
         emit clockCountEnabledChanged(checked);
     });
     addIntroCheck_ = new QCheckBox(
