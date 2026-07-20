@@ -58,6 +58,7 @@ public:
     const TimelineRenderSnapshot& snapshot() const;
 
     double timelineSecondForCursor(int lineNumber, int col) const;
+    bool resolveTimelineSecondForCursor(int lineNumber, int col, double* second) const;
     bool resolveTimelineNavigateCursor(double second, int* line, int* col, double* cursorSecond) const;
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
     bool resolvePreviewFollowSelectionRange(int line, int anchorCol, int* startCol, int* endCol) const;

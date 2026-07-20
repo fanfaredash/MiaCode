@@ -626,3 +626,22 @@ PreviewAudioSettings makePreviewLatencyAuditionLevels(const PreviewAudioSettings
     levels.normalize();
     return levels;
 }
+
+bool resolveBreakSlideTailCheerMutedPreference(const QJsonObject& preview)
+{
+    const QJsonValue canonical = preview.value(QStringLiteral("break_slide_tail_cheer_muted"));
+    if (canonical.isBool()) {
+        return canonical.toBool();
+    }
+    const QJsonObject audio = preview.value(QStringLiteral("audio")).toObject();
+    return audio.value(QStringLiteral("break_slide_tail_cheer_muted")).toBool(false);
+}
+
+PreviewAudioSettings previewAudioSettingsWithBreakSlideTailCheerPreference(
+    PreviewAudioSettings settings,
+    bool muted)
+{
+    settings.breakSlideTailCheerMuted = muted;
+    settings.normalize();
+    return settings;
+}

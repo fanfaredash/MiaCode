@@ -221,6 +221,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/editor/PlainCodeEditor.BracketCompletion.cpp
     src/editor/PlainCodeEditor.Input.cpp
     src/editor/PlainCodeEditor.Bookmarks.cpp
+    src/editor/TouchPadAuthoringEdit.h
+    src/editor/TouchPadAuthoringEdit.cpp
     src/editor/BracketCompletionPopup.h
     src/editor/BracketCompletionPopup.cpp
     src/editor/SimaiCompletionCatalog.h
@@ -299,6 +301,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/cover_export/CoverLayoutModel.cpp
     src/tools/cover_export/CoverCompositionState.h
     src/tools/cover_export/CoverCompositionState.cpp
+    src/tools/cover_export/CoverCompositionPersistenceGuard.h
+    src/tools/cover_export/CoverCompositionPersistenceGuard.cpp
     src/tools/cover_export/CoverLayerListModel.h
     src/tools/cover_export/CoverLayerListModel.cpp
     src/tools/cover_export/CoverLayerListPanel.h
@@ -1125,6 +1129,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/cover_export/CoverLayoutModel.cpp
             src/tools/cover_export/CoverCompositionState.h
             src/tools/cover_export/CoverCompositionState.cpp
+            src/tools/cover_export/CoverCompositionPersistenceGuard.h
+            src/tools/cover_export/CoverCompositionPersistenceGuard.cpp
             src/app/ui/UiText.h
             src/app/ui/UiText.cpp
             src/extensions/ExtensionManifest.h
@@ -1196,6 +1202,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/editor/PlainCodeEditor.BracketCompletion.cpp
             src/editor/PlainCodeEditor.Input.cpp
             src/editor/PlainCodeEditor.Bookmarks.cpp
+            src/editor/TouchPadAuthoringEdit.h
+            src/editor/TouchPadAuthoringEdit.cpp
             src/editor/BracketCompletionPopup.h
             src/editor/BracketCompletionPopup.cpp
             src/editor/SimaiCompletionCatalog.h
@@ -1367,6 +1375,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/common src/preview src/audio
     )
 
+    miacode_add_dev_tool(touch_pad_authoring_state_spec TEST
+        SOURCES
+            src/tools/preview/TouchPadAuthoringStateSpec.cpp
+            src/core/scene/TouchPadAuthoringState.h
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src
+    )
+
     miacode_add_dev_tool(bass_preview_retained_state_spec TEST
         SOURCES
             src/tools/preview/BassPreviewRetainedStateSpec.cpp
@@ -1491,6 +1507,17 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/ui/UiNativeWindowThemePolicy.h
         LIBS Qt6::Core
         INCLUDES src
+    )
+
+    miacode_add_dev_tool(ui_text_preferences_spec TEST
+        SOURCES
+            src/tools/ui_text/UiTextPreferencesSpec.cpp
+            src/app/ui/UiText.h
+            src/app/ui/UiText.cpp
+            src/extensions/ExtensionManifest.h
+            src/extensions/ExtensionManifest.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/app/ui src/extensions
     )
 
     # Behavior spec locking DebugOptions.h accessor semantics (defaults, clamps,

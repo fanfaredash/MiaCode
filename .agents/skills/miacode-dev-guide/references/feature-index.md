@@ -116,6 +116,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   (e.g. `ExportCoverDialog`) include `UiNativeWindowTheme.h` directly when they need an
   explicit call.
 
+  **Portable preference normalization contract:** `UiText::normalizedPreferencesRoot` preserves
+  unknown top-level extension keys while rewriting canonical `schema` / `ui` / `app` / `extensions`.
+  A built-in setting must have one canonical nested owner; any legacy top-level alias is migrated
+  then removed. Theme precedence is `ui.theme` → `ui_theme` → legacy top-level `theme`. Extension
+  `app/getInfo`, `theme/getCurrent`, and `theme/setCurrent` use the same canonical `ui.theme` helpers.
+  Keep migration/round-trip cases in `UiTextPreferencesSpec` whenever a preference key moves.
+
 ## 3. Document model & file flow
 
 - Storage: `src/core/chart/document/SimaiDocument.{h,cpp}` (`createEmpty`, `fromText`, `toText`,
@@ -276,6 +283,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   — MainWindow (`FrameBootstrap`) owns the actions. Dialog-free: the old create/detail/manager
   dialogs and the toolbox 创建书签/书签管理 entries were REMOVED (toolbox keeps JSON
   import/export as compatibility tools; import marks the document dirty).
+  The active bookmark underline in the gutter is sized from the rendered line-number text itself
+  (`PlainCodeEditor::lineNumberUnderlineHorizontalBounds` + `QFontMetrics::horizontalAdvance`),
+  so a one-digit line never inherits a two-or-more-digit underline width. Geometry cases live in
+  `PlainCodeEditorSpec`.
 
 ## 4. Parser, validation, markers
 
@@ -316,6 +327,18 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Slow refresh workers: `src/timeline/TimelineSlowRefresh.{h,cpp}`.
 - Timing getters: same `PreviewTimelineFlow.cpp` (`currentTimingMetadata`, `parsedFirstSeconds`,
   `parsedWholeBpm`, `parsedLatencyMeterId`, `applyLatencyDetectorOffset`).
+- **Ctrl touch-area authoring (2026-07-20):** `WindowSection` owns the Ctrl-hold/editor-context
+  gate → `PreviewSection::applyEffectivePreviewOutlineVariantToCanvas` enables the runtime →
+  `PreviewQuickSceneRoot` exclusively owns pointer press/move/release/cancel → `PreviewRuntime`
+  applies `TouchPadAuthoringState` hover/pressed styles and emits the committed pad → the central
+  `FrameBootstrap` connection plans/applies the edit through `TouchPadAuthoringEdit`, resolves the
+  caret token through `TimelineQuickModel::resolveTimelineSecondForCursor`, and seeks discretely to
+  `max(0, tokenSecond - 1/60)`. The comma-delimited token is selected by the editor caret (caret
+  immediately before a comma belongs to the left token); empty tokens receive the pad directly,
+  nonempty tokens receive `/pad`, or `` `pad`` when Shift is also held at release. Press must finish
+  on the same pad; moving away, ungrab, focus/app deactivation, page/context invalidation, or Ctrl
+  release cancels. Pure gesture/style coverage is in `TouchPadAuthoringStateSpec`; token/undo and
+  bookmark geometry coverage is in `PlainCodeEditorSpec`.
 
 ## 6. Preview video, media, render state
 
@@ -366,6 +389,11 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `MiniaudioPreviewAudioBackend.{h,cpp}` (non-Windows compatibility, SoundTouch stretch).
 - Settings/semantics: `src/audio/PreviewAudioSettings.*`, `src/common/PreviewSfxAssets.h`,
   `PreviewSfxSemantics.h`, `PreviewSfxTimeline.h`, `PreviewSfxTiming.h`.
+- BreakSlide尾音欢呼关闭 is an immediate app-level preference at
+  `app.preview.break_slide_tail_cheer_muted`. `PreviewAudioSettings` overlays that canonical sibling
+  onto live/software preset audio objects and mirrors it into `audio` for compatibility; saving or
+  applying a local audio preset must not revert the canonical value. Legacy nested audio values are
+  fallback-only. Cases live in `PreviewAudioSettingsSpec`.
 - MainWindow hooks: `MainWindow.cpp` (`ensurePreviewSfxRuntimePrepared`,
   `applyPreviewAudioSettingsToRuntime`); playback clock authority:
   `sections/timeline/MainWindow.TimelinePlayback.cpp` (`currentPreviewAuthoritativeAudioClockSecond`).
@@ -824,11 +852,14 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
     touch `resources/intro.qrc`) to force RCC.
 - Sub-dialog controls + embedded live composer: `ExportCoverDialog.{h,cpp}` (detailed above);
   size presets mirror the video-export resolutions, seeded from the persisted video size, tracked
-  independently. **All dialog settings persist to app preferences (2026-06-10):** the whole
+  independently. **All dialog settings persist to app preferences (updated 2026-07-20):** the whole
   composition JSON (`exportCompositionJson`) saves under `app.cover_export` (the portable
-  preferences object, same store as `miacode::video_export::loadDialogPreferences`) when the user
-  exports, and silently restores on the next dialog open (`applyCompositionJson(saved,
-  interactive=false)` — fallback notice boxes suppressed).
+  preferences object, same store as `miacode::video_export::loadDialogPreferences`) on export and
+  again when the panel closes, and silently restores on the next dialog open
+  (`applyCompositionJson(saved, interactive=false)` — fallback notice boxes suppressed).
+  `CoverCompositionPersistenceGuard` makes unchanged checkpoints idempotent while retrying a failed
+  save; it is declared last so its destructor can still read the panel state. Lifecycle cases live
+  in `CoverLayoutModelSpec`.
 - Entry slot (2026-06-11): the **Export hub page's 导出封面 card** (§8) →
   `MainWindow::ExportSection::onExportCover(difficultyId)` (`MainWindow.ExportFlow.cpp`) — the
   toolbar Export dropdown is GONE; the toolbar Export button now jumps straight to the Export

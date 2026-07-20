@@ -14,6 +14,12 @@ helper binaries. Build file: root `CMakeLists.txt` (one file, ~1200 lines). Pres
   windeployqt `$<CONFIG:Debug>` at `:1179`/`:1190`). Leave it unless it gets in the way; it is
   not a second supported product config.
 - Generator is multi-config (Visual Studio 17 2022), so CTest needs `-C Release`.
+- **macOS compatibility follows `dev-macos`.** Keep Windows-only BASS export/audio and DComp
+  sources inside `if(WIN32)`; guard their owning members/includes/call sites with `Q_OS_WIN`.
+  Published preview snapshots use `std::shared_ptr<const PreviewFrameState>` plus the free
+  `std::atomic_load_explicit` / `std::atomic_store_explicit` overloads — do not replace this with
+  `std::atomic<std::shared_ptr<...>>`, which is rejected by the supported macOS libc++ toolchain.
+  For memory-constrained local macOS builds, use an explicit low bound such as `--parallel 2`.
 
 ## 2. Targets
 
@@ -41,6 +47,7 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   `preview_sfx_timeline_spec`, `preview_audio_settings_spec`, `bass_preview_retained_state_spec`,
   `bass_preview_debug_log_routing_spec`, `quickshell_preview_surface_policy_spec`,
   `video_export_runtime_policy_spec`, `video_export_audio_render_plan_spec`,
+  `touch_pad_authoring_state_spec`,
   `chart_zip_packager_spec` (verifies the Export-as-ZIP packager against real zip read-back),
   `debug_flag_index_spec` (drift guard — every `MIACODE_*` flag read in `src/` must appear in
   `docs/ops/DEBUG_INDEX.md`, and every flag the doc names must still be read in code or be in the
@@ -48,7 +55,9 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   `MIACODE_SOURCE_ROOT` itself is a compile def, not an env flag, so the spec filters it via
   `kCompileDefinitions` — any new spec that consumes the source-root define is fine),
   `ui_text_locale_spec` (i18n drift guard — see the localization note in
-  `architecture-and-layout.md`; also uses the `MIACODE_SOURCE_ROOT` compile define)
+  `architecture-and-layout.md`; also uses the `MIACODE_SOURCE_ROOT` compile define),
+  `ui_text_preferences_spec` (canonical preference normalization/migration and unknown-key
+  preservation guard)
 
 ## 3. Spec / dev-tool convention (audit 2026-05-29 — being standardized)
 
