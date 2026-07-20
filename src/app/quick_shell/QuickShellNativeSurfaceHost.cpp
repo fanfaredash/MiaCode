@@ -1,6 +1,7 @@
 #include "QuickShellNativeSurfaceHost.h"
 
 #include "QuickShellMacSurfaceSupport.h"
+#include "common/AdoptedWidgetCoordinates.h"
 #include "app/ui/AppBackgroundPainter.h"
 #include "UiTheme.h"
 #include "common/DebugLog.h"
@@ -254,6 +255,10 @@ QuickShellNativeSurfaceHost::QuickShellNativeSurfaceHost(
     surfaceBundle_.workspace = createForeignWindowForSurface(workspaceSurfaceWidget_);
     surfaceBundle_.bottomTabs = createForeignWindowForSurface(bottomTabsSurfaceWidget_);
     surfaceBundle_.status = createForeignWindowForSurface(statusSurfaceWidget_);
+
+#ifdef Q_OS_MACOS
+    miacode::ui::bindAdoptedSurfaceWindow(workspaceSurfaceWidget_, surfaceBundle_.workspace);
+#endif
 
     ensureSurfaceLayouts();
     attachNativeWidgets();

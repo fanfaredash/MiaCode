@@ -60,6 +60,7 @@ pixels, and several Qt defaults lie** (`sizeHint()` under QSS, `SetFixedSize`,
 | 取消关闭但弹窗已没了 (cancel close, popups already gone) | Side-effect sweep ran BEFORE the cancellable prompt | Z4 |
 | 方向键被预览劫持 (arrows hijacked from text input) | Geometric "armed" gate without focus-widget check | Z5 |
 | 整个编辑列错位且跨页持续 (whole workspace column offset, persists across pages) | `QQuickWidget` under a quick-shell rehosted surface → top-level HWND recreated → foreign-window embed broken | Z6 |
+| macOS 嵌入页弹窗与文字错位 (popup displaced from text in a rehosted surface) | QWidget `mapToGlobal()` still uses the orphan NSPanel after its NSView is adopted by QuickShell | Z7 |
 
 Full recipes with code idioms and the commit history behind each: `references/recipes.md`.
 The W-patterns are also condensed in user memory `reference-widget-dialog-clipping`.
@@ -112,6 +113,9 @@ The W-patterns are also condensed in user memory `reference-widget-dialog-clippi
   (texture child → top-level HWND recreate → the `fromWinId` embed dies). Live QML preview
   in widgets = native `QQuickView` + `createWindowContainer` + key-forwarding event filter
   (cf. `IntroPreviewWidget`).
+- **Z7**: bind the bridge surface to its adopted `QWindow`, convert child-local coordinates
+  to bridge-surface coordinates in the QWidget hierarchy, then call the adopted window's
+  `mapToGlobal()`; never compensate with a fixed x/y offset.
 
 ## Known rejected approaches — do not retry
 
