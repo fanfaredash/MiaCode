@@ -3,8 +3,10 @@
 #include "DialogLocalization.h"
 #include "EditableValueLabel.h"
 #include "UiTheme.h"
+#include "common/AdoptedWidgetCoordinates.h"
 #include "mainwindow/MainWindowShared.h"
 
+#include <QAbstractItemView>
 #include <QAbstractScrollArea>
 #include <QCheckBox>
 #include <QComboBox>
@@ -22,6 +24,7 @@
 #include <QLayout>
 #include <QMenu>
 #include <QObject>
+#include <QPointer>
 #include <QPushButton>
 #include <QScreen>
 #include <QScrollBar>
@@ -62,6 +65,53 @@ void repolish(QWidget* widget)
     widget->style()->unpolish(widget);
     widget->style()->polish(widget);
     widget->update();
+}
+
+// QuickShell on macOS adopts a bridge QWidget's NSView into a QQuickWindow,
+// while Qt Widgets still maps the bridge through its former NSPanel. Let Qt
+// choose the normal popup geometry (including screen-edge flipping), then
+// translate that result by the adopted-surface coordinate delta on show.
+class AdoptedAnchorPopupPositionFilter final : public QObject {
+public:
+    AdoptedAnchorPopupPositionFilter(QWidget* anchor, QWidget* popup)
+        : QObject(popup)
+        , anchor_(anchor)
+        , popup_(popup)
+    {
+        if (popup_ != nullptr) {
+            popup_->installEventFilter(this);
+        }
+    }
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (event == nullptr || event->type() != QEvent::Show || watched != popup_ || anchor_.isNull()) {
+            return false;
+        }
+        const AdoptedWidgetCoordinateRoute route = adoptedWidgetCoordinateRoute(anchor_, QPoint());
+        if (route.window == nullptr) {
+            return false;
+        }
+        const QPoint defaultAnchor = anchor_->mapToGlobal(QPoint());
+        const QPoint adoptedAnchor = route.window->mapToGlobal(route.surfacePoint);
+        popup_->move(popup_->pos() + adoptedAnchor - defaultAnchor);
+        return false;
+    }
+
+private:
+    QPointer<QWidget> anchor_;
+    QPointer<QWidget> popup_;
+};
+
+void installAdoptedAnchorPopupPositioning(QWidget* anchor, QWidget* popup)
+{
+    if (anchor == nullptr || popup == nullptr
+        || popup->property("miacode.adopted_popup_positioning").toBool()) {
+        return;
+    }
+    popup->setProperty("miacode.adopted_popup_positioning", true);
+    new AdoptedAnchorPopupPositionFilter(anchor, popup);
 }
 
 QSize dialogMenuRowSizeHint(const QWidget* widget, QSize baseSize)
@@ -321,6 +371,9 @@ QComboBox* createDialogComboBox(QWidget* parent, int maxVisibleItems, Qt::Alignm
 void applyDialogComboBoxStyle(QComboBox* combo, int maxVisibleItems)
 {
     UiTheme::styleDialogComboBox(combo, maxVisibleItems);
+    if (QAbstractItemView* popupView = combo != nullptr ? combo->view() : nullptr) {
+        installAdoptedAnchorPopupPositioning(combo, popupView->window());
+    }
 }
 
 QToolButton* createDialogDropdownButton(QWidget* parent,
@@ -348,6 +401,7 @@ QToolButton* createDialogDropdownButton(QWidget* parent,
 
     auto* menu = new QMenu(button);
     UiTheme::styleDialogDropdownMenu(*menu);
+    installAdoptedAnchorPopupPositioning(button, menu);
     UiTheme::bindDialogMenuButtonPopupState(button, menu);
     button->setMenu(menu);
     if (menuOut != nullptr) {
