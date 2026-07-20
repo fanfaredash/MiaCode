@@ -283,10 +283,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   — MainWindow (`FrameBootstrap`) owns the actions. Dialog-free: the old create/detail/manager
   dialogs and the toolbox 创建书签/书签管理 entries were REMOVED (toolbox keeps JSON
   import/export as compatibility tools; import marks the document dirty).
-  The active bookmark underline in the gutter is sized from the rendered line-number text itself
-  (`PlainCodeEditor::lineNumberUnderlineHorizontalBounds` + `QFontMetrics::horizontalAdvance`),
-  so a one-digit line never inherits a two-or-more-digit underline width. Geometry cases live in
-  `PlainCodeEditorSpec`.
+  Bookmark gutter feedback uses the existing row background and accent-colored line number; it
+  deliberately has no underline.
 
 ## 4. Parser, validation, markers
 
@@ -335,10 +333,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   caret token through `TimelineQuickModel::resolveTimelineSecondForCursor`, and seeks discretely to
   `max(0, tokenSecond - 1/60)`. The comma-delimited token is selected by the editor caret (caret
   immediately before a comma belongs to the left token); empty tokens receive the pad directly,
-  nonempty tokens receive `/pad`, or `` `pad`` when Shift is also held at release. Press must finish
-  on the same pad; moving away, ungrab, focus/app deactivation, page/context invalidation, or Ctrl
-  release cancels. Pure gesture/style coverage is in `TouchPadAuthoringStateSpec`; token/undo and
-  bookmark geometry coverage is in `PlainCodeEditorSpec`.
+  nonempty tokens receive `/pad` on left click or `` `pad`` on right click. Clicking an ordinary
+  exact pad already present in the token removes only its first occurrence together with the
+  adjacent separator (while preserving leading timing controls and trailing whitespace). Press
+  must finish on the same pad; moving away, ungrab, focus/app deactivation, page/context
+  invalidation, or Ctrl release cancels. Gesture/style and bookmark-marker source contracts are in
+  `TouchPadAuthoringStateSpec`; token/undo coverage is in `PlainCodeEditorSpec`.
 
 ## 6. Preview video, media, render state
 

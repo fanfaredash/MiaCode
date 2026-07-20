@@ -1316,7 +1316,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     previewPanel_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
     previewCanvas_ = new PreviewRuntime(this);
-    connect(previewCanvas_, &PreviewRuntime::touchPadAuthoringClicked, this, [this](const QString& pad, bool useBacktickSeparator) {
+    connect(previewCanvas_, &PreviewRuntime::touchPadAuthoringClicked, this, [this](const QString& pad, bool backtickSeparator) {
         auto* editor = qobject_cast<QTextEdit*>(editorWidget_);
         if (editor == nullptr || editor->document() == nullptr || editor->isReadOnly()
             || !hasActiveDifficulty() || editorStack_ == nullptr
@@ -1327,7 +1327,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         }
         QTextCursor cursor = editor->textCursor();
         const auto editPlan = miacode::editor::planTouchPadAuthoringEdit(
-            editor->toPlainText(), cursor.position(), pad, useBacktickSeparator);
+            editor->toPlainText(), cursor.position(), pad, backtickSeparator);
         if (!editPlan.valid) {
             return;
         }

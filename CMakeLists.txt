@@ -1382,6 +1382,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core Qt6::Gui
         INCLUDES src
     )
+    target_compile_definitions(touch_pad_authoring_state_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     miacode_add_dev_tool(bass_preview_retained_state_spec TEST
         SOURCES

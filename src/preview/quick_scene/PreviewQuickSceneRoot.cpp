@@ -12,6 +12,7 @@
 #include "core/scene/PreviewSceneConstants.h"
 #include "core/scene/PreviewSceneGeometry.h"
 #include "core/scene/PreviewSceneMath.h"
+#include "core/scene/TouchPadAuthoringState.h"
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -343,7 +344,7 @@ PreviewQuickSceneRoot::PreviewQuickSceneRoot(QQuickItem* parent)
 {
     setFlag(ItemHasContents, true);
     setAcceptHoverEvents(true);
-    setAcceptedMouseButtons(Qt::LeftButton);
+    setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
     // Phase 4a — let PreviewDCompSurface auto-discover this item via
     // QObject::findChild on the QQuickWindow. Decoupled from the
     // dcomp/ side: surface looks up by objectName instead of taking a
@@ -510,7 +511,9 @@ void PreviewQuickSceneRoot::hoverLeaveEvent(QHoverEvent* event)
 
 void PreviewQuickSceneRoot::mousePressEvent(QMouseEvent* event)
 {
-    if (event == nullptr || event->button() != Qt::LeftButton || runtime_ == nullptr) {
+    if (event == nullptr
+        || !miacode::preview::scene::touchPadAuthoringMouseButtonSupported(event->button())
+        || runtime_ == nullptr) {
         QQuickItem::mousePressEvent(event);
         return;
     }
@@ -521,6 +524,7 @@ void PreviewQuickSceneRoot::mousePressEvent(QMouseEvent* event)
     }
     runtime_->setHoveredTouchPad(pad);
     if (runtime_->beginTouchPadAuthoringPress(pad)) {
+        touchPadAuthoringPressedButton_ = event->button();
         event->accept();
         return;
     }
@@ -539,11 +543,15 @@ void PreviewQuickSceneRoot::mouseMoveEvent(QMouseEvent* event)
 
 void PreviewQuickSceneRoot::mouseReleaseEvent(QMouseEvent* event)
 {
-    if (event != nullptr && event->button() == Qt::LeftButton && runtime_ != nullptr
+    if (event != nullptr
+        && miacode::preview::scene::touchPadAuthoringMouseButtonSupported(event->button())
+        && event->button() == touchPadAuthoringPressedButton_
+        && runtime_ != nullptr
         && runtime_->touchPadAuthoringPressActive()) {
         const QString pad = touchPadAtItemPoint(event->position());
+        touchPadAuthoringPressedButton_ = Qt::NoButton;
         runtime_->finishTouchPadAuthoringPress(
-            pad, event->modifiers().testFlag(Qt::ShiftModifier));
+            pad, miacode::preview::scene::touchPadAuthoringUsesBacktickSeparator(event->button()));
         event->accept();
         return;
     }
@@ -555,6 +563,7 @@ void PreviewQuickSceneRoot::mouseUngrabEvent()
     if (runtime_ != nullptr) {
         runtime_->cancelTouchPadAuthoringPress();
     }
+    touchPadAuthoringPressedButton_ = Qt::NoButton;
     QQuickItem::mouseUngrabEvent();
 }
 
