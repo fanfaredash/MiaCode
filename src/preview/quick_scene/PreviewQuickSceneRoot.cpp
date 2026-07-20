@@ -397,8 +397,11 @@ PreviewQuickSceneRoot::~PreviewQuickSceneRoot()
             .arg(pointerHex(runtime_))
             .arg(pointerHex(boundWindow_))
     );
-    if (runtime_ != nullptr && boundWindow_ != nullptr) {
-        runtime_->clearVisibleHostWindow(boundWindow_);
+    if (runtime_ != nullptr) {
+        runtime_->setHoveredTouchPad(QString());
+        if (boundWindow_ != nullptr) {
+            runtime_->clearVisibleHostWindow(boundWindow_);
+        }
     }
 }
 
@@ -419,8 +422,11 @@ void PreviewQuickSceneRoot::setRuntime(PreviewRuntime* runtime)
     if (runtime_ == runtime) {
         return;
     }
-    if (runtime_ != nullptr && boundWindow_ != nullptr) {
-        runtime_->clearVisibleHostWindow(boundWindow_);
+    if (runtime_ != nullptr) {
+        runtime_->setHoveredTouchPad(QString());
+        if (boundWindow_ != nullptr) {
+            runtime_->clearVisibleHostWindow(boundWindow_);
+        }
     }
     if (runtimeUpdateConnection_) {
         QObject::disconnect(runtimeUpdateConnection_);
@@ -514,8 +520,42 @@ void PreviewQuickSceneRoot::mousePressEvent(QMouseEvent* event)
         return;
     }
     runtime_->setHoveredTouchPad(pad);
-    runtime_->notifyTouchPadAuthoringClick(pad);
-    event->accept();
+    if (runtime_->beginTouchPadAuthoringPress(pad)) {
+        event->accept();
+        return;
+    }
+    QQuickItem::mousePressEvent(event);
+}
+
+void PreviewQuickSceneRoot::mouseMoveEvent(QMouseEvent* event)
+{
+    if (event != nullptr && runtime_ != nullptr && runtime_->touchPadAuthoringEnabled()) {
+        updateHoveredTouchPadAtItemPoint(event->position());
+        event->accept();
+        return;
+    }
+    QQuickItem::mouseMoveEvent(event);
+}
+
+void PreviewQuickSceneRoot::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (event != nullptr && event->button() == Qt::LeftButton && runtime_ != nullptr
+        && runtime_->touchPadAuthoringPressActive()) {
+        const QString pad = touchPadAtItemPoint(event->position());
+        runtime_->finishTouchPadAuthoringPress(
+            pad, event->modifiers().testFlag(Qt::ShiftModifier));
+        event->accept();
+        return;
+    }
+    QQuickItem::mouseReleaseEvent(event);
+}
+
+void PreviewQuickSceneRoot::mouseUngrabEvent()
+{
+    if (runtime_ != nullptr) {
+        runtime_->cancelTouchPadAuthoringPress();
+    }
+    QQuickItem::mouseUngrabEvent();
 }
 
 void PreviewQuickSceneRoot::setRuntimeObject(QObject* runtimeObject)
@@ -627,6 +667,9 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding(const char* reason)
     if (windowVisibilityConnection_) {
         QObject::disconnect(windowVisibilityConnection_);
         windowVisibilityConnection_ = QMetaObject::Connection();
+    }
+    if (runtime_ != nullptr) {
+        runtime_->setHoveredTouchPad(QString());
     }
     if (runtime_ != nullptr && boundWindow_ != nullptr) {
         appendQuickSceneLog(

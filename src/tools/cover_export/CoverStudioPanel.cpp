@@ -1,9 +1,11 @@
 #include "tools/cover_export/CoverStudioPanel.h"
 
 #include "tools/cover_export/CoverCompositionState.h"
+#include "tools/cover_export/CoverCompositionPersistenceGuard.h"
 
 #include "tools/cover_export/CoverLayoutModel.h"
 #include "tools/cover_export/SceneFrameRenderer.h"
+#include "common/DebugLog.h"
 #include "common/PreviewInteractionConfig.h"
 #include "UiNativeWindowTheme.h"
 #include "UiText.h"
@@ -674,17 +676,30 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     schedulePreviewResize();
     pushInputs();
 
-    // App-level preference restore: reopen with the last exported composition
-    // (saved in exportCover). Silent — fallback notices are suppressed; the
-    // explicit 导入布局 path stays interactive.
+    // App-level preference restore: reopen with the last edited composition.
+    // The final state is saved on export and again while closing. Silent —
+    // fallback notices are suppressed; the explicit 导入布局 path stays interactive.
     const QJsonObject savedPreferences = miacode::cover_export::CoverCompositionState::loadPreferences();
     if (!savedPreferences.isEmpty()) {
         applyCompositionJson(savedPreferences, /*interactive=*/false);
     }
+    compositionPersistenceGuard_ = std::make_unique<miacode::cover_export::CoverCompositionPersistenceGuard>(
+        [this]() { return exportCompositionJson(); },
+        [](const QJsonObject& payload) {
+            return miacode::cover_export::CoverCompositionState::savePreferences(payload);
+        });
 }
 
 CoverStudioPanel::~CoverStudioPanel()
 {
+    if (compositionPersistenceGuard_ != nullptr && !compositionPersistenceGuard_->persistNow()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Export,
+            QStringLiteral("cover/preferences"),
+            QStringLiteral("failed to persist final cover composition"),
+            /*force=*/true,
+            miacode::debug_log::Level::Warn);
+    }
     // Stop the play clock and sever the live scene's pointer to the shared frame
     // state HERE (destructor body), before the member SceneFrameRenderer that owns
     // that state is destroyed. Otherwise the live QQuickItem (torn down later, in
@@ -1764,9 +1779,11 @@ miacode::cover_export::CoverExportResult CoverStudioPanel::exportCover(const QSt
     // tick mid-grab would move the shared playhead out from under it. Stopping also
     // pins the exported still to exactly the frame the user is looking at.
     stopPlayback();
-    // The user committed this composition — remember ALL its settings app-wide
-    // (restored on the next dialog open).
-    miacode::cover_export::CoverCompositionState::savePreferences(exportCompositionJson());
+    // Checkpoint ALL settings app-wide before export. Closing checkpoints the
+    // final edited state again, so edits made after an export are not lost.
+    if (compositionPersistenceGuard_ != nullptr) {
+        compositionPersistenceGuard_->persistNow();
+    }
     // Re-grab the chart frame at the exact export resolution (chartFrameRenderPx
     // tracks currentSize().height(), which the composite scales the layer to), so
     // the still is crisp in the export.

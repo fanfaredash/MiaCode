@@ -1123,7 +1123,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     connectAudioSlider(touchSlider, &PreviewAudioSettings::setTouchPercent, "touch");
     connectAudioSlider(fireworkSlider, &PreviewAudioSettings::setFireworkPercent, "firework");
     connect(breakSlideTailCheerCheck, &QCheckBox::toggled, &dialog, [this, commitAudioSettingsChange](bool checked) {
+        owner_.breakSlideTailCheerMutedPreference_ = checked;
         owner_.previewAudioSettings_.breakSlideTailCheerMuted = checked;
+        owner_.softwarePreviewAudioSettings_.breakSlideTailCheerMuted = checked;
         commitAudioSettingsChange(QString());
     });
     const auto connectPerChannelMute = [
@@ -1154,8 +1156,8 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     if (saveLocalAudioPresetButton != nullptr) {
         connect(saveLocalAudioPresetButton, &QPushButton::clicked, &dialog, [this]() {
             owner_.previewAudioSettings_.normalize();
-            owner_.softwarePreviewAudioSettings_ = owner_.previewAudioSettings_;
-            owner_.softwarePreviewAudioSettings_.normalize();
+            owner_.softwarePreviewAudioSettings_ = previewAudioSettingsWithBreakSlideTailCheerPreference(
+                owner_.previewAudioSettings_, owner_.breakSlideTailCheerMutedPreference_);
             owner_.savePortableState();
         });
     }
@@ -1165,8 +1167,8 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             &QPushButton::clicked,
             &dialog,
             [this, audioApplyTimer, &pendingAudition, syncAudioControlsFromCurrentSettings]() {
-                owner_.previewAudioSettings_ = owner_.softwarePreviewAudioSettings_;
-                owner_.previewAudioSettings_.normalize();
+                owner_.previewAudioSettings_ = previewAudioSettingsWithBreakSlideTailCheerPreference(
+                    owner_.softwarePreviewAudioSettings_, owner_.breakSlideTailCheerMutedPreference_);
                 syncAudioControlsFromCurrentSettings();
                 owner_.applyPreviewAudioSettingsToRuntime();
                 owner_.savePortableState();

@@ -143,7 +143,7 @@ QJsonObject CoverCompositionState::loadPreferences()
     return app.value(QStringLiteral("cover_export")).toObject();
 }
 
-void CoverCompositionState::savePreferences(const QJsonObject& preferences)
+bool CoverCompositionState::savePreferences(const QJsonObject& preferences)
 {
     QJsonObject root = UiText::loadPreferencesObject();
     QJsonObject app = root.value(QStringLiteral("app")).toObject();
@@ -159,7 +159,7 @@ void CoverCompositionState::savePreferences(const QJsonObject& preferences)
     }
     app.insert(QStringLiteral("cover_export"), merged);
     root.insert(QStringLiteral("app"), app);
-    UiText::savePreferencesObject(root);
+    return UiText::savePreferencesObject(root);
 }
 
 QStringList CoverCompositionState::loadRecentFiles()

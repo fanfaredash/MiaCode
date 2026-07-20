@@ -69,6 +69,7 @@ public:
     PreviewOutlineVariant effectivePreviewOutlineVariant() const;
     void applyEffectivePreviewOutlineVariantToCanvas();
     void setPauseDisplayAltHoldActive(bool active);
+    void setTouchPadAuthoringCtrlHoldActive(bool active);
     void applyPreviewOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection, bool persistState);
     QString resolvePreviewCustomOutlineDir() const;
     QString resolvePreviewCustomOutlinePath() const;
