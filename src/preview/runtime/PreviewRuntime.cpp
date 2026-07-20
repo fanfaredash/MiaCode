@@ -1,4 +1,5 @@
 #include "preview/runtime/PreviewRuntime.h"
+#include "core/scene/TouchPadAuthoringState.h"
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
@@ -233,7 +234,7 @@ PreviewRuntime::~PreviewRuntime()
 
 std::shared_ptr<const miacode::preview::scene::PreviewFrameState> PreviewRuntime::frameStateSnapshot() const
 {
-    return publishedFrameState_.load(std::memory_order_acquire);
+    return std::atomic_load_explicit(&publishedFrameState_, std::memory_order_acquire);
 }
 
 void PreviewRuntime::publishFrameStateSnapshot()
@@ -241,7 +242,12 @@ void PreviewRuntime::publishFrameStateSnapshot()
     auto snapshot =
         std::make_shared<miacode::preview::scene::PreviewFrameState>(frameState_);
     miacode::preview::scene::refreshPreviewFrameStateHudStatsSnapshot(*snapshot);
-    publishedFrameState_.store(std::move(snapshot), std::memory_order_release);
+    std::shared_ptr<const miacode::preview::scene::PreviewFrameState> publishedSnapshot =
+        std::move(snapshot);
+    std::atomic_store_explicit(
+        &publishedFrameState_,
+        std::move(publishedSnapshot),
+        std::memory_order_release);
 }
 
 void PreviewRuntime::setVisibleHostWindow(QQuickWindow* window)
@@ -717,36 +723,65 @@ void PreviewRuntime::setJudgeEffectStyle(PreviewJudgeEffectStyle style)
 
 void PreviewRuntime::setHoveredTouchPad(const QString& pad)
 {
-    const QString normalizedPad = pad.trimmed().toUpper();
-    if (frameState_.hoveredTouchPad == normalizedPad) {
+    QString hovered = frameState_.hoveredTouchPad;
+    QString pressed = frameState_.pressedTouchPad;
+    miacode::preview::scene::moveTouchPadAuthoringGesture(&hovered, &pressed, pad);
+    if (frameState_.hoveredTouchPad == hovered && frameState_.pressedTouchPad == pressed) {
         return;
     }
-    frameState_.hoveredTouchPad = normalizedPad;
+    frameState_.hoveredTouchPad = hovered;
+    frameState_.pressedTouchPad = pressed;
+    update();
+}
+
+bool PreviewRuntime::beginTouchPadAuthoringPress(const QString& pad)
+{
+    if (!frameState_.touchPadAuthoringEnabled
+        || !miacode::preview::scene::beginTouchPadAuthoringGesture(
+            &frameState_.hoveredTouchPad, &frameState_.pressedTouchPad, pad)) {
+        return false;
+    }
+    update();
+    return true;
+}
+
+bool PreviewRuntime::finishTouchPadAuthoringPress(const QString& pad, bool useBacktickSeparator)
+{
+    const QString completed = miacode::preview::scene::finishTouchPadAuthoringGesture(
+        &frameState_.hoveredTouchPad, &frameState_.pressedTouchPad, pad);
+    update();
+    if (completed.isEmpty()) {
+        return false;
+    }
+    emit touchPadAuthoringClicked(completed, useBacktickSeparator);
+    return true;
+}
+
+void PreviewRuntime::cancelTouchPadAuthoringPress()
+{
+    if (frameState_.pressedTouchPad.isEmpty()) {
+        return;
+    }
+    frameState_.pressedTouchPad.clear();
     update();
 }
 
 void PreviewRuntime::setTouchPadAuthoringEnabled(bool enabled)
 {
     if (frameState_.touchPadAuthoringEnabled == enabled) {
-        if (!enabled && !frameState_.hoveredTouchPad.isEmpty()) {
-            setHoveredTouchPad(QString());
+        if (!enabled && (!frameState_.hoveredTouchPad.isEmpty() || !frameState_.pressedTouchPad.isEmpty())) {
+            frameState_.hoveredTouchPad.clear();
+            frameState_.pressedTouchPad.clear();
+            update();
         }
         return;
     }
     frameState_.touchPadAuthoringEnabled = enabled;
     if (!enabled) {
         frameState_.hoveredTouchPad.clear();
+        frameState_.pressedTouchPad.clear();
     }
     update();
-}
-
-void PreviewRuntime::notifyTouchPadAuthoringClick(const QString& pad)
-{
-    const QString normalizedPad = pad.trimmed().toUpper();
-    if (normalizedPad.isEmpty()) {
-        return;
-    }
-    emit touchPadAuthoringClicked(normalizedPad);
 }
 
 void PreviewRuntime::setShowDebugInfo(bool show)

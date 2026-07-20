@@ -36,6 +36,14 @@
 
 using namespace miacode::editor::pce_detail;
 
+QPair<int, int> miacode::editor::lineNumberUnderlineHorizontalBounds(
+    const QString& number,
+    const QFontMetrics& metrics,
+    int textRight)
+{
+    return {textRight - metrics.horizontalAdvance(number), textRight};
+}
+
 namespace {
 constexpr int kLineNumberLeftPadding = 6;
 
@@ -201,10 +209,14 @@ void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
                 painter.fillRect(rowRect, markerColor);
                 painter.setPen(QPen(c.accent, isDropLine ? 2 : 1));
                 const int underlineY = qMin(rowRect.bottom() - 2, drawTop + lineHeight - 3);
+                const auto underlineBounds = miacode::editor::lineNumberUnderlineHorizontalBounds(
+                    number,
+                    QFontMetrics(lineNumberArea_->font()),
+                    lineNumberArea_->width() - kLineNumberRightPadding);
                 painter.drawLine(
-                    kLineNumberLeftPadding,
+                    underlineBounds.first,
                     underlineY,
-                    lineNumberArea_->width() - kLineNumberRightPadding,
+                    underlineBounds.second,
                     underlineY
                 );
             }

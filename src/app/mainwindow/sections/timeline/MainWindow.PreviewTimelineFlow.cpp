@@ -1097,6 +1097,11 @@ double MainWindow::TimelineSection::timelineSecondForCursor(int line, int col) c
     return second;
 }
 
+bool MainWindow::TimelineSection::resolveTimelineSecondForCursor(int line, int col, double* second) const
+{
+    return state_.timelineQuickModel_.resolveTimelineSecondForCursor(line, col, second);
+}
+
 void MainWindow::TimelineSection::seekTimelineToCursor(int line, int col)
 {
     if (state_.timelineQuickStateBridge_ == nullptr) {
@@ -1543,6 +1548,11 @@ void MainWindow::rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& 
 double MainWindow::timelineSecondForCursor(int line, int col) const
 {
     return timelineSection_->timelineSecondForCursor(line, col);
+}
+
+bool MainWindow::resolveTimelineSecondForCursor(int line, int col, double* second) const
+{
+    return timelineSection_->resolveTimelineSecondForCursor(line, col, second);
 }
 
 void MainWindow::seekTimelineToCursor(int line, int col)

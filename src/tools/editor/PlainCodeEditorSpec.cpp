@@ -1,9 +1,11 @@
 #include "editor/PlainCodeEditor.h"
 #include "editor/BracketCompletionPopup.h"
+#include "editor/TouchPadAuthoringEdit.h"
 
 #include <QApplication>
 #include <QCursor>
 #include <QFocusEvent>
+#include <QFontMetrics>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QTextStream>
@@ -84,6 +86,57 @@ int main(int argc, char** argv)
 
     QTextStream out(stdout);
     int failed = 0;
+
+    {
+        const QFontMetrics metrics(QFont(QStringLiteral("Arial"), 12));
+        for (const QString number : {QStringLiteral("7"), QStringLiteral("42"), QStringLiteral("128"), QStringLiteral("12345")}) {
+            const auto bounds = miacode::editor::lineNumberUnderlineHorizontalBounds(number, metrics, 100);
+            expect(bounds.second == 100 && bounds.second - bounds.first == metrics.horizontalAdvance(number),
+                   QStringLiteral("bookmark underline matches actual width for %1").arg(number), out, &failed);
+        }
+    }
+
+    const auto expectTouchPlan = [&out, &failed](const QString& text, int pos, bool shift,
+                                                 int expectedStart, int expectedInsert,
+                                                 const QString& expectedText, const QString& message) {
+        const auto plan = miacode::editor::planTouchPadAuthoringEdit(text, pos, QStringLiteral("A1"), shift);
+        expect(plan.valid && plan.tokenStart == expectedStart && plan.insertionPosition == expectedInsert
+                   && plan.insertionText == expectedText,
+               message, out, &failed);
+    };
+    expectTouchPlan(QStringLiteral(",,"), 1, false, 1, 1, QStringLiteral("A1"),
+                    QStringLiteral("empty comma token inserts pad directly"));
+    expectTouchPlan(QStringLiteral(",  ,"), 2, false, 1, 1, QStringLiteral("A1"),
+                    QStringLiteral("whitespace-only token inserts before preserved whitespace"));
+    expectTouchPlan(QStringLiteral("1,2  ,3"), 3, false, 2, 3, QStringLiteral("/A1"),
+                    QStringLiteral("non-empty token appends slash before trailing whitespace"));
+    expectTouchPlan(QStringLiteral("1,2,"), 3, true, 2, 3, QStringLiteral("`A1"),
+                    QStringLiteral("Shift authoring appends backtick"));
+    expectTouchPlan(QStringLiteral("1,2,"), 1, false, 0, 1, QStringLiteral("/A1"),
+                    QStringLiteral("caret immediately before comma belongs to left token"));
+    expectTouchPlan(QStringLiteral("1,2,"), 2, false, 2, 3, QStringLiteral("/A1"),
+                    QStringLiteral("caret immediately after comma belongs to right token"));
+    expectTouchPlan(QString(), 0, false, 0, 0, QStringLiteral("A1"),
+                    QStringLiteral("empty document boundary inserts directly"));
+    expectTouchPlan(QStringLiteral("1,2,3"), 0, false, 0, 1, QStringLiteral("/A1"),
+                    QStringLiteral("document-start caret stays in the first comma token"));
+    expectTouchPlan(QStringLiteral("1,2"), 3, false, 2, 3, QStringLiteral("/A1"),
+                    QStringLiteral("document-end caret appends to the final token"));
+
+    {
+        QTextDocument document(QStringLiteral("1,2,"));
+        QTextCursor cursor(&document);
+        cursor.setPosition(0);
+        cursor.setPosition(3, QTextCursor::KeepAnchor);
+        const auto plan = miacode::editor::planTouchPadAuthoringEdit(
+            document.toPlainText(), cursor.position(), QStringLiteral("B2"), false);
+        expect(miacode::editor::applyTouchPadAuthoringEdit(&document, &cursor, plan)
+                   && document.toPlainText() == QLatin1String("1,2/B2,"),
+               QStringLiteral("active selection uses position and does not delete selected text"), out, &failed);
+        document.undo();
+        expect(document.toPlainText() == QLatin1String("1,2,"),
+               QStringLiteral("touch authoring insertion is one undo step"), out, &failed);
+    }
 
     expect(
         miacode::editor::normalizedHalfWidthText(QStringLiteral("、")) == QLatin1String("/"),

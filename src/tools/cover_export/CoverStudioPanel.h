@@ -31,6 +31,7 @@ class QWidget;
 namespace miacode::cover_export {
 class CoverLayer;
 class CoverLayoutModel;
+class CoverCompositionPersistenceGuard;
 class SceneFrameRenderer;
 
 // Sub-dialog launched from the video-export dialog's Font tab ("导出封面" /
@@ -145,9 +146,10 @@ private:
 
     // B2 — layout save / import. The whole composition (size + background + card +
     // chart-frame settings + layer geometry) round-trips through one JSON file.
-    // The same JSON also persists to app preferences (app.cover_export): saved on
-    // export, restored on dialog open. `interactive=false` (the silent preference
-    // restore) suppresses the fallback notice boxes an explicit import shows.
+    // The same JSON also persists to app preferences (app.cover_export): checkpointed
+    // on export and on close, then restored on dialog open. `interactive=false` (the
+    // silent preference restore) suppresses the fallback notice boxes an explicit
+    // import shows.
     QJsonObject exportCompositionJson() const;
     void applyCompositionJson(const QJsonObject& root, bool interactive = true);
 
@@ -259,6 +261,7 @@ private:
     int frameSeekHoldDirection_ = 0;
     int frameSeekHoldKey_ = 0;
     int frameSeekHoldLastElapsedMs_ = 0;
+    std::unique_ptr<CoverCompositionPersistenceGuard> compositionPersistenceGuard_;
 };
 
 }  // namespace miacode::cover_export

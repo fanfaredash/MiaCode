@@ -61,5 +61,8 @@ QString currentPreferencesSchema();
 QString storedPreferencesSchema();
 QJsonObject loadPreferencesObject();
 bool savePreferencesObject(const QJsonObject& root);
+QJsonObject normalizePreferencesObject(const QJsonObject& root);
+QString themeTokenFromPreferencesObject(const QJsonObject& root);
+void setThemeTokenInPreferencesObject(QJsonObject* root, const QString& token);
 
 }  // namespace UiText

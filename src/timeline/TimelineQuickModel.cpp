@@ -202,6 +202,11 @@ double TimelineQuickModel::timelineSecondForCursor(int lineNumber, int col) cons
     return second;
 }
 
+bool TimelineQuickModel::resolveTimelineSecondForCursor(int lineNumber, int col, double* second) const
+{
+    return resolvePreviousCursorAnchorForTextPosition(lineNumber, col, nullptr, nullptr, second);
+}
+
 bool TimelineQuickModel::resolveTimelineNavigateCursor(double second, int* line, int* col, double* cursorSecond) const
 {
     if (resolvePreviousCursorAnchorForSecond(second, line, col, cursorSecond)) {

@@ -241,6 +241,7 @@ struct PreviewFrameState {
     QString chartDifficultyLabel;
     QString chartDesigner;
     QString hoveredTouchPad;
+    QString pressedTouchPad;
     bool touchPadAuthoringEnabled = false;
     double playheadSeconds = 0.0;
     // Optional HUD-only override. When finite, the HUD timestamp/stats use

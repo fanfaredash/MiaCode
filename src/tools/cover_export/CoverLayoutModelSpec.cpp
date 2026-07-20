@@ -1,11 +1,16 @@
 #include "tools/cover_export/CoverCompositionState.h"
+#include "tools/cover_export/CoverCompositionPersistenceGuard.h"
 #include "tools/cover_export/CoverLayoutModel.h"
+#include "app/ui/UiText.h"
 
 #include <QCoreApplication>
+#include <QFile>
 #include <QJsonArray>
+#include <QStandardPaths>
 #include <QTextStream>
 
 using miacode::cover_export::CoverCompositionState;
+using miacode::cover_export::CoverCompositionPersistenceGuard;
 using miacode::cover_export::CoverLayer;
 using miacode::cover_export::CoverLayoutModel;
 
@@ -18,6 +23,43 @@ bool require(bool condition, const QString& message, QTextStream& err)
         return false;
     }
     return true;
+}
+
+bool testCompositionPersistenceLifecycle(QTextStream& err)
+{
+    QJsonObject current{{QStringLiteral("revision"), 1}};
+    QList<QJsonObject> writes;
+    {
+        CoverCompositionPersistenceGuard guard(
+            [&current]() { return current; },
+            [&writes](const QJsonObject& object) { writes.append(object); return true; });
+        if (!require(guard.persistNow(), QStringLiteral("explicit persistence succeeds"), err)) return false;
+        if (!require(writes.size() == 1, QStringLiteral("explicit persistence writes once"), err)) return false;
+        current.insert(QStringLiteral("revision"), 2);
+    }
+    if (!require(writes.size() == 2 && writes.constLast().value(QStringLiteral("revision")).toInt() == 2,
+                 QStringLiteral("teardown persists edits made after explicit export"), err)) return false;
+
+    writes.clear();
+    {
+        CoverCompositionPersistenceGuard guard(
+            [&current]() { return current; },
+            [&writes](const QJsonObject& object) { writes.append(object); return true; });
+        guard.persistNow();
+    }
+    if (!require(writes.size() == 1,
+                 QStringLiteral("unchanged teardown payload is content-idempotent"), err)) return false;
+
+    const QJsonObject preferences{
+        {QStringLiteral("kind"), QStringLiteral("miacode-cover-composition")},
+        {QStringLiteral("revision"), 3},
+    };
+    if (!require(CoverCompositionState::savePreferences(preferences),
+                 QStringLiteral("cover composition preference save reports success"), err)) return false;
+    const QJsonObject restored = CoverCompositionState::loadPreferences();
+    return require(restored.value(QStringLiteral("kind")) == preferences.value(QStringLiteral("kind"))
+                       && restored.value(QStringLiteral("revision")) == preferences.value(QStringLiteral("revision")),
+                   QStringLiteral("cover composition preferences round-trip in the isolated test path"), err);
 }
 
 bool testMultiFrameModel(QTextStream& err)
@@ -376,8 +418,12 @@ bool testMoveByViewRows(QTextStream& err)
 
 int main(int argc, char** argv)
 {
+    QStandardPaths::setTestModeEnabled(true);
     QCoreApplication app(argc, argv);
+    QCoreApplication::setApplicationName(QStringLiteral("MiaCodeCoverLayoutModelSpec"));
+    QFile::remove(UiText::preferencesFilePath());
     QTextStream err(stderr);
+    if (!testCompositionPersistenceLifecycle(err)) return 1;
     if (!testMultiFrameModel(err)) return 1;
     if (!testRoundTrip(err)) return 1;
     if (!testTemplatedChartFrameKeepsSettingsExceptPosition(err)) return 1;
@@ -389,5 +435,6 @@ int main(int argc, char** argv)
     if (!testBackgroundBrightnessRoundTrip(err)) return 1;
     if (!testMoveByViewRows(err)) return 1;
     if (!testCoverPresetPersistence(err)) return 1;
+    QFile::remove(UiText::preferencesFilePath());
     return 0;
 }

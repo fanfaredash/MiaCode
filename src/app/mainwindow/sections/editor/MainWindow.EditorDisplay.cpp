@@ -788,6 +788,9 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
         state_.softwarePreviewAudioSettings_ = PreviewAudioSettings::fromJson(preview);
     }
     state_.softwarePreviewAudioSettings_.normalize();
+    state_.breakSlideTailCheerMutedPreference_ = resolveBreakSlideTailCheerMutedPreference(preview);
+    state_.softwarePreviewAudioSettings_ = previewAudioSettingsWithBreakSlideTailCheerPreference(
+        state_.softwarePreviewAudioSettings_, state_.breakSlideTailCheerMutedPreference_);
     state_.previewAudioSettings_ = state_.softwarePreviewAudioSettings_;
     state_.softwarePreviewTimingSettings_ = PreviewTimingSettings::fromJson(preview.value("timing").toObject());
     state_.softwarePreviewTimingSettings_.normalize();
@@ -952,7 +955,10 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("swap_side_panels", state_.workspacePanelsSwapped_);
     preview.insert("canvas_aspect_ratio", 1.0);
     preview.insert("auto_restore_square_after_export", false);
-    preview.insert("audio", state_.softwarePreviewAudioSettings_.toJson());
+    PreviewAudioSettings storedAudio = previewAudioSettingsWithBreakSlideTailCheerPreference(
+        state_.softwarePreviewAudioSettings_, state_.breakSlideTailCheerMutedPreference_);
+    preview.insert("audio", storedAudio.toJson());
+    preview.insert("break_slide_tail_cheer_muted", state_.breakSlideTailCheerMutedPreference_);
     preview.insert("timing", state_.softwarePreviewTimingSettings_.toJson());
 
     app.insert("preview", preview);

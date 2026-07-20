@@ -2236,7 +2236,7 @@ QJsonObject ExtensionManager::handleHostRequestCore(const QString& method, const
             {QStringLiteral("configRoot"), QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)},
             {QStringLiteral("tempRoot"), QDir::tempPath()},
             {QStringLiteral("locale"), QLocale::system().name()},
-            {QStringLiteral("theme"), UiText::loadPreferencesObject().value(QStringLiteral("theme"))},
+            {QStringLiteral("theme"), UiText::themeTokenFromPreferencesObject(UiText::loadPreferencesObject())},
             {QStringLiteral("dpiScale"), dpiScale > 0.0 ? dpiScale : 1.0},
             {QStringLiteral("portableMode"), false},
             {QStringLiteral("restartRequired"), false},
@@ -2477,7 +2477,7 @@ QJsonObject ExtensionManager::handleHostRequestCore(const QString& method, const
     }
     if (method == QStringLiteral("theme/getCurrent")) {
         const QJsonObject root = UiText::loadPreferencesObject();
-        return okValue(root.value(QStringLiteral("theme")));
+        return okValue(UiText::themeTokenFromPreferencesObject(root));
     }
     if (method == QStringLiteral("theme/listAvailable")) {
         return okValue(QJsonArray{QStringLiteral("system"), QStringLiteral("light"), QStringLiteral("dark")});
@@ -2503,7 +2503,7 @@ QJsonObject ExtensionManager::handleHostRequestCore(const QString& method, const
             return errorObject(QStringLiteral("theme.setCurrent requires a theme value."));
         }
         QJsonObject root = UiText::loadPreferencesObject();
-        root.insert(QStringLiteral("theme"), theme);
+        UiText::setThemeTokenInPreferencesObject(&root, theme);
         return QJsonObject{{QStringLiteral("ok"), UiText::savePreferencesObject(root)}};
     }
     if (method == QStringLiteral("backup/list")) {

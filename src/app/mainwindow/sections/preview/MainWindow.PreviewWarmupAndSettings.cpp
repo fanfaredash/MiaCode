@@ -424,9 +424,31 @@ void MainWindow::PreviewSection::setPauseDisplayAltHoldActive(bool active)
     applyPreviewStageMediaRouteVisualSettings();
 }
 
+void MainWindow::PreviewSection::setTouchPadAuthoringCtrlHoldActive(bool active)
+{
+    if (state_.touchPadAuthoringCtrlHoldActive_ == active) {
+        return;
+    }
+    state_.touchPadAuthoringCtrlHoldActive_ = active;
+    applyEffectivePreviewOutlineVariantToCanvas();
+}
+
 void MainWindow::PreviewSection::applyEffectivePreviewOutlineVariantToCanvas()
 {
     if (state_.previewCanvas_ != nullptr) {
+        auto* editor = qobject_cast<QTextEdit*>(ui_.editorWidget_);
+        const bool editableAuthoringContext =
+            owner_.hasActiveDifficulty()
+            && ui_.editorStack_ != nullptr
+            && ui_.editorStack_->currentWidget() == ui_.chartPage_
+            && editor != nullptr
+            && !editor->isReadOnly()
+            && !state_.exportPreviewActive_
+            && QApplication::activeModalWidget() == nullptr
+            && QApplication::activePopupWidget() == nullptr;
+        if (!editableAuthoringContext) {
+            state_.touchPadAuthoringCtrlHoldActive_ = false;
+        }
         const bool forceJudgeAreaWhenPaused =
             state_.previewForceLabeledJudgeLineWhenPaused_ != state_.pauseDisplayAltHoldActive_;
         const bool pausedJudgeAreaView =
@@ -443,7 +465,9 @@ void MainWindow::PreviewSection::applyEffectivePreviewOutlineVariantToCanvas()
             customOutlinePath,
             outlineImageMode);
         state_.previewCanvas_->setTouchPadAuthoringEnabled(
-            pausedJudgeAreaView && state_.previewTouchPadAuthoringShortcutEnabled_);
+            state_.touchPadAuthoringCtrlHoldActive_
+            && state_.previewTouchPadAuthoringShortcutEnabled_
+            && editableAuthoringContext);
     }
 }
 
@@ -731,6 +755,11 @@ void MainWindow::applyEffectivePreviewOutlineVariantToCanvas()
 void MainWindow::setPauseDisplayAltHoldActive(bool active)
 {
     previewSection_->setPauseDisplayAltHoldActive(active);
+}
+
+void MainWindow::setTouchPadAuthoringCtrlHoldActive(bool active)
+{
+    previewSection_->setTouchPadAuthoringCtrlHoldActive(active);
 }
 
 void MainWindow::applyPreviewOutlineVariant(

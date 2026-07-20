@@ -93,7 +93,10 @@ bool saveJsonObjectToFile(const QString& path, const QJsonObject& root)
 
 QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
 {
-    QJsonObject normalized;
+    QJsonObject normalized = raw;
+    normalized.remove(kUiSectionKey);
+    normalized.remove(kAppSectionKey);
+    normalized.remove(kExtensionsSectionKey);
     normalized.insert("schema", kPreferencesSchema);
 
     QJsonObject ui = raw.value(kUiSectionKey).toObject();
@@ -106,6 +109,9 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
     if (!ui.contains(kThemeKey) && raw.contains("ui_theme")) {
         ui.insert(kThemeKey, raw.value("ui_theme").toString("system"));
     }
+    if (!ui.contains(kThemeKey) && raw.contains("theme")) {
+        ui.insert(kThemeKey, raw.value("theme").toString("system"));
+    }
     if (!ui.contains(kThemeKey)) {
         // Default theme for fresh installs is dark (user-voted default). Existing
         // users keep whatever they explicitly stored (incl. "system"/"light").
@@ -114,31 +120,38 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
     normalized.insert(kUiSectionKey, ui);
 
     QJsonObject app = raw.value(kAppSectionKey).toObject();
-    if (raw.contains("last_open_dir")) {
+    if (!app.contains("last_open_dir") && raw.contains("last_open_dir")) {
         app.insert("last_open_dir", raw.value("last_open_dir").toString());
     }
-    if (raw.contains("last_track_path")) {
+    if (!app.contains("last_track_path") && raw.contains("last_track_path")) {
         app.insert("last_track_path", raw.value("last_track_path").toString());
     }
-    if (raw.contains("show_slide_tracks")) {
+    if (!app.contains("show_slide_tracks") && raw.contains("show_slide_tracks")) {
         app.insert("show_slide_tracks", raw.value("show_slide_tracks").toBool(true));
     }
 
     QJsonObject preview = app.value(kPreviewSectionKey).toObject();
-    if (raw.contains("show_judge_markers")) {
+    if (!preview.contains("show_judge_markers") && raw.contains("show_judge_markers")) {
         preview.insert("show_judge_markers", raw.value("show_judge_markers").toBool(false));
     }
-    if (raw.contains("show_touch_trail")) {
+    if (!preview.contains("show_touch_trail") && raw.contains("show_touch_trail")) {
         preview.insert("show_touch_trail", raw.value("show_touch_trail").toBool(false));
     }
-    if (raw.contains("preview_background_brightness")) {
+    if (!preview.contains("background_brightness") && raw.contains("preview_background_brightness")) {
         preview.insert("background_brightness", raw.value("preview_background_brightness").toDouble(0.2));
     }
-    if (raw.contains("preview_show_debug_info")) {
+    if (!preview.contains("show_debug_info") && raw.contains("preview_show_debug_info")) {
         preview.insert("show_debug_info", raw.value("preview_show_debug_info").toBool(false));
     }
+    QJsonObject audio = preview.value("audio").toObject();
+    const bool canonicalTouchVolumePresent = audio.contains("touch_volume");
     if (raw.contains("preview_audio") && raw.value("preview_audio").isObject()) {
-        preview.insert("audio", raw.value("preview_audio").toObject());
+        const QJsonObject legacyAudio = raw.value("preview_audio").toObject();
+        for (auto it = legacyAudio.constBegin(); it != legacyAudio.constEnd(); ++it) {
+            if (!audio.contains(it.key())) {
+                audio.insert(it.key(), it.value());
+            }
+        }
     }
     if (raw.contains("master_volume")
         || raw.contains("master_restore_volume")
@@ -156,70 +169,76 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
         || raw.contains("break_slide_tail_cheer_muted")
         || raw.contains("firework_volume")
         || raw.contains("hanabi_volume")) {
-        QJsonObject audio = preview.value("audio").toObject();
-        if (raw.contains("master_volume")) {
+        if (!audio.contains("global_volume") && raw.contains("master_volume")) {
             audio.insert("global_volume", raw.value("master_volume").toDouble());
         }
-        if (raw.contains("master_restore_volume")) {
+        if (!audio.contains("global_restore_volume") && raw.contains("master_restore_volume")) {
             audio.insert("global_restore_volume", raw.value("master_restore_volume").toDouble());
         }
         if (raw.contains("bgm_volume")) {
-            audio.insert("track_volume", raw.value("bgm_volume").toDouble());
-            audio.insert("bgm_volume", raw.value("bgm_volume").toDouble());
+            if (!audio.contains("track_volume")) {
+                audio.insert("track_volume", raw.value("bgm_volume").toDouble());
+            }
+            if (!audio.contains("bgm_volume")) {
+                audio.insert("bgm_volume", raw.value("bgm_volume").toDouble());
+            }
         }
-        if (raw.contains("answer_volume")) {
+        if (!audio.contains("answer_volume") && raw.contains("answer_volume")) {
             audio.insert("answer_volume", raw.value("answer_volume").toDouble(raw.value("sfx_volume").toDouble()));
         }
         if (raw.contains("judge_volume")) {
-            audio.insert("tap_volume", raw.value("judge_volume").toDouble(raw.value("sfx_volume").toDouble()));
-            audio.insert("judge_volume", raw.value("judge_volume").toDouble(raw.value("sfx_volume").toDouble()));
+            if (!audio.contains("tap_volume")) {
+                audio.insert("tap_volume", raw.value("judge_volume").toDouble(raw.value("sfx_volume").toDouble()));
+            }
+            if (!audio.contains("judge_volume")) {
+                audio.insert("judge_volume", raw.value("judge_volume").toDouble(raw.value("sfx_volume").toDouble()));
+            }
         }
-        if (raw.contains("slide_volume")) {
+        if (!audio.contains("slide_volume") && raw.contains("slide_volume")) {
             audio.insert("slide_volume", raw.value("slide_volume").toDouble(raw.value("sfx_volume").toDouble()));
         }
-        if (raw.contains("break_volume")) {
+        if (!audio.contains("break_volume") && raw.contains("break_volume")) {
             audio.insert("break_volume", raw.value("break_volume").toDouble(raw.value("sfx_volume").toDouble()));
         }
-        if (raw.contains("break_slide_volume")) {
+        if (!audio.contains("break_slide_volume") && raw.contains("break_slide_volume")) {
             audio.insert(
                 "break_slide_volume",
                 raw.value("break_slide_volume").toDouble(
                     raw.value("slide_volume").toDouble(raw.value("sfx_volume").toDouble())));
         }
-        if (raw.contains("break_slide_restore_volume")) {
+        if (!audio.contains("break_slide_restore_volume") && raw.contains("break_slide_restore_volume")) {
             audio.insert(
                 "break_slide_restore_volume",
                 raw.value("break_slide_restore_volume").toDouble(
                     raw.value("break_slide_volume").toDouble(
                         raw.value("slide_volume").toDouble(raw.value("sfx_volume").toDouble()))));
         }
-        if (raw.contains("break_slide_tail_cheer_muted")) {
+        if (!audio.contains("break_slide_tail_cheer_muted") && raw.contains("break_slide_tail_cheer_muted")) {
             audio.insert("break_slide_tail_cheer_muted", raw.value("break_slide_tail_cheer_muted").toBool(false));
         }
-        if (raw.contains("ex_volume")) {
+        if (!audio.contains("ex_volume") && raw.contains("ex_volume")) {
             audio.insert("ex_volume", raw.value("ex_volume").toDouble(raw.value("sfx_volume").toDouble()));
         }
-        if (raw.contains("touch_volume")) {
+        if (!audio.contains("touch_volume") && raw.contains("touch_volume")) {
             audio.insert("touch_volume", raw.value("touch_volume").toDouble(raw.value("sfx_volume").toDouble()));
         }
         if (raw.contains("touchhold_volume")) {
             const double touchHoldVolume = raw.value("touchhold_volume").toDouble(raw.value("sfx_volume").toDouble());
-            audio.insert("touchhold_volume", touchHoldVolume);
-            if (!raw.contains("touch_volume")) {
-                audio.insert("touch_volume", touchHoldVolume);
-            } else {
-                audio.insert(
-                    "touch_volume",
-                    qMax(audio.value("touch_volume").toDouble(), touchHoldVolume)
-                );
+            if (!audio.contains("touchhold_volume")) {
+                audio.insert("touchhold_volume", touchHoldVolume);
+            }
+            if (!canonicalTouchVolumePresent) {
+                audio.insert("touch_volume", qMax(audio.value("touch_volume").toDouble(), touchHoldVolume));
             }
         }
-        if (raw.contains("firework_volume")) {
+        if (!audio.contains("firework_volume") && raw.contains("firework_volume")) {
             audio.insert("firework_volume", raw.value("firework_volume").toDouble(raw.value("sfx_volume").toDouble()));
         }
-        if (raw.contains("hanabi_volume")) {
+        if (!audio.contains("firework_volume") && raw.contains("hanabi_volume")) {
             audio.insert("firework_volume", raw.value("hanabi_volume").toDouble(raw.value("sfx_volume").toDouble()));
         }
+    }
+    if (!audio.isEmpty()) {
         preview.insert("audio", audio);
     }
 
@@ -231,6 +250,19 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
     const QJsonObject extensions = raw.value(kExtensionsSectionKey).toObject();
     if (!extensions.isEmpty()) {
         normalized.insert(kExtensionsSectionKey, extensions);
+    }
+    static const char* const legacyKeys[] = {
+        "ui_language", "ui_theme", "theme", "last_open_dir", "last_track_path",
+        "show_slide_tracks", "show_judge_markers", "show_touch_trail",
+        "preview_background_brightness", "preview_show_debug_info", "preview_audio",
+        "master_volume", "master_restore_volume", "bgm_volume", "sfx_volume",
+        "answer_volume", "judge_volume", "ex_volume", "break_volume",
+        "slide_volume", "touch_volume", "touchhold_volume", "break_slide_volume",
+        "break_slide_restore_volume", "break_slide_tail_cheer_muted",
+        "firework_volume", "hanabi_volume",
+    };
+    for (const char* key : legacyKeys) {
+        normalized.remove(QString::fromLatin1(key));
     }
     return normalized;
 }
@@ -3786,6 +3818,28 @@ QJsonObject UiText::loadPreferencesObject()
 bool UiText::savePreferencesObject(const QJsonObject& root)
 {
     return saveJsonObjectToFile(preferencesPath(), normalizedPreferencesRoot(root));
+}
+
+QJsonObject UiText::normalizePreferencesObject(const QJsonObject& root)
+{
+    return normalizedPreferencesRoot(root);
+}
+
+QString UiText::themeTokenFromPreferencesObject(const QJsonObject& root)
+{
+    return root.value(QStringLiteral("ui")).toObject()
+        .value(QStringLiteral("theme")).toString(QStringLiteral("system"));
+}
+
+void UiText::setThemeTokenInPreferencesObject(QJsonObject* root, const QString& token)
+{
+    if (root == nullptr) {
+        return;
+    }
+    QJsonObject ui = root->value(QStringLiteral("ui")).toObject();
+    ui.insert(QStringLiteral("theme"), token);
+    root->insert(QStringLiteral("ui"), ui);
+    root->remove(QStringLiteral("theme"));
 }
 
 QString UiText::text(const QString& key)

@@ -472,6 +472,7 @@ private:
     void setVideoDecodePrefersSoftware(bool preferSoftware, bool persistState);
     void setTimelineFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     double timelineSecondForCursor(int line, int col) const;
+    bool resolveTimelineSecondForCursor(int line, int col, double* second) const;
     void jumpToLocation(int line, int col);
     QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr) const;
     QString editorText() const;
@@ -495,6 +496,7 @@ private:
     // Transient Alt-hold override: while the preview is paused, holding Alt
     // flips the "暂停时显示判定区" pause display (judge area ⇄ PV/BG) until released.
     void setPauseDisplayAltHoldActive(bool active);
+    void setTouchPadAuthoringCtrlHoldActive(bool active);
     void activateBookmarkAtLine(int line);
     void setFullCopyAreaVisible(bool visible);
     void syncCopyAreaEditorAppearance();

@@ -524,6 +524,7 @@
         bool previewAutoRestoreSquareAfterExport_ = false;
         bool previewForceLabeledJudgeLineWhenPaused_ = true;
         bool previewTouchPadAuthoringShortcutEnabled_ = true;
+        bool touchPadAuthoringCtrlHoldActive_ = false;
         // Transient (not persisted): true only while the export-preview dialog
         // drives the on-screen preview. When set, the pause-hide option
         // ("暂停时显示判定区") is ignored so PV/BG renders exactly as it will in the
@@ -552,6 +553,7 @@
         bool workspacePanelsSwapped_ = false;
         PreviewAudioSettings softwarePreviewAudioSettings_;
         PreviewAudioSettings previewAudioSettings_;
+        bool breakSlideTailCheerMutedPreference_ = false;
         PreviewTimingSettings softwarePreviewTimingSettings_;
         PreviewTimingSettings previewTimingSettings_;
         int editorTextFontPointSize_ = 0;
@@ -964,6 +966,7 @@
     bool& workspacePanelsSwapped_ = state_.workspacePanelsSwapped_;
     PreviewAudioSettings& softwarePreviewAudioSettings_ = state_.softwarePreviewAudioSettings_;
     PreviewAudioSettings& previewAudioSettings_ = state_.previewAudioSettings_;
+    bool& breakSlideTailCheerMutedPreference_ = state_.breakSlideTailCheerMutedPreference_;
     PreviewTimingSettings& softwarePreviewTimingSettings_ = state_.softwarePreviewTimingSettings_;
     PreviewTimingSettings& previewTimingSettings_ = state_.previewTimingSettings_;
     int& editorTextFontPointSize_ = state_.editorTextFontPointSize_;
