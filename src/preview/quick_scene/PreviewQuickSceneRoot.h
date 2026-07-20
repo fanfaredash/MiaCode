@@ -89,6 +89,7 @@ private:
     void recordRenderPhaseProfile();
 
     QPointer<PreviewRuntime> runtime_;
+    Qt::MouseButton touchPadAuthoringPressedButton_ = Qt::NoButton;
     QMetaObject::Connection runtimeUpdateConnection_;
     QMetaObject::Connection frameSwapConnection_;
     QMetaObject::Connection windowVisibilityConnection_;

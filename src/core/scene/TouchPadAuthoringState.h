@@ -5,6 +5,16 @@
 
 namespace miacode::preview::scene {
 
+inline bool touchPadAuthoringMouseButtonSupported(Qt::MouseButton button)
+{
+    return button == Qt::LeftButton || button == Qt::RightButton;
+}
+
+inline bool touchPadAuthoringUsesBacktickSeparator(Qt::MouseButton button)
+{
+    return button == Qt::RightButton;
+}
+
 inline QString normalizedTouchPadAuthoringToken(const QString& pad)
 {
     return pad.trimmed().toUpper();
