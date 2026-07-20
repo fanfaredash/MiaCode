@@ -143,6 +143,15 @@ void VideoExportDialog::loadPersistedSettings()
             qMax(0, presetCombo_->findData(static_cast<int>(selectedPreset_))));
     }
 
+    // App-level count-in preference. Keep the historical opt-in default for
+    // users who have not selected this option before.
+    if (clockCountCheck_ != nullptr) {
+        const QSignalBlocker blocker(clockCountCheck_);
+        clockCountCheck_->setChecked(
+            settings.value(QStringLiteral("clock_count_enabled"))
+                .toBool(clockCountCheck_->isChecked()));
+    }
+
     // App-level "add intro" preference (persists across sessions).
     if (addIntroCheck_ != nullptr) {
         const QSignalBlocker blocker(addIntroCheck_);
@@ -203,6 +212,7 @@ void VideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
     settings.insert(QStringLiteral("fps"), task.fps);
     settings.insert(QStringLiteral("audio_bitrate_kbps"), task.audioBitrateKbps);
     settings.insert(QStringLiteral("preset"), videoExportPresetToken(task.preset));
+    settings.insert(QStringLiteral("clock_count_enabled"), task.clockCountEnabled);
     appendIntroPersistedSettings(&settings);
     miacode::video_export::saveDialogPreferences(settings);
 }
@@ -215,6 +225,8 @@ void VideoExportDialog::persistExportOnlySettings() const
     settings.insert(QStringLiteral("fps"), selectedFps_);
     settings.insert(QStringLiteral("audio_bitrate_kbps"), selectedAudioBitrateKbps_);
     settings.insert(QStringLiteral("preset"), videoExportPresetToken(selectedPreset_));
+    settings.insert(QStringLiteral("clock_count_enabled"),
+                    clockCountCheck_ != nullptr && clockCountCheck_->isChecked());
     appendIntroPersistedSettings(&settings);
     miacode::video_export::saveDialogPreferences(settings);
 }
