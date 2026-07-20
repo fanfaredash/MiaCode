@@ -3,11 +3,10 @@
 class QWidget;
 class QWindow;
 
-// Native (non-client) window theming. On Windows the OS paints top-level
-// title bars per the *system* theme, so a dark in-app UiTheme gets a white
-// caption unless each window is explicitly themed through DWM. These helpers
-// own that DWM logic (immersive dark mode + caption/text/border colors +
-// system backdrop) in one place; every function is a no-op off Windows.
+// Native (non-client) window theming. Windows uses DWM attributes for its
+// caption/backdrop; macOS sets NSWindow.appearance to Aqua, Dark Aqua, or nil
+// for the app's explicit light, explicit dark, or system preference. Other
+// platforms keep these helpers as no-ops.
 namespace UiNativeWindowTheme {
 
 // True for top-level widgets that own a native caption worth theming.
@@ -33,7 +32,7 @@ void applyToAllTopLevelWidgets();
 // Show / ActivationChange / ApplicationPaletteChange / ThemeChange, so
 // dialogs opened anywhere — including tools-layer code that cannot reach
 // MainWindow — no longer need an explicit call. The filter only observes;
-// it never consumes events.
+// it never consumes events. Implemented on Windows and macOS.
 void installAutoApplyFilter();
 
 }  // namespace UiNativeWindowTheme

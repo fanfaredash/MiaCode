@@ -143,12 +143,12 @@ public:
 private:
     QuickShellBootstrap* bootstrap_ = nullptr;
 };
+#endif
 
-void applySystemBackdropToQuickWindow(QQuickWindow* window)
+void applyNativeThemeToQuickWindow(QQuickWindow* window)
 {
     UiNativeWindowTheme::applyToWindow(window);
 }
-#endif
 
 void ensurePreviewQuickTypesRegisteredForQuickShell()
 {
@@ -468,18 +468,20 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
             if (surfaceHost_ != nullptr) {
                 surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
             }
+            applyNativeThemeToQuickWindow(window);
 #ifdef Q_OS_WIN
-            applySystemBackdropToQuickWindow(window);
             QObject::connect(window, &QQuickWindow::activeChanged, this, [window]() {
-                applySystemBackdropToQuickWindow(window);
+                applyNativeThemeToQuickWindow(window);
             });
+#endif
             if (styleBridge_ != nullptr) {
                 QObject::connect(styleBridge_.get(), &QuickShellStyleBridge::appearanceChanged, this, [window]() {
-                    applySystemBackdropToQuickWindow(window);
+                    applyNativeThemeToQuickWindow(window);
                 });
             }
+#ifdef Q_OS_WIN
             QObject::connect(qApp, &QGuiApplication::applicationStateChanged, this, [window](Qt::ApplicationState) {
-                applySystemBackdropToQuickWindow(window);
+                applyNativeThemeToQuickWindow(window);
             });
 #endif
             appendQuickShellRuntimeLog(

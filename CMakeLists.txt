@@ -172,6 +172,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/ui/UiComponents.cpp
     src/app/ui/UiNativeWindowTheme.h
     src/app/ui/UiNativeWindowTheme.cpp
+    src/app/ui/UiNativeWindowThemePolicy.h
     src/app/ui/WindowParityMetrics.h
     src/app/ui/WindowParityMetrics.cpp
     src/app/ui/FlowLayout.h
@@ -744,6 +745,8 @@ if (APPLE)
     # the QML WindowContainer (otherwise it floats over the UI as a white block).
     target_sources(MiaCode PRIVATE
         src/app/quick_shell/QuickShellMacSurfaceSupport.mm
+        src/app/ui/UiNativeWindowThemeMac.h
+        src/app/ui/UiNativeWindowThemeMac.mm
     )
     target_link_libraries(MiaCode PRIVATE "-framework AppKit")
 endif()
@@ -1480,6 +1483,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
     target_compile_definitions(ui_text_locale_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
+    miacode_add_dev_tool(native_chrome_policy_spec TEST
+        SOURCES
+            src/tools/ui/NativeChromePolicySpec.cpp
+            src/app/quick_shell/QuickShellPopupPosition.h
+            src/app/ui/UiNativeWindowThemePolicy.h
+        LIBS Qt6::Core
+        INCLUDES src
+    )
 
     # Behavior spec locking DebugOptions.h accessor semantics (defaults, clamps,
     # debug-category gating, DComp cascade), the safety net for any future

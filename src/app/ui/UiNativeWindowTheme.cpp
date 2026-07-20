@@ -3,6 +3,10 @@
 #include "UiText.h"
 #include "UiTheme.h"
 
+#ifdef Q_OS_MACOS
+#include "UiNativeWindowThemeMac.h"
+#endif
+
 #include <QApplication>
 #include <QColor>
 #include <QEvent>
@@ -17,6 +21,34 @@
 
 namespace UiNativeWindowTheme {
 namespace {
+
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+class AutoApplyFilter final : public QObject
+{
+public:
+    using QObject::QObject;
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        switch (event != nullptr ? event->type() : QEvent::None) {
+        case QEvent::Show:
+        case QEvent::ActivationChange:
+        case QEvent::ApplicationPaletteChange:
+        case QEvent::ThemeChange: {
+            QWidget* widget = qobject_cast<QWidget*>(watched);
+            if (isEligibleWidget(widget)) {
+                applyToWidget(widget);
+            }
+            break;
+        }
+        default:
+            break;
+        }
+        return false;  // observe only — never consume
+    }
+};
+#endif
 
 #ifdef Q_OS_WIN
 constexpr DWORD kDwmwaUseImmersiveDarkMode = 20;
@@ -102,31 +134,6 @@ void applyToNativeHandle(HWND hwnd, bool active, bool backdropEnabled, bool forc
     );
 }
 
-class AutoApplyFilter final : public QObject
-{
-public:
-    using QObject::QObject;
-
-protected:
-    bool eventFilter(QObject* watched, QEvent* event) override
-    {
-        switch (event != nullptr ? event->type() : QEvent::None) {
-        case QEvent::Show:
-        case QEvent::ActivationChange:
-        case QEvent::ApplicationPaletteChange:
-        case QEvent::ThemeChange: {
-            QWidget* widget = qobject_cast<QWidget*>(watched);
-            if (isEligibleWidget(widget)) {
-                applyToWidget(widget);
-            }
-            break;
-        }
-        default:
-            break;
-        }
-        return false;  // observe only — never consume
-    }
-};
 #endif  // Q_OS_WIN
 
 }  // namespace
@@ -159,6 +166,18 @@ void applyToWidget(QWidget* widget, bool backdropEnabled)
     }
     const HWND hwnd = reinterpret_cast<HWND>(topLevel->winId());
     applyToNativeHandle(hwnd, topLevel->isActiveWindow(), backdropEnabled, true);
+#elif defined(Q_OS_MACOS)
+    Q_UNUSED(backdropEnabled);
+    if (widget == nullptr) {
+        return;
+    }
+    QWidget* topLevel = widget->window();
+    if (topLevel == nullptr) {
+        topLevel = widget;
+    }
+    UiNativeWindowThemeMac::applyToNativeView(
+        reinterpret_cast<void*>(topLevel->winId()),
+        UiNativeWindowThemePolicy::appearanceFor(UiText::preferredTheme()));
 #else
     Q_UNUSED(widget);
     Q_UNUSED(backdropEnabled);
@@ -173,6 +192,14 @@ void applyToWindow(QWindow* window, bool backdropEnabled)
     }
     const HWND hwnd = reinterpret_cast<HWND>(window->winId());
     applyToNativeHandle(hwnd, window->isActive(), backdropEnabled, false);
+#elif defined(Q_OS_MACOS)
+    Q_UNUSED(backdropEnabled);
+    if (window == nullptr) {
+        return;
+    }
+    UiNativeWindowThemeMac::applyToNativeView(
+        reinterpret_cast<void*>(window->winId()),
+        UiNativeWindowThemePolicy::appearanceFor(UiText::preferredTheme()));
 #else
     Q_UNUSED(window);
     Q_UNUSED(backdropEnabled);
@@ -181,7 +208,7 @@ void applyToWindow(QWindow* window, bool backdropEnabled)
 
 void applyToAllTopLevelWidgets()
 {
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
     const QList<QWidget*> topLevels = QApplication::topLevelWidgets();
     for (QWidget* topLevel : topLevels) {
         if (!isEligibleWidget(topLevel)
@@ -196,7 +223,7 @@ void applyToAllTopLevelWidgets()
 
 void installAutoApplyFilter()
 {
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
     if (qApp == nullptr) {
         return;
     }
