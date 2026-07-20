@@ -60,6 +60,16 @@ configure_file(
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network OpenGL Multimedia Quick Qml QuickControls2 ShaderTools Svg)
 
+if (APPLE AND TARGET WrapOpenGL::WrapOpenGL)
+    find_library(MIACODE_AGL_FRAMEWORK NAMES AGL)
+    if (NOT MIACODE_AGL_FRAMEWORK)
+        # Xcode 27 SDK no longer ships AGL.framework, but Qt 6.8's
+        # WrapOpenGL helper still injects -framework AGL on macOS.
+        # QtGui already links AppKit/OpenGL, so drop the stale AGL edge.
+        set_property(TARGET WrapOpenGL::WrapOpenGL PROPERTY INTERFACE_LINK_LIBRARIES "")
+    endif()
+endif()
+
 # MultimediaQuickPrivate exposes the private QtMultimedia headers
 # (qhwvideobuffer_p.h / qvideotexturehelper_p.h) that QtAVPlayer's
 # QAVVideoFrame -> QVideoFrame bridge needs. Optional: only the Windows
@@ -84,6 +94,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/quick_shell/QuickShellContracts.h
     src/app/quick_shell/QuickShellNativeSurfaceHost.h
     src/app/quick_shell/QuickShellNativeSurfaceHost.cpp
+    src/app/quick_shell/QuickShellMacSurfaceSupport.h
     src/app/quick_shell/QuickShellPreviewCompositeSurface.h
     src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp
     src/app/quick_shell/QuickShellPreviewSurfacePolicy.h
@@ -91,6 +102,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/quick_shell/QuickShellController.cpp
     src/app/quick_shell/QuickShellStyleBridge.h
     src/app/quick_shell/QuickShellStyleBridge.cpp
+    src/common/AdoptedWidgetCoordinates.h
+    src/common/AdoptedWidgetCoordinates.cpp
     src/app/mainwindow/MainWindow.h
     src/app/mainwindow/MainWindow.cpp
     src/app/mainwindow/MainWindowShared.h
@@ -161,6 +174,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/ui/UiComponents.cpp
     src/app/ui/UiNativeWindowTheme.h
     src/app/ui/UiNativeWindowTheme.cpp
+    src/app/ui/UiNativeWindowThemePolicy.h
     src/app/ui/WindowParityMetrics.h
     src/app/ui/WindowParityMetrics.cpp
     src/app/ui/FlowLayout.h
@@ -580,6 +594,7 @@ qt_add_shaders(MiaCode "intro_shaders"
 )
 set_target_properties(MiaCode PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "MiaCode"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "com.fanfaredash.MiaCode"
 )
 
 if (WIN32 AND EXISTS "${MIACODE_APP_ICON}")
@@ -728,6 +743,18 @@ if (WIN32)
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassopus.dll"
             $<TARGET_FILE_DIR:MiaCode>
     )
+endif()
+
+if (APPLE)
+    # macOS-only Objective-C++ helper that hides the orphan Qt::Tool NSPanel left
+    # behind by each QuickShell bridge surface once its content view is adopted by
+    # the QML WindowContainer (otherwise it floats over the UI as a white block).
+    target_sources(MiaCode PRIVATE
+        src/app/quick_shell/QuickShellMacSurfaceSupport.mm
+        src/app/ui/UiNativeWindowThemeMac.h
+        src/app/ui/UiNativeWindowThemeMac.mm
+    )
+    target_link_libraries(MiaCode PRIVATE "-framework AppKit")
 endif()
 
 target_link_libraries(MiaCode PRIVATE Qt6::Multimedia)
@@ -965,13 +992,6 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/probe/SoundtouchProbe.cpp
             src/audio/PreviewAudioSettings.h
             src/audio/PreviewAudioSettings.cpp
-            src/audio/BassPreviewAudioBackend.h
-            src/audio/BassPreviewAudioBackend.cpp
-            src/audio/BassPreviewAudioBackend_EngineInit.cpp
-            src/audio/BassPreviewAudioBackend_Assets.cpp
-            src/audio/BassPreviewAudioBackend_Transport.cpp
-            src/audio/BassPreviewAudioBackend_PlaybackClock.cpp
-            src/audio/BassPreviewAudioBackend_EventDrain.cpp
             src/audio/MiniaudioPreviewAudioBackend.h
             src/audio/MiniaudioPreviewAudioBackend.cpp
             src/audio/QtPreviewSfxRuntime.h
@@ -979,10 +999,20 @@ if (MIACODE_BUILD_DEV_TOOLS)
             ${_miacode_log_core}
         LIBS Qt6::Concurrent Qt6::Core Qt6::Gui Qt6::Widgets soundtouch
         INCLUDES
-            third_party/bass/include src src/preview src/audio
+            src src/preview src/audio
             src/core/video src/timeline src/tools
     )
     if (WIN32)
+        target_sources(soundtouch_probe PRIVATE
+            src/audio/BassPreviewAudioBackend.h
+            src/audio/BassPreviewAudioBackend.cpp
+            src/audio/BassPreviewAudioBackend_EngineInit.cpp
+            src/audio/BassPreviewAudioBackend_Assets.cpp
+            src/audio/BassPreviewAudioBackend_Transport.cpp
+            src/audio/BassPreviewAudioBackend_PlaybackClock.cpp
+            src/audio/BassPreviewAudioBackend_EventDrain.cpp
+        )
+        target_include_directories(soundtouch_probe PRIVATE third_party/bass/include)
         target_link_libraries(soundtouch_probe PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
@@ -1194,6 +1224,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/app/ui/ShortcutRegistry.cpp
             src/common/InputShortcutGesture.h
             src/common/InputShortcutGesture.cpp
+            src/common/AdoptedWidgetCoordinates.h
+            src/common/AdoptedWidgetCoordinates.cpp
             ${_miacode_log_core}
         LIBS Qt6::Core Qt6::Gui Qt6::Widgets
         INCLUDES src src/app/ui src/common src/extensions
@@ -1354,6 +1386,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core Qt6::Gui
         INCLUDES src
     )
+    target_compile_definitions(touch_pad_authoring_state_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 
     miacode_add_dev_tool(bass_preview_retained_state_spec TEST
         SOURCES
@@ -1471,6 +1505,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
     target_compile_definitions(ui_text_locale_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
+    miacode_add_dev_tool(native_chrome_policy_spec TEST
+        SOURCES
+            src/tools/ui/NativeChromePolicySpec.cpp
+            src/app/quick_shell/QuickShellPopupPosition.h
+            src/app/ui/UiNativeWindowThemePolicy.h
+        LIBS Qt6::Core
+        INCLUDES src
+    )
 
     miacode_add_dev_tool(ui_text_preferences_spec TEST
         SOURCES

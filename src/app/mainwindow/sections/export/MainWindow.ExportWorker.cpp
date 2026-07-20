@@ -875,6 +875,15 @@ bool MainWindow::ExportSection::launchVideoExportWorker(const VideoExportSnapsho
             UiDialogs::centerDialogOnAnchor(progress, &owner_);
         });
         QTimer::singleShot(0, &owner_, [this]() {
+#ifdef Q_OS_MACOS
+            // MainWindow is a WA_DontShowOnScreen quick-shell host whose
+            // widgets are rehosted into the QML shell; raise()/activateWindow()
+            // would orderFront the empty white shell window on macOS. Windows
+            // keeps this focus-restore block unchanged.
+            if (owner_.testAttribute(Qt::WA_DontShowOnScreen)) {
+                return;
+            }
+#endif
             if (!owner_.isVisible() || owner_.windowState().testFlag(Qt::WindowMinimized)) {
                 return;
             }

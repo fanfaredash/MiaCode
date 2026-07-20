@@ -4,7 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-build}"
 QT_ROOT="${QT_ROOT:-}"
-DEPLOYMENT_TARGET="${CMAKE_OSX_DEPLOYMENT_TARGET:-}"
+# Default matches the prebuilt Qt 6.10 macOS floor (its frameworks are built
+# with minos 13.0). Without this the app inherits the build machine's SDK as
+# its minimum OS and won't launch on older systems.
+DEPLOYMENT_TARGET="${CMAKE_OSX_DEPLOYMENT_TARGET:-13.0}"
 BUILD_DEV_TOOLS="${MIACODE_BUILD_DEV_TOOLS:-OFF}"
 MACOS_CODESIGN_IDENTITY="${MACOS_CODESIGN_IDENTITY:--}"
 if [[ -z "$QT_ROOT" && -n "${QT_ROOT_DIR:-}" ]]; then
@@ -196,16 +199,18 @@ required_sfx_files=(
       exit 1
     fi
   done
-  cp -R "$ROOT_DIR/assets" "$DIST_DIR/assets"
+  # Assets ship ONLY inside the bundle (Contents/Resources/assets). That is
+  # the FIRST candidate in AssetPaths.h::findAssetRoot(), so a loose
+  # $DIST_DIR/assets copy would never be read — it just doubles the package
+  # size and misleads users into editing files the app ignores.
   bundle_assets_dir="$DIST_DIR/MiaCode.app/Contents/Resources/assets"
   rm -rf "$bundle_assets_dir"
   mkdir -p "$(dirname "$bundle_assets_dir")"
   cp -R "$ROOT_DIR/assets" "$bundle_assets_dir"
   # slide_data.json + the bundled fonts are embedded in the binary via qrc
   # (:/data/slide_data.json, :/fonts/*); the loose copies are never read. Drop
-  # them from both asset trees so the package does not ship ~17 MB twice.
+  # them so the package does not ship ~17 MB twice.
   for redundant in reference fonts; do
-    rm -rf "$DIST_DIR/assets/$redundant"
     rm -rf "$bundle_assets_dir/$redundant"
   done
 fi
@@ -242,7 +247,7 @@ Included:
   - MiaCode.app
   - Qt frameworks/plugins deployed by macdeployqt
   - MiaCode.app/Contents/MacOS/ffmpeg/ffmpeg
-  - assets/
+  - assets (inside MiaCode.app/Contents/Resources/assets)
   - docs/
 EOF
 
@@ -260,7 +265,13 @@ else
 EOF
 fi
 
-macdeployqt "$DIST_DIR/MiaCode.app" -always-overwrite
+macdeployqt "$DIST_DIR/MiaCode.app" -qmldir="$ROOT_DIR/src" -always-overwrite
+
+# MiaCode does not use Qt SQL. macdeployqt still deploys the sqldrivers
+# plugins, and the odbc/psql/mimer ones reference third-party dylibs
+# (homebrew libiodbc, Postgres.app, mimer) that only exist on the build
+# machine — dead weight that also breaks strict signature/dependency scans.
+rm -rf "$DIST_DIR/MiaCode.app/Contents/PlugIns/sqldrivers"
 
 # macdeployqt may rewrite Qt binaries and invalidate bundled signatures.
 # Re-sign the packaged app (ad-hoc by default) so macOS won't kill it at launch.

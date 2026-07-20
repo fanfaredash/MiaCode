@@ -4,9 +4,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FFMPEG_DIR="${MIACODE_MACOS_FFMPEG_DIR:-$ROOT_DIR/third_party/ffmpeg/macos}"
 FFMPEG_PATH="$FFMPEG_DIR/ffmpeg"
-FFMPEG_URL="${MIACODE_MACOS_FFMPEG_URL:-https://evermeet.cx/ffmpeg/ffmpeg-7.1.zip}"
-EXPECTED_SHA256="${MIACODE_MACOS_FFMPEG_SHA256:-430D60FBF419DAB28DAEE9B679E7929A31EE9BAE53F6E42E8AE26B725584290F}"
-EXPECTED_VERSION_PATTERN="${MIACODE_MACOS_FFMPEG_VERSION_PATTERN:-^ffmpeg version 7\\.1(\\.|$)}"
+# Pinned to a macOS arm64 static ffmpeg build that ships
+# h264_videotoolbox/hevc_videotoolbox for hardware export.
+FFMPEG_URL="${MIACODE_MACOS_FFMPEG_URL:-https://ffmpeg.martin-riedl.de/download/macos/arm64/1783011502_8.1.2/ffmpeg.zip}"
+EXPECTED_SHA256="${MIACODE_MACOS_FFMPEG_SHA256:-EAF91238E104DD0E262BC6510E25061855CC99A6955A721B0AC99660D58C473D}"
+EXPECTED_VERSION_PATTERN="${MIACODE_MACOS_FFMPEG_VERSION_PATTERN:-^ffmpeg version 8\\.1\\.2([.-]|$)}"
+EXPECTED_ARCH="${MIACODE_MACOS_FFMPEG_ARCH:-arm64}"
 
 compute_sha256() {
   shasum -a 256 "$1" | awk '{print toupper($1)}'
@@ -18,6 +21,17 @@ require_command() {
     echo "Required command not found: $name" >&2
     exit 1
   fi
+}
+
+validate_arch() {
+  local binary_path="$1"
+  local archs
+  archs="$(lipo -archs "$binary_path" 2>/dev/null || true)"
+  if [[ "$archs" != *"$EXPECTED_ARCH"* ]]; then
+    echo "ffmpeg binary is not $EXPECTED_ARCH (got: ${archs:-unknown}): $binary_path" >&2
+    return 1
+  fi
+  return 0
 }
 
 validate_version_output() {
@@ -50,6 +64,9 @@ validate_existing_binary() {
   fi
 
   chmod +x "$FFMPEG_PATH"
+  if ! validate_arch "$FFMPEG_PATH"; then
+    return 1
+  fi
   if ! validate_version_output "$FFMPEG_PATH"; then
     return 1
   fi
@@ -104,6 +121,9 @@ fi
 
 mkdir -p "$FFMPEG_DIR"
 install -m 755 "$downloaded_path" "$FFMPEG_PATH"
+if ! validate_arch "$FFMPEG_PATH"; then
+  exit 1
+fi
 if ! validate_version_output "$FFMPEG_PATH"; then
   exit 1
 fi

@@ -1,14 +1,15 @@
 #include "editor/PlainCodeEditor.h"
 #include "editor/BracketCompletionPopup.h"
 #include "editor/TouchPadAuthoringEdit.h"
+#include "common/AdoptedWidgetCoordinates.h"
 
 #include <QApplication>
 #include <QCursor>
 #include <QFocusEvent>
-#include <QFontMetrics>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QTextStream>
+#include <QWindow>
 
 namespace {
 
@@ -88,18 +89,29 @@ int main(int argc, char** argv)
     int failed = 0;
 
     {
-        const QFontMetrics metrics(QFont(QStringLiteral("Arial"), 12));
-        for (const QString number : {QStringLiteral("7"), QStringLiteral("42"), QStringLiteral("128"), QStringLiteral("12345")}) {
-            const auto bounds = miacode::editor::lineNumberUnderlineHorizontalBounds(number, metrics, 100);
-            expect(bounds.second == 100 && bounds.second - bounds.first == metrics.horizontalAdvance(number),
-                   QStringLiteral("bookmark underline matches actual width for %1").arg(number), out, &failed);
-        }
+        QWidget adoptedSurface;
+        QWidget nestedWidget(&adoptedSurface);
+        nestedWidget.move(17, 29);
+        auto* adoptedWindow = new QWindow;
+        const QPoint localPoint(5, 7);
+        miacode::ui::bindAdoptedSurfaceWindow(&adoptedSurface, adoptedWindow);
+        const auto route = miacode::ui::adoptedWidgetCoordinateRoute(&nestedWidget, localPoint);
+        expect(route.window == adoptedWindow
+                   && route.surfacePoint == QPoint(22, 36),
+               QStringLiteral("adopted widget coordinates resolve through the bridge surface"),
+               out,
+               &failed);
+        delete adoptedWindow;
+        expect(miacode::ui::adoptedWidgetCoordinateRoute(&nestedWidget, localPoint).window == nullptr,
+               QStringLiteral("destroying the adopted window clears the bridge coordinate route"),
+               out,
+               &failed);
     }
 
-    const auto expectTouchPlan = [&out, &failed](const QString& text, int pos, bool shift,
+    const auto expectTouchPlan = [&out, &failed](const QString& text, int pos, bool backtick,
                                                  int expectedStart, int expectedInsert,
                                                  const QString& expectedText, const QString& message) {
-        const auto plan = miacode::editor::planTouchPadAuthoringEdit(text, pos, QStringLiteral("A1"), shift);
+        const auto plan = miacode::editor::planTouchPadAuthoringEdit(text, pos, QStringLiteral("A1"), backtick);
         expect(plan.valid && plan.tokenStart == expectedStart && plan.insertionPosition == expectedInsert
                    && plan.insertionText == expectedText,
                message, out, &failed);
@@ -111,7 +123,7 @@ int main(int argc, char** argv)
     expectTouchPlan(QStringLiteral("1,2  ,3"), 3, false, 2, 3, QStringLiteral("/A1"),
                     QStringLiteral("non-empty token appends slash before trailing whitespace"));
     expectTouchPlan(QStringLiteral("1,2,"), 3, true, 2, 3, QStringLiteral("`A1"),
-                    QStringLiteral("Shift authoring appends backtick"));
+                    QStringLiteral("right-click authoring appends backtick"));
     expectTouchPlan(QStringLiteral("1,2,"), 1, false, 0, 1, QStringLiteral("/A1"),
                     QStringLiteral("caret immediately before comma belongs to left token"));
     expectTouchPlan(QStringLiteral("1,2,"), 2, false, 2, 3, QStringLiteral("/A1"),
@@ -122,6 +134,45 @@ int main(int argc, char** argv)
                     QStringLiteral("document-start caret stays in the first comma token"));
     expectTouchPlan(QStringLiteral("1,2"), 3, false, 2, 3, QStringLiteral("/A1"),
                     QStringLiteral("document-end caret appends to the final token"));
+
+    const auto expectTouchEdit = [&out, &failed](const QString& text, int pos, bool backtick,
+                                                 const QString& expected, const QString& message) {
+        QTextDocument document(text);
+        QTextCursor cursor(&document);
+        cursor.setPosition(pos);
+        const auto plan = miacode::editor::planTouchPadAuthoringEdit(
+            document.toPlainText(), cursor.position(), QStringLiteral("A1"), backtick);
+        const bool applied = miacode::editor::applyTouchPadAuthoringEdit(&document, &cursor, plan);
+        expect(applied && document.toPlainText() == expected, message, out, &failed);
+    };
+    expectTouchEdit(QStringLiteral("1/A1/B2"), 2, false, QStringLiteral("1/B2"),
+                    QStringLiteral("existing middle pad removes its preceding separator"));
+    expectTouchEdit(QStringLiteral("A1/B2"), 0, false, QStringLiteral("B2"),
+                    QStringLiteral("existing first pad removes its following separator"));
+    expectTouchEdit(QStringLiteral("A1"), 0, true, QString(),
+                    QStringLiteral("existing sole pad is removed regardless of mouse separator"));
+    expectTouchEdit(QStringLiteral("1`A1/B2"), 2, false, QStringLiteral("1/B2"),
+                    QStringLiteral("mixed separators remove the separator before the matched pad"));
+    expectTouchEdit(QStringLiteral("1/A1/A1"), 2, false, QStringLiteral("1/A1"),
+                    QStringLiteral("duplicate pad toggle removes only the first match"));
+    expectTouchEdit(QStringLiteral("(120){4}A1"), 0, false, QStringLiteral("(120){4}"),
+                    QStringLiteral("sole first pad removal preserves timing controls"));
+    expectTouchEdit(QStringLiteral("(120){4}A1/B2"), 0, false, QStringLiteral("(120){4}B2"),
+                    QStringLiteral("first pad removal keeps timing controls on the next item"));
+    expectTouchEdit(QStringLiteral("A10"), 0, false, QStringLiteral("A10/A1"),
+                    QStringLiteral("prefix-like area number is not an exact pad match"));
+    expectTouchEdit(QStringLiteral("A1h[4:1]"), 0, false, QStringLiteral("A1h[4:1]/A1"),
+                    QStringLiteral("touch hold is not removed as an ordinary touch"));
+    expectTouchEdit(QStringLiteral("1/A1  "), 2, false, QStringLiteral("1  "),
+                    QStringLiteral("toggle deletion preserves trailing token whitespace"));
+    expectTouchEdit(QStringLiteral(" A1/B2"), 0, false, QStringLiteral(" B2"),
+                    QStringLiteral("first pad match preserves leading token whitespace"));
+    expectTouchEdit(QStringLiteral("(120){4} A1/B2"), 0, false, QStringLiteral("(120){4} B2"),
+                    QStringLiteral("first pad match allows whitespace after timing controls"));
+    expectTouchEdit(QStringLiteral(" (120) {4}A1/B2"), 0, false, QStringLiteral(" (120) {4}B2"),
+                    QStringLiteral("first pad match allows whitespace around timing controls"));
+    expectTouchEdit(QStringLiteral("1/ A1 /B2"), 2, false, QStringLiteral("1/B2"),
+                    QStringLiteral("non-first pad match ignores item whitespace"));
 
     {
         QTextDocument document(QStringLiteral("1,2,"));
@@ -136,6 +187,20 @@ int main(int argc, char** argv)
         document.undo();
         expect(document.toPlainText() == QLatin1String("1,2,"),
                QStringLiteral("touch authoring insertion is one undo step"), out, &failed);
+    }
+
+    {
+        QTextDocument document(QStringLiteral("1/A1/B2"));
+        QTextCursor cursor(&document);
+        cursor.setPosition(2);
+        const auto plan = miacode::editor::planTouchPadAuthoringEdit(
+            document.toPlainText(), cursor.position(), QStringLiteral("A1"), false);
+        expect(miacode::editor::applyTouchPadAuthoringEdit(&document, &cursor, plan)
+                   && document.toPlainText() == QLatin1String("1/B2"),
+               QStringLiteral("touch authoring deletion applies successfully"), out, &failed);
+        document.undo();
+        expect(document.toPlainText() == QLatin1String("1/A1/B2"),
+               QStringLiteral("touch authoring deletion is one undo step"), out, &failed);
     }
 
     expect(

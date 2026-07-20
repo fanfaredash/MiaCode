@@ -10,6 +10,7 @@ namespace miacode::editor {
 struct TouchPadAuthoringEditPlan {
     int tokenStart = 0;
     int insertionPosition = 0;
+    int removalLength = 0;
     QString insertionText;
     bool valid = false;
 };

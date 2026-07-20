@@ -1,5 +1,6 @@
 #include "PlainCodeEditor.h"
 #include "BracketCompletionPopup.h"
+#include "common/AdoptedWidgetCoordinates.h"
 #include "SimaiCompletionCatalog.h"
 #include "common/DebugLog.h"
 #include "ShortcutRegistry.h"
@@ -307,7 +308,8 @@ void PlainCodeEditor::openCompletionPopup(const QStringList& candidates, QChar o
     completionStartPos_ = textCursor().position();
     ensureCompletionPopup();
     const QRect caret = cursorRect();
-    const QPoint anchor = viewport()->mapToGlobal(caret.bottomLeft() + QPoint(0, 2));
+    const QPoint anchor = miacode::ui::mapWidgetPointToGlobal(
+        viewport(), caret.bottomLeft() + QPoint(0, 2));
     completionPopup_->showCandidates(candidates, anchor);
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
@@ -457,7 +459,8 @@ void PlainCodeEditor::updateBracketCompletionFilter()
         return;
     }
     const QRect caret = cursorRect();
-    const QPoint anchor = viewport()->mapToGlobal(caret.bottomLeft() + QPoint(0, 2));
+    const QPoint anchor = miacode::ui::mapWidgetPointToGlobal(
+        viewport(), caret.bottomLeft() + QPoint(0, 2));
     completionPopup_->moveToAnchor(anchor);
 }
 

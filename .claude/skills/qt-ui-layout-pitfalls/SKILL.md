@@ -60,6 +60,8 @@ pixels, and several Qt defaults lie** (`sizeHint()` under QSS, `SetFixedSize`,
 | 取消关闭但弹窗已没了 (cancel close, popups already gone) | Side-effect sweep ran BEFORE the cancellable prompt | Z4 |
 | 方向键被预览劫持 (arrows hijacked from text input) | Geometric "armed" gate without focus-widget check | Z5 |
 | 整个编辑列错位且跨页持续 (whole workspace column offset, persists across pages) | `QQuickWidget` under a quick-shell rehosted surface → top-level HWND recreated → foreign-window embed broken | Z6 |
+| macOS 页面飞出窗口/无边框白色幽灵块 (page flies out as standalone window; frameless white ghost, macOS) | bridge `QWidget::show()` after WindowContainer adoption reclaims the NSView; emptied orphan NSPanel re-shown by `hidesOnDeactivate` | Z7 |
+| macOS 导出后出现带主窗口标题的白窗，关掉后主界面内容消失 (titled white MainWindow shell post-export; closing it blanks UI, macOS) | window-modal dialog / `raise()` on the hidden `WA_DontShowOnScreen` MainWindow → macOS sheet/orderFront surfaces it | Z8 |
 
 Full recipes with code idioms and the commit history behind each: `references/recipes.md`.
 The W-patterns are also condensed in user memory `reference-widget-dialog-clipping`.
@@ -112,6 +114,16 @@ The W-patterns are also condensed in user memory `reference-widget-dialog-clippi
   (texture child → top-level HWND recreate → the `fromWinId` embed dies). Live QML preview
   in widgets = native `QQuickView` + `createWindowContainer` + key-forwarding event filter
   (cf. `IntroPreviewWidget`).
+- **Z7** (macOS): never hide()/show() a bridge top-level after WindowContainer adoption —
+  per-tab visibility goes through `WindowContainer.visible` on the foreign QWindow
+  (`kBridgeSurfaceVisibilityFollowsTabs` = false on mac). Neutralize each emptied orphan
+  NSPanel once its view leaves it (`QuickShellMacSurfaceSupport`: `hidesOnDeactivate NO`,
+  alpha 0, click-through, orderOut, retried).
+- **Z8** (macOS): dialogs launched from the hidden quick-shell MainWindow use
+  `UiDialogs::effectiveParentWidget` + `applyDetachedParentBehavior` (window-modal on the
+  `WA_DontShowOnScreen` host = macOS sheet that orderFronts it); guard
+  `raise()/activateWindow()` with `WA_DontShowOnScreen`. `#ifdef Q_OS_MACOS` all sites so
+  Windows parenting/focus is untouched.
 
 ## Known rejected approaches — do not retry
 

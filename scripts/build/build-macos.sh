@@ -3,10 +3,14 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-QT_VERSION="${QT_VERSION:-6.8.3}"
+QT_VERSION="${QT_VERSION:-6.10.2}"
 QT_OUTPUT_DIR="${QT_OUTPUT_DIR:-$ROOT_DIR/.qt}"
-QT_MODULES="${QT_MODULES:-qtmultimedia qtdeclarative qtshadertools qtsvg}"
+# aqt's macOS module list does not expose every framework that ships in the
+# base desktop package. Keep the explicit add-on set minimal so the install
+# command stays valid across current mirrors.
+QT_MODULES="${QT_MODULES:-qtmultimedia qtshadertools}"
 QT_DESKTOP_ARCH="${QT_DESKTOP_ARCH:-clang_64}"
+BUILD_DIR="${BUILD_DIR:-$ROOT_DIR/build-macos}"
 DEPLOYMENT_TARGET="${CMAKE_OSX_DEPLOYMENT_TARGET:-13.0}"
 MIACODE_BUILD_DEV_TOOLS="${MIACODE_BUILD_DEV_TOOLS:-OFF}"
 RUNNER_ARCH="$(uname -m)"
@@ -45,6 +49,7 @@ export QT_ROOT_DIR
 export CMAKE_OSX_ARCHITECTURES="$CMAKE_ARCH"
 export CMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET"
 export MIACODE_BUILD_DEV_TOOLS
+export BUILD_DIR
 
 chmod +x "$ROOT_DIR/scripts/ffmpeg/ensure-macos-ffmpeg.sh"
 bash "$ROOT_DIR/scripts/ffmpeg/ensure-macos-ffmpeg.sh"

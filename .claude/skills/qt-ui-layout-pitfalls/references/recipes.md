@@ -332,6 +332,51 @@ the host window with an event filter so a click on the preview can't swallow Esc
 `QGuiApplication::topLevelWindows()` before/after the repro step — a surface whose
 `global == geom` and a new visible `QWidgetWindow <surface>Window` entry = de-embedded.
 
+### Z7. macOS bridge QWidget::show() reclaims the NSView adopted by a WindowContainer
+
+**Symptom** (macOS only): 语法/无理 bottom-tab pages render as a standalone frameless
+window floating outside the main window ("飞出窗口"); also a white borderless block that
+covers the UI and vanishes on app deactivate (the empty orphan NSPanel).
+
+**Mechanism**: each bridge surface is a `Qt::Tool` top-level QWidget; on macOS that is an
+NSPanel. The QML `WindowContainer` adopts the panel's *content NSView* into the
+QQuickWindow, but (a) the emptied NSPanel shell is not destroyed and lingers as a white
+ghost (NSPanel default `hidesOnDeactivate=YES` re-orderFronts it on every app
+reactivation), and (b) any later `QWidget::show()` on the bridge top-level re-attaches
+the NSView as the panel's contentView — ripping the embedded page out of the main window.
+Windows is immune: the child HWND stays put under ShowWindow. The bottom-tabs bridge was
+the only one hidden/re-shown per tab (`setSurfaceVisible` in `syncBottomTabsSurfaceSize`),
+so only 语法/无理 flew out.
+
+**Recipe**: (1) never hide()/show() a bridge top-level after adoption on macOS — gate with
+`kBridgeSurfaceVisibilityFollowsTabs` (false on mac) and drive per-tab visibility solely
+through the QML `WindowContainer.visible` binding on the foreign QWindow;
+(2) neutralize every orphan panel once its view has left it:
+`QuickShellMacSurfaceSupport` captures `[view window]` at construction, then after
+adoption sets `hidesOnDeactivate=NO`, alpha 0, `ignoresMouseEvents`, `orderOut` (with a
+retry loop, since native reparent lags the ui-ready callback). Commit: 5412a75e.
+
+### Z8. Window-modal dialog / raise() surfaces the hidden WA_DontShowOnScreen MainWindow (macOS)
+
+**Symptom** (macOS only): after a successful export (视频导出 / 打包 ZIP / 批量导出) an
+empty white window with the MAIN WINDOW'S TITLE appears; closing it blanks parts of the
+real UI (Qt reclaims adopted content views when it recreates the closed NSWindow).
+
+**Mechanism**: in quick-shell mode `MainWindow` is a `WA_DontShowOnScreen` +
+`miacode.dialog_parentless` host whose widgets are all rehosted into the QML shell. macOS
+presents a `Qt::WindowModal` dialog parented to it as a *sheet*, and attaching a sheet
+orderFronts the hidden parent NSWindow; `owner_.raise()/activateWindow()` does the same
+directly. The titled (not frameless) white window is the tell that it's MainWindow, not
+an orphan NSPanel (Z7).
+
+**Recipe**: on macOS, parent such dialogs via `UiDialogs::effectiveParentWidget(&owner_)`
++ `UiDialogs::applyDetachedParentBehavior(...)` (parentless → ApplicationModal, so
+modality is preserved), and guard raise/activate blocks with
+`owner_.testAttribute(Qt::WA_DontShowOnScreen)`. Keep all three sites `#ifdef Q_OS_MACOS`
+so Windows parenting/focus behavior is untouched. Native `QFileDialog::get*` statics
+parented to MainWindow did NOT trigger this — only Qt-rendered window-modal dialogs and
+explicit raise(). Commit: 8a59cfa5.
+
 ---
 
 ## Sync-pair constants to keep aligned (UI-layout-relevant)
