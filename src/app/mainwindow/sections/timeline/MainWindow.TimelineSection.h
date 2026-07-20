@@ -60,6 +60,7 @@ public:
     void dispatchTimelineAnalysisRefresh();
     void rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& noteMarkers);
     double timelineSecondForCursor(int line, int col) const;
+    bool resolveTimelineSecondForCursor(int line, int col, double* second) const;
     void seekTimelineToCursor(int line, int col);
     void syncTimelineToEditorCursor(bool centerView = true);
     void navigateTimelineToSecond(double second, bool focusEditor = true);

@@ -140,3 +140,8 @@ inline double previewTrackVolume(const PreviewAudioSettings& settings)
 // LatencyAudition half of the single level-dispatch entry
 // (MainWindow::applyPreviewAudioSettingsToRuntime); there is no snapshot/restore.
 PreviewAudioSettings makePreviewLatencyAuditionLevels(const PreviewAudioSettings& mix, int sfxPercent);
+
+bool resolveBreakSlideTailCheerMutedPreference(const QJsonObject& preview);
+PreviewAudioSettings previewAudioSettingsWithBreakSlideTailCheerPreference(
+    PreviewAudioSettings settings,
+    bool muted);

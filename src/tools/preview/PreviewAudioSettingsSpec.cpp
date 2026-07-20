@@ -262,6 +262,31 @@ bool verifyJsonShape(QTextStream& err)
     return true;
 }
 
+bool verifyApplicationCheerPreference(QTextStream& err)
+{
+    QJsonObject preview{
+        {QStringLiteral("audio"), QJsonObject{{QStringLiteral("break_slide_tail_cheer_muted"), false}}},
+        {QStringLiteral("break_slide_tail_cheer_muted"), true},
+    };
+    if (!require(resolveBreakSlideTailCheerMutedPreference(preview),
+                 QStringLiteral("canonical preview sibling key should win over audio preset mirror"), err)) {
+        return false;
+    }
+    preview.remove(QStringLiteral("break_slide_tail_cheer_muted"));
+    if (!require(!resolveBreakSlideTailCheerMutedPreference(preview),
+                 QStringLiteral("legacy audio preset field should remain a migration fallback"), err)) {
+        return false;
+    }
+    PreviewAudioSettings preset;
+    preset.globalVolume = 0.25;
+    preset.breakSlideTailCheerMuted = false;
+    const PreviewAudioSettings applied = previewAudioSettingsWithBreakSlideTailCheerPreference(preset, true);
+    return requireNear(applied.globalVolume, 0.25, 1e-9,
+                       QStringLiteral("applying canonical cheer preference should preserve preset mix"), err)
+        && require(applied.breakSlideTailCheerMuted,
+                   QStringLiteral("applying a local preset should not revert canonical cheer preference"), err);
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -283,6 +308,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyJsonShape(err)) {
+        return 1;
+    }
+    if (!verifyApplicationCheerPreference(err)) {
         return 1;
     }
 

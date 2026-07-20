@@ -5,6 +5,7 @@
 #include "core/scene/PreviewSceneConstants.h"
 #include "core/scene/PreviewSceneGeometry.h"
 #include "core/scene/PreviewSceneMath.h"
+#include "core/scene/TouchPadAuthoringState.h"
 
 QSGNode* PreviewQuickTouchHoverLayer::updateNode(
     QSGNode* oldNode,
@@ -40,8 +41,10 @@ QSGNode* PreviewQuickTouchHoverLayer::updateNode(
     circle.center = miacode::preview::scene::mapLogicalPointToRect(logicalPoint, playfieldRect);
     circle.radiusX = radius;
     circle.radiusY = radius;
-    circle.fillColor = QColor(255, 255, 255, 58);
-    circle.strokeColor = QColor(255, 255, 255, 96);
+    const bool pressed = state.pressedTouchPad.trimmed().toUpper() == hoveredPad;
+    const auto style = miacode::preview::scene::touchPadAuthoringVisualStyle(pressed);
+    circle.fillColor = style.fill;
+    circle.strokeColor = style.stroke;
     circle.strokeWidth = qMax<qreal>(1.0, miacode::preview::scene::mapLogicalLengthToRect(1.4, playfieldRect));
 
     return buildPreviewCircleNodeTree(

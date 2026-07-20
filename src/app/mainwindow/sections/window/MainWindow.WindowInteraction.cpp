@@ -229,87 +229,18 @@ void MainWindow::WindowSection::focusPreviewInteractionTarget(QObject* watched, 
     }
 }
 
-bool MainWindow::WindowSection::previewLogicalPointFromGlobal(const QPoint& globalPoint, QPointF* logicalPoint) const
+bool MainWindow::WindowSection::touchPadAuthoringEditableContext() const
 {
-    if (logicalPoint == nullptr) {
-        return false;
-    }
-    QPointF previewPoint;
-    QSize previewSize;
-    bool hasPreviewPoint = false;
-
-    QWindow* previewWindow = this->previewVisibleHostWindow();
-    if (previewWindow != nullptr && previewWindow->isVisible()) {
-        const QPoint local = previewWindow->mapFromGlobal(globalPoint);
-        const QSize windowSize = previewWindow->size();
-        if (QRect(QPoint(0, 0), windowSize).contains(local)) {
-            previewPoint = QPointF(local);
-            previewSize = windowSize;
-            hasPreviewPoint = true;
-        }
-    }
-
-    if (!hasPreviewPoint && owner_.previewCanvasContainer_ != nullptr && owner_.previewCanvasContainer_->isVisible()) {
-        const QPoint local = owner_.previewCanvasContainer_->mapFromGlobal(globalPoint);
-        const QSize widgetSize = owner_.previewCanvasContainer_->size();
-        if (QRect(QPoint(0, 0), widgetSize).contains(local)) {
-            previewPoint = QPointF(local);
-            previewSize = widgetSize;
-            hasPreviewPoint = true;
-        }
-    }
-
-    if (!hasPreviewPoint && owner_.previewCanvasFrame_ != nullptr && owner_.previewCanvasFrame_->isVisible()) {
-        const QPoint local = owner_.previewCanvasFrame_->mapFromGlobal(globalPoint);
-        const QRect contentsRect = owner_.previewCanvasFrame_->contentsRect();
-        if (contentsRect.contains(local)) {
-            previewPoint = QPointF(local - contentsRect.topLeft());
-            previewSize = contentsRect.size();
-            hasPreviewPoint = true;
-        }
-    }
-
-    if (!hasPreviewPoint) {
-        return false;
-    }
-
-    const QRectF playfieldRect = miacode::preview::scene::playfieldRectForStage(
-        miacode::preview::scene::stageRectForSize(previewSize),
-        owner_.previewLayoutSquareScale_
-    );
-    if (!playfieldRect.contains(previewPoint) || playfieldRect.width() <= 0.0) {
-        return false;
-    }
-
-    const qreal logicalScale = miacode::preview::scene::kLogicalCanvasSize / playfieldRect.width();
-    const QPointF mappedLogicalPoint(
-        (previewPoint.x() - playfieldRect.left()) * logicalScale,
-        (previewPoint.y() - playfieldRect.top()) * logicalScale
-    );
-    *logicalPoint = mappedLogicalPoint;
-    return true;
-}
-
-QString MainWindow::WindowSection::touchPadAtPreviewGlobalPoint(const QPoint& globalPoint) const
-{
-    QPointF logicalPoint;
-    if (!this->previewLogicalPointFromGlobal(globalPoint, &logicalPoint)) {
-        return QString();
-    }
-    return miacode::preview::scene::touchPadTokenAtLogicalPoint(logicalPoint);
-}
-
-bool MainWindow::WindowSection::touchPadInsertHoverEnabled() const
-{
-    if (!state_.pauseDisplayAltHoldActive_
-        || !state_.previewTouchPadAuthoringShortcutEnabled_
-        || QApplication::activeModalWidget() != nullptr
-        || QApplication::activePopupWidget() != nullptr) {
-        return false;
-    }
-    const PreviewOutlineVariant effectiveOutline = owner_.effectivePreviewOutlineVariant();
-    return effectiveOutline == PreviewOutlineVariant::JudgeArea
-        || effectiveOutline == PreviewOutlineVariant::JudgeAreaLabeled;
+    auto* editor = qobject_cast<QTextEdit*>(owner_.editorWidget_);
+    return state_.previewTouchPadAuthoringShortcutEnabled_
+        && owner_.hasActiveDifficulty()
+        && owner_.editorStack_ != nullptr
+        && owner_.editorStack_->currentWidget() == owner_.chartPage_
+        && editor != nullptr
+        && !editor->isReadOnly()
+        && !state_.exportPreviewActive_
+        && QApplication::activeModalWidget() == nullptr
+        && QApplication::activePopupWidget() == nullptr;
 }
 
 void MainWindow::WindowSection::setHoveredTouchPad(const QString& pad)
@@ -320,55 +251,6 @@ void MainWindow::WindowSection::setHoveredTouchPad(const QString& pad)
     owner_.previewCanvas_->setHoveredTouchPad(pad);
 }
 
-void MainWindow::WindowSection::updateTouchPadHoverFromGlobalPoint(const QPoint& globalPoint)
-{
-    if (!this->touchPadInsertHoverEnabled()) {
-        this->setHoveredTouchPad(QString());
-        return;
-    }
-    this->setHoveredTouchPad(this->touchPadAtPreviewGlobalPoint(globalPoint));
-}
-
-bool MainWindow::WindowSection::handleTouchPadInsertClick(QObject* watched, QMouseEvent* event)
-{
-    Q_UNUSED(watched);
-
-    if (event == nullptr
-        || event->button() != Qt::LeftButton
-        || !this->touchPadInsertHoverEnabled()) {
-        return false;
-    }
-
-    auto* editor = qobject_cast<QTextEdit*>(owner_.editorWidget_);
-    if (editor == nullptr || editor->document() == nullptr) {
-        return false;
-    }
-
-    QPointF logicalPoint;
-    if (!this->previewLogicalPointFromGlobal(event->globalPosition().toPoint(), &logicalPoint)) {
-        return false;
-    }
-    const QString pad = miacode::preview::scene::touchPadTokenAtLogicalPoint(logicalPoint);
-    if (pad.isEmpty()) {
-        this->setHoveredTouchPad(QString());
-        return false;
-    }
-    this->setHoveredTouchPad(pad);
-
-    QTextCursor cursor = editor->textCursor();
-    cursor.insertText(pad);
-    editor->setTextCursor(cursor);
-    editor->setFocus(Qt::OtherFocusReason);
-    appendPreviewInteractionLog(
-        QStringLiteral("touch_pad_insert"),
-        QStringLiteral("pad=%1 logical_x=%2 logical_y=%3")
-            .arg(pad)
-            .arg(logicalPoint.x(), 0, 'f', 1)
-            .arg(logicalPoint.y(), 0, 'f', 1)
-    );
-    return true;
-}
-
 void MainWindow::WindowSection::handleApplicationFocusChanged(QWidget* old, QWidget* now)
 {
     this->logFocusDebug(
@@ -377,6 +259,10 @@ void MainWindow::WindowSection::handleApplicationFocusChanged(QWidget* old, QWid
             : QStringLiteral("app_focus_changed"),
         old,
         now);
+    if (QApplication::activeModalWidget() != nullptr || QApplication::activePopupWidget() != nullptr) {
+        owner_.setTouchPadAuthoringCtrlHoldActive(false);
+        this->setHoveredTouchPad(QString());
+    }
     QTextEdit* newTextEdit = this->resolveRestorableTextEdit(now);
     if (newTextEdit != nullptr) {
         this->logFocusDebug(
@@ -450,6 +336,8 @@ void MainWindow::WindowSection::handleApplicationStateChanged(Qt::ApplicationSta
         this->recoverPreviewBackendsAfterApplicationResume();
         return;
     }
+    owner_.setTouchPadAuthoringCtrlHoldActive(false);
+    this->setHoveredTouchPad(QString());
     if (state == Qt::ApplicationSuspended || state == Qt::ApplicationHidden) {
         state_.previewBackendRecoveryPending_ = true;
     }
@@ -859,8 +747,16 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
     if (event != nullptr
         && (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease)) {
         auto* holdKeyEvent = static_cast<QKeyEvent*>(event);
+        if (holdKeyEvent->key() == Qt::Key_Control && !holdKeyEvent->isAutoRepeat()) {
+            if (event->type() == QEvent::KeyPress && touchPadAuthoringEditableContext()) {
+                owner_.setTouchPadAuthoringCtrlHoldActive(true);
+            } else if (event->type() == QEvent::KeyRelease) {
+                owner_.setTouchPadAuthoringCtrlHoldActive(false);
+            }
+        }
         const PauseDisplayHoldKey hold = pauseDisplayHoldKey();
-        if (holdKeyEvent->key() == hold.key) {
+        if (holdKeyEvent->key() == hold.key
+            && !(hold.key == Qt::Key_Control && state_.touchPadAuthoringCtrlHoldActive_)) {
             if (event->type() == QEvent::KeyPress
                 && !holdKeyEvent->isAutoRepeat()
                 && holdKeyEvent->modifiers() == hold.pressModifiers
@@ -874,6 +770,7 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         }
     } else if (event != nullptr && event->type() == QEvent::ApplicationDeactivate) {
         owner_.setPauseDisplayAltHoldActive(false);
+        owner_.setTouchPadAuthoringCtrlHoldActive(false);
         this->setHoveredTouchPad(QString());
     }
     if (event != nullptr
@@ -1097,19 +994,6 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         || watched == owner_.previewSpeedButton_
         || watched == owner_.previewFullscreenButton_
         || watched == previewVisibleWindow;
-    if (previewMouseFocusScope && event->type() == QEvent::MouseButtonPress) {
-        if (this->handleTouchPadInsertClick(watched, static_cast<QMouseEvent*>(event))) {
-            event->accept();
-            return true;
-        }
-    }
-    if (previewMouseFocusScope
-        && (event->type() == QEvent::MouseMove || event->type() == QEvent::HoverMove)) {
-        this->updateTouchPadHoverFromGlobalPoint(QCursor::pos());
-    } else if (previewMouseFocusScope
-               && (event->type() == QEvent::Leave || event->type() == QEvent::HoverLeave)) {
-        this->setHoveredTouchPad(QString());
-    }
     if (previewMouseFocusScope
         && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::Wheel)) {
         this->focusPreviewInteractionTarget(watched, Qt::MouseFocusReason);

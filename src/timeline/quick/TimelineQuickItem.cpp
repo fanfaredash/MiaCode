@@ -38,7 +38,9 @@
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "timeline/quick/TimelineQuickTextureCache.h"
 #include "timeline/quick/TimelineQuickWaveformLayer.h"
+#ifdef Q_OS_WIN
 #include "render/backend_d3d11/TimelineRenderView.h"
+#endif
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
@@ -853,6 +855,7 @@ TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
             /*force=*/true);
     }
     if (miacode::debug_options::previewTimelineUseDCompEnabled()) {
+#ifdef Q_OS_WIN
         dcompView_ = std::make_unique<miacode::preview::dcomp::TimelineRenderView>(this);
         // Attach to the host window once we're parented into a scene,
         // and tell the view we ARE its tracked item — bypassing the
@@ -875,6 +878,7 @@ TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
             dcompView_->attachToWindow(window());
             dcompView_->setTrackedQuickItem(this);
         }
+#endif
     }
 }
 
@@ -886,10 +890,12 @@ TimelineQuickItem::~TimelineQuickItem()
         QStringLiteral("action=destruct ptr=0x%1")
             .arg(reinterpret_cast<quintptr>(this), 0, 16),
         /*force=*/true);
+#ifdef Q_OS_WIN
     if (dcompWindowConnection_) {
         QObject::disconnect(dcompWindowConnection_);
         dcompWindowConnection_ = QMetaObject::Connection();
     }
+#endif
     // dcompView_'s unique_ptr destructor handles renderer.stop() +
     // core.shutdown() ordering through TimelineRenderView::~TimelineRenderView.
 }
@@ -1231,10 +1237,12 @@ void TimelineQuickItem::syncSourceState()
 
 void TimelineQuickItem::pushSceneStateToDComp()
 {
+#ifdef Q_OS_WIN
     if (dcompView_ == nullptr) {
         return;
     }
     dcompView_->setSceneState(currentSceneState());
+#endif
 }
 
 void TimelineQuickItem::updateReadyState(bool ready)
@@ -1482,6 +1490,7 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     // composites on top wins visually, with the other showing through
     // transparent regions).
     if (miacode::debug_options::previewTimelineUseDCompEnabled()) {
+#ifdef Q_OS_WIN
         if (oldNode != nullptr) {
             delete oldNode;
         }
@@ -1489,6 +1498,7 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         // Still push state to DComp side as before.
         pushSceneStateToDComp();
         return nullptr;
+#endif
     }
 
     QElapsedTimer paintNodeTimer;

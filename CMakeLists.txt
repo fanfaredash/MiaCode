@@ -209,6 +209,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/editor/PlainCodeEditor.BracketCompletion.cpp
     src/editor/PlainCodeEditor.Input.cpp
     src/editor/PlainCodeEditor.Bookmarks.cpp
+    src/editor/TouchPadAuthoringEdit.h
+    src/editor/TouchPadAuthoringEdit.cpp
     src/editor/BracketCompletionPopup.h
     src/editor/BracketCompletionPopup.cpp
     src/editor/SimaiCompletionCatalog.h
@@ -287,6 +289,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/cover_export/CoverLayoutModel.cpp
     src/tools/cover_export/CoverCompositionState.h
     src/tools/cover_export/CoverCompositionState.cpp
+    src/tools/cover_export/CoverCompositionPersistenceGuard.h
+    src/tools/cover_export/CoverCompositionPersistenceGuard.cpp
     src/tools/cover_export/CoverLayerListModel.h
     src/tools/cover_export/CoverLayerListModel.cpp
     src/tools/cover_export/CoverLayerListPanel.h
@@ -481,33 +485,9 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/sources/timeline/TimelineLabelCache.cpp
     src/sources/timeline/TimelineSpriteAssetCache.h
     src/sources/timeline/TimelineSpriteAssetCache.cpp
-    src/render/backend_d3d11/PreviewDCompCore.h
-    src/render/backend_d3d11/PreviewDCompCore.cpp
-    src/render/backend_d3d11/TimelineRenderView.h
-    src/render/backend_d3d11/TimelineRenderView.cpp
-    src/render/backend_d3d11/PreviewDCompFrameStateSnapshot.h
-    src/render/PreviewDCompRenderer.h
-    src/render/PreviewDCompRenderer.cpp
-    src/render/backend_d3d11/PreviewDCompSpritePipeline.h
-    src/render/backend_d3d11/PreviewDCompSpritePipeline.cpp
-    src/render/backend_d3d11/PreviewDCompTextureCache.h
-    src/render/backend_d3d11/PreviewDCompTextureCache.cpp
-    src/render/backend_d3d11/PreviewDCompSurface.h
-    src/render/backend_d3d11/PreviewDCompSurface.cpp
-    src/render/backend_d3d11/PreviewPopupHwndTracker.h
-    src/render/backend_d3d11/PreviewPopupHwndTracker.cpp
-    src/render/backend_d3d11/OwnerHwndTracker.h
-    src/render/backend_d3d11/OwnerHwndTracker.cpp
     src/audio/PreviewAudioBackend.h
     src/audio/PreviewAudioSettings.h
     src/audio/PreviewAudioSettings.cpp
-    src/audio/BassPreviewAudioBackend.h
-    src/audio/BassPreviewAudioBackend.cpp
-    src/audio/BassPreviewAudioBackend_EngineInit.cpp
-    src/audio/BassPreviewAudioBackend_Assets.cpp
-    src/audio/BassPreviewAudioBackend_Transport.cpp
-    src/audio/BassPreviewAudioBackend_PlaybackClock.cpp
-    src/audio/BassPreviewAudioBackend_EventDrain.cpp
     src/audio/MiniaudioPreviewAudioBackend.h
     src/audio/MiniaudioPreviewAudioBackend.cpp
     src/audio/QtPreviewSfxRuntime.h
@@ -698,11 +678,37 @@ target_sources(MiaCode PRIVATE
     src/tools/video_export/VideoExportAudioBackend.h
     src/tools/video_export/LegacyExportAudioBackend.h
     src/tools/video_export/LegacyExportAudioBackend.cpp
-    src/tools/video_export/BassExportAudioBackend.h
-    src/tools/video_export/BassExportAudioBackend.cpp
 )
 
 if (WIN32)
+    target_sources(MiaCode PRIVATE
+        src/audio/BassPreviewAudioBackend.h
+        src/audio/BassPreviewAudioBackend.cpp
+        src/audio/BassPreviewAudioBackend_EngineInit.cpp
+        src/audio/BassPreviewAudioBackend_Assets.cpp
+        src/audio/BassPreviewAudioBackend_Transport.cpp
+        src/audio/BassPreviewAudioBackend_PlaybackClock.cpp
+        src/audio/BassPreviewAudioBackend_EventDrain.cpp
+        src/tools/video_export/BassExportAudioBackend.h
+        src/tools/video_export/BassExportAudioBackend.cpp
+        src/render/backend_d3d11/PreviewDCompCore.h
+        src/render/backend_d3d11/PreviewDCompCore.cpp
+        src/render/backend_d3d11/TimelineRenderView.h
+        src/render/backend_d3d11/TimelineRenderView.cpp
+        src/render/backend_d3d11/PreviewDCompFrameStateSnapshot.h
+        src/render/PreviewDCompRenderer.h
+        src/render/PreviewDCompRenderer.cpp
+        src/render/backend_d3d11/PreviewDCompSpritePipeline.h
+        src/render/backend_d3d11/PreviewDCompSpritePipeline.cpp
+        src/render/backend_d3d11/PreviewDCompTextureCache.h
+        src/render/backend_d3d11/PreviewDCompTextureCache.cpp
+        src/render/backend_d3d11/PreviewDCompSurface.h
+        src/render/backend_d3d11/PreviewDCompSurface.cpp
+        src/render/backend_d3d11/PreviewPopupHwndTracker.h
+        src/render/backend_d3d11/PreviewPopupHwndTracker.cpp
+        src/render/backend_d3d11/OwnerHwndTracker.h
+        src/render/backend_d3d11/OwnerHwndTracker.cpp
+    )
     target_link_libraries(MiaCode PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
@@ -1095,6 +1101,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/cover_export/CoverLayoutModel.cpp
             src/tools/cover_export/CoverCompositionState.h
             src/tools/cover_export/CoverCompositionState.cpp
+            src/tools/cover_export/CoverCompositionPersistenceGuard.h
+            src/tools/cover_export/CoverCompositionPersistenceGuard.cpp
             src/app/ui/UiText.h
             src/app/ui/UiText.cpp
             src/extensions/ExtensionManifest.h
@@ -1166,6 +1174,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/editor/PlainCodeEditor.BracketCompletion.cpp
             src/editor/PlainCodeEditor.Input.cpp
             src/editor/PlainCodeEditor.Bookmarks.cpp
+            src/editor/TouchPadAuthoringEdit.h
+            src/editor/TouchPadAuthoringEdit.cpp
             src/editor/BracketCompletionPopup.h
             src/editor/BracketCompletionPopup.cpp
             src/editor/SimaiCompletionCatalog.h
@@ -1337,6 +1347,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/common src/preview src/audio
     )
 
+    miacode_add_dev_tool(touch_pad_authoring_state_spec TEST
+        SOURCES
+            src/tools/preview/TouchPadAuthoringStateSpec.cpp
+            src/core/scene/TouchPadAuthoringState.h
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src
+    )
+
     miacode_add_dev_tool(bass_preview_retained_state_spec TEST
         SOURCES
             src/tools/preview/BassPreviewRetainedStateSpec.cpp
@@ -1453,6 +1471,17 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
     target_compile_definitions(ui_text_locale_spec PRIVATE
         "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+
+    miacode_add_dev_tool(ui_text_preferences_spec TEST
+        SOURCES
+            src/tools/ui_text/UiTextPreferencesSpec.cpp
+            src/app/ui/UiText.h
+            src/app/ui/UiText.cpp
+            src/extensions/ExtensionManifest.h
+            src/extensions/ExtensionManifest.cpp
+        LIBS Qt6::Core
+        INCLUDES src src/app/ui src/extensions
+    )
 
     # Behavior spec locking DebugOptions.h accessor semantics (defaults, clamps,
     # debug-category gating, DComp cascade), the safety net for any future

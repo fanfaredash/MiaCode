@@ -21,9 +21,11 @@ class TimelineQuickGridLinesLayer;
 class TimelineQuickNotesLayer;
 class TimelineQuickOverlayLayer;
 
+#ifdef Q_OS_WIN
 namespace miacode::preview::dcomp {
 class TimelineRenderView;
 }
+#endif
 
 class TimelineQuickItem : public QQuickItem
 {
@@ -218,7 +220,9 @@ private:
     // top-level popup HWND overlays the QSG output. Phase 3e drops
     // the QSG path entirely once timeline-DComp ships its remaining
     // primitive types.
+    void pushSceneStateToDComp();
+#ifdef Q_OS_WIN
     std::unique_ptr<miacode::preview::dcomp::TimelineRenderView> dcompView_;
     QMetaObject::Connection dcompWindowConnection_;
-    void pushSceneStateToDComp();
+#endif
 };

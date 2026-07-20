@@ -14,6 +14,7 @@ class QInputMethodEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QMimeData;
+class QFontMetrics;
 
 namespace miacode::editor {
 QChar normalizedHalfWidthChar(QChar ch);
@@ -24,6 +25,10 @@ QString clearCompleteElementsInSelection(
     int selectionStart,
     int selectionEnd,
     int* changedCount = nullptr);
+QPair<int, int> lineNumberUnderlineHorizontalBounds(
+    const QString& number,
+    const QFontMetrics& metrics,
+    int textRight);
 }
 
 class PlainCodeEditor : public QTextEdit

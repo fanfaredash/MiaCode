@@ -15,6 +15,7 @@
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
 #include "PlainCodeEditor.h"
+#include "editor/TouchPadAuthoringEdit.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "ShortcutRegistry.h"
@@ -1315,16 +1316,44 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     previewPanel_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
     previewCanvas_ = new PreviewRuntime(this);
-    connect(previewCanvas_, &PreviewRuntime::touchPadAuthoringClicked, this, [this](const QString& pad) {
+    connect(previewCanvas_, &PreviewRuntime::touchPadAuthoringClicked, this, [this](const QString& pad, bool useBacktickSeparator) {
         auto* editor = qobject_cast<QTextEdit*>(editorWidget_);
-        if (editor == nullptr || editor->document() == nullptr || pad.trimmed().isEmpty()) {
+        if (editor == nullptr || editor->document() == nullptr || editor->isReadOnly()
+            || !hasActiveDifficulty() || editorStack_ == nullptr
+            || editorStack_->currentWidget() != chartPage_
+            || exportPreviewActive_ || QApplication::activeModalWidget() != nullptr
+            || QApplication::activePopupWidget() != nullptr || pad.trimmed().isEmpty()) {
             return;
         }
         QTextCursor cursor = editor->textCursor();
-        cursor.insertText(pad.trimmed().toUpper());
+        const auto editPlan = miacode::editor::planTouchPadAuthoringEdit(
+            editor->toPlainText(), cursor.position(), pad, useBacktickSeparator);
+        if (!editPlan.valid) {
+            return;
+        }
+        QTextCursor tokenCursor(editor->document());
+        tokenCursor.setPosition(editPlan.tokenStart);
+        const QTextBlock tokenBlock = tokenCursor.block();
+        double tokenSecond = 0.0;
+        const bool hasTokenSecond = tokenBlock.isValid()
+            && resolveTimelineSecondForCursor(
+                tokenBlock.blockNumber() + 1,
+                editPlan.tokenStart - tokenBlock.position() + 1,
+                &tokenSecond);
+        if (!miacode::editor::applyTouchPadAuthoringEdit(editor->document(), &cursor, editPlan)) {
+            return;
+        }
         editor->setTextCursor(cursor);
         editor->setFocus(Qt::OtherFocusReason);
+        if (hasTokenSecond) {
+            seekPreviewDiscreteToSecond(qMax(0.0, tokenSecond - (1.0 / 60.0)), true);
+        }
     });
+    if (editorStack_ != nullptr) {
+        connect(editorStack_, &QStackedWidget::currentChanged, this, [this](int) {
+            applyEffectivePreviewOutlineVariantToCanvas();
+        });
+    }
     logStartupStage("preview_canvas_created");
     applyEffectivePreviewOutlineVariantToCanvas();
     applyPreviewSkinDirectoryToSurfaces();

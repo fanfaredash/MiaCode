@@ -874,6 +874,9 @@ int main(int argc, char** argv)
     {
         TimelineQuickModel model;
         model.rebuildFromText(QStringLiteral("E"), 0.0);
+        double resolvedSecond = -1.0;
+        expect(!model.resolveTimelineSecondForCursor(1, 1, &resolvedSecond),
+               QStringLiteral("cursor-time resolver distinguishes missing anchor from valid zero"));
         int line = 0;
         int col = 0;
         double second = -1.0;
@@ -885,6 +888,9 @@ int main(int argc, char** argv)
     {
         TimelineQuickModel model;
         model.rebuildFromText(QStringLiteral("(120){4}1,12,\nE"), 0.0);
+        double resolvedSecond = -1.0;
+        expect(model.resolveTimelineSecondForCursor(1, 1, &resolvedSecond) && nearlyEqual(resolvedSecond, 0.0),
+               QStringLiteral("cursor-time resolver reports a valid zero-second anchor"));
         expect(nearlyEqual(model.timelineSecondForCursor(1, 1), 0.0),
                QStringLiteral("line-start caret stays on the first segment start"));
         expect(nearlyEqual(model.timelineSecondForCursor(1, 7), 0.0),
