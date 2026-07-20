@@ -1,5 +1,8 @@
 #pragma once
 
+class QMenuBar;
+class QWindow;
+
 // macOS-only helper that neutralizes the orphan native window left behind by a
 // QuickShell bridge surface.
 //
@@ -55,5 +58,13 @@ bool neutralizeOrphanShellWindow(void* nativeViewHandle, void* capturedPanel);
 // the window is hidden while the NSView is actually showing (validation page
 // painted over the QML timeline at startup). Idempotent.
 void setContentViewHidden(void* nativeViewHandle, bool hidden);
+
+// Correct first-level QMenu popup placement for a QMenuBar whose QWidget
+// surface has been adopted into a QML WindowContainer. Qt's QWidget hierarchy
+// still reports coordinates relative to the orphan NSPanel, so its default
+// mapToGlobal() result is displaced. This observer converts the action anchor
+// through the adopted NSView into the owning QQuickWindow's global space.
+// Nested submenus retain Qt's native placement behavior.
+void installTopLevelMenuPopupPositioning(QMenuBar* menuBar, QWindow* adoptedSurfaceWindow);
 
 }  // namespace miacode::quick_shell::mac

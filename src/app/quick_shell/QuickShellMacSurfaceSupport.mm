@@ -1,6 +1,188 @@
 #include "QuickShellMacSurfaceSupport.h"
 
+#include "QuickShellPopupPosition.h"
+#include "common/DebugLog.h"
+
 #import <AppKit/AppKit.h>
+
+#include <QApplication>
+#include <QEvent>
+#include <QGuiApplication>
+#include <QMenu>
+#include <QMenuBar>
+#include <QPointer>
+#include <QScreen>
+#include <QTimer>
+#include <QWindow>
+
+namespace {
+
+QPoint qtPointInView(NSView* view, const QPoint& point)
+{
+    if (view == nil || view.isFlipped) {
+        return point;
+    }
+    return QPoint(point.x(), qRound(NSHeight(view.bounds)) - point.y());
+}
+
+QPoint viewPointInQt(NSView* view, NSPoint point)
+{
+    if (view == nil || view.isFlipped) {
+        return QPoint(qRound(point.x), qRound(point.y));
+    }
+    return QPoint(qRound(point.x), qRound(NSHeight(view.bounds) - point.y));
+}
+
+QWindow* qtTopLevelForNativeWindow(NSWindow* nativeWindow)
+{
+    if (nativeWindow == nil) {
+        return nullptr;
+    }
+    const QList<QWindow*> topLevels = QGuiApplication::topLevelWindows();
+    for (QWindow* candidate : topLevels) {
+        if (candidate == nullptr || candidate->winId() == 0) {
+            continue;
+        }
+        NSView* candidateView = (__bridge NSView*)reinterpret_cast<void*>(candidate->winId());
+        if (candidateView != nil && candidateView.window == nativeWindow) {
+            return candidate;
+        }
+    }
+    return nullptr;
+}
+
+QPoint menuBarPointToGlobal(QMenuBar* menuBar, const QPoint& localPoint)
+{
+    if (menuBar == nullptr || menuBar->winId() == 0) {
+        return {};
+    }
+    NSView* menuBarView = (__bridge NSView*)reinterpret_cast<void*>(menuBar->winId());
+    NSWindow* nativeWindow = (menuBarView != nil) ? menuBarView.window : nil;
+    QWindow* qtWindow = qtTopLevelForNativeWindow(nativeWindow);
+    if (menuBarView == nil || nativeWindow == nil || qtWindow == nullptr || qtWindow->winId() == 0) {
+        return menuBar->mapToGlobal(localPoint);
+    }
+
+    NSView* rootView = (__bridge NSView*)reinterpret_cast<void*>(qtWindow->winId());
+    const QPoint cocoaLocal = qtPointInView(menuBarView, localPoint);
+    const NSPoint rootPoint = [menuBarView
+        convertPoint:NSMakePoint(cocoaLocal.x(), cocoaLocal.y())
+             toView:rootView];
+    return qtWindow->mapToGlobal(viewPointInQt(rootView, rootPoint));
+}
+
+class TopLevelMenuPopupPositionFilter final : public QObject
+{
+public:
+    TopLevelMenuPopupPositionFilter(QMenuBar* menuBar, QWindow* adoptedSurfaceWindow)
+        : QObject(menuBar)
+        , menuBar_(menuBar)
+        , adoptedSurfaceWindow_(adoptedSurfaceWindow)
+    {
+        qApp->installEventFilter(this);
+    }
+
+    ~TopLevelMenuPopupPositionFilter() override
+    {
+        if (qApp != nullptr) {
+            qApp->removeEventFilter(this);
+        }
+    }
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (event == nullptr || event->type() != QEvent::Show || menuBar_.isNull()) {
+            return false;
+        }
+        auto* menu = qobject_cast<QMenu*>(watched);
+        if (menu == nullptr) {
+            return false;
+        }
+        QAction* menuAction = menu->menuAction();
+        if (menuAction == nullptr || !menuBar_->actions().contains(menuAction)) {
+            return false;  // Preserve Qt placement for nested/context menus.
+        }
+
+        const QRect actionRect = menuBar_->actionGeometry(menuAction);
+        if (!actionRect.isValid()) {
+            return false;
+        }
+        QWidget* bridgeSurface = menuBar_->window();
+        const QPoint actionSurfaceTopLeft = bridgeSurface != nullptr
+            ? menuBar_->mapTo(bridgeSurface, actionRect.topLeft())
+            : actionRect.topLeft();
+
+        QPoint surfaceGlobalOrigin;
+        QString mappingRoute;
+        if (!adoptedSurfaceWindow_.isNull()) {
+            surfaceGlobalOrigin = adoptedSurfaceWindow_->mapToGlobal(QPoint(0, 0));
+            mappingRoute = QStringLiteral("adopted_qwindow");
+        } else {
+            surfaceGlobalOrigin = menuBarPointToGlobal(menuBar_, QPoint(0, 0));
+            mappingRoute = QStringLiteral("appkit_fallback");
+        }
+        const QRect actionScreenRect = miacode::quick_shell::actionScreenRectFromSurface(
+            surfaceGlobalOrigin,
+            QRect(actionSurfaceTopLeft, actionRect.size()));
+        QScreen* screen = QGuiApplication::screenAt(actionScreenRect.center());
+        if (screen == nullptr) {
+            screen = menuBar_->screen();
+        }
+        const QRect available = screen != nullptr ? screen->availableGeometry() : QRect();
+        const QSize popupSize = menu->size().expandedTo(menu->sizeHint());
+        const QPoint target = miacode::quick_shell::popupTopLeftForAction(
+            actionScreenRect.normalized(), popupSize, available);
+        const QPoint defaultPosition = menu->pos();
+        menu->move(target);
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("quick_shell/mac_menu_popup"),
+            QStringLiteral(
+                "phase=show route=%1 action=%2,%3,%4,%5 surface_origin=%6,%7 "
+                "default=%8,%9 target=%10,%11")
+                .arg(mappingRoute)
+                .arg(actionScreenRect.x())
+                .arg(actionScreenRect.y())
+                .arg(actionScreenRect.width())
+                .arg(actionScreenRect.height())
+                .arg(surfaceGlobalOrigin.x())
+                .arg(surfaceGlobalOrigin.y())
+                .arg(defaultPosition.x())
+                .arg(defaultPosition.y())
+                .arg(target.x())
+                .arg(target.y()));
+
+        // QMenuPrivate may perform one final platform placement after QEvent::Show.
+        // Re-assert the same absolute target on the next event-loop turn so Qt's
+        // stale orphan-panel coordinate cannot overwrite it.
+        QPointer<QMenu> menuGuard(menu);
+        QTimer::singleShot(0, menu, [menuGuard, target]() {
+            if (menuGuard.isNull()) {
+                return;
+            }
+            const QPoint beforeQueuedMove = menuGuard->pos();
+            if (beforeQueuedMove != target) {
+                menuGuard->move(target);
+            }
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("quick_shell/mac_menu_popup"),
+                QStringLiteral("phase=queued before=%1,%2 final=%3,%4")
+                    .arg(beforeQueuedMove.x())
+                    .arg(beforeQueuedMove.y())
+                    .arg(menuGuard->pos().x())
+                    .arg(menuGuard->pos().y()));
+        });
+        return false;
+    }
+
+private:
+    QPointer<QMenuBar> menuBar_;
+    QPointer<QWindow> adoptedSurfaceWindow_;
+};
+
+}  // namespace
 
 namespace miacode::quick_shell::mac {
 
@@ -66,6 +248,16 @@ void setContentViewHidden(void* nativeViewHandle, bool hidden)
     if (view.hidden != hidden) {
         view.hidden = hidden;
     }
+}
+
+void installTopLevelMenuPopupPositioning(QMenuBar* menuBar, QWindow* adoptedSurfaceWindow)
+{
+    if (menuBar == nullptr
+        || menuBar->property("miacodeMacPopupPositionFilterInstalled").toBool()) {
+        return;
+    }
+    menuBar->setProperty("miacodeMacPopupPositionFilterInstalled", true);
+    new TopLevelMenuPopupPositionFilter(menuBar, adoptedSurfaceWindow);
 }
 
 }  // namespace miacode::quick_shell::mac

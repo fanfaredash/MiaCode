@@ -839,6 +839,10 @@ void QuickShellNativeSurfaceHost::attachNativeWidgets()
             if (topChromeLayout->indexOf(windowMenuBar) < 0) {
                 topChromeLayout->addWidget(windowMenuBar);
             }
+#ifdef Q_OS_MACOS
+            miacode::quick_shell::mac::installTopLevelMenuPopupPositioning(
+                windowMenuBar, surfaceBundle_.topChrome);
+#endif
             windowMenuBar->show();
         }
 
