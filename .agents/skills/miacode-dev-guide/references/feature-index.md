@@ -177,6 +177,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   to the legacy auto-close key. Single setter `PlainCodeEditor::setAutoCompletionEnabled`, apply
   `applyEditorAutoCompletionEnabled`, one checkbox ("自动补全") in `MainWindow.PreferencesDialog.cpp`.
   Keys: ↑↓ navigate, Tab/Enter accept (Enter swallows the newline), Esc/keep-typing dismiss.
+  Popup anchors use `common/AdoptedWidgetCoordinates`: in ordinary QWidget windows this falls
+  back to `mapToGlobal`; in the macOS QuickShell workspace it maps the caret through the bound
+  bridge surface and adopted `QWindow`, avoiding the stale orphan-NSPanel coordinate origin.
 - **Offset (`&first`) field location:** the chart-wide timing offset is edited from the
   **difficulty-page header** (`firstEdit_`, label `difficultyFirstLabel_`, built in
   `MainWindow.FrameBootstrap.cpp` next to `&lv_N`), NOT the metadata page (the metadata `first`

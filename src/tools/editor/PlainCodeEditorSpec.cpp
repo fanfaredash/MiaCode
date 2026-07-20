@@ -1,6 +1,7 @@
 #include "editor/PlainCodeEditor.h"
 #include "editor/BracketCompletionPopup.h"
 #include "editor/TouchPadAuthoringEdit.h"
+#include "common/AdoptedWidgetCoordinates.h"
 
 #include <QApplication>
 #include <QCursor>
@@ -8,6 +9,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QTextStream>
+#include <QWindow>
 
 namespace {
 
@@ -85,6 +87,26 @@ int main(int argc, char** argv)
 
     QTextStream out(stdout);
     int failed = 0;
+
+    {
+        QWidget adoptedSurface;
+        QWidget nestedWidget(&adoptedSurface);
+        nestedWidget.move(17, 29);
+        auto* adoptedWindow = new QWindow;
+        const QPoint localPoint(5, 7);
+        miacode::ui::bindAdoptedSurfaceWindow(&adoptedSurface, adoptedWindow);
+        const auto route = miacode::ui::adoptedWidgetCoordinateRoute(&nestedWidget, localPoint);
+        expect(route.window == adoptedWindow
+                   && route.surfacePoint == QPoint(22, 36),
+               QStringLiteral("adopted widget coordinates resolve through the bridge surface"),
+               out,
+               &failed);
+        delete adoptedWindow;
+        expect(miacode::ui::adoptedWidgetCoordinateRoute(&nestedWidget, localPoint).window == nullptr,
+               QStringLiteral("destroying the adopted window clears the bridge coordinate route"),
+               out,
+               &failed);
+    }
 
     const auto expectTouchPlan = [&out, &failed](const QString& text, int pos, bool backtick,
                                                  int expectedStart, int expectedInsert,
