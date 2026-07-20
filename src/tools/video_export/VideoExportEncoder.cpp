@@ -284,6 +284,17 @@ bool shouldPreferHardwareEncoderInAutoMode(
         return true;
     }
 
+#ifdef Q_OS_MACOS
+    // Balanced mode on macOS: VideoToolbox is high quality and far more
+    // power-efficient than libx264, so prefer it whenever available instead
+    // of the Windows-tuned pixel-rate heuristics below. libx264 remains the
+    // runtime-probe fallback.
+    if (reason != nullptr) {
+        *reason = QStringLiteral("macos_prefers_videotoolbox");
+    }
+    return true;
+#endif
+
     const qint64 pixelsPerSecond =
         static_cast<qint64>(qMax(1, outputWidth)) * qMax(1, outputHeight) * qMax(1, fps);
     const qint64 availMiB = bytesToMiB(memoryInfo.availablePhysicalBytes);
@@ -666,6 +677,10 @@ VideoEncoderConfig chooseVideoEncoder(
     const bool hasLibx264 = hasEncoderToken(output, QStringLiteral("libx264"));
     const bool hasOpenH264 = hasEncoderToken(output, QStringLiteral("libopenh264"));
     const bool hasMpeg4 = hasEncoderToken(output, QStringLiteral("mpeg4"));
+#ifdef Q_OS_MACOS
+    const bool hasH264Videotoolbox = hasEncoderToken(output, QStringLiteral("h264_videotoolbox"));
+    const bool hasHevcVideotoolbox = hasEncoderToken(output, QStringLiteral("hevc_videotoolbox"));
+#endif
     const int safeWidth = qMax(1, outputWidth);
     const int safeHeight = qMax(1, outputHeight);
     const int safeFps = qMax(1, fps);
@@ -712,6 +727,19 @@ VideoEncoderConfig chooseVideoEncoder(
             return item;
         }
 
+#ifdef Q_OS_MACOS
+        if (codec.endsWith(QLatin1String("_videotoolbox"))) {
+            // VideoToolbox has no CRF mode; rate control comes from the shared
+            // bitrate plan. -allow_sw 0 makes the runtime probe fail (and fall
+            // back to libx264) instead of silently software-encoding inside
+            // the VideoToolbox session.
+            item.extraArgs = bitrateArgs;
+            item.extraArgs << QStringLiteral("-allow_sw") << QStringLiteral("0");
+            item.explicitBframes = isH264Codec ? 0 : -1;
+            return item;
+        }
+#endif
+
         if (preset == VideoExportPreset::Fast) {
             item.extraArgs = bitrateArgs;
             item.explicitBframes = isH264Codec ? 0 : -1;
@@ -750,6 +778,11 @@ VideoEncoderConfig chooseVideoEncoder(
         return !forcedEncoder.isEmpty() && codec.compare(forcedEncoder, Qt::CaseInsensitive) == 0;
     };
     const auto appendAutoHardwareCandidates = [&]() {
+#ifdef Q_OS_MACOS
+        if (hasH264Videotoolbox) {
+            pushCandidate(QStringLiteral("h264_videotoolbox"), true);
+        }
+#endif
         if (hasH264Nvenc) {
             pushCandidate(QStringLiteral("h264_nvenc"), true);
         }
@@ -763,6 +796,11 @@ VideoEncoderConfig chooseVideoEncoder(
             pushCandidate(QStringLiteral("h264_mf"), true);
         }
         if (encoderAutoMode == EncoderAutoMode::Hardware) {
+#ifdef Q_OS_MACOS
+            if (hasHevcVideotoolbox) {
+                pushCandidate(QStringLiteral("hevc_videotoolbox"), true);
+            }
+#endif
             if (hasHevcNvenc) {
                 pushCandidate(QStringLiteral("hevc_nvenc"), true);
             }
@@ -796,6 +834,14 @@ VideoEncoderConfig chooseVideoEncoder(
             appendAutoHardwareCandidates();
         }
     } else {
+#ifdef Q_OS_MACOS
+        if (forcedMatches(QStringLiteral("h264_videotoolbox")) && hasH264Videotoolbox) {
+            pushCandidate(QStringLiteral("h264_videotoolbox"), true);
+        }
+        if (forcedMatches(QStringLiteral("hevc_videotoolbox")) && hasHevcVideotoolbox) {
+            pushCandidate(QStringLiteral("hevc_videotoolbox"), true);
+        }
+#endif
         if (forcedMatches(QStringLiteral("hevc_nvenc")) && hasHevcNvenc) {
             pushCandidate(QStringLiteral("hevc_nvenc"), true);
         }
@@ -943,6 +989,11 @@ VideoEncoderConfig chooseVideoEncoder(
             .arg(preferHardwareFirst ? 1 : 0)
             .arg(encoderAutoModeReason)
             .arg(videoExportPresetToken(preset));
+#ifdef Q_OS_MACOS
+        detail += QStringLiteral(" h264_videotoolbox=%1 hevc_videotoolbox=%2")
+            .arg(hasH264Videotoolbox ? 1 : 0)
+            .arg(hasHevcVideotoolbox ? 1 : 0);
+#endif
         if (!runtimeProbeLines.isEmpty()) {
             detail += QStringLiteral(" runtime=%1")
                 .arg(truncateForLog(runtimeProbeLines.join(QLatin1Char(';')), 2400));

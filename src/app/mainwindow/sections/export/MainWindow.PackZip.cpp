@@ -75,15 +75,27 @@ void MainWindow::ExportSection::onPackAsZip()
 
     // Progress dialog modeled on the batch-export one: window-modal, shows
     // immediately, cancelable.
+    // macOS: parent through effectiveParentWidget. MainWindow is a
+    // WA_DontShowOnScreen quick-shell host, and a window-modal dialog parented
+    // to it becomes a macOS sheet that orderFronts the hidden window as an
+    // empty white shell. Windows keeps the original direct parenting.
+#ifdef Q_OS_MACOS
+    QWidget* const progressParent = UiDialogs::effectiveParentWidget(&owner_);
+#else
+    QWidget* const progressParent = &owner_;
+#endif
     QProgressDialog progress(
         UiText::text(QStringLiteral("export.preparing_package")),
         UiText::text(QStringLiteral("action.cancel")),
         0,
         100,
-        &owner_);
+        progressParent);
     progress.setWindowTitle(dialogTitle);
     progress.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     progress.setWindowModality(Qt::WindowModal);
+#ifdef Q_OS_MACOS
+    UiDialogs::applyDetachedParentBehavior(&progress, &owner_);
+#endif
     progress.setMinimumDuration(0);
     progress.setAutoClose(false);
     progress.setAutoReset(false);

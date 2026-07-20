@@ -175,7 +175,7 @@ public:
     void setJudgeEffectStyle(PreviewJudgeEffectStyle style);
     void setHoveredTouchPad(const QString& pad);
     bool beginTouchPadAuthoringPress(const QString& pad);
-    bool finishTouchPadAuthoringPress(const QString& pad, bool useBacktickSeparator);
+    bool finishTouchPadAuthoringPress(const QString& pad, bool backtickSeparator);
     void cancelTouchPadAuthoringPress();
     bool touchPadAuthoringEnabled() const { return frameState_.touchPadAuthoringEnabled; }
     bool touchPadAuthoringPressActive() const { return !frameState_.pressedTouchPad.isEmpty(); }
@@ -245,7 +245,7 @@ signals:
     void framePresented();
     void introOverlayDataChanged();
     void introOverlayStateChanged();
-    void touchPadAuthoringClicked(const QString& pad, bool useBacktickSeparator);
+    void touchPadAuthoringClicked(const QString& pad, bool backtickSeparator);
 
 private:
     void publishFrameStateSnapshot();

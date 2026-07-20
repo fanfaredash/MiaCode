@@ -1,7 +1,25 @@
 #include "core/scene/TouchPadAuthoringState.h"
 
 #include <QCoreApplication>
+#include <QFile>
 #include <QTextStream>
+
+#ifndef MIACODE_SOURCE_ROOT
+#error "MIACODE_SOURCE_ROOT must be defined"
+#endif
+
+namespace {
+
+QString readSource(const QString& relativePath)
+{
+    QFile file(QStringLiteral(MIACODE_SOURCE_ROOT) + QLatin1Char('/') + relativePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString();
+    }
+    return QString::fromUtf8(file.readAll());
+}
+
+} // namespace
 
 int main(int argc, char** argv)
 {
@@ -10,6 +28,15 @@ int main(int argc, char** argv)
     QString hovered;
     QString pressed;
     using namespace miacode::preview::scene;
+
+    if (!touchPadAuthoringMouseButtonSupported(Qt::LeftButton)
+        || !touchPadAuthoringMouseButtonSupported(Qt::RightButton)
+        || touchPadAuthoringMouseButtonSupported(Qt::MiddleButton)
+        || touchPadAuthoringUsesBacktickSeparator(Qt::LeftButton)
+        || !touchPadAuthoringUsesBacktickSeparator(Qt::RightButton)) {
+        err << "FAIL: left/right button routing should select slash/right-backtick only\n";
+        return 1;
+    }
 
     if (!beginTouchPadAuthoringGesture(&hovered, &pressed, QStringLiteral("a1"))
         || hovered != QLatin1String("A1") || pressed != hovered) {
@@ -40,6 +67,26 @@ int main(int argc, char** argv)
         || pressedStyle.fill.lightness() >= hoverStyle.fill.lightness()
         || pressedStyle.stroke.lightness() >= hoverStyle.stroke.lightness()) {
         err << "FAIL: pressed visual should be darker/stronger than hover\n";
+        return 1;
+    }
+    const QString sceneSource = readSource(QStringLiteral("src/preview/quick_scene/PreviewQuickSceneRoot.cpp"));
+    if (!sceneSource.contains(QStringLiteral("setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton)"))
+        || !sceneSource.contains(QStringLiteral("touchPadAuthoringMouseButtonSupported(event->button())"))
+        || !sceneSource.contains(QStringLiteral("touchPadAuthoringUsesBacktickSeparator(event->button())"))
+        || !sceneSource.contains(QStringLiteral("touchPadAuthoringPressedButton_ = event->button()"))
+        || !sceneSource.contains(QStringLiteral("event->button() == touchPadAuthoringPressedButton_"))
+        || sceneSource.contains(QStringLiteral("ShiftModifier"))) {
+        err << "FAIL: scene source should consume matching left/right gestures and ignore Shift\n";
+        return 1;
+    }
+    const QString editorLayoutSource = readSource(QStringLiteral("src/editor/PlainCodeEditor.Layout.cpp"));
+    const QString editorHeaderSource = readSource(QStringLiteral("src/editor/PlainCodeEditor.h"));
+    if (!editorLayoutSource.contains(QStringLiteral("painter.fillRect(rowRect, markerColor)"))
+        || !editorLayoutSource.contains(QStringLiteral("isBookmarkLine || isDropLine ? c.accent"))
+        || editorLayoutSource.contains(QStringLiteral("lineNumberUnderlineHorizontalBounds"))
+        || editorLayoutSource.contains(QStringLiteral("painter.drawLine"))
+        || editorHeaderSource.contains(QStringLiteral("lineNumberUnderlineHorizontalBounds"))) {
+        err << "FAIL: bookmark gutter should keep color cues without underline drawing\n";
         return 1;
     }
     QTextStream(stdout) << "touch_pad_authoring_state_spec ok\n";

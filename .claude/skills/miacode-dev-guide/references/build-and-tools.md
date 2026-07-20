@@ -92,6 +92,8 @@ Rules going forward:
 
 - `miacode_muri_dump`, `simai_native_dump`, `soundtouch_probe`, `latency_offset_batch` — CLI diagnostics.
 - `package-win.ps1` currently packages only `simai_native_dump.exe` as a Windows dev tool.
+- `soundtouch_probe` always builds the Miniaudio/SoundTouch path; only Windows adds the
+  `BassPreviewAudioBackend` sources, BASS headers, import libraries, and runtime deployment.
 - BASS runtime DLLs are copied post-build for `MiaCode` (and `soundtouch_probe`) from
   `third_party/bass/bin/win64/`.
 

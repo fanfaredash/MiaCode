@@ -1272,11 +1272,21 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
         systemL10n(QStringLiteral("Cancel"), QStringLiteral("取消")),
         0,
         100,
+        // macOS: effectiveParentWidget — window-modal + hidden quick-shell
+        // MainWindow parent = macOS sheet that orderFronts the empty white
+        // host window. Windows keeps the original direct parenting.
+#ifdef Q_OS_MACOS
+        UiDialogs::effectiveParentWidget(&owner_)
+#else
         &owner_
+#endif
     );
     progress.setWindowTitle(UiText::text(QStringLiteral("dialog.batch_export.title")));
     progress.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     progress.setWindowModality(Qt::WindowModal);
+#ifdef Q_OS_MACOS
+    UiDialogs::applyDetachedParentBehavior(&progress, &owner_);
+#endif
     progress.setMinimumDuration(0);
     progress.setAutoClose(false);
     progress.setAutoReset(false);

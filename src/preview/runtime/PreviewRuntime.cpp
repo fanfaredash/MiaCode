@@ -745,7 +745,7 @@ bool PreviewRuntime::beginTouchPadAuthoringPress(const QString& pad)
     return true;
 }
 
-bool PreviewRuntime::finishTouchPadAuthoringPress(const QString& pad, bool useBacktickSeparator)
+bool PreviewRuntime::finishTouchPadAuthoringPress(const QString& pad, bool backtickSeparator)
 {
     const QString completed = miacode::preview::scene::finishTouchPadAuthoringGesture(
         &frameState_.hoveredTouchPad, &frameState_.pressedTouchPad, pad);
@@ -753,7 +753,7 @@ bool PreviewRuntime::finishTouchPadAuthoringPress(const QString& pad, bool useBa
     if (completed.isEmpty()) {
         return false;
     }
-    emit touchPadAuthoringClicked(completed, useBacktickSeparator);
+    emit touchPadAuthoringClicked(completed, backtickSeparator);
     return true;
 }
 

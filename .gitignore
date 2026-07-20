@@ -1,9 +1,11 @@
 build/
 build-mingw*/
 Build-Mingw*/
+build-macos/
 dist/
 font_candidates/
 .qt/
+.DS_Store
 .vs/
 .idea/
 .vscode/
