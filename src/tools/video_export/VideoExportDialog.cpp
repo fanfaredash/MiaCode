@@ -1386,27 +1386,28 @@ VideoExportDialog::VideoExportDialog(
     introBgForm->addRow(QString(), introBlurCheck_);
     introControlsLayout->addWidget(introBgGroup, 0);
 
-    // 难度卡 group — DX/SD type + shadow + level-text render. (No card toggle:
-    // an intro always carries the difficulty card.)
+    // 难度卡 group — Auto/DX/SD type + shadow + level-text render. (No card
+    // toggle: an intro always carries the difficulty card.)
     auto* introCardGroup = new QGroupBox(
         UiText::text(QStringLiteral("cover.difficulty_card")), introControls);
     auto* introCardForm = new QFormLayout(introCardGroup);
     introCardForm->setSpacing(8);
     introCardForm->setLabelAlignment(Qt::AlignLeft);
     introCardForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-    // DX / SD chart type. "Standard" is the QML-side mode value: the card shows
-    // the スタンダード plate top-right and mirrors the tab shoulder under it.
+    // Auto/DX/SD chart type. "Standard" is the QML-side mode value: the card
+    // shows the スタンダード plate top-right and mirrors the tab shoulder under it.
     introCardModeCombo_ =
         miacode::ui::createDialogComboBox(introCardGroup, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    introCardModeCombo_->addItem(QString(), QStringLiteral("auto"));
     introCardModeCombo_->addItem(QStringLiteral("DX"), QStringLiteral("DX"));
     introCardModeCombo_->addItem(QStringLiteral("SD"), QStringLiteral("Standard"));
-    miacode::ui::applyDialogComboBoxStyle(introCardModeCombo_, 12);
     {
-        const int modeIdx = introCardModeCombo_->findData(baseTask_.intro.mode);
-        if (modeIdx >= 0) {
-            introCardModeCombo_->setCurrentIndex(modeIdx);
+        const int autoIdx = introCardModeCombo_->findData(QStringLiteral("auto"));
+        if (autoIdx >= 0) {
+            introCardModeCombo_->setCurrentIndex(autoIdx);
         }
     }
+    refreshIntroCardModeAutoLabel();
     introCardForm->addRow(
         UiText::text(QStringLiteral("cover.chart_type")), introCardModeCombo_);
     introCardShadowCheck_ = new QCheckBox(

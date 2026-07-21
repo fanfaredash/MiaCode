@@ -63,6 +63,53 @@ struct IntroBannerSpec {
     QString fontBodyPath;
 };
 
+inline bool isAutoIntroBannerMode(const QString& mode)
+{
+    return mode.compare(QStringLiteral("auto"), Qt::CaseInsensitive) == 0;
+}
+
+inline QString normalizedIntroBannerMode(const QString& mode)
+{
+    return mode.compare(QStringLiteral("Standard"), Qt::CaseInsensitive) == 0
+        ? QStringLiteral("Standard")
+        : QStringLiteral("DX");
+}
+
+inline QString introBannerModeAbbreviation(const QString& mode)
+{
+    return normalizedIntroBannerMode(mode) == QStringLiteral("Standard")
+        ? QStringLiteral("SD")
+        : QStringLiteral("DX");
+}
+
+inline QString detectedIntroBannerMode(const QVector<TimelineNoteMarker>& noteMarkers)
+{
+    for (const TimelineNoteMarker& marker : noteMarkers) {
+        const bool touchLike =
+            marker.type == QStringLiteral("touch")
+            || marker.type == QStringLiteral("touch_hold");
+        if (touchLike) {
+            return QStringLiteral("DX");
+        }
+
+        if (marker.type == QStringLiteral("hold") && marker.isBreak) {
+            return QStringLiteral("DX");
+        }
+
+        const bool slideLike =
+            marker.type == QStringLiteral("slide")
+            || marker.type == QStringLiteral("wifi");
+        if (slideLike && (marker.trackBreak || marker.slideSegmentKeys.size() > 1)) {
+            return QStringLiteral("DX");
+        }
+
+        if (marker.isEx || marker.headEx) {
+            return QStringLiteral("DX");
+        }
+    }
+    return QStringLiteral("Standard");
+}
+
 // Spec -> IntroOverlay.qml contract, shared by the export overlay mount
 // (VideoExportQuickRenderBackend::setupIntro) and the export dialog's live
 // intro preview so the two can never diverge.
@@ -85,12 +132,16 @@ inline QVariantMap introBannerTrackMap(const IntroBannerSpec& intro)
 // snapshot rebuilds the payload from the live document right before launch
 // (buildVideoExportSnapshot), which would otherwise silently reset the
 // dialog's choices to defaults.
+// `mode=auto` is a dialog-only request token: keep the freshly detected mode
+// already present on `to` instead of leaking "auto" across the worker snapshot.
 inline void copyIntroStyling(const IntroBannerSpec& from, IntroBannerSpec* to)
 {
     if (to == nullptr) {
         return;
     }
-    to->mode = from.mode;
+    if (!isAutoIntroBannerMode(from.mode)) {
+        to->mode = normalizedIntroBannerMode(from.mode);
+    }
     to->lvRenderMode = from.lvRenderMode;
     to->backgroundMode = from.backgroundMode;
     to->customBackgroundPath = from.customBackgroundPath;

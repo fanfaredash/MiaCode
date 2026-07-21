@@ -523,6 +523,7 @@ void VideoExportDialog::applyThemeStyles()
         introBackgroundPathEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet(UiTheme::colors().windowAltBg));
     }
     miacode::ui::applyDialogComboBoxStyle(introBackgroundCombo_, 12);
+    refreshIntroCardModeAutoLabel();
     miacode::ui::applyDialogComboBoxStyle(introCardModeCombo_, 12);
     if (exportButton_ != nullptr) {
         miacode::ui::applyDialogPushButtonStyle(exportButton_, true);
@@ -891,10 +892,11 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     // The maimai intro is a full-range-only pre-roll; clips starting
     // mid-chart never get it regardless of the checkbox. (A clip starting
     // at chart 0 counts as full-range, so it may carry the intro.)
-    // "片头" tab styling (background + difficulty card) — shared with the
-    // read-only preview via currentIntroSpec, so preview == export. `enabled`
-    // is recomputed below from the checkbox + range.
-    updated.intro = currentIntroSpec();
+    // "片头" tab styling (background + difficulty card). The read-only preview
+    // resolves Auto immediately, while export keeps `mode=auto` here so the
+    // launch snapshot can detect from the live chart just before worker handoff.
+    // `enabled` is recomputed below from the checkbox + range.
+    updated.intro = currentIntroSpecForExportTask();
     updated.intro.enabled =
         (addIntroCheck_ != nullptr && addIntroCheck_->isChecked())
         && updated.fullRangeExport;

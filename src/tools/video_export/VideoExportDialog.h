@@ -205,9 +205,14 @@ private:
     void syncIntroControlsEnabled();
     void browseIntroBackground();
     // Current intro spec = baseTask_.intro (chart payload) + the tab's styling
-    // controls. Used by BOTH the read-only preview and applyUiToTask, so
-    // preview == export.
+    // controls. The preview receives a resolved DX/Standard mode; the export
+    // request may keep `mode=auto` so the launch snapshot can re-detect from the
+    // live document immediately before crossing the worker boundary.
     IntroBannerSpec currentIntroSpec() const;
+    IntroBannerSpec currentIntroSpecForExportTask() const;
+    QString detectedIntroCardMode() const;
+    QString selectedIntroCardMode(bool resolveAuto) const;
+    void refreshIntroCardModeAutoLabel();
     void refreshIntroPreview();
     // Pin the read-only preview to the selected output aspect ratio.
     void resizeIntroPreviewToAspect();

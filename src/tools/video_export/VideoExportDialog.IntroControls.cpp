@@ -3,6 +3,7 @@
 #include "BusySpinner.h"
 #include "DialogLocalization.h"
 #include "EditableValueLabel.h"
+#include "UiComponents.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/DebugLog.h"
@@ -197,9 +198,18 @@ bool VideoExportDialog::isAddIntroActiveForPreview() const
 
 IntroBannerSpec VideoExportDialog::currentIntroSpec() const
 {
+    IntroBannerSpec spec = currentIntroSpecForExportTask();
+    if (isAutoIntroBannerMode(spec.mode)) {
+        spec.mode = detectedIntroCardMode();
+    }
+    return spec;
+}
+
+IntroBannerSpec VideoExportDialog::currentIntroSpecForExportTask() const
+{
     IntroBannerSpec spec = baseTask_.intro;   // chart payload: title/level/曲绘…
     if (introCardModeCombo_ != nullptr) {
-        spec.mode = introCardModeCombo_->currentData().toString();
+        spec.mode = selectedIntroCardMode(/*resolveAuto=*/false);
     }
     if (introLevelTextCheck_ != nullptr) {
         spec.lvRenderMode = introLevelTextCheck_->isChecked()
@@ -223,6 +233,41 @@ IntroBannerSpec VideoExportDialog::currentIntroSpec() const
         spec.fontBodyPath = introCardFontSelector_.bodyPath();
     }
     return spec;
+}
+
+QString VideoExportDialog::detectedIntroCardMode() const
+{
+    return normalizedIntroBannerMode(baseTask_.intro.mode);
+}
+
+QString VideoExportDialog::selectedIntroCardMode(bool resolveAuto) const
+{
+    if (introCardModeCombo_ == nullptr) {
+        return detectedIntroCardMode();
+    }
+    const QString mode = introCardModeCombo_->currentData().toString();
+    if (isAutoIntroBannerMode(mode)) {
+        return resolveAuto ? detectedIntroCardMode() : QStringLiteral("auto");
+    }
+    return normalizedIntroBannerMode(mode);
+}
+
+void VideoExportDialog::refreshIntroCardModeAutoLabel()
+{
+    if (introCardModeCombo_ == nullptr) {
+        return;
+    }
+    const int autoIndex = introCardModeCombo_->findData(QStringLiteral("auto"));
+    if (autoIndex < 0) {
+        return;
+    }
+    const QString label = UiText::text(QStringLiteral("cover.chart_type_auto_result"))
+        .arg(introBannerModeAbbreviation(detectedIntroCardMode()));
+    {
+        const QSignalBlocker blocker(introCardModeCombo_);
+        introCardModeCombo_->setItemText(autoIndex, label);
+    }
+    miacode::ui::applyDialogComboBoxStyle(introCardModeCombo_, 12);
 }
 
 void VideoExportDialog::refreshIntroPreview()
