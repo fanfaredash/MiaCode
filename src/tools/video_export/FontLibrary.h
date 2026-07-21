@@ -47,6 +47,11 @@ void populateFontCombo(QComboBox* combo,
                        bool includeDefault = true,
                        const QString& defaultLabel = QString());
 
+// Lets a font selector live inside a narrow inspector column. Font family names
+// can be arbitrarily long; keep their popup entries intact while allowing the
+// closed field to elide rather than widening its parent layout.
+void constrainFontComboToAvailableWidth(QComboBox* combo);
+
 // Overlay the user's difficulty-card font choice onto a parsed banner template's
 // `fonts` block (keys `display` / `body`). An absolute path is injected as a
 // file:// URL string, which MaimaiBannerCard.qml treats as a literal FontLoader

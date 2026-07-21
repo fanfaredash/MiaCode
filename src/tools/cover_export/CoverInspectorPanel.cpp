@@ -319,6 +319,7 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
     fontRowLayout->setContentsMargins(0, 0, 0, 0);
     fontRowLayout->setSpacing(6);
     textFontCombo_ = miacode::ui::createDialogComboBox(fontRow, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    miacode::video_export::constrainFontComboToAvailableWidth(textFontCombo_);
     textFontImportButton_ = miacode::ui::createDialogAuxiliaryButton(
         fontRow, UiText::text(QStringLiteral("card_font.import")));
     fontRowLayout->addWidget(textFontCombo_, 1);

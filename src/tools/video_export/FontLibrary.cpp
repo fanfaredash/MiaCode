@@ -9,6 +9,7 @@
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QMessageBox>
+#include <QSizePolicy>
 #include <QSignalBlocker>
 #include <QUrl>
 
@@ -144,6 +145,16 @@ void populateFontCombo(QComboBox* combo,
     if (combo->count() > 0) {
         combo->setCurrentIndex(selectedIndex);
     }
+}
+
+void constrainFontComboToAvailableWidth(QComboBox* combo)
+{
+    if (combo == nullptr) {
+        return;
+    }
+    combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    combo->setMinimumContentsLength(1);
+    combo->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
 }
 
 void applyBannerFontOverride(QVariantMap& templateMap,

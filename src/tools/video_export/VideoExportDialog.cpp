@@ -1432,10 +1432,13 @@ VideoExportDialog::VideoExportDialog(
     }
     // Custom card fonts (标题字体 / 正文字体) — a change refreshes the read-only intro
     // preview and persists; currentIntroSpec() feeds the paths to preview + export.
-    introCardFontSelector_ = miacode::video_export::createCardFontSelector(introCardGroup, [this]() {
-        refreshIntroPreview();
-        persistExportOnlySettings();
-    });
+    introCardFontSelector_ = miacode::video_export::createCardFontSelector(
+        introCardGroup,
+        [this]() {
+            refreshIntroPreview();
+            persistExportOnlySettings();
+        },
+        /*constrainToAvailableWidth=*/true);
     introCardFontSelector_.setSelection(baseTask_.intro.fontDisplayPath, baseTask_.intro.fontBodyPath);
     if (introCardFontSelector_.widget != nullptr) {
         introCardForm->addRow(introCardFontSelector_.widget);   // spans both columns

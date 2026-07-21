@@ -32,6 +32,7 @@ struct CardFontSelector {
 };
 
 CardFontSelector createCardFontSelector(QWidget* parent,
-                                        const std::function<void()>& onChanged);
+                                        const std::function<void()>& onChanged,
+                                        bool constrainToAvailableWidth = false);
 
 }  // namespace miacode::video_export

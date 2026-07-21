@@ -442,10 +442,13 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
 
     // Custom card fonts (标题字体 / 正文字体) — a font change refreshes the live
     // preview and export via cachedTemplate_'s fonts override in buildInputs().
-    cardFontSelector_ = miacode::video_export::createCardFontSelector(this, [this]() {
-        pushInputs();
-        emit compositionChanged();
-    });
+    cardFontSelector_ = miacode::video_export::createCardFontSelector(
+        this,
+        [this]() {
+            pushInputs();
+            emit compositionChanged();
+        },
+        /*constrainToAvailableWidth=*/true);
     if (cardFontSelector_.widget != nullptr) {
         cardForm->addRow(cardFontSelector_.widget);   // spans both columns (has own labels)
     }

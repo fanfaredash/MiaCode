@@ -12,7 +12,9 @@
 
 namespace miacode::video_export {
 
-CardFontSelector createCardFontSelector(QWidget* parent, const std::function<void()>& onChanged)
+CardFontSelector createCardFontSelector(QWidget* parent,
+                                        const std::function<void()>& onChanged,
+                                        bool constrainToAvailableWidth)
 {
     auto* root = new QWidget(parent);
     auto* layout = new QVBoxLayout(root);
@@ -29,6 +31,10 @@ CardFontSelector createCardFontSelector(QWidget* parent, const std::function<voi
     const QString defaultLabel = UiText::text(QStringLiteral("card_font.default"));
     auto* displayCombo = miacode::ui::createDialogComboBox(root, 12, Qt::AlignLeft | Qt::AlignVCenter);
     auto* bodyCombo = miacode::ui::createDialogComboBox(root, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    if (constrainToAvailableWidth) {
+        constrainFontComboToAvailableWidth(displayCombo);
+        constrainFontComboToAvailableWidth(bodyCombo);
+    }
 
     const auto repopulate = [displayCombo, bodyCombo, defaultLabel]() {
         populateFontCombo(displayCombo, displayCombo->currentData().toString(), true, defaultLabel);
