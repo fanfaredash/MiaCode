@@ -16,6 +16,11 @@ public:
     ~CoverCompositionPersistenceGuard();
 
     bool persistNow();
+    // Drop the supplier/saver so no further persistNow() (including the one in
+    // ~CoverCompositionPersistenceGuard) reads the source widgets. Call this once
+    // the final state has been saved while those widgets are still alive — it makes
+    // the later teardown-time persistNow() a safe no-op instead of a use-after-free.
+    void disarm();
 
 private:
     Supplier supplier_;

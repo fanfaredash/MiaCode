@@ -8,6 +8,7 @@
 class QMenu;
 class QObject;
 class QEvent;
+class QCloseEvent;
 struct VideoExportTask;
 
 namespace miacode::cover_export {
@@ -27,6 +28,10 @@ public:
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+    // Persist the composition while every child widget is still alive, before
+    // WA_DeleteOnClose tears the widget tree down (the panel's option groups are
+    // reparented into this window, so a destructor-time save would read freed widgets).
+    void closeEvent(QCloseEvent* event) override;
 
 private:
     void fitToScreen(QWidget* parent);

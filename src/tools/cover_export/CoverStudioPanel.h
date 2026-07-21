@@ -112,6 +112,14 @@ public:
     void importLayoutFromPath(const QString& path);
     void requestExport();
     void requestCancel();
+    // Persist the current composition to app preferences and then disarm the
+    // persistence guard. MUST be called by the owner window while every source
+    // widget is still alive (e.g. closeEvent) — the option-group widgets are
+    // reparented into the window's inspector column, so during widget-tree
+    // teardown they are freed BEFORE this panel; reading them from ~CoverStudioPanel
+    // would dereference dangling QComboBox pointers (their non-QPointer members stay
+    // non-null after deletion). Disarming makes the teardown-time persist a no-op.
+    void persistCompositionNow();
 
 signals:
     void exportRequested();

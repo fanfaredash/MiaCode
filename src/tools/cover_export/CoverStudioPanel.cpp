@@ -690,15 +690,36 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
         });
 }
 
-CoverStudioPanel::~CoverStudioPanel()
+void CoverStudioPanel::persistCompositionNow()
 {
-    if (compositionPersistenceGuard_ != nullptr && !compositionPersistenceGuard_->persistNow()) {
+    if (compositionPersistenceGuard_ == nullptr) {
+        return;
+    }
+    if (!compositionPersistenceGuard_->persistNow()) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Export,
             QStringLiteral("cover/preferences"),
             QStringLiteral("failed to persist final cover composition"),
             /*force=*/true,
             miacode::debug_log::Level::Warn);
+    }
+    // Widgets are still alive here; stop the guard from reading them again during
+    // the later widget-tree teardown (see persistCompositionNow's header note).
+    compositionPersistenceGuard_->disarm();
+}
+
+CoverStudioPanel::~CoverStudioPanel()
+{
+    // Do NOT persist here: exportCompositionJson() reads the option-group widgets
+    // (backgroundCombo_ / cardModeCombo_ / textOverflowCombo_ …) that CoverStudioWindow
+    // reparents into its inspector column. During widget-tree teardown those live in a
+    // sibling subtree that is freed BEFORE this panel, so reading them from the
+    // destructor dereferences dangling QComboBox pointers (they are raw, non-QPointer
+    // members, so the != nullptr guards do not catch the free) → EXC_BAD_ACCESS.
+    // The real save happens in CoverStudioWindow::closeEvent while everything is alive;
+    // here we only disarm so this guard (and its own destructor) never touch the widgets.
+    if (compositionPersistenceGuard_ != nullptr) {
+        compositionPersistenceGuard_->disarm();
     }
     // Stop the play clock and sever the live scene's pointer to the shared frame
     // state HERE (destructor body), before the member SceneFrameRenderer that owns
