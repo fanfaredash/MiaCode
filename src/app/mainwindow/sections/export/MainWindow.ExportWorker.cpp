@@ -847,7 +847,11 @@ bool MainWindow::ExportSection::launchVideoExportWorker(const VideoExportSnapsho
         );
         progress->setWindowTitle(systemL10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")));
         progress->setWindowFlag(Qt::WindowContextHelpButtonHint, false);
-        progress->setWindowFlag(Qt::WindowMinimizeButtonHint, true);
+        // Never allow minimizing: over the WA_DontShowOnScreen quick-shell host
+        // a minimized, parentless progress popup can never be re-raised, which
+        // strands the export flow (and deadlocks the app for the modal
+        // variants). Keep the popup non-minimizable everywhere.
+        progress->setWindowFlag(Qt::WindowMinimizeButtonHint, false);
         progress->setWindowModality(Qt::NonModal);
         progress->setAttribute(Qt::WA_ShowWithoutActivating, true);
         progress->setLabelText(UiText::text(QStringLiteral("dialog.video_export.progress.preparing")));
