@@ -75,19 +75,31 @@ Item {
     // fonts. Resource Han Rounded CN (思源圆体, rounded Source Han) natively covers
     // simplified Chinese (no system fallback) and approximates SEGA's rounded look.
     // Title (display) uses Heavy for prominence; body uses Bold.
+    // Resolve a card font (display/body) to a FontLoader source. template.fonts.*
+    // is normally a bare FILENAME resolved against fontsRoot (the bundled qrc
+    // fonts). The cover / 片头 font pickers instead inject an ABSOLUTE user font as
+    // a file:// URL (see FontLibrary::applyBannerFontOverride), which is used
+    // verbatim so a font outside the qrc tree still loads; an empty/missing value
+    // falls back to the bundled filename (a font absent on another machine → the
+    // default, never blank text).
+    function fontSourceUrl(key, fallbackFile) {
+        var name = (root.template && root.template.fonts && root.template.fonts[key])
+                    ? root.template.fonts[key] : fallbackFile
+        var s = (name === undefined || name === null) ? "" : name.toString()
+        if (s.length === 0)
+            s = fallbackFile
+        if (s.indexOf("://") >= 0 || s.indexOf("qrc:") === 0)
+            return s   // already a full URL → verbatim
+        return Qt.resolvedUrl((root.template.fontsRoot || "qrc:/intro/assets/fonts") + "/" + s)
+    }
+
     FontLoader {
         id: displayFont
-        source: Qt.resolvedUrl(
-            (root.template.fontsRoot || "qrc:/intro/assets/fonts") + "/" +
-            (root.template.fonts ? root.template.fonts.display : "ResourceHanRoundedCN-Heavy.ttf")
-        )
+        source: root.fontSourceUrl("display", "ResourceHanRoundedCN-Heavy.ttf")
     }
     FontLoader {
         id: bodyFont
-        source: Qt.resolvedUrl(
-            (root.template.fontsRoot || "qrc:/intro/assets/fonts") + "/" +
-            (root.template.fonts ? root.template.fonts.body : "ResourceHanRoundedCN-Bold.ttf")
-        )
+        source: root.fontSourceUrl("body", "ResourceHanRoundedCN-Bold.ttf")
     }
 
     implicitWidth: template.canvas.width

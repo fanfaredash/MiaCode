@@ -11,6 +11,7 @@
 #include <memory>
 
 #include "tools/cover_export/CoverComposerView.h"      // CoverComposerInputs, CoverExportResult, CoverComposerView
+#include "tools/video_export/CardFontSettings.h"         // CardFontSelector
 #include "tools/video_export/VideoExportController.h"    // IntroBannerSpec, VideoExportTask
 
 class QCheckBox;
@@ -69,6 +70,10 @@ public:
     QString activeLayerKey() const { return activeLayerKey_; }
     void setActiveLayerKey(const QString& key);
     void addChartFrameLayer();
+    // Prompt for an image file and add it as a custom image layer; add a custom
+    // text layer seeded with placeholder text (edited via the inspector).
+    void addImageLayer();
+    void addTextLayer();
     void duplicateActiveLayer();
     void removeActiveLayer();
     void moveActiveLayerUp();
@@ -87,6 +92,13 @@ public:
     void setActiveLayerFrameBgMode(const QString& mode);
     void setActiveLayerFrameBgBrightness(qreal brightness);
     void setActiveLayerFrameBgTransparency(qreal transparency);
+    // Custom image / text layer setters (inspector-driven).
+    void setActiveLayerImagePath(const QString& path);
+    void browseActiveLayerImage();
+    void setActiveLayerText(const QString& text);
+    void setActiveLayerFontPath(const QString& path);
+    void setActiveLayerTextColor(const QString& color);
+    void setActiveLayerTextBold(bool bold);
     void stepActiveFrameBySeconds(double deltaSeconds);
     void togglePlayback();   // play/pause the active chart frame (transport + Space)
     void cancelFrameTransportHold();
@@ -231,6 +243,11 @@ private:
     QCheckBox* cardShadowCheck_ = nullptr;
     QCheckBox* levelTextRenderCheck_ = nullptr;
     QComboBox* textOverflowCombo_ = nullptr;
+    // Difficulty-card custom fonts (empty path == the bundled default). The
+    // selector widget is reparented into the inspector column by CoverStudioWindow;
+    // read its selection only while alive (buildInputs / closeEvent-time save),
+    // never from the destructor — see the §8 lifecycle note.
+    miacode::video_export::CardFontSelector cardFontSelector_;
     QPushButton* resetLayoutButton_ = nullptr;
     QPushButton* saveLayoutButton_ = nullptr;
     QPushButton* importLayoutButton_ = nullptr;

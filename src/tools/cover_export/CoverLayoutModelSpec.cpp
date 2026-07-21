@@ -414,6 +414,52 @@ bool testMoveByViewRows(QTextStream& err)
     return true;
 }
 
+bool testImageAndTextLayers(QTextStream& err)
+{
+    CoverLayoutModel model;
+    // A non-existent path keeps the intrinsic aspect at its default; the stored
+    // contentAspect is what must survive a round-trip (cross-machine safety).
+    CoverLayer* image = model.addImageLayer(QStringLiteral("/nonexistent/cover-spec-image.png"));
+    if (!require(image != nullptr && image->kind() == QStringLiteral("image"),
+                 QStringLiteral("adds an image layer"), err)) return false;
+    image->setContentAspect(1.75);
+    image->setOpacity(0.8);
+
+    CoverLayer* text = model.addTextLayer(QStringLiteral("Hello"));
+    if (!require(text != nullptr && text->kind() == QStringLiteral("text"),
+                 QStringLiteral("adds a text layer"), err)) return false;
+    if (!require(text->text() == QStringLiteral("Hello"), QStringLiteral("text layer seeds its text"), err)) return false;
+    if (!require(image->key() != text->key(), QStringLiteral("image / text keys are unique"), err)) return false;
+    text->setFontPath(QStringLiteral("/nonexistent/font.ttf"));
+    text->setTextColor(QStringLiteral("#FF8800"));
+    text->setTextBold(true);
+    text->setContentAspect(3.5);
+
+    CoverLayoutModel restored;
+    restored.fromJson(model.toJson());
+    CoverLayer* ri = restored.layer(image->key());
+    CoverLayer* rt = restored.layer(text->key());
+    if (!require(ri != nullptr && ri->kind() == QStringLiteral("image"),
+                 QStringLiteral("round-trip restores the image layer"), err)) return false;
+    if (!require(ri->imagePath() == image->imagePath(), QStringLiteral("round-trip keeps image path"), err)) return false;
+    if (!require(qAbs(ri->contentAspect() - 1.75) < 0.001,
+                 QStringLiteral("round-trip keeps image aspect for a missing file"), err)) return false;
+    if (!require(qAbs(ri->opacity() - 0.8) < 0.001, QStringLiteral("round-trip keeps image opacity"), err)) return false;
+    if (!require(rt != nullptr && rt->kind() == QStringLiteral("text"),
+                 QStringLiteral("round-trip restores the text layer"), err)) return false;
+    if (!require(rt->text() == QStringLiteral("Hello"), QStringLiteral("round-trip keeps text"), err)) return false;
+    if (!require(rt->fontPath() == text->fontPath(), QStringLiteral("round-trip keeps text font path"), err)) return false;
+    if (!require(rt->textColor() == QStringLiteral("#FF8800"), QStringLiteral("round-trip keeps text color"), err)) return false;
+    if (!require(rt->textBold(), QStringLiteral("round-trip keeps text bold"), err)) return false;
+    if (!require(qAbs(rt->contentAspect() - 3.5) < 0.001, QStringLiteral("round-trip keeps text aspect"), err)) return false;
+
+    CoverLayer* dup = model.duplicateLayer(text->key());
+    if (!require(dup != nullptr && dup->text() == QStringLiteral("Hello") && dup->textBold()
+                     && dup->textColor() == QStringLiteral("#FF8800"),
+                 QStringLiteral("duplicate copies text-layer fields"), err)) return false;
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -434,6 +480,7 @@ int main(int argc, char** argv)
     if (!testDeleteSelectsNeighbour(err)) return 1;
     if (!testBackgroundBrightnessRoundTrip(err)) return 1;
     if (!testMoveByViewRows(err)) return 1;
+    if (!testImageAndTextLayers(err)) return 1;
     if (!testCoverPresetPersistence(err)) return 1;
     QFile::remove(UiText::preferencesFilePath());
     return 0;

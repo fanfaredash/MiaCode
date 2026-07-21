@@ -19,6 +19,7 @@
 #include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
+#include "tools/video_export/FontLibrary.h"
 #include "common/IntroConfig.h"
 #include "tools/video_export/VideoExportController.h"
 #include "core/scene/PreviewOpacityCurves.h"
@@ -90,9 +91,14 @@ void MainWindow::TimelineSection::setupExportIntroOverlayData()
     // replaced the card jacket and ignored the blur toggle.
     const QUrl jacketUrl =
         spec.jacketPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(spec.jacketPath);
+    // Overlay the dialog's difficulty-card custom fonts onto the lead-in template
+    // copy so the main-timeline audition matches the export (same FontLibrary
+    // override as the export mount + the dialog preview).
+    QVariantMap templateMap = introLeadInBannerTemplateMap();
+    miacode::video_export::applyBannerFontOverride(templateMap, spec.fontDisplayPath, spec.fontBodyPath);
     state_.previewCanvas_->setIntroOverlayData(
         introBannerTrackMap(spec),
-        introLeadInBannerTemplateMap(),
+        templateMap,
         jacketUrl,
         QUrl(QString::fromLatin1(miacode::intro::kLogoFallbackUrl)),
         introBannerStyleMap(spec));

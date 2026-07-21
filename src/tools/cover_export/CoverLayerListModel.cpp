@@ -4,11 +4,14 @@
 #include "UiText.h"
 
 #include <QDataStream>
+#include <QFileInfo>
 #include <QIODevice>
 #include <QImage>
+#include <QImageReader>
 #include <QMimeData>
 #include <QPainter>
 #include <QPen>
+#include <QPolygonF>
 #include <QStringList>
 
 #include <algorithm>
@@ -28,6 +31,12 @@ QString displayLabel(const CoverLayer* layer)
     }
     if (layer->kind() == QStringLiteral("chartFrame")) {
         return UiText::text(QStringLiteral("cover.chart_frame"));
+    }
+    if (layer->kind() == QStringLiteral("image")) {
+        return UiText::text(QStringLiteral("cover.image_layer"));
+    }
+    if (layer->kind() == QStringLiteral("text")) {
+        return UiText::text(QStringLiteral("cover.text_layer"));
     }
     return layer->label();
 }
@@ -92,6 +101,57 @@ QImage chartFrameThumbnail(const CoverLayer* layer)
     painter.drawEllipse(QPointF(24.0, 24.0), 10.0, 10.0);
     painter.drawLine(QPointF(24.0, 9.0), QPointF(24.0, 39.0));
     painter.drawLine(QPointF(9.0, 24.0), QPointF(39.0, 24.0));
+    return image;
+}
+
+QImage imageLayerThumbnail(const CoverLayer* layer)
+{
+    if (layer != nullptr && !layer->imagePath().isEmpty() && QFileInfo::exists(layer->imagePath())) {
+        QImageReader reader(layer->imagePath());
+        reader.setScaledSize(QSize(48, 48));
+        const QImage decoded = reader.read();
+        if (!decoded.isNull()) {
+            return decoded.scaled(48, 48, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+        }
+    }
+    // Missing / unreadable → a picture-frame placeholder.
+    QImage image(48, 48, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const int alpha = (layer != nullptr && layer->visible()) ? 210 : 85;
+    painter.setPen(QPen(QColor(76, 96, 124, alpha), 1.2));
+    painter.setBrush(QColor(30, 41, 59, (layer != nullptr && layer->visible()) ? 160 : 70));
+    painter.drawRoundedRect(QRectF(7.5, 9.5, 33.0, 29.0), 4.0, 4.0);
+    painter.setBrush(QColor(148, 163, 184, alpha));
+    painter.setPen(Qt::NoPen);
+    painter.drawEllipse(QPointF(17.0, 18.0), 3.0, 3.0);
+    QPolygonF hill;
+    hill << QPointF(12.0, 35.0) << QPointF(22.0, 24.0) << QPointF(30.0, 31.0)
+         << QPointF(34.0, 27.0) << QPointF(36.0, 35.0);
+    painter.drawPolygon(hill);
+    return image;
+}
+
+QImage textLayerThumbnail(const CoverLayer* layer)
+{
+    QImage image(48, 48, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    const int alpha = (layer != nullptr && layer->visible()) ? 235 : 90;
+    QColor glyphColor(layer != nullptr ? layer->textColor() : QStringLiteral("#FFFFFF"));
+    if (!glyphColor.isValid()) {
+        glyphColor = QColor(Qt::white);
+    }
+    glyphColor.setAlpha(alpha);
+    QFont font = painter.font();
+    font.setPixelSize(30);
+    font.setBold(true);
+    painter.setFont(font);
+    painter.setPen(glyphColor);
+    painter.drawText(image.rect(), Qt::AlignCenter, QStringLiteral("T"));
     return image;
 }
 
@@ -187,11 +247,27 @@ QVariant CoverLayerListModel::data(const QModelIndex& index, int role) const
         if (layer->kind() == QStringLiteral("chartFrame")) {
             return UiText::text(QStringLiteral("cover.frame_2")) + formatFrameTime(layer->frameSeconds());
         }
+        if (layer->kind() == QStringLiteral("image")) {
+            return layer->imagePath().isEmpty()
+                ? UiText::text(QStringLiteral("cover.image_layer"))
+                : QFileInfo(layer->imagePath()).fileName();
+        }
+        if (layer->kind() == QStringLiteral("text")) {
+            const QString t = layer->text().simplified();
+            return t.isEmpty() ? UiText::text(QStringLiteral("cover.text_layer")) : t;
+        }
         return UiText::text(QStringLiteral("cover.difficulty_card"));
     case ThumbnailRole:
-        return layer->kind() == QStringLiteral("chartFrame")
-            ? chartFrameThumbnail(layer)
-            : cardThumbnail(layer);
+        if (layer->kind() == QStringLiteral("chartFrame")) {
+            return chartFrameThumbnail(layer);
+        }
+        if (layer->kind() == QStringLiteral("image")) {
+            return imageLayerThumbnail(layer);
+        }
+        if (layer->kind() == QStringLiteral("text")) {
+            return textLayerThumbnail(layer);
+        }
+        return cardThumbnail(layer);
     default:
         return QVariant();
     }

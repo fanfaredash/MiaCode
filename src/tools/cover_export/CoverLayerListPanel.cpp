@@ -339,13 +339,13 @@ CoverLayerListPanel::CoverLayerListPanel(CoverStudioPanel* studio, QWidget* pare
         + QStringLiteral("QPushButton { min-width: 0px; min-height: 28px; padding: 0 10px; border-radius: 7px; }");
     auto* row = new QHBoxLayout();
     row->setSpacing(6);
-    auto* addButton = new QPushButton(UiText::text(QStringLiteral("cover.add_frame")), this);
+    auto* addButton = new QPushButton(UiText::text(QStringLiteral("cover.add_layer")), this);
     auto* removeButton = new QPushButton(UiText::text(QStringLiteral("metadata.delete")), this);
     addButton->setStyleSheet(compactButton);
     removeButton->setStyleSheet(compactButton);
     addButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
     removeButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
-    addButton->setToolTip(UiText::text(QStringLiteral("cover.add_a_chart_frame_a")));
+    addButton->setToolTip(UiText::text(QStringLiteral("cover.add_layer")));
     removeButton->setToolTip(UiText::text(QStringLiteral("cover.delete_the_selected_layer_delete")));
     addButton->setAccessibleName(addButton->toolTip());
     removeButton->setAccessibleName(removeButton->toolTip());
@@ -361,7 +361,33 @@ CoverLayerListPanel::CoverLayerListPanel(CoverStudioPanel* studio, QWidget* pare
         }
         studio_->setActiveLayerKey(model_->data(current, CoverLayerListModel::KeyRole).toString());
     });
-    connect(addButton, &QPushButton::clicked, studio_, &CoverStudioPanel::addChartFrameLayer);
+    // The single "add" button offers all layer kinds via a small menu (chart frame
+    // is disabled when the difficulty can't render one).
+    connect(addButton, &QPushButton::clicked, this, [this, addButton]() {
+        if (studio_ == nullptr) {
+            return;
+        }
+        QMenu menu(this);
+        UiTheme::styleRoundedMenu(menu);
+        QAction* frameAction = menu.addAction(UiText::text(QStringLiteral("cover.add_chart_frame")));
+        frameAction->setEnabled(studio_->chartFrameAvailable());
+        if (!studio_->chartFrameAvailable()) {
+            frameAction->setToolTip(UiText::text(QStringLiteral("cover.this_difficulty_has_no_chart")));
+        }
+        QAction* imageAction = menu.addAction(UiText::text(QStringLiteral("cover.add_image")));
+        QAction* textAction = menu.addAction(UiText::text(QStringLiteral("cover.add_text")));
+        QAction* chosen = menu.exec(addButton->mapToGlobal(QPoint(0, addButton->height())));
+        if (chosen == nullptr) {
+            return;
+        }
+        if (chosen == frameAction) {
+            studio_->addChartFrameLayer();
+        } else if (chosen == imageAction) {
+            studio_->addImageLayer();
+        } else if (chosen == textAction) {
+            studio_->addTextLayer();
+        }
+    });
     connect(removeButton, &QPushButton::clicked, studio_, &CoverStudioPanel::removeActiveLayer);
     // A reorder (drag / context menu) resets the model, which clears the view's
     // selection — re-assert the active layer's highlight afterwards.

@@ -49,6 +49,20 @@ class CoverLayer : public QObject
     Q_PROPERTY(QString frameStyle READ frameStyle WRITE setFrameStyle NOTIFY frameStyleChanged)
     // -1 = no still rendered yet (QML shows nothing); >= 0 bumps on each new grab.
     Q_PROPERTY(int imageRevision READ imageRevision NOTIFY imageRevisionChanged)
+    // ---- kind=="image" (custom image layer) ----
+    // Absolute path to the source image; empty shows nothing.
+    Q_PROPERTY(QString imagePath READ imagePath WRITE setImagePath NOTIFY imagePathChanged)
+    // ---- kind=="text" (custom text layer) ----
+    Q_PROPERTY(QString text READ text WRITE setText NOTIFY textChanged)
+    // Absolute path to a custom font; empty == the bundled default (Heavy).
+    Q_PROPERTY(QString fontPath READ fontPath WRITE setFontPath NOTIFY fontPathChanged)
+    Q_PROPERTY(QString textColor READ textColor WRITE setTextColor NOTIFY textColorChanged)
+    Q_PROPERTY(bool textBold READ textBold WRITE setTextBold NOTIFY textBoldChanged)
+    // Content width / height. For images it is the intrinsic aspect (read from the
+    // file in C++). For text it is written back from QML once the glyphs are laid
+    // out. Drives the layer's box width (= box height × contentAspect) so image/text
+    // layers keep their true proportions across preview and export.
+    Q_PROPERTY(qreal contentAspect READ contentAspect WRITE setContentAspect NOTIFY contentAspectChanged)
 
 public:
     explicit CoverLayer(QObject* parent = nullptr) : QObject(parent) {}
@@ -71,6 +85,12 @@ public:
     qreal frameBgBrightness() const { return frameBgBrightness_; }
     qreal frameBgTransparency() const { return frameBgTransparency_; }
     QString frameStyle() const { return frameStyle_; }
+    QString imagePath() const { return imagePath_; }
+    QString text() const { return text_; }
+    QString fontPath() const { return fontPath_; }
+    QString textColor() const { return textColor_; }
+    bool textBold() const { return textBold_; }
+    qreal contentAspect() const { return contentAspect_; }
 
     void setNx(qreal v);
     void setNy(qreal v);
@@ -85,6 +105,14 @@ public:
     void setFrameBgBrightness(qreal v);
     void setFrameBgTransparency(qreal v);
     void setFrameStyle(const QString& v);
+    // Sets the path and, when the file exists, refreshes contentAspect from its
+    // intrinsic size (via QImageReader) so the layer box matches the image.
+    void setImagePath(const QString& v);
+    void setText(const QString& v);
+    void setFontPath(const QString& v);
+    void setTextColor(const QString& v);
+    void setTextBold(bool v);
+    void setContentAspect(qreal v);
 
 signals:
     void nxChanged();
@@ -101,6 +129,12 @@ signals:
     void frameBgTransparencyChanged();
     void frameStyleChanged();
     void imageRevisionChanged();
+    void imagePathChanged();
+    void textChanged();
+    void fontPathChanged();
+    void textColorChanged();
+    void textBoldChanged();
+    void contentAspectChanged();
 
 private:
     friend class CoverLayoutModel;
@@ -122,6 +156,12 @@ private:
     qreal frameBgBrightness_ = 0.8;
     qreal frameBgTransparency_ = 0.5;
     QString frameStyle_;
+    QString imagePath_;
+    QString text_;
+    QString fontPath_;
+    QString textColor_ = QStringLiteral("#FFFFFF");
+    bool textBold_ = false;
+    qreal contentAspect_ = 1.0;
 };
 
 // Ordered set of composition layers, exposed to QML. Seeds the stable difficulty
@@ -153,6 +193,11 @@ public:
     Q_INVOKABLE bool chartFrameEnabled() const;
     Q_INVOKABLE void setChartFrameEnabled(bool enabled);
     CoverLayer* addChartFrameLayer(double frameSeconds = 0.0);
+    // Add a custom-image layer for `imagePath` (its intrinsic aspect is read into
+    // the layer), or a custom-text layer seeded with `text`. Both are placed with
+    // the normal new-layer geometry, made visible, and raised to the front.
+    CoverLayer* addImageLayer(const QString& imagePath);
+    CoverLayer* addTextLayer(const QString& text);
     // Add a chart-frame layer whose non-position properties are copied from
     // `source`, while geometry keeps the normal new-frame placement. Used by
     // the studio's "add frame" command to inherit the user's last frame setup.
@@ -199,6 +244,8 @@ private:
     CoverLayer* addLayerFromJson(const QJsonObject& obj);
     void applyDefaults(CoverLayer* layer) const;
     QString nextChartFrameKey() const;
+    // First unused key of the form "<prefix>", "<prefix>2", "<prefix>3", …
+    QString nextKeyWithPrefix(const QString& prefix) const;
     void assignZOrderFromList();
     int minZ() const;
     int maxZ() const;

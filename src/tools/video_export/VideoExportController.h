@@ -54,6 +54,13 @@ struct IntroBannerSpec {
     // Soft drop shadow behind the difficulty card. (The card itself is NOT
     // optional — an intro always carries it.)
     bool cardShadow = false;
+    // Difficulty-card custom fonts (absolute paths into the portable font
+    // library; empty == the bundled default). Overlaid onto the banner template's
+    // `fonts` block on every intro render path (preview + export) via
+    // FontLibrary::applyBannerFontOverride, so preview == export. A path absent on
+    // another machine falls back to the default at render time.
+    QString fontDisplayPath;
+    QString fontBodyPath;
 };
 
 // Spec -> IntroOverlay.qml contract, shared by the export overlay mount
@@ -89,6 +96,8 @@ inline void copyIntroStyling(const IntroBannerSpec& from, IntroBannerSpec* to)
     to->customBackgroundPath = from.customBackgroundPath;
     to->blurBackground = from.blurBackground;
     to->cardShadow = from.cardShadow;
+    to->fontDisplayPath = from.fontDisplayPath;
+    to->fontBodyPath = from.fontBodyPath;
 }
 
 // IntroOverlay root properties beyond the track: custom backdrop URL (empty ->

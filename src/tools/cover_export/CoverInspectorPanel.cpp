@@ -2,6 +2,7 @@
 
 #include "tools/cover_export/CoverLayoutModel.h"
 #include "tools/cover_export/CoverStudioPanel.h"
+#include "tools/video_export/FontLibrary.h"
 #include "EditableValueLabel.h"
 #include "UiText.h"
 #include "UiComponents.h"
@@ -9,14 +10,18 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QColor>
+#include <QColorDialog>
 #include <QComboBox>
 #include <QEvent>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QFont>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
@@ -281,10 +286,60 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
     frameTimeLayout->insertWidget(0, frameTimeLabel, 0);
     frameForm->addRow(frameTimeRow);
 
+    // ---- §3.3 image options (polymorphic; shown only for image layers) ----
+    imageOptionsGroup_ = new QGroupBox(UiText::text(QStringLiteral("cover.image_options")), this);
+    auto* imageForm = new QFormLayout(imageOptionsGroup_);
+    imageForm->setContentsMargins(8, 8, 8, 8);
+    imageForm->setSpacing(8);
+    imageForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    auto* imageRow = new QWidget(imageOptionsGroup_);
+    auto* imageRowLayout = new QHBoxLayout(imageRow);
+    imageRowLayout->setContentsMargins(0, 0, 0, 0);
+    imageRowLayout->setSpacing(6);
+    imagePathEdit_ = new QLineEdit(imageRow);
+    imagePathEdit_->setPlaceholderText(UiText::text(QStringLiteral("cover.image_file")));
+    imageBrowseButton_ = miacode::ui::createDialogAuxiliaryButton(
+        imageRow, UiText::text(QStringLiteral("cover.browse")));
+    imageRowLayout->addWidget(imagePathEdit_, 1);
+    imageRowLayout->addWidget(imageBrowseButton_, 0);
+    imageForm->addRow(UiText::text(QStringLiteral("cover.image_file")), imageRow);
+
+    // ---- §3.3 text options (polymorphic; shown only for text layers) ----
+    textOptionsGroup_ = new QGroupBox(UiText::text(QStringLiteral("cover.text_options")), this);
+    auto* textForm = new QFormLayout(textOptionsGroup_);
+    textForm->setContentsMargins(8, 8, 8, 8);
+    textForm->setSpacing(8);
+    textForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    textEdit_ = new QLineEdit(textOptionsGroup_);
+    textEdit_->setPlaceholderText(UiText::text(QStringLiteral("cover.text_content")));
+    textForm->addRow(UiText::text(QStringLiteral("cover.text_content")), textEdit_);
+
+    auto* fontRow = new QWidget(textOptionsGroup_);
+    auto* fontRowLayout = new QHBoxLayout(fontRow);
+    fontRowLayout->setContentsMargins(0, 0, 0, 0);
+    fontRowLayout->setSpacing(6);
+    textFontCombo_ = miacode::ui::createDialogComboBox(fontRow, 12, Qt::AlignLeft | Qt::AlignVCenter);
+    textFontImportButton_ = miacode::ui::createDialogAuxiliaryButton(
+        fontRow, UiText::text(QStringLiteral("card_font.import")));
+    fontRowLayout->addWidget(textFontCombo_, 1);
+    fontRowLayout->addWidget(textFontImportButton_, 0);
+    refreshTextFontCombo(QString());
+    textForm->addRow(UiText::text(QStringLiteral("cover.font")), fontRow);
+
+    textColorButton_ = miacode::ui::createDialogAuxiliaryButton(textOptionsGroup_, QStringLiteral("#FFFFFF"));
+    textForm->addRow(UiText::text(QStringLiteral("cover.text_color")), textColorButton_);
+
+    textBoldCheck_ = new QCheckBox(textOptionsGroup_);
+    textForm->addRow(UiText::text(QStringLiteral("cover.bold")), textBoldCheck_);
+
     emphasizeGroupTitle(layerGroup_);
     emphasizeGroupTitle(frameOptionsGroup_);
+    emphasizeGroupTitle(imageOptionsGroup_);
+    emphasizeGroupTitle(textOptionsGroup_);
 
     root->addWidget(frameOptionsGroup_);
+    root->addWidget(imageOptionsGroup_);
+    root->addWidget(textOptionsGroup_);
     root->addStretch(1);
 
     // ---- wiring (identical setters to the old inspector) ----
@@ -331,6 +386,51 @@ CoverInspectorPanel::CoverInspectorPanel(CoverStudioPanel* studio, QWidget* pare
     });
     connect(frameTimeSlider_, &QSlider::valueChanged, this, [this](int value) {
         if (studio_ != nullptr) studio_->setActiveLayerFrameSeconds(value / 1000.0);
+    });
+
+    // ---- image options wiring ----
+    connect(imageBrowseButton_, &QPushButton::clicked, this, [this] {
+        if (studio_ != nullptr) studio_->browseActiveLayerImage();
+    });
+    connect(imagePathEdit_, &QLineEdit::editingFinished, this, [this] {
+        if (studio_ != nullptr) studio_->setActiveLayerImagePath(imagePathEdit_->text().trimmed());
+    });
+
+    // ---- text options wiring ----
+    connect(textEdit_, &QLineEdit::textEdited, this, [this](const QString& value) {
+        if (studio_ != nullptr) studio_->setActiveLayerText(value);
+    });
+    connect(textFontCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (studio_ != nullptr && textFontCombo_ != nullptr) {
+            studio_->setActiveLayerFontPath(textFontCombo_->itemData(index).toString());
+        }
+    });
+    connect(textFontImportButton_, &QPushButton::clicked, this, [this] {
+        const QString imported = miacode::video_export::importFontIntoLibrary(this);
+        if (imported.isEmpty()) {
+            return;
+        }
+        refreshTextFontCombo(imported);
+        if (studio_ != nullptr) studio_->setActiveLayerFontPath(imported);
+    });
+    connect(textColorButton_, &QPushButton::clicked, this, [this] {
+        CoverLayer* layer = nullptr;
+        if (studio_ != nullptr && studio_->layoutModel() != nullptr) {
+            layer = studio_->layoutModel()->layer(studio_->activeLayerKey());
+        }
+        const QColor initial(layer != nullptr ? layer->textColor() : QStringLiteral("#FFFFFF"));
+        const QColor chosen = QColorDialog::getColor(
+            initial.isValid() ? initial : QColor(Qt::white), this,
+            UiText::text(QStringLiteral("cover.text_color")));
+        if (!chosen.isValid()) {
+            return;
+        }
+        const QString hex = chosen.name(QColor::HexRgb);
+        updateTextColorSwatch(hex);
+        if (studio_ != nullptr) studio_->setActiveLayerTextColor(hex);
+    });
+    connect(textBoldCheck_, &QCheckBox::toggled, this, [this](bool checked) {
+        if (studio_ != nullptr) studio_->setActiveLayerTextBold(checked);
     });
 
     if (studio_ != nullptr) {
@@ -520,6 +620,71 @@ void CoverInspectorPanel::refresh()
         frameBgTransparencySlider_->setEnabled(frameControlsEnabled && !imageMode);
         frameBgTransparencyValue_->setEnabled(frameControlsEnabled && !imageMode);
     }
+
+    // ---- image layer ----
+    const bool isImage = hasLayer && layer->kind() == QStringLiteral("image");
+    imageOptionsGroup_->setVisible(isImage);
+    if (isImage && imagePathEdit_ != nullptr) {
+        // Lock freezes position + size only (§12.6) — the image source, like
+        // opacity / visibility, stays editable while locked.
+        if (imagePathEdit_->text() != layer->imagePath()) {
+            const QSignalBlocker b(imagePathEdit_);
+            imagePathEdit_->setText(layer->imagePath());
+        }
+    }
+
+    // ---- text layer ----
+    const bool isText = hasLayer && layer->kind() == QStringLiteral("text");
+    textOptionsGroup_->setVisible(isText);
+    if (isText) {
+        if (textEdit_ != nullptr && textEdit_->text() != layer->text()) {
+            const QSignalBlocker b(textEdit_);
+            textEdit_->setText(layer->text());
+        }
+        if (textFontCombo_ != nullptr) {
+            const QString fontPath = layer->fontPath();
+            const int idx = textFontCombo_->findData(fontPath);
+            if (idx < 0 && !fontPath.isEmpty()) {
+                refreshTextFontCombo(fontPath);   // font added elsewhere — re-list
+            } else {
+                const QSignalBlocker b(textFontCombo_);
+                textFontCombo_->setCurrentIndex(idx >= 0 ? idx : 0);
+            }
+        }
+        if (textBoldCheck_ != nullptr) {
+            const QSignalBlocker b(textBoldCheck_);
+            textBoldCheck_->setChecked(layer->textBold());
+        }
+        updateTextColorSwatch(layer->textColor());
+    }
+}
+
+void CoverInspectorPanel::refreshTextFontCombo(const QString& selectedPath)
+{
+    if (textFontCombo_ == nullptr) {
+        return;
+    }
+    miacode::video_export::populateFontCombo(
+        textFontCombo_, selectedPath, /*includeDefault=*/true,
+        UiText::text(QStringLiteral("card_font.default")));
+    miacode::ui::applyDialogComboBoxStyle(textFontCombo_, 12);
+}
+
+void CoverInspectorPanel::updateTextColorSwatch(const QString& color)
+{
+    if (textColorButton_ == nullptr) {
+        return;
+    }
+    QColor c(color);
+    if (!c.isValid()) {
+        c = QColor(Qt::white);
+    }
+    const QString fg = (c.lightnessF() > 0.6) ? QStringLiteral("#101010") : QStringLiteral("#FFFFFF");
+    textColorButton_->setText(c.name(QColor::HexRgb).toUpper());
+    textColorButton_->setStyleSheet(QStringLiteral(
+        "QPushButton { background: %1; color: %2; border: 1px solid rgba(128,128,128,120);"
+        " border-radius: 6px; padding: 4px 12px; }")
+        .arg(c.name(QColor::HexRgb), fg));
 }
 
 }  // namespace miacode::cover_export

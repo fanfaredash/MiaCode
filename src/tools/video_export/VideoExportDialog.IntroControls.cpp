@@ -218,6 +218,10 @@ IntroBannerSpec VideoExportDialog::currentIntroSpec() const
     if (introCardShadowCheck_ != nullptr) {
         spec.cardShadow = introCardShadowCheck_->isChecked();
     }
+    if (introCardFontSelector_.widget != nullptr) {
+        spec.fontDisplayPath = introCardFontSelector_.displayPath();
+        spec.fontBodyPath = introCardFontSelector_.bodyPath();
+    }
     return spec;
 }
 

@@ -11,6 +11,7 @@
 #include <QVBoxLayout>
 
 #include "common/IntroConfig.h"
+#include "tools/video_export/FontLibrary.h"
 
 namespace {
 
@@ -106,6 +107,12 @@ void IntroPreviewWidget::applySpec(const IntroBannerSpec& spec)
         "backgroundImage",
         spec.jacketPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(spec.jacketPath));
     root->setProperty("bannerTrack", introBannerTrackMap(spec));
+    // Re-inject the difficulty-card custom fonts onto a fresh template copy so the
+    // preview uses the SAME fonts as the export (MaimaiBannerCard reloads its
+    // FontLoaders on externalTemplate change). Empty paths keep the qrc default.
+    QVariantMap templateMap = loadBannerTemplateMap();
+    miacode::video_export::applyBannerFontOverride(templateMap, spec.fontDisplayPath, spec.fontBodyPath);
+    root->setProperty("bannerTemplateData", templateMap);
     const QVariantMap style = introBannerStyleMap(spec);
     for (auto it = style.constBegin(); it != style.constEnd(); ++it) {
         root->setProperty(it.key().toUtf8().constData(), it.value());

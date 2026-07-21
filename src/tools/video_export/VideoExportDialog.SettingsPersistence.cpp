@@ -199,6 +199,13 @@ void VideoExportDialog::loadPersistedSettings()
         introLevelTextCheck_->setChecked(
             settings.value(QStringLiteral("intro_level_text_render")).toBool(introLevelTextCheck_->isChecked()));
     }
+    if (introCardFontSelector_.widget != nullptr) {
+        // setSelection suppresses the change callback; the refreshIntroPreview()
+        // below picks the restored fonts up.
+        introCardFontSelector_.setSelection(
+            settings.value(QStringLiteral("intro_card_font_display")).toString(),
+            settings.value(QStringLiteral("intro_card_font_body")).toString());
+    }
     resizeIntroPreviewToAspect();
     syncIntroControlsEnabled();
     refreshIntroPreview();
@@ -258,5 +265,9 @@ void VideoExportDialog::appendIntroPersistedSettings(QJsonObject* settings) cons
     }
     if (introLevelTextCheck_ != nullptr) {
         settings->insert(QStringLiteral("intro_level_text_render"), introLevelTextCheck_->isChecked());
+    }
+    if (introCardFontSelector_.widget != nullptr) {
+        settings->insert(QStringLiteral("intro_card_font_display"), introCardFontSelector_.displayPath());
+        settings->insert(QStringLiteral("intro_card_font_body"), introCardFontSelector_.bodyPath());
     }
 }

@@ -150,7 +150,44 @@ Item {
     // ---- per-layer pixel geometry helpers (used by selection chrome) ----
     function layerContentH(l) { return (l ? l.sizeFraction : 0.85) * canvas.height }
     function layerContentW(l) {
-        return layerContentH(l) * ((l && l.kind === "card") ? cardAspect : 1.0)
+        if (!l)
+            return layerContentH(l)
+        if (l.kind === "card")
+            return layerContentH(l) * cardAspect
+        // Image / text layers keep their true proportions: box width = height ×
+        // intrinsic (image) / laid-out (text) aspect. Both store it in contentAspect.
+        if (l.kind === "image" || l.kind === "text")
+            return layerContentH(l) * (l.contentAspect > 0 ? l.contentAspect : 1.0)
+        return layerContentH(l)
+    }
+
+    // Absolute filesystem path → file URL (custom image / text-layer font). Empty
+    // stays empty; an already-schemed value is used verbatim.
+    function localFileUrl(p) {
+        if (!p) return ""
+        var s = p.toString()
+        if (s.length === 0) return ""
+        if (s.indexOf("://") >= 0) return s
+        if (s.charAt(0) === "/") return "file://" + encodeURI(s)
+        return "file:///" + encodeURI(s)   // Windows drive path (C:/…)
+    }
+    // Text-layer font: the layer's custom fontPath (absolute) if set, else the
+    // bundled Heavy display font.
+    function fontSourceUrlForLayer(ld) {
+        var p = ld ? ld.fontPath : ""
+        if (p && p.toString().length > 0)
+            return canvas.localFileUrl(p)
+        return "qrc:/intro/assets/fonts/ResourceHanRoundedCN-Heavy.ttf"
+    }
+    // Write the text's true aspect (from an unconstrained probe) back onto the
+    // layer so its box hugs the glyphs. The probe's pixelSize is fixed, so this
+    // never feeds back into the probe → no binding loop.
+    function writeTextAspect(ld, probe) {
+        if (!ld || !probe) return
+        var w = probe.contentWidth
+        var h = probe.contentHeight
+        if (w > 0.5 && h > 0.5)
+            ld.contentAspect = w / h
     }
     function pointInLayer(l, px, py) {
         if (!l || !l.visible)
@@ -285,6 +322,8 @@ Item {
             readonly property var ld: modelData       // CoverLayer
             readonly property bool isCard: ld && ld.kind === "card"
             readonly property bool isChartFrame: ld && ld.kind === "chartFrame"
+            readonly property bool isImage: ld && ld.kind === "image"
+            readonly property bool isText: ld && ld.kind === "text"
             readonly property bool isActiveChartFrame:
                 isChartFrame && layerItem.ld && layerItem.ld.key === canvas.activeChartFrameKey
             readonly property bool frameBgEnabled:
@@ -459,6 +498,63 @@ Item {
                     cache: false
                     smooth: true
                     mipmap: true
+                }
+
+                // Custom image layer. The box aspect already tracks the image's
+                // intrinsic aspect (CoverLayer.contentAspect), so PreserveAspectFit
+                // exactly fills the box with no letterbox / distortion. Direct child
+                // (visible-gated), mirroring the chart-frame still Image above.
+                Image {
+                    anchors.fill: parent
+                    visible: layerItem.isImage
+                    source: (layerItem.isImage && layerItem.ld && layerItem.ld.imagePath)
+                            ? canvas.localFileUrl(layerItem.ld.imagePath) : ""
+                    fillMode: Image.PreserveAspectFit
+                    // Cap the decoded texture to the on-screen size (preview small,
+                    // export full-res) so a huge source doesn't decode at native
+                    // megapixels.
+                    sourceSize: (layerItem.isImage && width > 1 && height > 1)
+                                ? Qt.size(Math.ceil(width), Math.ceil(height)) : undefined
+                    asynchronous: false
+                    cache: false
+                    smooth: true
+                    mipmap: true
+                }
+
+                // Custom text layer. A hidden probe measures the glyphs' true aspect
+                // (unconstrained, fixed pixelSize) and writes it back onto the layer;
+                // the visible Text then Fits the aspect-correct box. Empty text (any
+                // non-text layer) yields a zero-width probe → writeTextAspect no-ops.
+                FontLoader {
+                    id: textFont
+                    source: canvas.fontSourceUrlForLayer(layerItem.ld)
+                }
+                Text {
+                    id: textProbe
+                    visible: false
+                    text: (layerItem.isText && layerItem.ld) ? layerItem.ld.text : ""
+                    font.family: textFont.name
+                    font.bold: (layerItem.isText && layerItem.ld) ? layerItem.ld.textBold : false
+                    font.pixelSize: 100
+                    wrapMode: Text.NoWrap
+                    maximumLineCount: 1
+                    onContentWidthChanged: { if (layerItem.isText) canvas.writeTextAspect(layerItem.ld, textProbe) }
+                    onContentHeightChanged: { if (layerItem.isText) canvas.writeTextAspect(layerItem.ld, textProbe) }
+                }
+                Text {
+                    anchors.fill: parent
+                    visible: layerItem.isText
+                    text: (layerItem.isText && layerItem.ld) ? layerItem.ld.text : ""
+                    color: (layerItem.ld && layerItem.ld.textColor) ? layerItem.ld.textColor : "#FFFFFF"
+                    font.family: textFont.name
+                    font.bold: (layerItem.isText && layerItem.ld) ? layerItem.ld.textBold : false
+                    font.pixelSize: Math.max(1, Math.round(parent.height))
+                    minimumPixelSize: 1
+                    fontSizeMode: Text.Fit
+                    wrapMode: Text.NoWrap
+                    maximumLineCount: 1
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
             }
 

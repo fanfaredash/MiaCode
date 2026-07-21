@@ -1,8 +1,11 @@
 #include "tools/cover_export/CoverLayoutModel.h"
 
+#include <QFileInfo>
+#include <QImageReader>
 #include <QJsonArray>
 #include <QSet>
 #include <QJsonValue>
+#include <QSize>
 
 #include <algorithm>
 #include <limits>
@@ -13,6 +16,29 @@ namespace {
 constexpr char kCardKey[] = "card";
 constexpr char kChartFrameKey[] = "chartFrame";
 constexpr char kChartFrameKeyPrefix[] = "chartFrame";
+constexpr char kImageKey[] = "image";
+constexpr char kTextKey[] = "text";
+
+// Default geometry for a freshly added custom image / text layer: centred, ~half
+// the canvas height, in front of everything.
+constexpr qreal kFreeLayerDefaultNx = 0.5;
+constexpr qreal kFreeLayerDefaultNy = 0.5;
+constexpr qreal kImageDefaultSizeFraction = 0.5;
+constexpr qreal kTextDefaultSizeFraction = 0.12;
+
+// Intrinsic width/height of `path`, or 1.0 when it can't be read.
+qreal imageAspectForPath(const QString& path)
+{
+    if (path.isEmpty() || !QFileInfo::exists(path)) {
+        return 1.0;
+    }
+    QImageReader reader(path);
+    const QSize size = reader.size();
+    if (size.width() > 0 && size.height() > 0) {
+        return static_cast<qreal>(size.width()) / static_cast<qreal>(size.height());
+    }
+    return 1.0;
+}
 
 // The difficulty card centred, sized so its body (≈0.85 of canvas height incl.
 // the tab shoulder) roughly matches the legacy card-fills-canvas cover. z=1 keeps
@@ -175,6 +201,56 @@ void CoverLayer::setFrameStyle(const QString& v)
     emit frameStyleChanged();
 }
 
+void CoverLayer::setImagePath(const QString& v)
+{
+    if (imagePath_ != v) {
+        imagePath_ = v;
+        emit imagePathChanged();
+    }
+    // Refresh the intrinsic aspect whenever the file is readable; a missing file
+    // keeps the last-known aspect (cross-machine: box stays sane, no blank grab).
+    if (!v.isEmpty() && QFileInfo::exists(v)) {
+        setContentAspect(imageAspectForPath(v));
+    }
+}
+
+void CoverLayer::setText(const QString& v)
+{
+    if (text_ == v) return;
+    text_ = v;
+    emit textChanged();
+}
+
+void CoverLayer::setFontPath(const QString& v)
+{
+    if (fontPath_ == v) return;
+    fontPath_ = v;
+    emit fontPathChanged();
+}
+
+void CoverLayer::setTextColor(const QString& v)
+{
+    if (textColor_ == v) return;
+    textColor_ = v;
+    emit textColorChanged();
+}
+
+void CoverLayer::setTextBold(bool v)
+{
+    if (textBold_ == v) return;
+    textBold_ = v;
+    emit textBoldChanged();
+}
+
+void CoverLayer::setContentAspect(qreal v)
+{
+    if (v < 0.02) v = 0.02;
+    if (v > 50.0) v = 50.0;
+    if (qFuzzyCompare(contentAspect_, v)) return;
+    contentAspect_ = v;
+    emit contentAspectChanged();
+}
+
 CoverLayoutModel::CoverLayoutModel(QObject* parent) : QObject(parent)
 {
     ensureDefaultLayers();
@@ -240,6 +316,22 @@ void CoverLayoutModel::applyDefaults(CoverLayer* layer) const
         layer->frameBgMode_ = QStringLiteral("image");
         layer->frameBgBrightness_ = 0.8;
         layer->frameBgTransparency_ = 0.5;
+    } else if (layer->kind_ == QString::fromLatin1(kImageKey)) {
+        layer->nx_ = kFreeLayerDefaultNx;
+        layer->ny_ = kFreeLayerDefaultNy;
+        layer->sizeFraction_ = kImageDefaultSizeFraction;
+        layer->z_ = 2;   // factory raises to front via setZ(maxZ()+1)
+        layer->visible_ = true;
+        layer->locked_ = false;
+        layer->opacity_ = 1.0;
+    } else if (layer->kind_ == QString::fromLatin1(kTextKey)) {
+        layer->nx_ = kFreeLayerDefaultNx;
+        layer->ny_ = kFreeLayerDefaultNy;
+        layer->sizeFraction_ = kTextDefaultSizeFraction;
+        layer->z_ = 2;   // factory raises to front via setZ(maxZ()+1)
+        layer->visible_ = true;
+        layer->locked_ = false;
+        layer->opacity_ = 1.0;
     }
 }
 
@@ -326,13 +418,41 @@ CoverLayer* CoverLayoutModel::addChartFrameLayerFromTemplate(const CoverLayer* s
     return chartFrame;
 }
 
+CoverLayer* CoverLayoutModel::addImageLayer(const QString& imagePath)
+{
+    const QString key = nextKeyWithPrefix(QString::fromLatin1(kImageKey));
+    CoverLayer* image = addLayer(key, QString::fromLatin1(kImageKey),
+                                 QStringLiteral("Image"));
+    applyDefaults(image);
+    image->setImagePath(imagePath);   // also seeds contentAspect from the file
+    image->setVisible(true);
+    image->setZ(maxZ() + 1);
+    emit layersChanged();
+    return image;
+}
+
+CoverLayer* CoverLayoutModel::addTextLayer(const QString& text)
+{
+    const QString key = nextKeyWithPrefix(QString::fromLatin1(kTextKey));
+    CoverLayer* layer = addLayer(key, QString::fromLatin1(kTextKey),
+                                 QStringLiteral("Text"));
+    applyDefaults(layer);
+    layer->setText(text);
+    // Rough seed until QML lays the glyphs out and writes the true aspect back.
+    layer->setContentAspect(qMax<qreal>(1.0, text.length() * 0.55));
+    layer->setVisible(true);
+    layer->setZ(maxZ() + 1);
+    emit layersChanged();
+    return layer;
+}
+
 CoverLayer* CoverLayoutModel::duplicateLayer(const QString& key)
 {
     CoverLayer* src = layer(key);
     if (src == nullptr || src->kind_ == QString::fromLatin1(kCardKey)) {
         return nullptr;
     }
-    CoverLayer* copy = addLayer(nextChartFrameKey(), src->kind_, src->label_);
+    CoverLayer* copy = addLayer(nextKeyWithPrefix(src->kind_), src->kind_, src->label_);
     copy->nx_ = src->nx_;
     copy->ny_ = src->ny_;
     copy->sizeFraction_ = src->sizeFraction_;
@@ -348,6 +468,12 @@ CoverLayer* CoverLayoutModel::duplicateLayer(const QString& key)
     copy->frameBgBrightness_ = src->frameBgBrightness_;
     copy->frameBgTransparency_ = src->frameBgTransparency_;
     copy->frameStyle_ = src->frameStyle_;
+    copy->imagePath_ = src->imagePath_;
+    copy->text_ = src->text_;
+    copy->fontPath_ = src->fontPath_;
+    copy->textColor_ = src->textColor_;
+    copy->textBold_ = src->textBold_;
+    copy->contentAspect_ = src->contentAspect_;
     emit layersChanged();
     return copy;
 }
@@ -601,6 +727,18 @@ QJsonObject CoverLayoutModel::toJson() const
         o.insert(QStringLiteral("frameBgBrightness"), layer->frameBgBrightness_);
         o.insert(QStringLiteral("frameBgTransparency"), layer->frameBgTransparency_);
         o.insert(QStringLiteral("frameStyle"), layer->frameStyle_);
+        // Custom image / text layer fields (absent for card / chart-frame layers,
+        // read back with defaults by fromJson).
+        if (layer->kind_ == QString::fromLatin1(kImageKey)) {
+            o.insert(QStringLiteral("imagePath"), layer->imagePath_);
+            o.insert(QStringLiteral("contentAspect"), layer->contentAspect_);
+        } else if (layer->kind_ == QString::fromLatin1(kTextKey)) {
+            o.insert(QStringLiteral("text"), layer->text_);
+            o.insert(QStringLiteral("fontPath"), layer->fontPath_);
+            o.insert(QStringLiteral("textColor"), layer->textColor_);
+            o.insert(QStringLiteral("textBold"), layer->textBold_);
+            o.insert(QStringLiteral("contentAspect"), layer->contentAspect_);
+        }
         arr.append(o);
     }
     QJsonObject root;
@@ -649,6 +787,24 @@ void CoverLayoutModel::fromJson(const QJsonObject& obj)
         layer->setFrameBgBrightness(o.value(QStringLiteral("frameBgBrightness")).toDouble(layer->frameBgBrightness_));
         layer->setFrameBgTransparency(o.value(QStringLiteral("frameBgTransparency")).toDouble(layer->frameBgTransparency_));
         layer->setFrameStyle(o.value(QStringLiteral("frameStyle")).toString(layer->frameStyle_));
+        // Custom image / text layer fields. setImagePath refreshes contentAspect
+        // from the file when present; apply the stored aspect afterwards so a
+        // MISSING image (cross-machine) still restores its saved proportions.
+        if (layer->kind_ == QString::fromLatin1(kImageKey)) {
+            if (o.contains(QStringLiteral("imagePath"))) {
+                layer->setImagePath(o.value(QStringLiteral("imagePath")).toString(layer->imagePath_));
+            }
+            if (o.contains(QStringLiteral("contentAspect"))
+                && !QFileInfo::exists(layer->imagePath())) {
+                layer->setContentAspect(o.value(QStringLiteral("contentAspect")).toDouble(layer->contentAspect_));
+            }
+        } else if (layer->kind_ == QString::fromLatin1(kTextKey)) {
+            layer->setText(o.value(QStringLiteral("text")).toString(layer->text_));
+            layer->setFontPath(o.value(QStringLiteral("fontPath")).toString(layer->fontPath_));
+            layer->setTextColor(o.value(QStringLiteral("textColor")).toString(layer->textColor_));
+            layer->setTextBold(o.value(QStringLiteral("textBold")).toBool(layer->textBold_));
+            layer->setContentAspect(o.value(QStringLiteral("contentAspect")).toDouble(layer->contentAspect_));
+        }
     }
     for (int i = layers_.size() - 1; i >= 0; --i) {
         CoverLayer* l = layers_.at(i);
@@ -674,6 +830,20 @@ QString CoverLayoutModel::nextChartFrameKey() const
         }
     }
     return QStringLiteral("%1%2").arg(QString::fromLatin1(kChartFrameKeyPrefix)).arg(layers_.size() + 1);
+}
+
+QString CoverLayoutModel::nextKeyWithPrefix(const QString& prefix) const
+{
+    if (layer(prefix) == nullptr) {
+        return prefix;
+    }
+    for (int i = 2; i < 100000; ++i) {
+        const QString key = QStringLiteral("%1%2").arg(prefix).arg(i);
+        if (layer(key) == nullptr) {
+            return key;
+        }
+    }
+    return QStringLiteral("%1%2").arg(prefix).arg(layers_.size() + 1);
 }
 
 }  // namespace miacode::cover_export

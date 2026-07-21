@@ -4,6 +4,7 @@
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "core/scene/PreviewProgressStatsCache.h"
+#include "tools/video_export/FontLibrary.h"
 
 #include <QFile>
 #include <QJsonDocument>
@@ -315,6 +316,11 @@ bool VideoExportQuickRenderBackend::setupIntro(const IntroBannerSpec& intro, QSt
     if (templateMap.isEmpty() && errorMessage != nullptr) {
         *errorMessage = QStringLiteral("intro banner template could not be loaded from qrc");
     }
+    // Overlay the dialog's difficulty-card custom fonts onto this template copy
+    // (never the shared qrc JSON) so the intro export uses the SAME fonts the
+    // dialog preview shows. Cover fonts are injected on their own path.
+    miacode::video_export::applyBannerFontOverride(
+        templateMap, intro.fontDisplayPath, intro.fontBodyPath);
 
     const QUrl logoUrl(QString::fromLatin1(miacode::intro::kLogoFallbackUrl));
     const QVariantMap styleMap = introBannerStyleMap(intro);

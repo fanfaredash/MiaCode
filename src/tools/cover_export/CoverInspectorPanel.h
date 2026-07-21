@@ -8,6 +8,7 @@ class QComboBox;
 class QEvent;
 class QGroupBox;
 class QLabel;
+class QLineEdit;
 class QPushButton;
 class QSlider;
 
@@ -70,6 +71,22 @@ private:
     QPushButton* framePlayButton_ = nullptr;
     QSlider* frameTimeSlider_ = nullptr;
     QLabel* frameTimeReadout_ = nullptr;
+
+    // §3.3-image — custom image layer options (shown only for image layers).
+    QGroupBox* imageOptionsGroup_ = nullptr;
+    QLineEdit* imagePathEdit_ = nullptr;
+    QPushButton* imageBrowseButton_ = nullptr;
+
+    // §3.3-text — custom text layer options (shown only for text layers).
+    QGroupBox* textOptionsGroup_ = nullptr;
+    QLineEdit* textEdit_ = nullptr;
+    QComboBox* textFontCombo_ = nullptr;
+    QPushButton* textFontImportButton_ = nullptr;
+    QPushButton* textColorButton_ = nullptr;
+    QCheckBox* textBoldCheck_ = nullptr;
+
+    void refreshTextFontCombo(const QString& selectedPath);
+    void updateTextColorSwatch(const QString& color);
 };
 
 }  // namespace miacode::cover_export

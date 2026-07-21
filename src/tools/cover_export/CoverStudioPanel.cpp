@@ -5,6 +5,7 @@
 
 #include "tools/cover_export/CoverLayoutModel.h"
 #include "tools/cover_export/SceneFrameRenderer.h"
+#include "tools/video_export/FontLibrary.h"
 #include "common/DebugLog.h"
 #include "common/PreviewInteractionConfig.h"
 #include "UiNativeWindowTheme.h"
@@ -14,6 +15,7 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QColorDialog>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QEvent>
@@ -438,6 +440,16 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     UiTheme::styleDialogComboBox(textOverflowCombo_, 12);
     cardForm->addRow(UiText::text(QStringLiteral("cover.long_text")), textOverflowCombo_);
 
+    // Custom card fonts (标题字体 / 正文字体) — a font change refreshes the live
+    // preview and export via cachedTemplate_'s fonts override in buildInputs().
+    cardFontSelector_ = miacode::video_export::createCardFontSelector(this, [this]() {
+        pushInputs();
+        emit compositionChanged();
+    });
+    if (cardFontSelector_.widget != nullptr) {
+        cardForm->addRow(cardFontSelector_.widget);   // spans both columns (has own labels)
+    }
+
     controlsColumn->addWidget(cardGroup);
     emphasizeGroupTitle(cardGroup);
 
@@ -853,6 +865,100 @@ void CoverStudioPanel::duplicateActiveLayer()
     if (model_ == nullptr) return;
     if (miacode::cover_export::CoverLayer* layer = model_->duplicateLayer(activeLayerKey_)) {
         setActiveLayerKey(layer->key());
+        emit compositionChanged();
+    }
+}
+
+void CoverStudioPanel::addImageLayer()
+{
+    if (model_ == nullptr) return;
+    const QString file = QFileDialog::getOpenFileName(
+        this,
+        UiText::text(QStringLiteral("cover.choose_image")),
+        QString(),
+        UiText::text(QStringLiteral("cover.images_png_jpg_jpeg_bmp")));
+    if (file.isEmpty()) {
+        return;
+    }
+    miacode::cover_export::CoverLayer* layer = model_->addImageLayer(file);
+    if (layer == nullptr) {
+        return;
+    }
+    setActiveLayerKey(layer->key());
+    pushInputs();
+    emit compositionChanged();
+}
+
+void CoverStudioPanel::addTextLayer()
+{
+    if (model_ == nullptr) return;
+    miacode::cover_export::CoverLayer* layer =
+        model_->addTextLayer(UiText::text(QStringLiteral("cover.text_layer_default")));
+    if (layer == nullptr) {
+        return;
+    }
+    setActiveLayerKey(layer->key());
+    pushInputs();
+    emit compositionChanged();
+}
+
+void CoverStudioPanel::setActiveLayerImagePath(const QString& path)
+{
+    if (miacode::cover_export::CoverLayer* layer = activeLayer()) {
+        layer->setImagePath(path);
+        pushInputs();
+        emit compositionChanged();
+    }
+}
+
+void CoverStudioPanel::browseActiveLayerImage()
+{
+    miacode::cover_export::CoverLayer* layer = activeLayer();
+    if (layer == nullptr) {
+        return;
+    }
+    const QString start = !layer->imagePath().isEmpty()
+        ? QFileInfo(layer->imagePath()).absolutePath()
+        : QString();
+    const QString file = QFileDialog::getOpenFileName(
+        this,
+        UiText::text(QStringLiteral("cover.choose_image")),
+        start,
+        UiText::text(QStringLiteral("cover.images_png_jpg_jpeg_bmp")));
+    if (file.isEmpty()) {
+        return;
+    }
+    setActiveLayerImagePath(file);
+}
+
+void CoverStudioPanel::setActiveLayerText(const QString& text)
+{
+    if (miacode::cover_export::CoverLayer* layer = activeLayer()) {
+        layer->setText(text);
+        emit compositionChanged();
+    }
+}
+
+void CoverStudioPanel::setActiveLayerFontPath(const QString& path)
+{
+    if (miacode::cover_export::CoverLayer* layer = activeLayer()) {
+        layer->setFontPath(path);
+        emit compositionChanged();
+    }
+}
+
+void CoverStudioPanel::setActiveLayerTextColor(const QString& color)
+{
+    if (miacode::cover_export::CoverLayer* layer = activeLayer()) {
+        layer->setTextColor(color);
+        emit compositionChanged();
+    }
+}
+
+void CoverStudioPanel::setActiveLayerTextBold(bool bold)
+{
+    if (miacode::cover_export::CoverLayer* layer = activeLayer()) {
+        layer->setTextBold(bold);
         emit compositionChanged();
     }
 }
@@ -1643,6 +1749,13 @@ miacode::cover_export::CoverComposerInputs CoverStudioPanel::buildInputs() const
     using miacode::cover_export::CoverBackgroundMode;
     miacode::cover_export::CoverComposerInputs in;
     in.templateMap = cachedTemplate_;
+    // Overlay the difficulty-card custom fonts (empty == bundled default). Applied
+    // to the per-call copy, so cachedTemplate_ stays pristine; the same override
+    // drives the live preview and the export (both grab this scene).
+    if (cardFontSelector_.widget != nullptr) {
+        miacode::video_export::applyBannerFontOverride(
+            in.templateMap, cardFontSelector_.displayPath(), cardFontSelector_.bodyPath());
+    }
 
     QVariantMap track;
     track.insert(QStringLiteral("title"), banner_.title);
@@ -1927,6 +2040,12 @@ QJsonObject CoverStudioPanel::exportCompositionJson() const
     card.insert(QStringLiteral("longText"),
                 textOverflowCombo_ != nullptr ? textOverflowCombo_->currentData().toString()
                                               : QStringLiteral("shrink"));
+    // Custom card fonts as absolute paths (empty == default). A path missing on
+    // another machine falls back to the bundled font at render time (§8).
+    if (cardFontSelector_.widget != nullptr) {
+        card.insert(QStringLiteral("fontDisplay"), cardFontSelector_.displayPath());
+        card.insert(QStringLiteral("fontBody"), cardFontSelector_.bodyPath());
+    }
     state.card = card;
 
     // Layer geometry + visibility (chart-frame enabled == its layer visible) +
@@ -2109,6 +2228,11 @@ void CoverStudioPanel::applyCompositionJson(const QJsonObject& root, bool intera
             const QSignalBlocker block(textOverflowCombo_);
             textOverflowCombo_->setCurrentIndex(ltIdx);
         }
+    }
+    if (cardFontSelector_.widget != nullptr) {
+        // setSelection suppresses onChanged; the trailing pushInputs() applies it.
+        cardFontSelector_.setSelection(card.value(QStringLiteral("fontDisplay")).toString(),
+                                       card.value(QStringLiteral("fontBody")).toString());
     }
 
     // --- Layer geometry (restores positions/scale + per-layer visible + frameSeconds). ---

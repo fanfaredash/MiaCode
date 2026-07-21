@@ -7,6 +7,7 @@
 #include <functional>
 
 #include "VideoExportController.h"
+#include "tools/video_export/CardFontSettings.h"   // CardFontSelector
 
 class QCheckBox;
 class QCloseEvent;
@@ -280,6 +281,8 @@ private:
     QComboBox* introCardModeCombo_ = nullptr;
     QCheckBox* introCardShadowCheck_ = nullptr;
     QCheckBox* introLevelTextCheck_ = nullptr;
+    // Difficulty-card custom fonts for the intro (empty path == bundled default).
+    miacode::video_export::CardFontSelector introCardFontSelector_;
     IntroPreviewWidget* introPreview_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
     QComboBox* backgroundScaleModeCombo_ = nullptr;
