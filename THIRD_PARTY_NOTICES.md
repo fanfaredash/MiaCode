@@ -18,7 +18,7 @@ This file inventories libraries, tools, fonts, media assets, and reference proje
 | SoundTouch | Audio processing under [third_party/soundtouch](third_party/soundtouch) | LGPL 2.1, see [third_party/soundtouch/COPYING.TXT](third_party/soundtouch/COPYING.TXT). Static linking and redistribution obligations need review before public release. |
 | miniz | ZIP packaging under [third_party/miniz](third_party/miniz) | MIT License, see [third_party/miniz/LICENSE](third_party/miniz/LICENSE). |
 | miniaudio | Audio playback / decode helper under [third_party/miniaudio](third_party/miniaudio) | Public Domain or MIT-0, see the license block in [third_party/miniaudio/miniaudio.h](third_party/miniaudio/miniaudio.h). |
-| BASS, BASSmix, BASS_FX, BASS_AAC, BASSOPUS | Windows audio backend headers/import libs and packaged runtime DLLs | Kept for non-commercial MiaCode builds/releases. BASS is not a general open-source dependency; do not use MiaCode's bundled BASS files for commercial redistribution without appropriate BASS licensing. |
+| BASS, BASSmix, BASS_FX, BASS_AAC, BASSOPUS | Windows and macOS audio backends, offline export mixing, and waveform decoding; packaged DLL/dylib runtimes | Kept for non-commercial MiaCode builds/releases. BASS is not a general open-source dependency; do not use MiaCode's bundled BASS files for commercial redistribution without appropriate BASS licensing. |
 
 ## Fonts
 

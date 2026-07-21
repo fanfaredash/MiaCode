@@ -21,8 +21,12 @@
 
 #include <cstdio>   // G1 Commit 8 followup: std::snprintf for startup-beacon lines
 
+#ifdef MIACODE_HAS_BASS_AUDIO
 #ifdef Q_OS_WIN
 #include <windows.h>
+#elif defined(Q_OS_MACOS)
+#include <dlfcn.h>
+#endif
 
 #include "bass.h"
 #include "bassmix.h"
@@ -37,7 +41,7 @@ using namespace miacode::audio::bass_detail;
 // shared across the BassPreviewAudioBackend translation units (declared
 // `extern` in BassPreviewAudioBackendImpl.h). It is DEFINED here, exactly
 // once, in the engine-init TU that owns BASS_Init / BASS_Free.
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
 namespace miacode {
 namespace audio {
 namespace bass_detail {
@@ -50,10 +54,10 @@ int gBassDeviceRefCount = 0;
 bool BassPreviewAudioBackend::ensureBassFxLoaded()
 {
     MC_OP("BassPreviewAudioBackend::ensureBassFxLoaded");
-#ifdef Q_OS_WIN
     if (bassFxTempoCreate_ != nullptr) {
         return true;
     }
+#ifdef Q_OS_WIN
     const QString libraryPath = runtimeFilePath(QStringLiteral("bass_fx.dll"));
     _mc_op_.note(QStringLiteral("path=%1").arg(libraryPath));
     const HMODULE module = LoadLibraryW(reinterpret_cast<LPCWSTR>(libraryPath.utf16()));
@@ -72,8 +76,33 @@ bool BassPreviewAudioBackend::ensureBassFxLoaded()
     bassFxModule_ = module;
     bassFxTempoCreate_ = reinterpret_cast<void*>(proc);
     return true;
+#elif defined(Q_OS_MACOS) && defined(MIACODE_HAS_BASS_AUDIO)
+    const QString libraryPath = runtimeFilePath(QStringLiteral("libbass_fx.dylib"));
+    _mc_op_.note(QStringLiteral("path=%1").arg(libraryPath));
+    const QByteArray encodedPath = QFile::encodeName(libraryPath);
+    void* module = dlopen(encodedPath.constData(), RTLD_NOW | RTLD_LOCAL);
+    if (module == nullptr) {
+        const char* error = dlerror();
+        _mc_op_.fail(QStringLiteral("dlopen failed error=%1")
+                         .arg(QString::fromLocal8Bit(error != nullptr ? error : "unknown")));
+        appendAudioDebugLog(QString("bass_fx_load_failed path=%1").arg(libraryPath));
+        return false;
+    }
+    dlerror();
+    void* proc = dlsym(module, "BASS_FX_TempoCreate");
+    const char* symbolError = dlerror();
+    if (proc == nullptr || symbolError != nullptr) {
+        dlclose(module);
+        _mc_op_.fail(QStringLiteral("dlsym BASS_FX_TempoCreate missing error=%1")
+                         .arg(QString::fromLocal8Bit(symbolError != nullptr ? symbolError : "unknown")));
+        appendAudioDebugLog(QString("bass_fx_symbol_missing path=%1").arg(libraryPath));
+        return false;
+    }
+    bassFxModule_ = module;
+    bassFxTempoCreate_ = proc;
+    return true;
 #else
-    _mc_op_.fail(QStringLiteral("non-Windows platform"));
+    _mc_op_.fail(QStringLiteral("BASS backend unavailable"));
     return false;
 #endif
 }
@@ -84,6 +113,10 @@ void BassPreviewAudioBackend::unloadBassFx()
     if (bassFxModule_ != nullptr) {
         FreeLibrary(static_cast<HMODULE>(bassFxModule_));
     }
+#elif defined(Q_OS_MACOS) && defined(MIACODE_HAS_BASS_AUDIO)
+    if (bassFxModule_ != nullptr) {
+        dlclose(bassFxModule_);
+    }
 #endif
     bassFxModule_ = nullptr;
     bassFxTempoCreate_ = nullptr;
@@ -91,6 +124,7 @@ void BassPreviewAudioBackend::unloadBassFx()
 
 void BassPreviewAudioBackend::loadOptionalPlugins()
 {
+#ifdef MIACODE_HAS_BASS_AUDIO
 #ifdef Q_OS_WIN
     if (pluginAac_ == 0) {
         const QString aacPath = runtimeFilePath(QStringLiteral("bass_aac.dll"));
@@ -104,12 +138,22 @@ void BassPreviewAudioBackend::loadOptionalPlugins()
             pluginOpus_ = BASS_PluginLoad(reinterpret_cast<const WCHAR*>(opusPath.utf16()), 0);
         }
     }
+#elif defined(Q_OS_MACOS)
+    if (pluginOpus_ == 0) {
+        const QString opusPath = runtimeFilePath(QStringLiteral("libbassopus.dylib"));
+        if (QFileInfo::exists(opusPath)) {
+            const QByteArray encodedPath = QFile::encodeName(opusPath);
+            pluginOpus_ = BASS_PluginLoad(encodedPath.constData(), 0);
+            noteBassErr("plugin_load_opus");
+        }
+    }
+#endif
 #endif
 }
 
 void BassPreviewAudioBackend::unloadOptionalPlugins()
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (pluginAac_ != 0) {
         BASS_PluginFree(pluginAac_);
         noteBassErr("plugin_free_aac");
@@ -126,8 +170,8 @@ void BassPreviewAudioBackend::unloadOptionalPlugins()
 bool BassPreviewAudioBackend::initializeAudioEngine()
 {
     MC_OP("BassPreviewAudioBackend::initializeAudioEngine");
-#ifndef Q_OS_WIN
-    _mc_op_.fail(QStringLiteral("non-Windows platform"));
+#ifndef MIACODE_HAS_BASS_AUDIO
+    _mc_op_.fail(QStringLiteral("BASS backend unavailable"));
     return false;
 #else
     if (engineInitialized_ && masterMixer_ != 0) {
@@ -208,4 +252,3 @@ bool BassPreviewAudioBackend::audioEngineInitialized() const
 {
     return engineInitialized_ && masterMixer_ != 0;
 }
-

@@ -49,7 +49,7 @@ QtPreviewSfxRuntime::~QtPreviewSfxRuntime()
 
 std::unique_ptr<miacode::preview_audio::PreviewAudioBackend> QtPreviewSfxRuntime::createBackend() const
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     auto bassBackend = std::make_unique<BassPreviewAudioBackend>();
     QString bassReason;
     const bool bassReady = bassBackend->canBePrimary(&bassReason);

@@ -22,6 +22,13 @@ endif()
 # to the same string now.
 set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_VERSION_STRING}")
 
+if (APPLE)
+    # MiaCode's macOS release is Apple-Silicon-only. Keeping this fixed before
+    # project() also makes every bundled dependency and helper inherit the same
+    # architecture contract instead of silently following the build machine.
+    set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "Supported macOS architecture" FORCE)
+endif()
+
 project(MiaCode VERSION ${MIACODE_VERSION} LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -702,7 +709,7 @@ target_sources(MiaCode PRIVATE
     src/tools/video_export/LegacyExportAudioBackend.cpp
 )
 
-if (WIN32)
+if (WIN32 OR APPLE)
     target_sources(MiaCode PRIVATE
         src/audio/BassPreviewAudioBackend.h
         src/audio/BassPreviewAudioBackend.cpp
@@ -713,6 +720,12 @@ if (WIN32)
         src/audio/BassPreviewAudioBackend_EventDrain.cpp
         src/tools/video_export/BassExportAudioBackend.h
         src/tools/video_export/BassExportAudioBackend.cpp
+    )
+    target_compile_definitions(MiaCode PRIVATE MIACODE_HAS_BASS_AUDIO=1)
+endif()
+
+if (WIN32)
+    target_sources(MiaCode PRIVATE
         src/render/backend_d3d11/PreviewDCompCore.h
         src/render/backend_d3d11/PreviewDCompCore.cpp
         src/render/backend_d3d11/TimelineRenderView.h
@@ -749,6 +762,36 @@ if (WIN32)
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_aac.dll"
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassopus.dll"
             $<TARGET_FILE_DIR:MiaCode>
+    )
+elseif (APPLE)
+    set(MIACODE_BASS_MACOS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/macos/universal")
+    set(MIACODE_BASS_MACOS_LIBRARIES
+        "${MIACODE_BASS_MACOS_DIR}/libbass.dylib"
+        "${MIACODE_BASS_MACOS_DIR}/libbassmix.dylib"
+        "${MIACODE_BASS_MACOS_DIR}/libbass_fx.dylib"
+        "${MIACODE_BASS_MACOS_DIR}/libbassopus.dylib"
+    )
+    foreach(MIACODE_BASS_LIBRARY IN LISTS MIACODE_BASS_MACOS_LIBRARIES)
+        if (NOT EXISTS "${MIACODE_BASS_LIBRARY}")
+            message(FATAL_ERROR "Missing required macOS BASS runtime: ${MIACODE_BASS_LIBRARY}")
+        endif()
+    endforeach()
+
+    target_link_libraries(MiaCode PRIVATE
+        "${MIACODE_BASS_MACOS_DIR}/libbass.dylib"
+        "${MIACODE_BASS_MACOS_DIR}/libbassmix.dylib"
+    )
+    set_target_properties(MiaCode PROPERTIES
+        BUILD_RPATH "@executable_path/../Frameworks"
+        INSTALL_RPATH "@executable_path/../Frameworks"
+    )
+    add_custom_command(TARGET MiaCode POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:MiaCode>/../Frameworks"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${MIACODE_BASS_MACOS_LIBRARIES}
+            "$<TARGET_FILE_DIR:MiaCode>/../Frameworks"
+        COMMENT "Deploying macOS BASS runtime libraries"
     )
 endif()
 
@@ -1019,6 +1062,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/audio/BassPreviewAudioBackend_PlaybackClock.cpp
             src/audio/BassPreviewAudioBackend_EventDrain.cpp
         )
+        target_compile_definitions(soundtouch_probe PRIVATE MIACODE_HAS_BASS_AUDIO=1)
         target_include_directories(soundtouch_probe PRIVATE third_party/bass/include)
         target_link_libraries(soundtouch_probe PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
