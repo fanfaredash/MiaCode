@@ -23,10 +23,13 @@ int firstTouchCandidateStart(const QString& text, int start, int end)
         const QChar closing = opening == QLatin1Char('(')
             ? QLatin1Char(')')
             : opening == QLatin1Char('{') ? QLatin1Char('}') : QChar();
-        if (closing.isNull()) {
+        const bool isHsDirective = text.mid(position, 4) == QStringLiteral("<HS*");
+        if (closing.isNull() && !isHsDirective) {
             break;
         }
-        const int closePosition = text.indexOf(closing, position + 1);
+        const int closePosition = isHsDirective
+            ? text.indexOf(QLatin1Char('>'), position + 4)
+            : text.indexOf(closing, position + 1);
         if (closePosition < 0 || closePosition >= end) {
             break;
         }
@@ -60,12 +63,20 @@ TouchPadAuthoringEditPlan planTouchPadAuthoringEdit(
     const int rightComma = text.indexOf(QLatin1Char(','), position);
     plan.tokenStart = leftComma + 1;
     const int tokenEnd = rightComma >= 0 ? rightComma : text.size();
-    const QString token = text.mid(plan.tokenStart, tokenEnd - plan.tokenStart);
-    const bool empty = token.trimmed().isEmpty();
-    int meaningfulEnd = tokenEnd;
+    // A `||` comment occupies the rest of the line and is not chart content.
+    // Keep it outside both the emptiness test and the edit range so a pad is
+    // inserted before the comment rather than separated from it by `/` or '`'.
+    const int commentStart = text.indexOf(QStringLiteral("||"), plan.tokenStart);
+    const int contentEnd = commentStart >= plan.tokenStart && commentStart < tokenEnd
+        ? commentStart
+        : tokenEnd;
+    int meaningfulEnd = contentEnd;
     while (meaningfulEnd > plan.tokenStart && text.at(meaningfulEnd - 1).isSpace()) {
         --meaningfulEnd;
     }
+    // Reuse the ordinary-touch removal path's leading-control scan: BPM and
+    // subdivision declarations do not make a comma token non-empty.
+    const bool empty = firstTouchCandidateStart(text, plan.tokenStart, meaningfulEnd) >= meaningfulEnd;
 
     int itemStart = plan.tokenStart;
     int itemIndex = 0;
@@ -103,10 +114,17 @@ TouchPadAuthoringEditPlan planTouchPadAuthoringEdit(
         ++itemIndex;
     }
 
-    plan.insertionPosition = empty ? plan.tokenStart : meaningfulEnd;
-    plan.insertionText = empty
-        ? normalizedPad
-        : QString(useBacktickSeparator ? QLatin1Char('`') : QLatin1Char('/')) + normalizedPad;
+    plan.insertionPosition = meaningfulEnd;
+    if (empty) {
+        // Controls are part of the token prefix, not an each-note separator.
+        // Keep the conventional whitespace gap when a BPM/subdivision prefix
+        // immediately precedes the newly authored pad.
+        const bool needsSpace = meaningfulEnd > plan.tokenStart
+            && !text.at(meaningfulEnd - 1).isSpace();
+        plan.insertionText = needsSpace ? QStringLiteral(" ") + normalizedPad : normalizedPad;
+    } else {
+        plan.insertionText = QString(useBacktickSeparator ? QLatin1Char('`') : QLatin1Char('/')) + normalizedPad;
+    }
     plan.valid = true;
     return plan;
 }

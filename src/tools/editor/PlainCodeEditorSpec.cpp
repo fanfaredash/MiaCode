@@ -145,6 +145,15 @@ int main(int argc, char** argv)
         const bool applied = miacode::editor::applyTouchPadAuthoringEdit(&document, &cursor, plan);
         expect(applied && document.toPlainText() == expected, message, out, &failed);
     };
+    expectTouchEdit(QStringLiteral("(160){16}"), 0, false, QStringLiteral("(160){16} A1"),
+                    QStringLiteral("timing-only token receives a pad without a touch separator"));
+    expectTouchEdit(QStringLiteral("{16}"), 0, false, QStringLiteral("{16} A1"),
+                    QStringLiteral("meter-only token receives a pad without a touch separator"));
+    expectTouchEdit(QStringLiteral("<HS*1.5>"), 0, false, QStringLiteral("<HS*1.5> A1"),
+                    QStringLiteral("HS-only token receives a pad without a touch separator"));
+    expectTouchEdit(QStringLiteral("(160){16} || lead-in"), 0, false,
+                    QStringLiteral("(160){16} A1 || lead-in"),
+                    QStringLiteral("comment-only token content does not require a touch separator"));
     expectTouchEdit(QStringLiteral("1/A1/B2"), 2, false, QStringLiteral("1/B2"),
                     QStringLiteral("existing middle pad removes its preceding separator"));
     expectTouchEdit(QStringLiteral("A1/B2"), 0, false, QStringLiteral("B2"),
