@@ -1655,6 +1655,8 @@ QString exportDialogStyleSheet()
         "QLineEdit:disabled, QDoubleSpinBox:disabled { background: %8; border-color: %3; color: %9; }"
         "QLabel { color: %4; }"
         "QCheckBox { color: %4; spacing: 6px; }"
+        "QGroupBox#BatchExportDifficultyGroup { background: %2; border: 1px solid %3; border-radius: 10px; margin-top: 12px; padding-top: 10px; }"
+        "QGroupBox#BatchExportDifficultyGroup::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }"
         // "添加片头" master switch sits in a neutral rounded box matching the
         // intro option groups, distinct from the louder export action buttons.
         "QFrame#AddIntroCapsule { background: %5; border: 1px solid %6; border-radius: 8px; }"

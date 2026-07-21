@@ -14,6 +14,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGridLayout>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -232,30 +233,25 @@ QWidget* BatchExportPanel::buildBatchOutputControls()
     layout->setContentsMargins(4, 6, 4, 6);
     layout->setSpacing(10);
 
-    auto* difficultySection = new QWidget(content);
-    auto* difficultyLayout = new QVBoxLayout(difficultySection);
-    difficultyLayout->setContentsMargins(0, 0, 0, 0);
-    difficultyLayout->setSpacing(6);
-    difficultyLayout->addWidget(
-        new QLabel(UiText::text(QStringLiteral("dialog.batch_export.difficulty")), difficultySection), 0);
-    auto* difficultyGridHost = new QWidget(difficultySection);
-    auto* difficultyGrid = new QGridLayout(difficultyGridHost);
-    difficultyGrid->setContentsMargins(0, 0, 0, 0);
-    difficultyGrid->setHorizontalSpacing(12);
-    difficultyGrid->setVerticalSpacing(6);
+    auto* difficultyGroup = new QGroupBox(
+        UiText::text(QStringLiteral("dialog.batch_export.difficulty")), content);
+    difficultyGroup->setObjectName(QStringLiteral("BatchExportDifficultyGroup"));
+    auto* difficultyGrid = new QGridLayout(difficultyGroup);
+    difficultyGrid->setContentsMargins(10, 8, 10, 8);
+    difficultyGrid->setHorizontalSpacing(10);
+    difficultyGrid->setVerticalSpacing(8);
     for (int column = 0; column < kBatchExportTaskDifficultyGridColumns; ++column) {
         difficultyGrid->setColumnStretch(column, 1);
     }
     for (int index = 0; index < availableDifficultyIds_.size(); ++index) {
         const int difficultyId = availableDifficultyIds_.at(index);
-        auto* check = new QCheckBox(SimaiDocument::difficultyShortName(difficultyId), difficultyGridHost);
+        auto* check = new QCheckBox(SimaiDocument::difficultyShortName(difficultyId), difficultyGroup);
         check->setChecked(selectionState_.selectedDifficultyIds().contains(difficultyId));
         difficultyChecks_.append(check);
         const BatchExportTaskGridPosition position = batchExportTaskDifficultyGridPosition(index);
         difficultyGrid->addWidget(check, position.row, position.column);
     }
-    difficultyLayout->addWidget(difficultyGridHost, 0);
-    layout->addWidget(difficultySection, 0);
+    layout->addWidget(difficultyGroup, 0);
 
     auto* outputSection = new QWidget(content);
     auto* outputSectionLayout = new QVBoxLayout(outputSection);
