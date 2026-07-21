@@ -335,7 +335,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `FrameBootstrap` connection plans/applies the edit through `TouchPadAuthoringEdit`, resolves the
   caret token through `TimelineQuickModel::resolveTimelineSecondForCursor`, and seeks discretely to
   `max(0, tokenSecond - 1/60)`. The comma-delimited token is selected by the editor caret (caret
-  immediately before a comma belongs to the left token); empty tokens receive the pad directly,
+  immediately before a comma belongs to the left token); tokens containing only whitespace,
+  leading BPM/subdivision/`<HS*>` controls, and/or `||` comments are empty and receive the pad directly
+  after their controls (before the comment),
   nonempty tokens receive `/pad` on left click or `` `pad`` on right click. Clicking an ordinary
   exact pad already present in the token removes only its first occurrence together with the
   adjacent separator (while preserving leading timing controls and trailing whitespace). Press

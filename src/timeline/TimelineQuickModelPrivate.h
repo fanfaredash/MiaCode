@@ -63,6 +63,14 @@ inline bool tryConsumeLeadingFollowControlToken(const QString& text, int limit, 
         }
     }
 
+    if (text.mid(start, 4) == QStringLiteral("<HS*")) {
+        const int close = text.indexOf(QLatin1Char('>'), start + 4);
+        if (close >= start + 4 && close < limit) {
+            *cursor = close + 1;
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -94,6 +102,14 @@ inline bool tryConsumeTrailingFollowControlToken(const QString& text, int start,
                 *endExclusive = open;
                 return true;
             }
+        }
+    }
+
+    if (text.at(end - 1) == QLatin1Char('>')) {
+        const int open = text.lastIndexOf(QStringLiteral("<HS*"), end - 1);
+        if (open >= start && open + 4 < end) {
+            *endExclusive = open;
+            return true;
         }
     }
 

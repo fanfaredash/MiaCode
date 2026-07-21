@@ -1,4 +1,5 @@
 #include "timeline/TimelineQuickModel.h"
+#include "timeline/TimelineQuickModelPrivate.h"
 #include "core/chart/document/SimaiTimingMetadata.h"
 #include "core/chart/parser/SimaiNativeParser.h"
 
@@ -735,6 +736,7 @@ int main(int argc, char** argv)
     QTextStream err(stderr);
 
     int failed = 0;
+
     const auto expect = [&](bool condition, const QString& message) {
         if (condition) {
             out << "[PASS] " << message << '\n';
@@ -743,6 +745,20 @@ int main(int argc, char** argv)
         err << "[FAIL] " << message << '\n';
         ++failed;
     };
+
+    {
+        const QString hsDirective = QStringLiteral("<HS*1.5>");
+        int leading = 0;
+        int trailing = hsDirective.size();
+        expect(
+            miacode::timeline::tqm_detail::tryConsumeLeadingFollowControlToken(
+                hsDirective, hsDirective.size(), &leading)
+                && leading == hsDirective.size()
+                && miacode::timeline::tqm_detail::tryConsumeTrailingFollowControlToken(
+                    hsDirective, 0, &trailing)
+                && trailing == 0,
+            QStringLiteral("follow control trimming recognizes leading and trailing HS directives"));
+    }
 
     {
         TimelineRenderLine longSlide;
