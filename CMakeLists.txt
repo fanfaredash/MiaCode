@@ -1484,6 +1484,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/tools
     )
 
+    miacode_add_dev_tool(video_export_intro_mode_spec TEST
+        SOURCES
+            src/tools/video_export/VideoExportIntroModeSpec.cpp
+            src/tools/video_export/VideoExportController.h
+            src/timeline/TimelineData.h
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src src/common src/audio src/core/video src/timeline src/tools src/tools/video_export
+    )
+
     miacode_add_dev_tool(video_export_audio_render_plan_spec TEST
         SOURCES
             src/tools/video_export/VideoExportAudioRenderPlanSpec.cpp

@@ -46,7 +46,8 @@ block at `:586`). These are dev/diagnostic/spec binaries, off by default:
   `preview_realtime_object_hot_path_spec`, `preview_quick_sprite_batch_spec`,
   `preview_sfx_timeline_spec`, `preview_audio_settings_spec`, `bass_preview_retained_state_spec`,
   `bass_preview_debug_log_routing_spec`, `quickshell_preview_surface_policy_spec`,
-  `video_export_runtime_policy_spec`, `video_export_audio_render_plan_spec`,
+  `video_export_runtime_policy_spec`, `video_export_intro_mode_spec`,
+  `video_export_audio_render_plan_spec`,
   `touch_pad_authoring_state_spec`,
   `chart_zip_packager_spec` (verifies the Export-as-ZIP packager against real zip read-back),
   `debug_flag_index_spec` (drift guard — every `MIACODE_*` flag read in `src/` must appear in

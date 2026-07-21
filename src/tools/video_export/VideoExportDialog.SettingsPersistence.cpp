@@ -206,6 +206,7 @@ void VideoExportDialog::loadPersistedSettings()
             settings.value(QStringLiteral("intro_card_font_display")).toString(),
             settings.value(QStringLiteral("intro_card_font_body")).toString());
     }
+    refreshIntroCardModeAutoLabel();
     resizeIntroPreviewToAspect();
     syncIntroControlsEnabled();
     refreshIntroPreview();

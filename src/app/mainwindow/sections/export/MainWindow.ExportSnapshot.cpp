@@ -66,6 +66,19 @@ QString introBpmString(double bpm)
     return text;
 }
 
+QString detectIntroBannerModeForChart(const SimaiDocument& document, const QString& chartBody)
+{
+    if (chartBody.trimmed().isEmpty()) {
+        return QStringLiteral("Standard");
+    }
+    const miacode::simai::SimaiTimingMetadata timingMetadata =
+        miacode::simai::buildTimingMetadata(document);
+    const SimaiNativeParseResult parsedTimeline = SimaiNativeParser::parseForTimeline(
+        chartBody,
+        timingMetadata);
+    return detectedIntroBannerMode(parsedTimeline.noteMarkers);
+}
+
 // Resolve the pre-roll intro banner payload from a chart. BPM uses the shared
 // clockBpmForChart fallback (&wholebpm -> first (BPM) -> 120), matching the
 // prepend-silence tool. The jacket is the still background image only (never
@@ -82,12 +95,12 @@ IntroBannerSpec buildIntroBannerSpec(
     intro.title = document.title;
     intro.artist = document.artist;
     intro.difficulty = introDifficultyAtlasKey(difficultyId);
-    intro.mode = QStringLiteral("DX");
     const SimaiDifficultyData* difficulty = document.difficulty(difficultyId);
+    const QString chartBody = (difficulty != nullptr) ? difficulty->chart : QString();
+    intro.mode = detectIntroBannerModeForChart(document, chartBody);
     intro.level = (difficulty != nullptr) ? difficulty->level : QString();
     const QString perDifficultyDesigner = (difficulty != nullptr) ? difficulty->designer : QString();
     intro.designer = perDifficultyDesigner.trimmed().isEmpty() ? document.designer : perDifficultyDesigner;
-    const QString chartBody = (difficulty != nullptr) ? difficulty->chart : QString();
     intro.bpm = introBpmString(miacode::chart_clock::clockBpmForChart(document, chartBody));
     intro.jacketPath = chartPath.isEmpty()
         ? QString()
