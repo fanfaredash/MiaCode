@@ -27,7 +27,7 @@ Implication:
 - Timeline note-head art selection should mirror preview base/overlay precedence: break or each chooses the base icon first, and EX overlays on top of that base instead of replacing break/each state in the timeline.
 - `TimelineQuickModel` is now the owner of comma-only `C` anchor lookup for editor cursor sync, header/timeline `R -> C` jumps, and playback follow.
 - Timeline beat-grid semantics are mirrored between `SimaiNativeParser` and `TimelineQuickModel`: every comma remains a beat line, while measure lines are generated on an independent meter timeline. The current meter now comes from shared `SimaiTimingMetadata` (`&whole_time_signature=`), inline `|| x/y` comments restart that meter timeline at the exact comment position, `{beats}` only changes comma spacing, and `(BPM)` changes restart the independent measure-line timeline at the BPM-change position.
-- Guide-layer state should group each-guide connectors by parser-derived `eachGroupId` when available; do not merge backtick-separated groups just because their `marker.second` matches.
+- Guide-layer state should group each-guide connectors by parser-derived `eachGroupId` when available; do not merge backtick-separated groups just because their `marker.second` matches. Consecutive backticks are accepted as input compatibility and collapse to one backtick separator, with no extra timing gap.
 - Timeline note sprite stacking is intentionally preview-mirrored for overlapping markers: `TimelineView::paintEvent` keeps slide/wifi tracks behind note heads, uses the preview-style descending-`second` stack for tap/hold/slide/wifi heads, and then draws touch above that stack with touch-hold above touch. If preview object-layer order changes, review `src/timeline/TimelineView.Paint.cpp`, `src/core/scene/PreviewLayerOrder.h`, and `src/preview/quick_scene/*` together.
 - Same-second slide/head/track/motion stacking is now shared by `src/core/scene/PreviewMarkerDrawOrder.*` plus the prepared `drawOrder` in `PreviewPreparedSceneCache`. If you change who sits “on top” for overlapping slides, update the helper and review `PreviewHeadLayerState.cpp`, `PreviewTrackLayerState.cpp`, `PreviewSlideMotionLayerState.cpp`, and the related preview specs together instead of patching one layer locally.
 - The slide stacking direction is now runtime state, not a hardwired preview-only branch: `PreviewFrameState::render.slideEarlierSecondAndTextOnTop` is seeded from the common default constant, persisted by main-window render settings, and serialized through `VideoExportTask` / `VideoExportSnapshot` so the export worker sees the same DX-vs-FiNALE choice as the live preview.
@@ -88,7 +88,7 @@ Current contract:
 
 If you change timing-metadata semantics, review all of:
 
-- `src/simai/document/SimaiTimingMetadata.cpp`
+- `src/core/chart/document/SimaiTimingMetadata.cpp`
 - `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
 - `src/app/mainwindow/sections/validation/MainWindow.ValidationFlow.cpp`
 - `src/timeline/TimelineQuickModel.cpp`

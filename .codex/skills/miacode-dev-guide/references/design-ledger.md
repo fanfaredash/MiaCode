@@ -18,6 +18,7 @@ Use this file to separate hard contracts from adjustable implementation choices.
   - preview
   - Muri analysis
   - export reconstruction
+- Simai backtick separators accept a consecutive run of `` ` `` characters as input compatibility, but the run collapses to a single backtick separator: it splits each-groups without adding a timing gap, and strict validation still requires notes on both sides of the run.
 - Runtime SFX and export SFX must use the same note-to-sound semantics.
 - `&first` is stored as raw document data; timing semantics are applied through getters and marker shifting instead of ad-hoc inversion scattered around the codebase.
 - Preview timing semantics now follow the current preview contract: raw `&first` is parsed directly into preview/export/tooling `firstSeconds` without a second inverted helper layer, preview `audioOffset` acts as a chart-domain whole-SFX shift, positive `displayOffset` advances the `answer` / `judge` families, `answerOffset` stays answer-only, `judgeOffset` stays judge-only, and slide / break-slide / touchhold-sustain / firework-anchor timing keeps only the global chart-domain shift.

@@ -668,11 +668,37 @@ int main(int argc, char** argv)
         const SimaiNativeParseResult strictDoubleSlash = SimaiNativeParser::validateSyntax(QStringLiteral("1//2,\nE"));
         const SimaiNativeParseResult lenientDoubleBacktick = SimaiNativeParser::parseForTimeline(QStringLiteral("1``2,\nE"));
         const SimaiNativeParseResult strictDoubleBacktick = SimaiNativeParser::validateSyntax(QStringLiteral("1``2,\nE"));
+        const SimaiNativeParseResult strictTripleBacktick = SimaiNativeParser::validateSyntax(QStringLiteral("1```2,\nE"));
 
         expect(lenientDoubleSlash.ok, QStringLiteral("lenient parse keeps accepting repeated slash separator for compatibility"));
         expect(!strictDoubleSlash.ok, QStringLiteral("validate rejects repeated slash separator"));
-        expect(lenientDoubleBacktick.ok, QStringLiteral("lenient parse keeps accepting repeated backtick separator for compatibility"));
-        expect(!strictDoubleBacktick.ok, QStringLiteral("validate rejects repeated backtick separator"));
+        expect(lenientDoubleBacktick.ok, QStringLiteral("lenient parse accepts repeated backtick separator for compatibility"));
+        expect(strictDoubleBacktick.ok, QStringLiteral("validate accepts repeated backtick separator as a single backtick"));
+        expect(strictTripleBacktick.ok, QStringLiteral("validate accepts three repeated backticks as a single backtick"));
+        if (strictDoubleBacktick.noteMarkers.size() == 2) {
+            expect(
+                nearlyEqual(strictDoubleBacktick.noteMarkers.at(0).second, strictDoubleBacktick.noteMarkers.at(1).second),
+                QStringLiteral("double backtick does not add a time gap"));
+            expect(
+                !strictDoubleBacktick.noteMarkers.at(0).isEach
+                    && !strictDoubleBacktick.noteMarkers.at(1).isEach
+                    && strictDoubleBacktick.noteMarkers.at(0).eachGroupId != strictDoubleBacktick.noteMarkers.at(1).eachGroupId,
+                QStringLiteral("double backtick still splits each-groups like a single backtick"));
+        } else {
+            expect(false, QStringLiteral("double backtick emits two notes"));
+        }
+        if (strictTripleBacktick.noteMarkers.size() == 2) {
+            expect(
+                nearlyEqual(strictTripleBacktick.noteMarkers.at(0).second, strictTripleBacktick.noteMarkers.at(1).second),
+                QStringLiteral("triple backtick does not add a time gap"));
+            expect(
+                !strictTripleBacktick.noteMarkers.at(0).isEach
+                    && !strictTripleBacktick.noteMarkers.at(1).isEach
+                    && strictTripleBacktick.noteMarkers.at(0).eachGroupId != strictTripleBacktick.noteMarkers.at(1).eachGroupId,
+                QStringLiteral("triple backtick still splits each-groups like a single backtick"));
+        } else {
+            expect(false, QStringLiteral("triple backtick emits two notes"));
+        }
 
         const SimaiNativeValidationReport doubleSlashReport = SimaiNativeParser::buildValidationReport(
             QStringLiteral("1//2,\nE"),
@@ -684,8 +710,8 @@ int main(int argc, char** argv)
         );
         expect(!doubleSlashReport.ok, QStringLiteral("validation report treats repeated slash separator as error"));
         expect(doubleSlashReport.errorCount == 1, QStringLiteral("repeated slash separator counts as one validation error"));
-        expect(!doubleBacktickReport.ok, QStringLiteral("validation report treats repeated backtick separator as error"));
-        expect(doubleBacktickReport.errorCount == 1, QStringLiteral("repeated backtick separator counts as one validation error"));
+        expect(doubleBacktickReport.ok, QStringLiteral("validation report accepts repeated backtick separator"));
+        expect(doubleBacktickReport.errorCount == 0, QStringLiteral("repeated backtick separator has no validation errors"));
     }
 
     {

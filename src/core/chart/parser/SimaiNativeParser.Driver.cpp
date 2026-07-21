@@ -224,12 +224,6 @@ const QString& kRepeatedSlashSeparator()
     return value;
 }
 
-const QString& kRepeatedBacktickSeparator()
-{
-    static const QString value = QStringLiteral("Repeated separator '``' is not allowed");
-    return value;
-}
-
 const QString& kSeparatorMissingOperand()
 {
     static const QString value = QStringLiteral("Separator '/' or '`' is missing an adjacent note");
@@ -289,7 +283,6 @@ const QHash<QString, QString>& zhExactMap()
         {kInvalidHsValue(), QStringLiteral("<HS*N> 数值无效")},
         {kMissingBeatSeparator(), QStringLiteral("缺少拍间分隔符 ','")},
         {kRepeatedSlashSeparator(), QStringLiteral("不允许使用连续分隔符 '//'")},
-        {kRepeatedBacktickSeparator(), QStringLiteral("不允许使用连续分隔符 '``'")},
         {kSeparatorMissingOperand(), QStringLiteral("分隔符 '/' 或 '`' 缺少相邻音符")},
         {kChartEmpty(), QStringLiteral("谱面为空。")},
     };
@@ -344,7 +337,6 @@ const QHash<QString, QString>& jaExactMap()
         {kInvalidHsValue(), QStringLiteral("<HS*N> の値が無効です")},
         {kMissingBeatSeparator(), QStringLiteral("拍区切りの ',' がありません")},
         {kRepeatedSlashSeparator(), QStringLiteral("連続する区切り記号 '//' は使えません")},
-        {kRepeatedBacktickSeparator(), QStringLiteral("連続する区切り記号 '``' は使えません")},
         {kSeparatorMissingOperand(), QStringLiteral("区切り記号 '/' または '`' の隣にノーツがありません")},
         {kChartEmpty(), QStringLiteral("譜面が空です。")},
     };
@@ -948,25 +940,19 @@ SimaiNativeParseResult parseInternal(
             }
 
             if (ch == QChar('`')) {
-                if (strictMode && i + 1 < line.size() && line.at(i + 1) == QChar('`')) {
-                    flushToken(lineNumber);
-                    clearPendingLineEndNote();
-                    appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kRepeatedBacktickSeparator(), i + 2);
-                    finalizeEachGroup(&state, currentGroup);
-                    currentGroup.clear();
-                    eachOperandPending = false;
-                    pendingSeparatorCol = -1;
-                    ++i;
-                    continue;
+                int runEnd = i + 1;
+                while (runEnd < line.size() && line.at(runEnd) == QChar('`')) {
+                    ++runEnd;
                 }
                 if (strictMode && !eachOperandPending) {
-                    // e.g. ",`7" or a leading '`': nothing to the left.
+                    // e.g. ",`7", ",``7", or a leading '`': nothing to the left.
                     flushToken(lineNumber);
                     clearPendingLineEndNote();
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kSeparatorMissingOperand());
                     finalizeEachGroup(&state, currentGroup);
                     currentGroup.clear();
                     pendingSeparatorCol = -1;
+                    i = runEnd - 1;
                     continue;
                 }
                 flushToken(lineNumber);
@@ -977,6 +963,7 @@ SimaiNativeParseResult parseInternal(
                     pendingSeparatorCol = i + 1;
                     eachOperandPending = false;
                 }
+                i = runEnd - 1;
                 continue;
             }
 

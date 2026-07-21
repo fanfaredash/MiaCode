@@ -1886,6 +1886,31 @@ int main(int argc, char** argv)
     }
 
     {
+        const QString chart = QStringLiteral("1``2,3```4,\nE");
+        QString diff;
+        const bool matches = snapshotMatchesParser(chart, &diff);
+        if (!matches) {
+            err << diff << '\n';
+        }
+        expect(matches,
+               QStringLiteral("quick model treats repeated backticks as a single backtick separator"));
+        TimelineQuickModel model;
+        model.rebuildFromText(chart, 0.0);
+        const TimelineRenderSnapshot snapshot = model.snapshot();
+        expect(!snapshot.lines.isEmpty(), QStringLiteral("quick model builds snapshot for repeated backticks"));
+        if (!snapshot.lines.isEmpty()) {
+            const QVector<TimelineRenderNote>& notes = snapshot.lines.constFirst().notes;
+            expect(notes.size() == 4, QStringLiteral("quick model emits repeated-backtick notes"));
+            if (notes.size() == 4) {
+                expect(nearlyEqual(notes.at(0).secondOffset, notes.at(1).secondOffset),
+                       QStringLiteral("double backtick keeps adjacent notes at the same time"));
+                expect(nearlyEqual(notes.at(2).secondOffset, notes.at(3).secondOffset),
+                       QStringLiteral("triple backtick keeps adjacent notes at the same time"));
+            }
+        }
+    }
+
+    {
         TimelineQuickModel model;
         model.rebuildFromText(QStringLiteral("1<5[4:1],8-3[8:1],\nE"), 0.0);
         const TimelineRenderSnapshot snapshot = model.snapshot();

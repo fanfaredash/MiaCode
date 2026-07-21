@@ -716,6 +716,10 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
             flushToken();
             finalizeEachGroup(lineState, currentGroup);
             currentGroup.clear();
+            while (index + 1 < lineState->text.size()
+                   && lineState->text.at(index + 1) == QLatin1Char('`')) {
+                ++index;
+            }
             continue;
         }
         if (ch == QLatin1Char(',')) {
