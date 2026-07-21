@@ -16,7 +16,6 @@
 #include "common/OperationLog.h"
 #include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
-#include "tools/video_export/BatchVideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
 #include "tools/video_export/VideoExportRuntimePolicy.h"
 #include "tools/video_export/VideoExportDialog.h"

@@ -143,7 +143,9 @@ Shared concerns (collapse/latest-wins/offset rules live in `src/common/PreviewSf
   STARTING at chart 0 counts as full-range even if it ends early (count-down lead-in, no frozen
   preload / pause glyph); only start > 0 is partial. Decided in TWO places that must stay in sync:
   `VideoExportDialog.cpp` (`updated.fullRangeExport`) and `MainWindow.ExportSnapshot.cpp`
-  (`fullRangeExport`).
+  (`fullRangeExport`). The export hub's single and batch embedded panels both re-seed the audition
+  clock after installation and on the shared checkbox signal; batch badge changes use the current
+  batch setting but do not change its selected output difficulties.
 
 If one side changes, inspect the other in the same patch.
 

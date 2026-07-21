@@ -814,6 +814,24 @@ QString outlineListStyleSheet()
         .arg(css(c.menuHoverBg));
 }
 
+QString batchExportChartDirectoryListStyleSheet()
+{
+    const Colors& c = colors();
+    const QColor selectedBg = c.dark ? QColor("#263344") : QColor("#EDF4FF");
+    return QStringLiteral(
+        "QListWidget#BatchExportChartDirectoryList { background: %1; color: %2; border: 1px solid %3; border-radius: 8px; padding: 4px; outline: none; }"
+        "QListWidget#BatchExportChartDirectoryList::item { min-height: 28px; margin: 1px 0; padding: 4px 10px; border: 1px solid transparent; border-radius: 5px; }"
+        "QListWidget#BatchExportChartDirectoryList::item:selected { color: %2; background: %4; border-color: %5; }"
+        "QListWidget#BatchExportChartDirectoryList::item:!selected:hover { background: %6; border-color: %3; }"
+    )
+        .arg(css(c.cardBg))
+        .arg(css(c.textPrimary))
+        .arg(css(c.borderSoft))
+        .arg(css(selectedBg))
+        .arg(css(c.accent))
+        .arg(css(c.menuHoverBg));
+}
+
 QString previewPanelStyleSheet()
 {
     const Colors& c = colors();

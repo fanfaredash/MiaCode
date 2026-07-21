@@ -31,7 +31,6 @@
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
 #include "tools/video_export/VideoExportDialog.h"
-#include "tools/video_export/BatchVideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
 #include "common/AssetPaths.h"
 #include "common/ChartAssetPaths.h"
@@ -480,4 +479,3 @@ void warmupFileIntoOsCache(const QString& path, qint64 maxBytes = -1)
 }
 
 }  // namespace
-

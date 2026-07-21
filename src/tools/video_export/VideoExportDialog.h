@@ -107,7 +107,18 @@ public:
     // and reroutes the Export button: startExport() emits exportConfirmed()
     // instead of accept(), so the host launches the worker while the panel
     // stays open. The Tools-menu modal path is unchanged (flag off).
-    void setEmbeddedPanelMode(bool embedded);
+    // The compact embedded single-export page omits the intro preview; callers
+    // can retain it only when they explicitly host the preview column.
+    void setEmbeddedPanelMode(bool embedded, bool retainIntroPreview = false);
+    // Reuses the dialog's shared settings tabs inside BatchExportPanel. It
+    // removes the single-file output path and export-range surface, leaving the
+    // batch host to own its footer and its first task tab.
+    void setBatchSettingsPanelMode();
+    // Inserts the batch host's range/destination/source controls as the first
+    // vertically scrollable embedded tab. Call after setBatchSettingsPanelMode.
+    void insertBatchTaskTab(QWidget* controls);
+    bool buildBatchTaskTemplate(VideoExportTask* task, QString* errorMessage = nullptr) const;
+    bool isClockCountEnabledForPreview() const;
     bool embeddedPanelMode() const { return embeddedPanelMode_; }
     // While an embedded-launched export runs, the Export button doubles as
     // the cancel affordance (导出 → 取消导出); clicking it then emits

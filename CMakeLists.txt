@@ -276,8 +276,11 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/FontLibrary.cpp
     src/tools/video_export/CardFontSettings.h
     src/tools/video_export/CardFontSettings.cpp
-    src/tools/video_export/BatchVideoExportDialog.h
-    src/tools/video_export/BatchVideoExportDialog.cpp
+    src/tools/video_export/BatchExportPanel.h
+    src/tools/video_export/BatchExportTaskLayout.h
+    src/tools/video_export/BatchExportTaskLayout.cpp
+    src/tools/video_export/BatchExportSelectionState.cpp
+    src/tools/video_export/BatchExportPanel.cpp
     src/tools/video_export/VideoExportController.h
     src/tools/video_export/VideoExportController.cpp
     src/tools/video_export/VideoExportEncoder.cpp
@@ -1438,6 +1441,17 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/video_export/VideoExportRuntimePolicy.cpp
         LIBS Qt6::Core
         INCLUDES src src/tools
+    )
+
+    miacode_add_dev_tool(batch_export_panel_spec TEST
+        SOURCES
+            src/tools/video_export/BatchExportPanelSpec.cpp
+            src/tools/video_export/BatchExportPanel.h
+            src/tools/video_export/BatchExportTaskLayout.h
+            src/tools/video_export/BatchExportTaskLayout.cpp
+            src/tools/video_export/BatchExportSelectionState.cpp
+        LIBS Qt6::Core Qt6::Widgets
+        INCLUDES src src/common src/audio src/core/video src/timeline src/tools src/tools/video_export
     )
 
     miacode_add_dev_tool(video_export_audio_render_plan_spec TEST

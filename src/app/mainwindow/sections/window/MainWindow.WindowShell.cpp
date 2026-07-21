@@ -20,6 +20,7 @@
 #include "tools/export_page/ExportLauncherPage.h"
 #include "tools/latency/LatencyDetectionPage.h"
 #include "tools/video_export/VideoExportDialog.h"
+#include "tools/video_export/BatchExportPanel.h"
 #include "app/ui/AppBackgroundPainter.h"
 
 #include <QtCore>
@@ -983,6 +984,9 @@ void MainWindow::WindowSection::applyUiTheme()
         // dark canvas, so the panel's reparented root is backstopped even if its
         // own background rule is slow to repaint; this re-themes its children.)
         owner_.embeddedVideoExportPanel_->applyThemeStyles();
+    }
+    if (!owner_.embeddedBatchExportPanel_.isNull()) {
+        owner_.embeddedBatchExportPanel_->applyThemeStyles();
     }
     if (owner_.metadataEmptyHintLabel_ != nullptr) {
         owner_.metadataEmptyHintLabel_->setStyleSheet(UiTheme::metadataEmptyHintLabelStyleSheet());

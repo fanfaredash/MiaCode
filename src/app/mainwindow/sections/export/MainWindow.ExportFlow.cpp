@@ -1,6 +1,7 @@
 #include "MainWindow.ExportSection.h"
 #include "../../MainWindowShared.h"
 #include "../dialogs/MainWindow.DialogsSection.h"
+#include "../document/MainWindow.DocumentSection.h"
 #include "../window/MainWindow.WindowSection.h"
 
 #include "DialogLocalization.h"
@@ -18,8 +19,9 @@
 #include "common/UiHangWatchdog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/cover_export/CoverStudioWindow.h"
+#include "tools/export_page/ExportLauncherPage.h"
 #include "tools/muri/MuriAnalyzer.h"
-#include "tools/video_export/BatchVideoExportDialog.h"
+#include "tools/video_export/BatchExportPanel.h"
 #include "tools/video_export/VideoExportController.h"
 #include "tools/video_export/VideoExportDialog.h"
 #include "tools/video_export/VideoExportPreferences.h"
@@ -925,6 +927,14 @@ QWidget* MainWindow::ExportSection::createEmbeddedVideoExportPanel(int difficult
             "ExportSection::createEmbeddedVideoExportPanel.installExportPreviewAuditionScene",
             QStringLiteral("difficulty=%1").arg(resolvedDifficultyId));
         installExportPreviewAuditionScene(resolvedDifficultyId);
+        if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(resolvedDifficultyId);
+            difficulty != nullptr) {
+            owner_.setExportAuditionClockSchedule(
+                panel->isClockCountEnabledForPreview()
+                    ? miacode::chart_clock::clockCountFromDocument(owner_.document_)
+                    : 0,
+                miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart));
+        }
         appendEmbeddedExportPanelDiag(
             QStringLiteral("install_export_preview_audition_scene_complete"),
             auditionTimer.elapsed(),
@@ -969,6 +979,96 @@ void MainWindow::ExportSection::destroyEmbeddedVideoExportPanel()
     endExportPreviewSession();
 }
 
+QWidget* MainWindow::ExportSection::createEmbeddedBatchExportPanel(int difficultyId, QWidget* parent)
+{
+    destroyEmbeddedBatchExportPanel();
+    const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : owner_.activeDifficultyId_;
+    if (!SimaiDocument::isDifficultyId(resolvedDifficultyId)
+        || owner_.document_.difficulty(resolvedDifficultyId) == nullptr
+        || owner_.previewCanvas_ == nullptr) {
+        return nullptr;
+    }
+    if (owner_.qtPreviewPlaying_) {
+        owner_.onTogglePreviewPause();
+    }
+
+    const VideoExportTask task = buildVideoExportSeedTask(resolvedDifficultyId);
+    QList<int> difficultyIds;
+    for (int difficultyIdValue = 1; difficultyIdValue <= 7; ++difficultyIdValue) {
+        difficultyIds.append(difficultyIdValue);
+    }
+    auto* panel = new miacode::video_export::BatchExportPanel(
+        task, difficultyIds, resolvedDifficultyId, parent);
+    VideoExportDialog* sharedSettings = buildConfiguredVideoExportDialog(task, panel);
+    panel->installSharedSettingsPanel(sharedSettings);
+    owner_.embeddedBatchExportPanel_ = panel;
+
+    connect(panel, &miacode::video_export::BatchExportPanel::batchExportConfirmed, &owner_, [this]() {
+        handleBatchExportConfirmed();
+    });
+    connect(panel, &miacode::video_export::BatchExportPanel::clockCountEnabledChanged,
+            &owner_, [this](bool enabled) {
+                auto* batchPanel = owner_.embeddedBatchExportPanel_.data();
+                if (batchPanel == nullptr) {
+                    return;
+                }
+                const int previewDifficultyId = batchPanel->previewDifficultyId();
+                const SimaiDifficultyData* difficulty = owner_.document_.difficulty(previewDifficultyId);
+                if (difficulty == nullptr) {
+                    return;
+                }
+                owner_.setExportAuditionClockSchedule(
+                    enabled ? miacode::chart_clock::clockCountFromDocument(owner_.document_) : 0,
+                    miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart));
+            });
+    connect(panel, &miacode::video_export::BatchExportPanel::introPreviewSettingsChanged,
+            &owner_, [this]() { owner_.refreshExportIntroState(); });
+
+    beginExportPreviewSession(task);
+    installExportPreviewAuditionScene(resolvedDifficultyId);
+    if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(resolvedDifficultyId);
+        difficulty != nullptr) {
+        owner_.setExportAuditionClockSchedule(
+            panel->isClockCountEnabledForPreview()
+                ? miacode::chart_clock::clockCountFromDocument(owner_.document_)
+                : 0,
+            miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart));
+    }
+    return panel;
+}
+
+void MainWindow::ExportSection::updateEmbeddedBatchExportPreviewDifficulty(int difficultyId)
+{
+    auto* panel = owner_.embeddedBatchExportPanel_.data();
+    if (panel == nullptr || !SimaiDocument::isDifficultyId(difficultyId)
+        || owner_.document_.difficulty(difficultyId) == nullptr) {
+        return;
+    }
+    panel->updatePreviewDifficulty(difficultyId);
+    teardownExportPreviewAuditionScene();
+    installExportPreviewAuditionScene(difficultyId);
+    if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId);
+        difficulty != nullptr) {
+        owner_.setExportAuditionClockSchedule(
+            panel->isClockCountEnabledForPreview()
+                ? miacode::chart_clock::clockCountFromDocument(owner_.document_)
+                : 0,
+            miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart));
+    }
+}
+
+void MainWindow::ExportSection::destroyEmbeddedBatchExportPanel()
+{
+    if (owner_.embeddedBatchExportPanel_.isNull()) {
+        return;
+    }
+    auto* panel = owner_.embeddedBatchExportPanel_.data();
+    owner_.embeddedBatchExportPanel_.clear();
+    panel->hide();
+    panel->deleteLater();
+    endExportPreviewSession();
+}
+
 void MainWindow::ExportSection::handleEmbeddedExportConfirmed()
 {
     VideoExportDialog* panel = owner_.embeddedVideoExportPanel_;
@@ -1008,16 +1108,23 @@ void MainWindow::ExportSection::handleEmbeddedExportConfirmed()
 
 bool MainWindow::currentExportIntroLeadInSpec(IntroBannerSpec* outSpec) const
 {
-    // The embedded video panel owns the live 片头 settings; the audition reads
-    // them at play time so the intro preview always reflects current settings.
-    if (embeddedVideoExportPanel_.isNull()
-        || !embeddedVideoExportPanel_->isAddIntroActiveForPreview()) {
-        return false;
+    // The active embedded panel owns the shared 片头 settings. The audition
+    // reads them at play time so both single and batch preview stay WYSIWYG.
+    if (!embeddedVideoExportPanel_.isNull()
+        && embeddedVideoExportPanel_->isAddIntroActiveForPreview()) {
+        if (outSpec != nullptr) {
+            *outSpec = embeddedVideoExportPanel_->previewIntroSpec();
+        }
+        return true;
     }
-    if (outSpec != nullptr) {
-        *outSpec = embeddedVideoExportPanel_->previewIntroSpec();
+    if (!embeddedBatchExportPanel_.isNull()
+        && embeddedBatchExportPanel_->isAddIntroActiveForPreview()) {
+        if (outSpec != nullptr) {
+            *outSpec = embeddedBatchExportPanel_->previewIntroSpec();
+        }
+        return true;
     }
-    return true;
+    return false;
 }
 
 void MainWindow::ExportSection::onExportCover(int difficultyId)
@@ -1065,131 +1172,52 @@ void MainWindow::ExportSection::onExportCover(int difficultyId)
 void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
 {
     MC_OP("MainWindow::ExportSection::onBatchExportPreviewVideo");
-    const int resolvedDifficultyId = difficultyId > 0 ? difficultyId : owner_.activeDifficultyId_;
-    if (!SimaiDocument::isDifficultyId(resolvedDifficultyId)
-        || owner_.document_.difficulty(resolvedDifficultyId) == nullptr) {
-        _mc_op_.fail(QStringLiteral("no target difficulty"));
-        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("dialog.batch_export.error.no_difficulty")));
-        return;
-    }
-    if (owner_.previewCanvas_ == nullptr) {
-        _mc_op_.fail(QStringLiteral("previewCanvas_ null"));
-        owner_.statusBar()->showMessage(UiText::text(QStringLiteral("dialog.batch_export.error.no_preview")));
-        return;
-    }
-    if (owner_.videoExportWorkerProcess_ != nullptr && owner_.videoExportWorkerProcess_->state() != QProcess::NotRunning) {
-        UiDialogs::showMessageBox(
-            QMessageBox::Warning,
-            &owner_,
-            UiText::text(QStringLiteral("dialog.batch_export.title")),
-            UiText::text(QStringLiteral("dialog.video_export.error.worker_busy"))
-        );
-        return;
-    }
-    if (owner_.qtPreviewPlaying_) {
-        owner_.onTogglePreviewPause();
-    }
-
-    owner_.refreshTimelineMetadata();
-
-    VideoExportTask task;
-    task.chartPath = owner_.currentFilePath_;
-    task.trackPath = owner_.resolveDefaultTrackPath();
-    task.noteMarkers = owner_.latestTimelineNoteMarkers_;
-    task.muriAnalysisReport = owner_.muriAnalysisReport_;
-    task.muriRenderOptions = owner_.muriRenderOptions_;
-    task.staticTapOnSlideThresholdSeconds = static_cast<double>(owner_.staticTapOnSlideThresholdMs_) / 1000.0;
-    task.audioSettings = owner_.previewAudioSettings_;
-    task.timingSettings = owner_.previewTimingSettings_;
-    task.backgroundBrightnessOuter = owner_.previewBackgroundBrightnessOuter_;
-    task.backgroundBrightnessInner = owner_.previewBackgroundBrightnessInner_;
-    task.layoutSquareScale = owner_.previewLayoutSquareScale_;
-    task.smoothBrightness = owner_.previewSmoothBrightness_;
-    task.outlineVariant = owner_.previewOutlineVariant_;
-    task.backgroundScaleMode = owner_.previewBackgroundScaleMode_;
-    task.tapFlowSpeed = owner_.previewTapFlowSpeed_;
-    task.touchFlowSpeed = owner_.previewTouchFlowSpeed_;
-    task.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
-    task.tapJudgeTextDistance = owner_.previewTapJudgeTextDistance_;
-    task.judgeEffectStyle = owner_.previewJudgeEffectStyle_;
-    task.exportStartSeconds = 0.0;
-    task.contentDurationSeconds = 0.0;
-    task.fullRangeExport = true;
-    task.outputWidth = 1024;
-    task.outputHeight = 1024;
-    task.fps = 60;
-    task.showTimestamp = owner_.previewShowTimestamp_;
-    task.showObjectStatsHud = owner_.exportShowObjectStatsHud_;
-    task.showChartInfoHud = owner_.exportShowChartInfoHud_;
-    // Batch export carries the *current* chart's metadata only as a hint
-    // for the dialog UI; the per-job chartTitle / chartArtist /
-    // chartDifficultyLabel / chartDesigner used by each render is
-    // re-derived inside buildVideoExportTaskFromSnapshot from the
-    // snapshot's chartTextUtf8 + difficulty id for that job.
-    task.chartTitle = owner_.document_.title;
-    task.chartArtist = owner_.document_.artist;
-    if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(resolvedDifficultyId);
-        difficulty != nullptr) {
-        task.chartDesigner = !difficulty->designer.trimmed().isEmpty()
-            ? difficulty->designer
-            : owner_.document_.designer;
-        const QString diffShort = SimaiDocument::difficultyShortName(resolvedDifficultyId);
-        const QString diffLevel = difficulty->level.trimmed();
-        if (!diffShort.isEmpty() || !diffLevel.isEmpty()) {
-            task.chartDifficultyLabel = QStringLiteral("%1 %2")
-                .arg(diffShort, diffLevel)
-                .trimmed();
+    Q_UNUSED(difficultyId);
+    // The Tools menu follows the same embedded page route as clicking the
+    // Batch Export sub-nav. It deliberately never constructs a modal dialog.
+    if (owner_.documentSection_ != nullptr && owner_.documentSection_->switchToExportField()) {
+        if (owner_.exportPage_ != nullptr) {
+            owner_.exportPage_->openBatchExportSubPage();
         }
-    } else {
-        task.chartDesigner = owner_.document_.designer;
-    }
-    task.centerDisplayMode = owner_.previewCenterDisplayMode_;
-
-    const QString difficultyToken = SimaiDocument::difficultyShortName(resolvedDifficultyId);
-    BatchVideoExportDialog dialog(
-        task,
-        difficultyToken,
-        [this](const VideoExportTask& sharedTask) {
-            this->applySharedExportTaskSettings(sharedTask);
-        },
-        UiDialogs::effectiveParentWidget(&owner_)
-    );
-    dialog.adjustSize();
-    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
-    UiDialogs::prepareDialogWindow(&dialog, &owner_);
-    dialog.exec();
-    if (!dialog.exportRequested()) {
         return;
     }
+}
 
-    const QStringList chartDirectories = dialog.selectedChartDirectories();
-    const QList<int> selectedDifficultyIds = dialog.selectedDifficultyIds();
-    const QString outputDirectory = dialog.outputDirectory();
-    const VideoExportTask requestedTask = dialog.requestedTaskTemplate();
+void MainWindow::ExportSection::handleBatchExportConfirmed()
+{
+    QPointer<miacode::video_export::BatchExportPanel> panel = owner_.embeddedBatchExportPanel_;
+    if (panel.isNull()) {
+        return;
+    }
+    const QStringList chartDirectories = panel->chartDirectories();
+    const QList<int> selectedDifficultyIds = panel->selectedDifficultyIds();
+    const QString outputDirectory = panel->outputDirectory();
+    VideoExportTask requestedTask = panel->requestedTaskTemplate();
+    // The injected Gameplay/Video-extra widgets mutate the live preview
+    // owner. Re-source those fields just as the embedded single-export path
+    // does, so confirming a batch never restores its stale opening seed.
+    requestedTask.outlineVariant = owner_.previewOutlineVariant_;
+    requestedTask.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
+    requestedTask.tapJudgeTextDistance = owner_.previewTapJudgeTextDistance_;
+    requestedTask.judgeEffectStyle = owner_.previewJudgeEffectStyle_;
+    requestedTask.centerDisplayMode = owner_.previewCenterDisplayMode_;
+    requestedTask.muriRenderOptions = owner_.muriRenderOptions_;
     this->applySharedExportTaskSettings(requestedTask);
-    if (chartDirectories.isEmpty()) {
+
+    if (chartDirectories.isEmpty() || selectedDifficultyIds.isEmpty() || outputDirectory.trimmed().isEmpty()) {
         return;
     }
-    if (selectedDifficultyIds.isEmpty()) {
-        return;
-    }
-    if (outputDirectory.trimmed().isEmpty()) {
-        UiDialogs::showMessageBox(
-            QMessageBox::Warning,
-            &owner_,
-            UiText::text(QStringLiteral("dialog.batch_export.title")),
-            UiText::text(QStringLiteral("dialog.batch_export.error.no_output_dir"))
-        );
-        return;
-    }
+    panel->setBatchExportRunning(true);
     if (!QDir().mkpath(outputDirectory)) {
         UiDialogs::showMessageBox(
             QMessageBox::Critical,
             &owner_,
             UiText::text(QStringLiteral("dialog.batch_export.title")),
             UiText::text(QStringLiteral("dialog.batch_export.error.output_dir_create_failed"))
-                + QStringLiteral("\n") + QDir::toNativeSeparators(outputDirectory)
-        );
+                + QStringLiteral("\n") + QDir::toNativeSeparators(outputDirectory));
+        if (!panel.isNull()) {
+            panel->setBatchExportRunning(false);
+        }
         return;
     }
 
@@ -1206,36 +1234,22 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
         const QFileInfo directoryInfo(chartDirectory);
         const QString folderName = directoryInfo.fileName();
         const QString trackPath = miacode::chart_assets::resolveTrackPathForDirectory(directoryInfo.absoluteFilePath());
-        if (trackPath.isEmpty()) {
-            failedCharts.append(
-                QDir::toNativeSeparators(chartDirectory)
-                + QStringLiteral(" - ")
-                + UiText::text(QStringLiteral("dialog.batch_export.error.missing_track_file"))
-            );
-            continue;
-        }
         const QString chartPath = resolveChartPathFromCliInput(directoryInfo.absoluteFilePath());
-        if (chartPath.isEmpty()) {
-            failedCharts.append(
-                QDir::toNativeSeparators(chartDirectory)
-                + QStringLiteral(" - ")
-                + UiText::text(QStringLiteral("dialog.batch_export.error.missing_chart_file"))
-            );
+        if (trackPath.isEmpty() || chartPath.isEmpty()) {
+            failedCharts.append(QDir::toNativeSeparators(chartDirectory) + QStringLiteral(" - ")
+                + UiText::text(trackPath.isEmpty()
+                    ? QStringLiteral("dialog.batch_export.error.missing_track_file")
+                    : QStringLiteral("dialog.batch_export.error.missing_chart_file")));
             continue;
         }
-
         bool usedSystemEncoding = false;
         const QString chartText = readTextFileWithFallbackEncoding(chartPath, &usedSystemEncoding);
         if (chartText.isNull()) {
-            failedCharts.append(
-                QDir::toNativeSeparators(chartDirectory)
-                + QStringLiteral(" - ")
+            failedCharts.append(QDir::toNativeSeparators(chartDirectory) + QStringLiteral(" - ")
                 + UiText::text(QStringLiteral("dialog.batch_export.error.read_chart_failed"))
-                    .arg(QFileInfo(chartPath).fileName())
-            );
+                    .arg(QFileInfo(chartPath).fileName()));
             continue;
         }
-
         const SimaiDocument document = SimaiDocument::fromText(chartText);
         int matchedDifficulties = 0;
         for (int difficultyId : selectedDifficultyIds) {
@@ -1244,26 +1258,17 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
             }
             ++matchedDifficulties;
             const QString token = SimaiDocument::difficultyShortName(difficultyId);
-            BatchExportJob job;
-            job.chartDirectory = chartDirectory;
-            job.difficultyId = difficultyId;
-            job.difficultyToken = token;
-            job.displayName = QStringLiteral("%1 [%2]").arg(folderName, token);
-            jobs.append(job);
+            jobs.append({chartDirectory, difficultyId, token,
+                         QStringLiteral("%1 [%2]").arg(folderName, token)});
         }
         if (matchedDifficulties == 0) {
-            const QString requested = [&selectedDifficultyIds]() {
-                QStringList names;
-                for (int id : selectedDifficultyIds) {
-                    names.append(SimaiDocument::difficultyShortName(id));
-                }
-                return names.join(QStringLiteral(", "));
-            }();
-            failedCharts.append(
-                QDir::toNativeSeparators(chartDirectory)
-                + QStringLiteral(" - ")
-                + UiText::text(QStringLiteral("dialog.batch_export.error.no_selected_difficulties_in_folder")).arg(requested)
-            );
+            QStringList requested;
+            for (int difficultyId : selectedDifficultyIds) {
+                requested.append(SimaiDocument::difficultyShortName(difficultyId));
+            }
+            failedCharts.append(QDir::toNativeSeparators(chartDirectory) + QStringLiteral(" - ")
+                + UiText::text(QStringLiteral("dialog.batch_export.error.no_selected_difficulties_in_folder"))
+                    .arg(requested.join(QStringLiteral(", "))));
         }
     }
 
@@ -1272,9 +1277,6 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
         systemL10n(QStringLiteral("Cancel"), QStringLiteral("取消")),
         0,
         100,
-        // macOS: effectiveParentWidget — window-modal + hidden quick-shell
-        // MainWindow parent = macOS sheet that orderFronts the empty white
-        // host window. Windows keeps the original direct parenting.
 #ifdef Q_OS_MACOS
         UiDialogs::effectiveParentWidget(&owner_)
 #else
@@ -1290,58 +1292,42 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
     progress.setMinimumDuration(0);
     progress.setAutoClose(false);
     progress.setAutoReset(false);
-    progress.setValue(0);
     UiDialogs::configureDialogPreviewShortcuts(&progress);
     owner_.windowSection_->applySystemWindowBackdrop(&progress);
     progress.show();
 
     QStringList exportedFiles;
-    int successCount = 0;
     bool canceled = false;
+    int successCount = 0;
     const int totalJobs = qMax(1, jobs.size());
     for (int index = 0; index < jobs.size(); ++index) {
         const BatchExportJob& job = jobs.at(index);
         progress.setValue(qRound(static_cast<double>(index) * 100.0 / totalJobs));
-        progress.setLabelText(
-            UiText::text(QStringLiteral("dialog.batch_export.progress.exporting_named"))
-                .arg(index + 1)
-                .arg(jobs.size())
-                .arg(job.displayName)
-        );
+        progress.setLabelText(UiText::text(QStringLiteral("dialog.batch_export.progress.exporting_named"))
+            .arg(index + 1).arg(jobs.size()).arg(job.displayName));
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
         if (progress.wasCanceled()) {
             canceled = true;
             break;
         }
-
         VideoExportSnapshot snapshot;
         QString validationFailure;
-        if (!this->buildVideoExportSnapshotForChartDirectory(
-                job.chartDirectory,
-                job.difficultyId,
-                job.difficultyToken,
-                requestedTask,
-                outputDirectory,
-                &snapshot,
-                &validationFailure)) {
+        if (!buildVideoExportSnapshotForChartDirectory(
+                job.chartDirectory, job.difficultyId, job.difficultyToken, requestedTask,
+                outputDirectory, &snapshot, &validationFailure)) {
             failedCharts.append(job.displayName + QStringLiteral(" - ") + validationFailure);
             continue;
         }
-
         QString failureText;
         bool canceledThisItem = false;
-        const auto updateBatchProgress = [this, &progress, index, totalJobs, &job](int percent, const QString& rawMessage) {
-            const int clampedPercent = qBound(0, percent, 100);
-            const double overall = (static_cast<double>(index) + static_cast<double>(clampedPercent) / 100.0)
+        const auto updateBatchProgress = [&progress, index, totalJobs, &job](int percent, const QString& rawMessage) {
+            const double overall = (static_cast<double>(index) + qBound(0, percent, 100) / 100.0)
                 / static_cast<double>(totalJobs);
             progress.setValue(qBound(0, qRound(overall * 100.0), 100));
-            progress.setLabelText(
-                UiText::text(QStringLiteral("dialog.batch_export.progress.current_item"))
-                    .arg(job.displayName)
-                    .arg(localizeExportWorkerMessageForUiLanguage(rawMessage))
-            );
+            progress.setLabelText(UiText::text(QStringLiteral("dialog.batch_export.progress.current_item"))
+                .arg(job.displayName).arg(localizeExportWorkerMessageForUiLanguage(rawMessage)));
         };
-        if (!this->runVideoExportWorkerSync(snapshot, &progress, &canceledThisItem, &failureText, updateBatchProgress)) {
+        if (!runVideoExportWorkerSync(snapshot, &progress, &canceledThisItem, &failureText, updateBatchProgress)) {
             if (canceledThisItem) {
                 canceled = true;
                 break;
@@ -1349,56 +1335,39 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo(int difficultyId)
             failedCharts.append(job.displayName + QStringLiteral(" - ") + failureText);
             continue;
         }
-
         ++successCount;
         exportedFiles.append(QFileInfo(snapshot.outputPath).fileName());
     }
-
     progress.setValue(100);
     progress.hide();
+    if (!panel.isNull()) {
+        panel->setBatchExportRunning(false);
+    }
 
     if (canceled) {
         UiDialogs::showMessageBox(
-            QMessageBox::Information,
-            &owner_,
-            UiText::text(QStringLiteral("dialog.batch_export.title")),
-            UiText::text(QStringLiteral("dialog.batch_export.message.canceled"))
-        );
+            QMessageBox::Information, &owner_, UiText::text(QStringLiteral("dialog.batch_export.title")),
+            UiText::text(QStringLiteral("dialog.batch_export.message.canceled")));
         return;
     }
-
+    const auto shortenDetails = [](QString details) {
+        return details.size() > 3000 ? details.left(3000) + QStringLiteral("\n...") : details;
+    };
+    const QString successDetails = shortenDetails(exportedFiles.join(QLatin1Char('\n')));
     if (failedCharts.isEmpty()) {
-        QString details = exportedFiles.join(QLatin1Char('\n'));
-        if (details.size() > 3000) {
-            details = details.left(3000) + QStringLiteral("\n...");
-        }
         UiDialogs::showMessageBox(
-            QMessageBox::Information,
-            &owner_,
-            UiText::text(QStringLiteral("dialog.batch_export.title")),
-            UiText::text(QStringLiteral("dialog.batch_export.message.success"))
-                .arg(successCount)
-                + (details.isEmpty() ? QString() : QStringLiteral("\n\n") + details)
-        );
+            QMessageBox::Information, &owner_, UiText::text(QStringLiteral("dialog.batch_export.title")),
+            UiText::text(QStringLiteral("dialog.batch_export.message.success")).arg(successCount)
+                + (successDetails.isEmpty() ? QString() : QStringLiteral("\n\n") + successDetails));
         return;
-    }
-
-    QString details = failedCharts.join(QLatin1Char('\n'));
-    if (details.size() > 3000) {
-        details = details.left(3000) + QStringLiteral("\n...");
-    }
-    QString successDetails = exportedFiles.join(QLatin1Char('\n'));
-    if (successDetails.size() > 3000) {
-        successDetails = successDetails.left(3000) + QStringLiteral("\n...");
     }
     UiDialogs::showMessageBox(
-        QMessageBox::Warning,
-        &owner_,
-        UiText::text(QStringLiteral("dialog.batch_export.title")),
+        QMessageBox::Warning, &owner_, UiText::text(QStringLiteral("dialog.batch_export.title")),
         UiText::text(QStringLiteral("dialog.batch_export.message.partial_failed"))
-            .arg(successCount)
-            .arg(failedCharts.size())
-            + (successDetails.isEmpty() ? QString() : QStringLiteral("\n\n") + UiText::text(QStringLiteral("dialog.batch_export.message.output_files")) + QStringLiteral("\n") + successDetails)
-            + QStringLiteral("\n\n") + details
-    );
+            .arg(successCount).arg(failedCharts.size())
+            + (successDetails.isEmpty() ? QString()
+                : QStringLiteral("\n\n")
+                    + UiText::text(QStringLiteral("dialog.batch_export.message.output_files"))
+                    + QStringLiteral("\n") + successDetails)
+            + QStringLiteral("\n\n") + shortenDetails(failedCharts.join(QLatin1Char('\n'))));
 }

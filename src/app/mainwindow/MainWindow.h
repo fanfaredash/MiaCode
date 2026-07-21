@@ -57,6 +57,9 @@ class LatencyDetectionPage;
 namespace miacode::export_page {
 class ExportLauncherPage;
 }
+namespace miacode::video_export {
+class BatchExportPanel;
+}
 namespace miacode::ui {
 class AppBackgroundPainter;
 class BusySpinner;
