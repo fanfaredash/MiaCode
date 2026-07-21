@@ -198,9 +198,21 @@ Item {
         var top = l.ny * canvas.height - h / 2
         return px >= left && px <= left + w && py >= top && py <= top + h
     }
+    function scaleHandleSize() { return Math.max(44, canvas.height * 0.04) }
+    function pointInSelectionScaleHandle(px, py) {
+        var l = selectedLayer
+        if (!editable || !l || !l.visible || l.locked)
+            return false
+        var s = scaleHandleSize()
+        var left = l.nx * canvas.width + layerContentW(l) / 2 - s / 2
+        var top = l.ny * canvas.height + layerContentH(l) / 2 - s / 2
+        return px >= left && px <= left + s && py >= top && py <= top + s
+    }
     function topHitLayerAt(px, py) {
         if (!coverLayout)
             return null
+        if (pointInSelectionScaleHandle(px, py))
+            return selectedLayer
         if (selectedLayer && pointInLayer(selectedLayer, px, py))
             return selectedLayer
         var layers = coverLayout.layers
@@ -571,6 +583,9 @@ Item {
             // Drag to move, with canvas centre/edge snapping. target:null — we
             // write normalized coords back to the model from the centroid delta,
             // so the model stays the single source of truth (no binding fight).
+            // §5 — the resize handle is its own hit target. Test the original
+            // press point, not the activation centroid, so the move drag cannot
+            // steal a gesture that began on the handle before crossing threshold.
             DragHandler {
                 id: moveDrag
                 target: null
@@ -583,6 +598,10 @@ Item {
                 property bool ownsGesture: false
                 onActiveChanged: {
                     if (active) {
+                        if (canvas.pointInSelectionScaleHandle(
+                                centroid.scenePressPosition.x,
+                                centroid.scenePressPosition.y))
+                            return
                         var hitKey = canvas.hitKeyAt(centroid.scenePosition.x, centroid.scenePosition.y)
                         ownsGesture = hitKey === layerItem.ld.key
                         if (canvas.chartSceneBinder)
@@ -670,17 +689,14 @@ Item {
         antialiasing: true
         z: 9000
     }
-    // Scale handle: invisible larger touch target with a centred visual indicator.
-    // The old 18×18-pixel rectangle bound its DragHandler to 18 px² — too small an
-    // area to hit reliably, and every miss fell through to the layer's moveDrag (or to
-    // another overlapping layer's, causing the "串到其他图层" bug). The Item wrapper
-    // gives a 44 px hit zone (WCAG minimum) while keeping the visual 18×18 indicator,
-    // so the gesture is captured before any layer below can intercept it.
+    // Scale handle — visual indicator + its own DragHandler for the full hit zone.
+    // The handle is a canvas-level hit target, and hitKeyAt() also treats it as the
+    // selected layer so overlapping layers cannot become active during resize.
     Item {
         id: scaleHandle
         readonly property var l: canvas.selectedLayer
         visible: canvas.editable && l !== null && l.visible && !l.locked
-        width: Math.max(44, canvas.height * 0.04)
+        width: canvas.scaleHandleSize()
         height: width
         z: 9001
         x: l ? (l.nx * canvas.width + canvas.layerContentW(l) / 2 - width / 2) : -100
@@ -696,8 +712,11 @@ Item {
             border.width: 2
         }
         DragHandler {
+            id: scaleDrag
             target: null
             enabled: scaleHandle.visible
+            grabPermissions: PointerHandler.CanTakeOverFromAnything
+                             | PointerHandler.ApprovesCancellation
             // Start state captured AT ACTIVATION so the scale is a delta from the
             // grab, not an absolute |cursor − centre|. This avoids the activation
             // jump (drag threshold + wherever on the handle you grabbed) and the
