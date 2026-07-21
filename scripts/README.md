@@ -34,10 +34,13 @@ bash scripts/build/build-macos.sh
 ```
 
 ```bash
-QT_ROOT="$HOME/Qt/6.8.3/macos" bash scripts/build/package-mac.sh
+QT_ROOT="$HOME/Qt/6.10.2/macos" CMAKE_OSX_ARCHITECTURES=arm64 bash scripts/build/package-mac.sh
 ```
 
-输出位于 `dist/`。
+输出位于 `dist/`。指定单一 `arm64` 或 `x86_64` 架构时，打包流程会在
+`macdeployqt` 后裁掉 Qt Framework/插件中的另一架构切片，并在重新签名前验证
+包内所有 Mach-O 均包含且只包含目标架构。可设置
+`MIACODE_THIN_MACOS_APP=OFF` 生成保留 Qt universal 二进制的对照包。
 
 ## 其他脚本
 
