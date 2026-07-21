@@ -415,9 +415,15 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
             window->setY(window->y() - deltaHeight / 2);
             window->setHeight(window->minimumHeight());
         }
+        // macOS must keep the bundle icon from app.icns so Dock can apply the
+        // system app-icon mask. Setting the QQuickWindow icon at runtime would
+        // replace it with the unmasked PNG; other platforms still need the
+        // explicit window icon supplied by the application bootstrap.
+#ifndef Q_OS_MACOS
         if (!appIcon_.isNull()) {
             window->setIcon(appIcon_);
         }
+#endif
         QObject::connect(window, &QQuickWindow::visibleChanged, this, [this, window]() {
             appendQuickShellRuntimeLog(
                 QStringLiteral("root_window_visible_changed"),

@@ -554,7 +554,9 @@ int main(int argc, char* argv[])
         || miacodePreferencesSchemaOutdated
         || wantsWelcomeDialog(rawArgs);
     const QIcon appIcon(QStringLiteral(":/icons/app.png"));
+#ifndef Q_OS_MACOS
     app.setWindowIcon(appIcon);
+#endif
     app.setStyle(QStyleFactory::create("Fusion"));
     UiTheme::applyApplicationTheme(app);
     // Keep the tooltip fade effect, but disable the slide/scroll animation (on
