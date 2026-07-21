@@ -2293,7 +2293,7 @@ const QHash<QString, QString>& zhMap()
         {"cover.pure_chart_frame", "纯谱面帧（无卡片）"},
         {"cover.rename_preset", "重命名预设"},
         {"cover.render_and_save_the_cover", "渲染并保存封面图片"},
-        {"cover.render_level_as_text", "等级文本渲染"},
+        {"cover.render_level_as_text", "等级包含文字/字母"},
         {"cover.reset_canvas_zoom", "还原画布缩放"},
         {"cover.reset_canvas_zoom_ctrl_0", "还原画布缩放（Ctrl+0）"},
         {"cover.reset_discards_all_current_layers", "重置将丢弃当前所有图层与位置，继续？"},

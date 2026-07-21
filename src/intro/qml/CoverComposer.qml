@@ -670,26 +670,38 @@ Item {
         antialiasing: true
         z: 9000
     }
-    Rectangle {
+    // Scale handle: invisible larger touch target with a centred visual indicator.
+    // The old 18×18-pixel rectangle bound its DragHandler to 18 px² — too small an
+    // area to hit reliably, and every miss fell through to the layer's moveDrag (or to
+    // another overlapping layer's, causing the "串到其他图层" bug). The Item wrapper
+    // gives a 44 px hit zone (WCAG minimum) while keeping the visual 18×18 indicator,
+    // so the gesture is captured before any layer below can intercept it.
+    Item {
         id: scaleHandle
         readonly property var l: canvas.selectedLayer
         visible: canvas.editable && l !== null && l.visible && !l.locked
-        width: 18
-        height: 18
-        radius: 4
-        color: "#3DA9FC"
-        border.color: "#FFFFFF"
-        border.width: 2
+        width: Math.max(44, canvas.height * 0.04)
+        height: width
         z: 9001
         x: l ? (l.nx * canvas.width + canvas.layerContentW(l) / 2 - width / 2) : -100
         y: l ? (l.ny * canvas.height + canvas.layerContentH(l) / 2 - height / 2) : -100
+        // Visual indicator (same 18×18 blue square, centred inside the larger hit zone)
+        Rectangle {
+            anchors.centerIn: parent
+            width: 18
+            height: 18
+            radius: 4
+            color: "#3DA9FC"
+            border.color: "#FFFFFF"
+            border.width: 2
+        }
         DragHandler {
             target: null
             enabled: scaleHandle.visible
             // Start state captured AT ACTIVATION so the scale is a delta from the
             // grab, not an absolute |cursor − centre|. This avoids the activation
-            // jump (drag threshold + wherever on the 18px handle you grabbed) and
-            // the old Math.abs flip (growing again when dragged past the centre).
+            // jump (drag threshold + wherever on the handle you grabbed) and the
+            // old Math.abs flip (growing again when dragged past the centre).
             property real grabSceneY: 0
             property real startHeightPx: 0
             onActiveChanged: {

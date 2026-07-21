@@ -1412,7 +1412,6 @@ VideoExportDialog::VideoExportDialog(
     introCardShadowCheck_ = new QCheckBox(
         UiText::text(QStringLiteral("cover.card_drop_shadow")), introCardGroup);
     introCardShadowCheck_->setChecked(baseTask_.intro.cardShadow);
-    introCardForm->addRow(QString(), introCardShadowCheck_);
     introLevelTextCheck_ = new QCheckBox(
         UiText::text(QStringLiteral("cover.render_level_as_text")), introCardGroup);
     introLevelTextCheck_->setChecked(baseTask_.intro.lvRenderMode == QStringLiteral("text"));
@@ -1420,7 +1419,16 @@ VideoExportDialog::VideoExportDialog(
     // event filter that hides tooltips outside the preview area).
     introLevelTextCheck_->setProperty("miacodeAllowTooltip", true);
     introLevelTextCheck_->setToolTip(UiText::text(QStringLiteral("video_export.level_text_tooltip")));
-    introCardForm->addRow(QString(), introLevelTextCheck_);
+    // Same line: shadow + level-text.
+    {
+        auto* introCardCheckRow = new QWidget(introCardGroup);
+        auto* introCardCheckLayout = new QHBoxLayout(introCardCheckRow);
+        introCardCheckLayout->setContentsMargins(0, 0, 0, 0);
+        introCardCheckLayout->setSpacing(16);
+        introCardCheckLayout->addWidget(introCardShadowCheck_);
+        introCardCheckLayout->addWidget(introLevelTextCheck_);
+        introCardForm->addRow(QString(), introCardCheckRow);
+    }
     // Custom card fonts (标题字体 / 正文字体) — a change refreshes the read-only intro
     // preview and persists; currentIntroSpec() feeds the paths to preview + export.
     introCardFontSelector_ = miacode::video_export::createCardFontSelector(introCardGroup, [this]() {
