@@ -1192,6 +1192,19 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/app/ui src/extensions
     )
 
+    miacode_add_dev_tool(font_combo_width_spec TEST
+        SOURCES
+            src/tools/video_export/FontComboWidthSpec.cpp
+            src/tools/video_export/FontLibrary.h
+            src/tools/video_export/FontLibrary.cpp
+            src/app/ui/UiText.h
+            src/app/ui/UiText.cpp
+            src/extensions/ExtensionManifest.h
+            src/extensions/ExtensionManifest.cpp
+        LIBS Qt6::Core Qt6::Gui Qt6::Widgets
+        INCLUDES src src/app/ui src/extensions
+    )
+
     miacode_add_dev_tool(muri_spec TEST
         SOURCES
             src/tools/muri/MuriSpec.cpp

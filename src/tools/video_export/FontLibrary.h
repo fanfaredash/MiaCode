@@ -47,10 +47,16 @@ void populateFontCombo(QComboBox* combo,
                        bool includeDefault = true,
                        const QString& defaultLabel = QString());
 
-// Lets a font selector live inside a narrow inspector column. Font family names
-// can be arbitrarily long; keep their popup entries intact while allowing the
-// closed field to elide rather than widening its parent layout.
-void constrainFontComboToAvailableWidth(QComboBox* combo);
+enum class FontComboWidthMode {
+    StandardForm,
+    NarrowInspector,
+};
+
+// Keeps the shared font selector visually themed while tuning only its layout
+// budget for the host. Long names elide in the closed field; popup entries stay
+// complete. Every mode remains horizontally expanding so a layout cannot
+// collapse the visible control.
+void configureFontComboWidth(QComboBox* combo, FontComboWidthMode mode);
 
 // Overlay the user's difficulty-card font choice onto a parsed banner template's
 // `fonts` block (keys `display` / `body`). An absolute path is injected as a

@@ -448,7 +448,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
             pushInputs();
             emit compositionChanged();
         },
-        /*constrainToAvailableWidth=*/true);
+        miacode::video_export::FontComboWidthMode::NarrowInspector);
     if (cardFontSelector_.widget != nullptr) {
         cardForm->addRow(cardFontSelector_.widget);   // spans both columns (has own labels)
     }

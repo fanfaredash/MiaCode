@@ -147,14 +147,16 @@ void populateFontCombo(QComboBox* combo,
     }
 }
 
-void constrainFontComboToAvailableWidth(QComboBox* combo)
+void configureFontComboWidth(QComboBox* combo, FontComboWidthMode mode)
 {
     if (combo == nullptr) {
         return;
     }
     combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    combo->setMinimumContentsLength(1);
-    combo->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    combo->setMinimumContentsLength(
+        mode == FontComboWidthMode::NarrowInspector ? 8 : 18);
+    combo->setMinimumWidth(0);
+    combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 }
 
 void applyBannerFontOverride(QVariantMap& templateMap,

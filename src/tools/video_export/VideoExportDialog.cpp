@@ -1438,7 +1438,7 @@ VideoExportDialog::VideoExportDialog(
             refreshIntroPreview();
             persistExportOnlySettings();
         },
-        /*constrainToAvailableWidth=*/true);
+        miacode::video_export::FontComboWidthMode::StandardForm);
     introCardFontSelector_.setSelection(baseTask_.intro.fontDisplayPath, baseTask_.intro.fontBodyPath);
     if (introCardFontSelector_.widget != nullptr) {
         introCardForm->addRow(introCardFontSelector_.widget);   // spans both columns
