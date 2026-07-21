@@ -14,6 +14,7 @@
 #include <QAbstractSpinBox>
 #include <QAction>
 #include <QApplication>
+#include <QCloseEvent>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -337,6 +338,19 @@ CoverStudioWindow::CoverStudioWindow(const VideoExportTask& task,
 CoverStudioWindow::~CoverStudioWindow()
 {
     qApp->removeEventFilter(this);
+}
+
+void CoverStudioWindow::closeEvent(QCloseEvent* event)
+{
+    // Save the composition here — every source widget (including the option groups
+    // reparented into the inspector column) is still alive — and disarm the guard so
+    // the later WA_DeleteOnClose teardown never reads them. Doing this from
+    // ~CoverStudioPanel instead crashed: those reparented widgets are freed before the
+    // panel, leaving dangling QComboBox pointers.
+    if (studio_ != nullptr) {
+        studio_->persistCompositionNow();
+    }
+    QMainWindow::closeEvent(event);
 }
 
 bool CoverStudioWindow::eventFilter(QObject* watched, QEvent* event)

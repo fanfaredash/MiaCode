@@ -18,7 +18,9 @@ CoverCompositionPersistenceGuard::~CoverCompositionPersistenceGuard()
 bool CoverCompositionPersistenceGuard::persistNow()
 {
     if (!supplier_ || !saver_) {
-        return false;
+        // Disarmed (or never configured): nothing to persist, and — crucially — we
+        // must NOT invoke the supplier, which reads live widgets. Treat as success.
+        return true;
     }
     const QJsonObject payload = supplier_();
     if (hasSuccessfulPayload_ && payload == lastSuccessfulPayload_) {
@@ -30,6 +32,12 @@ bool CoverCompositionPersistenceGuard::persistNow()
     lastSuccessfulPayload_ = payload;
     hasSuccessfulPayload_ = true;
     return true;
+}
+
+void CoverCompositionPersistenceGuard::disarm()
+{
+    supplier_ = nullptr;
+    saver_ = nullptr;
 }
 
 } // namespace miacode::cover_export
