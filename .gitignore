@@ -108,6 +108,7 @@ scripts/build/*
 !scripts/build/build-win.ps1
 !scripts/build/package-mac.sh
 !scripts/build/package-win.ps1
+!scripts/build/thin-macos-app.sh
 !scripts/debug/
 scripts/debug/*
 !scripts/debug/Start_MiaCode_Debug.bat

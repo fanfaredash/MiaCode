@@ -34,10 +34,15 @@ bash scripts/build/build-macos.sh
 ```
 
 ```bash
-QT_ROOT="$HOME/Qt/6.8.3/macos" bash scripts/build/package-mac.sh
+QT_ROOT="$HOME/Qt/6.10.2/macos" CMAKE_OSX_ARCHITECTURES=arm64 bash scripts/build/package-mac.sh
 ```
 
-Artifacts are written to `dist/`.
+Artifacts are written to `dist/`. When a single `arm64` or `x86_64`
+architecture is requested, packaging removes the other architecture slice from
+Qt frameworks/plugins after `macdeployqt` and verifies that every bundled
+Mach-O contains only the target architecture before re-signing. Set
+`MIACODE_THIN_MACOS_APP=OFF` to produce a comparison package that keeps Qt's
+universal binaries.
 
 ## Other Scripts
 

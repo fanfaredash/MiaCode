@@ -10,9 +10,19 @@ QT_ROOT="${QT_ROOT:-}"
 DEPLOYMENT_TARGET="${CMAKE_OSX_DEPLOYMENT_TARGET:-13.0}"
 BUILD_DEV_TOOLS="${MIACODE_BUILD_DEV_TOOLS:-OFF}"
 MACOS_CODESIGN_IDENTITY="${MACOS_CODESIGN_IDENTITY:--}"
+PACKAGE_ARCHITECTURES="${CMAKE_OSX_ARCHITECTURES:-}"
+THIN_SINGLE_ARCH_PACKAGE="${MIACODE_THIN_MACOS_APP:-ON}"
 if [[ -z "$QT_ROOT" && -n "${QT_ROOT_DIR:-}" ]]; then
   QT_ROOT="$QT_ROOT_DIR"
 fi
+case "$THIN_SINGLE_ARCH_PACKAGE" in
+  ON|OFF)
+    ;;
+  *)
+    echo "MIACODE_THIN_MACOS_APP must be ON or OFF (got: $THIN_SINGLE_ARCH_PACKAGE)" >&2
+    exit 2
+    ;;
+esac
 
 parse_version() {
   local cmake_file="$1"
@@ -34,7 +44,7 @@ parse_version() {
 
 VERSION="$(parse_version "$ROOT_DIR/CMakeLists.txt")"
 MACOS_PACKAGE_SUFFIX="macos"
-case "${CMAKE_OSX_ARCHITECTURES:-}" in
+case "$PACKAGE_ARCHITECTURES" in
   arm64)
     MACOS_PACKAGE_SUFFIX="macos-apple-silicon"
     ;;
@@ -127,8 +137,11 @@ cmake_args=(
 if [[ -n "$DEPLOYMENT_TARGET" ]]; then
   cmake_args+=("-DCMAKE_OSX_DEPLOYMENT_TARGET=$DEPLOYMENT_TARGET")
 fi
+if [[ -n "$PACKAGE_ARCHITECTURES" ]]; then
+  cmake_args+=("-DCMAKE_OSX_ARCHITECTURES=$PACKAGE_ARCHITECTURES")
+fi
 cmake "${cmake_args[@]}"
-build_args=(--build "$BUILD_DIR" --config Release)
+build_args=(--build "$BUILD_DIR" --config Release --parallel)
 if [[ "$BUILD_DEV_TOOLS" == "ON" ]]; then
   build_args+=(--target MiaCode simai_native_dump soundtouch_probe)
 else
@@ -273,14 +286,30 @@ macdeployqt "$DIST_DIR/MiaCode.app" -qmldir="$ROOT_DIR/src" -always-overwrite
 # machine — dead weight that also breaks strict signature/dependency scans.
 rm -rf "$DIST_DIR/MiaCode.app/Contents/PlugIns/sqldrivers"
 
-# macdeployqt may rewrite Qt binaries and invalidate bundled signatures.
-# Re-sign the packaged app (ad-hoc by default) so macOS won't kill it at launch.
+# macdeployqt copies universal Qt frameworks/plugins even when MiaCode itself is
+# a single-architecture executable. For a package explicitly configured as
+# arm64 or x86_64, keep only that matching slice. The helper hard-fails on any
+# Mach-O that lacks the target architecture, preventing an x86-only Rosetta
+# helper or another incompatible binary from being silently damaged.
+if [[ "$THIN_SINGLE_ARCH_PACKAGE" == "ON" ]]; then
+  case "$PACKAGE_ARCHITECTURES" in
+    arm64|x86_64)
+      "$ROOT_DIR/scripts/build/thin-macos-app.sh" \
+        "$DIST_DIR/MiaCode.app" "$PACKAGE_ARCHITECTURES"
+      ;;
+  esac
+fi
+
+# macdeployqt and architecture thinning rewrite Mach-O files and invalidate
+# bundled signatures. Re-sign only after both operations finish, then verify the
+# completed bundle before it can be archived.
 if [[ -n "$MACOS_CODESIGN_IDENTITY" ]]; then
   if ! command -v codesign >/dev/null 2>&1; then
     echo "codesign not found in PATH" >&2
     exit 1
   fi
   codesign --force --deep --sign "$MACOS_CODESIGN_IDENTITY" "$DIST_DIR/MiaCode.app"
+  codesign --verify --deep --strict --verbose=2 "$DIST_DIR/MiaCode.app"
 fi
 
 if [[ -n "$DEPLOYMENT_TARGET" ]]; then
