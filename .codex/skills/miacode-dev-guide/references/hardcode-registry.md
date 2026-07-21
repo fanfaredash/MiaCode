@@ -97,7 +97,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: whole-chart formatting snap constants for note-grid minimization, segment-length preservation, selection carry restoration, and duration-signature rewriting
   - Current tuning note: `384`-snap formatting keeps rendered `{beats}` selection independent from hold/slide duration syntax, still rewrites no-`#` duration signatures against a fixed `384` grid, keeps rendered duration denominators at or above a `16th-note` floor, requires reduce=true segment output to exactly express each snapped 384-grid segment length, and owns the optional blank-line sectioning after every 4 emitted measure lines
   - Rule: keep local while only the chart formatter consumes these thresholds, but document any user-visible formatting changes immediately
-- `src/simai/parser/SimaiNativeParser.cpp`
+- `src/core/chart/parser/SimaiNativeParser.cpp`
   - Owns: parser-default geometry and timing assumptions used to derive marker behavior
   - Rule: parser-level constants can have repo-wide consequences; treat changes as cross-chain changes
 - `src/tools/video_export/VideoExportController.cpp`

@@ -43,11 +43,11 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 ## 3. Document Model, Fields, And File Flow
 
 - Storage model for chart metadata and difficulties:
-  - Files: `src/simai/document/SimaiDocument.h`, `src/simai/document/SimaiDocument.cpp`
+  - Files: `src/core/chart/document/SimaiDocument.h`, `src/core/chart/document/SimaiDocument.cpp`
   - Class: `SimaiDocument`
   - Key functions: `createEmpty`, `fromText`, `toText`, `parseRawFields`, `serializeRawFields`, `ensureDifficulty`, `removeDifficulty`
 - Timing metadata extraction for parser / timeline / normalization:
-  - Files: `src/simai/document/SimaiTimingMetadata.h`, `src/simai/document/SimaiTimingMetadata.cpp`
+  - Files: `src/core/chart/document/SimaiTimingMetadata.h`, `src/core/chart/document/SimaiTimingMetadata.cpp`
   - Namespace: `miacode::simai`
   - Key functions: `buildTimingMetadata`, `buildTimingMetadataFromRawText`, `parseInlineTimeSignatureComment`, `latencyMeterIdForTimingMetadata`
 - File open/save/new and field switching:
@@ -66,12 +66,12 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 ## 4. Parser, Syntax Validation, And Marker Generation
 
 - Parser API:
-  - Files: `src/simai/parser/SimaiNativeParser.h`, `src/simai/parser/SimaiNativeParser.Driver.cpp`
+  - Files: `src/core/chart/parser/SimaiNativeParser.h`, `src/core/chart/parser/SimaiNativeParser.Driver.cpp`
   - Class: `SimaiNativeParser`
   - Key functions: `parseForTimeline`, `validateSyntax`, `buildValidationReport`
   - Owns: metadata-aware default meter input, inline `|| x/y` measure restarts, validation/strict-check awareness for time-signature comments
 - Parser internals:
-  - Files: `src/simai/parser/SimaiNativeParser.cpp`, `src/simai/parser/SimaiNativeParser.Slide.cpp`, `src/simai/parser/SimaiNativeParser.TouchTap.cpp`, `src/simai/parser/SimaiNativeParser.StrictChecks.cpp`
+  - Files: `src/core/chart/parser/SimaiNativeParser.cpp`, `src/core/chart/parser/SimaiNativeParser.Slide.cpp`, `src/core/chart/parser/SimaiNativeParser.TouchTap.cpp`, `src/core/chart/parser/SimaiNativeParser.StrictChecks.cpp`
   - Owns: note parsing, slide/wifi semantics, touch/tap parsing, strict-vs-lenient checks
 - Main window validation UI:
   - File: `src/app/mainwindow/sections/validation/MainWindow.ValidationFlow.cpp`

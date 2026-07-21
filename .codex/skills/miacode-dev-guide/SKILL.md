@@ -29,8 +29,8 @@ Use this skill as the repo memory layer for MiaCode. Start from the user-facing 
 
 - App boot and CLI: `src/app/main.cpp`
 - Main window orchestration: `src/app/mainwindow/`
-- Document model: `src/simai/document/`
-- Parser and validation primitives: `src/simai/parser/`
+- Document model: `src/core/chart/document/`
+- Parser and validation primitives: `src/core/chart/parser/`
 - Timeline data and UI: `src/timeline/`
 - Preview video: `src/preview/video/`
 - Preview audio: `src/preview/audio/`
