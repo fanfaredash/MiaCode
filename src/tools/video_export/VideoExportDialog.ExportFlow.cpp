@@ -457,7 +457,12 @@ bool VideoExportDialog::buildBatchTaskTemplate(VideoExportTask* task, QString* e
     updated.exportStartSeconds = 0.0;
     updated.contentDurationSeconds = qMax(0.0, baseTask_.contentDurationSeconds);
     updated.fullRangeExport = true;
-    updated.intro = currentIntroSpec();
+    // Batch must keep the intro mode UNRESOLVED (currentIntroSpecForExportTask,
+    // not currentIntroSpec): when the 片头 tab is set to "Auto" this preserves
+    // the "auto" token so each queued chart's snapshot detects its own SD/DX in
+    // copyIntroStyling(). currentIntroSpec() would bake in the currently-open
+    // chart's mode and force every batch item to it.
+    updated.intro = currentIntroSpecForExportTask();
     updated.intro.enabled = addIntroCheck_ != nullptr && addIntroCheck_->isChecked();
 
     if (updated.outputWidth <= 0 || updated.outputHeight <= 0) {
