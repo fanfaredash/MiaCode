@@ -49,7 +49,7 @@ int PlainCodeEditor::lineNumberAtGlobalPosition(const QPoint& globalPos) const
     if (lineNumberArea_ == nullptr) {
         return -1;
     }
-    const QPoint areaPos = lineNumberArea_->mapFromGlobal(globalPos);
+    const QPoint areaPos = miacode::ui::mapGlobalPointToWidget(lineNumberArea_, globalPos);
     QRect hitRect = lineNumberArea_->rect();
     hitRect.adjust(0, 0, kLineNumberDropHitSlopRight, 0);
     if (!hitRect.contains(areaPos)) {

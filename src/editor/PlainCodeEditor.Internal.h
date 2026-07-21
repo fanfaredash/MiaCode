@@ -12,6 +12,7 @@
 // type. Bodies are byte-identical to the former in-.cpp definitions.
 
 #include "PlainCodeEditor.h"
+#include "common/AdoptedWidgetCoordinates.h"
 
 #include <QApplication>
 #include <QByteArray>
@@ -90,7 +91,7 @@ protected:
     // itself is assembled by MainWindow (the editor layer stays UI-policy-free).
     void contextMenuEvent(QContextMenuEvent* event) override
     {
-        const int line = editor_->lineNumberAtAreaPosition(event->pos());
+        const int line = editor_->lineNumberAtGlobalPosition(event->globalPos());
         if (line > 0) {
             emit editor_->lineNumberBookmarkContextMenuRequested(line, event->globalPos());
             event->accept();

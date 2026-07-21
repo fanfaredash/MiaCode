@@ -28,6 +28,7 @@
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
+#include "common/AdoptedWidgetCoordinates.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewInteractionConfig.h"
@@ -375,7 +376,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             [this, editor](int line, const QPoint& globalPos) {
         // Line-number-gutter right-click: the same bookmark actions the editor
         // body menu offers, anchored at the gutter position.
-        QMenu menu(this);
+        QMenu menu(editor);
         menu.setFont(uiAccentFont(10));
         styleRoundedMenu(menu);
         const bool hasBookmark = editor->bookmarkedLines().contains(line);
@@ -1048,7 +1049,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             return;
         }
         if (kind == "add") {
-            QMenu menu(this);
+            QMenu menu(outlineList_);
             menu.setFont(uiAccentFont(10));
             styleRoundedMenu(menu);
             for (int id = 1; id <= 7; ++id) {
@@ -1113,7 +1114,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
             }
             if (!menu.isEmpty()) {
                 const QRect rowRect = outlineList_->visualItemRect(current);
-                menu.exec(outlineList_->viewport()->mapToGlobal(rowRect.bottomRight()));
+                menu.exec(miacode::ui::mapWidgetPointToGlobal(
+                    outlineList_->viewport(), rowRect.bottomRight()));
             }
             rebuildFieldSidebar();
             return;
@@ -1121,7 +1123,8 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         if (kind == "toolbox") {
             if (toolboxMenu_ != nullptr) {
                 const QRect rowRect = outlineList_->visualItemRect(current);
-                const QPoint popupPos = outlineList_->viewport()->mapToGlobal(
+                const QPoint popupPos = miacode::ui::mapWidgetPointToGlobal(
+                    outlineList_->viewport(),
                     QPoint(rowRect.right(), rowRect.top() + rowRect.height() / 2)
                 );
                 toolboxMenu_->exec(popupPos);
@@ -1183,13 +1186,22 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         if (outlineList_ == nullptr) {
             return;
         }
-        QListWidgetItem* item = outlineList_->itemAt(pos);
+        Q_UNUSED(pos);
+        QWidget* viewport = outlineList_->viewport();
+        if (viewport == nullptr) {
+            return;
+        }
+        // On the macOS QuickShell surface, the event's local point can still
+        // be relative to the orphan NSPanel.  Hit-test from the real cursor
+        // position through the adopted surface instead.
+        const QPoint itemPos = miacode::ui::mapGlobalPointToWidget(viewport, QCursor::pos());
+        QListWidgetItem* item = outlineList_->itemAt(itemPos);
         if (item == nullptr) {
             return;
         }
         const QString kind = item->data(kOutlineItemKindRole).toString();
         if (kind == QLatin1String("bookmark")) {
-            QMenu menu(this);
+            QMenu menu(outlineList_);
             menu.setFont(uiAccentFont(10));
             styleRoundedMenu(menu);
             const int bookmarkDifficultyId = item->data(kOutlineItemDifficultyRole).toInt();
@@ -1227,14 +1239,14 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
                     jumpToLocation(line, 1);
                 }
             });
-            menu.exec(outlineList_->viewport()->mapToGlobal(pos));
+            menu.exec(miacode::ui::mapWidgetPointToGlobal(viewport, itemPos));
             return;
         }
         const int difficultyId = item->data(kOutlineItemDifficultyRole).toInt();
         if (!SimaiDocument::isDifficultyId(difficultyId) || document_.difficulty(difficultyId) == nullptr) {
             return;
         }
-        QMenu menu(this);
+        QMenu menu(outlineList_);
         menu.setFont(uiAccentFont(10));
         styleRoundedMenu(menu);
         QAction* deleteAction = menu.addAction(
@@ -1243,7 +1255,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         connect(deleteAction, &QAction::triggered, this, [this, difficultyId]() {
             deleteDifficultyField(difficultyId);
         });
-        menu.exec(outlineList_->viewport()->mapToGlobal(pos));
+        menu.exec(miacode::ui::mapWidgetPointToGlobal(viewport, itemPos));
     });
 
     toolboxMenu_ = new QMenu(outlineList_);

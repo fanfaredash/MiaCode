@@ -57,4 +57,19 @@ QPoint mapWidgetPointToGlobal(const QWidget* widget, const QPoint& localPoint)
         : widget->mapToGlobal(localPoint);
 }
 
+QPoint mapGlobalPointToWidget(const QWidget* widget, const QPoint& globalPoint)
+{
+    if (widget == nullptr) {
+        return {};
+    }
+    for (const QWidget* ancestor = widget; ancestor != nullptr; ancestor = ancestor->parentWidget()) {
+        auto* adoptedWindow = qobject_cast<QWindow*>(
+            ancestor->property(kAdoptedSurfaceWindowProperty).value<QObject*>());
+        if (adoptedWindow != nullptr) {
+            return widget->mapFrom(ancestor, adoptedWindow->mapFromGlobal(globalPoint));
+        }
+    }
+    return widget->mapFromGlobal(globalPoint);
+}
+
 } // namespace miacode::ui
