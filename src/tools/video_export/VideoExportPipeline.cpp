@@ -169,7 +169,7 @@ bool isImageMediaPath(const QString& path)
 
 std::unique_ptr<miacode::video_export::VideoExportAudioBackend> createExportAudioBackend(QString* errorMessage)
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     auto backend = std::make_unique<miacode::video_export::BassExportAudioBackend>();
     QString reason;
     if (!backend->isSupported(&reason)) {

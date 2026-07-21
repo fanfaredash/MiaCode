@@ -10,11 +10,11 @@
 // BassPreviewAudioBackend_EngineInit.cpp.
 //
 // NOTE: this header is included by each TU *after* that TU's #include block
-// (Qt headers + common headers + the Windows/BASS headers guarded by
-// Q_OS_WIN), exactly mirroring the original file's ordering where the
+// (Qt headers + common headers + the platform BASS headers guarded by
+// MIACODE_HAS_BASS_AUDIO), exactly mirroring the original file's ordering where the
 // anonymous namespace followed the includes. The DWORD / BASS_* references in
 // the tempo constants and noteBassErr therefore resolve against the including
-// TU's windows.h / bass.h, just as they did before the split.
+// TU's bass.h on every supported platform.
 
 #include "BassPreviewDebugLogRouting.h"
 #include "PreviewAudioBackend.h"
@@ -237,7 +237,7 @@ inline void appendAudioDebugLog(const QString& message)
 // query before the next BASS call or risk losing the code.
 inline void noteBassErr(const char* ctx)
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     const int code = static_cast<int>(BASS_ErrorGetCode());
     if (code == 0) {
         return;
@@ -250,7 +250,13 @@ inline void noteBassErr(const char* ctx)
 
 inline QString runtimeFilePath(const QString& fileName)
 {
+#ifdef Q_OS_MACOS
+    return QDir::cleanPath(
+        QDir(QCoreApplication::applicationDirPath()).filePath(
+            QStringLiteral("../Frameworks/%1").arg(fileName)));
+#else
     return QDir(QCoreApplication::applicationDirPath()).filePath(fileName);
+#endif
 }
 
 inline bool runtimeLibraryExists(const QString& fileName)
@@ -347,7 +353,7 @@ inline QString bassDebugOperationLabel(miacode::preview_audio::bass::BassDebugOp
     }
 }
 
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
 typedef DWORD (WINAPI* BassFxTempoCreateProc)(DWORD handle, DWORD flags);
 extern int gBassDeviceRefCount;
 #endif

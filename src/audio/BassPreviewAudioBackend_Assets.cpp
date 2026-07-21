@@ -21,9 +21,7 @@
 
 #include <cstdio>   // G1 Commit 8 followup: std::snprintf for startup-beacon lines
 
-#ifdef Q_OS_WIN
-#include <windows.h>
-
+#ifdef MIACODE_HAS_BASS_AUDIO
 #include "bass.h"
 #include "bassmix.h"
 #endif
@@ -41,7 +39,7 @@ void BassPreviewAudioBackend::refreshPreparedAssets()
 
 void BassPreviewAudioBackend::resetAssets()
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     int releasedSampleCount = 0;
     samplesByKind_.clear();
     backgroundTrackSample_ = nullptr;
@@ -83,7 +81,7 @@ void BassPreviewAudioBackend::resetAssets()
 void BassPreviewAudioBackend::initializeAssets()
 {
     MC_OP("BassPreviewAudioBackend::initializeAssets");
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     QElapsedTimer timer;
     timer.start();
     resetAssets();
@@ -192,7 +190,7 @@ void BassPreviewAudioBackend::initializeAssets()
 
 void BassPreviewAudioBackend::applySampleLevels()
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     const auto apply = [](Sample* sample, double volume) {
         if (sample != nullptr) {
             sample->baseVolume = clampSampleVolume(volume);
@@ -373,4 +371,3 @@ void BassPreviewAudioBackend::clearTimeline()
     clearPreparedTimeline();
     stopAll();
 }
-

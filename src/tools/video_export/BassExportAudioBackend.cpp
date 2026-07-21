@@ -14,8 +14,10 @@
 #include <memory>
 #include <vector>
 
+#ifdef MIACODE_HAS_BASS_AUDIO
 #ifdef Q_OS_WIN
 #include <windows.h>
+#endif
 
 #include "bass.h"
 #include "bassmix.h"
@@ -33,7 +35,13 @@ void appendExportLog(const QString& stage, const QString& detail = QString())
 
 QString runtimeFilePath(const QString& fileName)
 {
+#ifdef Q_OS_MACOS
+    return QDir::cleanPath(
+        QDir(QCoreApplication::applicationDirPath()).filePath(
+            QStringLiteral("../Frameworks/%1").arg(fileName)));
+#else
     return QDir(QCoreApplication::applicationDirPath()).filePath(fileName);
+#endif
 }
 
 bool runtimeLibraryExists(const QString& fileName)
@@ -112,7 +120,7 @@ private:
     QDataStream stream_;
 };
 
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
 struct ScheduledSource {
     DWORD stream = 0;
 
@@ -143,9 +151,13 @@ QString BassExportAudioBackend::backendId() const
 
 bool BassExportAudioBackend::runtimeLibrariesPresent() const
 {
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN)
     return runtimeLibraryExists(QStringLiteral("bass.dll"))
         && runtimeLibraryExists(QStringLiteral("bassmix.dll"));
+#elif defined(Q_OS_MACOS) && defined(MIACODE_HAS_BASS_AUDIO)
+    return runtimeLibraryExists(QStringLiteral("libbass.dylib"))
+        && runtimeLibraryExists(QStringLiteral("libbassmix.dylib"))
+        && runtimeLibraryExists(QStringLiteral("libbassopus.dylib"));
 #else
     return false;
 #endif
@@ -153,7 +165,7 @@ bool BassExportAudioBackend::runtimeLibrariesPresent() const
 
 bool BassExportAudioBackend::isSupported(QString* reason) const
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (!runtimeLibrariesPresent()) {
         if (reason != nullptr) {
             *reason = QStringLiteral("BASS runtime libraries are missing");
@@ -166,7 +178,7 @@ bool BassExportAudioBackend::isSupported(QString* reason) const
     return true;
 #else
     if (reason != nullptr) {
-        *reason = QStringLiteral("BASS export backend is Windows-only");
+        *reason = QStringLiteral("BASS export backend is unavailable in this build");
     }
     return false;
 #endif
@@ -174,7 +186,7 @@ bool BassExportAudioBackend::isSupported(QString* reason) const
 
 bool BassExportAudioBackend::initializeBass(QString* errorMessage)
 {
-#ifndef Q_OS_WIN
+#ifndef MIACODE_HAS_BASS_AUDIO
     if (errorMessage != nullptr) {
         *errorMessage = QStringLiteral("BASS export backend is unavailable");
     }
@@ -200,7 +212,7 @@ bool BassExportAudioBackend::initializeBass(QString* errorMessage)
 
 void BassExportAudioBackend::shutdownBass()
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (ownsBassInit_) {
         BASS_Free();
         ownsBassInit_ = false;
@@ -214,7 +226,7 @@ bool BassExportAudioBackend::renderMixedTrackToWav(
     QString* errorMessage
 )
 {
-#ifndef Q_OS_WIN
+#ifndef MIACODE_HAS_BASS_AUDIO
     if (errorMessage != nullptr) {
         *errorMessage = QStringLiteral("BASS export backend is unavailable");
     }
@@ -233,6 +245,7 @@ bool BassExportAudioBackend::renderMixedTrackToWav(
 
     HPLUGIN pluginAac = 0;
     HPLUGIN pluginOpus = 0;
+#ifdef Q_OS_WIN
     const QString aacPath = runtimeFilePath(QStringLiteral("bass_aac.dll"));
     if (QFileInfo::exists(aacPath)) {
         pluginAac = BASS_PluginLoad(reinterpret_cast<const WCHAR*>(aacPath.utf16()), 0);
@@ -241,6 +254,13 @@ bool BassExportAudioBackend::renderMixedTrackToWav(
     if (QFileInfo::exists(opusPath)) {
         pluginOpus = BASS_PluginLoad(reinterpret_cast<const WCHAR*>(opusPath.utf16()), 0);
     }
+#elif defined(Q_OS_MACOS)
+    const QString opusPath = runtimeFilePath(QStringLiteral("libbassopus.dylib"));
+    if (QFileInfo::exists(opusPath)) {
+        const QByteArray encodedOpusPath = QFile::encodeName(opusPath);
+        pluginOpus = BASS_PluginLoad(encodedOpusPath.constData(), 0);
+    }
+#endif
 
     const DWORD mixerFlags = BASS_STREAM_DECODE | BASS_SAMPLE_FLOAT | BASS_MIXER_NONSTOP | BASS_MIXER_NOSPEAKER;
     const HSTREAM masterMixer = BASS_Mixer_StreamCreate(kMixSampleRate, kMixChannels, mixerFlags);
@@ -281,7 +301,12 @@ bool BassExportAudioBackend::renderMixedTrackToWav(
         }
 
         const DWORD sourceFlags = BASS_STREAM_DECODE | BASS_STREAM_PRESCAN;
+#ifdef Q_OS_WIN
         HSTREAM stream = BASS_StreamCreateFile(FALSE, reinterpret_cast<const WCHAR*>(path.utf16()), 0, 0, sourceFlags);
+#else
+        const QByteArray encodedPath = QFile::encodeName(path);
+        HSTREAM stream = BASS_StreamCreateFile(FALSE, encodedPath.constData(), 0, 0, sourceFlags);
+#endif
         if (stream == 0) {
             appendExportLog(
                 QStringLiteral("audio_backend_source_skip"),

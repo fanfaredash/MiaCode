@@ -21,9 +21,7 @@
 
 #include <cstdio>   // G1 Commit 8 followup: std::snprintf for startup-beacon lines
 
-#ifdef Q_OS_WIN
-#include <windows.h>
-
+#ifdef MIACODE_HAS_BASS_AUDIO
 #include "bass.h"
 #include "bassmix.h"
 #endif
@@ -108,7 +106,7 @@ void BassPreviewAudioBackend::drainEvents(double second)
 
 void BassPreviewAudioBackend::reconcileTouchholdVoice(double second)
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (touchholdSample_ == nullptr) {
         return;
     }
@@ -133,7 +131,7 @@ void BassPreviewAudioBackend::reconcileTouchholdVoice(double second)
 void BassPreviewAudioBackend::pauseTouchholdVoices()
 {
     MC_OP("BassPreviewAudioBackend::pauseTouchholdVoices");
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (touchholdSample_ != nullptr) {
         touchholdSample_->stop();
     }
@@ -144,7 +142,7 @@ void BassPreviewAudioBackend::pauseTouchholdVoices()
 void BassPreviewAudioBackend::restoreTouchholdVoices(double second)
 {
     MC_OP("BassPreviewAudioBackend::restoreTouchholdVoices");
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     pauseTouchholdVoices();
     reconcileTouchholdVoice(second);
 #else
@@ -155,7 +153,7 @@ void BassPreviewAudioBackend::restoreTouchholdVoices(double second)
 
 bool BassPreviewAudioBackend::playKindInternal(const QString& kind, double gain)
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     Sample* sample = sampleForKind(kind);
     if (sample == nullptr) {
         return false;
@@ -172,7 +170,7 @@ bool BassPreviewAudioBackend::playKindInternal(const QString& kind, double gain)
 bool BassPreviewAudioBackend::audition(const QString& kind, double gain)
 {
     MC_OP("BassPreviewAudioBackend::audition");
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (!initializeAudioEngine() || masterMixer_ == 0) {
         return false;
     }

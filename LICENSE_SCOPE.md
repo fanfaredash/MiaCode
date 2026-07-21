@@ -22,7 +22,7 @@ The public repository and prerelease packages may include assets and binaries wh
 - bundled application assets under [assets](assets)
 - intro templates and generated visual assets under [src/intro](src/intro)
 - bundled fonts, SFX, skins, background media, and note-guide images
-- BASS-related headers, import libraries, and runtime DLLs used by the Windows audio backend
+- BASS-related headers, import libraries, runtime DLLs, and runtime dylibs used by the Windows and macOS audio backends
 - generated release packages and packaged application archives
 
 Commercial redistribution is not covered by this repository-level distribution position. A commercial distributor would need to replace or relicense restricted assets/dependencies and independently satisfy all third-party license obligations.

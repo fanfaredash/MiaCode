@@ -23,8 +23,10 @@
 
 #include "../../third_party/miniaudio/miniaudio.h"
 
+#ifdef MIACODE_HAS_BASS_AUDIO
 #ifdef Q_OS_WIN
 #include <windows.h>
+#endif
 
 #include "bass.h"
 #endif
@@ -131,7 +133,7 @@ double peakColumnSecond(const WaveformLevel& level, double* peakEnergy)
     return peakIndex >= 0 ? static_cast<double>(peakIndex) * level.secondsPerColumn : -1.0;
 }
 
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
 QMutex& bassWaveformDecodeMutex()
 {
     static QMutex mutex;
@@ -293,7 +295,7 @@ QVector<float> decodeMonoSamplesWithMiniaudio(const QString& trackPath, double* 
     return samples;
 }
 
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
 QVector<float> decodeMonoSamplesWithBass(const QString& trackPath, double* durationSeconds)
 {
     QVector<float> samples;
@@ -398,7 +400,7 @@ QVector<float> decodeMonoSamples(
     if (backend != nullptr) {
         *backend = WaveformDecodeBackend::None;
     }
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     const QVector<float> bassSamples = decodeMonoSamplesWithBass(trackPath, durationSeconds);
     if (!bassSamples.isEmpty()) {
         if (backend != nullptr) {
