@@ -21,9 +21,7 @@
 
 #include <cstdio>   // G1 Commit 8 followup: std::snprintf for startup-beacon lines
 
-#ifdef Q_OS_WIN
-#include <windows.h>
-
+#ifdef MIACODE_HAS_BASS_AUDIO
 #include "bass.h"
 #include "bassmix.h"
 #endif
@@ -130,7 +128,7 @@ void BassPreviewAudioBackend::setPlaybackTransactionId(quint64 transactionId)
 
 void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, double fallbackSecond)
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (!runtimeAudioDebugEnabled()) {
         return;
     }
@@ -298,7 +296,7 @@ double BassPreviewAudioBackend::preparePreviewPlaybackTransaction(
 void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
 {
     MC_OP("BassPreviewAudioBackend::commitPreparedPreviewPlayback");
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (!preparedPlayback_.pending || masterMixer_ == 0) {
         return;
     }
@@ -601,4 +599,3 @@ double BassPreviewAudioBackend::syncPreviewPlaybackClockTransaction(double fallb
     logPlaybackStatus(second, fallbackSecond);
     return second;
 }
-

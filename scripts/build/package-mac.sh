@@ -10,7 +10,7 @@ QT_ROOT="${QT_ROOT:-}"
 DEPLOYMENT_TARGET="${CMAKE_OSX_DEPLOYMENT_TARGET:-13.0}"
 BUILD_DEV_TOOLS="${MIACODE_BUILD_DEV_TOOLS:-OFF}"
 MACOS_CODESIGN_IDENTITY="${MACOS_CODESIGN_IDENTITY:--}"
-PACKAGE_ARCHITECTURES="${CMAKE_OSX_ARCHITECTURES:-}"
+PACKAGE_ARCHITECTURES="${CMAKE_OSX_ARCHITECTURES:-arm64}"
 THIN_SINGLE_ARCH_PACKAGE="${MIACODE_THIN_MACOS_APP:-ON}"
 if [[ -z "$QT_ROOT" && -n "${QT_ROOT_DIR:-}" ]]; then
   QT_ROOT="$QT_ROOT_DIR"
@@ -23,6 +23,10 @@ case "$THIN_SINGLE_ARCH_PACKAGE" in
     exit 2
     ;;
 esac
+if [[ "$PACKAGE_ARCHITECTURES" != "arm64" ]]; then
+  echo "MiaCode for macOS is arm64-only (got CMAKE_OSX_ARCHITECTURES=$PACKAGE_ARCHITECTURES)." >&2
+  exit 2
+fi
 
 parse_version() {
   local cmake_file="$1"
@@ -43,15 +47,7 @@ parse_version() {
 }
 
 VERSION="$(parse_version "$ROOT_DIR/CMakeLists.txt")"
-MACOS_PACKAGE_SUFFIX="macos"
-case "$PACKAGE_ARCHITECTURES" in
-  arm64)
-    MACOS_PACKAGE_SUFFIX="macos-apple-silicon"
-    ;;
-  x86_64)
-    MACOS_PACKAGE_SUFFIX="macos-intel"
-    ;;
-esac
+MACOS_PACKAGE_SUFFIX="macos-apple-silicon"
 DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/MiaCode-v${VERSION}-${MACOS_PACKAGE_SUFFIX}}"
 
 version_gt() {
@@ -259,6 +255,7 @@ Run:
 Included:
   - MiaCode.app
   - Qt frameworks/plugins deployed by macdeployqt
+  - BASS, BASSmix, BASS FX, and BASSOPUS arm64 runtime libraries
   - MiaCode.app/Contents/MacOS/ffmpeg/ffmpeg
   - assets (inside MiaCode.app/Contents/Resources/assets)
   - docs/
@@ -292,13 +289,28 @@ rm -rf "$DIST_DIR/MiaCode.app/Contents/PlugIns/sqldrivers"
 # Mach-O that lacks the target architecture, preventing an x86-only Rosetta
 # helper or another incompatible binary from being silently damaged.
 if [[ "$THIN_SINGLE_ARCH_PACKAGE" == "ON" ]]; then
-  case "$PACKAGE_ARCHITECTURES" in
-    arm64|x86_64)
-      "$ROOT_DIR/scripts/build/thin-macos-app.sh" \
-        "$DIST_DIR/MiaCode.app" "$PACKAGE_ARCHITECTURES"
-      ;;
-  esac
+  "$ROOT_DIR/scripts/build/thin-macos-app.sh" \
+    "$DIST_DIR/MiaCode.app" "arm64"
 fi
+
+bass_frameworks_dir="$DIST_DIR/MiaCode.app/Contents/Frameworks"
+required_bass_libraries=(
+  "libbass.dylib"
+  "libbassmix.dylib"
+  "libbass_fx.dylib"
+  "libbassopus.dylib"
+)
+for bass_library in "${required_bass_libraries[@]}"; do
+  bass_path="$bass_frameworks_dir/$bass_library"
+  if [[ ! -f "$bass_path" ]]; then
+    echo "Missing packaged macOS BASS runtime: $bass_path" >&2
+    exit 1
+  fi
+  if [[ "$(lipo -archs "$bass_path")" != "arm64" ]]; then
+    echo "Packaged BASS runtime is not arm64-only: $bass_path" >&2
+    exit 1
+  fi
+done
 
 # macdeployqt and architecture thinning rewrite Mach-O files and invalidate
 # bundled signatures. Re-sign only after both operations finish, then verify the
@@ -315,6 +327,9 @@ fi
 if [[ -n "$DEPLOYMENT_TARGET" ]]; then
   validate_minos "$DIST_DIR/MiaCode.app/Contents/MacOS/MiaCode" "$DEPLOYMENT_TARGET"
   validate_minos "$DIST_DIR/MiaCode.app/Contents/Frameworks/QtCore.framework/Versions/A/QtCore" "$DEPLOYMENT_TARGET"
+  for bass_library in "${required_bass_libraries[@]}"; do
+    validate_minos "$bass_frameworks_dir/$bass_library" "$DEPLOYMENT_TARGET"
+  done
 fi
 
 ZIP_PATH="${DIST_DIR}.zip"

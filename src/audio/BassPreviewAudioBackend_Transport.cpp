@@ -21,9 +21,7 @@
 
 #include <cstdio>   // G1 Commit 8 followup: std::snprintf for startup-beacon lines
 
-#ifdef Q_OS_WIN
-#include <windows.h>
-
+#ifdef MIACODE_HAS_BASS_AUDIO
 #include "bass.h"
 #include "bassmix.h"
 #endif
@@ -35,7 +33,7 @@ using namespace miacode::audio::bass_detail;
 
 void BassPreviewAudioBackend::setBackgroundTrackSampleSpeed(double rate)
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (backgroundTrackSample_ != nullptr) {
         backgroundTrackSample_->setSpeed(rate);
     }
@@ -47,7 +45,7 @@ void BassPreviewAudioBackend::setBackgroundTrackSampleSpeed(double rate)
 
 void BassPreviewAudioBackend::suspendPlaybackTransport()
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (masterMixer_ == 0) {
         return;
     }
@@ -114,7 +112,7 @@ void BassPreviewAudioBackend::anchorTransportToSecond(double targetSecond, const
 
 void BassPreviewAudioBackend::clearResidualVoicesForPausedReposition()
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     Sample* residualSamples[] = {
         answerSample_.get(),
         judgeSample_.get(),
@@ -140,7 +138,7 @@ void BassPreviewAudioBackend::clearResidualVoicesForPausedReposition()
 
 void BassPreviewAudioBackend::repositionMasterTransportClock(double targetSecond)
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (masterMixer_ == 0) {
         return;
     }
@@ -195,7 +193,7 @@ void BassPreviewAudioBackend::repositionPausedTransportToSecond(double targetSec
 
 void BassPreviewAudioBackend::startTransportFromCurrentAnchor()
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (masterMixer_ == 0) {
         return;
     }
@@ -284,7 +282,7 @@ void BassPreviewAudioBackend::setBackgroundTrackPlaybackRate(double rate)
 void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double chartSecond)
 {
     MC_OP("BassPreviewAudioBackend::applyPlaybackRateAtChartSecond");
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     const double normalizedRate = qBound(kBassPreviewMinRate, qIsFinite(rate) ? rate : 1.0, kBassPreviewMaxRate);
     const double sanitizedChart = qIsFinite(chartSecond) ? chartSecond : 0.0;
     // G2 Diag: every leg of the pause-modify-resume sequence below maps to one
@@ -370,7 +368,7 @@ void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double
 
 void BassPreviewAudioBackend::resetMasterMixerClock(double startSecond)
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (masterMixer_ == 0) {
         return;
     }
@@ -394,7 +392,7 @@ void BassPreviewAudioBackend::resetMasterMixerClock(double startSecond)
 
 void BassPreviewAudioBackend::stopAllSamples()
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     const Sample* uniqueSamples[] = {
         answerSample_.get(),
         judgeSample_.get(),
@@ -457,7 +455,7 @@ void BassPreviewAudioBackend::configureBackgroundTrackForSecond(
     const QString& reason,
     miacode::preview_audio::bass::BassDebugRoute route)
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     QElapsedTimer timer;
     timer.start();
     if (backgroundTrackSample_ == nullptr) {
@@ -523,7 +521,7 @@ void BassPreviewAudioBackend::configureBackgroundTrackForSecond(
 
 bool BassPreviewAudioBackend::maybeStartPendingBackgroundTrack(double second)
 {
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (backgroundTrackSample_ == nullptr) {
         return false;
     }
@@ -570,7 +568,7 @@ bool BassPreviewAudioBackend::isBackgroundTrackRunning() const
 void BassPreviewAudioBackend::startBackgroundTrack(double second)
 {
     MC_OP("BassPreviewAudioBackend::startBackgroundTrack");
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (masterMixer_ != 0 && !playbackSession_.masterRunning) {
         resetMasterMixerClock(second);
         // G1 Commit 6: master mixer was started at engine init and never stops.
@@ -610,7 +608,7 @@ void BassPreviewAudioBackend::seekBackgroundTrack(double second)
 void BassPreviewAudioBackend::pauseBackgroundTrack()
 {
     MC_OP("BassPreviewAudioBackend::pauseBackgroundTrack");
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
     if (backgroundTrackSample_ != nullptr) {
         backgroundTrackSample_->pause();
     }
@@ -622,4 +620,3 @@ double BassPreviewAudioBackend::backgroundPlaybackSecond() const
 {
     return authoritativeSecond();
 }
-

@@ -15,18 +15,11 @@ DEPLOYMENT_TARGET="${CMAKE_OSX_DEPLOYMENT_TARGET:-13.0}"
 MIACODE_BUILD_DEV_TOOLS="${MIACODE_BUILD_DEV_TOOLS:-OFF}"
 RUNNER_ARCH="$(uname -m)"
 
-case "$RUNNER_ARCH" in
-  arm64)
-    CMAKE_ARCH="arm64"
-    ;;
-  x86_64)
-    CMAKE_ARCH="x86_64"
-    ;;
-  *)
-    echo "Unsupported macOS runner architecture: $RUNNER_ARCH" >&2
-    exit 1
-    ;;
-esac
+if [[ "$RUNNER_ARCH" != "arm64" ]]; then
+  echo "MiaCode for macOS is arm64-only; an Apple-Silicon build host is required (got: $RUNNER_ARCH)." >&2
+  exit 1
+fi
+CMAKE_ARCH="arm64"
 
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   echo "Python executable not found: $PYTHON_BIN" >&2

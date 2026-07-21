@@ -23,9 +23,7 @@
 
 #include <cstdio>   // G1 Commit 8 followup: std::snprintf for startup-beacon lines
 
-#ifdef Q_OS_WIN
-#include <windows.h>
-
+#ifdef MIACODE_HAS_BASS_AUDIO
 #include "bass.h"
 #include "bassmix.h"
 #endif
@@ -34,7 +32,7 @@
 
 using namespace miacode::audio::bass_detail;
 
-#ifdef Q_OS_WIN
+#ifdef MIACODE_HAS_BASS_AUDIO
 
 struct BassPreviewAudioBackend::Sample {
     QString name;
@@ -189,7 +187,7 @@ struct BassPreviewAudioBackend::Sample {
         speedChangeSupported = speedMode != SampleSpeedMode::None;
 
         // G1 Commit 8 followup: per-sample create beacon per §7.3. The beacon is
-        // heap-free / pure Win32, so if BASS_StreamCreateFile or BASS_FX_TempoCreate
+        // heap-free and platform-neutral, so if BASS_StreamCreateFile or BASS_FX_TempoCreate
         // crashes mid-call (the (a)-scenario fault locus per
         // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §4.1), this line still lands
         // and lets the next startup pin which sample was in flight. Filename only,

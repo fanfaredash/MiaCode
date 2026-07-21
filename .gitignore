@@ -90,8 +90,9 @@ third_party/**/*.so.*
 third_party/**/*.dylib
 third_party/**/*.a
 
-# BASS runtime DLLs are intentionally distributed for the non-commercial
-# Windows build; keep this exception narrow and in sync with CMake/package-win.
+# BASS runtime libraries are intentionally distributed for the non-commercial
+# Windows and macOS builds; keep these exceptions narrow and in sync with the
+# platform packaging scripts.
 !third_party/bass/bin/
 !third_party/bass/bin/win64/
 !third_party/bass/bin/win64/bass.dll
@@ -99,6 +100,12 @@ third_party/**/*.a
 !third_party/bass/bin/win64/bass_fx.dll
 !third_party/bass/bin/win64/bass_aac.dll
 !third_party/bass/bin/win64/bassopus.dll
+!third_party/bass/lib/macos/
+!third_party/bass/lib/macos/universal/
+!third_party/bass/lib/macos/universal/libbass.dylib
+!third_party/bass/lib/macos/universal/libbassmix.dylib
+!third_party/bass/lib/macos/universal/libbass_fx.dylib
+!third_party/bass/lib/macos/universal/libbassopus.dylib
 
 # scripts whitelist: ignore all by default, allow only release/infra scripts.
 scripts/*
