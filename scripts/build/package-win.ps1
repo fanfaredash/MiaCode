@@ -620,6 +620,7 @@ if (Test-Path $ffmpegSrc) {
 }
 
 $extensionGuideSrc = Join-Path $repoRoot "resources\\extensions\\README.md"
+$bundledExtensionsSrc = Join-Path $repoRoot "resources\\extensions\\bundled"
 Remove-Item (Join-Path $appDir "extensions") -Recurse -Force -ErrorAction SilentlyContinue
 
 $extensionsDistDir = Join-Path $DistDir "extensions"
@@ -628,6 +629,11 @@ if (!(Test-Path $extensionGuideSrc)) {
     throw "Missing extension guide: $extensionGuideSrc"
 }
 Copy-Item $extensionGuideSrc (Join-Path $extensionsDistDir "README.md") -Force
+if (Test-Path $bundledExtensionsSrc) {
+    foreach ($extensionDir in Get-ChildItem -Path $bundledExtensionsSrc -Directory) {
+        Copy-Item $extensionDir.FullName (Join-Path $extensionsDistDir $extensionDir.Name) -Recurse -Force
+    }
+}
 
 $requiredPackagePaths = @(
     # Root: user-facing entry points + content + log dirs only.
@@ -637,6 +643,10 @@ $requiredPackagePaths = @(
     "logs\\worker-hwnd",
     "assets\\SFX",
     "extensions\\README.md",
+    "extensions\\miacode-pet-overlay\\miacode-extension.json",
+    "extensions\\miacode-pet-overlay\\main.js",
+    "extensions\\miacode-pet-overlay\\pet-window.ps1",
+    "extensions\\miacode-pet-overlay\\assets\\skins\\default.png",
     "licenses\\Resource-Han-Rounded-OFL.txt",
     "LICENSE",
     "LICENSE_SCOPE.md",

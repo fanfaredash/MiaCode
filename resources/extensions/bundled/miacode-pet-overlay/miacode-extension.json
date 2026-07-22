@@ -1,0 +1,52 @@
+{
+  "id": "miacode-pet-overlay",
+  "name": "MiaCode Pet Overlay",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "miacode": ">=1.0.0"
+  },
+  "main": "./main.js",
+  "permissions": [
+    "experimental.invoke",
+    "filesystem.read",
+    "filesystem.write",
+    "preview.control",
+    "preview.read",
+    "process.manage",
+    "ui.contribute",
+    "ui.message"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "miacode-pet-overlay.spin",
+        "title": "Spin Pet Once",
+        "category": "Pet Overlay"
+      },
+      {
+        "command": "miacode-pet-overlay.reload",
+        "title": "Show Pet Window",
+        "category": "Pet Overlay"
+      },
+      {
+        "command": "miacode-pet-overlay.toggle-autostart",
+        "title": "Auto Start",
+        "category": "Pet Overlay"
+      }
+    ],
+    "menus": {
+      "tools/menu": [
+        {
+          "command": "miacode-pet-overlay.reload"
+        },
+        {
+          "command": "miacode-pet-overlay.toggle-autostart"
+        }
+      ]
+    }
+  }
+}
