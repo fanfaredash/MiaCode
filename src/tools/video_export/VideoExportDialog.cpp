@@ -1432,11 +1432,15 @@ VideoExportDialog::VideoExportDialog(
     }
     // Custom card fonts (标题字体 / 正文字体) — a change refreshes the read-only intro
     // preview and persists; currentIntroSpec() feeds the paths to preview + export.
+    // Embedded mode has no read-only IntroPreviewWidget, so it MUST also emit
+    // introPreviewSettingsChanged() (like introUiChanged below) or the negative-time
+    // intro overlay never picks up the new font until another intro control changes.
     introCardFontSelector_ = miacode::video_export::createCardFontSelector(
         introCardGroup,
         [this]() {
             refreshIntroPreview();
             persistExportOnlySettings();
+            emit introPreviewSettingsChanged();
         },
         miacode::video_export::FontComboWidthMode::StandardForm);
     introCardFontSelector_.setSelection(baseTask_.intro.fontDisplayPath, baseTask_.intro.fontBodyPath);
