@@ -251,6 +251,16 @@ int main(int argc, char* argv[])
         && !qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")
         && !qEnvironmentVariableIsEmpty("DISPLAY")) {
         qputenv("QT_QPA_PLATFORM", QByteArrayLiteral("xcb"));
+
+        // KDE Wayland normally leaves the Qt IM module unset so native clients
+        // can use text-input. Once this process moves to XWayland, honour the
+        // session's XMODIFIERS choice without changing the global session.
+        const QString xModifiers = qEnvironmentVariable("XMODIFIERS").trimmed();
+        if (qEnvironmentVariableIsEmpty("QT_IM_MODULE")
+            && qEnvironmentVariableIsEmpty("QT_IM_MODULES")
+            && xModifiers.contains(QStringLiteral("@im=fcitx"), Qt::CaseInsensitive)) {
+            qputenv("QT_IM_MODULE", QByteArrayLiteral("fcitx"));
+        }
     }
 #endif
     const QString startupOpenTarget =

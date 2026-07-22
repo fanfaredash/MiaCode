@@ -11,7 +11,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Linux GUI startup defaults to the `xcb` QPA plugin when running inside a Wayland session with
   XWayland available. QuickShell embeds native QWidget surfaces through `QWindow::fromWinId()`,
   which the Wayland QPA plugin cannot import. An explicit `QT_QPA_PLATFORM` value wins, and CLI
-  export / export-worker processes keep their existing platform selection.
+  export / export-worker processes keep their existing platform selection. When that automatic
+  XWayland fallback sees `XMODIFIERS=@im=fcitx`, it also selects the Fcitx Qt input context unless
+  the user already set `QT_IM_MODULE` or `QT_IM_MODULES`; GTK input-module state is never changed.
 - First-run welcome / initial-config dialog: `wantsWelcomeDialog` (`--welcome` flag) + first-run
   probe `QFile::exists(UiText::preferencesFilePath())` **OR** a schema-outdated probe
   `UiText::storedPreferencesSchema() != UiText::currentPreferencesSchema()` — both captured right
