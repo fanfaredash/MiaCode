@@ -490,8 +490,12 @@ bool compressVideoUnder20Mb(
     const QString& videoPath,
     QWidget* parent,
     QString* error,
-    bool* cancelled = nullptr)
+    bool* cancelled = nullptr,
+    bool* preservedCompressed = nullptr)
 {
+    if (preservedCompressed != nullptr) {
+        *preservedCompressed = false;
+    }
     constexpr qint64 kTargetBytes = 20LL * 1024LL * 1024LL;
     constexpr int kAudioBitrateKbps = 96;
     constexpr int kMinVideoBitrateKbps = 120;
@@ -563,7 +567,35 @@ bool compressVideoUnder20Mb(
         }
         return false;
     }
-    return replaceFileWithTemp(tempPath, videoPath, error);
+    if (replaceFileWithTemp(tempPath, videoPath, error)) {
+        return true;
+    }
+    // Compression itself SUCCEEDED — only the in-place replace could not complete
+    // (the original is still held open). Don't discard the finished clip: move it
+    // beside the original under a clear, user-visible name so the work is kept and
+    // the user can swap it in by hand after freeing the file. The original is left
+    // untouched, and its bytes are also in the <base>_bak backup made up-front, so
+    // nothing is lost. `error` currently holds replaceFileWithTemp's lock
+    // diagnostic; prepend the "saved as …" note so both are shown.
+    const QString preservedPath = videoInfo.dir().filePath(
+        QStringLiteral("%1_compressed.%2").arg(videoInfo.completeBaseName(), videoInfo.suffix()));
+    QFile::remove(preservedPath);
+    if (QFile::rename(tempPath, preservedPath)) {
+        if (preservedCompressed != nullptr) {
+            *preservedCompressed = true;
+        }
+        if (error != nullptr) {
+            const QString staged = *error;
+            *error = UiText::text(QStringLiteral("media_tools.compressed_but_replace_failed"))
+                         .arg(QDir::toNativeSeparators(preservedPath));
+            if (!staged.isEmpty()) {
+                *error += QStringLiteral("\n\n") + staged;
+            }
+        }
+    }
+    // If even the rename-out failed, leave the temp in place (still recoverable)
+    // and keep replaceFileWithTemp's error as-is.
+    return false;
 }
 
 bool convertTrackTo44100Hz(
@@ -788,11 +820,17 @@ void MainWindow::DialogsSection::onCompressBackgroundVideo()
 
     QString error;
     bool cancelled = false;
-    if (!compressVideoUnder20Mb(ffmpegPath, videoPath, UiDialogs::effectiveParentWidget(&owner_), &error, &cancelled)) {
+    bool preservedCompressed = false;
+    if (!compressVideoUnder20Mb(ffmpegPath, videoPath, UiDialogs::effectiveParentWidget(&owner_), &error, &cancelled, &preservedCompressed)) {
         if (cancelled) {
             QMessageBox::information(
                 UiDialogs::effectiveParentWidget(&owner_), title,
                 UiText::text(QStringLiteral("media_tools.video_compression_canceled")));
+        } else if (preservedCompressed) {
+            // Compression succeeded; only the auto-replace was blocked by the
+            // file lock. The compressed clip was kept beside the original — this
+            // is a heads-up, not a hard failure.
+            QMessageBox::information(UiDialogs::effectiveParentWidget(&owner_), title, error);
         } else {
             QMessageBox::critical(UiDialogs::effectiveParentWidget(&owner_), title, error);
         }

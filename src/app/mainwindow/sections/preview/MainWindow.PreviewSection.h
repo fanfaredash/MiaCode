@@ -42,6 +42,10 @@ public:
     void ensurePreviewStageMediaRouteInitialized();
     void syncPreviewStageMediaRouteChartPath(const QString& chartPath, const QString& trackPath, double pausedSecond, const QString& chartVideoOverridePath = QString());
     void clearPreviewStageMediaRoute();
+    // Hard-close the stage-media decoder's file handle before an in-app media
+    // tool renames/replaces the pv/bg video (Windows file-lock; see
+    // PreviewStageMediaHost::releaseDecoderForFileReplace).
+    void releasePreviewStageMediaDecoderForFileOperation();
     void applyPreviewMediaWarmupToStageMediaRoute(
         const QString& chartPath,
         const QString& resolvedMediaPath,

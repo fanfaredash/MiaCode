@@ -244,6 +244,14 @@ void PreviewStageMediaHost::clearMedia()
         videoSink_->setVideoFrame(QVideoFrame());
     }
     videoSink_.clear();
+    // handleDecodedVideoFrame pushes each decoded frame into BOTH the outer sink
+    // and the inner-circle sink (InnerCircleFitOuterFill scale mode). A frame
+    // left in the inner sink pins the same QAVFormatContext -> pv.mp4 stays open.
+    // Release it symmetrically with the outer sink.
+    if (innerVideoSink_ != nullptr) {
+        innerVideoSink_->setVideoFrame(QVideoFrame());
+    }
+    innerVideoSink_.clear();
     if (player_ != nullptr) {
         player_->stop();
         player_->setSource(QString());
@@ -294,6 +302,50 @@ void PreviewStageMediaHost::clearMedia()
     emit imageSourceChanged();
     emit mediaStateChanged();
     emit diagnosticsChanged();
+}
+
+
+void PreviewStageMediaHost::releaseDecoderForFileReplace()
+{
+    MC_OP("PreviewStageMediaHost::releaseDecoderForFileReplace");
+    // Soft path first: drops the retained sink frames (both sinks), unloads the
+    // demuxer, resets media state and generation counters. On its own this is
+    // not enough on Windows because the QAVPlayer keeps its own
+    // QSharedPointer<QAVFormatContext> ref alive until its async unload lands, so
+    // the pv.mp4 avio handle can still be open right after this returns.
+    clearMedia();
+#ifdef MIACODE_USE_QTAVPLAYER
+    // Destroy the player so ~QAVPlayer runs synchronously: it stops and JOINS the
+    // demux/decode threads and releases the format context, so
+    // avformat_close_input has executed by the time we return. This is the same
+    // hard teardown recoverVideoBackend uses; initializeBackendObjects() rebuilds
+    // a fresh player on the next load.
+    if (player_ != nullptr) {
+        player_->stop();
+        player_->setSource(QString());
+        delete player_;
+        player_ = nullptr;
+    }
+    videoBackendLoaded_ = false;
+#elif defined(HAVE_QT_MULTIMEDIA)
+    // POSIX rename-while-open is legal, so the file lock never bites here, but
+    // tear the backend down the same way for parity and a clean reload.
+    if (player_ != nullptr) {
+        player_->setVideoOutput(static_cast<QObject*>(nullptr));
+        player_->stop();
+        player_->setSource(QUrl());
+        player_->setAudioOutput(nullptr);
+        delete player_;
+        player_ = nullptr;
+    }
+    if (audioOutput_ != nullptr) {
+        delete audioOutput_;
+        audioOutput_ = nullptr;
+    }
+#endif
+    appendPreviewStageMediaLog(
+        QStringLiteral("release_decoder_for_file_replace"),
+        QStringLiteral("player_destroyed=1"));
 }
 
 

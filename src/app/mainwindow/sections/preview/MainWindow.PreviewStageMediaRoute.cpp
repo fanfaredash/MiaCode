@@ -193,6 +193,13 @@ void MainWindow::PreviewSection::clearPreviewStageMediaRoute()
     refreshPreviewStageMediaRouteDebugState(false);
 }
 
+void MainWindow::PreviewSection::releasePreviewStageMediaDecoderForFileOperation()
+{
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->releaseDecoderForFileReplace();
+    }
+}
+
 void MainWindow::PreviewSection::applyPreviewMediaWarmupToStageMediaRoute(
     const QString& chartPath,
     const QString& resolvedMediaPath,
@@ -581,6 +588,11 @@ void MainWindow::syncPreviewStageMediaRouteChartPath(const QString& chartPath, c
 void MainWindow::clearPreviewStageMediaRoute()
 {
     previewSection_->clearPreviewStageMediaRoute();
+}
+
+void MainWindow::releasePreviewStageMediaDecoderForFileOperation()
+{
+    previewSection_->releasePreviewStageMediaDecoderForFileOperation();
 }
 
 void MainWindow::applyPreviewMediaWarmupToStageMediaRoute(

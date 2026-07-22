@@ -69,16 +69,21 @@ QString MainWindow::DialogsSection::resolveCurrentChartDirectory() const
 void MainWindow::DialogsSection::releasePreviewMediaForFileOperation()
 {
     owner_.onStopPreview();
-    // clearPreviewStageMediaRoute() -> setChartPath("") -> clearMedia(), which
-    // now pushes an empty frame to the QML sink so the retained QVideoFrame ->
-    // QAVStream -> QAVFormatContext reference is dropped and the pv.mp4 avio
-    // handle is actually closed (the real "pv占用" fix lives in clearMedia()).
-    // We deliberately do NOT destroy the host here: deleting it detaches the
-    // QML VideoOutput's sink and it does not reliably re-attach to the
-    // re-created host, which left the post-op preview blank ("压缩后视频不加载").
-    // Keeping the host alive means the post-op reload re-decodes onto the same
-    // still-attached sink. See project_pv_file_lock_release.
+    // clearPreviewStageMediaRoute() -> setChartPath("") -> clearMedia() drops the
+    // retained frames from both QML sinks and unloads the demuxer. But that unload
+    // is ASYNCHRONOUS: the QAVPlayer survives and keeps its own
+    // QSharedPointer<QAVFormatContext> ref until the demuxer thread lands the
+    // close, so the pv.mp4 avio handle could still be open when we rename the file
+    // below -> ERROR_SHARING_VIOLATION ("pv占用"). That async gap — not just a
+    // stray sink frame — was the real cause the earlier empty-frame fix missed.
     owner_.clearPreviewStageMediaRoute();
+    // Deterministic close: destroy the QAVPlayer so ~QAVPlayer joins its decode
+    // threads and releases the format context SYNCHRONOUSLY (avformat_close_input
+    // runs before this returns). The player is rebuilt on the post-op reload. We
+    // keep the HOST alive so the QML VideoOutput's sink stays attached (destroying
+    // the host left the post-op preview blank, "压缩后视频不加载").
+    // See project_pv_file_lock_release.
+    owner_.releasePreviewStageMediaDecoderForFileOperation();
     for (int i = 0; i < 8; ++i) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
         QThread::msleep(25);

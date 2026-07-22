@@ -104,6 +104,21 @@ public:
     void pausePlayback();
     void shutdownForAppExit();
 
+    // Deterministically close the decoder's OS file handle on the currently
+    // loaded pv/bg video, so an in-app media tool can rename/replace that very
+    // file on Windows (where a file held open for read by FFmpeg's avio cannot
+    // be renamed/removed -> "pv占用" / ERROR_SHARING_VIOLATION). A plain
+    // clearMedia() is NOT enough: it drops only the outer sink's frame and
+    // unloads the demuxer ASYNCHRONOUSLY (the QAVPlayer survives, still holding
+    // its QAVFormatContext ref), so the handle can still be open when the caller
+    // renames the file. This drops every retained decoded frame (both sinks +
+    // lastVideoFrame_) and DESTROYS the player so ~QAVPlayer joins its
+    // demux/decode threads and releases the format context synchronously —
+    // avformat_close_input has run by the time this returns. The backend is
+    // rebuilt lazily on the next load (initializeBackendObjects), exactly like
+    // recoverVideoBackend. See project_pv_file_lock_release.
+    void releaseDecoderForFileReplace();
+
     double currentPlaybackSecond() const;
     bool videoPlaybackActive() const;
     bool hasVideoFrame() const;

@@ -14,6 +14,7 @@
         const QString& chartVideoOverridePath = QString()
     );
     void clearPreviewStageMediaRoute();
+    void releasePreviewStageMediaDecoderForFileOperation();
     void applyPreviewMediaWarmupToStageMediaRoute(
         const QString& chartPath,
         const QString& resolvedMediaPath,
