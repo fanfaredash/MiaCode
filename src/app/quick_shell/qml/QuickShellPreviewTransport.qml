@@ -119,8 +119,7 @@ Rectangle {
                 width: 3
                 height: 3
                 radius: 1.5
-                color: modeButton.shellRoot.transportPrimaryTextColor()
-                opacity: 0.42
+                color: modeButton.shellRoot.transportTextColor
                 visible: !(modeButton.shellRoot.controller && modeButton.shellRoot.controller.muriCheckRenderMode)
             }
 
