@@ -1023,6 +1023,30 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     // Captured BEFORE the reset below: seeds the page's difficulty badge
     // default (decision D4 — "the difficulty that was active on entry").
     const int previousActiveDifficultyId = state_.activeDifficultyId_;
+    // Carry the current preview position INTO the export audition so it doesn't
+    // snap to 0 — matching the difficulty-tab switch (which preserves progress
+    // when a difficulty / the latency page was active before the switch). Read
+    // the authoritative clock while it is still live (before stopQtPreviewPlayback
+    // below); installExportPreviewAuditionScene consumes this one-shot seed.
+    // The metadata (谱面信息) page keeps no audition, but leaving a difficulty for
+    // it stopped playback with keepPosition=true, so qtPreviewPauseSecond_ still
+    // holds the last position — carry it into the export page too. Source detected
+    // from the stack (currentWidget is still the page we're LEAVING; the switch to
+    // exportPage_ happens later), because activeOutlineKey_ was already overwritten
+    // with the destination by the sidebar handler. A stale cross-file value is
+    // guarded by loadDocument resetting qtPreviewPauseSecond_ to 0.
+    const bool leavingMetadataPage = ui_.editorStack_ != nullptr
+        && ui_.metadataPage_ != nullptr
+        && ui_.editorStack_->currentWidget() == ui_.metadataPage_;
+    const bool restoreEntryPreview = owner_.hasActiveDifficulty()
+        || state_.latencySandboxAuditionActive_
+        || state_.exportPreviewAuditionActive_   // re-entering export from export (sidebar re-click)
+        || leavingMetadataPage;
+    state_.exportPreviewEntrySeedSecond_ = restoreEntryPreview
+        ? qMax(0.0, state_.qtPreviewPlaying_
+              ? owner_.currentPreviewAuthoritativeAudioClockSecond()
+              : state_.qtPreviewPauseSecond_)
+        : -1.0;
     // Navigating away always tears down the latency audition. onPageLeft() is
     // idempotent (setOnPage(false) no-ops when not on the page), so it is NOT
     // gated on activeOutlineKey_ == "latency": the sidebar click handler overwrites
@@ -1185,12 +1209,26 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     // The user-facing toggle for this was removed in beta59 — behavior is
     // now always "preserve editor position + preview progress when an
     // active difficulty was selected before the switch".
-    // Also preserve when coming FROM the latency page: it sets activeDifficultyId_=0
-    // (so hasActiveDifficulty() is false) but maintains a valid playhead in
-    // qtPreviewPauseSecond_, which we want to carry over to the difficulty.
-    // (latencySandboxAuditionActive_ is still true here — onPageLeft() below
-    // tears it down only afterwards.)
-    const bool restoreSwitchView = owner_.hasActiveDifficulty() || state_.latencySandboxAuditionActive_;
+    // Also preserve when coming FROM the latency page OR the export page: both set
+    // activeDifficultyId_=0 (so hasActiveDifficulty() is false) but maintain a valid
+    // playhead in qtPreviewPauseSecond_ (export audition mirrors the latency
+    // sandbox), which we want to carry over to the difficulty. (Both audition flags
+    // are still true here — onPageLeft() below tears them down only afterwards.)
+    // The metadata (谱面信息) page has no audition either, but leaving a difficulty
+    // for it stops playback with keepPosition=true, so qtPreviewPauseSecond_ still
+    // holds the last position — carry it back too. Detect the source page from the
+    // stack (currentWidget is still the page we're LEAVING — this function switches
+    // it to chartPage_ later): activeOutlineKey_ is useless here because the sidebar
+    // click handler already overwrote it with the destination ("chart") before
+    // calling us. A stale cross-file value is guarded against by loadDocument
+    // resetting qtPreviewPauseSecond_ to 0.
+    const bool leavingMetadataPage = ui_.editorStack_ != nullptr
+        && ui_.metadataPage_ != nullptr
+        && ui_.editorStack_->currentWidget() == ui_.metadataPage_;
+    const bool restoreSwitchView = owner_.hasActiveDifficulty()
+        || state_.latencySandboxAuditionActive_
+        || state_.exportPreviewAuditionActive_
+        || leavingMetadataPage;
     const double restorePreviewSecond = restoreSwitchView
         ? qMax(0.0, state_.qtPreviewPlaying_
               ? owner_.currentPreviewAuthoritativeAudioClockSecond()
@@ -1360,6 +1398,13 @@ void MainWindow::DocumentSection::loadDocument(const SimaiDocument& document)
     state_.documentDirty_ = false;
     state_.currentFieldDirty_ = false;
     state_.activeDifficultyId_ = 0;
+    // A freshly loaded document has no carried-over preview position; clear it so
+    // the initial-field activation (and the metadata-page restore branch in
+    // switchToDifficultyField) can never resurrect a stale second from the file
+    // that was open before this one. Same reason for the export audition's
+    // last-installed difficulty (its position-preserve gate).
+    state_.qtPreviewPauseSecond_ = 0.0;
+    state_.lastExportAuditionDifficultyId_ = 0;
     state_.activeOutlineKey_ = state_.document_.difficultyIds().isEmpty() ? QStringLiteral("welcome") : QStringLiteral("chart");
     activateInitialField();
     updateMetadataPageMode();

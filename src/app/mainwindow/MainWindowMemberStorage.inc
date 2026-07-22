@@ -340,6 +340,21 @@
         // transport plays/seeks it even though activeDifficultyId_ == 0 (D4).
         // Cleared on teardown, which forces the next difficulty to rebuild.
         bool exportPreviewAuditionActive_ = false;
+        // One-shot preview position carried INTO the export page from the field
+        // that was active before entering (difficulty tab / latency page), so the
+        // export audition seeds the playhead there instead of snapping to 0 —
+        // matching the difficulty-tab switch behavior. < 0 means "no seed, start
+        // at 0"; installExportPreviewAuditionScene consumes it and resets it to
+        // -1 so later badge switches on the page still start their new difficulty
+        // from 0.
+        double exportPreviewEntrySeedSecond_ = -1.0;
+        // The difficulty id the export audition was last installed for. PERSISTS
+        // across teardown/destroy (unlike embeddedVideoExportDifficultyId_, which the
+        // sub-tab teardown resets to 0), so a re-install of the SAME difficulty —
+        // e.g. the 视频导出 → 封面 → 视频导出 sub-tab dance — can preserve the current
+        // qtPreviewPauseSecond_ instead of snapping to 0 (and thence to the 片头 head
+        // via refreshExportIntroState). Reset only on document load. 0 = none.
+        int lastExportAuditionDifficultyId_ = 0;
         // Export-page intro lead-in: while it runs, the animated 片头 plays in the
         // preview before the chart (添加片头 on, playing from 0). Self-contained
         // QTimer-driven phase; the chart audition starts when it finishes.
@@ -820,6 +835,8 @@
     double& videoExportInlineProgressSecond_ = state_.videoExportInlineProgressSecond_;
     int& embeddedVideoExportDifficultyId_ = state_.embeddedVideoExportDifficultyId_;
     bool& exportPreviewAuditionActive_ = state_.exportPreviewAuditionActive_;
+    double& exportPreviewEntrySeedSecond_ = state_.exportPreviewEntrySeedSecond_;
+    int& lastExportAuditionDifficultyId_ = state_.lastExportAuditionDifficultyId_;
     bool& exportIntroRegionActive_ = state_.exportIntroRegionActive_;
     double& exportIntroPlayheadSeconds_ = state_.exportIntroPlayheadSeconds_;
     bool& restoreSquareAfterVideoExport_ = state_.restoreSquareAfterVideoExport_;
