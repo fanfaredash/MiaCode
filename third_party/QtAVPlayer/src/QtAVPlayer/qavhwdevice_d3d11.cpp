@@ -573,7 +573,7 @@ static ComPtr<ID3D11Texture2D> copyTexture(ID3D11Device *dev, ID3D11Texture2D *f
     toDesc.Format = fromDesc.Format;
     toDesc.ArraySize = 1;
     toDesc.MipLevels = 1;
-    toDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+    toDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
     toDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
     toDesc.Usage = D3D11_USAGE_DEFAULT;
     toDesc.SampleDesc = { 1, 0 };
@@ -732,7 +732,11 @@ ComPtr<ID3D11Texture2D> QAVVideoFrame_D3D11::copyTexture(const ComPtr<ID3D11Devi
 
     desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
     desc.Usage = D3D11_USAGE_DEFAULT;
-    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+    // The bridge output is sampled by Qt Quick only.  In particular P010 is a
+    // valid shader-resource video texture but not a general render target;
+    // requesting D3D11_BIND_RENDER_TARGET here can make an otherwise valid
+    // Main10 decode surface fail or trip a driver error.
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 
     ComPtr<ID3D11Texture2D> outputTex;
     ENSURE(dev->CreateTexture2D(&desc, nullptr, outputTex.ReleaseAndGetAddressOf()), {});
@@ -948,7 +952,8 @@ public:
 #endif // #if QT_VERSION < QT_VERSION_CHECK(6, 6, 2)
         }
 
-        // Return 2 textures since we explicitly use NV12 pixel format
+        // Return both planes of the same multi-plane D3D11 texture. Qt selects
+        // the matching plane views from QVideoFrameFormat (NV12, P010, or P016).
         QList<quint64> textures = {quint64(m_texture.Get()), quint64(m_texture.Get())};
         return QVariant::fromValue(textures);
     }

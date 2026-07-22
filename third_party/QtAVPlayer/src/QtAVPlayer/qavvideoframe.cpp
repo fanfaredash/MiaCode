@@ -25,6 +25,10 @@
 #endif // #ifdef QT_AVPLAYER_MULTIMEDIA
 #include <QDebug>
 
+#if defined(Q_OS_WIN)
+    #include <d3d11.h>
+#endif
+
 extern "C" {
 #include <libswscale/swscale.h>
 #include <libavutil/pixdesc.h>
@@ -34,6 +38,37 @@ extern "C" {
 };
 
 QT_BEGIN_NAMESPACE
+
+#if defined(QT_AVPLAYER_MULTIMEDIA) && defined(Q_OS_WIN) && QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+// AV_PIX_FMT_D3D11 identifies the hardware surface container, not the pixel
+// layout stored in its ID3D11Texture2D.  In particular, HEVC Main10 commonly
+// decodes to DXGI_FORMAT_P010.  Qt Quick uses QVideoFrameFormat to choose its
+// plane SRVs, so reporting every D3D11 surface as NV12 makes it sample 16-bit
+// P010 planes as 8-bit data (green/garbled video and driver errors).
+static QVideoFrameFormat::PixelFormat d3d11TexturePixelFormat(const AVFrame *frame)
+{
+    if (!frame || frame->format != AV_PIX_FMT_D3D11 || !frame->data[0])
+        return QVideoFrameFormat::Format_Invalid;
+
+    auto *texture = reinterpret_cast<ID3D11Texture2D *>(frame->data[0]);
+    if (!texture)
+        return QVideoFrameFormat::Format_Invalid;
+
+    D3D11_TEXTURE2D_DESC desc = {};
+    texture->GetDesc(&desc);
+    switch (desc.Format) {
+    case DXGI_FORMAT_NV12:
+        return QVideoFrameFormat::Format_NV12;
+    case DXGI_FORMAT_P010:
+        return QVideoFrameFormat::Format_P010;
+    case DXGI_FORMAT_P016:
+        return QVideoFrameFormat::Format_P016;
+    default:
+        qWarning() << "Unsupported D3D11 video texture format" << desc.Format;
+        return QVideoFrameFormat::Format_Invalid;
+    }
+}
+#endif
 
 static const QAVVideoCodec *videoCodec(const QAVCodec *c)
 {
@@ -477,6 +512,13 @@ QAVVideoFrame::operator QVideoFrame() const
                 format = VideoFrame::Format_NV12;
             break;
         case AV_PIX_FMT_D3D11:
+#if defined(Q_OS_WIN) && QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+            format = d3d11TexturePixelFormat(frame());
+            break;
+#else
+            format = VideoFrame::Format_NV12;
+            break;
+#endif
         case AV_PIX_FMT_VIDEOTOOLBOX:
         case AV_PIX_FMT_NV12:
             format = VideoFrame::Format_NV12;
