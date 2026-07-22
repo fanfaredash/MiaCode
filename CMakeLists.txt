@@ -813,6 +813,19 @@ target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
 # (makeSettingsGearIcon, MainWindowShared.cpp) via QSvgRenderer.
 target_link_libraries(MiaCode PRIVATE Qt6::Svg)
 
+set(MIACODE_BUNDLED_EXTENSIONS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources/extensions/bundled")
+if (EXISTS "${MIACODE_BUNDLED_EXTENSIONS_DIR}")
+    add_custom_command(TARGET MiaCode POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:MiaCode>/extensions"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${MIACODE_BUNDLED_EXTENSIONS_DIR}"
+            "$<TARGET_FILE_DIR:MiaCode>/extensions"
+        COMMENT "Deploying bundled extensions next to MiaCode.exe"
+        VERBATIM
+    )
+endif()
+
 # ---------------------------------------------------------------------------
 # QtAVPlayer (FFmpeg) — preview background-video decode backend.
 #
