@@ -1,4 +1,5 @@
 build/
+build-linux*/
 build-mingw*/
 Build-Mingw*/
 build-macos/

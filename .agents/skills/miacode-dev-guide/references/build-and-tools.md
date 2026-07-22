@@ -158,7 +158,7 @@ Rules going forward:
 
 ## 7. Do not commit build artifacts
 
-`.gitignore` blocks `build/`, `.qt/`, `dist/`, `CMakeFiles/`, `*.obj`, `*.log`, `*.pdb`,
+`.gitignore` blocks `build/`, `build-linux*/`, `.qt/`, `dist/`, `CMakeFiles/`, `*.obj`, `*.log`, `*.pdb`,
 `tmp*/`, third-party binaries, and whitelists only specific `docs/` and `scripts/` files. Audit
 added `experimental/` and `logs/` to the ignore set. Never `git add` a compiled binary, log, or
 local experiment output. `experimental/` holds untracked local experiments (e.g. aubio) with no

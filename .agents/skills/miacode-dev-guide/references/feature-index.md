@@ -8,6 +8,10 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - GUI entry: `main`, `setWindowsAppUserModelId`, `wantsQuickShellBeta`,
   `startupOpenTargetFromArguments` (Qt startup, theme/font, window launch, startup-timing log,
   `--quick-shell-beta` routing, file/folder drag-open).
+- Linux GUI startup defaults to the `xcb` QPA plugin when running inside a Wayland session with
+  XWayland available. QuickShell embeds native QWidget surfaces through `QWindow::fromWinId()`,
+  which the Wayland QPA plugin cannot import. An explicit `QT_QPA_PLATFORM` value wins, and CLI
+  export / export-worker processes keep their existing platform selection.
 - First-run welcome / initial-config dialog: `wantsWelcomeDialog` (`--welcome` flag) + first-run
   probe `QFile::exists(UiText::preferencesFilePath())` **OR** a schema-outdated probe
   `UiText::storedPreferencesSchema() != UiText::currentPreferencesSchema()` — both captured right

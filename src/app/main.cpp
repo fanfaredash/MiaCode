@@ -241,6 +241,18 @@ int main(int argc, char* argv[])
     const bool cliVideoExportRequested = wantsCliVideoExport(rawArgs);
     const bool cliVideoExportWorkerRequested = wantsCliVideoExportWorker(rawArgs);
     const bool forceOpenGlGraphicsApi = cliVideoExportRequested || cliVideoExportWorkerRequested;
+#if defined(Q_OS_LINUX)
+    // QuickShell embeds native QWidget surfaces through QWindow::fromWinId(). Qt's
+    // Wayland plugin cannot import those foreign windows, while XWayland/xcb can.
+    // Keep explicit QPA choices and headless/export process modes untouched.
+    if (!cliVideoExportRequested
+        && !cliVideoExportWorkerRequested
+        && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")
+        && !qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")
+        && !qEnvironmentVariableIsEmpty("DISPLAY")) {
+        qputenv("QT_QPA_PLATFORM", QByteArrayLiteral("xcb"));
+    }
+#endif
     const QString startupOpenTarget =
         !cliVideoExportRequested && !cliVideoExportWorkerRequested
             ? startupOpenTargetFromArguments(rawArgs)
