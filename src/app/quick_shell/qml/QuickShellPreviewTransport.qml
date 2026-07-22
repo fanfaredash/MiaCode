@@ -19,6 +19,9 @@ Rectangle {
 
     readonly property int transportTextPixelSize: 13
     readonly property int transportTextWeight: Font.Medium
+    // Keep textual transport affordances on one semantic foreground token.
+    // The Muri-mode question deliberately shares the speed-label colour.
+    readonly property color transportTextColor: shellTheme.transportPrimaryTextColor()
 
     Components.Theme {
         id: shellTheme
@@ -86,6 +89,52 @@ Rectangle {
 
     function transportButtonBorderColor() {
         return shellTheme.transportButtonBorderColor()
+    }
+
+    component RenderModeToggleButton: Components.ShellToolButton {
+        id: modeButton
+        required property var shellRoot
+
+        Layout.preferredWidth: shellRoot.metric("previewTransportButtonWidth", 30)
+        Layout.preferredHeight: shellRoot.controlButtonHeight
+        paletteMap: shellRoot.paletteMap
+        metricsMap: shellRoot.metricsMap
+        fullscreenMode: shellRoot.fullscreenMode
+        enabled: !shellRoot.inputBlocked
+        onPressed: shellRoot.focusRequested()
+        onClicked: {
+            shellRoot.focusRequested()
+            if (shellRoot.controller)
+                shellRoot.controller.toggleMuriRenderMode()
+        }
+        contentItem: Item {
+            implicitWidth: 18
+            implicitHeight: 18
+
+            // Chart review intentionally recedes into the transport: the
+            // button chrome supplies the affordance, while a tiny dot marks
+            // the quiet/default mode. Muri check is a visible question.
+            Rectangle {
+                anchors.centerIn: parent
+                width: 3
+                height: 3
+                radius: 1.5
+                color: modeButton.shellRoot.transportPrimaryTextColor()
+                opacity: 0.42
+                visible: !(modeButton.shellRoot.controller && modeButton.shellRoot.controller.muriCheckRenderMode)
+            }
+
+            Text {
+                anchors.centerIn: parent
+                text: "?"
+                color: modeButton.shellRoot.transportTextColor
+                font.pixelSize: 16
+                font.weight: Font.Light
+                visible: !!(modeButton.shellRoot.controller && modeButton.shellRoot.controller.muriCheckRenderMode)
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
     }
 
     // Single source of truth for the on-screen handle centre (slider-local x).
@@ -222,7 +271,7 @@ Rectangle {
     ColumnLayout {
         id: transportLayout
         anchors.fill: parent
-        anchors.margins: fullscreenMode ? 14 : 8
+        anchors.margins: fullscreenMode ? 14 : root.metric("previewTransportCardMarginX", 8)
         // Transport-only gap between the scrubber row and the button row.
         // Deliberately a literal (not previewStatsVerticalSpacing) so widening
         // the scrubber↔buttons distance here does NOT also loosen the right-side
@@ -422,6 +471,11 @@ Rectangle {
                     }
 
                     Label {
+                        Layout.preferredWidth: Math.max(
+                            timeSummaryTextMetrics.advanceWidth + 2,
+                            root.metric("previewTimeSummaryMinWidth", 108)
+                        )
+                        Layout.minimumWidth: Layout.preferredWidth
                         text: root.timeSummary
                         color: root.transportPrimaryTextColor()
                         font.pixelSize: root.transportTextPixelSize
@@ -465,9 +519,9 @@ Rectangle {
 
                     Components.ShellToolButton {
                         text: controller ? controller.previewSpeedLabel : "1x"
-                        Layout.preferredWidth: root.metric("previewSpeedButtonWidth", 72)
-                        Layout.minimumWidth: root.metric("previewSpeedButtonWidth", 72)
-                        Layout.maximumWidth: root.metric("previewSpeedButtonWidth", 72)
+                        Layout.preferredWidth: root.metric("previewSpeedButtonWidth", 54)
+                        Layout.minimumWidth: root.metric("previewSpeedButtonWidth", 54)
+                        Layout.maximumWidth: root.metric("previewSpeedButtonWidth", 54)
                         Layout.preferredHeight: root.controlButtonHeight
                         Layout.minimumHeight: root.controlButtonHeight
                         Layout.maximumHeight: root.controlButtonHeight
@@ -482,7 +536,7 @@ Rectangle {
                             anchors.fill: parent
                             anchors.leftMargin: 9
                             anchors.rightMargin: 9
-                            color: root.transportPrimaryTextColor()
+                            color: root.transportTextColor
                             font.pixelSize: root.transportTextPixelSize
                             font.weight: root.transportTextWeight
                             horizontalAlignment: Text.AlignHCenter
@@ -490,6 +544,8 @@ Rectangle {
                             elide: Text.ElideRight
                         }
                     }
+
+                    RenderModeToggleButton { shellRoot: root }
 
                     Label {
                         Layout.preferredWidth: Math.max(
@@ -515,11 +571,13 @@ Rectangle {
                     Layout.alignment: Qt.AlignRight
                     spacing: 8
 
+                    RenderModeToggleButton { shellRoot: root }
+
                     Components.ShellToolButton {
                         text: controller ? controller.previewSpeedLabel : "1x"
-                        Layout.preferredWidth: root.metric("previewSpeedButtonWidth", 72)
-                        Layout.minimumWidth: root.metric("previewSpeedButtonWidth", 72)
-                        Layout.maximumWidth: root.metric("previewSpeedButtonWidth", 72)
+                        Layout.preferredWidth: root.metric("previewSpeedButtonWidth", 54)
+                        Layout.minimumWidth: root.metric("previewSpeedButtonWidth", 54)
+                        Layout.maximumWidth: root.metric("previewSpeedButtonWidth", 54)
                         Layout.preferredHeight: root.controlButtonHeight
                         Layout.minimumHeight: root.controlButtonHeight
                         Layout.maximumHeight: root.controlButtonHeight
@@ -534,7 +592,7 @@ Rectangle {
                             anchors.fill: parent
                             anchors.leftMargin: 9
                             anchors.rightMargin: 9
-                            color: root.transportPrimaryTextColor()
+                            color: root.transportTextColor
                             font.pixelSize: root.transportTextPixelSize
                             font.weight: root.transportTextWeight
                             horizontalAlignment: Text.AlignHCenter

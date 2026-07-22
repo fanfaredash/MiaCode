@@ -6,7 +6,7 @@ namespace miacode::window_parity {
 
 constexpr int kInitialWindowWidth = 1280;
 constexpr int kInitialWindowHeight = 800;
-constexpr int kInitialWindowFloorWidth = 960;
+constexpr int kInitialWindowFloorWidth = 1000;
 constexpr int kInitialWindowFloorHeight = 640;
 
 constexpr int kOutlineCollapsedWidth = 20;
@@ -15,8 +15,8 @@ constexpr int kOutlineExpandedDefaultWidth = 190;
 
 // Central content-column (editorStack) minimum width, and the export page's
 // design-width budget. SPEC (2026-06-15): derived from the smallest allowed
-// window — kInitialWindowFloorWidth(960) - kOutlineExpandedDefaultWidth(190)
-// - previewSplitterHandle(6) - kEmbeddedPreviewPanelMinWidth(320) = 444, taken
+// window — kInitialWindowFloorWidth(1000) - kOutlineExpandedDefaultWidth(190)
+// - previewSplitterHandle(6) - kEmbeddedPreviewPanelMinWidth(362) = 442, taken
 // as 440 with a small margin. At the floor window size the three panes
 // (sidebar + content + preview) coexist with the preview at its own minimum.
 // Export-page controls (difficulty badge row, sub-nav, embedded video panel)
@@ -51,9 +51,6 @@ constexpr int kEditorHeaderMarginX = 12;
 constexpr int kEditorHeaderMarginY = 8;
 constexpr int kEditorHeaderSpacing = 10;
 
-constexpr int kEmbeddedPreviewPanelMinWidth = 320;
-constexpr qreal kEmbeddedPreviewPanelWidthRatio = 0.50;
-constexpr int kEmbeddedPreviewPanelWidthMax = 900;
 constexpr int kPreviewPanelMarginX = 8;
 constexpr int kPreviewPanelMarginTop = 12;
 constexpr int kPreviewPanelMarginBottom = 12;
@@ -64,7 +61,28 @@ constexpr int kPreviewControlStatsCardMinWidth = 280;
 constexpr int kPreviewControlButtonMinHeight = 28;
 constexpr int kPreviewControlButtonPaddingX = 8;
 constexpr int kPreviewControlButtonPaddingY = 5;
-constexpr int kPreviewSpeedButtonWidth = 72;
+constexpr int kPreviewTransportButtonWidth = 30;
+constexpr int kPreviewTransportSpacing = 8;
+constexpr int kPreviewTransportCardMarginX = 8;
+constexpr int kPreviewTimeSummaryMinWidth = 108;
+// 1.25x at the transport's 13 px medium font requires 36 px of content width;
+// reserve its 9 px side insets without retaining the former oversized button.
+constexpr int kPreviewSpeedButtonWidth = 54;
+// Both panel orders contain four icon buttons, the speed button, the time
+// summary, and six 8 px layout gaps (two in each group and two around the
+// flexible spacer). Keep the panel wide enough for this whole row, the
+// transport card's margins, and the panel's margins, so it cannot be clipped
+// by the adjacent workspace.
+constexpr int kPreviewTransportMinimumContentWidth =
+    kPreviewTransportButtonWidth * 4
+    + kPreviewSpeedButtonWidth
+    + kPreviewTimeSummaryMinWidth
+    + kPreviewTransportSpacing * 6;
+constexpr int kEmbeddedPreviewPanelMinWidth =
+    kPreviewTransportMinimumContentWidth
+    + (kPreviewTransportCardMarginX + kPreviewPanelMarginX) * 2;
+constexpr qreal kEmbeddedPreviewPanelWidthRatio = 0.50;
+constexpr int kEmbeddedPreviewPanelWidthMax = 900;
 constexpr int kPreviewControlCardRadius = 10;
 constexpr int kPreviewStatsCardRadius = 10;
 constexpr int kPreviewStatsChipRadius = 9;

@@ -21,6 +21,7 @@ public:
     void updateShellPreviewScrub(double second, bool centerView);
     void endShellPreviewScrub(double second, bool centerView);
     void setShellPreviewRate(double rate);
+    void toggleShellMuriRenderMode();
     void nudgeShellPreviewRate(int direction);
     bool stepShellPreviewBySeconds(double deltaSeconds, bool centerView);
     void beginShellPreviewHeldSeek(int direction, int key);
@@ -45,6 +46,7 @@ public:
     QString shellWindowTitle() const;
     bool shellWorkspacePanelsSwapped() const;
     QString shellPreviewSpeedLabel() const;
+    bool shellMuriCheckRenderMode() const;
     bool shellPreviewPlaying() const;
     double shellPreviewPositionSeconds() const;
     double shellPreviewDurationSeconds() const;

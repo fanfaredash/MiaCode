@@ -353,6 +353,11 @@ QString QuickShellController::previewSpeedLabel() const
     return previewSpeedLabel_;
 }
 
+bool QuickShellController::muriCheckRenderMode() const
+{
+    return muriCheckRenderMode_;
+}
+
 bool QuickShellController::previewPlaying() const
 {
     return previewPlaying_;
@@ -705,6 +710,15 @@ void QuickShellController::setPreviewRate(double rate)
         return;
     }
     commandSink_->setShellPreviewRate(rate);
+    refreshFromStateSource();
+}
+
+void QuickShellController::toggleMuriRenderMode()
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    commandSink_->toggleShellMuriRenderMode();
     refreshFromStateSource();
 }
 
@@ -1221,6 +1235,7 @@ void QuickShellController::refreshFromStateSource()
     stateChanged |= assignIfChanged(windowTitle_, stateSource_->shellWindowTitle());
     stateChanged |= assignIfChanged(workspacePanelsSwapped_, stateSource_->shellWorkspacePanelsSwapped());
     stateChanged |= assignIfChanged(previewSpeedLabel_, stateSource_->shellPreviewSpeedLabel());
+    stateChanged |= assignIfChanged(muriCheckRenderMode_, stateSource_->shellMuriCheckRenderMode());
     stateChanged |= assignIfChanged(previewPlaying_, stateSource_->shellPreviewPlaying());
     stateChanged |= assignIfChanged(previewPositionSeconds_, stateSource_->shellPreviewPositionSeconds());
     stateChanged |= assignIfChanged(previewDurationSeconds_, stateSource_->shellPreviewDurationSeconds());

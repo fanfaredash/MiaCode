@@ -44,9 +44,9 @@ int computePreviewPanelTargetWidth(
     const int resolvedAvailableWidth = qMax(0, availableWidth);
     const int resolvedLeftMinWidth = qMax(0, leftMinWidth);
     const int minimumRightWidth =
-        (resolvedAvailableWidth >= resolvedLeftMinWidth + kPreviewControlStatsCardMinWidth + kPreviewPanelMarginX * 2)
-        ? (kPreviewControlStatsCardMinWidth + kPreviewPanelMarginX * 2)
-        : qMin(resolvedAvailableWidth, kPreviewControlStatsCardMinWidth + kPreviewPanelMarginX * 2);
+        (resolvedAvailableWidth >= resolvedLeftMinWidth + kEmbeddedPreviewPanelMinWidth)
+        ? kEmbeddedPreviewPanelMinWidth
+        : qMin(resolvedAvailableWidth, kEmbeddedPreviewPanelMinWidth);
     const int rightMaxWidth =
         (resolvedAvailableWidth >= resolvedLeftMinWidth + minimumRightWidth)
         ? qMin(kEmbeddedPreviewPanelWidthMax, resolvedAvailableWidth - resolvedLeftMinWidth)
@@ -96,9 +96,9 @@ int computePreviewPanelTargetWidthForAdaptiveStats(
     const int resolvedAvailableWidth = qMax(0, availableWidth);
     const int resolvedLeftMinWidth = qMax(0, leftMinWidth);
     const int minimumRightWidth =
-        (resolvedAvailableWidth >= resolvedLeftMinWidth + kPreviewControlStatsCardMinWidth + kPreviewPanelMarginX * 2)
-        ? (kPreviewControlStatsCardMinWidth + kPreviewPanelMarginX * 2)
-        : qMin(resolvedAvailableWidth, kPreviewControlStatsCardMinWidth + kPreviewPanelMarginX * 2);
+        (resolvedAvailableWidth >= resolvedLeftMinWidth + kEmbeddedPreviewPanelMinWidth)
+        ? kEmbeddedPreviewPanelMinWidth
+        : qMin(resolvedAvailableWidth, kEmbeddedPreviewPanelMinWidth);
     const int rightMaxWidth =
         (resolvedAvailableWidth >= resolvedLeftMinWidth + minimumRightWidth)
         ? qMin(kEmbeddedPreviewPanelWidthMax, resolvedAvailableWidth - resolvedLeftMinWidth)

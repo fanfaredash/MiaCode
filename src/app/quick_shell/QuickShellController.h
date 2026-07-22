@@ -16,6 +16,7 @@ class QuickShellController : public QObject
     Q_PROPERTY(QString windowTitle READ windowTitle NOTIFY shellStateChanged)
     Q_PROPERTY(bool workspacePanelsSwapped READ workspacePanelsSwapped NOTIFY shellStateChanged)
     Q_PROPERTY(QString previewSpeedLabel READ previewSpeedLabel NOTIFY shellStateChanged)
+    Q_PROPERTY(bool muriCheckRenderMode READ muriCheckRenderMode NOTIFY shellStateChanged)
     Q_PROPERTY(bool previewPlaying READ previewPlaying NOTIFY shellStateChanged)
     Q_PROPERTY(double previewPositionSeconds READ previewPositionSeconds NOTIFY shellStateChanged)
     Q_PROPERTY(double previewDurationSeconds READ previewDurationSeconds NOTIFY shellStateChanged)
@@ -81,6 +82,7 @@ public:
     QString windowTitle() const;
     bool workspacePanelsSwapped() const;
     QString previewSpeedLabel() const;
+    bool muriCheckRenderMode() const;
     bool previewPlaying() const;
     double previewPositionSeconds() const;
     double previewDurationSeconds() const;
@@ -132,6 +134,7 @@ public:
     Q_INVOKABLE void updatePreviewScrub(double second, bool centerView = true);
     Q_INVOKABLE void endPreviewScrub(double second, bool centerView = true);
     Q_INVOKABLE void setPreviewRate(double rate);
+    Q_INVOKABLE void toggleMuriRenderMode();
     Q_INVOKABLE void setPreviewPaneWidthRatio(double ratio);
     // Step the preview rate one stop (direction = -1 slower / +1 faster). Used
     // by the fullscreen QML Ctrl+O/Ctrl+P shortcuts; mirrors the main window's
@@ -192,6 +195,7 @@ private:
     QString windowTitle_;
     bool workspacePanelsSwapped_ = false;
     QString previewSpeedLabel_;
+    bool muriCheckRenderMode_ = false;
     bool previewPlaying_ = false;
     double previewPositionSeconds_ = 0.0;
     double previewDurationSeconds_ = 0.0;

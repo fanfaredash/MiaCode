@@ -486,6 +486,14 @@ void MainWindow::WindowSection::setShellPreviewRate(double rate)
     owner_.applyPreviewPlaybackRate(rate);
 }
 
+void MainWindow::WindowSection::toggleShellMuriRenderMode()
+{
+    const RenderMode nextMode = owner_.muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle
+        ? RenderMode::Native
+        : RenderMode::MaimuriDxStyle;
+    owner_.setMuriRenderMode(nextMode);
+}
+
 void MainWindow::WindowSection::nudgeShellPreviewRate(int direction)
 {
     owner_.applyPreviewPlaybackRate(
@@ -724,6 +732,11 @@ QString MainWindow::WindowSection::shellPreviewSpeedLabel() const
         rateText.chop(1);
     }
     return QStringLiteral("%1x").arg(rateText);
+}
+
+bool MainWindow::WindowSection::shellMuriCheckRenderMode() const
+{
+    return owner_.muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle;
 }
 
 bool MainWindow::WindowSection::shellPreviewPlaying() const

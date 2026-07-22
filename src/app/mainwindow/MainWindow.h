@@ -217,6 +217,7 @@ public:
     void updateShellPreviewScrub(double second, bool centerView) override;
     void endShellPreviewScrub(double second, bool centerView) override;
     void setShellPreviewRate(double rate) override;
+    void toggleShellMuriRenderMode() override;
     void nudgeShellPreviewRate(int direction) override;
     bool stepShellPreviewBySeconds(double deltaSeconds, bool centerView) override;
     void beginShellPreviewHeldSeek(int direction, int key) override;
@@ -241,6 +242,7 @@ public:
     QString shellWindowTitle() const override;
     bool shellWorkspacePanelsSwapped() const override;
     QString shellPreviewSpeedLabel() const override;
+    bool shellMuriCheckRenderMode() const override;
     bool shellPreviewPlaying() const override;
     double shellPreviewPositionSeconds() const override;
     double shellPreviewDurationSeconds() const override;

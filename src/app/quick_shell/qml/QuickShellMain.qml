@@ -344,7 +344,7 @@ ApplicationWindow {
     }
 
     function previewPaneMinWidth() {
-        return metric("previewPanelMinWidth", 320)
+        return metric("previewPanelMinWidth", 362)
     }
 
     function previewPaneAvailableWidth(totalWidth) {
@@ -387,8 +387,7 @@ ApplicationWindow {
     function previewPaneMinimumRightWidth(totalWidth) {
         const availableWidth = Math.max(0, totalWidth - previewPaneHandleWidth())
         const leftMinWidth = workspacePaneMinWidth()
-        const minimumCandidate = metric("previewControlStatsCardMinWidth", 280)
-            + metric("previewPanelMarginX", 8) * 2
+        const minimumCandidate = previewPaneMinWidth()
         return availableWidth >= leftMinWidth + minimumCandidate
             ? minimumCandidate
             : Math.min(availableWidth, minimumCandidate)
@@ -412,7 +411,7 @@ ApplicationWindow {
         targetRightWidth = Math.min(targetRightWidth, rightMaxWidth)
         targetRightWidth = Math.max(
             targetRightWidth,
-            Math.min(metric("previewPanelMinWidth", 320), rightMaxWidth)
+            Math.min(previewPaneMinWidth(), rightMaxWidth)
         )
         for (let iteration = 0; iteration < 3; ++iteration) {
             const availablePreviewHeight = Math.max(
@@ -547,7 +546,7 @@ ApplicationWindow {
     function noteStartupLayoutActivity(totalWidth, totalHeight) {
         if (!startupLayoutLocked)
             return
-        startupMinimumWindowWidth = metric("minimumWindowWidth", 960)
+        startupMinimumWindowWidth = metric("minimumWindowWidth", 1000)
         startupMinimumWindowHeight = metric("minimumWindowHeight", 640)
         applyWindowMinimumSize()
         if (totalWidth > 0)
@@ -558,7 +557,7 @@ ApplicationWindow {
     }
 
     function applyWindowMinimumSize() {
-        const nextMinimumWidth = startupLayoutLocked ? startupMinimumWindowWidth : metric("minimumWindowWidth", 960)
+        const nextMinimumWidth = startupLayoutLocked ? startupMinimumWindowWidth : metric("minimumWindowWidth", 1000)
         const nextMinimumHeight = startupLayoutLocked ? startupMinimumWindowHeight : metric("minimumWindowHeight", 640)
         root.minimumWidth = nextMinimumWidth
         root.minimumHeight = nextMinimumHeight
@@ -588,7 +587,7 @@ ApplicationWindow {
         const savedWidth = previewPaneSavedWidth(resolvedWidth, resolvedHeight)
         previewPaneUserResized = savedWidth > 0
         previewPaneStartupBalancePending = true
-        startupMinimumWindowWidth = metric("minimumWindowWidth", 960)
+        startupMinimumWindowWidth = metric("minimumWindowWidth", 1000)
         startupMinimumWindowHeight = metric("minimumWindowHeight", 640)
         applyWindowMinimumSize()
         previewPaneWidth = savedWidth > 0
@@ -756,7 +755,7 @@ ApplicationWindow {
             y = metric("initialWindowY", 120)
             initialGeometryApplied = true
         }
-        startupMinimumWindowWidth = metric("minimumWindowWidth", 960)
+        startupMinimumWindowWidth = metric("minimumWindowWidth", 1000)
         startupMinimumWindowHeight = metric("minimumWindowHeight", 640)
         applyWindowMinimumSize()
         styleBridge.syncWindowSize(width, height)

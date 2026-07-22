@@ -69,6 +69,11 @@ void MainWindow::setShellPreviewRate(double rate)
     windowSection_->setShellPreviewRate(rate);
 }
 
+void MainWindow::toggleShellMuriRenderMode()
+{
+    windowSection_->toggleShellMuriRenderMode();
+}
+
 void MainWindow::nudgeShellPreviewRate(int direction)
 {
     windowSection_->nudgeShellPreviewRate(direction);
@@ -182,6 +187,11 @@ bool MainWindow::shellWorkspacePanelsSwapped() const
 QString MainWindow::shellPreviewSpeedLabel() const
 {
     return windowSection_->shellPreviewSpeedLabel();
+}
+
+bool MainWindow::shellMuriCheckRenderMode() const
+{
+    return windowSection_->shellMuriCheckRenderMode();
 }
 
 bool MainWindow::shellPreviewPlaying() const

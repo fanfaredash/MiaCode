@@ -32,6 +32,7 @@ public:
     virtual void updateShellPreviewScrub(double second, bool centerView) = 0;
     virtual void endShellPreviewScrub(double second, bool centerView) = 0;
     virtual void setShellPreviewRate(double rate) = 0;
+    virtual void toggleShellMuriRenderMode() = 0;
     // Step the preview rate one stop (direction = -1 slower / +1 faster) using
     // the same ladder as the Ctrl+O/Ctrl+P menu actions. Lets the QML fullscreen
     // window drive speed without duplicating the rate table.
@@ -66,6 +67,7 @@ public:
     virtual QString shellWindowTitle() const = 0;
     virtual bool shellWorkspacePanelsSwapped() const = 0;
     virtual QString shellPreviewSpeedLabel() const = 0;
+    virtual bool shellMuriCheckRenderMode() const = 0;
     virtual bool shellPreviewPlaying() const = 0;
     virtual double shellPreviewPositionSeconds() const = 0;
     virtual double shellPreviewDurationSeconds() const = 0;
