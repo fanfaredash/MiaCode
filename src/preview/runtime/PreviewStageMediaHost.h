@@ -153,7 +153,6 @@ signals:
     void playbackPositionChanged(double seconds);
     void playbackStartPrepared(double seconds, quint64 transactionId);
     void pausedSeekCompleted(double seconds, quint64 generation);
-    void playbackFinished();
     void diagnosticsChanged();
 
 private:

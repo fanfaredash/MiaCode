@@ -415,9 +415,6 @@ void MainWindow::PreviewSection::ensurePreviewStageMediaHostInitialized()
             owner_.handlePausedPreviewMediaSeekCompleted(second, generation);
         }
     );
-    connect(state_.previewStageMediaHost_, &PreviewStageMediaHost::playbackFinished, &owner_, [this]() {
-        owner_.finishQtPreviewPlaybackAndReturnToEntry("Qt preview reached the end of current media.");
-    });
     connect(state_.previewStageMediaHost_, &PreviewStageMediaHost::diagnosticsChanged, &owner_, [this]() {
         refreshPreviewStageMediaRouteDebugState(!state_.qtPreviewPlaying_);
     });

@@ -275,6 +275,10 @@ void PreviewStageMediaHost::initializeBackendObjects()
             return;
         }
         if (status == QAVPlayer::EndOfMedia) {
+            // A PV/BG video is subordinate visual media, not the preview
+            // transport's lifetime owner. Leave lastVideoFrame_ in both video
+            // sinks so the final decoded frame stays visible while the chart,
+            // BGM and SFX continue to the unified content-duration endpoint.
             videoPlaybackActive_ = false;
             videoPlaybackPendingStart_ = false;
             videoPlaybackActiveElapsed_.invalidate();
@@ -282,7 +286,6 @@ void PreviewStageMediaHost::initializeBackendObjects()
             updateVideoFrameStallState(true);
             emitHwDecodeDiagSummary("eom");
             emit diagnosticsChanged();
-            emit playbackFinished();
             return;
         }
         if (status == QAVPlayer::InvalidMedia && mediaKind_ == MediaKind::Video) {
@@ -447,6 +450,10 @@ void PreviewStageMediaHost::initializeBackendObjects()
             }
         }
         if (status == QMediaPlayer::EndOfMedia) {
+            // Match the QtAVPlayer path: keep the sink's current (last) frame
+            // and end only this subordinate video stream. The main preview
+            // transport is completed exclusively by the timeline/content
+            // duration policy.
             videoPlaybackActive_ = false;
             videoPlaybackPendingStart_ = false;
             videoPlaybackActiveElapsed_.invalidate();
@@ -454,7 +461,6 @@ void PreviewStageMediaHost::initializeBackendObjects()
             updateClockDelta();
             updateVideoFrameStallState(true);
             emit diagnosticsChanged();
-            emit playbackFinished();
             return;
         }
         if (status == QMediaPlayer::StalledMedia && mediaKind_ == MediaKind::Video && videoPlaybackActive_) {

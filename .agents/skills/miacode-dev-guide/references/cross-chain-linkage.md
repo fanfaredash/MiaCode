@@ -168,6 +168,15 @@ If one side changes, inspect the other in the same patch.
 - Shared preview-time clock getter: `MainWindow::currentPreviewAuthoritativeAudioClockSecond`
   (UI follow, export-dialog current second, weak-video late-start must read this — do not branch on
   `PreviewStageMediaHost::currentPlaybackSecond()`, which is video-local observability only).
+- **Background video never owns the main preview transport lifetime.** A PV/BG `EndOfMedia` only
+  marks `PreviewStageMediaHost` video playback inactive; it deliberately leaves the last decoded
+  frame retained in the video sinks so the background freezes on that frame. It must not pause the
+  chart, BGM, SFX, or timeline. The sole natural-completion owner is
+  `TimelineSection::onQtPreviewTickAtSecond`, using `previewPlaybackEndSeconds()` and the unified
+  `max(chart end + tail, music duration)` policy. Review the QtAVPlayer and QMediaPlayer EOM branches
+  in `PreviewStageMediaHost_Backend.cpp` together with the signal wiring in
+  `MainWindow.PreviewStageMediaRoute.cpp`; never reconnect visual-media EOM to
+  `finishQtPreviewPlaybackAndReturnToEntry`.
 - Quickshell presentation split: images inline in `QuickShellPreviewSurface.qml`; video moves to
   `QuickShellPreviewCompositeSurface` (own `QQuickView`).
 - Export consumes the shared resolver via `VideoExportController`; Windows export audio = single
