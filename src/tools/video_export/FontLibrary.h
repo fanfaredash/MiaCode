@@ -47,6 +47,17 @@ void populateFontCombo(QComboBox* combo,
                        bool includeDefault = true,
                        const QString& defaultLabel = QString());
 
+enum class FontComboWidthMode {
+    StandardForm,
+    NarrowInspector,
+};
+
+// Keeps the shared font selector visually themed while tuning only its layout
+// budget for the host. Long names elide in the closed field; popup entries stay
+// complete. Every mode remains horizontally expanding so a layout cannot
+// collapse the visible control.
+void configureFontComboWidth(QComboBox* combo, FontComboWidthMode mode);
+
 // Overlay the user's difficulty-card font choice onto a parsed banner template's
 // `fonts` block (keys `display` / `body`). An absolute path is injected as a
 // file:// URL string, which MaimaiBannerCard.qml treats as a literal FontLoader

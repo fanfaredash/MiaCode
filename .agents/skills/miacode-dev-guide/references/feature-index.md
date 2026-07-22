@@ -69,8 +69,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   surface that bakes theme colors at construction needs an explicit re-apply hook that `applyUiTheme`
   calls. Today: `LatencyDetectionPage::applyThemeStyles()` (page sheet + the accent-tinted media-tools
   gear icon) and `ExportLauncherPage::applyThemeStyles()` (page sheet) are called from `applyUiTheme`,
-  and `applyUiTheme` ALSO forwards to the export hub's live embedded `VideoExportDialog`
-  (`owner_.embeddedVideoExportPanel_->applyThemeStyles()`) which re-applies its own sheet + every
+  and `applyUiTheme` ALSO forwards to the export hub's live embedded `VideoExportDialog` and
+  `BatchExportPanel` (`owner_.embeddedVideoExportPanel_` / `embeddedBatchExportPanel_`) which
+  re-apply their own sheet + every
   per-widget sheet (menu/push buttons, sliders, read-only edit, tab strip, footer rule) + the
   transport icons. When you add a baked `setStyleSheet`/`setIcon(make*Icon(color))` to one of these,
   mirror it in that class's `applyThemeStyles()` or it stays frozen at the startup theme. Preview-pane side = `workspacePanelsSwapped_` (`preview.swap_side_panels`), live via
@@ -93,8 +94,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   icon box drives the toolbar row height and a smaller iconSize visibly shortens the toolbar.
 - Slider value labels are click-to-edit. A `QSlider` + percent/value `QLabel` pair built through
   the shared row helpers — `addAudioRow` / `addVideoSliderRow` (`MainWindow.Dialogs.cpp`),
-  `addPercentSliderOption` (`VideoExportDialog.cpp`), `createSliderOption`
-  (`BatchVideoExportDialog.cpp`), and the inline SFX-volume row (`LatencyDetectionPage.cpp`) —
+  `addPercentSliderOption` (`VideoExportDialog.cpp`), and the inline SFX-volume row
+  (`LatencyDetectionPage.cpp`) —
   uses `miacode::ui::EditableValueLabel` (`src/app/ui/EditableValueLabel.{h,cpp}`) in place of a
   bare `QLabel`. Clicking the number opens an inline `QLineEdit` over the label's own `rect()`
   (zero layout change — it is still a `QLabel` at rest) and commits via `slider->setValue()`,
@@ -405,7 +406,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 ## 8. Video export — `src/tools/video_export/`
 
-- Dialogs: `VideoExportDialog.{h,cpp}`, `BatchVideoExportDialog.{h,cpp}`, `VideoExportPreferences.h`.
+- Settings host + batch page: `VideoExportDialog.{h,cpp}` (single-export dialog and the shared
+  tab host), `BatchExportPanel.{h,cpp}` + `BatchExportSelectionState.cpp` (embedded batch queue
+  form), `VideoExportPreferences.h`. The former `BatchVideoExportDialog` is deleted.
 - Controller + pipeline: `VideoExportController.{h,cpp}` (⚠ ~5000 lines — see god-file list),
   `VideoExportQuickRenderBackend.*`, `VideoExportAudioRenderPlan.*`, `VideoExportAudioBackend.h`,
   `BassExportAudioBackend.*`, `LegacyExportAudioBackend.*`, `RawVideoPipeTransport.*`,
@@ -430,9 +433,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   tried and reverted: the quick-shell workspace surface can be ~700 logical px total and the
   embedded 6-tab panel needs the full content width; the panel's 560px dialog minimum is also
   dropped in embedded mode.) Four entries: **视频导出 (IN-PAGE — see "Embedded video panel"
-  below)** / 封面导出 (dialog launcher pane) / 批量导出 (dialog launcher pane) / 打包ZIP
-  (in-page action pane) — the three non-video panes are action-button-only ("↗" marks dialog
-  launchers; greyed with a reason label when unavailable).
+  below)** / 封面导出 (dialog launcher pane) / **批量导出 (IN-PAGE — see "Embedded batch panel"
+  below)** / 打包ZIP (in-page action pane). Only the cover and ZIP entries are action-button panes.
   **Embedded video panel (E-C):** NOT a separate panel class — `VideoExportDialog` itself gained
   an embedded mode (`setEmbeddedPanelMode(true)`: **`setWindowFlags(Qt::Widget)` — MANDATORY:
   QLayout only strips the Qt::Dialog window flag when it has to reparent, so a panel constructed
@@ -463,6 +465,18 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `destroyEmbeddedVideoExportPanel()` (= dialog-close semantics) on leaving it. The page's
   `onPageLeft()` is called UNCONDITIONALLY from every page-leave switch function (same idempotent
   pattern as the latency teardown). Badge switch while the video sub-page shows re-seeds the panel.
+  **Embedded batch panel (2026-07-21):** `BatchExportPanel` owns the pinned batch footer and the
+  batch-only output area (seed-once difficulty checks, output directory, a fixed-height scrollable
+  chart-directory list, and inline add/remove/clear tools). It embeds one owner-wired
+  `VideoExportDialog` in batch mode, which hides single-file output and the range tab while keeping
+  the shared video/gameplay/skin/intro controls and full intro preview. `ExportSection` creates it
+  with `createEmbeddedBatchExportPanel`, runs the existing synchronous queue from
+  `handleBatchExportConfirmed`, and destroys it with `destroyEmbeddedBatchExportPanel`. A batch
+  badge change calls `updateEmbeddedBatchExportPreviewDifficulty`: it only retargets the audition;
+  it must never recreate the panel or overwrite the user's checked export difficulties. Tools →
+  Batch Export routes to this subpage. Count-in and intro signals follow the same audition bridge
+  as single export, and batch output tasks are rebuilt per chart/difficulty by the existing
+  snapshot pipeline.
   **Inline export progress (STATUS-BAR ONLY — 2026-06-13 redesign; supersedes the A3 "ride the
   PLAYBACK bar" amendment):** a panel-launched export creates NO `QProgressDialog` (every
   dialog-update site in `MainWindow.ExportWorker.cpp` is null-guarded). Progress (percent · stage ·

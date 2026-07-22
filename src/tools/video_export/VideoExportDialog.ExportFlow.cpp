@@ -150,7 +150,7 @@ void appendEmbeddedDialogLayoutDiag(
 
 }  // namespace
 
-void VideoExportDialog::setEmbeddedPanelMode(bool embedded)
+void VideoExportDialog::setEmbeddedPanelMode(bool embedded, bool retainIntroPreview)
 {
     MC_OP("VideoExportDialog::setEmbeddedPanelMode");
     QElapsedTimer totalTimer;
@@ -218,10 +218,10 @@ void VideoExportDialog::setEmbeddedPanelMode(bool embedded)
         previewStrip_->hide();
     }
 
-    // The 片头 live preview is sacrificed in the embedded page (product
-    // decision 2026-06-12): it was the tallest tab content by far, and the
-    // page must fit the viewport without scrolling at default window sizes.
-    if (introPreview_ != nullptr) {
+    // Embedded pages do not need an in-panel 片头 live preview: the export
+    // workspace already owns the preview surface. The controls remain in the
+    // tab, but the extra rendering column must not become a black rectangle.
+    if (!retainIntroPreview && introPreview_ != nullptr) {
         QWidget* previewColumn = introPreview_->parentWidget();
         introPreview_ = nullptr;
         delete previewColumn;
@@ -346,6 +346,138 @@ void VideoExportDialog::setEmbeddedExportRunning(bool running)
     exportButton_->setText(running
         ? UiText::text(QStringLiteral("video_export.cancel_export"))
         : UiText::text(QStringLiteral("video_export.start_export")));
+}
+
+void VideoExportDialog::setBatchSettingsPanelMode()
+{
+    setEmbeddedPanelMode(true, false);
+
+    // BatchExportPanel supplies the only footer/action. Hiding the existing
+    // dialog footer avoids competing start actions in the fixed page frame.
+    if (buttonBox_ != nullptr) {
+        buttonBox_->hide();
+    }
+    if (QWidget* footerRule = findChild<QWidget*>(QStringLiteral("EmbeddedExportFooterRule"));
+        footerRule != nullptr) {
+        footerRule->hide();
+    }
+
+    // Batch output targets a directory, not the single-file path used by the
+    // normal export route. Hide its whole row to avoid a stranded label gap.
+    if (outputPathEdit_ != nullptr && outputPathEdit_->parentWidget() != nullptr) {
+        if (QWidget* outputRow = outputPathEdit_->parentWidget()->parentWidget(); outputRow != nullptr) {
+            outputRow->hide();
+        }
+    }
+
+    // Keep the removed range page alive but hidden. Intro helpers retain their
+    // full-range values until the dialog is torn down, while the user sees no
+    // range tab in batch mode.
+    if (settingsTabs_ != nullptr) {
+        const QString rangeLabel = UiText::text(QStringLiteral("video_export.export_range"));
+        for (int index = 0; index < settingsTabs_->count(); ++index) {
+            if (settingsTabs_->tabText(index) == rangeLabel) {
+                if (QWidget* rangeScroll = settingsTabs_->widget(index); rangeScroll != nullptr) {
+                    settingsTabs_->removeTab(index);
+                    rangeScroll->hide();
+                }
+                break;
+            }
+        }
+    }
+    updateGeometry();
+}
+
+void VideoExportDialog::insertBatchTaskTab(QWidget* controls)
+{
+    if (!embeddedPanelMode_ || controls == nullptr || settingsTabs_ == nullptr) {
+        return;
+    }
+    controls->setMinimumHeight(0);
+    controls->setAutoFillBackground(false);
+    auto* taskScroll = new QScrollArea(settingsTabs_);
+    taskScroll->setObjectName(QStringLiteral("EmbeddedExportTabScroll"));
+    taskScroll->setWidgetResizable(true);
+    taskScroll->setFrameShape(QFrame::NoFrame);
+    taskScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    taskScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    taskScroll->viewport()->setAutoFillBackground(false);
+    taskScroll->setWidget(controls);
+    settingsTabs_->insertTab(
+        0,
+        taskScroll,
+        UiText::text(QStringLiteral("dialog.batch_export.task"))
+    );
+    settingsTabs_->setCurrentIndex(0);
+    settingsTabs_->updateGeometry();
+}
+
+bool VideoExportDialog::buildBatchTaskTemplate(VideoExportTask* task, QString* errorMessage) const
+{
+    if (task == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("task is null");
+        }
+        return false;
+    }
+
+    VideoExportTask updated = baseTask_;
+    const QSize selectedSize = selectedResolution();
+    updated.outputWidth = selectedSize.width() > 0 ? selectedSize.width() : updated.outputWidth;
+    updated.outputHeight = selectedSize.height() > 0 ? selectedSize.height() : updated.outputHeight;
+    updated.fps = qMax(1, selectedFps_);
+    updated.audioBitrateKbps = normaliseAudioBitrateKbps(selectedAudioBitrateKbps_);
+    updated.preset = selectedPreset_;
+    updated.showTimestamp = showTimestampCheck_ != nullptr && showTimestampCheck_->isChecked();
+    updated.showObjectStatsHud = showObjectStatsCheck_ != nullptr && showObjectStatsCheck_->isChecked();
+    updated.showChartInfoHud = showChartInfoCheck_ != nullptr && showChartInfoCheck_->isChecked();
+    updated.clockCountEnabled = clockCountCheck_ != nullptr && clockCountCheck_->isChecked();
+    updated.backgroundBrightnessOuter = brightnessOuterSlider_ != nullptr
+        ? qBound(0.0, static_cast<double>(brightnessOuterSlider_->value()) / 100.0, 1.0)
+        : updated.backgroundBrightnessOuter;
+    updated.backgroundBrightnessInner = brightnessInnerSlider_ != nullptr
+        ? qBound(0.0, static_cast<double>(brightnessInnerSlider_->value()) / 100.0, 1.0)
+        : updated.backgroundBrightnessInner;
+    updated.layoutSquareScale = layoutSquareScaleSlider_ != nullptr
+        ? miacode::preview_video::normalizedLayoutSquareScale(
+              static_cast<double>(layoutSquareScaleSlider_->value()) / 100.0)
+        : updated.layoutSquareScale;
+    updated.smoothBrightness = smoothBrightnessCheck_ != nullptr
+        ? smoothBrightnessCheck_->isChecked()
+        : updated.smoothBrightness;
+    updated.backgroundScaleMode = selectedBackgroundScaleMode_;
+
+    const auto readFlowSpeed = [](QLineEdit* edit, double fallback) {
+        bool ok = false;
+        const double value = edit != nullptr ? edit->text().trimmed().toDouble(&ok) : fallback;
+        return miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(ok ? value : fallback);
+    };
+    updated.tapFlowSpeed = readFlowSpeed(tapFlowSpeedEdit_, selectedTapFlowSpeed_);
+    updated.touchFlowSpeed = readFlowSpeed(touchFlowSpeedEdit_, selectedTouchFlowSpeed_);
+    updated.exportStartSeconds = 0.0;
+    updated.contentDurationSeconds = qMax(0.0, baseTask_.contentDurationSeconds);
+    updated.fullRangeExport = true;
+    // Batch must keep the intro mode UNRESOLVED (currentIntroSpecForExportTask,
+    // not currentIntroSpec): when the 片头 tab is set to "Auto" this preserves
+    // the "auto" token so each queued chart's snapshot detects its own SD/DX in
+    // copyIntroStyling(). currentIntroSpec() would bake in the currently-open
+    // chart's mode and force every batch item to it.
+    updated.intro = currentIntroSpecForExportTask();
+    updated.intro.enabled = addIntroCheck_ != nullptr && addIntroCheck_->isChecked();
+
+    if (updated.outputWidth <= 0 || updated.outputHeight <= 0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = UiText::text(QStringLiteral("video_export.resolution_is_invalid"));
+        }
+        return false;
+    }
+    *task = updated;
+    return true;
+}
+
+bool VideoExportDialog::isClockCountEnabledForPreview() const
+{
+    return clockCountCheck_ != nullptr && clockCountCheck_->isChecked();
 }
 
 void VideoExportDialog::finalizeEmbeddedSession()

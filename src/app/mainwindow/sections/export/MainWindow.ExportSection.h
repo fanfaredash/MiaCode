@@ -34,6 +34,9 @@ public:
     // restore + export-preview session end) and deletes the panel. Idempotent;
     // a running worker is NOT cancelled.
     void destroyEmbeddedVideoExportPanel();
+    QWidget* createEmbeddedBatchExportPanel(int difficultyId, QWidget* parent);
+    void updateEmbeddedBatchExportPreviewDifficulty(int difficultyId);
+    void destroyEmbeddedBatchExportPanel();
     bool buildVideoExportSnapshot(
         const VideoExportTask& requestedTask,
         VideoExportSnapshot* snapshot,
@@ -111,6 +114,7 @@ private:
     void installExportPreviewAuditionScene(int difficultyId);
     void teardownExportPreviewAuditionScene();
     void handleEmbeddedExportConfirmed();
+    void handleBatchExportConfirmed();
     // ---- Inline export progress on the preview transport (A3 amended) ----
     void beginInlineExportProgress();
     // percent < 0 keeps the current percent (label-only update); an empty

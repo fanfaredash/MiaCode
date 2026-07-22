@@ -16,7 +16,6 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "preview/runtime/PreviewRuntime.h"
-#include "tools/video_export/BatchVideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
 #include "tools/video_export/VideoExportDialog.h"
 #include "tools/video_export/VideoExportSnapshot.h"
@@ -503,14 +502,36 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
     }
     owner_.tickOutlineBusySpinner();
 
-    // Reset the playhead to the start for the freshly-installed difficulty.
-    owner_.qtPreviewPauseSecond_ = 0.0;
-    if (owner_.timelineQuickStateBridge_ != nullptr) {
-        owner_.timelineQuickStateBridge_->setPlayheadSeconds(0.0, false);
+    // Decide the playhead for the freshly-installed audition.
+    const double durationSeconds = owner_.previewDurationSeconds();
+    const auto clampToDuration = [durationSeconds](double second) {
+        return durationSeconds > 0.0 ? qBound(0.0, second, durationSeconds) : qMax(0.0, second);
+    };
+    double startSecond = 0.0;
+    if (owner_.exportPreviewEntrySeedSecond_ >= 0.0) {
+        // One-shot seed carried in on page entry / re-entry
+        // (performSwitchToExportField) so switching to the export page preserves
+        // progress like a difficulty-tab switch does.
+        startSecond = clampToDuration(owner_.exportPreviewEntrySeedSecond_);
+    } else if (owner_.lastExportAuditionDifficultyId_ == difficultyId) {
+        // Re-installing the SAME difficulty WITHOUT a page switch — the 视频导出 →
+        // 封面 → 视频导出 sub-tab dance destroys and recreates the panel. The old
+        // teardown stopped playback with keepPosition, so qtPreviewPauseSecond_ still
+        // holds the position; preserve it instead of snapping to 0 (which would let
+        // refreshExportIntroState default the playhead to the 片头 head, -kDuration).
+        startSecond = clampToDuration(qMax(0.0, owner_.qtPreviewPauseSecond_));
     }
-    owner_.previewCanvas_->setPlayheadSeconds(0.0, true);
+    // else: genuine first install for this difficulty (or a badge switch to a
+    // different one) → start at 0; 片头-on then shows the intro head as intended.
+    owner_.exportPreviewEntrySeedSecond_ = -1.0;
+    owner_.lastExportAuditionDifficultyId_ = difficultyId;
+    owner_.qtPreviewPauseSecond_ = startSecond;
+    if (owner_.timelineQuickStateBridge_ != nullptr) {
+        owner_.timelineQuickStateBridge_->setPlayheadSeconds(startSecond, false);
+    }
+    owner_.previewCanvas_->setPlayheadSeconds(startSecond, true);
     owner_.updatePreviewSliderRange();
-    owner_.updatePreviewSliderPosition(0.0);
+    owner_.updatePreviewSliderPosition(startSecond);
 
     // SFX timeline for this difficulty's notes.
     if (owner_.previewSfxRuntime_ != nullptr) {
@@ -865,6 +886,9 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
     built.showChartInfoHud = requestedTask.showChartInfoHud;
     built.centerDisplayMode = requestedTask.centerDisplayMode;
     built.skinLoadWaitMs = requestedTask.skinLoadWaitMs;
+    // Batch uses the same opt-in count-in setting as single export. The
+    // clock_count value itself is rebuilt from each chart in the worker.
+    built.clockCountEnabled = requestedTask.clockCountEnabled;
     built.introSoundFileName = requestedTask.introSoundFileName;
     built.intro = buildIntroBannerSpec(
         document,
@@ -872,6 +896,9 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
         chartPath,
         requestedTask.intro.enabled,
         built.fullRangeExport);  // batch is always full-range
+    // The chart contributes title/artist/designer metadata, while the shared
+    // 片头 tab owns its visual style. Preserve that style per queue item.
+    copyIntroStyling(requestedTask.intro, &built.intro);
 
     if (built.skinDirectory.trimmed().isEmpty()) {
         if (errorMessage != nullptr) {

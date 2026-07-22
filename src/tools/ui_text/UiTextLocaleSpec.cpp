@@ -105,6 +105,20 @@ int main(int argc, char* argv[])
             << Qt::endl;
     }
 
+    // Skin variants use their familiar chart-type abbreviations in every UI
+    // language. The persisted enum still uses "Standard" internally, so only
+    // the localized display labels are asserted here.
+    for (const QString& key : {
+             QStringLiteral("dialog.skin_settings.chart_effect.standard"),
+             QStringLiteral("dialog.render_settings.video.skin.standard"),
+         }) {
+        if (UiText::text(key) != QStringLiteral("SD")) {
+            ok = false;
+            err << "ui_text_locale_spec: " << key << " must display SD, got "
+                << UiText::text(key) << Qt::endl;
+        }
+    }
+
     // --- Invariant 2: source literal keys exist in the tables. --------------
     const QString root = QStringLiteral(MIACODE_SOURCE_ROOT);
     const QString srcDir = root + QStringLiteral("/src");

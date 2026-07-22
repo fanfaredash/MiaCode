@@ -20,4 +20,9 @@ AdoptedWidgetCoordinateRoute adoptedWidgetCoordinateRoute(
 
 QPoint mapWidgetPointToGlobal(const QWidget* widget, const QPoint& localPoint);
 
+// The inverse of mapWidgetPointToGlobal().  On an adopted QuickShell surface,
+// QWidget::mapFromGlobal() still follows the orphan native panel on macOS;
+// resolve through the adopted QWindow instead.
+QPoint mapGlobalPointToWidget(const QWidget* widget, const QPoint& globalPoint);
+
 } // namespace miacode::ui

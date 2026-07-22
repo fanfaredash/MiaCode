@@ -84,6 +84,9 @@
         // panel mode, hosted inside the Export hub page's video sub-page.
         // Created/destroyed by ExportSection::create/destroyEmbeddedVideoExportPanel.
         QPointer<VideoExportDialog> embeddedVideoExportPanel_;
+        // Batch counterpart: owns the shared VideoExportDialog settings host
+        // plus the batch-only output-directory and queue controls.
+        QPointer<miacode::video_export::BatchExportPanel> embeddedBatchExportPanel_;
         // BPM/offset summary on the metadata page's "延迟与偏移校准" entry
         // card (L-A migration); refreshed by populateMetadataPage.
         QLabel* latencyEntrySummaryLabel_ = nullptr;
@@ -337,6 +340,21 @@
         // transport plays/seeks it even though activeDifficultyId_ == 0 (D4).
         // Cleared on teardown, which forces the next difficulty to rebuild.
         bool exportPreviewAuditionActive_ = false;
+        // One-shot preview position carried INTO the export page from the field
+        // that was active before entering (difficulty tab / latency page), so the
+        // export audition seeds the playhead there instead of snapping to 0 —
+        // matching the difficulty-tab switch behavior. < 0 means "no seed, start
+        // at 0"; installExportPreviewAuditionScene consumes it and resets it to
+        // -1 so later badge switches on the page still start their new difficulty
+        // from 0.
+        double exportPreviewEntrySeedSecond_ = -1.0;
+        // The difficulty id the export audition was last installed for. PERSISTS
+        // across teardown/destroy (unlike embeddedVideoExportDifficultyId_, which the
+        // sub-tab teardown resets to 0), so a re-install of the SAME difficulty —
+        // e.g. the 视频导出 → 封面 → 视频导出 sub-tab dance — can preserve the current
+        // qtPreviewPauseSecond_ instead of snapping to 0 (and thence to the 片头 head
+        // via refreshExportIntroState). Reset only on document load. 0 = none.
+        int lastExportAuditionDifficultyId_ = 0;
         // Export-page intro lead-in: while it runs, the animated 片头 plays in the
         // preview before the chart (添加片头 on, playing from 0). Self-contained
         // QTimer-driven phase; the chart audition starts when it finishes.
@@ -817,6 +835,8 @@
     double& videoExportInlineProgressSecond_ = state_.videoExportInlineProgressSecond_;
     int& embeddedVideoExportDifficultyId_ = state_.embeddedVideoExportDifficultyId_;
     bool& exportPreviewAuditionActive_ = state_.exportPreviewAuditionActive_;
+    double& exportPreviewEntrySeedSecond_ = state_.exportPreviewEntrySeedSecond_;
+    int& lastExportAuditionDifficultyId_ = state_.lastExportAuditionDifficultyId_;
     bool& exportIntroRegionActive_ = state_.exportIntroRegionActive_;
     double& exportIntroPlayheadSeconds_ = state_.exportIntroPlayheadSeconds_;
     bool& restoreSquareAfterVideoExport_ = state_.restoreSquareAfterVideoExport_;
@@ -982,6 +1002,7 @@
     miacode::latency::LatencyDetectionPage*& latencyDetectionPage_ = ui_.latencyDetectionPage_;
     miacode::export_page::ExportLauncherPage*& exportPage_ = ui_.exportPage_;
     QPointer<VideoExportDialog>& embeddedVideoExportPanel_ = ui_.embeddedVideoExportPanel_;
+    QPointer<miacode::video_export::BatchExportPanel>& embeddedBatchExportPanel_ = ui_.embeddedBatchExportPanel_;
     QLabel*& latencyEntrySummaryLabel_ = ui_.latencyEntrySummaryLabel_;
     QWidget*& metadataCard_ = ui_.metadataCard_;
     QLabel*& metadataEmptyHintLabel_ = ui_.metadataEmptyHintLabel_;

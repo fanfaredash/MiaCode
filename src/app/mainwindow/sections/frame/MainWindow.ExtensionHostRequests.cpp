@@ -1773,7 +1773,7 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
         }
         if (method == QStringLiteral("workspace/scanChartFolders")) {
             const QString rootPath = params.value(QStringLiteral("rootPath")).toString();
-            QDirIterator iterator(rootPath, QStringList{QStringLiteral("maidata.txt"), QStringLiteral("net.txt")},
+            QDirIterator iterator(rootPath, QStringList{QStringLiteral("maidata.txt")},
                                   QDir::Files, QDirIterator::Subdirectories);
             QSet<QString> folders;
             while (iterator.hasNext()) {

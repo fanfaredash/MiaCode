@@ -257,6 +257,7 @@ QuickShellNativeSurfaceHost::QuickShellNativeSurfaceHost(
     surfaceBundle_.status = createForeignWindowForSurface(statusSurfaceWidget_);
 
 #ifdef Q_OS_MACOS
+    miacode::ui::bindAdoptedSurfaceWindow(sidebarSurfaceWidget_, surfaceBundle_.sidebar);
     miacode::ui::bindAdoptedSurfaceWindow(workspaceSurfaceWidget_, surfaceBundle_.workspace);
 #endif
 

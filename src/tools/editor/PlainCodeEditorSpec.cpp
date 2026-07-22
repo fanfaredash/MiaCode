@@ -101,6 +101,13 @@ int main(int argc, char** argv)
                QStringLiteral("adopted widget coordinates resolve through the bridge surface"),
                out,
                &failed);
+        expect(
+            miacode::ui::mapGlobalPointToWidget(
+                &nestedWidget,
+                adoptedWindow->mapToGlobal(route.surfacePoint)) == localPoint,
+            QStringLiteral("adopted global coordinates resolve back into the nested widget"),
+            out,
+            &failed);
         delete adoptedWindow;
         expect(miacode::ui::adoptedWidgetCoordinateRoute(&nestedWidget, localPoint).window == nullptr,
                QStringLiteral("destroying the adopted window clears the bridge coordinate route"),

@@ -178,8 +178,7 @@ void ExportLauncherPage::buildUi()
     videoPanelHostLayout_->addStretch(0);
     subPageStack_->addWidget(videoPanelHost_);
 
-    // [1..3] 封面 / 批量 / ZIP — action-button-only panes; "↗" marks the
-    // dialog launchers (descriptions and mode chips removed, 2026-06-12).
+    // [1] 封面 — dialog launcher (the composer remains modal).
     coverCard_ = makePane(
         subPageStack_,
         UiText::text(QStringLiteral("export_page.open_composer")));
@@ -187,12 +186,20 @@ void ExportLauncherPage::buildUi()
             this, &ExportLauncherPage::onExportCoverClicked);
     subPageStack_->addWidget(coverCard_.frame);
 
-    batchCard_ = makePane(
-        subPageStack_,
-        UiText::text(QStringLiteral("export_page.open_queue")));
-    connect(batchCard_.actionButton, &QPushButton::clicked,
-            this, &ExportLauncherPage::onBatchExportClicked);
-    subPageStack_->addWidget(batchCard_.frame);
+    // [2] 批量导出 — embedded settings panel, matching the video page's
+    // fixed-frame host. It intentionally owns a separate panel instance: a
+    // badge change updates only its preview audition, preserving queue state.
+    batchPanelHost_ = new QWidget(subPageStack_);
+    batchPanelHostLayout_ = new QVBoxLayout(batchPanelHost_);
+    batchPanelHostLayout_->setContentsMargins(0, 4, 0, 0);
+    batchPanelHostLayout_->setSpacing(8);
+    batchUnavailableLabel_ = new QLabel(batchPanelHost_);
+    batchUnavailableLabel_->setProperty("role", "disabledReason");
+    batchUnavailableLabel_->setWordWrap(true);
+    batchUnavailableLabel_->hide();
+    batchPanelHostLayout_->addWidget(batchUnavailableLabel_, 0, Qt::AlignTop);
+    batchPanelHostLayout_->addStretch(0);
+    subPageStack_->addWidget(batchPanelHost_);
 
     zipCard_ = makePane(
         subPageStack_,
@@ -380,7 +387,9 @@ void ExportLauncherPage::updatePaneStates()
     const bool hasChartBody = documentHasChartBody();
     const QString noChartReason = UiText::text(QStringLiteral("export_page.no_difficulty_has_chart_content"));
     setCardEnabled(coverCard_, hasChartBody, noChartReason);
-    setCardEnabled(batchCard_, hasChartBody, noChartReason);
+    if (batchUnavailableLabel_ != nullptr && !hasChartBody) {
+        batchUnavailableLabel_->setText(noChartReason);
+    }
     setCardEnabled(
         zipCard_,
         documentHasPackableContent(),
@@ -403,6 +412,11 @@ void ExportLauncherPage::setCurrentSubPage(int subPage)
     syncEmbeddedVideoPanel();
 }
 
+void ExportLauncherPage::openBatchExportSubPage()
+{
+    setCurrentSubPage(SubPageBatch);
+}
+
 void ExportLauncherPage::syncEmbeddedVideoPanel()
 {
     MC_OP("ExportLauncherPage::syncEmbeddedVideoPanel");
@@ -418,9 +432,10 @@ void ExportLauncherPage::syncEmbeddedVideoPanel()
         return;
     }
     const bool videoSubPageActive = pageSessionActive_ && currentSubPage_ == SubPageVideo;
+    const bool batchSubPageActive = pageSessionActive_ && currentSubPage_ == SubPageBatch;
     const bool targetAvailable = difficultyHasChartBody(selectedDifficultyId_);
 
-    if (!videoSubPageActive || !targetAvailable) {
+    if (!targetAvailable) {
         if (!embeddedVideoPanel_.isNull()) {
             embeddedVideoPanel_.clear();
             owner_->exportSection_->destroyEmbeddedVideoExportPanel();
@@ -432,6 +447,10 @@ void ExportLauncherPage::syncEmbeddedVideoPanel()
                     .arg(targetAvailable ? 1 : 0)
                     .arg(selectedDifficultyId_));
         }
+        if (!embeddedBatchPanel_.isNull()) {
+            embeddedBatchPanel_.clear();
+            owner_->exportSection_->destroyEmbeddedBatchExportPanel();
+        }
         if (videoUnavailableLabel_ != nullptr) {
             const QString reason = difficultyExists(selectedDifficultyId_)
                 ? UiText::text(QStringLiteral("export_page.the_selected_difficulty_has_no"))
@@ -439,49 +458,113 @@ void ExportLauncherPage::syncEmbeddedVideoPanel()
             videoUnavailableLabel_->setText(reason);
             videoUnavailableLabel_->setVisible(videoSubPageActive && !targetAvailable);
         }
-        return;
-    }
-
-    // Keep the existing panel when it already targets the selected difficulty.
-    if (!embeddedVideoPanel_.isNull()
-        && owner_->state_.embeddedVideoExportDifficultyId_ == selectedDifficultyId_) {
-        return;
-    }
-    if (!embeddedVideoPanel_.isNull()) {
-        embeddedVideoPanel_.clear();
-    }
-    QWidget* panel =
-        owner_->exportSection_->createEmbeddedVideoExportPanel(selectedDifficultyId_, videoPanelHost_);
-    if (panel == nullptr) {
-        if (videoUnavailableLabel_ != nullptr) {
-            videoUnavailableLabel_->setText(
-                UiText::text(QStringLiteral("export_page.the_video_export_panel_is")));
-            videoUnavailableLabel_->show();
+        if (batchUnavailableLabel_ != nullptr) {
+            const QString reason = difficultyExists(selectedDifficultyId_)
+                ? UiText::text(QStringLiteral("export_page.the_selected_difficulty_has_no"))
+                : UiText::text(QStringLiteral("export_page.no_difficulty_is_available_to"));
+            batchUnavailableLabel_->setText(reason);
+            batchUnavailableLabel_->setVisible(batchSubPageActive && !targetAvailable);
         }
         return;
     }
-    if (videoUnavailableLabel_ != nullptr) {
-        videoUnavailableLabel_->hide();
+
+    if (!videoSubPageActive && !embeddedVideoPanel_.isNull()) {
+        embeddedVideoPanel_.clear();
+        owner_->exportSection_->destroyEmbeddedVideoExportPanel();
     }
-    embeddedVideoPanel_ = panel;
-    // Insert above the zero-stretch trailing spacer, with stretch 1: the
-    // panel takes ALL remaining page height (its tab area absorbs it and its
-    // Start-Export footer pins to the bottom — fixed-frame layout).
-    videoPanelHostLayout_->insertWidget(videoPanelHostLayout_->count() - 1, panel, 1);
-    panel->show();
-    const qint64 elapsedMs = totalTimer.elapsed();
-    appendEmbeddedPanelDiag(
-        elapsedMs >= kEmbeddedPanelSyncSlowMs
-            ? QStringLiteral("sync_embedded_video_panel_slow")
-            : QStringLiteral("sync_embedded_video_panel_complete"),
-        elapsedMs,
-        QStringLiteral("difficulty=%1 panel=\"%2\" host=\"%3\"")
-            .arg(selectedDifficultyId_)
-            .arg(exportPageWidgetSummary(panel))
-            .arg(exportPageWidgetSummary(videoPanelHost_)),
-        elapsedMs >= kEmbeddedPanelSyncSlowMs
-            ? miacode::debug_log::Level::Warn
-            : miacode::debug_log::Level::Info);
+
+    if (!batchSubPageActive) {
+        if (!embeddedBatchPanel_.isNull()) {
+            embeddedBatchPanel_.clear();
+            owner_->exportSection_->destroyEmbeddedBatchExportPanel();
+        }
+        if (batchUnavailableLabel_ != nullptr) {
+            const QString reason = difficultyExists(selectedDifficultyId_)
+                ? UiText::text(QStringLiteral("export_page.the_selected_difficulty_has_no"))
+                : UiText::text(QStringLiteral("export_page.no_difficulty_is_available_to"));
+            batchUnavailableLabel_->setText(reason);
+            batchUnavailableLabel_->setVisible(batchSubPageActive && !targetAvailable);
+        }
+    }
+
+    if (!targetAvailable) {
+        return;
+    }
+
+    if (videoSubPageActive) {
+        if (!embeddedBatchPanel_.isNull()) {
+            embeddedBatchPanel_.clear();
+            owner_->exportSection_->destroyEmbeddedBatchExportPanel();
+        }
+
+        // Keep the existing panel when it already targets the selected difficulty.
+        if (!embeddedVideoPanel_.isNull()
+            && owner_->state_.embeddedVideoExportDifficultyId_ == selectedDifficultyId_) {
+            return;
+        }
+        if (!embeddedVideoPanel_.isNull()) {
+            embeddedVideoPanel_.clear();
+        }
+        QWidget* panel =
+            owner_->exportSection_->createEmbeddedVideoExportPanel(selectedDifficultyId_, videoPanelHost_);
+        if (panel == nullptr) {
+            if (videoUnavailableLabel_ != nullptr) {
+                videoUnavailableLabel_->setText(
+                    UiText::text(QStringLiteral("export_page.the_video_export_panel_is")));
+                videoUnavailableLabel_->show();
+            }
+            return;
+        }
+        if (videoUnavailableLabel_ != nullptr) {
+            videoUnavailableLabel_->hide();
+        }
+        embeddedVideoPanel_ = panel;
+        videoPanelHostLayout_->insertWidget(videoPanelHostLayout_->count() - 1, panel, 1);
+        panel->show();
+        const qint64 elapsedMs = totalTimer.elapsed();
+        appendEmbeddedPanelDiag(
+            elapsedMs >= kEmbeddedPanelSyncSlowMs
+                ? QStringLiteral("sync_embedded_video_panel_slow")
+                : QStringLiteral("sync_embedded_video_panel_complete"),
+            elapsedMs,
+            QStringLiteral("difficulty=%1 panel=\"%2\" host=\"%3\"")
+                .arg(selectedDifficultyId_)
+                .arg(exportPageWidgetSummary(panel))
+                .arg(exportPageWidgetSummary(videoPanelHost_)),
+            elapsedMs >= kEmbeddedPanelSyncSlowMs
+                ? miacode::debug_log::Level::Warn
+                : miacode::debug_log::Level::Info);
+        return;
+    }
+
+    if (batchSubPageActive) {
+        if (!embeddedVideoPanel_.isNull()) {
+            embeddedVideoPanel_.clear();
+            owner_->exportSection_->destroyEmbeddedVideoExportPanel();
+        }
+        // The batch panel's selection is seeded once. Badge changes retarget
+        // only the audition source and never recreate the settings form.
+        if (!embeddedBatchPanel_.isNull()) {
+            owner_->exportSection_->updateEmbeddedBatchExportPreviewDifficulty(selectedDifficultyId_);
+            return;
+        }
+        QWidget* panel = owner_->exportSection_->createEmbeddedBatchExportPanel(
+            selectedDifficultyId_, batchPanelHost_);
+        if (panel == nullptr) {
+            if (batchUnavailableLabel_ != nullptr) {
+                batchUnavailableLabel_->setText(
+                    UiText::text(QStringLiteral("export_page.the_video_export_panel_is")));
+                batchUnavailableLabel_->show();
+            }
+            return;
+        }
+        if (batchUnavailableLabel_ != nullptr) {
+            batchUnavailableLabel_->hide();
+        }
+        embeddedBatchPanel_ = panel;
+        batchPanelHostLayout_->insertWidget(batchPanelHostLayout_->count() - 1, panel, 1);
+        panel->show();
+    }
 }
 
 void ExportLauncherPage::onExportCoverClicked()

@@ -92,6 +92,10 @@ void MainWindow::ExportSection::onPackAsZip()
         progressParent);
     progress.setWindowTitle(dialogTitle);
     progress.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+    // Non-minimizable: a minimized, parentless progress popup over the
+    // WA_DontShowOnScreen quick-shell host can never be re-raised and deadlocks
+    // the app while it stays application-modal.
+    progress.setWindowFlag(Qt::WindowMinimizeButtonHint, false);
     progress.setWindowModality(Qt::WindowModal);
 #ifdef Q_OS_MACOS
     UiDialogs::applyDetachedParentBehavior(&progress, &owner_);

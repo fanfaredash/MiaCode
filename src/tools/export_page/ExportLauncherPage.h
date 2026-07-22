@@ -71,6 +71,9 @@ public:
     // progress stays on the preview transport.
     void onPageLeft();
 
+    // Tools-menu route: show the same embedded batch panel as the Export hub.
+    void openBatchExportSubPage();
+
     int selectedDifficultyId() const { return selectedDifficultyId_; }
     int menuActionDifficultyId() const;
 
@@ -127,8 +130,14 @@ private:
     QLabel* videoUnavailableLabel_ = nullptr;
     QPointer<QWidget> embeddedVideoPanel_;
 
+    // 批量导出 sub-page: mirrors the video host but preserves its panel across
+    // badge changes so user-selected batch difficulties are never reset.
+    QWidget* batchPanelHost_ = nullptr;
+    QVBoxLayout* batchPanelHostLayout_ = nullptr;
+    QLabel* batchUnavailableLabel_ = nullptr;
+    QPointer<QWidget> embeddedBatchPanel_;
+
     LauncherCard coverCard_;
-    LauncherCard batchCard_;
     LauncherCard zipCard_;
 };
 

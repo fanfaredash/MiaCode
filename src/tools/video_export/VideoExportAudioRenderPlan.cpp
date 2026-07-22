@@ -2,6 +2,7 @@
 
 #include "VideoExportController.h"
 
+#include "common/PreviewAudioMixConfig.h"
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewSfxSemantics.h"
 #include "common/PreviewSfxTimeline.h"
@@ -385,7 +386,19 @@ bool buildVideoExportAudioRenderPlan(
             miacode::preview_sfx_timeline::scheduledPlaybackMixSecond(playback, built.timelineOriginSecond);
         scheduled.gain = gain;
         if (playback.nextSameKindSecond >= 0.0) {
-            scheduled.maxDurationSeconds = qMax(0.0, playback.nextSameKindSecond - playback.second);
+            const double maskWindowSeconds = qMax(0.0, playback.nextSameKindSecond - playback.second);
+            // A later same-kind trigger supersedes this one. Realtime preview makes
+            // every note-SFX kind monophonic (one voice per kind, latest-wins), so a
+            // supersede that lands within a single mixer sample cuts this first hit
+            // off inaudibly. The export mixer cannot express a sub-sample truncation
+            // length: BASS rounds it to zero bytes and then treats zero as "no limit,"
+            // playing the whole sample and doubling the SFX (e.g. a hold tail whose end
+            // lands microseconds before a coincident tap). Drop the masked hit here so
+            // export matches preview instead of emitting a full, un-truncated overlap.
+            if (maskWindowSeconds * miacode::preview_audio::kMixSampleRate < 1.0) {
+                continue;
+            }
+            scheduled.maxDurationSeconds = maskWindowSeconds;
         }
         built.scheduledSfxPlaybacks.append(scheduled);
     }

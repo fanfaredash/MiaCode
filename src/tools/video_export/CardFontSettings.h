@@ -1,5 +1,7 @@
 #pragma once
 
+#include "tools/video_export/FontLibrary.h"
+
 #include <functional>
 
 #include <QString>
@@ -32,6 +34,7 @@ struct CardFontSelector {
 };
 
 CardFontSelector createCardFontSelector(QWidget* parent,
-                                        const std::function<void()>& onChanged);
+                                        const std::function<void()>& onChanged,
+                                        FontComboWidthMode widthMode = FontComboWidthMode::StandardForm);
 
 }  // namespace miacode::video_export
