@@ -5,6 +5,7 @@
 #include "VideoExportAudioRenderPlan.h"
 #include "VideoExportController.h"
 #include "common/ChartClockCount.h"
+#include "common/PreviewAudioMixConfig.h"
 
 namespace {
 
@@ -270,6 +271,52 @@ bool verifyLatestWinsScheduling(QTextStream& err)
     return true;
 }
 
+bool verifySubSampleSupersedeDropsMaskedAnswer(QTextStream& err)
+{
+    // Two taps less than one mixer sample apart (e.g. a hold tail whose absolute
+    // duration lands microseconds before a coincident tap). The first "answer" is
+    // superseded within a sub-sample window; realtime preview's monophonic voice
+    // cuts it off inaudibly. Export cannot express a sub-sample truncation length
+    // (BASS rounds it to zero and treats zero as "no limit"), so the masked hit
+    // must be dropped outright rather than left un-truncated and doubled.
+    const double kSubSampleGap = 1.0 / (2.0 * miacode::preview_audio::kMixSampleRate);
+    VideoExportTask task;
+    task.noteMarkers = {makeTap(1.0), makeTap(1.0 + kSubSampleGap)};
+    task.exportStartSeconds = 0.0;
+    task.contentDurationSeconds = 3.0;
+    task.fullRangeExport = false;
+    task.fps = 60;
+
+    VideoExportAudioRenderPlan plan;
+    QString errorMessage;
+    if (!miacode::video_export::buildVideoExportAudioRenderPlan(task, &plan, &errorMessage)) {
+        err << errorMessage << Qt::endl;
+        return false;
+    }
+
+    int answerCount = 0;
+    double survivingAnswerMaxDuration = -1.0;
+    for (const auto& playback : plan.scheduledSfxPlaybacks) {
+        if (playback.kind == QLatin1String("answer")) {
+            ++answerCount;
+            survivingAnswerMaxDuration = playback.maxDurationSeconds;
+        }
+    }
+    if (!require(
+            answerCount == 1,
+            QStringLiteral("sub-sample supersede should drop the masked answer, leaving exactly one"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            survivingAnswerMaxDuration <= 0.0,
+            QStringLiteral("the surviving answer should play un-truncated"),
+            err)) {
+        return false;
+    }
+    return true;
+}
+
 bool verifyTouchholdSpanMerge(QTextStream& err)
 {
     VideoExportTask task;
@@ -468,6 +515,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyLatestWinsScheduling(err)) {
+        return 1;
+    }
+    if (!verifySubSampleSupersedeDropsMaskedAnswer(err)) {
         return 1;
     }
     if (!verifyTouchholdSpanMerge(err)) {

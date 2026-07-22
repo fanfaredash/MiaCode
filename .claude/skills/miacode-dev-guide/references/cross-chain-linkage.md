@@ -125,6 +125,15 @@ Shared concerns (collapse/latest-wins/offset rules live in `src/common/PreviewSf
 
 - which kinds emit `answer/judge/break/ex/touch/touchhold/firework`; same-second same-kind collapse
   to one playback at strongest gain; every note-SFX kind is latest-wins across time on BOTH sides.
+  Preview enforces latest-wins with a **single voice per kind** (`QtPreviewSfxRuntime` `configureBank(..,1)`)
+  that restarts on retrigger, so two same-kind hits any distance apart collapse audibly to one. Export
+  has no voice — it *emulates* this via `nextSameKindSecond`→`maxDurationSeconds` truncation. When the
+  supersede gap is **sub-sample** (< `1/kMixSampleRate`), export can't express the truncation (BASS rounds
+  the length to 0 bytes and treats 0 as "no limit," playing the full sample and doubling the SFX), so
+  `VideoExportAudioRenderPlan.cpp` **drops** the masked playback outright to match preview. This bites when
+  a chart makes two events *intend* to coincide but land ~µs apart — e.g. a hold whose absolute duration
+  `[#…]` ends microseconds before a coincident tap, a gap just past the `1e-6` `buildTimeline` collapse
+  epsilon. Covered by `verifySubSampleSupersedeDropsMaskedAnswer` in `VideoExportAudioRenderPlanSpec.cpp`.
 - `&first` finite-raw direct use; `audioOffset` = whole-SFX chart shift; `displayOffset` advances
   answer/judge families; `answerOffset`/`judgeOffset` family-specific; `1/60 s` pre-trigger for
   answer + tap/hold/touch-family judge only.
