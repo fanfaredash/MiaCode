@@ -6,6 +6,7 @@
 #include "tools/cover_export/CoverLayoutModel.h"
 #include "tools/cover_export/SceneFrameRenderer.h"
 #include "tools/video_export/FontLibrary.h"
+#include "tools/video_export/VideoExportPreferences.h"
 #include "common/DebugLog.h"
 #include "common/PreviewInteractionConfig.h"
 #include "UiNativeWindowTheme.h"
@@ -408,13 +409,12 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     cardModeCombo_ = new QComboBox(this);
     cardModeCombo_->setProperty("miacode.combo_text_alignment",
                                 static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter));
+    cardModeCombo_->addItem(QString(), QStringLiteral("auto"));
     cardModeCombo_->addItem(QStringLiteral("DX"), QStringLiteral("DX"));
     cardModeCombo_->addItem(QStringLiteral("SD"), QStringLiteral("Standard"));
-    {
-        const int modeIdx = cardModeCombo_->findData(banner_.mode);
-        if (modeIdx >= 0) cardModeCombo_->setCurrentIndex(modeIdx);
-    }
     UiTheme::styleDialogComboBox(cardModeCombo_, 12);
+    restoreSharedCardModePreference();
+    refreshCardModeAutoLabel();
     cardForm->addRow(UiText::text(QStringLiteral("cover.chart_type")), cardModeCombo_);
 
     // Card drop shadow.
@@ -613,6 +613,7 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
         emit compositionChanged();
     });
     connect(cardModeCombo_, &QComboBox::currentIndexChanged, this, [this] {
+        persistSharedCardModePreference();
         pushInputs();
         emit compositionChanged();
     });
@@ -698,6 +699,8 @@ CoverStudioPanel::CoverStudioPanel(const VideoExportTask& task, const QSize& ini
     if (!savedPreferences.isEmpty()) {
         applyCompositionJson(savedPreferences, /*interactive=*/false);
     }
+    restoreSharedCardModePreference();
+    pushInputs();
     compositionPersistenceGuard_ = std::make_unique<miacode::cover_export::CoverCompositionPersistenceGuard>(
         [this]() { return exportCompositionJson(); },
         [](const QJsonObject& payload) {
@@ -1747,6 +1750,70 @@ QSize CoverStudioPanel::currentSize() const
     return data.canConvert<QSize>() ? data.toSize() : QSize(1080, 1080);
 }
 
+QString CoverStudioPanel::detectedCardMode() const
+{
+    return normalizedIntroBannerMode(banner_.mode);
+}
+
+QString CoverStudioPanel::selectedCardMode(bool resolveAuto) const
+{
+    if (cardModeCombo_ == nullptr) {
+        return detectedCardMode();
+    }
+    const QString mode = cardModeCombo_->currentData().toString();
+    if (isAutoIntroBannerMode(mode)) {
+        return resolveAuto ? detectedCardMode() : QStringLiteral("auto");
+    }
+    return normalizedIntroBannerMode(mode);
+}
+
+void CoverStudioPanel::refreshCardModeAutoLabel()
+{
+    if (cardModeCombo_ == nullptr) {
+        return;
+    }
+    const int autoIndex = cardModeCombo_->findData(QStringLiteral("auto"));
+    if (autoIndex < 0) {
+        return;
+    }
+    const QString label = UiText::text(QStringLiteral("cover.chart_type_auto_result"))
+        .arg(introBannerModeAbbreviation(detectedCardMode()));
+    {
+        const QSignalBlocker blocker(cardModeCombo_);
+        cardModeCombo_->setItemText(autoIndex, label);
+    }
+    UiTheme::styleDialogComboBox(cardModeCombo_, 12);
+}
+
+void CoverStudioPanel::restoreSharedCardModePreference()
+{
+    if (cardModeCombo_ == nullptr) {
+        return;
+    }
+    const QJsonObject settings = miacode::video_export::loadDialogPreferences();
+    const QString mode = settings.value(QStringLiteral("intro_card_type")).toString(QStringLiteral("auto"));
+    int idx = cardModeCombo_->findData(isAutoIntroBannerMode(mode) ? QStringLiteral("auto")
+                                                                  : normalizedIntroBannerMode(mode));
+    if (idx < 0) {
+        idx = cardModeCombo_->findData(QStringLiteral("auto"));
+    }
+    if (idx >= 0) {
+        const QSignalBlocker blocker(cardModeCombo_);
+        cardModeCombo_->setCurrentIndex(idx);
+    }
+    refreshCardModeAutoLabel();
+}
+
+void CoverStudioPanel::persistSharedCardModePreference() const
+{
+    if (cardModeCombo_ == nullptr) {
+        return;
+    }
+    QJsonObject settings = miacode::video_export::loadDialogPreferences();
+    settings.insert(QStringLiteral("intro_card_type"), selectedCardMode(/*resolveAuto=*/false));
+    miacode::video_export::saveDialogPreferences(settings);
+}
+
 miacode::cover_export::CoverComposerInputs CoverStudioPanel::buildInputs() const
 {
     using miacode::cover_export::CoverBackgroundMode;
@@ -1767,9 +1834,7 @@ miacode::cover_export::CoverComposerInputs CoverStudioPanel::buildInputs() const
     track.insert(QStringLiteral("level"), banner_.level);
     track.insert(QStringLiteral("difficulty"), banner_.difficulty);
     track.insert(QStringLiteral("bpm"), banner_.bpm);
-    track.insert(QStringLiteral("mode"),
-                 cardModeCombo_ != nullptr ? cardModeCombo_->currentData().toString()
-                                           : banner_.mode);
+    track.insert(QStringLiteral("mode"), selectedCardMode(/*resolveAuto=*/true));
     track.insert(QStringLiteral("lvRenderMode"),
                  (levelTextRenderCheck_ != nullptr && levelTextRenderCheck_->isChecked())
                      ? QStringLiteral("text")
@@ -2034,9 +2099,7 @@ QJsonObject CoverStudioPanel::exportCompositionJson() const
     state.background = bg;
 
     QJsonObject card;
-    card.insert(QStringLiteral("mode"),
-                cardModeCombo_ != nullptr ? cardModeCombo_->currentData().toString()
-                                          : QStringLiteral("DX"));
+    card.insert(QStringLiteral("mode"), selectedCardMode(/*resolveAuto=*/false));
     card.insert(QStringLiteral("shadow"), cardShadowCheck_ != nullptr && cardShadowCheck_->isChecked());
     card.insert(QStringLiteral("levelTextRender"),
                 levelTextRenderCheck_ != nullptr && levelTextRenderCheck_->isChecked());
@@ -2214,6 +2277,10 @@ void CoverStudioPanel::applyCompositionJson(const QJsonObject& root, bool intera
         if (modeIdx >= 0) {
             const QSignalBlocker block(cardModeCombo_);
             cardModeCombo_->setCurrentIndex(modeIdx);
+        }
+        refreshCardModeAutoLabel();
+        if (interactive) {
+            persistSharedCardModePreference();
         }
     }
     if (cardShadowCheck_ != nullptr) {

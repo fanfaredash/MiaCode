@@ -314,7 +314,7 @@ void CoverLayoutModel::applyDefaults(CoverLayer* layer) const
         layer->opacity_ = 1.0;
         layer->frameBgEnabled_ = true;
         layer->frameBgMode_ = QStringLiteral("image");
-        layer->frameBgBrightness_ = 0.8;
+        layer->frameBgBrightness_ = 0.3;
         layer->frameBgTransparency_ = 0.5;
     } else if (layer->kind_ == QString::fromLatin1(kImageKey)) {
         layer->nx_ = kFreeLayerDefaultNx;

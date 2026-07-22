@@ -161,6 +161,11 @@ private:
     void centerPreviewScroll();
     void schedulePreviewResize();
     void resizePreviewToAspect();
+    QString detectedCardMode() const;
+    QString selectedCardMode(bool resolveAuto) const;
+    void refreshCardModeAutoLabel();
+    void restoreSharedCardModePreference();
+    void persistSharedCardModePreference() const;
     miacode::cover_export::CoverComposerInputs buildInputs() const;
     QSize currentSize() const;
 
