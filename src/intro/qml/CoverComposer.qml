@@ -213,8 +213,6 @@ Item {
             return null
         if (pointInSelectionScaleHandle(px, py))
             return selectedLayer
-        if (selectedLayer && pointInLayer(selectedLayer, px, py))
-            return selectedLayer
         var layers = coverLayout.layers
         var best = null
         for (var i = 0; i < layers.length; ++i) {
@@ -225,6 +223,13 @@ Item {
                 best = l
         }
         return best
+    }
+    function dragLayerAt(px, py) {
+        if (pointInSelectionScaleHandle(px, py))
+            return null
+        if (selectedLayer && !selectedLayer.locked && pointInLayer(selectedLayer, px, py))
+            return selectedLayer
+        return topHitLayerAt(px, py)
     }
     function hitKeyAt(px, py) {
         var l = topHitLayerAt(px, py)
@@ -271,6 +276,62 @@ Item {
         onTapped: {
             if (canvas.chartSceneBinder)
                 canvas.chartSceneBinder.selectLayerKey(canvas.hitKeyAt(point.position.x, point.position.y))
+        }
+    }
+
+    // Canvas-level move drag. This must live above the layer delegates because a
+    // lower selected layer's own handler does not receive pointer events through an
+    // overlapping upper layer. Taps still use visual z-order; drags use dragLayerAt().
+    DragHandler {
+        id: moveDrag
+        target: null
+        enabled: canvas.editable
+        grabPermissions: PointerHandler.CanTakeOverFromAnything
+                         | PointerHandler.ApprovesTakeOverByAnything
+                         | PointerHandler.ApprovesCancellation
+        property var dragLayer: null
+        property real startNx: 0.5
+        property real startNy: 0.5
+        // Cursor position (scene px) AT ACTIVATION — the drag reference.
+        property real grabSceneX: 0
+        property real grabSceneY: 0
+        onActiveChanged: {
+            if (active) {
+                dragLayer = canvas.dragLayerAt(
+                        centroid.scenePressPosition.x,
+                        centroid.scenePressPosition.y)
+                if (!dragLayer) {
+                    dragLayer = null
+                    return
+                }
+                if (canvas.chartSceneBinder)
+                    canvas.chartSceneBinder.selectLayerKey(dragLayer.key)
+                startNx = dragLayer.nx
+                startNy = dragLayer.ny
+                // Reference the delta from the centroid AT ACTIVATION, not the
+                // press: a DragHandler only activates AFTER the cursor passes the
+                // drag threshold, so press-referenced movement would jump.
+                grabSceneX = centroid.scenePosition.x
+                grabSceneY = centroid.scenePosition.y
+            } else {
+                dragLayer = null
+                canvas.clearGuides()
+            }
+        }
+        onCentroidChanged: {
+            if (!active || !dragLayer) return
+            var dx = centroid.scenePosition.x - grabSceneX
+            var dy = centroid.scenePosition.y - grabSceneY
+            var w = canvas.layerContentW(dragLayer)
+            var h = canvas.layerContentH(dragLayer)
+            var cx = startNx * canvas.width + dx
+            var cy = startNy * canvas.height + dy
+            var snapped = canvas.applySnap(cx, cy, w, h)
+            // Keep >=25% of the layer on the clipped canvas so it can't be stranded.
+            var sx = canvas.clampCentre(snapped.x, w, canvas.width)
+            var sy = canvas.clampCentre(snapped.y, h, canvas.height)
+            dragLayer.nx = sx / canvas.width
+            dragLayer.ny = sy / canvas.height
         }
     }
 
@@ -580,62 +641,6 @@ Item {
                 }
             }
 
-            // Drag to move, with canvas centre/edge snapping. target:null — we
-            // write normalized coords back to the model from the centroid delta,
-            // so the model stays the single source of truth (no binding fight).
-            // §5 — the resize handle is its own hit target. Test the original
-            // press point, not the activation centroid, so the move drag cannot
-            // steal a gesture that began on the handle before crossing threshold.
-            DragHandler {
-                id: moveDrag
-                target: null
-                enabled: canvas.editable && layerItem.ld && !layerItem.ld.locked
-                property real startNx: 0.5
-                property real startNy: 0.5
-                // Cursor position (scene px) AT ACTIVATION — the drag reference.
-                property real grabSceneX: 0
-                property real grabSceneY: 0
-                property bool ownsGesture: false
-                onActiveChanged: {
-                    if (active) {
-                        if (canvas.pointInSelectionScaleHandle(
-                                centroid.scenePressPosition.x,
-                                centroid.scenePressPosition.y))
-                            return
-                        var hitKey = canvas.hitKeyAt(centroid.scenePosition.x, centroid.scenePosition.y)
-                        ownsGesture = hitKey === layerItem.ld.key
-                        if (canvas.chartSceneBinder)
-                            canvas.chartSceneBinder.selectLayerKey(hitKey)
-                        if (!ownsGesture)
-                            return
-                        startNx = layerItem.ld.nx
-                        startNy = layerItem.ld.ny
-                        // Reference the delta from the centroid AT ACTIVATION, not the
-                        // press: a DragHandler only activates AFTER the cursor passes
-                        // the drag threshold (plus any fast pre-activation motion), so a
-                        // press-referenced delta would jump the layer by that whole
-                        // distance the instant the drag begins.
-                        grabSceneX = centroid.scenePosition.x
-                        grabSceneY = centroid.scenePosition.y
-                    } else {
-                        ownsGesture = false
-                        canvas.clearGuides()
-                    }
-                }
-                onCentroidChanged: {
-                    if (!active || !ownsGesture || !layerItem.ld) return
-                    var dx = centroid.scenePosition.x - grabSceneX
-                    var dy = centroid.scenePosition.y - grabSceneY
-                    var cx = startNx * canvas.width + dx
-                    var cy = startNy * canvas.height + dy
-                    var snapped = canvas.applySnap(cx, cy, layerItem.width, layerItem.height)
-                    // Keep ≥25% of the card on the clipped canvas so it can't be stranded.
-                    var sx = canvas.clampCentre(snapped.x, layerItem.width, canvas.width)
-                    var sy = canvas.clampCentre(snapped.y, layerItem.height, canvas.height)
-                    layerItem.ld.nx = sx / canvas.width
-                    layerItem.ld.ny = sy / canvas.height
-                }
-            }
         }
     }
 
