@@ -3,6 +3,7 @@
 #include "UiComponents.h"
 #include "UiText.h"
 #include "core/scene/PreviewHudState.h"
+#include "tools/video_export/FontLibrary.h"
 
 #include <QComboBox>
 #include <QDialog>
@@ -67,15 +68,9 @@ QString uniqueHudFontLibraryPath(const QFileInfo& sourceInfo)
     return QFileInfo(candidate).absoluteFilePath();
 }
 
-QString fontFamilyForFile(const QString& path)
-{
-    const int fontId = QFontDatabase::addApplicationFont(path);
-    if (fontId < 0) {
-        return QString();
-    }
-    const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
-    return families.isEmpty() ? QString() : families.first();
-}
+// fontFamilyForFile() lives in FontLibrary (cached there — the HUD picker and
+// the card picker share the same <prefs>/fonts directory); the unqualified call
+// in hudFontChoices() binds to the shared miacode::video_export one.
 
 QVector<HudFontChoice> hudFontChoices()
 {

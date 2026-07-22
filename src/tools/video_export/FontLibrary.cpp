@@ -3,11 +3,13 @@
 #include "UiText.h"
 
 #include <QComboBox>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontDatabase>
+#include <QHash>
 #include <QMessageBox>
 #include <QSizePolicy>
 #include <QSignalBlocker>
@@ -26,12 +28,39 @@ QString fontFamilyForFile(const QString& path)
     if (path.isEmpty()) {
         return QString();
     }
-    const int fontId = QFontDatabase::addApplicationFont(path);
-    if (fontId < 0) {
-        return QString();
+    // Resolving a family means QFontDatabase::addApplicationFont(path) — a disk
+    // read + font parse. The export page rebuilds its font combos on every page
+    // entry AND every badge switch (each combo re-enumerates the whole library,
+    // several times per dialog), so the same files were re-parsed dozens of
+    // times per switch — a dominant slice of the "切换到导出页很慢" cost. The
+    // family name is a pure function of the file's content, so cache it keyed by
+    // absolute path + (mtime, size); an import always writes a fresh unique path
+    // (cache miss), and an edited file changes mtime/size (auto-invalidated).
+    // GUI-thread only, so no locking is needed.
+    struct CacheEntry {
+        qint64 mtimeMs = 0;
+        qint64 sizeBytes = -1;
+        QString family;
+    };
+    static QHash<QString, CacheEntry> cache;
+
+    const QFileInfo info(path);
+    const QString absPath = info.absoluteFilePath();
+    const qint64 mtimeMs = info.lastModified().toMSecsSinceEpoch();
+    const qint64 sizeBytes = info.size();
+    const auto it = cache.constFind(absPath);
+    if (it != cache.constEnd() && it->mtimeMs == mtimeMs && it->sizeBytes == sizeBytes) {
+        return it->family;
     }
-    const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
-    return families.isEmpty() ? QString() : families.first();
+
+    QString family;
+    const int fontId = QFontDatabase::addApplicationFont(path);
+    if (fontId >= 0) {
+        const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+        family = families.isEmpty() ? QString() : families.first();
+    }
+    cache.insert(absPath, CacheEntry{mtimeMs, sizeBytes, family});
+    return family;
 }
 
 QVector<FontLibraryEntry> fontLibraryEntries(bool includeDefault, const QString& defaultLabel)
