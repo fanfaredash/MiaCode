@@ -864,7 +864,16 @@ VideoExportResult VideoExportController::exportPreparedTask(
         QStringLiteral("quick=1 loaded=%1 dir=%2")
             .arg(exportCanvas.hasCoreSkinAssetsLoadedForDebug() ? 1 : 0)
             .arg(task.skinDirectory));
-    const QSurfaceFormat requestedFormat = QSurfaceFormat::defaultFormat();
+            
+    QSurfaceFormat requestedFormat = QSurfaceFormat::defaultFormat();
+
+    // Hanabi shaders used for export require GLSL 130 or newer.
+    // Specify OpenGL 3.2 Core Profile to ensure a modern context with GLSL 150. 
+    // Works on macOS and Linux, and on Windows it will fall back to OpenGL if D3D11 fails.
+    requestedFormat.setRenderableType(QSurfaceFormat::OpenGL);
+    requestedFormat.setVersion(3, 2);
+    requestedFormat.setProfile(QSurfaceFormat::CoreProfile);
+
     QOpenGLContext* shareContext = nullptr;
     QString offscreenInitError;
 
