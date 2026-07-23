@@ -23,6 +23,8 @@
 #include <QIcon>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QPixmap>
+#include <QSize>
 #include <QTextStream>
 #include <QTimer>
 #include <QStringList>
@@ -54,6 +56,28 @@
 #include "MainEntrypoints.h"
 
 namespace {
+
+QIcon applicationWindowIcon()
+{
+#ifdef Q_OS_LINUX
+    const QPixmap source(QStringLiteral(":/icons/app.png"));
+    if (!source.isNull()) {
+        QIcon icon;
+        const int iconSizes[] = {16, 20, 22, 24, 32, 48, 64, 96, 128, 256};
+        for (const int size : iconSizes) {
+            icon.addPixmap(
+                source.scaled(
+                    QSize(size, size),
+                    Qt::KeepAspectRatio,
+                    Qt::SmoothTransformation
+                )
+            );
+        }
+        return icon;
+    }
+#endif
+    return QIcon(QStringLiteral(":/icons/app.png"));
+}
 
 bool wantsCliVideoExport(const QStringList& arguments)
 {
@@ -593,7 +617,7 @@ int main(int argc, char* argv[])
         !miacodePreferencesExistedAtStartup
         || miacodePreferencesSchemaOutdated
         || wantsWelcomeDialog(rawArgs);
-    const QIcon appIcon(QStringLiteral(":/icons/app.png"));
+    const QIcon appIcon = applicationWindowIcon();
 #ifndef Q_OS_MACOS
     app.setWindowIcon(appIcon);
 #endif
