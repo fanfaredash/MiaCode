@@ -242,6 +242,24 @@ int main(int argc, char* argv[])
     const bool cliVideoExportWorkerRequested = wantsCliVideoExportWorker(rawArgs);
     const bool forceOpenGlGraphicsApi = cliVideoExportRequested || cliVideoExportWorkerRequested;
 #if defined(Q_OS_LINUX)
+    // QQuickRenderControl adopts the export session's QOpenGLContext. Under
+    // xcb, Qt's default GLX integration produces a context that the Quick RHI
+    // cannot adopt on affected Linux/NVIDIA configurations, while xcb/EGL
+    // works. Keep an explicit user choice, and leave native Wayland export
+    // processes alone.
+    const QString requestedQpaPlatform =
+        qEnvironmentVariable("QT_QPA_PLATFORM").trimmed().toLower();
+    const bool exportUsesXcb =
+        requestedQpaPlatform.startsWith(QStringLiteral("xcb"))
+        || (requestedQpaPlatform.isEmpty()
+            && qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")
+            && !qEnvironmentVariableIsEmpty("DISPLAY"));
+    if (forceOpenGlGraphicsApi
+        && exportUsesXcb
+        && qEnvironmentVariableIsEmpty("QT_XCB_GL_INTEGRATION")) {
+        qputenv("QT_XCB_GL_INTEGRATION", QByteArrayLiteral("xcb_egl"));
+    }
+
     // QuickShell embeds native QWidget surfaces through QWindow::fromWinId(). Qt's
     // Wayland plugin cannot import those foreign windows, while XWayland/xcb can.
     // Keep explicit QPA choices and headless/export process modes untouched.
