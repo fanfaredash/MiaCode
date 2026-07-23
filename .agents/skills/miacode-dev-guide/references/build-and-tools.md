@@ -88,8 +88,16 @@ Rules going forward:
   version freshness against `CMakeLists.txt` + generated `AppVersion.h`, auto-rebuilds MiaCode,
   runs windeployqt with `--qmldir src`, keeps the Qt Quick DLL set, copies repo-local BASS DLLs).
 - macOS build/package: `scripts/build/build-macos.sh`, `scripts/build/package-mac.sh`.
-- ffmpeg provisioning: `scripts/ffmpeg/ensure-windows-ffmpeg.ps1`, `scripts/ffmpeg/ensure-macos-ffmpeg.sh` (the standalone
-  `ffmpeg.exe` used by **export**).
+- Linux build/package: `scripts/build/build-linux.sh`, `scripts/build/package-linux.sh`. The wrapper
+  builds with 8 jobs by default in a fixed Ubuntu 22.04 / Qt 6.11.1 Docker or Podman image and
+  clears `dist/`, then emits `MiaCode-v<version>-linux-x86_64/` plus a matching `tar.gz`.
+  `MiaCode.AppImage` bundles Qt/QML, the C++ runtime, XCB Fcitx/IBus input plugins, assets,
+  extensions, and the pinned export FFmpeg; release documentation and license notices sit beside
+  the AppImage in the version directory. Incremental build, packaging, and download files stay
+  under `build/`; glibc, the loader, X11, and graphics drivers remain system-provided.
+- ffmpeg provisioning: `scripts/ffmpeg/ensure-windows-ffmpeg.ps1`, `scripts/ffmpeg/ensure-macos-ffmpeg.sh`,
+  `scripts/ffmpeg/ensure-linux-ffmpeg.sh` (the standalone
+  `ffmpeg` executable used by **export**).
 - ffmpeg **dev SDK** provisioning (Windows): `scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1` downloads the BtbN
   n7.1 LGPL *shared* build (headers + import libs + runtime DLLs) into
   `third_party/ffmpeg/windows/dev/` for the **QtAVPlayer preview decode backend**. Gitignored,
@@ -134,6 +142,10 @@ Rules going forward:
   export depend on it.
 - ffmpeg: pinned-binary notes in `third_party/ffmpeg/README.md`; never commit the binary
   (`.gitignore` blocks it). Export resolves ffmpeg from app-local/repo-local fallback.
+  The Linux x86_64 provisioner validates the fixed archive and binary hashes, ELF architecture,
+  resolved runtime linkage without system FFmpeg libraries, version, and the
+  encoder/filter/protocol/format surface used by MiaCode before packaging it as
+  `app/ffmpeg/ffmpeg`.
 - **QtAVPlayer preview backend (Windows):** vendored MIT source in `third_party/QtAVPlayer/`
   (compiled straight into `MiaCode` with `QT_AVPLAYER_MULTIMEDIA` + `QT_BUILD_QTAVPLAYER_LIB`);
   needs the `Qt6::MultimediaQuickPrivate` component and the FFmpeg dev SDK (see §4). The CMake
@@ -158,7 +170,7 @@ Rules going forward:
 
 ## 7. Do not commit build artifacts
 
-`.gitignore` blocks `build/`, `build-linux*/`, `.qt/`, `dist/`, `CMakeFiles/`, `*.obj`, `*.log`, `*.pdb`,
+`.gitignore` blocks `build/`, `.qt/`, `dist/`, `CMakeFiles/`, `*.obj`, `*.log`, `*.pdb`,
 `tmp*/`, third-party binaries, and whitelists only specific `docs/` and `scripts/` files. Audit
 added `experimental/` and `logs/` to the ignore set. Never `git add` a compiled binary, log, or
 local experiment output. `experimental/` holds untracked local experiments (e.g. aubio) with no

@@ -1,9 +1,11 @@
 build/
-build-linux*/
 build-mingw*/
 Build-Mingw*/
 build-macos/
 dist/
+/.cache/
+/.config/
+/squashfs-root/
 font_candidates/
 .qt/
 .DS_Store
@@ -113,8 +115,10 @@ scripts/*
 !scripts/build/
 scripts/build/*
 !scripts/build/build-macos.sh
+!scripts/build/build-linux.sh
 !scripts/build/build-win.ps1
 !scripts/build/package-mac.sh
+!scripts/build/package-linux.sh
 !scripts/build/package-win.ps1
 !scripts/build/thin-macos-app.sh
 !scripts/debug/
@@ -125,6 +129,7 @@ scripts/debug/*
 !scripts/ffmpeg/
 scripts/ffmpeg/*
 !scripts/ffmpeg/ensure-macos-ffmpeg.sh
+!scripts/ffmpeg/ensure-linux-ffmpeg.sh
 !scripts/ffmpeg/ensure-windows-ffmpeg-dev.ps1
 !scripts/ffmpeg/ensure-windows-ffmpeg.ps1
 !scripts/ffmpeg/trim/
