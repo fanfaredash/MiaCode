@@ -313,6 +313,20 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/net/NetBatchDownloadWorker.cpp
     src/tools/net/NetBatchDownloadDialog.h
     src/tools/net/NetBatchDownloadDialog.cpp
+    src/tools/net/NetBatchUploadWorker.h
+    src/tools/net/NetBatchUploadScanner.h
+    src/tools/net/NetBatchUploadScanner.cpp
+    src/tools/net/NetUploadDiagnostics.h
+    src/tools/net/NetUploadDiagnostics.cpp
+    src/tools/net/NetBatchUploadWorker.cpp
+    src/tools/net/NetBatchUploadDialog.h
+    src/tools/net/NetBatchUploadDialog.cpp
+    src/tools/media/PvBatchCompressionScanner.h
+    src/tools/media/PvBatchCompressionScanner.cpp
+    src/tools/media/PvBatchCompressionWorker.h
+    src/tools/media/PvBatchCompressionWorker.cpp
+    src/tools/media/PvBatchCompressionDialog.h
+    src/tools/media/PvBatchCompressionDialog.cpp
     src/tools/cover_export/CoverLayoutModel.h
     src/tools/cover_export/CoverLayoutModel.cpp
     src/tools/cover_export/CoverCompositionState.h
@@ -1568,6 +1582,12 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/net/NetClientSpec.cpp
             src/tools/net/NetClient.h
             src/tools/net/NetClient.cpp
+            src/tools/net/NetBatchUploadScanner.h
+            src/tools/net/NetBatchUploadScanner.cpp
+            src/tools/net/NetUploadDiagnostics.h
+            src/tools/net/NetUploadDiagnostics.cpp
+            src/tools/media/PvBatchCompressionScanner.h
+            src/tools/media/PvBatchCompressionScanner.cpp
             src/tools/zip_export/ChartZipPackager.h
             src/tools/zip_export/ChartZipPackager.cpp
             src/common/ChartAssetPaths.h

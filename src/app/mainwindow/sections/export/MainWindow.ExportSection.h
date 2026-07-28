@@ -21,6 +21,7 @@ public:
     void onBatchExportPreviewVideo(int difficultyId = 0);
     void onPackAsZip();
     void onNetBatchDownload();
+    void onNetBatchUpload();
     // ---- E-C embedded video panel (hosted by the Export hub page) ----
     // Builds a VideoExportDialog in embedded panel mode seeded with the given
     // difficulty, begins the export-preview session (exportPreviewActive_,

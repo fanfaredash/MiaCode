@@ -1,13 +1,18 @@
 #include "NetClient.h"
+#include "NetBatchUploadScanner.h"
+#include "NetUploadDiagnostics.h"
+#include "tools/media/PvBatchCompressionScanner.h"
 
 #include <miniz.h>
 
 #include <QCoreApplication>
 #include <QDate>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTextStream>
+#include <QTimeZone>
 
 #include <cstring>
 
@@ -41,6 +46,12 @@ QStringList readZipEntryNames(const QString& zipPath)
     return names;
 }
 
+bool writeFixtureFile(const QString& path, const QByteArray& payload = QByteArrayLiteral("fixture"))
+{
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly) && file.write(payload) == payload.size();
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -69,6 +80,139 @@ int main(int argc, char** argv)
 
     QTemporaryDir temp;
     ok &= check(temp.isValid(), "temporary dir created");
+    const QString uploadRoot = QDir(temp.path()).filePath(QStringLiteral("upload-root"));
+    const QString chartA = QDir(uploadRoot).filePath(QStringLiteral("chart-a"));
+    const QString chartB = QDir(uploadRoot).filePath(QStringLiteral("chart-b"));
+    const QString invalidChart = QDir(uploadRoot).filePath(QStringLiteral("missing-track"));
+    QDir().mkpath(chartA);
+    QDir().mkpath(chartB);
+    QDir().mkpath(invalidChart);
+    ok &= check(writeFixtureFile(QDir(chartA).filePath(QStringLiteral("maidata.txt"))), "chart A maidata fixture");
+    ok &= check(writeFixtureFile(QDir(chartA).filePath(QStringLiteral("bg.jpg"))), "chart A background fixture");
+    ok &= check(writeFixtureFile(QDir(chartA).filePath(QStringLiteral("track.mp3"))), "chart A track fixture");
+    ok &= check(writeFixtureFile(QDir(chartB).filePath(QStringLiteral("MAIDATA.TXT"))), "chart B case-insensitive maidata fixture");
+    ok &= check(writeFixtureFile(QDir(chartB).filePath(QStringLiteral("bg.png"))), "chart B PNG fixture");
+    ok &= check(writeFixtureFile(QDir(chartB).filePath(QStringLiteral("track.mp3"))), "chart B track fixture");
+    ok &= check(writeFixtureFile(QDir(chartB).filePath(QStringLiteral("pv.mp4"))), "chart B video fixture");
+    ok &= check(writeFixtureFile(QDir(invalidChart).filePath(QStringLiteral("maidata.txt"))), "invalid chart maidata fixture");
+    ok &= check(writeFixtureFile(QDir(invalidChart).filePath(QStringLiteral("bg.jpg"))), "invalid chart background fixture");
+    const QList<NetUploadJob> uploadJobs = scanNetUploadFolders(uploadRoot);
+    ok &= check(uploadJobs.size() == 2, "upload scanner keeps only complete immediate chart folders");
+    ok &= check(uploadJobs.at(0).displayName == QStringLiteral("chart-a"), "upload scanner sorts folders by name");
+    ok &= check(uploadJobs.at(1).backgroundPath.endsWith(QStringLiteral("bg.png")), "upload scanner accepts PNG background");
+    ok &= check(uploadJobs.at(1).videoPath.endsWith(QStringLiteral("pv.mp4")), "upload scanner keeps optional video");
+    QList<NetUploadJob> uploadQueue;
+    ok &= check(appendUniqueNetUploadJobs(&uploadQueue, uploadJobs) == 2, "upload queue appends scanned jobs");
+    ok &= check(appendUniqueNetUploadJobs(&uploadQueue, uploadJobs) == 0, "upload queue ignores duplicate folders");
+    ok &= check(uploadQueue.size() == 2, "upload queue remains deduplicated");
+
+    const QString pvRoot = QDir(temp.path()).filePath(QStringLiteral("pv-root"));
+    const QString largePvChart = QDir(pvRoot).filePath(QStringLiteral("large-pv"));
+    const QString smallPvChart = QDir(pvRoot).filePath(QStringLiteral("small-pv"));
+    const QString nestedGroup = QDir(pvRoot).filePath(QStringLiteral("group"));
+    const QString nestedBgChart = QDir(nestedGroup).filePath(QStringLiteral("nested-bg"));
+    QDir().mkpath(largePvChart);
+    QDir().mkpath(smallPvChart);
+    QDir().mkpath(nestedBgChart);
+    QFile largePv(QDir(largePvChart).filePath(QStringLiteral("PV.MP4")));
+    ok &= check(largePv.open(QIODevice::WriteOnly), "large PV fixture opens");
+    ok &= check(largePv.resize(miacode::media::kPvCompressionTargetBytes + 1), "large PV fixture is over target");
+    largePv.close();
+    QFile smallPv(QDir(smallPvChart).filePath(QStringLiteral("pv.mp4")));
+    ok &= check(smallPv.open(QIODevice::WriteOnly), "small PV fixture opens");
+    ok &= check(smallPv.resize(miacode::media::kPvCompressionTargetBytes), "small PV fixture is at target");
+    smallPv.close();
+    ok &= check(writeFixtureFile(QDir(nestedBgChart).filePath(QStringLiteral("bg.mp4"))), "nested bg fixture");
+    ok &= check(writeFixtureFile(QDir(nestedBgChart).filePath(QStringLiteral("pv.mp4"))), "nested pv fixture");
+    const QList<miacode::media::PvCompressionJob> pvJobs = miacode::media::scanPvCompressionFolders(pvRoot);
+    ok &= check(pvJobs.size() == 4, "video scanner keeps the root and immediate child folders");
+    bool foundLargePv = false;
+    bool foundNestedBg = false;
+    int foldersWithoutVideo = 0;
+    for (const miacode::media::PvCompressionJob& job : pvJobs) {
+        if (job.displayName == QStringLiteral("large-pv")) {
+            foundLargePv = job.videoPath.endsWith(QStringLiteral("PV.MP4"));
+        } else if (job.displayName == QStringLiteral("nested-bg")) {
+            foundNestedBg = job.videoPath.endsWith(QStringLiteral("bg.mp4"));
+        }
+        if (job.videoPath.isEmpty()) {
+            ++foldersWithoutVideo;
+        }
+    }
+    ok &= check(foundLargePv, "video scanner accepts case-insensitive pv.mp4");
+    ok &= check(!foundNestedBg, "video scanner does not include grandchild folders");
+    ok &= check(foldersWithoutVideo == 2, "video scanner retains folders without video");
+    const QList<miacode::media::PvCompressionJob> nestedJobs =
+        miacode::media::scanPvCompressionFolders(nestedGroup);
+    ok &= check(nestedJobs.size() == 2, "video scanner includes a selected root and its immediate child");
+    ok &= check(
+        nestedJobs.at(1).videoPath.endsWith(QStringLiteral("bg.mp4")),
+        "video scanner prefers bg.mp4 when both supported names exist");
+    QList<miacode::media::PvCompressionJob> pvQueue;
+    ok &= check(miacode::media::appendUniquePvCompressionJobs(&pvQueue, pvJobs) == 4, "video list appends scanned folders");
+    ok &= check(miacode::media::appendUniquePvCompressionJobs(&pvQueue, pvJobs) == 0, "video list ignores duplicate folders");
+
+    NetUploadResponseInfo rateLimitedResponse;
+    rateLimitedResponse.statusCode = 429;
+    rateLimitedResponse.reasonPhrase = QStringLiteral("Too Many Requests");
+    rateLimitedResponse.contentType = QStringLiteral("application/json");
+    rateLimitedResponse.server = QStringLiteral("cloudflare");
+    rateLimitedResponse.cfRay = QStringLiteral("abc123-SJC");
+    rateLimitedResponse.retryAfter = QStringLiteral("12");
+    rateLimitedResponse.payload = QByteArrayLiteral("{\"message\":\"Slow down\",\"code\":429}");
+    const NetUploadResponseAssessment rateLimited = assessNetUploadResponse(rateLimitedResponse);
+    ok &= check(rateLimited.isRateLimited, "upload diagnostics classify HTTP 429 as rate limited");
+    ok &= check(!rateLimited.shouldStopBatch, "first rate-limit response remains retryable");
+    ok &= check(rateLimited.retryAfterSeconds == 12, "upload diagnostics parse Retry-After seconds");
+    ok &= check(rateLimited.serverMessage == QStringLiteral("Slow down"), "upload diagnostics extract server message");
+    ok &= check(rateLimited.responseBody.contains(QStringLiteral("\"code\": 429")), "upload diagnostics retain full JSON body");
+
+    NetUploadResponseInfo challengeResponse;
+    challengeResponse.statusCode = 403;
+    challengeResponse.contentType = QStringLiteral("text/html; charset=UTF-8");
+    challengeResponse.server = QStringLiteral("cloudflare");
+    challengeResponse.cfRay = QStringLiteral("def456-LAX");
+    challengeResponse.payload = QByteArrayLiteral(
+        "<!doctype html><html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>");
+    const NetUploadResponseAssessment challenge = assessNetUploadResponse(challengeResponse);
+    ok &= check(challenge.isCloudflareChallenge, "upload diagnostics detect Cloudflare challenge HTML");
+    ok &= check(challenge.shouldStopBatch, "Cloudflare challenge stops the upload batch");
+    ok &= check(challenge.responseBody.contains(QStringLiteral("challenge-platform")), "challenge diagnostics retain HTML response");
+
+    NetUploadResponseInfo payloadTooLargeResponse;
+    payloadTooLargeResponse.statusCode = 413;
+    payloadTooLargeResponse.contentType = QStringLiteral("text/html");
+    payloadTooLargeResponse.server = QStringLiteral("cloudflare");
+    payloadTooLargeResponse.cfRay = QStringLiteral("a225651769d91990-SJC");
+    payloadTooLargeResponse.payload = QByteArrayLiteral(
+        "<html><head><title>413 Request Entity Too Large</title></head>"
+        "<body><h1>413 Request Entity Too Large</h1>"
+        "<script src='/cdn-cgi/challenge-platform/scripts/jsd/main.js'></script></body></html>");
+    const NetUploadResponseAssessment payloadTooLarge = assessNetUploadResponse(payloadTooLargeResponse);
+    ok &= check(payloadTooLarge.isPayloadTooLarge, "upload diagnostics classify HTTP 413 as an oversized request");
+    ok &= check(!payloadTooLarge.isCloudflareChallenge, "Cloudflare-injected script does not override HTTP 413");
+    ok &= check(!payloadTooLarge.shouldStopBatch, "HTTP 413 remains a per-chart failure");
+    ok &= check(payloadTooLarge.responseBody.contains(QStringLiteral("Request Entity Too Large")), "HTTP 413 diagnostics retain HTML response");
+
+    NetUploadResponseInfo validationResponse;
+    validationResponse.statusCode = 422;
+    validationResponse.contentType = QStringLiteral("application/json");
+    validationResponse.payload = QByteArrayLiteral("{\"detail\":{\"field\":\"maidata\",\"reason\":\"invalid\"}}");
+    const NetUploadResponseAssessment validation = assessNetUploadResponse(validationResponse);
+    ok &= check(!validation.shouldStopBatch, "HTTP 422 remains a per-chart failure");
+    ok &= check(validation.serverMessage.contains(QStringLiteral("maidata")), "object-valued error detail is preserved");
+
+    NetUploadResponseInfo applicationErrorResponse;
+    applicationErrorResponse.statusCode = 200;
+    applicationErrorResponse.contentType = QStringLiteral("application/json");
+    applicationErrorResponse.payload = QByteArrayLiteral("{\"success\":false,\"error\":\"Chart already exists\"}");
+    const NetUploadResponseAssessment applicationError = assessNetUploadResponse(applicationErrorResponse);
+    ok &= check(applicationError.isApplicationError, "HTTP 200 application error is not treated as success");
+
+    const QDateTime retryNow(QDate(2026, 7, 28), QTime(12, 0), QTimeZone::utc());
+    ok &= check(
+        parseNetUploadRetryAfterSeconds(QStringLiteral("Tue, 28 Jul 2026 12:00:30 GMT"), retryNow) == 30,
+        "upload diagnostics parse Retry-After HTTP date");
     const QString firstPath = uniqueZipPathForTitle(temp.path(), QStringLiteral("A/B"));
     QFile marker(firstPath);
     marker.open(QIODevice::WriteOnly);

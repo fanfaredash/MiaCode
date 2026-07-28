@@ -16,6 +16,7 @@ public:
     void onPrependTrackSilence();
     void onPrependPvBlack();
     void onCompressBackgroundVideo();
+    void onBatchCompressPv();
     void onConvertTrackTo44100Hz();
     void onReadTitleFromTrack();
     void onReadArtistFromTrack();

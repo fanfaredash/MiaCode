@@ -321,6 +321,7 @@ private slots:
     void onBatchExportPreviewVideo();
     void onPackAsZip();
     void onNetBatchDownload();
+    void onNetBatchUpload();
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
     void onSkinSettings();

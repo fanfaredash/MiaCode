@@ -211,6 +211,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     if (netBatchDownloadAction_ != nullptr) {
         toolsMenu->addSeparator();
         toolsMenu->addAction(netBatchDownloadAction_);
+        if (netBatchUploadAction_ != nullptr) {
+            toolsMenu->addAction(netBatchUploadAction_);
+        }
     }
     extensionManager_ = std::make_unique<miacode::extensions::ExtensionManager>(this);
     miacode::extensions::ExtensionHostCallbacks extensionCallbacks;
@@ -1289,6 +1292,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     if (netBatchDownloadAction_ != nullptr) {
         toolboxMenu_->addSeparator();
         toolboxMenu_->addAction(netBatchDownloadAction_);
+        if (netBatchUploadAction_ != nullptr) {
+            toolboxMenu_->addAction(netBatchUploadAction_);
+        }
     }
 
     // Copy Area is intentionally hidden from the toolbox per the toolbox
