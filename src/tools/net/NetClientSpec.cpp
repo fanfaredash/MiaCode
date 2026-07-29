@@ -60,6 +60,10 @@ int main(int argc, char** argv)
     using namespace miacode::net;
 
     bool ok = true;
+    ok &= check(
+        netUserSpaceReferer(QStringLiteral(" 乐园杯 "))
+            == QStringLiteral("https://majdata.net/space?id=%E4%B9%90%E5%9B%AD%E6%9D%AF"),
+        "Chinese uploader ID is percent-encoded in the user-space referer");
     const QByteArray json = R"([
       {"id":"a","title":"A/B","artist":"aa","designer":"da","uploader":"u","timestamp":"2026-01-02T14:10:57.494Z","levels":["","","13+"],"publicTags":["EventTag"]},
       {"id":"b","title":"B","artist":"bb","designer":"db","uploader":"u","timestamp":"2026-01-03T00:00:00Z","levels":[null,"12",""],"contestTag":"OtherTag"},
