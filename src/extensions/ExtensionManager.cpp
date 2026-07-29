@@ -1725,6 +1725,10 @@ void ExtensionManager::appendDevtoolsCall(const QString& method, const QJsonObje
     }
     if (!entry.value(QStringLiteral("ok")).toBool(true)) {
         appendExtensionLog(QStringLiteral("warning"), QStringLiteral("host API call failed"), entry);
+    } else if (isRawOrExperimentalCall(entry)
+               || method == QStringLiteral("process/spawn")
+               || method == QStringLiteral("shell/execute")) {
+        appendExtensionLog(QStringLiteral("info"), QStringLiteral("host API call accepted"), entry);
     }
 }
 
@@ -2223,6 +2227,7 @@ QJsonObject ExtensionManager::handleHostRequestCore(const QString& method, const
         return okValue(QJsonObject{
             {QStringLiteral("version"), QCoreApplication::applicationVersion()},
             {QStringLiteral("applicationName"), QCoreApplication::applicationName()},
+            {QStringLiteral("processId"), static_cast<double>(QCoreApplication::applicationPid())},
             {QStringLiteral("platform"), QSysInfo::productType()},
             {QStringLiteral("platformVersion"), QSysInfo::productVersion()},
             {QStringLiteral("architecture"), QSysInfo::currentCpuArchitecture()},
