@@ -118,7 +118,7 @@ void VideoExportDialog::loadPersistedSettings()
     }
 
     const int savedFps = settings.value(QStringLiteral("fps")).toInt(selectedFps_);
-    selectedFps_ = savedFps >= 90 ? 120 : 60;
+    selectedFps_ = normaliseExportFps(savedFps);
     if (fpsCombo_ != nullptr) {
         const QSignalBlocker blocker(fpsCombo_);
         fpsCombo_->setCurrentIndex(qMax(0, fpsCombo_->findData(selectedFps_)));

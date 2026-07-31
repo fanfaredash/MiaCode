@@ -108,8 +108,9 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: raw-video pipe queue depth, pipe buffer sizing, connect timeout, writer chunk size, and bounded producer blocking behavior
   - Current tuning note: `RawVideoPipePlan::maxBufferedFrames` is derived from frame size using `32 * (1920*1080) / (width*height)`, clamped to `8..128`, and then scaled by `2` so the effective queued-frame budget is `16..256`; `RawVideoPipePlan::requestedBufferBytes` now targets `2 * max(frameBytes, 1 MiB)` so the OS-side raw pipe buffer is also doubled
   - Rule: keep transport-level tuning local while it only shapes export stability/performance at the ffmpeg rawvideo boundary
-- `src/tools/video_export/VideoExportDialog.cpp`
-  - Owns: export-dialog UI sizing and preview control constants
+- `src/tools/video_export/VideoExportDialog.cpp` and `src/tools/video_export/VideoExportDialogInternal.h`
+  - Owns: export-dialog UI sizing, preview control constants, audio bitrate options, and selectable export FPS values
+  - Current tuning note: `kFpsOptions` is shared across the split VideoExportDialog translation units and currently exposes `30`, `60`, and `120` FPS for both single-export and batch-export settings panels; `normaliseExportFps(...)` snaps stored/custom task FPS to those options with halfway values choosing the higher option.
   - Rule: local UI constants usually stay local unless reused across dialogs
 - `src/tools/cover_export/CoverStudioPanel.cpp`
   - Owns: Cover Studio editor-only preview sizing and visual zoom constants

@@ -1535,7 +1535,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/video_export/BatchExportTaskLayout.cpp
             src/tools/video_export/BatchExportSelectionState.cpp
         LIBS Qt6::Core Qt6::Widgets
-        INCLUDES src src/common src/audio src/core/video src/timeline src/tools src/tools/video_export
+        INCLUDES src src/app/ui src/common src/audio src/core/video src/timeline src/tools src/tools/video_export
     )
 
     miacode_add_dev_tool(video_export_intro_mode_spec TEST

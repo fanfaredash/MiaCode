@@ -106,8 +106,6 @@ constexpr ResolutionPreset kResolutionPresets[] = {
     {2560, 1440, "2560x1440 (16:9)", 16.0 / 9.0},
 };
 
-constexpr int kFpsOptions[] = {60, 120};
-
 // (The HUD-font library helpers + the font-settings dialog moved to
 // tools/video_export/HudFontSettings.cpp on 2026-06-10, shared with the main
 // window's 视频设置 dialog.)
@@ -758,7 +756,7 @@ VideoExportDialog::VideoExportDialog(
     addOptionField(0, 0, UiText::text(QStringLiteral("dialog.video_export.resolution")), resolutionCombo_);
 
     // FPS dropdown (row 0, col 1).
-    selectedFps_ = baseTask_.fps >= 90 ? 120 : 60;
+    selectedFps_ = normaliseExportFps(baseTask_.fps);
     fpsCombo_ = miacode::ui::createDialogComboBox(optionsGrid, 12);
     for (int fps : kFpsOptions) {
         fpsCombo_->addItem(QStringLiteral("%1 FPS").arg(fps), fps);
