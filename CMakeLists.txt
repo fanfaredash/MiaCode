@@ -1698,6 +1698,16 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core
         INCLUDES src
     )
+
+    miacode_add_dev_tool(process_diagnostics_spec TEST
+        SOURCES
+            src/tools/debug_index/ProcessDiagnosticsSpec.cpp
+            src/common/ProcessDiagnostics.h
+            src/common/ProcessDiagnostics.cpp
+            ${_miacode_log_core}
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src
+    )
 endif()
 
 if (WIN32)

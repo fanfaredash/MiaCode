@@ -3,6 +3,8 @@
 #include <QString>
 #include <QtGlobal>
 
+class QObject;
+
 // Process-resource & leak-hunt diagnostics. Split out of common/DebugLog.h so the
 // logging header stays a pure channelized writer (see the note there). These sample
 // OS process counters and shuttle low-frequency memory samples between the GUI and
@@ -17,6 +19,10 @@ namespace miacode::diag {
 // appendLine(Channel::Runtime, "preview/resource_gauge", …) so a monotonic climb across
 // edit→play→pause cycles localises the leak (handles vs GPU/memory vs QObject churn).
 QString processResourceGaugePayload();
+
+// Install one debug-only GUI-thread timer that records a process resource
+// baseline immediately and then every 30 seconds. Idempotent per owner.
+void installPeriodicProcessResourceGauge(QObject* owner);
 
 // RAII memory-delta tracer for the leak hunt. On construction (only when runtime debug output
 // is enabled) it samples process private bytes; on destruction it samples again and logs

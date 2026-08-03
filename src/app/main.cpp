@@ -8,6 +8,7 @@
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
+#include "common/ProcessDiagnostics.h"
 #include "common/UiHangWatchdog.h"
 #include "common/DebugOptions.h"
 #include "common/WaveformCache.h"
@@ -431,6 +432,7 @@ int main(int argc, char* argv[])
 #endif
     QApplication app(argc, argv);
     miacode::hang_watchdog::installGuiHeartbeat(&app);
+    miacode::diag::installPeriodicProcessResourceGauge(&app);
 #ifdef Q_OS_WIN
     miacode::oplog::appendStartupBeaconLine("phase=after_qapplication_construct");
 #endif

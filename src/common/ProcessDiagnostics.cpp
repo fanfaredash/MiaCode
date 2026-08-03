@@ -3,9 +3,14 @@
 #include "DebugLog.h"
 #include "DebugOptions.h"
 
+#include <QCoreApplication>
+#include <QGuiApplication>
 #include <QString>
+#include <QTimer>
 
 #include <atomic>
+#include <chrono>
+#include <memory>
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
@@ -19,6 +24,31 @@
 #endif
 
 namespace miacode::diag {
+
+namespace {
+
+constexpr int kPeriodicResourceGaugeIntervalMs = 30000;
+
+QString applicationStateName()
+{
+    const auto* app = qobject_cast<QGuiApplication*>(QCoreApplication::instance());
+    if (app == nullptr) {
+        return QStringLiteral("not_gui");
+    }
+    switch (app->applicationState()) {
+    case Qt::ApplicationSuspended:
+        return QStringLiteral("suspended");
+    case Qt::ApplicationHidden:
+        return QStringLiteral("hidden");
+    case Qt::ApplicationInactive:
+        return QStringLiteral("inactive");
+    case Qt::ApplicationActive:
+        return QStringLiteral("active");
+    }
+    return QStringLiteral("unknown");
+}
+
+}  // namespace
 
 QString processResourceGaugePayload()
 {
@@ -67,6 +97,45 @@ QString processResourceGaugePayload()
         "gdi_objects=0 user_objects=0 kernel_handles=0 working_set_mb=0 peak_working_set_mb=0 "
         "private_mb=0 commit_mb=0 paged_pool_kb=0 nonpaged_pool_kb=0 page_faults=0");
 #endif
+}
+
+void installPeriodicProcessResourceGauge(QObject* owner)
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    if (owner == nullptr) {
+        owner = QCoreApplication::instance();
+    }
+    if (owner == nullptr
+        || owner->findChild<QTimer*>(
+            QStringLiteral("MiaCodePeriodicResourceGauge"),
+            Qt::FindDirectChildrenOnly) != nullptr) {
+        return;
+    }
+
+    auto* timer = new QTimer(owner);
+    timer->setObjectName(QStringLiteral("MiaCodePeriodicResourceGauge"));
+    timer->setInterval(kPeriodicResourceGaugeIntervalMs);
+
+    const auto startedAt = std::chrono::steady_clock::now();
+    const auto sampleCounter = std::make_shared<quint64>(0);
+    const auto emitSample = [sampleCounter, startedAt]() {
+        const qint64 uptimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startedAt).count();
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("idle/resource_gauge"),
+            QStringLiteral("action=sample sample=%1 uptime_ms=%2 app_state=%3 %4")
+                .arg((*sampleCounter)++)
+                .arg(qMax<qint64>(0, uptimeMs))
+                .arg(applicationStateName())
+                .arg(processResourceGaugePayload()));
+    };
+
+    QObject::connect(timer, &QTimer::timeout, timer, emitSample);
+    emitSample();
+    timer->start();
 }
 
 static qint64 stageScopePrivateBytes()
