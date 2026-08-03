@@ -2,7 +2,7 @@
 
 This document is the current user-facing index for MiaCode debug mode, log files, and preview/export diagnostics after the Qt Quick migration.
 
-> Reconciled against the code on 2026-05-29 (83 live `MIACODE_*` environment flags across ~28 files after the P3/P4 GPU additions `MIACODE_GPU_POLICY` / `MIACODE_GPU_ADAPTER_LUID` / `MIACODE_GPU_BIND_HIGH_PERFORMANCE` and the P5 export addition `MIACODE_EXPORT_RENDER_BACKEND`). When you add/remove a flag, update this index (and `.codex/skills/miacode-dev-guide/references/debug-flags.md`).
+> Reconciled against the code on 2026-08-04 (83 live `MIACODE_*` environment flags across ~28 files after the P3/P4 GPU additions `MIACODE_GPU_POLICY` / `MIACODE_GPU_ADAPTER_LUID` / `MIACODE_GPU_BIND_HIGH_PERFORMANCE` and the P5 export addition `MIACODE_EXPORT_RENDER_BACKEND`). The idle-freeze diagnostics add no environment flag. When you add/remove a flag, update this index (and `.codex/skills/miacode-dev-guide/references/debug-flags.md`).
 
 ## Debug Entry Points
 
@@ -12,6 +12,7 @@ This document is the current user-facing index for MiaCode debug mode, log files
 - Windows focused diagnostic helpers retained in the public repo:
   - `Start_MiaCode_SoftwareVideoDecode.bat`
   - `Start_MiaCode_QtPluginDiag.bat`
+  - `Start_MiaCode_IdleFreezeRepro.ps1` — launches the real `app\MiaCode.exe` in a timestamped evidence directory with an explicit `GpuBound` / `GpuOff` profile; see [Windows 空闲冻结复现与取证指南](WINDOWS_IDLE_FREEZE_REPRO_ZH.md)
 
 Inside debug mode, runtime, audio, export, startup-timing, and preview-profile outputs are enabled unless they are individually disabled.
 Outside debug mode, the export log still keeps a concise stage/failure summary so users can report export issues without reproducing under `--debug`.
@@ -69,6 +70,19 @@ C++ hang-watchdog instrumentation macros, not environment variables:
 - `MIACODE_HANG_JOIN`
 - `MIACODE_HANG_JOIN_IMPL`
 
+Idle-freeze diagnostics (debug mode only, no new environment flag):
+
+- `startup/process_identity` records the product `version`, build `git_revision`, `git_dirty`, and real executable identity so transient packages can be mapped precisely.
+- `ui/hang_watchdog` samples the GUI heartbeat every `250 ms`; it reports a marked phase after about `2 s` or an unmarked idle heartbeat stall after about `5 s` using a durable fatal-grade runtime record.
+- `idle/resource_gauge` writes sample `0` immediately and then process counters about every `30 s`.
+- `windows/environment_event` records registered Windows display-power, system power, session lock/unlock, display-change, and device-change notifications. Its fatal-grade records are a durability mechanism, not a claim that each environment event is fatal.
+
+Other `MIACODE_*` tokens seen by the source-index guard but not runtime flags:
+
+- `MIACODE_GIT_REVISION` / `MIACODE_GIT_DIRTY` — CMake-generated build identity macros embedded in `startup/process_identity`.
+- `MIACODE_HAS_BASS_AUDIO` — build-time compile definition for BASS support.
+- `MIACODE_EXTENSION_DEV_PATHS` — test-only environment literal used by `ExtensionManifestSpec`; production extension discovery does not read it.
+
 ## Category Gates
 
 These only matter while debug mode is active for the detailed channels. The always-on concise export summary remains available without `--debug`.
@@ -91,7 +105,7 @@ something goes wrong. The per-category gates above are snapshot into atomics at
 - Realtime preview and export both use Qt Quick scene graph.
 - **GUI RHI backend:** the desktop GUI no longer forces OpenGL. It uses `--rhi=<name>`, the persisted choice, or Qt's platform default (Direct3D11 on Windows / Qt 6). See the `startup/graphics_backend` and `quick_shell/device` runtime logs for the applied backend + the actual bound adapter.
 - **CLI export / export worker:** `--export-video` and `--export-video-worker` default Qt Quick to Direct3D11 and drive the D3D11/QRhi render-control session. `MIACODE_EXPORT_RENDER_BACKEND=opengl` keeps the stable offscreen `QQuickRenderControl` + FBO/PBO path as an explicit rollback. The export log's `render_backend` line reports `render_backend=d3d11_qrhi_rendercontrol` or `render_backend=opengl_qquick_rendercontrol`, the active RHI, adapter/renderer, and readback mode.
-- **Windows dist package:** the clickable `MiaCode.exe` at the package root is only the launcher; the real GUI/export worker is `app\MiaCode.exe`. Windows Graphics Settings and the NVIDIA/AMD control panels must target `app\MiaCode.exe`, not the root launcher. The `startup/process_identity` runtime log spells out the real exe path, whether it is running from the packaged `app\` dir, and the launcher parent process.
+- **Windows dist package:** the clickable `MiaCode.exe` at the package root is only the launcher; the real GUI/export worker is `app\MiaCode.exe`. Windows Graphics Settings and the NVIDIA/AMD control panels must target `app\MiaCode.exe`, not the root launcher. The `startup/process_identity` runtime log spells out the product version, source revision/dirty state, real exe path, whether it is running from the packaged `app\` dir, and the launcher parent process.
 - **High-performance GPU hint (P2):** `MiaCode.exe` and `MiaCodeLauncher.exe` export the `NvOptimusEnablement` / `AmdPowerXpressRequestHighPerformance` symbols so hybrid-graphics laptops prefer the discrete GPU. This is a process-level *preference*, not a precise adapter binding — Windows Graphics Settings / vendor control panels can still override it. Confirmed by the `startup/gpu_hint` runtime log.
 - **Root Quick GPU binding:** root-window `fromAdapter` binding is now default ON. Set `MIACODE_GPU_BIND_HIGH_PERFORMANCE=0` / `off` / `false` to keep Qt's platform-default adapter as a rollback. The preview composite remains never `fromAdapter`-bound.
 - Export PBO diagnostics now describe the headless Quick export session, not a removed legacy renderer.
@@ -244,7 +258,7 @@ Preview diagnostics now split these timing sources instead of reporting a single
   - BASS `bass_status` sampling is now reduced to about once per second in debug mode, and includes `bgm_delta_ms` (`auth - bgm_chart`) so waveform/playhead complaints can be separated from generic fallback-clock drift; waveform-alignment diagnostics can temporarily lower that interval
   - BASS BGM rate-mode decisions log as low-frequency `bgm_speed_mode` / `bgm_rate_mode` rows, not per tick; BASS_FX tempo-window experiments additionally log `bgm_tempo_window` with requested and read-back `sequence_ms`, `seek_ms`, and `overlap_ms`
   - `preview/interaction` correlates user-facing preview actions such as `play`, `pause`, `stop`, and `ctrl+click` seek
-  - `ui/hang_watchdog` is installed only when runtime debug output is active; if a marked GUI phase remains active for about `2s`, it writes a fatal-grade runtime line, flushes the op-chain shadow, and includes async-log writer stats
+  - `ui/hang_watchdog` is installed only when runtime debug output is active; if a marked GUI phase remains active for about `2s`, or the GUI heartbeat stops for about `5s` while no phase is marked, it writes a fatal-grade runtime line with `trigger=active_phase|idle_heartbeat`, flushes the op-chain shadow, and includes async-log writer stats
   - `layout/export_page`, `layout/rehosted_widget`, `export_page/embedded_video_panel`, `video_export/embedded_layout`, and `quick_shell/layout` are runtime-debug-only slow-path layout diagnostics for QuickShell/native-surface and embedded export-panel relayout work
   - `timeline/interaction` records quick timeline drag, wheel-scroll, and held-key horizontal scroll inputs
   - `timeline/bridge` records quick timeline hot-path state pushes such as `action=set_horizontal_scroll_value` only when `MIACODE_TIMELINE_HOTPATH_DIAG=1`

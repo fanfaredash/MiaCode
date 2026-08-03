@@ -1721,6 +1721,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core
         INCLUDES src
     )
+
+    miacode_add_dev_tool(idle_freeze_repro_script_spec TEST
+        SOURCES
+            src/tools/debug_index/IdleFreezeReproScriptSpec.cpp
+        LIBS Qt6::Core
+    )
+    target_compile_definitions(idle_freeze_repro_script_spec PRIVATE
+        "MIACODE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 endif()
 
 if (WIN32)
