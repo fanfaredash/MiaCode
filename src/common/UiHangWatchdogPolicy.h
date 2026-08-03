@@ -10,6 +10,11 @@ enum class Trigger {
     IdleHeartbeat,
 };
 
+inline bool monitorPauseRequiresRearm(qint64 monitorLoopGapMs, qint64 idleHeartbeatHangMs)
+{
+    return monitorLoopGapMs >= idleHeartbeatHangMs;
+}
+
 inline Trigger classify(
     bool phaseActive,
     qint64 activeMs,

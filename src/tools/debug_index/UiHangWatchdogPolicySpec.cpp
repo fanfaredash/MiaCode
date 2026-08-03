@@ -41,6 +41,13 @@ int main()
     ok &= require(policy::classify(true, 5000, true, 5000, 2000, 5000) == Trigger::IdleHeartbeat,
                   QStringLiteral("stale heartbeat has priority over active phase"), err);
 
+    ok &= require(!policy::monitorPauseRequiresRearm(4999, 5000),
+                  QStringLiteral("ordinary watchdog scheduling delay keeps current baseline"), err);
+    ok &= require(policy::monitorPauseRequiresRearm(5000, 5000),
+                  QStringLiteral("watchdog pause at idle threshold requires rearm"), err);
+    ok &= require(policy::monitorPauseRequiresRearm(120000, 5000),
+                  QStringLiteral("system sleep interval requires rearm"), err);
+
     ok &= require(!policy::shouldReport(
                       Trigger::IdleHeartbeat, 3, 10000,
                       Trigger::IdleHeartbeat, 3, 9000, 5000),

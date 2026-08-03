@@ -97,12 +97,33 @@ void watchdogLoop()
     policy::Trigger reportedTrigger = policy::Trigger::None;
     quint64 reportedGeneration = 0;
     qint64 reportedAtMs = 0;
+    qint64 previousMonitorWakeMs = steadyMs();
     while (!g_stop.load(std::memory_order_acquire)) {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         if (!g_enabled.load(std::memory_order_acquire)) {
             continue;
         }
         const qint64 now = steadyMs();
+        const qint64 monitorLoopGap = qMax<qint64>(0, now - previousMonitorWakeMs);
+        previousMonitorWakeMs = now;
+        if (policy::monitorPauseRequiresRearm(monitorLoopGap, kIdleHeartbeatHangMs)) {
+            // The monitor thread itself did not run, as happens across system
+            // suspend/hibernate. Neither heartbeat nor phase elapsed time can
+            // be attributed to a GUI stall, so restart both baselines.
+            if (g_lastHeartbeatMs.load(std::memory_order_acquire) > 0) {
+                g_lastHeartbeatMs.store(now, std::memory_order_release);
+            }
+            {
+                std::lock_guard<std::mutex> lock(g_phaseMutex);
+                if (g_phase.active) {
+                    g_phase.startMs = now;
+                }
+            }
+            reportedTrigger = policy::Trigger::None;
+            reportedGeneration = 0;
+            reportedAtMs = 0;
+            continue;
+        }
         const qint64 lastHeartbeat = g_lastHeartbeatMs.load(std::memory_order_acquire);
         const bool heartbeatArmed = lastHeartbeat > 0;
         const qint64 heartbeatAge = heartbeatArmed
