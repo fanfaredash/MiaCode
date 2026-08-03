@@ -50,6 +50,7 @@
         QAction* toggleTouchTrailAction_ = nullptr;
         QAction* renderModeNativeAction_ = nullptr;
         QAction* renderModeMaimuriDxAction_ = nullptr;
+        QAction* renderModeEraseByAreaAction_ = nullptr;
         QAction* editStaticTapOnSlideThresholdAction_ = nullptr;
         QAction* previewAudioSettingsAction_ = nullptr;
         QAction* previewVideoSettingsAction_ = nullptr;
@@ -724,6 +725,7 @@
     QAction*& toggleTouchTrailAction_ = ui_.toggleTouchTrailAction_;
     QAction*& renderModeNativeAction_ = ui_.renderModeNativeAction_;
     QAction*& renderModeMaimuriDxAction_ = ui_.renderModeMaimuriDxAction_;
+    QAction*& renderModeEraseByAreaAction_ = ui_.renderModeEraseByAreaAction_;
     QAction*& editStaticTapOnSlideThresholdAction_ = ui_.editStaticTapOnSlideThresholdAction_;
     QAction*& previewAudioSettingsAction_ = ui_.previewAudioSettingsAction_;
     QAction*& previewVideoSettingsAction_ = ui_.previewVideoSettingsAction_;

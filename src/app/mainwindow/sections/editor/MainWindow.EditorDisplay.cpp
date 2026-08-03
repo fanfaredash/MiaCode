@@ -560,10 +560,7 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
         );
     }
     const QString muriRenderMode = preview.value("muri_render_mode").toString().trimmed().toLower();
-    state_.muriRenderOptions_.renderMode =
-        muriRenderMode == QLatin1String("maimuri_dx_style")
-        ? RenderMode::MaimuriDxStyle
-        : RenderMode::Native;
+    state_.muriRenderOptions_.renderMode = muriRenderModeFromToken(muriRenderMode);
     if (preview.value("show_chart_review_slide_judge_overlay").isBool()) {
         state_.muriRenderOptions_.showChartReviewSlideJudgeOverlay =
             preview.value("show_chart_review_slide_judge_overlay")
@@ -849,12 +846,7 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("show_judge_markers", state_.showJudgeMarkers_);
     preview.insert("show_touch_trail", state_.showTouchTrail_);
     preview.insert("static_tap_on_slide_threshold_ms", state_.staticTapOnSlideThresholdMs_);
-    preview.insert(
-        "muri_render_mode",
-        state_.muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle
-            ? QStringLiteral("maimuri_dx_style")
-            : QStringLiteral("native")
-    );
+    preview.insert("muri_render_mode", muriRenderModeToken(state_.muriRenderOptions_.renderMode));
     preview.insert("show_chart_review_slide_judge_overlay", state_.muriRenderOptions_.showChartReviewSlideJudgeOverlay);
     preview.insert("show_chart_review_tap_judge_overlay", state_.muriRenderOptions_.showChartReviewTapJudgeOverlay);
     preview.insert("show_chart_review_break_judge_overlay", state_.muriRenderOptions_.showChartReviewBreakJudgeOverlay);

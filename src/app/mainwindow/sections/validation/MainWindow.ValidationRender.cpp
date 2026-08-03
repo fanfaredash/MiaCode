@@ -208,6 +208,14 @@ void MainWindow::ValidationSection::applyMuriRenderOptions()
             makeMenuSelectionCheckIcon(UiTheme::colors().accent, ui_.renderModeMaimuriDxAction_->isChecked())
         );
     }
+    if (ui_.renderModeEraseByAreaAction_ != nullptr) {
+        QSignalBlocker blocker(ui_.renderModeEraseByAreaAction_);
+        ui_.renderModeEraseByAreaAction_->setChecked(
+            state_.muriRenderOptions_.renderMode == RenderMode::EraseByArea);
+        ui_.renderModeEraseByAreaAction_->setIcon(
+            makeMenuSelectionCheckIcon(UiTheme::colors().accent, ui_.renderModeEraseByAreaAction_->isChecked())
+        );
+    }
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setShowSlideTracks(state_.muriRenderOptions_.showSlideTracks);
     }
@@ -231,11 +239,13 @@ void MainWindow::ValidationSection::setMuriRenderMode(RenderMode mode, bool pers
     if (owner_.hasActiveDifficulty() && !owner_.scheduleTimelineAnalysisRefreshFromLatestPreviewState()) {
         owner_.refreshTimelineMetadata();
     }
-    owner_.statusBar()->showMessage(
-        mode == RenderMode::MaimuriDxStyle
-            ? UiText::text(QStringLiteral("status.muri_render_mode_dx"))
-            : UiText::text(QStringLiteral("status.muri_render_mode_native"))
-    );
+    QString modeMessageKey = QStringLiteral("status.muri_render_mode_native");
+    if (mode == RenderMode::MaimuriDxStyle) {
+        modeMessageKey = QStringLiteral("status.muri_render_mode_dx");
+    } else if (mode == RenderMode::EraseByArea) {
+        modeMessageKey = QStringLiteral("status.muri_render_mode_erase_by_area");
+    }
+    owner_.statusBar()->showMessage(UiText::text(modeMessageKey));
 }
 
 const MuriAnalysisReport& MainWindow::alignedMuriAnalysisReportForPreview() const
@@ -272,3 +282,4 @@ void MainWindow::setMuriRenderMode(RenderMode mode, bool persistState)
 {
     validationSection_->setMuriRenderMode(mode, persistState);
 }
+

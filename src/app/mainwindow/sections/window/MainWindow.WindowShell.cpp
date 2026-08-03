@@ -490,9 +490,19 @@ void MainWindow::WindowSection::setShellPreviewRate(double rate)
 
 void MainWindow::WindowSection::toggleShellMuriRenderMode()
 {
-    const RenderMode nextMode = owner_.muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle
-        ? RenderMode::Native
-        : RenderMode::MaimuriDxStyle;
+    // Three exclusive preview modes, so the shell shortcut cycles rather than toggles.
+    RenderMode nextMode = RenderMode::MaimuriDxStyle;
+    switch (owner_.muriRenderOptions_.renderMode) {
+        case RenderMode::Native:
+            nextMode = RenderMode::EraseByArea;
+            break;
+        case RenderMode::EraseByArea:
+            nextMode = RenderMode::MaimuriDxStyle;
+            break;
+        case RenderMode::MaimuriDxStyle:
+            nextMode = RenderMode::Native;
+            break;
+    }
     owner_.setMuriRenderMode(nextMode);
 }
 
