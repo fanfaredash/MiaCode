@@ -663,9 +663,10 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/workspace/CompactPanelLayer.qml
     src/app/qml_ui/sidebar/WorkbenchSidebar.qml
     src/app/qml_ui/sidebar/ActivityBar.qml
-    src/app/qml_ui/sidebar/SidebarPlaceholderPage.qml
     src/app/qml_ui/sidebar/ChartFieldSidebar.qml
     src/app/qml_ui/sidebar/DifficultyList.qml
+    src/app/qml_ui/sidebar/ExportSidebarPage.qml
+    src/app/qml_ui/sidebar/ToolsSidebarPage.qml
     src/app/qml_ui/editor/EditorPane.qml
     src/app/qml_ui/editor/EditorTabBar.qml
     src/app/qml_ui/editor/SourceEditor.qml
@@ -675,7 +676,6 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/preview/PreviewPane.qml
     src/app/qml_ui/preview/PreviewTransport.qml
     src/app/qml_ui/preview/NoteStatistics.qml
-    src/app/qml_ui/settings/ViewSettingsPopup.qml
 )
 foreach(qml_file IN LISTS MIACODE_UI_QML_FILES)
     get_filename_component(qml_name "${qml_file}" NAME)
@@ -710,6 +710,8 @@ set(MIACODE_UI_ICON_FILES
     src/app/qml_ui/resources/icons/more.svg
     src/app/qml_ui/resources/icons/metadata.svg
     src/app/qml_ui/resources/icons/app-icon.svg
+    # Canonical MiaCode brand PNG (same asset as resources/app_icons.qrc).
+    resources/icons/app.png
 )
 foreach(icon_file IN LISTS MIACODE_UI_ICON_FILES)
     get_filename_component(icon_name "${icon_file}" NAME)
@@ -732,6 +734,10 @@ qt_add_qml_module(MiaCode
         src/app/qml_ui/QmlPreviewModel.h
         src/app/qml_ui/QmlWorkspaceSettings.cpp
         src/app/qml_ui/QmlWorkspaceSettings.h
+        src/app/qml_ui/QmlEditorPageHost.cpp
+        src/app/qml_ui/QmlEditorPageHost.h
+        src/app/qml_ui/QmlUiWindowChrome.cpp
+        src/app/qml_ui/QmlUiWindowChrome.h
         src/app/qml_ui/QmlUiBootstrap.cpp
         src/app/qml_ui/QmlUiBootstrap.h
     QML_FILES
@@ -869,6 +875,7 @@ if (WIN32)
         version      # Startup diagnostic file-version queries (MinGW)
         rstrtmgr     # Restart Manager process lookup for media tools (MinGW)
         opengl32     # QtAVPlayer D3D11/OpenGL texture interop (MinGW)
+        dwmapi       # v2 QmlUiWindowChrome DwmExtendFrameIntoClientArea
     )
     add_custom_command(TARGET MiaCode POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different

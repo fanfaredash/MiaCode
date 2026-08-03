@@ -12,6 +12,7 @@ Item {
     readonly property var previewSession: applicationContext.preview
     readonly property var commands: applicationContext.commands
     readonly property var shellController: applicationContext.shell
+    readonly property var pages: applicationContext.pages
     readonly property string documentTitle: documentSession.documentTitle
     readonly property bool compact: width < 720
     // 打开文件时的未保存决策。关闭应用走 v1 shell confirmClose 协议，
@@ -168,7 +169,7 @@ Item {
             sidebarActive: root.compact
                            ? state.compactPanel === "sidebar"
                            : state.sidebarVisible
-            bottomActive: state.bottomPanelVisible
+            bottomActive: state.bottomPanelVisible && root.shellController.bottomTabsVisible
             previewActive: root.compact
                            ? state.compactPanel === "preview"
                            : state.previewVisible
@@ -203,8 +204,9 @@ Item {
                 previewSession: root.previewSession
                 commands: root.commands
                 shellController: root.shellController
+                pages: root.pages
                 compact: root.compact
-                onSettingsRequested: settingsPopup.open()
+                onSettingsRequested: root.commands.openPreferences()
             }
 
             CompactPanelLayer {
@@ -215,8 +217,9 @@ Item {
                 previewSession: root.previewSession
                 commands: root.commands
                 shellController: root.shellController
+                pages: root.pages
                 compact: root.compact
-                onSettingsRequested: settingsPopup.open()
+                onSettingsRequested: root.commands.openPreferences()
                 onFullscreenRequested: {
                     state.compactPanel = ""
                     splitView.showFullscreenPreview()
@@ -235,15 +238,6 @@ Item {
             cursorLine: state.editorCursorLine
             cursorColumn: state.editorCursorColumn
         }
-    }
-
-    ViewSettingsPopup {
-        id: settingsPopup
-        parent: root
-        x: root.width - width - 10
-        y: 72
-        workbenchState: state
-        preferences: root.preferences
     }
 
     Shortcut {
@@ -340,7 +334,10 @@ Item {
         target: state
 
         function onDifficultyEditorActivationRequested(difficultyId) {
+            if (root.pages.overlayActive)
+                root.pages.leaveOverlayPage()
             root.commands.selectDifficulty(difficultyId)
+            state.activeSidebarView = "chart"
         }
     }
 }

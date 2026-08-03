@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Window
 import MiaCode.UI
 import "qrc:/quick_shell/qml" as Shell
 
@@ -14,9 +15,14 @@ Item {
     required property var previewSession
     required property var commands
     required property var shellController
+    required property var pages
     property bool compact: false
     readonly property bool canUndo: editorPane.canUndo
     readonly property bool canRedo: editorPane.canRedo
+    // User preference AND backend chart-bottom-tabs mode (export/metadata
+    // call setChartBottomTabsMode(false); latency/difficulty turn it back on).
+    readonly property bool bottomPanelEffectivelyVisible:
+        root.workbenchState.bottomPanelVisible && root.shellController.bottomTabsVisible
     signal settingsRequested()
 
     function undo() {
@@ -38,6 +44,8 @@ Item {
     }
 
     function showFullscreenPreview() {
+        if (root.shellController.exportPageActive)
+            return
         fullscreenPreview.visible = true
     }
 
@@ -54,8 +62,29 @@ Item {
     }
 
     function persistVerticalLayout() {
-        if (root.workbenchState.bottomPanelVisible)
+        if (root.bottomPanelEffectivelyVisible)
             root.preferences.bottomPanelHeight = Math.round(bottomPanel.height)
+    }
+
+    function fittedFullscreenWidth(hostWidth, hostHeight) {
+        const aspect = Math.max(1.0, root.shellController.previewCanvasAspectRatio || 1.0)
+        const safeWidth = Math.max(1, hostWidth)
+        const safeHeight = Math.max(1, hostHeight)
+        return Math.max(1, Math.min(safeWidth, safeHeight * aspect))
+    }
+
+    function fittedFullscreenHeight(hostWidth, hostHeight) {
+        const aspect = Math.max(1.0, root.shellController.previewCanvasAspectRatio || 1.0)
+        const frameWidth = fittedFullscreenWidth(hostWidth, hostHeight)
+        return Math.max(1, Math.min(hostHeight, frameWidth / aspect))
+    }
+
+    Connections {
+        target: root.shellController
+        function onShellStateChanged() {
+            if (root.shellController.exportPageActive && fullscreenPreview.visible)
+                fullscreenPreview.visible = false
+        }
     }
 
     SplitView {
@@ -73,6 +102,7 @@ Item {
             documentSession: root.documentSession
             preferences: root.preferences
             commands: root.commands
+            pages: root.pages
             compact: false
             visible: !root.compact
             SplitView.preferredWidth: root.workbenchState.sidebarVisible
@@ -93,26 +123,51 @@ Item {
                 onReleased: root.persistVerticalLayout()
             }
 
-            EditorPane {
-                id: editorPane
-                workbenchState: root.workbenchState
-                documentSession: root.documentSession
-                commands: root.commands
+            Item {
+                id: editorHost
                 SplitView.fillHeight: true
                 SplitView.minimumHeight: 180
+
+                EditorPane {
+                    id: editorPane
+                    anchors.fill: parent
+                    visible: !root.pages.overlayActive
+                    workbenchState: root.workbenchState
+                    documentSession: root.documentSession
+                    commands: root.commands
+                }
+
+                // v1 ExportLauncherPage / LatencyDetectionPage host. Sidebar stays
+                // QML; the full widget page reuses MainWindow switchTo* lifecycle.
+                WindowContainer {
+                    id: nativePageHost
+                    anchors.fill: parent
+                    visible: root.pages.overlayActive && root.pages.pageWindow !== null
+                    window: root.pages.pageWindow
+                    function syncNativeSize() {
+                        if (visible && width > 0 && height > 0)
+                            root.pages.syncPageSize(width, height)
+                    }
+                    onVisibleChanged: syncNativeSize()
+                    onWidthChanged: syncNativeSize()
+                    onHeightChanged: syncNativeSize()
+                    Component.onCompleted: syncNativeSize()
+                }
             }
 
             BottomPanel {
                 id: bottomPanel
-                visible: root.workbenchState.bottomPanelVisible
+                visible: root.bottomPanelEffectivelyVisible
                 workbenchState: root.workbenchState
                 documentSession: root.documentSession
                 preferences: root.preferences
                 commands: root.commands
                 shellController: root.shellController
-                SplitView.preferredHeight: root.preferences.bottomPanelHeight
-                SplitView.minimumHeight: 120
-                SplitView.maximumHeight: 340
+                SplitView.preferredHeight: root.bottomPanelEffectivelyVisible
+                                           ? root.preferences.bottomPanelHeight
+                                           : 0
+                SplitView.minimumHeight: root.bottomPanelEffectivelyVisible ? 120 : 0
+                SplitView.maximumHeight: root.bottomPanelEffectivelyVisible ? 340 : 0
                 onSyntaxIssueActivated: (line, column, endColumn) =>
                     editorPane.revealSyntaxIssue(line, column, endColumn)
             }
@@ -147,8 +202,8 @@ Item {
 
         Shell.QuickShellPreviewSurface {
             anchors.centerIn: parent
-            width: Math.min(parent.width, parent.height) * 0.94
-            height: width
+            width: root.fittedFullscreenWidth(parent.width * 0.94, parent.height * 0.94)
+            height: root.fittedFullscreenHeight(parent.width * 0.94, parent.height * 0.94)
             runtime: root.previewSession.runtime
             mediaHost: root.previewSession.mediaHost
             logger: root.shellController

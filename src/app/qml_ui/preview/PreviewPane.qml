@@ -9,15 +9,38 @@ Rectangle {
     required property var shellController
     signal fullscreenRequested()
 
+    // Mirror QuickShellMain: backend aspect is authoritative (export page
+    // widens the canvas; chart/latency stay 1:1). Prefer width/height >= 1.
+    readonly property real canvasAspectRatio: {
+        const ratio = root.shellController && root.shellController.previewCanvasAspectRatio !== undefined
+                      ? root.shellController.previewCanvasAspectRatio
+                      : 1.0
+        return Math.max(1.0, ratio)
+    }
+    readonly property bool exportPageActive: !!(root.shellController && root.shellController.exportPageActive)
+
     color: Theme.colors.background.workbench
     clip: true
+
+    function fittedFrameWidth(hostWidth, hostHeight) {
+        const safeWidth = Math.max(1, hostWidth)
+        const safeHeight = Math.max(1, hostHeight)
+        return Math.max(1, Math.min(safeWidth, safeHeight * root.canvasAspectRatio))
+    }
+
+    function fittedFrameHeight(hostWidth, hostHeight) {
+        const frameWidth = fittedFrameWidth(hostWidth, hostHeight)
+        return Math.max(1, Math.min(hostHeight, frameWidth / root.canvasAspectRatio))
+    }
 
     PanelHeader {
         id: heading
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        title: root.previewSession.muriMode ? qsTr("MURI模式") : qsTr("实时预览")
+        title: root.previewSession.muriMode ? qsTr("MURI模式")
+             : root.exportPageActive ? qsTr("导出预览")
+             : qsTr("实时预览")
     }
 
     Item {
@@ -30,8 +53,8 @@ Rectangle {
 
         Shell.QuickShellPreviewSurface {
             anchors.centerIn: parent
-            width: Math.max(0, Math.min(parent.width, parent.height) * 0.97)
-            height: width
+            width: root.fittedFrameWidth(parent.width * 0.97, parent.height * 0.97)
+            height: root.fittedFrameHeight(parent.width * 0.97, parent.height * 0.97)
             runtime: root.previewSession.runtime
             mediaHost: root.previewSession.mediaHost
             logger: root.shellController
@@ -46,6 +69,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: statistics.top
         previewSession: root.previewSession
+        shellController: root.shellController
         onFullscreenRequested: root.fullscreenRequested()
     }
 

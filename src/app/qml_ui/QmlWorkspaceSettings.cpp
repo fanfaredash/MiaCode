@@ -12,8 +12,6 @@ constexpr auto kBottomPanelHeight = "workbench/bottomPanelHeight";
 constexpr auto kPreviewVisible = "workbench/previewVisible";
 constexpr auto kPreviewWidthRatio = "workbench/previewWidthRatio";
 constexpr auto kFontSize = "appearance/fontSize";
-constexpr auto kTimelineLength = "timeline/length";
-constexpr auto kTimelineAutoCenter = "timeline/autoCenter";
 }
 
 QmlWorkspaceSettings::QmlWorkspaceSettings(QObject* parent)
@@ -37,8 +35,6 @@ QmlWorkspaceSettings::QmlWorkspaceSettings(QObject* parent)
     previewVisible_ = settings_.value(kPreviewVisible, true).toBool();
     previewWidthRatio_ = qBound(0.2, settings_.value(kPreviewWidthRatio, 0.5).toDouble(), 0.5);
     fontSize_ = qBound(12, settings_.value(kFontSize, 13).toInt(), 14);
-    timelineLength_ = qBound(1200, settings_.value(kTimelineLength, 2400).toInt(), 4800);
-    timelineAutoCenter_ = settings_.value(kTimelineAutoCenter, true).toBool();
 }
 
 bool QmlWorkspaceSettings::sidebarVisible() const { return sidebarVisible_; }
@@ -50,8 +46,6 @@ double QmlWorkspaceSettings::previewWidthRatio() const { return previewWidthRati
 QString QmlWorkspaceSettings::uiFontFamily() const { return uiFontFamily_; }
 QFont QmlWorkspaceSettings::codeFont() const { return codeFont_; }
 int QmlWorkspaceSettings::fontSize() const { return fontSize_; }
-int QmlWorkspaceSettings::timelineLength() const { return timelineLength_; }
-bool QmlWorkspaceSettings::timelineAutoCenter() const { return timelineAutoCenter_; }
 
 void QmlWorkspaceSettings::setSidebarVisible(bool value)
 {
@@ -111,34 +105,4 @@ void QmlWorkspaceSettings::setFontSize(int value)
     fontSize_ = value;
     settings_.setValue(kFontSize, value);
     emit fontSizeChanged();
-}
-
-void QmlWorkspaceSettings::setTimelineLength(int value)
-{
-    value = qBound(1200, value, 4800);
-    if (timelineLength_ == value) return;
-    timelineLength_ = value;
-    settings_.setValue(kTimelineLength, value);
-    emit timelineLengthChanged();
-}
-
-void QmlWorkspaceSettings::setTimelineAutoCenter(bool value)
-{
-    if (timelineAutoCenter_ == value) return;
-    timelineAutoCenter_ = value;
-    settings_.setValue(kTimelineAutoCenter, value);
-    emit timelineAutoCenterChanged();
-}
-
-void QmlWorkspaceSettings::resetToDefaults()
-{
-    setSidebarVisible(true);
-    setSidebarWidth(190);
-    setBottomPanelVisible(true);
-    setBottomPanelHeight(215);
-    setPreviewVisible(true);
-    setPreviewWidthRatio(0.5);
-    setFontSize(13);
-    setTimelineLength(2400);
-    setTimelineAutoCenter(true);
 }

@@ -8,6 +8,7 @@ Rectangle {
     required property var documentSession
     required property var preferences
     required property var commands
+    required property var pages
     property bool compact: false
     readonly property bool primarySidebarVisible: compact || workbenchState.sidebarVisible
 
@@ -29,11 +30,19 @@ Rectangle {
             return
         }
 
+        if (viewId === "chart" && root.pages.overlayActive)
+            root.pages.leaveOverlayPage()
+
         workbenchState.activeSidebarView = viewId
         if (!workbenchState.sidebarVisible) {
             workbenchState.sidebarVisible = true
             root.preferences.sidebarVisible = true
         }
+
+        if (viewId === "export")
+            root.pages.openExportPage()
+        else if (viewId === "tools")
+            root.pages.openLatencyPage()
     }
 
     ActivityBar {
@@ -62,29 +71,25 @@ Rectangle {
         anchors.bottom: parent.bottom
         visible: root.primarySidebarVisible
 
-        // 三个页面保持各自实例，功能切换后列表滚动位置和页面局部状态仍在。
-
         ChartFieldSidebar {
             anchors.fill: parent
             visible: root.workbenchState.activeSidebarView === "chart"
             workbenchState: root.workbenchState
             documentSession: root.documentSession
             commands: root.commands
+            pages: root.pages
         }
 
-        SidebarPlaceholderPage {
+        ExportSidebarPage {
             anchors.fill: parent
             visible: root.workbenchState.activeSidebarView === "export"
-            title: qsTr("导出")
-            description: qsTr("导出功能将在这里提供")
+            pages: root.pages
         }
 
-        SidebarPlaceholderPage {
+        ToolsSidebarPage {
             anchors.fill: parent
             visible: root.workbenchState.activeSidebarView === "tools"
-            title: qsTr("工具")
-            description: qsTr("谱面工具将在这里提供")
+            pages: root.pages
         }
     }
 }
-

@@ -6,7 +6,10 @@ Rectangle {
     id: root
 
     required property var previewSession
+    property var shellController
     signal fullscreenRequested()
+
+    readonly property bool exportPageActive: !!(root.shellController && root.shellController.exportPageActive)
 
     implicitHeight: 63
     color: Theme.colors.background.workbench
@@ -110,6 +113,7 @@ Rectangle {
         }
 
         IconButton {
+            visible: !root.exportPageActive
             iconSource: Qt.resolvedUrl("icons/fullscreen.svg")
             tooltip: qsTr("全屏预览")
             onClicked: root.fullscreenRequested()

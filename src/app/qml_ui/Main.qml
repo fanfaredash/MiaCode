@@ -12,7 +12,9 @@ ApplicationWindow {
     height: 720
     minimumWidth: 620
     minimumHeight: 480
-    visible: true
+    // Windows: bootstrap hides, attaches QmlUiWindowChrome, then show().
+    // Other platforms keep an immediate show.
+    visible: Qt.platform.os !== "windows"
     flags: Qt.platform.os === "windows"
            ? Qt.Window
              | Qt.CustomizeWindowHint

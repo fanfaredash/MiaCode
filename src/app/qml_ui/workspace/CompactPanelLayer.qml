@@ -10,6 +10,7 @@ Item {
     required property var previewSession
     required property var commands
     required property var shellController
+    required property var pages
     property bool compact: false
     signal fullscreenRequested()
     signal settingsRequested()
@@ -37,6 +38,7 @@ Item {
         documentSession: root.documentSession
         preferences: root.preferences
         commands: root.commands
+        pages: root.pages
         compact: true
         onSettingsRequested: root.settingsRequested()
     }

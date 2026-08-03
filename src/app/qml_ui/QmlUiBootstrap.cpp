@@ -1,6 +1,7 @@
 #include "QmlUiBootstrap.h"
 
 #include "QmlApplicationContext.h"
+#include "QmlUiWindowChrome.h"
 #include "MainEntrypoints.h"
 #include "mainwindow/MainWindow.h"
 #include "QuickShellController.h"
@@ -58,6 +59,7 @@ QmlUiBootstrap::QmlUiBootstrap(const QIcon& appIcon, QObject* parent)
 QmlUiBootstrap::~QmlUiBootstrap()
 {
     rootWindow_ = nullptr;
+    windowChrome_.reset();
     engine_.reset();
     applicationContext_.reset();
     controller_.reset();
@@ -75,8 +77,11 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
     backend_->setVisible(false);
     appendQmlUiRuntimeLog(QStringLiteral("backend_ready"));
 
-    // v2 shell has no WindowContainer rehost. QuickShellController already
-    // null-checks surfaceHost_ for every bridge API used by preview/timeline.
+    // v2 chrome stays pure QML. Export/Latency editor overlays may use a
+    // local WindowContainer via QmlEditorPageHost; the main shell still
+    // avoids NativeSurfaceHost rehost of the whole MainWindow.
+    // QuickShellController already null-checks surfaceHost_ for every
+    // bridge API used by preview/timeline.
     controller_ = std::make_unique<QuickShellController>(
         backend_.get(), backend_.get(), nullptr, this);
     QObject::connect(
@@ -150,7 +155,18 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         }
         miacode::app::entry::bindHighPerformanceQuickGraphicsDevice(
             window, QStringLiteral("qml_ui_root_window"), /*preferVideoShareDevice=*/false);
+
+#ifdef Q_OS_WIN
+        // v2-only client-area caption (Mashiro WindowChrome contract). Hide
+        // first so the native title bar never flashes, attach, then show.
+        // QuickShellBootstrap (v1) never constructs QmlUiWindowChrome.
+        window->setVisible(false);
+        windowChrome_ = std::make_unique<QmlUiWindowChrome>();
+        windowChrome_->attach(window);
+        appendQmlUiRuntimeLog(QStringLiteral("window_chrome_attached"));
+#endif
         UiNativeWindowTheme::applyToWindow(window);
+        window->show();
     }
 
     if (!startupOpenTarget.trimmed().isEmpty() && backend_ != nullptr) {
@@ -202,6 +218,7 @@ void QmlUiBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QString& so
     appendQmlUiRuntimeLog(QStringLiteral("shutdown_destroy"), source);
 
     rootWindow_ = nullptr;
+    windowChrome_.reset();
     engine_.reset();
     applicationContext_.reset();
     controller_.reset();

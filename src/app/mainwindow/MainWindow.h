@@ -45,6 +45,7 @@ class QDockWidget;
 class QEvent;
 class PreviewStageMediaHost;
 class QmlDocumentModel;
+class QmlEditorPageHost;
 class QmlUiBootstrap;
 class QFrame;
 class QGraphicsOpacityEffect;
@@ -136,6 +137,8 @@ class MainWindow : public QMainWindow,
     // Pure-QML (v2) document boundary reaches private document/editor state
     // while the visual chrome stays outside MainWindow.
     friend class QmlDocumentModel;
+    friend class QmlCommandService;
+    friend class QmlEditorPageHost;
     friend class QmlUiBootstrap;
 
 public:

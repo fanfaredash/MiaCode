@@ -3,13 +3,14 @@
 #include <QObject>
 #include <QUrl>
 
+class MainWindow;
 class QmlDocumentModel;
 
 class QmlCommandService final : public QObject
 {
     Q_OBJECT
 public:
-    explicit QmlCommandService(QmlDocumentModel& document, QObject* parent = nullptr);
+    QmlCommandService(MainWindow& backend, QmlDocumentModel& document, QObject* parent = nullptr);
 
     Q_INVOKABLE bool openDocument(const QUrl& fileUrl);
     Q_INVOKABLE bool saveDocument();
@@ -21,7 +22,10 @@ public:
     Q_INVOKABLE bool removeDifficulty(int id);
     Q_INVOKABLE void enableUnifiedDesigner(const QString& canonicalName);
     Q_INVOKABLE void disableUnifiedDesigner();
+    // Reuses MainWindow::onPreferences() — same dialog as v1 Tools/Preferences.
+    Q_INVOKABLE void openPreferences();
 
 private:
+    MainWindow* backend_ = nullptr;
     QmlDocumentModel* document_ = nullptr;
 };

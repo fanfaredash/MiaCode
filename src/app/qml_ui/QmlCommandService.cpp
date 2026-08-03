@@ -1,9 +1,15 @@
 #include "QmlCommandService.h"
 
 #include "QmlDocumentModel.h"
+#include "mainwindow/MainWindow.h"
 
-QmlCommandService::QmlCommandService(QmlDocumentModel& document, QObject* parent)
-    : QObject(parent), document_(&document)
+QmlCommandService::QmlCommandService(
+    MainWindow& backend,
+    QmlDocumentModel& document,
+    QObject* parent)
+    : QObject(parent)
+    , backend_(&backend)
+    , document_(&document)
 {
 }
 
@@ -17,3 +23,10 @@ bool QmlCommandService::addDifficulty(int id) { return document_->addDifficulty(
 bool QmlCommandService::removeDifficulty(int id) { return document_->removeDifficulty(id); }
 void QmlCommandService::enableUnifiedDesigner(const QString& name) { document_->enableUnifiedDesigner(name); }
 void QmlCommandService::disableUnifiedDesigner() { document_->disableUnifiedDesigner(); }
+
+void QmlCommandService::openPreferences()
+{
+    if (backend_ != nullptr) {
+        backend_->onPreferences();
+    }
+}

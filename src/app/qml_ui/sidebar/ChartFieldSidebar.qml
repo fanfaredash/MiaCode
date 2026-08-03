@@ -8,6 +8,7 @@ Rectangle {
     required property var workbenchState
     required property var documentSession
     required property var commands
+    property var pages
 
     color: Theme.colors.background.workbench
     clip: true
@@ -41,7 +42,12 @@ Rectangle {
                 width: parent.width
                 height: 30
                 hoverEnabled: true
-                onClicked: root.workbenchState.openMetadataEditor()
+                onClicked: {
+                    if (root.pages && root.pages.overlayActive)
+                        root.pages.leaveOverlayPage()
+                    root.workbenchState.activeSidebarView = "chart"
+                    root.workbenchState.openMetadataEditor()
+                }
                 contentItem: Text {
                     leftPadding: 20
                     text: qsTr("元数据")

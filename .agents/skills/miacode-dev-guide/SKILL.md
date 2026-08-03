@@ -31,7 +31,9 @@ same change.
 - Main window orchestration: `src/app/mainwindow/` (+ `sections/<feature>/`)
 - QuickShell beta shell + controller bridge: `src/app/quick_shell/` (default **v1** UI)
 - Pure-QML workbench (**v2**, opt-in `--ui=v2` / `MIACODE_UI_SKIN=v2`): `src/app/qml_ui/`
-  (phase-1 checklist: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`)
+  (phase-1 checklist: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`). Export/Latency embed via
+  `QmlEditorPageHost`; workspace mode follows `QuickShellController` (same as v1). Windows
+  client-area title bar: `QmlUiWindowChrome` (v2 bootstrap only).
 - Document model: `src/core/chart/document/` (`SimaiDocument`, `SimaiTimingMetadata`)
 - Parser + validation: `src/core/chart/parser/` (`SimaiNativeParser*` — include-split TU)
 - Chart transforms / normalization: `src/core/chart/transform/`

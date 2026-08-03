@@ -1,5 +1,7 @@
 #pragma once
 
+#include "QmlUiWindowChrome.h"
+
 #include <memory>
 
 #include <QIcon>
@@ -36,6 +38,8 @@ private:
     std::unique_ptr<QuickShellController> controller_;
     std::unique_ptr<QmlApplicationContext> applicationContext_;
     std::unique_ptr<QQmlApplicationEngine> engine_;
+    // Owns the native-event filter; must outlive the root window.
+    std::unique_ptr<QmlUiWindowChrome> windowChrome_;
     QPointer<QQuickWindow> rootWindow_;
     bool acceptedRootWindowShutdownStarted_ = false;
     bool acceptedRootWindowDestroyStarted_ = false;
