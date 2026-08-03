@@ -145,7 +145,7 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
             }
             appendConcentricGuide(
                 &sprites,
-                selectTapNoteGuideImage(state.skin, marker),
+                selectTapNoteGuideImage(state.skin, marker, state.render.useMineSkin),
                 approach.distance,
                 kNoteGuideSourceRadius,
                 laneRotationDegrees(marker.lane),
@@ -169,7 +169,7 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
             }
             appendConcentricGuide(
                 &sprites,
-                selectTapNoteGuideImage(state.skin, marker),
+                selectTapNoteGuideImage(state.skin, marker, state.render.useMineSkin),
                 approach.distance,
                 kNoteGuideSourceRadius,
                 laneRotationDegrees(marker.lane),
@@ -182,7 +182,7 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
                 const QPointF unit = laneUnitVector(marker.lane);
                 appendGuideSprite(
                     &sprites,
-                    selectHoldEndNoteGuideImage(state.skin, marker),
+                    selectHoldEndNoteGuideImage(state.skin, marker, state.render.useMineSkin),
                     QPointF(
                         kLogicalCanvasCenter + unit.x() * tailApproach.distance,
                         kLogicalCanvasCenter + unit.y() * tailApproach.distance

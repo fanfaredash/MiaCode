@@ -31,6 +31,12 @@ Supported contribution points in v1:
 - `contributes.menus["menubar/beforeHelp"]`
 - `contributes.languages`
 
+Checkable extension menu commands use the same canonical selection indicator as
+the built-in Preview Mode actions. `commands.setChecked` must update both the
+QAction checked state and `UiTheme::menuSelectionCheckIcon(checked)`; relying on
+the platform-default QAction checkmark is not conformant. See
+`docs/specs/ui/UI_MENU_SELECTION_INDICATOR_SPEC_ZH.md`.
+
 ## API Status
 
 The public registry uses exactly three statuses:
@@ -157,6 +163,7 @@ Core:
 - Open Bridge discovery/calls: `open.list`, `open.describe`, `open.call`, `open.forbiddenTargets`, `open.describeForbiddenTarget`
 - SDK convenience wrappers over Open Bridge/host methods: `app.openAboutDialog`, `editor.undo`, `editor.redo`, `editor.cut`, `editor.copy`, `editor.paste`, `editor.selectAll`, `ui.registerPetOverlay`
 - internal command discovery with `commands.getInternalCommands` and allowlisted `commands.executeInternal`
+- checked menu-command state controlled by the owning extension through `commands.setChecked`
 
 Document/editor:
 
@@ -187,6 +194,7 @@ Validation/timeline/preview/UI:
 - timeline markers, bands, vertical lines, and clear
 - preview playback controls and speed
 - preview render-state query
+- preview mine-note skin selection (`setMineSkinEnabled`), without changing mine semantics
 - preview text overlays: add/update/remove/clear/list/render/hit-test
 - controlled pet overlays with extension-local resources
 - bottom-tab extension views

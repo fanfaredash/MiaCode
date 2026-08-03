@@ -17,6 +17,7 @@
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "core/scene/PreviewProgressStatsCache.h"
+#include "extensions/ExtensionManager.h"
 #include "tools/export_page/ExportLauncherPage.h"
 #include "tools/latency/LatencyDetectionPage.h"
 #include "tools/net/NetBatchUploadDialog.h"
@@ -1155,6 +1156,9 @@ void MainWindow::WindowSection::applyUiTheme()
         owner_.previewStatsCard_->setStyleSheet(QString());
     }
     owner_.updateEditorValidationSummary();
+    if (owner_.extensionManager_ != nullptr) {
+        owner_.extensionManager_->refreshMenuSelectionIcons();
+    }
     owner_.updatePauseButtonAppearance();
     owner_.updatePreviewFullscreenButtonAppearance();
     owner_.update();

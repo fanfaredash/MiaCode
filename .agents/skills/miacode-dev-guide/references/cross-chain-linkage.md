@@ -28,10 +28,14 @@ Implications:
   above PLUS suppression: parser (`SimaiNativeParser.{cpp,TouchTap,Slide}`) ↔ mirror
   (`TimelineQuickModel`) ↔ `ChartBatchTransform` (must accept+emit it, not `return false`) ↔
   `ChartNormalization` round-trip ↔ skin selectors (`PreviewSkinSelectors` + the touch/touch-hold
-  layers, mine OVERRIDES break/each) ↔ timeline icons ↔ **SFX/Muri suppression** (`PreviewSfxTimeline`
-  `buildTimeline`, `MuriAnalyzer` pad windows, `MuriRuntimeModelBuilder` judgeable notes) ↔ specs.
+  layers, mine OVERRIDES break/each) ↔ timeline icons ↔ type-based SFX (`PreviewSfxTimeline`
+  `buildTimeline`) plus **Muri suppression** (`MuriAnalyzer` pad windows,
+  `MuriRuntimeModelBuilder` judgeable notes) ↔ specs.
   Mines deliberately DO count in `PreviewProgressStatsCache` (product decision). Skin art =
-  `<base>_mine.png` (skinSTD only; skinDX deferred).
+  `<base>_mine.png`; `PreviewRenderState::useMineSkin` is presentation-only and may be controlled
+  through the bundled extension, so every preview selector/layer must fall back to normal art when
+  it is false without clearing the mine flags. In that normal-art mode, EX mine heads must also
+  restore the normal EX overlay (`3xm` renders like `3x`, not `3`).
 - Negative HS (`<HS*-N>`, ON by default — `SimaiNativeParser::g_allowNegativeHs` defaults true;
   opt-out `MIACODE_PREVIEW_REJECT_NEGATIVE_HS` at boot sets it false): sign lives in `PreviewTapTiming.directionSign`
   (magnitude/sign split in `previewTapTimingForEffectiveFlowSpeed`); `sampleTapApproach` reverse

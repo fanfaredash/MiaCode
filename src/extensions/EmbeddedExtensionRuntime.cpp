@@ -85,6 +85,14 @@ public:
         return hostCall(QStringLiteral("commands/getCommands"));
     }
 
+    Q_INVOKABLE QJSValue setChecked(const QString& command, bool checked)
+    {
+        return hostCall(QStringLiteral("commands/setChecked"), QJsonObject{
+            {QStringLiteral("command"), command},
+            {QStringLiteral("checked"), checked},
+        });
+    }
+
     Q_INVOKABLE QJSValue getInternalCommands()
     {
         return hostCall(QStringLiteral("commands/getInternalCommands"));
@@ -681,6 +689,20 @@ public:
     Q_INVOKABLE QJSValue setSpeed(double value)
     {
         return hostCall(QStringLiteral("preview/setSpeed"), QJsonObject{{QStringLiteral("value"), value}});
+    }
+
+    Q_INVOKABLE QJSValue setMineSkinEnabled(bool enabled)
+    {
+        return hostCall(
+            QStringLiteral("preview/setMineSkinEnabled"),
+            QJsonObject{{QStringLiteral("enabled"), enabled}});
+    }
+
+    Q_INVOKABLE QJSValue setMineSfxEnabled(bool enabled)
+    {
+        return hostCall(
+            QStringLiteral("preview/setMineSfxEnabled"),
+            QJsonObject{{QStringLiteral("enabled"), enabled}});
     }
 
     Q_INVOKABLE QJSValue addOverlay(const QJSValue& overlay)

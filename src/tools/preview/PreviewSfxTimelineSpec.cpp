@@ -674,18 +674,17 @@ bool verifyTouchholdVoiceLatestWinsOwnership(QTextStream& err)
     return true;
 }
 
-bool verifyMineNotesEmitNoSfx(QTextStream& err)
+bool verifyMineNotesEmitTypeSfx(QTextStream& err)
 {
-    // Mine notes (simai `m`) are dodged by autoplay, so buildTimeline must emit
-    // ZERO events for them — no answer/judge/break/ex/touch/touchhold. A normal
-    // tap alongside confirms the suppression is mine-specific, not global.
+    // Mine judgement remains an autoplay dodge, but its chart timing stays
+    // audible through the same type-based SFX used by ordinary notes.
     QVector<TimelineNoteMarker> markers;
 
     TimelineNoteMarker mineTap;
     mineTap.type = QStringLiteral("tap");
     mineTap.second = 1.0;
     mineTap.isMine = true;
-    mineTap.isBreak = true;  // even a break mine stays silent
+    mineTap.isBreak = true;
     markers.append(mineTap);
 
     TimelineNoteMarker mineTouchHold;
@@ -711,22 +710,53 @@ bool verifyMineNotesEmitNoSfx(QTextStream& err)
     QVector<TouchholdSpan> spans;
     miacode::preview_sfx_timeline::buildTimeline(markers, 1.0, PreviewTimingSettings(), &events, &spans);
 
-    if (!require(spans.isEmpty(), QStringLiteral("[mine] mine notes emit no touch-hold spans"), err)) {
+    if (!require(spans.size() == 1, QStringLiteral("[mine] touch-hold mine emits its sustain span"), err)) {
         return false;
     }
     int answerCount = 0;
+    int breakCount = 0;
+    int touchCount = 0;
+    int slideCount = 0;
+    int touchholdStartCount = 0;
+    int touchholdStopCount = 0;
     for (const Event& event : events) {
         if (event.kind == QLatin1String("answer")) {
             ++answerCount;
+        } else if (event.kind == QLatin1String("break")) {
+            ++breakCount;
+        } else if (event.kind == QLatin1String("touch")) {
+            ++touchCount;
+        } else if (event.kind == QLatin1String("slide")) {
+            ++slideCount;
+        } else if (event.kind == QLatin1String("touchhold_start")) {
+            ++touchholdStartCount;
+        } else if (event.kind == QLatin1String("touchhold_stop")) {
+            ++touchholdStopCount;
         }
     }
-    // The lone normal tap contributes exactly one answer; the three mines none.
-    if (!require(answerCount == 1,
-                 QStringLiteral("[mine] only the non-mine tap emits an answer event (mines suppressed)"),
-                 err)) {
+    if (!require(answerCount == 5, QStringLiteral("[mine] all mine heads/tails emit answer timing"), err)
+        && require(breakCount == 1, QStringLiteral("[mine] break mine emits break SFX"), err)
+        && require(touchCount == 1, QStringLiteral("[mine] touch-hold mine emits touch SFX"), err)
+        && require(slideCount == 1, QStringLiteral("[mine] slide mine emits slide SFX"), err)
+        && require(touchholdStartCount == 1 && touchholdStopCount == 1,
+                   QStringLiteral("[mine] touch-hold mine starts and stops sustain SFX"), err)) {
         return false;
     }
-    return true;
+
+    miacode::preview_sfx_timeline::buildTimeline(
+        markers, 1.0, PreviewTimingSettings(), &events, &spans, false);
+    if (!require(spans.isEmpty(), QStringLiteral("[mine switch] disabled mine touch-hold has no sustain span"), err)) {
+        return false;
+    }
+    int normalAnswerCount = 0;
+    int normalJudgeCount = 0;
+    for (const Event& event : events) {
+        normalAnswerCount += event.kind == QLatin1String("answer") ? 1 : 0;
+        normalJudgeCount += event.kind == QLatin1String("judge") ? 1 : 0;
+    }
+    return require(events.size() == 2, QStringLiteral("[mine switch] only the normal tap remains audible"), err)
+        && require(normalAnswerCount == 1 && normalJudgeCount == 1,
+                   QStringLiteral("[mine switch] ordinary note SFX remain unchanged"), err);
 }
 
 }  // namespace
@@ -770,7 +800,7 @@ int main(int argc, char* argv[])
     if (!verifyTouchholdVoiceLatestWinsOwnership(err)) {
         return 1;
     }
-    if (!verifyMineNotesEmitNoSfx(err)) {
+    if (!verifyMineNotesEmitTypeSfx(err)) {
         return 1;
     }
 

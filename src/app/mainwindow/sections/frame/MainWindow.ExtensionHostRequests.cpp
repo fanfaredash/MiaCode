@@ -2606,6 +2606,8 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
                 {QStringLiteral("canvasHeight"), canvasSize.height()},
                 {QStringLiteral("layoutSquareScale"), previewLayoutSquareScale_},
                 {QStringLiteral("skinVariant"), static_cast<int>(previewSkinVariant_)},
+                {QStringLiteral("mineSkinEnabled"), previewCanvas_ == nullptr || previewCanvas_->useMineSkin()},
+                {QStringLiteral("mineSfxEnabled"), previewAudioSettings_.mineSfxEnabled},
                 {QStringLiteral("outlineVariant"), static_cast<int>(previewOutlineVariant_)},
                 {QStringLiteral("backgroundScaleMode"), static_cast<int>(previewBackgroundScaleMode_)},
                 {QStringLiteral("tapFlowSpeed"), previewTapFlowSpeed_},
@@ -2622,6 +2624,21 @@ QJsonObject MainWindow::handleExtensionHostRequest(const QString& method, const 
         if (method == QStringLiteral("preview/setSpeed")) {
             setShellPreviewRate(params.value(QStringLiteral("value")).toDouble(previewPlaybackRate_));
             return QJsonObject{{QStringLiteral("ok"), true}};
+        }
+        if (method == QStringLiteral("preview/setMineSkinEnabled")) {
+            const bool enabled = params.value(QStringLiteral("enabled")).toBool(true);
+            if (previewCanvas_ != nullptr) {
+                previewCanvas_->setUseMineSkin(enabled);
+            }
+            return okValue(QJsonObject{{QStringLiteral("enabled"), enabled}});
+        }
+        if (method == QStringLiteral("preview/setMineSfxEnabled")) {
+            const bool enabled = params.value(QStringLiteral("enabled")).toBool(true);
+            previewAudioSettings_.mineSfxEnabled = enabled;
+            if (previewSfxRuntime_ != nullptr) {
+                previewSfxRuntime_->applyLevels(previewAudioSettings_);
+            }
+            return okValue(QJsonObject{{QStringLiteral("enabled"), enabled}});
         }
         if (method == QStringLiteral("preview/addOverlay")) {
             QJsonObject overlay = registeredContribution(params, method);

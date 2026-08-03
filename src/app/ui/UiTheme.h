@@ -92,6 +92,9 @@ void applyApplicationTheme(QApplication& app);
 QString applicationStyleSheet();
 QString scrollBarStyleSheet();
 void styleRoundedMenu(QMenu& menu);
+// Canonical checked-state indicator for QAction-backed menus. Pass visible=false
+// to preserve the icon slot without painting the checkmark.
+QIcon menuSelectionCheckIcon(bool visible = true);
 QPalette timelineViewportPalette();
 QString timelineZoomButtonStyleSheet();
 QIcon timelineZoomButtonIcon(const QColor& strokeColor, const QString& sign);

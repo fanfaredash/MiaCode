@@ -60,9 +60,9 @@ struct TimelineNoteMarker {
     bool isEx = false;
     bool isFirework = false;
     // Mine note (simai `m` suffix). A mine is an "avoid" note: MiaCode is an
-    // autoplay simulator, so a mine is always perfectly dodged — it is
-    // rendered with a distinct hollow sprite but emits NO SFX, NO judge
-    // effect, and is skipped by Muri analysis. `isMine` covers
+    // autoplay simulator, so a mine is always perfectly dodged for judge
+    // effects and Muri analysis, while preview/export still play its type SFX.
+    // `isMine` covers
     // tap/hold/touch/touch_hold; slides use trackMine below.
     bool isMine = false;
     bool onSlide = false;

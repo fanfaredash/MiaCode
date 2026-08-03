@@ -946,6 +946,20 @@ bool PreviewRuntime::showChartInfoHud() const
     return frameState_.render.showChartInfoHud;
 }
 
+void PreviewRuntime::setUseMineSkin(bool enabled)
+{
+    if (frameState_.render.useMineSkin == enabled) {
+        return;
+    }
+    frameState_.render.useMineSkin = enabled;
+    update();
+}
+
+bool PreviewRuntime::useMineSkin() const
+{
+    return frameState_.render.useMineSkin;
+}
+
 miacode::preview_gameplay::CenterDisplayMode PreviewRuntime::centerDisplayMode() const
 {
     return frameState_.render.centerDisplayMode;

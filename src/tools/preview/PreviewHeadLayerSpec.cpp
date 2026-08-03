@@ -10,6 +10,7 @@
 #include "core/scene/PreviewPreparedSceneCache.h"
 #include "core/scene/PreviewSceneConstants.h"
 #include "core/scene/PreviewSceneMath.h"
+#include "core/scene/PreviewSkinSelectors.h"
 #include "core/chart/parser/SimaiNativeParser.h"
 
 namespace {
@@ -671,6 +672,86 @@ bool verifyNegativeHsReverseFlow(QTextStream& err)
     return true;
 }
 
+bool verifyMineSkinCanFallBackToNormalArt(QTextStream& err)
+{
+    miacode::preview::scene::PreviewSkinAssets skin;
+    skin.tapImage = solidImage(64, 64);
+    skin.tapMineImage = solidImage(65, 65);
+    skin.slideTrackImage = solidImage(32, 32);
+    skin.slideTrackMineImage = solidImage(33, 33);
+    skin.noteGuideNormalImage = solidImage(48, 48);
+    skin.noteGuideMineImage = solidImage(49, 49);
+
+    TimelineNoteMarker tap;
+    tap.type = QStringLiteral("tap");
+    tap.isMine = true;
+    if (!require(
+            miacode::preview::scene::selectTapImage(skin, tap, true) == &skin.tapMineImage,
+            QStringLiteral("enabled mine skin selects dedicated tap art"),
+            err)
+        || !require(
+            miacode::preview::scene::selectTapImage(skin, tap, false) == &skin.tapImage,
+            QStringLiteral("disabled mine skin selects normal tap art"),
+            err)
+        || !require(
+            miacode::preview::scene::selectTapNoteGuideImage(skin, tap, false) == &skin.noteGuideNormalImage,
+            QStringLiteral("disabled mine skin selects normal approach guide"),
+            err)) {
+        return false;
+    }
+
+    TimelineNoteMarker slide;
+    slide.type = QStringLiteral("slide");
+    slide.trackMine = true;
+    return require(
+               miacode::preview::scene::selectSlideTrackImage(skin, slide, true) == &skin.slideTrackMineImage,
+               QStringLiteral("enabled mine skin selects dedicated slide-track art"),
+               err)
+        && require(
+               miacode::preview::scene::selectSlideTrackImage(skin, slide, false) == &skin.slideTrackImage,
+               QStringLiteral("disabled mine skin selects normal slide-track art"),
+               err);
+}
+
+bool verifyNormalMineModeRestoresExOverlay(QTextStream& err)
+{
+    const auto verifyMaterial = [&](bool starMaterial, QTextStream& stream) {
+        PreviewFrameState state;
+        state.playheadSeconds = 0.5;
+        state.render.useMineSkin = false;
+        state.skin.tapImage = solidImage(64, 64);
+        state.skin.tapMineImage = solidImage(65, 65);
+        state.skin.tapExImage = solidImage(64, 64);
+        state.skin.starImage = solidImage(70, 70);
+        state.skin.starMineImage = solidImage(71, 71);
+        state.skin.starExImage = solidImage(70, 70);
+
+        TimelineNoteMarker marker;
+        marker.type = QStringLiteral("tap");
+        marker.lane = 3;
+        marker.second = 1.0;
+        marker.isMine = true;
+        marker.isEx = true;
+        marker.tapUsesStarMaterial = starMaterial;
+        state.noteMarkers.append(marker);
+
+        const PreviewHeadLayerState layer = buildFallbackHeadLayerState(state);
+        const QImage* normalBase = starMaterial ? &state.skin.starImage : &state.skin.tapImage;
+        const QImage* mineBase = starMaterial ? &state.skin.starMineImage : &state.skin.tapMineImage;
+        return require(layer.sprites.size() == 1,
+                       starMaterial ? QStringLiteral("normal-mode mine EX star renders")
+                                    : QStringLiteral("normal-mode mine EX tap renders"),
+                       stream)
+            && require(layer.sprites.constFirst().image != normalBase
+                           && layer.sprites.constFirst().image != mineBase,
+                       starMaterial ? QStringLiteral("normal-mode mine star keeps EX overlay")
+                                    : QStringLiteral("normal-mode mine tap keeps EX overlay"),
+                       stream);
+    };
+
+    return verifyMaterial(false, err) && verifyMaterial(true, err);
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -704,6 +785,12 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyNegativeHsReverseFlow(err)) {
+        return 1;
+    }
+    if (!verifyMineSkinCanFallBackToNormalArt(err)) {
+        return 1;
+    }
+    if (!verifyNormalMineModeRestoresExOverlay(err)) {
         return 1;
     }
 

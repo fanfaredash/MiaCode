@@ -194,6 +194,8 @@ QVector<ExtensionOpenBridgeObject> extensionOpenBridgeObjects()
                    method(QStringLiteral("stop"), QStringLiteral("preview/stop"), QStringLiteral("preview.control"), QStringLiteral("Stop preview playback.")),
                    method(QStringLiteral("seek"), QStringLiteral("preview/seek"), QStringLiteral("preview.control"), QStringLiteral("Seek preview playback.")),
                    method(QStringLiteral("setSpeed"), QStringLiteral("preview/setSpeed"), QStringLiteral("preview.control"), QStringLiteral("Set preview speed.")),
+                   method(QStringLiteral("setMineSkinEnabled"), QStringLiteral("preview/setMineSkinEnabled"), QStringLiteral("preview.control"), QStringLiteral("Choose dedicated or normal sprites for mine notes.")),
+                   method(QStringLiteral("setMineSfxEnabled"), QStringLiteral("preview/setMineSfxEnabled"), QStringLiteral("preview.control"), QStringLiteral("Enable or mute type-based SFX for mine notes.")),
                    method(QStringLiteral("getState"), QStringLiteral("preview/getState"), QStringLiteral("preview.read"), QStringLiteral("Read preview state.")),
                    method(QStringLiteral("getRenderState"), QStringLiteral("preview/getRenderState"), QStringLiteral("preview.read"), QStringLiteral("Read preview canvas/render settings.")),
                }),

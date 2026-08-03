@@ -1,5 +1,7 @@
 #include "ExtensionManager.h"
 
+#include <utility>
+
 #include <QAction>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -28,6 +30,7 @@
 #include <QUrl>
 
 #include "ExtensionOpenBridge.h"
+#include "UiTheme.h"
 #include "UiText.h"
 
 namespace miacode::extensions {
@@ -652,6 +655,7 @@ QVector<QJsonObject> extensionApiRegistry()
         apiDescriptor(QStringLiteral("commands.describe"), QStringLiteral("commands/describe"), QStringLiteral("commands.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Describe an extension command.")),
         apiDescriptor(QStringLiteral("commands.register"), QStringLiteral("commands/register"), QString(), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Register a command callback from the owning extension.")),
         apiDescriptor(QStringLiteral("commands.execute"), QStringLiteral("commands/execute"), QStringLiteral("commands.execute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Execute an extension command.")),
+        apiDescriptor(QStringLiteral("commands.setChecked"), QStringLiteral("commands/setChecked"), QStringLiteral("commands.execute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Set the checked state of an extension's own menu command.")),
         apiDescriptor(QStringLiteral("commands.executeInternal"), QStringLiteral("commands/executeInternal"), QStringLiteral("commands.execute"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Execute an allowlisted MiaCode internal command.")),
         apiDescriptor(QStringLiteral("commands.getInternalCommands"), QStringLiteral("commands/getInternalCommands"), QStringLiteral("commands.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("List allowlisted MiaCode internal commands.")),
 
@@ -739,6 +743,8 @@ QVector<QJsonObject> extensionApiRegistry()
         apiDescriptor(QStringLiteral("preview.stop"), QStringLiteral("preview/stop"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Stop preview.")),
         apiDescriptor(QStringLiteral("preview.seek"), QStringLiteral("preview/seek"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Seek preview.")),
         apiDescriptor(QStringLiteral("preview.setSpeed"), QStringLiteral("preview/setSpeed"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Set preview speed.")),
+        apiDescriptor(QStringLiteral("preview.setMineSkinEnabled"), QStringLiteral("preview/setMineSkinEnabled"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Choose dedicated or normal sprites for mine notes.")),
+        apiDescriptor(QStringLiteral("preview.setMineSfxEnabled"), QStringLiteral("preview/setMineSfxEnabled"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Enable or mute type-based SFX for mine notes.")),
         apiDescriptor(QStringLiteral("preview.addOverlay"), QStringLiteral("preview/addOverlay"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Add a rendered text overlay above the preview.")),
         apiDescriptor(QStringLiteral("preview.updateOverlay"), QStringLiteral("preview/updateOverlay"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Update a preview overlay.")),
         apiDescriptor(QStringLiteral("preview.removeOverlay"), QStringLiteral("preview/removeOverlay"), QStringLiteral("preview.control"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Remove a preview overlay.")),
@@ -1385,7 +1391,9 @@ QString ExtensionManager::permissionForMethod(const QString& method, const QJson
             ? QStringLiteral("settings.read")
             : QStringLiteral("settings.write");
     }
-    if (method == QStringLiteral("commands/execute") || method == QStringLiteral("commands/executeInternal")) {
+    if (method == QStringLiteral("commands/execute")
+        || method == QStringLiteral("commands/executeInternal")
+        || method == QStringLiteral("commands/setChecked")) {
         return QStringLiteral("commands.execute");
     }
     if (method == QStringLiteral("commands/getCommands") || method == QStringLiteral("commands/getInternalCommands")) {
@@ -1729,6 +1737,15 @@ void ExtensionManager::appendDevtoolsCall(const QString& method, const QJsonObje
                || method == QStringLiteral("process/spawn")
                || method == QStringLiteral("shell/execute")) {
         appendExtensionLog(QStringLiteral("info"), QStringLiteral("host API call accepted"), entry);
+    }
+}
+
+void ExtensionManager::refreshMenuSelectionIcons()
+{
+    for (QAction* action : std::as_const(commandActions_)) {
+        if (action != nullptr && action->isCheckable()) {
+            action->setIcon(UiTheme::menuSelectionCheckIcon(action->isChecked()));
+        }
     }
 }
 
@@ -2188,6 +2205,24 @@ QJsonObject ExtensionManager::handleHostRequestCore(const QString& method, const
             }
         }
         return okValue(commands);
+    }
+    if (method == QStringLiteral("commands/setChecked")) {
+        const QString command = params.value(QStringLiteral("command")).toString();
+        const QString extensionId = params.value(QStringLiteral("extensionId")).toString();
+        if (commandOwnerById_.value(command) != extensionId) {
+            return errorObject(QStringLiteral("Extensions may only change their own command state."));
+        }
+        QAction* action = commandActions_.value(command);
+        if (action == nullptr) {
+            return errorObject(QStringLiteral("Command menu action is unavailable: %1").arg(command));
+        }
+        action->setCheckable(true);
+        action->setChecked(params.value(QStringLiteral("checked")).toBool());
+        action->setIcon(UiTheme::menuSelectionCheckIcon(action->isChecked()));
+        return okValue(QJsonObject{
+            {QStringLiteral("command"), command},
+            {QStringLiteral("checked"), action->isChecked()},
+        });
     }
     if (method == QStringLiteral("commands/getInternalCommands")) {
         if (!callbacks_.mainWindowRequest) {

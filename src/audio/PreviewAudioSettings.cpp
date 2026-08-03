@@ -464,6 +464,7 @@ QJsonObject PreviewAudioSettings::toJson() const
     object.insert("slide_volume", normalized.slideVolume);
     object.insert("slide_restore_volume", normalized.slideRestoreVolume);
     object.insert("break_slide_tail_cheer_muted", normalized.breakSlideTailCheerMuted);
+    object.insert("mine_sfx_enabled", normalized.mineSfxEnabled);
     object.insert("touch_volume", normalized.touchVolume);
     object.insert("touch_restore_volume", normalized.touchRestoreVolume);
     object.insert("firework_volume", normalized.fireworkVolume);
@@ -558,6 +559,7 @@ PreviewAudioSettings PreviewAudioSettings::fromJson(const QJsonObject& object)
             : settings.slideVolume > kMuteThreshold ? settings.slideVolume : kDefaultSlideVolume);
 
     settings.breakSlideTailCheerMuted = object.value(QLatin1String("break_slide_tail_cheer_muted")).toBool(false);
+    settings.mineSfxEnabled = object.value(QLatin1String("mine_sfx_enabled")).toBool(true);
 
     const double legacyTouch = maxLegacyValue(
         valueOrDefault(object, "touch_volume", legacySfx),

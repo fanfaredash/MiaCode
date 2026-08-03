@@ -117,8 +117,21 @@ void QtPreviewSfxRuntime::setBackgroundTrackPlaybackRate(double rate)
 
 void QtPreviewSfxRuntime::applyLevels(const PreviewAudioSettings& settings)
 {
+    const bool rebuildMineSfx = settings_.mineSfxEnabled != settings.mineSfxEnabled;
+    const double cursorSecond = playbackSession_.backgroundTrackLastTimelineSecond;
     settings_ = settings;
     settings_.normalize();
+    if (rebuildMineSfx && !preparedTimeline_.sourceNoteMarkers.isEmpty()) {
+        rebuildPreparedTimeline(
+            preparedTimeline_.sourceNoteMarkers,
+            preparedTimelinePlaybackRate_,
+            timingSettings_);
+        resetCursor(cursorSecond, false);
+        pauseTouchholdVoices();
+        if (playbackSession_.backgroundTrackRunning) {
+            restoreTouchholdVoices(cursorSecond);
+        }
+    }
     applyVolumes();
 }
 
@@ -371,7 +384,8 @@ void QtPreviewSfxRuntime::rebuildPreparedTimeline(
         preparedTimelinePlaybackRate_,
         timingSettings_,
         &preparedTimeline_.events,
-        &preparedTimeline_.touchholdSpans);
+        &preparedTimeline_.touchholdSpans,
+        settings_.mineSfxEnabled);
     playbackSession_.eventIndex = 0;
 }
 

@@ -471,6 +471,23 @@ void styleRoundedMenu(QMenu& menu)
     );
 }
 
+QIcon menuSelectionCheckIcon(bool visible)
+{
+    QPixmap pixmap(14, 14);
+    pixmap.fill(Qt::transparent);
+    if (visible) {
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        QPen pen(colors().accent, 1.8);
+        pen.setCapStyle(Qt::RoundCap);
+        pen.setJoinStyle(Qt::RoundJoin);
+        painter.setPen(pen);
+        painter.drawLine(QPointF(5.0, 7.4), QPointF(7.7, 10.1));
+        painter.drawLine(QPointF(7.7, 10.1), QPointF(12.4, 4.4));
+    }
+    return QIcon(pixmap);
+}
+
 QPalette timelineViewportPalette()
 {
     const Colors& c = colors();

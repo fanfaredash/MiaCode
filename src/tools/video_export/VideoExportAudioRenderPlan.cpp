@@ -354,7 +354,8 @@ bool buildVideoExportAudioRenderPlan(
         1.0,
         normalizedTimingSettings,
         &events,
-        &touchholdSpans);
+        &touchholdSpans,
+        normalizedAudioSettings.mineSfxEnabled);
 
     const QVector<miacode::preview_sfx_timeline::ScheduledPlayback> scheduledPlaybacks =
         miacode::preview_sfx_timeline::buildScheduledPlaybacks(
