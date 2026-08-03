@@ -567,11 +567,15 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                     marker.wifiTrackAreaPoints.size()
                 );
             } else if (trimMode == PreviewSlideTrackTrimMode::VanillaAutoplay) {
-                // The arcade's wifi clear only reaches one or two of the rows before
-                // the note ends; that is the behaviour this mode exists to show.
-                removedArrowCount = previewWifiVanillaHiddenRowCount(
+                QVector<int> areaRowCounts;
+                areaRowCounts.reserve(marker.wifiTrackAreaPoints.size());
+                for (const QVector<QPointF>& areaPoints : marker.wifiTrackAreaPoints) {
+                    areaRowCounts.append(areaPoints.size());
+                }
+                // Whole areas only, so the draw walk below never needs a partial cut.
+                removedArrowCount = previewWifiEraseByAreaHiddenRowCount(
+                    areaRowCounts,
                     marker.wifiCriticalProportion,
-                    totalWifiTrackArrowCount(marker.wifiTrackAreaPoints),
                     startProportion
                 );
             } else {

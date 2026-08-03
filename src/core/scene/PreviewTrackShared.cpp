@@ -343,17 +343,29 @@ int previewSlideVanillaHiddenArrowCount(const PreviewSlideAutoplayAreas& areas, 
     return qBound(0, areas.hiddenArrowCountAfterArea.at(hitIndex - 1), areas.totalArrowCount);
 }
 
-int previewWifiVanillaHiddenRowCount(double criticalProportion, int rowCount, qreal starProgress)
+int previewWifiEraseByAreaHiddenRowCount(
+    const QVector<int>& areaRowCounts,
+    double criticalProportion,
+    qreal starProgress
+)
 {
-    if (rowCount <= 0 || criticalProportion <= 0.0) {
+    const int areaCount = areaRowCounts.size();
+    if (areaCount <= 0 || criticalProportion <= 0.0) {
         return 0;
     }
-    const qreal num7 = qMax<qreal>(0.0, starProgress) / criticalProportion;
-    if (num7 <= 0.0) {
-        return 0;
+
+    const qreal num = qMax<qreal>(0.0, starProgress) / criticalProportion;
+    const qreal scaled = areaCount * num;
+    // Unlike the slide clear, the index is allowed to reach areaCount, so every
+    // row is cleared once the star reaches the judge point rather than a few
+    // rows stalling for the rest of the note.
+    const int hitIndex = scaled >= areaCount ? areaCount : static_cast<int>(qMax<qreal>(0.0, scaled));
+
+    int rows = 0;
+    for (int areaIndex = 0; areaIndex < hitIndex; ++areaIndex) {
+        rows += qMax(0, areaRowCounts.at(areaIndex));
     }
-    const qreal rows = std::ceil(num7);
-    return rows >= rowCount ? rowCount : static_cast<int>(rows);
+    return rows;
 }
 
 int currentWifiLaneAreaIndexAt(

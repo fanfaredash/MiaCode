@@ -21,7 +21,7 @@ using miacode::preview::scene::PreviewSlideAutoplayAreas;
 using miacode::preview::scene::buildPreviewSlideAutoplayAreas;
 using miacode::preview::scene::previewSlideStarProgress;
 using miacode::preview::scene::previewSlideVanillaHiddenArrowCount;
-using miacode::preview::scene::previewWifiVanillaHiddenRowCount;
+using miacode::preview::scene::previewWifiEraseByAreaHiddenRowCount;
 
 constexpr qreal kEpsilon = 1e-6;
 
@@ -254,10 +254,9 @@ bool verifyStarProgressFollowsTheParsedSegmentSplit(QTextStream& err)
     );
 }
 
-// Wifi reproduces the arcade's fan clear as-is: `num7` is compared against the
-// row index without being scaled by the row count, so it barely passes 1 by the
-// time the star lands and only the leading rows ever clear.
-bool verifyWifiVanillaClearsOnlyTheLeadingRows(QTextStream& err)
+// Wifi clears area by area on the same hit-area clock as a slide, and unlike the
+// slide clear it runs to completion rather than stalling on a lit tail.
+bool verifyWifiClearsAreaByAreaAndCompletes(QTextStream& err)
 {
     TimelineNoteMarker marker;
     if (!parseSingleSlideMarker(QStringLiteral("(120){8}1w5[8:1],\nE"), &marker, err)) {
@@ -267,11 +266,16 @@ bool verifyWifiVanillaClearsOnlyTheLeadingRows(QTextStream& err)
         return false;
     }
 
+    QVector<int> areaRowCounts;
     int rowCount = 0;
     for (const QVector<QPointF>& areaPoints : marker.wifiTrackAreaPoints) {
+        areaRowCounts.append(areaPoints.size());
         rowCount += areaPoints.size();
     }
-    if (!require(rowCount > 2, QStringLiteral("the wifi lane has more than two rows"), err)) {
+    if (!require(areaRowCounts.size() > 1, QStringLiteral("the wifi track has several areas"), err)) {
+        return false;
+    }
+    if (!require(rowCount > 2, QStringLiteral("the wifi track has more than two rows"), err)) {
         return false;
     }
 
@@ -284,32 +288,47 @@ bool verifyWifiVanillaClearsOnlyTheLeadingRows(QTextStream& err)
     }
 
     if (!require(
-            previewWifiVanillaHiddenRowCount(critical, rowCount, 0.0) == 0,
+            previewWifiEraseByAreaHiddenRowCount(areaRowCounts, critical, 0.0) == 0,
             QStringLiteral("no wifi row clears before the star moves"),
             err)) {
         return false;
     }
 
+    // Every value the clear takes must be a whole-area boundary, so the draw walk
+    // never has to cut inside an area.
+    QVector<int> areaBoundaries;
+    int cumulative = 0;
+    areaBoundaries.append(0);
+    for (int areaRows : areaRowCounts) {
+        cumulative += areaRows;
+        areaBoundaries.append(cumulative);
+    }
+
     int previous = -1;
     for (int step = 0; step <= 1000; ++step) {
-        const int hidden =
-            previewWifiVanillaHiddenRowCount(critical, rowCount, static_cast<qreal>(step) / 1000.0);
+        const int hidden = previewWifiEraseByAreaHiddenRowCount(
+            areaRowCounts, critical, static_cast<qreal>(step) / 1000.0);
         if (!require(hidden >= previous, QStringLiteral("wifi hidden row count never decreases"), err)) {
+            return false;
+        }
+        if (!require(
+                areaBoundaries.contains(hidden),
+                QStringLiteral("wifi clears whole areas only"),
+                err)) {
             return false;
         }
         previous = hidden;
     }
 
-    const int hiddenAtLanding = previewWifiVanillaHiddenRowCount(critical, rowCount, 1.0);
     if (!require(
-            hiddenAtLanding == static_cast<int>(std::ceil(1.0 / critical)),
-            QStringLiteral("the wifi clear stops at ceil(1 / criticalProportion) rows"),
+            previewWifiEraseByAreaHiddenRowCount(areaRowCounts, critical, 1.0) == rowCount,
+            QStringLiteral("every wifi row is cleared by the time the star lands"),
             err)) {
         return false;
     }
     return require(
-        hiddenAtLanding < rowCount,
-        QStringLiteral("most wifi rows are still lit when the star lands"),
+        previewWifiEraseByAreaHiddenRowCount(areaRowCounts, critical, critical) == rowCount,
+        QStringLiteral("the wifi clear completes at the judge point"),
         err
     );
 }
@@ -334,7 +353,7 @@ int main(int argc, char** argv)
     if (!verifyStarProgressFollowsTheParsedSegmentSplit(err)) {
         return 1;
     }
-    if (!verifyWifiVanillaClearsOnlyTheLeadingRows(err)) {
+    if (!verifyWifiClearsAreaByAreaAndCompletes(err)) {
         return 1;
     }
 

@@ -71,11 +71,23 @@ qreal previewSlideStarProgress(const TimelineNoteMarker& marker, double playhead
 
 int previewSlideVanillaHiddenArrowCount(const PreviewSlideAutoplayAreas& areas, qreal starProgress);
 
-// The wifi counterpart (SlideFan.NoteCheck). The arcade compares a bare `num7`
-// against the row index rather than scaling it by the row count, so `num7`
-// barely passes 1 by the time the star lands and only one or two of the rows
-// ever clear. Reproduced as-is: it is what the arcade shows.
-int previewWifiVanillaHiddenRowCount(double criticalProportion, int rowCount, qreal starProgress);
+// The wifi counterpart. `wifiTrackAreaPoints` groups the eleven rows into the
+// same four judge areas as `tri_judge_sequence`, so the rows clear area by area
+// on the same hit-area clock as a slide.
+//
+// This deliberately does NOT reproduce the arcade's autoplay fan clear.
+// SlideFan.NoteCheck compares a bare `num7` against the row index instead of
+// scaling it by the row count, so `num7` barely passes 1 by the time the star
+// lands and only one or two of the eleven rows ever clear; real play uses touch
+// progress and clears all of them. Reproducing that here would leave a mode
+// named "erase by area" barely erasing anything, so the clear runs to
+// completion: the hit-area index is allowed to reach `areaCount`, clearing
+// every row by the time the note is judged.
+int previewWifiEraseByAreaHiddenRowCount(
+    const QVector<int>& areaRowCounts,
+    double criticalProportion,
+    qreal starProgress
+);
 
 int currentAreaIndexForProportion(const QVector<double>& thresholds, qreal proportion, int areaCount);
 int passedCheckpointCount(const QVector<MuriCheckpointState>& checkpoints, double playheadSeconds);
