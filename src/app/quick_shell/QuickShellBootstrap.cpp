@@ -1,5 +1,7 @@
 #include "QuickShellBootstrap.h"
 
+#include "app/WindowsIdleEventDiagnostics.h"
+
 #include "QuickShellNativeSurfaceHost.h"
 #include "QuickShellController.h"
 #include "QuickShellStyleBridge.h"
@@ -168,6 +170,10 @@ QuickShellBootstrap::QuickShellBootstrap(const QIcon& appIcon, QObject* parent)
     : QObject(parent)
     , appIcon_(appIcon)
 {
+#ifdef Q_OS_WIN
+    windowsIdleEventMonitor_ =
+        std::make_unique<miacode::app::windows_idle_diagnostics::WindowsIdleEventMonitor>();
+#endif
 }
 
 QuickShellBootstrap::~QuickShellBootstrap()
@@ -181,6 +187,9 @@ QuickShellBootstrap::~QuickShellBootstrap()
         qApp->removeEventFilter(this);
     }
 #ifdef Q_OS_WIN
+    if (windowsIdleEventMonitor_ != nullptr) {
+        windowsIdleEventMonitor_->unregisterWindow();
+    }
     if (QCoreApplication* app = QCoreApplication::instance(); app != nullptr) {
         if (nativeCloseEventFilter_ != nullptr) {
             app->removeNativeEventFilter(nativeCloseEventFilter_.get());
@@ -365,6 +374,9 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
         rootWindow_ = window;
 #ifdef Q_OS_WIN
         rootWindowNativeHwnd_ = static_cast<quintptr>(window->winId());
+        if (windowsIdleEventMonitor_ != nullptr) {
+            windowsIdleEventMonitor_->registerWindow(rootWindowNativeHwnd_);
+        }
 #endif
         window->installEventFilter(this);
 
@@ -880,7 +892,13 @@ bool QuickShellBootstrap::handleNativeCloseEvent(const QByteArray& eventType, vo
     }
 
     auto* msg = static_cast<MSG*>(message);
-    if (msg == nullptr || msg->hwnd == nullptr) {
+    if (msg == nullptr) {
+        return false;
+    }
+    if (windowsIdleEventMonitor_ != nullptr) {
+        windowsIdleEventMonitor_->observeNativeMessage(eventType, message);
+    }
+    if (msg->hwnd == nullptr) {
         return false;
     }
 
@@ -1087,6 +1105,9 @@ void QuickShellBootstrap::beginAcceptedRootWindowShutdown(const QString& source)
     }
 
 #ifdef Q_OS_WIN
+    if (windowsIdleEventMonitor_ != nullptr) {
+        windowsIdleEventMonitor_->unregisterWindow();
+    }
     if (QCoreApplication* app = QCoreApplication::instance(); app != nullptr) {
         if (nativeCloseEventFilter_ != nullptr) {
             app->removeNativeEventFilter(nativeCloseEventFilter_.get());

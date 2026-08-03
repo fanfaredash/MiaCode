@@ -19,6 +19,9 @@ class QuickShellNativeSurfaceHost;
 class QuickShellStyleBridge;
 
 #ifdef Q_OS_WIN
+namespace miacode::app::windows_idle_diagnostics {
+class WindowsIdleEventMonitor;
+}
 namespace miacode::preview::dcomp {
 class PreviewDCompSurface;
 }
@@ -72,6 +75,7 @@ private:
     std::unique_ptr<QQmlApplicationEngine> engine_;
 #ifdef Q_OS_WIN
     std::unique_ptr<miacode::preview::dcomp::PreviewDCompSurface> previewDCompSurface_;
+    std::unique_ptr<miacode::app::windows_idle_diagnostics::WindowsIdleEventMonitor> windowsIdleEventMonitor_;
     std::unique_ptr<QAbstractNativeEventFilter> nativeCloseEventFilter_;
     quintptr rootWindowNativeHwnd_ = 0;
 #endif

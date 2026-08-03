@@ -123,6 +123,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/startup_diagnostics_win32.cpp
     src/app/graphics_backend.cpp
     src/app/process_identity.cpp
+    src/app/WindowsIdleEventDiagnostics.h
+    src/app/WindowsIdleEventDiagnostics.cpp
     src/app/gpu_adapter_probe.cpp
     src/app/gpu_device_provider.cpp
     src/app/gpu_high_performance_hint.cpp
@@ -800,6 +802,8 @@ if (WIN32)
         dxgi         # IDXGIFactory2::CreateSwapChainForComposition + frame latency waitable
         dcomp        # DCompositionCreateDevice + visual tree
         d3dcompiler  # Phase 3 sprite pipeline runtime HLSL compile (D3DCompile)
+        User32       # RegisterPowerSettingNotification
+        Wtsapi32     # Session lock/unlock notifications for idle-freeze diagnostics
     )
     add_custom_command(TARGET MiaCode POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -1706,6 +1710,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/common/ProcessDiagnostics.cpp
             ${_miacode_log_core}
         LIBS Qt6::Core Qt6::Gui
+        INCLUDES src
+    )
+
+    miacode_add_dev_tool(windows_idle_event_diagnostics_spec TEST
+        SOURCES
+            src/tools/debug_index/WindowsIdleEventDiagnosticsSpec.cpp
+            src/app/WindowsIdleEventDiagnostics.h
+            src/app/WindowsIdleEventDiagnostics.cpp
+        LIBS Qt6::Core
         INCLUDES src
     )
 endif()
