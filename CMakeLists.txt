@@ -1691,6 +1691,13 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core
         INCLUDES src
     )
+
+    miacode_add_dev_tool(ui_hang_watchdog_policy_spec TEST
+        SOURCES
+            src/tools/debug_index/UiHangWatchdogPolicySpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
 endif()
 
 if (WIN32)

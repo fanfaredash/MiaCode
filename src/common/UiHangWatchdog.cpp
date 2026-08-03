@@ -1,5 +1,7 @@
 #include "common/UiHangWatchdog.h"
 
+#include "common/UiHangWatchdogPolicy.h"
+
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
@@ -18,6 +20,7 @@ namespace {
 
 constexpr qint64 kHeartbeatIntervalMs = 250;
 constexpr qint64 kActivePhaseHangMs = 2000;
+constexpr qint64 kIdleHeartbeatHangMs = 5000;
 constexpr qint64 kRepeatedReportMs = 5000;
 
 struct PhaseState {
@@ -61,11 +64,16 @@ QString logWriterStatsPayload()
         .arg(stats.workerRunning ? 1 : 0);
 }
 
-void appendWatchdogReport(const PhaseState& phase, qint64 nowMs, qint64 heartbeatAgeMs)
+void appendWatchdogReport(
+    policy::Trigger trigger,
+    const PhaseState& phase,
+    qint64 nowMs,
+    qint64 heartbeatAgeMs)
 {
     miacode::oplog::flushShadowToDisk();
     const qint64 activeMs = phase.active ? qMax<qint64>(0, nowMs - phase.startMs) : 0;
-    QString payload = QStringLiteral("action=gui_thread_phase_stale active=%1 active_ms=%2 heartbeat_age_ms=%3 phase=%4 generation=%5")
+    QString payload = QStringLiteral("action=gui_thread_stale trigger=%1 active=%2 active_ms=%3 heartbeat_age_ms=%4 phase=%5 generation=%6")
+        .arg(QString::fromLatin1(policy::triggerName(trigger)))
         .arg(phase.active ? 1 : 0)
         .arg(activeMs)
         .arg(heartbeatAgeMs)
@@ -86,6 +94,7 @@ void appendWatchdogReport(const PhaseState& phase, qint64 nowMs, qint64 heartbea
 
 void watchdogLoop()
 {
+    policy::Trigger reportedTrigger = policy::Trigger::None;
     quint64 reportedGeneration = 0;
     qint64 reportedAtMs = 0;
     while (!g_stop.load(std::memory_order_acquire)) {
@@ -96,18 +105,27 @@ void watchdogLoop()
         const qint64 now = steadyMs();
         const qint64 heartbeatAge = qMax<qint64>(0, now - g_lastHeartbeatMs.load(std::memory_order_acquire));
         const PhaseState phase = snapshotPhase();
-        if (!phase.active) {
+        const qint64 activeMs = phase.active
+            ? qMax<qint64>(0, now - phase.startMs)
+            : 0;
+        const policy::Trigger trigger = policy::classify(
+            phase.active,
+            activeMs,
+            heartbeatAge,
+            kActivePhaseHangMs,
+            kIdleHeartbeatHangMs);
+        if (!policy::shouldReport(
+                trigger,
+                phase.generation,
+                now,
+                reportedTrigger,
+                reportedGeneration,
+                reportedAtMs,
+                kRepeatedReportMs)) {
             continue;
         }
-        const qint64 activeMs = qMax<qint64>(0, now - phase.startMs);
-        if (activeMs < kActivePhaseHangMs) {
-            continue;
-        }
-        if (phase.generation == reportedGeneration
-            && now - reportedAtMs < kRepeatedReportMs) {
-            continue;
-        }
-        appendWatchdogReport(phase, now, heartbeatAge);
+        appendWatchdogReport(trigger, phase, now, heartbeatAge);
+        reportedTrigger = trigger;
         reportedGeneration = phase.generation;
         reportedAtMs = now;
     }
@@ -152,9 +170,10 @@ void installGuiHeartbeat(QObject* owner)
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("ui/hang_watchdog"),
-        QStringLiteral("action=installed heartbeat_ms=%1 active_phase_timeout_ms=%2")
+        QStringLiteral("action=installed heartbeat_ms=%1 active_phase_timeout_ms=%2 idle_heartbeat_timeout_ms=%3")
             .arg(kHeartbeatIntervalMs)
-            .arg(kActivePhaseHangMs));
+            .arg(kActivePhaseHangMs)
+            .arg(kIdleHeartbeatHangMs));
 }
 
 void setPhase(const char* phase, const QString& detail)
