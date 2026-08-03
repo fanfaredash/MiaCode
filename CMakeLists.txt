@@ -59,6 +59,39 @@ option(MIACODE_BUILD_DEV_TOOLS "Build developer helper tools" OFF)
 # top level for `ctest` to discover them; it is harmless when no tests exist.
 enable_testing()
 
+set(MIACODE_GIT_REVISION "unknown")
+set(MIACODE_GIT_DIRTY "unknown")
+find_package(Git QUIET)
+if (GIT_FOUND)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse --short=12 HEAD
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        RESULT_VARIABLE MIACODE_GIT_REVISION_RESULT
+        OUTPUT_VARIABLE MIACODE_GIT_REVISION_OUTPUT
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if (MIACODE_GIT_REVISION_RESULT EQUAL 0
+        AND NOT "${MIACODE_GIT_REVISION_OUTPUT}" STREQUAL "")
+        set(MIACODE_GIT_REVISION "${MIACODE_GIT_REVISION_OUTPUT}")
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" status --porcelain --untracked-files=normal -- .
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            RESULT_VARIABLE MIACODE_GIT_DIRTY_RESULT
+            OUTPUT_VARIABLE MIACODE_GIT_DIRTY_OUTPUT
+            ERROR_QUIET
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        if (MIACODE_GIT_DIRTY_RESULT EQUAL 0)
+            if ("${MIACODE_GIT_DIRTY_OUTPUT}" STREQUAL "")
+                set(MIACODE_GIT_DIRTY "0")
+            else()
+                set(MIACODE_GIT_DIRTY "1")
+            endif()
+        endif()
+    endif()
+endif()
+
 configure_file(
     src/app/AppVersion.h.in
     ${CMAKE_CURRENT_BINARY_DIR}/generated/AppVersion.h
@@ -1650,6 +1683,13 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/common/DebugOptions.h
         LIBS Qt6::Core
         INCLUDES src src/common
+    )
+
+    miacode_add_dev_tool(process_identity_fields_spec TEST
+        SOURCES
+            src/tools/debug_index/ProcessIdentityFieldsSpec.cpp
+        LIBS Qt6::Core
+        INCLUDES src
     )
 endif()
 

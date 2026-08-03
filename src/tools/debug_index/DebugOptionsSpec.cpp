@@ -143,6 +143,19 @@ bool verifyDefaultsAndClamps(QTextStream& err)
 {
     bool ok = true;
 
+    // Preserve the historical default-on path while the two diagnostic
+    // launch profiles select explicit sides of the GPU-binding A/B.
+    unsetEnv("MIACODE_GPU_BIND_HIGH_PERFORMANCE");
+    ok &= require(dbg::gpuBindHighPerformanceEnabled(),
+                  "GPU high-performance binding defaults on", err);
+    setEnv("MIACODE_GPU_BIND_HIGH_PERFORMANCE", "0");
+    ok &= require(!dbg::gpuBindHighPerformanceEnabled(),
+                  "GPU high-performance binding respects explicit 0", err);
+    setEnv("MIACODE_GPU_BIND_HIGH_PERFORMANCE", "1");
+    ok &= require(dbg::gpuBindHighPerformanceEnabled(),
+                  "GPU high-performance binding respects explicit 1", err);
+    unsetEnv("MIACODE_GPU_BIND_HIGH_PERFORMANCE");
+
     // value_or defaults.
     unsetEnv("MIACODE_PREVIEW_VISUAL_SMOOTHING");
     ok &= require(dbg::previewVisualSmoothingEnabled(), "visual smoothing defaults on", err);
