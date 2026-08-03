@@ -64,6 +64,15 @@ int main(int argc, char** argv)
     bool ok = true;
 
     {
+        qputenv("MIACODE_EXTENSION_DEV_PATHS", QByteArray("ignored-extension-path"));
+        const QStringList paths = miacode::extensions::defaultExtensionSearchPaths();
+        ok = expect(paths.size() == 1, QStringLiteral("extension discovery has exactly one root")) && ok;
+        ok = expect(paths.value(0) == miacode::extensions::userExtensionDirectoryPath(),
+                    QStringLiteral("extension discovery uses only the install-root extensions directory")) &&
+             ok;
+    }
+
+    {
         QTemporaryDir dir;
         ok = expect(dir.isValid(), QStringLiteral("temp dir")) && ok;
         writeText(QDir(dir.path()).filePath(QStringLiteral("extension.js")), QStringLiteral("module.exports = {};"));

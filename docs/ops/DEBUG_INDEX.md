@@ -170,7 +170,6 @@ Still active:
 
 - `MIACODE_PREVIEW_SFX_DIR`
 - `MIACODE_TRACK_PATH`
-- `MIACODE_EXTENSION_DEV_PATHS` (extension system only; platform path-list separated development extension paths scanned in addition to the user extension directory; each entry may point directly at an extension root or at a parent directory containing extension roots)
 - `MIACODE_BASS_BGM_RATE_MODE` (Windows/macOS BASS preview BGM; unset defaults to pitch-preserving BASS_FX `tempo`, while `rate_transpose` / `transpose` / `source_time` / `accurate` switches to source-time-priority rate transpose for A/B listening)
 - `MIACODE_BASS_BGM_TEMPO_PRESET` (Windows/macOS BASS preview BGM, only when tempo mode is active; BASS_FX window presets: unset = `compact40`, `stock` = plugin default, `auto` = `0/0/8`, `tight20` = `20/8/4`, `balanced30` = `30/10/6`, `compact40` = `40/15/8`, `smooth60` = `60/20/8`, `wide82` = `82/28/8`)
 - `MIACODE_BASS_BGM_TEMPO_PARAMS` (Windows/macOS BASS preview BGM, only when tempo mode is active; overrides preset with custom `sequence_ms,seek_ms,overlap_ms`, accepting comma, slash, semicolon, pipe, `x`, or spaces as separators)

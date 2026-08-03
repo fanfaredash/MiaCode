@@ -95,9 +95,6 @@ Dev-tool-only parser repro hook:
 - `MIACODE_TRACK_PATH`
   - preview track-path override
   - owner: `src/app/mainwindow/MainWindow.cpp`
-- `MIACODE_EXTENSION_DEV_PATHS`
-  - platform path-list separated development extension paths scanned in addition to the user extension directory and app-local `extensions-dev`; each entry may point directly at an extension root or at a parent directory containing extension roots
-  - owner: `src/extensions/ExtensionManifest.cpp`
 - `MIACODE_BASS_BGM_RATE_MODE`
   - Windows BASS preview BGM rate-mode override; unset defaults to pitch-preserving BASS_FX `tempo`, while `rate_transpose` / `transpose` / `source_time` / `accurate` switches to source-time-priority rate transpose for A/B listening
   - owner: `src/audio/BassPreviewAudioBackendImpl.h`, applied in `src/audio/BassPreviewAudioBackend_Assets.cpp`

@@ -64,6 +64,7 @@ public:
     QString userExtensionsDirectory() const;
     QString extensionLogDirectory() const;
     QJsonObject devtoolsSnapshotForUi() const;
+    void publishEvent(const QString& name, const QJsonObject& payload = {}, bool coalescible = false);
     void refreshExtensions();
     void refreshMenuSelectionIcons();
     void setExtensionEnabled(const QString& qualifiedId, bool enabled);

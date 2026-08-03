@@ -1660,6 +1660,16 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
                 }
             });
             ++timelineRevision_;
+            if (extensionManager_ != nullptr) {
+                extensionManager_->publishEvent(QStringLiteral("editor.text.changed"), QJsonObject{
+                    {QStringLiteral("source"), QStringLiteral("editor")},
+                    {QStringLiteral("data"), QJsonObject{
+                        {QStringLiteral("position"), position},
+                        {QStringLiteral("removed"), charsRemoved},
+                        {QStringLiteral("added"), charsAdded},
+                    }},
+                }, true);
+            }
             syncCopyAreaLineCount();
             applyTimelineQuickChange(position, charsRemoved, charsAdded);
             if (editorSection_ != nullptr) {
@@ -1687,6 +1697,16 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         });
     }
     connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QTextEdit::cursorPositionChanged, this, [this]() {
+        if (extensionManager_ != nullptr) {
+            const QTextCursor cursor = qobject_cast<PlainCodeEditor*>(editorWidget_)->textCursor();
+            extensionManager_->publishEvent(QStringLiteral("editor.selection.changed"), QJsonObject{
+                {QStringLiteral("source"), QStringLiteral("editor")},
+                {QStringLiteral("data"), QJsonObject{
+                    {QStringLiteral("position"), cursor.position()},
+                    {QStringLiteral("anchor"), cursor.anchor()},
+                }},
+            }, true);
+        }
         const bool syncTimelineCursor = !quickShellUiFocusBridgeMode_ || quickTimelineSurfaceReady_;
         scheduleDeferredEditorUiUpdate(
             true,

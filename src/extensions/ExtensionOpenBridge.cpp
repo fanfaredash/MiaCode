@@ -171,6 +171,10 @@ QVector<ExtensionOpenBridgeObject> extensionOpenBridgeObjects()
                    method(QStringLiteral("showCompletions"), QStringLiteral("editor/showCompletions"), QStringLiteral("providers.read"), QStringLiteral("Show completions in host UI.")),
                    method(QStringLiteral("showCodeActions"), QStringLiteral("editor/showCodeActions"), QStringLiteral("providers.read"), QStringLiteral("Show code actions in host UI.")),
                }),
+        object(QStringLiteral("window"), QStringLiteral("open.window"), QStringLiteral("Window focus operations exposed through a facade."),
+               {
+                   method(QStringLiteral("focusEditor"), QStringLiteral("window.focusEditor"), QStringLiteral("ui.prompt"), QStringLiteral("Focus the active chart editor.")),
+               }),
         object(QStringLiteral("timeline"), QStringLiteral("open.timeline"), QStringLiteral("Timeline read/control operations exposed through a facade."),
                {
                    method(QStringLiteral("seek"), QStringLiteral("timeline.seek"), QStringLiteral("timeline.control"), QStringLiteral("Seek the preview timeline.")),

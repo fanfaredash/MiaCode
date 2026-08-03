@@ -135,6 +135,12 @@ void MainWindow::TimelineSection::onQtPreviewTick()
     }
     const double elapsedSeconds = static_cast<double>(state_.qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
     const double fallbackSecond = state_.qtPreviewStartSecond_ + (elapsedSeconds * state_.previewPlaybackRate_);
+    if (owner_.extensionManager_ != nullptr) {
+        owner_.extensionManager_->publishEvent(QStringLiteral("preview.position.changed"), QJsonObject{
+            {QStringLiteral("source"), QStringLiteral("preview")},
+            {QStringLiteral("data"), QJsonObject{{QStringLiteral("second"), fallbackSecond}}},
+        }, true);
+    }
     // G1 Commit 5: the old syncPreviewPlaybackClockTransaction call is gone. Its three
     // side effects are now driven directly off wall-clock chart-second:
     //   * SFX drain — handled by drainEvents() inside onQtPreviewTickAtSecond.

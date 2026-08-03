@@ -125,6 +125,7 @@ bool isSupportedPermission(const QString& permission)
         QStringLiteral("open.inspect"),
         QStringLiteral("open.call"),
         QStringLiteral("open.app"),
+        QStringLiteral("open.window"),
         QStringLiteral("open.workspace"),
         QStringLiteral("open.document"),
         QStringLiteral("open.editor"),
@@ -346,19 +347,8 @@ ExtensionManifestParseResult loadExtensionManifest(const QString& extensionRootP
 
 QStringList defaultExtensionSearchPaths()
 {
-    QStringList paths;
     const QString userDir = userExtensionDirectoryPath();
-    if (!userDir.isEmpty()) {
-        paths.append(userDir);
-    }
-    const QString envPaths = qEnvironmentVariable("MIACODE_EXTENSION_DEV_PATHS");
-    for (const QString& path : envPaths.split(QDir::listSeparator(), Qt::SkipEmptyParts)) {
-        paths.append(QDir::cleanPath(path));
-    }
-    const QDir appDir(QCoreApplication::applicationDirPath());
-    paths.append(appDir.filePath(QStringLiteral("extensions-dev")));
-    paths.removeDuplicates();
-    return paths;
+    return userDir.isEmpty() ? QStringList{} : QStringList{userDir};
 }
 
 QString userExtensionDirectoryPath()

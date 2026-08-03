@@ -665,6 +665,7 @@ QVector<QJsonObject> extensionApiRegistry()
         apiDescriptor(QStringLiteral("window.showInputBox"), QStringLiteral("window/showInputBox"), QStringLiteral("ui.prompt"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Show a text input dialog.")),
         apiDescriptor(QStringLiteral("window.showQuickPick"), QStringLiteral("window/showQuickPick"), QStringLiteral("ui.prompt"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Show a simple selection dialog.")),
         apiDescriptor(QStringLiteral("window.createStatusBarItem"), QStringLiteral("window/createStatusBarItem"), QStringLiteral("ui.status"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Show a temporary status bar message.")),
+        apiDescriptor(QStringLiteral("window.focusEditor"), QStringLiteral("window/focusEditor"), QStringLiteral("ui.prompt"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Focus the active chart editor.")),
 
         apiDescriptor(QStringLiteral("workspace.getActiveDocument"), QStringLiteral("workspace/getActiveDocument"), QStringLiteral("workspace.read"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Get the active document snapshot.")),
         apiDescriptor(QStringLiteral("workspace.applyDocumentEdit"), QStringLiteral("workspace/applyDocumentEdit"), QStringLiteral("document.edit"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Replace active document text.")),
@@ -779,7 +780,7 @@ QVector<QJsonObject> extensionApiRegistry()
         apiDescriptor(QStringLiteral("input.registerKeyGesture"), QStringLiteral("input/registerKeyGesture"), QStringLiteral("input.listen"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register a controlled key gesture that invokes an extension command.")),
         apiDescriptor(QStringLiteral("input.registerMouseGesture"), QStringLiteral("input/registerMouseGesture"), QStringLiteral("input.listen"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register a controlled mouse gesture that invokes an extension command.")),
         apiDescriptor(QStringLiteral("input.getGestures"), QStringLiteral("input/getGestures"), QStringLiteral("input.listen"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("List registered extension input gestures.")),
-        apiDescriptor(QStringLiteral("events.register"), QStringLiteral("events/register"), QStringLiteral("events.subscribe"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Register an extension event subscription descriptor.")),
+        apiDescriptor(QStringLiteral("events.subscribe"), QStringLiteral("events/register"), QStringLiteral("events.subscribe"), QStringLiteral("low"), QStringLiteral("implemented"), QStringLiteral("Subscribe to an exact event name or namespace wildcard with optional filters.")),
         apiDescriptor(QStringLiteral("providers.registerHoverProvider"), QStringLiteral("contributions/register"), QStringLiteral("providers.register"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register an editor hover provider descriptor.")),
         apiDescriptor(QStringLiteral("providers.registerCompletionProvider"), QStringLiteral("contributions/register"), QStringLiteral("providers.register"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register an editor completion provider descriptor.")),
         apiDescriptor(QStringLiteral("providers.registerCodeActionProvider"), QStringLiteral("contributions/register"), QStringLiteral("providers.register"), QStringLiteral("medium"), QStringLiteral("implemented"), QStringLiteral("Register an editor code-action provider descriptor.")),
@@ -893,6 +894,13 @@ void ExtensionManager::appendExtensionLog(const QString& severity, const QString
 QJsonObject ExtensionManager::devtoolsSnapshotForUi() const
 {
     return devtoolsSnapshot(QString());
+}
+
+void ExtensionManager::publishEvent(const QString& name, const QJsonObject& payload, bool coalescible)
+{
+    if (runtime_ != nullptr && runtime_->isRunning()) {
+        runtime_->dispatchEvent(name, payload, coalescible);
+    }
 }
 
 void ExtensionManager::refreshExtensions()
