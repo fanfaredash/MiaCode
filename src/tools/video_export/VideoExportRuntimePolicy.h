@@ -11,6 +11,12 @@ bool shouldRequestOffscreenPboReadback(
     const std::optional<bool>& disableOverride
 );
 
+bool shouldUsePremultipliedExportPipe(
+    bool d3d11BackendActive,
+    bool fastPreset,
+    const std::optional<bool>& overrideValue
+);
+
 bool shouldRetryVideoExportWorkerAfterCrash(
     bool crashExit,
     bool pboRequestedForAttempt,

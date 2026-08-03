@@ -15,6 +15,10 @@
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 
+#include <algorithm>
+#include <array>
+#include <cstring>
+
 #if defined(Q_OS_WIN)
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -55,6 +59,7 @@ bool convertTopDownPremultipliedReadbackToStraightRgba(
     const uchar* sourceBytes,
     qsizetype sourceBytesPerRow,
     const QSize& imageSize,
+    bool preservePremultiplied,
     QImage* frame,
     QString* errorMessage)
 {
@@ -83,11 +88,14 @@ bool convertTopDownPremultipliedReadbackToStraightRgba(
     // Explicit allocation when the ring slot is still shared/in flight — same
     // OOM-safety rationale as the OpenGL session's converter (see the long
     // comment there).
+    const QImage::Format outputFormat = preservePremultiplied
+        ? QImage::Format_RGBA8888_Premultiplied
+        : QImage::Format_RGBA8888;
     if (frame->isNull()
         || frame->size() != safeSize
-        || frame->format() != QImage::Format_RGBA8888
+        || frame->format() != outputFormat
         || !frame->isDetached()) {
-        *frame = QImage(safeSize, QImage::Format_RGBA8888);
+        *frame = QImage(safeSize, outputFormat);
     }
     if (frame->isNull()) {
         if (errorMessage != nullptr) {
@@ -107,6 +115,10 @@ bool convertTopDownPremultipliedReadbackToStraightRgba(
                     "D3D11 export readback scanLine returned null (out of memory?)");
             }
             return false;
+        }
+        if (preservePremultiplied) {
+            std::memcpy(outputRow, sourceRowBytes, static_cast<size_t>(expectedBytesPerRow));
+            continue;
         }
         for (int x = 0; x < safeSize.width(); ++x) {
             const uchar* src = sourceRowBytes + x * 4;
@@ -143,7 +155,7 @@ struct PreviewQuickD3D11ExportSession::D3dObjects {
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;
     ComPtr<ID3D11Texture2D> renderTarget;
-    ComPtr<ID3D11Texture2D> staging;
+    std::array<ComPtr<ID3D11Texture2D>, kStagingTextureCount> staging;
     QSize textureSize;
     D3D_FEATURE_LEVEL featureLevel{};
 };
@@ -445,6 +457,7 @@ void PreviewQuickD3D11ExportSession::invalidate()
 
     d3d_.reset();
     resetReadbackRing();
+    resetPipelinedReadback();
     frameStateBound_ = false;
     layerFlagsApplied_ = false;
     appliedLayerFlags_ = miacode::preview::scene::kPreviewAllRenderLayers;
@@ -475,29 +488,156 @@ QImage PreviewQuickD3D11ExportSession::renderFrame(QString* errorMessage)
         return QImage();
     }
 
+    lastRenderStats_ = PreviewQuickExportRenderStats();
+    if (!renderScene(errorMessage)) {
+        return QImage();
+    }
+    d3d_->context->CopyResource(d3d_->staging[0].Get(), d3d_->renderTarget.Get());
+    QImage frame;
+    if (!readbackStagingTexture(0, &frame, errorMessage)) {
+        return QImage();
+    }
+    return frame;
+#endif  // Q_OS_WIN
+}
+
+bool PreviewQuickD3D11ExportSession::supportsPipelinedReadback(QString* errorMessage) const
+{
+#if !defined(Q_OS_WIN)
+    if (errorMessage != nullptr) {
+        *errorMessage = QStringLiteral("D3D11 pipelined readback is Windows-only");
+    }
+    return false;
+#else
+    const bool ready = isInitialized() && d3d_ != nullptr
+        && std::all_of(d3d_->staging.cbegin(), d3d_->staging.cend(),
+                       [](const ComPtr<ID3D11Texture2D>& texture) { return texture != nullptr; });
+    if (!ready && errorMessage != nullptr) {
+        *errorMessage = QStringLiteral("D3D11 staging ring is not initialized");
+    }
+    return ready;
+#endif
+}
+
+void PreviewQuickD3D11ExportSession::resetPipelinedReadback()
+{
+    pendingStagingTextureIndices_.clear();
+    nextStagingTextureIndex_ = 0;
+}
+
+bool PreviewQuickD3D11ExportSession::renderFramePipelinedStep(
+    QImage* completedFrame,
+    bool* completedFrameReady,
+    bool drainOnly,
+    QString* errorMessage)
+{
+    if (completedFrame != nullptr) {
+        *completedFrame = QImage();
+    }
+    if (completedFrameReady != nullptr) {
+        *completedFrameReady = false;
+    }
+    lastRenderStats_ = PreviewQuickExportRenderStats();
+
+    if (!supportsPipelinedReadback(errorMessage)) {
+        return false;
+    }
+
+#if defined(Q_OS_WIN)
+    if (!drainOnly) {
+        if (pendingStagingTextureIndices_.size() >= kStagingTextureCount) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral("D3D11 staging ring overflow");
+            }
+            return false;
+        }
+        if (!renderScene(errorMessage)) {
+            return false;
+        }
+        const int writeIndex = nextStagingTextureIndex_;
+        d3d_->context->CopyResource(
+            d3d_->staging[writeIndex].Get(),
+            d3d_->renderTarget.Get());
+        pendingStagingTextureIndices_.push_back(writeIndex);
+        nextStagingTextureIndex_ = (writeIndex + 1) % kStagingTextureCount;
+    }
+
+    const size_t retainedDepth = drainOnly ? 0u : 2u;
+    if (pendingStagingTextureIndices_.size() <= retainedDepth) {
+        return true;
+    }
+
+    const int readIndex = pendingStagingTextureIndices_.front();
+    QImage frame;
+    if (!readbackStagingTexture(readIndex, &frame, errorMessage)) {
+        return false;
+    }
+    pendingStagingTextureIndices_.pop_front();
+    if (completedFrame != nullptr) {
+        *completedFrame = std::move(frame);
+    }
+    if (completedFrameReady != nullptr) {
+        *completedFrameReady = completedFrame != nullptr && !completedFrame->isNull();
+    }
+    return true;
+#else
+    Q_UNUSED(drainOnly);
+    return false;
+#endif
+}
+
+bool PreviewQuickD3D11ExportSession::renderScene(QString* errorMessage)
+{
+    if (!isInitialized() || !ensureRenderTarget(errorMessage)) {
+        return false;
+    }
+    QElapsedTimer stageTimer;
+    stageTimer.start();
     applyFrameSize();
     applyFrameState();
+    lastRenderStats_.stateUpdateNs = stageTimer.nsecsElapsed();
 
     QElapsedTimer renderTimer;
     renderTimer.start();
-    // Qt Quick clears the target to the window color (transparent) at the start
-    // of its render pass, matching the OpenGL path's explicit clear.
+    stageTimer.restart();
     renderControl_->polishItems();
+    lastRenderStats_.polishNs = stageTimer.nsecsElapsed();
+    stageTimer.restart();
     renderControl_->beginFrame();
     renderControl_->sync();
+    lastRenderStats_.syncNs = stageTimer.nsecsElapsed();
+    stageTimer.restart();
     renderControl_->render();
     renderControl_->endFrame();
+    lastRenderStats_.renderSubmitNs = stageTimer.nsecsElapsed();
     lastRenderStats_.renderNs = renderTimer.nsecsElapsed();
+    return true;
+}
 
-    // P5.2 — synchronous readback. Commands on the immediate context are
-    // implicitly ordered, so CopyResource sees the finished frame and
-    // Map(READ) blocks until the copy lands. No fence machinery needed.
+bool PreviewQuickD3D11ExportSession::readbackStagingTexture(
+    int stagingIndex,
+    QImage* frame,
+    QString* errorMessage)
+{
+#if !defined(Q_OS_WIN)
+    Q_UNUSED(stagingIndex);
+    Q_UNUSED(frame);
+    if (errorMessage != nullptr) {
+        *errorMessage = QStringLiteral("D3D11 readback is Windows-only");
+    }
+    return false;
+#else
+    if (frame == nullptr || stagingIndex < 0 || stagingIndex >= kStagingTextureCount) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("invalid D3D11 staging readback request");
+        }
+        return false;
+    }
     QElapsedTimer readbackTimer;
     readbackTimer.start();
-    const QSize pixelSize = renderTargetPixelSize();
-    d3d_->context->CopyResource(d3d_->staging.Get(), d3d_->renderTarget.Get());
     D3D11_MAPPED_SUBRESOURCE mapped{};
-    const HRESULT hr = d3d_->context->Map(d3d_->staging.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+    const HRESULT hr = d3d_->context->Map(
+        d3d_->staging[stagingIndex].Get(), 0, D3D11_MAP_READ, 0, &mapped);
     if (FAILED(hr)) {
         const HRESULT removedReason = d3d_->device->GetDeviceRemovedReason();
         if (errorMessage != nullptr) {
@@ -506,7 +646,7 @@ QImage PreviewQuickD3D11ExportSession::renderFrame(QString* errorMessage)
                 .arg(hresultHex(hr))
                 .arg(removedReason != S_OK ? hresultHex(removedReason) : QStringLiteral("no"));
         }
-        return QImage();
+        return false;
     }
     lastReadbackRowPitch_ = static_cast<qsizetype>(mapped.RowPitch);
     QImage* readbackSlot = nextReadbackRingSlot();
@@ -514,19 +654,21 @@ QImage PreviewQuickD3D11ExportSession::renderFrame(QString* errorMessage)
     const bool converted = convertTopDownPremultipliedReadbackToStraightRgba(
         static_cast<const uchar*>(mapped.pData),
         lastReadbackRowPitch_,
-        pixelSize,
+        renderTargetPixelSize(),
+        preservePremultipliedReadback_,
         readbackSlot,
         &convertError);
-    d3d_->context->Unmap(d3d_->staging.Get(), 0);
+    d3d_->context->Unmap(d3d_->staging[stagingIndex].Get(), 0);
     if (!converted) {
         if (errorMessage != nullptr) {
             *errorMessage = convertError;
         }
-        return QImage();
+        return false;
     }
     lastRenderStats_.readbackNs = readbackTimer.nsecsElapsed();
-    return *readbackSlot;
-#endif  // Q_OS_WIN
+    *frame = *readbackSlot;
+    return true;
+#endif
 }
 
 bool PreviewQuickD3D11ExportSession::ensureRenderTarget(QString* errorMessage)
@@ -550,7 +692,11 @@ bool PreviewQuickD3D11ExportSession::ensureRenderTarget(QString* errorMessage)
         }
         return false;
     }
-    if (d3d_->renderTarget && d3d_->staging && d3d_->textureSize == pixelSize) {
+    const bool stagingRingReady = std::all_of(
+        d3d_->staging.cbegin(),
+        d3d_->staging.cend(),
+        [](const ComPtr<ID3D11Texture2D>& texture) { return texture != nullptr; });
+    if (d3d_->renderTarget && stagingRingReady && d3d_->textureSize == pixelSize) {
         return true;
     }
 
@@ -582,15 +728,19 @@ bool PreviewQuickD3D11ExportSession::ensureRenderTarget(QString* errorMessage)
     stagingDesc.Usage = D3D11_USAGE_STAGING;
     stagingDesc.BindFlags = 0;
     stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-    hr = d3d_->device->CreateTexture2D(
-        &stagingDesc, nullptr, d3d_->staging.ReleaseAndGetAddressOf());
-    if (FAILED(hr)) {
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("failed to create D3D11 export staging texture (hr=%1)")
-                .arg(hresultHex(hr));
+    for (int index = 0; index < kStagingTextureCount; ++index) {
+        hr = d3d_->device->CreateTexture2D(
+            &stagingDesc, nullptr, d3d_->staging[index].ReleaseAndGetAddressOf());
+        if (FAILED(hr)) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral(
+                    "failed to create D3D11 export staging texture %1 (hr=%2)")
+                    .arg(index)
+                    .arg(hresultHex(hr));
+            }
+            destroyRenderTarget();
+            return false;
         }
-        destroyRenderTarget();
-        return false;
     }
 
     // Depth/stencil is left to Qt (plan P5.1 spike guidance): QQuickRenderTarget
@@ -603,6 +753,7 @@ bool PreviewQuickD3D11ExportSession::ensureRenderTarget(QString* errorMessage)
     target.setDevicePixelRatio(1.0);
     quickWindow_->setRenderTarget(target);
     d3d_->textureSize = pixelSize;
+    resetPipelinedReadback();
     return true;
 #endif  // Q_OS_WIN
 }
@@ -616,9 +767,12 @@ void PreviewQuickD3D11ExportSession::destroyRenderTarget()
     if (quickWindow_ != nullptr && d3d_->renderTarget) {
         quickWindow_->setRenderTarget(QQuickRenderTarget());
     }
-    d3d_->staging.Reset();
+    for (ComPtr<ID3D11Texture2D>& staging : d3d_->staging) {
+        staging.Reset();
+    }
     d3d_->renderTarget.Reset();
     d3d_->textureSize = QSize();
+    resetPipelinedReadback();
 #endif
 }
 

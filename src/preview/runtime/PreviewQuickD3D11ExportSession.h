@@ -9,6 +9,7 @@
 
 #include <limits>
 #include <memory>
+#include <deque>
 
 #include "core/scene/PreviewFrameState.h"
 #include "core/scene/PreviewLayerOrder.h"
@@ -36,10 +37,9 @@ class PreviewQuickSceneRoot;
 //     the GUI surfaces it can bind a non-default adapter safely.
 //   - The render target is an ID3D11Texture2D (R8G8B8A8_UNORM) handed to Qt
 //     Quick via QQuickRenderTarget::fromD3D11Texture.
-//   - Readback is synchronous: CopyResource into a staging texture + Map(READ)
-//     (row-pitch aware, top-down — no vertical flip, unlike GL glReadPixels),
-//     then the same premultiplied→straight RGBA8888 conversion as the GL path.
-//     No PBO/async pipeline in this first version (plan P5.2).
+//   - Synchronous readback remains available for warm-up and rollback. Export
+//     uses a three-texture staging ring so CopyResource for frame N overlaps
+//     CPU mapping/conversion of an older frame.
 //
 // Requires the process-global Qt Quick graphics API to be Direct3D11 (main.cpp
 // selects it for export processes when MIACODE_EXPORT_RENDER_BACKEND requests
@@ -70,6 +70,10 @@ public:
 
     void setFrameSize(const QSize& size);
     QSize frameSize() const { return frameSize_; }
+    void setPreservePremultipliedReadback(bool preserve)
+    {
+        preservePremultipliedReadback_ = preserve;
+    }
 
     // Intro overlay — same contract as PreviewQuickExportSession (sync pair).
     bool setupIntroOverlay(const QUrl& qmlUrl, QString* errorMessage = nullptr);
@@ -87,6 +91,13 @@ public:
     bool isInitialized() const;
 
     QImage renderFrame(QString* errorMessage = nullptr);
+    bool supportsPipelinedReadback(QString* errorMessage = nullptr) const;
+    void resetPipelinedReadback();
+    bool renderFramePipelinedStep(
+        QImage* completedFrame,
+        bool* completedFrameReady,
+        bool drainOnly,
+        QString* errorMessage = nullptr);
     const PreviewQuickExportRenderStats& lastRenderStats() const { return lastRenderStats_; }
     qint64 lastRenderNs() const { return lastRenderStats_.renderNs; }
 
@@ -101,6 +112,8 @@ private:
 
     bool ensureRenderTarget(QString* errorMessage);
     void destroyRenderTarget();
+    bool renderScene(QString* errorMessage);
+    bool readbackStagingTexture(int stagingIndex, QImage* frame, QString* errorMessage);
     // Advance the synchronous readback staging ring and return the next slot
     // (same in-flight zero-copy rationale as the OpenGL session's ring — see
     // the readbackRing_ comment in PreviewQuickExportSession.h).
@@ -131,6 +144,9 @@ private:
     static constexpr int kReadbackRingSize = 8;
     QImage readbackRing_[kReadbackRingSize];
     int readbackRingIndex_ = 0;
+    static constexpr int kStagingTextureCount = 3;
+    int nextStagingTextureIndex_ = 0;
+    std::deque<int> pendingStagingTextureIndices_;
     bool frameStateBound_ = false;
     bool layerFlagsApplied_ = false;
     miacode::preview::scene::PreviewRenderLayerFlags appliedLayerFlags_ =
@@ -139,4 +155,5 @@ private:
     QString adapterDescription_;
     QString adapterLuidString_;
     qsizetype lastReadbackRowPitch_ = 0;
+    bool preservePremultipliedReadback_ = false;
 };

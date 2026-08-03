@@ -39,6 +39,7 @@
 #include <QProgressDialog>
 #include <QRect>
 #include <QRegularExpression>
+#include <QSettings>
 #include <QSet>
 #include <QStandardPaths>
 #include <QSurfaceFormat>
@@ -53,6 +54,7 @@
 #include <cstring>
 #include <deque>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <optional>
 
@@ -70,6 +72,37 @@
 using namespace miacode::video_export::detail;
 
 namespace miacode::video_export::detail {
+
+namespace {
+
+constexpr auto kPreferredHardwareEncoderSettingsKey =
+    "video_export/runtime_probe/preferred_hardware_encoder";
+
+QSettings encoderRuntimeSettings()
+{
+    return QSettings(
+        QSettings::IniFormat,
+        QSettings::UserScope,
+        QStringLiteral("MiaCode"),
+        QStringLiteral("VideoExportRuntime"));
+}
+
+QString preferredHardwareEncoder()
+{
+    QSettings settings = encoderRuntimeSettings();
+    return settings.value(QLatin1String(kPreferredHardwareEncoderSettingsKey)).toString().trimmed();
+}
+
+void rememberPreferredHardwareEncoder(const QString& codec)
+{
+    if (codec.isEmpty()) {
+        return;
+    }
+    QSettings settings = encoderRuntimeSettings();
+    settings.setValue(QLatin1String(kPreferredHardwareEncoderSettingsKey), codec);
+}
+
+}  // namespace
 
 qint64 bytesToMiB(quint64 bytes)
 {
@@ -201,6 +234,8 @@ ExportRuntimeConfig loadExportRuntimeConfig()
     config.x264PresetOverride = qEnvironmentVariable("MIACODE_EXPORT_X264_PRESET").trimmed();
     config.x264CrfOverride = miacode::debug_options::envIntValue("MIACODE_EXPORT_X264_CRF", -1);
     config.x264BframesOverride = miacode::debug_options::envIntValue("MIACODE_EXPORT_X264_BFRAMES", -1);
+    config.premultipliedPipeOverride =
+        miacode::debug_options::exportPremultipliedPipeOverride();
 
     const std::optional<bool> gpuRenderOverride =
         miacode::debug_options::envOptionalFlagValue("MIACODE_EXPORT_ENABLE_GPU_RENDER");
@@ -263,6 +298,7 @@ ExportRuntimeConfig loadExportRuntimeConfig()
 
 bool shouldPreferHardwareEncoderInAutoMode(
     EncoderAutoMode mode,
+    VideoExportPreset preset,
     int outputWidth,
     int outputHeight,
     int fps,
@@ -280,6 +316,13 @@ bool shouldPreferHardwareEncoderInAutoMode(
     if (mode == EncoderAutoMode::Hardware) {
         if (reason != nullptr) {
             *reason = QStringLiteral("mode=hardware");
+        }
+        return true;
+    }
+
+    if (preset == VideoExportPreset::Fast) {
+        if (reason != nullptr) {
+            *reason = QStringLiteral("fast_preset_prefers_hardware");
         }
         return true;
     }
@@ -389,6 +432,24 @@ X264TuningPlan chooseX264TuningPlan(
         static_cast<qint64>(qMax(1, outputWidth)) * qMax(1, outputHeight) * qMax(1, fps);
 
     X264TuningPlan plan;
+    if (preset == VideoExportPreset::Fast) {
+        plan.preset = QStringLiteral("veryfast");
+        plan.crf = 22;
+        plan.bframes = 0;
+        plan.tune = QStringLiteral("animation");
+        if (!exportConfig.x264PresetOverride.isEmpty()) {
+            plan.preset = exportConfig.x264PresetOverride;
+        }
+        plan.crf = qBound(
+            16,
+            exportConfig.x264CrfOverride >= 0 ? exportConfig.x264CrfOverride : plan.crf,
+            28);
+        plan.bframes = qBound(
+            0,
+            exportConfig.x264BframesOverride >= 0 ? exportConfig.x264BframesOverride : plan.bframes,
+            8);
+        return plan;
+    }
     if (memoryInfo.valid) {
         if (availMiB >= 24576 && totalMiB >= 32768) {
             plan.preset = QStringLiteral("medium");
@@ -757,6 +818,7 @@ VideoEncoderConfig chooseVideoEncoder(
     QString encoderAutoModeReason;
     const bool preferHardwareFirst = shouldPreferHardwareEncoderInAutoMode(
         encoderAutoMode,
+        preset,
         safeWidth,
         safeHeight,
         safeFps,
@@ -880,6 +942,21 @@ VideoEncoderConfig chooseVideoEncoder(
         pushCandidate(QStringLiteral("mpeg4"), false);
     }
 
+    QString preferredHardwareCodec;
+    if (autoModeEnabled() && preferHardwareFirst) {
+        preferredHardwareCodec = preferredHardwareEncoder();
+        const auto preferredIt = std::find_if(
+            candidates.begin(),
+            candidates.end(),
+            [&preferredHardwareCodec](const VideoEncoderConfig& candidate) {
+                return candidate.isHardware
+                    && candidate.codec.compare(preferredHardwareCodec, Qt::CaseInsensitive) == 0;
+            });
+        if (preferredIt != candidates.end() && preferredIt != candidates.begin()) {
+            std::rotate(candidates.begin(), preferredIt, std::next(preferredIt));
+        }
+    }
+
     if (!forcedEncoder.isEmpty()) {
         const auto forcedIt = std::find_if(
             candidates.cbegin(),
@@ -938,7 +1015,13 @@ VideoEncoderConfig chooseVideoEncoder(
         QString probeDetail;
         if (probeEncoderRuntimeAvailability(ffmpegPath, candidate, safeWidth, safeHeight, fps, &probeDetail)) {
             config = candidate;
-            runtimeProbeLines.append(QStringLiteral("%1:ok").arg(candidate.codec));
+            if (candidate.isHardware) {
+                rememberPreferredHardwareEncoder(candidate.codec);
+            }
+            runtimeProbeLines.append(
+                candidate.codec.compare(preferredHardwareCodec, Qt::CaseInsensitive) == 0
+                    ? QStringLiteral("%1:ok(preferred_first)").arg(candidate.codec)
+                    : QStringLiteral("%1:ok").arg(candidate.codec));
             selected = true;
             break;
         }

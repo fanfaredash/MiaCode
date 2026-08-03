@@ -148,10 +148,11 @@ FFmpeg binary + extra readback toggle:
 
 - `MIACODE_FFMPEG` / `MIACODE_FFMPEG_PATH` — override the ffmpeg executable path used by export (and the dialog's ffmpeg probe).
 - `MIACODE_EXPORT_DISABLE_PBO_READBACK=1` — extra PBO-readback opt-out, narrower than `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO`.
+- `MIACODE_EXPORT_PREMULTIPLIED_PIPE=0` — restore straight-RGBA CPU conversion for Fast D3D11 export. Unset/default keeps premultiplied RGBA and uses FFmpeg `overlay alpha=premultiplied`; HighQuality and OpenGL remain straight RGBA.
 
 Render-session backend (P5 — hidden, diagnostic):
 
-- `MIACODE_EXPORT_RENDER_BACKEND` — `d3d11_qrhi` (default) | `opengl` | `auto`. Selects the offscreen chart-render session for CLI export and the export worker. The default `d3d11_qrhi` path puts the export process on the Direct3D11 Qt Quick graphics API and drives `PreviewQuickD3D11ExportSession` (device created on the P3-policy adapter via `QQuickGraphicsDevice::fromDeviceAndContext`, `QQuickRenderTarget::fromD3D11Texture` R8G8B8A8 target, synchronous CopyResource+Map readback — no PBO pipeline). Init failure auto-falls back to the OpenGL session (`render_backend_fallback` export-log line: `fallback_from=d3d11_qrhi fallback_to=opengl reason=…`). `opengl` is the explicit rollback path. `auto` is currently identical to `d3d11_qrhi`. Windows-only; unknown values keep OpenGL. Selected backend, adapter LUID and readback mode appear in the `render_backend` export-log summary line.
+- `MIACODE_EXPORT_RENDER_BACKEND` — `d3d11_qrhi` (default) | `opengl` | `auto`. Selects the offscreen chart-render session for CLI export and the export worker. The default `d3d11_qrhi` path puts the export process on the Direct3D11 Qt Quick graphics API and drives `PreviewQuickD3D11ExportSession` (device created on the P3-policy adapter via `QQuickGraphicsDevice::fromDeviceAndContext`, `QQuickRenderTarget::fromD3D11Texture` R8G8B8A8 target, three-texture staging-ring CopyResource+Map readback). Init failure auto-falls back to the OpenGL session (`render_backend_fallback` export-log line: `fallback_from=d3d11_qrhi fallback_to=opengl reason=…`). `opengl` is the explicit rollback path. `auto` is currently identical to `d3d11_qrhi`. Windows-only; unknown values keep OpenGL. Selected backend, adapter LUID and readback mode appear in the `render_backend` export-log summary line; `render_stage_timing_summary` reports state/polish/sync/submit averages.
 
 ## GPU Device Policy (P3/P4 — hidden, diagnostic)
 

@@ -20,6 +20,7 @@ bool verifyPolicy(QTextStream& err)
 {
     using miacode::video_export::shouldRequestOffscreenPboReadback;
     using miacode::video_export::shouldRetryVideoExportWorkerAfterCrash;
+    using miacode::video_export::shouldUsePremultipliedExportPipe;
 
     if (!require(
             shouldRequestOffscreenPboReadback(std::nullopt, std::nullopt),
@@ -72,6 +73,30 @@ bool verifyPolicy(QTextStream& err)
     if (!require(
             !shouldRetryVideoExportWorkerAfterCrash(true, true, false, 2),
             QStringLiteral("Crash retry should happen at most once"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            shouldUsePremultipliedExportPipe(true, true, std::nullopt),
+            QStringLiteral("fast D3D11 export should default to premultiplied transport"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            !shouldUsePremultipliedExportPipe(true, false, std::nullopt),
+            QStringLiteral("high-quality export should keep straight RGBA transport"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            !shouldUsePremultipliedExportPipe(false, true, std::nullopt),
+            QStringLiteral("OpenGL export should keep straight RGBA transport"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            !shouldUsePremultipliedExportPipe(true, true, false),
+            QStringLiteral("explicit premultiplied transport opt-out should win"),
             err)) {
         return false;
     }

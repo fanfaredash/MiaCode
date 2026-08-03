@@ -162,6 +162,10 @@ ReadyFramePayload buildReadyFramePayload(
     if (exportBackend != nullptr) {
         readyFrame.offscreenDrawNs = exportBackend->offscreenDrawNsLastFrameForDebug();
         readyFrame.offscreenReadbackNs = exportBackend->offscreenReadbackNsLastFrameForDebug();
+        readyFrame.stateUpdateNs = exportBackend->stateUpdateNsLastFrameForDebug();
+        readyFrame.polishNs = exportBackend->polishNsLastFrameForDebug();
+        readyFrame.syncNs = exportBackend->syncNsLastFrameForDebug();
+        readyFrame.renderSubmitNs = exportBackend->renderSubmitNsLastFrameForDebug();
         readyFrame.fallbackCount = exportBackend->cpuFallbackCountLastFrameForDebug();
         readyFrame.usedGpuRenderer = exportBackend->usedGpuRendererLastFrameForDebug();
     }
@@ -537,6 +541,7 @@ bool stageStaticBackgroundImageForExport(
 
 bool preparePackedRgbaFrame(
     const QImage& frame,
+    bool preservePremultiplied,
     QImage* convertedFrame,
     QByteArray* packedScratch,
     const char** data,
@@ -551,9 +556,12 @@ bool preparePackedRgbaFrame(
     *data = nullptr;
     *size = 0;
 
+    const QImage::Format expectedFormat = preservePremultiplied
+        ? QImage::Format_RGBA8888_Premultiplied
+        : QImage::Format_RGBA8888;
     const QImage* rgba = &frame;
-    if (rgba->format() != QImage::Format_RGBA8888) {
-        *convertedFrame = frame.convertToFormat(QImage::Format_RGBA8888);
+    if (rgba->format() != expectedFormat) {
+        *convertedFrame = frame.convertToFormat(expectedFormat);
         if (!frame.isNull() && convertedFrame->isNull()) {
             return false;
         }

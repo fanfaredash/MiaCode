@@ -262,17 +262,15 @@ void VideoExportQuickRenderBackend::shutdownOffscreenRenderer()
     d3d11Session_.invalidate();
 }
 
+void VideoExportQuickRenderBackend::setPreservePremultipliedReadback(bool preserve)
+{
+    d3d11Session_.setPreservePremultipliedReadback(preserve);
+}
+
 bool VideoExportQuickRenderBackend::supportsOffscreenPboReadback(QString* errorMessage) const
 {
     if (sessionBackend_ == ExportQuickRenderSessionBackend::D3D11Qrhi) {
-        // The D3D11 session reads back synchronously (CopyResource + Map);
-        // there is no PBO-equivalent pipelined path in this first version
-        // (plan P5.2). Returning false routes the export loop onto the same
-        // synchronous branch HighQuality already uses.
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("d3d11_qrhi readback is synchronous (no PBO path)");
-        }
-        return false;
+        return d3d11Session_.supportsPipelinedReadback(errorMessage);
     }
     return session_.supportsOffscreenPboReadback(errorMessage);
 }
@@ -280,6 +278,7 @@ bool VideoExportQuickRenderBackend::supportsOffscreenPboReadback(QString* errorM
 void VideoExportQuickRenderBackend::resetOffscreenPboReadback()
 {
     if (sessionBackend_ == ExportQuickRenderSessionBackend::D3D11Qrhi) {
+        d3d11Session_.resetPipelinedReadback();
         return;
     }
     session_.resetOffscreenPboReadback();
@@ -353,12 +352,21 @@ bool VideoExportQuickRenderBackend::renderOverlayFrameOffscreenPboStep(
     double hudPlayheadSecondsOverride)
 {
     if (sessionBackend_ == ExportQuickRenderSessionBackend::D3D11Qrhi) {
-        // Unreachable when supportsOffscreenPboReadback gated correctly; guard
-        // anyway so a stray call fails loudly instead of on a null GL context.
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("PBO readback is not available on d3d11_qrhi");
+        d3d11Session_.setFrameSize(outputSize);
+        if (!drainOnly) {
+            updateFrameStateForRender(
+                playheadSeconds,
+                showTimestamp,
+                showObjectStatsHud,
+                hudPlayheadSecondsOverride);
         }
-        return false;
+        const bool ok = d3d11Session_.renderFramePipelinedStep(
+            completedFrame,
+            completedFrameReady,
+            drainOnly,
+            errorMessage);
+        lastRenderStats_ = d3d11Session_.lastRenderStats();
+        return ok;
     }
     session_.setFrameSize(outputSize);
     updateFrameStateForRender(
@@ -458,6 +466,26 @@ qint64 VideoExportQuickRenderBackend::offscreenDrawNsLastFrameForDebug() const
 qint64 VideoExportQuickRenderBackend::offscreenReadbackNsLastFrameForDebug() const
 {
     return lastRenderStats_.readbackNs;
+}
+
+qint64 VideoExportQuickRenderBackend::stateUpdateNsLastFrameForDebug() const
+{
+    return lastRenderStats_.stateUpdateNs;
+}
+
+qint64 VideoExportQuickRenderBackend::polishNsLastFrameForDebug() const
+{
+    return lastRenderStats_.polishNs;
+}
+
+qint64 VideoExportQuickRenderBackend::syncNsLastFrameForDebug() const
+{
+    return lastRenderStats_.syncNs;
+}
+
+qint64 VideoExportQuickRenderBackend::renderSubmitNsLastFrameForDebug() const
+{
+    return lastRenderStats_.renderSubmitNs;
 }
 
 double VideoExportQuickRenderBackend::layoutRingDiameterRatio() const

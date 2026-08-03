@@ -1176,8 +1176,11 @@ bool PreviewQuickExportSession::mapOffscreenReadbackPbo(
 
 bool PreviewQuickExportSession::renderSceneIntoFramebuffer(QString* errorMessage)
 {
+    QElapsedTimer stageTimer;
+    stageTimer.start();
     applyFrameSize();
     applyFrameState();
+    lastRenderStats_.stateUpdateNs = stageTimer.nsecsElapsed();
 
     if (!framebuffer_->bind()) {
         if (errorMessage != nullptr) {
@@ -1202,12 +1205,18 @@ bool PreviewQuickExportSession::renderSceneIntoFramebuffer(QString* errorMessage
 
     QElapsedTimer renderTimer;
     renderTimer.start();
+    stageTimer.restart();
     renderControl_->polishItems();
+    lastRenderStats_.polishNs = stageTimer.nsecsElapsed();
+    stageTimer.restart();
     renderControl_->beginFrame();
     renderControl_->sync();
+    lastRenderStats_.syncNs = stageTimer.nsecsElapsed();
+    stageTimer.restart();
     renderControl_->render();
     renderControl_->endFrame();
     gl->glFlush();
+    lastRenderStats_.renderSubmitNs = stageTimer.nsecsElapsed();
     lastRenderStats_.renderNs = renderTimer.nsecsElapsed();
     return true;
 }
