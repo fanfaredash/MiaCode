@@ -1391,6 +1391,24 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/core/chart/document src/core/chart/parser src/timeline
     )
 
+    miacode_add_dev_tool(preview_slide_vanilla_trim_spec TEST
+        SOURCES
+            src/tools/preview/PreviewSlideVanillaTrimSpec.cpp
+            ${_miacode_chart_core}
+            ${_miacode_log_core}
+            src/core/scene/PreviewTrackShared.h
+            src/core/scene/PreviewTrackShared.cpp
+            src/core/scene/PreviewSceneConstants.h
+            src/common/MuriTypes.h
+            src/common/MuriTypes.cpp
+            src/timeline/TimelineData.h
+            resources/slide_data.qrc
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES
+            src src/common src/preview src/core/scene src/core/chart
+            src/core/chart/document src/core/chart/parser src/timeline
+    )
+
     miacode_add_dev_tool(preview_realtime_object_hot_path_spec TEST
         SOURCES
             src/tools/preview/PreviewRealtimeObjectHotPathSpec.cpp

@@ -1,8 +1,55 @@
 #include "core/scene/PreviewTrackShared.h"
 
+#include "core/scene/PreviewSceneConstants.h"
+
 #include <QtMath>
 
+#include <cmath>
+
 namespace miacode::preview::scene {
+namespace {
+
+// Track proportions are authored to six decimals, so compare with a slack that
+// is far below one arrow spacing but above the authoring rounding.
+constexpr double kProportionEpsilon = 1e-9;
+
+// Arrow index inside one hit area at which the star leaves that area. This is
+// the checkpoint the arcade's GetDeleteArrowDistance stops at; when the shape
+// records no crossing strictly inside the area, the star leaves it exactly as
+// the next area begins, which puts every arrow of the area behind it.
+int hiddenCutWithinArea(
+    const TimelineNoteMarker& marker,
+    int segmentIndex,
+    int areaIndex,
+    const QVector<double>& thresholds,
+    int areaArrowCount
+)
+{
+    const QVector<double>& checkpoints =
+        marker.slideTrackAreaCheckpoints.value(segmentIndex).value(areaIndex);
+    const QVector<int>& cutIndices =
+        marker.slideTrackAreaCutIndices.value(segmentIndex).value(areaIndex);
+    if (checkpoints.isEmpty() || cutIndices.size() != checkpoints.size()) {
+        return areaArrowCount;
+    }
+
+    const double areaStart = thresholds.value(areaIndex, 0.0);
+    const double areaEnd = areaIndex + 1 < thresholds.size() ? thresholds.at(areaIndex + 1) : 1.0;
+
+    int cut = -1;
+    for (int checkpointIndex = 0; checkpointIndex < checkpoints.size(); ++checkpointIndex) {
+        const double checkpoint = checkpoints.at(checkpointIndex);
+        if (checkpoint > areaStart - kProportionEpsilon && checkpoint < areaEnd - kProportionEpsilon) {
+            cut = cutIndices.at(checkpointIndex);
+        }
+    }
+    if (cut < 0) {
+        return areaArrowCount;
+    }
+    return qBound(0, cut, areaArrowCount);
+}
+
+}  // namespace
 
 int currentAreaIndexForProportion(const QVector<double>& thresholds, qreal proportion, int areaCount)
 {
@@ -144,6 +191,169 @@ int totalWifiTrackArrowCount(const QVector<QVector<QPointF>>& areas)
         totalArrowCount += areaPoints.size();
     }
     return totalArrowCount;
+}
+
+PreviewSlideAutoplayAreas buildPreviewSlideAutoplayAreas(const TimelineNoteMarker& marker)
+{
+    PreviewSlideAutoplayAreas autoplayAreas;
+    const int segmentCount = marker.slideTrackAreaPoints.size();
+    if (segmentCount <= 0) {
+        return autoplayAreas;
+    }
+
+    int globalArrowOffset = 0;
+    int lastSegmentArrowCount = 0;
+    for (int segmentIndex = 0; segmentIndex < segmentCount; ++segmentIndex) {
+        const QVector<QVector<QPointF>>& areas = marker.slideTrackAreaPoints[segmentIndex];
+        const QVector<double>& thresholds = marker.slideTrackAreaThresholds.value(segmentIndex);
+        int segmentArrowCount = 0;
+        for (int areaIndex = 0; areaIndex < areas.size(); ++areaIndex) {
+            const int areaArrowCount = areas[areaIndex].size();
+            const int hiddenAt = globalArrowOffset
+                + hiddenCutWithinArea(marker, segmentIndex, areaIndex, thresholds, areaArrowCount);
+            if (segmentIndex > 0 && areaIndex == 0 && !autoplayAreas.hiddenArrowCountAfterArea.isEmpty()) {
+                // Connected-slide join: the arcade keeps one merged hit-area
+                // list and folds the incoming segment's first area into the
+                // previous slot as its sub hit area, so that slot's exit point
+                // becomes this area's rather than adding a step of its own.
+                autoplayAreas.hiddenArrowCountAfterArea.last() = hiddenAt;
+            } else {
+                autoplayAreas.hiddenArrowCountAfterArea.append(hiddenAt);
+            }
+            globalArrowOffset += areaArrowCount;
+            segmentArrowCount += areaArrowCount;
+        }
+        lastSegmentArrowCount = segmentArrowCount;
+    }
+    autoplayAreas.totalArrowCount = globalArrowOffset;
+
+    // `critical_proportion` is authored per segment and is exactly the arcade's
+    // 1 - lastWaitTime / traceDuration. The arcade measures lastWaitTime once
+    // over the merged list, so scale the last segment's value by that segment's
+    // share of the track; a single-segment slide keeps its value unchanged.
+    const int criticalCount = marker.slideSegmentCriticalProportions.size();
+    const double lastCritical = criticalCount > 0
+        ? marker.slideSegmentCriticalProportions.at(qMin(segmentCount, criticalCount) - 1)
+        : 1.0;
+    const double lastShare = autoplayAreas.totalArrowCount > 0
+        ? static_cast<double>(lastSegmentArrowCount) / autoplayAreas.totalArrowCount
+        : 1.0;
+    autoplayAreas.criticalProportion =
+        qBound(kRenderDurationEpsilon, 1.0 - lastShare * (1.0 - lastCritical), 1.0);
+    return autoplayAreas;
+}
+
+void previewSlideStarSegment(
+    const TimelineNoteMarker& marker,
+    double playheadSeconds,
+    int segmentCount,
+    int* outSegmentIndex,
+    qreal* outSegmentProportion
+)
+{
+    int segmentIndex = 0;
+    if (!marker.slideSegmentShootSeconds.isEmpty()
+        && marker.slideSegmentShootSeconds.size() == marker.slideSegmentDurations.size()) {
+        for (int index = marker.slideSegmentShootSeconds.size() - 1; index >= 0; --index) {
+            if (playheadSeconds >= marker.slideSegmentShootSeconds[index]) {
+                segmentIndex = index;
+                break;
+            }
+        }
+    }
+    if (segmentCount > 0) {
+        segmentIndex = qBound(0, segmentIndex, segmentCount - 1);
+    }
+
+    qreal proportion = 1.0;
+    if (segmentIndex < marker.slideSegmentShootSeconds.size()
+        && segmentIndex < marker.slideSegmentDurations.size()) {
+        const qreal duration =
+            qMax<qreal>(kRenderDurationEpsilon, marker.slideSegmentDurations[segmentIndex]);
+        proportion = qBound<qreal>(
+            0.0,
+            static_cast<qreal>((playheadSeconds - marker.slideSegmentShootSeconds[segmentIndex]) / duration),
+            1.0
+        );
+    }
+
+    if (outSegmentIndex != nullptr) {
+        *outSegmentIndex = segmentIndex;
+    }
+    if (outSegmentProportion != nullptr) {
+        *outSegmentProportion = proportion;
+    }
+}
+
+qreal previewSlideStarProgress(const TimelineNoteMarker& marker, double playheadSeconds)
+{
+    const int segmentCount = marker.slideTrackAreaPoints.size();
+    if (segmentCount <= 0) {
+        return 0.0;
+    }
+
+    // Weight segments the way the parser split the trace time between them, so
+    // the front cannot drift away from the star. A connected chain currently
+    // always resolves to a length-proportional split, but reading the parsed
+    // durations keeps this correct if per-segment timing is ever honoured.
+    QVector<double> segmentWeights(segmentCount, 0.0);
+    double totalWeight = 0.0;
+    const bool useDurations = marker.slideSegmentDurations.size() >= segmentCount;
+    for (int segmentIndex = 0; segmentIndex < segmentCount; ++segmentIndex) {
+        double weight = 0.0;
+        if (useDurations) {
+            weight = qMax(0.0, marker.slideSegmentDurations.at(segmentIndex));
+        } else {
+            for (const QVector<QPointF>& areaPoints : marker.slideTrackAreaPoints[segmentIndex]) {
+                weight += areaPoints.size();
+            }
+        }
+        segmentWeights[segmentIndex] = weight;
+        totalWeight += weight;
+    }
+    if (totalWeight <= 0.0) {
+        return 0.0;
+    }
+
+    int segmentIndex = 0;
+    qreal segmentProportion = 1.0;
+    previewSlideStarSegment(marker, playheadSeconds, segmentCount, &segmentIndex, &segmentProportion);
+
+    double weightBefore = 0.0;
+    for (int index = 0; index < segmentIndex; ++index) {
+        weightBefore += segmentWeights[index];
+    }
+    const double travelled = weightBefore + segmentProportion * segmentWeights[segmentIndex];
+    return qBound<qreal>(0.0, static_cast<qreal>(travelled / totalWeight), 1.0);
+}
+
+int previewSlideVanillaHiddenArrowCount(const PreviewSlideAutoplayAreas& areas, qreal starProgress)
+{
+    if (!areas.isValid()) {
+        return 0;
+    }
+
+    const int areaCount = areas.areaCount();
+    const qreal num6 = qMax<qreal>(0.0, starProgress) / areas.criticalProportion;
+    const qreal scaled = areaCount * num6;
+    const int hitIndex = scaled >= areaCount ? areaCount - 1 : static_cast<int>(qMax<qreal>(0.0, scaled));
+    if (hitIndex <= 0) {
+        return 0;
+    }
+    return qBound(0, areas.hiddenArrowCountAfterArea.at(hitIndex - 1), areas.totalArrowCount);
+}
+
+int previewWifiVanillaHiddenRowCount(double criticalProportion, int rowCount, qreal starProgress)
+{
+    if (rowCount <= 0 || criticalProportion <= 0.0) {
+        return 0;
+    }
+    const qreal num7 = qMax<qreal>(0.0, starProgress) / criticalProportion;
+    if (num7 <= 0.0) {
+        return 0;
+    }
+    const qreal rows = std::ceil(num7);
+    return rows >= rowCount ? rowCount : static_cast<int>(rows);
 }
 
 int currentWifiLaneAreaIndexAt(
