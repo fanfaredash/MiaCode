@@ -13,11 +13,12 @@ enum class Trigger {
 inline Trigger classify(
     bool phaseActive,
     qint64 activeMs,
+    bool heartbeatArmed,
     qint64 heartbeatAgeMs,
     qint64 activePhaseHangMs,
     qint64 idleHeartbeatHangMs)
 {
-    if (heartbeatAgeMs >= idleHeartbeatHangMs) {
+    if (heartbeatArmed && heartbeatAgeMs >= idleHeartbeatHangMs) {
         return Trigger::IdleHeartbeat;
     }
     if (phaseActive && activeMs >= activePhaseHangMs) {

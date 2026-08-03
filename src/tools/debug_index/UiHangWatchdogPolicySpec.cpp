@@ -24,15 +24,21 @@ int main()
     QTextStream out(stdout);
     bool ok = true;
 
-    ok &= require(policy::classify(false, 0, 4999, 2000, 5000) == Trigger::None,
+    ok &= require(policy::classify(false, 0, true, 4999, 2000, 5000) == Trigger::None,
                   QStringLiteral("inactive heartbeat below threshold"), err);
-    ok &= require(policy::classify(false, 0, 5000, 2000, 5000) == Trigger::IdleHeartbeat,
+    ok &= require(policy::classify(false, 0, true, 5000, 2000, 5000) == Trigger::IdleHeartbeat,
                   QStringLiteral("inactive stale heartbeat triggers"), err);
-    ok &= require(policy::classify(true, 1999, 100, 2000, 5000) == Trigger::None,
+    ok &= require(policy::classify(false, 0, false, 60000, 2000, 5000) == Trigger::None,
+                  QStringLiteral("idle watchdog stays disarmed before first event-loop heartbeat"), err);
+    ok &= require(policy::classify(true, 1999, false, 60000, 2000, 5000) == Trigger::None,
+                  QStringLiteral("unarmed heartbeat does not hide a short active phase"), err);
+    ok &= require(policy::classify(true, 1999, true, 100, 2000, 5000) == Trigger::None,
                   QStringLiteral("active phase below threshold"), err);
-    ok &= require(policy::classify(true, 2000, 100, 2000, 5000) == Trigger::ActivePhase,
+    ok &= require(policy::classify(true, 2000, false, 60000, 2000, 5000) == Trigger::ActivePhase,
+                  QStringLiteral("active phase remains available before first heartbeat"), err);
+    ok &= require(policy::classify(true, 2000, true, 100, 2000, 5000) == Trigger::ActivePhase,
                   QStringLiteral("active phase threshold triggers"), err);
-    ok &= require(policy::classify(true, 5000, 5000, 2000, 5000) == Trigger::IdleHeartbeat,
+    ok &= require(policy::classify(true, 5000, true, 5000, 2000, 5000) == Trigger::IdleHeartbeat,
                   QStringLiteral("stale heartbeat has priority over active phase"), err);
 
     ok &= require(!policy::shouldReport(

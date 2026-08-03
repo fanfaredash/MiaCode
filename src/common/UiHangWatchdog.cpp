@@ -103,7 +103,11 @@ void watchdogLoop()
             continue;
         }
         const qint64 now = steadyMs();
-        const qint64 heartbeatAge = qMax<qint64>(0, now - g_lastHeartbeatMs.load(std::memory_order_acquire));
+        const qint64 lastHeartbeat = g_lastHeartbeatMs.load(std::memory_order_acquire);
+        const bool heartbeatArmed = lastHeartbeat > 0;
+        const qint64 heartbeatAge = heartbeatArmed
+            ? qMax<qint64>(0, now - lastHeartbeat)
+            : 0;
         const PhaseState phase = snapshotPhase();
         const qint64 activeMs = phase.active
             ? qMax<qint64>(0, now - phase.startMs)
@@ -111,6 +115,7 @@ void watchdogLoop()
         const policy::Trigger trigger = policy::classify(
             phase.active,
             activeMs,
+            heartbeatArmed,
             heartbeatAge,
             kActivePhaseHangMs,
             kIdleHeartbeatHangMs);
@@ -142,7 +147,10 @@ void installGuiHeartbeat(QObject* owner)
         owner = QCoreApplication::instance();
     }
     g_enabled.store(true, std::memory_order_release);
-    g_lastHeartbeatMs.store(steadyMs(), std::memory_order_release);
+    // Do not arm the idle trigger until the event loop proves it can deliver a
+    // heartbeat. Startup may legitimately spend more than five seconds before
+    // app.exec(), while marked phase monitoring remains available immediately.
+    g_lastHeartbeatMs.store(0, std::memory_order_release);
 
     auto* timer = new QTimer(owner);
     timer->setObjectName(QStringLiteral("MiaCodeGuiHangHeartbeat"));

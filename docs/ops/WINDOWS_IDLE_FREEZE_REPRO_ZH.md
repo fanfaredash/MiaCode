@@ -71,7 +71,7 @@ $evidenceRoot = "D:\miacode-idle-freeze"
 - `GpuBound` 的 `startup/gpu_provider` 应显示实际 `action=bound`，或明确说明为何跳过；若是 `reason=high_perf_equals_default_adapter`，这台机器上的 GPU 绑定 A/B 没有判别力。
 - `GpuOff` 应出现 `reason=bind_disabled_by_env`。
 - `[runtime/idle/resource_gauge] action=sample sample=0` 应在启动后出现，随后约每 30 秒一条。
-- 显示器状态改变应出现 `[runtime/windows/environment_event] action=console_display_state state=off|on|dimmed`。
+- 显示器状态改变应出现 `[runtime/windows/environment_event] action=console_display_state console_display_state=off|on|dimmed`。
 - 锁屏/解锁应出现 `action=session_change reason=session_lock|session_unlock`。
 
 环境事件与看门狗记录使用 `FATAL` 级别是为了同步持久化证据，不表示显示器关闭或锁屏本身是致命错误。

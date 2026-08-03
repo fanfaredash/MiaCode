@@ -1718,9 +1718,13 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/debug_index/WindowsIdleEventDiagnosticsSpec.cpp
             src/app/WindowsIdleEventDiagnostics.h
             src/app/WindowsIdleEventDiagnostics.cpp
+            ${_miacode_log_core}
         LIBS Qt6::Core
         INCLUDES src
     )
+    if (WIN32)
+        target_link_libraries(windows_idle_event_diagnostics_spec PRIVATE User32 Wtsapi32)
+    endif()
 
     miacode_add_dev_tool(idle_freeze_repro_script_spec TEST
         SOURCES
