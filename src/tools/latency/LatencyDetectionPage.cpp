@@ -228,6 +228,7 @@ void LatencyDetectionPage::buildUi()
     // Tools menu), so it carries its own way back. switchToMetadataField()
     // runs the full leave semantics (onPageLeft teardown, bottom-tab OFF).
     auto* backBar = new QWidget(this);
+    backBar->setObjectName(QStringLiteral("LatencyBackBar"));
     auto* backBarLayout = new QHBoxLayout(backBar);
     backBarLayout->setContentsMargins(22, 12, 28, 0);
     backBarLayout->setSpacing(0);
@@ -267,13 +268,17 @@ void LatencyDetectionPage::buildUi()
     outer->addWidget(backBar, 0);
 
     auto* scroll = new QScrollArea(this);
+    scroll->setObjectName(QStringLiteral("LatencyScrollArea"));
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->viewport()->setObjectName(QStringLiteral("LatencyScrollViewport"));
+    scroll->viewport()->setAutoFillBackground(false);
     miacode::ui::applyScrollBarStyle(scroll);
     outer->addWidget(scroll, 1);
 
     auto* content = new QWidget(scroll);
+    content->setObjectName(QStringLiteral("LatencyContent"));
     auto* contentLayout = new QVBoxLayout(content);
     contentLayout->setContentsMargins(28, 24, 28, 24);
     contentLayout->setSpacing(16);

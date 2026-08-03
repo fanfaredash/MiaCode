@@ -649,11 +649,26 @@ QString metadataPageStyleSheet()
 QString latencyDetectionPageStyleSheet()
 {
     const Colors& c = colors();
+    const QColor pageBackground = c.dark ? QColor(QStringLiteral("#1B222B")) : c.panelBg;
     return QStringLiteral(
+        "QWidget#LatencyDetectionPage {"
+        " background: %6;"
+        " color: %3;"
+        "}"
+        "QWidget#LatencyBackBar,"
+        "QWidget#LatencyContent,"
+        "QWidget#LatencyScrollViewport,"
+        "QScrollArea#LatencyScrollArea {"
+        " background: %6;"
+        " border: none;"
+        "}"
         "QFrame#LatencyCard {"
         " background: %1;"
         " border: 1px solid %2;"
         " border-radius: 6px;"
+        "}"
+        "QFrame#LatencyCard QLabel {"
+        " background: transparent;"
         "}"
         "QLabel[role=\"cardTitle\"] {"
         " color: %3;"
@@ -686,12 +701,69 @@ QString latencyDetectionPageStyleSheet()
         " border-color: %5;"
         " color: %5;"
         "}"
+        "QFrame#LatencyCard QAbstractSpinBox {"
+        " background: %7;"
+        " color: %3;"
+        " border: 1px solid %8;"
+        " border-radius: 6px;"
+        " padding: 4px 8px;"
+        " selection-background-color: %9;"
+        " selection-color: %10;"
+        "}"
+        "QFrame#LatencyCard QAbstractSpinBox:focus {"
+        " border-color: %5;"
+        "}"
+        "QFrame#LatencyCard QPushButton {"
+        " color: %3;"
+        " background: %7;"
+        " border: 1px solid %2;"
+        " border-radius: 6px;"
+        " padding: 5px 12px;"
+        "}"
+        "QFrame#LatencyCard QPushButton:hover {"
+        " background: %11;"
+        " border-color: %5;"
+        " color: %5;"
+        "}"
+        "QFrame#LatencyCard QPushButton:disabled {"
+        " color: %4;"
+        " background: %7;"
+        " border-color: %8;"
+        "}"
+        "QFrame#LatencyCard QRadioButton {"
+        " color: %3;"
+        " background: transparent;"
+        " spacing: 6px;"
+        "}"
+        "QFrame#LatencyCard QSlider::groove:horizontal {"
+        " height: 6px;"
+        " background: %7;"
+        " border: 1px solid %8;"
+        " border-radius: 3px;"
+        "}"
+        "QFrame#LatencyCard QSlider::handle:horizontal {"
+        " background: %5;"
+        " border: 1px solid %5;"
+        " width: 16px;"
+        " margin: -6px 0;"
+        " border-radius: 8px;"
+        "}"
+        "QFrame#LatencyCard QSlider::sub-page:horizontal {"
+        " background: %5;"
+        " border-radius: 3px;"
+        "}"
     )
         .arg(cssSurface(c.cardBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Card, c.dark)))
         .arg(css(c.border))
         .arg(css(c.textPrimary))
         .arg(css(c.textMuted))
-        .arg(css(c.accent));
+        .arg(css(c.accent))
+        .arg(css(pageBackground))
+        .arg(cssSurface(c.inputBg, appBackgroundOverlayAlpha(AppBackgroundOverlayRole::Input, c.dark)))
+        .arg(css(c.borderSoft))
+        .arg(css(c.selection))
+        .arg(css(c.selectionText))
+        .arg(css(c.menuHoverBg));
 }
 
 QString exportLauncherPageStyleSheet()
