@@ -2,11 +2,10 @@
 
 #include <QtMath>
 #include <algorithm>
-#include <climits>
 #include <cmath>
 #include <limits>
 
-#include "common/MiniaudioFileAccess.h"
+#include "audio/OfflineAudioDecoder.h"
 
 namespace miacode::latency_analysis {
 
@@ -243,41 +242,20 @@ void cacheBpmCandidates(
 
 }  // namespace
 
-DecodedAudio decodeMonoTrack(const QString& trackPath, int sampleRate)
+DecodedAudio decodeMonoTrack(
+    const QString& trackPath,
+    int sampleRate,
+    miacode::audio_decode::BackendPreference backend)
 {
     DecodedAudio decoded;
     if (trackPath.isEmpty() || sampleRate <= 0) {
         return decoded;
     }
 
-    ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 1, static_cast<ma_uint32>(sampleRate));
-    ma_decoder decoder;
-    if (miacode::audio_io::decoderInitFile(trackPath, &config, &decoder) != MA_SUCCESS) {
-        return decoded;
-    }
-
-    ma_uint64 totalFrames = 0;
-    if (ma_decoder_get_length_in_pcm_frames(&decoder, &totalFrames) == MA_SUCCESS && totalFrames > 0) {
-        decoded.samples.reserve(static_cast<int>(qMin<ma_uint64>(totalFrames, static_cast<ma_uint64>(INT_MAX))));
-    }
-
-    QVector<float> buffer(4096, 0.0f);
-    while (true) {
-        ma_uint64 framesRead = 0;
-        if (ma_decoder_read_pcm_frames(&decoder, buffer.data(), static_cast<ma_uint64>(buffer.size()), &framesRead) != MA_SUCCESS
-            || framesRead == 0) {
-            break;
-        }
-        const int oldSize = decoded.samples.size();
-        decoded.samples.resize(oldSize + static_cast<int>(framesRead));
-        std::copy_n(buffer.constBegin(), static_cast<int>(framesRead), decoded.samples.begin() + oldSize);
-    }
-    ma_decoder_uninit(&decoder);
-
-    decoded.sampleRate = sampleRate;
-    if (sampleRate > 0) {
-        decoded.durationSeconds = static_cast<double>(decoded.samples.size()) / static_cast<double>(sampleRate);
-    }
+    const auto audio = miacode::audio_decode::decodeFileToMono(trackPath, sampleRate, backend);
+    decoded.samples = audio.samples;
+    decoded.sampleRate = audio.sampleRate;
+    decoded.durationSeconds = audio.durationSeconds;
     return decoded;
 }
 

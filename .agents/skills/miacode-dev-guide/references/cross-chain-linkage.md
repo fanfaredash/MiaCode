@@ -289,6 +289,11 @@ replica was the wrong approach: it bypassed the real per-frame path and drifted)
 - The controller's `QTimer` is a ~30Hz UI poll ONLY: it mirrors `qtPreviewPlaying_` +
   `qtPreviewPauseSecond_` onto the page's own widgets (audition button + position label) via
   `auditionStateChanged` / `playheadAdvanced`. It does NOT drive playback.
+- BPM/offset analysis audio is decoded independently of the audition transport through
+  `src/audio/OfflineAudioDecoder.*`. `LatencyDetectionPage` persists a strict BASS/miniaudio
+  selection under `latency/audioDecoder`; switching it clears both cached envelopes. BASS is the
+  supported OGG Vorbis path, while miniaudio preserves the original WAV/MP3/FLAC behavior. Do not
+  silently cross-fallback, because the visible selector is also the user's diagnostic control.
 - Leaving the page (`setOnPage(false)`) stops the transport and restores the previous chart's preview
   state, then re-dispatches audio levels (see below). `setOnPage` flips `onPage_` BEFORE running
   install/teardown, so the level dispatch reads the correct mode at both edges.

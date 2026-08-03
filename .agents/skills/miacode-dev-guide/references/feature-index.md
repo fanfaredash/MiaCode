@@ -974,6 +974,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 
 - `LatencyDetectionPage.*`, `LatencyAnalysis.*`, `LatencySandboxController.*`,
   `LatencyTestChartBuilder.*` (an in-sidebar page + sandbox audition).
+- **Selectable offline decoder:** `src/audio/OfflineAudioDecoder.*` owns the shared mono decode
+  boundary. The latency page persists `latency/audioDecoder` and offers **BASS** (default where
+  compiled, including OGG Vorbis support) plus the original **miniaudio** path. Selection is strict:
+  a decode failure is reported instead of silently falling back to the other backend, and changing
+  the selection invalidates the cached analysis envelopes. Other `decodeMonoTrack` callers retain
+  miniaudio as their source-compatible default.
 - **UI** is one "谱面参数" (Chart Parameters) card holding three grid rows
   (label / spin / 自动检测 / result) for BPM, 偏移 (Offset), and `clock_count`, plus the
   audition card; the audio/video media-tools launcher sits in the page back-bar (not on
@@ -993,7 +999,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   the batch pass rate 52.8%→63.0% @10ms — see `docs/OFFSET_DETECTION_BASELINE_v1_ZH.md`.
 - **Offline batch evaluator:** `LatencyBatchTest.cpp` → dev tool **`latency_offset_batch`**
   (built behind `MIACODE_BUILD_DEV_TOOLS`, NOT a CTest case; own miniaudio-impl TU
-  `LatencyBatchAudioImpl.cpp`, decode-only). Walks a root for `maidata.txt`+`track.*` projects,
+  `LatencyBatchAudioImpl.cpp`, decode-only, and uses the miniaudio decoder default). Walks a root
+  for `maidata.txt`+`track.*` projects,
   parses declared BPM (`&wholebpm`→`&bpm`→inline `(NNN)`) + `&first`, runs `detectOffset`, and
   scores the error **folded modulo one 8th-note** (an integer number of 8th-notes = 0 error).
   Every `DetectionTuning` field is a CLI flag (`--transient-weight`, `--phase-penalty`,

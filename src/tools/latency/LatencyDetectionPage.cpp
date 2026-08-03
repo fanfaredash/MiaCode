@@ -15,6 +15,7 @@
 #include <QApplication>
 #include <QButtonGroup>
 #include <QCursor>
+#include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFrame>
 #include <QGridLayout>
@@ -49,6 +50,11 @@ constexpr int kDecimalsOffset = 3;
 QString latencySfxVolumeSettingsKey()
 {
     return QStringLiteral("latency/sfxVolumePercent");
+}
+
+QString latencyAudioDecoderSettingsKey()
+{
+    return QStringLiteral("latency/audioDecoder");
 }
 
 // The BPM/offset spin boxes and the SFX slider live in a scroll area, so a
@@ -382,6 +388,36 @@ void LatencyDetectionPage::buildUi()
     // clock_count is a plain manual field: no auto-detect button, no hint, and
     // BPM detection no longer writes it.
 
+    paramGrid->addWidget(
+        miacode::ui::createFormLabel(
+            UiText::text(QStringLiteral("latency.audio_decoder")), paramCard),
+        3, 0, Qt::AlignLeft | Qt::AlignVCenter);
+    audioDecoderCombo_ = new QComboBox(paramCard);
+    audioDecoderCombo_->addItem(QStringLiteral("BASS"), QStringLiteral("bass"));
+    audioDecoderCombo_->addItem(QStringLiteral("miniaudio"), QStringLiteral("miniaudio"));
+    audioDecoderCombo_->setMinimumWidth(110);
+    const QString storedDecoder = QSettings().value(
+        latencyAudioDecoderSettingsKey(), QStringLiteral("bass")).toString();
+    int decoderIndex = audioDecoderCombo_->findData(storedDecoder);
+    if (decoderIndex < 0) {
+        decoderIndex = 0;
+    }
+    audioDecoderCombo_->setCurrentIndex(decoderIndex);
+    if (!miacode::audio_decode::bassBackendAvailable()) {
+        audioDecoderCombo_->setItemData(0, 0, Qt::UserRole - 1);
+        if (decoderIndex == 0) {
+            audioDecoderCombo_->setCurrentIndex(1);
+        }
+    }
+    connect(audioDecoderCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (audioDecoderCombo_ == nullptr || index < 0) {
+            return;
+        }
+        QSettings().setValue(latencyAudioDecoderSettingsKey(), audioDecoderCombo_->itemData(index));
+        clearAudioEnvelopeCache();
+    });
+    paramGrid->addWidget(audioDecoderCombo_, 3, 1, Qt::AlignVCenter);
+
     paramLayout->addLayout(paramGrid);
     contentLayout->addWidget(paramCard);
 
@@ -613,7 +649,14 @@ void LatencyDetectionPage::onDetectBpmClicked()
         return;
     }
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    ensureAudioEnvelopeReady();
+    if (!ensureAudioEnvelopeReady()) {
+        QApplication::restoreOverrideCursor();
+        if (bpmDetectResultLabel_ != nullptr) {
+            bpmDetectResultLabel_->setText(
+                UiText::text(QStringLiteral("latency.audio_decode_failed")));
+        }
+        return;
+    }
     const auto result = latency_analysis::detectBpm(cachedOnsetEnvelope_);
     QApplication::restoreOverrideCursor();
     if (!(result.bpm > 0.0)) {
@@ -659,7 +702,14 @@ void LatencyDetectionPage::onDetectOffsetClicked()
         return;
     }
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    ensureAudioEnvelopeReady();
+    if (!ensureAudioEnvelopeReady()) {
+        QApplication::restoreOverrideCursor();
+        if (offsetDetectResultLabel_ != nullptr) {
+            offsetDetectResultLabel_->setText(
+                UiText::text(QStringLiteral("latency.audio_decode_failed")));
+        }
+        return;
+    }
     latency_analysis::OffsetDetectionInputs inputs;
     inputs.bpm = bpm;
     inputs.offsetAnchorSeconds = offsetEdit_ != nullptr ? offsetEdit_->value() : 0.0;
@@ -737,27 +787,38 @@ void LatencyDetectionPage::updateAutoDetectAvailability()
     }
 }
 
-void LatencyDetectionPage::ensureAudioEnvelopeReady()
+bool LatencyDetectionPage::ensureAudioEnvelopeReady()
 {
     const QString trackPath = currentTrackPath();
     if (trackPath.isEmpty()) {
         clearAudioEnvelopeCache();
-        return;
+        return false;
     }
     if (trackPath == cachedAudioPath_
         && !cachedOnsetEnvelope_.isEmpty()
         && !cachedTransientEnvelope_.isEmpty()) {
-        return;
+        return true;
     }
-    const auto decoded = latency_analysis::decodeMonoTrack(trackPath);
+    const auto decoded = latency_analysis::decodeMonoTrack(
+        trackPath, latency_analysis::kAnalysisSampleRate, selectedAudioDecodeBackend());
     if (decoded.samples.isEmpty() || decoded.sampleRate <= 0) {
         clearAudioEnvelopeCache();
-        return;
+        return false;
     }
     cachedAudioPath_ = trackPath;
     cachedAudioDurationSeconds_ = decoded.durationSeconds;
     cachedOnsetEnvelope_ = latency_analysis::buildOnsetEnvelope(decoded.samples, decoded.sampleRate);
     cachedTransientEnvelope_ = latency_analysis::buildTransientEnvelope(decoded.samples, decoded.sampleRate);
+    return !cachedOnsetEnvelope_.isEmpty() && !cachedTransientEnvelope_.isEmpty();
+}
+
+miacode::audio_decode::BackendPreference LatencyDetectionPage::selectedAudioDecodeBackend() const
+{
+    if (audioDecoderCombo_ != nullptr
+        && audioDecoderCombo_->currentData().toString() == QStringLiteral("bass")) {
+        return miacode::audio_decode::BackendPreference::Bass;
+    }
+    return miacode::audio_decode::BackendPreference::Miniaudio;
 }
 
 void LatencyDetectionPage::clearAudioEnvelopeCache()

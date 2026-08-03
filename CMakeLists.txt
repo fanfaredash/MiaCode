@@ -212,6 +212,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/InputShortcutGesture.h
     src/common/InputShortcutGesture.cpp
     src/common/ChartAssetPaths.h
+    src/audio/OfflineAudioDecoder.h
+    src/audio/OfflineAudioDecoder.cpp
     src/common/Id3TagReader.h
     src/common/Id3TagReader.cpp
     src/common/TimelineThemeConfig.h
@@ -1114,6 +1116,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/latency/LatencyBatchAudioImpl.cpp
             src/tools/latency/LatencyAnalysis.h
             src/tools/latency/LatencyAnalysis.cpp
+            src/audio/OfflineAudioDecoder.h
+            src/audio/OfflineAudioDecoder.cpp
         LIBS Qt6::Core
         INCLUDES src src/tools/latency
     )

@@ -1342,6 +1342,8 @@ const QHash<QString, QString>& enMap()
         {"export_page.the_video_export_panel_is", "The video export panel is unavailable right now."},
 
         {"latency.auto_detect", "Auto-detect"},
+        {"latency.audio_decode_failed", "Audio decoding failed"},
+        {"latency.audio_decoder", "Audio decoder"},
         {"latency.back_to_chart_info", "← Back to Chart Info"},
         {"latency.bpm_not_detected", "BPM not detected"},
         {"latency.chart_parameters", "Chart Parameters"},
@@ -2507,6 +2509,8 @@ const QHash<QString, QString>& zhMap()
         {"export_page.the_video_export_panel_is", "视频导出面板暂不可用。"},
 
         {"latency.auto_detect", "自动检测"},
+        {"latency.audio_decode_failed", "音频解码失败"},
+        {"latency.audio_decoder", "音频解码器"},
         {"latency.back_to_chart_info", "← 返回谱面信息"},
         {"latency.bpm_not_detected", "未检测到 BPM"},
         {"latency.chart_parameters", "谱面参数"},
@@ -3641,6 +3645,8 @@ const QHash<QString, QString>& jaMap()
         {"export_page.the_video_export_panel_is", "動画出力パネルは現在利用できません。"},
 
         {"latency.auto_detect", "自動検出"},
+        {"latency.audio_decode_failed", "オーディオのデコードに失敗しました"},
+        {"latency.audio_decoder", "オーディオデコーダー"},
         {"latency.back_to_chart_info", "← 譜面情報に戻る"},
         {"latency.bpm_not_detected", "BPM を検出できません"},
         {"latency.chart_parameters", "譜面パラメーター"},
