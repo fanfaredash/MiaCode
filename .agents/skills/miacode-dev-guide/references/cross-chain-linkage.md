@@ -30,7 +30,8 @@ Implications:
   `ChartNormalization` round-trip ↔ skin selectors (`PreviewSkinSelectors` + the touch/touch-hold
   layers, mine OVERRIDES break/each) ↔ timeline icons ↔ type-based SFX (`PreviewSfxTimeline`
   `buildTimeline`) plus **Muri suppression** (`MuriAnalyzer` pad windows,
-  `MuriRuntimeModelBuilder` judgeable notes) ↔ specs.
+  `MuriRuntimeModelBuilder` judgeable notes, and `MuriStaticChecker` cause/affected
+  candidates all exclude `isMine || trackMine`) ↔ specs.
   Mines deliberately DO count in `PreviewProgressStatsCache` (product decision). Skin art =
   `<base>_mine.png`; `PreviewRenderState::useMineSkin` is presentation-only and may be controlled
   through the bundled extension, so every preview selector/layer must fall back to normal art when
