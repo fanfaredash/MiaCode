@@ -19,6 +19,7 @@ namespace miacode::hang_watchdog {
 namespace {
 
 constexpr qint64 kHeartbeatIntervalMs = 250;
+constexpr qint64 kMonitorLoopIntervalMs = 500;
 constexpr qint64 kActivePhaseHangMs = 2000;
 constexpr qint64 kIdleHeartbeatHangMs = 5000;
 constexpr qint64 kRepeatedReportMs = 5000;
@@ -99,14 +100,14 @@ void watchdogLoop()
     qint64 reportedAtMs = 0;
     qint64 previousMonitorWakeMs = steadyMs();
     while (!g_stop.load(std::memory_order_acquire)) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(kMonitorLoopIntervalMs));
         if (!g_enabled.load(std::memory_order_acquire)) {
             continue;
         }
         const qint64 now = steadyMs();
         const qint64 monitorLoopGap = qMax<qint64>(0, now - previousMonitorWakeMs);
         previousMonitorWakeMs = now;
-        if (policy::monitorPauseRequiresRearm(monitorLoopGap, kIdleHeartbeatHangMs)) {
+        if (policy::monitorPauseRequiresRearm(monitorLoopGap, kMonitorLoopIntervalMs)) {
             // The monitor thread itself did not run, as happens across system
             // suspend/hibernate. Neither heartbeat nor phase elapsed time can
             // be attributed to a GUI stall, so restart both baselines.
