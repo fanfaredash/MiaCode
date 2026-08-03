@@ -198,7 +198,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     exportTimer.start();
     appendVideoExportLog(
         QStringLiteral("export_begin"),
-        QStringLiteral("output=%1 chart=%2 media=%3 track=%4 skin=%5 notes=%6 start=%7 duration=%8 size=%9x%10 fps=%11 preset=%12")
+        QStringLiteral("output=%1 chart=%2 media=%3 track=%4 skin=%5 notes=%6 start=%7 duration=%8 size=%9x%10 fps=%11 preset=%12 sizePreset=%13 audioKbps=%14")
             .arg(task.outputPath, task.chartPath, task.backgroundMediaPath, task.trackPath, task.skinDirectory)
             .arg(task.noteMarkers.size())
             .arg(task.exportStartSeconds, 0, 'f', 6)
@@ -207,6 +207,9 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(task.outputHeight)
             .arg(task.fps)
             .arg(videoExportPresetToken(task.preset))
+            .arg(miacode::video_export::videoExportSizePresetToken(task.sizePreset))
+            .arg(miacode::video_export::effectiveVideoExportAudioBitrateKbps(
+                task.sizePreset, task.audioBitrateKbps))
     );
     if (task.skinDirectory.trimmed().isEmpty()) {
         result.message = QStringLiteral("Skin directory is empty.");
@@ -282,6 +285,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const int frameHeight = qMax(1, task.outputHeight);
     const QSize frameSize(frameWidth, frameHeight);
     const QString explicitMediaPath = normalizePath(task.backgroundMediaPath);
+    const miacode::video_export::VideoExportSizePolicy sizePolicy =
+        miacode::video_export::videoExportSizePolicy(task.sizePreset);
     // Phase 4c — `task.backgroundMediaPath` is filled by the snapshot
     // builder using `resolveChartVideoPath` (`&video=` override first,
     // then sibling fallback). Trust that as the final choice when it
@@ -289,13 +294,15 @@ VideoExportResult VideoExportController::exportPreparedTask(
     // path inverts the priority (sibling first), which would silently
     // override the chart-author's explicit `&video=` choice.
     QString mediaPath;
+    const bool includeVideoBackground = !sizePolicy.disableVideoBackground;
     if (miacode::chart_assets::isSupportedBackgroundMediaPath(
-            explicitMediaPath, /*includeVideoCandidates=*/true)) {
+            explicitMediaPath, includeVideoBackground)) {
         mediaPath = explicitMediaPath;
     } else {
         mediaPath = miacode::chart_assets::resolvePreferredBackgroundMediaPath(
             task.chartPath,
-            explicitMediaPath);
+            explicitMediaPath,
+            includeVideoBackground);
     }
     const bool hasMedia = !mediaPath.isEmpty();
     const bool mediaIsImage = hasMedia && isImageMediaPath(mediaPath);
@@ -312,10 +319,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
               task.staticTapOnSlideThresholdSeconds);
     appendVideoExportLog(
         QStringLiteral("input_probe"),
-        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 leadIn=%8 timelineOrigin=%9 fullRange=%10 markerFilter=marker.second within simulatedWindow frameWindow=%11..%12 visibleWindow=%13..%14 totalSeconds=%15 alignedSeconds=%16 frameCount=%17 size=%18x%19")
+        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 videoBackgroundEnabled=%4 track=%5 hasTrack=%6 segmentStart=%7 segmentEnd=%8 leadIn=%9 timelineOrigin=%10 fullRange=%11 markerFilter=marker.second within simulatedWindow frameWindow=%12..%13 visibleWindow=%14..%15 totalSeconds=%16 alignedSeconds=%17 frameCount=%18 size=%19x%20")
             .arg(mediaPath)
             .arg(hasMedia ? 1 : 0)
             .arg(mediaIsImage ? 1 : 0)
+            .arg(includeVideoBackground ? 1 : 0)
             .arg(trackPath)
             .arg(hasTrack ? 1 : 0)
             .arg(audioRenderPlan.segmentStartSecond, 0, 'f', 6)
@@ -810,6 +818,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         frameHeight,
         task.fps,
         task.preset,
+        task.sizePreset,
         memoryInfo,
         exportConfig,
         &encoderProbeLog
@@ -1099,7 +1108,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
          << QStringLiteral("-frames:v")
          << QString::number(frameCount)
          << QStringLiteral("-g")
-         << QString::number(qMax(1, task.fps * 2))
+         << QString::number(qMax(1, task.fps * sizePolicy.gopSeconds))
          << QStringLiteral("-c:v")
          << encoderConfig.codec
          << QStringLiteral("-pix_fmt")
@@ -1113,7 +1122,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
          // ceiling for stereo at 44.1/48 kHz; below 96k AAC quality
          // collapses, so 96k is our floor.
          << QStringLiteral("%1k")
-                .arg(qBound(96, task.audioBitrateKbps, 320));
+                .arg(miacode::video_export::effectiveVideoExportAudioBitrateKbps(
+                    task.sizePreset, task.audioBitrateKbps));
     if (previewCapped) {
         // -frames:v already stops the video at the capped count; -shortest trims the
         // (still full-length) audio so the preview output ends with the video.

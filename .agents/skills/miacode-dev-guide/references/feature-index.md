@@ -414,6 +414,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `BassExportAudioBackend.*`, `LegacyExportAudioBackend.*`, `RawVideoPipeTransport.*`,
   `VideoExportRuntimePolicy.*`. Key fns: `exportFullPreview`, `exportPreparedTask`,
   `buildVideoExportAudioRenderPlan`, `chooseVideoEncoder`.
+- File-size presets are independent from render quality: `Standard` preserves the legacy encoder
+  tuning, `Compact` lowers video/audio limits while retaining PV, and the two ultra-compact modes
+  lower them again; `UltraCompactWithPv` retains PV while `UltraCompact` excludes video backgrounds
+  during export only (falling back to a sibling still image).
+  Owners: `VideoExportDialog*` (UI/persistence), `VideoExportRuntimePolicy.*` (policy),
+  `VideoExportEncoder.cpp` (encoder arguments), and `VideoExportPreparedTask.cpp` (media/GOP/audio).
 - Snapshot boundary (contract): `VideoExportSnapshot.{h,cpp}` (`toJson`, `fromJson`,
   `buildVideoExportTaskFromSnapshot`).
 - MainWindow ownership: `MainWindow.cpp` / `sections/export/*` (`onExportPreviewVideo`,

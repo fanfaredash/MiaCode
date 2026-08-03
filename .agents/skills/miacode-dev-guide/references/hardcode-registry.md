@@ -40,8 +40,10 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   extend down by `fraction * timelineHeight`. Consumed by `TimelineSceneStateBuilder.cpp`
   `addGridLine` (QSG + DComp via pre-baked `state.gridLines`) AND `TimelineView.Paint.cpp` (widget
   path — bar + comma tiers only; that path has no separate quarter-note subdivision lines).
-- `VideoExportRuntimePolicy.h` (`src/tools/video_export/`) — export PBO env precedence + worker
-  crash-retry policy (`kVideoExportWorkerMaxCrashRetries = 1`).
+- `VideoExportRuntimePolicy.{h,cpp}` (`src/tools/video_export/`) — export PBO env precedence + worker
+  crash-retry policy (`kVideoExportWorkerMaxCrashRetries = 1`) and file-size preset policy
+  (bitrate coefficient/min/max, peak-rate/buffer multipliers, GOP seconds, audio cap, x264 CRF,
+  and whether export suppresses video backgrounds).
 
 ## 2. Implementation-local hotspots (keep local unless promotion rule triggers)
 
@@ -69,8 +71,8 @@ shared config header. Ported with paths corrected (2026-05-29); verify against c
   (`384`-grid, `16th-note` denominator floor).
 - `src/core/chart/parser/SimaiNativeParser.cpp` — parser default geometry/timing assumptions
   (parser-level constants have repo-wide consequences — treat changes as cross-chain).
-- `src/tools/video_export/VideoExportController.cpp` — encoder probe timeouts, bitrate heuristics,
-  preset mapping (`Fast`/`High Quality`/`High Compression`), ffmpeg fallback.
+- `src/tools/video_export/VideoExportEncoder.cpp` — encoder probe timeouts, render-quality preset
+  mapping (`Fast`/`High Quality`), application of the runtime size policy, and ffmpeg fallback.
 - `src/tools/video_export/RawVideoPipeTransport.cpp` — pipe queue depth / buffer sizing
   (`maxBufferedFrames` derived from frame size, ×2; `requestedBufferBytes` `2 * max(frameBytes,1MiB)`).
 - `src/app/mainwindow/MainWindow.cpp` + `sections/window/*.cpp` — preview panel spacing, fullscreen

@@ -428,6 +428,7 @@ bool VideoExportDialog::buildBatchTaskTemplate(VideoExportTask* task, QString* e
     updated.fps = qMax(1, selectedFps_);
     updated.audioBitrateKbps = normaliseAudioBitrateKbps(selectedAudioBitrateKbps_);
     updated.preset = selectedPreset_;
+    updated.sizePreset = selectedSizePreset_;
     updated.showTimestamp = showTimestampCheck_ != nullptr && showTimestampCheck_->isChecked();
     updated.showObjectStatsHud = showObjectStatsCheck_ != nullptr && showObjectStatsCheck_->isChecked();
     updated.showChartInfoHud = showChartInfoCheck_ != nullptr && showChartInfoCheck_->isChecked();
@@ -506,7 +507,7 @@ void VideoExportDialog::applyThemeStyles()
 
     // Dialog dropdowns (miacode::ui::createDialogComboBox).
     for (QComboBox* combo : {resolutionCombo_, fpsCombo_, audioBitrateCombo_,
-                             presetCombo_, backgroundScaleModeCombo_}) {
+                             presetCombo_, sizePresetCombo_, backgroundScaleModeCombo_}) {
         miacode::ui::applyDialogComboBoxStyle(combo, 12);
     }
 
@@ -832,6 +833,7 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     updated.fps = qMax(1, selectedFps_);
     updated.audioBitrateKbps = normaliseAudioBitrateKbps(selectedAudioBitrateKbps_);
     updated.preset = selectedPreset_;
+    updated.sizePreset = selectedSizePreset_;
     updated.showTimestamp = showTimestampCheck_ != nullptr ? showTimestampCheck_->isChecked() : true;
     updated.showObjectStatsHud = showObjectStatsCheck_ != nullptr ? showObjectStatsCheck_->isChecked() : false;
     updated.showChartInfoHud = showChartInfoCheck_ != nullptr ? showChartInfoCheck_->isChecked() : false;

@@ -827,6 +827,38 @@ VideoExportDialog::VideoExportDialog(
         presetCombo_
     );
 
+    selectedSizePreset_ = baseTask_.sizePreset;
+    sizePresetCombo_ = miacode::ui::createDialogComboBox(optionsGrid, 12);
+    sizePresetCombo_->addItem(
+        UiText::text(QStringLiteral("dialog.video_export.size_preset.standard")),
+        static_cast<int>(VideoExportSizePreset::Standard));
+    sizePresetCombo_->addItem(
+        UiText::text(QStringLiteral("dialog.video_export.size_preset.compact")),
+        static_cast<int>(VideoExportSizePreset::Compact));
+    sizePresetCombo_->addItem(
+        UiText::text(QStringLiteral("dialog.video_export.size_preset.ultra_compact_with_pv")),
+        static_cast<int>(VideoExportSizePreset::UltraCompactWithPv));
+    sizePresetCombo_->addItem(
+        UiText::text(QStringLiteral("dialog.video_export.size_preset.ultra_compact")),
+        static_cast<int>(VideoExportSizePreset::UltraCompact));
+    sizePresetCombo_->setCurrentIndex(
+        qMax(0, sizePresetCombo_->findData(static_cast<int>(selectedSizePreset_))));
+    miacode::ui::applyDialogComboBoxStyle(sizePresetCombo_, 12);
+    connect(sizePresetCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0) {
+            return;
+        }
+        selectedSizePreset_ =
+            static_cast<VideoExportSizePreset>(sizePresetCombo_->itemData(index).toInt());
+        persistExportOnlySettings();
+    });
+    addOptionField(
+        2,
+        0,
+        UiText::text(QStringLiteral("dialog.video_export.size_preset")),
+        sizePresetCombo_
+    );
+
     outputPageLayout->addWidget(optionsGrid, 0);
 
     rangeContent_ = new QWidget(rangePage);

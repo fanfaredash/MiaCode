@@ -1,4 +1,5 @@
 #include "VideoExportSnapshot.h"
+#include "VideoExportRuntimePolicy.h"
 
 #include "SimaiDocument.h"
 #include "SimaiNativeParser.h"
@@ -88,6 +89,20 @@ VideoExportPreset videoExportPresetFromToken(const QString& token)
     // Unknown/missing token -> the safe default (synchronous readback, no
     // tearing), matching the dialog's default export-quality choice.
     return VideoExportPreset::HighQuality;
+}
+
+VideoExportSizePreset videoExportSizePresetFromToken(const QString& token)
+{
+    if (token.compare(QStringLiteral("compact"), Qt::CaseInsensitive) == 0) {
+        return VideoExportSizePreset::Compact;
+    }
+    if (token.compare(QStringLiteral("ultra_compact"), Qt::CaseInsensitive) == 0) {
+        return VideoExportSizePreset::UltraCompact;
+    }
+    if (token.compare(QStringLiteral("ultra_compact_with_pv"), Qt::CaseInsensitive) == 0) {
+        return VideoExportSizePreset::UltraCompactWithPv;
+    }
+    return VideoExportSizePreset::Standard;
 }
 
 PreviewBackgroundScaleMode backgroundScaleModeFromToken(const QString& token)
@@ -250,7 +265,11 @@ QJsonObject VideoExportSnapshot::toJson() const
     exportObject.insert(QStringLiteral("output_width"), outputWidth);
     exportObject.insert(QStringLiteral("output_height"), outputHeight);
     exportObject.insert(QStringLiteral("fps"), fps);
+    exportObject.insert(QStringLiteral("audio_bitrate_kbps"), audioBitrateKbps);
     exportObject.insert(QStringLiteral("preset"), videoExportPresetToken(preset));
+    exportObject.insert(
+        QStringLiteral("size_preset"),
+        miacode::video_export::videoExportSizePresetToken(sizePreset));
     exportObject.insert(QStringLiteral("full_range_export"), fullRangeExport);
     exportObject.insert(QStringLiteral("output_path"), outputPath);
     root.insert(QStringLiteral("export"), exportObject);
@@ -397,7 +416,11 @@ bool VideoExportSnapshot::fromJson(
     parsed.outputWidth = exportObject.value(QStringLiteral("output_width")).toInt(parsed.outputWidth);
     parsed.outputHeight = exportObject.value(QStringLiteral("output_height")).toInt(parsed.outputHeight);
     parsed.fps = exportObject.value(QStringLiteral("fps")).toInt(parsed.fps);
+    parsed.audioBitrateKbps = exportObject.value(QStringLiteral("audio_bitrate_kbps"))
+                                  .toInt(parsed.audioBitrateKbps);
     parsed.preset = videoExportPresetFromToken(exportObject.value(QStringLiteral("preset")).toString());
+    parsed.sizePreset = videoExportSizePresetFromToken(
+        exportObject.value(QStringLiteral("size_preset")).toString());
     parsed.fullRangeExport = exportObject.value(QStringLiteral("full_range_export")).toBool(parsed.fullRangeExport);
     parsed.outputPath = exportObject.value(QStringLiteral("output_path")).toString();
 
@@ -506,7 +529,9 @@ bool buildVideoExportTaskFromSnapshot(
     built.outputWidth = snapshot.outputWidth;
     built.outputHeight = snapshot.outputHeight;
     built.fps = snapshot.fps;
+    built.audioBitrateKbps = qBound(96, snapshot.audioBitrateKbps, 320);
     built.preset = snapshot.preset;
+    built.sizePreset = snapshot.sizePreset;
     built.fullRangeExport = snapshot.fullRangeExport;
     built.showTimestamp = snapshot.showTimestamp;
     built.showObjectStatsHud = snapshot.showObjectStatsHud;

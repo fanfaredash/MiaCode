@@ -218,6 +218,12 @@ export settings (and shared timing offsets, static Muri thresholds) must be adde
 serialization sides; worker protocol changes reflect in both `main.cpp` and MainWindow worker-event
 handling.
 
+`audioBitrateKbps` and `sizePreset` are part of this boundary. Single and batch snapshot builders
+must copy both fields; `VideoExportSnapshot::{toJson,fromJson}` must serialize them; and
+`buildVideoExportTaskFromSnapshot` must restore them before `exportPreparedTask`. The
+`UltraCompactWithPv` and `UltraCompact` tokens share encoder tuning; only `UltraCompact` suppresses
+PV in the prepared export task, never in the live/export-page preview.
+
 ## 9. Shared render state flows through preview and export
 
 Shared settings (background brightness outer/inner, layout square scale, outline diameter ratio

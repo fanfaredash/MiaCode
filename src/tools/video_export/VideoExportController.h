@@ -16,12 +16,15 @@
 #include "common/MuriTypes.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "common/PreviewGameplayConfig.h"
+#include "tools/video_export/VideoExportRuntimePolicy.h"
 class QProgressDialog;
 
 enum class VideoExportPreset {
     Fast,
     HighQuality,
 };
+
+using VideoExportSizePreset = miacode::video_export::VideoExportSizePreset;
 
 // Pre-roll "track-start" intro banner spec. Populated from the chart in
 // buildVideoExportSnapshot; consumed by the export session when `enabled`.
@@ -210,10 +213,10 @@ struct VideoExportTask {
     // quality bump for charts with stereo BGM, transparent for casual
     // phone playback. Routed into ffmpeg as `-b:a <kbps>k`.
     int audioBitrateKbps = 192;
-    // Export-quality toggle. HighQuality = synchronous readback (no PBO, no
-    // tearing); Fast = pipelined PBO readback (faster, may tear on some GPUs).
-    // Encoder params are HighQuality regardless; this only picks the readback.
+    // Export-quality toggle. HighQuality uses compactness-oriented software
+    // tuning; Fast uses pipelined readback and prefers hardware encoding.
     VideoExportPreset preset = VideoExportPreset::HighQuality;
+    VideoExportSizePreset sizePreset = VideoExportSizePreset::Standard;
     bool fullRangeExport = true;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;

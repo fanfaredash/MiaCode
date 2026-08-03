@@ -44,7 +44,9 @@ struct VideoExportSnapshot {
     int outputWidth = 1024;
     int outputHeight = 1024;
     int fps = 60;
+    int audioBitrateKbps = 192;
     VideoExportPreset preset = VideoExportPreset::HighQuality;
+    VideoExportSizePreset sizePreset = VideoExportSizePreset::Standard;
     bool fullRangeExport = true;
     QString outputPath;
     bool showTimestamp = true;

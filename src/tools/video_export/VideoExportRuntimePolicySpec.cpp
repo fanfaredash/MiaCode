@@ -18,9 +18,42 @@ bool require(bool condition, const QString& message, QTextStream& err)
 
 bool verifyPolicy(QTextStream& err)
 {
+    using miacode::video_export::effectiveVideoExportAudioBitrateKbps;
+    using miacode::video_export::VideoExportSizePreset;
     using miacode::video_export::shouldRequestOffscreenPboReadback;
     using miacode::video_export::shouldRetryVideoExportWorkerAfterCrash;
     using miacode::video_export::shouldUsePremultipliedExportPipe;
+    using miacode::video_export::videoExportSizePolicy;
+    using miacode::video_export::videoExportSizePresetToken;
+
+    const auto standard = videoExportSizePolicy(VideoExportSizePreset::Standard);
+    const auto compact = videoExportSizePolicy(VideoExportSizePreset::Compact);
+    const auto ultraWithPv = videoExportSizePolicy(VideoExportSizePreset::UltraCompactWithPv);
+    const auto ultra = videoExportSizePolicy(VideoExportSizePreset::UltraCompact);
+    if (!require(standard.x264Crf < 0 && standard.gopSeconds == 2,
+                 QStringLiteral("standard size mode must retain legacy encoder tuning"), err)
+        || !require(compact.maxBitrateKbps == 6000 && compact.gopSeconds == 4
+                        && compact.x264Crf == 23 && !compact.disableVideoBackground,
+                    QStringLiteral("compact size policy mismatch"), err)
+        || !require(ultra.maxBitrateKbps == 4000 && ultra.gopSeconds == 6
+                        && ultra.x264Crf == 25 && ultra.disableVideoBackground,
+                    QStringLiteral("ultra-compact size policy mismatch"), err)
+        || !require(ultraWithPv.maxBitrateKbps == ultra.maxBitrateKbps
+                        && ultraWithPv.x264Crf == ultra.x264Crf
+                        && !ultraWithPv.disableVideoBackground,
+                    QStringLiteral("ultra-compact-with-PV size policy mismatch"), err)
+        || !require(videoExportSizePresetToken(VideoExportSizePreset::UltraCompactWithPv)
+                        == QStringLiteral("ultra_compact_with_pv")
+                        && videoExportSizePresetToken(VideoExportSizePreset::UltraCompact)
+                        == QStringLiteral("ultra_compact"),
+                    QStringLiteral("ultra-compact size tokens must remain distinct"), err)
+        || !require(effectiveVideoExportAudioBitrateKbps(VideoExportSizePreset::Standard, 320) == 320
+                        && effectiveVideoExportAudioBitrateKbps(VideoExportSizePreset::Compact, 320) == 160
+                        && effectiveVideoExportAudioBitrateKbps(VideoExportSizePreset::UltraCompactWithPv, 320) == 128
+                        && effectiveVideoExportAudioBitrateKbps(VideoExportSizePreset::UltraCompact, 320) == 128,
+                    QStringLiteral("size-mode audio bitrate caps mismatch"), err)) {
+        return false;
+    }
 
     if (!require(
             shouldRequestOffscreenPboReadback(std::nullopt, std::nullopt),

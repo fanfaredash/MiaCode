@@ -284,6 +284,8 @@ private:
     int selectedAudioBitrateKbps_ = 192;
     QComboBox* presetCombo_ = nullptr;
     VideoExportPreset selectedPreset_ = VideoExportPreset::HighQuality;
+    QComboBox* sizePresetCombo_ = nullptr;
+    VideoExportSizePreset selectedSizePreset_ = VideoExportSizePreset::Standard;
     QCheckBox* showTimestampCheck_ = nullptr;
     QCheckBox* showObjectStatsCheck_ = nullptr;
     QCheckBox* showChartInfoCheck_ = nullptr;

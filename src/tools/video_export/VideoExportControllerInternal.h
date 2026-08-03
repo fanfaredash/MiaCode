@@ -390,12 +390,14 @@ bool shouldPreferHardwareEncoderInAutoMode(
 );
 VideoBitratePlan chooseVideoBitratePlan(
     VideoExportPreset preset,
+    VideoExportSizePreset sizePreset,
     int outputWidth,
     int outputHeight,
     int fps
 );
 X264TuningPlan chooseX264TuningPlan(
     VideoExportPreset preset,
+    VideoExportSizePreset sizePreset,
     const ExportRuntimeConfig& exportConfig,
     const SystemMemoryInfo& memoryInfo,
     int outputWidth,
@@ -421,6 +423,7 @@ VideoEncoderConfig chooseVideoEncoder(
     int outputHeight,
     int fps,
     VideoExportPreset preset,
+    VideoExportSizePreset sizePreset,
     const SystemMemoryInfo& memoryInfo,
     const ExportRuntimeConfig& exportConfig,
     QString* probeLog

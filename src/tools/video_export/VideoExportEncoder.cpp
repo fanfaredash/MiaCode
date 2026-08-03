@@ -369,6 +369,7 @@ bool shouldPreferHardwareEncoderInAutoMode(
 
 VideoBitratePlan chooseVideoBitratePlan(
     VideoExportPreset preset,
+    VideoExportSizePreset sizePreset,
     int outputWidth,
     int outputHeight,
     int fps
@@ -379,6 +380,25 @@ VideoBitratePlan chooseVideoBitratePlan(
     const int safeFps = qMax(1, fps);
 
     VideoBitratePlan plan;
+    const miacode::video_export::VideoExportSizePolicy sizePolicy =
+        miacode::video_export::videoExportSizePolicy(sizePreset);
+    if (sizePreset != VideoExportSizePreset::Standard) {
+        plan.bitrateKbps = qBound<qint64>(
+            sizePolicy.minBitrateKbps,
+            qRound64(static_cast<double>(safeWidth) * safeHeight * safeFps
+                     * sizePolicy.bitrateCoefficient / 1000.0),
+            sizePolicy.maxBitrateKbps
+        );
+        plan.maxRateKbps = qMax<qint64>(
+            plan.bitrateKbps,
+            qRound64(static_cast<double>(plan.bitrateKbps) * sizePolicy.maxRateMultiplier)
+        );
+        plan.bufSizeKbps = qMax<qint64>(
+            plan.maxRateKbps,
+            qRound64(static_cast<double>(plan.maxRateKbps) * sizePolicy.bufferMultiplier)
+        );
+        return plan;
+    }
     if (preset == VideoExportPreset::HighQuality) {
         plan.bitrateKbps = qBound<qint64>(
             2600LL,
@@ -418,6 +438,7 @@ VideoBitratePlan chooseVideoBitratePlan(
 
 X264TuningPlan chooseX264TuningPlan(
     VideoExportPreset preset,
+    VideoExportSizePreset sizePreset,
     const ExportRuntimeConfig& exportConfig,
     const SystemMemoryInfo& memoryInfo,
     int outputWidth,
@@ -432,6 +453,8 @@ X264TuningPlan chooseX264TuningPlan(
         static_cast<qint64>(qMax(1, outputWidth)) * qMax(1, outputHeight) * qMax(1, fps);
 
     X264TuningPlan plan;
+    const miacode::video_export::VideoExportSizePolicy sizePolicy =
+        miacode::video_export::videoExportSizePolicy(sizePreset);
     if (preset == VideoExportPreset::Fast) {
         plan.preset = QStringLiteral("veryfast");
         plan.crf = 22;
@@ -442,7 +465,9 @@ X264TuningPlan chooseX264TuningPlan(
         }
         plan.crf = qBound(
             16,
-            exportConfig.x264CrfOverride >= 0 ? exportConfig.x264CrfOverride : plan.crf,
+            exportConfig.x264CrfOverride >= 0
+                ? exportConfig.x264CrfOverride
+                : (sizePolicy.x264Crf >= 0 ? sizePolicy.x264Crf : plan.crf),
             28);
         plan.bframes = qBound(
             0,
@@ -515,7 +540,9 @@ X264TuningPlan chooseX264TuningPlan(
     }
     plan.crf = qBound(
         16,
-        exportConfig.x264CrfOverride >= 0 ? exportConfig.x264CrfOverride : plan.crf,
+        exportConfig.x264CrfOverride >= 0
+            ? exportConfig.x264CrfOverride
+            : (sizePolicy.x264Crf >= 0 ? sizePolicy.x264Crf : plan.crf),
         28
     );
     // beta25 — bframes upper bound raised from 2 to 8 to honour the new
@@ -697,6 +724,7 @@ VideoEncoderConfig chooseVideoEncoder(
     int outputHeight,
     int fps,
     VideoExportPreset preset,
+    VideoExportSizePreset sizePreset,
     const SystemMemoryInfo& memoryInfo,
     const ExportRuntimeConfig& exportConfig,
     QString* probeLog
@@ -746,9 +774,14 @@ VideoEncoderConfig chooseVideoEncoder(
     const int safeHeight = qMax(1, outputHeight);
     const int safeFps = qMax(1, fps);
     const int idealThreadCount = qMax(1, QThread::idealThreadCount());
-    const VideoBitratePlan bitratePlan = chooseVideoBitratePlan(preset, safeWidth, safeHeight, safeFps);
+    const VideoBitratePlan bitratePlan =
+        chooseVideoBitratePlan(preset, sizePreset, safeWidth, safeHeight, safeFps);
     const X264TuningPlan x264Plan =
-        chooseX264TuningPlan(preset, exportConfig, memoryInfo, safeWidth, safeHeight, safeFps, idealThreadCount);
+        chooseX264TuningPlan(
+            preset, sizePreset, exportConfig, memoryInfo,
+            safeWidth, safeHeight, safeFps, idealThreadCount);
+    const miacode::video_export::VideoExportSizePolicy sizePolicy =
+        miacode::video_export::videoExportSizePolicy(sizePreset);
     const QStringList bitrateArgs = bitratePlan.toArgs();
     const QStringList x264Args = x264Plan.toArgs();
     const auto mpeg4Args = [preset]() {
@@ -785,6 +818,13 @@ VideoEncoderConfig chooseVideoEncoder(
         }
         if (codec == QLatin1String("mpeg4")) {
             item.extraArgs = mpeg4Args();
+            return item;
+        }
+        if (codec == QLatin1String("h264_mf") && sizePolicy.usePeakConstrainedVbr) {
+            item.extraArgs = bitrateArgs;
+            item.extraArgs << QStringLiteral("-rate_control") << QStringLiteral("pc_vbr")
+                           << QStringLiteral("-scenario") << QStringLiteral("archive");
+            item.explicitBframes = 0;
             return item;
         }
 
