@@ -642,6 +642,104 @@ if (APPLE AND EXISTS "${MIACODE_MACOS_APP_ICON}")
     )
 endif()
 
+# Pure-QML (v2) workbench. Opt-in via --ui=v2 / MIACODE_UI_SKIN=v2.
+# Default GUI remains QuickShell (v1). Both share the MainWindow backend.
+set(MIACODE_UI_QML_FILES
+    src/app/qml_ui/Main.qml
+    src/app/qml_ui/WorkbenchState.qml
+    src/app/qml_ui/theme/Theme.qml
+    src/app/qml_ui/components/IconButton.qml
+    src/app/qml_ui/components/WorkbenchTab.qml
+    src/app/qml_ui/components/PanelHeader.qml
+    src/app/qml_ui/components/SplitHandle.qml
+    src/app/qml_ui/components/Tooltip.qml
+    src/app/qml_ui/chrome/WindowTitleBar.qml
+    src/app/qml_ui/chrome/WindowCaptionButtons.qml
+    src/app/qml_ui/chrome/MainMenu.qml
+    src/app/qml_ui/chrome/MainToolBar.qml
+    src/app/qml_ui/chrome/StatusBar.qml
+    src/app/qml_ui/workspace/Workbench.qml
+    src/app/qml_ui/workspace/WorkspaceSplitView.qml
+    src/app/qml_ui/workspace/CompactPanelLayer.qml
+    src/app/qml_ui/sidebar/WorkbenchSidebar.qml
+    src/app/qml_ui/sidebar/ActivityBar.qml
+    src/app/qml_ui/sidebar/SidebarPlaceholderPage.qml
+    src/app/qml_ui/sidebar/ChartFieldSidebar.qml
+    src/app/qml_ui/sidebar/DifficultyList.qml
+    src/app/qml_ui/editor/EditorPane.qml
+    src/app/qml_ui/editor/EditorTabBar.qml
+    src/app/qml_ui/editor/SourceEditor.qml
+    src/app/qml_ui/editor/LineNumberGutter.qml
+    src/app/qml_ui/timeline/BottomPanel.qml
+    src/app/qml_ui/timeline/BottomTabBar.qml
+    src/app/qml_ui/preview/PreviewPane.qml
+    src/app/qml_ui/preview/PreviewTransport.qml
+    src/app/qml_ui/preview/NoteStatistics.qml
+    src/app/qml_ui/settings/ViewSettingsPopup.qml
+)
+foreach(qml_file IN LISTS MIACODE_UI_QML_FILES)
+    get_filename_component(qml_name "${qml_file}" NAME)
+    set_source_files_properties("${qml_file}" PROPERTIES QT_RESOURCE_ALIAS "${qml_name}")
+endforeach()
+set_source_files_properties(
+    src/app/qml_ui/theme/Theme.qml
+    PROPERTIES QT_QML_SINGLETON_TYPE TRUE
+)
+
+set(MIACODE_UI_ICON_FILES
+    src/app/qml_ui/resources/icons/folder-open.svg
+    src/app/qml_ui/resources/icons/save.svg
+    src/app/qml_ui/resources/icons/undo.svg
+    src/app/qml_ui/resources/icons/redo.svg
+    src/app/qml_ui/resources/icons/play.svg
+    src/app/qml_ui/resources/icons/pause.svg
+    src/app/qml_ui/resources/icons/stop.svg
+    src/app/qml_ui/resources/icons/fullscreen.svg
+    src/app/qml_ui/resources/icons/panel-left.svg
+    src/app/qml_ui/resources/icons/panel-bottom.svg
+    src/app/qml_ui/resources/icons/panel-right.svg
+    src/app/qml_ui/resources/icons/settings.svg
+    src/app/qml_ui/resources/icons/chart.svg
+    src/app/qml_ui/resources/icons/export.svg
+    src/app/qml_ui/resources/icons/tools.svg
+    src/app/qml_ui/resources/icons/audio-settings.svg
+    src/app/qml_ui/resources/icons/preview-settings.svg
+    src/app/qml_ui/resources/icons/muri-mode.svg
+    src/app/qml_ui/resources/icons/preview-mode.svg
+    src/app/qml_ui/resources/icons/close.svg
+    src/app/qml_ui/resources/icons/more.svg
+    src/app/qml_ui/resources/icons/metadata.svg
+    src/app/qml_ui/resources/icons/app-icon.svg
+)
+foreach(icon_file IN LISTS MIACODE_UI_ICON_FILES)
+    get_filename_component(icon_name "${icon_file}" NAME)
+    set_source_files_properties("${icon_file}" PROPERTIES QT_RESOURCE_ALIAS "icons/${icon_name}")
+endforeach()
+
+qt_add_qml_module(MiaCode
+    URI MiaCode.UI
+    VERSION 1.0
+    SOURCES
+        src/app/qml_ui/SimaiSyntaxHighlighter.cpp
+        src/app/qml_ui/SimaiSyntaxHighlighter.h
+        src/app/qml_ui/QmlApplicationContext.cpp
+        src/app/qml_ui/QmlApplicationContext.h
+        src/app/qml_ui/QmlCommandService.cpp
+        src/app/qml_ui/QmlCommandService.h
+        src/app/qml_ui/QmlDocumentModel.cpp
+        src/app/qml_ui/QmlDocumentModel.h
+        src/app/qml_ui/QmlPreviewModel.cpp
+        src/app/qml_ui/QmlPreviewModel.h
+        src/app/qml_ui/QmlWorkspaceSettings.cpp
+        src/app/qml_ui/QmlWorkspaceSettings.h
+        src/app/qml_ui/QmlUiBootstrap.cpp
+        src/app/qml_ui/QmlUiBootstrap.h
+    QML_FILES
+        ${MIACODE_UI_QML_FILES}
+    RESOURCES
+        ${MIACODE_UI_ICON_FILES}
+)
+
 add_library(soundtouch STATIC
     third_party/soundtouch/source/SoundTouch/AAFilter.cpp
     third_party/soundtouch/source/SoundTouch/BPMDetect.cpp
@@ -696,6 +794,7 @@ target_include_directories(MiaCode PRIVATE
     third_party/bass/include
     src
     src/app
+    src/app/qml_ui
     src/app/quick_shell
     src/app/ui
     src/core/video
@@ -767,6 +866,9 @@ if (WIN32)
         dxgi         # IDXGIFactory2::CreateSwapChainForComposition + frame latency waitable
         dcomp        # DCompositionCreateDevice + visual tree
         d3dcompiler  # Phase 3 sprite pipeline runtime HLSL compile (D3DCompile)
+        version      # Startup diagnostic file-version queries (MinGW)
+        rstrtmgr     # Restart Manager process lookup for media tools (MinGW)
+        opengl32     # QtAVPlayer D3D11/OpenGL texture interop (MinGW)
     )
     add_custom_command(TARGET MiaCode POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different

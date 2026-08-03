@@ -44,6 +44,8 @@ class QDialog;
 class QDockWidget;
 class QEvent;
 class PreviewStageMediaHost;
+class QmlDocumentModel;
+class QmlUiBootstrap;
 class QFrame;
 class QGraphicsOpacityEffect;
 class QGridLayout;
@@ -131,6 +133,10 @@ class MainWindow : public QMainWindow,
     // state for its badge row — same narrow-feature rationale as the
     // latency page above.
     friend class miacode::export_page::ExportLauncherPage;
+    // Pure-QML (v2) document boundary reaches private document/editor state
+    // while the visual chrome stays outside MainWindow.
+    friend class QmlDocumentModel;
+    friend class QmlUiBootstrap;
 
 public:
     // Phase 4c — non-owning accessor + signal so the QuickShellBootstrap can

@@ -1,0 +1,351 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import MiaCode.UI
+
+Rectangle {
+    id: root
+
+    required property var workbenchState
+    required property var documentSession
+    required property var commands
+
+    readonly property bool metadataSourceActive: workbenchState.metadataEditorActive
+        && workbenchState.metadataEditorMode === 1
+    readonly property bool sourceVisible: workbenchState.difficultyEditorActive
+        || metadataSourceActive
+    readonly property bool canUndo: sourceVisible && sourceEditor.canUndo
+    readonly property bool canRedo: sourceVisible && sourceEditor.canRedo
+
+    function undo() {
+        if (sourceVisible)
+            sourceEditor.undo()
+    }
+
+    function redo() {
+        if (sourceVisible)
+            sourceEditor.redo()
+    }
+
+    function selectAll() {
+        if (sourceVisible)
+            sourceEditor.selectAll()
+    }
+
+    function revealSyntaxIssue(line, column, endColumn) {
+        workbenchState.openDifficultyEditor(root.documentSession.currentDifficultyId)
+        sourceEditor.revealSyntaxIssue(line, column, endColumn)
+    }
+
+    color: Theme.colors.background.editor
+
+    EditorTabBar {
+        id: tabs
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        workbenchState: root.workbenchState
+        documentSession: root.documentSession
+    }
+
+    Rectangle {
+        id: difficultyHeader
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: tabs.bottom
+        height: 42
+        visible: root.workbenchState.difficultyEditorActive
+        color: Theme.colors.background.workbench
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 10
+            anchors.rightMargin: 8
+            spacing: 8
+
+            Label {
+                text: root.documentSession.currentDifficultyName
+                color: Theme.colors.text.primary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.uiFontSize
+            }
+
+            TextField {
+                Layout.preferredWidth: 90
+                placeholderText: qsTr("等级")
+                text: root.documentSession.currentDifficultyLevel
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.uiFontSize
+                onEditingFinished: root.documentSession.currentDifficultyLevel = text
+            }
+
+            TextField {
+                id: difficultyDesignerField
+                property bool userEdited: false
+
+                Layout.fillWidth: true
+                placeholderText: qsTr("谱师")
+                text: root.documentSession.currentDifficultyDesigner
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.uiFontSize
+                // 文档打开、难度切换和焦点转移都可能结束编辑状态。只有收到
+                // TextInput 的真实编辑信号后，才把显示值提交给文档模型。
+                onTextEdited: userEdited = true
+                onEditingFinished: {
+                    if (userEdited)
+                        root.documentSession.currentDifficultyDesigner = text
+                    userEdited = false
+                }
+            }
+
+            Button {
+                text: qsTr("删除难度")
+                enabled: root.documentSession.currentDifficultyId > 0
+                onClicked: removeDifficultyDialog.open()
+            }
+        }
+    }
+
+    Rectangle {
+        id: metadataModeBar
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: tabs.bottom
+        height: 42
+        visible: root.workbenchState.metadataEditorActive
+        color: Theme.colors.background.workbench
+
+        Button {
+            anchors.left: parent.left
+            anchors.leftMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.workbenchState.metadataEditorMode === 0
+                ? qsTr("字段源码")
+                : qsTr("表单")
+            onClicked: root.workbenchState.metadataEditorMode
+                = root.workbenchState.metadataEditorMode === 0 ? 1 : 0
+        }
+
+        Switch {
+            id: unifiedDesignerSwitch
+            anchors.right: parent.right
+            anchors.rightMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            text: qsTr("统一谱师")
+
+            onToggled: {
+                if (checked === root.documentSession.unifiedDesignerEnabled)
+                    return
+                if (!checked) {
+                    root.commands.disableUnifiedDesigner()
+                    return
+                }
+                const candidates = root.documentSession.designerCandidates
+                if (candidates.length > 1) {
+                    canonicalDesignerDialog.candidates = candidates
+                    designerChoice.currentIndex = 0
+                    checked = root.documentSession.unifiedDesignerEnabled
+                    canonicalDesignerDialog.open()
+                    return
+                }
+                root.commands.enableUnifiedDesigner(
+                    candidates.length === 1 ? candidates[0] : "")
+            }
+
+            Binding {
+                target: unifiedDesignerSwitch
+                property: "checked"
+                value: root.documentSession.unifiedDesignerEnabled
+            }
+        }
+    }
+
+    Label {
+        id: metadataSourceError
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: metadataModeBar.bottom
+        anchors.leftMargin: 12
+        anchors.rightMargin: 12
+        height: visible ? implicitHeight + 8 : 0
+        visible: root.metadataSourceActive && !root.documentSession.metadataSourceValid
+        text: root.documentSession.metadataSourceError
+        color: Theme.colors.syntax.error
+        font.family: Theme.uiFont
+        font.pixelSize: Theme.secondaryFontSize
+        verticalAlignment: Text.AlignVCenter
+        wrapMode: Text.Wrap
+    }
+
+    // 难度正文与头字段源码共用这一套编辑控件。标签或模式切换只改变
+    // SourceEditor 的业务数据源，光标、滚动和编辑命令始终由这一实例持有。
+    SourceEditor {
+        id: sourceEditor
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: root.metadataSourceActive
+            ? metadataSourceError.bottom
+            : difficultyHeader.bottom
+        anchors.bottom: parent.bottom
+        visible: root.sourceVisible
+        metadataMode: root.metadataSourceActive
+        workbenchState: root.workbenchState
+        documentSession: root.documentSession
+    }
+
+    Flickable {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: metadataModeBar.bottom
+        anchors.bottom: parent.bottom
+        visible: root.workbenchState.metadataEditorActive
+            && root.workbenchState.metadataEditorMode === 0
+        contentHeight: metadataColumn.implicitHeight + 32
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollBar {}
+
+        Column {
+            id: metadataColumn
+            x: 20
+            y: 16
+            width: Math.max(240, parent.width - 40)
+            spacing: 12
+
+            Label {
+                text: qsTr("元数据")
+                color: Theme.colors.text.primary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.uiFontSize + 2
+            }
+
+            MetadataField {
+                width: metadataColumn.width
+                label: qsTr("标题")
+                value: root.documentSession.metadataTitle
+                onCommitted: value => root.documentSession.metadataTitle = value
+            }
+            MetadataField {
+                width: metadataColumn.width
+                label: qsTr("艺术家")
+                value: root.documentSession.metadataArtist
+                onCommitted: value => root.documentSession.metadataArtist = value
+            }
+            MetadataField {
+                width: metadataColumn.width
+                label: qsTr("谱师")
+                value: root.documentSession.metadataDesigner
+                onCommitted: value => root.documentSession.metadataDesigner = value
+            }
+            MetadataField {
+                width: metadataColumn.width
+                label: qsTr("初始偏移")
+                value: root.documentSession.metadataFirst
+                onCommitted: value => root.documentSession.metadataFirst = value
+            }
+            MetadataField {
+                width: metadataColumn.width
+                label: qsTr("视频路径")
+                value: root.documentSession.metadataVideoPath
+                onCommitted: value => root.documentSession.metadataVideoPath = value
+            }
+
+            Label {
+                text: qsTr("其他字段")
+                color: Theme.colors.text.secondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.secondaryFontSize
+            }
+            TextArea {
+                width: metadataColumn.width
+                height: 150
+                text: root.documentSession.metadataExtraText
+                placeholderText: qsTr("每行一个 &字段=值")
+                wrapMode: TextEdit.NoWrap
+                font: Theme.codeFont
+                onActiveFocusChanged: {
+                    if (!activeFocus)
+                        root.documentSession.metadataExtraText = text
+                }
+            }
+        }
+    }
+
+    Label {
+        anchors.centerIn: parent
+        visible: !root.workbenchState.hasActiveEditor
+        text: qsTr("从左侧打开元数据或难度")
+        color: Theme.colors.text.secondary
+        font.family: Theme.uiFont
+        font.pixelSize: Theme.uiFontSize
+    }
+
+    Dialog {
+        id: canonicalDesignerDialog
+        property var candidates: []
+
+        anchors.centerIn: parent
+        modal: true
+        title: qsTr("选择统一谱师")
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: root.commands.enableUnifiedDesigner(designerChoice.currentText)
+        onRejected: unifiedDesignerSwitch.checked = root.documentSession.unifiedDesignerEnabled
+
+        Column {
+            spacing: 8
+
+            Label {
+                text: qsTr("当前存在多个谱师名义，请选择要统一使用的值。")
+                color: Theme.colors.text.primary
+            }
+            ComboBox {
+                id: designerChoice
+                width: 280
+                model: canonicalDesignerDialog.candidates
+            }
+        }
+    }
+
+    Dialog {
+        id: removeDifficultyDialog
+        anchors.centerIn: parent
+        modal: true
+        title: qsTr("删除当前难度")
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: root.commands.removeDifficulty(root.documentSession.currentDifficultyId)
+
+        Label {
+            text: qsTr("当前难度及其正文将从文档中删除。")
+            color: Theme.colors.text.primary
+        }
+    }
+
+    component MetadataField: Column {
+        id: field
+        required property string label
+        required property string value
+        signal committed(string value)
+        spacing: 4
+
+        Label {
+            text: field.label
+            color: Theme.colors.text.secondary
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.secondaryFontSize
+        }
+        TextField {
+            property bool userEdited: false
+            width: field.width
+            text: field.value
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.uiFontSize
+            onTextEdited: userEdited = true
+            onEditingFinished: {
+                if (userEdited)
+                    field.committed(text)
+                userEdited = false
+            }
+        }
+    }
+}
+

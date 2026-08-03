@@ -239,11 +239,17 @@ void PreviewDCompRenderer::renderLoop()
         return;
     }
 
-    // Tag the thread for diagnostic tools. Using SetThreadDescription means
-    // any debugger / WPA capture shows "MiaCodeDComp" instead of an
-    // anonymous worker — useful when correlating render-thread CPU usage
-    // against frame pacing data.
-    ::SetThreadDescription(::GetCurrentThread(), L"MiaCodeDComp");
+    // Resolve SetThreadDescription at runtime so the diagnostic thread name
+    // works with both MSVC and MinGW SDK headers. The API is available on
+    // supported Windows versions even when an older header omits its symbol.
+    using SetThreadDescriptionFn = HRESULT(WINAPI*)(HANDLE, PCWSTR);
+    static const auto setThreadDescription =
+        reinterpret_cast<SetThreadDescriptionFn>(
+            ::GetProcAddress(::GetModuleHandleW(L"kernel32.dll"),
+                             "SetThreadDescription"));
+    if (setThreadDescription != nullptr) {
+        setThreadDescription(::GetCurrentThread(), L"MiaCodeDComp");
+    }
 
     // Phase 4b-perf — register with MMCSS so the OS scheduler protects
     // this thread from being preempted by background work (indexing,

@@ -1,0 +1,143 @@
+import QtQuick
+
+QtObject {
+    signal difficultyEditorActivationRequested(int difficultyId)
+
+    readonly property string metadataEditorKey: "metadata"
+    property var openEditorTabs: []
+    property var editorHistory: []
+    property string activeEditorKey: ""
+    readonly property bool hasActiveEditor: activeEditorKey.length > 0
+    readonly property bool metadataEditorActive: activeEditorKey === metadataEditorKey
+    readonly property bool difficultyEditorActive: activeEditorKey.startsWith("difficulty:")
+    readonly property int activeDifficultyId: difficultyEditorActive
+        ? Number(activeEditorKey.substring("difficulty:".length))
+        : 0
+    property int metadataEditorMode: 0
+    property int editorCursorLine: 1
+    property int editorCursorColumn: 1
+    property int activeBottomTab: 0
+    property bool sidebarVisible: true
+    // Activity Bar 的选择属于当前工作台会话；Primary Sidebar 的展开状态
+    // 继续由宿主偏好服务持久化。
+    property string activeSidebarView: "chart"
+    property bool difficultySectionExpanded: true
+    property bool bottomPanelVisible: true
+    property bool previewVisible: true
+    property string compactPanel: ""
+
+    // 编辑器标签是当前工作台会话中的视图集合。关闭标签只从集合中移除
+    // 对应视图，谱面字段、难度对象和正文仍由 documentSession 持有。
+    function difficultyEditorKey(id) {
+        return "difficulty:" + id
+    }
+
+    function containsEditor(key) {
+        return openEditorTabs.indexOf(key) >= 0
+    }
+
+    function recordEditorUse(key) {
+        const history = editorHistory.filter(item => item !== key)
+        history.push(key)
+        editorHistory = history
+    }
+
+    // 难度标签激活必须先请求文档 owner 切换正文数据源，再发布活动标签。
+    // 这样标题、字段、源码和解析结果在同一轮状态变化中读取同一个难度。
+    function setActiveEditor(key) {
+        const difficultyId = key.startsWith("difficulty:")
+            ? Number(key.substring("difficulty:".length))
+            : 0
+        if (difficultyId > 0)
+            difficultyEditorActivationRequested(difficultyId)
+        activeEditorKey = key
+    }
+
+    function activateEditor(key) {
+        if (!containsEditor(key))
+            return
+        setActiveEditor(key)
+        recordEditorUse(key)
+    }
+
+    function openEditor(key) {
+        if (!containsEditor(key)) {
+            const tabs = openEditorTabs.slice()
+            tabs.push(key)
+            openEditorTabs = tabs
+        }
+        activateEditor(key)
+    }
+
+    function openMetadataEditor() {
+        openEditor(metadataEditorKey)
+    }
+
+    function openDifficultyEditor(id) {
+        if (id > 0)
+            openEditor(difficultyEditorKey(id))
+    }
+
+    function closeEditor(key) {
+        const closingIndex = openEditorTabs.indexOf(key)
+        if (closingIndex < 0)
+            return
+
+        const tabs = openEditorTabs.slice()
+        tabs.splice(closingIndex, 1)
+        openEditorTabs = tabs
+        editorHistory = editorHistory.filter(item => item !== key)
+
+        if (activeEditorKey !== key)
+            return
+
+        let nextKey = ""
+        for (let index = editorHistory.length - 1; index >= 0; --index) {
+            if (tabs.indexOf(editorHistory[index]) >= 0) {
+                nextKey = editorHistory[index]
+                break
+            }
+        }
+        if (nextKey.length === 0 && tabs.length > 0)
+            nextKey = tabs[Math.min(closingIndex, tabs.length - 1)]
+        setActiveEditor(nextKey)
+        if (nextKey.length > 0)
+            recordEditorUse(nextKey)
+    }
+
+    function closeActiveEditor() {
+        closeEditor(activeEditorKey)
+    }
+
+    function resetEditorTabs(currentDifficultyId) {
+        const tabs = currentDifficultyId > 0
+            ? [difficultyEditorKey(currentDifficultyId)]
+            : []
+        openEditorTabs = tabs
+        editorHistory = tabs.slice()
+        setActiveEditor(currentDifficultyId > 0
+            ? difficultyEditorKey(currentDifficultyId)
+            : "")
+    }
+
+    function syncDifficultyEditors(difficulties) {
+        const validKeys = {}
+        for (let index = 0; index < difficulties.length; ++index)
+            validKeys[difficultyEditorKey(difficulties[index].id)] = true
+
+        const tabs = openEditorTabs.filter(key => key === metadataEditorKey || validKeys[key])
+        if (tabs.length === openEditorTabs.length)
+            return
+
+        const previousActive = activeEditorKey
+        openEditorTabs = tabs
+        editorHistory = editorHistory.filter(key => tabs.indexOf(key) >= 0)
+        if (tabs.indexOf(previousActive) >= 0)
+            return
+
+        setActiveEditor(editorHistory.length > 0
+            ? editorHistory[editorHistory.length - 1]
+            : (tabs.length > 0 ? tabs[0] : ""))
+    }
+}
+

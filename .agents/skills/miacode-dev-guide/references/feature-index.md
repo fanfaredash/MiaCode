@@ -59,7 +59,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   same deferred lambda once the build returns.
 - QuickShell beta: `src/app/quick_shell/` (`QuickShellBootstrap`, `QuickShellController`,
   `QuickShellNativeSurfaceHost`, `QuickShellPreviewCompositeSurface`, `QuickShellStyleBridge`,
-  `qml/QuickShellMain.qml`).
+  `qml/QuickShellMain.qml`). This is the **default v1 UI skin**.
+- Pure-QML workbench (v2, opt-in): `src/app/qml_ui/` (`QmlUiBootstrap`, `QmlApplicationContext`,
+  `MiaCode.UI` QML module). Selected by `--ui=v2` / `--modern-ui` or `MIACODE_UI_SKIN=v2`.
+  Shares the hidden `MainWindow` backend and `QuickShellController` (no NativeSurfaceHost).
+  Default remains QuickShell v1 (`--ui=v1` / unset).
+  **Phase-1 living checklist (update when working):** `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
 - Appearance prefs + first-run onboarding: theme pref persisted via
   `UiText::preferredTheme`/`setPreferredTheme` (`preferences.json` `ui.theme`); live re-theme via
   `MainWindow::WindowSection::applyUiTheme` (triggers `ApplicationPaletteChange` → `QuickShellStyleBridge`
