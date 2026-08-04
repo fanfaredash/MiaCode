@@ -446,6 +446,7 @@ $vcRuntimeSrc = $null
 # roots and pick the highest-versioned Microsoft.VC14X.CRT folder under
 # x64. Tested against BuildTools, Community, Professional, Enterprise.
 $vsCandidateRoots = @(
+    'C:\BuildTools\VC\Redist\MSVC',
     'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Redist\MSVC',
     'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Redist\MSVC',
     'C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Redist\MSVC',
