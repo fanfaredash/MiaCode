@@ -92,6 +92,14 @@ void VideoExportDialog::syncLivePreviewChartInfoVisibility()
     previewChartInfoCallback_(showChartInfoCheck_->isChecked());
 }
 
+void VideoExportDialog::syncLivePreviewHudTextLayout()
+{
+    if (fixHudTextLayoutCheck_ == nullptr || !previewHudTextLayoutCallback_) {
+        return;
+    }
+    previewHudTextLayoutCallback_(fixHudTextLayoutCheck_->isChecked());
+}
+
 void VideoExportDialog::restoreLivePreviewState()
 {
     if (previewStateRestored_) {
@@ -106,6 +114,9 @@ void VideoExportDialog::restoreLivePreviewState()
     }
     if (previewChartInfoCallback_) {
         previewChartInfoCallback_(initialShowChartInfo_);
+    }
+    if (previewHudTextLayoutCallback_) {
+        previewHudTextLayoutCallback_(false);
     }
     if (previewAspectRatioCallback_) {
         previewAspectRatioCallback_(1.0);

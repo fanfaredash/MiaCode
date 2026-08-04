@@ -422,6 +422,12 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `VideoExportEncoder.cpp` (encoder arguments), and `VideoExportPreparedTask.cpp` (media/GOP/audio).
 - Snapshot boundary (contract): `VideoExportSnapshot.{h,cpp}` (`toJson`, `fromJson`,
   `buildVideoExportTaskFromSnapshot`).
+- Export-video HUD compatibility: the Visuals checkbox "Fix HUD font line spacing" persists as
+  `fix_hud_text_layout` (default off), flows through `VideoExportTask` and the snapshot boundary,
+  and enables device-bound font metrics plus glyph-safe line advances in the export-page preview
+  and exported frames. Leaving the export-video page restores the normal preview to legacy layout.
+  With the checkbox off, `PreviewQuickHudLayer` must retain the legacy chart-info/object-stats
+  metrics and baseline formulas so unaffected users' output does not move.
 - MainWindow ownership: `MainWindow.cpp` / `sections/export/*` (`onExportPreviewVideo`,
   `buildVideoExportSnapshot`, `launchVideoExportWorker`, `handleVideoExportWorkerEvent`).
 - **Export hub page (E-C hybrid since 2026-06-11 — phases 1+2 of the export-page migration,

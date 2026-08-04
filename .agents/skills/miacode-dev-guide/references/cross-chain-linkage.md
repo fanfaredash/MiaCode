@@ -225,6 +225,13 @@ must copy both fields; `VideoExportSnapshot::{toJson,fromJson}` must serialize t
 `UltraCompactWithPv` and `UltraCompact` tokens share encoder tuning; only `UltraCompact` suppresses
 PV in the prepared export task, never in the live/export-page preview.
 
+`fixHudTextLayout` follows the same single/batch snapshot path and is serialized as
+`render.fix_hud_text_layout`. It defaults false for legacy snapshots and gates the export frame
+state's device-aware, glyph-safe HUD line layout. The dialog also applies it as a temporary live
+preview override while the export-video page is active; `restoreLivePreviewState` and
+`endExportPreviewSession` force it false on exit. The false branch preserves the original chart-info
+and object-stats baseline calculations.
+
 ## 9. Shared render state flows through preview and export
 
 Shared settings (background brightness outer/inner, layout square scale, outline diameter ratio

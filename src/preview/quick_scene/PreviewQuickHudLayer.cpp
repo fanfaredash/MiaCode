@@ -150,6 +150,20 @@ QStringList wrapTextByPixelWidth(const QString& text, qreal maxWidth, const QFon
     return lines;
 }
 
+QFontMetrics hudFontMetrics(const QFont& font, const QPainter& painter)
+{
+    return QFontMetrics(font, painter.device());
+}
+
+qreal hudLineAdvance(const QFontMetrics& metrics, const QStringList& lines)
+{
+    qreal glyphHeight = 0.0;
+    for (const QString& line : lines) {
+        glyphHeight = qMax(glyphHeight, static_cast<qreal>(metrics.boundingRect(line).height()));
+    }
+    return qMax(static_cast<qreal>(metrics.lineSpacing()), glyphHeight);
+}
+
 void drawOutlinedHudText(
     QPainter& painter,
     const QPointF& baseline,
@@ -800,9 +814,12 @@ void paintPreviewHudOverlay(
         if (chartInfoMaxHeight > 0.0) {
             // Mirror the timestamp HUD sizing while using the chart-info
             // area font family.
-            const QFontMetrics chartInfoMetrics(chartInfoFont);
-            const qreal lineHeight = static_cast<qreal>(chartInfoMetrics.lineSpacing());
-            const int maxLines = qMax(0, static_cast<int>(chartInfoMaxHeight / qMax<qreal>(1.0, lineHeight)));
+            const bool fixHudTextLayout = state->render.fixHudTextLayout;
+            const QFontMetrics chartInfoMetrics = fixHudTextLayout
+                ? hudFontMetrics(chartInfoFont, painter)
+                : QFontMetrics(chartInfoFont);
+            const qreal nominalLineHeight = qMax<qreal>(1.0, chartInfoMetrics.lineSpacing());
+            const int maxLines = qMax(0, static_cast<int>(chartInfoMaxHeight / nominalLineHeight));
             if (maxLines > 0) {
                 QStringList physicalLines;
                 // Lines 1-3: pushed verbatim, no width clamp, no wrap.
@@ -834,6 +851,19 @@ void paintPreviewHudOverlay(
                 }
                 if (truncated && !physicalLines.isEmpty()) {
                     physicalLines[physicalLines.size() - 1] = QStringLiteral("...");
+                }
+                qreal lineHeight = nominalLineHeight;
+                if (fixHudTextLayout && !physicalLines.isEmpty()) {
+                    lineHeight = hudLineAdvance(chartInfoMetrics, physicalLines);
+                    const int glyphSafeMaxLines = qMax(
+                        0,
+                        static_cast<int>(chartInfoMaxHeight / qMax<qreal>(1.0, lineHeight)));
+                    if (physicalLines.size() > glyphSafeMaxLines) {
+                        physicalLines = physicalLines.mid(0, glyphSafeMaxLines);
+                        if (!physicalLines.isEmpty()) {
+                            physicalLines[physicalLines.size() - 1] = QStringLiteral("...");
+                        }
+                    }
                 }
                 if (!physicalLines.isEmpty()) {
                     const qreal chartInfoShadow = qMax<qreal>(1.0, 2.0 * hudScale);
@@ -897,8 +927,12 @@ void paintPreviewHudOverlay(
     qreal headerGap = 0.0;
     qreal sectionGap = 0.0;
     qreal statGap = 0.0;
+    qreal titleLineHeight = 0.0;
+    qreal rateLineHeight = 0.0;
+    qreal statLineHeight = 0.0;
     QString rateLine;
     std::array<QString, 7> statLines;
+    const bool fixHudTextLayout = state->render.fixHudTextLayout;
 
     while (baseFontPointSize >= kHudMinimumReadableStatsFontPointSize) {
         titleFont = miacode::preview::scene::previewHudTimestampFontForArea(
@@ -913,9 +947,9 @@ void paintPreviewHudOverlay(
             miacode::preview::scene::PreviewHudFontArea::ObjectStats,
             baseFontPointSize,
             QFont::DemiBold);
-        titleMetrics = QFontMetrics(titleFont);
-        rateMetrics = QFontMetrics(rateFont);
-        statMetrics = QFontMetrics(statFont);
+        titleMetrics = fixHudTextLayout ? hudFontMetrics(titleFont, painter) : QFontMetrics(titleFont);
+        rateMetrics = fixHudTextLayout ? hudFontMetrics(rateFont, painter) : QFontMetrics(rateFont);
+        statMetrics = fixHudTextLayout ? hudFontMetrics(statFont, painter) : QFontMetrics(statFont);
 
         const QString finaleLine = QStringLiteral("%1 %")
             .arg(QString::number(stats.finaleRate, 'f', 2).rightJustified(6, QChar('0')));
@@ -930,6 +964,21 @@ void paintPreviewHudOverlay(
             QStringLiteral("BRK: %1/%2").arg(stats.breakPlayed).arg(stats.breakTotal),
             QStringLiteral("ALL: %1/%2").arg(stats.combo).arg(stats.totalNotes),
         };
+        if (fixHudTextLayout) {
+            titleLineHeight = hudLineAdvance(
+                titleMetrics,
+                {QStringLiteral("FiNALE Rate:"), QStringLiteral("DELUXE Rate:")});
+            rateLineHeight = hudLineAdvance(rateMetrics, {statLines[0], rateLine});
+            QStringList objectStatLines;
+            for (int i = 1; i < static_cast<int>(statLines.size()); ++i) {
+                objectStatLines.append(statLines[static_cast<size_t>(i)]);
+            }
+            statLineHeight = hudLineAdvance(statMetrics, objectStatLines);
+        } else {
+            titleLineHeight = titleMetrics.height();
+            rateLineHeight = rateMetrics.height();
+            statLineHeight = statMetrics.height();
+        }
 
         int maxStatWidth = 0;
         for (const QString& line : statLines) {
@@ -949,13 +998,19 @@ void paintPreviewHudOverlay(
                 maxStatWidth
             )
         );
-        blockHeight =
-            static_cast<qreal>(titleMetrics.height()) * 2.0
-            + headerGap * 2.0
-            + static_cast<qreal>(rateMetrics.height()) * 2.0
-            + sectionGap * 2.0
-            + static_cast<qreal>(statMetrics.height()) * static_cast<qreal>(statLines.size() - 1)
-            + statGap * static_cast<qreal>(qMax(0, static_cast<int>(statLines.size()) - 2));
+        blockHeight = fixHudTextLayout
+            ? titleLineHeight * 2.0
+                + headerGap * 2.0
+                + rateLineHeight * 2.0
+                + sectionGap * 2.0
+                + statLineHeight * static_cast<qreal>(statLines.size() - 1)
+                + statGap * static_cast<qreal>(qMax(0, static_cast<int>(statLines.size()) - 2))
+            : static_cast<qreal>(titleMetrics.height()) * 2.0
+                + headerGap * 2.0
+                + static_cast<qreal>(rateMetrics.height()) * 2.0
+                + sectionGap * 2.0
+                + static_cast<qreal>(statMetrics.height()) * static_cast<qreal>(statLines.size() - 1)
+                + statGap * static_cast<qreal>(qMax(0, static_cast<int>(statLines.size()) - 2));
 
         if (blockWidth <= availableStatsWidth && blockHeight <= (stageRect.height() - hudPadding * 2.0)) {
             break;
@@ -989,7 +1044,9 @@ void paintPreviewHudOverlay(
         QStringLiteral("FiNALE Rate:"),
         titleFont,
         shadowOffset);
-    baseline += titleMetrics.descent() + headerGap + rateMetrics.ascent();
+    baseline += fixHudTextLayout
+        ? titleLineHeight + headerGap
+        : titleMetrics.descent() + headerGap + rateMetrics.ascent();
     drawHudText(
         painter,
         QStringLiteral("object_stats.finale_rate"),
@@ -997,7 +1054,9 @@ void paintPreviewHudOverlay(
         statLines[0],
         rateFont,
         shadowOffset);
-    baseline += rateMetrics.descent() + sectionGap + titleMetrics.ascent();
+    baseline += fixHudTextLayout
+        ? rateLineHeight + sectionGap
+        : rateMetrics.descent() + sectionGap + titleMetrics.ascent();
     drawHudText(
         painter,
         QStringLiteral("object_stats.deluxe_title"),
@@ -1005,7 +1064,9 @@ void paintPreviewHudOverlay(
         QStringLiteral("DELUXE Rate:"),
         titleFont,
         shadowOffset);
-    baseline += titleMetrics.descent() + headerGap + rateMetrics.ascent();
+    baseline += fixHudTextLayout
+        ? titleLineHeight + headerGap
+        : titleMetrics.descent() + headerGap + rateMetrics.ascent();
     drawHudText(
         painter,
         QStringLiteral("object_stats.deluxe_rate"),
@@ -1013,10 +1074,12 @@ void paintPreviewHudOverlay(
         rateLine,
         rateFont,
         shadowOffset);
-    baseline += rateMetrics.descent() + sectionGap + statMetrics.ascent();
+    baseline += fixHudTextLayout
+        ? rateLineHeight + sectionGap
+        : rateMetrics.descent() + sectionGap + statMetrics.ascent();
     for (int i = 1; i < static_cast<int>(statLines.size()); ++i) {
         if (i > 1) {
-            baseline += statGap + statMetrics.leading();
+            baseline += statGap + (fixHudTextLayout ? 0.0 : statMetrics.leading());
         }
         drawHudText(
             painter,
@@ -1025,7 +1088,7 @@ void paintPreviewHudOverlay(
             statLines[static_cast<size_t>(i)],
             statFont,
             shadowOffset);
-        baseline += statMetrics.height();
+        baseline += fixHudTextLayout ? statLineHeight : statMetrics.height();
     }
 }
 
