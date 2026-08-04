@@ -1,11 +1,12 @@
 import QtQuick
+import QtQuick.Layouts
 import MiaCode.UI
 
 Rectangle {
     id: root
 
-    property string difficulty: "Master 13+"
-    property string documentName: "maidata.txt"
+    property string difficulty: ""
+    property string documentName: ""
     property int cursorLine: 1
     property int cursorColumn: 1
 
@@ -20,24 +21,33 @@ Rectangle {
         color: Theme.colors.border.normal
     }
 
-    Row {
-        anchors.left: parent.left
+    RowLayout {
+        anchors.fill: parent
         anchors.leftMargin: 8
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: 14
-
-        StatusText { text: root.difficulty }
-        StatusText { text: root.documentName }
-    }
-
-    Row {
-        anchors.right: parent.right
         anchors.rightMargin: 8
-        anchors.verticalCenter: parent.verticalCenter
         spacing: 14
 
-        StatusText { text: qsTr("行 %1，列 %2").arg(root.cursorLine).arg(root.cursorColumn) }
-        StatusText { text: "simai" }
+        StatusText {
+            visible: root.difficulty.length > 0
+            text: root.difficulty
+            Layout.preferredWidth: implicitWidth
+        }
+        StatusText {
+            Layout.fillWidth: true
+            text: root.documentName
+            visible: text.length > 0
+            elide: Text.ElideMiddle
+        }
+        Item { Layout.fillWidth: root.documentName.length === 0 }
+
+        StatusText {
+            text: qsTr("行 %1，列 %2").arg(root.cursorLine).arg(root.cursorColumn)
+            Layout.preferredWidth: implicitWidth
+        }
+        StatusText {
+            text: "simai"
+            Layout.preferredWidth: implicitWidth
+        }
     }
 
     component StatusText: Text {
@@ -46,4 +56,3 @@ Rectangle {
         font.pixelSize: Theme.secondaryFontSize
     }
 }
-

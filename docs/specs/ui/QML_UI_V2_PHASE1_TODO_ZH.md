@@ -48,6 +48,7 @@
 - [x] 设置齿轮：去掉演示用 `ViewSettingsPopup`，改为调用 v1 `MainWindow::onPreferences()`
 - [x] QQC 共享皮肤：`AppTextField` / `AppTextArea` / `AppButton` / `AppComboBox` / `AppSlider` / `AppMenu*`（几何对齐 v1 dialog*，色用 `Theme`）
 - [x] 悬停/选中高亮收口：`HoverChrome` + `NavRow`（仅 v2 `qml_ui`，不碰 v1）；`nav`/`hover` 默认 inset；`AppSwitch`；IconButton `glyph`
+- [x] 标题栏菜单溢出：窄窗时从右往左收入 `…` 二级菜单；文档标题保持整窗居中
 - [ ] 禁用菜单/按钮：能接则接（音频/预览设置 → 现有对话框）；短期接不上的改为隐藏，少留灰色死控件
 
 ### P2 — 专属壳能力巩固（相对 v1 已有差异，需保持可用）

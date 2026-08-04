@@ -12,7 +12,7 @@ MenuItem {
     font.pixelSize: Theme.uiFontSize
     implicitHeight: 28
     leftPadding: 12
-    rightPadding: 16
+    rightPadding: subMenu ? 22 : 16
     topPadding: 3
     bottomPadding: 3
 
@@ -57,5 +57,20 @@ MenuItem {
     background: HoverChrome {
         selected: root.highlighted
         tone: "nav"
+    }
+
+    // Same placement contract as Qt Basic MenuItem; sized down slightly.
+    arrow: ControlsImpl.ColorImage {
+        x: root.mirrored ? root.leftPadding : root.width - width - root.rightPadding + 6
+        y: root.topPadding + (root.availableHeight - height) / 2
+        width: 8
+        height: 12
+        visible: root.subMenu
+        mirror: root.mirrored
+        source: root.subMenu
+                ? "qrc:/qt-project.org/imports/QtQuick/Controls/Basic/images/arrow-indicator.png"
+                : ""
+        color: root.labelColor
+        opacity: 0.85
     }
 }

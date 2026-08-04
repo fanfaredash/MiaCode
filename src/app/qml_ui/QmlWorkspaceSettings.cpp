@@ -1,6 +1,7 @@
 #include "QmlWorkspaceSettings.h"
 
-#include <QFontDatabase>
+#include "mainwindow/MainWindowShared.h"
+
 #include <QGuiApplication>
 #include <QtGlobal>
 
@@ -19,12 +20,8 @@ QmlWorkspaceSettings::QmlWorkspaceSettings(QObject* parent)
 {
     uiFontFamily_ = QGuiApplication::font().family();
 
-    // The QML source editor uses the platform fixed-pitch font so glyph
-    // metrics remain consistent across every supported desktop platform.
-    codeFont_ = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    codeFont_.setStyleHint(QFont::Monospace);
-    codeFont_.setFixedPitch(true);
-    codeFont_.setPixelSize(14);
+    // Match v1 editor: embedded Consolas on Windows (`:/fonts/consola.ttf`), 10 pt.
+    codeFont_ = miacode::mainwindow::shared::editorFont(10);
 
     // 所有值在程序启动时一次性恢复并约束到界面可接受范围。配置文件中的
     // 旧值即使来自不同尺寸的显示器，也不会让关键工作区完全离开可见范围。

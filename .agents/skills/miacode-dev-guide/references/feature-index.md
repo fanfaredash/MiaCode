@@ -73,7 +73,9 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `resources/icons/app.png` (QML alias `icons/app.png`). Shared QQC chrome:
   `AppTextField` / `AppTextArea` / `AppButton` / `AppComboBox` / `AppSlider` / `AppMenu*`
   (v1 dialog* geometry, local `Theme` colors). Hover/selection chrome shared via
-  `HoverChrome` + `NavRow` (v2 `qml_ui` only).
+  `HoverChrome` + `NavRow` (v2 `qml_ui` only). Title-bar `MainMenu` collapses
+  right-to-left into a More (`…`) submenu when the window-centered document title
+  band leaves insufficient width (`WindowTitleBar` + `MainMenu.availableWidth`).
   Default remains QuickShell v1 (`--ui=v1` / unset).
   **Phase-1 living checklist (update when working):** `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
   Next focus there: P1 honesty (`syntaxIssues` / dead toolbar buttons), then P0 Document friend cleanup.

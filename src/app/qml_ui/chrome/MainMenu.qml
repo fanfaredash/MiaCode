@@ -5,7 +5,9 @@ import QtQuick.Controls
 import QtQuick.Controls.impl as ControlsImpl
 import MiaCode.UI
 
-MenuBar {
+// Custom menubar (not Qt MenuBar): whole-item Row + optional More.
+// Overflow removes complete top-level entries (right → left); never clips mid-item.
+Item {
     id: root
 
     signal toggleSidebarRequested()
@@ -24,32 +26,126 @@ MenuBar {
     property bool canUndo: false
     property bool canRedo: false
     property bool commandsEnabled: true
+    property real availableWidth: Number.POSITIVE_INFINITY
 
+    readonly property int overflowButtonWidth: 30
+    property int visibleCount: 6
+    property var _activeMenu: null
+
+    implicitHeight: 34
+    height: parent ? parent.height : implicitHeight
+    // Shrink-wrap to whole visible controls only — never min(available) + clip.
+    width: barRow.width
     enabled: commandsEnabled
 
-    topPadding: 0
-    leftPadding: 0
-    rightPadding: 0
-    bottomPadding: 0
+    onAvailableWidthChanged: root.scheduleReflow()
+    Component.onCompleted: root.scheduleReflow()
 
-    delegate: MenuBarItem {
-        id: menuItem
+    function scheduleReflow() {
+        Qt.callLater(root.reflow)
+    }
+
+    function topButtons() {
+        return [fileButton, editButton, toolsButton, adjustButton, previewButton, helpButton]
+    }
+
+    function topMenus() {
+        return [fileMenu, editMenu, toolsMenu, adjustMenu, previewMenu, helpMenu]
+    }
+
+    function closeActiveMenu() {
+        if (root._activeMenu && root._activeMenu.visible)
+            root._activeMenu.close()
+        root._activeMenu = null
+    }
+
+    function openAnchoredMenu(menu, anchor) {
+        if (!menu || !anchor)
+            return
+        if (root._activeMenu && root._activeMenu !== menu && root._activeMenu.visible)
+            root._activeMenu.close()
+        root._activeMenu = menu
+        menu.popup(anchor, 0, anchor.height)
+    }
+
+    function plainTitle(text) {
+        let out = ""
+        for (let i = 0; i < text.length; ++i) {
+            if (text[i] === "&" && i + 1 < text.length) {
+                ++i
+                out += text[i]
+                continue
+            }
+            out += text[i]
+        }
+        return out
+    }
+
+    function detachAllOverflowMenus() {
+        // Pull every submenu back out so top-level popup still owns them.
+        for (let i = overflowMenu.count - 1; i >= 0; --i) {
+            if (overflowMenu.menuAt(i))
+                overflowMenu.takeMenu(i)
+        }
+        const menus = root.topMenus()
+        for (let i = 0; i < menus.length; ++i)
+            menus[i].parent = menuHost
+    }
+
+    function reflow() {
+        root.closeActiveMenu()
+        root.detachAllOverflowMenus()
+
+        const buttons = root.topButtons()
+        const menus = root.topMenus()
+        const avail = root.availableWidth
+        let n = buttons.length
+
+        while (n > 0) {
+            let total = 0
+            for (let i = 0; i < n; ++i)
+                total += buttons[i].implicitWidth
+            if (n < buttons.length)
+                total += root.overflowButtonWidth
+            if (total <= avail + 0.5)
+                break
+            --n
+        }
+
+        root.visibleCount = n
+
+        // Register overflowed entries as real Menu submenus (parent= alone does nothing).
+        for (let i = n; i < menus.length; ++i)
+            overflowMenu.addMenu(menus[i])
+    }
+
+    // Top-level entry: real control width drives overflow math.
+    component TopLevelItem: AbstractButton {
+        id: btn
+
+        required property var menu
+        required property int menuIndex
+
         height: root.height
+        padding: 0
         leftPadding: 8
         rightPadding: 8
         topPadding: 0
         bottomPadding: 0
-        font.family: Theme.uiFont
-        font.pixelSize: Theme.uiFontSize
-        palette.highlight: Theme.colors.state.lineHighlight
-        palette.highlightedText: Theme.colors.text.primary
+        visible: root.visibleCount > btn.menuIndex
+        hoverEnabled: true
+        focusPolicy: Qt.NoFocus
 
-        // 一级菜单标题保留 Qt 的 & 助记标记。该标签负责隐藏 &、绘制
-        // 下划线；MenuBarItem 同时据此注册对应的 Alt 组合键。
+        readonly property bool menuOpen: btn.menu && btn.menu.visible
+
+        implicitWidth: Math.ceil(label.implicitWidth) + leftPadding + rightPadding
+
         contentItem: ControlsImpl.MnemonicLabel {
-            text: menuItem.text
+            id: label
+            text: btn.menu ? btn.menu.title : ""
             mnemonicVisible: true
-            color: menuItem.highlighted ? Theme.colors.text.active : Theme.colors.text.secondary
+            color: (btn.hovered || btn.menuOpen) ? Theme.colors.text.active
+                                                 : Theme.colors.text.secondary
             font.family: Theme.uiFont
             font.pixelSize: Theme.uiFontSize
             horizontalAlignment: Text.AlignHCenter
@@ -57,109 +153,184 @@ MenuBar {
         }
 
         background: HoverChrome {
-            selected: menuItem.highlighted
+            selected: btn.menuOpen
+            hovered: btn.hovered
+            pressed: btn.down
             tone: "bar"
         }
+
+        onClicked: root.openAnchoredMenu(btn.menu, btn)
+
+        // Menubar-style: while a menu is open, hovering another top item switches it.
+        onHoveredChanged: {
+            if (!btn.hovered || !btn.visible || !btn.menu)
+                return
+            if (root._activeMenu && root._activeMenu.visible && root._activeMenu !== btn.menu)
+                root.openAnchoredMenu(btn.menu, btn)
+        }
     }
 
-    background: Rectangle {
-        color: "transparent"
+    Row {
+        id: barRow
+        spacing: 0
+        height: parent.height
+
+        TopLevelItem {
+            id: fileButton
+            menu: fileMenu
+            menuIndex: 0
+        }
+        TopLevelItem {
+            id: editButton
+            menu: editMenu
+            menuIndex: 1
+        }
+        TopLevelItem {
+            id: toolsButton
+            menu: toolsMenu
+            menuIndex: 2
+        }
+        TopLevelItem {
+            id: adjustButton
+            menu: adjustMenu
+            menuIndex: 3
+        }
+        TopLevelItem {
+            id: previewButton
+            menu: previewMenu
+            menuIndex: 4
+        }
+        TopLevelItem {
+            id: helpButton
+            menu: helpMenu
+            menuIndex: 5
+        }
+
+        IconButton {
+            id: moreButton
+            width: root.overflowButtonWidth
+            height: root.height
+            visible: root.visibleCount < 6
+            iconSource: Qt.resolvedUrl("icons/more.svg")
+            iconWidth: 16
+            iconHeight: 16
+            tooltip: qsTr("更多")
+            onClicked: root.openAnchoredMenu(overflowMenu, moreButton)
+        }
     }
 
+    // Host for top-level menus while their button is visible.
+    Item {
+        id: menuHost
+        width: 0
+        height: 0
+
+        AppMenu {
+            id: fileMenu
+            title: qsTr("文件(&F)")
+            Action {
+                text: qsTr("打开")
+                shortcut: StandardKey.Open
+                enabled: root.commandsEnabled
+                onTriggered: root.openRequested()
+            }
+            Action {
+                text: qsTr("保存")
+                shortcut: StandardKey.Save
+                enabled: root.commandsEnabled
+                onTriggered: root.saveRequested()
+            }
+            Action {
+                text: qsTr("另存为")
+                shortcut: StandardKey.SaveAs
+                enabled: root.commandsEnabled
+                onTriggered: root.saveAsRequested()
+            }
+            AppMenuSeparator {}
+            Action {
+                text: qsTr("退出")
+                shortcut: StandardKey.Quit
+                enabled: root.commandsEnabled
+                onTriggered: root.exitRequested()
+            }
+        }
+
+        AppMenu {
+            id: editMenu
+            title: qsTr("编辑(&E)")
+            Action {
+                text: qsTr("撤销")
+                shortcut: StandardKey.Undo
+                enabled: root.commandsEnabled && root.canUndo
+                onTriggered: root.undoRequested()
+            }
+            Action {
+                text: qsTr("重做")
+                shortcut: StandardKey.Redo
+                enabled: root.commandsEnabled && root.canRedo
+                onTriggered: root.redoRequested()
+            }
+            Action { text: qsTr("查找"); enabled: false }
+            AppMenuSeparator {}
+            Action {
+                text: qsTr("全选")
+                shortcut: StandardKey.SelectAll
+                enabled: root.commandsEnabled
+                onTriggered: root.selectAllRequested()
+            }
+            Action { text: qsTr("选择当前行"); enabled: false }
+        }
+
+        AppMenu {
+            id: toolsMenu
+            title: qsTr("工具(&T)")
+            Action {
+                text: qsTr("元数据")
+                enabled: root.commandsEnabled
+                onTriggered: root.metadataRequested()
+            }
+            Action {
+                text: qsTr("检查谱面")
+                enabled: root.commandsEnabled
+                onTriggered: root.validateRequested()
+            }
+        }
+
+        AppMenu {
+            id: adjustMenu
+            title: qsTr("调整(&M)")
+            Action {
+                text: qsTr("切换侧栏")
+                shortcut: "Ctrl+B"
+                enabled: root.commandsEnabled
+                onTriggered: root.toggleSidebarRequested()
+            }
+            Action {
+                text: qsTr("切换时间轴")
+                enabled: root.commandsEnabled
+                onTriggered: root.toggleBottomPanelRequested()
+            }
+        }
+
+        AppMenu {
+            id: previewMenu
+            title: qsTr("预览(&P)")
+            Action {
+                text: qsTr("切换实时预览")
+                enabled: root.commandsEnabled
+                onTriggered: root.togglePreviewRequested()
+            }
+        }
+
+        AppMenu {
+            id: helpMenu
+            title: qsTr("帮助(&H)")
+            Action { text: qsTr("关于 MiaCode"); enabled: false }
+        }
+    }
+
+    // Overflowed top-level AppMenus are inserted via addMenu() as submenus.
     AppMenu {
-        title: qsTr("文件(&F)")
-        Action {
-            text: qsTr("打开")
-            shortcut: StandardKey.Open
-            enabled: root.commandsEnabled
-            onTriggered: root.openRequested()
-        }
-        Action {
-            text: qsTr("保存")
-            shortcut: StandardKey.Save
-            enabled: root.commandsEnabled
-            onTriggered: root.saveRequested()
-        }
-        Action {
-            text: qsTr("另存为")
-            shortcut: StandardKey.SaveAs
-            enabled: root.commandsEnabled
-            onTriggered: root.saveAsRequested()
-        }
-        AppMenuSeparator {}
-        Action {
-            text: qsTr("退出")
-            shortcut: StandardKey.Quit
-            enabled: root.commandsEnabled
-            onTriggered: root.exitRequested()
-        }
-    }
-
-    AppMenu {
-        title: qsTr("编辑(&E)")
-        Action {
-            text: qsTr("撤销")
-            shortcut: StandardKey.Undo
-            enabled: root.commandsEnabled && root.canUndo
-            onTriggered: root.undoRequested()
-        }
-        Action {
-            text: qsTr("重做")
-            shortcut: StandardKey.Redo
-            enabled: root.commandsEnabled && root.canRedo
-            onTriggered: root.redoRequested()
-        }
-        Action { text: qsTr("查找"); enabled: false }
-        AppMenuSeparator {}
-        Action {
-            text: qsTr("全选")
-            shortcut: StandardKey.SelectAll
-            enabled: root.commandsEnabled
-            onTriggered: root.selectAllRequested()
-        }
-        Action { text: qsTr("选择当前行"); enabled: false }
-    }
-
-    AppMenu {
-        title: qsTr("工具(&T)")
-        Action {
-            text: qsTr("元数据")
-            enabled: root.commandsEnabled
-            onTriggered: root.metadataRequested()
-        }
-        Action {
-            text: qsTr("检查谱面")
-            enabled: root.commandsEnabled
-            onTriggered: root.validateRequested()
-        }
-    }
-
-    AppMenu {
-        title: qsTr("调整(&M)")
-        Action {
-            text: qsTr("切换侧栏")
-            shortcut: "Ctrl+B"
-            enabled: root.commandsEnabled
-            onTriggered: root.toggleSidebarRequested()
-        }
-        Action {
-            text: qsTr("切换时间轴")
-            enabled: root.commandsEnabled
-            onTriggered: root.toggleBottomPanelRequested()
-        }
-    }
-
-    AppMenu {
-        title: qsTr("预览(&P)")
-        Action {
-            text: qsTr("切换实时预览")
-            enabled: root.commandsEnabled
-            onTriggered: root.togglePreviewRequested()
-        }
-    }
-
-    AppMenu {
-        title: qsTr("帮助(&H)")
-        Action { text: qsTr("关于 MiaCode"); enabled: false }
+        id: overflowMenu
     }
 }

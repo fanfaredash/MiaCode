@@ -3,12 +3,22 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import MiaCode.UI
 
+// Note counts under the preview. Column count follows whether six
+// value cells fit; never elide numeric values. Transport chrome is
+// independent — do not share a width threshold with PreviewTransport.
 Rectangle {
     id: root
 
     required property var statistics
 
-    implicitHeight: 55
+    // Enough for values like "999/999" at uiFontSize + side padding.
+    readonly property int minCellWidth: 64
+    readonly property bool wideLayout: width >= minCellWidth * 6
+    readonly property int columns: wideLayout ? 6 : 3
+    readonly property int rows: wideLayout ? 1 : 2
+
+    implicitHeight: wideLayout ? 55 : 96
+    height: implicitHeight
     color: Theme.colors.background.workbench
 
     Rectangle {
@@ -19,41 +29,53 @@ Rectangle {
         color: Theme.colors.border.normal
     }
 
-    Row {
+    Grid {
+        id: grid
         anchors.fill: parent
         anchors.leftMargin: 4
         anchors.rightMargin: 4
+        anchors.topMargin: 4
+        anchors.bottomMargin: 4
+        columns: root.columns
+        rows: root.rows
+        columnSpacing: 0
+        rowSpacing: 0
 
         Repeater {
             model: root.statistics
 
             delegate: Item {
-                id: statistic
+                id: cell
                 required property var modelData
-                width: (root.width - 8) / 6
-                height: root.height
+
+                width: grid.width / root.columns
+                height: grid.height / root.rows
 
                 Column {
                     anchors.centerIn: parent
                     spacing: 2
+                    width: parent.width - 4
 
                     Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: statistic.modelData.name
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        text: cell.modelData.name
                         color: Theme.colors.text.secondary
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.secondaryFontSize
+                        elide: Text.ElideRight
                     }
                     Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: statistic.modelData.value
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        // Numeric values must stay complete — switch layout instead of eliding.
+                        text: cell.modelData.value
                         color: Theme.colors.text.primary
                         font.family: Theme.uiFont
-                        font.pixelSize: Theme.uiFontSize
+                        font.pixelSize: root.wideLayout ? Theme.uiFontSize : Theme.secondaryFontSize
                     }
                 }
             }
         }
     }
 }
-

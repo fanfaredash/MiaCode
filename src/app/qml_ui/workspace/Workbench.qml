@@ -142,6 +142,7 @@ Item {
             width: parent.width
             height: visible ? 30 : 0
             visible: Qt.platform.os !== "windows"
+            availableWidth: width
             commandsEnabled: visible
             canUndo: splitView.canUndo
             canRedo: splitView.canRedo
@@ -234,7 +235,7 @@ Item {
             difficulty: state.difficultyEditorActive
                 ? root.documentSession.currentDifficultyLabel : ""
             documentName: state.metadataEditorActive ? "metadata"
-                : state.difficultyEditorActive ? root.documentSession.currentFileName : ""
+                : state.difficultyEditorActive ? root.documentSession.currentFilePath : ""
             cursorLine: state.editorCursorLine
             cursorColumn: state.editorCursorColumn
         }
