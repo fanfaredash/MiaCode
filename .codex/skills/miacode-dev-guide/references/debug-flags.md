@@ -136,6 +136,15 @@ Dev-tool-only parser repro hook:
   - use to diagnose stutter that the offscreen-renderer perf instrumentation can't see — i.e. when `renderer_perf max_frame_total_ms` is well under the vsync budget but `fixed_gate_present wait_ms` and `fixed_gate_tick gate_wait_ms` still spike
   - default off; flag is read once at startup so it must be in the environment before the exe launches
   - owners: `src/common/DebugOptions.h`, `src/app/main.cpp`
+- `MIACODE_ENABLE_DIAG_MODULE_LIST`
+  - enables the supplementary pre-Qt process-module list in the startup beacon; disabled by default so third-party/injected-module traversal cannot prevent normal startup
+  - owner: `src/app/startup_diagnostics_win32.cpp`
+- `MIACODE_ENABLE_DIAG_D3D11`
+  - enables the supplementary startup D3D11 diagnostic probe; disabled by default so vendor graphics drivers are not loaded before Qt initializes
+  - owner: `src/app/startup_diagnostics_win32.cpp`
+- `MIACODE_SKIP_DIAG_D3D11`
+  - compatibility override that skips the startup D3D11 diagnostic probe while retaining the OS/runtime checks
+  - owner: `src/app/startup_diagnostics_win32.cpp`
 - `MIACODE_PREVIEW_VISUAL_LOOKAHEAD_VSYNCS`
   - Tier 2A predictive playhead. Biases the rendered visual time forward by N display intervals (scaled by current playback rate) so the frame represents audio time at the moment it's actually visible — eliminates the perceived "audio leads video by one frame" lag from the GUI→render→composite→present pipeline
   - default `1.0` (≈16.7ms at 60Hz); set to `0` to disable, allowed range `[0, 4]`

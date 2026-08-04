@@ -464,20 +464,31 @@ void runStartupDiagnostic() noexcept
     __except (EXCEPTION_EXECUTE_HANDLER) {
         appendBeaconLineUtf8("diag/modules seh_in_probe=1");
     }
-    appendBeaconLineUtf8("phase=diag_modlist");
-    __try { probeLoadedModuleList(); }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
-        appendBeaconLineUtf8("diag/modlist seh_in_probe=1");
+    // Full process-module enumeration is supplementary crash evidence, not a
+    // prerequisite for the startup diagnosis. It traverses arbitrary
+    // third-party modules while the process is still in its fragile pre-Qt
+    // phase, so keep it opt-in: diagnostics must never block normal startup.
+    const DWORD enableModuleList =
+        ::GetEnvironmentVariableW(L"MIACODE_ENABLE_DIAG_MODULE_LIST", nullptr, 0);
+    if (enableModuleList > 0) {
+        appendBeaconLineUtf8("phase=diag_modlist");
+        __try { probeLoadedModuleList(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) {
+            appendBeaconLineUtf8("diag/modlist seh_in_probe=1");
+        }
+    } else {
+        appendBeaconLineUtf8("phase=diag_modlist_skipped_default_safe");
     }
-    // D3D11 probe creates a full hardware device, which loads AMD/NVIDIA/Intel
-    // user-mode driver DLLs into the process. Once loaded these UMD DLLs hook
-    // Win32 APIs and never unload — on some AMD APU + Win10 22H2 combinations
-    // this hook-set interferes with subsequent std::mutex / SRWLock operations
-    // and triggers a fast-fail. Allow opting out via env var so support can
-    // run the rest of the diagnostic without provoking that path.
+    // Device creation loads vendor graphics drivers before Qt initializes, so
+    // this supplementary probe must not be a normal-startup prerequisite.
+    // The legacy skip flag remains a compatibility override for support runs.
+    const DWORD enableD3D11 =
+        ::GetEnvironmentVariableW(L"MIACODE_ENABLE_DIAG_D3D11", nullptr, 0);
     const DWORD skipD3D11 =
         ::GetEnvironmentVariableW(L"MIACODE_SKIP_DIAG_D3D11", nullptr, 0);
-    if (skipD3D11 > 0) {
+    if (enableD3D11 == 0) {
+        appendBeaconLineUtf8("phase=diag_d3d11_skipped_default_safe");
+    } else if (skipD3D11 > 0) {
         appendBeaconLineUtf8("phase=diag_d3d11_skipped_via_env");
     } else {
         appendBeaconLineUtf8("phase=diag_d3d11");

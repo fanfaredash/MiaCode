@@ -69,6 +69,9 @@ struct StackWalkJob {
     DWORD resumeErrorCode = 0;
 };
 
+DWORD stackWalkMachineType();
+void seedStackFrame(STACKFRAME64* frame, const CONTEXT& context);
+
 // The ONLY code that runs while the target is suspended. Everything here is
 // allocation-free and Qt-free by construction; see the hazard notes in the header.
 void runStackWalkJob(std::shared_ptr<StackWalkJob> job)

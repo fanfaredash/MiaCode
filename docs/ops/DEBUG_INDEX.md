@@ -288,7 +288,9 @@ DirectComposition / D3D11 preview (`src/common/DebugOptions.h`; default OFF, bei
 - `MIACODE_PREVIEW_DCOMP_QUIESCE_QSG` — skip QSG repaint subscriptions while DComp is active.
 - `MIACODE_PREVIEW_QSG_FULL_DISABLE` — force QSG to the software/basic path (GPU-contention isolation test).
 - `MIACODE_PREVIEW_FORCE_BASIC_RENDER_LOOP` — force `QSG_RENDER_LOOP=basic` at startup.
-- `MIACODE_SKIP_DIAG_D3D11` — skip the startup D3D11 diagnostic probe.
+- `MIACODE_ENABLE_DIAG_D3D11` — explicitly enable the supplementary startup D3D11 diagnostic probe. It is disabled by default because device creation loads vendor graphics drivers before Qt initializes.
+- `MIACODE_SKIP_DIAG_D3D11` — compatibility override that skips the D3D11 diagnostic probe even when it has been explicitly enabled.
+- `MIACODE_ENABLE_DIAG_MODULE_LIST` — explicitly enable the supplementary pre-Qt process-module list in the startup beacon. It is disabled by default because it traverses third-party/injected modules; normal startup records `phase=diag_modlist_skipped_default_safe` instead.
 
 ## Misc / Platform
 
