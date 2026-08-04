@@ -11,6 +11,15 @@
       "displayName": "VS2022 + Qt6",
       "generator": "Visual Studio 17 2022",
       "binaryDir": "${sourceDir}/build"
+    },
+    {
+      "name": "ninja-mingw-qt6",
+      "displayName": "Ninja + MinGW + Qt6",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
     }
   ],
   "buildPresets": [
@@ -25,6 +34,12 @@
       "displayName": "Debug",
       "configurePreset": "vs2022-qt6",
       "configuration": "Debug"
+    },
+    {
+      "name": "ninja-release",
+      "displayName": "Ninja Release",
+      "configurePreset": "ninja-mingw-qt6",
+      "jobs": 8
     }
   ]
 }

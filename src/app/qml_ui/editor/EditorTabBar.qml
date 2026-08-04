@@ -138,7 +138,7 @@ Rectangle {
         tooltip: qsTr("显示所有已打开的编辑器")
         onClicked: overflowMenu.open()
 
-        Menu {
+        AppMenu {
             id: overflowMenu
             x: parent.width - width
             y: parent.height
@@ -146,7 +146,7 @@ Rectangle {
             Repeater {
                 model: root.workbenchState.openEditorTabs
 
-                delegate: MenuItem {
+                delegate: AppMenuItem {
                     required property string modelData
 
                     text: root.displayTitleForKey(modelData)

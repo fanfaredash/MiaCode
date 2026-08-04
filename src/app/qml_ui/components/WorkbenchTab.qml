@@ -59,7 +59,7 @@ Item {
                     visible: !root.panelTab && root.iconSource.toString().length > 0
                     source: root.iconSource
                     sourceSize: Qt.size(15, 15)
-                    color: root.active ? Theme.colors.text.primary : Theme.colors.text.secondary
+                    color: root.active ? Theme.colors.text.active : Theme.colors.text.secondary
                 }
 
                 Text {
@@ -68,7 +68,7 @@ Item {
                     Layout.fillWidth: true
                     text: root.text
                     elide: Text.ElideRight
-                    color: root.active ? Theme.colors.text.primary : Theme.colors.text.secondary
+                    color: root.active ? Theme.colors.text.active : Theme.colors.text.secondary
                     font.family: Theme.uiFont
                     font.pixelSize: root.panelTab ? Theme.secondaryFontSize : Theme.uiFontSize
                     horizontalAlignment: root.panelTab ? Text.AlignHCenter : Text.AlignLeft
@@ -124,11 +124,10 @@ Item {
                         sourceSize: Qt.size(14, 14)
                         color: Theme.colors.text.secondary
                     }
-                    background: Rectangle {
-                        radius: 4
-                        color: closeButton.down ? Theme.colors.state.pressed
-                              : closeButton.hovered ? Theme.colors.state.hover
-                              : "transparent"
+                    background: HoverChrome {
+                        hovered: closeButton.hovered
+                        pressed: closeButton.down
+                        tone: "icon"
                     }
                     Tooltip {
                         visible: closeButton.hovered
@@ -138,10 +137,27 @@ Item {
             }
         }
 
-        background: Rectangle {
-            color: root.active && !root.panelTab ? Theme.colors.background.editor
-                  : root.hovered ? Theme.colors.state.hover
-                  : Theme.colors.background.workbench
+        background: Item {
+            // Document tabs: idle/active sheet; hover uses rounded HoverChrome
+            // (active tab keeps full-bleed editor fill for adjacent tiling).
+            Rectangle {
+                anchors.fill: parent
+                color: {
+                    if (root.panelTab)
+                        return Theme.colors.background.workbench
+                    if (root.active)
+                        return Theme.colors.background.editor
+                    return Theme.colors.background.workbench
+                }
+            }
+
+            HoverChrome {
+                anchors.fill: parent
+                margins: root.panelTab ? 2 : -1
+                visible: root.hovered && (!root.active || root.panelTab)
+                hovered: root.hovered
+                tone: "hover"
+            }
 
             Rectangle {
                 anchors.top: parent.top

@@ -37,29 +37,15 @@ Rectangle {
             y: 6
             width: parent.width - 12
 
-            AbstractButton {
-                id: infoButton
+            NavRow {
                 width: parent.width
-                height: 30
-                hoverEnabled: true
+                text: qsTr("元数据")
+                selected: root.workbenchState.metadataEditorActive
                 onClicked: {
                     if (root.pages && root.pages.overlayActive)
                         root.pages.leaveOverlayPage()
                     root.workbenchState.activeSidebarView = "chart"
                     root.workbenchState.openMetadataEditor()
-                }
-                contentItem: Text {
-                    leftPadding: 20
-                    text: qsTr("元数据")
-                    color: Theme.colors.text.primary
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.uiFontSize
-                    verticalAlignment: Text.AlignVCenter
-                }
-                background: Rectangle {
-                    color: root.workbenchState.metadataEditorActive
-                           ? Theme.colors.state.menuSelection
-                           : infoButton.hovered ? Theme.colors.state.hover : "transparent"
                 }
             }
 
@@ -74,4 +60,3 @@ Rectangle {
         ScrollBar.vertical: ScrollBar {}
     }
 }
-

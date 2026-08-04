@@ -36,7 +36,7 @@ Rectangle {
             width: parent.width - 12
             spacing: 2
 
-            SidebarListButton {
+            NavRow {
                 width: parent.width
                 text: qsTr("延迟校准")
                 selected: root.pages.activePageId === "latency"
@@ -45,7 +45,7 @@ Rectangle {
                     root.pages.openLatencyPage()
                 }
             }
-            SidebarListButton {
+            NavRow {
                 width: parent.width
                 text: qsTr("音视频处理")
                 selected: root.selectedAction === "media"
@@ -54,7 +54,7 @@ Rectangle {
                     root.pages.openMediaProcessingTools()
                 }
             }
-            SidebarListButton {
+            NavRow {
                 width: parent.width
                 text: qsTr("整谱规范化")
                 selected: root.selectedAction === "normalize"
@@ -63,7 +63,7 @@ Rectangle {
                     root.pages.openNormalizeWholeChart()
                 }
             }
-            SidebarListButton {
+            NavRow {
                 width: parent.width
                 text: qsTr("Net 批量下载")
                 selected: root.selectedAction === "net-download"
@@ -72,7 +72,7 @@ Rectangle {
                     root.pages.openNetBatchDownload()
                 }
             }
-            SidebarListButton {
+            NavRow {
                 width: parent.width
                 text: qsTr("Net 批量上传")
                 selected: root.selectedAction === "net-upload"
@@ -84,25 +84,5 @@ Rectangle {
         }
 
         ScrollBar.vertical: ScrollBar {}
-    }
-
-    component SidebarListButton: AbstractButton {
-        id: button
-        property bool selected: false
-        height: 30
-        hoverEnabled: true
-        contentItem: Text {
-            leftPadding: 20
-            text: button.text
-            color: Theme.colors.text.primary
-            font.family: Theme.uiFont
-            font.pixelSize: Theme.uiFontSize
-            verticalAlignment: Text.AlignVCenter
-        }
-        background: Rectangle {
-            color: button.selected ? Theme.colors.state.menuSelection
-                  : button.hovered ? Theme.colors.state.hover
-                  : "transparent"
-        }
     }
 }

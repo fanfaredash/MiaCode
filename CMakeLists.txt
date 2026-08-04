@@ -653,6 +653,17 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/components/PanelHeader.qml
     src/app/qml_ui/components/SplitHandle.qml
     src/app/qml_ui/components/Tooltip.qml
+    src/app/qml_ui/components/HoverChrome.qml
+    src/app/qml_ui/components/NavRow.qml
+    src/app/qml_ui/components/AppTextField.qml
+    src/app/qml_ui/components/AppTextArea.qml
+    src/app/qml_ui/components/AppButton.qml
+    src/app/qml_ui/components/AppSwitch.qml
+    src/app/qml_ui/components/AppComboBox.qml
+    src/app/qml_ui/components/AppSlider.qml
+    src/app/qml_ui/components/AppMenu.qml
+    src/app/qml_ui/components/AppMenuItem.qml
+    src/app/qml_ui/components/AppMenuSeparator.qml
     src/app/qml_ui/chrome/WindowTitleBar.qml
     src/app/qml_ui/chrome/WindowCaptionButtons.qml
     src/app/qml_ui/chrome/MainMenu.qml

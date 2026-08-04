@@ -1,0 +1,25 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "local",
+      "displayName": "Local (Ninja MinGW Qt6)",
+      "inherits": "ninja-mingw-qt6",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "C:/Qt/6.x.y/mingw_64"
+      },
+      "environment": {
+        "PATH": "C:/Qt/Tools/mingw1310_64/bin;C:/Qt/Tools/CMake_64/bin;C:/Qt/Tools/Ninja;$penv{PATH}"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "local-release",
+      "displayName": "Local Release (MiaCode)",
+      "configurePreset": "local",
+      "targets": ["MiaCode"],
+      "jobs": 8
+    }
+  ]
+}

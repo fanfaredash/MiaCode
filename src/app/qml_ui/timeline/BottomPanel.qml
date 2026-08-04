@@ -73,7 +73,7 @@ Rectangle {
                 font.pixelSize: Theme.secondaryFontSize
             }
 
-            Button {
+            AppButton {
                 text: qsTr("重新检查")
                 onClicked: root.commands.validateDocument()
             }
@@ -94,6 +94,8 @@ Rectangle {
                 width: ListView.view.width
                 height: 34
                 hoverEnabled: true
+                leftPadding: 10
+                rightPadding: 10
                 onClicked: root.syntaxIssueActivated(
                     modelData.line,
                     modelData.column,
@@ -110,13 +112,18 @@ Rectangle {
                         font: Theme.codeFont
                     }
                     Label {
-                        width: Math.max(0, issueDelegate.width - 100)
+                        width: Math.max(0, issueDelegate.width - 120)
                         text: issueDelegate.modelData.message
                         color: Theme.colors.text.primary
                         elide: Text.ElideRight
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.uiFontSize
                     }
+                }
+
+                background: HoverChrome {
+                    hovered: issueDelegate.highlighted || issueDelegate.hovered
+                    tone: "hover"
                 }
             }
 

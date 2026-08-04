@@ -70,10 +70,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   (`bottomTabsVisible`, `previewCanvasAspectRatio`, `exportPageActive`) — no parallel flags in
   WorkbenchState. Windows client-area caption is `QmlUiWindowChrome` attached only from
   `QmlUiBootstrap` (v1 QuickShell untouched). Title-bar brand icon reuses canonical
-  `resources/icons/app.png` (QML alias `icons/app.png`).
+  `resources/icons/app.png` (QML alias `icons/app.png`). Shared QQC chrome:
+  `AppTextField` / `AppTextArea` / `AppButton` / `AppComboBox` / `AppSlider` / `AppMenu*`
+  (v1 dialog* geometry, local `Theme` colors). Hover/selection chrome shared via
+  `HoverChrome` + `NavRow` (v2 `qml_ui` only).
   Default remains QuickShell v1 (`--ui=v1` / unset).
   **Phase-1 living checklist (update when working):** `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
-  Next focus there: P1 honesty (menus/`syntaxIssues`), then P0 Document friend cleanup.
+  Next focus there: P1 honesty (`syntaxIssues` / dead toolbar buttons), then P0 Document friend cleanup.
 - Appearance prefs + first-run onboarding: theme pref persisted via
   `UiText::preferredTheme`/`setPreferredTheme` (`preferences.json` `ui.theme`); live re-theme via
   `MainWindow::WindowSection::applyUiTheme` (triggers `ApplicationPaletteChange` → `QuickShellStyleBridge`

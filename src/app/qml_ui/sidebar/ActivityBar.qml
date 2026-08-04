@@ -65,20 +65,25 @@ Rectangle {
             source: button.iconSource
             sourceSize: Qt.size(24, 24)
             color: button.selected || button.hovered
-                   ? Theme.colors.text.primary
+                   ? Theme.colors.text.active
                    : Theme.colors.text.secondary
         }
 
-        background: Rectangle {
-            color: button.down ? Theme.colors.state.pressed
-                  : button.hovered ? Theme.colors.state.hover
-                  : "transparent"
+        background: Item {
+            HoverChrome {
+                anchors.fill: parent
+                margins: 6
+                hovered: button.hovered
+                pressed: button.down
+                tone: "icon"
+            }
 
             Rectangle {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 width: 2
-                height: 32
+                height: 24
+                radius: 1
                 visible: button.selected
                 color: Theme.colors.accent.primary
             }

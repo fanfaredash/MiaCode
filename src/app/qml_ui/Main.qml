@@ -45,11 +45,14 @@ ApplicationWindow {
     palette.mid: Theme.colors.border.control
     palette.dark: Theme.colors.background.editor
     palette.shadow: "#000000"
-    palette.highlight: Theme.colors.state.menuSelection
-    palette.highlightedText: Theme.colors.text.primary
+    palette.highlight: Theme.colors.state.selected
+    palette.highlightedText: Theme.colors.text.active
     palette.placeholderText: Theme.colors.text.secondary
     palette.toolTipBase: Theme.colors.background.elevated
     palette.toolTipText: Theme.colors.text.primary
+    palette.disabled.text: Theme.colors.text.disabled
+    palette.disabled.windowText: Theme.colors.text.disabled
+    palette.disabled.buttonText: Theme.colors.text.disabled
 
     Binding {
         target: Theme

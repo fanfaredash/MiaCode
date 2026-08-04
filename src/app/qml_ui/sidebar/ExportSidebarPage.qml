@@ -36,7 +36,7 @@ Rectangle {
             width: parent.width - 12
             spacing: 2
 
-            SidebarListButton {
+            NavRow {
                 width: parent.width
                 text: qsTr("导出中心")
                 selected: root.pages.activePageId === "export"
@@ -46,7 +46,7 @@ Rectangle {
                     root.pages.openExportPage()
                 }
             }
-            SidebarListButton {
+            NavRow {
                 width: parent.width
                 text: qsTr("批量导出")
                 selected: root.selectedAction === "batch"
@@ -58,25 +58,5 @@ Rectangle {
         }
 
         ScrollBar.vertical: ScrollBar {}
-    }
-
-    component SidebarListButton: AbstractButton {
-        id: button
-        property bool selected: false
-        height: 30
-        hoverEnabled: true
-        contentItem: Text {
-            leftPadding: 20
-            text: button.text
-            color: Theme.colors.text.primary
-            font.family: Theme.uiFont
-            font.pixelSize: Theme.uiFontSize
-            verticalAlignment: Text.AlignVCenter
-        }
-        background: Rectangle {
-            color: button.selected ? Theme.colors.state.menuSelection
-                  : button.hovered ? Theme.colors.state.hover
-                  : "transparent"
-        }
     }
 }

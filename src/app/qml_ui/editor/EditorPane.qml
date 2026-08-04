@@ -70,24 +70,20 @@ Rectangle {
                 font.pixelSize: Theme.uiFontSize
             }
 
-            TextField {
+            AppTextField {
                 Layout.preferredWidth: 90
                 placeholderText: qsTr("等级")
                 text: root.documentSession.currentDifficultyLevel
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.uiFontSize
                 onEditingFinished: root.documentSession.currentDifficultyLevel = text
             }
 
-            TextField {
+            AppTextField {
                 id: difficultyDesignerField
                 property bool userEdited: false
 
                 Layout.fillWidth: true
                 placeholderText: qsTr("谱师")
                 text: root.documentSession.currentDifficultyDesigner
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.uiFontSize
                 // 文档打开、难度切换和焦点转移都可能结束编辑状态。只有收到
                 // TextInput 的真实编辑信号后，才把显示值提交给文档模型。
                 onTextEdited: userEdited = true
@@ -98,7 +94,7 @@ Rectangle {
                 }
             }
 
-            Button {
+            AppButton {
                 text: qsTr("删除难度")
                 enabled: root.documentSession.currentDifficultyId > 0
                 onClicked: removeDifficultyDialog.open()
@@ -115,7 +111,7 @@ Rectangle {
         visible: root.workbenchState.metadataEditorActive
         color: Theme.colors.background.workbench
 
-        Button {
+        AppButton {
             anchors.left: parent.left
             anchors.leftMargin: 10
             anchors.verticalCenter: parent.verticalCenter
@@ -126,7 +122,7 @@ Rectangle {
                 = root.workbenchState.metadataEditorMode === 0 ? 1 : 0
         }
 
-        Switch {
+        AppSwitch {
             id: unifiedDesignerSwitch
             anchors.right: parent.right
             anchors.rightMargin: 10
@@ -256,13 +252,11 @@ Rectangle {
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.secondaryFontSize
             }
-            TextArea {
+            AppTextArea {
                 width: metadataColumn.width
                 height: 150
                 text: root.documentSession.metadataExtraText
                 placeholderText: qsTr("每行一个 &字段=值")
-                wrapMode: TextEdit.NoWrap
-                font: Theme.codeFont
                 onActiveFocusChanged: {
                     if (!activeFocus)
                         root.documentSession.metadataExtraText = text
@@ -298,7 +292,7 @@ Rectangle {
                 text: qsTr("当前存在多个谱师名义，请选择要统一使用的值。")
                 color: Theme.colors.text.primary
             }
-            ComboBox {
+            AppComboBox {
                 id: designerChoice
                 width: 280
                 model: canonicalDesignerDialog.candidates
@@ -333,12 +327,10 @@ Rectangle {
             font.family: Theme.uiFont
             font.pixelSize: Theme.secondaryFontSize
         }
-        TextField {
+        AppTextField {
             property bool userEdited: false
             width: field.width
             text: field.value
-            font.family: Theme.uiFont
-            font.pixelSize: Theme.uiFontSize
             onTextEdited: userEdited = true
             onEditingFinished: {
                 if (userEdited)

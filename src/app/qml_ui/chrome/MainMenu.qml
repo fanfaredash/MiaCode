@@ -49,11 +49,16 @@ MenuBar {
         contentItem: ControlsImpl.MnemonicLabel {
             text: menuItem.text
             mnemonicVisible: true
-            color: menuItem.highlighted ? Theme.colors.text.primary : Theme.colors.text.secondary
+            color: menuItem.highlighted ? Theme.colors.text.active : Theme.colors.text.secondary
             font.family: Theme.uiFont
             font.pixelSize: Theme.uiFontSize
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
+        }
+
+        background: HoverChrome {
+            selected: menuItem.highlighted
+            tone: "bar"
         }
     }
 
@@ -61,7 +66,7 @@ MenuBar {
         color: "transparent"
     }
 
-    Menu {
+    AppMenu {
         title: qsTr("文件(&F)")
         Action {
             text: qsTr("打开")
@@ -81,7 +86,7 @@ MenuBar {
             enabled: root.commandsEnabled
             onTriggered: root.saveAsRequested()
         }
-        MenuSeparator {}
+        AppMenuSeparator {}
         Action {
             text: qsTr("退出")
             shortcut: StandardKey.Quit
@@ -90,7 +95,7 @@ MenuBar {
         }
     }
 
-    Menu {
+    AppMenu {
         title: qsTr("编辑(&E)")
         Action {
             text: qsTr("撤销")
@@ -105,7 +110,7 @@ MenuBar {
             onTriggered: root.redoRequested()
         }
         Action { text: qsTr("查找"); enabled: false }
-        MenuSeparator {}
+        AppMenuSeparator {}
         Action {
             text: qsTr("全选")
             shortcut: StandardKey.SelectAll
@@ -115,7 +120,7 @@ MenuBar {
         Action { text: qsTr("选择当前行"); enabled: false }
     }
 
-    Menu {
+    AppMenu {
         title: qsTr("工具(&T)")
         Action {
             text: qsTr("元数据")
@@ -129,7 +134,7 @@ MenuBar {
         }
     }
 
-    Menu {
+    AppMenu {
         title: qsTr("调整(&M)")
         Action {
             text: qsTr("切换侧栏")
@@ -144,7 +149,7 @@ MenuBar {
         }
     }
 
-    Menu {
+    AppMenu {
         title: qsTr("预览(&P)")
         Action {
             text: qsTr("切换实时预览")
@@ -153,7 +158,7 @@ MenuBar {
         }
     }
 
-    Menu {
+    AppMenu {
         title: qsTr("帮助(&H)")
         Action { text: qsTr("关于 MiaCode"); enabled: false }
     }

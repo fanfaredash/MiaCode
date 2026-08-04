@@ -4,7 +4,7 @@
 >
 > 分支：`feature/qml-ui`（已含 `origin/dev` @ `677a9625` 及之后快进）  
 > 入口：默认 v1 QuickShell；`--ui=v2` / `--modern-ui` / `MIACODE_UI_SKIN=v2` → `QmlUiBootstrap`  
-> 构建：`build/`（已 ignore）；本机当前常用 MinGW + Qt 6.11  
+> 构建：`build/`（已 ignore）  
 > 原型参考：`../MashiroEditor/src/ui`（壳层来源）
 
 ## 目标与约束
@@ -46,13 +46,15 @@
 
 - [ ] 打通 `syntaxIssues`：`runValidateSimaiSilently` 结果灌进 model，驱动底栏「检查」与高亮 diagnostics
 - [x] 设置齿轮：去掉演示用 `ViewSettingsPopup`，改为调用 v1 `MainWindow::onPreferences()`
+- [x] QQC 共享皮肤：`AppTextField` / `AppTextArea` / `AppButton` / `AppComboBox` / `AppSlider` / `AppMenu*`（几何对齐 v1 dialog*，色用 `Theme`）
+- [x] 悬停/选中高亮收口：`HoverChrome` + `NavRow`（仅 v2 `qml_ui`，不碰 v1）；`nav`/`hover` 默认 inset；`AppSwitch`；IconButton `glyph`
 - [ ] 禁用菜单/按钮：能接则接（音频/预览设置 → 现有对话框）；短期接不上的改为隐藏，少留灰色死控件
 
 ### P2 — 专属壳能力巩固（相对 v1 已有差异，需保持可用）
 
 v2 相对 QuickShell v1 的专属面（完成度仍低，但不要回退）：
 
-- 纯 QML 深色 Theme、自绘标题栏 / Caption、内嵌菜单
+- 纯 QML 深色 Theme、自绘标题栏 / Caption、内嵌菜单 + 共享表单控件皮肤（`App*`）
 - Activity Bar、`<720` 紧凑覆盖层（设置齿轮复用 v1 首选项）
 - QML 多标签编辑器 + 元数据表单/源码双视图
 - QML 谱面字段侧栏 / 难度列表、底栏时间轴/检查 Tab

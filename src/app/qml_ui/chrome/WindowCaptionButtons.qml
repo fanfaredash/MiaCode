@@ -50,29 +50,33 @@ Row {
 
         contentItem: Text {
             text: button.glyph
-            color: button.closeButton && button.hovered ? "#FFFFFF" : Theme.colors.text.primary
+            color: button.closeButton && button.hovered ? "#FFFFFF"
+                   : (button.hovered ? Theme.colors.text.active : Theme.colors.text.secondary)
             font.family: "Segoe Fluent Icons"
             font.pixelSize: 10
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
 
-        background: Rectangle {
-            color: {
-                if (button.closeButton) {
+        background: Item {
+            HoverChrome {
+                anchors.fill: parent
+                visible: !button.closeButton
+                hovered: button.hovered
+                pressed: button.down
+                tone: "icon"
+            }
+            Rectangle {
+                anchors.fill: parent
+                visible: button.closeButton
+                color: {
                     if (button.down)
                         return "#A92317"
                     if (button.hovered)
                         return "#C42B1C"
                     return "transparent"
                 }
-                if (button.down)
-                    return Theme.colors.state.pressed
-                if (button.hovered)
-                    return Theme.colors.state.hover
-                return "transparent"
             }
         }
     }
 }
-
