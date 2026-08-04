@@ -5,7 +5,6 @@
 
 #include <QPainter>
 #include <QPainterPath>
-#include <QFontMetrics>
 #include <QWindow>
 
 namespace {

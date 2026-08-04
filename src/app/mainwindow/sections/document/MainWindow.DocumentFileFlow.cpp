@@ -111,6 +111,35 @@ PreparedDocumentOpenPayload prepareDocumentOpenPayload(const QString& path, bool
     return payload;
 }
 
+bool writeDocumentFileAtomically(
+    const QString& path,
+    const SimaiDocument& document,
+    QString* failedStage = nullptr)
+{
+    QStringEncoder encoder(QStringConverter::Utf8);
+    const QByteArray payload = encoder.encode(document.toText());
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        if (failedStage != nullptr) {
+            *failedStage = QStringLiteral("open_maidata");
+        }
+        return false;
+    }
+    if (file.write(payload) != payload.size()) {
+        if (failedStage != nullptr) {
+            *failedStage = QStringLiteral("write_maidata");
+        }
+        return false;
+    }
+    if (!file.commit()) {
+        if (failedStage != nullptr) {
+            *failedStage = QStringLiteral("commit_maidata");
+        }
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
@@ -227,15 +256,8 @@ void MainWindow::DocumentSection::onNewFile()
     }
 
     const SimaiDocument newDocument = SimaiDocument::createEmpty();
-    QStringEncoder encoder(QStringConverter::Utf8);
-    const QByteArray payload = encoder.encode(newDocument.toText());
-    QSaveFile file(targetPath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-            UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Create Failed", "Cannot write file:\n" + targetPath);
-        return;
-    }
-    if (file.write(payload) != payload.size() || !file.commit()) {
-        UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Create Failed", "Write failed:\n" + targetPath);
+    if (!writeDocumentFileAtomically(targetPath, newDocument)) {
+        UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Create Failed", "Cannot write file:\n" + targetPath);
         return;
     }
 
@@ -265,7 +287,11 @@ QString cleanDropFolderName(QString name)
     if (reservedDevice || numberedDevice) {
         name.prepend(QLatin1Char('_'));
     }
-    return name.left(80).trimmed();
+    name = name.left(80).trimmed();
+    while (name.endsWith(QLatin1Char('.')) || name.endsWith(QLatin1Char(' '))) {
+        name.chop(1);
+    }
+    return name;
 }
 
 struct DroppedChartCandidate {
@@ -325,12 +351,12 @@ bool MainWindow::DocumentSection::createChartsFromAudioDrop(const QStringList& a
         const QString key = candidate.sourceDirectory.toCaseFolded();
         QString target = candidate.targetDirectory;
         int suffix = 2;
-        while (QFileInfo::exists(target) || reserved[key].contains(target)) {
+        while (QFileInfo::exists(target) || reserved[key].contains(target.toCaseFolded())) {
             target = QDir(candidate.sourceDirectory).filePath(
                 QStringLiteral("%1 (%2)").arg(QFileInfo(candidate.targetDirectory).fileName()).arg(suffix++));
         }
         candidate.targetDirectory = target;
-        reserved[key].insert(target);
+        reserved[key].insert(target.toCaseFolded());
         preview << QDir::toNativeSeparators(target);
     }
 
@@ -359,7 +385,6 @@ bool MainWindow::DocumentSection::createChartsFromAudioDrop(const QStringList& a
         QStringLiteral("create_confirmed count=%1").arg(candidates.size()));
 
     const SimaiDocument emptyDocument = SimaiDocument::createEmpty();
-    const QByteArray payload = emptyDocument.toText().toUtf8();
     int created = 0;
     int failed = 0;
     miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
@@ -371,13 +396,18 @@ bool MainWindow::DocumentSection::createChartsFromAudioDrop(const QStringList& a
         const QString stagedChart = QDir(staging).filePath(QFileInfo(candidate.targetDirectory).fileName());
         const QString stagedTrack = QDir(stagedChart).filePath(QStringLiteral("track.%1").arg(candidate.extension));
         const QString stagedMaidata = QDir(stagedChart).filePath(QStringLiteral("maidata.txt"));
-        bool ok = QDir().mkpath(stagedChart) && QFile::copy(candidate.sourcePath, stagedTrack);
+        QString failedStage = QStringLiteral("create_staging_directory");
+        bool ok = QDir().mkpath(stagedChart);
         if (ok) {
-            QSaveFile file(stagedMaidata);
-            ok = file.open(QIODevice::WriteOnly | QIODevice::Text)
-                && file.write(payload) == payload.size() && file.commit();
+            failedStage = QStringLiteral("copy_audio");
+            ok = QFile::copy(candidate.sourcePath, stagedTrack);
         }
         if (ok) {
+            failedStage.clear();
+            ok = writeDocumentFileAtomically(stagedMaidata, emptyDocument, &failedStage);
+        }
+        if (ok) {
+            failedStage = QStringLiteral("publish");
             ok = QDir().rename(stagedChart, candidate.targetDirectory);
         }
         QDir(staging).removeRecursively();
@@ -385,8 +415,9 @@ bool MainWindow::DocumentSection::createChartsFromAudioDrop(const QStringList& a
             ++failed;
             miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
                 QStringLiteral("ui/chart_drop"),
-                QStringLiteral("chart_create_failed stage=publish format=%1 created=%2 failed=%3 elapsed_ms=%4")
-                    .arg(candidate.extension).arg(created).arg(failed).arg(dropTimer.elapsed()));
+                QStringLiteral("chart_create_failed stage=%1 format=%2 created=%3 failed=%4 elapsed_ms=%5")
+                    .arg(failedStage, candidate.extension)
+                    .arg(created).arg(failed).arg(dropTimer.elapsed()));
             continue;
         }
         ++created;
@@ -414,8 +445,7 @@ bool MainWindow::DocumentSection::createChartsFromAudioDrop(const QStringList& a
             miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
                 QStringLiteral("ui/chart_drop"), QStringLiteral("switch_declined"));
         }
-    }
-    if (failed > 0) {
+    } else if (failed > 0) {
         UiDialogs::showMessageBox(QMessageBox::Warning, &owner_,
             UiText::text(QStringLiteral("drop_chart.created_title")),
             UiText::text(QStringLiteral("drop_chart.created_with_failures"))

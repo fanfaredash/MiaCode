@@ -56,6 +56,7 @@ private:
     void scheduleAcceptedRootWindowDestroyAndQuit(const QString& source);
     void destroyAcceptedRootWindowResourcesAndQuit(const QString& source);
     void syncChartDropOverlay();
+    bool dragInputStillActive() const;
     bool cursorIsOverQuickShellRoot();
     void logFocusEvent(const QString& action, QObject* watched = nullptr, QEvent* event = nullptr, const QString& detail = QString()) const;
     // Construct previewDCompSurface_ + wire it to the runtime, the

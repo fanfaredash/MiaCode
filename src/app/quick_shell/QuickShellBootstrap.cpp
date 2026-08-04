@@ -16,7 +16,6 @@
 #ifdef Q_OS_WIN
 #include "render/backend_d3d11/PreviewDCompSurface.h"
 #include "render/backend_d3d11/PreviewPopupHwndTracker.h"
-#include <windows.h>
 #endif
 // Phase 4c — needed for the host pointer type in the bootstrap
 // wiring lambda; the lambda passes it straight to setStageMediaHost.
@@ -56,6 +55,30 @@ namespace {
 QString pointerHex(const void* pointer)
 {
     return QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(pointer), 0, 16);
+}
+
+bool nativeDragInputStillActive()
+{
+#ifdef Q_OS_WIN
+    constexpr SHORT kPressed = static_cast<SHORT>(0x8000);
+    return (GetAsyncKeyState(VK_LBUTTON) & kPressed) != 0
+        || (GetAsyncKeyState(VK_RBUTTON) & kPressed) != 0
+        || (GetAsyncKeyState(VK_MBUTTON) & kPressed) != 0
+        || (GetAsyncKeyState(VK_XBUTTON1) & kPressed) != 0
+        || (GetAsyncKeyState(VK_XBUTTON2) & kPressed) != 0;
+#else
+    return QGuiApplication::mouseButtons() != Qt::NoButton;
+#endif
+}
+
+bool nativeDragCancelKeyPressed()
+{
+#ifdef Q_OS_WIN
+    constexpr SHORT kPressed = static_cast<SHORT>(0x8000);
+    return (GetAsyncKeyState(VK_ESCAPE) & kPressed) != 0;
+#else
+    return false;
+#endif
 }
 
 void appendQuickShellRuntimeLog(const QString& action, const QString& payload = QString())
@@ -398,7 +421,8 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
         backend_->setQuickShellRootWindow(window);
         chartDropOverlay_ = std::make_unique<ChartDropOverlay>();
         chartDropOverlayMonitorTimer_ = new QTimer(this);
-        chartDropOverlayMonitorTimer_->setInterval(50);
+        chartDropOverlayMonitorTimer_->setInterval(16);
+        chartDropOverlayMonitorTimer_->setTimerType(Qt::PreciseTimer);
         QObject::connect(chartDropOverlayMonitorTimer_, &QTimer::timeout, this, [this]() {
             syncChartDropOverlay();
         });
@@ -739,6 +763,17 @@ void QuickShellBootstrap::syncChartDropOverlay()
         || !chartDropOverlay_->isVisible()) {
         return;
     }
+    // Cancelling an OLE drag (for example with the right mouse button or Esc)
+    // can terminate the source without delivering DragLeave to the previous
+    // target. Do not keep the overlay alive after the native drag input ends.
+    if (!dragInputStillActive() || nativeDragCancelKeyPressed()) {
+        if (backend_ != nullptr) {
+            backend_->cancelChartAudioDrop();
+        } else {
+            chartDropOverlay_->hideOverlay();
+        }
+        return;
+    }
     if (!cursorIsOverQuickShellRoot()) {
         if (backend_ != nullptr) {
             backend_->cancelChartAudioDrop();
@@ -752,10 +787,24 @@ void QuickShellBootstrap::syncChartDropOverlay()
     chartDropOverlay_->showForWindow(rootWindow_);
 }
 
+bool QuickShellBootstrap::dragInputStillActive() const
+{
+    return nativeDragInputStillActive();
+}
+
 bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
 {
     if (controller_ == nullptr || event == nullptr) {
         return QObject::eventFilter(watched, event);
+    }
+
+    // The independent native overlay can become the OLE drop target while it
+    // is visible. Forward its terminal drag events to the same state owner so
+    // the visual overlay and MainWindow cannot diverge.
+    if (chartDropOverlay_ != nullptr && watched == chartDropOverlay_.get()
+        && (event->type() == QEvent::DragLeave || event->type() == QEvent::Drop)
+        && backend_ != nullptr) {
+        backend_->cancelChartAudioDrop();
     }
 
     if (watched == rootWindow_
@@ -764,7 +813,11 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
             || event->type() == QEvent::Close
             || event->type() == QEvent::WindowStateChange)
         && chartDropOverlay_ != nullptr) {
-        chartDropOverlay_->hideOverlay();
+        if (backend_ != nullptr) {
+            backend_->cancelChartAudioDrop();
+        } else {
+            chartDropOverlay_->hideOverlay();
+        }
     }
 
     if (watched == rootWindow_ && event->type() == QEvent::Close) {
