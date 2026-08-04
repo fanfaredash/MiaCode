@@ -1449,9 +1449,35 @@ void QuickShellBootstrap::logFocusEvent(const QString& action, QObject* watched,
         }
         payload += QStringLiteral(" spontaneous=%1").arg(event->spontaneous() ? 1 : 0);
     }
-    payload += QStringLiteral(" watched={%1}").arg(describeFocusObject(watched));
-    payload += QStringLiteral(" app_focus_widget={%1}").arg(describeFocusObject(qobject_cast<QObject*>(QApplication::focusWidget())));
-    payload += QStringLiteral(" app_focus_window={%1}").arg(describeFocusObject(qobject_cast<QObject*>(qApp != nullptr ? qApp->focusWindow() : nullptr)));
+    const QString watchedDescription = describeFocusObject(watched);
+    const QString focusWidgetDescription =
+        describeFocusObject(qobject_cast<QObject*>(QApplication::focusWidget()));
+    const QString focusWindowDescription =
+        describeFocusObject(qobject_cast<QObject*>(qApp != nullptr ? qApp->focusWindow() : nullptr));
+
+    // `event_filter` is raw event tracing: it fires for every focus-related
+    // event the filter sees, and in practice most of those repeat the previous
+    // line's focus state exactly. Keep every real transition, drop the
+    // repeats. The other actions (focus_changed_signal,
+    // root_window_active_changed, application_state_changed) are genuine state
+    // changes and are never suppressed.
+    if (action == QLatin1String("event_filter")) {
+        const QString signature = watchedDescription + QLatin1Char('|')
+            + focusWidgetDescription + QLatin1Char('|') + focusWindowDescription;
+        if (signature == lastFocusFilterSignature_) {
+            return;
+        }
+        lastFocusFilterSignature_ = signature;
+    } else {
+        // A non-filter transition changes the state the filter signature
+        // describes, so drop the memo rather than let it mask the next
+        // event_filter line.
+        lastFocusFilterSignature_.clear();
+    }
+
+    payload += QStringLiteral(" watched={%1}").arg(watchedDescription);
+    payload += QStringLiteral(" app_focus_widget={%1}").arg(focusWidgetDescription);
+    payload += QStringLiteral(" app_focus_window={%1}").arg(focusWindowDescription);
     if (!detail.trimmed().isEmpty()) {
         payload += QStringLiteral(" detail=%1").arg(detail.trimmed());
     }

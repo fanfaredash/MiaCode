@@ -189,6 +189,86 @@ void appendValidationPerfLog(const QString& tag, const QString& payload)
     );
 }
 
+// Extra-selections apply logging used to emit TWO lines per apply
+// (`edit/extra_selections_perf` + `edit/extra_selections_apply_perf`) with
+// overlapping fields. In a 39-minute field capture that pair was 46.5% of the
+// whole runtime channel — 11,196 lines whose elapsed_ms was between 0.012 and
+// 0.048 ms, i.e. pure volume with no diagnostic signal. The channel rotated
+// (4 MB x 3 segments) inside two hours and took the pre-freeze evidence window
+// with it.
+//
+// So: one line per apply instead of two, and only when it is worth reading —
+// immediately if the apply was actually slow, otherwise folded into a periodic
+// summary that preserves the rate and the worst case. GUI-thread only, which is
+// why plain statics are safe here.
+constexpr double kExtraSelectionsSlowMs = 1.0;
+constexpr qint64 kExtraSelectionsSummaryIntervalMs = 5000;
+
+struct ExtraSelectionsLogThrottle {
+    qint64 lastEmitMs = 0;
+    int suppressedCount = 0;
+    double suppressedMaxMs = 0.0;
+    double suppressedTotalMs = 0.0;
+};
+
+ExtraSelectionsLogThrottle& extraSelectionsLogThrottle()
+{
+    static ExtraSelectionsLogThrottle throttle;
+    return throttle;
+}
+
+void appendExtraSelectionsPerfLog(
+    const QString& reason,
+    bool skipped,
+    int decorations,
+    int previewFollowActive,
+    int validationSelections,
+    int totalSelections,
+    double elapsedMs)
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+
+    ExtraSelectionsLogThrottle& throttle = extraSelectionsLogThrottle();
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    const bool slow = elapsedMs >= kExtraSelectionsSlowMs;
+    const bool summaryDue = throttle.lastEmitMs == 0
+        || nowMs - throttle.lastEmitMs >= kExtraSelectionsSummaryIntervalMs;
+
+    if (!slow && !summaryDue) {
+        ++throttle.suppressedCount;
+        throttle.suppressedMaxMs = qMax(throttle.suppressedMaxMs, elapsedMs);
+        throttle.suppressedTotalMs += elapsedMs;
+        return;
+    }
+
+    QString payload =
+        QStringLiteral("reason=%1 skipped=%2 decorations=%3 preview_follow=%4 "
+                       "validation_selections=%5 total_selections=%6 elapsed_ms=%7 slow=%8")
+            .arg(reason)
+            .arg(skipped ? 1 : 0)
+            .arg(decorations)
+            .arg(previewFollowActive)
+            .arg(validationSelections)
+            .arg(totalSelections)
+            .arg(elapsedMs, 0, 'f', 3)
+            .arg(slow ? 1 : 0);
+    if (throttle.suppressedCount > 0) {
+        payload += QStringLiteral(" suppressed=%1 suppressed_max_ms=%2 suppressed_total_ms=%3")
+                       .arg(throttle.suppressedCount)
+                       .arg(throttle.suppressedMaxMs, 0, 'f', 3)
+                       .arg(throttle.suppressedTotalMs, 0, 'f', 3);
+    }
+
+    throttle.lastEmitMs = nowMs;
+    throttle.suppressedCount = 0;
+    throttle.suppressedMaxMs = 0.0;
+    throttle.suppressedTotalMs = 0.0;
+
+    appendValidationPerfLog(QStringLiteral("edit/extra_selections_perf"), payload);
+}
+
 QString validationIssueTypeKeyFromRawMessage(const QString& rawMessage)
 {
     return QStringLiteral("validation:%1").arg(issueTypeSegment(rawMessage));
@@ -596,22 +676,14 @@ void MainWindow::ValidationSection::applyEditorExtraSelectionsForReason(const QS
     const int totalSelections = state_.cachedValidationExtraSelections_.size();
     const int previewFollowActive = state_.previewFollowDecorationActive_ ? 1 : 0;
     if (signature == state_.lastEditorExtraSelectionsSignature_) {
-        appendValidationPerfLog(
-            QStringLiteral("edit/extra_selections_perf"),
-            QStringLiteral("skipped=1 decorations=%1 preview_follow=%2 elapsed_ms=%3")
-                .arg(state_.validationDecorations_.size())
-                .arg(previewFollowActive)
-                .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
-        );
-        appendValidationPerfLog(
-            QStringLiteral("edit/extra_selections_apply_perf"),
-            QStringLiteral(
-                "reason=%1 validation_selections=%2 follow_active=%3 total_selections=%4 elapsed_ms=%5")
-                .arg(reason)
-                .arg(state_.cachedValidationExtraSelections_.size())
-                .arg(previewFollowActive)
-                .arg(totalSelections)
-                .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+        appendExtraSelectionsPerfLog(
+            reason,
+            /*skipped=*/true,
+            state_.validationDecorations_.size(),
+            previewFollowActive,
+            state_.cachedValidationExtraSelections_.size(),
+            totalSelections,
+            timer.nsecsElapsed() / 1000000.0
         );
         return;
     }
@@ -639,23 +711,14 @@ void MainWindow::ValidationSection::applyEditorExtraSelectionsForReason(const QS
     }
     editor->setExtraSelections(state_.currentEditorExtraSelections_);
     state_.lastEditorExtraSelectionsSignature_ = signature;
-    appendValidationPerfLog(
-        QStringLiteral("edit/extra_selections_perf"),
-        QStringLiteral("skipped=0 decorations=%1 preview_follow=%2 selections=%3 elapsed_ms=%4")
-            .arg(state_.validationDecorations_.size())
-            .arg(previewFollowActive)
-            .arg(state_.currentEditorExtraSelections_.size())
-            .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
-    );
-    appendValidationPerfLog(
-        QStringLiteral("edit/extra_selections_apply_perf"),
-        QStringLiteral(
-            "reason=%1 validation_selections=%2 follow_active=%3 total_selections=%4 elapsed_ms=%5")
-            .arg(reason)
-            .arg(state_.cachedValidationExtraSelections_.size())
-            .arg(previewFollowActive)
-            .arg(state_.currentEditorExtraSelections_.size())
-            .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+    appendExtraSelectionsPerfLog(
+        reason,
+        /*skipped=*/false,
+        state_.validationDecorations_.size(),
+        previewFollowActive,
+        state_.cachedValidationExtraSelections_.size(),
+        state_.currentEditorExtraSelections_.size(),
+        timer.nsecsElapsed() / 1000000.0
     );
 }
 
