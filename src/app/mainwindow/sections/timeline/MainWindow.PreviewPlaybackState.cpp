@@ -394,6 +394,53 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
         state_.previewFollowEnabled_);
 }
 
+void MainWindow::TimelineSection::emitChartSwitchResourceGauge()
+{
+    // Chart-switch leak gauge. The pause handler above is the ONLY other site that
+    // arms a render sample, which left a chart switch (the scenario in
+    // docs/audit/CHART_SWITCH_RESOURCE_RELEASE_AUDIT_ZH.md) as a zero-log event:
+    // measuring it required an artificial "play a few seconds, then pause" step
+    // after every switch, and any round where the timeline tab happened to be
+    // hidden silently dropped its sample. Arming here makes the switch itself the
+    // sampling point, which also covers the common "only ever switches, never
+    // plays" usage.
+    //
+    // Semantics: the counters this arms are read on the NEXT timeline present, so
+    // a line reports the state the process is ENTERING this chart with — i.e. it
+    // carries the accumulation of every previous switch, not this switch's own
+    // texture builds. That is exactly what detecting accumulation needs: across an
+    // A→B→A→B… loop, `tex` / `tex_pix` at "entering A" must be flat. A monotonic
+    // climb is the leak signature (F-1); a flat count with climbing private bytes
+    // is Qt RHI deferred release, not our accumulation.
+    //
+    // Same gate as every other leak-gauge site, so it costs nothing outside --debug.
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    // Disjoint from the playback transaction sequence (a small counter starting at
+    // 1), so the render-thread `timeline/leak_gauge txn=` value pairs with exactly
+    // one `preview/resource_gauge` line and never straddles the two sources.
+    constexpr quint64 kChartSwitchGaugeTxnBase = 1ULL << 32;
+    const quint64 gaugeTxn = kChartSwitchGaugeTxnBase + (++state_.chartSwitchGaugeTxnCounter_);
+    const qint64 switchPrivBytes = miacode::diag::processPrivateBytes();
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/resource_gauge"),
+        QStringLiteral("reason=chart_switch txn=%1 switch_seq=%2 difficulty=%3 "
+                       "qobject_descendants=%4 inflight=%5 inflight_peak=%6 %7 %8")
+            .arg(gaugeTxn)
+            .arg(state_.chartSwitchGaugeTxnCounter_)
+            .arg(state_.activeDifficultyId_)
+            .arg(static_cast<qint64>(owner_.findChildren<QObject*>().size()))
+            .arg(miacode::diag::leak_gauge::inflightDepth())
+            .arg(miacode::diag::leak_gauge::inflightPeak())
+            .arg(miacode::diag::processResourceGaugePayload())
+            .arg(state_.previewCanvas_ != nullptr
+                     ? state_.previewCanvas_->resourceGaugePayload()
+                     : QStringLiteral("scene_revision=-")));
+    miacode::diag::leak_gauge::armRenderSample(switchPrivBytes, gaugeTxn);
+}
+
 void MainWindow::TimelineSection::pauseQtPreviewPlaybackForReanchor()
 {
     const bool wasPlaying = state_.qtPreviewPlaying_;

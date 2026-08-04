@@ -92,6 +92,7 @@ public:
     void updatePreviewSliderPosition(double second);
     void refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers);
     void clearPreviewObjectStats();
+    void emitChartSwitchResourceGauge();
     int updatePreviewStatsLayoutMode(int hostWidth = -1);
     int previewStatsMinimumHeightForPanelWidth(int panelWidth) const;
     double normalizedPreviewCanvasAspectRatio(double ratio) const;

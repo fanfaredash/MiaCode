@@ -474,6 +474,13 @@
         QString previewPendingPlayInteractionSource_;
         quint64 previewPlaybackTransactionCounter_ = 0;
         quint64 activePreviewPlaybackTransactionId_ = 0;
+        // Chart-switch leak-gauge sequence. Deliberately NOT the playback
+        // counter above: that one keys real transactions against the audio /
+        // stage-media backends, and a diagnostic must not consume ids from it.
+        // Emitted offset into a disjoint high range (see
+        // kChartSwitchGaugeTxnBase) so a `timeline/leak_gauge txn=` value
+        // unambiguously identifies which resource_gauge line armed it.
+        quint64 chartSwitchGaugeTxnCounter_ = 0;
         bool previewStartupSyncPending_ = false;
         bool previewLateVideoStartPending_ = false;
         bool previewStartupAudioPrepared_ = false;

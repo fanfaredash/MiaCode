@@ -1352,6 +1352,11 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
         owner_.scheduleTimelineRefresh();
     });
     owner_.saveProjectRenderState();
+    // Chart-switch leak gauge. This is the single funnel for BOTH switch paths —
+    // loadDocument() reaches a chart only via activateInitialField() -> here — so
+    // one call covers difficulty switches and file opens alike. No-ops outside
+    // --debug. See emitChartSwitchResourceGauge() for what the sample means.
+    owner_.emitChartSwitchResourceGauge();
     owner_.refreshLayoutAfterPageSwitch();
         QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
     return true;
