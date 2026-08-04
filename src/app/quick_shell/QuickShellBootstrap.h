@@ -17,6 +17,7 @@ class MainWindow;
 class QuickShellController;
 class QuickShellNativeSurfaceHost;
 class QuickShellStyleBridge;
+class ChartDropOverlay;
 
 #ifdef Q_OS_WIN
 namespace miacode::preview::dcomp {
@@ -54,6 +55,8 @@ private:
     void beginAcceptedRootWindowShutdown(const QString& source);
     void scheduleAcceptedRootWindowDestroyAndQuit(const QString& source);
     void destroyAcceptedRootWindowResourcesAndQuit(const QString& source);
+    void syncChartDropOverlay();
+    bool cursorIsOverQuickShellRoot();
     void logFocusEvent(const QString& action, QObject* watched = nullptr, QEvent* event = nullptr, const QString& detail = QString()) const;
     // Construct previewDCompSurface_ + wire it to the runtime, the
     // stage-media-host signal, and the present sync interval. Idempotent
@@ -69,6 +72,8 @@ private:
     std::unique_ptr<QuickShellNativeSurfaceHost> surfaceHost_;
     std::unique_ptr<QuickShellController> controller_;
     std::unique_ptr<QuickShellStyleBridge> styleBridge_;
+    std::unique_ptr<ChartDropOverlay> chartDropOverlay_;
+    QTimer* chartDropOverlayMonitorTimer_ = nullptr;
     std::unique_ptr<QQmlApplicationEngine> engine_;
 #ifdef Q_OS_WIN
     std::unique_ptr<miacode::preview::dcomp::PreviewDCompSurface> previewDCompSurface_;

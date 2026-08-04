@@ -8,6 +8,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "UiNativeWindowTheme.h"
+#include "ui/ChartDropOverlay.h"
 #include "common/DebugOptions.h"
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
@@ -15,6 +16,7 @@
 #ifdef Q_OS_WIN
 #include "render/backend_d3d11/PreviewDCompSurface.h"
 #include "render/backend_d3d11/PreviewPopupHwndTracker.h"
+#include <windows.h>
 #endif
 // Phase 4c — needed for the host pointer type in the bootstrap
 // wiring lambda; the lambda passes it straight to setStageMediaHost.
@@ -26,6 +28,7 @@
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QCursor>
 #include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QScreen>
@@ -251,14 +254,43 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
             beginAcceptedRootWindowShutdown(source);
         }
     );
+    QObject::connect(
+        backend_.get(),
+        &MainWindow::chartDropOverlayVisibleChanged,
+        this,
+        [this](bool visible) {
+            if (chartDropOverlay_ == nullptr) {
+                return;
+            }
+            if (visible) {
+                chartDropOverlay_->showForWindow(rootWindow_);
+                if (chartDropOverlayMonitorTimer_ != nullptr) {
+                    chartDropOverlayMonitorTimer_->start();
+                }
+                syncChartDropOverlay();
+            } else {
+                if (chartDropOverlayMonitorTimer_ != nullptr) {
+                    chartDropOverlayMonitorTimer_->stop();
+                }
+                chartDropOverlay_->hideOverlay();
+            }
+        }
+    );
     styleBridge_ = std::make_unique<QuickShellStyleBridge>(backend_.get(), surfaceHost_.get(), this);
     appendQuickShellRuntimeLog(QStringLiteral("style_bridge_ready"));
     if (surfaceHost_ != nullptr && styleBridge_ != nullptr) {
         QObject::connect(
             styleBridge_.get(),
             &QuickShellStyleBridge::appearanceChanged,
-            surfaceHost_.get(),
-            &QuickShellNativeSurfaceHost::refreshSurfaceStyles
+            this,
+            [this]() {
+                if (surfaceHost_ != nullptr) {
+                    surfaceHost_->refreshSurfaceStyles();
+                }
+                if (chartDropOverlay_ != nullptr && chartDropOverlay_->isVisible()) {
+                    chartDropOverlay_->update();
+                }
+            }
         );
     }
     miacode::oplog::appendStartupBeaconLine("qsb/before_qml_engine_ctor");
@@ -363,6 +395,13 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
 
     if (QQuickWindow* window = qobject_cast<QQuickWindow*>(engine_->rootObjects().constFirst()); window != nullptr) {
         rootWindow_ = window;
+        backend_->setQuickShellRootWindow(window);
+        chartDropOverlay_ = std::make_unique<ChartDropOverlay>();
+        chartDropOverlayMonitorTimer_ = new QTimer(this);
+        chartDropOverlayMonitorTimer_->setInterval(50);
+        QObject::connect(chartDropOverlayMonitorTimer_, &QTimer::timeout, this, [this]() {
+            syncChartDropOverlay();
+        });
 #ifdef Q_OS_WIN
         rootWindowNativeHwnd_ = static_cast<quintptr>(window->winId());
 #endif
@@ -656,10 +695,76 @@ bool QuickShellBootstrap::createInProcessPreviewSurface(QQuickWindow* window, co
 #endif
 }
 
+bool QuickShellBootstrap::cursorIsOverQuickShellRoot()
+{
+    if (rootWindow_.isNull() || !rootWindow_->isVisible()
+        || rootWindow_->visibility() == QWindow::Minimized
+        || !rootWindow_->frameGeometry().contains(QCursor::pos())) {
+        return false;
+    }
+
+#ifdef Q_OS_WIN
+    if (rootWindowNativeHwnd_ == 0) {
+        return false;
+    }
+    POINT point{};
+    point.x = QCursor::pos().x();
+    point.y = QCursor::pos().y();
+    const HWND hit = WindowFromPoint(point);
+    if (hit == nullptr) {
+        return false;
+    }
+    const HWND root = reinterpret_cast<HWND>(rootWindowNativeHwnd_);
+    const HWND overlay = chartDropOverlay_ != nullptr
+        ? reinterpret_cast<HWND>(chartDropOverlay_->winId()) : nullptr;
+    if (hit == overlay || (overlay != nullptr && IsChild(overlay, hit))) {
+        return true;
+    }
+    if (hit == root || IsChild(root, hit)) {
+        return true;
+    }
+    // Native bridge surfaces may have their own HWND but remain owned by the
+    // QuickShell root. Treat the owner chain as part of MiaCode while rejecting
+    // a file-manager window covering the same screen coordinates.
+    return GetAncestor(hit, GA_ROOTOWNER) == root
+        || GetWindow(hit, GW_OWNER) == root;
+#else
+    return true;
+#endif
+}
+
+void QuickShellBootstrap::syncChartDropOverlay()
+{
+    if (chartDropOverlay_ == nullptr || rootWindow_.isNull()
+        || !chartDropOverlay_->isVisible()) {
+        return;
+    }
+    if (!cursorIsOverQuickShellRoot()) {
+        if (backend_ != nullptr) {
+            backend_->cancelChartAudioDrop();
+        } else {
+            chartDropOverlay_->hideOverlay();
+        }
+        return;
+    }
+    // showForWindow also refreshes geometry, so the independent native overlay
+    // follows move/resize operations while the drag is still active.
+    chartDropOverlay_->showForWindow(rootWindow_);
+}
+
 bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
 {
     if (controller_ == nullptr || event == nullptr) {
         return QObject::eventFilter(watched, event);
+    }
+
+    if (watched == rootWindow_
+        && (event->type() == QEvent::WindowDeactivate
+            || event->type() == QEvent::Hide
+            || event->type() == QEvent::Close
+            || event->type() == QEvent::WindowStateChange)
+        && chartDropOverlay_ != nullptr) {
+        chartDropOverlay_->hideOverlay();
     }
 
     if (watched == rootWindow_ && event->type() == QEvent::Close) {

@@ -148,6 +148,7 @@ public:
     miacode::latency::LatencySandboxController* latencySandboxController() const;
 
 signals:
+    void chartDropOverlayVisibleChanged(bool visible);
     void previewStageMediaHostInitialized(PreviewStageMediaHost* host);
     // Issue #3 fix — emitted whenever the user changes the preview canvas
     // frame-rate option in Render Settings. Carries the SyncInterval
@@ -200,6 +201,9 @@ public:
         QString* details = nullptr
     );
     bool openStartupTarget(const QString& path);
+    void setQuickShellRootWindow(QWindow* window);
+    void cancelChartAudioDrop();
+    void handleAudioDrop(const QStringList& audioPaths);
     // Shows the first-run welcome / initial-config dialog (preview side +
     // theme). Called from QuickShellBootstrap after the UI is ready.
     void showWelcomeDialog();

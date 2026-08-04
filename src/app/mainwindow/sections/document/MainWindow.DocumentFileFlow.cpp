@@ -16,6 +16,7 @@
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/Id3TagReader.h"
 #include "common/OperationLog.h"
 #include "common/ProjectPreferences.h"
 #include "common/WaveformCache.h"
@@ -244,6 +245,188 @@ void MainWindow::DocumentSection::onNewFile()
     state_.currentEncoding_ = TextEncoding::Utf8;
     owner_.setCurrentFilePath(targetPath);
     owner_.statusBar()->showMessage(QString("Created: %1").arg(targetPath));
+}
+
+namespace {
+
+QString cleanDropFolderName(QString name)
+{
+    name = name.trimmed();
+    name.replace(QRegularExpression(QStringLiteral("[<>:\"/\\\\|?*\\x00-\\x1f]")), QStringLiteral("_"));
+    while (name.endsWith(QLatin1Char('.')) || name.endsWith(QLatin1Char(' '))) {
+        name.chop(1);
+    }
+    const QString device = name.section(QLatin1Char('.'), 0, 0).toUpper();
+    const bool reservedDevice = QSet<QString>{QStringLiteral("CON"), QStringLiteral("PRN"),
+                                              QStringLiteral("AUX"), QStringLiteral("NUL")}.contains(device);
+    const bool numberedDevice = (device.startsWith(QStringLiteral("COM"))
+                                 || device.startsWith(QStringLiteral("LPT")))
+        && device.size() == 4 && device.at(3) >= QLatin1Char('1') && device.at(3) <= QLatin1Char('9');
+    if (reservedDevice || numberedDevice) {
+        name.prepend(QLatin1Char('_'));
+    }
+    return name.left(80).trimmed();
+}
+
+struct DroppedChartCandidate {
+    QString sourcePath;
+    QString sourceDirectory;
+    QString extension;
+    QString targetDirectory;
+};
+
+} // namespace
+
+bool MainWindow::DocumentSection::createChartsFromAudioDrop(const QStringList& audioPaths)
+{
+    if (audioPaths.isEmpty()) {
+        return false;
+    }
+    QElapsedTimer dropTimer;
+    dropTimer.start();
+    miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+        QStringLiteral("ui/chart_drop"),
+        QStringLiteral("drop_received count=%1").arg(audioPaths.size()));
+    const QStringList supported = miacode::chart_assets::supportedTrackFileExtensions();
+    QList<DroppedChartCandidate> candidates;
+    for (const QString& path : audioPaths) {
+        const QFileInfo info(path);
+        const QString extension = info.suffix().toLower();
+        if (!info.isFile() || !supported.contains(extension)) {
+            miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+                QStringLiteral("ui/chart_drop"),
+                QStringLiteral("unsupported_file_ignored format=%1").arg(extension));
+            continue;
+        }
+        QString title = info.completeBaseName();
+        if (extension == QStringLiteral("mp3")) {
+            const auto tag = miacode::id3::readTagFromFile(path);
+            if (!tag.title.trimmed().isEmpty()) {
+                title = tag.title.trimmed();
+            }
+        }
+        QString folder = cleanDropFolderName(title);
+        if (folder.isEmpty()) {
+            folder = QStringLiteral("Untitled");
+        }
+        candidates.append({info.absoluteFilePath(), info.absolutePath(), extension,
+                           QDir(info.absolutePath()).filePath(folder)});
+        miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+            QStringLiteral("ui/chart_drop"),
+            QStringLiteral("supported_file_counted format=%1").arg(extension));
+    }
+    if (candidates.isEmpty()) {
+        return false;
+    }
+
+    QHash<QString, QSet<QString>> reserved;
+    QStringList preview;
+    for (DroppedChartCandidate& candidate : candidates) {
+        const QString key = candidate.sourceDirectory.toCaseFolded();
+        QString target = candidate.targetDirectory;
+        int suffix = 2;
+        while (QFileInfo::exists(target) || reserved[key].contains(target)) {
+            target = QDir(candidate.sourceDirectory).filePath(
+                QStringLiteral("%1 (%2)").arg(QFileInfo(candidate.targetDirectory).fileName()).arg(suffix++));
+        }
+        candidate.targetDirectory = target;
+        reserved[key].insert(target);
+        preview << QDir::toNativeSeparators(target);
+    }
+
+    QMessageBox dialog(
+        QMessageBox::Question,
+        UiText::text(QStringLiteral("drop_chart.preview.title")),
+        UiText::text(QStringLiteral("drop_chart.preview.message"))
+            .arg(candidates.size()) + preview.join(QLatin1Char('\n')),
+        QMessageBox::Yes | QMessageBox::No,
+        UiDialogs::effectiveParentWidget(&owner_));
+    miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+        QStringLiteral("ui/chart_drop"),
+        QStringLiteral("preview_shown count=%1").arg(candidates.size()));
+    dialog.setButtonText(QMessageBox::Yes,
+        UiText::text(QStringLiteral("drop_chart.preview.create")).arg(candidates.size()));
+    dialog.setButtonText(QMessageBox::No, UiText::text(QStringLiteral("action.cancel")));
+    UiDialogs::prepareDialogWindow(&dialog, &owner_);
+    UiDialogs::localizeMessageBox(&dialog);
+    if (dialog.exec() != QMessageBox::Yes || !maybeSaveBeforeContinue()) {
+        miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+            QStringLiteral("ui/chart_drop"), QStringLiteral("create_cancelled"));
+        return false;
+    }
+    miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+        QStringLiteral("ui/chart_drop"),
+        QStringLiteral("create_confirmed count=%1").arg(candidates.size()));
+
+    const SimaiDocument emptyDocument = SimaiDocument::createEmpty();
+    const QByteArray payload = emptyDocument.toText().toUtf8();
+    int created = 0;
+    int failed = 0;
+    miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+        QStringLiteral("ui/chart_drop"),
+        QStringLiteral("batch_create_started count=%1").arg(candidates.size()));
+    for (const DroppedChartCandidate& candidate : candidates) {
+        const QString staging = QDir(candidate.sourceDirectory).filePath(
+            QStringLiteral(".miacode-drop-%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        const QString stagedChart = QDir(staging).filePath(QFileInfo(candidate.targetDirectory).fileName());
+        const QString stagedTrack = QDir(stagedChart).filePath(QStringLiteral("track.%1").arg(candidate.extension));
+        const QString stagedMaidata = QDir(stagedChart).filePath(QStringLiteral("maidata.txt"));
+        bool ok = QDir().mkpath(stagedChart) && QFile::copy(candidate.sourcePath, stagedTrack);
+        if (ok) {
+            QSaveFile file(stagedMaidata);
+            ok = file.open(QIODevice::WriteOnly | QIODevice::Text)
+                && file.write(payload) == payload.size() && file.commit();
+        }
+        if (ok) {
+            ok = QDir().rename(stagedChart, candidate.targetDirectory);
+        }
+        QDir(staging).removeRecursively();
+        if (!ok) {
+            ++failed;
+            miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+                QStringLiteral("ui/chart_drop"),
+                QStringLiteral("chart_create_failed stage=publish format=%1 created=%2 failed=%3 elapsed_ms=%4")
+                    .arg(candidate.extension).arg(created).arg(failed).arg(dropTimer.elapsed()));
+            continue;
+        }
+        ++created;
+        miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+            QStringLiteral("ui/chart_drop"),
+            QStringLiteral("chart_create_succeeded format=%1").arg(candidate.extension));
+    }
+
+    if (created == 0) {
+        UiDialogs::showMessageBox(QMessageBox::Critical, &owner_,
+            UiText::text(QStringLiteral("drop_chart.error.title")),
+            UiText::text(QStringLiteral("drop_chart.create_failed")));
+    } else if (candidates.size() == 1 && created == 1) {
+        miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+            QStringLiteral("ui/chart_drop"), QStringLiteral("switch_prompt_shown"));
+        const QMessageBox::StandardButton switchChoice = UiDialogs::showMessageBox(
+            QMessageBox::Question, &owner_, UiText::text(QStringLiteral("drop_chart.created_title")),
+            UiText::text(QStringLiteral("drop_chart.confirm_switch")).arg(created),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (switchChoice == QMessageBox::Yes) {
+            miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+                QStringLiteral("ui/chart_drop"), QStringLiteral("switch_confirmed"));
+            owner_.openStartupTarget(candidates.first().targetDirectory);
+        } else {
+            miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+                QStringLiteral("ui/chart_drop"), QStringLiteral("switch_declined"));
+        }
+    }
+    if (failed > 0) {
+        UiDialogs::showMessageBox(QMessageBox::Warning, &owner_,
+            UiText::text(QStringLiteral("drop_chart.created_title")),
+            UiText::text(QStringLiteral("drop_chart.created_with_failures"))
+                .arg(created).arg(failed));
+    }
+    owner_.statusBar()->showMessage(UiText::text(QStringLiteral("drop_chart.created_chart")).arg(created));
+    miacode::debug_log::appendLine(miacode::debug_log::Channel::Runtime,
+        QStringLiteral("ui/chart_drop"),
+        QStringLiteral("batch_create_finished count=%1 elapsed_ms=%2")
+            .arg(created).arg(dropTimer.elapsed()));
+    return created > 0;
 }
 
 void MainWindow::DocumentSection::onOpenFile()

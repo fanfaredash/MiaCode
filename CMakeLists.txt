@@ -169,6 +169,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/window/MainWindow.WindowShell.cpp
     src/app/ui/UiText.h
     src/app/ui/UiText.cpp
+    src/app/ui/ChartDropOverlay.h
+    src/app/ui/ChartDropOverlay.cpp
     src/app/ui/AppBackgroundSettings.h
     src/app/ui/AppBackgroundSettings.cpp
     src/app/ui/AppBackgroundPainter.h
