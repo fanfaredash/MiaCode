@@ -76,6 +76,12 @@ private:
     quintptr rootWindowNativeHwnd_ = 0;
 #endif
     QPointer<QQuickWindow> rootWindow_;
+    // Collapses runs of `action=event_filter` focus lines that carry no state
+    // change. In a 39-minute field capture `quick_shell/focus` was 27% of the
+    // whole runtime channel and 1616 of its 1748 lines were event_filter, most
+    // of them repeating the previous line's focus state verbatim. Mutable
+    // because logFocusEvent() is const.
+    mutable QString lastFocusFilterSignature_;
     bool previewSeekArmed_ = false;
     bool rootWindowCloseRelayScheduled_ = false;
     bool rootWindowCloseRelayActive_ = false;

@@ -249,9 +249,14 @@ Primary owners:
   - `edit/quick_timeline_perf`
   - `edit/follow_sync_perf`
   - `edit/follow_sync_breakdown`
-  - `edit/extra_selections_perf`
+  - `edit/extra_selections_perf` — one line per apply, carrying `reason` /
+    `skipped` / `decorations` / `preview_follow` / `validation_selections` /
+    `total_selections` / `elapsed_ms` / `slow`. Emitted immediately when
+    `elapsed_ms >= 1.0`, otherwise folded into a ≥5 s summary that adds
+    `suppressed` / `suppressed_max_ms` / `suppressed_total_ms`.
+    (Was a two-line pair with `edit/extra_selections_apply_perf`, which was
+    46.5% of the runtime channel in a field capture; merged + throttled.)
   - `edit/extra_selections_validation_perf`
-  - `edit/extra_selections_apply_perf`
   - `edit/muri_perf`
   - `edit/validation_perf`
   - `edit/validation_apply_perf`

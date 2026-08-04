@@ -96,6 +96,28 @@ VRAM 实测峰值 **73 MB / 预算 1639 MB，`local_over_budget=0` 全程**，�
 
 `bass_audio_health` 实测 `bass_mmcss_registered_by_app=0`、`app_mmcss_task_class=(already registered)`，证实 **BASS 音频线程确无 MMCSS 保护**，只有 QSG 渲染线程有。C-1 的前提成立，但本次未出现卡顿，**其影响未被验证**。
 
+### 扩展相关（O-4 / O-5 不在场）
+
+`extensions.log` 显示两次会话都只加载 **1 个扩展 `miacode-mine-skin-toggle`，没有 pet-overlay**。该扩展源码只注册命令、**不注册任何事件订阅**，因此事件总线没有订阅者，`flushPendingEvents` 不会被触发。
+
+**O-4（事件总线悬垂迭代器 + 0 ms 自喂）与 O-5（pet-overlay 常驻 PowerShell）在该配置下均不在场。**
+
+### 附带发现：扩展 `deactivate()` 缺少扩展上下文（**与问题 1/2 无关**）
+
+两次会话在退出时都确定性地出现：
+
+```
+[WARNING] permission missing extension context
+  {"error":"Privileged API 'preview/setMineSkinEnabled' requires an extension context.",
+   "method":"preview/setMineSkinEnabled","extensionId":"","permission":"preview.control"}
+```
+
+`miacode-mine-skin-toggle` 的 `deactivate()` 会调用 `applyPreference(true)` / `applySfxPreference(true)` 做状态还原，但此时 `extensionId` 为空——**卸载钩子运行在没有扩展上下文的状态下**，于是所有特权 API 调用被拒，还会连带尝试弹出 `window/showMessage` 错误框（同样失败）。
+
+影响面：**所有扩展的 `deactivate()` 清理逻辑实际上都是静默失效的。**
+
+**明确说明：这与问题 1（冻死）和问题 2（推流卡顿）没有因果关系。** 它只发生在正常退出路径上，不消耗资源，也不阻塞关闭；两次会话的 `exit_code` 均为 0。记录在此仅因为它是在同一批日志里发现的，应作为独立缺陷单独排期，不要混进争用问题的排查。
+
 ### 测试未覆盖报告条件
 
 用户描述的是**最小化/被浏览器遮挡 + 浏览器持续播放视频 + 持续 5～10 分钟**。实测最小化仅 **84.7 秒**，日志中亦无第三方负载痕迹；会话 B 根本没最小化。**这是条件不足的阴性结果，不能用来推翻争用假设。**
