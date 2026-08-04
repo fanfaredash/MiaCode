@@ -115,14 +115,39 @@ if (![string]::IsNullOrWhiteSpace($resolvedChart)) {
     $arguments.Add("`"$escapedChart`"")
 }
 
+# The reported failure is contention, not idleness, so record which third-party
+# GPU/CPU consumers were already running when this run started. Without it the
+# "OBS on / browser playing video" variable is reconstructed from memory afterwards.
+$contendingProcessNames = @(
+    "obs64", "obs32", "obs",
+    "chrome", "msedge", "firefox", "brave", "opera", "vivaldi",
+    "ffmpeg", "nvcontainer", "Video.UI"
+)
+$contendingProcesses = @(
+    Get-Process -ErrorAction SilentlyContinue |
+        Where-Object { $contendingProcessNames -contains $_.ProcessName } |
+        Sort-Object ProcessName |
+        Select-Object ProcessName, Id, @{ Name = "StartTime"; Expression = {
+            try { $_.StartTime.ToUniversalTime().ToString("o") } catch { $null } } }
+)
+
 $oldLogDir = [Environment]::GetEnvironmentVariable("MIACODE_LOG_DIR", "Process")
 $oldGpuBinding = [Environment]::GetEnvironmentVariable(
     "MIACODE_GPU_BIND_HIGH_PERFORMANCE", "Process")
+# Frame-pacing diagnostics are mandatory for this matrix: they are what produce the
+# render_frame_profile line (paint_ms / sync_ms / pre_render_wait_ms / render_submit_ms /
+# swap_gpu_ms) that the triage tree in the repro doc branches on, and every frame >= 30 ms
+# is logged automatically rather than sampled. Setting it here removes the single most
+# likely operator mistake: forgetting the flag and having to redo the run.
+$oldFramePacingDiag = [Environment]::GetEnvironmentVariable(
+    "MIACODE_PREVIEW_FRAME_PACING_DIAG", "Process")
 $process = $null
 try {
     [Environment]::SetEnvironmentVariable("MIACODE_LOG_DIR", $runDirectory, "Process")
     [Environment]::SetEnvironmentVariable(
         "MIACODE_GPU_BIND_HIGH_PERFORMANCE", $gpuBinding, "Process")
+    [Environment]::SetEnvironmentVariable(
+        "MIACODE_PREVIEW_FRAME_PACING_DIAG", "1", "Process")
     $process = Start-Process `
         -FilePath $resolvedExe `
         -ArgumentList $arguments.ToArray() `
@@ -132,12 +157,15 @@ try {
     [Environment]::SetEnvironmentVariable("MIACODE_LOG_DIR", $oldLogDir, "Process")
     [Environment]::SetEnvironmentVariable(
         "MIACODE_GPU_BIND_HIGH_PERFORMANCE", $oldGpuBinding, "Process")
+    [Environment]::SetEnvironmentVariable(
+        "MIACODE_PREVIEW_FRAME_PACING_DIAG", $oldFramePacingDiag, "Process")
 }
 
 $metadata = [ordered]@{
     CollectedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
     Profile = $Profile
     GpuBinding = $gpuBinding
+    FramePacingDiagnostics = "1"
     LogDirectory = $runDirectory
     Executable = [ordered]@{
         Path = $resolvedExe
@@ -153,6 +181,7 @@ $metadata = [ordered]@{
         ChartPath = $resolvedChart
     }
     ExistingMiaCodeEnvironment = $miacodeEnvironment
+    ContendingProcesses = $contendingProcesses
     OperatingSystem = $osInfo
     ComputerSystem = $computerInfo
     Processor = $cpuInfo
@@ -164,6 +193,10 @@ $metadata | ConvertTo-Json -Depth 8 |
 
 Write-Host "MiaCode idle-freeze diagnostic run started."
 Write-Host "  Profile: $Profile (MIACODE_GPU_BIND_HIGH_PERFORMANCE=$gpuBinding)"
+Write-Host "  Frame pacing diagnostics: MIACODE_PREVIEW_FRAME_PACING_DIAG=1"
 Write-Host "  PID: $($process.Id)"
 Write-Host "  Evidence: $runDirectory"
+Write-Host "  Contending processes at launch: $($contendingProcesses.Count)"
+Write-Host "Record the OBS encoder (x264 or NVENC) with this run - it decides whether the"
+Write-Host "contention lands on the CPU or on the 2 GB MX450, and it is currently unknown."
 Write-Host "Do not close the frozen process before collecting Get-Process data and a full dump."

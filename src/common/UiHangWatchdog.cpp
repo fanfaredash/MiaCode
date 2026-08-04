@@ -5,6 +5,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/OperationLog.h"
+#include "common/ThreadStackCapture.h"
 
 #include <QCoreApplication>
 #include <QTimer>
@@ -23,6 +24,10 @@ constexpr qint64 kMonitorLoopIntervalMs = 500;
 constexpr qint64 kActivePhaseHangMs = 2000;
 constexpr qint64 kIdleHeartbeatHangMs = 5000;
 constexpr qint64 kRepeatedReportMs = 5000;
+// Stack captures are budgeted separately from the 5 s report cadence — see
+// policy::shouldCaptureStack for why.
+constexpr qint64 kStackCaptureIntervalMs = 30000;
+constexpr int kMaxStackCapturesPerSession = 16;
 
 struct PhaseState {
     bool active = false;
@@ -93,11 +98,74 @@ void appendWatchdogReport(
         miacode::debug_log::Level::Fatal);
 }
 
+// Suspend the GUI thread, walk it, resume it, then log the frames. Runs on the watchdog
+// thread only, immediately after a hang report, and only within the budget granted by
+// policy::shouldCaptureStack.
+//
+// This is the log's substitute for a crash dump: affected users cannot practically
+// transfer a full `.dmp`, so the stack has to arrive as text. Emitted at Level::Fatal so
+// every line takes the durable synchronous-flush path — a stack that is still sitting in
+// the async writer's queue when the process is killed is worth nothing.
+policy::StackCaptureOutcome appendGuiThreadStackReport(
+    policy::Trigger trigger, qint64 heartbeatAgeMs, int captureIndex)
+{
+    const miacode::diag::StackCaptureResult stack =
+        miacode::diag::captureRegisteredThreadStack();
+    const policy::StackCaptureOutcome outcome =
+        stack.timedOut ? policy::StackCaptureOutcome::TimedOut
+        : stack.captured ? policy::StackCaptureOutcome::Captured
+                         : policy::StackCaptureOutcome::Failed;
+    QString header =
+        QStringLiteral("action=gui_thread_stack trigger=%1 heartbeat_age_ms=%2 capture_index=%3 "
+                       "capture=%4 supported=%5 captured=%6 frame_count=%7 suspended_us=%8")
+            .arg(QString::fromLatin1(policy::triggerName(trigger)))
+            .arg(heartbeatAgeMs)
+            .arg(captureIndex)
+            .arg(QString::fromLatin1(policy::stackCaptureOutcomeName(outcome)))
+            .arg(stack.supported ? 1 : 0)
+            .arg(stack.captured ? 1 : 0)
+            .arg(stack.frameCount)
+            .arg(stack.suspendedUs);
+    if (!stack.skipReason.isEmpty()) {
+        header += QStringLiteral(" reason=%1").arg(stack.skipReason);
+    }
+    if (stack.lastErrorCode != 0) {
+        header += QStringLiteral(" errno=%1").arg(stack.lastErrorCode);
+    }
+    if (outcome == policy::StackCaptureOutcome::TimedOut) {
+        // Say plainly what happened and what it costs, because this is the one outcome
+        // where the diagnostic itself had to intervene in the process it was observing.
+        header += QStringLiteral(" forced_resume=1 session_disabled=1");
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("ui/hang_watchdog"),
+        header,
+        /*force=*/true,
+        miacode::debug_log::Level::Fatal);
+    for (const QString& frame : stack.frames) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("ui/hang_watchdog_stack"),
+            QStringLiteral("capture_index=%1 %2").arg(captureIndex).arg(frame),
+            /*force=*/true,
+            miacode::debug_log::Level::Fatal);
+    }
+    return outcome;
+}
+
 void watchdogLoop()
 {
+    // Warm dbghelp here, on this thread, at process start — never during a hang. See
+    // prepareStackWalkSymbols() for why deferring it to first use is a deadlock risk.
+    miacode::diag::prepareStackWalkSymbols();
+
     policy::Trigger reportedTrigger = policy::Trigger::None;
     quint64 reportedGeneration = 0;
     qint64 reportedAtMs = 0;
+    qint64 lastStackCaptureAtMs = 0;
+    int stackCaptureCount = 0;
+    bool stackCaptureSessionEnabled = true;
     qint64 previousMonitorWakeMs = steadyMs();
     while (!g_stop.load(std::memory_order_acquire)) {
         std::this_thread::sleep_for(std::chrono::milliseconds(kMonitorLoopIntervalMs));
@@ -155,6 +223,21 @@ void watchdogLoop()
         reportedTrigger = trigger;
         reportedGeneration = phase.generation;
         reportedAtMs = now;
+        if (policy::shouldCaptureStack(
+                stackCaptureSessionEnabled,
+                trigger,
+                now,
+                lastStackCaptureAtMs,
+                stackCaptureCount,
+                kStackCaptureIntervalMs,
+                kMaxStackCapturesPerSession)) {
+            const policy::StackCaptureOutcome outcome =
+                appendGuiThreadStackReport(trigger, heartbeatAge, stackCaptureCount);
+            lastStackCaptureAtMs = now;
+            ++stackCaptureCount;
+            stackCaptureSessionEnabled =
+                policy::stackCaptureSessionEnabledAfter(stackCaptureSessionEnabled, outcome);
+        }
     }
 }
 
@@ -173,6 +256,13 @@ void installGuiHeartbeat(QObject* owner)
     // heartbeat. Startup may legitimately spend more than five seconds before
     // app.exec(), while marked phase monitoring remains available immediately.
     g_lastHeartbeatMs.store(0, std::memory_order_release);
+
+    // installGuiHeartbeat runs ON the GUI thread, which is the only place a real handle
+    // to it can be duplicated (GetCurrentThread() is a pseudo-handle). Do it here so the
+    // watchdog thread can suspend-and-walk the GUI thread when the heartbeat dies.
+    QString stackTargetReason;
+    const bool stackTargetRegistered =
+        miacode::diag::registerStackWalkTargetThread(&stackTargetReason);
 
     auto* timer = new QTimer(owner);
     timer->setObjectName(QStringLiteral("MiaCodeGuiHangHeartbeat"));
@@ -194,16 +284,26 @@ void installGuiHeartbeat(QObject* owner)
             if (g_thread.joinable()) {
                 g_thread.join();
             }
+            // Only after the watchdog thread is joined — releasing the handle while it
+            // could still be mid-capture would close a handle in use.
+            miacode::diag::releaseStackWalkTargetThread();
         });
     }
 
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("ui/hang_watchdog"),
-        QStringLiteral("action=installed heartbeat_ms=%1 active_phase_timeout_ms=%2 idle_heartbeat_timeout_ms=%3")
+        QStringLiteral("action=installed heartbeat_ms=%1 active_phase_timeout_ms=%2 "
+                       "idle_heartbeat_timeout_ms=%3 stack_capture=%4 stack_capture_reason=%5 "
+                       "stack_capture_interval_ms=%6 stack_capture_max=%7 stack_frame_cap=%8")
             .arg(kHeartbeatIntervalMs)
             .arg(kActivePhaseHangMs)
-            .arg(kIdleHeartbeatHangMs));
+            .arg(kIdleHeartbeatHangMs)
+            .arg(stackTargetRegistered ? 1 : 0)
+            .arg(stackTargetReason.isEmpty() ? QStringLiteral("(none)") : stackTargetReason)
+            .arg(kStackCaptureIntervalMs)
+            .arg(kMaxStackCapturesPerSession)
+            .arg(miacode::diag::kMaxCapturedStackFrames));
 }
 
 void setPhase(const char* phase, const QString& detail)

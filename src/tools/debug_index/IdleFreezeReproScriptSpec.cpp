@@ -49,6 +49,13 @@ int main()
         QStringLiteral("Env:MIACODE_"),
         QStringLiteral("Start-Process"),
         QStringLiteral("--debug"),
+        // The reported failure is contention, not idleness. Frame-pacing diagnostics
+        // produce the render_frame_profile line the triage tree branches on, and the
+        // contending-process snapshot records whether OBS / a browser were running —
+        // both are too easy for an operator to forget, so the script owns them.
+        QStringLiteral("MIACODE_PREVIEW_FRAME_PACING_DIAG"),
+        QStringLiteral("ContendingProcesses"),
+        QStringLiteral("obs64"),
     };
     for (const QString& token : requiredTokens) {
         ok &= require(script.contains(token),

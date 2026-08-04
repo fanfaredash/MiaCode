@@ -1,15 +1,30 @@
-# Windows 空闲冻结复现与取证指南
+# Windows 冻结/卡顿复现与取证指南
 
-本文用于在用户的 Windows 双显卡机器上复现并验证 MiaCode 空闲冻结问题。当前改动是**诊断增强**，不是在缺少线程 dump 与严格 A/B 结果时提前宣称根因已经修复。开发侧没有等价 Windows 硬件环境，因此最终结论必须以用户机证据为准。
+本文用于在用户的 Windows 双显卡机器上复现并验证 MiaCode 的冻结与预览卡顿问题。当前改动是**诊断增强**，不是在缺少线程栈与严格 A/B 结果时提前宣称根因已经修复。开发侧没有等价 Windows 硬件环境，因此最终结论必须以用户机证据为准。
 
 ## 0. 已确认的历史基线
 
 - 受影响版本确认为短暂发布过的 `1.1.0-beta.2`；不要将它改写或映射为 `1.0.1-beta.2`。
-- 设备：11th Gen Intel Core i5-1155G7、16 GB RAM、NVIDIA GeForce MX450 2 GB 与 Intel Iris Xe 双显卡、477 GB SSD。
+- 设备：11th Gen Intel Core i5-1155G7（4 核 8 线程、15 W 移动端）、16 GB RAM、NVIDIA GeForce MX450 **2 GB** 与 Intel Iris Xe 双显卡、477 GB SSD。
 - 用户未启用任何扩展。
 - 本轮诊断构建保持高性能 GPU 绑定默认开启；`GpuOff` 只作为受控 A/B 对照。
 
 新诊断构建会在启动日志记录版本、源码 revision、工作树状态与实际 exe 身份；两次 A/B 必须使用同一个 `app\MiaCode.exe`，并用 `phase0.json` 的 SHA-256 复核。
+
+## 0.1 场景已被用户反馈改写：这是**争用**问题，不是**空闲**问题
+
+2026-08-04 的用户反馈把问题 1 的条件改写为：
+
+| | 早期假设 | 用户实际 |
+|---|---|---|
+| 屏幕 | 黑屏 / 休眠 | **未黑屏、未锁定** |
+| 窗口 | 前台放置 | **最小化 / 被浏览器挡住** |
+| 机器负载 | 空闲 | **浏览器持续播放视频** |
+| 时长 | 2 小时 | **5～10 分钟** |
+
+同一台机器还报告了问题 2：**OBS 推流时**预览播放卡顿，密度阈值降到平时的约 1/10。
+
+两者的公因子是第三方进程持续占用 CPU/GPU。**应用是空闲的，机器不是。** 因此下面的矩阵按“争用优先”排列；显示器休眠与锁屏被降级为回归项。详细候选机制见 `docs/audit/OBS_CONTENTION_PLAYBACK_STUTTER_AUDIT_ZH.md`。
 
 ## 1. 准备
 
@@ -20,7 +35,25 @@
 3. Microsoft Sysinternals ProcDump，用于冻结当场取得完整 dump。
 4. 一个空间充足的证据目录；每次启动会新建带时间戳的子目录，不覆盖旧证据。
 
-不要设置其他 `MIACODE_*` 变量，不要加 `--quick-shell-beta`，保持所有扩展关闭。两组使用相同谱面、供电方式、显示设置、空闲时长与唤醒操作。
+不要设置其他 `MIACODE_*` 变量，不要加 `--quick-shell-beta`，保持所有扩展关闭。两组使用相同谱面、供电方式、显示设置、放置时长与唤醒操作。
+
+**唯一的例外，且每一组都要加：`MIACODE_PREVIEW_FRAME_PACING_DIAG=1`。**
+
+```powershell
+$env:MIACODE_PREVIEW_FRAME_PACING_DIAG = "1"
+```
+
+这个开关早已存在，但此前从未要求打开。它让运行时日志输出 `render_frame_profile`，把一帧拆成
+`paint_ms / sync_ms / pre_render_wait_ms / render_submit_ms / swap_gpu_ms`，并且对**每一个 ≥30 ms 的慢帧自动记录**（`slow=1`），不只是按 `MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS` 采样。第 6 节的判别树完全依赖这些字段。
+
+### 必须记录：OBS 的编码器是 x264 还是 NVENC
+
+这一项目前**未知**，且它决定争用落在哪里：
+
+- **x264（软编）** → 争用在 **CPU**，4 核机器会被吃满，优先看 `paint_ms` / `layer_sum_ms` 与音频欠载；
+- **NVENC（硬编）** → 争用在 **MX450 的 2 GB 显存**上，与 MiaCode 根窗口挤在同一块卡，优先看 `idle/vram_gauge` 的 `local_over_budget` 与 `swap_gpu_ms`。
+
+在 OBS 的“设置 → 输出 → 编码器”里确认，并连同分辨率、码率、帧率一起写进本次证据目录。**不要事后猜。**
 
 ## 2. 启动严格 A/B
 
@@ -43,16 +76,24 @@ $evidenceRoot = "D:\miacode-idle-freeze"
 - 将本次全部 MiaCode 日志定向到独立证据目录；
 - 启动后立即返回并显示 PID，便于冻结时取证。
 
-### 首选顺序
+### 首选顺序（按用户实际场景重排）
 
-先做最高价值的显示器休眠场景，不要先花两小时跑常亮基线：
+先做争用场景。第 1～3 组每轮只要 5～15 分钟，单轮成本比旧矩阵低一个数量级，可以多跑几遍取重复性：
 
 | 顺序 | Profile | 条件 | 时长 |
 |---|---|---|---|
-| 1 | `GpuBound` | 打开谱面、不播放；显示器 5 分钟后关闭，允许休眠与唤醒 | 2 h |
-| 2 | `GpuOff` | 与第 1 组完全相同 | 2 h |
-| 3 | `GpuBound` / `GpuOff` | `Win+L`，30 分钟后解锁；两组条件一致 | 30 min+ |
-| 4 | `GpuBound` / `GpuOff` | 禁止显示器休眠的常亮基线 | 2 h |
+| 1 | `GpuBound` | 打开谱面；**最小化 / 被浏览器完全挡住，浏览器持续播放视频网站**；不休眠、不锁屏 | 5–15 min |
+| 2 | `GpuOff` | 与第 1 组完全相同（`MIACODE_GPU_BIND_HIGH_PERFORMANCE=0` 对照，把根窗口拉回 Iris Xe，取消跨适配器分裂并让根窗口离开 2 GB 卡） | 5–15 min |
+| 3 | `GpuBound` | **前台放置**（不最小化、不遮挡）+ 浏览器持续播放视频 | 5–15 min |
+| 4 | `GpuBound` / `GpuOff` | 回归项：显示器 5 分钟后关闭、允许休眠唤醒；以及 `Win+L` 后解锁 | 2 h |
+
+第 3 组的作用是把「被遮挡」和「被争用」两个变量分开：
+
+- 只有第 1 组冻结、第 3 组不冻结 → 与**遮挡/最小化**相关（看 `window/visibility`）；
+- 第 1、3 组都冻结 → 与**争用**相关，遮挡不是必要条件；
+- 第 1 组冻结而第 2 组不冻结 → 支持 GPU 绑定 / 2 GB 显存候选（看 `idle/vram_gauge`）。
+
+问题 2（OBS 卡顿）用同一构建、同一开关另跑一组四格对照：OBS 关/浏览器关（基线）、OBS 开/浏览器关、OBS 关/浏览器开、两者都开。**同一谱面、同一密度、同一时长**，比较各组 `render_frame_profile` 里 `slow=1` 行哪一项膨胀。
 
 完成一组并退出 MiaCode 后，再用另一 Profile 启动：
 
@@ -60,7 +101,7 @@ $evidenceRoot = "D:\miacode-idle-freeze"
 & $reproScript -MiaCodeExe $realExe -Profile GpuOff -LogRoot $evidenceRoot
 ```
 
-后续才扩展到“未保存修改”“播放后暂停”“全屏预览”等矩阵项。每个对照都必须保持相同的空闲时长，不能用一次短测否定候选原因。
+后续才扩展到“未保存修改”“播放后暂停”“全屏预览”等矩阵项。每个对照都必须保持相同的时长与相同的第三方负载，不能用一次短测否定候选原因。
 
 ## 3. 启动后先验收诊断链
 
@@ -71,6 +112,11 @@ $evidenceRoot = "D:\miacode-idle-freeze"
 - `GpuBound` 的 `startup/gpu_provider` 应显示实际 `action=bound`，或明确说明为何跳过；若是 `reason=high_perf_equals_default_adapter`，这台机器上的 GPU 绑定 A/B 没有判别力。
 - `GpuOff` 应出现 `reason=bind_disabled_by_env`。
 - `[runtime/idle/resource_gauge] action=sample sample=0` 应在启动后出现，随后约每 30 秒一条。
+- `[runtime/idle/vram_gauge] action=adapter_scan` 应与上面同一节拍出现，`adapter_count` 在这台机器上应为 **2**，随后每块适配器各一条 `action=sample`，含 `local_budget_mb` / `local_usage_mb` / `local_over_budget`。
+- `[runtime/window/visibility] action=installed` 应对 `surface=root_window` 与 `surface=preview_composite` 各出现一次；同时应有一条 `action=graphics_persistence surface=preview_composite persistent_graphics=1`，它说明**最小化不会释放预览的显存**。
+- `[runtime/ui/hang_watchdog] action=installed` 应含 `stack_capture=1`；若为 `0`，GUI 线程栈抓取未就绪，冻结时拿不到栈。
+- 开启 `MIACODE_PREVIEW_FRAME_PACING_DIAG=1` 后，播放时应出现 `render_frame_profile` 行。
+- 播放时音频日志应出现 `bass_audio_health`（约每 5 秒一条）。
 - 显示器状态改变应出现 `[runtime/windows/environment_event] action=console_display_state console_display_state=off|on|dimmed`。
 - 锁屏/解锁应出现 `action=session_change reason=session_lock|session_unlock`。
 
@@ -93,7 +139,7 @@ Get-Process -Id $targetPid |
 procdump.exe -accepteula -ma $targetPid (Join-Path $runDir "miacode-freeze-$targetPid.dmp")
 ```
 
-同时记录冻结发生的本地时间、显示器/锁屏状态、是否能移动窗口或操作菜单，以及任务管理器中 CPU 与内存是否仍在变化。
+同时记录冻结发生的本地时间、窗口状态（最小化 / 被遮挡 / 前台）、浏览器与 OBS 当时是否在跑、是否能移动窗口或操作菜单，以及任务管理器中 CPU 与内存是否仍在变化。
 
 初步分类：
 
@@ -103,19 +149,59 @@ procdump.exe -accepteula -ma $targetPid (Join-Path $runDir "miacode-freeze-$targ
 
 日志中若出现 `[runtime/ui/hang_watchdog] action=gui_thread_stale trigger=idle_heartbeat`，其 `heartbeat_age_ms` 给出 GUI 心跳停止时间。若完全没有该行，仍须保留 dump；同时用启动身份和资源采样行确认日志目录及诊断构建是否正确。
 
+**dump 传不动时，日志里的 GUI 线程栈就是替代品。** 紧随上面那行之后应出现：
+
+```
+[runtime/ui/hang_watchdog] action=gui_thread_stack ... capture_index=0 capture=captured captured=1 frame_count=NN
+[runtime/ui/hang_watchdog_stack] capture_index=0 frame=00 addr=0x... module=MiaCode.exe module_offset=0x... symbol=...
+```
+
+- `symbol=(nosym)` 是用户机上的正常结果（没有 PDB）。`module` + `module_offset` 已经足够，用**同一次构建**的 PDB 离线还原即可，所以务必同时保留该构建的 PDB。
+- `captured=0` 时看 `reason=`：`not_registered` 表示启动时没拿到 GUI 线程句柄；`same_thread` / `suspend_failed` / `resume_failed` 属于异常，需连同日志一起回传。
+- 每次冻结最多抓 16 份栈、每 30 秒一份，用 `capture_index=` 对应。多份栈**帧完全一致**说明真的卡死不动；帧在变化说明是极慢而非死锁。
+
+### `capture=timeout`：本轮拿不到栈，改用 ProcDump
+
+若出现：
+
+```
+[runtime/ui/hang_watchdog] action=gui_thread_stack ... capture=timeout reason=timeout forced_resume=1 session_disabled=1
+```
+
+含义是：抓栈线程在挂起窗口内被卡住（`StackWalk64` 内部要拿 dbghelp / loader 锁，而这把锁很可能正被**被它挂起的那个 GUI 线程**持有），看门狗在 2 秒超时后**自己把 GUI 线程恢复了**，并在本次会话内**永久关闭抓栈**；之后的尝试记为 `reason=disabled_after_timeout`。
+
+这是有意为之的保护：宁可拿不到栈，也不能让诊断把 GUI 线程永久挂起，把一次可能可恢复的卡顿变成必然的硬死机。
+
+**操作要求：本轮没有栈证据，必须改用 ProcDump 取完整 dump（见上面的命令），并在回执里注明这一轮是 `capture=timeout`。** 同时这条线索本身也有价值——它强烈暗示 GUI 线程当时卡在 loader / 符号相关路径上。
+
 ## 5. 必须回传的证据
 
 - 本次完整时间戳目录，包括 `phase0.json`、`powercfg.txt`、全部日志和 `process_snapshot.txt`；
-- 完整 `.dmp`，不要只交小型 minidump；
-- 冻结发生的准确时间和触发步骤；
+- **OBS 编码器类型（x264 / NVENC）与输出设置**，以及浏览器当时播放的分辨率；
+- 完整 `.dmp`（能传就传；传不动时以 `ui/hang_watchdog_stack` 的栈行 + 该构建的 PDB 替代。**若本轮是 `capture=timeout`，`.dmp` 不是可选项而是必需项**）；
+- 冻结发生的准确时间、当时的窗口状态（最小化 / 被遮挡 / 前台）和触发步骤；
 - 两个 Profile 的相同条件、相同时长结果；
 - 日志中的 `dropped=` 计数；非零表示部分证据窗口可能已丢失。
 
-## 6. 如何解释 A/B
+## 6. 判别树：先读 `render_frame_profile`，再下结论
 
-- 只有 `GpuBound` 在重复的相同条件下冻结，而 `GpuOff` 多次不冻结：支持 GPU 绑定/电源状态候选，但仍需线程栈闭环。
-- 两组都冻结：应转向显示恢复、渲染线程或其他共享路径，不能把原因归结为绑定开关。
-- 两组都不冻结：只能说明本轮未复现，不能排除低概率空闲问题。
+`MIACODE_PREVIEW_FRAME_PACING_DIAG=1` 打开后，每个 ≥30 ms 的慢帧都会记一行 `slow=1`。按哪一项膨胀分支：
+
+| 哪一项大 | 指向 | 交叉验证 |
+|---|---|---|
+| `render_submit_ms` 大且 `pre_render_wait_ms` ≈ 0 | QSG 渲染线程被整片调度出去（MMCSS 保底在多进程争用下被稀释） | 其他进程是否也注册了 MMCSS |
+| `pre_render_wait_ms` 大 | present / DXGI flip-queue 背压 | `GpuOff` 组是否改善 |
+| `swap_gpu_ms` 大 | GPU 执行慢 / 显存驱逐 | `idle/vram_gauge` 的 `local_over_budget=1` |
+| `paint_ms` / `layer_sum_ms` 大 | CPU 侧密度成本（x264 软编抢核） | `top_layer` 指出具体层 |
+| 上面都不大，但用户听到卡顿 | 音频欠载 | 音频日志的 `bass_audio_stall` / `bass_audio_health` 的 `buffered_ms` |
+
+## 7. 如何解释 A/B
+
+- 只有 `GpuBound` 在重复的相同条件下冻结/卡顿，而 `GpuOff` 多次正常：支持 GPU 绑定与 2 GB 显存候选，仍需 `idle/vram_gauge` 或线程栈闭环。
+- 两组都冻结：应转向争用、渲染线程或其他共享路径，不能把原因归结为绑定开关。
+- 两组都不冻结：只能说明本轮未复现，不能排除低概率问题。
 - 资源曲线持续增长：优先分析内存与句柄来源。
+- `local_usage_mb` 逼近或超过 `local_budget_mb`（`local_over_budget=1`）：显存驱逐候选成立，应与慢帧时间戳对齐核对。
+- `window/visibility` 的 `occluded_for_ms` 给出本次被遮挡/最小化的实际时长，用它核对“5～10 分钟”这个尺度是否吻合。
 
-最终根因判断以冻结当场的完整线程栈、环境事件时间线和严格 A/B 为准。
+最终根因判断以冻结当场的 GUI 线程栈、`render_frame_profile` 分支、显存曲线、环境事件时间线和严格 A/B 为准。

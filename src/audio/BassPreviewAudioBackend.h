@@ -9,6 +9,7 @@
 #include "common/PreviewAudioMixConfig.h"
 #include "BassPreviewDebugLogRouting.h"
 #include "PreviewAudioBackend.h"
+#include "PreviewAudioHealth.h"
 
 class BassPreviewAudioBackend final : public QObject, public miacode::preview_audio::PreviewAudioBackend
 {
@@ -113,6 +114,10 @@ private:
         double sessionPlaybackRate = 1.0;
         double lastAuthoritativeSecond = 0.0;
         double lastStatusLogSecond = -1.0;
+        // Underrun / buffer-health probe state. Separate from lastStatusLogSecond so the
+        // (much coarser) health cadence and the ~1 Hz bass_status cadence stay independent.
+        double lastHealthLogSecond = -1.0;
+        miacode::preview_audio::health::StallTracker stallTracker;
         double lastTriggeredGroupSecond = -1.0;
         int lastTriggeredGroupIndex = -1;
         int triggeredGroupCount = 0;
@@ -168,6 +173,10 @@ private:
     void reconcileTouchholdVoice(double second);
     void triggerGroup(const CollapsedEventGroup& group);
     void logPlaybackStatus(double authoritativeSecond, double fallbackSecond);
+    // Underrun / buffer-level probe. Polled at tick rate (cheap BASS_ChannelIsActive
+    // calls) so a stall edge is caught immediately; the fuller buffer-health line
+    // self-throttles to health::kHealthSampleIntervalSeconds.
+    void logAudioHealth(double authoritativeSecond);
     void logPreparedEventWindow(double startSecond) const;
     QString groupSignature(const CollapsedEventGroup& group) const;
 

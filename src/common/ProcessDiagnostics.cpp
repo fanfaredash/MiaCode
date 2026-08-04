@@ -16,10 +16,15 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <psapi.h>
+#include <dxgi1_4.h>
 #if defined(_MSC_VER)
 #pragma comment(lib, "psapi.lib")
+#pragma comment(lib, "dxgi.lib")
 #endif
 #endif
 
@@ -47,6 +52,15 @@ QString applicationStateName()
     }
     return QStringLiteral("unknown");
 }
+
+#ifdef Q_OS_WIN
+constexpr quint64 kBytesPerMb = 1024ull * 1024ull;
+
+quint64 bytesToMb(quint64 bytes)
+{
+    return bytes / kBytesPerMb;
+}
+#endif
 
 }  // namespace
 
@@ -99,6 +113,133 @@ QString processResourceGaugePayload()
 #endif
 }
 
+qint64 adapterProcessVideoMemoryUsageKb(void* dxgiAdapter)
+{
+#ifdef Q_OS_WIN
+    if (dxgiAdapter == nullptr) {
+        return -1;
+    }
+    auto* adapter = static_cast<IDXGIAdapter*>(dxgiAdapter);
+    IDXGIAdapter3* adapter3 = nullptr;
+    if (FAILED(adapter->QueryInterface(__uuidof(IDXGIAdapter3), reinterpret_cast<void**>(&adapter3)))
+        || adapter3 == nullptr) {
+        return -1;
+    }
+    quint64 totalBytes = 0;
+    bool any = false;
+    DXGI_QUERY_VIDEO_MEMORY_INFO info;
+    ZeroMemory(&info, sizeof(info));
+    if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info))) {
+        totalBytes += info.CurrentUsage;
+        any = true;
+    }
+    ZeroMemory(&info, sizeof(info));
+    if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &info))) {
+        totalBytes += info.CurrentUsage;
+        any = true;
+    }
+    adapter3->Release();
+    return any ? static_cast<qint64>(totalBytes / 1024ull) : -1;
+#else
+    Q_UNUSED(dxgiAdapter);
+    return -1;
+#endif
+}
+
+QList<AdapterVideoMemorySample> sampleAdapterVideoMemory()
+{
+    QList<AdapterVideoMemorySample> samples;
+#ifdef Q_OS_WIN
+    IDXGIFactory1* factory = nullptr;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))
+        || factory == nullptr) {
+        return samples;
+    }
+    IDXGIAdapter1* adapter = nullptr;
+    for (UINT index = 0; factory->EnumAdapters1(index, &adapter) != DXGI_ERROR_NOT_FOUND; ++index) {
+        if (adapter == nullptr) {
+            continue;
+        }
+        AdapterVideoMemorySample sample;
+        sample.index = static_cast<int>(index);
+        DXGI_ADAPTER_DESC1 desc;
+        ZeroMemory(&desc, sizeof(desc));
+        if (SUCCEEDED(adapter->GetDesc1(&desc))) {
+            sample.description = QString::fromWCharArray(desc.Description).trimmed();
+            sample.luid = QStringLiteral("0x%1%2")
+                              .arg(static_cast<quint32>(desc.AdapterLuid.HighPart), 8, 16, QLatin1Char('0'))
+                              .arg(static_cast<quint32>(desc.AdapterLuid.LowPart), 8, 16, QLatin1Char('0'));
+            sample.vendorId = static_cast<quint32>(desc.VendorId);
+            sample.deviceId = static_cast<quint32>(desc.DeviceId);
+            sample.software = (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
+            sample.dedicatedVideoMemoryMb = bytesToMb(static_cast<quint64>(desc.DedicatedVideoMemory));
+            sample.sharedSystemMemoryMb = bytesToMb(static_cast<quint64>(desc.SharedSystemMemory));
+        }
+        IDXGIAdapter3* adapter3 = nullptr;
+        if (SUCCEEDED(adapter->QueryInterface(
+                __uuidof(IDXGIAdapter3), reinterpret_cast<void**>(&adapter3)))
+            && adapter3 != nullptr) {
+            DXGI_QUERY_VIDEO_MEMORY_INFO info;
+            ZeroMemory(&info, sizeof(info));
+            if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info))) {
+                sample.queried = true;
+                sample.localBudgetMb = bytesToMb(info.Budget);
+                sample.localUsageMb = bytesToMb(info.CurrentUsage);
+                sample.localReservedMb = bytesToMb(info.CurrentReservation);
+            }
+            ZeroMemory(&info, sizeof(info));
+            if (SUCCEEDED(
+                    adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &info))) {
+                sample.queried = true;
+                sample.nonLocalBudgetMb = bytesToMb(info.Budget);
+                sample.nonLocalUsageMb = bytesToMb(info.CurrentUsage);
+                sample.nonLocalReservedMb = bytesToMb(info.CurrentReservation);
+            }
+            adapter3->Release();
+        }
+        samples.append(sample);
+        adapter->Release();
+        adapter = nullptr;
+    }
+    factory->Release();
+#endif
+    return samples;
+}
+
+QString formatAdapterVideoMemoryPayload(const AdapterVideoMemorySample& sample)
+{
+    // over_budget is the actual alarm: once CurrentUsage exceeds the Budget DXGI grants
+    // this process, the driver starts evicting to system memory and every frame pays a
+    // PCIe re-upload. Precomputed here so an operator can grep `local_over_budget=1`
+    // without doing arithmetic across two fields.
+    const int localOverBudget =
+        (sample.localBudgetMb > 0 && sample.localUsageMb > sample.localBudgetMb) ? 1 : 0;
+    const int nonLocalOverBudget =
+        (sample.nonLocalBudgetMb > 0 && sample.nonLocalUsageMb > sample.nonLocalBudgetMb) ? 1 : 0;
+    return QStringLiteral(
+               "adapter=%1 desc=\"%2\" luid=%3 vendor=0x%4 device=0x%5 software=%6 queried=%7 "
+               "dedicated_mb=%8 shared_mb=%9 local_budget_mb=%10 local_usage_mb=%11 "
+               "local_reserved_mb=%12 local_over_budget=%13 nonlocal_budget_mb=%14 "
+               "nonlocal_usage_mb=%15 nonlocal_reserved_mb=%16 nonlocal_over_budget=%17")
+        .arg(sample.index)
+        .arg(sample.description.isEmpty() ? QStringLiteral("(unknown)") : sample.description)
+        .arg(sample.luid.isEmpty() ? QStringLiteral("(none)") : sample.luid)
+        .arg(sample.vendorId, 4, 16, QLatin1Char('0'))
+        .arg(sample.deviceId, 4, 16, QLatin1Char('0'))
+        .arg(sample.software ? 1 : 0)
+        .arg(sample.queried ? 1 : 0)
+        .arg(sample.dedicatedVideoMemoryMb)
+        .arg(sample.sharedSystemMemoryMb)
+        .arg(sample.localBudgetMb)
+        .arg(sample.localUsageMb)
+        .arg(sample.localReservedMb)
+        .arg(localOverBudget)
+        .arg(sample.nonLocalBudgetMb)
+        .arg(sample.nonLocalUsageMb)
+        .arg(sample.nonLocalReservedMb)
+        .arg(nonLocalOverBudget);
+}
+
 void installPeriodicProcessResourceGauge(QObject* owner)
 {
     if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
@@ -123,14 +264,36 @@ void installPeriodicProcessResourceGauge(QObject* owner)
     const auto emitSample = [sampleCounter, startedAt]() {
         const qint64 uptimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startedAt).count();
+        const quint64 sample = (*sampleCounter)++;
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("idle/resource_gauge"),
             QStringLiteral("action=sample sample=%1 uptime_ms=%2 app_state=%3 %4")
-                .arg((*sampleCounter)++)
+                .arg(sample)
                 .arg(qMax<qint64>(0, uptimeMs))
                 .arg(applicationStateName())
                 .arg(processResourceGaugePayload()));
+
+        // Per-adapter VRAM on the same cadence. The scan line is emitted even when zero
+        // adapters are found so the reader can tell "probe ran, DXGI unavailable" from
+        // "diagnostics never installed".
+        const QList<AdapterVideoMemorySample> adapters = sampleAdapterVideoMemory();
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("idle/vram_gauge"),
+            QStringLiteral("action=adapter_scan sample=%1 uptime_ms=%2 adapter_count=%3")
+                .arg(sample)
+                .arg(qMax<qint64>(0, uptimeMs))
+                .arg(adapters.size()));
+        for (const AdapterVideoMemorySample& adapter : adapters) {
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("idle/vram_gauge"),
+                QStringLiteral("action=sample sample=%1 uptime_ms=%2 %3")
+                    .arg(sample)
+                    .arg(qMax<qint64>(0, uptimeMs))
+                    .arg(formatAdapterVideoMemoryPayload(adapter)));
+        }
     };
 
     QObject::connect(timer, &QTimer::timeout, timer, emitSample);

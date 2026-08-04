@@ -6,6 +6,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/FileContentStamp.h"
+#include "common/Mmcss.h"
 #include "common/OperationLog.h"
 #include "common/PreviewAudioMixConfig.h"
 #include "common/PreviewSfxAssets.h"
@@ -126,12 +127,164 @@ void BassPreviewAudioBackend::setPlaybackTransactionId(quint64 transactionId)
 }
 
 
+namespace {
+
+#ifdef MIACODE_HAS_BASS_AUDIO
+
+namespace audio_health = miacode::preview_audio::health;
+
+// BASS_ACTIVE_* -> the backend-neutral vocabulary in PreviewAudioHealth.h. Kept in this
+// TU because it is the one that owns bass.h.
+audio_health::ChannelActivity activityFromBass(DWORD active)
+{
+    switch (active) {
+    case BASS_ACTIVE_STOPPED:
+        return audio_health::ChannelActivity::Stopped;
+    case BASS_ACTIVE_PLAYING:
+        return audio_health::ChannelActivity::Playing;
+    case BASS_ACTIVE_STALLED:
+        return audio_health::ChannelActivity::Stalled;
+    case BASS_ACTIVE_PAUSED:
+        return audio_health::ChannelActivity::Paused;
+    case BASS_ACTIVE_PAUSED_DEVICE:
+        return audio_health::ChannelActivity::PausedDevice;
+    default:
+        return audio_health::ChannelActivity::Unknown;
+    }
+}
+
+// The master mixer is the real playback channel (BASS_ChannelPlay in engine init), so it
+// is the one whose STALLED state means "the device buffer ran dry" — i.e. BASS's update
+// thread lost its CPU race. That is the underrun this probe is hunting.
+audio_health::ChannelActivity playbackActivityFor(DWORD handle)
+{
+    if (handle == 0) {
+        return audio_health::ChannelActivity::Unknown;
+    }
+    return activityFromBass(BASS_ChannelIsActive(handle));
+}
+
+// Sources live inside the mixer graph (source -> per-sample resampler -> master mixer),
+// so their state must be read with BASS_Mixer_ChannelIsActive, matching Sample::isPlaying.
+// A STALLED source means the decode side ran dry (slow disk / starved decode), which is a
+// different failure from a device-buffer underrun and worth distinguishing.
+audio_health::ChannelActivity mixerSourceActivityFor(DWORD handle)
+{
+    if (handle == 0) {
+        return audio_health::ChannelActivity::Unknown;
+    }
+    return activityFromBass(BASS_Mixer_ChannelIsActive(handle));
+}
+
+audio_health::BufferSnapshot bufferSnapshotFor(DWORD mixerHandle)
+{
+    audio_health::BufferSnapshot snapshot;
+    BASS_INFO info = {};
+    if (BASS_GetInfo(&info)) {
+        snapshot.minBufferMs = static_cast<qint64>(info.minbuf);
+        // BASS_INFO::latency is only populated when BASS_Init was given
+        // BASS_DEVICE_LATENCY. MiaCode does not request it (it costs a test-buffer
+        // playback at init), so this reads 0 — recorded anyway so the field's meaning is
+        // unambiguous rather than silently absent.
+        snapshot.initLatencyMs = static_cast<qint64>(info.latency);
+        snapshot.deviceFreq = static_cast<qint64>(info.freq);
+    }
+    const DWORD configBuffer = BASS_GetConfig(BASS_CONFIG_BUFFER);
+    if (configBuffer != static_cast<DWORD>(-1)) {
+        snapshot.configBufferMs = static_cast<qint64>(configBuffer);
+    }
+    const DWORD updatePeriod = BASS_GetConfig(BASS_CONFIG_UPDATEPERIOD);
+    if (updatePeriod != static_cast<DWORD>(-1)) {
+        snapshot.updatePeriodMs = static_cast<qint64>(updatePeriod);
+    }
+    const DWORD updateThreads = BASS_GetConfig(BASS_CONFIG_UPDATETHREADS);
+    if (updateThreads != static_cast<DWORD>(-1)) {
+        snapshot.updateThreads = static_cast<qint64>(updateThreads);
+    }
+    if (mixerHandle != 0) {
+        // Playback buffer fill level. This is the number that collapses first when the
+        // update thread is starved of CPU — it drops toward zero right before BASS
+        // reports STALLED.
+        const DWORD available = BASS_ChannelGetData(mixerHandle, nullptr, BASS_DATA_AVAILABLE);
+        if (available != static_cast<DWORD>(-1)) {
+            snapshot.bufferedBytes = static_cast<qint64>(available);
+            const double seconds =
+                BASS_ChannelBytes2Seconds(mixerHandle, static_cast<QWORD>(available));
+            if (seconds >= 0.0) {
+                snapshot.bufferedMs = static_cast<qint64>(seconds * 1000.0);
+            }
+        }
+    }
+    return snapshot;
+}
+
+#endif  // MIACODE_HAS_BASS_AUDIO
+
+}  // namespace
+
+void BassPreviewAudioBackend::logAudioHealth(double authoritativeSecond)
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    if (!engineInitialized_) {
+        return;
+    }
+    const audio_health::ChannelActivity mixerActivity =
+        playbackActivityFor(static_cast<DWORD>(masterMixer_));
+    const audio_health::ChannelActivity backgroundActivity =
+        (backgroundTrackSample_ != nullptr && backgroundTrackSample_->valid())
+            ? mixerSourceActivityFor(backgroundTrackSample_->source)
+            : audio_health::ChannelActivity::Unknown;
+    const bool underrun =
+        audio_health::isUnderrun(mixerActivity) || audio_health::isUnderrun(backgroundActivity);
+
+    // Stall edges log immediately: an underrun shorter than the sampling interval is
+    // precisely the event that a periodic-only probe would miss.
+    const audio_health::StallEdge edge = audio_health::updateStall(
+        &playbackSession_.stallTracker, underrun, authoritativeSecond);
+    if (edge != audio_health::StallEdge::None) {
+        appendAudioDebugLog(audio_health::stallEdgePayload(
+            edge,
+            playbackTransactionId_,
+            authoritativeSecond,
+            mixerActivity,
+            backgroundActivity,
+            playbackSession_.stallTracker));
+    }
+
+    if (!audio_health::shouldLogHealth(
+            authoritativeSecond, playbackSession_.lastHealthLogSecond)) {
+        return;
+    }
+    playbackSession_.lastHealthLogSecond = authoritativeSecond;
+
+    const miacode::mmcss::LastRegistrationStatus mmcss = miacode::mmcss::lastRegistrationStatus();
+    appendAudioDebugLog(audio_health::healthPayload(
+        playbackTransactionId_,
+        authoritativeSecond,
+        mixerActivity,
+        backgroundActivity,
+        playbackSession_.stallTracker,
+        bufferSnapshotFor(static_cast<DWORD>(masterMixer_)),
+        // Nothing in MiaCode registers a BASS thread with MMCSS. The only registration in
+        // the default path is the QSG render thread
+        // (preview/quick_scene/PreviewQuickSceneRoot.cpp), so BASS's own update/mixer
+        // threads run at normal priority and are fully exposed to CPU contention.
+        /*mmcssRegisteredOnAudioThreads=*/false,
+        mmcss.everRegistered ? mmcss.lastTaskClass : QString()));
+#else
+    Q_UNUSED(authoritativeSecond);
+#endif
+}
+
 void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, double fallbackSecond)
 {
 #ifdef MIACODE_HAS_BASS_AUDIO
     if (!runtimeAudioDebugEnabled()) {
         return;
     }
+    // Runs before the bass_status interval gate below so stall detection polls at tick
+    // rate while the buffer-health line keeps its own, much coarser cadence.
+    logAudioHealth(authoritativeSecond);
     const double statusLogIntervalSeconds =
         miacode::debug_options::previewWaveformAlignmentDiagnosticsEnabled()
             ? qMax(0.001, static_cast<double>(

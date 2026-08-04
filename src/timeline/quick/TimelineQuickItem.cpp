@@ -92,6 +92,11 @@ void accumulateSceneGraphStats(const QSGNode* node, SceneGraphStats* out)
 // QueryVideoMemoryInfo isolates the GPU portion: if gpu_kb climbs monotonically while our
 // node/geometry/texture counts stay flat, the leak is Qt-internal RHI deferred release. Reads the
 // RHI's ID3D11Device via QSGRendererInterface on the render thread (where it is valid). KB, or -1.
+//
+// The QueryVideoMemoryInfo call itself now lives in miacode::diag (common/ProcessDiagnostics)
+// so the 30 s per-adapter VRAM gauge and this per-pause leak gauge share one implementation.
+// What stays here is the render-thread-only part: getting from the QQuickWindow to an
+// IDXGIAdapter. The returned value is unchanged (LOCAL + NON_LOCAL CurrentUsage, KB).
 qint64 timelineGpuProcessMemoryKb(QQuickWindow* window)
 {
 #ifdef Q_OS_WIN
@@ -117,24 +122,7 @@ qint64 timelineGpuProcessMemoryKb(QQuickWindow* window)
     qint64 usageKb = -1;
     IDXGIAdapter* adapter = nullptr;
     if (SUCCEEDED(dxgiDevice->GetAdapter(&adapter)) && adapter != nullptr) {
-        IDXGIAdapter3* adapter3 = nullptr;
-        if (SUCCEEDED(adapter->QueryInterface(
-                __uuidof(IDXGIAdapter3), reinterpret_cast<void**>(&adapter3)))
-            && adapter3 != nullptr) {
-            quint64 totalBytes = 0;
-            DXGI_QUERY_VIDEO_MEMORY_INFO info;
-            ZeroMemory(&info, sizeof(info));
-            if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info))) {
-                totalBytes += info.CurrentUsage;
-            }
-            ZeroMemory(&info, sizeof(info));
-            if (SUCCEEDED(
-                    adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &info))) {
-                totalBytes += info.CurrentUsage;
-            }
-            usageKb = static_cast<qint64>(totalBytes / 1024ull);
-            adapter3->Release();
-        }
+        usageKb = miacode::diag::adapterProcessVideoMemoryUsageKb(adapter);
         adapter->Release();
     }
     dxgiDevice->Release();

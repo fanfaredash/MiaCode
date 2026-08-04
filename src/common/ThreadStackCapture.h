@@ -1,0 +1,110 @@
+#pragma once
+
+#include <QString>
+#include <QStringList>
+#include <QtGlobal>
+
+// Self-inflicted, in-process stack walk of ONE registered target thread (in practice the
+// GUI thread), taken from a different thread while the target is frozen.
+//
+// Why this exists: the Windows freeze reports come from users who cannot realistically
+// transfer a full `.dmp`. The runtime log has to replace the dump, which means the hang
+// watchdog must answer "where is the GUI thread stuck?" on its own. See
+// docs/ops/WINDOWS_IDLE_FREEZE_REPRO_ZH.md.
+//
+// CORRECTNESS HAZARD 1 — read before editing captureRegisteredThreadStack():
+// while a thread is suspended it may hold the loader lock or a CRT heap lock. Calling
+// ANY allocating or module-loading function from the capturing thread during that window
+// (SymInitialize, SymFromAddr, LoadLibrary, malloc-backed containers, QString building)
+// can deadlock the watchdog against the very thread it is trying to diagnose. The
+// implementation therefore does exactly three things under suspension —
+// GetThreadContext, StackWalk64, and writing raw return addresses into a fixed-size
+// stack array — and symbolizes only AFTER ResumeThread. Keep it that way.
+//
+// CORRECTNESS HAZARD 2 — why the suspension window runs on a worker thread:
+// even that minimal work is not provably non-blocking. StackWalk64 calls
+// SymFunctionTableAccess64 / SymGetModuleBase64, which take the dbghelp lock and can
+// touch the loader. If the SUSPENDED thread holds that lock, StackWalk64 blocks forever,
+// the ResumeThread that follows it is never reached, and the GUI thread stays suspended
+// for the life of the process. The diagnostic would then have converted a possibly
+// recoverable hang into a guaranteed hard freeze — and it would do so precisely when the
+// GUI thread hung inside a loader/symbol path, which is not far-fetched for the bug being
+// chased. A diagnostic must never leave the app worse off than the fault it observes.
+//
+// So the suspend/walk/resume sequence runs on a dedicated short-lived worker thread and
+// the caller waits on it with a bounded timeout (kStackWalkTimeoutMs). On timeout the
+// caller force-resumes the target itself, abandons the stuck worker, and permanently
+// disables further captures for the session (a timeout means dbghelp is unsafe on this
+// machine and the condition will recur). One leaked thread and one leaked handle in an
+// already-failing process is an acceptable price; a permanently suspended GUI thread is
+// not. The two resume paths are mutually exclusive via an atomic claim flag.
+//
+// Symbols: user machines ship without PDBs, so SymFromAddr usually fails. That is fine
+// and still useful: every frame also reports `module` + `offset`, which resolves offline
+// against the matching PDB for that build.
+namespace miacode::diag {
+
+// Maximum number of return addresses collected per capture. Bounded so the suspension
+// window stays short and a runaway/corrupt stack cannot spin StackWalk64 forever.
+inline constexpr int kMaxCapturedStackFrames = 64;
+
+// How long the caller waits for the worker before force-resuming the target. Generous
+// relative to a healthy capture (sub-millisecond) so a merely slow machine is not
+// mistaken for a deadlock, but short enough that the GUI thread is never held for long.
+inline constexpr int kStackWalkTimeoutMs = 2000;
+
+struct StackCaptureResult {
+    bool supported = false;      // false on non-Windows builds
+    bool captured = false;       // true when at least one frame was walked
+    bool timedOut = false;       // worker exceeded kStackWalkTimeoutMs; target force-resumed
+    int frameCount = 0;
+    qint64 suspendedUs = 0;      // how long the target thread was actually suspended
+    quint32 lastErrorCode = 0;   // GetLastError() from the failing Win32 call, else 0
+    QString skipReason;          // populated whenever captured == false
+    QStringList frames;          // one formatted line per frame (see formatStackFrameLine)
+};
+
+// Register the CALLING thread as the capture target. Duplicates a real thread handle
+// (GetCurrentThread() is a pseudo-handle that always means "the calling thread", so it
+// cannot be handed to another thread). Call once, from the thread to be diagnosed.
+// Returns false on non-Windows or when DuplicateHandle fails.
+bool registerStackWalkTargetThread(QString* outReason = nullptr);
+
+// Release the duplicated handle. Safe to call when nothing was registered.
+void releaseStackWalkTargetThread();
+
+// True when a target thread handle is currently held.
+bool hasStackWalkTargetThread();
+
+// Initialise dbghelp's symbol handler up front. Idempotent; a no-op off Windows.
+//
+// Call this ONCE from the capturing (watchdog) thread at startup, while nothing is hung.
+// SymInitialize enumerates loaded modules and takes the loader lock: if it were first
+// called during a hang while the GUI thread held that lock, the watchdog would block
+// before it ever reached SuspendThread and the hang would go unreported. Doing it early
+// moves that acquisition to a known-quiet moment. captureRegisteredThreadStack still
+// calls it lazily as a fallback, always before opening the suspension window.
+void prepareStackWalkSymbols();
+
+// Suspend the registered thread, walk it, resume it, then symbolize. MUST NOT be called
+// from the target thread itself (self-suspension would deadlock) — that case is detected
+// and reported as skipReason=same_thread instead.
+//
+// The target is ALWAYS resumed: either by the worker on its normal path, or by this
+// function after kStackWalkTimeoutMs. A timed-out call returns timedOut=true and
+// skipReason="timeout"; callers must then stop capturing for the rest of the session (see
+// hang_watchdog::policy::stackCaptureSessionEnabledAfter).
+StackCaptureResult captureRegisteredThreadStack(int maxFrames = kMaxCapturedStackFrames);
+
+// Render one frame as a stable, greppable `key=value` payload. Platform-independent and
+// pure so the format is covered by a spec on every platform.
+// `moduleName` / `symbolName` may be empty; they degrade to `(unknown)` / `(nosym)`.
+QString formatStackFrameLine(
+    int index,
+    quint64 address,
+    const QString& moduleName,
+    quint64 moduleOffset,
+    const QString& symbolName,
+    quint64 symbolOffset);
+
+}  // namespace miacode::diag

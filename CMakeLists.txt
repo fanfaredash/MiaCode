@@ -125,6 +125,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/process_identity.cpp
     src/app/WindowsIdleEventDiagnostics.h
     src/app/WindowsIdleEventDiagnostics.cpp
+    src/app/WindowVisibilityDiagnostics.h
+    src/app/WindowVisibilityDiagnostics.cpp
     src/app/gpu_adapter_probe.cpp
     src/app/gpu_device_provider.cpp
     src/app/gpu_high_performance_hint.cpp
@@ -233,6 +235,9 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/DebugLog.cpp
     src/common/UiHangWatchdog.h
     src/common/UiHangWatchdog.cpp
+    src/common/UiHangWatchdogPolicy.h
+    src/common/ThreadStackCapture.h
+    src/common/ThreadStackCapture.cpp
     src/common/ProcessDiagnostics.h
     src/common/ProcessDiagnostics.cpp
     src/common/GpuDevicePolicy.h
@@ -804,6 +809,7 @@ if (WIN32)
         d3dcompiler  # Phase 3 sprite pipeline runtime HLSL compile (D3DCompile)
         User32       # RegisterPowerSettingNotification
         Wtsapi32     # Session lock/unlock notifications for idle-freeze diagnostics
+        dbghelp      # StackWalk64 + Sym* for the hang watchdog's GUI-thread self stack walk
     )
     add_custom_command(TARGET MiaCode POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -1532,6 +1538,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/common src/preview src/audio
     )
 
+    miacode_add_dev_tool(preview_audio_health_spec TEST
+        SOURCES
+            src/tools/preview/PreviewAudioHealthSpec.cpp
+            src/audio/PreviewAudioHealth.h
+        LIBS Qt6::Core
+        INCLUDES src src/common src/preview src/audio
+    )
+
     # Simulation spec for the preview audio/stage-media cache mechanism: the
     # content-stamp skip decision (size:mtime, NOT path-only) and the live,
     # uncached track/bg resolvers. Drives the real production functions against
@@ -1712,6 +1726,23 @@ if (MIACODE_BUILD_DEV_TOOLS)
         LIBS Qt6::Core Qt6::Gui
         INCLUDES src
     )
+    if (WIN32)
+        # Per-adapter VRAM gauge: CreateDXGIFactory1 + IDXGIAdapter3::QueryVideoMemoryInfo.
+        target_link_libraries(process_diagnostics_spec PRIVATE dxgi)
+    endif()
+
+    miacode_add_dev_tool(thread_stack_capture_spec TEST
+        SOURCES
+            src/tools/debug_index/ThreadStackCaptureSpec.cpp
+            src/common/ThreadStackCapture.h
+            src/common/ThreadStackCapture.cpp
+        LIBS Qt6::Core
+        INCLUDES src
+    )
+    if (WIN32)
+        # StackWalk64 / SymFromAddr for the GUI-thread self stack walk.
+        target_link_libraries(thread_stack_capture_spec PRIVATE dbghelp)
+    endif()
 
     miacode_add_dev_tool(windows_idle_event_diagnostics_spec TEST
         SOURCES
@@ -1725,6 +1756,16 @@ if (MIACODE_BUILD_DEV_TOOLS)
     if (WIN32)
         target_link_libraries(windows_idle_event_diagnostics_spec PRIVATE User32 Wtsapi32)
     endif()
+
+    miacode_add_dev_tool(window_visibility_diagnostics_spec TEST
+        SOURCES
+            src/tools/debug_index/WindowVisibilityDiagnosticsSpec.cpp
+            src/app/WindowVisibilityDiagnostics.h
+            src/app/WindowVisibilityDiagnostics.cpp
+            ${_miacode_log_core}
+        LIBS Qt6::Core Qt6::Gui
+        INCLUDES src
+    )
 
     miacode_add_dev_tool(idle_freeze_repro_script_spec TEST
         SOURCES

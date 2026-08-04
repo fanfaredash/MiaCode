@@ -90,6 +90,59 @@ int main(int argc, char* argv[])
     ok &= require(log.contains(QStringLiteral("action=sample sample=1")),
                   QStringLiteral("timer emits next sample"), err);
 
+    // Per-adapter VRAM gauge. The DXGI enumeration itself is Windows-only, but the gauge
+    // must always emit an adapter_scan line so a log reader can distinguish "the probe ran
+    // and DXGI reported nothing" from "the diagnostics build was never installed".
+    ok &= require(log.contains(QStringLiteral("[runtime/idle/vram_gauge]"))
+                      && log.contains(QStringLiteral("action=adapter_scan sample=0")),
+                  QStringLiteral("gauge emits a per-adapter VRAM scan line"), err);
+#ifndef Q_OS_WIN
+    ok &= require(miacode::diag::sampleAdapterVideoMemory().isEmpty(),
+                  QStringLiteral("non-windows adapter sampling is empty"), err);
+    ok &= require(miacode::diag::adapterProcessVideoMemoryUsageKb(nullptr) == -1,
+                  QStringLiteral("non-windows adapter usage reports unavailable"), err);
+#endif
+
+    // Payload format: pinned here because an operator greps these keys and the offline
+    // analysis reads them positionally-by-name. over_budget is the eviction alarm and is
+    // derived, so it gets explicit coverage in both directions.
+    miacode::diag::AdapterVideoMemorySample sample;
+    sample.index = 1;
+    sample.description = QStringLiteral("NVIDIA GeForce MX450");
+    sample.luid = QStringLiteral("0x0000000000012345");
+    sample.vendorId = 0x10de;
+    sample.deviceId = 0x1f97;
+    sample.queried = true;
+    sample.dedicatedVideoMemoryMb = 2048;
+    sample.localBudgetMb = 1800;
+    sample.localUsageMb = 1900;
+    sample.nonLocalBudgetMb = 4096;
+    sample.nonLocalUsageMb = 128;
+    const QString payload = miacode::diag::formatAdapterVideoMemoryPayload(sample);
+    ok &= require(payload.contains(QStringLiteral("adapter=1"))
+                      && payload.contains(QStringLiteral("desc=\"NVIDIA GeForce MX450\""))
+                      && payload.contains(QStringLiteral("luid=0x0000000000012345"))
+                      && payload.contains(QStringLiteral("vendor=0x10de")),
+                  QStringLiteral("adapter payload identifies the adapter"), err);
+    ok &= require(payload.contains(QStringLiteral("local_budget_mb=1800"))
+                      && payload.contains(QStringLiteral("local_usage_mb=1900"))
+                      && payload.contains(QStringLiteral("nonlocal_budget_mb=4096"))
+                      && payload.contains(QStringLiteral("nonlocal_usage_mb=128")),
+                  QStringLiteral("adapter payload reports budget vs usage per segment"), err);
+    ok &= require(payload.contains(QStringLiteral("local_over_budget=1"))
+                      && payload.contains(QStringLiteral("nonlocal_over_budget=0")),
+                  QStringLiteral("over-budget flag is derived per segment"), err);
+    ok &= require(payload.contains(QStringLiteral("dedicated_mb=2048"))
+                      && payload.contains(QStringLiteral("queried=1")),
+                  QStringLiteral("adapter payload reports capacity and query success"), err);
+
+    miacode::diag::AdapterVideoMemorySample unknown;
+    const QString unknownPayload = miacode::diag::formatAdapterVideoMemoryPayload(unknown);
+    ok &= require(unknownPayload.contains(QStringLiteral("desc=\"(unknown)\""))
+                      && unknownPayload.contains(QStringLiteral("queried=0"))
+                      && unknownPayload.contains(QStringLiteral("local_over_budget=0")),
+                  QStringLiteral("unqueried adapter degrades without false alarms"), err);
+
     miacode::debug_options::setDebugModeEnabled(false);
     qunsetenv("MIACODE_LOG_DIR");
 

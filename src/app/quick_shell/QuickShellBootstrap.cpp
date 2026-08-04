@@ -1,6 +1,7 @@
 #include "QuickShellBootstrap.h"
 
 #include "app/WindowsIdleEventDiagnostics.h"
+#include "app/WindowVisibilityDiagnostics.h"
 
 #include "QuickShellNativeSurfaceHost.h"
 #include "QuickShellController.h"
@@ -379,6 +380,12 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
         }
 #endif
         window->installEventFilter(this);
+
+        // Occlusion / minimize awareness for the DEFAULT QSG path. The reported freeze
+        // happens with the app minimized or covered by a video-playing browser, and that
+        // condition is otherwise entirely absent from the logs.
+        miacode::app::window_diag::installWindowVisibilityDiagnostics(
+            window, QStringLiteral("root_window"));
 
         // P4 — bind the root window to the resolved high-performance DXGI
         // adapter BEFORE its scene graph initializes (still pre-event-loop
