@@ -181,6 +181,12 @@ void VideoExportDialog::loadPersistedSettings()
                 .toBool(clockCountCheck_->isChecked()));
     }
 
+    if (fixHudTextLayoutCheck_ != nullptr) {
+        const QSignalBlocker blocker(fixHudTextLayoutCheck_);
+        fixHudTextLayoutCheck_->setChecked(
+            settings.value(QStringLiteral("fix_hud_text_layout")).toBool(false));
+    }
+
     // App-level "add intro" preference (persists across sessions).
     if (addIntroCheck_ != nullptr) {
         const QSignalBlocker blocker(addIntroCheck_);
@@ -253,6 +259,7 @@ void VideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
         QStringLiteral("size_preset"),
         miacode::video_export::videoExportSizePresetToken(task.sizePreset));
     settings.insert(QStringLiteral("clock_count_enabled"), task.clockCountEnabled);
+    settings.insert(QStringLiteral("fix_hud_text_layout"), task.fixHudTextLayout);
     appendIntroPersistedSettings(&settings);
     miacode::video_export::saveDialogPreferences(settings);
 }
@@ -270,6 +277,8 @@ void VideoExportDialog::persistExportOnlySettings() const
         miacode::video_export::videoExportSizePresetToken(selectedSizePreset_));
     settings.insert(QStringLiteral("clock_count_enabled"),
                     clockCountCheck_ != nullptr && clockCountCheck_->isChecked());
+    settings.insert(QStringLiteral("fix_hud_text_layout"),
+                    fixHudTextLayoutCheck_ != nullptr && fixHudTextLayoutCheck_->isChecked());
     appendIntroPersistedSettings(&settings);
     miacode::video_export::saveDialogPreferences(settings);
 }

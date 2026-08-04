@@ -47,6 +47,7 @@ public:
     using PreviewTimestampCallback = std::function<void(bool showTimestamp)>;
     using PreviewObjectStatsCallback = std::function<void(bool showObjectStatsHud)>;
     using PreviewChartInfoCallback = std::function<void(bool showChartInfoHud)>;
+    using PreviewHudTextLayoutCallback = std::function<void(bool enabled)>;
     using PreviewAspectRatioCallback = std::function<void(double ratio)>;
     using PreviewBrightnessCallback = std::function<void(double outer, double inner)>;
     using PreviewLayoutScaleCallback = std::function<void(double scale)>;
@@ -67,6 +68,7 @@ public:
         PreviewTimestampCallback previewTimestampCallback = {},
         PreviewObjectStatsCallback previewObjectStatsCallback = {},
         PreviewChartInfoCallback previewChartInfoCallback = {},
+        PreviewHudTextLayoutCallback previewHudTextLayoutCallback = {},
         PreviewAspectRatioCallback previewAspectRatioCallback = {},
         PreviewBrightnessCallback previewBrightnessCallback = {},
         PreviewLayoutScaleCallback previewLayoutScaleCallback = {},
@@ -162,6 +164,7 @@ private:
     void syncLivePreviewTimestampVisibility();
     void syncLivePreviewObjectStatsVisibility();
     void syncLivePreviewChartInfoVisibility();
+    void syncLivePreviewHudTextLayout();
     void restoreLivePreviewState();
     void refreshSharedSettingsFromCallback();
     void refreshSharedSettingsFromTask(const VideoExportTask& task);
@@ -240,6 +243,7 @@ private:
     PreviewTimestampCallback previewTimestampCallback_;
     PreviewObjectStatsCallback previewObjectStatsCallback_;
     PreviewChartInfoCallback previewChartInfoCallback_;
+    PreviewHudTextLayoutCallback previewHudTextLayoutCallback_;
     PreviewAspectRatioCallback previewAspectRatioCallback_;
     PreviewBrightnessCallback previewBrightnessCallback_;
     PreviewLayoutScaleCallback previewLayoutScaleCallback_;
@@ -289,6 +293,7 @@ private:
     QCheckBox* showTimestampCheck_ = nullptr;
     QCheckBox* showObjectStatsCheck_ = nullptr;
     QCheckBox* showChartInfoCheck_ = nullptr;
+    QCheckBox* fixHudTextLayoutCheck_ = nullptr;
     QCheckBox* clockCountCheck_ = nullptr;
     QCheckBox* addIntroCheck_ = nullptr;
     // ---- "片头" tab controls ----
