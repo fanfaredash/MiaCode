@@ -1513,6 +1513,20 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         resetNodeTreeBeforeTextureInvalidation = true;
     }
 
+    // Capacity flush. The cache had no other bound: window / skin / DPR only fire on
+    // configuration changes, and the theme invalidation deliberately spares the
+    // `note|` and `hold_` prefixes — which are exactly the keys that grow, because
+    // slide-arrow rotation is derived from on-screen geometry and quantised to 0.1
+    // degrees, so every chart contributes a fresh batch that never retires. Measured
+    // at ~30 new rotation keys per chart switch with no plateau after ten switches.
+    // Routed through the same reset flag as every other invalidation so it inherits
+    // the ordering contract below: node tree first, textures second.
+    const bool textureCapacityFlushRequired =
+        textures_ != nullptr && textures_->capacityFlushRequired();
+    if (textureCapacityFlushRequired) {
+        resetNodeTreeBeforeTextureInvalidation = true;
+    }
+
     miacode::timeline::TimelineSceneState state = currentSceneState();
     const quint64 themeSignature = timelineThemeSignatureHash(state);
     if (cachedThemeSignatureValid_ && cachedThemeSignature_ != themeSignature) {
@@ -1532,7 +1546,16 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
 
     textures_->setWindow(window());
     textures_->setSkinDirectory(targetSkinDirectory);
-    if (pendingDprInvalidation_) {
+    // The capacity flush is a superset of both partial invalidations, so it wins and
+    // consumes their pending flags. Checked first (rather than as a third `else if`)
+    // because a theme invalidation landing in the same frame would otherwise remove
+    // only the text keys, leave the cache still over its cap, and defer the real flush
+    // by a frame.
+    if (textureCapacityFlushRequired) {
+        textures_->invalidateAll();
+        pendingDprInvalidation_ = false;
+        pendingThemeInvalidation_ = false;
+    } else if (pendingDprInvalidation_) {
         textures_->invalidateDprDependent();
         pendingDprInvalidation_ = false;
         pendingThemeInvalidation_ = false;

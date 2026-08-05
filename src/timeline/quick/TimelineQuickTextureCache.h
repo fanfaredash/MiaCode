@@ -47,6 +47,15 @@ public:
     void invalidateThemeDependent();
     void invalidateDprDependent();
     bool requiresReset(QQuickWindow* window, const QString& skinDirectory) const;
+    // True once the cache has grown past its capacity policy and must be flushed
+    // whole. Before this existed, the only invalidations that ever fired at runtime
+    // were window / skin / DPR / theme — and the theme one deliberately spares the
+    // `note|` and `hold_` prefixes, i.e. it spared exactly the axis that grows, so
+    // note + rotation keys accumulated for the life of the process across every chart
+    // switch (measured: ~30 new rotation keys per switch, no plateau after 10).
+    // Callers MUST tear the node tree down before acting on this — live materials
+    // hold raw QSGTexture pointers. See TimelineQuickItem::updatePaintNode.
+    bool capacityFlushRequired() const;
     void setSkinDirectory(const QString& skinDirectory);
     QSGTexture* textureForKey(const QString& key, const QImage& image);
     QSGTexture* textureForPixmapKey(const QString& key, const QPixmap& pixmap);
@@ -97,6 +106,10 @@ private:
     miacode::timeline::TimelineNoteAssetSet noteAssets_;
     QString skinDirectory_;
     QHash<QString, QSGTexture*> textures_;
+    // Per-key upload size, so selective removal (removeTextureKeysMatching, used by the
+    // theme invalidation) can decrement the running total instead of letting it drift.
+    QHash<QString, qint64> textureBytesByKey_;
+    qint64 textureBytes_ = 0;
     QHash<QString, QPixmap> transformedPixmaps_;
     QHash<QString, HoldPixmapPartsCacheEntry> holdPixmapParts_;
     // beta7 leak gauge — cumulative count of QSGTextures actually created (createTextureFromImage).

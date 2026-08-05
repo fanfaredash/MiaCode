@@ -19,13 +19,23 @@
 
 真正未释放的是**时间轴（timeline）那一侧的纹理缓存**，它是全仓库唯一**完全没有上限、也完全没有切谱失效钩子**的资源池，而且它的宿主对象在整个进程生命周期内常驻。
 
-| # | 结论 | 严重度 | 归属 |
-|---|---|---|---|
-| **F-1** | `TimelineQuickTextureCache` 三个缓存无上限、无切谱失效 → 跨谱面单调累积 | **高** | `src/timeline/quick/` |
-| **F-2** | `PreviewQuickSceneRoot::invalidateTextureCache()` 是死代码（零调用方）→ 预览纹理缓存只能靠撞 96 MB 上限自清 | 中 | `src/preview/quick_scene/` |
-| **F-3** | `ignoredHeaderIssueTypesByFile_` 按文件路径累积，永不清理 | 低 | `src/app/mainwindow/` |
-| **F-4** | `clearTimelineAndPreview()` 清了 `muriAnalysisReport_` 但没清 `muriStaticReferences_` | 低（正确性，非泄漏） | `src/app/mainwindow/` |
-| — | 音频 / 视频 / 异步 / 定时器 / 撤销栈 / 波形 / 校验缓存 | **未发现问题** | 见 §5 |
+| # | 结论 | 严重度 | 状态 | 归属 |
+|---|---|---|---|---|
+| **F-1** | `TimelineQuickTextureCache` 三个缓存无上限、无切谱失效 → 跨谱面单调累积 | **高** | **已实测证实 → 已修**（`beta.7-test.4`，见 §2.7） | `src/timeline/quick/` |
+| **F-2** | `PreviewQuickSceneRoot::invalidateTextureCache()` 是死代码（零调用方）→ 预览纹理缓存只能靠撞 96 MB 上限自清 | 中 | 实测下**未构成问题**（全程 0 次冲刷，占用平台化于 ~92 条 / 32 MB）；相关的读数可信度缺陷已修，见 §7.4 | `src/preview/quick_scene/` |
+| **F-3** | `ignoredHeaderIssueTypesByFile_` 按文件路径累积，永不清理 | 低 | 未处理 | `src/app/mainwindow/` |
+| **F-4** | `clearTimelineAndPreview()` 清了 `muriAnalysisReport_` 但没清 `muriStaticReferences_` | 低（正确性，非泄漏） | 未处理 | `src/app/mainwindow/` |
+| — | 音频 / 视频 / 异步 / 定时器 / 撤销栈 / 波形 / 校验缓存 | **未发现问题** | — | 见 §5 |
+
+> **实测补充（`1.1.0-beta.7-test.3-win64`，10 次切谱 / 26 个采样点）**：`tex_rot` 0→293、
+> `tex_pix` 2→315，**全程一次都没有下降**，约 +30 键/次切谱且第 10 次仍无饱和。
+> 同时 `qobject_descendants` 恒为 156、`nodes` 恒为 91 ⇒ 无 QObject / QSG 节点累积；
+> 而 `priv_mb`、`gpu_kb` 剧烈震荡且非单调 ⇒ 只看内存曲线读不出这个 bug（见 §6）。
+>
+> 实测还纠正了一处静态审查的判断：`tex` 偶有小幅回落而同刻 `pix`/`rot` 纹丝不动，
+> 说明全程唯一真正触发过的淘汰是 `invalidateThemeDependent()` —— 而它按设计豁免
+> `note|` / `hold_` 前缀。**唯一会跑的淘汰，恰好放过了唯一在增长的那条轴**，
+> 这比 §2.2 原本写的「切谱时没有淘汰」是更强的结论。
 
 ---
 
