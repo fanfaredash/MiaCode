@@ -903,6 +903,11 @@ void ExtensionManager::publishEvent(const QString& name, const QJsonObject& payl
     }
 }
 
+bool ExtensionManager::hasEventSubscribers(const QString& name) const
+{
+    return runtime_ != nullptr && runtime_->isRunning() && runtime_->hasEventSubscriber(name);
+}
+
 void ExtensionManager::refreshExtensions()
 {
     discoverExtensions();

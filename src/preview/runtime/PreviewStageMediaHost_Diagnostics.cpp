@@ -457,7 +457,15 @@ void PreviewStageMediaHost::handleDecodedVideoFrame(const QVideoFrame& frame,
     if (videoSink_ != nullptr) {
         videoSink_->setVideoFrame(frame);
     }
-    if (innerVideoSink_ != nullptr && innerVideoSink_ != videoSink_) {
+    // The inner-circle sink only has a consumer in InnerCircleFitOuterFill; in
+    // every other scale mode its VideoOutput is invisible. Pushing there anyway
+    // made each decoded frame a second consumer that pins a decode-pool surface
+    // for as long as the sink holds it — on the D3D11VA two-device bridge that
+    // is exactly the resource the decoder needs back.
+    // refreshInnerVideoSinkForScaleMode() re-primes it with lastVideoFrame_ when
+    // the mode turns on, so switching into mode 3 mid-playback still shows the
+    // current frame immediately.
+    if (innerVideoSinkActive() && innerVideoSink_ != videoSink_) {
         innerVideoSink_->setVideoFrame(frame);
     }
 

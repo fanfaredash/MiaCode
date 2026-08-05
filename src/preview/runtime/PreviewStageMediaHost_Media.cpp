@@ -137,7 +137,32 @@ void PreviewStageMediaHost::setBackgroundScaleMode(PreviewBackgroundScaleMode mo
         return;
     }
     backgroundScaleMode_ = mode;
+    refreshInnerVideoSinkForScaleMode();
     emit backgroundScaleModeChanged();
+}
+
+bool PreviewStageMediaHost::innerVideoSinkActive() const
+{
+    return innerVideoSink_ != nullptr
+        && backgroundScaleMode_ == PreviewBackgroundScaleMode::InnerCircleFitOuterFill;
+}
+
+void PreviewStageMediaHost::refreshInnerVideoSinkForScaleMode()
+{
+    if (innerVideoSink_ == nullptr || innerVideoSink_ == videoSink_) {
+        return;
+    }
+    if (innerVideoSinkActive()) {
+#ifdef MIACODE_USE_QTAVPLAYER
+        if (lastVideoFrame_.isValid()) {
+            innerVideoSink_->setVideoFrame(lastVideoFrame_);
+        }
+#endif
+        return;
+    }
+    // Leaving the mode: drop the retained frame so the inner sink stops pinning
+    // a decode-pool surface (same reason releaseVideoBackend() clears it).
+    innerVideoSink_->setVideoFrame(QVideoFrame());
 }
 
 double PreviewStageMediaHost::layoutSquareScale() const
@@ -576,7 +601,7 @@ void PreviewStageMediaHost::bindVideoOutput()
         if (videoSink_ != nullptr) {
             videoSink_->setVideoFrame(lastVideoFrame_);
         }
-        if (innerVideoSink_ != nullptr && innerVideoSink_ != videoSink_) {
+        if (innerVideoSinkActive() && innerVideoSink_ != videoSink_) {
             innerVideoSink_->setVideoFrame(lastVideoFrame_);
         }
     }

@@ -171,6 +171,15 @@ private:
                                      qint64 ageMs);
     void updateClockDelta();
     void noteVideoFrameArrived(const QVideoFrame& frame, quint64 sourceGeneration);
+    // The inner-circle VideoOutput is only rendered in InnerCircleFitOuterFill
+    // (background scale mode 3); in every other mode it is bound but invisible,
+    // so feeding it decoded frames buys nothing and retains a decode-pool
+    // surface. True only when a distinct inner sink exists AND that mode is on.
+    bool innerVideoSinkActive() const;
+    // Push the retained frame into the inner sink so a mid-playback switch into
+    // InnerCircleFitOuterFill shows the current frame without waiting for the
+    // next decode; clear it when leaving the mode so nothing stays pinned.
+    void refreshInnerVideoSinkForScaleMode();
 #ifdef MIACODE_USE_QTAVPLAYER
     // QtAVPlayer frame path: a decoded QAVVideoFrame (already converted to a
     // QVideoFrame and tagged with its presentation pts in seconds) is pushed
