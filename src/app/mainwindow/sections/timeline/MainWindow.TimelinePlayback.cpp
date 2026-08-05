@@ -452,6 +452,30 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     const bool hasVideoMedia = owner_.previewStageMediaRouteHasVideo();
     const quint64 playbackTxn = ++state_.previewPlaybackTransactionCounter_;
     state_.activePreviewPlaybackTransactionId_ = playbackTxn;
+    // Stamp the transaction tag on both backends HERE, above the retained/cold branch,
+    // so both start paths carry it by construction.
+    //
+    // These two setters are log tags only — every use of playbackTransactionId_ inside
+    // BassPreviewAudioBackend and PreviewStageMediaHost is string formatting. The
+    // functional staleness guard is a different member,
+    // PreviewStageMediaHost::preparedPlaybackTransaction_, set by preparePlaybackStart()
+    // further down; that stays on the cold path because it protects the async
+    // prepare/commit handshake, which the retained path does not have.
+    //
+    // They used to live in the cold path only. The retained fast-resume path returns
+    // before reaching them, and in practice nearly every real playback takes it (a
+    // paused scrub re-anchors the retained state, so the resume is always the retained
+    // branch), which left the audio backend stamping txn=0 on every bass_status line
+    // for the whole session. That silently removed the only handle for correlating
+    // audio-channel lines with the runtime channel's preview/resource_gauge — the
+    // correlation docs/audit/AUDIO_CLOCK_DESYNC_AUDIT_ZH.md phase A asks an
+    // investigator to use.
+    if (state_.previewSfxRuntime_ != nullptr) {
+        state_.previewSfxRuntime_->setPlaybackTransactionId(playbackTxn);
+    }
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->setPlaybackTransactionId(playbackTxn);
+    }
     const auto applyPlaybackClockState = [this](double initialSecond) {
         state_.qtPreviewStartSecond_ = initialSecond;
         state_.qtPreviewPauseSecond_ = initialSecond;
@@ -540,7 +564,6 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
 
     double effectiveStartSecond = startSecond;
     if (state_.previewSfxRuntime_ != nullptr) {
-        state_.previewSfxRuntime_->setPlaybackTransactionId(playbackTxn);
         effectiveStartSecond = state_.previewSfxRuntime_->preparePreviewPlaybackTransaction(
             startSecond,
             resumeFromPause,
@@ -573,7 +596,7 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     }
     if (hasVideoMedia) {
         if (state_.previewStageMediaHost_ != nullptr) {
-            state_.previewStageMediaHost_->setPlaybackTransactionId(playbackTxn);
+            // Tag already stamped above the branch; this is the functional guard.
             state_.previewStageMediaHost_->preparePlaybackStart(effectiveStartSecond, playbackTxn);
         }
         appendPreviewPlaybackLog(
