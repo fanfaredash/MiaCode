@@ -155,13 +155,52 @@ QFontMetrics hudFontMetrics(const QFont& font, const QPainter& painter)
     return QFontMetrics(font, painter.device());
 }
 
+struct HudGlyphVerticalBounds {
+    qreal top = 0.0;
+    qreal bottom = 0.0;
+    bool valid = false;
+};
+
+HudGlyphVerticalBounds hudGlyphVerticalBounds(const QFontMetrics& metrics, const QStringList& lines)
+{
+    HudGlyphVerticalBounds bounds;
+    for (const QString& line : lines) {
+        if (line.isEmpty()) {
+            continue;
+        }
+        const QRect glyphRect = metrics.boundingRect(line);
+        if (!bounds.valid) {
+            bounds.top = glyphRect.top();
+            bounds.bottom = glyphRect.bottom();
+            bounds.valid = true;
+        } else {
+            bounds.top = qMin(bounds.top, static_cast<qreal>(glyphRect.top()));
+            bounds.bottom = qMax(bounds.bottom, static_cast<qreal>(glyphRect.bottom()));
+        }
+    }
+    return bounds;
+}
+
 qreal hudLineAdvance(const QFontMetrics& metrics, const QStringList& lines)
 {
-    qreal glyphHeight = 0.0;
-    for (const QString& line : lines) {
-        glyphHeight = qMax(glyphHeight, static_cast<qreal>(metrics.boundingRect(line).height()));
-    }
-    return qMax(static_cast<qreal>(metrics.lineSpacing()), glyphHeight);
+    const HudGlyphVerticalBounds bounds = hudGlyphVerticalBounds(metrics, lines);
+    const qreal glyphSpan = bounds.valid ? bounds.bottom - bounds.top + 1.0 : 0.0;
+    return qMax(static_cast<qreal>(metrics.lineSpacing()), glyphSpan);
+}
+
+qreal hudBaselineAdvance(
+    const QFontMetrics& previousMetrics,
+    const QStringList& previousLines,
+    const QFontMetrics& nextMetrics,
+    const QStringList& nextLines)
+{
+    const HudGlyphVerticalBounds previousBounds = hudGlyphVerticalBounds(previousMetrics, previousLines);
+    const HudGlyphVerticalBounds nextBounds = hudGlyphVerticalBounds(nextMetrics, nextLines);
+    const qreal typographicAdvance = previousMetrics.descent() + nextMetrics.ascent();
+    const qreal glyphSafeAdvance = previousBounds.valid && nextBounds.valid
+        ? previousBounds.bottom - nextBounds.top + 1.0
+        : 0.0;
+    return qMax(typographicAdvance, glyphSafeAdvance);
 }
 
 void drawOutlinedHudText(
@@ -541,7 +580,7 @@ void paintPreviewHudOverlay(
     appendHudPaintDiagLine(
         QStringLiteral("overlay_enter"),
         QStringLiteral(
-            "state=%1 canvas=%2x%3 layer_flags=0x%4 show_timestamp=%5 show_debug=%6 show_object_stats=%7 show_chart_info=%8 center_mode=%9 chart_title_len=%10 chart_artist_len=%11 chart_diff_len=%12 chart_designer_len=%13 progress_stats=%14 %15")
+            "state=%1 canvas=%2x%3 layer_flags=0x%4 show_timestamp=%5 show_debug=%6 show_object_stats=%7 show_chart_info=%8 fix_hud_text_layout=%9 center_mode=%10 chart_title_len=%11 chart_artist_len=%12 chart_diff_len=%13 chart_designer_len=%14 progress_stats=%15 %16")
             .arg(pointerHex(state))
             .arg(canvasSize.width())
             .arg(canvasSize.height())
@@ -550,6 +589,7 @@ void paintPreviewHudOverlay(
             .arg(state->render.showDebugInfo ? 1 : 0)
             .arg(state->render.showObjectStatsHud ? 1 : 0)
             .arg(state->render.showChartInfoHud ? 1 : 0)
+            .arg(state->render.fixHudTextLayout ? 1 : 0)
             .arg(static_cast<int>(state->render.centerDisplayMode))
             .arg(state->chartTitle.size())
             .arg(state->chartArtist.size())
@@ -818,6 +858,17 @@ void paintPreviewHudOverlay(
             const QFontMetrics chartInfoMetrics = fixHudTextLayout
                 ? hudFontMetrics(chartInfoFont, painter)
                 : QFontMetrics(chartInfoFont);
+            if (fixHudTextLayout) {
+                appendHudPaintDiagLine(
+                    QStringLiteral("chart_info_metrics"),
+                    QStringLiteral("family=\"%1\" point=%2 ascent=%3 descent=%4 leading=%5 line_spacing=%6")
+                        .arg(chartInfoFont.family())
+                        .arg(chartInfoFont.pointSize())
+                        .arg(chartInfoMetrics.ascent())
+                        .arg(chartInfoMetrics.descent())
+                        .arg(chartInfoMetrics.leading())
+                        .arg(chartInfoMetrics.lineSpacing()));
+            }
             const qreal nominalLineHeight = qMax<qreal>(1.0, chartInfoMetrics.lineSpacing());
             const int maxLines = qMax(0, static_cast<int>(chartInfoMaxHeight / nominalLineHeight));
             if (maxLines > 0) {
@@ -867,7 +918,23 @@ void paintPreviewHudOverlay(
                 }
                 if (!physicalLines.isEmpty()) {
                     const qreal chartInfoShadow = qMax<qreal>(1.0, 2.0 * hudScale);
-                    qreal chartInfoBaseline = stageRect.top() + hudPadding + chartInfoMetrics.ascent();
+                    const HudGlyphVerticalBounds chartInfoBounds =
+                        hudGlyphVerticalBounds(chartInfoMetrics, physicalLines);
+                    qreal chartInfoBaseline = stageRect.top() + hudPadding
+                        + (fixHudTextLayout && chartInfoBounds.valid
+                            ? -chartInfoBounds.top
+                            : chartInfoMetrics.ascent());
+                    if (fixHudTextLayout) {
+                        appendHudPaintDiagLine(
+                            QStringLiteral("chart_info_layout"),
+                            QStringLiteral("glyph_bounds=%1,%2 line_advance=%3 first_baseline=%4 visible_top=%5 padding_top=%6")
+                                .arg(chartInfoBounds.top)
+                                .arg(chartInfoBounds.bottom)
+                                .arg(lineHeight)
+                                .arg(chartInfoBaseline)
+                                .arg(chartInfoBaseline + chartInfoBounds.top)
+                                .arg(stageRect.top() + hudPadding));
+                    }
                     for (int i = 0; i < physicalLines.size(); ++i) {
                         const QString& line = physicalLines.at(i);
                         drawHudText(
@@ -927,9 +994,11 @@ void paintPreviewHudOverlay(
     qreal headerGap = 0.0;
     qreal sectionGap = 0.0;
     qreal statGap = 0.0;
-    qreal titleLineHeight = 0.0;
-    qreal rateLineHeight = 0.0;
     qreal statLineHeight = 0.0;
+    qreal titleToRateAdvance = 0.0;
+    qreal rateToTitleAdvance = 0.0;
+    qreal rateToStatsAdvance = 0.0;
+    QString finaleLine;
     QString rateLine;
     std::array<QString, 7> statLines;
     const bool fixHudTextLayout = state->render.fixHudTextLayout;
@@ -951,7 +1020,7 @@ void paintPreviewHudOverlay(
         rateMetrics = fixHudTextLayout ? hudFontMetrics(rateFont, painter) : QFontMetrics(rateFont);
         statMetrics = fixHudTextLayout ? hudFontMetrics(statFont, painter) : QFontMetrics(statFont);
 
-        const QString finaleLine = QStringLiteral("%1 %")
+        finaleLine = QStringLiteral("%1 %")
             .arg(QString::number(stats.finaleRate, 'f', 2).rightJustified(6, QChar('0')));
         rateLine = QStringLiteral("%1 %")
             .arg(QString::number(stats.deluxeRate, 'f', 4).rightJustified(8, QChar('0')));
@@ -965,18 +1034,12 @@ void paintPreviewHudOverlay(
             QStringLiteral("ALL: %1/%2").arg(stats.combo).arg(stats.totalNotes),
         };
         if (fixHudTextLayout) {
-            titleLineHeight = hudLineAdvance(
-                titleMetrics,
-                {QStringLiteral("FiNALE Rate:"), QStringLiteral("DELUXE Rate:")});
-            rateLineHeight = hudLineAdvance(rateMetrics, {statLines[0], rateLine});
             QStringList objectStatLines;
             for (int i = 1; i < static_cast<int>(statLines.size()); ++i) {
                 objectStatLines.append(statLines[static_cast<size_t>(i)]);
             }
             statLineHeight = hudLineAdvance(statMetrics, objectStatLines);
         } else {
-            titleLineHeight = titleMetrics.height();
-            rateLineHeight = rateMetrics.height();
             statLineHeight = statMetrics.height();
         }
 
@@ -988,6 +1051,24 @@ void paintPreviewHudOverlay(
         headerGap = qMax<qreal>(2.0, titleMetrics.height() * 0.18);
         sectionGap = qMax<qreal>(8.0, titleMetrics.height() * 0.5);
         statGap = qMax<qreal>(1.0, statMetrics.height() * 0.08);
+        if (fixHudTextLayout) {
+            titleToRateAdvance = hudBaselineAdvance(
+                titleMetrics,
+                {QStringLiteral("FiNALE Rate:"), QStringLiteral("DELUXE Rate:")},
+                rateMetrics,
+                {finaleLine, rateLine});
+            rateToTitleAdvance = hudBaselineAdvance(
+                rateMetrics,
+                {finaleLine, rateLine},
+                titleMetrics,
+                {QStringLiteral("FiNALE Rate:"), QStringLiteral("DELUXE Rate:")});
+            QStringList objectStatLines;
+            for (int i = 1; i < static_cast<int>(statLines.size()); ++i) {
+                objectStatLines.append(statLines[static_cast<size_t>(i)]);
+            }
+            rateToStatsAdvance = hudBaselineAdvance(
+                rateMetrics, {finaleLine, rateLine}, statMetrics, objectStatLines);
+        }
         blockWidth = qMax<qreal>(
             qMax<qreal>(
                 titleMetrics.horizontalAdvance(QStringLiteral("FiNALE Rate:")),
@@ -998,19 +1079,33 @@ void paintPreviewHudOverlay(
                 maxStatWidth
             )
         );
-        blockHeight = fixHudTextLayout
-            ? titleLineHeight * 2.0
-                + headerGap * 2.0
-                + rateLineHeight * 2.0
-                + sectionGap * 2.0
-                + statLineHeight * static_cast<qreal>(statLines.size() - 1)
-                + statGap * static_cast<qreal>(qMax(0, static_cast<int>(statLines.size()) - 2))
-            : static_cast<qreal>(titleMetrics.height()) * 2.0
+        if (fixHudTextLayout) {
+            const HudGlyphVerticalBounds titleBounds = hudGlyphVerticalBounds(
+                titleMetrics, {QStringLiteral("FiNALE Rate:"), QStringLiteral("DELUXE Rate:")});
+            QStringList objectStatLines;
+            for (int i = 1; i < static_cast<int>(statLines.size()); ++i) {
+                objectStatLines.append(statLines[static_cast<size_t>(i)]);
+            }
+            const HudGlyphVerticalBounds statBounds = hudGlyphVerticalBounds(statMetrics, objectStatLines);
+            const qreal firstLineTopExtent = qMax<qreal>(
+                titleMetrics.ascent(), titleBounds.valid ? -titleBounds.top : 0.0);
+            const qreal lastLineBottomExtent = qMax<qreal>(
+                statMetrics.descent(), statBounds.valid ? statBounds.bottom : 0.0);
+            const int statTransitionCount = qMax(0, static_cast<int>(statLines.size()) - 2);
+            blockHeight = firstLineTopExtent
+                + (titleToRateAdvance + headerGap) * 2.0
+                + rateToTitleAdvance + sectionGap
+                + rateToStatsAdvance + sectionGap
+                + (statLineHeight + statGap) * statTransitionCount
+                + lastLineBottomExtent;
+        } else {
+            blockHeight = static_cast<qreal>(titleMetrics.height()) * 2.0
                 + headerGap * 2.0
                 + static_cast<qreal>(rateMetrics.height()) * 2.0
                 + sectionGap * 2.0
                 + static_cast<qreal>(statMetrics.height()) * static_cast<qreal>(statLines.size() - 1)
                 + statGap * static_cast<qreal>(qMax(0, static_cast<int>(statLines.size()) - 2));
+        }
 
         if (blockWidth <= availableStatsWidth && blockHeight <= (stageRect.height() - hudPadding * 2.0)) {
             break;
@@ -1022,6 +1117,23 @@ void paintPreviewHudOverlay(
         || blockWidth > availableStatsWidth
         || blockHeight > (stageRect.height() - hudPadding * 2.0)) {
         return;
+    }
+    if (fixHudTextLayout) {
+        const HudGlyphVerticalBounds titleBounds = hudGlyphVerticalBounds(
+            titleMetrics, {QStringLiteral("FiNALE Rate:"), QStringLiteral("DELUXE Rate:")});
+        const HudGlyphVerticalBounds rateBounds = hudGlyphVerticalBounds(rateMetrics, {finaleLine, rateLine});
+        appendHudPaintDiagLine(
+            QStringLiteral("object_stats_metrics"),
+            QStringLiteral(
+                "family=\"%1\" title_ascent=%2 title_descent=%3 title_line_spacing=%4 title_bounds=%5,%6 rate_ascent=%7 rate_descent=%8 rate_line_spacing=%9 rate_bounds=%10,%11 stat_ascent=%12 stat_descent=%13 stat_line_spacing=%14 title_to_rate=%15 rate_to_title=%16 rate_to_stats=%17 stat_advance=%18 block_height=%19")
+                .arg(titleFont.family())
+                .arg(titleMetrics.ascent()).arg(titleMetrics.descent()).arg(titleMetrics.lineSpacing())
+                .arg(titleBounds.top).arg(titleBounds.bottom)
+                .arg(rateMetrics.ascent()).arg(rateMetrics.descent()).arg(rateMetrics.lineSpacing())
+                .arg(rateBounds.top).arg(rateBounds.bottom)
+                .arg(statMetrics.ascent()).arg(statMetrics.descent()).arg(statMetrics.lineSpacing())
+                .arg(titleToRateAdvance).arg(rateToTitleAdvance).arg(rateToStatsAdvance)
+                .arg(statLineHeight).arg(blockHeight));
     }
 
     const bool isSixteenByNine = aspectRatioNear(stageAspectRatio, 16.0 / 9.0);
@@ -1045,7 +1157,7 @@ void paintPreviewHudOverlay(
         titleFont,
         shadowOffset);
     baseline += fixHudTextLayout
-        ? titleLineHeight + headerGap
+        ? titleToRateAdvance + headerGap
         : titleMetrics.descent() + headerGap + rateMetrics.ascent();
     drawHudText(
         painter,
@@ -1055,7 +1167,7 @@ void paintPreviewHudOverlay(
         rateFont,
         shadowOffset);
     baseline += fixHudTextLayout
-        ? rateLineHeight + sectionGap
+        ? rateToTitleAdvance + sectionGap
         : rateMetrics.descent() + sectionGap + titleMetrics.ascent();
     drawHudText(
         painter,
@@ -1065,7 +1177,7 @@ void paintPreviewHudOverlay(
         titleFont,
         shadowOffset);
     baseline += fixHudTextLayout
-        ? titleLineHeight + headerGap
+        ? titleToRateAdvance + headerGap
         : titleMetrics.descent() + headerGap + rateMetrics.ascent();
     drawHudText(
         painter,
@@ -1075,7 +1187,7 @@ void paintPreviewHudOverlay(
         rateFont,
         shadowOffset);
     baseline += fixHudTextLayout
-        ? rateLineHeight + sectionGap
+        ? rateToStatsAdvance + sectionGap
         : rateMetrics.descent() + sectionGap + statMetrics.ascent();
     for (int i = 1; i < static_cast<int>(statLines.size()); ++i) {
         if (i > 1) {
