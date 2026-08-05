@@ -52,6 +52,7 @@ public:
     RetainedPlaybackMode retainedPlaybackMode() const;
     RetainedBgmState retainedBgmState() const;
     double authoritativePlaybackSecond() const;
+    bool audioClockChartSecond(double* outSecond) const;
     double syncPreviewPlaybackClockTransaction(double fallbackSecond);
     void resetCursor(double second, bool includeCurrentSecond);
     void drainEvents(double second);

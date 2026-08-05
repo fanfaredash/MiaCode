@@ -83,6 +83,29 @@ public:
     virtual RetainedPlaybackMode retainedPlaybackMode() const = 0;
     virtual RetainedBgmState retainedBgmState() const = 0;
     virtual double authoritativePlaybackSecond() const = 0;
+    // Chart-second read from the AUDIO device's own clock — where the BGM stream
+    // has actually been consumed to — as opposed to the wall clock that drives
+    // chart-second everywhere else.
+    //
+    // SFX scheduling uses this so SFX and BGM sit in ONE clock domain. They are
+    // already mixed and output together; only the decision of WHEN to fire an SFX
+    // was made against a separate clock, and the two crystals drift. The visual
+    // chart-second deliberately stays on the wall clock (a BASS-cursor-driven
+    // visual clock was the "smear" that G1 Commit 4 removed), so this narrows the
+    // audio seam without reopening the visual one.
+    //
+    // Returns false when there is no usable audio clock: no BGM loaded, BGM not
+    // running yet (a positive `&first` delays its start), or a backend that has
+    // none. Callers keep their wall-clock second in that case — this refines the
+    // trigger instant, it is never the only source.
+    //
+    // Defaults to "no audio clock" so the miniaudio backend (Linux) keeps the
+    // wall-clock behaviour unchanged; only the BASS backend overrides it.
+    virtual bool audioClockChartSecond(double* outSecond) const
+    {
+        (void) outSecond;
+        return false;
+    }
     virtual double syncPreviewPlaybackClockTransaction(double fallbackSecond) = 0;
     virtual void resetCursor(double second, bool includeCurrentSecond) = 0;
     virtual void drainEvents(double second) = 0;

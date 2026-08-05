@@ -48,6 +48,10 @@ public:
     void onTimelineFollowProgressToggled(bool enabled);
     void onTimelineSyncToggled(bool enabled);
     void applyLatestTimelinePreviewStateToPausedPreview();
+    // Chart-second the SFX drain should use this tick: the audio clock when one is
+    // available and tracking, otherwise the wall-clock second passed in. Visuals
+    // always keep the wall-clock second.
+    double sfxDrainSecond(double wallClockSecond);
     void requestTimelineSlowRefresh();
     void dispatchTimelineSlowRefresh();
     void scheduleTimelineAnalysisRefresh(

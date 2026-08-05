@@ -38,6 +38,20 @@
 #include "MainWindow.TimelinePlayback.Internal.h"
 
 using namespace miacode::mainwindow::shared;
+
+namespace {
+
+// Guard for the audio-clock SFX drain. If the audio clock and the wall clock ever
+// disagree by more than this, the audio clock is not merely drifting, it has
+// stopped tracking real time — a stalled device, a suspended output, a track that
+// ended in a way the end-of-track check did not catch. Healthy divergence is
+// bounded by hardware crystal tolerance and measured at +/-10 ms on real captures,
+// so this sits an order of magnitude above the legitimate band: loose enough never
+// to fight normal drift (following it is the entire point), tight enough that a
+// stall costs at most this much SFX lateness before falling back.
+constexpr double kSfxAudioClockMaxDivergenceSeconds = 0.25;
+
+}  // namespace
 using namespace miacode::mainwindow::timeline_playback_detail;
 
 void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool centerView)
@@ -199,6 +213,48 @@ void MainWindow::TimelineSection::resetVisualClockSmoothing()
     state_.qtPreviewVisualClockDiagLastLogMs_ = -1;
 }
 
+double MainWindow::TimelineSection::sfxDrainSecond(double wallClockSecond)
+{
+    // SFX and BGM are already mixed and output together; what used to separate
+    // them was the trigger DECISION being made against the wall clock while the
+    // BGM advanced on the device clock. Two crystals, no correction, divergence
+    // measured every second into bgm_delta_ms and acted on by nobody. Draining
+    // against the audio clock closes that loop.
+    //
+    // The visual chart-second is deliberately NOT moved: a BASS-cursor-driven
+    // visual clock is exactly the "smear" G1 Commit 4 removed, and it needed ~130
+    // lines of drift/catch-up/snap smoothing to hide. This narrows the audio seam
+    // without reopening the visual one.
+    if (state_.previewSfxRuntime_ == nullptr) {
+        return wallClockSecond;
+    }
+    double audioSecond = 0.0;
+    bool useAudioClock = state_.previewSfxRuntime_->audioClockChartSecond(&audioSecond);
+    if (useAudioClock && !qIsFinite(audioSecond)) {
+        useAudioClock = false;
+    }
+    if (useAudioClock
+        && qAbs(wallClockSecond - audioSecond) > kSfxAudioClockMaxDivergenceSeconds) {
+        // Not drift — drift is what we want to follow. This much disagreement means
+        // the audio clock has stopped tracking real time at all.
+        useAudioClock = false;
+    }
+    if (useAudioClock != state_.sfxAudioClockActive_) {
+        state_.sfxAudioClockActive_ = useAudioClock;
+        if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("preview/sfx_clock"),
+                QStringLiteral("action=source_changed source=%1 wall_second=%2 audio_second=%3 delta_ms=%4")
+                    .arg(useAudioClock ? QStringLiteral("audio") : QStringLiteral("wall"))
+                    .arg(wallClockSecond, 0, 'f', 6)
+                    .arg(audioSecond, 0, 'f', 6)
+                    .arg((wallClockSecond - audioSecond) * 1000.0, 0, 'f', 3));
+        }
+    }
+    return useAudioClock ? audioSecond : wallClockSecond;
+}
+
 void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second, double fallbackSecond, bool hasAudioClock)
 {
     if (!state_.qtPreviewPlaying_) {
@@ -222,6 +278,11 @@ void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second, double 
         second = playbackEndSecond;
         applyQtPreviewPosition(second, true);
         if (state_.previewSfxRuntime_ != nullptr) {
+            // Deliberately the wall-clock end-second, NOT sfxDrainSecond(): this is
+            // the terminal flush, not a timing decision. Playback is ending on this
+            // tick, so everything still queued has to fire now regardless of where
+            // the audio clock got to — including the case where the BGM ended early
+            // and the audio clock stopped advancing before the last note.
             state_.previewSfxRuntime_->drainEvents(second);
         }
         finishQtPreviewPlaybackAndReturnToEntry("Qt preview reached the end of current timeline.");
@@ -309,7 +370,10 @@ void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second, double 
     }
     const qint64 beforeDrainNs = diagEnabled ? tickProfileTimer.nsecsElapsed() : 0;
     if (state_.previewSfxRuntime_ != nullptr) {
-        state_.previewSfxRuntime_->drainEvents(second);
+        // Audio-domain SFX scheduling. `second` (wall clock) still drives every
+        // visual below; only the SFX trigger instant moves onto the audio clock,
+        // so SFX and BGM stop being able to separate from each other.
+        state_.previewSfxRuntime_->drainEvents(sfxDrainSecond(second));
     }
     maybeFireExportAuditionClockTicks(second);
     if (diagEnabled) {

@@ -481,6 +481,9 @@
         // kChartSwitchGaugeTxnBase) so a `timeline/leak_gauge txn=` value
         // unambiguously identifies which resource_gauge line armed it.
         quint64 chartSwitchGaugeTxnCounter_ = 0;
+        // Whether the SFX drain is currently following the audio clock. Only used to
+        // log the transitions; steady state emits nothing.
+        bool sfxAudioClockActive_ = false;
         bool previewStartupSyncPending_ = false;
         bool previewLateVideoStartPending_ = false;
         bool previewStartupAudioPrepared_ = false;

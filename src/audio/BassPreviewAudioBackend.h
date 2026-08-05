@@ -61,6 +61,7 @@ public:
     RetainedPlaybackMode retainedPlaybackMode() const override;
     RetainedBgmState retainedBgmState() const override;
     double authoritativePlaybackSecond() const override;
+    bool audioClockChartSecond(double* outSecond) const override;
     double syncPreviewPlaybackClockTransaction(double fallbackSecond) override;
     void resetCursor(double second, bool includeCurrentSecond) override;
     void drainEvents(double second) override;
