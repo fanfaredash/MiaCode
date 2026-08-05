@@ -374,7 +374,7 @@ qint64 startupTrimMaxBytes()
 
 // Number of archived segments kept per channel (miacode_x.1.log .. .N.log).
 // Total on-disk per channel is bounded by (N + 1) × startupTrimMaxBytes().
-constexpr int kMaxLogSegments = 3;
+constexpr int kMaxLogSegments = 19;
 
 // Build the rotated-segment path: ".../miacode_runtime_debug.log" + index 1 ->
 // ".../miacode_runtime_debug.1.log" (index inserted before the suffix).

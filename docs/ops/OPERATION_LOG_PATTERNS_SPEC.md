@@ -6,8 +6,8 @@
 
 | 频道 | 文件 | 用途 | 写入方式 | 保留策略 |
 | --- | --- | --- | --- | --- |
-| `Operation` | `miacode_operation.log` | `MC_OP` 记录的操作链失败，包括显式 `fail()` 和异常栈展开 | 异步 | 4 MB 后轮转为 `.1/.2/.3`；失败路径常开，不依赖 `--debug` |
-| `Fatal` | `miacode_fatal.log` | 死亡事件、已捕获异常和子进程崩溃摘要 | 同步 + fsync | 4 MB 后轮转；常开 |
+| `Operation` | `miacode_operation.log` | `MC_OP` 记录的操作链失败，包括显式 `fail()` 和异常栈展开 | 异步 | 4 MB 后轮转为 `.1` 至 `.19`（含当前文件最多 80 MB）；失败路径常开，不依赖 `--debug` |
+| `Fatal` | `miacode_fatal.log` | 死亡事件、已捕获异常和子进程崩溃摘要 | 同步 + fsync | 4 MB 后轮转为 `.1` 至 `.19`（含当前文件最多 80 MB）；常开 |
 | `Runtime` | `miacode_runtime_debug.log` | 常规运行时、supervisor、IPC、Quick shell 等调试事件 | 异步 | `--debug` 下写入并轮转 |
 | `Audio` | `miacode_audio_debug.log` | BASS / miniaudio 音频引擎，以及部分预览视频/解码日志 | 异步 | `--debug` 下写入并轮转 |
 | `Export` | `miacode_video_export.log` | 视频导出流程；关键失败阶段也会写入 `Fatal` | 异步 | `--debug` 下写入详细诊断；非 debug 下保留简要导出摘要 |

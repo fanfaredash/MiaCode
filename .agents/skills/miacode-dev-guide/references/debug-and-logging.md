@@ -25,8 +25,8 @@ canonical doc is `docs/ops/DEBUG_INDEX.md`; this file is the code-owner-oriented
   `FATAL`; oplog failures log at `Error`.
 - **Overflow** (async queue full, `kMaxQueueSize=4096`): drops the OLDEST entry but emits a coalesced
   `[<channel>/asynclog] dropped=N reason=queue_overflow` gap marker so loss is visible, not silent.
-- **Rotation** is rename-based: a channel file over 4 MB rotates to `miacode_<x>.1.log` (chain `.1`→`.2`→`.3`,
-  `kMaxLogSegments=3`), preserving the session start — NOT in-place head-truncation.
+- **Rotation** is rename-based: a channel file over 4 MB rotates to `miacode_<x>.1.log` (chain `.1`→…→`.19`,
+  `kMaxLogSegments=19`; 20 files / up to 80 MB per rotating channel), preserving the session start — NOT in-place head-truncation.
 - **Process/leak diagnostics** (`processResourceGaugePayload`, `MemoryStageScope`, `processPrivateBytes`,
   `leak_gauge`) are in `src/common/ProcessDiagnostics.{h,cpp}` (namespace **`miacode::diag`**), split OUT of
   DebugLog so the writer stays a pure channelized log (the profiler depends on it, not the reverse).
