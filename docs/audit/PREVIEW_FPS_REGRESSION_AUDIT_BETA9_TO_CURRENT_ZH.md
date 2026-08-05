@@ -45,7 +45,7 @@
 | 8 | 中（模式相关） | 内圆适配外部填充模式对同一视频维护双 sink、双 VideoOutput 和离屏遮罩 | BG/PV 且缩放模式 3 | 视频采样与额外合成 pass |
 | 9 | 中（样式相关） | Starry/DX 非 Break Tap 每事件增加两圈共 16 个星光精灵 | Starry 样式、Tap 密集段 | 几何和透明过绘制 |
 | 10 | 中（设置相关） | 自定义应用背景升级为全窗口纹理与 MultiEffect 模糊 | 自定义背景且模糊大于 0 | 根 Quick 窗口离屏层、显存与填充竞争 |
-| 11 | 中（阶段性） | Windows 波形缓存未命中时读入压缩文件并完整解码为单声道 float | 打开/切换长音频谱面 | 后台 CPU、内存、分页与 BASS 生命周期竞争 |
+| 11 | 中（阶段性） | 波形缓存未命中时读入压缩文件并完整解码为单声道 float | Windows/macOS（含 BASS 的构建），打开/切换长音频谱面 | 后台 CPU、内存、分页与 BASS 生命周期竞争 |
 | 12 | 中低 | 2026-08-05 起每预览 tick 查询一次 BASS mixer 播放位置 | Windows/macOS、BGM 正在运行 | GUI 线程音频 API 查询与偶发重锚 |
 | 13 | 中低（诊断条件） | 帧节奏诊断为每帧安装计时并对慢帧无条件写日志 | `--debug`/诊断环境变量 | 测量和日志自扰动 |
 | 14 | 低（突发） | 预览纹理仓库越界后整代清空并在同一帧重建 | 高 DPR/大量资产变体 | 单帧或数帧纹理重传 |
@@ -57,6 +57,8 @@
 | 20 | 很低（加载期） | 自定义轮廓暂停区合成增加逐像素亮度处理和多次 QPainter 合成 | 轮廓/皮肤重载 | 后台资产生成峰值 |
 
 ## 4. 排序后的详细审计结果
+
+> 每条结论下方的「> 审查（2026-08-05）」引用块是本报告发布后的逐条复核回执：核对结论是否与当前代码一致、是否已直接修复、还是需要取舍或属误报。汇总见第 10 节。已落地的代码修复在提交 `cd3c446a`。
 
 ### 4.1 帧状态快照在单个 tick/呈现周期内放大为约 4–5 次完整复制与原子发布
 
@@ -78,6 +80,19 @@
 - 代理基线已有相似的 tick、视觉平滑和请求下一帧链路，但没有这套完整状态快照复制/原子发布。因此它是明确位于比较窗口内的增量热路径。
 
 评估：该项覆盖所有实时预览，不依赖视频、特定谱面或诊断开关；它同时发生在 GUI 线程和渲染线程交界处，能直接侵蚀高刷新率下更短的帧预算。静态代码无法给出实际毫秒数，但发生频率、对象宽度和回归边界均最完整。
+
+> 审查（2026-08-05）：**结论成立，但两条修复路线都不属于低风险，因此未直接改动。**
+>
+> 已逐条核对：`publishFrameStateSnapshot()` 确为整体 `make_shared<PreviewFrameState>(frameState_)`；`PreviewFrameState.h` 当前正好是 93 个直接 `QImage` 字段与 4 个 `QVector<QImage>`（`wifiImages` / `wifiEachImages` / `wifiBreakImages` / `wifiMineImages`），计数无误。播放期单 tick 的 4 次发布链路也逐个走通了：`noteTickForProfiling()` → `applyQtPreviewPosition()` 里的 `setPlayheadSeconds(second, false)` → 视觉平滑的 `setPlayheadSeconds(visualSecond, false)` → `requestNextFixedIntervalPreviewFrame()` 里的 `update()`；再加每次呈现的 `handlePresentedFrame()`，稳态就是 5 次。
+>
+> 补一个报告没写死的前提：第三次发布不是「视觉平滑生效时才有」，而是必然发生——`previewVisualLookaheadVsyncs()` 默认 1.0 而非 0，所以 `visualSecond` 恒不等于 `second`，`qAbs(...) > 1e-9` 恒真。
+>
+> 两条可行路线及其取舍：
+>
+> - **(a) tick 内合并发布。** 给 `PreviewRuntime` 加一个批处理作用域，把 tick 期间的发布推迟到 `requestNextFixedIntervalPreviewFrame()` 之后一次完成，5 次 → 2 次。逻辑上是安全的（GUI 线程在 tick 函数返回前不会走到渲染同步点），但它改变的正是渲染线程读到状态的时刻，而本仓库在帧节奏上反复栽过这类跟头——第 5.3 节记录的 present-driven gate 就是上线后又撤销的。没有 Windows 实测数字就合入不合适。
+> - **(b) 收窄快照。** 把 `skin` / `judgeOverlay` / `judgeEffect` / `noteMarkers` 这些「每谱一次」的大块移入 `shared_ptr<const>`，让每帧拷贝只剩标量与少量共享指针。这才是真正的解法，但要改所有 `state.skin.xxx` 形式的消费方，属结构性改动。
+>
+> 建议顺序：先用 (a) 在 Windows 上做一次 A/B 拿到毫秒量级，确认这条确实值钱，再决定是否投入 (b)。
 
 ### 4.2 高性能 GPU 默认绑定可使根窗口与预览合成窗口分属两个适配器
 
@@ -102,6 +117,12 @@
 
 评估：该项对混合显卡用户可持续存在，且与“单独运行尚可、OBS/浏览器并发时下降”这一既有现象高度吻合；对单 GPU 用户解释力较弱。
 
+> 审查（2026-08-05）：**结论成立；注释矛盾已修，默认值本身留待实测。**
+>
+> `gpuBindHighPerformanceEnabled()` 无环境变量时确实直接 `return true`，根窗口 `preferVideoShareDevice=false`、预览合成 `=true` 的分流也与描述一致。报告点出的注释矛盾属实，`gpu_device_provider.cpp:109` 的「opt-in until it is validated」自 `41cf08a8` 默认翻转起就不再成立，已在 `cd3c446a` 改写，同时保留了混合显卡的风险说明。
+>
+> 默认值没动，原因是翻转它是产品取舍而非缺陷修复。另外报告没提到一处已有保护：`gpu_device_provider.cpp:150-160` 会在「高性能适配器就是 DXGI 默认适配器」时跳过绑定，所以单 GPU 机器和 dGPU 直驱主显示器的机器本来就不会形成双适配器结构。是否对混合显卡默认关闭，需要在 i5-1155G7 + MX450 那类机器上实测后再定。
+
 ### 4.3 PV 默认硬件解码进入 D3D11VA 两设备共享纹理与 180 ms keyed-mutex 路径
 
 - 可疑度：高，依赖 Windows、视频背景和解码偏好
@@ -123,6 +144,14 @@
 
 评估：这是一条明确的逐视频帧同步/复制链，可同时受到集显负载、OBS、跨窗口 GPU 策略和解码池压力影响；不含 PV/BG 视频的谱面不会触发。
 
+> 审查（2026-08-05）：**结论成立，但可选方向都是产品取舍，未直接改动。**
+>
+> 三点事实全部核对无误：`videoDecodePrefersSoftware_` 默认 `false`（硬解）、H2 单设备默认关闭、`kPreviewAcquireSyncTimeoutMs = 180`（`qavhwdevice_d3d11.cpp:82`）。
+>
+> 报告说对了一件值得单独留档的事：默认路径确实不做逐帧 `toImage()`。`handleDecodedVideoFrame()` 里 `needsCpuImageForDComp` 同时要求 `previewUseDCompEnabled()` 且 `!previewDCompPerPixelAlphaEnabled()`，默认配置两个条件都不满足；那段注释还记录了在 GUI 线程对 D3D11VA 硬件帧调 `toImage()` 曾在 Intel iGPU 上造成 use-after-free。这条不能因为「看起来能省一次拷贝」被反向改回去。
+>
+> 两个可选方向各自带包袱：打开 H2 单设备（`DebugOptions.h:280` 明确标注 RESERVED / UI 隐藏 / 不再推进）、或对集显恢复软解默认（`2d22f22b` 刚刚移除该行为）。任一都必须先在受影响的 iGPU 机器上验收，不该凭静态审计翻默认值。
+
 ### 4.4 HUD 诊断详情在关闭时仍被提前格式化，开启时还可逐文本强制 flush
 
 - 可疑度：高至中；默认存在固定成本，诊断开启时风险显著放大
@@ -141,6 +170,12 @@
 - 同一提交既引入该诊断包装，也引入第 4.1 节的状态快照，因此两项会共同出现在 `1.0.1-beta.3` 之后。
 
 评估：默认关闭诊断时，10 Hz 的字符串分配单独造成大幅 FPS 回退的解释力低于前三项，但它是确定存在的无条件新增工作；诊断开关开启后，逐文本强制 flush 足以成为显著自扰动源。
+
+> 审查（2026-08-05）：**结论成立，已修（`cd3c446a`）。**
+>
+> 报告还漏算了一半成本：`previewHudPaintDiagnosticsEnabled()` 不做缓存，每次调用都是一次 `qEnvironmentVariable` + `trimmed()` + `toLower()` + 最多 4 次字符串比较，而关闭诊断时每次 HUD paint 仍会命中约 20 次（每个 diag 点一次）。
+>
+> 修法：所有调用点改走惰性包装 `appendHudPaintDiag(action, detailFn)`，先判开关再构造 detail；开关本身按 `DebugLog.cpp` 里 `skipAsyncLogFlush()` 的既有做法只读一次。诊断开启后的行为（包括 `draw_text_before` 的 `durable=true` 逐文本 flush）保持原样——那是这条诊断刻意要的持久性，收紧它属于第 4.13 节同类的取舍。
 
 ### 4.5 扩展事件总线每 tick 构造 JSON，启用扩展后在 GUI 线程执行 JS 回调
 
@@ -162,6 +197,14 @@
 
 评估：没有扩展运行时或订阅时，主要是每 tick JSON 构造；有预览位置订阅时，成本可放大为 GUI 线程的 JavaScript 执行。它是当前版本才出现的常驻 tick 增量，但实际严重程度高度依赖扩展集合。
 
+> 审查（2026-08-05）：**结论成立，已修（`cd3c446a`）；且报告低估了无订阅时的成本。**
+>
+> 报告把「没有订阅」的成本描述为「主要是每 tick JSON 构造」，实际上更贵：只要运行时在跑，`dispatchEvent()` 就会先复制 payload、插入 6 个键（其中 `timestamp` 要走 `QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)`）、再建两张 `QHash` 分别扫描 `eventCallbacks_` 与 `pendingEvents_`，**之后**才在投递循环里发现没有一个 callback 匹配。
+>
+> 修法：新增 `EmbeddedExtensionRuntime::hasEventSubscriber()` / `ExtensionManager::hasEventSubscribers()`，通配符匹配逻辑与投递循环共用一个 `eventPatternMatchesKind()` 以免两处判断漂移。`dispatchEvent()` 在 enrichment 之前先做这个预检，`onQtPreviewTick()` 也用它跳过 JSON 构造本身。`nextEventSequence_` 因此不再为无人接收的事件递增——序号仍然单调，只是少了空洞，投递方看不出差别。
+>
+> 「同一回调连续 5 次超过 16 ms 才被 suspend」与代码一致，未改：那是扩展 API 的容错策略，收紧它会改变扩展作者可依赖的行为，属取舍。
+
 ### 4.6 烟花 PSO 预热在确认绘制前随 playhead 反复提升场景 revision
 
 - 可疑度：中高，但通常是启动/资源加载后的瞬时回退
@@ -182,6 +225,14 @@
 
 评估：该项可清楚解释“刚开始播放、切皮肤或资源刚加载后的几秒帧率较低”，不能单独解释整段会话持续掉帧，除非烟花层长期无法完成且呈现计数也不前进。
 
+> 审查（2026-08-05）：**结论成立；其中最贵的一块已修（`cd3c446a`），重建本身仍是取舍。**
+>
+> `kFireworkWarmupMaxPresents = 240`、armed 期间每次 playhead 变化都 `sceneContentRevision += 1`、`rebuild()` 清空 10 个 prepared layer 并扫描全部 marker，均与代码一致。
+>
+> 报告点出的「HS 分布字符串在日志 sink 判定之前生成」是这条里唯一能无损修掉的部分，已修：那段的原注释写着「Cheap（一 marker 一次 map 插入，一行日志）」——在重建罕见的前提下确实便宜，但正是本节描述的 warm-up recenter 让它变成了逐帧执行，于是每帧都要对全谱 marker 建一次 `QHash` 再拼一段 `QTextStream`，然后在 `appendLine()` 里因 Runtime 通道关闭而丢弃。现已前置 `runtimeDebugOutputEnabled()`（一次原子读）。
+>
+> `rebuild()` 的全量重建没动：`sceneContentRevision` 变化即整体失效是既定语义，要收敛得改成增量失效或让合成 marker 走局部路径，属结构性取舍。另一条更省事的方向是让 warm-up 不再借 playhead recenter 触发全局 revision，但那会动到烟花 PSO 预热的正确性前提（`688e97b1` 换成「必须观察到烟花层出节点」正是为了修早期只数 present 的老 bug），同样需要单独评估。
+
 ### 4.7 Touch 判定特效由每事件 9 个精灵增至 17 个
 
 - 可疑度：中，谱面密度相关
@@ -200,6 +251,12 @@
 - 多个同时活动 Touch 位置按线性比例放大；没有 Touch 判定事件的帧返回空 layer state。
 
 评估：这是定量最明确的谱面内容回归之一。它不影响无 Touch 或稀疏段，但能造成 Touch 密集区相对于代理基线更明显的 CPU 建模、顶点更新和透明过绘制。
+
+> 审查（2026-08-05）：**数字属实，但定性应从「回归」改为「视觉设计取舍」，未改动。**
+>
+> `reserve(positionTriggers.size() * 17)` 与两次 8 点 `appendSparkleRing()`（`kJudgeEffectTouchSparklePointCount = 8`）都已核对，17 = 1 中心圆 + 8 内圈 + 8 外圈无误。
+>
+> 但 9→17 是 `86e81759` 刻意做的判定特效升级，不是无意引入的开销。把它当缺陷回退需要产品决定，本次不动。若确认这里是瓶颈，正确的优化方向是让同一 `QImage` 的 17 个精灵合批（减少批次与纹理绑定），而不是砍精灵数量——那会直接改变观感。
 
 ### 4.8 内圆适配外部填充模式对同一视频维护双 sink、双 VideoOutput 和离屏遮罩
 
@@ -221,6 +278,12 @@
 
 评估：该项与第 4.3 节可叠加，在模式 3 的视频背景上同时增加视频消费者、GPU pass 和同步压力。
 
+> 审查（2026-08-05）：**结论成立；报告点出的那半已修（`cd3c446a`），模式 3 自身的合成成本保留。**
+>
+> 「该推送不检查当前是否正在使用模式 3」是这一节最有价值的观察，且后果比报告写的更具体：非模式 3 时那个 `VideoOutput` 的 `visible` 为假、不会产出 QSG 节点，所以推进去的帧没有任何消费者——但 sink 仍然持有这个 `QVideoFrame`，也就是钉住一块解码池 surface，而这恰恰是 D3D11VA 两设备桥最需要归还的资源。现已按 `backgroundScaleMode_` 门控；`refreshInnerVideoSinkForScaleMode()` 在切入模式 3 时用 `lastVideoFrame_` 补一帧、切出时清空，所以播放中切模式仍然立刻有画面。
+>
+> 模式 3 本身的双 `ShaderEffectSource` + `MultiEffect` 遮罩没动：QML 已把两个 source 的 `live` 绑定到 `innerCircleFitOuterFill`，非模式 3 时着色器 pass 不运行；剩下的开销是该显示模式的固有代价，取消它等于取消这个功能。
+
 ### 4.9 Starry/DX 非 Break Tap 每事件增加两圈共 16 个星光精灵
 
 - 可疑度：中，样式与 Tap 密度相关
@@ -238,6 +301,10 @@
 - `PreviewRenderState` 和主窗口默认值仍是 `PreviewJudgeEffectStyle::Standard`，所以该项只影响选择了 Starry/DX 风格的用户或任务状态。
 
 评估：精灵增量明确，但不是默认样式。它与 Touch 判定精灵翻倍、烟花和高密度谱面可叠加。
+
+> 审查（2026-08-05）：**结论成立，同第 4.7 节属样式取舍，未改动。**
+>
+> Starry 且非 Break 的分支确实在两次 8 点 ring 后直接 `return`，不再走标准形状路径；`PreviewRenderState::judgeEffectStyle` 默认值仍是 `Standard`，所以影响面仅限主动选择 Starry/DX 的用户，报告的限定准确。
 
 ### 4.10 自定义应用背景升级为全窗口纹理与 MultiEffect 模糊
 
@@ -259,7 +326,13 @@
 
 评估：单张静态图片不会每帧重新解码，但全窗口离屏纹理、模糊和合成仍增加驻留与 fill-rate。它在低显存、双 GPU、OBS 捕获或高分辨率窗口下更有解释力。
 
-### 4.11 Windows 波形缓存未命中时读入压缩文件并完整解码为单声道 float
+> 审查（2026-08-05）：**结论成立，属设置取舍，未改动。**
+>
+> `QuickShellMain.qml` 的 `smooth` / `mipmap` / `asynchronous` / `cache`、`layer.enabled: visible && appBackgroundBlur() > 0`、`MultiEffect` 的 `blurMax: 64` 均与描述一致，未启用自定义背景或模糊为 0 时不建离屏层也属实。
+>
+> 这是用户显式开启的外观特性，成本与视觉效果直接绑定，代码侧没有「不改观感就变便宜」的空间——能做的只有关掉或调低模糊值，那是用户的选择。唯一值得记一笔的是 `blurMax: 64` 偏高：`MultiEffect` 的模糊采样代价随 `blurMax` 增长，而不是随实际 `blur` 值，所以即使用户只开了很轻的模糊也在按 64 的规模采样。调低它会改变高模糊档位的观感上限，仍需产品确认，故未动。
+
+### 4.11 波形缓存未命中时读入压缩文件并完整解码为单声道 float（含 BASS 的构建：Windows/macOS）
 
 - 可疑度：中，主要是开谱/换谱阶段
 - 日期：2026-06-24
@@ -271,7 +344,7 @@
 
 代码事实：
 
-- Windows BASS 路径先把整个压缩文件读入 `QByteArray`，随后再持有完整的 float 解码数组。
+- BASS 路径先把整个压缩文件读入 `QByteArray`，随后再持有完整的 float 解码数组。该分支的条件是 `#ifdef MIACODE_HAS_BASS_AUDIO`（Windows 与 macOS 均成立），不是 Windows 专属；只有无 BASS 的构建才回落到 miniaudio。
 - 解码输出按采样率为单声道 float；以 44.1 kHz 估算约 176.4 KB/秒，即一小时约 606 MiB，不含压缩文件副本、临时交错缓冲和最终波形层级。
 - 工作在后台线程池而非 GUI 线程，但仍与预览共享 CPU 核、内存带宽、文件缓存和进程地址空间。
 - 缓存命中或解码完成后，这一主要峰值结束；它不是稳定整段播放的逐帧工作。
@@ -279,6 +352,14 @@
 既有审计结合：`WINDOWS_IDLE_FREEZE_POST_V1_0_0_AUDIT_ZH.md` 已把该路径列为 F-01，并确认其静态资源峰值成立。
 
 评估：可解释“新打开长音频谱面时预览先慢、过一段时间恢复”，不充分解释缓存命中后的持续掉帧。
+
+> 审查（2026-08-05）：**机制属实，但「覆盖范围」写窄了；修复方向属取舍，未改动。**
+>
+> `QFile::readAll()` 读完整压缩文件、`BASS_STREAM_DECODE | BASS_STREAM_PRESCAN | BASS_SAMPLE_FLOAT`、分块解码但持续追加完整单声道 `QVector<float>`，逐条核对无误。
+>
+> 需要更正的是范围：`decodeMonoSamples()` 里选 BASS 路径的条件是 `#ifdef MIACODE_HAS_BASS_AUDIO`，不是 Windows。macOS 的 BASS 构建走的是同一条全量解码路径。标题与第 3 节表格的「Windows」应改为「含 BASS 的构建（Windows/macOS）」——这一点与第 4.16 节自己写的「Windows/macOS BASS 构建相关」也不一致。
+>
+> 修复方向（边解码边降采样，不驻留完整 float 数组）是有价值的，但要重排 `WaveformCache` 的解码—降采样结构与多级 level 生成，属取舍，不在本轮低风险范围内。
 
 ### 4.12 每预览 tick 查询一次 BASS mixer 播放位置并在 50 ms 偏差时排队重锚
 
@@ -302,6 +383,12 @@
 
 评估：单次 BASS 查询通常应较小，但它可能触及 mixer 内部同步，且频率随预览目标刷新率线性增加。当前没有实测证明其毫秒量级，故排在中低。
 
+> 审查（2026-08-05）：**结论成立，暂不改动——但值得担心的不是查询成本，是阈值本身。**
+>
+> `kMaxClockDivergenceSeconds = 0.050`、每 tick 一次 mixer 位置查询、Linux / BGM 未运行 / pending start / 已到末尾时的早退，均与代码一致。
+>
+> 单次 `BASS_Mixer_ChannelGetPosition` 大概率不构成帧预算问题，本节把它排在中低是合理的。真正需要 Windows 实测回答的是另一个问题：50 ms 是排队重锚的触发线，如果某台机器的 wall/audio 稳态偏差本来就在这个量级附近徘徊，就会变成反复重锚——而每次重锚都要在下一轮事件循环里再查一次时钟并重启 transport。这是一条比查询开销更值得看的失败模式，但它需要 `bgm_delta_ms` 的实际分布才能定，不宜凭静态代码调阈值。建议下一次 Windows 采样时专门统计一下 `action=automatic_reanchor reason=clock_divergence` 的发生频率。
+
 ### 4.13 帧节奏诊断为每帧安装计时并对慢帧无条件写日志
 
 - 可疑度：中低，仅诊断配置下成立
@@ -321,6 +408,12 @@
 
 评估：它更可能污染诊断测量或放大已有卡顿，而不是普通用户默认配置的根因。
 
+> 审查（2026-08-05）：**结论成立，但收紧它是取舍，建议保持现状。**
+>
+> `kSlowFrameMs = 30.0`、`if (!slowFrame && !sampleReady) return;`——慢帧确实绕过 `sampleMs` 限流无条件写日志，描述准确。
+>
+> 不改的理由：给慢帧也加限流（比如每窗口只记一条 + 计一个被抑制的慢帧计数）确实能降低自扰动，但也正好削掉这条诊断存在的意义——它就是为了不漏掉任何一个慢帧。加上这条链默认不运行，代价只落在主动开诊断的人身上。更合适的处理是在读日志时把这条自扰动当已知量，而不是改代码。本节自己的定性（「污染测量」而非「根因」）已经是对的。
+
 ### 4.14 预览纹理仓库越界后整代清空并在同一帧重建
 
 - 可疑度：低，突发型
@@ -339,6 +432,10 @@
 
 评估：机制具备明确的单帧尖峰形态，但既有样本把其普通场景概率降为低。高 DPR、更多资产变体或异常 fast-key 增长仍可能触发。
 
+> 审查（2026-08-05）：**结论成立且定性正确，无需改动。**
+>
+> `previewTextureGenerationResetRequired()` 确为「任一上限越界即整代重置」而非逐项 LRU，重置点也确实在 render-thread `updatePaintNode()` 开头、当帧继续重建。既有实测（约 92 项 / 32 MiB / 0 次 reset）已把普通场景概率压到低位，本节把它排在第 14 位是准确的。
+
 ### 4.15 QuickShell 几何变化与 VideoOutput 绑定定时器形成切换期抖动链
 
 - 可疑度：低，过渡状态相关
@@ -356,6 +453,12 @@
 - 既有 `WINDOWS_IDLE_FREEZE_POST_V1_0_0_AUDIT_ZH.md` 曾把此链列为 F-02，后续审查因幂等判断和缺少稳定状态自反馈证据而降级。
 
 评估：可解释窗口缩放、全屏切换、DPI/显示器迁移和启动布局收敛期间的帧率波动，不支持把它认定为稳定播放中的持续回退。
+
+> 审查（2026-08-05）：**结论成立，降级正确，无需改动。**
+>
+> 已复核 `QuickShellPreviewSurface.qml`：`syncVideoOutputBinding()` 只在 host / outer output / inner output 三个对象身份真正改变时才 attach/detach，稳定几何变化不会重绑，本节据此降级是对的。
+>
+> 补一处本节没写的小项：`geometryLogTimer` 每次触发除了调 `syncVideoOutputBinding()`，还会无条件构造 `surfaceGeometryPayload()` 字符串再交给 `logSurface()`。这只在拖拽缩放期间成立，量级远小于本报告前几项，不值得单独改。
 
 ### 4.16 BGM 默认使用 BASS_FX tempo 与 compact40 窗口
 
@@ -378,6 +481,12 @@
 
 评估：可作为低核 CPU 或并发录制时的放大因子，静态证据不足以把它提升为主要预览回退源。
 
+> 审查（2026-08-05）：**结论成立，条件性定性正确，未改动。**
+>
+> `backgroundTrackSpeedMode()` 无环境变量时返回 `Tempo`、compact40 预设为 sequence 40 ms / seek window 15 ms / overlap 8 ms，均已核对。
+>
+> 「播放率为 1.0 时仍保留 tempo 包装」是可以优化的（1.0 时直通 decode stream），但那会改变切换播放率时的流生命周期——需要在切速时重建包装，而重建点正好落在播放中，属取舍，未动。
+
 ### 4.17 时间轴纹理缓存跨谱面增长，但已有实测未显示帧时间恶化
 
 - 可疑度：低，且被现有实测明显降级
@@ -386,7 +495,7 @@
 - 提交：`aa6f8e44`；`78ca9488b8390c447c111fd7d68463bda81f5c28`；`ca8aa41fa6b24889b2442275739da4b951924e2a`
 - 模块：时间轴 QSG 纹理、旋转 slide arrow、文字/hold pixmap 缓存
 - 目录：`src/timeline/quick/TimelineQuickTextureCache.cpp`、`src/timeline/quick/TimelineQuickTextureCachePolicy.h`、`src/timeline/quick/TimelineQuickItem.cpp`
-- 触发链路：`反复切谱/切皮肤/改变缩放或 DPR` → 新文字、音符和量化到 0.1° 的 slide-arrow rotation key → CPU pixmap 与 QSG texture 跨谱面保留 → 驻留量逐步增加 → 当前达到 8192 项或 512 MiB 级逃逸阈值时删除 node tree 并 `invalidateAll()` → 极端会话出现重建尖峰
+- 触发链路：`反复切谱/切皮肤/改变缩放或 DPR` → 新文字、音符和量化到 0.1° 的 slide-arrow rotation key → CPU pixmap 与 QSG texture 跨谱面保留 → 驻留量逐步增加 → 当前达到 8192 项或 64 MiB 逃逸阈值时删除 node tree 并 `invalidateAll()` → 极端会话出现重建尖峰
 
 代码事实：
 
@@ -396,6 +505,12 @@
 - 因缓存主体已存在于代理基线附近，本项不是纯粹由 beta9 之后新建的完整机制；增量主要来自更多皮肤/几何 key 来源和当前极端全清分支。
 
 评估：它是长期驻留与极端 flush 风险，不是现有证据支持的普通预览 FPS 回退根因。
+
+> 审查（2026-08-05）：**结论成立，但本节内部有一处数字自相矛盾，需以代码为准。**
+>
+> 触发链路一段写的是「当前达到 8192 项或 **512 MiB** 级逃逸阈值」，而同节「代码事实」写的是 64 MiB——后者才对：`TimelineQuickTextureCache.cpp` 的 `kTimelineCachedTextureByteLimit = 64LL * 1024 * 1024`。512 MiB 这个数字在代码里不存在，应删除或改为 64 MiB。
+>
+> 其余结论（8192 texture entries / 8192 transformed pixmaps、定位为 runaway guard、既有实测约 360 条目 ≈ 1.3 MiB 且 `updatePaintNode` 均值从 0.334 ms 降到 0.033 ms）均与代码和既有审计一致，无需改动。
 
 ### 4.18 Touch 创作悬停增加输入命中与一个 QSG 图层
 
@@ -414,6 +529,10 @@
 - hover layer 没有 hovered pad 时直接返回空节点；启用时通常只绘制一个区域提示。
 
 评估：它不会解释普通播放期间的持续帧率下降，只可能影响暂停创作交互或鼠标高频移动期间的局部刷新。
+
+> 审查（2026-08-05）：**结论成立，无需改动。**
+>
+> `setAcceptHoverEvents(true)` 常驻、真正的 pad 命中受 `touchPadAuthoringEnabled` 门控、hover layer 无 hovered pad 时直接返回空节点，三点均已核对。
 
 ### 4.19 分区 HUD 字体使每次 HUD 重绘额外构造 chart-info 字体路径
 
@@ -434,6 +553,10 @@
 
 评估：属于可确认但规模很小的固定增量，不足以单独解释显著 FPS 回退。
 
+> 审查（2026-08-05）：**结论成立，已修（`cd3c446a`）。**
+>
+> 「在进入 debug/chart-info 分支前就无条件构造 timestampFont 和 chartInfoFont」属实。规模比本节估计的略大一点：`previewHudTimestampFontForArea()` 除了按 area 查自定义字体族，还会对内嵌 fallback 走一次 `QFontInfo(font).family()` 解析——这不是纯粹的 `QFont` 构造。chart-info HUD 默认关闭，所以这一路每次 HUD 重绘都白跑。改为在自己的分支内按需构造。
+
 ### 4.20 自定义轮廓暂停区合成增加逐像素亮度处理和多次 QPainter 合成
 
 - 可疑度：很低，加载期
@@ -452,6 +575,10 @@
 
 评估：能形成轮廓切换或资源重载瞬间的 CPU/上传峰值，不具备持续 FPS 回退形态。
 
+> 审查（2026-08-05）：**结论成立，无需改动。**
+>
+> `brightnessAdjustedImage()` 的逐像素循环确实只在资产构建时运行，合成结果作为单个 `QImage` 存入 asset state 后由纹理仓库复用，不进入每帧路径。
+
 ## 5. 已有审查结论的合并与降级项
 
 ### 5.1 PV 播放结束自动暂停属于历史问题，当前已修复，不是当前持续低 FPS 原因
@@ -466,6 +593,8 @@
 
 结合结论：工作区现有 `PREVIEW_AUTO_PAUSE_INITIAL_DIAGNOSIS_ZH.md` 已定位并记录该问题；当前提交历史包含明确修复。因此它不应与“当前仍在播放但 FPS 较低”混为一谈。
 
+> 审查（2026-08-05）：**复核通过。** 排除依据成立，且这个区分很重要——“FPS 归零/预览停住”与“仍在播放但帧率低”是两类现象，把前者混入本报告会污染排序。
+
 ### 5.2 默认实时预览不走 DComp，也不执行默认逐帧 QVideoFrame::toImage
 
 - 可疑度：当前默认路径排除
@@ -477,6 +606,8 @@
 - 触发链路：默认 `QSG main path` → `PreviewQuickSceneRoot` + `PreviewStageMediaItem`；只有显式 DComp 环境开关/回退组合才进入 DComp CPU 图像路径
 
 结合结论：仓库开发指南和当前代码均把 in-process QSG 定义为主路径，DComp 默认关闭且正在解耦。视频硬件帧默认通过 `QVideoSink/VideoOutput` 保持 GPU handle；`toImage()` 被限制到特定 DComp fallback。因此不能把默认掉帧归因于一个并不存在的常态 GPU→CPU 拷贝。
+
+> 审查（2026-08-05）：**复核通过。** 排除依据在 `handleDecodedVideoFrame()` 里可直接确认：`needsCpuImageForDComp` 同时要求 `previewUseDCompEnabled()` 且 `!previewDCompPerPixelAlphaEnabled()`，默认配置两个条件都不成立。该处注释还记录了为什么这条不能反向放宽——在 GUI 线程对 D3D11VA 硬件帧调 `toImage()` 会映射一块解码线程仍在回收的 surface，曾在 Intel iGPU 上造成 use-after-free 崩溃。
 
 ### 5.3 预览/时间轴默认刷新率配置本身没有从代理基线发生方向性下降
 
@@ -490,6 +621,8 @@
 
 结合结论：代理基线和当前代码的主要默认模式一致。当前 `previewCanvasUsesFrameSwappedPacing()` 固定返回 false，注释所述 present-driven gate 的启用与撤销发生在代理基线之前；比较窗口内主要是文件拆分和诊断扩展。因此“默认 FPS 选项被直接改低”没有代码证据。
 
+> 审查（2026-08-05）：**复核通过。** `previewCanvasUsesFrameSwappedPacing()` 确为固定 `return false`，其注释记录的撤销理由（把播放 tick 耦合到 frameSwapped，导致任何渲染打嗝直接拖停播放时钟）也正是第 4.1 节路线 (a) 需要引以为戒的先例。
+
 ### 5.4 切谱资源释放总体正确，未形成可重复的预览纹理泄漏证据
 
 - 可疑度：低，现有实测不支持
@@ -502,6 +635,8 @@
 
 结合结论：`CHART_SWITCH_RESOURCE_RELEASE_AUDIT_ZH.md` 对主要生命周期逐项检查后，确认视频/音频/QSG 所有权大体正确；预览纹理缓存正常样本稳定，时间轴缓存虽增长但命中改善且未导致 paint time 上升。故“每换一张谱就稳定泄漏并持续压低预览 FPS”目前没有证据。
 
+> 审查（2026-08-05）：**复核通过。** 本轮第 4.8 节的内圈 sink 修复与这一节相邻但不冲突：那不是所有权泄漏，而是一个正确释放、只是在用不到它的模式下也照样持有帧的消费者。既有审计对生命周期正确性的结论不受影响。
+
 ### 5.5 日志系统重构整体不是默认回退源，只有特定热路径存在提前构造或诊断自扰动
 
 - 可疑度：整体低；第 4.4、4.6、4.13 节为具体例外
@@ -513,6 +648,12 @@
 - 触发链路：`调用方构造 payload` → debug option/channel gate → 异步队列/文件写入
 
 结合结论：日志 writer 已异步化并有降量提交，默认关闭的通道通常快速返回；不能把所有新增日志语句等同于文件 I/O。真正仍进入热路径的部分，是调用方在 gate 之前就完成昂贵 payload 构造，或诊断开启后对慢帧/文本执行高频记录和 flush，已分别列入详细结果。
+
+> 审查（2026-08-05）：**复核通过，且这一节的定性是本报告最有实操价值的一条。**
+>
+> 「gate 在 payload 之后」这个模式确实是本轮唯一被直接修掉的一类问题——第 4.4、4.6 三处（HUD diag detail、chart-info 字体、prepared-cache HS 直方图）加上第 4.5 的扩展事件 payload，都是同一个形状：调用方先把字符串/容器建好，被调用方才去看开关。它们共同的特点是修复无损、可验证、不涉及任何取舍，因此值得在后续审计里作为独立的检查项固定下来。
+>
+> 一个可复用的判据：凡是「gate 函数在被调函数体内」的日志/诊断辅助，都要检查调用方是否已经付了构造成本；`DebugLog.cpp` 里 `skipAsyncLogFlush()` 的缓存注释是这类问题的既有正解范例。
 
 ## 6. 触发条件交叉矩阵
 
@@ -588,3 +729,40 @@
 从 beta9 代理边界到当前版本，最可能造成“普遍、持续、刷新率越高越明显”的代码级回退是第 4.1 节的帧状态快照放大；最可能造成“特定 Windows 机器显著下降，尤其与 OBS/PV/混合显卡共同出现”的是第 4.2 和 4.3 节的双适配器 Quick 窗口与 D3D11VA 两设备视频桥。第 4.4 和 4.5 节属于默认路径上的额外 CPU 分配/格式化，其中扩展运行时和 HUD 诊断开关能进一步放大。其余项目主要解释谱面密度、视觉样式、背景设置、开谱阶段或诊断状态下的局部下降和瞬时抖动。
 
 已有专项审计同时排除了几种容易混淆的表象：PV 到尾自动暂停已修复；默认 DComp/默认逐帧 `toImage()` 不成立；默认帧率选项没有方向性下调；普通切谱样本没有显示预览纹理泄漏或时间轴缓存导致帧时间持续恶化。
+
+## 10. 逐条审查回执（2026-08-05）
+
+对第 4、5 两节的每个条目做了代码复核，判定分三类：**已修**（结论成立且修复无损、可验证）、**取舍**（结论成立但修复涉及产品/结构决策，需实测或产品确认）、**通过**（结论成立且当前不需要动作）。**没有条目被判定为误报**——20 条详细结果与 5 条合并结论描述的代码事实全部与当前分支一致。
+
+已落地的代码修复在提交 `cd3c446a`：Release 构建通过，ctest 43/46；3 个失败（`oplog_self_test`、`plain_code_editor_spec`、`preview_firework_lifecycle_spec`）在未改动的分支头上同样复现，与本次改动无关。
+
+| 条目 | 判定 | 说明 |
+|---|---|---|
+| 4.1 帧状态快照放大 | 取舍 | 结论与计数全部核实。合并发布（路线 a）与收窄快照（路线 b）都不属低风险；建议先用 (a) 做 Windows A/B 取数 |
+| 4.2 高性能 GPU 默认绑定 | 已修（注释）/ 取舍（默认值） | 过期注释已改写；默认值翻转需混合显卡实测 |
+| 4.3 PV 默认硬解 + 两设备桥 | 取舍 | 三点事实无误；H2 已标注 RESERVED，集显软解默认刚被移除，任一方向都要 iGPU 验收 |
+| 4.4 HUD 诊断提前格式化 | 已修 | 惰性 detail + 开关单次读取；报告漏算了未缓存的环境变量读取 |
+| 4.5 扩展事件总线每 tick JSON | 已修 | 新增订阅预检；报告低估了无订阅时 `dispatchEvent()` 的 enrichment 成本 |
+| 4.6 烟花预热触发全量重建 | 已修（HS 直方图）/ 取舍（重建本身） | 直方图字符串已前置门控；prepared cache 全量失效属结构性取舍 |
+| 4.7 Touch 判定精灵 9→17 | 取舍 | 数字属实，但属刻意的视觉升级；优化方向应是合批而非减量 |
+| 4.8 内圆模式双 sink | 已修（越模式推帧）/ 取舍（模式 3 合成） | 非模式 3 不再向内圈 sink 推帧，避免多钉一块解码池 surface |
+| 4.9 Starry 判定星光 | 取舍 | 同 4.7；非默认样式 |
+| 4.10 全窗口背景模糊 | 取舍 | 用户显式开启的外观特性；另注意 `blurMax: 64` 决定采样规模而非实际模糊值 |
+| 4.11 波形全量解码 | 通过（需更正范围） | 覆盖范围应从「Windows」改为「含 BASS 的构建（Windows/macOS）」 |
+| 4.12 每 tick BASS 时钟查询 | 取舍 | 查询成本次要；真正要看的是 50 ms 重锚阈值是否偏紧，需 `bgm_delta_ms` 分布 |
+| 4.13 慢帧无条件写日志 | 取舍 | 收紧会削弱诊断本身的意义；默认不运行，建议保持现状 |
+| 4.14 纹理仓库整代重置 | 通过 | 机制与定性均正确 |
+| 4.15 QuickShell 几何抖动链 | 通过 | 幂等判断已核实，降级正确 |
+| 4.16 BASS_FX tempo | 取舍 | 1.0 倍速直通可优化，但会动到切速时的流生命周期 |
+| 4.17 时间轴纹理缓存增长 | 通过（需更正数字） | 触发链路写的「512 MiB」在代码中不存在，应为 64 MiB |
+| 4.18 Touch 创作悬停 | 通过 | — |
+| 4.19 分区 HUD 字体 | 已修 | chart-info 字体改为按需构造 |
+| 4.20 轮廓暂停区合成 | 通过 | 确认只在资产构建时运行 |
+| 5.1–5.5 合并与降级项 | 通过 | 5.2 / 5.3 的排除依据已在代码中逐点确认 |
+
+两处事实性错误已直接在正文更正：
+
+1. 第 3 节表格与第 4.11 节标题原写「Windows 波形缓存」，实际 `decodeMonoSamples()` 的分支条件是 `#ifdef MIACODE_HAS_BASS_AUDIO`，Windows 与 macOS 都走同一条全量解码路径（与第 4.16 节自己的「Windows/macOS BASS 构建相关」也不一致）。已改为「含 BASS 的构建（Windows/macOS）」。
+2. 第 4.17 节触发链路原写「512 MiB 级逃逸阈值」，代码中不存在这个数字；`kTimelineCachedTextureByteLimit = 64LL * 1024 * 1024`，与同节「代码事实」一致。已改为 64 MiB。
+
+另有一处措辞可以写得更死，未改正文、记在此处：第 4.1 节把视觉平滑那次发布描述为条件性的（“视觉平滑时间不同于音频时间时再发布一次”），实际它必然发生——`previewVisualLookaheadVsyncs()` 默认 1.0 而非 0，`visualSecond` 恒不等于 `second`，所以稳态就是每 tick 4 次 + 每呈现 1 次，不存在「只有 4 次」的常见情形。
