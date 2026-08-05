@@ -1042,10 +1042,25 @@ void PreviewRuntime::noteTickForProfiling()
 
 QString PreviewRuntime::resourceGaugePayload() const
 {
+    // `tex_fresh` guards every cached_tex* / creates field on this line.
+    //
+    // Those come from notePresentedTextureStats(), which only ever runs on a present
+    // and only when preview-profile output is on. A caller on the GUI thread can
+    // therefore read them at a moment when they describe nothing: reset() (and
+    // setFrameSize) arm pendingPresentedStatsRefresh_ and zero
+    // cachedTextureCreateTotal_, and handlePresentedFrame() is what disarms it. A
+    // chart switch runs reset() and samples immediately, so before this flag existed
+    // it printed a confident `cached_tex=0 cached_tex_creates=0` that a reader could
+    // not distinguish from a genuinely empty repository — the exact misread called
+    // out in docs/audit/CHART_SWITCH_RESOURCE_RELEASE_AUDIT_ZH.md section 7.4.
+    //
+    // tex_fresh=0 means "no present has refreshed these since the last reset/resize;
+    // ignore them". It does NOT mean the repository is empty.
     return QStringLiteral(
-               "scene_revision=%1 cached_tex=%2 cached_tex_kb=%3 transient_tex=%4 "
-               "cached_tex_creates=%5 transient_tex_creates=%6 sprite_max=%7 present_total=%8")
+               "scene_revision=%1 tex_fresh=%2 cached_tex=%3 cached_tex_kb=%4 transient_tex=%5 "
+               "cached_tex_creates=%6 transient_tex_creates=%7 sprite_max=%8 present_total=%9")
         .arg(static_cast<qulonglong>(frameState_.sceneContentRevision))
+        .arg(pendingPresentedStatsRefresh_ ? 0 : 1)
         .arg(latestCachedTextureCount_)
         .arg(latestCachedTextureBytes_ / 1024)
         .arg(latestTransientTextureCount_)
