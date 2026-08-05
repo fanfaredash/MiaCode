@@ -10,16 +10,28 @@
 
 namespace {
 
-// Capacity caps. The entry cap is the one that actually binds: a measured session held
-// ~360 live textures at roughly 3.5 KB each (~1.3 MB total), so a byte-only cap would
-// never have fired while the key count climbed ~30 per chart switch. 1024 leaves more
-// than an order of magnitude of headroom over one chart's observed working set (~80
-// entries), so a flush costs a node-tree rebuild only every few dozen switches instead
-// of thrashing mid-session. The byte cap is the backstop for the pathological shape the
-// entry cap cannot see: few entries, each huge (very high DPR, oversized hold bodies).
-constexpr qsizetype kTimelineCachedTextureEntryLimit = 1024;
+// Capacity caps. These are a SAFETY NET against unbounded growth, not a working-set
+// budget — the distinction decides the numbers, so it is worth stating.
+//
+// The first cut used 1024 on the assumption that a fat cache costs frame time. The
+// field capture disproved that: over a session where the cache grew from ~18 to ~360
+// entries (20x), mean updatePaintNode went DOWN, 0.334 ms -> 0.033 ms, because a
+// warm cache is all hits. 995 samples, 994 of them under 3.4 ms; the single 65 ms
+// outlier was the first-ever paint (cold start), not a large cache. At ~3.5 KB per
+// entry the whole 360-entry cache was ~1.3 MB.
+//
+// So growth costs residency and nothing else, while a flush costs a full node-tree
+// teardown plus a re-upload of the working set — a visible hitch. A cap tight enough
+// to fire in normal use would therefore trade ~1 MB for a periodic stutter, which is
+// a losing trade in an app whose open complaint is stuttering. These limits are set
+// so they never fire in normal use and only catch a genuine runaway: 8192 entries is
+// >20x the measured 10-switch working set, i.e. hundreds of chart switches away.
+//
+// The byte cap covers the shape the entry cap cannot see — few entries, each huge
+// (very high DPR, oversized hold bodies).
+constexpr qsizetype kTimelineCachedTextureEntryLimit = 8192;
 constexpr qint64 kTimelineCachedTextureByteLimit = 64LL * 1024 * 1024;
-constexpr qsizetype kTimelineTransformedPixmapEntryLimit = 1024;
+constexpr qsizetype kTimelineTransformedPixmapEntryLimit = 8192;
 
 QString normalizedSkinDirectory(const QString& skinDirectory)
 {

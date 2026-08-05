@@ -1513,14 +1513,17 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         resetNodeTreeBeforeTextureInvalidation = true;
     }
 
-    // Capacity flush. The cache had no other bound: window / skin / DPR only fire on
-    // configuration changes, and the theme invalidation deliberately spares the
-    // `note|` and `hold_` prefixes — which are exactly the keys that grow, because
-    // slide-arrow rotation is derived from on-screen geometry and quantised to 0.1
-    // degrees, so every chart contributes a fresh batch that never retires. Measured
-    // at ~30 new rotation keys per chart switch with no plateau after ten switches.
-    // Routed through the same reset flag as every other invalidation so it inherits
-    // the ordering contract below: node tree first, textures second.
+    // Capacity flush — a runaway guard, expected never to fire in normal use. The
+    // cache had no other bound: window / skin / DPR only fire on configuration
+    // changes, and the theme invalidation deliberately spares the `note|` and `hold_`
+    // prefixes, which are exactly the keys that grow (slide-arrow rotation is derived
+    // from on-screen geometry and quantised to 0.1 degrees, so every chart contributes
+    // a fresh batch that never retires — measured at ~30 per chart switch). But the
+    // same capture showed paint time does not scale with cache size, so this is here
+    // to bound residency in a pathological session, NOT to keep the cache small; see
+    // the limits in TimelineQuickTextureCache.cpp for why firing it routinely would be
+    // a net loss. Routed through the same reset flag as every other invalidation so it
+    // inherits the ordering contract below: node tree first, textures second.
     const bool textureCapacityFlushRequired =
         textures_ != nullptr && textures_->capacityFlushRequired();
     if (textureCapacityFlushRequired) {

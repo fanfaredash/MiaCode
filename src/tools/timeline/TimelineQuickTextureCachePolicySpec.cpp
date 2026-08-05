@@ -21,9 +21,9 @@ int main(int argc, char* argv[])
     QCoreApplication app(argc, argv);
     using miacode::timeline::quick::timelineTextureCacheFlushRequired;
 
-    constexpr qsizetype textureLimit = 1024;
+    constexpr qsizetype textureLimit = 8192;
     constexpr qint64 byteLimit = 64LL * 1024 * 1024;
-    constexpr qsizetype pixmapLimit = 1024;
+    constexpr qsizetype pixmapLimit = 8192;
 
     bool ok = true;
     ok &= expect(
