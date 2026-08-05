@@ -9,6 +9,7 @@
 #include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "audio/PreviewAudioRecoveryPolicy.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -39,19 +40,6 @@
 
 using namespace miacode::mainwindow::shared;
 
-namespace {
-
-// Guard for the audio-clock SFX drain. If the audio clock and the wall clock ever
-// disagree by more than this, the audio clock is not merely drifting, it has
-// stopped tracking real time — a stalled device, a suspended output, a track that
-// ended in a way the end-of-track check did not catch. Healthy divergence is
-// bounded by hardware crystal tolerance and measured at +/-10 ms on real captures,
-// so this sits an order of magnitude above the legitimate band: loose enough never
-// to fight normal drift (following it is the entire point), tight enough that a
-// stall costs at most this much SFX lateness before falling back.
-constexpr double kSfxAudioClockMaxDivergenceSeconds = 0.25;
-
-}  // namespace
 using namespace miacode::mainwindow::timeline_playback_detail;
 
 void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool centerView)
@@ -233,11 +221,19 @@ double MainWindow::TimelineSection::sfxDrainSecond(double wallClockSecond)
     if (useAudioClock && !qIsFinite(audioSecond)) {
         useAudioClock = false;
     }
-    if (useAudioClock
-        && qAbs(wallClockSecond - audioSecond) > kSfxAudioClockMaxDivergenceSeconds) {
-        // Not drift — drift is what we want to follow. This much disagreement means
-        // the audio clock has stopped tracking real time at all.
-        useAudioClock = false;
+    if (useAudioClock) {
+        const double clockDeltaSeconds = qAbs(wallClockSecond - audioSecond);
+        const auto recovery = miacode::preview_audio::recovery::decidePreviewAudioRecovery(
+            state_.qtPreviewPlaying_,
+            /*defaultOutputChanged=*/false,
+            /*audioClockAvailable=*/true,
+            clockDeltaSeconds);
+        if (recovery == miacode::preview_audio::recovery::Reason::DriftExceeded) {
+            requestPreviewAudioReanchor(QStringLiteral("clock_divergence"));
+            // The queued anchor runs after this tick. Do not emit one more SFX
+            // on a clock that has demonstrably stopped following the chart.
+            useAudioClock = false;
+        }
     }
     if (useAudioClock != state_.sfxAudioClockActive_) {
         state_.sfxAudioClockActive_ = useAudioClock;
@@ -253,6 +249,54 @@ double MainWindow::TimelineSection::sfxDrainSecond(double wallClockSecond)
         }
     }
     return useAudioClock ? audioSecond : wallClockSecond;
+}
+
+void MainWindow::TimelineSection::onPreviewAudioOutputDevicesChanged(bool defaultOutputChanged)
+{
+    const auto recovery = miacode::preview_audio::recovery::decidePreviewAudioRecovery(
+        state_.qtPreviewPlaying_,
+        defaultOutputChanged,
+        /*audioClockAvailable=*/false,
+        /*absoluteDeltaSeconds=*/0.0);
+    if (recovery == miacode::preview_audio::recovery::Reason::DefaultOutputChanged) {
+        requestPreviewAudioReanchor(QStringLiteral("default_output_changed"));
+    }
+}
+
+void MainWindow::TimelineSection::requestPreviewAudioReanchor(const QString& reason)
+{
+    if (state_.previewAudioReanchorPending_ || state_.previewSfxRuntime_ == nullptr) {
+        return;
+    }
+    state_.previewAudioReanchorPending_ = true;
+    QTimer::singleShot(0, &owner_, [this, reason]() {
+        state_.previewAudioReanchorPending_ = false;
+        if (!state_.qtPreviewPlaying_ || state_.previewSfxRuntime_ == nullptr) {
+            return;
+        }
+
+        const double wallClockSecond = owner_.currentPreviewAuthoritativeAudioClockSecond();
+        double audioClockSecond = 0.0;
+        const bool hasAudioClock = state_.previewSfxRuntime_->audioClockChartSecond(&audioClockSecond);
+        const bool reanchored =
+            state_.previewSfxRuntime_->reanchorPlayingTransportAtChartSecond(wallClockSecond, reason);
+        double reanchoredAudioSecond = 0.0;
+        const bool hasReanchoredAudioClock =
+            state_.previewSfxRuntime_->audioClockChartSecond(&reanchoredAudioSecond);
+        if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("preview/audio_reanchor"),
+                QStringLiteral("action=completed reason=%1 wall_second=%2 audio_second=%3 delta_ms=%4 applied=%5 post_audio_second=%6 post_delta_ms=%7")
+                    .arg(reason)
+                    .arg(wallClockSecond, 0, 'f', 6)
+                    .arg(audioClockSecond, 0, 'f', 6)
+                    .arg(hasAudioClock ? (wallClockSecond - audioClockSecond) * 1000.0 : 0.0, 0, 'f', 3)
+                    .arg(reanchored ? 1 : 0)
+                    .arg(reanchoredAudioSecond, 0, 'f', 6)
+                    .arg(hasReanchoredAudioClock ? (wallClockSecond - reanchoredAudioSecond) * 1000.0 : 0.0, 0, 'f', 3));
+        }
+    });
 }
 
 void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second, double fallbackSecond, bool hasAudioClock)

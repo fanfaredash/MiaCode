@@ -62,6 +62,7 @@ public:
     RetainedBgmState retainedBgmState() const override;
     double authoritativePlaybackSecond() const override;
     bool audioClockChartSecond(double* outSecond) const override;
+    bool reanchorPlayingTransportAtChartSecond(double chartSecond, const QString& reason) override;
     double syncPreviewPlaybackClockTransaction(double fallbackSecond) override;
     void resetCursor(double second, bool includeCurrentSecond) override;
     void drainEvents(double second) override;

@@ -6,6 +6,10 @@
 #include "common/DebugOptions.h"
 
 #include <QElapsedTimer>
+#ifdef MIACODE_HAS_BASS_AUDIO
+#include <QAudioDevice>
+#include <QMediaDevices>
+#endif
 
 namespace {
 
@@ -29,6 +33,19 @@ QtPreviewSfxRuntime::QtPreviewSfxRuntime(QObject* parent)
     , backend_(createBackend())
 {
     appendAudioDebugLog(QString("QtPreviewSfxRuntime created backend=%1").arg(backend_->backendId()));
+#ifdef MIACODE_HAS_BASS_AUDIO
+    mediaDevices_ = new QMediaDevices(this);
+    defaultAudioOutputId_ = QMediaDevices::defaultAudioOutput().id();
+    connect(mediaDevices_, &QMediaDevices::audioOutputsChanged, this, [this]() {
+        const QByteArray currentDefaultOutputId = QMediaDevices::defaultAudioOutput().id();
+        const bool defaultOutputChanged = currentDefaultOutputId != defaultAudioOutputId_;
+        defaultAudioOutputId_ = currentDefaultOutputId;
+        appendAudioDebugLog(
+            QString("preview_audio_device action=outputs_changed default_changed=%1")
+                .arg(defaultOutputChanged ? 1 : 0));
+        emit audioOutputDevicesChanged(defaultOutputChanged);
+    });
+#endif
 }
 
 QtPreviewSfxRuntime::~QtPreviewSfxRuntime()
@@ -203,6 +220,11 @@ double QtPreviewSfxRuntime::authoritativePlaybackSecond() const
 bool QtPreviewSfxRuntime::audioClockChartSecond(double* outSecond) const
 {
     return backend_->audioClockChartSecond(outSecond);
+}
+
+bool QtPreviewSfxRuntime::reanchorPlayingTransportAtChartSecond(double chartSecond, const QString& reason)
+{
+    return backend_->reanchorPlayingTransportAtChartSecond(chartSecond, reason);
 }
 
 double QtPreviewSfxRuntime::syncPreviewPlaybackClockTransaction(double fallbackSecond)

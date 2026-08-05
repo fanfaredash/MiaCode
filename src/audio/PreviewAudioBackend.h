@@ -106,6 +106,15 @@ public:
         (void) outSecond;
         return false;
     }
+    // Repositions the playing audio transport without changing the wall-clock
+    // preview state. Backends without a device-owned audio clock keep the
+    // existing behaviour by declining the request.
+    virtual bool reanchorPlayingTransportAtChartSecond(double chartSecond, const QString& reason)
+    {
+        (void) chartSecond;
+        (void) reason;
+        return false;
+    }
     virtual double syncPreviewPlaybackClockTransaction(double fallbackSecond) = 0;
     virtual void resetCursor(double second, bool includeCurrentSecond) = 0;
     virtual void drainEvents(double second) = 0;

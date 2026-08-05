@@ -739,6 +739,37 @@ double BassPreviewAudioBackend::authoritativePlaybackSecond() const
     return authoritativeSecond();
 }
 
+bool BassPreviewAudioBackend::reanchorPlayingTransportAtChartSecond(double chartSecond, const QString& reason)
+{
+    MC_OP("BassPreviewAudioBackend::reanchorPlayingTransportAtChartSecond");
+#ifdef MIACODE_HAS_BASS_AUDIO
+    // A chart may outlast its BGM. At that natural end-of-track boundary the
+    // BGM cursor is intentionally not a clock, so an output-device signal must
+    // not turn a finished song into a restart.
+    if (!playbackSession_.masterRunning
+        || !playbackSession_.backgroundTrackRunning
+        || playbackSession_.backgroundTrackPendingStart
+        || !audioClockChartSecond(nullptr)) {
+        return false;
+    }
+
+    const double anchoredSecond = clampTimelineSecond(chartSecond);
+    const QString transportReason = QStringLiteral("automatic_reanchor");
+    noteInitWindowOpened(transportReason);
+    anchorTransportToSecond(anchoredSecond, transportReason);
+    startTransportFromCurrentAnchor();
+    appendAudioDebugLog(
+        QString("bass_transport action=automatic_reanchor reason=%1 chart_second=%2")
+            .arg(reason)
+            .arg(anchoredSecond, 0, 'f', 6));
+    return true;
+#else
+    (void) chartSecond;
+    (void) reason;
+    return false;
+#endif
+}
+
 double BassPreviewAudioBackend::syncPreviewPlaybackClockTransaction(double fallbackSecond)
 {
     if (shuttingDown_.load(std::memory_order_acquire)) {

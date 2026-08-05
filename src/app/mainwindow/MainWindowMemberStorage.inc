@@ -484,6 +484,9 @@
         // Whether the SFX drain is currently following the audio clock. Only used to
         // log the transitions; steady state emits nothing.
         bool sfxAudioClockActive_ = false;
+        // A device event and the first divergent clock sample often arrive in
+        // the same event-loop turn. Coalesce them into one transport anchor.
+        bool previewAudioReanchorPending_ = false;
         bool previewStartupSyncPending_ = false;
         bool previewLateVideoStartPending_ = false;
         bool previewStartupAudioPrepared_ = false;

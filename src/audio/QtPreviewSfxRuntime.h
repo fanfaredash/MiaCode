@@ -2,9 +2,12 @@
 
 #include <memory>
 
+#include <QByteArray>
 #include <QObject>
 
 #include "PreviewAudioBackend.h"
+
+class QMediaDevices;
 
 class QtPreviewSfxRuntime : public QObject
 {
@@ -53,6 +56,7 @@ public:
     RetainedBgmState retainedBgmState() const;
     double authoritativePlaybackSecond() const;
     bool audioClockChartSecond(double* outSecond) const;
+    bool reanchorPlayingTransportAtChartSecond(double chartSecond, const QString& reason);
     double syncPreviewPlaybackClockTransaction(double fallbackSecond);
     void resetCursor(double second, bool includeCurrentSecond);
     void drainEvents(double second);
@@ -69,8 +73,13 @@ public:
     void stopAll();
     void prepareForShutdown();
 
+signals:
+    void audioOutputDevicesChanged(bool defaultOutputChanged);
+
 private:
     std::unique_ptr<miacode::preview_audio::PreviewAudioBackend> createBackend() const;
 
     std::unique_ptr<miacode::preview_audio::PreviewAudioBackend> backend_;
+    QMediaDevices* mediaDevices_ = nullptr;
+    QByteArray defaultAudioOutputId_;
 };

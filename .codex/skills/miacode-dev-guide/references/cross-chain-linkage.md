@@ -109,6 +109,7 @@ Current runtime ownership note:
 - `QtPreviewSfxRuntime` is now the stable facade owned by `MainWindow`, while concrete runtime behavior lives behind `src/preview/audio/PreviewAudioBackend.h`.
 - `MiniaudioPreviewAudioBackend` remains the unsupported-platform compatibility implementation and still owns the existing `QtPreviewSfxRuntime.*.cpp` split internals.
 - `BassPreviewAudioBackend` owns the Windows and macOS preview-time BASS transport path with no supported-platform miniaudio fallback: bundled runtime-library loading, the master mixer authority clock, preloaded note-SFX channels, background-track tempo control through `bass_fx`, and backend-side event draining. It also keeps a lightweight rolling scheduler by arming only the next mixer sync position at a time instead of relying on UI tick direct one-shots.
+- `QtPreviewSfxRuntime` observes `QMediaDevices::audioOutputsChanged` on BASS platforms and emits whether the *default* output id actually changed. `TimelineSection` ignores non-default enumeration changes; a default-output change or a live BGM/device-clock divergence of at least `50 ms` queues one zero-delay `reanchorPlayingTransportAtChartSecond` transaction. The transaction only repositions BGM/SFX to the unchanged wall-clock chart second; it does not pause the preview, restart timers, or touch canvas/stage-media state. It declines when BGM has naturally ended, so a chart tail cannot restart a finished track.
 
 Shared concerns:
 

@@ -52,6 +52,7 @@ public:
     // available and tracking, otherwise the wall-clock second passed in. Visuals
     // always keep the wall-clock second.
     double sfxDrainSecond(double wallClockSecond);
+    void onPreviewAudioOutputDevicesChanged(bool defaultOutputChanged);
     void requestTimelineSlowRefresh();
     void dispatchTimelineSlowRefresh();
     void scheduleTimelineAnalysisRefresh(
@@ -211,6 +212,7 @@ public:
     void jumpToNearestTimelineNote(double second, int lane);
 
 private:
+    void requestPreviewAudioReanchor(const QString& reason);
     void queueTimelineCursorBridgeUpdate(double second, bool centerView);
     void scheduleDeferredTimelineBridgeFlush();
     void invalidatePreviewFollowBindingCache();

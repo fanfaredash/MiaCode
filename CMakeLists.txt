@@ -1555,6 +1555,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/common src/preview src/audio
     )
 
+    miacode_add_dev_tool(preview_audio_recovery_policy_spec TEST
+        SOURCES
+            src/tools/preview/PreviewAudioRecoveryPolicySpec.cpp
+            src/audio/PreviewAudioRecoveryPolicy.h
+        LIBS Qt6::Core
+        INCLUDES src src/common src/preview src/audio
+    )
+
     # Simulation spec for the preview audio/stage-media cache mechanism: the
     # content-stamp skip decision (size:mtime, NOT path-only) and the live,
     # uncached track/bg resolvers. Drives the real production functions against
