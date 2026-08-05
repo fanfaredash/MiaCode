@@ -48,11 +48,9 @@ public:
     void onTimelineFollowProgressToggled(bool enabled);
     void onTimelineSyncToggled(bool enabled);
     void applyLatestTimelinePreviewStateToPausedPreview();
-    // Chart-second the SFX drain should use this tick: the audio clock when one is
-    // available and tracking, otherwise the wall-clock second passed in. Visuals
-    // always keep the wall-clock second.
+    // Chart-second used to observe live BGM drift. The BASS backend schedules
+    // SFX itself; its fallback backend may still use the returned value to drain.
     double sfxDrainSecond(double wallClockSecond);
-    void onPreviewAudioOutputDevicesChanged(bool defaultOutputChanged);
     void requestTimelineSlowRefresh();
     void dispatchTimelineSlowRefresh();
     void scheduleTimelineAnalysisRefresh(

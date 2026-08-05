@@ -2,12 +2,9 @@
 
 #include <memory>
 
-#include <QByteArray>
 #include <QObject>
 
 #include "PreviewAudioBackend.h"
-
-class QMediaDevices;
 
 class QtPreviewSfxRuntime : public QObject
 {
@@ -73,13 +70,8 @@ public:
     void stopAll();
     void prepareForShutdown();
 
-signals:
-    void audioOutputDevicesChanged(bool defaultOutputChanged);
-
 private:
     std::unique_ptr<miacode::preview_audio::PreviewAudioBackend> createBackend() const;
 
     std::unique_ptr<miacode::preview_audio::PreviewAudioBackend> backend_;
-    QMediaDevices* mediaDevices_ = nullptr;
-    QByteArray defaultAudioOutputId_;
 };

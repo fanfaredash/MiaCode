@@ -1449,11 +1449,6 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 
     previewSfxRuntime_ = new QtPreviewSfxRuntime(this);
     logStartupStage("preview_sfx_runtime_created");
-    connect(previewSfxRuntime_, &QtPreviewSfxRuntime::audioOutputDevicesChanged, this, [this](bool defaultOutputChanged) {
-        if (timelineSection_ != nullptr) {
-            timelineSection_->onPreviewAudioOutputDevicesChanged(defaultOutputChanged);
-        }
-    });
     connect(previewCanvas_, &PreviewRuntime::framePresented, this, [this]() {
         timelineSection_->handlePreviewStartupCanvasPresented();
         if (!qtPreviewPlaying_) {

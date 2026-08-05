@@ -5,9 +5,11 @@
 
 #include <QObject>
 #include <QHash>
+#include <QMutex>
 
 #include "common/PreviewAudioMixConfig.h"
 #include "BassPreviewDebugLogRouting.h"
+#include "BassPreviewSfxSchedulerPolicy.h"
 #include "PreviewAudioBackend.h"
 #include "PreviewAudioHealth.h"
 
@@ -81,6 +83,13 @@ public:
 
 private:
     struct Sample;
+
+    enum class ScheduledMixerAction {
+        None,
+        SfxGroup,
+        StartPendingBackgroundTrack,
+        SfxGroupAndStartPendingBackgroundTrack,
+    };
 
     struct PreparedAssetState {
         QString chartPath;
@@ -163,6 +172,10 @@ private:
     void repositionPausedTransportToSecond(double targetSecond, const QString& reason);
     void startTransportFromCurrentAnchor();
     void resetMasterMixerClock(double startSecond);
+    void disarmSfxScheduler();
+    void anchorSfxScheduler(double chartSecond);
+    double currentSfxSchedulerChartSecond(double fallbackSecond) const;
+    void armNextGroupSyncLocked();
     void stopAllSamples();
     void stopPlaybackSession();
     double authoritativeSecond() const;
@@ -181,6 +194,8 @@ private:
     void logAudioHealth(double authoritativeSecond);
     void logPreparedEventWindow(double startSecond) const;
     QString groupSignature(const CollapsedEventGroup& group) const;
+    static void onMixerGroupSync(quint32 handle, quint32 channel, quint32 data, void* user);
+    void handleMixerGroupSync(quint32 handle);
 
     PreviewAudioSettings settings_;
     PreviewTimingSettings timingSettings_;
@@ -205,6 +220,13 @@ private:
     quint64 transportReadyGeneration_ = 0;
     bool trackMissingAfterLoadLogged_ = false;
     std::atomic_bool shuttingDown_ = false;
+    mutable QMutex schedulerMutex_;
+    quint32 scheduledGroupSync_ = 0;
+    int scheduledGroupIndex_ = -1;
+    ScheduledMixerAction scheduledMixerAction_ = ScheduledMixerAction::None;
+    bool sfxSchedulerActive_ = false;
+    miacode::preview_audio::bass::SfxSchedulerAnchor sfxSchedulerAnchor_;
+    quint64 sfxSchedulerAnchorDecodePosition_ = 0;
     QHash<QString, Sample*> samplesByKind_;
     Sample* backgroundTrackSample_ = nullptr;
     Sample* touchholdSample_ = nullptr;

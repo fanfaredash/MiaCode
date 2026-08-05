@@ -149,15 +149,9 @@ void MainWindow::TimelineSection::onQtPreviewTick()
             {QStringLiteral("data"), QJsonObject{{QStringLiteral("second"), fallbackSecond}}},
         }, true);
     }
-    // G1 Commit 5: the old syncPreviewPlaybackClockTransaction call is gone. Its three
-    // side effects are now driven directly off wall-clock chart-second:
-    //   * SFX drain — handled by drainEvents() inside onQtPreviewTickAtSecond.
-    //   * Pending-BGM-start (BGM with positive offset) — handled by syncBackgroundTrack
-    //     called below; it forwards to maybeStartPendingBackgroundTrack on the backend.
-    //   * BASS_SYNC_POS re-arming — retired (see armNextGroupSync, which is now an
-    //     early-return no-op pending Commit 7's full deletion). With wall-clock-driven
-    //     drainEvents, the BASS SYNC chain can only produce duplicate triggers and
-    //     buys nothing.
+    // Live BASS playback owns SFX and pending-BGM timing through the master
+    // mixer. The tick remains responsible for visual advancement, health
+    // observation, and the non-BASS fallback backend.
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->syncBackgroundTrack(fallbackSecond);
     }
@@ -209,16 +203,9 @@ void MainWindow::TimelineSection::resetVisualClockSmoothing()
 
 double MainWindow::TimelineSection::sfxDrainSecond(double wallClockSecond)
 {
-    // SFX and BGM are already mixed and output together; what used to separate
-    // them was the trigger DECISION being made against the wall clock while the
-    // BGM advanced on the device clock. Two crystals, no correction, divergence
-    // measured every second into bgm_delta_ms and acted on by nobody. Draining
-    // against the audio clock closes that loop.
-    //
-    // The visual chart-second is deliberately NOT moved: a BASS-cursor-driven
-    // visual clock is exactly the "smear" G1 Commit 4 removed, and it needed ~130
-    // lines of drift/catch-up/snap smoothing to hide. This narrows the audio seam
-    // without reopening the visual one.
+    // This observes the BGM clock only to correct a real BGM divergence. BASS
+    // schedules live SFX directly from the master mixer, so GUI timing no longer
+    // decides when a running BASS session emits a note sound.
     if (state_.previewSfxRuntime_ == nullptr) {
         return wallClockSecond;
     }
@@ -231,7 +218,6 @@ double MainWindow::TimelineSection::sfxDrainSecond(double wallClockSecond)
         const double clockDeltaSeconds = qAbs(wallClockSecond - audioSecond);
         const auto recovery = miacode::preview_audio::recovery::decidePreviewAudioRecovery(
             state_.qtPreviewPlaying_,
-            /*defaultOutputChanged=*/false,
             /*audioClockAvailable=*/true,
             clockDeltaSeconds);
         if (recovery == miacode::preview_audio::recovery::Reason::DriftExceeded) {
@@ -255,18 +241,6 @@ double MainWindow::TimelineSection::sfxDrainSecond(double wallClockSecond)
         }
     }
     return useAudioClock ? audioSecond : wallClockSecond;
-}
-
-void MainWindow::TimelineSection::onPreviewAudioOutputDevicesChanged(bool defaultOutputChanged)
-{
-    const auto recovery = miacode::preview_audio::recovery::decidePreviewAudioRecovery(
-        state_.qtPreviewPlaying_,
-        defaultOutputChanged,
-        /*audioClockAvailable=*/false,
-        /*absoluteDeltaSeconds=*/0.0);
-    if (recovery == miacode::preview_audio::recovery::Reason::DefaultOutputChanged) {
-        requestPreviewAudioReanchor(QStringLiteral("default_output_changed"));
-    }
 }
 
 void MainWindow::TimelineSection::requestPreviewAudioReanchor(const QString& reason)
@@ -328,11 +302,9 @@ void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second, double 
         second = playbackEndSecond;
         applyQtPreviewPosition(second, true);
         if (state_.previewSfxRuntime_ != nullptr) {
-            // Deliberately the wall-clock end-second, NOT sfxDrainSecond(): this is
-            // the terminal flush, not a timing decision. Playback is ending on this
-            // tick, so everything still queued has to fire now regardless of where
-            // the audio clock got to — including the case where the BGM ended early
-            // and the audio clock stopped advancing before the last note.
+            // Non-BASS fallback needs a terminal flush. The live BASS backend
+            // ignores this call because its master-mixer sync owns the final
+            // note timing as well.
             state_.previewSfxRuntime_->drainEvents(second);
         }
         finishQtPreviewPlaybackAndReturnToEntry("Qt preview reached the end of current timeline.");
@@ -420,9 +392,8 @@ void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second, double 
     }
     const qint64 beforeDrainNs = diagEnabled ? tickProfileTimer.nsecsElapsed() : 0;
     if (state_.previewSfxRuntime_ != nullptr) {
-        // Audio-domain SFX scheduling. `second` (wall clock) still drives every
-        // visual below; only the SFX trigger instant moves onto the audio clock,
-        // so SFX and BGM stop being able to separate from each other.
+        // BASS ignores this compatibility drain while its mixer scheduler is
+        // active; the call remains for the fallback backend.
         state_.previewSfxRuntime_->drainEvents(sfxDrainSecond(second));
     }
     maybeFireExportAuditionClockTicks(second);

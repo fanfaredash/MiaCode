@@ -25,32 +25,32 @@ int main()
     bool ok = true;
 
     ok &= require(
-        decidePreviewAudioRecovery(/*playbackActive=*/false, /*defaultOutputChanged=*/true,
+        decidePreviewAudioRecovery(/*playbackActive=*/false,
                                    /*audioClockAvailable=*/true, /*absoluteDeltaSeconds=*/1.0)
             == Reason::None,
         QStringLiteral("inactive preview never reanchors"), err);
     ok &= require(
-        decidePreviewAudioRecovery(/*playbackActive=*/true, /*defaultOutputChanged=*/true,
+        decidePreviewAudioRecovery(/*playbackActive=*/true,
                                    /*audioClockAvailable=*/false, /*absoluteDeltaSeconds=*/0.0)
-            == Reason::DefaultOutputChanged,
-        QStringLiteral("default-output changes reanchor active playback"), err);
+            == Reason::None,
+        QStringLiteral("no BGM clock cannot request a reset"), err);
     ok &= require(
-        decidePreviewAudioRecovery(/*playbackActive=*/true, /*defaultOutputChanged=*/true,
+        decidePreviewAudioRecovery(/*playbackActive=*/true,
                                    /*audioClockAvailable=*/true, /*absoluteDeltaSeconds=*/1.0)
-            == Reason::DefaultOutputChanged,
-        QStringLiteral("default-output changes take precedence over drift"), err);
+            == Reason::DriftExceeded,
+        QStringLiteral("a real BGM drift remains recoverable"), err);
     ok &= require(
-        decidePreviewAudioRecovery(/*playbackActive=*/true, /*defaultOutputChanged=*/false,
+        decidePreviewAudioRecovery(/*playbackActive=*/true,
                                    /*audioClockAvailable=*/true, /*absoluteDeltaSeconds=*/0.049)
             == Reason::None,
         QStringLiteral("49 ms audio-clock divergence remains below the guard"), err);
     ok &= require(
-        decidePreviewAudioRecovery(/*playbackActive=*/true, /*defaultOutputChanged=*/false,
+        decidePreviewAudioRecovery(/*playbackActive=*/true,
                                    /*audioClockAvailable=*/true, /*absoluteDeltaSeconds=*/0.050)
             == Reason::DriftExceeded,
         QStringLiteral("50 ms audio-clock divergence queues recovery"), err);
     ok &= require(
-        decidePreviewAudioRecovery(/*playbackActive=*/true, /*defaultOutputChanged=*/false,
+        decidePreviewAudioRecovery(/*playbackActive=*/true,
                                    /*audioClockAvailable=*/false, /*absoluteDeltaSeconds=*/1.0)
             == Reason::None,
         QStringLiteral("no audio clock cannot produce a drift recovery"), err);

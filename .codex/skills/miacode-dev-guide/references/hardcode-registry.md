@@ -95,8 +95,8 @@ Use this file to track where important constants live, what they mean, and wheth
   - Rule: keep local while this is a Windows preview-only diagnostic path and export does not share live BASS_FX tempo playback
 - `src/audio/PreviewAudioRecoveryPolicy.h`
   - Owns: the live preview audio-recovery decision and the `50 ms` BGM-device-clock divergence boundary
-  - Scope: `TimelineSection` SFX-clock guard plus BASS default-output reanchor; not export timing or visual clock policy
-  - Rule: keep the threshold shared in this policy because the SFX wall-clock fallback and BGM reanchor must cross the boundary together; do not add retries, cooldowns, or an engine-restart fallback without new evidence
+  - Scope: `TimelineSection` live BGM-drift guard and BASS BGM-only correction; not export timing, device enumeration, SFX scheduling, or visual clock policy
+  - Rule: keep the threshold shared in this policy; device changes do not invoke it, and do not add retries, cooldowns, full transport resets, or an engine-restart fallback without new evidence
 - `src/core/chart/transform/ChartNormalization.cpp`, `src/core/chart/transform/ChartNormalizationSegmentPolicy.cpp`
   - Owns: whole-chart formatting snap constants for note-grid minimization, segment-length preservation, selection carry restoration, and duration-signature rewriting
   - Current tuning note: `384`-snap formatting keeps rendered `{beats}` selection independent from hold/slide duration syntax, still rewrites no-`#` duration signatures against a fixed `384` grid, keeps rendered duration denominators at or above a `16th-note` floor, requires reduce=true segment output to exactly express each snapped 384-grid segment length, and owns the optional blank-line sectioning after every 4 emitted measure lines

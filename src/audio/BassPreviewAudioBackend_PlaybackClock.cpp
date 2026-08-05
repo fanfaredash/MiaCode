@@ -297,6 +297,11 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
     }
     playbackSession_.lastStatusLogSecond = authoritativeSecond;
 
+    // The mixer callback advances the SFX cursor and can unpause a pending BGM.
+    // Hold the same lock while collecting this diagnostic snapshot so logging
+    // cannot race those state transitions.
+    QMutexLocker schedulerLocker(&schedulerMutex_);
+
     const double mixerSecond = (authoritativeSecond - playbackSession_.sessionStartSecond)
         / qMax(kBassPreviewMinRate, playbackSession_.sessionPlaybackRate);
     const double bgmRawSecond = backgroundTrackSample_ != nullptr ? backgroundTrackSample_->currentSec() : -1.0;
@@ -386,11 +391,6 @@ void BassPreviewAudioBackend::logPreparedEventWindow(double startSecond) const
     }
 }
 
-// G1 Commit 7: onMixerGroupSync / handleMixerGroupSync deleted. The BASS_SYNC_POS
-// callback chain was the BASS-cursor-driven SFX trigger path; it's been fully
-// replaced by wall-clock drainEvents in MainWindow's per-tick handler.
-
-
 double BassPreviewAudioBackend::preparePreviewPlaybackTransaction(
     double startSecond,
     bool resumeFromPause,
@@ -472,6 +472,7 @@ void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
         drainEvents(preparedPlayback_.startSecond);
     }
     restoreTouchholdVoices(preparedPlayback_.startSecond);
+    anchorSfxScheduler(preparedPlayback_.startSecond);
     logTrackFileMissingAfterLoadIfNeeded();
     // G1 Commit 8: rename `bass_commit` → `bass_play` per §7.2 of
     // PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md, and add the rate field so
@@ -530,10 +531,17 @@ void BassPreviewAudioBackend::applyPausedPreviewState(
     // at its old position; trusting it then "reuses" the transport and resumes the
     // BGM from the wrong second. When a BGM is the live clock, use its real
     // chart-second so a mismatch falls through to repositionPausedTransportToSecond.
+    bool backgroundTrackPendingStart = false;
+    double backgroundTrackOffsetSeconds = 0.0;
+    {
+        QMutexLocker locker(&schedulerMutex_);
+        backgroundTrackPendingStart = playbackSession_.backgroundTrackPendingStart;
+        backgroundTrackOffsetSeconds = playbackSession_.backgroundTrackOffsetSeconds;
+    }
     const double reuseCompareSecond =
         (hasBackgroundTrack() && backgroundTrackSample_ != nullptr
-         && !playbackSession_.backgroundTrackPendingStart)
-            ? backgroundTrackSample_->currentSec() - playbackSession_.backgroundTrackOffsetSeconds
+         && !backgroundTrackPendingStart)
+            ? backgroundTrackSample_->currentSec() - backgroundTrackOffsetSeconds
             : retainedTransportSecond();
     if (miacode::preview_audio::bass::canReusePausedTransport(
             retainedPlaybackMode_,
@@ -586,12 +594,19 @@ miacode::preview_audio::PausePreviewResult BassPreviewAudioBackend::pausePreview
     // of where the audio actually is) as the pause second so transport and BGM
     // resume in lockstep. No-op in the editor preview, where the BGM already tracks
     // the playhead, so authoritativeSecond() and the BGM position agree.
+    bool backgroundTrackPendingStart = false;
+    double backgroundTrackOffsetSeconds = 0.0;
+    {
+        QMutexLocker locker(&schedulerMutex_);
+        backgroundTrackPendingStart = playbackSession_.backgroundTrackPendingStart;
+        backgroundTrackOffsetSeconds = playbackSession_.backgroundTrackOffsetSeconds;
+    }
     if (playbackSession_.masterRunning
         && result.usedBackgroundTrack
         && backgroundTrackSample_ != nullptr
-        && !playbackSession_.backgroundTrackPendingStart) {
+        && !backgroundTrackPendingStart) {
         const double bgmChartSecond =
-            backgroundTrackSample_->currentSec() - playbackSession_.backgroundTrackOffsetSeconds;
+            backgroundTrackSample_->currentSec() - backgroundTrackOffsetSeconds;
         if (qIsFinite(bgmChartSecond) && bgmChartSecond >= 0.0) {
             result.pauseSecond = bgmChartSecond;
         }
@@ -744,22 +759,41 @@ bool BassPreviewAudioBackend::reanchorPlayingTransportAtChartSecond(double chart
     MC_OP("BassPreviewAudioBackend::reanchorPlayingTransportAtChartSecond");
 #ifdef MIACODE_HAS_BASS_AUDIO
     // A chart may outlast its BGM. At that natural end-of-track boundary the
-    // BGM cursor is intentionally not a clock, so an output-device signal must
-    // not turn a finished song into a restart.
+    // BGM cursor is intentionally not a clock, so no recovery may restart it.
+    bool backgroundTrackRunning = false;
+    bool backgroundTrackPendingStart = false;
+    double backgroundTrackOffsetSeconds = 0.0;
+    {
+        QMutexLocker locker(&schedulerMutex_);
+        backgroundTrackRunning = playbackSession_.backgroundTrackRunning;
+        backgroundTrackPendingStart = playbackSession_.backgroundTrackPendingStart;
+        backgroundTrackOffsetSeconds = playbackSession_.backgroundTrackOffsetSeconds;
+    }
     if (!playbackSession_.masterRunning
-        || !playbackSession_.backgroundTrackRunning
-        || playbackSession_.backgroundTrackPendingStart
+        || !backgroundTrackRunning
+        || backgroundTrackPendingStart
         || !audioClockChartSecond(nullptr)) {
         return false;
     }
 
     const double anchoredSecond = clampTimelineSecond(chartSecond);
-    const QString transportReason = QStringLiteral("automatic_reanchor");
-    noteInitWindowOpened(transportReason);
-    anchorTransportToSecond(anchoredSecond, transportReason);
-    startTransportFromCurrentAnchor();
+    const double rawSecond = anchoredSecond + backgroundTrackOffsetSeconds;
+    if (rawSecond < 0.0) {
+        return false;
+    }
+    // Correct the BGM source only.  The master mixer and its SFX sync chain
+    // continue uninterrupted, so a device/GUI hiccup cannot cancel one-shots
+    // that were already scheduled in the audio domain.
+    backgroundTrackSample_->pause();
+    backgroundTrackSample_->setCurrentSec(rawSecond);
+    backgroundTrackSample_->play();
+    playbackSession_.lastAuthoritativeSecond = anchoredSecond;
+    {
+        QMutexLocker locker(&schedulerMutex_);
+        playbackSession_.backgroundTrackRunning = true;
+    }
     appendAudioDebugLog(
-        QString("bass_transport action=automatic_reanchor reason=%1 chart_second=%2")
+        QString("bass_transport action=automatic_reanchor scope=bgm_only reason=%1 chart_second=%2")
             .arg(reason)
             .arg(anchoredSecond, 0, 'f', 6));
     return true;
