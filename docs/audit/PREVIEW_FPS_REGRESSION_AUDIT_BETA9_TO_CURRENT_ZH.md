@@ -36,7 +36,7 @@
 | 排名 | 可疑度 | 审计结果 | 覆盖范围 | 主要形态 |
 |---:|---|---|---|---|
 | 1 | 极高 | 帧状态快照在单个 tick/呈现周期内放大为约 4–5 次完整复制与原子发布 | 所有实时预览 | 持续 CPU、分配、引用计数与跨线程争用 |
-| 2 | 极高（条件性） | 高性能 GPU 默认绑定造成根窗口与预览合成窗口分属独显/集显 | Windows 混合显卡 | 持续跨适配器合成、显存与呈现竞争 |
+| 2 | ~~极高（条件性）~~ → **待触发** | 高性能 GPU 默认绑定造成根窗口与预览合成窗口分属独显/集显 | Windows 混合显卡，且高性能适配器 ≠ 默认适配器，且独立合成窗口已启用 | 持续跨适配器合成、显存与呈现竞争 |
 | 3 | 高（条件性） | PV 默认硬解进入 D3D11VA 两设备共享纹理与 180 ms keyed-mutex 路径 | Windows、含 PV/BG 视频 | 解码复制、同步等待、丢帧或长尾阻塞 |
 | 4 | 高至中 | HUD 诊断详情在诊断关闭时仍提前格式化；开启后还可逐文本强制 flush | 默认时间戳 HUD；诊断开启时更强 | 固定字符串分配；条件性日志阻塞 |
 | 5 | 中高（条件性） | 扩展事件总线每 tick 构造 JSON，启用扩展后在 GUI 线程执行 JS 回调 | 所有预览有基础成本；扩展用户更高 | JSON 分配、队列扫描、JS 执行 |
@@ -117,11 +117,32 @@
 
 评估：该项对混合显卡用户可持续存在，且与“单独运行尚可、OBS/浏览器并发时下降”这一既有现象高度吻合；对单 GPU 用户解释力较弱。
 
-> 审查（2026-08-05）：**结论成立；注释矛盾已修，默认值本身留待实测。**
+> 审查（2026-08-05）：**代码描述成立，但触发场景暂未遇到——实测与代码复核都不支持这条当前正在发生。降级为「待触发」，不作为排查重点。**
 >
-> `gpuBindHighPerformanceEnabled()` 无环境变量时确实直接 `return true`，根窗口 `preferVideoShareDevice=false`、预览合成 `=true` 的分流也与描述一致。报告点出的注释矛盾属实，`gpu_device_provider.cpp:109` 的「opt-in until it is validated」自 `41cf08a8` 默认翻转起就不再成立，已在 `cd3c446a` 改写，同时保留了混合显卡的风险说明。
+> 代码事实无误：`gpuBindHighPerformanceEnabled()` 无环境变量时确实 `return true`，根窗口 `preferVideoShareDevice=false`、预览合成 `=true` 的分流也与描述一致。报告点出的注释矛盾属实，`gpu_device_provider.cpp:109` 的「opt-in until it is validated」自 `41cf08a8` 默认翻转起就不再成立，已在 `cd3c446a` 改写。
 >
-> 默认值没动，原因是翻转它是产品取舍而非缺陷修复。另外报告没提到一处已有保护：`gpu_device_provider.cpp:150-160` 会在「高性能适配器就是 DXGI 默认适配器」时跳过绑定，所以单 GPU 机器和 dGPU 直驱主显示器的机器本来就不会形成双适配器结构。是否对混合显卡默认关闭，需要在 i5-1155G7 + MX450 那类机器上实测后再定。
+> 但本节描述的双适配器结构，有两道独立的门把它挡住了：
+>
+> **门一：这台目标机器上高性能适配器就是默认适配器。** 2026-08-04 的两次会话日志（`logs`、`logs 2`）里，两个 surface 都是 `action=skip`：
+>
+> ```
+> surface=quick_shell_preview_composite  action=skip  reason=video_surface_keeps_default_for_decode_bridge
+> surface=quick_shell_root_window        action=skip  reason=high_perf_equals_default_adapter  luid=0x0:0xf856
+> ```
+>
+> 原因在 `idle/vram_gauge` 的适配器扫描：DXGI adapter 0 是 MX450（`0xf856`），adapter 1 才是 Iris Xe（`0xf25b`）。**独显本身就是默认适配器**，所以 `gpu_device_provider.cpp:150-160` 的「高性能 == 默认则跳过」保护直接命中，绑定压根没执行。设备探针也确认根窗口落在 `adapter="NVIDIA GeForce MX450"`。本节假设的「根窗口在独显、预览在集显」在这台机器上是反的。
+>
+> 顺带否掉配套的显存假设：MX450 显存用量峰值 79 MB / 预算 1639 MB，所有采样的 `local_over_budget` 全为 0。
+>
+> **门二：独立合成窗口在当前代码里根本不会上屏。** 这一条比门一更彻底，且与机器无关——`MainWindow::PreviewSection::quickShellPreviewUsesSeparateSurface()` 现在硬编码 `return false`（`3f89c397` 起；此前它是按 `hasVideoMedia()` 动态决定的）。`QuickShellMain.qml` 里两个承载 `previewCompositeWindow` 的 `Loader` 都以 `controller.previewUsesSeparateSurface` 为 `active` 条件，于是永远不激活。
+>
+> 日志完全印证：`preview_composite` 全程 `from=Hidden to=Hidden exposed=0`，且全日志没有一条 `quick_shell/device surface=quick_shell_preview_composite` 探针（该行只在首次渲染时打），说明它一帧都没画过、也从未初始化 QRhi。预览实际以 `role=embedded_inline` 跑在根窗口内，`external_stage_media.separate_surface_active=0`。
+>
+> 也就是说：当前构建里只存在**一个**在渲染的 Quick 窗口，「两套 QRhi 并存 + DWM 跨适配器合成」这个前提不成立。`QuickShellPreviewCompositeSurface` 仍会在启动时构造一个 `QQuickView`（这就是那条 `gpu_provider` 日志的来源），但它永远不上屏。
+>
+> **结论：** 本节保留为架构风险记录——一旦 `quickShellPreviewUsesSeparateSurface()` 重新启用，或换到一台「高性能适配器 ≠ 默认适配器」的机器（例如 iGPU 驱动主显示器的常见混合显卡配置），两道门会同时打开，本节描述即刻成立。但作为当前掉帧的解释，它没有证据，不应占用排查预算。默认值也因此不需要改动。
+>
+> 附带发现（不属本节）：`shouldUseSeparatePreviewSurface()` 及其 `quickshell_preview_surface_policy_spec` 仍在仓库里并持续跑测试，但生产端唯一调用者已被 `return false` 取代，成了孤儿策略。
 
 ### 4.3 PV 默认硬件解码进入 D3D11VA 两设备共享纹理与 180 ms keyed-mutex 路径
 
@@ -732,14 +753,16 @@
 
 ## 10. 逐条审查回执（2026-08-05）
 
-对第 4、5 两节的每个条目做了代码复核，判定分三类：**已修**（结论成立且修复无损、可验证）、**取舍**（结论成立但修复涉及产品/结构决策，需实测或产品确认）、**通过**（结论成立且当前不需要动作）。**没有条目被判定为误报**——20 条详细结果与 5 条合并结论描述的代码事实全部与当前分支一致。
+对第 4、5 两节的每个条目做了代码复核，判定分四类：**已修**（结论成立且修复无损、可验证）、**取舍**（结论成立但修复涉及产品/结构决策，需实测或产品确认）、**待触发**（代码描述成立，但当前构建或目标机器不满足触发条件，暂不占排查预算）、**通过**（结论成立且当前不需要动作）。**没有条目被判定为误报**——20 条详细结果与 5 条合并结论描述的代码事实全部与当前分支一致。
+
+第 4.2 节在 2026-08-04 实测日志（`logs`、`logs 2`）到手后由「取舍」改判为「待触发」：那两次会话中两个 surface 的绑定都被跳过，且独立合成窗口在当前代码里被 `quickShellPreviewUsesSeparateSurface()` 硬编码关闭，从未上屏。详见该节。
 
 已落地的代码修复在提交 `cd3c446a`：Release 构建通过，ctest 43/46；3 个失败（`oplog_self_test`、`plain_code_editor_spec`、`preview_firework_lifecycle_spec`）在未改动的分支头上同样复现，与本次改动无关。
 
 | 条目 | 判定 | 说明 |
 |---|---|---|
 | 4.1 帧状态快照放大 | 取舍 | 结论与计数全部核实。合并发布（路线 a）与收窄快照（路线 b）都不属低风险；建议先用 (a) 做 Windows A/B 取数 |
-| 4.2 高性能 GPU 默认绑定 | 已修（注释）/ 取舍（默认值） | 过期注释已改写；默认值翻转需混合显卡实测 |
+| 4.2 高性能 GPU 默认绑定 | **待触发** | 过期注释已改写；但实测日志与代码复核都表明双适配器结构当前不会发生，见该节。默认值无需改动 |
 | 4.3 PV 默认硬解 + 两设备桥 | 取舍 | 三点事实无误；H2 已标注 RESERVED，集显软解默认刚被移除，任一方向都要 iGPU 验收 |
 | 4.4 HUD 诊断提前格式化 | 已修 | 惰性 detail + 开关单次读取；报告漏算了未缓存的环境变量读取 |
 | 4.5 扩展事件总线每 tick JSON | 已修 | 新增订阅预检；报告低估了无订阅时 `dispatchEvent()` 的 enrichment 成本 |
