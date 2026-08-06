@@ -207,6 +207,10 @@ private:
     // because the mixer-sync caller runs under the scheduler mutex on the BASS
     // audio thread and must not log there.
     void triggerGroup(const CollapsedEventGroup& group, QString* playedKindsOut = nullptr);
+    // Stable bass_status token for the action the mixer sync is armed for. A member
+    // rather than a neighbour of retainedPlaybackModeLabel in
+    // BassPreviewAudioBackendImpl.h because ScheduledMixerAction is private here.
+    static QString scheduledMixerActionLabel(ScheduledMixerAction action);
     void logPlaybackStatus(double authoritativeSecond, double fallbackSecond);
     // Underrun / buffer-level probe. Polled at tick rate (cheap BASS_ChannelIsActive
     // calls) so a stall edge is caught immediately; the fuller buffer-health line

@@ -276,6 +276,21 @@ void BassPreviewAudioBackend::logAudioHealth(double authoritativeSecond)
 #endif
 }
 
+QString BassPreviewAudioBackend::scheduledMixerActionLabel(ScheduledMixerAction action)
+{
+    switch (action) {
+    case ScheduledMixerAction::SfxGroup:
+        return QStringLiteral("sfx_group");
+    case ScheduledMixerAction::StartPendingBackgroundTrack:
+        return QStringLiteral("start_pending_bgm");
+    case ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack:
+        return QStringLiteral("sfx_group_and_start_pending_bgm");
+    case ScheduledMixerAction::None:
+    default:
+        return QStringLiteral("none");
+    }
+}
+
 void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, double fallbackSecond)
 {
 #ifdef MIACODE_HAS_BASS_AUDIO
@@ -320,13 +335,16 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
     const double bgmLengthSecond =
         backgroundTrackSample_ != nullptr ? backgroundTrackSample_->lengthSeconds : -1.0;
     const double driftMs = (authoritativeSecond - fallbackSecond) * 1000.0;
-    // G1 Commit 7: scheduledGroupIndex_ deleted with the BASS_SYNC_POS scheduler.
-    // The next group to trigger is simply the current event-group cursor.
+    // `next_group_idx` is the event-group cursor: what the timeline will trigger next.
+    // It is NOT what the mixer sync is armed for -- scheduledGroupIndex_ is -1 while the
+    // armed sync exists only to start a pending BGM, and the two also diverge between a
+    // group firing and the next arm. `armed_group_idx` / `armed_action` report the
+    // scheduler's own view so that difference is readable instead of inferred.
     const int nextGroupIndex = playbackSession_.eventGroupIndex;
     const double nextGroupSecond =
         (nextGroupIndex >= 0 && nextGroupIndex < preparedGroups_.size()) ? preparedGroups_[nextGroupIndex].second : -1.0;
     appendAudioDebugLog(
-        QString("bass_status txn=%1 auth=%2 mixer=%3 bgm_raw=%4 bgm_chart=%5 fallback=%6 drift_ms=%7 next_group_idx=%8 next_group_second=%9 last_trigger_idx=%10 last_trigger_second=%11 triggered_count=%12 rate=%13 speed_mode=%14 bgm_delta_ms=%15 bgm_raw_expected=%16 bgm_raw_delta_ms=%17 bgm_offset=%18 bgm_len=%19 bgm_running=%20 bgm_pending=%21 master_running=%22 retained_mode=%23 status_interval_ms=%24")
+        QString("bass_status txn=%1 auth=%2 mixer=%3 bgm_raw=%4 bgm_chart=%5 fallback=%6 drift_ms=%7 next_group_idx=%8 next_group_second=%9 last_trigger_idx=%10 last_trigger_second=%11 triggered_count=%12 rate=%13 speed_mode=%14 bgm_delta_ms=%15 bgm_raw_expected=%16 bgm_raw_delta_ms=%17 bgm_offset=%18 bgm_len=%19 bgm_running=%20 bgm_pending=%21 master_running=%22 retained_mode=%23 status_interval_ms=%24 armed_group_idx=%25 armed_action=%26")
             .arg(playbackTransactionId_)
             .arg(authoritativeSecond, 0, 'f', 6)
             .arg(mixerSecond, 0, 'f', 6)
@@ -352,7 +370,9 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
             .arg(playbackSession_.backgroundTrackPendingStart ? 1 : 0)
             .arg(playbackSession_.masterRunning ? 1 : 0)
             .arg(retainedPlaybackModeLabel(retainedPlaybackMode_))
-            .arg(statusLogIntervalSeconds * 1000.0, 0, 'f', 3));
+            .arg(statusLogIntervalSeconds * 1000.0, 0, 'f', 3)
+            .arg(scheduledGroupIndex_)
+            .arg(scheduledMixerActionLabel(scheduledMixerAction_)));
 #else
     Q_UNUSED(authoritativeSecond);
     Q_UNUSED(fallbackSecond);
