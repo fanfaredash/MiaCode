@@ -235,14 +235,26 @@ inline void appendAudioDebugLog(const QString& message)
 // audio channel. Reads-and-clears the per-thread error, matching BASS's
 // own contract: only the most recent failure is preserved, so callers must
 // query before the next BASS call or risk losing the code.
-inline void noteBassErr(const char* ctx)
+inline void noteBassErrCode(const char* ctx, int code)
 {
 #ifdef MIACODE_HAS_BASS_AUDIO
-    const int code = static_cast<int>(BASS_ErrorGetCode());
     if (code == 0) {
         return;
     }
     appendAudioDebugLog(QString("bass_err ctx=%1 code=%2").arg(QLatin1String(ctx)).arg(code));
+#else
+    Q_UNUSED(ctx);
+    Q_UNUSED(code);
+#endif
+}
+
+inline void noteBassErr(const char* ctx)
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    // Split from noteBassErrCode so a caller that must query the code inside a locked
+    // region can still emit the line after unlocking: the scheduler mutex is shared
+    // with the BASS mixer callback, where a log write is a stall hazard.
+    noteBassErrCode(ctx, static_cast<int>(BASS_ErrorGetCode()));
 #else
     Q_UNUSED(ctx);
 #endif

@@ -42,7 +42,7 @@ void BassPreviewAudioBackend::resetCursor(double second, bool includeCurrentSeco
         rearmScheduler = sfxSchedulerActive_;
     }
     if (rearmScheduler) {
-        disarmSfxScheduler();
+        disarmSfxScheduler("reset_cursor");
     }
 #endif
     playbackSession_.eventGroupIndex = 0;
@@ -143,19 +143,43 @@ void BassPreviewAudioBackend::drainEvents(double second)
     }
 }
 
-void BassPreviewAudioBackend::disarmSfxScheduler()
+void BassPreviewAudioBackend::disarmSfxScheduler(const char* reason)
 {
 #ifdef MIACODE_HAS_BASS_AUDIO
-    QMutexLocker locker(&schedulerMutex_);
-    if (scheduledGroupSync_ != 0 && masterMixer_ != 0) {
-        BASS_ChannelRemoveSync(masterMixer_, scheduledGroupSync_);
-        noteBassErr("sfx_scheduler/remove_sync");
+    bool wasActive = false;
+    bool hadSync = false;
+    int groupIndex = -1;
+    int removeSyncError = 0;
+    {
+        QMutexLocker locker(&schedulerMutex_);
+        wasActive = sfxSchedulerActive_;
+        hadSync = scheduledGroupSync_ != 0;
+        groupIndex = scheduledGroupIndex_;
+        if (scheduledGroupSync_ != 0 && masterMixer_ != 0) {
+            BASS_ChannelRemoveSync(masterMixer_, scheduledGroupSync_);
+            // Read now (BASS keeps only the most recent per-thread code), report below.
+            removeSyncError = static_cast<int>(BASS_ErrorGetCode());
+        }
+        scheduledGroupSync_ = 0;
+        scheduledGroupIndex_ = -1;
+        scheduledMixerAction_ = ScheduledMixerAction::None;
+        sfxSchedulerActive_ = false;
+        sfxSchedulerAnchorDecodePosition_ = 0;
     }
-    scheduledGroupSync_ = 0;
-    scheduledGroupIndex_ = -1;
-    scheduledMixerAction_ = ScheduledMixerAction::None;
-    sfxSchedulerActive_ = false;
-    sfxSchedulerAnchorDecodePosition_ = 0;
+    // Both lines land after the locker's scope ends: schedulerMutex_ is also taken by
+    // the mixer sync callback on the BASS audio thread, so a log write underneath it
+    // stalls playback. The anchor side has always been logged; without the disarm side
+    // a session that never re-anchors just stops producing anchor rows, which reads
+    // identically to a session that was never armed.
+    noteBassErrCode("sfx_scheduler/remove_sync", removeSyncError);
+    appendAudioDebugLog(
+        QString("bass_sfx_scheduler action=disarm reason=%1 was_active=%2 had_sync=%3 group_idx=%4")
+            .arg(QLatin1String(reason))
+            .arg(wasActive ? 1 : 0)
+            .arg(hadSync ? 1 : 0)
+            .arg(groupIndex));
+#else
+    Q_UNUSED(reason);
 #endif
 }
 
@@ -167,7 +191,7 @@ void BassPreviewAudioBackend::anchorSfxScheduler(double chartSecond)
         return;
     }
 
-    disarmSfxScheduler();
+    disarmSfxScheduler("anchor_rearm");
     const QWORD position = BASS_ChannelGetPosition(
         masterMixer_, BASS_POS_BYTE | BASS_POS_DECODE);
     if (position == static_cast<QWORD>(-1)) {

@@ -171,7 +171,11 @@ private:
     void repositionPausedTransportToSecond(double targetSecond, const QString& reason);
     void startTransportFromCurrentAnchor();
     void resetMasterMixerClock(double startSecond);
-    void disarmSfxScheduler();
+    // `reason` names the caller in the emitted `action=disarm` line. A disarm that is
+    // never followed by a re-anchor silently drops live SFX to the GUI drainEvents
+    // fallback, and the log only showed anchors, so the author of a missing re-anchor
+    // could not be identified from a capture.
+    void disarmSfxScheduler(const char* reason);
     void anchorSfxScheduler(double chartSecond);
     double currentSfxSchedulerChartSecond(double fallbackSecond) const;
     void armNextGroupSyncLocked();

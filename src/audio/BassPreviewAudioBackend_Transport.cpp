@@ -52,7 +52,7 @@ void BassPreviewAudioBackend::suspendPlaybackTransport()
     logTrackFileMissingAfterLoadIfNeeded();
     const double pauseSecond = authoritativeSecond();
     playbackSession_.lastAuthoritativeSecond = pauseSecond;
-    disarmSfxScheduler();
+    disarmSfxScheduler("suspend_transport");
     // G1 Commit 6 (corrected post-test): master mixer stays ACTIVE_PLAYING for the
     // engine's lifetime — what makes the BGM go silent is *this* call, setting
     // BASS_MIXER_CHAN_PAUSE on the BGM source. Pre-G1, BASS_ChannelPause on the
@@ -90,7 +90,7 @@ void BassPreviewAudioBackend::anchorTransportToSecond(double targetSecond, const
     timer.start();
     const double anchoredSecond = clampTimelineSecond(targetSecond);
     preparedPlayback_ = PreparedPlaybackState();
-    disarmSfxScheduler();
+    disarmSfxScheduler("anchor_transport");
     stopAllSamples();
     resetMasterMixerClock(anchoredSecond);
     configureBackgroundTrackForSecond(
@@ -173,7 +173,7 @@ void BassPreviewAudioBackend::repositionPausedTransportToSecond(double targetSec
     timer.start();
     const double repositionedSecond = clampTimelineSecond(targetSecond);
     preparedPlayback_ = PreparedPlaybackState();
-    disarmSfxScheduler();
+    disarmSfxScheduler("reposition_paused_transport");
     clearResidualVoicesForPausedReposition();
     repositionMasterTransportClock(repositionedSecond);
     configureBackgroundTrackForSecond(
@@ -306,7 +306,7 @@ void BassPreviewAudioBackend::applyPlaybackRateAtChartSecond(double rate, double
     }
     const bool rearmScheduler = playbackSession_.masterRunning;
     if (rearmScheduler) {
-        disarmSfxScheduler();
+        disarmSfxScheduler("live_rate_change");
     }
     if (backgroundTrackSample_ == nullptr) {
         // No BGM loaded — just record the rate so the next sample creation
@@ -471,7 +471,7 @@ void BassPreviewAudioBackend::stopSfxVoices()
 
 void BassPreviewAudioBackend::stopPlaybackSession()
 {
-    disarmSfxScheduler();
+    disarmSfxScheduler("stop_playback_session");
     stopAllSamples();
     resetMasterMixerClock(playbackSession_.lastAuthoritativeSecond);
     playbackSession_.backgroundTrackRunning = false;
@@ -622,7 +622,7 @@ void BassPreviewAudioBackend::startBackgroundTrack(double second)
     MC_OP("BassPreviewAudioBackend::startBackgroundTrack");
 #ifdef MIACODE_HAS_BASS_AUDIO
     if (playbackSession_.masterRunning) {
-        disarmSfxScheduler();
+        disarmSfxScheduler("start_background_track");
     }
     if (masterMixer_ != 0 && !playbackSession_.masterRunning) {
         resetMasterMixerClock(second);
@@ -653,7 +653,7 @@ void BassPreviewAudioBackend::startBackgroundTrack(double second)
 void BassPreviewAudioBackend::seekBackgroundTrack(double second)
 {
     MC_OP("BassPreviewAudioBackend::seekBackgroundTrack");
-    disarmSfxScheduler();
+    disarmSfxScheduler("seek_background_track");
     configureBackgroundTrackForSecond(
         second,
         QStringLiteral("seek_background_track"),
@@ -670,7 +670,7 @@ void BassPreviewAudioBackend::seekBackgroundTrack(double second)
 void BassPreviewAudioBackend::pauseBackgroundTrack()
 {
     MC_OP("BassPreviewAudioBackend::pauseBackgroundTrack");
-    disarmSfxScheduler();
+    disarmSfxScheduler("pause_background_track");
 #ifdef MIACODE_HAS_BASS_AUDIO
     if (backgroundTrackSample_ != nullptr) {
         backgroundTrackSample_->pause();

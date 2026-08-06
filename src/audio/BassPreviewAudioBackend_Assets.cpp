@@ -40,7 +40,7 @@ void BassPreviewAudioBackend::refreshPreparedAssets()
 void BassPreviewAudioBackend::resetAssets()
 {
 #ifdef MIACODE_HAS_BASS_AUDIO
-    disarmSfxScheduler();
+    disarmSfxScheduler("reset_assets");
     int releasedSampleCount = 0;
     samplesByKind_.clear();
     backgroundTrackSample_ = nullptr;
@@ -279,7 +279,7 @@ void BassPreviewAudioBackend::applyLevels(const PreviewAudioSettings& settings)
     // setting. Remove its one outstanding sync before reading or rebuilding the
     // event vector, then resume from the same fired/unfired boundary.
     if (rearmScheduler) {
-        disarmSfxScheduler();
+        disarmSfxScheduler("apply_levels");
     }
     settings_ = settings;
     settings_.normalize();
@@ -380,7 +380,7 @@ void BassPreviewAudioBackend::configureTimeline(
     const double liveChartSecond = currentSfxSchedulerChartSecond(
         playbackSession_.lastAuthoritativeSecond);
     if (rearmScheduler) {
-        disarmSfxScheduler();
+        disarmSfxScheduler("configure_timeline");
     }
     rebuildPreparedTimeline(noteMarkers, playbackRate, timingSettings);
     if (rearmScheduler && playbackSession_.masterRunning) {
@@ -392,7 +392,7 @@ void BassPreviewAudioBackend::configureTimeline(
 void BassPreviewAudioBackend::clearTimeline()
 {
     MC_OP("BassPreviewAudioBackend::clearTimeline");
-    disarmSfxScheduler();
+    disarmSfxScheduler("clear_timeline");
     clearPreparedTimeline();
     stopAll();
 }
