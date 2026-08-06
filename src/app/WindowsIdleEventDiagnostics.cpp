@@ -255,6 +255,13 @@ void WindowsIdleEventMonitor::observeNativeMessage(const QByteArray& eventType, 
     if (impl_ == nullptr || impl_->window == nullptr || msg->hwnd != impl_->window) {
         return;
     }
+    // nativeEventFilter sees every message the process dispatches, so reject the
+    // overwhelming majority here rather than letting eventPayload()'s empty return do the
+    // filtering further down. Safe ahead of the PBT_POWERSETTINGCHANGE special case below:
+    // that case only ever fires for WM_POWERBROADCAST, which isRelevantMessage() accepts.
+    if (!isRelevantMessage(static_cast<quint32>(msg->message))) {
+        return;
+    }
     QString payload;
     if (msg->message == WM_POWERBROADCAST
         && msg->wParam == PBT_POWERSETTINGCHANGE
