@@ -156,13 +156,6 @@ bool verifyDefaultsAndClamps(QTextStream& err)
                   "GPU high-performance binding respects explicit 1", err);
     unsetEnv("MIACODE_GPU_BIND_HIGH_PERFORMANCE");
 
-    // value_or defaults.
-    unsetEnv("MIACODE_PREVIEW_VISUAL_SMOOTHING");
-    ok &= require(dbg::previewVisualSmoothingEnabled(), "visual smoothing defaults on", err);
-    setEnv("MIACODE_PREVIEW_VISUAL_SMOOTHING", "0");
-    ok &= require(!dbg::previewVisualSmoothingEnabled(), "visual smoothing respects '0'", err);
-    unsetEnv("MIACODE_PREVIEW_VISUAL_SMOOTHING");
-
     // Frame-pacing sample ms: default 1000, positive-guarded.
     unsetEnv("MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS");
     ok &= require(dbg::previewFramePacingDiagnosticSampleMs() == 1000, "sample ms default 1000", err);

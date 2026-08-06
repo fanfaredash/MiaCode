@@ -175,8 +175,10 @@ double MainWindow::TimelineSection::applyVisualClockSmoothing(
     // What's preserved: the lookahead-vsync shift. That compensates for GPU pipeline
     // latency (GUI → render → composite → present takes 1-2 vsyncs after the tick that
     // samples chart-second) and is independent of the audio backend, so it survives the
-    // clock flip. State variables are still maintained so debug overlays and the
-    // smoothing-enabled toggle continue to work without dangling references.
+    // clock flip; it keeps its own lookahead-vsyncs env control (see DEBUG_INDEX).
+    // State variables are still maintained so debug overlays keep working without
+    // dangling references. The smoothing-enabled env gate that used to wrap this body
+    // went away with the algorithm it gated; it is now a retired flag.
     //
     // See docs/PREVIEW_AUDIO_CLOCK_ALIGNMENT_HANDOFF_ZH.md §3.6, §5.3, §6.1 step 4.
     const qint64 targetIntervalNs = qMax<qint64>(1, previewCanvasTargetFrameIntervalNs());

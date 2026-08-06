@@ -392,15 +392,6 @@ inline bool previewHwDecodeDropCorruptFramesEnabled()
     return envFlagEnabled("MIACODE_PREVIEW_HWDECODE_DROP_CORRUPT");
 }
 
-inline bool previewVisualSmoothingEnabled()
-{
-    // Visual-time smoothing (doc section 6.3): bound per-frame visual delta so render-time
-    // variance doesn't feed audio-time jumps straight into the rendered playhead. Default ON
-    // because the choppy motion from audio-authority + render-variance interaction is the most
-    // visible artefact during playback. Set MIACODE_PREVIEW_VISUAL_SMOOTHING=0 to disable.
-    return envOptionalFlagValue("MIACODE_PREVIEW_VISUAL_SMOOTHING").value_or(true);
-}
-
 inline bool previewUseDCompEnabled()
 {
     // DirectComposition preview path (see local plan doc
