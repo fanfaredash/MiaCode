@@ -89,6 +89,31 @@ int main()
     ok &= require(!result.timedOut,
                   QStringLiteral("a declined capture is not reported as a timeout"), err);
 
+    // ---- symbol handler status -------------------------------------------------
+    // symbol=(nosym) on a frame has two very different causes — the machine has no PDB
+    // (normal, documented) or SymInitialize never came up (a real fault) — and the frame
+    // itself cannot tell them apart. This status is the only thing that can, so its
+    // contract has to hold: never claim ready without having attempted, and never report
+    // an error code alongside success.
+    const diag::SymbolHandlerStatus symbols = diag::prepareStackWalkSymbols();
+    ok &= require(!symbols.ready || symbols.attempted,
+                  QStringLiteral("symbol handler is never ready without an attempt"), err);
+    ok &= require(!symbols.ready || symbols.lastErrorCode == 0,
+                  QStringLiteral("a ready symbol handler reports no error code"), err);
+    const diag::SymbolHandlerStatus queried = diag::stackWalkSymbolStatus();
+    ok &= require(queried.attempted == symbols.attempted && queried.ready == symbols.ready
+                      && queried.lastErrorCode == symbols.lastErrorCode,
+                  QStringLiteral("querying the status matches what preparing returned"), err);
+#if defined(Q_OS_WIN)
+    ok &= require(symbols.attempted,
+                  QStringLiteral("windows build attempts to initialise the symbol handler"), err);
+#else
+    // Off Windows there is no dbghelp to initialise, which must read as "never tried"
+    // rather than as a failed attempt.
+    ok &= require(!symbols.attempted && !symbols.ready && symbols.lastErrorCode == 0,
+                  QStringLiteral("non-windows symbol preparation reports no attempt"), err);
+#endif
+
     // ---- capture budget --------------------------------------------------------
     ok &= require(!policy::shouldCaptureStack(true, Trigger::None, 100000, 0, 0, 30000, 16),
                   QStringLiteral("no trigger never captures"), err);

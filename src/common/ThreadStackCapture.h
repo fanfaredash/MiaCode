@@ -76,7 +76,19 @@ void releaseStackWalkTargetThread();
 // True when a target thread handle is currently held.
 bool hasStackWalkTargetThread();
 
-// Initialise dbghelp's symbol handler up front. Idempotent; a no-op off Windows.
+// Outcome of the one-time SymInitialize. Reported so `symbol=(nosym)` on a frame stays
+// attributable: with ready=true it means the documented, expected "user machine has no
+// PDB"; with ready=false it means the symbol handler never came up at all and NO frame in
+// this process could ever have been named. Those are different bug reports.
+struct SymbolHandlerStatus {
+    bool attempted = false;      // false off Windows, where there is no dbghelp to init
+    bool ready = false;          // SymInitialize succeeded
+    quint32 lastErrorCode = 0;   // GetLastError() from a failed SymInitialize, else 0
+};
+
+// Initialise dbghelp's symbol handler up front, and report whether it came up. Idempotent
+// (later calls return the first attempt's outcome); off Windows it is a no-op that reports
+// attempted=false, ready=false.
 //
 // Call this ONCE from the capturing (watchdog) thread at startup, while nothing is hung.
 // SymInitialize enumerates loaded modules and takes the loader lock: if it were first
@@ -84,7 +96,14 @@ bool hasStackWalkTargetThread();
 // before it ever reached SuspendThread and the hang would go unreported. Doing it early
 // moves that acquisition to a known-quiet moment. captureRegisteredThreadStack still
 // calls it lazily as a fallback, always before opening the suspension window.
-void prepareStackWalkSymbols();
+SymbolHandlerStatus prepareStackWalkSymbols();
+
+// The current symbol-handler outcome without forcing an attempt: reports
+// attempted=false when prepareStackWalkSymbols() has not run yet. Query this rather than
+// caching a copy — a caller that snapshots at startup would keep reporting the startup
+// value even though the lazy fallback inside captureRegisteredThreadStack can be the call
+// that actually performs the attempt.
+SymbolHandlerStatus stackWalkSymbolStatus();
 
 // Suspend the registered thread, walk it, resume it, then symbolize. MUST NOT be called
 // from the target thread itself (self-suspension would deadlock) — that case is detected

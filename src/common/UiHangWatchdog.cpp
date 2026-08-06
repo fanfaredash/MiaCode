@@ -132,13 +132,21 @@ policy::StackCaptureOutcome appendGuiThreadStackReport(
 {
     const miacode::diag::StackCaptureResult stack =
         miacode::diag::captureRegisteredThreadStack();
+    // Queried after the capture, not cached from startup: captureRegisteredThreadStack's
+    // lazy fallback can be the call that performs the attempt, so a startup snapshot could
+    // under-report. Carried on the header so a reader holding one stack can tell
+    // symbol=(nosym) "no PDB on this machine" (sym_ready=1, the documented normal case)
+    // from "the symbol handler never came up" (sym_ready=0) without scrolling back to the
+    // startup line.
+    const miacode::diag::SymbolHandlerStatus symbols = miacode::diag::stackWalkSymbolStatus();
     const policy::StackCaptureOutcome outcome =
         stack.timedOut ? policy::StackCaptureOutcome::TimedOut
         : stack.captured ? policy::StackCaptureOutcome::Captured
                          : policy::StackCaptureOutcome::Failed;
     QString header =
         QStringLiteral("action=gui_thread_stack trigger=%1 heartbeat_age_ms=%2 capture_index=%3 "
-                       "capture=%4 supported=%5 captured=%6 frame_count=%7 suspended_us=%8")
+                       "capture=%4 supported=%5 captured=%6 frame_count=%7 suspended_us=%8 "
+                       "sym_ready=%9")
             .arg(QString::fromLatin1(policy::triggerName(trigger)))
             .arg(heartbeatAgeMs)
             .arg(captureIndex)
@@ -146,7 +154,8 @@ policy::StackCaptureOutcome appendGuiThreadStackReport(
             .arg(stack.supported ? 1 : 0)
             .arg(stack.captured ? 1 : 0)
             .arg(stack.frameCount)
-            .arg(stack.suspendedUs);
+            .arg(stack.suspendedUs)
+            .arg(symbols.ready ? 1 : 0);
     if (!stack.skipReason.isEmpty()) {
         header += QStringLiteral(" reason=%1").arg(stack.skipReason);
     }
@@ -179,7 +188,20 @@ void watchdogLoop()
 {
     // Warm dbghelp here, on this thread, at process start — never during a hang. See
     // prepareStackWalkSymbols() for why deferring it to first use is a deadlock risk.
-    miacode::diag::prepareStackWalkSymbols();
+    //
+    // Its own line rather than a field on `action=installed`: that line is written on the
+    // GUI thread and installGuiHeartbeat() returns before this thread has necessarily run,
+    // so folding the result in would need a handshake the diagnostic has no business
+    // introducing. Not force/Fatal either — this is a startup fact recorded long before
+    // any hang, not hang evidence that has to survive a kill.
+    const miacode::diag::SymbolHandlerStatus symbols = miacode::diag::prepareStackWalkSymbols();
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("ui/hang_watchdog"),
+        QStringLiteral("action=stack_symbols sym_attempted=%1 sym_ready=%2 sym_err=%3")
+            .arg(symbols.attempted ? 1 : 0)
+            .arg(symbols.ready ? 1 : 0)
+            .arg(symbols.lastErrorCode));
 
     // Sampled once, not per loop: an env lookup every 500 ms is waste, and a threshold
     // that changed mid-session would make a capture impossible to interpret.

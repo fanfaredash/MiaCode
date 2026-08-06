@@ -37,6 +37,10 @@ HANDLE g_targetThread = nullptr;
 DWORD g_targetThreadId = 0;
 bool g_symbolHandlerReady = false;
 bool g_symbolHandlerTried = false;
+// GetLastError() from a failed SymInitialize. Kept so the log can separate "no PDB on
+// this machine" (the normal cause of symbol=(nosym)) from "the symbol handler never came
+// up", which no frame-level field can distinguish on its own.
+DWORD g_symbolHandlerErrorCode = 0;
 // Set once a capture has timed out and its worker has been abandoned. The abandoned
 // worker may still be blocked inside StackWalk64 and may still touch g_targetThread, so
 // after this point nothing may suspend the target again and the handle must not be closed.
@@ -166,6 +170,17 @@ void ensureSymbolHandler()
     SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME | SYMOPT_LOAD_LINES
                   | SYMOPT_FAIL_CRITICAL_ERRORS);
     g_symbolHandlerReady = SymInitialize(GetCurrentProcess(), nullptr, TRUE) != FALSE;
+    g_symbolHandlerErrorCode = g_symbolHandlerReady ? 0 : GetLastError();
+}
+
+// Caller must hold g_captureMutex.
+SymbolHandlerStatus symbolHandlerStatusLocked()
+{
+    SymbolHandlerStatus status;
+    status.attempted = g_symbolHandlerTried;
+    status.ready = g_symbolHandlerReady;
+    status.lastErrorCode = static_cast<quint32>(g_symbolHandlerErrorCode);
+    return status;
 }
 
 DWORD stackWalkMachineType()
@@ -318,10 +333,17 @@ bool hasStackWalkTargetThread()
     return g_targetThread != nullptr;
 }
 
-void prepareStackWalkSymbols()
+SymbolHandlerStatus prepareStackWalkSymbols()
 {
     std::lock_guard<std::mutex> lock(g_captureMutex);
     ensureSymbolHandler();
+    return symbolHandlerStatusLocked();
+}
+
+SymbolHandlerStatus stackWalkSymbolStatus()
+{
+    std::lock_guard<std::mutex> lock(g_captureMutex);
+    return symbolHandlerStatusLocked();
 }
 
 StackCaptureResult captureRegisteredThreadStack(int maxFrames)
@@ -454,8 +476,16 @@ bool hasStackWalkTargetThread()
     return false;
 }
 
-void prepareStackWalkSymbols()
+SymbolHandlerStatus prepareStackWalkSymbols()
 {
+    // No dbghelp here, so nothing is ever attempted — distinct from a Windows run where
+    // the attempt happened and failed.
+    return SymbolHandlerStatus{};
+}
+
+SymbolHandlerStatus stackWalkSymbolStatus()
+{
+    return SymbolHandlerStatus{};
 }
 
 StackCaptureResult captureRegisteredThreadStack(int maxFrames)
