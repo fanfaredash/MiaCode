@@ -713,9 +713,4 @@ inline bool hasDebugArg(const QStringList& args)
     return args.contains(QStringLiteral("--debug"));
 }
 
-inline bool hasRuntimeDebugArg(const QStringList& args)
-{
-    return hasDebugArg(args);
-}
-
 }  // namespace miacode::debug_options
