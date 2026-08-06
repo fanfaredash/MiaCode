@@ -81,8 +81,15 @@ int main()
                   QStringLiteral("non-windows capture states why"), err);
     ok &= require(!diag::registerStackWalkTargetThread(nullptr),
                   QStringLiteral("non-windows registration fails cleanly"), err);
-    ok &= require(!diag::hasStackWalkTargetThread(),
-                  QStringLiteral("non-windows registration holds no handle"), err);
+    // A failed registration must leave nothing behind that a later capture could mistake
+    // for a usable target. Checked through the capture contract itself, which is what
+    // production actually depends on.
+    const diag::StackCaptureResult afterFailedRegistration =
+        diag::captureRegisteredThreadStack();
+    ok &= require(!afterFailedRegistration.captured
+                      && afterFailedRegistration.skipReason
+                          == QStringLiteral("unsupported_platform"),
+                  QStringLiteral("a failed registration leaves no usable target"), err);
     diag::releaseStackWalkTargetThread();  // must be safe with nothing registered
 #endif
 

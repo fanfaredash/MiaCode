@@ -327,12 +327,6 @@ void releaseStackWalkTargetThread()
     g_targetThreadId = 0;
 }
 
-bool hasStackWalkTargetThread()
-{
-    std::lock_guard<std::mutex> lock(g_captureMutex);
-    return g_targetThread != nullptr;
-}
-
 SymbolHandlerStatus prepareStackWalkSymbols()
 {
     std::lock_guard<std::mutex> lock(g_captureMutex);
@@ -469,11 +463,6 @@ bool registerStackWalkTargetThread(QString* outReason)
 
 void releaseStackWalkTargetThread()
 {
-}
-
-bool hasStackWalkTargetThread()
-{
-    return false;
 }
 
 SymbolHandlerStatus prepareStackWalkSymbols()

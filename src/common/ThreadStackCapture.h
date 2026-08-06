@@ -73,9 +73,6 @@ bool registerStackWalkTargetThread(QString* outReason = nullptr);
 // Release the duplicated handle. Safe to call when nothing was registered.
 void releaseStackWalkTargetThread();
 
-// True when a target thread handle is currently held.
-bool hasStackWalkTargetThread();
-
 // Outcome of the one-time SymInitialize. Reported so `symbol=(nosym)` on a frame stays
 // attributable: with ready=true it means the documented, expected "user machine has no
 // PDB"; with ready=false it means the symbol handler never came up at all and NO frame in
