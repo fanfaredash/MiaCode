@@ -69,6 +69,7 @@ third_party/ffmpeg/**/ffprobe.exe
 # this also keeps the headers + .lib import libraries out of version control.
 third_party/ffmpeg/windows/dev/
 third_party/ffmpeg/windows/dev.full.bak/
+third_party/ffmpeg/windows/ffmpeg-dev.zip
 third_party/ffmpeg/macos/dev/
 third_party/ffmpeg/linux/dev/
 
