@@ -480,16 +480,12 @@ void runStartupDiagnostic() noexcept
         appendBeaconLineUtf8("phase=diag_modlist_skipped_default_safe");
     }
     // Device creation loads vendor graphics drivers before Qt initializes, so
-    // this supplementary probe must not be a normal-startup prerequisite.
-    // The legacy skip flag remains a compatibility override for support runs.
+    // this supplementary probe must not be a normal-startup prerequisite. The
+    // enable flag is the single control: unset (the normal case) skips the probe.
     const DWORD enableD3D11 =
         ::GetEnvironmentVariableW(L"MIACODE_ENABLE_DIAG_D3D11", nullptr, 0);
-    const DWORD skipD3D11 =
-        ::GetEnvironmentVariableW(L"MIACODE_SKIP_DIAG_D3D11", nullptr, 0);
     if (enableD3D11 == 0) {
         appendBeaconLineUtf8("phase=diag_d3d11_skipped_default_safe");
-    } else if (skipD3D11 > 0) {
-        appendBeaconLineUtf8("phase=diag_d3d11_skipped_via_env");
     } else {
         appendBeaconLineUtf8("phase=diag_d3d11");
         __try { probeD3D11Device(); }

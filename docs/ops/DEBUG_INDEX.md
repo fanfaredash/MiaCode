@@ -2,9 +2,9 @@
 
 This document is the current user-facing index for MiaCode debug mode, log files, and preview/export diagnostics after the Qt Quick migration.
 
-> Reconciled against the code on 2026-08-07: **92 live `MIACODE_*` environment flags across 26 files**, including the four the idle-freeze diagnostics added — `MIACODE_UI_HANG_ACTIVE_PHASE_MS`, `MIACODE_UI_HANG_IDLE_HEARTBEAT_MS`, `MIACODE_ENABLE_DIAG_D3D11`, `MIACODE_ENABLE_DIAG_MODULE_LIST`.
+> Reconciled against the code on 2026-08-07: **91 live `MIACODE_*` environment flags across 26 files**, including the four the idle-freeze diagnostics added — `MIACODE_UI_HANG_ACTIVE_PHASE_MS`, `MIACODE_UI_HANG_IDLE_HEARTBEAT_MS`, `MIACODE_ENABLE_DIAG_D3D11`, `MIACODE_ENABLE_DIAG_MODULE_LIST`.
 >
-> Recount rather than trusting that number: `grep -rhoE '"MIACODE_[A-Z0-9_]+"' src --include="*.cpp" --include="*.h" | sort -u` yields 100 quoted literals, of which 92 are live env flags — subtract `MIACODE_SOURCE_ROOT` (a CMake compile definition) and the seven retired flags that survive only inside `kRetiredFlags` in `src/tools/debug_index/DebugFlagIndexSpec.cpp`. The drift guard `ctest -R debug_flag_index_spec` is the real enforcement — it fails if a flag read in `src/` is missing from this doc or a flag named here is no longer read. Its own summary reports a **larger** total (102) because its regex also counts the build-time compile definitions and hang-watchdog macros listed under "Other `MIACODE_*` tokens" below; that number is not the env-flag count.
+> Recount rather than trusting that number: `grep -rhoE '"MIACODE_[A-Z0-9_]+"' src --include="*.cpp" --include="*.h" | sort -u` yields 100 quoted literals, of which 91 are live env flags — subtract `MIACODE_SOURCE_ROOT` (a CMake compile definition) and the eight retired flags that survive only inside `kRetiredFlags` in `src/tools/debug_index/DebugFlagIndexSpec.cpp`. The drift guard `ctest -R debug_flag_index_spec` is the real enforcement — it fails if a flag read in `src/` is missing from this doc or a flag named here is no longer read. Its own summary reports a **larger** total (102) because its regex also counts the build-time compile definitions and hang-watchdog macros listed under "Other `MIACODE_*` tokens" below; that number is not the env-flag count.
 >
 > When you add/remove a flag, update this index (and `.codex/skills/miacode-dev-guide/references/debug-flags.md`).
 
@@ -239,6 +239,7 @@ Retired with the old preview renderer and not recommended anymore (no longer rea
 - `MIACODE_PREVIEW_DIAG_COMPARE_PRESENT_EVERY`
 - `MIACODE_PREVIEW_SESSION_SCRIPT` (was a preview session-script hook; gone)
 - `MIACODE_DISABLE_GL_DEBUG_MESSAGES` (GL debug-message gate; gone)
+- `MIACODE_SKIP_DIAG_D3D11` (skipped the startup D3D11 diagnostic probe back when that probe ran by default. The probe is now opt-in behind `MIACODE_ENABLE_DIAG_D3D11`, which made the skip unreachable unless an operator enabled and disabled the same probe in one run, so the enable flag is the single control.)
 - `MIACODE_PREVIEW_VISUAL_SMOOTHING` (gated visual-clock smoothing, which bounded the per-frame visual playhead delta so BASS-master-mixer cursor jitter could not reach the rendered scene. The G1 wall-clock flip made `qtPreviewElapsed_` the master timeline — monotonic and rate-correct by construction — so `applyVisualClockSmoothing` was collapsed to exactly its old smoothing-disabled branch and the gate was dropped with it. The flag had been a no-op ever since. The lookahead-vsync shift that survives in that function was always outside this gate and has its own `MIACODE_PREVIEW_VISUAL_LOOKAHEAD_VSYNCS` control.)
 
 Preview diagnostics now split these timing sources instead of reporting a single ambiguous FPS number:
@@ -302,7 +303,6 @@ DirectComposition / D3D11 preview (`src/common/DebugOptions.h`; default OFF, bei
 - `MIACODE_PREVIEW_QSG_FULL_DISABLE` — force QSG to the software/basic path (GPU-contention isolation test).
 - `MIACODE_PREVIEW_FORCE_BASIC_RENDER_LOOP` — force `QSG_RENDER_LOOP=basic` at startup.
 - `MIACODE_ENABLE_DIAG_D3D11` — explicitly enable the supplementary startup D3D11 diagnostic probe. It is disabled by default because device creation loads vendor graphics drivers before Qt initializes.
-- `MIACODE_SKIP_DIAG_D3D11` — compatibility override that skips the D3D11 diagnostic probe even when it has been explicitly enabled.
 - `MIACODE_ENABLE_DIAG_MODULE_LIST` — explicitly enable the supplementary pre-Qt process-module list in the startup beacon. It is disabled by default because it traverses third-party/injected modules; normal startup records `phase=diag_modlist_skipped_default_safe` instead.
 
 ## Misc / Platform
