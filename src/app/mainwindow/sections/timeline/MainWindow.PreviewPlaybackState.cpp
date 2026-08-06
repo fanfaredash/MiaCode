@@ -435,6 +435,23 @@ void MainWindow::TimelineSection::pausePreviewForAudioDeviceChange(
         // Not playing: nothing has a stale anchor. This is also what makes the burst of
         // notifications Qt emits for one physical hotplug safe, and what keeps a video
         // export untouched (MainWindow.ExportFlow.cpp pauses the preview before it starts).
+        //
+        // Counted and logged even though nothing happens, for two reasons. The branch was
+        // previously the only zero-log outcome here, so a capture could not tell a
+        // deliberate skip from a notification that never arrived. And because the sequence
+        // advances on every notification rather than only on the ones that pause, the gaps
+        // between `device_change_pause_begin` sequence numbers now have a matching
+        // `device_change_ignored` line to explain them.
+        const quint64 ignoredSequence = ++state_.previewAudioDeviceChangeSequence_;
+        appendPreviewPlaybackLog(
+            QStringLiteral("device_change_ignored"),
+            QString("device_change_seq=%1 change=%2 playing=%3 startup_pending=%4 "
+                    "pause_second=%5")
+                .arg(ignoredSequence)
+                .arg(QLatin1String(miacode::preview_audio::device_change::changeName(change)))
+                .arg(state_.qtPreviewPlaying_ ? 1 : 0)
+                .arg(state_.previewStartupSyncPending_ ? 1 : 0)
+                .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6));
         return;
     }
     const quint64 deviceChangeSequence = ++state_.previewAudioDeviceChangeSequence_;
