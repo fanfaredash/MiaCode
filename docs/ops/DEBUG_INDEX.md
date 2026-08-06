@@ -2,7 +2,11 @@
 
 This document is the current user-facing index for MiaCode debug mode, log files, and preview/export diagnostics after the Qt Quick migration.
 
-> Reconciled against the code on 2026-08-04 (83 live `MIACODE_*` environment flags across ~28 files after the P3/P4 GPU additions `MIACODE_GPU_POLICY` / `MIACODE_GPU_ADAPTER_LUID` / `MIACODE_GPU_BIND_HIGH_PERFORMANCE` and the P5 export addition `MIACODE_EXPORT_RENDER_BACKEND`). The idle-freeze diagnostics add no environment flag. When you add/remove a flag, update this index (and `.codex/skills/miacode-dev-guide/references/debug-flags.md`).
+> Reconciled against the code on 2026-08-07: **93 live `MIACODE_*` environment flags across 26 files**, including the four the idle-freeze diagnostics added — `MIACODE_UI_HANG_ACTIVE_PHASE_MS`, `MIACODE_UI_HANG_IDLE_HEARTBEAT_MS`, `MIACODE_ENABLE_DIAG_D3D11`, `MIACODE_ENABLE_DIAG_MODULE_LIST`.
+>
+> Recount rather than trusting that number: `grep -rhoE '"MIACODE_[A-Z0-9_]+"' src --include="*.cpp" --include="*.h" | sort -u` yields 100 quoted literals, of which 93 are live env flags — subtract `MIACODE_SOURCE_ROOT` (a CMake compile definition) and the six retired flags that survive only inside `kRetiredFlags` in `src/tools/debug_index/DebugFlagIndexSpec.cpp`. The drift guard `ctest -R debug_flag_index_spec` is the real enforcement — it fails if a flag read in `src/` is missing from this doc or a flag named here is no longer read. Its own summary reports a **larger** total (102) because its regex also counts the build-time compile definitions and hang-watchdog macros listed under "Other `MIACODE_*` tokens" below; that number is not the env-flag count.
+>
+> When you add/remove a flag, update this index (and `.codex/skills/miacode-dev-guide/references/debug-flags.md`).
 
 ## Debug Entry Points
 
@@ -70,7 +74,7 @@ C++ hang-watchdog instrumentation macros, not environment variables:
 - `MIACODE_HANG_JOIN`
 - `MIACODE_HANG_JOIN_IMPL`
 
-Freeze / contention diagnostics (debug mode only, no new environment flag):
+Freeze / contention diagnostics (debug mode only; the probes below are on by default in debug mode, but four flags tune or gate them — `MIACODE_UI_HANG_ACTIVE_PHASE_MS`, `MIACODE_UI_HANG_IDLE_HEARTBEAT_MS`, `MIACODE_ENABLE_DIAG_D3D11`, `MIACODE_ENABLE_DIAG_MODULE_LIST`):
 
 - `startup/process_identity` records the product `version`, build `git_revision`, `git_dirty`, and real executable identity so transient packages can be mapped precisely.
 - `ui/hang_watchdog` samples the GUI heartbeat every `250 ms`; it reports a marked phase after about `2 s` or an unmarked idle heartbeat stall after about `5 s` using a durable fatal-grade runtime record. Both timeouts are overridable per run — see `MIACODE_UI_HANG_ACTIVE_PHASE_MS` / `MIACODE_UI_HANG_IDLE_HEARTBEAT_MS`; the defaults are too coarse for a stall of only a couple of seconds. `action=installed` states the thresholds actually in force and whether the GUI-thread stack-walk target was registered. Every `action=gui_thread_stale` row also carries `stack=capture|skipped_disabled|skipped_budget|skipped_interval|skipped_no_trigger` plus `captures_so_far=`, so a stale row with no stack after it says which budget rule suppressed the capture instead of looking like a broken one — in a long freeze `skipped_interval` (inside the `30 s` gap) and `skipped_budget` (all `16` spent) are the normal answers, while `skipped_disabled` means an earlier capture timed out and switched capture off for the session.
