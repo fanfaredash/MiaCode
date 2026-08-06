@@ -267,7 +267,15 @@ void LatencySandboxController::applyPlayheadToScene(double seconds)
         return;
     }
     const double clamped = qMax(0.0, seconds);
-    owner_->state_.qtPreviewPauseSecond_ = clamped;
+    // Goes through the single writer like every other write to this member: the
+    // sandbox's hot-apply path re-anchors the playhead when BPM / offset /
+    // subdivision change mid-session, so it can move the pause second BACKWARD
+    // while paused — exactly the move the log line exists to attribute.
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        owner_->state_.qtPreviewPauseSecond_,
+        clamped,
+        owner_->state_.qtPreviewPlaying_,
+        "latency_sandbox_apply_playhead");
     if (owner_->state_.timelineQuickStateBridge_ != nullptr) {
         owner_->state_.timelineQuickStateBridge_->setPlayheadSeconds(clamped, false);
     }
