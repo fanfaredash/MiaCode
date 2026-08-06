@@ -159,6 +159,7 @@ procdump.exe -accepteula -ma $targetPid (Join-Path $runDir "miacode-freeze-$targ
 - `symbol=(nosym)` 是用户机上的正常结果（没有 PDB）。`module` + `module_offset` 已经足够，用**同一次构建**的 PDB 离线还原即可，所以务必同时保留该构建的 PDB。
 - `captured=0` 时看 `reason=`：`not_registered` 表示启动时没拿到 GUI 线程句柄；`same_thread` / `suspend_failed` / `resume_failed` 属于异常，需连同日志一起回传。
 - 每次冻结最多抓 16 份栈、每 30 秒一份，用 `capture_index=` 对应。多份栈**帧完全一致**说明真的卡死不动；帧在变化说明是极慢而非死锁。
+- 长时间冻结里大多数 `action=gui_thread_stale` 行后面**本来就没有栈**，这不是故障。该行自带 `stack=` 说明原因：`capture` 表示紧接着有栈；`skipped_interval` 表示还在 30 秒间隔内；`skipped_budget` 表示 16 份配额已用完（`captures_so_far=` 给出已抓份数）；`skipped_disabled` 表示先前某次 `capture=timeout` 已永久关闭抓栈，本轮必须改用 ProcDump。
 
 ### `capture=timeout`：本轮拿不到栈，改用 ProcDump
 

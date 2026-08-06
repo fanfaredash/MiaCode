@@ -82,11 +82,17 @@ QString logWriterStatsPayload()
         .arg(stats.workerRunning ? 1 : 0);
 }
 
+// `stackDecision` / `capturesSoFar` are what makes a bare report readable: without them a
+// stale row that carries no stack is indistinguishable from one whose capture broke. The
+// decision is computed by the caller BEFORE this runs, but the stack itself is still
+// emitted after — the report stays the first line of the incident.
 void appendWatchdogReport(
     policy::Trigger trigger,
     const PhaseState& phase,
     qint64 nowMs,
-    qint64 heartbeatAgeMs)
+    qint64 heartbeatAgeMs,
+    policy::StackCaptureDecision stackDecision,
+    int capturesSoFar)
 {
     miacode::oplog::flushShadowToDisk();
     const qint64 activeMs = phase.active ? qMax<qint64>(0, nowMs - phase.startMs) : 0;
@@ -97,6 +103,9 @@ void appendWatchdogReport(
         .arg(heartbeatAgeMs)
         .arg(phase.phase.isEmpty() ? QStringLiteral("(none)") : phase.phase)
         .arg(phase.generation);
+    payload += QStringLiteral(" stack=%1 captures_so_far=%2")
+                   .arg(QString::fromLatin1(policy::stackCaptureDecisionName(stackDecision)))
+                   .arg(capturesSoFar);
     if (!phase.detail.trimmed().isEmpty()) {
         payload += QStringLiteral(" detail=\"%1\"").arg(phase.detail.trimmed());
     }
@@ -236,18 +245,21 @@ void watchdogLoop()
                 kRepeatedReportMs)) {
             continue;
         }
-        appendWatchdogReport(trigger, phase, now, heartbeatAge);
+        // Decided before the report is written so the report can state it, but acted on
+        // only after — the stale line must stay the first line of the incident.
+        const policy::StackCaptureDecision stackDecision = policy::classifyStackCapture(
+            stackCaptureSessionEnabled,
+            trigger,
+            now,
+            lastStackCaptureAtMs,
+            stackCaptureCount,
+            kStackCaptureIntervalMs,
+            kMaxStackCapturesPerSession);
+        appendWatchdogReport(trigger, phase, now, heartbeatAge, stackDecision, stackCaptureCount);
         reportedTrigger = trigger;
         reportedGeneration = phase.generation;
         reportedAtMs = now;
-        if (policy::shouldCaptureStack(
-                stackCaptureSessionEnabled,
-                trigger,
-                now,
-                lastStackCaptureAtMs,
-                stackCaptureCount,
-                kStackCaptureIntervalMs,
-                kMaxStackCapturesPerSession)) {
+        if (stackDecision == policy::StackCaptureDecision::Capture) {
             const policy::StackCaptureOutcome outcome =
                 appendGuiThreadStackReport(trigger, heartbeatAge, stackCaptureCount);
             lastStackCaptureAtMs = now;

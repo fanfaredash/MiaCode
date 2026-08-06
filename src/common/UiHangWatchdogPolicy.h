@@ -54,6 +54,18 @@ inline bool shouldReport(
     return nowMs - lastReportedAtMs >= repeatedReportMs;
 }
 
+// Why a hang report did or did not bring a stack with it. Most stale rows in a long
+// freeze legitimately arrive bare — the budget below is deliberately much stricter than
+// the 5 s report cadence — but a reader cannot tell "budget spent" from "stack capture
+// broke" unless the row says which. Every report therefore carries one of these.
+enum class StackCaptureDecision {
+    Capture,          // eligible; a stack follows this report
+    SkipDisabled,     // a previous capture timed out and switched the session off for good
+    SkipBudget,       // maxCaptures already reached for this process
+    SkipInterval,     // inside minIntervalMs of the previous capture
+    SkipNoTrigger,    // no hang trigger at all (this path emits no report either)
+};
+
 // Gate for the GUI-thread stack capture that accompanies a hang report. The report
 // itself repeats every `repeatedReportMs` (5 s) for as long as the stall lasts; a stack
 // capture is far more expensive — it suspends the GUI thread and emits up to 64
@@ -65,7 +77,13 @@ inline bool shouldReport(
 // A long freeze therefore yields a handful of stacks (enough to tell "wedged forever"
 // from "moving slowly") instead of thousands of lines that bury the rest of the log.
 // `lastCaptureAtMs <= 0` means "never captured", which always passes the interval test.
-inline bool shouldCaptureStack(
+//
+// The veto order is fixed and reported verbatim, so it is part of the contract: a
+// permanently disabled session outranks the budget, which outranks the interval. When
+// two would apply the earlier one wins, which is what an operator wants — "we stopped
+// capturing at all" is the more important fact than "and also the interval had not
+// elapsed".
+inline StackCaptureDecision classifyStackCapture(
     bool sessionEnabled,
     Trigger trigger,
     qint64 nowMs,
@@ -75,18 +93,59 @@ inline bool shouldCaptureStack(
     int maxCaptures)
 {
     if (!sessionEnabled) {
-        return false;
+        return StackCaptureDecision::SkipDisabled;
     }
     if (trigger == Trigger::None) {
-        return false;
+        return StackCaptureDecision::SkipNoTrigger;
     }
     if (maxCaptures > 0 && capturesSoFar >= maxCaptures) {
-        return false;
+        return StackCaptureDecision::SkipBudget;
     }
     if (lastCaptureAtMs <= 0) {
-        return true;
+        return StackCaptureDecision::Capture;
     }
-    return nowMs - lastCaptureAtMs >= minIntervalMs;
+    return nowMs - lastCaptureAtMs >= minIntervalMs
+        ? StackCaptureDecision::Capture
+        : StackCaptureDecision::SkipInterval;
+}
+
+// The boolean gate, kept as the single decision point by deferring to the classifier —
+// the two can only ever disagree if this line is edited to stop calling it.
+inline bool shouldCaptureStack(
+    bool sessionEnabled,
+    Trigger trigger,
+    qint64 nowMs,
+    qint64 lastCaptureAtMs,
+    int capturesSoFar,
+    qint64 minIntervalMs,
+    int maxCaptures)
+{
+    return classifyStackCapture(
+               sessionEnabled,
+               trigger,
+               nowMs,
+               lastCaptureAtMs,
+               capturesSoFar,
+               minIntervalMs,
+               maxCaptures)
+        == StackCaptureDecision::Capture;
+}
+
+inline const char* stackCaptureDecisionName(StackCaptureDecision decision)
+{
+    switch (decision) {
+    case StackCaptureDecision::Capture:
+        return "capture";
+    case StackCaptureDecision::SkipDisabled:
+        return "skipped_disabled";
+    case StackCaptureDecision::SkipBudget:
+        return "skipped_budget";
+    case StackCaptureDecision::SkipInterval:
+        return "skipped_interval";
+    case StackCaptureDecision::SkipNoTrigger:
+    default:
+        return "skipped_no_trigger";
+    }
 }
 
 enum class StackCaptureOutcome {
