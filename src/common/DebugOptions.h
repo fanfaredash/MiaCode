@@ -260,18 +260,6 @@ inline bool previewRejectNegativeHsEnabled()
     return envFlagEnabled("MIACODE_PREVIEW_REJECT_NEGATIVE_HS");
 }
 
-inline bool previewForceSoftwareVideoDecodeEnabled()
-{
-    // Force QtAVPlayer to decode preview video in software (setInputVideoCodec("software"))
-    // from the first frame instead of D3D11VA hardware decode. Diagnostic + workaround for the
-    // green-padding artifact on videos whose dimensions are not 16-aligned: the zero-copy
-    // D3D11VA NV12 texture is allocated at the macroblock-aligned coded size (e.g. 300 -> 304),
-    // and the uninitialized padding (U=V=0) samples as pure green when VideoOutput isn't cropped
-    // to the display rectangle. Software frames are CPU buffers cropped to the display size, so
-    // no padding is shown. Set MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO=1 to enable.
-    return envFlagEnabled("MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO");
-}
-
 // Three-state preview video decode preference. The MIACODE_PREVIEW_FORCE_SOFTWARE_VIDEO
 // env var is now a DEV OVERRIDE on top of the persisted 硬件渲染 / 软件渲染 user
 // preference (owned by MainWindow in preferences.json, pushed to
