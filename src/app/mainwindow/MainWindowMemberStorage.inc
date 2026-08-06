@@ -571,6 +571,9 @@
         bool chartNormalizeStartAtNewMeasure_ = true;
         bool chartNormalizeReduceTo384Grid_ = false;
         bool chartNormalizeSplitEveryFourMeasures_ = true;
+        int chartNormalizeSectionMeasureCount_ = 4;
+        miacode::chart_transform::ChartNormalizationSyntax chartNormalizeSyntax_ =
+            miacode::chart_transform::ChartNormalizationSyntax::Fpd;
         bool workspacePanelsSwapped_ = false;
         PreviewAudioSettings softwarePreviewAudioSettings_;
         PreviewAudioSettings previewAudioSettings_;
