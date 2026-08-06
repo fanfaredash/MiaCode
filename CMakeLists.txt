@@ -248,7 +248,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/CrashRecovery.cpp
     src/common/Mmcss.h
     src/common/Mmcss.cpp
-    src/common/DebugImageCompare.h
     src/common/InputShortcutGesture.h
     src/common/InputShortcutGesture.cpp
     src/common/ChartAssetPaths.h

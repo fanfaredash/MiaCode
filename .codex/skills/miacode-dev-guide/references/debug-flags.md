@@ -167,13 +167,13 @@ Dev-tool-only parser repro hook:
 - `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_FRAMES`
   - enables PNG dumps for preview compare samples
   - applies to both `preview_gl/video_compare` and `preview/present_compare`
-  - owner: `src/common/DebugImageCompare.h`
+  - owner: accessor `previewCompareDumpFramesEnabled()` in `src/common/DebugOptions.h`; the sole consumer (`src/common/DebugImageCompare.h`) was deleted as orphan code, so the accessor currently has no production caller
 - `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_MAX_SAMPLES`
   - caps dumped samples per compare stream; `0` means no cap
-  - owner: `src/common/DebugImageCompare.h`
+  - owner: accessor `previewCompareDumpMaxSamples()` in `src/common/DebugOptions.h`; no production caller since `DebugImageCompare.h` was deleted
 - `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_DIR`
   - overrides the preview compare PNG dump root directory
-  - owner: `src/common/DebugImageCompare.h`
+  - owner: accessor `previewCompareDumpDirectoryOverride()` in `src/common/DebugOptions.h`; no production caller since `DebugImageCompare.h` was deleted
 - `MIACODE_DISABLE_GL_DEBUG_MESSAGES`
   - disables OpenGL driver message logging inside debug mode
   - current impact is limited because the active preview/export path is Qt Quick on an explicitly forced OpenGL backend, not the removed `PreviewCanvas` logger stack
