@@ -369,49 +369,71 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
     bool startedBackground = false;
     QString playedKinds;
     SfxSchedulerArmFailure armFailure;
+    QString dropReason;
+    quint32 expectedSyncHandle = 0;
 
     {
         QMutexLocker locker(&schedulerMutex_);
-        if (shuttingDown_.load(std::memory_order_acquire)
-            || !sfxSchedulerActive_ || handle == 0 || handle != scheduledGroupSync_) {
-            return;
+        if (shuttingDown_.load(std::memory_order_acquire)) {
+            return;  // teardown, not a dropped group
         }
-
-        const int groupIndex = scheduledGroupIndex_;
-        const ScheduledMixerAction action = scheduledMixerAction_;
-        scheduledGroupSync_ = 0;
-        scheduledGroupIndex_ = -1;
-        scheduledMixerAction_ = ScheduledMixerAction::None;
-
-        const bool startBackground = action == ScheduledMixerAction::StartPendingBackgroundTrack
-            || action == ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack;
-        if (startBackground && backgroundTrackSample_ != nullptr
-            && playbackSession_.backgroundTrackPendingStart) {
-            backgroundTrackSample_->play();
-            playbackSession_.backgroundTrackPendingStart = false;
-            playbackSession_.backgroundTrackRunning = true;
-            startedBackground = true;
+        // Either branch means the group this sync was armed for is discarded outright:
+        // silence where the chart has a note. Recorded rather than logged here for the
+        // same reason as the trigger row below -- this is the BASS mixer thread holding
+        // the scheduler lock.
+        if (!sfxSchedulerActive_) {
+            dropReason = QStringLiteral("inactive");
+        } else if (handle == 0 || handle != scheduledGroupSync_) {
+            dropReason = QStringLiteral("stale_handle");
         }
+        if (!dropReason.isEmpty()) {
+            expectedSyncHandle = scheduledGroupSync_;
+        } else {
+            const int groupIndex = scheduledGroupIndex_;
+            const ScheduledMixerAction action = scheduledMixerAction_;
+            scheduledGroupSync_ = 0;
+            scheduledGroupIndex_ = -1;
+            scheduledMixerAction_ = ScheduledMixerAction::None;
 
-        const bool shouldTriggerGroup = action == ScheduledMixerAction::SfxGroup
-            || action == ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack;
-        if (shouldTriggerGroup && groupIndex >= 0 && groupIndex < preparedGroups_.size()) {
-            const CollapsedEventGroup group = preparedGroups_[groupIndex];
-            if (playbackSession_.eventGroupIndex <= groupIndex) {
-                playbackSession_.eventGroupIndex = groupIndex + 1;
+            const bool startBackground = action == ScheduledMixerAction::StartPendingBackgroundTrack
+                || action == ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack;
+            if (startBackground && backgroundTrackSample_ != nullptr
+                && playbackSession_.backgroundTrackPendingStart) {
+                backgroundTrackSample_->play();
+                playbackSession_.backgroundTrackPendingStart = false;
+                playbackSession_.backgroundTrackRunning = true;
+                startedBackground = true;
             }
-            playbackSession_.lastTriggeredGroupIndex = groupIndex;
-            playbackSession_.lastTriggeredGroupSecond = group.second;
-            ++playbackSession_.triggeredGroupCount;
-            triggerGroup(group, runtimeAudioDebugEnabled() ? &playedKinds : nullptr);
-            triggered = true;
-            triggeredGroupIndex = groupIndex;
-            triggeredGroupSecond = group.second;
-            triggeredCount = playbackSession_.triggeredGroupCount;
+
+            const bool shouldTriggerGroup = action == ScheduledMixerAction::SfxGroup
+                || action == ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack;
+            if (shouldTriggerGroup && groupIndex >= 0 && groupIndex < preparedGroups_.size()) {
+                const CollapsedEventGroup group = preparedGroups_[groupIndex];
+                if (playbackSession_.eventGroupIndex <= groupIndex) {
+                    playbackSession_.eventGroupIndex = groupIndex + 1;
+                }
+                playbackSession_.lastTriggeredGroupIndex = groupIndex;
+                playbackSession_.lastTriggeredGroupSecond = group.second;
+                ++playbackSession_.triggeredGroupCount;
+                triggerGroup(group, runtimeAudioDebugEnabled() ? &playedKinds : nullptr);
+                triggered = true;
+                triggeredGroupIndex = groupIndex;
+                triggeredGroupSecond = group.second;
+                triggeredCount = playbackSession_.triggeredGroupCount;
+            }
+            armNextGroupSyncLocked();
+            armFailure = sfxSchedulerArmFailure_;
+            sfxSchedulerArmFailure_ = SfxSchedulerArmFailure();
         }
-        armNextGroupSyncLocked();
-        armFailure = sfxSchedulerArmFailure_;
-        sfxSchedulerArmFailure_ = SfxSchedulerArmFailure();
+    }
+
+    if (!dropReason.isEmpty()) {
+        appendAudioDebugLog(
+            QString("bass_sfx_mixer_drop reason=%1 handle=%2 expected=%3")
+                .arg(dropReason)
+                .arg(handle)
+                .arg(expectedSyncHandle));
+        return;
     }
 
     // The GUI fallback path logs every drain as `bass_sfx_drain`, but this path --
