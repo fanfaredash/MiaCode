@@ -86,6 +86,12 @@ private:
     // of them repeating the previous line's focus state verbatim. Mutable
     // because logFocusEvent() is const.
     mutable QString lastFocusFilterSignature_;
+    // Dedup drops are counted, not discarded: the next emitted focus line carries
+    // ` deduped=N`, mirroring how appendExtraSelectionsPerfLog preserves its
+    // throttled volume as `suppressed=…`. If focus thrash is itself a symptom, the
+    // rate has to survive the filtering. GUI-thread only, so a plain member is
+    // enough; mutable for the same reason as the signature above.
+    mutable int suppressedFocusFilterCount_ = 0;
     bool previewSeekArmed_ = false;
     bool rootWindowCloseRelayScheduled_ = false;
     bool rootWindowCloseRelayActive_ = false;

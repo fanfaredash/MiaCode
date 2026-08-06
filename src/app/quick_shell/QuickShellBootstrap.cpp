@@ -1465,6 +1465,7 @@ void QuickShellBootstrap::logFocusEvent(const QString& action, QObject* watched,
         const QString signature = watchedDescription + QLatin1Char('|')
             + focusWidgetDescription + QLatin1Char('|') + focusWindowDescription;
         if (signature == lastFocusFilterSignature_) {
+            ++suppressedFocusFilterCount_;
             return;
         }
         lastFocusFilterSignature_ = signature;
@@ -1480,6 +1481,13 @@ void QuickShellBootstrap::logFocusEvent(const QString& action, QObject* watched,
     payload += QStringLiteral(" app_focus_window={%1}").arg(focusWindowDescription);
     if (!detail.trimmed().isEmpty()) {
         payload += QStringLiteral(" detail=%1").arg(detail.trimmed());
+    }
+    // Attach and reset the run of drops this line ends, so the collapsed volume is
+    // still readable instead of erased. Omitted when zero, so an unthrottled stream
+    // stays byte-identical to what it looked like before the dedup existed.
+    if (suppressedFocusFilterCount_ > 0) {
+        payload += QStringLiteral(" deduped=%1").arg(suppressedFocusFilterCount_);
+        suppressedFocusFilterCount_ = 0;
     }
     appendQuickShellFocusLog(action, payload);
 }
