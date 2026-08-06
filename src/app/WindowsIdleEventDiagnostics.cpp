@@ -44,20 +44,23 @@ void appendDurableEnvironmentEvent(const QString& payload)
     if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
         return;
     }
+    // Level::Fatal IS the durability contract here, and it is self-contained: for a
+    // Fatal-level line DebugLog::appendText() drains the async writer and then does its
+    // own synchronous open/write/flush/close, never enqueuing (src/common/DebugLog.cpp,
+    // appendText()). By the time appendLine() returns, the record is on disk and the
+    // queue is empty.
+    //
+    // Do NOT add a follow-up flushAsyncLogWriter() here. It could only ever find an empty
+    // queue and report success, and this runs on the GUI thread inside the Windows native
+    // event filter while dispatching WM_POWERBROADCAST and friends -- a redundant blocking
+    // flush there is a self-inflicted GUI stall in exactly the scenario this monitor
+    // exists to diagnose.
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("windows/environment_event"),
         payload,
         /*force=*/true,
         miacode::debug_log::Level::Fatal);
-    if (!miacode::debug_log::flushAsyncLogWriter(1000)) {
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("windows/environment_event"),
-            QStringLiteral("action=log_flush_timeout timeout_ms=1000"),
-            /*force=*/true,
-            miacode::debug_log::Level::Fatal);
-    }
 }
 #endif
 
