@@ -95,6 +95,7 @@ class QToolButton;
 class QWidget;
 class QWheelEvent;
 class QWindow;
+class PreviewAudioDeviceWatcher;
 class QtPreviewSfxRuntime;
 class TimelineView;
 class TimelineQuickStateBridge;

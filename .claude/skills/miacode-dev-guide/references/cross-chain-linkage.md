@@ -250,6 +250,11 @@ affects both live diagnostics and exported overlays.
   `VideoExportController.cpp`.
 - Muri list anchoring/dedupe → `MuriPanelEntries.cpp`, `MainWindow.ValidationFlow.cpp`,
   `src/tools/muri/MuriSpec.cpp`.
+- **Preview auto-pause on audio-device change ⇄ export's "pause the preview first" step.**
+  `TimelineSection::pausePreviewForAudioDeviceChange` only acts when `qtPreviewPlaying_` is true, and
+  the only reason a device hotplug can't disturb a running video export is that
+  `MainWindow.ExportFlow.cpp` pauses the preview before opening the export dialog. If export ever
+  starts while playback continues, that guard must be re-examined — it is the sole protection.
 
 ## 12. Latency-page audition reuses the main preview transport
 

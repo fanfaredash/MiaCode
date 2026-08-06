@@ -572,6 +572,9 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/audio/PreviewAudioSettings.cpp
     src/audio/MiniaudioPreviewAudioBackend.h
     src/audio/MiniaudioPreviewAudioBackend.cpp
+    src/audio/PreviewAudioDeviceChangePolicy.h
+    src/audio/PreviewAudioDeviceWatcher.h
+    src/audio/PreviewAudioDeviceWatcher.cpp
     src/audio/QtPreviewSfxRuntime.h
     src/audio/QtPreviewSfxRuntime.cpp
     src/core/chart/transform/ChartBatchTransform.h
@@ -1555,10 +1558,10 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/common src/preview src/audio
     )
 
-    miacode_add_dev_tool(preview_audio_recovery_policy_spec TEST
+    miacode_add_dev_tool(preview_audio_device_change_policy_spec TEST
         SOURCES
-            src/tools/preview/PreviewAudioRecoveryPolicySpec.cpp
-            src/audio/PreviewAudioRecoveryPolicy.h
+            src/tools/preview/PreviewAudioDeviceChangePolicySpec.cpp
+            src/audio/PreviewAudioDeviceChangePolicy.h
         LIBS Qt6::Core
         INCLUDES src src/common src/preview src/audio
     )

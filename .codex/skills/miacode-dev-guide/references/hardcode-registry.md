@@ -93,10 +93,10 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: Windows preview BGM BASS/BASS_FX rate-mode defaults and BASS_FX tempo-window presets for pitch-preserving A/B tests
   - Current tuning note: Windows BGM defaults to pitch-preserving tempo mode with the `compact40` (`40/15/8`) window preset. `MIACODE_BASS_BGM_RATE_MODE=rate_transpose` switches to source-time-priority `BASS_ATTRIB_FREQ` mode. `MIACODE_BASS_BGM_TEMPO_PRESET` is active only in tempo mode; presets are unset/`compact40` (`40/15/8`), `stock` (plugin default), `auto` (`0/0/8`), `tight20` (`20/8/4`), `balanced30` (`30/10/6`), `smooth60` (`60/20/8`), and `wide82` (`82/28/8`). `MIACODE_BASS_BGM_TEMPO_PARAMS` overrides those presets with custom `sequence_ms,seek_ms,overlap_ms`.
   - Rule: keep local while this is a Windows preview-only diagnostic path and export does not share live BASS_FX tempo playback
-- `src/audio/PreviewAudioRecoveryPolicy.h`
-  - Owns: the live preview audio-recovery decision and the `50 ms` BGM-device-clock divergence boundary
-  - Scope: `TimelineSection` live BGM-drift guard and BASS BGM-only correction; not export timing, device enumeration, SFX scheduling, or visual clock policy
-  - Rule: keep the threshold shared in this policy; device changes do not invoke it, and do not add retries, cooldowns, full transport resets, or an engine-restart fallback without new evidence
+- `src/audio/PreviewAudioDeviceChangePolicy.h`
+  - Owns: what counts as an output-device configuration change (sorted device-id list, default-output id) and whether that change pauses the preview
+  - Scope: `PreviewAudioDeviceWatcher` and the `TimelineSection` auto-pause; not export timing, SFX scheduling, or visual clock policy
+  - Rule: this policy holds NO thresholds and must not grow one. The trigger is a deterministic device event; the previous `50 ms` drift boundary was removed with the in-place re-anchor it fed. Do not add debounce/cooldown state either — the not-playing guard already absorbs Qt's per-hotplug notification burst
 - `src/core/chart/transform/ChartNormalization.cpp`, `src/core/chart/transform/ChartNormalizationSegmentPolicy.cpp`
   - Owns: whole-chart formatting snap constants for note-grid minimization, segment-length preservation, selection carry restoration, and duration-signature rewriting
   - Current tuning note: `384`-snap formatting keeps rendered `{beats}` selection independent from hold/slide duration syntax, still rewrites no-`#` duration signatures against a fixed `384` grid, keeps rendered duration denominators at or above a `16th-note` floor, requires reduce=true segment output to exactly express each snapped 384-grid segment length, and owns the optional blank-line sectioning after every 4 emitted measure lines

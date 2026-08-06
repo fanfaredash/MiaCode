@@ -479,55 +479,6 @@ double BassPreviewAudioBackend::authoritativeSecond() const
     return playbackSession_.lastAuthoritativeSecond;
 }
 
-bool BassPreviewAudioBackend::audioClockChartSecond(double* outSecond) const
-{
-#ifdef MIACODE_HAS_BASS_AUDIO
-    // The BGM stream position IS the audio clock: it advances exactly as the
-    // device consumes samples. Everything else in the mixer, SFX included, is
-    // consumed at that same rate, so scheduling SFX against this number puts the
-    // trigger decision in the same domain as the sound it has to line up with.
-    // This is the same quantity the bass_status row logs as bgm_chart, which
-    // means bgm_delta_ms now reports the residual of a closed loop instead of an
-    // uncorrected divergence.
-    Sample* backgroundTrack = nullptr;
-    bool backgroundTrackRunning = false;
-    bool backgroundTrackPendingStart = false;
-    double backgroundTrackOffsetSeconds = 0.0;
-    {
-        QMutexLocker locker(&schedulerMutex_);
-        backgroundTrack = backgroundTrackSample_;
-        backgroundTrackRunning = playbackSession_.backgroundTrackRunning;
-        backgroundTrackPendingStart = playbackSession_.backgroundTrackPendingStart;
-        backgroundTrackOffsetSeconds = playbackSession_.backgroundTrackOffsetSeconds;
-    }
-    if (backgroundTrack == nullptr
-        || !playbackSession_.masterRunning
-        || !backgroundTrackRunning
-        || backgroundTrackPendingStart) {
-        return false;
-    }
-    const double rawSecond = backgroundTrack->currentSec();
-    if (!qIsFinite(rawSecond) || rawSecond < 0.0) {
-        return false;
-    }
-    // Past the end of the track the position stops advancing, so the clock would
-    // freeze and every later SFX would stall behind it. A chart outlasting its
-    // BGM is normal, not an error, so report "no audio clock" and let the caller
-    // fall back to the wall clock for the tail.
-    const double lengthSecond = backgroundTrack->lengthSeconds;
-    if (lengthSecond > 0.0 && rawSecond >= lengthSecond - kBassPreviewEpsilonSeconds) {
-        return false;
-    }
-    if (outSecond != nullptr) {
-        *outSecond = rawSecond - backgroundTrackOffsetSeconds;
-    }
-    return true;
-#else
-    (void) outSecond;
-    return false;
-#endif
-}
-
 void BassPreviewAudioBackend::configureBackgroundTrackForSecond(
     double second,
     const QString& reason,

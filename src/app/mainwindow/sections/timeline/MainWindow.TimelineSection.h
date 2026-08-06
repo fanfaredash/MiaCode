@@ -2,6 +2,8 @@
 
 #include "../../MainWindow.h"
 
+#include "audio/PreviewAudioDeviceChangePolicy.h"
+
 class MainWindow::TimelineSection {
 public:
     TimelineSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state);
@@ -48,9 +50,6 @@ public:
     void onTimelineFollowProgressToggled(bool enabled);
     void onTimelineSyncToggled(bool enabled);
     void applyLatestTimelinePreviewStateToPausedPreview();
-    // Chart-second used to observe live BGM drift. The BASS backend schedules
-    // SFX itself; its fallback backend may still use the returned value to drain.
-    double sfxDrainSecond(double wallClockSecond);
     void requestTimelineSlowRefresh();
     void dispatchTimelineSlowRefresh();
     void scheduleTimelineAnalysisRefresh(
@@ -196,6 +195,7 @@ public:
     void maybeFireExportAuditionClockTicks(double second);
     bool startQtPreviewPlayback(double second, bool resumeFromPause = false);
     void pauseQtPreviewPlaybackExact();
+    void pausePreviewForAudioDeviceChange(miacode::preview_audio::device_change::Change change);
     void handlePreviewStartupCanvasPresented();
     void handlePreviewStartupVideoPrepared(double second, quint64 transactionId);
     void finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage);
@@ -210,7 +210,6 @@ public:
     void jumpToNearestTimelineNote(double second, int lane);
 
 private:
-    void requestPreviewAudioReanchor(const QString& reason);
     void queueTimelineCursorBridgeUpdate(double second, bool centerView);
     void scheduleDeferredTimelineBridgeFlush();
     void invalidatePreviewFollowBindingCache();

@@ -366,6 +366,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   `MiniaudioPreviewAudioBackend.{h,cpp}` (non-Windows compatibility, SoundTouch stretch).
 - Settings/semantics: `src/audio/PreviewAudioSettings.*`, `src/common/PreviewSfxAssets.h`,
   `PreviewSfxSemantics.h`, `PreviewSfxTimeline.h`, `PreviewSfxTiming.h`.
+- **Output-device change → auto-pause** (BASS platforms only): `PreviewAudioDeviceWatcher.{h,cpp}`
+  (owns the `QMediaDevices` observer + snapshot) + `PreviewAudioDeviceChangePolicy.h` (pure decision,
+  CTest `preview_audio_device_change_policy_spec`) → `TimelineSection::pausePreviewForAudioDeviceChange`
+  in `sections/timeline/MainWindow.PreviewPlaybackState.cpp`, wired in `sections/frame/MainWindow.FrameBootstrap.cpp`.
+  A hotplug or default-output switch pauses a playing preview; the user's resume is what re-anchors
+  the transport. See `docs/superpowers/specs/2026-08-06-preview-audio-device-autopause-design.md` —
+  in-place re-anchoring was tried three times and removed.
 - MainWindow hooks: `MainWindow.cpp` (`ensurePreviewSfxRuntimePrepared`,
   `applyPreviewAudioSettingsToRuntime`); playback clock authority:
   `sections/timeline/MainWindow.TimelinePlayback.cpp` (`currentPreviewAuthoritativeAudioClockSecond`).

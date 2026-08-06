@@ -228,6 +228,9 @@
         int bottomTabsResizeStartHeight_ = 0;
         bool timelineTabVisible_ = true;
         QtPreviewSfxRuntime* previewSfxRuntime_ = nullptr;
+        // Null on backends other than BASS; see the construction site in
+        // MainWindow.FrameBootstrap.cpp for why the watcher is BASS-only.
+        PreviewAudioDeviceWatcher* previewAudioDeviceWatcher_ = nullptr;
         miacode::waveform::WaveformCacheService* waveformCacheService_ = nullptr;
         QThreadPool* previewWarmupPool_ = nullptr;
         QThreadPool* timelineSlowRefreshPool_ = nullptr;
@@ -481,12 +484,6 @@
         // kChartSwitchGaugeTxnBase) so a `timeline/leak_gauge txn=` value
         // unambiguously identifies which resource_gauge line armed it.
         quint64 chartSwitchGaugeTxnCounter_ = 0;
-        // Whether the SFX drain is currently following the audio clock. Only used to
-        // log the transitions; steady state emits nothing.
-        bool sfxAudioClockActive_ = false;
-        // A device event and the first divergent clock sample often arrive in
-        // the same event-loop turn. Coalesce them into one transport anchor.
-        bool previewAudioReanchorPending_ = false;
         bool previewStartupSyncPending_ = false;
         bool previewLateVideoStartPending_ = false;
         bool previewStartupAudioPrepared_ = false;
@@ -683,6 +680,7 @@
     int& bottomTabsResizeStartHeight_ = state_.bottomTabsResizeStartHeight_;
     bool& timelineTabVisible_ = state_.timelineTabVisible_;
     QtPreviewSfxRuntime*& previewSfxRuntime_ = state_.previewSfxRuntime_;
+    PreviewAudioDeviceWatcher*& previewAudioDeviceWatcher_ = state_.previewAudioDeviceWatcher_;
     QThreadPool*& previewWarmupPool_ = state_.previewWarmupPool_;
     QThreadPool*& timelineSlowRefreshPool_ = state_.timelineSlowRefreshPool_;
     QThreadPool*& timelineAnalysisPool_ = state_.timelineAnalysisPool_;

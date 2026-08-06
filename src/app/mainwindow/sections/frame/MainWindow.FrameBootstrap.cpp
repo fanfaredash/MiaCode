@@ -16,6 +16,7 @@
 #include "DialogLocalization.h"
 #include "PlainCodeEditor.h"
 #include "editor/TouchPadAuthoringEdit.h"
+#include "audio/PreviewAudioDeviceWatcher.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "ShortcutRegistry.h"
@@ -1449,6 +1450,23 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 
     previewSfxRuntime_ = new QtPreviewSfxRuntime(this);
     logStartupStage("preview_sfx_runtime_created");
+#ifdef MIACODE_HAS_BASS_AUDIO
+    // BASS-only on purpose. docs/audit/AUDIO_CLOCK_DESYNC_AUDIT_ZH.md fixes the
+    // device-change desync (问题 3) to the BASS transport's anchor model on Windows and
+    // macOS. Linux runs MiniaudioPreviewAudioBackend, a different seek/clock
+    // implementation with a separate, unproven report (问题 4), so auto-pausing there
+    // would interrupt playback on no evidence.
+    previewAudioDeviceWatcher_ = new PreviewAudioDeviceWatcher(this);
+    connect(previewAudioDeviceWatcher_,
+            &PreviewAudioDeviceWatcher::outputConfigurationChanged,
+            this,
+            [this](PreviewAudioDeviceWatcher::Change change) {
+                if (timelineSection_ != nullptr) {
+                    timelineSection_->pausePreviewForAudioDeviceChange(change);
+                }
+            });
+    logStartupStage("preview_audio_device_watcher_created");
+#endif
     connect(previewCanvas_, &PreviewRuntime::framePresented, this, [this]() {
         timelineSection_->handlePreviewStartupCanvasPresented();
         if (!qtPreviewPlaying_) {

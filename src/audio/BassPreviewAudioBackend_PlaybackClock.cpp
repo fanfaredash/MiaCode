@@ -754,56 +754,6 @@ double BassPreviewAudioBackend::authoritativePlaybackSecond() const
     return authoritativeSecond();
 }
 
-bool BassPreviewAudioBackend::reanchorPlayingTransportAtChartSecond(double chartSecond, const QString& reason)
-{
-    MC_OP("BassPreviewAudioBackend::reanchorPlayingTransportAtChartSecond");
-#ifdef MIACODE_HAS_BASS_AUDIO
-    // A chart may outlast its BGM. At that natural end-of-track boundary the
-    // BGM cursor is intentionally not a clock, so no recovery may restart it.
-    bool backgroundTrackRunning = false;
-    bool backgroundTrackPendingStart = false;
-    double backgroundTrackOffsetSeconds = 0.0;
-    {
-        QMutexLocker locker(&schedulerMutex_);
-        backgroundTrackRunning = playbackSession_.backgroundTrackRunning;
-        backgroundTrackPendingStart = playbackSession_.backgroundTrackPendingStart;
-        backgroundTrackOffsetSeconds = playbackSession_.backgroundTrackOffsetSeconds;
-    }
-    if (!playbackSession_.masterRunning
-        || !backgroundTrackRunning
-        || backgroundTrackPendingStart
-        || !audioClockChartSecond(nullptr)) {
-        return false;
-    }
-
-    const double anchoredSecond = clampTimelineSecond(chartSecond);
-    const double rawSecond = anchoredSecond + backgroundTrackOffsetSeconds;
-    if (rawSecond < 0.0) {
-        return false;
-    }
-    // Correct the BGM source only.  The master mixer and its SFX sync chain
-    // continue uninterrupted, so a device/GUI hiccup cannot cancel one-shots
-    // that were already scheduled in the audio domain.
-    backgroundTrackSample_->pause();
-    backgroundTrackSample_->setCurrentSec(rawSecond);
-    backgroundTrackSample_->play();
-    playbackSession_.lastAuthoritativeSecond = anchoredSecond;
-    {
-        QMutexLocker locker(&schedulerMutex_);
-        playbackSession_.backgroundTrackRunning = true;
-    }
-    appendAudioDebugLog(
-        QString("bass_transport action=automatic_reanchor scope=bgm_only reason=%1 chart_second=%2")
-            .arg(reason)
-            .arg(anchoredSecond, 0, 'f', 6));
-    return true;
-#else
-    (void) chartSecond;
-    (void) reason;
-    return false;
-#endif
-}
-
 double BassPreviewAudioBackend::syncPreviewPlaybackClockTransaction(double fallbackSecond)
 {
     if (shuttingDown_.load(std::memory_order_acquire)) {

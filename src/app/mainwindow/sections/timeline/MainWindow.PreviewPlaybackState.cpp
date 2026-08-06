@@ -394,6 +394,37 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
         state_.previewFollowEnabled_);
 }
 
+void MainWindow::TimelineSection::pausePreviewForAudioDeviceChange(
+    miacode::preview_audio::device_change::Change change)
+{
+    // The whole fix for 问题 3 (docs/audit/AUDIO_CLOCK_DESYNC_AUDIT_ZH.md §1). The preview
+    // clock anchors and advances; it does not follow the device. A hotplug or default-output
+    // switch leaves that anchor stale for the rest of the session, and three attempts to
+    // correct it silently while playback continued did not work. Pause is the correction the
+    // audit proved works (F3-2) — pause anchors, resume re-starts from the fresh anchor — so
+    // the app now performs it the moment the device configuration changes and hands the
+    // resume back to the user.
+    if (!miacode::preview_audio::device_change::shouldPausePreview(change, state_.qtPreviewPlaying_)) {
+        // Not playing: nothing has a stale anchor. This is also what makes the burst of
+        // notifications Qt emits for one physical hotplug safe, and what keeps a video
+        // export untouched (MainWindow.ExportFlow.cpp pauses the preview before it starts).
+        return;
+    }
+    appendPreviewPlaybackLog(
+        QStringLiteral("pause_audio_device_change"),
+        QString("txn=%1 change=%2 second=%3")
+            .arg(state_.activePreviewPlaybackTransactionId_)
+            .arg(QLatin1String(miacode::preview_audio::device_change::changeName(change)))
+            .arg(owner_.currentPreviewAuthoritativeAudioClockSecond(), 0, 'f', 6));
+    // Same path as the pause button, so the pause second, timeline centring, and the
+    // preview.playback.changed extension event are identical to a manual pause.
+    pauseQtPreviewPlaybackExact();
+    // Not a notification — state correctness. Without it the button keeps reading
+    // "playing" while playback is stopped. The pause itself stays silent: no status-bar
+    // message, no dialog.
+    owner_.updatePauseButtonAppearance();
+}
+
 void MainWindow::TimelineSection::emitChartSwitchResourceGauge()
 {
     // Chart-switch leak gauge. The pause handler above is the ONLY other site that

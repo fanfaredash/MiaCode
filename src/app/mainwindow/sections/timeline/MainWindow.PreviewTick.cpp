@@ -9,7 +9,6 @@
 #include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
-#include "audio/PreviewAudioRecoveryPolicy.h"
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
@@ -201,84 +200,6 @@ void MainWindow::TimelineSection::resetVisualClockSmoothing()
     state_.qtPreviewVisualClockDiagLastLogMs_ = -1;
 }
 
-double MainWindow::TimelineSection::sfxDrainSecond(double wallClockSecond)
-{
-    // This observes the BGM clock only to correct a real BGM divergence. BASS
-    // schedules live SFX directly from the master mixer, so GUI timing no longer
-    // decides when a running BASS session emits a note sound.
-    if (state_.previewSfxRuntime_ == nullptr) {
-        return wallClockSecond;
-    }
-    double audioSecond = 0.0;
-    bool useAudioClock = state_.previewSfxRuntime_->audioClockChartSecond(&audioSecond);
-    if (useAudioClock && !qIsFinite(audioSecond)) {
-        useAudioClock = false;
-    }
-    if (useAudioClock) {
-        const double clockDeltaSeconds = qAbs(wallClockSecond - audioSecond);
-        const auto recovery = miacode::preview_audio::recovery::decidePreviewAudioRecovery(
-            state_.qtPreviewPlaying_,
-            /*audioClockAvailable=*/true,
-            clockDeltaSeconds);
-        if (recovery == miacode::preview_audio::recovery::Reason::DriftExceeded) {
-            requestPreviewAudioReanchor(QStringLiteral("clock_divergence"));
-            // The queued anchor runs after this tick. Do not emit one more SFX
-            // on a clock that has demonstrably stopped following the chart.
-            useAudioClock = false;
-        }
-    }
-    if (useAudioClock != state_.sfxAudioClockActive_) {
-        state_.sfxAudioClockActive_ = useAudioClock;
-        if (miacode::debug_options::runtimeDebugOutputEnabled()) {
-            miacode::debug_log::appendLine(
-                miacode::debug_log::Channel::Runtime,
-                QStringLiteral("preview/sfx_clock"),
-                QStringLiteral("action=source_changed source=%1 wall_second=%2 audio_second=%3 delta_ms=%4")
-                    .arg(useAudioClock ? QStringLiteral("audio") : QStringLiteral("wall"))
-                    .arg(wallClockSecond, 0, 'f', 6)
-                    .arg(audioSecond, 0, 'f', 6)
-                    .arg((wallClockSecond - audioSecond) * 1000.0, 0, 'f', 3));
-        }
-    }
-    return useAudioClock ? audioSecond : wallClockSecond;
-}
-
-void MainWindow::TimelineSection::requestPreviewAudioReanchor(const QString& reason)
-{
-    if (state_.previewAudioReanchorPending_ || state_.previewSfxRuntime_ == nullptr) {
-        return;
-    }
-    state_.previewAudioReanchorPending_ = true;
-    QTimer::singleShot(0, &owner_, [this, reason]() {
-        state_.previewAudioReanchorPending_ = false;
-        if (!state_.qtPreviewPlaying_ || state_.previewSfxRuntime_ == nullptr) {
-            return;
-        }
-
-        const double wallClockSecond = owner_.currentPreviewAuthoritativeAudioClockSecond();
-        double audioClockSecond = 0.0;
-        const bool hasAudioClock = state_.previewSfxRuntime_->audioClockChartSecond(&audioClockSecond);
-        const bool reanchored =
-            state_.previewSfxRuntime_->reanchorPlayingTransportAtChartSecond(wallClockSecond, reason);
-        double reanchoredAudioSecond = 0.0;
-        const bool hasReanchoredAudioClock =
-            state_.previewSfxRuntime_->audioClockChartSecond(&reanchoredAudioSecond);
-        if (miacode::debug_options::runtimeDebugOutputEnabled()) {
-            miacode::debug_log::appendLine(
-                miacode::debug_log::Channel::Runtime,
-                QStringLiteral("preview/audio_reanchor"),
-                QStringLiteral("action=completed reason=%1 wall_second=%2 audio_second=%3 delta_ms=%4 applied=%5 post_audio_second=%6 post_delta_ms=%7")
-                    .arg(reason)
-                    .arg(wallClockSecond, 0, 'f', 6)
-                    .arg(audioClockSecond, 0, 'f', 6)
-                    .arg(hasAudioClock ? (wallClockSecond - audioClockSecond) * 1000.0 : 0.0, 0, 'f', 3)
-                    .arg(reanchored ? 1 : 0)
-                    .arg(reanchoredAudioSecond, 0, 'f', 6)
-                    .arg(hasReanchoredAudioClock ? (wallClockSecond - reanchoredAudioSecond) * 1000.0 : 0.0, 0, 'f', 3));
-        }
-    });
-}
-
 void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second, double fallbackSecond, bool hasAudioClock)
 {
     if (!state_.qtPreviewPlaying_) {
@@ -393,8 +314,10 @@ void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second, double 
     const qint64 beforeDrainNs = diagEnabled ? tickProfileTimer.nsecsElapsed() : 0;
     if (state_.previewSfxRuntime_ != nullptr) {
         // BASS ignores this compatibility drain while its mixer scheduler is
-        // active; the call remains for the fallback backend.
-        state_.previewSfxRuntime_->drainEvents(sfxDrainSecond(second));
+        // active; the call remains for the fallback backend, which drains on the
+        // wall clock. `second` IS that wall clock: onQtPreviewTick is the only
+        // caller and passes fallbackSecond with hasAudioClock=false.
+        state_.previewSfxRuntime_->drainEvents(second);
     }
     maybeFireExportAuditionClockTicks(second);
     if (diagEnabled) {

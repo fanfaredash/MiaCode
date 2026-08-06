@@ -200,16 +200,6 @@ double QtPreviewSfxRuntime::authoritativePlaybackSecond() const
     return backend_->authoritativePlaybackSecond();
 }
 
-bool QtPreviewSfxRuntime::audioClockChartSecond(double* outSecond) const
-{
-    return backend_->audioClockChartSecond(outSecond);
-}
-
-bool QtPreviewSfxRuntime::reanchorPlayingTransportAtChartSecond(double chartSecond, const QString& reason)
-{
-    return backend_->reanchorPlayingTransportAtChartSecond(chartSecond, reason);
-}
-
 double QtPreviewSfxRuntime::syncPreviewPlaybackClockTransaction(double fallbackSecond)
 {
     return backend_->syncPreviewPlaybackClockTransaction(fallbackSecond);

@@ -71,6 +71,11 @@ gated `appendLine`; don't reintroduce that pattern.)
   → **runtime** log. So: video decode / PV playback / decode-toggle ⇒ grep `miacode_audio_debug.log`;
   hwframe / seek / summary ⇒ grep `miacode_runtime_debug.log`. (Grepping the runtime log for decode
   activity finds only the `runtime/app_shutdown/...stage_media_host` teardown lines — looks like "nothing logged.")
+- Preview transport lines are on the Audio channel too: `preview/playback` (`appendPreviewPlaybackLog`)
+  and `preview/audio_device` (`PreviewAudioDeviceWatcher`, BASS platforms only). Keeping the
+  device-change row on the same channel is deliberate — an output hotplug, the
+  `action=pause_audio_device_change` it triggers, and the `bass_status` / `bgm_delta_ms` rows used to
+  judge desync all read in order out of one `miacode_audio_debug.log`.
 
 ## 2. The env-flag situation (audit 2026-05-29)
 
