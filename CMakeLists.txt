@@ -511,7 +511,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/quick_scene/PreviewQuickHudLayer.cpp
     src/preview/quick_scene/PreviewQuickSceneRoot.h
     src/preview/quick_scene/PreviewQuickSceneRoot.cpp
-    src/preview/quick_scene/PreviewQuickSceneInvalidationPolicy.h
     src/render/source.h
     src/render/compositor.h
     src/render/compositor.cpp
