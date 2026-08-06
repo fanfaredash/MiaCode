@@ -205,11 +205,34 @@ void PreviewAudioDeviceWatcher::handleNativeDefaultOutputChanged()
 {
 #ifdef Q_OS_WIN
     QMetaObject::invokeMethod(this, [this]() {
+        // The emit stays UNCONDITIONAL on purpose. This callback is the whole point of
+        // f82cfa64: Core Audio tells us the default output moved BEFORE Qt re-enumerates,
+        // so routing this through the snapshot comparison would usually find nothing
+        // changed yet and no pause would happen at all.
+        //
+        // Re-baseline the snapshot first, though. The Qt notification for this same
+        // physical event arrives shortly after and previously always compared as changed
+        // (the native path never touched snapshot_), emitting a second time for one device
+        // switch. That second emit was harmless -- the preview is already paused, so
+        // shouldPausePreview() swallows it -- but it duplicated log rows and hid which of
+        // the two paths a capture actually came through. Adopting the current state here
+        // makes the follow-up comparison find no delta.
+        //
+        // Runs on this object's thread (queued), the same thread as
+        // handleAudioOutputsChanged(), so snapshot_ needs no further synchronisation.
+        const QString previousDefaultOutputId = snapshot_.defaultOutputId;
+        snapshot_ = currentOutputSnapshot();
         if (miacode::debug_options::audioDebugOutputEnabled()) {
             miacode::debug_log::appendLine(
                 miacode::debug_log::Channel::Audio,
                 QStringLiteral("preview/audio_device"),
-                QStringLiteral("action=native_default_output_changed"));
+                QStringLiteral("action=native_default_output_changed default_before=%1 "
+                               "default_after=%2 outputs=%3")
+                    .arg(previousDefaultOutputId.isEmpty() ? QStringLiteral("(none)")
+                                                           : previousDefaultOutputId)
+                    .arg(snapshot_.defaultOutputId.isEmpty() ? QStringLiteral("(none)")
+                                                             : snapshot_.defaultOutputId)
+                    .arg(snapshot_.outputIds.size()));
         }
         emit outputConfigurationChanged(Change::DefaultOutputChanged);
     }, Qt::QueuedConnection);
