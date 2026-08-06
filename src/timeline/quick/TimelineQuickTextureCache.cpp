@@ -88,15 +88,30 @@ bool TimelineQuickTextureCache::requiresReset(QQuickWindow* window, const QStrin
     return window_ != window || skinDirectory_ != normalizedSkinDirectory(skinDirectory);
 }
 
-bool TimelineQuickTextureCache::capacityFlushRequired() const
+TimelineQuickTextureCacheCapacity TimelineQuickTextureCache::capacitySnapshot() const
 {
-    return miacode::timeline::quick::timelineTextureCacheFlushRequired(
+    return TimelineQuickTextureCacheCapacity{
         textures_.size(),
         textureBytes_,
         transformedPixmaps_.size(),
         kTimelineCachedTextureEntryLimit,
         kTimelineCachedTextureByteLimit,
-        kTimelineTransformedPixmapEntryLimit);
+        kTimelineTransformedPixmapEntryLimit,
+    };
+}
+
+bool TimelineQuickTextureCache::capacityFlushRequired() const
+{
+    // Routed through the same snapshot the diagnostics read, so the logged limits
+    // are by construction the ones the predicate actually used.
+    const TimelineQuickTextureCacheCapacity capacity = capacitySnapshot();
+    return miacode::timeline::quick::timelineTextureCacheFlushRequired(
+        capacity.textureCount,
+        capacity.textureBytes,
+        capacity.pixmapCount,
+        capacity.textureCountLimit,
+        capacity.textureByteLimit,
+        capacity.pixmapCountLimit);
 }
 
 void TimelineQuickTextureCache::setSkinDirectory(const QString& skinDirectory)

@@ -36,6 +36,19 @@ struct TimelineQuickHoldTextureParts {
     }
 };
 
+// Live counts paired with the limits they are tested against. Exists so a caller
+// that needs to REPORT a capacity flush (TimelineQuickItem::updatePaintNode) can
+// state what tripped it without restating the limits: they stay defined exactly
+// once, as file-static constants in TimelineQuickTextureCache.cpp.
+struct TimelineQuickTextureCacheCapacity {
+    qsizetype textureCount = 0;
+    qint64 textureBytes = 0;
+    qsizetype pixmapCount = 0;
+    qsizetype textureCountLimit = 0;
+    qint64 textureByteLimit = 0;
+    qsizetype pixmapCountLimit = 0;
+};
+
 class TimelineQuickTextureCache
 {
 public:
@@ -56,6 +69,10 @@ public:
     // Callers MUST tear the node tree down before acting on this — live materials
     // hold raw QSGTexture pointers. See TimelineQuickItem::updatePaintNode.
     bool capacityFlushRequired() const;
+    // The inputs capacityFlushRequired() decided on, for diagnostics. Read it BEFORE
+    // acting on the flush — invalidateAll() zeroes every count, so a snapshot taken
+    // afterwards describes an empty cache instead of the one that tripped the cap.
+    TimelineQuickTextureCacheCapacity capacitySnapshot() const;
     void setSkinDirectory(const QString& skinDirectory);
     QSGTexture* textureForKey(const QString& key, const QImage& image);
     QSGTexture* textureForPixmapKey(const QString& key, const QPixmap& pixmap);

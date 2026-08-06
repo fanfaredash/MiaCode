@@ -1555,6 +1555,28 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     // only the text keys, leave the cache still over its cap, and defer the real flush
     // by a frame.
     if (textureCapacityFlushRequired) {
+        // The guard is expected never to fire, which is exactly why it is worth one
+        // line when it does: the flush costs a node-tree teardown plus a re-upload of
+        // the working set, and this line is the only thing that could later attribute
+        // that hitch. Snapshot BEFORE invalidateAll() — it zeroes every count, so a
+        // read afterwards would report an empty cache instead of the one that tripped
+        // the cap. Render thread (appendLine is mutex-guarded + async, and the debug
+        // predicate is a relaxed atomic load), same as the leak-gauge emission below.
+        if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+            const TimelineQuickTextureCacheCapacity capacity = textures_->capacitySnapshot();
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("timeline/texture_cache"),
+                QStringLiteral(
+                    "action=capacity_flush tex=%1 tex_bytes=%2 pixmaps=%3 tex_limit=%4 "
+                    "tex_byte_limit=%5 pixmap_limit=%6")
+                    .arg(capacity.textureCount)
+                    .arg(capacity.textureBytes)
+                    .arg(capacity.pixmapCount)
+                    .arg(capacity.textureCountLimit)
+                    .arg(capacity.textureByteLimit)
+                    .arg(capacity.pixmapCountLimit));
+        }
         textures_->invalidateAll();
         pendingDprInvalidation_ = false;
         pendingThemeInvalidation_ = false;
