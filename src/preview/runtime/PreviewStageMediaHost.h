@@ -176,10 +176,20 @@ private:
     // so feeding it decoded frames buys nothing and retains a decode-pool
     // surface. True only when a distinct inner sink exists AND that mode is on.
     bool innerVideoSinkActive() const;
+    // What refreshInnerVideoSinkForScaleMode() actually did, so the scale-mode log
+    // line can state the outcome instead of the intent — "entered mode 3 but there
+    // was no retained frame to prime" and "primed with the current frame" are the
+    // two halves of the "wrong first frame after switching" report, and only the
+    // callee can tell them apart.
+    enum class InnerVideoSinkRefresh {
+        None,     // no distinct inner sink, or entering the mode with no retained frame
+        Primed,   // retained frame pushed, so the mode shows the current frame at once
+        Cleared,  // frame released, so the sink stops pinning a decode-pool surface
+    };
     // Push the retained frame into the inner sink so a mid-playback switch into
     // InnerCircleFitOuterFill shows the current frame without waiting for the
     // next decode; clear it when leaving the mode so nothing stays pinned.
-    void refreshInnerVideoSinkForScaleMode();
+    InnerVideoSinkRefresh refreshInnerVideoSinkForScaleMode();
 #ifdef MIACODE_USE_QTAVPLAYER
     // QtAVPlayer frame path: a decoded QAVVideoFrame (already converted to a
     // QVideoFrame and tagged with its presentation pts in seconds) is pushed

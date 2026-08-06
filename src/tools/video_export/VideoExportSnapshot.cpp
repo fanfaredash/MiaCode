@@ -13,20 +13,9 @@
 
 namespace {
 
-QString backgroundScaleModeToken(PreviewBackgroundScaleMode mode)
-{
-    switch (mode) {
-    case PreviewBackgroundScaleMode::FitContain:
-        return QStringLiteral("fit");
-    case PreviewBackgroundScaleMode::SquareFitContain:
-        return QStringLiteral("square_fit");
-    case PreviewBackgroundScaleMode::InnerCircleFitOuterFill:
-        return QStringLiteral("inner_circle_fit_outer_fill");
-    case PreviewBackgroundScaleMode::FillCrop:
-    default:
-        return QStringLiteral("fill");
-    }
-}
+// backgroundScaleModeToken moved to core/video/PreviewRenderSettings.h (same tokens,
+// unchanged) so the preview runtime's scale-mode diagnostics name the modes the same
+// way this snapshot serialises them.
 
 QString outlineVariantToken(PreviewOutlineVariant variant)
 {
@@ -217,7 +206,7 @@ QJsonObject VideoExportSnapshot::toJson() const
     render.insert(QStringLiteral("layout_square_scale"), layoutSquareScale);
     render.insert(QStringLiteral("smooth_brightness"), smoothBrightness);
     render.insert(QStringLiteral("outline_variant"), outlineVariantToken(outlineVariant));
-    render.insert(QStringLiteral("background_scale_mode"), backgroundScaleModeToken(backgroundScaleMode));
+    render.insert(QStringLiteral("background_scale_mode"), QString::fromLatin1(backgroundScaleModeToken(backgroundScaleMode)));
     render.insert(QStringLiteral("tap_flow_speed"), tapFlowSpeed);
     render.insert(QStringLiteral("touch_flow_speed"), touchFlowSpeed);
     render.insert(QStringLiteral("slide_earlier_second_and_text_on_top"), slideEarlierSecondAndTextOnTop);

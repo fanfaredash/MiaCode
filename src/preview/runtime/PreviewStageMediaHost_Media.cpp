@@ -136,8 +136,23 @@ void PreviewStageMediaHost::setBackgroundScaleMode(PreviewBackgroundScaleMode mo
     if (backgroundScaleMode_ == mode) {
         return;
     }
+    const PreviewBackgroundScaleMode previousMode = backgroundScaleMode_;
     backgroundScaleMode_ = mode;
-    refreshInnerVideoSinkForScaleMode();
+    // Report what refreshInnerVideoSinkForScaleMode() DID, not what the switch was
+    // supposed to trigger. This is the only record tying a user-visible render-setting
+    // change to the inner-sink side effect, which is what "switching into mode 3
+    // mid-playback shows the wrong first frame" (primed=0) and "VRAM does not drop
+    // after leaving mode 3" (cleared=0) each hinge on. The no-op case returns above
+    // and stays unlogged.
+    const InnerVideoSinkRefresh refresh = refreshInnerVideoSinkForScaleMode();
+    appendPreviewStageMediaLog(
+        QStringLiteral("scale_mode"),
+        QStringLiteral("from=%1 to=%2 inner_sink_active=%3 primed=%4 cleared=%5")
+            .arg(QString::fromLatin1(backgroundScaleModeToken(previousMode)))
+            .arg(QString::fromLatin1(backgroundScaleModeToken(backgroundScaleMode_)))
+            .arg(innerVideoSinkActive() ? 1 : 0)
+            .arg(refresh == InnerVideoSinkRefresh::Primed ? 1 : 0)
+            .arg(refresh == InnerVideoSinkRefresh::Cleared ? 1 : 0));
     emit backgroundScaleModeChanged();
 }
 
@@ -147,22 +162,26 @@ bool PreviewStageMediaHost::innerVideoSinkActive() const
         && backgroundScaleMode_ == PreviewBackgroundScaleMode::InnerCircleFitOuterFill;
 }
 
-void PreviewStageMediaHost::refreshInnerVideoSinkForScaleMode()
+PreviewStageMediaHost::InnerVideoSinkRefresh PreviewStageMediaHost::refreshInnerVideoSinkForScaleMode()
 {
     if (innerVideoSink_ == nullptr || innerVideoSink_ == videoSink_) {
-        return;
+        return InnerVideoSinkRefresh::None;
     }
     if (innerVideoSinkActive()) {
 #ifdef MIACODE_USE_QTAVPLAYER
         if (lastVideoFrame_.isValid()) {
             innerVideoSink_->setVideoFrame(lastVideoFrame_);
+            return InnerVideoSinkRefresh::Primed;
         }
 #endif
-        return;
+        // Entered the mode with nothing retained — the inner circle stays blank
+        // until the next decoded frame lands.
+        return InnerVideoSinkRefresh::None;
     }
     // Leaving the mode: drop the retained frame so the inner sink stops pinning
     // a decode-pool surface (same reason releaseVideoBackend() clears it).
     innerVideoSink_->setVideoFrame(QVideoFrame());
+    return InnerVideoSinkRefresh::Cleared;
 }
 
 double PreviewStageMediaHost::layoutSquareScale() const
