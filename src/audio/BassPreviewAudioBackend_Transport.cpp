@@ -446,6 +446,29 @@ void BassPreviewAudioBackend::stopAllSamples()
 #endif
 }
 
+void BassPreviewAudioBackend::stopSfxVoices()
+{
+    MC_OP("BassPreviewAudioBackend::stopSfxVoices");
+#ifdef MIACODE_HAS_BASS_AUDIO
+    // samplesByKind_ holds exactly the note-SFX voices: BGM lives in
+    // backgroundTrackSample_ and is never inserted, and touchhold is loaded with
+    // requiredForMap=false because the pause path already stops it via
+    // pauseTouchholdVoices(). A few kinds alias the same Sample (break_touch /
+    // judge_break, break_slide / break_slide_start); stopping one twice is a no-op.
+    int stoppedCount = 0;
+    for (Sample* sample : samplesByKind_) {
+        if (sample == nullptr || sample == backgroundTrackSample_) {
+            continue;
+        }
+        sample->stop();
+        ++stoppedCount;
+    }
+    appendAudioDebugLog(
+        QString("bass_sfx_voices op=stop reason=audio_device_change stopped=%1")
+            .arg(stoppedCount));
+#endif
+}
+
 void BassPreviewAudioBackend::stopPlaybackSession()
 {
     disarmSfxScheduler();

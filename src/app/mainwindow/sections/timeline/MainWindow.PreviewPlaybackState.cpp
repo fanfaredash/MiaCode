@@ -419,6 +419,19 @@ void MainWindow::TimelineSection::pausePreviewForAudioDeviceChange(
     // Same path as the pause button, so the pause second, timeline centring, and the
     // preview.playback.changed extension event are identical to a manual pause.
     pauseQtPreviewPlaybackExact();
+    // The one behaviour that differs from a manual pause, and it lives here rather
+    // than inside suspendPlaybackTransport so the pause button keeps its feel.
+    //
+    // Measured on two captures: the last group before the pause started `answer`
+    // (0.352 s) AND `judge` -> tap_perfect.wav (0.875 s), only 58 ms and 286 ms
+    // before the pause line. Nothing stops a one-shot -- suspendPlaybackTransport
+    // silences BGM and touchhold and lets note sounds self-terminate -- so up to
+    // 0.8 s of note audio outlives the visible pause, and the macOS route switch
+    // mutes the output in the middle of it. What the user hears is silence, then a
+    // stray note, after the preview has already stopped.
+    if (state_.previewSfxRuntime_ != nullptr) {
+        state_.previewSfxRuntime_->stopSfxVoices();
+    }
     // Not a notification — state correctness. Without it the button keeps reading
     // "playing" while playback is stopped. The pause itself stays silent: no status-bar
     // message, no dialog.

@@ -52,6 +52,7 @@ public:
     RetainedPlaybackMode retainedPlaybackMode() const;
     RetainedBgmState retainedBgmState() const;
     double authoritativePlaybackSecond() const;
+    void stopSfxVoices();
     double syncPreviewPlaybackClockTransaction(double fallbackSecond);
     void resetCursor(double second, bool includeCurrentSecond);
     void drainEvents(double second);

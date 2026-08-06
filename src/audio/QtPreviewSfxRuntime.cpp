@@ -200,6 +200,11 @@ double QtPreviewSfxRuntime::authoritativePlaybackSecond() const
     return backend_->authoritativePlaybackSecond();
 }
 
+void QtPreviewSfxRuntime::stopSfxVoices()
+{
+    backend_->stopSfxVoices();
+}
+
 double QtPreviewSfxRuntime::syncPreviewPlaybackClockTransaction(double fallbackSecond)
 {
     return backend_->syncPreviewPlaybackClockTransaction(fallbackSecond);

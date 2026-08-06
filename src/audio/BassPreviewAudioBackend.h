@@ -63,6 +63,7 @@ public:
     RetainedPlaybackMode retainedPlaybackMode() const override;
     RetainedBgmState retainedBgmState() const override;
     double authoritativePlaybackSecond() const override;
+    void stopSfxVoices() override;
     double syncPreviewPlaybackClockTransaction(double fallbackSecond) override;
     void resetCursor(double second, bool includeCurrentSecond) override;
     void drainEvents(double second) override;

@@ -83,6 +83,12 @@ public:
     virtual RetainedPlaybackMode retainedPlaybackMode() const = 0;
     virtual RetainedBgmState retainedBgmState() const = 0;
     virtual double authoritativePlaybackSecond() const = 0;
+    // Hard-stops the note-SFX one-shot voices, leaving BGM and the touch-hold voice
+    // alone. Only the audio-device auto-pause calls this. A manual pause deliberately
+    // lets one-shots ring out (see suspendPlaybackTransport), but on a device change
+    // that tail outlives the route switch and is heard as a stray note AFTER the
+    // preview has visibly stopped. Default no-op, so the miniaudio backend is unchanged.
+    virtual void stopSfxVoices() {}
     virtual double syncPreviewPlaybackClockTransaction(double fallbackSecond) = 0;
     virtual void resetCursor(double second, bool includeCurrentSecond) = 0;
     virtual void drainEvents(double second) = 0;
