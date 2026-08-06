@@ -194,7 +194,11 @@ public:
     void resetExportAuditionClockCursor(double startSecond);
     void maybeFireExportAuditionClockTicks(double second);
     bool startQtPreviewPlayback(double second, bool resumeFromPause = false);
-    void pauseQtPreviewPlaybackExact();
+    // Which clock names the pause second. WallClock is the G1 default and what every
+    // user-initiated pause uses. AudioPosition is for the audio-device auto-pause only,
+    // where a process stall makes the wall clock run past what was actually heard.
+    enum class PauseSecondSource { WallClock, AudioPosition };
+    void pauseQtPreviewPlaybackExact(PauseSecondSource pauseSecondSource = PauseSecondSource::WallClock);
     void pausePreviewForAudioDeviceChange(miacode::preview_audio::device_change::Change change);
     void handlePreviewStartupCanvasPresented();
     void handlePreviewStartupVideoPrepared(double second, quint64 transactionId);

@@ -225,6 +225,24 @@ inline int previewWaveformAlignmentDiagnosticSampleMs()
     return value > 0 ? value : 250;
 }
 
+// UI-hang thresholds. The defaults are sized for the freeze reports the watchdog was
+// built for — a window that stops responding — which makes them far too coarse for a
+// stall that merely drops ~2 s of preview ticks: the idle heartbeat never reaches 5 s,
+// so the Windows GUI-thread stack capture, the one probe that can name the blocking
+// call, never arms. Lowering these is how a short but reproducible stall gets a stack.
+// Non-positive or unparsable values fall back to the default.
+inline int uiHangActivePhaseMs()
+{
+    const int value = envIntValue("MIACODE_UI_HANG_ACTIVE_PHASE_MS", 2000);
+    return value > 0 ? value : 2000;
+}
+
+inline int uiHangIdleHeartbeatMs()
+{
+    const int value = envIntValue("MIACODE_UI_HANG_IDLE_HEARTBEAT_MS", 5000);
+    return value > 0 ? value : 5000;
+}
+
 inline bool previewFixedTimerHighResolutionEnabled()
 {
     return envFlagEnabled("MIACODE_PREVIEW_FIXED_TIMER_HIGH_RES");

@@ -21,9 +21,21 @@ namespace {
 
 constexpr qint64 kHeartbeatIntervalMs = 250;
 constexpr qint64 kMonitorLoopIntervalMs = 500;
-constexpr qint64 kActivePhaseHangMs = 2000;
-constexpr qint64 kIdleHeartbeatHangMs = 5000;
 constexpr qint64 kRepeatedReportMs = 5000;
+
+// Read once at install: the monitor loop must not pay an env lookup every 500 ms, and a
+// threshold that changed mid-session would make a capture impossible to interpret. The
+// installed values are echoed in the `action=installed` line below, so a log always says
+// which thresholds produced (or failed to produce) its reports.
+qint64 activePhaseHangMs()
+{
+    return static_cast<qint64>(miacode::debug_options::uiHangActivePhaseMs());
+}
+
+qint64 idleHeartbeatHangMs()
+{
+    return static_cast<qint64>(miacode::debug_options::uiHangIdleHeartbeatMs());
+}
 // Stack captures are budgeted separately from the 5 s report cadence — see
 // policy::shouldCaptureStack for why.
 constexpr qint64 kStackCaptureIntervalMs = 30000;
@@ -160,6 +172,11 @@ void watchdogLoop()
     // prepareStackWalkSymbols() for why deferring it to first use is a deadlock risk.
     miacode::diag::prepareStackWalkSymbols();
 
+    // Sampled once, not per loop: an env lookup every 500 ms is waste, and a threshold
+    // that changed mid-session would make a capture impossible to interpret.
+    const qint64 activePhaseTimeoutMs = activePhaseHangMs();
+    const qint64 idleHeartbeatTimeoutMs = idleHeartbeatHangMs();
+
     policy::Trigger reportedTrigger = policy::Trigger::None;
     quint64 reportedGeneration = 0;
     qint64 reportedAtMs = 0;
@@ -207,8 +224,8 @@ void watchdogLoop()
             activeMs,
             heartbeatArmed,
             heartbeatAge,
-            kActivePhaseHangMs,
-            kIdleHeartbeatHangMs);
+            activePhaseTimeoutMs,
+            idleHeartbeatTimeoutMs);
         if (!policy::shouldReport(
                 trigger,
                 phase.generation,
@@ -297,8 +314,8 @@ void installGuiHeartbeat(QObject* owner)
                        "idle_heartbeat_timeout_ms=%3 stack_capture=%4 stack_capture_reason=%5 "
                        "stack_capture_interval_ms=%6 stack_capture_max=%7 stack_frame_cap=%8")
             .arg(kHeartbeatIntervalMs)
-            .arg(kActivePhaseHangMs)
-            .arg(kIdleHeartbeatHangMs)
+            .arg(activePhaseHangMs())
+            .arg(idleHeartbeatHangMs())
             .arg(stackTargetRegistered ? 1 : 0)
             .arg(stackTargetReason.isEmpty() ? QStringLiteral("(none)") : stackTargetReason)
             .arg(kStackCaptureIntervalMs)
