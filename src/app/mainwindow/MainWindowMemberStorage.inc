@@ -473,6 +473,7 @@
         double pendingPreviewPlaybackSecond_ = 0.0;
         quint64 previewInteractionSequence_ = 0;
         quint64 previewPendingPlayInteractionId_ = 0;
+        quint64 previewAudioDeviceChangeSequence_ = 0;
         quint64 deferredPreviewUiTailGeneration_ = 0;
         QString previewPendingPlayInteractionSource_;
         quint64 previewPlaybackTransactionCounter_ = 0;

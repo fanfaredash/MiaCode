@@ -293,6 +293,15 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact(PauseSecondSource 
     // returned pauseSecond would be stale; the wall-clock value is the truth, so we
     // overwrite the runtime's PausePreviewResult.pauseSecond with it below.
     const double wallClockPauseSecond = owner_.currentPreviewAuthoritativeAudioClockSecond();
+    // Freeze the UI-side playback state before entering the audio backend. A device
+    // switch can make pausePreviewPlaybackTransaction() block long enough for the
+    // preview timers/frame callbacks to advance the timeline after the pause was
+    // requested. The captured wall-clock second remains the pause anchor; the
+    // backend pause is allowed to complete after the UI has become inert.
+    cancelPreviewStartupSync();
+    owner_.pausePreviewStageMediaRoutePlayback();
+    stopQtPreviewTimers();
+    state_.qtPreviewPlaying_ = false;
     const QtPreviewSfxRuntime::PausePreviewResult pauseResult =
         state_.previewSfxRuntime_->pausePreviewPlaybackTransaction();
     // Measurement only — the wall clock stays authoritative. An output-device switch
@@ -317,9 +326,6 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact(PauseSecondSource 
     }
     miacode::mainwindow::shared::writePreviewPauseSecond(
         state_.qtPreviewPauseSecond_, wallClockPauseSecond, state_.qtPreviewPlaying_, "pause_qt_preview_playback_exact");
-    cancelPreviewStartupSync();
-    owner_.pausePreviewStageMediaRoutePlayback();
-    stopQtPreviewTimers();
     state_.pausedPreviewMediaSeekPending_ = false;
     appendPreviewPlaybackLog(
         QStringLiteral("pause_exact"),
@@ -338,7 +344,6 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact(PauseSecondSource 
     // chart start with playhead off-screen to the right.
     state_.qtPreviewPendingTimelineCenterView_ = true;
     state_.qtPreviewTimelineDirty_ = true;
-    state_.qtPreviewPlaying_ = false;
     if (owner_.extensionManager_ != nullptr) {
         owner_.extensionManager_->publishEvent(QStringLiteral("preview.playback.changed"), QJsonObject{
             {QStringLiteral("source"), QStringLiteral("preview")},
@@ -432,12 +437,19 @@ void MainWindow::TimelineSection::pausePreviewForAudioDeviceChange(
         // export untouched (MainWindow.ExportFlow.cpp pauses the preview before it starts).
         return;
     }
+    const quint64 deviceChangeSequence = ++state_.previewAudioDeviceChangeSequence_;
     appendPreviewPlaybackLog(
-        QStringLiteral("pause_audio_device_change"),
-        QString("txn=%1 change=%2 second=%3")
+        QStringLiteral("device_change_pause_begin"),
+        QString("device_change_seq=%1 txn=%2 change=%3 playing=%4 startup_pending=%5 "
+                "pause_second=%6 authoritative_second=%7 pending_play_op=%8")
+            .arg(deviceChangeSequence)
             .arg(state_.activePreviewPlaybackTransactionId_)
             .arg(QLatin1String(miacode::preview_audio::device_change::changeName(change)))
-            .arg(owner_.currentPreviewAuthoritativeAudioClockSecond(), 0, 'f', 6));
+            .arg(state_.qtPreviewPlaying_ ? 1 : 0)
+            .arg(state_.previewStartupSyncPending_ ? 1 : 0)
+            .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6)
+            .arg(owner_.currentPreviewAuthoritativeAudioClockSecond(), 0, 'f', 6)
+            .arg(state_.previewPendingPlayInteractionId_));
     // Same path as the pause button -- timeline centring and the
     // preview.playback.changed extension event are identical to a manual pause -- except
     // for where the pause second comes from. See PauseSecondSource: the device switch
@@ -456,6 +468,14 @@ void MainWindow::TimelineSection::pausePreviewForAudioDeviceChange(
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->stopSfxVoices();
     }
+    appendPreviewPlaybackLog(
+        QStringLiteral("device_change_pause_complete"),
+        QString("device_change_seq=%1 txn=%2 playing=%3 pause_second=%4 pending_play_op=%5")
+            .arg(deviceChangeSequence)
+            .arg(state_.activePreviewPlaybackTransactionId_)
+            .arg(state_.qtPreviewPlaying_ ? 1 : 0)
+            .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6)
+            .arg(state_.previewPendingPlayInteractionId_));
     // Not a notification — state correctness. Without it the button keeps reading
     // "playing" while playback is stopped. The pause itself stays silent: no status-bar
     // message, no dialog.

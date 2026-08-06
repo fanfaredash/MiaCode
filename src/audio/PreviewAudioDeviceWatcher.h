@@ -22,6 +22,12 @@ public:
     using Change = miacode::preview_audio::device_change::Change;
 
     explicit PreviewAudioDeviceWatcher(QObject* parent = nullptr);
+    ~PreviewAudioDeviceWatcher() override;
+
+    // Called by the Windows Core Audio endpoint callback. The callback itself may
+    // run outside the Qt GUI thread; this method only queues the lightweight
+    // notification back to this QObject's thread.
+    void handleNativeDefaultOutputChanged();
 
 signals:
     void outputConfigurationChanged(Change change);
@@ -31,4 +37,6 @@ private:
 
     QMediaDevices* mediaDevices_ = nullptr;
     miacode::preview_audio::device_change::OutputSnapshot snapshot_;
+    void* nativeEndpointNotificationClient_ = nullptr;
+    bool nativeComInitialized_ = false;
 };

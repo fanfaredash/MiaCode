@@ -806,6 +806,7 @@ if (WIN32)
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
         winmm
+        ole32       # Windows Core Audio endpoint notification COM API
         avrt  # Multimedia Class Scheduler Service (AvSetMmThreadCharacteristicsW)
         d3d11        # DComp preview path (src/render/backend_d3d11) — see docs plan §3 Phase 1
         dxgi         # IDXGIFactory2::CreateSwapChainForComposition + frame latency waitable

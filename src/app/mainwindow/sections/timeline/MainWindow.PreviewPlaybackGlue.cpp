@@ -115,8 +115,19 @@ void MainWindow::TimelineSection::onTogglePreviewPause()
         // Stale region (intro no longer enabled): heal and fall through to play.
         exitExportIntroRegion();
     }
+    const quint64 opId = ++state_.previewInteractionSequence_;
+    appendPreviewInteractionLog(
+        QStringLiteral("toggle_entry"),
+        QString("op=%1 playing=%2 startup_pending=%3 device_change_seq=%4 pause_second=%5 "
+                "authoritative_second=%6 pending_play_op=%7")
+            .arg(opId)
+            .arg(state_.qtPreviewPlaying_ ? 1 : 0)
+            .arg(state_.previewStartupSyncPending_ ? 1 : 0)
+            .arg(state_.previewAudioDeviceChangeSequence_)
+            .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6)
+            .arg(owner_.currentPreviewAuthoritativeAudioClockSecond(), 0, 'f', 6)
+            .arg(state_.previewPendingPlayInteractionId_));
     if (state_.qtPreviewPlaying_) {
-        const quint64 opId = ++state_.previewInteractionSequence_;
         appendPreviewInteractionLog(
             QStringLiteral("pause_request"),
             QString("op=%1 source=toggle_action current_second=%2")
@@ -139,14 +150,14 @@ void MainWindow::TimelineSection::onTogglePreviewPause()
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
-    const quint64 opId = ++state_.previewInteractionSequence_;
     state_.previewPendingPlayInteractionId_ = opId;
     state_.previewPendingPlayInteractionSource_ = QStringLiteral("toggle_action");
     appendPreviewInteractionLog(
         QStringLiteral("play_request"),
-        QString("op=%1 source=toggle_action requested_second=%2")
+        QString("op=%1 source=toggle_action requested_second=%2 device_change_seq=%3")
             .arg(opId)
-            .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6));
+            .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6)
+            .arg(state_.previewAudioDeviceChangeSequence_));
     if (!startQtPreviewPlayback(state_.qtPreviewPauseSecond_, true)) {
         appendPreviewInteractionLog(
             QStringLiteral("play_deferred"),
