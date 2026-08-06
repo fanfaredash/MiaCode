@@ -108,6 +108,13 @@ PreviewAudioDeviceWatcher::PreviewAudioDeviceWatcher(QObject* parent)
             Qt::AutoConnection);
 
 #ifdef Q_OS_WIN
+    // Sentinel for "this step was never reached", so the log can tell "CoCreateInstance
+    // never ran" from "CoCreateInstance failed". Facility 0x7ff is unassigned, so no real
+    // API returns it.
+    constexpr HRESULT kStepNotAttempted = static_cast<HRESULT>(0xFFFFFFFFu);
+    HRESULT enumeratorResult = kStepNotAttempted;
+    HRESULT registerResult = kStepNotAttempted;
+
     const HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     // Only undo a COM initialization performed by this object.  On
     // RPC_E_CHANGED_MODE the thread already has an incompatible apartment;
@@ -116,7 +123,7 @@ PreviewAudioDeviceWatcher::PreviewAudioDeviceWatcher(QObject* parent)
     nativeComInitialized_ = SUCCEEDED(comResult);
     if (SUCCEEDED(comResult) || comResult == RPC_E_CHANGED_MODE) {
         IMMDeviceEnumerator* enumerator = nullptr;
-        const HRESULT enumeratorResult = CoCreateInstance(
+        enumeratorResult = CoCreateInstance(
             __uuidof(MMDeviceEnumerator),
             nullptr,
             CLSCTX_ALL,
@@ -124,7 +131,7 @@ PreviewAudioDeviceWatcher::PreviewAudioDeviceWatcher(QObject* parent)
             reinterpret_cast<void**>(&enumerator));
         if (SUCCEEDED(enumeratorResult) && enumerator != nullptr) {
             auto* client = new PreviewAudioNativeEndpointNotificationClient(this);
-            const HRESULT registerResult = enumerator->RegisterEndpointNotificationCallback(client);
+            registerResult = enumerator->RegisterEndpointNotificationCallback(client);
             if (SUCCEEDED(registerResult)) {
                 nativeEndpointNotificationClient_ = client;
             } else {
@@ -132,6 +139,38 @@ PreviewAudioDeviceWatcher::PreviewAudioDeviceWatcher(QObject* parent)
             }
             enumerator->Release();
         }
+    }
+
+    // Without this line a capture that contains no `action=native_default_output_changed`
+    // is ambiguous: the user may simply never have switched devices, or this listener may
+    // never have armed. Mirrors `action=registration` in
+    // src/app/WindowsIdleEventDiagnostics.cpp, which records the same thing for the
+    // Windows session/power notifications.
+    if (miacode::debug_options::audioDebugOutputEnabled()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Audio,
+            QStringLiteral("preview/audio_device"),
+            QStringLiteral("action=native_registration com_hr=0x%1 com_owned=%2 "
+                           "enumerator_hr=0x%3 register_hr=0x%4 registered=%5 outputs=%6 "
+                           "default_output=%7")
+                .arg(static_cast<quint32>(comResult), 8, 16, QLatin1Char('0'))
+                .arg(nativeComInitialized_ ? 1 : 0)
+                .arg(static_cast<quint32>(enumeratorResult), 8, 16, QLatin1Char('0'))
+                .arg(static_cast<quint32>(registerResult), 8, 16, QLatin1Char('0'))
+                .arg(nativeEndpointNotificationClient_ != nullptr ? 1 : 0)
+                .arg(snapshot_.outputIds.size())
+                .arg(snapshot_.defaultOutputId.isEmpty() ? QStringLiteral("(none)")
+                                                         : snapshot_.defaultOutputId));
+    }
+#else
+    // There is no native endpoint listener off Windows — QMediaDevices is the only
+    // source of device-change notifications here. Emitted so a non-Windows capture reads
+    // as "not supported on this platform" rather than "armed and never fired".
+    if (miacode::debug_options::audioDebugOutputEnabled()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Audio,
+            QStringLiteral("preview/audio_device"),
+            QStringLiteral("action=native_registration supported=0"));
     }
 #endif
 }
