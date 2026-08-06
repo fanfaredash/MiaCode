@@ -214,6 +214,9 @@ void WindowsIdleEventMonitor::unregisterWindow()
     if (impl_ == nullptr || impl_->window == nullptr) {
         return;
     }
+    const quintptr nativeWindow = reinterpret_cast<quintptr>(impl_->window);
+    const bool sessionRegistered = impl_->sessionRegistered;
+    const bool consoleDisplayRegistered = impl_->consoleDisplayNotification != nullptr;
     if (impl_->sessionRegistered) {
         ::WTSUnRegisterSessionNotification(impl_->window);
     }
@@ -223,6 +226,19 @@ void WindowsIdleEventMonitor::unregisterWindow()
     impl_->window = nullptr;
     impl_->consoleDisplayNotification = nullptr;
     impl_->sessionRegistered = false;
+
+    // Symmetric with `action=registration`. Every windows/environment_event stops after
+    // this returns, and both callers (the destructor and
+    // QuickShellBootstrap::beginAcceptedRootWindowShutdown) can run long before the
+    // process does — without this line a log that simply goes quiet is indistinguishable
+    // from one where the monitor was torn down early. The early return above keeps a
+    // never-registered monitor silent.
+    appendDurableEnvironmentEvent(
+        QStringLiteral("action=unregistration hwnd=0x%1 session_registered=%2 "
+                       "console_display_registered=%3")
+            .arg(nativeWindow, 0, 16)
+            .arg(sessionRegistered ? 1 : 0)
+            .arg(consoleDisplayRegistered ? 1 : 0));
 #endif
 }
 
