@@ -525,7 +525,8 @@ void MainWindow::ExportSection::installExportPreviewAuditionScene(int difficulty
     // different one) → start at 0; 片头-on then shows the intro head as intended.
     owner_.exportPreviewEntrySeedSecond_ = -1.0;
     owner_.lastExportAuditionDifficultyId_ = difficultyId;
-    owner_.qtPreviewPauseSecond_ = startSecond;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        owner_.qtPreviewPauseSecond_, startSecond, owner_.qtPreviewPlaying_, "install_export_preview_audition_scene");
     if (owner_.timelineQuickStateBridge_ != nullptr) {
         owner_.timelineQuickStateBridge_->setPlayheadSeconds(startSecond, false);
     }

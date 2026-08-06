@@ -25,6 +25,8 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "WindowParityMetrics.h"
+#include "common/DebugLog.h"
+#include "common/DebugOptions.h"
 
 class QDialog;
 class QFileInfo;
@@ -33,6 +35,46 @@ class QTextEdit;
 class QWidget;
 
 namespace miacode::mainwindow::shared {
+
+// Single writer for the preview pause second.
+//
+// Why this exists: `qtPreviewPauseSecond_` had eighteen direct assignments spread across
+// six section files, none of them logged, and one of them
+// (`applyQtPreviewPosition`) fires unconditionally on every playback tick. A reported
+// symptom — the timeline stepping BACKWARD some time after a pause, by roughly the length
+// of an audio-device stall — was therefore un-diagnosable: nothing recorded who moved the
+// playhead, when, or from where, so every explanation for it was a guess from reading
+// code, and two such guesses were wrong.
+//
+// Routing every write through here makes a backward move name its own author. Only
+// backward moves while paused are logged: forward motion during playback is the normal
+// per-frame case and would bury the channel.
+inline void writePreviewPauseSecond(
+    double& slot,
+    double next,
+    bool previewPlaying,
+    const char* reason)
+{
+    const double previous = slot;
+    slot = next;
+    if (previewPlaying || !miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    // Half a timeline frame at 120 Hz — below this a "move" is re-flush noise from the
+    // same logical position, not a jump anyone can see.
+    constexpr double kBackwardMoveEpsilonSeconds = 0.004;
+    if (!(next < previous - kBackwardMoveEpsilonSeconds)) {
+        return;
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Audio,
+        QStringLiteral("preview/playback"),
+        QStringLiteral("action=pause_second_moved_back reason=%1 from=%2 to=%3 delta_ms=%4")
+            .arg(QLatin1String(reason))
+            .arg(previous, 0, 'f', 6)
+            .arg(next, 0, 'f', 6)
+            .arg((next - previous) * 1000.0, 0, 'f', 3));
+}
 
 inline constexpr int kEmbeddedPreviewPanelMinWidth = miacode::window_parity::kEmbeddedPreviewPanelMinWidth;
 inline constexpr int kPreviewPanelMarginX = miacode::window_parity::kPreviewPanelMarginX;

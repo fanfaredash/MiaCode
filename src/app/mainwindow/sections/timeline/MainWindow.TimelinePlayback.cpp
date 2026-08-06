@@ -117,7 +117,8 @@ void MainWindow::TimelineSection::seekPreviewToSecond(double second, bool center
         const double effectiveSecond =
             state_.previewSfxRuntime_->seekRetainedPreviewPlaybackTransaction(clampedSecond, true);
         state_.qtPreviewStartSecond_ = effectiveSecond;
-        state_.qtPreviewPauseSecond_ = effectiveSecond;
+        miacode::mainwindow::shared::writePreviewPauseSecond(
+            state_.qtPreviewPauseSecond_, effectiveSecond, state_.qtPreviewPlaying_, "seek_preview_to_second");
         state_.qtPreviewElapsed_.restart();
         state_.qtPreviewTimelineElapsed_.restart();
         state_.qtPreviewPendingTimelineSecond_ = effectiveSecond;
@@ -181,7 +182,8 @@ void MainWindow::TimelineSection::seekPreviewDiscreteToSecond(double second, boo
 
     owner_.pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
-    state_.qtPreviewPauseSecond_ = clampedSecond;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        state_.qtPreviewPauseSecond_, clampedSecond, state_.qtPreviewPlaying_, "seek_preview_discrete_to_second");
     state_.pausedPreviewMediaSeekPending_ = false;
     state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
@@ -478,7 +480,8 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     }
     const auto applyPlaybackClockState = [this](double initialSecond) {
         state_.qtPreviewStartSecond_ = initialSecond;
-        state_.qtPreviewPauseSecond_ = initialSecond;
+        miacode::mainwindow::shared::writePreviewPauseSecond(
+            state_.qtPreviewPauseSecond_, initialSecond, state_.qtPreviewPlaying_, "start_qt_preview_playback");
         state_.qtPreviewLastTimelineSecond_ = initialSecond;
         state_.qtPreviewPendingTimelineSecond_ = initialSecond;
         state_.qtPreviewPendingTimelineCenterView_ = true;
@@ -624,18 +627,21 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
     const quint64 playbackTxn = state_.activePreviewPlaybackTransactionId_;
     bool pauseSecondCaptured = false;
     if (hadStartupSync && !wasPlaying) {
-        state_.qtPreviewPauseSecond_ = state_.previewStartupPreparedSecond_;
+        miacode::mainwindow::shared::writePreviewPauseSecond(
+            state_.qtPreviewPauseSecond_, state_.previewStartupPreparedSecond_, state_.qtPreviewPlaying_, "stop_qt_preview_playback");
         pauseSecondCaptured = true;
     }
     if (!pauseSecondCaptured) {
-        state_.qtPreviewPauseSecond_ = owner_.currentPreviewAuthoritativeAudioClockSecond();
+        miacode::mainwindow::shared::writePreviewPauseSecond(
+            state_.qtPreviewPauseSecond_, owner_.currentPreviewAuthoritativeAudioClockSecond(), state_.qtPreviewPlaying_, "stop_qt_preview_playback");
         pauseSecondCaptured = true;
     }
     cancelPreviewStartupSync();
     owner_.pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
     if (!keepPosition) {
-        state_.qtPreviewPauseSecond_ = 0.0;
+        miacode::mainwindow::shared::writePreviewPauseSecond(
+            state_.qtPreviewPauseSecond_, 0.0, state_.qtPreviewPlaying_, "stop_qt_preview_playback");
     }
     state_.pausedPreviewMediaSeekPending_ = false;
     if (wasPlaying || hadStartupSync) {

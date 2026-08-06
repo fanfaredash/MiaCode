@@ -47,7 +47,8 @@ void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool cen
         !state_.quickShellUiFocusBridgeMode_ || state_.quickTimelineSurfaceReady_;
     const double timelineCadenceSeconds =
         static_cast<double>(qMax<qint64>(1, timelineTargetFrameIntervalNs())) / 1000000000.0;
-    state_.qtPreviewPauseSecond_ = second;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        state_.qtPreviewPauseSecond_, second, state_.qtPreviewPlaying_, "apply_qt_preview_position");
     const bool timelineShouldCenter = centerView && (!state_.qtPreviewPlaying_ || state_.previewProgressFollowEnabled_);
     if (!state_.qtPreviewPlaying_
         && state_.timelineQuickStateBridge_ != nullptr

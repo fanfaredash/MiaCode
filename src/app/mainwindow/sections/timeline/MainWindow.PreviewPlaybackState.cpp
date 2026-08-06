@@ -200,7 +200,8 @@ void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiv
     // tick after the 片头 hand-off).
     resetExportAuditionClockCursor(effectiveStartSecond);
     state_.qtPreviewStartSecond_ = effectiveStartSecond;
-    state_.qtPreviewPauseSecond_ = effectiveStartSecond;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        state_.qtPreviewPauseSecond_, effectiveStartSecond, state_.qtPreviewPlaying_, "finalize_qt_preview_playback_start");
     state_.qtPreviewElapsed_.restart();
     state_.qtPreviewTimelineElapsed_.restart();
     state_.qtPreviewPlaying_ = true;
@@ -314,7 +315,8 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact(PauseSecondSource 
                 .arg(pauseResult.pauseSecond, 0, 'f', 6)
                 .arg((wallClockPauseSecond - pauseResult.pauseSecond) * 1000.0, 0, 'f', 3));
     }
-    state_.qtPreviewPauseSecond_ = wallClockPauseSecond;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        state_.qtPreviewPauseSecond_, wallClockPauseSecond, state_.qtPreviewPlaying_, "pause_qt_preview_playback_exact");
     cancelPreviewStartupSync();
     owner_.pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
@@ -523,7 +525,8 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackForReanchor()
     const double wallClockPauseSecond = owner_.currentPreviewAuthoritativeAudioClockSecond();
     const QtPreviewSfxRuntime::PausePreviewResult pauseResult =
         state_.previewSfxRuntime_->pausePreviewPlaybackTransaction();
-    state_.qtPreviewPauseSecond_ = wallClockPauseSecond;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        state_.qtPreviewPauseSecond_, wallClockPauseSecond, state_.qtPreviewPlaying_, "pause_qt_preview_playback_for_reanchor");
     cancelPreviewStartupSync();
     owner_.pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
@@ -580,7 +583,8 @@ void MainWindow::TimelineSection::anchorQtPreviewPlaybackToSecond(double second,
     cancelPreviewStartupSync();
     owner_.pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
-    state_.qtPreviewPauseSecond_ = clampedSecond;
+    miacode::mainwindow::shared::writePreviewPauseSecond(
+        state_.qtPreviewPauseSecond_, clampedSecond, state_.qtPreviewPlaying_, "anchor_qt_preview_playback_to_second");
     state_.pausedPreviewMediaSeekPending_ = false;
     state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
