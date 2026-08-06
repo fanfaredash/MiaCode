@@ -35,6 +35,7 @@
 #include "common/PreviewVideoGeometryConfig.h"
 #include "extensions/ExtensionManager.h"
 #include "app/ui/AppBackgroundSettings.h"
+#include "core/chart/transform/ChartNormalization.h"
 
 class QAction;
 class QByteArray;

@@ -551,6 +551,7 @@ VideoExportDialog::VideoExportDialog(
     PreviewTimestampCallback previewTimestampCallback,
     PreviewObjectStatsCallback previewObjectStatsCallback,
     PreviewChartInfoCallback previewChartInfoCallback,
+    PreviewHudTextLayoutCallback previewHudTextLayoutCallback,
     PreviewAspectRatioCallback previewAspectRatioCallback,
     PreviewBrightnessCallback previewBrightnessCallback,
     PreviewLayoutScaleCallback previewLayoutScaleCallback,
@@ -571,6 +572,7 @@ VideoExportDialog::VideoExportDialog(
     , previewTimestampCallback_(std::move(previewTimestampCallback))
     , previewObjectStatsCallback_(std::move(previewObjectStatsCallback))
     , previewChartInfoCallback_(std::move(previewChartInfoCallback))
+    , previewHudTextLayoutCallback_(std::move(previewHudTextLayoutCallback))
     , previewAspectRatioCallback_(std::move(previewAspectRatioCallback))
     , previewBrightnessCallback_(std::move(previewBrightnessCallback))
     , previewLayoutScaleCallback_(std::move(previewLayoutScaleCallback))
@@ -1078,6 +1080,11 @@ VideoExportDialog::VideoExportDialog(
         optionsContent_
     );
     showChartInfoCheck_->setChecked(baseTask_.showChartInfoHud);
+    fixHudTextLayoutCheck_ = new QCheckBox(
+        UiText::text(QStringLiteral("dialog.video_export.option.fix_hud_text_layout")),
+        optionsContent_
+    );
+    fixHudTextLayoutCheck_->setChecked(baseTask_.fixHudTextLayout);
     clockCountCheck_ = new QCheckBox(
         UiText::text(QStringLiteral("video_export.enable_clock_count_1"))
             .arg(baseTask_.clockCount),
@@ -1322,7 +1329,8 @@ VideoExportDialog::VideoExportDialog(
     hudTogglesLayout->addWidget(showTimestampCheck_, 0, 1, Qt::AlignLeft | Qt::AlignVCenter);
     hudTogglesLayout->addWidget(showObjectStatsCheck_, 1, 0, Qt::AlignLeft | Qt::AlignVCenter);
     hudTogglesLayout->addWidget(showChartInfoCheck_, 1, 1, Qt::AlignLeft | Qt::AlignVCenter);
-    hudTogglesLayout->addWidget(clockCountCheck_, 2, 0, 1, 2, Qt::AlignLeft | Qt::AlignVCenter);
+    hudTogglesLayout->addWidget(fixHudTextLayoutCheck_, 2, 0, 1, 2, Qt::AlignLeft | Qt::AlignVCenter);
+    hudTogglesLayout->addWidget(clockCountCheck_, 3, 0, 1, 2, Qt::AlignLeft | Qt::AlignVCenter);
 
     // ("添加片头" moved to its own "片头" tab, built below.)
     visualsPageLayout->addWidget(hudToggles, 0);
@@ -1584,6 +1592,10 @@ VideoExportDialog::VideoExportDialog(
         syncLivePreviewChartInfoVisibility();
         initialShowChartInfo_ = checked;
     });
+    connect(fixHudTextLayoutCheck_, &QCheckBox::toggled, this, [this]() {
+        persistExportOnlySettings();
+        syncLivePreviewHudTextLayout();
+    });
     connect(smoothBrightnessCheck_, &QCheckBox::toggled, this, [this](bool checked) {
         if (previewSmoothBrightnessCallback_) {
             previewSmoothBrightnessCallback_(checked);
@@ -1626,6 +1638,7 @@ VideoExportDialog::VideoExportDialog(
     previewSlider_->installEventFilter(this);
 
     loadPersistedSettings();
+    syncLivePreviewHudTextLayout();
     miacode::ui::busyTick();
     initialResolutionAspectRatio_ = selectedResolutionAspectRatio();
     syncRangeUi();

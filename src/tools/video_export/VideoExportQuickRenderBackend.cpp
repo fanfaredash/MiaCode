@@ -75,6 +75,7 @@ bool VideoExportQuickRenderBackend::bootstrap(
     frameState_.render.showTimestamp = task.showTimestamp;
     frameState_.render.showObjectStatsHud = task.showObjectStatsHud;
     frameState_.render.showChartInfoHud = task.showChartInfoHud;
+    frameState_.render.fixHudTextLayout = task.fixHudTextLayout;
     frameState_.chartTitle = task.chartTitle;
     frameState_.chartArtist = task.chartArtist;
     frameState_.chartDifficultyLabel = task.chartDifficultyLabel;

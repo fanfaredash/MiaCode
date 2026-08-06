@@ -225,6 +225,18 @@ must copy both fields; `VideoExportSnapshot::{toJson,fromJson}` must serialize t
 `UltraCompactWithPv` and `UltraCompact` tokens share encoder tuning; only `UltraCompact` suppresses
 PV in the prepared export task, never in the live/export-page preview.
 
+`fixHudTextLayout` follows the same single/batch snapshot path and is serialized as
+`render.fix_hud_text_layout`. It defaults false for legacy snapshots and gates the export frame
+state's device-aware, glyph-safe HUD line layout. The dialog also applies it as a temporary live
+preview override while the export-video page is active; `restoreLivePreviewState` and
+`endExportPreviewSession` force it false on exit. The false branch preserves the original chart-info
+and object-stats baseline calculations. The enabled branch derives same-font line advances from
+device-bound glyph top/bottom bounds and cross-font advances from the previous glyph bottom to the
+next glyph top (with typographic ascent/descent as a floor). The chart-info first baseline also uses
+the actual glyph top so custom-font overshoot cannot intrude into the configured HUD padding.
+`MIACODE_PREVIEW_HUD_PAINT_DIAG=1` records the flag plus the resolved HUD font metrics, calculated
+advances, and chart-info visible top.
+
 ## 9. Shared render state flows through preview and export
 
 Shared settings (background brightness outer/inner, layout square scale, outline diameter ratio
@@ -289,6 +301,11 @@ replica was the wrong approach: it bypassed the real per-frame path and drifted)
 - The controller's `QTimer` is a ~30Hz UI poll ONLY: it mirrors `qtPreviewPlaying_` +
   `qtPreviewPauseSecond_` onto the page's own widgets (audition button + position label) via
   `auditionStateChanged` / `playheadAdvanced`. It does NOT drive playback.
+- BPM/offset analysis audio is decoded independently of the audition transport through
+  `src/audio/OfflineAudioDecoder.*`. `LatencyDetectionPage` persists a strict BASS/miniaudio
+  selection under `latency/audioDecoder`; switching it clears both cached envelopes. BASS is the
+  supported OGG Vorbis path, while miniaudio preserves the original WAV/MP3/FLAC behavior. Do not
+  silently cross-fallback, because the visible selector is also the user's diagnostic control.
 - Leaving the page (`setOnPage(false)`) stops the transport and restores the previous chart's preview
   state, then re-dispatches audio levels (see below). `setOnPage` flips `onPage_` BEFORE running
   install/teardown, so the level dispatch reads the correct mode at both edges.

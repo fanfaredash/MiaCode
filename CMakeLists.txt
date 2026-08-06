@@ -9,7 +9,7 @@ set(MIACODE_VERSION_PATCH "0")
 # split MIACODE_VERSION_PRERELEASE / MIACODE_DISPLAY_PRERELEASE pair —
 # they always drifted apart in practice (e.g. beta20 zip shipping with
 # beta19 in the About dialog because only one variable got bumped).
-set(MIACODE_VERSION_PRERELEASE "beta.7")
+set(MIACODE_VERSION_PRERELEASE "beta.8")
 set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
@@ -212,6 +212,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/InputShortcutGesture.h
     src/common/InputShortcutGesture.cpp
     src/common/ChartAssetPaths.h
+    src/audio/OfflineAudioDecoder.h
+    src/audio/OfflineAudioDecoder.cpp
     src/common/Id3TagReader.h
     src/common/Id3TagReader.cpp
     src/common/TimelineThemeConfig.h
@@ -1234,6 +1236,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/tools/latency/LatencyBatchAudioImpl.cpp
             src/tools/latency/LatencyAnalysis.h
             src/tools/latency/LatencyAnalysis.cpp
+            src/audio/OfflineAudioDecoder.h
+            src/audio/OfflineAudioDecoder.cpp
         LIBS Qt6::Core
         INCLUDES src src/tools/latency
     )
