@@ -292,40 +292,72 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
         return;
     }
 
-    QMutexLocker locker(&schedulerMutex_);
-    if (shuttingDown_.load(std::memory_order_acquire)
-        || !sfxSchedulerActive_ || handle == 0 || handle != scheduledGroupSync_) {
-        return;
-    }
+    // Set only when this callback actually emits sound, so the log write below can
+    // happen after the scheduler mutex is released. This runs on the BASS mixer
+    // thread: holding an audio-callback lock across a log write is exactly the kind
+    // of stall the buffer-health probe exists to catch.
+    bool triggered = false;
+    int triggeredGroupIndex = -1;
+    double triggeredGroupSecond = 0.0;
+    quint64 triggeredCount = 0;
+    bool startedBackground = false;
 
-    const int groupIndex = scheduledGroupIndex_;
-    const ScheduledMixerAction action = scheduledMixerAction_;
-    scheduledGroupSync_ = 0;
-    scheduledGroupIndex_ = -1;
-    scheduledMixerAction_ = ScheduledMixerAction::None;
-
-    const bool startBackground = action == ScheduledMixerAction::StartPendingBackgroundTrack
-        || action == ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack;
-    if (startBackground && backgroundTrackSample_ != nullptr
-        && playbackSession_.backgroundTrackPendingStart) {
-        backgroundTrackSample_->play();
-        playbackSession_.backgroundTrackPendingStart = false;
-        playbackSession_.backgroundTrackRunning = true;
-    }
-
-    const bool shouldTriggerGroup = action == ScheduledMixerAction::SfxGroup
-        || action == ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack;
-    if (shouldTriggerGroup && groupIndex >= 0 && groupIndex < preparedGroups_.size()) {
-        const CollapsedEventGroup group = preparedGroups_[groupIndex];
-        if (playbackSession_.eventGroupIndex <= groupIndex) {
-            playbackSession_.eventGroupIndex = groupIndex + 1;
+    {
+        QMutexLocker locker(&schedulerMutex_);
+        if (shuttingDown_.load(std::memory_order_acquire)
+            || !sfxSchedulerActive_ || handle == 0 || handle != scheduledGroupSync_) {
+            return;
         }
-        playbackSession_.lastTriggeredGroupIndex = groupIndex;
-        playbackSession_.lastTriggeredGroupSecond = group.second;
-        ++playbackSession_.triggeredGroupCount;
-        triggerGroup(group);
+
+        const int groupIndex = scheduledGroupIndex_;
+        const ScheduledMixerAction action = scheduledMixerAction_;
+        scheduledGroupSync_ = 0;
+        scheduledGroupIndex_ = -1;
+        scheduledMixerAction_ = ScheduledMixerAction::None;
+
+        const bool startBackground = action == ScheduledMixerAction::StartPendingBackgroundTrack
+            || action == ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack;
+        if (startBackground && backgroundTrackSample_ != nullptr
+            && playbackSession_.backgroundTrackPendingStart) {
+            backgroundTrackSample_->play();
+            playbackSession_.backgroundTrackPendingStart = false;
+            playbackSession_.backgroundTrackRunning = true;
+            startedBackground = true;
+        }
+
+        const bool shouldTriggerGroup = action == ScheduledMixerAction::SfxGroup
+            || action == ScheduledMixerAction::SfxGroupAndStartPendingBackgroundTrack;
+        if (shouldTriggerGroup && groupIndex >= 0 && groupIndex < preparedGroups_.size()) {
+            const CollapsedEventGroup group = preparedGroups_[groupIndex];
+            if (playbackSession_.eventGroupIndex <= groupIndex) {
+                playbackSession_.eventGroupIndex = groupIndex + 1;
+            }
+            playbackSession_.lastTriggeredGroupIndex = groupIndex;
+            playbackSession_.lastTriggeredGroupSecond = group.second;
+            ++playbackSession_.triggeredGroupCount;
+            triggerGroup(group);
+            triggered = true;
+            triggeredGroupIndex = groupIndex;
+            triggeredGroupSecond = group.second;
+            triggeredCount = playbackSession_.triggeredGroupCount;
+        }
+        armNextGroupSyncLocked();
     }
-    armNextGroupSyncLocked();
+
+    // The GUI fallback path logs every drain as `bass_sfx_drain`, but this path --
+    // the one a LIVE session actually uses -- logged nothing, which made "did an SFX
+    // fire after the transport was paused?" unanswerable from a capture. It is the
+    // only remaining way a note sound can be emitted while playing, so it has to be
+    // visible. One line per triggered group, `--debug` only, same cadence as the
+    // groups themselves.
+    if (triggered || startedBackground) {
+        appendAudioDebugLog(
+            QString("bass_sfx_mixer_trigger group_idx=%1 group_second=%2 count=%3 started_bgm=%4")
+                .arg(triggeredGroupIndex)
+                .arg(triggeredGroupSecond, 0, 'f', 6)
+                .arg(triggeredCount)
+                .arg(startedBackground ? 1 : 0));
+    }
 #else
     Q_UNUSED(handle);
 #endif
