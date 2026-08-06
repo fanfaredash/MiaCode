@@ -184,7 +184,12 @@ private:
     bool maybeStartPendingBackgroundTrack(double second);
     bool playKindInternal(const QString& kind, double gain = 1.0);
     void reconcileTouchholdVoice(double second);
-    void triggerGroup(const CollapsedEventGroup& group);
+    // `playedKindsOut`, when non-null, receives a compact "kind:gain" list of the
+    // samples that ACTUALLY started. The group-level logs record a decision to
+    // trigger; this records the sound. Collected rather than logged in place
+    // because the mixer-sync caller runs under the scheduler mutex on the BASS
+    // audio thread and must not log there.
+    void triggerGroup(const CollapsedEventGroup& group, QString* playedKindsOut = nullptr);
     void logPlaybackStatus(double authoritativeSecond, double fallbackSecond);
     // Underrun / buffer-level probe. Polled at tick rate (cheap BASS_ChannelIsActive
     // calls) so a stall edge is caught immediately; the fuller buffer-health line

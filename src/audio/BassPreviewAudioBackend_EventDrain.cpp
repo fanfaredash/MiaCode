@@ -63,8 +63,18 @@ void BassPreviewAudioBackend::resetCursor(double second, bool includeCurrentSeco
 #endif
 }
 
-void BassPreviewAudioBackend::triggerGroup(const CollapsedEventGroup& group)
+void BassPreviewAudioBackend::triggerGroup(const CollapsedEventGroup& group, QString* playedKindsOut)
 {
+    const auto record = [playedKindsOut](const QString& kind, double gain, bool started) {
+        if (playedKindsOut == nullptr || !started) {
+            return;
+        }
+        if (!playedKindsOut->isEmpty()) {
+            playedKindsOut->append(QLatin1Char(','));
+        }
+        playedKindsOut->append(QStringLiteral("%1:%2").arg(kind).arg(gain, 0, 'f', 2));
+    };
+
     for (const Event& event : group.orderedEvents) {
         if (event.kind == QLatin1String("touchhold_start")
             || event.kind == QLatin1String("touchhold_stop")) {
@@ -76,11 +86,12 @@ void BassPreviewAudioBackend::triggerGroup(const CollapsedEventGroup& group)
             reconcileTouchholdVoice(event.second);
             continue;
         }
-        playKindInternal(event.kind, event.gain);
+        record(event.kind, event.gain, playKindInternal(event.kind, event.gain));
     }
 
     for (const miacode::preview_sfx_timeline::AggregatedPlayback& playback : group.aggregatedPlaybacks) {
-        playKindInternal(playback.kind, miacode::preview_sfx_timeline::aggregatedPlaybackGain(playback));
+        const double gain = miacode::preview_sfx_timeline::aggregatedPlaybackGain(playback);
+        record(playback.kind, gain, playKindInternal(playback.kind, gain));
     }
 }
 
@@ -105,6 +116,7 @@ void BassPreviewAudioBackend::drainEvents(double second)
     const int firstIdxBeforeDrain = playbackSession_.eventGroupIndex;
     int drainedCount = 0;
     int lastTriggeredIdx = -1;
+    QString playedKinds;
     while (playbackSession_.eventGroupIndex < preparedGroups_.size()) {
         const CollapsedEventGroup& group = preparedGroups_[playbackSession_.eventGroupIndex];
         if (group.second > second + kBassPreviewEpsilonSeconds) {
@@ -112,7 +124,7 @@ void BassPreviewAudioBackend::drainEvents(double second)
         }
         // This is the compatibility backend path. A live BASS session returns
         // above before reaching it, so it cannot duplicate a mixer sync.
-        triggerGroup(group);
+        triggerGroup(group, runtimeAudioDebugEnabled() ? &playedKinds : nullptr);
         playbackSession_.lastTriggeredGroupIndex = playbackSession_.eventGroupIndex;
         playbackSession_.lastTriggeredGroupSecond = group.second;
         playbackSession_.triggeredGroupCount += 1;
@@ -122,11 +134,12 @@ void BassPreviewAudioBackend::drainEvents(double second)
     }
     if (drainedCount > 0) {
         appendAudioDebugLog(
-            QString("bass_sfx_drain at_chart=%1 drained=%2 first_idx=%3 last_idx=%4")
+            QString("bass_sfx_drain at_chart=%1 drained=%2 first_idx=%3 last_idx=%4 played=%5")
                 .arg(second, 0, 'f', 6)
                 .arg(drainedCount)
                 .arg(firstIdxBeforeDrain)
-                .arg(lastTriggeredIdx));
+                .arg(lastTriggeredIdx)
+                .arg(playedKinds.isEmpty() ? QStringLiteral("(none)") : playedKinds));
     }
 }
 
@@ -301,6 +314,7 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
     double triggeredGroupSecond = 0.0;
     quint64 triggeredCount = 0;
     bool startedBackground = false;
+    QString playedKinds;
 
     {
         QMutexLocker locker(&schedulerMutex_);
@@ -335,7 +349,7 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
             playbackSession_.lastTriggeredGroupIndex = groupIndex;
             playbackSession_.lastTriggeredGroupSecond = group.second;
             ++playbackSession_.triggeredGroupCount;
-            triggerGroup(group);
+            triggerGroup(group, runtimeAudioDebugEnabled() ? &playedKinds : nullptr);
             triggered = true;
             triggeredGroupIndex = groupIndex;
             triggeredGroupSecond = group.second;
@@ -352,11 +366,12 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
     // groups themselves.
     if (triggered || startedBackground) {
         appendAudioDebugLog(
-            QString("bass_sfx_mixer_trigger group_idx=%1 group_second=%2 count=%3 started_bgm=%4")
+            QString("bass_sfx_mixer_trigger group_idx=%1 group_second=%2 count=%3 started_bgm=%4 played=%5")
                 .arg(triggeredGroupIndex)
                 .arg(triggeredGroupSecond, 0, 'f', 6)
                 .arg(triggeredCount)
-                .arg(startedBackground ? 1 : 0));
+                .arg(startedBackground ? 1 : 0)
+                .arg(playedKinds.isEmpty() ? QStringLiteral("(none)") : playedKinds));
     }
 #else
     Q_UNUSED(handle);
@@ -374,14 +389,28 @@ void BassPreviewAudioBackend::reconcileTouchholdVoice(double second)
     if (owner == touchholdOwnerSpanIndex_) {
         return;  // voice already belongs to the right span — leave it playing
     }
+    const int previousOwner = touchholdOwnerSpanIndex_;
     touchholdOwnerSpanIndex_ = owner;
     if (owner < 0) {
         touchholdSample_->stop();
+        appendAudioDebugLog(
+            QString("bass_sfx_touchhold action=stop prev_owner=%1 second=%2")
+                .arg(previousOwner)
+                .arg(second, 0, 'f', 6));
         return;
     }
     const TouchholdSpan& span = preparedTimeline_.touchholdSpans[owner];
     touchholdSample_->setCurrentSec(qMax(0.0, second - span.startSecond));
     touchholdSample_->play();
+    // The third sound source with no log of its own. Only fires on an ownership
+    // change (the function returns above when the voice already belongs to the
+    // right span), so this stays rare even during dense touch-hold sections.
+    appendAudioDebugLog(
+        QString("bass_sfx_touchhold action=start owner=%1 prev_owner=%2 second=%3 span_start=%4")
+            .arg(owner)
+            .arg(previousOwner)
+            .arg(second, 0, 'f', 6)
+            .arg(span.startSecond, 0, 'f', 6));
 #else
     Q_UNUSED(second);
 #endif
@@ -438,7 +467,17 @@ bool BassPreviewAudioBackend::audition(const QString& kind, double gain)
         // G1 Commit 6: master mixer was started at engine init and never stops.
         playbackSession_.masterRunning = true;
     }
-    return playKindInternal(kind, gain);
+    const bool started = playKindInternal(kind, gain);
+    // This path emits a real note sound while bypassing the scheduler, the group
+    // cursor, and therefore both group-level logs. Unlogged, an audition was
+    // indistinguishable from "no sound was played at all" in a capture — which is
+    // precisely the ambiguity that stalled the device-change investigation.
+    appendAudioDebugLog(
+        QString("bass_sfx_audition kind=%1 gain=%2 started=%3")
+            .arg(kind)
+            .arg(gain, 0, 'f', 2)
+            .arg(started ? 1 : 0));
+    return started;
 #else
     Q_UNUSED(kind);
     Q_UNUSED(gain);
