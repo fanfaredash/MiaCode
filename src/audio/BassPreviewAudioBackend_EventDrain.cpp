@@ -202,6 +202,7 @@ void BassPreviewAudioBackend::anchorSfxScheduler(double chartSecond)
     int nextGroupIndex = 0;
     bool backgroundPendingStart = false;
     double playbackRate = 1.0;
+    SfxSchedulerArmFailure armFailure;
     {
         QMutexLocker locker(&schedulerMutex_);
         if (shuttingDown_.load(std::memory_order_acquire)
@@ -214,6 +215,8 @@ void BassPreviewAudioBackend::anchorSfxScheduler(double chartSecond)
         sfxSchedulerAnchorDecodePosition_ = position;
         sfxSchedulerActive_ = true;
         armNextGroupSyncLocked();
+        armFailure = sfxSchedulerArmFailure_;
+        sfxSchedulerArmFailure_ = SfxSchedulerArmFailure();
         nextGroupIndex = playbackSession_.eventGroupIndex;
         backgroundPendingStart = playbackSession_.backgroundTrackPendingStart;
         playbackRate = playbackSession_.backgroundTrackPlaybackRate;
@@ -224,6 +227,9 @@ void BassPreviewAudioBackend::anchorSfxScheduler(double chartSecond)
             .arg(playbackRate, 0, 'f', 3)
             .arg(nextGroupIndex)
             .arg(backgroundPendingStart ? 1 : 0));
+    // After the anchor row, so the pair reads in the order it happened: the anchor was
+    // taken, then arming its first sync failed and the scheduler switched itself off.
+    logSfxSchedulerArmFailure(armFailure);
 #else
     Q_UNUSED(chartSecond);
 #endif
@@ -298,7 +304,14 @@ void BassPreviewAudioBackend::armNextGroupSyncLocked()
         reinterpret_cast<SYNCPROC*>(BassPreviewAudioBackend::onMixerGroupSync),
         this);
     if (syncHandle == 0) {
-        noteBassErr("sfx_scheduler/set_sync");
+        // Live SFX just switched to the GUI drainEvents fallback for the rest of the
+        // session — audible, and previously reported only by a bass_err row that
+        // noteBassErr suppresses when BASS left no code behind. Recorded rather than
+        // logged: this runs under schedulerMutex_, on the BASS mixer thread when the
+        // caller is handleMixerGroupSync.
+        sfxSchedulerArmFailure_.pending = true;
+        sfxSchedulerArmFailure_.bassError = static_cast<int>(BASS_ErrorGetCode());
+        sfxSchedulerArmFailure_.targetChartSecond = targetChartSecond;
         sfxSchedulerActive_ = false;
         return;
     }
@@ -309,6 +322,22 @@ void BassPreviewAudioBackend::armNextGroupSyncLocked()
         : (startBackgroundFirst
             ? ScheduledMixerAction::StartPendingBackgroundTrack
             : ScheduledMixerAction::SfxGroup);
+#endif
+}
+
+void BassPreviewAudioBackend::logSfxSchedulerArmFailure(const SfxSchedulerArmFailure& failure) const
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    if (!failure.pending) {
+        return;
+    }
+    noteBassErrCode("sfx_scheduler/set_sync", failure.bassError);
+    appendAudioDebugLog(
+        QString("bass_sfx_scheduler action=deactivated reason=set_sync_failed bass_err=%1 target_chart_second=%2")
+            .arg(failure.bassError)
+            .arg(failure.targetChartSecond, 0, 'f', 6));
+#else
+    Q_UNUSED(failure);
 #endif
 }
 
@@ -339,6 +368,7 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
     quint64 triggeredCount = 0;
     bool startedBackground = false;
     QString playedKinds;
+    SfxSchedulerArmFailure armFailure;
 
     {
         QMutexLocker locker(&schedulerMutex_);
@@ -380,6 +410,8 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
             triggeredCount = playbackSession_.triggeredGroupCount;
         }
         armNextGroupSyncLocked();
+        armFailure = sfxSchedulerArmFailure_;
+        sfxSchedulerArmFailure_ = SfxSchedulerArmFailure();
     }
 
     // The GUI fallback path logs every drain as `bass_sfx_drain`, but this path --
@@ -397,6 +429,9 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
                 .arg(startedBackground ? 1 : 0)
                 .arg(playedKinds.isEmpty() ? QStringLiteral("(none)") : playedKinds));
     }
+    // Last, so the row order matches the order of events: this group fired, and then
+    // re-arming for the next one failed and left the scheduler off.
+    logSfxSchedulerArmFailure(armFailure);
 #else
     Q_UNUSED(handle);
 #endif

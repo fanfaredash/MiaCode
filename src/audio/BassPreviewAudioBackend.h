@@ -133,6 +133,16 @@ private:
         int triggeredGroupCount = 0;
     };
 
+    // Deferred report of armNextGroupSyncLocked's self-deactivation. That function runs
+    // with schedulerMutex_ held and, through handleMixerGroupSync, on the BASS mixer
+    // thread, so it records the failure here instead of logging it; the callers drain
+    // this once they have released the lock.
+    struct SfxSchedulerArmFailure {
+        bool pending = false;
+        int bassError = 0;
+        double targetChartSecond = 0.0;
+    };
+
     QString resolveTrackPath(const QString& chartPath) const;
     QString resolveSfxDir() const;
     bool runtimeLibrariesPresent() const;
@@ -179,6 +189,8 @@ private:
     void anchorSfxScheduler(double chartSecond);
     double currentSfxSchedulerChartSecond(double fallbackSecond) const;
     void armNextGroupSyncLocked();
+    // Must be called with schedulerMutex_ released.
+    void logSfxSchedulerArmFailure(const SfxSchedulerArmFailure& failure) const;
     void stopAllSamples();
     void stopPlaybackSession();
     double authoritativeSecond() const;
@@ -233,6 +245,7 @@ private:
     int scheduledGroupIndex_ = -1;
     ScheduledMixerAction scheduledMixerAction_ = ScheduledMixerAction::None;
     bool sfxSchedulerActive_ = false;
+    SfxSchedulerArmFailure sfxSchedulerArmFailure_;
     miacode::preview_audio::bass::SfxSchedulerAnchor sfxSchedulerAnchor_;
     quint64 sfxSchedulerAnchorDecodePosition_ = 0;
     QHash<QString, Sample*> samplesByKind_;
