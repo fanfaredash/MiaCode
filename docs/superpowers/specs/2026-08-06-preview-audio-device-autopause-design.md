@@ -142,10 +142,19 @@ continuous BGM, so it has no clock to desynchronise.
 
 ## Removal batch
 
-The following have no call sites. `073e31fa` set `hasAudioClock = false`
-unconditionally in `onQtPreviewTick()` (`MainWindow.PreviewTick.cpp:159`),
-which orphaned `sfxDrainSecond()` and everything reachable only from it.
-Deleting them changes no runtime behaviour.
+`073e31fa` set `hasAudioClock = false` unconditionally in `onQtPreviewTick()`
+(`MainWindow.PreviewTick.cpp:159`), which left the drift-recovery chain behind
+without removing it.
+
+One correction to an earlier reading of this: `sfxDrainSecond()` is NOT
+call-site-free. `onQtPreviewTickAtSecond` calls it every tick to compute the
+argument for `drainEvents`. Its *value*, however, is already inert on both
+backends — BASS returns from `drainEvents` before reading `second` while its
+mixer scheduler is live, and the miniaudio backend has no audio clock, so the
+helper hands back the wall clock it was given. Passing that wall clock through
+directly is behaviour-preserving; what disappears is only the drift-triggered
+re-anchor and its `preview/sfx_clock` line, which is the point of the removal.
+Everything else below is genuinely unreferenced.
 
 | File | Removed |
 |---|---|
