@@ -294,32 +294,27 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact(PauseSecondSource 
     const double wallClockPauseSecond = owner_.currentPreviewAuthoritativeAudioClockSecond();
     const QtPreviewSfxRuntime::PausePreviewResult pauseResult =
         state_.previewSfxRuntime_->pausePreviewPlaybackTransaction();
-    double effectivePauseSecond = wallClockPauseSecond;
-    // The one case where the wall clock is NOT the truth. An output-device switch stalls
-    // the whole process; the wall clock is a QElapsedTimer and sails straight through it,
-    // while the audio does not. Measured on a Windows capture: wall 6.071 s against a BGM
-    // that had only reached 5.090 s — 0.98 s that was never rendered and never heard.
-    // Pausing at the wall value parks the playhead almost a second past the last sound the
-    // user got, and leaves the GUI and the backend disagreeing by exactly the stall.
-    //
-    // Only accepted when it is BEHIND the wall clock: the BGM position can never
-    // legitimately lead it, so a leading value means something other than a stall and the
-    // wall clock stays authoritative.
+    // Measurement only — the wall clock stays authoritative. An output-device switch
+    // stalls the process; the wall clock is a QElapsedTimer and sails straight through it,
+    // while the audio does not, so the two disagree by however long the switch cost. That
+    // gap is worth recording (it is the only place the stall is quantified) but it must NOT
+    // move the pause second: at a device switch the audio path is already broken, so those
+    // milliseconds are LOST, not deferred. Advancing to the wall clock is the intent —
+    // resuming there skips audio that was never going to play, which is correct.
     if (pauseSecondSource == PauseSecondSource::AudioPosition
         && pauseResult.usedBackgroundTrack
         && qIsFinite(pauseResult.pauseSecond)
         && pauseResult.pauseSecond >= 0.0
         && pauseResult.pauseSecond < wallClockPauseSecond) {
-        effectivePauseSecond = pauseResult.pauseSecond;
         appendPreviewPlaybackLog(
-            QStringLiteral("pause_second_from_audio"),
+            QStringLiteral("pause_audio_stall_observed"),
             QString("txn=%1 wall_second=%2 audio_second=%3 stall_ms=%4")
                 .arg(playbackTxn)
                 .arg(wallClockPauseSecond, 0, 'f', 6)
                 .arg(pauseResult.pauseSecond, 0, 'f', 6)
                 .arg((wallClockPauseSecond - pauseResult.pauseSecond) * 1000.0, 0, 'f', 3));
     }
-    state_.qtPreviewPauseSecond_ = effectivePauseSecond;
+    state_.qtPreviewPauseSecond_ = wallClockPauseSecond;
     cancelPreviewStartupSync();
     owner_.pausePreviewStageMediaRoutePlayback();
     stopQtPreviewTimers();
