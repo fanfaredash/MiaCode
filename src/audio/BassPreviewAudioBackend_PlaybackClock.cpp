@@ -312,37 +312,75 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
     }
     playbackSession_.lastStatusLogSecond = authoritativeSecond;
 
-    // The mixer callback advances the SFX cursor and can unpause a pending BGM.
-    // Hold the same lock while collecting this diagnostic snapshot so logging
-    // cannot race those state transitions.
-    QMutexLocker schedulerLocker(&schedulerMutex_);
-
-    const double mixerSecond = (authoritativeSecond - playbackSession_.sessionStartSecond)
-        / qMax(kBassPreviewMinRate, playbackSession_.sessionPlaybackRate);
-    const double bgmRawSecond = backgroundTrackSample_ != nullptr ? backgroundTrackSample_->currentSec() : -1.0;
-    const double bgmChartSecond = backgroundTrackSample_ != nullptr
-        ? (bgmRawSecond - playbackSession_.backgroundTrackOffsetSeconds)
-        : -1.0;
-    const double bgmExpectedRawSecond = backgroundTrackSample_ != nullptr
-        ? authoritativeSecond + playbackSession_.backgroundTrackOffsetSeconds
-        : -1.0;
-    const double bgmDeltaMs = backgroundTrackSample_ != nullptr
-        ? (authoritativeSecond - bgmChartSecond) * 1000.0
-        : 0.0;
-    const double bgmRawDeltaMs = backgroundTrackSample_ != nullptr
-        ? (bgmRawSecond - bgmExpectedRawSecond) * 1000.0
-        : 0.0;
-    const double bgmLengthSecond =
-        backgroundTrackSample_ != nullptr ? backgroundTrackSample_->lengthSeconds : -1.0;
+    // The mixer callback advances the SFX cursor and can unpause a pending BGM, so the
+    // fields below have to be read as one consistent set under the scheduler lock.
+    //
+    // What must NOT happen under that lock is the formatting and the file write. This log
+    // line has 26 substitutions and ends in appendAudioDebugLog; schedulerMutex_ is also
+    // taken by handleMixerGroupSync on the BASS mixer thread, so every millisecond spent
+    // holding it here directly delays the next group of note sounds. One slow disk write
+    // on the GUI thread becomes a late note or an underrun -- the exact stall the
+    // buffer-health probe was added to catch, manufactured by the probe's sibling.
+    // handleMixerGroupSync already follows this rule (its own comment says so) and
+    // disarmSfxScheduler was fixed to follow it; this was the last holdout.
+    //
+    // So: copy into locals, release, then format and write. The snapshot stays atomic;
+    // the lock is held for a few reads instead of for a formatted I/O.
+    double mixerSecond = 0.0;
+    double bgmRawSecond = -1.0;
+    double bgmChartSecond = -1.0;
+    double bgmExpectedRawSecond = -1.0;
+    double bgmDeltaMs = 0.0;
+    double bgmRawDeltaMs = 0.0;
+    double bgmLengthSecond = -1.0;
+    int nextGroupIndex = -1;
+    double nextGroupSecond = -1.0;
+    QString bgmSpeedModeLabel = QStringLiteral("none");
+    double backgroundTrackPlaybackRate = 0.0;
+    double backgroundTrackOffsetSeconds = 0.0;
+    int lastTriggeredGroupIndex = -1;
+    double lastTriggeredGroupSecond = 0.0;
+    quint64 triggeredGroupCount = 0;
+    bool backgroundTrackRunning = false;
+    bool backgroundTrackPendingStart = false;
+    bool masterRunning = false;
+    int armedGroupIndex = -1;
+    QString armedActionLabel;
+    {
+        QMutexLocker schedulerLocker(&schedulerMutex_);
+        mixerSecond = (authoritativeSecond - playbackSession_.sessionStartSecond)
+            / qMax(kBassPreviewMinRate, playbackSession_.sessionPlaybackRate);
+        if (backgroundTrackSample_ != nullptr) {
+            bgmRawSecond = backgroundTrackSample_->currentSec();
+            bgmChartSecond = bgmRawSecond - playbackSession_.backgroundTrackOffsetSeconds;
+            bgmExpectedRawSecond =
+                authoritativeSecond + playbackSession_.backgroundTrackOffsetSeconds;
+            bgmDeltaMs = (authoritativeSecond - bgmChartSecond) * 1000.0;
+            bgmRawDeltaMs = (bgmRawSecond - bgmExpectedRawSecond) * 1000.0;
+            bgmLengthSecond = backgroundTrackSample_->lengthSeconds;
+            bgmSpeedModeLabel = sampleSpeedModeLabel(backgroundTrackSample_->speedMode);
+        }
+        // `next_group_idx` is the event-group cursor: what the timeline will trigger next.
+        // It is NOT what the mixer sync is armed for -- scheduledGroupIndex_ is -1 while
+        // the armed sync exists only to start a pending BGM, and the two also diverge
+        // between a group firing and the next arm. `armed_group_idx` / `armed_action`
+        // report the scheduler's own view so that difference is readable, not inferred.
+        nextGroupIndex = playbackSession_.eventGroupIndex;
+        nextGroupSecond = (nextGroupIndex >= 0 && nextGroupIndex < preparedGroups_.size())
+            ? preparedGroups_[nextGroupIndex].second
+            : -1.0;
+        backgroundTrackPlaybackRate = playbackSession_.backgroundTrackPlaybackRate;
+        backgroundTrackOffsetSeconds = playbackSession_.backgroundTrackOffsetSeconds;
+        lastTriggeredGroupIndex = playbackSession_.lastTriggeredGroupIndex;
+        lastTriggeredGroupSecond = playbackSession_.lastTriggeredGroupSecond;
+        triggeredGroupCount = playbackSession_.triggeredGroupCount;
+        backgroundTrackRunning = playbackSession_.backgroundTrackRunning;
+        backgroundTrackPendingStart = playbackSession_.backgroundTrackPendingStart;
+        masterRunning = playbackSession_.masterRunning;
+        armedGroupIndex = scheduledGroupIndex_;
+        armedActionLabel = scheduledMixerActionLabel(scheduledMixerAction_);
+    }
     const double driftMs = (authoritativeSecond - fallbackSecond) * 1000.0;
-    // `next_group_idx` is the event-group cursor: what the timeline will trigger next.
-    // It is NOT what the mixer sync is armed for -- scheduledGroupIndex_ is -1 while the
-    // armed sync exists only to start a pending BGM, and the two also diverge between a
-    // group firing and the next arm. `armed_group_idx` / `armed_action` report the
-    // scheduler's own view so that difference is readable instead of inferred.
-    const int nextGroupIndex = playbackSession_.eventGroupIndex;
-    const double nextGroupSecond =
-        (nextGroupIndex >= 0 && nextGroupIndex < preparedGroups_.size()) ? preparedGroups_[nextGroupIndex].second : -1.0;
     appendAudioDebugLog(
         QString("bass_status txn=%1 auth=%2 mixer=%3 bgm_raw=%4 bgm_chart=%5 fallback=%6 drift_ms=%7 next_group_idx=%8 next_group_second=%9 last_trigger_idx=%10 last_trigger_second=%11 triggered_count=%12 rate=%13 speed_mode=%14 bgm_delta_ms=%15 bgm_raw_expected=%16 bgm_raw_delta_ms=%17 bgm_offset=%18 bgm_len=%19 bgm_running=%20 bgm_pending=%21 master_running=%22 retained_mode=%23 status_interval_ms=%24 armed_group_idx=%25 armed_action=%26")
             .arg(playbackTransactionId_)
@@ -354,25 +392,23 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
             .arg(driftMs, 0, 'f', 3)
             .arg(nextGroupIndex)
             .arg(nextGroupSecond, 0, 'f', 6)
-            .arg(playbackSession_.lastTriggeredGroupIndex)
-            .arg(playbackSession_.lastTriggeredGroupSecond, 0, 'f', 6)
-            .arg(playbackSession_.triggeredGroupCount)
-            .arg(playbackSession_.backgroundTrackPlaybackRate, 0, 'f', 3)
-            .arg(backgroundTrackSample_ != nullptr
-                ? sampleSpeedModeLabel(backgroundTrackSample_->speedMode)
-                : QStringLiteral("none"))
+            .arg(lastTriggeredGroupIndex)
+            .arg(lastTriggeredGroupSecond, 0, 'f', 6)
+            .arg(triggeredGroupCount)
+            .arg(backgroundTrackPlaybackRate, 0, 'f', 3)
+            .arg(bgmSpeedModeLabel)
             .arg(bgmDeltaMs, 0, 'f', 3)
             .arg(bgmExpectedRawSecond, 0, 'f', 6)
             .arg(bgmRawDeltaMs, 0, 'f', 3)
-            .arg(playbackSession_.backgroundTrackOffsetSeconds, 0, 'f', 6)
+            .arg(backgroundTrackOffsetSeconds, 0, 'f', 6)
             .arg(bgmLengthSecond, 0, 'f', 6)
-            .arg(playbackSession_.backgroundTrackRunning ? 1 : 0)
-            .arg(playbackSession_.backgroundTrackPendingStart ? 1 : 0)
-            .arg(playbackSession_.masterRunning ? 1 : 0)
+            .arg(backgroundTrackRunning ? 1 : 0)
+            .arg(backgroundTrackPendingStart ? 1 : 0)
+            .arg(masterRunning ? 1 : 0)
             .arg(retainedPlaybackModeLabel(retainedPlaybackMode_))
             .arg(statusLogIntervalSeconds * 1000.0, 0, 'f', 3)
-            .arg(scheduledGroupIndex_)
-            .arg(scheduledMixerActionLabel(scheduledMixerAction_)));
+            .arg(armedGroupIndex)
+            .arg(armedActionLabel));
 #else
     Q_UNUSED(authoritativeSecond);
     Q_UNUSED(fallbackSecond);

@@ -244,6 +244,20 @@ private:
     quint64 transportReadyGeneration_ = 0;
     bool trackMissingAfterLoadLogged_ = false;
     std::atomic_bool shuttingDown_ = false;
+    // Held by the GUI thread AND by the BASS mixer callback thread (handleMixerGroupSync).
+    // That makes it an audio-callback lock, so its rule is stricter than "guard the shared
+    // fields":
+    //
+    //   While holding schedulerMutex_: NO I/O, NO logging, NO calls back into BASS.
+    //
+    // Time under this lock is time the mixer callback cannot trigger its next group of note
+    // sounds; it turns directly into late notes and underruns. Calling into BASS under it
+    // is worse than slow -- BASS_ChannelRemoveSync waits for the very sync callback that is
+    // itself waiting on this mutex, an ABBA deadlock that presents as a frozen GUI thread
+    // and is indistinguishable from the freezes this branch exists to diagnose.
+    //
+    // Snapshot into locals, release, then format / write / call out. All three sites do
+    // this: handleMixerGroupSync, disarmSfxScheduler, logPlaybackStatus.
     mutable QMutex schedulerMutex_;
     quint32 scheduledGroupSync_ = 0;
     int scheduledGroupIndex_ = -1;

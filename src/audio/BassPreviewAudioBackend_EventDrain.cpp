@@ -150,21 +150,41 @@ void BassPreviewAudioBackend::disarmSfxScheduler(const char* reason)
     bool hadSync = false;
     int groupIndex = -1;
     int removeSyncError = 0;
+    quint32 syncToRemove = 0;
     {
         QMutexLocker locker(&schedulerMutex_);
         wasActive = sfxSchedulerActive_;
         hadSync = scheduledGroupSync_ != 0;
         groupIndex = scheduledGroupIndex_;
-        if (scheduledGroupSync_ != 0 && masterMixer_ != 0) {
-            BASS_ChannelRemoveSync(masterMixer_, scheduledGroupSync_);
-            // Read now (BASS keeps only the most recent per-thread code), report below.
-            removeSyncError = static_cast<int>(BASS_ErrorGetCode());
-        }
+        // Take ownership of the handle here, but do NOT call into BASS yet -- see below.
+        syncToRemove = scheduledGroupSync_;
         scheduledGroupSync_ = 0;
         scheduledGroupIndex_ = -1;
         scheduledMixerAction_ = ScheduledMixerAction::None;
         sfxSchedulerActive_ = false;
         sfxSchedulerAnchorDecodePosition_ = 0;
+    }
+    // BASS_ChannelRemoveSync runs OUTSIDE schedulerMutex_ because the two locks involved
+    // are otherwise taken in opposite orders on the two threads that matter:
+    //
+    //   GUI thread    : schedulerMutex_ -> BASS internal sync lock (inside RemoveSync)
+    //   BASS callback : BASS internal sync lock -> schedulerMutex_ (handleMixerGroupSync)
+    //
+    // RemoveSync waits for an in-flight sync callback to finish, and that callback can be
+    // blocked acquiring schedulerMutex_ -- whose holder is the very thread sitting inside
+    // RemoveSync. Textbook ABBA, and its symptom is an unresponsive GUI thread, which is
+    // indistinguishable from the freeze this branch exists to diagnose. The exposure is
+    // every ordinary interaction, not an edge case: this function has 16 call sites
+    // covering pause, seek, chart switch, volume and rate.
+    //
+    // Clearing the scheduler state above is what makes the hoist safe rather than merely
+    // narrower: sfxSchedulerActive_ is already false by the time the lock is dropped, so a
+    // callback firing in the window between the unlock and the removal takes its own
+    // early-out instead of acting on a scheduler that is being torn down.
+    if (syncToRemove != 0 && masterMixer_ != 0) {
+        BASS_ChannelRemoveSync(masterMixer_, syncToRemove);
+        // Read now (BASS keeps only the most recent per-thread code), report below.
+        removeSyncError = static_cast<int>(BASS_ErrorGetCode());
     }
     // Both lines land after the locker's scope ends: schedulerMutex_ is also taken by
     // the mixer sync callback on the BASS audio thread, so a log write underneath it
