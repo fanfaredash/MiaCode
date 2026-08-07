@@ -511,42 +511,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/quick_scene/PreviewQuickHudLayer.cpp
     src/preview/quick_scene/PreviewQuickSceneRoot.h
     src/preview/quick_scene/PreviewQuickSceneRoot.cpp
-    src/render/source.h
-    src/render/compositor.h
-    src/render/compositor.cpp
-    src/render/snapshot_builder.h
-    src/sources/chart/StageBackgroundSource.h
-    src/sources/chart/StageBackgroundSource.cpp
-    src/sources/chart/BackdropSource.h
-    src/sources/chart/BackdropSource.cpp
-    src/sources/chart/MuriPadSource.h
-    src/sources/chart/MuriPadSource.cpp
-    src/sources/chart/MuriActionSource.h
-    src/sources/chart/MuriActionSource.cpp
-    src/sources/chart/JudgeFireworkSource.h
-    src/sources/chart/JudgeFireworkSource.cpp
-    src/sources/chart/GuideSource.h
-    src/sources/chart/GuideSource.cpp
-    src/sources/chart/TrackSource.h
-    src/sources/chart/TrackSource.cpp
-    src/sources/chart/SlideMotionSource.h
-    src/sources/chart/SlideMotionSource.cpp
-    src/sources/chart/JudgeEffectSource.h
-    src/sources/chart/JudgeEffectSource.cpp
-    src/sources/chart/TouchJudgeSource.h
-    src/sources/chart/TouchJudgeSource.cpp
-    src/sources/chart/HeadSource.h
-    src/sources/chart/HeadSource.cpp
-    src/sources/chart/TouchSource.h
-    src/sources/chart/TouchSource.cpp
-    src/sources/chart/TouchHoldSource.h
-    src/sources/chart/TouchHoldSource.cpp
-    src/sources/chart/ChartReviewSource.h
-    src/sources/chart/ChartReviewSource.cpp
-    src/sources/chart/MaimuriDxJudgeSource.h
-    src/sources/chart/MaimuriDxJudgeSource.cpp
-    src/sources/chart/HudSource.h
-    src/sources/chart/HudSource.cpp
     src/audio/PreviewAudioBackend.h
     src/audio/PreviewAudioSettings.h
     src/audio/PreviewAudioSettings.cpp
@@ -764,21 +728,6 @@ endif()
 
 if (WIN32)
     target_sources(MiaCode PRIVATE
-        src/render/backend_d3d11/PreviewDCompCore.h
-        src/render/backend_d3d11/PreviewDCompCore.cpp
-        src/render/backend_d3d11/PreviewDCompFrameStateSnapshot.h
-        src/render/PreviewDCompRenderer.h
-        src/render/PreviewDCompRenderer.cpp
-        src/render/backend_d3d11/PreviewDCompSpritePipeline.h
-        src/render/backend_d3d11/PreviewDCompSpritePipeline.cpp
-        src/render/backend_d3d11/PreviewDCompTextureCache.h
-        src/render/backend_d3d11/PreviewDCompTextureCache.cpp
-        src/render/backend_d3d11/PreviewDCompSurface.h
-        src/render/backend_d3d11/PreviewDCompSurface.cpp
-        src/render/backend_d3d11/PreviewPopupHwndTracker.h
-        src/render/backend_d3d11/PreviewPopupHwndTracker.cpp
-        src/render/backend_d3d11/OwnerHwndTracker.h
-        src/render/backend_d3d11/OwnerHwndTracker.cpp
     )
     target_link_libraries(MiaCode PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"

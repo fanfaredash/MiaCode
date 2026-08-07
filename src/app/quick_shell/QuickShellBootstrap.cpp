@@ -15,10 +15,6 @@
 #include "common/DebugLog.h"
 #include "common/OperationLog.h"
 #include "mainwindow/MainWindow.h"
-#ifdef Q_OS_WIN
-#include "render/backend_d3d11/PreviewDCompSurface.h"
-#include "render/backend_d3d11/PreviewPopupHwndTracker.h"
-#endif
 // Phase 4c — needed for the host pointer type in the bootstrap
 // wiring lambda; the lambda passes it straight to setStageMediaHost.
 #include "preview/runtime/PreviewStageMediaHost.h"
@@ -402,16 +398,6 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
         miacode::app::entry::logQuickWindowGpuDevice(
             window, QStringLiteral("quick_shell_root_window"));
 
-        // Phase 1 of the DComp preview path. Opt-in via
-        // MIACODE_PREVIEW_USE_DCOMP=1. Renders a red test rectangle in the
-        // top-left of the window to verify the DComp visual tree attaches
-        // and resizes correctly. Attached lazily on first sceneGraphInitialized
-        // (handled inside attachToWindow). Phase 4+ replaces the fixed
-        // top-left placement with placeholder-driven geometry.
-        if (miacode::debug_options::previewUseDCompEnabled()) {
-            createInProcessPreviewSurface(window, QStringLiteral("env_flag"));
-        }
-
         if (surfaceHost_ != nullptr) {
             surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
         }
@@ -558,121 +544,6 @@ bool QuickShellBootstrap::start(const QString& startupOpenTarget)
         });
     }
     return true;
-}
-
-bool QuickShellBootstrap::createInProcessPreviewSurface(QQuickWindow* window, const QString& reason)
-{
-#ifdef Q_OS_WIN
-    MC_OP("QuickShellBootstrap::createInProcessPreviewSurface");
-    _mc_op_.note(QStringLiteral("reason=%1").arg(reason));
-    if (window == nullptr) {
-        _mc_op_.fail(QStringLiteral("null window"));
-        return false;
-    }
-    // Idempotent — caller may invoke from multiple paths (normal
-    // startup, spawn-failure fallback, crash-loop-given-up fallback).
-    // Once attached, further calls are a no-op so we don't create a
-    // second surface or re-wire signals already in place.
-    if (previewDCompSurface_ != nullptr) {
-        appendQuickShellRuntimeLog(
-            QStringLiteral("dcomp_surface_attach_skipped"),
-            QStringLiteral("reason=already_attached requested=%1").arg(reason));
-        return true;
-    }
-    previewDCompSurface_ =
-        std::make_unique<miacode::preview::dcomp::PreviewDCompSurface>(this);
-    previewDCompSurface_->attachToWindow(window);
-    // Phase 3.2: connect the surface to the PreviewRuntime so the
-    // render thread can read playhead state. controller_ exposes
-    // it as a generic QObject* (the QML-property accessor); cast
-    // back to PreviewRuntime for the typed setRuntime call.
-    if (controller_ != nullptr) {
-        if (auto* runtime = qobject_cast<PreviewRuntime*>(
-                controller_->previewRuntime()); runtime != nullptr) {
-            previewDCompSurface_->setRuntime(runtime);
-        }
-    }
-    // Phase 4c — wire the PreviewStageMediaHost into the surface so
-    // StageBackgroundSource can pull the current QVideoFrame
-    // (delivered by the host's QMediaPlayer + QVideoSink) on every
-    // snapshot build. The host is created lazily inside MainWindow on
-    // first chart-load, so we connect the signal AND attach the host
-    // immediately if it already exists (race-free in either direction).
-    if (backend_ != nullptr) {
-        QObject::connect(
-            backend_.get(),
-            &MainWindow::previewStageMediaHostInitialized,
-            this,
-            [this](PreviewStageMediaHost* host) {
-                if (previewDCompSurface_ != nullptr) {
-                    previewDCompSurface_->setStageMediaHost(host);
-                }
-            });
-        if (auto* existingHost = backend_->previewStageMediaHost();
-            existingHost != nullptr) {
-            previewDCompSurface_->setStageMediaHost(existingHost);
-        }
-    }
-    // Issue #3 fix — propagate the user's "Preview Canvas Frame
-    // Rate" option (60 / 120 / Display) to the new pipeline.
-    // MainWindow emits previewCanvasPresentSyncIntervalChanged
-    // whenever the user picks a different option in Render
-    // Settings; we forward to the surface, which forwards to
-    // the renderer's setPresentSyncInterval. The legacy QSG
-    // qtPreviewTimer was already wired separately inside
-    // MainWindow itself; this connection brings the new
-    // pipeline to parity.
-    if (backend_ != nullptr) {
-        QObject::connect(
-            backend_.get(),
-            &MainWindow::previewCanvasPresentSyncIntervalChanged,
-            this,
-            [this](unsigned int syncInterval) {
-                if (previewDCompSurface_ != nullptr) {
-                    previewDCompSurface_->setRenderPresentSyncInterval(syncInterval);
-                }
-            });
-        // Push the initial value once at attach time. The exact
-        // SyncInterval depends on the display refresh rate, which
-        // MainWindow knows; we replicate just enough of the
-        // logic here to seed the renderer correctly. Defaults
-        // are conservative (1 = display refresh) when we can't
-        // determine the display rate at this point.
-        unsigned int initialSyncInterval = 1U;
-        if (auto* screen = QGuiApplication::primaryScreen();
-            screen != nullptr && screen->refreshRate() > 1.0) {
-            const double displayHz = screen->refreshRate();
-            double targetHz = displayHz;
-            switch (backend_->currentPreviewCanvasFrameRateMode()) {
-            case MainWindow::PreviewCanvasFrameRateMode::Fps30:
-                targetHz = 30.0;
-                break;
-            case MainWindow::PreviewCanvasFrameRateMode::Fps60:
-                targetHz = 60.0;
-                break;
-            case MainWindow::PreviewCanvasFrameRateMode::Fps120:
-                targetHz = 120.0;
-                break;
-            case MainWindow::PreviewCanvasFrameRateMode::DisplayRefresh:
-            default:
-                targetHz = displayHz;
-                break;
-            }
-            const double interval = displayHz / qMax(1.0, targetHz);
-            initialSyncInterval = static_cast<unsigned int>(
-                qBound<double>(1.0, qRound(interval), 4.0));
-        }
-        previewDCompSurface_->setRenderPresentSyncInterval(initialSyncInterval);
-    }
-    appendQuickShellRuntimeLog(
-        QStringLiteral("dcomp_surface_attached"),
-        QStringLiteral("phase=3.2 reason=%1").arg(reason));
-    return true;
-#else
-    Q_UNUSED(window);
-    Q_UNUSED(reason);
-    return false;
-#endif
 }
 
 bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
@@ -907,46 +778,6 @@ bool QuickShellBootstrap::handleNativeCloseEvent(const QByteArray& eventType, vo
     }
     if (msg->hwnd == nullptr) {
         return false;
-    }
-
-    // Phase 4e — owner-followed popup tracking. WM_WINDOWPOSCHANGED is
-    // the canonical "your window moved/resized/restored" hook, fired
-    // once per DWM compositor tick during animations. Forwarding it to
-    // the popup tracker lets both DComp popups (chart + timeline)
-    // commit a batched DeferWindowPos in the same tick the editor's
-    // own frame is rendered, eliminating the 1-3 frame inter-popup
-    // shear during drag/maximize/restore. WebView2 Visual hosting and
-    // Chromium Aura use this exact pattern — there is no OS-level
-    // "follow my owner" auto-sync; the host has to drive it.
-    //
-    // Returning false unconditionally here — we observe but do not
-    // consume the message; DefWindowProc still gets to do its own
-    // post-processing.
-    if (msg->message == WM_WINDOWPOSCHANGED) {
-        // Throttled diagnostic — log at most once per second to confirm
-        // the hook receives WM_WINDOWPOSCHANGED at all. Includes both
-        // the message HWND and our recorded root HWND so a mismatch is
-        // visible. force=true bypasses any channel filter.
-        static QElapsedTimer s_lastSeenTimer;
-        static bool s_seenStarted = false;
-        if (!s_seenStarted) { s_lastSeenTimer.start(); s_seenStarted = true; }
-        const bool isRoot = rootWindowNativeHwnd_ != 0
-            && msg->hwnd == reinterpret_cast<HWND>(rootWindowNativeHwnd_);
-        if (s_lastSeenTimer.elapsed() >= 1000) {
-            miacode::debug_log::appendLine(
-                miacode::debug_log::Channel::Runtime,
-                QStringLiteral("quick_shell"),
-                QStringLiteral(
-                    "action=wmpos_seen msg_hwnd=0x%1 root_hwnd=0x%2 is_root=%3")
-                    .arg(reinterpret_cast<quintptr>(msg->hwnd), 0, 16)
-                    .arg(rootWindowNativeHwnd_, 0, 16)
-                    .arg(isRoot ? 1 : 0),
-                /*force=*/true);
-            s_lastSeenTimer.restart();
-        }
-        if (isRoot) {
-            miacode::preview::dcomp::PreviewPopupHwndTracker::notifyOwnerWindowPosChanged();
-        }
     }
 
     const bool isCloseMessage = msg->message == WM_CLOSE;
@@ -1239,28 +1070,6 @@ void QuickShellBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QStrin
         );
     };
 
-    // Phase 8b — destroy the chart-side PreviewDCompSurface FIRST. It
-    // owns the D3D11 render thread plus a `Qt::QueuedConnection` from
-    // `PreviewRuntime::frameStateChanged` and a queued connection on
-    // its renderer's `presented` signal. PreviewRuntime is parented to
-    // MainWindow and dies during the QObject children-walk inside
-    // `backend_.reset()`. If the render thread is still alive at that
-    // point, an in-flight queued emit can race against the receiver's
-    // disconnect-on-destroy and deadlock both threads on the per-
-    // receiver Qt signal-slot lock pool — exactly the symptom: the
-    // last log line is `accepted_close_destroy_backend_enter` and the
-    // process never exits.
-    //
-    // ~PreviewDCompSurface's existing teardownCore() does the right
-    // thing IF called early enough: stops the render thread, joins it,
-    // then disconnects the queued connections. The fix is just to
-    // sequence it before MainWindow goes away. Mirror of the same
-    // ordering discipline applied for the timeline render view in
-    // commits 8ec8c18 / 55107cf / 7ebab94.
-#ifdef Q_OS_WIN
-    logResetTiming(QStringLiteral("accepted_close_destroy_preview_dcomp_surface"),
-                   previewDCompSurface_);
-#endif
     logResetTiming(QStringLiteral("accepted_close_destroy_engine"), engine_);
     rootWindow_ = nullptr;
 #ifdef Q_OS_WIN

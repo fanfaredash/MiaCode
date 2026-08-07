@@ -134,12 +134,9 @@ class MainWindow : public QMainWindow,
     friend class miacode::export_page::ExportLauncherPage;
 
 public:
-    // Phase 4c — non-owning accessor + signal so the QuickShellBootstrap can
-    // wire the host (QMediaPlayer + QVideoSink) into PreviewDCompSurface
-    // for StageBackgroundSource video-frame lookup. The host is created
-    // lazily inside MainWindow.PreviewStageMediaRoute on first chart-load;
-    // the signal lets the bootstrap connect once and react to its
-    // appearance without polling.
+    // Phase 4c — non-owning accessor for the preview stage-media host
+    // (QMediaPlayer + QVideoSink). The host is created lazily inside
+    // MainWindow.PreviewStageMediaRoute on first chart-load.
     PreviewStageMediaHost* previewStageMediaHost() const;
 
     // Accessor for the latency-detection sandbox controller. The
@@ -147,20 +144,6 @@ public:
     // (BPM/offset/subdivision/SFX-volume + audition lifecycle).
     // Always non-null after construction.
     miacode::latency::LatencySandboxController* latencySandboxController() const;
-
-signals:
-    void previewStageMediaHostInitialized(PreviewStageMediaHost* host);
-    // Issue #3 fix — emitted whenever the user changes the preview canvas
-    // frame-rate option in Render Settings. Carries the SyncInterval
-    // value (1, 2, 3) for the DComp renderer's Present(N, 0) call.
-    // The GUI computes N = round(target_interval_ns / display_vsync_ns)
-    // because only the GUI has QScreen::refreshRate() — the render
-    // thread can't safely query Qt screen state.
-    //   - 1 = present every vsync (display rate; this is the
-    //         DisplayRefresh option AND also Fps60 on a 60 Hz display).
-    //   - 2 = present every other vsync (60 FPS on 120 Hz, 50 on 100 Hz).
-    //   - 3 = present every third vsync.
-    void previewCanvasPresentSyncIntervalChanged(unsigned int syncInterval);
 
 public:
     struct CliVideoExportRequest {
@@ -349,11 +332,10 @@ private slots:
     void onErrorItemActivated(QListWidgetItem* item);
     void onMuriItemActivated(QListWidgetItem* item);
 public:
-    // Issue #3 fix — moved from private so QuickShellBootstrap can read
-    // the cached mode at attach-time and seed the DComp renderer's
-    // target-frame-interval cap. Exposing the enum doesn't widen any
+    // Public so callers outside MainWindow (the preferences dialog)
+    // can read the cached mode. Exposing the enum doesn't widen any
     // mutation surface (the setter setPreviewCanvasFrameRateMode
-    // remains internal); only the value type is now visible.
+    // remains internal); only the value type is visible.
     enum class PreviewCanvasFrameRateMode {
         Fps30,
         Fps60,
@@ -444,12 +426,9 @@ private:
     QString previewStageMediaFrameRateModeStorageValue() const;
     QString timelineFrameRateModeStorageValue() const;
 public:
-    // Issue #3 fix — public getter for the current preview canvas
-    // frame-rate mode. QuickShellBootstrap needs it to seed the DComp
-    // renderer's target-interval at attach time (before the user has
-    // touched Render Settings, the cached value is already set from
-    // the persisted project / portable state). Read-only — the setter
-    // setPreviewCanvasFrameRateMode stays internal.
+    // Public getter for the current preview canvas frame-rate mode,
+    // read by the preferences dialog to seed its combo box. Read-only
+    // — the setter setPreviewCanvasFrameRateMode stays internal.
     PreviewCanvasFrameRateMode currentPreviewCanvasFrameRateMode() const;
     PreviewCanvasFrameRateMode currentPreviewStageMediaFrameRateMode() const;
     PreviewCanvasFrameRateMode currentTimelineFrameRateMode() const;

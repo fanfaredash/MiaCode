@@ -9,8 +9,8 @@
 // Why this exists: the reported freeze happens while MiaCode is minimized or sitting
 // behind a browser that is playing video — i.e. "quiet app, busy machine" — and the
 // default QSG path has no occlusion awareness whatsoever, so that condition is currently
-// invisible in the logs. (DXGI_STATUS_OCCLUDED is handled only in the DComp backend,
-// which is off by default and no longer maintained, so it never runs for users.)
+// invisible in the logs. (DXGI_STATUS_OCCLUDED was only ever handled in the
+// DirectComposition backend, which has since been removed entirely.)
 //
 // Design: transition-triggered only. One line per visibility / expose / window-state
 // change, never per frame. The exit transition carries how long the surface stayed

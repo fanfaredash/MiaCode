@@ -22,9 +22,6 @@ class QuickShellStyleBridge;
 namespace miacode::app::windows_idle_diagnostics {
 class WindowsIdleEventMonitor;
 }
-namespace miacode::preview::dcomp {
-class PreviewDCompSurface;
-}
 #endif
 
 class QuickShellBootstrap : public QObject
@@ -58,14 +55,6 @@ private:
     void scheduleAcceptedRootWindowDestroyAndQuit(const QString& source);
     void destroyAcceptedRootWindowResourcesAndQuit(const QString& source);
     void logFocusEvent(const QString& action, QObject* watched = nullptr, QEvent* event = nullptr, const QString& detail = QString()) const;
-    // Construct previewDCompSurface_ + wire it to the runtime, the
-    // stage-media-host signal, and the present sync interval. Idempotent
-    // — returns immediately if a surface already exists. `reason` is
-    // logged via `dcomp_surface_attached reason=<reason>` for diagnostics.
-    // Safe to call after the window has been around for a while; the
-    // in-process surface attaches to whatever HWND the window currently
-    // owns.
-    bool createInProcessPreviewSurface(QQuickWindow* window, const QString& reason);
 
     QIcon appIcon_;
     std::unique_ptr<MainWindow> backend_;
@@ -74,7 +63,6 @@ private:
     std::unique_ptr<QuickShellStyleBridge> styleBridge_;
     std::unique_ptr<QQmlApplicationEngine> engine_;
 #ifdef Q_OS_WIN
-    std::unique_ptr<miacode::preview::dcomp::PreviewDCompSurface> previewDCompSurface_;
     std::unique_ptr<miacode::app::windows_idle_diagnostics::WindowsIdleEventMonitor> windowsIdleEventMonitor_;
     std::unique_ptr<QAbstractNativeEventFilter> nativeCloseEventFilter_;
     quintptr rootWindowNativeHwnd_ = 0;
