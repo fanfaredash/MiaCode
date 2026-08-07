@@ -908,6 +908,48 @@ QString runtimeLogPath()
     return logPath(Channel::Runtime);
 }
 
+namespace {
+
+// Last resort for a fatal-grade line whose durable write could not get logMutex() in time.
+// Deliberately its OWN file and NOT the contended one: serialising appends is the whole
+// job of that mutex, so a writer that just failed to acquire it must not append to the
+// file it guards. Per-process so two processes sharing a log directory cannot interleave
+// either.
+//
+// The file existing at all is the signal. It means some thread held the log mutex for
+// longer than the timeout -- in practice a stalled disk or a disconnected network share --
+// and that the corresponding lines are missing from the normal log. Read it alongside the
+// runtime log, not instead of it.
+bool writeDurableFallbackLine(const QByteArray& bytes)
+{
+    // Its own mutex, never the contended one, so it cannot be held by the writer whose
+    // stall sent us here. Still bounded: if the underlying storage is what stalled then
+    // this write can stall too, and the point of this path is that no caller waits
+    // indefinitely. Losing a line beats wedging the watchdog that was reporting the freeze.
+    static QMutex fallbackMutex;
+    if (!fallbackMutex.tryLock(500)) {
+        return false;
+    }
+    bool written = false;
+    {
+        const QString path = QDir(logDirectory())
+                                 .filePath(QStringLiteral("miacode_durable_fallback_%1.log")
+                                               .arg(cachedProcessId()));
+        ensureParentDirectory(path);
+        QFile file(path);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+            file.write(bytes);
+            file.flush();
+            file.close();
+            written = true;
+        }
+    }
+    fallbackMutex.unlock();
+    return written;
+}
+
+}  // namespace
+
 QString audioLogPath()
 {
     return logPath(Channel::Audio);
@@ -1027,17 +1069,37 @@ bool appendText(Channel channel, const QString& text, bool force, Level level)
         if (!skipAsyncLog) {
             AsyncLogWriter::instance().flush(1000);
         }
-        QMutexLocker locker(&logMutex());
-        const QString path = logPath(channel);
-        ensureParentDirectory(path);
-        QFile file(path);
-        if (!file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
-            return false;
+        // Bounded, not QMutexLocker. This lock is held across an open/write/flush/close,
+        // so a thread stuck in a slow write -- a stalled disk, a disconnected network share
+        // -- holds it for as long as that write takes. An unbounded wait here means the one
+        // writer that most needs to get its bytes out, the hang watchdog reporting a frozen
+        // GUI thread, blocks on its FIRST line and the freeze report never lands. That is
+        // the diagnostic being defeated by the exact condition it exists to record.
+        //
+        // On timeout, write the line anyway to a per-process fallback file. Two writers
+        // appending to one file without the mutex is what the lock prevents, so the
+        // fallback deliberately does not touch the contended path; it is a separate file,
+        // and the line carries `durable_lock=timeout` so a reader can tell a fallback row
+        // from a normal one and knows the main log is missing it.
+        constexpr int kDurableLockTimeoutMs = 2000;
+        QMutex& mutex = logMutex();
+        if (!mutex.tryLock(kDurableLockTimeoutMs)) {
+            return writeDurableFallbackLine(bytes);
         }
-        file.write(bytes);
-        file.flush();
-        file.close();
-        return true;
+        bool written = false;
+        {
+            const QString path = logPath(channel);
+            ensureParentDirectory(path);
+            QFile file(path);
+            if (file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+                file.write(bytes);
+                file.flush();
+                file.close();
+                written = true;
+            }
+        }
+        mutex.unlock();
+        return written;
     }
     AsyncLogWriter::instance().enqueue(channel, std::move(bytes));
     return true;
