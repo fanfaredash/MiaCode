@@ -615,6 +615,7 @@ bool BassPreviewAudioBackend::audition(const QString& kind, double gain)
         resetMasterMixerClock(0.0);
         // G1 Commit 6: master mixer was started at engine init and never stops.
         playbackSession_.masterRunning = true;
+        audioHealthPlaybackRunning_.store(true, std::memory_order_release);
     }
     const bool started = playKindInternal(kind, gain);
     // This path emits a real note sound while bypassing the scheduler, the group

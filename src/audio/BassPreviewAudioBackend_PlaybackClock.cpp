@@ -255,6 +255,16 @@ void BassPreviewAudioBackend::startAudioHealthSampler()
         // longer depends on this cadence for anything -- it reads whatever is published.
         constexpr auto kInterval = std::chrono::milliseconds(100);
         while (!audioHealthSamplerStop_.load(std::memory_order_acquire)) {
+            // Idle means idle: no playback, no BASS queries. The first version of this
+            // sampler polled unconditionally for the whole process lifetime, which is more
+            // contact with the device than the per-tick probe it replaced (that one at
+            // least stopped when playback did) and produced a reported ~2 s hitch shortly
+            // after launch. Nothing consumes the snapshot while stopped anyway -- both
+            // readers sit behind logPlaybackStatus, which only runs on a playback tick.
+            if (!audioHealthPlaybackRunning_.load(std::memory_order_acquire)) {
+                std::this_thread::sleep_for(kInterval);
+                continue;
+            }
             const quint32 mixer = audioHealthMixerHandle_.load(std::memory_order_acquire);
             const quint32 source = audioHealthSourceHandle_.load(std::memory_order_acquire);
             // THE BLOCKING CALLS. On this thread they are harmless: a multi-second stall
@@ -609,6 +619,7 @@ void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
     // G1 Commit 6: master mixer was started at engine init. The commit step is now
     // purely about unsetting BASS_MIXER_CHAN_PAUSE on the BGM sample below.
     playbackSession_.masterRunning = true;
+    audioHealthPlaybackRunning_.store(true, std::memory_order_release);
     playbackSession_.lastAuthoritativeSecond = preparedPlayback_.startSecond;
     if (backgroundTrackSample_ != nullptr && !playbackSession_.backgroundTrackPendingStart) {
         backgroundTrackSample_->play();

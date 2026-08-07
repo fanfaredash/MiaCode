@@ -74,6 +74,7 @@ void BassPreviewAudioBackend::suspendPlaybackTransport()
     }
     pauseTouchholdVoices();
     playbackSession_.masterRunning = false;
+    audioHealthPlaybackRunning_.store(false, std::memory_order_release);
     playbackSession_.backgroundTrackRunning = false;
     retainedPlaybackMode_ = RetainedPlaybackMode::PausedExact;
     appendBassDebugLog(
@@ -165,6 +166,7 @@ void BassPreviewAudioBackend::repositionMasterTransportClock(double targetSecond
     playbackSession_.lastTriggeredGroupIndex = -1;
     playbackSession_.triggeredGroupCount = 0;
     playbackSession_.masterRunning = false;
+    audioHealthPlaybackRunning_.store(false, std::memory_order_release);
 }
 
 void BassPreviewAudioBackend::repositionPausedTransportToSecond(double targetSecond, const QString& reason)
@@ -206,6 +208,7 @@ void BassPreviewAudioBackend::startTransportFromCurrentAnchor()
     // Resume is now purely the act of unsetting BASS_MIXER_CHAN_PAUSE on each
     // sample (done below via backgroundTrackSample_->play() and similar).
     playbackSession_.masterRunning = true;
+    audioHealthPlaybackRunning_.store(true, std::memory_order_release);
     playbackSession_.lastAuthoritativeSecond = authoritativeSecond();
     // G1 followup: bass_play also fires on the retained-resume path (the
     // common case for ▶ after ⏸). The cold-start path emits it from
@@ -413,6 +416,7 @@ void BassPreviewAudioBackend::resetMasterMixerClock(double startSecond)
     playbackSession_.lastTriggeredGroupIndex = -1;
     playbackSession_.triggeredGroupCount = 0;
     playbackSession_.masterRunning = false;
+    audioHealthPlaybackRunning_.store(false, std::memory_order_release);
 #else
     Q_UNUSED(startSecond);
 #endif
@@ -628,6 +632,7 @@ void BassPreviewAudioBackend::startBackgroundTrack(double second)
         resetMasterMixerClock(second);
         // G1 Commit 6: master mixer was started at engine init and never stops.
         playbackSession_.masterRunning = true;
+        audioHealthPlaybackRunning_.store(true, std::memory_order_release);
         playbackSession_.lastAuthoritativeSecond = clampTimelineSecond(second);
     }
     configureBackgroundTrackForSecond(

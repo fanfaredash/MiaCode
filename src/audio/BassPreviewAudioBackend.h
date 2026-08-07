@@ -284,6 +284,12 @@ private:
     // sampler run without any lifetime coupling to backgroundTrackSample_.
     std::atomic<quint32> audioHealthMixerHandle_{0};
     std::atomic<quint32> audioHealthSourceHandle_{0};
+    // Gates the BASS queries on playback actually running. Without it the sampler polls
+    // the device 10x a second for the whole process lifetime, including while idle --
+    // strictly more contact with BASS than the per-tick probe it replaced, which at least
+    // only ran while playing. A user hit a ~2 s hitch shortly after launch on the first
+    // build of this sampler; idle polling is the part of it that was never wanted.
+    std::atomic_bool audioHealthPlaybackRunning_{false};
     mutable QMutex audioHealthSampleMutex_;
     HealthSample audioHealthSample_;
     void logPreparedEventWindow(double startSecond) const;
