@@ -28,6 +28,7 @@
 #include "core/scene/PreviewProgressStatsCache.h"
 #include "core/chart/transform/ChartBatchTransform.h"
 #include "core/chart/transform/ChartNormalization.h"
+#include "timeline/TimelineMarkerOffset.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
@@ -196,50 +197,6 @@ void updatePreviewControlsLayout(
         previewControlsLayout->addWidget(previewSpeedButton, 0);
         previewControlsLayout->addWidget(previewFullscreenButton, 0);
     }
-}
-
-double shiftedTimelineSecond(double second, double offsetSeconds)
-{
-    if (!qIsFinite(second) || !qIsFinite(offsetSeconds)) {
-        return second;
-    }
-    return second + offsetSeconds;
-}
-
-QVector<TimelineBeatMarker> shiftedBeatMarkers(
-    const QVector<TimelineBeatMarker>& beatMarkers,
-    double offsetSeconds
-)
-{
-    QVector<TimelineBeatMarker> shifted = beatMarkers;
-    for (TimelineBeatMarker& marker : shifted) {
-        marker.second = shiftedTimelineSecond(marker.second, offsetSeconds);
-    }
-    return shifted;
-}
-
-QVector<TimelineNoteMarker> shiftedNoteMarkers(
-    const QVector<TimelineNoteMarker>& noteMarkers,
-    double offsetSeconds
-)
-{
-    QVector<TimelineNoteMarker> shifted = noteMarkers;
-    for (TimelineNoteMarker& marker : shifted) {
-        marker.second = shiftedTimelineSecond(marker.second, offsetSeconds);
-        if (marker.endSecond >= 0.0) {
-            marker.endSecond = shiftedTimelineSecond(marker.endSecond, offsetSeconds);
-        }
-        if (marker.slideTraceSecond >= 0.0) {
-            marker.slideTraceSecond = shiftedTimelineSecond(marker.slideTraceSecond, offsetSeconds);
-        }
-        if (marker.availableSecond >= 0.0) {
-            marker.availableSecond = shiftedTimelineSecond(marker.availableSecond, offsetSeconds);
-        }
-        for (double& shootSecond : marker.slideSegmentShootSeconds) {
-            shootSecond = shiftedTimelineSecond(shootSecond, offsetSeconds);
-        }
-    }
-    return shifted;
 }
 
 std::pair<int, int> lineColForTextOffset(const QString& text, int offset)
@@ -534,13 +491,7 @@ double MainWindow::TimelineSection::parsedRawFirstSeconds(bool* ok) const
     if (hasActiveDifficulty() && ui_.firstEdit_ != nullptr) {
         rawValue = ui_.firstEdit_->text();
     }
-    const QString trimmedRawValue = rawValue.trimmed();
-    bool localOk = false;
-    const double value = trimmedRawValue.isEmpty() ? 0.0 : trimmedRawValue.toDouble(&localOk);
-    if (ok != nullptr) {
-        *ok = trimmedRawValue.isEmpty() ? true : localOk;
-    }
-    return (trimmedRawValue.isEmpty() || localOk) ? value : 0.0;
+    return miacode::timeline::offset::parsedFirstSeconds(rawValue, ok);
 }
 
 double MainWindow::TimelineSection::parsedFirstSeconds(bool* ok) const

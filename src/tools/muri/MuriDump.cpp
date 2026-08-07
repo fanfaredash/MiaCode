@@ -17,6 +17,7 @@
 #include "SimaiDocument.h"
 #include "SimaiNativeParser.h"
 #include "timeline/TimelineData.h"
+#include "timeline/TimelineMarkerOffset.h"
 #include "common/MuriConfig.h"
 #include "common/MuriTypes.h"
 #include "tools/muri/MuriAnalyzer.h"
@@ -24,6 +25,10 @@
 #include "tools/muri/MuriPanelEntries.h"
 
 namespace {
+
+using miacode::timeline::offset::NonFiniteHandling;
+using miacode::timeline::offset::parsedFirstSeconds;
+using miacode::timeline::offset::shiftedNoteMarkers;
 
 struct TimelineChartCounts {
     int noteCount = 0;
@@ -50,17 +55,6 @@ constexpr double kStaticCollideThresholdSeconds = 36.0 / miacode::muri::kJudgeTp
 constexpr double kStaticCollideExtraDeltaSeconds =
     kStaticCollideThresholdSeconds - miacode::muri::kTapAvailableSeconds;
 constexpr double kStaticTimeEpsilonSeconds = 1e-9;
-
-double parsedFirstSeconds(const QString& rawValue, bool* ok = nullptr)
-{
-    const QString trimmed = rawValue.trimmed();
-    bool localOk = false;
-    const double value = trimmed.isEmpty() ? 0.0 : trimmed.toDouble(&localOk);
-    if (ok != nullptr) {
-        *ok = trimmed.isEmpty() ? true : localOk;
-    }
-    return (trimmed.isEmpty() || localOk) ? value : 0.0;
-}
 
 bool isSlideLike(const TimelineNoteMarker& marker)
 {
@@ -386,37 +380,6 @@ QJsonObject jsonFromStaticReferenceRecord(const MuriStaticReference& record)
         item.insert(QStringLiteral("delta_ms"), record.deltaSecond * 1000.0);
     }
     return item;
-}
-
-double shiftedTimelineSecond(double second, double offsetSeconds)
-{
-    if (!qIsFinite(second) || !qIsFinite(offsetSeconds)) {
-        return second;
-    }
-    return second + offsetSeconds;
-}
-
-QVector<TimelineNoteMarker> shiftedNoteMarkers(
-    const QVector<TimelineNoteMarker>& noteMarkers,
-    double offsetSeconds)
-{
-    QVector<TimelineNoteMarker> shifted = noteMarkers;
-    for (TimelineNoteMarker& marker : shifted) {
-        marker.second = shiftedTimelineSecond(marker.second, offsetSeconds);
-        if (marker.endSecond >= 0.0) {
-            marker.endSecond = shiftedTimelineSecond(marker.endSecond, offsetSeconds);
-        }
-        if (marker.slideTraceSecond >= 0.0) {
-            marker.slideTraceSecond = shiftedTimelineSecond(marker.slideTraceSecond, offsetSeconds);
-        }
-        if (marker.availableSecond >= 0.0) {
-            marker.availableSecond = shiftedTimelineSecond(marker.availableSecond, offsetSeconds);
-        }
-        for (double& shootSecond : marker.slideSegmentShootSeconds) {
-            shootSecond = shiftedTimelineSecond(shootSecond, offsetSeconds);
-        }
-    }
-    return shifted;
 }
 
 QJsonArray jsonArrayFromStringList(const QStringList& values)
@@ -1125,7 +1088,8 @@ int main(int argc, char* argv[])
     }
 
     const SimaiNativeParseResult nativeResult = SimaiNativeParser::parseForTimeline(chartText, timingMetadata);
-    const QVector<TimelineNoteMarker> shiftedMarkers = shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds);
+    const QVector<TimelineNoteMarker> shiftedMarkers =
+        shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds, NonFiniteHandling::PassThrough);
     const MuriAnalysisReport report = MuriAnalyzer::analyze(shiftedMarkers);
 
     QJsonObject parseObject;

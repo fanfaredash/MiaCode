@@ -5,6 +5,7 @@
 #include "SimaiNativeParser.h"
 #include "common/ChartClockCount.h"
 #include "common/ChartAssetPaths.h"
+#include "timeline/TimelineMarkerOffset.h"
 #include "tools/muri/MuriAnalyzer.h"
 
 #include <QDir>
@@ -12,6 +13,10 @@
 #include <QtMath>
 
 namespace {
+
+using miacode::timeline::offset::NonFiniteHandling;
+using miacode::timeline::offset::parsedFirstSeconds;
+using miacode::timeline::offset::shiftedNoteMarkers;
 
 // backgroundScaleModeToken moved to core/video/PreviewRenderSettings.h (same tokens,
 // unchanged) so the preview runtime's scale-mode diagnostics name the modes the same
@@ -132,43 +137,6 @@ RenderMode renderModeFromToken(const QString& token)
     return token.trimmed().compare(QStringLiteral("maimuri_dx_style"), Qt::CaseInsensitive) == 0
         ? RenderMode::MaimuriDxStyle
         : RenderMode::Native;
-}
-
-double parsedFirstSeconds(const QString& rawValue)
-{
-    bool ok = false;
-    const QString trimmed = rawValue.trimmed();
-    const double value = trimmed.isEmpty() ? 0.0 : trimmed.toDouble(&ok);
-    return (trimmed.isEmpty() || ok) ? value : 0.0;
-}
-
-double shiftedTimelineSecond(double second, double offsetSeconds)
-{
-    return second + offsetSeconds;
-}
-
-QVector<TimelineNoteMarker> shiftedNoteMarkers(
-    const QVector<TimelineNoteMarker>& noteMarkers,
-    double offsetSeconds
-)
-{
-    QVector<TimelineNoteMarker> shifted = noteMarkers;
-    for (TimelineNoteMarker& marker : shifted) {
-        marker.second = shiftedTimelineSecond(marker.second, offsetSeconds);
-        if (marker.endSecond >= 0.0) {
-            marker.endSecond = shiftedTimelineSecond(marker.endSecond, offsetSeconds);
-        }
-        if (marker.slideTraceSecond >= 0.0) {
-            marker.slideTraceSecond = shiftedTimelineSecond(marker.slideTraceSecond, offsetSeconds);
-        }
-        if (marker.availableSecond >= 0.0) {
-            marker.availableSecond = shiftedTimelineSecond(marker.availableSecond, offsetSeconds);
-        }
-        for (double& shootSecond : marker.slideSegmentShootSeconds) {
-            shootSecond = shiftedTimelineSecond(shootSecond, offsetSeconds);
-        }
-    }
-    return shifted;
 }
 
 QString jsonString(const QJsonObject& object, const char* key)
@@ -494,7 +462,8 @@ bool buildVideoExportTaskFromSnapshot(
     );
     built.trackPath = snapshot.trackPath;
     built.skinDirectory = snapshot.skinDirectory;
-    built.noteMarkers = shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds);
+    built.noteMarkers =
+        shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds, NonFiniteHandling::Propagate);
     built.audioSettings = snapshot.audioSettings;
     built.audioSettings.normalize();
     built.timingSettings = snapshot.timingSettings;

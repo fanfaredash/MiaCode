@@ -6,11 +6,15 @@
 
 #include "common/MuriConfig.h"
 #include "common/MuriTypes.h"
+#include "timeline/TimelineMarkerOffset.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
 
 namespace {
+
+using miacode::timeline::offset::NonFiniteHandling;
+using miacode::timeline::offset::shiftedNoteMarkers;
 
 struct AnalyzedChart {
     SimaiNativeParseResult parsed;
@@ -24,42 +28,12 @@ bool nearlyEqual(double a, double b, double epsilon = 1e-6)
     return qAbs(a - b) <= epsilon;
 }
 
-double shiftedTimelineSecond(double second, double offsetSeconds)
-{
-    if (!qIsFinite(second) || !qIsFinite(offsetSeconds)) {
-        return second;
-    }
-    return second + offsetSeconds;
-}
-
-QVector<TimelineNoteMarker> shiftedNoteMarkers(
-    const QVector<TimelineNoteMarker>& noteMarkers,
-    double offsetSeconds)
-{
-    QVector<TimelineNoteMarker> shifted = noteMarkers;
-    for (TimelineNoteMarker& marker : shifted) {
-        marker.second = shiftedTimelineSecond(marker.second, offsetSeconds);
-        if (marker.endSecond >= 0.0) {
-            marker.endSecond = shiftedTimelineSecond(marker.endSecond, offsetSeconds);
-        }
-        if (marker.slideTraceSecond >= 0.0) {
-            marker.slideTraceSecond = shiftedTimelineSecond(marker.slideTraceSecond, offsetSeconds);
-        }
-        if (marker.availableSecond >= 0.0) {
-            marker.availableSecond = shiftedTimelineSecond(marker.availableSecond, offsetSeconds);
-        }
-        for (double& shootSecond : marker.slideSegmentShootSeconds) {
-            shootSecond = shiftedTimelineSecond(shootSecond, offsetSeconds);
-        }
-    }
-    return shifted;
-}
-
 AnalyzedChart analyzeChart(const QString& chartText, double firstSeconds = 0.0)
 {
     AnalyzedChart result;
     result.parsed = SimaiNativeParser::parseForTimeline(chartText);
-    const QVector<TimelineNoteMarker> shiftedMarkers = shiftedNoteMarkers(result.parsed.noteMarkers, firstSeconds);
+    const QVector<TimelineNoteMarker> shiftedMarkers =
+        shiftedNoteMarkers(result.parsed.noteMarkers, firstSeconds, NonFiniteHandling::PassThrough);
     result.report = MuriAnalyzer::analyze(shiftedMarkers);
     result.staticReferences = miacode::muri::buildStaticMuriReferences(
         shiftedMarkers,

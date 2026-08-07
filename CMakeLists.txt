@@ -1329,6 +1329,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
         INCLUDES src src/app/ui src/core/chart src/core/chart/parser src/timeline src/tools
     )
 
+    miacode_add_dev_tool(timeline_marker_offset_spec TEST
+        SOURCES
+            src/tools/timeline/TimelineMarkerOffsetSpec.cpp
+            src/timeline/TimelineMarkerOffset.h
+            src/timeline/TimelineData.h
+        LIBS Qt6::Core
+        INCLUDES src src/common src/timeline
+    )
+
     miacode_add_dev_tool(plain_code_editor_spec TEST
         SOURCES
             src/tools/editor/PlainCodeEditorSpec.cpp
