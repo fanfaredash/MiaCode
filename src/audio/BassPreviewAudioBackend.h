@@ -200,13 +200,32 @@ private:
         miacode::preview_audio::bass::BassDebugRoute route);
     bool maybeStartPendingBackgroundTrack(double second);
     bool playKindInternal(const QString& kind, double gain = 1.0);
-    void reconcileTouchholdVoice(double second);
+    // What reconcileTouchholdVoice() did, so the caller can log it after releasing
+    // schedulerMutex_. The audio-thread path reaches this function from triggerGroup(),
+    // i.e. under that lock, and a log write there is the stall the buffer-health probe
+    // exists to catch. `changed` is false when the voice already belonged to the right
+    // span, which is the common case and emits nothing.
+    struct TouchholdTransition {
+        bool changed = false;
+        int owner = -1;
+        int previousOwner = -1;
+        double second = 0.0;
+        double spanStartSecond = -1.0;
+    };
+    // Pass `out` when holding schedulerMutex_: the transition is recorded rather than
+    // logged, and the caller emits it once the lock is gone. With `out` null the function
+    // logs directly, which is correct only on the GUI path where no lock is held.
+    void reconcileTouchholdVoice(double second, TouchholdTransition* out = nullptr);
+    void logTouchholdTransition(const TouchholdTransition& transition) const;
     // `playedKindsOut`, when non-null, receives a compact "kind:gain" list of the
     // samples that ACTUALLY started. The group-level logs record a decision to
     // trigger; this records the sound. Collected rather than logged in place
     // because the mixer-sync caller runs under the scheduler mutex on the BASS
     // audio thread and must not log there.
-    void triggerGroup(const CollapsedEventGroup& group, QString* playedKindsOut = nullptr);
+    void triggerGroup(
+        const CollapsedEventGroup& group,
+        QString* playedKindsOut = nullptr,
+        TouchholdTransition* touchholdOut = nullptr);
     // Stable bass_status token for the action the mixer sync is armed for. A member
     // rather than a neighbour of retainedPlaybackModeLabel in
     // BassPreviewAudioBackendImpl.h because ScheduledMixerAction is private here.
@@ -256,8 +275,10 @@ private:
     // itself waiting on this mutex, an ABBA deadlock that presents as a frozen GUI thread
     // and is indistinguishable from the freezes this branch exists to diagnose.
     //
-    // Snapshot into locals, release, then format / write / call out. All three sites do
-    // this: handleMixerGroupSync, disarmSfxScheduler, logPlaybackStatus.
+    // Snapshot into locals, release, then format / write / call out. Four sites do this:
+    // handleMixerGroupSync, disarmSfxScheduler, logPlaybackStatus, and -- reached from
+    // handleMixerGroupSync via triggerGroup, which is why it was the easiest to miss --
+    // reconcileTouchholdVoice, whose row is deferred through TouchholdTransition.
     mutable QMutex schedulerMutex_;
     quint32 scheduledGroupSync_ = 0;
     int scheduledGroupIndex_ = -1;

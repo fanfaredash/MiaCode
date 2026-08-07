@@ -63,7 +63,10 @@ void BassPreviewAudioBackend::resetCursor(double second, bool includeCurrentSeco
 #endif
 }
 
-void BassPreviewAudioBackend::triggerGroup(const CollapsedEventGroup& group, QString* playedKindsOut)
+void BassPreviewAudioBackend::triggerGroup(
+    const CollapsedEventGroup& group,
+    QString* playedKindsOut,
+    TouchholdTransition* touchholdOut)
 {
     const auto record = [playedKindsOut](const QString& kind, double gain, bool started) {
         if (playedKindsOut == nullptr || !started) {
@@ -83,7 +86,12 @@ void BassPreviewAudioBackend::triggerGroup(const CollapsedEventGroup& group, QSt
             // clobber the next span's start at a seamless join, and let an older
             // span's stop kill a newer overlapping one), re-derive who should own
             // the voice at this instant and reconcile. Order-independent.
-            reconcileTouchholdVoice(event.second);
+            // touchholdOut is non-null exactly when the caller holds schedulerMutex_, which
+            // defers this transition's log line until after the unlock. If a group somehow
+            // produces two ownership changes, the slot keeps the last one -- reconcile
+            // leaves it untouched when nothing changed -- so the logged row always
+            // describes the voice state this group actually ended on.
+            reconcileTouchholdVoice(event.second, touchholdOut);
             continue;
         }
         record(event.kind, event.gain, playKindInternal(event.kind, event.gain));
@@ -391,6 +399,9 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
     SfxSchedulerArmFailure armFailure;
     QString dropReason;
     quint32 expectedSyncHandle = 0;
+    // Same deal as playedKinds: filled under the lock, logged after it. Touch-hold was the
+    // one sound source still writing its row from inside the critical section.
+    TouchholdTransition touchholdTransition;
 
     {
         QMutexLocker locker(&schedulerMutex_);
@@ -435,7 +446,10 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
                 playbackSession_.lastTriggeredGroupIndex = groupIndex;
                 playbackSession_.lastTriggeredGroupSecond = group.second;
                 ++playbackSession_.triggeredGroupCount;
-                triggerGroup(group, runtimeAudioDebugEnabled() ? &playedKinds : nullptr);
+                triggerGroup(
+                    group,
+                    runtimeAudioDebugEnabled() ? &playedKinds : nullptr,
+                    &touchholdTransition);
                 triggered = true;
                 triggeredGroupIndex = groupIndex;
                 triggeredGroupSecond = group.second;
@@ -471,6 +485,9 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
                 .arg(startedBackground ? 1 : 0)
                 .arg(playedKinds.isEmpty() ? QStringLiteral("(none)") : playedKinds));
     }
+    // After the trigger row, so a touch-hold ownership change reads as a consequence of
+    // the group that caused it. No-op unless the voice actually changed hands.
+    logTouchholdTransition(touchholdTransition);
     // Last, so the row order matches the order of events: this group fired, and then
     // re-arming for the next one failed and left the scheduler off.
     logSfxSchedulerArmFailure(armFailure);
@@ -479,7 +496,7 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
 #endif
 }
 
-void BassPreviewAudioBackend::reconcileTouchholdVoice(double second)
+void BassPreviewAudioBackend::reconcileTouchholdVoice(double second, TouchholdTransition* out)
 {
 #ifdef MIACODE_HAS_BASS_AUDIO
     if (touchholdSample_ == nullptr) {
@@ -492,28 +509,59 @@ void BassPreviewAudioBackend::reconcileTouchholdVoice(double second)
     }
     const int previousOwner = touchholdOwnerSpanIndex_;
     touchholdOwnerSpanIndex_ = owner;
+
+    TouchholdTransition transition;
+    transition.changed = true;
+    transition.owner = owner;
+    transition.previousOwner = previousOwner;
+    transition.second = second;
     if (owner < 0) {
         touchholdSample_->stop();
-        appendAudioDebugLog(
-            QString("bass_sfx_touchhold action=stop prev_owner=%1 second=%2")
-                .arg(previousOwner)
-                .arg(second, 0, 'f', 6));
+    } else {
+        const TouchholdSpan& span = preparedTimeline_.touchholdSpans[owner];
+        touchholdSample_->setCurrentSec(qMax(0.0, second - span.startSecond));
+        touchholdSample_->play();
+        transition.spanStartSecond = span.startSecond;
+    }
+    // Recorded for the caller when it holds schedulerMutex_, logged inline when it does
+    // not. The audio-thread route arrives here from triggerGroup() with that lock held, and
+    // this used to write the file underneath it -- the same defect as logPlaybackStatus,
+    // on the worse thread, and the one instance the branch audit's T-1 missed.
+    if (out != nullptr) {
+        *out = transition;
         return;
     }
-    const TouchholdSpan& span = preparedTimeline_.touchholdSpans[owner];
-    touchholdSample_->setCurrentSec(qMax(0.0, second - span.startSecond));
-    touchholdSample_->play();
-    // The third sound source with no log of its own. Only fires on an ownership
-    // change (the function returns above when the voice already belongs to the
-    // right span), so this stays rare even during dense touch-hold sections.
-    appendAudioDebugLog(
-        QString("bass_sfx_touchhold action=start owner=%1 prev_owner=%2 second=%3 span_start=%4")
-            .arg(owner)
-            .arg(previousOwner)
-            .arg(second, 0, 'f', 6)
-            .arg(span.startSecond, 0, 'f', 6));
+    logTouchholdTransition(transition);
 #else
     Q_UNUSED(second);
+    Q_UNUSED(out);
+#endif
+}
+
+void BassPreviewAudioBackend::logTouchholdTransition(const TouchholdTransition& transition) const
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    if (!transition.changed) {
+        return;
+    }
+    if (transition.owner < 0) {
+        appendAudioDebugLog(
+            QString("bass_sfx_touchhold action=stop prev_owner=%1 second=%2")
+                .arg(transition.previousOwner)
+                .arg(transition.second, 0, 'f', 6));
+        return;
+    }
+    // The third sound source with no log of its own. Only fires on an ownership
+    // change (reconcileTouchholdVoice returns early when the voice already belongs to
+    // the right span), so this stays rare even during dense touch-hold sections.
+    appendAudioDebugLog(
+        QString("bass_sfx_touchhold action=start owner=%1 prev_owner=%2 second=%3 span_start=%4")
+            .arg(transition.owner)
+            .arg(transition.previousOwner)
+            .arg(transition.second, 0, 'f', 6)
+            .arg(transition.spanStartSecond, 0, 'f', 6));
+#else
+    Q_UNUSED(transition);
 #endif
 }
 
