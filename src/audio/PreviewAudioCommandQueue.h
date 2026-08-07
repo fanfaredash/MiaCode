@@ -46,9 +46,9 @@ private:
     std::deque<Entry> high_;
     std::deque<Entry> ordered_;
     std::deque<Entry> auditions_;
+    std::deque<Entry> manualPauses_;
     std::optional<Entry> shutdown_;
     std::optional<Entry> devicePause_;
-    std::optional<Entry> manualPause_;
     std::optional<Entry> syncBackgroundTrack_;
     std::optional<Entry> drainEvents_;
     quint64 nextOrder_ = 1;

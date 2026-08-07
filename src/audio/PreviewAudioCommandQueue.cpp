@@ -92,10 +92,10 @@ EnqueueResult PreviewAudioCommandQueue::enqueue(PreviewAudioCommand command)
     }
 
     if (command.kind == CommandKind::ManualPause) {
-        if (manualPause_) {
-            return accepted(false, true);
+        if (qsizetype(manualPauses_.size()) >= kHighCapacity) {
+            return rejected(CommandError::QueueFull);
         }
-        manualPause_ = makeEntry(std::move(command));
+        manualPauses_.push_back(makeEntry(std::move(command)));
         return accepted();
     }
 
@@ -123,6 +123,9 @@ EnqueueResult PreviewAudioCommandQueue::enqueue(PreviewAudioCommand command)
             ? syncBackgroundTrack_
             : drainEvents_;
         if (slot) {
+            if (command.identity.generation < slot->command.identity.generation) {
+                return rejected(CommandError::Stale);
+            }
             slot->command = std::move(command);
             return accepted(true, false);
         }
@@ -157,8 +160,8 @@ std::optional<PreviewAudioCommand> PreviewAudioCommandQueue::takeHigh()
 
     Source source = Source::None;
     quint64 firstOrder = std::numeric_limits<quint64>::max();
-    const auto consider = [&source, &firstOrder](Source candidate, const std::optional<Entry>& entry) {
-        if (entry && entry->order < firstOrder) {
+    const auto consider = [&source, &firstOrder](Source candidate, const Entry* entry) {
+        if (entry != nullptr && entry->order < firstOrder) {
             source = candidate;
             firstOrder = entry->order;
         }
@@ -167,9 +170,9 @@ std::optional<PreviewAudioCommand> PreviewAudioCommandQueue::takeHigh()
         firstOrder = high_.front().order;
         source = Source::Ordinary;
     }
-    consider(Source::Shutdown, shutdown_);
-    consider(Source::DevicePause, devicePause_);
-    consider(Source::ManualPause, manualPause_);
+    consider(Source::Shutdown, shutdown_ ? &*shutdown_ : nullptr);
+    consider(Source::DevicePause, devicePause_ ? &*devicePause_ : nullptr);
+    consider(Source::ManualPause, manualPauses_.empty() ? nullptr : &manualPauses_.front());
 
     if (source == Source::None) {
         return std::nullopt;
@@ -188,9 +191,11 @@ std::optional<PreviewAudioCommand> PreviewAudioCommandQueue::takeHigh()
     case Source::DevicePause:
         selected = &devicePause_;
         break;
-    case Source::ManualPause:
-        selected = &manualPause_;
-        break;
+    case Source::ManualPause: {
+        PreviewAudioCommand command = std::move(manualPauses_.front().command);
+        manualPauses_.pop_front();
+        return command;
+    }
     case Source::None:
     case Source::Ordinary:
         break;
@@ -237,9 +242,9 @@ void PreviewAudioCommandQueue::invalidateBefore(quint64 generation)
     eraseStalePlayback(high_, generation);
     eraseStalePlayback(ordered_, generation);
     eraseStalePlayback(auditions_, generation);
+    eraseStalePlayback(manualPauses_, generation);
     resetStalePlayback(shutdown_, generation);
     resetStalePlayback(devicePause_, generation);
-    resetStalePlayback(manualPause_, generation);
     resetStalePlayback(syncBackgroundTrack_, generation);
     resetStalePlayback(drainEvents_, generation);
 }
@@ -250,9 +255,9 @@ bool PreviewAudioCommandQueue::containsPlaybackGeneration(quint64 generation) co
     return containerContainsPlaybackGeneration(high_, generation)
         || containerContainsPlaybackGeneration(ordered_, generation)
         || containerContainsPlaybackGeneration(auditions_, generation)
+        || containerContainsPlaybackGeneration(manualPauses_, generation)
         || optionalContainsPlaybackGeneration(shutdown_, generation)
         || optionalContainsPlaybackGeneration(devicePause_, generation)
-        || optionalContainsPlaybackGeneration(manualPause_, generation)
         || optionalContainsPlaybackGeneration(syncBackgroundTrack_, generation)
         || optionalContainsPlaybackGeneration(drainEvents_, generation);
 }
@@ -265,10 +270,9 @@ bool PreviewAudioCommandQueue::empty() const
 qsizetype PreviewAudioCommandQueue::size() const
 {
     std::lock_guard lock(mutex_);
-    return qsizetype(high_.size() + ordered_.size() + auditions_.size())
+    return qsizetype(high_.size() + ordered_.size() + auditions_.size() + manualPauses_.size())
         + (shutdown_ ? 1 : 0)
         + (devicePause_ ? 1 : 0)
-        + (manualPause_ ? 1 : 0)
         + (syncBackgroundTrack_ ? 1 : 0)
         + (drainEvents_ ? 1 : 0);
 }

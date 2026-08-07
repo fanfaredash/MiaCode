@@ -90,8 +90,14 @@ bool verifyCapacitiesAndReservedSlots(QTextStream& err)
     ok &= expect(firstPause.accepted, "reserved device pause accepted when ordinary high is full", err);
     ok &= expect(duplicatePause.accepted && duplicatePause.coalesced && !duplicatePause.replaced,
                  "duplicate device pause coalesces", err);
-    ok &= expect(high.enqueue(makeHigh(CommandKind::ManualPause, 5, 17)).accepted,
+    const auto firstManual = high.enqueue(
+        numbered(makeHigh(CommandKind::ManualPause, 5, 17), 90));
+    const auto secondManual = high.enqueue(
+        numbered(makeHigh(CommandKind::ManualPause, 6, 18), 91));
+    ok &= expect(firstManual.accepted,
                  "reserved manual pause accepted when ordinary high is full", err);
+    ok &= expect(secondManual.accepted && !secondManual.coalesced,
+                 "distinct reserved manual pause remains accepted", err);
 
     PreviewAudioCommand shutdown = makeHigh(CommandKind::Shutdown);
     shutdown.identity.sequence = 99;
@@ -103,6 +109,7 @@ bool verifyCapacitiesAndReservedSlots(QTextStream& err)
 
     bool foundDevicePause = false;
     bool foundShutdown = false;
+    QVector<quint64> manualSequences;
     while (const std::optional<PreviewAudioCommand> command = high.takeNext()) {
         if (command->kind == CommandKind::DeviceChangePause) {
             foundDevicePause = true;
@@ -113,9 +120,14 @@ bool verifyCapacitiesAndReservedSlots(QTextStream& err)
             foundShutdown = true;
             ok &= expect(command->identity.sequence == 99, "shutdown command is preserved", err);
         }
+        if (command->kind == CommandKind::ManualPause) {
+            manualSequences.append(command->identity.sequence);
+        }
     }
     ok &= expect(foundDevicePause, "reserved device pause can be taken", err);
     ok &= expect(foundShutdown, "reserved shutdown can be taken", err);
+    ok &= expect(manualSequences == QVector<quint64>({90, 91}),
+                 "distinct reserved manual pauses preserve FIFO", err);
 
     PreviewAudioCommandQueue ordered;
     for (qsizetype i = 0; i < PreviewAudioCommandQueue::kOrderedCapacity; ++i) {
@@ -171,6 +183,66 @@ bool verifyPriorityAndLatestReplacement(QTextStream& err)
     return ok;
 }
 
+bool verifyLatestGenerationOrdering(QTextStream& err)
+{
+    bool ok = true;
+
+    PreviewAudioCommandQueue syncSameGeneration;
+    syncSameGeneration.enqueue(makeLatest(CommandKind::SyncBackgroundTrack, 4, 1.0));
+    ok &= expect(syncSameGeneration.enqueue(
+                     makeLatest(CommandKind::SyncBackgroundTrack, 4, 2.0)).replaced,
+                 "same-generation sync replaces", err);
+    ok &= expect(syncSameGeneration.takeNext()->value == 2.0,
+                 "same-generation sync keeps newest value", err);
+
+    PreviewAudioCommandQueue syncNewerGeneration;
+    syncNewerGeneration.enqueue(makeLatest(CommandKind::SyncBackgroundTrack, 4, 1.0));
+    ok &= expect(syncNewerGeneration.enqueue(
+                     makeLatest(CommandKind::SyncBackgroundTrack, 5, 2.0)).replaced,
+                 "newer-generation sync replaces older generation", err);
+    const auto newerSync = syncNewerGeneration.takeNext();
+    ok &= expect(newerSync && newerSync->identity.generation == 5 && newerSync->value == 2.0,
+                 "newer-generation sync remains queued", err);
+
+    PreviewAudioCommandQueue syncOlderGeneration;
+    syncOlderGeneration.enqueue(makeLatest(CommandKind::SyncBackgroundTrack, 5, 2.0));
+    const auto staleSync = syncOlderGeneration.enqueue(
+        makeLatest(CommandKind::SyncBackgroundTrack, 4, 1.0));
+    ok &= expect(!staleSync.accepted && staleSync.error == CommandError::Stale,
+                 "older-generation sync is explicitly stale", err);
+    const auto retainedSync = syncOlderGeneration.takeNext();
+    ok &= expect(retainedSync && retainedSync->identity.generation == 5 && retainedSync->value == 2.0,
+                 "older sync cannot overwrite newer slot", err);
+
+    PreviewAudioCommandQueue drainSameGeneration;
+    drainSameGeneration.enqueue(makeLatest(CommandKind::DrainEvents, 4, 1.0));
+    ok &= expect(drainSameGeneration.enqueue(
+                     makeLatest(CommandKind::DrainEvents, 4, 2.0)).replaced,
+                 "same-generation drain replaces", err);
+    ok &= expect(drainSameGeneration.takeNext()->value == 2.0,
+                 "same-generation drain keeps newest value", err);
+
+    PreviewAudioCommandQueue drainNewerGeneration;
+    drainNewerGeneration.enqueue(makeLatest(CommandKind::DrainEvents, 4, 1.0));
+    ok &= expect(drainNewerGeneration.enqueue(
+                     makeLatest(CommandKind::DrainEvents, 5, 2.0)).replaced,
+                 "newer-generation drain replaces older generation", err);
+    const auto newerDrain = drainNewerGeneration.takeNext();
+    ok &= expect(newerDrain && newerDrain->identity.generation == 5 && newerDrain->value == 2.0,
+                 "newer-generation drain remains queued", err);
+
+    PreviewAudioCommandQueue drainOlderGeneration;
+    drainOlderGeneration.enqueue(makeLatest(CommandKind::DrainEvents, 5, 2.0));
+    const auto staleDrain = drainOlderGeneration.enqueue(
+        makeLatest(CommandKind::DrainEvents, 4, 1.0));
+    ok &= expect(!staleDrain.accepted && staleDrain.error == CommandError::Stale,
+                 "older-generation drain is explicitly stale", err);
+    const auto retainedDrain = drainOlderGeneration.takeNext();
+    ok &= expect(retainedDrain && retainedDrain->identity.generation == 5 && retainedDrain->value == 2.0,
+                 "older drain cannot overwrite newer slot", err);
+    return ok;
+}
+
 bool verifyPlaybackInvalidation(QTextStream& err)
 {
     bool ok = true;
@@ -222,6 +294,7 @@ int main()
     ok &= verifyFifoWithinClasses(err);
     ok &= verifyCapacitiesAndReservedSlots(err);
     ok &= verifyPriorityAndLatestReplacement(err);
+    ok &= verifyLatestGenerationOrdering(err);
     ok &= verifyPlaybackInvalidation(err);
     if (ok) {
         out << "preview_audio_command_queue_spec ok" << Qt::endl;
