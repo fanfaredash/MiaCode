@@ -33,6 +33,64 @@ inline Trigger classify(
     return Trigger::None;
 }
 
+// ---- sub-hang GUI stall episodes ------------------------------------------------
+//
+// `classify()` only fires at `idleHeartbeatHangMs` (5 s), or at `activePhaseHangMs` (2 s)
+// while an explicitly marked phase is open. Ordinary playback marks no phase, so a GUI
+// thread that stops servicing its 250 ms heartbeat for two, three, four seconds produces
+// ZERO watchdog rows. That is not hypothetical: a user capture taken to investigate exactly
+// this symptom contained a 2.075 s and a 4.683 s GUI stall -- both plainly visible as a
+// hole in every other channel, and as a collapse to 10 fps in the render thread's own
+// stats -- with not one `ui/hang_watchdog` line between them. Every stall in that capture
+// sat in the dead band between 2 s and 5 s.
+//
+// A stall episode is therefore reported separately from a hang:
+//   * it opens as soon as the heartbeat is `stallThresholdMs` stale, so the fact survives
+//     a process kill that happens before the GUI thread ever comes back,
+//   * it closes when the heartbeat moves again, carrying the measured duration,
+//   * it is Info, not Fatal, and never carries a stack.
+// The hang path keeps its Fatal rows, its 5 s repeat cadence and its stack budget
+// untouched -- this adds an observation, it does not re-tune a threshold.
+enum class StallTransition {
+    None,   // nothing to report on this poll
+    Began,  // the heartbeat just went stale past the threshold
+    Ended,  // the GUI thread came back; the episode's duration is now known
+};
+
+// Total and edge-triggered: `stallOpen` is the caller's memory of the previous poll, so
+// each episode yields exactly one Began and at most one Ended. An unarmed heartbeat counts
+// as not stalled -- it carries no age worth attributing -- which also closes an episode
+// left open across a rearm. The caller drops the baseline in that case rather than
+// reporting a duration measured against a timestamp that no longer means anything.
+inline StallTransition classifyHeartbeatStall(
+    bool heartbeatArmed,
+    qint64 heartbeatAgeMs,
+    qint64 stallThresholdMs,
+    bool stallOpen)
+{
+    const bool stalled = heartbeatArmed && heartbeatAgeMs >= stallThresholdMs;
+    if (stalled && !stallOpen) {
+        return StallTransition::Began;
+    }
+    if (!stalled && stallOpen) {
+        return StallTransition::Ended;
+    }
+    return StallTransition::None;
+}
+
+inline const char* stallTransitionName(StallTransition transition)
+{
+    switch (transition) {
+    case StallTransition::Began:
+        return "began";
+    case StallTransition::Ended:
+        return "ended";
+    case StallTransition::None:
+    default:
+        return "none";
+    }
+}
+
 inline bool shouldReport(
     Trigger trigger,
     quint64 phaseGeneration,

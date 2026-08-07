@@ -71,6 +71,53 @@ int main()
                       Trigger::None, 3, 0, 5000),
                   QStringLiteral("no trigger never reports"), err);
 
+    // ---- sub-hang stall episodes -------------------------------------------------
+    // The gap this closes: with a 2 s active-phase and a 5 s idle threshold, an unmarked
+    // GUI stall between those two values is invisible to classify(). Both stalls in the
+    // capture that motivated this (2075 ms and 4683 ms) land in that band, so pin the band
+    // explicitly -- a future threshold edit that reopens the hole must fail here.
+    using policy::StallTransition;
+    ok &= require(policy::classify(false, 0, true, 2075, 2000, 5000) == Trigger::None,
+                  QStringLiteral("2075 ms unmarked stall is not a hang"), err);
+    ok &= require(policy::classify(false, 0, true, 4683, 2000, 5000) == Trigger::None,
+                  QStringLiteral("4683 ms unmarked stall is not a hang"), err);
+    ok &= require(
+        policy::classifyHeartbeatStall(true, 2075, 1000, false) == StallTransition::Began,
+        QStringLiteral("2075 ms unmarked stall opens a stall episode"), err);
+    ok &= require(
+        policy::classifyHeartbeatStall(true, 4683, 1000, false) == StallTransition::Began,
+        QStringLiteral("4683 ms unmarked stall opens a stall episode"), err);
+
+    ok &= require(policy::classifyHeartbeatStall(true, 999, 1000, false) == StallTransition::None,
+                  QStringLiteral("below threshold with no episode open reports nothing"), err);
+    ok &= require(policy::classifyHeartbeatStall(true, 1000, 1000, false) == StallTransition::Began,
+                  QStringLiteral("threshold is inclusive"), err);
+    ok &= require(policy::classifyHeartbeatStall(true, 30000, 1000, true) == StallTransition::None,
+                  QStringLiteral("an open episode does not re-report while still stalled"), err);
+    ok &= require(policy::classifyHeartbeatStall(true, 0, 1000, true) == StallTransition::Ended,
+                  QStringLiteral("heartbeat resuming closes the episode"), err);
+    ok &= require(policy::classifyHeartbeatStall(true, 999, 1000, true) == StallTransition::Ended,
+                  QStringLiteral("dropping below threshold closes the episode"), err);
+    // An unarmed heartbeat has no age worth attributing: it must never open an episode,
+    // and it closes one left open across a rearm so the flag cannot wedge on.
+    ok &= require(
+        policy::classifyHeartbeatStall(false, 600000, 1000, false) == StallTransition::None,
+        QStringLiteral("unarmed heartbeat never opens an episode"), err);
+    ok &= require(
+        policy::classifyHeartbeatStall(false, 600000, 1000, true) == StallTransition::Ended,
+        QStringLiteral("unarmed heartbeat closes an open episode"), err);
+
+    // Tokens are greppable contract, same as the stack-capture decisions above.
+    ok &= require(QLatin1String(policy::stallTransitionName(StallTransition::Began))
+                      == QLatin1String("began"),
+                  QStringLiteral("stall began token"), err);
+    ok &= require(QLatin1String(policy::stallTransitionName(StallTransition::Ended))
+                      == QLatin1String("ended"),
+                  QStringLiteral("stall ended token"), err);
+    ok &= require(QLatin1String(policy::stallTransitionName(StallTransition::None))
+                      == QLatin1String("none"),
+                  QStringLiteral("stall none token"), err);
+
     // ---- stack capture decision -------------------------------------------------
     // A hang report that arrives without a stack must say why. These five decisions are
     // the complete set of answers, and each maps to a token an operator greps for in the

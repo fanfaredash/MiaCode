@@ -41,6 +41,13 @@ qint64 idleHeartbeatHangMs()
 constexpr qint64 kStackCaptureIntervalMs = 30000;
 constexpr int kMaxStackCapturesPerSession = 16;
 
+// Sub-hang stall episodes — see policy::classifyHeartbeatStall for why this exists at all.
+// 1 s is four missed 250 ms heartbeats and two monitor polls: comfortably outside normal
+// scheduling jitter, and far enough below the 2 s active-phase threshold to cover the band
+// that produced no rows at all. Deliberately a constant and not an env flag: this is the
+// floor of what the log should always have said, not a knob worth a capture-time decision.
+constexpr qint64 kHeartbeatStallMs = 1000;
+
 struct PhaseState {
     bool active = false;
     QString phase;
@@ -119,6 +126,42 @@ void appendWatchdogReport(
         miacode::debug_log::Level::Fatal);
 }
 
+// One row per sub-hang stall episode edge. Info, not Fatal: a 1–5 s stall is a
+// responsiveness fact, not the crash-adjacent evidence the gui_thread_stale path carries,
+// and forcing every one of these through the synchronous flush would itself add GUI-thread
+// latency on a machine that is already struggling. `began` still goes out immediately
+// rather than being held until recovery, so a process killed mid-stall leaves the fact
+// behind; `ended` is the row that carries the measured duration.
+//
+// The duration is the gap between two GUI-thread heartbeat timestamps, not between two
+// monitor polls, so it measures how long the GUI thread actually went unserviced rather
+// than the 500 ms-quantised window in which the watchdog noticed.
+void appendStallReport(
+    policy::StallTransition transition,
+    qint64 heartbeatAgeMs,
+    qint64 stallDurationMs,
+    const PhaseState& phase,
+    int episodeIndex)
+{
+    QString payload =
+        QStringLiteral("action=gui_thread_stall edge=%1 episode=%2 threshold_ms=%3 "
+                       "heartbeat_age_ms=%4 phase_active=%5 phase=%6")
+            .arg(QString::fromLatin1(policy::stallTransitionName(transition)))
+            .arg(episodeIndex)
+            .arg(kHeartbeatStallMs)
+            .arg(heartbeatAgeMs)
+            .arg(phase.active ? 1 : 0)
+            .arg(phase.phase.isEmpty() ? QStringLiteral("(none)") : phase.phase);
+    if (transition == policy::StallTransition::Ended) {
+        payload += QStringLiteral(" stall_ms=%1").arg(stallDurationMs);
+    }
+    payload += logWriterStatsPayload();
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("ui/hang_watchdog"),
+        payload);
+}
+
 // Suspend the GUI thread, walk it, resume it, then log the frames. Runs on the watchdog
 // thread only, immediately after a hang report, and only within the budget granted by
 // policy::shouldCaptureStack.
@@ -146,7 +189,7 @@ policy::StackCaptureOutcome appendGuiThreadStackReport(
     QString header =
         QStringLiteral("action=gui_thread_stack trigger=%1 heartbeat_age_ms=%2 capture_index=%3 "
                        "capture=%4 supported=%5 captured=%6 frame_count=%7 suspended_us=%8 "
-                       "sym_ready=%9")
+                       "sym_ready=%9 sym_invaded=%10")
             .arg(QString::fromLatin1(policy::triggerName(trigger)))
             .arg(heartbeatAgeMs)
             .arg(captureIndex)
@@ -155,7 +198,8 @@ policy::StackCaptureOutcome appendGuiThreadStackReport(
             .arg(stack.captured ? 1 : 0)
             .arg(stack.frameCount)
             .arg(stack.suspendedUs)
-            .arg(symbols.ready ? 1 : 0);
+            .arg(symbols.ready ? 1 : 0)
+            .arg(symbols.invadedProcess ? 1 : 0);
     if (!stack.skipReason.isEmpty()) {
         header += QStringLiteral(" reason=%1").arg(stack.skipReason);
     }
@@ -198,10 +242,13 @@ void watchdogLoop()
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("ui/hang_watchdog"),
-        QStringLiteral("action=stack_symbols sym_attempted=%1 sym_ready=%2 sym_err=%3")
+        QStringLiteral("action=stack_symbols sym_attempted=%1 sym_ready=%2 sym_err=%3 "
+                       "sym_invaded=%4 sym_invade_err=%5")
             .arg(symbols.attempted ? 1 : 0)
             .arg(symbols.ready ? 1 : 0)
-            .arg(symbols.lastErrorCode));
+            .arg(symbols.lastErrorCode)
+            .arg(symbols.invadedProcess ? 1 : 0)
+            .arg(symbols.invadeErrorCode));
 
     // Sampled once, not per loop: an env lookup every 500 ms is waste, and a threshold
     // that changed mid-session would make a capture impossible to interpret.
@@ -215,6 +262,9 @@ void watchdogLoop()
     int stackCaptureCount = 0;
     bool stackCaptureSessionEnabled = true;
     qint64 previousMonitorWakeMs = steadyMs();
+    bool stallOpen = false;
+    qint64 stallBaselineHeartbeatMs = 0;
+    int stallEpisodeCount = 0;
     while (!g_stop.load(std::memory_order_acquire)) {
         std::this_thread::sleep_for(std::chrono::milliseconds(kMonitorLoopIntervalMs));
         if (!g_enabled.load(std::memory_order_acquire)) {
@@ -239,6 +289,11 @@ void watchdogLoop()
             reportedTrigger = policy::Trigger::None;
             reportedGeneration = 0;
             reportedAtMs = 0;
+            // Drop any open stall episode WITHOUT reporting an end: its baseline was taken
+            // against a heartbeat timeline that the rearm above has just discarded, so the
+            // only duration we could print would be the machine's sleep, not a GUI stall.
+            stallOpen = false;
+            stallBaselineHeartbeatMs = 0;
             continue;
         }
         const qint64 lastHeartbeat = g_lastHeartbeatMs.load(std::memory_order_acquire);
@@ -247,6 +302,33 @@ void watchdogLoop()
             ? qMax<qint64>(0, now - lastHeartbeat)
             : 0;
         const PhaseState phase = snapshotPhase();
+        // Runs before the hang classification and independently of it: a stall episode is
+        // an observation about the heartbeat alone, and the two must not be able to
+        // suppress each other. A stall that goes on to become a hang produces both.
+        switch (policy::classifyHeartbeatStall(
+            heartbeatArmed, heartbeatAge, kHeartbeatStallMs, stallOpen)) {
+        case policy::StallTransition::Began:
+            stallOpen = true;
+            stallBaselineHeartbeatMs = lastHeartbeat;
+            appendStallReport(
+                policy::StallTransition::Began, heartbeatAge, 0, phase, stallEpisodeCount);
+            break;
+        case policy::StallTransition::Ended: {
+            // Both timestamps are written by the GUI thread itself, so their difference is
+            // the time it spent not running its own timer — the number the reader wants.
+            const qint64 stallMs = stallBaselineHeartbeatMs > 0 && lastHeartbeat > 0
+                ? qMax<qint64>(0, lastHeartbeat - stallBaselineHeartbeatMs)
+                : 0;
+            appendStallReport(
+                policy::StallTransition::Ended, heartbeatAge, stallMs, phase, stallEpisodeCount);
+            ++stallEpisodeCount;
+            stallOpen = false;
+            stallBaselineHeartbeatMs = 0;
+            break;
+        }
+        case policy::StallTransition::None:
+            break;
+        }
         const qint64 activeMs = phase.active
             ? qMax<qint64>(0, now - phase.startMs)
             : 0;
