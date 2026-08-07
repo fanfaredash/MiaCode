@@ -1087,8 +1087,12 @@ bool appendText(Channel channel, const QString& text, bool force, Level level)
             return writeDurableFallbackLine(bytes);
         }
         bool written = false;
+        int openError = 0;
+        QString openErrorText;
+        QString attemptedPath;
         {
             const QString path = logPath(channel);
+            attemptedPath = path;
             ensureParentDirectory(path);
             QFile file(path);
             if (file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
@@ -1096,10 +1100,37 @@ bool appendText(Channel channel, const QString& text, bool force, Level level)
                 file.flush();
                 file.close();
                 written = true;
+            } else {
+                openError = static_cast<int>(file.error());
+                openErrorText = file.errorString();
             }
         }
         mutex.unlock();
-        return written;
+        if (written) {
+            return true;
+        }
+        // The durable path used to end here, returning false into a caller that does not
+        // check it -- so a fatal-grade line whose open() failed vanished without a trace.
+        // That is not theoretical: across five captures the hang watchdog generated its
+        // report (proven by action=report_gate will_report=1, and by reportedAtMs advancing
+        // past appendWatchdogReport) and not one gui_thread_stale row ever reached disk,
+        // with the lock never timing out, no rotation, and the same path working for other
+        // writers. A silently failed open is the only branch left that behaves like that.
+        //
+        // Two changes, both about never losing these bytes again: the line goes to the
+        // per-process fallback file, and the reason goes to the startup beacon -- which is
+        // the established escape hatch in this file for a failure the log system itself
+        // cannot report (see resetLogFiles), and which cannot recurse back into here.
+        {
+            const QByteArray reason = openErrorText.toUtf8();
+            const QByteArray pathUtf8 = attemptedPath.toUtf8();
+            char buf[1024];
+            std::snprintf(buf, sizeof(buf),
+                          "durable/open_failed err=%d path=%.320s msg=%.320s",
+                          openError, pathUtf8.constData(), reason.constData());
+            miacode::oplog::appendStartupBeaconLine(buf);
+        }
+        return writeDurableFallbackLine(bytes);
     }
     AsyncLogWriter::instance().enqueue(channel, std::move(bytes));
     return true;
