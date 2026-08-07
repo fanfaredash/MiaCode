@@ -204,9 +204,8 @@ bool verifyDCompCascade(QTextStream& err)
     const char* kExclusive = "MIACODE_PREVIEW_DCOMP_EXCLUSIVE";
     const char* kPerPixel = "MIACODE_PREVIEW_DCOMP_PER_PIXEL_ALPHA";
     const char* kTopLevel = "MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND";
-    const char* kTimeline = "MIACODE_TIMELINE_USE_DCOMP";
     const char* kQuiesce = "MIACODE_PREVIEW_DCOMP_QUIESCE_QSG";
-    for (const char* k : {kUse, kExclusive, kPerPixel, kTopLevel, kTimeline, kQuiesce}) {
+    for (const char* k : {kUse, kExclusive, kPerPixel, kTopLevel, kQuiesce}) {
         unsetEnv(k);
     }
 
@@ -216,14 +215,12 @@ bool verifyDCompCascade(QTextStream& err)
     setEnv(kExclusive, "1");
     setEnv(kPerPixel, "1");
     setEnv(kTopLevel, "1");
-    setEnv(kTimeline, "1");
     setEnv(kQuiesce, "1");
     ok &= require(!dbg::previewDCompExclusiveEnabled(), "exclusive false when parent off", err);
     ok &= require(!dbg::previewDCompPerPixelAlphaEnabled(), "per-pixel-alpha false when parent off", err);
     ok &= require(!dbg::previewDCompTopLevelHwndEnabled(), "top-level-hwnd false when parent off", err);
-    ok &= require(!dbg::previewTimelineUseDCompEnabled(), "timeline DComp false when parent off", err);
     ok &= require(!dbg::previewDCompQuiesceQsgEnabled(), "quiesce-qsg false when parent off", err);
-    for (const char* k : {kExclusive, kPerPixel, kTopLevel, kTimeline, kQuiesce}) {
+    for (const char* k : {kExclusive, kPerPixel, kTopLevel, kQuiesce}) {
         unsetEnv(k);
     }
 
@@ -233,7 +230,6 @@ bool verifyDCompCascade(QTextStream& err)
     ok &= require(dbg::previewDCompTopLevelHwndEnabled(), "top-level-hwnd defaults on under DComp", err);
     ok &= require(dbg::previewDCompPerPixelAlphaEnabled(), "per-pixel-alpha defaults on under DComp", err);
     ok &= require(dbg::previewDCompExclusiveEnabled(), "exclusive auto-on via per-pixel-alpha default", err);
-    ok &= require(!dbg::previewTimelineUseDCompEnabled(), "timeline DComp defaults off under DComp", err);
 
     setEnv(kPerPixel, "0");
     ok &= require(!dbg::previewDCompExclusiveEnabled(), "exclusive off when per-pixel off + not forced", err);
@@ -241,10 +237,8 @@ bool verifyDCompCascade(QTextStream& err)
     ok &= require(dbg::previewDCompExclusiveEnabled(), "exclusive on when explicitly forced", err);
     setEnv(kTopLevel, "0");
     ok &= require(!dbg::previewDCompTopLevelHwndEnabled(), "top-level-hwnd respects explicit off", err);
-    setEnv(kTimeline, "1");
-    ok &= require(dbg::previewTimelineUseDCompEnabled(), "timeline DComp on when set under DComp", err);
 
-    for (const char* k : {kUse, kExclusive, kPerPixel, kTopLevel, kTimeline, kQuiesce}) {
+    for (const char* k : {kUse, kExclusive, kPerPixel, kTopLevel, kQuiesce}) {
         unsetEnv(k);
     }
     return ok;

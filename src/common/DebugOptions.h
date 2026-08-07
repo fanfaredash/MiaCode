@@ -498,35 +498,6 @@ inline bool previewDCompPerPixelAlphaEnabled()
     return override.value_or(true);
 }
 
-inline bool previewTimelineUseDCompEnabled()
-{
-    // Phase 3c of the v2-refactor — DComp pipeline for the timeline
-    // pane. When on, TimelineQuickItem's updatePaintNode returns null
-    // (skipping the QSG path) and pushes scene-state to a sibling
-    // TimelineRenderView that owns its own top-level popup HWND and
-    // composites the timeline via DirectComposition. When off, the
-    // QSG paint node renders the timeline through Qt Quick's normal
-    // scene graph.
-    //
-    // Default OFF as of beta34: the embedded QSG-only path is the
-    // startup baseline while the worker/HWND topology remains available
-    // as an explicit diagnostic launcher / env override.
-    //
-    // Set `MIACODE_TIMELINE_USE_DCOMP=1` to opt into the HWND timeline
-    // path — useful for performance comparison or DComp/HWND triage.
-    //
-    // Auto-disabled on Apple Silicon Windows VMs alongside the chart
-    // preview's DComp path, via the previewUseDCompEnabled cascade.
-    // On those VMs the QSG path is the only working option regardless
-    // of this default.
-    if (!previewUseDCompEnabled()) {
-        return false;
-    }
-    const std::optional<bool> override = envOptionalFlagValue(
-        "MIACODE_TIMELINE_USE_DCOMP");
-    return override.value_or(false);
-}
-
 inline bool previewQsgFullDisableEnabled()
 {
     // Diagnostic / fallback mode: disable Qt Quick's native (GPU) rendering

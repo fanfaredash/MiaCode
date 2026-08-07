@@ -588,12 +588,6 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             0.0, state.timelineTop - 1.0,
             state.timelineLeft + 1.0, state.timelineHeight + 2.0);
         state.frameRects.append(TimelineSceneRect{sidebarRect, opaqueSidebar});
-        // Phase 4d-fix — same rect, published as a separate field so
-        // TimelineHeaderSource can re-emit it AFTER notes/sprites at
-        // z=3. This masks any chart-content that scrolls into the
-        // lane-label column (e.g. slide-trace arrows extending toward
-        // the off-screen-left edge).
-        state.sidebarMaskRect = TimelineSceneRect{sidebarRect, opaqueSidebar};
     }
     state.frameLines.append(TimelineSceneLine{
         QPointF(0.0, state.timelineTop - 1.0),

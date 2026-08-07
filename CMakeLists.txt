@@ -547,24 +547,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/sources/chart/MaimuriDxJudgeSource.cpp
     src/sources/chart/HudSource.h
     src/sources/chart/HudSource.cpp
-    src/sources/timeline/TimelineGridSource.h
-    src/sources/timeline/TimelineGridSource.cpp
-    src/sources/timeline/TimelineGridLinesSource.h
-    src/sources/timeline/TimelineGridLinesSource.cpp
-    src/sources/timeline/TimelineLaneOverlaySource.h
-    src/sources/timeline/TimelineLaneOverlaySource.cpp
-    src/sources/timeline/TimelineWaveformSource.h
-    src/sources/timeline/TimelineWaveformSource.cpp
-    src/sources/timeline/TimelineNotesSource.h
-    src/sources/timeline/TimelineNotesSource.cpp
-    src/sources/timeline/TimelineHeaderSource.h
-    src/sources/timeline/TimelineHeaderSource.cpp
-    src/sources/timeline/TimelineOverlaySource.h
-    src/sources/timeline/TimelineOverlaySource.cpp
-    src/sources/timeline/TimelineLabelCache.h
-    src/sources/timeline/TimelineLabelCache.cpp
-    src/sources/timeline/TimelineSpriteAssetCache.h
-    src/sources/timeline/TimelineSpriteAssetCache.cpp
     src/audio/PreviewAudioBackend.h
     src/audio/PreviewAudioSettings.h
     src/audio/PreviewAudioSettings.cpp
@@ -784,8 +766,6 @@ if (WIN32)
     target_sources(MiaCode PRIVATE
         src/render/backend_d3d11/PreviewDCompCore.h
         src/render/backend_d3d11/PreviewDCompCore.cpp
-        src/render/backend_d3d11/TimelineRenderView.h
-        src/render/backend_d3d11/TimelineRenderView.cpp
         src/render/backend_d3d11/PreviewDCompFrameStateSnapshot.h
         src/render/PreviewDCompRenderer.h
         src/render/PreviewDCompRenderer.cpp

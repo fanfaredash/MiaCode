@@ -138,18 +138,16 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
         for (const auto& rect : state.laneOverlayRects) {
             staticRoot->appendChildNode(buildTimelineRectNode(rect));
         }
-        // Header control (zoom button). Mirrors the
-        // DComp TimelineHeaderSource rendering at lines 146-220 of
-        // src/sources/timeline/TimelineHeaderSource.cpp. Lives in
-        // staticRoot (no horizontal-scroll transform) because the
-        // controls are screen-space — pinned to viewport corners,
-        // independent of timeline scroll position.
+        // Header control (zoom button). Lives in staticRoot (no
+        // horizontal-scroll transform) because the controls are
+        // screen-space — pinned to viewport corners, independent of
+        // timeline scroll position.
         //
-        // Without this block the zoom% button is missing from the QSG
-        // render path; it exists as data on TimelineSceneState but
-        // only the DComp path was emitting it as visible pixels.
+        // Without this block the zoom% button is missing entirely: it
+        // exists as data on TimelineSceneState but nothing would emit
+        // it as visible pixels.
         if (state.hasHeaderControls) {
-            // Order matters — same as the DComp source path:
+            // Order matters:
             //   1. zoomButtonBg (covers widget area)
             //   2. zoom button border (4 hairlines)
             //   3. zoom text label (via texture cache)

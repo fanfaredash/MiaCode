@@ -70,8 +70,7 @@ QSizeF rotatedSpriteLogicalSize(const QSize& baseSize, qreal rotationDegrees)
     return QTransform().rotate(rotationDegrees).mapRect(rect).size();
 }
 
-// Physical-pixel snap, mirroring the new pipeline's Phase 4d-fix4 fix
-// (see TimelineNotesSource.cpp). At fractional DPR (1.25 / 1.5 / 1.75)
+// Physical-pixel snap (Phase 4d-fix4). At fractional DPR (1.25 / 1.5 / 1.75)
 // integer-logical centres still produce non-integer physical-pixel
 // corners, which the GPU rasteriser bilinear-smears. Snapping the
 // CENTRE to the physical-pixel grid keeps texel→pixel mapping 1:1.

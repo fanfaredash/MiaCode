@@ -38,9 +38,6 @@
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "timeline/quick/TimelineQuickTextureCache.h"
 #include "timeline/quick/TimelineQuickWaveformLayer.h"
-#ifdef Q_OS_WIN
-#include "render/backend_d3d11/TimelineRenderView.h"
-#endif
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
@@ -821,13 +818,6 @@ TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
     heldHorizontalKeyScrollTimer_.setInterval(kTimelineKeyHoldTickIntervalMs);
     connect(&heldHorizontalKeyScrollTimer_, &QTimer::timeout, this, &TimelineQuickItem::applyHeldHorizontalKeyScrollTick);
 
-    // Phase 3c — DComp tracker placeholder. The TimelineRenderView's
-    // tryDiscoverTrackedItem looks up by this objectName via
-    // QObject::findChild on the QQuickWindow.  Even when the env flag
-    // is off (no view created) we still set the name so a later
-    // toggle-on Just Works. Same pattern as PreviewQuickSceneRoot's
-    // preview_dcomp_track_target.
-    setObjectName(QStringLiteral("timeline_dcomp_track_target"));
     // Phase 3e-diag — force-log every TimelineQuickItem construction so
     // we can identify if QML is creating multiple instances (which
     // would explain the two-popup symptom in the user's log).
@@ -842,32 +832,6 @@ TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
                 .arg(reinterpret_cast<quintptr>(this), 0, 16),
             /*force=*/true);
     }
-    if (miacode::debug_options::previewTimelineUseDCompEnabled()) {
-#ifdef Q_OS_WIN
-        dcompView_ = std::make_unique<miacode::preview::dcomp::TimelineRenderView>(this);
-        // Attach to the host window once we're parented into a scene,
-        // and tell the view we ARE its tracked item — bypassing the
-        // findChild-by-objectName dance, which fails in the
-        // sceneGraphInitialized → onWindowGeometryChanged path because
-        // the QQuickItem is constructed lazily by QML and isn't in
-        // the window's child tree at the right moment. The popup
-        // would otherwise stay sized to the full QQuickWindow client
-        // area, drawing timeline rects/lines at the window's top-left
-        // instead of inside the timeline pane.
-        dcompWindowConnection_ = connect(
-            this, &QQuickItem::windowChanged, this,
-            [this](QQuickWindow* w) {
-                if (dcompView_ != nullptr) {
-                    dcompView_->attachToWindow(w);
-                    dcompView_->setTrackedQuickItem(this);
-                }
-            });
-        if (window() != nullptr) {
-            dcompView_->attachToWindow(window());
-            dcompView_->setTrackedQuickItem(this);
-        }
-#endif
-    }
 }
 
 TimelineQuickItem::~TimelineQuickItem()
@@ -878,14 +842,6 @@ TimelineQuickItem::~TimelineQuickItem()
         QStringLiteral("action=destruct ptr=0x%1")
             .arg(reinterpret_cast<quintptr>(this), 0, 16),
         /*force=*/true);
-#ifdef Q_OS_WIN
-    if (dcompWindowConnection_) {
-        QObject::disconnect(dcompWindowConnection_);
-        dcompWindowConnection_ = QMetaObject::Connection();
-    }
-#endif
-    // dcompView_'s unique_ptr destructor handles renderer.stop() +
-    // core.shutdown() ordering through TimelineRenderView::~TimelineRenderView.
 }
 
 TimelineQuickStateBridge* TimelineQuickItem::stateBridge() const
@@ -1216,21 +1172,6 @@ void TimelineQuickItem::syncSourceState()
         updateReadyState(false);
     }
     update();
-    // Phase 3c — also push the latest state to the DComp render view.
-    // syncSourceState fires on every renderStateChanged from the bridge,
-    // so this is the natural hook for keeping the render view in sync.
-    // No-op when the env flag is off (dcompView_ stays nullptr).
-    pushSceneStateToDComp();
-}
-
-void TimelineQuickItem::pushSceneStateToDComp()
-{
-#ifdef Q_OS_WIN
-    if (dcompView_ == nullptr) {
-        return;
-    }
-    dcompView_->setSceneState(currentSceneState());
-#endif
 }
 
 void TimelineQuickItem::updateReadyState(bool ready)
@@ -1342,8 +1283,8 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.showSlideTracks = stateBridge_->showSlideTracks();
     request.playheadIndicatorSuppressed = stateBridge_->playheadIndicatorSuppressed();
     request.dragActive = dragActive_;
-    // Phase 9d-native — header-control state for native rendering of
-    // the zoom button in the DComp pipeline.
+    // Phase 9d-native — header-control state for the zoom button,
+    // emitted by the builder and drawn by TimelineQuickHeaderLayer.
     request.zoomControlPressedPart = zoomControlPressedPart_;
     request.zoomControlHoveredPart = zoomControlHoveredPart_;
     request.settingsControlHovered = settingsControlHovered_;
@@ -1460,34 +1401,6 @@ void TimelineQuickItem::stopHeldHorizontalKeyScroll(int key)
 QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data)
 {
     Q_UNUSED(data);
-
-    // Phase 3e — when DComp-exclusive mode is on for the timeline, the
-    // TimelineRenderView is the authoritative timeline renderer. This
-    // QSG path produces nothing: discard any existing scene-graph
-    // subtree and return null so Qt skips this layer entirely. The
-    // QQuickItem itself stays alive (so DComp's tracked-item geometry
-    // tracking still works), but its bounding rect contributes no
-    // pixels to the QSG scene.
-    //
-    // Mirrors PreviewQuickSceneRoot::updatePaintNode's gate at line
-    // 526 (`previewDCompExclusiveEnabled`) — same pattern, same
-    // behaviour. Without this gate, both the QSG layers and the DComp
-    // pipeline would render the same timeline content into different
-    // surfaces, producing the "two timelines" symptom the user
-    // observed (one rendered by QML+QSG, one by DComp; whichever DWM
-    // composites on top wins visually, with the other showing through
-    // transparent regions).
-    if (miacode::debug_options::previewTimelineUseDCompEnabled()) {
-#ifdef Q_OS_WIN
-        if (oldNode != nullptr) {
-            delete oldNode;
-        }
-        updateReadyState(true);
-        // Still push state to DComp side as before.
-        pushSceneStateToDComp();
-        return nullptr;
-#endif
-    }
 
     QElapsedTimer paintNodeTimer;
     paintNodeTimer.start();
