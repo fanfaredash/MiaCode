@@ -10,6 +10,9 @@
 #ifdef Q_OS_WIN
 #include <mmdeviceapi.h>
 #include <objbase.h>
+
+#include <atomic>
+#include <mutex>
 #endif
 
 namespace {
@@ -55,18 +58,44 @@ public:
         return E_NOINTERFACE;
     }
 
+    // Atomic because this object exists specifically to be called from another thread: the
+    // Windows audio service invokes IMMNotificationClient on its own MTA thread, and it
+    // AddRef/Releases across that boundary. A plain ULONG here is a torn refcount away from
+    // either a leak or a double free, and the failure would land on the device-switch path
+    // that is already the hardest one to reproduce.
     ULONG STDMETHODCALLTYPE AddRef() override
     {
-        return ++references_;
+        return references_.fetch_add(1, std::memory_order_relaxed) + 1;
     }
 
     ULONG STDMETHODCALLTYPE Release() override
     {
-        const ULONG references = --references_;
+        // acq_rel so the decrement that reaches zero happens-after every other thread's
+        // use of this object, which is what makes the delete below safe.
+        const ULONG references = references_.fetch_sub(1, std::memory_order_acq_rel) - 1;
         if (references == 0) {
             delete this;
         }
         return references;
+    }
+
+    // Severs the back-pointer before the owner finishes destructing.
+    //
+    // UnregisterEndpointNotificationCallback stops FUTURE callbacks but does not promise
+    // that an OnDefaultDeviceChanged already executing has returned. That callback holds a
+    // raw pointer to the PreviewAudioDeviceWatcher and calls a method on it, so without
+    // this the teardown path has a real -- if narrow -- use-after-free, of the kind that
+    // only ever shows up as an unreproducible exit crash.
+    //
+    // Taking the same mutex the callback holds makes this a barrier, not just a store: it
+    // blocks until an in-flight callback has finished with owner_, and every later one
+    // sees nullptr. Safe against deadlock because the callback does no blocking work under
+    // the mutex -- handleNativeDefaultOutputChanged only posts a queued invocation, which
+    // returns immediately rather than waiting on the owner's thread.
+    void detachOwner()
+    {
+        const std::lock_guard<std::mutex> lock(ownerMutex_);
+        owner_ = nullptr;
     }
 
     HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override { return S_OK; }
@@ -79,7 +108,13 @@ public:
         ERole role,
         LPCWSTR) override
     {
-        if (flow == eRender && role == eConsole && owner_ != nullptr) {
+        if (flow != eRender || role != eConsole) {
+            return S_OK;
+        }
+        // Held across the call, not just across the read: the owner may start destructing
+        // between a bare null check and the dereference. See detachOwner().
+        const std::lock_guard<std::mutex> lock(ownerMutex_);
+        if (owner_ != nullptr) {
             owner_->handleNativeDefaultOutputChanged();
         }
         return S_OK;
@@ -88,8 +123,9 @@ public:
 private:
     ~PreviewAudioNativeEndpointNotificationClient() = default;
 
+    std::mutex ownerMutex_;
     PreviewAudioDeviceWatcher* owner_ = nullptr;
-    ULONG references_ = 1;
+    std::atomic<ULONG> references_{1};
 };
 
 #endif
@@ -115,7 +151,23 @@ PreviewAudioDeviceWatcher::PreviewAudioDeviceWatcher(QObject* parent)
     HRESULT enumeratorResult = kStepNotAttempted;
     HRESULT registerResult = kStepNotAttempted;
 
-    const HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    // APARTMENTTHREADED, not MULTITHREADED: this constructor runs on the GUI thread, and
+    // the GUI thread's apartment is not ours to choose. Qt initialises it as an STA on
+    // Windows because OLE drag-and-drop requires one.
+    //
+    // Asking for MULTITHREADED here was relying on an unasserted ordering. In practice Qt
+    // has already run, so the call returns RPC_E_CHANGED_MODE and is harmlessly ignored --
+    // a field capture confirms exactly that (`com_hr=0x80010106`). But the day some
+    // construction-order change lets this run first, it would put the GUI thread into an
+    // MTA, silently breaking drag-and-drop and shell dialogs with no log to explain it.
+    //
+    // Requesting the apartment the thread should already have removes that failure mode:
+    // it returns S_FALSE when Qt got there first (success, refcount incremented, so the
+    // CoUninitialize below stays balanced) and yields the correct STA if it did not.
+    // IMMDeviceEnumerator and IMMNotificationClient are both agile, so the notification
+    // still arrives on the audio service's own MTA thread either way -- which is precisely
+    // why the client's refcount and back-pointer have to be thread-safe.
+    const HRESULT comResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     // Only undo a COM initialization performed by this object.  On
     // RPC_E_CHANGED_MODE the thread already has an incompatible apartment;
     // COM can still be usable, but calling CoUninitialize here would undo
@@ -192,6 +244,13 @@ PreviewAudioDeviceWatcher::~PreviewAudioDeviceWatcher()
             enumerator->UnregisterEndpointNotificationCallback(client);
             enumerator->Release();
         }
+        // Order matters, and all three steps are required:
+        //   1. Unregister  -- stops new callbacks being dispatched,
+        //   2. detachOwner -- waits out any callback already running and blinds later ones,
+        //   3. Release     -- drops our reference; the audio service may still hold one.
+        // Step 2 is unconditional: if CoCreateInstance failed above we could not
+        // unregister, which makes severing the back-pointer more important, not less.
+        client->detachOwner();
         client->Release();
         nativeEndpointNotificationClient_ = nullptr;
     }
