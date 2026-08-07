@@ -410,14 +410,44 @@ void watchdogLoop()
         case policy::StallTransition::None:
             break;
         }
-        if (!policy::shouldReport(
-                trigger,
-                phase.generation,
-                now,
-                reportedTrigger,
-                reportedGeneration,
-                reportedAtMs,
-                kRepeatedReportMs)) {
+        const bool willReport = policy::shouldReport(
+            trigger,
+            phase.generation,
+            now,
+            reportedTrigger,
+            reportedGeneration,
+            reportedAtMs,
+            kRepeatedReportMs);
+        if (trigger != policy::Trigger::None) {
+            // The last unobserved link. logs 16 established that the threshold reaches this
+            // loop (idle_timeout_ms=800) and that classify() returns idle_heartbeat on nine
+            // separate polls -- and still not one gui_thread_stale row exists, with no
+            // monitor_rearm, no durable-fallback file, a single watchdog thread, and the
+            // Fatal durable path demonstrably working elsewhere in the same capture.
+            //
+            // Everything between that verdict and the file is these three statements, and
+            // none of them said anything. This row closes that gap from the OTHER side: it
+            // is Info, so it travels the async queue rather than the synchronous Fatal path,
+            // and therefore cannot be lost by whatever is losing the report. If this row
+            // appears with will_report=1 and no gui_thread_stale follows, the loss is inside
+            // appendWatchdogReport or the Fatal write itself; if will_report=0, shouldReport
+            // is declining and the four inputs below say exactly why.
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("ui/hang_watchdog"),
+                QStringLiteral("action=report_gate trigger=%1 will_report=%2 "
+                               "last_trigger=%3 last_reported_at_ms=%4 age_since_report_ms=%5 "
+                               "phase_generation=%6 last_phase_generation=%7 repeat_ms=%8")
+                    .arg(QString::fromLatin1(policy::triggerName(trigger)))
+                    .arg(willReport ? 1 : 0)
+                    .arg(QString::fromLatin1(policy::triggerName(reportedTrigger)))
+                    .arg(reportedAtMs)
+                    .arg(reportedAtMs > 0 ? now - reportedAtMs : -1)
+                    .arg(phase.generation)
+                    .arg(reportedGeneration)
+                    .arg(kRepeatedReportMs));
+        }
+        if (!willReport) {
             continue;
         }
         // Decided before the report is written so the report can state it, but acted on
