@@ -41,6 +41,11 @@ bool g_symbolHandlerTried = false;
 // this machine" (the normal cause of symbol=(nosym)) from "the symbol handler never came
 // up", which no frame-level field can distinguish on its own.
 DWORD g_symbolHandlerErrorCode = 0;
+// Whether the handler came up via SymInitialize(fInvadeProcess=TRUE) or via the
+// no-enumeration fallback, and what the preferred route failed with. See
+// ensureSymbolHandler() for why the fallback exists.
+bool g_symbolHandlerInvaded = false;
+DWORD g_symbolHandlerInvadeErrorCode = 0;
 // Set once a capture has timed out and its worker has been abandoned. The abandoned
 // worker may still be blocked inside StackWalk64 and may still touch g_targetThread, so
 // after this point nothing may suspend the target again and the handle must not be closed.
@@ -169,8 +174,41 @@ void ensureSymbolHandler()
     g_symbolHandlerTried = true;
     SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME | SYMOPT_LOAD_LINES
                   | SYMOPT_FAIL_CRITICAL_ERRORS);
-    g_symbolHandlerReady = SymInitialize(GetCurrentProcess(), nullptr, TRUE) != FALSE;
-    g_symbolHandlerErrorCode = g_symbolHandlerReady ? 0 : GetLastError();
+    const HANDLE process = GetCurrentProcess();
+
+    // Preferred route: let SymInitialize enumerate the loaded modules itself.
+    if (SymInitialize(process, nullptr, TRUE) != FALSE) {
+        g_symbolHandlerReady = true;
+        g_symbolHandlerInvaded = true;
+        g_symbolHandlerErrorCode = 0;
+        return;
+    }
+    g_symbolHandlerInvadeErrorCode = GetLastError();
+
+    // fInvadeProcess=TRUE walks every module in the process as one unit and reports a
+    // single failure for the whole enumeration, so one uncooperative module denies symbols
+    // to all of them. Observed in the field: a capture came back `sym_ready=0
+    // sym_err=3221225476` (0xC0000004, STATUS_INFO_LENGTH_MISMATCH — an NTSTATUS left in
+    // the thread's last-error slot by an internal query, not a Win32 code this call
+    // documents), which left every frame of every stack unnamed for the whole session.
+    //
+    // Retrying with FALSE skips the enumeration entirely: the handler comes up, and
+    // SymRefreshModuleList then loads the module list through a different path. With
+    // SYMOPT_DEFERRED_LOADS set above, per-module symbol data is loaded on first use
+    // anyway, so even a refresh that fails leaves a handler that resolves what it can.
+    // SymCleanup first because a failed SymInitialize may still have left partial state;
+    // it returns FALSE when there is nothing to clean, which is fine and ignored.
+    SymCleanup(process);
+    if (SymInitialize(process, nullptr, FALSE) == FALSE) {
+        g_symbolHandlerReady = false;
+        g_symbolHandlerErrorCode = GetLastError();
+        return;
+    }
+    g_symbolHandlerReady = true;
+    g_symbolHandlerInvaded = false;
+    // Not fatal: deferred loads mean names still resolve per module on demand. Recorded so
+    // a half-populated handler is distinguishable from a clean fallback.
+    g_symbolHandlerErrorCode = SymRefreshModuleList(process) != FALSE ? 0 : GetLastError();
 }
 
 // Caller must hold g_captureMutex.
@@ -180,6 +218,8 @@ SymbolHandlerStatus symbolHandlerStatusLocked()
     status.attempted = g_symbolHandlerTried;
     status.ready = g_symbolHandlerReady;
     status.lastErrorCode = static_cast<quint32>(g_symbolHandlerErrorCode);
+    status.invadedProcess = g_symbolHandlerInvaded;
+    status.invadeErrorCode = static_cast<quint32>(g_symbolHandlerInvadeErrorCode);
     return status;
 }
 

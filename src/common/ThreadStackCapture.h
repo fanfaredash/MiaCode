@@ -79,8 +79,18 @@ void releaseStackWalkTargetThread();
 // this process could ever have been named. Those are different bug reports.
 struct SymbolHandlerStatus {
     bool attempted = false;      // false off Windows, where there is no dbghelp to init
-    bool ready = false;          // SymInitialize succeeded
-    quint32 lastErrorCode = 0;   // GetLastError() from a failed SymInitialize, else 0
+    bool ready = false;          // SymInitialize succeeded (by either route below)
+    quint32 lastErrorCode = 0;   // GetLastError() from the attempt that decided `ready`
+    // Which route brought the handler up. `SymInitialize(fInvadeProcess=TRUE)` enumerates
+    // every loaded module up front and fails as a unit; when it does, the handler is
+    // retried with FALSE and the module list populated separately. Both facts are reported
+    // because they mean different things to a reader: invaded=0 with ready=1 is a working
+    // handler that took the fallback, whereas ready=0 is no symbols at all.
+    bool invadedProcess = false;
+    // GetLastError() from the failed fInvadeProcess=TRUE attempt, 0 if it succeeded. Kept
+    // separate from `lastErrorCode` so a successful fallback still records what the
+    // preferred route hit — that code is the only evidence of why the fallback was needed.
+    quint32 invadeErrorCode = 0;
 };
 
 // Initialise dbghelp's symbol handler up front, and report whether it came up. Idempotent
