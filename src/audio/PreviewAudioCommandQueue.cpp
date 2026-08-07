@@ -1,0 +1,282 @@
+#include "PreviewAudioCommandQueue.h"
+
+#include <algorithm>
+#include <utility>
+
+namespace miacode::preview_audio {
+
+namespace {
+
+EnqueueResult accepted(bool replaced = false, bool coalesced = false)
+{
+    return {true, replaced, coalesced, CommandError::None};
+}
+
+EnqueueResult rejected(CommandError error)
+{
+    return {false, false, false, error};
+}
+
+template <typename Container>
+void eraseStalePlayback(Container& entries, quint64 generation)
+{
+    entries.erase(
+        std::remove_if(
+            entries.begin(),
+            entries.end(),
+            [generation](const auto& entry) {
+                return isPlaybackCommand(entry.command.kind)
+                    && entry.command.identity.generation < generation;
+            }),
+        entries.end());
+}
+
+template <typename Entry>
+void resetStalePlayback(std::optional<Entry>& entry, quint64 generation)
+{
+    if (entry && isPlaybackCommand(entry->command.kind)
+        && entry->command.identity.generation < generation) {
+        entry.reset();
+    }
+}
+
+template <typename Container>
+bool containerContainsPlaybackGeneration(const Container& entries, quint64 generation)
+{
+    return std::any_of(
+        entries.begin(),
+        entries.end(),
+        [generation](const auto& entry) {
+            return isPlaybackCommand(entry.command.kind)
+                && entry.command.identity.generation == generation;
+        });
+}
+
+template <typename Entry>
+bool optionalContainsPlaybackGeneration(const std::optional<Entry>& entry, quint64 generation)
+{
+    return entry && isPlaybackCommand(entry->command.kind)
+        && entry->command.identity.generation == generation;
+}
+
+}  // namespace
+
+PreviewAudioCommandQueue::Entry PreviewAudioCommandQueue::makeEntry(PreviewAudioCommand command)
+{
+    Entry entry;
+    entry.command = std::move(command);
+    entry.order = nextOrder_++;
+    return entry;
+}
+
+EnqueueResult PreviewAudioCommandQueue::enqueue(PreviewAudioCommand command)
+{
+    if (command.kind == CommandKind::Shutdown) {
+        return beginShutdown(std::move(command));
+    }
+
+    std::lock_guard lock(mutex_);
+    if (shuttingDown_) {
+        return rejected(CommandError::ShuttingDown);
+    }
+
+    if (command.kind == CommandKind::DeviceChangePause) {
+        if (devicePause_) {
+            if (canCoalesce(devicePause_->command, command)) {
+                return accepted(false, true);
+            }
+            return rejected(CommandError::QueueFull);
+        }
+        devicePause_ = makeEntry(std::move(command));
+        return accepted();
+    }
+
+    if (command.kind == CommandKind::ManualPause) {
+        if (manualPause_) {
+            return accepted(false, true);
+        }
+        manualPause_ = makeEntry(std::move(command));
+        return accepted();
+    }
+
+    switch (commandClass(command.kind)) {
+    case CommandClass::High:
+        if (qsizetype(high_.size()) >= kHighCapacity) {
+            return rejected(CommandError::QueueFull);
+        }
+        high_.push_back(makeEntry(std::move(command)));
+        return accepted();
+    case CommandClass::Ordered:
+        if (qsizetype(ordered_.size()) >= kOrderedCapacity) {
+            return rejected(CommandError::QueueFull);
+        }
+        ordered_.push_back(makeEntry(std::move(command)));
+        return accepted();
+    case CommandClass::Audition:
+        if (qsizetype(auditions_.size()) >= kAuditionCapacity) {
+            return rejected(CommandError::QueueFull);
+        }
+        auditions_.push_back(makeEntry(std::move(command)));
+        return accepted();
+    case CommandClass::Latest: {
+        std::optional<Entry>& slot = command.kind == CommandKind::SyncBackgroundTrack
+            ? syncBackgroundTrack_
+            : drainEvents_;
+        if (slot) {
+            slot->command = std::move(command);
+            return accepted(true, false);
+        }
+        slot = makeEntry(std::move(command));
+        return accepted();
+    }
+    }
+    return rejected(CommandError::BackendFailure);
+}
+
+EnqueueResult PreviewAudioCommandQueue::beginShutdown(PreviewAudioCommand shutdown)
+{
+    std::lock_guard lock(mutex_);
+    if (shuttingDown_) {
+        return rejected(CommandError::ShuttingDown);
+    }
+    shutdown.kind = CommandKind::Shutdown;
+    shutdown_ = makeEntry(std::move(shutdown));
+    shuttingDown_ = true;
+    return accepted();
+}
+
+std::optional<PreviewAudioCommand> PreviewAudioCommandQueue::takeHigh()
+{
+    enum class Source {
+        None,
+        Ordinary,
+        Shutdown,
+        DevicePause,
+        ManualPause,
+    };
+
+    Source source = Source::None;
+    quint64 firstOrder = std::numeric_limits<quint64>::max();
+    const auto consider = [&source, &firstOrder](Source candidate, const std::optional<Entry>& entry) {
+        if (entry && entry->order < firstOrder) {
+            source = candidate;
+            firstOrder = entry->order;
+        }
+    };
+    if (!high_.empty()) {
+        firstOrder = high_.front().order;
+        source = Source::Ordinary;
+    }
+    consider(Source::Shutdown, shutdown_);
+    consider(Source::DevicePause, devicePause_);
+    consider(Source::ManualPause, manualPause_);
+
+    if (source == Source::None) {
+        return std::nullopt;
+    }
+    if (source == Source::Ordinary) {
+        PreviewAudioCommand command = std::move(high_.front().command);
+        high_.pop_front();
+        return command;
+    }
+
+    std::optional<Entry>* selected = nullptr;
+    switch (source) {
+    case Source::Shutdown:
+        selected = &shutdown_;
+        break;
+    case Source::DevicePause:
+        selected = &devicePause_;
+        break;
+    case Source::ManualPause:
+        selected = &manualPause_;
+        break;
+    case Source::None:
+    case Source::Ordinary:
+        break;
+    }
+    PreviewAudioCommand command = std::move((*selected)->command);
+    selected->reset();
+    return command;
+}
+
+std::optional<PreviewAudioCommand> PreviewAudioCommandQueue::takeNext()
+{
+    std::lock_guard lock(mutex_);
+    if (std::optional<PreviewAudioCommand> command = takeHigh()) {
+        return command;
+    }
+    if (!ordered_.empty()) {
+        PreviewAudioCommand command = std::move(ordered_.front().command);
+        ordered_.pop_front();
+        return command;
+    }
+    if (syncBackgroundTrack_ || drainEvents_) {
+        std::optional<Entry>* selected = nullptr;
+        if (!drainEvents_ || (syncBackgroundTrack_
+                             && syncBackgroundTrack_->order < drainEvents_->order)) {
+            selected = &syncBackgroundTrack_;
+        } else {
+            selected = &drainEvents_;
+        }
+        PreviewAudioCommand command = std::move((*selected)->command);
+        selected->reset();
+        return command;
+    }
+    if (!auditions_.empty()) {
+        PreviewAudioCommand command = std::move(auditions_.front().command);
+        auditions_.pop_front();
+        return command;
+    }
+    return std::nullopt;
+}
+
+void PreviewAudioCommandQueue::invalidateBefore(quint64 generation)
+{
+    std::lock_guard lock(mutex_);
+    eraseStalePlayback(high_, generation);
+    eraseStalePlayback(ordered_, generation);
+    eraseStalePlayback(auditions_, generation);
+    resetStalePlayback(shutdown_, generation);
+    resetStalePlayback(devicePause_, generation);
+    resetStalePlayback(manualPause_, generation);
+    resetStalePlayback(syncBackgroundTrack_, generation);
+    resetStalePlayback(drainEvents_, generation);
+}
+
+bool PreviewAudioCommandQueue::containsPlaybackGeneration(quint64 generation) const
+{
+    std::lock_guard lock(mutex_);
+    return containerContainsPlaybackGeneration(high_, generation)
+        || containerContainsPlaybackGeneration(ordered_, generation)
+        || containerContainsPlaybackGeneration(auditions_, generation)
+        || optionalContainsPlaybackGeneration(shutdown_, generation)
+        || optionalContainsPlaybackGeneration(devicePause_, generation)
+        || optionalContainsPlaybackGeneration(manualPause_, generation)
+        || optionalContainsPlaybackGeneration(syncBackgroundTrack_, generation)
+        || optionalContainsPlaybackGeneration(drainEvents_, generation);
+}
+
+bool PreviewAudioCommandQueue::empty() const
+{
+    return size() == 0;
+}
+
+qsizetype PreviewAudioCommandQueue::size() const
+{
+    std::lock_guard lock(mutex_);
+    return qsizetype(high_.size() + ordered_.size() + auditions_.size())
+        + (shutdown_ ? 1 : 0)
+        + (devicePause_ ? 1 : 0)
+        + (manualPause_ ? 1 : 0)
+        + (syncBackgroundTrack_ ? 1 : 0)
+        + (drainEvents_ ? 1 : 0);
+}
+
+bool PreviewAudioCommandQueue::isShuttingDown() const
+{
+    std::lock_guard lock(mutex_);
+    return shuttingDown_;
+}
+
+}  // namespace miacode::preview_audio

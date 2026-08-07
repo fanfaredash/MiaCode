@@ -512,6 +512,9 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/quick_scene/PreviewQuickSceneRoot.h
     src/preview/quick_scene/PreviewQuickSceneRoot.cpp
     src/audio/PreviewAudioBackend.h
+    src/audio/PreviewAudioWorkerProtocol.h
+    src/audio/PreviewAudioCommandQueue.h
+    src/audio/PreviewAudioCommandQueue.cpp
     src/audio/PreviewAudioSettings.h
     src/audio/PreviewAudioSettings.cpp
     src/audio/MiniaudioPreviewAudioBackend.h
@@ -1456,6 +1459,24 @@ if (MIACODE_BUILD_DEV_TOOLS)
             src/common/PreviewSfxSemantics.h
         LIBS Qt6::Core
         INCLUDES src src/common src/preview src/audio
+    )
+
+    miacode_add_dev_tool(preview_audio_command_queue_spec TEST
+        SOURCES
+            src/tools/preview/PreviewAudioCommandQueueSpec.cpp
+            src/audio/PreviewAudioCommandQueue.h
+            src/audio/PreviewAudioCommandQueue.cpp
+            src/audio/PreviewAudioWorkerProtocol.h
+        LIBS Qt6::Core
+        INCLUDES src src/common src/audio src/timeline
+    )
+
+    miacode_add_dev_tool(preview_audio_worker_protocol_spec TEST
+        SOURCES
+            src/tools/preview/PreviewAudioWorkerProtocolSpec.cpp
+            src/audio/PreviewAudioWorkerProtocol.h
+        LIBS Qt6::Core
+        INCLUDES src src/common src/audio src/timeline
     )
 
     miacode_add_dev_tool(touch_pad_authoring_state_spec TEST
