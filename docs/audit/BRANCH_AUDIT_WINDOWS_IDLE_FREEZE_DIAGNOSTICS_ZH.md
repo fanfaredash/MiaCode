@@ -51,7 +51,11 @@
 | O-1 / R-2 `TimelineView` 死代码 | **已撤回** — 结论错误，见勘误 | — |
 | T-1 `logPlaybackStatus` 持锁写日志 | 已修复（锁内只快照，出锁再格式化与写盘） | 本轮 |
 | T-2 `schedulerMutex_` × BASS 内部锁 ABBA | 已修复（`BASS_ChannelRemoveSync` 移出临界区） | 本轮 |
-| 第 4 类其余（T-3…T-10） | 未实施 | — |
+| T-3 `playbackSession_` 跨线程读写 | **部分修复** — 见下方复核，触摸长按那条已修，其余重新评级 | 本轮 |
+| T-4 通知客户端引用计数非原子 + UAF | 已修复（原子计数 + `detachOwner()` 屏障） | 本轮 |
+| T-5 GUI 线程被改公寓模型 | 已修复（改 `COINIT_APARTMENTTHREADED`） | 本轮 |
+| T-7 启动期 `SymInitialize` 与 loader 争锁 | 已修复（推迟到首个心跳，监控不中断） | 本轮 |
+| T-6 / T-8 / T-9 / T-10 | 未实施 | — |
 | W-1 亚阈值 GUI 卡顿完全无日志 | 已修复（新增 `action=gui_thread_stall`） | 本轮 |
 | W-2 `SymInitialize` 单点失败导致全程无符号 | 已修复（`fInvadeProcess=FALSE` 回退 + `SymRefreshModuleList`） | 本轮 |
 
@@ -395,6 +399,15 @@ logPlaybackStatus()                       handleMixerGroupSync()
   由于 `sfxSchedulerActive_` 已在锁内置 false，即使回调此刻在跑也会走它自己的早退分支，安全性不变。
 
 ### T-3（高）音频回调线程改写 `playbackSession_`，而 GUI 线程多处无锁读写同一结构
+
+> **实施时复核（2026-08-07）：原条目高估了前三个例子，漏掉了真正严重的那个。** 逐点核对结果：
+>
+> - **`resetCursor()` —— 不是竞态。** 它在写 `eventGroupIndex` 之前先读 `sfxSchedulerActive_`（持锁）并在其为真时 `disarmSfxScheduler()`；撤防后 `sfxSchedulerActive_` 为 false，`handleMixerGroupSync` 走 `dropReason="inactive"` 早退，不会再碰这些字段。而 `rearmScheduler` 为 false 的那条路径，恰恰意味着调度器本来就没布防，回调同样早退。两条路都安全。
+> - **`logPreparedEventWindow()` —— 不值得加锁，加了反而有害。** 它是 `const` 的纯诊断读，结果立即被 `qBound` 夹住，最坏是索引偏一格。更重要的是它在**循环里调 `appendAudioDebugLog`**——给它加 `schedulerMutex_` 等于新造一个 T-1。
+> - **`applyLevels()` —— 保留为待办**，量级同上，未复核出实际危害。
+> - **触摸长按那条是真的，而且比原文写的更严重。** `reconcileTouchholdVoice()` 由 `triggerGroup()` 调用，而 `triggerGroup()` 在 `handleMixerGroupSync` 的**临界区内**执行——也就是说它过去**在 BASS 混音回调线程上、持 `schedulerMutex_` 写日志文件**，一次触发写两行。这正是 T-1 的缺陷本身，出现在最不该出现的线程上，而 T-1 条目没有把它算进去。已修：新增 `TouchholdTransition` 出参，锁内只记录发生了什么，出锁后由 `handleMixerGroupSync` 调 `logTouchholdTransition()` 写出。GUI 路径（`restoreTouchholdVoices`）不持锁，仍直接写。
+> - **仍未处理**：`touchholdSample_` / `touchholdOwnerSpanIndex_` 本身的跨线程访问——音频线程持锁操作，GUI 线程的 `pauseTouchholdVoices()` / `restoreTouchholdVoices()` 不持锁操作同一对象。给这一对加锁需要先审计约 15 个调用点是否已持锁（`QMutex` 非递归，且 `restoreTouchholdVoices` 内部还会调 `pauseTouchholdVoices`），本机无法跑音频冒烟测试，未夹带。
+> - **原条目建议的"析出 `SfxSchedulerState`"未实施**：这六个字段共 134 处引用，加触摸长按 23 处，是一次覆盖音频热路径 ~150 个调用点的重构，而本仓库没有任何音频行为的自动化测试可以兜底。应作为独立改动、在有 Windows 实机验证的前提下做。
 
 - `handleMixerGroupSync()`（音频线程，持 `schedulerMutex_`）写：`eventGroupIndex`、`lastTriggeredGroupIndex`、`lastTriggeredGroupSecond`、`triggeredGroupCount`、`backgroundTrackPendingStart`、`backgroundTrackRunning`。
 - GUI 线程**不持锁**读写同一批字段的例子：
