@@ -67,6 +67,8 @@ configure_file(
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network OpenGL Multimedia Quick Qml QuickControls2 ShaderTools Svg)
 
+qt_policy(SET QTP0001 NEW)
+
 if (APPLE AND TARGET WrapOpenGL::WrapOpenGL)
     find_library(MIACODE_AGL_FRAMEWORK NAMES AGL)
     if (NOT MIACODE_AGL_FRAMEWORK)
@@ -644,14 +646,14 @@ if (APPLE AND EXISTS "${MIACODE_MACOS_APP_ICON}")
     )
 endif()
 
-# Pure-QML (v2) workbench. Opt-in via --ui=v2 / MIACODE_UI_SKIN=v2.
-# Default GUI remains QuickShell (v1). Both share the MainWindow backend.
+# Default UI (v2). QuickShell v1: --ui=v1 / MIACODE_UI_SKIN=v1.
+# QTP0001 NEW embeds this module at :/qt/qml/MiaCode/UI/.
 set(MIACODE_UI_QML_FILES
     src/app/qml_ui/Main.qml
-    src/app/qml_ui/WorkbenchState.qml
+    src/app/qml_ui/ViewState.qml
     src/app/qml_ui/theme/Theme.qml
     src/app/qml_ui/components/IconButton.qml
-    src/app/qml_ui/components/WorkbenchTab.qml
+    src/app/qml_ui/components/AppTab.qml
     src/app/qml_ui/components/PanelHeader.qml
     src/app/qml_ui/components/SplitHandle.qml
     src/app/qml_ui/components/Tooltip.qml
@@ -669,12 +671,13 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/chrome/WindowTitleBar.qml
     src/app/qml_ui/chrome/WindowCaptionButtons.qml
     src/app/qml_ui/chrome/MainMenu.qml
+    src/app/qml_ui/chrome/MainMenuCommands.qml
     src/app/qml_ui/chrome/MainToolBar.qml
     src/app/qml_ui/chrome/StatusBar.qml
-    src/app/qml_ui/workspace/Workbench.qml
-    src/app/qml_ui/workspace/WorkspaceSplitView.qml
-    src/app/qml_ui/workspace/CompactPanelLayer.qml
-    src/app/qml_ui/sidebar/WorkbenchSidebar.qml
+    src/app/qml_ui/layout/MainView.qml
+    src/app/qml_ui/layout/MainSplitView.qml
+    src/app/qml_ui/layout/CompactPanelLayer.qml
+    src/app/qml_ui/sidebar/Sidebar.qml
     src/app/qml_ui/sidebar/ActivityBar.qml
     src/app/qml_ui/sidebar/ChartFieldSidebar.qml
     src/app/qml_ui/sidebar/DifficultyList.qml
@@ -745,8 +748,9 @@ qt_add_qml_module(MiaCode
         src/app/qml_ui/QmlDocumentModel.h
         src/app/qml_ui/QmlPreviewModel.cpp
         src/app/qml_ui/QmlPreviewModel.h
-        src/app/qml_ui/QmlWorkspaceSettings.cpp
-        src/app/qml_ui/QmlWorkspaceSettings.h
+        src/app/qml_ui/QmlUiSettings.cpp
+        src/app/qml_ui/QmlUiSettings.h
+        src/app/qml_ui/QmlUiPlatformChrome.h
         src/app/qml_ui/QmlEditorPageHost.cpp
         src/app/qml_ui/QmlEditorPageHost.h
         src/app/qml_ui/QmlUiWindowChrome.cpp
@@ -939,6 +943,7 @@ if (APPLE)
         src/app/quick_shell/QuickShellMacSurfaceSupport.mm
         src/app/ui/UiNativeWindowThemeMac.h
         src/app/ui/UiNativeWindowThemeMac.mm
+        src/app/qml_ui/QmlUiWindowChrome.mm
     )
     target_link_libraries(MiaCode PRIVATE "-framework AppKit")
 endif()

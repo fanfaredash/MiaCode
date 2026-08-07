@@ -19,7 +19,7 @@ Rectangle {
     }
     readonly property bool exportPageActive: !!(root.shellController && root.shellController.exportPageActive)
 
-    color: Theme.colors.background.workbench
+    color: Theme.colors.background.surface
     clip: true
 
     function fittedFrameWidth(hostWidth, hostHeight) {

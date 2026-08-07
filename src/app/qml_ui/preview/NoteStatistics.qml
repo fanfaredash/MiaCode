@@ -19,7 +19,7 @@ Rectangle {
 
     implicitHeight: wideLayout ? 55 : 96
     height: implicitHeight
-    color: Theme.colors.background.workbench
+    color: Theme.colors.background.surface
 
     Rectangle {
         anchors.left: parent.left

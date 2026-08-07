@@ -9,7 +9,7 @@ import "qrc:/quick_shell/qml" as Shell
 Item {
     id: root
 
-    required property var workbenchState
+    required property var viewState
     required property var documentSession
     required property var preferences
     required property var previewSession
@@ -22,7 +22,7 @@ Item {
     // User preference AND backend chart-bottom-tabs mode (export/metadata
     // call setChartBottomTabsMode(false); latency/difficulty turn it back on).
     readonly property bool bottomPanelEffectivelyVisible:
-        root.workbenchState.bottomPanelVisible && root.shellController.bottomTabsVisible
+        root.viewState.bottomPanelVisible && root.shellController.bottomTabsVisible
     signal settingsRequested()
 
     function undo() {
@@ -39,8 +39,8 @@ Item {
 
     function validateChart() {
         root.commands.validateDocument()
-        root.workbenchState.bottomPanelVisible = true
-        root.workbenchState.activeBottomTab = 1
+        root.viewState.bottomPanelVisible = true
+        root.viewState.activeBottomTab = 1
     }
 
     function showFullscreenPreview() {
@@ -51,9 +51,9 @@ Item {
 
     function persistHorizontalLayout() {
         if (root.compact) return
-        if (root.workbenchState.sidebarVisible)
+        if (root.viewState.sidebarVisible)
             root.preferences.sidebarWidth = Math.round(sidebar.width - 48)
-        if (root.workbenchState.previewVisible) {
+        if (root.viewState.previewVisible) {
             const available = Math.max(1, root.width
                 - sidebar.width - 4
                 - 4)
@@ -96,20 +96,20 @@ Item {
             onReleased: root.persistHorizontalLayout()
         }
 
-        WorkbenchSidebar {
+        Sidebar {
             id: sidebar
-            workbenchState: root.workbenchState
+            viewState: root.viewState
             documentSession: root.documentSession
             preferences: root.preferences
             commands: root.commands
             pages: root.pages
             compact: false
             visible: !root.compact
-            SplitView.preferredWidth: root.workbenchState.sidebarVisible
+            SplitView.preferredWidth: root.viewState.sidebarVisible
                                       ? root.preferences.sidebarWidth + 48
                                       : 48
-            SplitView.minimumWidth: root.workbenchState.sidebarVisible ? 168 : 48
-            SplitView.maximumWidth: root.workbenchState.sidebarVisible ? 368 : 48
+            SplitView.minimumWidth: root.viewState.sidebarVisible ? 168 : 48
+            SplitView.maximumWidth: root.viewState.sidebarVisible ? 368 : 48
             onSettingsRequested: root.settingsRequested()
         }
 
@@ -132,7 +132,7 @@ Item {
                     id: editorPane
                     anchors.fill: parent
                     visible: !root.pages.overlayActive
-                    workbenchState: root.workbenchState
+                    viewState: root.viewState
                     documentSession: root.documentSession
                     commands: root.commands
                 }
@@ -158,7 +158,7 @@ Item {
             BottomPanel {
                 id: bottomPanel
                 visible: root.bottomPanelEffectivelyVisible
-                workbenchState: root.workbenchState
+                viewState: root.viewState
                 documentSession: root.documentSession
                 preferences: root.preferences
                 commands: root.commands
@@ -175,13 +175,13 @@ Item {
 
         PreviewPane {
             id: preview
-            visible: !root.compact && root.workbenchState.previewVisible
+            visible: !root.compact && root.viewState.previewVisible
             previewSession: root.previewSession
             shellController: root.shellController
             SplitView.preferredWidth: Math.max(
                 220,
                 (root.width - 48
-                    - (root.workbenchState.sidebarVisible ? root.preferences.sidebarWidth + 4 : 0) - 4)
+                    - (root.viewState.sidebarVisible ? root.preferences.sidebarWidth + 4 : 0) - 4)
                 * root.preferences.previewWidthRatio
             )
             SplitView.minimumWidth: 220

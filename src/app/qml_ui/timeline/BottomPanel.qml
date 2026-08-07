@@ -8,14 +8,14 @@ import MiaCode.Timeline
 Rectangle {
     id: root
 
-    required property var workbenchState
+    required property var viewState
     required property var documentSession
     required property var preferences
     required property var commands
     required property var shellController
     signal syntaxIssueActivated(int line, int column, int endColumn)
 
-    color: Theme.colors.background.workbench
+    color: Theme.colors.background.surface
     clip: true
 
     BottomTabBar {
@@ -23,7 +23,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        workbenchState: root.workbenchState
+        viewState: root.viewState
         documentSession: root.documentSession
     }
 
@@ -32,7 +32,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: tabs.bottom
         anchors.bottom: parent.bottom
-        visible: root.workbenchState.activeBottomTab === 0
+        visible: root.viewState.activeBottomTab === 0
         enabled: visible
         stateBridge: root.shellController.timelineStateBridge
         onHeaderNavigateRequested: second => root.shellController.timelineHeaderNavigate(second)
@@ -52,7 +52,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: tabs.bottom
         anchors.bottom: parent.bottom
-        visible: root.workbenchState.activeBottomTab === 1
+        visible: root.viewState.activeBottomTab === 1
 
         Row {
             id: summaryRow

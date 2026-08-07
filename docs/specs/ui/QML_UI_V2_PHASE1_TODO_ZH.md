@@ -3,7 +3,8 @@
 > 工作清单，不是最终规格。上下文压缩后以本文件为准继续改；完成或调整条目时同步更新本文件与 `feature-index.md` 中的入口句。
 >
 > 分支：`feature/qml-ui`（已含 `origin/dev` @ `677a9625` 及之后快进）  
-> 入口：默认 v1 QuickShell；`--ui=v2` / `--modern-ui` / `MIACODE_UI_SKIN=v2` → `QmlUiBootstrap`  
+> 入口：默认 `QmlUiBootstrap`（v2）；`--ui=v1` / `MIACODE_UI_SKIN=v1` → QuickShell  
+
 > 构建：`build/`（已 ignore）  
 > 原型参考：`../MashiroEditor/src/ui`（壳层来源）
 
@@ -13,7 +14,7 @@
 - v2 终态方向：**纯 QML 壳** + C++ 域服务 + 已有 `QQuickItem`（时间轴/预览）；**主壳**零 `WindowContainer`。
 - **例外（一阶段已落地）**：编辑区可对单个 v1 全页做局部 `WindowContainer`（`QmlEditorPageHost`），仅用于 Export / Latency；禁止把整窗 `MainWindow` 再宿主进 v2。
 - 共享后端：隐藏 `MainWindow` + `QuickShellController(surfaceHost=nullptr)`。
-- 工作区模式（底栏显隐 / 预览画幅 / 导出全屏门闸）以 `MainWindow` 切换为权威，v2 **只读** `QuickShellController` 投影，不在 `WorkbenchState` 另写平行标志。
+- 工作区模式（底栏显隐 / 预览画幅 / 导出全屏门闸）以 `MainWindow` 切换为权威，v2 **只读** `QuickShellController` 投影，不在 `ViewState` 另写平行标志。
 - 上游纯 v1 壳改动通常不伤 v2；共享 `MainWindow` / Controller / Preview / Timeline API 仍会一起吃到。
 
 ## 已完成
@@ -79,11 +80,11 @@ v2 相对 QuickShell v1 的专属面（完成度仍低，但不要回退）：
 | 契约根 | `src/app/qml_ui/QmlApplicationContext.*` |
 | 文档桥 | `src/app/qml_ui/QmlDocumentModel.*` |
 | 预览桥 | `src/app/qml_ui/QmlPreviewModel.*` |
-| 壳 QML | `src/app/qml_ui/Main.qml`, `workspace/Workbench.qml` |
+| 壳 QML | `src/app/qml_ui/Main.qml`, `layout/MainView.qml` |
 | 编辑区 v1 页宿主 | `src/app/qml_ui/QmlEditorPageHost.*`（Export/Latency） |
 | v2 Windows 客户区标题栏 | `src/app/qml_ui/QmlUiWindowChrome.*`（仅 `QmlUiBootstrap` attach） |
 | 导出/工具侧栏 | `sidebar/ExportSidebarPage.qml`, `ToolsSidebarPage.qml` |
-| 工作区态消费 | `WorkspaceSplitView.qml` / `PreviewPane.qml` ← `shellController.*` |
+| 工作区态消费 | `MainSplitView.qml` / `PreviewPane.qml` ← `shellController.*` |
 | v1 壳（勿删） | `src/app/quick_shell/` |
 | 开发索引入口 | `.agents/skills/miacode-dev-guide/references/feature-index.md` |
 
@@ -92,7 +93,7 @@ v2 相对 QuickShell v1 的专属面（完成度仍低，但不要回退）：
 ```powershell
 cmake --build build --target MiaCode -j 8
 .\build\MiaCode.exe
-.\build\MiaCode.exe --ui=v2
+.\build\MiaCode.exe --ui=v1
 ```
 
 ## 建议下一刀（维护性优先）

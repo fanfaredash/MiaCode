@@ -8,7 +8,7 @@
 // 桌面工作台的持久化边界。QML 在拖动期间维护临时几何，只在用户完成
 // 操作后写入这里，从而避免分隔线移动时连续刷新配置文件。
 // Appearance / audio / preview prefs live in MainWindow::onPreferences().
-class QmlWorkspaceSettings final : public QObject
+class QmlUiSettings final : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool sidebarVisible READ sidebarVisible WRITE setSidebarVisible NOTIFY sidebarVisibleChanged)
@@ -22,7 +22,7 @@ class QmlWorkspaceSettings final : public QObject
     Q_PROPERTY(int fontSize READ fontSize WRITE setFontSize NOTIFY fontSizeChanged)
 
 public:
-    explicit QmlWorkspaceSettings(QObject* parent = nullptr);
+    explicit QmlUiSettings(QObject* parent = nullptr);
 
     bool sidebarVisible() const;
     int sidebarWidth() const;

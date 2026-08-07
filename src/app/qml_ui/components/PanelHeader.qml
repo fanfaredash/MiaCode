@@ -8,7 +8,7 @@ Rectangle {
     property bool showMore: false
 
     implicitHeight: 34
-    color: Theme.colors.background.workbench
+    color: Theme.colors.background.surface
 
     Text {
         anchors.left: parent.left

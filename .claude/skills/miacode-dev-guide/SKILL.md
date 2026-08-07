@@ -29,7 +29,8 @@ same change.
 
 - App boot + CLI export + export-worker entry: `src/app/main.cpp`
 - Main window orchestration: `src/app/mainwindow/` (+ `sections/<feature>/`)
-- QuickShell beta shell + controller bridge: `src/app/quick_shell/`
+- Default UI (**v2**): `src/app/qml_ui/`
+- QuickShell (**v1**, `--ui=v1` / `MIACODE_UI_SKIN=v1`): `src/app/quick_shell/`
 - Document model: `src/core/chart/document/` (`SimaiDocument`, `SimaiTimingMetadata`)
 - Parser + validation: `src/core/chart/parser/` (`SimaiNativeParser*` — include-split TU)
 - Chart transforms / normalization: `src/core/chart/transform/`

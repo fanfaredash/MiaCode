@@ -15,9 +15,8 @@ class MainWindow;
 class QmlApplicationContext;
 class QuickShellController;
 
-// Pure-QML (v2) workbench entry. Shares the same hidden MainWindow backend as
-// QuickShell, but never creates NativeSurfaceHost / StyleBridge. Default GUI
-// remains v1 QuickShellBootstrap; this path is selected by --ui=v2.
+// Default UI entry (v2). Shares the hidden MainWindow backend with
+// QuickShell; no NativeSurfaceHost / StyleBridge. QuickShell: --ui=v1.
 class QmlUiBootstrap final : public QObject
 {
     Q_OBJECT

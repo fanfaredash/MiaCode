@@ -5,26 +5,13 @@ import QtQuick.Controls
 import QtQuick.Controls.impl as ControlsImpl
 import MiaCode.UI
 
-// Custom menubar (not Qt MenuBar): whole-item Row + optional More.
-// Overflow removes complete top-level entries (right → left); never clips mid-item.
+// Custom menubar
+// Overflow removes complete top-level entries (right → left)
+
 Item {
     id: root
 
-    signal toggleSidebarRequested()
-    signal toggleBottomPanelRequested()
-    signal togglePreviewRequested()
-    signal openRequested()
-    signal saveRequested()
-    signal saveAsRequested()
-    signal exitRequested()
-    signal undoRequested()
-    signal redoRequested()
-    signal selectAllRequested()
-    signal validateRequested()
-    signal metadataRequested()
-
-    property bool canUndo: false
-    property bool canRedo: false
+    required property var commands
     property bool commandsEnabled: true
     property real availableWidth: Number.POSITIVE_INFINITY
 
@@ -34,7 +21,7 @@ Item {
 
     implicitHeight: 34
     height: parent ? parent.height : implicitHeight
-    // Shrink-wrap to whole visible controls only — never min(available) + clip.
+    // Shrink-wrap to whole visible controls
     width: barRow.width
     enabled: commandsEnabled
 
@@ -232,26 +219,26 @@ Item {
                 text: qsTr("打开")
                 shortcut: StandardKey.Open
                 enabled: root.commandsEnabled
-                onTriggered: root.openRequested()
+                onTriggered: root.commands.openRequested()
             }
             Action {
                 text: qsTr("保存")
                 shortcut: StandardKey.Save
                 enabled: root.commandsEnabled
-                onTriggered: root.saveRequested()
+                onTriggered: root.commands.saveRequested()
             }
             Action {
                 text: qsTr("另存为")
                 shortcut: StandardKey.SaveAs
                 enabled: root.commandsEnabled
-                onTriggered: root.saveAsRequested()
+                onTriggered: root.commands.saveAsRequested()
             }
             AppMenuSeparator {}
             Action {
                 text: qsTr("退出")
                 shortcut: StandardKey.Quit
                 enabled: root.commandsEnabled
-                onTriggered: root.exitRequested()
+                onTriggered: root.commands.exitRequested()
             }
         }
 
@@ -261,14 +248,14 @@ Item {
             Action {
                 text: qsTr("撤销")
                 shortcut: StandardKey.Undo
-                enabled: root.commandsEnabled && root.canUndo
-                onTriggered: root.undoRequested()
+                enabled: root.commandsEnabled && root.commands.canUndo
+                onTriggered: root.commands.undoRequested()
             }
             Action {
                 text: qsTr("重做")
                 shortcut: StandardKey.Redo
-                enabled: root.commandsEnabled && root.canRedo
-                onTriggered: root.redoRequested()
+                enabled: root.commandsEnabled && root.commands.canRedo
+                onTriggered: root.commands.redoRequested()
             }
             Action { text: qsTr("查找"); enabled: false }
             AppMenuSeparator {}
@@ -276,7 +263,7 @@ Item {
                 text: qsTr("全选")
                 shortcut: StandardKey.SelectAll
                 enabled: root.commandsEnabled
-                onTriggered: root.selectAllRequested()
+                onTriggered: root.commands.selectAllRequested()
             }
             Action { text: qsTr("选择当前行"); enabled: false }
         }
@@ -287,12 +274,12 @@ Item {
             Action {
                 text: qsTr("元数据")
                 enabled: root.commandsEnabled
-                onTriggered: root.metadataRequested()
+                onTriggered: root.commands.metadataRequested()
             }
             Action {
                 text: qsTr("检查谱面")
                 enabled: root.commandsEnabled
-                onTriggered: root.validateRequested()
+                onTriggered: root.commands.validateRequested()
             }
         }
 
@@ -303,12 +290,12 @@ Item {
                 text: qsTr("切换侧栏")
                 shortcut: "Ctrl+B"
                 enabled: root.commandsEnabled
-                onTriggered: root.toggleSidebarRequested()
+                onTriggered: root.commands.toggleSidebarRequested()
             }
             Action {
                 text: qsTr("切换时间轴")
                 enabled: root.commandsEnabled
-                onTriggered: root.toggleBottomPanelRequested()
+                onTriggered: root.commands.toggleBottomPanelRequested()
             }
         }
 
@@ -318,7 +305,7 @@ Item {
             Action {
                 text: qsTr("切换实时预览")
                 enabled: root.commandsEnabled
-                onTriggered: root.togglePreviewRequested()
+                onTriggered: root.commands.togglePreviewRequested()
             }
         }
 

@@ -3,12 +3,11 @@ pragma Singleton
 import QtQuick
 
 QtObject {
-    // 应用宿主注入视图偏好；独立 QML 工具在缺省配置下仍可创建主题。
     property var preferences: null
 
     property var colors: ({
         background: {
-            workbench: "#191A1B",
+            surface: "#191A1B",
             editor: "#121314",
             elevated: "#202122"
         },

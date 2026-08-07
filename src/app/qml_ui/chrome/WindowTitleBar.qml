@@ -5,25 +5,16 @@ Rectangle {
     id: root
 
     required property var hostWindow
+    required property var menuCommands
+    required property var platform
     property string documentTitle: ""
-    signal toggleSidebarRequested()
-    signal toggleBottomPanelRequested()
-    signal togglePreviewRequested()
-    signal exitRequested()
-    signal undoRequested()
-    signal redoRequested()
-    signal selectAllRequested()
-    signal validateRequested()
-    signal metadataRequested()
-    signal openRequested()
-    signal saveRequested()
-    signal saveAsRequested()
+    property real leadingInset: 0
 
-    property bool canUndo: false
-    property bool canRedo: false
+    readonly property bool useEmbeddedMenu: root.platform.embeddedMenuInTitleBar
+    readonly property bool useCaptionButtons: root.platform.captionButtons
 
     implicitHeight: 34
-    color: Theme.colors.background.workbench
+    color: Theme.colors.background.surface
 
     // Title stays window-centered. Menu only yields to the painted glyph width
     // (capped by the max title band), not the whole empty center band.
@@ -37,16 +28,23 @@ Rectangle {
     readonly property real titleBandLeft: (width - titleGlyphWidth) / 2
     readonly property real menuGap: 16
     readonly property real menuLeft: brand.x + brand.width + 12
-    readonly property real menuAvailableWidth: Math.max(0, titleBandLeft - menuGap - menuLeft)
+    readonly property real menuAvailableWidth: root.useEmbeddedMenu
+        ? Math.max(0, titleBandLeft - menuGap - menuLeft)
+        : 0
 
-    onWidthChanged: mainMenu.scheduleReflow()
-    onMenuAvailableWidthChanged: mainMenu.scheduleReflow()
-    onDocumentTitleChanged: mainMenu.scheduleReflow()
+    function scheduleMainMenuReflow() {
+        if (mainMenuLoader.item)
+            mainMenuLoader.item.scheduleReflow()
+    }
+
+    onWidthChanged: root.scheduleMainMenuReflow()
+    onMenuAvailableWidthChanged: root.scheduleMainMenuReflow()
+    onDocumentTitleChanged: root.scheduleMainMenuReflow()
 
     Row {
         id: brand
         anchors.left: parent.left
-        anchors.leftMargin: 10
+        anchors.leftMargin: 10 + root.leadingInset
         anchors.verticalCenter: parent.verticalCenter
         // Font ascent makes glyphs look high; nudge down for optical center.
         anchors.verticalCenterOffset: 1
@@ -72,34 +70,35 @@ Rectangle {
         }
     }
 
-    MainMenu {
-        id: mainMenu
+    Item {
+        id: menuHost
         anchors.left: brand.right
         anchors.leftMargin: 12
         anchors.verticalCenter: parent.verticalCenter
         height: parent.height
+        width: root.useEmbeddedMenu && mainMenuLoader.item ? mainMenuLoader.item.width : 0
+        clip: true
         z: 2
-        availableWidth: root.menuAvailableWidth
-        commandsEnabled: root.visible
-        canUndo: root.canUndo
-        canRedo: root.canRedo
-        onToggleSidebarRequested: root.toggleSidebarRequested()
-        onToggleBottomPanelRequested: root.toggleBottomPanelRequested()
-        onTogglePreviewRequested: root.togglePreviewRequested()
-        onExitRequested: root.exitRequested()
-        onUndoRequested: root.undoRequested()
-        onRedoRequested: root.redoRequested()
-        onSelectAllRequested: root.selectAllRequested()
-        onValidateRequested: root.validateRequested()
-        onMetadataRequested: root.metadataRequested()
-        onOpenRequested: root.openRequested()
-        onSaveRequested: root.saveRequested()
-        onSaveAsRequested: root.saveAsRequested()
+
+        Loader {
+            id: mainMenuLoader
+            active: root.useEmbeddedMenu
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            height: parent.height
+            sourceComponent: MainMenu {
+                height: menuHost.height
+                availableWidth: root.menuAvailableWidth
+                commands: root.menuCommands
+                commandsEnabled: root.visible
+            }
+            onLoaded: root.scheduleMainMenuReflow()
+        }
     }
 
     Item {
         id: dragArea
-        anchors.left: mainMenu.right
+        anchors.left: menuHost.right
         anchors.right: captionButtons.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -140,14 +139,15 @@ Rectangle {
         // Let drag / menu hit-testing win under the label.
         enabled: false
 
-        onImplicitWidthChanged: mainMenu.scheduleReflow()
+        onImplicitWidthChanged: root.scheduleMainMenuReflow()
     }
 
     WindowCaptionButtons {
         id: captionButtons
         anchors.right: parent.right
         z: 2
-        visible: Qt.platform.os === "windows"
+        visible: root.useCaptionButtons
+        width: root.useCaptionButtons ? implicitWidth : 0
         hostWindow: root.hostWindow
     }
 

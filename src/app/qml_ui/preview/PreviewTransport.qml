@@ -13,7 +13,7 @@ Rectangle {
     readonly property bool exportPageActive: !!(root.shellController && root.shellController.exportPageActive)
 
     implicitHeight: 63
-    color: Theme.colors.background.workbench
+    color: Theme.colors.background.surface
 
     Rectangle {
         anchors.left: parent.left

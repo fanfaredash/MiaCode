@@ -144,10 +144,10 @@ Item {
                 anchors.fill: parent
                 color: {
                     if (root.panelTab)
-                        return Theme.colors.background.workbench
+                        return Theme.colors.background.surface
                     if (root.active)
                         return Theme.colors.background.editor
-                    return Theme.colors.background.workbench
+                    return Theme.colors.background.surface
                 }
             }
 

@@ -5,7 +5,7 @@
 
 class QuickShellController;
 
-// Real-time preview state exposed to the pure-QML workbench. Playback and
+// Real-time preview state exposed to the pure-QML UI. Playback and
 // rendering remain owned by MiaCode's preview runtime.
 class QmlPreviewModel final : public QObject
 {

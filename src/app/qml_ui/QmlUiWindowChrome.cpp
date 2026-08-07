@@ -1,6 +1,8 @@
 #include "QmlUiWindowChrome.h"
 
+#include <QtGlobal>
 #include <QCoreApplication>
+#include <QPointer>
 #include <QWindow>
 
 #ifdef Q_OS_WIN
@@ -9,6 +11,11 @@
 #include <windowsx.h>
 #endif
 
+QmlUiWindowChrome::QmlUiWindowChrome(QObject* parent)
+    : QObject(parent)
+{
+}
+
 QmlUiWindowChrome::~QmlUiWindowChrome()
 {
     if (QCoreApplication::instance() != nullptr) {
@@ -16,20 +23,29 @@ QmlUiWindowChrome::~QmlUiWindowChrome()
     }
 }
 
+void QmlUiWindowChrome::setTitleBarLeadingInset(qreal inset)
+{
+    if (qFuzzyCompare(titleBarLeadingInset_, inset)) {
+        return;
+    }
+    titleBarLeadingInset_ = inset;
+    emit titleBarLeadingInsetChanged();
+}
+
 void QmlUiWindowChrome::attach(QWindow* window)
 {
-#ifdef Q_OS_WIN
     if (window == nullptr) {
         return;
     }
 
+    window_ = window;
+
+#ifdef Q_OS_WIN
     nativeHandle_ = window->winId();
     const auto handle = reinterpret_cast<HWND>(nativeHandle_);
     QCoreApplication::instance()->installNativeEventFilter(this);
     extendDwmFrame();
 
-    // Force WM_NCCALCSIZE so the client area covers the native caption
-    // before the window is shown.
     SetWindowPos(
         handle,
         nullptr,
@@ -38,8 +54,40 @@ void QmlUiWindowChrome::attach(QWindow* window)
         0,
         0,
         SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    setTitleBarLeadingInset(0);
+#elif defined(Q_OS_MACOS)
+    applyMacOs(window);
+    QObject::connect(
+        window,
+        &QWindow::widthChanged,
+        this,
+        &QmlUiWindowChrome::refreshTitleBarMetrics,
+        static_cast<Qt::ConnectionType>(Qt::UniqueConnection));
+    QObject::connect(
+        window,
+        &QWindow::visibleChanged,
+        this,
+        [this](bool visible) {
+            if (visible) {
+                refreshTitleBarMetrics();
+            }
+        },
+        static_cast<Qt::ConnectionType>(Qt::UniqueConnection));
 #else
     Q_UNUSED(window);
+    setTitleBarLeadingInset(0);
+#endif
+}
+
+void QmlUiWindowChrome::refreshTitleBarMetrics()
+{
+#ifdef Q_OS_MACOS
+    if (window_.isNull()) {
+        return;
+    }
+    applyMacOs(window_.data());
+#else
+    setTitleBarLeadingInset(0);
 #endif
 }
 
@@ -57,9 +105,6 @@ bool QmlUiWindowChrome::nativeEventFilter(const QByteArray& eventType, void* mes
     }
 
     if (nativeMessage->message == WM_NCCALCSIZE && nativeMessage->wParam == TRUE) {
-        // Returning 0 removes the standard caption and makes the whole
-        // window client area. When maximized, clamp to the monitor work
-        // area so the client does not cover the taskbar.
         if (IsZoomed(handle)) {
             MONITORINFO monitorInfo{};
             monitorInfo.cbSize = sizeof(monitorInfo);
@@ -143,3 +188,10 @@ void QmlUiWindowChrome::extendDwmFrame() const
     DwmExtendFrameIntoClientArea(reinterpret_cast<HWND>(nativeHandle_), &margins);
 #endif
 }
+
+#ifndef Q_OS_MACOS
+void QmlUiWindowChrome::applyMacOs(QWindow* window)
+{
+    Q_UNUSED(window);
+}
+#endif

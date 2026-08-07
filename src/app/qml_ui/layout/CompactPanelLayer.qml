@@ -4,7 +4,7 @@ import MiaCode.UI
 Item {
     id: root
 
-    required property var workbenchState
+    required property var viewState
     required property var documentSession
     required property var preferences
     required property var previewSession
@@ -15,7 +15,7 @@ Item {
     signal fullscreenRequested()
     signal settingsRequested()
 
-    visible: compact && workbenchState.compactPanel.length > 0
+    visible: compact && viewState.compactPanel.length > 0
     z: 40
 
     Rectangle {
@@ -24,17 +24,17 @@ Item {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: root.workbenchState.compactPanel = ""
+            onClicked: root.viewState.compactPanel = ""
         }
     }
 
-    WorkbenchSidebar {
+    Sidebar {
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: Math.min(320, parent.width - 36)
-        visible: root.workbenchState.compactPanel === "sidebar"
-        workbenchState: root.workbenchState
+        visible: root.viewState.compactPanel === "sidebar"
+        viewState: root.viewState
         documentSession: root.documentSession
         preferences: root.preferences
         commands: root.commands
@@ -48,7 +48,7 @@ Item {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: Math.min(360, parent.width - 36)
-        visible: root.workbenchState.compactPanel === "preview"
+        visible: root.viewState.compactPanel === "preview"
         previewSession: root.previewSession
         shellController: root.shellController
         onFullscreenRequested: root.fullscreenRequested()

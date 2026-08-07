@@ -6,13 +6,13 @@ import MiaCode.UI
 Rectangle {
     id: root
 
-    required property var workbenchState
+    required property var viewState
     required property var documentSession
     required property var commands
 
-    readonly property bool metadataSourceActive: workbenchState.metadataEditorActive
-        && workbenchState.metadataEditorMode === 1
-    readonly property bool sourceVisible: workbenchState.difficultyEditorActive
+    readonly property bool metadataSourceActive: viewState.metadataEditorActive
+        && viewState.metadataEditorMode === 1
+    readonly property bool sourceVisible: viewState.difficultyEditorActive
         || metadataSourceActive
     readonly property bool canUndo: sourceVisible && sourceEditor.canUndo
     readonly property bool canRedo: sourceVisible && sourceEditor.canRedo
@@ -33,7 +33,7 @@ Rectangle {
     }
 
     function revealSyntaxIssue(line, column, endColumn) {
-        workbenchState.openDifficultyEditor(root.documentSession.currentDifficultyId)
+        viewState.openDifficultyEditor(root.documentSession.currentDifficultyId)
         sourceEditor.revealSyntaxIssue(line, column, endColumn)
     }
 
@@ -44,7 +44,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        workbenchState: root.workbenchState
+        viewState: root.viewState
         documentSession: root.documentSession
     }
 
@@ -54,8 +54,8 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: tabs.bottom
         height: 42
-        visible: root.workbenchState.difficultyEditorActive
-        color: Theme.colors.background.workbench
+        visible: root.viewState.difficultyEditorActive
+        color: Theme.colors.background.surface
 
         RowLayout {
             anchors.fill: parent
@@ -108,18 +108,18 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: tabs.bottom
         height: 42
-        visible: root.workbenchState.metadataEditorActive
-        color: Theme.colors.background.workbench
+        visible: root.viewState.metadataEditorActive
+        color: Theme.colors.background.surface
 
         AppButton {
             anchors.left: parent.left
             anchors.leftMargin: 10
             anchors.verticalCenter: parent.verticalCenter
-            text: root.workbenchState.metadataEditorMode === 0
+            text: root.viewState.metadataEditorMode === 0
                 ? qsTr("字段源码")
                 : qsTr("表单")
-            onClicked: root.workbenchState.metadataEditorMode
-                = root.workbenchState.metadataEditorMode === 0 ? 1 : 0
+            onClicked: root.viewState.metadataEditorMode
+                = root.viewState.metadataEditorMode === 0 ? 1 : 0
         }
 
         AppSwitch {
@@ -185,7 +185,7 @@ Rectangle {
         anchors.bottom: parent.bottom
         visible: root.sourceVisible
         metadataMode: root.metadataSourceActive
-        workbenchState: root.workbenchState
+        viewState: root.viewState
         documentSession: root.documentSession
     }
 
@@ -194,8 +194,8 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: metadataModeBar.bottom
         anchors.bottom: parent.bottom
-        visible: root.workbenchState.metadataEditorActive
-            && root.workbenchState.metadataEditorMode === 0
+        visible: root.viewState.metadataEditorActive
+            && root.viewState.metadataEditorMode === 0
         contentHeight: metadataColumn.implicitHeight + 32
         clip: true
         boundsBehavior: Flickable.StopAtBounds
@@ -267,7 +267,7 @@ Rectangle {
 
     Label {
         anchors.centerIn: parent
-        visible: !root.workbenchState.hasActiveEditor
+        visible: !root.viewState.hasActiveEditor
         text: qsTr("从左侧打开元数据或难度")
         color: Theme.colors.text.secondary
         font.family: Theme.uiFont

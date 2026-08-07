@@ -13,6 +13,7 @@ Item {
     readonly property var commands: applicationContext.commands
     readonly property var shellController: applicationContext.shell
     readonly property var pages: applicationContext.pages
+    readonly property var platform: applicationContext.platform
     readonly property string documentTitle: documentSession.documentTitle
     readonly property bool compact: width < 720
     // 打开文件时的未保存决策。关闭应用走 v1 shell confirmClose 协议，
@@ -20,7 +21,28 @@ Item {
     property url pendingOpenFile
     property bool continueAfterSaveAs: false
 
-    WorkbenchState { id: state }
+    ViewState { id: state }
+
+    MainMenuCommands {
+        id: menuCommands
+        canUndo: splitView.canUndo
+        canRedo: splitView.canRedo
+        onToggleSidebarRequested: root.toggleSidebar()
+        onToggleBottomPanelRequested: {
+            state.bottomPanelVisible = !state.bottomPanelVisible
+            root.preferences.bottomPanelVisible = state.bottomPanelVisible
+        }
+        onTogglePreviewRequested: root.togglePreview()
+        onExitRequested: root.requestClose()
+        onUndoRequested: root.undo()
+        onRedoRequested: root.redo()
+        onSelectAllRequested: root.selectAll()
+        onValidateRequested: root.validateChart()
+        onMetadataRequested: state.openMetadataEditor()
+        onOpenRequested: openFileDialog.open()
+        onSaveRequested: root.saveDocument()
+        onSaveAsRequested: saveFileDialog.open()
+    }
 
     function toggleSidebar() {
         if (root.compact) {
@@ -115,52 +137,28 @@ Item {
             id: titleBar
             width: parent.width
             height: visible ? implicitHeight : 0
-            visible: Qt.platform.os === "windows"
+            visible: root.platform.customTitleBar
             hostWindow: root.hostWindow
+            platform: root.platform
+            menuCommands: menuCommands
+            leadingInset: root.applicationContext.windowChrome
+                ? root.applicationContext.windowChrome.titleBarLeadingInset
+                : 0
             documentTitle: root.documentSession.documentTitle
-            canUndo: splitView.canUndo
-            canRedo: splitView.canRedo
-            onToggleSidebarRequested: root.toggleSidebar()
-            onToggleBottomPanelRequested: {
-                state.bottomPanelVisible = !state.bottomPanelVisible
-                root.preferences.bottomPanelVisible = state.bottomPanelVisible
-            }
-            onTogglePreviewRequested: root.togglePreview()
-            onExitRequested: root.requestClose()
-            onUndoRequested: root.undo()
-            onRedoRequested: root.redo()
-            onSelectAllRequested: root.selectAll()
-            onValidateRequested: root.validateChart()
-            onMetadataRequested: state.openMetadataEditor()
-            onOpenRequested: openFileDialog.open()
-            onSaveRequested: root.saveDocument()
-            onSaveAsRequested: saveFileDialog.open()
         }
 
-        MainMenu {
-            id: platformMenu
+        Loader {
+            id: platformMenuLoader
             width: parent.width
-            height: visible ? 30 : 0
-            visible: Qt.platform.os !== "windows"
-            availableWidth: width
-            commandsEnabled: visible
-            canUndo: splitView.canUndo
-            canRedo: splitView.canRedo
-            onToggleSidebarRequested: root.toggleSidebar()
-            onToggleBottomPanelRequested: {
-                state.bottomPanelVisible = !state.bottomPanelVisible
-                root.preferences.bottomPanelVisible = state.bottomPanelVisible
+            height: active ? 30 : 0
+            active: !root.platform.customTitleBar
+            sourceComponent: MainMenu {
+                width: platformMenuLoader.width
+                height: 30
+                availableWidth: width
+                commands: menuCommands
+                commandsEnabled: true
             }
-            onTogglePreviewRequested: root.togglePreview()
-            onExitRequested: root.requestClose()
-            onUndoRequested: root.undo()
-            onRedoRequested: root.redo()
-            onSelectAllRequested: root.selectAll()
-            onValidateRequested: root.validateChart()
-            onMetadataRequested: state.openMetadataEditor()
-            onOpenRequested: openFileDialog.open()
-            onSaveRequested: root.saveDocument()
-            onSaveAsRequested: saveFileDialog.open()
         }
 
         MainToolBar {
@@ -191,15 +189,15 @@ Item {
         }
 
         Item {
-            id: workspaceHost
+            id: mainViewHost
             width: parent.width
-            height: parent.height - titleBar.height - platformMenu.height
+            height: parent.height - titleBar.height - platformMenuLoader.height
                     - mainToolBar.height - statusBar.height
 
-            WorkspaceSplitView {
+            MainSplitView {
                 id: splitView
                 anchors.fill: parent
-                workbenchState: state
+                viewState: state
                 documentSession: root.documentSession
                 preferences: root.preferences
                 previewSession: root.previewSession
@@ -212,7 +210,7 @@ Item {
 
             CompactPanelLayer {
                 anchors.fill: parent
-                workbenchState: state
+                viewState: state
                 documentSession: root.documentSession
                 preferences: root.preferences
                 previewSession: root.previewSession

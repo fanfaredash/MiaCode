@@ -21,7 +21,7 @@ Rectangle {
     property bool muriPreviewActive: false
 
     implicitHeight: 36
-    color: Theme.colors.background.workbench
+    color: Theme.colors.background.surface
 
     Row {
         anchors.left: parent.left

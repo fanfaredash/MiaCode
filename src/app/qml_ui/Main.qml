@@ -7,38 +7,47 @@ ApplicationWindow {
 
     required property var applicationContext
     readonly property var shellController: applicationContext.shell
+    readonly property var platform: applicationContext.platform
 
     width: 1280
     height: 720
     minimumWidth: 620
     minimumHeight: 480
-    // Windows: bootstrap hides, attaches QmlUiWindowChrome, then show().
-    // Other platforms keep an immediate show.
-    visible: Qt.platform.os !== "windows"
-    flags: Qt.platform.os === "windows"
-           ? Qt.Window
-             | Qt.CustomizeWindowHint
-             | Qt.WindowTitleHint
-             | Qt.WindowSystemMenuHint
-             | Qt.WindowMinimizeButtonHint
-             | Qt.WindowMaximizeButtonHint
-             | Qt.WindowCloseButtonHint
-           : Qt.Window
-    title: Qt.application.name + (workbench.documentTitle.length > 0
-                                  ? " — " + workbench.documentTitle
+    // Initial visibility / flags come from applicationContext.platform.
+    // Windows: bootstrap hides, attaches chrome, then show().
+    // macOS: expand client area so WindowTitleBar draws under traffic lights.
+    visible: !window.platform.hideBeforeChromeAttach
+    flags: {
+        let value = Qt.Window
+        if (window.platform.captionButtons) {
+            value |= Qt.CustomizeWindowHint
+                    | Qt.WindowTitleHint
+                    | Qt.WindowSystemMenuHint
+                    | Qt.WindowMinimizeButtonHint
+                    | Qt.WindowMaximizeButtonHint
+                    | Qt.WindowCloseButtonHint
+        }
+        if (window.platform.expandClientArea) {
+            value |= Qt.ExpandedClientAreaHint
+                    | Qt.NoTitleBarBackgroundHint
+        }
+        return value
+    }
+    title: Qt.application.name + (mainView.documentTitle.length > 0
+                                  ? " — " + mainView.documentTitle
                                   : "")
-    color: Theme.colors.background.workbench
+    color: Theme.colors.background.surface
     topPadding: 0
     leftPadding: 0
     rightPadding: 0
     bottomPadding: 0
 
-    palette.window: Theme.colors.background.workbench
+    palette.window: Theme.colors.background.surface
     palette.windowText: Theme.colors.text.primary
     palette.base: Theme.colors.background.editor
     palette.alternateBase: Theme.colors.background.elevated
     palette.text: Theme.colors.text.primary
-    palette.button: Theme.colors.background.workbench
+    palette.button: Theme.colors.background.surface
     palette.buttonText: Theme.colors.text.primary
     palette.light: Theme.colors.border.control
     palette.midlight: Theme.colors.border.normal
@@ -70,8 +79,8 @@ ApplicationWindow {
             window.shellController.notifyRootCloseAccepted("qml_ui_root_closing")
     }
 
-    Workbench {
-        id: workbench
+    MainView {
+        id: mainView
         anchors.fill: parent
         hostWindow: window
         applicationContext: window.applicationContext

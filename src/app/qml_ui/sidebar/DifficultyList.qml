@@ -7,7 +7,7 @@ import MiaCode.UI
 Column {
     id: root
 
-    required property var workbenchState
+    required property var viewState
     required property var documentSession
     required property var commands
 
@@ -25,13 +25,13 @@ Column {
             height: parent.height
             hoverEnabled: true
             onClicked: {
-                root.workbenchState.difficultySectionExpanded
-                    = !root.workbenchState.difficultySectionExpanded
+                root.viewState.difficultySectionExpanded
+                    = !root.viewState.difficultySectionExpanded
             }
 
             contentItem: Text {
                 leftPadding: 8
-                text: (root.workbenchState.difficultySectionExpanded ? "▾  " : "▸  ")
+                text: (root.viewState.difficultySectionExpanded ? "▾  " : "▸  ")
                     + qsTr("难度")
                 color: Theme.colors.text.secondary
                 font.family: Theme.uiFont
@@ -47,7 +47,7 @@ Column {
 
             Tooltip {
                 visible: sectionButton.hovered
-                text: root.workbenchState.difficultySectionExpanded
+                text: root.viewState.difficultySectionExpanded
                     ? qsTr("折叠难度") : qsTr("展开难度")
             }
         }
@@ -82,15 +82,15 @@ Column {
             required property var modelData
             // 侧边栏只反映编辑器会话中的活动标签。文档模型的
             // currentDifficultyId 负责正文数据源，不参与导航选中状态。
-            readonly property bool activeEditor: root.workbenchState.activeEditorKey
-                === root.workbenchState.difficultyEditorKey(modelData.id)
+            readonly property bool activeEditor: root.viewState.activeEditorKey
+                === root.viewState.difficultyEditorKey(modelData.id)
 
             width: root.width
-            height: root.workbenchState.difficultySectionExpanded ? 30 : 0
-            visible: root.workbenchState.difficultySectionExpanded
+            height: root.viewState.difficultySectionExpanded ? 30 : 0
+            visible: root.viewState.difficultySectionExpanded
             text: modelData.label
             selected: activeEditor
-            onClicked: root.workbenchState.openDifficultyEditor(modelData.id)
+            onClicked: root.viewState.openDifficultyEditor(modelData.id)
         }
     }
 
@@ -105,7 +105,7 @@ Column {
                 text: modelData.label
                 onTriggered: {
                     if (root.commands.addDifficulty(modelData.id))
-                        root.workbenchState.openDifficultyEditor(modelData.id)
+                        root.viewState.openDifficultyEditor(modelData.id)
                 }
             }
         }

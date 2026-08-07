@@ -14,6 +14,11 @@ helper binaries. Build file: root `CMakeLists.txt` (one file, ~1200 lines). Pres
   windeployqt `$<CONFIG:Debug>` at `:1179`/`:1190`). Leave it unless it gets in the way; it is
   not a second supported product config.
 - Generator is multi-config (Visual Studio 17 2022), so CTest needs `-C Release`.
+- **QTP0001 NEW** is set after `find_package(Qt6 …)` so `qt_add_qml_module(MiaCode URI MiaCode.UI …)`
+  embeds under `:/qt/qml/MiaCode/UI/`. That path is on Qt's default QML import path, so
+  `loadFromModule("MiaCode.UI", "Main")` works inside a macOS `.app` without a filesystem
+  `MiaCode/UI` sibling next to the executable. Leaving the policy unset keeps the OLD
+  `:/MiaCode/UI/` resource layout and breaks packaged / app-bundle uiv2 startup.
 
 ## 2. Targets
 

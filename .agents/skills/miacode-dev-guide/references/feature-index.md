@@ -57,28 +57,13 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   spinner is a mouse-transparent viewport overlay positioned with the same `visualItemRect`
   pattern as `deleteDifficultyButton_`; spinner `isActive()` guards re-entrancy. Stopped in the
   same deferred lambda once the build returns.
-- QuickShell beta: `src/app/quick_shell/` (`QuickShellBootstrap`, `QuickShellController`,
-  `QuickShellNativeSurfaceHost`, `QuickShellPreviewCompositeSurface`, `QuickShellStyleBridge`,
-  `qml/QuickShellMain.qml`). This is the **default v1 UI skin**.
-- Pure-QML workbench (v2, opt-in): `src/app/qml_ui/` (`QmlUiBootstrap`, `QmlApplicationContext`,
-  `MiaCode.UI` QML module). Selected by `--ui=v2` / `--modern-ui` or `MIACODE_UI_SKIN=v2`.
-  Shares the hidden `MainWindow` backend and `QuickShellController` (no NativeSurfaceHost for the
-  whole shell). Export/Tools: v2 sidebars + editor-area local `WindowContainer` via
-  `QmlEditorPageHost` embedding v1 `ExportLauncherPage` / `LatencyDetectionPage` (dialogs for
-  media/normalize/Net stay dialogs). Verified: enter Export collapses bottom tabs and switches
-  preview to export aspect/session via the same `QuickShellController` projections v1 uses
-  (`bottomTabsVisible`, `previewCanvasAspectRatio`, `exportPageActive`) — no parallel flags in
-  WorkbenchState. Windows client-area caption is `QmlUiWindowChrome` attached only from
-  `QmlUiBootstrap` (v1 QuickShell untouched). Title-bar brand icon reuses canonical
-  `resources/icons/app.png` (QML alias `icons/app.png`). Shared QQC chrome:
-  `AppTextField` / `AppTextArea` / `AppButton` / `AppComboBox` / `AppSlider` / `AppMenu*`
-  (v1 dialog* geometry, local `Theme` colors). Hover/selection chrome shared via
-  `HoverChrome` + `NavRow` (v2 `qml_ui` only). Title-bar `MainMenu` collapses
-  right-to-left into a More (`…`) submenu when the window-centered document title
-  band leaves insufficient width (`WindowTitleBar` + `MainMenu.availableWidth`).
-  Default remains QuickShell v1 (`--ui=v1` / unset).
-  **Phase-1 living checklist (update when working):** `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
-  Next focus there: P1 honesty (`syntaxIssues` / dead toolbar buttons), then P0 Document friend cleanup.
+- Default UI (v2): `src/app/qml_ui/` (`QmlUiBootstrap`, `QmlApplicationContext`,
+  `MiaCode.UI`). Shares hidden `MainWindow` + `QuickShellController` (no shell-wide
+  NativeSurfaceHost). Export/Latency: `QmlEditorPageHost`. Windows caption:
+  `QmlUiWindowChrome`. Checklist: `docs/specs/ui/QML_UI_V2_PHASE1_TODO_ZH.md`.
+- QuickShell (v1, `--ui=v1` / `MIACODE_UI_SKIN=v1`): `src/app/quick_shell/`
+  (`QuickShellBootstrap`, `QuickShellController`, `QuickShellNativeSurfaceHost`,
+  `QuickShellPreviewCompositeSurface`, `QuickShellStyleBridge`, `qml/QuickShellMain.qml`).
 - Appearance prefs + first-run onboarding: theme pref persisted via
   `UiText::preferredTheme`/`setPreferredTheme` (`preferences.json` `ui.theme`); live re-theme via
   `MainWindow::WindowSection::applyUiTheme` (triggers `ApplicationPaletteChange` → `QuickShellStyleBridge`

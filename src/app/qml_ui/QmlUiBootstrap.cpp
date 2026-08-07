@@ -1,6 +1,7 @@
 #include "QmlUiBootstrap.h"
 
 #include "QmlApplicationContext.h"
+#include "QmlUiPlatformChrome.h"
 #include "QmlUiWindowChrome.h"
 #include "MainEntrypoints.h"
 #include "mainwindow/MainWindow.h"
@@ -15,7 +16,6 @@
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
-#include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickWindow>
 #include <QTextStream>
@@ -59,8 +59,8 @@ QmlUiBootstrap::QmlUiBootstrap(const QIcon& appIcon, QObject* parent)
 QmlUiBootstrap::~QmlUiBootstrap()
 {
     rootWindow_ = nullptr;
-    windowChrome_.reset();
     engine_.reset();
+    windowChrome_.reset();
     applicationContext_.reset();
     controller_.reset();
     backend_.reset();
@@ -97,6 +97,9 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
     engine_ = std::make_unique<QQmlApplicationEngine>(this);
     engine_->addImportPath(QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
     ensurePreviewQuickTypesRegisteredForQmlUi();
+
+    windowChrome_ = std::make_unique<QmlUiWindowChrome>(this);
+    applicationContext_->setWindowChrome(windowChrome_.get());
 
     QObject::connect(
         engine_.get(),
@@ -156,17 +159,24 @@ bool QmlUiBootstrap::start(const QString& startupOpenTarget)
         miacode::app::entry::bindHighPerformanceQuickGraphicsDevice(
             window, QStringLiteral("qml_ui_root_window"), /*preferVideoShareDevice=*/false);
 
-#ifdef Q_OS_WIN
-        // v2-only client-area caption (Mashiro WindowChrome contract). Hide
-        // first so the native title bar never flashes, attach, then show.
+        auto* platform = qobject_cast<QmlUiPlatformChrome*>(applicationContext_->platform());
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+        // Timing comes from applicationContext.platform (hide before / attach after show).
         // QuickShellBootstrap (v1) never constructs QmlUiWindowChrome.
-        window->setVisible(false);
-        windowChrome_ = std::make_unique<QmlUiWindowChrome>();
-        windowChrome_->attach(window);
-        appendQmlUiRuntimeLog(QStringLiteral("window_chrome_attached"));
+        if (platform != nullptr && platform->hideBeforeChromeAttach()) {
+            window->setVisible(false);
+            windowChrome_->attach(window);
+            appendQmlUiRuntimeLog(QStringLiteral("window_chrome_attached"));
+        }
 #endif
         UiNativeWindowTheme::applyToWindow(window);
         window->show();
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+        if (platform != nullptr && platform->attachChromeAfterShow()) {
+            windowChrome_->attach(window);
+            appendQmlUiRuntimeLog(QStringLiteral("window_chrome_attached"));
+        }
+#endif
     }
 
     if (!startupOpenTarget.trimmed().isEmpty() && backend_ != nullptr) {
@@ -218,8 +228,8 @@ void QmlUiBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QString& so
     appendQmlUiRuntimeLog(QStringLiteral("shutdown_destroy"), source);
 
     rootWindow_ = nullptr;
-    windowChrome_.reset();
     engine_.reset();
+    windowChrome_.reset();
     applicationContext_.reset();
     controller_.reset();
     backend_.reset();

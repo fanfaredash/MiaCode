@@ -5,12 +5,12 @@ import MiaCode.UI
 Rectangle {
     id: root
 
-    required property var workbenchState
+    required property var viewState
     required property var documentSession
     required property var commands
     property var pages
 
-    color: Theme.colors.background.workbench
+    color: Theme.colors.background.surface
     clip: true
 
     PanelHeader {
@@ -40,18 +40,18 @@ Rectangle {
             NavRow {
                 width: parent.width
                 text: qsTr("元数据")
-                selected: root.workbenchState.metadataEditorActive
+                selected: root.viewState.metadataEditorActive
                 onClicked: {
                     if (root.pages && root.pages.overlayActive)
                         root.pages.leaveOverlayPage()
-                    root.workbenchState.activeSidebarView = "chart"
-                    root.workbenchState.openMetadataEditor()
+                    root.viewState.activeSidebarView = "chart"
+                    root.viewState.openMetadataEditor()
                 }
             }
 
             DifficultyList {
                 width: parent.width
-                workbenchState: root.workbenchState
+                viewState: root.viewState
                 documentSession: root.documentSession
                 commands: root.commands
             }

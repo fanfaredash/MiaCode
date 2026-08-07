@@ -1,4 +1,4 @@
-#include "QmlWorkspaceSettings.h"
+#include "QmlUiSettings.h"
 
 #include "mainwindow/MainWindowShared.h"
 
@@ -6,25 +6,25 @@
 #include <QtGlobal>
 
 namespace {
-constexpr auto kSidebarVisible = "workbench/sidebarVisible";
-constexpr auto kSidebarWidth = "workbench/sidebarWidth";
-constexpr auto kBottomPanelVisible = "workbench/bottomPanelVisible";
-constexpr auto kBottomPanelHeight = "workbench/bottomPanelHeight";
-constexpr auto kPreviewVisible = "workbench/previewVisible";
-constexpr auto kPreviewWidthRatio = "workbench/previewWidthRatio";
+constexpr auto kSidebarVisible = "ui/sidebarVisible";
+constexpr auto kSidebarWidth = "ui/sidebarWidth";
+constexpr auto kBottomPanelVisible = "ui/bottomPanelVisible";
+constexpr auto kBottomPanelHeight = "ui/bottomPanelHeight";
+constexpr auto kPreviewVisible = "ui/previewVisible";
+constexpr auto kPreviewWidthRatio = "ui/previewWidthRatio";
 constexpr auto kFontSize = "appearance/fontSize";
 }
 
-QmlWorkspaceSettings::QmlWorkspaceSettings(QObject* parent)
+QmlUiSettings::QmlUiSettings(QObject* parent)
     : QObject(parent)
 {
     uiFontFamily_ = QGuiApplication::font().family();
 
-    // Match v1 editor: embedded Consolas on Windows (`:/fonts/consola.ttf`), 10 pt.
-    codeFont_ = miacode::mainwindow::shared::editorFont(10);
+    // Match v1 editorFont() platform defaults: Consolas 10 pt on Windows,
+    // SF Mono / Menlo 13 pt on macOS (see MainWindowShared.cpp).
+    codeFont_ = miacode::mainwindow::shared::editorFont();
 
-    // 所有值在程序启动时一次性恢复并约束到界面可接受范围。配置文件中的
-    // 旧值即使来自不同尺寸的显示器，也不会让关键工作区完全离开可见范围。
+    // 启动时读取并约束到界面可接受范围。
     sidebarVisible_ = settings_.value(kSidebarVisible, true).toBool();
     sidebarWidth_ = qBound(120, settings_.value(kSidebarWidth, 190).toInt(), 320);
     bottomPanelVisible_ = settings_.value(kBottomPanelVisible, true).toBool();
@@ -34,17 +34,17 @@ QmlWorkspaceSettings::QmlWorkspaceSettings(QObject* parent)
     fontSize_ = qBound(12, settings_.value(kFontSize, 13).toInt(), 14);
 }
 
-bool QmlWorkspaceSettings::sidebarVisible() const { return sidebarVisible_; }
-int QmlWorkspaceSettings::sidebarWidth() const { return sidebarWidth_; }
-bool QmlWorkspaceSettings::bottomPanelVisible() const { return bottomPanelVisible_; }
-int QmlWorkspaceSettings::bottomPanelHeight() const { return bottomPanelHeight_; }
-bool QmlWorkspaceSettings::previewVisible() const { return previewVisible_; }
-double QmlWorkspaceSettings::previewWidthRatio() const { return previewWidthRatio_; }
-QString QmlWorkspaceSettings::uiFontFamily() const { return uiFontFamily_; }
-QFont QmlWorkspaceSettings::codeFont() const { return codeFont_; }
-int QmlWorkspaceSettings::fontSize() const { return fontSize_; }
+bool QmlUiSettings::sidebarVisible() const { return sidebarVisible_; }
+int QmlUiSettings::sidebarWidth() const { return sidebarWidth_; }
+bool QmlUiSettings::bottomPanelVisible() const { return bottomPanelVisible_; }
+int QmlUiSettings::bottomPanelHeight() const { return bottomPanelHeight_; }
+bool QmlUiSettings::previewVisible() const { return previewVisible_; }
+double QmlUiSettings::previewWidthRatio() const { return previewWidthRatio_; }
+QString QmlUiSettings::uiFontFamily() const { return uiFontFamily_; }
+QFont QmlUiSettings::codeFont() const { return codeFont_; }
+int QmlUiSettings::fontSize() const { return fontSize_; }
 
-void QmlWorkspaceSettings::setSidebarVisible(bool value)
+void QmlUiSettings::setSidebarVisible(bool value)
 {
     if (sidebarVisible_ == value) return;
     sidebarVisible_ = value;
@@ -52,7 +52,7 @@ void QmlWorkspaceSettings::setSidebarVisible(bool value)
     emit sidebarVisibleChanged();
 }
 
-void QmlWorkspaceSettings::setSidebarWidth(int value)
+void QmlUiSettings::setSidebarWidth(int value)
 {
     value = qBound(120, value, 320);
     if (sidebarWidth_ == value) return;
@@ -61,7 +61,7 @@ void QmlWorkspaceSettings::setSidebarWidth(int value)
     emit sidebarWidthChanged();
 }
 
-void QmlWorkspaceSettings::setBottomPanelVisible(bool value)
+void QmlUiSettings::setBottomPanelVisible(bool value)
 {
     if (bottomPanelVisible_ == value) return;
     bottomPanelVisible_ = value;
@@ -69,7 +69,7 @@ void QmlWorkspaceSettings::setBottomPanelVisible(bool value)
     emit bottomPanelVisibleChanged();
 }
 
-void QmlWorkspaceSettings::setBottomPanelHeight(int value)
+void QmlUiSettings::setBottomPanelHeight(int value)
 {
     value = qBound(120, value, 340);
     if (bottomPanelHeight_ == value) return;
@@ -78,7 +78,7 @@ void QmlWorkspaceSettings::setBottomPanelHeight(int value)
     emit bottomPanelHeightChanged();
 }
 
-void QmlWorkspaceSettings::setPreviewVisible(bool value)
+void QmlUiSettings::setPreviewVisible(bool value)
 {
     if (previewVisible_ == value) return;
     previewVisible_ = value;
@@ -86,7 +86,7 @@ void QmlWorkspaceSettings::setPreviewVisible(bool value)
     emit previewVisibleChanged();
 }
 
-void QmlWorkspaceSettings::setPreviewWidthRatio(double value)
+void QmlUiSettings::setPreviewWidthRatio(double value)
 {
     value = qBound(0.2, value, 0.5);
     if (qFuzzyCompare(previewWidthRatio_, value)) return;
@@ -95,7 +95,7 @@ void QmlWorkspaceSettings::setPreviewWidthRatio(double value)
     emit previewWidthRatioChanged();
 }
 
-void QmlWorkspaceSettings::setFontSize(int value)
+void QmlUiSettings::setFontSize(int value)
 {
     value = qBound(12, value, 14);
     if (fontSize_ == value) return;

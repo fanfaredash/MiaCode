@@ -71,45 +71,29 @@ bool wantsQuickShellBeta(const QStringList& arguments)
     return arguments.contains(QStringLiteral("--quick-shell-beta"));
 }
 
-// UI skin selection: default remains QuickShell (v1). Pure-QML workbench
-// (v2 / Mashiro-style) is opt-in so both skins coexist in one build.
 enum class UiSkin {
-    QuickShellV1,
     QmlUiV2,
+    QuickShellV1,
 };
 
+// Default: v2. Opt into QuickShell with --ui=v1 or MIACODE_UI_SKIN=v1.
 UiSkin resolveUiSkin(const QStringList& arguments)
 {
-    const QString envSkin = qEnvironmentVariable("MIACODE_UI_SKIN").trimmed().toLower();
     for (int index = 1; index < arguments.size(); ++index) {
         const QString argument = arguments.at(index).trimmed();
-        if (argument == QStringLiteral("--ui=v2")
-            || argument == QStringLiteral("--ui=modern")
-            || argument == QStringLiteral("--modern-ui")) {
-            return UiSkin::QmlUiV2;
-        }
-        if (argument == QStringLiteral("--ui=v1")
-            || argument == QStringLiteral("--ui=classic")
-            || argument == QStringLiteral("--classic-ui")) {
+        if (argument == QStringLiteral("--ui=v1")) {
             return UiSkin::QuickShellV1;
         }
-        if (argument.startsWith(QStringLiteral("--ui="))) {
-            const QString value = argument.mid(5).trimmed().toLower();
-            if (value == QStringLiteral("v2") || value == QStringLiteral("modern")) {
-                return UiSkin::QmlUiV2;
-            }
-            if (value == QStringLiteral("v1") || value == QStringLiteral("classic")) {
-                return UiSkin::QuickShellV1;
-            }
+        if (argument.startsWith(QStringLiteral("--ui="))
+            && argument.mid(5).trimmed().compare(QStringLiteral("v1"), Qt::CaseInsensitive) == 0) {
+            return UiSkin::QuickShellV1;
         }
     }
-    if (envSkin == QStringLiteral("v2") || envSkin == QStringLiteral("modern")) {
-        return UiSkin::QmlUiV2;
-    }
-    if (envSkin == QStringLiteral("v1") || envSkin == QStringLiteral("classic")) {
+    if (qEnvironmentVariable("MIACODE_UI_SKIN").trimmed().compare(
+            QStringLiteral("v1"), Qt::CaseInsensitive) == 0) {
         return UiSkin::QuickShellV1;
     }
-    return UiSkin::QuickShellV1;
+    return UiSkin::QmlUiV2;
 }
 
 // Force-show the first-run welcome / initial-config dialog even when

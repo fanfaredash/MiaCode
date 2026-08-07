@@ -8,7 +8,7 @@
 class MainWindow;
 
 // QML-facing owner for the active MiaCode chart document. This class is the
-// single boundary between the visual workbench and the existing chart model;
+// single boundary between the visual UI and the existing chart model;
 // QML never reaches into widgets or MainWindow internals.
 class QmlDocumentModel final : public QObject
 {

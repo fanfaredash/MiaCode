@@ -7,12 +7,12 @@ import MiaCode.UI
 Rectangle {
     id: root
 
-    required property var workbenchState
+    required property var viewState
     required property var documentSession
 
     readonly property int minimumTabWidth: 100
     readonly property int preferredTabWidth: 160
-    readonly property int tabCount: workbenchState.openEditorTabs.length
+    readonly property int tabCount: viewState.openEditorTabs.length
     readonly property bool tabsOverflow: tabCount * minimumTabWidth > width
     readonly property real tabWidth: tabCount === 0 ? preferredTabWidth
         : tabsOverflow ? minimumTabWidth
@@ -34,7 +34,7 @@ Rectangle {
     }
 
     function titleForKey(key) {
-        if (key === workbenchState.metadataEditorKey)
+        if (key === viewState.metadataEditorKey)
             return qsTr("元数据")
         const difficulty = difficultyData(difficultyIdForKey(key))
         return difficulty ? difficulty.label : qsTr("难度")
@@ -46,7 +46,7 @@ Rectangle {
     }
 
     function tooltipForKey(key) {
-        if (key === workbenchState.metadataEditorKey)
+        if (key === viewState.metadataEditorKey)
             return ""
         const difficulty = difficultyData(difficultyIdForKey(key))
         if (!difficulty)
@@ -61,11 +61,11 @@ Rectangle {
     }
 
     function activateTab(key) {
-        workbenchState.activateEditor(key)
+        viewState.activateEditor(key)
     }
 
     function revealActiveTab() {
-        const index = workbenchState.openEditorTabs.indexOf(workbenchState.activeEditorKey)
+        const index = viewState.openEditorTabs.indexOf(viewState.activeEditorKey)
         const item = index >= 0 ? tabRepeater.itemAt(index) : null
         if (!item)
             return
@@ -76,7 +76,7 @@ Rectangle {
     }
 
     implicitHeight: 34
-    color: Theme.colors.background.workbench
+    color: Theme.colors.background.surface
 
     Flickable {
         id: tabViewport
@@ -103,9 +103,9 @@ Rectangle {
 
             Repeater {
                 id: tabRepeater
-                model: root.workbenchState.openEditorTabs
+                model: root.viewState.openEditorTabs
 
-                delegate: WorkbenchTab {
+                delegate: AppTab {
                     required property string modelData
 
                     width: root.tabWidth
@@ -113,14 +113,14 @@ Rectangle {
                     preferredTabWidth: root.tabWidth
                     text: root.displayTitleForKey(modelData)
                     secondaryText: ""
-                    iconSource: modelData === root.workbenchState.metadataEditorKey
+                    iconSource: modelData === root.viewState.metadataEditorKey
                         ? Qt.resolvedUrl("icons/metadata.svg")
                         : Qt.resolvedUrl("icons/chart.svg")
                     tooltip: root.tooltipForKey(modelData)
-                    active: root.workbenchState.activeEditorKey === modelData
+                    active: root.viewState.activeEditorKey === modelData
                     closable: true
                     onClicked: root.activateTab(modelData)
-                    onCloseRequested: root.workbenchState.closeEditor(modelData)
+                    onCloseRequested: root.viewState.closeEditor(modelData)
                 }
             }
         }
@@ -144,14 +144,14 @@ Rectangle {
             y: parent.height
 
             Repeater {
-                model: root.workbenchState.openEditorTabs
+                model: root.viewState.openEditorTabs
 
                 delegate: AppMenuItem {
                     required property string modelData
 
                     text: root.displayTitleForKey(modelData)
                     checkable: true
-                    checked: root.workbenchState.activeEditorKey === modelData
+                    checked: root.viewState.activeEditorKey === modelData
                     onTriggered: root.activateTab(modelData)
                 }
             }
@@ -159,7 +159,7 @@ Rectangle {
     }
 
     Connections {
-        target: root.workbenchState
+        target: root.viewState
 
         function onActiveEditorKeyChanged() {
             Qt.callLater(root.revealActiveTab)

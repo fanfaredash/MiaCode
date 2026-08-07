@@ -5,7 +5,7 @@ import MiaCode.UI
 Rectangle {
     id: root
 
-    required property var workbenchState
+    required property var viewState
     required property var documentSession
     property bool metadataMode: false
     onMetadataModeChanged: syncTextFromController()
@@ -78,8 +78,8 @@ Rectangle {
         const pos = Math.max(0, Math.min(text.length, sourceArea.cursorPosition))
         const before = text.substring(0, pos)
         const lines = before.split("\n")
-        root.workbenchState.editorCursorLine = lines.length
-        root.workbenchState.editorCursorColumn = lines[lines.length - 1].length + 1
+        root.viewState.editorCursorLine = lines.length
+        root.viewState.editorCursorColumn = lines[lines.length - 1].length + 1
     }
 
     LineNumberGutter {
