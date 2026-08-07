@@ -150,9 +150,28 @@ QList<AdapterVideoMemorySample> sampleAdapterVideoMemory()
 {
     QList<AdapterVideoMemorySample> samples;
 #ifdef Q_OS_WIN
-    IDXGIFactory1* factory = nullptr;
-    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))
-        || factory == nullptr) {
+    // Cached rather than created and destroyed on every 30 s sample. CreateDXGIFactory1
+    // touches the graphics driver DLLs, and doing that on the GUI thread on a timer means
+    // periodically contending with the two QSG render threads for the same DXGI objects --
+    // a self-inflicted hitch in a probe whose whole purpose is to measure hitches.
+    //
+    // IsCurrent() is what keeps the cache honest: it goes false when the adapter set
+    // changes, which is exactly when a stale factory would start under-reporting. On a
+    // hybrid laptop -- the configuration these captures come from -- that is not
+    // hypothetical.
+    //
+    // Deliberately never released. It is a process-lifetime singleton, and releasing a COM
+    // object from a static destructor runs after COM may already have been torn down. A
+    // single leaked factory in a debug-only probe is the cheaper side of that trade.
+    static IDXGIFactory1* factory = nullptr;
+    if (factory != nullptr && factory->IsCurrent() == FALSE) {
+        factory->Release();
+        factory = nullptr;
+    }
+    if (factory == nullptr
+        && (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))
+            || factory == nullptr)) {
+        factory = nullptr;
         return samples;
     }
     IDXGIAdapter1* adapter = nullptr;
@@ -201,7 +220,9 @@ QList<AdapterVideoMemorySample> sampleAdapterVideoMemory()
         adapter->Release();
         adapter = nullptr;
     }
-    factory->Release();
+    // No factory->Release() here: the factory outlives this call by design, see above.
+    // The per-adapter interfaces above are still released each pass -- those are cheap to
+    // re-enumerate and holding them would pin adapters across a device change.
 #endif
     return samples;
 }
@@ -297,7 +318,16 @@ void installPeriodicProcessResourceGauge(QObject* owner)
     };
 
     QObject::connect(timer, &QTimer::timeout, timer, emitSample);
-    emitSample();
+    // The first sample used to run synchronously, right here. installPeriodicProcessResourceGauge
+    // is called just after the QApplication constructor, so that put a CreateDXGIFactory1 --
+    // which loads the vendor graphics driver DLLs -- on the GUI thread BEFORE Qt has
+    // initialised its own RHI. This branch already turned the D3D11 startup probe off by
+    // default for precisely that reason; this was the same hazard left in place next to it.
+    //
+    // Posting it instead keeps the sample (uptime_ms just reads a little later) while
+    // moving the driver load behind the event loop, where Qt has already chosen and
+    // initialised its backend.
+    QTimer::singleShot(0, timer, emitSample);
     timer->start();
 }
 

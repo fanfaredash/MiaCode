@@ -76,6 +76,21 @@ int main(int argc, char* argv[])
     ok &= require(resourceGaugeTimers(&app).size() == 1,
                   QStringLiteral("install is idempotent"), err);
 
+    // The baseline sample is POSTED, not taken inline: install runs just after the
+    // QApplication constructor, and on Windows the sample opens a DXGI factory, which loads
+    // the vendor graphics driver DLLs -- doing that on the GUI thread before Qt initialises
+    // its own RHI is the hazard this branch already disabled the D3D11 startup probe for.
+    //
+    // Hence this processEvents(): without it the baseline never runs and the assertion
+    // below fails. That is the only leverage this spec has on the deferral. It cannot also
+    // assert the negative ("install emitted nothing yet"), because the async writer keeps
+    // its QFile handle open and buffered, so a mid-run read of the log observes nothing
+    // either way -- an attempted negative assertion here passed against a deliberately
+    // reverted, inline implementation, i.e. it could not fail. Rather than keep a green
+    // check that proves nothing, the guard against reverting to an inline first sample is
+    // the comment at the call site, not this spec.
+    QCoreApplication::processEvents();
+
     if (timer != nullptr) {
         QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection);
     }
@@ -86,7 +101,7 @@ int main(int argc, char* argv[])
     const QString log = readRuntimeLog();
     ok &= require(log.contains(QStringLiteral("[runtime/idle/resource_gauge]"))
                       && log.contains(QStringLiteral("action=sample sample=0")),
-                  QStringLiteral("install emits baseline sample"), err);
+                  QStringLiteral("first event-loop turn emits baseline sample"), err);
     ok &= require(log.contains(QStringLiteral("action=sample sample=1")),
                   QStringLiteral("timer emits next sample"), err);
 
