@@ -2,20 +2,15 @@
 //
 // Locks down the *bespoke* per-flag logic — default values, optional-flag
 // `value_or` fallbacks, int/double parse + range clamping, debug-mode category
-// gating, and the DComp cascade (children short-circuit unless the parent
-// `MIACODE_PREVIEW_USE_DCOMP` is on). This is the safety net that a future
-// table-driven DebugOptions registry must preserve: without it, rerouting the
-// accessors through a generic table could silently change a default or drop a
-// cascade and nothing would catch it.
+// gating. This is the safety net that a future table-driven DebugOptions
+// registry must preserve: without it, rerouting the accessors through a
+// generic table could silently change a default and nothing would catch it.
 //
 // Registered with CTest as `debug_options_spec`. Drives the accessors by
 // setting/clearing env vars; most read live, but the per-channel category gates
 // (startup/runtime/audio/export/preview-profile) are snapshot into atomics at
 // setDebugModeEnabled time, so a disable flag changed afterwards needs an explicit
-// refreshDebugCategoryCache() to take effect. Cases must clean up after themselves. The Windows-on-ARM64 emulation auto-disable branch depends on
-// real hardware detection and is not exercised here; every assertion below holds
-// regardless of that branch (override is checked first; the default is false
-// either way).
+// refreshDebugCategoryCache() to take effect. Cases must clean up after themselves.
 
 #include <QByteArray>
 #include <QCoreApplication>
@@ -197,53 +192,6 @@ bool verifyDefaultsAndClamps(QTextStream& err)
     return ok;
 }
 
-bool verifyDCompCascade(QTextStream& err)
-{
-    bool ok = true;
-    const char* kUse = "MIACODE_PREVIEW_USE_DCOMP";
-    const char* kExclusive = "MIACODE_PREVIEW_DCOMP_EXCLUSIVE";
-    const char* kPerPixel = "MIACODE_PREVIEW_DCOMP_PER_PIXEL_ALPHA";
-    const char* kTopLevel = "MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND";
-    const char* kQuiesce = "MIACODE_PREVIEW_DCOMP_QUIESCE_QSG";
-    for (const char* k : {kUse, kExclusive, kPerPixel, kTopLevel, kQuiesce}) {
-        unsetEnv(k);
-    }
-
-    // Parent off (default): every child short-circuits to false even if its own
-    // flag is set.
-    ok &= require(!dbg::previewUseDCompEnabled(), "DComp defaults off", err);
-    setEnv(kExclusive, "1");
-    setEnv(kPerPixel, "1");
-    setEnv(kTopLevel, "1");
-    setEnv(kQuiesce, "1");
-    ok &= require(!dbg::previewDCompExclusiveEnabled(), "exclusive false when parent off", err);
-    ok &= require(!dbg::previewDCompPerPixelAlphaEnabled(), "per-pixel-alpha false when parent off", err);
-    ok &= require(!dbg::previewDCompTopLevelHwndEnabled(), "top-level-hwnd false when parent off", err);
-    ok &= require(!dbg::previewDCompQuiesceQsgEnabled(), "quiesce-qsg false when parent off", err);
-    for (const char* k : {kExclusive, kPerPixel, kTopLevel, kQuiesce}) {
-        unsetEnv(k);
-    }
-
-    // Parent on: children follow their own override/default.
-    setEnv(kUse, "1");
-    ok &= require(dbg::previewUseDCompEnabled(), "DComp on with override", err);
-    ok &= require(dbg::previewDCompTopLevelHwndEnabled(), "top-level-hwnd defaults on under DComp", err);
-    ok &= require(dbg::previewDCompPerPixelAlphaEnabled(), "per-pixel-alpha defaults on under DComp", err);
-    ok &= require(dbg::previewDCompExclusiveEnabled(), "exclusive auto-on via per-pixel-alpha default", err);
-
-    setEnv(kPerPixel, "0");
-    ok &= require(!dbg::previewDCompExclusiveEnabled(), "exclusive off when per-pixel off + not forced", err);
-    setEnv(kExclusive, "1");
-    ok &= require(dbg::previewDCompExclusiveEnabled(), "exclusive on when explicitly forced", err);
-    setEnv(kTopLevel, "0");
-    ok &= require(!dbg::previewDCompTopLevelHwndEnabled(), "top-level-hwnd respects explicit off", err);
-
-    for (const char* k : {kUse, kExclusive, kPerPixel, kTopLevel, kQuiesce}) {
-        unsetEnv(k);
-    }
-    return ok;
-}
-
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -256,8 +204,7 @@ int main(int argc, char* argv[])
         static_cast<int>(verifyValueParsing(err))
         & static_cast<int>(verifyEnvHelpers(err))
         & static_cast<int>(verifyDebugCategoryGating(err))
-        & static_cast<int>(verifyDefaultsAndClamps(err))
-        & static_cast<int>(verifyDCompCascade(err));
+        & static_cast<int>(verifyDefaultsAndClamps(err));
 
     if (!ok) {
         return 1;

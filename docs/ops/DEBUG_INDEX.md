@@ -2,9 +2,9 @@
 
 This document is the current user-facing index for MiaCode debug mode, log files, and preview/export diagnostics after the Qt Quick migration.
 
-> Reconciled against the code on 2026-08-07: **90 live `MIACODE_*` environment flags across 26 files**, including the four the idle-freeze diagnostics added — `MIACODE_UI_HANG_ACTIVE_PHASE_MS`, `MIACODE_UI_HANG_IDLE_HEARTBEAT_MS`, `MIACODE_ENABLE_DIAG_D3D11`, `MIACODE_ENABLE_DIAG_MODULE_LIST`.
+> Reconciled against the code on 2026-08-07: **85 live `MIACODE_*` environment flags across 26 files**, including the four the idle-freeze diagnostics added — `MIACODE_UI_HANG_ACTIVE_PHASE_MS`, `MIACODE_UI_HANG_IDLE_HEARTBEAT_MS`, `MIACODE_ENABLE_DIAG_D3D11`, `MIACODE_ENABLE_DIAG_MODULE_LIST`.
 >
-> Recount rather than trusting that number: `grep -rhoE '"MIACODE_[A-Z0-9_]+"' src --include="*.cpp" --include="*.h" | sort -u` yields 100 quoted literals, of which 90 are live env flags — subtract `MIACODE_SOURCE_ROOT` (a CMake compile definition) and the nine retired flags that survive only inside `kRetiredFlags` in `src/tools/debug_index/DebugFlagIndexSpec.cpp`. The drift guard `ctest -R debug_flag_index_spec` is the real enforcement — it fails if a flag read in `src/` is missing from this doc or a flag named here is no longer read. Its own summary reports a **larger** total (102) because its regex also counts the build-time compile definitions and hang-watchdog macros listed under "Other `MIACODE_*` tokens" below; that number is not the env-flag count.
+> Recount rather than trusting that number: `grep -rhoE '"MIACODE_[A-Z0-9_]+"' src --include="*.cpp" --include="*.h" | sort -u` yields 100 quoted literals, of which 85 are live env flags — subtract `MIACODE_SOURCE_ROOT` (a CMake compile definition) and the fourteen retired flags that survive only inside `kRetiredFlags` in `src/tools/debug_index/DebugFlagIndexSpec.cpp`. The drift guard `ctest -R debug_flag_index_spec` is the real enforcement — it fails if a flag read in `src/` is missing from this doc or a flag named here is no longer read. Its own summary reports a **larger** total (95) because its regex also counts the build-time compile definitions and hang-watchdog macros listed under "Other `MIACODE_*` tokens" below; that number is not the env-flag count.
 >
 > When you add/remove a flag, update this index (and `.codex/skills/miacode-dev-guide/references/debug-flags.md`).
 
@@ -240,7 +240,13 @@ Retired with the old preview renderer and not recommended anymore (no longer rea
 - `MIACODE_PREVIEW_SESSION_SCRIPT` (was a preview session-script hook; gone)
 - `MIACODE_DISABLE_GL_DEBUG_MESSAGES` (GL debug-message gate; gone)
 - `MIACODE_SKIP_DIAG_D3D11` (skipped the startup D3D11 diagnostic probe back when that probe ran by default. The probe is now opt-in behind `MIACODE_ENABLE_DIAG_D3D11`, which made the skip unreachable unless an operator enabled and disabled the same probe in one run, so the enable flag is the single control.)
-- `MIACODE_TIMELINE_USE_DCOMP` (selected the DirectComposition/D3D11 pipeline for the timeline pane, rendered by `TimelineRenderView` into its own top-level popup HWND. Retired 2026-08-07 together with the rest of the DComp preview + timeline render stack; the in-process QSG path is now the only timeline renderer.)
+- The DirectComposition / D3D11 render backend flags, all retired together on 2026-08-07 when `src/render/` and `src/sources/` were deleted. Every one of them cascaded off `MIACODE_PREVIEW_USE_DCOMP`, which had defaulted to off since beta34, so removing the backend made all six unreachable. The in-process QSG path is now the only preview and timeline renderer:
+  - `MIACODE_PREVIEW_USE_DCOMP` (parent opt-in; created the DComp-backed chart preview popup)
+  - `MIACODE_TIMELINE_USE_DCOMP` (DComp pipeline for the timeline pane, via `TimelineRenderView`)
+  - `MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND` (hosted DComp in an owned top-level HWND)
+  - `MIACODE_PREVIEW_DCOMP_PER_PIXEL_ALPHA` (per-pixel-alpha `WS_EX_NOREDIRECTIONBITMAP` popup)
+  - `MIACODE_PREVIEW_DCOMP_EXCLUSIVE` (made DComp the sole chart renderer)
+  - `MIACODE_PREVIEW_DCOMP_QUIESCE_QSG` (skipped QSG repaint subscriptions while DComp was active)
 - `MIACODE_PREVIEW_VISUAL_SMOOTHING` (gated visual-clock smoothing, which bounded the per-frame visual playhead delta so BASS-master-mixer cursor jitter could not reach the rendered scene. The G1 wall-clock flip made `qtPreviewElapsed_` the master timeline — monotonic and rate-correct by construction — so `applyVisualClockSmoothing` was collapsed to exactly its old smoothing-disabled branch and the gate was dropped with it. The flag had been a no-op ever since. The lookahead-vsync shift that survives in that function was always outside this gate and has its own `MIACODE_PREVIEW_VISUAL_LOOKAHEAD_VSYNCS` control.)
 
 Preview diagnostics now split these timing sources instead of reporting a single ambiguous FPS number:
@@ -293,13 +299,8 @@ Preview diagnostics now split these timing sources instead of reporting a single
 
 The in-process Qt Quick (QSG) path is the default and the only one needed for normal use; both realtime preview and export run through it. The toggles below select alternate render topologies for diagnostics and are **off by default**.
 
-DirectComposition / D3D11 preview (`src/common/DebugOptions.h`; default OFF, being decoupled from the QSG path):
+The DirectComposition / D3D11 preview and timeline backend was **removed on 2026-08-07**. `src/render/` and `src/sources/` are gone, along with all six `MIACODE_*_DCOMP*` flags (see the retired list above). The QSG path is now the only render path; there is no alternate backend to A/B against.
 
-- `MIACODE_PREVIEW_USE_DCOMP` — opt into the DComp-backed chart preview popup.
-- `MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND` — host DComp in an owned top-level HWND (override; default on when DComp is on).
-- `MIACODE_PREVIEW_DCOMP_PER_PIXEL_ALPHA` — per-pixel-alpha NRB popup (override; default on when DComp is on).
-- `MIACODE_PREVIEW_DCOMP_EXCLUSIVE` — let DComp be the sole chart renderer (auto-on with per-pixel alpha).
-- `MIACODE_PREVIEW_DCOMP_QUIESCE_QSG` — skip QSG repaint subscriptions while DComp is active.
 - `MIACODE_PREVIEW_QSG_FULL_DISABLE` — force QSG to the software/basic path (GPU-contention isolation test).
 - `MIACODE_PREVIEW_FORCE_BASIC_RENDER_LOOP` — force `QSG_RENDER_LOOP=basic` at startup.
 - `MIACODE_ENABLE_DIAG_D3D11` — explicitly enable the supplementary startup D3D11 diagnostic probe. It is disabled by default because device creation loads vendor graphics drivers before Qt initializes.
@@ -321,10 +322,6 @@ Launch the default Quick Shell app in debug mode:
 Launch the legacy Qt native widget shell in debug mode:
 
 - `MiaCode.exe --qt-native --debug`
-
-Launch the Qt Quick hybrid host explicitly in debug mode:
-
-- `MiaCode.exe --quick-shell-beta --debug`
 
 Force export logging into a local directory:
 
