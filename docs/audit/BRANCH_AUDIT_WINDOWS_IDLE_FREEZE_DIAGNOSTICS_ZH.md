@@ -13,7 +13,9 @@
 
 ## 处理状态总表（截至 2026-08-07）
 
-第 1–3 类已实施，共 33 个提交（`f82cfa64..HEAD`，169 files，+1452 / −13398）。构建绿；`ctest` 46/49，3 个失败（`oplog_self_test`、`plain_code_editor_spec`、`preview_firework_lifecycle_spec`）为分支既有，已逐项核对这三个目标的 `SOURCES` 未被本轮改动触及。第 4 类（线程管理）未实施。
+第 1–3 类已实施，共 33 个提交（`f82cfa64..HEAD`，169 files，+1452 / −13398）。构建绿；`ctest` 46/49，3 个失败（`oplog_self_test`、`plain_code_editor_spec`、`preview_firework_lifecycle_spec`）为分支既有，已逐项核对这三个目标的 `SOURCES` 未被本轮改动触及。
+
+**2026-08-07 追加一轮**：第 4 类的 T-1、T-2 已实施，另修复两处 watchdog 观测缺口（下表 W-1 / W-2）。触发这轮的是 8-07 15:51 的用户 capture（构建 `f515ec4a`）：其中两次音频设备切换各自伴随一段 GUI 线程停顿（2.075 s、4.683 s），期间 `pause_second`（视觉秒）与 `authoritative_second`（音频秒）分别岔开 1.916 s 与 4.023 s——**跳转幅度即停顿时长**；而同一份日志里 `ui/hang_watchdog` 一条报告都没有，`sym_ready=0` 使得即便报告了也拿不到符号。ctest 仍为 46/49，同样三个既有失败，且这三个目标的 `SOURCES` 均未被本轮触及（已核对）。
 
 | 条目 | 状态 | 提交 |
 |---|---|---|
@@ -47,7 +49,11 @@
 | R-1 DComp/D3D11 栈清除 | 已删除（71 files / 11404 行 / 6 flags） | `8e53d5ae`…`364a936d` |
 | R-5 MMCSS 说明失实 | **已撤回** — 结论错误，见勘误 | — |
 | O-1 / R-2 `TimelineView` 死代码 | **已撤回** — 结论错误，见勘误 | — |
-| 第 4 类 T-1…T-10 线程管理 | 未实施 | — |
+| T-1 `logPlaybackStatus` 持锁写日志 | 已修复（锁内只快照，出锁再格式化与写盘） | 本轮 |
+| T-2 `schedulerMutex_` × BASS 内部锁 ABBA | 已修复（`BASS_ChannelRemoveSync` 移出临界区） | 本轮 |
+| 第 4 类其余（T-3…T-10） | 未实施 | — |
+| W-1 亚阈值 GUI 卡顿完全无日志 | 已修复（新增 `action=gui_thread_stall`） | 本轮 |
+| W-2 `SymInitialize` 单点失败导致全程无符号 | 已修复（`fInvadeProcess=FALSE` 回退 + `SymRefreshModuleList`） | 本轮 |
 
 实施过程中发现的、报告原文未写到的补充事实：
 
@@ -345,6 +351,8 @@
 
 ### T-1（最高）`schedulerMutex_` 把 BASS 混音线程和 GUI 线程绑死，且 GUI 侧在持锁期间写日志
 
+> **已修复（2026-08-07）**：`logPlaybackStatus` 改为锁内只把 20 个字段拷进局部变量，出锁后再做 26 处 `.arg()` 与 `appendAudioDebugLog`。`disarmSfxScheduler` 的那一半此前已修。规则本身写进了 `BassPreviewAudioBackend.h` 的 `schedulerMutex_` 声明处：**持锁期间禁止 I/O、日志、以及任何回调进 BASS**，并列出三个遵守该规则的站点。
+
 **耦合结构**
 
 ```
@@ -369,6 +377,8 @@ logPlaybackStatus()                       handleMixerGroupSync()
 3. 在 `BassPreviewAudioBackend.h` 的 `schedulerMutex_` 声明处写死规则：**持有此锁期间禁止任何 I/O、日志与内存分配**，并在两侧各留一条断言性注释。
 
 ### T-2（高）`schedulerMutex_` 与 BASS 内部锁的顺序倒置风险
+
+> **已修复（2026-08-07）**：按下面建议的形状实施——锁内取走 `scheduledGroupSync_` 句柄并把调度器状态清空，出锁后再调 `BASS_ChannelRemoveSync`。安全性依据已在代码注释里写明并复核过：`handleMixerGroupSync` 开头就有 `if (!sfxSchedulerActive_) dropReason = "inactive"` 的早退分支，而该标志在解锁前已置 false，所以解锁到移除之间触发的回调走自己的早退路径，不会操作正在拆除的调度器。
 
 - GUI 线程：`disarmSfxScheduler()` 持有 `schedulerMutex_` → 调用 `BASS_ChannelRemoveSync()`（取 BASS 内部同步锁）。
 - 音频线程：BASS 持有内部锁 → 调用 `onMixerGroupSync` → `handleMixerGroupSync()` 尝试取 `schedulerMutex_`。
@@ -467,6 +477,27 @@ logPlaybackStatus()                       handleMixerGroupSync()
 - 这是有意识的权衡，注释也写清楚了（"One leaked thread and one leaked handle in an already-failing process is an acceptable price"），**判断本身认同**。
 - 但两点可以更好：① `g_stackWalkAbandoned` 一旦置位就再也无法恢复，即使 dbghelp 后来恢复正常；② 被遗弃的 worker 若解除阻塞，会继续写 `job`（shared_ptr 保活，安全）但不会有任何日志说明它最终结束了。
 - 建议：至少让被遗弃的 worker 在完成时写一行 `action=abandoned_worker_completed suspended_us=%1`，这条信息能直接告诉支持人员"dbghelp 只是慢，不是死锁"。
+
+---
+
+## 四·补、Watchdog 自身的两个观测缺口（2026-08-07 capture 暴露）
+
+这两条不在原报告里。它们是在核对"为什么 8-07 的 capture 里有两次多秒 GUI 停顿、却一条 `ui/hang_watchdog` 报告都没有"时定位到的，性质与第一类（日志遗漏）相同：**探针在关键分支上静默**。
+
+### W-1（最高）2–5 s 的 GUI 卡顿落在阈值死区里，完全无日志
+
+- `policy::classify()` 只有两个触发条件：`heartbeatArmed && heartbeatAge >= idleHeartbeatHangMs`（默认 **5000 ms**），或 `phaseActive && activeMs >= activePhaseHangMs`（默认 **2000 ms**）。
+- 后者要求有人**显式标记过 phase**。常规播放不标记任何 phase，于是唯一可用的条件就是 5 s。
+- 实测：8-07 capture 里两次停顿分别为 **2075 ms** 和 **4683 ms**，两次都卡在 2 s 与 5 s 之间，`ui/hang_watchdog` 全程只有 `action=installed` 和 `action=stack_symbols` 两行。同一时间窗口里渲染线程自己的 `update_paint_node_stats` 已经掉到 10.5 fps / 15.8 fps，主线程 1 Hz 的 `bass_status` 心跳漏拍——**除了 watchdog，每个通道都看见了**。
+- 修复：新增 `action=gui_thread_stall`，`edge=began` 在心跳陈旧满 1000 ms 时立即写出（保证进程被杀也留痕），`edge=ended` 带 `stall_ms=`。时长取两次 GUI 心跳时间戳之差，因此是 GUI 线程真实失服务时长，而非 500 ms 轮询窗口。Info 级、不带栈，不改动既有 hang 路径的阈值/节奏/栈预算。判定函数 `classifyHeartbeatStall` 为纯函数并在 `ui_hang_watchdog_policy_spec` 里锁死，spec 里显式钉了 2075 / 4683 这两个真实值。
+- 阈值取常量 1000 ms 而非新增 env flag：这是"日志本来就应该有的下限"，不是需要按次调节的旋钮。
+
+### W-2（高）`SymInitialize` 单点失败让整个会话拿不到任何符号
+
+- `SymInitialize(GetCurrentProcess(), nullptr, TRUE)` 的 `fInvadeProcess=TRUE` 会把进程内所有模块当作一个整体枚举，**整体失败**——一个不配合的模块就让全进程无符号。
+- 实测：capture 里 `action=stack_symbols sym_attempted=1 sym_ready=0 sym_err=3221225476`。`0xC0000004` 是 `STATUS_INFO_LENGTH_MISMATCH`，一个 NTSTATUS，来自内部查询遗留在 last-error 槽里的值，并不是这个 API 文档化的 Win32 错误码。后果：即使 W-1 修好后 hang 报告真的触发了，栈也全是 `symbol=(nosym)`，等于没有。
+- 修复：失败后先 `SymCleanup`，再以 `fInvadeProcess=FALSE` 重试并调 `SymRefreshModuleList`。日志新增 `sym_invaded=` / `sym_invade_err=`：`sym_invaded=0 sym_ready=1` 是"走了回退且可用"，与 `sym_ready=0`（彻底没有符号）是两件事。`SYMOPT_DEFERRED_LOADS` 本就按模块懒加载，所以即使 refresh 失败，句柄仍能解析它够得着的部分。
+- **未在本机验证**：这段代码在 `#ifdef Q_OS_WIN` 内，macOS 上不参与编译。需要一次 Windows 构建确认。
 
 ---
 
