@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <memory>
+#include <thread>
 
 #include <QObject>
 #include <QHash>
@@ -235,6 +236,56 @@ private:
     // calls) so a stall edge is caught immediately; the fuller buffer-health line
     // self-throttles to health::kHealthSampleIntervalSeconds.
     void logAudioHealth(double authoritativeSecond);
+
+    // ---- audio-health sampling: BASS queries, off the GUI thread ------------------
+    //
+    // BASS_ChannelIsActive / BASS_Mixer_ChannelIsActive / BASS_ChannelGetData all take
+    // BASS's internal device lock. During a Windows audio endpoint switch BASS holds that
+    // lock while it tears the old output device down and builds the new one, which on the
+    // captures behind this change meant 2.0-4.5 s. logAudioHealth used to make those calls
+    // ON THE GUI THREAD, at tick rate, so the GUI thread parked on that lock for the whole
+    // switch -- and Qt's threaded render loop parks with it at the next sync, which is why
+    // both visual threads died together while audio played on undisturbed.
+    //
+    // Bracketing all 27 stall episodes across five captures put the GUI thread's last log
+    // line at this probe 18 times; at 3.9% of GUI-thread lines, chance predicts 1. So the
+    // probe is moved off the GUI thread entirely rather than merely called less often:
+    // a sampler thread owns every BASS query, and the GUI thread reads the published
+    // snapshot. When BASS blocks now, only the sampler blocks, and it is the one thread
+    // with nothing waiting on it.
+    struct HealthSample {
+        miacode::preview_audio::health::ChannelActivity mixerActivity =
+            miacode::preview_audio::health::ChannelActivity::Unknown;
+        miacode::preview_audio::health::ChannelActivity backgroundActivity =
+            miacode::preview_audio::health::ChannelActivity::Unknown;
+        miacode::preview_audio::health::BufferSnapshot buffer;
+        // The BGM stream's own position. Sampled here rather than via
+        // Sample::currentSec() on the GUI thread, because that is
+        // BASS_Mixer_ChannelGetPosition + BASS_ChannelBytes2Seconds -- two more calls on
+        // the same device lock, and logPlaybackStatus made them while holding
+        // schedulerMutex_, so a blocked GUI thread also stalled the mixer callback.
+        // -1.0 when there is no background track, matching the previous sentinel.
+        double bgmRawSecond = -1.0;
+        // Wall-clock age of this sample, so a reader can tell a fresh snapshot from one
+        // frozen by a sampler that is itself stuck in BASS -- which is now the visible
+        // signature of the endpoint switch instead of a frozen UI.
+        qint64 sampledAtMs = 0;
+        quint64 sequence = 0;
+    };
+
+    void startAudioHealthSampler();
+    void stopAudioHealthSampler();
+    void publishAudioHealthHandles();
+
+    std::thread audioHealthSamplerThread_;
+    std::atomic_bool audioHealthSamplerStop_{false};
+    // Handles only, never C++ objects: a BASS handle is an integer, so a stale one makes
+    // BASS return an error instead of dereferencing freed memory. This is what lets the
+    // sampler run without any lifetime coupling to backgroundTrackSample_.
+    std::atomic<quint32> audioHealthMixerHandle_{0};
+    std::atomic<quint32> audioHealthSourceHandle_{0};
+    mutable QMutex audioHealthSampleMutex_;
+    HealthSample audioHealthSample_;
     void logPreparedEventWindow(double startSecond) const;
     QString groupSignature(const CollapsedEventGroup& group) const;
     static void onMixerGroupSync(quint32 handle, quint32 channel, quint32 data, void* user);

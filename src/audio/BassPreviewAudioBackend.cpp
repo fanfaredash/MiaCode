@@ -42,6 +42,9 @@ BassPreviewAudioBackend::~BassPreviewAudioBackend()
     appendAudioDebugLog("BassPreviewAudioBackend destroying");
     shuttingDown_.store(true, std::memory_order_release);
 #ifdef MIACODE_HAS_BASS_AUDIO
+    // First: the sampler calls into BASS, so it must be joined before anything below frees
+    // a stream or tears the device down.
+    stopAudioHealthSampler();
     stopPlaybackSession();
     resetAssets();
     unloadOptionalPlugins();

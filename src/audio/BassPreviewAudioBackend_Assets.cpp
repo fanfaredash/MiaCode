@@ -44,6 +44,8 @@ void BassPreviewAudioBackend::resetAssets()
     int releasedSampleCount = 0;
     samplesByKind_.clear();
     backgroundTrackSample_ = nullptr;
+    // Keep the sampler's handle in step; it never dereferences the object itself.
+    publishAudioHealthHandles();
     touchholdSample_ = nullptr;
     retainedBgmState_ = RetainedBgmState::NoneLoaded;
     trackMissingAfterLoadLogged_ = false;
@@ -140,6 +142,8 @@ void BassPreviewAudioBackend::initializeAssets()
                 true,
                 bgmSpeedMode)) {
             backgroundTrackSample_ = backgroundTrackSampleOwner_.get();
+            // Keep the sampler's handle in step; it never dereferences the object itself.
+            publishAudioHealthHandles();
             backgroundTrackSample_->setLoop(false);
             backgroundTrackSample_->setSpeed(playbackSession_.backgroundTrackPlaybackRate);
             ++loadedSampleCount;
@@ -153,6 +157,8 @@ void BassPreviewAudioBackend::initializeAssets()
         } else {
             backgroundTrackSampleOwner_.reset();
             backgroundTrackSample_ = nullptr;
+            // Keep the sampler's handle in step; it never dereferences the object itself.
+            publishAudioHealthHandles();
         }
     }
 

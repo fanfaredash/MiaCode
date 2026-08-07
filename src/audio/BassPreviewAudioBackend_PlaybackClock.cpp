@@ -222,23 +222,105 @@ audio_health::BufferSnapshot bufferSnapshotFor(DWORD mixerHandle)
 
 }  // namespace
 
+// Publishes the two BASS handles the sampler is allowed to touch. Called from the GUI
+// thread whenever they change; the sampler only ever sees integers, never objects.
+void BassPreviewAudioBackend::publishAudioHealthHandles()
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    audioHealthMixerHandle_.store(masterMixer_, std::memory_order_release);
+    const quint32 source =
+        (backgroundTrackSample_ != nullptr && backgroundTrackSample_->valid())
+            ? static_cast<quint32>(backgroundTrackSample_->source)
+            : 0u;
+    audioHealthSourceHandle_.store(source, std::memory_order_release);
+#endif
+}
+
+void BassPreviewAudioBackend::startAudioHealthSampler()
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    if (audioHealthSamplerThread_.joinable()) {
+        return;
+    }
+    // Diagnostics-only, exactly as the probe it replaces: no --debug, no sampler, and the
+    // GUI thread makes none of these calls either way.
+    if (!runtimeAudioDebugEnabled()) {
+        return;
+    }
+    audioHealthSamplerStop_.store(false, std::memory_order_release);
+    publishAudioHealthHandles();
+    audioHealthSamplerThread_ = std::thread([this]() {
+        // 100 ms: fast enough to keep the tick-rate stall detection this replaces
+        // meaningful, slow enough that the device lock is not hammered. The GUI thread no
+        // longer depends on this cadence for anything -- it reads whatever is published.
+        constexpr auto kInterval = std::chrono::milliseconds(100);
+        while (!audioHealthSamplerStop_.load(std::memory_order_acquire)) {
+            const quint32 mixer = audioHealthMixerHandle_.load(std::memory_order_acquire);
+            const quint32 source = audioHealthSourceHandle_.load(std::memory_order_acquire);
+            // THE BLOCKING CALLS. On this thread they are harmless: a multi-second stall
+            // here delays the next sample and nothing else.
+            HealthSample sample;
+            sample.mixerActivity = playbackActivityFor(static_cast<DWORD>(mixer));
+            sample.backgroundActivity = source != 0
+                ? mixerSourceActivityFor(static_cast<DWORD>(source))
+                : audio_health::ChannelActivity::Unknown;
+            sample.buffer = bufferSnapshotFor(static_cast<DWORD>(mixer));
+            if (source != 0) {
+                // Same arithmetic Sample::currentSec() does, from the handle alone -- the
+                // sampler never touches the Sample object, so there is no lifetime race
+                // with a chart switch freeing it.
+                const QWORD position =
+                    BASS_Mixer_ChannelGetPosition(static_cast<DWORD>(source), BASS_POS_BYTE);
+                sample.bgmRawSecond =
+                    BASS_ChannelBytes2Seconds(static_cast<DWORD>(source), position);
+            }
+            sample.sampledAtMs = QDateTime::currentMSecsSinceEpoch();
+            {
+                QMutexLocker locker(&audioHealthSampleMutex_);
+                sample.sequence = audioHealthSample_.sequence + 1;
+                audioHealthSample_ = sample;
+            }
+            std::this_thread::sleep_for(kInterval);
+        }
+    });
+#endif
+}
+
+void BassPreviewAudioBackend::stopAudioHealthSampler()
+{
+#ifdef MIACODE_HAS_BASS_AUDIO
+    audioHealthSamplerStop_.store(true, std::memory_order_release);
+    if (audioHealthSamplerThread_.joinable()) {
+        // Joined, not detached: the sampler calls into BASS, so it must be gone before
+        // BASS_Free runs in the destructor. Worst case this waits out one blocked query,
+        // which is bounded by the endpoint switch itself.
+        audioHealthSamplerThread_.join();
+    }
+#endif
+}
+
 void BassPreviewAudioBackend::logAudioHealth(double authoritativeSecond)
 {
 #ifdef MIACODE_HAS_BASS_AUDIO
     if (!engineInitialized_) {
         return;
     }
-    const audio_health::ChannelActivity mixerActivity =
-        playbackActivityFor(static_cast<DWORD>(masterMixer_));
-    const audio_health::ChannelActivity backgroundActivity =
-        (backgroundTrackSample_ != nullptr && backgroundTrackSample_->valid())
-            ? mixerSourceActivityFor(backgroundTrackSample_->source)
-            : audio_health::ChannelActivity::Unknown;
+    // Reads the sampler's published snapshot. Deliberately NO BASS calls on this path --
+    // see the HealthSample comment in the header for what they used to cost.
+    HealthSample sample;
+    {
+        QMutexLocker locker(&audioHealthSampleMutex_);
+        sample = audioHealthSample_;
+    }
+    const audio_health::ChannelActivity mixerActivity = sample.mixerActivity;
+    const audio_health::ChannelActivity backgroundActivity = sample.backgroundActivity;
     const bool underrun =
         audio_health::isUnderrun(mixerActivity) || audio_health::isUnderrun(backgroundActivity);
 
-    // Stall edges log immediately: an underrun shorter than the sampling interval is
-    // precisely the event that a periodic-only probe would miss.
+    // Stall edges still log on the first tick that observes them. The observation itself
+    // now happens on the sampler at 100 ms rather than on this thread at tick rate, so a
+    // shorter underrun than that is the one case this can miss -- the price of not parking
+    // the GUI thread on BASS's device lock, and a cheap one next to a 4 s freeze.
     const audio_health::StallEdge edge = audio_health::updateStall(
         &playbackSession_.stallTracker, underrun, authoritativeSecond);
     if (edge != audio_health::StallEdge::None) {
@@ -264,7 +346,9 @@ void BassPreviewAudioBackend::logAudioHealth(double authoritativeSecond)
         mixerActivity,
         backgroundActivity,
         playbackSession_.stallTracker,
-        bufferSnapshotFor(static_cast<DWORD>(masterMixer_)),
+        // From the snapshot, not a fresh query: this was the third BASS call this function
+        // used to make on the GUI thread.
+        sample.buffer,
         // Nothing in MiaCode registers a BASS thread with MMCSS. The only registration in
         // the default path is the QSG render thread
         // (preview/quick_scene/PreviewQuickSceneRoot.cpp), so BASS's own update/mixer
@@ -346,12 +430,25 @@ void BassPreviewAudioBackend::logPlaybackStatus(double authoritativeSecond, doub
     bool masterRunning = false;
     int armedGroupIndex = -1;
     QString armedActionLabel;
+    // Read before the scheduler lock, and off the sampler's own mutex: nothing here may
+    // call into BASS, least of all under schedulerMutex_.
+    HealthSample healthSample;
+    {
+        QMutexLocker healthLocker(&audioHealthSampleMutex_);
+        healthSample = audioHealthSample_;
+    }
     {
         QMutexLocker schedulerLocker(&schedulerMutex_);
         mixerSecond = (authoritativeSecond - playbackSession_.sessionStartSecond)
             / qMax(kBassPreviewMinRate, playbackSession_.sessionPlaybackRate);
         if (backgroundTrackSample_ != nullptr) {
-            bgmRawSecond = backgroundTrackSample_->currentSec();
+            // From the sampler's snapshot, NOT backgroundTrackSample_->currentSec(). That
+            // call is BASS_Mixer_ChannelGetPosition + BASS_ChannelBytes2Seconds on the
+            // GUI thread, and it ran here while holding schedulerMutex_ -- so an endpoint
+            // switch blocked the GUI thread and the mixer callback behind it at once. The
+            // value is at most one sampler interval stale, which for a diagnostic row is
+            // immaterial next to what it cost.
+            bgmRawSecond = healthSample.bgmRawSecond;
             bgmChartSecond = bgmRawSecond - playbackSession_.backgroundTrackOffsetSeconds;
             bgmExpectedRawSecond =
                 authoritativeSecond + playbackSession_.backgroundTrackOffsetSeconds;

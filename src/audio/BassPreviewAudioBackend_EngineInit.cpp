@@ -236,6 +236,8 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
     BASS_ChannelPlay(masterMixer_, FALSE);
     noteBassErr("engine_init/master_play_once");
     engineInitialized_ = true;
+    // Started after engineInitialized_, so the sampler never queries a half-built engine.
+    startAudioHealthSampler();
     appendAudioDebugLog(QString("bass_engine_ready sample_rate=%1").arg(deviceSampleRate_));
     appendBassDebugLog(
         miacode::preview_audio::bass::BassDebugOperation::InitializeAudioEngine,
