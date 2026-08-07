@@ -283,7 +283,34 @@ void watchdogLoop()
             // The monitor thread itself did not run, as happens across system
             // suspend/hibernate. Neither heartbeat nor phase elapsed time can
             // be attributed to a GUI stall, so restart both baselines.
-            if (g_lastHeartbeatMs.load(std::memory_order_acquire) > 0) {
+            //
+            // THIS BRANCH DISCARDS A HANG, so it has to say so. It was silent, and that
+            // silence is load-bearing: system suspend is not the only thing that stops this
+            // thread running. A process-wide freeze starves the watchdog thread along with
+            // everything else, and then this heuristic reads that freeze as a suspend,
+            // rebaselines the heartbeat, and drops the report -- which would explain why no
+            // capture has ever contained a `gui_thread_stale` row, including one taken with
+            // the idle threshold lowered to 800 ms specifically to force one.
+            //
+            // Whether that is what happens is exactly what no capture could answer, because
+            // nothing here left a trace. `discarded_heartbeat_age_ms` is the number that
+            // settles it: a large value means a real GUI stall was thrown away here.
+            const qint64 discardedHeartbeat = g_lastHeartbeatMs.load(std::memory_order_acquire);
+            const qint64 discardedHeartbeatAgeMs =
+                discardedHeartbeat > 0 ? qMax<qint64>(0, now - discardedHeartbeat) : -1;
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("ui/hang_watchdog"),
+                QStringLiteral("action=monitor_rearm monitor_gap_ms=%1 expected_loop_ms=%2 "
+                               "discarded_heartbeat_age_ms=%3 discarded_stall_open=%4 "
+                               "discarded_trigger=%5 phase_active=%6")
+                    .arg(monitorLoopGap)
+                    .arg(kMonitorLoopIntervalMs)
+                    .arg(discardedHeartbeatAgeMs)
+                    .arg(stallOpen ? 1 : 0)
+                    .arg(QString::fromLatin1(policy::triggerName(reportedTrigger)))
+                    .arg(snapshotPhase().active ? 1 : 0));
+            if (discardedHeartbeat > 0) {
                 g_lastHeartbeatMs.store(now, std::memory_order_release);
             }
             {
