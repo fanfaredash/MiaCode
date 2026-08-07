@@ -349,11 +349,6 @@ PreviewQuickSceneRoot::PreviewQuickSceneRoot(QQuickItem* parent)
     setFlag(ItemHasContents, true);
     setAcceptHoverEvents(true);
     setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
-    // Phase 4a — let PreviewDCompSurface auto-discover this item via
-    // QObject::findChild on the QQuickWindow. Decoupled from the
-    // dcomp/ side: surface looks up by objectName instead of taking a
-    // direct dependency on PreviewQuickSceneRoot's type.
-    setObjectName(QStringLiteral("preview_dcomp_track_target"));
     appendQuickSceneLog(
         QStringLiteral("scene_root_construct"),
         QString("%1 item_visible=%2")
@@ -440,11 +435,9 @@ void PreviewQuickSceneRoot::setRuntime(PreviewRuntime* runtime)
     runtime_ = runtime;
     if (runtime_ != nullptr) {
         frameState_ = nullptr;
-        if (!miacode::debug_options::previewDCompQuiesceQsgEnabled()) {
-            runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
-                update();
-            });
-        }
+        runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
+            update();
+        });
         runtime_->setFrameSize(boundingRect().size().toSize());
     }
     syncVisibleHostWindowBinding("set_runtime");
@@ -574,21 +567,6 @@ void PreviewQuickSceneRoot::mouseUngrabEvent()
 void PreviewQuickSceneRoot::setRuntimeObject(QObject* runtimeObject)
 {
     setRuntime(qobject_cast<PreviewRuntime*>(runtimeObject));
-}
-
-void PreviewQuickSceneRoot::setDCompFallbackActive(bool active)
-{
-    if (dcompFallbackActive_ == active) {
-        return;
-    }
-    dcompFallbackActive_ = active;
-    // Force a re-paint so the next updatePaintNode honours the new
-    // setting immediately. With fallback on, the legacy QSG path
-    // resumes producing pixels; with it off, the DComp short-circuit
-    // returns nullptr again. Either way the user-visible state needs
-    // to switch within one frame of the QML toggle.
-    update();
-    emit dcompFallbackActiveChanged();
 }
 
 void PreviewQuickSceneRoot::setFrameState(const miacode::preview::scene::PreviewFrameState* frameState)
@@ -851,41 +829,6 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
 {
     Q_UNUSED(updatePaintNodeData);
 
-    // Phase 4b — when DComp-exclusive mode is on, the DComp surface is
-    // the authoritative chart renderer; this QSG path produces nothing.
-    // Discard any existing scene-graph subtree and return null so Qt
-    // skips this layer entirely. The QQuickItem itself stays visible
-    // (so the DComp surface's findChild + mapToScene tracking still
-    // works), but its bounding rect contributes no pixels to the QSG
-    // scene. PreviewQuickHudLayer + PreviewStageMediaItem are sibling
-    // items and continue to render normally.
-    //
-    // Phase 4d-fix — exception: when per-pixel alpha is on (the default
-    // case where exclusive auto-enables), we still want the QSG
-    // stage_background dim shader to run so the user's "Background
-    // brightness" sliders affect QML's PreviewStageMediaItem (which
-    // shows through DComp's transparent areas). The chart-sprite QSG
-    // layers stay skipped — only the dim slot is processed. See the
-    // `keepDimOnly` short-circuit below the dim slot for the second
-    // half of this conditional.
-    // Issue #4 fix — `dcompFallbackActive_` overrides the DComp-exclusive
-    // short-circuit. QML sets this on the fullscreen QuickShellPreviewSurface
-    // instance because the DComp popup HWND can't follow the secondary
-    // fullscreen window (it's owned by the editor and would be z-ordered
-    // behind the fullscreen window). With fallback active, the legacy
-    // QSG path renders chart content into the fullscreen window directly,
-    // matching the embedded preview's appearance.
-    const bool exclusive = !dcompFallbackActive_
-        && miacode::debug_options::previewDCompExclusiveEnabled();
-    const bool keepDimOnly = exclusive
-        && miacode::debug_options::previewDCompPerPixelAlphaEnabled();
-    if (exclusive && !keepDimOnly) {
-        if (oldNode != nullptr) {
-            delete oldNode;
-        }
-        return nullptr;
-    }
-
     const bool renderDiagEnabled = miacode::debug_options::previewFramePacingDiagnosticsEnabled();
     if (renderDiagEnabled) {
         if (!renderPhaseTimer_.isValid()) {
@@ -1016,20 +959,6 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         [&](QSGNode* oldChild) {
             return stageBackgroundLayer_.updateNode(oldChild, *state, renderSize, window(), textures);
         });
-    // Phase 4d-fix — when per-pixel alpha is on (exclusive auto-on),
-    // stop here. The dim-layer slot above is the only QSG output the
-    // chart preview needs; chart-sprite layers below are owned by
-    // DComp. This preserves the user's Background brightness controls
-    // while keeping DComp the exclusive chart renderer.
-    if (keepDimOnly) {
-        // Clear stale chart-sprite contents from a prior frame without changing the fixed
-        // slot topology. Keeping the slot nodes stable avoids rebuilding the root generation.
-        root->clearLayerContentsFrom(slotIndex);
-        if (miacode::debug_options::previewProfileOutputEnabled()) {
-            enqueueTextureStatsForPresentation(mergedTextureStats(*textures, layerProfileStats_));
-        }
-        return root;
-    }
     updateCenterDisplaySlot(
         layerSlotAt(root, slotIndex++),
         *state,

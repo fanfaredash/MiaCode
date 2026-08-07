@@ -193,8 +193,8 @@ private:
 #ifdef MIACODE_USE_QTAVPLAYER
     // QtAVPlayer frame path: a decoded QAVVideoFrame (already converted to a
     // QVideoFrame and tagged with its presentation pts in seconds) is pushed
-    // to the QML sink here, mirrored into the toImage() DComp fallback, and
-    // used to settle the paused-seek / prepared-start handshakes by pts.
+    // to the QML sink here and used to settle the paused-seek /
+    // prepared-start handshakes by pts.
     void handleDecodedVideoFrame(const QVideoFrame& frame, double ptsSeconds, double durationSeconds, quint64 sourceGeneration);
     // Settle the paused-seek / prepared-start acks once the decoded media time
     // [start,end] (frame pts..pts+dur, or the seeked() position as a point)
@@ -253,7 +253,7 @@ private:
     double layoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
 #ifdef MIACODE_USE_QTAVPLAYER
     // FFmpeg decode backend. setSpeed() runs inside QtAVPlayer's own decode
-    // loop (no Qt converter rebuild) so rate changes never race the QSG/DComp
+    // loop (no Qt converter rebuild) so rate changes never race the QSG
     // texture sampler — the class of crash the QMediaPlayer scaffolding below
     // existed to paper over. No QAudioOutput: the video's own audio track is
     // intentionally never played (song audio is BASS-owned).

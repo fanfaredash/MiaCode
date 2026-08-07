@@ -233,7 +233,7 @@ public:
 
     void setFrameSize(const QSize& size);
     std::shared_ptr<const miacode::preview::scene::PreviewFrameState> frameStateSnapshot() const;
-    // GUI-thread builder state. Render/QSG/DComp consumers must use
+    // GUI-thread builder state. QSG consumers must use
     // frameStateSnapshot() so a frame never observes partially-mutated state.
     const miacode::preview::scene::PreviewFrameState& frameState() const { return frameState_; }
     // Detailed render-side resource snapshot for the leak gauge ("key=val …"): scene content

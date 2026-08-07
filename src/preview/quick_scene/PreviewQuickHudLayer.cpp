@@ -396,11 +396,9 @@ void PreviewQuickHudLayer::setRuntime(PreviewRuntime* runtime)
     runtime_ = runtime;
     if (runtime_ != nullptr) {
         frameState_ = nullptr;
-        if (!miacode::debug_options::previewDCompQuiesceQsgEnabled()) {
-            runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
-                requestThrottledUpdate();
-            });
-        }
+        runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
+            requestThrottledUpdate();
+        });
         runtime_->setFrameSize(boundingRect().size().toSize());
     }
     emit runtimeChanged();
@@ -415,16 +413,6 @@ QObject* PreviewQuickHudLayer::runtimeObject() const
 void PreviewQuickHudLayer::setRuntimeObject(QObject* runtimeObject)
 {
     setRuntime(qobject_cast<PreviewRuntime*>(runtimeObject));
-}
-
-void PreviewQuickHudLayer::setDCompFallbackActive(bool active)
-{
-    if (dcompFallbackActive_ == active) {
-        return;
-    }
-    dcompFallbackActive_ = active;
-    update();
-    emit dcompFallbackActiveChanged();
 }
 
 void PreviewQuickHudLayer::setFrameState(const miacode::preview::scene::PreviewFrameState* frameState)
@@ -459,46 +447,19 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
         return;
     }
     const QSize canvasSize = boundingRect().size().toSize();
-    const bool dcompExclusive = miacode::debug_options::previewDCompExclusiveEnabled();
     appendHudPaintDiag(
         QStringLiteral("paint_enter"),
         [&] {
             return QStringLiteral(
-                "item=%1 runtime=%2 frame_state_member=%3 canvas=%4x%5 layer_flags=0x%6 dcomp_fallback=%7 dcomp_exclusive=%8 %9")
+                "item=%1 runtime=%2 frame_state_member=%3 canvas=%4x%5 layer_flags=0x%6 %7")
                 .arg(pointerHex(this))
                 .arg(pointerHex(runtime_.data()))
                 .arg(pointerHex(frameState_))
                 .arg(canvasSize.width())
                 .arg(canvasSize.height())
                 .arg(layerFlags_, 0, 16)
-                .arg(dcompFallbackActive_ ? 1 : 0)
-                .arg(dcompExclusive ? 1 : 0)
                 .arg(painterDiagPayload(*painter));
         });
-    // Phase 4b — when DComp-exclusive mode is on, the HUD is rendered
-    // by PreviewDCompSurface via the same paintPreviewHudOverlay
-    // helper into an offscreen QImage and uploaded as a DComp sprite.
-    // Skipping QSG paint here avoids the redundant QQuickPaintedItem
-    // texture upload that was the last QSG cost the user flagged as
-    // perf-relevant.
-    //
-    // Issue #4 fix — `dcompFallbackActive_` overrides the gate: in the
-    // fullscreen QuickShellPreviewSurface instance the DComp popup
-    // can't render (see PreviewQuickSceneRoot's parallel comment), so
-    // QML sets fallback=true to let this QQuickPaintedItem paint as
-    // usual.
-    if (!dcompFallbackActive_ && dcompExclusive) {
-        appendHudPaintDiag(
-            QStringLiteral("paint_skip"),
-            [&] {
-                return QStringLiteral("reason=dcomp_exclusive item=%1 runtime=%2 canvas=%3x%4")
-                    .arg(pointerHex(this))
-                    .arg(pointerHex(runtime_.data()))
-                    .arg(canvasSize.width())
-                    .arg(canvasSize.height());
-            });
-        return;
-    }
     const miacode::preview::scene::PreviewFrameState* state = nullptr;
     QString stateSource = QStringLiteral("member");
     std::shared_ptr<const miacode::preview::scene::PreviewFrameState> runtimeStateSnapshot;

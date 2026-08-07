@@ -140,13 +140,12 @@ QSGTexture* PreviewTextureRepository::textureForImage(const QImage& image, bool 
             return existing;
         }
 
-        // beta20-fix2 — REVERTED to no-mip for parity with the
-        // DComp-side revert (Intel iGPU driver crash on runtime mip
-        // generation). Qt's createTextureFromImage uses the platform
-        // RHI backend (D3D11 on Windows by default), so requesting
-        // mips here would route through the same driver path that
-        // crashed igd10um64xe.DLL on the DComp side. Pre-generated
-        // asset mips are the planned follow-up.
+        // beta20-fix2 — REVERTED to no-mip: runtime mip generation
+        // crashed the Intel iGPU driver (igd10um64xe.DLL). Qt's
+        // createTextureFromImage uses the platform RHI backend (D3D11
+        // on Windows by default), so requesting mips here would route
+        // through that same driver path. Pre-generated asset mips are
+        // the planned follow-up.
         QSGTexture* texture = window_->createTextureFromImage(image);
         if (texture == nullptr) {
             return nullptr;

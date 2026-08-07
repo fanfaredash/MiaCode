@@ -221,23 +221,9 @@ bool PreviewQuickExportSession::initialize(
 
     sceneRoot_ = new PreviewQuickSceneRoot(rootItem_);
     sceneRoot_->setZ(0.0);
-    // Force the QSG chart-render path on for the export scene graph.
-    //
-    // PreviewQuickSceneRoot::updatePaintNode and PreviewQuickHudLayer::paint
-    // both early-return when previewDCompExclusiveEnabled() is true, because
-    // for the live preview the DComp popup HWND is the authoritative chart
-    // renderer and the QSG layer would just duplicate work. The export path
-    // is offscreen (QQuickRenderControl + framebuffer) — there is no DComp
-    // popup to render anything, so the early-return drops every chart
-    // sprite from the encoded frames. Reusing the existing
-    // `dcompFallbackActive` override (set by QuickShellMain.qml on the
-    // secondary fullscreen surface for the same structural reason) tells
-    // both items to render normally regardless of the exclusive flag.
-    sceneRoot_->setDCompFallbackActive(true);
 
     hudLayer_ = new PreviewQuickHudLayer(rootItem_);
     hudLayer_->setZ(1.0);
-    hudLayer_->setDCompFallbackActive(true);
 
     applyFrameSize();
     applyFrameState();

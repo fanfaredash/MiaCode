@@ -432,11 +432,6 @@ bool QuickShellController::previewUsesSeparateSurface() const
     return previewUsesSeparateSurface_;
 }
 
-bool QuickShellController::previewDCompExclusive() const
-{
-    return miacode::debug_options::previewDCompExclusiveEnabled();
-}
-
 QObject* QuickShellController::timelineStateBridge() const
 {
     return stateSource_ != nullptr ? stateSource_->shellTimelineStateBridgeObject() : nullptr;

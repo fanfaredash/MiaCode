@@ -203,10 +203,8 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame, quin
         }
         return;
     }
-    // Phase 4c-9 — convert the QVideoFrame to a QImage and stash it
-    // for DComp's StageBackgroundSource. The QML VideoOutput
-    // underneath the DComp HWND is occluded (WS_EX_LAYERED + LWA_ALPHA
-    // is opaque per-window), so DComp has to paint the frame itself.
+    // Phase 4c-9 — convert the QVideoFrame to a QImage and stash it in
+    // loadedBackgroundImage_, exposed via currentBackgroundImage().
     // QVideoFrame::toImage() is GUI-thread safe (this slot runs on
     // GUI via the queued `videoFrameChanged` connection).
     //
@@ -227,13 +225,7 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame, quin
     const bool throttledOut =
         videoFrameToImageThrottle_.isValid()
         && videoFrameToImageThrottle_.nsecsElapsed() < videoFrameToImageThrottleNs;
-    // Phase 4d — when per-pixel alpha is on, QML's VideoOutput renders
-    // the video natively (GPU-direct via QRhi), no CPU detour needed.
-    // Skip the toImage() conversion entirely — that's the whole point
-    // of per-pixel alpha: zero CPU cost for video bg.
-    const bool skipForPerPixelAlpha =
-        miacode::debug_options::previewDCompPerPixelAlphaEnabled();
-    if (mediaVisible_ && !throttledOut && !skipForPerPixelAlpha) {
+    if (mediaVisible_ && !throttledOut) {
         if (syncFrameBeacon) {
             char buf[220];
             std::snprintf(buf, sizeof(buf),
@@ -261,11 +253,10 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame, quin
     } else if (syncFrameBeacon) {
         char buf[220];
         std::snprintf(buf, sizeof(buf),
-            "preview/frame/skip_to_image tid=%lu visible=%d throttled=%d per_pixel_alpha=%d",
+            "preview/frame/skip_to_image tid=%lu visible=%d throttled=%d",
             currentBeaconTid(),
             mediaVisible_ ? 1 : 0,
-            throttledOut ? 1 : 0,
-            skipForPerPixelAlpha ? 1 : 0);
+            throttledOut ? 1 : 0);
         miacode::oplog::appendStartupBeaconLine(buf);
     }
     const bool firstFrameForSource = videoFrameCountTotal_ == 0;
@@ -469,36 +460,12 @@ void PreviewStageMediaHost::handleDecodedVideoFrame(const QVideoFrame& frame,
         innerVideoSink_->setVideoFrame(frame);
     }
 
-    // CPU fallback for the DComp per-pixel-alpha-OFF path: mirror to a QImage
-    // (throttled to videoFrameToImageMaxFps_). Skipped under per-pixel alpha
-    // (QML renders the VideoOutput natively, zero CPU cost) and when hidden.
-    const qint64 videoFrameToImageThrottleNs =
-        qMax<qint64>(1, qRound64(1000000000.0 / qMax(1.0, videoFrameToImageMaxFps_)));
-    const bool throttledOut =
-        videoFrameToImageThrottle_.isValid()
-        && videoFrameToImageThrottle_.nsecsElapsed() < videoFrameToImageThrottleNs;
-    // The toImage() CPU copy is consumed ONLY by the DComp CPU-paint fallback
-    // (currentBackgroundImage() → PreviewDCompSurface / StageBackgroundSource),
-    // and only when per-pixel alpha is off. When DComp is disabled — the
-    // default — the QML VideoOutput renders the pushed frame directly on the
-    // GPU and this copy has no consumer (dead work). Crucially, calling
-    // QVideoFrame::toImage() on a QtAVPlayer D3D11VA *hardware* frame from the
-    // GUI thread maps a decoder-pool surface while the decode thread keeps
-    // recycling it (the D3D11 device context isn't shared safely across
-    // threads) → use-after-free crash, observed on Intel iGPU. The proven
-    // spike never did a per-frame toImage; the default path here must not
-    // either. Only pay the cost (and take the risk) when DComp's fallback
-    // genuinely needs the QImage.
-    const bool needsCpuImageForDComp =
-        miacode::debug_options::previewUseDCompEnabled()
-        && !miacode::debug_options::previewDCompPerPixelAlphaEnabled();
-    if (mediaVisible_ && !throttledOut && needsCpuImageForDComp) {
-        QImage decodedImage = frame.toImage();
-        if (!decodedImage.isNull()) {
-            loadedBackgroundImage_ = std::move(decodedImage);
-            videoFrameToImageThrottle_.restart();
-        }
-    }
+    // NOTE — deliberately NO per-frame QVideoFrame::toImage() here. Calling it
+    // on a QtAVPlayer D3D11VA *hardware* frame from the GUI thread maps a
+    // decoder-pool surface while the decode thread keeps recycling it (the
+    // D3D11 device context isn't shared safely across threads) → use-after-free
+    // crash, observed on Intel iGPU. The QML VideoOutput renders the pushed
+    // frame directly on the GPU, so no CPU copy is needed.
 
     // Frame-rate / stall diagnostics (drives the HUD; backend-agnostic math).
     const bool firstFrameForSource = videoFrameCountTotal_ == 0;

@@ -659,13 +659,11 @@ Item {
     // Live chart-frame scene (edit mode, A2). A bare PreviewQuickSceneRoot whose
     // layer flags / shared frame state are wired in C++ by
     // CoverComposerView::bindLiveChartScene (overlay layers only over transparent).
-    // dcompFallbackActive is pre-set here so the very first frame renders via the
-    // QSG path even before C++ binds. anchors.fill tracks the layer's drag/scale.
+    // anchors.fill tracks the layer's drag/scale.
     Component {
         id: liveChartComponent
         PreviewQuickSceneRoot {
             anchors.fill: parent
-            dcompFallbackActive: true
             // The export grab clips overlay geometry to its square framebuffer
             // (SceneFrameRenderer renders into a side×side window). Clip the live
             // scene to the same square box so out-of-bounds effects (fireworks /
