@@ -14,7 +14,7 @@ helper binaries. Build file: root `CMakeLists.txt` (one file, ~1200 lines). Pres
   windeployqt `$<CONFIG:Debug>` at `:1179`/`:1190`). Leave it unless it gets in the way; it is
   not a second supported product config.
 - Generator is multi-config (Visual Studio 17 2022), so CTest needs `-C Release`.
-- **macOS compatibility follows `dev-macos`.** Keep Windows-only BASS export/audio and DComp
+- **macOS compatibility follows `dev-macos`.** Keep Windows-only BASS export/audio and D3D11
   sources inside `if(WIN32)`; guard their owning members/includes/call sites with `Q_OS_WIN`.
   Published preview snapshots use `std::shared_ptr<const PreviewFrameState>` plus the free
   `std::atomic_load_explicit` / `std::atomic_store_explicit` overloads — do not replace this with

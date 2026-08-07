@@ -85,7 +85,7 @@ The toolbox blank-media submenu operates on the current chart directory only. It
   - Consumers: `PreviewRuntime`, `PreviewQuickExportSession`, `VideoExportQuickRenderBackend`
   - Entry: `MainWindow::resolvePreviewSkinDir`, `MainWindow::applyPreviewSkinDirectoryToSurfaces`, `PreviewRuntime::setSkinDirectory`, `PreviewSceneAssetRepository::setSkinDirectory`, `PreviewSceneAssetLoader::load`
   - Skin selection enumerates child directories of `assets/skin`; a directory is shown only when core files such as `tap.png`, `hold.png`, and `star.png` exist
-  - Timeline note art follows the same selected skin directory through `TimelineQuickStateBridge::setSkinDirectory`; `TimelineNoteAssets` falls back to built-in `skinSD` only when no skin directory is supplied or the selected skin cannot provide usable timeline icons. Widget timeline, Quick/QSG timeline, and DComp timeline sprite caches must be invalidated together on skin changes.
+  - Timeline note art follows the same selected skin directory through `TimelineQuickStateBridge::setSkinDirectory`; `TimelineNoteAssets` falls back to built-in `skinSD` only when no skin directory is supplied or the selected skin cannot provide usable timeline icons. Widget timeline and Quick/QSG timeline sprite caches must be invalidated together on skin changes.
   - Touch break assets use the external-skin naming convention first:
     - `touch_break_border_2.png`
     - `touch_break_border_3.png`

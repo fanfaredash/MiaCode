@@ -1656,8 +1656,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
 
     # Behavior spec locking DebugOptions.h accessor semantics (defaults, clamps,
-    # debug-category gating, DComp cascade), the safety net for any future
-    # table-driven registry refactor.
+    # debug-category gating), the safety net for any future table-driven
+    # registry refactor.
     miacode_add_dev_tool(debug_options_spec TEST
         SOURCES
             src/tools/debug_index/DebugOptionsSpec.cpp

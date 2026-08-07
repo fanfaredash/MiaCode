@@ -58,8 +58,7 @@ Implications:
   `SlideShapeOnly` slot between `slide_motion` and `judge_effect` (below notes/touch/tap-judge), and a
   `JudgeTextOnly` slot on top. So each judge enum bit drives 2 slots; keep
   `kPreviewQuickSceneLayerSlotCount` equal to the number of `layerSlotAt(root, slotIndex++)` calls when
-  adding/removing slots. The off-by-default DComp path (`src/sources/chart/ChartReviewSource.*`,
-  `MaimuriDxJudgeSource.*`, sorted by `zOrder()`) still draws both groups in one pass — a known divergence.
+  adding/removing slots.
 - Firework visuals use the custom `PreviewQuickJudgeFireworkLayer` material; state in
   `src/core/scene/PreviewJudgeFireworkLayerState.*`, shader in
   `src/preview/quick_scene/shaders/PreviewFireworkMaterial.*`.

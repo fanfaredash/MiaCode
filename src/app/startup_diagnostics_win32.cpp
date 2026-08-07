@@ -256,8 +256,8 @@ void probeD3D11Device() noexcept
     // Probe D3D11CreateDevice on HARDWARE → WARP → reference, recording
     // which level worked and the adapter description. If hardware works
     // we know B (GPU driver missing) is NOT the cause. If only WARP
-    // works, B is likely the cause — Qt RHI / DComp on WARP is the
-    // confirmed weak spot.
+    // works, B is likely the cause — Qt's RHI on WARP is the confirmed
+    // weak spot.
 
     typedef HRESULT (WINAPI* D3D11CreateDeviceFn)(
         IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT,
