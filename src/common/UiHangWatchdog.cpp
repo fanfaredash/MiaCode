@@ -230,25 +230,31 @@ policy::StackCaptureOutcome appendGuiThreadStackReport(
 
 void watchdogLoop()
 {
-    // Warm dbghelp here, on this thread, at process start — never during a hang. See
-    // prepareStackWalkSymbols() for why deferring it to first use is a deadlock risk.
+    // dbghelp is warmed on this thread — never on the GUI thread, and never lazily during a
+    // hang — but NOT at the first instruction. SymInitialize enumerates the loaded modules
+    // and takes the loader lock, and this thread starts from installGuiHeartbeat(), which
+    // runs just after the QApplication constructor while the GUI thread is still loading Qt
+    // platform plugins and graphics backends. Both want the loader lock, and the watchdog
+    // loses: it would sit blocked through exactly the startup window it is meant to watch.
+    //
+    // So wait for the first GUI heartbeat. That is the cheapest available proof that the
+    // event loop is running and plugin loading is done — the quiet moment the eager call
+    // was reaching for and, at startup, could not actually have. The idle trigger is
+    // disarmed until that same heartbeat anyway, so this costs no coverage it had before.
+    // A marked-phase hang before the first heartbeat still gets a stack: the lazy fallback
+    // inside captureRegisteredThreadStack performs the attempt itself.
     //
     // Its own line rather than a field on `action=installed`: that line is written on the
     // GUI thread and installGuiHeartbeat() returns before this thread has necessarily run,
     // so folding the result in would need a handshake the diagnostic has no business
     // introducing. Not force/Fatal either — this is a startup fact recorded long before
     // any hang, not hang evidence that has to survive a kill.
-    const miacode::diag::SymbolHandlerStatus symbols = miacode::diag::prepareStackWalkSymbols();
-    miacode::debug_log::appendLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("ui/hang_watchdog"),
-        QStringLiteral("action=stack_symbols sym_attempted=%1 sym_ready=%2 sym_err=%3 "
-                       "sym_invaded=%4 sym_invade_err=%5")
-            .arg(symbols.attempted ? 1 : 0)
-            .arg(symbols.ready ? 1 : 0)
-            .arg(symbols.lastErrorCode)
-            .arg(symbols.invadedProcess ? 1 : 0)
-            .arg(symbols.invadeErrorCode));
+    // Prepared inside the monitor loop below, on the first poll that sees a heartbeat --
+    // NOT by blocking here until one arrives. Marked-phase detection is live before the
+    // first heartbeat (policy::classify only gates the *idle* trigger on it), so stopping
+    // the loop to wait would trade one startup blind spot for a worse one.
+    const qint64 symbolWaitStartMs = steadyMs();
+    bool symbolsPrepared = false;
 
     // Sampled once, not per loop: an env lookup every 500 ms is waste, and a threshold
     // that changed mid-session would make a capture impossible to interpret.
@@ -301,6 +307,22 @@ void watchdogLoop()
         const qint64 heartbeatAge = heartbeatArmed
             ? qMax<qint64>(0, now - lastHeartbeat)
             : 0;
+        if (!symbolsPrepared && heartbeatArmed) {
+            symbolsPrepared = true;
+            const miacode::diag::SymbolHandlerStatus symbols =
+                miacode::diag::prepareStackWalkSymbols();
+            miacode::debug_log::appendLine(
+                miacode::debug_log::Channel::Runtime,
+                QStringLiteral("ui/hang_watchdog"),
+                QStringLiteral("action=stack_symbols sym_attempted=%1 sym_ready=%2 sym_err=%3 "
+                               "sym_invaded=%4 sym_invade_err=%5 waited_for_heartbeat_ms=%6")
+                    .arg(symbols.attempted ? 1 : 0)
+                    .arg(symbols.ready ? 1 : 0)
+                    .arg(symbols.lastErrorCode)
+                    .arg(symbols.invadedProcess ? 1 : 0)
+                    .arg(symbols.invadeErrorCode)
+                    .arg(qMax<qint64>(0, now - symbolWaitStartMs)));
+        }
         const PhaseState phase = snapshotPhase();
         // Runs before the hang classification and independently of it: a stall episode is
         // an observation about the heartbeat alone, and the two must not be able to

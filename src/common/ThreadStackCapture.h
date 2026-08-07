@@ -97,11 +97,15 @@ struct SymbolHandlerStatus {
 // (later calls return the first attempt's outcome); off Windows it is a no-op that reports
 // attempted=false, ready=false.
 //
-// Call this ONCE from the capturing (watchdog) thread at startup, while nothing is hung.
-// SymInitialize enumerates loaded modules and takes the loader lock: if it were first
-// called during a hang while the GUI thread held that lock, the watchdog would block
-// before it ever reached SuspendThread and the hang would go unreported. Doing it early
-// moves that acquisition to a known-quiet moment. captureRegisteredThreadStack still
+// Call this ONCE from the capturing (watchdog) thread, while nothing is hung, and not
+// before the event loop is up. SymInitialize enumerates loaded modules and takes the
+// loader lock, which pulls in two directions: called first during a hang, while the GUI
+// thread holds that lock, the watchdog would block before it ever reached SuspendThread
+// and the hang would go unreported; called at the very start of the watchdog thread it
+// contends with the GUI thread still loading Qt plugins, and blocks through the startup
+// window it exists to watch. The caller therefore waits for the first GUI heartbeat --
+// proof the event loop runs and plugin loading is done -- and calls it then, without
+// suspending its own monitoring in the meantime. captureRegisteredThreadStack still
 // calls it lazily as a fallback, always before opening the suspension window.
 SymbolHandlerStatus prepareStackWalkSymbols();
 
