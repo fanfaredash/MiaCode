@@ -55,7 +55,10 @@
 | T-4 通知客户端引用计数非原子 + UAF | 已修复（原子计数 + `detachOwner()` 屏障） | 本轮 |
 | T-5 GUI 线程被改公寓模型 | 已修复（改 `COINIT_APARTMENTTHREADED`） | 本轮 |
 | T-7 启动期 `SymInitialize` 与 loader 争锁 | 已修复（推迟到首个心跳，监控不中断） | 本轮 |
-| T-6 / T-8 / T-9 / T-10 | 未实施 | — |
+| T-6 资源计量在 GUI 线程上反复建毁 DXGI 工厂 | 已修复（首采样改投递 + 工厂缓存 `IsCurrent()` 校验） | 本轮 |
+| T-8 挂起报告链路被它要报告的挂起阻塞 | 已修复（`logMutex` 改 2 s `tryLock` + 独立兜底文件） | 本轮 |
+| T-9 线程池职责划分 | 未实施 —— 与本次冻结无关（切谱面延迟） | — |
+| T-10 栈捕获超时泄漏 | 未实施 —— 原报告本身认同当前权衡 | — |
 | W-1 亚阈值 GUI 卡顿完全无日志 | 已修复（新增 `action=gui_thread_stall`） | 本轮 |
 | W-2 `SymInitialize` 单点失败导致全程无符号 | 已修复（`fInvadeProcess=FALSE` 回退 + `SymRefreshModuleList`） | 本轮 |
 
