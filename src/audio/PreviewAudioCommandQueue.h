@@ -28,7 +28,7 @@ public:
     std::optional<PreviewAudioCommand> takeNext();
 
     void invalidateBefore(quint64 generation);
-    bool containsPlaybackGeneration(quint64 generation) const;
+    bool containsInvalidatablePlaybackGeneration(quint64 generation) const;
     bool empty() const;
     qsizetype size() const;
     bool isShuttingDown() const;
@@ -52,6 +52,7 @@ private:
     std::optional<Entry> syncBackgroundTrack_;
     std::optional<Entry> drainEvents_;
     quint64 nextOrder_ = 1;
+    quint64 minimumPlaybackGeneration_ = 0;
     bool shuttingDown_ = false;
 };
 

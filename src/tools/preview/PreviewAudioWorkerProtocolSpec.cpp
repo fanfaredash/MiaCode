@@ -100,6 +100,68 @@ bool verifyVocabularyAndValueSemantics(QTextStream& err)
     return ok;
 }
 
+bool verifyEveryCommandPolicy(QTextStream& err)
+{
+    struct ExpectedPolicy {
+        CommandKind kind;
+        CommandPolicy policy;
+    };
+
+    const std::array expected{
+        ExpectedPolicy{CommandKind::Shutdown, {false, false, false, false, false, false, false}},
+        ExpectedPolicy{CommandKind::DeviceChangePause, {true, false, false, true, false, false, true}},
+        ExpectedPolicy{CommandKind::ManualPause, {true, true, false, true, false, false, false}},
+        ExpectedPolicy{CommandKind::StopAll, {true, true, false, false, false, false, false}},
+        ExpectedPolicy{CommandKind::SetWarmupResolvedPaths, {false, false, false, false, true, true, false}},
+        ExpectedPolicy{CommandKind::ReloadAssets, {false, false, false, false, true, true, false}},
+        ExpectedPolicy{CommandKind::SetChartPath, {false, false, false, false, true, true, false}},
+        ExpectedPolicy{CommandKind::SetBackgroundOffset, {true, true, false, false, true, false, false}},
+        ExpectedPolicy{CommandKind::SetBackgroundRate, {true, true, false, false, true, false, false}},
+        ExpectedPolicy{CommandKind::ApplyRateAtSecond, {true, true, true, false, true, false, false}},
+        ExpectedPolicy{CommandKind::ApplyLevels, {true, true, false, false, true, false, false}},
+        ExpectedPolicy{CommandKind::ConfigureTimeline, {true, true, false, false, true, false, false}},
+        ExpectedPolicy{CommandKind::ClearTimeline, {true, true, false, false, true, false, false}},
+        ExpectedPolicy{CommandKind::ApplyPausedState, {true, true, true, false, true, false, false}},
+        ExpectedPolicy{CommandKind::Prepare, {true, true, true, true, false, false, false}},
+        ExpectedPolicy{CommandKind::Commit, {true, true, true, true, false, false, false}},
+        ExpectedPolicy{CommandKind::Cancel, {true, true, true, true, false, false, false}},
+        ExpectedPolicy{CommandKind::Start, {true, true, true, true, false, false, false}},
+        ExpectedPolicy{CommandKind::ResumeRetained, {true, true, true, true, false, false, false}},
+        ExpectedPolicy{CommandKind::SeekRetained, {true, true, true, true, false, false, false}},
+        ExpectedPolicy{CommandKind::ResetRetained, {true, true, true, true, false, false, false}},
+        ExpectedPolicy{CommandKind::ClearRetained, {true, true, true, true, false, false, false}},
+        ExpectedPolicy{CommandKind::ResetCursor, {true, true, true, false, false, false, false}},
+        ExpectedPolicy{CommandKind::PauseTouchhold, {true, true, true, false, false, false, false}},
+        ExpectedPolicy{CommandKind::RestoreTouchhold, {true, true, true, false, false, false, false}},
+        ExpectedPolicy{CommandKind::StartBackground, {true, true, true, false, false, false, false}},
+        ExpectedPolicy{CommandKind::SeekBackground, {true, true, true, false, false, false, false}},
+        ExpectedPolicy{CommandKind::PauseBackground, {true, true, true, false, false, false, false}},
+        ExpectedPolicy{CommandKind::StopSfxVoices, {true, true, true, false, false, false, false}},
+        ExpectedPolicy{CommandKind::SyncBackgroundTrack, {true, true, true, false, false, false, false}},
+        ExpectedPolicy{CommandKind::DrainEvents, {true, true, true, false, false, false, false}},
+        ExpectedPolicy{CommandKind::Audition, {false, false, false, false, true, true, false}},
+    };
+
+    bool ok = true;
+    ok &= expect(expected.size() == 32, "policy table covers all command kinds", err);
+    for (qsizetype index = 0; index < qsizetype(expected.size()); ++index) {
+        const CommandPolicy actual = commandPolicy(expected[size_t(index)].kind);
+        const CommandPolicy wanted = expected[size_t(index)].policy;
+        const bool matches = actual.usesPlaybackGeneration == wanted.usesPlaybackGeneration
+            && actual.playbackCompletionEligible == wanted.playbackCompletionEligible
+            && actual.invalidatedByPlaybackBoundary == wanted.invalidatedByPlaybackBoundary
+            && actual.requiresTransaction == wanted.requiresTransaction
+            && actual.usesAssetGeneration == wanted.usesAssetGeneration
+            && actual.assetCompletionEligible == wanted.assetCompletionEligible
+            && actual.requiresDevicePauseToken == wanted.requiresDevicePauseToken;
+        if (!matches) {
+            err << "FAIL: command policy row " << index << Qt::endl;
+            ok = false;
+        }
+    }
+    return ok;
+}
+
 bool verifyClassificationAndCoalescing(QTextStream& err)
 {
     bool ok = true;
@@ -113,13 +175,13 @@ bool verifyClassificationAndCoalescing(QTextStream& err)
                  "drain is latest-only", err);
     ok &= expect(commandClass(CommandKind::Audition) == CommandClass::Audition,
                  "audition has its own bounded class", err);
-    ok &= expect(isPlaybackCommand(CommandKind::Start)
-                     && isPlaybackCommand(CommandKind::SyncBackgroundTrack),
-                 "transport and ticks are playback commands", err);
-    ok &= expect(!isPlaybackCommand(CommandKind::ReloadAssets)
-                     && !isPlaybackCommand(CommandKind::ApplyLevels)
-                     && !isPlaybackCommand(CommandKind::Audition),
-                 "asset settings and audition are not playback invalidation targets", err);
+    ok &= expect(commandPolicy(CommandKind::Start).usesPlaybackGeneration
+                     && commandPolicy(CommandKind::SyncBackgroundTrack).usesPlaybackGeneration,
+                 "transport and ticks use playback generation", err);
+    ok &= expect(!commandPolicy(CommandKind::ReloadAssets).invalidatedByPlaybackBoundary
+                     && !commandPolicy(CommandKind::ApplyLevels).invalidatedByPlaybackBoundary
+                     && !commandPolicy(CommandKind::Audition).invalidatedByPlaybackBoundary,
+                 "asset settings and audition survive playback invalidation", err);
 
     const PreviewAudioCommand firstPause = [] {
         PreviewAudioCommand command = makeHigh(CommandKind::DeviceChangePause, 8, 21);
@@ -190,6 +252,8 @@ bool verifyCompletionAcceptance(QTextStream& err)
     paused.identity.pauseToken = 43;
     const quint64 latestDeviceSequence = 45;
     Q_UNUSED(latestDeviceSequence);
+    ok &= expect(!acceptsPlaybackCompletion(7, 31, paused),
+                 "device pause cannot bypass its token through the general predicate", err);
     ok &= expect(acceptsDevicePauseCompletion(7, 31, 43, paused),
                  "pause completion matches immutable token despite a newer device sequence", err);
     ok &= expect(!acceptsDevicePauseCompletion(8, 31, 43, paused),
@@ -207,6 +271,23 @@ bool verifyCompletionAcceptance(QTextStream& err)
                  "older asset completion rejected despite matching playback generation", err);
     reload.identity.assetGeneration = 11;
     ok &= expect(acceptsAssetCompletion(11, reload), "latest asset completion accepted", err);
+    reload.identity.assetGeneration = 12;
+    ok &= expect(!acceptsAssetCompletion(11, reload),
+                 "future asset completion is not current", err);
+
+    PreviewAudioCompletion startAsAsset;
+    startAsAsset.kind = CommandKind::Start;
+    startAsAsset.identity.assetGeneration = 11;
+    ok &= expect(!acceptsAssetCompletion(11, startAsAsset),
+                 "start is not an asset completion", err);
+    paused.identity.assetGeneration = 11;
+    ok &= expect(!acceptsAssetCompletion(11, paused),
+                 "device pause is not an asset completion", err);
+    PreviewAudioCompletion levelsAsAsset;
+    levelsAsAsset.kind = CommandKind::ApplyLevels;
+    levelsAsAsset.identity.assetGeneration = 11;
+    ok &= expect(!acceptsAssetCompletion(11, levelsAsAsset),
+                 "settings diagnostic is not an asset result", err);
     return ok;
 }
 
@@ -218,6 +299,7 @@ int main()
     QTextStream out(stdout);
     bool ok = true;
     ok &= verifyVocabularyAndValueSemantics(err);
+    ok &= verifyEveryCommandPolicy(err);
     ok &= verifyClassificationAndCoalescing(err);
     ok &= verifySnapshotSequence(err);
     ok &= verifyCompletionAcceptance(err);

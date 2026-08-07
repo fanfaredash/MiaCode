@@ -121,6 +121,87 @@ struct PreviewAudioSnapshot {
     double authoritativeSecond = 0.0;
 };
 
+struct CommandPolicy {
+    bool usesPlaybackGeneration = false;
+    bool playbackCompletionEligible = false;
+    bool invalidatedByPlaybackBoundary = false;
+    bool requiresTransaction = false;
+    bool usesAssetGeneration = false;
+    bool assetCompletionEligible = false;
+    bool requiresDevicePauseToken = false;
+};
+
+constexpr CommandPolicy commandPolicy(CommandKind kind) noexcept
+{
+    switch (kind) {
+    case CommandKind::Shutdown:
+        return {false, false, false, false, false, false, false};
+    case CommandKind::DeviceChangePause:
+        return {true, false, false, true, false, false, true};
+    case CommandKind::ManualPause:
+        return {true, true, false, true, false, false, false};
+    case CommandKind::StopAll:
+        return {true, true, false, false, false, false, false};
+    case CommandKind::SetWarmupResolvedPaths:
+        return {false, false, false, false, true, true, false};
+    case CommandKind::ReloadAssets:
+        return {false, false, false, false, true, true, false};
+    case CommandKind::SetChartPath:
+        return {false, false, false, false, true, true, false};
+    case CommandKind::SetBackgroundOffset:
+        return {true, true, false, false, true, false, false};
+    case CommandKind::SetBackgroundRate:
+        return {true, true, false, false, true, false, false};
+    case CommandKind::ApplyRateAtSecond:
+        return {true, true, true, false, true, false, false};
+    case CommandKind::ApplyLevels:
+        return {true, true, false, false, true, false, false};
+    case CommandKind::ConfigureTimeline:
+        return {true, true, false, false, true, false, false};
+    case CommandKind::ClearTimeline:
+        return {true, true, false, false, true, false, false};
+    case CommandKind::ApplyPausedState:
+        return {true, true, true, false, true, false, false};
+    case CommandKind::Prepare:
+        return {true, true, true, true, false, false, false};
+    case CommandKind::Commit:
+        return {true, true, true, true, false, false, false};
+    case CommandKind::Cancel:
+        return {true, true, true, true, false, false, false};
+    case CommandKind::Start:
+        return {true, true, true, true, false, false, false};
+    case CommandKind::ResumeRetained:
+        return {true, true, true, true, false, false, false};
+    case CommandKind::SeekRetained:
+        return {true, true, true, true, false, false, false};
+    case CommandKind::ResetRetained:
+        return {true, true, true, true, false, false, false};
+    case CommandKind::ClearRetained:
+        return {true, true, true, true, false, false, false};
+    case CommandKind::ResetCursor:
+        return {true, true, true, false, false, false, false};
+    case CommandKind::PauseTouchhold:
+        return {true, true, true, false, false, false, false};
+    case CommandKind::RestoreTouchhold:
+        return {true, true, true, false, false, false, false};
+    case CommandKind::StartBackground:
+        return {true, true, true, false, false, false, false};
+    case CommandKind::SeekBackground:
+        return {true, true, true, false, false, false, false};
+    case CommandKind::PauseBackground:
+        return {true, true, true, false, false, false, false};
+    case CommandKind::StopSfxVoices:
+        return {true, true, true, false, false, false, false};
+    case CommandKind::SyncBackgroundTrack:
+        return {true, true, true, false, false, false, false};
+    case CommandKind::DrainEvents:
+        return {true, true, true, false, false, false, false};
+    case CommandKind::Audition:
+        return {false, false, false, false, true, true, false};
+    }
+    return {};
+}
+
 constexpr CommandClass commandClass(CommandKind kind) noexcept
 {
     switch (kind) {
@@ -137,65 +218,6 @@ constexpr CommandClass commandClass(CommandKind kind) noexcept
     default:
         return CommandClass::Ordered;
     }
-}
-
-constexpr bool isPlaybackCommand(CommandKind kind) noexcept
-{
-    switch (kind) {
-    case CommandKind::DeviceChangePause:
-    case CommandKind::ManualPause:
-    case CommandKind::StopAll:
-    case CommandKind::ApplyRateAtSecond:
-    case CommandKind::ApplyPausedState:
-    case CommandKind::Prepare:
-    case CommandKind::Commit:
-    case CommandKind::Cancel:
-    case CommandKind::Start:
-    case CommandKind::ResumeRetained:
-    case CommandKind::SeekRetained:
-    case CommandKind::ResetRetained:
-    case CommandKind::ClearRetained:
-    case CommandKind::ResetCursor:
-    case CommandKind::PauseTouchhold:
-    case CommandKind::RestoreTouchhold:
-    case CommandKind::StartBackground:
-    case CommandKind::SeekBackground:
-    case CommandKind::PauseBackground:
-    case CommandKind::StopSfxVoices:
-    case CommandKind::SyncBackgroundTrack:
-    case CommandKind::DrainEvents:
-        return true;
-    default:
-        return false;
-    }
-}
-
-constexpr bool isTransactionalCommand(CommandKind kind) noexcept
-{
-    switch (kind) {
-    case CommandKind::DeviceChangePause:
-    case CommandKind::ManualPause:
-    case CommandKind::ApplyPausedState:
-    case CommandKind::Prepare:
-    case CommandKind::Commit:
-    case CommandKind::Cancel:
-    case CommandKind::Start:
-    case CommandKind::ResumeRetained:
-    case CommandKind::SeekRetained:
-    case CommandKind::ResetRetained:
-    case CommandKind::ClearRetained:
-        return true;
-    default:
-        return false;
-    }
-}
-
-constexpr bool isAssetCommand(CommandKind kind) noexcept
-{
-    return kind == CommandKind::SetWarmupResolvedPaths
-        || kind == CommandKind::ReloadAssets
-        || kind == CommandKind::SetChartPath
-        || kind == CommandKind::Audition;
 }
 
 inline PreviewAudioCommand makeHigh(
@@ -272,11 +294,13 @@ inline bool acceptsPlaybackCompletion(
     quint64 activeTransactionId,
     const PreviewAudioCompletion& completion) noexcept
 {
-    if (!isPlaybackCommand(completion.kind)
+    const CommandPolicy policy = commandPolicy(completion.kind);
+    if (!policy.playbackCompletionEligible
+        || policy.requiresDevicePauseToken
         || completion.identity.generation != currentGeneration) {
         return false;
     }
-    if (isTransactionalCommand(completion.kind)) {
+    if (policy.requiresTransaction) {
         return activeTransactionId != 0
             && completion.identity.transactionId == activeTransactionId;
     }
@@ -289,7 +313,7 @@ inline bool acceptsDevicePauseCompletion(
     quint64 pendingPauseToken,
     const PreviewAudioCompletion& completion) noexcept
 {
-    return completion.kind == CommandKind::DeviceChangePause
+    return commandPolicy(completion.kind).requiresDevicePauseToken
         && completion.identity.generation == currentGeneration
         && pendingTransactionId != 0
         && completion.identity.transactionId == pendingTransactionId
@@ -301,7 +325,10 @@ inline bool acceptsAssetCompletion(
     quint64 latestAssetGeneration,
     const PreviewAudioCompletion& completion) noexcept
 {
-    return completion.identity.assetGeneration >= latestAssetGeneration;
+    const CommandPolicy policy = commandPolicy(completion.kind);
+    return policy.usesAssetGeneration
+        && policy.assetCompletionEligible
+        && completion.identity.assetGeneration == latestAssetGeneration;
 }
 
 }  // namespace miacode::preview_audio

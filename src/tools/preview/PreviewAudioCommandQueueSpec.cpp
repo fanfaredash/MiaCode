@@ -280,6 +280,102 @@ bool verifyLatestGenerationOrdering(QTextStream& err)
     return ok;
 }
 
+bool verifyLatestReplacementRefreshesFifoOrder(QTextStream& err)
+{
+    bool ok = true;
+    PreviewAudioCommandQueue queue;
+    queue.enqueue(makeLatest(CommandKind::SyncBackgroundTrack, 4, 1.0));
+    queue.enqueue(makeLatest(CommandKind::DrainEvents, 4, 2.0));
+    ok &= expect(queue.enqueue(
+                     makeLatest(CommandKind::SyncBackgroundTrack, 4, 3.0)).replaced,
+                 "later sync replaces its occupied slot", err);
+
+    const auto first = queue.takeNext();
+    const auto second = queue.takeNext();
+    ok &= expect(first && first->kind == CommandKind::DrainEvents && first->value == 2.0,
+                 "unreplaced drain keeps its earlier latest-class FIFO position", err);
+    ok &= expect(second && second->kind == CommandKind::SyncBackgroundTrack && second->value == 3.0,
+                 "replacement sync receives its later latest-class FIFO position", err);
+    return ok;
+}
+
+bool verifyInvalidationWatermark(QTextStream& err)
+{
+    bool ok = true;
+    PreviewAudioCommandQueue orderedQueue;
+    orderedQueue.invalidateBefore(5);
+
+    const auto oldStart = orderedQueue.enqueue(makeOrdered(CommandKind::Start, 4, 2));
+    ok &= expect(!oldStart.accepted && oldStart.error == CommandError::Stale,
+                 "old ordered playback is stale after invalidation", err);
+    ok &= expect(orderedQueue.enqueue(makeOrdered(CommandKind::Start, 5, 3)).accepted,
+                 "generation at watermark survives", err);
+
+    PreviewAudioCommandQueue latestQueue;
+    latestQueue.invalidateBefore(5);
+    ok &= expect(latestQueue.enqueue(makeLatest(CommandKind::SyncBackgroundTrack, 5, 1.0)).accepted,
+                 "threshold sync is accepted", err);
+    ok &= expect(latestQueue.takeNext()->kind == CommandKind::SyncBackgroundTrack,
+                 "threshold sync can be taken", err);
+    const auto oldSync = latestQueue.enqueue(makeLatest(CommandKind::SyncBackgroundTrack, 4, 2.0));
+    ok &= expect(!oldSync.accepted && oldSync.error == CommandError::Stale,
+                 "old sync stays stale after its slot was taken", err);
+    if (oldSync.accepted) {
+        latestQueue.takeNext();
+    }
+
+    ok &= expect(latestQueue.enqueue(makeLatest(CommandKind::DrainEvents, 5, 1.0)).accepted,
+                 "threshold drain is accepted", err);
+    ok &= expect(latestQueue.takeNext()->kind == CommandKind::DrainEvents,
+                 "threshold drain can be taken", err);
+    const auto oldDrain = latestQueue.enqueue(makeLatest(CommandKind::DrainEvents, 4, 2.0));
+    ok &= expect(!oldDrain.accepted && oldDrain.error == CommandError::Stale,
+                 "old drain stays stale after its slot was taken", err);
+
+    PreviewAudioCommandQueue policyQueue;
+    policyQueue.invalidateBefore(5);
+    const auto oldPausedState = policyQueue.enqueue(makeOrdered(CommandKind::ApplyPausedState, 4));
+    ok &= expect(!oldPausedState.accepted && oldPausedState.error == CommandError::Stale,
+                 "old paused state is playback-boundary stale", err);
+
+    PreviewAudioCommand reload = makeOrdered(CommandKind::ReloadAssets, 4);
+    reload.identity.assetGeneration = 9;
+    PreviewAudioCommand levels = makeOrdered(CommandKind::ApplyLevels, 4);
+    levels.identity.assetGeneration = 9;
+    ok &= expect(policyQueue.enqueue(reload).accepted,
+                 "old-generation asset work bypasses playback watermark", err);
+    ok &= expect(policyQueue.enqueue(levels).accepted,
+                 "old-generation settings work bypasses playback watermark", err);
+
+    PreviewAudioCommandQueue monotonicQueue;
+    monotonicQueue.invalidateBefore(7);
+    monotonicQueue.invalidateBefore(6);
+    const auto belowMaximum = monotonicQueue.enqueue(makeOrdered(CommandKind::Start, 6, 4));
+    ok &= expect(!belowMaximum.accepted && belowMaximum.error == CommandError::Stale,
+                 "invalidation watermark never moves backward", err);
+    ok &= expect(monotonicQueue.enqueue(makeOrdered(CommandKind::Start, 7, 5)).accepted,
+                 "generation at maximum watermark survives", err);
+
+    PreviewAudioCommandQueue safetyQueue;
+    safetyQueue.enqueue(numbered(devicePause(4, 8, 22), 1));
+    safetyQueue.enqueue(numbered(makeHigh(CommandKind::ManualPause, 4, 8), 2));
+    safetyQueue.enqueue(numbered(makeHigh(CommandKind::StopAll, 4), 3));
+    safetyQueue.invalidateBefore(5);
+    const auto device = safetyQueue.takeNext();
+    const auto manual = safetyQueue.takeNext();
+    const auto stop = safetyQueue.takeNext();
+    ok &= expect(device && device->kind == CommandKind::DeviceChangePause
+                     && device->identity.sequence == 1,
+                 "device pause safety barrier survives playback invalidation", err);
+    ok &= expect(manual && manual->kind == CommandKind::ManualPause
+                     && manual->identity.sequence == 2,
+                 "manual pause safety control survives playback invalidation", err);
+    ok &= expect(stop && stop->kind == CommandKind::StopAll
+                     && stop->identity.sequence == 3,
+                 "stop-all safety control survives playback invalidation", err);
+    return ok;
+}
+
 bool verifyPlaybackInvalidation(QTextStream& err)
 {
     bool ok = true;
@@ -301,8 +397,10 @@ bool verifyPlaybackInvalidation(QTextStream& err)
                  "current playback command accepted", err);
 
     queue.invalidateBefore(5);
-    ok &= expect(!queue.containsPlaybackGeneration(4), "old playback generation invalidated", err);
-    ok &= expect(queue.containsPlaybackGeneration(5), "current playback generation retained", err);
+    ok &= expect(!queue.containsInvalidatablePlaybackGeneration(4),
+                 "old invalidatable playback generation removed", err);
+    ok &= expect(queue.containsInvalidatablePlaybackGeneration(5),
+                 "current invalidatable playback generation retained", err);
 
     bool foundReload = false;
     bool foundLevels = false;
@@ -333,7 +431,9 @@ int main()
     ok &= verifyManualPauseReserveAndOrdinarySpill(err);
     ok &= verifyPriorityAndLatestReplacement(err);
     ok &= verifyLatestGenerationOrdering(err);
+    ok &= verifyLatestReplacementRefreshesFifoOrder(err);
     ok &= verifyPlaybackInvalidation(err);
+    ok &= verifyInvalidationWatermark(err);
     if (ok) {
         out << "preview_audio_command_queue_spec ok" << Qt::endl;
     }

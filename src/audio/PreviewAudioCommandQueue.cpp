@@ -25,7 +25,7 @@ void eraseStalePlayback(Container& entries, quint64 generation)
             entries.begin(),
             entries.end(),
             [generation](const auto& entry) {
-                return isPlaybackCommand(entry.command.kind)
+                return commandPolicy(entry.command.kind).invalidatedByPlaybackBoundary
                     && entry.command.identity.generation < generation;
             }),
         entries.end());
@@ -34,28 +34,30 @@ void eraseStalePlayback(Container& entries, quint64 generation)
 template <typename Entry>
 void resetStalePlayback(std::optional<Entry>& entry, quint64 generation)
 {
-    if (entry && isPlaybackCommand(entry->command.kind)
+    if (entry && commandPolicy(entry->command.kind).invalidatedByPlaybackBoundary
         && entry->command.identity.generation < generation) {
         entry.reset();
     }
 }
 
 template <typename Container>
-bool containerContainsPlaybackGeneration(const Container& entries, quint64 generation)
+bool containerContainsInvalidatablePlaybackGeneration(const Container& entries, quint64 generation)
 {
     return std::any_of(
         entries.begin(),
         entries.end(),
         [generation](const auto& entry) {
-            return isPlaybackCommand(entry.command.kind)
+            return commandPolicy(entry.command.kind).invalidatedByPlaybackBoundary
                 && entry.command.identity.generation == generation;
         });
 }
 
 template <typename Entry>
-bool optionalContainsPlaybackGeneration(const std::optional<Entry>& entry, quint64 generation)
+bool optionalContainsInvalidatablePlaybackGeneration(
+    const std::optional<Entry>& entry,
+    quint64 generation)
 {
-    return entry && isPlaybackCommand(entry->command.kind)
+    return entry && commandPolicy(entry->command.kind).invalidatedByPlaybackBoundary
         && entry->command.identity.generation == generation;
 }
 
@@ -78,6 +80,11 @@ EnqueueResult PreviewAudioCommandQueue::enqueue(PreviewAudioCommand command)
     std::lock_guard lock(mutex_);
     if (shuttingDown_) {
         return rejected(CommandError::ShuttingDown);
+    }
+    const CommandPolicy policy = commandPolicy(command.kind);
+    if (policy.invalidatedByPlaybackBoundary
+        && command.identity.generation < minimumPlaybackGeneration_) {
+        return rejected(CommandError::Stale);
     }
 
     if (command.kind == CommandKind::DeviceChangePause) {
@@ -130,7 +137,7 @@ EnqueueResult PreviewAudioCommandQueue::enqueue(PreviewAudioCommand command)
             if (command.identity.generation < slot->command.identity.generation) {
                 return rejected(CommandError::Stale);
             }
-            slot->command = std::move(command);
+            slot = makeEntry(std::move(command));
             return accepted(true, false);
         }
         slot = makeEntry(std::move(command));
@@ -241,27 +248,28 @@ std::optional<PreviewAudioCommand> PreviewAudioCommandQueue::takeNext()
 void PreviewAudioCommandQueue::invalidateBefore(quint64 generation)
 {
     std::lock_guard lock(mutex_);
-    eraseStalePlayback(high_, generation);
-    eraseStalePlayback(ordered_, generation);
-    eraseStalePlayback(auditions_, generation);
-    resetStalePlayback(shutdown_, generation);
-    resetStalePlayback(devicePause_, generation);
-    resetStalePlayback(manualPause_, generation);
-    resetStalePlayback(syncBackgroundTrack_, generation);
-    resetStalePlayback(drainEvents_, generation);
+    minimumPlaybackGeneration_ = std::max(minimumPlaybackGeneration_, generation);
+    eraseStalePlayback(high_, minimumPlaybackGeneration_);
+    eraseStalePlayback(ordered_, minimumPlaybackGeneration_);
+    eraseStalePlayback(auditions_, minimumPlaybackGeneration_);
+    resetStalePlayback(shutdown_, minimumPlaybackGeneration_);
+    resetStalePlayback(devicePause_, minimumPlaybackGeneration_);
+    resetStalePlayback(manualPause_, minimumPlaybackGeneration_);
+    resetStalePlayback(syncBackgroundTrack_, minimumPlaybackGeneration_);
+    resetStalePlayback(drainEvents_, minimumPlaybackGeneration_);
 }
 
-bool PreviewAudioCommandQueue::containsPlaybackGeneration(quint64 generation) const
+bool PreviewAudioCommandQueue::containsInvalidatablePlaybackGeneration(quint64 generation) const
 {
     std::lock_guard lock(mutex_);
-    return containerContainsPlaybackGeneration(high_, generation)
-        || containerContainsPlaybackGeneration(ordered_, generation)
-        || containerContainsPlaybackGeneration(auditions_, generation)
-        || optionalContainsPlaybackGeneration(shutdown_, generation)
-        || optionalContainsPlaybackGeneration(devicePause_, generation)
-        || optionalContainsPlaybackGeneration(manualPause_, generation)
-        || optionalContainsPlaybackGeneration(syncBackgroundTrack_, generation)
-        || optionalContainsPlaybackGeneration(drainEvents_, generation);
+    return containerContainsInvalidatablePlaybackGeneration(high_, generation)
+        || containerContainsInvalidatablePlaybackGeneration(ordered_, generation)
+        || containerContainsInvalidatablePlaybackGeneration(auditions_, generation)
+        || optionalContainsInvalidatablePlaybackGeneration(shutdown_, generation)
+        || optionalContainsInvalidatablePlaybackGeneration(devicePause_, generation)
+        || optionalContainsInvalidatablePlaybackGeneration(manualPause_, generation)
+        || optionalContainsInvalidatablePlaybackGeneration(syncBackgroundTrack_, generation)
+        || optionalContainsInvalidatablePlaybackGeneration(drainEvents_, generation);
 }
 
 bool PreviewAudioCommandQueue::empty() const
