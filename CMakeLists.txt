@@ -727,18 +727,16 @@ if (WIN32 OR APPLE)
 endif()
 
 if (WIN32)
-    target_sources(MiaCode PRIVATE
-    )
     target_link_libraries(MiaCode PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
         winmm
         ole32       # Windows Core Audio endpoint notification COM API
         avrt  # Multimedia Class Scheduler Service (AvSetMmThreadCharacteristicsW)
-        d3d11        # DComp preview path (src/render/backend_d3d11) — see docs plan §3 Phase 1
-        dxgi         # IDXGIFactory2::CreateSwapChainForComposition + frame latency waitable
-        dcomp        # DCompositionCreateDevice + visual tree
-        d3dcompiler  # Phase 3 sprite pipeline runtime HLSL compile (D3DCompile)
+        d3d11        # Shared preview device, D3D11 export session, QuickShell composite
+                     # surface, stage-media host (src/preview/runtime, src/app)
+        dxgi         # Adapter enumeration + per-process VRAM gauge
+                     # (GpuDevicePolicy, ProcessDiagnostics, TimelineQuickItem)
         User32       # RegisterPowerSettingNotification
         Wtsapi32     # Session lock/unlock notifications for idle-freeze diagnostics
         dbghelp      # StackWalk64 + Sym* for the hang watchdog's GUI-thread self stack walk
