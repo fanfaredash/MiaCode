@@ -222,27 +222,48 @@ bool verifyCompletionAcceptance(QTextStream& err)
     started.kind = CommandKind::Start;
     started.identity.generation = 4;
     started.identity.transactionId = 19;
-    ok &= expect(acceptsPlaybackCompletion(4, 19, started), "matching playback completion accepted", err);
-    ok &= expect(!acceptsPlaybackCompletion(5, 19, started), "old playback generation rejected", err);
-    ok &= expect(!acceptsPlaybackCompletion(4, 20, started), "wrong transaction rejected", err);
+    ok &= expect(acceptsPlaybackCompletion(4, 11, 19, started), "matching playback completion accepted", err);
+    ok &= expect(!acceptsPlaybackCompletion(5, 11, 19, started), "old playback generation rejected", err);
+    ok &= expect(!acceptsPlaybackCompletion(4, 11, 20, started), "wrong transaction rejected", err);
 
     PreviewAudioCompletion zeroTransaction = started;
     zeroTransaction.identity.transactionId = 0;
-    ok &= expect(!acceptsPlaybackCompletion(4, 0, zeroTransaction),
+    ok &= expect(!acceptsPlaybackCompletion(4, 11, 0, zeroTransaction),
                  "transactional operation requires a nonzero transaction", err);
     PreviewAudioCompletion drain;
     drain.kind = CommandKind::DrainEvents;
     drain.identity.generation = 4;
-    ok &= expect(acceptsPlaybackCompletion(4, 0, drain),
+    drain.identity.assetGeneration = 7;
+    ok &= expect(acceptsPlaybackCompletion(4, 11, 0, drain),
                  "zero transaction is allowed for non-transactional playback work", err);
     drain.identity.transactionId = 19;
-    ok &= expect(!acceptsPlaybackCompletion(4, 19, drain),
+    ok &= expect(!acceptsPlaybackCompletion(4, 11, 19, drain),
                  "non-transactional operation cannot impersonate a transaction", err);
     PreviewAudioCompletion reloadAsPlayback;
     reloadAsPlayback.kind = CommandKind::ReloadAssets;
     reloadAsPlayback.identity.generation = 4;
-    ok &= expect(!acceptsPlaybackCompletion(4, 0, reloadAsPlayback),
+    ok &= expect(!acceptsPlaybackCompletion(4, 11, 0, reloadAsPlayback),
                  "asset completion is not accepted through the playback predicate", err);
+
+    PreviewAudioCompletion levels;
+    levels.kind = CommandKind::ApplyLevels;
+    levels.identity.generation = 4;
+    levels.identity.assetGeneration = 10;
+    ok &= expect(!acceptsPlaybackCompletion(4, 11, 0, levels),
+                 "dual-domain levels reject a stale asset generation", err);
+    levels.identity.assetGeneration = 11;
+    ok &= expect(acceptsPlaybackCompletion(4, 11, 0, levels),
+                 "dual-domain levels accept exact playback and asset generations", err);
+
+    PreviewAudioCompletion pausedState;
+    pausedState.kind = CommandKind::ApplyPausedState;
+    pausedState.identity.generation = 4;
+    pausedState.identity.assetGeneration = 10;
+    ok &= expect(!acceptsPlaybackCompletion(4, 11, 0, pausedState),
+                 "dual-domain paused state rejects a stale asset generation", err);
+    pausedState.identity.assetGeneration = 11;
+    ok &= expect(acceptsPlaybackCompletion(4, 11, 0, pausedState),
+                 "dual-domain paused state accepts exact playback and asset generations", err);
 
     PreviewAudioCompletion paused;
     paused.kind = CommandKind::DeviceChangePause;
@@ -252,7 +273,7 @@ bool verifyCompletionAcceptance(QTextStream& err)
     paused.identity.pauseToken = 43;
     const quint64 latestDeviceSequence = 45;
     Q_UNUSED(latestDeviceSequence);
-    ok &= expect(!acceptsPlaybackCompletion(7, 31, paused),
+    ok &= expect(!acceptsPlaybackCompletion(7, 11, 31, paused),
                  "device pause cannot bypass its token through the general predicate", err);
     ok &= expect(acceptsDevicePauseCompletion(7, 31, 43, paused),
                  "pause completion matches immutable token despite a newer device sequence", err);

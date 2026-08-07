@@ -291,13 +291,17 @@ constexpr bool isNewerSnapshotSequence(quint64 candidate, quint64 current) noexc
 
 inline bool acceptsPlaybackCompletion(
     quint64 currentGeneration,
+    quint64 latestAssetGeneration,
     quint64 activeTransactionId,
     const PreviewAudioCompletion& completion) noexcept
 {
     const CommandPolicy policy = commandPolicy(completion.kind);
     if (!policy.playbackCompletionEligible
         || policy.requiresDevicePauseToken
-        || completion.identity.generation != currentGeneration) {
+        || (policy.usesPlaybackGeneration
+            && completion.identity.generation != currentGeneration)
+        || (policy.usesAssetGeneration
+            && completion.identity.assetGeneration != latestAssetGeneration)) {
         return false;
     }
     if (policy.requiresTransaction) {
