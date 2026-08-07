@@ -210,6 +210,86 @@ bool getImportedDllNames(const std::wstring& path, std::vector<std::string>& out
 }
 
 // =============================================================
+// Launcher-side failure log.
+//
+// The wrapper deliberately does NOT link src/common (no Qt, no
+// debug_log) — it has to start even when app/ is broken, which is the
+// whole point of it existing. But a failure here is exactly the case
+// where the real app never runs and therefore writes nothing at all:
+// no runtime log, no startup timing, no crash beacon (those are all
+// written by the child process). Remote support was left with a
+// screenshot of a MessageBox and nothing else.
+//
+// So: an append-only line into <root>\logs\launcher.log using raw Win32
+// calls only. Written on every failure path that ends in a MessageBox.
+// Timestamps are UTC to match the debug_log / beacon convention.
+// =============================================================
+
+wchar_t g_launcherLogPath[MAX_PATH] = {};
+
+void initLauncherLog(const std::wstring& rootDir)
+{
+    const std::wstring logDir = rootDir + L"\\logs";
+    // Package already ships a logs\ directory; create it anyway so a
+    // hand-assembled tree still logs. Failure is fine — the append
+    // below just no-ops if the path is unusable.
+    ::CreateDirectoryW(logDir.c_str(), nullptr);
+
+    const std::wstring path = logDir + L"\\launcher.log";
+    if (path.size() >= MAX_PATH) {
+        // Leave g_launcherLogPath empty → logging silently disabled.
+        // A too-long install path must never block the launch itself.
+        return;
+    }
+    ::swprintf_s(g_launcherLogPath, L"%ls", path.c_str());
+}
+
+void appendLauncherLog(const wchar_t* scope, const std::wstring& payload)
+{
+    if (g_launcherLogPath[0] == L'\0') {
+        return;
+    }
+
+    SYSTEMTIME st{};
+    ::GetSystemTime(&st);
+
+    wchar_t line[1024];
+    ::swprintf_s(
+        line,
+        L"%04u-%02u-%02uT%02u:%02u:%02u.%03uZ ERROR pid=%lu [launcher/%ls] %ls\r\n",
+        st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
+        static_cast<unsigned long>(::GetCurrentProcessId()),
+        scope,
+        payload.c_str());
+
+    // UTF-8 on disk so Chinese payloads survive; drop the terminating
+    // NUL from the byte count so the file stays plain text.
+    const int bytes = ::WideCharToMultiByte(CP_UTF8, 0, line, -1, nullptr, 0, nullptr, nullptr);
+    if (bytes <= 1) {
+        return;
+    }
+    std::vector<char> utf8(static_cast<size_t>(bytes));
+    if (::WideCharToMultiByte(CP_UTF8, 0, line, -1, utf8.data(), bytes, nullptr, nullptr) <= 0) {
+        return;
+    }
+
+    HANDLE handle = ::CreateFileW(
+        g_launcherLogPath,
+        FILE_APPEND_DATA,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        nullptr,
+        OPEN_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    DWORD written = 0;
+    ::WriteFile(handle, utf8.data(), static_cast<DWORD>(bytes - 1), &written, nullptr);
+    ::CloseHandle(handle);
+}
+
+// =============================================================
 // Failure classifier + bilingual MessageBox.
 // =============================================================
 
@@ -243,14 +323,53 @@ DllCategory classifyDll(const std::wstring& name)
     return DllCategory::Generic;
 }
 
+// Bilingual layout: simplified Chinese block on top, English block on
+// bottom, separator line in between. Each block is self-contained so
+// a reader can ignore the other language entirely. Both failure paths
+// (missing DLL, CreateProcess refusal) render through here so the two
+// dialogs stay visually identical.
+void showBilingualError(const std::wstring& zh, const std::wstring& en, DWORD lastError)
+{
+    wchar_t errZh[96];
+    ::swprintf_s(errZh, L"\n\n错误代码: 0x%08lX (%lu)", lastError, lastError);
+    wchar_t errEn[96];
+    ::swprintf_s(errEn, L"\n\nError code: 0x%08lX (%lu)", lastError, lastError);
+
+    const std::wstring body =
+        zh + errZh +
+        L"\n\n────────────────────────────────────\n\n" +
+        en + errEn;
+    ::MessageBoxW(nullptr, body.c_str(), L"MiaCode",
+                  MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
+}
+
+// Stable ASCII tags for the log line — greppable, and independent of
+// the user-facing wording (which is translated and may be reworded).
+const wchar_t* dllCategoryTag(DllCategory category)
+{
+    switch (category) {
+    case DllCategory::VCRuntime:  return L"vc_runtime";
+    case DllCategory::QtPlatform: return L"qt_platform_plugin";
+    case DllCategory::Qt:         return L"qt_runtime";
+    case DllCategory::DirectX:    return L"directx";
+    case DllCategory::BASS:       return L"bass";
+    case DllCategory::Generic:
+    default:                      return L"generic";
+    }
+}
+
 void showMissingDllMessage(const std::wstring& missingDll, DWORD lastError)
 {
-    // Bilingual layout: simplified Chinese block on top, English block on
-    // bottom, separator line in between. Each block is self-contained so
-    // a reader can ignore the other language entirely.
+    const DllCategory category = classifyDll(missingDll);
+
+    wchar_t logLine[512];
+    ::swprintf_s(logLine, L"dll=%ls category=%ls code=%lu",
+                 missingDll.c_str(), dllCategoryTag(category), lastError);
+    appendLauncherLog(L"missing_dll", logLine);
+
     std::wstring zh;
     std::wstring en;
-    switch (classifyDll(missingDll)) {
+    switch (category) {
     case DllCategory::VCRuntime:
         zh = L"缺少 Visual C++ 2015-2022 运行库: " + missingDll + L"\n\n"
              L"解决方案:\n"
@@ -322,17 +441,200 @@ void showMissingDllMessage(const std::wstring& missingDll, DWORD lastError)
         break;
     }
 
-    wchar_t errZh[96];
-    ::swprintf_s(errZh, L"\n\n错误代码: 0x%08lX (%lu)", lastError, lastError);
-    wchar_t errEn[96];
-    ::swprintf_s(errEn, L"\n\nError code: 0x%08lX (%lu)", lastError, lastError);
+    showBilingualError(zh, en, lastError);
+}
 
-    const std::wstring body =
-        zh + errZh +
-        L"\n\n────────────────────────────────────\n\n" +
-        en + errEn;
-    ::MessageBoxW(nullptr, body.c_str(), L"MiaCode",
-                  MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
+// =============================================================
+// CreateProcessW failure classifier.
+//
+// The preflight probe above only covers *missing dependencies*. Once it
+// passes we know app\MiaCode.exe exists and every imported DLL loads —
+// so a CreateProcessW failure here means the OS actively REFUSED to
+// start the process. Those refusals are almost always policy / security
+// blocks, and a bare "Windows error 4551" gives the user nothing to act
+// on. Classify the common ones into actionable bilingual text.
+//
+// NB: the 4550-4553 codes are the ERROR_SYSTEM_INTEGRITY_* range (code
+// integrity / Smart App Control / WDAC policy). They are spelled as
+// numeric literals rather than SDK macros so this stays buildable
+// against older Windows SDKs that predate those definitions.
+// =============================================================
+
+enum class LaunchFailure {
+    CodeIntegrityPolicy,
+    AntivirusBlock,
+    RestrictedByPolicy,
+    AccessDenied,
+    ElevationRequired,
+    ArchMismatch,
+    Resources,
+    Generic,
+};
+
+LaunchFailure classifyLaunchFailure(DWORD err)
+{
+    switch (err) {
+    case 4550:  // ERROR_SYSTEM_INTEGRITY_ROLLBACK_DETECTED
+    case 4551:  // ERROR_SYSTEM_INTEGRITY_POLICY_VIOLATION
+    case 4552:  // ERROR_SYSTEM_INTEGRITY_INVALID_POLICY
+    case 4553:  // ERROR_SYSTEM_INTEGRITY_POLICY_NOT_SIGNED
+        return LaunchFailure::CodeIntegrityPolicy;
+    case ERROR_VIRUS_INFECTED:
+    case ERROR_VIRUS_DELETED:
+        return LaunchFailure::AntivirusBlock;
+    case ERROR_ACCESS_DISABLED_BY_POLICY:
+        return LaunchFailure::RestrictedByPolicy;
+    case ERROR_ACCESS_DENIED:
+        return LaunchFailure::AccessDenied;
+    case ERROR_ELEVATION_REQUIRED:
+        return LaunchFailure::ElevationRequired;
+    case ERROR_BAD_EXE_FORMAT:
+    case ERROR_EXE_MACHINE_TYPE_MISMATCH:
+        return LaunchFailure::ArchMismatch;
+    case ERROR_NOT_ENOUGH_MEMORY:
+    case ERROR_OUTOFMEMORY:
+    case ERROR_NO_SYSTEM_RESOURCES:
+        return LaunchFailure::Resources;
+    default:
+        return LaunchFailure::Generic;
+    }
+}
+
+const wchar_t* launchFailureTag(LaunchFailure failure)
+{
+    switch (failure) {
+    case LaunchFailure::CodeIntegrityPolicy: return L"code_integrity_policy";
+    case LaunchFailure::AntivirusBlock:      return L"antivirus_block";
+    case LaunchFailure::RestrictedByPolicy:  return L"restricted_by_policy";
+    case LaunchFailure::AccessDenied:        return L"access_denied";
+    case LaunchFailure::ElevationRequired:   return L"elevation_required";
+    case LaunchFailure::ArchMismatch:        return L"arch_mismatch";
+    case LaunchFailure::Resources:           return L"resources";
+    case LaunchFailure::Generic:
+    default:                                 return L"generic";
+    }
+}
+
+void showLaunchFailureMessage(const std::wstring& realExe, DWORD lastError)
+{
+    const LaunchFailure failure = classifyLaunchFailure(lastError);
+
+    wchar_t logLine[512];
+    ::swprintf_s(logLine, L"code=%lu category=%ls exe=\"%ls\"",
+                 lastError, launchFailureTag(failure), realExe.c_str());
+    appendLauncherLog(L"create_process_failed", logLine);
+
+    std::wstring zh;
+    std::wstring en;
+    switch (failure) {
+    case LaunchFailure::CodeIntegrityPolicy:
+        zh = L"系统安全策略阻止了 MiaCode 启动\n" + realExe + L"\n\n"
+             L"程序文件本身完好, 依赖检查也已通过, 是 Windows 拒绝创建进程.\n"
+             L"通常由「智能应用控制」或企业代码完整性(WDAC)策略拦截未签名程序引起.\n\n"
+             L"排查方案:\n"
+             L"  1. Windows 安全中心 → 应用和浏览器控制 → 智能应用控制, 查看是否已开启\n"
+             L"     (注意: 该开关一旦关闭将无法再次开启, 只能重装系统恢复)\n"
+             L"  2. 事件查看器 → 应用程序和服务日志 → Microsoft → Windows →\n"
+             L"     CodeIntegrity → Operational, 查看具体拦截记录\n"
+             L"  3. 若为公司/学校设备, 请联系 IT 管理员将 MiaCode 加入白名单";
+        en = L"A system security policy blocked MiaCode from starting\n" + realExe + L"\n\n"
+             L"The program files are intact and the dependency check passed —\n"
+             L"Windows itself refused to create the process. This is usually\n"
+             L"Smart App Control or a WDAC code-integrity policy blocking an\n"
+             L"unsigned application.\n\n"
+             L"What to check:\n"
+             L"  1. Windows Security → App & browser control → Smart App Control\n"
+             L"     (note: turning it off is permanent — only a Windows reinstall\n"
+             L"      can turn it back on)\n"
+             L"  2. Event Viewer → Applications and Services Logs → Microsoft →\n"
+             L"     Windows → CodeIntegrity → Operational, for the block record\n"
+             L"  3. On a managed device, ask IT to allow-list MiaCode";
+        break;
+    case LaunchFailure::AntivirusBlock:
+        zh = L"杀毒软件阻止了 MiaCode 启动\n" + realExe + L"\n\n"
+             L"文件被判定为威胁并拦截 —— 这是对未签名程序的常见误报.\n\n"
+             L"解决方案:\n"
+             L"  1. 打开杀毒软件的「保护历史 / 隔离区」, 恢复被拦截的文件\n"
+             L"  2. 将 MiaCode 整个文件夹加入排除列表\n"
+             L"  3. 重新解压 MiaCode-*.zip (文件可能已被删改)";
+        en = L"Antivirus blocked MiaCode from starting\n" + realExe + L"\n\n"
+             L"The file was flagged as a threat — a common false positive for\n"
+             L"unsigned applications.\n\n"
+             L"Solution:\n"
+             L"  1. Open your antivirus quarantine / protection history and restore it\n"
+             L"  2. Add the whole MiaCode folder to the exclusion list\n"
+             L"  3. Re-extract MiaCode-*.zip (the file may have been altered)";
+        break;
+    case LaunchFailure::RestrictedByPolicy:
+        zh = L"组策略禁止运行 MiaCode\n" + realExe + L"\n\n"
+             L"设备上的软件限制策略 / AppLocker 规则不允许从该位置运行程序.\n\n"
+             L"解决方案:\n"
+             L"  1. 将 MiaCode 移动到策略允许的目录 (如 C:\\Program Files\\)\n"
+             L"  2. 若为公司/学校设备, 请联系 IT 管理员";
+        en = L"Group Policy is blocking MiaCode\n" + realExe + L"\n\n"
+             L"A software restriction policy / AppLocker rule forbids running\n"
+             L"programs from this location.\n\n"
+             L"Solution:\n"
+             L"  1. Move MiaCode to an allowed folder (e.g. C:\\Program Files\\)\n"
+             L"  2. On a managed device, contact your IT administrator";
+        break;
+    case LaunchFailure::AccessDenied:
+        zh = L"没有权限启动 MiaCode\n" + realExe + L"\n\n"
+             L"解决方案:\n"
+             L"  1. 将 MiaCode 移出受保护目录 (如 Program Files, 系统盘根目录)\n"
+             L"  2. 检查该文件夹的读取/执行权限\n"
+             L"  3. 杀毒软件或安全软件可能正在锁定文件";
+        en = L"Access denied while starting MiaCode\n" + realExe + L"\n\n"
+             L"Solution:\n"
+             L"  1. Move MiaCode out of a protected folder (Program Files, drive root)\n"
+             L"  2. Check read/execute permissions on the folder\n"
+             L"  3. Antivirus or security software may be locking the file";
+        break;
+    case LaunchFailure::ElevationRequired:
+        zh = L"MiaCode 需要管理员权限才能启动\n" + realExe + L"\n\n"
+             L"解决方案:\n"
+             L"右键点击 MiaCode.exe → 以管理员身份运行";
+        en = L"MiaCode requires administrator privileges to start\n" + realExe + L"\n\n"
+             L"Solution:\n"
+             L"Right-click MiaCode.exe → Run as administrator";
+        break;
+    case LaunchFailure::ArchMismatch:
+        zh = L"程序文件损坏或架构不匹配\n" + realExe + L"\n\n"
+             L"解决方案:\n"
+             L"  1. 确认使用的是 64 位 Windows\n"
+             L"  2. 重新下载并解压 MiaCode-*.zip (文件可能下载不完整)";
+        en = L"Corrupt executable or architecture mismatch\n" + realExe + L"\n\n"
+             L"Solution:\n"
+             L"  1. Confirm you are on 64-bit Windows\n"
+             L"  2. Re-download and re-extract MiaCode-*.zip (it may be truncated)";
+        break;
+    case LaunchFailure::Resources:
+        zh = L"系统资源不足, 无法启动 MiaCode\n" + realExe + L"\n\n"
+             L"解决方案:\n"
+             L"关闭部分正在运行的程序后重试";
+        en = L"Not enough system resources to start MiaCode\n" + realExe + L"\n\n"
+             L"Solution:\n"
+             L"Close some running programs and try again";
+        break;
+    case LaunchFailure::Generic:
+    default:
+        zh = L"无法启动 MiaCode\n" + realExe + L"\n\n"
+             L"程序文件存在且依赖检查已通过, 但 Windows 拒绝创建进程.\n\n"
+             L"排查方案:\n"
+             L"  1. 在命令提示符执行 net helpmsg <下方错误代码> 查看系统说明\n"
+             L"  2. 暂时关闭杀毒软件后重试\n"
+             L"  3. 重新解压 MiaCode-*.zip 到本地非云端目录";
+        en = L"Failed to start MiaCode\n" + realExe + L"\n\n"
+             L"The executable exists and its dependencies loaded, but Windows\n"
+             L"refused to create the process.\n\n"
+             L"What to try:\n"
+             L"  1. Run: net helpmsg <the error code below>, for the system description\n"
+             L"  2. Temporarily disable antivirus and retry\n"
+             L"  3. Re-extract MiaCode-*.zip to a local, non-cloud folder";
+        break;
+    }
+
+    showBilingualError(zh, en, lastError);
 }
 
 // =============================================================
@@ -467,7 +769,12 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
     const std::wstring appDir = rootDir + L"\\" + kAppSubdir;
     const std::wstring realExe = appDir + L"\\" + kRealExeName;
 
+    // Resolve the log path as soon as rootDir is known, so every failure
+    // path below leaves a durable record next to the app.
+    initLauncherLog(rootDir);
+
     if (::GetFileAttributesW(realExe.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        appendLauncherLog(L"real_exe_missing", L"exe=\"" + realExe + L"\"");
         const std::wstring msg =
             L"找不到 app\\MiaCode.exe\n" + realExe + L"\n\n"
             L"解决方案:\n"
@@ -511,9 +818,7 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
             &si,
             &pi)) {
         const DWORD err = ::GetLastError();
-        wchar_t buf[512];
-        ::swprintf_s(buf, L"Failed to launch:\n%ls\n\nWindows error %lu", realExe.c_str(), err);
-        ::MessageBoxW(nullptr, buf, L"MiaCode", MB_ICONERROR);
+        showLaunchFailureMessage(realExe, err);
         return static_cast<int>(err);
     }
 
