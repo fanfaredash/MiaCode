@@ -92,10 +92,14 @@ EnqueueResult PreviewAudioCommandQueue::enqueue(PreviewAudioCommand command)
     }
 
     if (command.kind == CommandKind::ManualPause) {
-        if (qsizetype(manualPauses_.size()) >= kHighCapacity) {
+        if (!manualPause_) {
+            manualPause_ = makeEntry(std::move(command));
+            return accepted();
+        }
+        if (qsizetype(high_.size()) >= kHighCapacity) {
             return rejected(CommandError::QueueFull);
         }
-        manualPauses_.push_back(makeEntry(std::move(command)));
+        high_.push_back(makeEntry(std::move(command)));
         return accepted();
     }
 
@@ -172,7 +176,7 @@ std::optional<PreviewAudioCommand> PreviewAudioCommandQueue::takeHigh()
     }
     consider(Source::Shutdown, shutdown_ ? &*shutdown_ : nullptr);
     consider(Source::DevicePause, devicePause_ ? &*devicePause_ : nullptr);
-    consider(Source::ManualPause, manualPauses_.empty() ? nullptr : &manualPauses_.front());
+    consider(Source::ManualPause, manualPause_ ? &*manualPause_ : nullptr);
 
     if (source == Source::None) {
         return std::nullopt;
@@ -191,11 +195,9 @@ std::optional<PreviewAudioCommand> PreviewAudioCommandQueue::takeHigh()
     case Source::DevicePause:
         selected = &devicePause_;
         break;
-    case Source::ManualPause: {
-        PreviewAudioCommand command = std::move(manualPauses_.front().command);
-        manualPauses_.pop_front();
-        return command;
-    }
+    case Source::ManualPause:
+        selected = &manualPause_;
+        break;
     case Source::None:
     case Source::Ordinary:
         break;
@@ -242,9 +244,9 @@ void PreviewAudioCommandQueue::invalidateBefore(quint64 generation)
     eraseStalePlayback(high_, generation);
     eraseStalePlayback(ordered_, generation);
     eraseStalePlayback(auditions_, generation);
-    eraseStalePlayback(manualPauses_, generation);
     resetStalePlayback(shutdown_, generation);
     resetStalePlayback(devicePause_, generation);
+    resetStalePlayback(manualPause_, generation);
     resetStalePlayback(syncBackgroundTrack_, generation);
     resetStalePlayback(drainEvents_, generation);
 }
@@ -255,9 +257,9 @@ bool PreviewAudioCommandQueue::containsPlaybackGeneration(quint64 generation) co
     return containerContainsPlaybackGeneration(high_, generation)
         || containerContainsPlaybackGeneration(ordered_, generation)
         || containerContainsPlaybackGeneration(auditions_, generation)
-        || containerContainsPlaybackGeneration(manualPauses_, generation)
         || optionalContainsPlaybackGeneration(shutdown_, generation)
         || optionalContainsPlaybackGeneration(devicePause_, generation)
+        || optionalContainsPlaybackGeneration(manualPause_, generation)
         || optionalContainsPlaybackGeneration(syncBackgroundTrack_, generation)
         || optionalContainsPlaybackGeneration(drainEvents_, generation);
 }
@@ -270,9 +272,10 @@ bool PreviewAudioCommandQueue::empty() const
 qsizetype PreviewAudioCommandQueue::size() const
 {
     std::lock_guard lock(mutex_);
-    return qsizetype(high_.size() + ordered_.size() + auditions_.size() + manualPauses_.size())
+    return qsizetype(high_.size() + ordered_.size() + auditions_.size())
         + (shutdown_ ? 1 : 0)
         + (devicePause_ ? 1 : 0)
+        + (manualPause_ ? 1 : 0)
         + (syncBackgroundTrack_ ? 1 : 0)
         + (drainEvents_ ? 1 : 0);
 }

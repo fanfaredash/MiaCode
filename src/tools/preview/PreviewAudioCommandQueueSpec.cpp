@@ -96,8 +96,8 @@ bool verifyCapacitiesAndReservedSlots(QTextStream& err)
         numbered(makeHigh(CommandKind::ManualPause, 6, 18), 91));
     ok &= expect(firstManual.accepted,
                  "reserved manual pause accepted when ordinary high is full", err);
-    ok &= expect(secondManual.accepted && !secondManual.coalesced,
-                 "distinct reserved manual pause remains accepted", err);
+    ok &= expect(!secondManual.accepted && secondManual.error == CommandError::QueueFull,
+                 "second distinct manual pause is full when reserve and ordinary high are full", err);
 
     PreviewAudioCommand shutdown = makeHigh(CommandKind::Shutdown);
     shutdown.identity.sequence = 99;
@@ -126,8 +126,8 @@ bool verifyCapacitiesAndReservedSlots(QTextStream& err)
     }
     ok &= expect(foundDevicePause, "reserved device pause can be taken", err);
     ok &= expect(foundShutdown, "reserved shutdown can be taken", err);
-    ok &= expect(manualSequences == QVector<quint64>({90, 91}),
-                 "distinct reserved manual pauses preserve FIFO", err);
+    ok &= expect(manualSequences == QVector<quint64>({90}),
+                 "rejected manual pause does not replace the reserved command", err);
 
     PreviewAudioCommandQueue ordered;
     for (qsizetype i = 0; i < PreviewAudioCommandQueue::kOrderedCapacity; ++i) {
@@ -146,6 +146,43 @@ bool verifyCapacitiesAndReservedSlots(QTextStream& err)
     const auto auditionOverflow = audition.enqueue(makeAudition(1, QStringLiteral("overflow")));
     ok &= expect(!auditionOverflow.accepted && auditionOverflow.error == CommandError::QueueFull,
                  "audition capacity is 32", err);
+    return ok;
+}
+
+bool verifyManualPauseReserveAndOrdinarySpill(QTextStream& err)
+{
+    bool ok = true;
+    PreviewAudioCommandQueue queue;
+
+    const auto reserved = queue.enqueue(
+        numbered(makeHigh(CommandKind::ManualPause, 5, 17), 1));
+    const auto ordinaryBeforeSpill = queue.enqueue(
+        numbered(makeHigh(CommandKind::StopAll, 5), 2));
+    const auto spilled = queue.enqueue(
+        numbered(makeHigh(CommandKind::ManualPause, 6, 18), 3));
+    ok &= expect(reserved.accepted, "first manual pause uses its reserved slot", err);
+    ok &= expect(ordinaryBeforeSpill.accepted, "ordinary high command accepted", err);
+    ok &= expect(spilled.accepted && !spilled.coalesced,
+                 "second distinct manual pause uses ordinary high capacity", err);
+
+    for (qsizetype i = 0; i < PreviewAudioCommandQueue::kHighCapacity - 2; ++i) {
+        ok &= expect(queue.enqueue(numbered(
+                         makeHigh(CommandKind::StopAll, 6), quint64(i + 4))).accepted,
+                     "remaining ordinary high slot accepted", err);
+    }
+    const auto overflow = queue.enqueue(makeHigh(CommandKind::StopAll, 6));
+    ok &= expect(!overflow.accepted && overflow.error == CommandError::QueueFull,
+                 "spilled manual pause consumes exactly one ordinary high slot", err);
+
+    const auto first = queue.takeNext();
+    const auto second = queue.takeNext();
+    const auto third = queue.takeNext();
+    ok &= expect(first && first->identity.sequence == 1,
+                 "reserved manual pause keeps global high FIFO position", err);
+    ok &= expect(second && second->identity.sequence == 2,
+                 "ordinary command keeps global high FIFO position", err);
+    ok &= expect(third && third->identity.sequence == 3,
+                 "spilled manual pause keeps global high FIFO position", err);
     return ok;
 }
 
@@ -293,6 +330,7 @@ int main()
     bool ok = true;
     ok &= verifyFifoWithinClasses(err);
     ok &= verifyCapacitiesAndReservedSlots(err);
+    ok &= verifyManualPauseReserveAndOrdinarySpill(err);
     ok &= verifyPriorityAndLatestReplacement(err);
     ok &= verifyLatestGenerationOrdering(err);
     ok &= verifyPlaybackInvalidation(err);
