@@ -216,6 +216,22 @@ QtPreviewSfxRuntime::PausePreviewResult QtPreviewSfxRuntime::pausePreviewPlaybac
     return lastPauseResult();
 }
 
+QtPreviewSfxRuntime::PauseSubmission QtPreviewSfxRuntime::requestManualPause(
+    quint64 transactionId,
+    double wallSecond)
+{
+    PreviewAudioCommand command = makeCommand(CommandKind::ManualPause);
+    command.identity.generation = advancePlaybackGeneration();
+    command.identity.transactionId = transactionId;
+    command.second = wallSecond;
+    PauseSubmission submission;
+    submission.identity = command.identity;
+    submission.visualFallbackSecond = wallSecond;
+    submission.post = post(std::move(command));
+    submission.identity.sequence = submission.post.sequence;
+    return submission;
+}
+
 QtPreviewSfxRuntime::DevicePauseRequest QtPreviewSfxRuntime::requestDeviceChangePause(
     quint64 transactionId,
     quint64 deviceSequence,
@@ -232,7 +248,7 @@ QtPreviewSfxRuntime::DevicePauseRequest QtPreviewSfxRuntime::requestDeviceChange
 
     DevicePauseRequest request;
     request.identity = command.identity;
-    request.post = post(std::move(command));
+    request.post = postDeviceChangePauseBarrier(std::move(command));
     request.identity.sequence = request.post.sequence;
     return request;
 }
@@ -240,6 +256,7 @@ QtPreviewSfxRuntime::DevicePauseRequest QtPreviewSfxRuntime::requestDeviceChange
 QtPreviewSfxRuntime::PlaybackSubmission QtPreviewSfxRuntime::resumeRetainedPreviewPlaybackTransaction()
 {
     PreviewAudioCommand command = makeCommand(CommandKind::ResumeRetained);
+    command.identity.generation = advancePlaybackGeneration();
     PlaybackSubmission submission;
     submission.identity = command.identity;
     submission.fallbackSecond = authoritativePlaybackSecond();
@@ -407,6 +424,27 @@ WorkerPostResult QtPreviewSfxRuntime::post(PreviewAudioCommand command)
         completion.error = result.error;
         completion.success = false;
         completion.detail = QStringLiteral("preview audio facade rejected command before worker execution");
+        handleCompletion(completion);
+    }
+    return result;
+}
+
+WorkerPostResult QtPreviewSfxRuntime::postDeviceChangePauseBarrier(PreviewAudioCommand command)
+{
+    const CommandKind kind = command.kind;
+    const CommandIdentity identity = command.identity;
+    if (!acceptingCommands_.load(std::memory_order_acquire) || worker_ == nullptr) {
+        return {false, false, false, CommandError::ShuttingDown, 0};
+    }
+    WorkerPostResult result = worker_->postDeviceChangePauseBarrier(std::move(command));
+    if (!result.accepted) {
+        PreviewAudioCompletion completion;
+        completion.kind = kind;
+        completion.identity = identity;
+        completion.identity.sequence = result.sequence;
+        completion.error = result.error;
+        completion.success = false;
+        completion.detail = QStringLiteral("preview audio facade rejected device pause before worker execution");
         handleCompletion(completion);
     }
     return result;

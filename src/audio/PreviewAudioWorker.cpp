@@ -72,6 +72,7 @@ struct PreviewAudioWorker::RuntimeState {
     QString sfxDirectory;
     quint64 warmupAssetGeneration = 0;
     bool hasWarmupPaths = false;
+    quint64 pauseBarrierGeneration = 0;
     health::StallTracker healthStallTracker;
     double lastHealthLogSecond = -1.0;
 };
@@ -122,6 +123,35 @@ WorkerPostResult PreviewAudioWorker::post(PreviewAudioCommand command)
         } else {
             result = queue_.enqueue(std::move(command));
         }
+    }
+    if (result.retiredSequence != 0) {
+        markCompletionRetiredForNonGui(result.retiredSequence);
+    }
+    if (result.accepted) {
+        wakeCv_.notify_one();
+    }
+    return {result.accepted, result.replaced, result.coalesced, result.error, sequence};
+}
+
+WorkerPostResult PreviewAudioWorker::postDeviceChangePauseBarrier(PreviewAudioCommand command)
+{
+    const quint64 sequence = nextCommandSequence_.fetch_add(1, std::memory_order_relaxed);
+    command.identity.sequence = sequence;
+    command.enqueuedAtNs = steadyNowNs();
+    if (command.kind != CommandKind::DeviceChangePause) {
+        return {false, false, false, CommandError::BackendFailure, sequence};
+    }
+    if (!acceptingPosts_.load(std::memory_order_acquire)) {
+        return {false, false, false, CommandError::ShuttingDown, sequence};
+    }
+
+    EnqueueResult result;
+    {
+        std::lock_guard wakeLock(wakeMutex_);
+        if (!acceptingPosts_.load(std::memory_order_acquire)) {
+            return {false, false, false, CommandError::ShuttingDown, sequence};
+        }
+        result = queue_.enqueueDeviceChangePauseBarrier(std::move(command));
     }
     if (result.retiredSequence != 0) {
         markCompletionRetiredForNonGui(result.retiredSequence);
@@ -357,6 +387,21 @@ void PreviewAudioWorker::execute(
         completion.error = CommandError::Stale;
         completion.success = false;
         completion.detail = QStringLiteral("asset generation was superseded before execution");
+        completion.executionDurationNs = steadyNowNs() - startedAtNs;
+        deliverCompletion(completion);
+        return;
+    }
+
+    if (command.kind == CommandKind::DeviceChangePause) {
+        state.pauseBarrierGeneration = std::max(
+            state.pauseBarrierGeneration,
+            command.identity.generation);
+    } else if (policy.invalidatedByPlaybackBoundary
+               && state.pauseBarrierGeneration != 0
+               && command.identity.generation < state.pauseBarrierGeneration) {
+        completion.error = CommandError::Stale;
+        completion.success = false;
+        completion.detail = QStringLiteral("device pause barrier superseded queued playback command");
         completion.executionDurationNs = steadyNowNs() - startedAtNs;
         deliverCompletion(completion);
         return;

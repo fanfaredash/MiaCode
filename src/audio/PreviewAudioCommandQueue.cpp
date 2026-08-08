@@ -151,6 +151,36 @@ EnqueueResult PreviewAudioCommandQueue::enqueue(PreviewAudioCommand command)
     return rejected(CommandError::BackendFailure);
 }
 
+EnqueueResult PreviewAudioCommandQueue::enqueueDeviceChangePauseBarrier(PreviewAudioCommand command)
+{
+    if (command.kind != CommandKind::DeviceChangePause) {
+        return rejected(CommandError::BackendFailure);
+    }
+
+    std::lock_guard lock(mutex_);
+    if (shuttingDown_) {
+        return rejected(CommandError::ShuttingDown);
+    }
+    minimumPlaybackGeneration_ = std::max(minimumPlaybackGeneration_, command.identity.generation);
+    eraseStalePlayback(high_, minimumPlaybackGeneration_);
+    eraseStalePlayback(ordered_, minimumPlaybackGeneration_);
+    eraseStalePlayback(auditions_, minimumPlaybackGeneration_);
+    resetStalePlayback(shutdown_, minimumPlaybackGeneration_);
+    resetStalePlayback(devicePause_, minimumPlaybackGeneration_);
+    resetStalePlayback(manualPause_, minimumPlaybackGeneration_);
+    resetStalePlayback(syncBackgroundTrack_, minimumPlaybackGeneration_);
+    resetStalePlayback(drainEvents_, minimumPlaybackGeneration_);
+
+    if (devicePause_) {
+        if (canCoalesce(devicePause_->command, command)) {
+            return accepted(false, true, command.identity.sequence);
+        }
+        return rejected(CommandError::QueueFull);
+    }
+    devicePause_ = makeEntry(std::move(command));
+    return accepted();
+}
+
 EnqueueResult PreviewAudioCommandQueue::beginShutdown(PreviewAudioCommand shutdown)
 {
     std::lock_guard lock(mutex_);

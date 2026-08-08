@@ -23,6 +23,12 @@ public:
         miacode::preview_audio::WorkerPostResult post;
     };
 
+    struct PauseSubmission {
+        miacode::preview_audio::CommandIdentity identity;
+        miacode::preview_audio::WorkerPostResult post;
+        double visualFallbackSecond = 0.0;
+    };
+
     // The fallback is a snapshot only. The caller must wait for the completion
     // carrying this identity before treating the worker second as authoritative.
     struct PlaybackSubmission {
@@ -70,6 +76,7 @@ public:
     double startPreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate);
     PausePreviewResult capturePausedPreviewTransaction();
     PausePreviewResult pausePreviewPlaybackTransaction();
+    PauseSubmission requestManualPause(quint64 transactionId, double wallSecond);
     DevicePauseRequest requestDeviceChangePause(
         quint64 transactionId,
         quint64 deviceSequence,
@@ -117,6 +124,8 @@ private:
     };
 
     miacode::preview_audio::WorkerPostResult post(miacode::preview_audio::PreviewAudioCommand command);
+    miacode::preview_audio::WorkerPostResult postDeviceChangePauseBarrier(
+        miacode::preview_audio::PreviewAudioCommand command);
     miacode::preview_audio::PreviewAudioCommand makeCommand(
         miacode::preview_audio::CommandKind kind) const;
     quint64 advancePlaybackGeneration();

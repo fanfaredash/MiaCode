@@ -24,6 +24,9 @@ public:
     static constexpr qsizetype kAuditionCapacity = 32;
 
     EnqueueResult enqueue(PreviewAudioCommand command);
+    // The device pause must establish its generation watermark and reserve its command
+    // under one queue lock, so no old playback work can slip in between those actions.
+    EnqueueResult enqueueDeviceChangePauseBarrier(PreviewAudioCommand command);
     EnqueueResult beginShutdown(
         PreviewAudioCommand shutdown = makeHigh(CommandKind::Shutdown));
     std::optional<PreviewAudioCommand> takeNext();

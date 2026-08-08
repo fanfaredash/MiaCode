@@ -419,6 +419,35 @@ bool verifyPlaybackInvalidation(QTextStream& err)
     return ok;
 }
 
+bool verifyDevicePauseBoundaryInvalidatesQueuedPlayback(QTextStream& err)
+{
+    bool ok = true;
+    PreviewAudioCommandQueue queue;
+    ok &= expect(queue.enqueue(numbered(makeOrdered(CommandKind::Start, 20, 4), 1)).accepted,
+                 "old start is queued before a device pause", err);
+    ok &= expect(queue.enqueue(numbered(makeHigh(CommandKind::Commit, 20, 4), 2)).accepted,
+                 "old commit is queued before a device pause", err);
+    ok &= expect(queue.enqueue(numbered(makeOrdered(CommandKind::ResumeRetained, 20, 4), 3)).accepted,
+                 "old retained resume is queued before a device pause", err);
+    ok &= expect(queue.enqueue(numbered(makeOrdered(CommandKind::SeekRetained, 20, 4), 4)).accepted,
+                 "old retained seek is queued before a device pause", err);
+    ok &= expect(queue.enqueueDeviceChangePauseBarrier(
+                     numbered(devicePause(21, 4, 71), 5)).accepted,
+                 "device pause atomically reserves its slot and invalidates old playback", err);
+    const auto pause = queue.takeNext();
+    ok &= expect(pause && pause->kind == CommandKind::DeviceChangePause
+                     && pause->identity.generation == 21,
+                 "device pause survives its own invalidation barrier", err);
+    ok &= expect(!queue.takeNext(),
+                 "queue invalidation drops old start commit and retained commands", err);
+    ok &= expect(queue.enqueue(numbered(makeOrdered(CommandKind::Start, 22, 5), 6)).accepted,
+                 "later user play is accepted above the device pause barrier", err);
+    const auto play = queue.takeNext();
+    ok &= expect(play && play->kind == CommandKind::Start && play->identity.generation == 22,
+                 "later user play remains runnable after the barrier", err);
+    return ok;
+}
+
 }  // namespace
 
 int main()
@@ -434,6 +463,7 @@ int main()
     ok &= verifyLatestReplacementRefreshesFifoOrder(err);
     ok &= verifyPlaybackInvalidation(err);
     ok &= verifyInvalidationWatermark(err);
+    ok &= verifyDevicePauseBoundaryInvalidatesQueuedPlayback(err);
     if (ok) {
         out << "preview_audio_command_queue_spec ok" << Qt::endl;
     }

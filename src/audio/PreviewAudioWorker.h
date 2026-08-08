@@ -61,6 +61,7 @@ public:
     PreviewAudioWorker& operator=(const PreviewAudioWorker&) = delete;
 
     WorkerPostResult post(PreviewAudioCommand command);
+    WorkerPostResult postDeviceChangePauseBarrier(PreviewAudioCommand command);
     PreviewAudioSnapshot snapshot() const;
 
     // These barriers are for non-GUI callers only. Calling them from the facade-owning

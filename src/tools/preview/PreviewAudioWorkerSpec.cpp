@@ -1762,6 +1762,88 @@ bool verifyWarmupTimingIncludesSnapshotGetters(QTextStream& err)
     return ok;
 }
 
+bool verifyDevicePauseBarrierDropsOlderQueuedPlayback(QTextStream& err)
+{
+    auto state = std::make_shared<FakeState>();
+    auto completions = std::make_shared<CompletionLog>();
+    PreviewAudioWorker worker(fakeFactory(state), [completions](const auto& completion) {
+        completions->append(completion);
+    });
+    bool ok = true;
+    ok &= expect(waitForLifecycle(worker, WorkerLifecycle::Ready),
+                 "device-pause barrier worker ready", err);
+
+    {
+        std::lock_guard lock(state->mutex);
+        state->blockedMethod = QStringLiteral("applyLevels");
+        state->releaseBlockedMethod = false;
+    }
+    const WorkerPostResult blocker = worker.post(commandFor(CommandKind::ApplyLevels, 40, 1, 0));
+    const bool blockerEntered = state->waitForCall(QStringLiteral("applyLevels"));
+    ok &= expect(blocker.accepted && blockerEntered,
+                 "worker is held before the device pause barrier is submitted", err);
+    if (!blockerEntered) {
+        worker.shutdownAndJoin();
+        return false;
+    }
+
+    const WorkerPostResult oldStart = worker.post(commandFor(CommandKind::Start, 40, 1, 401));
+    const WorkerPostResult oldCommit = worker.post(commandFor(CommandKind::Commit, 40, 1, 401));
+    const WorkerPostResult oldResume = worker.post(commandFor(CommandKind::ResumeRetained, 40, 1, 401));
+    const WorkerPostResult oldSeek = worker.post(commandFor(CommandKind::SeekRetained, 40, 1, 401));
+    PreviewAudioCommand pause = commandFor(CommandKind::DeviceChangePause, 41, 1, 401);
+    pause.identity.pauseToken = 501;
+    const WorkerPostResult devicePause = worker.post(std::move(pause));
+    const WorkerPostResult laterPlay = worker.post(commandFor(CommandKind::Start, 42, 1, 402));
+    ok &= expect(oldStart.accepted && oldCommit.accepted && oldResume.accepted && oldSeek.accepted
+                     && devicePause.accepted && laterPlay.accepted,
+                 "old playback, device pause, and later user play are queued", err);
+
+    {
+        std::lock_guard lock(state->mutex);
+        state->blockedMethod.clear();
+        state->releaseBlockedMethod = true;
+        state->cv.notify_all();
+    }
+
+    PreviewAudioCompletion ignored;
+    PreviewAudioCompletion oldStartCompletion;
+    PreviewAudioCompletion oldCommitCompletion;
+    PreviewAudioCompletion oldResumeCompletion;
+    PreviewAudioCompletion oldSeekCompletion;
+    PreviewAudioCompletion pauseCompletion;
+    PreviewAudioCompletion laterPlayCompletion;
+    ok &= expect(completions->waitFor(blocker.sequence, &ignored),
+                 "worker blocker completes", err);
+    ok &= expect(completions->waitFor(devicePause.sequence, &pauseCompletion)
+                     && pauseCompletion.success,
+                 "device pause starts and establishes its barrier", err);
+    ok &= expect(completions->waitFor(oldStart.sequence, &oldStartCompletion)
+                     && oldStartCompletion.error == CommandError::Stale,
+                 "barrier drops an older queued start", err);
+    ok &= expect(completions->waitFor(oldCommit.sequence, &oldCommitCompletion)
+                     && oldCommitCompletion.error == CommandError::Stale,
+                 "barrier drops an older queued commit", err);
+    ok &= expect(completions->waitFor(oldResume.sequence, &oldResumeCompletion)
+                     && oldResumeCompletion.error == CommandError::Stale,
+                 "barrier drops an older queued retained resume", err);
+    ok &= expect(completions->waitFor(oldSeek.sequence, &oldSeekCompletion)
+                     && oldSeekCompletion.error == CommandError::Stale,
+                 "barrier drops an older queued retained seek", err);
+    ok &= expect(completions->waitFor(laterPlay.sequence, &laterPlayCompletion)
+                     && laterPlayCompletion.success,
+                 "later user play above the barrier remains accepted", err);
+
+    const std::vector<QString> calls = state->callNames();
+    ok &= expect(std::count(calls.cbegin(), calls.cend(), QStringLiteral("start")) == 1
+                     && std::find(calls.cbegin(), calls.cend(), QStringLiteral("commit")) == calls.cend()
+                     && std::find(calls.cbegin(), calls.cend(), QStringLiteral("resumeRetained")) == calls.cend()
+                     && std::find(calls.cbegin(), calls.cend(), QStringLiteral("seekRetained")) == calls.cend(),
+                 "only the later play reaches the backend after the device pause barrier", err);
+    worker.shutdownAndJoin();
+    return ok;
+}
+
 bool verifyDevicePauseRetainsCoreResultWhenCleanupFails(QTextStream& err)
 {
     auto state = std::make_shared<FakeState>();
@@ -2191,6 +2273,7 @@ int main(int argc, char* argv[])
     ok &= verifyWindowsBassFxLoaderCachesImmediateErrors(err);
     ok &= verifyExceptionBoundaryAndReservedPauseTiming(err);
     ok &= verifyWarmupTimingIncludesSnapshotGetters(err);
+    ok &= verifyDevicePauseBarrierDropsOlderQueuedPlayback(err);
     ok &= verifyDevicePauseRetainsCoreResultWhenCleanupFails(err);
     ok &= verifyShutdownWaitsForAuthorizedCallback(err);
     ok &= verifyWorkerThreadShutdownIsRejected(err);

@@ -305,6 +305,83 @@ bool verifyPendingInitializersPreserveWorkerSecond(QTextStream& err)
     return ok;
 }
 
+bool verifyManualPauseCompletionRequiresItsImmutableIdentity(QTextStream& err)
+{
+    PauseState state;
+    const PauseRequest request{
+        PauseKind::Manual,
+        80,
+        801,
+        1801,
+        0,
+        0,
+        14.0,
+    };
+    const PauseState pending = beginManualPause(state, request);
+    const PauseDecision stale = decidePauseCompletion(
+        pending,
+        PauseCompletion{PauseKind::Manual, 79, 801, 1801, 0, 0, 12.0, 1, 1, true, false});
+    const PauseDecision accepted = decidePauseCompletion(
+        pending,
+        PauseCompletion{PauseKind::Manual, 80, 801, 1801, 0, 0, 12.25, 1, 1, true, false});
+
+    bool ok = true;
+    ok &= expect(pending.visualSecond == 14.0
+                     && pending.pendingManualPauseGeneration == 80
+                     && pending.pendingManualPauseTransactionId == 801
+                     && pending.pendingManualPauseSequence == 1801,
+                 "manual pause freezes the visual second before the worker completion", err);
+    ok &= expect(!stale.matchesPending && stale.state.currentGeneration == 80
+                     && stale.state.visualSecond == 14.0,
+                 "stale manual pause completion is diagnostic-only without a generation change", err);
+    ok &= expect(accepted.matchesPending && accepted.commitsRetainedState
+                     && accepted.state.pendingManualPauseSequence == 0
+                     && accepted.state.visualSecond == 14.0
+                     && accepted.state.authoritativeRetainedSecond == 12.25
+                     && accepted.state.retainedMode == 1
+                     && accepted.state.retainedBgmState == 1,
+                 "matching manual pause completion commits retained state without replacing its wall second", err);
+    return ok;
+}
+
+bool verifyDevicePauseTokenCoalescesAndPlaySupersedesIt(QTextStream& err)
+{
+    PauseState state;
+    const PauseState first = beginDeviceChangePause(
+        state,
+        PauseRequest{PauseKind::DeviceChange, 90, 901, 1901, 7, 70, 21.0});
+    const PauseState duplicate = beginDeviceChangePause(
+        first,
+        PauseRequest{PauseKind::DeviceChange, 91, 902, 1902, 8, 80, 22.0});
+    const PauseState played = supersedePendingPauseForPlay(
+        duplicate,
+        Request{92, 902, 1903, 22.0});
+    const PauseDecision late = decidePauseCompletion(
+        played,
+        PauseCompletion{PauseKind::DeviceChange, 90, 901, 1901, 8, 70, 21.5, 2, 2, true, false});
+
+    bool ok = true;
+    ok &= expect(first.deviceSequence == 7 && first.pendingDevicePauseGeneration == 90
+                     && first.pendingDevicePauseTransactionId == 901
+                     && first.pendingDevicePauseToken == 70
+                     && first.devicePauseVisualSecond == 21.0,
+                 "first real device change captures one immutable pause identity", err);
+    ok &= expect(duplicate.deviceSequence == 8
+                     && duplicate.pendingDevicePauseGeneration == 90
+                     && duplicate.pendingDevicePauseTransactionId == 901
+                     && duplicate.pendingDevicePauseToken == 70
+                     && duplicate.devicePauseVisualSecond == 21.0,
+                 "duplicate device change advances sequence but preserves the pending pause token", err);
+    ok &= expect(played.currentGeneration == 92
+                     && played.pendingDevicePauseToken == 0
+                     && played.pendingManualPauseSequence == 0,
+                 "play supersedes a pending pause at a strictly higher generation", err);
+    ok &= expect(!late.matchesPending && late.state.currentGeneration == 92
+                     && late.state.visualSecond == 21.0,
+                 "late device pause completion cannot overwrite a newer play transition", err);
+    return ok;
+}
+
 }  // namespace
 
 int main()
@@ -321,6 +398,8 @@ int main()
     ok &= verifyPlayingSeekWaitsForAcceptedWorkerCompletion(err);
     ok &= verifyFailedOrDegradedPrepareLeavesUiPaused(err);
     ok &= verifyPendingInitializersPreserveWorkerSecond(err);
+    ok &= verifyManualPauseCompletionRequiresItsImmutableIdentity(err);
+    ok &= verifyDevicePauseTokenCoalescesAndPlaySupersedesIt(err);
     if (ok) {
         out << "preview_audio_playback_flow_policy_spec ok" << Qt::endl;
     }

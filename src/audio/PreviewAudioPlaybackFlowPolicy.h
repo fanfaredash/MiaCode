@@ -57,6 +57,142 @@ struct TickDecision {
     bool suppressesRunningClockSideEffects = false;
 };
 
+enum class PauseKind {
+    Manual,
+    DeviceChange,
+};
+
+// Pause work has an immediate visual transition but an asynchronous backend result.
+// The GUI accepts that result only when all immutable request identity fields still match.
+struct PauseRequest {
+    PauseKind kind = PauseKind::Manual;
+    quint64 generation = 0;
+    quint64 transactionId = 0;
+    quint64 sequence = 0;
+    quint64 deviceSequence = 0;
+    quint64 pauseToken = 0;
+    double wallSecond = 0.0;
+};
+
+struct PauseCompletion {
+    PauseKind kind = PauseKind::Manual;
+    quint64 generation = 0;
+    quint64 transactionId = 0;
+    quint64 sequence = 0;
+    quint64 deviceSequence = 0;
+    quint64 pauseToken = 0;
+    double acceptedPauseSecond = 0.0;
+    int retainedMode = 0;
+    int retainedBgmState = 0;
+    bool success = false;
+    bool degraded = false;
+};
+
+struct PauseState {
+    quint64 currentGeneration = 0;
+    quint64 deviceSequence = 0;
+
+    quint64 pendingManualPauseGeneration = 0;
+    quint64 pendingManualPauseTransactionId = 0;
+    quint64 pendingManualPauseSequence = 0;
+    double manualPauseVisualSecond = 0.0;
+
+    quint64 pendingDevicePauseGeneration = 0;
+    quint64 pendingDevicePauseTransactionId = 0;
+    quint64 pendingDevicePauseSequence = 0;
+    quint64 pendingDevicePauseToken = 0;
+    double devicePauseVisualSecond = 0.0;
+
+    double visualSecond = 0.0;
+    double authoritativeRetainedSecond = 0.0;
+    int retainedMode = 0;
+    int retainedBgmState = 0;
+};
+
+struct PauseDecision {
+    PauseState state;
+    bool matchesPending = false;
+    bool commitsRetainedState = false;
+};
+
+inline PauseState beginManualPause(PauseState state, const PauseRequest& request)
+{
+    state.currentGeneration = request.generation;
+    state.pendingManualPauseGeneration = request.generation;
+    state.pendingManualPauseTransactionId = request.transactionId;
+    state.pendingManualPauseSequence = request.sequence;
+    state.manualPauseVisualSecond = request.wallSecond;
+    state.visualSecond = request.wallSecond;
+    return state;
+}
+
+inline PauseState beginDeviceChangePause(PauseState state, const PauseRequest& request)
+{
+    state.deviceSequence = request.deviceSequence;
+    if (state.pendingDevicePauseToken != 0) {
+        return state;
+    }
+    state.currentGeneration = request.generation;
+    state.pendingDevicePauseGeneration = request.generation;
+    state.pendingDevicePauseTransactionId = request.transactionId;
+    state.pendingDevicePauseSequence = request.sequence;
+    state.pendingDevicePauseToken = request.pauseToken;
+    state.devicePauseVisualSecond = request.wallSecond;
+    state.visualSecond = request.wallSecond;
+    return state;
+}
+
+inline PauseState supersedePendingPauseForPlay(PauseState state, const Request& request)
+{
+    state.currentGeneration = request.generation;
+    state.pendingManualPauseGeneration = 0;
+    state.pendingManualPauseTransactionId = 0;
+    state.pendingManualPauseSequence = 0;
+    state.pendingDevicePauseGeneration = 0;
+    state.pendingDevicePauseTransactionId = 0;
+    state.pendingDevicePauseSequence = 0;
+    state.pendingDevicePauseToken = 0;
+    return state;
+}
+
+inline PauseDecision decidePauseCompletion(PauseState state, const PauseCompletion& completion)
+{
+    PauseDecision decision;
+    decision.state = state;
+    if (completion.kind == PauseKind::Manual) {
+        decision.matchesPending = state.pendingManualPauseSequence != 0
+            && completion.generation == state.pendingManualPauseGeneration
+            && completion.transactionId == state.pendingManualPauseTransactionId
+            && completion.sequence == state.pendingManualPauseSequence;
+        if (!decision.matchesPending) {
+            return decision;
+        }
+        decision.state.pendingManualPauseGeneration = 0;
+        decision.state.pendingManualPauseTransactionId = 0;
+        decision.state.pendingManualPauseSequence = 0;
+        decision.commitsRetainedState = completion.success && !completion.degraded;
+        if (decision.commitsRetainedState) {
+            decision.state.authoritativeRetainedSecond = completion.acceptedPauseSecond;
+            decision.state.retainedMode = completion.retainedMode;
+            decision.state.retainedBgmState = completion.retainedBgmState;
+        }
+        return decision;
+    }
+
+    decision.matchesPending = state.pendingDevicePauseToken != 0
+        && completion.generation == state.pendingDevicePauseGeneration
+        && completion.transactionId == state.pendingDevicePauseTransactionId
+        && completion.sequence == state.pendingDevicePauseSequence
+        && completion.pauseToken == state.pendingDevicePauseToken;
+    if (decision.matchesPending) {
+        decision.state.pendingDevicePauseGeneration = 0;
+        decision.state.pendingDevicePauseTransactionId = 0;
+        decision.state.pendingDevicePauseSequence = 0;
+        decision.state.pendingDevicePauseToken = 0;
+    }
+    return decision;
+}
+
 inline State beginColdPrepare(State state, const Request& request)
 {
     state.currentGeneration = request.generation;

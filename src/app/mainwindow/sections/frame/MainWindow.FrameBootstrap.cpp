@@ -1465,6 +1465,14 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
                     timelineSection_->handlePreviewRetainedPlaybackCompleted(completion);
                 }
             });
+    connect(previewSfxRuntime_,
+            &QtPreviewSfxRuntime::previewPlaybackPaused,
+            this,
+            [this](const QtPreviewSfxRuntime::Completion& completion) {
+                if (timelineSection_ != nullptr) {
+                    timelineSection_->handlePreviewRetainedPlaybackCompleted(completion);
+                }
+            });
     logStartupStage("preview_sfx_runtime_created");
 #ifdef MIACODE_HAS_BASS_AUDIO
     // BASS-only on purpose. docs/audit/AUDIO_CLOCK_DESYNC_AUDIT_ZH.md fixes the

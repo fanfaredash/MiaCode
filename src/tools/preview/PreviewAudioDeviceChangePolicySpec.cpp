@@ -3,6 +3,7 @@
 #include <QTextStream>
 
 #include "audio/PreviewAudioDeviceChangePolicy.h"
+#include "audio/PreviewAudioPlaybackFlowPolicy.h"
 
 namespace {
 
@@ -102,6 +103,24 @@ int main()
                 .arg(QLatin1String(changeName(change))),
             err);
     }
+
+    using miacode::preview_audio::playback_flow::PauseKind;
+    using miacode::preview_audio::playback_flow::PauseRequest;
+    using miacode::preview_audio::playback_flow::PauseState;
+    using miacode::preview_audio::playback_flow::beginDeviceChangePause;
+    const PauseState paused = beginDeviceChangePause(
+        PauseState{},
+        PauseRequest{PauseKind::DeviceChange, 17, 71, 117, 5, 901, 6.5});
+    const PauseState ignored = beginDeviceChangePause(
+        paused,
+        PauseRequest{PauseKind::DeviceChange, 18, 72, 118, 6, 902, 7.5});
+    ok &= require(
+        ignored.deviceSequence == 6
+            && ignored.pendingDevicePauseToken == 901
+            && ignored.pendingDevicePauseTransactionId == 71
+            && ignored.devicePauseVisualSecond == 6.5,
+        QStringLiteral("a paused duplicate notification is logged/coalesced without replacing its token"),
+        err);
 
     if (ok) {
         out << "Preview audio device change policy spec passed." << Qt::endl;
