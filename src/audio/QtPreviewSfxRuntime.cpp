@@ -52,7 +52,7 @@ QtPreviewSfxRuntime::~QtPreviewSfxRuntime()
     shutdownWorker();
 }
 
-void QtPreviewSfxRuntime::setWarmupResolvedPaths(
+QtPreviewSfxRuntime::AssetSubmission QtPreviewSfxRuntime::setWarmupResolvedPaths(
     const QString& chartPath,
     const QString& trackPath,
     const QString& sfxDir)
@@ -62,27 +62,41 @@ void QtPreviewSfxRuntime::setWarmupResolvedPaths(
     command.chartPath = chartPath;
     command.trackPath = trackPath;
     command.sfxDirectory = sfxDir;
-    post(std::move(command));
+    AssetSubmission submission;
+    submission.identity = command.identity;
+    submission.post = post(std::move(command));
+    submission.identity.sequence = submission.post.sequence;
+    return submission;
 }
 
-void QtPreviewSfxRuntime::reloadAssets(const PreviewAudioSettings& settings)
+QtPreviewSfxRuntime::AssetSubmission QtPreviewSfxRuntime::reloadAssets(const PreviewAudioSettings& settings)
 {
     PreviewAudioCommand command = makeCommand(CommandKind::ReloadAssets);
+    command.identity.assetGeneration = ++assetGeneration_;
     command.settings = settings;
-    post(std::move(command));
+    AssetSubmission submission;
+    submission.identity = command.identity;
+    submission.post = post(std::move(command));
+    submission.identity.sequence = submission.post.sequence;
+    return submission;
 }
 
 bool QtPreviewSfxRuntime::audioEngineInitialized() const
 {
-    return lastSnapshot().backendReady;
+    const PreviewAudioSnapshot snapshot = lastSnapshot();
+    return snapshot.backendReady && snapshot.identity.assetGeneration == assetGeneration_;
 }
 
-void QtPreviewSfxRuntime::setChartPath(const QString& chartPath)
+QtPreviewSfxRuntime::AssetSubmission QtPreviewSfxRuntime::setChartPath(const QString& chartPath)
 {
     PreviewAudioCommand command = makeCommand(CommandKind::SetChartPath);
     command.identity.assetGeneration = ++assetGeneration_;
     command.chartPath = chartPath;
-    post(std::move(command));
+    AssetSubmission submission;
+    submission.identity = command.identity;
+    submission.post = post(std::move(command));
+    submission.identity.sequence = submission.post.sequence;
+    return submission;
 }
 
 void QtPreviewSfxRuntime::setBackgroundTrackOffsetSeconds(double seconds)
@@ -309,6 +323,11 @@ quint64 QtPreviewSfxRuntime::playbackGeneration() const noexcept
     return playbackGeneration_;
 }
 
+quint64 QtPreviewSfxRuntime::assetGeneration() const noexcept
+{
+    return assetGeneration_;
+}
+
 double QtPreviewSfxRuntime::authoritativePlaybackSecond() const
 {
     return lastSnapshot().authoritativeSecond;
@@ -369,11 +388,11 @@ bool QtPreviewSfxRuntime::isBackgroundTrackRunning() const
     return lastSnapshot().backgroundTrackRunning;
 }
 
-void QtPreviewSfxRuntime::startBackgroundTrack(double second)
+WorkerPostResult QtPreviewSfxRuntime::startBackgroundTrack(double second)
 {
     PreviewAudioCommand command = makeCommand(CommandKind::StartBackground);
     command.second = second;
-    post(std::move(command));
+    return post(std::move(command));
 }
 
 void QtPreviewSfxRuntime::seekBackgroundTrack(double second)
@@ -395,6 +414,10 @@ double QtPreviewSfxRuntime::backgroundPlaybackSecond() const
 
 bool QtPreviewSfxRuntime::audition(const QString& kind, double gain)
 {
+    const PreviewAudioSnapshot snapshot = lastSnapshot();
+    if (!snapshot.backendReady || snapshot.identity.assetGeneration != assetGeneration_) {
+        return false;
+    }
     PreviewAudioCommand command = makeCommand(CommandKind::Audition);
     command.auditionKind = kind;
     command.gain = gain;
@@ -411,6 +434,22 @@ void QtPreviewSfxRuntime::stopAll()
 void QtPreviewSfxRuntime::prepareForShutdown()
 {
     shutdownWorker();
+}
+
+NonGuiBarrierWaitStatus QtPreviewSfxRuntime::waitForReadyForNonGui(std::chrono::milliseconds timeout)
+{
+    return worker_ != nullptr
+        ? worker_->waitForReadyForNonGui(timeout)
+        : NonGuiBarrierWaitStatus::ShuttingDown;
+}
+
+NonGuiBarrierWaitStatus QtPreviewSfxRuntime::waitForCompletionForNonGui(
+    quint64 sequence,
+    std::chrono::milliseconds timeout)
+{
+    return worker_ != nullptr
+        ? worker_->waitForCompletionForNonGui(sequence, timeout)
+        : NonGuiBarrierWaitStatus::ShuttingDown;
 }
 
 WorkerPostResult QtPreviewSfxRuntime::post(PreviewAudioCommand command)

@@ -8,7 +8,9 @@
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QTextStream>
-#include <QThread>
+
+#include <chrono>
+#include <thread>
 
 namespace {
 QString probeLogPath()
@@ -53,18 +55,54 @@ int main(int argc, char* argv[])
     settings.normalize();
 
     QtPreviewSfxRuntime runtime;
-    runtime.reloadAssets(settings);
     runtime.setChartPath(chartPath);
+    const QtPreviewSfxRuntime::AssetSubmission reload = runtime.reloadAssets(settings);
     runtime.setBackgroundTrackOffsetSeconds(0.0);
     runtime.setBackgroundTrackPlaybackRate(rate);
-    runtime.startBackgroundTrack(0.0);
+    const miacode::preview_audio::WorkerPostResult start = runtime.startBackgroundTrack(0.0);
+    if (!reload.post.accepted || !start.accepted) {
+        out << "initial preview-audio command rejected\n";
+        return 1;
+    }
+
+    struct WaitResult {
+        miacode::preview_audio::NonGuiBarrierWaitStatus ready;
+        miacode::preview_audio::NonGuiBarrierWaitStatus reload;
+        miacode::preview_audio::NonGuiBarrierWaitStatus start;
+    } waitResult{
+        miacode::preview_audio::NonGuiBarrierWaitStatus::Timeout,
+        miacode::preview_audio::NonGuiBarrierWaitStatus::Timeout,
+        miacode::preview_audio::NonGuiBarrierWaitStatus::Timeout,
+    };
+    std::thread waiter([&] {
+        using miacode::preview_audio::NonGuiBarrierWaitStatus;
+        waitResult.ready = runtime.waitForReadyForNonGui(std::chrono::seconds(5));
+        if (waitResult.ready != NonGuiBarrierWaitStatus::Ready) {
+            return;
+        }
+        waitResult.reload = runtime.waitForCompletionForNonGui(reload.identity.sequence, std::chrono::seconds(10));
+        if (waitResult.reload != NonGuiBarrierWaitStatus::Completed) {
+            return;
+        }
+        waitResult.start = runtime.waitForCompletionForNonGui(start.sequence, std::chrono::seconds(10));
+    });
+    waiter.join();
+    if (waitResult.ready != miacode::preview_audio::NonGuiBarrierWaitStatus::Ready
+        || waitResult.reload != miacode::preview_audio::NonGuiBarrierWaitStatus::Completed
+        || waitResult.start != miacode::preview_audio::NonGuiBarrierWaitStatus::Completed) {
+        out << "preview-audio worker barrier failed"
+            << " ready=" << static_cast<int>(waitResult.ready)
+            << " reload=" << static_cast<int>(waitResult.reload)
+            << " start=" << static_cast<int>(waitResult.start) << "\n";
+        return 1;
+    }
 
     QElapsedTimer timer;
     timer.start();
     while (timer.elapsed() < runMs) {
         const double second = static_cast<double>(timer.elapsed()) / 1000.0;
         runtime.syncBackgroundTrack(second);
-        QThread::msleep(50);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
     out << "hasBackgroundTrack=" << (runtime.hasBackgroundTrack() ? "true" : "false") << "\n";
@@ -74,5 +112,4 @@ int main(int argc, char* argv[])
     out.flush();
     return 0;
 }
-
 

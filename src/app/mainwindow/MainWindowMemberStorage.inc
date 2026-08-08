@@ -305,6 +305,8 @@
         bool runtimeDebugOutputEnabled_ = false;
         quint64 windowEventDebugSequence_ = 0;
         bool previewSfxRuntimePrepared_ = false;
+        quint64 previewSfxRuntimePreparationAssetGeneration_ = 0;
+        quint64 previewSfxRuntimePreparationSequence_ = 0;
         bool previewBackendRecoveryPending_ = false;
         quint64 previewWarmupGeneration_ = 0;
         quint64 previewMediaWarmupAppliedGeneration_ = 0;
@@ -846,6 +848,8 @@
     bool& runtimeDebugOutputEnabled_ = state_.runtimeDebugOutputEnabled_;
     quint64& windowEventDebugSequence_ = state_.windowEventDebugSequence_;
     bool& previewSfxRuntimePrepared_ = state_.previewSfxRuntimePrepared_;
+    quint64& previewSfxRuntimePreparationAssetGeneration_ = state_.previewSfxRuntimePreparationAssetGeneration_;
+    quint64& previewSfxRuntimePreparationSequence_ = state_.previewSfxRuntimePreparationSequence_;
     bool& previewBackendRecoveryPending_ = state_.previewBackendRecoveryPending_;
     quint64& previewWarmupGeneration_ = state_.previewWarmupGeneration_;
     quint64& previewMediaWarmupAppliedGeneration_ = state_.previewMediaWarmupAppliedGeneration_;

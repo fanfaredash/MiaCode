@@ -579,7 +579,6 @@ bool verifyFacadeQueuesOwnerThreadCallsAndDropsDestroyedReceiver(QTextStream& er
         runtime.startBackgroundTrack(2.0);
         runtime.seekBackgroundTrack(2.0);
         runtime.pauseBackgroundTrack();
-        runtime.audition(QStringLiteral("judge"));
         runtime.stopAll();
 
         {
@@ -588,8 +587,14 @@ bool verifyFacadeQueuesOwnerThreadCallsAndDropsDestroyedReceiver(QTextStream& er
             state->releaseBlockedMethod = true;
             state->cv.notify_all();
         }
-        ok &= expect(state->waitForCall(QStringLiteral("audition")),
+        ok &= expect(state->waitForCall(QStringLiteral("pauseBackground")),
                      "worker drains the facade command queue", err);
+        ok &= expect(processEventsUntil([&] { return runtime.audition(QStringLiteral("judge")); }),
+                     "facade queues audition once the current asset snapshot is ready", err);
+        ok &= expect(state->waitForCall(QStringLiteral("audition")),
+                     "worker drains the accepted facade audition command", err);
+        ok &= expect(state->waitForCall(QStringLiteral("stopAll")),
+                     "worker drains high-priority facade commands before snapshot assertions", err);
         ok &= expect(processEventsUntil([&] {
                          return !completions.empty()
                              && prepared && started && paused && retainedCompleted && auditionCompleted;
@@ -657,6 +662,91 @@ bool verifyFacadeQueuesOwnerThreadCallsAndDropsDestroyedReceiver(QTextStream& er
     QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
     ok &= expect(destroyedReceiverCallbacks == 0,
                  "destroyed facade drops pending callbacks without dereferencing its receiver", err);
+    return ok;
+}
+
+bool verifyFacadeAuditionRequiresCurrentAssetReadiness(QTextStream& err)
+{
+    auto state = std::make_shared<FakeState>();
+    std::vector<PreviewAudioCompletion> completions;
+    QtPreviewSfxRuntime runtime(fakeFactory(state));
+    QObject::connect(&runtime,
+                     &QtPreviewSfxRuntime::commandCompleted,
+                     [&completions](const PreviewAudioCompletion& completion) {
+                         completions.push_back(completion);
+                     });
+
+    bool ok = true;
+    const auto warmup = runtime.setWarmupResolvedPaths(
+        QStringLiteral("chart"), QStringLiteral("track"), QStringLiteral("sfx"));
+    ok &= expect(warmup.post.accepted && warmup.identity.sequence == warmup.post.sequence,
+                 "warmup submission carries the worker sequence needed by GUI consumers",
+                 err);
+    ok &= expect(!runtime.audition(QStringLiteral("judge")),
+                 "facade rejects audition until the latest asset generation is ready",
+                 err);
+
+    const auto reload = runtime.reloadAssets(PreviewAudioSettings());
+    ok &= expect(reload.post.accepted
+                     && reload.identity.sequence == reload.post.sequence
+                     && reload.identity.assetGeneration > warmup.identity.assetGeneration,
+                 "reload submission advances the asset generation for superseding settings",
+                 err);
+    ok &= expect(processEventsUntil([&] {
+                     return std::any_of(completions.cbegin(), completions.cend(), [](const auto& completion) {
+                         return completion.kind == CommandKind::ReloadAssets && completion.success;
+                     });
+                 }),
+                 "facade observes the matching asset reload completion",
+                 err);
+
+    const bool auditionAccepted = runtime.audition(QStringLiteral("judge"));
+    ok &= expect(auditionAccepted,
+                 "facade accepts audition after the current asset generation becomes ready",
+                 err);
+    ok &= expect(processEventsUntil([&] {
+                     return std::any_of(completions.cbegin(), completions.cend(), [](const auto& completion) {
+                         return completion.kind == CommandKind::Audition && completion.success;
+                     });
+                 }),
+                 "accepted audition reports its actual backend success through completion",
+                 err);
+
+    {
+        std::lock_guard lock(state->mutex);
+        state->blockedMethod = QStringLiteral("applyLevels");
+        state->releaseBlockedMethod = false;
+    }
+    runtime.applyLevels(PreviewAudioSettings());
+    ok &= expect(state->waitForCall(QStringLiteral("applyLevels")),
+                 "facade latest-slot test blocks an ordinary worker command",
+                 err);
+    const qsizetype syncBefore = state->callCount(QStringLiteral("syncBackgroundTrack"));
+    const qsizetype drainBefore = state->callCount(QStringLiteral("drainEvents"));
+    for (int index = 0; index < 200; ++index) {
+        const double second = static_cast<double>(index) / 60.0;
+        runtime.syncBackgroundTrack(second);
+        runtime.drainEvents(second);
+    }
+    {
+        std::lock_guard lock(state->mutex);
+        state->blockedMethod.clear();
+        state->releaseBlockedMethod = true;
+        state->cv.notify_all();
+    }
+    ok &= expect(state->waitForCallCount(QStringLiteral("syncBackgroundTrack"), syncBefore + 1),
+                 "hundreds of background sync ticks execute as one latest command",
+                 err);
+    ok &= expect(state->waitForCallCount(QStringLiteral("drainEvents"), drainBefore + 1),
+                 "hundreds of event drain ticks execute as one latest command",
+                 err);
+    std::this_thread::sleep_for(100ms);
+    ok &= expect(state->callCount(QStringLiteral("syncBackgroundTrack")) == syncBefore + 1
+                     && state->callCount(QStringLiteral("drainEvents")) == drainBefore + 1,
+                 "each latest tick kind retains only one command for its generation",
+                 err);
+
+    runtime.prepareForShutdown();
     return ok;
 }
 
@@ -2316,6 +2406,7 @@ int main(int argc, char* argv[])
 
     bool ok = true;
     ok &= verifyFacadeQueuesOwnerThreadCallsAndDropsDestroyedReceiver(err);
+    ok &= verifyFacadeAuditionRequiresCurrentAssetReadiness(err);
     ok &= verifyWorkerSamplesHealthOnItsBackendThread(err);
     ok &= verifyHealthSamplingDeadlineIsDeterministic(err);
     ok &= verifyAssetLifecycleSnapshotCallbackRunsOutsideGenerationLock(err);

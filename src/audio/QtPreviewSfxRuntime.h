@@ -3,6 +3,7 @@
 #include "PreviewAudioWorker.h"
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <mutex>
 
@@ -29,6 +30,11 @@ public:
         double visualFallbackSecond = 0.0;
     };
 
+    struct AssetSubmission {
+        miacode::preview_audio::CommandIdentity identity;
+        miacode::preview_audio::WorkerPostResult post;
+    };
+
     // The fallback is a snapshot only. The caller must wait for the completion
     // carrying this identity before treating the worker second as authoritative.
     struct PlaybackSubmission {
@@ -43,10 +49,10 @@ public:
         QObject* parent = nullptr);
     ~QtPreviewSfxRuntime() override;
 
-    void setWarmupResolvedPaths(const QString& chartPath, const QString& trackPath, const QString& sfxDir);
-    void reloadAssets(const PreviewAudioSettings& settings);
+    AssetSubmission setWarmupResolvedPaths(const QString& chartPath, const QString& trackPath, const QString& sfxDir);
+    AssetSubmission reloadAssets(const PreviewAudioSettings& settings);
     bool audioEngineInitialized() const;
-    void setChartPath(const QString& chartPath);
+    AssetSubmission setChartPath(const QString& chartPath);
     void setBackgroundTrackOffsetSeconds(double seconds);
     void setBackgroundTrackPlaybackRate(double rate);
     void applyPlaybackRateAtChartSecond(double rate, double chartSecond);
@@ -89,6 +95,7 @@ public:
     RetainedPlaybackMode retainedPlaybackMode() const;
     RetainedBgmState retainedBgmState() const;
     quint64 playbackGeneration() const noexcept;
+    quint64 assetGeneration() const noexcept;
     double authoritativePlaybackSecond() const;
     void stopSfxVoices();
     double syncPreviewPlaybackClockTransaction(double fallbackSecond);
@@ -99,7 +106,7 @@ public:
     void syncBackgroundTrack(double timelineSecond);
     bool hasBackgroundTrack() const;
     bool isBackgroundTrackRunning() const;
-    void startBackgroundTrack(double second);
+    miacode::preview_audio::WorkerPostResult startBackgroundTrack(double second);
     void seekBackgroundTrack(double second);
     void pauseBackgroundTrack();
     double backgroundPlaybackSecond() const;
@@ -109,6 +116,14 @@ public:
     // The only GUI-facing wait. Destructor shutdown uses the same sequence after
     // producer and callback delivery have been disabled.
     void prepareForShutdown();
+
+    // These wrappers are intentionally available only for non-GUI command-line
+    // tools. The worker rejects the facade-owning thread before it can wait.
+    miacode::preview_audio::NonGuiBarrierWaitStatus waitForReadyForNonGui(
+        std::chrono::milliseconds timeout);
+    miacode::preview_audio::NonGuiBarrierWaitStatus waitForCompletionForNonGui(
+        quint64 sequence,
+        std::chrono::milliseconds timeout);
 
 signals:
     void backendReadyChanged(bool ready);

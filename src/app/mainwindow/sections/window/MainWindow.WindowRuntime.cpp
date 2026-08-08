@@ -10,6 +10,7 @@
 #include "../preview/MainWindow.PreviewSection.h"
 #include "../timeline/MainWindow.TimelineSection.h"
 #include "../validation/MainWindow.ValidationSection.h"
+#include "audio/PreviewAudioDeviceWatcher.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"
@@ -413,6 +414,12 @@ void MainWindow::preparePreviewForShutdown()
     pausedPreviewMediaSeekPending_ = false;
     pendingPreviewPlaybackStart_ = false;
     state_.activePreviewPlaybackTransactionId_ = 0;
+
+    if (previewAudioDeviceWatcher_ != nullptr) {
+        previewAudioDeviceWatcher_->disconnect(this);
+        delete previewAudioDeviceWatcher_;
+        previewAudioDeviceWatcher_ = nullptr;
+    }
 
     QElapsedTimer audioTimer;
     audioTimer.start();

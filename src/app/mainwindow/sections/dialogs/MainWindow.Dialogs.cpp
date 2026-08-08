@@ -103,6 +103,15 @@ void MainWindow::DialogsSection::reloadPreviewMediaAfterFileOperation(bool reloa
         if (owner_.previewSfxRuntime_ != nullptr) {
             owner_.previewSfxRuntime_->setChartPath(QString());
             owner_.previewSfxRuntime_->setChartPath(owner_.currentFilePath_);
+            const QtPreviewSfxRuntime::AssetSubmission reload =
+                owner_.previewSfxRuntime_->reloadAssets(owner_.previewAudioSettings_);
+            owner_.previewSfxRuntimePrepared_ = false;
+            owner_.previewSfxRuntimePreparationAssetGeneration_ = reload.post.accepted
+                ? reload.identity.assetGeneration
+                : 0;
+            owner_.previewSfxRuntimePreparationSequence_ = reload.post.accepted
+                ? reload.identity.sequence
+                : 0;
             owner_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(owner_.previewPlaybackRate_);
             owner_.previewSfxRuntime_->resetRetainedPreviewPlaybackTransaction(qMax(0.0, owner_.qtPreviewPauseSecond_));
         }

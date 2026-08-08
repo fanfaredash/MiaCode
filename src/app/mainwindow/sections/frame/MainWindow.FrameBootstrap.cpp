@@ -1450,6 +1450,23 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
 
     previewSfxRuntime_ = new QtPreviewSfxRuntime(this);
     connect(previewSfxRuntime_,
+            &QtPreviewSfxRuntime::commandCompleted,
+            this,
+            [this](const QtPreviewSfxRuntime::Completion& completion) {
+                using namespace miacode::preview_audio;
+                if (completion.kind != CommandKind::ReloadAssets
+                    || completion.identity.sequence != state_.previewSfxRuntimePreparationSequence_
+                    || !acceptsAssetCompletion(
+                        state_.previewSfxRuntimePreparationAssetGeneration_, completion)) {
+                    return;
+                }
+                state_.previewSfxRuntimePrepared_ = completion.success
+                    && previewSfxRuntime_ != nullptr
+                    && previewSfxRuntime_->audioEngineInitialized();
+                state_.previewSfxRuntimePreparationAssetGeneration_ = 0;
+                state_.previewSfxRuntimePreparationSequence_ = 0;
+            });
+    connect(previewSfxRuntime_,
             &QtPreviewSfxRuntime::previewPrepared,
             this,
             [this](const QtPreviewSfxRuntime::Completion& completion) {
