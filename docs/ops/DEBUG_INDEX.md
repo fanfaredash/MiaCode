@@ -143,6 +143,7 @@ Encoder selection/tuning:
 - `MIACODE_EXPORT_X264_PRESET`
 - `MIACODE_EXPORT_X264_CRF`
 - `MIACODE_EXPORT_X264_BFRAMES`
+- `MIACODE_EXPORT_VAAPI_DEVICE` — Linux only; override the DRM render node used for `h264_vaapi` / `hevc_vaapi` export (default auto-picks `/dev/dri/renderD128` or the first `renderD*`). Empty/missing path drops VAAPI from the candidate list.
 
 FFmpeg binary + extra readback toggle:
 
