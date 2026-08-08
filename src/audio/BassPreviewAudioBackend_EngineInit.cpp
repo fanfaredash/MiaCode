@@ -24,7 +24,7 @@
 #ifdef MIACODE_HAS_BASS_AUDIO
 #ifdef Q_OS_WIN
 #include <windows.h>
-#elif defined(Q_OS_MACOS)
+#elif defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
 #include <dlfcn.h>
 #endif
 
@@ -76,8 +76,13 @@ bool BassPreviewAudioBackend::ensureBassFxLoaded()
     bassFxModule_ = module;
     bassFxTempoCreate_ = reinterpret_cast<void*>(proc);
     return true;
-#elif defined(Q_OS_MACOS) && defined(MIACODE_HAS_BASS_AUDIO)
-    const QString libraryPath = runtimeFilePath(QStringLiteral("libbass_fx.dylib"));
+#elif (defined(Q_OS_MACOS) || defined(Q_OS_LINUX)) && defined(MIACODE_HAS_BASS_AUDIO)
+#ifdef Q_OS_MACOS
+    const QString libraryName = QStringLiteral("libbass_fx.dylib");
+#else
+    const QString libraryName = QStringLiteral("libbass_fx.so");
+#endif
+    const QString libraryPath = runtimeFilePath(libraryName);
     _mc_op_.note(QStringLiteral("path=%1").arg(libraryPath));
     const QByteArray encodedPath = QFile::encodeName(libraryPath);
     void* module = dlopen(encodedPath.constData(), RTLD_NOW | RTLD_LOCAL);
@@ -113,7 +118,7 @@ void BassPreviewAudioBackend::unloadBassFx()
     if (bassFxModule_ != nullptr) {
         FreeLibrary(static_cast<HMODULE>(bassFxModule_));
     }
-#elif defined(Q_OS_MACOS) && defined(MIACODE_HAS_BASS_AUDIO)
+#elif (defined(Q_OS_MACOS) || defined(Q_OS_LINUX)) && defined(MIACODE_HAS_BASS_AUDIO)
     if (bassFxModule_ != nullptr) {
         dlclose(bassFxModule_);
     }

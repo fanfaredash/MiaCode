@@ -68,7 +68,7 @@ Current chart-directory conventions:
   - `.miacode/waveform/`
   - stores hashed per-track waveform cache blobs used by widget and Quick timeline waveform rendering
   - cache validity is tied to normalized track path plus file size and last-modified timestamp
-  - Windows and macOS cache generation decode through bundled BASS so supported track containers share the preview BGM playback backend; unsupported platforms fall back to miniaudio
+  - Windows, macOS, and Linux cache generation decode through bundled BASS so supported track containers share the preview BGM playback backend; unsupported platforms fall back to miniaudio
 - autosave container root:
   - `.miacode/.autosave/<chart file>/`
   - contains `<chart file>.bak`, `history/*.bak`, and `autosave.json`
@@ -131,7 +131,7 @@ The toolbox blank-media submenu operates on the current chart directory only. It
   - Consumer: `QtPreviewSfxRuntime`, `VideoExportAudioRenderPlan`, export audio backends
   - Entry: `miacode::preview_sfx::resolveSfxDirectory`
   - `track_start` is the intro opening SFX kind. Runtime audition/playback and exported intro audio first check the selected `assets/music/<file>` entry, then legacy `assets/music/track_start.wav`, then the resolved SFX folder's `track_start.wav`, then the bundled `:/intro/audio/track_start.wav` for export-only extraction.
-- Windows and macOS BASS runtime assets:
+- Windows, macOS, and Linux BASS runtime assets:
   - Repo-local files:
     - `third_party/bass/include/bass.h`
     - `third_party/bass/include/bassmix.h`
@@ -146,11 +146,15 @@ The toolbox blank-media submenu operates on the current chart directory only. It
     - `third_party/bass/lib/macos/universal/libbassmix.dylib`
     - `third_party/bass/lib/macos/universal/libbass_fx.dylib`
     - `third_party/bass/lib/macos/universal/libbassopus.dylib`
+    - `third_party/bass/lib/linux/x86_64/libbass.so`
+    - `third_party/bass/lib/linux/x86_64/libbassmix.so`
+    - `third_party/bass/lib/linux/x86_64/libbass_fx.so`
   - Current build contract:
     - `CMakeLists.txt` links `bass.lib` and `bassmix.lib` on Windows for `MiaCode` and `soundtouch_probe`
     - post-build copy deploys the repo-local `bass*.dll` files into the executable directory
     - macOS links the Universal BASS/BASSmix dylibs, copies all four runtimes into `MiaCode.app/Contents/Frameworks`, and the package-wide thinning script keeps only arm64
-    - `src/common/WaveformCache.cpp` uses BASS on Windows and macOS to keep timeline waveform cache timing aligned with preview BGM playback
+    - Linux x86_64 links the bundled BASS/BASSmix shared objects, loads BASS_FX from the executable directory, and copies all three `.so` runtimes beside `MiaCode`
+    - `src/common/WaveformCache.cpp` uses BASS on Windows, macOS, and Linux to keep timeline waveform cache timing aligned with preview BGM playback
 - Background outlines and auxiliary background art:
   - Consumers: preview and export overlay composition
   - Current active variant files:

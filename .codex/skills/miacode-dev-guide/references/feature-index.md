@@ -133,7 +133,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Preview SFX runtime:
   - Files: `src/common/PreviewSfxSemantics.h`, `src/common/PreviewSfxTimeline.h`, `src/audio/PreviewAudioBackend.h`, `src/audio/QtPreviewSfxRuntime.h`, `src/audio/QtPreviewSfxRuntime.cpp`, `src/audio/MiniaudioPreviewAudioBackend.h`, `src/audio/MiniaudioPreviewAudioBackend.cpp`, `src/audio/BassPreviewAudioBackend.h`, `src/audio/BassPreviewAudioBackend*.cpp`
   - Class: `QtPreviewSfxRuntime`
-  - Owns: the preview-audio facade seen by `MainWindow`, backend selection, and the stable prepare / commit / pause / resume / seek surface; `MiniaudioPreviewAudioBackend` remains the unsupported-platform compatibility path, while `BassPreviewAudioBackend` owns the Windows and macOS runtime path with bundled BASS libraries, no supported-platform miniaudio fallback, master mixer clock authority, preloaded sample channels inspired by NetPlay's `BassAudioSample`, and backend-side note-SFX draining
+  - Owns: the preview-audio facade seen by `MainWindow`, backend selection, and the stable prepare / commit / pause / resume / seek surface; `MiniaudioPreviewAudioBackend` remains the unsupported-platform compatibility path, while `BassPreviewAudioBackend` owns the Windows, macOS, and Linux runtime path with bundled BASS libraries, no supported-platform miniaudio fallback, master mixer clock authority, preloaded sample channels inspired by NetPlay's `BassAudioSample`, and backend-side note-SFX draining
 - Split responsibilities:
   - `QtPreviewSfxRuntime.Assets.cpp`: miniaudio backend chart track resolution, SFX dir resolution, bank resets
   - `QtPreviewSfxRuntime.Timeline.cpp`: miniaudio backend event generation from `TimelineNoteMarker`

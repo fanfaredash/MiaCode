@@ -17,7 +17,7 @@ Use this checklist before making the repository public. It intentionally separat
 - [x] Add [LICENSE_SCOPE.md](../../LICENSE_SCOPE.md) for scheme A: project-owned source code under MIT, bundled assets/releases under non-commercial distribution notes.
 - [x] Add [DOCS_PUBLICATION_AUDIT.md](../audit/DOCS_PUBLICATION_AUDIT.md) for tracked-docs publication review.
 - [x] Review package contents against THIRD_PARTY_NOTICES.md after removing Remotion prototype files.
-- [x] Ensure BASS runtime DLLs are explicitly tracked for the intended non-commercial Windows build.
+- [x] Ensure BASS runtime libraries are explicitly tracked for the intended non-commercial Windows, macOS, and Linux builds.
 - [x] Audit third-party build inputs from a clean-clone perspective: required vendored headers/libs/assets are tracked, and intentionally untracked FFmpeg binaries/SDKs have provisioning scripts and documented URLs.
 - [x] Verify pinned FFmpeg download URLs are reachable: Windows export package, Windows QtAVPlayer dev SDK, macOS package, and FFmpeg `n7.1` source mirrors.
 - [x] Fix Windows export FFmpeg URL after the old Gyan.dev package path returned 404.

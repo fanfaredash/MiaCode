@@ -725,7 +725,7 @@ target_sources(MiaCode PRIVATE
     src/tools/video_export/LegacyExportAudioBackend.cpp
 )
 
-if (WIN32 OR APPLE)
+if (WIN32 OR APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(MiaCode PRIVATE
         src/audio/BassPreviewAudioBackend.h
         src/audio/BassPreviewAudioBackend.cpp
@@ -808,6 +808,38 @@ elseif (APPLE)
             ${MIACODE_BASS_MACOS_LIBRARIES}
             "$<TARGET_FILE_DIR:MiaCode>/../Frameworks"
         COMMENT "Deploying macOS BASS runtime libraries"
+    )
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    if (NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
+        message(FATAL_ERROR "MiaCode's bundled Linux BASS runtime currently supports x86_64 only")
+    endif()
+
+    set(MIACODE_BASS_LINUX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/linux/x86_64")
+    set(MIACODE_BASS_LINUX_LIBRARIES
+        "${MIACODE_BASS_LINUX_DIR}/libbass.so"
+        "${MIACODE_BASS_LINUX_DIR}/libbassmix.so"
+        "${MIACODE_BASS_LINUX_DIR}/libbass_fx.so"
+    )
+    foreach(MIACODE_BASS_LIBRARY IN LISTS MIACODE_BASS_LINUX_LIBRARIES)
+        if (NOT EXISTS "${MIACODE_BASS_LIBRARY}")
+            message(FATAL_ERROR "Missing required Linux BASS runtime: ${MIACODE_BASS_LIBRARY}")
+        endif()
+    endforeach()
+
+    target_link_libraries(MiaCode PRIVATE
+        "${MIACODE_BASS_LINUX_DIR}/libbass.so"
+        "${MIACODE_BASS_LINUX_DIR}/libbassmix.so"
+        ${CMAKE_DL_LIBS}
+    )
+    set_target_properties(MiaCode PROPERTIES
+        BUILD_RPATH "$ORIGIN"
+        INSTALL_RPATH "$ORIGIN"
+    )
+    add_custom_command(TARGET MiaCode POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${MIACODE_BASS_LINUX_LIBRARIES}
+            $<TARGET_FILE_DIR:MiaCode>
+        COMMENT "Deploying Linux BASS runtime libraries"
     )
 endif()
 

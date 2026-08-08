@@ -401,8 +401,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
 - Facade: `QtPreviewSfxRuntime.{h,cpp}` (+ include-split `.Assets/.Timeline/.Background/.Engine/.Voices.cpp`)
   — backend selection, prepare/commit/pause/resume/seek surface.
 - Backends behind `src/audio/PreviewAudioBackend.h`: `BassPreviewAudioBackend.{h,cpp}` (Windows,
-  real BASS, master mixer clock, preloaded SFX channels, BASS_FX tempo) and
-  `MiniaudioPreviewAudioBackend.{h,cpp}` (non-Windows compatibility, SoundTouch stretch).
+  macOS, and Linux; real BASS, master mixer clock, preloaded SFX channels, BASS_FX tempo) and
+  `MiniaudioPreviewAudioBackend.{h,cpp}` (unsupported-platform compatibility, SoundTouch stretch).
 - Settings/semantics: `src/audio/PreviewAudioSettings.*`, `src/common/PreviewSfxAssets.h`,
   `PreviewSfxSemantics.h`, `PreviewSfxTimeline.h`, `PreviewSfxTiming.h`.
 - BreakSlide尾音欢呼关闭 is an immediate app-level preference at
@@ -576,8 +576,8 @@ Map a user-facing feature to the files / classes / functions that own it. Paths 
   the SFX prepared timeline (the resume hand-off `resetCursor(0,false)` would skip the downbeat).
   Seeded from `installExportPreviewAuditionScene` (`clockCountFromDocument`+`clockBpmForChart`),
   cleared in `teardownExportPreviewAuditionScene`. ⚠ **Both backends must load a `"clock"` sample
-  for `audition("clock")` to make sound** — added to `BassPreviewAudioBackend` (Windows:
-  `clockSample_`, load+reset+`applySampleLevels`); the miniaudio (non-Windows) backend gracefully
+  for `audition("clock")` to make sound** — added to `BassPreviewAudioBackend` (Windows/macOS/Linux:
+  `clockSample_`, load+reset+`applySampleLevels`); the miniaudio compatibility backend gracefully
   no-ops (`sampleForKind` miss → silent count-in there). `clock.wav` ships in `assets/SFX/`.
   ⚠⚠ **The on-screen preview transport (default shell too) is the QML
   `QuickShellPreviewTransport.qml`** — its slider was hardcoded `from: 0` (the real clamp) — NOT the
