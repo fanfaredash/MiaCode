@@ -23,6 +23,8 @@ Item {
     // call setChartBottomTabsMode(false); latency/difficulty turn it back on).
     readonly property bool bottomPanelEffectivelyVisible:
         root.viewState.bottomPanelVisible && root.shellController.bottomTabsVisible
+    readonly property bool exportVideoActive:
+        root.pages.activePageId === "export"
     signal settingsRequested()
 
     function undo() {
@@ -131,18 +133,24 @@ Item {
                 EditorPane {
                     id: editorPane
                     anchors.fill: parent
-                    visible: !root.pages.overlayActive
+                    visible: !root.pages.overlayActive && !root.exportVideoActive
                     viewState: root.viewState
                     documentSession: root.documentSession
                     commands: root.commands
                 }
 
-                // v1 ExportLauncherPage / LatencyDetectionPage host. Sidebar stays
-                // QML; the full widget page reuses MainWindow switchTo* lifecycle.
+                // v2 video export center: QML chrome + ExportVideoController panel surface.
+                ExportVideoPage {
+                    anchors.fill: parent
+                    visible: root.exportVideoActive
+                    pages: root.pages
+                }
+
+                // LatencyDetectionPage (and any remaining full-page widget host).
                 WindowContainer {
                     id: nativePageHost
                     anchors.fill: parent
-                    visible: root.pages.overlayActive && root.pages.pageWindow !== null
+                    visible: root.pages.activePageId === "latency" && root.pages.pageWindow !== null
                     window: root.pages.pageWindow
                     function syncNativeSize() {
                         if (visible && width > 0 && height > 0)

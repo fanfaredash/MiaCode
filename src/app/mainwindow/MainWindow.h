@@ -47,6 +47,7 @@ class QEvent;
 class PreviewStageMediaHost;
 class QmlDocumentModel;
 class QmlEditorPageHost;
+class QmlExportSession;
 class QmlUiBootstrap;
 class QFrame;
 class QGraphicsOpacityEffect;
@@ -140,6 +141,7 @@ class MainWindow : public QMainWindow,
     friend class QmlDocumentModel;
     friend class QmlCommandService;
     friend class QmlEditorPageHost;
+    friend class QmlExportSession;
     friend class QmlUiBootstrap;
 
 public:
@@ -216,6 +218,10 @@ public:
     bool quickShellRootWindowFrameGeometryAvailable() const;
     QRect quickShellRootWindowFrameGeometry() const;
     void setQuickShellBackendActive(bool active);
+    // QmlUi v2 owns the export center in pure QML. QuickShell / classic Widgets
+    // still enter ExportLauncherPage via onPageEntered.
+    void setQmlExportCenterActive(bool active);
+    bool qmlExportCenterActive() const { return qmlExportCenterActive_; }
     void preparePreviewForShutdown();
     bool shellTimelineSurfaceReady() const override;
     void noteQuickTimelineSurfaceReady();

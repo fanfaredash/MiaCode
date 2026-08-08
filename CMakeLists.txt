@@ -683,6 +683,7 @@ set(MIACODE_UI_QML_FILES
     src/app/qml_ui/sidebar/DifficultyList.qml
     src/app/qml_ui/sidebar/ExportSidebarPage.qml
     src/app/qml_ui/sidebar/ToolsSidebarPage.qml
+    src/app/qml_ui/export/ExportVideoPage.qml
     src/app/qml_ui/editor/EditorPane.qml
     src/app/qml_ui/editor/EditorTabBar.qml
     src/app/qml_ui/editor/SourceEditor.qml
@@ -753,6 +754,8 @@ qt_add_qml_module(MiaCode
         src/app/qml_ui/QmlUiPlatformChrome.h
         src/app/qml_ui/QmlEditorPageHost.cpp
         src/app/qml_ui/QmlEditorPageHost.h
+        src/app/qml_ui/export/QmlExportSession.cpp
+        src/app/qml_ui/export/QmlExportSession.h
         src/app/qml_ui/QmlUiWindowChrome.cpp
         src/app/qml_ui/QmlUiWindowChrome.h
         src/app/qml_ui/QmlUiBootstrap.cpp

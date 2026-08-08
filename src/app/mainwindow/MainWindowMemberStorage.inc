@@ -83,6 +83,7 @@
         QWidget* chartPage_ = nullptr;
         miacode::latency::LatencyDetectionPage* latencyDetectionPage_ = nullptr;
         miacode::export_page::ExportLauncherPage* exportPage_ = nullptr;
+        QmlExportSession* qmlExportSession_ = nullptr;
         // E-C embedded video-export panel: a VideoExportDialog in embedded
         // panel mode, hosted inside the Export hub page's video sub-page.
         // Created/destroyed by ExportSection::create/destroyEmbeddedVideoExportPanel.
@@ -214,6 +215,7 @@
         bool quickShellBootstrapMode_ = false;
         bool timelineWidgetlessQuickRoute_ = false;
         bool quickShellBackendActive_ = false;
+        bool qmlExportCenterActive_ = false;
         bool quickShellUiFocusBridgeMode_ = false;
         bool quickTimelineSurfaceReady_ = false;
         quint64 deferredTimelineBridgeFlushGeneration_ = 0;
@@ -660,6 +662,7 @@
     bool& quickShellBootstrapMode_ = state_.quickShellBootstrapMode_;
     bool& timelineWidgetlessQuickRoute_ = state_.timelineWidgetlessQuickRoute_;
     bool& quickShellBackendActive_ = state_.quickShellBackendActive_;
+    bool& qmlExportCenterActive_ = state_.qmlExportCenterActive_;
     bool& quickShellUiFocusBridgeMode_ = state_.quickShellUiFocusBridgeMode_;
     bool& quickTimelineSurfaceReady_ = state_.quickTimelineSurfaceReady_;
     quint64& deferredTimelineBridgeFlushGeneration_ = state_.deferredTimelineBridgeFlushGeneration_;
@@ -1010,6 +1013,7 @@
     QWidget*& metadataPage_ = ui_.metadataPage_;
     miacode::latency::LatencyDetectionPage*& latencyDetectionPage_ = ui_.latencyDetectionPage_;
     miacode::export_page::ExportLauncherPage*& exportPage_ = ui_.exportPage_;
+    QmlExportSession*& qmlExportSession_ = ui_.qmlExportSession_;
     QPointer<VideoExportDialog>& embeddedVideoExportPanel_ = ui_.embeddedVideoExportPanel_;
     QPointer<miacode::video_export::BatchExportPanel>& embeddedBatchExportPanel_ = ui_.embeddedBatchExportPanel_;
     QLabel*& latencyEntrySummaryLabel_ = ui_.latencyEntrySummaryLabel_;

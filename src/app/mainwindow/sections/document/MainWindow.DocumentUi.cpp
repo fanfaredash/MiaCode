@@ -23,6 +23,7 @@
 #include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/export_page/ExportLauncherPage.h"
+#include "app/qml_ui/export/QmlExportSession.h"
 #include "tools/latency/LatencyDetectionPage.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
@@ -900,6 +901,9 @@ bool MainWindow::DocumentSection::switchToLatencyField()
     if (ui_.exportPage_ != nullptr) {
         ui_.exportPage_->onPageLeft();
     }
+    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+        ui_.qmlExportSession_->leave();
+    }
     owner_.cacheWorkspaceLayoutSizes();
     // Preserve the current preview position across the switch, just like
     // switchToDifficultyField does, so entering the latency page keeps the
@@ -1061,6 +1065,9 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     if (ui_.exportPage_ != nullptr) {
         ui_.exportPage_->onPageLeft();
     }
+    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+        ui_.qmlExportSession_->leave();
+    }
     owner_.cacheWorkspaceLayoutSizes();
     owner_.stopQtPreviewPlayback(true);
     state_.pendingPreviewPlaybackStart_ = false;
@@ -1085,7 +1092,13 @@ void MainWindow::DocumentSection::performSwitchToExportField()
     // The expensive part — building the embedded video panel — happens inside
     // onPageEntered. It ticks the spinner at its own sub-step boundaries so the
     // ring keeps rotating across the build (see createEmbeddedVideoExportPanel).
-    ui_.exportPage_->onPageEntered(previousActiveDifficultyId);
+    // QmlUi v2 owns a pure-QML export center; classic / QuickShell still enter
+    // ExportLauncherPage so the Widgets hub panels stay intact.
+    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+        ui_.qmlExportSession_->enter(previousActiveDifficultyId);
+    } else if (ui_.exportPage_ != nullptr) {
+        ui_.exportPage_->onPageEntered(previousActiveDifficultyId);
+    }
     owner_.tickOutlineBusySpinner();
     // Entering the export page changes the preview aspect (square → export video
     // ratio) and collapses the bottom tabs; both drive the workspace surface to a
@@ -1115,6 +1128,9 @@ bool MainWindow::DocumentSection::switchToMetadataField()
     // embedded video panel (idempotent; a running export keeps rendering).
     if (ui_.exportPage_ != nullptr) {
         ui_.exportPage_->onPageLeft();
+    }
+    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+        ui_.qmlExportSession_->leave();
     }
     owner_.cacheWorkspaceLayoutSizes();
     owner_.stopQtPreviewPlayback(true);
@@ -1169,6 +1185,9 @@ bool MainWindow::DocumentSection::switchToWelcomePage()
     // embedded video panel (idempotent; a running export keeps rendering).
     if (ui_.exportPage_ != nullptr) {
         ui_.exportPage_->onPageLeft();
+    }
+    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+        ui_.qmlExportSession_->leave();
     }
     owner_.cacheWorkspaceLayoutSizes();
     owner_.stopQtPreviewPlayback(true);
@@ -1262,6 +1281,9 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     // embedded video panel (idempotent; a running export keeps rendering).
     if (ui_.exportPage_ != nullptr) {
         ui_.exportPage_->onPageLeft();
+    }
+    if (owner_.qmlExportCenterActive() && ui_.qmlExportSession_ != nullptr) {
+        ui_.qmlExportSession_->leave();
     }
     owner_.cacheWorkspaceLayoutSizes();
     owner_.stopQtPreviewPlayback(true);

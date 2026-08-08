@@ -38,6 +38,19 @@ public:
     QWidget* createEmbeddedBatchExportPanel(int difficultyId, QWidget* parent);
     void updateEmbeddedBatchExportPreviewDifficulty(int difficultyId);
     void destroyEmbeddedBatchExportPanel();
+
+    // ---- QML export shell (v2; does not create VideoExportDialog) ----
+    VideoExportTask buildVideoExportSeedTaskPublic(int difficultyId = 0);
+    bool startQmlExportAudition(int difficultyId, const VideoExportTask& visualTask);
+    void stopQmlExportAudition();
+    bool launchQmlVideoExport(const VideoExportTask& requestedTask, int difficultyId, QString* errorMessage);
+    bool launchQmlBatchExport(
+        const VideoExportTask& templateTask,
+        const QStringList& chartDirectories,
+        const QList<int>& selectedDifficultyIds,
+        const QString& outputDirectory,
+        QString* errorMessage);
+
     bool buildVideoExportSnapshot(
         const VideoExportTask& requestedTask,
         VideoExportSnapshot* snapshot,

@@ -20,6 +20,7 @@
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/cover_export/CoverStudioWindow.h"
 #include "tools/export_page/ExportLauncherPage.h"
+#include "app/qml_ui/export/QmlExportSession.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/video_export/BatchExportPanel.h"
 #include "tools/video_export/VideoExportController.h"
@@ -1130,6 +1131,14 @@ bool MainWindow::currentExportIntroLeadInSpec(IntroBannerSpec* outSpec) const
         }
         return true;
     }
+    if (qmlExportSession_ != nullptr
+        && qmlExportSession_->pageSessionActive()
+        && qmlExportSession_->previewIntroSpec().enabled) {
+        if (outSpec != nullptr) {
+            *outSpec = qmlExportSession_->previewIntroSpec();
+        }
+        return true;
+    }
     return false;
 }
 
@@ -1380,4 +1389,159 @@ void MainWindow::ExportSection::handleBatchExportConfirmed()
                     + UiText::text(QStringLiteral("dialog.batch_export.message.output_files"))
                     + QStringLiteral("\n") + successDetails)
             + QStringLiteral("\n\n") + shortenDetails(failedCharts.join(QLatin1Char('\n'))));
+}
+
+VideoExportTask MainWindow::ExportSection::buildVideoExportSeedTaskPublic(int difficultyId)
+{
+    return buildVideoExportSeedTask(difficultyId);
+}
+
+bool MainWindow::ExportSection::startQmlExportAudition(int difficultyId, const VideoExportTask& visualTask)
+{
+    if (!SimaiDocument::isDifficultyId(difficultyId)
+        || owner_.document_.difficulty(difficultyId) == nullptr
+        || owner_.previewCanvas_ == nullptr) {
+        return false;
+    }
+    if (owner_.qtPreviewPlaying_) {
+        owner_.onTogglePreviewPause();
+    }
+
+    beginExportPreviewSession(visualTask);
+    installExportPreviewAuditionScene(difficultyId);
+    if (owner_.previewCanvas_ != nullptr) {
+        owner_.previewCanvas_->setBackgroundBrightnessOuter(visualTask.backgroundBrightnessOuter);
+        owner_.previewCanvas_->setBackgroundBrightnessInner(visualTask.backgroundBrightnessInner);
+        owner_.previewCanvas_->setLayoutSquareScale(visualTask.layoutSquareScale);
+        owner_.previewCanvas_->setSmoothBrightness(visualTask.smoothBrightness);
+        owner_.previewCanvas_->setBackgroundScaleMode(visualTask.backgroundScaleMode);
+        owner_.previewCanvas_->setTapFlowSpeed(visualTask.tapFlowSpeed);
+        owner_.previewCanvas_->setTouchFlowSpeed(visualTask.touchFlowSpeed);
+        owner_.previewCanvas_->setFixHudTextLayout(visualTask.fixHudTextLayout);
+        owner_.previewCanvas_->setShowChartInfoHud(visualTask.showChartInfoHud);
+    }
+    if (const SimaiDifficultyData* difficulty = owner_.document_.difficulty(difficultyId);
+        difficulty != nullptr) {
+        owner_.setExportAuditionClockSchedule(
+            visualTask.clockCountEnabled
+                ? miacode::chart_clock::clockCountFromDocument(owner_.document_)
+                : 0,
+            miacode::chart_clock::clockBpmForChart(owner_.document_, difficulty->chart));
+    }
+    owner_.refreshExportIntroState();
+    return true;
+}
+
+void MainWindow::ExportSection::stopQmlExportAudition()
+{
+    endExportPreviewSession();
+}
+
+bool MainWindow::ExportSection::launchQmlVideoExport(
+    const VideoExportTask& requestedTask,
+    int difficultyId,
+    QString* errorMessage)
+{
+    VideoExportTask task = requestedTask;
+    applySharedExportTaskSettings(task);
+    VideoExportSnapshot snapshot;
+    owner_.videoExportUseInlineProgress_ = false;
+    if (!buildVideoExportSnapshot(task, &snapshot, errorMessage, difficultyId)
+        || !launchVideoExportWorker(snapshot, errorMessage)) {
+        owner_.videoExportUseInlineProgress_ = false;
+        return false;
+    }
+    return true;
+}
+
+bool MainWindow::ExportSection::launchQmlBatchExport(
+    const VideoExportTask& templateTask,
+    const QStringList& chartDirectories,
+    const QList<int>& selectedDifficultyIds,
+    const QString& outputDirectory,
+    QString* errorMessage)
+{
+    if (chartDirectories.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.no_chart_dirs"));
+        }
+        return false;
+    }
+    if (selectedDifficultyIds.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.no_difficulties"));
+        }
+        return false;
+    }
+    if (outputDirectory.trimmed().isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.no_output_dir"));
+        }
+        return false;
+    }
+    // Seed the existing batch panel confirm path by synthesizing a one-shot run:
+    // reuse handleBatchExportConfirmed's loop via a temporary panel is heavy.
+    // Call the same snapshot/worker path per chart as handleBatchExportConfirmed.
+    Q_UNUSED(templateTask);
+    // Delegate to the Tools-menu batch entry after storing QML selections is
+    // incomplete without a panel. For the QML shell, surface a clear error until
+    // the batch runner is fully ported — single-export remains fully wired.
+    if (errorMessage != nullptr) {
+        *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.export_failed"));
+    }
+    // Prefer running the known-good batch confirm implementation by temporarily
+    // constructing settings into a BatchExportPanel is avoided (v1 untouched).
+    // Instead invoke onBatchExportPreviewVideo only opens v1 UI — blocked here.
+    // Implement a direct loop mirroring handleBatchExportConfirmed.
+    VideoExportTask requestedTask = templateTask;
+    applySharedExportTaskSettings(requestedTask);
+    requestedTask.exportStartSeconds = 0.0;
+    requestedTask.fullRangeExport = true;
+
+    if (!QDir().mkpath(outputDirectory)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.error.output_dir_create_failed"));
+        }
+        return false;
+    }
+
+    // Mirror handleBatchExportConfirmed: run sequential exports.
+    // Keep this in ExportFlow by calling the private confirm handler body —
+    // for maintainability, call into a shared helper. Minimal: one chart first.
+    int successCount = 0;
+    QStringList failedCharts;
+    for (const QString& chartDirectory : chartDirectories) {
+        for (int difficultyId : selectedDifficultyIds) {
+            VideoExportSnapshot snapshot;
+            QString launchError;
+            const QString token = SimaiDocument::difficultyShortName(difficultyId);
+            if (!buildVideoExportSnapshotForChartDirectory(
+                    chartDirectory,
+                    difficultyId,
+                    token,
+                    requestedTask,
+                    outputDirectory,
+                    &snapshot,
+                    &launchError)
+                || !runVideoExportWorkerSync(snapshot, nullptr, nullptr, &launchError)) {
+                failedCharts.append(chartDirectory + QStringLiteral(" / ") + token + QStringLiteral(": ") + launchError);
+                continue;
+            }
+            ++successCount;
+        }
+    }
+    if (successCount == 0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = failedCharts.isEmpty()
+                ? UiText::text(QStringLiteral("dialog.batch_export.error.export_failed"))
+                : failedCharts.join(QLatin1Char('\n'));
+        }
+        return false;
+    }
+    if (!failedCharts.isEmpty() && errorMessage != nullptr) {
+        *errorMessage = UiText::text(QStringLiteral("dialog.batch_export.message.partial_failed"))
+            .arg(successCount)
+            .arg(failedCharts.size());
+    }
+    return failedCharts.isEmpty();
 }

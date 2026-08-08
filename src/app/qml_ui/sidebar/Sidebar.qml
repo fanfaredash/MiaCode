@@ -40,7 +40,7 @@ Rectangle {
         }
 
         if (viewId === "export")
-            root.pages.openExportPage()
+            root.pages.openVideoExportPage()
         else if (viewId === "tools")
             root.pages.openLatencyPage()
     }

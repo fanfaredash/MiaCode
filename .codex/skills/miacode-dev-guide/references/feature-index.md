@@ -166,9 +166,10 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Struct: `VideoExportSnapshot`
   - Key functions: `toJson`, `fromJson`, `buildVideoExportTaskFromSnapshot`
 - Main window export ownership:
-  - Files: `src/app/mainwindow/MainWindow.cpp`, `src/app/mainwindow/sections/export/MainWindow.ExportSection.cpp`, `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`, `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.ExportSettings.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp`, `src/tools/export_page/ExportLauncherPage.*`
-  - Key functions: `onExportCover`, `onBatchExportPreviewVideo`, `onExportPreviewVideo`, `buildVideoExportSnapshot`, `launchVideoExportWorker`, `handleVideoExportWorkerEvent`, `DialogsSection::buildSkinSettings`, `DialogsSection::openSkinSettingsDialog`
-  - Owns: toolbar/menu entry points for export and skin settings, including the shared Skin popup used by the main window and injected into the export dialog's Skin tab
+  - Files: `src/app/mainwindow/MainWindow.cpp`, `src/app/mainwindow/sections/export/MainWindow.ExportSection.cpp`, `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`, `src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.ExportSettings.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp`, `src/tools/export_page/ExportLauncherPage.*`, `src/app/qml_ui/export/QmlExportSession.*`, `src/app/qml_ui/export/ExportVideoPage.qml`, `src/app/qml_ui/sidebar/ExportSidebarPage.qml`, `src/app/qml_ui/QmlEditorPageHost.*`
+  - Classes: `ExportLauncherPage` (v1 Widgets hub), `QmlExportSession` (v2 pure-QML settings session)
+  - Key functions: `onExportCover`, `onBatchExportPreviewVideo`, `onExportPreviewVideo`, `buildVideoExportSnapshot`, `launchVideoExportWorker`, `startQmlExportAudition`, `launchQmlVideoExport`, `handleVideoExportWorkerEvent`
+  - Owns: toolbar/menu entry points; v1 hub still embeds `VideoExportDialog`; v2 QML shell drives the same ExportSection audition/worker path without hosting Widgets export dialogs
 - Cover export studio:
   - Files: `src/tools/cover_export/CoverStudioWindow.*`, `CoverStudioPanel.*`, `CoverLayerListPanel.*`, `CoverLayerListModel.*`, `CoverLayoutModel.*`, `CoverCompositionState.*`, `CoverComposerView.*`, `SceneFrameRenderer.*`, `src/intro/qml/CoverComposer.qml`, `src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp`
   - Classes: `CoverStudioWindow`, `CoverStudioPanel`, `CoverLayerListPanel`, `CoverLayerListModel`, `CoverLayoutModel`, `CoverCompositionState`, `CoverComposerView`, `SceneFrameRenderer`

@@ -4,7 +4,7 @@
 #include "UiTheme.h"
 #include "common/AdoptedWidgetCoordinates.h"
 #include "common/DebugLog.h"
-#include "tools/export_page/ExportLauncherPage.h"
+#include "app/qml_ui/export/QmlExportSession.h"
 #include "tools/latency/LatencyDetectionPage.h"
 
 #include <QBoxLayout>
@@ -77,6 +77,28 @@ QmlEditorPageHost::~QmlEditorPageHost()
 QWindow* QmlEditorPageHost::pageWindow() const
 {
     return pageWindow_.data();
+}
+
+QObject* QmlEditorPageHost::exportSession() const
+{
+    return backend_ != nullptr ? static_cast<QObject*>(backend_->qmlExportSession_) : nullptr;
+}
+
+void QmlEditorPageHost::markExportPageActive()
+{
+    if (activePageId_ == QLatin1String("export")) {
+        return;
+    }
+    // Detach latency (or any) full-page widget before marking export active —
+    // export chrome is QML, not this WindowContainer surface.
+    if (attachedPage_ != nullptr) {
+        detachCurrentPage(true);
+    } else if (!activePageId_.isEmpty()) {
+        activePageId_.clear();
+        emit activePageIdChanged();
+    }
+    activePageId_ = QStringLiteral("export");
+    emit activePageIdChanged();
 }
 
 void QmlEditorPageHost::ensureSurface()
@@ -235,32 +257,29 @@ bool QmlEditorPageHost::resumeChartOrMetadata()
     return backend_->switchToMetadataField();
 }
 
-bool QmlEditorPageHost::openExportPage()
+bool QmlEditorPageHost::openVideoExportPage(const QString& tab)
 {
-    if (backend_ == nullptr) {
+    if (backend_ == nullptr || backend_->qmlExportSession_ == nullptr) {
         return false;
     }
     rememberResumeDifficulty();
+    if (tab == QLatin1String("batch")) {
+        backend_->qmlExportSession_->setActiveTab(QStringLiteral("batch"));
+    } else {
+        backend_->qmlExportSession_->setActiveTab(QStringLiteral("export"));
+    }
     if (!backend_->switchToExportField()) {
         return false;
     }
-    // switchToExportField defers performSwitchToExportField by one tick.
     QTimer::singleShot(0, this, [this]() {
-        if (backend_ == nullptr || backend_->exportPage_ == nullptr) {
-            return;
-        }
-        attachPageWidget(backend_->exportPage_, QStringLiteral("export"));
-        // Second tick: export onPageEntered builds the heavy embedded panel;
-        // re-sync size after that layout lands.
-        QTimer::singleShot(0, this, [this]() {
-            if (surfaceWidget_ != nullptr && attachedPage_ != nullptr) {
-                syncPageSize(surfaceWidget_->width(), surfaceWidget_->height());
-                activateSurfaceLayout(surfaceWidget_);
-                attachedPage_->update();
-            }
-        });
+        markExportPageActive();
     });
     return true;
+}
+
+bool QmlEditorPageHost::openExportPage()
+{
+    return openVideoExportPage(QStringLiteral("export"));
 }
 
 bool QmlEditorPageHost::openLatencyPage()
@@ -294,7 +313,18 @@ bool QmlEditorPageHost::leaveOverlayPage()
         return true;
     }
 
-    detachCurrentPage(true);
+    const bool leavingExport = activePageId_ == QLatin1String("export");
+    if (leavingExport) {
+        if (backend_->qmlExportSession_ != nullptr) {
+            backend_->qmlExportSession_->leave();
+        }
+        if (!activePageId_.isEmpty()) {
+            activePageId_.clear();
+            emit activePageIdChanged();
+        }
+    } else {
+        detachCurrentPage(true);
+    }
     return resumeChartOrMetadata();
 }
 
@@ -340,18 +370,23 @@ void QmlEditorPageHost::openNetBatchUpload()
 
 void QmlEditorPageHost::openBatchExport()
 {
+    openVideoExportPage(QStringLiteral("batch"));
+}
+
+void QmlEditorPageHost::openCoverExport()
+{
     if (backend_ == nullptr) {
         return;
     }
-    if (!openExportPage()) {
+    backend_->onExportCover();
+}
+
+void QmlEditorPageHost::packAsZip()
+{
+    if (backend_ == nullptr) {
         return;
     }
-    QTimer::singleShot(0, this, [this]() {
-        if (backend_ == nullptr || backend_->exportPage_ == nullptr) {
-            return;
-        }
-        backend_->exportPage_->openBatchExportSubPage();
-    });
+    backend_->onPackAsZip();
 }
 
 void QmlEditorPageHost::syncPageSize(int width, int height)
