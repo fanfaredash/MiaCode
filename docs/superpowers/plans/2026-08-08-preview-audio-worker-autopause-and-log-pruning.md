@@ -8,6 +8,24 @@
 
 **Tech Stack:** C++17, Qt 6 Core/Widgets/QML, `std::thread`/`std::condition_variable`, BASS/BASSmix/BASS_FX, miniaudio/SoundTouch, CMake dev-tool specs, CTest, `miacode::debug_log`.
 
+## Task Status (2026-08-08)
+
+- [x] Task 1: Typed Protocol And Bounded Command Queue
+- [x] Task 2: Worker Ownership, Snapshot Publication, And Failure Recovery
+- [ ] Task 3: Non-GUI Completion Barrier
+- [ ] Task 4: Make Miniaudio A Real Backend Implementation
+- [ ] Task 5: Serialize Process-Wide BASS Device Lifetime
+- [ ] Task 6: Convert QtPreviewSfxRuntime Into A Non-Blocking Facade
+- [ ] Task 7: Migrate Startup, Retained Resume, And Seek State Machines
+- [ ] Task 8: Immediate Manual And Device-Change Pause
+- [ ] Task 9: Migrate Ticks, Warmup, Dialog, Latency, Probe, And Shutdown
+- [ ] Task 10: Pure Log-Pruning Policies
+- [ ] Task 11: Wire Audio, Media, Watchdog, And Scene Log Gates
+- [ ] Task 12: Wire QuickShell And Background Edge Logging
+- [ ] Task 13: Documentation And Complete Verification
+
+Completed commits: `db8a83d1`, `55d33f34`, `29c245d1`, `adb3c964`, `a1e70c05`, and `7e7423b7`.
+
 ---
 
 ## Working Rules
@@ -16,7 +34,7 @@
 - Preserve the unrelated main-workspace edit in `src/wrapper/MiaCodeLauncher.cpp`; never stage it from `/Users/caoyusen/Desktop/MiaCode`.
 - Follow `@superpowers:test-driven-development`: add one behavioral spec, run it and observe the expected failure, then add only the implementation needed to pass.
 - Follow `@miacode-dev-guide`: `src/audio` remains the only module that links native audio libraries; MainWindow files orchestrate but do not own worker mechanics.
-- Follow `@miacode-concurrent-build`: Release only, one MiaCode build at a time, and `--parallel`. Do not clean/rebuild/delete build artifacts without fresh user approval.
+- Follow `@miacode-concurrent-build`: Release only and one MiaCode build at a time. Per the 2026-08-08 user override after an over-parallelized build restarted the device, every agent must use exactly `--parallel 1`; never run multiple builds concurrently. Do not clean/rebuild/delete build artifacts without fresh user approval.
 - Add every new source explicitly to `MiaCode`, the relevant spec target, and `soundtouch_probe` where that target shares the runtime.
 - Run `git status --short` after every task commit; only intentional later-task changes may remain, so an omitted source cannot silently drift across commit boundaries.
 - Do not edit, delete, or rewrite any `logs*` directory. This plan changes only future emission behavior.
@@ -58,7 +76,7 @@ Existing owners to modify:
 - Create: `src/tools/preview/PreviewAudioWorkerProtocolSpec.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Register and write the failing queue/protocol specs**
+- [x] **Step 1: Register and write the failing queue/protocol specs**
 
 Cover these independent cases with the repository's standalone `main()` assertion style:
 
@@ -83,17 +101,17 @@ expect(!acceptsAssetCompletion(latestAssetGeneration, olderReloadCompletion),
        "old chart/settings reload cannot publish ready");
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
 ```bash
-cmake --build build --config Release --target preview_audio_command_queue_spec preview_audio_worker_protocol_spec --parallel
+cmake --build build --config Release --target preview_audio_command_queue_spec preview_audio_worker_protocol_spec --parallel 1
 ```
 
 Expected: FAIL because the new protocol/queue types and methods do not exist.
 
-- [ ] **Step 3: Implement the minimum protocol and queue**
+- [x] **Step 3: Implement the minimum protocol and queue**
 
 Define explicit value types with no `QObject*`, references, or GUI containers:
 
@@ -142,7 +160,7 @@ Pin every public facade operation to one protocol domain:
 | audition | bounded audition command; audition completion | current asset generation |
 | scalar getters | no command; read `PreviewAudioSnapshot` | snapshot sequence |
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run the two targets above, then:
 
@@ -152,7 +170,7 @@ ctest --test-dir build -C Release --output-on-failure -R "(preview_audio_command
 
 Expected: both specs PASS with no warnings/errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add CMakeLists.txt src/audio/PreviewAudioWorkerProtocol.h src/audio/PreviewAudioCommandQueue.h src/audio/PreviewAudioCommandQueue.cpp src/tools/preview/PreviewAudioCommandQueueSpec.cpp src/tools/preview/PreviewAudioWorkerProtocolSpec.cpp
@@ -171,7 +189,7 @@ git commit -m "feat(audio): define preview worker command protocol"
 - Modify: `src/audio/PreviewAudioWorkerProtocol.h`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Write the failing fake-backend worker spec**
+- [x] **Step 1: Write the failing fake-backend worker spec**
 
 Create a fake implementing `PreviewAudioBackend` that records constructor, every method, and destructor thread IDs. Inject it through a factory lambda. Test:
 
@@ -183,15 +201,15 @@ Create a fake implementing `PreviewAudioBackend` that records constructor, every
 - a blocked ordinary fake call delays native pause execution but never blocks `enqueue()`;
 - shutdown disables callbacks, resolves/rejects pending work, destroys backend, then joins.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
-cmake --build build --config Release --target preview_audio_worker_spec --parallel
+cmake --build build --config Release --target preview_audio_worker_spec --parallel 1
 ```
 
 Expected: FAIL because `PreviewAudioWorker` and injectable factory do not exist.
 
-- [ ] **Step 3: Implement the worker loop and explicit failure drain**
+- [x] **Step 3: Implement the worker loop and explicit failure drain**
 
 The worker owns the backend exclusively. Construction and shutdown are both
 exception-safe; a missing/failed backend is a valid `Degraded` state, not a
@@ -256,16 +274,16 @@ on Windows/macOS; the probe keeps its existing platform guards). The two spec
 targets use the existing `miacode_add_dev_tool(... TEST ...)` helper with
 `Qt6::Core` and `INCLUDES src src/audio src/common`.
 
-- [ ] **Step 4: Run GREEN and regress the pure specs**
+- [x] **Step 4: Run GREEN and regress the pure specs**
 
 ```bash
-cmake --build build --config Release --target preview_audio_worker_spec preview_audio_command_queue_spec preview_audio_worker_protocol_spec --parallel
+cmake --build build --config Release --target preview_audio_worker_spec preview_audio_command_queue_spec preview_audio_worker_protocol_spec --parallel 1
 ctest --test-dir build -C Release --output-on-failure -R "preview_audio_(worker_spec|command_queue_spec|worker_protocol_spec)"
 ```
 
 Expected: all selected specs PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add CMakeLists.txt src/audio/PreviewAudioBackend.h src/audio/PreviewAudioWorkerProtocol.h src/audio/PreviewAudioWorkerFactory.h src/audio/PreviewAudioWorkerFactory.cpp src/audio/PreviewAudioWorker.h src/audio/PreviewAudioWorker.cpp src/tools/preview/PreviewAudioWorkerSpec.cpp
@@ -288,7 +306,7 @@ Start the fake worker, enqueue reload/start, and call `waitForReadyForNonGui(tim
 - [ ] **Step 2: Run RED**
 
 ```bash
-cmake --build build --config Release --target preview_audio_non_gui_barrier_spec --parallel
+cmake --build build --config Release --target preview_audio_non_gui_barrier_spec --parallel 1
 ```
 
 Expected: FAIL because completion storage/barrier methods are missing.
@@ -300,7 +318,7 @@ Store completion records by command sequence until observed or retired, notify a
 - [ ] **Step 4: Run GREEN**
 
 ```bash
-cmake --build build --config Release --target preview_audio_non_gui_barrier_spec preview_audio_worker_spec --parallel
+cmake --build build --config Release --target preview_audio_non_gui_barrier_spec preview_audio_worker_spec --parallel 1
 ctest --test-dir build -C Release --output-on-failure -R "preview_audio_(non_gui_barrier|worker)_spec"
 ```
 
@@ -334,7 +352,7 @@ Build the factory without `MIACODE_HAS_BASS_AUDIO`, construct the miniaudio back
 - [ ] **Step 2: Run RED**
 
 ```bash
-cmake --build build --config Release --target preview_audio_worker_spec soundtouch_probe --parallel
+cmake --build build --config Release --target preview_audio_worker_spec soundtouch_probe --parallel 1
 ```
 
 Expected: the new drift assertion fails while the macro alias remains.
@@ -360,7 +378,7 @@ symbols. Update both the `MiaCode` audio source list and the
 - [ ] **Step 4: Run GREEN**
 
 ```bash
-cmake --build build --config Release --target preview_audio_worker_spec soundtouch_probe --parallel
+cmake --build build --config Release --target preview_audio_worker_spec soundtouch_probe --parallel 1
 ctest --test-dir build -C Release --output-on-failure -R "preview_audio_worker_spec"
 ```
 
@@ -394,7 +412,7 @@ Inject `getDevice/init/free` function objects so the spec needs no real output d
 - [ ] **Step 2: Run RED**
 
 ```bash
-cmake --build build --config Release --target preview_bass_device_lease_spec --parallel
+cmake --build build --config Release --target preview_bass_device_lease_spec --parallel 1
 ```
 
 Expected: FAIL because `PreviewBassDeviceLease` is missing.
@@ -406,7 +424,7 @@ Move `gBassDeviceRefCount` and its mutex into the lease implementation. The leas
 - [ ] **Step 4: Run GREEN and BASS regressions**
 
 ```bash
-cmake --build build --config Release --target preview_bass_device_lease_spec bass_preview_retained_state_spec video_export_audio_render_plan_spec MiaCode soundtouch_probe --parallel
+cmake --build build --config Release --target preview_bass_device_lease_spec bass_preview_retained_state_spec video_export_audio_render_plan_spec MiaCode soundtouch_probe --parallel 1
 ctest --test-dir build -C Release --output-on-failure -R "(preview_bass_device_lease|bass_preview_retained_state|video_export_audio_render_plan)_spec"
 ```
 
@@ -446,7 +464,7 @@ Construct a facade with an injected fake factory. Call every public mutator and 
 - [ ] **Step 2: Run RED**
 
 ```bash
-cmake --build build --config Release --target preview_audio_worker_spec --parallel
+cmake --build build --config Release --target preview_audio_worker_spec --parallel 1
 ```
 
 Expected: FAIL because the facade still directly owns/calls `backend_`.
@@ -475,7 +493,7 @@ its scheduler lock.
 - [ ] **Step 5: Run GREEN and scan the boundary**
 
 ```bash
-cmake --build build --config Release --target preview_audio_worker_spec preview_audio_health_spec soundtouch_probe --parallel
+cmake --build build --config Release --target preview_audio_worker_spec preview_audio_health_spec soundtouch_probe --parallel 1
 ctest --test-dir build -C Release --output-on-failure -R "(preview_audio_worker|preview_audio_health)_spec"
 rg -n "backend_->|audioHealthSamplerThread_|BASS_(Get|Channel|Mixer|Error|Init|Free)" src/audio/QtPreviewSfxRuntime* src/app/mainwindow
 ```
@@ -508,7 +526,7 @@ Model only acceptance/state decisions, not widgets. Prove prepare/retained compl
 - [ ] **Step 2: Run RED**
 
 ```bash
-cmake --build build --config Release --target preview_audio_playback_flow_policy_spec --parallel
+cmake --build build --config Release --target preview_audio_playback_flow_policy_spec --parallel 1
 ```
 
 Expected: FAIL because the playback flow policy/acceptance helpers are absent.
@@ -524,7 +542,7 @@ Connect runtime signals to focused `TimelineSection` handlers. Store current aud
 - [ ] **Step 5: Run GREEN**
 
 ```bash
-cmake --build build --config Release --target preview_audio_playback_flow_policy_spec MiaCode --parallel
+cmake --build build --config Release --target preview_audio_playback_flow_policy_spec MiaCode --parallel 1
 ctest --test-dir build -C Release --output-on-failure -R "preview_audio_(playback_flow_policy|worker_protocol)_spec"
 ```
 
@@ -580,7 +598,7 @@ exist.
 - [ ] **Step 2: Run RED**
 
 ```bash
-cmake --build build --config Release --target preview_audio_worker_spec preview_audio_command_queue_spec preview_audio_playback_flow_policy_spec preview_audio_device_change_policy_spec --parallel
+cmake --build build --config Release --target preview_audio_worker_spec preview_audio_command_queue_spec preview_audio_playback_flow_policy_spec preview_audio_device_change_policy_spec --parallel 1
 ctest --test-dir build -C Release --output-on-failure -R "(preview_audio_worker|preview_audio_command_queue|preview_audio_playback_flow_policy|preview_audio_device_change_policy)_spec"
 ```
 
@@ -623,7 +641,7 @@ higher generation, so it can run after the barrier.
 - [ ] **Step 5: Run GREEN**
 
 ```bash
-cmake --build build --config Release --target preview_audio_worker_spec preview_audio_command_queue_spec preview_audio_playback_flow_policy_spec preview_audio_device_change_policy_spec MiaCode --parallel
+cmake --build build --config Release --target preview_audio_worker_spec preview_audio_command_queue_spec preview_audio_playback_flow_policy_spec preview_audio_device_change_policy_spec MiaCode --parallel 1
 ctest --test-dir build -C Release --output-on-failure -R "(preview_audio_worker|preview_audio_command_queue|preview_audio_playback_flow_policy|preview_audio_device_change_policy)_spec"
 ```
 
@@ -675,7 +693,7 @@ through completion. Verify no GUI consumer calls either non-GUI wait method.
 - [ ] **Step 2: Run RED**
 
 ```bash
-cmake --build build --config Release --target preview_audio_worker_spec preview_audio_non_gui_barrier_spec --parallel
+cmake --build build --config Release --target preview_audio_worker_spec preview_audio_non_gui_barrier_spec --parallel 1
 ```
 
 Expected: at least the newly specified readiness/audition behavior fails before consumer migration.
@@ -703,7 +721,7 @@ target as well as `MiaCode`.
 - [ ] **Step 5: Run GREEN and the forbidden-call scan**
 
 ```bash
-cmake --build build --config Release --target preview_audio_worker_spec preview_audio_non_gui_barrier_spec soundtouch_probe MiaCode --parallel
+cmake --build build --config Release --target preview_audio_worker_spec preview_audio_non_gui_barrier_spec soundtouch_probe MiaCode --parallel 1
 ctest --test-dir build -C Release --output-on-failure -R "preview_audio_(worker|non_gui_barrier)_spec"
 rg -n "waitFor(Ready|Completion)ForNonGui|processEvents\(|backend_->" src/app src/tools/latency src/tools/probe src/audio/QtPreviewSfxRuntime*
 ```
@@ -743,7 +761,7 @@ Cover:
 - [ ] **Step 2: Run RED**
 
 ```bash
-cmake --build build --config Release --target log_pruning_policy_spec bass_preview_sfx_scheduler_policy_spec ui_hang_watchdog_policy_spec --parallel
+cmake --build build --config Release --target log_pruning_policy_spec bass_preview_sfx_scheduler_policy_spec ui_hang_watchdog_policy_spec --parallel 1
 ctest --test-dir build -C Release --output-on-failure -R "(log_pruning_policy|bass_preview_sfx_scheduler_policy|ui_hang_watchdog_policy)_spec"
 ```
 
@@ -784,7 +802,7 @@ Extend the pure specs with exact payload checks for the fields the emitters cons
 - [ ] **Step 2: Run RED**
 
 ```bash
-cmake --build build --config Release --target log_pruning_policy_spec bass_preview_sfx_scheduler_policy_spec ui_hang_watchdog_policy_spec --parallel
+cmake --build build --config Release --target log_pruning_policy_spec bass_preview_sfx_scheduler_policy_spec ui_hang_watchdog_policy_spec --parallel 1
 ```
 
 Expected: exact payload/bypass assertions FAIL until policy results are complete.
@@ -799,7 +817,7 @@ Expected: exact payload/bypass assertions FAIL until policy results are complete
 - [ ] **Step 4: Run GREEN and retained-log scan**
 
 ```bash
-cmake --build build --config Release --target log_pruning_policy_spec bass_preview_sfx_scheduler_policy_spec ui_hang_watchdog_policy_spec MiaCode --parallel
+cmake --build build --config Release --target log_pruning_policy_spec bass_preview_sfx_scheduler_policy_spec ui_hang_watchdog_policy_spec MiaCode --parallel 1
 ctest --test-dir build -C Release --output-on-failure -R "(log_pruning_policy|bass_preview_sfx_scheduler_policy|ui_hang_watchdog_policy)_spec"
 rg -n "playback_rate_(deferred|flushed)|update_paint_node_stats|device_change_(ignored|begin|complete)|bass_status|underrun|stall" src
 ```
@@ -831,7 +849,7 @@ Prove mouse `mousePressSequence` increments at the native press entry, identical
 - [ ] **Step 2: Run RED**
 
 ```bash
-cmake --build build --config Release --target log_pruning_policy_spec --parallel
+cmake --build build --config Release --target log_pruning_policy_spec --parallel 1
 ```
 
 Expected: new sequence/lifecycle/slow-call assertions FAIL.
@@ -843,7 +861,7 @@ Keep state in the owning long-lived object, not static globals. Reset on constru
 - [ ] **Step 4: Run GREEN**
 
 ```bash
-cmake --build build --config Release --target log_pruning_policy_spec MiaCode --parallel
+cmake --build build --config Release --target log_pruning_policy_spec MiaCode --parallel 1
 ctest --test-dir build -C Release --output-on-failure -R "log_pruning_policy_spec"
 ```
 
@@ -888,7 +906,7 @@ Expected: no whitespace errors; no direct facade backend/macro/sampler ownership
 Before building, perform the one-build-at-a-time process check required by `miacode-concurrent-build`. Then run:
 
 ```bash
-cmake --build build --config Release --target MiaCode soundtouch_probe preview_audio_command_queue_spec preview_audio_worker_protocol_spec preview_audio_worker_spec preview_audio_non_gui_barrier_spec preview_bass_device_lease_spec preview_audio_playback_flow_policy_spec log_pruning_policy_spec bass_preview_sfx_scheduler_policy_spec preview_audio_device_change_policy_spec preview_audio_health_spec ui_hang_watchdog_policy_spec --parallel
+cmake --build build --config Release --target MiaCode soundtouch_probe preview_audio_command_queue_spec preview_audio_worker_protocol_spec preview_audio_worker_spec preview_audio_non_gui_barrier_spec preview_bass_device_lease_spec preview_audio_playback_flow_policy_spec log_pruning_policy_spec bass_preview_sfx_scheduler_policy_spec preview_audio_device_change_policy_spec preview_audio_health_spec ui_hang_watchdog_policy_spec --parallel 1
 ```
 
 Expected: every target builds successfully in Release.
