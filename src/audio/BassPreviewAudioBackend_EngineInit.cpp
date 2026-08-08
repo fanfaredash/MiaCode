@@ -20,6 +20,7 @@
 #include <QtMath>
 
 #include <cstdio>   // G1 Commit 8 followup: std::snprintf for startup-beacon lines
+#include <cstring>
 
 #ifdef MIACODE_HAS_BASS_AUDIO
 #ifdef Q_OS_WIN
@@ -49,6 +50,57 @@ int gBassDeviceRefCount = 0;
 }  // namespace bass_detail
 }  // namespace audio
 }  // namespace miacode
+
+namespace {
+
+#if defined(Q_OS_LINUX)
+// Bluetooth and other session sinks only exist as PipeWire nodes. 
+// Fallback to -1 when that PCM is absent.
+int selectLinuxOutputDevice()
+{
+    for (int device = 1;; ++device) {
+        BASS_DEVICEINFO info {};
+        if (!BASS_GetDeviceInfo(static_cast<DWORD>(device), &info)) {
+            break;
+        }
+        if ((info.flags & BASS_DEVICE_ENABLED) == 0) {
+            continue;
+        }
+        if (info.driver != nullptr && std::strcmp(info.driver, "pipewire") == 0) {
+            return device;
+        }
+    }
+    return -1;
+}
+#endif
+
+bool initOutputDevice(quint32 sampleRate, int* selectedDeviceOut)
+{
+    int device = -1;
+#if defined(Q_OS_LINUX)
+    device = selectLinuxOutputDevice();
+#endif
+    if (selectedDeviceOut != nullptr) {
+        *selectedDeviceOut = device;
+    }
+    if (BASS_Init(device, static_cast<int>(sampleRate), 0, nullptr, nullptr)) {
+        return true;
+    }
+#if defined(Q_OS_LINUX)
+    if (device != -1) {
+        appendAudioDebugLog(
+            QStringLiteral("bass_init_pipewire_failed err=%1 falling_back_to_default")
+                .arg(static_cast<int>(BASS_ErrorGetCode())));
+        if (selectedDeviceOut != nullptr) {
+            *selectedDeviceOut = -1;
+        }
+        return BASS_Init(-1, static_cast<int>(sampleRate), 0, nullptr, nullptr) != 0;
+    }
+#endif
+    return false;
+}
+
+}  // namespace
 #endif
 
 bool BassPreviewAudioBackend::ensureBassFxLoaded()
@@ -195,7 +247,8 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
     }
     if (!registeredBassDeviceRef_) {
         if (gBassDeviceRefCount == 0) {
-            if (!BASS_Init(-1, static_cast<int>(deviceSampleRate_), 0, nullptr, nullptr)) {
+            int selectedDevice = -1;
+            if (!initOutputDevice(deviceSampleRate_, &selectedDevice)) {
                 _mc_op_.fail(QStringLiteral("BASS_Init err=%1").arg(static_cast<int>(BASS_ErrorGetCode())));
                 appendAudioDebugLog(QString("bass_init_failed err=%1").arg(static_cast<int>(BASS_ErrorGetCode())));
                 appendBassDebugLog(
@@ -204,6 +257,19 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
                     true);
                 return false;
             }
+            BASS_DEVICEINFO selectedInfo {};
+            const bool haveInfo = BASS_GetDeviceInfo(
+                selectedDevice >= 0 ? static_cast<DWORD>(selectedDevice) : static_cast<DWORD>(BASS_GetDevice()),
+                &selectedInfo);
+            appendAudioDebugLog(
+                QStringLiteral("bass_init_ok device=%1 name=%2 driver=%3")
+                    .arg(selectedDevice)
+                    .arg(haveInfo && selectedInfo.name != nullptr
+                             ? QString::fromLocal8Bit(selectedInfo.name)
+                             : QStringLiteral("unknown"))
+                    .arg(haveInfo && selectedInfo.driver != nullptr
+                             ? QString::fromLocal8Bit(selectedInfo.driver)
+                             : QStringLiteral("unknown")));
         }
         ++gBassDeviceRefCount;
         registeredBassDeviceRef_ = true;
